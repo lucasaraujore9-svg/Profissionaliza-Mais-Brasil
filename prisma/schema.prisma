@@ -7,9 +7,7 @@ generator client {
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL") // Supabase connection pooling
+  provider = "postgresql"
 }
 
 // ============================================================
@@ -96,7 +94,7 @@ model User {
 
   // Relacao: se for RESELLER, qual tenant e dono
   tenantId String? @unique @map("tenant_id")
-  tenant   Tenant? @relation("TenantOwner")
+  tenant   Tenant? @relation("TenantOwner", fields: [tenantId], references: [id])
 
   // Memberships em tenants (para multiplos admins)
   tenantMemberships TenantMember[]
