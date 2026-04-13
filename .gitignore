@@ -17,6 +17,9 @@ build/
 .env.test.local
 .env.production.local
 
+# MCP config (contem tokens sensiveis)
+.mcp.json
+
 # debug
 npm-debug.log*
 yarn-debug.log*

@@ -196,6 +196,27 @@ POST Asaas customers → POST Asaas subscriptions
 - Tokens: NUNCA expor no client. MP access_token criptografado.
 - Webhooks: logar TUDO em webhook_logs, processar async, retornar 200 imediato
 
+## MCP — Supabase (Project-Scoped)
+
+Este projeto usa o Supabase MCP configurado em `.mcp.json` (project-local, nao commitado por seguranca).
+
+- **Project Ref:** jpwskehhnplmmtgyyxmf
+- **URL do projeto:** https://jpwskehhnplmmtgyyxmf.supabase.co
+- **Access Token:** salvo em `SUPABASE_ACCESS_TOKEN` (.env.local)
+
+### Como usar
+Apos configurar o `.mcp.json` na raiz, reinicie o Claude Code. As ferramentas do Supabase ficarao disponiveis automaticamente para queries diretas no banco, gerenciamento de tabelas, RLS policies, etc.
+
+### Onboarding em outra maquina
+1. Copiar `.mcp.json.example` para `.mcp.json`
+2. Substituir `${SUPABASE_ACCESS_TOKEN}` pelo token real (do .env.local)
+3. Reiniciar Claude Code
+
+### Importante
+- Nunca commitar `.mcp.json` (contem token de admin do Supabase com poder total no projeto)
+- O token expira? Nao — e um Personal Access Token, valido ate revogacao manual em supabase.com/dashboard/account/tokens
+- Se vazar: revogar imediatamente em supabase.com/dashboard/account/tokens e gerar novo
+
 ## Variaveis de Ambiente
 
 ```env
@@ -206,6 +227,15 @@ NEXT_PUBLIC_APP_DOMAIN=profissionalizamaisbrasil.com.br
 # Database (Supabase)
 DATABASE_URL=postgresql://...
 DIRECT_URL=postgresql://...
+
+# Supabase
+SUPABASE_PROJECT_REF=
+SUPABASE_URL=
+SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
+SUPABASE_ACCESS_TOKEN=
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
 
 # Redis (Upstash)
 UPSTASH_REDIS_REST_URL=
