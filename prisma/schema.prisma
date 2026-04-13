@@ -1,0 +1,526 @@
+// Profissionaliza Mais Brasil — Schema Prisma Completo
+// Banco: PostgreSQL (Supabase)
+// Atualizado: 2026-04-13
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL") // Supabase connection pooling
+}
+
+// ============================================================
+// ENUMS
+// ============================================================
+
+enum UserRole {
+  SUPER_ADMIN
+  ADMIN
+  RESELLER
+}
+
+enum TenantStatus {
+  PENDING    // Aguardando primeiro pagamento
+  ACTIVE     // Ativo e operante
+  SUSPENDED  // Suspenso por inadimplencia
+  CANCELLED  // Cancelado definitivamente
+}
+
+enum BillingMode {
+  AUTO    // Sistema bloqueia aluno automaticamente
+  MANUAL  // Revendedor decide quando bloquear
+}
+
+enum StudentStatus {
+  ATIVO
+  INATIVO
+  BLOQUEADO
+  DEVEDOR
+  FORMADO
+  INTERESSADO
+}
+
+enum ApostilaStatus {
+  LIBERADA
+  BLOQUEADA
+}
+
+enum EnrollmentStatus {
+  PENDING     // Aguardando pagamento
+  ACTIVE      // Matricula ativa
+  SUSPENDED   // Suspenso por inadimplencia
+  CANCELLED   // Cancelado
+  COMPLETED   // Curso concluido
+}
+
+enum PaymentType {
+  ONE_TIME    // Pagamento unico
+  MONTHLY     // Assinatura mensal
+}
+
+enum PaymentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  REFUNDED
+  CANCELLED
+  IN_PROCESS
+  CHARGED_BACK
+}
+
+enum DiscountType {
+  PERCENTAGE  // Desconto percentual (ex: 20%)
+  FIXED       // Desconto fixo em reais (ex: R$50)
+}
+
+enum WebhookSource {
+  ASAAS
+  MERCADO_PAGO
+}
+
+// ============================================================
+// USUARIOS E AUTENTICACAO
+// ============================================================
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String
+  passwordHash  String    @map("password_hash")
+  role          UserRole  @default(RESELLER)
+  emailVerified DateTime? @map("email_verified")
+  image         String?
+
+  // Relacao: se for RESELLER, qual tenant e dono
+  tenantId String? @unique @map("tenant_id")
+  tenant   Tenant? @relation("TenantOwner")
+
+  // Memberships em tenants (para multiplos admins)
+  tenantMemberships TenantMember[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("users")
+}
+
+// ============================================================
+// MEMBROS DO TENANT (para multiplos admins no futuro)
+// ============================================================
+
+model TenantMember {
+  id       String @id @default(cuid())
+  tenantId String @map("tenant_id")
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userId   String @map("user_id")
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role     String @default("manager") // owner, manager, viewer
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([tenantId, userId])
+  @@map("tenant_members")
+}
+
+// ============================================================
+// TENANTS (REVENDEDORES)
+// ============================================================
+
+model Tenant {
+  id   String @id @default(cuid())
+  name String // Nome do revendedor / empresa
+  slug String @unique // Subdominio: slug.profissionalizamaisbrasil.com.br
+
+  // Dominio custom
+  customDomain   String?  @unique @map("custom_domain") // ex: cursosjoao.com.br
+  domainVerified Boolean  @default(false) @map("domain_verified")
+
+  // Personalizacao da vitrine
+  logoUrl        String?  @map("logo_url")
+  primaryColor   String   @default("#2563eb") @map("primary_color")   // Azul padrao
+  secondaryColor String   @default("#1e40af") @map("secondary_color")
+  bannerUrl      String?  @map("banner_url")
+  tagline        String?  // Frase curta da vitrine
+  description    String?  // Descricao longa
+  whatsapp       String?  // Whatsapp para contato
+  instagram      String?
+  facebook       String?
+
+  // Status e config
+  status      TenantStatus @default(PENDING)
+  billingMode BillingMode  @default(AUTO) @map("billing_mode")
+  planValue   Decimal      @map("plan_value") @db.Decimal(10, 2) // Valor da mensalidade
+
+  // Politica de cancelamento (flexivel, definida individualmente pelo admin)
+  cancellationPolicy Json? @map("cancellation_policy")
+  // Exemplo: { gracePeriodDays: 15, keepStudentsActive: true, notifyStudents: true }
+
+  // Integracao Asaas (mensalidade do revendedor)
+  asaasCustomerId     String? @unique @map("asaas_customer_id")     // cus_xxxx
+  asaasSubscriptionId String? @unique @map("asaas_subscription_id") // sub_xxxx
+
+  // Integracao Mercado Pago (vendas dos cursos)
+  mpAccessToken  String?  @map("mp_access_token")  // Criptografado AES-256
+  mpPublicKey    String?  @map("mp_public_key")
+  mpRefreshToken String?  @map("mp_refresh_token")
+  mpConnected    Boolean  @default(false) @map("mp_connected")
+  mpUserId       String?  @map("mp_user_id") // ID do revendedor no MP
+
+  // Integracao Escola Avancada
+  eaVendedorId String? @map("ea_vendedor_id") // ID do funcionario criado na EA
+  eaVendedorLogin String? @map("ea_vendedor_login") // Login retornado pelo funcionarios/novo
+  poloName     String? @map("polo_name")      // Nome do polo usado no campo "polo" da EA
+
+  // Dono do tenant (owner principal)
+  owner User? @relation("TenantOwner")
+
+  // Membros do tenant (para multiplos admins/gerentes no futuro)
+  members TenantMember[]
+
+  // Relacoes
+  tenantCourses  TenantCourse[]
+  students       Student[]
+  enrollments    Enrollment[]
+  payments       Payment[]
+  coupons        Coupon[]
+  tenantPayments TenantPayment[]
+  webhookLogs    WebhookLog[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([slug])
+  @@index([customDomain])
+  @@index([status])
+  @@map("tenants")
+}
+
+// ============================================================
+// CURSOS (sincronizados da Escola Avancada)
+// ============================================================
+
+model Course {
+  id String @id @default(cuid())
+
+  // Dados da Escola Avancada
+  // ATENCAO: a API cursos/listar NAO retorna ID do curso!
+  // eaCourseId pode ser: (1) descoberto via testes, (2) inferido da ordem, ou (3) null
+  // O campo "nome" e usado como chave alternativa de match no sync
+  eaCourseId    String?  @unique @map("ea_course_id") // ID na EA (pode ser null se API nao retornar)
+  nome          String   @unique // Nome e a chave de match primaria no sync
+  descricao     String?  @db.Text // Campo "obs" da API
+  qtdAulas      Int      @map("qtd_aulas")       // Campo "aulas"
+  cargaHoraria  String?  @map("carga_horaria")
+  precoOriginal Decimal? @map("preco_original") @db.Decimal(10, 2) // Parseado do formato BR
+  precoPromocional Decimal? @map("preco_promocional") @db.Decimal(10, 2)
+  parcelasSugeridas Int? @map("parcelas_sugeridas") // Campo "parcelas"
+
+  // Categorias
+  categoriaInterna String? @map("categoria_interna")
+  categoriaLoja    String? @map("categoria_loja")
+
+  // Exibicao
+  destaque     Boolean @default(false)
+  status       String  @default("ATIVO") // ATIVO / INATIVO
+  precoMostrar Boolean @default(false) @map("preco_mostrar")
+  capaImageUrl String? @map("capa_image_url")
+
+  // Slug para URL amigavel (gerado do nome)
+  slug String @unique
+
+  // Controle de sync
+  syncedAt DateTime @map("synced_at") @default(now())
+
+  // Relacoes
+  tenantCourses TenantCourse[]
+  enrollments   Enrollment[]
+  courseLessons CourseLesson[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([status])
+  @@index([categoriaLoja])
+  @@map("courses")
+}
+
+model CourseLesson {
+  id       String @id @default(cuid())
+  courseId  String @map("course_id")
+  course   Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  nome     String // Campo "aula" da API
+  ordem    Int    // Ordem sequencial
+
+  @@unique([courseId, ordem])
+  @@map("course_lessons")
+}
+
+// ============================================================
+// CONFIGURACAO DE CURSO POR REVENDEDOR
+// ============================================================
+
+model TenantCourse {
+  id       String @id @default(cuid())
+  tenantId String @map("tenant_id")
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  courseId  String @map("course_id")
+  course   Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  // Precificacao do revendedor
+  price       Decimal     @db.Decimal(10, 2) // Preco definido pelo revendedor
+  paymentType PaymentType @default(ONE_TIME) @map("payment_type")
+
+  // Se mensal, dados do plano no MP
+  mpPlanId String? @map("mp_plan_id") // preapproval_plan_xxxx
+
+  // Visibilidade e customizacao
+  isVisible         Boolean @default(true) @map("is_visible")
+  customDescription String? @map("custom_description") @db.Text
+  customOrder       Int     @default(0) @map("custom_order") // Ordem na vitrine
+  isFeatured        Boolean @default(false) @map("is_featured") // Destaque na vitrine
+
+  enrollments Enrollment[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([tenantId, courseId])
+  @@index([tenantId, isVisible])
+  @@map("tenant_courses")
+}
+
+// ============================================================
+// ALUNOS
+// ============================================================
+
+model Student {
+  id       String @id @default(cuid())
+  tenantId String @map("tenant_id")
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  // Dados pessoais
+  nome          String
+  email         String?
+  fone          String?
+  fone2         String?
+  cpf           String?
+  rg            String?
+  sexo          String?
+  nascimento    DateTime?
+  responsavel   String? // Nome do responsavel (menores)
+  rgResponsavel  String? @map("rg_responsavel")
+  cpfResponsavel String? @map("cpf_responsavel")
+
+  // Endereco
+  rua    String?
+  bairro String?
+  cidade String?
+  estado String?
+  numero String?
+  cep    String?
+
+  obs String? @db.Text
+
+  // Escola Avancada
+  eaAlunoId    String  @map("ea_aluno_id")     // Login retornado por usuarios/novo
+  eaAlunoSenha String? @map("ea_aluno_senha")  // Criptografada
+  polo         String  // = tenant.slug (enviado a EA)
+  vendedorId   String? @map("vendedor_id")     // = tenant.eaVendedorId
+
+  // Status na EA
+  status   StudentStatus  @default(ATIVO)
+  apostila ApostilaStatus @default(LIBERADA)
+
+  // Controle
+  certificado Boolean  @default(false)
+  bolsista    Boolean  @default(false)
+  dataFinal   DateTime? @map("data_final") // Data final do acesso
+
+  // Relacoes
+  enrollments Enrollment[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([tenantId, email])
+  @@unique([tenantId, cpf])
+  @@index([tenantId])
+  @@index([eaAlunoId])
+  @@index([tenantId, status])
+  @@map("students")
+}
+
+// ============================================================
+// MATRICULAS
+// ============================================================
+
+model Enrollment {
+  id             String @id @default(cuid())
+  tenantId       String @map("tenant_id")
+  tenant         Tenant @relation(fields: [tenantId], references: [id])
+  studentId      String @map("student_id")
+  student        Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  tenantCourseId String @map("tenant_course_id")
+  tenantCourse   TenantCourse @relation(fields: [tenantCourseId], references: [id])
+  courseId        String @map("course_id")
+  course         Course @relation(fields: [courseId], references: [id])
+
+  // Pagamento
+  paymentType       PaymentType    @map("payment_type")
+  status            EnrollmentStatus @default(PENDING)
+  originalAmount    Decimal        @map("original_amount") @db.Decimal(10, 2)
+  discountAmount    Decimal        @default(0) @map("discount_amount") @db.Decimal(10, 2)
+  finalAmount       Decimal        @map("final_amount") @db.Decimal(10, 2)
+
+  // Mercado Pago
+  mpPreferenceId    String?  @map("mp_preference_id")     // preference_xxxx
+  mpPaymentId       String?  @map("mp_payment_id")        // Pagamento unico
+  mpSubscriptionId  String?  @map("mp_subscription_id")   // preapproval_xxxx (mensal)
+  externalReference String?  @map("external_reference")   // Para rastreamento no webhook
+
+  // Cupom
+  couponId String? @map("coupon_id")
+  coupon   Coupon? @relation(fields: [couponId], references: [id])
+
+  // Datas
+  startedAt   DateTime? @map("started_at")
+  expiresAt   DateTime? @map("expires_at")
+  cancelledAt DateTime? @map("cancelled_at")
+
+  // Relacoes
+  payments Payment[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([tenantId])
+  @@index([studentId])
+  @@index([status])
+  @@index([mpPaymentId])
+  @@index([mpSubscriptionId])
+  @@index([externalReference])
+  @@map("enrollments")
+}
+
+// ============================================================
+// PAGAMENTOS (cada pagamento recebido do aluno)
+// ============================================================
+
+model Payment {
+  id           String @id @default(cuid())
+  tenantId     String @map("tenant_id")
+  tenant       Tenant @relation(fields: [tenantId], references: [id])
+  enrollmentId String @map("enrollment_id")
+  enrollment   Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+
+  // Valores
+  amount Decimal @db.Decimal(10, 2)
+  type   PaymentType
+
+  // Mercado Pago
+  mpPaymentId   String        @unique @map("mp_payment_id") // ID do pagamento no MP
+  mpStatus      PaymentStatus @map("mp_status")
+  mpPaymentType String?       @map("mp_payment_type") // credit_card, pix, boleto, account_money
+  mpStatusDetail String?      @map("mp_status_detail")
+
+  // Cupom aplicado
+  couponId String? @map("coupon_id")
+  coupon   Coupon? @relation(fields: [couponId], references: [id])
+
+  paidAt    DateTime? @map("paid_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@index([tenantId])
+  @@index([mpPaymentId])
+  @@index([enrollmentId])
+  @@map("payments")
+}
+
+// ============================================================
+// CUPONS DE DESCONTO
+// ============================================================
+
+model Coupon {
+  id       String @id @default(cuid())
+  tenantId String @map("tenant_id")
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  code          String       // Codigo do cupom (ex: PROMO20)
+  discountType  DiscountType @map("discount_type")
+  discountValue Decimal      @map("discount_value") @db.Decimal(10, 2)
+
+  // Limites
+  maxUses   Int?     @map("max_uses")  // null = ilimitado
+  usedCount Int      @default(0) @map("used_count")
+  validFrom DateTime @map("valid_from")
+  validUntil DateTime @map("valid_until")
+  isActive  Boolean  @default(true) @map("is_active")
+
+  // Relacoes
+  enrollments Enrollment[]
+  payments    Payment[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([tenantId, code])
+  @@index([tenantId, isActive])
+  @@map("coupons")
+}
+
+// ============================================================
+// MENSALIDADES DOS REVENDEDORES (via Asaas)
+// ============================================================
+
+model TenantPayment {
+  id       String @id @default(cuid())
+  tenantId String @map("tenant_id")
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  // Asaas
+  asaasPaymentId String @unique @map("asaas_payment_id") // pay_xxxx
+  amount         Decimal @db.Decimal(10, 2)
+  billingType    String? @map("billing_type") // PIX, BOLETO, CREDIT_CARD
+
+  // Status
+  status  String  // PENDING, CONFIRMED, RECEIVED, OVERDUE, REFUNDED, etc.
+  dueDate DateTime @map("due_date")
+  paidAt  DateTime? @map("paid_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([tenantId])
+  @@index([status])
+  @@index([dueDate])
+  @@map("tenant_payments")
+}
+
+// ============================================================
+// LOG DE WEBHOOKS (auditoria)
+// ============================================================
+
+model WebhookLog {
+  id       String @id @default(cuid())
+  tenantId String? @map("tenant_id") // Pode ser null se for webhook do Asaas (admin)
+  tenant   Tenant? @relation(fields: [tenantId], references: [id])
+
+  source    WebhookSource
+  eventType String  @map("event_type") // PAYMENT_RECEIVED, payment.updated, etc.
+  payload   Json    // Payload completo recebido
+  headers   Json?   // Headers relevantes (para debug)
+
+  // Processamento
+  processed   Boolean  @default(false)
+  processedAt DateTime? @map("processed_at")
+  error       String?  @db.Text // Mensagem de erro se falhou
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([source, eventType])
+  @@index([processed])
+  @@index([createdAt])
+  @@map("webhook_logs")
+}
