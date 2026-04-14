@@ -1,28 +1,83 @@
 "use client"
 
 import Link from "next/link"
-import { Mail, Lock, ArrowRight } from "lucide-react"
+import { useRouter, useSearchParams } from "next/navigation"
+import { useState, type FormEvent } from "react"
+import { signIn } from "next-auth/react"
+import { Mail, Lock, ArrowRight, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 
+type SubmitState =
+  | { kind: "idle" }
+  | { kind: "submitting" }
+  | { kind: "error"; message: string }
+
 export function LoginForm() {
-  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const reset = searchParams.get("reset") === "1"
+  const [state, setState] = useState<SubmitState>({ kind: "idle" })
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    setState({ kind: "submitting" })
+
+    const form = event.currentTarget
+    const formData = new FormData(form)
+    const email = String(formData.get("email") ?? "")
+    const password = String(formData.get("password") ?? "")
+
+    const result = await signIn("credentials", {
+      email,
+      password,
+      redirect: false,
+    })
+
+    if (!result || result.error) {
+      setState({
+        kind: "error",
+        message: "Email ou senha inválidos.",
+      })
+      return
+    }
+
+    // Fetch session para descobrir role e redirecionar
+    try {
+      const res = await fetch("/api/auth/session")
+      const session = (await res.json()) as {
+        user?: { role?: string }
+      }
+      const role = session.user?.role
+      if (role === "ADMIN") router.push("/admin")
+      else if (role === "RESELLER") router.push("/painel")
+      else router.push("/")
+    } catch {
+      router.push("/")
+    }
   }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
+      {reset && (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">
+          Senha redefinida com sucesso. Faça login com sua nova senha.
+        </div>
+      )}
+
       <div>
         <Label htmlFor="email">Email</Label>
         <div className="relative mt-1.5">
           <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
           <Input
             id="email"
+            name="email"
             type="email"
             placeholder="voce@empresa.com"
             className="pl-9"
             autoComplete="email"
+            required
           />
         </div>
       </div>
@@ -41,10 +96,12 @@ export function LoginForm() {
           <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
           <Input
             id="password"
+            name="password"
             type="password"
             placeholder="Sua senha"
             className="pl-9"
             autoComplete="current-password"
+            required
           />
         </div>
       </div>
@@ -57,13 +114,29 @@ export function LoginForm() {
         Lembrar-me neste dispositivo
       </label>
 
+      {state.kind === "error" && (
+        <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+          {state.message}
+        </div>
+      )}
+
       <Button
         type="submit"
         size="lg"
         className="w-full bg-blue-600 text-white hover:bg-blue-700"
+        disabled={state.kind === "submitting"}
       >
-        Entrar
-        <ArrowRight className="ml-2 h-4 w-4" />
+        {state.kind === "submitting" ? (
+          <>
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            Entrando...
+          </>
+        ) : (
+          <>
+            Entrar
+            <ArrowRight className="ml-2 h-4 w-4" />
+          </>
+        )}
       </Button>
 
       <p className="text-center text-sm text-gray-600">
