@@ -1,65 +1,96 @@
 import { Tag } from "lucide-react"
 
-interface OrderLine {
-  label: string
-  value: string
-  highlight?: boolean
+export interface OrderSummaryProps {
+  courseName: string
+  courseCategory: string | null
+  courseHours: string | null
+  basePrice: number
+  discountAmount: number
+  finalPrice: number
+  couponCode: string | null
+  parcelasSugeridas: number | null
 }
 
-const lines: OrderLine[] = [
-  { label: "Subtotal", value: "R$ 297,00" },
-  { label: "Desconto (BEMVINDO10)", value: "-R$ 29,70", highlight: true },
-  { label: "Taxa de processamento", value: "R$ 0,00" },
-]
+function formatBRL(value: number): string {
+  return value.toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+    minimumFractionDigits: 2,
+  })
+}
 
-export function OrderSummary() {
+export function OrderSummary({
+  courseName,
+  courseCategory,
+  courseHours,
+  basePrice,
+  discountAmount,
+  finalPrice,
+  couponCode,
+  parcelasSugeridas,
+}: OrderSummaryProps) {
+  const parcelasLabel =
+    parcelasSugeridas && parcelasSugeridas >= 2
+      ? `${parcelasSugeridas}x de ${formatBRL(finalPrice / parcelasSugeridas)}`
+      : null
+
   return (
     <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm lg:p-8">
       <h2 className="text-base font-semibold text-[#1A1A2E]">Resumo do pedido</h2>
 
       <div className="mt-5 flex gap-4 border-b border-gray-100 pb-5">
-        <div className="h-20 w-20 shrink-0 rounded-xl bg-gradient-to-br from-green-500 to-emerald-700" />
+        <div className="h-20 w-20 shrink-0 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-700" />
         <div className="flex-1">
-          <div className="text-xs font-medium text-gray-500">Tecnologia</div>
+          <div className="text-xs font-medium text-gray-500">
+            {courseCategory ?? "Curso"}
+          </div>
           <h3 className="mt-0.5 text-sm font-semibold leading-snug text-[#1A1A2E]">
-            Excel Avançado — Do Zero ao PROCV
+            {courseName}
           </h3>
-          <div className="mt-1 text-xs text-gray-500">120h · 5 módulos</div>
+          {courseHours && (
+            <div className="mt-1 text-xs text-gray-500">{courseHours}</div>
+          )}
         </div>
       </div>
 
       <dl className="mt-5 space-y-2 text-sm">
-        {lines.map((line) => (
-          <div key={line.label} className="flex items-center justify-between">
-            <dt className="text-gray-600">{line.label}</dt>
-            <dd
-              className={`font-mono ${
-                line.highlight ? "font-semibold text-green-600" : "text-[#1A1A2E]"
-              }`}
-            >
-              {line.value}
+        <div className="flex items-center justify-between">
+          <dt className="text-gray-600">Subtotal</dt>
+          <dd className="font-mono text-[#1A1A2E]">{formatBRL(basePrice)}</dd>
+        </div>
+        {discountAmount > 0 && (
+          <div className="flex items-center justify-between">
+            <dt className="text-gray-600">
+              Desconto{couponCode ? ` (${couponCode})` : ""}
+            </dt>
+            <dd className="font-mono font-semibold text-green-600">
+              -{formatBRL(discountAmount)}
             </dd>
           </div>
-        ))}
+        )}
       </dl>
 
       <div className="mt-5 flex items-center justify-between border-t border-gray-100 pt-5">
         <span className="text-sm font-medium text-[#1A1A2E]">Total</span>
         <span className="font-mono text-2xl font-bold text-[#1A1A2E]">
-          R$ 267,30
+          {formatBRL(finalPrice)}
         </span>
       </div>
 
-      <div className="mt-2 text-right text-xs text-gray-500">
-        ou <span className="font-mono font-medium">3x de R$ 89,10</span> sem juros
-      </div>
+      {parcelasLabel && (
+        <div className="mt-2 text-right text-xs text-gray-500">
+          ou <span className="font-mono font-medium">{parcelasLabel}</span> sem juros
+        </div>
+      )}
 
-      <div className="mt-5 flex items-start gap-2 rounded-xl bg-blue-50 p-3 text-xs text-blue-700">
-        <Tag className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-        <span>
-          Cupom <strong className="font-mono">BEMVINDO10</strong> aplicado (10% OFF)
-        </span>
-      </div>
+      {couponCode && (
+        <div className="mt-5 flex items-start gap-2 rounded-xl bg-blue-50 p-3 text-xs text-blue-700">
+          <Tag className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <span>
+            Cupom <strong className="font-mono">{couponCode}</strong> aplicado
+          </span>
+        </div>
+      )}
     </div>
   )
 }
