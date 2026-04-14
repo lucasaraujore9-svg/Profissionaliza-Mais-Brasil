@@ -108,10 +108,10 @@ async function requestWithRetry<T>(
 
 async function postFormData<T>(
   endpoint: string,
-  params: Record<string, unknown> = {},
+  params: object = {},
 ): Promise<T> {
   const { token } = getConfig()
-  const formData = buildFormData(token, params)
+  const formData = buildFormData(token, params as Record<string, unknown>)
 
   const data = await requestWithRetry<T>(endpoint, {
     method: "POST",

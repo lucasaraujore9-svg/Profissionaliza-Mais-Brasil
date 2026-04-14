@@ -1,10 +1,10 @@
+import { getJson, setJson, invalidateMany } from "./cache"
 import {
-  getJson,
-  setJson,
-  invalidateMany,
   TENANT_CACHE_TTL_SECONDS,
-} from "./cache"
-import { tenantBySlugKey, tenantByDomainKey, tenantByIdKey } from "./keys"
+  tenantBySlugKey,
+  tenantByDomainKey,
+  tenantByIdKey,
+} from "./keys"
 
 export interface CachedTenant {
   id: string

@@ -60,7 +60,7 @@ async function main() {
       categoriaLoja: "Tecnologia",
       qtdAulas: 40,
       cargaHoraria: "120h",
-      precoOriginal: 197.00 as unknown as import("@prisma/client/runtime/library").Decimal,
+      precoOriginal: 197.0,
     },
     {
       nome: "Marketing Digital",
@@ -68,7 +68,7 @@ async function main() {
       categoriaLoja: "Marketing",
       qtdAulas: 35,
       cargaHoraria: "100h",
-      precoOriginal: 297.00 as unknown as import("@prisma/client/runtime/library").Decimal,
+      precoOriginal: 297.0,
     },
     {
       nome: "Programacao Web",
@@ -76,7 +76,7 @@ async function main() {
       categoriaLoja: "Tecnologia",
       qtdAulas: 60,
       cargaHoraria: "200h",
-      precoOriginal: 497.00 as unknown as import("@prisma/client/runtime/library").Decimal,
+      precoOriginal: 497.0,
     },
   ]
 

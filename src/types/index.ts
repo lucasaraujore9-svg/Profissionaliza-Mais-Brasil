@@ -8,13 +8,6 @@ declare module "next-auth" {
   }
 }
 
-declare module "next-auth/jwt" {
-  interface JWT {
-    role: UserRole
-    tenantId: string | null
-  }
-}
-
 // API Response padrão
 export interface ApiResponse<T = unknown> {
   success: boolean
