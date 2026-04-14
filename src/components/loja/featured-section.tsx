@@ -1,35 +1,30 @@
 import Link from "next/link"
 import { Flame, ArrowRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import type { TenantCourseListItem } from "@/lib/tenant/courses"
 
-const featured = [
-  {
-    slug: "excel-avancado",
-    nome: "Excel Avançado",
-    tagline: "Mais vendido do mês",
-    preco: "R$ 197",
-    gradient: "from-green-600 to-emerald-800",
-    badge: "Bestseller",
-  },
-  {
-    slug: "programacao-web",
-    nome: "Programação Web Full Stack",
-    tagline: "Turma nova com 40% OFF",
-    preco: "R$ 497",
-    gradient: "from-blue-600 to-indigo-800",
-    badge: "Lançamento",
-  },
-  {
-    slug: "marketing-digital",
-    nome: "Marketing Digital 2026",
-    tagline: "Atualizado pra IA + Social",
-    preco: "R$ 297",
-    gradient: "from-purple-600 to-pink-700",
-    badge: "Atualizado",
-  },
+interface FeaturedSectionProps {
+  items: TenantCourseListItem[]
+}
+
+const GRADIENTS = [
+  "from-green-600 to-emerald-800",
+  "from-blue-600 to-indigo-800",
+  "from-purple-600 to-pink-700",
 ]
 
-export function FeaturedSection() {
+function formatPrice(value: number): string {
+  return value.toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  })
+}
+
+export function FeaturedSection({ items }: FeaturedSectionProps) {
+  if (items.length === 0) return null
+
   return (
     <section className="bg-white py-12 md:py-16">
       <div className="mx-auto max-w-7xl px-4 md:px-6">
@@ -48,25 +43,27 @@ export function FeaturedSection() {
         </div>
 
         <div className="mt-8 grid grid-cols-1 gap-5 md:grid-cols-3">
-          {featured.map((item) => (
+          {items.slice(0, 3).map((item, index) => (
             <Link
-              key={item.slug}
-              href={`/loja/curso/${item.slug}`}
-              className={`group relative overflow-hidden rounded-2xl bg-gradient-to-br ${item.gradient} p-6 shadow-lg transition-transform hover:-translate-y-1 md:p-8`}
+              key={item.id}
+              href={`/curso/${item.slug}`}
+              className={`group relative overflow-hidden rounded-2xl bg-gradient-to-br ${GRADIENTS[index % GRADIENTS.length]} p-6 shadow-lg transition-transform hover:-translate-y-1 md:p-8`}
             >
               <div className="inline-block rounded-full bg-white/20 px-2.5 py-1 text-xs font-medium text-white backdrop-blur">
-                {item.badge}
+                Destaque
               </div>
               <h3 className="mt-4 text-xl font-bold text-white md:text-2xl">
                 {item.nome}
               </h3>
-              <p className="mt-2 text-sm text-white/80">{item.tagline}</p>
+              {item.categoria && (
+                <p className="mt-2 text-sm text-white/80">{item.categoria}</p>
+              )}
 
               <div className="mt-8 flex items-center justify-between">
                 <div>
                   <div className="text-xs text-white/60">A partir de</div>
                   <div className="font-mono text-2xl font-bold text-white">
-                    {item.preco}
+                    {formatPrice(item.price)}
                   </div>
                 </div>
                 <Button

@@ -120,16 +120,19 @@ export async function middleware(request: NextRequest) {
     return NextResponse.rewrite(url)
   }
 
-  // Rewrite para /loja/* com o header do tenant
+  // Rewrite para /loja/* com headers do tenant propagados no request
   const url = request.nextUrl.clone()
   url.pathname = `/loja${pathname}`
-  const response = NextResponse.rewrite(url)
-  response.headers.set("x-tenant-slug", tenantSlug)
+
+  const requestHeaders = new Headers(request.headers)
+  requestHeaders.set("x-tenant-slug", tenantSlug)
   if (cachedTenant) {
-    response.headers.set("x-tenant-id", cachedTenant.id)
+    requestHeaders.set("x-tenant-id", cachedTenant.id)
   }
 
-  return response
+  return NextResponse.rewrite(url, {
+    request: { headers: requestHeaders },
+  })
 }
 
 export const config = {

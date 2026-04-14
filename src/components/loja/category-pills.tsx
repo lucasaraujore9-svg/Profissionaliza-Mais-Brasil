@@ -1,35 +1,57 @@
 "use client"
 
-import { useState } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
+import { useTransition } from "react"
 
-const categorias = [
-  { slug: "todos", nome: "Todos" },
-  { slug: "tecnologia", nome: "Tecnologia" },
-  { slug: "marketing", nome: "Marketing" },
-  { slug: "administracao", nome: "Administração" },
-  { slug: "saude", nome: "Saúde" },
-]
+interface CategoryPillsProps {
+  categories: string[]
+  activeCategory?: string
+}
 
-export function CategoryPills() {
-  const [active, setActive] = useState("todos")
+export function CategoryPills({
+  categories,
+  activeCategory,
+}: CategoryPillsProps) {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const [isPending, startTransition] = useTransition()
+
+  const active = (activeCategory ?? "todos").toLowerCase()
+  const items = [{ slug: "todos", label: "Todos" }, ...categories.map((c) => ({
+    slug: c.toLowerCase(),
+    label: c,
+  }))]
+
+  function setCategory(slug: string) {
+    const params = new URLSearchParams(searchParams.toString())
+    if (slug === "todos") {
+      params.delete("category")
+    } else {
+      params.set("category", slug)
+    }
+    startTransition(() => {
+      router.push(`/?${params.toString()}`)
+    })
+  }
 
   return (
     <div className="border-b border-gray-200 bg-white">
       <div className="mx-auto flex max-w-7xl gap-2 overflow-x-auto px-4 py-4 md:px-6">
-        {categorias.map((cat) => {
+        {items.map((cat) => {
           const isActive = active === cat.slug
           return (
             <button
               key={cat.slug}
               type="button"
-              onClick={() => setActive(cat.slug)}
+              onClick={() => setCategory(cat.slug)}
+              disabled={isPending}
               className={`shrink-0 rounded-full px-4 py-2 text-sm font-medium transition-colors ${
                 isActive
                   ? "bg-blue-600 text-white"
                   : "border border-gray-200 bg-white text-gray-700 hover:border-blue-300 hover:text-blue-600"
-              }`}
+              } disabled:opacity-60`}
             >
-              {cat.nome}
+              {cat.label}
             </button>
           )
         })}
