@@ -186,6 +186,7 @@ model Tenant {
   coupons        Coupon[]
   tenantPayments TenantPayment[]
   webhookLogs    WebhookLog[]
+  leads          Lead[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -521,4 +522,36 @@ model WebhookLog {
   @@index([processed])
   @@index([createdAt])
   @@map("webhook_logs")
+}
+
+// ============================================================
+// LEADS (captacao de interesse de revendedores)
+// ============================================================
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  CONVERTED
+  LOST
+}
+
+model Lead {
+  id          String     @id @default(cuid())
+  email       String
+  companyName String     @map("company_name")
+  phone       String
+  status      LeadStatus @default(NEW)
+
+  // Quando converter em revendedor, liga ao tenant
+  tenantId    String?    @map("tenant_id")
+  tenant      Tenant?    @relation(fields: [tenantId], references: [id])
+
+  notes       String?    @db.Text
+  createdAt   DateTime   @default(now()) @map("created_at")
+  updatedAt   DateTime   @updatedAt @map("updated_at")
+
+  @@index([status])
+  @@index([email])
+  @@index([createdAt])
+  @@map("leads")
 }

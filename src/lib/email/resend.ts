@@ -16,6 +16,10 @@ import {
   PaymentTemplate,
   type PaymentTemplateProps,
 } from "./templates/payment"
+import {
+  LeadConfirmationTemplate,
+  type LeadConfirmationTemplateProps,
+} from "./templates/lead-confirmation"
 
 const DEFAULT_FROM = "Profissionaliza Mais Brasil <noreply@profissionalizamaisbrasil.com.br>"
 
@@ -43,6 +47,7 @@ export type EmailTemplate =
   | { type: "reset-password"; props: ResetPasswordTemplateProps }
   | { type: "enrollment"; props: EnrollmentTemplateProps }
   | { type: "payment"; props: PaymentTemplateProps }
+  | { type: "lead-confirmation"; props: LeadConfirmationTemplateProps }
 
 interface SendEmailParams {
   to: string | string[]
@@ -62,6 +67,8 @@ function renderTemplate(template: EmailTemplate): React.ReactElement {
       return EnrollmentTemplate(template.props)
     case "payment":
       return PaymentTemplate(template.props)
+    case "lead-confirmation":
+      return LeadConfirmationTemplate(template.props)
   }
 }
 
