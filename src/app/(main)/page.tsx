@@ -1,14 +1,19 @@
-export default function Home() {
+import { HeroSection } from "@/components/main/hero-section"
+import { ComoFunciona } from "@/components/main/como-funciona"
+import { NumerosBento } from "@/components/main/numeros-bento"
+import { CatalogoPreview } from "@/components/main/catalogo-preview"
+import { PlanosSection } from "@/components/main/planos-section"
+import { DepoimentosSection } from "@/components/main/depoimentos-section"
+
+export default function LandingPage() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50">
-      <div className="text-center">
-        <h1 className="text-4xl font-bold text-zinc-900">
-          Profissionaliza Mais Brasil
-        </h1>
-        <p className="mt-4 text-lg text-zinc-600">
-          Plataforma de cursos profissionalizantes online
-        </p>
-      </div>
-    </div>
+    <>
+      <HeroSection />
+      <ComoFunciona />
+      <NumerosBento />
+      <CatalogoPreview />
+      <PlanosSection />
+      <DepoimentosSection />
+    </>
   )
 }
