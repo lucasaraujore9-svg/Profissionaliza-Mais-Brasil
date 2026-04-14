@@ -1,8 +1,42 @@
+type EnrollmentStatusLabel =
+  | "PENDING"
+  | "ACTIVE"
+  | "SUSPENDED"
+  | "CANCELLED"
+  | "COMPLETED"
+
 interface ConfirmationCardProps {
   numeroPedido: string
   curso: string
   total: string
   email: string
+  status: EnrollmentStatusLabel
+}
+
+const STATUS_CONFIG: Record<
+  EnrollmentStatusLabel,
+  { label: string; className: string }
+> = {
+  PENDING: {
+    label: "Pagamento em análise",
+    className: "bg-yellow-100 text-yellow-700",
+  },
+  ACTIVE: {
+    label: "Pagamento aprovado",
+    className: "bg-green-100 text-green-700",
+  },
+  SUSPENDED: {
+    label: "Suspensa",
+    className: "bg-orange-100 text-orange-700",
+  },
+  CANCELLED: {
+    label: "Cancelada",
+    className: "bg-red-100 text-red-700",
+  },
+  COMPLETED: {
+    label: "Concluída",
+    className: "bg-blue-100 text-blue-700",
+  },
 }
 
 export function ConfirmationCard({
@@ -10,7 +44,10 @@ export function ConfirmationCard({
   curso,
   total,
   email,
+  status,
 }: ConfirmationCardProps) {
+  const config = STATUS_CONFIG[status]
+
   return (
     <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm lg:p-8">
       <div className="flex items-center justify-between border-b border-gray-100 pb-5">
@@ -22,15 +59,17 @@ export function ConfirmationCard({
             {numeroPedido}
           </div>
         </div>
-        <div className="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700">
-          Pagamento aprovado
+        <div
+          className={`rounded-full px-3 py-1 text-xs font-semibold ${config.className}`}
+        >
+          {config.label}
         </div>
       </div>
 
       <dl className="mt-5 space-y-3 text-sm">
         <div className="flex items-center justify-between">
           <dt className="text-gray-600">Curso</dt>
-          <dd className="font-medium text-[#1A1A2E]">{curso}</dd>
+          <dd className="text-right font-medium text-[#1A1A2E]">{curso}</dd>
         </div>
         <div className="flex items-center justify-between">
           <dt className="text-gray-600">Email de acesso</dt>

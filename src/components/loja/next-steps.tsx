@@ -1,4 +1,10 @@
+"use client"
+
+import { useEffect, useState } from "react"
 import { Mail, LogIn, BookOpen } from "lucide-react"
+
+const EA_URL = "https://escolaavancada.com.br"
+const REDIRECT_SECONDS = 5
 
 const steps = [
   {
@@ -18,12 +24,30 @@ const steps = [
   },
 ]
 
-export function NextSteps() {
+interface NextStepsProps {
+  autoRedirect?: boolean
+}
+
+export function NextSteps({ autoRedirect = false }: NextStepsProps) {
+  const [seconds, setSeconds] = useState(REDIRECT_SECONDS)
+
+  useEffect(() => {
+    if (!autoRedirect) return
+    if (seconds <= 0) {
+      window.location.href = EA_URL
+      return
+    }
+    const t = setTimeout(() => setSeconds((s) => s - 1), 1000)
+    return () => clearTimeout(t)
+  }, [autoRedirect, seconds])
+
   return (
     <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm lg:p-8">
       <h2 className="text-base font-semibold text-[#1A1A2E]">Próximos passos</h2>
       <p className="mt-1 text-sm text-gray-600">
-        Você será redirecionado à Escola Avançada onde seus estudos acontecem.
+        {autoRedirect
+          ? `Você será redirecionado à Escola Avançada em ${seconds} segundo${seconds === 1 ? "" : "s"}.`
+          : "Assim que o pagamento for confirmado, você receberá suas credenciais por email."}
       </p>
 
       <ol className="mt-6 space-y-4">
