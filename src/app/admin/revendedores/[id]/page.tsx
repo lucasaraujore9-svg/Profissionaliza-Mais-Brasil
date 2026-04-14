@@ -1,10 +1,6 @@
 import Link from "next/link"
 import { ArrowLeft } from "lucide-react"
-import { ResellerProfile } from "@/components/admin/reseller-profile"
-import { ResellerStudentCount } from "@/components/admin/reseller-student-count"
-import { ResellerPaymentHistory } from "@/components/admin/reseller-payment-history"
-import { ResellerPolicyConfig } from "@/components/admin/reseller-policy-config"
-import { ResellerActionButtons } from "@/components/admin/reseller-action-buttons"
+import { ResellerDetailClient } from "@/components/admin/reseller-detail-client"
 
 export default async function ResellerDetailPage({
   params,
@@ -23,18 +19,7 @@ export default async function ResellerDetailPage({
         Voltar para revendedores
       </Link>
 
-      <ResellerProfile id={id} />
-
-      <div className="grid gap-6 xl:grid-cols-[2fr_1fr]">
-        <div className="space-y-6">
-          <ResellerPaymentHistory />
-          <ResellerPolicyConfig />
-        </div>
-        <div className="space-y-6">
-          <ResellerStudentCount />
-          <ResellerActionButtons />
-        </div>
-      </div>
+      <ResellerDetailClient tenantId={id} />
     </div>
   )
 }

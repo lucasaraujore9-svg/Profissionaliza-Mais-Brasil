@@ -1,3 +1,17 @@
+export interface AnalyticsChartsData {
+  months: string[]
+  revenueByMonth: number[]
+  studentsByMonth: number[]
+  conversionByMonth: number[]
+  distribution: { label: string; value: number }[]
+}
+
+interface AnalyticsChartsProps {
+  data: AnalyticsChartsData
+}
+
+const DONUT_COLORS = ["#3B82F6", "#10B981", "#F59E0B", "#6366F1", "#F97316", "#14B8A6"]
+
 interface ChartWrapperProps {
   title: string
   subtitle: string
@@ -15,10 +29,13 @@ function ChartWrapper({ title, subtitle, children }: ChartWrapperProps) {
 }
 
 function LineChart({ values, color }: { values: number[]; color: string }) {
+  if (values.length === 0) {
+    return <div className="h-[120px] text-xs text-gray-400">Sem dados</div>
+  }
   const width = 320
   const height = 120
-  const max = Math.max(...values) * 1.1
-  const step = width / (values.length - 1)
+  const max = Math.max(...values, 1) * 1.1
+  const step = values.length > 1 ? width / (values.length - 1) : width
   const points = values
     .map((v, i) => `${i * step},${height - (v / max) * height}`)
     .join(" ")
@@ -37,7 +54,10 @@ function LineChart({ values, color }: { values: number[]; color: string }) {
 }
 
 function BarChart({ values, color }: { values: number[]; color: string }) {
-  const max = Math.max(...values)
+  if (values.length === 0) {
+    return <div className="h-[120px] text-xs text-gray-400">Sem dados</div>
+  }
+  const max = Math.max(...values, 1)
   return (
     <div className="flex h-[120px] items-end gap-2">
       {values.map((v, i) => (
@@ -57,17 +77,35 @@ function BarChart({ values, color }: { values: number[]; color: string }) {
 
 function DonutChart({ segments }: { segments: { label: string; value: number; color: string }[] }) {
   const total = segments.reduce((sum, s) => sum + s.value, 0)
+  if (total === 0) {
+    return <div className="text-xs text-gray-400">Sem dados</div>
+  }
   const radius = 45
   const circumference = 2 * Math.PI * radius
-  let offset = 0
+  const segmentsWithGeometry = segments.reduce<
+    {
+      seg: { label: string; value: number; color: string }
+      length: number
+      dasharray: string
+      dashoffset: number
+    }[]
+  >((acc, seg) => {
+    const previousOffset = acc.reduce((sum, item) => sum + item.length, 0)
+    const length = (seg.value / total) * circumference
+    return [
+      ...acc,
+      {
+        seg,
+        length,
+        dasharray: `${length} ${circumference - length}`,
+        dashoffset: -previousOffset,
+      },
+    ]
+  }, [])
   return (
     <div className="flex items-center gap-5">
       <svg viewBox="0 0 120 120" className="h-28 w-28 -rotate-90">
-        {segments.map((seg) => {
-          const length = (seg.value / total) * circumference
-          const dasharray = `${length} ${circumference - length}`
-          const dashoffset = -offset
-          offset += length
+        {segmentsWithGeometry.map(({ seg, dasharray, dashoffset }) => {
           return (
             <circle
               key={seg.label}
@@ -101,44 +139,48 @@ function DonutChart({ segments }: { segments: { label: string; value: number; co
   )
 }
 
-export function AnalyticsCharts() {
+function formatMonth(ym: string): string {
+  const [y, m] = ym.split("-")
+  return `${m}/${y.slice(-2)}`
+}
+
+export function AnalyticsCharts({ data }: AnalyticsChartsProps) {
+  const distSegments = data.distribution.map((d, i) => ({
+    label: d.label,
+    value: d.value,
+    color: DONUT_COLORS[i % DONUT_COLORS.length],
+  }))
+
+  const monthsLabel = data.months.length > 0
+    ? `${formatMonth(data.months[0])} → ${formatMonth(data.months[data.months.length - 1])}`
+    : "Sem dados"
+
   return (
     <div className="grid gap-6 lg:grid-cols-2 xl:grid-cols-3">
-      <ChartWrapper title="Receita mensal" subtitle="MRR últimos 6 meses">
-        <LineChart values={[64, 72, 86, 96, 118, 148]} color="#3B82F6" />
+      <ChartWrapper title="Receita mensal" subtitle={`Pagamentos · ${monthsLabel}`}>
+        <LineChart values={data.revenueByMonth} color="#3B82F6" />
       </ChartWrapper>
-      <ChartWrapper title="Crescimento de alunos" subtitle="Matrículas por mês">
-        <LineChart values={[840, 920, 1010, 1140, 1220, 1284]} color="#10B981" />
+      <ChartWrapper title="Crescimento de alunos" subtitle={`Matrículas · ${monthsLabel}`}>
+        <LineChart values={data.studentsByMonth} color="#10B981" />
       </ChartWrapper>
-      <ChartWrapper title="Conversão checkout" subtitle="% por semana">
+      <ChartWrapper title="Conversão checkout" subtitle="% por mês">
         <BarChart
-          values={[5.2, 6.1, 5.8, 7.0, 7.8, 8.2]}
+          values={data.conversionByMonth}
           color="linear-gradient(180deg, #6366F1, #3B82F6)"
         />
       </ChartWrapper>
-      <ChartWrapper title="Distribuição revendedores" subtitle="Por plano contratado">
-        <DonutChart
-          segments={[
-            { label: "Growth (R$ 297)", value: 62, color: "#3B82F6" },
-            { label: "Starter (R$ 197)", value: 28, color: "#10B981" },
-            { label: "Free trial", value: 10, color: "#F59E0B" },
-          ]}
-        />
+      <ChartWrapper title="Distribuição revendedores" subtitle="Por valor de plano">
+        <DonutChart segments={distSegments} />
       </ChartWrapper>
-      <ChartWrapper title="Origem dos alunos" subtitle="Canais de aquisição" >
-        <DonutChart
-          segments={[
-            { label: "Orgânico", value: 48, color: "#6366F1" },
-            { label: "Ads", value: 32, color: "#F97316" },
-            { label: "Indicação", value: 20, color: "#14B8A6" },
-          ]}
-        />
+      <ChartWrapper title="Origem dos alunos" subtitle="Indisponível">
+        <div className="flex h-[120px] items-center justify-center text-xs text-gray-400">
+          Aguardando integração de tracking
+        </div>
       </ChartWrapper>
-      <ChartWrapper title="Satisfação (NPS)" subtitle="Média mensal">
-        <BarChart
-          values={[62, 68, 71, 74, 79, 82]}
-          color="linear-gradient(180deg, #F59E0B, #F97316)"
-        />
+      <ChartWrapper title="Satisfação (NPS)" subtitle="Indisponível">
+        <div className="flex h-[120px] items-center justify-center text-xs text-gray-400">
+          Aguardando integração de pesquisa
+        </div>
       </ChartWrapper>
     </div>
   )

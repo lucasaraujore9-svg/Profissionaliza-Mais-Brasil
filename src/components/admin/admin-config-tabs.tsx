@@ -1,12 +1,14 @@
 "use client"
 
 import { useState } from "react"
-import { IntegrationTestCards } from "./integration-test-cards"
-import { WebhookConfig } from "./webhook-config"
-import { SystemInfo } from "./system-info"
+import {
+  IntegrationTestCards,
+  type IntegrationsConfig,
+} from "./integration-test-cards"
+import { WebhookConfig, type WebhookConfigData } from "./webhook-config"
+import { SystemInfo, type SystemInfoData } from "./system-info"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Button } from "@/components/ui/button"
 
 const TABS = [
   { id: "geral", label: "Geral" },
@@ -17,7 +19,17 @@ const TABS = [
 
 type TabId = (typeof TABS)[number]["id"]
 
-function GeneralTab() {
+export interface GeneralConfigData {
+  appName: string
+  appDomain: string
+  supportEmail: string
+}
+
+interface GeneralTabProps {
+  general: GeneralConfigData
+}
+
+function GeneralTab({ general }: GeneralTabProps) {
   return (
     <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm lg:p-8">
       <h3 className="text-sm font-semibold text-[#1A1A2E]">Configurações gerais</h3>
@@ -28,18 +40,15 @@ function GeneralTab() {
       <div className="mt-6 grid gap-5 md:grid-cols-2">
         <div>
           <Label htmlFor="conf-nome">Nome da plataforma</Label>
-          <Input
-            id="conf-nome"
-            defaultValue="Profissionaliza Mais Brasil"
-            className="mt-1.5"
-          />
+          <Input id="conf-nome" defaultValue={general.appName} className="mt-1.5" readOnly />
         </div>
         <div>
           <Label htmlFor="conf-dominio">Domínio principal</Label>
           <Input
             id="conf-dominio"
-            defaultValue="profissionalizamaisbrasil.com.br"
+            defaultValue={general.appDomain}
             className="mt-1.5 font-mono"
+            readOnly
           />
         </div>
         <div>
@@ -47,30 +56,34 @@ function GeneralTab() {
           <Input
             id="conf-suporte"
             type="email"
-            defaultValue="suporte@profissionalizamaisbrasil.com.br"
+            defaultValue={general.supportEmail}
             className="mt-1.5"
-          />
-        </div>
-        <div>
-          <Label htmlFor="conf-telefone">Telefone de contato</Label>
-          <Input
-            id="conf-telefone"
-            defaultValue="(11) 4000-0000"
-            className="mt-1.5"
+            readOnly
           />
         </div>
       </div>
 
-      <div className="mt-6 flex justify-end">
-        <Button className="bg-blue-600 text-white hover:bg-blue-700">
-          Salvar alterações
-        </Button>
-      </div>
+      <p className="mt-5 text-[11px] text-gray-500">
+        Estes valores vêm de variáveis de ambiente. Para alterá-los, edite no Vercel e
+        faça redeploy.
+      </p>
     </div>
   )
 }
 
-export function AdminConfigTabs() {
+interface AdminConfigTabsProps {
+  general: GeneralConfigData
+  integrations: IntegrationsConfig
+  webhooks: WebhookConfigData
+  system: SystemInfoData
+}
+
+export function AdminConfigTabs({
+  general,
+  integrations,
+  webhooks,
+  system,
+}: AdminConfigTabsProps) {
   const [active, setActive] = useState<TabId>("geral")
 
   return (
@@ -93,10 +106,10 @@ export function AdminConfigTabs() {
       </div>
 
       <div className="mt-6">
-        {active === "geral" && <GeneralTab />}
-        {active === "integracoes" && <IntegrationTestCards />}
-        {active === "webhooks" && <WebhookConfig />}
-        {active === "sobre" && <SystemInfo />}
+        {active === "geral" && <GeneralTab general={general} />}
+        {active === "integracoes" && <IntegrationTestCards integrations={integrations} />}
+        {active === "webhooks" && <WebhookConfig config={webhooks} />}
+        {active === "sobre" && <SystemInfo info={system} />}
       </div>
     </div>
   )

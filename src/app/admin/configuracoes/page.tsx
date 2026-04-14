@@ -1,5 +1,5 @@
 import { PageHeader } from "@/components/painel/page-header"
-import { AdminConfigTabs } from "@/components/admin/admin-config-tabs"
+import { AdminConfigClient } from "@/components/admin/admin-config-client"
 
 export default function AdminConfigPage() {
   return (
@@ -8,7 +8,7 @@ export default function AdminConfigPage() {
         title="Configurações"
         description="Parâmetros globais, integrações, webhooks e informações do sistema."
       />
-      <AdminConfigTabs />
+      <AdminConfigClient />
     </div>
   )
 }

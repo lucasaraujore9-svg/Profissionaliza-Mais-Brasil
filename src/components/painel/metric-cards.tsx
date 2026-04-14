@@ -1,40 +1,74 @@
 import { TrendingUp, Users, Target, Receipt } from "lucide-react"
+import { formatCurrency } from "@/lib/utils"
 
-const metrics = [
-  {
-    label: "Receita do mês",
-    value: "R$ 48.720",
-    change: "+12,4%",
-    positive: true,
-    icon: TrendingUp,
-  },
-  {
-    label: "Alunos novos",
-    value: "182",
-    change: "+8,1%",
-    positive: true,
-    icon: Users,
-  },
-  {
-    label: "Taxa de conversão",
-    value: "4,7%",
-    change: "-0,3%",
-    positive: false,
-    icon: Target,
-  },
-  {
-    label: "Ticket médio",
-    value: "R$ 267",
-    change: "+4,2%",
-    positive: true,
-    icon: Receipt,
-  },
-] as const
+export interface DashboardMetrics {
+  monthlyRevenue: number
+  monthlyRevenueChange: number | null
+  monthlyStudents: number
+  monthlyStudentsChange: number | null
+  conversionRate: number | null
+  ticketAverage: number
+  enrollmentsCount: number
+}
 
-export function MetricCards() {
+interface MetricCardsProps {
+  metrics: DashboardMetrics
+}
+
+function formatPercent(value: number | null): { label: string; positive: boolean } {
+  if (value === null) {
+    return { label: "—", positive: true }
+  }
+  const positive = value >= 0
+  const formatted = `${positive ? "+" : ""}${value.toFixed(1).replace(".", ",")}%`
+  return { label: formatted, positive }
+}
+
+export function MetricCards({ metrics }: MetricCardsProps) {
+  const revenueChange = formatPercent(metrics.monthlyRevenueChange)
+  const studentsChange = formatPercent(metrics.monthlyStudentsChange)
+  const conversion = metrics.conversionRate === null
+    ? "—"
+    : `${metrics.conversionRate.toFixed(1).replace(".", ",")}%`
+
+  const items = [
+    {
+      label: "Receita do mês",
+      value: formatCurrency(metrics.monthlyRevenue),
+      change: revenueChange.label,
+      positive: revenueChange.positive,
+      hint: "vs mês anterior",
+      icon: TrendingUp,
+    },
+    {
+      label: "Alunos novos",
+      value: String(metrics.monthlyStudents),
+      change: studentsChange.label,
+      positive: studentsChange.positive,
+      hint: "vs mês anterior",
+      icon: Users,
+    },
+    {
+      label: "Taxa de conversão",
+      value: conversion,
+      change: `${metrics.enrollmentsCount} matrículas`,
+      positive: true,
+      hint: "no mês",
+      icon: Target,
+    },
+    {
+      label: "Ticket médio",
+      value: formatCurrency(metrics.ticketAverage),
+      change: `${metrics.enrollmentsCount} vendas`,
+      positive: true,
+      hint: "no mês",
+      icon: Receipt,
+    },
+  ]
+
   return (
     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-      {metrics.map((metric) => {
+      {items.map((metric) => {
         const Icon = metric.icon
         return (
           <div
@@ -57,7 +91,7 @@ export function MetricCards() {
                 metric.positive ? "text-green-600" : "text-red-600"
               }`}
             >
-              {metric.change} vs mês anterior
+              {metric.change} {metric.hint}
             </div>
           </div>
         )

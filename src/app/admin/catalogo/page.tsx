@@ -1,7 +1,5 @@
 import { PageHeader } from "@/components/painel/page-header"
-import { CatalogHeader } from "@/components/admin/catalog-header"
-import { CatalogCourseGrid } from "@/components/admin/catalog-course-grid"
-import { CatalogSyncLog } from "@/components/admin/catalog-sync-log"
+import { AdminCatalogClient } from "@/components/admin/admin-catalog-client"
 
 export default function AdminCatalogPage() {
   return (
@@ -10,9 +8,7 @@ export default function AdminCatalogPage() {
         title="Catálogo"
         description="Sincronize os cursos da Escola Avançada e gerencie o catálogo agregado."
       />
-      <CatalogHeader />
-      <CatalogCourseGrid />
-      <CatalogSyncLog />
+      <AdminCatalogClient />
     </div>
   )
 }

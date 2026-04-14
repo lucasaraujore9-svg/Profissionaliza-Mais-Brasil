@@ -5,11 +5,10 @@ function createRedisClient(): Redis | null {
   const token = process.env.UPSTASH_REDIS_REST_TOKEN
 
   if (!url || !token) {
-    if (process.env.NODE_ENV === "development") {
+    if (process.env.NODE_ENV !== "production") {
       console.warn("[redis] UPSTASH_REDIS_REST_URL or TOKEN not set — Redis disabled")
-      return null
     }
-    throw new Error("UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN are required")
+    return null
   }
 
   return new Redis({ url, token })

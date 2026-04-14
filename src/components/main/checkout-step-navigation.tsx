@@ -1,9 +1,10 @@
-import { ArrowLeft, ArrowRight, Check } from "lucide-react"
+import { ArrowLeft, ArrowRight, Check, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
 interface CheckoutStepNavigationProps {
   currentStep: number
   totalSteps: number
+  submitting?: boolean
   onPrevious: () => void
   onNext: () => void
 }
@@ -11,6 +12,7 @@ interface CheckoutStepNavigationProps {
 export function CheckoutStepNavigation({
   currentStep,
   totalSteps,
+  submitting = false,
   onPrevious,
   onNext,
 }: CheckoutStepNavigationProps) {
@@ -24,7 +26,7 @@ export function CheckoutStepNavigation({
         type="button"
         variant="outline"
         size="lg"
-        disabled={isFirst}
+        disabled={isFirst || submitting}
         onClick={onPrevious}
         className="w-full sm:w-auto"
       >
@@ -37,9 +39,15 @@ export function CheckoutStepNavigation({
           type="button"
           size="lg"
           onClick={onNext}
+          disabled={submitting}
           className="w-full bg-blue-600 text-white hover:bg-blue-700 sm:w-auto"
         >
-          {isFinalReview ? (
+          {submitting ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Enviando...
+            </>
+          ) : isFinalReview ? (
             <>
               <Check className="mr-2 h-4 w-4" />
               Finalizar cadastro

@@ -2,44 +2,90 @@
 
 import { Eye, Ban, Unlock } from "lucide-react"
 
-interface Student {
+export type StudentStatus =
+  | "ATIVO"
+  | "INATIVO"
+  | "BLOQUEADO"
+  | "DEVEDOR"
+  | "FORMADO"
+  | "INTERESSADO"
+
+export interface StudentListItem {
   id: string
   nome: string
   email: string
-  cursos: number
-  matricula: string
-  status: "Ativo" | "Bloqueado" | "Inativo"
+  status: StudentStatus
+  coursesCount: number
+  createdAt: string
 }
 
-const students: Student[] = [
-  { id: "1", nome: "Marina Costa", email: "marina@email.com", cursos: 3, matricula: "14/03/2026", status: "Ativo" },
-  { id: "2", nome: "Pedro Almeida", email: "pedro@email.com", cursos: 2, matricula: "12/03/2026", status: "Ativo" },
-  { id: "3", nome: "Juliana Ramos", email: "juliana@email.com", cursos: 1, matricula: "11/03/2026", status: "Ativo" },
-  { id: "4", nome: "Rafael Lima", email: "rafael@email.com", cursos: 4, matricula: "09/03/2026", status: "Bloqueado" },
-  { id: "5", nome: "Carla Mendes", email: "carla@email.com", cursos: 2, matricula: "08/03/2026", status: "Ativo" },
-  { id: "6", nome: "Bruno Souza", email: "bruno@email.com", cursos: 1, matricula: "07/03/2026", status: "Inativo" },
-  { id: "7", nome: "Fernanda Dias", email: "fernanda@email.com", cursos: 3, matricula: "05/03/2026", status: "Ativo" },
-  { id: "8", nome: "Lucas Oliveira", email: "lucas.o@email.com", cursos: 2, matricula: "04/03/2026", status: "Ativo" },
-  { id: "9", nome: "Amanda Reis", email: "amanda@email.com", cursos: 1, matricula: "02/03/2026", status: "Bloqueado" },
-  { id: "10", nome: "Diego Martins", email: "diego@email.com", cursos: 2, matricula: "01/03/2026", status: "Ativo" },
-  { id: "11", nome: "Patrícia Alves", email: "patricia@email.com", cursos: 1, matricula: "27/02/2026", status: "Ativo" },
-  { id: "12", nome: "Tiago Ferreira", email: "tiago@email.com", cursos: 5, matricula: "25/02/2026", status: "Ativo" },
-  { id: "13", nome: "Vanessa Pires", email: "vanessa@email.com", cursos: 2, matricula: "22/02/2026", status: "Inativo" },
-  { id: "14", nome: "Henrique Gomes", email: "henrique@email.com", cursos: 3, matricula: "20/02/2026", status: "Ativo" },
-  { id: "15", nome: "Beatriz Cardoso", email: "beatriz@email.com", cursos: 1, matricula: "18/02/2026", status: "Ativo" },
-]
+const statusLabels: Record<StudentStatus, string> = {
+  ATIVO: "Ativo",
+  INATIVO: "Inativo",
+  BLOQUEADO: "Bloqueado",
+  DEVEDOR: "Devedor",
+  FORMADO: "Formado",
+  INTERESSADO: "Interessado",
+}
 
-const statusColors: Record<Student["status"], string> = {
-  Ativo: "bg-green-100 text-green-700",
-  Bloqueado: "bg-red-100 text-red-700",
-  Inativo: "bg-gray-100 text-gray-600",
+const statusColors: Record<StudentStatus, string> = {
+  ATIVO: "bg-green-100 text-green-700",
+  INATIVO: "bg-gray-100 text-gray-600",
+  BLOQUEADO: "bg-red-100 text-red-700",
+  DEVEDOR: "bg-amber-100 text-amber-700",
+  FORMADO: "bg-blue-100 text-blue-700",
+  INTERESSADO: "bg-violet-100 text-violet-700",
+}
+
+function formatDate(iso: string): string {
+  try {
+    const date = new Date(iso)
+    return date.toLocaleDateString("pt-BR")
+  } catch {
+    return "—"
+  }
+}
+
+function initials(name: string): string {
+  return name
+    .split(" ")
+    .map((n) => n[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase()
 }
 
 interface StudentTableProps {
+  students: StudentListItem[]
+  loading?: boolean
+  pendingId?: string | null
   onViewDetails: (studentId: string) => void
+  onToggleBlock: (student: StudentListItem) => void
 }
 
-export function StudentTable({ onViewDetails }: StudentTableProps) {
+export function StudentTable({
+  students,
+  loading,
+  pendingId,
+  onViewDetails,
+  onToggleBlock,
+}: StudentTableProps) {
+  if (loading) {
+    return (
+      <div className="rounded-2xl border border-gray-200 bg-white p-10 text-center text-sm text-gray-500 shadow-sm">
+        Carregando alunos...
+      </div>
+    )
+  }
+
+  if (students.length === 0) {
+    return (
+      <div className="rounded-2xl border border-dashed border-gray-300 bg-white p-10 text-center text-sm text-gray-500">
+        Nenhum aluno encontrado.
+      </div>
+    )
+  }
+
   return (
     <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
       <div className="overflow-x-auto">
@@ -55,73 +101,61 @@ export function StudentTable({ onViewDetails }: StudentTableProps) {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100 bg-white">
-            {students.map((student) => (
-              <tr key={student.id} className="hover:bg-gray-50/60">
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 text-[10px] font-semibold text-blue-700">
-                      {student.nome
-                        .split(" ")
-                        .map((n) => n[0])
-                        .join("")
-                        .slice(0, 2)}
+            {students.map((student) => {
+              const isBlocked = student.status === "BLOQUEADO"
+              const isPending = pendingId === student.id
+              return (
+                <tr key={student.id} className="hover:bg-gray-50/60">
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 text-[10px] font-semibold text-blue-700">
+                        {initials(student.nome)}
+                      </div>
+                      <span className="text-sm font-medium text-[#1A1A2E]">
+                        {student.nome}
+                      </span>
                     </div>
-                    <span className="text-sm font-medium text-[#1A1A2E]">
-                      {student.nome}
+                  </td>
+                  <td className="px-4 py-3 text-sm text-gray-600">{student.email}</td>
+                  <td className="px-4 py-3 font-mono text-sm text-gray-700">
+                    {student.coursesCount}
+                  </td>
+                  <td className="px-4 py-3 text-sm text-gray-600">
+                    {formatDate(student.createdAt)}
+                  </td>
+                  <td className="px-4 py-3">
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${statusColors[student.status]}`}
+                    >
+                      {statusLabels[student.status]}
                     </span>
-                  </div>
-                </td>
-                <td className="px-4 py-3 text-sm text-gray-600">
-                  {student.email}
-                </td>
-                <td className="px-4 py-3 font-mono text-sm text-gray-700">
-                  {student.cursos}
-                </td>
-                <td className="px-4 py-3 text-sm text-gray-600">
-                  {student.matricula}
-                </td>
-                <td className="px-4 py-3">
-                  <span
-                    className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                      statusColors[student.status]
-                    }`}
-                  >
-                    {student.status}
-                  </span>
-                </td>
-                <td className="px-4 py-3">
-                  <div className="flex items-center justify-end gap-1">
-                    <button
-                      type="button"
-                      onClick={() => onViewDetails(student.id)}
-                      className="rounded-md p-1.5 text-gray-500 hover:bg-gray-100 hover:text-blue-600"
-                      title="Ver detalhes"
-                    >
-                      <Eye className="h-4 w-4" />
-                    </button>
-                    <button
-                      type="button"
-                      className={`rounded-md p-1.5 hover:bg-gray-100 ${
-                        student.status === "Bloqueado"
-                          ? "text-green-600"
-                          : "text-gray-500 hover:text-red-600"
-                      }`}
-                      title={
-                        student.status === "Bloqueado"
-                          ? "Desbloquear"
-                          : "Bloquear"
-                      }
-                    >
-                      {student.status === "Bloqueado" ? (
-                        <Unlock className="h-4 w-4" />
-                      ) : (
-                        <Ban className="h-4 w-4" />
-                      )}
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center justify-end gap-1">
+                      <button
+                        type="button"
+                        onClick={() => onViewDetails(student.id)}
+                        className="rounded-md p-1.5 text-gray-500 hover:bg-gray-100 hover:text-blue-600"
+                        title="Ver detalhes"
+                      >
+                        <Eye className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isPending}
+                        onClick={() => onToggleBlock(student)}
+                        className={`rounded-md p-1.5 hover:bg-gray-100 disabled:opacity-50 ${
+                          isBlocked ? "text-green-600" : "text-gray-500 hover:text-red-600"
+                        }`}
+                        title={isBlocked ? "Desbloquear" : "Bloquear"}
+                      >
+                        {isBlocked ? <Unlock className="h-4 w-4" /> : <Ban className="h-4 w-4" />}
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
       </div>

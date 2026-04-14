@@ -1,40 +1,65 @@
 import { TrendingUp, Repeat, Users, Coins } from "lucide-react"
 
-const CARDS = [
-  {
-    label: "MRR Total",
-    value: "R$ 148.320",
-    change: "+12,4%",
-    icon: Repeat,
-    gradient: "from-blue-600 to-indigo-600",
-  },
-  {
-    label: "ARR (projetado)",
-    value: "R$ 1,78M",
-    change: "+14,1%",
-    icon: TrendingUp,
-    gradient: "from-emerald-500 to-teal-600",
-  },
-  {
-    label: "Churn Rate",
-    value: "2,6%",
-    change: "-0,3pp",
-    icon: Users,
-    gradient: "from-rose-500 to-pink-600",
-  },
-  {
-    label: "LTV médio",
-    value: "R$ 6.840",
-    change: "+4,2%",
-    icon: Coins,
-    gradient: "from-amber-500 to-orange-600",
-  },
-]
+export interface AdminFinanceSummaryData {
+  mrr: number
+  arr: number
+  churnRate: number
+  ltv: number
+  paidLast30: number
+  paidChangePct: number
+}
 
-export function AdminFinanceSummary() {
+interface AdminFinanceSummaryProps {
+  summary: AdminFinanceSummaryData
+}
+
+function formatMoney(v: number): string {
+  return v.toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+    maximumFractionDigits: 0,
+  })
+}
+
+function formatPct(v: number, digits = 1): string {
+  return `${v >= 0 ? "+" : ""}${v.toFixed(digits)}%`
+}
+
+export function AdminFinanceSummary({ summary }: AdminFinanceSummaryProps) {
+  const cards = [
+    {
+      label: "MRR",
+      value: formatMoney(summary.mrr),
+      change: formatPct(summary.paidChangePct),
+      icon: Repeat,
+      gradient: "from-blue-600 to-indigo-600",
+    },
+    {
+      label: "ARR (projetado)",
+      value: formatMoney(summary.arr),
+      change: "12x MRR",
+      icon: TrendingUp,
+      gradient: "from-emerald-500 to-teal-600",
+    },
+    {
+      label: "Churn Rate",
+      value: `${summary.churnRate.toFixed(1)}%`,
+      change: "Acumulado",
+      icon: Users,
+      gradient: "from-rose-500 to-pink-600",
+    },
+    {
+      label: "LTV médio",
+      value: formatMoney(summary.ltv),
+      change: "Base 24 meses",
+      icon: Coins,
+      gradient: "from-amber-500 to-orange-600",
+    },
+  ]
+
   return (
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-      {CARDS.map((card) => {
+      {cards.map((card) => {
         const Icon = card.icon
         return (
           <div
@@ -48,7 +73,7 @@ export function AdminFinanceSummary() {
               <Icon className="h-4 w-4 text-white/85" />
             </div>
             <p className="mt-3 font-mono text-2xl font-bold">{card.value}</p>
-            <p className="mt-1 text-xs text-white/85">{card.change} vs mês anterior</p>
+            <p className="mt-1 text-xs text-white/85">{card.change}</p>
           </div>
         )
       })}

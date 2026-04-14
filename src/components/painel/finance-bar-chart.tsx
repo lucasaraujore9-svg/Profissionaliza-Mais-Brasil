@@ -2,26 +2,20 @@
 
 import { useState } from "react"
 
-const weekData = [
-  { label: "Seg", value: 42 },
-  { label: "Ter", value: 68 },
-  { label: "Qua", value: 55 },
-  { label: "Qui", value: 89 },
-  { label: "Sex", value: 72 },
-  { label: "Sáb", value: 95 },
-  { label: "Dom", value: 38 },
-]
+export interface ChartPoint {
+  label: string
+  value: number
+}
 
-const monthData = [
-  { label: "Sem 1", value: 62 },
-  { label: "Sem 2", value: 78 },
-  { label: "Sem 3", value: 58 },
-  { label: "Sem 4", value: 92 },
-]
+interface FinanceBarChartProps {
+  week: ChartPoint[]
+  month: ChartPoint[]
+}
 
-export function FinanceBarChart() {
+export function FinanceBarChart({ week, month }: FinanceBarChartProps) {
   const [view, setView] = useState<"semana" | "mes">("semana")
-  const data = view === "semana" ? weekData : monthData
+  const data = view === "semana" ? week : month
+  const max = Math.max(...data.map((d) => d.value), 1)
 
   return (
     <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
@@ -52,21 +46,36 @@ export function FinanceBarChart() {
         </div>
       </div>
 
-      <div className="mt-6 flex h-48 items-end justify-between gap-3">
-        {data.map((bar) => (
-          <div key={bar.label} className="flex flex-1 flex-col items-center">
-            <div className="flex h-full w-full items-end">
+      {data.length === 0 ? (
+        <div className="mt-6 flex h-48 items-center justify-center text-xs text-gray-500">
+          Sem dados no período
+        </div>
+      ) : (
+        <div className="mt-6 flex h-48 items-end justify-between gap-3">
+          {data.map((bar, i) => {
+            const heightPct = (bar.value / max) * 100
+            return (
               <div
-                className="w-full rounded-t-md bg-gradient-to-t from-blue-600 to-indigo-500 transition-all"
-                style={{ height: `${bar.value}%` }}
-              />
-            </div>
-            <span className="mt-2 text-[10px] font-medium text-gray-500">
-              {bar.label}
-            </span>
-          </div>
-        ))}
-      </div>
+                key={`${bar.label}-${i}`}
+                className="flex flex-1 flex-col items-center"
+                title={`R$ ${bar.value.toLocaleString("pt-BR", {
+                  minimumFractionDigits: 2,
+                })}`}
+              >
+                <div className="flex h-full w-full items-end">
+                  <div
+                    className="w-full rounded-t-md bg-gradient-to-t from-blue-600 to-indigo-500 transition-all"
+                    style={{ height: `${Math.max(heightPct, 2)}%` }}
+                  />
+                </div>
+                <span className="mt-2 text-[10px] font-medium text-gray-500">
+                  {bar.label}
+                </span>
+              </div>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }

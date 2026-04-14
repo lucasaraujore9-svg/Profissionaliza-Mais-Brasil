@@ -1,14 +1,30 @@
 "use client"
 
-import { useState } from "react"
 import { Search } from "lucide-react"
 import { Input } from "@/components/ui/input"
 
-const filters = ["Todos", "Ativos", "Bloqueados", "Inativos"] as const
+export type StudentFilter = "TODOS" | "ATIVO" | "BLOQUEADO" | "INATIVO"
 
-export function StudentToolbar() {
-  const [active, setActive] = useState<(typeof filters)[number]>("Todos")
+const filters: { key: StudentFilter; label: string }[] = [
+  { key: "TODOS", label: "Todos" },
+  { key: "ATIVO", label: "Ativos" },
+  { key: "BLOQUEADO", label: "Bloqueados" },
+  { key: "INATIVO", label: "Inativos" },
+]
 
+interface StudentToolbarProps {
+  search: string
+  onSearchChange: (value: string) => void
+  filter: StudentFilter
+  onFilterChange: (filter: StudentFilter) => void
+}
+
+export function StudentToolbar({
+  search,
+  onSearchChange,
+  filter,
+  onFilterChange,
+}: StudentToolbarProps) {
   return (
     <div className="flex flex-col gap-3 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm md:flex-row md:items-center md:justify-between">
       <div className="relative flex-1 md:max-w-md">
@@ -17,22 +33,24 @@ export function StudentToolbar() {
           placeholder="Buscar por nome ou email..."
           className="pl-9"
           type="search"
+          value={search}
+          onChange={(e) => onSearchChange(e.target.value)}
         />
       </div>
 
       <div className="flex flex-wrap items-center gap-1 rounded-lg border border-gray-200 bg-gray-50 p-1">
-        {filters.map((filter) => (
+        {filters.map((item) => (
           <button
-            key={filter}
+            key={item.key}
             type="button"
-            onClick={() => setActive(filter)}
+            onClick={() => onFilterChange(item.key)}
             className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
-              active === filter
+              filter === item.key
                 ? "bg-white text-[#1A1A2E] shadow-sm"
                 : "text-gray-600 hover:text-[#1A1A2E]"
             }`}
           >
-            {filter}
+            {item.label}
           </button>
         ))}
       </div>

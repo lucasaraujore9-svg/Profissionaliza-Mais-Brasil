@@ -1,10 +1,12 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 import {
   ArrowLeft,
   ArrowRight,
   Check,
+  Loader2,
   PartyPopper,
   User,
   Globe,
@@ -22,7 +24,61 @@ const steps = [
 ] as const
 
 export function OnboardingWizard() {
+  const router = useRouter()
   const [current, setCurrent] = useState(1)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [finished, setFinished] = useState(false)
+
+  async function persistStep(step: number, completed: boolean) {
+    setError(null)
+    setSaving(true)
+    try {
+      const response = await fetch("/api/painel/onboarding", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ step, completed }),
+      })
+      if (!response.ok) {
+        const json = await response.json().catch(() => null)
+        setError(json?.error ?? "Erro ao salvar etapa")
+        return false
+      }
+      return true
+    } catch {
+      setError("Erro de rede")
+      return false
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleNext() {
+    if (current === steps.length) return
+
+    const ok = await persistStep(current, true)
+    if (!ok) return
+
+    const nextStep = current + 1
+    setCurrent(nextStep)
+
+    if (nextStep === steps.length) {
+      const activated = await persistStep(steps.length, true)
+      if (activated) {
+        setFinished(true)
+      }
+    }
+  }
+
+  function handlePrevious() {
+    setError(null)
+    setCurrent((v) => Math.max(1, v - 1))
+  }
+
+  function handleGoToPanel() {
+    router.push("/painel")
+    router.refresh()
+  }
 
   return (
     <div className="rounded-2xl border border-gray-200 bg-white shadow-sm">
@@ -84,7 +140,8 @@ export function OnboardingWizard() {
           <div>
             <h3 className="text-lg font-bold text-[#1A1A2E]">Confirme seus dados</h3>
             <p className="mt-1 text-sm text-gray-600">
-              Valide nome, email e empresa antes de seguir.
+              Abra a aba <strong>Configurações → Conta</strong> e valide nome,
+              email e empresa antes de seguir.
             </p>
           </div>
         )}
@@ -92,7 +149,8 @@ export function OnboardingWizard() {
           <div>
             <h3 className="text-lg font-bold text-[#1A1A2E]">Defina seu endereço</h3>
             <p className="mt-1 text-sm text-gray-600">
-              Escolha o subdomínio gratuito ou aponte um domínio próprio.
+              Escolha o subdomínio gratuito ou aponte um domínio próprio em{" "}
+              <strong>Vitrine → Domínio</strong>.
             </p>
           </div>
         )}
@@ -100,7 +158,8 @@ export function OnboardingWizard() {
           <div>
             <h3 className="text-lg font-bold text-[#1A1A2E]">Personalize a vitrine</h3>
             <p className="mt-1 text-sm text-gray-600">
-              Envie o logo, escolha cores e escreva o texto de boas-vindas.
+              Envie o logo, escolha cores e escreva o texto de boas-vindas em{" "}
+              <strong>Vitrine → Editor</strong>.
             </p>
           </div>
         )}
@@ -108,21 +167,26 @@ export function OnboardingWizard() {
           <div className="text-center">
             <Sparkles className="mx-auto h-12 w-12 text-blue-600" />
             <h3 className="mt-4 text-lg font-bold text-[#1A1A2E]">
-              Tudo pronto!
+              {finished ? "Tudo pronto!" : "Ativando sua conta..."}
             </h3>
             <p className="mx-auto mt-2 max-w-md text-sm text-gray-600">
-              Sua vitrine está no ar. Agora é hora de compartilhar com os
-              primeiros alunos.
+              {finished
+                ? "Sua vitrine está no ar. Agora é hora de compartilhar com os primeiros alunos."
+                : "Estamos finalizando a ativação. Aguarde um instante."}
             </p>
           </div>
+        )}
+
+        {error && (
+          <p className="mt-4 text-center text-xs text-red-600">{error}</p>
         )}
       </div>
 
       <footer className="flex items-center justify-between border-t border-gray-200 px-6 py-4">
         <Button
           variant="outline"
-          disabled={current === 1}
-          onClick={() => setCurrent((v) => Math.max(1, v - 1))}
+          disabled={current === 1 || saving || finished}
+          onClick={handlePrevious}
         >
           <ArrowLeft className="mr-2 h-4 w-4" />
           Anterior
@@ -130,14 +194,39 @@ export function OnboardingWizard() {
         <span className="text-xs text-gray-500">
           Etapa {current} de {steps.length}
         </span>
-        <Button
-          className="bg-blue-600 text-white hover:bg-blue-700"
-          disabled={current === steps.length}
-          onClick={() => setCurrent((v) => Math.min(steps.length, v + 1))}
-        >
-          {current === steps.length - 1 ? "Finalizar" : "Próximo"}
-          <ArrowRight className="ml-2 h-4 w-4" />
-        </Button>
+        {current < steps.length ? (
+          <Button
+            className="bg-blue-600 text-white hover:bg-blue-700"
+            disabled={saving}
+            onClick={handleNext}
+          >
+            {saving ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Salvando...
+              </>
+            ) : current === steps.length - 1 ? (
+              <>
+                Finalizar
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </>
+            ) : (
+              <>
+                Próximo
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </>
+            )}
+          </Button>
+        ) : (
+          <Button
+            className="bg-blue-600 text-white hover:bg-blue-700"
+            disabled={!finished}
+            onClick={handleGoToPanel}
+          >
+            Ir para o painel
+            <ArrowRight className="ml-2 h-4 w-4" />
+          </Button>
+        )}
       </footer>
     </div>
   )

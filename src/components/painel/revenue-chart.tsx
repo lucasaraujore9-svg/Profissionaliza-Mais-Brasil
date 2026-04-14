@@ -1,23 +1,42 @@
-const dataPoints = [
-  1200, 1450, 1100, 1800, 2100, 1950, 2400, 2200, 2800, 2600, 3100, 2900, 3400,
-  3200, 3800, 3600, 4100, 3900, 4400, 4200, 4800, 4600, 5100, 4900, 5400, 5200,
-  5700, 5500, 6000, 5800,
-] as const
+import { formatCurrency } from "@/lib/utils"
 
-export function RevenueChart() {
-  const max = Math.max(...dataPoints)
-  const min = Math.min(...dataPoints)
-  const range = max - min
+export interface RevenueChartPoint {
+  date: string
+  revenue: number
+}
 
-  const points = dataPoints
-    .map((value, index) => {
-      const x = (index / (dataPoints.length - 1)) * 100
-      const y = 100 - ((value - min) / range) * 100
+interface RevenueChartProps {
+  data: RevenueChartPoint[]
+}
+
+function formatShortDate(iso: string): string {
+  const d = new Date(iso + "T00:00:00")
+  return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`
+}
+
+export function RevenueChart({ data }: RevenueChartProps) {
+  const total = data.reduce((sum, p) => sum + p.revenue, 0)
+  const values = data.map((p) => p.revenue)
+  const max = values.length > 0 ? Math.max(...values) : 0
+  const min = values.length > 0 ? Math.min(...values) : 0
+  const range = max - min || 1
+
+  const points = data
+    .map((point, index) => {
+      const x = data.length > 1 ? (index / (data.length - 1)) * 100 : 0
+      const y = 100 - ((point.revenue - min) / range) * 100
       return `${x},${y}`
     })
     .join(" ")
 
-  const areaPath = `M 0,100 L ${points} L 100,100 Z`
+  const areaPath = data.length > 0
+    ? `M 0,100 L ${points} L 100,100 Z`
+    : "M 0,100 L 100,100 Z"
+
+  const firstLabel = data[0] ? formatShortDate(data[0].date) : ""
+  const midIndex = Math.floor(data.length / 2)
+  const midLabel = data[midIndex] ? formatShortDate(data[midIndex].date) : ""
+  const lastLabel = data.length > 0 ? formatShortDate(data[data.length - 1].date) : ""
 
   return (
     <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
@@ -29,49 +48,50 @@ export function RevenueChart() {
           <p className="mt-1 text-xs text-gray-600">
             Acumulado no período:{" "}
             <span className="font-mono font-semibold text-[#1A1A2E]">
-              R$ 48.720
+              {formatCurrency(total)}
             </span>
           </p>
         </div>
-        <select className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs text-gray-700">
-          <option>Últimos 30 dias</option>
-          <option>Últimos 7 dias</option>
-          <option>Últimos 90 dias</option>
-        </select>
       </div>
 
       <div className="mt-6 h-52 w-full">
-        <svg
-          viewBox="0 0 100 100"
-          preserveAspectRatio="none"
-          className="h-full w-full"
-        >
-          <defs>
-            <linearGradient id="areaFill" x1="0" x2="0" y1="0" y2="1">
-              <stop offset="0%" stopColor="#3B82F6" stopOpacity="0.3" />
-              <stop offset="100%" stopColor="#3B82F6" stopOpacity="0" />
-            </linearGradient>
-          </defs>
-          <path d={areaPath} fill="url(#areaFill)" />
-          <polyline
-            points={points}
-            fill="none"
-            stroke="#3B82F6"
-            strokeWidth="0.6"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            vectorEffect="non-scaling-stroke"
-          />
-        </svg>
+        {data.length === 0 || total === 0 ? (
+          <div className="flex h-full items-center justify-center text-xs text-gray-400">
+            Sem vendas no período.
+          </div>
+        ) : (
+          <svg
+            viewBox="0 0 100 100"
+            preserveAspectRatio="none"
+            className="h-full w-full"
+          >
+            <defs>
+              <linearGradient id="areaFill" x1="0" x2="0" y1="0" y2="1">
+                <stop offset="0%" stopColor="#3B82F6" stopOpacity="0.3" />
+                <stop offset="100%" stopColor="#3B82F6" stopOpacity="0" />
+              </linearGradient>
+            </defs>
+            <path d={areaPath} fill="url(#areaFill)" />
+            <polyline
+              points={points}
+              fill="none"
+              stroke="#3B82F6"
+              strokeWidth="0.6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              vectorEffect="non-scaling-stroke"
+            />
+          </svg>
+        )}
       </div>
 
-      <div className="mt-2 flex justify-between text-[10px] text-gray-400">
-        <span>01/04</span>
-        <span>08/04</span>
-        <span>15/04</span>
-        <span>22/04</span>
-        <span>30/04</span>
-      </div>
+      {data.length > 0 && (
+        <div className="mt-2 flex justify-between text-[10px] text-gray-400">
+          <span>{firstLabel}</span>
+          <span>{midLabel}</span>
+          <span>{lastLabel}</span>
+        </div>
+      )}
     </div>
   )
 }

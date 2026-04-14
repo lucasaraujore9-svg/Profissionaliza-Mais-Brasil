@@ -1,44 +1,72 @@
 import { DollarSign, Users, GraduationCap, AlertTriangle } from "lucide-react"
 
-const METRICS = [
-  {
-    label: "Receita Total (MRR)",
-    value: "R$ 148.320",
-    change: "+12,4%",
-    positive: true,
-    icon: DollarSign,
-    accent: "bg-blue-50 text-blue-600",
-  },
-  {
-    label: "Revendedores ativos",
-    value: "312",
-    change: "+18",
-    positive: true,
-    icon: Users,
-    accent: "bg-emerald-50 text-emerald-600",
-  },
-  {
-    label: "Alunos matriculados",
-    value: "24.875",
-    change: "+6,2%",
-    positive: true,
-    icon: GraduationCap,
-    accent: "bg-indigo-50 text-indigo-600",
-  },
-  {
-    label: "Inadimplência",
-    value: "4,8%",
-    change: "+0,6pp",
-    positive: false,
-    icon: AlertTriangle,
-    accent: "bg-rose-50 text-rose-600",
-  },
-]
+export interface AdminMetrics {
+  revenue: number
+  revenueChangePct: number
+  activeResellers: number
+  newResellers7d: number
+  totalStudents: number
+  studentsChangePct: number
+  overdueRate: number
+  overdueCount: number
+}
 
-export function AdminMetricCards() {
+interface AdminMetricCardsProps {
+  metrics: AdminMetrics
+}
+
+function formatCurrency(value: number): string {
+  return value.toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+    maximumFractionDigits: 0,
+  })
+}
+
+function formatPct(value: number): string {
+  const sign = value >= 0 ? "+" : ""
+  return `${sign}${value.toFixed(1)}%`
+}
+
+export function AdminMetricCards({ metrics }: AdminMetricCardsProps) {
+  const cards = [
+    {
+      label: "Receita no período",
+      value: formatCurrency(metrics.revenue),
+      change: formatPct(metrics.revenueChangePct),
+      positive: metrics.revenueChangePct >= 0,
+      icon: DollarSign,
+      accent: "bg-blue-50 text-blue-600",
+    },
+    {
+      label: "Revendedores ativos",
+      value: metrics.activeResellers.toLocaleString("pt-BR"),
+      change: `+${metrics.newResellers7d} (7d)`,
+      positive: metrics.newResellers7d >= 0,
+      icon: Users,
+      accent: "bg-emerald-50 text-emerald-600",
+    },
+    {
+      label: "Alunos matriculados",
+      value: metrics.totalStudents.toLocaleString("pt-BR"),
+      change: formatPct(metrics.studentsChangePct),
+      positive: metrics.studentsChangePct >= 0,
+      icon: GraduationCap,
+      accent: "bg-indigo-50 text-indigo-600",
+    },
+    {
+      label: "Inadimplência",
+      value: `${metrics.overdueRate.toFixed(1)}%`,
+      change: `${metrics.overdueCount} em atraso`,
+      positive: metrics.overdueRate <= 5,
+      icon: AlertTriangle,
+      accent: "bg-rose-50 text-rose-600",
+    },
+  ]
+
   return (
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-      {METRICS.map((metric) => {
+      {cards.map((metric) => {
         const Icon = metric.icon
         return (
           <div
@@ -61,7 +89,7 @@ export function AdminMetricCards() {
                 metric.positive ? "text-emerald-600" : "text-rose-600"
               }`}
             >
-              {metric.change} <span className="text-gray-500 font-normal">vs mês anterior</span>
+              {metric.change}
             </p>
           </div>
         )

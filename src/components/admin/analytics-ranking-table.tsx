@@ -1,63 +1,34 @@
 "use client"
 
 import { useState } from "react"
+import Link from "next/link"
 
-const METRICS = ["MRR", "Alunos", "Conversão", "Churn"] as const
-
-const RANKINGS: Record<(typeof METRICS)[number], { nome: string; valor: string }[]> = {
-  MRR: [
-    { nome: "Educa+ Cursos", valor: "R$ 14.820" },
-    { nome: "Academia Digital BR", valor: "R$ 12.110" },
-    { nome: "Formação Pro", valor: "R$ 9.640" },
-    { nome: "EduTech Norte", valor: "R$ 8.930" },
-    { nome: "Centro Profissional SP", valor: "R$ 7.480" },
-    { nome: "Carreira Rápida", valor: "R$ 6.220" },
-    { nome: "Saber Online", valor: "R$ 5.870" },
-    { nome: "Instituto Avance", valor: "R$ 5.330" },
-    { nome: "Vertical Skills", valor: "R$ 4.910" },
-    { nome: "Nova Trilha EAD", valor: "R$ 4.580" },
-  ],
-  Alunos: [
-    { nome: "Educa+ Cursos", valor: "1.284" },
-    { nome: "Academia Digital BR", valor: "982" },
-    { nome: "Formação Pro", valor: "874" },
-    { nome: "EduTech Norte", valor: "712" },
-    { nome: "Centro Profissional SP", valor: "654" },
-    { nome: "Carreira Rápida", valor: "589" },
-    { nome: "Saber Online", valor: "512" },
-    { nome: "Instituto Avance", valor: "488" },
-    { nome: "Vertical Skills", valor: "421" },
-    { nome: "Nova Trilha EAD", valor: "396" },
-  ],
-  Conversão: [
-    { nome: "Saber Online", valor: "12,4%" },
-    { nome: "Educa+ Cursos", valor: "10,8%" },
-    { nome: "Vertical Skills", valor: "9,7%" },
-    { nome: "Formação Pro", valor: "9,2%" },
-    { nome: "Academia Digital BR", valor: "8,9%" },
-    { nome: "Nova Trilha EAD", valor: "8,1%" },
-    { nome: "EduTech Norte", valor: "7,6%" },
-    { nome: "Click Carreira", valor: "7,3%" },
-    { nome: "Carreira Rápida", valor: "6,9%" },
-    { nome: "Centro Profissional SP", valor: "6,4%" },
-  ],
-  Churn: [
-    { nome: "Cursos Mil Grau", valor: "0,8%" },
-    { nome: "Saber Online", valor: "1,1%" },
-    { nome: "Educa+ Cursos", valor: "1,4%" },
-    { nome: "Formação Pro", valor: "1,6%" },
-    { nome: "Academia Digital BR", valor: "1,8%" },
-    { nome: "EduTech Norte", valor: "2,0%" },
-    { nome: "Vertical Skills", valor: "2,2%" },
-    { nome: "Nova Trilha EAD", valor: "2,4%" },
-    { nome: "Carreira Rápida", valor: "2,7%" },
-    { nome: "Foco Total Educa", valor: "2,9%" },
-  ],
+export interface AnalyticsRankingRow {
+  id: string
+  name: string
+  slug: string
+  value: number
 }
 
-export function AnalyticsRankingTable() {
-  const [metric, setMetric] = useState<(typeof METRICS)[number]>("MRR")
-  const rows = RANKINGS[metric]
+export interface AnalyticsRankings {
+  mrr: AnalyticsRankingRow[]
+  students: AnalyticsRankingRow[]
+}
+
+interface AnalyticsRankingTableProps {
+  rankings: AnalyticsRankings
+}
+
+const METRICS = ["MRR", "Alunos"] as const
+type Metric = (typeof METRICS)[number]
+
+function formatMoney(v: number): string {
+  return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
+}
+
+export function AnalyticsRankingTable({ rankings }: AnalyticsRankingTableProps) {
+  const [metric, setMetric] = useState<Metric>("MRR")
+  const rows = metric === "MRR" ? rankings.mrr : rankings.students
 
   return (
     <div className="rounded-2xl border border-gray-200 bg-white shadow-sm">
@@ -83,30 +54,45 @@ export function AnalyticsRankingTable() {
           ))}
         </div>
       </div>
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-gray-200 bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
-              <th className="px-6 py-3 font-medium">Posição</th>
-              <th className="px-6 py-3 font-medium">Revendedor</th>
-              <th className="px-6 py-3 font-medium">{metric}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row, idx) => (
-              <tr key={row.nome} className="border-b border-gray-100 last:border-b-0">
-                <td className="px-6 py-3 font-mono text-xs text-gray-400">
-                  {String(idx + 1).padStart(2, "0")}
-                </td>
-                <td className="px-6 py-3 font-medium text-[#1A1A2E]">{row.nome}</td>
-                <td className="px-6 py-3 font-mono font-semibold text-[#1A1A2E]">
-                  {row.valor}
-                </td>
+      {rows.length === 0 ? (
+        <div className="px-6 py-10 text-center text-xs text-gray-500">
+          Nenhum revendedor para ranquear.
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-200 bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
+                <th className="px-6 py-3 font-medium">Posição</th>
+                <th className="px-6 py-3 font-medium">Revendedor</th>
+                <th className="px-6 py-3 font-medium">{metric}</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {rows.map((row, idx) => (
+                <tr key={row.id} className="border-b border-gray-100 last:border-b-0">
+                  <td className="px-6 py-3 font-mono text-xs text-gray-400">
+                    {String(idx + 1).padStart(2, "0")}
+                  </td>
+                  <td className="px-6 py-3 font-medium text-[#1A1A2E]">
+                    <Link
+                      href={`/admin/revendedores/${row.id}`}
+                      className="hover:text-blue-600"
+                    >
+                      {row.name}
+                    </Link>
+                  </td>
+                  <td className="px-6 py-3 font-mono font-semibold text-[#1A1A2E]">
+                    {metric === "MRR"
+                      ? formatMoney(row.value)
+                      : row.value.toLocaleString("pt-BR")}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   )
 }

@@ -1,8 +1,5 @@
 import { PageHeader } from "@/components/painel/page-header"
-import { AnalyticsFilters } from "@/components/admin/analytics-filters"
-import { AnalyticsKpiCards } from "@/components/admin/analytics-kpi-cards"
-import { AnalyticsCharts } from "@/components/admin/analytics-charts"
-import { AnalyticsRankingTable } from "@/components/admin/analytics-ranking-table"
+import { AdminAnalyticsClient } from "@/components/admin/admin-analytics-client"
 
 export default function AdminAnalyticsPage() {
   return (
@@ -11,10 +8,7 @@ export default function AdminAnalyticsPage() {
         title="Analytics"
         description="Indicadores globais, KPIs e ranking dos revendedores."
       />
-      <AnalyticsFilters />
-      <AnalyticsKpiCards />
-      <AnalyticsCharts />
-      <AnalyticsRankingTable />
+      <AdminAnalyticsClient />
     </div>
   )
 }

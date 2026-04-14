@@ -1,0 +1,117 @@
+const VERCEL_API = "https://api.vercel.com"
+
+function getConfig(): {
+  token: string
+  projectId: string
+  teamId?: string
+} {
+  const token = process.env.VERCEL_TOKEN
+  const projectId = process.env.VERCEL_PROJECT_ID
+  if (!token) throw new Error("VERCEL_TOKEN not configured")
+  if (!projectId) throw new Error("VERCEL_PROJECT_ID not configured")
+  return {
+    token,
+    projectId,
+    teamId: process.env.VERCEL_TEAM_ID || undefined,
+  }
+}
+
+function appendTeamId(url: string, teamId?: string): string {
+  if (!teamId) return url
+  const sep = url.includes("?") ? "&" : "?"
+  return `${url}${sep}teamId=${teamId}`
+}
+
+async function vercelFetch<T>(
+  path: string,
+  init: RequestInit,
+): Promise<T> {
+  const { token, teamId } = getConfig()
+  const url = appendTeamId(`${VERCEL_API}${path}`, teamId)
+  const res = await fetch(url, {
+    ...init,
+    headers: {
+      ...init.headers,
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+  })
+  const text = await res.text()
+  let body: unknown = null
+  if (text) {
+    try {
+      body = JSON.parse(text)
+    } catch {
+      body = text
+    }
+  }
+  if (!res.ok) {
+    const message =
+      (body as { error?: { message?: string } })?.error?.message ??
+      `Vercel API ${res.status}`
+    throw new Error(message)
+  }
+  return body as T
+}
+
+export interface VercelDomain {
+  name: string
+  apexName: string
+  verified: boolean
+  verification?: Array<{
+    type: string
+    domain: string
+    value: string
+    reason: string
+  }>
+}
+
+export async function addProjectDomain(domain: string): Promise<VercelDomain> {
+  const { projectId } = getConfig()
+  return vercelFetch<VercelDomain>(
+    `/v10/projects/${projectId}/domains`,
+    {
+      method: "POST",
+      body: JSON.stringify({ name: domain }),
+    },
+  )
+}
+
+export async function removeProjectDomain(domain: string): Promise<void> {
+  const { projectId } = getConfig()
+  await vercelFetch<unknown>(
+    `/v9/projects/${projectId}/domains/${encodeURIComponent(domain)}`,
+    { method: "DELETE" },
+  )
+}
+
+export interface VercelDomainStatus {
+  name: string
+  verified: boolean
+  verification?: Array<{
+    type: string
+    domain: string
+    value: string
+    reason: string
+  }>
+}
+
+export async function getProjectDomain(
+  domain: string,
+): Promise<VercelDomainStatus> {
+  const { projectId } = getConfig()
+  return vercelFetch<VercelDomainStatus>(
+    `/v9/projects/${projectId}/domains/${encodeURIComponent(domain)}`,
+    { method: "GET" },
+  )
+}
+
+export async function verifyProjectDomain(
+  domain: string,
+): Promise<VercelDomainStatus> {
+  const { projectId } = getConfig()
+  return vercelFetch<VercelDomainStatus>(
+    `/v9/projects/${projectId}/domains/${encodeURIComponent(domain)}/verify`,
+    { method: "POST" },
+  )
+}

@@ -3,21 +3,20 @@
 import { useState } from "react"
 import { ChevronDown } from "lucide-react"
 
-const records = [
-  {
-    tipo: "CNAME",
-    nome: "www",
-    valor: "cname.profissionalizamaisbrasil.com.br",
-  },
-  {
-    tipo: "A",
-    nome: "@",
-    valor: "76.76.21.21",
-  },
-] as const
+export interface DnsRecord {
+  type: string
+  name: string
+  value: string
+}
 
-export function DnsInstructions() {
+interface DnsInstructionsProps {
+  records: DnsRecord[]
+}
+
+export function DnsInstructions({ records }: DnsInstructionsProps) {
   const [open, setOpen] = useState(true)
+
+  if (records.length === 0) return null
 
   return (
     <div className="overflow-hidden rounded-xl border border-gray-200">
@@ -57,16 +56,16 @@ export function DnsInstructions() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 bg-white">
-                {records.map((record) => (
-                  <tr key={record.tipo}>
+                {records.map((record, i) => (
+                  <tr key={`${record.type}-${i}`}>
                     <td className="px-3 py-2 font-mono font-semibold text-[#1A1A2E]">
-                      {record.tipo}
+                      {record.type}
                     </td>
                     <td className="px-3 py-2 font-mono text-gray-700">
-                      {record.nome}
+                      {record.name}
                     </td>
                     <td className="px-3 py-2 font-mono text-gray-700">
-                      {record.valor}
+                      {record.value}
                     </td>
                   </tr>
                 ))}

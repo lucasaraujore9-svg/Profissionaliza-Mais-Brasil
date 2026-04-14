@@ -1,6 +1,5 @@
 import { PageHeader } from "@/components/painel/page-header"
-import { SubdomainDisplay } from "@/components/painel/subdomain-display"
-import { CustomDomainForm } from "@/components/painel/custom-domain-form"
+import { DomainConfig } from "@/components/painel/domain-config"
 
 export default function PainelDominioPage() {
   return (
@@ -9,9 +8,7 @@ export default function PainelDominioPage() {
         title="Domínio"
         description="Configure o endereço onde seus alunos encontram sua vitrine."
       />
-
-      <SubdomainDisplay />
-      <CustomDomainForm />
+      <DomainConfig />
     </div>
   )
 }

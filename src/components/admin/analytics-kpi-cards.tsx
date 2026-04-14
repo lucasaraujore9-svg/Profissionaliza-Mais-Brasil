@@ -1,16 +1,41 @@
-const KPIS = [
-  { label: "Novos revendedores", value: "42", change: "+18%", positive: true },
-  { label: "Novos alunos", value: "1.284", change: "+12%", positive: true },
-  { label: "Conversão checkout", value: "8,2%", change: "+1,4pp", positive: true },
-  { label: "MRR média", value: "R$ 474", change: "+3,1%", positive: true },
-  { label: "Churn", value: "2,6%", change: "-0,3pp", positive: true },
-  { label: "LTV", value: "R$ 6.840", change: "+4,2%", positive: true },
-]
+export interface AnalyticsKpis {
+  newResellers: number
+  newStudents: number
+  conversionRate: number
+  avgMrr: number
+  churn: number
+  ltv: number
+}
 
-export function AnalyticsKpiCards() {
+interface AnalyticsKpiCardsProps {
+  kpis: AnalyticsKpis
+}
+
+function formatMoney(v: number): string {
+  return v.toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+    maximumFractionDigits: 0,
+  })
+}
+
+function formatPct(v: number): string {
+  return `${v.toFixed(1).replace(".", ",")}%`
+}
+
+export function AnalyticsKpiCards({ kpis }: AnalyticsKpiCardsProps) {
+  const items = [
+    { label: "Novos revendedores", value: kpis.newResellers.toLocaleString("pt-BR") },
+    { label: "Novos alunos", value: kpis.newStudents.toLocaleString("pt-BR") },
+    { label: "Conversão checkout", value: formatPct(kpis.conversionRate) },
+    { label: "MRR média", value: formatMoney(kpis.avgMrr) },
+    { label: "Churn", value: formatPct(kpis.churn) },
+    { label: "LTV", value: formatMoney(kpis.ltv) },
+  ]
+
   return (
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-      {KPIS.map((kpi) => (
+      {items.map((kpi) => (
         <div
           key={kpi.label}
           className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm"
@@ -19,13 +44,6 @@ export function AnalyticsKpiCards() {
             {kpi.label}
           </p>
           <p className="mt-2 font-mono text-lg font-bold text-[#1A1A2E]">{kpi.value}</p>
-          <p
-            className={`mt-1 text-[11px] font-semibold ${
-              kpi.positive ? "text-emerald-600" : "text-rose-600"
-            }`}
-          >
-            {kpi.change}
-          </p>
         </div>
       ))}
     </div>

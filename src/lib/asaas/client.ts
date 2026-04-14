@@ -113,6 +113,15 @@ export async function getSubscription(
   return request<AsaasSubscription>("GET", `/subscriptions/${subscriptionId}`)
 }
 
+export async function cancelSubscription(
+  subscriptionId: string,
+): Promise<{ deleted: boolean; id: string }> {
+  return request<{ deleted: boolean; id: string }>(
+    "DELETE",
+    `/subscriptions/${subscriptionId}`,
+  )
+}
+
 // ── Payments ──
 
 export async function getPayment(

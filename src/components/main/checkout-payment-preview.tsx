@@ -1,32 +1,45 @@
 "use client"
 
-import { useState } from "react"
 import { CreditCard, QrCode, CalendarCheck } from "lucide-react"
+import type { PagamentoForm } from "./checkout-wizard"
 
-const paymentMethods = [
+type BillingType = PagamentoForm["billingType"]
+
+const paymentMethods: Array<{
+  id: BillingType
+  label: string
+  description: string
+  icon: typeof CreditCard
+}> = [
   {
-    id: "credit",
+    id: "CREDIT_CARD",
     label: "Cartão de crédito",
     description: "Cobrança recorrente mensal automática.",
     icon: CreditCard,
   },
   {
-    id: "pix",
+    id: "PIX",
     label: "PIX mensal",
     description: "Receba um QR Code todo mês com 7 dias de antecedência.",
     icon: QrCode,
   },
   {
-    id: "boleto",
+    id: "BOLETO",
     label: "Boleto mensal",
     description: "Boleto enviado por email 7 dias antes do vencimento.",
     icon: CalendarCheck,
   },
-] as const
+]
 
-export function CheckoutPaymentPreview() {
-  const [selected, setSelected] = useState<string>("credit")
+interface CheckoutPaymentPreviewProps {
+  value: PagamentoForm
+  onChange: (value: PagamentoForm) => void
+}
 
+export function CheckoutPaymentPreview({
+  value,
+  onChange,
+}: CheckoutPaymentPreviewProps) {
   return (
     <div>
       <h2 className="text-xl font-bold text-[#1A1A2E] md:text-2xl">
@@ -39,12 +52,12 @@ export function CheckoutPaymentPreview() {
       <div className="mt-6 space-y-3">
         {paymentMethods.map((method) => {
           const Icon = method.icon
-          const isActive = selected === method.id
+          const isActive = value.billingType === method.id
           return (
             <button
               key={method.id}
               type="button"
-              onClick={() => setSelected(method.id)}
+              onClick={() => onChange({ billingType: method.id })}
               className={`flex w-full items-start gap-4 rounded-xl border-2 p-4 text-left transition-all ${
                 isActive
                   ? "border-blue-600 bg-blue-50/50 shadow-sm"

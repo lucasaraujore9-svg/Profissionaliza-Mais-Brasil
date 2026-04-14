@@ -1,44 +1,42 @@
 "use client"
 
-import { useState } from "react"
-import { Pencil, Copy, Trash2, Eye, EyeOff } from "lucide-react"
+import { Pencil, Trash2, Eye, EyeOff } from "lucide-react"
+import { formatCurrency } from "@/lib/utils"
 
-interface Course {
+export interface CourseListItem {
   id: string
-  titulo: string
-  alunos: number
-  preco: string
-  tipo: "Único" | "Recorrente"
-  status: "Ativo" | "Oculto"
+  courseId: string
+  title: string
+  description: string | null
+  capaImageUrl: string | null
+  qtdAulas: number
+  cargaHoraria: string | null
+  price: number
+  paymentType: "ONE_TIME" | "MONTHLY"
+  isVisible: boolean
+  isFeatured: boolean
+  customOrder: number
+  enrollmentsCount: number
 }
-
-const initialCourses: Course[] = [
-  { id: "1", titulo: "Excel Avançado — Do Zero ao PROCV", alunos: 342, preco: "R$ 267,00", tipo: "Único", status: "Ativo" },
-  { id: "2", titulo: "Marketing Digital Completo", alunos: 281, preco: "R$ 397,00", tipo: "Único", status: "Ativo" },
-  { id: "3", titulo: "Design Gráfico para Iniciantes", alunos: 195, preco: "R$ 347,00", tipo: "Único", status: "Ativo" },
-  { id: "4", titulo: "Power BI — Dashboards Profissionais", alunos: 178, preco: "R$ 497,00", tipo: "Único", status: "Ativo" },
-  { id: "5", titulo: "Inglês Profissional para Trabalho", alunos: 166, preco: "R$ 59,90", tipo: "Recorrente", status: "Ativo" },
-  { id: "6", titulo: "Gestão de Projetos Ágeis", alunos: 142, preco: "R$ 447,00", tipo: "Único", status: "Ativo" },
-  { id: "7", titulo: "Copywriting Persuasivo", alunos: 98, preco: "R$ 297,00", tipo: "Único", status: "Oculto" },
-  { id: "8", titulo: "Programação Python do Zero", alunos: 87, preco: "R$ 597,00", tipo: "Único", status: "Ativo" },
-  { id: "9", titulo: "Maquiagem Profissional", alunos: 64, preco: "R$ 397,00", tipo: "Único", status: "Oculto" },
-  { id: "10", titulo: "Oratória e Apresentações", alunos: 52, preco: "R$ 247,00", tipo: "Único", status: "Ativo" },
-]
 
 interface CourseListTableProps {
+  courses: CourseListItem[]
   onEdit: (courseId: string) => void
+  onToggleVisibility: (courseId: string, next: boolean) => void
+  onDelete: (courseId: string) => void
 }
 
-export function CourseListTable({ onEdit }: CourseListTableProps) {
-  const [courses, setCourses] = useState(initialCourses)
-
-  const toggleStatus = (id: string) => {
-    setCourses((prev) =>
-      prev.map((c) =>
-        c.id === id
-          ? { ...c, status: c.status === "Ativo" ? "Oculto" : "Ativo" }
-          : c,
-      ),
+export function CourseListTable({
+  courses,
+  onEdit,
+  onToggleVisibility,
+  onDelete,
+}: CourseListTableProps) {
+  if (courses.length === 0) {
+    return (
+      <div className="rounded-2xl border border-gray-200 bg-white p-10 text-center text-sm text-gray-500 shadow-sm">
+        Nenhum curso encontrado.
+      </div>
     )
   }
 
@@ -49,10 +47,10 @@ export function CourseListTable({ onEdit }: CourseListTableProps) {
           <thead className="bg-gray-50">
             <tr>
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Título</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Alunos</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Matrículas</th>
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Preço</th>
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Tipo</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Status</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Visibilidade</th>
               <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-600">Ações</th>
             </tr>
           </thead>
@@ -60,41 +58,43 @@ export function CourseListTable({ onEdit }: CourseListTableProps) {
             {courses.map((course) => (
               <tr key={course.id} className="hover:bg-gray-50/60">
                 <td className="max-w-xs truncate px-4 py-3 text-sm font-medium text-[#1A1A2E]">
-                  {course.titulo}
+                  {course.title}
                 </td>
                 <td className="px-4 py-3 font-mono text-sm text-gray-700">
-                  {course.alunos}
+                  {course.enrollmentsCount}
                 </td>
                 <td className="px-4 py-3 font-mono text-sm font-semibold text-[#1A1A2E]">
-                  {course.preco}
+                  {formatCurrency(course.price)}
                 </td>
                 <td className="px-4 py-3 text-sm">
                   <span
                     className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                      course.tipo === "Recorrente"
+                      course.paymentType === "MONTHLY"
                         ? "bg-indigo-100 text-indigo-700"
                         : "bg-gray-100 text-gray-700"
                     }`}
                   >
-                    {course.tipo}
+                    {course.paymentType === "MONTHLY" ? "Recorrente" : "Único"}
                   </span>
                 </td>
                 <td className="px-4 py-3">
                   <button
                     type="button"
-                    onClick={() => toggleStatus(course.id)}
+                    onClick={() =>
+                      onToggleVisibility(course.id, !course.isVisible)
+                    }
                     className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                      course.status === "Ativo"
+                      course.isVisible
                         ? "bg-green-100 text-green-700"
                         : "bg-gray-100 text-gray-600"
                     }`}
                   >
-                    {course.status === "Ativo" ? (
+                    {course.isVisible ? (
                       <Eye className="h-3 w-3" />
                     ) : (
                       <EyeOff className="h-3 w-3" />
                     )}
-                    {course.status}
+                    {course.isVisible ? "Visível" : "Oculto"}
                   </button>
                 </td>
                 <td className="px-4 py-3">
@@ -109,13 +109,7 @@ export function CourseListTable({ onEdit }: CourseListTableProps) {
                     </button>
                     <button
                       type="button"
-                      className="rounded-md p-1.5 text-gray-500 hover:bg-gray-100 hover:text-[#1A1A2E]"
-                      title="Duplicar"
-                    >
-                      <Copy className="h-4 w-4" />
-                    </button>
-                    <button
-                      type="button"
+                      onClick={() => onDelete(course.id)}
                       className="rounded-md p-1.5 text-gray-500 hover:bg-gray-100 hover:text-red-600"
                       title="Remover"
                     >
