@@ -3,76 +3,41 @@
 import { useState } from "react"
 import { ChevronDown, PlayCircle, Lock } from "lucide-react"
 
-interface Aula {
+export interface LessonAccordionAula {
   titulo: string
-  duracao: string
+  duracao?: string
   preview?: boolean
 }
 
-interface Modulo {
+export interface LessonAccordionModulo {
   numero: number
   titulo: string
-  duracao: string
-  aulas: Aula[]
+  duracao?: string
+  aulas: LessonAccordionAula[]
 }
 
-const modulos: Modulo[] = [
-  {
-    numero: 1,
-    titulo: "Introdução e fundamentos",
-    duracao: "4h 20min",
-    aulas: [
-      { titulo: "Boas-vindas e visão geral do curso", duracao: "12:30", preview: true },
-      { titulo: "Configurando o ambiente de trabalho", duracao: "18:45" },
-      { titulo: "Interface do Excel em detalhes", duracao: "25:10" },
-    ],
-  },
-  {
-    numero: 2,
-    titulo: "Fórmulas e funções essenciais",
-    duracao: "8h 15min",
-    aulas: [
-      { titulo: "PROCV — o que é e quando usar", duracao: "22:00" },
-      { titulo: "ÍNDICE e CORRESP — a dupla poderosa", duracao: "28:30" },
-      { titulo: "SOMASE, CONT.SE e MÉDIA.SE", duracao: "19:50" },
-    ],
-  },
-  {
-    numero: 3,
-    titulo: "Tabelas dinâmicas e dashboards",
-    duracao: "6h 40min",
-    aulas: [
-      { titulo: "Criando sua primeira tabela dinâmica", duracao: "24:15" },
-      { titulo: "Gráficos dinâmicos e segmentação", duracao: "30:20" },
-      { titulo: "Dashboards executivos na prática", duracao: "35:10" },
-    ],
-  },
-  {
-    numero: 4,
-    titulo: "Macros e VBA",
-    duracao: "12h 30min",
-    aulas: [
-      { titulo: "O que é VBA e como usar", duracao: "20:00" },
-      { titulo: "Gravando sua primeira macro", duracao: "18:30" },
-      { titulo: "Automatizando relatórios completos", duracao: "45:20" },
-    ],
-  },
-  {
-    numero: 5,
-    titulo: "Projeto final e certificação",
-    duracao: "5h 00min",
-    aulas: [
-      { titulo: "Briefing do projeto final", duracao: "15:00" },
-      { titulo: "Desenvolvendo o projeto — passo a passo", duracao: "90:00" },
-      { titulo: "Como obter seu certificado", duracao: "8:30" },
-    ],
-  },
-]
+interface LessonAccordionProps {
+  modulos: LessonAccordionModulo[]
+  totalHoras?: string
+}
 
-export function LessonAccordion() {
-  const [openIndex, setOpenIndex] = useState<number | null>(null)
+export function LessonAccordion({ modulos, totalHoras }: LessonAccordionProps) {
+  const [openIndex, setOpenIndex] = useState<number | null>(0)
 
   const totalAulas = modulos.reduce((sum, m) => sum + m.aulas.length, 0)
+
+  if (modulos.length === 0) {
+    return (
+      <div>
+        <h2 className="text-2xl font-bold text-[#1A1A2E] md:text-3xl">
+          Conteúdo do curso
+        </h2>
+        <div className="mt-6 rounded-2xl border border-dashed border-gray-200 bg-white p-8 text-center text-sm text-gray-500">
+          O conteúdo deste curso ainda está sendo preparado.
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div>
@@ -81,7 +46,9 @@ export function LessonAccordion() {
           Conteúdo do curso
         </h2>
         <p className="text-sm text-gray-500">
-          {modulos.length} módulos · {totalAulas} aulas · 120h no total
+          {modulos.length} {modulos.length === 1 ? "módulo" : "módulos"} ·{" "}
+          {totalAulas} {totalAulas === 1 ? "aula" : "aulas"}
+          {totalHoras ? ` · ${totalHoras} no total` : ""}
         </p>
       </div>
 
@@ -90,7 +57,7 @@ export function LessonAccordion() {
           const isOpen = openIndex === index
           return (
             <div
-              key={modulo.numero}
+              key={`${modulo.numero}-${modulo.titulo}`}
               className="overflow-hidden rounded-xl border border-gray-200 bg-white"
             >
               <button
@@ -108,7 +75,8 @@ export function LessonAccordion() {
                       {modulo.titulo}
                     </div>
                     <div className="text-xs text-gray-500">
-                      {modulo.aulas.length} aulas · {modulo.duracao}
+                      {modulo.aulas.length} {modulo.aulas.length === 1 ? "aula" : "aulas"}
+                      {modulo.duracao ? ` · ${modulo.duracao}` : ""}
                     </div>
                   </div>
                 </div>
@@ -121,9 +89,9 @@ export function LessonAccordion() {
 
               {isOpen && (
                 <ul className="divide-y divide-gray-100 border-t border-gray-100 bg-gray-50/30">
-                  {modulo.aulas.map((aula) => (
+                  {modulo.aulas.map((aula, aulaIdx) => (
                     <li
-                      key={aula.titulo}
+                      key={`${aula.titulo}-${aulaIdx}`}
                       className="flex items-center justify-between gap-3 px-4 py-3"
                     >
                       <div className="flex items-center gap-2 text-sm text-gray-700">
@@ -139,9 +107,11 @@ export function LessonAccordion() {
                           </span>
                         )}
                       </div>
-                      <span className="font-mono text-xs text-gray-500">
-                        {aula.duracao}
-                      </span>
+                      {aula.duracao && (
+                        <span className="font-mono text-xs text-gray-500">
+                          {aula.duracao}
+                        </span>
+                      )}
                     </li>
                   ))}
                 </ul>

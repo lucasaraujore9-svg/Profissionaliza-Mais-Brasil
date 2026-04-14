@@ -79,6 +79,65 @@ export async function listTenantCourses(
   }
 }
 
+export interface TenantCourseDetail extends TenantCourseListItem {
+  tenantCourseId: string
+  qtdAulas: number
+  parcelasSugeridas: number | null
+  eaCourseId: string | null
+  lessons: Array<{ id: string; nome: string; ordem: number }>
+}
+
+export async function getTenantCourseBySlug(
+  tenantId: string,
+  slug: string,
+): Promise<TenantCourseDetail | null> {
+  try {
+    const tc = await prisma.tenantCourse.findFirst({
+      where: {
+        tenantId,
+        isVisible: true,
+        course: { status: "ATIVO", slug },
+      },
+      include: {
+        course: {
+          include: {
+            courseLessons: { orderBy: { ordem: "asc" } },
+          },
+        },
+      },
+    })
+
+    if (!tc) return null
+
+    return {
+      id: tc.id,
+      tenantCourseId: tc.id,
+      slug: tc.course.slug,
+      nome: tc.course.nome,
+      descricao: tc.customDescription ?? tc.course.descricao,
+      categoria: tc.course.categoriaLoja ?? tc.course.categoriaInterna,
+      horas: tc.course.cargaHoraria,
+      price: Number(tc.price),
+      originalPrice: tc.course.precoOriginal
+        ? Number(tc.course.precoOriginal)
+        : null,
+      imageUrl: tc.course.capaImageUrl,
+      isFeatured: tc.isFeatured,
+      qtdAulas: tc.course.qtdAulas,
+      parcelasSugeridas: tc.course.parcelasSugeridas,
+      eaCourseId: tc.course.eaCourseId,
+      lessons: tc.course.courseLessons.map((l) => ({
+        id: l.id,
+        nome: l.nome,
+        ordem: l.ordem,
+      })),
+    }
+  } catch (error) {
+    console.error("[getTenantCourseBySlug] error:", error)
+    return null
+  }
+}
+
 export async function listTenantCategories(tenantId: string): Promise<string[]> {
   try {
     const result = await prisma.tenantCourse.findMany({

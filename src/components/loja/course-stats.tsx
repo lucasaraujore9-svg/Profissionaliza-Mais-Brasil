@@ -1,13 +1,25 @@
 import { Clock, Layers, Users, Award } from "lucide-react"
 
-const stats = [
-  { icon: Clock, label: "Horas de conteúdo", value: "120h" },
-  { icon: Layers, label: "Módulos", value: "5" },
-  { icon: Users, label: "Alunos matriculados", value: "12.4k" },
-  { icon: Award, label: "Certificado", value: "Incluso" },
-]
+interface CourseStatsProps {
+  horas?: string | null
+  modulos: number
+  alunos?: string
+  temCertificado?: boolean
+}
 
-export function CourseStats() {
+export function CourseStats({
+  horas,
+  modulos,
+  alunos,
+  temCertificado = true,
+}: CourseStatsProps) {
+  const stats = [
+    { icon: Clock, label: "Horas de conteúdo", value: horas ?? "—" },
+    { icon: Layers, label: modulos === 1 ? "Módulo" : "Módulos", value: String(modulos) },
+    { icon: Users, label: "Alunos matriculados", value: alunos ?? "—" },
+    { icon: Award, label: "Certificado", value: temCertificado ? "Incluso" : "—" },
+  ]
+
   return (
     <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
       {stats.map((stat) => (
