@@ -5,23 +5,19 @@ import { usePathname } from "next/navigation"
 import {
   LayoutDashboard,
   Users,
-  GraduationCap,
-  CreditCard,
-  Settings,
-  Store,
+  DollarSign,
+  BookOpen,
   BarChart3,
-  Shield,
+  Settings,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 const NAV_ITEMS = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
   { href: "/admin/revendedores", label: "Revendedores", icon: Users },
-  { href: "/admin/cursos", label: "Cursos", icon: GraduationCap },
-  { href: "/admin/cobrancas", label: "Cobranças", icon: CreditCard },
-  { href: "/admin/vitrines", label: "Vitrines", icon: Store },
-  { href: "/admin/relatorios", label: "Relatórios", icon: BarChart3 },
-  { href: "/admin/webhooks", label: "Webhooks", icon: Shield },
+  { href: "/admin/financeiro", label: "Financeiro", icon: DollarSign },
+  { href: "/admin/catalogo", label: "Catálogo", icon: BookOpen },
+  { href: "/admin/analytics", label: "Analytics", icon: BarChart3 },
   { href: "/admin/configuracoes", label: "Configurações", icon: Settings },
 ]
 
@@ -29,9 +25,9 @@ export function SidebarAdmin() {
   const pathname = usePathname()
 
   return (
-    <aside className="hidden lg:flex w-60 flex-col border-r border-gray-200 bg-white">
+    <aside className="flex w-60 flex-col border-r border-gray-200 bg-white">
       <div className="flex h-16 items-center px-6 border-b border-gray-200">
-        <Link href="/admin" className="text-lg font-bold text-gray-900">
+        <Link href="/admin" className="text-lg font-bold text-[#1A1A2E]">
           PMB <span className="text-blue-600">Admin</span>
         </Link>
       </div>
@@ -57,6 +53,17 @@ export function SidebarAdmin() {
           )
         })}
       </nav>
+      <div className="border-t border-gray-200 p-4">
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-600 text-xs font-bold text-white">
+            AM
+          </div>
+          <div className="min-w-0">
+            <p className="truncate text-xs font-semibold text-[#1A1A2E]">Admin Master</p>
+            <p className="truncate text-[10px] text-gray-500">admin@profissionaliza.com.br</p>
+          </div>
+        </div>
+      </div>
     </aside>
   )
 }
