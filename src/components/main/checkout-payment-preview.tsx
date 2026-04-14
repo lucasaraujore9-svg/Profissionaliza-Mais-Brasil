@@ -1,0 +1,93 @@
+"use client"
+
+import { useState } from "react"
+import { CreditCard, QrCode, CalendarCheck } from "lucide-react"
+
+const paymentMethods = [
+  {
+    id: "credit",
+    label: "Cartão de crédito",
+    description: "Cobrança recorrente mensal automática.",
+    icon: CreditCard,
+  },
+  {
+    id: "pix",
+    label: "PIX mensal",
+    description: "Receba um QR Code todo mês com 7 dias de antecedência.",
+    icon: QrCode,
+  },
+  {
+    id: "boleto",
+    label: "Boleto mensal",
+    description: "Boleto enviado por email 7 dias antes do vencimento.",
+    icon: CalendarCheck,
+  },
+] as const
+
+export function CheckoutPaymentPreview() {
+  const [selected, setSelected] = useState<string>("credit")
+
+  return (
+    <div>
+      <h2 className="text-xl font-bold text-[#1A1A2E] md:text-2xl">
+        Forma de pagamento
+      </h2>
+      <p className="mt-1 text-sm text-gray-600">
+        Escolha como deseja pagar a mensalidade do seu plano.
+      </p>
+
+      <div className="mt-6 space-y-3">
+        {paymentMethods.map((method) => {
+          const Icon = method.icon
+          const isActive = selected === method.id
+          return (
+            <button
+              key={method.id}
+              type="button"
+              onClick={() => setSelected(method.id)}
+              className={`flex w-full items-start gap-4 rounded-xl border-2 p-4 text-left transition-all ${
+                isActive
+                  ? "border-blue-600 bg-blue-50/50 shadow-sm"
+                  : "border-gray-200 bg-white hover:border-gray-300"
+              }`}
+            >
+              <div
+                className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${
+                  isActive ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-500"
+                }`}
+              >
+                <Icon className="h-5 w-5" />
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-semibold text-[#1A1A2E]">
+                    {method.label}
+                  </span>
+                  <span
+                    className={`flex h-5 w-5 items-center justify-center rounded-full border-2 ${
+                      isActive
+                        ? "border-blue-600 bg-blue-600"
+                        : "border-gray-300 bg-white"
+                    }`}
+                  >
+                    {isActive && (
+                      <span className="h-2 w-2 rounded-full bg-white" />
+                    )}
+                  </span>
+                </div>
+                <p className="mt-1 text-sm text-gray-600">
+                  {method.description}
+                </p>
+              </div>
+            </button>
+          )
+        })}
+      </div>
+
+      <div className="mt-6 rounded-xl border border-dashed border-gray-300 bg-gray-50/50 p-4 text-xs text-gray-600">
+        Ao concluir, você concorda com os termos de serviço e autoriza a
+        cobrança recorrente da mensalidade do plano escolhido.
+      </div>
+    </div>
+  )
+}
