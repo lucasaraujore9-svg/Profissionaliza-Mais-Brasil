@@ -8,6 +8,7 @@ import {
 } from "@/lib/escola-avancada/client"
 import { validateMpWebhookSignature } from "./webhook"
 import type { MPPayment } from "./types"
+import { pmbEaPolo, pmbEaVendedorId, pmbMpAccessToken } from "@/lib/pmb-config"
 
 interface ProcessArgs {
   logId: string
@@ -41,6 +42,21 @@ interface TenantContext {
   eaVendedorId: string | null
   mpAccessToken: string | null
   primaryColor: string
+  isPmbVitrine?: boolean
+}
+
+function pmbContext(): TenantContext | null {
+  const token = pmbMpAccessToken()
+  if (!token) return null
+  return {
+    id: "__pmb__",
+    name: "PMB Vitrine",
+    slug: pmbEaPolo(),
+    eaVendedorId: pmbEaVendedorId(),
+    mpAccessToken: token, // ja plain (nao criptografado)
+    primaryColor: "#00a862",
+    isPmbVitrine: true,
+  }
 }
 
 async function resolveTenantFromReference(
@@ -52,6 +68,7 @@ async function resolveTenantFromReference(
     where: { externalReference },
     select: {
       id: true,
+      tenantId: true,
       tenant: {
         select: {
           id: true,
@@ -64,8 +81,14 @@ async function resolveTenantFromReference(
       },
     },
   })
-  if (enrollment && enrollment.tenant) {
-    return { tenant: enrollment.tenant, enrollmentId: enrollment.id }
+  if (enrollment) {
+    if (enrollment.tenant) {
+      return { tenant: enrollment.tenant, enrollmentId: enrollment.id }
+    }
+    if (enrollment.tenantId === null) {
+      const pmb = pmbContext()
+      if (pmb) return { tenant: pmb, enrollmentId: enrollment.id }
+    }
   }
 
   const tenant = await prisma.tenant.findUnique({
@@ -187,8 +210,9 @@ async function fulfillEnrollment(
 
   await prisma.payment.create({
     data: {
-      tenantId: tenant.id,
+      tenantId: tenant.isPmbVitrine ? null : tenant.id,
       enrollmentId: enrollment.id,
+      soldByUserId: enrollment.soldByUserId ?? null,
       amount: payment.transaction_amount,
       type: enrollment.paymentType,
       mpPaymentId: String(payment.id),
@@ -250,6 +274,7 @@ export async function processMpWebhook(args: ProcessArgs): Promise<void> {
         where: { mpPaymentId: paymentId },
         select: {
           id: true,
+          tenantId: true,
           externalReference: true,
           tenant: {
             select: {
@@ -264,7 +289,11 @@ export async function processMpWebhook(args: ProcessArgs): Promise<void> {
         },
       })
       if (pending) {
-        tenant = pending.tenant
+        if (pending.tenant) {
+          tenant = pending.tenant
+        } else if (pending.tenantId === null) {
+          tenant = pmbContext()
+        }
         enrollmentId = pending.id
         externalReference = pending.externalReference
       }
@@ -304,14 +333,18 @@ export async function processMpWebhook(args: ProcessArgs): Promise<void> {
       return
     }
 
-    await prisma.webhookLog
-      .update({
-        where: { id: logId },
-        data: { tenantId: tenant.id },
-      })
-      .catch(() => undefined)
+    if (!tenant.isPmbVitrine) {
+      await prisma.webhookLog
+        .update({
+          where: { id: logId },
+          data: { tenantId: tenant.id },
+        })
+        .catch(() => undefined)
+    }
 
-    const accessToken = decryptTenantMpToken(tenant.mpAccessToken)
+    const accessToken = tenant.isPmbVitrine
+      ? tenant.mpAccessToken
+      : decryptTenantMpToken(tenant.mpAccessToken)
 
     const secret = process.env.MP_WEBHOOK_SECRET
     if (secret) {
