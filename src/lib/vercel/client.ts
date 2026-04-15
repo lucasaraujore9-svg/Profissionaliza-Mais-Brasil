@@ -1,5 +1,18 @@
 const VERCEL_API = "https://api.vercel.com"
 
+export class VercelNotConfiguredError extends Error {
+  constructor() {
+    super(
+      "Recurso de domínio personalizado indisponível no momento. Use o subdomínio oficial ou entre em contato com o suporte.",
+    )
+    this.name = "VercelNotConfiguredError"
+  }
+}
+
+export function isVercelConfigured(): boolean {
+  return Boolean(process.env.VERCEL_TOKEN && process.env.VERCEL_PROJECT_ID)
+}
+
 function getConfig(): {
   token: string
   projectId: string
@@ -7,8 +20,7 @@ function getConfig(): {
 } {
   const token = process.env.VERCEL_TOKEN
   const projectId = process.env.VERCEL_PROJECT_ID
-  if (!token) throw new Error("VERCEL_TOKEN not configured")
-  if (!projectId) throw new Error("VERCEL_PROJECT_ID not configured")
+  if (!token || !projectId) throw new VercelNotConfiguredError()
   return {
     token,
     projectId,

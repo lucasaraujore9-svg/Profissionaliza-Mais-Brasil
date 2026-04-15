@@ -56,7 +56,8 @@ export async function POST(request: Request) {
     })
 
     const appUrl =
-      process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"
+      process.env.NEXT_PUBLIC_APP_URL ??
+      "https://profissionalizamaisbrasil.com.br"
     const resetUrl = `${appUrl}/reset-password?token=${token}`
 
     await sendEmail({

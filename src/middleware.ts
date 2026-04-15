@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 
-const APP_DOMAIN = process.env.NEXT_PUBLIC_APP_DOMAIN ?? "localhost"
+const APP_DOMAIN =
+  process.env.NEXT_PUBLIC_APP_DOMAIN ?? "profissionalizamaisbrasil.com.br"
 
 const RESERVED_SUBDOMAINS = new Set([
   "www",
@@ -46,7 +47,8 @@ async function resolveTenantFromDB(
   type: "slug" | "domain"
 ): Promise<{ id: string; slug: string; status: string } | null> {
   const internalSecret = process.env.INTERNAL_SECRET
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"
+  const appUrl =
+    process.env.NEXT_PUBLIC_APP_URL ?? "https://profissionalizamaisbrasil.com.br"
 
   try {
     const res = await fetch(

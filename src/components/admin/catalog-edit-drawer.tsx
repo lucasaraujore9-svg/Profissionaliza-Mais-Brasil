@@ -72,26 +72,27 @@ export function CatalogEditDrawer({ courseId, open, onOpenChange, onSaved }: Cat
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
-        <SheetHeader>
+      <SheetContent className="w-full overflow-y-auto sm:max-w-lg">
+        <SheetHeader className="px-6 pt-6">
           <SheetTitle>Editar curso da vitrine PMB</SheetTitle>
           <SheetDescription>
             Estes ajustes aplicam apenas na vitrine principal. Revendedores definem o proprio preco.
           </SheetDescription>
         </SheetHeader>
 
-        {!detail && !error ? (
-          <div className="mt-8 text-sm text-gray-500">Carregando...</div>
-        ) : null}
+        <div className="px-6 pb-8">
+          {!detail && !error ? (
+            <div className="mt-8 text-sm text-gray-500">Carregando...</div>
+          ) : null}
 
-        {error ? (
-          <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-            {error}
-          </div>
-        ) : null}
+          {error ? (
+            <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+              {error}
+            </div>
+          ) : null}
 
-        {detail ? (
-          <form onSubmit={handleSave} className="mt-6 space-y-5">
+          {detail ? (
+            <form onSubmit={handleSave} className="mt-6 space-y-5">
             <div>
               <label className="text-xs font-semibold text-gray-700">Curso</label>
               <p className="mt-1 text-sm font-medium text-[var(--color-pmb-green-900)]">{detail.nome}</p>
@@ -215,7 +216,8 @@ export function CatalogEditDrawer({ courseId, open, onOpenChange, onSaved }: Cat
               </button>
             </div>
           </form>
-        ) : null}
+          ) : null}
+        </div>
       </SheetContent>
     </Sheet>
   )

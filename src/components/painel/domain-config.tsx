@@ -15,6 +15,7 @@ interface DomainInfo {
   customDomain: string | null
   status: DomainStatus
   dnsRecords: DnsRecord[]
+  vercelConfigured?: boolean
 }
 
 export function DomainConfig() {
@@ -99,6 +100,12 @@ export function DomainConfig() {
         subdomain={info.subdomain}
         appDomain={info.appDomain}
       />
+      {info.vercelConfigured === false ? (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          Domínio personalizado temporariamente indisponível. Use o subdomínio
+          oficial acima ou entre em contato com o suporte.
+        </div>
+      ) : null}
       <CustomDomainForm
         customDomain={info.customDomain}
         status={info.status}

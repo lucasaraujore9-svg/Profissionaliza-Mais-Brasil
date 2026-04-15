@@ -15,7 +15,8 @@ export async function createInviteToken(userId: string): Promise<string> {
 }
 
 export function buildInviteUrl(token: string): string {
-  const base = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3002"
+  const base =
+    process.env.NEXT_PUBLIC_APP_URL ?? "https://profissionalizamaisbrasil.com.br"
   return `${base}/reset-password?token=${token}&invite=1`
 }
 

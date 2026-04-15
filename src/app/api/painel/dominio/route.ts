@@ -6,10 +6,13 @@ import {
   addProjectDomain,
   getProjectDomain,
   removeProjectDomain,
+  isVercelConfigured,
+  VercelNotConfiguredError,
 } from "@/lib/vercel/client"
 import { invalidateTenant } from "@/lib/redis/tenant-cache"
 
-const appDomain = process.env.NEXT_PUBLIC_APP_DOMAIN ?? ""
+const appDomain =
+  process.env.NEXT_PUBLIC_APP_DOMAIN ?? "profissionalizamaisbrasil.com.br"
 
 function cnameTarget(): string {
   return `cname.${appDomain}`
@@ -46,6 +49,7 @@ async function fetchTenantDomainInfo(tenantId: string) {
     subdomainFull: `${tenant.slug}.${appDomain}`,
     customDomain: tenant.customDomain,
     status,
+    vercelConfigured: isVercelConfigured(),
     dnsRecords: tenant.customDomain
       ? [
           {
@@ -139,6 +143,9 @@ export async function POST(request: Request) {
   try {
     await addProjectDomain(domain)
   } catch (error) {
+    if (error instanceof VercelNotConfiguredError) {
+      return NextResponse.json({ error: error.message }, { status: 503 })
+    }
     const message = error instanceof Error ? error.message : "Erro Vercel"
     return NextResponse.json(
       { error: `Falha ao adicionar domínio: ${message}` },
@@ -184,6 +191,9 @@ export async function DELETE() {
   try {
     await removeProjectDomain(tenant.customDomain)
   } catch (error) {
+    if (error instanceof VercelNotConfiguredError) {
+      return NextResponse.json({ error: error.message }, { status: 503 })
+    }
     const message = error instanceof Error ? error.message : "Erro Vercel"
     if (!message.toLowerCase().includes("not found")) {
       return NextResponse.json(
