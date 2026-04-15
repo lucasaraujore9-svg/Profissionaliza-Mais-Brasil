@@ -1,7 +1,16 @@
 import { Suspense } from "react"
+import { redirect } from "next/navigation"
+import { auth } from "@/lib/auth"
+import { homeForRole } from "@/lib/auth/home-for-role"
 import { LoginForm } from "@/components/auth/login-form"
 
-export default function LoginPage() {
+export default async function LoginPage() {
+  const session = await auth()
+  if (session?.user) {
+    const role = (session.user as { role?: string }).role
+    redirect(homeForRole(role))
+  }
+
   return (
     <div>
       <div className="mb-8">

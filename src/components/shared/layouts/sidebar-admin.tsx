@@ -3,6 +3,7 @@
 import Link from "next/link"
 import Image from "next/image"
 import { usePathname } from "next/navigation"
+import { signOut } from "next-auth/react"
 import {
   LayoutDashboard,
   Users,
@@ -12,6 +13,8 @@ import {
   Settings,
   UserCog,
   ShoppingCart,
+  UserCircle,
+  LogOut,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -31,9 +34,28 @@ const ALL_ITEMS: {
   { href: "/admin/analytics", label: "Analytics", icon: BarChart3, roles: ["SUPER_ADMIN"] },
   { href: "/admin/equipe", label: "Equipe", icon: UserCog, roles: ["SUPER_ADMIN"] },
   { href: "/admin/configuracoes", label: "Configurações", icon: Settings, roles: ["SUPER_ADMIN"] },
+  { href: "/admin/meu-perfil", label: "Meu perfil", icon: UserCircle, roles: ["SUPER_ADMIN", "PMB_SALES", "PMB_RESELLER_MGR"] },
 ]
 
-export function SidebarAdmin({ role = "SUPER_ADMIN" }: { role?: Role } = {}) {
+function initialsOf(name?: string): string {
+  if (!name) return "AM"
+  const parts = name.trim().split(/\s+/)
+  const a = parts[0]?.[0] ?? ""
+  const b = parts.length > 1 ? parts[parts.length - 1][0] : ""
+  return (a + b).toUpperCase() || "AM"
+}
+
+interface Props {
+  role?: Role
+  userName?: string
+  userEmail?: string
+}
+
+export function SidebarAdmin({
+  role = "SUPER_ADMIN",
+  userName,
+  userEmail,
+}: Props = {}) {
   const pathname = usePathname()
   const navItems = ALL_ITEMS.filter((item) => item.roles.includes(role))
 
@@ -81,15 +103,30 @@ export function SidebarAdmin({ role = "SUPER_ADMIN" }: { role?: Role } = {}) {
       </nav>
 
       <div className="border-t border-white/10 p-4">
-        <div className="flex items-center gap-3">
+        <Link
+          href="/admin/meu-perfil"
+          className="flex items-center gap-3 rounded-lg p-2 -m-2 transition-colors hover:bg-white/10"
+        >
           <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[var(--color-pmb-gold)] text-xs font-bold text-[var(--color-pmb-green-900)]">
-            AM
+            {initialsOf(userName)}
           </div>
-          <div className="min-w-0">
-            <p className="truncate text-xs font-semibold text-white">Admin Master</p>
-            <p className="truncate text-[10px] text-white/65">admin@profissionaliza.com.br</p>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-xs font-semibold text-white">
+              {userName ?? "Admin"}
+            </p>
+            <p className="truncate text-[10px] text-white/65">
+              {userEmail ?? ""}
+            </p>
           </div>
-        </div>
+        </Link>
+        <button
+          type="button"
+          onClick={() => signOut({ callbackUrl: "/login" })}
+          className="mt-3 flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold text-white/80 transition-colors hover:bg-white/10 hover:text-white"
+        >
+          <LogOut className="h-4 w-4" />
+          Sair da conta
+        </button>
       </div>
     </aside>
   )

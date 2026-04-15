@@ -9,24 +9,27 @@ export function AdminLayoutShell({
   children,
   role,
   userName,
+  userEmail,
 }: {
   children: React.ReactNode
   role: Role
   userName: string
+  userEmail: string
 }) {
   return (
     <div className="flex h-screen overflow-hidden bg-[var(--color-pmb-mist)]">
       <div className="hidden h-full lg:block">
-        <SidebarAdmin role={role} />
+        <SidebarAdmin role={role} userName={userName} userEmail={userEmail} />
       </div>
       <div className="flex flex-1 flex-col overflow-hidden">
         <HeaderDashboard
           userName={userName}
-          mobileNav={<SidebarAdmin role={role} />}
+          profileHref="/admin/meu-perfil"
+          mobileNav={
+            <SidebarAdmin role={role} userName={userName} userEmail={userEmail} />
+          }
         />
-        <main className="flex-1 overflow-y-auto p-4 lg:p-6">
-          {children}
-        </main>
+        <main className="flex-1 overflow-y-auto p-4 lg:p-6">{children}</main>
       </div>
     </div>
   )

@@ -10,7 +10,11 @@ export function PainelLayoutShell({ children }: { children: React.ReactNode }) {
         <SidebarPainel />
       </div>
       <div className="flex flex-1 flex-col overflow-hidden">
-        <HeaderDashboard mobileNav={<SidebarPainel />} userName="João Silva" />
+        <HeaderDashboard
+          mobileNav={<SidebarPainel />}
+          userName="João Silva"
+          profileHref="/painel/configuracoes"
+        />
         <main className="flex-1 overflow-y-auto bg-[var(--color-pmb-mist)] p-4 lg:p-8">
           {children}
         </main>

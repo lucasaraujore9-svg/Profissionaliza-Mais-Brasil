@@ -1,20 +1,27 @@
 "use client"
 
-import { Menu, Bell, LogOut } from "lucide-react"
+import Link from "next/link"
+import { signOut } from "next-auth/react"
+import { Menu, Bell, LogOut, UserCog } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 
 interface HeaderDashboardProps {
   mobileNav: React.ReactNode
   userName?: string
+  profileHref?: string
   onSignOut?: () => void
 }
 
 export function HeaderDashboard({
   mobileNav,
   userName,
+  profileHref,
   onSignOut,
 }: HeaderDashboardProps) {
+  const handleSignOut =
+    onSignOut ?? (() => signOut({ callbackUrl: "/login" }))
+
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b border-[rgba(2,89,24,0.1)] bg-white px-4 lg:px-6">
       <Sheet>
@@ -46,17 +53,25 @@ export function HeaderDashboard({
         </span>
       )}
 
-      {onSignOut && (
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={onSignOut}
-          className="text-[var(--color-pmb-green)] hover:bg-[var(--color-pmb-lime-50)]"
+      {profileHref && (
+        <Link
+          href={profileHref}
+          aria-label="Meu perfil"
+          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[var(--color-pmb-green)] hover:bg-[var(--color-pmb-lime-50)]"
         >
-          <LogOut className="h-5 w-5" />
-          <span className="sr-only">Sair</span>
-        </Button>
+          <UserCog className="h-5 w-5" />
+        </Link>
       )}
+
+      <Button
+        variant="ghost"
+        size="icon"
+        onClick={handleSignOut}
+        className="text-[var(--color-pmb-green)] hover:bg-red-50 hover:text-red-600"
+      >
+        <LogOut className="h-5 w-5" />
+        <span className="sr-only">Sair</span>
+      </Button>
     </header>
   )
 }
