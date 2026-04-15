@@ -54,7 +54,7 @@ export function AdminDualRevenueChart({
     <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h3 className="text-sm font-semibold text-[#1A1A2E]">Receita global</h3>
+          <h3 className="text-sm font-semibold text-[var(--color-pmb-green-900)]">Receita global</h3>
           <p className="mt-1 text-xs text-gray-600">
             Comparativo entre receita bruta e líquida (pós-taxas).
           </p>
@@ -66,7 +66,7 @@ export function AdminDualRevenueChart({
               type="button"
               onClick={() => onPeriodChange(p)}
               className={`rounded-md px-3 py-1 text-xs font-semibold transition-colors ${
-                period === p ? "bg-white text-blue-600 shadow-sm" : "text-gray-600"
+                period === p ? "bg-white text-[var(--color-pmb-green)] shadow-sm" : "text-gray-600"
               }`}
             >
               {p}
@@ -77,16 +77,16 @@ export function AdminDualRevenueChart({
 
       <div className="mt-5 flex flex-wrap items-center gap-4 text-xs">
         <span className="flex items-center gap-2 text-gray-600">
-          <span className="h-2 w-2 rounded-full bg-blue-600" />
+          <span className="h-2 w-2 rounded-full bg-[var(--color-pmb-green)]" />
           Bruta:{" "}
-          <span className="font-mono font-semibold text-[#1A1A2E]">
+          <span className="font-mono font-semibold text-[var(--color-pmb-green-900)]">
             {formatShortCurrency(latestBruta)}
           </span>
         </span>
         <span className="flex items-center gap-2 text-gray-600">
           <span className="h-2 w-2 rounded-full bg-emerald-500" />
           Líquida:{" "}
-          <span className="font-mono font-semibold text-[#1A1A2E]">
+          <span className="font-mono font-semibold text-[var(--color-pmb-green-900)]">
             {formatShortCurrency(latestLiquida)}
           </span>
         </span>

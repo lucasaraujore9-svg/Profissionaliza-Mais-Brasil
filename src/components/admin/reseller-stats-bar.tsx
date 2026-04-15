@@ -12,7 +12,7 @@ interface ResellerStatsBarProps {
 
 export function ResellerStatsBar({ stats }: ResellerStatsBarProps) {
   const items = [
-    { label: "Total", value: stats.total, accent: "text-[#1A1A2E]" },
+    { label: "Total", value: stats.total, accent: "text-[var(--color-pmb-green-900)]" },
     { label: "Ativos", value: stats.active, accent: "text-emerald-600" },
     { label: "Pendentes", value: stats.pending, accent: "text-amber-600" },
     { label: "Suspensos", value: stats.suspended, accent: "text-rose-600" },

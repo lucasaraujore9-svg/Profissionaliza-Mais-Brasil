@@ -32,7 +32,7 @@ export function CatalogSyncLog({ logs }: CatalogSyncLogProps) {
         className="flex w-full items-center justify-between px-6 py-4 text-left"
       >
         <div>
-          <h3 className="text-sm font-semibold text-[#1A1A2E]">Histórico de sincronizações</h3>
+          <h3 className="text-sm font-semibold text-[var(--color-pmb-green-900)]">Histórico de sincronizações</h3>
           <p className="mt-0.5 text-xs text-gray-600">
             {logs.length === 0
               ? "Nenhuma sincronização registrada ainda."

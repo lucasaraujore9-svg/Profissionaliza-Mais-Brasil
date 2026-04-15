@@ -29,7 +29,7 @@ export function LessonAccordion({ modulos, totalHoras }: LessonAccordionProps) {
   if (modulos.length === 0) {
     return (
       <div>
-        <h2 className="text-2xl font-bold text-[#1A1A2E] md:text-3xl">
+        <h2 className="text-2xl font-bold text-[var(--color-pmb-green-900)] md:text-3xl">
           Conteúdo do curso
         </h2>
         <div className="mt-6 rounded-2xl border border-dashed border-gray-200 bg-white p-8 text-center text-sm text-gray-500">
@@ -42,7 +42,7 @@ export function LessonAccordion({ modulos, totalHoras }: LessonAccordionProps) {
   return (
     <div>
       <div className="flex flex-col gap-1 md:flex-row md:items-end md:justify-between">
-        <h2 className="text-2xl font-bold text-[#1A1A2E] md:text-3xl">
+        <h2 className="text-2xl font-bold text-[var(--color-pmb-green-900)] md:text-3xl">
           Conteúdo do curso
         </h2>
         <p className="text-sm text-gray-500">
@@ -67,11 +67,11 @@ export function LessonAccordion({ modulos, totalHoras }: LessonAccordionProps) {
                 aria-expanded={isOpen}
               >
                 <div className="flex items-center gap-3">
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-50 font-mono text-sm font-semibold text-blue-600">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--color-pmb-lime-50)] font-mono text-sm font-semibold text-[var(--color-pmb-green)]">
                     {String(modulo.numero).padStart(2, "0")}
                   </span>
                   <div>
-                    <div className="text-sm font-semibold text-[#1A1A2E]">
+                    <div className="text-sm font-semibold text-[var(--color-pmb-green-900)]">
                       {modulo.titulo}
                     </div>
                     <div className="text-xs text-gray-500">
@@ -96,13 +96,13 @@ export function LessonAccordion({ modulos, totalHoras }: LessonAccordionProps) {
                     >
                       <div className="flex items-center gap-2 text-sm text-gray-700">
                         {aula.preview ? (
-                          <PlayCircle className="h-4 w-4 text-blue-600" />
+                          <PlayCircle className="h-4 w-4 text-[var(--color-pmb-green)]" />
                         ) : (
                           <Lock className="h-3.5 w-3.5 text-gray-400" />
                         )}
                         <span>{aula.titulo}</span>
                         {aula.preview && (
-                          <span className="ml-1 rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-700">
+                          <span className="ml-1 rounded-full bg-[var(--color-pmb-lime-50)] px-2 py-0.5 text-[10px] font-semibold text-[var(--color-pmb-green-700)]">
                             GRÁTIS
                           </span>
                         )}

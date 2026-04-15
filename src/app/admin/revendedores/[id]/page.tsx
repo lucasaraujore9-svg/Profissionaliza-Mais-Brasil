@@ -13,7 +13,7 @@ export default async function ResellerDetailPage({
     <div className="space-y-6">
       <Link
         href="/admin/revendedores"
-        className="inline-flex items-center gap-2 text-xs font-semibold text-gray-600 hover:text-[#1A1A2E]"
+        className="inline-flex items-center gap-2 text-xs font-semibold text-gray-600 hover:text-[var(--color-pmb-green-900)]"
       >
         <ArrowLeft className="h-3.5 w-3.5" />
         Voltar para revendedores

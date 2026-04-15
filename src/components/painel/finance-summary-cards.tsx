@@ -25,7 +25,7 @@ export function FinanceSummaryCards({ metrics }: FinanceSummaryCardsProps) {
       label: "Receita do mês",
       value: formatCurrency(metrics.monthRevenue),
       icon: TrendingUp,
-      color: "from-blue-600 to-indigo-600",
+      color: "from-[var(--color-pmb-green)] to-[var(--color-pmb-green-700)]",
     },
     {
       label: "Recebido",

@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button"
 
 export function HeroBanner() {
   return (
-    <section className="relative overflow-hidden bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-900">
+    <section className="relative overflow-hidden bg-gradient-to-br from-[var(--color-pmb-green)] via-[var(--color-pmb-green-700)] to-[var(--color-pmb-green-900)]">
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0 opacity-30"
@@ -25,13 +25,13 @@ export function HeroBanner() {
             <span className="text-yellow-300">menos de 3 meses</span>
           </h1>
 
-          <p className="mt-4 max-w-lg text-base text-blue-100 md:text-lg">
+          <p className="mt-4 max-w-lg text-base text-[var(--color-pmb-lime-50)] md:text-lg">
             Cursos profissionalizantes com certificado, material didático completo
             e suporte online de segunda a sexta.
           </p>
 
           <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-center md:justify-start">
-            <Button size="lg" className="bg-yellow-300 text-[#1A1A2E] hover:bg-yellow-400">
+            <Button size="lg" className="bg-yellow-300 text-[var(--color-pmb-green-900)] hover:bg-yellow-400">
               Ver cursos
             </Button>
             <Button

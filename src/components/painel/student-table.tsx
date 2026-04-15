@@ -33,7 +33,7 @@ const statusColors: Record<StudentStatus, string> = {
   INATIVO: "bg-gray-100 text-gray-600",
   BLOQUEADO: "bg-red-100 text-red-700",
   DEVEDOR: "bg-amber-100 text-amber-700",
-  FORMADO: "bg-blue-100 text-blue-700",
+  FORMADO: "bg-[var(--color-pmb-lime-50)] text-[var(--color-pmb-green-700)]",
   INTERESSADO: "bg-violet-100 text-violet-700",
 }
 
@@ -108,10 +108,10 @@ export function StudentTable({
                 <tr key={student.id} className="hover:bg-gray-50/60">
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 text-[10px] font-semibold text-blue-700">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--color-pmb-lime-50)] text-[10px] font-semibold text-[var(--color-pmb-green-700)]">
                         {initials(student.nome)}
                       </div>
-                      <span className="text-sm font-medium text-[#1A1A2E]">
+                      <span className="text-sm font-medium text-[var(--color-pmb-green-900)]">
                         {student.nome}
                       </span>
                     </div>
@@ -135,7 +135,7 @@ export function StudentTable({
                       <button
                         type="button"
                         onClick={() => onViewDetails(student.id)}
-                        className="rounded-md p-1.5 text-gray-500 hover:bg-gray-100 hover:text-blue-600"
+                        className="rounded-md p-1.5 text-gray-500 hover:bg-gray-100 hover:text-[var(--color-pmb-green)]"
                         title="Ver detalhes"
                       >
                         <Eye className="h-4 w-4" />

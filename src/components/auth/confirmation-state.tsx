@@ -8,7 +8,7 @@ export function ConfirmationState() {
         <MailCheck className="h-8 w-8 text-green-600" />
       </div>
 
-      <h2 className="mt-5 text-2xl font-bold text-[#1A1A2E]">
+      <h2 className="mt-5 text-2xl font-bold text-[var(--color-pmb-green-900)]">
         Email enviado com sucesso
       </h2>
       <p className="mx-auto mt-2 max-w-sm text-sm text-gray-600">
@@ -17,7 +17,7 @@ export function ConfirmationState() {
       </p>
 
       <div className="mt-8 rounded-xl border border-gray-100 bg-gray-50/50 p-4 text-left text-xs text-gray-600">
-        <strong className="block text-sm font-semibold text-[#1A1A2E]">
+        <strong className="block text-sm font-semibold text-[var(--color-pmb-green-900)]">
           Não recebeu?
         </strong>
         <span className="mt-1 block">
@@ -28,7 +28,7 @@ export function ConfirmationState() {
 
       <Link
         href="/login"
-        className="mt-6 inline-flex items-center gap-1.5 text-sm font-medium text-blue-600 hover:text-blue-700"
+        className="mt-6 inline-flex items-center gap-1.5 text-sm font-medium text-[var(--color-pmb-green)] hover:text-[var(--color-pmb-green-700)]"
       >
         <ArrowLeft className="h-3.5 w-3.5" />
         Voltar para o login

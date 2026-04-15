@@ -40,7 +40,7 @@ export function CheckoutStepNavigation({
           size="lg"
           onClick={onNext}
           disabled={submitting}
-          className="w-full bg-blue-600 text-white hover:bg-blue-700 sm:w-auto"
+          className="w-full bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)] sm:w-auto"
         >
           {submitting ? (
             <>

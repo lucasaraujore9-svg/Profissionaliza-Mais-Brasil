@@ -64,7 +64,7 @@ async function resolveTenantFromReference(
       },
     },
   })
-  if (enrollment) {
+  if (enrollment && enrollment.tenant) {
     return { tenant: enrollment.tenant, enrollmentId: enrollment.id }
   }
 

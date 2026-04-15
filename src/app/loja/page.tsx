@@ -21,7 +21,7 @@ export default async function LojaHomePage({
   if (!tenant) {
     return (
       <div className="mx-auto max-w-3xl px-4 py-24 text-center">
-        <h1 className="text-2xl font-bold text-[#1A1A2E]">
+        <h1 className="text-2xl font-bold text-[var(--color-pmb-green-900)]">
           Vitrine indisponível
         </h1>
         <p className="mt-3 text-sm text-gray-600">

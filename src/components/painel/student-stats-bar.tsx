@@ -14,7 +14,7 @@ interface StudentStatsBarProps {
 
 export function StudentStatsBar({ stats }: StudentStatsBarProps) {
   const items = [
-    { label: "Total", value: stats.total, color: "text-[#1A1A2E]" },
+    { label: "Total", value: stats.total, color: "text-[var(--color-pmb-green-900)]" },
     { label: "Ativos", value: stats.ATIVO, color: "text-green-600" },
     { label: "Bloqueados", value: stats.BLOQUEADO, color: "text-red-600" },
     { label: "Inativos", value: stats.INATIVO, color: "text-gray-500" },

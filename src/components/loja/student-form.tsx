@@ -126,10 +126,10 @@ export function StudentForm({ courseId, couponCode }: StudentFormProps) {
     <form onSubmit={handleSubmit} className="space-y-6">
       <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm lg:p-8">
         <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 font-mono text-sm font-semibold text-blue-600">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--color-pmb-lime-50)] font-mono text-sm font-semibold text-[var(--color-pmb-green)]">
             01
           </div>
-          <h2 className="text-base font-semibold text-[#1A1A2E]">Seus dados</h2>
+          <h2 className="text-base font-semibold text-[var(--color-pmb-green-900)]">Seus dados</h2>
         </div>
 
         <div className="mt-6 space-y-5">
@@ -241,7 +241,7 @@ export function StudentForm({ courseId, couponCode }: StudentFormProps) {
           type="submit"
           size="lg"
           disabled={submitting}
-          className="w-full bg-blue-600 text-white hover:bg-blue-700"
+          className="w-full bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)]"
         >
           <Lock className="mr-2 h-4 w-4" />
           {submitting ? "Redirecionando..." : "Finalizar Compra"}

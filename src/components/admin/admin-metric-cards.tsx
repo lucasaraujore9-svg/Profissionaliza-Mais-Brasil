@@ -36,7 +36,7 @@ export function AdminMetricCards({ metrics }: AdminMetricCardsProps) {
       change: formatPct(metrics.revenueChangePct),
       positive: metrics.revenueChangePct >= 0,
       icon: DollarSign,
-      accent: "bg-blue-50 text-blue-600",
+      accent: "bg-[var(--color-pmb-lime-50)] text-[var(--color-pmb-green)]",
     },
     {
       label: "Revendedores ativos",
@@ -52,7 +52,7 @@ export function AdminMetricCards({ metrics }: AdminMetricCardsProps) {
       change: formatPct(metrics.studentsChangePct),
       positive: metrics.studentsChangePct >= 0,
       icon: GraduationCap,
-      accent: "bg-indigo-50 text-indigo-600",
+      accent: "bg-[var(--color-pmb-lime-50)] text-[var(--color-pmb-green)]",
     },
     {
       label: "Inadimplência",
@@ -81,7 +81,7 @@ export function AdminMetricCards({ metrics }: AdminMetricCardsProps) {
                 <Icon className="h-4 w-4" />
               </span>
             </div>
-            <p className="mt-4 font-mono text-2xl font-bold text-[#1A1A2E]">
+            <p className="mt-4 font-mono text-2xl font-bold text-[var(--color-pmb-green-900)]">
               {metric.value}
             </p>
             <p

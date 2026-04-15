@@ -8,16 +8,44 @@ const adapter = new PrismaPg(pool)
 const prisma = new PrismaClient({ adapter })
 
 async function main() {
-  // Admin user
+  // Super Admin (PMB owner — acesso total)
   const adminPassword = await bcrypt.hash("admin123", 10)
-  const admin = await prisma.user.upsert({
+  await prisma.user.upsert({
     where: { email: "admin@pmb.com.br" },
-    update: {},
+    update: { role: UserRole.SUPER_ADMIN },
     create: {
       email: "admin@pmb.com.br",
       name: "Admin Master",
       passwordHash: adminPassword,
-      role: UserRole.ADMIN,
+      role: UserRole.SUPER_ADMIN,
+      updatedAt: new Date(),
+    },
+  })
+
+  // PMB Sales (vendas diretas vitrine principal, cupom ate 50%)
+  const salesPassword = await bcrypt.hash("vendas123", 10)
+  await prisma.user.upsert({
+    where: { email: "vendas@pmb.com.br" },
+    update: { role: UserRole.PMB_SALES },
+    create: {
+      email: "vendas@pmb.com.br",
+      name: "Vendas PMB",
+      passwordHash: salesPassword,
+      role: UserRole.PMB_SALES,
+      updatedAt: new Date(),
+    },
+  })
+
+  // PMB Reseller Manager (gerente de revendedores)
+  const mgrPassword = await bcrypt.hash("gerente123", 10)
+  const mgr = await prisma.user.upsert({
+    where: { email: "gerente@pmb.com.br" },
+    update: { role: UserRole.PMB_RESELLER_MGR },
+    create: {
+      email: "gerente@pmb.com.br",
+      name: "Gerente Revendedores",
+      passwordHash: mgrPassword,
+      role: UserRole.PMB_RESELLER_MGR,
       updatedAt: new Date(),
     },
   })
@@ -25,7 +53,7 @@ async function main() {
   // Tenant (must be created before reseller user due to FK)
   const tenant = await prisma.tenant.upsert({
     where: { slug: "demo" },
-    update: {},
+    update: { accountManagerId: mgr.id },
     create: {
       slug: "demo",
       name: "Vitrine Demo",
@@ -33,6 +61,7 @@ async function main() {
       billingMode: BillingMode.MANUAL,
       planValue: 99.90,
       tagline: "Sua escola profissionalizante online",
+      accountManagerId: mgr.id,
       updatedAt: new Date(),
     },
   })
@@ -92,7 +121,9 @@ async function main() {
   }
 
   console.log("Seed completo:")
-  console.log("- Admin: admin@pmb.com.br / admin123")
+  console.log("- Super Admin: admin@pmb.com.br / admin123")
+  console.log("- PMB Sales: vendas@pmb.com.br / vendas123")
+  console.log("- PMB Reseller Mgr: gerente@pmb.com.br / gerente123")
   console.log("- Revendedor: revendedor@teste.com / teste123")
   console.log(`- Tenant: slug=demo, id=${tenant.id}`)
   console.log("- 3 cursos criados")

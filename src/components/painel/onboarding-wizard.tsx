@@ -94,9 +94,9 @@ export function OnboardingWizard() {
                   <div
                     className={`flex h-10 w-10 items-center justify-center rounded-full border-2 font-mono text-xs font-semibold transition-all ${
                       isDone
-                        ? "border-blue-600 bg-blue-600 text-white"
+                        ? "border-[var(--color-pmb-green)] bg-[var(--color-pmb-green)] text-white"
                         : isActive
-                          ? "border-blue-600 bg-white text-blue-600 shadow"
+                          ? "border-[var(--color-pmb-green)] bg-white text-[var(--color-pmb-green)] shadow"
                           : "border-gray-200 bg-white text-gray-400"
                     }`}
                   >
@@ -104,7 +104,7 @@ export function OnboardingWizard() {
                   </div>
                   <span
                     className={`hidden text-[10px] font-medium md:block ${
-                      isActive ? "text-[#1A1A2E]" : "text-gray-500"
+                      isActive ? "text-[var(--color-pmb-green-900)]" : "text-gray-500"
                     }`}
                   >
                     {step.label}
@@ -113,7 +113,7 @@ export function OnboardingWizard() {
                 {index < steps.length - 1 && (
                   <div
                     className={`mx-2 mb-4 h-0.5 flex-1 ${
-                      isDone ? "bg-blue-600" : "bg-gray-200"
+                      isDone ? "bg-[var(--color-pmb-green)]" : "bg-gray-200"
                     }`}
                   />
                 )}
@@ -126,8 +126,8 @@ export function OnboardingWizard() {
       <div className="min-h-[240px] px-6 py-8">
         {current === 1 && (
           <div className="text-center">
-            <PartyPopper className="mx-auto h-12 w-12 text-blue-600" />
-            <h3 className="mt-4 text-lg font-bold text-[#1A1A2E]">
+            <PartyPopper className="mx-auto h-12 w-12 text-[var(--color-pmb-green)]" />
+            <h3 className="mt-4 text-lg font-bold text-[var(--color-pmb-green-900)]">
               Bem-vindo à Profissionaliza Mais Brasil
             </h3>
             <p className="mx-auto mt-2 max-w-md text-sm text-gray-600">
@@ -138,7 +138,7 @@ export function OnboardingWizard() {
         )}
         {current === 2 && (
           <div>
-            <h3 className="text-lg font-bold text-[#1A1A2E]">Confirme seus dados</h3>
+            <h3 className="text-lg font-bold text-[var(--color-pmb-green-900)]">Confirme seus dados</h3>
             <p className="mt-1 text-sm text-gray-600">
               Abra a aba <strong>Configurações → Conta</strong> e valide nome,
               email e empresa antes de seguir.
@@ -147,7 +147,7 @@ export function OnboardingWizard() {
         )}
         {current === 3 && (
           <div>
-            <h3 className="text-lg font-bold text-[#1A1A2E]">Defina seu endereço</h3>
+            <h3 className="text-lg font-bold text-[var(--color-pmb-green-900)]">Defina seu endereço</h3>
             <p className="mt-1 text-sm text-gray-600">
               Escolha o subdomínio gratuito ou aponte um domínio próprio em{" "}
               <strong>Vitrine → Domínio</strong>.
@@ -156,7 +156,7 @@ export function OnboardingWizard() {
         )}
         {current === 4 && (
           <div>
-            <h3 className="text-lg font-bold text-[#1A1A2E]">Personalize a vitrine</h3>
+            <h3 className="text-lg font-bold text-[var(--color-pmb-green-900)]">Personalize a vitrine</h3>
             <p className="mt-1 text-sm text-gray-600">
               Envie o logo, escolha cores e escreva o texto de boas-vindas em{" "}
               <strong>Vitrine → Editor</strong>.
@@ -165,8 +165,8 @@ export function OnboardingWizard() {
         )}
         {current === 5 && (
           <div className="text-center">
-            <Sparkles className="mx-auto h-12 w-12 text-blue-600" />
-            <h3 className="mt-4 text-lg font-bold text-[#1A1A2E]">
+            <Sparkles className="mx-auto h-12 w-12 text-[var(--color-pmb-green)]" />
+            <h3 className="mt-4 text-lg font-bold text-[var(--color-pmb-green-900)]">
               {finished ? "Tudo pronto!" : "Ativando sua conta..."}
             </h3>
             <p className="mx-auto mt-2 max-w-md text-sm text-gray-600">
@@ -196,7 +196,7 @@ export function OnboardingWizard() {
         </span>
         {current < steps.length ? (
           <Button
-            className="bg-blue-600 text-white hover:bg-blue-700"
+            className="bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)]"
             disabled={saving}
             onClick={handleNext}
           >
@@ -219,7 +219,7 @@ export function OnboardingWizard() {
           </Button>
         ) : (
           <Button
-            className="bg-blue-600 text-white hover:bg-blue-700"
+            className="bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)]"
             disabled={!finished}
             onClick={handleGoToPanel}
           >

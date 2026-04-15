@@ -78,7 +78,7 @@ function IntegrationCard({
           </span>
         )}
       </div>
-      <h4 className="mt-4 text-sm font-semibold text-[#1A1A2E]">{title}</h4>
+      <h4 className="mt-4 text-sm font-semibold text-[var(--color-pmb-green-900)]">{title}</h4>
       <p className="mt-1 text-xs text-gray-600">{description}</p>
       {message && (
         <p
@@ -96,7 +96,7 @@ function IntegrationCard({
         type="button"
         onClick={handle}
         disabled={status === "testing"}
-        className="mt-4 inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-70"
+        className="mt-4 inline-flex items-center gap-2 rounded-lg bg-[var(--color-pmb-green)] px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-[var(--color-pmb-green-700)] disabled:opacity-70"
       >
         {status === "testing" ? (
           <>
@@ -131,7 +131,7 @@ export function IntegrationTestCards({ integrations }: IntegrationTestCardsProps
         title="Escola Avançada"
         description="API v2 para matrícula automática, bloqueio e sincronização de catálogo."
         brand="EA"
-        brandClass="bg-[#1A1A2E]"
+        brandClass="bg-[var(--color-pmb-green-900)]"
         endpoint="/api/admin/config/test-ea"
         configured={integrations.ea.configured}
       />

@@ -19,7 +19,7 @@ const GRADIENT_BY_CATEGORY: Record<string, string> = {
   tecnologia: "from-green-600 to-emerald-800",
   saude: "from-rose-600 to-pink-800",
   beleza: "from-purple-600 to-fuchsia-800",
-  administracao: "from-blue-600 to-indigo-800",
+  administracao: "from-[var(--color-pmb-green)] to-[var(--color-pmb-green-900)]",
   gastronomia: "from-orange-600 to-red-700",
   default: "from-slate-700 to-slate-900",
 }
@@ -40,7 +40,7 @@ export default async function CoursePage({ params }: CoursePageProps) {
   if (!tenant) {
     return (
       <div className="mx-auto max-w-3xl px-4 py-24 text-center">
-        <h1 className="text-2xl font-bold text-[#1A1A2E]">
+        <h1 className="text-2xl font-bold text-[var(--color-pmb-green-900)]">
           Curso indisponível
         </h1>
         <p className="mt-3 text-sm text-gray-600">

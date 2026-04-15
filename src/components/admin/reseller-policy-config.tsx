@@ -73,7 +73,7 @@ export function ResellerPolicyConfig({
 
   return (
     <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-      <h3 className="text-sm font-semibold text-[#1A1A2E]">Modo de bloqueio</h3>
+      <h3 className="text-sm font-semibold text-[var(--color-pmb-green-900)]">Modo de bloqueio</h3>
       <p className="mt-1 text-xs text-gray-600">
         Define como a plataforma lida com alunos inadimplentes deste revendedor.
       </p>
@@ -83,12 +83,12 @@ export function ResellerPolicyConfig({
           type="button"
           onClick={() => setMode("AUTO")}
           className={`rounded-xl border-2 p-4 text-left transition-all ${
-            mode === "AUTO" ? "border-blue-600 bg-blue-50/50" : "border-gray-200 bg-white"
+            mode === "AUTO" ? "border-[var(--color-pmb-green)] bg-[var(--color-pmb-lime-50)]/50" : "border-gray-200 bg-white"
           }`}
         >
           <div className="flex items-center justify-between">
-            <span className="text-sm font-semibold text-[#1A1A2E]">Automático</span>
-            {mode === "AUTO" && <CheckCircle2 className="h-4 w-4 text-blue-600" />}
+            <span className="text-sm font-semibold text-[var(--color-pmb-green-900)]">Automático</span>
+            {mode === "AUTO" && <CheckCircle2 className="h-4 w-4 text-[var(--color-pmb-green)]" />}
           </div>
           <p className="mt-1 text-xs text-gray-600">
             Bloqueia aluno automaticamente após atraso, via API EA.
@@ -98,12 +98,12 @@ export function ResellerPolicyConfig({
           type="button"
           onClick={() => setMode("MANUAL")}
           className={`rounded-xl border-2 p-4 text-left transition-all ${
-            mode === "MANUAL" ? "border-blue-600 bg-blue-50/50" : "border-gray-200 bg-white"
+            mode === "MANUAL" ? "border-[var(--color-pmb-green)] bg-[var(--color-pmb-lime-50)]/50" : "border-gray-200 bg-white"
           }`}
         >
           <div className="flex items-center justify-between">
-            <span className="text-sm font-semibold text-[#1A1A2E]">Manual</span>
-            {mode === "MANUAL" && <CheckCircle2 className="h-4 w-4 text-blue-600" />}
+            <span className="text-sm font-semibold text-[var(--color-pmb-green-900)]">Manual</span>
+            {mode === "MANUAL" && <CheckCircle2 className="h-4 w-4 text-[var(--color-pmb-green)]" />}
           </div>
           <p className="mt-1 text-xs text-gray-600">
             Admin e revendedor recebem aviso para decidir.
@@ -117,7 +117,7 @@ export function ResellerPolicyConfig({
         </h4>
 
         <label className="flex flex-col gap-1 text-xs">
-          <span className="font-medium text-[#1A1A2E]">
+          <span className="font-medium text-[var(--color-pmb-green-900)]">
             Período de carência (dias)
           </span>
           <input
@@ -160,7 +160,7 @@ export function ResellerPolicyConfig({
       )}
 
       <div className="mt-4 flex justify-end">
-        <Button onClick={save} disabled={saving} className="bg-blue-600 text-white hover:bg-blue-700">
+        <Button onClick={save} disabled={saving} className="bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)]">
           <Save className="mr-2 h-4 w-4" />
           {saving ? "Salvando..." : "Salvar política"}
         </Button>

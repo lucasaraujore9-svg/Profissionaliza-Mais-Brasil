@@ -32,7 +32,7 @@ export function SubdomainDisplay({
       </div>
 
       <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="font-mono text-lg font-bold text-[#1A1A2E] sm:text-xl">
+        <div className="font-mono text-lg font-bold text-[var(--color-pmb-green-900)] sm:text-xl">
           {subdomain}
           <span className="text-gray-500">.{appDomain}</span>
         </div>
@@ -48,7 +48,7 @@ export function SubdomainDisplay({
         </div>
       </div>
 
-      <div className="mt-4 rounded-lg bg-blue-50 p-3 text-xs text-blue-900">
+      <div className="mt-4 rounded-lg bg-[var(--color-pmb-lime-50)] p-3 text-xs text-[var(--color-pmb-green-900)]">
         Esse endereço é gratuito e sempre estará disponível. Você pode também
         apontar um domínio próprio abaixo.
       </div>

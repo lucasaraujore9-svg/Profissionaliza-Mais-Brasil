@@ -28,7 +28,7 @@ const statusColors: Record<string, string> = {
   REJECTED: "bg-red-100 text-red-700",
   REFUNDED: "bg-gray-100 text-gray-700",
   CANCELLED: "bg-red-100 text-red-700",
-  IN_PROCESS: "bg-blue-100 text-blue-700",
+  IN_PROCESS: "bg-[var(--color-pmb-lime-50)] text-[var(--color-pmb-green-700)]",
   CHARGED_BACK: "bg-red-100 text-red-700",
 }
 
@@ -54,7 +54,7 @@ export function FinancePaymentTable({
   return (
     <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
       <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
-        <h3 className="text-sm font-semibold text-[#1A1A2E]">Transações</h3>
+        <h3 className="text-sm font-semibold text-[var(--color-pmb-green-900)]">Transações</h3>
         <span className="text-xs text-gray-500">
           {loading
             ? "Carregando..."
@@ -88,10 +88,10 @@ export function FinancePaymentTable({
                   <td className="px-4 py-3 font-mono text-sm text-gray-600">
                     {formatDate(p.date)}
                   </td>
-                  <td className="px-4 py-3 text-sm text-[#1A1A2E]">
+                  <td className="px-4 py-3 text-sm text-[var(--color-pmb-green-900)]">
                     {p.description}
                   </td>
-                  <td className="px-4 py-3 font-mono text-sm font-semibold text-[#1A1A2E]">
+                  <td className="px-4 py-3 font-mono text-sm font-semibold text-[var(--color-pmb-green-900)]">
                     {formatCurrency(p.amount)}
                   </td>
                   <td className="px-4 py-3">

@@ -6,13 +6,13 @@ const actions = [
     label: "Novo cupom",
     href: "/painel/cupons",
     icon: Tag,
-    color: "bg-blue-600 hover:bg-blue-700",
+    color: "bg-[var(--color-pmb-green)] hover:bg-[var(--color-pmb-green-700)]",
   },
   {
     label: "Ver alunos",
     href: "/painel/alunos",
     icon: Users,
-    color: "bg-indigo-600 hover:bg-indigo-700",
+    color: "bg-[var(--color-pmb-green)] hover:bg-[var(--color-pmb-green-700)]",
   },
   {
     label: "Relatório",
@@ -31,7 +31,7 @@ const actions = [
 export function QuickActions() {
   return (
     <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-      <h3 className="text-sm font-semibold text-[#1A1A2E]">Ações rápidas</h3>
+      <h3 className="text-sm font-semibold text-[var(--color-pmb-green-900)]">Ações rápidas</h3>
       <p className="mt-1 text-xs text-gray-600">
         Acesse as operações mais comuns.
       </p>

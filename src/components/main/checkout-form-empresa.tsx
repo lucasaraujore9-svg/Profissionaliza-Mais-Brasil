@@ -31,7 +31,7 @@ export function CheckoutFormEmpresa({
 
   return (
     <div>
-      <h2 className="text-xl font-bold text-[#1A1A2E] md:text-2xl">
+      <h2 className="text-xl font-bold text-[var(--color-pmb-green-900)] md:text-2xl">
         Dados da sua empresa
       </h2>
       <p className="mt-1 text-sm text-gray-600">

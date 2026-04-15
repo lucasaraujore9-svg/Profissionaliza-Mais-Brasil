@@ -113,7 +113,7 @@ export function ResetPasswordForm({ token }: ResetPasswordFormProps) {
       <Button
         type="submit"
         size="lg"
-        className="w-full bg-blue-600 text-white hover:bg-blue-700"
+        className="w-full bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)]"
         disabled={state.kind === "submitting"}
       >
         {state.kind === "submitting" ? (
@@ -131,7 +131,7 @@ export function ResetPasswordForm({ token }: ResetPasswordFormProps) {
 
       <Link
         href="/login"
-        className="flex items-center justify-center gap-1.5 text-sm font-medium text-gray-600 hover:text-[#1A1A2E]"
+        className="flex items-center justify-center gap-1.5 text-sm font-medium text-gray-600 hover:text-[var(--color-pmb-green-900)]"
       >
         <ArrowLeft className="h-3.5 w-3.5" />
         Voltar para o login

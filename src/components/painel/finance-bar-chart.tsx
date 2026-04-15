@@ -21,7 +21,7 @@ export function FinanceBarChart({ week, month }: FinanceBarChartProps) {
     <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-sm font-semibold text-[#1A1A2E]">
+          <h3 className="text-sm font-semibold text-[var(--color-pmb-green-900)]">
             Receita por {view === "semana" ? "dia" : "semana"}
           </h3>
           <p className="mt-1 text-xs text-gray-600">
@@ -36,7 +36,7 @@ export function FinanceBarChart({ week, month }: FinanceBarChartProps) {
               onClick={() => setView(option)}
               className={`rounded-md px-3 py-1 text-xs font-semibold capitalize transition-colors ${
                 view === option
-                  ? "bg-white text-[#1A1A2E] shadow-sm"
+                  ? "bg-white text-[var(--color-pmb-green-900)] shadow-sm"
                   : "text-gray-600"
               }`}
             >
@@ -64,7 +64,7 @@ export function FinanceBarChart({ week, month }: FinanceBarChartProps) {
               >
                 <div className="flex h-full w-full items-end">
                   <div
-                    className="w-full rounded-t-md bg-gradient-to-t from-blue-600 to-indigo-500 transition-all"
+                    className="w-full rounded-t-md bg-gradient-to-t from-[var(--color-pmb-green)] to-[var(--color-pmb-gold)] transition-all"
                     style={{ height: `${Math.max(heightPct, 2)}%` }}
                   />
                 </div>

@@ -54,7 +54,7 @@ export function PlanosSection() {
     <section id="planos" className="bg-[#FAFAFA] py-16 md:py-24">
       <div className="mx-auto max-w-7xl px-4 md:px-6">
         <div className="mx-auto max-w-2xl text-center">
-          <h2 className="text-3xl font-bold tracking-tight text-[#1A1A2E] md:text-4xl">
+          <h2 className="text-3xl font-bold tracking-tight text-[var(--color-pmb-green-900)] md:text-4xl">
             Planos que crescem com você
           </h2>
           <p className="mt-4 text-gray-600">
@@ -68,23 +68,23 @@ export function PlanosSection() {
               key={plano.nome}
               className={`relative flex flex-col rounded-2xl border bg-white p-6 transition-all lg:p-8 ${
                 plano.destaque
-                  ? "border-blue-600 shadow-lg md:-translate-y-2"
+                  ? "border-[var(--color-pmb-green)] shadow-lg md:-translate-y-2"
                   : "border-gray-200 hover:shadow-md"
               }`}
             >
               {plano.destaque && (
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-blue-600 px-4 py-1 text-xs font-semibold text-white">
+                <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-[var(--color-pmb-green)] px-4 py-1 text-xs font-semibold text-white">
                   Mais popular
                 </div>
               )}
 
               <div>
-                <h3 className="text-xl font-bold text-[#1A1A2E]">{plano.nome}</h3>
+                <h3 className="text-xl font-bold text-[var(--color-pmb-green-900)]">{plano.nome}</h3>
                 <p className="mt-1 text-sm text-gray-600">{plano.tagline}</p>
               </div>
 
               <div className="mt-6 flex items-baseline gap-1">
-                <span className="font-mono text-4xl font-bold text-[#1A1A2E]">
+                <span className="font-mono text-4xl font-bold text-[var(--color-pmb-green-900)]">
                   {plano.preco}
                 </span>
                 <span className="text-sm text-gray-500">{plano.periodo}</span>
@@ -93,7 +93,7 @@ export function PlanosSection() {
               <ul className="mt-6 flex-1 space-y-3">
                 {plano.features.map((feature) => (
                   <li key={feature} className="flex items-start gap-2 text-sm text-gray-700">
-                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-blue-600" />
+                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-[var(--color-pmb-green)]" />
                     <span>{feature}</span>
                   </li>
                 ))}
@@ -103,8 +103,8 @@ export function PlanosSection() {
                 <Button
                   className={`w-full ${
                     plano.destaque
-                      ? "bg-blue-600 text-white hover:bg-blue-700"
-                      : "bg-white text-[#1A1A2E] hover:bg-gray-50"
+                      ? "bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)]"
+                      : "bg-white text-[var(--color-pmb-green-900)] hover:bg-gray-50"
                   }`}
                   variant={plano.destaque ? "default" : "outline"}
                 >

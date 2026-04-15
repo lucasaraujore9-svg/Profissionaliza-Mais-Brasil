@@ -22,7 +22,7 @@ export function CourseDescription({ descricao, highlights }: CourseDescriptionPr
 
   return (
     <div>
-      <h2 className="text-2xl font-bold text-[#1A1A2E] md:text-3xl">
+      <h2 className="text-2xl font-bold text-[var(--color-pmb-green-900)] md:text-3xl">
         Sobre este curso
       </h2>
 
@@ -33,11 +33,11 @@ export function CourseDescription({ descricao, highlights }: CourseDescriptionPr
       </div>
 
       <div className="mt-8 rounded-2xl border border-gray-200 bg-[#FAFAFA] p-6 lg:p-8">
-        <h3 className="text-lg font-semibold text-[#1A1A2E]">O que você vai aprender</h3>
+        <h3 className="text-lg font-semibold text-[var(--color-pmb-green-900)]">O que você vai aprender</h3>
         <ul className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
           {items.map((item) => (
             <li key={item} className="flex items-start gap-2 text-sm text-gray-700">
-              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-blue-600" />
+              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[var(--color-pmb-green)]" />
               <span>{item}</span>
             </li>
           ))}

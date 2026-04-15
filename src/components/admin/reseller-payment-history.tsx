@@ -51,7 +51,7 @@ export function ResellerPaymentHistory({ payments }: ResellerPaymentHistoryProps
   return (
     <div className="rounded-2xl border border-gray-200 bg-white shadow-sm">
       <div className="border-b border-gray-200 px-6 py-4">
-        <h3 className="text-sm font-semibold text-[#1A1A2E]">Histórico de pagamentos</h3>
+        <h3 className="text-sm font-semibold text-[var(--color-pmb-green-900)]">Histórico de pagamentos</h3>
         <p className="mt-0.5 text-xs text-gray-600">
           Faturas da assinatura Asaas recentes.
         </p>
@@ -80,7 +80,7 @@ export function ResellerPaymentHistory({ payments }: ResellerPaymentHistoryProps
                     <td className="px-6 py-3 font-mono text-xs text-gray-700">
                       {formatDate(p.dueDate)}
                     </td>
-                    <td className="px-6 py-3 font-mono font-semibold text-[#1A1A2E]">
+                    <td className="px-6 py-3 font-mono font-semibold text-[var(--color-pmb-green-900)]">
                       {formatMoney(p.amount)}
                     </td>
                     <td className="px-6 py-3 text-xs text-gray-600">

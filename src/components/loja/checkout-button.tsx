@@ -8,7 +8,7 @@ export function CheckoutButton() {
       <Link href="/loja/confirmacao" className="block">
         <Button
           size="lg"
-          className="w-full bg-blue-600 text-white hover:bg-blue-700"
+          className="w-full bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)]"
         >
           <Lock className="mr-2 h-4 w-4" />
           Finalizar Compra

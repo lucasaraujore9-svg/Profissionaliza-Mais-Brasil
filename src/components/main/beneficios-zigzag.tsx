@@ -6,7 +6,7 @@ const beneficios = [
     title: "Domínio personalizado",
     description:
       "Tenha sua própria URL (minhaescola.com.br) ou use um subdomínio nosso gratuitamente.",
-    gradient: "from-blue-500 to-cyan-500",
+    gradient: "from-[var(--color-pmb-mist)]0 to-cyan-500",
   },
   {
     icon: ShoppingBag,
@@ -43,7 +43,7 @@ export function BeneficiosZigZag() {
     <section className="bg-white py-16 md:py-24">
       <div className="mx-auto max-w-6xl px-4 md:px-6">
         <div className="mx-auto max-w-2xl text-center">
-          <h2 className="text-3xl font-bold tracking-tight text-[#1A1A2E] md:text-4xl">
+          <h2 className="text-3xl font-bold tracking-tight text-[var(--color-pmb-green-900)] md:text-4xl">
             Tudo pronto pra você vender
           </h2>
           <p className="mt-4 text-gray-600">
@@ -68,10 +68,10 @@ export function BeneficiosZigZag() {
               </div>
 
               <div>
-                <div className="font-mono text-xs font-semibold uppercase tracking-wider text-blue-600">
+                <div className="font-mono text-xs font-semibold uppercase tracking-wider text-[var(--color-pmb-green)]">
                   Benefício 0{index + 1}
                 </div>
-                <h3 className="mt-3 text-2xl font-bold text-[#1A1A2E] md:text-3xl">
+                <h3 className="mt-3 text-2xl font-bold text-[var(--color-pmb-green-900)] md:text-3xl">
                   {b.title}
                 </h3>
                 <p className="mt-4 text-base leading-relaxed text-gray-600">

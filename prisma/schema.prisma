@@ -15,21 +15,22 @@ datasource db {
 // ============================================================
 
 enum UserRole {
-  SUPER_ADMIN
-  ADMIN
-  RESELLER
+  SUPER_ADMIN // PMB owner — full access
+  PMB_SALES // Vendas diretas vitrine PMB, cupom ate 50%
+  PMB_RESELLER_MGR // Gerencia revendedores atribuidos
+  RESELLER // Dono ou consultor de tenant
 }
 
 enum TenantStatus {
-  PENDING    // Aguardando primeiro pagamento
-  ACTIVE     // Ativo e operante
-  SUSPENDED  // Suspenso por inadimplencia
-  CANCELLED  // Cancelado definitivamente
+  PENDING // Aguardando primeiro pagamento
+  ACTIVE // Ativo e operante
+  SUSPENDED // Suspenso por inadimplencia
+  CANCELLED // Cancelado definitivamente
 }
 
 enum BillingMode {
-  AUTO    // Sistema bloqueia aluno automaticamente
-  MANUAL  // Revendedor decide quando bloquear
+  AUTO // Sistema bloqueia aluno automaticamente
+  MANUAL // Revendedor decide quando bloquear
 }
 
 enum StudentStatus {
@@ -47,16 +48,16 @@ enum ApostilaStatus {
 }
 
 enum EnrollmentStatus {
-  PENDING     // Aguardando pagamento
-  ACTIVE      // Matricula ativa
-  SUSPENDED   // Suspenso por inadimplencia
-  CANCELLED   // Cancelado
-  COMPLETED   // Curso concluido
+  PENDING // Aguardando pagamento
+  ACTIVE // Matricula ativa
+  SUSPENDED // Suspenso por inadimplencia
+  CANCELLED // Cancelado
+  COMPLETED // Curso concluido
 }
 
 enum PaymentType {
-  ONE_TIME    // Pagamento unico
-  MONTHLY     // Assinatura mensal
+  ONE_TIME // Pagamento unico
+  MONTHLY // Assinatura mensal
 }
 
 enum PaymentStatus {
@@ -70,8 +71,8 @@ enum PaymentStatus {
 }
 
 enum DiscountType {
-  PERCENTAGE  // Desconto percentual (ex: 20%)
-  FIXED       // Desconto fixo em reais (ex: R$50)
+  PERCENTAGE // Desconto percentual (ex: 20%)
+  FIXED // Desconto fixo em reais (ex: R$50)
 }
 
 enum WebhookSource {
@@ -89,8 +90,11 @@ model User {
   name          String
   passwordHash  String    @map("password_hash")
   role          UserRole  @default(RESELLER)
+  status        String    @default("ATIVO") // ATIVO / INATIVO / PENDING_INVITE
+  phone         String?
   emailVerified DateTime? @map("email_verified")
   image         String?
+  lastActiveAt  DateTime? @map("last_active_at")
 
   // Relacao: se for RESELLER, qual tenant e dono
   tenantId String? @unique @map("tenant_id")
@@ -98,6 +102,16 @@ model User {
 
   // Memberships em tenants (para multiplos admins)
   tenantMemberships TenantMember[]
+
+  // Tenants gerenciados (PMB_RESELLER_MGR como account manager)
+  managedTenants Tenant[] @relation("AccountManagerTenants")
+
+  // Cupons criados por este usuario (auditoria + cap por papel)
+  createdCoupons Coupon[] @relation("CreatedCoupons")
+
+  // Vendas diretas geradas por este usuario (PMB_SALES / consultor)
+  soldEnrollments Enrollment[] @relation("SoldEnrollments")
+  soldPayments    Payment[]    @relation("SoldPayments")
 
   // Reset password
   resetToken        String?   @unique @map("reset_token")
@@ -115,12 +129,14 @@ model User {
 // ============================================================
 
 model TenantMember {
-  id       String @id @default(cuid())
-  tenantId String @map("tenant_id")
-  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  userId   String @map("user_id")
-  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  role     String @default("manager") // owner, manager, viewer
+  id          String @id @default(cuid())
+  tenantId    String @map("tenant_id")
+  tenant      Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userId      String @map("user_id")
+  user        User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role        String @default("manager") // owner, manager, viewer, consultant
+  maxDiscount Int?   @map("max_discount") // % cap para cupons (consultor)
+  status      String @default("ATIVO")
 
   createdAt DateTime @default(now()) @map("created_at")
 
@@ -138,17 +154,17 @@ model Tenant {
   slug String @unique // Subdominio: slug.profissionalizamaisbrasil.com.br
 
   // Dominio custom
-  customDomain   String?  @unique @map("custom_domain") // ex: cursosjoao.com.br
-  domainVerified Boolean  @default(false) @map("domain_verified")
+  customDomain   String? @unique @map("custom_domain") // ex: cursosjoao.com.br
+  domainVerified Boolean @default(false) @map("domain_verified")
 
   // Personalizacao da vitrine
-  logoUrl        String?  @map("logo_url")
-  primaryColor   String   @default("#2563eb") @map("primary_color")   // Azul padrao
-  secondaryColor String   @default("#1e40af") @map("secondary_color")
-  bannerUrl      String?  @map("banner_url")
-  tagline        String?  // Frase curta da vitrine
-  description    String?  // Descricao longa
-  whatsapp       String?  // Whatsapp para contato
+  logoUrl        String? @map("logo_url")
+  primaryColor   String  @default("#2563eb") @map("primary_color") // Azul padrao
+  secondaryColor String  @default("#1e40af") @map("secondary_color")
+  bannerUrl      String? @map("banner_url")
+  tagline        String? // Frase curta da vitrine
+  description    String? // Descricao longa
+  whatsapp       String? // Whatsapp para contato
   instagram      String?
   facebook       String?
 
@@ -162,23 +178,27 @@ model Tenant {
   // Exemplo: { gracePeriodDays: 15, keepStudentsActive: true, notifyStudents: true }
 
   // Integracao Asaas (mensalidade do revendedor)
-  asaasCustomerId     String? @unique @map("asaas_customer_id")     // cus_xxxx
+  asaasCustomerId     String? @unique @map("asaas_customer_id") // cus_xxxx
   asaasSubscriptionId String? @unique @map("asaas_subscription_id") // sub_xxxx
 
   // Integracao Mercado Pago (vendas dos cursos)
-  mpAccessToken  String?  @map("mp_access_token")  // Criptografado AES-256
-  mpPublicKey    String?  @map("mp_public_key")
-  mpRefreshToken String?  @map("mp_refresh_token")
-  mpConnected    Boolean  @default(false) @map("mp_connected")
-  mpUserId       String?  @map("mp_user_id") // ID do revendedor no MP
+  mpAccessToken  String? @map("mp_access_token") // Criptografado AES-256
+  mpPublicKey    String? @map("mp_public_key")
+  mpRefreshToken String? @map("mp_refresh_token")
+  mpConnected    Boolean @default(false) @map("mp_connected")
+  mpUserId       String? @map("mp_user_id") // ID do revendedor no MP
 
   // Integracao Escola Avancada
-  eaVendedorId String? @map("ea_vendedor_id") // ID do funcionario criado na EA
+  eaVendedorId    String? @map("ea_vendedor_id") // ID do funcionario criado na EA
   eaVendedorLogin String? @map("ea_vendedor_login") // Login retornado pelo funcionarios/novo
-  poloName     String? @map("polo_name")      // Nome do polo usado no campo "polo" da EA
+  poloName        String? @map("polo_name") // Nome do polo usado no campo "polo" da EA
 
   // Dono do tenant (owner principal)
   owner User? @relation("TenantOwner")
+
+  // Gerente de conta PMB (PMB_RESELLER_MGR atribuido)
+  accountManagerId String? @map("account_manager_id")
+  accountManager   User?   @relation("AccountManagerTenants", fields: [accountManagerId], references: [id])
 
   // Membros do tenant (para multiplos admins/gerentes no futuro)
   members TenantMember[]
@@ -213,14 +233,14 @@ model Course {
   // ATENCAO: a API cursos/listar NAO retorna ID do curso!
   // eaCourseId pode ser: (1) descoberto via testes, (2) inferido da ordem, ou (3) null
   // O campo "nome" e usado como chave alternativa de match no sync
-  eaCourseId    String?  @unique @map("ea_course_id") // ID na EA (pode ser null se API nao retornar)
-  nome          String   @unique // Nome e a chave de match primaria no sync
-  descricao     String?  @db.Text // Campo "obs" da API
-  qtdAulas      Int      @map("qtd_aulas")       // Campo "aulas"
-  cargaHoraria  String?  @map("carga_horaria")
-  precoOriginal Decimal? @map("preco_original") @db.Decimal(10, 2) // Parseado do formato BR
-  precoPromocional Decimal? @map("preco_promocional") @db.Decimal(10, 2)
-  parcelasSugeridas Int? @map("parcelas_sugeridas") // Campo "parcelas"
+  eaCourseId        String?  @unique @map("ea_course_id") // ID na EA (pode ser null se API nao retornar)
+  nome              String   @unique // Nome e a chave de match primaria no sync
+  descricao         String?  @db.Text // Campo "obs" da API
+  qtdAulas          Int      @map("qtd_aulas") // Campo "aulas"
+  cargaHoraria      String?  @map("carga_horaria")
+  precoOriginal     Decimal? @map("preco_original") @db.Decimal(10, 2) // Parseado do formato BR
+  precoPromocional  Decimal? @map("preco_promocional") @db.Decimal(10, 2)
+  parcelasSugeridas Int?     @map("parcelas_sugeridas") // Campo "parcelas"
 
   // Categorias
   categoriaInterna String? @map("categoria_interna")
@@ -232,11 +252,18 @@ model Course {
   precoMostrar Boolean @default(false) @map("preco_mostrar")
   capaImageUrl String? @map("capa_image_url")
 
+  // Overrides da vitrine principal PMB (curadoria admin — nao tocar no sync)
+  precoVitrineMain  Decimal? @map("preco_vitrine_main") @db.Decimal(10, 2)
+  destaqueHome      Boolean  @default(false) @map("destaque_home")
+  ordemHome         Int?     @map("ordem_home")
+  descricaoOverride String?  @map("descricao_override") @db.Text
+  capaOverride      String?  @map("capa_override")
+
   // Slug para URL amigavel (gerado do nome)
   slug String @unique
 
   // Controle de sync
-  syncedAt DateTime @map("synced_at") @default(now())
+  syncedAt DateTime @default(now()) @map("synced_at")
 
   // Relacoes
   tenantCourses TenantCourse[]
@@ -253,10 +280,10 @@ model Course {
 
 model CourseLesson {
   id       String @id @default(cuid())
-  courseId  String @map("course_id")
+  courseId String @map("course_id")
   course   Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
   nome     String // Campo "aula" da API
-  ordem    Int    // Ordem sequencial
+  ordem    Int // Ordem sequencial
 
   @@unique([courseId, ordem])
   @@map("course_lessons")
@@ -270,7 +297,7 @@ model TenantCourse {
   id       String @id @default(cuid())
   tenantId String @map("tenant_id")
   tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  courseId  String @map("course_id")
+  courseId String @map("course_id")
   course   Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
 
   // Precificacao do revendedor
@@ -306,17 +333,17 @@ model Student {
   tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   // Dados pessoais
-  nome          String
-  email         String?
-  fone          String?
-  fone2         String?
-  cpf           String?
-  rg            String?
-  sexo          String?
-  nascimento    DateTime?
-  responsavel   String? // Nome do responsavel (menores)
-  rgResponsavel  String? @map("rg_responsavel")
-  cpfResponsavel String? @map("cpf_responsavel")
+  nome           String
+  email          String?
+  fone           String?
+  fone2          String?
+  cpf            String?
+  rg             String?
+  sexo           String?
+  nascimento     DateTime?
+  responsavel    String? // Nome do responsavel (menores)
+  rgResponsavel  String?   @map("rg_responsavel")
+  cpfResponsavel String?   @map("cpf_responsavel")
 
   // Endereco
   rua    String?
@@ -329,18 +356,18 @@ model Student {
   obs String? @db.Text
 
   // Escola Avancada
-  eaAlunoId    String  @map("ea_aluno_id")     // Login retornado por usuarios/novo
-  eaAlunoSenha String? @map("ea_aluno_senha")  // Criptografada
-  polo         String  // = tenant.slug (enviado a EA)
-  vendedorId   String? @map("vendedor_id")     // = tenant.eaVendedorId
+  eaAlunoId    String  @map("ea_aluno_id") // Login retornado por usuarios/novo
+  eaAlunoSenha String? @map("ea_aluno_senha") // Criptografada
+  polo         String // = tenant.slug (enviado a EA)
+  vendedorId   String? @map("vendedor_id") // = tenant.eaVendedorId
 
   // Status na EA
   status   StudentStatus  @default(ATIVO)
   apostila ApostilaStatus @default(LIBERADA)
 
   // Controle
-  certificado Boolean  @default(false)
-  bolsista    Boolean  @default(false)
+  certificado Boolean   @default(false)
+  bolsista    Boolean   @default(false)
   dataFinal   DateTime? @map("data_final") // Data final do acesso
 
   // Relacoes
@@ -362,28 +389,32 @@ model Student {
 // ============================================================
 
 model Enrollment {
-  id             String @id @default(cuid())
-  tenantId       String @map("tenant_id")
-  tenant         Tenant @relation(fields: [tenantId], references: [id])
-  studentId      String @map("student_id")
-  student        Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  tenantCourseId String @map("tenant_course_id")
-  tenantCourse   TenantCourse @relation(fields: [tenantCourseId], references: [id])
-  courseId        String @map("course_id")
-  course         Course @relation(fields: [courseId], references: [id])
+  id             String        @id @default(cuid())
+  tenantId       String?       @map("tenant_id") // null = vitrine principal PMB
+  tenant         Tenant?       @relation(fields: [tenantId], references: [id])
+  studentId      String        @map("student_id")
+  student        Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  tenantCourseId String?       @map("tenant_course_id") // null para vendas vitrine PMB
+  tenantCourse   TenantCourse? @relation(fields: [tenantCourseId], references: [id])
+
+  // Vendedor (PMB_SALES ou consultor que originou)
+  soldByUserId String? @map("sold_by_user_id")
+  soldByUser   User?   @relation("SoldEnrollments", fields: [soldByUserId], references: [id])
+  courseId     String  @map("course_id")
+  course       Course  @relation(fields: [courseId], references: [id])
 
   // Pagamento
-  paymentType       PaymentType    @map("payment_type")
-  status            EnrollmentStatus @default(PENDING)
-  originalAmount    Decimal        @map("original_amount") @db.Decimal(10, 2)
-  discountAmount    Decimal        @default(0) @map("discount_amount") @db.Decimal(10, 2)
-  finalAmount       Decimal        @map("final_amount") @db.Decimal(10, 2)
+  paymentType    PaymentType      @map("payment_type")
+  status         EnrollmentStatus @default(PENDING)
+  originalAmount Decimal          @map("original_amount") @db.Decimal(10, 2)
+  discountAmount Decimal          @default(0) @map("discount_amount") @db.Decimal(10, 2)
+  finalAmount    Decimal          @map("final_amount") @db.Decimal(10, 2)
 
   // Mercado Pago
-  mpPreferenceId    String?  @map("mp_preference_id")     // preference_xxxx
-  mpPaymentId       String?  @map("mp_payment_id")        // Pagamento unico
-  mpSubscriptionId  String?  @map("mp_subscription_id")   // preapproval_xxxx (mensal)
-  externalReference String?  @map("external_reference")   // Para rastreamento no webhook
+  mpPreferenceId    String? @map("mp_preference_id") // preference_xxxx
+  mpPaymentId       String? @map("mp_payment_id") // Pagamento unico
+  mpSubscriptionId  String? @map("mp_subscription_id") // preapproval_xxxx (mensal)
+  externalReference String? @map("external_reference") // Para rastreamento no webhook
 
   // Cupom
   couponId String? @map("coupon_id")
@@ -414,21 +445,25 @@ model Enrollment {
 // ============================================================
 
 model Payment {
-  id           String @id @default(cuid())
-  tenantId     String @map("tenant_id")
-  tenant       Tenant @relation(fields: [tenantId], references: [id])
-  enrollmentId String @map("enrollment_id")
+  id           String     @id @default(cuid())
+  tenantId     String?    @map("tenant_id") // null = vitrine principal PMB
+  tenant       Tenant?    @relation(fields: [tenantId], references: [id])
+  enrollmentId String     @map("enrollment_id")
   enrollment   Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
 
+  // Vendedor (PMB_SALES ou consultor que originou)
+  soldByUserId String? @map("sold_by_user_id")
+  soldByUser   User?   @relation("SoldPayments", fields: [soldByUserId], references: [id])
+
   // Valores
-  amount Decimal @db.Decimal(10, 2)
+  amount Decimal     @db.Decimal(10, 2)
   type   PaymentType
 
   // Mercado Pago
-  mpPaymentId   String        @unique @map("mp_payment_id") // ID do pagamento no MP
-  mpStatus      PaymentStatus @map("mp_status")
-  mpPaymentType String?       @map("mp_payment_type") // credit_card, pix, boleto, account_money
-  mpStatusDetail String?      @map("mp_status_detail")
+  mpPaymentId    String        @unique @map("mp_payment_id") // ID do pagamento no MP
+  mpStatus       PaymentStatus @map("mp_status")
+  mpPaymentType  String?       @map("mp_payment_type") // credit_card, pix, boleto, account_money
+  mpStatusDetail String?       @map("mp_status_detail")
 
   // Cupom aplicado
   couponId String? @map("coupon_id")
@@ -448,20 +483,25 @@ model Payment {
 // ============================================================
 
 model Coupon {
-  id       String @id @default(cuid())
-  tenantId String @map("tenant_id")
-  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  id       String  @id @default(cuid())
+  tenantId String? @map("tenant_id") // null = cupom da vitrine principal PMB
+  tenant   Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
-  code          String       // Codigo do cupom (ex: PROMO20)
+  // Auditoria + cap por papel
+  createdByUserId String?   @map("created_by_user_id")
+  createdByUser   User?     @relation("CreatedCoupons", fields: [createdByUserId], references: [id])
+  createdByRole   UserRole? @map("created_by_role")
+
+  code          String // Codigo do cupom (ex: PROMO20)
   discountType  DiscountType @map("discount_type")
   discountValue Decimal      @map("discount_value") @db.Decimal(10, 2)
 
   // Limites
-  maxUses   Int?     @map("max_uses")  // null = ilimitado
-  usedCount Int      @default(0) @map("used_count")
-  validFrom DateTime @map("valid_from")
+  maxUses    Int?     @map("max_uses") // null = ilimitado
+  usedCount  Int      @default(0) @map("used_count")
+  validFrom  DateTime @map("valid_from")
   validUntil DateTime @map("valid_until")
-  isActive  Boolean  @default(true) @map("is_active")
+  isActive   Boolean  @default(true) @map("is_active")
 
   // Relacoes
   enrollments Enrollment[]
@@ -485,13 +525,13 @@ model TenantPayment {
   tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   // Asaas
-  asaasPaymentId String @unique @map("asaas_payment_id") // pay_xxxx
+  asaasPaymentId String  @unique @map("asaas_payment_id") // pay_xxxx
   amount         Decimal @db.Decimal(10, 2)
   billingType    String? @map("billing_type") // PIX, BOLETO, CREDIT_CARD
 
   // Status
-  status  String  // PENDING, CONFIRMED, RECEIVED, OVERDUE, REFUNDED, etc.
-  dueDate DateTime @map("due_date")
+  status  String // PENDING, CONFIRMED, RECEIVED, OVERDUE, REFUNDED, etc.
+  dueDate DateTime  @map("due_date")
   paidAt  DateTime? @map("paid_at")
 
   createdAt DateTime @default(now()) @map("created_at")
@@ -507,19 +547,19 @@ model TenantPayment {
 // ============================================================
 
 model WebhookLog {
-  id       String @id @default(cuid())
+  id       String  @id @default(cuid())
   tenantId String? @map("tenant_id") // Pode ser null se for webhook do Asaas (admin)
   tenant   Tenant? @relation(fields: [tenantId], references: [id])
 
   source    WebhookSource
-  eventType String  @map("event_type") // PAYMENT_RECEIVED, payment.updated, etc.
-  payload   Json    // Payload completo recebido
-  headers   Json?   // Headers relevantes (para debug)
+  eventType String        @map("event_type") // PAYMENT_RECEIVED, payment.updated, etc.
+  payload   Json // Payload completo recebido
+  headers   Json? // Headers relevantes (para debug)
 
   // Processamento
-  processed   Boolean  @default(false)
+  processed   Boolean   @default(false)
   processedAt DateTime? @map("processed_at")
-  error       String?  @db.Text // Mensagem de erro se falhou
+  error       String?   @db.Text // Mensagem de erro se falhou
 
   createdAt DateTime @default(now()) @map("created_at")
 
@@ -548,12 +588,12 @@ model Lead {
   status      LeadStatus @default(NEW)
 
   // Quando converter em revendedor, liga ao tenant
-  tenantId    String?    @map("tenant_id")
-  tenant      Tenant?    @relation(fields: [tenantId], references: [id])
+  tenantId String? @map("tenant_id")
+  tenant   Tenant? @relation(fields: [tenantId], references: [id])
 
-  notes       String?    @db.Text
-  createdAt   DateTime   @default(now()) @map("created_at")
-  updatedAt   DateTime   @updatedAt @map("updated_at")
+  notes     String?  @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   @@index([status])
   @@index([email])

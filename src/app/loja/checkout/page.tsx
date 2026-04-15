@@ -55,7 +55,7 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
   if (!tenant) {
     return (
       <div className="mx-auto max-w-3xl px-4 py-24 text-center">
-        <h1 className="text-2xl font-bold text-[#1A1A2E]">
+        <h1 className="text-2xl font-bold text-[var(--color-pmb-green-900)]">
           Checkout indisponível
         </h1>
         <p className="mt-3 text-sm text-gray-600">
@@ -68,7 +68,7 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
   if (!course_id) {
     return (
       <div className="mx-auto max-w-3xl px-4 py-24 text-center">
-        <h1 className="text-2xl font-bold text-[#1A1A2E]">
+        <h1 className="text-2xl font-bold text-[var(--color-pmb-green-900)]">
           Selecione um curso
         </h1>
         <p className="mt-3 text-sm text-gray-600">
@@ -76,7 +76,7 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
         </p>
         <Link
           href="/"
-          className="mt-6 inline-block rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+          className="mt-6 inline-block rounded-lg bg-[var(--color-pmb-green)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--color-pmb-green-700)]"
         >
           Voltar para a loja
         </Link>
@@ -102,7 +102,7 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
   if (!tenantCourse) {
     return (
       <div className="mx-auto max-w-3xl px-4 py-24 text-center">
-        <h1 className="text-2xl font-bold text-[#1A1A2E]">
+        <h1 className="text-2xl font-bold text-[var(--color-pmb-green-900)]">
           Curso indisponível
         </h1>
         <p className="mt-3 text-sm text-gray-600">
@@ -124,7 +124,7 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
     <section className="bg-[#FAFAFA] py-10 md:py-16">
       <div className="mx-auto max-w-6xl px-4 md:px-6">
         <header className="mb-8">
-          <h1 className="text-2xl font-bold tracking-tight text-[#1A1A2E] md:text-3xl">
+          <h1 className="text-2xl font-bold tracking-tight text-[var(--color-pmb-green-900)] md:text-3xl">
             Finalizar compra
           </h1>
           <p className="mt-1 text-sm text-gray-600">

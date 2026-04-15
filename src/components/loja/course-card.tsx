@@ -20,27 +20,27 @@ interface CourseCardProps {
 
 export function CourseCard({ curso }: CourseCardProps) {
   return (
-    <article className="group flex flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white transition-all hover:-translate-y-1 hover:border-blue-200 hover:shadow-lg">
+    <article className="group flex flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white transition-all hover:-translate-y-1 hover:border-[rgba(2,89,24,0.18)] hover:shadow-lg">
       <div className={`relative h-44 bg-gradient-to-br ${curso.gradient}`}>
-        <div className="absolute top-3 left-3 rounded-full bg-white/90 px-2.5 py-1 text-xs font-medium text-[#1A1A2E] backdrop-blur">
+        <div className="absolute top-3 left-3 rounded-full bg-white/90 px-2.5 py-1 text-xs font-medium text-[var(--color-pmb-green-900)] backdrop-blur">
           {curso.categoria}
         </div>
         {curso.precoOriginal && (
-          <div className="absolute top-3 right-3 rounded-full bg-yellow-300 px-2.5 py-1 text-xs font-bold text-[#1A1A2E]">
+          <div className="absolute top-3 right-3 rounded-full bg-yellow-300 px-2.5 py-1 text-xs font-bold text-[var(--color-pmb-green-900)]">
             OFF
           </div>
         )}
       </div>
 
       <div className="flex flex-1 flex-col p-5">
-        <h3 className="text-base font-semibold leading-tight text-[#1A1A2E] line-clamp-2">
+        <h3 className="text-base font-semibold leading-tight text-[var(--color-pmb-green-900)] line-clamp-2">
           {curso.nome}
         </h3>
 
         <div className="mt-2 flex items-center gap-3 text-xs text-gray-500">
           <div className="flex items-center gap-1">
             <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
-            <span className="font-medium text-[#1A1A2E]">{curso.rating.toFixed(1)}</span>
+            <span className="font-medium text-[var(--color-pmb-green-900)]">{curso.rating.toFixed(1)}</span>
             {curso.ratingCount && <span>({curso.ratingCount})</span>}
           </div>
           <div className="flex items-center gap-1">
@@ -56,12 +56,12 @@ export function CourseCard({ curso }: CourseCardProps) {
                 {curso.precoOriginal}
               </div>
             )}
-            <div className="font-mono text-xl font-bold text-[#1A1A2E]">
+            <div className="font-mono text-xl font-bold text-[var(--color-pmb-green-900)]">
               {curso.preco}
             </div>
           </div>
           <Link href={`/loja/curso/${curso.slug}`}>
-            <Button size="sm" className="bg-blue-600 text-white hover:bg-blue-700">
+            <Button size="sm" className="bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)]">
               Ver mais
             </Button>
           </Link>

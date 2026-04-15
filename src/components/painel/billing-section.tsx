@@ -104,7 +104,7 @@ export function BillingSection({ data, onUpdate }: BillingSectionProps) {
   return (
     <div className="space-y-6">
       <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm lg:p-8">
-        <h3 className="text-sm font-semibold text-[#1A1A2E]">
+        <h3 className="text-sm font-semibold text-[var(--color-pmb-green-900)]">
           Modo de cobrança inadimplentes
         </h3>
         <p className="mt-1 text-xs text-gray-600">
@@ -118,16 +118,16 @@ export function BillingSection({ data, onUpdate }: BillingSectionProps) {
             onClick={() => updateBillingMode("AUTO")}
             className={`rounded-xl border-2 p-4 text-left transition-all disabled:opacity-60 ${
               billingMode === "AUTO"
-                ? "border-blue-600 bg-blue-50/50 shadow-sm"
+                ? "border-[var(--color-pmb-green)] bg-[var(--color-pmb-lime-50)]/50 shadow-sm"
                 : "border-gray-200 bg-white"
             }`}
           >
             <div className="flex items-center justify-between">
-              <span className="text-sm font-semibold text-[#1A1A2E]">
+              <span className="text-sm font-semibold text-[var(--color-pmb-green-900)]">
                 Automático
               </span>
               {billingMode === "AUTO" && (
-                <CheckCircle2 className="h-4 w-4 text-blue-600" />
+                <CheckCircle2 className="h-4 w-4 text-[var(--color-pmb-green)]" />
               )}
             </div>
             <p className="mt-1 text-xs text-gray-600">
@@ -141,16 +141,16 @@ export function BillingSection({ data, onUpdate }: BillingSectionProps) {
             onClick={() => updateBillingMode("MANUAL")}
             className={`rounded-xl border-2 p-4 text-left transition-all disabled:opacity-60 ${
               billingMode === "MANUAL"
-                ? "border-blue-600 bg-blue-50/50 shadow-sm"
+                ? "border-[var(--color-pmb-green)] bg-[var(--color-pmb-lime-50)]/50 shadow-sm"
                 : "border-gray-200 bg-white"
             }`}
           >
             <div className="flex items-center justify-between">
-              <span className="text-sm font-semibold text-[#1A1A2E]">
+              <span className="text-sm font-semibold text-[var(--color-pmb-green-900)]">
                 Manual
               </span>
               {billingMode === "MANUAL" && (
-                <CheckCircle2 className="h-4 w-4 text-blue-600" />
+                <CheckCircle2 className="h-4 w-4 text-[var(--color-pmb-green)]" />
               )}
             </div>
             <p className="mt-1 text-xs text-gray-600">
@@ -171,7 +171,7 @@ export function BillingSection({ data, onUpdate }: BillingSectionProps) {
               MP
             </div>
             <div>
-              <h3 className="text-sm font-semibold text-[#1A1A2E]">
+              <h3 className="text-sm font-semibold text-[var(--color-pmb-green-900)]">
                 Mercado Pago
               </h3>
               <p className="mt-1 text-xs text-gray-600">
@@ -237,7 +237,7 @@ export function BillingSection({ data, onUpdate }: BillingSectionProps) {
               <Button
                 onClick={connectMp}
                 disabled={mpSaving}
-                className="bg-blue-600 text-white hover:bg-blue-700"
+                className="bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)]"
               >
                 {mpSaving ? (
                   <>

@@ -10,7 +10,7 @@ export default function CheckoutRevendedorPage() {
         <div className="mb-6">
           <Link
             href="/seja-revendedor"
-            className="inline-flex items-center gap-2 text-sm font-medium text-gray-600 transition-colors hover:text-[#1A1A2E]"
+            className="inline-flex items-center gap-2 text-sm font-medium text-gray-600 transition-colors hover:text-[var(--color-pmb-green-900)]"
           >
             <ArrowLeft className="h-4 w-4" />
             Voltar para planos
@@ -18,7 +18,7 @@ export default function CheckoutRevendedorPage() {
         </div>
 
         <div className="mb-8">
-          <h1 className="text-2xl font-bold tracking-tight text-[#1A1A2E] md:text-3xl">
+          <h1 className="text-2xl font-bold tracking-tight text-[var(--color-pmb-green-900)] md:text-3xl">
             Finalize sua assinatura
           </h1>
           <p className="mt-2 text-sm text-gray-600 md:text-base">

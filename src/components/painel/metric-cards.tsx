@@ -79,11 +79,11 @@ export function MetricCards({ metrics }: MetricCardsProps) {
               <span className="text-xs font-medium uppercase tracking-wider text-gray-500">
                 {metric.label}
               </span>
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--color-pmb-lime-50)] text-[var(--color-pmb-green)]">
                 <Icon className="h-4 w-4" />
               </div>
             </div>
-            <div className="mt-3 font-mono text-2xl font-bold text-[#1A1A2E]">
+            <div className="mt-3 font-mono text-2xl font-bold text-[var(--color-pmb-green-900)]">
               {metric.value}
             </div>
             <div

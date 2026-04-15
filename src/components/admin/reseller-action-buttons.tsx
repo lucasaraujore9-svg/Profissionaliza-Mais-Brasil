@@ -66,7 +66,7 @@ export function ResellerActionButtons({
 
   return (
     <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-      <h3 className="text-sm font-semibold text-[#1A1A2E]">Ações</h3>
+      <h3 className="text-sm font-semibold text-[var(--color-pmb-green-900)]">Ações</h3>
       <p className="mt-1 text-xs text-gray-600">
         Operações administrativas que afetam o status da assinatura.
       </p>

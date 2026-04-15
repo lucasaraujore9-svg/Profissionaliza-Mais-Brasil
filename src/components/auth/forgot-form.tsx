@@ -52,7 +52,7 @@ export function ForgotForm() {
           <CheckCircle2 className="h-6 w-6" />
         </div>
         <div>
-          <h3 className="text-lg font-semibold text-[#1A1A2E]">
+          <h3 className="text-lg font-semibold text-[var(--color-pmb-green-900)]">
             Verifique seu email
           </h3>
           <p className="mt-2 text-sm text-gray-600">
@@ -62,7 +62,7 @@ export function ForgotForm() {
         </div>
         <Link
           href="/login"
-          className="flex items-center justify-center gap-1.5 text-sm font-medium text-gray-600 hover:text-[#1A1A2E]"
+          className="flex items-center justify-center gap-1.5 text-sm font-medium text-gray-600 hover:text-[var(--color-pmb-green-900)]"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
           Voltar para o login
@@ -101,7 +101,7 @@ export function ForgotForm() {
       <Button
         type="submit"
         size="lg"
-        className="w-full bg-blue-600 text-white hover:bg-blue-700"
+        className="w-full bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)]"
         disabled={state.kind === "submitting"}
       >
         {state.kind === "submitting" ? (
@@ -119,7 +119,7 @@ export function ForgotForm() {
 
       <Link
         href="/login"
-        className="flex items-center justify-center gap-1.5 text-sm font-medium text-gray-600 hover:text-[#1A1A2E]"
+        className="flex items-center justify-center gap-1.5 text-sm font-medium text-gray-600 hover:text-[var(--color-pmb-green-900)]"
       >
         <ArrowLeft className="h-3.5 w-3.5" />
         Voltar para o login

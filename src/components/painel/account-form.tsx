@@ -67,7 +67,7 @@ export function AccountForm({ data, onUpdate }: AccountFormProps) {
       onSubmit={handleSubmit}
       className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm lg:p-8"
     >
-      <h3 className="text-sm font-semibold text-[#1A1A2E]">Dados da conta</h3>
+      <h3 className="text-sm font-semibold text-[var(--color-pmb-green-900)]">Dados da conta</h3>
       <p className="mt-1 text-xs text-gray-600">
         Seus dados pessoais e da empresa cadastrada na plataforma.
       </p>
@@ -129,7 +129,7 @@ export function AccountForm({ data, onUpdate }: AccountFormProps) {
         <Button
           type="submit"
           disabled={status === "submitting"}
-          className="bg-blue-600 text-white hover:bg-blue-700"
+          className="bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)]"
         >
           {status === "submitting" ? (
             <>

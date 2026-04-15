@@ -42,7 +42,7 @@ export function CheckoutPaymentPreview({
 }: CheckoutPaymentPreviewProps) {
   return (
     <div>
-      <h2 className="text-xl font-bold text-[#1A1A2E] md:text-2xl">
+      <h2 className="text-xl font-bold text-[var(--color-pmb-green-900)] md:text-2xl">
         Forma de pagamento
       </h2>
       <p className="mt-1 text-sm text-gray-600">
@@ -60,26 +60,26 @@ export function CheckoutPaymentPreview({
               onClick={() => onChange({ billingType: method.id })}
               className={`flex w-full items-start gap-4 rounded-xl border-2 p-4 text-left transition-all ${
                 isActive
-                  ? "border-blue-600 bg-blue-50/50 shadow-sm"
+                  ? "border-[var(--color-pmb-green)] bg-[var(--color-pmb-lime-50)]/50 shadow-sm"
                   : "border-gray-200 bg-white hover:border-gray-300"
               }`}
             >
               <div
                 className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${
-                  isActive ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-500"
+                  isActive ? "bg-[var(--color-pmb-green)] text-white" : "bg-gray-100 text-gray-500"
                 }`}
               >
                 <Icon className="h-5 w-5" />
               </div>
               <div className="flex-1">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-semibold text-[#1A1A2E]">
+                  <span className="text-sm font-semibold text-[var(--color-pmb-green-900)]">
                     {method.label}
                   </span>
                   <span
                     className={`flex h-5 w-5 items-center justify-center rounded-full border-2 ${
                       isActive
-                        ? "border-blue-600 bg-blue-600"
+                        ? "border-[var(--color-pmb-green)] bg-[var(--color-pmb-green)]"
                         : "border-gray-300 bg-white"
                     }`}
                   >

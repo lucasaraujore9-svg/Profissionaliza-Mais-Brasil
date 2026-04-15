@@ -40,7 +40,7 @@ export function CheckoutConfirmacao({
         <CheckCircle2 className="h-10 w-10 text-green-600" />
       </div>
 
-      <h2 className="mt-5 text-xl font-bold text-[#1A1A2E] md:text-2xl">
+      <h2 className="mt-5 text-xl font-bold text-[var(--color-pmb-green-900)] md:text-2xl">
         Cadastro recebido!
       </h2>
       <p className="mx-auto mt-2 max-w-md text-sm text-gray-600">
@@ -56,11 +56,11 @@ export function CheckoutConfirmacao({
               key={step.title}
               className="flex gap-4 rounded-xl border border-gray-100 bg-gray-50/50 p-4"
             >
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-600 text-white">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--color-pmb-green)] text-white">
                 <Icon className="h-5 w-5" />
               </div>
               <div className="flex-1">
-                <div className="text-sm font-semibold text-[#1A1A2E]">
+                <div className="text-sm font-semibold text-[var(--color-pmb-green-900)]">
                   {step.title}
                 </div>
                 <p className="mt-1 text-sm text-gray-600">{step.description}</p>
@@ -75,7 +75,7 @@ export function CheckoutConfirmacao({
           <a href={result.paymentUrl} target="_blank" rel="noopener noreferrer">
             <Button
               size="lg"
-              className="w-full bg-blue-600 text-white hover:bg-blue-700 sm:w-auto"
+              className="w-full bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)] sm:w-auto"
             >
               <ExternalLink className="mr-2 h-4 w-4" />
               Abrir fatura

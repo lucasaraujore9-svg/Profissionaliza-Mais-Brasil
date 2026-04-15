@@ -84,7 +84,7 @@ export function CourseEditDrawer({
       <aside className="relative ml-auto flex h-full w-full max-w-md flex-col overflow-y-auto bg-white shadow-xl">
         <header className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
           <div>
-            <h2 className="text-base font-semibold text-[#1A1A2E]">
+            <h2 className="text-base font-semibold text-[var(--color-pmb-green-900)]">
               Editar curso
             </h2>
             <p className="text-xs text-gray-500">{course.title}</p>
@@ -140,7 +140,7 @@ export function CourseEditDrawer({
 
           <label className="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50/50 px-4 py-3">
             <div>
-              <div className="text-sm font-semibold text-[#1A1A2E]">
+              <div className="text-sm font-semibold text-[var(--color-pmb-green-900)]">
                 Destaque na vitrine
               </div>
               <div className="text-xs text-gray-500">
@@ -151,7 +151,7 @@ export function CourseEditDrawer({
               type="checkbox"
               checked={isFeatured}
               onChange={(e) => setIsFeatured(e.target.checked)}
-              className="h-4 w-4 rounded border-gray-300 text-blue-600"
+              className="h-4 w-4 rounded border-gray-300 text-[var(--color-pmb-green)]"
             />
           </label>
 
@@ -170,7 +170,7 @@ export function CourseEditDrawer({
           </Button>
           <Button
             type="button"
-            className="flex-1 bg-blue-600 text-white hover:bg-blue-700"
+            className="flex-1 bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)]"
             onClick={handleSave}
             disabled={saving}
           >

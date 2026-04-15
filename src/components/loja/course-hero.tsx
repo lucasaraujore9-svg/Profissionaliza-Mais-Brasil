@@ -24,11 +24,11 @@ export function CourseHero({
   return (
     <div className="grid grid-cols-1 gap-8 lg:grid-cols-[1.1fr_1fr] lg:items-center">
       <div>
-        <div className="inline-block rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700">
+        <div className="inline-block rounded-full border border-[rgba(2,89,24,0.18)] bg-[var(--color-pmb-lime-50)] px-3 py-1 text-xs font-medium text-[var(--color-pmb-green-700)]">
           {categoria}
         </div>
 
-        <h1 className="mt-4 text-3xl font-bold tracking-tight text-[#1A1A2E] md:text-4xl lg:text-5xl">
+        <h1 className="mt-4 text-3xl font-bold tracking-tight text-[var(--color-pmb-green-900)] md:text-4xl lg:text-5xl">
           {nome}
         </h1>
 
@@ -37,7 +37,7 @@ export function CourseHero({
         <div className="mt-6 flex flex-wrap items-center gap-6 text-sm">
           <div className="flex items-center gap-1.5">
             <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
-            <span className="font-semibold text-[#1A1A2E]">{rating.toFixed(1)}</span>
+            <span className="font-semibold text-[var(--color-pmb-green-900)]">{rating.toFixed(1)}</span>
             <span className="text-gray-500">({ratingCount.toLocaleString("pt-BR")} avaliações)</span>
           </div>
           <div className="flex items-center gap-1.5 text-gray-600">
@@ -63,7 +63,7 @@ export function CourseHero({
             <svg
               viewBox="0 0 24 24"
               fill="currentColor"
-              className="h-10 w-10 text-blue-600"
+              className="h-10 w-10 text-[var(--color-pmb-green)]"
             >
               <path d="M8 5v14l11-7z" />
             </svg>

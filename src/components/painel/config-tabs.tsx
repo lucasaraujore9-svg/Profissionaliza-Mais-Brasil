@@ -90,8 +90,8 @@ export function ConfigTabs() {
             onClick={() => setActive(tab.id)}
             className={`flex-1 rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${
               active === tab.id
-                ? "bg-blue-600 text-white shadow-sm"
-                : "text-gray-600 hover:text-[#1A1A2E]"
+                ? "bg-[var(--color-pmb-green)] text-white shadow-sm"
+                : "text-gray-600 hover:text-[var(--color-pmb-green-900)]"
             }`}
           >
             {tab.label}

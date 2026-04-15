@@ -13,7 +13,7 @@ const depoimentos = [
     nome: "Roberto Silva",
     cargo: "Dono de escola profissionalizante",
     foto: "RS",
-    fotoColor: "bg-blue-500",
+    fotoColor: "bg-[var(--color-pmb-cyan)]",
     texto:
       "Triplicamos nossa receita em 6 meses. O catálogo é robusto, os alunos recebem certificados e a gestão é simples como deveria ser.",
   },
@@ -32,7 +32,7 @@ export function DepoimentosSection() {
     <section className="bg-white py-16 md:py-24">
       <div className="mx-auto max-w-7xl px-4 md:px-6">
         <div className="mx-auto max-w-2xl text-center">
-          <h2 className="text-3xl font-bold tracking-tight text-[#1A1A2E] md:text-4xl">
+          <h2 className="text-3xl font-bold tracking-tight text-[var(--color-pmb-green-900)] md:text-4xl">
             Quem já está crescendo com a gente
           </h2>
           <p className="mt-4 text-gray-600">
@@ -46,7 +46,7 @@ export function DepoimentosSection() {
               key={d.nome}
               className="flex flex-col rounded-2xl border border-gray-200 bg-[#FAFAFA] p-6 lg:p-8"
             >
-              <Quote className="h-6 w-6 text-blue-600" />
+              <Quote className="h-6 w-6 text-[var(--color-pmb-green)]" />
               <blockquote className="mt-4 flex-1 text-sm leading-relaxed text-gray-700">
                 “{d.texto}”
               </blockquote>
@@ -57,7 +57,7 @@ export function DepoimentosSection() {
                   {d.foto}
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-[#1A1A2E]">{d.nome}</p>
+                  <p className="text-sm font-semibold text-[var(--color-pmb-green-900)]">{d.nome}</p>
                   <p className="text-xs text-gray-500">{d.cargo}</p>
                 </div>
               </figcaption>

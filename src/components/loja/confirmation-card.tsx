@@ -35,7 +35,7 @@ const STATUS_CONFIG: Record<
   },
   COMPLETED: {
     label: "Concluída",
-    className: "bg-blue-100 text-blue-700",
+    className: "bg-[var(--color-pmb-lime-50)] text-[var(--color-pmb-green-700)]",
   },
 }
 
@@ -55,7 +55,7 @@ export function ConfirmationCard({
           <div className="text-xs font-medium uppercase tracking-wider text-gray-500">
             Número do pedido
           </div>
-          <div className="mt-1 font-mono text-lg font-bold text-[#1A1A2E]">
+          <div className="mt-1 font-mono text-lg font-bold text-[var(--color-pmb-green-900)]">
             {numeroPedido}
           </div>
         </div>
@@ -69,15 +69,15 @@ export function ConfirmationCard({
       <dl className="mt-5 space-y-3 text-sm">
         <div className="flex items-center justify-between">
           <dt className="text-gray-600">Curso</dt>
-          <dd className="text-right font-medium text-[#1A1A2E]">{curso}</dd>
+          <dd className="text-right font-medium text-[var(--color-pmb-green-900)]">{curso}</dd>
         </div>
         <div className="flex items-center justify-between">
           <dt className="text-gray-600">Email de acesso</dt>
-          <dd className="font-mono text-[#1A1A2E]">{email}</dd>
+          <dd className="font-mono text-[var(--color-pmb-green-900)]">{email}</dd>
         </div>
         <div className="flex items-center justify-between border-t border-gray-100 pt-3">
-          <dt className="text-sm font-medium text-[#1A1A2E]">Valor pago</dt>
-          <dd className="font-mono text-lg font-bold text-[#1A1A2E]">{total}</dd>
+          <dt className="text-sm font-medium text-[var(--color-pmb-green-900)]">Valor pago</dt>
+          <dd className="font-mono text-lg font-bold text-[var(--color-pmb-green-900)]">{total}</dd>
         </div>
       </dl>
     </div>

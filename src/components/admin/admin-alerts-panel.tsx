@@ -41,7 +41,7 @@ export function AdminAlertsPanel({ alerts }: AdminAlertsPanelProps) {
       <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4">
         <div className="flex items-center gap-2">
           <Bell className="h-4 w-4 text-gray-500" />
-          <h3 className="text-sm font-semibold text-[#1A1A2E]">Alertas</h3>
+          <h3 className="text-sm font-semibold text-[var(--color-pmb-green-900)]">Alertas</h3>
         </div>
         {criticalCount > 0 && (
           <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-semibold text-rose-700">
@@ -69,7 +69,7 @@ export function AdminAlertsPanel({ alerts }: AdminAlertsPanelProps) {
                   <Icon className="h-4 w-4" />
                 </span>
                 <div className="min-w-0 flex-1">
-                  <p className="text-xs font-semibold text-[#1A1A2E]">{alert.title}</p>
+                  <p className="text-xs font-semibold text-[var(--color-pmb-green-900)]">{alert.title}</p>
                   <p className="mt-0.5 text-xs text-gray-600">{alert.description}</p>
                   {alert.time && (
                     <p className="mt-1 text-[10px] font-medium text-gray-400">{alert.time}</p>

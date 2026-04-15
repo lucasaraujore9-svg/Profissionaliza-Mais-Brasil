@@ -174,7 +174,7 @@ export function VitrineEditor() {
           )}
           <Button
             size="lg"
-            className="bg-blue-600 text-white hover:bg-blue-700"
+            className="bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)]"
             onClick={handleSave}
             disabled={saving || !dirty}
           >

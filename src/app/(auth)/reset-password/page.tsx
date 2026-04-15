@@ -14,7 +14,7 @@ export default async function ResetPasswordPage({
     return (
       <div>
         <div className="mb-8">
-          <h2 className="text-2xl font-bold tracking-tight text-[#1A1A2E] md:text-3xl">
+          <h2 className="text-2xl font-bold tracking-tight text-[var(--color-pmb-green-900)] md:text-3xl">
             Link inválido
           </h2>
           <p className="mt-2 text-sm text-gray-600">
@@ -23,7 +23,7 @@ export default async function ResetPasswordPage({
         </div>
         <Link
           href="/forgot-password"
-          className="text-sm font-medium text-blue-600 hover:text-blue-700"
+          className="text-sm font-medium text-[var(--color-pmb-green)] hover:text-[var(--color-pmb-green-700)]"
         >
           Solicitar novo link
         </Link>
@@ -34,7 +34,7 @@ export default async function ResetPasswordPage({
   return (
     <div>
       <div className="mb-8">
-        <h2 className="text-2xl font-bold tracking-tight text-[#1A1A2E] md:text-3xl">
+        <h2 className="text-2xl font-bold tracking-tight text-[var(--color-pmb-green-900)] md:text-3xl">
           Redefinir senha
         </h2>
         <p className="mt-2 text-sm text-gray-600">

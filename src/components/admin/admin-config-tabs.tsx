@@ -32,7 +32,7 @@ interface GeneralTabProps {
 function GeneralTab({ general }: GeneralTabProps) {
   return (
     <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm lg:p-8">
-      <h3 className="text-sm font-semibold text-[#1A1A2E]">Configurações gerais</h3>
+      <h3 className="text-sm font-semibold text-[var(--color-pmb-green-900)]">Configurações gerais</h3>
       <p className="mt-1 text-xs text-gray-600">
         Dados exibidos publicamente e no rodapé das vitrines.
       </p>
@@ -96,8 +96,8 @@ export function AdminConfigTabs({
             onClick={() => setActive(tab.id)}
             className={`flex-1 rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${
               active === tab.id
-                ? "bg-blue-600 text-white shadow-sm"
-                : "text-gray-600 hover:text-[#1A1A2E]"
+                ? "bg-[var(--color-pmb-green)] text-white shadow-sm"
+                : "text-gray-600 hover:text-[var(--color-pmb-green-900)]"
             }`}
           >
             {tab.label}

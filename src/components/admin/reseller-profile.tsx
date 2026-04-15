@@ -56,13 +56,13 @@ export function ResellerProfile({ reseller }: ResellerProfileProps) {
   return (
     <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm lg:p-8">
       <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:gap-6">
-        <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 text-2xl font-bold text-white shadow">
+        <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[var(--color-pmb-green)] to-[var(--color-pmb-green-700)] text-2xl font-bold text-white shadow">
           {initials(reseller.name) || "R"}
         </div>
         <div className="flex-1 space-y-4">
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className="text-xl font-bold text-[#1A1A2E]">{reseller.name}</h2>
+              <h2 className="text-xl font-bold text-[var(--color-pmb-green-900)]">{reseller.name}</h2>
               <span
                 className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${STATUS_STYLES[reseller.status]}`}
               >

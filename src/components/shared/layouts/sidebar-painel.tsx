@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import Image from "next/image"
 import { usePathname } from "next/navigation"
 import {
   LayoutDashboard,
@@ -25,16 +26,36 @@ const NAV_ITEMS = [
   { href: "/painel/configuracoes", label: "Configurações", icon: Settings },
 ]
 
-export function SidebarPainel() {
+interface SidebarPainelProps {
+  tenantName?: string
+  userEmail?: string
+}
+
+export function SidebarPainel({ tenantName, userEmail }: SidebarPainelProps) {
   const pathname = usePathname()
 
   return (
-    <aside className="flex h-full w-60 flex-col border-r border-gray-200 bg-white lg:flex">
-      <div className="flex h-16 items-center border-b border-gray-200 px-6">
-        <Link href="/painel" className="text-lg font-bold text-[#1A1A2E]">
-          Meu <span className="text-blue-600">Painel</span>
-        </Link>
+    <aside className="flex h-full w-60 flex-col bg-[var(--color-pmb-green-700)] text-white lg:flex">
+      <div className="flex h-20 items-center gap-3 border-b border-white/10 px-6">
+        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/10 backdrop-blur">
+          <Image
+            src="/images/logo.png"
+            alt="PMB"
+            width={40}
+            height={40}
+            className="h-7 w-auto"
+          />
+        </div>
+        <div className="flex flex-col leading-tight min-w-0">
+          <span className="font-display text-sm text-white truncate">
+            {tenantName ?? "Meu Painel"}
+          </span>
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-pmb-lime)]">
+            Revendedor
+          </span>
+        </div>
       </div>
+
       <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
         {NAV_ITEMS.map((item) => {
           const isActive =
@@ -45,10 +66,10 @@ export function SidebarPainel() {
               key={item.href}
               href={item.href}
               className={cn(
-                "flex items-center gap-3 rounded-lg px-4 py-2.5 text-sm transition-colors",
+                "flex items-center gap-3 rounded-lg px-4 py-2.5 text-sm font-medium transition-colors",
                 isActive
-                  ? "bg-blue-50 font-semibold text-blue-600"
-                  : "text-gray-700 hover:bg-gray-100",
+                  ? "bg-[var(--color-pmb-lime)] text-[var(--color-pmb-green-900)] font-semibold"
+                  : "text-white/85 hover:bg-white/10 hover:text-white",
               )}
             >
               <item.icon className="h-5 w-5" />
@@ -57,9 +78,14 @@ export function SidebarPainel() {
           )
         })}
       </nav>
-      <div className="border-t border-gray-200 px-6 py-4 text-xs text-gray-500">
-        <div className="font-semibold text-[#1A1A2E]">Educa+ Cursos</div>
-        <div className="truncate">revendedor@empresa.com</div>
+
+      <div className="border-t border-white/10 px-6 py-4 text-xs">
+        <div className="font-semibold text-white truncate">
+          {tenantName ?? "Escola"}
+        </div>
+        <div className="truncate text-white/65">
+          {userEmail ?? "revendedor@empresa.com"}
+        </div>
       </div>
     </aside>
   )

@@ -120,7 +120,7 @@ export function CreateCouponModal({
       <div className="relative w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-2xl">
         <header className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
           <div>
-            <h2 className="text-base font-semibold text-[#1A1A2E]">
+            <h2 className="text-base font-semibold text-[var(--color-pmb-green-900)]">
               Novo cupom de desconto
             </h2>
             <p className="text-xs text-gray-500">
@@ -239,7 +239,7 @@ export function CreateCouponModal({
           </Button>
           <Button
             type="button"
-            className="flex-1 bg-blue-600 text-white hover:bg-blue-700"
+            className="flex-1 bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)]"
             onClick={handleSubmit}
             disabled={submitting}
           >

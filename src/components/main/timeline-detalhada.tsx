@@ -41,7 +41,7 @@ export function TimelineDetalhada() {
     <section className="bg-[#FAFAFA] py-16 md:py-24">
       <div className="mx-auto max-w-4xl px-4 md:px-6">
         <div className="mx-auto max-w-2xl text-center">
-          <h2 className="text-3xl font-bold tracking-tight text-[#1A1A2E] md:text-4xl">
+          <h2 className="text-3xl font-bold tracking-tight text-[var(--color-pmb-green-900)] md:text-4xl">
             Do cadastro à primeira venda
           </h2>
           <p className="mt-4 text-gray-600">
@@ -53,7 +53,7 @@ export function TimelineDetalhada() {
           {etapas.map((etapa, index) => (
             <li key={etapa.numero} className="relative md:flex md:gap-6">
               <div className="relative flex flex-col items-center md:pt-1">
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-blue-600 font-mono text-sm font-bold text-white shadow-lg shadow-blue-500/30">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[var(--color-pmb-green)] font-mono text-sm font-bold text-white shadow-lg shadow-[rgba(2,89,24,0.35)]/30">
                   {etapa.numero}
                 </div>
                 {index < etapas.length - 1 && (
@@ -63,10 +63,10 @@ export function TimelineDetalhada() {
 
               <div className="mt-3 flex-1 rounded-2xl border border-gray-200 bg-white p-6 md:mt-0 md:mb-8">
                 <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                  <h3 className="text-lg font-semibold text-[#1A1A2E]">
+                  <h3 className="text-lg font-semibold text-[var(--color-pmb-green-900)]">
                     {etapa.titulo}
                   </h3>
-                  <span className="inline-flex self-start rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-blue-700 md:self-auto">
+                  <span className="inline-flex self-start rounded-full bg-[var(--color-pmb-lime-50)] px-2.5 py-0.5 text-xs font-medium text-[var(--color-pmb-green-700)] md:self-auto">
                     {etapa.duracao}
                   </span>
                 </div>

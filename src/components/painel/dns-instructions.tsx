@@ -25,7 +25,7 @@ export function DnsInstructions({ records }: DnsInstructionsProps) {
         onClick={() => setOpen((v) => !v)}
         className="flex w-full items-center justify-between bg-gray-50 px-4 py-3 text-left"
       >
-        <span className="text-sm font-semibold text-[#1A1A2E]">
+        <span className="text-sm font-semibold text-[var(--color-pmb-green-900)]">
           Instruções de DNS
         </span>
         <ChevronDown
@@ -58,7 +58,7 @@ export function DnsInstructions({ records }: DnsInstructionsProps) {
               <tbody className="divide-y divide-gray-100 bg-white">
                 {records.map((record, i) => (
                   <tr key={`${record.type}-${i}`}>
-                    <td className="px-3 py-2 font-mono font-semibold text-[#1A1A2E]">
+                    <td className="px-3 py-2 font-mono font-semibold text-[var(--color-pmb-green-900)]">
                       {record.type}
                     </td>
                     <td className="px-3 py-2 font-mono text-gray-700">

@@ -17,7 +17,7 @@ export function CheckoutProgress({ currentStep }: CheckoutProgressProps) {
   return (
     <div>
       <div className="flex items-center justify-between text-xs text-gray-500">
-        <span className="font-medium text-[#1A1A2E]">
+        <span className="font-medium text-[var(--color-pmb-green-900)]">
           Etapa {currentStep} de {CHECKOUT_STEPS.length}
         </span>
         <span className="font-mono">{Math.round(progress)}%</span>
@@ -25,7 +25,7 @@ export function CheckoutProgress({ currentStep }: CheckoutProgressProps) {
 
       <div className="relative mt-3 h-1.5 w-full overflow-hidden rounded-full bg-gray-200">
         <div
-          className="absolute inset-y-0 left-0 rounded-full bg-blue-600 transition-all duration-300"
+          className="absolute inset-y-0 left-0 rounded-full bg-[var(--color-pmb-green)] transition-all duration-300"
           style={{ width: `${progress}%` }}
         />
       </div>
@@ -39,9 +39,9 @@ export function CheckoutProgress({ currentStep }: CheckoutProgressProps) {
               <div
                 className={`flex h-9 w-9 items-center justify-center rounded-full border-2 font-mono text-xs font-semibold transition-all ${
                   isDone
-                    ? "border-blue-600 bg-blue-600 text-white"
+                    ? "border-[var(--color-pmb-green)] bg-[var(--color-pmb-green)] text-white"
                     : isActive
-                      ? "border-blue-600 bg-white text-blue-600 shadow-md shadow-blue-500/20"
+                      ? "border-[var(--color-pmb-green)] bg-white text-[var(--color-pmb-green)] shadow-md shadow-[rgba(2,89,24,0.35)]/20"
                       : "border-gray-200 bg-white text-gray-400"
                 }`}
               >
@@ -49,7 +49,7 @@ export function CheckoutProgress({ currentStep }: CheckoutProgressProps) {
               </div>
               <span
                 className={`text-xs font-medium leading-tight ${
-                  isActive ? "text-[#1A1A2E]" : "text-gray-500"
+                  isActive ? "text-[var(--color-pmb-green-900)]" : "text-gray-500"
                 }`}
               >
                 {step.label}
@@ -60,7 +60,7 @@ export function CheckoutProgress({ currentStep }: CheckoutProgressProps) {
       </ol>
 
       <div className="mt-4 md:hidden">
-        <span className="text-sm font-semibold text-[#1A1A2E]">
+        <span className="text-sm font-semibold text-[var(--color-pmb-green-900)]">
           {CHECKOUT_STEPS[currentStep - 1]?.label}
         </span>
       </div>

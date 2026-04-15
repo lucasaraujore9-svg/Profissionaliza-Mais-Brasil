@@ -21,7 +21,7 @@ interface ChartWrapperProps {
 function ChartWrapper({ title, subtitle, children }: ChartWrapperProps) {
   return (
     <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-      <h3 className="text-sm font-semibold text-[#1A1A2E]">{title}</h3>
+      <h3 className="text-sm font-semibold text-[var(--color-pmb-green-900)]">{title}</h3>
       <p className="mt-0.5 text-xs text-gray-600">{subtitle}</p>
       <div className="mt-4">{children}</div>
     </div>
@@ -129,7 +129,7 @@ function DonutChart({ segments }: { segments: { label: string; value: number; co
               style={{ backgroundColor: s.color }}
             />
             <span>{s.label}</span>
-            <span className="font-mono font-semibold text-[#1A1A2E]">
+            <span className="font-mono font-semibold text-[var(--color-pmb-green-900)]">
               {Math.round((s.value / total) * 100)}%
             </span>
           </li>

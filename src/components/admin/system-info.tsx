@@ -29,7 +29,7 @@ export function SystemInfo({ info }: SystemInfoProps) {
 
   return (
     <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-      <h3 className="text-sm font-semibold text-[#1A1A2E]">Informações do sistema</h3>
+      <h3 className="text-sm font-semibold text-[var(--color-pmb-green-900)]">Informações do sistema</h3>
       <p className="mt-1 text-xs text-gray-600">
         Diagnóstico rápido para suporte e debugging.
       </p>
@@ -48,7 +48,7 @@ export function SystemInfo({ info }: SystemInfoProps) {
                 <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">
                   {item.label}
                 </p>
-                <p className="mt-0.5 font-mono text-xs font-semibold text-[#1A1A2E]">
+                <p className="mt-0.5 font-mono text-xs font-semibold text-[var(--color-pmb-green-900)]">
                   {item.value}
                 </p>
               </div>

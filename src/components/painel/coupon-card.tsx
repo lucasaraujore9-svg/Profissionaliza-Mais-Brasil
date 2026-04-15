@@ -63,7 +63,7 @@ export function CouponCard({
       <div
         className={`relative px-5 py-6 ${
           isActive
-            ? "bg-gradient-to-br from-blue-600 to-indigo-600 text-white"
+            ? "bg-gradient-to-br from-[var(--color-pmb-green)] to-[var(--color-pmb-green-700)] text-white"
             : "bg-gray-100 text-gray-500"
         }`}
       >
@@ -95,7 +95,7 @@ export function CouponCard({
           <button
             type="button"
             onClick={() => onViewUsage(coupon)}
-            className="text-xs font-semibold text-blue-600 hover:text-blue-700"
+            className="text-xs font-semibold text-[var(--color-pmb-green)] hover:text-[var(--color-pmb-green-700)]"
           >
             Ver histórico
           </button>
@@ -108,7 +108,7 @@ export function CouponCard({
               disabled={pending}
               onClick={() => onToggle(coupon)}
               className={`relative h-5 w-9 rounded-full transition-colors disabled:opacity-50 ${
-                isActive ? "bg-blue-600" : "bg-gray-300"
+                isActive ? "bg-[var(--color-pmb-green)]" : "bg-gray-300"
               }`}
             >
               <span

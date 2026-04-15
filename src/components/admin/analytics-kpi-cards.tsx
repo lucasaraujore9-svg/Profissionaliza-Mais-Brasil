@@ -43,7 +43,7 @@ export function AnalyticsKpiCards({ kpis }: AnalyticsKpiCardsProps) {
           <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">
             {kpi.label}
           </p>
-          <p className="mt-2 font-mono text-lg font-bold text-[#1A1A2E]">{kpi.value}</p>
+          <p className="mt-2 font-mono text-lg font-bold text-[var(--color-pmb-green-900)]">{kpi.value}</p>
         </div>
       ))}
     </div>

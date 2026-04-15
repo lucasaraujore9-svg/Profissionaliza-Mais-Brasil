@@ -26,7 +26,7 @@ export function ComoFunciona() {
     <section id="como-funciona" className="bg-white py-16 md:py-24">
       <div className="mx-auto max-w-7xl px-4 md:px-6">
         <div className="mx-auto max-w-2xl text-center">
-          <h2 className="text-3xl font-bold tracking-tight text-[#1A1A2E] md:text-4xl">
+          <h2 className="text-3xl font-bold tracking-tight text-[var(--color-pmb-green-900)] md:text-4xl">
             Como funciona
           </h2>
           <p className="mt-4 text-gray-600">
@@ -40,13 +40,13 @@ export function ComoFunciona() {
               key={step.number}
               className="relative rounded-2xl border border-gray-200 bg-white p-6 transition-shadow hover:shadow-md lg:p-8"
             >
-              <div className="absolute -top-3 right-6 rounded-full bg-blue-600 px-3 py-1 font-mono text-xs font-semibold text-white">
+              <div className="absolute -top-3 right-6 rounded-full bg-[var(--color-pmb-green)] px-3 py-1 font-mono text-xs font-semibold text-white">
                 {step.number}
               </div>
-              <div className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+              <div className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-[var(--color-pmb-lime-50)] text-[var(--color-pmb-green)]">
                 <step.icon className="h-6 w-6" />
               </div>
-              <h3 className="mt-4 text-xl font-semibold text-[#1A1A2E]">
+              <h3 className="mt-4 text-xl font-semibold text-[var(--color-pmb-green-900)]">
                 {step.title}
               </h3>
               <p className="mt-2 text-sm leading-relaxed text-gray-600">

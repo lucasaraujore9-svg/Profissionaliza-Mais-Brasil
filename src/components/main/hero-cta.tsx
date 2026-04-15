@@ -9,7 +9,7 @@ const trustPoints = [
 
 export function HeroCTA() {
   return (
-    <section className="relative overflow-hidden bg-gradient-to-br from-blue-600 via-blue-700 to-blue-900 py-20 md:py-28 lg:py-32">
+    <section className="relative overflow-hidden bg-gradient-to-br from-[var(--color-pmb-green)] via-[var(--color-pmb-green-700)] to-[var(--color-pmb-green-900)] py-20 md:py-28 lg:py-32">
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0 opacity-20"
@@ -29,14 +29,14 @@ export function HeroCTA() {
           <span className="text-yellow-300">nossa infraestrutura</span>
         </h1>
 
-        <p className="mx-auto mt-6 max-w-2xl text-base text-blue-100 md:text-lg">
+        <p className="mx-auto mt-6 max-w-2xl text-base text-[var(--color-pmb-lime-50)] md:text-lg">
           Vitrine própria, domínio personalizado, catálogo com 120+ cursos profissionalizantes
           e toda a operação de pagamento e matrícula automatizada.
         </p>
 
         <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
           <a href="#formulario">
-            <Button size="lg" className="w-full bg-yellow-300 text-[#1A1A2E] hover:bg-yellow-400 sm:w-auto">
+            <Button size="lg" className="w-full bg-yellow-300 text-[var(--color-pmb-green-900)] hover:bg-yellow-400 sm:w-auto">
               Começar Agora
               <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
@@ -52,7 +52,7 @@ export function HeroCTA() {
           </a>
         </div>
 
-        <ul className="mt-8 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm text-blue-100">
+        <ul className="mt-8 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm text-[var(--color-pmb-lime-50)]">
           {trustPoints.map((point) => (
             <li key={point} className="flex items-center gap-1.5">
               <CheckCircle2 className="h-4 w-4 text-yellow-300" />

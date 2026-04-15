@@ -57,20 +57,20 @@ export function CourseListTable({
           <tbody className="divide-y divide-gray-100 bg-white">
             {courses.map((course) => (
               <tr key={course.id} className="hover:bg-gray-50/60">
-                <td className="max-w-xs truncate px-4 py-3 text-sm font-medium text-[#1A1A2E]">
+                <td className="max-w-xs truncate px-4 py-3 text-sm font-medium text-[var(--color-pmb-green-900)]">
                   {course.title}
                 </td>
                 <td className="px-4 py-3 font-mono text-sm text-gray-700">
                   {course.enrollmentsCount}
                 </td>
-                <td className="px-4 py-3 font-mono text-sm font-semibold text-[#1A1A2E]">
+                <td className="px-4 py-3 font-mono text-sm font-semibold text-[var(--color-pmb-green-900)]">
                   {formatCurrency(course.price)}
                 </td>
                 <td className="px-4 py-3 text-sm">
                   <span
                     className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
                       course.paymentType === "MONTHLY"
-                        ? "bg-indigo-100 text-indigo-700"
+                        ? "bg-[var(--color-pmb-lime-50)] text-[var(--color-pmb-green-700)]"
                         : "bg-gray-100 text-gray-700"
                     }`}
                   >
@@ -102,7 +102,7 @@ export function CourseListTable({
                     <button
                       type="button"
                       onClick={() => onEdit(course.id)}
-                      className="rounded-md p-1.5 text-gray-500 hover:bg-gray-100 hover:text-blue-600"
+                      className="rounded-md p-1.5 text-gray-500 hover:bg-gray-100 hover:text-[var(--color-pmb-green)]"
                       title="Editar"
                     >
                       <Pencil className="h-4 w-4" />

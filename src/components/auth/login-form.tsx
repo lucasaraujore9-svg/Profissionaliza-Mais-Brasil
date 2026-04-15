@@ -50,9 +50,13 @@ export function LoginForm() {
         user?: { role?: string }
       }
       const role = session.user?.role
-      if (role === "ADMIN") router.push("/admin")
-      else if (role === "RESELLER") router.push("/painel")
-      else router.push("/")
+      if (role === "SUPER_ADMIN" || role === "PMB_SALES" || role === "PMB_RESELLER_MGR") {
+        router.push("/admin")
+      } else if (role === "RESELLER") {
+        router.push("/painel")
+      } else {
+        router.push("/")
+      }
     } catch {
       router.push("/")
     }
@@ -87,7 +91,7 @@ export function LoginForm() {
           <Label htmlFor="password">Senha</Label>
           <Link
             href="/forgot-password"
-            className="text-xs font-medium text-blue-600 hover:text-blue-700"
+            className="text-xs font-medium text-[var(--color-pmb-green)] hover:text-[var(--color-pmb-green-700)]"
           >
             Esqueci minha senha
           </Link>
@@ -109,7 +113,7 @@ export function LoginForm() {
       <label className="flex items-center gap-2 text-sm text-gray-700">
         <input
           type="checkbox"
-          className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+          className="h-4 w-4 rounded border-gray-300 text-[var(--color-pmb-green)] focus:ring-[var(--color-pmb-gold)]"
         />
         Lembrar-me neste dispositivo
       </label>
@@ -123,7 +127,7 @@ export function LoginForm() {
       <Button
         type="submit"
         size="lg"
-        className="w-full bg-blue-600 text-white hover:bg-blue-700"
+        className="w-full bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)]"
         disabled={state.kind === "submitting"}
       >
         {state.kind === "submitting" ? (
@@ -143,7 +147,7 @@ export function LoginForm() {
         Ainda não tem conta?{" "}
         <Link
           href="/seja-revendedor"
-          className="font-medium text-blue-600 hover:text-blue-700"
+          className="font-medium text-[var(--color-pmb-green)] hover:text-[var(--color-pmb-green-700)]"
         >
           Seja revendedor
         </Link>

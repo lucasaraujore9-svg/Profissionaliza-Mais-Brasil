@@ -89,7 +89,7 @@ export function CustomDomainForm({
 
   return (
     <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-      <h3 className="text-sm font-semibold text-[#1A1A2E]">
+      <h3 className="text-sm font-semibold text-[var(--color-pmb-green-900)]">
         Domínio personalizado
       </h3>
       <p className="mt-1 text-xs text-gray-600">
@@ -111,7 +111,7 @@ export function CustomDomainForm({
             />
             <Button
               type="button"
-              className="bg-blue-600 text-white hover:bg-blue-700"
+              className="bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)]"
               onClick={handleAdd}
               disabled={submitting || input.trim().length === 0}
             >
@@ -132,7 +132,7 @@ export function CustomDomainForm({
         <div className="mt-6 rounded-xl border border-gray-200 bg-gray-50/50 p-4">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <div className="font-mono text-sm font-semibold text-[#1A1A2E]">
+              <div className="font-mono text-sm font-semibold text-[var(--color-pmb-green-900)]">
                 {customDomain}
               </div>
               <div className="mt-1 flex items-center gap-2">

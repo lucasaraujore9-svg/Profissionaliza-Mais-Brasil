@@ -41,14 +41,14 @@ export function AdminTopResellersTable({ resellers }: AdminTopResellersTableProp
     <div className="rounded-2xl border border-gray-200 bg-white shadow-sm">
       <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
         <div>
-          <h3 className="text-sm font-semibold text-[#1A1A2E]">Top revendedores</h3>
+          <h3 className="text-sm font-semibold text-[var(--color-pmb-green-900)]">Top revendedores</h3>
           <p className="mt-0.5 text-xs text-gray-600">
             Rankeados por receita no período.
           </p>
         </div>
         <Link
           href="/admin/revendedores"
-          className="text-xs font-semibold text-blue-600 hover:text-blue-700"
+          className="text-xs font-semibold text-[var(--color-pmb-green)] hover:text-[var(--color-pmb-green-700)]"
         >
           Ver todos
         </Link>
@@ -80,10 +80,10 @@ export function AdminTopResellersTable({ resellers }: AdminTopResellersTableProp
                     <span className="font-mono text-xs text-gray-400">
                       {String(idx + 1).padStart(2, "0")}
                     </span>
-                    <span className="font-medium text-[#1A1A2E]">{r.name}</span>
+                    <span className="font-medium text-[var(--color-pmb-green-900)]">{r.name}</span>
                   </div>
                 </td>
-                <td className="px-6 py-3 font-mono font-semibold text-[#1A1A2E]">
+                <td className="px-6 py-3 font-mono font-semibold text-[var(--color-pmb-green-900)]">
                   {formatCurrency(r.mrr)}
                 </td>
                 <td className="px-6 py-3 font-mono text-gray-700">{r.students}</td>
@@ -95,7 +95,7 @@ export function AdminTopResellersTable({ resellers }: AdminTopResellersTableProp
                 <td className="px-6 py-3 text-right">
                   <Link
                     href={`/admin/revendedores/${r.id}`}
-                    className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700"
+                    className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--color-pmb-green)] hover:text-[var(--color-pmb-green-700)]"
                   >
                     Ver
                     <ArrowUpRight className="h-3 w-3" />

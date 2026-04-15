@@ -28,8 +28,8 @@ export function CourseListToolbar() {
             onClick={() => setActive(filter)}
             className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
               active === filter
-                ? "bg-white text-[#1A1A2E] shadow-sm"
-                : "text-gray-600 hover:text-[#1A1A2E]"
+                ? "bg-white text-[var(--color-pmb-green-900)] shadow-sm"
+                : "text-gray-600 hover:text-[var(--color-pmb-green-900)]"
             }`}
           >
             {filter}

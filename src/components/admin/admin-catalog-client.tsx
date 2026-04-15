@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react"
 import { CatalogHeader, type CatalogLastSync } from "./catalog-header"
 import { CatalogCourseGrid, type CatalogCourse } from "./catalog-course-grid"
 import { CatalogSyncLog } from "./catalog-sync-log"
+import { CatalogEditDrawer } from "./catalog-edit-drawer"
 import type { SyncLogEntry } from "@/lib/catalog/sync-log"
 
 interface CatalogResponse {
@@ -16,11 +17,16 @@ interface SyncLogResponse {
   logs: SyncLogEntry[]
 }
 
-export function AdminCatalogClient() {
+interface AdminCatalogClientProps {
+  canEdit?: boolean
+}
+
+export function AdminCatalogClient({ canEdit = false }: AdminCatalogClientProps) {
   const [catalog, setCatalog] = useState<CatalogResponse | null>(null)
   const [logs, setLogs] = useState<SyncLogEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [editingId, setEditingId] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setError(null)
@@ -74,8 +80,18 @@ export function AdminCatalogClient() {
         totalCourses={catalog.total}
         onSynced={load}
       />
-      <CatalogCourseGrid courses={catalog.courses} />
+      <CatalogCourseGrid
+        courses={catalog.courses}
+        canEdit={canEdit}
+        onEdit={(id) => setEditingId(id)}
+      />
       <CatalogSyncLog logs={logs} />
+      <CatalogEditDrawer
+        courseId={editingId}
+        open={editingId !== null}
+        onOpenChange={(v) => !v && setEditingId(null)}
+        onSaved={load}
+      />
     </div>
   )
 }

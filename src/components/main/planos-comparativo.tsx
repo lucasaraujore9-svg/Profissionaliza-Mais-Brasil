@@ -15,7 +15,7 @@ const features = [
 function FeatureCell({ value }: { value: string | boolean }) {
   if (typeof value === "boolean") {
     return value ? (
-      <Check className="mx-auto h-4 w-4 text-blue-600" />
+      <Check className="mx-auto h-4 w-4 text-[var(--color-pmb-green)]" />
     ) : (
       <X className="mx-auto h-4 w-4 text-gray-300" />
     )
@@ -28,7 +28,7 @@ export function PlanosComparativo() {
     <section id="planos" className="bg-white py-16 md:py-24">
       <div className="mx-auto max-w-5xl px-4 md:px-6">
         <div className="mx-auto max-w-2xl text-center">
-          <h2 className="text-3xl font-bold tracking-tight text-[#1A1A2E] md:text-4xl">
+          <h2 className="text-3xl font-bold tracking-tight text-[var(--color-pmb-green-900)] md:text-4xl">
             Compare os planos
           </h2>
           <p className="mt-4 text-gray-600">
@@ -44,25 +44,25 @@ export function PlanosComparativo() {
                   Funcionalidade
                 </th>
                 <th className="p-6 text-center">
-                  <div className="text-sm font-semibold text-[#1A1A2E]">Starter</div>
-                  <div className="mt-1 font-mono text-2xl font-bold text-[#1A1A2E]">
+                  <div className="text-sm font-semibold text-[var(--color-pmb-green-900)]">Starter</div>
+                  <div className="mt-1 font-mono text-2xl font-bold text-[var(--color-pmb-green-900)]">
                     R$ 99
                   </div>
                   <div className="text-xs text-gray-500">/mês</div>
                 </th>
                 <th className="relative p-6 text-center">
-                  <div className="absolute inset-x-0 top-0 rounded-t-none bg-blue-600 py-1 text-xs font-semibold text-white">
+                  <div className="absolute inset-x-0 top-0 rounded-t-none bg-[var(--color-pmb-green)] py-1 text-xs font-semibold text-white">
                     Mais popular
                   </div>
-                  <div className="mt-4 text-sm font-semibold text-[#1A1A2E]">Growth</div>
-                  <div className="mt-1 font-mono text-2xl font-bold text-blue-600">
+                  <div className="mt-4 text-sm font-semibold text-[var(--color-pmb-green-900)]">Growth</div>
+                  <div className="mt-1 font-mono text-2xl font-bold text-[var(--color-pmb-green)]">
                     R$ 249
                   </div>
                   <div className="text-xs text-gray-500">/mês</div>
                 </th>
                 <th className="p-6 text-center">
-                  <div className="text-sm font-semibold text-[#1A1A2E]">Enterprise</div>
-                  <div className="mt-1 font-mono text-2xl font-bold text-[#1A1A2E]">
+                  <div className="text-sm font-semibold text-[var(--color-pmb-green-900)]">Enterprise</div>
+                  <div className="mt-1 font-mono text-2xl font-bold text-[var(--color-pmb-green-900)]">
                     R$ 599
                   </div>
                   <div className="text-xs text-gray-500">/mês</div>
@@ -76,7 +76,7 @@ export function PlanosComparativo() {
                   <td className="px-6 py-4 text-center">
                     <FeatureCell value={f.starter} />
                   </td>
-                  <td className="bg-blue-50/30 px-6 py-4 text-center">
+                  <td className="bg-[var(--color-pmb-lime-50)]/30 px-6 py-4 text-center">
                     <FeatureCell value={f.growth} />
                   </td>
                   <td className="px-6 py-4 text-center">
@@ -91,8 +91,8 @@ export function PlanosComparativo() {
                     Escolher Starter
                   </Button>
                 </td>
-                <td className="bg-blue-50/30 px-6 py-6 text-center">
-                  <Button size="sm" className="bg-blue-600 text-white hover:bg-blue-700">
+                <td className="bg-[var(--color-pmb-lime-50)]/30 px-6 py-6 text-center">
+                  <Button size="sm" className="bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)]">
                     Escolher Growth
                   </Button>
                 </td>

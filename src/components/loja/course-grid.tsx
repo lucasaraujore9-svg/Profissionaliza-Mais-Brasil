@@ -9,7 +9,7 @@ interface CourseGridProps {
 const GRADIENTS = [
   "from-green-500 to-emerald-700",
   "from-purple-500 to-pink-600",
-  "from-blue-500 to-indigo-700",
+  "from-[var(--color-pmb-mist)]0 to-[var(--color-pmb-green-900)]",
   "from-orange-500 to-red-600",
   "from-pink-400 to-rose-600",
   "from-teal-500 to-cyan-700",
@@ -49,7 +49,7 @@ export function CourseGrid({ items, total }: CourseGridProps) {
       <div className="mx-auto max-w-7xl px-4 md:px-6">
         <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
           <div>
-            <h2 className="text-2xl font-bold text-[#1A1A2E] md:text-3xl">
+            <h2 className="text-2xl font-bold text-[var(--color-pmb-green-900)] md:text-3xl">
               Catálogo completo
             </h2>
             <p className="text-sm text-gray-600">
@@ -58,7 +58,7 @@ export function CourseGrid({ items, total }: CourseGridProps) {
           </div>
           <div className="text-sm text-gray-500">
             Ordenar por:{" "}
-            <span className="font-medium text-[#1A1A2E]">Populares</span>
+            <span className="font-medium text-[var(--color-pmb-green-900)]">Populares</span>
           </div>
         </div>
 

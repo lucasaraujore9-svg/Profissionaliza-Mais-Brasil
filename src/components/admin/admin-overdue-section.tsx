@@ -53,10 +53,10 @@ export function AdminOverdueSection({ rows, totalAmount }: AdminOverdueSectionPr
             <tbody>
               {rows.map((o) => (
                 <tr key={o.id} className="border-b border-rose-100 last:border-b-0">
-                  <td className="px-6 py-3 font-medium text-[#1A1A2E]">
+                  <td className="px-6 py-3 font-medium text-[var(--color-pmb-green-900)]">
                     <Link
                       href={`/admin/revendedores/${o.tenantId}`}
-                      className="hover:text-blue-600"
+                      className="hover:text-[var(--color-pmb-green)]"
                     >
                       {o.tenantName}
                     </Link>
@@ -64,7 +64,7 @@ export function AdminOverdueSection({ rows, totalAmount }: AdminOverdueSectionPr
                   <td className="px-6 py-3 font-mono text-rose-700">
                     {o.daysLate} dias
                   </td>
-                  <td className="px-6 py-3 font-mono font-semibold text-[#1A1A2E]">
+                  <td className="px-6 py-3 font-mono font-semibold text-[var(--color-pmb-green-900)]">
                     {formatMoney(o.amount)}
                   </td>
                 </tr>

@@ -24,6 +24,8 @@ export async function GET() {
         status: true,
         capaImageUrl: true,
         syncedAt: true,
+        precoVitrineMain: true,
+        destaqueHome: true,
         _count: {
           select: {
             tenantCourses: true,
@@ -53,6 +55,8 @@ export async function GET() {
         syncedAt: c.syncedAt.toISOString(),
         resellers: c._count.tenantCourses,
         students: c._count.enrollments,
+        precoVitrineMain: c.precoVitrineMain ? Number(c.precoVitrineMain) : null,
+        destaqueHome: c.destaqueHome,
       })),
       lastSync: lastSync
         ? {

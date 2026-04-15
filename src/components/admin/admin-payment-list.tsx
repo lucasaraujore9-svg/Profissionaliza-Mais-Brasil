@@ -48,7 +48,7 @@ export function AdminPaymentList({ payments }: AdminPaymentListProps) {
   return (
     <div className="rounded-2xl border border-gray-200 bg-white shadow-sm">
       <div className="border-b border-gray-200 px-6 py-4">
-        <h3 className="text-sm font-semibold text-[#1A1A2E]">Pagamentos recentes</h3>
+        <h3 className="text-sm font-semibold text-[var(--color-pmb-green-900)]">Pagamentos recentes</h3>
         <p className="mt-0.5 text-xs text-gray-600">
           Últimas cobranças geradas via Asaas para assinaturas de revendedores.
         </p>
@@ -76,15 +76,15 @@ export function AdminPaymentList({ payments }: AdminPaymentListProps) {
                     key={p.id}
                     className="border-b border-gray-100 last:border-b-0 hover:bg-gray-50"
                   >
-                    <td className="px-6 py-3 font-medium text-[#1A1A2E]">
+                    <td className="px-6 py-3 font-medium text-[var(--color-pmb-green-900)]">
                       <Link
                         href={`/admin/revendedores/${p.tenantId}`}
-                        className="hover:text-blue-600"
+                        className="hover:text-[var(--color-pmb-green)]"
                       >
                         {p.tenantName}
                       </Link>
                     </td>
-                    <td className="px-6 py-3 font-mono font-semibold text-[#1A1A2E]">
+                    <td className="px-6 py-3 font-mono font-semibold text-[var(--color-pmb-green-900)]">
                       {formatMoney(p.amount)}
                     </td>
                     <td className="px-6 py-3 font-mono text-xs text-gray-600">

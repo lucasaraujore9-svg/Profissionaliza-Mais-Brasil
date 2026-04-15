@@ -25,7 +25,7 @@ export function AnalyticsFilters({ period, onPeriodChange }: AnalyticsFiltersPro
               type="button"
               onClick={() => onPeriodChange(p)}
               className={`rounded-md px-3 py-1 text-xs font-semibold transition-colors ${
-                period === p ? "bg-white text-blue-600 shadow-sm" : "text-gray-600"
+                period === p ? "bg-white text-[var(--color-pmb-green)] shadow-sm" : "text-gray-600"
               }`}
             >
               {p}

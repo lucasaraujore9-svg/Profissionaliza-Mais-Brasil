@@ -32,7 +32,7 @@ export function AdminFinanceSummary({ summary }: AdminFinanceSummaryProps) {
       value: formatMoney(summary.mrr),
       change: formatPct(summary.paidChangePct),
       icon: Repeat,
-      gradient: "from-blue-600 to-indigo-600",
+      gradient: "from-[var(--color-pmb-green)] to-[var(--color-pmb-green-700)]",
     },
     {
       label: "ARR (projetado)",

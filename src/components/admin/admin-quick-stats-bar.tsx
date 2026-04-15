@@ -26,7 +26,7 @@ export function AdminQuickStatsBar({ stats }: AdminQuickStatsBarProps) {
   ]
 
   return (
-    <div className="rounded-2xl border border-gray-200 bg-gradient-to-r from-blue-600 to-indigo-600 p-5 text-white shadow-sm">
+    <div className="rounded-2xl border border-gray-200 bg-gradient-to-r from-[var(--color-pmb-green)] to-[var(--color-pmb-green-700)] p-5 text-white shadow-sm">
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {items.map((item) => (
           <div key={item.label} className="border-r border-white/20 pr-4 last:border-r-0">

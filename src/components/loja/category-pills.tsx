@@ -47,8 +47,8 @@ export function CategoryPills({
               disabled={isPending}
               className={`shrink-0 rounded-full px-4 py-2 text-sm font-medium transition-colors ${
                 isActive
-                  ? "bg-blue-600 text-white"
-                  : "border border-gray-200 bg-white text-gray-700 hover:border-blue-300 hover:text-blue-600"
+                  ? "bg-[var(--color-pmb-green)] text-white"
+                  : "border border-gray-200 bg-white text-gray-700 hover:border-[rgba(2,89,24,0.25)] hover:text-[var(--color-pmb-green)]"
               } disabled:opacity-60`}
             >
               {cat.label}

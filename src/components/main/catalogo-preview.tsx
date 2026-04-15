@@ -10,7 +10,7 @@ const cursos = [
     aulas: 40,
     horas: "120h",
     preco: "R$ 197",
-    gradient: "from-blue-500 to-blue-700",
+    gradient: "from-[var(--color-pmb-mist)]0 to-[var(--color-pmb-green-700)]",
   },
   {
     slug: "marketing-digital",
@@ -38,14 +38,14 @@ export function CatalogoPreview() {
       <div className="mx-auto max-w-7xl px-4 md:px-6">
         <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div>
-            <h2 className="text-3xl font-bold tracking-tight text-[#1A1A2E] md:text-4xl">
+            <h2 className="text-3xl font-bold tracking-tight text-[var(--color-pmb-green-900)] md:text-4xl">
               Catálogo de cursos
             </h2>
             <p className="mt-3 max-w-xl text-gray-600">
               Mais de 120 cursos prontos pra você revender, organizados por categoria.
             </p>
           </div>
-          <Link href="/seja-revendedor" className="text-sm font-medium text-blue-600 hover:text-blue-700">
+          <Link href="/seja-revendedor" className="text-sm font-medium text-[var(--color-pmb-green)] hover:text-[var(--color-pmb-green-700)]">
             Ver todos
             <ArrowRight className="ml-1 inline h-4 w-4" />
           </Link>
@@ -58,12 +58,12 @@ export function CatalogoPreview() {
               className="group overflow-hidden rounded-2xl border border-gray-200 bg-white transition-all hover:-translate-y-1 hover:shadow-lg"
             >
               <div className={`relative h-48 bg-gradient-to-br ${curso.gradient}`}>
-                <div className="absolute top-4 left-4 rounded-full bg-white/90 px-3 py-1 text-xs font-medium text-[#1A1A2E] backdrop-blur">
+                <div className="absolute top-4 left-4 rounded-full bg-white/90 px-3 py-1 text-xs font-medium text-[var(--color-pmb-green-900)] backdrop-blur">
                   {curso.categoria}
                 </div>
               </div>
               <div className="p-6">
-                <h3 className="text-lg font-semibold text-[#1A1A2E]">{curso.nome}</h3>
+                <h3 className="text-lg font-semibold text-[var(--color-pmb-green-900)]">{curso.nome}</h3>
                 <div className="mt-3 flex items-center gap-4 text-xs text-gray-500">
                   <span className="flex items-center gap-1">
                     <BookOpen className="h-3.5 w-3.5" />
@@ -75,10 +75,10 @@ export function CatalogoPreview() {
                   </span>
                 </div>
                 <div className="mt-5 flex items-center justify-between border-t border-gray-100 pt-4">
-                  <span className="font-mono text-xl font-bold text-[#1A1A2E]">
+                  <span className="font-mono text-xl font-bold text-[var(--color-pmb-green-900)]">
                     {curso.preco}
                   </span>
-                  <Button size="sm" className="bg-blue-600 text-white hover:bg-blue-700">
+                  <Button size="sm" className="bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)]">
                     Ver curso
                   </Button>
                 </div>

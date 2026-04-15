@@ -38,7 +38,7 @@ export function FAQAccordion() {
     <section className="bg-[#FAFAFA] py-16 md:py-24">
       <div className="mx-auto max-w-3xl px-4 md:px-6">
         <div className="mx-auto max-w-2xl text-center">
-          <h2 className="text-3xl font-bold tracking-tight text-[#1A1A2E] md:text-4xl">
+          <h2 className="text-3xl font-bold tracking-tight text-[var(--color-pmb-green-900)] md:text-4xl">
             Perguntas frequentes
           </h2>
           <p className="mt-4 text-gray-600">
@@ -60,7 +60,7 @@ export function FAQAccordion() {
                   className="flex w-full items-center justify-between gap-4 p-5 text-left transition-colors hover:bg-gray-50"
                   aria-expanded={isOpen}
                 >
-                  <span className="text-base font-medium text-[#1A1A2E]">
+                  <span className="text-base font-medium text-[var(--color-pmb-green-900)]">
                     {faq.pergunta}
                   </span>
                   <ChevronDown

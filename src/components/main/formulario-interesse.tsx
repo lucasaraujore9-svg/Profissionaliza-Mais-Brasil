@@ -86,7 +86,7 @@ export function FormularioInteresse() {
                 <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-green-100 text-green-600">
                   <CheckCircle2 className="h-6 w-6" />
                 </div>
-                <h2 className="mt-4 text-2xl font-bold tracking-tight text-[#1A1A2E] md:text-3xl">
+                <h2 className="mt-4 text-2xl font-bold tracking-tight text-[var(--color-pmb-green-900)] md:text-3xl">
                   Obrigado!
                 </h2>
                 <p className="mt-3 text-gray-600">
@@ -104,7 +104,7 @@ export function FormularioInteresse() {
             ) : (
               <>
                 <div className="text-center">
-                  <h2 className="text-2xl font-bold tracking-tight text-[#1A1A2E] md:text-3xl">
+                  <h2 className="text-2xl font-bold tracking-tight text-[var(--color-pmb-green-900)] md:text-3xl">
                     Pronto pra começar?
                   </h2>
                   <p className="mt-3 text-gray-600">
@@ -168,7 +168,7 @@ export function FormularioInteresse() {
                   <Button
                     type="submit"
                     size="lg"
-                    className="w-full bg-blue-600 text-white hover:bg-blue-700"
+                    className="w-full bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)]"
                     disabled={state.kind === "submitting"}
                   >
                     {state.kind === "submitting" ? (

@@ -102,7 +102,7 @@ export function CouponGrid() {
     <div className="space-y-6">
       <div className="flex justify-end">
         <Button
-          className="bg-blue-600 text-white hover:bg-blue-700"
+          className="bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)]"
           onClick={() => setModalOpen(true)}
         >
           <Plus className="mr-2 h-4 w-4" />
@@ -140,9 +140,9 @@ export function CouponGrid() {
 
       {expandedCoupon && (
         <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-          <h3 className="text-sm font-semibold text-[#1A1A2E]">
+          <h3 className="text-sm font-semibold text-[var(--color-pmb-green-900)]">
             Histórico do cupom{" "}
-            <span className="font-mono text-blue-600">{expandedCoupon.code}</span>
+            <span className="font-mono text-[var(--color-pmb-green)]">{expandedCoupon.code}</span>
           </h3>
           <p className="mt-1 text-xs text-gray-600">
             Últimos usos registrados deste cupom.

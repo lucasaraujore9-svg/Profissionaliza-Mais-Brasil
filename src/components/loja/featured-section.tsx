@@ -9,7 +9,7 @@ interface FeaturedSectionProps {
 
 const GRADIENTS = [
   "from-green-600 to-emerald-800",
-  "from-blue-600 to-indigo-800",
+  "from-[var(--color-pmb-green)] to-[var(--color-pmb-green-900)]",
   "from-purple-600 to-pink-700",
 ]
 
@@ -33,7 +33,7 @@ export function FeaturedSection({ items }: FeaturedSectionProps) {
             <Flame className="h-5 w-5 text-orange-500" />
           </div>
           <div>
-            <h2 className="text-2xl font-bold text-[#1A1A2E] md:text-3xl">
+            <h2 className="text-2xl font-bold text-[var(--color-pmb-green-900)] md:text-3xl">
               Cursos em destaque
             </h2>
             <p className="text-sm text-gray-600">
@@ -68,7 +68,7 @@ export function FeaturedSection({ items }: FeaturedSectionProps) {
                 </div>
                 <Button
                   size="sm"
-                  className="bg-white text-[#1A1A2E] hover:bg-gray-50"
+                  className="bg-white text-[var(--color-pmb-green-900)] hover:bg-gray-50"
                 >
                   Ver curso
                   <ArrowRight className="ml-1.5 h-3.5 w-3.5" />

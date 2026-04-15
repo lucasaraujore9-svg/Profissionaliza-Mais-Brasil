@@ -62,10 +62,10 @@ export function ResellerTable({ rows }: ResellerTableProps) {
             {rows.map((r) => (
               <tr key={r.id} className="border-b border-gray-100 last:border-b-0 hover:bg-gray-50">
                 <td className="px-6 py-3">
-                  <p className="font-semibold text-[#1A1A2E]">{r.name}</p>
+                  <p className="font-semibold text-[var(--color-pmb-green-900)]">{r.name}</p>
                   <p className="mt-0.5 text-xs text-gray-500">{r.email ?? r.slug}</p>
                 </td>
-                <td className="px-6 py-3 font-mono font-semibold text-[#1A1A2E]">
+                <td className="px-6 py-3 font-mono font-semibold text-[var(--color-pmb-green-900)]">
                   {formatMoney(r.mrr)}
                 </td>
                 <td className="px-6 py-3 font-mono text-gray-700">
@@ -82,7 +82,7 @@ export function ResellerTable({ rows }: ResellerTableProps) {
                   <div className="flex items-center justify-end gap-2">
                     <Link
                       href={`/admin/revendedores/${r.id}`}
-                      className="inline-flex h-8 w-8 items-center justify-center rounded-md text-gray-500 hover:bg-blue-50 hover:text-blue-600"
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-md text-gray-500 hover:bg-[var(--color-pmb-lime-50)] hover:text-[var(--color-pmb-green)]"
                       aria-label="Ver"
                     >
                       <Eye className="h-4 w-4" />

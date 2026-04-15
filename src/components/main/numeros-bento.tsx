@@ -65,7 +65,7 @@ export async function NumerosBento() {
       label: "Revendedores",
       value: formatCount(metrics.resellers),
       hint: "Empreendedores ativos",
-      color: "bg-blue-50 text-blue-600",
+      color: "bg-[var(--color-pmb-lime-50)] text-[var(--color-pmb-green)]",
       span: "md:col-span-2",
     },
     {
@@ -98,7 +98,7 @@ export async function NumerosBento() {
     <section className="bg-[#FAFAFA] py-16 md:py-24">
       <div className="mx-auto max-w-7xl px-4 md:px-6">
         <div className="mx-auto max-w-2xl text-center">
-          <h2 className="text-3xl font-bold tracking-tight text-[#1A1A2E] md:text-4xl">
+          <h2 className="text-3xl font-bold tracking-tight text-[var(--color-pmb-green-900)] md:text-4xl">
             Números que inspiram
           </h2>
           <p className="mt-4 text-gray-600">
@@ -115,10 +115,10 @@ export async function NumerosBento() {
               <div className={`inline-flex h-10 w-10 items-center justify-center rounded-xl ${metric.color}`}>
                 <metric.icon className="h-5 w-5" />
               </div>
-              <div className="mt-6 font-mono text-4xl font-bold tracking-tight text-[#1A1A2E] lg:text-5xl">
+              <div className="mt-6 font-mono text-4xl font-bold tracking-tight text-[var(--color-pmb-green-900)] lg:text-5xl">
                 {metric.value}
               </div>
-              <p className="mt-2 text-sm font-medium text-[#1A1A2E]">{metric.label}</p>
+              <p className="mt-2 text-sm font-medium text-[var(--color-pmb-green-900)]">{metric.label}</p>
               <p className="text-xs text-gray-500">{metric.hint}</p>
             </div>
           ))}

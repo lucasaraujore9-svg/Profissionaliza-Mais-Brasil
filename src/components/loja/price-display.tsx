@@ -73,13 +73,13 @@ export function PriceDisplay({
           </div>
         )}
 
-        <div className="mt-2 font-mono text-4xl font-bold text-[#1A1A2E] lg:text-5xl">
+        <div className="mt-2 font-mono text-4xl font-bold text-[var(--color-pmb-green-900)] lg:text-5xl">
           {formatBRL(finalPrice)}
         </div>
         {parcelasLabel && (
           <div className="mt-1 text-sm text-gray-600">
             ou{" "}
-            <span className="font-mono font-semibold text-[#1A1A2E]">
+            <span className="font-mono font-semibold text-[var(--color-pmb-green-900)]">
               {parcelasLabel}
             </span>{" "}
             sem juros
@@ -98,7 +98,7 @@ export function PriceDisplay({
         <Link href={checkoutHref}>
           <Button
             size="lg"
-            className="mt-6 w-full bg-blue-600 text-white hover:bg-blue-700"
+            className="mt-6 w-full bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)]"
           >
             Matricular-se Agora
           </Button>

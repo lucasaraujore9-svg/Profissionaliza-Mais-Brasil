@@ -26,7 +26,7 @@ const statusColors: Record<RecentSale["status"], string> = {
   ACTIVE: "bg-green-100 text-green-700",
   SUSPENDED: "bg-orange-100 text-orange-700",
   CANCELLED: "bg-red-100 text-red-700",
-  COMPLETED: "bg-blue-100 text-blue-700",
+  COMPLETED: "bg-[var(--color-pmb-lime-50)] text-[var(--color-pmb-green-700)]",
 }
 
 function relativeTime(iso: string): string {
@@ -46,12 +46,12 @@ export function RecentSales({ sales }: RecentSalesProps) {
   return (
     <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-[#1A1A2E]">
+        <h3 className="text-sm font-semibold text-[var(--color-pmb-green-900)]">
           Vendas recentes
         </h3>
         <a
           href="/painel/financeiro"
-          className="text-xs font-semibold text-blue-600 hover:text-blue-700"
+          className="text-xs font-semibold text-[var(--color-pmb-green)] hover:text-[var(--color-pmb-green-700)]"
         >
           Ver todas →
         </a>
@@ -67,7 +67,7 @@ export function RecentSales({ sales }: RecentSalesProps) {
               className="flex items-center justify-between gap-3 py-3"
             >
               <div className="flex items-center gap-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-100 text-xs font-semibold text-blue-700">
+                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[var(--color-pmb-lime-50)] text-xs font-semibold text-[var(--color-pmb-green-700)]">
                   {sale.studentName
                     .split(" ")
                     .map((n) => n[0])
@@ -76,7 +76,7 @@ export function RecentSales({ sales }: RecentSalesProps) {
                     .toUpperCase()}
                 </div>
                 <div className="min-w-0">
-                  <div className="truncate text-sm font-medium text-[#1A1A2E]">
+                  <div className="truncate text-sm font-medium text-[var(--color-pmb-green-900)]">
                     {sale.studentName}
                   </div>
                   <div className="truncate text-xs text-gray-500">
@@ -85,7 +85,7 @@ export function RecentSales({ sales }: RecentSalesProps) {
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                <span className="font-mono text-sm font-semibold text-[#1A1A2E]">
+                <span className="font-mono text-sm font-semibold text-[var(--color-pmb-green-900)]">
                   {formatCurrency(sale.amount)}
                 </span>
                 <span

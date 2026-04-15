@@ -57,7 +57,7 @@ export function CouponUsageTable({ usages, loading }: CouponUsageTableProps) {
         <tbody className="divide-y divide-gray-100">
           {usages.map((u) => (
             <tr key={u.id}>
-              <td className="px-4 py-2 text-sm text-[#1A1A2E]">{u.studentName}</td>
+              <td className="px-4 py-2 text-sm text-[var(--color-pmb-green-900)]">{u.studentName}</td>
               <td className="px-4 py-2 text-sm text-gray-600">{u.courseName}</td>
               <td className="px-4 py-2 font-mono text-sm font-semibold text-green-600">
                 -{formatCurrency(u.discountAmount)}

@@ -12,7 +12,7 @@ export default function AuthLayout({
   children: React.ReactNode
 }) {
   return (
-    <div className="flex min-h-screen bg-[#FAFAFA]">
+    <div className="flex min-h-screen bg-[var(--color-pmb-mist)]">
       <BrandPanel />
 
       <div className="flex w-full items-center justify-center bg-white px-6 py-12 lg:w-1/2">

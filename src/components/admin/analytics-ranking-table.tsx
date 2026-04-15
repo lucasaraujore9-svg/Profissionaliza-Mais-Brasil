@@ -34,7 +34,7 @@ export function AnalyticsRankingTable({ rankings }: AnalyticsRankingTableProps) 
     <div className="rounded-2xl border border-gray-200 bg-white shadow-sm">
       <div className="flex flex-col gap-3 border-b border-gray-200 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h3 className="text-sm font-semibold text-[#1A1A2E]">Ranking de revendedores</h3>
+          <h3 className="text-sm font-semibold text-[var(--color-pmb-green-900)]">Ranking de revendedores</h3>
           <p className="mt-0.5 text-xs text-gray-600">
             Top 10 revendedores pela métrica selecionada.
           </p>
@@ -46,7 +46,7 @@ export function AnalyticsRankingTable({ rankings }: AnalyticsRankingTableProps) 
               type="button"
               onClick={() => setMetric(m)}
               className={`rounded-md px-3 py-1 text-xs font-semibold transition-colors ${
-                metric === m ? "bg-white text-blue-600 shadow-sm" : "text-gray-600"
+                metric === m ? "bg-white text-[var(--color-pmb-green)] shadow-sm" : "text-gray-600"
               }`}
             >
               {m}
@@ -74,15 +74,15 @@ export function AnalyticsRankingTable({ rankings }: AnalyticsRankingTableProps) 
                   <td className="px-6 py-3 font-mono text-xs text-gray-400">
                     {String(idx + 1).padStart(2, "0")}
                   </td>
-                  <td className="px-6 py-3 font-medium text-[#1A1A2E]">
+                  <td className="px-6 py-3 font-medium text-[var(--color-pmb-green-900)]">
                     <Link
                       href={`/admin/revendedores/${row.id}`}
-                      className="hover:text-blue-600"
+                      className="hover:text-[var(--color-pmb-green)]"
                     >
                       {row.name}
                     </Link>
                   </td>
-                  <td className="px-6 py-3 font-mono font-semibold text-[#1A1A2E]">
+                  <td className="px-6 py-3 font-mono font-semibold text-[var(--color-pmb-green-900)]">
                     {metric === "MRR"
                       ? formatMoney(row.value)
                       : row.value.toLocaleString("pt-BR")}

@@ -42,12 +42,12 @@ export function RevenueChart({ data }: RevenueChartProps) {
     <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
       <div className="flex items-start justify-between">
         <div>
-          <h3 className="text-sm font-semibold text-[#1A1A2E]">
+          <h3 className="text-sm font-semibold text-[var(--color-pmb-green-900)]">
             Receita dos últimos 30 dias
           </h3>
           <p className="mt-1 text-xs text-gray-600">
             Acumulado no período:{" "}
-            <span className="font-mono font-semibold text-[#1A1A2E]">
+            <span className="font-mono font-semibold text-[var(--color-pmb-green-900)]">
               {formatCurrency(total)}
             </span>
           </p>

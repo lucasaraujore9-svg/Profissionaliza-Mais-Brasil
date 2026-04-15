@@ -47,7 +47,7 @@ const statusColors: Record<StudentStatus, string> = {
   INATIVO: "bg-gray-100 text-gray-600",
   BLOQUEADO: "bg-red-100 text-red-700",
   DEVEDOR: "bg-amber-100 text-amber-700",
-  FORMADO: "bg-blue-100 text-blue-700",
+  FORMADO: "bg-[var(--color-pmb-lime-50)] text-[var(--color-pmb-green-700)]",
   INTERESSADO: "bg-violet-100 text-violet-700",
 }
 
@@ -172,7 +172,7 @@ export function StudentDetailDrawer({
       />
       <aside className="relative ml-auto flex h-full w-full max-w-md flex-col overflow-y-auto bg-white shadow-xl">
         <header className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
-          <h2 className="text-base font-semibold text-[#1A1A2E]">
+          <h2 className="text-base font-semibold text-[var(--color-pmb-green-900)]">
             Detalhes do aluno
           </h2>
           <button
@@ -192,11 +192,11 @@ export function StudentDetailDrawer({
           ) : (
             <>
               <div className="flex items-center gap-4">
-                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-blue-100 text-lg font-semibold text-blue-700">
+                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[var(--color-pmb-lime-50)] text-lg font-semibold text-[var(--color-pmb-green-700)]">
                   {initials(student.nome)}
                 </div>
                 <div>
-                  <div className="text-base font-semibold text-[#1A1A2E]">
+                  <div className="text-base font-semibold text-[var(--color-pmb-green-900)]">
                     {student.nome}
                   </div>
                   <div className="flex items-center gap-1 text-xs text-gray-600">
@@ -225,7 +225,7 @@ export function StudentDetailDrawer({
 
               <div className="grid grid-cols-3 gap-3 rounded-xl border border-gray-100 bg-gray-50/50 p-4 text-center">
                 <div>
-                  <div className="font-mono text-lg font-bold text-[#1A1A2E]">
+                  <div className="font-mono text-lg font-bold text-[var(--color-pmb-green-900)]">
                     {student.enrollments.length}
                   </div>
                   <div className="text-[10px] uppercase tracking-wider text-gray-500">
@@ -233,7 +233,7 @@ export function StudentDetailDrawer({
                   </div>
                 </div>
                 <div>
-                  <div className="font-mono text-lg font-bold text-[#1A1A2E]">
+                  <div className="font-mono text-lg font-bold text-[var(--color-pmb-green-900)]">
                     {formatDate(student.createdAt)}
                   </div>
                   <div className="text-[10px] uppercase tracking-wider text-gray-500">
@@ -241,7 +241,7 @@ export function StudentDetailDrawer({
                   </div>
                 </div>
                 <div>
-                  <div className="font-mono text-lg font-bold text-[#1A1A2E]">
+                  <div className="font-mono text-lg font-bold text-[var(--color-pmb-green-900)]">
                     {formatCurrency(student.totalPaid)}
                   </div>
                   <div className="text-[10px] uppercase tracking-wider text-gray-500">
@@ -251,7 +251,7 @@ export function StudentDetailDrawer({
               </div>
 
               <div>
-                <h3 className="text-sm font-semibold text-[#1A1A2E]">Cursos</h3>
+                <h3 className="text-sm font-semibold text-[var(--color-pmb-green-900)]">Cursos</h3>
                 {student.enrollments.length === 0 ? (
                   <div className="mt-3 rounded-xl border border-dashed border-gray-200 bg-white p-4 text-center text-xs text-gray-500">
                     Nenhum curso matriculado.
@@ -264,7 +264,7 @@ export function StudentDetailDrawer({
                         className="rounded-xl border border-gray-100 bg-white p-4"
                       >
                         <div className="flex items-center justify-between">
-                          <div className="text-sm font-medium text-[#1A1A2E]">
+                          <div className="text-sm font-medium text-[var(--color-pmb-green-900)]">
                             {course.courseName}
                           </div>
                           <span className="font-mono text-xs text-gray-500">
@@ -284,7 +284,7 @@ export function StudentDetailDrawer({
               </div>
 
               <div>
-                <h3 className="text-sm font-semibold text-[#1A1A2E]">
+                <h3 className="text-sm font-semibold text-[var(--color-pmb-green-900)]">
                   Enviar mensagem
                 </h3>
                 <textarea
@@ -293,7 +293,7 @@ export function StudentDetailDrawer({
                   rows={3}
                   maxLength={2000}
                   placeholder="Digite uma mensagem para o aluno..."
-                  className="mt-2 w-full rounded-md border border-gray-200 p-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  className="mt-2 w-full rounded-md border border-gray-200 p-2 text-sm focus:border-[var(--color-pmb-cyan)] focus:outline-none focus:ring-1 focus:ring-[var(--color-pmb-gold)]"
                 />
                 {sendResult && (
                   <div

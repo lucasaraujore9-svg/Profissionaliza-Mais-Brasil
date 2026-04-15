@@ -13,14 +13,14 @@ interface ResellerStudentCountProps {
 
 export function ResellerStudentCount({ students }: ResellerStudentCountProps) {
   const counts = [
-    { label: "Alunos totais", value: students.total, icon: GraduationCap, accent: "text-blue-600" },
+    { label: "Alunos totais", value: students.total, icon: GraduationCap, accent: "text-[var(--color-pmb-green)]" },
     { label: "Ativos", value: students.active, icon: UserCheck, accent: "text-emerald-600" },
     { label: "Bloqueados", value: students.blocked, icon: UserX, accent: "text-rose-600" },
   ]
 
   return (
     <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-      <h3 className="text-sm font-semibold text-[#1A1A2E]">Alunos vinculados</h3>
+      <h3 className="text-sm font-semibold text-[var(--color-pmb-green-900)]">Alunos vinculados</h3>
       <p className="mt-1 text-xs text-gray-600">
         Contagem agregada do vendedor na Escola Avançada.
       </p>
@@ -35,7 +35,7 @@ export function ResellerStudentCount({ students }: ResellerStudentCountProps) {
                 </p>
                 <Icon className={`h-4 w-4 ${c.accent}`} />
               </div>
-              <p className="mt-2 font-mono text-xl font-bold text-[#1A1A2E]">
+              <p className="mt-2 font-mono text-xl font-bold text-[var(--color-pmb-green-900)]">
                 {c.value.toLocaleString("pt-BR")}
               </p>
             </div>

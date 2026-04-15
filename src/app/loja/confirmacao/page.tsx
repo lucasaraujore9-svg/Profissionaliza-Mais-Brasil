@@ -42,14 +42,14 @@ export default async function ConfirmacaoPage({
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-red-100 text-red-600">
             <AlertCircle className="h-8 w-8" />
           </div>
-          <h1 className="mt-6 text-2xl font-bold text-[#1A1A2E] md:text-3xl">
+          <h1 className="mt-6 text-2xl font-bold text-[var(--color-pmb-green-900)] md:text-3xl">
             Matrícula não encontrada
           </h1>
           <p className="mx-auto mt-3 max-w-md text-sm text-gray-600 md:text-base">
             Não conseguimos localizar sua matrícula. Verifique o link recebido.
           </p>
           <Link href="/" className="mt-6 inline-block">
-            <Button size="lg" className="bg-blue-600 text-white hover:bg-blue-700">
+            <Button size="lg" className="bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)]">
               <Home className="mr-2 h-4 w-4" />
               Voltar à loja
             </Button>
@@ -74,7 +74,7 @@ export default async function ConfirmacaoPage({
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-red-100 text-red-600">
             <AlertCircle className="h-8 w-8" />
           </div>
-          <h1 className="mt-6 text-2xl font-bold text-[#1A1A2E] md:text-3xl">
+          <h1 className="mt-6 text-2xl font-bold text-[var(--color-pmb-green-900)] md:text-3xl">
             Matrícula não encontrada
           </h1>
           <p className="mx-auto mt-3 max-w-md text-sm text-gray-600 md:text-base">
@@ -98,7 +98,7 @@ export default async function ConfirmacaoPage({
       <div className="mx-auto max-w-3xl px-4 md:px-6">
         <div className="text-center">
           <SuccessIcon />
-          <h1 className="mt-6 text-2xl font-bold tracking-tight text-[#1A1A2E] md:text-3xl">
+          <h1 className="mt-6 text-2xl font-bold tracking-tight text-[var(--color-pmb-green-900)] md:text-3xl">
             {title}
           </h1>
           <p className="mx-auto mt-3 max-w-md text-sm text-gray-600 md:text-base">
@@ -125,7 +125,7 @@ export default async function ConfirmacaoPage({
             >
               <Button
                 size="lg"
-                className="w-full bg-blue-600 text-white hover:bg-blue-700 sm:w-auto"
+                className="w-full bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)] sm:w-auto"
               >
                 <ExternalLink className="mr-2 h-4 w-4" />
                 Ir para Escola Avançada

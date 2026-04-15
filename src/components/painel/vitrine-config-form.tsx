@@ -59,7 +59,7 @@ export function VitrineConfigForm({
   return (
     <div className="space-y-6">
       <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-        <h3 className="text-sm font-semibold text-[#1A1A2E]">Identidade visual</h3>
+        <h3 className="text-sm font-semibold text-[var(--color-pmb-green-900)]">Identidade visual</h3>
         <p className="mt-1 text-xs text-gray-600">
           Envie os elementos gráficos da sua marca.
         </p>
@@ -93,7 +93,7 @@ export function VitrineConfigForm({
       </section>
 
       <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-        <h3 className="text-sm font-semibold text-[#1A1A2E]">Paleta de cores</h3>
+        <h3 className="text-sm font-semibold text-[var(--color-pmb-green-900)]">Paleta de cores</h3>
         <p className="mt-1 text-xs text-gray-600">
           As cores serão aplicadas no tempo real do preview ao lado.
         </p>
@@ -115,7 +115,7 @@ export function VitrineConfigForm({
       </section>
 
       <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-        <h3 className="text-sm font-semibold text-[#1A1A2E]">Textos</h3>
+        <h3 className="text-sm font-semibold text-[var(--color-pmb-green-900)]">Textos</h3>
         <p className="mt-1 text-xs text-gray-600">
           O que aparece na vitrine do seu aluno.
         </p>
@@ -154,7 +154,7 @@ export function VitrineConfigForm({
       </section>
 
       <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-        <h3 className="text-sm font-semibold text-[#1A1A2E]">Contato e redes</h3>
+        <h3 className="text-sm font-semibold text-[var(--color-pmb-green-900)]">Contato e redes</h3>
         <p className="mt-1 text-xs text-gray-600">
           Aparece no rodapé da vitrine.
         </p>
@@ -218,7 +218,7 @@ function AssetUploader({
   return (
     <div>
       <Label>{label}</Label>
-      <label className="mt-1.5 flex h-28 cursor-pointer flex-col items-center justify-center gap-1 overflow-hidden rounded-xl border-2 border-dashed border-gray-300 bg-gray-50/50 text-xs text-gray-500 transition-colors hover:border-blue-400 hover:bg-blue-50/50">
+      <label className="mt-1.5 flex h-28 cursor-pointer flex-col items-center justify-center gap-1 overflow-hidden rounded-xl border-2 border-dashed border-gray-300 bg-gray-50/50 text-xs text-gray-500 transition-colors hover:border-[var(--color-pmb-cyan)] hover:bg-[var(--color-pmb-lime-50)]/50">
         {uploading ? (
           <>
             <Loader2 className="h-5 w-5 animate-spin" />
@@ -279,7 +279,7 @@ function ColorField({ id, label, value, onChange }: ColorFieldProps) {
           onChange={(e) => onChange(e.target.value)}
           className="h-7 w-7 cursor-pointer rounded border-0 bg-transparent"
         />
-        <span className="font-mono text-xs font-semibold text-[#1A1A2E]">
+        <span className="font-mono text-xs font-semibold text-[var(--color-pmb-green-900)]">
           {value.toUpperCase()}
         </span>
       </div>

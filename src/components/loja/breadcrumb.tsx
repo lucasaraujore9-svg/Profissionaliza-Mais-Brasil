@@ -21,12 +21,12 @@ export function Breadcrumb({ items }: BreadcrumbProps) {
               {item.href && !isLast ? (
                 <Link
                   href={item.href}
-                  className="transition-colors hover:text-blue-600"
+                  className="transition-colors hover:text-[var(--color-pmb-green)]"
                 >
                   {item.label}
                 </Link>
               ) : (
-                <span className={isLast ? "font-medium text-[#1A1A2E]" : ""}>
+                <span className={isLast ? "font-medium text-[var(--color-pmb-green-900)]" : ""}>
                   {item.label}
                 </span>
               )}
