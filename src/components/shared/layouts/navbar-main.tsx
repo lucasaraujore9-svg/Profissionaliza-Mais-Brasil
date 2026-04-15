@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import Image from "next/image"
 import { useState } from "react"
 import { Search, Menu, X, ChevronDown, User } from "lucide-react"
 
@@ -25,21 +26,15 @@ export function NavbarMain() {
   return (
     <header className="sticky top-0 z-40 bg-white shadow-[0_1px_0_0_rgba(2,89,24,0.08)]">
       <div className="mx-auto flex h-[68px] max-w-[1280px] items-center gap-3 px-4 md:gap-5 md:px-6">
-        <Link href="/" className="flex items-center gap-2 shrink-0" aria-label="Início">
-          <span
-            aria-hidden
-            className="grid h-9 w-9 place-items-center rounded-lg bg-[var(--color-pmb-green)] text-white font-bold text-lg leading-none"
-          >
-            P+
-          </span>
-          <span className="hidden sm:flex flex-col leading-[1.05]">
-            <span className="text-[13px] font-bold text-[var(--color-pmb-green)] tracking-tight">
-              Profissionaliza
-            </span>
-            <span className="text-[13px] font-bold text-[var(--color-pmb-green)] tracking-tight">
-              Mais Brasil
-            </span>
-          </span>
+        <Link href="/" className="flex items-center shrink-0" aria-label="Profissionaliza Mais Brasil">
+          <Image
+            src="/images/logo.png"
+            alt="Profissionaliza Mais Brasil"
+            width={1536}
+            height={1024}
+            priority
+            className="h-10 w-auto md:h-11"
+          />
         </Link>
 
         <button

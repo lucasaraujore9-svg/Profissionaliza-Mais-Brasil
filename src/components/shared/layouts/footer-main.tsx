@@ -1,4 +1,5 @@
 import Link from "next/link"
+import Image from "next/image"
 import { MessageCircle, Mail, MapPin, Camera, Users, PlayCircle } from "lucide-react"
 
 const GRUPOS = [
@@ -41,14 +42,18 @@ export function FooterMain() {
       <div className="mx-auto max-w-[1280px] px-4 pt-14 pb-8 md:px-6">
         <div className="grid gap-10 md:grid-cols-[1.4fr_1fr_1fr_1fr]">
           <div>
-            <Link href="/" className="inline-flex items-center gap-2">
-              <span className="grid h-10 w-10 place-items-center rounded-md bg-[var(--color-pmb-gold)] text-[18px] font-black text-[var(--color-pmb-green)]">
-                P+
-              </span>
-              <span className="leading-tight">
-                <span className="block text-[15px] font-black">Profissionaliza</span>
-                <span className="block text-[13px] font-bold text-[var(--color-pmb-lime)]">Mais Brasil</span>
-              </span>
+            <Link
+              href="/"
+              aria-label="Profissionaliza Mais Brasil"
+              className="inline-flex items-center rounded-lg bg-white p-2"
+            >
+              <Image
+                src="/images/logo.png"
+                alt="Profissionaliza Mais Brasil"
+                width={1536}
+                height={1024}
+                className="h-10 w-auto"
+              />
             </Link>
 
             <p className="mt-4 max-w-sm text-[13.5px] leading-relaxed text-white/75">
