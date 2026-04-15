@@ -16,6 +16,7 @@ import {
   ResellerStudentCount,
   type ResellerStudentsBreakdown,
 } from "./reseller-student-count"
+import { ResellerSupportNotes } from "./reseller-support-notes"
 
 interface DetailResponse {
   reseller: ResellerProfileData & {
@@ -95,6 +96,10 @@ export function ResellerDetailClient({ tenantId }: ResellerDetailClientProps) {
             tenantId={tenantId}
             status={data.reseller.status}
             onChanged={load}
+          />
+          <ResellerSupportNotes
+            tenantId={tenantId}
+            whatsapp={(data.reseller as { whatsapp?: string | null }).whatsapp ?? null}
           />
         </div>
       </div>

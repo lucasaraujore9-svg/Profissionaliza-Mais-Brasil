@@ -19,6 +19,7 @@ export async function GET(
     where: { id },
     include: {
       owner: { select: { email: true, name: true } },
+      accountManager: { select: { id: true, name: true } },
       tenantPayments: {
         orderBy: { dueDate: "desc" },
         take: 24,
@@ -26,6 +27,13 @@ export async function GET(
       _count: { select: { students: true } },
     },
   })
+
+  if (ctx.role === "PMB_RESELLER_MGR" && tenant?.accountManagerId !== ctx.userId) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  }
+  if (ctx.role === "PMB_SALES") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  }
 
   if (!tenant) {
     return NextResponse.json({ error: "Revendedor não encontrado" }, { status: 404 })
@@ -70,6 +78,8 @@ export async function GET(
         asaasSubscriptionId: tenant.asaasSubscriptionId,
         mpConnected: tenant.mpConnected,
         eaVendedorId: tenant.eaVendedorId,
+        accountManagerId: tenant.accountManagerId,
+        accountManagerName: tenant.accountManager?.name ?? null,
       },
       payments: tenant.tenantPayments.map((p) => ({
         id: p.id,

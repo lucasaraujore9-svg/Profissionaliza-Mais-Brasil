@@ -1,18 +1,41 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
+import { toast } from "sonner"
 import { ResellerStatsBar, type ResellerStats } from "./reseller-stats-bar"
 import {
   ResellerListToolbar,
   type ResellerFilter,
 } from "./reseller-list-toolbar"
 import { ResellerTable, type ResellerRow } from "./reseller-table"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { Button } from "@/components/ui/button"
 
 interface ListResponse {
   data: {
     stats: ResellerStats
     resellers: ResellerRow[]
+    role: "SUPER_ADMIN" | "PMB_SALES" | "PMB_RESELLER_MGR"
   }
+}
+
+interface ManagerOption {
+  id: string
+  name: string
 }
 
 function useDebounced<T>(value: T, delay = 300): T {
@@ -30,6 +53,11 @@ export function ResellerListClient() {
   const [data, setData] = useState<ListResponse["data"] | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  const [managers, setManagers] = useState<ManagerOption[]>([])
+  const [assignTenantId, setAssignTenantId] = useState<string | null>(null)
+  const [assignValue, setAssignValue] = useState<string>("")
+  const [saving, setSaving] = useState(false)
 
   const debouncedQuery = useDebounced(query, 350)
 
@@ -58,6 +86,55 @@ export function ResellerListClient() {
     load()
   }, [load])
 
+  // Carrega gerentes disponíveis (só precisa pra SUPER_ADMIN)
+  useEffect(() => {
+    if (data?.role !== "SUPER_ADMIN") return
+    fetch("/api/admin/equipe")
+      .then((r) => r.json())
+      .then((body) => {
+        const rows = (body.data ?? []) as {
+          id: string
+          name: string
+          role: string
+          status: string
+        }[]
+        setManagers(
+          rows
+            .filter((u) => u.role === "PMB_RESELLER_MGR" && u.status === "ATIVO")
+            .map((u) => ({ id: u.id, name: u.name })),
+        )
+      })
+      .catch(() => setManagers([]))
+  }, [data?.role])
+
+  function openAssign(tenantId: string) {
+    const row = data?.resellers.find((r) => r.id === tenantId)
+    setAssignTenantId(tenantId)
+    setAssignValue(row?.accountManagerId ?? "")
+  }
+
+  async function saveAssign() {
+    if (!assignTenantId) return
+    setSaving(true)
+    try {
+      const res = await fetch(`/api/admin/revendedores/${assignTenantId}/manager`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ managerId: assignValue || null }),
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        toast.error(body.error ?? "Falha ao atribuir")
+        return
+      }
+      toast.success("Gerente atualizado")
+      setAssignTenantId(null)
+      load()
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const content = useMemo(() => {
     if (loading && !data) {
       return (
@@ -74,7 +151,14 @@ export function ResellerListClient() {
       )
     }
     if (!data) return null
-    return <ResellerTable rows={data.resellers} />
+    return (
+      <ResellerTable
+        rows={data.resellers}
+        showManager={data.role === "SUPER_ADMIN"}
+        onAssign={data.role === "SUPER_ADMIN" ? openAssign : undefined}
+      />
+    )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, loading, error])
 
   return (
@@ -97,6 +181,44 @@ export function ResellerListClient() {
         onFilterChange={setFilter}
       />
       {content}
+
+      <Dialog open={!!assignTenantId} onOpenChange={(o) => !o && setAssignTenantId(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Atribuir gerente de conta</DialogTitle>
+            <DialogDescription>
+              O gerente passará a ver este revendedor em seu painel.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-2">
+            <Select value={assignValue || "__none__"} onValueChange={(v) => setAssignValue(v === "__none__" ? "" : (v ?? ""))}>
+              <SelectTrigger>
+                <SelectValue placeholder="Selecione…" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">Sem gerente</SelectItem>
+                {managers.map((m) => (
+                  <SelectItem key={m.id} value={m.id}>
+                    {m.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAssignTenantId(null)} disabled={saving}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={saveAssign}
+              disabled={saving}
+              className="bg-[var(--color-pmb-green)] hover:bg-[var(--color-pmb-green-900)]"
+            >
+              {saving ? "Salvando…" : "Salvar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

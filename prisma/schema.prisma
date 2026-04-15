@@ -113,6 +113,9 @@ model User {
   soldEnrollments Enrollment[] @relation("SoldEnrollments")
   soldPayments    Payment[]    @relation("SoldPayments")
 
+  // Notas de suporte escritas por este usuario
+  supportNotes TenantSupportNote[] @relation("SupportNotes")
+
   // Reset password
   resetToken        String?   @unique @map("reset_token")
   resetTokenExpires DateTime? @map("reset_token_expires")
@@ -212,6 +215,7 @@ model Tenant {
   tenantPayments TenantPayment[]
   webhookLogs    WebhookLog[]
   leads          Lead[]
+  supportNotes   TenantSupportNote[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -219,7 +223,22 @@ model Tenant {
   @@index([slug])
   @@index([customDomain])
   @@index([status])
+  @@index([accountManagerId])
   @@map("tenants")
+}
+
+model TenantSupportNote {
+  id        String   @id @default(cuid())
+  tenantId  String   @map("tenant_id")
+  authorId  String   @map("author_id")
+  body      String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  author User   @relation("SupportNotes", fields: [authorId], references: [id])
+
+  @@index([tenantId, createdAt])
+  @@map("tenant_support_notes")
 }
 
 // ============================================================

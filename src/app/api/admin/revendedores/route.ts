@@ -25,6 +25,18 @@ export async function GET(request: Request) {
     where.status = status as Prisma.TenantWhereInput["status"]
   }
 
+  // Escopo: PMB_RESELLER_MGR ve so seus. SUPER_ADMIN ve todos.
+  // PMB_SALES nao entra aqui (via sidebar ja filtrado), mas se chegar, nao devolve nada.
+  if (ctx.role === "PMB_RESELLER_MGR") {
+    where.accountManagerId = ctx.userId
+  } else if (ctx.role === "PMB_SALES") {
+    where.id = "__none__"
+  } else {
+    const managerFilter = searchParams.get("manager")?.trim()
+    if (managerFilter === "unassigned") where.accountManagerId = null
+    else if (managerFilter) where.accountManagerId = managerFilter
+  }
+
   const [tenants, stats] = await Promise.all([
     prisma.tenant.findMany({
       where,
@@ -36,6 +48,8 @@ export async function GET(request: Request) {
         planValue: true,
         createdAt: true,
         owner: { select: { email: true } },
+        accountManagerId: true,
+        accountManager: { select: { id: true, name: true } },
         _count: { select: { students: true } },
       },
       orderBy: { createdAt: "desc" },
@@ -44,6 +58,7 @@ export async function GET(request: Request) {
     prisma.tenant.groupBy({
       by: ["status"],
       _count: { _all: true },
+      where: ctx.role === "PMB_RESELLER_MGR" ? { accountManagerId: ctx.userId } : undefined,
     }),
   ])
 
@@ -76,8 +91,11 @@ export async function GET(request: Request) {
         email: t.owner?.email ?? null,
         mrr: Number(t.planValue),
         students: t._count.students,
+        accountManagerId: t.accountManagerId,
+        accountManagerName: t.accountManager?.name ?? null,
         createdAt: t.createdAt.toISOString(),
       })),
+      role: ctx.role,
     },
   })
 }

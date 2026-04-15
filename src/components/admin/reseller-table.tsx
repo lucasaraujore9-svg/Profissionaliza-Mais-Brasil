@@ -12,10 +12,14 @@ export interface ResellerRow {
   students: number
   status: ResellerStatus
   createdAt: string
+  accountManagerId?: string | null
+  accountManagerName?: string | null
 }
 
 interface ResellerTableProps {
   rows: ResellerRow[]
+  showManager?: boolean
+  onAssign?: (tenantId: string) => void
 }
 
 const STATUS_STYLES: Record<ResellerStatus, string> = {
@@ -36,7 +40,7 @@ function formatMoney(v: number): string {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
 }
 
-export function ResellerTable({ rows }: ResellerTableProps) {
+export function ResellerTable({ rows, showManager = false, onAssign }: ResellerTableProps) {
   if (rows.length === 0) {
     return (
       <div className="rounded-2xl border border-dashed border-gray-300 bg-white p-10 text-center text-sm text-gray-500">
@@ -55,6 +59,7 @@ export function ResellerTable({ rows }: ResellerTableProps) {
               <th className="px-6 py-3 font-medium">MRR</th>
               <th className="px-6 py-3 font-medium">Alunos</th>
               <th className="px-6 py-3 font-medium">Status</th>
+              {showManager && <th className="px-6 py-3 font-medium">Gerente</th>}
               <th className="px-6 py-3 text-right font-medium">Ações</th>
             </tr>
           </thead>
@@ -78,8 +83,26 @@ export function ResellerTable({ rows }: ResellerTableProps) {
                     {STATUS_LABEL[r.status]}
                   </span>
                 </td>
+                {showManager && (
+                  <td className="px-6 py-3 text-xs">
+                    {r.accountManagerName ? (
+                      <span className="text-gray-700">{r.accountManagerName}</span>
+                    ) : (
+                      <span className="text-gray-400 italic">sem gerente</span>
+                    )}
+                  </td>
+                )}
                 <td className="px-6 py-3">
                   <div className="flex items-center justify-end gap-2">
+                    {onAssign && (
+                      <button
+                        type="button"
+                        onClick={() => onAssign(r.id)}
+                        className="rounded-md px-2 py-1 text-xs font-medium text-[var(--color-pmb-green)] hover:bg-[var(--color-pmb-lime-50)]"
+                      >
+                        Atribuir
+                      </button>
+                    )}
                     <Link
                       href={`/admin/revendedores/${r.id}`}
                       className="inline-flex h-8 w-8 items-center justify-center rounded-md text-gray-500 hover:bg-[var(--color-pmb-lime-50)] hover:text-[var(--color-pmb-green)]"
