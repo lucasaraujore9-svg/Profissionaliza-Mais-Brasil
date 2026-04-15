@@ -1,44 +1,184 @@
 "use client"
 
 import Link from "next/link"
-import { Button } from "@/components/ui/button"
+import { useState } from "react"
+import { Search, Menu, X, ChevronDown, User } from "lucide-react"
+
+const CATEGORIAS = [
+  "Beleza e Estética",
+  "Saúde e Bem-estar",
+  "Gastronomia",
+  "Eletricista e Hidráulica",
+  "Construção Civil",
+  "Administração",
+  "Pet e Veterinária",
+  "Automotivo",
+  "Moda e Costura",
+  "Tecnologia",
+  "Vendas",
+  "Idiomas",
+] as const
 
 export function NavbarMain() {
+  const [mobileOpen, setMobileOpen] = useState(false)
+
   return (
-    <header className="sticky top-0 z-40 border-b border-gray-200 bg-white/95 backdrop-blur">
-      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 md:px-6">
-        <Link href="/" className="text-xl font-bold text-gray-900">
-          Profissionaliza <span className="text-blue-600">Mais Brasil</span>
+    <header className="sticky top-0 z-40 bg-white shadow-[0_1px_0_0_rgba(2,89,24,0.08)]">
+      <div className="mx-auto flex h-[68px] max-w-[1280px] items-center gap-3 px-4 md:gap-5 md:px-6">
+        <Link href="/" className="flex items-center gap-2 shrink-0" aria-label="Início">
+          <span
+            aria-hidden
+            className="grid h-9 w-9 place-items-center rounded-lg bg-[var(--color-pmb-green)] text-white font-bold text-lg leading-none"
+          >
+            P+
+          </span>
+          <span className="hidden sm:flex flex-col leading-[1.05]">
+            <span className="text-[13px] font-bold text-[var(--color-pmb-green)] tracking-tight">
+              Profissionaliza
+            </span>
+            <span className="text-[13px] font-bold text-[var(--color-pmb-green)] tracking-tight">
+              Mais Brasil
+            </span>
+          </span>
         </Link>
 
-        <nav className="hidden md:flex items-center gap-6 text-sm text-gray-600">
-          <Link href="/#como-funciona" className="hover:text-gray-900 transition-colors">
-            Como Funciona
+        <button
+          type="button"
+          className="hidden lg:flex items-center gap-1.5 rounded-md px-2.5 py-2 text-[14px] font-medium text-[var(--color-pmb-green)] hover:bg-[var(--color-pmb-mist)] transition-colors"
+        >
+          <Menu className="h-4 w-4" aria-hidden />
+          Categorias
+          <ChevronDown className="h-3.5 w-3.5 opacity-60" aria-hidden />
+        </button>
+
+        <form
+          role="search"
+          action="/cursos"
+          className="flex-1 max-w-[560px] relative"
+        >
+          <label htmlFor="navbar-search" className="sr-only">
+            Buscar cursos
+          </label>
+          <Search
+            className="h-[18px] w-[18px] absolute left-4 top-1/2 -translate-y-1/2 text-[var(--color-pmb-green)]"
+            aria-hidden
+          />
+          <input
+            id="navbar-search"
+            name="q"
+            type="search"
+            placeholder="O que você quer aprender hoje?"
+            className="w-full h-11 pl-11 pr-4 rounded-full border border-[rgba(2,89,24,0.18)] bg-white text-[14px] text-[var(--color-pmb-green)] placeholder:text-[rgba(2,89,24,0.55)] focus:outline-none focus:border-[var(--color-pmb-green)] focus:ring-2 focus:ring-[var(--color-pmb-lime)]/60 transition"
+          />
+        </form>
+
+        <nav className="hidden lg:flex items-center gap-5 text-[14px] font-medium text-[var(--color-pmb-green)]">
+          <Link href="/#como-funciona" className="hover:underline underline-offset-4">
+            Como funciona
           </Link>
-          <Link href="/#cursos" className="hover:text-gray-900 transition-colors">
-            Cursos
-          </Link>
-          <Link href="/#planos" className="hover:text-gray-900 transition-colors">
-            Planos
-          </Link>
-          <Link href="/seja-revendedor" className="hover:text-gray-900 transition-colors">
-            Seja Revendedor
+          <Link href="/ajuda" className="hover:underline underline-offset-4">
+            Ajuda
           </Link>
         </nav>
 
-        <div className="flex items-center gap-3">
-          <Link href="/login">
-            <Button variant="ghost" size="sm">
-              Entrar
-            </Button>
-          </Link>
-          <Link href="/seja-revendedor">
-            <Button size="sm" className="bg-blue-600 text-white hover:bg-blue-700">
-              Começar Agora
-            </Button>
-          </Link>
+        <Link
+          href="/login"
+          className="hidden sm:inline-flex items-center gap-1.5 text-[14px] font-medium text-[var(--color-pmb-green)] hover:underline underline-offset-4"
+        >
+          <User className="h-4 w-4" aria-hidden />
+          Entrar
+        </Link>
+
+        <Link
+          href="/cursos"
+          className="hidden md:inline-flex items-center h-10 px-4 rounded-lg bg-[var(--color-pmb-gold)] text-[var(--color-pmb-green)] text-[14px] font-bold hover:bg-[var(--color-pmb-gold-600)] transition-colors whitespace-nowrap"
+        >
+          Quero estudar
+        </Link>
+
+        <button
+          type="button"
+          aria-label="Abrir menu"
+          aria-expanded={mobileOpen}
+          onClick={() => setMobileOpen((v) => !v)}
+          className="lg:hidden rounded-md p-2 text-[var(--color-pmb-green)] hover:bg-[var(--color-pmb-mist)]"
+        >
+          {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+        </button>
+      </div>
+
+      <div className="hidden lg:block border-t border-[rgba(2,89,24,0.08)]">
+        <div className="mx-auto max-w-[1280px] px-4 md:px-6">
+          <ul className="flex items-center gap-1 overflow-x-auto scrollbar-none py-1.5 -mx-1">
+            {CATEGORIAS.map((cat, i) => (
+              <li key={cat} className="shrink-0">
+                <Link
+                  href={`/cursos?categoria=${encodeURIComponent(cat)}`}
+                  className={`inline-block px-3 py-1.5 rounded-md text-[13px] font-medium whitespace-nowrap transition-colors ${
+                    i === 0
+                      ? "text-[var(--color-pmb-green)] bg-[var(--color-pmb-lime-50)]"
+                      : "text-[rgba(2,89,24,0.78)] hover:text-[var(--color-pmb-green)] hover:bg-[var(--color-pmb-mist)]"
+                  }`}
+                >
+                  {cat}
+                </Link>
+              </li>
+            ))}
+          </ul>
         </div>
       </div>
+
+      {mobileOpen && (
+        <div className="lg:hidden border-t border-[rgba(2,89,24,0.08)] bg-white">
+          <div className="mx-auto max-w-[1280px] px-4 py-3 flex flex-col gap-1">
+            <Link
+              href="/cursos"
+              onClick={() => setMobileOpen(false)}
+              className="inline-flex items-center h-11 px-4 rounded-lg bg-[var(--color-pmb-gold)] text-[var(--color-pmb-green)] text-[14px] font-bold justify-center mb-2"
+            >
+              Quero estudar
+            </Link>
+            <Link
+              href="/login"
+              onClick={() => setMobileOpen(false)}
+              className="py-2 text-[15px] font-medium text-[var(--color-pmb-green)]"
+            >
+              Entrar
+            </Link>
+            <Link
+              href="/#como-funciona"
+              onClick={() => setMobileOpen(false)}
+              className="py-2 text-[15px] font-medium text-[var(--color-pmb-green)]"
+            >
+              Como funciona
+            </Link>
+            <Link
+              href="/ajuda"
+              onClick={() => setMobileOpen(false)}
+              className="py-2 text-[15px] font-medium text-[var(--color-pmb-green)]"
+            >
+              Ajuda
+            </Link>
+            <div className="mt-2 pt-2 border-t border-[rgba(2,89,24,0.08)]">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-[rgba(2,89,24,0.55)] mb-1">
+                Categorias
+              </p>
+              <div className="flex flex-wrap gap-1.5 py-1">
+                {CATEGORIAS.map((cat) => (
+                  <Link
+                    key={cat}
+                    href={`/cursos?categoria=${encodeURIComponent(cat)}`}
+                    onClick={() => setMobileOpen(false)}
+                    className="inline-block px-2.5 py-1 rounded-md bg-[var(--color-pmb-mist)] text-[12px] text-[var(--color-pmb-green)]"
+                  >
+                    {cat}
+                  </Link>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </header>
   )
 }

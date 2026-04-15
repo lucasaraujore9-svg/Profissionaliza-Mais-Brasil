@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+
+<html class="scroll-smooth" lang="pt-BR"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Profissionaliza Mais Brasil | Cursos Profissionalizantes</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700;9..144,900&amp;family=Geist:wght@400;500;700&amp;family=Geist+Mono:wght@400;500&amp;family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        primary: "#025918",
+                        accent: "#F2B705",
+                        highlight: "#07B2D9",
+                        success: "#C0D904",
+                        editorial: "#8C3A27",
+                        canvas: "#FAFAF7"
+                    },
+                    fontFamily: {
+                        headline: ["Fraunces", "serif"],
+                        body: ["Geist", "sans-serif"],
+                        label: ["Geist Mono", "monospace"]
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body { background-color: #FAFAF7; color: #025918; font-family: 'Geist', sans-serif; }
+        .fraunces-title { font-family: 'Fraunces', serif; letter-spacing: -0.03em; line-height: 0.95; }
+        .editorial-rule { border-bottom: 1px solid rgba(2, 89, 24, 0.2); }
+        .mono-label { font-family: 'Geist Mono', monospace; font-size: 12px; text-transform: uppercase; letter-spacing: 0.15em; }
+    </style>
+</head>
+<body class="antialiased overflow-x-hidden">
+<!-- TopNavBar -->
+<header class="fixed top-0 w-full z-50 flex justify-between items-center px-6 py-4 max-w-[1440px] left-1/2 -translate-x-1/2 bg-[#FAFAF7] dark:bg-stone-950 border-b border-[#025918]/20">
+<div class="flex items-center gap-8">
+<a class="font-serif text-2xl font-bold text-[#025918] dark:text-emerald-500 italic" href="/">Profissionaliza Mais Brasil</a>
+<nav class="hidden md:flex gap-6">
+<a class="text-[#025918] dark:text-emerald-400 font-bold border-b-2 border-[#F2B705] transition-colors duration-300" href="#">Cursos</a>
+<a class="text-[#025918]/70 dark:text-stone-400 font-medium hover:text-[#07B2D9] transition-colors duration-300" href="#">Certificados</a>
+<a class="text-[#025918]/70 dark:text-stone-400 font-medium hover:text-[#07B2D9] transition-colors duration-300" href="#">Empresas</a>
+<a class="text-[#025918]/70 dark:text-stone-400 font-medium hover:text-[#07B2D9] transition-colors duration-300" href="#">Sobre</a>
+</nav>
+</div>
+<div class="flex items-center gap-4">
+<button class="mono-label text-primary hover:text-highlight transition-colors">Entrar</button>
+<span class="material-symbols-outlined text-primary cursor-pointer" data-icon="search">search</span>
+</div>
+</header>
+<main class="mt-20">
+<!-- Hero Section -->
+<section class="max-w-[1440px] mx-auto px-6 py-16 md:py-24 grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
+<div class="lg:col-span-7">
+<p class="mono-label mb-6 text-primary/60">Educação técnica de excelência</p>
+<h1 class="fraunces-title text-6xl md:text-8xl font-black mb-8">A profissão que você quer. No seu tempo. Com certificado.</h1>
+<div class="flex flex-col gap-4 max-w-2xl">
+<div class="flex bg-white border border-primary/20 p-2 shadow-sm">
+<input class="flex-grow border-none focus:ring-0 text-primary placeholder-primary/40 bg-transparent px-4" placeholder="Qual curso você procura hoje?" type="text"/>
+<button class="bg-primary text-white px-8 py-3 font-bold hover:bg-highlight transition-colors flex items-center gap-2">
+                            BUSCAR <span class="material-symbols-outlined text-sm" data-icon="arrow_forward">arrow_forward</span>
+</button>
+</div>
+<div class="flex flex-wrap gap-2 mt-2">
+<span class="px-3 py-1 bg-primary/5 text-primary mono-label text-[10px] cursor-pointer hover:bg-primary/10">ELETRICISTA</span>
+<span class="px-3 py-1 bg-primary/5 text-primary mono-label text-[10px] cursor-pointer hover:bg-primary/10">MANICURE</span>
+<span class="px-3 py-1 bg-primary/5 text-primary mono-label text-[10px] cursor-pointer hover:bg-primary/10">ESTÉTICA</span>
+<span class="px-3 py-1 bg-primary/5 text-primary mono-label text-[10px] cursor-pointer hover:bg-primary/10">MECÂNICA</span>
+<span class="px-3 py-1 bg-primary/5 text-primary mono-label text-[10px] cursor-pointer hover:bg-primary/10">GASTRONOMIA</span>
+</div>
+</div>
+</div>
+<div class="lg:col-span-5 relative">
+<div class="aspect-[4/5] overflow-hidden grayscale contrast-125">
+<img alt="Brazilian student studying at home" class="w-full h-full object-cover" data-alt="Candid portrait of a young Brazilian woman studying on a laptop at a wooden table in a brightly lit modern living room with plants" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCrupyFyliOjIRhNb-ezQzkKFwBFbd7rwJWXHhw3uiimYztffIRiemUPiqG6N3_EUyGAcHBmF2PzfcP6TN_REu6lPaYOAUXQLFYWzyi3Bro4z4FlFvY13AsVIXg2JP1onFXOzdofZKasDjk0nuuWfzkcbqD8LErUR4RIIG-CzsZHsaoWordyPIzF3_nlJseYFM78DOWDGCu-ATNssnMea3MZmlPbGFEogmcSinUX6kimCNzDY14Yyw5H8r-I5L1HNME0Tecse71j0Q"/>
+</div>
+<div class="absolute -bottom-6 -left-6 bg-accent text-primary p-6 max-w-[200px]">
+<span class="mono-label block mb-2">REVISTA EXAME</span>
+<p class="font-serif italic font-medium leading-tight">"A maior plataforma de ensino técnico democrático do Brasil."</p>
+</div>
+</div>
+</section>
+<div class="editorial-rule max-w-[1440px] mx-auto"></div>
+<!-- Áreas de Interesse -->
+<section class="max-w-[1440px] mx-auto px-6 py-20">
+<h2 class="mono-label mb-12 text-center opacity-60">Explore por categorias de atuação</h2>
+<div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-px bg-primary/10 border border-primary/10">
+<!-- Grid Cards -->
+<div class="bg-canvas p-8 flex flex-col items-center justify-center text-center group hover:bg-primary transition-colors cursor-pointer">
+<span class="material-symbols-outlined text-4xl mb-4 text-primary group-hover:text-white" data-icon="face_6">face_6</span>
+<p class="mono-label group-hover:text-white transition-colors">Beleza</p>
+</div>
+<div class="bg-canvas p-8 flex flex-col items-center justify-center text-center group hover:bg-primary transition-colors cursor-pointer">
+<span class="material-symbols-outlined text-4xl mb-4 text-primary group-hover:text-white" data-icon="medical_services">medical_services</span>
+<p class="mono-label group-hover:text-white transition-colors">Saúde</p>
+</div>
+<div class="bg-canvas p-8 flex flex-col items-center justify-center text-center group hover:bg-primary transition-colors cursor-pointer">
+<span class="material-symbols-outlined text-4xl mb-4 text-primary group-hover:text-white" data-icon="restaurant">restaurant</span>
+<p class="mono-label group-hover:text-white transition-colors">Gastronomia</p>
+</div>
+<div class="bg-canvas p-8 flex flex-col items-center justify-center text-center group hover:bg-primary transition-colors cursor-pointer">
+<span class="material-symbols-outlined text-4xl mb-4 text-primary group-hover:text-white" data-icon="electric_bolt">electric_bolt</span>
+<p class="mono-label group-hover:text-white transition-colors">Elétrica</p>
+</div>
+<div class="bg-canvas p-8 flex flex-col items-center justify-center text-center group hover:bg-primary transition-colors cursor-pointer">
+<span class="material-symbols-outlined text-4xl mb-4 text-primary group-hover:text-white" data-icon="construction">construction</span>
+<p class="mono-label group-hover:text-white transition-colors">Obra</p>
+</div>
+<div class="bg-canvas p-8 flex flex-col items-center justify-center text-center group hover:bg-primary transition-colors cursor-pointer">
+<span class="material-symbols-outlined text-4xl mb-4 text-primary group-hover:text-white" data-icon="laptop_mac">laptop_mac</span>
+<p class="mono-label group-hover:text-white transition-colors">TI</p>
+</div>
+<div class="bg-canvas p-8 flex flex-col items-center justify-center text-center group hover:bg-primary transition-colors cursor-pointer">
+<span class="material-symbols-outlined text-4xl mb-4 text-primary group-hover:text-white" data-icon="airport_shuttle">airport_shuttle</span>
+<p class="mono-label group-hover:text-white transition-colors">Logística</p>
+</div>
+<div class="bg-canvas p-8 flex flex-col items-center justify-center text-center group hover:bg-primary transition-colors cursor-pointer">
+<span class="material-symbols-outlined text-4xl mb-4 text-primary group-hover:text-white" data-icon="psychology">psychology</span>
+<p class="mono-label group-hover:text-white transition-colors">Gestão</p>
+</div>
+</div>
+</section>
+<div class="editorial-rule max-w-[1440px] mx-auto"></div>
+<!-- Cursos em Destaque -->
+<section class="max-w-[1440px] mx-auto px-6 py-20">
+<div class="flex justify-between items-end mb-12">
+<h2 class="fraunces-title text-5xl font-bold">Vitrine de Destaques</h2>
+<a class="mono-label underline underline-offset-8 hover:text-highlight" href="#">Ver todo o catálogo</a>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+<!-- Course Card 1 -->
+<div class="group border border-primary/10 p-4 hover:border-primary transition-colors bg-white">
+<div class="relative aspect-[4/3] mb-6 overflow-hidden">
+<img alt="Eletricista profissional" class="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all duration-500" data-alt="Professional electrician working on a complex electrical panel with copper wiring, sharp focus on hands, industrial setting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCB6vnyR5c72IneyxFu8KzDTYyMxu_mWP1v1cguQ45nnitBO7dbFB9s3MY-7W19-QH5MTPu5xdZWWKhpMRPnxz7RX4L9KqigmHFi6729Pt9BbMof4Njhto3dQ2-C_2wRGrROROHov8Y3zvx8A_xSKb4dyuv-njXMtRCW0D8N1CdaUVkjWF3dZ7qNGCMOy7ekF9DT9ij2NpPTFuZ1vpoUG7vd0WjCaHqax9ow0cMWs3xRLN0opmx-Nm2Q01BfK9N6Yv4dSj83lCgP_I"/>
+<span class="absolute top-4 left-4 bg-highlight text-white px-2 py-1 mono-label text-[10px]">NOVO</span>
+</div>
+<p class="mono-label text-primary/60 mb-2">Instalações Elétricas</p>
+<h3 class="fraunces-title text-2xl font-bold mb-4">Eletricista Predial e Residencial</h3>
+<div class="flex items-center justify-between mt-auto pt-4 border-t border-primary/5">
+<p class="mono-label text-lg">R$ 197<span class="text-xs">,00</span></p>
+<button class="bg-accent text-primary px-4 py-2 font-bold text-xs uppercase hover:bg-primary hover:text-white transition-colors">Ver curso</button>
+</div>
+</div>
+<!-- Course Card 2 -->
+<div class="group border border-primary/10 p-4 hover:border-primary transition-colors bg-white">
+<div class="relative aspect-[4/3] mb-6 overflow-hidden">
+<img alt="Barbeiro trabalhando" class="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all duration-500" data-alt="Close up of a skilled barber styling a client hair with professional scissors in a vintage barbershop with soft ambient lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBYooRO74gEaXmlXdhMpTruGM3y3HkUf7U-5WKLSnKAkJUrizqZ6uABrZLqWYMp5gny_IGGR-_ul4SxVsNahFL4ZkfVfudKKKshUGm2lfy1d0jrls1Fe-3_NBZArbkTxiN_xTGJ_0Q2lZbefks9s_9RWgXfts2JoommDU4R6eC5T1QOa0W__SZZsvgwr12CWRZLF5uI2Ub7H3oGUKA4ZwHb43aBfuf4TAMiKQATYtDencm5ApsFllRTpGFn3E9Dyb_L_pIFAyyXDAU"/>
+<span class="absolute top-4 left-4 bg-success text-primary px-2 py-1 mono-label text-[10px]">MAIS VENDIDO</span>
+</div>
+<p class="mono-label text-primary/60 mb-2">Estética Masculina</p>
+<h3 class="fraunces-title text-2xl font-bold mb-4">Barbearia Profissional Avançada</h3>
+<div class="flex items-center justify-between mt-auto pt-4 border-t border-primary/5">
+<p class="mono-label text-lg">R$ 149<span class="text-xs">,00</span></p>
+<button class="bg-accent text-primary px-4 py-2 font-bold text-xs uppercase hover:bg-primary hover:text-white transition-colors">Ver curso</button>
+</div>
+</div>
+<!-- Course Card 3 -->
+<div class="group border border-primary/10 p-4 hover:border-primary transition-colors bg-white">
+<div class="relative aspect-[4/3] mb-6 overflow-hidden">
+<img alt="Manicure em ação" class="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all duration-500" data-alt="Detail shot of a manicurist applying nail polish to a client hand in a modern, clean beauty salon with bright lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCAfwoHhnSvwgm68rzyHbUyOFVhW5hVr8kyM7AGZTSst1zfthDLVYBZtROa0Vkdeqo6k1dBpGu6o8Mefzo8F6ROcKRtNQGXuIbS02jC13kaOhkp_5a3-K30F7z34u311xBGD6Fmkq7pjZIjlPJ_klr3hf9VvyCGb-bcQ-GX4taCpYS98xj8tSbClOpHIANTT_6ltAsstAcD3EYTkbhYB0Hm4sYL0KkZLOGN4KM9rm_od192EsAffMh5r2w_om_gTdI-AVnExT3R7SY"/>
+<span class="absolute top-4 left-4 bg-success text-primary px-2 py-1 mono-label text-[10px]">MAIS VENDIDO</span>
+</div>
+<p class="mono-label text-primary/60 mb-2">Estética e Beleza</p>
+<h3 class="fraunces-title text-2xl font-bold mb-4">Manicure e Pedicure Profissional</h3>
+<div class="flex items-center justify-between mt-auto pt-4 border-t border-primary/5">
+<p class="mono-label text-lg">R$ 127<span class="text-xs">,00</span></p>
+<button class="bg-accent text-primary px-4 py-2 font-bold text-xs uppercase hover:bg-primary hover:text-white transition-colors">Ver curso</button>
+</div>
+</div>
+<!-- Course Card 4 -->
+<div class="group border border-primary/10 p-4 hover:border-primary transition-colors bg-white">
+<div class="relative aspect-[4/3] mb-6 overflow-hidden">
+<img alt="Cozinheiro profissional" class="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all duration-500" data-alt="Chef in professional white uniform plating a gourmet dish in a high-end restaurant kitchen with blurred background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCFfdcd3NQ1gK9GOk_mluFH65q6nInZtak5XBCwZihLUz8_HR6pKJwLOtYsT3v2MuJDCrWO_8F46rwdMq6QxV-tMpMTRmOvPIl7GWLEL8Zy21yDQFUfq4nqAMoAVAb6L4Xf5rk5V1pkvAONvq7EzSe4hxDywDfgJ0mADGcRpOrN8M2kYKCNuWEAL_gex9gKKyxk6V-IE9I3Xf_Z9mpb1IAH0a4AXtKVWkrnEV2z9SEZoBibJDCoc1DSdnWHGjSSUcE0lJxChRaN0Fo"/>
+<span class="absolute top-4 left-4 bg-highlight text-white px-2 py-1 mono-label text-[10px]">NOVO</span>
+</div>
+<p class="mono-label text-primary/60 mb-2">Gastronomia</p>
+<h3 class="fraunces-title text-2xl font-bold mb-4">Auxiliar de Cozinha Internacional</h3>
+<div class="flex items-center justify-between mt-auto pt-4 border-t border-primary/5">
+<p class="mono-label text-lg">R$ 185<span class="text-xs">,00</span></p>
+<button class="bg-accent text-primary px-4 py-2 font-bold text-xs uppercase hover:bg-primary hover:text-white transition-colors">Ver curso</button>
+</div>
+</div>
+</div>
+</section>
+<div class="editorial-rule max-w-[1440px] mx-auto"></div>
+<!-- Como Funciona -->
+<section class="max-w-[1440px] mx-auto px-6 py-24 bg-primary text-canvas">
+<h2 class="fraunces-title text-5xl font-bold mb-20 text-center">Transforme seu futuro em 3 passos</h2>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-16">
+<div class="relative">
+<span class="font-headline text-[120px] font-black opacity-10 absolute -top-20 -left-4">01</span>
+<span class="material-symbols-outlined text-accent text-5xl mb-6" data-icon="app_registration">app_registration</span>
+<h3 class="fraunces-title text-3xl font-bold mb-4">Matricule-se</h3>
+<p class="font-body opacity-80 leading-relaxed">Escolha sua área de atuação e tenha acesso imediato a todo o conteúdo técnico exclusivo preparado por especialistas.</p>
+</div>
+<div class="relative">
+<span class="font-headline text-[120px] font-black opacity-10 absolute -top-20 -left-4">02</span>
+<span class="material-symbols-outlined text-accent text-5xl mb-6" data-icon="auto_stories">auto_stories</span>
+<h3 class="fraunces-title text-3xl font-bold mb-4">Estude</h3>
+<p class="font-body opacity-80 leading-relaxed">Aprenda no seu ritmo, de qualquer lugar, com aulas práticas e teóricas pensadas para o mercado de trabalho brasileiro.</p>
+</div>
+<div class="relative">
+<span class="font-headline text-[120px] font-black opacity-10 absolute -top-20 -left-4">03</span>
+<span class="material-symbols-outlined text-accent text-5xl mb-6" data-icon="workspace_premium">workspace_premium</span>
+<h3 class="fraunces-title text-3xl font-bold mb-4">Certifique-se</h3>
+<p class="font-body opacity-80 leading-relaxed">Ao concluir, receba seu certificado válido em todo o território nacional e abra as portas para novas oportunidades.</p>
+</div>
+</div>
+</section>
+<!-- Depoimentos -->
+<section class="max-w-[1440px] mx-auto px-6 py-20">
+<h2 class="mono-label mb-16 text-center opacity-60">Histórias de Sucesso Reais</h2>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-12">
+<div class="space-y-6">
+<div class="w-20 h-20 overflow-hidden">
+<img alt="Ana Paula" class="w-full h-full object-cover grayscale" data-alt="Portrait of a young smiling Brazilian woman with dark hair against a neutral background, natural studio lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA0jnqI3Q9hYh4sXsKE5oXqEXgI7MNRVahyOpbSa5Et9qprNXTA7VRkcTEo5tfV31oyXUNqU4EvpZJ_5Ie-qKMtP80C37AKjOy1LNGcVORtsMJOS_nPWpC0Uw9yFtzd-t6xrCIDHM_o8JhkA8dxjLNxrJw6bYZx4SMjXPxMBRcruFV2OEnNsy08ErKUwSAkoPm5GALvsgXpriw--2oCa1jujOZI7NpFjDMPBix3k6Tc02s5V0l3NslDsapGwST8RanZMQSOBDXriMw"/>
+</div>
+<p class="text-editorial italic text-2xl font-headline leading-tight">
+                        “Sempre quis trabalhar com beleza, mas não tinha tempo para cursos presenciais. O Profissionaliza mudou minha vida e hoje tenho meu próprio salão.”
+                    </p>
+<div>
+<p class="font-bold">Ana Paula Santos</p>
+<p class="mono-label text-[10px] text-primary/60">Manicure Empreendedora</p>
+</div>
+</div>
+<div class="space-y-6">
+<div class="w-20 h-20 overflow-hidden">
+<img alt="Carlos R." class="w-full h-full object-cover grayscale" data-alt="Close up portrait of a Brazilian man with a friendly expression, outdoor setting with soft sunlight" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBtif9HKkPwgpEJGYxHhltDG77gIOXMc293CdMivAO08TevPKcLPnO0zmYWYQZYcrEvoPsGDJjsKv-EmZSoSI60amCtvxPwYD2wHRmN9sy541_MC79rDWrEfkXbkninC2bLme4OhkSfm_5dUtmKwN6S1GgoNNIjdNL-OMQmwuTBAs8qXWgunicsP2lwxWtiGULj1zU6KW4aDqWe9Il1VW8pAhlhI3wxNX-q3UxwRtxHYtL7lxJdtfvVbqYxApgENY53N6hCm6i9dE8"/>
+</div>
+<p class="text-editorial italic text-2xl font-headline leading-tight">
+                        “A qualidade das aulas de elétrica é superior a muito curso caro por aí. O certificado me ajudou a conseguir minha primeira vaga em uma grande construtora.”
+                    </p>
+<div>
+<p class="font-bold">Carlos Ribeiro</p>
+<p class="mono-label text-[10px] text-primary/60">Eletricista Predial</p>
+</div>
+</div>
+<div class="space-y-6">
+<div class="w-20 h-20 overflow-hidden">
+<img alt="Juliana M." class="w-full h-full object-cover grayscale" data-alt="Confident Brazilian business woman portrait, indoor office setting with bokeh background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAmDMV8zCbqyB7qRdRUy1V3aV08-z1CO-VhluA1H1YoIVeWjewhZD-9DvlXgys0Fo41ju2WWf-nnqH0r-Q2xKz6cvqt2N-Sy4uD-itd3q_Nsxqtv-H8c-NAW8Skr1oNa0kRCYJo0qOLpSPpZboSvg1c7f1Sm1JHmzrtWqvTJSPowwUHUVntGa1NhWDmBd7NcDva6tkDulaEH_Kq3-o8Ofp8sDH3hYRzsyTh1I86VmLhP5RoRpa3vVy1R9kw7m1t0KMxuXWTTUdolUw"/>
+</div>
+<p class="text-editorial italic text-2xl font-headline leading-tight">
+                        “O portal é muito intuitivo. Consegui estudar nos meus intervalos e me profissionalizar em Auxiliar Administrativo em apenas 3 meses.”
+                    </p>
+<div>
+<p class="font-bold">Juliana Mendes</p>
+<p class="mono-label text-[10px] text-primary/60">Assistente Administrativa</p>
+</div>
+</div>
+</div>
+</section>
+<div class="editorial-rule max-w-[1440px] mx-auto"></div>
+<!-- Final CTA + FAQ -->
+<section class="max-w-[1440px] mx-auto grid grid-cols-1 md:grid-cols-2">
+<div class="bg-primary text-canvas p-12 md:p-24 flex flex-col justify-center items-start">
+<h2 class="fraunces-title text-6xl font-bold mb-8">Pronto para começar sua jornada?</h2>
+<p class="font-body text-xl opacity-80 mb-12 max-w-md">Junte-se a mais de 150 mil alunos que já transformaram suas carreiras com nossos cursos.</p>
+<button class="bg-accent text-primary px-10 py-5 font-bold text-lg uppercase hover:bg-highlight hover:text-white transition-all">Ver todos os cursos</button>
+</div>
+<div class="p-12 md:p-24 bg-white border-l border-primary/10">
+<p class="mono-label mb-8 text-primary/60">Dúvidas Frequentes</p>
+<div class="space-y-8">
+<div class="group border-b border-primary/10 pb-6 cursor-pointer">
+<div class="flex justify-between items-center mb-4">
+<h4 class="fraunces-title text-xl font-bold">O certificado é reconhecido?</h4>
+<span class="material-symbols-outlined text-primary group-hover:rotate-45 transition-transform" data-icon="add">add</span>
+</div>
+<p class="font-body text-primary/70 text-sm hidden group-hover:block transition-all">Sim, nossos certificados são emitidos em conformidade com a Lei nº 9.394, sendo válidos em todo o Brasil para comprovação de capacitação profissional.</p>
+</div>
+<div class="group border-b border-primary/10 pb-6 cursor-pointer">
+<div class="flex justify-between items-center mb-4">
+<h4 class="fraunces-title text-xl font-bold">Posso parcelar o valor do curso?</h4>
+<span class="material-symbols-outlined text-primary group-hover:rotate-45 transition-transform" data-icon="add">add</span>
+</div>
+<p class="font-body text-primary/70 text-sm hidden group-hover:block transition-all">Com certeza. Oferecemos parcelamento em até 12x no cartão de crédito, além de opções via PIX e boleto bancário.</p>
+</div>
+<div class="group border-b border-primary/10 pb-6 cursor-pointer">
+<div class="flex justify-between items-center mb-4">
+<h4 class="fraunces-title text-xl font-bold">Quanto tempo dura cada curso?</h4>
+<span class="material-symbols-outlined text-primary group-hover:rotate-45 transition-transform" data-icon="add">add</span>
+</div>
+<p class="font-body text-primary/70 text-sm hidden group-hover:block transition-all">A carga horária varia entre 40h e 280h, dependendo da especialidade. Você tem acesso vitalício para concluir no seu próprio tempo.</p>
+</div>
+</div>
+<div class="mt-12 flex items-center gap-4">
+<span class="material-symbols-outlined text-highlight" data-icon="support_agent">support_agent</span>
+<div>
+<p class="font-bold text-sm">Ainda tem dúvidas?</p>
+<p class="text-sm text-primary/60 underline cursor-pointer">Fale com um consultor pedagógico</p>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- Footer -->
+<footer class="w-full py-16 px-8 grid grid-cols-1 md:grid-cols-4 gap-12 max-w-[1440px] mx-auto border-t-2 border-[#025918] bg-[#FAFAF7] dark:bg-stone-950 mt-12">
+<div class="col-span-1 md:col-span-1">
+<a class="font-serif text-3xl font-black text-[#025918] dark:text-emerald-500 mb-6 block" href="/">Profissionaliza Mais Brasil</a>
+<p class="mono-label text-[10px] text-[#025918]/60 leading-relaxed">
+                © 2024 Profissionaliza Mais Brasil. O maior portal de ensino técnico do país. CNPJ: 00.000.000/0001-00
+            </p>
+</div>
+<div class="space-y-4">
+<h4 class="fraunces-title text-xl font-bold">Plataforma</h4>
+<div class="flex flex-col gap-2">
+<a class="font-body text-[#8C3A27] dark:text-stone-400 hover:underline decoration-[#07B2D9] underline-offset-4" href="#">Cursos Online</a>
+<a class="font-body text-[#8C3A27] dark:text-stone-400 hover:underline decoration-[#07B2D9] underline-offset-4" href="#">Certificados</a>
+<a class="font-body text-[#8C3A27] dark:text-stone-400 hover:underline decoration-[#07B2D9] underline-offset-4" href="#">Área do Aluno</a>
+</div>
+</div>
+<div class="space-y-4">
+<h4 class="fraunces-title text-xl font-bold">Institucional</h4>
+<div class="flex flex-col gap-2">
+<a class="font-body text-[#8C3A27] dark:text-stone-400 hover:underline decoration-[#07B2D9] underline-offset-4" href="#">Trabalhe Conosco</a>
+<a class="font-body text-[#8C3A27] dark:text-stone-400 hover:underline decoration-[#07B2D9] underline-offset-4" href="#">MEC e Certificações</a>
+<a class="font-body text-[#8C3A27] dark:text-stone-400 hover:underline decoration-[#07B2D9] underline-offset-4" href="#">Suporte ao Aluno</a>
+</div>
+</div>
+<div class="space-y-4">
+<h4 class="fraunces-title text-xl font-bold">Legal</h4>
+<div class="flex flex-col gap-2">
+<a class="font-body text-[#8C3A27] dark:text-stone-400 hover:underline decoration-[#07B2D9] underline-offset-4" href="#">Termos de Uso</a>
+<a class="font-body text-[#8C3A27] dark:text-stone-400 hover:underline decoration-[#07B2D9] underline-offset-4" href="#">Privacidade</a>
+</div>
+<div class="pt-6 flex gap-4">
+<span class="material-symbols-outlined text-primary cursor-pointer hover:text-highlight" data-icon="facebook">social_leaderboard</span>
+<span class="material-symbols-outlined text-primary cursor-pointer hover:text-highlight" data-icon="photo_camera">photo_camera</span>
+<span class="material-symbols-outlined text-primary cursor-pointer hover:text-highlight" data-icon="play_circle">play_circle</span>
+</div>
+</div>
+</footer>
+</body></html>

@@ -13,6 +13,47 @@ Plataforma SaaS multi-tenant de revenda de cursos profissionalizantes online.
 
 Nos NAO somos uma plataforma de cursos. Os alunos assistem aulas na Escola Avancada. Nos construimos a camada comercial, vitrine, gestao e cobranca.
 
+## Progresso Atual (2026-04-14)
+
+### O que ja esta implementado
+
+**Fundacao (020-029):** Prisma migrado + seed · middleware multi-tenant · NextAuth v5 (credentials, role ADMIN/RESELLER) · layouts auth/main/admin/painel/loja · clients EA/Asaas/MP · crypto AES-256-GCM · Redis Upstash · Resend + React Email.
+
+**Prototipos (001-019):** UIs hardcoded de todas as 19 paginas principais.
+
+**Behaviors (030-049):** landing, auth, checkout revendedor, vitrine, curso, checkout aluno, confirmacao, dashboard/cursos/alunos/cupons/financeiro revendedor, dominio (Vercel API), vitrine config (Supabase Storage), configuracoes, onboarding, dashboards + financeiro + analytics + config do admin.
+
+**Webhooks/Cron (050-053):** webhook Asaas (PAYMENT_RECEIVED/OVERDUE ativa/suspende tenant) · webhook MP (matricula automatica na EA) · cron diario 6h sync cursos (vercel.json) · auto-block/unblock de alunos via `src/lib/auto-block.ts`.
+
+### Validacao executada em 2026-04-14
+
+`npm install`, `npx prisma generate`, `npx tsc --noEmit`, `npm run lint`, `npm run build` — **todos verdes** apos fixes:
+- `src/components/admin/analytics-charts.tsx` — mutacao `let offset` durante render trocada por `reduce` imutavel (React 19 `react-hooks/immutability`)
+- `src/components/painel/course-list-wrapper.tsx:35` — `setState` dentro de `useEffect` com `eslint-disable-next-line` (padrao legitimo de data fetching)
+- `src/lib/redis.ts` — nao lanca mais em producao se env vazia (retorna null, consumers ja tratam)
+- `src/app/(auth)/login/page.tsx` — `<Suspense>` em volta do `LoginForm` (usa `useSearchParams`)
+- `src/lib/auth.ts:13-14` — adicionado `secret: process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET` + `trustHost: true` (NextAuth v5 estava com `MissingSecret`)
+- `.env.local` — preenchido `NEXTAUTH_SECRET`, adicionado `AUTH_SECRET`/`AUTH_URL`/`AUTH_TRUST_HOST=true`, porta do dev ajustada para `3002` (3000 estava ocupada por outro projeto)
+
+### Teste de auth end-to-end (2026-04-14)
+
+- Login admin (`admin@pmb.com.br` / `admin123`): **OK** — 302 -> /admin, session emitida com `role=ADMIN`
+- Login revendedor (`revendedor@teste.com` / `teste123`): **OK** — 302 -> /painel, session com `role=RESELLER` e `tenantId`
+- Credencial invalida: **OK** — 302 -> `/login?error=CredentialsSignin`, sem cookie
+- `GET /api/auth/session` persiste corretamente
+
+### Bugs conhecidos (pendentes)
+
+- **`/admin` sem guard de autorizacao** — anonimos e revendedores conseguem `GET /admin` com 200. `/painel` bloqueia corretamente (redireciona para `/login`). Precisa adicionar verificacao de `session.user.role === "ADMIN"` no `src/app/admin/layout.tsx` (ou no middleware).
+- **2 warnings de lint nao bloqueantes:** `prisma/seed.ts:13` (`admin` nao usado) e `src/lib/crypto.ts:5` (`TAG_LENGTH` nao usado).
+- **Middleware file convention deprecado** no Next 16 (usar `proxy` em vez de `middleware`) — nao bloqueia mas precisa migrar.
+
+### Proximas etapas
+
+1. **Issue 054** — Home page redesign via Google Stitch (design premium brasileiro, palette verde/ouro/cyan, estrutura editorial em 8 secoes). MCP do Stitch ja configurado em `~/.claude/mcp.json` com chave correta. **Aguarda reinicio do Claude Code** para o MCP carregar.
+2. **Fix `/admin` guard** — adicionar verificacao de role ADMIN no layout.
+3. **Executar issue 054** — gerar design no Stitch, aprovar, portar para `src/app/(main)/page.tsx` + componentes em `src/components/main/home/`.
+
 ## Stack
 
 - **Next.js 15+** (App Router) + **TypeScript**
@@ -28,7 +69,7 @@ Nos NAO somos uma plataforma de cursos. Os alunos assistem aulas na Escola Avanc
 Este projeto segue um workflow estruturado. **NUNCA comece a codificar sem seguir estes passos.**
 
 1. **SPEC** — Toda funcionalidade esta documentada em `docs/SPEC.md` (paginas, componentes, comportamentos)
-2. **BREAK** — A SPEC foi quebrada em 53 issues individuais em `issues/` (proto → infra → behavior → integration)
+2. **BREAK** — A SPEC foi quebrada em 54 issues individuais em `issues/` (proto → infra → behavior → integration → design)
 3. **PLAN** — Antes de codificar, use `/plan NNN` para ler a issue, docs de referencia e planejar
 4. **EXECUTE** — Use `/execute NNN` para implementar seguindo o plano
 
@@ -49,6 +90,7 @@ Este projeto segue um workflow estruturado. **NUNCA comece a codificar sem segui
 2. **Prototipos (001-019)**: UI com dados hardcoded, foco em design system
 3. **Comportamentos (030-049)**: Conectar UIs a dados reais
 4. **Webhooks/Cron (050-053)**: Processamento async
+5. **Design premium (054+)**: Redesign de paginas publicas via Google Stitch
 
 ## Documentacao Essencial (LEIA antes de codificar)
 

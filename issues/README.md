@@ -1,6 +1,6 @@
 # Profissionaliza Mais Brasil — Issues Breakdown
 
-This folder contains 53 executable issues breaking down the complete project SPEC into focused, single-session tasks.
+This folder contains 54 executable issues breaking down the complete project SPEC into focused, single-session tasks.
 
 ## Organization
 
@@ -39,6 +39,11 @@ Webhook endpoints and cron jobs for async processing.
 - **051**: Mercado Pago webhook (auto-enrollment, EA API calls)
 - **052**: Cron sync (daily 6am, EA courses/listar)
 - **053**: Auto block/unblock (inadimplência logic)
+
+### Design Premium (054+) — Stitch-Driven Redesigns
+Redesenhos premium via Google Stitch MCP, com direção editorial e palette BR.
+
+- **054**: Home page premium (hero split, bento grid, zig-zag, FAQ editorial)
 
 ## Workflow
 
@@ -97,10 +102,11 @@ Each issue follows this format:
 
 ## Stats
 
-- **53 total issues**
+- **54 total issues**
 - **19 prototypes** (UI)
 - **10 infrastructure** (systems)
 - **20 behavior** (features)
 - **4 webhooks/cron** (async)
+- **1 design redesign** (Stitch-driven)
 
 All issues are independent or clearly ordered by dependencies. Ready to execute\!
