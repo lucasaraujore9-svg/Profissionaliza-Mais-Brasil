@@ -13,11 +13,11 @@ Plataforma SaaS multi-tenant de revenda de cursos profissionalizantes online.
 
 Nos NAO somos uma plataforma de cursos. Os alunos assistem aulas na Escola Avancada. Nos construimos a camada comercial, vitrine, gestao e cobranca.
 
-## Progresso Atual (2026-04-14)
+## Progresso Atual (2026-04-15)
 
 ### O que ja esta implementado
 
-**Fundacao (020-029):** Prisma migrado + seed · middleware multi-tenant · NextAuth v5 (credentials, role ADMIN/RESELLER) · layouts auth/main/admin/painel/loja · clients EA/Asaas/MP · crypto AES-256-GCM · Redis Upstash · Resend + React Email.
+**Fundacao (020-029):** Prisma migrado + seed · middleware multi-tenant · NextAuth v5 (credentials, roles SUPER_ADMIN/PMB_SALES/PMB_RESELLER_MGR/RESELLER) · layouts auth/main/admin/painel/loja · clients EA/Asaas/MP · crypto AES-256-GCM · Redis Upstash · Resend + React Email.
 
 **Prototipos (001-019):** UIs hardcoded de todas as 19 paginas principais.
 
@@ -25,34 +25,42 @@ Nos NAO somos uma plataforma de cursos. Os alunos assistem aulas na Escola Avanc
 
 **Webhooks/Cron (050-053):** webhook Asaas (PAYMENT_RECEIVED/OVERDUE ativa/suspende tenant) · webhook MP (matricula automatica na EA) · cron diario 6h sync cursos (vercel.json) · auto-block/unblock de alunos via `src/lib/auto-block.ts`.
 
-### Validacao executada em 2026-04-14
+**Home vitrine (054):** home udemy-style com logo oficial + navbar/footer.
 
-`npm install`, `npx prisma generate`, `npx tsc --noEmit`, `npm run lint`, `npm run build` — **todos verdes** apos fixes:
-- `src/components/admin/analytics-charts.tsx` — mutacao `let offset` durante render trocada por `reduce` imutavel (React 19 `react-hooks/immutability`)
-- `src/components/painel/course-list-wrapper.tsx:35` — `setState` dentro de `useEffect` com `eslint-disable-next-line` (padrao legitimo de data fetching)
-- `src/lib/redis.ts` — nao lanca mais em producao se env vazia (retorna null, consumers ja tratam)
-- `src/app/(auth)/login/page.tsx` — `<Suspense>` em volta do `LoginForm` (usa `useSearchParams`)
-- `src/lib/auth.ts:13-14` — adicionado `secret: process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET` + `trustHost: true` (NextAuth v5 estava com `MissingSecret`)
-- `.env.local` — preenchido `NEXTAUTH_SECRET`, adicionado `AUTH_SECRET`/`AUTH_URL`/`AUTH_TRUST_HOST=true`, porta do dev ajustada para `3002` (3000 estava ocupada por outro projeto)
+**Expansao de roles e vitrine PMB (061-067):**
+- UserRole expandido para SUPER_ADMIN, PMB_SALES, PMB_RESELLER_MGR, RESELLER (+ consultor via TenantMember role="consultant" com `maxDiscount`)
+- Guards em `src/lib/auth/guards.ts` no padrao `{ ok, session } | { ok, response }`
+- /admin/equipe (SUPER_ADMIN) — CRUD de usuarios PMB + atribuicao de tenants a gerentes
+- /admin/revendedores (+ PMB_RESELLER_MGR) — lista filtrada por `accountManagerId`, aba Asaas, notas de suporte
+- /admin/vendas/* (SUPER_ADMIN, PMB_SALES) — dashboard + nova venda (form single-page) + cupons (cap 50% para PMB_SALES) + alunos PMB
+- /painel/equipe (RESELLER owner) — convida consultores, define `maxDiscount`
+- **Vitrine PMB**: `Enrollment/Payment/Coupon.tenantId = null`; `Student.tenantId` aponta para tenant placeholder slug `__pmb__` criado lazy por `src/lib/pmb-tenant.ts`
+- Env PMB: `PMB_MP_ACCESS_TOKEN` (plain), `PMB_EA_VENDEDOR_ID`, `PMB_EA_POLO`. Helpers em `src/lib/pmb-config.ts`
+- Webhook MP (`src/lib/mercadopago/process.ts`) com branch `isPmbVitrine` — usa pmbContext sintetico, token plain, nao atualiza WebhookLog.tenantId
+- Seed reescrito (`prisma/seed.ts`): super@/admin@ legado/vendas@/gerente@/owner1/owner2/consultor1, tenants revenda1+revenda2, 5 cursos (2 destaqueHome), 3 cupons (SUPER50, VENDAS30, CONSULT10). Cupons via findFirst+create (nao upsert) porque `@@unique([tenantId,code])` nao dedupe com NULL
+- QA manual documentado em `docs/qa/PERFIS.md`
 
-### Teste de auth end-to-end (2026-04-14)
+### Validacao executada em 2026-04-15
 
-- Login admin (`admin@pmb.com.br` / `admin123`): **OK** — 302 -> /admin, session emitida com `role=ADMIN`
-- Login revendedor (`revendedor@teste.com` / `teste123`): **OK** — 302 -> /painel, session com `role=RESELLER` e `tenantId`
-- Credencial invalida: **OK** — 302 -> `/login?error=CredentialsSignin`, sem cookie
-- `GET /api/auth/session` persiste corretamente
+`npm install`, `npx prisma generate`, `npx tsc --noEmit`, `npm run build` — **todos verdes**. Fixes aplicados:
+- Button shadcn nao suporta `asChild` — trocado por `<Link className="inline-flex ...">` direto em `src/app/admin/vendas/page.tsx`
+- `MPPreferencePayer.email` exige string nao-nula — `src/app/api/admin/vendas/route.ts` valida `student.email` antes (400 se ausente)
+- Coupon seed usa `findFirst`+`create` em vez de `upsert` (NULL em composite unique)
+
+### Credenciais pos-seed (2026-04-15)
+
+SUPER_ADMIN primario agora e `super@pmb.com.br` / `super123`. Matriz completa em `docs/qa/PERFIS.md`.
 
 ### Bugs conhecidos (pendentes)
 
-- **`/admin` sem guard de autorizacao** — anonimos e revendedores conseguem `GET /admin` com 200. `/painel` bloqueia corretamente (redireciona para `/login`). Precisa adicionar verificacao de `session.user.role === "ADMIN"` no `src/app/admin/layout.tsx` (ou no middleware).
-- **2 warnings de lint nao bloqueantes:** `prisma/seed.ts:13` (`admin` nao usado) e `src/lib/crypto.ts:5` (`TAG_LENGTH` nao usado).
-- **Middleware file convention deprecado** no Next 16 (usar `proxy` em vez de `middleware`) — nao bloqueia mas precisa migrar.
+- **Middleware file convention deprecado** no Next 16 (usar `proxy` em vez de `middleware`).
+- Consultor (TenantMember) nao popula `session.user.tenantId` no JWT — cap de desconto e validado server-side via lookup de TenantMember na API.
 
 ### Proximas etapas
 
-1. **Issue 054** — Home page redesign via Google Stitch (design premium brasileiro, palette verde/ouro/cyan, estrutura editorial em 8 secoes). MCP do Stitch ja configurado em `~/.claude/mcp.json` com chave correta. **Aguarda reinicio do Claude Code** para o MCP carregar.
-2. **Fix `/admin` guard** — adicionar verificacao de role ADMIN no layout.
-3. **Executar issue 054** — gerar design no Stitch, aprovar, portar para `src/app/(main)/page.tsx` + componentes em `src/components/main/home/`.
+1. **Rodar `npx prisma db seed`** contra o banco atual para criar as novas credenciais.
+2. **Executar checklist `docs/qa/PERFIS.md`** — validar fronteiras end-to-end por papel.
+3. **Rollout design system (055-060)** — aplicar estilo PMB em todo o app (issues ja abertas).
 
 ## Stack
 
