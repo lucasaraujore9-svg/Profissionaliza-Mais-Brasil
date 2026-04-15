@@ -80,6 +80,25 @@ export async function POST(request: Request) {
 
   const code = parsed.data.code.toUpperCase()
 
+  // Cap de desconto para consultor (TenantMember com maxDiscount)
+  const membership = await prisma.tenantMember.findUnique({
+    where: { tenantId_userId: { tenantId: ctx.tenantId, userId: ctx.userId } },
+    select: { role: true, maxDiscount: true, status: true },
+  })
+  if (
+    membership &&
+    membership.role === "consultant" &&
+    membership.status === "ATIVO" &&
+    membership.maxDiscount !== null &&
+    parsed.data.discountType === "PERCENTAGE" &&
+    parsed.data.discountValue > membership.maxDiscount
+  ) {
+    return NextResponse.json(
+      { error: `Seu cap de desconto é ${membership.maxDiscount}%` },
+      { status: 403 },
+    )
+  }
+
   const existing = await prisma.coupon.findUnique({
     where: { tenantId_code: { tenantId: ctx.tenantId, code } },
     select: { id: true },
@@ -101,6 +120,8 @@ export async function POST(request: Request) {
       validFrom: new Date(parsed.data.validFrom),
       validUntil: new Date(parsed.data.validUntil),
       isActive: true,
+      createdByUserId: ctx.userId,
+      createdByRole: "RESELLER",
     },
   })
 

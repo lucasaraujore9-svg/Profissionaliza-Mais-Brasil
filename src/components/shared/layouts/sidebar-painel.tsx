@@ -12,27 +12,36 @@ import {
   Globe,
   Palette,
   Settings,
+  UserCog,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
-const NAV_ITEMS = [
+const ALL_ITEMS: {
+  href: string
+  label: string
+  icon: typeof LayoutDashboard
+  ownerOnly?: boolean
+}[] = [
   { href: "/painel", label: "Dashboard", icon: LayoutDashboard },
   { href: "/painel/cursos", label: "Cursos", icon: GraduationCap },
   { href: "/painel/alunos", label: "Alunos", icon: Users },
   { href: "/painel/cupons", label: "Cupons", icon: Tag },
   { href: "/painel/financeiro", label: "Financeiro", icon: CreditCard },
-  { href: "/painel/dominio", label: "Domínio", icon: Globe },
-  { href: "/painel/vitrine", label: "Vitrine", icon: Palette },
-  { href: "/painel/configuracoes", label: "Configurações", icon: Settings },
+  { href: "/painel/equipe", label: "Equipe", icon: UserCog, ownerOnly: true },
+  { href: "/painel/dominio", label: "Domínio", icon: Globe, ownerOnly: true },
+  { href: "/painel/vitrine", label: "Vitrine", icon: Palette, ownerOnly: true },
+  { href: "/painel/configuracoes", label: "Configurações", icon: Settings, ownerOnly: true },
 ]
 
 interface SidebarPainelProps {
   tenantName?: string
   userEmail?: string
+  isOwner?: boolean
 }
 
-export function SidebarPainel({ tenantName, userEmail }: SidebarPainelProps) {
+export function SidebarPainel({ tenantName, userEmail, isOwner = true }: SidebarPainelProps) {
   const pathname = usePathname()
+  const navItems = ALL_ITEMS.filter((item) => (item.ownerOnly ? isOwner : true))
 
   return (
     <aside className="flex h-full w-60 flex-col bg-[var(--color-pmb-green-700)] text-white lg:flex">
@@ -57,7 +66,7 @@ export function SidebarPainel({ tenantName, userEmail }: SidebarPainelProps) {
       </div>
 
       <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
-        {NAV_ITEMS.map((item) => {
+        {navItems.map((item) => {
           const isActive =
             pathname === item.href ||
             (item.href !== "/painel" && pathname.startsWith(item.href))
