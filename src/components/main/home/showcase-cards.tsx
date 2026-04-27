@@ -1,27 +1,18 @@
 import { CourseThumb } from "./course-thumb"
 import { Star } from "lucide-react"
+import type { ShowcaseCard } from "@/lib/catalog/home"
 
-function CardPreview({
-  categoria,
-  titulo,
-  preco,
-  de,
-  selo,
-  accent,
-  rating,
-}: {
-  categoria: string
-  titulo: string
-  preco: string
-  de: string
-  selo: "novo" | "mais-vendido"
-  accent: "gold" | "cyan" | "lime"
-  rating: string
-}) {
+function CardPreview({ card }: { card: ShowcaseCard }) {
+  const { categoria, titulo, preco, imageUrl, selo, accent, rating } = card
   return (
     <div className="w-[300px] rounded-xl bg-white text-[var(--color-pmb-green)] shadow-[0_20px_40px_-18px_rgba(0,0,0,0.55)] overflow-hidden">
       <div className="relative">
-        <CourseThumb categoria={categoria} accent={accent} />
+        <CourseThumb
+          categoria={categoria}
+          accent={accent}
+          imageUrl={imageUrl}
+          titulo={titulo}
+        />
         <span
           className={`absolute left-3 top-3 rounded-full px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide ${
             selo === "novo"
@@ -36,16 +27,13 @@ function CardPreview({
         <p className="text-[11px] font-bold uppercase tracking-wider text-[rgba(2,89,24,0.6)]">
           {categoria}
         </p>
-        <h3 className="mt-1 text-[15px] font-bold leading-tight">{titulo}</h3>
+        <h3 className="mt-1 line-clamp-2 text-[15px] font-bold leading-tight">{titulo}</h3>
         <div className="mt-2 flex items-center gap-1.5 text-[12px]">
           <Star className="h-3.5 w-3.5 fill-[var(--color-pmb-gold)] text-[var(--color-pmb-gold)]" />
           <span className="font-bold">{rating}</span>
           <span className="text-[rgba(2,89,24,0.6)]">(2.340 alunos)</span>
         </div>
         <div className="mt-3 flex items-baseline gap-2">
-          <span className="text-[11px] line-through text-[rgba(2,89,24,0.5)]">
-            {de}
-          </span>
           <span className="text-[20px] font-bold text-[var(--color-pmb-green)]">
             {preco}
           </span>
@@ -58,52 +46,60 @@ function CardPreview({
   )
 }
 
-export function ShowcaseCards() {
+const FALLBACK: ShowcaseCard[] = [
+  {
+    slug: "manicure-pedicure",
+    categoria: "Beleza",
+    titulo: "Manicure e Pedicure Profissional",
+    preco: "R$ 47,00",
+    imageUrl: null,
+    selo: "mais-vendido",
+    accent: "gold",
+    rating: "4.9",
+  },
+  {
+    slug: "eletricista",
+    categoria: "Elétrica",
+    titulo: "Eletricista Predial e Industrial",
+    preco: "R$ 97,00",
+    imageUrl: null,
+    selo: "mais-vendido",
+    accent: "cyan",
+    rating: "4.8",
+  },
+  {
+    slug: "confeitaria",
+    categoria: "Gastronomia",
+    titulo: "Confeitaria do Zero ao Profissional",
+    preco: "R$ 89,00",
+    imageUrl: null,
+    selo: "novo",
+    accent: "lime",
+    rating: "4.9",
+  },
+]
+
+export function ShowcaseCards({ cards }: { cards?: ShowcaseCard[] }) {
+  const list = cards && cards.length === 3 ? cards : FALLBACK
+
   return (
     <div className="relative h-[520px] w-full">
-      <div
-        aria-hidden
-        className="absolute right-[-40px] top-[40px] rotate-[-6deg]"
-      >
-        <CardPreview
-          categoria="Beleza"
-          titulo="Manicure e Pedicure Profissional"
-          de="R$ 297,00"
-          preco="R$ 47,00"
-          selo="mais-vendido"
-          accent="gold"
-          rating="4.9"
-        />
+      <div aria-hidden className="absolute right-[-40px] top-[40px] rotate-[-6deg]">
+        <CardPreview card={list[0]} />
       </div>
 
       <div
         aria-hidden
         className="absolute left-[-20px] top-[170px] rotate-[4deg] z-10"
       >
-        <CardPreview
-          categoria="Elétrica"
-          titulo="Eletricista Predial e Industrial"
-          de="R$ 397,00"
-          preco="R$ 97,00"
-          selo="mais-vendido"
-          accent="cyan"
-          rating="4.8"
-        />
+        <CardPreview card={list[1]} />
       </div>
 
       <div
         aria-hidden
         className="absolute right-[10px] bottom-[0px] rotate-[-2deg] z-20"
       >
-        <CardPreview
-          categoria="Gastronomia"
-          titulo="Confeitaria do Zero ao Profissional"
-          de="R$ 347,00"
-          preco="R$ 89,00"
-          selo="novo"
-          accent="lime"
-          rating="4.9"
-        />
+        <CardPreview card={list[2]} />
       </div>
 
       <div

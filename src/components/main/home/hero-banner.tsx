@@ -1,6 +1,7 @@
 import Link from "next/link"
 import { Search, Sparkles } from "lucide-react"
 import { ShowcaseCards } from "./showcase-cards"
+import type { ShowcaseCard } from "@/lib/catalog/home"
 
 const MAIS_PROCURADOS = [
   "Manicure",
@@ -11,7 +12,11 @@ const MAIS_PROCURADOS = [
   "Depilação",
 ] as const
 
-export function HeroBanner() {
+interface HeroBannerProps {
+  showcase?: ShowcaseCard[]
+}
+
+export function HeroBanner({ showcase }: HeroBannerProps = {}) {
   return (
     <section className="relative overflow-hidden bg-[var(--color-pmb-green)] text-white">
       <div
@@ -109,7 +114,7 @@ export function HeroBanner() {
         </div>
 
         <div className="relative hidden lg:block">
-          <ShowcaseCards />
+          <ShowcaseCards cards={showcase} />
         </div>
       </div>
     </section>
