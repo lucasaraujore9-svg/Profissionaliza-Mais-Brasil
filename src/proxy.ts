@@ -66,7 +66,7 @@ async function resolveTenantFromDB(
   }
 }
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const hostname = request.headers.get("host") ?? ""
   const { pathname } = request.nextUrl
 
