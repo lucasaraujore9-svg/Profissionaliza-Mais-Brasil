@@ -52,7 +52,8 @@ async function requestWithRetry<T>(
   options: RequestInit,
 ): Promise<EAResponse<T>> {
   const { url } = getConfig()
-  const fullUrl = `${url}/${endpoint}`
+  // EA API usa roteamento PHP estilo `index.php?cursos/listar`
+  const fullUrl = `${url}/index.php?${endpoint}`
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
