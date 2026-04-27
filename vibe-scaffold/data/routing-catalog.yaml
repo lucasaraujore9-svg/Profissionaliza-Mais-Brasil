@@ -1,0 +1,105 @@
+# ═══════════════════════════════════════════════════
+# Routing Catalog: vibe-scaffold
+# Maps keywords to specialist agents for fast routing
+# ═══════════════════════════════════════════════════
+
+domains:
+  full_project:
+    keywords:
+      - novo projeto
+      - criar sistema
+      - scaffold
+      - bootstrap
+      - vibecoder
+      - estrutura basal
+      - projeto do zero
+      - novo SaaS
+      - novo MVP
+      - novo app
+      - setup de projeto
+      - comecar projeto
+      - montar estrutura
+      - projeto estruturado
+    primary_agent: chief-architect
+    workflow: workflows/wf-full-project.yaml
+    description: "Scaffold completo: entrevista + todos os artefatos"
+
+  spec_generation:
+    keywords:
+      - gerar spec
+      - criar spec
+      - escrever spec
+      - especificacao
+      - documentar paginas
+      - descrever sistema
+      - o que o sistema faz
+      - mapear funcionalidades
+    primary_agent: spec-writer
+    secondary_agent: chief-architect
+    description: "Gerar SPEC.md. Chief Architect faz entrevista minima primeiro."
+
+  issue_decomposition:
+    keywords:
+      - quebrar em issues
+      - criar issues
+      - decompor
+      - break
+      - dividir tarefas
+      - atomizar
+      - sprint planning
+      - backlog
+    primary_agent: issue-breaker
+    description: "Decompor SPEC existente em issues. Requer docs/SPEC.md."
+
+  documentation:
+    keywords:
+      - criar CLAUDE.md
+      - gerar docs
+      - documentacao de referencia
+      - architecture.md
+      - design system doc
+      - workflow doc
+      - documentar projeto
+    primary_agent: doc-architect
+    secondary_agent: chief-architect
+    description: "Gerar CLAUDE.md + reference docs."
+
+  slash_commands:
+    keywords:
+      - criar comandos
+      - slash commands
+      - gerar commands
+      - /setup
+      - /plan
+      - /execute
+      - /status
+      - /next
+      - /review
+    primary_agent: command-smith
+    description: "Gerar 6 slash commands em .claude/commands/"
+
+  file_structure:
+    keywords:
+      - montar pastas
+      - criar estrutura
+      - .env
+      - .gitignore
+      - README
+      - settings.json
+      - arvore de pastas
+      - config files
+    primary_agent: scaffold-builder
+    description: "Gerar config files e arvore de diretorios."
+
+  incremental:
+    keywords:
+      - adicionar ao projeto
+      - atualizar estrutura
+      - complementar
+      - falta issue
+      - falta doc
+      - expandir
+      - nova fase
+    primary_agent: chief-architect
+    workflow: workflows/wf-incremental.yaml
+    description: "Avaliar projeto existente e preencher lacunas."

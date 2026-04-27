@@ -1,0 +1,29 @@
+# ═══════════════════════════════════════════════════
+# Workflow: Incremental Enhancement
+# Adicionar artefatos a um projeto existente
+# ═══════════════════════════════════════════════════
+
+workflow:
+  name: wf-incremental
+  display_name: "Incremental Enhancement"
+  description: "Adicionar issues, docs ou commands a um projeto que ja existe"
+  duration_estimate: "5-10 minutos"
+
+  phases:
+    phase_1:
+      name: "Assess Existing"
+      agent: chief-architect
+      description: "Ler CLAUDE.md e SPEC.md existentes, identificar lacunas"
+      output: "Lista de artefatos que faltam ou precisam de atualizacao"
+
+    phase_2:
+      name: "Fill Gaps"
+      agent: "[varies based on gap]"
+      description: "Ativar agente relevante: spec-writer, issue-breaker, doc-architect, command-smith, ou scaffold-builder"
+      depends_on: [phase_1]
+
+    phase_3:
+      name: "Quality Review"
+      agent: chief-architect
+      description: "Revisar artefatos novos contra checklist"
+      depends_on: [phase_2]

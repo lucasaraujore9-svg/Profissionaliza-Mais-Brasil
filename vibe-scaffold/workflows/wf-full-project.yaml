@@ -1,0 +1,63 @@
+# ═══════════════════════════════════════════════════
+# Workflow: Full Project Scaffold
+# Entrevista → SPEC → Issues → Docs → Commands → Files
+# ═══════════════════════════════════════════════════
+
+workflow:
+  name: wf-full-project
+  display_name: "Full Project Scaffold"
+  description: "Scaffold completo de projeto do zero ate estrutura pronta para /plan + /execute"
+  duration_estimate: "10-20 minutos"
+
+  phases:
+    phase_1:
+      name: "Discovery Interview"
+      agent: chief-architect
+      task: tasks/full-scaffold.md
+      description: "5 rodadas de entrevista para coletar todos os requisitos"
+      output: "Dados estruturados do projeto"
+
+    phase_2:
+      name: "Spec Generation"
+      agent: spec-writer
+      task: tasks/spec-only.md
+      description: "Transformar requisitos em SPEC.md completa"
+      output: "docs/SPEC.md"
+      depends_on: [phase_1]
+
+    phase_3:
+      name: "Issue Decomposition"
+      agent: issue-breaker
+      task: tasks/break-only.md
+      description: "Quebrar SPEC em issues atomicas numeradas"
+      output: "issues/*.md + issues/README.md"
+      depends_on: [phase_2]
+
+    phase_4:
+      name: "Documentation"
+      agent: doc-architect
+      task: tasks/docs-only.md
+      description: "Gerar CLAUDE.md + 3 reference docs"
+      output: "CLAUDE.md + docs/references/*.md"
+      depends_on: [phase_1, phase_3]
+
+    phase_5:
+      name: "Slash Commands"
+      agent: command-smith
+      task: tasks/commands-only.md
+      description: "Gerar 6 slash commands calibrados"
+      output: ".claude/commands/*.md"
+      depends_on: [phase_4]
+
+    phase_6:
+      name: "File Scaffold"
+      agent: scaffold-builder
+      description: "Gerar config files + arvore de pastas"
+      output: ".env.example, .gitignore, README.md, .claude/settings.json, src/**"
+      depends_on: [phase_4]
+
+    phase_7:
+      name: "Quality Review"
+      agent: chief-architect
+      description: "Revisar tudo contra checklists/output-quality.md"
+      depends_on: [phase_2, phase_3, phase_4, phase_5, phase_6]

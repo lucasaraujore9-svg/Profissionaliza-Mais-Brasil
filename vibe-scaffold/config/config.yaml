@@ -1,0 +1,73 @@
+# ═══════════════════════════════════════════════════════════════════
+# Squad: vibe-scaffold
+# Domain: Arquitetura e scaffold de projetos de software
+# Version: 1.0.0
+# ═══════════════════════════════════════════════════════════════════
+
+squad:
+  name: vibe-scaffold
+  display_name: "Vibe Scaffold — Arquitetura de Projetos"
+  version: "1.0.0"
+  domain: "Criacao estruturada de projetos de software com qualidade"
+  description: >
+    Squad de 6 agentes que transformam uma ideia em uma estrutura de projeto
+    pronta para execucao controlada. Metodo SPEC -> BREAK -> PLAN -> EXECUTE.
+    Gera CLAUDE.md, SPEC.md, issues numeradas, docs de referencia, slash commands
+    e estrutura de pastas — tudo calibrado para o projeto especifico.
+  keywords:
+    - scaffold
+    - novo projeto
+    - estrutura basal
+    - vibecoder
+    - SPEC
+    - issues
+    - CLAUDE.md
+    - slash commands
+    - bootstrap
+    - MVP
+    - SaaS
+    - projeto do zero
+  entry_agent: chief-architect
+  created_at: "2026-04-16"
+
+tiers:
+  tier_0:
+    name: "Orquestracao"
+    agents: [chief-architect]
+    purpose: "Conduz entrevista, diagnostica escopo, roteia para especialistas, monta entrega final"
+  tier_1:
+    name: "Especialistas"
+    agents: [spec-writer, issue-breaker, doc-architect, command-smith, scaffold-builder]
+    purpose: "Cada agente gera sua parte do scaffold seguindo frameworks especificos"
+
+agents:
+  chief-architect:
+    file: agents/chief-architect.md
+    tier: 0
+    icon: "🏗️"
+    focus: "Orquestracao: entrevista, diagnostico, roteamento, revisao final"
+  spec-writer:
+    file: agents/spec-writer.md
+    tier: 1
+    icon: "📋"
+    focus: "Gerar SPEC.md com paginas, componentes, comportamentos, criterios"
+  issue-breaker:
+    file: agents/issue-breaker.md
+    tier: 1
+    icon: "🔨"
+    focus: "Decompor SPEC em issues atomicas numeradas com dependencias"
+  doc-architect:
+    file: agents/doc-architect.md
+    tier: 1
+    icon: "📐"
+    focus: "Gerar CLAUDE.md + architecture.md + design-system.md + workflow.md"
+  command-smith:
+    file: agents/command-smith.md
+    tier: 1
+    icon: "⚡"
+    focus: "Criar 6 slash commands calibrados para o projeto"
+  scaffold-builder:
+    file: agents/scaffold-builder.md
+    tier: 1
+    icon: "📁"
+    focus: "Montar arvore de pastas, .env, .gitignore, README, settings.json"

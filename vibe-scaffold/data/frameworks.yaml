@@ -1,0 +1,99 @@
+# ═══════════════════════════════════════════════════
+# Frameworks & Methodologies: vibe-scaffold
+# Reference data for all agents
+# ═══════════════════════════════════════════════════
+
+methodology:
+  name: "SPEC → BREAK → PLAN → EXECUTE"
+  origin: "Profissionaliza Mais Brasil project (2026)"
+  philosophy: >
+    Software e construido em 4 fases sequenciais. Pular fases produz retrabalho.
+    Documentar antes de codar. Decompor antes de planejar. Planejar antes de executar.
+  phases:
+    SPEC:
+      description: "Descrever O QUE o sistema faz"
+      artifacts: ["docs/SPEC.md"]
+      agent: spec-writer
+    BREAK:
+      description: "Quebrar em issues atomicas numeradas"
+      artifacts: ["issues/*.md", "issues/README.md"]
+      agent: issue-breaker
+    PLAN:
+      description: "Ler issue + docs, produzir plano antes de codar"
+      artifacts: ["Plano textual (nao salvo em arquivo)"]
+      command: "/plan NNN"
+    EXECUTE:
+      description: "Implementar seguindo padroes documentados"
+      artifacts: ["Codigo fonte + commit"]
+      command: "/execute NNN"
+
+issue_taxonomy:
+  description: "Sistema de numeracao por tipo de issue"
+  ranges:
+    - range: "001-019"
+      type: proto
+      description: "Prototipos UI — dados hardcoded, design system, responsivo"
+      rules:
+        - "Nunca fazer fetch de API"
+        - "Dados em constantes no topo do arquivo"
+        - "Foco em design fidelity"
+    - range: "020-029"
+      type: infra
+      description: "Infraestrutura — auth, db, middleware, clients, crypto, cache, email"
+      rules:
+        - "Nunca depende de proto"
+        - "Exportar tipos junto com funcoes"
+        - "Documentar uso breve"
+    - range: "030-049"
+      type: behavior
+      description: "Behaviors — conectar UI a dados reais"
+      rules:
+        - "SEMPRE depende do proto correspondente"
+        - "Server Components para fetch"
+        - "Zod em todos inputs de API"
+    - range: "050-059"
+      type: integration
+      description: "Integracoes — webhooks, cron, APIs externas, async"
+      rules:
+        - "Retry logic obrigatorio"
+        - "Logging detalhado"
+        - "Webhooks retornam 200 imediato"
+    - range: "060+"
+      type: expansion
+      description: "Expansoes, redesigns, novas features"
+
+interview_framework:
+  name: "Five Round Discovery"
+  rounds:
+    1:
+      name: "Identidade"
+      collects: ["nome", "slug", "descricao", "pasta"]
+    2:
+      name: "Escopo"
+      collects: ["dominio", "multi-tenant", "atores", "integracoes"]
+    3:
+      name: "Stack"
+      collects: ["frontend", "UI", "ORM+DB", "auth", "cache", "email", "host"]
+      defaults:
+        frontend: "Next.js 15 App Router + TypeScript"
+        UI: "Tailwind 4 + shadcn/ui"
+        orm_db: "Prisma + PostgreSQL (Supabase)"
+        auth: "NextAuth v5"
+        cache: "Upstash Redis"
+        email: "Resend + React Email"
+        host: "Vercel"
+    4:
+      name: "Paginas e Fluxos"
+      collects: ["rotas com descricao", "fluxos end-to-end"]
+    5:
+      name: "Design (opcional)"
+      collects: ["paleta", "tipografia", "tom visual"]
+
+quality_standards:
+  typescript: "strict mode, sem any"
+  components: "PascalCase, 1 por arquivo"
+  api_routes: "Zod validation em todos inputs"
+  errors: "try/catch tipado, nunca swallow"
+  secrets: "nunca no client, criptografar tokens no banco"
+  webhooks: "logar tudo, retornar 200 imediato, processar async"
+  imports: "alias @/* para relativos longos"

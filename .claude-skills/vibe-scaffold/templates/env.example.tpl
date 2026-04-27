@@ -1,0 +1,26 @@
+# App
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+NEXT_PUBLIC_APP_DOMAIN=localhost
+
+# Database
+DATABASE_URL=
+DIRECT_URL=
+
+# Auth
+NEXTAUTH_SECRET=
+NEXTAUTH_URL=http://localhost:3000
+
+# Redis (cache/rate-limit)
+UPSTASH_REDIS_REST_URL=
+UPSTASH_REDIS_REST_TOKEN=
+
+# Email
+RESEND_API_KEY=
+
+# Crypto (32 bytes hex)
+ENCRYPTION_KEY=
+
+# Cron
+CRON_SECRET=
+
+{{INTEGRATION_VARS}}

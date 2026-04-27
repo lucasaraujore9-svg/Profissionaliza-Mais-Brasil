@@ -1,0 +1,96 @@
+========================================================================
+  KIT DE MIGRACAO DO CLAUDE COWORK — Skills, Agents e Commands
+========================================================================
+
+CONTEUDO
+--------
+1. export-all-skills.sh   -> rode na maquina de ORIGEM
+2. import-all-skills.sh   -> rode na maquina de DESTINO
+3. vibe-scaffold/         -> skill customizada ja pronta (backup)
+4. LEIA-ME.txt            -> este arquivo
+5. MANIFEST.md            -> lista das 48 skills detectadas
+
+========================================================================
+  PASSO A PASSO
+========================================================================
+
+ETAPA 1 — Na maquina de ORIGEM
+-------------------------------
+Abra o Terminal (Aplicativos > Utilitarios > Terminal) e rode:
+
+  cd ~/Desktop
+  unzip -o claude-export-kit.zip
+  cd claude-export-kit
+  chmod +x *.sh
+  ./export-all-skills.sh
+
+Isso gera ~/Desktop/claude-skills-export.zip com tudo dentro.
+
+ETAPA 2 — Transferir
+--------------------
+Use AirDrop, Drive, Dropbox, pendrive ou email.
+Arquivo: ~/Desktop/claude-skills-export.zip
+
+ETAPA 3 — Na maquina de DESTINO
+-------------------------------
+Salve claude-skills-export.zip no Desktop, depois:
+
+  cd ~/Desktop
+  unzip claude-skills-export.zip
+  cd claude-skills-export
+  chmod +x import-all-skills.sh
+  ./import-all-skills.sh
+
+Depois:
+  1. Cmd+Q no Claude Cowork (fechar 100%)
+  2. Reabrir
+  3. Testar: digite "criar estrutura basal para novo projeto"
+     -> deve disparar o vibe-scaffold
+
+========================================================================
+  INVENTARIO — 48 SKILLS
+========================================================================
+
+CUSTOM (1):
+  vibe-scaffold
+
+ANTHROPIC MARKETPLACE (21):
+  hormozi-squad, xlsx, c-level-squad, movement, setup-cowork,
+  pptx, stitch-designer, traffic-masters, consolidate-memory,
+  advisory-board, brand-squad, pdf, docx, cso-squad, schedule,
+  skill-creator, data-squad, cybersecurity, copy-squad,
+  storytelling, design-squad
+
+SALES PLUGIN (9):
+  account-research, call-prep, pipeline-review, forecast,
+  draft-outreach, competitive-intelligence, daily-briefing,
+  call-summary, create-an-asset
+
+MARKETING PLUGIN (8):
+  content-creation, brand-review, email-sequence,
+  competitive-brief, performance-report, campaign-plan,
+  seo-audit, draft-content
+
+OPERATIONS PLUGIN (9):
+  vendor-review, risk-assessment, process-doc,
+  compliance-tracking, status-report, runbook, capacity-plan,
+  process-optimization, change-request
+
+========================================================================
+  TROUBLESHOOTING
+========================================================================
+
+"permission denied":
+  chmod +x *.sh
+
+"Cowork nao encontra as skills":
+  - Confirme Cmd+Q completo (nao so fechar janela)
+  - Verifique: ls ~/.claude/skills/
+
+"Nao achou Anthropic skills":
+  O cache /var/folders expira. Abra o Cowork pelo menos uma vez
+  na maquina origem antes de rodar o export.
+
+"Quero reinstalar do marketplace em vez de copiar":
+  Cowork > Settings > Plugins. So o vibe-scaffold precisa copia
+  manual (ja esta neste kit em vibe-scaffold/).
