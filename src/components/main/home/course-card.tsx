@@ -15,6 +15,7 @@ export interface Course {
   parcelas: string
   selo?: "novo" | "mais-vendido" | "pix-10" | null
   accent: "gold" | "cyan" | "lime" | "green" | "terracotta"
+  imageUrl?: string | null
 }
 
 interface CourseCardProps {
@@ -35,6 +36,7 @@ export function CourseCard({ course }: CourseCardProps) {
     parcelas,
     selo,
     accent,
+    imageUrl,
   } = course
 
   return (
@@ -43,7 +45,13 @@ export function CourseCard({ course }: CourseCardProps) {
       className="group flex flex-col overflow-hidden rounded-xl border border-[rgba(2,89,24,0.08)] bg-white transition-all hover:-translate-y-0.5 hover:border-[rgba(2,89,24,0.2)] hover:shadow-[0_10px_30px_-12px_rgba(2,89,24,0.25)]"
     >
       <div className="relative">
-        <CourseThumb categoria={categoria} accent={accent} hours={horas} />
+        <CourseThumb
+          categoria={categoria}
+          accent={accent}
+          hours={horas}
+          imageUrl={imageUrl}
+          titulo={titulo}
+        />
         {selo && (
           <span
             className={`absolute left-2.5 top-2.5 rounded-full px-2.5 py-0.5 text-[10.5px] font-black uppercase tracking-wider shadow-sm ${

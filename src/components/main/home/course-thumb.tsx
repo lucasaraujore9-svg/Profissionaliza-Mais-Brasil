@@ -1,3 +1,4 @@
+import Image from "next/image"
 import {
   Scissors,
   Heart,
@@ -51,12 +52,39 @@ interface CourseThumbProps {
   categoria: string
   accent?: Accent
   hours?: string
+  imageUrl?: string | null
+  titulo?: string
 }
 
-export function CourseThumb({ categoria, accent = "gold", hours }: CourseThumbProps) {
+export function CourseThumb({
+  categoria,
+  accent = "gold",
+  hours,
+  imageUrl,
+  titulo,
+}: CourseThumbProps) {
   const entry = CATEGORIA_MAP[categoria] ?? { icon: SparklesIcon, pattern: "default" }
   const Icon = entry.icon
   const textColor = accent === "gold" || accent === "lime" ? "#025918" : "#FFFFFF"
+
+  if (imageUrl) {
+    return (
+      <div className="relative aspect-[16/10] w-full overflow-hidden bg-[var(--color-pmb-mist)]">
+        <Image
+          src={imageUrl}
+          alt={titulo ?? categoria}
+          fill
+          sizes="(min-width: 1024px) 25vw, (min-width: 640px) 33vw, 50vw"
+          className="object-cover"
+        />
+        {hours && (
+          <div className="absolute bottom-2 right-3 rounded-md bg-black/55 px-2 py-0.5 text-[10px] font-bold text-white backdrop-blur-sm">
+            {hours}
+          </div>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div
