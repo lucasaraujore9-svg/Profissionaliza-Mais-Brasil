@@ -31,6 +31,18 @@ const RESERVED_SUBDOMAINS = new Set([
   "test",
 ])
 
+// Rotas que devem ser reescritas para /loja em subdomínios de tenant.
+// Tudo fora dessa lista (ex: /admin, /painel, /login, /cursos, /sobre)
+// passa direto e usa as rotas do site principal.
+const VITRINE_PATH_PREFIXES = ["/curso", "/checkout", "/confirmacao"]
+
+function isVitrinePath(pathname: string): boolean {
+  if (pathname === "/") return true
+  return VITRINE_PATH_PREFIXES.some(
+    (p) => pathname === p || pathname.startsWith(`${p}/`)
+  )
+}
+
 function detectSubdomain(hostname: string): {
   subdomain: string | null
   apex: string | null
@@ -132,6 +144,17 @@ export default async function proxy(request: NextRequest) {
     return NextResponse.next()
   }
 
+  // Em subdomínio de tenant, só reescreve para /loja se for caminho de vitrine.
+  // /admin, /painel, /login, /api, /cursos, /sobre etc. ficam servidos pelo
+  // site principal sem rewrite.
+  if (!isVitrinePath(pathname)) {
+    const requestHeaders = new Headers(request.headers)
+    requestHeaders.set("x-tenant-slug", tenantSlug)
+    return NextResponse.next({
+      request: { headers: requestHeaders },
+    })
+  }
+
   const cachedTenant = await resolveTenantFromRedis(tenantSlug)
   if (cachedTenant && cachedTenant.status !== "ACTIVE") {
     const url = request.nextUrl.clone()
@@ -140,7 +163,7 @@ export default async function proxy(request: NextRequest) {
   }
 
   const url = request.nextUrl.clone()
-  url.pathname = `/loja${pathname}`
+  url.pathname = pathname === "/" ? "/loja" : `/loja${pathname}`
 
   const requestHeaders = new Headers(request.headers)
   requestHeaders.set("x-tenant-slug", tenantSlug)

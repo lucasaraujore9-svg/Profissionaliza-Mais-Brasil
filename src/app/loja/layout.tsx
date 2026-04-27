@@ -1,6 +1,6 @@
 import type { Metadata } from "next"
-import { NavbarLoja } from "@/components/shared/layouts/navbar-loja"
-import { FooterLoja } from "@/components/shared/layouts/footer-loja"
+import { NavbarMain } from "@/components/shared/layouts/navbar-main"
+import { FooterMain } from "@/components/shared/layouts/footer-main"
 
 export const metadata: Metadata = {
   title: "Cursos Online",
@@ -14,9 +14,9 @@ export default function LojaLayout({
 }) {
   return (
     <>
-      <NavbarLoja />
+      <NavbarMain />
       <main className="flex-1">{children}</main>
-      <FooterLoja />
+      <FooterMain />
     </>
   )
 }
