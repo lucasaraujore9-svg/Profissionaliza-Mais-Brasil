@@ -5,17 +5,29 @@ import { CategoriesGrid } from "@/components/main/home/categories-grid"
 import { LearnAnywhere } from "@/components/main/home/learn-anywhere"
 import { Testimonials } from "@/components/main/home/testimonials"
 import { FinalCta } from "@/components/main/home/final-cta"
-import { loadCurated, loadByCategoria, loadShowcase } from "@/lib/catalog/home"
+import {
+  loadCurated,
+  loadByCategoria,
+  loadShowcase,
+  loadCategorias,
+} from "@/lib/catalog/home"
 
 export default async function LandingPage() {
-  const [showcase, curated, informatica, administrativo, diversas] =
-    await Promise.all([
-      loadShowcase(),
-      loadCurated(),
-      loadByCategoria("INFORMÁTICA E TECNOLOGIA"),
-      loadByCategoria("ADMINISTRATIVO"),
-      loadByCategoria("DIVERSAS ÁREAS"),
-    ])
+  const [
+    showcase,
+    curated,
+    informatica,
+    administrativo,
+    diversas,
+    categorias,
+  ] = await Promise.all([
+    loadShowcase(),
+    loadCurated(),
+    loadByCategoria("INFORMÁTICA E TECNOLOGIA"),
+    loadByCategoria("ADMINISTRATIVO"),
+    loadByCategoria("DIVERSAS ÁREAS"),
+    loadCategorias(),
+  ])
 
   return (
     <>
@@ -28,7 +40,7 @@ export default async function LandingPage() {
           cursos={curated}
         />
       )}
-      <CategoriesGrid />
+      <CategoriesGrid categorias={categorias} />
       {informatica.length > 0 && (
         <CourseRow
           titulo="Informática e Tecnologia"

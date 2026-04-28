@@ -4,23 +4,23 @@ import Link from "next/link"
 import Image from "next/image"
 import { useState } from "react"
 import { Search, Menu, X, ChevronDown, User } from "lucide-react"
+import type { CategoriaInfo } from "@/lib/catalog/home"
 
-const CATEGORIAS = [
-  "Beleza e Estética",
-  "Saúde e Bem-estar",
-  "Gastronomia",
-  "Eletricista e Hidráulica",
-  "Construção Civil",
-  "Administração",
-  "Pet e Veterinária",
-  "Automotivo",
-  "Moda e Costura",
-  "Tecnologia",
-  "Vendas",
-  "Idiomas",
-] as const
+const FALLBACK_CATEGORIAS: CategoriaInfo[] = [
+  { nome: "Informática e Tecnologia", slug: "informatica", count: 0 },
+  { nome: "Administrativo", slug: "administrativo", count: 0 },
+  { nome: "Diversas Áreas", slug: "diversas", count: 0 },
+  { nome: "Preparatórios", slug: "preparatorios", count: 0 },
+  { nome: "Idiomas", slug: "idiomas", count: 0 },
+]
 
-export function NavbarMain() {
+interface NavbarMainProps {
+  categorias?: CategoriaInfo[]
+}
+
+export function NavbarMain({ categorias }: NavbarMainProps = {}) {
+  const lista =
+    categorias && categorias.length > 0 ? categorias : FALLBACK_CATEGORIAS
   const [mobileOpen, setMobileOpen] = useState(false)
 
   return (
@@ -105,17 +105,17 @@ export function NavbarMain() {
       <div className="hidden lg:block border-t border-[rgba(2,89,24,0.08)]">
         <div className="mx-auto max-w-[1280px] px-4 md:px-6">
           <ul className="flex items-center gap-1 overflow-x-auto scrollbar-none py-1.5 -mx-1">
-            {CATEGORIAS.map((cat, i) => (
-              <li key={cat} className="shrink-0">
+            {lista.map((cat, i) => (
+              <li key={cat.slug} className="shrink-0">
                 <Link
-                  href={`/cursos?categoria=${encodeURIComponent(cat)}`}
+                  href={`/cursos?categoria=${encodeURIComponent(cat.nome)}`}
                   className={`inline-block px-3 py-1.5 rounded-md text-[13px] font-medium whitespace-nowrap transition-colors ${
                     i === 0
                       ? "text-[var(--color-pmb-green)] bg-[var(--color-pmb-lime-50)]"
                       : "text-[rgba(2,89,24,0.78)] hover:text-[var(--color-pmb-green)] hover:bg-[var(--color-pmb-mist)]"
                   }`}
                 >
-                  {cat}
+                  {cat.nome}
                 </Link>
               </li>
             ))}
@@ -159,14 +159,14 @@ export function NavbarMain() {
                 Categorias
               </p>
               <div className="flex flex-wrap gap-1.5 py-1">
-                {CATEGORIAS.map((cat) => (
+                {lista.map((cat) => (
                   <Link
-                    key={cat}
-                    href={`/cursos?categoria=${encodeURIComponent(cat)}`}
+                    key={cat.slug}
+                    href={`/cursos?categoria=${encodeURIComponent(cat.nome)}`}
                     onClick={() => setMobileOpen(false)}
                     className="inline-block px-2.5 py-1 rounded-md bg-[var(--color-pmb-mist)] text-[12px] text-[var(--color-pmb-green)]"
                   >
-                    {cat}
+                    {cat.nome}
                   </Link>
                 ))}
               </div>

@@ -131,6 +131,58 @@ export async function loadByCategoria(categoria: string, take = 8): Promise<Cour
   }
 }
 
+export interface CategoriaInfo {
+  nome: string
+  slug: string
+  count: number
+}
+
+const CATEGORIA_SLUG_OVERRIDES: Record<string, string> = {
+  "INFORMÁTICA E TECNOLOGIA": "informatica",
+  "DIVERSAS ÁREAS": "diversas",
+  ADMINISTRATIVO: "administrativo",
+  PREPARATÓRIOS: "preparatorios",
+  IDIOMAS: "idiomas",
+}
+
+function slugifyCategoria(nome: string): string {
+  const override = CATEGORIA_SLUG_OVERRIDES[nome.toUpperCase()]
+  if (override) return override
+  return nome
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+}
+
+function titleCaseCategoria(nome: string): string {
+  // EA retorna "INFORMÁTICA E TECNOLOGIA" em caps; convertendo para Title Case
+  const lower = nome.toLowerCase()
+  return lower.replace(/(^|\s|-)\p{L}/gu, (m) => m.toUpperCase())
+}
+
+export async function loadCategorias(minCount = 3): Promise<CategoriaInfo[]> {
+  try {
+    const grouped = await prisma.course.groupBy({
+      by: ["categoriaLoja"],
+      where: { status: "ATIVO", categoriaLoja: { not: null } },
+      _count: { _all: true },
+      orderBy: { _count: { categoriaLoja: "desc" } },
+    })
+
+    return grouped
+      .filter((g) => g.categoriaLoja && g._count._all >= minCount)
+      .map((g) => ({
+        nome: titleCaseCategoria(g.categoriaLoja!),
+        slug: slugifyCategoria(g.categoriaLoja!),
+        count: g._count._all,
+      }))
+  } catch {
+    return []
+  }
+}
+
 export interface ShowcaseCard {
   slug: string
   titulo: string

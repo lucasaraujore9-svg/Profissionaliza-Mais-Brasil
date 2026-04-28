@@ -1,44 +1,37 @@
 import Link from "next/link"
 import {
-  Scissors,
-  Heart,
-  ChefHat,
-  Zap,
-  Hammer,
-  PawPrint,
   Briefcase,
-  Car,
-  Shirt,
   Monitor,
-  Wrench,
-  TrendingUp,
+  GraduationCap,
+  Languages,
+  Sparkles,
+  Layers,
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
+import type { CategoriaInfo } from "@/lib/catalog/home"
 
-interface Categoria {
-  nome: string
-  slug: string
+interface IconConfig {
   icon: LucideIcon
-  cursos: string
   cor: string
 }
 
-const CATEGORIAS: Categoria[] = [
-  { nome: "Beleza e Estética", slug: "beleza", icon: Scissors, cursos: "340 cursos", cor: "var(--color-pmb-gold)" },
-  { nome: "Saúde e Bem-estar", slug: "saude", icon: Heart, cursos: "210 cursos", cor: "var(--color-pmb-cyan)" },
-  { nome: "Gastronomia", slug: "gastronomia", icon: ChefHat, cursos: "180 cursos", cor: "var(--color-pmb-lime)" },
-  { nome: "Eletricista e Hidráulica", slug: "eletrica", icon: Zap, cursos: "120 cursos", cor: "var(--color-pmb-gold)" },
-  { nome: "Construção Civil", slug: "construcao", icon: Hammer, cursos: "95 cursos", cor: "var(--color-pmb-terracotta)" },
-  { nome: "Pet e Veterinária", slug: "pet", icon: PawPrint, cursos: "70 cursos", cor: "var(--color-pmb-green)" },
-  { nome: "Administração", slug: "administracao", icon: Briefcase, cursos: "150 cursos", cor: "var(--color-pmb-cyan)" },
-  { nome: "Automotivo", slug: "automotivo", icon: Car, cursos: "60 cursos", cor: "var(--color-pmb-terracotta)" },
-  { nome: "Moda e Costura", slug: "moda", icon: Shirt, cursos: "85 cursos", cor: "var(--color-pmb-gold)" },
-  { nome: "Tecnologia", slug: "tecnologia", icon: Monitor, cursos: "220 cursos", cor: "var(--color-pmb-cyan)" },
-  { nome: "Manutenção", slug: "manutencao", icon: Wrench, cursos: "75 cursos", cor: "var(--color-pmb-green)" },
-  { nome: "Vendas e Negócios", slug: "vendas", icon: TrendingUp, cursos: "110 cursos", cor: "var(--color-pmb-lime)" },
-]
+const ICON_BY_SLUG: Record<string, IconConfig> = {
+  informatica: { icon: Monitor, cor: "var(--color-pmb-cyan)" },
+  diversas: { icon: Layers, cor: "var(--color-pmb-gold)" },
+  administrativo: { icon: Briefcase, cor: "var(--color-pmb-green)" },
+  preparatorios: { icon: GraduationCap, cor: "var(--color-pmb-terracotta)" },
+  idiomas: { icon: Languages, cor: "var(--color-pmb-lime)" },
+}
 
-export function CategoriesGrid() {
+function getIconConfig(slug: string): IconConfig {
+  return ICON_BY_SLUG[slug] ?? { icon: Sparkles, cor: "var(--color-pmb-green)" }
+}
+
+export function CategoriesGrid({ categorias }: { categorias: CategoriaInfo[] }) {
+  if (categorias.length === 0) return null
+
+  const total = categorias.reduce((acc, c) => acc + c.count, 0)
+
   return (
     <section className="border-b border-[rgba(2,89,24,0.08)] bg-[var(--color-pmb-mist)]">
       <div className="mx-auto max-w-[1280px] px-4 py-10 md:px-6 md:py-14">
@@ -50,37 +43,46 @@ export function CategoriesGrid() {
             Qual profissão você quer aprender?
           </h2>
           <p className="mt-2 text-[14px] text-[rgba(2,89,24,0.65)]">
-            Mais de 2.400 cursos em 12 áreas que dão dinheiro no Brasil
+            {total} cursos em {categorias.length}{" "}
+            {categorias.length === 1 ? "área" : "áreas"} que dão dinheiro no Brasil
           </p>
         </div>
 
         <ul className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
-          {CATEGORIAS.map((cat) => (
-            <li key={cat.slug}>
-              <Link
-                href={`/categoria/${cat.slug}`}
-                className="group flex items-center gap-3 rounded-xl border border-[rgba(2,89,24,0.08)] bg-white p-4 transition-all hover:-translate-y-0.5 hover:border-[rgba(2,89,24,0.22)] hover:shadow-[0_10px_24px_-12px_rgba(2,89,24,0.2)]"
-              >
-                <span
-                  className="grid h-11 w-11 shrink-0 place-items-center rounded-lg"
-                  style={{ background: `color-mix(in srgb, ${cat.cor} 16%, white)` }}
+          {categorias.map((cat) => {
+            const cfg = getIconConfig(cat.slug)
+            const Icon = cfg.icon
+            return (
+              <li key={cat.slug}>
+                <Link
+                  href={`/cursos?categoria=${encodeURIComponent(cat.nome)}`}
+                  className="group flex items-center gap-3 rounded-xl border border-[rgba(2,89,24,0.08)] bg-white p-4 transition-all hover:-translate-y-0.5 hover:border-[rgba(2,89,24,0.22)] hover:shadow-[0_10px_24px_-12px_rgba(2,89,24,0.2)]"
                 >
-                  <cat.icon
-                    className="h-5 w-5"
-                    strokeWidth={2.25}
-                    style={{ color: cat.cor }}
-                    aria-hidden
-                  />
-                </span>
-                <div className="min-w-0">
-                  <p className="truncate text-[14px] font-bold text-[var(--color-pmb-green)] group-hover:underline">
-                    {cat.nome}
-                  </p>
-                  <p className="text-[12px] text-[rgba(2,89,24,0.6)]">{cat.cursos}</p>
-                </div>
-              </Link>
-            </li>
-          ))}
+                  <span
+                    className="grid h-11 w-11 shrink-0 place-items-center rounded-lg"
+                    style={{
+                      background: `color-mix(in srgb, ${cfg.cor} 16%, white)`,
+                    }}
+                  >
+                    <Icon
+                      className="h-5 w-5"
+                      strokeWidth={2.25}
+                      style={{ color: cfg.cor }}
+                      aria-hidden
+                    />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="truncate text-[14px] font-bold text-[var(--color-pmb-green)] group-hover:underline">
+                      {cat.nome}
+                    </p>
+                    <p className="text-[12px] text-[rgba(2,89,24,0.6)]">
+                      {cat.count} {cat.count === 1 ? "curso" : "cursos"}
+                    </p>
+                  </div>
+                </Link>
+              </li>
+            )
+          })}
         </ul>
       </div>
     </section>

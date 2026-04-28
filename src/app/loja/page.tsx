@@ -12,6 +12,7 @@ import {
   loadCurated,
   loadByCategoria,
   loadShowcase,
+  loadCategorias,
 } from "@/lib/catalog/home"
 
 function formatPrice(value: number | null): string {
@@ -59,14 +60,21 @@ export default async function LojaHomePage() {
     )
   }
 
-  const [showcase, curated, informatica, administrativo, diversas] =
-    await Promise.all([
-      loadShowcase(),
-      loadTenantOrGlobalCurated(tenant.id),
-      loadByCategoria("INFORMÁTICA E TECNOLOGIA"),
-      loadByCategoria("ADMINISTRATIVO"),
-      loadByCategoria("DIVERSAS ÁREAS"),
-    ])
+  const [
+    showcase,
+    curated,
+    informatica,
+    administrativo,
+    diversas,
+    categorias,
+  ] = await Promise.all([
+    loadShowcase(),
+    loadTenantOrGlobalCurated(tenant.id),
+    loadByCategoria("INFORMÁTICA E TECNOLOGIA"),
+    loadByCategoria("ADMINISTRATIVO"),
+    loadByCategoria("DIVERSAS ÁREAS"),
+    loadCategorias(),
+  ])
 
   return (
     <>
@@ -79,7 +87,7 @@ export default async function LojaHomePage() {
           cursos={curated}
         />
       )}
-      <CategoriesGrid />
+      <CategoriesGrid categorias={categorias} />
       {informatica.length > 0 && (
         <CourseRow
           titulo="Informática e Tecnologia"
