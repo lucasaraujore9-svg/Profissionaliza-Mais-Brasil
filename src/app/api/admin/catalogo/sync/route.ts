@@ -2,6 +2,9 @@ import { NextResponse } from "next/server"
 import { requireAdminSession } from "@/lib/auth/admin-session"
 import { syncCatalogFromEA } from "@/lib/catalog/sync"
 
+// Sync com 120+ cursos pode passar dos 10s default da Vercel.
+export const maxDuration = 60
+
 export async function POST() {
   const ctx = await requireAdminSession()
   if (!ctx) {

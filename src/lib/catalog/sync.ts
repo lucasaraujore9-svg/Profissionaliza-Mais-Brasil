@@ -32,9 +32,24 @@ export async function syncCatalogFromEA(
         : null
       const parcelas = curso.parcelas ? Number.parseInt(curso.parcelas, 10) : null
 
-      const data = {
+      const destaqueRaw = (curso.destaque ?? "").toString().toLowerCase().trim()
+      const isDestaque =
+        destaqueRaw === "destacar" ||
+        destaqueRaw === "1" ||
+        destaqueRaw === "true" ||
+        destaqueRaw === "sim"
+
+      const precoMostrarRaw = (curso.preco_mostrar ?? "")
+        .toString()
+        .toLowerCase()
+        .trim()
+      const isPrecoMostrar =
+        precoMostrarRaw === "sim" ||
+        precoMostrarRaw === "1" ||
+        precoMostrarRaw === "true"
+
+      const dataBase = {
         nome: curso.nome,
-        slug,
         descricao: curso.obs || null,
         qtdAulas,
         cargaHoraria: curso.carga_horaria || null,
@@ -43,9 +58,9 @@ export async function syncCatalogFromEA(
         parcelasSugeridas: parcelas,
         categoriaInterna: curso.categoria_interna || null,
         categoriaLoja: curso.categoria_loja || null,
-        destaque: curso.destaque === "1" || curso.destaque === "true",
+        destaque: isDestaque,
         status: curso.status || "ATIVO",
-        precoMostrar: curso.preco_mostrar === "1" || curso.preco_mostrar === "true",
+        precoMostrar: isPrecoMostrar,
         capaImageUrl: curso.capa_image || null,
         syncedAt: new Date(),
       }
@@ -56,14 +71,16 @@ export async function syncCatalogFromEA(
       })
 
       if (existing) {
+        // Não regenerar slug em updates — preserva o slug atual evitando
+        // conflito com unique constraint em casos de homonímia.
         await prisma.course.update({
           where: { nome: curso.nome },
-          data,
+          data: dataBase,
         })
         updated += 1
       } else {
         await prisma.course.create({
-          data: { ...data, slug: await ensureUniqueSlug(slug) },
+          data: { ...dataBase, slug: await ensureUniqueSlug(slug) },
         })
         added += 1
       }

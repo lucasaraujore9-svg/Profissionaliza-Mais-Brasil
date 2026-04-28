@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
 import { syncCatalogFromEA } from "@/lib/catalog/sync"
 
+export const maxDuration = 60
+
 function authorized(request: Request): boolean {
   const secret = process.env.CRON_SECRET
   if (!secret) return false
