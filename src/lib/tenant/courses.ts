@@ -11,6 +11,7 @@ export interface TenantCourseListItem {
   price: number
   originalPrice: number | null
   imageUrl: string | null
+  parcelas: number | null
   isFeatured: boolean
 }
 
@@ -62,14 +63,23 @@ export async function listTenantCourses(
         id: tc.id,
         slug: tc.course.slug,
         nome: tc.course.nome,
-        descricao: tc.customDescription ?? tc.course.descricao,
+        // Hierarquia: tenant > admin > EA bruto
+        descricao:
+          tc.customDescription ??
+          tc.course.descricaoOverride ??
+          tc.course.descricao,
         categoria: tc.course.categoriaLoja ?? tc.course.categoriaInterna,
         horas: tc.course.cargaHoraria,
         price: Number(tc.price),
         originalPrice: tc.course.precoOriginal
           ? Number(tc.course.precoOriginal)
           : null,
-        imageUrl: tc.course.capaImageUrl,
+        imageUrl:
+          tc.customCapaUrl ?? tc.course.capaOverride ?? tc.course.capaImageUrl,
+        parcelas:
+          tc.customParcelas ??
+          tc.course.parcelasOverride ??
+          tc.course.parcelasSugeridas,
         isFeatured: tc.isFeatured,
       })),
     }
@@ -114,17 +124,28 @@ export async function getTenantCourseBySlug(
       tenantCourseId: tc.id,
       slug: tc.course.slug,
       nome: tc.course.nome,
-      descricao: tc.customDescription ?? tc.course.descricao,
+      descricao:
+        tc.customDescription ??
+        tc.course.descricaoOverride ??
+        tc.course.descricao,
       categoria: tc.course.categoriaLoja ?? tc.course.categoriaInterna,
       horas: tc.course.cargaHoraria,
       price: Number(tc.price),
       originalPrice: tc.course.precoOriginal
         ? Number(tc.course.precoOriginal)
         : null,
-      imageUrl: tc.course.capaImageUrl,
+      imageUrl:
+        tc.customCapaUrl ?? tc.course.capaOverride ?? tc.course.capaImageUrl,
+      parcelas:
+        tc.customParcelas ??
+        tc.course.parcelasOverride ??
+        tc.course.parcelasSugeridas,
       isFeatured: tc.isFeatured,
       qtdAulas: tc.course.qtdAulas,
-      parcelasSugeridas: tc.course.parcelasSugeridas,
+      parcelasSugeridas:
+        tc.customParcelas ??
+        tc.course.parcelasOverride ??
+        tc.course.parcelasSugeridas,
       eaCourseId: tc.course.eaCourseId,
       lessons: tc.course.courseLessons.map((l) => ({
         id: l.id,

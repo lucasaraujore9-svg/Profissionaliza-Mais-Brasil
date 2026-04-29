@@ -7,6 +7,8 @@ const updateSchema = z.object({
   price: z.number().positive("Preço deve ser maior que zero"),
   paymentType: z.enum(["ONE_TIME", "MONTHLY"]),
   customDescription: z.string().trim().max(2000).nullable().optional(),
+  customCapaUrl: z.string().url().nullable().optional(),
+  customParcelas: z.number().int().min(1).max(24).nullable().optional(),
   isFeatured: z.boolean().optional(),
   customOrder: z.number().int().min(0).optional(),
 })
@@ -46,16 +48,32 @@ export async function GET(
       id: tc.id,
       courseId: tc.courseId,
       title: tc.course.nome,
-      description: tc.customDescription ?? tc.course.descricao,
-      capaImageUrl: tc.course.capaImageUrl,
+      // Hierarquia: tenant > admin > EA bruto
+      description:
+        tc.customDescription ??
+        tc.course.descricaoOverride ??
+        tc.course.descricao,
+      capaImageUrl:
+        tc.customCapaUrl ?? tc.course.capaOverride ?? tc.course.capaImageUrl,
       qtdAulas: tc.course.qtdAulas,
       cargaHoraria: tc.course.cargaHoraria,
       price: Number(tc.price),
+      parcelas:
+        tc.customParcelas ??
+        tc.course.parcelasOverride ??
+        tc.course.parcelasSugeridas,
       paymentType: tc.paymentType,
       isVisible: tc.isVisible,
       isFeatured: tc.isFeatured,
       customOrder: tc.customOrder,
       customDescription: tc.customDescription,
+      customCapaUrl: tc.customCapaUrl,
+      customParcelas: tc.customParcelas,
+      // Defaults vindos do catálogo (úteis pro form mostrar "valor padrão")
+      defaultCapaUrl: tc.course.capaOverride ?? tc.course.capaImageUrl,
+      defaultParcelas:
+        tc.course.parcelasOverride ?? tc.course.parcelasSugeridas,
+      defaultDescription: tc.course.descricaoOverride ?? tc.course.descricao,
       enrollmentsCount: tc._count.enrollments,
     },
   })
@@ -99,6 +117,12 @@ export async function PUT(
       price: parsed.data.price,
       paymentType: parsed.data.paymentType,
       customDescription: parsed.data.customDescription ?? null,
+      ...(parsed.data.customCapaUrl !== undefined && {
+        customCapaUrl: parsed.data.customCapaUrl,
+      }),
+      ...(parsed.data.customParcelas !== undefined && {
+        customParcelas: parsed.data.customParcelas,
+      }),
       ...(parsed.data.isFeatured !== undefined && { isFeatured: parsed.data.isFeatured }),
       ...(parsed.data.customOrder !== undefined && { customOrder: parsed.data.customOrder }),
     },
@@ -110,6 +134,8 @@ export async function PUT(
       price: Number(updated.price),
       paymentType: updated.paymentType,
       customDescription: updated.customDescription,
+      customCapaUrl: updated.customCapaUrl,
+      customParcelas: updated.customParcelas,
       isFeatured: updated.isFeatured,
       customOrder: updated.customOrder,
     },

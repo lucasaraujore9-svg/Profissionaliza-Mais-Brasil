@@ -277,6 +277,7 @@ model Course {
   ordemHome         Int?     @map("ordem_home")
   descricaoOverride String?  @map("descricao_override") @db.Text
   capaOverride      String?  @map("capa_override")
+  parcelasOverride  Int?     @map("parcelas_override")
 
   // Slug para URL amigavel (gerado do nome)
   slug String @unique
@@ -329,6 +330,8 @@ model TenantCourse {
   // Visibilidade e customizacao
   isVisible         Boolean @default(true) @map("is_visible")
   customDescription String? @map("custom_description") @db.Text
+  customCapaUrl     String? @map("custom_capa_url")
+  customParcelas    Int?    @map("custom_parcelas")
   customOrder       Int     @default(0) @map("custom_order") // Ordem na vitrine
   isFeatured        Boolean @default(false) @map("is_featured") // Destaque na vitrine
 

@@ -11,6 +11,9 @@ interface RawCourse {
   precoPromocional: number | null
   precoOriginal: number | null
   capaImageUrl: string | null
+  capaOverride: string | null
+  parcelasSugeridas: number | null
+  parcelasOverride: number | null
 }
 
 function formatPrice(value: number | null): string {
@@ -27,6 +30,7 @@ function pickPrice(c: Pick<RawCourse, "precoVitrineMain" | "precoPromocional" | 
 }
 
 function toCourse(c: RawCourse, idx: number, selo?: Course["selo"]): Course {
+  const parcelas = c.parcelasOverride ?? c.parcelasSugeridas
   return {
     slug: c.slug,
     categoria: c.categoriaLoja ?? "Curso profissionalizante",
@@ -36,10 +40,10 @@ function toCourse(c: RawCourse, idx: number, selo?: Course["selo"]): Course {
     alunos: "—",
     horas: c.cargaHoraria ? `${c.cargaHoraria}h` : `${c.qtdAulas} aulas`,
     preco: formatPrice(pickPrice(c)),
-    parcelas: "12x sem juros",
+    parcelas: parcelas ? `${parcelas}x sem juros` : "12x sem juros",
     selo: selo ?? null,
     accent: idx % 2 === 0 ? "gold" : "green",
-    imageUrl: c.capaImageUrl,
+    imageUrl: c.capaOverride ?? c.capaImageUrl,
   }
 }
 
@@ -53,6 +57,9 @@ const SELECT = {
   precoPromocional: true,
   precoOriginal: true,
   capaImageUrl: true,
+  capaOverride: true,
+  parcelasSugeridas: true,
+  parcelasOverride: true,
 } as const
 
 type DbRow = {
@@ -65,6 +72,9 @@ type DbRow = {
   precoPromocional: unknown
   precoOriginal: unknown
   capaImageUrl: string | null
+  capaOverride: string | null
+  parcelasSugeridas: number | null
+  parcelasOverride: number | null
 }
 
 function normalize(c: DbRow): RawCourse {
@@ -75,6 +85,9 @@ function normalize(c: DbRow): RawCourse {
     qtdAulas: c.qtdAulas,
     cargaHoraria: c.cargaHoraria,
     capaImageUrl: c.capaImageUrl,
+    capaOverride: c.capaOverride,
+    parcelasSugeridas: c.parcelasSugeridas,
+    parcelasOverride: c.parcelasOverride,
     precoVitrineMain: c.precoVitrineMain ? Number(c.precoVitrineMain) : null,
     precoPromocional: c.precoPromocional ? Number(c.precoPromocional) : null,
     precoOriginal: c.precoOriginal ? Number(c.precoOriginal) : null,

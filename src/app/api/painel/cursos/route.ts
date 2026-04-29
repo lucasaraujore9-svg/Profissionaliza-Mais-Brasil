@@ -22,9 +22,13 @@ export async function GET() {
           id: true,
           nome: true,
           descricao: true,
+          descricaoOverride: true,
           capaImageUrl: true,
+          capaOverride: true,
           qtdAulas: true,
           cargaHoraria: true,
+          parcelasSugeridas: true,
+          parcelasOverride: true,
         },
       },
       _count: { select: { enrollments: true } },
@@ -36,15 +40,27 @@ export async function GET() {
       id: tc.id,
       courseId: tc.courseId,
       title: tc.course.nome,
-      description: tc.customDescription ?? tc.course.descricao,
-      capaImageUrl: tc.course.capaImageUrl,
+      // Hierarquia tenant > admin > EA bruto
+      description:
+        tc.customDescription ??
+        tc.course.descricaoOverride ??
+        tc.course.descricao,
+      capaImageUrl:
+        tc.customCapaUrl ?? tc.course.capaOverride ?? tc.course.capaImageUrl,
       qtdAulas: tc.course.qtdAulas,
       cargaHoraria: tc.course.cargaHoraria,
       price: Number(tc.price),
+      parcelas:
+        tc.customParcelas ??
+        tc.course.parcelasOverride ??
+        tc.course.parcelasSugeridas,
       paymentType: tc.paymentType,
       isVisible: tc.isVisible,
       isFeatured: tc.isFeatured,
       customOrder: tc.customOrder,
+      hasCustomCapa: tc.customCapaUrl != null,
+      hasCustomDescription: tc.customDescription != null,
+      hasCustomParcelas: tc.customParcelas != null,
       enrollmentsCount: tc._count.enrollments,
     })),
   })
