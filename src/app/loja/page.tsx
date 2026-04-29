@@ -78,7 +78,7 @@ export default async function LojaHomePage() {
 
   return (
     <>
-      <HeroBanner showcase={showcase} />
+      <HeroBanner showcase={showcase} tenantBannerUrl={tenant.bannerUrl} />
       <TrustBar />
       {curated.length > 0 && (
         <CourseRow

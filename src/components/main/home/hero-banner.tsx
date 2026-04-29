@@ -14,19 +14,37 @@ const MAIS_PROCURADOS = [
 
 interface HeroBannerProps {
   showcase?: ShowcaseCard[]
+  tenantBannerUrl?: string | null
 }
 
-export function HeroBanner({ showcase }: HeroBannerProps = {}) {
+export function HeroBanner({
+  showcase,
+  tenantBannerUrl,
+}: HeroBannerProps = {}) {
   return (
     <section className="relative overflow-hidden bg-[var(--color-pmb-green)] text-white">
-      <div
-        aria-hidden
-        className="absolute inset-0 opacity-[0.08] pointer-events-none"
-        style={{
-          backgroundImage:
-            "radial-gradient(circle at 20% 30%, #C0D904 0, transparent 38%), radial-gradient(circle at 85% 75%, #F2B705 0, transparent 40%)",
-        }}
-      />
+      {tenantBannerUrl ? (
+        <>
+          <div
+            aria-hidden
+            className="absolute inset-0 bg-cover bg-center"
+            style={{ backgroundImage: `url(${tenantBannerUrl})` }}
+          />
+          <div
+            aria-hidden
+            className="absolute inset-0 bg-gradient-to-br from-[var(--color-pmb-green)]/85 via-[var(--color-pmb-green)]/70 to-black/55"
+          />
+        </>
+      ) : (
+        <div
+          aria-hidden
+          className="absolute inset-0 opacity-[0.08] pointer-events-none"
+          style={{
+            backgroundImage:
+              "radial-gradient(circle at 20% 30%, #C0D904 0, transparent 38%), radial-gradient(circle at 85% 75%, #F2B705 0, transparent 40%)",
+          }}
+        />
+      )}
       <div className="relative mx-auto grid max-w-[1280px] grid-cols-1 items-center gap-10 px-4 py-12 md:px-6 md:py-16 lg:grid-cols-[1.05fr_0.95fr] lg:gap-16 lg:py-20">
         <div className="max-w-[620px]">
           <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--color-pmb-lime)] px-3 py-1 text-[12px] font-bold uppercase tracking-wide text-[var(--color-pmb-green)]">

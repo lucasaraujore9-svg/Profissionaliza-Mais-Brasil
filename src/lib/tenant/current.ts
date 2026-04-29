@@ -8,6 +8,7 @@ export interface CurrentTenant {
   name: string
   status: string
   logoUrl: string | null
+  bannerUrl: string | null
   primaryColor: string
   secondaryColor: string
   tagline: string | null
@@ -33,6 +34,7 @@ export const getCurrentTenant = cache(
           name: true,
           status: true,
           logoUrl: true,
+          bannerUrl: true,
           primaryColor: true,
           secondaryColor: true,
           tagline: true,
