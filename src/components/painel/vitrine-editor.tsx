@@ -105,6 +105,29 @@ export function VitrineEditor() {
     [],
   )
 
+  const handleRemove = useCallback(async (kind: VitrineAssetKind) => {
+    setUploading(kind)
+    try {
+      const res = await fetch(`/api/painel/vitrine/upload?kind=${kind}`, {
+        method: "DELETE",
+      })
+      const body = await res.json()
+      if (!res.ok) {
+        throw new Error(body.error ?? "Falha ao remover arquivo")
+      }
+      setConfig((prev) => ({
+        ...prev,
+        ...(kind === "logo" ? { logoUrl: null } : { bannerUrl: null }),
+      }))
+      setInitial((prev) => ({
+        ...prev,
+        ...(kind === "logo" ? { logoUrl: null } : { bannerUrl: null }),
+      }))
+    } finally {
+      setUploading(null)
+    }
+  }, [])
+
   async function handleSave() {
     setSaving(true)
     setError(null)
@@ -156,6 +179,7 @@ export function VitrineEditor() {
           config={config}
           onChange={setConfig}
           onUpload={handleUpload}
+          onRemove={handleRemove}
           uploading={uploading}
         />
 

@@ -1,7 +1,7 @@
 "use client"
 
 import { useRef, useState } from "react"
-import { Upload, Image as ImageIcon, Loader2 } from "lucide-react"
+import { Upload, Image as ImageIcon, Loader2, Trash2 } from "lucide-react"
 import Image from "next/image"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -26,6 +26,7 @@ interface VitrineConfigFormProps {
   config: VitrineConfig
   onChange: (config: VitrineConfig) => void
   onUpload: (kind: VitrineAssetKind, file: File) => Promise<void>
+  onRemove: (kind: VitrineAssetKind) => Promise<void>
   uploading: VitrineAssetKind | null
 }
 
@@ -33,6 +34,7 @@ export function VitrineConfigForm({
   config,
   onChange,
   onUpload,
+  onRemove,
   uploading,
 }: VitrineConfigFormProps) {
   const [uploadError, setUploadError] = useState<string | null>(null)
@@ -56,6 +58,17 @@ export function VitrineConfigForm({
     }
   }
 
+  async function handleRemove(kind: VitrineAssetKind) {
+    setUploadError(null)
+    const label = kind === "logo" ? "logo" : "banner"
+    if (!confirm(`Remover o ${label}?`)) return
+    try {
+      await onRemove(kind)
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : "Erro ao remover")
+    }
+  }
+
   return (
     <div className="space-y-6">
       <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
@@ -73,6 +86,7 @@ export function VitrineConfigForm({
             uploading={uploading === "logo"}
             inputRef={logoInputRef}
             onChoose={(file) => handleFile("logo", file)}
+            onRemove={() => handleRemove("logo")}
           />
           <AssetUploader
             label="Banner hero"
@@ -82,6 +96,7 @@ export function VitrineConfigForm({
             uploading={uploading === "banner"}
             inputRef={bannerInputRef}
             onChoose={(file) => handleFile("banner", file)}
+            onRemove={() => handleRemove("banner")}
           />
         </div>
 
@@ -204,6 +219,7 @@ interface AssetUploaderProps {
   uploading: boolean
   inputRef: React.RefObject<HTMLInputElement | null>
   onChoose: (file: File | null) => void
+  onRemove: () => void
 }
 
 function AssetUploader({
@@ -214,48 +230,66 @@ function AssetUploader({
   uploading,
   inputRef,
   onChoose,
+  onRemove,
 }: AssetUploaderProps) {
   return (
     <div>
       <Label>{label}</Label>
-      <label className="mt-1.5 flex h-28 cursor-pointer flex-col items-center justify-center gap-1 overflow-hidden rounded-xl border-2 border-dashed border-gray-300 bg-gray-50/50 text-xs text-gray-500 transition-colors hover:border-[var(--color-pmb-cyan)] hover:bg-[var(--color-pmb-lime-50)]/50">
-        {uploading ? (
-          <>
-            <Loader2 className="h-5 w-5 animate-spin" />
-            <span>Enviando...</span>
-          </>
-        ) : previewUrl ? (
-          <div className="relative flex h-full w-full items-center justify-center bg-white">
-            <Image
-              src={previewUrl}
-              alt={label}
-              fill
-              className="object-contain p-2"
-              unoptimized
-            />
-          </div>
-        ) : (
-          <>
-            {icon === "logo" ? (
-              <Upload className="h-5 w-5" />
-            ) : (
-              <ImageIcon className="h-5 w-5" />
-            )}
-            <span>{hint}</span>
-          </>
+      <div className="relative mt-1.5">
+        <label className="flex h-28 cursor-pointer flex-col items-center justify-center gap-1 overflow-hidden rounded-xl border-2 border-dashed border-gray-300 bg-gray-50/50 text-xs text-gray-500 transition-colors hover:border-[var(--color-pmb-cyan)] hover:bg-[var(--color-pmb-lime-50)]/50">
+          {uploading ? (
+            <>
+              <Loader2 className="h-5 w-5 animate-spin" />
+              <span>Processando...</span>
+            </>
+          ) : previewUrl ? (
+            <div className="relative flex h-full w-full items-center justify-center bg-white">
+              <Image
+                src={previewUrl}
+                alt={label}
+                fill
+                className="object-contain p-2"
+                unoptimized
+              />
+            </div>
+          ) : (
+            <>
+              {icon === "logo" ? (
+                <Upload className="h-5 w-5" />
+              ) : (
+                <ImageIcon className="h-5 w-5" />
+              )}
+              <span>{hint}</span>
+            </>
+          )}
+          <input
+            ref={inputRef}
+            type="file"
+            className="hidden"
+            accept="image/png,image/jpeg,image/webp,image/svg+xml"
+            onChange={(e) => {
+              const file = e.target.files?.[0] ?? null
+              onChoose(file)
+              if (e.target) e.target.value = ""
+            }}
+          />
+        </label>
+        {previewUrl && !uploading && (
+          <button
+            type="button"
+            onClick={onRemove}
+            aria-label={`Remover ${label.toLowerCase()}`}
+            className="absolute right-2 top-2 inline-flex h-7 w-7 items-center justify-center rounded-full border border-red-200 bg-white text-red-600 shadow-sm hover:bg-red-50"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
         )}
-        <input
-          ref={inputRef}
-          type="file"
-          className="hidden"
-          accept="image/png,image/jpeg,image/webp,image/svg+xml"
-          onChange={(e) => {
-            const file = e.target.files?.[0] ?? null
-            onChoose(file)
-            if (e.target) e.target.value = ""
-          }}
-        />
-      </label>
+      </div>
+      {previewUrl && !uploading && (
+        <p className="mt-1 text-[11px] text-gray-500">
+          Clique na imagem para trocar, ou no <Trash2 className="inline h-3 w-3 align-middle" /> para remover.
+        </p>
+      )}
     </div>
   )
 }

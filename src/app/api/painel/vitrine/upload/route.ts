@@ -131,3 +131,57 @@ export async function POST(request: Request) {
     },
   })
 }
+
+export async function DELETE(request: Request) {
+  const ctx = await requireResellerSession()
+  if (!ctx) {
+    return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
+  }
+
+  const url = new URL(request.url)
+  const kind = (url.searchParams.get("kind") ?? "").trim()
+  if (!ALLOWED_KINDS.has(kind)) {
+    return NextResponse.json(
+      { error: "kind deve ser 'logo' ou 'banner'" },
+      { status: 400 },
+    )
+  }
+
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: ctx.tenantId },
+    select: {
+      id: true,
+      slug: true,
+      customDomain: true,
+      logoUrl: true,
+      bannerUrl: true,
+    },
+  })
+  if (!tenant) {
+    return NextResponse.json({ error: "Tenant não encontrado" }, { status: 404 })
+  }
+
+  const currentUrl = kind === "logo" ? tenant.logoUrl : tenant.bannerUrl
+  const currentPath = extractAssetPath(currentUrl)
+
+  await prisma.tenant.update({
+    where: { id: tenant.id },
+    data: kind === "logo" ? { logoUrl: null } : { bannerUrl: null },
+  })
+
+  await invalidateTenant({
+    id: tenant.id,
+    slug: tenant.slug,
+    customDomain: tenant.customDomain,
+  })
+
+  if (currentPath) {
+    try {
+      await deleteVitrineAsset(currentPath)
+    } catch {
+      // Arquivo já não existe — ignora
+    }
+  }
+
+  return NextResponse.json({ data: { kind, url: null } })
+}
