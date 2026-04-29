@@ -17,6 +17,7 @@ import {
   type ResellerStudentsBreakdown,
 } from "./reseller-student-count"
 import { ResellerSupportNotes } from "./reseller-support-notes"
+import { ResellerImpersonateButton } from "./reseller-impersonate-button"
 
 interface DetailResponse {
   reseller: ResellerProfileData & {
@@ -79,6 +80,8 @@ export function ResellerDetailClient({ tenantId }: ResellerDetailClientProps) {
   return (
     <div className="space-y-6">
       <ResellerProfile reseller={data.reseller} />
+
+      <ResellerImpersonateButton tenantId={tenantId} />
 
       <div className="grid gap-6 xl:grid-cols-[2fr_1fr]">
         <div className="space-y-6">
