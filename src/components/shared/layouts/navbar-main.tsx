@@ -16,9 +16,15 @@ const FALLBACK_CATEGORIAS: CategoriaInfo[] = [
 
 interface NavbarMainProps {
   categorias?: CategoriaInfo[]
+  tenantLogoUrl?: string | null
+  tenantName?: string | null
 }
 
-export function NavbarMain({ categorias }: NavbarMainProps = {}) {
+export function NavbarMain({
+  categorias,
+  tenantLogoUrl,
+  tenantName,
+}: NavbarMainProps = {}) {
   const lista =
     categorias && categorias.length > 0 ? categorias : FALLBACK_CATEGORIAS
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -26,15 +32,30 @@ export function NavbarMain({ categorias }: NavbarMainProps = {}) {
   return (
     <header className="sticky top-0 z-40 bg-white shadow-[0_1px_0_0_rgba(2,89,24,0.08)]">
       <div className="mx-auto flex h-[80px] max-w-[1280px] items-center gap-3 px-4 md:h-[92px] md:gap-5 md:px-6">
-        <Link href="/" className="flex items-center shrink-0" aria-label="Profissionaliza Mais Brasil">
-          <Image
-            src="/images/logo.png"
-            alt="Profissionaliza Mais Brasil"
-            width={1536}
-            height={1024}
-            priority
-            className="h-14 w-auto md:h-16"
-          />
+        <Link
+          href="/"
+          className="flex items-center shrink-0"
+          aria-label={tenantName ?? "Profissionaliza Mais Brasil"}
+        >
+          {tenantLogoUrl ? (
+            <Image
+              src={tenantLogoUrl}
+              alt={tenantName ?? "Logo"}
+              width={400}
+              height={120}
+              priority
+              className="h-14 w-auto object-contain md:h-16"
+            />
+          ) : (
+            <Image
+              src="/images/logo.png"
+              alt="Profissionaliza Mais Brasil"
+              width={1536}
+              height={1024}
+              priority
+              className="h-14 w-auto md:h-16"
+            />
+          )}
         </Link>
 
         <button
