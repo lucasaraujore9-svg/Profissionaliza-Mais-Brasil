@@ -97,7 +97,7 @@ function normalize(c: DbRow): RawCourse {
 export async function loadCurated(take = 8): Promise<Course[]> {
   try {
     const featured = await prisma.course.findMany({
-      where: { destaque: true, status: "ATIVO" },
+      where: { destaque: true, status: "ATIVO", hiddenMain: false },
       orderBy: { nome: "asc" },
       take,
       select: SELECT,
@@ -112,6 +112,7 @@ export async function loadCurated(take = 8): Promise<Course[]> {
     const fill = await prisma.course.findMany({
       where: {
         status: "ATIVO",
+        hiddenMain: false,
         destaque: false,
       },
       orderBy: { nome: "asc" },
@@ -132,6 +133,7 @@ export async function loadByCategoria(categoria: string, take = 8): Promise<Cour
     const rows = await prisma.course.findMany({
       where: {
         status: "ATIVO",
+        hiddenMain: false,
         categoriaLoja: { equals: categoria, mode: "insensitive" },
       },
       orderBy: { nome: "asc" },
@@ -197,7 +199,11 @@ export async function loadCategorias(minCount = 3): Promise<CategoriaInfo[]> {
   try {
     const grouped = await prisma.course.groupBy({
       by: ["categoriaLoja"],
-      where: { status: "ATIVO", categoriaLoja: { not: null } },
+      where: {
+        status: "ATIVO",
+        hiddenMain: false,
+        categoriaLoja: { not: null },
+      },
       _count: { _all: true },
       orderBy: { _count: { categoriaLoja: "desc" } },
     })
@@ -230,6 +236,7 @@ export async function loadShowcase(): Promise<ShowcaseCard[]> {
     const rows = await prisma.course.findMany({
       where: {
         status: "ATIVO",
+        hiddenMain: false,
         destaque: true,
         capaImageUrl: { not: null },
       },
@@ -242,6 +249,7 @@ export async function loadShowcase(): Promise<ShowcaseCard[]> {
       const fill = await prisma.course.findMany({
         where: {
           status: "ATIVO",
+          hiddenMain: false,
           capaImageUrl: { not: null },
         },
         orderBy: { nome: "asc" },

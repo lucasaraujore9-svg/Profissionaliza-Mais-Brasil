@@ -21,6 +21,17 @@ interface CourseDetail {
   capaOverride: string | null
   categoriaLoja: string | null
   status: string
+  parcelasSugeridas: number | null
+  parcelasOverride: number | null
+  hiddenMain: boolean
+}
+
+type Visibility = "all" | "main_only_hidden" | "none"
+
+function visibilityFromDetail(d: CourseDetail): Visibility {
+  if (d.status === "INATIVO") return "none"
+  if (d.hiddenMain) return "main_only_hidden"
+  return "all"
 }
 
 export function CatalogEditDrawer({ courseId, open, onOpenChange, onSaved }: CatalogEditDrawerProps) {
@@ -46,14 +57,17 @@ export function CatalogEditDrawer({ courseId, open, onOpenChange, onSaved }: Cat
     if (!detail) return
     setSaving(true)
     setError(null)
+    const visibility = visibilityFromDetail(detail)
     const body = {
       precoVitrineMain: detail.precoVitrineMain,
       destaqueHome: detail.destaqueHome,
       ordemHome: detail.ordemHome,
       descricaoOverride: detail.descricaoOverride,
       capaOverride: detail.capaOverride,
+      parcelasOverride: detail.parcelasOverride,
       categoriaLoja: detail.categoriaLoja,
-      status: detail.status === "INATIVO" ? "INATIVO" : "ATIVO",
+      status: visibility === "none" ? "INATIVO" : "ATIVO",
+      hiddenMain: visibility === "main_only_hidden",
     }
     const res = await fetch(`/api/admin/catalogo/${detail.id}`, {
       method: "PATCH",
@@ -188,16 +202,100 @@ export function CatalogEditDrawer({ courseId, open, onOpenChange, onSaved }: Cat
             </div>
 
             <div>
-              <label className="text-xs font-semibold text-gray-700">Status</label>
-              <select
-                value={detail.status}
-                onChange={(e) => setDetail({ ...detail, status: e.target.value })}
+              <label className="text-xs font-semibold text-gray-700">
+                Parcelas (override) — vazio usa o padrão da EA
+                {detail.parcelasSugeridas
+                  ? ` (${detail.parcelasSugeridas}x)`
+                  : ""}
+              </label>
+              <input
+                type="number"
+                min={1}
+                max={24}
+                value={detail.parcelasOverride ?? ""}
+                onChange={(e) =>
+                  setDetail({
+                    ...detail,
+                    parcelasOverride:
+                      e.target.value === "" ? null : Number(e.target.value),
+                  })
+                }
                 className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-              >
-                <option value="ATIVO">ATIVO</option>
-                <option value="INATIVO">INATIVO</option>
-              </select>
+                placeholder={
+                  detail.parcelasSugeridas
+                    ? String(detail.parcelasSugeridas)
+                    : "Ex: 12"
+                }
+              />
             </div>
+
+            <fieldset className="rounded-lg border border-gray-200 p-4">
+              <legend className="px-2 text-xs font-bold uppercase tracking-wide text-gray-600">
+                Visibilidade
+              </legend>
+              <div className="space-y-2.5">
+                <label className="flex cursor-pointer items-start gap-3 rounded-md p-2 hover:bg-gray-50">
+                  <input
+                    type="radio"
+                    name="visibility"
+                    className="mt-0.5"
+                    checked={visibilityFromDetail(detail) === "all"}
+                    onChange={() =>
+                      setDetail({ ...detail, status: "ATIVO", hiddenMain: false })
+                    }
+                  />
+                  <div>
+                    <div className="text-sm font-semibold text-[var(--color-pmb-green-900)]">
+                      Visível em todas as vitrines
+                    </div>
+                    <div className="text-[11px] text-gray-500">
+                      Aparece na vitrine principal e em todos os revendedores que
+                      não ocultaram individualmente.
+                    </div>
+                  </div>
+                </label>
+                <label className="flex cursor-pointer items-start gap-3 rounded-md p-2 hover:bg-gray-50">
+                  <input
+                    type="radio"
+                    name="visibility"
+                    className="mt-0.5"
+                    checked={visibilityFromDetail(detail) === "main_only_hidden"}
+                    onChange={() =>
+                      setDetail({ ...detail, status: "ATIVO", hiddenMain: true })
+                    }
+                  />
+                  <div>
+                    <div className="text-sm font-semibold text-[var(--color-pmb-green-900)]">
+                      Ocultar só na vitrine principal
+                    </div>
+                    <div className="text-[11px] text-gray-500">
+                      Some apenas em www.profissionalizamaisbrasil.com.br.
+                      Revendedores continuam vendendo normalmente.
+                    </div>
+                  </div>
+                </label>
+                <label className="flex cursor-pointer items-start gap-3 rounded-md p-2 hover:bg-gray-50">
+                  <input
+                    type="radio"
+                    name="visibility"
+                    className="mt-0.5"
+                    checked={visibilityFromDetail(detail) === "none"}
+                    onChange={() =>
+                      setDetail({ ...detail, status: "INATIVO", hiddenMain: false })
+                    }
+                  />
+                  <div>
+                    <div className="text-sm font-semibold text-rose-700">
+                      Ocultar em todas as vitrines
+                    </div>
+                    <div className="text-[11px] text-gray-500">
+                      Marca o curso como INATIVO. Some da vitrine principal e de
+                      todos os revendedores.
+                    </div>
+                  </div>
+                </label>
+              </div>
+            </fieldset>
 
             <div className="flex justify-end gap-2 pt-4">
               <button

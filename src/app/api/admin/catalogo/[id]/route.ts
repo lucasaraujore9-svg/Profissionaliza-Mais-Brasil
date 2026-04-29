@@ -13,6 +13,7 @@ const patchSchema = z.object({
   parcelasOverride: z.number().int().min(1).max(24).nullable().optional(),
   categoriaLoja: z.string().nullable().optional(),
   status: z.enum(["ATIVO", "INATIVO"]).optional(),
+  hiddenMain: z.boolean().optional(),
 })
 
 export async function GET(
@@ -44,6 +45,7 @@ export async function GET(
       capaOverride: true,
       parcelasSugeridas: true,
       parcelasOverride: true,
+      hiddenMain: true,
     },
   })
   if (!course) return NextResponse.json({ error: "Não encontrado" }, { status: 404 })
@@ -85,6 +87,7 @@ export async function PATCH(
       parcelasOverride: true,
       categoriaLoja: true,
       status: true,
+      hiddenMain: true,
     },
   })
 

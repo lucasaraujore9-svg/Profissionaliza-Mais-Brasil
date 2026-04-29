@@ -275,6 +275,7 @@ model Course {
   precoVitrineMain  Decimal? @map("preco_vitrine_main") @db.Decimal(10, 2)
   destaqueHome      Boolean  @default(false) @map("destaque_home")
   ordemHome         Int?     @map("ordem_home")
+  hiddenMain        Boolean  @default(false) @map("hidden_main")
   descricaoOverride String?  @map("descricao_override") @db.Text
   capaOverride      String?  @map("capa_override")
   parcelasOverride  Int?     @map("parcelas_override")
