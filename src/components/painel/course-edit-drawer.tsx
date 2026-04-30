@@ -343,68 +343,91 @@ export function CourseEditDrawer({
                 />
               </div>
 
-              {paymentType === "ONE_TIME" && (
-                <div>
-                  <Label htmlFor="edit-parcelas">
-                    Número de parcelas{" "}
-                    <span className="text-[11px] font-normal text-gray-500">
-                      (1 a 24
-                      {detail?.defaultParcelas
-                        ? ` · padrão ${detail.defaultParcelas}x`
-                        : ""}
-                      )
-                    </span>
-                  </Label>
-                  <Input
-                    id="edit-parcelas"
-                    type="number"
-                    min={1}
-                    max={24}
-                    value={parcelas}
-                    onChange={(e) => setParcelas(e.target.value)}
-                    className="mt-1.5"
-                    placeholder={
-                      detail?.defaultParcelas
-                        ? String(detail.defaultParcelas)
-                        : "Ex: 12"
-                    }
-                  />
-                  {(() => {
-                    const numericPrice = parseFloat(
-                      price.replace(/\./g, "").replace(",", "."),
+              <div>
+                <Label htmlFor="edit-parcelas">
+                  {paymentType === "MONTHLY"
+                    ? "Quantidade de mensalidades"
+                    : "Número de parcelas"}{" "}
+                  <span className="text-[11px] font-normal text-gray-500">
+                    (1 a 24
+                    {detail?.defaultParcelas
+                      ? ` · padrão ${detail.defaultParcelas}${
+                          paymentType === "MONTHLY" ? " meses" : "x"
+                        }`
+                      : ""}
                     )
-                    const efetivoParcelas = parcelas.trim()
-                      ? parseInt(parcelas, 10)
-                      : (detail?.defaultParcelas ?? 12)
-                    if (
-                      !Number.isFinite(numericPrice) ||
-                      numericPrice <= 0 ||
-                      !efetivoParcelas ||
-                      efetivoParcelas <= 0
-                    ) {
-                      return null
-                    }
-                    const valorParcela = numericPrice / efetivoParcelas
-                    return (
-                      <div className="mt-2 rounded-lg border border-[rgba(2,89,24,0.15)] bg-[var(--color-pmb-lime-50)]/40 px-3 py-2 text-xs text-[var(--color-pmb-green-900)]">
-                        <strong>{efetivoParcelas}x</strong> de{" "}
-                        <strong className="font-mono">
-                          {valorParcela.toLocaleString("pt-BR", {
-                            style: "currency",
-                            currency: "BRL",
-                          })}
-                        </strong>{" "}
-                        sem juros
-                        {parcelas.trim() === "" && (
-                          <span className="text-gray-500">
-                            {" "}(usando padrão do catálogo)
-                          </span>
-                        )}
-                      </div>
-                    )
-                  })()}
-                </div>
-              )}
+                  </span>
+                </Label>
+                <Input
+                  id="edit-parcelas"
+                  type="number"
+                  min={1}
+                  max={24}
+                  value={parcelas}
+                  onChange={(e) => setParcelas(e.target.value)}
+                  className="mt-1.5"
+                  placeholder={
+                    detail?.defaultParcelas
+                      ? String(detail.defaultParcelas)
+                      : "Ex: 12"
+                  }
+                />
+                {(() => {
+                  const numericPrice = parseFloat(
+                    price.replace(/\./g, "").replace(",", "."),
+                  )
+                  const efetivoParcelas = parcelas.trim()
+                    ? parseInt(parcelas, 10)
+                    : (detail?.defaultParcelas ?? 12)
+                  if (
+                    !Number.isFinite(numericPrice) ||
+                    numericPrice <= 0 ||
+                    !efetivoParcelas ||
+                    efetivoParcelas <= 0
+                  ) {
+                    return null
+                  }
+                  const fmt = (v: number) =>
+                    v.toLocaleString("pt-BR", {
+                      style: "currency",
+                      currency: "BRL",
+                    })
+                  const usingDefault = parcelas.trim() === ""
+                  return (
+                    <div className="mt-2 rounded-lg border border-[rgba(2,89,24,0.15)] bg-[var(--color-pmb-lime-50)]/40 px-3 py-2 text-xs text-[var(--color-pmb-green-900)]">
+                      {paymentType === "MONTHLY" ? (
+                        <>
+                          <strong>{efetivoParcelas}</strong>{" "}
+                          {efetivoParcelas === 1 ? "mensalidade" : "mensalidades"}{" "}
+                          de{" "}
+                          <strong className="font-mono">
+                            {fmt(numericPrice)}
+                          </strong>
+                          <div className="mt-0.5 text-[11px] text-gray-600">
+                            Total ao final:{" "}
+                            <span className="font-mono">
+                              {fmt(numericPrice * efetivoParcelas)}
+                            </span>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <strong>{efetivoParcelas}x</strong> de{" "}
+                          <strong className="font-mono">
+                            {fmt(numericPrice / efetivoParcelas)}
+                          </strong>{" "}
+                          sem juros
+                        </>
+                      )}
+                      {usingDefault && (
+                        <span className="text-gray-500">
+                          {" "}(usando padrão do catálogo)
+                        </span>
+                      )}
+                    </div>
+                  )
+                })()}
+              </div>
 
               <label className="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50/50 px-4 py-3">
                 <div>

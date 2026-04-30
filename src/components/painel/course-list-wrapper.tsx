@@ -225,14 +225,21 @@ export function CourseListWrapper() {
                         <div>
                           <p className="font-mono text-sm font-bold text-[var(--color-pmb-green-900)]">
                             {formatBRL(c.price)}
+                            {c.paymentType === "MONTHLY" && (
+                              <span className="text-[11px] font-medium text-gray-500">
+                                {" "}/mês
+                              </span>
+                            )}
                           </p>
-                          {valorParcela ? (
+                          {c.paymentType === "MONTHLY" ? (
+                            <p className="text-[11px] text-gray-500">
+                              {parcelas
+                                ? `${parcelas} ${parcelas === 1 ? "mensalidade" : "mensalidades"}`
+                                : "Mensalidade recorrente"}
+                            </p>
+                          ) : valorParcela ? (
                             <p className="text-[11px] text-gray-500">
                               {parcelas}x de {formatBRL(valorParcela)}
-                            </p>
-                          ) : c.paymentType === "MONTHLY" ? (
-                            <p className="text-[11px] text-gray-500">
-                              Mensalidade
                             </p>
                           ) : null}
                         </div>
