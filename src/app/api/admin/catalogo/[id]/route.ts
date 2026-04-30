@@ -14,6 +14,8 @@ const patchSchema = z.object({
   categoriaLoja: z.string().nullable().optional(),
   status: z.enum(["ATIVO", "INATIVO"]).optional(),
   hiddenMain: z.boolean().optional(),
+  paymentTypeMain: z.enum(["ONE_TIME", "MONTHLY"]).optional(),
+  monthlyMonthsMain: z.number().int().min(1).max(60).nullable().optional(),
 })
 
 export async function GET(
@@ -46,6 +48,8 @@ export async function GET(
       parcelasSugeridas: true,
       parcelasOverride: true,
       hiddenMain: true,
+      paymentTypeMain: true,
+      monthlyMonthsMain: true,
     },
   })
   if (!course) return NextResponse.json({ error: "Não encontrado" }, { status: 404 })
@@ -74,9 +78,19 @@ export async function PATCH(
     return NextResponse.json({ error: "Payload inválido", issues: parsed.error.issues }, { status: 400 })
   }
 
+  // Se mudou para ONE_TIME, zera monthlyMonthsMain. Se MONTHLY sem meses,
+  // garante um default razoavel.
+  const data = { ...parsed.data }
+  if (data.paymentTypeMain === "ONE_TIME") {
+    data.monthlyMonthsMain = null
+  }
+  if (data.paymentTypeMain === "MONTHLY" && data.monthlyMonthsMain === undefined) {
+    data.monthlyMonthsMain = 12
+  }
+
   const updated = await prisma.course.update({
     where: { id },
-    data: parsed.data,
+    data,
     select: {
       id: true,
       precoVitrineMain: true,
@@ -88,6 +102,8 @@ export async function PATCH(
       categoriaLoja: true,
       status: true,
       hiddenMain: true,
+      paymentTypeMain: true,
+      monthlyMonthsMain: true,
     },
   })
 

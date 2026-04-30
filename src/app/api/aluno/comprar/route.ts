@@ -66,6 +66,8 @@ export async function POST(request: Request) {
         precoVitrineMain: true,
         precoPromocional: true,
         precoOriginal: true,
+        paymentTypeMain: true,
+        monthlyMonthsMain: true,
       },
     }),
   ])
@@ -153,7 +155,7 @@ export async function POST(request: Request) {
       studentId: student.id,
       tenantCourseId: null,
       courseId: course.id,
-      paymentType: "ONE_TIME",
+      paymentType: course.paymentTypeMain,
       status: "PENDING",
       gateway,
       originalAmount: basePrice,

@@ -278,13 +278,15 @@ model Course {
   capaImageUrl String? @map("capa_image_url")
 
   // Overrides da vitrine principal PMB (curadoria admin — nao tocar no sync)
-  precoVitrineMain  Decimal? @map("preco_vitrine_main") @db.Decimal(10, 2)
-  destaqueHome      Boolean  @default(false) @map("destaque_home")
-  ordemHome         Int?     @map("ordem_home")
-  hiddenMain        Boolean  @default(false) @map("hidden_main")
-  descricaoOverride String?  @map("descricao_override") @db.Text
-  capaOverride      String?  @map("capa_override")
-  parcelasOverride  Int?     @map("parcelas_override")
+  precoVitrineMain  Decimal?    @map("preco_vitrine_main") @db.Decimal(10, 2)
+  destaqueHome      Boolean     @default(false) @map("destaque_home")
+  ordemHome         Int?        @map("ordem_home")
+  hiddenMain        Boolean     @default(false) @map("hidden_main")
+  descricaoOverride String?     @map("descricao_override") @db.Text
+  capaOverride      String?     @map("capa_override")
+  parcelasOverride  Int?        @map("parcelas_override")
+  paymentTypeMain   PaymentType @default(ONE_TIME) @map("payment_type_main") // ONE_TIME ou MONTHLY na vitrine PMB
+  monthlyMonthsMain Int?        @map("monthly_months_main") // Quantidade de mensalidades quando paymentTypeMain=MONTHLY
 
   // Slug para URL amigavel (gerado do nome)
   slug String @unique

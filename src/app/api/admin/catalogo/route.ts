@@ -26,6 +26,8 @@ export async function GET() {
         syncedAt: true,
         precoVitrineMain: true,
         destaqueHome: true,
+        paymentTypeMain: true,
+        monthlyMonthsMain: true,
         _count: {
           select: {
             tenantCourses: true,
@@ -57,6 +59,8 @@ export async function GET() {
         students: c._count.enrollments,
         precoVitrineMain: c.precoVitrineMain ? Number(c.precoVitrineMain) : null,
         destaqueHome: c.destaqueHome,
+        paymentTypeMain: c.paymentTypeMain,
+        monthlyMonthsMain: c.monthlyMonthsMain,
       })),
       lastSync: lastSync
         ? {

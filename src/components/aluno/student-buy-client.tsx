@@ -12,6 +12,8 @@ interface CatalogCourse {
   categoria: string | null
   price: number
   installments: number | null
+  paymentType: "ONE_TIME" | "MONTHLY"
+  monthlyMonths: number | null
   ownedStatus: "PENDING" | "ACTIVE" | "COMPLETED" | null
 }
 
@@ -152,8 +154,9 @@ export function StudentBuyClient() {
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {filtered.map((c) => {
             const owned = c.ownedStatus !== null
+            const isMonthly = c.paymentType === "MONTHLY"
             const installmentValue =
-              c.installments && c.installments > 1
+              !isMonthly && c.installments && c.installments > 1
                 ? c.price / c.installments
                 : null
             return (
@@ -192,7 +195,19 @@ export function StudentBuyClient() {
                     <span className="font-mono text-lg font-bold text-[var(--color-pmb-green)]">
                       {brl(c.price)}
                     </span>
+                    {isMonthly && (
+                      <span className="text-xs font-semibold text-gray-500">
+                        /mês
+                      </span>
+                    )}
                   </div>
+                  {isMonthly && c.monthlyMonths ? (
+                    <p className="text-[11px] text-gray-500">
+                      {c.monthlyMonths}{" "}
+                      {c.monthlyMonths === 1 ? "mensalidade" : "mensalidades"} ·
+                      total {brl(c.price * c.monthlyMonths)}
+                    </p>
+                  ) : null}
                   {installmentValue !== null && (
                     <p className="text-[11px] text-gray-500">
                       ou {c.installments}x de {brl(installmentValue)}

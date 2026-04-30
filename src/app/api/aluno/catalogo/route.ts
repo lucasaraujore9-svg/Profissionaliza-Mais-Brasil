@@ -26,6 +26,8 @@ export async function GET() {
         precoOriginal: true,
         parcelasOverride: true,
         parcelasSugeridas: true,
+        paymentTypeMain: true,
+        monthlyMonthsMain: true,
       },
     }),
     prisma.enrollment.findMany({
@@ -54,6 +56,8 @@ export async function GET() {
           categoria: c.categoriaLoja ?? null,
           price,
           installments: c.parcelasOverride ?? c.parcelasSugeridas ?? null,
+          paymentType: c.paymentTypeMain,
+          monthlyMonths: c.monthlyMonthsMain,
           ownedStatus: ownedMap.get(c.id) ?? null,
         }
       }),

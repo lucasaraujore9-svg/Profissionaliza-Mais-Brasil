@@ -1,5 +1,5 @@
 import Image from "next/image"
-import { BookOpen, Users, Pencil, Sparkles } from "lucide-react"
+import { BookOpen, Users, Pencil, Sparkles, Repeat } from "lucide-react"
 
 export interface CatalogCourse {
   id: string
@@ -18,6 +18,8 @@ export interface CatalogCourse {
   students: number
   precoVitrineMain?: number | null
   destaqueHome?: boolean
+  paymentTypeMain?: "ONE_TIME" | "MONTHLY"
+  monthlyMonthsMain?: number | null
   hasOverride?: boolean
 }
 
@@ -84,12 +86,25 @@ export function CatalogCourseGrid({ courses, canEdit = false, onEdit }: CatalogC
                     </span>
                     <span className="font-mono font-semibold text-[var(--color-pmb-green-900)]">
                       {formatMoney(preco)}
+                      {c.paymentTypeMain === "MONTHLY" && (
+                        <span className="ml-0.5 text-[10px] font-normal text-gray-500">
+                          /mês
+                        </span>
+                      )}
                     </span>
                   </div>
                   <p className="mt-2 text-[10px] font-medium text-gray-500">
                     {c.resellers} revendedor{c.resellers === 1 ? "" : "es"} vendendo
                   </p>
-                  <div className="mt-3 flex items-center gap-2">
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    {c.paymentTypeMain === "MONTHLY" ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-700">
+                        <Repeat className="h-3 w-3" />
+                        {c.monthlyMonthsMain
+                          ? `${c.monthlyMonthsMain} mensalidades`
+                          : "Mensalidade"}
+                      </span>
+                    ) : null}
                     {c.destaqueHome ? (
                       <span className="inline-flex items-center gap-1 rounded-full bg-[var(--color-pmb-lime-50)] px-2 py-0.5 text-[10px] font-semibold text-[var(--color-pmb-green-900)]">
                         <Sparkles className="h-3 w-3" /> Curadoria admin
