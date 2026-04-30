@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { invalidateTenant } from "@/lib/redis/tenant-cache"
 
 const bodySchema = z.object({
   mode: z.enum(["AUTO", "MANUAL"]),
@@ -32,10 +33,15 @@ export async function PATCH(request: Request) {
     )
   }
 
-  await prisma.tenant.update({
-    where: { id: session.user.tenantId as string },
+  const tenantId = session.user.tenantId as string
+
+  const updated = await prisma.tenant.update({
+    where: { id: tenantId },
     data: { billingMode: parsed.data.mode },
+    select: { id: true, slug: true, customDomain: true },
   })
+
+  await invalidateTenant(updated)
 
   return NextResponse.json({ data: { billingMode: parsed.data.mode } })
 }

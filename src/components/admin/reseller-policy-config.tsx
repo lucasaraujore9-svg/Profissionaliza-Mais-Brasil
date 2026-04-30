@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { CheckCircle2, Save } from "lucide-react"
+import { CheckCircle2, Loader2, Save } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
 export type BillingMode = "AUTO" | "MANUAL"
@@ -26,12 +26,15 @@ export function ResellerPolicyConfig({
   onSaved,
 }: ResellerPolicyConfigProps) {
   const [mode, setMode] = useState<BillingMode>(billingMode)
+  const [modeSaving, setModeSaving] = useState<BillingMode | null>(null)
+  const [modeError, setModeError] = useState<string | null>(null)
+
   const [grace, setGrace] = useState<number>(cancellationPolicy?.gracePeriodDays ?? 15)
   const [keep, setKeep] = useState<boolean>(cancellationPolicy?.keepStudentsActive ?? true)
   const [notify, setNotify] = useState<boolean>(cancellationPolicy?.notifyStudents ?? true)
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [ok, setOk] = useState(false)
+  const [policySaving, setPolicySaving] = useState(false)
+  const [policyError, setPolicyError] = useState<string | null>(null)
+  const [policyOk, setPolicyOk] = useState(false)
 
   useEffect(() => {
     setMode(billingMode)
@@ -40,16 +43,39 @@ export function ResellerPolicyConfig({
     setNotify(cancellationPolicy?.notifyStudents ?? true)
   }, [billingMode, cancellationPolicy])
 
-  async function save() {
-    setSaving(true)
-    setError(null)
-    setOk(false)
+  async function changeMode(next: BillingMode) {
+    if (next === mode || modeSaving) return
+    setModeSaving(next)
+    setModeError(null)
+    try {
+      const res = await fetch(`/api/admin/revendedores/${tenantId}/policy`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ billingMode: next }),
+      })
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setModeError(body.error ?? "Falha ao salvar modo")
+        return
+      }
+      setMode(next)
+      onSaved?.()
+    } catch {
+      setModeError("Erro de rede ao salvar")
+    } finally {
+      setModeSaving(null)
+    }
+  }
+
+  async function savePolicy() {
+    setPolicySaving(true)
+    setPolicyError(null)
+    setPolicyOk(false)
     try {
       const res = await fetch(`/api/admin/revendedores/${tenantId}/policy`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          billingMode: mode,
           cancellationPolicy: {
             gracePeriodDays: grace,
             keepStudentsActive: keep,
@@ -59,30 +85,42 @@ export function ResellerPolicyConfig({
       })
       const body = await res.json()
       if (!res.ok) {
-        setError(body.error ?? "Falha ao salvar política")
+        setPolicyError(body.error ?? "Falha ao salvar política")
         return
       }
-      setOk(true)
+      setPolicyOk(true)
       onSaved?.()
     } catch {
-      setError("Erro de rede ao salvar política")
+      setPolicyError("Erro de rede ao salvar política")
     } finally {
-      setSaving(false)
+      setPolicySaving(false)
     }
   }
 
   return (
     <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-      <h3 className="text-sm font-semibold text-[var(--color-pmb-green-900)]">Modo de bloqueio</h3>
-      <p className="mt-1 text-xs text-gray-600">
-        Define como a plataforma lida com alunos inadimplentes deste revendedor.
-      </p>
+      <div className="flex items-center justify-between gap-2">
+        <div>
+          <h3 className="text-sm font-semibold text-[var(--color-pmb-green-900)]">Modo de bloqueio</h3>
+          <p className="mt-1 text-xs text-gray-600">
+            Define como a plataforma lida com alunos inadimplentes deste revendedor.
+            Espelha a configuração do painel do próprio revendedor.
+          </p>
+        </div>
+        {modeSaving && (
+          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-gray-500">
+            <Loader2 className="h-3 w-3 animate-spin" />
+            Salvando...
+          </span>
+        )}
+      </div>
 
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
         <button
           type="button"
-          onClick={() => setMode("AUTO")}
-          className={`rounded-xl border-2 p-4 text-left transition-all ${
+          onClick={() => changeMode("AUTO")}
+          disabled={modeSaving !== null}
+          className={`rounded-xl border-2 p-4 text-left transition-all disabled:opacity-60 ${
             mode === "AUTO" ? "border-[var(--color-pmb-green)] bg-[var(--color-pmb-lime-50)]/50" : "border-gray-200 bg-white"
           }`}
         >
@@ -96,8 +134,9 @@ export function ResellerPolicyConfig({
         </button>
         <button
           type="button"
-          onClick={() => setMode("MANUAL")}
-          className={`rounded-xl border-2 p-4 text-left transition-all ${
+          onClick={() => changeMode("MANUAL")}
+          disabled={modeSaving !== null}
+          className={`rounded-xl border-2 p-4 text-left transition-all disabled:opacity-60 ${
             mode === "MANUAL" ? "border-[var(--color-pmb-green)] bg-[var(--color-pmb-lime-50)]/50" : "border-gray-200 bg-white"
           }`}
         >
@@ -110,6 +149,10 @@ export function ResellerPolicyConfig({
           </p>
         </button>
       </div>
+
+      {modeError && (
+        <p className="mt-3 rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">{modeError}</p>
+      )}
 
       <div className="mt-6 space-y-4 border-t border-gray-100 pt-4">
         <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-500">
@@ -150,19 +193,19 @@ export function ResellerPolicyConfig({
         </label>
       </div>
 
-      {error && (
-        <p className="mt-3 rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>
+      {policyError && (
+        <p className="mt-3 rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">{policyError}</p>
       )}
-      {ok && (
+      {policyOk && (
         <p className="mt-3 rounded-md bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
           Política salva com sucesso.
         </p>
       )}
 
       <div className="mt-4 flex justify-end">
-        <Button onClick={save} disabled={saving} className="bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)]">
+        <Button onClick={savePolicy} disabled={policySaving} className="bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)]">
           <Save className="mr-2 h-4 w-4" />
-          {saving ? "Salvando..." : "Salvar política"}
+          {policySaving ? "Salvando..." : "Salvar política"}
         </Button>
       </div>
     </div>
