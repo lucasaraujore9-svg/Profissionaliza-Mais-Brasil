@@ -80,6 +80,11 @@ enum WebhookSource {
   MERCADO_PAGO
 }
 
+enum PaymentGateway {
+  MP
+  ASAAS
+}
+
 // ============================================================
 // USUARIOS E AUTENTICACAO
 // ============================================================
@@ -433,11 +438,19 @@ model Enrollment {
   discountAmount Decimal          @default(0) @map("discount_amount") @db.Decimal(10, 2)
   finalAmount    Decimal          @map("final_amount") @db.Decimal(10, 2)
 
+  // Gateway escolhido (vitrine PMB pode usar MP ou ASAAS)
+  gateway PaymentGateway @default(MP)
+
   // Mercado Pago
   mpPreferenceId    String? @map("mp_preference_id") // preference_xxxx
   mpPaymentId       String? @map("mp_payment_id") // Pagamento unico
   mpSubscriptionId  String? @map("mp_subscription_id") // preapproval_xxxx (mensal)
   externalReference String? @map("external_reference") // Para rastreamento no webhook
+
+  // Asaas (venda direta PMB via Asaas)
+  asaasCustomerId String? @map("asaas_customer_id")
+  asaasPaymentId  String? @map("asaas_payment_id")
+  asaasInvoiceUrl String? @map("asaas_invoice_url") @db.Text
 
   // Cupom
   couponId String? @map("coupon_id")
@@ -460,6 +473,7 @@ model Enrollment {
   @@index([mpPaymentId])
   @@index([mpSubscriptionId])
   @@index([externalReference])
+  @@index([asaasPaymentId])
   @@map("enrollments")
 }
 
@@ -479,14 +493,18 @@ model Payment {
   soldByUser   User?   @relation("SoldPayments", fields: [soldByUserId], references: [id])
 
   // Valores
-  amount Decimal     @db.Decimal(10, 2)
-  type   PaymentType
+  amount  Decimal        @db.Decimal(10, 2)
+  type    PaymentType
+  gateway PaymentGateway @default(MP)
 
-  // Mercado Pago
-  mpPaymentId    String        @unique @map("mp_payment_id") // ID do pagamento no MP
+  // Mercado Pago (nullable quando gateway=ASAAS)
+  mpPaymentId    String?       @unique @map("mp_payment_id") // ID do pagamento no MP
   mpStatus       PaymentStatus @map("mp_status")
   mpPaymentType  String?       @map("mp_payment_type") // credit_card, pix, boleto, account_money
   mpStatusDetail String?       @map("mp_status_detail")
+
+  // Asaas (nullable quando gateway=MP)
+  asaasPaymentId String? @unique @map("asaas_payment_id")
 
   // Cupom aplicado
   couponId String? @map("coupon_id")
@@ -622,4 +640,16 @@ model Lead {
   @@index([email])
   @@index([createdAt])
   @@map("leads")
+}
+
+// ============================================================
+// CONFIGURACOES GLOBAIS DO SISTEMA (singleton id="default")
+// ============================================================
+
+model SystemSettings {
+  id                     String         @id @default("default")
+  pmbDirectSaleGateway   PaymentGateway @default(MP) @map("pmb_direct_sale_gateway")
+  updatedAt              DateTime       @updatedAt @map("updated_at")
+
+  @@map("system_settings")
 }

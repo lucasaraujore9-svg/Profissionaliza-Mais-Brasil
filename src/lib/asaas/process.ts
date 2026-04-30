@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/prisma"
 import { sendEmail } from "@/lib/email/resend"
 import { blockTenantStudents, unblockTenantStudents } from "@/lib/auto-block"
+import { fulfillEnrollment } from "@/lib/enrollment/fulfill"
+import { pmbEaPolo, pmbEaVendedorId } from "@/lib/pmb-config"
 import type { AsaasWebhookPayload } from "./types"
 
 function formatMoney(value: number): string {
@@ -36,6 +38,64 @@ async function markLog(
     .catch(() => undefined)
 }
 
+async function processPmbDirectSale(
+  logId: string,
+  event: string,
+  payment: AsaasWebhookPayload["payment"],
+): Promise<boolean> {
+  // Detecta venda direta PMB pela externalReference (pmb_enr_<id>)
+  // OU pelo asaas_payment_id ja registrado em algum enrollment.
+  let enrollment = null as Awaited<
+    ReturnType<typeof prisma.enrollment.findFirst>
+  >
+
+  if (payment.externalReference?.startsWith("pmb_enr_")) {
+    const enrollmentId = payment.externalReference.replace("pmb_enr_", "")
+    enrollment = await prisma.enrollment.findUnique({
+      where: { id: enrollmentId },
+    })
+  }
+
+  if (!enrollment) {
+    enrollment = await prisma.enrollment.findFirst({
+      where: { asaasPaymentId: payment.id },
+    })
+  }
+
+  if (!enrollment || enrollment.tenantId !== null) return false
+
+  if (event === "PAYMENT_RECEIVED" || event === "PAYMENT_CONFIRMED") {
+    await fulfillEnrollment(
+      {
+        id: "__pmb__",
+        slug: pmbEaPolo(),
+        eaVendedorId: pmbEaVendedorId(),
+        isPmbVitrine: true,
+      },
+      enrollment.id,
+      {
+        gateway: "ASAAS",
+        externalPaymentId: payment.id,
+        amount: payment.value,
+        paidAt: payment.paymentDate ? new Date(payment.paymentDate) : new Date(),
+        paymentType: "ONE_TIME",
+      },
+    )
+    await markLog(logId, true, "pmb venda direta processada")
+    return true
+  }
+
+  if (event === "PAYMENT_OVERDUE") {
+    await prisma.enrollment.update({
+      where: { id: enrollment.id },
+      data: { status: "SUSPENDED" },
+    }).catch(() => undefined)
+  }
+
+  await markLog(logId, true, `pmb venda direta: ${event} sem fulfillment`)
+  return true
+}
+
 export async function processAsaasWebhook(
   logId: string,
   payload: AsaasWebhookPayload,
@@ -45,6 +105,8 @@ export async function processAsaasWebhook(
 
     const subscriptionId = payment.subscription
     if (!subscriptionId) {
+      const handled = await processPmbDirectSale(logId, event, payment)
+      if (handled) return
       await markLog(logId, true, `sem subscription: ${event}`)
       return
     }

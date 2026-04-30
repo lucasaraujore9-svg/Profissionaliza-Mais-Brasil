@@ -16,7 +16,11 @@ interface ConfigResponse {
   system: SystemInfoData
 }
 
-export function AdminConfigClient() {
+interface AdminConfigClientProps {
+  canEditGateway: boolean
+}
+
+export function AdminConfigClient({ canEditGateway }: AdminConfigClientProps) {
   const [config, setConfig] = useState<ConfigResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -62,6 +66,7 @@ export function AdminConfigClient() {
       integrations={config.integrations}
       webhooks={config.webhooks}
       system={config.system}
+      canEditGateway={canEditGateway}
     />
   )
 }

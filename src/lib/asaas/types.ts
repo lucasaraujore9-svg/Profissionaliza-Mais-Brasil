@@ -31,6 +31,16 @@ export interface AsaasCustomer {
   dateCreated: string
 }
 
+// ── Payment Creation ──
+export interface AsaasCreatePaymentParams {
+  customer: string
+  billingType: "BOLETO" | "CREDIT_CARD" | "PIX" | "UNDEFINED"
+  value: number
+  dueDate: string // YYYY-MM-DD
+  description?: string
+  externalReference?: string
+}
+
 // ── Subscription ──
 export interface AsaasCreateSubscriptionParams {
   customer: string

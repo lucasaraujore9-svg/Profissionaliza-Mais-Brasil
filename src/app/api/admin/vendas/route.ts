@@ -5,6 +5,12 @@ import { requirePmbSales } from "@/lib/auth/guards"
 import { getOrCreatePmbTenant } from "@/lib/pmb-tenant"
 import { pmbMpAccessToken } from "@/lib/pmb-config"
 import { createPreference } from "@/lib/mercadopago/client"
+import {
+  createCustomer as createAsaasCustomer,
+  createPayment as createAsaasPayment,
+  AsaasApiError,
+} from "@/lib/asaas/client"
+import { getSystemSettings } from "@/lib/system-settings"
 
 const PMB_SALES_CAP = 50
 
@@ -44,6 +50,7 @@ export async function GET(request: Request) {
       discountAmount: Number(e.discountAmount),
       finalAmount: Number(e.finalAmount),
       status: e.status,
+      gateway: e.gateway,
       soldByName: e.soldByUser?.name ?? null,
       createdAt: e.createdAt.toISOString(),
     })),
@@ -56,17 +63,15 @@ const createSchema = z.object({
   couponCode: z.string().trim().max(64).optional(),
 })
 
+function dueDateInDays(days: number): string {
+  const d = new Date()
+  d.setDate(d.getDate() + days)
+  return d.toISOString().slice(0, 10)
+}
+
 export async function POST(request: Request) {
   const guard = await requirePmbSales()
   if (!guard.ok) return guard.response
-
-  const mpToken = pmbMpAccessToken()
-  if (!mpToken) {
-    return NextResponse.json(
-      { error: "PMB_MP_ACCESS_TOKEN não configurado" },
-      { status: 503 },
-    )
-  }
 
   let payload: unknown
   try {
@@ -83,6 +88,22 @@ export async function POST(request: Request) {
     )
   }
 
+  const settings = await getSystemSettings()
+  const gateway = settings.pmbDirectSaleGateway
+
+  if (gateway === "MP" && !pmbMpAccessToken()) {
+    return NextResponse.json(
+      { error: "PMB_MP_ACCESS_TOKEN não configurado" },
+      { status: 503 },
+    )
+  }
+  if (gateway === "ASAAS" && (!process.env.ASAAS_API_URL || !process.env.ASAAS_API_KEY)) {
+    return NextResponse.json(
+      { error: "Asaas não configurado (ASAAS_API_URL/ASAAS_API_KEY)" },
+      { status: 503 },
+    )
+  }
+
   const pmbTenant = await getOrCreatePmbTenant()
 
   const [student, course] = await Promise.all([
@@ -93,6 +114,7 @@ export async function POST(request: Request) {
         nome: true,
         email: true,
         cpf: true,
+        fone: true,
       },
     }),
     prisma.course.findUnique({
@@ -152,7 +174,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Cupom esgotado" }, { status: 400 })
     }
 
-    // Cap por papel do vendedor no momento da aplicacao
     const cap = guard.session.role === "PMB_SALES" ? PMB_SALES_CAP : 100
     if (
       coupon.discountType === "PERCENTAGE" &&
@@ -183,6 +204,7 @@ export async function POST(request: Request) {
       soldByUserId: guard.session.userId,
       paymentType: "ONE_TIME",
       status: "PENDING",
+      gateway,
       originalAmount: basePrice,
       discountAmount,
       finalAmount,
@@ -194,49 +216,115 @@ export async function POST(request: Request) {
   const externalReference = `pmb_enr_${enrollment.id}`
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? ""
 
-  const preference = await createPreference(mpToken, {
-    items: [
-      {
-        id: course.id,
-        title: course.nome,
-        quantity: 1,
-        unit_price: finalAmount,
-        currency_id: "BRL",
+  if (gateway === "MP") {
+    const mpToken = pmbMpAccessToken()
+    if (!mpToken) {
+      return NextResponse.json(
+        { error: "PMB_MP_ACCESS_TOKEN não configurado" },
+        { status: 503 },
+      )
+    }
+
+    const preference = await createPreference(mpToken, {
+      items: [
+        {
+          id: course.id,
+          title: course.nome,
+          quantity: 1,
+          unit_price: finalAmount,
+          currency_id: "BRL",
+        },
+      ],
+      payer: {
+        name: student.nome,
+        email: student.email,
+        identification: student.cpf
+          ? { type: "CPF", number: student.cpf }
+          : undefined,
       },
-    ],
-    payer: {
+      back_urls: appUrl
+        ? {
+            success: `${appUrl}/admin/vendas?ok=${enrollment.id}`,
+            failure: `${appUrl}/admin/vendas?err=${enrollment.id}`,
+            pending: `${appUrl}/admin/vendas?pend=${enrollment.id}`,
+          }
+        : undefined,
+      auto_return: "approved",
+      external_reference: externalReference,
+      notification_url: appUrl ? `${appUrl}/api/webhooks/mercadopago` : undefined,
+    })
+
+    await prisma.enrollment.update({
+      where: { id: enrollment.id },
+      data: {
+        mpPreferenceId: preference.id,
+        externalReference,
+      },
+    })
+
+    return NextResponse.json({
+      data: {
+        enrollmentId: enrollment.id,
+        gateway: "MP",
+        initPoint: preference.init_point,
+        finalAmount,
+        discountAmount,
+      },
+    })
+  }
+
+  // gateway === "ASAAS"
+  if (!student.cpf) {
+    await prisma.enrollment.delete({ where: { id: enrollment.id } })
+    return NextResponse.json(
+      { error: "Aluno precisa ter CPF cadastrado para cobrança via Asaas" },
+      { status: 400 },
+    )
+  }
+
+  try {
+    const customer = await createAsaasCustomer({
       name: student.nome,
       email: student.email,
-      identification: student.cpf
-        ? { type: "CPF", number: student.cpf }
-        : undefined,
-    },
-    back_urls: appUrl
-      ? {
-          success: `${appUrl}/admin/vendas?ok=${enrollment.id}`,
-          failure: `${appUrl}/admin/vendas?err=${enrollment.id}`,
-          pending: `${appUrl}/admin/vendas?pend=${enrollment.id}`,
-        }
-      : undefined,
-    auto_return: "approved",
-    external_reference: externalReference,
-    notification_url: appUrl ? `${appUrl}/api/webhooks/mercadopago` : undefined,
-  })
+      cpfCnpj: student.cpf,
+      mobilePhone: student.fone ?? undefined,
+      externalReference: `pmb_student_${student.id}`,
+    })
 
-  await prisma.enrollment.update({
-    where: { id: enrollment.id },
-    data: {
-      mpPreferenceId: preference.id,
+    const payment = await createAsaasPayment({
+      customer: customer.id,
+      billingType: "UNDEFINED",
+      value: finalAmount,
+      dueDate: dueDateInDays(3),
+      description: `Curso: ${course.nome}`,
       externalReference,
-    },
-  })
+    })
 
-  return NextResponse.json({
-    data: {
-      enrollmentId: enrollment.id,
-      initPoint: preference.init_point,
-      finalAmount,
-      discountAmount,
-    },
-  })
+    await prisma.enrollment.update({
+      where: { id: enrollment.id },
+      data: {
+        externalReference,
+        asaasCustomerId: customer.id,
+        asaasPaymentId: payment.id,
+        asaasInvoiceUrl: payment.invoiceUrl,
+      },
+    })
+
+    return NextResponse.json({
+      data: {
+        enrollmentId: enrollment.id,
+        gateway: "ASAAS",
+        initPoint: payment.invoiceUrl,
+        finalAmount,
+        discountAmount,
+      },
+    })
+  } catch (error) {
+    await prisma.enrollment.delete({ where: { id: enrollment.id } }).catch(() => undefined)
+    const message =
+      error instanceof AsaasApiError
+        ? error.message
+        : "Falha ao criar cobrança no Asaas"
+    return NextResponse.json({ error: message }, { status: 502 })
+  }
 }

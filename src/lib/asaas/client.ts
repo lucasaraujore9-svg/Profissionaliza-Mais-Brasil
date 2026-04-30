@@ -2,6 +2,7 @@ import type {
   AsaasCreateCustomerParams,
   AsaasCustomer,
   AsaasCreateSubscriptionParams,
+  AsaasCreatePaymentParams,
   AsaasSubscription,
   AsaasPayment,
   AsaasPaymentList,
@@ -123,6 +124,12 @@ export async function cancelSubscription(
 }
 
 // ── Payments ──
+
+export async function createPayment(
+  params: AsaasCreatePaymentParams,
+): Promise<AsaasPayment> {
+  return request<AsaasPayment>("POST", "/payments", params)
+}
 
 export async function getPayment(
   paymentId: string,

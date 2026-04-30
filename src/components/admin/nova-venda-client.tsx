@@ -44,6 +44,7 @@ export function NovaVendaClient({
     initPoint: string
     finalAmount: number
     discountAmount: number
+    gateway?: "MP" | "ASAAS"
   } | null>(null)
 
   const cap = role === "PMB_SALES" ? 50 : 100
@@ -211,8 +212,15 @@ export function NovaVendaClient({
 
       {result && (
         <div className="rounded-xl border bg-emerald-50 p-4 space-y-2">
-          <div className="font-display text-[var(--color-pmb-green-900)]">
-            Link gerado
+          <div className="flex items-center justify-between">
+            <div className="font-display text-[var(--color-pmb-green-900)]">
+              Link gerado
+            </div>
+            {result.gateway && (
+              <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold text-[var(--color-pmb-green-900)]">
+                {result.gateway === "ASAAS" ? "Asaas" : "Mercado Pago"}
+              </span>
+            )}
           </div>
           <div className="text-sm">
             Valor final: <strong>{formatBRL(result.finalAmount)}</strong>
