@@ -24,6 +24,10 @@ import {
   InviteTemplate,
   type InviteTemplateProps,
 } from "./templates/invite"
+import {
+  ResellerOnboardingTemplate,
+  type ResellerOnboardingTemplateProps,
+} from "./templates/reseller-onboarding"
 
 const DEFAULT_FROM = "Profissionaliza Mais Brasil <noreply@profissionalizamaisbrasil.com.br>"
 
@@ -53,6 +57,10 @@ export type EmailTemplate =
   | { type: "payment"; props: PaymentTemplateProps }
   | { type: "lead-confirmation"; props: LeadConfirmationTemplateProps }
   | { type: "invite"; props: InviteTemplateProps }
+  | {
+      type: "reseller-onboarding"
+      props: ResellerOnboardingTemplateProps
+    }
 
 interface SendEmailParams {
   to: string | string[]
@@ -76,6 +84,8 @@ function renderTemplate(template: EmailTemplate): React.ReactElement {
       return LeadConfirmationTemplate(template.props)
     case "invite":
       return InviteTemplate(template.props)
+    case "reseller-onboarding":
+      return ResellerOnboardingTemplate(template.props)
   }
 }
 

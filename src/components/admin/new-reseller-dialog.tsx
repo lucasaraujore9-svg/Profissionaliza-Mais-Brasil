@@ -1,7 +1,15 @@
 "use client"
 
 import { useState } from "react"
-import { Copy, Loader2, ExternalLink, AlertTriangle, Plus } from "lucide-react"
+import {
+  Copy,
+  Loader2,
+  ExternalLink,
+  AlertTriangle,
+  Plus,
+  Mail,
+  CheckCircle2,
+} from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -22,11 +30,17 @@ interface CreatedResult {
   tenant: { id: string; slug: string; name: string }
   owner: { id: string; email: string }
   tempPassword: string
+  vitrineUrl: string
   asaas: {
     configured: boolean
     customerId: string | null
     subscriptionId: string | null
     invoiceUrl: string | null
+    error: string | null
+  }
+  email: {
+    configured: boolean
+    sent: boolean
     error: string | null
   }
 }
@@ -260,9 +274,40 @@ function CreatedSuccess({
       <DialogHeader>
         <DialogTitle>Revenda criada — aguardando pagamento</DialogTitle>
         <DialogDescription>
-          Envie os dados abaixo para o responsável.
+          {result.email.sent
+            ? `Enviamos as instruções por email para ${result.owner.email}.`
+            : "Envie manualmente os dados abaixo para o responsável."}
         </DialogDescription>
       </DialogHeader>
+
+      {result.email.sent ? (
+        <div className="flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800">
+          <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+          <p>
+            <strong>Email enviado</strong> para{" "}
+            <strong>{result.owner.email}</strong> com credenciais de acesso e
+            link de pagamento. O responsável pode finalizar tudo a partir do
+            email.
+          </p>
+        </div>
+      ) : result.email.configured ? (
+        <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+          <Mail className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+          <p>
+            Falha ao enviar email automático. Copie os dados abaixo e envie
+            manualmente.
+            {result.email.error && ` (${result.email.error})`}
+          </p>
+        </div>
+      ) : (
+        <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+          <Mail className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+          <p>
+            <strong>RESEND_API_KEY não configurada.</strong> Email não foi
+            enviado. Copie os dados abaixo e envie manualmente.
+          </p>
+        </div>
+      )}
 
       <div className="space-y-3 rounded-lg border border-gray-200 bg-gray-50/60 p-4 text-sm">
         <Field

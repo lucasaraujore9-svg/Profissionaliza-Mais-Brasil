@@ -11,6 +11,7 @@ import {
   createSubscription,
   listPayments,
 } from "@/lib/asaas/client"
+import { sendEmail } from "@/lib/email/resend"
 
 export async function GET(request: Request) {
   const ctx = await requireAdminSession()
@@ -290,17 +291,58 @@ export async function POST(request: Request) {
     select: { id: true, email: true },
   })
 
+  // Dispara email de onboarding com credenciais e link de pagamento.
+  // Falha silenciosa em dev (sem RESEND_API_KEY) — não quebra a criação.
+  const baseUrl =
+    process.env.NEXT_PUBLIC_APP_URL ??
+    "https://www.profissionalizamaisbrasil.com.br"
+  const vitrineUrl = `https://${data.slug}.profissionalizamaisbrasil.com.br`
+  let emailSent = false
+  let emailError: string | null = null
+  if (process.env.RESEND_API_KEY) {
+    try {
+      await sendEmail({
+        to: data.ownerEmail,
+        subject: invoiceUrl
+          ? `Sua revenda ${data.name} foi criada — finalize o pagamento`
+          : `Sua revenda ${data.name} foi criada`,
+        template: {
+          type: "reseller-onboarding",
+          props: {
+            ownerName: data.ownerName,
+            resellerName: data.name,
+            loginEmail: data.ownerEmail,
+            tempPassword,
+            loginUrl: `${baseUrl}/login`,
+            vitrineUrl,
+            paymentUrl: invoiceUrl,
+            planValue: data.planValue,
+          },
+        },
+      })
+      emailSent = true
+    } catch (err) {
+      emailError = err instanceof Error ? err.message : "Erro ao enviar email"
+    }
+  }
+
   return NextResponse.json({
     data: {
       tenant,
       owner: { id: user.id, email: user.email },
       tempPassword,
+      vitrineUrl,
       asaas: {
         configured: Boolean(process.env.ASAAS_API_KEY),
         customerId: asaasCustomerId,
         subscriptionId: asaasSubscriptionId,
         invoiceUrl,
         error: asaasError,
+      },
+      email: {
+        configured: Boolean(process.env.RESEND_API_KEY),
+        sent: emailSent,
+        error: emailError,
       },
     },
   })
