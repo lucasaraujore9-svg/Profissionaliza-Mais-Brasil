@@ -43,14 +43,25 @@ export function LoginForm() {
       return
     }
 
-    // Fetch session para descobrir role e redirecionar
+    // Sessão criada — redireciona pelo papel do usuário.
     try {
       const res = await fetch("/api/auth/session")
       const session = (await res.json()) as {
         user?: { role?: string }
       }
       const role = session.user?.role
-      if (role === "SUPER_ADMIN" || role === "PMB_SALES" || role === "PMB_RESELLER_MGR") {
+      const redirectTo = searchParams.get("callbackUrl")
+
+      if (redirectTo && redirectTo.startsWith("/")) {
+        router.push(redirectTo)
+        return
+      }
+
+      if (
+        role === "SUPER_ADMIN" ||
+        role === "PMB_SALES" ||
+        role === "PMB_RESELLER_MGR"
+      ) {
         router.push("/admin")
       } else if (role === "RESELLER") {
         router.push("/painel")
@@ -144,7 +155,7 @@ export function LoginForm() {
       </Button>
 
       <p className="text-center text-sm text-gray-600">
-        Ainda não tem conta?{" "}
+        Quer revender cursos?{" "}
         <Link
           href="/seja-revendedor"
           className="font-medium text-[var(--color-pmb-green)] hover:text-[var(--color-pmb-green-700)]"
