@@ -289,59 +289,122 @@ export function CourseEditDrawer({
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="edit-preco">Preço (R$)</Label>
-                  <Input
-                    id="edit-preco"
-                    value={price}
-                    onChange={(e) => setPrice(e.target.value)}
-                    className="mt-1.5 font-mono"
-                    placeholder="0,00"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="edit-tipo">Tipo</Label>
-                  <select
-                    id="edit-tipo"
-                    value={paymentType}
-                    onChange={(e) =>
-                      setPaymentType(e.target.value as "ONE_TIME" | "MONTHLY")
-                    }
-                    className="mt-1.5 h-9 w-full rounded-md border border-gray-200 bg-white px-3 text-sm"
+              <div>
+                <Label>Forma de pagamento</Label>
+                <div className="mt-1.5 grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setPaymentType("ONE_TIME")}
+                    className={`rounded-lg border px-3 py-2.5 text-left text-xs transition-colors ${
+                      paymentType === "ONE_TIME"
+                        ? "border-[var(--color-pmb-green)] bg-[var(--color-pmb-lime-50)]"
+                        : "border-gray-200 bg-white hover:border-gray-300"
+                    }`}
                   >
-                    <option value="ONE_TIME">Pagamento único</option>
-                    <option value="MONTHLY">Recorrente</option>
-                  </select>
+                    <div className="font-bold text-[var(--color-pmb-green-900)]">
+                      Pagamento único
+                    </div>
+                    <div className="mt-0.5 text-[11px] text-gray-500">
+                      À vista ou parcelado no cartão
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPaymentType("MONTHLY")}
+                    className={`rounded-lg border px-3 py-2.5 text-left text-xs transition-colors ${
+                      paymentType === "MONTHLY"
+                        ? "border-[var(--color-pmb-green)] bg-[var(--color-pmb-lime-50)]"
+                        : "border-gray-200 bg-white hover:border-gray-300"
+                    }`}
+                  >
+                    <div className="font-bold text-[var(--color-pmb-green-900)]">
+                      Mensalidade
+                    </div>
+                    <div className="mt-0.5 text-[11px] text-gray-500">
+                      Cobrança recorrente no mesmo dia
+                    </div>
+                  </button>
                 </div>
               </div>
 
               <div>
-                <Label htmlFor="edit-parcelas">
-                  Parcelas{" "}
-                  <span className="text-[11px] font-normal text-gray-500">
-                    (1 a 24 — vazio usa o padrão{" "}
-                    {detail?.defaultParcelas
-                      ? `(${detail.defaultParcelas}x)`
-                      : ""}
-                    )
-                  </span>
+                <Label htmlFor="edit-preco">
+                  {paymentType === "MONTHLY"
+                    ? "Valor da mensalidade (R$)"
+                    : "Preço total (R$)"}
                 </Label>
                 <Input
-                  id="edit-parcelas"
-                  type="number"
-                  min={1}
-                  max={24}
-                  value={parcelas}
-                  onChange={(e) => setParcelas(e.target.value)}
-                  className="mt-1.5"
-                  placeholder={
-                    detail?.defaultParcelas
-                      ? String(detail.defaultParcelas)
-                      : "Ex: 12"
-                  }
+                  id="edit-preco"
+                  value={price}
+                  onChange={(e) => setPrice(e.target.value)}
+                  className="mt-1.5 font-mono"
+                  placeholder="0,00"
+                  inputMode="decimal"
                 />
               </div>
+
+              {paymentType === "ONE_TIME" && (
+                <div>
+                  <Label htmlFor="edit-parcelas">
+                    Número de parcelas{" "}
+                    <span className="text-[11px] font-normal text-gray-500">
+                      (1 a 24
+                      {detail?.defaultParcelas
+                        ? ` · padrão ${detail.defaultParcelas}x`
+                        : ""}
+                      )
+                    </span>
+                  </Label>
+                  <Input
+                    id="edit-parcelas"
+                    type="number"
+                    min={1}
+                    max={24}
+                    value={parcelas}
+                    onChange={(e) => setParcelas(e.target.value)}
+                    className="mt-1.5"
+                    placeholder={
+                      detail?.defaultParcelas
+                        ? String(detail.defaultParcelas)
+                        : "Ex: 12"
+                    }
+                  />
+                  {(() => {
+                    const numericPrice = parseFloat(
+                      price.replace(/\./g, "").replace(",", "."),
+                    )
+                    const efetivoParcelas = parcelas.trim()
+                      ? parseInt(parcelas, 10)
+                      : (detail?.defaultParcelas ?? 12)
+                    if (
+                      !Number.isFinite(numericPrice) ||
+                      numericPrice <= 0 ||
+                      !efetivoParcelas ||
+                      efetivoParcelas <= 0
+                    ) {
+                      return null
+                    }
+                    const valorParcela = numericPrice / efetivoParcelas
+                    return (
+                      <div className="mt-2 rounded-lg border border-[rgba(2,89,24,0.15)] bg-[var(--color-pmb-lime-50)]/40 px-3 py-2 text-xs text-[var(--color-pmb-green-900)]">
+                        <strong>{efetivoParcelas}x</strong> de{" "}
+                        <strong className="font-mono">
+                          {valorParcela.toLocaleString("pt-BR", {
+                            style: "currency",
+                            currency: "BRL",
+                          })}
+                        </strong>{" "}
+                        sem juros
+                        {parcelas.trim() === "" && (
+                          <span className="text-gray-500">
+                            {" "}(usando padrão do catálogo)
+                          </span>
+                        )}
+                      </div>
+                    )
+                  })()}
+                </div>
+              )}
 
               <label className="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50/50 px-4 py-3">
                 <div>
