@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { z, ZodError } from "zod"
 import { prisma } from "@/lib/prisma"
 import { sendEmail, EmailError } from "@/lib/email/resend"
+import { createNotification } from "@/lib/notifications"
 
 const phoneRegex = /^\(?\d{2}\)?\s?\d{4,5}-?\d{4}$/
 
@@ -65,6 +66,27 @@ export async function POST(request: Request) {
       } else {
         console.error("[leads] email unexpected error:", err)
       }
+    })
+
+    // Notifica equipe interna sobre novo lead — equipe de vendas tipicamente
+    // tem PMB_SALES, mas sem alguem com esse papel cai pro SUPER_ADMIN.
+    await createNotification({
+      audience: "ROLE",
+      roleTarget: "PMB_SALES",
+      level: "INFO",
+      title: `Novo lead: ${data.companyName}`,
+      body: `${data.email} · ${data.phone}`,
+      category: "lead",
+      href: "/admin/revendedores",
+    })
+    await createNotification({
+      audience: "ROLE",
+      roleTarget: "SUPER_ADMIN",
+      level: "INFO",
+      title: `Novo lead: ${data.companyName}`,
+      body: `${data.email} · ${data.phone}`,
+      category: "lead",
+      href: "/admin/revendedores",
     })
 
     return NextResponse.json({ data: { id: lead.id } }, { status: 201 })

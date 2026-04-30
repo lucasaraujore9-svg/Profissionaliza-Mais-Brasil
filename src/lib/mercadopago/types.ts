@@ -74,9 +74,40 @@ export interface MPPreapproval {
     frequency_type: string
     transaction_amount: number
     currency_id: string
+    start_date?: string
+    end_date?: string
   }
+  init_point?: string
   date_created: string
   next_payment_date: string
+}
+
+export interface MPCreatePreapprovalParams {
+  reason: string
+  external_reference: string
+  payer_email: string
+  back_url: string
+  auto_recurring: {
+    frequency: number
+    frequency_type: "days" | "months"
+    transaction_amount: number
+    currency_id: "BRL"
+    start_date?: string
+    end_date?: string
+  }
+  status?: "pending" | "authorized"
+}
+
+export interface MPAuthorizedPayment {
+  id: number
+  preapproval_id: string
+  status: string
+  external_reference: string
+  transaction_amount: number
+  currency_id: string
+  payment_id: number | null
+  date_created: string
+  last_modified: string
 }
 
 export interface MPWebhookNotification {

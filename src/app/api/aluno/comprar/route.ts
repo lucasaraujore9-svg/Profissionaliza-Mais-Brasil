@@ -3,7 +3,7 @@ import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { requireStudentSession } from "@/lib/auth/student-session"
 import { pmbMpAccessToken } from "@/lib/pmb-config"
-import { createPreference } from "@/lib/mercadopago/client"
+import { createPreference, createPreapproval } from "@/lib/mercadopago/client"
 import {
   createCustomer as createAsaasCustomer,
   createPayment as createAsaasPayment,
@@ -161,15 +161,7 @@ export async function POST(request: Request) {
   const isMonthly = course.paymentTypeMain === "MONTHLY"
   const monthlyMonths = isMonthly ? course.monthlyMonthsMain ?? 12 : null
 
-  if (isMonthly && gateway === "MP") {
-    return NextResponse.json(
-      {
-        error:
-          "Este curso é cobrado em mensalidades. No momento, só aceitamos cobrança recorrente via Asaas. Tente novamente em alguns instantes.",
-      },
-      { status: 400 },
-    )
-  }
+  // MP+MONTHLY agora suportado via preapproval
 
   const enrollment = await prisma.enrollment.create({
     data: {
@@ -200,6 +192,52 @@ export async function POST(request: Request) {
         { error: "Mercado Pago não configurado" },
         { status: 503 },
       )
+    }
+
+    if (isMonthly && monthlyMonths) {
+      const startDate = new Date(Date.now() + 60_000).toISOString()
+      const endDate = new Date(
+        Date.now() +
+          monthlyMonths * 31 * 24 * 60 * 60 * 1000 +
+          3 * 24 * 60 * 60 * 1000,
+      ).toISOString()
+
+      const preapproval = await createPreapproval(mpToken, {
+        reason: `Mensalidade — ${course.nome}`,
+        external_reference: externalReference,
+        payer_email: student.email,
+        back_url: appUrl
+          ? `${appUrl}/aluno/pagamentos?ok=${enrollment.id}`
+          : "https://www.profissionalizamaisbrasil.com.br/aluno/pagamentos",
+        auto_recurring: {
+          frequency: 1,
+          frequency_type: "months",
+          transaction_amount: finalAmount,
+          currency_id: "BRL",
+          start_date: startDate,
+          end_date: endDate,
+        },
+        status: "pending",
+      })
+
+      await prisma.enrollment.update({
+        where: { id: enrollment.id },
+        data: {
+          mpSubscriptionId: preapproval.id,
+          externalReference,
+        },
+      })
+
+      return NextResponse.json({
+        data: {
+          enrollmentId: enrollment.id,
+          gateway: "MP",
+          mode: "subscription",
+          installmentsTotal: monthlyMonths,
+          initPoint: preapproval.init_point,
+          finalAmount,
+        },
+      })
     }
 
     const preference = await createPreference(mpToken, {

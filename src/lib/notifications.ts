@@ -48,6 +48,38 @@ export type CreateNotificationInput =
   | TenantInput
   | RoleInput
 
+/**
+ * Verifica se o usuario/aluno deseja receber este canal+categoria.
+ * Default: true. So bloqueia se houver registro explicito desligando.
+ */
+async function isChannelEnabled(
+  channel: "in_app" | "email",
+  category: string | undefined,
+  target: { userId?: string; studentId?: string },
+): Promise<boolean> {
+  if (!category) return true
+  const where = target.userId
+    ? { userId: target.userId, category }
+    : target.studentId
+      ? { studentId: target.studentId, category }
+      : null
+  if (!where) return true
+
+  const pref = await prisma.notificationPreference.findFirst({
+    where,
+    select: { inApp: true, email: true },
+  })
+  if (!pref) return true
+  return channel === "in_app" ? pref.inApp : pref.email
+}
+
+export async function shouldSendEmail(
+  category: string | undefined,
+  target: { userId?: string; studentId?: string },
+): Promise<boolean> {
+  return isChannelEnabled("email", category, target)
+}
+
 export async function createNotification(
   input: CreateNotificationInput,
 ): Promise<void> {
@@ -69,8 +101,19 @@ export async function createNotification(
       for (const m of members) userIds.add(m.userId)
 
       if (userIds.size === 0) return
+      // Filtra cada userId pelas suas preferencias in-app
+      const enabled = await Promise.all(
+        [...userIds].map(async (userId) =>
+          (await isChannelEnabled("in_app", input.category, { userId }))
+            ? userId
+            : null,
+        ),
+      )
+      const filteredUserIds = enabled.filter((u): u is string => u !== null)
+      if (filteredUserIds.length === 0) return
+
       await prisma.notification.createMany({
-        data: [...userIds].map((userId) => ({
+        data: filteredUserIds.map((userId) => ({
           audience: "USER" as const,
           userId,
           tenantId: input.tenantId,
@@ -90,10 +133,20 @@ export async function createNotification(
         select: { id: true },
       })
       if (users.length === 0) return
+      const enabled = await Promise.all(
+        users.map(async (u) =>
+          (await isChannelEnabled("in_app", input.category, { userId: u.id }))
+            ? u.id
+            : null,
+        ),
+      )
+      const filteredUserIds = enabled.filter((u): u is string => u !== null)
+      if (filteredUserIds.length === 0) return
+
       await prisma.notification.createMany({
-        data: users.map((u) => ({
+        data: filteredUserIds.map((userId) => ({
           audience: "USER" as const,
-          userId: u.id,
+          userId,
           roleTarget: input.roleTarget,
           level: input.level ?? "INFO",
           title: input.title,
@@ -102,6 +155,15 @@ export async function createNotification(
           href: input.href ?? null,
         })),
       })
+      return
+    }
+
+    // USER ou STUDENT — checa preferencia individual
+    const target =
+      input.audience === "USER"
+        ? { userId: input.userId }
+        : { studentId: input.studentId }
+    if (!(await isChannelEnabled("in_app", input.category, target))) {
       return
     }
 

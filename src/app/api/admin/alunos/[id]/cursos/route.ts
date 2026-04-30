@@ -10,6 +10,7 @@ import {
   EAApiError,
   EANetworkError,
 } from "@/lib/escola-avancada/errors"
+import { createNotification } from "@/lib/notifications"
 
 const linkSchema = z.object({
   courseId: z.string().cuid(),
@@ -102,6 +103,17 @@ export async function POST(request: Request, ctx: Ctx) {
 
   try {
     const result = await linkCourseToStudent(studentId, course.id)
+
+    await createNotification({
+      audience: "STUDENT",
+      studentId,
+      level: "SUCCESS",
+      title: `Você foi inscrito em ${course.nome}`,
+      body: "Vinculação manual liberada pelo administrador. Acesse a área de aulas.",
+      category: "enrollment",
+      href: "/aluno/cursos",
+    })
+
     return NextResponse.json({
       data: {
         ok: true,
@@ -149,6 +161,21 @@ export async function DELETE(request: Request, ctx: Ctx) {
 
   try {
     await unlinkCourseFromStudent(studentId, courseId)
+
+    const removedCourse = await prisma.course.findUnique({
+      where: { id: courseId },
+      select: { nome: true },
+    })
+    await createNotification({
+      audience: "STUDENT",
+      studentId,
+      level: "WARNING",
+      title: `Curso ${removedCourse?.nome ?? "removido"} foi desvinculado`,
+      body: "Acesso ao curso foi removido pelo administrador. Em caso de dúvida, fale com o suporte.",
+      category: "enrollment",
+      href: "/aluno/cursos",
+    })
+
     return NextResponse.json({ data: { ok: true } })
   } catch (error) {
     const message =

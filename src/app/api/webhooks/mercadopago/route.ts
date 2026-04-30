@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma"
 import { extractPaymentIdFromNotification } from "@/lib/mercadopago/webhook"
 import { processMpWebhook } from "@/lib/mercadopago/process"
 import type { MPWebhookNotification } from "@/lib/mercadopago/types"
+import { getAuthorizedPayment } from "@/lib/mercadopago/client"
+import { pmbMpAccessToken } from "@/lib/pmb-config"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
@@ -35,7 +37,27 @@ export async function POST(request: Request) {
     searchParams.get("type") ??
     "unknown"
 
-  const paymentId = extractPaymentIdFromNotification(body, queryDataId)
+  let paymentId = extractPaymentIdFromNotification(body, queryDataId)
+
+  // Topic "subscription_authorized_payment": data.id e o id do authorized
+  // payment, nao do payment direto. Buscamos o payment_id real via API MP
+  // e seguimos o fluxo padrao.
+  if (
+    !paymentId &&
+    (topic === "subscription_authorized_payment" ||
+      topic.includes("subscription_authorized_payment")) &&
+    queryDataId
+  ) {
+    try {
+      const token = await pmbMpAccessToken()
+      if (token) {
+        const ap = await getAuthorizedPayment(token, queryDataId)
+        if (ap.payment_id) paymentId = String(ap.payment_id)
+      }
+    } catch (err) {
+      console.warn("[mp webhook] authorized_payment lookup falhou:", err)
+    }
+  }
 
   const log = await prisma.webhookLog.create({
     data: {

@@ -708,6 +708,25 @@ model Notification {
   @@map("notifications")
 }
 
+// Preferencias por categoria (User OU Student). Quando ausente, defaults
+// permitem todos os canais. Categorias livres: payment, enrollment, lead,
+// tenant, tenant-billing, sale, support.
+model NotificationPreference {
+  id        String   @id @default(cuid())
+  userId    String?  @map("user_id")
+  studentId String?  @map("student_id")
+  category  String
+  inApp     Boolean  @default(true) @map("in_app")
+  email     Boolean  @default(true)
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([userId, category])
+  @@unique([studentId, category])
+  @@index([userId])
+  @@index([studentId])
+  @@map("notification_preferences")
+}
+
 model SystemSettings {
   id                     String         @id @default("default")
   pmbDirectSaleGateway   PaymentGateway @default(MP) @map("pmb_direct_sale_gateway")

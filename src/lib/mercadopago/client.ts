@@ -4,6 +4,8 @@ import type {
   MPPreference,
   MPPayment,
   MPPreapproval,
+  MPCreatePreapprovalParams,
+  MPAuthorizedPayment,
 } from "./types"
 
 const MP_BASE_URL = "https://api.mercadopago.com"
@@ -109,4 +111,22 @@ export async function getPreapproval(
   preapprovalId: string,
 ): Promise<MPPreapproval> {
   return request<MPPreapproval>("GET", `/preapproval/${preapprovalId}`, accessToken)
+}
+
+export async function createPreapproval(
+  accessToken: string,
+  params: MPCreatePreapprovalParams,
+): Promise<MPPreapproval> {
+  return request<MPPreapproval>("POST", "/preapproval", accessToken, params)
+}
+
+export async function getAuthorizedPayment(
+  accessToken: string,
+  authorizedPaymentId: string,
+): Promise<MPAuthorizedPayment> {
+  return request<MPAuthorizedPayment>(
+    "GET",
+    `/authorized_payments/${authorizedPaymentId}`,
+    accessToken,
+  )
 }

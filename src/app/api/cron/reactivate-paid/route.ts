@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { unblockTenantStudents } from "@/lib/auto-block"
 import { unblockStudentInEA } from "@/lib/students/ea-actions"
+import { createNotification } from "@/lib/notifications"
 
 export const maxDuration = 60
 export const dynamic = "force-dynamic"
@@ -61,6 +62,16 @@ async function processReactivations() {
       result.tenantsReactivated += 1
       const unblock = await unblockTenantStudents(tenant.id)
       result.studentsUnblocked += unblock.affectedStudents
+
+      await createNotification({
+        audience: "TENANT",
+        tenantId: tenant.id,
+        level: "SUCCESS",
+        title: "Conta reativada",
+        body: "Pagamento confirmado. Seus alunos foram desbloqueados.",
+        category: "tenant-billing",
+        href: "/painel/financeiro",
+      })
     } catch (error) {
       const msg = error instanceof Error ? error.message : "erro desconhecido"
       result.errors.push(`tenant ${tenant.id}: ${msg}`)
@@ -97,6 +108,16 @@ async function processReactivations() {
         await unblockStudentInEA(enrollment.studentId)
         result.studentsUnblocked += 1
       }
+
+      await createNotification({
+        audience: "STUDENT",
+        studentId: enrollment.studentId,
+        level: "SUCCESS",
+        title: "Acesso reativado",
+        body: "Pagamento recebido. Sua matrícula foi reativada.",
+        category: "payment",
+        href: "/aluno/cursos",
+      })
     } catch (error) {
       const msg = error instanceof Error ? error.message : "erro desconhecido"
       result.errors.push(`enrollment ${enrollment.id}: ${msg}`)

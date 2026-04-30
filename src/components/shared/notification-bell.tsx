@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
+import { usePathname } from "next/navigation"
 import {
   Bell,
   CheckCheck,
@@ -23,7 +24,11 @@ interface Notification {
   createdAt: string
 }
 
-const POLL_MS = 60_000
+// Polling adaptativo:
+// - Aba ativa: 15s (pega eventos rapido)
+// - Aba escondida (background): pausa
+// - Volta para foreground: dispara load imediato
+const ACTIVE_POLL_MS = 15_000
 
 const LEVEL_ICON: Record<Notification["level"], React.ComponentType<{ className?: string }>> = {
   INFO: Info,
@@ -62,6 +67,15 @@ export function NotificationBell({ variant = "light" }: NotificationBellProps) {
   const [loading, setLoading] = useState(false)
   const [marking, setMarking] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
+  const pathname = usePathname()
+
+  const seeAllHref = pathname?.startsWith("/admin")
+    ? "/admin/notificacoes"
+    : pathname?.startsWith("/painel")
+      ? "/painel/notificacoes"
+      : pathname?.startsWith("/aluno")
+        ? "/aluno/notificacoes"
+        : "/aluno/notificacoes"
 
   async function load() {
     setLoading(true)
@@ -79,9 +93,39 @@ export function NotificationBell({ variant = "light" }: NotificationBellProps) {
   }
 
   useEffect(() => {
+    let interval: ReturnType<typeof setInterval> | null = null
+
+    const start = () => {
+      if (interval !== null) return
+      interval = setInterval(load, ACTIVE_POLL_MS)
+    }
+    const stop = () => {
+      if (interval === null) return
+      clearInterval(interval)
+      interval = null
+    }
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") {
+        load()
+        start()
+      } else {
+        stop()
+      }
+    }
+    const onFocus = () => {
+      load()
+      start()
+    }
+
     load()
-    const interval = setInterval(load, POLL_MS)
-    return () => clearInterval(interval)
+    start()
+    document.addEventListener("visibilitychange", onVisibility)
+    window.addEventListener("focus", onFocus)
+    return () => {
+      stop()
+      document.removeEventListener("visibilitychange", onVisibility)
+      window.removeEventListener("focus", onFocus)
+    }
   }, [])
 
   useEffect(() => {
@@ -252,6 +296,15 @@ export function NotificationBell({ variant = "light" }: NotificationBellProps) {
                 })}
               </ul>
             )}
+          </div>
+          <div className="border-t border-gray-100 px-4 py-2 text-center">
+            <Link
+              href={seeAllHref}
+              onClick={() => setOpen(false)}
+              className="text-[11px] font-semibold text-[var(--color-pmb-green)] hover:underline"
+            >
+              Ver todas as notificações
+            </Link>
           </div>
         </div>
       )}

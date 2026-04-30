@@ -9,6 +9,7 @@ interface BeforeInstallPromptEvent extends Event {
 }
 
 const DISMISS_KEY = "pmb-pwa-install-dismissed"
+const SESSION_SHOWN_KEY = "pmb-pwa-install-shown-session"
 const DISMISS_DAYS = 7
 
 function wasRecentlyDismissed(): boolean {
@@ -20,16 +21,33 @@ function wasRecentlyDismissed(): boolean {
   return Date.now() - ts < DISMISS_DAYS * 24 * 60 * 60 * 1000
 }
 
+function alreadyShownThisSession(): boolean {
+  if (typeof window === "undefined") return true
+  return sessionStorage.getItem(SESSION_SHOWN_KEY) === "1"
+}
+
+function markShownThisSession(): void {
+  if (typeof window === "undefined") return
+  sessionStorage.setItem(SESSION_SHOWN_KEY, "1")
+}
+
 export function PwaInstallPrompt() {
   const [event, setEvent] = useState<BeforeInstallPromptEvent | null>(null)
   const [visible, setVisible] = useState(false)
 
   useEffect(() => {
     if (typeof window === "undefined") return
-    if (wasRecentlyDismissed()) return
+    // Bloqueio em duas camadas:
+    // - localStorage (7 dias): respeita "Agora não" / instalação por uma semana
+    // - sessionStorage (1 sessão): garante que so apareça UMA vez por aba/visita,
+    //   mesmo navegando entre páginas
+    if (wasRecentlyDismissed() || alreadyShownThisSession()) return
 
     function handler(e: Event) {
       e.preventDefault()
+      // Marca imediatamente como exibido nesta sessão para o evento nao
+      // disparar de novo em proximas paginas
+      markShownThisSession()
       setEvent(e as BeforeInstallPromptEvent)
       setVisible(true)
     }
@@ -38,6 +56,7 @@ export function PwaInstallPrompt() {
     function installed() {
       setVisible(false)
       setEvent(null)
+      markShownThisSession()
     }
     window.addEventListener("appinstalled", installed)
 
@@ -53,6 +72,7 @@ export function PwaInstallPrompt() {
   function dismiss() {
     setVisible(false)
     localStorage.setItem(DISMISS_KEY, String(Date.now()))
+    markShownThisSession()
   }
 
   async function install() {
@@ -62,6 +82,7 @@ export function PwaInstallPrompt() {
     if (choice.outcome === "accepted") {
       setVisible(false)
       setEvent(null)
+      markShownThisSession()
     } else {
       dismiss()
     }

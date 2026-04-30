@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { blockStudentInEA } from "@/lib/students/ea-actions"
+import { createNotification } from "@/lib/notifications"
 
 export const maxDuration = 60
 export const dynamic = "force-dynamic"
@@ -45,9 +46,11 @@ async function processOverdueStudents() {
   const candidates = await prisma.enrollment.findMany({
     where: {
       status: "ACTIVE",
-      gateway: "ASAAS",
       installmentsTotal: { not: null },
-      asaasSubscriptionId: { not: null },
+      OR: [
+        { asaasSubscriptionId: { not: null } },
+        { mpSubscriptionId: { not: null } },
+      ],
     },
     include: {
       student: {
@@ -102,6 +105,19 @@ async function processOverdueStudents() {
         await blockStudentInEA(enrollment.student.id)
         result.studentsBlocked += 1
       }
+
+      await createNotification({
+        audience: "STUDENT",
+        studentId: enrollment.student.id,
+        level: "ERROR",
+        title: "Mensalidade em atraso — acesso suspenso",
+        body:
+          stillActive.length === 0
+            ? `Vencimento atrasado em ${ageDays} dia(s). Pague para liberar o acesso.`
+            : `Vencimento atrasado em ${ageDays} dia(s). A matrícula deste curso foi suspensa.`,
+        category: "payment",
+        href: "/aluno/pagamentos",
+      })
     } catch (error) {
       const message = error instanceof Error ? error.message : "erro desconhecido"
       result.errors.push(`enrollment ${enrollment.id}: ${message}`)

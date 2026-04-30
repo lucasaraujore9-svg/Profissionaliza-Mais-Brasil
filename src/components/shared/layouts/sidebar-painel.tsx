@@ -14,6 +14,7 @@ import {
   Settings,
   UserCog,
   ShoppingCart,
+  Bell,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -29,6 +30,7 @@ const ALL_ITEMS: {
   { href: "/painel/vendas", label: "Vendas diretas", icon: ShoppingCart },
   { href: "/painel/cupons", label: "Cupons", icon: Tag },
   { href: "/painel/financeiro", label: "Financeiro", icon: CreditCard },
+  { href: "/painel/notificacoes", label: "Notificações", icon: Bell },
   { href: "/painel/equipe", label: "Equipe", icon: UserCog, ownerOnly: true },
   { href: "/painel/dominio", label: "Domínio", icon: Globe, ownerOnly: true },
   { href: "/painel/vitrine", label: "Vitrine", icon: Palette, ownerOnly: true },

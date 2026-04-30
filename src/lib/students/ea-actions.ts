@@ -209,6 +209,51 @@ export async function blockStudentInEA(studentId: string): Promise<void> {
 }
 
 /**
+ * Sincroniza dados de perfil do aluno na EA (sem mexer em status/apostila).
+ * Idempotente: se o aluno ainda nao foi para a EA, ignora (so faz sentido
+ * apos pagamento/criacao). Usa editarAluno passando apenas os campos que o
+ * usuario pode editar no /aluno/perfil.
+ */
+export async function syncStudentProfileToEA(studentId: string): Promise<void> {
+  const student = await prisma.student.findUnique({
+    where: { id: studentId },
+    select: {
+      eaAlunoId: true,
+      nome: true,
+      email: true,
+      fone: true,
+      cpf: true,
+      cidade: true,
+      estado: true,
+      cep: true,
+      rua: true,
+      numero: true,
+      bairro: true,
+    },
+  })
+  if (!student) throw new Error(`student ${studentId} nao encontrado`)
+  const eaId = parseEaId(student.eaAlunoId)
+  if (eaId === null) {
+    // Aluno ainda nao esta na EA — sera enviado quando o pagamento confirmar.
+    return
+  }
+
+  await editarAluno({
+    id_aluno: eaId,
+    nome: student.nome,
+    email: student.email ?? undefined,
+    fone: student.fone ?? undefined,
+    cpf: student.cpf ?? undefined,
+    cidade: student.cidade ?? undefined,
+    estado: student.estado ?? undefined,
+    cep: student.cep ?? undefined,
+    rua: student.rua ?? undefined,
+    numero: student.numero ?? undefined,
+    bairro: student.bairro ?? undefined,
+  })
+}
+
+/**
  * Libera o acesso do aluno na EA: status=ativo + apostila=liberar.
  */
 export async function unblockStudentInEA(studentId: string): Promise<void> {
