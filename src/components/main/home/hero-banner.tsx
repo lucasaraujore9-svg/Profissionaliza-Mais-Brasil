@@ -1,16 +1,6 @@
-import Link from "next/link"
 import { Search, Sparkles } from "lucide-react"
 import { ShowcaseCards } from "./showcase-cards"
 import type { ShowcaseCard } from "@/lib/catalog/home"
-
-const MAIS_PROCURADOS = [
-  "Manicure",
-  "Eletricista",
-  "Confeitaria",
-  "Barbearia",
-  "Cuidador de idosos",
-  "Depilação",
-] as const
 
 interface HeroBannerProps {
   showcase?: ShowcaseCard[]
@@ -88,22 +78,7 @@ export function HeroBanner({
             </button>
           </form>
 
-          <div className="mt-4 flex flex-wrap items-center gap-2">
-            <span className="text-[12px] font-medium uppercase tracking-wider text-white/65">
-              Mais procurados:
-            </span>
-            {MAIS_PROCURADOS.map((cat) => (
-              <Link
-                key={cat}
-                href={`/cursos?q=${encodeURIComponent(cat)}`}
-                className="inline-block rounded-full border border-white/25 bg-white/[0.06] px-3 py-1 text-[13px] text-white hover:bg-white/15 transition-colors"
-              >
-                {cat}
-              </Link>
-            ))}
-          </div>
-
-          <ul className="mt-7 flex flex-wrap items-center gap-x-5 gap-y-2 text-[13px] text-white/85">
+          <ul className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-2 text-[13px] text-white/85">
             <li className="flex items-center gap-1.5">
               <span className="grid h-4 w-4 place-items-center rounded-full bg-[var(--color-pmb-lime)] text-[var(--color-pmb-green)] text-[10px] font-black">
                 ✓
