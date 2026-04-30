@@ -29,9 +29,10 @@ export async function POST(
       apostila: "liberar",
     })
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Erro ao contatar EA"
+    const message =
+      error instanceof Error ? error.message : "Erro na plataforma de aulas"
     return NextResponse.json(
-      { error: `Falha ao desbloquear aluno na Escola Avançada: ${message}` },
+      { error: `Falha ao desbloquear acesso do aluno: ${message}` },
       { status: 502 },
     )
   }

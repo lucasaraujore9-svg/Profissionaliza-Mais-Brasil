@@ -23,7 +23,7 @@ export function SystemInfo({ info }: SystemInfoProps) {
   const items = [
     { label: "Versão", value: `v${info.appVersion}`, icon: GitBranch },
     { label: "Ambiente", value: info.environment, icon: Cpu },
-    { label: "Última sync EA", value: formatDate(info.lastSyncAt), icon: Clock },
+    { label: "Última sincronização", value: formatDate(info.lastSyncAt), icon: Clock },
     { label: "Banco", value: "Supabase PostgreSQL", icon: Database },
   ]
 

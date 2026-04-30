@@ -22,7 +22,7 @@ export function ResellerStudentCount({ students }: ResellerStudentCountProps) {
     <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
       <h3 className="text-sm font-semibold text-[var(--color-pmb-green-900)]">Alunos vinculados</h3>
       <p className="mt-1 text-xs text-gray-600">
-        Contagem agregada do vendedor na Escola Avançada.
+        Total de alunos vinculados a este revendedor.
       </p>
       <div className="mt-4 grid gap-3 sm:grid-cols-3">
         {counts.map((c) => {

@@ -36,7 +36,7 @@ export default function PrivacidadePage() {
           <h2>3. Compartilhamento de dados</h2>
           <p>
             Não vendemos seus dados. Compartilhamos apenas com provedores essenciais à operação
-            (plataforma de ensino Escola Avançada, gateway Mercado Pago e serviços de email),
+            (plataforma de ensino, gateway de pagamento e serviços de email),
             sempre sob contratos com cláusula de confidencialidade.
           </p>
 

@@ -17,7 +17,7 @@ const steps = [
     icon: TrendingUp,
     number: "03",
     title: "Ganha",
-    description: "Lucre com cada matrícula. Alunos são auto-inscritos na Escola Avançada.",
+    description: "Lucre com cada matrícula. Alunos são auto-inscritos na plataforma de aulas.",
   },
 ]
 

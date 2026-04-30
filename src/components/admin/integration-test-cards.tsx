@@ -128,9 +128,9 @@ export function IntegrationTestCards({ integrations }: IntegrationTestCardsProps
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
       <IntegrationCard
-        title="Escola Avançada"
-        description="API v2 para matrícula automática, bloqueio e sincronização de catálogo."
-        brand="EA"
+        title="Plataforma de aulas"
+        description="Integração responsável por matrícula automática, bloqueio e sincronização de catálogo."
+        brand="AULAS"
         brandClass="bg-[var(--color-pmb-green-900)]"
         endpoint="/api/admin/config/test-ea"
         configured={integrations.ea.configured}

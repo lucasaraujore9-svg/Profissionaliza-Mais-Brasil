@@ -17,7 +17,7 @@ const faqs = [
   {
     pergunta: "Os cursos são de verdade? Com certificado?",
     resposta:
-      "Sim. Todos os cursos são ministrados na Escola Avançada, plataforma com mais de 10 anos de mercado. Alunos têm acesso a aulas gravadas, materiais em PDF e certificado ao final.",
+      "Sim. Todos os cursos são ministrados em plataforma consolidada com mais de 10 anos de mercado. Alunos têm acesso a aulas gravadas, materiais em PDF e certificado ao final.",
   },
   {
     pergunta: "Posso cancelar a qualquer momento?",

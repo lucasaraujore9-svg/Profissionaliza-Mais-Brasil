@@ -44,7 +44,7 @@ export function CatalogCourseGrid({ courses, canEdit = false, onEdit }: CatalogC
 
       {courses.length === 0 ? (
         <div className="mt-6 rounded-xl border border-dashed border-gray-300 bg-gray-50 p-10 text-center text-sm text-gray-500">
-          Nenhum curso no catálogo. Execute uma sincronização com a Escola Avançada.
+          Nenhum curso no catálogo. Execute uma sincronização para puxar os cursos.
         </div>
       ) : (
         <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">

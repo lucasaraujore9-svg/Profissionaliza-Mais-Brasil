@@ -291,8 +291,8 @@ export function CourseDetailView({
                   <p>
                     O curso tem <strong>{course.qtdAulas} aulas</strong> com
                     carga horária de <strong>{cargaHoraria}</strong>. Após a
-                    matrícula, você recebe o acesso completo ao conteúdo na
-                    plataforma da Escola Avançada.
+                    matrícula, você recebe acesso completo ao conteúdo na
+                    sua área de aulas.
                   </p>
                 </div>
               )}

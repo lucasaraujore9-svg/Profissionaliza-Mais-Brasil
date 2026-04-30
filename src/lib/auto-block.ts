@@ -8,7 +8,7 @@ export interface BlockResult {
 }
 
 /**
- * Bloqueia todos os alunos do tenant na Escola Avancada e marca as
+ * Bloqueia todos os alunos do tenant na plataforma de aulas e marca as
  * matriculas ativas como SUSPENDED. Usado quando o tenant fica inadimplente
  * em modo billingMode=AUTO.
  */

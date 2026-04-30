@@ -10,7 +10,7 @@ export default async function AdminCatalogPage() {
     <div className="space-y-6">
       <PageHeader
         title="Catálogo"
-        description="Sincronize os cursos da Escola Avançada e gerencie o catálogo agregado."
+        description="Sincronize o catálogo central de cursos e gerencie a curadoria agregada."
       />
       <AdminCatalogClient canEdit={canEdit} />
     </div>

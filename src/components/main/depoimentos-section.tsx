@@ -23,7 +23,7 @@ const depoimentos = [
     foto: "CN",
     fotoColor: "bg-green-500",
     texto:
-      "Comecei com o plano Starter e já migrei pro Growth. O suporte é atencioso e a experiência do aluno na Escola Avançada é impecável.",
+      "Comecei com o plano Starter e já migrei pro Growth. O suporte é atencioso e a experiência do aluno na plataforma é impecável.",
   },
 ]
 

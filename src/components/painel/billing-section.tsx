@@ -131,8 +131,8 @@ export function BillingSection({ data, onUpdate }: BillingSectionProps) {
               )}
             </div>
             <p className="mt-1 text-xs text-gray-600">
-              Alunos inadimplentes são bloqueados na Escola Avançada após 3
-              dias de atraso.
+              Alunos inadimplentes têm o acesso bloqueado automaticamente
+              após 3 dias de atraso.
             </p>
           </button>
           <button

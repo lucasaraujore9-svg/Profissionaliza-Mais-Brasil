@@ -14,8 +14,8 @@ const steps = [
   },
   {
     icon: LogIn,
-    title: "Acesse a Escola Avançada",
-    description: "Faça login em escolaavancada.com.br com os dados recebidos.",
+    title: "Acesse sua área de aulas",
+    description: "Faça login na plataforma com os dados recebidos por email.",
   },
   {
     icon: BookOpen,
@@ -46,7 +46,7 @@ export function NextSteps({ autoRedirect = false }: NextStepsProps) {
       <h2 className="text-base font-semibold text-[var(--color-pmb-green-900)]">Próximos passos</h2>
       <p className="mt-1 text-sm text-gray-600">
         {autoRedirect
-          ? `Você será redirecionado à Escola Avançada em ${seconds} segundo${seconds === 1 ? "" : "s"}.`
+          ? `Você será redirecionado à plataforma em ${seconds} segundo${seconds === 1 ? "" : "s"}.`
           : "Assim que o pagamento for confirmado, você receberá suas credenciais por email."}
       </p>
 

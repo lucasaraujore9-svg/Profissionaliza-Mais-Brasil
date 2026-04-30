@@ -167,7 +167,7 @@ export function GlobalStudentsClient() {
                         )}
                         {s.eaAlunoId && (
                           <div className="text-[10px] text-gray-400">
-                            EA #{s.eaAlunoId}
+                            ID plataforma: {s.eaAlunoId}
                           </div>
                         )}
                       </td>

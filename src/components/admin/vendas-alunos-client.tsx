@@ -58,7 +58,7 @@ export function VendasAlunosClient() {
               <th className="px-4 py-3 font-semibold">Nome</th>
               <th className="px-4 py-3 font-semibold">Email</th>
               <th className="px-4 py-3 font-semibold">CPF</th>
-              <th className="px-4 py-3 font-semibold">EA ID</th>
+              <th className="px-4 py-3 font-semibold">ID plataforma</th>
               <th className="px-4 py-3 font-semibold">Status</th>
               <th className="px-4 py-3 font-semibold">Cadastro</th>
             </tr>

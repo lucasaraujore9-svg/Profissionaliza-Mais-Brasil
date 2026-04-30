@@ -19,7 +19,7 @@ const beneficios = [
     icon: Zap,
     title: "Matrícula automática",
     description:
-      "Aluno paga, recebe credenciais da Escola Avançada em segundos. Zero trabalho manual.",
+      "Aluno paga, recebe credenciais de acesso à plataforma em segundos. Zero trabalho manual.",
     gradient: "from-yellow-500 to-orange-500",
   },
   {

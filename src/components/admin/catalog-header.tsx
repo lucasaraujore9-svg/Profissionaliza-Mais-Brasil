@@ -30,7 +30,7 @@ export function CatalogHeader({ lastSync, totalCourses, onSynced }: CatalogHeade
         <p className="mt-1 flex items-center gap-2 text-xs text-gray-600">
           <Clock className="h-3.5 w-3.5 text-gray-400" />
           {lastSync
-            ? `Última sincronização: ${formatDate(lastSync.at)} · ${lastSync.totalInEa} cursos na EA · ${totalCourses} no banco`
+            ? `Última sincronização: ${formatDate(lastSync.at)} · ${lastSync.totalInEa} cursos importados · ${totalCourses} no banco`
             : `Nenhuma sincronização registrada · ${totalCourses} cursos no banco`}
         </p>
       </div>

@@ -203,7 +203,7 @@ export function CatalogEditDrawer({ courseId, open, onOpenChange, onSaved }: Cat
 
             <div>
               <label className="text-xs font-semibold text-gray-700">
-                Parcelas (override) — vazio usa o padrão da EA
+                Parcelas (override) — vazio usa o padrão importado
                 {detail.parcelasSugeridas
                   ? ` (${detail.parcelasSugeridas}x)`
                   : ""}

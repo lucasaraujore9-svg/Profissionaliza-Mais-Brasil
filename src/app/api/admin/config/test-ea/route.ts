@@ -15,7 +15,7 @@ export async function POST() {
     return NextResponse.json({
       data: {
         status: "success",
-        message: `Conexão OK. ${cursos.length} cursos disponíveis na EA.`,
+        message: `Conexão OK. ${cursos.length} cursos disponíveis no catálogo.`,
         durationMs: Date.now() - startedAt,
       },
     })
@@ -25,7 +25,7 @@ export async function POST() {
         ? err.apiError ?? err.message
         : err instanceof EANetworkError
         ? err.message
-        : "Erro desconhecido ao testar EA"
+        : "Erro desconhecido ao testar a plataforma de aulas"
     return NextResponse.json({
       data: {
         status: "error",

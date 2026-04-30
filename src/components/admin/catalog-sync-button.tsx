@@ -38,7 +38,7 @@ export function CatalogSyncButton({ onDone }: CatalogSyncButtonProps) {
         className="bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)]"
       >
         <RefreshCw className={`mr-2 h-4 w-4 ${syncing ? "animate-spin" : ""}`} />
-        {syncing ? "Sincronizando..." : "Sincronizar com Escola Avançada"}
+        {syncing ? "Sincronizando..." : "Sincronizar catálogo"}
       </Button>
       {error && <span className="text-xs text-rose-600">{error}</span>}
     </div>

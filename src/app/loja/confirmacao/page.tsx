@@ -128,7 +128,7 @@ export default async function ConfirmacaoPage({
                 className="w-full bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)] sm:w-auto"
               >
                 <ExternalLink className="mr-2 h-4 w-4" />
-                Ir para Escola Avançada
+                Ir para área de aulas
               </Button>
             </a>
             <Link href="/">

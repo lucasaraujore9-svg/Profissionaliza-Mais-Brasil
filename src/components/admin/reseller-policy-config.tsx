@@ -91,7 +91,7 @@ export function ResellerPolicyConfig({
             {mode === "AUTO" && <CheckCircle2 className="h-4 w-4 text-[var(--color-pmb-green)]" />}
           </div>
           <p className="mt-1 text-xs text-gray-600">
-            Bloqueia aluno automaticamente após atraso, via API EA.
+            Bloqueia o acesso do aluno automaticamente após atraso.
           </p>
         </button>
         <button
