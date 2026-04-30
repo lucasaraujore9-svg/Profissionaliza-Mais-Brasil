@@ -30,26 +30,43 @@ export function LearnAnywhere() {
               style={{ background: "var(--color-pmb-cyan)", opacity: 0.18 }}
             />
 
-            <div className="relative flex h-full flex-col justify-end p-8">
-              <h3 className="text-[28px] font-black leading-tight text-white">
-                Sua escola<br />
-                no bolso.
-              </h3>
-              <p className="mt-3 text-[14px] leading-relaxed text-white/80">
-                Assista aulas no ônibus, na hora do almoço, antes de dormir.
-                O certificado chega no seu e-mail em PDF.
-              </p>
+            <div className="relative flex h-full flex-col justify-between gap-6 p-8">
+              <div className="flex items-center gap-2 text-white/85">
+                <span className="grid h-9 w-9 place-items-center rounded-xl bg-white/15 backdrop-blur">
+                  <Smartphone
+                    className="h-4 w-4 text-white"
+                    strokeWidth={2.5}
+                    aria-hidden
+                  />
+                </span>
+                <span className="text-[12px] font-bold uppercase tracking-wider">
+                  Profissionaliza
+                </span>
+              </div>
 
-              <div className="mt-6 flex items-center gap-3 rounded-2xl bg-white/10 p-3 backdrop-blur">
+              <div>
+                <h3 className="text-[32px] font-black leading-[1.05] text-white md:text-[36px]">
+                  Sua escola
+                  <br />
+                  no bolso.
+                </h3>
+                <p className="mt-3 max-w-[260px] text-[14px] leading-relaxed text-white/80">
+                  Assista aulas no ônibus, na hora do almoço, antes de dormir.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-3 rounded-2xl bg-white/10 p-3 backdrop-blur">
                 <div className="h-12 w-12 shrink-0 rounded-xl bg-[var(--color-pmb-gold)]" />
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <p className="truncate text-[13px] font-bold text-white">
                     Confeitaria Lucrativa
                   </p>
-                  <div className="mt-0.5 h-1.5 overflow-hidden rounded-full bg-white/20">
+                  <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-white/20">
                     <div className="h-full w-3/5 rounded-full bg-[var(--color-pmb-lime)]" />
                   </div>
-                  <p className="mt-1 text-[11px] text-white/70">Aula 14 de 30 · 60% concluído</p>
+                  <p className="mt-1 text-[11px] text-white/70">
+                    Aula 14 de 30 · 60% concluído
+                  </p>
                 </div>
               </div>
             </div>

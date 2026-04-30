@@ -101,13 +101,6 @@ export function ShowcaseCards({ cards }: { cards?: ShowcaseCard[] }) {
       >
         <CardPreview card={list[2]} />
       </div>
-
-      <div
-        aria-hidden
-        className="absolute right-[40px] top-[-14px] rotate-[6deg] rounded-md bg-[var(--color-pmb-gold)] px-3 py-1.5 text-[11px] font-black uppercase tracking-wider text-[var(--color-pmb-green)] shadow-[0_8px_20px_-6px_rgba(0,0,0,0.45)]"
-      >
-        Até 70% OFF no Pix
-      </div>
     </div>
   )
 }
