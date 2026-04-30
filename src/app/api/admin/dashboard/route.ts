@@ -69,7 +69,7 @@ export async function GET(request: Request) {
     prisma.tenantPayment.count({
       where: { status: "OVERDUE" },
     }).catch(() => 0),
-    prisma.tenantCourse.count({ where: { isVisible: true } }),
+    prisma.course.count({ where: { status: "ATIVO" } }),
     prisma.tenant.count({
       where: { createdAt: { gte: sevenDaysAgo(now) } },
     }),

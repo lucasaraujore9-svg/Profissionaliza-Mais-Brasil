@@ -72,7 +72,7 @@ export async function GET(request: NextRequest) {
     }),
     prisma.enrollment.findMany({
       where: { createdAt: { gte: subDays(new Date(), 180) } },
-      select: { createdAt: true },
+      select: { createdAt: true, status: true, mpPaymentId: true, asaasPaymentId: true },
     }),
     prisma.tenant.groupBy({
       by: ["planValue"],
@@ -121,12 +121,22 @@ export async function GET(request: NextRequest) {
   }
 
   const studentsMap = new Map<string, number>(months.map((m) => [m, 0]))
+  const enrollMap = new Map<string, number>(months.map((m) => [m, 0]))
+  const paidMap = new Map<string, number>(months.map((m) => [m, 0]))
   for (const e of studentsByMonth) {
     const k = monthKey(e.createdAt)
     if (studentsMap.has(k)) {
       studentsMap.set(k, (studentsMap.get(k) ?? 0) + 1)
+      enrollMap.set(k, (enrollMap.get(k) ?? 0) + 1)
+      const isPaid = Boolean(e.mpPaymentId) || Boolean(e.asaasPaymentId)
+      if (isPaid) paidMap.set(k, (paidMap.get(k) ?? 0) + 1)
     }
   }
+  const conversionByMonthArr = months.map((m) => {
+    const enr = enrollMap.get(m) ?? 0
+    const paid = paidMap.get(m) ?? 0
+    return enr > 0 ? Number(((paid / enr) * 100).toFixed(1)) : 0
+  })
 
   const distribution = distributionByPlanRows.map((row) => ({
     label: `R$ ${Number(row.planValue).toFixed(0)}`,
@@ -147,9 +157,7 @@ export async function GET(request: NextRequest) {
         months,
         revenueByMonth: months.map((m) => revenueMap.get(m) ?? 0),
         studentsByMonth: months.map((m) => studentsMap.get(m) ?? 0),
-        conversionByMonth: months.map(() =>
-          Number(conversionRate.toFixed(1)),
-        ),
+        conversionByMonth: conversionByMonthArr,
         distribution,
       },
       rankings: {

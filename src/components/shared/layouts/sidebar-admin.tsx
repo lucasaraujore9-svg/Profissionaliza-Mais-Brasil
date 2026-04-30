@@ -64,13 +64,13 @@ export function SidebarAdmin({
   return (
     <aside className="flex h-full w-60 flex-col bg-[var(--color-pmb-green)] text-white">
       <div className="flex h-20 items-center gap-3 px-6 border-b border-white/10">
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/10 backdrop-blur">
+        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white p-2 shadow-sm ring-1 ring-black/5">
           <Image
             src="/images/logo.png"
             alt="PMB"
             width={40}
             height={40}
-            className="h-7 w-auto"
+            className="h-full w-full object-contain"
           />
         </div>
         <div className="flex flex-col leading-tight">
