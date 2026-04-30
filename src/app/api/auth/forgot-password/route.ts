@@ -45,28 +45,54 @@ export async function POST(request: Request) {
 
   try {
     const user = await prisma.user.findUnique({ where: { email: data.email } })
-    if (!user) return response
 
     const token = randomBytes(32).toString("hex")
     const expires = new Date(Date.now() + RESET_EXPIRATION_MINUTES * 60 * 1000)
-
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { resetToken: token, resetTokenExpires: expires },
-    })
-
     const appUrl =
       process.env.NEXT_PUBLIC_APP_URL ??
       "https://profissionalizamaisbrasil.com.br"
     const resetUrl = `${appUrl}/reset-password?token=${token}`
 
+    if (user) {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { resetToken: token, resetTokenExpires: expires },
+      })
+
+      await sendEmail({
+        to: user.email,
+        subject: "Redefinir sua senha",
+        template: {
+          type: "reset-password",
+          props: {
+            userName: user.name,
+            resetUrl,
+            expirationMinutes: RESET_EXPIRATION_MINUTES,
+          },
+        },
+      })
+      return response
+    }
+
+    // Fallback: tenta como aluno
+    const student = await prisma.student.findFirst({
+      where: { email: data.email },
+      select: { id: true, nome: true, email: true },
+    })
+    if (!student?.email) return response
+
+    await prisma.student.update({
+      where: { id: student.id },
+      data: { resetToken: token, resetTokenExpires: expires },
+    })
+
     await sendEmail({
-      to: user.email,
-      subject: "Redefinir sua senha",
+      to: student.email,
+      subject: "Definir senha de acesso à área do aluno",
       template: {
         type: "reset-password",
         props: {
-          userName: user.name,
+          userName: student.nome,
           resetUrl,
           expirationMinutes: RESET_EXPIRATION_MINUTES,
         },

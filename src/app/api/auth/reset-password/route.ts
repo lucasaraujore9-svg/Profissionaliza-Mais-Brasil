@@ -40,30 +40,61 @@ export async function POST(request: Request) {
   }
 
   try {
+    const passwordHash = await hash(data.password, 12)
+
     const user = await prisma.user.findUnique({
       where: { resetToken: data.token },
     })
 
-    if (!user || !user.resetTokenExpires) {
+    if (user) {
+      if (
+        !user.resetTokenExpires ||
+        user.resetTokenExpires.getTime() < Date.now()
+      ) {
+        return NextResponse.json(
+          { error: "Token expirado. Solicite um novo link.", code: "TOKEN_EXPIRED" },
+          { status: 400 },
+        )
+      }
+
+      await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          passwordHash,
+          resetToken: null,
+          resetTokenExpires: null,
+        },
+      })
+
+      return NextResponse.json({ data: { message: "Senha atualizada." } })
+    }
+
+    // Fallback: token de aluno
+    const student = await prisma.student.findUnique({
+      where: { resetToken: data.token },
+    })
+
+    if (!student) {
       return NextResponse.json(
         { error: "Token inválido", code: "INVALID_TOKEN" },
         { status: 400 },
       )
     }
-
-    if (user.resetTokenExpires.getTime() < Date.now()) {
+    if (
+      !student.resetTokenExpires ||
+      student.resetTokenExpires.getTime() < Date.now()
+    ) {
       return NextResponse.json(
         { error: "Token expirado. Solicite um novo link.", code: "TOKEN_EXPIRED" },
         { status: 400 },
       )
     }
 
-    const passwordHash = await hash(data.password, 12)
-
-    await prisma.user.update({
-      where: { id: user.id },
+    await prisma.student.update({
+      where: { id: student.id },
       data: {
         passwordHash,
+        passwordSetAt: new Date(),
         resetToken: null,
         resetTokenExpires: null,
       },

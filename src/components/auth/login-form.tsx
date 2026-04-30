@@ -65,6 +65,8 @@ export function LoginForm() {
         router.push("/admin")
       } else if (role === "RESELLER") {
         router.push("/painel")
+      } else if (role === "STUDENT") {
+        router.push("/aluno")
       } else {
         router.push("/")
       }

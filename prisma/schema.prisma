@@ -19,6 +19,7 @@ enum UserRole {
   PMB_SALES // Vendas diretas vitrine PMB, cupom ate 50%
   PMB_RESELLER_MGR // Gerencia revendedores atribuidos
   RESELLER // Dono ou consultor de tenant
+  STUDENT // Aluno acessa /aluno com matriculas e pagamentos
 }
 
 enum TenantStatus {
@@ -398,6 +399,13 @@ model Student {
   bolsista    Boolean   @default(false)
   dataFinal   DateTime? @map("data_final") // Data final do acesso
 
+  // Acesso ao painel /aluno
+  passwordHash       String?   @map("password_hash") // null = ainda nao definiu senha
+  passwordSetAt      DateTime? @map("password_set_at")
+  resetToken         String?   @unique @map("reset_token")
+  resetTokenExpires  DateTime? @map("reset_token_expires")
+  lastLoginAt        DateTime? @map("last_login_at")
+
   // Relacoes
   enrollments Enrollment[]
 
@@ -409,6 +417,7 @@ model Student {
   @@index([tenantId])
   @@index([eaAlunoId])
   @@index([tenantId, status])
+  @@index([resetToken])
   @@map("students")
 }
 

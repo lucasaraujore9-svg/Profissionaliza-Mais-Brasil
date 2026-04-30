@@ -5,6 +5,7 @@ declare module "next-auth" {
   interface User {
     role: UserRole
     tenantId: string | null
+    studentId?: string | null
   }
 }
 

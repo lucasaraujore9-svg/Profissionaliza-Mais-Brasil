@@ -15,6 +15,7 @@ import {
   ShoppingCart,
   UserCircle,
   GraduationCap,
+  FileText,
   LogOut,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -34,6 +35,7 @@ const ALL_ITEMS: {
   { href: "/admin/financeiro", label: "Financeiro", icon: DollarSign, roles: ["SUPER_ADMIN"] },
   { href: "/admin/catalogo", label: "Catálogo", icon: BookOpen, roles: ["SUPER_ADMIN", "PMB_SALES", "PMB_RESELLER_MGR"] },
   { href: "/admin/analytics", label: "Analytics", icon: BarChart3, roles: ["SUPER_ADMIN"] },
+  { href: "/admin/relatorios", label: "Relatórios", icon: FileText, roles: ["SUPER_ADMIN", "PMB_SALES", "PMB_RESELLER_MGR"] },
   { href: "/admin/equipe", label: "Equipe", icon: UserCog, roles: ["SUPER_ADMIN"] },
   { href: "/admin/configuracoes", label: "Configurações", icon: Settings, roles: ["SUPER_ADMIN"] },
   { href: "/admin/meu-perfil", label: "Meu perfil", icon: UserCircle, roles: ["SUPER_ADMIN", "PMB_SALES", "PMB_RESELLER_MGR"] },

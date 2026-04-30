@@ -26,22 +26,61 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const parsed = loginSchema.safeParse(credentials)
         if (!parsed.success) return null
 
+        // 1) Tenta como User (admin/equipe/revendedor)
         const user = await prisma.user.findUnique({
           where: { email: parsed.data.email },
           include: { tenant: true },
         })
 
-        if (!user) return null
+        if (user) {
+          const isValid = await compare(parsed.data.password, user.passwordHash)
+          if (!isValid) return null
 
-        const isValid = await compare(parsed.data.password, user.passwordHash)
+          return {
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            role: user.role,
+            tenantId: user.tenantId,
+            studentId: null,
+          }
+        }
+
+        // 2) Fallback: aluno com senha definida. Student.email pode existir
+        // em multiplos tenants; pega o primeiro com passwordHash populado.
+        const student = await prisma.student.findFirst({
+          where: {
+            email: parsed.data.email,
+            passwordHash: { not: null },
+          },
+          select: {
+            id: true,
+            nome: true,
+            email: true,
+            passwordHash: true,
+            tenantId: true,
+          },
+        })
+
+        if (!student?.passwordHash || !student.email) return null
+
+        const isValid = await compare(parsed.data.password, student.passwordHash)
         if (!isValid) return null
 
+        await prisma.student
+          .update({
+            where: { id: student.id },
+            data: { lastLoginAt: new Date() },
+          })
+          .catch(() => undefined)
+
         return {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          role: user.role,
-          tenantId: user.tenantId,
+          id: student.id,
+          email: student.email,
+          name: student.nome,
+          role: "STUDENT",
+          tenantId: student.tenantId,
+          studentId: student.id,
         }
       },
     }),
@@ -51,6 +90,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (user) {
         token.role = (user as { role: string }).role
         token.tenantId = (user as { tenantId: string | null }).tenantId
+        token.studentId =
+          (user as { studentId?: string | null }).studentId ?? null
       }
       return token
     },
@@ -58,7 +99,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (session.user) {
         session.user.id = token.sub!
         ;(session.user as { role: string }).role = token.role as string
-        ;(session.user as { tenantId: string | null }).tenantId = token.tenantId as string | null
+        ;(session.user as { tenantId: string | null }).tenantId =
+          token.tenantId as string | null
+        ;(session.user as { studentId: string | null }).studentId =
+          (token.studentId as string | null | undefined) ?? null
       }
       return session
     },
