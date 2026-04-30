@@ -24,6 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
+import { NewResellerDialog } from "./new-reseller-dialog"
 
 interface ListResponse {
   data: {
@@ -174,12 +175,20 @@ export function ResellerListClient() {
           }
         }
       />
-      <ResellerListToolbar
-        query={query}
-        filter={filter}
-        onQueryChange={setQuery}
-        onFilterChange={setFilter}
-      />
+      <div className="flex flex-col items-stretch justify-between gap-3 sm:flex-row sm:items-center">
+        <div className="flex-1">
+          <ResellerListToolbar
+            query={query}
+            filter={filter}
+            onQueryChange={setQuery}
+            onFilterChange={setFilter}
+          />
+        </div>
+        {(data?.role === "SUPER_ADMIN" ||
+          data?.role === "PMB_RESELLER_MGR") && (
+          <NewResellerDialog onCreated={load} />
+        )}
+      </div>
       {content}
 
       <Dialog open={!!assignTenantId} onOpenChange={(o) => !o && setAssignTenantId(null)}>
