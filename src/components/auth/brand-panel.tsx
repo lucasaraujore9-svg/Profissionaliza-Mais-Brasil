@@ -44,26 +44,26 @@ export function BrandPanel({ tenantName, tenantLogoUrl }: BrandPanelProps = {}) 
             {isTenant ? "Sua escola online" : "Plataforma ativa"}
           </div>
 
-          <div className="mt-6 flex h-20 items-center justify-start">
+          <div className="mt-6 flex items-center justify-start">
             {tenantLogoUrl ? (
-              <div className="rounded-2xl bg-white/95 p-3 backdrop-blur">
+              <div className="flex h-28 items-center justify-center rounded-2xl bg-white px-8 py-6 shadow-[0_12px_30px_-12px_rgba(0,0,0,0.35)]">
                 <Image
                   src={tenantLogoUrl}
                   alt={displayName}
                   width={400}
                   height={120}
-                  className="h-12 w-auto object-contain"
+                  className="h-16 w-auto object-contain"
                   unoptimized
                 />
               </div>
             ) : (
-              <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white/10 backdrop-blur">
+              <div className="flex h-28 w-28 items-center justify-center rounded-2xl bg-white p-6 shadow-[0_12px_30px_-12px_rgba(0,0,0,0.35)]">
                 <Image
                   src="/images/logo.png"
                   alt="Profissionaliza Mais Brasil"
-                  width={64}
-                  height={64}
-                  className="h-11 w-auto"
+                  width={200}
+                  height={200}
+                  className="h-16 w-auto object-contain"
                 />
               </div>
             )}
