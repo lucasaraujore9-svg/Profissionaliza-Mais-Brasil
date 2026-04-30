@@ -30,8 +30,6 @@ function getIconConfig(slug: string): IconConfig {
 export function CategoriesGrid({ categorias }: { categorias: CategoriaInfo[] }) {
   if (categorias.length === 0) return null
 
-  const total = categorias.reduce((acc, c) => acc + c.count, 0)
-
   return (
     <section className="border-b border-[rgba(2,89,24,0.08)] bg-[var(--color-pmb-mist)]">
       <div className="mx-auto max-w-[1280px] px-4 py-10 md:px-6 md:py-14">
@@ -42,10 +40,6 @@ export function CategoriesGrid({ categorias }: { categorias: CategoriaInfo[] }) 
           <h2 className="mt-1 text-[24px] font-black leading-tight text-[var(--color-pmb-green)] md:text-[30px]">
             Qual profissão você quer aprender?
           </h2>
-          <p className="mt-2 text-[14px] text-[rgba(2,89,24,0.65)]">
-            {total} cursos em {categorias.length}{" "}
-            {categorias.length === 1 ? "área" : "áreas"} que dão dinheiro no Brasil
-          </p>
         </div>
 
         <ul className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
@@ -74,9 +68,6 @@ export function CategoriesGrid({ categorias }: { categorias: CategoriaInfo[] }) 
                   <div className="min-w-0">
                     <p className="truncate text-[14px] font-bold text-[var(--color-pmb-green)] group-hover:underline">
                       {cat.nome}
-                    </p>
-                    <p className="text-[12px] text-[rgba(2,89,24,0.6)]">
-                      {cat.count} {cat.count === 1 ? "curso" : "cursos"}
                     </p>
                   </div>
                 </Link>
