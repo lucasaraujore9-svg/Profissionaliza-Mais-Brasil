@@ -1,5 +1,8 @@
 import { prisma } from "@/lib/prisma"
-import { editarAluno } from "@/lib/escola-avancada/client"
+import {
+  blockStudentInEA,
+  unblockStudentInEA,
+} from "@/lib/students/ea-actions"
 
 export interface BlockResult {
   affectedStudents: number
@@ -11,6 +14,10 @@ export interface BlockResult {
  * Bloqueia todos os alunos do tenant na plataforma de aulas e marca as
  * matriculas ativas como SUSPENDED. Usado quando o tenant fica inadimplente
  * em modo billingMode=AUTO.
+ *
+ * Cada aluno passa pelo mesmo blockStudentInEA usado nas operacoes
+ * individuais — a EA recebe a mesma chamada (editarAluno status=bloqueado)
+ * em todos os caminhos.
  */
 export async function blockTenantStudents(tenantId: string): Promise<BlockResult> {
   const errors: string[] = []
@@ -22,33 +29,16 @@ export async function blockTenantStudents(tenantId: string): Promise<BlockResult
       tenantId,
       status: { notIn: ["BLOQUEADO", "INATIVO", "FORMADO"] },
     },
-    select: { id: true, eaAlunoId: true, nome: true },
+    select: { id: true, eaAlunoId: true },
   })
 
   for (const student of students) {
-    const eaId = Number.parseInt(student.eaAlunoId, 10)
-    if (!Number.isFinite(eaId)) {
-      errors.push(`student ${student.id}: ea_aluno_id invalido (${student.eaAlunoId})`)
-      continue
-    }
-
     try {
-      await editarAluno({
-        id_aluno: eaId,
-        status: "bloqueado",
-        apostila: "bloquear",
-      })
-
-      await prisma.student.update({
-        where: { id: student.id },
-        data: { status: "BLOQUEADO", apostila: "BLOQUEADA" },
-      })
-
+      await blockStudentInEA(student.id)
       const updated = await prisma.enrollment.updateMany({
         where: { studentId: student.id, status: "ACTIVE" },
         data: { status: "SUSPENDED" },
       })
-
       affectedStudents += 1
       affectedEnrollments += updated.count
     } catch (error) {
@@ -61,7 +51,9 @@ export async function blockTenantStudents(tenantId: string): Promise<BlockResult
 }
 
 /**
- * Desbloqueia alunos do tenant, reativa matriculas suspensas.
+ * Desbloqueia alunos do tenant, reativa matriculas suspensas. Cada aluno
+ * passa por unblockStudentInEA — o caminho e identico ao desbloqueio
+ * individual.
  */
 export async function unblockTenantStudents(tenantId: string): Promise<BlockResult> {
   const errors: string[] = []
@@ -74,29 +66,12 @@ export async function unblockTenantStudents(tenantId: string): Promise<BlockResu
   })
 
   for (const student of students) {
-    const eaId = Number.parseInt(student.eaAlunoId, 10)
-    if (!Number.isFinite(eaId)) {
-      errors.push(`student ${student.id}: ea_aluno_id invalido`)
-      continue
-    }
-
     try {
-      await editarAluno({
-        id_aluno: eaId,
-        status: "ativo",
-        apostila: "liberar",
-      })
-
-      await prisma.student.update({
-        where: { id: student.id },
-        data: { status: "ATIVO", apostila: "LIBERADA" },
-      })
-
+      await unblockStudentInEA(student.id)
       const updated = await prisma.enrollment.updateMany({
         where: { studentId: student.id, status: "SUSPENDED" },
         data: { status: "ACTIVE" },
       })
-
       affectedStudents += 1
       affectedEnrollments += updated.count
     } catch (error) {

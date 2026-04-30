@@ -1,10 +1,10 @@
 import { prisma } from "@/lib/prisma"
 import { sendEmail } from "@/lib/email/resend"
+import { enviarEmailCredenciais } from "@/lib/escola-avancada/client"
 import {
-  criarAluno,
-  vincularCurso,
-  enviarEmailCredenciais,
-} from "@/lib/escola-avancada/client"
+  ensureStudentInEA,
+  linkCourseToStudent,
+} from "@/lib/students/ea-actions"
 import type { PaymentGateway, PaymentType } from "@prisma/client"
 
 export interface TenantContext {
@@ -33,6 +33,11 @@ export interface PaymentEvent {
  * Para cursos MONTHLY (assinatura): a 1a cobranca cria o aluno na EA + vincula
  * o curso + envia o email de boas-vindas. As demais apenas criam o registro
  * Payment, incrementam installmentsPaid e marcam COMPLETED na ultima.
+ *
+ * Toda interacao com a plataforma de aulas passa por src/lib/students/ea-actions.
+ * O comportamento e identico para vendas PMB e revendedor — so o polo/vendedor
+ * mudam por tenant. Toda informacao financeira (Payment, gateway, valor,
+ * cupom) fica no nosso banco e nunca e enviada para a EA.
  */
 export async function fulfillEnrollment(
   tenant: TenantContext,
@@ -42,8 +47,8 @@ export async function fulfillEnrollment(
   const enrollment = await prisma.enrollment.findUnique({
     where: { id: enrollmentId },
     include: {
-      student: true,
-      course: { select: { id: true, nome: true, eaCourseId: true } },
+      student: { select: { id: true, email: true, nome: true } },
+      course: { select: { id: true, nome: true } },
     },
   })
   if (!enrollment) throw new Error(`enrollment ${enrollmentId} nao encontrado`)
@@ -99,86 +104,26 @@ export async function fulfillEnrollment(
     return
   }
 
-  let student = enrollment.student
-  let eaLogin = student.eaAlunoId
-  let eaSenha = student.eaAlunoSenha ?? ""
-  const needsEACreation =
-    !eaLogin ||
-    eaLogin === "" ||
-    eaLogin === "pending" ||
-    Number.isNaN(Number.parseInt(eaLogin, 10))
+  // Primeira cobranca: garante aluno na EA + vincula o curso (mesma rota
+  // usada pelas concessoes manuais via /admin/alunos/[id]/cursos).
+  const { eaAlunoId, created, eaSenha } = await ensureStudentInEA(
+    enrollment.student.id,
+  )
+  await linkCourseToStudent(enrollment.student.id, enrollment.course.id)
 
-  if (needsEACreation) {
-    const nascimento = student.nascimento
-      ? student.nascimento.toISOString().slice(0, 10)
-      : undefined
-
-    const result = await criarAluno({
-      nome: student.nome,
-      email: student.email ?? undefined,
-      fone: student.fone ?? undefined,
-      cpf: student.cpf ?? undefined,
-      rg: student.rg ?? undefined,
-      rua: student.rua ?? undefined,
-      bairro: student.bairro ?? undefined,
-      cidade: student.cidade ?? undefined,
-      estado: student.estado ?? undefined,
-      numero: student.numero ?? undefined,
-      cep: student.cep ?? undefined,
-      nascimento,
-      sexo: student.sexo ?? undefined,
-      polo: tenant.slug,
-      status: "ativo",
-      apostila: "liberar",
-      vendedor: tenant.eaVendedorId
-        ? Number.parseInt(tenant.eaVendedorId, 10) || undefined
-        : undefined,
-    })
-
-    eaLogin = String(result.login)
-    eaSenha = String(result.senha)
-
-    student = await prisma.student.update({
-      where: { id: student.id },
-      data: {
-        eaAlunoId: eaLogin,
-        eaAlunoSenha: eaSenha,
-        status: "ATIVO",
-        apostila: "LIBERADA",
-        polo: tenant.slug,
-        vendedorId: tenant.eaVendedorId ?? null,
-      },
-    })
-  } else {
-    await prisma.student.update({
-      where: { id: student.id },
-      data: {
-        status: "ATIVO",
-        apostila: "LIBERADA",
-      },
+  // Envia email de boas-vindas com credenciais somente quando criamos o aluno
+  // agora (evita spam em recompras).
+  if (created) {
+    await enviarEmailCredenciais(eaAlunoId).catch((err) => {
+      console.error(`[fulfill] envioemail EA falhou para aluno ${eaAlunoId}:`, err)
     })
   }
 
-  const idCursoEA = enrollment.course.eaCourseId
-    ? Number.parseInt(enrollment.course.eaCourseId, 10)
-    : NaN
-  const idAlunoEA = Number.parseInt(eaLogin, 10)
-
-  if (!Number.isFinite(idAlunoEA)) {
-    throw new Error(`aluno EA sem id numerico: ${eaLogin}`)
-  }
-
-  if (Number.isFinite(idCursoEA)) {
-    await vincularCurso({ aluno: idAlunoEA, idcurso: idCursoEA })
-  } else {
-    console.warn(
-      `[fulfill] curso ${enrollment.course.id} (${enrollment.course.nome}) sem eaCourseId — vinculo pulado`,
-    )
-  }
-
-  await enviarEmailCredenciais(idAlunoEA).catch((err) => {
-    console.error(`[fulfill] envioemail EA falhou para aluno ${idAlunoEA}:`, err)
-  })
+  // Primeira cobranca cobre a 1a parcela quando MONTHLY
+  const firstInstallmentPaid = enrollment.installmentsTotal !== null ? 1 : 0
+  const reachedTotalOnFirst =
+    enrollment.installmentsTotal !== null &&
+    firstInstallmentPaid >= enrollment.installmentsTotal
 
   await prisma.payment.create({
     data: {
@@ -197,12 +142,6 @@ export async function fulfillEnrollment(
     },
   })
 
-  // Primeira cobranca cobre a 1a parcela quando MONTHLY
-  const firstInstallmentPaid = enrollment.installmentsTotal !== null ? 1 : 0
-  const reachedTotalOnFirst =
-    enrollment.installmentsTotal !== null &&
-    firstInstallmentPaid >= enrollment.installmentsTotal
-
   await prisma.enrollment.update({
     where: { id: enrollment.id },
     data: {
@@ -218,25 +157,25 @@ export async function fulfillEnrollment(
     },
   })
 
-  if (student.email) {
+  if (created && enrollment.student.email) {
     const eaLoginUrl =
       process.env.EA_STUDENT_LOGIN_URL ?? "https://suaescola.com/aluno"
 
     await sendEmail({
-      to: student.email,
+      to: enrollment.student.email,
       subject: `Matricula confirmada em ${enrollment.course.nome}`,
       template: {
         type: "enrollment",
         props: {
-          studentName: student.nome,
+          studentName: enrollment.student.nome,
           courseName: enrollment.course.nome,
           eaLoginUrl,
-          studentLogin: eaLogin,
-          studentPassword: eaSenha || "(enviada em email separado)",
+          studentLogin: String(eaAlunoId),
+          studentPassword: eaSenha ?? "(enviada em email separado)",
         },
       },
     }).catch((err) => {
-      console.error(`[fulfill] enrollment email falhou (${student.email}):`, err)
+      console.error(`[fulfill] enrollment email falhou:`, err)
     })
   }
 }

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { requireResellerSession } from "@/lib/auth/reseller-session"
-import { editarAluno } from "@/lib/escola-avancada/client"
+import { blockStudentInEA } from "@/lib/students/ea-actions"
 
 export async function POST(
   _request: Request,
@@ -15,7 +15,7 @@ export async function POST(
   const { id } = await params
   const student = await prisma.student.findFirst({
     where: { id, tenantId: ctx.tenantId },
-    select: { id: true, eaAlunoId: true, status: true },
+    select: { id: true },
   })
 
   if (!student) {
@@ -23,11 +23,7 @@ export async function POST(
   }
 
   try {
-    await editarAluno({
-      id_aluno: Number(student.eaAlunoId),
-      status: "bloqueado",
-      apostila: "bloquear",
-    })
+    await blockStudentInEA(student.id)
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Erro na plataforma de aulas"
@@ -37,9 +33,8 @@ export async function POST(
     )
   }
 
-  const updated = await prisma.student.update({
+  const updated = await prisma.student.findUnique({
     where: { id: student.id },
-    data: { status: "BLOQUEADO", apostila: "BLOQUEADA" },
     select: { id: true, status: true, apostila: true },
   })
 
