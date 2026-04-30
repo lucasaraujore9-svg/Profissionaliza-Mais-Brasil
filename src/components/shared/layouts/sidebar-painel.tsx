@@ -13,6 +13,7 @@ import {
   Palette,
   Settings,
   UserCog,
+  ShoppingCart,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -23,8 +24,9 @@ const ALL_ITEMS: {
   ownerOnly?: boolean
 }[] = [
   { href: "/painel", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/painel/cursos", label: "Cursos", icon: GraduationCap },
+  { href: "/painel/cursos", label: "Catálogo", icon: GraduationCap },
   { href: "/painel/alunos", label: "Alunos", icon: Users },
+  { href: "/painel/vendas", label: "Vendas diretas", icon: ShoppingCart },
   { href: "/painel/cupons", label: "Cupons", icon: Tag },
   { href: "/painel/financeiro", label: "Financeiro", icon: CreditCard },
   { href: "/painel/equipe", label: "Equipe", icon: UserCog, ownerOnly: true },
