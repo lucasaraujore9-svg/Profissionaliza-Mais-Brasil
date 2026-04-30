@@ -12,6 +12,7 @@ import {
   listPayments,
 } from "@/lib/asaas/client"
 import { sendEmail } from "@/lib/email/resend"
+import { createNotification } from "@/lib/notifications"
 
 export async function GET(request: Request) {
   const ctx = await requireAdminSession()
@@ -324,6 +325,30 @@ export async function POST(request: Request) {
     } catch (err) {
       emailError = err instanceof Error ? err.message : "Erro ao enviar email"
     }
+  }
+
+  // Notifica gerentes de revendedor + super admin sobre novo revendedor
+  await createNotification({
+    audience: "ROLE",
+    roleTarget: "SUPER_ADMIN",
+    level: "INFO",
+    title: `Novo revendedor: ${data.name}`,
+    body: invoiceUrl
+      ? "Aguardando primeiro pagamento."
+      : "Cadastro concluído.",
+    category: "tenant",
+    href: `/admin/revendedores/${tenant.id}`,
+  })
+  if (data.accountManagerId) {
+    await createNotification({
+      audience: "USER",
+      userId: data.accountManagerId,
+      level: "INFO",
+      title: `Você foi atribuído ao revendedor ${data.name}`,
+      body: `Slug: ${data.slug} · Plano R$ ${data.planValue.toFixed(2).replace(".", ",")}`,
+      category: "tenant",
+      href: `/admin/revendedores/${tenant.id}`,
+    })
   }
 
   return NextResponse.json({

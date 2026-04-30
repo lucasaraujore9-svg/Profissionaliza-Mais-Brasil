@@ -5,6 +5,7 @@ import {
   ensureStudentInEA,
   linkCourseToStudent,
 } from "@/lib/students/ea-actions"
+import { createNotification } from "@/lib/notifications"
 import type { PaymentGateway, PaymentType } from "@prisma/client"
 
 export interface TenantContext {
@@ -101,6 +102,34 @@ export async function fulfillEnrollment(
       },
     })
 
+    // Notifica o aluno: parcela paga
+    await createNotification({
+      audience: "STUDENT",
+      studentId: enrollment.student.id,
+      level: "SUCCESS",
+      title: reachedTotal
+        ? `Curso ${enrollment.course.nome} totalmente pago`
+        : `Mensalidade ${newPaidCount}/${enrollment.installmentsTotal} confirmada`,
+      body: reachedTotal
+        ? "Parabéns! Você completou todas as mensalidades."
+        : `Pagamento de R$ ${event.amount.toFixed(2).replace(".", ",")} confirmado.`,
+      category: "payment",
+      href: "/aluno/pagamentos",
+    })
+
+    // Notifica revendedor (se houver) que recebeu pagamento
+    if (!tenant.isPmbVitrine) {
+      await createNotification({
+        audience: "TENANT",
+        tenantId: tenant.id,
+        level: "SUCCESS",
+        title: `Mensalidade recebida — ${enrollment.student.nome}`,
+        body: `R$ ${event.amount.toFixed(2).replace(".", ",")} (${newPaidCount}/${enrollment.installmentsTotal})`,
+        category: "payment",
+        href: "/painel/financeiro",
+      })
+    }
+
     return
   }
 
@@ -176,6 +205,45 @@ export async function fulfillEnrollment(
       },
     }).catch((err) => {
       console.error(`[fulfill] enrollment email falhou:`, err)
+    })
+  }
+
+  // Notificacoes in-app
+  await createNotification({
+    audience: "STUDENT",
+    studentId: enrollment.student.id,
+    level: "SUCCESS",
+    title: `Matrícula confirmada em ${enrollment.course.nome}`,
+    body: enrollment.installmentsTotal
+      ? `Primeira de ${enrollment.installmentsTotal} mensalidades paga.`
+      : "Acesse a área de aulas para começar agora.",
+    category: "enrollment",
+    href: "/aluno/cursos",
+  })
+
+  if (!tenant.isPmbVitrine) {
+    await createNotification({
+      audience: "TENANT",
+      tenantId: tenant.id,
+      level: "SUCCESS",
+      title: `Nova venda — ${enrollment.course.nome}`,
+      body: `${enrollment.student.nome} comprou por R$ ${event.amount
+        .toFixed(2)
+        .replace(".", ",")}.`,
+      category: "sale",
+      href: "/painel/vendas",
+    })
+  } else {
+    await createNotification({
+      audience: "ROLE",
+      roleTarget: "SUPER_ADMIN",
+      level: "SUCCESS",
+      title: `Venda direta — ${enrollment.course.nome}`,
+      body: `${enrollment.student.nome} (vitrine PMB) — R$ ${event.amount
+        .toFixed(2)
+        .replace(".", ",")}.`,
+      category: "sale",
+      href: "/admin/vendas",
     })
   }
 }

@@ -3,6 +3,7 @@ import { sendEmail } from "@/lib/email/resend"
 import { blockTenantStudents, unblockTenantStudents } from "@/lib/auto-block"
 import { fulfillEnrollment } from "@/lib/enrollment/fulfill"
 import { pmbEaPolo, pmbEaVendedorId } from "@/lib/pmb-config"
+import { createNotification } from "@/lib/notifications"
 import type { AsaasWebhookPayload } from "./types"
 
 function formatMoney(value: number): string {
@@ -212,6 +213,18 @@ export async function processAsaasWebhook(
             console.error("[asaas] failed to send payment email:", err)
           })
         }
+
+        await createNotification({
+          audience: "TENANT",
+          tenantId: tenant.id,
+          level: "SUCCESS",
+          title: wasSuspended
+            ? "Conta reativada após pagamento"
+            : "Mensalidade paga",
+          body: `Pagamento de ${formatMoney(payment.value)} confirmado.`,
+          category: "tenant-billing",
+          href: "/painel/financeiro",
+        })
         break
       }
 
@@ -253,6 +266,29 @@ export async function processAsaasWebhook(
             console.error("[asaas] failed to send overdue email:", err)
           })
         }
+
+        await createNotification({
+          audience: "TENANT",
+          tenantId: tenant.id,
+          level: "ERROR",
+          title: "Mensalidade em atraso — conta suspensa",
+          body:
+            tenant.billingMode === "AUTO"
+              ? `Vencimento ${formatDate(payment.dueDate)}. Seus alunos foram bloqueados.`
+              : `Vencimento ${formatDate(payment.dueDate)}. Regularize para evitar bloqueio dos alunos.`,
+          category: "tenant-billing",
+          href: payment.invoiceUrl ?? "/painel/financeiro",
+        })
+
+        await createNotification({
+          audience: "ROLE",
+          roleTarget: "SUPER_ADMIN",
+          level: "WARNING",
+          title: `Revendedor ${tenant.name} inadimplente`,
+          body: `Cobrança ${formatMoney(payment.value)} venceu em ${formatDate(payment.dueDate)}.`,
+          category: "tenant-billing",
+          href: `/admin/revendedores/${tenant.id}`,
+        })
         break
       }
 

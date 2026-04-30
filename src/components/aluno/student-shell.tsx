@@ -13,6 +13,7 @@ import {
   LogOut,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { NotificationBell } from "@/components/shared/notification-bell"
 
 interface SessionShape {
   studentId: string
@@ -112,6 +113,9 @@ export function StudentShell({
       </aside>
 
       <main className="flex-1 overflow-y-auto">
+        <header className="sticky top-0 z-10 flex h-14 items-center justify-end gap-3 border-b border-gray-200 bg-white px-6">
+          <NotificationBell />
+        </header>
         <div className="mx-auto max-w-5xl p-6 lg:p-10">{children}</div>
       </main>
     </div>

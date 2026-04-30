@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { blockTenantStudents } from "@/lib/auto-block"
 import { sendEmail } from "@/lib/email/resend"
+import { createNotification } from "@/lib/notifications"
 
 export const maxDuration = 60
 export const dynamic = "force-dynamic"
@@ -113,6 +114,28 @@ async function processOverdueTenants() {
           console.error(`[sweep-tenants] email falhou (${tenant.id}):`, err)
         })
       }
+
+      await createNotification({
+        audience: "TENANT",
+        tenantId: tenant.id,
+        level: "ERROR",
+        title: "Conta suspensa por inadimplência",
+        body:
+          tenant.billingMode === "AUTO"
+            ? "Mensalidade vencida. Seus alunos foram bloqueados."
+            : "Mensalidade vencida. Regularize para evitar bloqueios.",
+        category: "tenant-billing",
+        href: "/painel/financeiro",
+      })
+      await createNotification({
+        audience: "ROLE",
+        roleTarget: "SUPER_ADMIN",
+        level: "WARNING",
+        title: `Sweep: revendedor ${tenant.name} suspenso`,
+        body: `Mensalidade vencida há ${ageDays} dia(s).`,
+        category: "tenant-billing",
+        href: `/admin/revendedores/${tenant.id}`,
+      })
     } catch (error) {
       const message = error instanceof Error ? error.message : "erro desconhecido"
       result.errors.push(`tenant ${tenant.id}: ${message}`)

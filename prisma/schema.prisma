@@ -662,6 +662,52 @@ model Lead {
 // CONFIGURACOES GLOBAIS DO SISTEMA (singleton id="default")
 // ============================================================
 
+// ============================================================
+// NOTIFICACOES IN-APP
+// ============================================================
+
+enum NotificationLevel {
+  INFO
+  SUCCESS
+  WARNING
+  ERROR
+}
+
+enum NotificationAudience {
+  USER     // entregue para um User especifico (User.id)
+  STUDENT  // entregue para um Student especifico (Student.id)
+  TENANT   // entregue para todos os usuarios do tenant
+  ROLE     // entregue para todos os Users com determinado UserRole
+}
+
+model Notification {
+  id           String                @id @default(cuid())
+  audience     NotificationAudience
+  // alvo concreto (depende de audience):
+  userId       String?               @map("user_id")
+  studentId    String?               @map("student_id")
+  tenantId     String?               @map("tenant_id")
+  roleTarget   UserRole?             @map("role_target")
+
+  level        NotificationLevel     @default(INFO)
+  title        String
+  body         String?               @db.Text
+  // categoria livre para filtros (ex: "payment", "enrollment", "tenant", "support")
+  category     String?
+  // link opcional dentro do app
+  href         String?
+
+  readAt       DateTime?             @map("read_at")
+  createdAt    DateTime              @default(now()) @map("created_at")
+
+  @@index([userId, readAt])
+  @@index([studentId, readAt])
+  @@index([tenantId, readAt])
+  @@index([roleTarget, readAt])
+  @@index([audience, createdAt])
+  @@map("notifications")
+}
+
 model SystemSettings {
   id                     String         @id @default("default")
   pmbDirectSaleGateway   PaymentGateway @default(MP) @map("pmb_direct_sale_gateway")

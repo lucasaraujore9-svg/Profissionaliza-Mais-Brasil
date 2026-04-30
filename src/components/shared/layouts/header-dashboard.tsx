@@ -2,9 +2,10 @@
 
 import Link from "next/link"
 import { signOut } from "next-auth/react"
-import { Menu, Bell, LogOut, UserCog } from "lucide-react"
+import { Menu, LogOut, UserCog } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
+import { NotificationBell } from "@/components/shared/notification-bell"
 
 interface HeaderDashboardProps {
   mobileNav: React.ReactNode
@@ -38,14 +39,8 @@ export function HeaderDashboard({
 
       <div className="flex-1" />
 
-      <Button
-        variant="ghost"
-        size="icon"
-        className="relative text-[var(--color-pmb-green)] hover:bg-[var(--color-pmb-lime-50)]"
-      >
-        <Bell className="h-5 w-5" />
-        <span className="sr-only">Notificações</span>
-      </Button>
+      <NotificationBell />
+
 
       {userName && (
         <span className="hidden sm:inline text-sm font-medium text-[var(--color-pmb-green)]">
