@@ -27,7 +27,6 @@ export function CourseCard({ course }: CourseCardProps) {
     slug,
     categoria,
     titulo,
-    instrutor,
     rating,
     alunos,
     horas,
@@ -78,11 +77,8 @@ export function CourseCard({ course }: CourseCardProps) {
         <h3 className="mt-1 line-clamp-2 text-[15px] font-bold leading-snug text-[var(--color-pmb-green)] group-hover:underline decoration-[var(--color-pmb-gold)] underline-offset-4">
           {titulo}
         </h3>
-        <p className="mt-1 text-[12.5px] text-[rgba(2,89,24,0.7)]">
-          Prof. {instrutor}
-        </p>
 
-        <div className="mt-1.5 flex items-center gap-1.5 text-[12px]">
+        <div className="mt-2 flex items-center gap-1.5 text-[12px]">
           <span className="font-bold text-[var(--color-pmb-gold-600)]">
             {rating}
           </span>
