@@ -5,8 +5,9 @@ import { getLastSuccessfulSync } from "@/lib/catalog/sync-log"
 import {
   getSystemSettings,
   updatePmbDirectSaleGateway,
+  updatePmbMpAccessToken,
+  getPmbMpAccessTokenAsync,
 } from "@/lib/system-settings"
-import { pmbMpAccessToken } from "@/lib/pmb-config"
 
 export async function GET() {
   const ctx = await requireAdminSession()
@@ -14,10 +15,17 @@ export async function GET() {
     return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
   }
 
-  const [lastSync, settings] = await Promise.all([
+  const [lastSync, settings, mpToken] = await Promise.all([
     getLastSuccessfulSync(),
     getSystemSettings(),
+    getPmbMpAccessTokenAsync(),
   ])
+
+  const tokenSource: "db" | "env" | null = settings.pmbMpAccessTokenEnc
+    ? "db"
+    : process.env.PMB_MP_ACCESS_TOKEN
+      ? "env"
+      : null
 
   return NextResponse.json({
     data: {
@@ -37,7 +45,8 @@ export async function GET() {
           baseUrl: process.env.ASAAS_API_URL ?? null,
         },
         mp: {
-          configured: Boolean(pmbMpAccessToken()),
+          configured: Boolean(mpToken),
+          tokenSource,
         },
       },
       webhooks: {
@@ -55,6 +64,7 @@ export async function GET() {
 
 const patchSchema = z.object({
   pmbDirectSaleGateway: z.enum(["MP", "ASAAS"]).optional(),
+  pmbMpAccessToken: z.string().trim().min(1).max(500).nullable().optional(),
 })
 
 export async function PATCH(request: Request) {
@@ -93,12 +103,17 @@ export async function PATCH(request: Request) {
     }
   }
   if (parsed.data.pmbDirectSaleGateway === "MP") {
-    if (!pmbMpAccessToken()) {
+    const existing = await getPmbMpAccessTokenAsync()
+    if (!existing && !parsed.data.pmbMpAccessToken) {
       return NextResponse.json(
-        { error: "Mercado Pago PMB não está configurado (PMB_MP_ACCESS_TOKEN)" },
+        { error: "Configure o token do Mercado Pago antes de selecionar este gateway" },
         { status: 400 },
       )
     }
+  }
+
+  if (parsed.data.pmbMpAccessToken !== undefined) {
+    await updatePmbMpAccessToken(parsed.data.pmbMpAccessToken)
   }
 
   if (parsed.data.pmbDirectSaleGateway) {
@@ -110,5 +125,5 @@ export async function PATCH(request: Request) {
     })
   }
 
-  return NextResponse.json({ data: {} })
+  return NextResponse.json({ data: { ok: true } })
 }

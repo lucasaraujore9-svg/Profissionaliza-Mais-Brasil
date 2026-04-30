@@ -91,11 +91,14 @@ export async function POST(request: Request) {
   const settings = await getSystemSettings()
   const gateway = settings.pmbDirectSaleGateway
 
-  if (gateway === "MP" && !pmbMpAccessToken()) {
-    return NextResponse.json(
-      { error: "PMB_MP_ACCESS_TOKEN não configurado" },
-      { status: 503 },
-    )
+  if (gateway === "MP") {
+    const exists = await pmbMpAccessToken()
+    if (!exists) {
+      return NextResponse.json(
+        { error: "Token Mercado Pago PMB não configurado" },
+        { status: 503 },
+      )
+    }
   }
   if (gateway === "ASAAS" && (!process.env.ASAAS_API_URL || !process.env.ASAAS_API_KEY)) {
     return NextResponse.json(
@@ -217,10 +220,10 @@ export async function POST(request: Request) {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? ""
 
   if (gateway === "MP") {
-    const mpToken = pmbMpAccessToken()
+    const mpToken = await pmbMpAccessToken()
     if (!mpToken) {
       return NextResponse.json(
-        { error: "PMB_MP_ACCESS_TOKEN não configurado" },
+        { error: "Token Mercado Pago PMB não configurado" },
         { status: 503 },
       )
     }

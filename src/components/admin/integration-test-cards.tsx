@@ -117,7 +117,7 @@ function IntegrationCard({
 export interface IntegrationsConfig {
   ea: { configured: boolean }
   asaas: { configured: boolean }
-  mp: { configured: boolean }
+  mp: { configured: boolean; tokenSource?: "db" | "env" | null }
 }
 
 interface IntegrationTestCardsProps {

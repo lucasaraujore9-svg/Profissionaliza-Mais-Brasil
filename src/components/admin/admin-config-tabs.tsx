@@ -8,6 +8,7 @@ import {
 } from "./integration-test-cards"
 import { WebhookConfig, type WebhookConfigData } from "./webhook-config"
 import { SystemInfo, type SystemInfoData } from "./system-info"
+import { PmbMpTokenConfig } from "./pmb-mp-token-config"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 
@@ -261,7 +262,16 @@ export function AdminConfigTabs({
             mpAvailable={integrations.mp.configured}
           />
         )}
-        {active === "integracoes" && <IntegrationTestCards integrations={integrations} />}
+        {active === "integracoes" && (
+          <div className="space-y-6">
+            <PmbMpTokenConfig
+              configured={integrations.mp.configured}
+              tokenSource={integrations.mp.tokenSource ?? null}
+              canEdit={canEditGateway}
+            />
+            <IntegrationTestCards integrations={integrations} />
+          </div>
+        )}
         {active === "webhooks" && <WebhookConfig config={webhooks} />}
         {active === "sobre" && <SystemInfo info={system} />}
       </div>

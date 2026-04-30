@@ -40,8 +40,8 @@ interface TenantContext {
   isPmbVitrine?: boolean
 }
 
-function pmbContext(): TenantContext | null {
-  const token = pmbMpAccessToken()
+async function pmbContext(): Promise<TenantContext | null> {
+  const token = await pmbMpAccessToken()
   if (!token) return null
   return {
     id: "__pmb__",
@@ -81,7 +81,7 @@ async function resolveTenantFromReference(
       return { tenant: enrollment.tenant, enrollmentId: enrollment.id }
     }
     if (enrollment.tenantId === null) {
-      const pmb = pmbContext()
+      const pmb = await pmbContext()
       if (pmb) return { tenant: pmb, enrollmentId: enrollment.id }
     }
   }
@@ -165,7 +165,7 @@ export async function processMpWebhook(args: ProcessArgs): Promise<void> {
         if (pending.tenant) {
           tenant = pending.tenant
         } else if (pending.tenantId === null) {
-          tenant = pmbContext()
+          tenant = await pmbContext()
         }
         enrollmentId = pending.id
         externalReference = pending.externalReference
