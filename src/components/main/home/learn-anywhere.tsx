@@ -1,4 +1,4 @@
-import { Smartphone, Download, Clock, Users } from "lucide-react"
+import { Smartphone, Clock } from "lucide-react"
 
 const BENEFICIOS = [
   {
@@ -7,19 +7,9 @@ const BENEFICIOS = [
     texto: "Sem precisar de computador. As aulas rodam em qualquer Android ou iPhone, até na internet fraca.",
   },
   {
-    icon: Download,
-    titulo: "Baixe as aulas",
-    texto: "Baixa uma vez no Wi-Fi e assiste quando quiser, sem gastar seu pacote de dados.",
-  },
-  {
     icon: Clock,
     titulo: "No seu tempo",
     texto: "Estude 15 minutinhos por dia ou 3 horas no fim de semana. Você é quem manda no ritmo.",
-  },
-  {
-    icon: Users,
-    titulo: "Professor no WhatsApp",
-    texto: "Ficou com dúvida? Manda mensagem direto pro professor. Ele responde de segunda a sábado.",
   },
 ]
 
@@ -41,10 +31,6 @@ export function LearnAnywhere() {
             />
 
             <div className="relative flex h-full flex-col justify-end p-8">
-              <div className="mb-4 inline-flex w-max items-center gap-1.5 rounded-full bg-[var(--color-pmb-lime)] px-3 py-1 text-[11px] font-black uppercase tracking-wider text-[var(--color-pmb-green)]">
-                <Smartphone className="h-3.5 w-3.5" strokeWidth={2.5} aria-hidden />
-                App no celular
-              </div>
               <h3 className="text-[28px] font-black leading-tight text-white">
                 Sua escola<br />
                 no bolso.

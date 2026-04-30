@@ -1,4 +1,4 @@
-import { Search, Sparkles } from "lucide-react"
+import { Search } from "lucide-react"
 import { ShowcaseCards } from "./showcase-cards"
 import type { ShowcaseCard } from "@/lib/catalog/home"
 
@@ -37,12 +37,7 @@ export function HeroBanner({
       )}
       <div className="relative mx-auto grid max-w-[1280px] grid-cols-1 items-center gap-10 px-4 py-12 md:px-6 md:py-16 lg:grid-cols-[1.05fr_0.95fr] lg:gap-16 lg:py-20">
         <div className="max-w-[620px]">
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--color-pmb-lime)] px-3 py-1 text-[12px] font-bold uppercase tracking-wide text-[var(--color-pmb-green)]">
-            <Sparkles className="h-3.5 w-3.5" aria-hidden />
-            2.400+ cursos com certificado
-          </span>
-
-          <h1 className="mt-4 text-[34px] md:text-[44px] lg:text-[52px] font-bold leading-[1.08] tracking-tight">
+          <h1 className="text-[34px] md:text-[44px] lg:text-[52px] font-bold leading-[1.08] tracking-tight">
             Aprenda uma profissão e comece a ganhar seu próprio dinheiro.
           </h1>
 

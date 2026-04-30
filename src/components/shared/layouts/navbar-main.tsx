@@ -194,27 +194,6 @@ export function NavbarMain({
         </button>
       </div>
 
-      <div className="hidden lg:block border-t border-[rgba(2,89,24,0.08)]">
-        <div className="mx-auto max-w-[1280px] px-4 md:px-6">
-          <ul className="flex items-center gap-1 overflow-x-auto scrollbar-none py-1.5 -mx-1">
-            {lista.map((cat, i) => (
-              <li key={cat.slug} className="shrink-0">
-                <Link
-                  href={`/cursos?categoria=${encodeURIComponent(cat.nome)}`}
-                  className={`inline-block px-3 py-1.5 rounded-md text-[13px] font-medium whitespace-nowrap transition-colors ${
-                    i === 0
-                      ? "text-[var(--color-pmb-green)] bg-[var(--color-pmb-lime-50)]"
-                      : "text-[rgba(2,89,24,0.78)] hover:text-[var(--color-pmb-green)] hover:bg-[var(--color-pmb-mist)]"
-                  }`}
-                >
-                  {cat.nome}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </div>
-      </div>
-
       {mobileOpen && (
         <div className="lg:hidden border-t border-[rgba(2,89,24,0.08)] bg-white">
           <div className="mx-auto max-w-[1280px] px-4 py-3 flex flex-col gap-1">
