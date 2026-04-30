@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { requireAdminSession } from "@/lib/auth/admin-session"
-import { csvResponse } from "@/lib/reports/csv"
+import { buildCsv, csvResponse } from "@/lib/reports/csv"
 import {
   REPORT_DEFS,
   getReportRunner,
@@ -39,6 +39,7 @@ export async function GET(request: Request, ctx: Ctx) {
   }
 
   const url = new URL(request.url)
+  const format = (url.searchParams.get("format") ?? "csv").toLowerCase()
   const filters = {
     from: url.searchParams.get("from") ?? undefined,
     to: url.searchParams.get("to") ?? undefined,
@@ -46,8 +47,25 @@ export async function GET(request: Request, ctx: Ctx) {
   }
 
   try {
-    const { csv, filename } = await runner.generate(filters)
+    const { header, rows, filename } = await runner.generate(filters)
     const dateStamp = new Date().toISOString().slice(0, 10)
+
+    if (format === "json") {
+      return NextResponse.json({
+        data: {
+          id: def.id,
+          label: def.label,
+          group: def.group,
+          description: def.description,
+          header,
+          rows,
+          filename: `${filename}-${dateStamp}`,
+          totalRows: rows.length,
+        },
+      })
+    }
+
+    const csv = buildCsv(header, rows)
     return csvResponse(csv, `${filename}-${dateStamp}.csv`)
   } catch (error) {
     console.error("[reports] failed:", error)

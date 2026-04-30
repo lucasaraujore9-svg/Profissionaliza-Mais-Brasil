@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import type { Prisma } from "@prisma/client"
-import { brl, buildCsv, isoDate, isoDateTime } from "./csv"
+import { brl, isoDate, isoDateTime } from "./csv"
 
 export interface ReportFilters {
   from?: string
@@ -8,8 +8,14 @@ export interface ReportFilters {
   tenantId?: string
 }
 
+export interface ReportData {
+  header: string[]
+  rows: unknown[][]
+  filename: string
+}
+
 export interface ReportRunner {
-  generate(filters: ReportFilters): Promise<{ csv: string; filename: string }>
+  generate(filters: ReportFilters): Promise<ReportData>
 }
 
 export interface ReportDef {
@@ -185,8 +191,7 @@ const RUNNERS: Record<string, ReportRunner> = {
         },
       })
       return {
-        csv: buildCsv(
-          [
+        header: [
             "id",
             "criado_em",
             "vitrine",
@@ -206,7 +211,7 @@ const RUNNERS: Record<string, ReportRunner> = {
             "vendedor",
             "external_reference",
           ],
-          rows.map((e) => [
+          rows: rows.map((e) => [
             e.id,
             isoDateTime(e.createdAt),
             e.tenantId ? "Revendedor" : "PMB",
@@ -226,7 +231,6 @@ const RUNNERS: Record<string, ReportRunner> = {
             e.soldByUser?.name ?? "",
             e.externalReference ?? "",
           ]),
-        ),
         filename: "vendas-completas",
       }
     },
@@ -251,8 +255,7 @@ const RUNNERS: Record<string, ReportRunner> = {
         },
       })
       return {
-        csv: buildCsv(
-          [
+        header: [
             "criado_em",
             "aluno",
             "email",
@@ -267,7 +270,7 @@ const RUNNERS: Record<string, ReportRunner> = {
             "status",
             "vendedor",
           ],
-          rows.map((e) => [
+          rows: rows.map((e) => [
             isoDateTime(e.createdAt),
             e.student.nome,
             e.student.email ?? "",
@@ -282,7 +285,6 @@ const RUNNERS: Record<string, ReportRunner> = {
             e.status,
             e.soldByUser?.name ?? "",
           ]),
-        ),
         filename: "vendas-vitrine-pmb",
       }
     },
@@ -307,8 +309,7 @@ const RUNNERS: Record<string, ReportRunner> = {
         },
       })
       return {
-        csv: buildCsv(
-          [
+        header: [
             "criado_em",
             "revendedor",
             "slug",
@@ -320,7 +321,7 @@ const RUNNERS: Record<string, ReportRunner> = {
             "valor_final",
             "status",
           ],
-          rows.map((e) => [
+          rows: rows.map((e) => [
             isoDateTime(e.createdAt),
             e.tenant?.name ?? "",
             e.tenant?.slug ?? "",
@@ -332,7 +333,6 @@ const RUNNERS: Record<string, ReportRunner> = {
             brl(Number(e.finalAmount)),
             e.status,
           ]),
-        ),
         filename: "vendas-revendedores",
       }
     },
@@ -365,8 +365,7 @@ const RUNNERS: Record<string, ReportRunner> = {
         },
       })
       return {
-        csv: buildCsv(
-          [
+        header: [
             "criado_em",
             "cupom",
             "tipo_desconto",
@@ -379,7 +378,7 @@ const RUNNERS: Record<string, ReportRunner> = {
             "valor_aplicado",
             "valor_final",
           ],
-          rows.map((e) => [
+          rows: rows.map((e) => [
             isoDateTime(e.createdAt),
             e.coupon?.code ?? "",
             e.coupon?.discountType ?? "",
@@ -394,7 +393,6 @@ const RUNNERS: Record<string, ReportRunner> = {
             brl(Number(e.discountAmount)),
             brl(Number(e.finalAmount)),
           ]),
-        ),
         filename: "cupons-utilizados",
       }
     },
@@ -415,8 +413,7 @@ const RUNNERS: Record<string, ReportRunner> = {
         },
       })
       return {
-        csv: buildCsv(
-          [
+        header: [
             "criado_em",
             "vitrine",
             "nome",
@@ -429,7 +426,7 @@ const RUNNERS: Record<string, ReportRunner> = {
             "matriculas_ativas",
             "id_plataforma",
           ],
-          rows.map((s) => [
+          rows: rows.map((s) => [
             isoDate(s.createdAt),
             s.tenant.slug === "__pmb__" ? "Vitrine PMB" : s.tenant.name,
             s.nome,
@@ -442,7 +439,6 @@ const RUNNERS: Record<string, ReportRunner> = {
             s._count.enrollments,
             s.eaAlunoId ?? "",
           ]),
-        ),
         filename: "alunos-todos",
       }
     },
@@ -462,9 +458,8 @@ const RUNNERS: Record<string, ReportRunner> = {
         },
       })
       return {
-        csv: buildCsv(
-          ["criado_em", "nome", "email", "fone", "cpf", "status", "matriculas"],
-          rows.map((s) => [
+        header: ["criado_em", "nome", "email", "fone", "cpf", "status", "matriculas"],
+          rows: rows.map((s) => [
             isoDate(s.createdAt),
             s.nome,
             s.email ?? "",
@@ -473,7 +468,6 @@ const RUNNERS: Record<string, ReportRunner> = {
             s.status,
             s._count.enrollments,
           ]),
-        ),
         filename: "alunos-vitrine-pmb",
       }
     },
@@ -494,8 +488,7 @@ const RUNNERS: Record<string, ReportRunner> = {
         },
       })
       return {
-        csv: buildCsv(
-          [
+        header: [
             "revendedor",
             "slug",
             "status_revendedor",
@@ -505,7 +498,7 @@ const RUNNERS: Record<string, ReportRunner> = {
             "devedores",
             "formados",
           ],
-          tenants.map((t) => {
+          rows: tenants.map((t) => {
             const total = t.students.length
             const count = (s: string): number =>
               t.students.filter((x) => x.status === s).length
@@ -520,7 +513,6 @@ const RUNNERS: Record<string, ReportRunner> = {
               count("FORMADO"),
             ]
           }),
-        ),
         filename: "alunos-por-revendedor",
       }
     },
@@ -537,8 +529,7 @@ const RUNNERS: Record<string, ReportRunner> = {
         },
       })
       return {
-        csv: buildCsv(
-          [
+        header: [
             "criado_em",
             "nome",
             "slug",
@@ -551,7 +542,7 @@ const RUNNERS: Record<string, ReportRunner> = {
             "total_alunos",
             "asaas_subscription_id",
           ],
-          tenants
+          rows: tenants
             .filter((t) => t.slug !== "__pmb__")
             .map((t) => [
               isoDate(t.createdAt),
@@ -566,7 +557,6 @@ const RUNNERS: Record<string, ReportRunner> = {
               t._count.students,
               t.asaasSubscriptionId ?? "",
             ]),
-        ),
         filename: "revendedores-todos",
       }
     },
@@ -589,8 +579,7 @@ const RUNNERS: Record<string, ReportRunner> = {
         },
       })
       return {
-        csv: buildCsv(
-          [
+        header: [
             "nome",
             "slug",
             "status",
@@ -601,7 +590,7 @@ const RUNNERS: Record<string, ReportRunner> = {
             "ultimo_vencimento",
             "valor_em_atraso",
           ],
-          tenants
+          rows: tenants
             .filter((t) => t.slug !== "__pmb__")
             .map((t) => [
               t.name,
@@ -614,7 +603,6 @@ const RUNNERS: Record<string, ReportRunner> = {
               isoDate(t.tenantPayments[0]?.dueDate ?? null),
               brl(Number(t.tenantPayments[0]?.amount ?? 0)),
             ]),
-        ),
         filename: "revendedores-inadimplentes",
       }
     },
@@ -644,8 +632,7 @@ const RUNNERS: Record<string, ReportRunner> = {
         },
       })
       return {
-        csv: buildCsv(
-          [
+        header: [
             "data_pagamento",
             "vitrine",
             "revendedor",
@@ -659,7 +646,7 @@ const RUNNERS: Record<string, ReportRunner> = {
             "asaas_payment_id",
             "vendedor",
           ],
-          rows.map((p) => [
+          rows: rows.map((p) => [
             isoDateTime(p.paidAt ?? p.createdAt),
             p.enrollment.tenant ? "Revendedor" : "PMB",
             p.enrollment.tenant?.name ?? "Vitrine principal",
@@ -673,7 +660,6 @@ const RUNNERS: Record<string, ReportRunner> = {
             p.asaasPaymentId ?? "",
             p.soldByUser?.name ?? "",
           ]),
-        ),
         filename: "pagamentos-recebidos",
       }
     },
@@ -692,8 +678,7 @@ const RUNNERS: Record<string, ReportRunner> = {
         include: { tenant: { select: { name: true, slug: true } } },
       })
       return {
-        csv: buildCsv(
-          [
+        header: [
             "vencimento",
             "pago_em",
             "revendedor",
@@ -703,7 +688,7 @@ const RUNNERS: Record<string, ReportRunner> = {
             "status",
             "asaas_payment_id",
           ],
-          rows.map((p) => [
+          rows: rows.map((p) => [
             isoDate(p.dueDate),
             isoDate(p.paidAt),
             p.tenant.name,
@@ -713,7 +698,6 @@ const RUNNERS: Record<string, ReportRunner> = {
             p.status,
             p.asaasPaymentId,
           ]),
-        ),
         filename: "mensalidades-revendedores",
       }
     },
@@ -735,8 +719,7 @@ const RUNNERS: Record<string, ReportRunner> = {
         },
       })
       return {
-        csv: buildCsv(
-          [
+        header: [
             "vencimento",
             "revendedor",
             "owner_nome",
@@ -745,7 +728,7 @@ const RUNNERS: Record<string, ReportRunner> = {
             "tipo_cobranca",
             "asaas_payment_id",
           ],
-          rows.map((p) => [
+          rows: rows.map((p) => [
             isoDate(p.dueDate),
             p.tenant.name,
             p.tenant.owner?.name ?? "",
@@ -754,7 +737,6 @@ const RUNNERS: Record<string, ReportRunner> = {
             p.billingType,
             p.asaasPaymentId,
           ]),
-        ),
         filename: "mensalidades-em-atraso",
       }
     },
@@ -781,16 +763,14 @@ const RUNNERS: Record<string, ReportRunner> = {
       })
       const map = new Map(courses.map((c) => [c.id, c]))
       return {
-        csv: buildCsv(
-          ["posicao", "curso", "categoria", "matriculas", "receita_total"],
-          grouped.map((g, i) => [
+        header: ["posicao", "curso", "categoria", "matriculas", "receita_total"],
+          rows: grouped.map((g, i) => [
             i + 1,
             map.get(g.courseId)?.nome ?? g.courseId,
             map.get(g.courseId)?.categoriaLoja ?? "",
             g._count._all,
             brl(Number(g._sum.finalAmount ?? 0)),
           ]),
-        ),
         filename: "cursos-mais-vendidos",
       }
     },
@@ -853,8 +833,7 @@ const RUNNERS: Record<string, ReportRunner> = {
           b.pmbCount + b.resellerCount - (a.pmbCount + a.resellerCount),
       )
       return {
-        csv: buildCsv(
-          [
+        header: [
             "curso",
             "categoria",
             "status",
@@ -864,7 +843,7 @@ const RUNNERS: Record<string, ReportRunner> = {
             "receita_revendedores",
             "ticket_medio",
           ],
-          arr.map((r) => {
+          rows: arr.map((r) => {
             const total = r.pmbCount + r.resellerCount
             const ticket =
               total > 0 ? (r.pmbRevenue + r.resellerRevenue) / total : 0
@@ -879,7 +858,6 @@ const RUNNERS: Record<string, ReportRunner> = {
               brl(ticket),
             ]
           }),
-        ),
         filename: "performance-por-curso",
       }
     },
