@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import Image from "next/image"
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Search, Menu, X, ChevronDown, User } from "lucide-react"
 import type { CategoriaInfo } from "@/lib/catalog/home"
 
@@ -28,6 +28,29 @@ export function NavbarMain({
   const lista =
     categorias && categorias.length > 0 ? categorias : FALLBACK_CATEGORIAS
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [categoriasOpen, setCategoriasOpen] = useState(false)
+  const categoriasRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    if (!categoriasOpen) return
+    function handleClick(event: MouseEvent) {
+      if (
+        categoriasRef.current &&
+        !categoriasRef.current.contains(event.target as Node)
+      ) {
+        setCategoriasOpen(false)
+      }
+    }
+    function handleKey(event: KeyboardEvent) {
+      if (event.key === "Escape") setCategoriasOpen(false)
+    }
+    document.addEventListener("mousedown", handleClick)
+    document.addEventListener("keydown", handleKey)
+    return () => {
+      document.removeEventListener("mousedown", handleClick)
+      document.removeEventListener("keydown", handleKey)
+    }
+  }, [categoriasOpen])
 
   return (
     <header className="sticky top-0 z-40 bg-white shadow-[0_1px_0_0_rgba(2,89,24,0.08)]">
@@ -58,14 +81,62 @@ export function NavbarMain({
           )}
         </Link>
 
-        <button
-          type="button"
-          className="hidden lg:flex items-center gap-1.5 rounded-md px-2.5 py-2 text-[14px] font-medium text-[var(--color-pmb-green)] hover:bg-[var(--color-pmb-mist)] transition-colors"
+        <div
+          ref={categoriasRef}
+          className="relative hidden lg:block"
         >
-          <Menu className="h-4 w-4" aria-hidden />
-          Categorias
-          <ChevronDown className="h-3.5 w-3.5 opacity-60" aria-hidden />
-        </button>
+          <button
+            type="button"
+            aria-haspopup="menu"
+            aria-expanded={categoriasOpen}
+            onClick={() => setCategoriasOpen((v) => !v)}
+            className="flex items-center gap-1.5 rounded-md px-2.5 py-2 text-[14px] font-medium text-[var(--color-pmb-green)] hover:bg-[var(--color-pmb-mist)] transition-colors"
+          >
+            <Menu className="h-4 w-4" aria-hidden />
+            Categorias
+            <ChevronDown
+              className={`h-3.5 w-3.5 opacity-60 transition-transform ${
+                categoriasOpen ? "rotate-180" : ""
+              }`}
+              aria-hidden
+            />
+          </button>
+          {categoriasOpen && (
+            <div
+              role="menu"
+              className="absolute left-0 top-full z-50 mt-1 w-72 rounded-xl border border-[rgba(2,89,24,0.1)] bg-white p-2 shadow-[0_18px_40px_-18px_rgba(2,89,24,0.35)]"
+            >
+              <ul className="flex flex-col">
+                {lista.map((cat) => (
+                  <li key={cat.slug}>
+                    <Link
+                      href={`/cursos?categoria=${encodeURIComponent(cat.nome)}`}
+                      onClick={() => setCategoriasOpen(false)}
+                      role="menuitem"
+                      className="flex items-center justify-between rounded-md px-3 py-2 text-[13.5px] font-medium text-[var(--color-pmb-green)] hover:bg-[var(--color-pmb-mist)]"
+                    >
+                      <span>{cat.nome}</span>
+                      {cat.count > 0 && (
+                        <span className="text-[11px] text-[rgba(2,89,24,0.55)]">
+                          {cat.count}
+                        </span>
+                      )}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+              <div className="mt-1 border-t border-[rgba(2,89,24,0.08)] pt-2">
+                <Link
+                  href="/cursos"
+                  onClick={() => setCategoriasOpen(false)}
+                  className="block rounded-md px-3 py-2 text-[13px] font-bold text-[var(--color-pmb-green)] hover:bg-[var(--color-pmb-mist)]"
+                >
+                  Ver todos os cursos →
+                </Link>
+              </div>
+            </div>
+          )}
+        </div>
 
         <form
           role="search"
@@ -89,7 +160,7 @@ export function NavbarMain({
         </form>
 
         <nav className="hidden lg:flex items-center gap-5 text-[14px] font-medium text-[var(--color-pmb-green)]">
-          <Link href="/#como-funciona" className="hover:underline underline-offset-4">
+          <Link href="/como-funciona" className="hover:underline underline-offset-4">
             Como funciona
           </Link>
           <Link href="/ajuda" className="hover:underline underline-offset-4">
@@ -162,7 +233,7 @@ export function NavbarMain({
               Entrar
             </Link>
             <Link
-              href="/#como-funciona"
+              href="/como-funciona"
               onClick={() => setMobileOpen(false)}
               className="py-2 text-[15px] font-medium text-[var(--color-pmb-green)]"
             >
