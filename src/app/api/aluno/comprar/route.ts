@@ -1,0 +1,286 @@
+import { NextResponse } from "next/server"
+import { z } from "zod"
+import { prisma } from "@/lib/prisma"
+import { requireStudentSession } from "@/lib/auth/student-session"
+import { pmbMpAccessToken } from "@/lib/pmb-config"
+import { createPreference } from "@/lib/mercadopago/client"
+import {
+  createCustomer as createAsaasCustomer,
+  createPayment as createAsaasPayment,
+  AsaasApiError,
+} from "@/lib/asaas/client"
+import { getSystemSettings } from "@/lib/system-settings"
+
+const createSchema = z.object({
+  courseId: z.string().cuid(),
+  couponCode: z.string().trim().max(64).optional(),
+})
+
+function dueDateInDays(days: number): string {
+  const d = new Date()
+  d.setDate(d.getDate() + days)
+  return d.toISOString().slice(0, 10)
+}
+
+export async function POST(request: Request) {
+  const session = await requireStudentSession()
+  if (!session) {
+    return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
+  }
+
+  let payload: unknown
+  try {
+    payload = await request.json()
+  } catch {
+    return NextResponse.json({ error: "JSON inválido" }, { status: 400 })
+  }
+
+  const parsed = createSchema.safeParse(payload)
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: "Dados inválidos", fields: parsed.error.flatten().fieldErrors },
+      { status: 400 },
+    )
+  }
+
+  const settings = await getSystemSettings()
+  const gateway = settings.pmbDirectSaleGateway
+
+  const [student, course] = await Promise.all([
+    prisma.student.findUnique({
+      where: { id: session.studentId },
+      select: {
+        id: true,
+        nome: true,
+        email: true,
+        cpf: true,
+        fone: true,
+      },
+    }),
+    prisma.course.findUnique({
+      where: { id: parsed.data.courseId },
+      select: {
+        id: true,
+        nome: true,
+        status: true,
+        precoVitrineMain: true,
+        precoPromocional: true,
+        precoOriginal: true,
+      },
+    }),
+  ])
+
+  if (!student) {
+    return NextResponse.json({ error: "Aluno não encontrado" }, { status: 404 })
+  }
+  if (!student.email) {
+    return NextResponse.json(
+      { error: "Cadastre seu email no perfil antes de comprar" },
+      { status: 400 },
+    )
+  }
+  if (!course || course.status !== "ATIVO") {
+    return NextResponse.json({ error: "Curso indisponível" }, { status: 404 })
+  }
+
+  // Bloqueia compra duplicada de curso ainda ativo
+  const existingActive = await prisma.enrollment.findFirst({
+    where: {
+      studentId: student.id,
+      courseId: course.id,
+      status: { in: ["PENDING", "ACTIVE", "COMPLETED"] },
+    },
+    select: { id: true, status: true },
+  })
+  if (existingActive) {
+    return NextResponse.json(
+      {
+        error:
+          existingActive.status === "PENDING"
+            ? "Você já tem uma cobrança pendente para este curso"
+            : "Você já tem este curso na sua conta",
+      },
+      { status: 409 },
+    )
+  }
+
+  const basePrice = Number(
+    course.precoVitrineMain ??
+      course.precoPromocional ??
+      course.precoOriginal ??
+      0,
+  )
+  if (basePrice <= 0) {
+    return NextResponse.json(
+      { error: "Curso sem preço configurado na vitrine" },
+      { status: 400 },
+    )
+  }
+
+  let discountAmount = 0
+  let couponId: string | null = null
+  if (parsed.data.couponCode) {
+    const code = parsed.data.couponCode.toUpperCase()
+    const now = new Date()
+    const coupon = await prisma.coupon.findFirst({
+      where: {
+        tenantId: null,
+        code,
+        isActive: true,
+        validFrom: { lte: now },
+        validUntil: { gte: now },
+      },
+    })
+    if (!coupon) {
+      return NextResponse.json({ error: "Cupom inválido" }, { status: 400 })
+    }
+    if (coupon.maxUses !== null && coupon.usedCount >= coupon.maxUses) {
+      return NextResponse.json({ error: "Cupom esgotado" }, { status: 400 })
+    }
+    const raw =
+      coupon.discountType === "PERCENTAGE"
+        ? (basePrice * Number(coupon.discountValue)) / 100
+        : Number(coupon.discountValue)
+    discountAmount = Math.min(raw, basePrice)
+    couponId = coupon.id
+  }
+
+  const finalAmount = Number((basePrice - discountAmount).toFixed(2))
+
+  const enrollment = await prisma.enrollment.create({
+    data: {
+      tenantId: null,
+      studentId: student.id,
+      tenantCourseId: null,
+      courseId: course.id,
+      paymentType: "ONE_TIME",
+      status: "PENDING",
+      gateway,
+      originalAmount: basePrice,
+      discountAmount,
+      finalAmount,
+      couponId,
+    },
+    select: { id: true },
+  })
+
+  const externalReference = `pmb_enr_${enrollment.id}`
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? ""
+
+  if (gateway === "MP") {
+    const mpToken = await pmbMpAccessToken()
+    if (!mpToken) {
+      await prisma.enrollment.delete({ where: { id: enrollment.id } })
+      return NextResponse.json(
+        { error: "Mercado Pago não configurado" },
+        { status: 503 },
+      )
+    }
+
+    const preference = await createPreference(mpToken, {
+      items: [
+        {
+          id: course.id,
+          title: course.nome,
+          quantity: 1,
+          unit_price: finalAmount,
+          currency_id: "BRL",
+        },
+      ],
+      payer: {
+        name: student.nome,
+        email: student.email,
+        identification: student.cpf
+          ? { type: "CPF", number: student.cpf }
+          : undefined,
+      },
+      back_urls: appUrl
+        ? {
+            success: `${appUrl}/aluno/pagamentos?ok=${enrollment.id}`,
+            failure: `${appUrl}/aluno/pagamentos?err=${enrollment.id}`,
+            pending: `${appUrl}/aluno/pagamentos?pend=${enrollment.id}`,
+          }
+        : undefined,
+      auto_return: "approved",
+      external_reference: externalReference,
+      notification_url: appUrl ? `${appUrl}/api/webhooks/mercadopago` : undefined,
+    })
+
+    await prisma.enrollment.update({
+      where: { id: enrollment.id },
+      data: {
+        mpPreferenceId: preference.id,
+        externalReference,
+      },
+    })
+
+    return NextResponse.json({
+      data: {
+        enrollmentId: enrollment.id,
+        gateway: "MP",
+        initPoint: preference.init_point,
+        finalAmount,
+      },
+    })
+  }
+
+  // ASAAS
+  if (!process.env.ASAAS_API_URL || !process.env.ASAAS_API_KEY) {
+    await prisma.enrollment.delete({ where: { id: enrollment.id } })
+    return NextResponse.json({ error: "Asaas não configurado" }, { status: 503 })
+  }
+  if (!student.cpf) {
+    await prisma.enrollment.delete({ where: { id: enrollment.id } })
+    return NextResponse.json(
+      { error: "Cadastre seu CPF no perfil antes de comprar via Asaas" },
+      { status: 400 },
+    )
+  }
+
+  try {
+    const customer = await createAsaasCustomer({
+      name: student.nome,
+      email: student.email,
+      cpfCnpj: student.cpf,
+      mobilePhone: student.fone ?? undefined,
+      externalReference: `pmb_student_${student.id}`,
+    })
+
+    const payment = await createAsaasPayment({
+      customer: customer.id,
+      billingType: "UNDEFINED",
+      value: finalAmount,
+      dueDate: dueDateInDays(3),
+      description: `Curso: ${course.nome}`,
+      externalReference,
+    })
+
+    await prisma.enrollment.update({
+      where: { id: enrollment.id },
+      data: {
+        externalReference,
+        asaasCustomerId: customer.id,
+        asaasPaymentId: payment.id,
+        asaasInvoiceUrl: payment.invoiceUrl,
+      },
+    })
+
+    return NextResponse.json({
+      data: {
+        enrollmentId: enrollment.id,
+        gateway: "ASAAS",
+        initPoint: payment.invoiceUrl,
+        finalAmount,
+      },
+    })
+  } catch (error) {
+    await prisma.enrollment
+      .delete({ where: { id: enrollment.id } })
+      .catch(() => undefined)
+    const message =
+      error instanceof AsaasApiError
+        ? error.message
+        : "Falha ao gerar cobrança no Asaas"
+    return NextResponse.json({ error: message }, { status: 502 })
+  }
+}

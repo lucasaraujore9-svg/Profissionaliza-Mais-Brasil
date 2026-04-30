@@ -9,6 +9,7 @@ import {
   CreditCard,
   GraduationCap,
   UserCircle,
+  ShoppingBag,
   LogOut,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -22,6 +23,7 @@ interface SessionShape {
 const NAV = [
   { href: "/aluno", label: "Visão geral", icon: LayoutDashboard },
   { href: "/aluno/cursos", label: "Meus cursos", icon: GraduationCap },
+  { href: "/aluno/comprar", label: "Comprar curso", icon: ShoppingBag },
   { href: "/aluno/pagamentos", label: "Pagamentos", icon: CreditCard },
   { href: "/aluno/perfil", label: "Meu perfil", icon: UserCircle },
 ]

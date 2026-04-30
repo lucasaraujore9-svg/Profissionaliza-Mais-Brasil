@@ -1,7 +1,7 @@
 import Link from "next/link"
 import { prisma } from "@/lib/prisma"
 import { requireStudentSession } from "@/lib/auth/student-session"
-import { CreditCard, GraduationCap, AlertCircle } from "lucide-react"
+import { CreditCard, GraduationCap, AlertCircle, ShoppingBag } from "lucide-react"
 
 function brl(value: number): string {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
@@ -176,19 +176,43 @@ export default async function StudentDashboardPage() {
         )}
       </section>
 
-      <a
-        href={eaLoginUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="block rounded-2xl border border-[var(--color-pmb-green)]/20 bg-[var(--color-pmb-lime-50)]/40 p-6 text-center transition-colors hover:bg-[var(--color-pmb-lime-50)]"
-      >
-        <p className="text-sm font-semibold text-[var(--color-pmb-green-900)]">
-          Acesse sua área de aulas →
-        </p>
-        <p className="mt-1 text-xs text-gray-600">
-          Use as credenciais enviadas por email para entrar na plataforma.
-        </p>
-      </a>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Link
+          href="/aluno/comprar"
+          className="group flex items-center gap-4 rounded-2xl border border-[var(--color-pmb-green)]/20 bg-white p-6 shadow-sm transition-all hover:border-[var(--color-pmb-green)] hover:shadow-md"
+        >
+          <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-[var(--color-pmb-lime-50)] text-[var(--color-pmb-green)]">
+            <ShoppingBag className="h-5 w-5" />
+          </span>
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-[var(--color-pmb-green-900)]">
+              Comprar novo curso →
+            </p>
+            <p className="mt-0.5 text-xs text-gray-600">
+              Acesse o catálogo PMB e contrate em poucos cliques.
+            </p>
+          </div>
+        </Link>
+
+        <a
+          href={eaLoginUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-4 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm transition-all hover:border-[var(--color-pmb-green)] hover:shadow-md"
+        >
+          <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-[var(--color-pmb-lime-50)] text-[var(--color-pmb-green)]">
+            <GraduationCap className="h-5 w-5" />
+          </span>
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-[var(--color-pmb-green-900)]">
+              Acesse sua área de aulas →
+            </p>
+            <p className="mt-0.5 text-xs text-gray-600">
+              Use as credenciais enviadas por email.
+            </p>
+          </div>
+        </a>
+      </div>
     </div>
   )
 }

@@ -2,7 +2,11 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { requireAdminSession } from "@/lib/auth/admin-session"
 import { invalidateTenant } from "@/lib/redis/tenant-cache"
-import { cancelSubscription, AsaasApiError } from "@/lib/asaas/client"
+import {
+  cancelSubscription,
+  getSubscription,
+  AsaasApiError,
+} from "@/lib/asaas/client"
 
 export async function GET(
   _request: Request,
@@ -59,6 +63,20 @@ export async function GET(
 
   const totalStudents = Object.values(studentsMap).reduce((a, b) => a + b, 0)
 
+  // Tenta buscar nextDueDate do Asaas. Falha silenciosamente se a API estiver
+  // indisponivel — front trata como null.
+  let asaasNextDueDate: string | null = null
+  let asaasSubscriptionStatus: string | null = null
+  if (tenant.asaasSubscriptionId) {
+    try {
+      const sub = await getSubscription(tenant.asaasSubscriptionId)
+      asaasNextDueDate = sub.nextDueDate ?? null
+      asaasSubscriptionStatus = sub.status ?? null
+    } catch (error) {
+      console.warn("[reseller] getSubscription falhou:", error)
+    }
+  }
+
   return NextResponse.json({
     data: {
       reseller: {
@@ -80,6 +98,8 @@ export async function GET(
         eaVendedorId: tenant.eaVendedorId,
         accountManagerId: tenant.accountManagerId,
         accountManagerName: tenant.accountManager?.name ?? null,
+        asaasNextDueDate,
+        asaasSubscriptionStatus,
       },
       payments: tenant.tenantPayments.map((p) => ({
         id: p.id,

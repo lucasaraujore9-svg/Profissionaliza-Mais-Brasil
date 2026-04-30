@@ -123,6 +123,24 @@ export async function cancelSubscription(
   )
 }
 
+export interface AsaasUpdateSubscriptionParams {
+  value?: number
+  nextDueDate?: string // YYYY-MM-DD
+  description?: string
+  billingType?: "BOLETO" | "CREDIT_CARD" | "PIX" | "UNDEFINED"
+}
+
+export async function updateSubscription(
+  subscriptionId: string,
+  params: AsaasUpdateSubscriptionParams,
+): Promise<AsaasSubscription> {
+  return request<AsaasSubscription>(
+    "POST",
+    `/subscriptions/${subscriptionId}`,
+    params,
+  )
+}
+
 // ── Payments ──
 
 export async function createPayment(

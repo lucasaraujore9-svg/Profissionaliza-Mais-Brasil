@@ -18,11 +18,15 @@ import {
 } from "./reseller-student-count"
 import { ResellerSupportNotes } from "./reseller-support-notes"
 import { ResellerImpersonateButton } from "./reseller-impersonate-button"
+import { ResellerBillingEdit } from "./reseller-billing-edit"
 
 interface DetailResponse {
   reseller: ResellerProfileData & {
     billingMode: BillingMode
     cancellationPolicy: CancellationPolicy | null
+    asaasSubscriptionId: string | null
+    asaasNextDueDate: string | null
+    asaasSubscriptionStatus: string | null
   }
   payments: ResellerPayment[]
   students: ResellerStudentsBreakdown
@@ -85,6 +89,14 @@ export function ResellerDetailClient({ tenantId }: ResellerDetailClientProps) {
 
       <div className="grid gap-6 xl:grid-cols-[2fr_1fr]">
         <div className="space-y-6">
+          <ResellerBillingEdit
+            tenantId={tenantId}
+            planValue={data.reseller.planValue}
+            asaasNextDueDate={data.reseller.asaasNextDueDate}
+            asaasSubscriptionId={data.reseller.asaasSubscriptionId}
+            asaasSubscriptionStatus={data.reseller.asaasSubscriptionStatus}
+            onSaved={load}
+          />
           <ResellerPaymentHistory payments={data.payments} />
           <ResellerPolicyConfig
             tenantId={tenantId}
