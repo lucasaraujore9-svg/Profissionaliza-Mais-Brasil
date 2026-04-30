@@ -7,6 +7,8 @@ import { createPreference } from "@/lib/mercadopago/client"
 import {
   createCustomer as createAsaasCustomer,
   createPayment as createAsaasPayment,
+  createSubscription as createAsaasSubscription,
+  listPayments as listAsaasPayments,
   AsaasApiError,
 } from "@/lib/asaas/client"
 import { getSystemSettings } from "@/lib/system-settings"
@@ -19,6 +21,13 @@ const createSchema = z.object({
 function dueDateInDays(days: number): string {
   const d = new Date()
   d.setDate(d.getDate() + days)
+  return d.toISOString().slice(0, 10)
+}
+
+function endDateAfterMonths(months: number): string {
+  const d = new Date()
+  d.setMonth(d.getMonth() + months)
+  d.setDate(d.getDate() + 3)
   return d.toISOString().slice(0, 10)
 }
 
@@ -149,6 +158,19 @@ export async function POST(request: Request) {
 
   const finalAmount = Number((basePrice - discountAmount).toFixed(2))
 
+  const isMonthly = course.paymentTypeMain === "MONTHLY"
+  const monthlyMonths = isMonthly ? course.monthlyMonthsMain ?? 12 : null
+
+  if (isMonthly && gateway === "MP") {
+    return NextResponse.json(
+      {
+        error:
+          "Este curso é cobrado em mensalidades. No momento, só aceitamos cobrança recorrente via Asaas. Tente novamente em alguns instantes.",
+      },
+      { status: 400 },
+    )
+  }
+
   const enrollment = await prisma.enrollment.create({
     data: {
       tenantId: null,
@@ -162,6 +184,7 @@ export async function POST(request: Request) {
       discountAmount,
       finalAmount,
       couponId,
+      installmentsTotal: monthlyMonths,
     },
     select: { id: true },
   })
@@ -248,6 +271,58 @@ export async function POST(request: Request) {
       externalReference: `pmb_student_${student.id}`,
     })
 
+    if (isMonthly && monthlyMonths) {
+      const subscription = await createAsaasSubscription({
+        customer: customer.id,
+        billingType: "UNDEFINED",
+        value: finalAmount,
+        nextDueDate: dueDateInDays(3),
+        cycle: "MONTHLY",
+        description: `Mensalidade — ${course.nome}`,
+        externalReference,
+        endDate: endDateAfterMonths(monthlyMonths),
+      })
+
+      let firstInvoiceUrl: string | null = null
+      let firstPaymentId: string | null = null
+      for (let i = 0; i < 3; i++) {
+        const list = await listAsaasPayments({
+          subscription: subscription.id,
+          limit: 1,
+          offset: 0,
+        }).catch(() => null)
+        const first = list?.data?.[0]
+        if (first) {
+          firstInvoiceUrl = first.invoiceUrl
+          firstPaymentId = first.id
+          break
+        }
+        await new Promise((r) => setTimeout(r, 500))
+      }
+
+      await prisma.enrollment.update({
+        where: { id: enrollment.id },
+        data: {
+          externalReference,
+          asaasCustomerId: customer.id,
+          asaasSubscriptionId: subscription.id,
+          asaasPaymentId: firstPaymentId,
+          asaasInvoiceUrl: firstInvoiceUrl,
+        },
+      })
+
+      return NextResponse.json({
+        data: {
+          enrollmentId: enrollment.id,
+          gateway: "ASAAS",
+          mode: "subscription",
+          installmentsTotal: monthlyMonths,
+          initPoint: firstInvoiceUrl,
+          finalAmount,
+        },
+      })
+    }
+
     const payment = await createAsaasPayment({
       customer: customer.id,
       billingType: "UNDEFINED",
@@ -271,6 +346,7 @@ export async function POST(request: Request) {
       data: {
         enrollmentId: enrollment.id,
         gateway: "ASAAS",
+        mode: "one_time",
         initPoint: payment.invoiceUrl,
         finalAmount,
       },

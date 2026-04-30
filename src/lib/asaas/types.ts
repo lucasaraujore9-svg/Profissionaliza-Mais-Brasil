@@ -50,6 +50,7 @@ export interface AsaasCreateSubscriptionParams {
   cycle: "MONTHLY" | "WEEKLY" | "BIWEEKLY" | "QUARTERLY" | "SEMIANNUALLY" | "YEARLY"
   description?: string
   externalReference?: string
+  endDate?: string // YYYY-MM-DD — fim da subscription (Asaas para cobranças após)
 }
 
 export interface AsaasSubscription {

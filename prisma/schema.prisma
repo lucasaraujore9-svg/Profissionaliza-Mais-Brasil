@@ -459,9 +459,14 @@ model Enrollment {
   externalReference String? @map("external_reference") // Para rastreamento no webhook
 
   // Asaas (venda direta PMB via Asaas)
-  asaasCustomerId String? @map("asaas_customer_id")
-  asaasPaymentId  String? @map("asaas_payment_id")
-  asaasInvoiceUrl String? @map("asaas_invoice_url") @db.Text
+  asaasCustomerId     String? @map("asaas_customer_id")
+  asaasPaymentId      String? @map("asaas_payment_id") // 1a cobranca (one-time) ou 1a parcela da subscription
+  asaasSubscriptionId String? @map("asaas_subscription_id") // Subscription Asaas para cursos MONTHLY
+  asaasInvoiceUrl     String? @map("asaas_invoice_url") @db.Text
+
+  // Controle de mensalidades (cursos MONTHLY)
+  installmentsTotal Int? @map("installments_total") // = course.monthlyMonthsMain no momento da compra
+  installmentsPaid  Int  @default(0) @map("installments_paid")
 
   // Cupom
   couponId String? @map("coupon_id")

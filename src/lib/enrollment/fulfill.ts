@@ -27,7 +27,12 @@ export interface PaymentEvent {
 
 /**
  * Realiza a matricula do aluno na plataforma de aulas e registra o pagamento.
+ *
  * Idempotente: se o pagamento ja foi registrado, nao processa de novo.
+ *
+ * Para cursos MONTHLY (assinatura): a 1a cobranca cria o aluno na EA + vincula
+ * o curso + envia o email de boas-vindas. As demais apenas criam o registro
+ * Payment, incrementam installmentsPaid e marcam COMPLETED na ultima.
  */
 export async function fulfillEnrollment(
   tenant: TenantContext,
@@ -53,6 +58,46 @@ export async function fulfillEnrollment(
     select: { id: true },
   })
   if (alreadyPaid) return
+
+  // Cobranca subsequente de uma subscription: aluno ja foi matriculado, so
+  // registramos o pagamento, incrementamos a contagem e fechamos o ciclo na ultima.
+  const isSubsequentInstallment =
+    enrollment.startedAt !== null && enrollment.installmentsTotal !== null
+
+  if (isSubsequentInstallment) {
+    const newPaidCount = enrollment.installmentsPaid + 1
+    const reachedTotal =
+      enrollment.installmentsTotal !== null &&
+      newPaidCount >= enrollment.installmentsTotal
+
+    await prisma.payment.create({
+      data: {
+        tenantId: tenant.isPmbVitrine ? null : tenant.id,
+        enrollmentId: enrollment.id,
+        soldByUserId: enrollment.soldByUserId ?? null,
+        amount: event.amount,
+        type: event.paymentType ?? enrollment.paymentType,
+        gateway: event.gateway,
+        mpPaymentId: event.gateway === "MP" ? event.externalPaymentId : null,
+        asaasPaymentId:
+          event.gateway === "ASAAS" ? event.externalPaymentId : null,
+        mpStatus: "APPROVED",
+        mpPaymentType: event.mpPaymentType ?? null,
+        mpStatusDetail: event.mpStatusDetail ?? null,
+        paidAt: event.paidAt,
+      },
+    })
+
+    await prisma.enrollment.update({
+      where: { id: enrollment.id },
+      data: {
+        installmentsPaid: newPaidCount,
+        ...(reachedTotal ? { status: "COMPLETED" } : {}),
+      },
+    })
+
+    return
+  }
 
   let student = enrollment.student
   let eaLogin = student.eaAlunoId
@@ -152,10 +197,16 @@ export async function fulfillEnrollment(
     },
   })
 
+  // Primeira cobranca cobre a 1a parcela quando MONTHLY
+  const firstInstallmentPaid = enrollment.installmentsTotal !== null ? 1 : 0
+  const reachedTotalOnFirst =
+    enrollment.installmentsTotal !== null &&
+    firstInstallmentPaid >= enrollment.installmentsTotal
+
   await prisma.enrollment.update({
     where: { id: enrollment.id },
     data: {
-      status: "ACTIVE",
+      status: reachedTotalOnFirst ? "COMPLETED" : "ACTIVE",
       mpPaymentId:
         event.gateway === "MP" ? event.externalPaymentId : enrollment.mpPaymentId,
       asaasPaymentId:
@@ -163,6 +214,7 @@ export async function fulfillEnrollment(
           ? event.externalPaymentId
           : enrollment.asaasPaymentId,
       startedAt: new Date(),
+      installmentsPaid: firstInstallmentPaid,
     },
   })
 

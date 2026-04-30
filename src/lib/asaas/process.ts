@@ -43,8 +43,10 @@ async function processPmbDirectSale(
   event: string,
   payment: AsaasWebhookPayload["payment"],
 ): Promise<boolean> {
-  // Detecta venda direta PMB pela externalReference (pmb_enr_<id>)
-  // OU pelo asaas_payment_id ja registrado em algum enrollment.
+  // Detecta venda direta PMB por:
+  // 1. externalReference (pmb_enr_<id>) — propagado para todas as cobrancas da subscription
+  // 2. asaas_payment_id (legado, cobrancas one-time)
+  // 3. asaas_subscription_id (parcelas seguintes da subscription, caso externalReference falhe)
   let enrollment = null as Awaited<
     ReturnType<typeof prisma.enrollment.findFirst>
   >
@@ -59,6 +61,12 @@ async function processPmbDirectSale(
   if (!enrollment) {
     enrollment = await prisma.enrollment.findFirst({
       where: { asaasPaymentId: payment.id },
+    })
+  }
+
+  if (!enrollment && payment.subscription) {
+    enrollment = await prisma.enrollment.findFirst({
+      where: { asaasSubscriptionId: payment.subscription },
     })
   }
 
@@ -78,10 +86,16 @@ async function processPmbDirectSale(
         externalPaymentId: payment.id,
         amount: payment.value,
         paidAt: payment.paymentDate ? new Date(payment.paymentDate) : new Date(),
-        paymentType: "ONE_TIME",
+        paymentType: enrollment.paymentType,
       },
     )
-    await markLog(logId, true, "pmb venda direta processada")
+    await markLog(
+      logId,
+      true,
+      enrollment.installmentsTotal
+        ? `pmb mensalidade processada (${enrollment.installmentsPaid + 1}/${enrollment.installmentsTotal})`
+        : "pmb venda direta processada",
+    )
     return true
   }
 
@@ -109,6 +123,17 @@ export async function processAsaasWebhook(
       if (handled) return
       await markLog(logId, true, `sem subscription: ${event}`)
       return
+    }
+
+    // Se a subscription pertence a uma matricula PMB (vitrine principal),
+    // delega para o processamento de venda direta antes de tentar tenant.
+    const pmbEnrollmentForSubscription = await prisma.enrollment.findFirst({
+      where: { asaasSubscriptionId: subscriptionId, tenantId: null },
+      select: { id: true },
+    })
+    if (pmbEnrollmentForSubscription) {
+      const handled = await processPmbDirectSale(logId, event, payment)
+      if (handled) return
     }
 
     const tenant = await prisma.tenant.findFirst({
