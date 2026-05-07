@@ -8,6 +8,7 @@ import type {
   AsaasPayment,
   AsaasPaymentList,
   AsaasBillingInfo,
+  AsaasPixQrCode,
   AsaasPayWithCreditCardParams,
   AsaasErrorResponse,
 } from "./types"
@@ -228,6 +229,10 @@ export async function updatePayment(
 
 export async function getBillingInfo(paymentId: string): Promise<AsaasBillingInfo> {
   return request<AsaasBillingInfo>("GET", `/payments/${paymentId}/billingInfo`)
+}
+
+export async function getPixQrCode(paymentId: string): Promise<AsaasPixQrCode> {
+  return request<AsaasPixQrCode>("GET", `/payments/${paymentId}/pixQrCode`)
 }
 
 export async function payWithCreditCard(

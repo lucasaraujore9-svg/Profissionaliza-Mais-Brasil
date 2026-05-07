@@ -113,14 +113,17 @@ export interface AsaasPaymentList {
   data: AsaasPayment[]
 }
 
-// ── Billing Info (PIX + Boleto + Card token em uma chamada) ──
+// ── PIX QR Code ──
+export interface AsaasPixQrCode {
+  encodedImage: string
+  payload: string
+  expirationDate: string
+  description: string
+}
+
+// ── Billing Info (Boleto + Card token; PIX vem de /pixQrCode separado) ──
 export interface AsaasBillingInfo {
-  pix: {
-    encodedImage: string
-    payload: string
-    expirationDate: string
-    description: string
-  } | null
+  pix: AsaasPixQrCode | null
   creditCard: {
     creditCardNumber: string
     creditCardBrand: string

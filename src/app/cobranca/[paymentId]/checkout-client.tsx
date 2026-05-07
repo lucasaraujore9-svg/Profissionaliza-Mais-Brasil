@@ -556,49 +556,27 @@ export function CheckoutClient({ paymentId, billingType }: Props) {
   const [billingLoading, setBillingLoading] = useState(true)
   const [billingError, setBillingError] = useState<string | null>(null)
   const [paid, setPaid] = useState(false)
-  const pixRetryRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const pixRetryCount = useRef(0)
-  const MAX_PIX_RETRIES = 5
 
-  const fetchBillingInfo = useCallback(async (isRetry = false) => {
-    if (!isRetry) {
-      setBillingLoading(true)
-      setBillingError(null)
-    }
+  const fetchBillingInfo = useCallback(async () => {
+    setBillingLoading(true)
+    setBillingError(null)
     try {
       const res = await fetch(`/api/cobranca/${paymentId}/billing-info`)
       const json = await res.json()
       if (!res.ok) {
         setBillingError(json.error ?? "Erro ao carregar informações de pagamento")
-        setBillingLoading(false)
         return
       }
-      const info: AsaasBillingInfo = json.data
-
-      // PIX pode ser gerado lazily — tenta até MAX_PIX_RETRIES vezes
-      if (!info.pix && pixRetryCount.current < MAX_PIX_RETRIES) {
-        pixRetryCount.current += 1
-        pixRetryRef.current = setTimeout(() => fetchBillingInfo(true), 3000)
-        // Mantém loading enquanto aguarda o PIX
-        return
-      }
-
-      pixRetryCount.current = 0
-      setBillingInfo(info)
+      setBillingInfo(json.data as AsaasBillingInfo)
     } catch {
       setBillingError("Erro de rede ao carregar informações de pagamento")
     } finally {
-      if (!isRetry || pixRetryCount.current === 0) {
-        setBillingLoading(false)
-      }
+      setBillingLoading(false)
     }
   }, [paymentId])
 
   useEffect(() => {
     fetchBillingInfo()
-    return () => {
-      if (pixRetryRef.current) clearTimeout(pixRetryRef.current)
-    }
   }, [fetchBillingInfo])
 
   const onPaid = useCallback(() => setPaid(true), [])
