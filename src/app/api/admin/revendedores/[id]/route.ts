@@ -5,6 +5,7 @@ import { invalidateTenant } from "@/lib/redis/tenant-cache"
 import {
   cancelSubscription,
   getSubscription,
+  listPayments,
   AsaasApiError,
 } from "@/lib/asaas/client"
 
@@ -63,17 +64,57 @@ export async function GET(
 
   const totalStudents = Object.values(studentsMap).reduce((a, b) => a + b, 0)
 
-  // Tenta buscar nextDueDate do Asaas. Falha silenciosamente se a API estiver
-  // indisponivel — front trata como null.
+  // Busca dados atualizados do Asaas: subscription + pagamentos.
+  // Falha silenciosamente — front trata campos como null e usa dados do banco.
   let asaasNextDueDate: string | null = null
   let asaasSubscriptionStatus: string | null = null
+  type PaymentRow = {
+    id: string
+    asaasPaymentId: string
+    amount: number
+    billingType: string | null
+    status: string
+    dueDate: string
+    paidAt: string | null
+    invoiceUrl: string | null
+    bankSlipUrl: string | null
+  }
+  let payments: PaymentRow[] = tenant.tenantPayments.map((p) => ({
+    id: p.id,
+    asaasPaymentId: p.asaasPaymentId,
+    amount: Number(p.amount),
+    billingType: p.billingType,
+    status: p.status,
+    dueDate: p.dueDate.toISOString(),
+    paidAt: p.paidAt?.toISOString() ?? null,
+    invoiceUrl: p.invoiceUrl ?? null,
+    bankSlipUrl: p.bankSlipUrl ?? null,
+  }))
+
   if (tenant.asaasSubscriptionId) {
     try {
-      const sub = await getSubscription(tenant.asaasSubscriptionId)
+      const [sub, asaasPayments] = await Promise.all([
+        getSubscription(tenant.asaasSubscriptionId),
+        listPayments({ subscription: tenant.asaasSubscriptionId, limit: 24 }),
+      ])
       asaasNextDueDate = sub.nextDueDate ?? null
       asaasSubscriptionStatus = sub.status ?? null
+
+      // Usa pagamentos do Asaas como fonte primária (inclui PENDING não
+      // sincronizados caso o webhook tenha falhado ou esteja atrasado).
+      payments = asaasPayments.data.map((p) => ({
+        id: p.id,
+        asaasPaymentId: p.id,
+        amount: p.value,
+        billingType: p.billingType,
+        status: p.status,
+        dueDate: new Date(p.dueDate).toISOString(),
+        paidAt: p.paymentDate ? new Date(p.paymentDate).toISOString() : null,
+        invoiceUrl: p.invoiceUrl ?? null,
+        bankSlipUrl: p.bankSlipUrl ?? null,
+      }))
     } catch (error) {
-      console.warn("[reseller] getSubscription falhou:", error)
+      console.warn("[reseller] Asaas fetch falhou, usando dados do banco:", error)
     }
   }
 
@@ -102,17 +143,7 @@ export async function GET(
         asaasNextDueDate,
         asaasSubscriptionStatus,
       },
-      payments: tenant.tenantPayments.map((p) => ({
-        id: p.id,
-        asaasPaymentId: p.asaasPaymentId,
-        amount: Number(p.amount),
-        billingType: p.billingType,
-        status: p.status,
-        dueDate: p.dueDate.toISOString(),
-        paidAt: p.paidAt?.toISOString() ?? null,
-        invoiceUrl: p.invoiceUrl ?? null,
-        bankSlipUrl: p.bankSlipUrl ?? null,
-      })),
+      payments,
       students: {
         total: totalStudents,
         active: studentsMap.ATIVO,
