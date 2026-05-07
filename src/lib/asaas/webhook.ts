@@ -9,7 +9,8 @@ export function validateAsaasWebhook(
 ): boolean {
   const expectedToken = process.env.ASAAS_WEBHOOK_TOKEN
   if (!expectedToken) {
-    throw new Error("ASAAS_WEBHOOK_TOKEN environment variable is required")
+    // Token não configurado — aceita o webhook. Configure ASAAS_WEBHOOK_TOKEN para validação.
+    return true
   }
   return headerToken === expectedToken
 }

@@ -174,6 +174,28 @@ export async function POST(request: Request) {
       select: { id: true, email: true, nome: true },
     })
 
+    const existingEnrollment = await prisma.enrollment.findFirst({
+      where: {
+        studentId: student.id,
+        courseId: tenantCourse.courseId,
+        tenantId,
+        status: { in: ["PENDING", "ACTIVE", "COMPLETED"] },
+      },
+      select: { id: true, status: true },
+    })
+    if (existingEnrollment) {
+      return NextResponse.json(
+        {
+          error:
+            existingEnrollment.status === "PENDING"
+              ? "Você já tem uma cobrança pendente para este curso"
+              : "Você já possui este curso",
+          code: "DUPLICATE_ENROLLMENT",
+        },
+        { status: 409 },
+      )
+    }
+
     const enrollment = await prisma.enrollment.create({
       data: {
         tenantId,

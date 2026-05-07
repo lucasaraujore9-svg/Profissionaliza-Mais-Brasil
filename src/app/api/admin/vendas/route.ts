@@ -152,6 +152,26 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Curso não disponível" }, { status: 404 })
   }
 
+  const existingEnrollment = await prisma.enrollment.findFirst({
+    where: {
+      studentId: student.id,
+      courseId: course.id,
+      status: { in: ["PENDING", "ACTIVE", "COMPLETED"] },
+    },
+    select: { id: true, status: true },
+  })
+  if (existingEnrollment) {
+    return NextResponse.json(
+      {
+        error:
+          existingEnrollment.status === "PENDING"
+            ? "Este aluno já tem uma cobrança pendente para este curso"
+            : "Este aluno já possui este curso ativo",
+      },
+      { status: 409 },
+    )
+  }
+
   const basePrice = Number(
     course.precoVitrineMain ?? course.precoPromocional ?? course.precoOriginal ?? 0,
   )
