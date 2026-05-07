@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label"
 type SubmitState =
   | { kind: "idle" }
   | { kind: "submitting" }
-  | { kind: "error"; message: string }
+  | { kind: "error"; message: string; delinquent?: boolean }
 
 export function LoginForm() {
   const router = useRouter()
@@ -36,22 +36,33 @@ export function LoginForm() {
     })
 
     if (!result || result.error) {
+      // tenant_not_active é o código lançado quando PENDING ou SUSPENDED
+      const isDelinquent = result?.error === "tenant_not_active"
       setState({
         kind: "error",
-        message: "Email ou senha inválidos.",
+        message: isDelinquent
+          ? "Sua unidade está com pagamento pendente ou suspensa. Entre em contato com seu gerente de suporte."
+          : "Email ou senha inválidos.",
+        delinquent: isDelinquent,
       })
       return
     }
 
-    // Sessão criada — redireciona pelo papel do usuário.
+    // Sessão criada — verifica mustChangePassword antes de redirecionar.
     try {
       const res = await fetch("/api/auth/session")
       const session = (await res.json()) as {
-        user?: { role?: string }
+        user?: { role?: string; mustChangePassword?: boolean }
       }
       const role = session.user?.role
-      const redirectTo = searchParams.get("callbackUrl")
+      const mustChange = session.user?.mustChangePassword === true
 
+      if (mustChange) {
+        router.push("/alterar-senha-inicial")
+        return
+      }
+
+      const redirectTo = searchParams.get("callbackUrl")
       if (redirectTo && redirectTo.startsWith("/")) {
         router.push(redirectTo)
         return
@@ -132,7 +143,13 @@ export function LoginForm() {
       </label>
 
       {state.kind === "error" && (
-        <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+        <div
+          className={`rounded-lg border p-3 text-sm ${
+            state.delinquent
+              ? "border-amber-200 bg-amber-50 text-amber-800"
+              : "border-rose-200 bg-rose-50 text-rose-700"
+          }`}
+        >
           {state.message}
         </div>
       )}

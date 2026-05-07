@@ -219,6 +219,7 @@ export async function POST(request: Request) {
   let asaasCustomerId: string | null = null
   let asaasSubscriptionId: string | null = null
   let invoiceUrl: string | null = null
+  let firstPaymentId: string | null = null
   let asaasError: string | null = null
 
   if (process.env.ASAAS_API_KEY) {
@@ -249,7 +250,9 @@ export async function POST(request: Request) {
           subscription: subscription.id,
           limit: 1,
         })
-        invoiceUrl = payments.data[0]?.invoiceUrl ?? null
+        const firstPayment = payments.data[0] ?? null
+        invoiceUrl = firstPayment?.invoiceUrl ?? null
+        firstPaymentId = firstPayment?.id ?? null
       } catch {
         // sem invoiceUrl ainda — webhook vai atualizar depois
       }
@@ -287,6 +290,7 @@ export async function POST(request: Request) {
       tenantId: tenant.id,
       passwordHash,
       phone: data.ownerPhone ?? null,
+      mustChangePassword: true,
       updatedAt: new Date(),
     },
     select: { id: true, email: true },
@@ -362,6 +366,7 @@ export async function POST(request: Request) {
         customerId: asaasCustomerId,
         subscriptionId: asaasSubscriptionId,
         invoiceUrl,
+        firstPaymentId,
         error: asaasError,
       },
       email: {

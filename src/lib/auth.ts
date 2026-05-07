@@ -1,4 +1,4 @@
-import NextAuth from "next-auth"
+import NextAuth, { CredentialsSignin } from "next-auth"
 import Credentials from "next-auth/providers/credentials"
 import { prisma } from "@/lib/prisma"
 import { z } from "zod"
@@ -8,6 +8,11 @@ const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(6),
 })
+
+// Erro customizado para tenant inativo (PENDING ou SUSPENDED)
+class TenantNotActiveError extends CredentialsSignin {
+  code = "tenant_not_active"
+}
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   secret: process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET,
@@ -36,6 +41,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           const isValid = await compare(parsed.data.password, user.passwordHash)
           if (!isValid) return null
 
+          // Revendedores com tenant PENDING ou SUSPENDED não podem acessar
+          if (
+            user.role === "RESELLER" &&
+            user.tenant &&
+            (user.tenant.status === "PENDING" || user.tenant.status === "SUSPENDED")
+          ) {
+            throw new TenantNotActiveError()
+          }
+
           return {
             id: user.id,
             email: user.email,
@@ -43,6 +57,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             role: user.role,
             tenantId: user.tenantId,
             studentId: null,
+            mustChangePassword: user.mustChangePassword,
           }
         }
 
@@ -81,6 +96,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           role: "STUDENT",
           tenantId: student.tenantId,
           studentId: student.id,
+          mustChangePassword: false,
         }
       },
     }),
@@ -92,6 +108,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.tenantId = (user as { tenantId: string | null }).tenantId
         token.studentId =
           (user as { studentId?: string | null }).studentId ?? null
+        token.mustChangePassword =
+          (user as { mustChangePassword?: boolean }).mustChangePassword ?? false
       }
       return token
     },
@@ -103,6 +121,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           token.tenantId as string | null
         ;(session.user as { studentId: string | null }).studentId =
           (token.studentId as string | null | undefined) ?? null
+        ;(session.user as unknown as { mustChangePassword: boolean }).mustChangePassword =
+          (token.mustChangePassword as boolean | undefined) ?? false
       }
       return session
     },

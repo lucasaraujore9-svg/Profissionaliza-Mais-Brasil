@@ -36,6 +36,7 @@ interface CreatedResult {
     customerId: string | null
     subscriptionId: string | null
     invoiceUrl: string | null
+    firstPaymentId: string | null
     error: string | null
   }
   email: {
@@ -269,114 +270,107 @@ function CreatedSuccess({
     }
   }
 
+  // Link de pagamento: prefere nossa página interna, cai no externo se não tiver ID
+  const paymentLink = result.asaas.firstPaymentId
+    ? `/cobranca/${result.asaas.firstPaymentId}`
+    : result.asaas.invoiceUrl
+
+  const vitrineUrl = `https://${result.tenant.slug}.profissionalizamaisbrasil.com.br`
+
   return (
     <div className="space-y-4">
       <DialogHeader>
-        <DialogTitle>Revenda criada — aguardando pagamento</DialogTitle>
+        <DialogTitle>Revenda criada com sucesso</DialogTitle>
         <DialogDescription>
-          {result.email.sent
-            ? `Enviamos as instruções por email para ${result.owner.email}.`
-            : "Envie manualmente os dados abaixo para o responsável."}
+          Copie as credenciais abaixo e envie ao responsável.
+          {result.email.sent && ` Um email também foi enviado para ${result.owner.email}.`}
         </DialogDescription>
       </DialogHeader>
 
-      {result.email.sent ? (
-        <div className="flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800">
-          <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
-          <p>
-            <strong>Email enviado</strong> para{" "}
-            <strong>{result.owner.email}</strong> com credenciais de acesso e
-            link de pagamento. O responsável pode finalizar tudo a partir do
-            email.
-          </p>
+      {/* Credenciais — sempre exibidas em destaque */}
+      <div className="rounded-xl border-2 border-[var(--color-pmb-green)]/20 bg-[var(--color-pmb-green)]/5 p-4">
+        <p className="mb-3 text-[11px] font-bold uppercase tracking-wider text-[var(--color-pmb-green-900)]">
+          Credenciais de acesso inicial
+        </p>
+        <div className="space-y-2.5">
+          <Field
+            label="Email"
+            value={result.owner.email}
+            onCopy={() => copy("email", result.owner.email)}
+            copied={copied === "email"}
+          />
+          <Field
+            label="Senha inicial (trocar no primeiro acesso)"
+            value={result.tempPassword}
+            onCopy={() => copy("senha", result.tempPassword)}
+            copied={copied === "senha"}
+            mono
+            highlight
+          />
+          <Field
+            label="Vitrine"
+            value={vitrineUrl}
+            onCopy={() => copy("url", vitrineUrl)}
+            copied={copied === "url"}
+          />
         </div>
-      ) : result.email.configured ? (
-        <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
-          <Mail className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
-          <p>
-            Falha ao enviar email automático. Copie os dados abaixo e envie
-            manualmente.
-            {result.email.error && ` (${result.email.error})`}
-          </p>
+      </div>
+
+      {/* Status do email */}
+      {result.email.sent ? (
+        <div className="flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-2.5 text-xs text-emerald-800">
+          <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+          <span>Email de boas-vindas enviado para {result.owner.email}.</span>
         </div>
       ) : (
-        <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
-          <Mail className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
-          <p>
-            <strong>RESEND_API_KEY não configurada.</strong> Email não foi
-            enviado. Copie os dados abaixo e envie manualmente.
-          </p>
+        <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-800">
+          <Mail className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+          <span>
+            Email não enviado.{result.email.error ? ` (${result.email.error})` : ""}{" "}
+            Envie as credenciais acima manualmente.
+          </span>
         </div>
       )}
 
-      <div className="space-y-3 rounded-lg border border-gray-200 bg-gray-50/60 p-4 text-sm">
-        <Field
-          label="Email do admin da revenda"
-          value={result.owner.email}
-          onCopy={() => copy("email", result.owner.email)}
-          copied={copied === "email"}
-        />
-        <Field
-          label="Senha temporária"
-          value={result.tempPassword}
-          onCopy={() => copy("senha", result.tempPassword)}
-          copied={copied === "senha"}
-          mono
-        />
-        <Field
-          label="Vitrine"
-          value={`https://${result.tenant.slug}.profissionalizamaisbrasil.com.br`}
-          onCopy={() =>
-            copy(
-              "url",
-              `https://${result.tenant.slug}.profissionalizamaisbrasil.com.br`,
-            )
-          }
-          copied={copied === "url"}
-        />
-      </div>
-
-      {result.asaas.configured ? (
-        result.asaas.invoiceUrl ? (
-          <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm">
-            <p className="font-semibold text-emerald-900">
-              Link de pagamento da primeira mensalidade
-            </p>
+      {/* Link de pagamento da primeira fatura */}
+      {paymentLink ? (
+        <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+          <p className="mb-1.5 text-xs font-semibold text-gray-700">
+            Link da primeira mensalidade
+          </p>
+          <div className="flex items-center gap-2">
             <a
-              href={result.asaas.invoiceUrl}
+              href={paymentLink}
               target="_blank"
               rel="noreferrer"
-              className="mt-1 inline-flex items-center gap-1.5 break-all text-emerald-800 underline underline-offset-2"
+              className="flex flex-1 items-center gap-1 truncate text-xs text-[var(--color-pmb-green)] underline underline-offset-2"
             >
-              {result.asaas.invoiceUrl}
-              <ExternalLink className="h-3.5 w-3.5" />
+              <ExternalLink className="h-3 w-3 shrink-0" />
+              <span className="truncate">{paymentLink.startsWith("/") ? `profissionalizamaisbrasil.com.br${paymentLink}` : paymentLink}</span>
             </a>
             <button
               type="button"
-              onClick={() => copy("invoice", result.asaas.invoiceUrl!)}
-              className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-emerald-700 hover:underline"
+              onClick={() => copy("invoice", paymentLink.startsWith("/")
+                ? `${typeof window !== "undefined" ? window.location.origin : ""}${paymentLink}`
+                : paymentLink
+              )}
+              className="shrink-0 rounded bg-gray-200 px-2 py-1 text-[11px] font-medium text-gray-700 hover:bg-gray-300"
             >
-              <Copy className="h-3 w-3" />
-              {copied === "invoice" ? "Copiado!" : "Copiar link"}
+              {copied === "invoice" ? "Copiado!" : "Copiar"}
             </button>
           </div>
-        ) : (
-          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
-            <AlertTriangle className="mr-1.5 inline h-3.5 w-3.5" />
-            Assinatura criada, mas o link da primeira fatura ainda
-            não foi gerado. Em alguns minutos o webhook PAYMENT_CREATED vai
-            popular o invoiceUrl.
-            {result.asaas.error && ` (${result.asaas.error})`}
-          </div>
-        )
-      ) : (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
-          <AlertTriangle className="mr-1.5 inline h-3.5 w-3.5" />
-          ASAAS_API_KEY não configurada. A revenda foi criada como{" "}
-          <strong>PENDING</strong>. Para gerar cobrança automática, configure
-          as configurações de integração no Vercel.
         </div>
-      )}
+      ) : result.asaas.configured && !result.asaas.error ? (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-800">
+          <AlertTriangle className="mr-1.5 inline h-3.5 w-3.5" />
+          Link de pagamento ainda sendo gerado. Acesse a revenda em instantes para copiar.
+        </div>
+      ) : result.asaas.error ? (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-800">
+          <AlertTriangle className="mr-1.5 inline h-3.5 w-3.5" />
+          Cobrança automática não configurada: {result.asaas.error}. Configure na página da revenda.
+        </div>
+      ) : null}
 
       <DialogFooter>
         <Button onClick={onClose}>Fechar</Button>
@@ -391,21 +385,27 @@ function Field({
   onCopy,
   copied,
   mono,
+  highlight,
 }: {
   label: string
   value: string
   onCopy: () => void
   copied: boolean
   mono?: boolean
+  highlight?: boolean
 }) {
   return (
     <div>
-      <p className="text-[11px] font-bold uppercase tracking-wider text-gray-500">
-        {label}
-      </p>
-      <div className="mt-1 flex items-center justify-between gap-2 rounded-md border border-gray-200 bg-white px-3 py-2">
+      <p className="text-[11px] font-semibold text-gray-500">{label}</p>
+      <div
+        className={`mt-1 flex items-center justify-between gap-2 rounded-md border px-3 py-2 ${
+          highlight
+            ? "border-[var(--color-pmb-green)]/30 bg-white ring-1 ring-[var(--color-pmb-green)]/20"
+            : "border-gray-200 bg-white"
+        }`}
+      >
         <span
-          className={`break-all text-[13px] text-gray-900 ${mono ? "font-mono" : ""}`}
+          className={`break-all text-[13px] text-gray-900 ${mono ? "font-mono tracking-wider" : ""}`}
         >
           {value}
         </span>
