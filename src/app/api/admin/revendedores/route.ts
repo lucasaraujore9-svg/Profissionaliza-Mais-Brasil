@@ -11,6 +11,7 @@ import {
   createSubscription,
   listPayments,
 } from "@/lib/asaas/client"
+import { criarFuncionario } from "@/lib/escola-avancada/client"
 import { sendEmail } from "@/lib/email/resend"
 import { createNotification } from "@/lib/notifications"
 
@@ -266,6 +267,28 @@ export async function POST(request: Request) {
     }
   }
 
+  // Cria funcionário/vendedor na EA para este revendedor (falha silenciosa).
+  let eaVendedorId: string | null = null
+  let eaVendedorLogin: string | null = null
+  if (process.env.EA_API_URL && process.env.EA_API_TOKEN) {
+    try {
+      const tipoAcesso = Number.parseInt(
+        process.env.EA_VENDEDOR_TIPO_ACESSO ?? "2",
+        10,
+      )
+      const funcionario = await criarFuncionario({
+        nome: data.name,
+        email: data.ownerEmail,
+        fone: data.ownerPhone ?? undefined,
+        tipo_acesso: tipoAcesso,
+      })
+      eaVendedorId = String(funcionario.login)
+      eaVendedorLogin = String(funcionario.login)
+    } catch (err) {
+      console.error("[revendedor] falha ao criar funcionário na EA:", err)
+    }
+  }
+
   const tenant = await prisma.tenant.create({
     data: {
       name: data.name,
@@ -276,6 +299,9 @@ export async function POST(request: Request) {
       asaasCustomerId,
       asaasSubscriptionId,
       accountManagerId: data.accountManagerId ?? null,
+      eaVendedorId,
+      eaVendedorLogin,
+      poloName: data.slug,
       updatedAt: new Date(),
     },
     select: { id: true, slug: true, name: true, status: true },
