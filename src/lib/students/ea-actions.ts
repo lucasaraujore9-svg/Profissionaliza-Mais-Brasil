@@ -32,15 +32,17 @@ async function resolvePoloContextForStudent(
   const student = await prisma.student.findUnique({
     where: { id: studentId },
     select: {
-      tenant: { select: { slug: true, eaVendedorId: true } },
+      tenant: { select: { slug: true, poloName: true } },
     },
   })
   if (!student) return null
 
   const isPmb = student.tenant.slug === PMB_TENANT_SLUG
+  // Vendedor é sempre o PMB (único vendedor na EA para toda a plataforma).
+  // O polo identifica a unidade do aluno (slug da revenda ou polo PMB).
   return {
-    polo: isPmb ? pmbEaPolo() : student.tenant.slug,
-    vendedor: isPmb ? pmbEaVendedorId() : student.tenant.eaVendedorId,
+    polo: isPmb ? pmbEaPolo() : (student.tenant.poloName ?? student.tenant.slug),
+    vendedor: pmbEaVendedorId(),
   }
 }
 
