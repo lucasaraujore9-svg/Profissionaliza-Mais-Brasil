@@ -66,6 +66,7 @@ export async function GET(
 
   // Busca dados atualizados do Asaas: subscription + pagamentos.
   // Falha silenciosamente — front trata campos como null e usa dados do banco.
+  let effectiveTenantStatus = tenant.status
   let asaasNextDueDate: string | null = null
   let asaasSubscriptionStatus: string | null = null
   let asaasSubscriptionValue: number | null = null
@@ -129,6 +130,49 @@ export async function GET(
       payments = [...fromAsaas, ...fromDb].sort(
         (a, b) => new Date(b.dueDate).getTime() - new Date(a.dueDate).getTime(),
       )
+
+      // Auto-ativa o tenant se o Asaas mostra pagamento confirmado mas o banco
+      // ainda está PENDING (webhook não recebido ou falhou).
+      const hasConfirmedPayment = asaasPayments.data.some(
+        (p) => p.status === "RECEIVED" || p.status === "CONFIRMED",
+      )
+      if (hasConfirmedPayment && tenant.status === "PENDING") {
+        await prisma.tenant.update({
+          where: { id },
+          data: { status: "ACTIVE" },
+        })
+        effectiveTenantStatus = "ACTIVE"
+        await invalidateTenant({
+          id: tenant.id,
+          slug: tenant.slug,
+          customDomain: tenant.customDomain,
+        }).catch(() => undefined)
+
+        // Upsert dos TenantPayment confirmados para manter o banco consistente
+        for (const p of asaasPayments.data) {
+          if (p.status !== "RECEIVED" && p.status !== "CONFIRMED") continue
+          await prisma.tenantPayment.upsert({
+            where: { asaasPaymentId: p.id },
+            update: {
+              status: p.status,
+              paidAt: p.paymentDate ? new Date(p.paymentDate) : null,
+              ...(p.invoiceUrl ? { invoiceUrl: p.invoiceUrl } : {}),
+              ...(p.bankSlipUrl ? { bankSlipUrl: p.bankSlipUrl } : {}),
+            },
+            create: {
+              tenantId: tenant.id,
+              asaasPaymentId: p.id,
+              amount: p.value,
+              billingType: p.billingType,
+              status: p.status,
+              dueDate: new Date(p.dueDate),
+              paidAt: p.paymentDate ? new Date(p.paymentDate) : null,
+              invoiceUrl: p.invoiceUrl ?? null,
+              bankSlipUrl: p.bankSlipUrl ?? null,
+            },
+          }).catch(() => undefined)
+        }
+      }
     } catch (error) {
       console.warn("[reseller] Asaas fetch falhou, usando dados do banco:", error)
     }
@@ -140,7 +184,7 @@ export async function GET(
         id: tenant.id,
         name: tenant.name,
         slug: tenant.slug,
-        status: tenant.status,
+        status: effectiveTenantStatus,
         billingMode: tenant.billingMode,
         cancellationPolicy: tenant.cancellationPolicy,
         planValue: Number(tenant.planValue),

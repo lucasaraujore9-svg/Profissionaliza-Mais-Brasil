@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label"
 type SubmitState =
   | { kind: "idle" }
   | { kind: "submitting" }
-  | { kind: "error"; message: string; delinquent?: boolean }
+  | { kind: "error"; message: string }
 
 export function LoginForm() {
   const router = useRouter()
@@ -36,26 +36,26 @@ export function LoginForm() {
     })
 
     if (!result || result.error) {
-      // tenant_not_active é o código lançado quando PENDING ou SUSPENDED
-      const isDelinquent = result?.error === "tenant_not_active"
       setState({
         kind: "error",
-        message: isDelinquent
-          ? "Sua unidade está com pagamento pendente ou suspensa. Entre em contato com seu gerente de suporte."
-          : "Email ou senha inválidos.",
-        delinquent: isDelinquent,
+        message: "Email ou senha inválidos.",
       })
       return
     }
 
-    // Sessão criada — verifica mustChangePassword antes de redirecionar.
+    // Sessão criada — verifica mustChangePassword e tenantStatus antes de redirecionar.
     try {
       const res = await fetch("/api/auth/session")
       const session = (await res.json()) as {
-        user?: { role?: string; mustChangePassword?: boolean }
+        user?: {
+          role?: string
+          mustChangePassword?: boolean
+          tenantStatus?: string | null
+        }
       }
       const role = session.user?.role
       const mustChange = session.user?.mustChangePassword === true
+      const tenantStatus = session.user?.tenantStatus
 
       if (mustChange) {
         router.push("/alterar-senha-inicial")
@@ -75,7 +75,11 @@ export function LoginForm() {
       ) {
         router.push("/admin")
       } else if (role === "RESELLER") {
-        router.push("/painel")
+        if (tenantStatus === "PENDING" || tenantStatus === "SUSPENDED") {
+          router.push("/inadimplente")
+        } else {
+          router.push("/painel")
+        }
       } else if (role === "STUDENT") {
         router.push("/aluno")
       } else {
@@ -143,13 +147,7 @@ export function LoginForm() {
       </label>
 
       {state.kind === "error" && (
-        <div
-          className={`rounded-lg border p-3 text-sm ${
-            state.delinquent
-              ? "border-amber-200 bg-amber-50 text-amber-800"
-              : "border-rose-200 bg-rose-50 text-rose-700"
-          }`}
-        >
+        <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
           {state.message}
         </div>
       )}

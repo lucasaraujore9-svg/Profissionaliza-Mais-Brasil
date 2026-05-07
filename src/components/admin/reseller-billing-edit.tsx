@@ -50,7 +50,7 @@ export function ResellerBillingEdit({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [ok, setOk] = useState<string | null>(null)
-  const [invoiceUrl, setInvoiceUrl] = useState<string | null>(null)
+  const [firstPaymentId, setFirstPaymentId] = useState<string | null>(null)
 
   const noSubscription = !asaasSubscriptionId
   const needsCpf = noSubscription && !asaasCustomerId
@@ -65,7 +65,7 @@ export function ResellerBillingEdit({
   async function save() {
     setError(null)
     setOk(null)
-    setInvoiceUrl(null)
+    setFirstPaymentId(null)
     const numericValue = Number(value)
     if (!Number.isFinite(numericValue) || numericValue < 0) {
       setError("Valor inválido")
@@ -105,8 +105,8 @@ export function ResellerBillingEdit({
         return
       }
 
-      if (json.data?.invoiceUrl) {
-        setInvoiceUrl(json.data.invoiceUrl)
+      if (json.data?.firstPaymentId) {
+        setFirstPaymentId(json.data.firstPaymentId)
       }
 
       if (json.data?.subscriptionCreated) {
@@ -221,9 +221,9 @@ export function ResellerBillingEdit({
       {ok && (
         <div className="mt-4 rounded-md bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
           <p>{ok}</p>
-          {invoiceUrl && (
+          {firstPaymentId && (
             <a
-              href={invoiceUrl}
+              href={`/cobranca/${firstPaymentId}`}
               target="_blank"
               rel="noopener noreferrer"
               className="mt-2 inline-flex items-center gap-1 font-semibold underline underline-offset-2"

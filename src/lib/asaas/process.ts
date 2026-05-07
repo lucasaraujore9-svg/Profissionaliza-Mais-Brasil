@@ -4,6 +4,7 @@ import { blockTenantStudents, unblockTenantStudents } from "@/lib/auto-block"
 import { fulfillEnrollment } from "@/lib/enrollment/fulfill"
 import { pmbEaPolo, pmbEaVendedorId } from "@/lib/pmb-config"
 import { createNotification } from "@/lib/notifications"
+import { invalidateTenant } from "@/lib/redis/tenant-cache"
 import type { AsaasWebhookPayload } from "./types"
 
 function formatMoney(value: number): string {
@@ -143,6 +144,7 @@ export async function processAsaasWebhook(
         id: true,
         name: true,
         slug: true,
+        customDomain: true,
         billingMode: true,
         status: true,
         owner: { select: { email: true, name: true } },
@@ -192,6 +194,8 @@ export async function processAsaasWebhook(
           data: { status: "ACTIVE" },
         })
 
+        invalidateTenant({ id: tenant.id, slug: tenant.slug, customDomain: tenant.customDomain }).catch(() => undefined)
+
         if (wasSuspended) {
           const result = await unblockTenantStudents(tenant.id)
           if (result.errors.length > 0) {
@@ -237,6 +241,8 @@ export async function processAsaasWebhook(
           where: { id: tenant.id },
           data: { status: "SUSPENDED" },
         })
+
+        invalidateTenant({ id: tenant.id, slug: tenant.slug, customDomain: tenant.customDomain }).catch(() => undefined)
 
         if (tenant.billingMode === "AUTO") {
           const result = await blockTenantStudents(tenant.id)

@@ -102,6 +102,7 @@ export async function PATCH(request: Request, ctx: Ctx) {
 
   let asaasUpdated = false
   let invoiceUrl: string | null = null
+  let firstPaymentId: string | null = null
   let newCustomerId: string | null = null
   let newSubscriptionId: string | null = null
 
@@ -158,7 +159,9 @@ export async function PATCH(request: Request, ctx: Ctx) {
 
           try {
             const payments = await listPayments({ subscription: subscription.id, limit: 1 })
-            invoiceUrl = payments.data[0]?.invoiceUrl ?? null
+            const firstPayment = payments.data[0] ?? null
+            invoiceUrl = firstPayment?.invoiceUrl ?? null
+            firstPaymentId = firstPayment?.id ?? null
           } catch {
             // webhook atualiza depois
           }
@@ -233,7 +236,9 @@ export async function PATCH(request: Request, ctx: Ctx) {
         // Tenta buscar invoiceUrl do primeiro pagamento criado
         try {
           const payments = await listPayments({ subscription: subscription.id, limit: 1 })
-          invoiceUrl = payments.data[0]?.invoiceUrl ?? null
+          const firstPayment = payments.data[0] ?? null
+          invoiceUrl = firstPayment?.invoiceUrl ?? null
+          firstPaymentId = firstPayment?.id ?? null
         } catch {
           // webhook vai atualizar depois
         }
@@ -269,6 +274,7 @@ export async function PATCH(request: Request, ctx: Ctx) {
       planValue: parsed.data.planValue ?? Number(tenant.planValue),
       nextDueDate: parsed.data.nextDueDate ?? null,
       invoiceUrl,
+      firstPaymentId,
     },
   })
 }
