@@ -7,7 +7,7 @@ const cpfRegex = /^\d{3}\.?\d{3}\.?\d{3}-?\d{2}$/
 const phoneRegex = /^\(?\d{2}\)?\s?\d{4,5}-?\d{4}$/
 
 const bodySchema = z.object({
-  courseId: z.string().cuid(),
+  courseId: z.string().min(1),
   couponCode: z
     .string()
     .trim()
@@ -223,7 +223,7 @@ export async function POST(request: Request) {
       },
       auto_return: "approved",
       external_reference: externalReference,
-      notification_url: `${appUrl}/api/webhooks/mercadopago`,
+      notification_url: `${appUrl}/api/webhooks/mercadopago?tenant=${tenantSlug}`,
     })
 
     await prisma.enrollment.update({

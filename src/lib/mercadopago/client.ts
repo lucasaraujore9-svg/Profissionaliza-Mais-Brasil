@@ -130,3 +130,11 @@ export async function getAuthorizedPayment(
     accessToken,
   )
 }
+
+export async function searchPayments(
+  accessToken: string,
+  params: { external_reference?: string; status?: string },
+): Promise<{ results: MPPayment[] }> {
+  const qs = new URLSearchParams(params as Record<string, string>).toString()
+  return request<{ results: MPPayment[] }>("GET", `/v1/payments/search?${qs}`, accessToken)
+}

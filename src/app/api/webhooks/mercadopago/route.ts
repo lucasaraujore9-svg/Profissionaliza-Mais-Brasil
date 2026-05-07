@@ -86,12 +86,14 @@ export async function POST(request: Request) {
 
   const xSignature = request.headers.get("x-signature")
   const xRequestId = request.headers.get("x-request-id")
+  const tenantSlug = searchParams.get("tenant") ?? null
 
   void processMpWebhook({
     logId: log.id,
     paymentId,
     xSignature,
     xRequestId,
+    tenantSlug,
     dataId: queryDataId ?? String(paymentId),
   })
 

@@ -205,6 +205,7 @@ export async function POST(request: Request) {
         back_url: appUrl
           ? `${appUrl}/aluno/pagamentos?ok=${enrollment.id}`
           : "https://www.profissionalizamaisbrasil.com.br/aluno/pagamentos",
+        notification_url: appUrl ? `${appUrl}/api/webhooks/mercadopago` : undefined,
         auto_recurring: {
           frequency: 1,
           frequency_type: "months",

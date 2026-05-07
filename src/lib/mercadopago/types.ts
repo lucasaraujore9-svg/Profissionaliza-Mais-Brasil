@@ -87,6 +87,7 @@ export interface MPCreatePreapprovalParams {
   external_reference: string
   payer_email: string
   back_url: string
+  notification_url?: string
   auto_recurring: {
     frequency: number
     frequency_type: "days" | "months"

@@ -27,7 +27,7 @@ const createSchema = z.object({
     .pipe(z.string().regex(phoneRegex, "Telefone inválido")),
 
   // Curso a vender (TenantCourse do próprio tenant)
-  tenantCourseId: z.string().cuid(),
+  tenantCourseId: z.string().min(1),
   couponCode: z.string().trim().max(64).optional(),
 })
 
@@ -274,9 +274,7 @@ export async function POST(request: Request) {
       : undefined,
     auto_return: "approved",
     external_reference: externalReference,
-    notification_url: appUrl
-      ? `${appUrl}/api/webhooks/mercadopago`
-      : undefined,
+    notification_url: appUrl ? `${appUrl}/api/webhooks/mercadopago?tenant=${tenant.slug}` : undefined,
   })
 
   await prisma.enrollment.update({

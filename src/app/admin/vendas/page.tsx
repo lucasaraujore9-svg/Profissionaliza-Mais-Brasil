@@ -129,7 +129,7 @@ export default async function VendasDashboardPage() {
                 <td className="px-4 py-3">{e.course.nome}</td>
                 <td className="px-4 py-3">{formatBRL(Number(e.finalAmount))}</td>
                 <td className="px-4 py-3">
-                  {e.status === "PENDING" && e.gateway === "ASAAS" ? (
+                  {e.status === "PENDING" ? (
                     <SyncPaymentButton enrollmentId={e.id} />
                   ) : (
                     <StatusBadge status={e.status} />

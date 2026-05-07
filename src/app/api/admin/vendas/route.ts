@@ -256,6 +256,7 @@ export async function POST(request: Request) {
         back_url: appUrl
           ? `${appUrl}/admin/vendas?ok=${enrollment.id}`
           : "https://www.profissionalizamaisbrasil.com.br/admin/vendas",
+        notification_url: appUrl ? `${appUrl}/api/webhooks/mercadopago` : undefined,
         auto_recurring: {
           frequency: 1,
           frequency_type: "months",
