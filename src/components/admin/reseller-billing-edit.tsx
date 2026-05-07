@@ -1,11 +1,12 @@
 "use client"
 
 import { useState } from "react"
-import { Save, CalendarClock, DollarSign } from "lucide-react"
+import { Save, CalendarClock, DollarSign, ExternalLink, AlertTriangle } from "lucide-react"
 
 interface Props {
   tenantId: string
   planValue: number
+  asaasCustomerId: string | null
   asaasNextDueDate: string | null
   asaasSubscriptionId: string | null
   asaasSubscriptionStatus: string | null
@@ -24,26 +25,43 @@ function isoToYmd(iso: string | null): string {
   return iso.slice(0, 10)
 }
 
+function defaultDueDate(): string {
+  const d = new Date()
+  d.setDate(d.getDate() + 3)
+  return d.toISOString().slice(0, 10)
+}
+
 export function ResellerBillingEdit({
   tenantId,
   planValue,
+  asaasCustomerId,
   asaasNextDueDate,
   asaasSubscriptionId,
   asaasSubscriptionStatus,
   onSaved,
 }: Props) {
   const [value, setValue] = useState<string>(String(planValue))
-  const [dueDate, setDueDate] = useState<string>(isoToYmd(asaasNextDueDate))
+  const [dueDate, setDueDate] = useState<string>(
+    isoToYmd(asaasNextDueDate) || defaultDueDate(),
+  )
+  const [cpfCnpj, setCpfCnpj] = useState("")
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [ok, setOk] = useState<string | null>(null)
+  const [invoiceUrl, setInvoiceUrl] = useState<string | null>(null)
+
+  const noSubscription = !asaasSubscriptionId
+  const needsCpf = noSubscription && !asaasCustomerId
 
   const dirty =
-    Number(value) !== planValue || dueDate !== isoToYmd(asaasNextDueDate)
+    Number(value) !== planValue ||
+    dueDate !== isoToYmd(asaasNextDueDate) ||
+    noSubscription
 
   async function save() {
     setError(null)
     setOk(null)
+    setInvoiceUrl(null)
     const numericValue = Number(value)
     if (!Number.isFinite(numericValue) || numericValue < 0) {
       setError("Valor inválido")
@@ -53,14 +71,21 @@ export function ResellerBillingEdit({
       setError("Data inválida")
       return
     }
+    if (needsCpf && !cpfCnpj.replace(/\D/g, "")) {
+      setError("CPF/CNPJ é obrigatório para criar a assinatura no Asaas")
+      return
+    }
 
     setSaving(true)
     try {
-      const body: { planValue?: number; nextDueDate?: string } = {}
+      const body: {
+        planValue?: number
+        nextDueDate?: string
+        ownerCpfCnpj?: string
+      } = {}
       if (numericValue !== planValue) body.planValue = numericValue
-      if (dueDate && dueDate !== isoToYmd(asaasNextDueDate)) {
-        body.nextDueDate = dueDate
-      }
+      if (dueDate) body.nextDueDate = dueDate
+      if (needsCpf && cpfCnpj) body.ownerCpfCnpj = cpfCnpj.replace(/\D/g, "")
 
       const res = await fetch(
         `/api/admin/revendedores/${tenantId}/billing`,
@@ -75,11 +100,19 @@ export function ResellerBillingEdit({
         setError(json.error ?? "Falha ao salvar")
         return
       }
-      setOk(
-        json.data?.asaasUpdated
-          ? "Cobrança atualizada no Asaas e no banco."
-          : "Banco atualizado. Asaas não foi sincronizado (sem subscription).",
-      )
+
+      if (json.data?.invoiceUrl) {
+        setInvoiceUrl(json.data.invoiceUrl)
+      }
+
+      if (json.data?.subscriptionCreated) {
+        setOk("Assinatura criada no Asaas com sucesso.")
+      } else if (json.data?.asaasUpdated) {
+        setOk("Cobrança atualizada no Asaas e no banco.")
+      } else {
+        setOk("Banco atualizado.")
+      }
+
       onSaved?.()
     } catch {
       setError("Erro de rede ao salvar")
@@ -94,9 +127,20 @@ export function ResellerBillingEdit({
         Mensalidade do revendedor
       </h3>
       <p className="mt-1 text-xs text-gray-600">
-        Altere o valor e a próxima data de vencimento. Se houver assinatura
-        ativa no Asaas, ela é atualizada junto.
+        {noSubscription
+          ? "Este revendedor ainda não tem assinatura no Asaas. Preencha os dados para criar."
+          : "Altere o valor e a próxima data de vencimento."}
       </p>
+
+      {noSubscription && (
+        <div className="mt-3 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <span>
+            Sem assinatura Asaas — o sistema não cobrará automaticamente este
+            revendedor até criar uma.
+          </span>
+        </div>
+      )}
 
       <div className="mt-4 space-y-4">
         <label className="block">
@@ -120,7 +164,7 @@ export function ResellerBillingEdit({
         <label className="block">
           <span className="flex items-center gap-1.5 text-xs font-semibold text-gray-700">
             <CalendarClock className="h-3.5 w-3.5" />
-            Próximo vencimento
+            {noSubscription ? "Primeiro vencimento" : "Próximo vencimento"}
           </span>
           <input
             type="date"
@@ -128,12 +172,32 @@ export function ResellerBillingEdit({
             onChange={(e) => setDueDate(e.target.value)}
             className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-[var(--color-pmb-green)] focus:outline-none"
           />
-          <span className="mt-1 block text-[11px] text-gray-500">
-            {asaasSubscriptionId
-              ? `Asaas: ${asaasNextDueDate ? new Date(asaasNextDueDate).toLocaleDateString("pt-BR") : "—"}${asaasSubscriptionStatus ? ` · ${asaasSubscriptionStatus}` : ""}`
-              : "Sem assinatura ativa no Asaas"}
-          </span>
+          {!noSubscription && (
+            <span className="mt-1 block text-[11px] text-gray-500">
+              {asaasSubscriptionId
+                ? `Asaas: ${asaasNextDueDate ? new Date(asaasNextDueDate).toLocaleDateString("pt-BR") : "—"}${asaasSubscriptionStatus ? ` · ${asaasSubscriptionStatus}` : ""}`
+                : "Sem assinatura ativa no Asaas"}
+            </span>
+          )}
         </label>
+
+        {needsCpf && (
+          <label className="block">
+            <span className="text-xs font-semibold text-gray-700">
+              CPF / CNPJ do responsável
+            </span>
+            <input
+              type="text"
+              value={cpfCnpj}
+              onChange={(e) => setCpfCnpj(e.target.value)}
+              placeholder="Apenas números"
+              className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 font-mono text-sm focus:border-[var(--color-pmb-green)] focus:outline-none"
+            />
+            <span className="mt-1 block text-[11px] text-gray-500">
+              Necessário para criar o cliente no Asaas.
+            </span>
+          </label>
+        )}
       </div>
 
       {error && (
@@ -142,9 +206,20 @@ export function ResellerBillingEdit({
         </p>
       )}
       {ok && (
-        <p className="mt-4 rounded-md bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
-          {ok}
-        </p>
+        <div className="mt-4 rounded-md bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
+          <p>{ok}</p>
+          {invoiceUrl && (
+            <a
+              href={invoiceUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-2 inline-flex items-center gap-1 font-semibold underline underline-offset-2"
+            >
+              <ExternalLink className="h-3 w-3" />
+              Abrir link da primeira fatura
+            </a>
+          )}
+        </div>
       )}
 
       <div className="mt-4 flex justify-end">
@@ -155,7 +230,11 @@ export function ResellerBillingEdit({
           className="inline-flex items-center gap-2 rounded-lg bg-[var(--color-pmb-green)] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[var(--color-pmb-green-700)] disabled:opacity-50"
         >
           <Save className="h-4 w-4" />
-          {saving ? "Salvando..." : "Salvar mensalidade"}
+          {saving
+            ? "Salvando..."
+            : noSubscription
+              ? "Criar assinatura no Asaas"
+              : "Salvar mensalidade"}
         </button>
       </div>
     </div>

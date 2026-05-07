@@ -24,6 +24,7 @@ interface DetailResponse {
   reseller: ResellerProfileData & {
     billingMode: BillingMode
     cancellationPolicy: CancellationPolicy | null
+    asaasCustomerId: string | null
     asaasSubscriptionId: string | null
     asaasNextDueDate: string | null
     asaasSubscriptionStatus: string | null
@@ -92,6 +93,7 @@ export function ResellerDetailClient({ tenantId }: ResellerDetailClientProps) {
           <ResellerBillingEdit
             tenantId={tenantId}
             planValue={data.reseller.planValue}
+            asaasCustomerId={data.reseller.asaasCustomerId}
             asaasNextDueDate={data.reseller.asaasNextDueDate}
             asaasSubscriptionId={data.reseller.asaasSubscriptionId}
             asaasSubscriptionStatus={data.reseller.asaasSubscriptionStatus}

@@ -93,6 +93,7 @@ export async function GET(
         createdAt: tenant.createdAt.toISOString(),
         email: tenant.owner?.email ?? null,
         ownerName: tenant.owner?.name ?? null,
+        asaasCustomerId: tenant.asaasCustomerId,
         asaasSubscriptionId: tenant.asaasSubscriptionId,
         mpConnected: tenant.mpConnected,
         eaVendedorId: tenant.eaVendedorId,
