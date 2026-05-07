@@ -6,7 +6,7 @@ import { getOrCreatePmbTenant } from "@/lib/pmb-tenant"
 import { pmbMpAccessToken } from "@/lib/pmb-config"
 import { createPreference, createPreapproval } from "@/lib/mercadopago/client"
 import {
-  createCustomer as createAsaasCustomer,
+  findOrCreateAsaasCustomer,
   createPayment as createAsaasPayment,
   createSubscription as createAsaasSubscription,
   listPayments as listAsaasPayments,
@@ -71,12 +71,6 @@ function dueDateInDays(days: number): string {
   return d.toISOString().slice(0, 10)
 }
 
-function endDateAfterMonths(months: number): string {
-  const d = new Date()
-  d.setMonth(d.getMonth() + months)
-  d.setDate(d.getDate() + 3) // margem de 3 dias depois do ultimo vencimento
-  return d.toISOString().slice(0, 10)
-}
 
 export async function POST(request: Request) {
   const guard = await requirePmbSales()
@@ -127,6 +121,7 @@ export async function POST(request: Request) {
         email: true,
         cpf: true,
         fone: true,
+        asaasCustomerId: true,
       },
     }),
     prisma.course.findUnique({
@@ -352,13 +347,20 @@ export async function POST(request: Request) {
   }
 
   try {
-    const customer = await createAsaasCustomer({
+    const { customer, created: customerCreated } = await findOrCreateAsaasCustomer({
       name: student.nome,
-      email: student.email,
+      email: student.email ?? undefined,
       cpfCnpj: student.cpf,
       mobilePhone: student.fone ?? undefined,
       externalReference: `pmb_student_${student.id}`,
     })
+
+    if (customerCreated && !student.asaasCustomerId) {
+      await prisma.student.update({
+        where: { id: student.id },
+        data: { asaasCustomerId: customer.id },
+      })
+    }
 
     if (isMonthly && monthlyMonths) {
       const subscription = await createAsaasSubscription({
@@ -369,7 +371,7 @@ export async function POST(request: Request) {
         cycle: "MONTHLY",
         description: `Mensalidade — ${course.nome}`,
         externalReference,
-        endDate: endDateAfterMonths(monthlyMonths),
+        maxPayments: monthlyMonths,
       })
 
       // Asaas gera as cobrancas async; busca a 1a invoice em ate 3 tentativas

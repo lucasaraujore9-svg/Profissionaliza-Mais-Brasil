@@ -1,6 +1,7 @@
 import type {
   AsaasCreateCustomerParams,
   AsaasCustomer,
+  AsaasCustomerList,
   AsaasCreateSubscriptionParams,
   AsaasCreatePaymentParams,
   AsaasSubscription,
@@ -112,6 +113,35 @@ export async function getCustomer(
   customerId: string,
 ): Promise<AsaasCustomer> {
   return request<AsaasCustomer>("GET", `/customers/${customerId}`)
+}
+
+export async function listCustomers(params?: {
+  email?: string
+  cpfCnpj?: string
+  externalReference?: string
+  offset?: number
+  limit?: number
+}): Promise<AsaasCustomerList> {
+  const query = new URLSearchParams()
+  if (params) {
+    for (const [key, value] of Object.entries(params)) {
+      if (value !== undefined) query.set(key, String(value))
+    }
+  }
+  const qs = query.toString()
+  return request<AsaasCustomerList>("GET", `/customers${qs ? `?${qs}` : ""}`)
+}
+
+export async function findOrCreateAsaasCustomer(
+  params: AsaasCreateCustomerParams,
+): Promise<{ customer: AsaasCustomer; created: boolean }> {
+  const cpfCnpj = sanitizeDoc(params.cpfCnpj)
+  const existing = await listCustomers({ cpfCnpj, limit: 1 })
+  if (existing.data.length > 0) {
+    return { customer: existing.data[0], created: false }
+  }
+  const customer = await createCustomer(params)
+  return { customer, created: true }
 }
 
 // ── Subscriptions ──

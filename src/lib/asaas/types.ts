@@ -26,9 +26,26 @@ export interface AsaasCustomer {
   addressNumber: string
   complement: string
   province: string
+  city: string
+  cityName: string
+  state: string
+  country: string
   externalReference: string
   notificationDisabled: boolean
+  additionalEmails: string | null
+  personType: "FISICA" | "JURIDICA"
+  deleted: boolean
+  foreignCustomer: boolean
   dateCreated: string
+}
+
+export interface AsaasCustomerList {
+  object: string
+  hasMore: boolean
+  totalCount: number
+  limit: number
+  offset: number
+  data: AsaasCustomer[]
 }
 
 // ── Payment Creation ──
@@ -51,6 +68,7 @@ export interface AsaasCreateSubscriptionParams {
   description?: string
   externalReference?: string
   endDate?: string // YYYY-MM-DD — fim da subscription (Asaas para cobranças após)
+  maxPayments?: number // número exato de cobranças; preferido sobre endDate
 }
 
 export interface AsaasSubscription {

@@ -386,6 +386,9 @@ model Student {
 
   obs String? @db.Text
 
+  // Asaas
+  asaasCustomerId String? @map("asaas_customer_id")
+
   // Escola Avancada
   eaAlunoId    String  @map("ea_aluno_id") // Login retornado por usuarios/novo
   eaAlunoSenha String? @map("ea_aluno_senha") // Criptografada
