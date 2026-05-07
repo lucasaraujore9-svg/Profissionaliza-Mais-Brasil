@@ -355,7 +355,7 @@ export async function POST(request: Request) {
       externalReference: `pmb_student_${student.id}`,
     })
 
-    if (customerCreated && !student.asaasCustomerId) {
+    if (!student.asaasCustomerId) {
       await prisma.student.update({
         where: { id: student.id },
         data: { asaasCustomerId: customer.id },

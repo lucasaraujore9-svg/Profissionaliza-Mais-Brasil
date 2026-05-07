@@ -5,7 +5,8 @@ import { requireStudentSession } from "@/lib/auth/student-session"
 import { pmbMpAccessToken } from "@/lib/pmb-config"
 import { createPreference, createPreapproval } from "@/lib/mercadopago/client"
 import {
-  createCustomer as createAsaasCustomer,
+  findOrCreateAsaasCustomer,
+  getCustomer as getAsaasCustomer,
   createPayment as createAsaasPayment,
   createSubscription as createAsaasSubscription,
   listPayments as listAsaasPayments,
@@ -58,6 +59,7 @@ export async function POST(request: Request) {
         email: true,
         cpf: true,
         fone: true,
+        asaasCustomerId: true,
       },
     }),
     prisma.course.findUnique({
@@ -295,13 +297,24 @@ export async function POST(request: Request) {
   }
 
   try {
-    const customer = await createAsaasCustomer({
-      name: student.nome,
-      email: student.email,
-      cpfCnpj: student.cpf,
-      mobilePhone: student.fone ?? undefined,
-      externalReference: `pmb_student_${student.id}`,
-    })
+    // Reutiliza customer Asaas existente — evita duplicatas em compras múltiplas
+    let customer: Awaited<ReturnType<typeof getAsaasCustomer>>
+    if (student.asaasCustomerId) {
+      customer = await getAsaasCustomer(student.asaasCustomerId)
+    } else {
+      const result = await findOrCreateAsaasCustomer({
+        name: student.nome,
+        email: student.email,
+        cpfCnpj: student.cpf,
+        mobilePhone: student.fone ?? undefined,
+        externalReference: `pmb_student_${student.id}`,
+      })
+      customer = result.customer
+      await prisma.student.update({
+        where: { id: student.id },
+        data: { asaasCustomerId: customer.id },
+      })
+    }
 
     if (isMonthly && monthlyMonths) {
       const subscription = await createAsaasSubscription({
@@ -363,6 +376,7 @@ export async function POST(request: Request) {
       dueDate: dueDateInDays(3),
       description: `Curso: ${course.nome}`,
       externalReference,
+      notificationUrl: appUrl ? `${appUrl}/api/webhooks/asaas` : undefined,
     })
 
     await prisma.enrollment.update({

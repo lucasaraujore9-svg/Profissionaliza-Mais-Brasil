@@ -101,7 +101,7 @@ export interface AsaasPayment {
   invoiceUrl: string
   bankSlipUrl: string | null
   transactionReceiptUrl: string | null
-  externalReference: string
+  externalReference: string | null
   description: string
   dateCreated: string
 }
