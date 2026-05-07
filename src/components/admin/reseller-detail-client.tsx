@@ -28,6 +28,7 @@ interface DetailResponse {
     asaasSubscriptionId: string | null
     asaasNextDueDate: string | null
     asaasSubscriptionStatus: string | null
+    asaasSubscriptionValue: number | null
   }
   payments: ResellerPayment[]
   students: ResellerStudentsBreakdown
@@ -97,6 +98,7 @@ export function ResellerDetailClient({ tenantId }: ResellerDetailClientProps) {
             asaasNextDueDate={data.reseller.asaasNextDueDate}
             asaasSubscriptionId={data.reseller.asaasSubscriptionId}
             asaasSubscriptionStatus={data.reseller.asaasSubscriptionStatus}
+            asaasSubscriptionValue={data.reseller.asaasSubscriptionValue}
             onSaved={load}
           />
           <ResellerPaymentHistory

@@ -10,6 +10,7 @@ interface Props {
   asaasNextDueDate: string | null
   asaasSubscriptionId: string | null
   asaasSubscriptionStatus: string | null
+  asaasSubscriptionValue: number | null
   onSaved?: () => void
 }
 
@@ -38,6 +39,7 @@ export function ResellerBillingEdit({
   asaasNextDueDate,
   asaasSubscriptionId,
   asaasSubscriptionStatus,
+  asaasSubscriptionValue,
   onSaved,
 }: Props) {
   const [value, setValue] = useState<string>(String(planValue))
@@ -53,8 +55,10 @@ export function ResellerBillingEdit({
   const noSubscription = !asaasSubscriptionId
   const needsCpf = noSubscription && !asaasCustomerId
 
+  // Compara contra o valor real do Asaas (não o banco) para detectar dessincronia.
+  const effectiveValue = asaasSubscriptionValue ?? planValue
   const dirty =
-    Number(value) !== planValue ||
+    Number(value) !== effectiveValue ||
     dueDate !== isoToYmd(asaasNextDueDate) ||
     noSubscription
 
@@ -83,7 +87,7 @@ export function ResellerBillingEdit({
         nextDueDate?: string
         ownerCpfCnpj?: string
       } = {}
-      if (numericValue !== planValue) body.planValue = numericValue
+      if (numericValue !== effectiveValue) body.planValue = numericValue
       if (dueDate) body.nextDueDate = dueDate
       if (needsCpf && cpfCnpj) body.ownerCpfCnpj = cpfCnpj.replace(/\D/g, "")
 
@@ -157,7 +161,16 @@ export function ResellerBillingEdit({
             className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 font-mono text-sm focus:border-[var(--color-pmb-green)] focus:outline-none"
           />
           <span className="mt-1 block text-[11px] text-gray-500">
-            Atual: {brl(planValue)}
+            {asaasSubscriptionValue !== null && asaasSubscriptionValue !== planValue ? (
+              <>
+                Banco: {brl(planValue)} ·{" "}
+                <span className="font-semibold text-amber-600">
+                  Asaas: {brl(asaasSubscriptionValue)} (dessincronizado)
+                </span>
+              </>
+            ) : (
+              <>Atual: {brl(effectiveValue)}</>
+            )}
           </span>
         </label>
 

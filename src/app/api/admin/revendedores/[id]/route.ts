@@ -68,6 +68,7 @@ export async function GET(
   // Falha silenciosamente — front trata campos como null e usa dados do banco.
   let asaasNextDueDate: string | null = null
   let asaasSubscriptionStatus: string | null = null
+  let asaasSubscriptionValue: number | null = null
   type PaymentRow = {
     id: string
     asaasPaymentId: string
@@ -99,6 +100,7 @@ export async function GET(
       ])
       asaasNextDueDate = sub.nextDueDate ?? null
       asaasSubscriptionStatus = sub.status ?? null
+      asaasSubscriptionValue = sub.value ?? null
 
       // Usa pagamentos do Asaas como fonte primária (inclui PENDING não
       // sincronizados caso o webhook tenha falhado ou esteja atrasado).
@@ -142,6 +144,7 @@ export async function GET(
         accountManagerName: tenant.accountManager?.name ?? null,
         asaasNextDueDate,
         asaasSubscriptionStatus,
+        asaasSubscriptionValue,
       },
       payments,
       students: {

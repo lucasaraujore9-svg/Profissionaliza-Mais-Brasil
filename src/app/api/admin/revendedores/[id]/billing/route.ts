@@ -111,11 +111,10 @@ export async function PATCH(request: Request, ctx: Ctx) {
 
     // ── Caso 1: já tem subscription ─────────────────────────────────────────
     if (hasSubscription) {
-      const valueChanged =
-        parsed.data.planValue !== undefined &&
-        parsed.data.planValue !== Number(tenant.planValue)
-
-      if (valueChanged) {
+      // PUT /subscriptions/{id} não aceita "value" — para mudar o valor,
+      // cancela a subscription atual e cria uma nova. Sem comparação com o
+      // banco (pode estar dessincronizado do Asaas).
+      if (parsed.data.planValue !== undefined) {
         // PUT /v3/subscriptions/{id} não suporta o campo "value".
         // Único caminho: cancelar a subscription atual e criar uma nova.
         try {
