@@ -14,7 +14,7 @@ import {
 import { getSystemSettings } from "@/lib/system-settings"
 
 const createSchema = z.object({
-  courseId: z.string().cuid(),
+  courseId: z.string().min(1),
   couponCode: z.string().trim().max(64).optional(),
 })
 
@@ -24,12 +24,6 @@ function dueDateInDays(days: number): string {
   return d.toISOString().slice(0, 10)
 }
 
-function endDateAfterMonths(months: number): string {
-  const d = new Date()
-  d.setMonth(d.getMonth() + months)
-  d.setDate(d.getDate() + 3)
-  return d.toISOString().slice(0, 10)
-}
 
 export async function POST(request: Request) {
   const session = await requireStudentSession()
@@ -318,7 +312,8 @@ export async function POST(request: Request) {
         cycle: "MONTHLY",
         description: `Mensalidade — ${course.nome}`,
         externalReference,
-        endDate: endDateAfterMonths(monthlyMonths),
+        maxPayments: monthlyMonths,
+        notificationUrl: appUrl ? `${appUrl}/api/webhooks/asaas` : undefined,
       })
 
       let firstInvoiceUrl: string | null = null
