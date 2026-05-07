@@ -113,6 +113,53 @@ export interface AsaasPaymentList {
   data: AsaasPayment[]
 }
 
+// ── Billing Info (PIX + Boleto + Card token em uma chamada) ──
+export interface AsaasBillingInfo {
+  pix: {
+    encodedImage: string
+    payload: string
+    expirationDate: string
+    description: string
+  } | null
+  creditCard: {
+    creditCardNumber: string
+    creditCardBrand: string
+    creditCardToken: string
+  } | null
+  bankSlip: {
+    identificationField: string
+    nossoNumero: string
+    barCode: string
+    bankSlipUrl: string
+    daysAfterDueDateToRegistrationCancellation: number
+  } | null
+}
+
+// ── Credit Card Checkout ──
+export interface AsaasCreditCard {
+  holderName: string
+  number: string
+  expiryMonth: string
+  expiryYear: string
+  ccv: string
+}
+
+export interface AsaasCreditCardHolderInfo {
+  name: string
+  email: string
+  cpfCnpj: string
+  postalCode: string
+  addressNumber: string
+  addressComplement?: string
+  phone: string
+  mobilePhone?: string
+}
+
+export interface AsaasPayWithCreditCardParams {
+  creditCard: AsaasCreditCard
+  creditCardHolderInfo: AsaasCreditCardHolderInfo
+}
+
 // ── Webhook ──
 export type AsaasWebhookEvent =
   | "PAYMENT_CREATED"

@@ -7,6 +7,8 @@ import type {
   AsaasSubscription,
   AsaasPayment,
   AsaasPaymentList,
+  AsaasBillingInfo,
+  AsaasPayWithCreditCardParams,
   AsaasErrorResponse,
 } from "./types"
 
@@ -209,6 +211,17 @@ export async function deletePayment(
     "DELETE",
     `/payments/${paymentId}`,
   )
+}
+
+export async function getBillingInfo(paymentId: string): Promise<AsaasBillingInfo> {
+  return request<AsaasBillingInfo>("GET", `/payments/${paymentId}/billingInfo`)
+}
+
+export async function payWithCreditCard(
+  paymentId: string,
+  params: AsaasPayWithCreditCardParams,
+): Promise<AsaasPayment> {
+  return request<AsaasPayment>("POST", `/payments/${paymentId}/payWithCreditCard`, params)
 }
 
 export async function listPayments(
