@@ -1,4 +1,7 @@
-import { ExternalLink } from "lucide-react"
+"use client"
+
+import { useState } from "react"
+import { ExternalLink, Trash2 } from "lucide-react"
 
 export interface ResellerPayment {
   id: string
@@ -13,7 +16,9 @@ export interface ResellerPayment {
 }
 
 interface ResellerPaymentHistoryProps {
+  tenantId: string
   payments: ResellerPayment[]
+  onRefresh?: () => void
 }
 
 const STATUS_STYLES: Record<string, string> = {
@@ -22,6 +27,7 @@ const STATUS_STYLES: Record<string, string> = {
   PENDING: "bg-amber-100 text-amber-700",
   OVERDUE: "bg-rose-100 text-rose-700",
   REFUNDED: "bg-gray-200 text-gray-600",
+  DELETED: "bg-gray-100 text-gray-400",
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -30,6 +36,7 @@ const STATUS_LABEL: Record<string, string> = {
   PENDING: "pendente",
   OVERDUE: "vencido",
   REFUNDED: "estornado",
+  DELETED: "cancelado",
 }
 
 const METHOD_LABEL: Record<string, string> = {
@@ -51,15 +58,53 @@ function formatMoney(v: number): string {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
 }
 
-export function ResellerPaymentHistory({ payments }: ResellerPaymentHistoryProps) {
+export function ResellerPaymentHistory({
+  tenantId,
+  payments,
+  onRefresh,
+}: ResellerPaymentHistoryProps) {
+  const [cancelling, setCancelling] = useState<string | null>(null)
+  const [cancelError, setCancelError] = useState<string | null>(null)
+
+  async function handleCancel(paymentId: string) {
+    if (!confirm("Cancelar esta cobrança no Asaas? Esta ação não pode ser desfeita.")) return
+    setCancelling(paymentId)
+    setCancelError(null)
+    try {
+      const res = await fetch(
+        `/api/admin/revendedores/${tenantId}/payments/${paymentId}`,
+        { method: "DELETE" },
+      )
+      const body = await res.json()
+      if (!res.ok) {
+        setCancelError(body.error ?? "Falha ao cancelar cobrança")
+        return
+      }
+      onRefresh?.()
+    } catch {
+      setCancelError("Erro de rede ao cancelar cobrança")
+    } finally {
+      setCancelling(null)
+    }
+  }
+
   return (
     <div className="rounded-2xl border border-gray-200 bg-white shadow-sm">
       <div className="border-b border-gray-200 px-6 py-4">
-        <h3 className="text-sm font-semibold text-[var(--color-pmb-green-900)]">Histórico de pagamentos</h3>
+        <h3 className="text-sm font-semibold text-[var(--color-pmb-green-900)]">
+          Histórico de pagamentos
+        </h3>
         <p className="mt-0.5 text-xs text-gray-600">
           Faturas da assinatura Asaas recentes.
         </p>
       </div>
+
+      {cancelError && (
+        <div className="mx-6 mt-4 rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">
+          {cancelError}
+        </div>
+      )}
+
       {payments.length === 0 ? (
         <div className="px-6 py-10 text-center text-xs text-gray-500">
           Nenhuma fatura registrada ainda.
@@ -74,6 +119,7 @@ export function ResellerPaymentHistory({ payments }: ResellerPaymentHistoryProps
                 <th className="px-6 py-3 font-medium">Método</th>
                 <th className="px-6 py-3 font-medium">Status</th>
                 <th className="px-6 py-3 font-medium">Link</th>
+                <th className="px-6 py-3 font-medium"></th>
               </tr>
             </thead>
             <tbody>
@@ -82,6 +128,8 @@ export function ResellerPaymentHistory({ payments }: ResellerPaymentHistoryProps
                 const methodKey = (p.billingType ?? "UNDEFINED").toUpperCase()
                 const paymentLink = p.bankSlipUrl ?? p.invoiceUrl
                 const isPending = statusKey === "PENDING" || statusKey === "OVERDUE"
+                const isCancellable = statusKey === "PENDING" || statusKey === "OVERDUE"
+                const isLoading = cancelling === p.asaasPaymentId
                 return (
                   <tr key={p.id} className="border-b border-gray-100 last:border-b-0">
                     <td className="px-6 py-3 font-mono text-xs text-gray-700">
@@ -119,6 +167,20 @@ export function ResellerPaymentHistory({ payments }: ResellerPaymentHistoryProps
                         </a>
                       ) : (
                         <span className="text-xs text-gray-400">—</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-3">
+                      {isCancellable && (
+                        <button
+                          type="button"
+                          onClick={() => handleCancel(p.asaasPaymentId)}
+                          disabled={isLoading}
+                          title="Cancelar cobrança"
+                          className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-semibold text-red-600 transition-colors hover:bg-red-50 disabled:opacity-50"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                          {isLoading ? "..." : "Cancelar"}
+                        </button>
                       )}
                     </td>
                   </tr>

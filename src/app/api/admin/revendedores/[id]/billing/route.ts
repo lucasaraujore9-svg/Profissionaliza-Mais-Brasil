@@ -5,6 +5,8 @@ import { requireSuperAdmin } from "@/lib/auth/guards"
 import {
   findOrCreateAsaasCustomer,
   createSubscription,
+  cancelSubscription,
+  getSubscription,
   listPayments,
   updateSubscription,
   AsaasApiError,
@@ -107,22 +109,87 @@ export async function PATCH(request: Request, ctx: Ctx) {
     const hasSubscription = Boolean(tenant.asaasSubscriptionId)
     const hasCustomer = Boolean(tenant.asaasCustomerId)
 
-    // ── Caso 1: já tem subscription — só atualiza nextDueDate ────────────────
-    if (hasSubscription && parsed.data.nextDueDate !== undefined) {
-      try {
-        await updateSubscription(tenant.asaasSubscriptionId!, {
-          nextDueDate: parsed.data.nextDueDate,
-        })
-        asaasUpdated = true
-      } catch (error) {
-        const message =
-          error instanceof AsaasApiError
-            ? error.message
-            : "Falha ao atualizar assinatura no Asaas"
-        return NextResponse.json(
-          { error: `Asaas: ${message}. Banco não foi alterado para manter consistência.` },
-          { status: 502 },
-        )
+    // ── Caso 1: já tem subscription ─────────────────────────────────────────
+    if (hasSubscription) {
+      const valueChanged =
+        parsed.data.planValue !== undefined &&
+        parsed.data.planValue !== Number(tenant.planValue)
+
+      if (valueChanged) {
+        // PUT /v3/subscriptions/{id} não suporta o campo "value".
+        // Único caminho: cancelar a subscription atual e criar uma nova.
+        try {
+          await cancelSubscription(tenant.asaasSubscriptionId!)
+        } catch (error) {
+          if (!(error instanceof AsaasApiError && error.statusCode === 404)) {
+            const message =
+              error instanceof AsaasApiError
+                ? error.message
+                : "Falha ao cancelar assinatura atual no Asaas"
+            return NextResponse.json(
+              { error: `Asaas: ${message}. Banco não foi alterado para manter consistência.` },
+              { status: 502 },
+            )
+          }
+        }
+
+        // Usa nextDueDate do input se fornecido, senão busca do Asaas, senão +3d
+        let dueDate = parsed.data.nextDueDate
+        if (!dueDate) {
+          try {
+            const sub = await getSubscription(tenant.asaasSubscriptionId!)
+            dueDate = sub.nextDueDate
+          } catch {
+            dueDate = isoDayPlus(3)
+          }
+        }
+
+        try {
+          const subscription = await createSubscription({
+            customer: tenant.asaasCustomerId!,
+            billingType: "UNDEFINED",
+            value: parsed.data.planValue!,
+            nextDueDate: dueDate,
+            cycle: "MONTHLY",
+            description: `Mensalidade Profissionaliza Mais Brasil — ${tenant.name}`,
+            externalReference: `tenant:${tenant.slug}`,
+          })
+          newSubscriptionId = subscription.id
+          asaasUpdated = true
+
+          try {
+            const payments = await listPayments({ subscription: subscription.id, limit: 1 })
+            invoiceUrl = payments.data[0]?.invoiceUrl ?? null
+          } catch {
+            // webhook atualiza depois
+          }
+        } catch (error) {
+          const message =
+            error instanceof AsaasApiError
+              ? error.message
+              : "Falha ao recriar assinatura no Asaas"
+          return NextResponse.json(
+            { error: `Asaas: ${message}` },
+            { status: 502 },
+          )
+        }
+      } else if (parsed.data.nextDueDate !== undefined) {
+        // Só a data mudou — atualiza sem cancelar
+        try {
+          await updateSubscription(tenant.asaasSubscriptionId!, {
+            nextDueDate: parsed.data.nextDueDate,
+          })
+          asaasUpdated = true
+        } catch (error) {
+          const message =
+            error instanceof AsaasApiError
+              ? error.message
+              : "Falha ao atualizar assinatura no Asaas"
+          return NextResponse.json(
+            { error: `Asaas: ${message}. Banco não foi alterado para manter consistência.` },
+            { status: 502 },
+          )
+        }
       }
     }
 

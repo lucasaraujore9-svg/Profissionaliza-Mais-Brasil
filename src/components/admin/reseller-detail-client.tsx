@@ -99,7 +99,11 @@ export function ResellerDetailClient({ tenantId }: ResellerDetailClientProps) {
             asaasSubscriptionStatus={data.reseller.asaasSubscriptionStatus}
             onSaved={load}
           />
-          <ResellerPaymentHistory payments={data.payments} />
+          <ResellerPaymentHistory
+            tenantId={tenantId}
+            payments={data.payments}
+            onRefresh={load}
+          />
           <ResellerPolicyConfig
             tenantId={tenantId}
             billingMode={data.reseller.billingMode}

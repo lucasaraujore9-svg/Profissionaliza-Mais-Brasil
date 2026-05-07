@@ -202,6 +202,15 @@ export async function getPayment(
   return request<AsaasPayment>("GET", `/payments/${paymentId}`)
 }
 
+export async function deletePayment(
+  paymentId: string,
+): Promise<{ deleted: boolean; id: string }> {
+  return request<{ deleted: boolean; id: string }>(
+    "DELETE",
+    `/payments/${paymentId}`,
+  )
+}
+
 export async function listPayments(
   params?: {
     customer?: string
