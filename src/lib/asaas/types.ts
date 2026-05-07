@@ -56,6 +56,7 @@ export interface AsaasCreatePaymentParams {
   dueDate: string // YYYY-MM-DD
   description?: string
   externalReference?: string
+  notificationUrl?: string
 }
 
 // ── Subscription ──
@@ -69,6 +70,7 @@ export interface AsaasCreateSubscriptionParams {
   externalReference?: string
   endDate?: string // YYYY-MM-DD — fim da subscription (Asaas para cobranças após)
   maxPayments?: number // número exato de cobranças; preferido sobre endDate
+  notificationUrl?: string
 }
 
 export interface AsaasSubscription {

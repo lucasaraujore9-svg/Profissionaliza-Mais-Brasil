@@ -3,6 +3,7 @@ import Link from "next/link"
 import { requireAdminSession } from "@/lib/auth/admin-session"
 import { prisma } from "@/lib/prisma"
 import { Plus, Tag, Users } from "lucide-react"
+import { SyncPaymentButton } from "@/components/admin/sync-payment-button"
 
 export const dynamic = "force-dynamic"
 
@@ -127,7 +128,13 @@ export default async function VendasDashboardPage() {
                 </td>
                 <td className="px-4 py-3">{e.course.nome}</td>
                 <td className="px-4 py-3">{formatBRL(Number(e.finalAmount))}</td>
-                <td className="px-4 py-3">{e.status}</td>
+                <td className="px-4 py-3">
+                  {e.status === "PENDING" && e.gateway === "ASAAS" ? (
+                    <SyncPaymentButton enrollmentId={e.id} />
+                  ) : (
+                    <StatusBadge status={e.status} />
+                  )}
+                </td>
                 {session.role === "SUPER_ADMIN" && (
                   <td className="px-4 py-3 text-muted-foreground">
                     {e.soldByUser?.name ?? "—"}
@@ -152,6 +159,31 @@ export default async function VendasDashboardPage() {
         </table>
       </div>
     </div>
+  )
+}
+
+const STATUS_LABELS: Record<string, string> = {
+  PENDING: "Pendente",
+  ACTIVE: "Ativo",
+  COMPLETED: "Concluído",
+  SUSPENDED: "Suspenso",
+  CANCELLED: "Cancelado",
+}
+
+const STATUS_COLORS: Record<string, string> = {
+  PENDING: "bg-yellow-50 text-yellow-700",
+  ACTIVE: "bg-green-50 text-green-700",
+  COMPLETED: "bg-blue-50 text-blue-700",
+  SUSPENDED: "bg-red-50 text-red-700",
+  CANCELLED: "bg-gray-100 text-gray-500",
+}
+
+function StatusBadge({ status }: { status: string }) {
+  const color = STATUS_COLORS[status] ?? "bg-gray-100 text-gray-500"
+  return (
+    <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${color}`}>
+      {STATUS_LABELS[status] ?? status}
+    </span>
   )
 }
 

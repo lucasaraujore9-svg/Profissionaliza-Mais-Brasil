@@ -372,6 +372,7 @@ export async function POST(request: Request) {
         description: `Mensalidade — ${course.nome}`,
         externalReference,
         maxPayments: monthlyMonths,
+        notificationUrl: appUrl ? `${appUrl}/api/webhooks/asaas` : undefined,
       })
 
       // Asaas gera as cobrancas async; busca a 1a invoice em ate 3 tentativas
@@ -424,6 +425,7 @@ export async function POST(request: Request) {
       dueDate: dueDateInDays(3),
       description: `Curso: ${course.nome}`,
       externalReference,
+      notificationUrl: appUrl ? `${appUrl}/api/webhooks/asaas` : undefined,
     })
 
     await prisma.enrollment.update({
