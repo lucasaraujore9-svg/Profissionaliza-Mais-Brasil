@@ -27,6 +27,7 @@ function PixTab({
   const pix = billingInfo?.pix
 
   useEffect(() => {
+    if (!pix) return
     pollRef.current = setInterval(async () => {
       try {
         const res = await fetch(`/api/cobranca/${paymentId}`)
@@ -43,7 +44,7 @@ function PixTab({
     return () => {
       if (pollRef.current) clearInterval(pollRef.current)
     }
-  }, [paymentId, onPaid])
+  }, [paymentId, onPaid, pix])
 
   async function copy() {
     if (!pix?.payload) return
@@ -65,6 +66,17 @@ function PixTab({
   }
 
   if (!pix) {
+    // billingInfo loaded but pix is null → PIX not available for this payment
+    if (billingInfo !== null) {
+      return (
+        <div className="flex flex-col items-center gap-4 py-8 text-center text-gray-500">
+          <p className="text-sm font-medium">PIX indisponível para esta cobrança.</p>
+          <p className="text-xs text-gray-400">
+            Use o Boleto ou Cartão de crédito para pagar.
+          </p>
+        </div>
+      )
+    }
     return (
       <div className="flex flex-col items-center gap-4 py-8 text-gray-500">
         <Spinner />
@@ -590,6 +602,15 @@ export function CheckoutClient({ paymentId, billingType }: Props) {
   }, [fetchBillingInfo])
 
   const onPaid = useCallback(() => setPaid(true), [])
+
+  // Auto-switch to BOLETO when PIX is not available after retries
+  useEffect(() => {
+    if (!billingInfo) return
+    if (!billingInfo.pix && billingInfo.bankSlip) {
+      setTab("BOLETO")
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [billingInfo])
 
   const tabs = [
     {
