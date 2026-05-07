@@ -740,9 +740,8 @@ model NotificationPreference {
 model SystemSettings {
   id                     String         @id @default("default")
   pmbDirectSaleGateway   PaymentGateway @default(MP) @map("pmb_direct_sale_gateway")
-  // Token MP da conta PMB (criptografado com AES-256-GCM). Quando null, faz
-  // fallback para PMB_MP_ACCESS_TOKEN no .env.
   pmbMpAccessTokenEnc    String?        @map("pmb_mp_access_token_enc") @db.Text
+  lastCatalogSyncJson    String?        @map("last_catalog_sync_json") @db.Text
   updatedAt              DateTime       @updatedAt @map("updated_at")
 
   @@map("system_settings")

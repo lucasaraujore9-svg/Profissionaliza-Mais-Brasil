@@ -1,7 +1,9 @@
 import { redis } from "@/lib/redis"
+import { prisma } from "@/lib/prisma"
 
 const KEY = "catalog:sync-log"
 const MAX_ENTRIES = 30
+const SETTINGS_ID = "default"
 
 export interface SyncLogEntry {
   id: string
@@ -16,9 +18,19 @@ export interface SyncLogEntry {
 }
 
 export async function pushSyncLog(entry: SyncLogEntry): Promise<void> {
-  if (!redis) return
-  await redis.lpush(KEY, JSON.stringify(entry))
-  await redis.ltrim(KEY, 0, MAX_ENTRIES - 1)
+  // Redis: histórico completo (opcional)
+  if (redis) {
+    await redis.lpush(KEY, JSON.stringify(entry))
+    await redis.ltrim(KEY, 0, MAX_ENTRIES - 1)
+  }
+  // DB: persiste sempre o último sync bem-sucedido (fallback sem Redis)
+  if (entry.status === "SUCCESS") {
+    await prisma.systemSettings.upsert({
+      where: { id: SETTINGS_ID },
+      update: { lastCatalogSyncJson: JSON.stringify(entry) },
+      create: { id: SETTINGS_ID, lastCatalogSyncJson: JSON.stringify(entry) },
+    })
+  }
 }
 
 export async function listSyncLogs(): Promise<SyncLogEntry[]> {
@@ -38,6 +50,21 @@ export async function listSyncLogs(): Promise<SyncLogEntry[]> {
 }
 
 export async function getLastSuccessfulSync(): Promise<SyncLogEntry | null> {
-  const logs = await listSyncLogs()
-  return logs.find((l) => l.status === "SUCCESS") ?? null
+  // 1. Tenta Redis (histórico completo)
+  if (redis) {
+    const logs = await listSyncLogs()
+    const fromRedis = logs.find((l) => l.status === "SUCCESS") ?? null
+    if (fromRedis) return fromRedis
+  }
+  // 2. Fallback: DB (sempre disponível)
+  try {
+    const row = await prisma.systemSettings.findUnique({
+      where: { id: SETTINGS_ID },
+      select: { lastCatalogSyncJson: true },
+    })
+    if (!row?.lastCatalogSyncJson) return null
+    return JSON.parse(row.lastCatalogSyncJson) as SyncLogEntry
+  } catch {
+    return null
+  }
 }

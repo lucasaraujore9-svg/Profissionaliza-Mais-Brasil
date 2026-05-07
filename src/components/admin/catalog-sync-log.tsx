@@ -35,7 +35,7 @@ export function CatalogSyncLog({ logs }: CatalogSyncLogProps) {
           <h3 className="text-sm font-semibold text-[var(--color-pmb-green-900)]">Histórico de sincronizações</h3>
           <p className="mt-0.5 text-xs text-gray-600">
             {logs.length === 0
-              ? "Nenhuma sincronização registrada ainda."
+              ? "Histórico detalhado requer Redis (Upstash). Configure UPSTASH_REDIS_REST_URL para habilitar."
               : `Últimas ${logs.length} execuções com status e alterações aplicadas.`}
           </p>
         </div>
