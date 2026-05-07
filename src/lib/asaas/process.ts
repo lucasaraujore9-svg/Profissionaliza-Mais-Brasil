@@ -166,6 +166,8 @@ export async function processAsaasWebhook(
       update: {
         status: payment.status,
         paidAt,
+        ...(payment.invoiceUrl ? { invoiceUrl: payment.invoiceUrl } : {}),
+        ...(payment.bankSlipUrl ? { bankSlipUrl: payment.bankSlipUrl } : {}),
       },
       create: {
         tenantId: tenant.id,
@@ -175,6 +177,8 @@ export async function processAsaasWebhook(
         status: payment.status,
         dueDate: new Date(payment.dueDate),
         paidAt,
+        invoiceUrl: payment.invoiceUrl ?? null,
+        bankSlipUrl: payment.bankSlipUrl ?? null,
       },
     })
 

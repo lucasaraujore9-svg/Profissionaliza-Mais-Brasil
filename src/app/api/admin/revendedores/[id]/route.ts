@@ -109,6 +109,8 @@ export async function GET(
         status: p.status,
         dueDate: p.dueDate.toISOString(),
         paidAt: p.paidAt?.toISOString() ?? null,
+        invoiceUrl: p.invoiceUrl ?? null,
+        bankSlipUrl: p.bankSlipUrl ?? null,
       })),
       students: {
         total: totalStudents,

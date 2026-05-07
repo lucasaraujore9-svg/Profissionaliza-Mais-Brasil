@@ -586,6 +586,10 @@ model TenantPayment {
   amount         Decimal @db.Decimal(10, 2)
   billingType    String? @map("billing_type") // PIX, BOLETO, CREDIT_CARD
 
+  // Links de pagamento
+  invoiceUrl  String? @map("invoice_url") @db.Text
+  bankSlipUrl String? @map("bank_slip_url") @db.Text
+
   // Status
   status  String // PENDING, CONFIRMED, RECEIVED, OVERDUE, REFUNDED, etc.
   dueDate DateTime  @map("due_date")

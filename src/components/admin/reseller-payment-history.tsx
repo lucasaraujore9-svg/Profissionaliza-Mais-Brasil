@@ -1,3 +1,5 @@
+import { ExternalLink } from "lucide-react"
+
 export interface ResellerPayment {
   id: string
   asaasPaymentId: string
@@ -6,6 +8,8 @@ export interface ResellerPayment {
   status: string
   dueDate: string
   paidAt: string | null
+  invoiceUrl: string | null
+  bankSlipUrl: string | null
 }
 
 interface ResellerPaymentHistoryProps {
@@ -69,12 +73,15 @@ export function ResellerPaymentHistory({ payments }: ResellerPaymentHistoryProps
                 <th className="px-6 py-3 font-medium">Valor</th>
                 <th className="px-6 py-3 font-medium">Método</th>
                 <th className="px-6 py-3 font-medium">Status</th>
+                <th className="px-6 py-3 font-medium">Link</th>
               </tr>
             </thead>
             <tbody>
               {payments.map((p) => {
                 const statusKey = p.status.toUpperCase()
                 const methodKey = (p.billingType ?? "UNDEFINED").toUpperCase()
+                const paymentLink = p.bankSlipUrl ?? p.invoiceUrl
+                const isPending = statusKey === "PENDING" || statusKey === "OVERDUE"
                 return (
                   <tr key={p.id} className="border-b border-gray-100 last:border-b-0">
                     <td className="px-6 py-3 font-mono text-xs text-gray-700">
@@ -94,6 +101,25 @@ export function ResellerPaymentHistory({ payments }: ResellerPaymentHistoryProps
                       >
                         {STATUS_LABEL[statusKey] ?? p.status.toLowerCase()}
                       </span>
+                    </td>
+                    <td className="px-6 py-3">
+                      {paymentLink ? (
+                        <a
+                          href={paymentLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-semibold transition-colors ${
+                            isPending
+                              ? "bg-amber-50 text-amber-700 hover:bg-amber-100"
+                              : "bg-gray-50 text-gray-500 hover:bg-gray-100"
+                          }`}
+                        >
+                          <ExternalLink className="h-3 w-3" />
+                          {isPending ? "Enviar link" : "Ver fatura"}
+                        </a>
+                      ) : (
+                        <span className="text-xs text-gray-400">—</span>
+                      )}
                     </td>
                   </tr>
                 )
