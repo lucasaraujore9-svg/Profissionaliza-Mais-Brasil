@@ -4,6 +4,24 @@ import { prisma } from "@/lib/prisma"
 import { requirePmbSales } from "@/lib/auth/guards"
 import { getOrCreatePmbTenant } from "@/lib/pmb-tenant"
 import { pmbEaPolo, pmbEaVendedorId } from "@/lib/pmb-config"
+import { ensureStudentInEA } from "@/lib/students/ea-actions"
+import { findOrCreateAsaasCustomer } from "@/lib/asaas/client"
+import { getSystemSettings } from "@/lib/system-settings"
+
+function isValidCpf(cpf: string): boolean {
+  const d = cpf.replace(/\D/g, "")
+  if (d.length !== 11 || /^(\d)\1+$/.test(d)) return false
+  let s = 0
+  for (let i = 0; i < 9; i++) s += +d[i] * (10 - i)
+  let r = (s * 10) % 11
+  if (r >= 10) r = 0
+  if (r !== +d[9]) return false
+  s = 0
+  for (let i = 0; i < 10; i++) s += +d[i] * (11 - i)
+  r = (s * 10) % 11
+  if (r >= 10) r = 0
+  return r === +d[10]
+}
 
 export async function GET(request: Request) {
   const guard = await requirePmbSales()
@@ -14,15 +32,15 @@ export async function GET(request: Request) {
   const url = new URL(request.url)
   const q = url.searchParams.get("q")?.trim() ?? ""
 
-  // PMB_SALES ve so alunos cujas enrollments dele ele criou; SUPER_ADMIN ve todos
-  const whereStudent = guard.session.role === "SUPER_ADMIN"
-    ? { tenantId: pmbTenant.id }
-    : {
-        tenantId: pmbTenant.id,
-        enrollments: {
-          some: { tenantId: null, soldByUserId: guard.session.userId },
-        },
-      }
+  const whereStudent =
+    guard.session.role === "SUPER_ADMIN"
+      ? { tenantId: pmbTenant.id }
+      : {
+          tenantId: pmbTenant.id,
+          enrollments: {
+            some: { tenantId: null, soldByUserId: guard.session.userId },
+          },
+        }
 
   const students = await prisma.student.findMany({
     where: {
@@ -91,19 +109,23 @@ export async function POST(request: Request) {
     )
   }
 
-  const pmbTenant = await getOrCreatePmbTenant()
   const cpf = parsed.data.cpf.replace(/\D/g, "")
+  if (!isValidCpf(cpf)) {
+    return NextResponse.json({ error: "CPF inválido" }, { status: 400 })
+  }
+
+  const pmbTenant = await getOrCreatePmbTenant()
 
   const existing = await prisma.student.findFirst({
     where: {
       tenantId: pmbTenant.id,
       OR: [{ email: parsed.data.email }, { cpf }],
     },
-    select: { id: true, email: true, cpf: true },
+    select: { id: true, nome: true, email: true, cpf: true },
   })
   if (existing) {
     return NextResponse.json({
-      data: { id: existing.id, existed: true },
+      data: { id: existing.id, nome: existing.nome, email: existing.email, cpf: existing.cpf, existed: true },
     })
   }
 
@@ -119,8 +141,39 @@ export async function POST(request: Request) {
       eaAlunoId: `pending_${Date.now()}`,
       status: "ATIVO",
     },
-    select: { id: true },
+    select: { id: true, nome: true, email: true, cpf: true },
   })
 
-  return NextResponse.json({ data: { id: student.id, existed: false } })
+  // Cria o aluno na EA imediatamente (não espera pelo pagamento)
+  try {
+    await ensureStudentInEA(student.id)
+  } catch (err) {
+    console.error("[alunos/POST] falha ao criar aluno na EA:", err)
+    // Não bloqueia — será tentado novamente no fulfill do pagamento
+  }
+
+  // Se gateway for Asaas, cria o customer já (sem CPF obrigatório no Asaas só precisa de nome)
+  try {
+    const settings = await getSystemSettings()
+    if (settings.pmbDirectSaleGateway === "ASAAS" && process.env.ASAAS_API_KEY) {
+      const { customer } = await findOrCreateAsaasCustomer({
+        name: parsed.data.nome,
+        email: parsed.data.email,
+        cpfCnpj: cpf,
+        mobilePhone: parsed.data.fone,
+        externalReference: `pmb_student_${student.id}`,
+      })
+      await prisma.student.update({
+        where: { id: student.id },
+        data: { asaasCustomerId: customer.id },
+      })
+    }
+  } catch (err) {
+    console.error("[alunos/POST] falha ao criar customer no Asaas:", err)
+    // Não bloqueia — será criado/reutilizado na geração do link
+  }
+
+  return NextResponse.json({
+    data: { id: student.id, nome: student.nome, email: student.email, cpf: student.cpf, existed: false },
+  })
 }

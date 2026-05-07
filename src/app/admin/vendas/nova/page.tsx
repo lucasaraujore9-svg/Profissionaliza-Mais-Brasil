@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation"
 import { requireAdminSession } from "@/lib/auth/admin-session"
 import { prisma } from "@/lib/prisma"
+import { getSystemSettings } from "@/lib/system-settings"
 import { NovaVendaClient } from "@/components/admin/nova-venda-client"
 
 export const dynamic = "force-dynamic"
@@ -12,28 +13,34 @@ export default async function NovaVendaPage() {
     redirect("/admin")
   }
 
-  const courses = await prisma.course.findMany({
-    where: { status: "ATIVO" },
-    orderBy: { nome: "asc" },
-    select: {
-      id: true,
-      nome: true,
-      precoVitrineMain: true,
-      precoPromocional: true,
-      precoOriginal: true,
-    },
-  })
+  const [courses, settings] = await Promise.all([
+    prisma.course.findMany({
+      where: { status: "ATIVO" },
+      orderBy: { nome: "asc" },
+      select: {
+        id: true,
+        nome: true,
+        precoVitrineMain: true,
+        precoPromocional: true,
+        precoOriginal: true,
+        paymentTypeMain: true,
+        monthlyMonthsMain: true,
+      },
+    }),
+    getSystemSettings(),
+  ])
 
   return (
     <div className="p-8">
       <NovaVendaClient
         role={session.role}
+        gateway={settings.pmbDirectSaleGateway}
         courses={courses.map((c) => ({
           id: c.id,
           nome: c.nome,
-          preco: Number(
-            c.precoVitrineMain ?? c.precoPromocional ?? c.precoOriginal ?? 0,
-          ),
+          preco: Number(c.precoVitrineMain ?? c.precoPromocional ?? c.precoOriginal ?? 0),
+          paymentType: c.paymentTypeMain,
+          monthlyMonths: c.monthlyMonthsMain ?? null,
         }))}
       />
     </div>
