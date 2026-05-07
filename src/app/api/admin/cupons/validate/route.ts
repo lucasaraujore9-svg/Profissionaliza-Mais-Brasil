@@ -7,7 +7,7 @@ const PMB_SALES_CAP = 50
 
 const schema = z.object({
   code: z.string().trim().min(1).max(64),
-  courseId: z.string().cuid(),
+  courseId: z.string().min(1),
 })
 
 export async function POST(request: Request) {

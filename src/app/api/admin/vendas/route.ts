@@ -60,8 +60,8 @@ export async function GET(request: Request) {
 }
 
 const createSchema = z.object({
-  studentId: z.string().cuid(),
-  courseId: z.string().cuid(),
+  studentId: z.string().min(1),
+  courseId: z.string().min(1),
   couponCode: z.string().trim().max(64).optional(),
 })
 
