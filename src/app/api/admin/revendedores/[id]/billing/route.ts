@@ -3,7 +3,7 @@ import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { requireSuperAdmin } from "@/lib/auth/guards"
 import {
-  createCustomer,
+  findOrCreateAsaasCustomer,
   createSubscription,
   listPayments,
   updateSubscription,
@@ -138,7 +138,7 @@ export async function PATCH(request: Request, ctx: Ctx) {
               { status: 400 },
             )
           }
-          const customer = await createCustomer({
+          const { customer } = await findOrCreateAsaasCustomer({
             name: tenant.owner?.name ?? tenant.name,
             email: tenant.owner?.email ?? undefined,
             mobilePhone: tenant.owner?.phone ?? undefined,
@@ -146,7 +146,7 @@ export async function PATCH(request: Request, ctx: Ctx) {
             externalReference: `tenant:${tenant.slug}`,
           })
           customerId = customer.id
-          newCustomerId = customer.id
+          newCustomerId = customer.id // sempre persiste, seja novo ou encontrado
         }
 
         const planValue = parsed.data.planValue ?? Number(tenant.planValue)
