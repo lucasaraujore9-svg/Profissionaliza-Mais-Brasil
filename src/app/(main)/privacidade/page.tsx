@@ -19,7 +19,7 @@ export default function PrivacidadePage() {
           <p>Coletamos apenas os dados necessários para prestar nossos serviços:</p>
           <ul>
             <li>Nome completo, email, CPF e telefone</li>
-            <li>Dados de pagamento (processados pelo Mercado Pago — não armazenamos dados de cartão)</li>
+            <li>Dados de pagamento (processados de forma segura — não armazenamos dados de cartão)</li>
             <li>Dados de acesso à plataforma e progresso nas aulas</li>
             <li>Endereço IP e cookies para fins de segurança e experiência</li>
           </ul>

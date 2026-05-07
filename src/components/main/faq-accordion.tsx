@@ -12,7 +12,7 @@ const faqs = [
   {
     pergunta: "Como funciona o pagamento do aluno?",
     resposta:
-      "O aluno paga via Mercado Pago (cartão, Pix ou boleto). O dinheiro cai direto na SUA conta Mercado Pago. Nós não retemos valor algum — você recebe 100% do que vende.",
+      "O aluno paga com cartão, Pix ou boleto. O dinheiro cai direto na SUA conta de pagamentos. Nós não retemos valor algum — você recebe 100% do que vende.",
   },
   {
     pergunta: "Os cursos são de verdade? Com certificado?",
@@ -22,7 +22,7 @@ const faqs = [
   {
     pergunta: "Posso cancelar a qualquer momento?",
     resposta:
-      "Sim. Não há fidelidade nem multa. Você cancela pelo painel ou pelo Asaas e para de ser cobrado no próximo ciclo.",
+      "Sim. Não há fidelidade nem multa. Você cancela pelo painel e para de ser cobrado no próximo ciclo.",
   },
   {
     pergunta: "Tem taxa por matrícula ou só a mensalidade?",

@@ -38,7 +38,7 @@ export default function TermosPage() {
 
           <h2>4. Pagamentos e reembolso</h2>
           <p>
-            Os pagamentos são processados via Mercado Pago. Aceitamos Pix, cartão de crédito e
+            Os pagamentos são processados de forma segura. Aceitamos Pix, cartão de crédito e
             boleto bancário. Você tem direito a reembolso integral em até 7 dias corridos após a
             compra, conforme Código de Defesa do Consumidor.
           </p>

@@ -218,7 +218,7 @@ export function NovaVendaClient({
             </div>
             {result.gateway && (
               <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold text-[var(--color-pmb-green-900)]">
-                {result.gateway === "ASAAS" ? "Asaas" : "Mercado Pago"}
+                Cobrança gerada
               </span>
             )}
           </div>

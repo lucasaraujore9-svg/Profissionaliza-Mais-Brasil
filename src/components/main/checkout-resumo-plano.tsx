@@ -3,7 +3,7 @@ import { Check, Shield } from "lucide-react"
 const planFeatures = [
   "Vitrine com domínio personalizado",
   "Até 500 alunos ativos",
-  "Integração com Mercado Pago",
+  "Integração com gateway de pagamento",
   "Catálogo com 200+ cursos",
   "Suporte por WhatsApp",
 ] as const

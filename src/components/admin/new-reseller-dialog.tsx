@@ -363,7 +363,7 @@ function CreatedSuccess({
         ) : (
           <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
             <AlertTriangle className="mr-1.5 inline h-3.5 w-3.5" />
-            Subscription criada no Asaas, mas o link da primeira fatura ainda
+            Assinatura criada, mas o link da primeira fatura ainda
             não foi gerado. Em alguns minutos o webhook PAYMENT_CREATED vai
             popular o invoiceUrl.
             {result.asaas.error && ` (${result.asaas.error})`}
@@ -374,7 +374,7 @@ function CreatedSuccess({
           <AlertTriangle className="mr-1.5 inline h-3.5 w-3.5" />
           ASAAS_API_KEY não configurada. A revenda foi criada como{" "}
           <strong>PENDING</strong>. Para gerar cobrança automática, configure
-          a chave Asaas no Vercel.
+          as configurações de integração no Vercel.
         </div>
       )}
 

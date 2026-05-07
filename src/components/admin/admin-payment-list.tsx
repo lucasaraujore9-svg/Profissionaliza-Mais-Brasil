@@ -50,7 +50,7 @@ export function AdminPaymentList({ payments }: AdminPaymentListProps) {
       <div className="border-b border-gray-200 px-6 py-4">
         <h3 className="text-sm font-semibold text-[var(--color-pmb-green-900)]">Pagamentos recentes</h3>
         <p className="mt-0.5 text-xs text-gray-600">
-          Últimas cobranças geradas via Asaas para assinaturas de revendedores.
+          Últimas cobranças de assinaturas de revendedores.
         </p>
       </div>
       {payments.length === 0 ? (

@@ -93,7 +93,6 @@ export default async function StudentPaymentsPage() {
                     {e.course.nome}
                   </p>
                   <p className="text-xs text-gray-500">
-                    {e.gateway === "ASAAS" ? "Asaas" : "Mercado Pago"} ·{" "}
                     {e.paymentType === "MONTHLY" ? "Mensalidade" : "Pagamento único"}
                   </p>
                 </div>
@@ -152,7 +151,7 @@ export default async function StudentPaymentsPage() {
                       {p.enrollment.course.nome}
                     </td>
                     <td className="px-3 py-2 text-xs text-gray-700">
-                      {p.gateway === "ASAAS" ? "Asaas" : "Mercado Pago"}
+                      Cobrança
                     </td>
                     <td className="px-3 py-2">
                       <span

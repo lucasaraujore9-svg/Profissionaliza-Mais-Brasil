@@ -18,7 +18,7 @@ const nextSteps = [
     icon: Mail,
     title: "Finalize o pagamento",
     description:
-      "Abra a fatura Asaas e conclua a primeira cobrança para ativar seu acesso.",
+      "Abra a fatura recebida e conclua o pagamento para ativar seu acesso.",
   },
   {
     icon: Rocket,

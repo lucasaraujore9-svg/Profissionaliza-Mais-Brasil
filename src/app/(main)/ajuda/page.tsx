@@ -20,7 +20,7 @@ const FAQ = [
   },
   {
     p: "Quais as formas de pagamento?",
-    r: "Pix (com desconto), cartão de crédito em até 12x sem juros ou boleto bancário. O processamento é seguro, via Mercado Pago.",
+    r: "Pix (com desconto), cartão de crédito em até 12x sem juros ou boleto bancário. O processamento é de forma segura.",
   },
   {
     p: "E se eu não gostar do curso?",

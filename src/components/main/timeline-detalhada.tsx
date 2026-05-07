@@ -3,7 +3,7 @@ const etapas = [
     numero: "01",
     titulo: "Cadastro e pagamento",
     descricao:
-      "Crie sua conta, escolha o plano e assine pelo Asaas. Pagamento 100% seguro.",
+      "Crie sua conta, escolha o plano e realize o pagamento. 100% seguro.",
     duracao: "2 minutos",
   },
   {
@@ -15,9 +15,9 @@ const etapas = [
   },
   {
     numero: "03",
-    titulo: "Conecte o Mercado Pago",
+    titulo: "Configure os pagamentos",
     descricao:
-      "Vincule sua conta MP pra receber os pagamentos direto. Nós não retemos seu dinheiro.",
+      "Vincule sua conta de pagamentos pra receber direto. Nós não retemos seu dinheiro.",
     duracao: "5 minutos",
   },
   {

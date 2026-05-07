@@ -96,7 +96,7 @@ export function PainelNovaVendaClient({ courses }: { courses: CourseOption[] }) 
           <p className="mt-2 text-sm">
             Envie o link abaixo para o aluno finalizar o pagamento. A
             matrícula é ativada automaticamente após o pagamento ser
-            confirmado pelo Mercado Pago.
+            confirmado pelo gateway de pagamento.
           </p>
 
           <div className="mt-4 grid gap-2 sm:grid-cols-3">
@@ -116,7 +116,7 @@ export function PainelNovaVendaClient({ courses }: { courses: CourseOption[] }) 
               rel="noreferrer"
               className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-pmb-green)] px-4 py-2.5 text-xs font-bold text-white hover:bg-[var(--color-pmb-green-700)]"
             >
-              Abrir checkout do Mercado Pago
+              Abrir link de pagamento
               <ExternalLink className="h-3.5 w-3.5" />
             </a>
             <button

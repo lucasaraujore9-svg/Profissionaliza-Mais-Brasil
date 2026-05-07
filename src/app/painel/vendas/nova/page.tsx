@@ -38,7 +38,7 @@ export default async function PainelNovaVendaPage() {
     <div className="space-y-6">
       <PageHeader
         title="Nova venda direta"
-        description="Cadastre o aluno, escolha o curso e gere o link de pagamento via Mercado Pago."
+        description="Cadastre o aluno, escolha o curso e gere o link de pagamento."
       />
       <PainelNovaVendaClient courses={courses} />
     </div>

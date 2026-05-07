@@ -70,7 +70,7 @@ export function BillingSection({ data, onUpdate }: BillingSectionProps) {
       setConnected(true)
       setTokenInput("")
       setShowForm(false)
-      setMpSuccess("Mercado Pago conectado com sucesso.")
+      setMpSuccess("Gateway de pagamento conectado com sucesso.")
       onUpdate({ tenant: { ...data.tenant, mpConnected: true } })
     } catch {
       setMpError("Erro de rede")
@@ -172,7 +172,7 @@ export function BillingSection({ data, onUpdate }: BillingSectionProps) {
             </div>
             <div>
               <h3 className="text-sm font-semibold text-[var(--color-pmb-green-900)]">
-                Mercado Pago
+                Gateway de Pagamento
               </h3>
               <p className="mt-1 text-xs text-gray-600">
                 Integração responsável por receber pagamentos dos seus alunos.
@@ -210,7 +210,7 @@ export function BillingSection({ data, onUpdate }: BillingSectionProps) {
               className="bg-[#009EE3] text-white hover:bg-[#008cc8]"
             >
               <LinkIcon className="mr-2 h-4 w-4" />
-              Conectar Mercado Pago
+              Conectar gateway de pagamento
             </Button>
           )}
         </div>
@@ -228,7 +228,7 @@ export function BillingSection({ data, onUpdate }: BillingSectionProps) {
                 onChange={(e) => setTokenInput(e.target.value)}
               />
               <p className="mt-1 text-[11px] text-gray-500">
-                Copie em Mercado Pago → Credenciais → Produção. O token é
+                Copie no painel de pagamentos → Credenciais → Produção. O token é
                 criptografado antes de ser salvo.
               </p>
             </div>

@@ -67,7 +67,7 @@ export function ResellerPaymentHistory({
   const [cancelError, setCancelError] = useState<string | null>(null)
 
   async function handleCancel(paymentId: string) {
-    if (!confirm("Cancelar esta cobrança no Asaas? Esta ação não pode ser desfeita.")) return
+    if (!confirm("Cancelar esta cobrança? Esta ação não pode ser desfeita.")) return
     setCancelling(paymentId)
     setCancelError(null)
     try {
@@ -95,7 +95,7 @@ export function ResellerPaymentHistory({
           Histórico de pagamentos
         </h3>
         <p className="mt-0.5 text-xs text-gray-600">
-          Faturas da assinatura Asaas recentes.
+          Faturas recentes da assinatura.
         </p>
       </div>
 

@@ -247,7 +247,7 @@ export function StudentForm({ courseId, couponCode }: StudentFormProps) {
           {submitting ? "Redirecionando..." : "Finalizar Compra"}
         </Button>
         <p className="text-center text-xs text-gray-500">
-          Você será redirecionado para o ambiente seguro do Mercado Pago.
+          Você será redirecionado para o ambiente seguro de pagamento.
         </p>
       </div>
     </form>

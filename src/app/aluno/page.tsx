@@ -108,8 +108,7 @@ export default async function StudentDashboardPage() {
                       {e.course.nome}
                     </p>
                     <p className="text-xs text-gray-500">
-                      Valor: {brl(Number(e.finalAmount))} ·{" "}
-                      {e.gateway === "ASAAS" ? "Asaas" : "Mercado Pago"}
+                      Valor: {brl(Number(e.finalAmount))}
                     </p>
                   </div>
                   {link ? (
@@ -163,8 +162,7 @@ export default async function StudentDashboardPage() {
                   <p className="text-xs text-gray-500">
                     {p.paidAt
                       ? new Date(p.paidAt).toLocaleDateString("pt-BR")
-                      : "—"}{" "}
-                    · {p.gateway === "ASAAS" ? "Asaas" : "Mercado Pago"}
+                      : "—"}
                   </p>
                 </div>
                 <span className="font-mono text-sm font-semibold text-[var(--color-pmb-green)]">

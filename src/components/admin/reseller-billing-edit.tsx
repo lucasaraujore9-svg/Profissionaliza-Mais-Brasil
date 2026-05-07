@@ -76,7 +76,7 @@ export function ResellerBillingEdit({
       return
     }
     if (needsCpf && !cpfCnpj.replace(/\D/g, "")) {
-      setError("CPF/CNPJ é obrigatório para criar a assinatura no Asaas")
+      setError("CPF/CNPJ é obrigatório para criar a cobrança automática")
       return
     }
 
@@ -110,9 +110,9 @@ export function ResellerBillingEdit({
       }
 
       if (json.data?.subscriptionCreated) {
-        setOk("Assinatura criada no Asaas com sucesso.")
+        setOk("Cobrança automática criada com sucesso.")
       } else if (json.data?.asaasUpdated) {
-        setOk("Cobrança atualizada no Asaas e no banco.")
+        setOk("Cobrança atualizada com sucesso.")
       } else {
         setOk("Banco atualizado.")
       }
@@ -132,7 +132,7 @@ export function ResellerBillingEdit({
       </h3>
       <p className="mt-1 text-xs text-gray-600">
         {noSubscription
-          ? "Este revendedor ainda não tem assinatura no Asaas. Preencha os dados para criar."
+          ? "Este revendedor ainda não tem cobrança automática configurada. Preencha os dados para criar."
           : "Altere o valor e a próxima data de vencimento."}
       </p>
 
@@ -140,7 +140,7 @@ export function ResellerBillingEdit({
         <div className="mt-3 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
           <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           <span>
-            Sem assinatura Asaas — o sistema não cobrará automaticamente este
+            Sem cobrança automática — o sistema não cobrará automaticamente este
             revendedor até criar uma.
           </span>
         </div>
@@ -165,7 +165,7 @@ export function ResellerBillingEdit({
               <>
                 Banco: {brl(planValue)} ·{" "}
                 <span className="font-semibold text-amber-600">
-                  Asaas: {brl(asaasSubscriptionValue)} (dessincronizado)
+                  Gateway: {brl(asaasSubscriptionValue)} (dessincronizado)
                 </span>
               </>
             ) : (
@@ -188,8 +188,8 @@ export function ResellerBillingEdit({
           {!noSubscription && (
             <span className="mt-1 block text-[11px] text-gray-500">
               {asaasSubscriptionId
-                ? `Asaas: ${asaasNextDueDate ? new Date(asaasNextDueDate).toLocaleDateString("pt-BR") : "—"}${asaasSubscriptionStatus ? ` · ${asaasSubscriptionStatus}` : ""}`
-                : "Sem assinatura ativa no Asaas"}
+                ? `${asaasNextDueDate ? new Date(asaasNextDueDate).toLocaleDateString("pt-BR") : "—"}${asaasSubscriptionStatus ? ` · ${asaasSubscriptionStatus}` : ""}`
+                : "Sem cobrança ativa configurada"}
             </span>
           )}
         </label>
@@ -207,7 +207,7 @@ export function ResellerBillingEdit({
               className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 font-mono text-sm focus:border-[var(--color-pmb-green)] focus:outline-none"
             />
             <span className="mt-1 block text-[11px] text-gray-500">
-              Necessário para criar o cliente no Asaas.
+              Necessário para identificar o pagador.
             </span>
           </label>
         )}
@@ -246,7 +246,7 @@ export function ResellerBillingEdit({
           {saving
             ? "Salvando..."
             : noSubscription
-              ? "Criar assinatura no Asaas"
+              ? "Configurar cobrança automática"
               : "Salvar mensalidade"}
         </button>
       </div>

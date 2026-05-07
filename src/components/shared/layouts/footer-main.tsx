@@ -123,7 +123,7 @@ export function FooterMain() {
           <p>
             © {new Date().getFullYear()} Profissionaliza Mais Brasil · Todos os direitos reservados
           </p>
-          <p>CNPJ 00.000.000/0001-00 · Pagamentos via Mercado Pago</p>
+          <p>CNPJ 00.000.000/0001-00 · Pagamentos 100% seguros</p>
         </div>
       </div>
     </footer>
