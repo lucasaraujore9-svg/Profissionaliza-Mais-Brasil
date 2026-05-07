@@ -88,10 +88,24 @@ async function request<T>(
 
 // ── Customers ──
 
+function sanitizeDoc(value: string): string {
+  return value.replace(/\D/g, "")
+}
+
+function sanitizePhone(value: string | undefined): string | undefined {
+  if (!value) return undefined
+  return value.replace(/\D/g, "")
+}
+
 export async function createCustomer(
   params: AsaasCreateCustomerParams,
 ): Promise<AsaasCustomer> {
-  return request<AsaasCustomer>("POST", "/customers", params)
+  return request<AsaasCustomer>("POST", "/customers", {
+    ...params,
+    cpfCnpj: sanitizeDoc(params.cpfCnpj),
+    phone: sanitizePhone(params.phone),
+    mobilePhone: sanitizePhone(params.mobilePhone),
+  })
 }
 
 export async function getCustomer(
@@ -123,11 +137,14 @@ export async function cancelSubscription(
   )
 }
 
+// PUT /v3/subscriptions/{id} — spec oficial não inclui "value".
+// Para alterar o valor da assinatura é necessário cancelar e recriar.
 export interface AsaasUpdateSubscriptionParams {
-  value?: number
   nextDueDate?: string // YYYY-MM-DD
   description?: string
   billingType?: "BOLETO" | "CREDIT_CARD" | "PIX" | "UNDEFINED"
+  status?: "ACTIVE" | "INACTIVE"
+  updatePendingPayments?: boolean
 }
 
 export async function updateSubscription(
@@ -135,7 +152,7 @@ export async function updateSubscription(
   params: AsaasUpdateSubscriptionParams,
 ): Promise<AsaasSubscription> {
   return request<AsaasSubscription>(
-    "POST",
+    "PUT",
     `/subscriptions/${subscriptionId}`,
     params,
   )

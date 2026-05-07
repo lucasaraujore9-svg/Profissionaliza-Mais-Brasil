@@ -83,16 +83,16 @@ export async function PATCH(request: Request, ctx: Ctx) {
     }
   }
 
-  // Sync com Asaas (se houver subscription)
+  // Sync com Asaas: apenas nextDueDate é suportado pelo PUT /subscriptions/{id}.
+  // Alteração de value não é suportada pela API — só é salva localmente no banco.
   let asaasUpdated = false
   if (
     parsed.data.syncWithAsaas &&
     tenant.asaasSubscriptionId &&
-    (parsed.data.planValue !== undefined || parsed.data.nextDueDate !== undefined)
+    parsed.data.nextDueDate !== undefined
   ) {
     try {
       await updateSubscription(tenant.asaasSubscriptionId, {
-        value: parsed.data.planValue,
         nextDueDate: parsed.data.nextDueDate,
       })
       asaasUpdated = true
