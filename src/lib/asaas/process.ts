@@ -303,7 +303,93 @@ export async function processAsaasWebhook(
       }
 
       case "PAYMENT_REFUNDED":
+      case "PAYMENT_PARTIALLY_REFUNDED": {
+        // Atualiza status da cobrança no banco
+        await prisma.tenantPayment
+          .updateMany({
+            where: { asaasPaymentId: payment.id, tenantId: tenant.id },
+            data: { status: payment.status },
+          })
+          .catch(() => undefined)
+
+        // Verifica se ainda há algum pagamento RECEIVED/CONFIRMED para este tenant.
+        // Se não houver, suspende a conta (dinheiro foi devolvido = não pagou).
+        const otherConfirmed = await prisma.tenantPayment.findFirst({
+          where: {
+            tenantId: tenant.id,
+            asaasPaymentId: { not: payment.id },
+            status: { in: ["RECEIVED", "CONFIRMED"] },
+          },
+          select: { id: true },
+        })
+
+        if (!otherConfirmed && tenant.status === "ACTIVE") {
+          await prisma.tenant.update({
+            where: { id: tenant.id },
+            data: { status: "SUSPENDED" },
+          })
+          invalidateTenant({ id: tenant.id, slug: tenant.slug, customDomain: tenant.customDomain }).catch(() => undefined)
+
+          if (tenant.billingMode === "AUTO") {
+            const result = await blockTenantStudents(tenant.id)
+            if (result.errors.length > 0) {
+              console.error(`[asaas] block errors after refund for ${tenant.id}:`, result.errors)
+            }
+          }
+        }
+
+        // Notifica admin sobre o estorno
+        await createNotification({
+          audience: "ROLE",
+          roleTarget: "SUPER_ADMIN",
+          level: "WARNING",
+          title: `Estorno detectado: ${tenant.name}`,
+          body: `Pagamento de ${formatMoney(payment.value)} foi ${event === "PAYMENT_REFUNDED" ? "estornado" : "parcialmente estornado"}.${!otherConfirmed ? " Conta suspensa automaticamente." : ""}`,
+          category: "tenant-billing",
+          href: `/admin/revendedores/${tenant.id}`,
+        })
+
+        // Notifica o dono do tenant
+        await createNotification({
+          audience: "TENANT",
+          tenantId: tenant.id,
+          level: "ERROR",
+          title: "Pagamento estornado",
+          body: `O pagamento de ${formatMoney(payment.value)} foi estornado.${!otherConfirmed ? " Sua conta foi suspensa. Regularize para reativar." : ""}`,
+          category: "tenant-billing",
+          href: "/painel/financeiro",
+        })
+
+        if (tenant.owner?.email) {
+          await sendEmail({
+            to: tenant.owner.email,
+            subject: "Estorno detectado na sua assinatura",
+            template: {
+              type: "payment",
+              props: {
+                customerName: tenant.owner.name ?? tenant.name,
+                amount: formatMoney(payment.value),
+                paymentDate: formatDate(payment.paymentDate),
+                description: !otherConfirmed
+                  ? "O pagamento foi estornado e sua conta foi suspensa. Faça um novo pagamento para reativar."
+                  : "Um pagamento foi estornado. Sua conta permanece ativa pois há outros pagamentos confirmados.",
+                receiptUrl: payment.invoiceUrl ?? undefined,
+              },
+            },
+          }).catch((err) => {
+            console.error("[asaas] failed to send refund email:", err)
+          })
+        }
+        break
+      }
+
       case "PAYMENT_DELETED": {
+        await prisma.tenantPayment
+          .updateMany({
+            where: { asaasPaymentId: payment.id, tenantId: tenant.id },
+            data: { status: "DELETED" },
+          })
+          .catch(() => undefined)
         break
       }
 

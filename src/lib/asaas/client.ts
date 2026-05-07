@@ -213,6 +213,19 @@ export async function deletePayment(
   )
 }
 
+export interface AsaasUpdatePaymentParams {
+  dueDate?: string   // YYYY-MM-DD
+  value?: number
+  description?: string
+}
+
+export async function updatePayment(
+  paymentId: string,
+  params: AsaasUpdatePaymentParams,
+): Promise<AsaasPayment> {
+  return request<AsaasPayment>("PUT", `/payments/${paymentId}`, params)
+}
+
 export async function getBillingInfo(paymentId: string): Promise<AsaasBillingInfo> {
   return request<AsaasBillingInfo>("GET", `/payments/${paymentId}/billingInfo`)
 }

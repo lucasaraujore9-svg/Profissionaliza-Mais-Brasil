@@ -66,9 +66,12 @@ function PixTab({
 
   if (!pix) {
     return (
-      <div className="flex flex-col items-center gap-2 py-8 text-gray-500">
+      <div className="flex flex-col items-center gap-4 py-8 text-gray-500">
         <Spinner />
-        <span className="text-sm">Gerando PIX...</span>
+        <span className="text-sm">Gerando QR Code PIX...</span>
+        <p className="text-xs text-gray-400">
+          Isso pode levar alguns segundos.
+        </p>
       </div>
     )
   }
@@ -541,27 +544,49 @@ export function CheckoutClient({ paymentId, billingType }: Props) {
   const [billingLoading, setBillingLoading] = useState(true)
   const [billingError, setBillingError] = useState<string | null>(null)
   const [paid, setPaid] = useState(false)
+  const pixRetryRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pixRetryCount = useRef(0)
+  const MAX_PIX_RETRIES = 5
 
-  const fetchBillingInfo = useCallback(async () => {
-    setBillingLoading(true)
-    setBillingError(null)
+  const fetchBillingInfo = useCallback(async (isRetry = false) => {
+    if (!isRetry) {
+      setBillingLoading(true)
+      setBillingError(null)
+    }
     try {
       const res = await fetch(`/api/cobranca/${paymentId}/billing-info`)
       const json = await res.json()
       if (!res.ok) {
         setBillingError(json.error ?? "Erro ao carregar informações de pagamento")
+        setBillingLoading(false)
         return
       }
-      setBillingInfo(json.data)
+      const info: AsaasBillingInfo = json.data
+
+      // PIX pode ser gerado lazily — tenta até MAX_PIX_RETRIES vezes
+      if (!info.pix && pixRetryCount.current < MAX_PIX_RETRIES) {
+        pixRetryCount.current += 1
+        pixRetryRef.current = setTimeout(() => fetchBillingInfo(true), 3000)
+        // Mantém loading enquanto aguarda o PIX
+        return
+      }
+
+      pixRetryCount.current = 0
+      setBillingInfo(info)
     } catch {
       setBillingError("Erro de rede ao carregar informações de pagamento")
     } finally {
-      setBillingLoading(false)
+      if (!isRetry || pixRetryCount.current === 0) {
+        setBillingLoading(false)
+      }
     }
   }, [paymentId])
 
   useEffect(() => {
     fetchBillingInfo()
+    return () => {
+      if (pixRetryRef.current) clearTimeout(pixRetryRef.current)
+    }
   }, [fetchBillingInfo])
 
   const onPaid = useCallback(() => setPaid(true), [])
@@ -634,7 +659,7 @@ export function CheckoutClient({ paymentId, billingType }: Props) {
             {billingError}
             <button
               type="button"
-              onClick={fetchBillingInfo}
+              onClick={() => fetchBillingInfo()}
               className="ml-2 font-semibold underline"
             >
               Tentar novamente
