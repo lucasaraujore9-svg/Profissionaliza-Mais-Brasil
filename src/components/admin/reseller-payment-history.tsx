@@ -126,7 +126,7 @@ export function ResellerPaymentHistory({
               {payments.map((p) => {
                 const statusKey = p.status.toUpperCase()
                 const methodKey = (p.billingType ?? "UNDEFINED").toUpperCase()
-                const paymentLink = p.bankSlipUrl ?? p.invoiceUrl
+                const paymentLink = p.invoiceUrl ?? p.bankSlipUrl
                 const isPending = statusKey === "PENDING" || statusKey === "OVERDUE"
                 const isCancellable = statusKey === "PENDING" || statusKey === "OVERDUE"
                 const isLoading = cancelling === p.asaasPaymentId

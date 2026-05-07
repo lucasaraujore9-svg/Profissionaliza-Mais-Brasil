@@ -94,17 +94,22 @@ export async function GET(
 
   if (tenant.asaasSubscriptionId) {
     try {
+      // Busca subscription e pagamentos em paralelo.
+      // Usa customer como filtro para capturar pagamentos de subscriptions
+      // anteriores (ex: quando recriamos por mudança de valor).
       const [sub, asaasPayments] = await Promise.all([
         getSubscription(tenant.asaasSubscriptionId),
-        listPayments({ subscription: tenant.asaasSubscriptionId, limit: 24 }),
+        listPayments(
+          tenant.asaasCustomerId
+            ? { customer: tenant.asaasCustomerId, limit: 24 }
+            : { subscription: tenant.asaasSubscriptionId, limit: 24 },
+        ),
       ])
       asaasNextDueDate = sub.nextDueDate ?? null
       asaasSubscriptionStatus = sub.status ?? null
       asaasSubscriptionValue = sub.value ?? null
 
-      // Usa pagamentos do Asaas como fonte primária (inclui PENDING não
-      // sincronizados caso o webhook tenha falhado ou esteja atrasado).
-      payments = asaasPayments.data.map((p) => ({
+      const fromAsaas = asaasPayments.data.map((p) => ({
         id: p.id,
         asaasPaymentId: p.id,
         amount: p.value,
@@ -115,6 +120,15 @@ export async function GET(
         invoiceUrl: p.invoiceUrl ?? null,
         bankSlipUrl: p.bankSlipUrl ?? null,
       }))
+
+      // Complementa com registros do banco que não apareceram no Asaas
+      // (pagamentos de subscriptions antigas apagadas no Asaas).
+      const asaasIds = new Set(fromAsaas.map((p) => p.asaasPaymentId))
+      const fromDb = payments.filter((p) => !asaasIds.has(p.asaasPaymentId))
+
+      payments = [...fromAsaas, ...fromDb].sort(
+        (a, b) => new Date(b.dueDate).getTime() - new Date(a.dueDate).getTime(),
+      )
     } catch (error) {
       console.warn("[reseller] Asaas fetch falhou, usando dados do banco:", error)
     }
