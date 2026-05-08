@@ -138,3 +138,10 @@ export async function searchPayments(
   const qs = new URLSearchParams(params as Record<string, string>).toString()
   return request<{ results: MPPayment[] }>("GET", `/v1/payments/search?${qs}`, accessToken)
 }
+
+export async function cancelPreapproval(
+  accessToken: string,
+  preapprovalId: string,
+): Promise<MPPreapproval> {
+  return request<MPPreapproval>("PUT", `/preapproval/${preapprovalId}`, accessToken, { status: "cancelled" })
+}

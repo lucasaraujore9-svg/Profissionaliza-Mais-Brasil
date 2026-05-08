@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import Link from "next/link"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 
@@ -66,7 +67,11 @@ export function VendasAlunosClient() {
           <tbody>
             {items.map((s) => (
               <tr key={s.id} className="border-t">
-                <td className="px-4 py-3 font-medium">{s.nome}</td>
+                <td className="px-4 py-3 font-medium">
+                  <Link href={`/admin/vendas/alunos/${s.id}`} className="hover:underline text-[var(--color-pmb-green-900)]">
+                    {s.nome}
+                  </Link>
+                </td>
                 <td className="px-4 py-3 text-muted-foreground">{s.email ?? "—"}</td>
                 <td className="px-4 py-3 text-muted-foreground">{s.cpf ?? "—"}</td>
                 <td className="px-4 py-3 text-muted-foreground">{s.eaAlunoId ?? "—"}</td>
