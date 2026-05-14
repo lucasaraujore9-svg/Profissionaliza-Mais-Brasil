@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 export interface StudentFormProps {
   courseId: string
   couponCode: string | null
+  apiPath?: string
 }
 
 interface FormState {
@@ -55,7 +56,11 @@ const INITIAL: FormState = {
   endereco: "",
 }
 
-export function StudentForm({ courseId, couponCode }: StudentFormProps) {
+export function StudentForm({
+  courseId,
+  couponCode,
+  apiPath = "/api/loja/checkout",
+}: StudentFormProps) {
   const [form, setForm] = useState<FormState>(INITIAL)
   const [status, setStatus] = useState<SubmitStatus>("idle")
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
@@ -77,7 +82,7 @@ export function StudentForm({ courseId, couponCode }: StudentFormProps) {
     setFieldErrors({})
 
     try {
-      const res = await fetch("/api/loja/checkout", {
+      const res = await fetch(apiPath, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

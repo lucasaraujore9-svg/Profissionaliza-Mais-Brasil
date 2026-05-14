@@ -5,7 +5,12 @@ import {
   type CourseDetailData,
 } from "@/components/shared/course-detail-view"
 
-async function loadCurso(slug: string): Promise<CourseDetailData | null> {
+type LoadedCurso = CourseDetailData & {
+  id: string
+  isOneTime: boolean
+}
+
+async function loadCurso(slug: string): Promise<LoadedCurso | null> {
   try {
     const c = await prisma.course.findUnique({
       where: { slug },
@@ -26,6 +31,7 @@ async function loadCurso(slug: string): Promise<CourseDetailData | null> {
         : null
 
     return {
+      id: c.id,
       slug: c.slug,
       nome: c.nome,
       categoria: c.categoriaLoja ?? "Curso profissionalizante",
@@ -42,6 +48,7 @@ async function loadCurso(slug: string): Promise<CourseDetailData | null> {
         nome: l.nome,
         ordem: l.ordem,
       })),
+      isOneTime: c.paymentTypeMain === "ONE_TIME" && price > 0,
     }
   } catch {
     return null
@@ -57,11 +64,18 @@ export default async function CursoDetalhePage({
   const curso = await loadCurso(slug)
   if (!curso) notFound()
 
+  // Cursos com preço ONE_TIME têm checkout direto. Cursos mensais ou sem
+  // preço configurado caem no fluxo de lead (formulário de contato).
+  const ctaHref = curso.isOneTime
+    ? `/checkout?course_id=${curso.id}`
+    : `/contato?curso=${encodeURIComponent(curso.slug)}`
+  const ctaLabel = curso.isOneTime ? "Comprar agora" : "Quero me matricular"
+
   return (
     <CourseDetailView
       course={curso}
-      ctaHref={`/contato?curso=${encodeURIComponent(curso.slug)}`}
-      ctaLabel="Quero me matricular"
+      ctaHref={ctaHref}
+      ctaLabel={ctaLabel}
       backHref="/cursos"
       backLabel="Voltar para o catálogo"
       secondaryCtaHref="/ajuda"
