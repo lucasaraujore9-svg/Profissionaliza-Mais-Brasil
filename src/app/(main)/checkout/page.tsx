@@ -1,7 +1,6 @@
 import Link from "next/link"
 import { OrderSummary } from "@/components/loja/order-summary"
-import { StudentForm } from "@/components/loja/student-form"
-import { PaymentInfo } from "@/components/loja/payment-info"
+import { PmbCheckoutForm } from "@/components/loja/pmb-checkout-form"
 import { prisma } from "@/lib/prisma"
 
 interface CheckoutPageProps {
@@ -161,12 +160,10 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_380px] lg:gap-8">
           <div className="space-y-6">
-            <StudentForm
+            <PmbCheckoutForm
               courseId={course.id}
               couponCode={validatedCoupon?.code ?? null}
-              apiPath="/api/checkout"
             />
-            <PaymentInfo />
           </div>
 
           <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start">

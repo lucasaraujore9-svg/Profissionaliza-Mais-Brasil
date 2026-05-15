@@ -10,6 +10,9 @@ import {
   createPayment as createAsaasPayment,
   createSubscription as createAsaasSubscription,
   listPayments as listAsaasPayments,
+  getPixQrCode,
+  getBillingInfo,
+  payWithCreditCard,
   AsaasApiError,
 } from "@/lib/asaas/client"
 import { getOrCreatePmbTenant } from "@/lib/pmb-tenant"
@@ -22,6 +25,32 @@ import { getSystemSettings } from "@/lib/system-settings"
 
 const cpfRegex = /^\d{3}\.?\d{3}\.?\d{3}-?\d{2}$/
 const phoneRegex = /^\(?\d{2}\)?\s?\d{4,5}-?\d{4}$/
+
+// Cartão: aceitamos número com espaços, validade MM/AA ou MM/AAAA, CCV 3-4 dígitos.
+const creditCardSchema = z.object({
+  holderName: z.string().trim().min(3).max(160),
+  number: z
+    .string()
+    .trim()
+    .transform((v) => v.replace(/\D/g, ""))
+    .refine((v) => v.length >= 13 && v.length <= 19, "Número do cartão inválido"),
+  expiryMonth: z.string().regex(/^(0[1-9]|1[0-2])$/, "Mês inválido"),
+  expiryYear: z
+    .string()
+    .regex(/^\d{2}(\d{2})?$/, "Ano inválido")
+    .transform((v) => (v.length === 2 ? `20${v}` : v)),
+  ccv: z.string().regex(/^\d{3,4}$/, "CCV inválido"),
+})
+
+const creditCardHolderSchema = z.object({
+  postalCode: z
+    .string()
+    .trim()
+    .transform((v) => v.replace(/\D/g, ""))
+    .refine((v) => v.length === 8, "CEP inválido"),
+  addressNumber: z.string().trim().min(1).max(20),
+  addressComplement: z.string().trim().max(60).optional(),
+})
 
 const bodySchema = z.object({
   courseId: z.string().min(1),
@@ -40,6 +69,9 @@ const bodySchema = z.object({
     .transform((v) => v.replace(/\D/g, "")),
   fone: z.string().trim().regex(phoneRegex, "Telefone inválido"),
   endereco: z.string().trim().max(300).optional(),
+  paymentMethod: z.enum(["PIX", "BOLETO", "CREDIT_CARD"]).optional(),
+  creditCard: creditCardSchema.optional(),
+  creditCardHolder: creditCardHolderSchema.optional(),
 })
 
 type ParsedBody = z.infer<typeof bodySchema>
@@ -103,6 +135,19 @@ export async function POST(request: Request) {
             code: "ASAAS_NOT_CONFIGURED",
           },
           { status: 503 },
+        )
+      }
+    }
+
+    // Validações específicas de método (apenas Asaas suporta transparente).
+    if (gateway === "ASAAS" && data.paymentMethod === "CREDIT_CARD") {
+      if (!data.creditCard || !data.creditCardHolder) {
+        return NextResponse.json(
+          {
+            error: "Dados do cartão obrigatórios",
+            code: "CREDIT_CARD_REQUIRED",
+          },
+          { status: 400 },
         )
       }
     }
@@ -263,12 +308,11 @@ export async function POST(request: Request) {
     const protocol = request.headers.get("x-forwarded-proto") ?? "https"
     const siteUrl = appUrl || `${protocol}://${host}`
 
+    // ── MP (mantém fluxo de redirect) ─────────────────────────────────────
     if (gateway === "MP") {
-      // Token já validado no pré-check acima.
       const mpToken = (await pmbMpAccessToken())!
 
       if (isMonthly && monthlyMonths) {
-        // MP: subscription recorrente (preapproval).
         const startDate = new Date(Date.now() + 60_000).toISOString()
         const endDate = new Date(
           Date.now() +
@@ -307,8 +351,7 @@ export async function POST(request: Request) {
           data: {
             enrollmentId: enrollment.id,
             gateway: "MP",
-            mode: "subscription",
-            installmentsTotal: monthlyMonths,
+            mode: "redirect",
             initPoint: preapproval.init_point,
           },
         })
@@ -353,13 +396,18 @@ export async function POST(request: Request) {
         data: {
           enrollmentId: enrollment.id,
           gateway: "MP",
-          mode: "one_time",
+          mode: "redirect",
           initPoint: preference.init_point,
         },
       })
     }
 
-    // gateway === "ASAAS"
+    // ── ASAAS (checkout transparente) ─────────────────────────────────────
+    // billingType: o que será enviado ao Asaas. UNDEFINED = link checkout
+    // (compat com clientes antigos que não enviam paymentMethod).
+    const billingType: "PIX" | "BOLETO" | "CREDIT_CARD" | "UNDEFINED" =
+      data.paymentMethod ?? "UNDEFINED"
+
     try {
       const { customer } = await findOrCreateAsaasCustomer({
         name: student.nome,
@@ -376,11 +424,11 @@ export async function POST(request: Request) {
         })
       }
 
+      // ──── MONTHLY ────
       if (isMonthly && monthlyMonths) {
-        // Asaas: subscription recorrente.
         const subscription = await createAsaasSubscription({
           customer: customer.id,
-          billingType: "UNDEFINED",
+          billingType,
           value: finalAmount,
           nextDueDate: dueDateInDays(3),
           cycle: "MONTHLY",
@@ -391,8 +439,7 @@ export async function POST(request: Request) {
         })
 
         // Asaas gera as cobranças async; busca a 1a invoice em até 3 tentativas
-        let firstInvoiceUrl: string | null = null
-        let firstPaymentId: string | null = null
+        let firstPayment: { id: string; invoiceUrl: string; bankSlipUrl: string | null } | null = null
         for (let i = 0; i < 3; i++) {
           const list = await listAsaasPayments({
             subscription: subscription.id,
@@ -401,8 +448,11 @@ export async function POST(request: Request) {
           }).catch(() => null)
           const first = list?.data?.[0]
           if (first) {
-            firstInvoiceUrl = first.invoiceUrl
-            firstPaymentId = first.id
+            firstPayment = {
+              id: first.id,
+              invoiceUrl: first.invoiceUrl,
+              bankSlipUrl: first.bankSlipUrl,
+            }
             break
           }
           await new Promise((r) => setTimeout(r, 500))
@@ -414,25 +464,81 @@ export async function POST(request: Request) {
             externalReference,
             asaasCustomerId: customer.id,
             asaasSubscriptionId: subscription.id,
-            asaasPaymentId: firstPaymentId,
-            asaasInvoiceUrl: firstInvoiceUrl,
+            asaasPaymentId: firstPayment?.id ?? null,
+            asaasInvoiceUrl: firstPayment?.invoiceUrl ?? null,
           },
         })
 
+        // Cartão de crédito recorrente: cobra a 1ª parcela transparente
+        // (gera creditCardToken que o Asaas associa à subscription).
+        if (billingType === "CREDIT_CARD" && firstPayment && data.creditCard && data.creditCardHolder) {
+          const result = await payWithCreditCard(firstPayment.id, {
+            creditCard: data.creditCard,
+            creditCardHolderInfo: {
+              name: student.nome,
+              email: student.email ?? data.email,
+              cpfCnpj: data.cpf,
+              postalCode: data.creditCardHolder.postalCode,
+              addressNumber: data.creditCardHolder.addressNumber,
+              addressComplement: data.creditCardHolder.addressComplement,
+              phone: (student.fone ?? data.fone).replace(/\D/g, ""),
+              mobilePhone: (student.fone ?? data.fone).replace(/\D/g, ""),
+            },
+          })
+          return NextResponse.json({
+            data: {
+              enrollmentId: enrollment.id,
+              gateway: "ASAAS",
+              mode: "credit_card_result",
+              status: result.status, // CONFIRMED | RECEIVED | etc.
+              paymentId: result.id,
+            },
+          })
+        }
+
+        if (billingType === "PIX" && firstPayment) {
+          const qr = await getPixQrCode(firstPayment.id).catch(() => null)
+          return NextResponse.json({
+            data: {
+              enrollmentId: enrollment.id,
+              gateway: "ASAAS",
+              mode: "pix",
+              paymentId: firstPayment.id,
+              pix: qr,
+            },
+          })
+        }
+
+        if (billingType === "BOLETO" && firstPayment) {
+          const billing = await getBillingInfo(firstPayment.id).catch(() => null)
+          return NextResponse.json({
+            data: {
+              enrollmentId: enrollment.id,
+              gateway: "ASAAS",
+              mode: "boleto",
+              paymentId: firstPayment.id,
+              bankSlipUrl: firstPayment.bankSlipUrl ?? billing?.bankSlip?.bankSlipUrl ?? null,
+              identificationField: billing?.bankSlip?.identificationField ?? null,
+              barCode: billing?.bankSlip?.barCode ?? null,
+            },
+          })
+        }
+
+        // Fallback: link de checkout Asaas (UNDEFINED ou sem 1ª invoice)
         return NextResponse.json({
           data: {
             enrollmentId: enrollment.id,
             gateway: "ASAAS",
-            mode: "subscription",
-            installmentsTotal: monthlyMonths,
-            initPoint: firstInvoiceUrl,
+            mode: "redirect",
+            initPoint: firstPayment?.invoiceUrl ?? null,
           },
         })
       }
 
+      // ──── ONE_TIME ────
       const payment = await createAsaasPayment({
         customer: customer.id,
-        billingType: "UNDEFINED",
+        billingType,
         value: finalAmount,
         dueDate: dueDateInDays(3),
         description: `Curso: ${course.nome}`,
@@ -450,11 +556,65 @@ export async function POST(request: Request) {
         },
       })
 
+      if (billingType === "CREDIT_CARD" && data.creditCard && data.creditCardHolder) {
+        const result = await payWithCreditCard(payment.id, {
+          creditCard: data.creditCard,
+          creditCardHolderInfo: {
+            name: student.nome,
+            email: student.email ?? data.email,
+            cpfCnpj: data.cpf,
+            postalCode: data.creditCardHolder.postalCode,
+            addressNumber: data.creditCardHolder.addressNumber,
+            addressComplement: data.creditCardHolder.addressComplement,
+            phone: (student.fone ?? data.fone).replace(/\D/g, ""),
+            mobilePhone: (student.fone ?? data.fone).replace(/\D/g, ""),
+          },
+        })
+        return NextResponse.json({
+          data: {
+            enrollmentId: enrollment.id,
+            gateway: "ASAAS",
+            mode: "credit_card_result",
+            status: result.status,
+            paymentId: result.id,
+          },
+        })
+      }
+
+      if (billingType === "PIX") {
+        const qr = await getPixQrCode(payment.id).catch(() => null)
+        return NextResponse.json({
+          data: {
+            enrollmentId: enrollment.id,
+            gateway: "ASAAS",
+            mode: "pix",
+            paymentId: payment.id,
+            pix: qr,
+          },
+        })
+      }
+
+      if (billingType === "BOLETO") {
+        const billing = await getBillingInfo(payment.id).catch(() => null)
+        return NextResponse.json({
+          data: {
+            enrollmentId: enrollment.id,
+            gateway: "ASAAS",
+            mode: "boleto",
+            paymentId: payment.id,
+            bankSlipUrl: payment.bankSlipUrl ?? billing?.bankSlip?.bankSlipUrl ?? null,
+            identificationField: billing?.bankSlip?.identificationField ?? null,
+            barCode: billing?.bankSlip?.barCode ?? null,
+          },
+        })
+      }
+
+      // billingType === "UNDEFINED" → link checkout Asaas
       return NextResponse.json({
         data: {
           enrollmentId: enrollment.id,
           gateway: "ASAAS",
-          mode: "one_time",
+          mode: "redirect",
           initPoint: payment.invoiceUrl,
         },
       })
