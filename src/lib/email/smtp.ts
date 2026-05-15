@@ -1,0 +1,105 @@
+import nodemailer, { type Transporter } from "nodemailer"
+
+/**
+ * Transporter SMTP para envio de emails.
+ *
+ * Configurado para Hostinger (smtp.hostinger.com:465 SSL), mas funciona
+ * com qualquer provedor SMTP válido — basta setar:
+ *
+ *   SMTP_HOST=smtp.hostinger.com
+ *   SMTP_PORT=465                # 465 (SSL) ou 587 (STARTTLS)
+ *   SMTP_USER=noreply@seudominio.com.br
+ *   SMTP_PASSWORD=********
+ *   SMTP_FROM="Profissionaliza Mais Brasil <noreply@seudominio.com.br>"
+ *
+ * Para Hostinger especificamente: o SMTP_USER deve ser o email completo
+ * (inclui o domínio) e SMTP_PASSWORD é a senha da caixa de email.
+ */
+
+let transporter: Transporter | null = null
+
+interface SmtpConfig {
+  host: string
+  port: number
+  secure: boolean
+  user: string
+  password: string
+  from: string
+}
+
+function loadConfig(): SmtpConfig {
+  const host = process.env.SMTP_HOST
+  const portRaw = process.env.SMTP_PORT
+  const user = process.env.SMTP_USER
+  const password = process.env.SMTP_PASSWORD
+  const from = process.env.SMTP_FROM ?? user
+
+  const missing = [
+    !host && "SMTP_HOST",
+    !portRaw && "SMTP_PORT",
+    !user && "SMTP_USER",
+    !password && "SMTP_PASSWORD",
+  ].filter(Boolean) as string[]
+  if (missing.length > 0) {
+    throw new Error(
+      `SMTP não configurado: faltam ${missing.join(", ")}`,
+    )
+  }
+
+  const port = Number(portRaw)
+  if (!Number.isFinite(port) || port <= 0) {
+    throw new Error(`SMTP_PORT inválido: ${portRaw}`)
+  }
+
+  return {
+    host: host!,
+    port,
+    // 465 → SSL/TLS direto; outras portas (587, 25) usam STARTTLS via secure=false.
+    secure: port === 465,
+    user: user!,
+    password: password!,
+    from: from!,
+  }
+}
+
+export function getTransporter(): Transporter {
+  if (transporter) return transporter
+  const cfg = loadConfig()
+  transporter = nodemailer.createTransport({
+    host: cfg.host,
+    port: cfg.port,
+    secure: cfg.secure,
+    auth: {
+      user: cfg.user,
+      pass: cfg.password,
+    },
+  })
+  return transporter
+}
+
+export function getDefaultFrom(): string {
+  return loadConfig().from
+}
+
+export interface SendSmtpParams {
+  to: string | string[]
+  subject: string
+  html: string
+  from?: string
+  replyTo?: string
+}
+
+export async function sendSmtp(
+  params: SendSmtpParams,
+): Promise<{ messageId: string }> {
+  const t = getTransporter()
+  const from = params.from ?? getDefaultFrom()
+  const info = await t.sendMail({
+    from,
+    to: params.to,
+    subject: params.subject,
+    html: params.html,
+    replyTo: params.replyTo,
+  })
+  return { messageId: info.messageId }
+}
