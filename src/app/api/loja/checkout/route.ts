@@ -6,6 +6,7 @@ import {
   createPreapproval,
   decryptTenantMpToken,
 } from "@/lib/mercadopago/client"
+import { upsertStudent } from "@/lib/students/upsert"
 
 const cpfRegex = /^\d{3}\.?\d{3}\.?\d{3}-?\d{2}$/
 const phoneRegex = /^\(?\d{2}\)?\s?\d{4,5}-?\d{4}$/
@@ -160,29 +161,16 @@ export async function POST(request: Request) {
 
     const finalAmount = Number((basePrice - discountAmount).toFixed(2))
 
-    const student = await prisma.student.upsert({
-      where: {
-        tenantId_email: { tenantId, email: data.email },
-      },
-      create: {
-        tenantId,
-        nome: normalize(data.nome),
-        email: data.email,
-        fone: data.fone,
-        cpf: data.cpf,
-        rua: data.endereco,
-        polo: tenant.slug,
-        vendedorId: tenant.eaVendedorId,
-        eaAlunoId: `pending_${Date.now()}`,
-        status: "ATIVO",
-      },
-      update: {
-        nome: normalize(data.nome),
-        fone: data.fone,
-        cpf: data.cpf,
-        rua: data.endereco ?? undefined,
-      },
-      select: { id: true, email: true, nome: true },
+    const student = await upsertStudent({
+      tenantId,
+      nome: normalize(data.nome),
+      email: data.email,
+      cpf: data.cpf,
+      fone: data.fone,
+      endereco: data.endereco,
+      polo: tenant.slug,
+      vendedorId: tenant.eaVendedorId,
+      eaAlunoIdFallback: `pending_${Date.now()}`,
     })
 
     const existingEnrollment = await prisma.enrollment.findFirst({

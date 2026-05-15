@@ -22,6 +22,7 @@ import {
   pmbMpAccessToken,
 } from "@/lib/pmb-config"
 import { getSystemSettings } from "@/lib/system-settings"
+import { upsertStudent } from "@/lib/students/upsert"
 
 const cpfRegex = /^\d{3}\.?\d{3}\.?\d{3}-?\d{2}$/
 const phoneRegex = /^\(?\d{2}\)?\s?\d{4,5}-?\d{4}$/
@@ -234,36 +235,16 @@ export async function POST(request: Request) {
 
     const pmbTenant = await getOrCreatePmbTenant()
 
-    const student = await prisma.student.upsert({
-      where: {
-        tenantId_email: { tenantId: pmbTenant.id, email: data.email },
-      },
-      create: {
-        tenantId: pmbTenant.id,
-        nome: normalize(data.nome),
-        email: data.email,
-        fone: data.fone,
-        cpf: data.cpf,
-        rua: data.endereco,
-        polo: pmbEaPolo(),
-        vendedorId: pmbEaVendedorId(),
-        eaAlunoId: `pending_${Date.now()}`,
-        status: "ATIVO",
-      },
-      update: {
-        nome: normalize(data.nome),
-        fone: data.fone,
-        cpf: data.cpf,
-        rua: data.endereco ?? undefined,
-      },
-      select: {
-        id: true,
-        email: true,
-        nome: true,
-        cpf: true,
-        fone: true,
-        asaasCustomerId: true,
-      },
+    const student = await upsertStudent({
+      tenantId: pmbTenant.id,
+      nome: normalize(data.nome),
+      email: data.email,
+      cpf: data.cpf,
+      fone: data.fone,
+      endereco: data.endereco,
+      polo: pmbEaPolo(),
+      vendedorId: pmbEaVendedorId(),
+      eaAlunoIdFallback: `pending_${Date.now()}`,
     })
 
     const existingEnrollment = await prisma.enrollment.findFirst({
