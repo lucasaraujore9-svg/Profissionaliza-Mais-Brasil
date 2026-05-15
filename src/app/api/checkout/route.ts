@@ -128,10 +128,14 @@ export async function POST(request: Request) {
         )
       }
     } else {
-      if (!process.env.ASAAS_API_URL || !process.env.ASAAS_API_KEY) {
+      const missing = [
+        !process.env.ASAAS_API_URL && "ASAAS_API_URL",
+        !process.env.ASAAS_API_KEY && "ASAAS_API_KEY",
+      ].filter(Boolean) as string[]
+      if (missing.length > 0) {
         return NextResponse.json(
           {
-            error: "Pagamento PMB ainda não configurado",
+            error: `Asaas não configurado: faltam ${missing.join(", ")}`,
             code: "ASAAS_NOT_CONFIGURED",
           },
           { status: 503 },
@@ -632,9 +636,24 @@ export async function POST(request: Request) {
       )
     }
   } catch (error) {
+    // Loga o erro completo no Vercel pra investigação futura.
     console.error("[pmb-checkout] error:", error)
+    // Erros conhecidos da API Asaas viram resposta 502 com a mensagem real.
+    if (error instanceof AsaasApiError) {
+      return NextResponse.json(
+        {
+          error: error.message,
+          code: "ASAAS_ERROR",
+          details: error.errors,
+        },
+        { status: 502 },
+      )
+    }
+    // Demais erros: devolve a mensagem do Error pra acelerar diagnóstico.
+    const message =
+      error instanceof Error ? error.message : "Erro ao processar checkout"
     return NextResponse.json(
-      { error: "Erro ao processar checkout", code: "INTERNAL_ERROR" },
+      { error: message, code: "INTERNAL_ERROR" },
       { status: 500 },
     )
   }
