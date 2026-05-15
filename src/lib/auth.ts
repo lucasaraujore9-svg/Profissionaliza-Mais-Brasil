@@ -3,11 +3,46 @@ import Credentials from "next-auth/providers/credentials"
 import { prisma } from "@/lib/prisma"
 import { z } from "zod"
 import { compare } from "bcryptjs"
+import { PMB_TENANT_SLUG } from "@/lib/pmb-config"
 
 const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(6),
 })
+
+/**
+ * Resolve o tenant ativo a partir dos headers preenchidos pelo proxy:
+ *   - x-tenant-id (preferido)
+ *   - x-tenant-slug (fallback — consulta o DB)
+ *   - sem headers → vitrine PMB (tenant placeholder `__pmb__`)
+ *
+ * Usado para escopar o login do aluno: cada subdomínio só autoriza
+ * Students daquele tenant.
+ */
+async function resolveTenantIdFromRequest(
+  request: Request | undefined,
+): Promise<string | null> {
+  const tenantId = request?.headers?.get?.("x-tenant-id") ?? null
+  if (tenantId) return tenantId
+
+  const tenantSlug = request?.headers?.get?.("x-tenant-slug") ?? null
+  if (tenantSlug) {
+    const t = await prisma.tenant.findUnique({
+      where: { slug: tenantSlug },
+      select: { id: true },
+    })
+    if (t) return t.id
+  }
+
+  // Sem subdomínio: usa o tenant placeholder PMB (vendas direto na vitrine
+  // principal). Se ainda não existe (seed não rodou), retorna null e o
+  // login do aluno cai para o fallback global.
+  const pmbTenant = await prisma.tenant.findUnique({
+    where: { slug: PMB_TENANT_SLUG },
+    select: { id: true },
+  })
+  return pmbTenant?.id ?? null
+}
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   secret: process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET,
@@ -22,7 +57,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         email: { label: "Email", type: "email" },
         password: { label: "Senha", type: "password" },
       },
-      async authorize(credentials) {
+      async authorize(credentials, request) {
         const parsed = loginSchema.safeParse(credentials)
         if (!parsed.success) return null
 
@@ -48,11 +83,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           }
         }
 
-        // 2) Fallback: aluno com senha definida. Student.email pode existir
-        // em multiplos tenants; pega o primeiro com passwordHash populado.
+        // 2) Login do aluno — escopado pelo tenant do subdomínio atual.
+        // O mesmo email pode existir em vários tenants (cada loja gera um
+        // Student separado); só autorizamos o da loja onde o usuário está
+        // tentando logar.
+        const targetTenantId = await resolveTenantIdFromRequest(request)
+        if (!targetTenantId) return null
+
         const student = await prisma.student.findFirst({
           where: {
             email: parsed.data.email,
+            tenantId: targetTenantId,
             passwordHash: { not: null },
           },
           select: {
