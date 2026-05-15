@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation"
+import { prisma } from "@/lib/prisma"
 import { getCurrentTenant } from "@/lib/tenant/current"
 import { getTenantCourseBySlug } from "@/lib/tenant/courses"
 import {
@@ -8,6 +9,14 @@ import {
 
 interface CoursePageProps {
   params: Promise<{ slug: string }>
+}
+
+function whatsappLink(whatsapp: string, courseName: string): string {
+  const digits = whatsapp.replace(/\D/g, "")
+  const text = encodeURIComponent(
+    `Olá! Tenho interesse no curso "${courseName}".`,
+  )
+  return `https://wa.me/${digits}?text=${text}`
 }
 
 export default async function CoursePage({ params }: CoursePageProps) {
@@ -31,6 +40,15 @@ export default async function CoursePage({ params }: CoursePageProps) {
   const course = await getTenantCourseBySlug(tenant.id, slug)
   if (!course) notFound()
 
+  // Sem MP configurado, o checkout não consegue gerar a preferência.
+  // Cai no fluxo de lead (WhatsApp do revendedor) com mensagem pré-preenchida.
+  const tenantPayment = await prisma.tenant.findUnique({
+    where: { id: tenant.id },
+    select: { mpAccessToken: true, whatsapp: true },
+  })
+  const canCheckout = Boolean(tenantPayment?.mpAccessToken)
+  const whatsapp = tenantPayment?.whatsapp ?? null
+
   const data: CourseDetailData = {
     slug: course.slug,
     nome: course.nome,
@@ -45,11 +63,18 @@ export default async function CoursePage({ params }: CoursePageProps) {
     lessons: course.lessons,
   }
 
+  const ctaHref = canCheckout
+    ? `/checkout?course_id=${course.tenantCourseId}`
+    : whatsapp
+      ? whatsappLink(whatsapp, course.nome)
+      : "#"
+  const ctaLabel = canCheckout ? "Comprar agora" : "Quero me matricular"
+
   return (
     <CourseDetailView
       course={data}
-      ctaHref={`/checkout/${course.tenantCourseId}`}
-      ctaLabel="Comprar agora"
+      ctaHref={ctaHref}
+      ctaLabel={ctaLabel}
       backHref="/"
       backLabel="Voltar para a loja"
     />
