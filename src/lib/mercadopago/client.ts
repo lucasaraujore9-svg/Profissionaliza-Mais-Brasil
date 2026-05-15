@@ -25,10 +25,29 @@ export class MPApiError extends Error {
 
 /**
  * Decripta o token MP armazenado no tenant (AES-256-GCM).
- * Deve ser chamado server-side only.
+ *
+ * Fallback: se a string não estiver no formato cifrado (versão legacy ou
+ * inserção manual via Prisma Studio/SQL), retorna como texto plano quando
+ * parece um token MP válido (`APP_USR-…` ou `TEST-…`). Isso evita que tokens
+ * inseridos manualmente quebrem a venda inteira.
+ *
+ * Server-side only.
  */
 export function decryptTenantMpToken(encrypted: string): string {
-  return decrypt(encrypted)
+  try {
+    return decrypt(encrypted)
+  } catch (err) {
+    if (
+      typeof encrypted === "string" &&
+      (encrypted.startsWith("APP_USR-") || encrypted.startsWith("TEST-"))
+    ) {
+      console.warn(
+        "[mp] decryptTenantMpToken: usando token em texto plano (legacy/manual).",
+      )
+      return encrypted
+    }
+    throw err
+  }
 }
 
 async function sleep(ms: number): Promise<void> {

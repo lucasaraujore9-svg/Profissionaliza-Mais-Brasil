@@ -158,9 +158,17 @@ export async function processMpWebhook(args: ProcessArgs): Promise<void> {
         .catch(() => undefined)
     }
 
-    // ── Passo 3: validar assinatura HMAC (opcional) ─────────────────────────
+    // ── Passo 3: validar assinatura HMAC ────────────────────────────────────
+    // Em produção exige MP_WEBHOOK_SECRET configurado e assinatura válida.
+    // Sem isso qualquer um poderia disparar fulfillment forjando webhooks.
     const secret = process.env.MP_WEBHOOK_SECRET
-    if (secret) {
+    if (!secret) {
+      if (process.env.NODE_ENV === "production") {
+        await markLog(logId, false, "MP_WEBHOOK_SECRET ausente em produção")
+        return
+      }
+      // Dev: segue sem validar para permitir testes com ngrok.
+    } else {
       const valid = validateMpWebhookSignature(
         xSignature,
         xRequestId,

@@ -2,14 +2,24 @@ import type { AsaasWebhookPayload } from "./types"
 
 /**
  * Valida o token do webhook do Asaas.
- * O Asaas envia o token no header `asaas-access-token`.
+ *
+ * Em produção, exige `ASAAS_WEBHOOK_TOKEN` configurado e que bata com o header
+ * `asaas-access-token`. Em desenvolvimento, aceita quando o token não está
+ * configurado (facilita testes locais com ngrok/forwarding).
  */
 export function validateAsaasWebhook(
   headerToken: string | null,
 ): boolean {
   const expectedToken = process.env.ASAAS_WEBHOOK_TOKEN
   if (!expectedToken) {
-    // Token não configurado — aceita o webhook. Configure ASAAS_WEBHOOK_TOKEN para validação.
+    if (process.env.NODE_ENV === "production") {
+      // Em produção, exigir o token. Aceitar webhook anônimo permitiria
+      // que qualquer um marcasse enrollments como pagos.
+      console.error(
+        "[asaas-webhook] ASAAS_WEBHOOK_TOKEN não configurado — rejeitando.",
+      )
+      return false
+    }
     return true
   }
   return headerToken === expectedToken
