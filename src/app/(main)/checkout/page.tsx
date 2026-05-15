@@ -86,6 +86,7 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
       precoPromocional: true,
       precoOriginal: true,
       paymentTypeMain: true,
+      monthlyMonthsMain: true,
     },
   })
 
@@ -103,25 +104,6 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
           className="mt-6 inline-block rounded-lg bg-[var(--color-pmb-green)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--color-pmb-green-900)]"
         >
           Ver outros cursos
-        </Link>
-      </div>
-    )
-  }
-
-  if (course.paymentTypeMain !== "ONE_TIME") {
-    return (
-      <div className="mx-auto max-w-3xl px-4 py-24 text-center">
-        <h1 className="text-2xl font-bold text-[var(--color-pmb-green-900)]">
-          Atendimento personalizado
-        </h1>
-        <p className="mt-3 text-sm text-gray-600">
-          Este curso é vendido em mensalidades. Nosso time PMB conclui a matrícula para você.
-        </p>
-        <Link
-          href={`/contato?curso=${encodeURIComponent(course.slug)}`}
-          className="mt-6 inline-block rounded-lg bg-[var(--color-pmb-green)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--color-pmb-green-900)]"
-        >
-          Falar com a equipe
         </Link>
       </div>
     )
@@ -197,6 +179,8 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
               finalPrice={finalPrice}
               couponCode={validatedCoupon?.code ?? null}
               parcelasSugeridas={course.parcelasSugeridas}
+              paymentType={course.paymentTypeMain}
+              monthlyMonths={course.monthlyMonthsMain}
             />
           </aside>
         </div>

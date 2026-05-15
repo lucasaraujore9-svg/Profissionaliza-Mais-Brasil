@@ -9,6 +9,10 @@ export interface OrderSummaryProps {
   finalPrice: number
   couponCode: string | null
   parcelasSugeridas: number | null
+  /** ONE_TIME = preço cheio; MONTHLY = mensalidade recorrente. */
+  paymentType?: "ONE_TIME" | "MONTHLY"
+  /** Quantidade total de mensalidades quando paymentType === "MONTHLY". */
+  monthlyMonths?: number | null
 }
 
 function formatBRL(value: number): string {
@@ -28,11 +32,18 @@ export function OrderSummary({
   finalPrice,
   couponCode,
   parcelasSugeridas,
+  paymentType = "ONE_TIME",
+  monthlyMonths,
 }: OrderSummaryProps) {
+  const isMonthly = paymentType === "MONTHLY"
+  const months = isMonthly ? monthlyMonths ?? 12 : null
+
   const parcelasLabel =
-    parcelasSugeridas && parcelasSugeridas >= 2
+    !isMonthly && parcelasSugeridas && parcelasSugeridas >= 2
       ? `${parcelasSugeridas}x de ${formatBRL(finalPrice / parcelasSugeridas)}`
       : null
+
+  const totalLabel = isMonthly ? "Mensalidade" : "Total"
 
   return (
     <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm lg:p-8">
@@ -55,7 +66,9 @@ export function OrderSummary({
 
       <dl className="mt-5 space-y-2 text-sm">
         <div className="flex items-center justify-between">
-          <dt className="text-gray-600">Subtotal</dt>
+          <dt className="text-gray-600">
+            {isMonthly ? "Valor da mensalidade" : "Subtotal"}
+          </dt>
           <dd className="font-mono text-[var(--color-pmb-green-900)]">{formatBRL(basePrice)}</dd>
         </div>
         {discountAmount > 0 && (
@@ -71,11 +84,21 @@ export function OrderSummary({
       </dl>
 
       <div className="mt-5 flex items-center justify-between border-t border-gray-100 pt-5">
-        <span className="text-sm font-medium text-[var(--color-pmb-green-900)]">Total</span>
+        <span className="text-sm font-medium text-[var(--color-pmb-green-900)]">{totalLabel}</span>
         <span className="font-mono text-2xl font-bold text-[var(--color-pmb-green-900)]">
           {formatBRL(finalPrice)}
+          {isMonthly && (
+            <span className="ml-1 text-sm font-medium text-gray-500">/mês</span>
+          )}
         </span>
       </div>
+
+      {isMonthly && months && (
+        <div className="mt-2 text-right text-xs text-gray-500">
+          <span className="font-mono font-medium">{months}</span> mensalidades de{" "}
+          <span className="font-mono font-medium">{formatBRL(finalPrice)}</span>
+        </div>
+      )}
 
       {parcelasLabel && (
         <div className="mt-2 text-right text-xs text-gray-500">
