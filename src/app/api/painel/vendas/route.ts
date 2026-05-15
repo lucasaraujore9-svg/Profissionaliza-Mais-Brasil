@@ -5,6 +5,7 @@ import { requireResellerSession } from "@/lib/auth/reseller-session"
 import { auth } from "@/lib/auth"
 import {
   createPreference,
+  createPreapproval,
   decryptTenantMpToken,
 } from "@/lib/mercadopago/client"
 
@@ -123,7 +124,9 @@ export async function POST(request: Request) {
   const tenantCourse = await prisma.tenantCourse.findFirst({
     where: { id: data.tenantCourseId, tenantId: tenant.id, isVisible: true },
     include: {
-      course: { select: { id: true, nome: true, slug: true } },
+      course: {
+        select: { id: true, nome: true, slug: true, monthlyMonthsMain: true },
+      },
     },
   })
   if (!tenantCourse) {
@@ -219,8 +222,9 @@ export async function POST(request: Request) {
           email: data.email,
           fone: data.fone,
           cpf: data.cpf,
-          eaAlunoId: "",
-          polo: "",
+          eaAlunoId: `pending_${Date.now()}`,
+          polo: tenant.slug,
+          vendedorId: tenant.eaVendedorId,
           status: "INTERESSADO",
           updatedAt: new Date(),
         },
@@ -248,6 +252,11 @@ export async function POST(request: Request) {
     )
   }
 
+  const isMonthly = tenantCourse.paymentType === "MONTHLY"
+  const monthlyMonths = isMonthly
+    ? tenantCourse.course.monthlyMonthsMain ?? 12
+    : null
+
   const enrollment = await prisma.enrollment.create({
     data: {
       tenantId: tenant.id,
@@ -257,17 +266,69 @@ export async function POST(request: Request) {
       soldByUserId: userId,
       paymentType: tenantCourse.paymentType,
       status: "PENDING",
+      gateway: "MP",
       originalAmount: basePrice,
       discountAmount,
       finalAmount,
       couponId,
+      installmentsTotal: monthlyMonths,
     },
     select: { id: true },
   })
 
-  const externalReference = `tenant_${tenant.slug}_enr_${enrollment.id}`
+  // Padronizado: `enr_<id>` (mesmo formato de /api/loja/checkout). O webhook
+  // identifica o tenant pela query string `?tenant=<slug>` na notification_url.
+  const externalReference = `enr_${enrollment.id}`
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? ""
   const accessToken = decryptTenantMpToken(tenant.mpAccessToken)
+
+  if (isMonthly && monthlyMonths) {
+    const startDate = new Date(Date.now() + 60_000).toISOString()
+    const endDate = new Date(
+      Date.now() +
+        monthlyMonths * 31 * 24 * 60 * 60 * 1000 +
+        3 * 24 * 60 * 60 * 1000,
+    ).toISOString()
+
+    const preapproval = await createPreapproval(accessToken, {
+      reason: `Mensalidade — ${tenantCourse.course.nome}`,
+      external_reference: externalReference,
+      payer_email: student.email ?? data.email,
+      back_url: appUrl
+        ? `${appUrl}/painel/vendas?ok=${enrollment.id}`
+        : "https://www.profissionalizamaisbrasil.com.br/painel/vendas",
+      notification_url: appUrl
+        ? `${appUrl}/api/webhooks/mercadopago?tenant=${tenant.slug}`
+        : undefined,
+      auto_recurring: {
+        frequency: 1,
+        frequency_type: "months",
+        transaction_amount: finalAmount,
+        currency_id: "BRL",
+        start_date: startDate,
+        end_date: endDate,
+      },
+      status: "pending",
+    })
+
+    await prisma.enrollment.update({
+      where: { id: enrollment.id },
+      data: { mpSubscriptionId: preapproval.id, externalReference },
+    })
+
+    return NextResponse.json({
+      data: {
+        enrollmentId: enrollment.id,
+        mode: "subscription",
+        installmentsTotal: monthlyMonths,
+        initPoint: preapproval.init_point,
+        finalAmount,
+        discountAmount,
+        basePrice,
+        studentId: student.id,
+      },
+    })
+  }
 
   const preference = await createPreference(accessToken, {
     items: [
@@ -306,6 +367,7 @@ export async function POST(request: Request) {
   return NextResponse.json({
     data: {
       enrollmentId: enrollment.id,
+      mode: "one_time",
       initPoint: preference.init_point,
       finalAmount,
       discountAmount,

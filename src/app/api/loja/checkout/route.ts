@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { createPreference, decryptTenantMpToken } from "@/lib/mercadopago/client"
+import {
+  createPreference,
+  createPreapproval,
+  decryptTenantMpToken,
+} from "@/lib/mercadopago/client"
 
 const cpfRegex = /^\d{3}\.?\d{3}\.?\d{3}-?\d{2}$/
 const phoneRegex = /^\(?\d{2}\)?\s?\d{4,5}-?\d{4}$/
@@ -80,7 +84,14 @@ export async function POST(request: Request) {
       prisma.tenantCourse.findFirst({
         where: { id: data.courseId, tenantId, isVisible: true },
         include: {
-          course: { select: { nome: true, slug: true, eaCourseId: true } },
+          course: {
+            select: {
+              nome: true,
+              slug: true,
+              eaCourseId: true,
+              monthlyMonthsMain: true,
+            },
+          },
         },
       }),
     ])
@@ -196,6 +207,11 @@ export async function POST(request: Request) {
       )
     }
 
+    const isMonthly = tenantCourse.paymentType === "MONTHLY"
+    const monthlyMonths = isMonthly
+      ? tenantCourse.course.monthlyMonthsMain ?? 12
+      : null
+
     const enrollment = await prisma.enrollment.create({
       data: {
         tenantId,
@@ -204,10 +220,12 @@ export async function POST(request: Request) {
         courseId: tenantCourse.courseId,
         paymentType: tenantCourse.paymentType,
         status: "PENDING",
+        gateway: "MP",
         originalAmount: basePrice,
         discountAmount,
         finalAmount,
         couponId,
+        installmentsTotal: monthlyMonths,
       },
       select: { id: true },
     })
@@ -222,6 +240,52 @@ export async function POST(request: Request) {
         : `${protocol}://${host}`
 
     const accessToken = decryptTenantMpToken(tenant.mpAccessToken)
+
+    if (isMonthly && monthlyMonths) {
+      // Cursos mensais usam preapproval (subscription recorrente do MP).
+      const startDate = new Date(Date.now() + 60_000).toISOString()
+      const endDate = new Date(
+        Date.now() +
+          monthlyMonths * 31 * 24 * 60 * 60 * 1000 +
+          3 * 24 * 60 * 60 * 1000,
+      ).toISOString()
+
+      const preapproval = await createPreapproval(accessToken, {
+        reason: `Mensalidade — ${tenantCourse.course.nome}`,
+        external_reference: externalReference,
+        payer_email: student.email ?? data.email,
+        back_url: `${storeUrl}/loja/confirmacao?enrollment_id=${enrollment.id}`,
+        notification_url: appUrl
+          ? `${appUrl}/api/webhooks/mercadopago?tenant=${tenantSlug}`
+          : undefined,
+        auto_recurring: {
+          frequency: 1,
+          frequency_type: "months",
+          transaction_amount: finalAmount,
+          currency_id: "BRL",
+          start_date: startDate,
+          end_date: endDate,
+        },
+        status: "pending",
+      })
+
+      await prisma.enrollment.update({
+        where: { id: enrollment.id },
+        data: {
+          mpSubscriptionId: preapproval.id,
+          externalReference,
+        },
+      })
+
+      return NextResponse.json({
+        data: {
+          enrollmentId: enrollment.id,
+          mode: "subscription",
+          installmentsTotal: monthlyMonths,
+          initPoint: preapproval.init_point,
+        },
+      })
+    }
 
     const preference = await createPreference(accessToken, {
       items: [
@@ -259,6 +323,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       data: {
         enrollmentId: enrollment.id,
+        mode: "one_time",
         initPoint: preference.init_point,
       },
     })
