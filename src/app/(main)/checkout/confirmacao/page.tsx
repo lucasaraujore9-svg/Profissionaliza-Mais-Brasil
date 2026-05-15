@@ -65,6 +65,11 @@ export default async function ConfirmacaoPage({
     include: {
       student: { select: { nome: true, email: true } },
       course: { select: { nome: true } },
+      payments: {
+        orderBy: { createdAt: "desc" },
+        take: 1,
+        select: { mpPaymentType: true, gateway: true },
+      },
     },
   })
 
@@ -86,13 +91,49 @@ export default async function ConfirmacaoPage({
     )
   }
 
-  const isApproved = enrollment.status === "ACTIVE"
+  const isApproved =
+    enrollment.status === "ACTIVE" || enrollment.status === "COMPLETED"
+  const lastPaymentType = enrollment.payments[0]?.mpPaymentType ?? null
+
+  // Para PENDING, customiza a mensagem por método (PIX/Boleto/Cartão).
+  // Como ainda não criamos o Payment row antes da confirmação do webhook,
+  // mpPaymentType pode estar vazio — usa fallback genérico.
+  function pendingMessages() {
+    if (lastPaymentType === "pix") {
+      return {
+        title: "Aguardando seu pagamento via PIX",
+        subtitle:
+          "Assim que o PIX for compensado (geralmente em segundos), liberamos seu acesso e enviamos as credenciais por email.",
+      }
+    }
+    if (lastPaymentType === "ticket" || lastPaymentType === "boleto") {
+      return {
+        title: "Boleto gerado",
+        subtitle:
+          "O boleto pode levar até 3 dias úteis para ser compensado. Você receberá um email assim que sua matrícula for liberada.",
+      }
+    }
+    if (lastPaymentType === "credit_card") {
+      return {
+        title: "Pagamento em análise",
+        subtitle:
+          "Sua operadora está validando a transação. Você receberá um email assim que for aprovada.",
+      }
+    }
+    return {
+      title: "Estamos processando seu pagamento",
+      subtitle:
+        "Assim que o pagamento for confirmado, liberaremos seu acesso e enviaremos as credenciais por email.",
+    }
+  }
+
+  const pending = pendingMessages()
   const title = isApproved
     ? "Matrícula realizada com sucesso!"
-    : "Estamos processando seu pagamento"
+    : pending.title
   const subtitle = isApproved
     ? "Obrigado pela confiança. Você já pode começar a estudar agora mesmo."
-    : "Assim que o pagamento for confirmado, liberaremos seu acesso e enviaremos as credenciais por email."
+    : pending.subtitle
 
   return (
     <section className="bg-[#FAFAFA] py-10 md:py-16">
