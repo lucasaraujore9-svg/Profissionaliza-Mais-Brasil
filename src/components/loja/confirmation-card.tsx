@@ -22,7 +22,7 @@ const STATUS_CONFIG: Record<
     className: "bg-yellow-100 text-yellow-700",
   },
   ACTIVE: {
-    label: "Pagamento aprovado",
+    label: "Aprovada",
     className: "bg-green-100 text-green-700",
   },
   SUSPENDED: {

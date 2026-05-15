@@ -23,6 +23,7 @@ import {
 } from "@/lib/pmb-config"
 import { getSystemSettings } from "@/lib/system-settings"
 import { upsertStudent } from "@/lib/students/upsert"
+import { provisionStudentAccess } from "@/lib/students/access"
 
 const cpfRegex = /^\d{3}\.?\d{3}\.?\d{3}-?\d{2}$/
 const phoneRegex = /^\(?\d{2}\)?\s?\d{4,5}-?\d{4}$/
@@ -245,6 +246,13 @@ export async function POST(request: Request) {
       polo: pmbEaPolo(),
       vendedorId: pmbEaVendedorId(),
       eaAlunoIdFallback: `pending_${Date.now()}`,
+    })
+
+    await provisionStudentAccess(student.id, {
+      isPmbVitrine: true,
+      slug: pmbTenant.slug,
+    }).catch((err) => {
+      console.error("[pmb-checkout] provisionStudentAccess falhou:", err)
     })
 
     const existingEnrollment = await prisma.enrollment.findFirst({

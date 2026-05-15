@@ -3,6 +3,7 @@
 export {
   sendEmail,
   renderTemplateHtml,
+  isEmailConfigured,
   EmailError,
   type EmailTemplate,
 } from "./mailer"

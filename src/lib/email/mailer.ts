@@ -114,6 +114,19 @@ function pickProvider(): "smtp" | "resend" {
   )
 }
 
+/**
+ * Retorna `true` se SMTP ou Resend estão configurados. Útil para call sites
+ * que precisam expor "email funciona?" no response sem disparar envio real.
+ */
+export function isEmailConfigured(): boolean {
+  try {
+    pickProvider()
+    return true
+  } catch {
+    return false
+  }
+}
+
 export async function sendEmail({
   to,
   subject,
@@ -147,7 +160,8 @@ export async function sendEmail({
   const result = await client.emails.send({
     from:
       from ??
-      "Profissionaliza Mais Brasil <noreply@profissionalizamaisbrasil.com.br>",
+      process.env.SMTP_FROM ??
+      "Profissionaliza Mais Brasil <bem-vindo@bmbr.com.br>",
     to,
     subject,
     html,

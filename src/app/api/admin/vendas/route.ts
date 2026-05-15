@@ -13,6 +13,7 @@ import {
   AsaasApiError,
 } from "@/lib/asaas/client"
 import { getSystemSettings } from "@/lib/system-settings"
+import { provisionStudentAccess } from "@/lib/students/access"
 
 const PMB_SALES_CAP = 50
 
@@ -148,6 +149,14 @@ export async function POST(request: Request) {
       { status: 400 },
     )
   }
+
+  await provisionStudentAccess(student.id, {
+    isPmbVitrine: true,
+    slug: pmbTenant.slug,
+  }).catch((err) => {
+    console.error("[admin-vendas] provisionStudentAccess falhou:", err)
+  })
+
   if (!course || course.status !== "ATIVO") {
     return NextResponse.json({ error: "Curso não disponível" }, { status: 404 })
   }

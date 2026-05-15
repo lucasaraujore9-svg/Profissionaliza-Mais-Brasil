@@ -118,11 +118,7 @@ export default async function ConfirmacaoPage({
           <NextSteps autoRedirect={isApproved} />
 
           <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
-            <a
-              href="https://escolaavancada.com.br"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
+            <Link href="/aluno">
               <Button
                 size="lg"
                 className="w-full bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)] sm:w-auto"
@@ -130,7 +126,7 @@ export default async function ConfirmacaoPage({
                 <ExternalLink className="mr-2 h-4 w-4" />
                 Ir para área de aulas
               </Button>
-            </a>
+            </Link>
             <Link href="/">
               <Button size="lg" variant="outline" className="w-full sm:w-auto">
                 <Home className="mr-2 h-4 w-4" />

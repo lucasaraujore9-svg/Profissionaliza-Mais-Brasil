@@ -7,6 +7,7 @@ import {
   decryptTenantMpToken,
 } from "@/lib/mercadopago/client"
 import { upsertStudent } from "@/lib/students/upsert"
+import { provisionStudentAccess } from "@/lib/students/access"
 
 const cpfRegex = /^\d{3}\.?\d{3}\.?\d{3}-?\d{2}$/
 const phoneRegex = /^\(?\d{2}\)?\s?\d{4,5}-?\d{4}$/
@@ -78,6 +79,7 @@ export async function POST(request: Request) {
         select: {
           id: true,
           slug: true,
+          name: true,
           mpAccessToken: true,
           eaVendedorId: true,
         },
@@ -171,6 +173,14 @@ export async function POST(request: Request) {
       polo: tenant.slug,
       vendedorId: tenant.eaVendedorId,
       eaAlunoIdFallback: `pending_${Date.now()}`,
+    })
+
+    await provisionStudentAccess(student.id, {
+      isPmbVitrine: false,
+      slug: tenant.slug,
+      name: tenant.name,
+    }).catch((err) => {
+      console.error("[loja-checkout] provisionStudentAccess falhou:", err)
     })
 
     const existingEnrollment = await prisma.enrollment.findFirst({

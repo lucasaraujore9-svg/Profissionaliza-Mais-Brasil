@@ -11,7 +11,7 @@ import {
   createSubscription,
   listPayments,
 } from "@/lib/asaas/client"
-import { sendEmail } from "@/lib/email/resend"
+import { sendEmail, isEmailConfigured } from "@/lib/email/resend"
 import { createNotification } from "@/lib/notifications"
 
 export async function GET(request: Request) {
@@ -298,38 +298,37 @@ export async function POST(request: Request) {
   })
 
   // Dispara email de onboarding com credenciais e link de pagamento.
-  // Falha silenciosa em dev (sem RESEND_API_KEY) — não quebra a criação.
+  // Falha silenciosa se nenhum provedor estiver configurado — não quebra a criação.
   const baseUrl =
     process.env.NEXT_PUBLIC_APP_URL ??
     "https://www.profissionalizamaisbrasil.com.br"
   const vitrineUrl = `https://${data.slug}.profissionalizamaisbrasil.com.br`
   let emailSent = false
   let emailError: string | null = null
-  if (process.env.RESEND_API_KEY) {
-    try {
-      await sendEmail({
-        to: data.ownerEmail,
-        subject: invoiceUrl
-          ? `Sua revenda ${data.name} foi criada — finalize o pagamento`
-          : `Sua revenda ${data.name} foi criada`,
-        template: {
-          type: "reseller-onboarding",
-          props: {
-            ownerName: data.ownerName,
-            resellerName: data.name,
-            loginEmail: data.ownerEmail,
-            tempPassword,
-            loginUrl: `${baseUrl}/login`,
-            vitrineUrl,
-            paymentUrl: invoiceUrl,
-            planValue: data.planValue,
-          },
+  try {
+    await sendEmail({
+      to: data.ownerEmail,
+      subject: invoiceUrl
+        ? `Sua revenda ${data.name} foi criada — finalize o pagamento`
+        : `Sua revenda ${data.name} foi criada`,
+      template: {
+        type: "reseller-onboarding",
+        props: {
+          ownerName: data.ownerName,
+          resellerName: data.name,
+          loginEmail: data.ownerEmail,
+          tempPassword,
+          loginUrl: `${baseUrl}/login`,
+          vitrineUrl,
+          paymentUrl: invoiceUrl,
+          planValue: data.planValue,
         },
-      })
-      emailSent = true
-    } catch (err) {
-      emailError = err instanceof Error ? err.message : "Erro ao enviar email"
-    }
+      },
+    })
+    emailSent = true
+  } catch (err) {
+    emailError = err instanceof Error ? err.message : "Erro ao enviar email"
+    console.error("[revendedores] onboarding email falhou:", err)
   }
 
   // Notifica gerentes de revendedor + super admin sobre novo revendedor
@@ -371,7 +370,7 @@ export async function POST(request: Request) {
         error: asaasError,
       },
       email: {
-        configured: Boolean(process.env.RESEND_API_KEY),
+        configured: isEmailConfigured(),
         sent: emailSent,
         error: emailError,
       },

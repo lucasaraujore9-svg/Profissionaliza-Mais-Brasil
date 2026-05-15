@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button"
 import { SuccessIcon } from "@/components/loja/success-icon"
 import { ConfirmationCard } from "@/components/loja/confirmation-card"
 import { NextSteps } from "@/components/loja/next-steps"
+import { StatusPoller } from "@/components/loja/status-poller"
 import { prisma } from "@/lib/prisma"
 
 interface ConfirmacaoPageProps {
@@ -137,6 +138,7 @@ export default async function ConfirmacaoPage({
 
   return (
     <section className="bg-[#FAFAFA] py-10 md:py-16">
+      <StatusPoller enrollmentId={enrollment.id} initialStatus={enrollment.status} />
       <div className="mx-auto max-w-3xl px-4 md:px-6">
         <div className="text-center">
           <SuccessIcon />
@@ -160,11 +162,7 @@ export default async function ConfirmacaoPage({
           <NextSteps autoRedirect={isApproved} />
 
           <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
-            <a
-              href="https://escolaavancada.com.br"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
+            <Link href="/aluno">
               <Button
                 size="lg"
                 className="w-full bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-900)] sm:w-auto"
@@ -172,7 +170,7 @@ export default async function ConfirmacaoPage({
                 <ExternalLink className="mr-2 h-4 w-4" />
                 Ir para área de aulas
               </Button>
-            </a>
+            </Link>
             <Link href="/cursos">
               <Button size="lg" variant="outline" className="w-full sm:w-auto">
                 <Home className="mr-2 h-4 w-4" />

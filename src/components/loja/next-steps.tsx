@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { Mail, LogIn, BookOpen } from "lucide-react"
 
-const EA_URL = "https://escolaavancada.com.br"
+const STUDENT_AREA_URL = "/aluno"
 const REDIRECT_SECONDS = 5
 
 const steps = [
@@ -34,7 +34,7 @@ export function NextSteps({ autoRedirect = false }: NextStepsProps) {
   useEffect(() => {
     if (!autoRedirect) return
     if (seconds <= 0) {
-      window.location.href = EA_URL
+      window.location.href = STUDENT_AREA_URL
       return
     }
     const t = setTimeout(() => setSeconds((s) => s - 1), 1000)
