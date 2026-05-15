@@ -6,6 +6,10 @@
       "headers": {
         "Authorization": "Bearer ${SUPABASE_ACCESS_TOKEN}"
       }
+    },
+    "asaas": {
+      "type": "http",
+      "url": "https://docs.asaas.com/mcp"
     }
   }
 }
