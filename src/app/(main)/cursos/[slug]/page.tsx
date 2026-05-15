@@ -4,13 +4,11 @@ import {
   CourseDetailView,
   type CourseDetailData,
 } from "@/components/shared/course-detail-view"
-import { getSystemSettings } from "@/lib/system-settings"
-import { pmbMpAccessToken } from "@/lib/pmb-config"
 
 type LoadedCurso = CourseDetailData & {
   id: string
-  /** Curso pode ser vendido no checkout público (ONE_TIME + preço > 0). */
-  isPublicSale: boolean
+  /** Tem preço configurado na vitrine principal. */
+  hasPrice: boolean
 }
 
 async function loadCurso(slug: string): Promise<LoadedCurso | null> {
@@ -51,21 +49,11 @@ async function loadCurso(slug: string): Promise<LoadedCurso | null> {
         nome: l.nome,
         ordem: l.ordem,
       })),
-      isPublicSale: c.paymentTypeMain === "ONE_TIME" && price > 0,
+      hasPrice: price > 0,
     }
   } catch {
     return null
   }
-}
-
-async function isGatewayReady(): Promise<boolean> {
-  const settings = await getSystemSettings()
-  if (settings.pmbDirectSaleGateway === "ASAAS") {
-    return Boolean(process.env.ASAAS_API_URL && process.env.ASAAS_API_KEY)
-  }
-  // gateway === "MP"
-  const token = await pmbMpAccessToken()
-  return Boolean(token)
 }
 
 export default async function CursoDetalhePage({
@@ -77,14 +65,14 @@ export default async function CursoDetalhePage({
   const curso = await loadCurso(slug)
   if (!curso) notFound()
 
-  // Checkout fica disponível quando o curso é vendível publicamente (ONE_TIME
-  // + preço) e o gateway ativo (Asaas ou MP) está pronto. A página de checkout
-  // é a mesma — só muda o backend (definido por pmbDirectSaleGateway).
-  const canCheckout = curso.isPublicSale && (await isGatewayReady())
-  const ctaHref = canCheckout
+  // CTA sempre tenta checkout quando há preço. O backend define o gateway
+  // ativo (Asaas ou MP via pmbDirectSaleGateway) e a página /checkout trata
+  // os casos de borda (curso MONTHLY → "atendimento personalizado", gateway
+  // sem credenciais → erro 503).
+  const ctaHref = curso.hasPrice
     ? `/checkout?course_id=${curso.id}`
     : `/contato?curso=${encodeURIComponent(curso.slug)}`
-  const ctaLabel = canCheckout ? "Comprar agora" : "Quero me matricular"
+  const ctaLabel = curso.hasPrice ? "Quero me matricular" : "Falar com a equipe"
 
   return (
     <CourseDetailView
