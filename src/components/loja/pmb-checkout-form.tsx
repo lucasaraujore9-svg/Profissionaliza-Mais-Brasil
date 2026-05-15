@@ -1,7 +1,6 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import Image from "next/image"
 import {
   AlertCircle,
   CheckCircle2,
@@ -59,7 +58,6 @@ type Status =
       bankSlipUrl: string | null
       identificationField: string | null
     }
-  | { kind: "credit_card_processing"; enrollmentId: string }
   | { kind: "approved"; enrollmentId: string }
   | { kind: "declined"; message: string }
 
@@ -217,12 +215,27 @@ export function PmbCheckoutForm({ courseId, couponCode }: PmbCheckoutFormProps) 
           return
         case "credit_card_result": {
           const st = String(d.status ?? "").toUpperCase()
-          if (st === "CONFIRMED" || st === "RECEIVED" || st === "RECEIVED_IN_CASH") {
+          // Estados de sucesso: cobrança capturada e/ou já recebida.
+          if (
+            st === "CONFIRMED" ||
+            st === "RECEIVED" ||
+            st === "RECEIVED_IN_CASH"
+          ) {
             setStatus({ kind: "approved", enrollmentId: d.enrollmentId })
-            // Webhook normalmente confirma também — redireciona já.
             window.location.href = `/checkout/confirmacao?enrollment_id=${d.enrollmentId}`
             return
           }
+          // Estados de espera (Asaas autorizou mas precisa analisar risco
+          // ou aguarda compensação). A página de confirmação trata.
+          if (
+            st === "PENDING" ||
+            st === "AWAITING_RISK_ANALYSIS" ||
+            st === "APPROVED_BY_RISK_ANALYSIS"
+          ) {
+            window.location.href = `/checkout/confirmacao?enrollment_id=${d.enrollmentId}`
+            return
+          }
+          // Tudo o mais (REPROVED_BY_RISK_ANALYSIS, CHARGEBACK, etc.) é recusa.
           setStatus({
             kind: "declined",
             message:
@@ -511,9 +524,21 @@ export function PmbCheckoutForm({ courseId, couponCode }: PmbCheckoutFormProps) 
 
       {/* ERROS / DECLINED ─────────────────────────────────────────────── */}
       {(status.kind === "error" || status.kind === "declined") && (
-        <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-          <span>{status.message}</span>
+        <div className="space-y-3">
+          <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>{status.message}</span>
+          </div>
+          {status.kind === "declined" && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setStatus({ kind: "idle" })}
+              className="w-full"
+            >
+              Tentar outra forma de pagamento
+            </Button>
+          )}
         </div>
       )}
 
@@ -674,12 +699,12 @@ function PixResult({
 
       <div className="mt-6 flex justify-center">
         <div className="rounded-2xl border border-gray-200 bg-white p-4">
-          <Image
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
             src={`data:image/png;base64,${status.qrImageBase64}`}
             alt="QR Code PIX"
             width={240}
             height={240}
-            unoptimized
             className="h-60 w-60"
           />
         </div>
