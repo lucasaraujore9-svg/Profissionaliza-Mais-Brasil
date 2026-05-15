@@ -98,6 +98,7 @@ async function fulfillFromMp(
     {
       id: tenant.id,
       slug: tenant.slug,
+      name: tenant.name,
       eaVendedorId: tenant.eaVendedorId,
       isPmbVitrine: tenant.isPmbVitrine,
     },

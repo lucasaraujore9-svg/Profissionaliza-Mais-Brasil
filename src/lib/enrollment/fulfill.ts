@@ -1,10 +1,11 @@
 import { prisma } from "@/lib/prisma"
-import { sendEmail } from "@/lib/email/resend"
+import { sendEmail } from "@/lib/email/mailer"
 import { enviarEmailCredenciais } from "@/lib/escola-avancada/client"
 import {
   ensureStudentInEA,
   linkCourseToStudent,
 } from "@/lib/students/ea-actions"
+import { generatePasswordWithHash } from "@/lib/students/generate-password"
 import { createNotification } from "@/lib/notifications"
 import type { PaymentGateway, PaymentType } from "@prisma/client"
 
@@ -13,6 +14,8 @@ export interface TenantContext {
   slug: string
   eaVendedorId: string | null
   isPmbVitrine?: boolean
+  /** Nome amigável da loja — usado em emails ao aluno. */
+  name?: string
 }
 
 export interface PaymentEvent {
@@ -48,7 +51,14 @@ export async function fulfillEnrollment(
   const enrollment = await prisma.enrollment.findUnique({
     where: { id: enrollmentId },
     include: {
-      student: { select: { id: true, email: true, nome: true } },
+      student: {
+        select: {
+          id: true,
+          email: true,
+          nome: true,
+          passwordHash: true,
+        },
+      },
       course: { select: { id: true, nome: true } },
     },
   })
@@ -185,6 +195,59 @@ export async function fulfillEnrollment(
       installmentsPaid: firstInstallmentPaid,
     },
   })
+
+  // Gera credenciais do painel /aluno quando o aluno ainda não tem senha.
+  // Vale tanto na 1ª compra (created=true) quanto em alunos antigos que nunca
+  // logaram (passwordHash=null) — assim qualquer compra concluída garante
+  // acesso ao painel.
+  let panelPassword: string | null = null
+  if (enrollment.student.email && !enrollment.student.passwordHash) {
+    try {
+      const { plain, hash } = await generatePasswordWithHash()
+      await prisma.student.update({
+        where: { id: enrollment.student.id },
+        data: { passwordHash: hash, passwordSetAt: new Date() },
+      })
+      panelPassword = plain
+    } catch (err) {
+      console.error("[fulfill] falha ao gerar senha do painel:", err)
+    }
+  }
+
+  // Email de boas-vindas ao painel /aluno (com senha temporária).
+  // Disparamos quando geramos a senha agora — evita reenvio em recompras.
+  if (panelPassword && enrollment.student.email) {
+    const appUrl =
+      process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ??
+      "https://www.profissionalizamaisbrasil.com.br"
+    let loginUrl: string
+    let storeName: string
+    if (tenant.isPmbVitrine) {
+      loginUrl = `${appUrl}/login`
+      storeName = "Profissionaliza Mais Brasil"
+    } else {
+      // Loja do revendedor: link pro subdomínio dele.
+      const host = new URL(appUrl).host.replace(/^www\./, "")
+      loginUrl = `https://${tenant.slug}.${host}/login`
+      storeName = tenant.name ?? `Loja ${tenant.slug}`
+    }
+    await sendEmail({
+      to: enrollment.student.email,
+      subject: `Bem-vindo! Seu acesso ao painel ${storeName}`,
+      template: {
+        type: "student-welcome",
+        props: {
+          studentName: enrollment.student.nome,
+          studentEmail: enrollment.student.email,
+          temporaryPassword: panelPassword,
+          loginUrl,
+          storeName,
+        },
+      },
+    }).catch((err) => {
+      console.error("[fulfill] student-welcome email falhou:", err)
+    })
+  }
 
   if (created && enrollment.student.email) {
     const eaLoginUrl =
