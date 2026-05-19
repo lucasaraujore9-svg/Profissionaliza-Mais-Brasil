@@ -1,82 +1,7 @@
 import Link from "next/link"
 import { Search } from "lucide-react"
-import { CourseCard, type Course } from "@/components/main/home/course-card"
-import { MAIS_VENDIDOS, SAUDE, CONSTRUCAO, BELEZA } from "@/components/main/home/courses-data"
-import { prisma } from "@/lib/prisma"
-
-const CATEGORIAS = [
-  { nome: "Todas", slug: "" },
-  { nome: "Beleza e Estética", slug: "beleza" },
-  { nome: "Saúde e Bem-estar", slug: "saude" },
-  { nome: "Gastronomia", slug: "gastronomia" },
-  { nome: "Eletricista e Hidráulica", slug: "eletrica" },
-  { nome: "Construção Civil", slug: "construcao" },
-  { nome: "Pet e Veterinária", slug: "pet" },
-  { nome: "Administração", slug: "administracao" },
-  { nome: "Automotivo", slug: "automotivo" },
-  { nome: "Moda e Costura", slug: "moda" },
-  { nome: "Tecnologia", slug: "tecnologia" },
-  { nome: "Manutenção", slug: "manutencao" },
-  { nome: "Vendas e Negócios", slug: "vendas" },
-]
-
-const CATEGORIA_NOMES: Record<string, string> = Object.fromEntries(
-  CATEGORIAS.filter((c) => c.slug).map((c) => [c.slug, c.nome]),
-)
-
-const ACCENTS: Course["accent"][] = ["gold", "green", "cyan", "lime", "terracotta"]
-
-async function loadCourses(q?: string, categoria?: string): Promise<Course[]> {
-  try {
-    const where: Record<string, unknown> = { status: "ATIVO" }
-    if (q) {
-      where.OR = [
-        { nome: { contains: q, mode: "insensitive" } },
-        { descricao: { contains: q, mode: "insensitive" } },
-      ]
-    }
-    if (categoria && CATEGORIA_NOMES[categoria]) {
-      where.OR = [
-        { categoriaLoja: { contains: CATEGORIA_NOMES[categoria], mode: "insensitive" } },
-        { categoriaInterna: { contains: categoria, mode: "insensitive" } },
-      ]
-    }
-    const rows = await prisma.course.findMany({
-      where,
-      orderBy: [{ destaqueHome: "desc" }, { nome: "asc" }],
-      take: 48,
-    })
-    if (rows.length === 0) return fallbackCourses(categoria)
-    return rows.map((c, idx): Course => {
-      const preco = c.precoVitrineMain ?? c.precoPromocional ?? c.precoOriginal
-      return {
-        slug: c.slug,
-        categoria: c.categoriaLoja ?? "Curso profissionalizante",
-        titulo: c.nome,
-        instrutor: "Equipe PMB",
-        rating: "4.9",
-        alunos: "—",
-        horas: c.cargaHoraria ?? `${c.qtdAulas} aulas`,
-        preco: preco ? `R$ ${Number(preco).toFixed(2).replace(".", ",")}` : "Consulte",
-        parcelas: "12x sem juros",
-        selo: null,
-        accent: ACCENTS[idx % ACCENTS.length],
-      }
-    })
-  } catch {
-    return fallbackCourses(categoria)
-  }
-}
-
-function fallbackCourses(categoria?: string): Course[] {
-  const all = [...MAIS_VENDIDOS, ...SAUDE, ...CONSTRUCAO, ...BELEZA]
-  const seen = new Set<string>()
-  const uniq = all.filter((c) => (seen.has(c.slug) ? false : (seen.add(c.slug), true)))
-  if (!categoria) return uniq
-  const nome = CATEGORIA_NOMES[categoria]
-  if (!nome) return uniq
-  return uniq.filter((c) => c.categoria.toLowerCase().includes(nome.toLowerCase().split(" ")[0]))
-}
+import { CourseCard } from "@/components/main/home/course-card"
+import { loadCatalogo, loadCategorias } from "@/lib/catalog/home"
 
 export default async function CursosPage({
   searchParams,
@@ -85,9 +10,15 @@ export default async function CursosPage({
 }) {
   const sp = await searchParams
   const q = sp.q?.trim() || ""
-  const categoria = sp.categoria?.trim() || ""
-  const cursos = await loadCourses(q, categoria)
-  const tituloAtivo = categoria && CATEGORIA_NOMES[categoria] ? CATEGORIA_NOMES[categoria] : "Todos os cursos"
+  const categoriaSlug = sp.categoria?.trim() || ""
+
+  const [cursos, categorias] = await Promise.all([
+    loadCatalogo({ q, categoriaSlug }),
+    loadCategorias(1),
+  ])
+
+  const categoriaAtiva = categorias.find((c) => c.slug === categoriaSlug)
+  const tituloAtivo = categoriaAtiva ? categoriaAtiva.nome : "Todos os cursos"
 
   return (
     <div className="bg-[var(--color-pmb-mist)]">
@@ -98,7 +29,7 @@ export default async function CursosPage({
           </p>
           <h1 className="mt-1 text-[28px] font-black leading-tight md:text-[40px]">{tituloAtivo}</h1>
           <p className="mt-2 max-w-xl text-[14.5px] text-white/80">
-            Mais de 2.400 cursos profissionalizantes com certificado. Compre uma vez, assista quando quiser.
+            Cursos profissionalizantes com certificado. Compre uma vez, assista quando quiser.
           </p>
 
           <form action="/cursos" method="get" className="mt-6 flex max-w-xl items-center gap-2 rounded-xl bg-white p-2 shadow-[0_10px_30px_-12px_rgba(0,0,0,0.3)]">
@@ -109,7 +40,7 @@ export default async function CursosPage({
               placeholder="Buscar curso por nome..."
               className="flex-1 bg-transparent text-[14px] text-[var(--color-pmb-green)] placeholder:text-[rgba(2,89,24,0.5)] focus:outline-none"
             />
-            {categoria && <input type="hidden" name="categoria" value={categoria} />}
+            {categoriaSlug && <input type="hidden" name="categoria" value={categoriaSlug} />}
             <button
               type="submit"
               className="rounded-lg bg-[var(--color-pmb-gold)] px-4 py-2 text-[13px] font-bold text-[var(--color-pmb-green)] transition-colors hover:brightness-105"
@@ -122,13 +53,22 @@ export default async function CursosPage({
 
       <section className="border-b border-[rgba(2,89,24,0.08)] bg-white">
         <div className="mx-auto flex max-w-[1280px] flex-wrap gap-2 px-4 py-4 md:px-6">
-          {CATEGORIAS.map((cat) => {
-            const isActive = (cat.slug || "") === categoria
-            const href = cat.slug ? `/cursos?categoria=${cat.slug}` : "/cursos"
+          <Link
+            href="/cursos"
+            className={`rounded-full border px-3.5 py-1.5 text-[13px] font-semibold transition-colors ${
+              !categoriaSlug
+                ? "border-[var(--color-pmb-green)] bg-[var(--color-pmb-green)] text-white"
+                : "border-[rgba(2,89,24,0.15)] text-[var(--color-pmb-green)] hover:border-[var(--color-pmb-green)]"
+            }`}
+          >
+            Todas
+          </Link>
+          {categorias.map((cat) => {
+            const isActive = cat.slug === categoriaSlug
             return (
               <Link
-                key={cat.slug || "todas"}
-                href={href}
+                key={cat.slug}
+                href={`/cursos?categoria=${cat.slug}`}
                 className={`rounded-full border px-3.5 py-1.5 text-[13px] font-semibold transition-colors ${
                   isActive
                     ? "border-[var(--color-pmb-green)] bg-[var(--color-pmb-green)] text-white"

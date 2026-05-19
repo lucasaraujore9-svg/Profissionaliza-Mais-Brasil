@@ -231,6 +231,54 @@ export interface ShowcaseCard {
   rating: string
 }
 
+export async function loadCatalogo({
+  q,
+  categoriaSlug,
+  take = 96,
+}: {
+  q?: string
+  categoriaSlug?: string
+  take?: number
+}): Promise<Course[]> {
+  try {
+    const where: Record<string, unknown> = {
+      status: "ATIVO",
+      hiddenMain: false,
+    }
+
+    if (q && q.trim()) {
+      where.OR = [
+        { nome: { contains: q.trim(), mode: "insensitive" } },
+        { descricao: { contains: q.trim(), mode: "insensitive" } },
+      ]
+    }
+
+    if (categoriaSlug) {
+      const real = await prisma.course.groupBy({
+        by: ["categoriaLoja"],
+        where: { status: "ATIVO", hiddenMain: false, categoriaLoja: { not: null } },
+        _count: { _all: true },
+      })
+      const realName = real
+        .map((r) => r.categoriaLoja!)
+        .find((n) => slugifyCategoria(n) === categoriaSlug)
+      if (!realName) return []
+      where.categoriaLoja = { equals: realName, mode: "insensitive" }
+    }
+
+    const rows = await prisma.course.findMany({
+      where,
+      orderBy: [{ destaqueHome: "desc" }, { destaque: "desc" }, { nome: "asc" }],
+      take,
+      select: SELECT,
+    })
+
+    return rows.map((c, idx) => toCourse(normalize(c), idx))
+  } catch {
+    return []
+  }
+}
+
 export async function loadShowcase(): Promise<ShowcaseCard[]> {
   try {
     const rows = await prisma.course.findMany({
