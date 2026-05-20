@@ -9,7 +9,7 @@
 
 Pelo presente instrumento particular, na melhor forma de direito:
 
-**PROFISSIONALIZA MAIS BRASIL**, pessoa jurídica de direito privado, com sede na Rua Tiradentes, nº 2564, sala 09 (301), Bairro Industrial, Contagem/MG, CEP 32.230-020, doravante denominada **"PMB"** ou **"CONTRATADA"**;
+**GRUPO BOLSA MAIS BRASIL**, pessoa jurídica de direito privado, inscrita no CNPJ/MF sob o nº **66.553.170/0001-01**, com sede na Rua Tiradentes, nº 2564, sala 09 (301), Bairro Industrial, Contagem/MG, CEP 32.230-020, atuando neste ato por meio de sua unidade de negócios **"PROFISSIONALIZA MAIS BRASIL"**, doravante denominada **"PMB"** ou **"CONTRATADA"**;
 
 E, de outro lado,
 

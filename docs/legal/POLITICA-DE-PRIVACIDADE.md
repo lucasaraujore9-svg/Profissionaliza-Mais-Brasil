@@ -7,7 +7,7 @@
 
 ---
 
-O **Profissionaliza Mais Brasil** ("PMB", "nós" ou "nosso") tem como compromisso fundamental o respeito pela privacidade de seus visitantes, alunos, revendedores e parceiros, bem como a proteção e a segurança dos dados pessoais coletados em razão da utilização da nossa plataforma.
+O **Profissionaliza Mais Brasil** ("PMB", "nós" ou "nosso") — unidade de negócios do **GRUPO BOLSA MAIS BRASIL**, pessoa jurídica de direito privado inscrita no CNPJ/MF sob o nº **66.553.170/0001-01**, com sede na Rua Tiradentes, nº 2564, sala 09 (301), Bairro Industrial, Contagem/MG, CEP 32.230-020 — tem como compromisso fundamental o respeito pela privacidade de seus visitantes, alunos, revendedores e parceiros, bem como a proteção e a segurança dos dados pessoais coletados em razão da utilização da nossa plataforma.
 
 Como parte integrante dos **Termos de Uso** e do **Contrato de Revenda**, esta Política de Privacidade e Segurança de Dados ("Política") estabelece as regras sobre a obtenção, o uso, o armazenamento, o compartilhamento e a eliminação dos dados e informações coletadas, além do registro das atividades dos usuários.
 
@@ -77,7 +77,7 @@ Para os fins desta Política, devem ser consideradas as seguintes definições, 
 
 **Consentimento**: manifestação livre, informada e inequívoca pela qual o Titular concorda com o Tratamento de seus dados para uma finalidade determinada.
 
-**PMB** ou **nós**: Profissionaliza Mais Brasil, nome empresarial **BOLSA BRASIL EDUCAÇÃO UNIPESSOAL LTDA.** (ou denominação social vigente da operadora da Plataforma).
+**PMB** ou **nós**: **Profissionaliza Mais Brasil**, unidade de negócios do **GRUPO BOLSA MAIS BRASIL**, pessoa jurídica de direito privado, inscrita no CNPJ/MF sob o nº **66.553.170/0001-01**, com sede na Rua Tiradentes, nº 2564, sala 09 (301), Bairro Industrial, Contagem/MG, CEP 32.230-020.
 
 **Você** ou **Usuário**: qualquer pessoa física — Visitante, Aluno, Revendedor, Consultor ou empregado de Revendedor — que acesse ou interaja com a Plataforma.
 

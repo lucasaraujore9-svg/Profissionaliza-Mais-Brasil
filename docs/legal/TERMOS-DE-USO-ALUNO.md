@@ -9,6 +9,8 @@
 
 Seja bem-vindo(a) ao **Profissionaliza Mais Brasil**!
 
+O Profissionaliza Mais Brasil é uma unidade de negócios do **GRUPO BOLSA MAIS BRASIL**, pessoa jurídica de direito privado inscrita no CNPJ/MF sob o nº **66.553.170/0001-01**, com sede na Rua Tiradentes, nº 2564, sala 09 (301), Bairro Industrial, Contagem/MG, CEP 32.230-020, doravante denominado simplesmente **"PMB"**.
+
 Neste documento informamos a nossos visitantes, usuários e alunos as regras de utilização da nossa plataforma, bem como as condições aplicáveis à aquisição de cursos profissionalizantes online por meio dela.
 
 **ATENÇÃO: LEIA ATENTAMENTE AS REGRAS ABAIXO. AO NAVEGAR, CADASTRAR-SE OU ADQUIRIR QUALQUER CURSO POR MEIO DA PLATAFORMA, VOCÊ AUTOMATICAMENTE CONCORDA COM ESTES TERMOS DE USO E COM A POLÍTICA DE PRIVACIDADE, DE FORMA INTEGRAL, IRREVOGÁVEL E INCONDICIONAL.**
@@ -23,7 +25,7 @@ Caso você **não concorde** com qualquer cláusula destes Termos de Uso, **não
 
 As expressões a seguir constantes neste Termo, no plural ou no singular, terão o significado estabelecido abaixo:
 
-**Profissionaliza Mais Brasil** ou **PMB** ou **Plataforma**: pessoa jurídica responsável pela operação tecnológica e comercial deste ambiente digital, que disponibiliza ferramentas para que **Revendedores parceiros** comercializem **Cursos** profissionalizantes online ao **Aluno** final.
+**Profissionaliza Mais Brasil** ou **PMB** ou **Plataforma**: unidade de negócios do **GRUPO BOLSA MAIS BRASIL**, pessoa jurídica de direito privado inscrita no CNPJ/MF sob o nº **66.553.170/0001-01**, responsável pela operação tecnológica e comercial deste ambiente digital, que disponibiliza ferramentas para que **Revendedores parceiros** comercializem **Cursos** profissionalizantes online ao **Aluno** final.
 
 **Termos de Uso**: este instrumento contratual, que regula os termos e condições de uso da Plataforma pelos Visitantes e Alunos.
 
