@@ -13,6 +13,7 @@ import {
 } from "@/lib/asaas/client"
 import { sendEmail, isEmailConfigured } from "@/lib/email/resend"
 import { createNotification } from "@/lib/notifications"
+import { appUrl, vitrineUrl as buildVitrineUrl } from "@/lib/tenant/urls"
 
 export async function GET(request: Request) {
   const ctx = await requireAdminSession()
@@ -299,10 +300,8 @@ export async function POST(request: Request) {
 
   // Dispara email de onboarding com credenciais e link de pagamento.
   // Falha silenciosa se nenhum provedor estiver configurado — não quebra a criação.
-  const baseUrl =
-    process.env.NEXT_PUBLIC_APP_URL ??
-    "https://www.profissionalizamaisbrasil.com.br"
-  const vitrineUrl = `https://${data.slug}.profissionalizamaisbrasil.com.br`
+  const baseUrl = appUrl()
+  const vitrineUrl = buildVitrineUrl(data.slug)
   let emailSent = false
   let emailError: string | null = null
   try {

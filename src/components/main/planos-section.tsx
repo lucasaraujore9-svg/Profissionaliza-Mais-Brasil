@@ -10,7 +10,7 @@ const planos = [
     periodo: "/mês",
     features: [
       "Até 50 matrículas/mês",
-      "Subdomínio .profissionalizamaisbrasil.com.br",
+      "Subdomínio .livrecursos.com.br",
       "Catálogo completo (120 cursos)",
       "Suporte por email",
     ],

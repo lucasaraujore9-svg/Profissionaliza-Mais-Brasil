@@ -7,6 +7,7 @@ import {
 } from "@/lib/students/ea-actions"
 import { generatePasswordWithHash } from "@/lib/students/generate-password"
 import { createNotification } from "@/lib/notifications"
+import { appUrl as resolveAppUrl, vitrineHost } from "@/lib/tenant/urls"
 import type { PaymentGateway, PaymentType } from "@prisma/client"
 
 export interface TenantContext {
@@ -217,18 +218,15 @@ export async function fulfillEnrollment(
   // Email de boas-vindas ao painel /aluno (com senha temporária).
   // Disparamos quando geramos a senha agora — evita reenvio em recompras.
   if (panelPassword && enrollment.student.email) {
-    const appUrl =
-      process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ??
-      "https://www.profissionalizamaisbrasil.com.br"
+    const appUrl = resolveAppUrl().replace(/\/$/, "")
     let loginUrl: string
     let storeName: string
     if (tenant.isPmbVitrine) {
       loginUrl = `${appUrl}/login`
       storeName = "Profissionaliza Mais Brasil"
     } else {
-      // Loja do revendedor: link pro subdomínio dele.
-      const host = new URL(appUrl).host.replace(/^www\./, "")
-      loginUrl = `https://${tenant.slug}.${host}/login`
+      // Loja do revendedor: link pro subdominio no dominio de vitrines.
+      loginUrl = `https://${vitrineHost(tenant.slug)}/login`
       storeName = tenant.name ?? `Loja ${tenant.slug}`
     }
     await sendEmail({

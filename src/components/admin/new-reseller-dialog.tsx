@@ -21,6 +21,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { appDomain, vitrineDomain, vitrineUrl as buildVitrineUrl } from "@/lib/tenant/urls"
 
 interface NewResellerDialogProps {
   onCreated: () => void
@@ -141,7 +142,7 @@ export function NewResellerDialog({ onCreated }: NewResellerDialogProps) {
                   <Label htmlFor="r-slug">
                     Subdomínio{" "}
                     <span className="font-normal text-gray-500">
-                      (.profissionalizamaisbrasil.com.br)
+                      (.{vitrineDomain()})
                     </span>
                   </Label>
                   <Input
@@ -275,7 +276,7 @@ function CreatedSuccess({
     ? `/cobranca/${result.asaas.firstPaymentId}`
     : result.asaas.invoiceUrl
 
-  const vitrineUrl = `https://${result.tenant.slug}.profissionalizamaisbrasil.com.br`
+  const vitrineUrl = buildVitrineUrl(result.tenant.slug)
 
   return (
     <div className="space-y-4">
@@ -346,7 +347,7 @@ function CreatedSuccess({
               className="flex flex-1 items-center gap-1 truncate text-xs text-[var(--color-pmb-green)] underline underline-offset-2"
             >
               <ExternalLink className="h-3 w-3 shrink-0" />
-              <span className="truncate">{paymentLink.startsWith("/") ? `profissionalizamaisbrasil.com.br${paymentLink}` : paymentLink}</span>
+              <span className="truncate">{paymentLink.startsWith("/") ? `${appDomain()}${paymentLink}` : paymentLink}</span>
             </a>
             <button
               type="button"

@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { sendEmail } from "@/lib/email/mailer"
 import { generatePasswordWithHash } from "@/lib/students/generate-password"
+import { appUrl as resolveAppUrl, vitrineHost } from "@/lib/tenant/urls"
 
 export interface ProvisionAccessTenant {
   isPmbVitrine: boolean
@@ -35,9 +36,7 @@ export async function provisionStudentAccess(
     data: { passwordHash: hash, passwordSetAt: new Date() },
   })
 
-  const appUrl =
-    process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ??
-    "https://www.profissionalizamaisbrasil.com.br"
+  const appUrl = resolveAppUrl().replace(/\/$/, "")
 
   let loginUrl: string
   let storeName: string
@@ -45,8 +44,7 @@ export async function provisionStudentAccess(
     loginUrl = `${appUrl}/login`
     storeName = "Profissionaliza Mais Brasil"
   } else {
-    const host = new URL(appUrl).host.replace(/^www\./, "")
-    loginUrl = `https://${tenant.slug}.${host}/login`
+    loginUrl = `https://${vitrineHost(tenant.slug)}/login`
     storeName = tenant.name ?? `Loja ${tenant.slug}`
   }
 

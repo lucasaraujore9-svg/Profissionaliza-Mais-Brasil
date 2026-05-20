@@ -10,7 +10,7 @@ import type { DnsRecord } from "./dns-instructions"
 
 interface DomainInfo {
   subdomain: string
-  appDomain: string
+  vitrineDomain: string
   subdomainFull: string
   customDomain: string | null
   status: DomainStatus
@@ -98,7 +98,7 @@ export function DomainConfig() {
     <>
       <SubdomainDisplay
         subdomain={info.subdomain}
-        appDomain={info.appDomain}
+        vitrineDomain={info.vitrineDomain}
       />
       {info.vercelConfigured === false ? (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">

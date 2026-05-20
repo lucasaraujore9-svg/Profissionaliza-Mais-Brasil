@@ -5,14 +5,14 @@ import { Button } from "@/components/ui/button"
 
 interface SubdomainDisplayProps {
   subdomain: string
-  appDomain: string
+  vitrineDomain: string
 }
 
 export function SubdomainDisplay({
   subdomain,
-  appDomain,
+  vitrineDomain,
 }: SubdomainDisplayProps) {
-  const full = `${subdomain}.${appDomain}`
+  const full = `${subdomain}.${vitrineDomain}`
 
   function handleCopy() {
     if (typeof navigator !== "undefined" && navigator.clipboard) {
@@ -34,7 +34,7 @@ export function SubdomainDisplay({
       <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="font-mono text-lg font-bold text-[var(--color-pmb-green-900)] sm:text-xl">
           {subdomain}
-          <span className="text-gray-500">.{appDomain}</span>
+          <span className="text-gray-500">.{vitrineDomain}</span>
         </div>
         <div className="flex items-center gap-2">
           <Button size="sm" variant="outline" onClick={handleCopy}>

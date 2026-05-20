@@ -10,13 +10,11 @@ import {
   VercelNotConfiguredError,
 } from "@/lib/vercel/client"
 import { invalidateTenant } from "@/lib/redis/tenant-cache"
-
-const appDomain =
-  process.env.NEXT_PUBLIC_APP_DOMAIN ?? "profissionalizamaisbrasil.com.br"
-
-function cnameTarget(): string {
-  return `cname.${appDomain}`
-}
+import {
+  appDomain as resolveAppDomain,
+  cnameTarget as resolveCnameTarget,
+  vitrineDomain as resolveVitrineDomain,
+} from "@/lib/tenant/urls"
 
 async function fetchTenantDomainInfo(tenantId: string) {
   const tenant = await prisma.tenant.findUnique({
@@ -43,10 +41,11 @@ async function fetchTenantDomainInfo(tenantId: string) {
     }
   }
 
+  const vitrineDomain = resolveVitrineDomain()
   return {
     subdomain: tenant.slug,
-    appDomain,
-    subdomainFull: `${tenant.slug}.${appDomain}`,
+    vitrineDomain,
+    subdomainFull: `${tenant.slug}.${vitrineDomain}`,
     customDomain: tenant.customDomain,
     status,
     vercelConfigured: isVercelConfigured(),
@@ -55,7 +54,7 @@ async function fetchTenantDomainInfo(tenantId: string) {
           {
             type: "CNAME",
             name: tenant.customDomain.startsWith("www.") ? "www" : "@",
-            value: cnameTarget(),
+            value: resolveCnameTarget(),
           },
         ]
       : [],
@@ -114,7 +113,12 @@ export async function POST(request: Request) {
   }
 
   const domain = parsed.data.domain
-  if (appDomain && domain.endsWith(`.${appDomain}`)) {
+  const appDomain = resolveAppDomain()
+  const vitrineDomain = resolveVitrineDomain()
+  if (
+    (appDomain && domain.endsWith(`.${appDomain}`)) ||
+    (vitrineDomain && domain.endsWith(`.${vitrineDomain}`))
+  ) {
     return NextResponse.json(
       { error: "Use apenas domínio próprio, não um subdomínio da plataforma" },
       { status: 400 },

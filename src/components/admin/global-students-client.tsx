@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { Input } from "@/components/ui/input"
 import { Loader2 } from "lucide-react"
+import { vitrineHost } from "@/lib/tenant/urls"
 
 interface TenantOption {
   id: string
@@ -182,7 +183,7 @@ export function GlobalStudentsClient() {
                               {s.tenant.name}
                             </div>
                             <div className="text-[10px] text-gray-500">
-                              {s.tenant.slug}.profissionalizamaisbrasil.com.br
+                              {vitrineHost(s.tenant.slug)}
                             </div>
                           </div>
                         )}

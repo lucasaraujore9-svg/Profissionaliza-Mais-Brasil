@@ -2,37 +2,51 @@
 
 ## O Problema
 
-Precisamos que o mesmo app Next.js responda a 3 tipos de URL:
+O mesmo app Next.js responde a 4 tipos de URL, distribuidos em **dois dominios distintos**:
 
 | Tipo | Exemplo | O que mostra |
 |------|---------|-------------|
-| Dominio principal | `profissionalizamaisbrasil.com.br` | Site institucional, login, admin |
-| Subdominio | `joao.profissionalizamaisbrasil.com.br` | Vitrine do revendedor "joao" |
+| Dominio do app (PMB) | `profissionalizamaisbrasil.com.br` | Site institucional + `/admin` + `/painel` + `/aluno` |
+| Apex do dominio de vitrines | `livrecursos.com.br` | Landing de captacao de revendedores |
+| Subdominio do dominio de vitrines | `joao.livrecursos.com.br` | Vitrine do revendedor "joao" |
 | Dominio custom | `cursosjoao.com.br` | Vitrine do revendedor "joao" |
+
+> Subdominios de `profissionalizamaisbrasil.com.br` (ex: `joao.profissionalizamaisbrasil.com.br`) **nunca** sao tenants — sao sempre reservados (`www`, `app`, `api`, ...). Isso isola o site institucional/admin do dominio onde vivem as vitrines, e os cookies de sessao ficam automaticamente segregados por dominio.
+
+Em codigo, **sempre** use os helpers em `src/lib/tenant/urls.ts` (`appDomain`, `vitrineDomain`, `vitrineHost`, `vitrineUrl`, `cnameTarget`) em vez de concatenar strings.
 
 ## Solucao Completa
 
-### 1. Configuracao DNS do Dominio Principal
+### 1. Configuracao DNS
 
-No registrador do dominio (Registro.br ou onde estiver):
-
+**Registrar de `profissionalizamaisbrasil.com.br`:**
 ```
-profissionalizamaisbrasil.com.br    A       76.76.21.21
-*.profissionalizamaisbrasil.com.br  CNAME   cname.vercel-dns.com
+profissionalizamaisbrasil.com.br        A       76.76.21.21
+www.profissionalizamaisbrasil.com.br    CNAME   cname.vercel-dns.com
 ```
+Nao precisa wildcard aqui — subdominios nao sao usados como vitrine.
 
-O registro wildcard `*` faz com que qualquer subdominio aponte para a Vercel.
+**Registrar de `livrecursos.com.br`:**
+```
+livrecursos.com.br                      A       76.76.21.21
+www.livrecursos.com.br                  CNAME   cname.vercel-dns.com
+*.livrecursos.com.br                    CNAME   cname.vercel-dns.com
+```
+O wildcard `*` aceita qualquer subdominio de vitrine.
 
 ### 2. Configuracao na Vercel
 
-No painel da Vercel > Settings > Domains, adicionar:
+No painel Vercel > Settings > Domains, adicionar **todos**:
 
 ```
-profissionalizamaisbrasil.com.br          (dominio principal)
-*.profissionalizamaisbrasil.com.br        (wildcard - aceita qualquer sub)
+profissionalizamaisbrasil.com.br          (apex PMB)
+www.profissionalizamaisbrasil.com.br      (www PMB)
+livrecursos.com.br                        (apex livrecursos)
+www.livrecursos.com.br                    (www livrecursos)
+*.livrecursos.com.br                      (wildcard — vitrines)
 ```
 
-A Vercel gera SSL automaticamente para ambos.
+A Vercel gera SSL automaticamente para todos.
 
 ### 3. Dominios Custom dos Revendedores
 
@@ -40,8 +54,9 @@ Quando um revendedor quer usar seu proprio dominio (ex: `cursosjoao.com.br`):
 
 **Passo 1 — Revendedor configura DNS no dominio dele:**
 ```
-cursosjoao.com.br   CNAME   cname.vercel-dns.com
+cursosjoao.com.br   CNAME   cname.livrecursos.com.br
 ```
+(Esse CNAME interno aponta para a Vercel; o valor exato e retornado por `cnameTarget()` em `src/lib/tenant/urls.ts`.)
 
 **Passo 2 — Nosso sistema adiciona o dominio no projeto Vercel via API:**
 ```typescript
@@ -111,16 +126,19 @@ Revendedor digita dominio → POST /api/tenants/domain → addCustomDomain()
 → Quando verified=true: dominio ativo!
 ```
 
-### 4. O Middleware (PECA CENTRAL)
+### 4. O Proxy (PECA CENTRAL)
+
+Implementacao real em `src/proxy.ts`. O pseudocodigo abaixo descreve a logica — sempre prefira ler o codigo:
 
 ```typescript
-// src/middleware.ts
+// src/proxy.ts (resumo da logica)
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
 const APP_DOMAIN = process.env.NEXT_PUBLIC_APP_DOMAIN || 'profissionalizamaisbrasil.com.br'
+const VITRINE_DOMAIN = process.env.NEXT_PUBLIC_VITRINE_DOMAIN || 'livrecursos.com.br'
 
-// Subdominios que NAO sao tenants
+// Subdominios que NAO sao tenants em VITRINE_DOMAIN
 const RESERVED_SUBDOMAINS = new Set([
   'www', 'app', 'api', 'admin', 'painel', 'mail', 'smtp',
   'ftp', 'cdn', 'assets', 'static', 'staging', 'dev', 'test'
@@ -132,40 +150,46 @@ const PUBLIC_PATHS = new Set([
   '/seja-revendedor', '/sobre', '/api/webhooks'
 ])
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const hostname = request.headers.get('host') || ''
   const cleanHost = hostname.replace(/:\d+$/, '').replace(/^www\./, '')
   const pathname = request.nextUrl.pathname
 
-  // --- 1. DOMINIO PRINCIPAL ---
-  if (cleanHost === APP_DOMAIN) {
-    // Site principal: nao faz nada, segue normal
+  // --- 1. APP_DOMAIN (PMB): site institucional + admin + painel ---
+  // Subdominios aqui sao sempre reservados (RESERVED_SUBDOMAINS), nunca tenant.
+  if (cleanHost === APP_DOMAIN || cleanHost.endsWith(`.${APP_DOMAIN}`)) {
     return NextResponse.next()
   }
 
-  // --- 2. SUBDOMINIO ---
-  if (cleanHost.endsWith(`.${APP_DOMAIN}`)) {
-    const subdomain = cleanHost.replace(`.${APP_DOMAIN}`, '')
+  // --- 2. VITRINE_DOMAIN apex/www: landing dedicada (rewrite /livrecursos) ---
+  if (cleanHost === VITRINE_DOMAIN) {
+    const url = request.nextUrl.clone()
+    url.pathname = pathname === '/' ? '/livrecursos' : `/livrecursos${pathname}`
+    return NextResponse.rewrite(url)
+  }
 
-    // Subdominio reservado? (ex: api.profissionalizamaisbrasil.com.br)
+  // --- 3. VITRINE_DOMAIN subdominio: tenant ---
+  if (cleanHost.endsWith(`.${VITRINE_DOMAIN}`)) {
+    const subdomain = cleanHost.replace(`.${VITRINE_DOMAIN}`, '')
+
+    // Subdominio reservado (ex: www.livrecursos.com.br) → landing
     if (RESERVED_SUBDOMAINS.has(subdomain)) {
-      return NextResponse.next()
+      const url = request.nextUrl.clone()
+      url.pathname = pathname === '/' ? '/livrecursos' : `/livrecursos${pathname}`
+      return NextResponse.rewrite(url)
     }
 
     // Resolver tenant pelo slug (subdominio)
     const tenant = await resolveTenantBySlug(subdomain)
 
     if (!tenant) {
-      // Subdominio nao existe → pagina 404 ou redirect
       return NextResponse.rewrite(new URL('/loja/not-found', request.url))
     }
 
     if (tenant.status !== 'active') {
-      // Tenant suspenso/cancelado
       return NextResponse.rewrite(new URL('/loja/suspended', request.url))
     }
 
-    // Injetar tenant nos headers e reescrever para /loja/*
     const response = NextResponse.rewrite(
       new URL(`/loja${pathname === '/' ? '' : pathname}`, request.url)
     )
@@ -174,7 +198,7 @@ export async function middleware(request: NextRequest) {
     return response
   }
 
-  // --- 3. DOMINIO CUSTOM ---
+  // --- 4. DOMINIO CUSTOM ---
   const tenant = await resolveTenantByDomain(cleanHost)
 
   if (!tenant) {
@@ -326,7 +350,7 @@ PAINEL DO REVENDEDOR > CONFIGURACOES > DOMINIO
 
 ┌─────────────────────────────────────────────────┐
 │ Seu Subdominio (automatico):                     │
-│ [joao].profissionalizamaisbrasil.com.br  ✅ Ativo │
+│ [joao].livrecursos.com.br  ✅ Ativo               │
 │                                                   │
 │ ─────────────────────────────────────────────────│
 │                                                   │
@@ -339,7 +363,7 @@ PAINEL DO REVENDEDOR > CONFIGURACOES > DOMINIO
 │ ┌──────────────────────────────────────────────┐  │
 │ │ Tipo: CNAME                                   │  │
 │ │ Nome: @ (ou cursosjoao.com.br)               │  │
-│ │ Valor: cname.vercel-dns.com                  │  │
+│ │ Valor: cname.livrecursos.com.br              │  │
 │ └──────────────────────────────────────────────┘  │
 │                                                   │
 │ [🔄 Verificar DNS]  [❌ Remover dominio]          │
@@ -348,33 +372,33 @@ PAINEL DO REVENDEDOR > CONFIGURACOES > DOMINIO
 
 ### 8. Desenvolvimento Local
 
-Para testar multi-tenant localmente:
+`localhost` (sem subdominio) e tratado como app PMB. `{slug}.localhost` e tratado como tenant — conveniencia dev-only embutida em `src/proxy.ts`. Funciona out-of-the-box no Chrome/Edge (resolvem automaticamente).
+
+Para testar a landing dedicada de `livrecursos.com.br` em dev, mapeie um host:
 
 **Editar /etc/hosts:**
 ```
-127.0.0.1   profissionalizamaisbrasil.local
-127.0.0.1   joao.profissionalizamaisbrasil.local
-127.0.0.1   maria.profissionalizamaisbrasil.local
+127.0.0.1   livrecursos.local
+127.0.0.1   joao.livrecursos.local
+127.0.0.1   maria.livrecursos.local
 127.0.0.1   cursosjoao.local
 ```
 
-**Ou usar o middleware com deteccao de dev:**
-```typescript
-// Em dev, aceitar .local e localhost
-const isLocalDev = process.env.NODE_ENV === 'development'
-const APP_DOMAIN = isLocalDev 
-  ? 'profissionalizamaisbrasil.local:3000'
-  : 'profissionalizamaisbrasil.com.br'
+**E definir no `.env.local`:**
 ```
+NEXT_PUBLIC_VITRINE_DOMAIN=livrecursos.local
+```
+
+Acesse `http://livrecursos.local:3000` (landing) e `http://joao.livrecursos.local:3000` (vitrine do tenant joao).
 
 ### 9. Checklist de Deploy
 
-- [ ] Dominio principal adicionado na Vercel
-- [ ] Wildcard `*.profissionalizamaisbrasil.com.br` adicionado na Vercel
-- [ ] DNS do dominio principal configurado (A record → 76.76.21.21)
-- [ ] DNS wildcard configurado (CNAME *.pmb → cname.vercel-dns.com)
-- [ ] SSL gerado automaticamente pela Vercel (verificar)
-- [ ] Vercel Token gerado e salvo nas env vars
+- [ ] DNS de `profissionalizamaisbrasil.com.br` configurado (A + CNAME www)
+- [ ] DNS de `livrecursos.com.br` configurado (A + CNAME www + CNAME wildcard)
+- [ ] Vercel > Settings > Domains: ambos os apex, ambos os www, e `*.livrecursos.com.br`
+- [ ] Env vars setadas: `NEXT_PUBLIC_APP_DOMAIN`, `NEXT_PUBLIC_VITRINE_DOMAIN`, `NEXT_PUBLIC_APP_URL`, `NEXTAUTH_URL`
+- [ ] SSL gerado automaticamente pela Vercel (verificar todos)
+- [ ] Vercel Token gerado e salvo nas env vars (gerencia custom domains dos revendedores)
 - [ ] Vercel Project ID e Team ID salvos nas env vars
 - [ ] Redis (Upstash) configurado e conectado
 - [ ] Middleware testado com subdominio e dominio custom

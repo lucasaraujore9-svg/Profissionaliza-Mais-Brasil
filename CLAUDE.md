@@ -175,21 +175,34 @@ profissionaliza-mais-brasil/
 
 ## Arquitetura Multi-Tenant (MAIS IMPORTANTE DO SISTEMA)
 
-O middleware do Next.js resolve o tenant a partir do hostname:
+A plataforma usa **dois dominios distintos** (proxy em `src/proxy.ts`):
 
-1. `profissionalizamaisbrasil.com.br` → Site principal (rotas normais)
-2. `*.profissionalizamaisbrasil.com.br` → Vitrine do revendedor (rewrite para /loja/*)
-3. `dominio-custom.com.br` → Vitrine do revendedor (rewrite para /loja/*)
+| Hostname | O que renderiza |
+|---|---|
+| `profissionalizamaisbrasil.com.br` (e `www`) | Site PMB institucional + `/admin` + `/painel` + `/aluno` + `/loja` direto. **Subdominios aqui sao sempre reservados (www, app, api, ...) — nunca tenant.** |
+| `livrecursos.com.br` (e `www`) | Landing dedicada a captacao de revendedores (rewrite para `/livrecursos`). |
+| `{slug}.livrecursos.com.br` | Vitrine do revendedor `{slug}` (rewrite para `/loja/*`). |
+| `dominio-custom.com.br` | Vitrine do revendedor que configurou dominio proprio (lookup por `customDomain` no banco). |
+
+**Helpers obrigatorios em `src/lib/tenant/urls.ts`** — sempre use estas funcoes em vez de concatenar strings de dominio:
+
+- `appDomain()` → `profissionalizamaisbrasil.com.br`
+- `vitrineDomain()` → `livrecursos.com.br`
+- `appUrl()` → `https://profissionalizamaisbrasil.com.br`
+- `vitrineHost(slug)` → `{slug}.livrecursos.com.br`
+- `vitrineUrl(slug)` → `https://{slug}.livrecursos.com.br`
+- `cnameTarget()` → `cname.livrecursos.com.br` (alvo CNAME para custom domains)
 
 **Implementacao detalhada em:** `docs/architecture/DOMINIOS-GUIDE.md`
 
 **Regras:**
-- Middleware roda no Edge Runtime — NAO pode usar Prisma direto
+- Proxy roda no Edge Runtime — NAO pode usar Prisma direto
 - Usar Upstash Redis como cache (funciona no Edge) + Supabase client como fallback
 - TTL do cache: 5 minutos
-- Subdominios reservados: www, app, api, admin, painel, mail, smtp, ftp, cdn, assets, static, staging, dev, test
+- Subdominios reservados em livrecursos.com.br: www, app, api, admin, painel, mail, smtp, ftp, cdn, assets, static, staging, dev, test
 - TODA query no contexto da vitrine DEVE filtrar por tenant_id
 - NUNCA permitir acesso cross-tenant
+- Cookies de sessao sao automaticamente isolados pelos dominios (PMB e livrecursos nao compartilham sessao)
 
 ## Integracoes API — Resumo Rapido
 
@@ -273,6 +286,7 @@ Apos configurar o `.mcp.json` na raiz, reinicie o Claude Code. As ferramentas do
 # App
 NEXT_PUBLIC_APP_URL=https://profissionalizamaisbrasil.com.br
 NEXT_PUBLIC_APP_DOMAIN=profissionalizamaisbrasil.com.br
+NEXT_PUBLIC_VITRINE_DOMAIN=livrecursos.com.br
 
 # Database (Supabase)
 DATABASE_URL=postgresql://...

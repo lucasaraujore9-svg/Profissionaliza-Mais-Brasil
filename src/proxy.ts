@@ -1,16 +1,34 @@
 import { NextRequest, NextResponse } from "next/server"
 
+// ============================================================
+// Arquitetura de dominios (multi-tenant)
+//
+//   profissionalizamaisbrasil.com.br      → site PMB (institucional + admin + painel)
+//   www.profissionalizamaisbrasil.com.br  → site PMB
+//   livrecursos.com.br                    → landing dedicada a captacao de revendedores
+//   www.livrecursos.com.br                → mesma landing
+//   {slug}.livrecursos.com.br             → vitrine do revendedor (rewrite p/ /loja)
+//   {customDomain}                        → vitrine do revendedor (lookup via DB)
+//
+// Subdominios em PMB NAO sao tenants (so reservados como www, app, api, ...).
+// ============================================================
+
 const PRIMARY_APP_DOMAIN = "profissionalizamaisbrasil.com.br"
+const PRIMARY_VITRINE_DOMAIN = "livrecursos.com.br"
 
 const APP_DOMAINS = Array.from(
   new Set(
-    [
-      process.env.NEXT_PUBLIC_APP_DOMAIN,
-      PRIMARY_APP_DOMAIN,
-      "localhost:3000",
-      "localhost:3002",
-      "localhost",
-    ].filter((d): d is string => Boolean(d))
+    [process.env.NEXT_PUBLIC_APP_DOMAIN, PRIMARY_APP_DOMAIN].filter(
+      (d): d is string => Boolean(d)
+    )
+  )
+)
+
+const VITRINE_DOMAINS = Array.from(
+  new Set(
+    [process.env.NEXT_PUBLIC_VITRINE_DOMAIN, PRIMARY_VITRINE_DOMAIN].filter(
+      (d): d is string => Boolean(d)
+    )
   )
 )
 
@@ -43,20 +61,70 @@ function isVitrinePath(pathname: string): boolean {
   )
 }
 
-function detectSubdomain(hostname: string): {
-  subdomain: string | null
+function stripPort(hostname: string): string {
+  return hostname.split(":")[0]
+}
+
+type HostKind = "app" | "vitrine_apex" | "tenant" | "unknown"
+
+interface HostInfo {
+  kind: HostKind
   apex: string | null
-} {
+  subdomain: string | null
+}
+
+function matchApex(hostname: string, apex: string): HostInfo | null {
+  if (hostname === apex || hostname === `www.${apex}`) {
+    return { kind: "app", apex, subdomain: null }
+  }
+  if (hostname.endsWith(`.${apex}`)) {
+    const sub = stripPort(hostname.slice(0, -1 * (apex.length + 1)))
+    return { kind: "app", apex, subdomain: sub }
+  }
+  return null
+}
+
+function classifyHost(hostname: string): HostInfo {
+  // 1) App domain (site PMB) — subdominios aqui sao sempre reservados,
+  //    NUNCA tenants. Isso isola o site institucional/admin de vitrines.
   for (const apex of APP_DOMAINS) {
+    const hit = matchApex(hostname, apex)
+    if (hit) return hit
+  }
+
+  // 2) Vitrine domain — apex sao landing dedicada; subdominios viram tenants
+  //    (a menos que estejam em RESERVED_SUBDOMAINS).
+  for (const apex of VITRINE_DOMAINS) {
     if (hostname === apex || hostname === `www.${apex}`) {
-      return { subdomain: null, apex }
+      return { kind: "vitrine_apex", apex, subdomain: null }
     }
     if (hostname.endsWith(`.${apex}`)) {
-      const sub = hostname.slice(0, -1 * (apex.length + 1)).split(":")[0]
-      return { subdomain: sub, apex }
+      const sub = stripPort(hostname.slice(0, -1 * (apex.length + 1)))
+      if (RESERVED_SUBDOMAINS.has(sub)) {
+        return { kind: "vitrine_apex", apex, subdomain: sub }
+      }
+      return { kind: "tenant", apex, subdomain: sub }
     }
   }
-  return { subdomain: null, apex: null }
+
+  // 3) Dev local: `localhost` ou `localhost:PORT` → trata como app principal.
+  //    `{slug}.localhost[:PORT]` → trata como tenant (conveniencia dev-only).
+  //    Para testar a landing de livrecursos em dev, defina
+  //    NEXT_PUBLIC_VITRINE_DOMAIN no .env.local (ex: livrecursos.local) e
+  //    aponte no /etc/hosts.
+  const bare = stripPort(hostname)
+  if (bare === "localhost") {
+    return { kind: "app", apex: hostname, subdomain: null }
+  }
+  if (bare.endsWith(".localhost")) {
+    const sub = bare.slice(0, -1 * ".localhost".length)
+    if (RESERVED_SUBDOMAINS.has(sub)) {
+      return { kind: "app", apex: hostname, subdomain: sub }
+    }
+    return { kind: "tenant", apex: hostname, subdomain: sub }
+  }
+
+  return { kind: "unknown", apex: null, subdomain: null }
 }
 
 async function resolveTenantFromRedis(
@@ -116,27 +184,31 @@ export default async function proxy(request: NextRequest) {
     return NextResponse.next()
   }
 
-  const { subdomain } = detectSubdomain(hostname)
+  const host = classifyHost(hostname)
+
+  // Apex da vitrine (livrecursos.com.br/, www.livrecursos.com.br/, ou subdominios
+  // reservados como www): renderiza a landing dedicada de captacao em /livrecursos.
+  if (host.kind === "vitrine_apex") {
+    const url = request.nextUrl.clone()
+    url.pathname = pathname === "/" ? "/livrecursos" : `/livrecursos${pathname}`
+    return NextResponse.rewrite(url)
+  }
 
   let tenantSlug: string | null = null
 
-  if (subdomain && !RESERVED_SUBDOMAINS.has(subdomain)) {
-    tenantSlug = subdomain
+  if (host.kind === "tenant" && host.subdomain) {
+    tenantSlug = host.subdomain
   }
 
-  if (!tenantSlug) {
-    const knownApex = APP_DOMAINS.some(
-      (apex) => hostname === apex || hostname === `www.${apex}`
+  // Hostname desconhecido: tenta resolver como custom domain de tenant.
+  if (host.kind === "unknown") {
+    const tenant = await resolveTenantFromDB(
+      stripPort(hostname),
+      "domain",
+      origin
     )
-    if (!knownApex) {
-      const tenant = await resolveTenantFromDB(
-        hostname.split(":")[0],
-        "domain",
-        origin
-      )
-      if (tenant) {
-        tenantSlug = tenant.slug
-      }
+    if (tenant) {
+      tenantSlug = tenant.slug
     }
   }
 

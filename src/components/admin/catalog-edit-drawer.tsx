@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet"
+import { appDomain } from "@/lib/tenant/urls"
 
 export interface CatalogEditDrawerProps {
   courseId: string | null
@@ -390,8 +391,8 @@ export function CatalogEditDrawer({ courseId, open, onOpenChange, onSaved }: Cat
                       Ocultar só na vitrine principal
                     </div>
                     <div className="text-[11px] text-gray-500">
-                      Some apenas em www.profissionalizamaisbrasil.com.br.
-                      Revendedores continuam vendendo normalmente.
+                      Some apenas em www.{appDomain()}. Revendedores continuam
+                      vendendo normalmente.
                     </div>
                   </div>
                 </label>
