@@ -5,22 +5,22 @@ import remarkGfm from "remark-gfm"
 import { PageHero, PageBody, Prose } from "@/components/main/static/page-hero"
 
 export const metadata = {
-  title: "Termos de Uso — Profissionaliza Mais Brasil",
+  title: "Contrato de Revenda — Profissionaliza Mais Brasil",
   description:
-    "Termos e condições de uso da plataforma Profissionaliza Mais Brasil para alunos e visitantes.",
+    "Contrato de licenciamento de uso da plataforma e revenda de cursos profissionalizantes Profissionaliza Mais Brasil.",
 }
 
-export default function TermosPage() {
-  const file = path.join(process.cwd(), "docs/legal/TERMOS-DE-USO-ALUNO.md")
+export default function ContratoRevendaPage() {
+  const file = path.join(process.cwd(), "docs/legal/CONTRATO-DE-REVENDA.md")
   const raw = fs.readFileSync(file, "utf-8")
   const body = raw.replace(/^# .+?\n/, "").trim()
 
   return (
     <>
       <PageHero
-        eyebrow="Termos de uso"
-        titulo="Termos e Condições de Uso — Alunos e Visitantes"
-        subtitulo="Versão 1.0 — Atualizado em 20 de maio de 2026. Leia atentamente antes de adquirir qualquer curso."
+        eyebrow="Contrato de revenda"
+        titulo="Contrato de Licenciamento e Revenda de Cursos"
+        subtitulo="Versão 1.0 — Atualizado em 20 de maio de 2026. Documento aplicável a revendedores e consultores parceiros."
       />
       <PageBody>
         <Prose>
