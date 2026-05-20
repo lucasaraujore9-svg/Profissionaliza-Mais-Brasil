@@ -234,12 +234,12 @@ export interface ShowcaseCard {
 export async function loadCatalogo({
   q,
   categoriaSlug,
-  take = 96,
+  take,
 }: {
   q?: string
   categoriaSlug?: string
   take?: number
-}): Promise<Course[]> {
+}): Promise<{ cursos: Course[]; total: number }> {
   try {
     const where: Record<string, unknown> = {
       status: "ATIVO",
@@ -262,20 +262,26 @@ export async function loadCatalogo({
       const realName = real
         .map((r) => r.categoriaLoja!)
         .find((n) => slugifyCategoria(n) === categoriaSlug)
-      if (!realName) return []
+      if (!realName) return { cursos: [], total: 0 }
       where.categoriaLoja = { equals: realName, mode: "insensitive" }
     }
 
-    const rows = await prisma.course.findMany({
-      where,
-      orderBy: [{ destaqueHome: "desc" }, { destaque: "desc" }, { nome: "asc" }],
-      take,
-      select: SELECT,
-    })
+    const [rows, total] = await Promise.all([
+      prisma.course.findMany({
+        where,
+        orderBy: [{ destaqueHome: "desc" }, { destaque: "desc" }, { nome: "asc" }],
+        ...(take ? { take } : {}),
+        select: SELECT,
+      }),
+      prisma.course.count({ where }),
+    ])
 
-    return rows.map((c, idx) => toCourse(normalize(c), idx))
+    return {
+      cursos: rows.map((c, idx) => toCourse(normalize(c), idx)),
+      total,
+    }
   } catch {
-    return []
+    return { cursos: [], total: 0 }
   }
 }
 

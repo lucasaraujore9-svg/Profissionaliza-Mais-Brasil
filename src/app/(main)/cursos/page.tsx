@@ -12,7 +12,7 @@ export default async function CursosPage({
   const q = sp.q?.trim() || ""
   const categoriaSlug = sp.categoria?.trim() || ""
 
-  const [cursos, categorias] = await Promise.all([
+  const [{ cursos, total }, categorias] = await Promise.all([
     loadCatalogo({ q, categoriaSlug }),
     loadCategorias(1),
   ])
@@ -97,7 +97,7 @@ export default async function CursosPage({
         ) : (
           <>
             <p className="mb-5 text-[13px] text-[rgba(2,89,24,0.7)]">
-              {cursos.length} {cursos.length === 1 ? "curso encontrado" : "cursos encontrados"}
+              {total} {total === 1 ? "curso encontrado" : "cursos encontrados"}
               {q && ` para "${q}"`}
             </p>
             <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">

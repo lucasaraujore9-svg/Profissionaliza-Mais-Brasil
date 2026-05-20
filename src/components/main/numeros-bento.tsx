@@ -19,7 +19,7 @@ async function loadMetrics(): Promise<PublicMetrics> {
   try {
     const [resellers, courses, students, revenueAgg] = await Promise.all([
       prisma.tenant.count({ where: { status: "ACTIVE" } }),
-      prisma.course.count(),
+      prisma.course.count({ where: { status: "ATIVO", hiddenMain: false } }),
       prisma.student.count(),
       prisma.payment.aggregate({
         _sum: { amount: true },
