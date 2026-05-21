@@ -9,12 +9,6 @@ const pilares = [
       "CNPJ 66.553.170/0001-01. 10 anos de história em educação, com a missão de transformar vidas e ajudar quem quer empreender.",
   },
   {
-    rotulo: "Conteúdo",
-    titulo: "Escola Avançada",
-    descricao:
-      "Uma das maiores empresas de cursos livres do país, com mais de 10 anos de mercado. Você revende algo que já funciona.",
-  },
-  {
     rotulo: "Tecnologia",
     titulo: "Plataforma própria",
     descricao:
