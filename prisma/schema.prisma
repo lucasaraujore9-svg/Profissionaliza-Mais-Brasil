@@ -200,10 +200,10 @@ model Tenant {
   mpConnected    Boolean @default(false) @map("mp_connected")
   mpUserId       String? @map("mp_user_id") // ID do revendedor no MP
 
-  // Integracao Escola Avancada
-  eaVendedorId    String? @map("ea_vendedor_id") // ID do funcionario criado na EA
-  eaVendedorLogin String? @map("ea_vendedor_login") // Login retornado pelo funcionarios/novo
-  poloName        String? @map("polo_name") // Nome do polo usado no campo "polo" da EA
+  // Integracao com a plataforma de aulas
+  plataformaVendedorId    String? @map("ea_vendedor_id") // ID do funcionario criado na plataforma
+  plataformaVendedorLogin String? @map("ea_vendedor_login") // Login retornado pelo funcionarios/novo
+  poloName        String? @map("polo_name") // Nome do polo usado no campo "polo" da plataforma
 
   // Dono do tenant (owner principal)
   owner User? @relation("TenantOwner")
@@ -251,17 +251,17 @@ model TenantSupportNote {
 }
 
 // ============================================================
-// CURSOS (sincronizados da Escola Avancada)
+// CURSOS (sincronizados da plataforma de aulas)
 // ============================================================
 
 model Course {
   id String @id @default(cuid())
 
-  // Dados da Escola Avancada
+  // Dados da plataforma de aulas
   // ATENCAO: a API cursos/listar NAO retorna ID do curso!
-  // eaCourseId pode ser: (1) descoberto via testes, (2) inferido da ordem, ou (3) null
+  // plataformaCourseId pode ser: (1) descoberto via testes, (2) inferido da ordem, ou (3) null
   // O campo "nome" e usado como chave alternativa de match no sync
-  eaCourseId        String?  @unique @map("ea_course_id") // ID na EA (pode ser null se API nao retornar)
+  plataformaCourseId        String?  @unique @map("ea_course_id") // ID na plataforma (pode ser null se API nao retornar)
   nome              String   @unique // Nome e a chave de match primaria no sync
   descricao         String?  @db.Text // Campo "obs" da API
   qtdAulas          Int      @map("qtd_aulas") // Campo "aulas"
@@ -392,13 +392,13 @@ model Student {
   // Asaas
   asaasCustomerId String? @map("asaas_customer_id")
 
-  // Escola Avancada
-  eaAlunoId    String  @map("ea_aluno_id") // Login retornado por usuarios/novo
-  eaAlunoSenha String? @map("ea_aluno_senha") // Criptografada
-  polo         String // = tenant.slug (enviado a EA)
-  vendedorId   String? @map("vendedor_id") // = tenant.eaVendedorId
+  // plataforma de aulas
+  plataformaAlunoId    String  @map("ea_aluno_id") // Login retornado por usuarios/novo
+  plataformaAlunoSenha String? @map("ea_aluno_senha") // Criptografada
+  polo         String // = tenant.slug (enviado a plataforma)
+  vendedorId   String? @map("vendedor_id") // = tenant.plataformaVendedorId
 
-  // Status na EA
+  // Status na plataforma
   status   StudentStatus  @default(ATIVO)
   apostila ApostilaStatus @default(LIBERADA)
 
@@ -423,7 +423,7 @@ model Student {
   @@unique([tenantId, email])
   @@unique([tenantId, cpf])
   @@index([tenantId])
-  @@index([eaAlunoId])
+  @@index([plataformaAlunoId])
   @@index([tenantId, status])
   @@index([resetToken])
   @@map("students")

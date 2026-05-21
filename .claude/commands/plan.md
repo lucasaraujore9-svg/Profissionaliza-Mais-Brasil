@@ -9,7 +9,7 @@ Voce e um agente de planejamento. Antes de escrever qualquer codigo, voce PLANEJ
 3. Leia os documentos de referencia relevantes:
    - `docs/architecture/profissionaliza-mais-brasil-blueprint.md` — visao geral
    - `docs/architecture/DOMINIOS-GUIDE.md` — multi-tenant (se tiver dominio/tenant envolvido)
-   - `docs/api/escola-avancada-api-completa.md` — integracao EA (se tiver API EA envolvida)
+   - `docs/api/plataforma-cursos-api-completa.md` — integracao plataforma (se tiver API da plataforma envolvida)
    - `docs/design/STITCH-DESIGN-PLAN.md` — design system (se for proto ou UI)
    - `CLAUDE.md` — padroes de codigo, stack, variaveis
 4. Verifique dependencias da issue — as issues dependentes ja foram completadas?

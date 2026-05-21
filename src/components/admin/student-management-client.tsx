@@ -36,7 +36,7 @@ interface StudentData {
   fone: string | null
   status: string
   apostila: string
-  eaAlunoId: string | null
+  plataformaAlunoId: string | null
   asaasCustomerId: string | null
   createdAt: string
   enrollments: EnrollmentItem[]
@@ -229,7 +229,7 @@ export function StudentManagementClient({ student: initialStudent, role }: Props
           <InfoField label="Email" value={student.email} />
           <InfoField label="CPF" value={student.cpf} />
           <InfoField label="Telefone" value={student.fone} />
-          <InfoField label="ID na plataforma de aulas" value={student.eaAlunoId} />
+          <InfoField label="ID na plataforma de aulas" value={student.plataformaAlunoId} />
           <InfoField label="ID Asaas" value={student.asaasCustomerId} />
           <InfoField label="Cadastro" value={formatDate(student.createdAt)} />
           <InfoField label="Apostila" value={student.apostila} />

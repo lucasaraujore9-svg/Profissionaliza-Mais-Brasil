@@ -24,7 +24,7 @@ export interface UpsertStudentInput {
   endereco?: string | null
   polo: string
   vendedorId: string | null
-  eaAlunoIdFallback: string // ex: `pending_<timestamp>`
+  plataformaAlunoIdFallback: string // ex: `pending_<timestamp>`
 }
 
 export interface UpsertedStudent {
@@ -99,7 +99,7 @@ export async function upsertStudent(
       rua: endereco ?? undefined,
       polo: input.polo,
       vendedorId: input.vendedorId,
-      eaAlunoId: input.eaAlunoIdFallback,
+      plataformaAlunoId: input.plataformaAlunoIdFallback,
       status: "ATIVO",
     },
     select: SELECT,

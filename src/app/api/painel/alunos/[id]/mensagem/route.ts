@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { requireResellerSession } from "@/lib/auth/reseller-session"
-import { enviarMensagem } from "@/lib/escola-avancada/client"
+import { enviarMensagem } from "@/lib/plataforma-cursos/client"
 
 const messageSchema = z.object({
   mensagem: z.string().trim().min(1, "Mensagem vazia").max(2000),
@@ -40,11 +40,11 @@ export async function POST(
   const [student, tenant] = await Promise.all([
     prisma.student.findFirst({
       where: { id, tenantId: ctx.tenantId },
-      select: { eaAlunoId: true },
+      select: { plataformaAlunoId: true },
     }),
     prisma.tenant.findUnique({
       where: { id: ctx.tenantId },
-      select: { eaVendedorId: true },
+      select: { plataformaVendedorId: true },
     }),
   ])
 
@@ -54,8 +54,8 @@ export async function POST(
 
   try {
     await enviarMensagem({
-      idaluno: Number(student.eaAlunoId),
-      idfuncionario: tenant?.eaVendedorId ? Number(tenant.eaVendedorId) : undefined,
+      idaluno: Number(student.plataformaAlunoId),
+      idfuncionario: tenant?.plataformaVendedorId ? Number(tenant.plataformaVendedorId) : undefined,
       mensagem: parsed.data.mensagem,
     })
   } catch (error) {

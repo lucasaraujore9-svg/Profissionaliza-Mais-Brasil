@@ -15,7 +15,7 @@ Criar página analytics e configurações do Admin. Componentes: filtros analyti
 - Charts — 6 gráficos: Receita Mensal, Alunos Crescimento, Conversão, Distribuição Revendedores, Origem Alunos, Satisfação
 - RankingTable — top 10 revendedores por métrica selecionada
 - ConfigTabs — 4 tabs: Geral, Integrações, Webhooks, Sobre
-- IntegrationTestCards — cards testes: "Testar Conexão EA", "Testar Asaas", "Testar MP"
+- IntegrationTestCards — cards testes: "Testar Conexão plataforma", "Testar Asaas", "Testar MP"
 - WebhookConfig — input webhook secret, tabela histórico webhooks
 - SystemInfo — card informações sistema: Versão, Ambiente, Últimas Sincronizações
 

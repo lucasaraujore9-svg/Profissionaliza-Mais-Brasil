@@ -31,7 +31,7 @@ export default async function StudentDashboardPage() {
   const pendingEnrollments = enrollments.filter((e) => e.status === "PENDING")
   const totalPaid = payments.reduce((sum, p) => sum + Number(p.amount), 0)
 
-  const eaLoginUrl =
+  const plataformaLoginUrl =
     process.env.EA_STUDENT_LOGIN_URL ?? "https://escolaavancada.com.br/aluno"
 
   return (
@@ -193,7 +193,7 @@ export default async function StudentDashboardPage() {
         </Link>
 
         <a
-          href={eaLoginUrl}
+          href={plataformaLoginUrl}
           target="_blank"
           rel="noopener noreferrer"
           className="flex items-center gap-4 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm transition-all hover:border-[var(--color-pmb-green)] hover:shadow-md"

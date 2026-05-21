@@ -27,7 +27,7 @@ Implementar React Email templates e integração Resend. Templates: welcome (rev
 - [ ] React Email templates criadas para 4 tipos
 - [ ] WelcomeTemplate com logo, greeting, próximos passos
 - [ ] ResetPasswordTemplate com link reset + expiration
-- [ ] EnrollmentTemplate com curso, acesso EA, CTA
+- [ ] EnrollmentTemplate com curso, acesso plataforma, CTA
 - [ ] PaymentTemplate com valor, comprovante, CTA
 - [ ] lib/email/resend.ts com sendEmail function
 - [ ] RESEND_API_KEY em .env

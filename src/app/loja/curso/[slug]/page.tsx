@@ -36,7 +36,7 @@ export default async function CoursePage({ params }: CoursePageProps) {
     )
   }
 
-  // getTenantCourseBySlug já aplica a hierarquia tenant > admin > EA
+  // getTenantCourseBySlug já aplica a hierarquia tenant > admin > plataforma
   const course = await getTenantCourseBySlug(tenant.id, slug)
   if (!course) notFound()
 

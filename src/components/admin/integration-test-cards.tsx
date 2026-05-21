@@ -132,7 +132,7 @@ export function IntegrationTestCards({ integrations }: IntegrationTestCardsProps
         description="Integração responsável por matrícula automática, bloqueio e sincronização de catálogo."
         brand="AULAS"
         brandClass="bg-[var(--color-pmb-green-900)]"
-        endpoint="/api/admin/config/test-ea"
+        endpoint="/api/admin/config/test-plataforma"
         configured={integrations.ea.configured}
       />
       <IntegrationCard

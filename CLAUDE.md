@@ -9,21 +9,21 @@ Plataforma SaaS multi-tenant de revenda de cursos profissionalizantes online.
 
 - **Admin Master** gerencia o ecossistema e cobra mensalidades dos revendedores via **Asaas**
 - **Revendedores** tem vitrines proprias com dominio personalizado e vendem cursos via **Mercado Pago**
-- **Alunos** compram cursos e sao auto-matriculados na **Escola Avancada** (plataforma white-label com API)
+- **Alunos** compram cursos e sao auto-matriculados na **plataforma parceira** (plataforma white-label com API)
 
-Nos NAO somos uma plataforma de cursos. Os alunos assistem aulas na Escola Avancada. Nos construimos a camada comercial, vitrine, gestao e cobranca.
+Nos NAO somos uma plataforma de cursos. Os alunos assistem aulas na plataforma parceira. Nos construimos a camada comercial, vitrine, gestao e cobranca.
 
 ## Progresso Atual (2026-04-15)
 
 ### O que ja esta implementado
 
-**Fundacao (020-029):** Prisma migrado + seed · middleware multi-tenant · NextAuth v5 (credentials, roles SUPER_ADMIN/PMB_SALES/PMB_RESELLER_MGR/RESELLER) · layouts auth/main/admin/painel/loja · clients EA/Asaas/MP · crypto AES-256-GCM · Redis Upstash · Resend + React Email.
+**Fundacao (020-029):** Prisma migrado + seed · middleware multi-tenant · NextAuth v5 (credentials, roles SUPER_ADMIN/PMB_SALES/PMB_RESELLER_MGR/RESELLER) · layouts auth/main/admin/painel/loja · clients plataforma/Asaas/MP · crypto AES-256-GCM · Redis Upstash · Resend + React Email.
 
 **Prototipos (001-019):** UIs hardcoded de todas as 19 paginas principais.
 
 **Behaviors (030-049):** landing, auth, checkout revendedor, vitrine, curso, checkout aluno, confirmacao, dashboard/cursos/alunos/cupons/financeiro revendedor, dominio (Vercel API), vitrine config (Supabase Storage), configuracoes, onboarding, dashboards + financeiro + analytics + config do admin.
 
-**Webhooks/Cron (050-053):** webhook Asaas (PAYMENT_RECEIVED/OVERDUE ativa/suspende tenant) · webhook MP (matricula automatica na EA) · cron diario 6h sync cursos (vercel.json) · auto-block/unblock de alunos via `src/lib/auto-block.ts`.
+**Webhooks/Cron (050-053):** webhook Asaas (PAYMENT_RECEIVED/OVERDUE ativa/suspende tenant) · webhook MP (matricula automatica na plataforma) · cron diario 6h sync cursos (vercel.json) · auto-block/unblock de alunos via `src/lib/auto-block.ts`.
 
 **Home vitrine (054):** home udemy-style com logo oficial + navbar/footer.
 
@@ -35,7 +35,7 @@ Nos NAO somos uma plataforma de cursos. Os alunos assistem aulas na Escola Avanc
 - /admin/vendas/* (SUPER_ADMIN, PMB_SALES) — dashboard + nova venda (form single-page) + cupons (cap 50% para PMB_SALES) + alunos PMB
 - /painel/equipe (RESELLER owner) — convida consultores, define `maxDiscount`
 - **Vitrine PMB**: `Enrollment/Payment/Coupon.tenantId = null`; `Student.tenantId` aponta para tenant placeholder slug `__pmb__` criado lazy por `src/lib/pmb-tenant.ts`
-- Env PMB: `PMB_MP_ACCESS_TOKEN` (plain), `PMB_EA_VENDEDOR_ID`, `PMB_EA_POLO`. Helpers em `src/lib/pmb-config.ts`
+- Env PMB: `PMB_MP_ACCESS_TOKEN` (plain), `PMB_PLATAFORMA_VENDEDOR_ID`, `PMB_PLATAFORMA_POLO`. Helpers em `src/lib/pmb-config.ts`
 - Webhook MP (`src/lib/mercadopago/process.ts`) com branch `isPmbVitrine` — usa pmbContext sintetico, token plain, nao atualiza WebhookLog.tenantId
 - Seed reescrito (`prisma/seed.ts`): super@/admin@ legado/vendas@/gerente@/owner1/owner2/consultor1, tenants revenda1+revenda2, 5 cursos (2 destaqueHome), 3 cupons (SUPER50, VENDAS30, CONSULT10). Cupons via findFirst+create (nao upsert) porque `@@unique([tenantId,code])` nao dedupe com NULL
 - QA manual documentado em `docs/qa/PERFIS.md`
@@ -110,7 +110,7 @@ Este projeto segue um workflow estruturado. **NUNCA comece a codificar sem segui
 | `docs/references/workflow.md` | Workflow SPEC→BREAK→PLAN→EXECUTE detalhado |
 | `docs/architecture/profissionaliza-mais-brasil-blueprint.md` | Blueprint completo: atores, fluxos, integracao das 3 APIs, modelo de dados |
 | `docs/architecture/DOMINIOS-GUIDE.md` | **CRITICO**: Multi-tenant com middleware, wildcard DNS, dominios custom via Vercel API |
-| `docs/api/escola-avancada-api-completa.md` | Todos os 21 endpoints da API EA com params, responses e cuidados |
+| `docs/api/plataforma-parceira-api-completa.md` | Todos os 21 endpoints da API da plataforma parceira com params, responses e cuidados |
 | `docs/design/STITCH-DESIGN-PLAN.md` | Design system, paleta, tipografia e prompts para 19 telas |
 | `prisma/schema.prisma` | Schema completo do banco (12 models, pronto para `prisma migrate dev`) |
 | `issues/` | **53 issues** individuais com tipo, dependencias, componentes e criterios de aceite |
@@ -163,7 +163,7 @@ profissionaliza-mais-brasil/
     │   ├── auth.ts                  # NextAuth config
     │   ├── crypto.ts                # AES-256-GCM para tokens MP
     │   ├── utils.ts                 # Helpers gerais
-    │   ├── escola-avancada/         # Client API EA (form-data!)
+    │   ├── plataforma-cursos/         # Client API da plataforma parceira (form-data!)
     │   ├── asaas/                   # Client API Asaas
     │   ├── mercadopago/             # Client API MP
     │   └── tenant/                  # Resolver multi-tenant
@@ -206,10 +206,10 @@ A plataforma usa **dois dominios distintos** (proxy em `src/proxy.ts`):
 
 ## Integracoes API — Resumo Rapido
 
-### Escola Avancada (form-data, NAO JSON!)
+### plataforma parceira (form-data, NAO JSON!)
 - Base: `https://SUAESCOLA.com/api/v2/`
 - Auth: Token via form-data
-- **Doc completa:** `docs/api/escola-avancada-api-completa.md`
+- **Doc completa:** `docs/api/plataforma-parceira-api-completa.md`
 - CUIDADOS: `vinculocurso` sem idcurso = vincula TODOS. DELETE usa HEADERS. Precos em formato BR.
 
 ### Asaas (JSON, REST padrao)
@@ -228,16 +228,16 @@ A plataforma usa **dois dominios distintos** (proxy em `src/proxy.ts`):
 ### Matricula Automatica
 ```
 MP webhook → GET /v1/payments/{id} → status=approved
-→ POST EA usuarios/novo {polo, vendedor, status:"ativo", apostila:"liberar"}
-→ POST EA usuarios/vinculocurso {aluno, idcurso}
-→ POST EA usuarios/envioemail {aluno}
+→ POST plataforma usuarios/novo {polo, vendedor, status:"ativo", apostila:"liberar"}
+→ POST plataforma usuarios/vinculocurso {aluno, idcurso}
+→ POST plataforma usuarios/envioemail {aluno}
 → Salvar enrollment no banco
 ```
 
 ### Bloqueio por Inadimplencia
 ```
 MP webhook falhou → checar tenant.billing_mode
-→ AUTO: POST EA usuarios/editar {status:"bloqueado", apostila:"bloquear"}
+→ AUTO: POST plataforma usuarios/editar {status:"bloqueado", apostila:"bloquear"}
 → MANUAL: notificar revendedor
 ```
 
@@ -245,7 +245,7 @@ MP webhook falhou → checar tenant.billing_mode
 ```
 POST Asaas customers → POST Asaas subscriptions
 → Webhook PAYMENT_RECEIVED
-→ POST EA funcionarios/novo → vendedor_id
+→ POST plataforma funcionarios/novo → vendedor_id
 → Criar tenant no banco → Revendedor configura vitrine + conecta MP
 ```
 
@@ -309,7 +309,7 @@ UPSTASH_REDIS_REST_TOKEN=
 NEXTAUTH_SECRET=
 NEXTAUTH_URL=https://profissionalizamaisbrasil.com.br
 
-# Escola Avancada
+# plataforma parceira
 EA_API_URL=https://SUAESCOLA.com/api/v2
 EA_API_TOKEN=
 

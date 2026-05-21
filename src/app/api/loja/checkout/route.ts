@@ -81,7 +81,7 @@ export async function POST(request: Request) {
           slug: true,
           name: true,
           mpAccessToken: true,
-          eaVendedorId: true,
+          plataformaVendedorId: true,
         },
       }),
       prisma.tenantCourse.findFirst({
@@ -91,7 +91,7 @@ export async function POST(request: Request) {
             select: {
               nome: true,
               slug: true,
-              eaCourseId: true,
+              plataformaCourseId: true,
               monthlyMonthsMain: true,
             },
           },
@@ -171,8 +171,8 @@ export async function POST(request: Request) {
       fone: data.fone,
       endereco: data.endereco,
       polo: tenant.slug,
-      vendedorId: tenant.eaVendedorId,
-      eaAlunoIdFallback: `pending_${Date.now()}`,
+      vendedorId: tenant.plataformaVendedorId,
+      plataformaAlunoIdFallback: `pending_${Date.now()}`,
     })
 
     await provisionStudentAccess(student.id, {

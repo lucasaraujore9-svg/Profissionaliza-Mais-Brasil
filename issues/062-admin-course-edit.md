@@ -7,7 +7,7 @@
 
 ## Objetivo
 
-Super Admin PMB gerencia o catalogo da **vitrine principal PMB** (nao do revendedor): define preco, destaque na home, ordem, capa, descricao. Aulas continuam vindo da EA — NAO editaveis.
+Super Admin PMB gerencia o catalogo da **vitrine principal PMB** (nao do revendedor): define preco, destaque na home, ordem, capa, descricao. Aulas continuam vindo da plataforma — NAO editaveis.
 
 ## Schema
 
@@ -22,7 +22,7 @@ model Course {
 }
 ```
 
-Sync da EA (src/lib/catalog/*) **nao pode** tocar em: `precoVitrineMain`, `destaqueHome`, `ordemHome`, `descricaoOverride`, `capaOverride`.
+Sync da plataforma (src/lib/catalog/*) **nao pode** tocar em: `precoVitrineMain`, `destaqueHome`, `ordemHome`, `descricaoOverride`, `capaOverride`.
 
 ## API
 

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { blockStudentInEA } from "@/lib/students/ea-actions"
+import { blockStudentInEA } from "@/lib/students/plataforma-actions"
 import { createNotification } from "@/lib/notifications"
 
 export const maxDuration = 60

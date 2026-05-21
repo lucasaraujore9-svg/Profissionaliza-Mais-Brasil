@@ -12,7 +12,7 @@ Implementar analytics admin com 6 charts e filtering, e configurações com test
 ## Componentes Envolvidos
 - GET /api/admin/analytics — KPIs + chart data
 - GET /api/admin/config — configurações admin
-- POST /api/admin/config/test-ea — testar conexão EA
+- POST /api/admin/config/test-ea — testar conexão plataforma
 - POST /api/admin/config/test-asaas — testar conexão Asaas
 - POST /api/admin/config/test-mp — testar conexão MP
 
@@ -34,7 +34,7 @@ Implementar analytics admin com 6 charts e filtering, e configurações com test
 - [ ] Filter período/revendedor funciona
 - [ ] RankingTable top 10 revendedores
 - [ ] ConfigTabs com 4 abas renderiza
-- [ ] POST /api/admin/config/test-ea testa GET EA funcionarios/listar
+- [ ] POST /api/admin/config/test-ea testa GET plataforma funcionarios/listar
 - [ ] Retorna { status: success/error, message }
 - [ ] POST /api/admin/config/test-asaas testa GET Asaas /customers
 - [ ] POST /api/admin/config/test-mp retorna status token

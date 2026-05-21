@@ -7,14 +7,14 @@
 
 ## O Que Fazer
 
-Implementar gestão alunos revendedor: carregar alunos, buscar/filtrar, ver detalhes, bloquear/desbloquear aluno na EA, enviar mensagem. Integração EA API.
+Implementar gestão alunos revendedor: carregar alunos, buscar/filtrar, ver detalhes, bloquear/desbloquear aluno na plataforma, enviar mensagem. Integração API da plataforma.
 
 ## Componentes Envolvidos
 - GET /api/painel/alunos — listar alunos do tenant
 - GET /api/painel/alunos/[id] — detalhe aluno
-- POST /api/painel/alunos/[id]/bloquear — chamar EA usuarios/editar
-- POST /api/painel/alunos/[id]/desbloquear — chamar EA usuarios/editar
-- POST /api/painel/alunos/[id]/mensagem — chamar EA usuarios/enviarmensagem
+- POST /api/painel/alunos/[id]/bloquear — chamar plataforma usuarios/editar
+- POST /api/painel/alunos/[id]/desbloquear — chamar plataforma usuarios/editar
+- POST /api/painel/alunos/[id]/mensagem — chamar plataforma usuarios/enviarmensagem
 - StudentTable, StudentDetailDrawer com dados reais
 
 ## Comportamentos
@@ -22,9 +22,9 @@ Implementar gestão alunos revendedor: carregar alunos, buscar/filtrar, ver deta
 - `search-students` — filtrar por nome/email
 - `filter-by-status` — filtrar ATIVO/BLOQUEADO/INATIVO
 - `view-student-detail` — GET /api/painel/alunos/[id]
-- `block-student` — POST /api/painel/alunos/[id]/bloquear (EA editar status:bloqueado)
-- `unblock-student` — POST /api/painel/alunos/[id]/desbloquear (EA editar status:ativo)
-- `send-message` — POST /api/painel/alunos/[id]/mensagem (EA enviarmensagem)
+- `block-student` — POST /api/painel/alunos/[id]/bloquear (plataforma editar status:bloqueado)
+- `unblock-student` — POST /api/painel/alunos/[id]/desbloquear (plataforma editar status:ativo)
+- `send-message` — POST /api/painel/alunos/[id]/mensagem (plataforma enviarmensagem)
 
 ## Critério de Aceite
 - [ ] GET /api/painel/alunos implementado
@@ -35,7 +35,7 @@ Implementar gestão alunos revendedor: carregar alunos, buscar/filtrar, ver deta
 - [ ] Filter status atualiza tabela
 - [ ] Clicar "Ver Detalhes" abre drawer
 - [ ] GET /api/painel/alunos/[id] com cursos do aluno
-- [ ] POST /api/painel/alunos/[id]/bloquear chama EA usuarios/editar { status: bloqueado }
+- [ ] POST /api/painel/alunos/[id]/bloquear chama plataforma usuarios/editar { status: bloqueado }
 - [ ] Status atualiza em DB e tabela
-- [ ] POST /api/painel/alunos/[id]/desbloquear chama EA usuarios/editar { status: ativo }
-- [ ] POST /api/painel/alunos/[id]/mensagem chama EA usuarios/enviarmensagem
+- [ ] POST /api/painel/alunos/[id]/desbloquear chama plataforma usuarios/editar { status: ativo }
+- [ ] POST /api/painel/alunos/[id]/mensagem chama plataforma usuarios/enviarmensagem

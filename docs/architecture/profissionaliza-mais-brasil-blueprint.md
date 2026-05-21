@@ -326,7 +326,7 @@ Aluno aplica cupom → Sistema valida (código, validade, max_uses)
 - URL base: `https://SUAESCOLA.com/api/v2/`
 - Formato: Todas as requests usam `multipart/form-data`
 - Response padrão: `{ "erro": "", "resultado": ... }` (sempre HTTP 200, erros no campo `erro`)
-- **Documentação completa de todos os 21 endpoints:** ver `escola-avancada-api-completa.md`
+- **Documentação completa de todos os 21 endpoints:** ver `plataforma-cursos-api-completa.md`
 
 **21 Endpoints Mapeados (API V2) — Classificação por Prioridade:**
 
@@ -336,7 +336,7 @@ Aluno aplica cupom → Sistema valida (código, validade, max_uses)
 |---|--------|----------|-----------|---------------------|
 | 1 | POST | `cursos/listar` | Catálogo completo de cursos | `token`, `categoria` (opcional) |
 | 2 | POST | `cursos/aulas` | Ementa/módulos de um curso | `token`, `curso` (ID) |
-| 3 | POST | `funcionarios/novo` | Criar funcionário (= revendedor na EA) | `token`, `nome`, `tipo_acesso` |
+| 3 | POST | `funcionarios/novo` | Criar funcionário (= revendedor na plataforma) | `token`, `nome`, `tipo_acesso` |
 | 4 | POST | `usuarios/novo` | Matricular aluno (27+ params) | `token`, `nome` + campos do tenant |
 | 5 | POST | `usuarios/editar` | Bloquear/desbloquear aluno | `token`, `id_aluno` + campos a alterar |
 | 6 | POST | `usuarios/listar` | Buscar aluno por ID/CPF/email | `token` + (`id` ou `cpf` ou `email`) |
@@ -374,7 +374,7 @@ Aluno aplica cupom → Sistema valida (código, validade, max_uses)
 - **`funcionario_cadastro`**: quem cadastrou o aluno — rastreabilidade.
 
 ##### Respostas-Chave
-- **`usuarios/novo`** → `{ login: 4017, senha: 1751278, nome: "..." }` (login = matrícula EA, senha em plain text)
+- **`usuarios/novo`** → `{ login: 4017, senha: 1751278, nome: "..." }` (login = matrícula plataforma, senha em plain text)
 - **`usuarios/listar`** → Todos os dados pessoais + login, senha, datacadastro, polo, sexo, status, apostila, vendedor, datafinal, certificado, bolsista, funcionario_cadastro
 - **`usuarios/cursosvinculados`** → `[{ Curso, Data do cadastro, Situação (EM ANDAMENTO/CONCLUÍDO), Porcentagem, Data da última aula }]`
 - **`cursos/listar`** → nome, aulas (qtd), preco (formato BR "1.400,00"), preco_promocional, parcelas, status, obs, categoria_interna, carga_horaria, categoria_loja, destaque, preco_mostrar, capa_image. **⚠️ NÃO retorna ID do curso.**
@@ -436,13 +436,13 @@ PAGAMENTO ÚNICO:
 3. Aluno é redirecionado para checkout do Mercado Pago → paga
 4. Webhook MP: { type: "payment", action: "payment.updated" }
 5. GET MP /v1/payments/{id} → confirmar status = "approved"
-6. POST EA usuarios/novo → criar aluno
-   - polo = slug do revendedor, vendedor = ID do funcionário EA
+6. POST plataforma usuarios/novo → criar aluno
+   - polo = slug do revendedor, vendedor = ID do funcionário plataforma
    - status = "ativo", apostila = "liberar"
    → Retorna: login + senha
-7. POST EA usuarios/vinculocurso → vincular curso
-   - aluno = ID retornado, idcurso = ID do curso na EA
-8. POST EA usuarios/envioemail → enviar credenciais
+7. POST plataforma usuarios/vinculocurso → vincular curso
+   - aluno = ID retornado, idcurso = ID do curso na plataforma
+8. POST plataforma usuarios/envioemail → enviar credenciais
 9. Salvar enrollment no banco com escola_avancada_id + mp_payment_id
 
 PAGAMENTO MENSAL:
@@ -458,11 +458,11 @@ PAGAMENTO MENSAL:
 1. Webhook MP: pagamento da assinatura falhou/reciclando
 2. Consultar config do revendedor: billing_mode
    - SE automático:
-     POST EA usuarios/editar → status = "bloqueado", apostila = "bloquear"
+     POST plataforma usuarios/editar → status = "bloqueado", apostila = "bloquear"
      Notificar aluno por email
    - SE manual:
      Notificar revendedor no painel → ele decide
-     Revendedor clica "bloquear" → POST EA usuarios/editar
+     Revendedor clica "bloquear" → POST plataforma usuarios/editar
 ```
 
 ### Fluxo 4: Inadimplência do Revendedor (Asaas)
@@ -474,7 +474,7 @@ PAGAMENTO MENSAL:
    - Dar prazo extra (não faz nada no sistema)
    - Suspender vitrine → tenant.status = "suspended"
      → Vitrine mostra página de manutenção
-     → Alunos continuam acessando cursos na EA (decisão por revendedor)
+     → Alunos continuam acessando cursos na plataforma (decisão por revendedor)
    - Cancelar → tenant.status = "cancelled"
      → Vitrine desativada
      → Decisão sobre alunos conforme política individual
@@ -484,7 +484,7 @@ PAGAMENTO MENSAL:
 ```
 1. Webhook MP → pagamento atrasado agora aprovado
 2. GET MP /v1/payments/{id} → confirmar status = "approved"
-3. POST EA usuarios/editar → status = "ativo", apostila = "liberar"
+3. POST plataforma usuarios/editar → status = "ativo", apostila = "liberar"
 4. Atualizar enrollment no banco
 5. Notificar aluno
 ```
@@ -492,8 +492,8 @@ PAGAMENTO MENSAL:
 ### Fluxo 6: Sync do Catálogo de Cursos
 ```
 1. Cron job (1x por dia ou sob demanda via painel admin)
-2. POST EA cursos/listar → buscar todos os cursos
-3. Para cada curso novo: POST EA cursos/aulas → buscar lista de aulas
+2. POST plataforma cursos/listar → buscar todos os cursos
+3. Para cada curso novo: POST plataforma cursos/aulas → buscar lista de aulas
 4. Comparar com banco local:
    - Curso novo → INSERT + notificar revendedores
    - Curso alterado → UPDATE
@@ -565,8 +565,8 @@ tenants (revendedores)
 ├── logo_url, primary_color, secondary_color, banner_url, tagline
 ├── asaas_customer_id (cus_xxxx), asaas_subscription_id (sub_xxxx)
 ├── mp_access_token (criptografado), mp_public_key, mp_connected (boolean)
-├── escola_avancada_vendedor_id (ID do funcionário criado na EA)
-├── polo_name (nome do polo usado no campo "polo" da EA)
+├── escola_avancada_vendedor_id (ID do funcionário criado na plataforma)
+├── polo_name (nome do polo usado no campo "polo" da plataforma)
 ├── status (active, suspended, cancelled, pending)
 ├── billing_mode (auto, manual) → para inadimplência dos alunos
 ├── cancellation_policy (JSON flexível, definido individualmente pelo admin)
@@ -599,7 +599,7 @@ students (espelha dados de usuarios/novo + usuarios/listar da API)
 ├── escola_avancada_id (login retornado pela API)
 ├── escola_avancada_senha (senha retornada - criptografada)
 ├── polo (= slug do revendedor, enviado à API)
-├── vendedor_id (= ID do funcionário na EA, enviado à API)
+├── vendedor_id (= ID do funcionário na plataforma, enviado à API)
 ├── status (ativo, bloqueado, devedor, inativo, formado, interessado)
 ├── apostila (liberada, bloqueada)
 ├── certificado, bolsista
@@ -678,9 +678,9 @@ webhook_logs
 
 1. **Token único por escola** — Todos os revendedores usam o mesmo token. O isolamento é feito pelos campos `polo` e `vendedor`, não por tokens separados. Risco: qualquer endpoint pode acessar/modificar alunos de outro polo.
 
-2. **Sem endpoint de deletar aluno** — Só é possível `editar` com status="inativo". Alunos nunca são removidos da EA.
+2. **Sem endpoint de deletar aluno** — Só é possível `editar` com status="inativo". Alunos nunca são removidos da plataforma.
 
-3. **Sem webhook/callback** — API é apenas request/response. Mudanças feitas direto na EA não são notificadas. Solução: sync periódico via cron + banco próprio como fonte primária.
+3. **Sem webhook/callback** — API é apenas request/response. Mudanças feitas direto na plataforma não são notificadas. Solução: sync periódico via cron + banco próprio como fonte primária.
 
 4. **Sem listagem em massa por polo** — `usuarios/listar` busca individual (id/cpf/email). Impossível listar todos os alunos de um revendedor via API. Banco local é obrigatório.
 

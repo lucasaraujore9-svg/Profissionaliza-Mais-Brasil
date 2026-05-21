@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma"
-import { listarCursos } from "@/lib/escola-avancada/client"
+import { listarCursos } from "@/lib/plataforma-cursos/client"
 import { parseBRPrice, slugify } from "@/lib/utils"
 import { pushSyncLog, type SyncLogEntry } from "./sync-log"
 
@@ -8,9 +8,9 @@ import { pushSyncLog, type SyncLogEntry } from "./sync-log"
  * Por convencao, a URL da capa segue o padrao
  *   https://<host>/oficial/metodo/imagemcursos/<id>.<ext>
  * (ou .../<id>.jpeg, .png, ...). Quando o admin sobe outra imagem com nome
- * diferente, retornamos null e mantem o eaCourseId previo (se houver).
+ * diferente, retornamos null e mantem o plataformaCourseId previo (se houver).
  */
-export function extractEaCourseIdFromCapa(
+export function extractCourseIdFromCapa(
   capaUrl: string | null | undefined,
 ): string | null {
   if (!capaUrl) return null
@@ -63,7 +63,7 @@ export async function syncCatalogFromEA(
         precoMostrarRaw === "1" ||
         precoMostrarRaw === "true"
 
-      const eaCourseIdFromCapa = extractEaCourseIdFromCapa(curso.capa_image)
+      const courseIdFromCapa = extractCourseIdFromCapa(curso.capa_image)
 
       const dataBase = {
         nome: curso.nome,
@@ -84,19 +84,19 @@ export async function syncCatalogFromEA(
 
       const existing = await prisma.course.findUnique({
         where: { nome: curso.nome },
-        select: { id: true, eaCourseId: true },
+        select: { id: true, plataformaCourseId: true },
       })
 
-      // eaCourseId tem unique constraint. So escreve quando:
+      // plataformaCourseId tem unique constraint. So escreve quando:
       // 1) tem id extraido da capa
       // 2) ainda nao esta usado por outro curso (ou esta usado pelo proprio)
       let canSetEaCourseId = false
-      if (eaCourseIdFromCapa) {
-        if (existing?.eaCourseId === eaCourseIdFromCapa) {
+      if (courseIdFromCapa) {
+        if (existing?.plataformaCourseId === courseIdFromCapa) {
           canSetEaCourseId = false // ja correto, nao precisa atualizar
         } else {
           const conflict = await prisma.course.findUnique({
-            where: { eaCourseId: eaCourseIdFromCapa },
+            where: { plataformaCourseId: courseIdFromCapa },
             select: { id: true },
           })
           if (!conflict || conflict.id === existing?.id) {
@@ -111,7 +111,7 @@ export async function syncCatalogFromEA(
           data: {
             ...dataBase,
             ...(canSetEaCourseId
-              ? { eaCourseId: eaCourseIdFromCapa }
+              ? { plataformaCourseId: courseIdFromCapa }
               : {}),
           },
         })
@@ -122,7 +122,7 @@ export async function syncCatalogFromEA(
             ...dataBase,
             slug: await ensureUniqueSlug(slug),
             ...(canSetEaCourseId
-              ? { eaCourseId: eaCourseIdFromCapa }
+              ? { plataformaCourseId: courseIdFromCapa }
               : {}),
           },
         })

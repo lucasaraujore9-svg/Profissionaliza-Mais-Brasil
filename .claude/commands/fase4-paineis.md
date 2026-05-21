@@ -24,7 +24,7 @@ Criar `src/app/painel/alunos/page.tsx`:
 - Busca por nome/email/CPF
 - Filtros: status, curso
 - Drawer de detalhes do aluno com historico
-- Acoes: bloquear/desbloquear (chama EA usuarios/editar), enviar mensagem
+- Acoes: bloquear/desbloquear (chama plataforma usuarios/editar), enviar mensagem
 
 ### 5. Gestao de Cupons (Tela 3.4)
 Criar `src/app/painel/cupons/page.tsx`:
@@ -105,10 +105,10 @@ Criar `src/app/admin/financeiro/page.tsx`:
 
 ### 14. Catalogo Master (Tela 4.4)
 Criar `src/app/admin/catalogo/page.tsx`:
-- Grid de cursos sincronizados da EA
+- Grid de cursos sincronizados da plataforma
 - Botao "Sincronizar Agora" (chama cron manualmente)
 - Ultimo sync + resultado
-- Cursos sao read-only (vem da EA)
+- Cursos sao read-only (vem da plataforma)
 
 ### 15. Analytics Global (Tela 4.5)
 Criar `src/app/admin/analytics/page.tsx`:
@@ -120,7 +120,7 @@ Criar `src/app/admin/analytics/page.tsx`:
 ### 16. Verificacao
 - Login como revendedor → painel completo funcional
 - Login como admin → painel admin funcional
-- Bloquear aluno via painel → checar que EA foi chamada
+- Bloquear aluno via painel → checar que plataforma foi chamada
 - Criar cupom → aplicar na vitrine → funcionar
 - Adicionar dominio custom → instrucoes DNS corretas
 

@@ -33,7 +33,7 @@ Steps:
 
 ### `admin/vendas/alunos/page.tsx`
 - Lista de alunos da vitrine PMB (Enrollments com `tenantId=null`)
-- Perfil: historico de compras, contato, status EA
+- Perfil: historico de compras, contato, status na plataforma
 - PMB_SALES ve so alunos que ele cadastrou; SUPER_ADMIN ve todos
 
 ## Schema ajustes
@@ -60,7 +60,7 @@ model Enrollment {
 - `GET /api/admin/cupons` — lista
 - `PATCH /api/admin/cupons/[id]/toggle` — ativar/desativar
 - `GET /api/admin/alunos` — lista
-- `POST /api/admin/alunos` — cadastra aluno + cria usuario EA (`usuarios/novo`)
+- `POST /api/admin/alunos` — cadastra aluno + cria usuario da plataforma (`usuarios/novo`)
 
 ## Guards
 
@@ -73,5 +73,5 @@ model Enrollment {
 - [ ] Cupom 60% criado por PMB_SALES retorna 403
 - [ ] Cupom da vitrine PMB (tenantId=null) NAO aparece na vitrine do revendedor
 - [ ] PMB_SALES ve apenas proprias vendas/alunos
-- [ ] Matricula na EA acontece apos pagamento MP (reusa webhook existente mas com branch "tenantId null → conta PMB")
+- [ ] Matricula na plataforma acontece apos pagamento MP (reusa webhook existente mas com branch "tenantId null → conta PMB")
 - [ ] `npm run build` verde

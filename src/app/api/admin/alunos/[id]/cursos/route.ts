@@ -5,11 +5,11 @@ import { requireAdminSession } from "@/lib/auth/admin-session"
 import {
   linkCourseToStudent,
   unlinkCourseFromStudent,
-} from "@/lib/students/ea-actions"
+} from "@/lib/students/plataforma-actions"
 import {
   EAApiError,
   EANetworkError,
-} from "@/lib/escola-avancada/errors"
+} from "@/lib/plataforma-cursos/errors"
 import { createNotification } from "@/lib/notifications"
 
 const linkSchema = z.object({
@@ -32,7 +32,7 @@ export async function GET(_request: Request, ctx: Ctx) {
     orderBy: { createdAt: "desc" },
     include: {
       course: {
-        select: { id: true, nome: true, eaCourseId: true, status: true },
+        select: { id: true, nome: true, plataformaCourseId: true, status: true },
       },
     },
   })
@@ -42,7 +42,7 @@ export async function GET(_request: Request, ctx: Ctx) {
       enrollmentId: e.id,
       courseId: e.course.id,
       courseName: e.course.nome,
-      eaCourseId: e.course.eaCourseId,
+      plataformaCourseId: e.course.plataformaCourseId,
       status: e.status,
       gateway: e.gateway,
       createdAt: e.createdAt.toISOString(),
@@ -52,8 +52,8 @@ export async function GET(_request: Request, ctx: Ctx) {
 
 /**
  * Vincula manualmente um curso ao aluno na plataforma de aulas.
- * Toda a interacao com a EA passa pelo modulo unificado em
- * src/lib/students/ea-actions.ts — exatamente o mesmo caminho usado pelo
+ * Toda a interacao com a plataforma passa pelo modulo unificado em
+ * src/lib/students/plataforma-actions.ts — exatamente o mesmo caminho usado pelo
  * fluxo automatico de venda. Para na plataforma nao ha distincao entre venda PMB,
  * venda revendedor e concessao manual.
  */
@@ -90,7 +90,7 @@ export async function POST(request: Request, ctx: Ctx) {
     }),
     prisma.course.findUnique({
       where: { id: parsed.data.courseId },
-      select: { id: true, nome: true, eaCourseId: true },
+      select: { id: true, nome: true, plataformaCourseId: true },
     }),
   ])
 
@@ -117,8 +117,8 @@ export async function POST(request: Request, ctx: Ctx) {
     return NextResponse.json({
       data: {
         ok: true,
-        eaAlunoId: String(result.eaAlunoId),
-        eaCourseId: String(result.eaCourseId),
+        plataformaAlunoId: String(result.plataformaAlunoId),
+        plataformaCourseId: String(result.plataformaCourseId),
         courseName: course.nome,
       },
     })

@@ -18,7 +18,7 @@ Implementar página confirmação após checkout. Ler enrollment_id de query par
 - `load-confirmation-page` — ler enrollment_id do query params
 - `fetch-enrollment-details` — GET /api/loja/confirmacao/[id]
 - `display-success-message` — exibir SuccessIcon + mensagem
-- `display-next-steps` — instruções acesso Escola Avançada
+- `display-next-steps` — instruções acesso plataforma parceira
 
 ## Critério de Aceite
 - [ ] URL /loja/confirmacao?enrollment_id=X
@@ -28,6 +28,6 @@ Implementar página confirmação após checkout. Ler enrollment_id de query par
 - [ ] SuccessIcon animado renderiza
 - [ ] ConfirmationCard exibe número pedido (enrollment.id)
 - [ ] Exibe resumo: aluno, curso, data
-- [ ] NextSteps mensagem: "Você será redirecionado à Escola Avançada em 5 segundos"
-- [ ] Link manual "Ir para Escola Avançada"
+- [ ] NextSteps mensagem: "Você será redirecionado à plataforma parceira em 5 segundos"
+- [ ] Link manual "Ir para plataforma parceira"
 - [ ] Se enrollment não encontrado, exibir erro

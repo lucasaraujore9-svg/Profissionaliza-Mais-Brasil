@@ -51,13 +51,13 @@ Criar `src/app/api/webhooks/mercadopago/route.ts`:
 - Validar HMAC SHA256
 - Logar em webhook_logs
 - GET payment details
-- Processar: approved → matricular aluno (fluxo completo EA)
+- Processar: approved → matricular aluno (fluxo completo plataforma)
 - Retornar 200 IMEDIATO
 
 ### 5. Cron: Sync de Cursos
 Criar `src/app/api/cron/sync-cursos/route.ts`:
 - GET handler protegido por CRON_SECRET
-- Chama EA cursos/listar
+- Chama plataforma cursos/listar
 - Compara com banco local
 - Insere novos, atualiza existentes, soft-delete removidos
 - Para cada novo: buscar aulas via cursos/aulas
@@ -74,7 +74,7 @@ Configurar em `vercel.json`:
 ```
 
 ### 6. Verificacao
-- Client EA: testar parse de preco BR, tipagem correta
+- Client plataforma: testar parse de preco BR, tipagem correta
 - Client Asaas: testar criacao de customer/subscription (sandbox)
 - Client MP: testar criacao de preferencia
 - Webhooks: testar com payload mock
@@ -82,5 +82,5 @@ Configurar em `vercel.json`:
 
 ### COMMIT
 ```bash
-git add . && git commit -m "feat: API clients (EA, Asaas, MP) + webhooks + cron sync"
+git add . && git commit -m "feat: API clients (plataforma, Asaas, MP) + webhooks + cron sync"
 ```

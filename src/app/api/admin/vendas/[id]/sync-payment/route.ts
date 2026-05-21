@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { requirePmbSales } from "@/lib/auth/guards"
 import { getPayment as getAsaasPayment, listPayments as listAsaasPayments } from "@/lib/asaas/client"
 import { searchPayments as searchMpPayments } from "@/lib/mercadopago/client"
-import { pmbMpAccessToken, pmbEaPolo, pmbEaVendedorId } from "@/lib/pmb-config"
+import { pmbMpAccessToken, pmbPlataformaPolo, pmbPlataformaVendedorId } from "@/lib/pmb-config"
 import { fulfillEnrollment } from "@/lib/enrollment/fulfill"
 
 export const dynamic = "force-dynamic"
@@ -48,8 +48,8 @@ export async function POST(
 
   const pmbContext = {
     id: "__pmb__",
-    slug: pmbEaPolo(),
-    eaVendedorId: pmbEaVendedorId(),
+    slug: pmbPlataformaPolo(),
+    plataformaVendedorId: pmbPlataformaVendedorId(),
     isPmbVitrine: true as const,
   }
 

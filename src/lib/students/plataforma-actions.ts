@@ -4,11 +4,11 @@ import {
   editarAluno,
   vincularCurso,
   removerCurso,
-} from "@/lib/escola-avancada/client"
-import { pmbEaPolo, pmbEaVendedorId, PMB_TENANT_SLUG } from "@/lib/pmb-config"
+} from "@/lib/plataforma-cursos/client"
+import { pmbPlataformaPolo, pmbPlataformaVendedorId, PMB_TENANT_SLUG } from "@/lib/pmb-config"
 
 /**
- * Camada UNICA de integracao com a plataforma de aulas (EA).
+ * Camada UNICA de integracao com a plataforma de aulas (plataforma).
  *
  * Regras do projeto:
  * - Qualquer venda (vitrine PMB ou revendedor) cadastra o aluno na plataforma do mesmo
@@ -17,7 +17,7 @@ import { pmbEaPolo, pmbEaVendedorId, PMB_TENANT_SLUG } from "@/lib/pmb-config"
  * - Suspensao, liberacao, vinculo e desvinculo de curso passam SEMPRE por aqui
  *   (nao chamar editarAluno/vincularCurso/removerCurso direto em outros pontos).
  * - Toda gestao financeira (Enrollment, Payment, Coupon, mensalidade do tenant)
- *   fica no nosso banco. A EA so conhece: aluno + cursos vinculados + status
+ *   fica no nosso banco. A plataforma so conhece: aluno + cursos vinculados + status
  *   de acesso.
  */
 
@@ -38,48 +38,48 @@ async function resolvePoloContextForStudent(
   if (!student) return null
 
   const isPmb = student.tenant.slug === PMB_TENANT_SLUG
-  // Vendedor é sempre o PMB (único vendedor na EA para toda a plataforma).
+  // Vendedor é sempre o PMB (único vendedor na plataforma para toda a plataforma).
   // O polo identifica a unidade do aluno (slug da revenda ou polo PMB).
   return {
-    polo: isPmb ? pmbEaPolo() : (student.tenant.poloName ?? student.tenant.slug),
-    vendedor: pmbEaVendedorId(),
+    polo: isPmb ? pmbPlataformaPolo() : (student.tenant.poloName ?? student.tenant.slug),
+    vendedor: pmbPlataformaVendedorId(),
   }
 }
 
-function parseEaId(value: string | null | undefined): number | null {
+function parseExternalId(value: string | null | undefined): number | null {
   if (!value) return null
   const n = Number.parseInt(value, 10)
   return Number.isFinite(n) ? n : null
 }
 
 /**
- * Garante que o aluno existe na EA. Se ja tem ea_aluno_id valido, retorna
- * imediatamente. Caso contrario chama criarAluno e persiste ea_aluno_id +
+ * Garante que o aluno existe na plataforma. Se ja tem plataforma_aluno_id valido, retorna
+ * imediatamente. Caso contrario chama criarAluno e persiste plataforma_aluno_id +
  * ea_aluno_senha + status ATIVO + apostila LIBERADA + polo + vendedor.
  *
  * Retorna o numero do aluno na plataforma.
  */
-export async function ensureStudentInEA(
+export async function ensureStudentOnPlatform(
   studentId: string,
-): Promise<{ eaAlunoId: number; created: boolean; eaSenha: string | null }> {
+): Promise<{ plataformaAlunoId: number; created: boolean; plataformaSenha: string | null }> {
   const student = await prisma.student.findUnique({
     where: { id: studentId },
-    include: { tenant: { select: { slug: true, eaVendedorId: true } } },
+    include: { tenant: { select: { slug: true, plataformaVendedorId: true } } },
   })
   if (!student) throw new Error(`student ${studentId} nao encontrado`)
 
-  const existingId = parseEaId(student.eaAlunoId)
-  if (existingId !== null && student.eaAlunoId !== "pending") {
+  const existingId = parseExternalId(student.plataformaAlunoId)
+  if (existingId !== null && student.plataformaAlunoId !== "pending") {
     return {
-      eaAlunoId: existingId,
+      plataformaAlunoId: existingId,
       created: false,
-      eaSenha: student.eaAlunoSenha,
+      plataformaSenha: student.plataformaAlunoSenha,
     }
   }
 
   const isPmb = student.tenant.slug === PMB_TENANT_SLUG
-  const polo = isPmb ? pmbEaPolo() : student.tenant.slug
-  const vendedor = isPmb ? pmbEaVendedorId() : student.tenant.eaVendedorId
+  const polo = isPmb ? pmbPlataformaPolo() : student.tenant.slug
+  const vendedor = isPmb ? pmbPlataformaVendedorId() : student.tenant.plataformaVendedorId
 
   const result = await criarAluno({
     nome: student.nome,
@@ -103,14 +103,14 @@ export async function ensureStudentInEA(
     vendedor: vendedor ? Number.parseInt(vendedor, 10) || undefined : undefined,
   })
 
-  const eaLogin = String(result.login)
-  const eaSenha = String(result.senha)
+  const platformLogin = String(result.login)
+  const plataformaSenha = String(result.senha)
 
   await prisma.student.update({
     where: { id: student.id },
     data: {
-      eaAlunoId: eaLogin,
-      eaAlunoSenha: eaSenha,
+      plataformaAlunoId: platformLogin,
+      plataformaAlunoSenha: plataformaSenha,
       status: "ATIVO",
       apostila: "LIBERADA",
       polo,
@@ -118,38 +118,38 @@ export async function ensureStudentInEA(
     },
   })
 
-  return { eaAlunoId: Number.parseInt(eaLogin, 10), created: true, eaSenha }
+  return { plataformaAlunoId: Number.parseInt(platformLogin, 10), created: true, plataformaSenha }
 }
 
 /**
  * Vincula um curso ao aluno na plataforma. Cria o aluno na plataforma se ainda nao existir.
- * Idempotente: a EA e tolerante a multiplos vincularCurso para o mesmo par.
+ * Idempotente: a plataforma e tolerante a multiplos vincularCurso para o mesmo par.
  */
 export async function linkCourseToStudent(
   studentId: string,
   courseId: string,
-): Promise<{ eaAlunoId: number; eaCourseId: number }> {
+): Promise<{ plataformaAlunoId: number; plataformaCourseId: number }> {
   const course = await prisma.course.findUnique({
     where: { id: courseId },
-    select: { id: true, eaCourseId: true, nome: true },
+    select: { id: true, plataformaCourseId: true, nome: true },
   })
   if (!course) throw new Error(`curso ${courseId} nao encontrado`)
-  if (!course.eaCourseId) {
+  if (!course.plataformaCourseId) {
     throw new Error(
-      `curso ${course.nome} sem ea_course_id — rode o sync do catalogo primeiro`,
+      `curso ${course.nome} sem plataforma_course_id — rode o sync do catalogo primeiro`,
     )
   }
 
-  const eaCourseIdNum = parseEaId(course.eaCourseId)
-  if (eaCourseIdNum === null) {
-    throw new Error(`ea_course_id ${course.eaCourseId} invalido`)
+  const courseIdNum = parseExternalId(course.plataformaCourseId)
+  if (courseIdNum === null) {
+    throw new Error(`plataforma_course_id ${course.plataformaCourseId} invalido`)
   }
 
-  const { eaAlunoId } = await ensureStudentInEA(studentId)
+  const { plataformaAlunoId } = await ensureStudentOnPlatform(studentId)
 
-  await vincularCurso({ aluno: eaAlunoId, idcurso: eaCourseIdNum })
+  await vincularCurso({ aluno: plataformaAlunoId, idcurso: courseIdNum })
 
-  return { eaAlunoId, eaCourseId: eaCourseIdNum }
+  return { plataformaAlunoId, plataformaCourseId: courseIdNum }
 }
 
 /**
@@ -162,22 +162,22 @@ export async function unlinkCourseFromStudent(
   const [student, course] = await Promise.all([
     prisma.student.findUnique({
       where: { id: studentId },
-      select: { eaAlunoId: true },
+      select: { plataformaAlunoId: true },
     }),
     prisma.course.findUnique({
       where: { id: courseId },
-      select: { eaCourseId: true },
+      select: { plataformaCourseId: true },
     }),
   ])
   if (!student) throw new Error(`student ${studentId} nao encontrado`)
   if (!course) throw new Error(`course ${courseId} nao encontrado`)
 
-  const eaAlunoId = parseEaId(student.eaAlunoId)
-  const eaCourseIdNum = parseEaId(course.eaCourseId)
-  if (eaAlunoId === null) throw new Error("aluno sem ea_aluno_id")
-  if (eaCourseIdNum === null) throw new Error("curso sem ea_course_id")
+  const plataformaAlunoId = parseExternalId(student.plataformaAlunoId)
+  const courseIdNum = parseExternalId(course.plataformaCourseId)
+  if (plataformaAlunoId === null) throw new Error("aluno sem plataforma_aluno_id")
+  if (courseIdNum === null) throw new Error("curso sem plataforma_course_id")
 
-  await removerCurso({ aluno: eaAlunoId, idcurso: eaCourseIdNum })
+  await removerCurso({ aluno: plataformaAlunoId, idcurso: courseIdNum })
 }
 
 /**
@@ -189,17 +189,17 @@ export async function unlinkCourseFromStudent(
 export async function blockStudentInEA(studentId: string): Promise<void> {
   const student = await prisma.student.findUnique({
     where: { id: studentId },
-    select: { id: true, eaAlunoId: true },
+    select: { id: true, plataformaAlunoId: true },
   })
   if (!student) throw new Error(`student ${studentId} nao encontrado`)
 
-  const eaId = parseEaId(student.eaAlunoId)
-  if (eaId === null) {
-    throw new Error("aluno sem ea_aluno_id (ainda nao foi para a EA)")
+  const platformId = parseExternalId(student.plataformaAlunoId)
+  if (platformId === null) {
+    throw new Error("aluno sem plataforma_aluno_id (ainda nao foi para a plataforma)")
   }
 
   await editarAluno({
-    id_aluno: eaId,
+    id_aluno: platformId,
     status: "bloqueado",
     apostila: "bloquear",
   })
@@ -212,7 +212,7 @@ export async function blockStudentInEA(studentId: string): Promise<void> {
 
 /**
  * Sincroniza dados de perfil do aluno na plataforma (sem mexer em status/apostila).
- * Idempotente: se o aluno ainda nao foi para a EA, ignora (so faz sentido
+ * Idempotente: se o aluno ainda nao foi para a plataforma, ignora (so faz sentido
  * apos pagamento/criacao). Usa editarAluno passando apenas os campos que o
  * usuario pode editar no /aluno/perfil.
  */
@@ -220,7 +220,7 @@ export async function syncStudentProfileToEA(studentId: string): Promise<void> {
   const student = await prisma.student.findUnique({
     where: { id: studentId },
     select: {
-      eaAlunoId: true,
+      plataformaAlunoId: true,
       nome: true,
       email: true,
       fone: true,
@@ -234,14 +234,14 @@ export async function syncStudentProfileToEA(studentId: string): Promise<void> {
     },
   })
   if (!student) throw new Error(`student ${studentId} nao encontrado`)
-  const eaId = parseEaId(student.eaAlunoId)
-  if (eaId === null) {
-    // Aluno ainda nao esta na EA — sera enviado quando o pagamento confirmar.
+  const platformId = parseExternalId(student.plataformaAlunoId)
+  if (platformId === null) {
+    // Aluno ainda nao esta na plataforma — sera enviado quando o pagamento confirmar.
     return
   }
 
   await editarAluno({
-    id_aluno: eaId,
+    id_aluno: platformId,
     nome: student.nome,
     email: student.email ?? undefined,
     fone: student.fone ?? undefined,
@@ -261,17 +261,17 @@ export async function syncStudentProfileToEA(studentId: string): Promise<void> {
 export async function unblockStudentInEA(studentId: string): Promise<void> {
   const student = await prisma.student.findUnique({
     where: { id: studentId },
-    select: { id: true, eaAlunoId: true },
+    select: { id: true, plataformaAlunoId: true },
   })
   if (!student) throw new Error(`student ${studentId} nao encontrado`)
 
-  const eaId = parseEaId(student.eaAlunoId)
-  if (eaId === null) {
-    throw new Error("aluno sem ea_aluno_id (ainda nao foi para a EA)")
+  const platformId = parseExternalId(student.plataformaAlunoId)
+  if (platformId === null) {
+    throw new Error("aluno sem plataforma_aluno_id (ainda nao foi para a plataforma)")
   }
 
   await editarAluno({
-    id_aluno: eaId,
+    id_aluno: platformId,
     status: "ativo",
     apostila: "liberar",
   })

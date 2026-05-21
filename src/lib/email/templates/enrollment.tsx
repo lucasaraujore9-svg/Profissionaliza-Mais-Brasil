@@ -13,7 +13,7 @@ import {
 export interface EnrollmentTemplateProps {
   studentName: string
   courseName: string
-  eaLoginUrl: string
+  plataformaLoginUrl: string
   studentLogin: string
   studentPassword: string
 }
@@ -21,7 +21,7 @@ export interface EnrollmentTemplateProps {
 export function EnrollmentTemplate({
   studentName,
   courseName,
-  eaLoginUrl,
+  plataformaLoginUrl,
   studentLogin,
   studentPassword,
 }: EnrollmentTemplateProps) {
@@ -47,7 +47,7 @@ export function EnrollmentTemplate({
             </Text>
           </Section>
           <Section style={{ textAlign: "center" as const, margin: "32px 0" }}>
-            <Button style={button} href={eaLoginUrl}>
+            <Button style={button} href={plataformaLoginUrl}>
               Acessar Área do Aluno
             </Button>
           </Section>
@@ -123,7 +123,7 @@ const footer = {
 EnrollmentTemplate.PreviewProps = {
   studentName: "Beatriz Souza",
   courseName: "Auxiliar Administrativo",
-  eaLoginUrl: "https://escola.com/login",
+  plataformaLoginUrl: "https://escola.com/login",
   studentLogin: "beatriz.souza@gmail.com",
   studentPassword: "Curso@2026",
 } satisfies EnrollmentTemplateProps

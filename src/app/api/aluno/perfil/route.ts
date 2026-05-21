@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { requireStudentSession } from "@/lib/auth/student-session"
-import { syncStudentProfileToEA } from "@/lib/students/ea-actions"
+import { syncStudentProfileToEA } from "@/lib/students/plataforma-actions"
 
 const patchSchema = z.object({
   nome: z.string().trim().min(2).max(120),
@@ -59,15 +59,15 @@ export async function PATCH(request: Request) {
   // Propaga para a plataforma de aulas. Falha silenciosa: se a plataforma estiver
   // indisponivel, o salvamento local ja aconteceu — proxima edicao tenta
   // sincronizar de novo.
-  let eaSynced = true
-  let eaError: string | null = null
+  let plataformaSynced = true
+  let plataformaError: string | null = null
   try {
     await syncStudentProfileToEA(session.studentId)
   } catch (err) {
-    eaSynced = false
-    eaError = err instanceof Error ? err.message : "Erro ao sincronizar"
+    plataformaSynced = false
+    plataformaError = err instanceof Error ? err.message : "Erro ao sincronizar"
     console.warn("[aluno/perfil] sync com a plataforma falhou:", err)
   }
 
-  return NextResponse.json({ data: { ok: true, eaSynced, eaError } })
+  return NextResponse.json({ data: { ok: true, plataformaSynced, plataformaError } })
 }

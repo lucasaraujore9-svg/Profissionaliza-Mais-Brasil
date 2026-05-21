@@ -194,9 +194,9 @@ Alunos sao auto-matriculados na plataforma parceira (plataforma white-label com 
 - `search-student`: Filtrar tabela por texto
 - `filter-by-status`: Filtrar por status selecionado
 - `view-student-detail`: Abrir drawer com dados completos + progresso (API da plataforma parceira cursosvinculados)
-- `block-student`: POST /api/students/[id]/block → chama EA usuarios/editar {status:"bloqueado", apostila:"bloquear"} → atualizar banco
-- `unblock-student`: POST /api/students/[id]/unblock → chama EA usuarios/editar {status:"ativo", apostila:"liberar"} → atualizar banco
-- `send-message`: POST /api/students/[id]/message → chama EA usuarios/enviarmensagem
+- `block-student`: POST /api/students/[id]/block → chama plataforma usuarios/editar {status:"bloqueado", apostila:"bloquear"} → atualizar banco
+- `unblock-student`: POST /api/students/[id]/unblock → chama plataforma usuarios/editar {status:"ativo", apostila:"liberar"} → atualizar banco
+- `send-message`: POST /api/students/[id]/message → chama plataforma usuarios/enviarmensagem
 
 ---
 
@@ -399,7 +399,7 @@ Alunos sao auto-matriculados na plataforma parceira (plataforma white-label com 
 - **ConfigTabs**: Geral, Planos, Integracao, Webhooks
 - **GeneralTab**: Nome plataforma, logo, cores padrao
 - **PlansTab**: Config planos de revenda (valor, features)
-- **IntegrationTab**: Status APIs (EA, Asaas), tokens mascarados, botoes "Testar Conexao"
+- **IntegrationTab**: Status APIs (plataforma, Asaas), tokens mascarados, botoes "Testar Conexao"
 - **WebhooksTab**: Log de webhooks recentes, retry failed
 
 ### Comportamentos
@@ -414,10 +414,10 @@ Alunos sao auto-matriculados na plataforma parceira (plataforma white-label com 
 
 ### Comportamentos
 - `process-asaas-webhook`: Receber evento Asaas → validar token → logar → processar (PAYMENT_RECEIVED → ativar tenant, PAYMENT_OVERDUE → notificar admin)
-- `process-mp-webhook`: Receber evento MP → validar HMAC → logar → GET payment → processar (approved → matricula automatica completa na EA)
+- `process-mp-webhook`: Receber evento MP → validar HMAC → logar → GET payment → processar (approved → matricula automatica completa na plataforma)
 - `auto-enroll-student`: Criar aluno na plataforma parceira → vincular curso na plataforma parceira → enviar email da plataforma parceira → atualizar banco
-- `auto-block-student`: Checar billing_mode → se AUTO: bloquear na EA + banco → notificar
-- `auto-unblock-student`: Pagamento atrasado agora aprovado → desbloquear na EA + banco
+- `auto-block-student`: Checar billing_mode → se AUTO: bloquear na plataforma + banco → notificar
+- `auto-unblock-student`: Pagamento atrasado agora aprovado → desbloquear na plataforma + banco
 
 ### Cron
-- `sync-courses`: Diario 6h → EA cursos/listar → comparar → sync banco
+- `sync-courses`: Diario 6h → plataforma cursos/listar → comparar → sync banco

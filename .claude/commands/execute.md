@@ -9,7 +9,7 @@ Voce e um agente de execucao. Voce recebe uma issue (ja planejada) e IMPLEMENTA.
 3. Leia os documentos de referencia relevantes:
    - Proto? → `docs/design/STITCH-DESIGN-PLAN.md` + `CLAUDE.md` padroes
    - Behavior/API? → `docs/architecture/profissionaliza-mais-brasil-blueprint.md` + `CLAUDE.md`
-   - Integracao EA? → `docs/api/escola-avancada-api-completa.md`
+   - Integracao com a plataforma? → `docs/api/plataforma-cursos-api-completa.md`
    - Multi-tenant? → `docs/architecture/DOMINIOS-GUIDE.md`
    - Qualquer um → `CLAUDE.md` padroes de codigo
 4. Identifique o TIPO da issue (deve estar no arquivo):
@@ -75,7 +75,7 @@ Voce e um agente de execucao. Voce recebe uma issue (ja planejada) e IMPLEMENTA.
 - Queries filtram por tenant_id automaticamente
 
 ### Integration (APIs externas, webhooks, cron)
-- Clients em `src/lib/[servico]/` (ex: `src/lib/escola-avancada/`)
+- Clients em `src/lib/[servico]/` (ex: `src/lib/plataforma-cursos/`)
 - Retry logic para chamadas externas (exponential backoff)
 - Logging detalhado em cada etapa
 - Tratamento de rate limits e timeouts

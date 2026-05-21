@@ -10,8 +10,8 @@ import { getPmbMpAccessTokenAsync } from "@/lib/system-settings"
  * Variaveis de ambiente (legado / fallback):
  * - PMB_MP_ACCESS_TOKEN: Access token MP da conta PMB. Hoje configuravel pelo
  *   admin em /admin/configuracoes; usado como fallback se o DB ainda nao tem.
- * - PMB_EA_VENDEDOR_ID: ID do funcionario EA que representa o time PMB
- * - PMB_EA_POLO: slug do polo na EA (default: "pmb")
+ * - PMB_PLATAFORMA_VENDEDOR_ID: ID do funcionario na plataforma que representa o time PMB
+ * - PMB_PLATAFORMA_POLO: slug do polo na plataforma (default: "pmb")
  */
 
 export const PMB_TENANT_SLUG = "__pmb__"
@@ -25,10 +25,16 @@ export async function pmbMpAccessToken(): Promise<string | null> {
   return getPmbMpAccessTokenAsync()
 }
 
-export function pmbEaVendedorId(): string | null {
-  return process.env.PMB_EA_VENDEDOR_ID?.trim() || null
+export function pmbPlataformaVendedorId(): string | null {
+  return (
+    process.env.PMB_PLATAFORMA_VENDEDOR_ID ||
+    process.env.PMB_EA_VENDEDOR_ID
+  )?.trim() || null
 }
 
-export function pmbEaPolo(): string {
-  return process.env.PMB_EA_POLO?.trim() || "pmb"
+export function pmbPlataformaPolo(): string {
+  return (
+    process.env.PMB_PLATAFORMA_POLO ||
+    process.env.PMB_EA_POLO
+  )?.trim() || "pmb"
 }

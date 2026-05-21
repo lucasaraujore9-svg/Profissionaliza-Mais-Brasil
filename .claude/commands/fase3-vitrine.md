@@ -25,8 +25,8 @@ Criar `src/app/loja/curso/[slug]/page.tsx`:
 - Split layout: imagem + info (titulo, descricao, preco, CTA)
 - Preco em fonte Mono grande
 - Campo de cupom inline
-- Secao "Sobre o Curso" (descricao da API EA)
-- Ementa: accordion com lista de aulas (API EA cursos/aulas)
+- Secao "Sobre o Curso" (descricao da API da plataforma)
+- Ementa: accordion com lista de aulas (API da plataforma cursos/aulas)
 - Stats: aulas, carga horaria, certificado
 - CTA sticky no mobile
 
@@ -78,8 +78,8 @@ Criar `src/app/loja/confirmacao/page.tsx`:
 ### 7. Fluxo Completo de Matricula (no webhook)
 Garantir que o webhook do MP (criado na fase 2) executa:
 1. Valida pagamento aprovado
-2. Cria aluno na EA (usuarios/novo com polo e vendedor)
-3. Vincula curso na EA (usuarios/vinculocurso com idcurso)
+2. Cria aluno na plataforma (usuarios/novo com polo e vendedor)
+3. Vincula curso na plataforma (usuarios/vinculocurso com idcurso)
 4. Envia email de credenciais (usuarios/envioemail)
 5. Atualiza student e enrollment no banco (status ACTIVE)
 

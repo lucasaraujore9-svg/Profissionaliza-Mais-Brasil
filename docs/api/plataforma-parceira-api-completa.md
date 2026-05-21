@@ -182,7 +182,7 @@
 }
 ```
 
-**Uso no Projeto:** Analytics no painel admin e painel do revendedor — relatórios de inadimplência da plataforma EA.
+**Uso no Projeto:** Analytics no painel admin e painel do revendedor — relatórios de inadimplência da plataforma.
 
 ---
 
@@ -223,10 +223,10 @@
 }
 ```
 
-**Uso no Projeto:** Cada revendedor = 1 funcionário na EA. O `login` retornado é usado como `vendedor_id` para vincular alunos ao revendedor. Chamado durante o onboarding do revendedor.
+**Uso no Projeto:** Cada revendedor = 1 funcionário na plataforma. O `login` retornado é usado como `vendedor_id` para vincular alunos ao revendedor. Chamado durante o onboarding do revendedor.
 
 **⚠️ Observações:**
-- `tipo_acesso` precisa ser obtido manualmente no painel admin da EA
+- `tipo_acesso` precisa ser obtido manualmente no painel admin da plataforma
 - Senha retornada em texto plano
 - Não existe endpoint para editar ou listar funcionários
 
@@ -286,7 +286,7 @@
 - `vendedor` = ID do funcionário criado para o revendedor
 - `status` = "ativo" ao matricular
 - `apostila` = "liberar" para dar acesso
-- `login` retornado = matrícula do aluno na EA (guardar como `escola_avancada_id`)
+- `login` retornado = matrícula do aluno na plataforma (guardar como `plataforma_aluno_id`)
 - `senha` retornada = credencial do aluno (enviar por email)
 
 ---
@@ -586,7 +586,7 @@ ou
 
 ### 4.13 POST `usuarios/enviarmensagem` — Enviar mensagem ao aluno
 
-**Descrição:** Envia uma mensagem para a Área do Aluno dentro da plataforma EA.
+**Descrição:** Envia uma mensagem para a Área do Aluno dentro da plataforma.
 
 | Parâmetro | Tipo | Obrigatório | Descrição |
 |-----------|------|-------------|-----------|
@@ -600,7 +600,7 @@ ou
 { "erro": "", "resultado": "Mensagem Enviada com sucesso!" }
 ```
 
-**Uso no Projeto:** Comunicação revendedor→aluno via plataforma EA. Ex: aviso de vencimento, boas-vindas, etc.
+**Uso no Projeto:** Comunicação revendedor→aluno via plataforma. Ex: aviso de vencimento, boas-vindas, etc.
 
 **⚠️ Não suporta HTML na mensagem.**
 

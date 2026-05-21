@@ -17,8 +17,8 @@ import {
 } from "@/lib/asaas/client"
 import { getOrCreatePmbTenant } from "@/lib/pmb-tenant"
 import {
-  pmbEaPolo,
-  pmbEaVendedorId,
+  pmbPlataformaPolo,
+  pmbPlataformaVendedorId,
   pmbMpAccessToken,
 } from "@/lib/pmb-config"
 import { getSystemSettings } from "@/lib/system-settings"
@@ -243,9 +243,9 @@ export async function POST(request: Request) {
       cpf: data.cpf,
       fone: data.fone,
       endereco: data.endereco,
-      polo: pmbEaPolo(),
-      vendedorId: pmbEaVendedorId(),
-      eaAlunoIdFallback: `pending_${Date.now()}`,
+      polo: pmbPlataformaPolo(),
+      vendedorId: pmbPlataformaVendedorId(),
+      plataformaAlunoIdFallback: `pending_${Date.now()}`,
     })
 
     await provisionStudentAccess(student.id, {

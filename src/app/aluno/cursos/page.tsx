@@ -38,7 +38,7 @@ export default async function StudentCoursesPage() {
     orderBy: { createdAt: "desc" },
   })
 
-  const eaLoginUrl =
+  const plataformaLoginUrl =
     process.env.EA_STUDENT_LOGIN_URL ?? "https://escolaavancada.com.br/aluno"
 
   return (
@@ -107,7 +107,7 @@ export default async function StudentCoursesPage() {
                   </span>
                   {e.status === "ACTIVE" || e.status === "COMPLETED" ? (
                     <a
-                      href={eaLoginUrl}
+                      href={plataformaLoginUrl}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="rounded-md bg-[var(--color-pmb-green)] px-3 py-1 font-semibold text-white hover:bg-[var(--color-pmb-green-700)]"

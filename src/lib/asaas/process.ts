@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma"
 import { sendEmail } from "@/lib/email/resend"
 import { blockTenantStudents, unblockTenantStudents } from "@/lib/auto-block"
 import { fulfillEnrollment } from "@/lib/enrollment/fulfill"
-import { pmbEaPolo, pmbEaVendedorId } from "@/lib/pmb-config"
+import { pmbPlataformaPolo, pmbPlataformaVendedorId } from "@/lib/pmb-config"
 import { createNotification } from "@/lib/notifications"
 import { invalidateTenant } from "@/lib/redis/tenant-cache"
 import type { AsaasWebhookPayload } from "./types"
@@ -78,8 +78,8 @@ async function processPmbDirectSale(
     await fulfillEnrollment(
       {
         id: "__pmb__",
-        slug: pmbEaPolo(),
-        eaVendedorId: pmbEaVendedorId(),
+        slug: pmbPlataformaPolo(),
+        plataformaVendedorId: pmbPlataformaVendedorId(),
         isPmbVitrine: true,
       },
       enrollment.id,

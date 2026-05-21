@@ -5,7 +5,7 @@ import { requirePmbSales } from "@/lib/auth/guards"
 import { cancelSubscription, deletePayment } from "@/lib/asaas/client"
 import { cancelPreapproval } from "@/lib/mercadopago/client"
 import { pmbMpAccessToken } from "@/lib/pmb-config"
-import { unlinkCourseFromStudent } from "@/lib/students/ea-actions"
+import { unlinkCourseFromStudent } from "@/lib/students/plataforma-actions"
 
 const bodySchema = z.object({
   removeFromEA: z.boolean().optional().default(false),
@@ -94,7 +94,7 @@ export async function POST(request: Request, ctx: Ctx) {
     }
   }
 
-  // Remove course access from EA if requested and enrollment was active
+  // Remove course access from the platform if requested and enrollment was active
   if (removeFromEA && wasActive && enrollment.courseId) {
     try {
       await unlinkCourseFromStudent(studentId, enrollment.courseId)

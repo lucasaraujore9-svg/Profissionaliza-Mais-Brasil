@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma"
 import { decryptTenantMpToken, getPayment } from "./client"
 import { validateMpWebhookSignature } from "./webhook"
 import type { MPPayment } from "./types"
-import { pmbEaPolo, pmbEaVendedorId, pmbMpAccessToken } from "@/lib/pmb-config"
+import { pmbPlataformaPolo, pmbPlataformaVendedorId, pmbMpAccessToken } from "@/lib/pmb-config"
 import { fulfillEnrollment } from "@/lib/enrollment/fulfill"
 
 interface ProcessArgs {
@@ -35,7 +35,7 @@ interface TenantContext {
   id: string
   name: string
   slug: string
-  eaVendedorId: string | null
+  plataformaVendedorId: string | null
   mpAccessToken: string | null
   primaryColor: string
   isPmbVitrine?: boolean
@@ -47,8 +47,8 @@ async function buildPmbContext(): Promise<TenantContext | null> {
   return {
     id: "__pmb__",
     name: "PMB Vitrine",
-    slug: pmbEaPolo(),
-    eaVendedorId: pmbEaVendedorId(),
+    slug: pmbPlataformaPolo(),
+    plataformaVendedorId: pmbPlataformaVendedorId(),
     mpAccessToken: token,
     primaryColor: "#00a862",
     isPmbVitrine: true,
@@ -56,7 +56,7 @@ async function buildPmbContext(): Promise<TenantContext | null> {
 }
 
 async function resolveTenantBySlug(slug: string): Promise<TenantContext | null> {
-  if (slug === "pmb" || slug === pmbEaPolo()) return buildPmbContext()
+  if (slug === "pmb" || slug === pmbPlataformaPolo()) return buildPmbContext()
 
   const tenant = await prisma.tenant.findUnique({
     where: { slug },
@@ -64,7 +64,7 @@ async function resolveTenantBySlug(slug: string): Promise<TenantContext | null> 
       id: true,
       name: true,
       slug: true,
-      eaVendedorId: true,
+      plataformaVendedorId: true,
       mpAccessToken: true,
       primaryColor: true,
     },
@@ -99,7 +99,7 @@ async function fulfillFromMp(
       id: tenant.id,
       slug: tenant.slug,
       name: tenant.name,
-      eaVendedorId: tenant.eaVendedorId,
+      plataformaVendedorId: tenant.plataformaVendedorId,
       isPmbVitrine: tenant.isPmbVitrine,
     },
     enrollmentId,

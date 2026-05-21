@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma"
 import {
   blockStudentInEA,
   unblockStudentInEA,
-} from "@/lib/students/ea-actions"
+} from "@/lib/students/plataforma-actions"
 
 export interface BlockResult {
   affectedStudents: number
@@ -29,7 +29,7 @@ export async function blockTenantStudents(tenantId: string): Promise<BlockResult
       tenantId,
       status: { notIn: ["BLOQUEADO", "INATIVO", "FORMADO"] },
     },
-    select: { id: true, eaAlunoId: true },
+    select: { id: true, plataformaAlunoId: true },
   })
 
   for (const student of students) {
@@ -62,7 +62,7 @@ export async function unblockTenantStudents(tenantId: string): Promise<BlockResu
 
   const students = await prisma.student.findMany({
     where: { tenantId, status: "BLOQUEADO" },
-    select: { id: true, eaAlunoId: true },
+    select: { id: true, plataformaAlunoId: true },
   })
 
   for (const student of students) {

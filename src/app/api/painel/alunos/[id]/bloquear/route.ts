@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { requireResellerSession } from "@/lib/auth/reseller-session"
-import { blockStudentInEA } from "@/lib/students/ea-actions"
+import { blockStudentInEA } from "@/lib/students/plataforma-actions"
 
 export async function POST(
   _request: Request,

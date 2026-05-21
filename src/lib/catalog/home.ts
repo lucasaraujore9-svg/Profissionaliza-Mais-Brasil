@@ -184,7 +184,7 @@ const LOWER_WORDS = new Set([
 ])
 
 function titleCaseCategoria(nome: string): string {
-  // EA retorna "INFORMÁTICA E TECNOLOGIA" em caps; converte para Title Case
+  // plataforma retorna "INFORMÁTICA E TECNOLOGIA" em caps; converte para Title Case
   // mantendo conectores (e, de, da, do…) em minúsculo no meio do texto.
   const words = nome.toLowerCase().split(/\s+/)
   return words

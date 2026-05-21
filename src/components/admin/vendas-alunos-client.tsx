@@ -12,7 +12,7 @@ interface StudentItem {
   fone: string | null
   cpf: string | null
   status: string
-  eaAlunoId: string | null
+  plataformaAlunoId: string | null
   createdAt: string
 }
 
@@ -74,7 +74,7 @@ export function VendasAlunosClient() {
                 </td>
                 <td className="px-4 py-3 text-muted-foreground">{s.email ?? "—"}</td>
                 <td className="px-4 py-3 text-muted-foreground">{s.cpf ?? "—"}</td>
-                <td className="px-4 py-3 text-muted-foreground">{s.eaAlunoId ?? "—"}</td>
+                <td className="px-4 py-3 text-muted-foreground">{s.plataformaAlunoId ?? "—"}</td>
                 <td className="px-4 py-3">
                   <Badge variant={s.status === "ATIVO" ? "default" : "outline"}>
                     {s.status}

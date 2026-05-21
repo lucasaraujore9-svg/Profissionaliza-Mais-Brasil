@@ -15,7 +15,7 @@ Criar página financeira do Admin e catálogo sincronização. Componentes: resu
 - OverdueSection — tabela inadimplência: Revendedor, Dias Atraso, Valor
 - CatalogHeader — titulo "Catálogo", botão "+ Sincronizar Cursos", last sync timestamp
 - CourseGrid — grid 20 cursos agregados (todos os revendedores)
-- SyncButton — botão "Sincronizar com Escola Avançada"
+- SyncButton — botão "Sincronizar com plataforma parceira"
 - SyncLog — tabela histórico sincronizações: data, status, cursos adicionados/atualizados
 
 ## Comportamentos

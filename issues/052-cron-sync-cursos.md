@@ -1,4 +1,4 @@
-# Issue 052 — Cron: Sincronizar Cursos Escola Avançada
+# Issue 052 — Cron: Sincronizar Cursos plataforma parceira
 
 **Tipo:** integration
 **Página:** global
@@ -7,17 +7,17 @@
 
 ## O Que Fazer
 
-Implementar cron job diário (6am) que sincroniza cursos da Escola Avançada com DB. GET EA cursos/listar, compara com DB, cria/atualiza courses, log resultado.
+Implementar cron job diário (6am) que sincroniza cursos da plataforma parceira com DB. GET plataforma cursos/listar, compara com DB, cria/atualiza courses, log resultado.
 
 ## Componentes Envolvidos
 - Vercel Cron (ou trigger manual)
 - GET /api/cron/sync-courses
-- lib/escola-avancada client: cursos/listar endpoint
+- lib/plataforma-cursos client: cursos/listar endpoint
 - SyncLog table — histórico sincronizações
 
 ## Comportamentos
 - `trigger-cron-6am` — executar diariamente 6am
-- `get-ea-courses` — GET EA cursos/listar
+- `get-ea-courses` — GET plataforma cursos/listar
 - `compare-with-db` — comparar cursos novos vs DB
 - `create-courses` — INSERT courses novos
 - `update-courses` — UPDATE courses modificados
@@ -26,8 +26,8 @@ Implementar cron job diário (6am) que sincroniza cursos da Escola Avançada com
 ## Critério de Aceite
 - [ ] GET /api/cron/sync-courses implementado
 - [ ] Verifica CRON_SECRET header
-- [ ] GET EA cursos/listar usando lib/escola-avancada
-- [ ] Parse resposta, extrai lista cursos EA
+- [ ] GET plataforma cursos/listar usando lib/plataforma-cursos
+- [ ] Parse resposta, extrai lista cursos plataforma
 - [ ] Para cada curso, query DB por ea_course_id
 - [ ] Se não existe, CREATE Course { ea_course_id, title, description, ... }
 - [ ] Se existe, UPDATE com dados novos

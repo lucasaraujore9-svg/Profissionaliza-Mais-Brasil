@@ -18,7 +18,7 @@ interface StudentItem {
   fone: string | null
   cpf: string | null
   status: string
-  eaAlunoId: string | null
+  plataformaAlunoId: string | null
   createdAt: string
   tenant: { id: string; slug: string; name: string; isPmbDirect: boolean }
   activeEnrollments: number
@@ -166,9 +166,9 @@ export function GlobalStudentsClient() {
                             CPF: {s.cpf}
                           </div>
                         )}
-                        {s.eaAlunoId && (
+                        {s.plataformaAlunoId && (
                           <div className="text-[10px] text-gray-400">
-                            ID plataforma: {s.eaAlunoId}
+                            ID plataforma: {s.plataformaAlunoId}
                           </div>
                         )}
                       </td>

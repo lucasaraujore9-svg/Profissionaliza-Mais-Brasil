@@ -48,7 +48,7 @@ export async function GET(
       id: tc.id,
       courseId: tc.courseId,
       title: tc.course.nome,
-      // Hierarquia: tenant > admin > EA bruto
+      // Hierarquia: tenant > admin > plataforma bruto
       description:
         tc.customDescription ??
         tc.course.descricaoOverride ??

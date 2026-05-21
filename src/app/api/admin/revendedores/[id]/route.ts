@@ -197,7 +197,7 @@ export async function GET(
         asaasCustomerId: tenant.asaasCustomerId,
         asaasSubscriptionId: tenant.asaasSubscriptionId,
         mpConnected: tenant.mpConnected,
-        eaVendedorId: tenant.eaVendedorId,
+        plataformaVendedorId: tenant.plataformaVendedorId,
         accountManagerId: tenant.accountManagerId,
         accountManagerName: tenant.accountManager?.name ?? null,
         asaasNextDueDate,

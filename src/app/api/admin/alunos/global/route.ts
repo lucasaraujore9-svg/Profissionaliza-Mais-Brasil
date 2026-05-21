@@ -38,7 +38,7 @@ export async function GET(request: Request) {
       fone: true,
       cpf: true,
       status: true,
-      eaAlunoId: true,
+      plataformaAlunoId: true,
       createdAt: true,
       tenant: { select: { id: true, slug: true, name: true } },
       _count: {
@@ -64,7 +64,7 @@ export async function GET(request: Request) {
         fone: s.fone,
         cpf: s.cpf,
         status: s.status,
-        eaAlunoId: s.eaAlunoId,
+        plataformaAlunoId: s.plataformaAlunoId,
         createdAt: s.createdAt.toISOString(),
         tenant: {
           id: s.tenant.id,

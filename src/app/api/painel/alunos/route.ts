@@ -73,7 +73,7 @@ export async function GET(request: Request) {
         status: s.status,
         createdAt: s.createdAt.toISOString(),
         coursesCount: s._count.enrollments,
-        eaAlunoId: s.eaAlunoId,
+        plataformaAlunoId: s.plataformaAlunoId,
       })),
       stats,
     },

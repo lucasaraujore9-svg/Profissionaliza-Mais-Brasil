@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { unblockTenantStudents } from "@/lib/auto-block"
-import { unblockStudentInEA } from "@/lib/students/ea-actions"
+import { unblockStudentInEA } from "@/lib/students/plataforma-actions"
 import { createNotification } from "@/lib/notifications"
 
 export const maxDuration = 60

@@ -52,7 +52,7 @@ async function requestWithRetry<T>(
   options: RequestInit,
 ): Promise<EAResponse<T>> {
   const { url } = getConfig()
-  // EA API usa roteamento PHP estilo `index.php?cursos/listar`
+  // API da plataforma usa roteamento PHP estilo `index.php?cursos/listar`
   const fullUrl = `${url}/index.php?${endpoint}`
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
@@ -71,7 +71,7 @@ async function requestWithRetry<T>(
 
       if (data.erro && data.erro.length > 0) {
         throw new EAApiError(
-          `EA API error: ${data.erro}`,
+          `plataforma API error: ${data.erro}`,
           endpoint,
           200,
           data.erro,
@@ -98,7 +98,7 @@ async function requestWithRetry<T>(
 
       const backoff = INITIAL_BACKOFF_MS * Math.pow(2, attempt)
       if (process.env.NODE_ENV === "development") {
-        console.warn(`[EA] Retry ${attempt + 1}/${MAX_RETRIES} for ${endpoint} in ${backoff}ms`)
+        console.warn(`[plataforma] Retry ${attempt + 1}/${MAX_RETRIES} for ${endpoint} in ${backoff}ms`)
       }
       await sleep(backoff)
     }

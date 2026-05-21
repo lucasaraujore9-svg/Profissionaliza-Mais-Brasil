@@ -36,7 +36,7 @@ async function loadCurso(slug: string): Promise<LoadedCurso | null> {
       slug: c.slug,
       nome: c.nome,
       categoria: c.categoriaLoja ?? "Curso profissionalizante",
-      // Hierarquia para a vitrine principal: admin > EA bruto
+      // Hierarquia para a vitrine principal: admin > plataforma bruto
       descricao: c.descricaoOverride ?? c.descricao,
       qtdAulas: c.qtdAulas,
       cargaHoraria: c.cargaHoraria,

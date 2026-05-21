@@ -16,7 +16,7 @@ Criar página de checkout do aluno e confirmação de compra. Componentes: resum
 - CheckoutButton — botão "Finalizar Compra"
 - SuccessIcon — ícone sucesso (checkmark animado)
 - ConfirmationCard — resumo compra, número pedido, próximos passos
-- NextSteps — instruções: "Você será redirecionado à Escola Avançada"
+- NextSteps — instruções: "Você será redirecionado à plataforma parceira"
 
 ## Comportamentos
 - `render-checkout` — exibir form checkout

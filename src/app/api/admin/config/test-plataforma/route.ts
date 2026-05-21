@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { requireAdminSession } from "@/lib/auth/admin-session"
-import { listarCursos } from "@/lib/escola-avancada/client"
-import { EAApiError, EANetworkError } from "@/lib/escola-avancada/errors"
+import { listarCursos } from "@/lib/plataforma-cursos/client"
+import { EAApiError, EANetworkError } from "@/lib/plataforma-cursos/errors"
 
 export async function POST() {
   const ctx = await requireAdminSession()

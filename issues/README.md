@@ -16,7 +16,7 @@ Infrastructure, database, auth, APIs, caching, email. These enable all other iss
 - **021**: Multi-tenant middleware (Edge Runtime, Upstash Redis)
 - **022**: NextAuth.js v5 (credentials, role-based redirect)
 - **023**: Layouts (auth, main, admin, painel, loja)
-- **024**: Escola Avançada API client (21 endpoints, form-data)
+- **024**: plataforma parceira API client (21 endpoints, form-data)
 - **025**: Asaas API client
 - **026**: Mercado Pago API client
 - **027**: AES-256-GCM crypto module
@@ -36,8 +36,8 @@ Functional features with real database queries and API integrations. One behavio
 Webhook endpoints and cron jobs for async processing.
 
 - **050**: Asaas webhook (PAYMENT_RECEIVED, PAYMENT_OVERDUE)
-- **051**: Mercado Pago webhook (auto-enrollment, EA API calls)
-- **052**: Cron sync (daily 6am, EA courses/listar)
+- **051**: Mercado Pago webhook (auto-enrollment, API da plataforma calls)
+- **052**: Cron sync (daily 6am, plataforma courses/listar)
 - **053**: Auto block/unblock (inadimplência logic)
 
 ### Design Premium (054+) — Stitch-Driven Redesigns
@@ -86,7 +86,7 @@ Each issue follows this format:
 - Middleware provides `tenant_id` via request context
 
 ### API Client Design
-- **Escola Avançada**: form-data (NOT JSON), token via field
+- **plataforma parceira**: form-data (NOT JSON), token via field
 - **Asaas**: JSON REST, token via header
 - **Mercado Pago**: JSON REST, token per-tenant (encrypted in DB)
 

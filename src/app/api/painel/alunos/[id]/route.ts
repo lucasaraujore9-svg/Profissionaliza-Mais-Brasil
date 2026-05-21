@@ -40,7 +40,7 @@ export async function GET(
       email: student.email,
       cpf: student.cpf,
       fone: student.fone,
-      eaAlunoId: student.eaAlunoId,
+      plataformaAlunoId: student.plataformaAlunoId,
       status: student.status,
       apostila: student.apostila,
       createdAt: student.createdAt.toISOString(),

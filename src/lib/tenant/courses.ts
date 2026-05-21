@@ -63,7 +63,7 @@ export async function listTenantCourses(
         id: tc.id,
         slug: tc.course.slug,
         nome: tc.course.nome,
-        // Hierarquia: tenant > admin > EA bruto
+        // Hierarquia: tenant > admin > plataforma bruto
         descricao:
           tc.customDescription ??
           tc.course.descricaoOverride ??
@@ -93,7 +93,7 @@ export interface TenantCourseDetail extends TenantCourseListItem {
   tenantCourseId: string
   qtdAulas: number
   parcelasSugeridas: number | null
-  eaCourseId: string | null
+  plataformaCourseId: string | null
   lessons: Array<{ id: string; nome: string; ordem: number }>
 }
 
@@ -146,7 +146,7 @@ export async function getTenantCourseBySlug(
         tc.customParcelas ??
         tc.course.parcelasOverride ??
         tc.course.parcelasSugeridas,
-      eaCourseId: tc.course.eaCourseId,
+      plataformaCourseId: tc.course.plataformaCourseId,
       lessons: tc.course.courseLessons.map((l) => ({
         id: l.id,
         nome: l.nome,

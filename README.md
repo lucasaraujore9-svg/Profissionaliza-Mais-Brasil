@@ -22,7 +22,7 @@ npm run dev
 docs/SPEC.md           Spec completa (paginas, componentes, behaviors)
 docs/references/       Docs de referencia (architecture, design-system, workflow)
 docs/architecture/     Blueprint e guia de dominios
-docs/api/              Documentacao da API Escola Avancada
+docs/api/              Documentacao da API plataforma parceira
 issues/                53 issues individuais (proto → infra → behavior → integration)
 prisma/                Schema e migrations do banco
 src/app/               App Router (admin, painel, loja, api)

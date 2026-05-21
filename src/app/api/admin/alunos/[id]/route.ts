@@ -33,7 +33,7 @@ export async function GET(_request: Request, ctx: Ctx) {
       fone: true,
       status: true,
       apostila: true,
-      eaAlunoId: true,
+      plataformaAlunoId: true,
       asaasCustomerId: true,
       createdAt: true,
       enrollments: {
@@ -78,7 +78,7 @@ export async function GET(_request: Request, ctx: Ctx) {
       fone: student.fone,
       status: student.status,
       apostila: student.apostila,
-      eaAlunoId: student.eaAlunoId,
+      plataformaAlunoId: student.plataformaAlunoId,
       asaasCustomerId: student.asaasCustomerId,
       createdAt: student.createdAt.toISOString(),
       enrollments: student.enrollments.map((e) => ({

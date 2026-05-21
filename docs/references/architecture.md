@@ -393,11 +393,11 @@ src/
 │       ├── webhooks/
 │       │   ├── mercado-pago/      # POST /api/webhooks/mercado-pago
 │       │   ├── asaas/             # POST /api/webhooks/asaas
-│       │   └── escola-avancada/   # POST /api/webhooks/escola-avancada
+│       │   └── plataforma-cursos/   # POST /api/webhooks/plataforma-cursos
 │       └── integrations/
 │           ├── mercado-pago/      # PUT /api/integrations/mercado-pago/connect
 │           ├── asaas/
-│           └── escola-avancada/
+│           └── plataforma-cursos/
 │
 ├── components/
 │   ├── ui/                        # shadcn/ui base
@@ -446,7 +446,7 @@ src/
 │   │   ├── get-current-tenant.ts
 │   │   └── validate-tenant-access.ts
 │   │
-│   ├── escola-avancada/
+│   ├── plataforma-cursos/
 │   │   ├── client.ts              # form-data client
 │   │   ├── types.ts
 │   │   ├── usuarios.ts
@@ -661,7 +661,7 @@ const token = decryptToken(encrypted);
 | **Variáveis/Funções** | camelCase | `currentTenant`, `formatPrice()` |
 | **Constantes** | UPPER_SNAKE_CASE | `MAX_UPLOAD_SIZE`, `CACHE_TTL` |
 | **Ficheiros** | kebab-case | `load-courses.ts`, `submit-form.ts` |
-| **Pastas** | kebab-case | `src/app/admin`, `src/lib/escola-avancada` |
+| **Pastas** | kebab-case | `src/app/admin`, `src/lib/plataforma-cursos` |
 
 ---
 

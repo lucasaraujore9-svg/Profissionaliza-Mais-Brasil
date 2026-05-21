@@ -13,7 +13,7 @@ Nao use este arquivo. Ele foi substituido.
 - Crescimento de alunos ao longo do tempo (line chart)
 - Top revendedores por vendas, alunos, ticket medio
 - Vendas por forma de pagamento (donut)
-- Taxa de conclusao de cursos (via EA cursosvinculados)
+- Taxa de conclusao de cursos (via plataforma cursosvinculados)
 - Horarios de pico de vendas (heatmap)
 
 ### 3. Landing Page Principal (Tela 1.1)
@@ -72,7 +72,7 @@ Testar todos os fluxos:
 - [ ] Revendedor se cadastra → paga Asaas → conta ativada
 - [ ] Revendedor configura vitrine → publica
 - [ ] Aluno acessa vitrine → escolhe curso → aplica cupom → checkout MP
-- [ ] Pagamento aprovado → aluno matriculado na EA → email enviado
+- [ ] Pagamento aprovado → aluno matriculado na plataforma → email enviado
 - [ ] Aluno inadimplente → bloqueio automatico/manual
 - [ ] Revendedor inadimplente → admin notificado → suspensao
 - [ ] Dominio custom → DNS → verificacao → vitrine funcional

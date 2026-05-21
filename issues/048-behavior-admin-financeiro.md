@@ -7,13 +7,13 @@
 
 ## O Que Fazer
 
-Implementar financeiro admin: carregar resumo financeiro global, histórico pagamentos, seção inadimplência. E catálogo: sincronizar cursos EA, exibir grid, log sincronização.
+Implementar financeiro admin: carregar resumo financeiro global, histórico pagamentos, seção inadimplência. E catálogo: sincronizar cursos plataforma, exibir grid, log sincronização.
 
 ## Componentes Envolvidos
 - GET /api/admin/financeiro — métricas + payments Asaas
 - GET /api/admin/financeiro/overdue — inadimplência
 - GET /api/admin/catalogo — cursos agregados
-- POST /api/admin/catalogo/sync — sincronizar EA cursos/listar
+- POST /api/admin/catalogo/sync — sincronizar plataforma cursos/listar
 - GET /api/admin/catalogo/sync-log — histórico sincronizações
 
 ## Comportamentos
@@ -22,7 +22,7 @@ Implementar financeiro admin: carregar resumo financeiro global, histórico paga
 - `load-payments-asaas` — GET Asaas /payments
 - `load-overdue` — Tenant com status OVERDUE
 - `load-catalogo` — GET /api/admin/catalogo (todos cursos)
-- `sync-courses-ea` — POST /api/admin/catalogo/sync (EA API)
+- `sync-courses-ea` — POST /api/admin/catalogo/sync (API da plataforma)
 - `update-sync-log` — registrar resultado sync
 
 ## Critério de Aceite
@@ -35,7 +35,7 @@ Implementar financeiro admin: carregar resumo financeiro global, histórico paga
 - [ ] OverdueSection mostra inadimplência
 - [ ] GET /api/admin/catalogo retorna todos cursos (agregado)
 - [ ] CourseGrid renderiza com 20+ cursos
-- [ ] POST /api/admin/catalogo/sync chama EA cursos/listar
+- [ ] POST /api/admin/catalogo/sync chama plataforma cursos/listar
 - [ ] Compara com DB, cria/atualiza courses
 - [ ] GET /api/admin/catalogo/sync-log retorna histórico
 - [ ] SyncLog tabela com data, status, contagem

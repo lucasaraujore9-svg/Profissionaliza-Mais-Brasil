@@ -105,7 +105,7 @@ export async function POST(request: Request) {
       id: true,
       slug: true,
       mpAccessToken: true,
-      eaVendedorId: true,
+      plataformaVendedorId: true,
     },
   })
   if (!tenant) {
@@ -222,9 +222,9 @@ export async function POST(request: Request) {
           email: data.email,
           fone: data.fone,
           cpf: data.cpf,
-          eaAlunoId: `pending_${Date.now()}`,
+          plataformaAlunoId: `pending_${Date.now()}`,
           polo: tenant.slug,
-          vendedorId: tenant.eaVendedorId,
+          vendedorId: tenant.plataformaVendedorId,
           status: "INTERESSADO",
           updatedAt: new Date(),
         },

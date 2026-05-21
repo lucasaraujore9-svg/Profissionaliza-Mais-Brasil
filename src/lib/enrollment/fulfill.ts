@@ -1,10 +1,10 @@
 import { prisma } from "@/lib/prisma"
 import { sendEmail } from "@/lib/email/mailer"
-import { enviarEmailCredenciais } from "@/lib/escola-avancada/client"
+import { enviarEmailCredenciais } from "@/lib/plataforma-cursos/client"
 import {
-  ensureStudentInEA,
+  ensureStudentOnPlatform,
   linkCourseToStudent,
-} from "@/lib/students/ea-actions"
+} from "@/lib/students/plataforma-actions"
 import { generatePasswordWithHash } from "@/lib/students/generate-password"
 import { createNotification } from "@/lib/notifications"
 import { appUrl as resolveAppUrl, vitrineHost } from "@/lib/tenant/urls"
@@ -13,7 +13,7 @@ import type { PaymentGateway, PaymentType } from "@prisma/client"
 export interface TenantContext {
   id: string
   slug: string
-  eaVendedorId: string | null
+  plataformaVendedorId: string | null
   isPmbVitrine?: boolean
   /** Nome amigável da loja — usado em emails ao aluno. */
   name?: string
@@ -39,10 +39,10 @@ export interface PaymentEvent {
  * o curso + envia o email de boas-vindas. As demais apenas criam o registro
  * Payment, incrementam installmentsPaid e marcam COMPLETED na ultima.
  *
- * Toda interacao com a plataforma de aulas passa por src/lib/students/ea-actions.
+ * Toda interacao com a plataforma de aulas passa por src/lib/students/plataforma-actions.
  * O comportamento e identico para vendas PMB e revendedor — so o polo/vendedor
  * mudam por tenant. Toda informacao financeira (Payment, gateway, valor,
- * cupom) fica no nosso banco e nunca e enviada para a EA.
+ * cupom) fica no nosso banco e nunca e enviada para a plataforma.
  */
 export async function fulfillEnrollment(
   tenant: TenantContext,
@@ -146,7 +146,7 @@ export async function fulfillEnrollment(
 
   // Primeira cobranca: garante aluno na plataforma + vincula o curso (mesma rota
   // usada pelas concessoes manuais via /admin/alunos/[id]/cursos).
-  const { eaAlunoId, created, eaSenha } = await ensureStudentInEA(
+  const { plataformaAlunoId, created, plataformaSenha } = await ensureStudentOnPlatform(
     enrollment.student.id,
   )
   await linkCourseToStudent(enrollment.student.id, enrollment.course.id)
@@ -154,8 +154,8 @@ export async function fulfillEnrollment(
   // Envia email de boas-vindas com credenciais somente quando criamos o aluno
   // agora (evita spam em recompras).
   if (created) {
-    await enviarEmailCredenciais(eaAlunoId).catch((err) => {
-      console.error(`[fulfill] envioemail EA falhou para aluno ${eaAlunoId}:`, err)
+    await enviarEmailCredenciais(plataformaAlunoId).catch((err) => {
+      console.error(`[fulfill] envioemail da plataforma falhou para aluno ${plataformaAlunoId}:`, err)
     })
   }
 
@@ -248,7 +248,7 @@ export async function fulfillEnrollment(
   }
 
   if (created && enrollment.student.email) {
-    const eaLoginUrl =
+    const plataformaLoginUrl =
       process.env.EA_STUDENT_LOGIN_URL ?? "https://suaescola.com/aluno"
 
     await sendEmail({
@@ -259,9 +259,9 @@ export async function fulfillEnrollment(
         props: {
           studentName: enrollment.student.nome,
           courseName: enrollment.course.nome,
-          eaLoginUrl,
-          studentLogin: String(eaAlunoId),
-          studentPassword: eaSenha ?? "(enviada em email separado)",
+          plataformaLoginUrl,
+          studentLogin: String(plataformaAlunoId),
+          studentPassword: plataformaSenha ?? "(enviada em email separado)",
         },
       },
     }).catch((err) => {

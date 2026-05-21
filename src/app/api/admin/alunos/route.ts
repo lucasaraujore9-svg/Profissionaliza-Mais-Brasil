@@ -3,8 +3,8 @@ import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { requirePmbSales } from "@/lib/auth/guards"
 import { getOrCreatePmbTenant } from "@/lib/pmb-tenant"
-import { pmbEaPolo, pmbEaVendedorId } from "@/lib/pmb-config"
-import { ensureStudentInEA } from "@/lib/students/ea-actions"
+import { pmbPlataformaPolo, pmbPlataformaVendedorId } from "@/lib/pmb-config"
+import { ensureStudentOnPlatform } from "@/lib/students/plataforma-actions"
 import { findOrCreateAsaasCustomer } from "@/lib/asaas/client"
 import { getSystemSettings } from "@/lib/system-settings"
 
@@ -64,7 +64,7 @@ export async function GET(request: Request) {
       fone: true,
       cpf: true,
       status: true,
-      eaAlunoId: true,
+      plataformaAlunoId: true,
       createdAt: true,
     },
   })
@@ -77,7 +77,7 @@ export async function GET(request: Request) {
       fone: s.fone,
       cpf: s.cpf,
       status: s.status,
-      eaAlunoId: s.eaAlunoId,
+      plataformaAlunoId: s.plataformaAlunoId,
       createdAt: s.createdAt.toISOString(),
     })),
   })
@@ -136,9 +136,9 @@ export async function POST(request: Request) {
       email: parsed.data.email,
       cpf,
       fone: parsed.data.fone,
-      polo: pmbEaPolo(),
-      vendedorId: pmbEaVendedorId(),
-      eaAlunoId: `pending_${Date.now()}`,
+      polo: pmbPlataformaPolo(),
+      vendedorId: pmbPlataformaVendedorId(),
+      plataformaAlunoId: `pending_${Date.now()}`,
       status: "ATIVO",
     },
     select: { id: true, nome: true, email: true, cpf: true },
@@ -146,7 +146,7 @@ export async function POST(request: Request) {
 
   // Cria o aluno na plataforma imediatamente (não espera pelo pagamento)
   try {
-    await ensureStudentInEA(student.id)
+    await ensureStudentOnPlatform(student.id)
   } catch (err) {
     console.error("[alunos/POST] falha ao criar aluno na plataforma:", err)
     // Não bloqueia — será tentado novamente no fulfill do pagamento

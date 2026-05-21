@@ -167,8 +167,8 @@ Individual course detail page in the reseller's storefront.
 **PAGE STRUCTURE:**
 1. **Breadcrumb:** Home > Categoria > Nome do Curso
 2. **Hero do Curso (Split):** Left: course cover image (large). Right: title, category badge, description excerpt, price (large Mono font), parcelas info, CTA "Matricular Agora" button, coupon field
-3. **Sobre o Curso:** Full description text (from EA API "obs" field)
-4. **Ementa/Modulos:** Collapsible accordion list of lessons (from EA API "cursos/aulas")
+3. **Sobre o Curso:** Full description text (from plataforma API "obs" field)
+4. **Ementa/Modulos:** Collapsible accordion list of lessons (from plataforma API "cursos/aulas")
 5. **Detalhes Rapidos:** Horizontal stat bar: [X] aulas, [X]h carga horaria, Certificado incluso, Acesso imediato
 6. **CTA Inferior:** Sticky bottom bar on mobile with price + "Matricular" button
 
@@ -396,7 +396,7 @@ Course catalog synced from plataforma parceira.
 
 **CONSTRAINTS:**
 - Show sync status prominently
-- Courses are read-only (managed by EA)
+- Courses are read-only (managed by plataforma)
 ```
 
 #### Tela 4.5 — Analytics Global
@@ -422,7 +422,7 @@ System settings for the admin.
 1. **Tabs:** Geral, Planos, Integracao, Webhooks
 2. **Geral:** Nome da plataforma, logo upload, cores padrao
 3. **Planos:** Configurar planos de revenda (valor, features)
-4. **Integracao:** Status das APIs (EA conectada? Asaas configurado?), tokens (masked), test connection buttons
+4. **Integracao:** Status das APIs (plataforma conectada? Asaas configurado?), tokens (masked), test connection buttons
 5. **Webhooks:** Log de webhooks recentes, retry failed
 
 **CONSTRAINTS:**

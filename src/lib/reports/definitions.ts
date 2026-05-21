@@ -437,7 +437,7 @@ const RUNNERS: Record<string, ReportRunner> = {
             s.estado ?? "",
             s.status,
             s._count.enrollments,
-            s.eaAlunoId ?? "",
+            s.plataformaAlunoId ?? "",
           ]),
         filename: "alunos-todos",
       }
