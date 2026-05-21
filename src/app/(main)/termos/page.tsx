@@ -20,7 +20,7 @@ export default function TermosPage() {
       <PageHero
         eyebrow="Termos de uso"
         titulo="Termos e Condições de Uso — Alunos e Visitantes"
-        subtitulo="Versão 1.0 — Atualizado em 20 de maio de 2026. Leia atentamente antes de adquirir qualquer curso."
+        subtitulo="Versão 1.1 — Atualizado em 21 de maio de 2026. Leia atentamente antes de adquirir qualquer curso."
       />
       <PageBody>
         <Prose>

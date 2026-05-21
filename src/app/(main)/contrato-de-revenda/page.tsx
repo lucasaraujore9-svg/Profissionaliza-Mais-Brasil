@@ -20,7 +20,7 @@ export default function ContratoRevendaPage() {
       <PageHero
         eyebrow="Contrato de revenda"
         titulo="Contrato de Licenciamento e Revenda de Cursos"
-        subtitulo="Versão 1.0 — Atualizado em 20 de maio de 2026. Documento aplicável a revendedores e consultores parceiros."
+        subtitulo="Versão 1.0 — Atualizado em 20 de maio de 2026. Documento aplicável a Unidades e Consultores parceiros."
       />
       <PageBody>
         <Prose>

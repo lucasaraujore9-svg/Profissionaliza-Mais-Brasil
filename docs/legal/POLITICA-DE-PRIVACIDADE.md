@@ -2,28 +2,28 @@
 
 **Profissionaliza Mais Brasil**
 
-> Atualizado pela última vez em: 20/05/2026
-> Versão: 1.0
+> Atualizado pela última vez em: 21/05/2026
+> Versão: 1.1
 
 ---
 
-O **Profissionaliza Mais Brasil** ("PMB", "nós" ou "nosso") — unidade de negócios do **GRUPO BOLSA MAIS BRASIL**, pessoa jurídica de direito privado inscrita no CNPJ/MF sob o nº **66.553.170/0001-01**, com sede na Rua Tiradentes, nº 2564, sala 09 (301), Bairro Industrial, Contagem/MG, CEP 32.230-020 — tem como compromisso fundamental o respeito pela privacidade de seus visitantes, alunos, revendedores e parceiros, bem como a proteção e a segurança dos dados pessoais coletados em razão da utilização da nossa plataforma.
+O **Profissionaliza Mais Brasil** ("PMB", "nós" ou "nosso") — unidade de negócios do **GRUPO BOLSA MAIS BRASIL**, pessoa jurídica de direito privado inscrita no CNPJ/MF sob o nº **66.553.170/0001-01**, com sede na Rua Tiradentes, nº 2564, sala 09 (301), Bairro Industrial, Contagem/MG, CEP 32.230-020 — tem como compromisso fundamental o respeito pela privacidade de seus visitantes, alunos, unidades e parceiros, bem como a proteção e a segurança dos dados pessoais coletados em razão da utilização da nossa plataforma.
 
-Como parte integrante dos **Termos de Uso** e do **Contrato de Revenda**, esta Política de Privacidade e Segurança de Dados ("Política") estabelece as regras sobre a obtenção, o uso, o armazenamento, o compartilhamento e a eliminação dos dados e informações coletadas, além do registro das atividades dos usuários.
+Como parte integrante dos **Termos de Uso** e do **Contrato da Unidade**, esta Política de Privacidade e Segurança de Dados ("Política") estabelece as regras sobre a obtenção, o uso, o armazenamento, o compartilhamento e a eliminação dos dados e informações coletadas, além do registro das atividades dos usuários.
 
 Esta Política aplica-se a:
 
 (i) O site institucional [www.profissionalizamaisbrasil.com.br](https://www.profissionalizamaisbrasil.com.br);
 
-(ii) O domínio de vitrines [www.livrecursos.com.br](https://www.livrecursos.com.br) e todos os seus subdomínios `{revendedor}.livrecursos.com.br`;
+(ii) O domínio de vitrines [www.livrecursos.com.br](https://www.livrecursos.com.br) e todos os seus subdomínios `{unidade}.livrecursos.com.br`;
 
-(iii) Domínios personalizados de **Revendedores parceiros** que apontem para a infraestrutura da PMB;
+(iii) Domínios personalizados de **Unidades parceiras** que apontem para a infraestrutura do PMB;
 
-(iv) Os fluxos de matrícula automática na **Escola Avançada** e demais integrações com gateways de pagamento e sistemas terceiros, **na exata medida em que a PMB intermedeia o tratamento desses dados**.
+(iv) Os fluxos de matrícula automática na **Escola Avançada** e demais integrações com gateways de pagamento e sistemas terceiros, **na exata medida em que o PMB intermedeia o tratamento desses dados**.
 
 A presente Política está em conformidade com a **Lei Geral de Proteção de Dados Pessoais (Lei nº 13.709/2018 — "LGPD")**, com o **Marco Civil da Internet (Lei nº 12.965/2014)**, com o **Decreto nº 8.771/2016** e com as melhores práticas internacionais de privacidade.
 
-**Ao acessar e usar a Plataforma, você concorda com esta Política e autoriza expressamente a PMB a coletar, processar e armazenar seus dados para os fins descritos aqui. Caso não concorde com qualquer item, por favor, não utilize nossos serviços.**
+**Ao acessar e usar a Plataforma, você concorda com esta Política e autoriza expressamente o PMB a coletar, processar e armazenar seus dados para os fins descritos aqui. Caso não concorde com qualquer item, por favor, não utilize nossos serviços.**
 
 É importante que esta Política seja lida atentamente para que você esteja ciente de **como** e **por que** estamos utilizando suas informações.
 
@@ -32,7 +32,7 @@ A presente Política está em conformidade com a **Lei Geral de Proteção de Da
 ## ÍNDICE
 
 1. Definições
-2. Papéis das Partes no Tratamento de Dados (PMB, Revendedor, Escola Avançada)
+2. Papéis das Partes no Tratamento de Dados (PMB, Unidade, Escola Avançada)
 3. Dados que Coletamos
 4. Como Coletamos seus Dados
 5. Base Legal para o Tratamento
@@ -59,7 +59,7 @@ Para os fins desta Política, devem ser consideradas as seguintes definições, 
 
 **Dados Pessoais**: qualquer informação relacionada a uma pessoa natural identificada ou identificável (ex.: nome, CPF, e-mail, telefone, IP, dados de pagamento, dados de progresso pedagógico).
 
-**Dados Pessoais Sensíveis**: dados sobre origem racial ou étnica, convicção religiosa, opinião política, filiação a sindicato ou organização religiosa/filosófica/política, dados referentes à saúde ou à vida sexual, dados genéticos ou biométricos (a PMB **não coleta** dados sensíveis em seu fluxo padrão).
+**Dados Pessoais Sensíveis**: dados sobre origem racial ou étnica, convicção religiosa, opinião política, filiação a sindicato ou organização religiosa/filosófica/política, dados referentes à saúde ou à vida sexual, dados genéticos ou biométricos (o PMB **não coleta** dados sensíveis em seu fluxo padrão).
 
 **LGPD**: Lei Geral de Proteção de Dados Pessoais (Lei nº 13.709/2018).
 
@@ -79,15 +79,15 @@ Para os fins desta Política, devem ser consideradas as seguintes definições, 
 
 **PMB** ou **nós**: **Profissionaliza Mais Brasil**, unidade de negócios do **GRUPO BOLSA MAIS BRASIL**, pessoa jurídica de direito privado, inscrita no CNPJ/MF sob o nº **66.553.170/0001-01**, com sede na Rua Tiradentes, nº 2564, sala 09 (301), Bairro Industrial, Contagem/MG, CEP 32.230-020.
 
-**Você** ou **Usuário**: qualquer pessoa física — Visitante, Aluno, Revendedor, Consultor ou empregado de Revendedor — que acesse ou interaja com a Plataforma.
+**Você** ou **Usuário**: qualquer pessoa física — Visitante, Aluno, Unidade, Consultor ou empregado de Unidade — que acesse ou interaja com a Plataforma.
 
-**Revendedor**: pessoa física ou jurídica parceira comercial que opera uma Vitrine na infraestrutura da PMB, conforme **Contrato de Revenda**.
+**Unidade**: pessoa física ou jurídica parceira comercial que opera uma Vitrine na infraestrutura do PMB, conforme **Contrato da Unidade**.
 
-**Escola Avançada** ou **EA**: plataforma educacional terceira, contratada pela PMB sob modelo white-label/API, responsável pela hospedagem e ministração dos Cursos.
+**Escola Avançada** ou **EA**: plataforma educacional terceira, contratada pelo PMB sob modelo white-label/API, responsável pela hospedagem e ministração dos Cursos.
 
-**Vitrine**: loja virtual operada por um Revendedor, acessível por subdomínio em `livrecursos.com.br` ou por domínio personalizado.
+**Vitrine**: loja virtual operada por uma Unidade, acessível por subdomínio em `livrecursos.com.br` ou por domínio personalizado.
 
-**Plataforma**: o conjunto do Site Institucional, das Vitrines, painéis administrativos e integrações da PMB.
+**Plataforma**: o conjunto do Site Institucional, das Vitrines, painéis administrativos e integrações do PMB.
 
 ---
 
@@ -97,26 +97,26 @@ O ecossistema do Profissionaliza Mais Brasil envolve **múltiplos atores** com p
 
 ### 2.1. Quando você é VISITANTE do Site Institucional
 
-A **PMB é CONTROLADORA** dos seus dados de navegação, cookies, contatos via formulário institucional, newsletter e contato comercial.
+O **PMB é CONTROLADOR** dos seus dados de navegação, cookies, contatos via formulário institucional, newsletter e contato comercial.
 
-### 2.2. Quando você é ALUNO que comprou um Curso em VITRINE de Revendedor
+### 2.2. Quando você é ALUNO que comprou um Curso em VITRINE de Unidade
 
-- O **REVENDEDOR é o CONTROLADOR** dos seus dados de cadastro, compra, contato e relacionamento comercial referentes à venda realizada em sua Vitrine;
-- A **PMB é OPERADORA** desses dados, atuando **sob as instruções do Revendedor** e nos limites necessários à execução do Contrato de Revenda, dos Termos de Uso e desta Política;
+- A **UNIDADE é a CONTROLADORA** dos seus dados de cadastro, compra, contato e relacionamento comercial referentes à venda realizada em sua Vitrine;
+- O **PMB é OPERADOR** desses dados, atuando **sob as instruções da Unidade** e nos limites necessários à execução do Contrato da Unidade, dos Termos de Uso e desta Política;
 - A **ESCOLA AVANÇADA é OPERADORA** dos dados necessários à criação da matrícula e ao acesso ao Curso, e **CONTROLADORA** dos dados de progresso pedagógico, conclusão e emissão de certificado em sua plataforma.
 
 ### 2.3. Quando você é ALUNO que comprou um Curso diretamente no Site Institucional PMB
 
-- A **PMB é CONTROLADORA** dos seus dados de cadastro, compra e relacionamento;
+- O **PMB é CONTROLADOR** dos seus dados de cadastro, compra e relacionamento;
 - A **ESCOLA AVANÇADA é OPERADORA** dos dados de matrícula e Controladora dos dados de progresso pedagógico.
 
-### 2.4. Quando você é REVENDEDOR ou CONSULTOR
+### 2.4. Quando você é UNIDADE ou CONSULTOR
 
-A **PMB é CONTROLADORA** dos seus dados de cadastro, contratuais, comerciais, fiscais, de uso da Plataforma e de relacionamento.
+O **PMB é CONTROLADOR** dos seus dados de cadastro, contratuais, comerciais, fiscais, de uso da Plataforma e de relacionamento.
 
-### 2.5. Quando você é colaborador de REVENDEDOR (Consultor)
+### 2.5. Quando você é colaborador de UNIDADE (Consultor)
 
-O **REVENDEDOR é o CONTROLADOR** dos seus dados como colaborador. A PMB atua como Operadora ao prover a credencial de acesso ao painel.
+A **UNIDADE é a CONTROLADORA** dos seus dados como colaborador. O PMB atua como Operador ao prover a credencial de acesso ao painel.
 
 ### 2.6. Independência dos Sub-operadores
 
@@ -136,7 +136,7 @@ Os gateways de pagamento (Mercado Pago e Asaas), os provedores de infraestrutura
 - Telefone (com WhatsApp, opcionalmente)
 - Senha (armazenada de forma criptografada — bcrypt)
 
-**No Cadastro (Revendedor / Consultor):**
+**No Cadastro (Unidade / Consultor):**
 
 - Razão social ou nome completo
 - CNPJ ou CPF
@@ -149,7 +149,7 @@ Os gateways de pagamento (Mercado Pago e Asaas), os provedores de infraestrutura
 **No Checkout de Curso:**
 
 - Dados de cobrança (nome, CPF, e-mail, endereço)
-- **Dados de pagamento**: a PMB **NÃO armazena** dados de cartão, CVV ou credenciais bancárias. Esses dados são fornecidos diretamente ao gateway (Mercado Pago) e processados em ambiente PCI-DSS
+- **Dados de pagamento**: o PMB **NÃO armazena** dados de cartão, CVV ou credenciais bancárias. Esses dados são fornecidos diretamente ao gateway (Mercado Pago) e processados em ambiente PCI-DSS
 
 **Em formulários de contato, suporte, newsletter e onboarding:**
 
@@ -171,7 +171,7 @@ Os gateways de pagamento (Mercado Pago e Asaas), os provedores de infraestrutura
 
 - Da **Escola Avançada**: dados de matrícula, progresso, conclusão e certificação
 - Do **Mercado Pago**: status de pagamento, ID da transação, valor, método (sem CVV/PAN)
-- Do **Asaas**: status de cobrança da mensalidade do Revendedor
+- Do **Asaas**: status de cobrança da mensalidade da Unidade
 - De provedores de **antifraude** (quando aplicável)
 - De **redes sociais** (caso o Usuário opte por login social — recurso futuro)
 
@@ -197,7 +197,7 @@ d) **Integrações automáticas** com gateways de pagamento e com a Escola Avan�
 
 e) **Recebimento de webhooks** de eventos de pagamento, matrícula e progresso;
 
-f) **Cadastro de Consultor** pelo respectivo Revendedor responsável.
+f) **Cadastro de Consultor** pela respectiva Unidade responsável.
 
 ---
 
@@ -218,7 +218,7 @@ Em conformidade com o **art. 7º da LGPD**, realizamos o Tratamento de Dados Pes
 | Compartilhamento com autoridades em razão de ordem judicial | **Cumprimento de obrigação legal** | art. 7º, II |
 | Defesa em processo administrativo, judicial ou arbitral | **Exercício regular de direitos** | art. 7º, VI |
 | Cookies de analytics e performance | **Legítimo interesse**, mitigado por opt-out | art. 7º, IX |
-| Tratamento de dados de Revendedor | **Execução de contrato** (Contrato de Revenda) | art. 7º, V |
+| Tratamento de dados de Unidade | **Execução de contrato** (Contrato da Unidade) | art. 7º, V |
 | Estudos e estatísticas anonimizadas | **Legítimo interesse**, com anonimização | art. 7º, IX e art. 12 |
 
 Quando o tratamento se basear no **Consentimento**, o Titular poderá **revogar a qualquer tempo**, sem prejuízo dos tratamentos anteriores realizados sob essa base.
@@ -241,11 +241,11 @@ c) Processar pagamentos via Mercado Pago e/ou Asaas;
 
 d) Permitir o acesso às aulas, materiais e certificados;
 
-e) Aplicar a política de bloqueio por inadimplência configurada pelo Revendedor;
+e) Aplicar a política de bloqueio por inadimplência configurada pela Unidade;
 
-f) Permitir a operação da Vitrine do Revendedor (gestão de alunos, cupons, financeiro);
+f) Permitir a operação da Vitrine da Unidade (gestão de alunos, cupons, financeiro);
 
-g) Permitir o atendimento ao Aluno pelo Revendedor.
+g) Permitir o atendimento ao Aluno pela Unidade.
 
 ### 6.2. Comunicação
 
@@ -265,9 +265,9 @@ a) Detectar e prevenir fraudes, abusos, acessos indevidos e atividades ilícitas
 
 b) Investigar incidentes de segurança;
 
-c) Cumprir requisitos regulatórios de KYC (Know Your Customer) para Revendedores;
+c) Cumprir requisitos regulatórios de KYC (Know Your Customer) para Unidades;
 
-d) Garantir o cumprimento dos Termos de Uso e do Contrato de Revenda.
+d) Garantir o cumprimento dos Termos de Uso e do Contrato da Unidade.
 
 ### 6.4. Cumprimento Legal e Defesa de Direitos
 
@@ -275,7 +275,7 @@ a) Cumprir obrigações fiscais, contábeis, regulatórias e legais (emissão de
 
 b) Atender requisições de autoridades públicas (Receita Federal, Ministério Público, Procon, ANPD, Polícia Civil/Federal, Justiça);
 
-c) Defender direitos da PMB, dos Revendedores e dos Alunos em processos judiciais, administrativos ou arbitrais.
+c) Defender direitos do PMB, das Unidades e dos Alunos em processos judiciais, administrativos ou arbitrais.
 
 ### 6.5. Melhoria Contínua
 
@@ -297,7 +297,7 @@ Não utilizaremos seus dados para **finalidades incompatíveis** com as descrita
 
 ### 7.1. Princípio Geral
 
-A PMB **não vende, aluga, cede ou troca** seus Dados Pessoais com terceiros para fins comerciais não relacionados à prestação do serviço.
+O PMB **não vende, aluga, cede ou troca** seus Dados Pessoais com terceiros para fins comerciais não relacionados à prestação do serviço.
 
 Compartilhamos seus dados **apenas** nas hipóteses descritas abaixo, sempre observando os princípios da LGPD e mediante contratos com cláusulas de confidencialidade e segurança.
 
@@ -308,7 +308,7 @@ Compartilhamos seus dados **apenas** nas hipóteses descritas abaixo, sempre obs
 | **Vercel Inc.** | Hospedagem da Plataforma, CDN, gerenciamento de domínios | Logs de requisição, IP, headers | EUA / Global |
 | **Supabase** | Banco de dados PostgreSQL, autenticação | Todos os dados cadastrais e transacionais | EUA |
 | **Upstash** | Cache de tenant, rate limiting | IP, tenant ID, contadores | Global |
-| **Asaas** | Cobrança da mensalidade do Revendedor | Nome, CPF/CNPJ, e-mail, telefone do Revendedor | Brasil |
+| **Asaas** | Cobrança da mensalidade da Unidade | Nome, CPF/CNPJ, e-mail, telefone da Unidade | Brasil |
 | **Mercado Pago** | Gateway de pagamento de Cursos | Nome, CPF, e-mail, dados de pagamento | Brasil |
 | **Escola Avançada** | Hospedagem e ministração dos Cursos | Nome, CPF, e-mail, senha de acesso, dados de progresso | Brasil |
 | **Resend** | Envio de e-mails transacionais | Nome, e-mail, conteúdo da mensagem | EUA |
@@ -316,11 +316,11 @@ Compartilhamos seus dados **apenas** nas hipóteses descritas abaixo, sempre obs
 | **Google Analytics** (quando ativado) | Métricas de navegação | IP anonimizado, eventos, identificador de sessão | EUA / Global |
 | **Vercel Analytics** | Métricas de performance e Core Web Vitals | IP anonimizado, métricas de performance | EUA |
 
-### 7.3. Compartilhamento com Revendedores
+### 7.3. Compartilhamento com Unidades
 
-Quando o Aluno realiza compra em uma Vitrine, **os Dados Pessoais necessários à execução da venda são compartilhados com o Revendedor titular da Vitrine** (que atua como Controlador desses dados, conforme Cláusula 2.2), incluindo nome, CPF, e-mail, telefone, dados da compra e progresso na Vitrine.
+Quando o Aluno realiza compra em uma Vitrine, **os Dados Pessoais necessários à execução da venda são compartilhados com a Unidade titular da Vitrine** (que atua como Controlador desses dados, conforme Cláusula 2.2), incluindo nome, CPF, e-mail, telefone, dados da compra e progresso na Vitrine.
 
-A PMB **não compartilha dados de Alunos de uma Vitrine com Revendedores de outras Vitrines**.
+O PMB **não compartilha dados de Alunos de uma Vitrine com Unidades de outras Vitrines**.
 
 ### 7.4. Compartilhamento com a Escola Avançada
 
@@ -334,15 +334,15 @@ a) **Autoridades policiais, ministeriais e judiciais** em razão de ordem judici
 
 b) **Autoridades administrativas** (ANPD, Procon, Receita Federal, Banco Central) quando exigido por lei;
 
-c) **Órgãos de proteção ao crédito** (SPC, SERASA), nas hipóteses contratuais aplicáveis (inadimplência de Revendedor — conforme Contrato de Revenda).
+c) **Órgãos de proteção ao crédito** (SPC, SERASA), nas hipóteses contratuais aplicáveis (inadimplência de Unidade — conforme Contrato da Unidade).
 
 ### 7.6. Compartilhamento em Operações Societárias
 
-Em caso de **fusão, cisão, incorporação, aquisição ou venda total/parcial dos ativos** da PMB, os Dados Pessoais poderão ser transferidos à sucessora, que ficará obrigada a manter as mesmas condições de privacidade aqui pactuadas, com aviso prévio aos Titulares quando exigido por lei.
+Em caso de **fusão, cisão, incorporação, aquisição ou venda total/parcial dos ativos** do PMB, os Dados Pessoais poderão ser transferidos à sucessora, que ficará obrigada a manter as mesmas condições de privacidade aqui pactuadas, com aviso prévio aos Titulares quando exigido por lei.
 
 ### 7.7. Compartilhamento para Defesa de Direitos
 
-Em situações de risco a direitos da PMB, dos Revendedores ou de terceiros, poderemos compartilhar dados com **advogados, peritos, autoridades** e demais profissionais envolvidos.
+Em situações de risco a direitos do PMB, das Unidades ou de terceiros, poderemos compartilhar dados com **advogados, peritos, autoridades** e demais profissionais envolvidos.
 
 ### 7.8. Outras Hipóteses
 
@@ -370,7 +370,7 @@ d) **Necessidade para execução de contrato** ou **cumprimento de obrigação l
 
 ## 9. MEDIDAS DE SEGURANÇA
 
-A PMB adota medidas **técnicas, administrativas e organizacionais** razoáveis para proteger seus Dados Pessoais contra acessos não autorizados, situações acidentais ou ilícitas de destruição, perda, alteração, comunicação ou difusão.
+O PMB adota medidas **técnicas, administrativas e organizacionais** razoáveis para proteger seus Dados Pessoais contra acessos não autorizados, situações acidentais ou ilícitas de destruição, perda, alteração, comunicação ou difusão.
 
 ### 9.1. Medidas Técnicas
 
@@ -389,14 +389,14 @@ A PMB adota medidas **técnicas, administrativas e organizacionais** razoáveis 
 
 - **Controle de acesso baseado em papéis** (RBAC): SUPER_ADMIN, PMB_SALES, PMB_RESELLER_MGR, RESELLER, CONSULTOR — cada um com permissões mínimas necessárias
 - **Política de senhas fortes** para acesso administrativo
-- **Acesso a dados pessoais restrito** à Equipe da PMB com necessidade legítima de saber, sob obrigações de confidencialidade
+- **Acesso a dados pessoais restrito** à Equipe do PMB com necessidade legítima de saber, sob obrigações de confidencialidade
 - **Treinamento periódico** da equipe em LGPD e segurança da informação
 - **Procedimentos para resposta a incidentes** (Cláusula 14)
 - **Avaliação contínua** de fornecedores e sub-operadores
 
 ### 9.3. Limitações
 
-A PMB envida seus melhores esforços, **porém nenhum sistema é absolutamente impenetrável**. A PMB **não pode garantir, em termos absolutos**, a inviolabilidade dos dados em face de eventos extraordinários, ataques cibernéticos de elevada sofisticação ou força maior.
+O PMB envida seus melhores esforços, **porém nenhum sistema é absolutamente impenetrável**. O PMB **não pode garantir, em termos absolutos**, a inviolabilidade dos dados em face de eventos extraordinários, ataques cibernéticos de elevada sofisticação ou força maior.
 
 O Titular também é corresponsável pela segurança ao manter senhas fortes, não compartilhá-las, manter seus dispositivos atualizados e protegidos.
 
@@ -414,8 +414,8 @@ O Titular também é corresponsável pela segurança ao manter senhas fortes, n�
 | Notas fiscais eletrônicas | **5 anos** | Obrigação legal (LC 116/2003) |
 | Logs de acesso e navegação | **6 meses**, conforme art. 15 do Marco Civil | Obrigação legal |
 | Logs de aplicação (eventos do sistema) | **12 meses** | Legítimo interesse de segurança |
-| Cadastro de Revendedor (contrato ativo) | Enquanto vigente o contrato | Execução de contrato |
-| Cadastro de Revendedor (após encerramento) | **5 anos** | Defesa de direitos |
+| Cadastro de Unidade (contrato ativo) | Enquanto vigente o contrato | Execução de contrato |
+| Cadastro de Unidade (após encerramento) | **5 anos** | Defesa de direitos |
 | Webhooks e tokens criptografados de pagamento | Enquanto necessário ao serviço | Execução de contrato |
 | Comunicações de marketing (consentimento) | Até a revogação do consentimento | Consentimento |
 | Cookies e identificadores | Conforme Cláusula 12 | Consentimento ou Legítimo interesse |
@@ -456,7 +456,7 @@ b) Cumprimento de requisições legais e judiciais;
 
 c) Análises agregadas de desempenho e capacidade;
 
-d) Defesa de direitos da PMB, dos Revendedores e dos Titulares.
+d) Defesa de direitos do PMB, das Unidades e dos Titulares.
 
 ---
 
@@ -473,7 +473,7 @@ d) Defesa de direitos da PMB, dos Revendedores e dos Titulares.
 | **Performance / Analytics** | Métricas de uso, Core Web Vitals, Google Analytics, Vercel Analytics | Consentimento ou Legítimo interesse (IP anonimizado) | Banner de cookies ou navegador |
 | **Marketing** | Remarketing, campanhas, pixels de conversão (Facebook/Meta, Google Ads) — quando ativados | Consentimento | Banner de cookies ou navegador |
 
-**12.3. Isolamento multi-tenant.** Os cookies de sessão são **isolados por domínio**, de forma que a autenticação em `profissionalizamaisbrasil.com.br` (área administrativa/aluno) **não se confunde** com a autenticação em uma Vitrine de Revendedor em `livrecursos.com.br`.
+**12.3. Isolamento multi-tenant.** Os cookies de sessão são **isolados por domínio**, de forma que a autenticação em `profissionalizamaisbrasil.com.br` (área administrativa/aluno) **não se confunde** com a autenticação em uma Vitrine de Unidade em `livrecursos.com.br`.
 
 **12.4. Como gerenciar cookies.** O Usuário pode:
 
@@ -489,7 +489,7 @@ c) Solicitar ao DPO informações detalhadas sobre cookies de terceiros em uso n
 
 ## 13. SEUS DIREITOS COMO TITULAR (ART. 18 DA LGPD)
 
-Você, na condição de Titular de Dados Pessoais, pode exercer, a qualquer momento, perante a PMB (ou perante o Revendedor titular da Vitrine, conforme Cláusula 2), os seguintes direitos:
+Você, na condição de Titular de Dados Pessoais, pode exercer, a qualquer momento, perante o PMB (ou perante a Unidade titular da Vitrine, conforme Cláusula 2), os seguintes direitos:
 
 ### 13.1. Direitos Garantidos
 
@@ -505,7 +505,7 @@ e) **Portabilidade** dos dados a outro fornecedor de serviço ou produto, median
 
 f) **Eliminação** dos dados tratados com base no consentimento, exceto nas hipóteses de retenção legal (art. 16 da LGPD);
 
-g) **Informação** sobre as entidades públicas e privadas com as quais a PMB compartilha seus dados;
+g) **Informação** sobre as entidades públicas e privadas com as quais o PMB compartilha seus dados;
 
 h) **Informação** sobre a possibilidade de não fornecer consentimento e sobre as consequências da negativa;
 
@@ -513,13 +513,13 @@ i) **Revogação do consentimento**, a qualquer momento, mediante manifestação
 
 j) **Oposição** ao Tratamento realizado com base em legítimo interesse, em caso de descumprimento da LGPD;
 
-k) **Revisão de decisões automatizadas** (atualmente, a PMB não realiza decisões totalmente automatizadas que produzam efeitos significativos ao Titular);
+k) **Revisão de decisões automatizadas** (atualmente, o PMB não realiza decisões totalmente automatizadas que produzam efeitos significativos ao Titular);
 
 l) **Petição perante a ANPD** contra o Controlador.
 
 ### 13.2. Como exercer seus direitos
 
-Para exercer qualquer direito, envie comunicação escrita ao DPO da PMB pelo e-mail `dpo@profissionalizamaisbrasil.com.br`, indicando como assunto **"Nome do usuário — Exercício de Direitos do Titular"**, e fornecendo:
+Para exercer qualquer direito, envie comunicação escrita ao DPO do PMB pelo e-mail `profissionaliza@grupobolsamaisbrasil.com.br`, indicando como assunto **"Nome do usuário — Exercício de Direitos do Titular"**, e fornecendo:
 
 (i) Nome completo, CPF e e-mail (e, se aplicável, do representante legal);
 
@@ -533,11 +533,11 @@ Para exercer qualquer direito, envie comunicação escrita ao DPO da PMB pelo e-
 
 ### 13.3. Verificação de identidade
 
-Antes de atender o pedido, a PMB **verificará a identidade** do solicitante para evitar fraudes. Caso a verificação não seja possível, a PMB poderá recusar o atendimento, justificadamente.
+Antes de atender o pedido, o PMB **verificará a identidade** do solicitante para evitar fraudes. Caso a verificação não seja possível, o PMB poderá recusar o atendimento, justificadamente.
 
 ### 13.4. Prazo de resposta
 
-A PMB responderá ao pedido em até **15 (quinze) dias corridos** após o recebimento, conforme art. 19, §3º, da LGPD, prorrogáveis por igual período em casos justificados.
+O PMB responderá ao pedido em até **15 (quinze) dias corridos** após o recebimento, conforme art. 19, §3º, da LGPD, prorrogáveis por igual período em casos justificados.
 
 ### 13.5. Gratuidade
 
@@ -567,7 +567,7 @@ Caso entenda que seus direitos não foram adequadamente atendidos, você pode ap
 
 ## 14. INCIDENTES DE SEGURANÇA
 
-**14.1. Resposta a incidentes.** A PMB possui procedimentos internos para detecção, contenção, investigação e remediação de incidentes de segurança que possam acarretar risco ou dano aos Titulares.
+**14.1. Resposta a incidentes.** O PMB possui procedimentos internos para detecção, contenção, investigação e remediação de incidentes de segurança que possam acarretar risco ou dano aos Titulares.
 
 **14.2. Notificação à ANPD.** Conforme o **art. 48 da LGPD**, comunicaremos à **ANPD** e aos Titulares afetados, em **prazo razoável** (regulamentado pela ANPD), a ocorrência de incidente de segurança que possa acarretar **risco ou dano relevante** aos Titulares, contendo:
 
@@ -583,7 +583,7 @@ e) Motivos da demora, quando a comunicação não tiver sido imediata;
 
 f) Medidas adotadas para reverter ou mitigar os efeitos.
 
-**14.3.** A PMB cooperará com os Revendedores (na qualidade de Controladores das suas Vitrines) na resposta a incidentes envolvendo dados de Alunos das respectivas Vitrines, conforme Cláusula 13 do Contrato de Revenda.
+**14.3.** O PMB cooperará com as Unidades (na qualidade de Controladores das suas Vitrines) na resposta a incidentes envolvendo dados de Alunos das respectivas Vitrines, conforme Cláusula 13 do Contrato da Unidade.
 
 ---
 
@@ -591,7 +591,7 @@ f) Medidas adotadas para reverter ou mitigar os efeitos.
 
 **15.1.** A Plataforma é destinada a pessoas **maiores de 18 anos** ou devidamente representadas/assistidas.
 
-**15.2.** Caso a PMB tome conhecimento de Tratamento inadvertido de dados de crianças ou adolescentes (menores de 18 anos) sem o consentimento específico e em destaque de pelo menos um dos pais ou responsável legal, conforme **art. 14 da LGPD**, adotará as medidas para eliminação imediata dos dados, salvo se a manutenção for necessária para a proteção do próprio Titular (art. 14, § 3º).
+**15.2.** Caso o PMB tome conhecimento de Tratamento inadvertido de dados de crianças ou adolescentes (menores de 18 anos) sem o consentimento específico e em destaque de pelo menos um dos pais ou responsável legal, conforme **art. 14 da LGPD**, adotará as medidas para eliminação imediata dos dados, salvo se a manutenção for necessária para a proteção do próprio Titular (art. 14, § 3º).
 
 **15.3.** Pais e responsáveis legais podem contatar o DPO a qualquer momento para solicitar a eliminação dos dados de menores.
 
@@ -599,7 +599,7 @@ f) Medidas adotadas para reverter ou mitigar os efeitos.
 
 ## 16. ENCARREGADO DE PROTEÇÃO DE DADOS (DPO)
 
-**16.1.** Em atenção ao **art. 41 da LGPD**, a PMB designa formalmente um Encarregado de Proteção de Dados (DPO), responsável por:
+**16.1.** Em atenção ao **art. 41 da LGPD**, o PMB designa formalmente um Encarregado de Proteção de Dados (DPO), responsável por:
 
 a) Receber comunicações dos Titulares e prestar esclarecimentos;
 
@@ -611,7 +611,7 @@ d) Executar as demais atribuições do art. 41, § 2º, da LGPD.
 
 **16.2. Canal do DPO:**
 
-- **E-mail**: `dpo@profissionalizamaisbrasil.com.br`
+- **E-mail (canal único)**: `profissionaliza@grupobolsamaisbrasil.com.br` — indicar no assunto "DPO / LGPD"
 - **Endereço para correspondência**: Rua Tiradentes, nº 2564, sala 09 (301), Bairro Industrial, Contagem/MG, CEP 32.230-020 — A/C do Encarregado de Proteção de Dados
 
 **16.3.** A identidade do DPO em pessoa física e demais dados de contato estão disponíveis mediante solicitação.
@@ -620,11 +620,11 @@ d) Executar as demais atribuições do art. 41, § 2º, da LGPD.
 
 ## 17. ALTERAÇÕES DESTA POLÍTICA
 
-**17.1.** Esta Política poderá ser atualizada periodicamente para refletir evolução legal, tecnológica ou operacional da PMB.
+**17.1.** Esta Política poderá ser atualizada periodicamente para refletir evolução legal, tecnológica ou operacional do PMB.
 
 **17.2.** Recomendamos consultar esta página com regularidade. A versão vigente sempre será identificável pelo campo **"Atualizado pela última vez em"** no topo deste documento.
 
-**17.3.** Em caso de **alterações relevantes** (mudança de finalidades, novas bases legais, novos sub-operadores significativos, alteração de retenção), a PMB notificará os Titulares com antecedência razoável por:
+**17.3.** Em caso de **alterações relevantes** (mudança de finalidades, novas bases legais, novos sub-operadores significativos, alteração de retenção), o PMB notificará os Titulares com antecedência razoável por:
 
 a) Aviso destacado na Plataforma;
 
@@ -654,13 +654,9 @@ c) Encerrar sua conta.
 
 Para dúvidas, sugestões, reclamações ou exercício de direitos relativos a esta Política:
 
-- **DPO / LGPD**: `dpo@profissionalizamaisbrasil.com.br`
-- **Contato geral**: `contato@profissionalizamaisbrasil.com.br`
-- **Suporte ao Aluno**: `suporte@profissionalizamaisbrasil.com.br`
-- **Jurídico**: `juridico@profissionalizamaisbrasil.com.br`
+- **E-mail (canal único — DPO/LGPD, contato geral, suporte ao Aluno e jurídico)**: `profissionaliza@grupobolsamaisbrasil.com.br`
 - **Endereço**: Rua Tiradentes, nº 2564, sala 09 (301), Bairro Industrial, Contagem/MG, CEP 32.230-020
 - **Telefone / WhatsApp**: 0800-441-4321 (segunda a sexta, das 8h às 20h)
-- **Atendimento Urgente**: (31) 99335-4321
 - **Chat ao Vivo**: disponível no Site Institucional, das 9h às 20h, segunda a sexta-feira
 
 ---
