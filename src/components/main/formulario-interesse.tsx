@@ -35,9 +35,11 @@ export function FormularioInteresse() {
 
     const form = event.currentTarget
     const formData = new FormData(form)
+    // TODO: estender o lead model pra persistir `interesse` (profissionaliza vs profissionaliza+tecnico)
+    // e `cidade`/`estado`. Hoje a API aceita apenas email/companyName/phone.
     const body = {
       email: String(formData.get("email") ?? ""),
-      companyName: String(formData.get("empresa") ?? ""),
+      companyName: String(formData.get("nome") ?? ""),
       phone: String(formData.get("telefone") ?? ""),
     }
 
@@ -77,50 +79,118 @@ export function FormularioInteresse() {
   }
 
   return (
-    <section id="formulario" className="bg-white py-16 md:py-24">
-      <div className="mx-auto max-w-3xl px-4 md:px-6">
-        <div className="overflow-hidden rounded-2xl border border-gray-200 bg-gradient-to-br from-[#FAFAFA] to-white shadow-sm">
-          <div className="p-6 md:p-10 lg:p-12">
-            {state.kind === "success" ? (
-              <div className="py-8 text-center">
-                <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-green-100 text-green-600">
-                  <CheckCircle2 className="h-6 w-6" />
-                </div>
-                <h2 className="mt-4 text-2xl font-bold tracking-tight text-[var(--color-pmb-green-900)] md:text-3xl">
-                  Obrigado!
-                </h2>
-                <p className="mt-3 text-gray-600">
-                  Entraremos em contato em até 1 dia útil.
-                </p>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="mt-6"
-                  onClick={() => setState({ kind: "idle" })}
-                >
-                  Enviar outro contato
-                </Button>
-              </div>
-            ) : (
-              <>
-                <div className="text-center">
-                  <h2 className="text-2xl font-bold tracking-tight text-[var(--color-pmb-green-900)] md:text-3xl">
-                    Pronto pra começar?
-                  </h2>
-                  <p className="mt-3 text-gray-600">
-                    Preencha o formulário e um consultor entra em contato pra te
-                    ajudar a escolher o plano ideal.
-                  </p>
-                </div>
+    <section
+      id="formulario"
+      className="relative overflow-hidden bg-[var(--color-pmb-green-900)]"
+    >
+      <div
+        aria-hidden
+        data-parallax="50"
+        className="pointer-events-none absolute inset-0 opacity-30"
+        style={{
+          backgroundImage:
+            "radial-gradient(circle at 20% 100%, rgba(192,217,4,0.3) 0%, transparent 40%), radial-gradient(circle at 80% 0%, rgba(242,183,5,0.25) 0%, transparent 40%)",
+        }}
+      />
 
-                <form className="mt-8 space-y-5" onSubmit={handleSubmit} noValidate>
+      <div className="relative mx-auto max-w-6xl px-4 py-20 md:px-8 md:py-28">
+        <div className="grid grid-cols-1 gap-12 lg:grid-cols-12 lg:gap-16">
+          <div className="lg:col-span-6 lg:pr-8" data-reveal>
+            <p className="font-mono text-xs uppercase tracking-[0.2em] text-yellow-300">
+              Último passo
+            </p>
+            <h2 className="mt-4 text-4xl font-black leading-[1.05] tracking-tight text-white md:text-6xl">
+              Pronto pra prosperar no
+              <br />
+              <span className="italic text-yellow-300">
+                mercado da educação?
+              </span>
+            </h2>
+            <p className="mt-6 max-w-md text-base text-white/85 md:text-lg">
+              Preenche o formulário e descubra como ter o seu site
+              personalizado de cursos profissionalizantes. Em até 1 dia útil,
+              alguém do nosso time te chama no WhatsApp.
+            </p>
+
+            <ul className="mt-10 space-y-3 text-sm text-white/80" data-stagger>
+              <li className="flex items-center gap-3">
+                <span className="font-mono text-xs font-bold text-yellow-300">
+                  ✓
+                </span>
+                Conversa por WhatsApp, no seu tempo
+              </li>
+              <li className="flex items-center gap-3">
+                <span className="font-mono text-xs font-bold text-yellow-300">
+                  ✓
+                </span>
+                Sem cobrança, sem compromisso
+              </li>
+              <li className="flex items-center gap-3">
+                <span className="font-mono text-xs font-bold text-yellow-300">
+                  ✓
+                </span>
+                Os seus dados ficam só com a gente
+              </li>
+            </ul>
+          </div>
+
+          <div className="lg:col-span-6" data-reveal data-reveal-delay="0.15">
+            <div className="rounded-3xl bg-white p-7 md:p-10">
+              {state.kind === "success" ? (
+                <div className="py-6 text-center">
+                  <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[var(--color-pmb-lime-50)] text-[var(--color-pmb-green)]">
+                    <CheckCircle2 className="h-7 w-7" />
+                  </div>
+                  <h3 className="mt-5 text-2xl font-black tracking-tight text-[var(--color-pmb-green-900)] md:text-3xl">
+                    Recebemos os seus dados.
+                  </h3>
+                  <p className="mt-3 text-gray-600">
+                    Alguém do nosso time vai te chamar no WhatsApp em até 1
+                    dia útil. Fique de olho.
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="mt-6"
+                    onClick={() => setState({ kind: "idle" })}
+                  >
+                    Enviar outro contato
+                  </Button>
+                </div>
+              ) : (
+                <form
+                  className="space-y-5"
+                  onSubmit={handleSubmit}
+                  noValidate
+                >
+                  <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-[var(--color-pmb-green)]">
+                    Leva 30 segundos
+                  </p>
+
                   <div className="space-y-2">
-                    <Label htmlFor="email">Email profissional</Label>
+                    <Label htmlFor="nome">Seu nome</Label>
+                    <Input
+                      id="nome"
+                      name="nome"
+                      type="text"
+                      placeholder="Ex: Maria da Silva"
+                      required
+                      aria-invalid={Boolean(errors.companyName)}
+                    />
+                    {errors.companyName && (
+                      <p className="text-xs text-rose-600">
+                        {errors.companyName}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="email">Seu e-mail</Label>
                     <Input
                       id="email"
                       name="email"
                       type="email"
-                      placeholder="voce@empresa.com.br"
+                      placeholder="voce@email.com"
                       required
                       aria-invalid={Boolean(errors.email)}
                     />
@@ -130,22 +200,9 @@ export function FormularioInteresse() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="empresa">Nome da empresa ou escola</Label>
-                    <Input
-                      id="empresa"
-                      name="empresa"
-                      type="text"
-                      placeholder="Ex: Escola Excel Pro"
-                      required
-                      aria-invalid={Boolean(errors.companyName)}
-                    />
-                    {errors.companyName && (
-                      <p className="text-xs text-rose-600">{errors.companyName}</p>
-                    )}
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="telefone">Telefone (WhatsApp)</Label>
+                    <Label htmlFor="telefone">
+                      Seu WhatsApp (com DDD)
+                    </Label>
                     <Input
                       id="telefone"
                       name="telefone"
@@ -168,7 +225,7 @@ export function FormularioInteresse() {
                   <Button
                     type="submit"
                     size="lg"
-                    className="w-full bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)]"
+                    className="h-13 w-full bg-[var(--color-pmb-green)] text-base font-bold text-white transition-transform hover:scale-[1.01] hover:bg-[var(--color-pmb-green-700)]"
                     disabled={state.kind === "submitting"}
                   >
                     {state.kind === "submitting" ? (
@@ -178,19 +235,14 @@ export function FormularioInteresse() {
                       </>
                     ) : (
                       <>
-                        Quero Começar
+                        Quero que me chamem no WhatsApp
                         <ArrowRight className="ml-2 h-4 w-4" />
                       </>
                     )}
                   </Button>
-
-                  <p className="text-center text-xs text-gray-500">
-                    Seus dados estão seguros. Nunca compartilhamos informações com
-                    terceiros.
-                  </p>
                 </form>
-              </>
-            )}
+              )}
+            </div>
           </div>
         </div>
       </div>

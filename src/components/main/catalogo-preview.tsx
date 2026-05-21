@@ -1,90 +1,109 @@
-import Link from "next/link"
-import { ArrowRight, Clock, BookOpen } from "lucide-react"
+import { ArrowRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import {
+  Laptop2,
+  Heart,
+  Wrench,
+  Briefcase,
+  Sparkles,
+  Calculator,
+} from "lucide-react"
 
-const cursos = [
+const categorias = [
   {
-    slug: "excel-avancado",
-    nome: "Excel Avançado",
-    categoria: "Tecnologia",
-    aulas: 40,
-    horas: "120h",
-    preco: "R$ 197",
-    gradient: "from-[var(--color-pmb-mist)]0 to-[var(--color-pmb-green-700)]",
+    icon: Laptop2,
+    nome: "Informática",
+    cursos: ["Pacote Office completo", "Excel avançado", "Manutenção de computador"],
   },
   {
-    slug: "marketing-digital",
-    nome: "Marketing Digital",
-    categoria: "Marketing",
-    aulas: 35,
-    horas: "100h",
-    preco: "R$ 297",
-    gradient: "from-purple-500 to-pink-600",
+    icon: Heart,
+    nome: "Saúde e bem-estar",
+    cursos: ["Cuidador de idosos", "Auxiliar de enfermagem", "Massoterapia"],
   },
   {
-    slug: "programacao-web",
-    nome: "Programação Web",
-    categoria: "Tecnologia",
-    aulas: 60,
-    horas: "200h",
-    preco: "R$ 497",
-    gradient: "from-green-500 to-emerald-700",
+    icon: Wrench,
+    nome: "Técnico profissional",
+    cursos: ["Eletricista predial", "Mecânica de motos", "Refrigeração"],
+  },
+  {
+    icon: Briefcase,
+    nome: "Administração e vendas",
+    cursos: ["Gestão de pequenos negócios", "Vendas e atendimento", "Recursos humanos"],
+  },
+  {
+    icon: Sparkles,
+    nome: "Beleza e estética",
+    cursos: ["Cabeleireiro profissional", "Design de sobrancelhas", "Maquiagem"],
+  },
+  {
+    icon: Calculator,
+    nome: "Finanças e contabilidade",
+    cursos: ["Departamento pessoal", "Rotinas contábeis", "Educação financeira"],
   },
 ]
 
 export function CatalogoPreview() {
   return (
-    <section id="cursos" className="bg-white py-16 md:py-24">
-      <div className="mx-auto max-w-7xl px-4 md:px-6">
-        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-          <div>
-            <h2 className="text-3xl font-bold tracking-tight text-[var(--color-pmb-green-900)] md:text-4xl">
-              Catálogo de cursos
-            </h2>
-            <p className="mt-3 max-w-xl text-gray-600">
-              Mais de 120 cursos prontos pra você revender, organizados por categoria.
+    <section className="bg-white py-20 md:py-28">
+      <div className="mx-auto max-w-6xl px-4 md:px-8">
+        <div className="grid grid-cols-1 gap-12 lg:grid-cols-12 lg:gap-16">
+          <header className="lg:col-span-5" data-reveal>
+            <p className="font-mono text-xs uppercase tracking-[0.2em] text-[var(--color-pmb-green)]">
+              O que você vai vender
             </p>
-          </div>
-          <Link href="/seja-revendedor" className="text-sm font-medium text-[var(--color-pmb-green)] hover:text-[var(--color-pmb-green-700)]">
-            Ver todos
-            <ArrowRight className="ml-1 inline h-4 w-4" />
-          </Link>
-        </div>
+            <h2 className="mt-4 text-4xl font-black leading-[1.05] tracking-tight text-[var(--color-pmb-green-900)] md:text-5xl">
+              Mais de 100 cursos profissionalizantes.
+              <br />
+              <span className="text-gray-400">Aqui vão alguns.</span>
+            </h2>
+            <p className="mt-6 text-base text-gray-700 md:text-lg">
+              O catálogo cobre as áreas que mais vendem no Brasil: informática,
+              saúde, técnico, administração, beleza, finanças. Você escolhe
+              quais cursos vai oferecer e por quanto.
+            </p>
 
-        <div className="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {cursos.map((curso) => (
-            <div
-              key={curso.slug}
-              className="group overflow-hidden rounded-2xl border border-gray-200 bg-white transition-all hover:-translate-y-1 hover:shadow-lg"
-            >
-              <div className={`relative h-48 bg-gradient-to-br ${curso.gradient}`}>
-                <div className="absolute top-4 left-4 rounded-full bg-white/90 px-3 py-1 text-xs font-medium text-[var(--color-pmb-green-900)] backdrop-blur">
-                  {curso.categoria}
-                </div>
-              </div>
-              <div className="p-6">
-                <h3 className="text-lg font-semibold text-[var(--color-pmb-green-900)]">{curso.nome}</h3>
-                <div className="mt-3 flex items-center gap-4 text-xs text-gray-500">
-                  <span className="flex items-center gap-1">
-                    <BookOpen className="h-3.5 w-3.5" />
-                    {curso.aulas} aulas
+            <a href="#formulario" className="mt-8 inline-block">
+              <Button
+                size="lg"
+                className="bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)]"
+              >
+                Quero ver o catálogo completo
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
+            </a>
+          </header>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:col-span-7" data-stagger>
+            {categorias.map((cat) => (
+              <article
+                key={cat.nome}
+                className="group rounded-2xl border border-[var(--color-pmb-green-900)]/10 bg-[var(--color-pmb-mist)] p-6 transition-all hover:-translate-y-1 hover:border-[var(--color-pmb-green)]/30 hover:bg-white hover:shadow-lg"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-[var(--color-pmb-green)] ring-1 ring-[var(--color-pmb-green)]/15 transition-colors group-hover:bg-[var(--color-pmb-lime-50)]">
+                    <cat.icon className="h-5 w-5" />
                   </span>
-                  <span className="flex items-center gap-1">
-                    <Clock className="h-3.5 w-3.5" />
-                    {curso.horas}
-                  </span>
+                  <h3 className="text-base font-bold tracking-tight text-[var(--color-pmb-green-900)]">
+                    {cat.nome}
+                  </h3>
                 </div>
-                <div className="mt-5 flex items-center justify-between border-t border-gray-100 pt-4">
-                  <span className="font-mono text-xl font-bold text-[var(--color-pmb-green-900)]">
-                    {curso.preco}
-                  </span>
-                  <Button size="sm" className="bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)]">
-                    Ver curso
-                  </Button>
-                </div>
-              </div>
-            </div>
-          ))}
+                <ul className="mt-5 space-y-2">
+                  {cat.cursos.map((curso) => (
+                    <li
+                      key={curso}
+                      className="flex items-center gap-2 text-sm text-gray-700"
+                    >
+                      <span className="h-1 w-1 rounded-full bg-[var(--color-pmb-green)]" />
+                      {curso}
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-5 font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--color-pmb-green)]/70">
+                  E mais cursos nessa área
+                </p>
+              </article>
+            ))}
+          </div>
         </div>
       </div>
     </section>

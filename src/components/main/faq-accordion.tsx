@@ -1,82 +1,64 @@
 "use client"
 
 import { useState } from "react"
-import { ChevronDown } from "lucide-react"
-
-const faqs = [
-  {
-    pergunta: "Preciso ter experiência com cursos online?",
-    resposta:
-      "Não. A plataforma foi desenhada pra quem tá começando do zero. Toda a parte técnica (hospedagem, pagamentos, entrega de aulas) é cuidada por nós. Você foca em divulgar e vender.",
-  },
-  {
-    pergunta: "Como funciona o pagamento do aluno?",
-    resposta:
-      "O aluno paga com cartão, Pix ou boleto. O dinheiro cai direto na SUA conta de pagamentos. Nós não retemos valor algum — você recebe 100% do que vende.",
-  },
-  {
-    pergunta: "Os cursos são de verdade? Com certificado?",
-    resposta:
-      "Sim. Todos os cursos são ministrados em plataforma consolidada com mais de 10 anos de mercado. Alunos têm acesso a aulas gravadas, materiais em PDF e certificado ao final.",
-  },
-  {
-    pergunta: "Posso cancelar a qualquer momento?",
-    resposta:
-      "Sim. Não há fidelidade nem multa. Você cancela pelo painel e para de ser cobrado no próximo ciclo.",
-  },
-  {
-    pergunta: "Tem taxa por matrícula ou só a mensalidade?",
-    resposta:
-      "Só a mensalidade do plano. Não cobramos por matrícula, comissão sobre vendas nem nada parecido. Transparência total.",
-  },
-]
+import { Plus, Minus } from "lucide-react"
+import { faqs } from "./faq-data"
 
 export function FAQAccordion() {
   const [openIndex, setOpenIndex] = useState<number | null>(null)
 
   return (
-    <section className="bg-[#FAFAFA] py-16 md:py-24">
-      <div className="mx-auto max-w-3xl px-4 md:px-6">
-        <div className="mx-auto max-w-2xl text-center">
-          <h2 className="text-3xl font-bold tracking-tight text-[var(--color-pmb-green-900)] md:text-4xl">
-            Perguntas frequentes
-          </h2>
-          <p className="mt-4 text-gray-600">
-            Tudo que você quer saber antes de começar.
-          </p>
-        </div>
+    <section className="bg-white py-20 md:py-28">
+      <div className="mx-auto max-w-6xl px-4 md:px-8">
+        <div className="grid grid-cols-1 gap-12 lg:grid-cols-12 lg:gap-16">
+          <header className="lg:col-span-4" data-reveal>
+            <p className="font-mono text-xs uppercase tracking-[0.2em] text-[var(--color-pmb-green)]">
+              Perguntas frequentes
+            </p>
+            <h2 className="mt-4 text-4xl font-black leading-tight tracking-tight text-[var(--color-pmb-green-900)] md:text-5xl">
+              A gente já respondeu quase tudo.
+            </h2>
+            <p className="mt-6 text-base text-gray-600">
+              Não achou a sua dúvida? Manda no WhatsApp da gente que respondemos no mesmo dia.
+            </p>
+          </header>
 
-        <div className="mt-10 space-y-3">
-          {faqs.map((faq, index) => {
-            const isOpen = openIndex === index
-            return (
-              <div
-                key={faq.pergunta}
-                className="overflow-hidden rounded-xl border border-gray-200 bg-white"
-              >
-                <button
-                  type="button"
-                  onClick={() => setOpenIndex(isOpen ? null : index)}
-                  className="flex w-full items-center justify-between gap-4 p-5 text-left transition-colors hover:bg-gray-50"
-                  aria-expanded={isOpen}
+          <ul className="lg:col-span-8" data-stagger data-stagger-step="0.04">
+            {faqs.map((faq, index) => {
+              const isOpen = openIndex === index
+              const Icon = isOpen ? Minus : Plus
+              const numero = String(index + 1).padStart(2, "0")
+              return (
+                <li
+                  key={faq.pergunta}
+                  className="border-t border-[var(--color-pmb-green-900)]/10 last:border-b"
                 >
-                  <span className="text-base font-medium text-[var(--color-pmb-green-900)]">
-                    {faq.pergunta}
-                  </span>
-                  <ChevronDown
-                    className={`h-5 w-5 shrink-0 text-gray-400 transition-transform duration-200 ${
-                      isOpen ? "rotate-180" : ""
-                    }`}
-                  />
-                </button>
-                {isOpen && (
-                  <div className="border-t border-gray-100 bg-gray-50/50 p-5 text-sm leading-relaxed text-gray-600">
-                    {faq.resposta}
-                  </div>
-                )}
-              </div>
-            )
-          })}
+                  <button
+                    type="button"
+                    onClick={() => setOpenIndex(isOpen ? null : index)}
+                    className="flex w-full items-start gap-5 py-6 text-left transition-colors hover:bg-[var(--color-pmb-mist)] md:py-7"
+                    aria-expanded={isOpen}
+                  >
+                    <span className="shrink-0 font-mono text-xs font-bold text-[var(--color-pmb-green)]/60 md:text-sm">
+                      {numero}
+                    </span>
+                    <span className="flex-1 text-base font-bold tracking-tight text-[var(--color-pmb-green-900)] md:text-lg">
+                      {faq.pergunta}
+                    </span>
+                    <Icon
+                      className={`mt-0.5 h-5 w-5 shrink-0 text-[var(--color-pmb-green)] transition-transform duration-200`}
+                      strokeWidth={2.5}
+                    />
+                  </button>
+                  {isOpen && (
+                    <div className="pl-11 pr-9 pb-7 text-sm leading-relaxed text-gray-700 md:pl-14 md:text-base">
+                      {faq.resposta}
+                    </div>
+                  )}
+                </li>
+              )
+            })}
+          </ul>
         </div>
       </div>
     </section>
