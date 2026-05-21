@@ -279,3 +279,16 @@ const footer = {
   margin: "20px 0 0",
   textAlign: "center" as const,
 }
+
+ResellerOnboardingTemplate.PreviewProps = {
+  ownerName: "João Pereira",
+  resellerName: "Cursos Pro João",
+  loginEmail: "joao@cursospro.com.br",
+  tempPassword: "Pmb#2026Tmp",
+  loginUrl: "https://profissionalizamaisbrasil.com.br/auth/login",
+  vitrineUrl: "https://cursos-pro-joao.livrecursos.com.br",
+  paymentUrl: "https://www.asaas.com/c/abc123def456",
+  planValue: 197,
+} satisfies ResellerOnboardingTemplateProps
+
+export default ResellerOnboardingTemplate

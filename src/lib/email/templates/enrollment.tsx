@@ -119,3 +119,13 @@ const footer = {
   margin: "24px 0 0",
   textAlign: "center" as const,
 }
+
+EnrollmentTemplate.PreviewProps = {
+  studentName: "Beatriz Souza",
+  courseName: "Auxiliar Administrativo",
+  eaLoginUrl: "https://escola.com/login",
+  studentLogin: "beatriz.souza@gmail.com",
+  studentPassword: "Curso@2026",
+} satisfies EnrollmentTemplateProps
+
+export default EnrollmentTemplate

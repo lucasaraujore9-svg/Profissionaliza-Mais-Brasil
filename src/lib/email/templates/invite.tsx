@@ -116,3 +116,14 @@ const footer = {
   margin: "24px 0 0",
   textAlign: "center" as const,
 }
+
+InviteTemplate.PreviewProps = {
+  userName: "Ana Costa",
+  inviterName: "Lucas Araujo",
+  role: "PMB_SALES",
+  inviteUrl: "https://profissionalizamaisbrasil.com.br/auth/accept-invite?token=abc123",
+  expirationDays: 7,
+  context: "pmb_team",
+} satisfies InviteTemplateProps
+
+export default InviteTemplate

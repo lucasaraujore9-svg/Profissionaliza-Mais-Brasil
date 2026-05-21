@@ -94,3 +94,11 @@ const footer = {
   margin: "24px 0 0",
   textAlign: "center" as const,
 }
+
+ResetPasswordTemplate.PreviewProps = {
+  userName: "Carlos Mendes",
+  resetUrl: "https://profissionalizamaisbrasil.com.br/auth/reset?token=abc123xyz",
+  expirationMinutes: 30,
+} satisfies ResetPasswordTemplateProps
+
+export default ResetPasswordTemplate

@@ -108,3 +108,11 @@ const footer = {
   margin: "24px 0 0",
   textAlign: "center" as const,
 }
+
+WelcomeTemplate.PreviewProps = {
+  resellerName: "Maria Silva",
+  loginUrl: "https://profissionalizamaisbrasil.com.br/auth/login",
+  panelUrl: "https://profissionalizamaisbrasil.com.br/painel",
+} satisfies WelcomeTemplateProps
+
+export default WelcomeTemplate

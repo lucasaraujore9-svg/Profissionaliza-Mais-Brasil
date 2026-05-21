@@ -121,3 +121,13 @@ const footer = {
   margin: "24px 0 0",
   textAlign: "center" as const,
 }
+
+PaymentTemplate.PreviewProps = {
+  customerName: "Maria Silva",
+  amount: "R$ 197,00",
+  paymentDate: "20/05/2026",
+  description: "Mensalidade Profissionaliza Mais Brasil — Plano Starter",
+  receiptUrl: "https://www.asaas.com/i/receipt/abc123",
+} satisfies PaymentTemplateProps
+
+export default PaymentTemplate

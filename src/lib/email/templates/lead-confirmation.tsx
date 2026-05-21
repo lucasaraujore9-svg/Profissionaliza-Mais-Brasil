@@ -88,3 +88,9 @@ const footer = {
   margin: "24px 0 0",
   textAlign: "center" as const,
 }
+
+LeadConfirmationTemplate.PreviewProps = {
+  companyName: "Escola Profissional XYZ Ltda",
+} satisfies LeadConfirmationTemplateProps
+
+export default LeadConfirmationTemplate

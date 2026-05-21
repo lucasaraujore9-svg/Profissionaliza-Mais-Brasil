@@ -174,3 +174,13 @@ const footer = {
   margin: "24px 0 0",
   textAlign: "center" as const,
 }
+
+StudentWelcomeTemplate.PreviewProps = {
+  studentName: "Pedro Henrique Oliveira",
+  studentEmail: "pedro.henrique@email.com",
+  temporaryPassword: "Pmb#Aluno2026",
+  loginUrl: "https://cursos-pro-joao.livrecursos.com.br/aluno",
+  storeName: "Cursos Pro João",
+} satisfies StudentWelcomeTemplateProps
+
+export default StudentWelcomeTemplate
