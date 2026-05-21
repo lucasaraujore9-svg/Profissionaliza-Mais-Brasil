@@ -229,7 +229,7 @@ export function StudentManagementClient({ student: initialStudent, role }: Props
           <InfoField label="Email" value={student.email} />
           <InfoField label="CPF" value={student.cpf} />
           <InfoField label="Telefone" value={student.fone} />
-          <InfoField label="ID plataforma EA" value={student.eaAlunoId} />
+          <InfoField label="ID na plataforma de aulas" value={student.eaAlunoId} />
           <InfoField label="ID Asaas" value={student.asaasCustomerId} />
           <InfoField label="Cadastro" value={formatDate(student.createdAt)} />
           <InfoField label="Apostila" value={student.apostila} />
@@ -252,7 +252,7 @@ export function StudentManagementClient({ student: initialStudent, role }: Props
               onClick={handleBlockStudent}
               className="inline-flex items-center rounded-md border border-orange-200 px-3 py-2 text-sm text-orange-700 hover:bg-orange-50 disabled:opacity-50"
             >
-              {isBlockLoading ? "Bloqueando…" : "Bloquear EA"}
+              {isBlockLoading ? "Bloqueando…" : "Bloquear na plataforma"}
             </button>
 
             <button
@@ -260,7 +260,7 @@ export function StudentManagementClient({ student: initialStudent, role }: Props
               onClick={handleUnblockStudent}
               className="inline-flex items-center rounded-md border border-green-200 px-3 py-2 text-sm text-green-700 hover:bg-green-50 disabled:opacity-50"
             >
-              {isUnblockLoading ? "Desbloqueando…" : "Desbloquear EA"}
+              {isUnblockLoading ? "Desbloqueando…" : "Desbloquear na plataforma"}
             </button>
           </>
         )}
@@ -385,7 +385,7 @@ export function StudentManagementClient({ student: initialStudent, role }: Props
                   Cancelar e remover acesso à plataforma
                 </span>
                 <p className="mt-0.5 text-xs text-muted-foreground">
-                  Cancela a cobrança e desvincula o curso na plataforma de aulas (EA).
+                  Cancela a cobrança e desvincula o curso na plataforma de aulas.
                 </p>
               </button>
               <button

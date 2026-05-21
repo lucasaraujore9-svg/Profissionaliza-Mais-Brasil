@@ -11,7 +11,7 @@ import { pmbEaPolo, pmbEaVendedorId, PMB_TENANT_SLUG } from "@/lib/pmb-config"
  * Camada UNICA de integracao com a plataforma de aulas (EA).
  *
  * Regras do projeto:
- * - Qualquer venda (vitrine PMB ou revendedor) cadastra o aluno na EA do mesmo
+ * - Qualquer venda (vitrine PMB ou revendedor) cadastra o aluno na plataforma do mesmo
  *   jeito — nao ha distincao na plataforma. O `polo` e o `vendedor` mudam por
  *   contexto, mas o restante das chamadas e identico.
  * - Suspensao, liberacao, vinculo e desvinculo de curso passam SEMPRE por aqui
@@ -57,7 +57,7 @@ function parseEaId(value: string | null | undefined): number | null {
  * imediatamente. Caso contrario chama criarAluno e persiste ea_aluno_id +
  * ea_aluno_senha + status ATIVO + apostila LIBERADA + polo + vendedor.
  *
- * Retorna o numero do aluno na EA.
+ * Retorna o numero do aluno na plataforma.
  */
 export async function ensureStudentInEA(
   studentId: string,
@@ -122,7 +122,7 @@ export async function ensureStudentInEA(
 }
 
 /**
- * Vincula um curso ao aluno na EA. Cria o aluno na EA se ainda nao existir.
+ * Vincula um curso ao aluno na plataforma. Cria o aluno na plataforma se ainda nao existir.
  * Idempotente: a EA e tolerante a multiplos vincularCurso para o mesmo par.
  */
 export async function linkCourseToStudent(
@@ -153,7 +153,7 @@ export async function linkCourseToStudent(
 }
 
 /**
- * Desvincula um curso do aluno na EA.
+ * Desvincula um curso do aluno na plataforma.
  */
 export async function unlinkCourseFromStudent(
   studentId: string,
@@ -181,7 +181,7 @@ export async function unlinkCourseFromStudent(
 }
 
 /**
- * Bloqueia o acesso do aluno na EA: status=bloqueado + apostila=bloquear.
+ * Bloqueia o acesso do aluno na plataforma: status=bloqueado + apostila=bloquear.
  * Atualiza tambem o registro local (status BLOQUEADO + apostila BLOQUEADA).
  * Marcacoes de Enrollment SUSPENDED ficam por conta do chamador (ou do
  * blockTenantStudents).
@@ -211,7 +211,7 @@ export async function blockStudentInEA(studentId: string): Promise<void> {
 }
 
 /**
- * Sincroniza dados de perfil do aluno na EA (sem mexer em status/apostila).
+ * Sincroniza dados de perfil do aluno na plataforma (sem mexer em status/apostila).
  * Idempotente: se o aluno ainda nao foi para a EA, ignora (so faz sentido
  * apos pagamento/criacao). Usa editarAluno passando apenas os campos que o
  * usuario pode editar no /aluno/perfil.
@@ -256,7 +256,7 @@ export async function syncStudentProfileToEA(studentId: string): Promise<void> {
 }
 
 /**
- * Libera o acesso do aluno na EA: status=ativo + apostila=liberar.
+ * Libera o acesso do aluno na plataforma: status=ativo + apostila=liberar.
  */
 export async function unblockStudentInEA(studentId: string): Promise<void> {
   const student = await prisma.student.findUnique({

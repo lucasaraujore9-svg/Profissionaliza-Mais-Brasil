@@ -176,7 +176,7 @@ export function NovaVendaClient({
         return
       }
       setSelectedStudent(body.data)
-      toast.success(body.data.existed ? "Aluno existente encontrado e selecionado" : "Aluno criado e registrado na EA")
+      toast.success(body.data.existed ? "Aluno existente encontrado e selecionado" : "Aluno criado e registrado na plataforma de aulas")
     } catch {
       toast.error("Erro de rede ao salvar aluno")
     } finally {

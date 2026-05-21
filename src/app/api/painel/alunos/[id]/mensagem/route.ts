@@ -59,7 +59,7 @@ export async function POST(
       mensagem: parsed.data.mensagem,
     })
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Erro ao contatar EA"
+    const message = error instanceof Error ? error.message : "Erro ao contatar a plataforma"
     return NextResponse.json(
       { error: `Falha ao enviar mensagem: ${message}` },
       { status: 502 },

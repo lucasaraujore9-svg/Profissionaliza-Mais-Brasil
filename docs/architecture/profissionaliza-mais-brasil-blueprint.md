@@ -4,7 +4,7 @@
 
 **Plataforma SaaS multi-tenant de revenda de cursos profissionalizantes.**
 
-A Profissionaliza Mais Brasil é a operadora master que revende o sistema da Escola Avançada (white-label com API). O modelo de negócio permite que revendedores paguem uma mensalidade fixa e ganhem sua própria vitrine de cursos personalizada, com domínio próprio, para vender cursos no preço e condições que quiserem.
+A Profissionaliza Mais Brasil é a operadora master que revende o sistema da plataforma parceira (white-label com API). O modelo de negócio permite que revendedores paguem uma mensalidade fixa e ganhem sua própria vitrine de cursos personalizada, com domínio próprio, para vender cursos no preço e condições que quiserem.
 
 ---
 
@@ -12,7 +12,7 @@ A Profissionaliza Mais Brasil é a operadora master que revende o sistema da Esc
 
 ### Admin Master (Profissionaliza Mais Brasil)
 - Gerencia todo o ecossistema
-- Controla catálogo de cursos (sync via API da Escola Avançada)
+- Controla catálogo de cursos (sync via API da plataforma parceira)
 - Gerencia revendedores (ativar, desativar, configurar)
 - Recebe mensalidades via **Asaas**
 - Acessa analytics completos de toda a operação
@@ -30,8 +30,8 @@ A Profissionaliza Mais Brasil é a operadora master que revende o sistema da Esc
 ### Aluno
 - Acessa a vitrine do revendedor
 - Escolhe e compra o curso (checkout via Mercado Pago)
-- É cadastrado automaticamente na Escola Avançada via API
-- Faz aulas na plataforma da Escola Avançada
+- É cadastrado automaticamente na plataforma parceira via API
+- Faz aulas na plataforma da plataforma parceira
 
 ---
 
@@ -50,7 +50,7 @@ Revendedor acessa site principal → Escolhe plano → Preenche cadastro
 ```
 Aluno acessa vitrine do revendedor → Navega catálogo → Seleciona curso
 → (Opcional) Aplica cupom de desconto → Checkout via Mercado Pago
-→ Pagamento confirmado (webhook) → Sistema cria aluno na Escola Avançada via API
+→ Pagamento confirmado (webhook) → Sistema cria aluno na plataforma parceira via API
 → Aluno recebe credenciais por email → Acessa plataforma de aulas
 ```
 
@@ -59,7 +59,7 @@ Aluno acessa vitrine do revendedor → Navega catálogo → Seleciona curso
 Mercado Pago gera cobrança recorrente → Webhook de pagamento
 → SE pago: acesso mantido
 → SE inadimplente: comportamento definido pelo revendedor
-   → Modo automático: sistema suspende acesso na Escola Avançada via API
+   → Modo automático: sistema suspende acesso na plataforma parceira via API
    → Modo manual: revendedor decide quando suspender
 ```
 
@@ -320,7 +320,7 @@ Aluno aplica cupom → Sistema valida (código, validade, max_uses)
 → Registra uso do cupom no banco
 ```
 
-#### Escola Avançada (Gestão de Alunos e Cursos)
+#### plataforma parceira (Gestão de Alunos e Cursos)
 - API Doc: https://documenter.getpostman.com/view/20632445/2s93z3f5Bt
 - Autenticação: Token gerado nas configurações da plataforma (enviado via form-data ou header)
 - URL base: `https://SUAESCOLA.com/api/v2/`
@@ -409,7 +409,7 @@ Aluno aplica cupom → Sistema valida (código, validade, max_uses)
 
 ## 4.4 Fluxos Técnicos Integrados (3 APIs)
 
-### Fluxo 1: Onboarding do Revendedor (Asaas + Escola Avançada)
+### Fluxo 1: Onboarding do Revendedor (Asaas + plataforma parceira)
 ```
 1. Revendedor preenche cadastro no site
 2. POST Asaas /v3/customers → criar cliente
@@ -419,13 +419,13 @@ Aluno aplica cupom → Sistema valida (código, validade, max_uses)
    - billingType = PIX (ou BOLETO/CREDIT_CARD)
 4. Revendedor paga 1ª mensalidade
 5. Webhook Asaas PAYMENT_RECEIVED → ativar conta do revendedor
-6. POST Escola Avançada funcionarios/novo → criar funcionário para rastreio
+6. POST plataforma parceira funcionarios/novo → criar funcionário para rastreio
    - Guardar ID como vendedor_id do tenant
 7. Revendedor acessa painel → configura vitrine
 8. Revendedor conecta conta Mercado Pago (access_token ou OAuth)
 ```
 
-### Fluxo 2: Matrícula Automática (Mercado Pago + Escola Avançada)
+### Fluxo 2: Matrícula Automática (Mercado Pago + plataforma parceira)
 ```
 PAGAMENTO ÚNICO:
 1. Aluno escolhe curso na vitrine → aplica cupom (se houver)
@@ -453,7 +453,7 @@ PAGAMENTO MENSAL:
 10. Cobranças seguintes: webhook a cada mês → verificar status
 ```
 
-### Fluxo 3: Inadimplência do Aluno (Mercado Pago + Escola Avançada)
+### Fluxo 3: Inadimplência do Aluno (Mercado Pago + plataforma parceira)
 ```
 1. Webhook MP: pagamento da assinatura falhou/reciclando
 2. Consultar config do revendedor: billing_mode
@@ -551,7 +551,7 @@ Esses MCP servers podem ser conectados ao Cursor/VS Code para auxiliar no desenv
 - **Financeiro Asaas:** mensalidades recebidas, inadimplentes, previsão de receita
 - **Analytics por revendedor:** vendas, alunos, cursos mais vendidos, ticket médio
 - **Analytics global:** tendências, comparativos, ranking de revendedores
-- **Catálogo master:** cursos sincronizados da Escola Avançada, gestão do catálogo
+- **Catálogo master:** cursos sincronizados da plataforma parceira, gestão do catálogo
 - **Relatórios:** exportação de dados, relatórios customizados
 - **Configurações:** planos de revenda, preços de mensalidade, políticas gerais
 
@@ -573,7 +573,7 @@ tenants (revendedores)
 ├── plan_value (valor da mensalidade paga ao admin)
 ├── created_at, updated_at
 
-courses (catálogo sincronizado da Escola Avançada via cursos/listar)
+courses (catálogo sincronizado da plataforma parceira via cursos/listar)
 ├── id, escola_avancada_id
 ├── nome, descricao (campo "obs" da API)
 ├── qtd_aulas (campo "aulas"), carga_horaria
@@ -674,7 +674,7 @@ webhook_logs
 
 ## 8.1 Limitações e Riscos Identificados
 
-### Escola Avançada — Limitações da API
+### plataforma parceira — Limitações da API
 
 1. **Token único por escola** — Todos os revendedores usam o mesmo token. O isolamento é feito pelos campos `polo` e `vendedor`, não por tokens separados. Risco: qualquer endpoint pode acessar/modificar alunos de outro polo.
 
@@ -728,7 +728,7 @@ webhook_logs
 - CRUD básico de revendedores
 
 ### Fase 2 — Integrações Core (Semanas 3-4)
-- Integração Escola Avançada API (sync de cursos, criar aluno, matricular)
+- Integração plataforma parceira API (sync de cursos, criar aluno, matricular)
 - Integração Asaas (criar cliente, assinatura, webhooks)
 - Integração Mercado Pago (checkout, webhooks, OAuth por revendedor)
 

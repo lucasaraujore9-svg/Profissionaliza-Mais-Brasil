@@ -54,7 +54,7 @@ export async function GET(_request: Request, ctx: Ctx) {
  * Vincula manualmente um curso ao aluno na plataforma de aulas.
  * Toda a interacao com a EA passa pelo modulo unificado em
  * src/lib/students/ea-actions.ts — exatamente o mesmo caminho usado pelo
- * fluxo automatico de venda. Para a EA nao ha distincao entre venda PMB,
+ * fluxo automatico de venda. Para na plataforma nao ha distincao entre venda PMB,
  * venda revendedor e concessao manual.
  */
 export async function POST(request: Request, ctx: Ctx) {

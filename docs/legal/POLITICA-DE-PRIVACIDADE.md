@@ -19,7 +19,7 @@ Esta Política aplica-se a:
 
 (iii) Domínios personalizados de **Unidades parceiras** que apontem para a infraestrutura do PMB;
 
-(iv) Os fluxos de matrícula automática na **Escola Avançada** e demais integrações com gateways de pagamento e sistemas terceiros, **na exata medida em que o PMB intermedeia o tratamento desses dados**.
+(iv) Os fluxos de matrícula automática na **plataforma parceira** e demais integrações com gateways de pagamento e sistemas terceiros, **na exata medida em que o PMB intermedeia o tratamento desses dados**.
 
 A presente Política está em conformidade com a **Lei Geral de Proteção de Dados Pessoais (Lei nº 13.709/2018 — "LGPD")**, com o **Marco Civil da Internet (Lei nº 12.965/2014)**, com o **Decreto nº 8.771/2016** e com as melhores práticas internacionais de privacidade.
 
@@ -32,7 +32,7 @@ A presente Política está em conformidade com a **Lei Geral de Proteção de Da
 ## ÍNDICE
 
 1. Definições
-2. Papéis das Partes no Tratamento de Dados (PMB, Unidade, Escola Avançada)
+2. Papéis das Partes no Tratamento de Dados (PMB, Unidade, plataforma parceira)
 3. Dados que Coletamos
 4. Como Coletamos seus Dados
 5. Base Legal para o Tratamento
@@ -83,7 +83,7 @@ Para os fins desta Política, devem ser consideradas as seguintes definições, 
 
 **Unidade**: pessoa física ou jurídica parceira comercial que opera uma Vitrine na infraestrutura do PMB, conforme **Contrato da Unidade**.
 
-**Escola Avançada** ou **EA**: plataforma educacional terceira, contratada pelo PMB sob modelo white-label/API, responsável pela hospedagem e ministração dos Cursos.
+**plataforma parceira de conteúdo educacional**: plataforma educacional terceira, contratada pelo PMB sob modelo white-label/API, responsável pela hospedagem e ministração dos Cursos.
 
 **Vitrine**: loja virtual operada por uma Unidade, acessível por subdomínio em `livrecursos.com.br` ou por domínio personalizado.
 
@@ -165,11 +165,11 @@ Os gateways de pagamento (Mercado Pago e Asaas), os provedores de infraestrutura
 - **Cookies, local storage e session storage** (Cláusula 12)
 - **Logs de autenticação** (data, hora, IP, navegador) — para fins de segurança
 - **Webhooks de pagamento** dos gateways, com dados da transação (sem dados sensíveis de cartão)
-- **Eventos de progresso pedagógico** retornados pela Escola Avançada (acessos, percentual concluído)
+- **Eventos de progresso pedagógico** retornados pela plataforma parceira (acessos, percentual concluído)
 
 ### 3.3. Dados recebidos de terceiros
 
-- Da **Escola Avançada**: dados de matrícula, progresso, conclusão e certificação
+- Da **plataforma parceira**: dados de matrícula, progresso, conclusão e certificação
 - Do **Mercado Pago**: status de pagamento, ID da transação, valor, método (sem CVV/PAN)
 - Do **Asaas**: status de cobrança da mensalidade da Unidade
 - De provedores de **antifraude** (quando aplicável)
@@ -193,7 +193,7 @@ b) **Navegação na Plataforma**, por meio de cookies e tecnologias similares (C
 
 c) **Comunicações com nossa equipe** (e-mail, chat, WhatsApp, telefone);
 
-d) **Integrações automáticas** com gateways de pagamento e com a Escola Avançada;
+d) **Integrações automáticas** com gateways de pagamento e com a plataforma parceira;
 
 e) **Recebimento de webhooks** de eventos de pagamento, matrícula e progresso;
 
@@ -235,7 +235,7 @@ Os Dados Pessoais coletados poderão ser utilizados para as seguintes finalidade
 
 a) Permitir o cadastro, autenticação e acesso à sua conta;
 
-b) Processar a aquisição de Cursos e efetivar a matrícula automática na Escola Avançada;
+b) Processar a aquisição de Cursos e efetivar a matrícula automática na plataforma parceira;
 
 c) Processar pagamentos via Mercado Pago e/ou Asaas;
 
@@ -310,7 +310,7 @@ Compartilhamos seus dados **apenas** nas hipóteses descritas abaixo, sempre obs
 | **Upstash** | Cache de tenant, rate limiting | IP, tenant ID, contadores | Global |
 | **Asaas** | Cobrança da mensalidade da Unidade | Nome, CPF/CNPJ, e-mail, telefone da Unidade | Brasil |
 | **Mercado Pago** | Gateway de pagamento de Cursos | Nome, CPF, e-mail, dados de pagamento | Brasil |
-| **Escola Avançada** | Hospedagem e ministração dos Cursos | Nome, CPF, e-mail, senha de acesso, dados de progresso | Brasil |
+| **plataforma parceira** | Hospedagem e ministração dos Cursos | Nome, CPF, e-mail, senha de acesso, dados de progresso | Brasil |
 | **Resend** | Envio de e-mails transacionais | Nome, e-mail, conteúdo da mensagem | EUA |
 | **Hostinger SMTP** | Envio de e-mails via servidor SMTP | Nome, e-mail | UE / EUA |
 | **Google Analytics** (quando ativado) | Métricas de navegação | IP anonimizado, eventos, identificador de sessão | EUA / Global |
@@ -322,9 +322,9 @@ Quando o Aluno realiza compra em uma Vitrine, **os Dados Pessoais necessários �
 
 O PMB **não compartilha dados de Alunos de uma Vitrine com Unidades de outras Vitrines**.
 
-### 7.4. Compartilhamento com a Escola Avançada
+### 7.4. Compartilhamento com a plataforma parceira
 
-Para a matrícula automática e a fruição do Curso, **os Dados Pessoais necessários à criação da conta na Escola Avançada são automaticamente transmitidos** (nome, CPF, e-mail, telefone). A Escola Avançada possui sua própria política de privacidade, à qual o Aluno deve dar atenção.
+Para a matrícula automática e a fruição do Curso, **os Dados Pessoais necessários à criação da conta na plataforma parceira são automaticamente transmitidos** (nome, CPF, e-mail, telefone). A plataforma parceira possui sua própria política de privacidade, à qual o Aluno deve dar atenção.
 
 ### 7.5. Compartilhamento com Autoridades
 

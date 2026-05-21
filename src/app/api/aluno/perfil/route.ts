@@ -56,7 +56,7 @@ export async function PATCH(request: Request) {
     },
   })
 
-  // Propaga para a plataforma de aulas. Falha silenciosa: se a EA estiver
+  // Propaga para a plataforma de aulas. Falha silenciosa: se a plataforma estiver
   // indisponivel, o salvamento local ja aconteceu — proxima edicao tenta
   // sincronizar de novo.
   let eaSynced = true
@@ -66,7 +66,7 @@ export async function PATCH(request: Request) {
   } catch (err) {
     eaSynced = false
     eaError = err instanceof Error ? err.message : "Erro ao sincronizar"
-    console.warn("[aluno/perfil] sync EA falhou:", err)
+    console.warn("[aluno/perfil] sync com a plataforma falhou:", err)
   }
 
   return NextResponse.json({ data: { ok: true, eaSynced, eaError } })

@@ -35,7 +35,7 @@ export interface PaymentEvent {
  *
  * Idempotente: se o pagamento ja foi registrado, nao processa de novo.
  *
- * Para cursos MONTHLY (assinatura): a 1a cobranca cria o aluno na EA + vincula
+ * Para cursos MONTHLY (assinatura): a 1a cobranca cria o aluno na plataforma + vincula
  * o curso + envia o email de boas-vindas. As demais apenas criam o registro
  * Payment, incrementam installmentsPaid e marcam COMPLETED na ultima.
  *
@@ -144,7 +144,7 @@ export async function fulfillEnrollment(
     return
   }
 
-  // Primeira cobranca: garante aluno na EA + vincula o curso (mesma rota
+  // Primeira cobranca: garante aluno na plataforma + vincula o curso (mesma rota
   // usada pelas concessoes manuais via /admin/alunos/[id]/cursos).
   const { eaAlunoId, created, eaSenha } = await ensureStudentInEA(
     enrollment.student.id,

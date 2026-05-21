@@ -16,7 +16,7 @@ export interface BlockResult {
  * em modo billingMode=AUTO.
  *
  * Cada aluno passa pelo mesmo blockStudentInEA usado nas operacoes
- * individuais — a EA recebe a mesma chamada (editarAluno status=bloqueado)
+ * individuais — a plataforma recebe a mesma chamada (editarAluno status=bloqueado)
  * em todos os caminhos.
  */
 export async function blockTenantStudents(tenantId: string): Promise<BlockResult> {

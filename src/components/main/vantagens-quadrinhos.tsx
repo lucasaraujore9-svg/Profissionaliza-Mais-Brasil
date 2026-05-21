@@ -62,12 +62,12 @@ export function VantagensQuadrinhos() {
           </p>
           <h2 className="mt-4 text-4xl font-black leading-[1.05] tracking-tight text-[var(--color-pmb-green-900)] md:text-5xl">
             Um modelo de negócio onde os seus{" "}
-            <span className="relative inline-block">
+            <span className="relative inline-block px-1.5">
               <span className="relative z-10 italic">ganhos são ilimitados.</span>
               <span
                 aria-hidden
                 data-marker
-                className="absolute inset-x-0 bottom-1 -z-0 h-[0.55em] -skew-y-1 bg-[var(--color-pmb-lime)]/70"
+                className="absolute inset-0 -z-0 rounded-sm bg-[var(--color-pmb-lime)]/70"
               />
             </span>
           </h2>

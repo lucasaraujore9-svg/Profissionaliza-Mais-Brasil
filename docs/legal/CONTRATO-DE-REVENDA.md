@@ -43,9 +43,9 @@ Os termos abaixo, no plural ou no singular, terão os seguintes significados:
 
 **Mercado Pago**: gateway de pagamentos contratado **diretamente pela Unidade** (com sua própria conta e CNPJ/CPF), por meio do qual a Unidade recebe as vendas de Cursos efetuadas em sua Vitrine.
 
-**Escola Avançada** ou **EA**: terceira plataforma educacional contratada pelo PMB sob modelo white-label/API, responsável pelo **conteúdo, hospedagem, ministração e certificação** dos Cursos.
+**plataforma parceira de conteúdo educacional**: terceira plataforma educacional contratada pelo PMB sob modelo white-label/API, responsável pelo **conteúdo, hospedagem, ministração e certificação** dos Cursos.
 
-**Catálogo**: conjunto de Cursos disponibilizados pelo PMB à Unidade para revenda, sincronizado periodicamente com a Escola Avançada.
+**Catálogo**: conjunto de Cursos disponibilizados pelo PMB à Unidade para revenda, sincronizado periodicamente com a plataforma parceira.
 
 **Curso**: cada produto educacional do Catálogo, comercializado pela Unidade em sua Vitrine ao Aluno final.
 
@@ -71,7 +71,7 @@ Os termos abaixo, no plural ou no singular, terão os seguintes significados:
 
 a) Publicação e operação de uma **Vitrine virtual** de cursos profissionalizantes online;
 
-b) Revenda de **Cursos** do Catálogo (produzidos e hospedados pela Escola Avançada) ao **Aluno** final;
+b) Revenda de **Cursos** do Catálogo (produzidos e hospedados pela plataforma parceira) ao **Aluno** final;
 
 c) Processamento e gestão de **vendas, cupons, alunos, relatórios financeiros** e demais funcionalidades descritas no Plano contratado.
 
@@ -129,11 +129,11 @@ b) **Hospedagem da Vitrine** em subdomínio `{slug}.livrecursos.com.br`;
 
 c) **Suporte ao registro de Domínio Personalizado** (configuração de CNAME pela API da Vercel), ressalvado que a aquisição e manutenção do domínio é de responsabilidade exclusiva da Unidade;
 
-d) **Acesso ao Catálogo** sincronizado com a Escola Avançada;
+d) **Acesso ao Catálogo** sincronizado com a plataforma parceira;
 
 e) **Integração técnica** com o Mercado Pago (token da Unidade) para processamento das vendas;
 
-f) **Matrícula automática** do Aluno na Escola Avançada após a confirmação do pagamento, por integração via API;
+f) **Matrícula automática** do Aluno na plataforma parceira após a confirmação do pagamento, por integração via API;
 
 g) **Webhooks** de gestão de status de pagamentos e acesso (bloqueio automático ou manual em caso de inadimplência do Aluno, conforme política configurada pela Unidade);
 
@@ -159,7 +159,7 @@ f) Garantia de volume de vendas, performance, conversão ou retorno financeiro.
 
 a) Janelas de manutenção programada (comunicadas com 24h de antecedência);
 
-b) Indisponibilidade de terceiros (Vercel, Supabase, Asaas, Mercado Pago, Escola Avançada, Resend, Upstash, registradores de domínio, provedores de DNS);
+b) Indisponibilidade de terceiros (Vercel, Supabase, Asaas, Mercado Pago, plataforma parceira, Resend, Upstash, registradores de domínio, provedores de DNS);
 
 c) Caso fortuito ou força maior;
 
@@ -193,7 +193,7 @@ a) **Até 5 dias de atraso**: aviso amigável de cobrança, sem suspensão;
 
 b) **De 6 a 15 dias de atraso**: notificação formal de cobrança, com **bloqueio das funcionalidades de gestão** do Painel (mantendo-se, por critério do PMB, a Vitrine acessível ao Aluno);
 
-c) **De 16 a 30 dias de atraso**: **suspensão total da Vitrine** (acesso aos Alunos suspenso na Escola Avançada conforme política configurada pela Unidade, podendo o PMB acionar diretamente a Escola Avançada para preservar o serviço aos Alunos);
+c) **De 16 a 30 dias de atraso**: **suspensão total da Vitrine** (acesso aos Alunos suspenso na plataforma parceira conforme política configurada pela Unidade, podendo o PMB acionar diretamente a plataforma parceira para preservar o serviço aos Alunos);
 
 d) **A partir de 31 dias de atraso**: **rescisão automática** do Contrato por culpa exclusiva da Unidade, com perda do slug, do Domínio Personalizado configurado e dos dados de configuração da Vitrine, sem prejuízo da cobrança das parcelas vencidas, multa contratual da Cláusula 16 e custas de cobrança.
 
@@ -259,7 +259,7 @@ b) Praticar **publicidade comparativa desleal** com outras Unidades ou plataform
 
 c) Veicular conteúdo **ilegal, obsceno, racista, homofóbico, religiosamente discriminatório, de ódio ou que incite violência**;
 
-d) Comercializar Cursos que **não estejam no Catálogo** ou que tenham sido descontinuados pela Escola Avançada;
+d) Comercializar Cursos que **não estejam no Catálogo** ou que tenham sido descontinuados pela plataforma parceira;
 
 e) Utilizar a Plataforma como **veículo de fraude, lavagem de dinheiro, esquema de pirâmide, marketing multinível com bonificação cumulativa, financiamento ao terrorismo** ou qualquer atividade ilícita;
 
@@ -297,7 +297,7 @@ d) O **access token** do Mercado Pago é armazenado de forma criptografada (AES-
 
 a) A **PMB não responde pela devolução** dos valores ao Aluno — essa responsabilidade é da Unidade, conforme política do Mercado Pago;
 
-b) O PMB **executará as integrações necessárias** para sincronizar o status (p.ex., revogar acesso do Aluno na Escola Avançada);
+b) O PMB **executará as integrações necessárias** para sincronizar o status (p.ex., revogar acesso do Aluno na plataforma parceira);
 
 c) **A taxa de Mensalidade do PMB permanece devida** integralmente, independente de chargebacks na carteira da Unidade.
 
@@ -331,29 +331,29 @@ d) Poderá, a seu critério, **recusar Domínios Personalizados** que violem dir
 
 ## 9. CATÁLOGO, ESCOLA AVANÇADA E ENTREGA DO CURSO
 
-**9.1.** O Catálogo é fornecido pelo PMB à Unidade **conforme disponibilizado pela Escola Avançada**, sem qualquer garantia de:
+**9.1.** O Catálogo é fornecido pelo PMB à Unidade **conforme disponibilizado pela plataforma parceira**, sem qualquer garantia de:
 
-a) Manutenção integral do Catálogo durante a vigência (Cursos podem ser **adicionados, modificados ou descontinuados** pela Escola Avançada a qualquer tempo);
+a) Manutenção integral do Catálogo durante a vigência (Cursos podem ser **adicionados, modificados ou descontinuados** pela plataforma parceira a qualquer tempo);
 
 b) Equivalência dos Cursos a modalidades de ensino regulado pelo MEC;
 
-c) Aceitação dos certificados emitidos pela Escola Avançada em concursos públicos, conselhos profissionais ou órgãos reguladores;
+c) Aceitação dos certificados emitidos pela plataforma parceira em concursos públicos, conselhos profissionais ou órgãos reguladores;
 
-d) Continuidade da relação contratual entre PMB e Escola Avançada — em caso de descontinuação dessa relação, o PMB envidará esforços razoáveis para substituir o provedor de conteúdo, **podendo, alternativamente, encerrar este Contrato** mediante aviso de **60 (sessenta) dias**, sem multa.
+d) Continuidade da relação contratual entre PMB e plataforma parceira — em caso de descontinuação dessa relação, o PMB envidará esforços razoáveis para substituir o provedor de conteúdo, **podendo, alternativamente, encerrar este Contrato** mediante aviso de **60 (sessenta) dias**, sem multa.
 
 **9.2.** O PMB **NÃO RESPONDE**:
 
 a) Pelo **conteúdo pedagógico** dos Cursos (qualidade, atualização, didática, ementa, erros materiais);
 
-b) Pela **disponibilidade técnica** da plataforma de aulas da Escola Avançada;
+b) Pela **disponibilidade técnica** da plataforma de aulas da plataforma parceira;
 
-c) Pela **emissão e validação de certificados** pela Escola Avançada;
+c) Pela **emissão e validação de certificados** pela plataforma parceira;
 
-d) Por **atrasos ou falhas** da Escola Avançada na matrícula automática do Aluno;
+d) Por **atrasos ou falhas** da plataforma parceira na matrícula automática do Aluno;
 
-e) Por **alterações unilaterais** efetuadas pela Escola Avançada em ementa, carga horária, materiais ou preço-base.
+e) Por **alterações unilaterais** efetuadas pela plataforma parceira em ementa, carga horária, materiais ou preço-base.
 
-**9.3.** A Unidade reconhece que, em caso de reclamação do Aluno sobre o conteúdo do Curso, a **responsabilidade primária é da Escola Avançada**, e a **responsabilidade comercial perante o Aluno é da Unidade** (CDC), cabendo ao PMB exclusivamente a intermediação técnica.
+**9.3.** A Unidade reconhece que, em caso de reclamação do Aluno sobre o conteúdo do Curso, a **responsabilidade primária é da plataforma parceira**, e a **responsabilidade comercial perante o Aluno é da Unidade** (CDC), cabendo ao PMB exclusivamente a intermediação técnica.
 
 ---
 
@@ -383,7 +383,7 @@ d) Garantir o cumprimento da LGPD pelos seus Consultores no tratamento dos dados
 
 **11.2. Propriedade da Unidade.** A marca, o logotipo, a identidade visual e os textos institucionais da **Vitrine** são de propriedade da Unidade, que outorga ao PMB uma **licença não exclusiva, gratuita, mundial e revogável** para uso operacional desses elementos exclusivamente para hospedagem e exibição na Plataforma durante a vigência deste Contrato.
 
-**11.3. Conteúdo dos Cursos.** Permanece sob propriedade da **Escola Avançada** ou de seus licenciantes.
+**11.3. Conteúdo dos Cursos.** Permanece sob propriedade da **plataforma parceira** ou de seus licenciantes.
 
 **11.4. Vedações à Unidade.** É VEDADO à Unidade:
 
@@ -399,7 +399,7 @@ e) Atuar como **representante, agente ou porta-voz** do PMB perante terceiros.
 
 **11.5. Não-Concorrência durante a vigência.** Durante toda a vigência deste Contrato, a Unidade **NÃO PODERÁ**:
 
-a) **Desenvolver ou comercializar plataforma concorrente** que ofereça serviço substancialmente equivalente ao do PMB (revenda de cursos da Escola Avançada em modelo multi-tenant) usando dados, conhecimento técnico ou contatos obtidos por meio da Plataforma;
+a) **Desenvolver ou comercializar plataforma concorrente** que ofereça serviço substancialmente equivalente ao do PMB (revenda de cursos da plataforma parceira em modelo multi-tenant) usando dados, conhecimento técnico ou contatos obtidos por meio da Plataforma;
 
 b) Praticar **aliciamento desleal de outras Unidades** parceiros para migração para plataformas concorrentes mediante divulgação de informações obtidas confidencialmente.
 
@@ -411,7 +411,7 @@ b) Praticar **aliciamento desleal de outras Unidades** parceiros para migração
 
 ## 12. RESPONSABILIDADE DA UNIDADE PERANTE O ALUNO (CDC)
 
-**12.1.** A Unidade reconhece que, na revenda de Cursos ao Aluno final na sua Vitrine, **figura como FORNECEDORA perante o consumidor**, nos termos do art. 3º do **Código de Defesa do Consumidor (Lei nº 8.078/1990)**, sendo solidariamente responsável com a Escola Avançada e o PMB perante o Aluno.
+**12.1.** A Unidade reconhece que, na revenda de Cursos ao Aluno final na sua Vitrine, **figura como FORNECEDORA perante o consumidor**, nos termos do art. 3º do **Código de Defesa do Consumidor (Lei nº 8.078/1990)**, sendo solidariamente responsável com a plataforma parceira e o PMB perante o Aluno.
 
 **12.2.** A Unidade obriga-se a:
 
@@ -427,7 +427,7 @@ e) **Emitir nota fiscal** das vendas realizadas em sua Vitrine;
 
 f) **Atender órgãos de defesa do consumidor** (PROCON, consumidor.gov.br) e demandas judiciais relativas a sua Vitrine, **assumindo polo passivo** em ações ajuizadas por Aluno.
 
-**12.3. Cláusula de Mantença de Indenidade (Indenização).** A Unidade obriga-se a **manter o PMB e a Escola Avançada indenes** de qualquer reclamação, demanda administrativa, ação judicial, multa, condenação, custas, honorários, danos materiais ou morais, decorrente de:
+**12.3. Cláusula de Mantença de Indenidade (Indenização).** A Unidade obriga-se a **manter o PMB e a plataforma parceira indenes** de qualquer reclamação, demanda administrativa, ação judicial, multa, condenação, custas, honorários, danos materiais ou morais, decorrente de:
 
 a) Descumprimento, pela Unidade, dos Termos de Uso do Aluno, do CDC, da LGPD ou de qualquer legislação aplicável;
 
@@ -461,7 +461,7 @@ a) A **Unidade é o CONTROLADOR**, nos termos do art. 5º, VI, da LGPD;
 
 b) A **PMB é o OPERADOR**, nos termos do art. 5º, VII, da LGPD, atuando sob as instruções da Unidade e nos limites operacionais necessários à execução deste Contrato;
 
-c) A **Escola Avançada é a OPERADORA** quanto aos dados necessários à matrícula e gestão do acesso aos Cursos, e **CONTROLADORA** quanto aos dados de progresso pedagógico e certificação.
+c) A **plataforma parceira é a OPERADORA** quanto aos dados necessários à matrícula e gestão do acesso aos Cursos, e **CONTROLADORA** quanto aos dados de progresso pedagógico e certificação.
 
 **13.2. Obrigações da Unidade como Controlador:**
 
@@ -491,7 +491,7 @@ d) Auxiliar a Unidade no atendimento a solicitações de titulares e da ANPD;
 
 e) Comunicar incidentes de segurança à Unidade em prazo razoável.
 
-**13.4. Subcontratação.** A Unidade autoriza o PMB a subcontratar, como **sub-operadoras**, as seguintes entidades necessárias à prestação dos serviços: Vercel (hospedagem), Supabase (banco de dados), Upstash (cache), Asaas (cobrança da Mensalidade), Mercado Pago (gateway de vendas), Resend (e-mails transacionais), Escola Avançada (matrícula e aulas), e outras necessárias à evolução do produto, com comunicação prévia em caso de mudança material.
+**13.4. Subcontratação.** A Unidade autoriza o PMB a subcontratar, como **sub-operadoras**, as seguintes entidades necessárias à prestação dos serviços: Vercel (hospedagem), Supabase (banco de dados), Upstash (cache), Asaas (cobrança da Mensalidade), Mercado Pago (gateway de vendas), Resend (e-mails transacionais), plataforma parceira (matrícula e aulas), e outras necessárias à evolução do produto, com comunicação prévia em caso de mudança material.
 
 **13.5. Transferência Internacional.** A Unidade autoriza o PMB a tratar dados em servidores localizados no Brasil ou no exterior (em especial, infraestrutura Vercel/Supabase), observados os requisitos do Capítulo V da LGPD.
 
@@ -565,7 +565,7 @@ c) O subdomínio `{slug}.livrecursos.com.br` poderá ser **liberado para uso fut
 
 d) Domínios Personalizados serão **desconectados** da Plataforma;
 
-e) **Alunos ativos** com cursos em curso continuarão tendo acesso ao conteúdo na **Escola Avançada**, conforme política de cancelamento individual aplicada pelo PMB à Unidade (Cláusula 16.7);
+e) **Alunos ativos** com cursos em curso continuarão tendo acesso ao conteúdo na **plataforma parceira**, conforme política de cancelamento individual aplicada pelo PMB à Unidade (Cláusula 16.7);
 
 f) Mensalidades vencidas e demais valores devidos permanecem **exigíveis**, sem prejuízo de multa.
 
@@ -573,7 +573,7 @@ f) Mensalidades vencidas e demais valores devidos permanecem **exigíveis**, sem
 
 **16.7. Política de cancelamento individual e Alunos ativos.** Em qualquer hipótese de rescisão, o PMB decidirá individualmente, conforme política previamente acordada com a Unidade, sobre o destino dos Alunos ativos da Vitrine encerrada, podendo:
 
-(i) **Manter ativos os Alunos** na Escola Avançada até o final do prazo já adquirido (proteção do consumidor — CDC);
+(i) **Manter ativos os Alunos** na plataforma parceira até o final do prazo já adquirido (proteção do consumidor — CDC);
 
 (ii) **Migrar a carteira** para outra Unidade ou para venda direta pelo Site Institucional do PMB;
 
@@ -591,9 +591,9 @@ f) Mensalidades vencidas e demais valores devidos permanecem **exigíveis**, sem
 
 a) **Lucros cessantes, perda de oportunidade, perda de clientes, perda de receita** ou qualquer dano indireto, mediato ou consequencial;
 
-b) **Atos ou omissões da Escola Avançada**, do Mercado Pago, do Asaas, da Vercel, da Supabase, da Upstash, de registradores de domínio, provedores de DNS ou de qualquer terceiro contratado;
+b) **Atos ou omissões da plataforma parceira**, do Mercado Pago, do Asaas, da Vercel, da Supabase, da Upstash, de registradores de domínio, provedores de DNS ou de qualquer terceiro contratado;
 
-c) **Decisões administrativas, regulatórias ou judiciais** que afetem o Catálogo, a operação da Escola Avançada ou o setor de educação livre/profissionalizante;
+c) **Decisões administrativas, regulatórias ou judiciais** que afetem o Catálogo, a operação da plataforma parceira ou o setor de educação livre/profissionalizante;
 
 d) **Caso fortuito ou força maior**, nos termos do art. 393 do Código Civil;
 

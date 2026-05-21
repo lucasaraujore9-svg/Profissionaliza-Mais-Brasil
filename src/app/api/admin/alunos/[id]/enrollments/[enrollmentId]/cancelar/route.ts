@@ -99,10 +99,10 @@ export async function POST(request: Request, ctx: Ctx) {
     try {
       await unlinkCourseFromStudent(studentId, enrollment.courseId)
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Falha ao remover acesso na EA"
-      console.error("[cancelar] falha ao desvincular curso na EA:", err)
+      const msg = err instanceof Error ? err.message : "Falha ao remover acesso na plataforma"
+      console.error("[cancelar] falha ao desvincular curso na plataforma:", err)
       // Merge into gatewayError if not already set
-      gatewayError = gatewayError ? `${gatewayError}; EA: ${msg}` : `EA: ${msg}`
+      gatewayError = gatewayError ? `${gatewayError}; plataforma: ${msg}` : `Plataforma: ${msg}`
     }
   }
 

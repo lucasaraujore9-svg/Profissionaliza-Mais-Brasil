@@ -402,7 +402,7 @@ Exemplo: "Webhook MP atualiza status de order"
   ✅ Endpoint de webhook em /api/webhooks/mp
   ✅ Valida assinatura
   ✅ Atualiza order no BD
-  ✅ Chama EA para matricular aluno
+  ✅ Chama plataforma parceira para matricular aluno
 ```
 
 ### Exemplo Real: Feature Checkout
@@ -426,7 +426,7 @@ Sprint 3: Behavior
 
 Sprint 4: Integration
   Issue 008: Mercado Pago webhook
-  Issue 009: Auto-matricula na Escola Avancada
+  Issue 009: Auto-matricula na plataforma parceira
   Issue 010: Email de confirmação
   Result: Full funnel: checkout → pagamento → matrícula → email
 ```

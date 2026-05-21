@@ -4,7 +4,7 @@ import { parseBRPrice, slugify } from "@/lib/utils"
 import { pushSyncLog, type SyncLogEntry } from "./sync-log"
 
 /**
- * O endpoint cursos/listar nao retorna o ID numerico do curso na EA.
+ * O endpoint cursos/listar nao retorna o ID numerico do curso na plataforma.
  * Por convencao, a URL da capa segue o padrao
  *   https://<host>/oficial/metodo/imagemcursos/<id>.<ext>
  * (ou .../<id>.jpeg, .png, ...). Quando o admin sobe outra imagem com nome

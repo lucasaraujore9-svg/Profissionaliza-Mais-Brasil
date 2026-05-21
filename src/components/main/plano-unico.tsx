@@ -2,7 +2,7 @@ import { Check, ArrowRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
 const inclui = [
-  "Todos os cursos do catálogo da Escola Avançada já liberados",
+  "Mais de 100 cursos profissionalizantes já liberados pra você vender",
   "Liberdade pra subir os seus próprios cursos",
   "Site personalizado, com o seu nome e a sua cara",
   "Pode usar um endereço próprio (tipo cursos.suamarca.com.br)",

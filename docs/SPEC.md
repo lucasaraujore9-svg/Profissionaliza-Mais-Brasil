@@ -2,7 +2,7 @@
 
 Plataforma SaaS multi-tenant de revenda de cursos profissionalizantes.
 Admin Master cobra revendedores via Asaas. Revendedores vendem cursos via Mercado Pago.
-Alunos sao auto-matriculados na Escola Avancada (plataforma white-label com API).
+Alunos sao auto-matriculados na plataforma parceira (plataforma white-label com API).
 
 ---
 
@@ -106,13 +106,13 @@ Alunos sao auto-matriculados na Escola Avancada (plataforma white-label com API)
 - **CourseHero**: Split — capa grande esquerda + info direita (titulo, descricao, preco, CTA)
 - **PriceDisplay**: Preco em Mono grande + info parcelas + tipo (unico/mensal)
 - **CouponField**: Input + botao "Aplicar" + feedback visual
-- **CourseDescription**: Texto longo da descricao (API EA campo "obs")
-- **LessonAccordion**: Lista colapsavel de aulas/modulos (API EA cursos/aulas)
+- **CourseDescription**: Texto longo da descricao (API da plataforma parceira campo "obs")
+- **LessonAccordion**: Lista colapsavel de aulas/modulos (API da plataforma parceira cursos/aulas)
 - **CourseStats**: Stats inline: aulas, carga horaria, certificado
 - **StickyCTA**: Barra sticky no mobile com preco + botao "Matricular"
 
 ### Comportamentos
-- `load-course`: Buscar curso do banco + aulas da API EA → renderizar
+- `load-course`: Buscar curso do banco + aulas da API da plataforma parceira → renderizar
 - `apply-coupon`: POST /api/coupons/validate → validar codigo → atualizar preco exibido
 - `remove-coupon`: Limpar cupom aplicado → restaurar preco original
 - `click-matricular`: Navegar para /loja/checkout?curso=[id]&cupom=[code]
@@ -193,7 +193,7 @@ Alunos sao auto-matriculados na Escola Avancada (plataforma white-label com API)
 - `load-students`: Buscar students do banco por tenant_id → renderizar tabela
 - `search-student`: Filtrar tabela por texto
 - `filter-by-status`: Filtrar por status selecionado
-- `view-student-detail`: Abrir drawer com dados completos + progresso (API EA cursosvinculados)
+- `view-student-detail`: Abrir drawer com dados completos + progresso (API da plataforma parceira cursosvinculados)
 - `block-student`: POST /api/students/[id]/block → chama EA usuarios/editar {status:"bloqueado", apostila:"bloquear"} → atualizar banco
 - `unblock-student`: POST /api/students/[id]/unblock → chama EA usuarios/editar {status:"ativo", apostila:"liberar"} → atualizar banco
 - `send-message`: POST /api/students/[id]/message → chama EA usuarios/enviarmensagem
@@ -404,7 +404,7 @@ Alunos sao auto-matriculados na Escola Avancada (plataforma white-label com API)
 
 ### Comportamentos
 - `load-settings`: Buscar config do sistema
-- `test-ea-connection`: POST /api/admin/test-ea → chamar EA cursos/listar → exibir resultado
+- `test-plataforma-connection`: POST /api/admin/test-ea → chamar plataforma parceira cursos/listar → exibir resultado
 - `test-asaas-connection`: POST /api/admin/test-asaas → chamar Asaas → exibir resultado
 - `retry-webhook`: POST /api/admin/webhooks/[id]/retry → reprocessar webhook falho
 
@@ -415,7 +415,7 @@ Alunos sao auto-matriculados na Escola Avancada (plataforma white-label com API)
 ### Comportamentos
 - `process-asaas-webhook`: Receber evento Asaas → validar token → logar → processar (PAYMENT_RECEIVED → ativar tenant, PAYMENT_OVERDUE → notificar admin)
 - `process-mp-webhook`: Receber evento MP → validar HMAC → logar → GET payment → processar (approved → matricula automatica completa na EA)
-- `auto-enroll-student`: Criar aluno EA → vincular curso EA → enviar email EA → atualizar banco
+- `auto-enroll-student`: Criar aluno na plataforma parceira → vincular curso na plataforma parceira → enviar email da plataforma parceira → atualizar banco
 - `auto-block-student`: Checar billing_mode → se AUTO: bloquear na EA + banco → notificar
 - `auto-unblock-student`: Pagamento atrasado agora aprovado → desbloquear na EA + banco
 

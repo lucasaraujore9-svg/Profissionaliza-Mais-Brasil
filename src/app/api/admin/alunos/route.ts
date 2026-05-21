@@ -144,11 +144,11 @@ export async function POST(request: Request) {
     select: { id: true, nome: true, email: true, cpf: true },
   })
 
-  // Cria o aluno na EA imediatamente (não espera pelo pagamento)
+  // Cria o aluno na plataforma imediatamente (não espera pelo pagamento)
   try {
     await ensureStudentInEA(student.id)
   } catch (err) {
-    console.error("[alunos/POST] falha ao criar aluno na EA:", err)
+    console.error("[alunos/POST] falha ao criar aluno na plataforma:", err)
     // Não bloqueia — será tentado novamente no fulfill do pagamento
   }
 

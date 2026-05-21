@@ -18,6 +18,10 @@ export function LandingAnimations() {
           el.style.opacity = "1"
           el.style.transform = "none"
         })
+        document.querySelectorAll<SVGPathElement>("[data-marker] path").forEach((p) => {
+          p.style.strokeDasharray = "none"
+          p.style.strokeDashoffset = "0"
+        })
       }
     }
 
@@ -99,13 +103,39 @@ export function LandingAnimations() {
         })
       })
 
-      // 4) Marker highlight draw: [data-marker]
-      const markers = gsap.utils.toArray<HTMLElement>("[data-marker]")
+      // 4) Marker draw: [data-marker]
+      // SVG -> anima stroke-dashoffset dos paths (efeito desenho a mao).
+      // Outros elementos -> scaleX 0->1 a partir da esquerda.
+      const markers = gsap.utils.toArray<Element>("[data-marker]")
       markers.forEach((el) => {
+        if (el.tagName.toLowerCase() === "svg") {
+          const paths = el.querySelectorAll<SVGPathElement>("path")
+          paths.forEach((path) => {
+            const length = path.getTotalLength()
+            gsap.set(path, {
+              strokeDasharray: length,
+              strokeDashoffset: length,
+            })
+            ScrollTrigger.create({
+              trigger: el,
+              start: "top 85%",
+              once: true,
+              onEnter: () => {
+                gsap.to(path, {
+                  strokeDashoffset: 0,
+                  duration: 1.1,
+                  ease: "power2.out",
+                  delay: 0.3,
+                })
+              },
+            })
+          })
+          return
+        }
         gsap.set(el, { scaleX: 0, transformOrigin: "left center" })
         ScrollTrigger.create({
           trigger: el,
-          start: "top 80%",
+          start: "top 85%",
           once: true,
           onEnter: () => {
             gsap.to(el, {

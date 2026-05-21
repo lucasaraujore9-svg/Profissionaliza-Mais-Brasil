@@ -1,4 +1,4 @@
-# Escola Avançada API V2 — Documentação Completa de Endpoints
+# plataforma parceira API V2 — Documentação Completa de Endpoints
 
 **Base URL:** `https://SUAESCOLA.com/api/v2/`
 **Autenticação:** Token enviado via form-data (POST) ou header (GET/DELETE)
@@ -141,7 +141,7 @@
 **Uso no Projeto:** Painel do revendedor para acompanhar situação financeira dos alunos. Complementar ao financeiro do Mercado Pago.
 
 **⚠️ Observações:**
-- A Escola Avançada usa Asaas internamente para boletos
+- A plataforma parceira usa Asaas internamente para boletos
 - No nosso modelo, o financeiro principal é via Mercado Pago do revendedor
 - Este endpoint serve para consulta/relatório complementar
 

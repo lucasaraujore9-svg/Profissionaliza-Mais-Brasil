@@ -387,7 +387,7 @@ Admin financial dashboard — reseller subscription payments.
 
 #### Tela 4.4 — Catalogo Master
 ```
-Course catalog synced from Escola Avancada.
+Course catalog synced from plataforma parceira.
 
 **PAGE STRUCTURE:**
 1. **Header:** "Catalogo de Cursos" title, "Sincronizar Agora" button, last sync timestamp

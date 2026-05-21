@@ -48,14 +48,14 @@ export async function HeroCTA() {
               className="mt-4 text-[clamp(1.85rem,6.5vw,4.5rem)] font-black leading-[0.95] tracking-tight text-white sm:mt-5 lg:text-[clamp(2.75rem,5vw,5.5rem)]"
             >
               <span className="block sm:inline">Tenha o seu</span>{" "}
-              <span className="relative inline-block">
+              <span className="relative inline-block px-2">
                 <span className="relative z-10 italic text-[var(--color-pmb-green-900)]">
                   portal de cursos
                 </span>
                 <span
                   aria-hidden
                   data-marker
-                  className="absolute inset-x-0 bottom-1 -z-0 h-[0.85em] -skew-y-2 bg-yellow-300"
+                  className="absolute inset-0 -z-0 rounded-sm bg-yellow-300"
                 />
               </span>
               <br />
