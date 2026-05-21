@@ -108,7 +108,6 @@ export function VantagensQuadrinhos() {
 
         <div className="mt-14 flex items-center justify-center" data-reveal>
           <div className="inline-flex items-center gap-3 rounded-full bg-yellow-300/15 px-5 py-2.5 ring-1 ring-yellow-300/40">
-            <span className="text-2xl">🎯</span>
             <p className="text-sm font-bold text-[var(--color-pmb-green-900)] md:text-base">
               E você nem precisa de CNPJ pra começar.
             </p>

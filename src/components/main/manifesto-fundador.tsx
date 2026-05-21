@@ -117,7 +117,7 @@ export function ManifestoFundador() {
                 de lucro.&rdquo;
               </blockquote>
               <figcaption className="mt-6 border-t border-white/15 pt-5">
-                <p className="font-bold text-white">O idealizador do GBMB</p>
+                <p className="font-bold text-white text-[11px]">Leonardo V. | Idealizador do GBMB</p>
                 <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-yellow-300/90">
                   Grupo Bolsa Mais Brasil
                 </p>
