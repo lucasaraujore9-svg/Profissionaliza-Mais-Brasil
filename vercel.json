@@ -3,6 +3,14 @@
     {
       "path": "/api/cron/sync-cursos",
       "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/cron/sync-progresso",
+      "schedule": "0 7 * * *"
+    },
+    {
+      "path": "/api/cron/referral-monthly-payout",
+      "schedule": "0 5 20 * *"
     }
   ]
 }

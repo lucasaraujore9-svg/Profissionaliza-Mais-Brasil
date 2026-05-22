@@ -17,6 +17,8 @@ import {
   PLANO_GROWTH_VALOR,
   PLANO_GROWTH_DESCRICAO,
 } from "@/lib/revendedor/plano"
+import { generateUniqueReferralCode } from "@/lib/referrals/code"
+import { resolveReferrerFromCookie } from "@/lib/referrals/capture"
 
 const RESERVED_SLUGS = new Set([
   "www",
@@ -141,6 +143,9 @@ export async function POST(request: Request) {
     )
   }
 
+  const referralCode = await generateUniqueReferralCode(slug)
+  const referrerTenantId = await resolveReferrerFromCookie()
+
   try {
     await prisma.$transaction(async (tx) => {
       const tenant = await tx.tenant.create({
@@ -152,6 +157,8 @@ export async function POST(request: Request) {
           planValue: new Prisma.Decimal(PLANO_GROWTH_VALOR),
           asaasCustomerId: asaasCustomer.id,
           asaasSubscriptionId: asaasSubscription.id,
+          referralCode,
+          referrerTenantId,
         },
       })
 

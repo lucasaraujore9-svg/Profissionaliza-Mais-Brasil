@@ -14,6 +14,8 @@ import {
 import { sendEmail, isEmailConfigured } from "@/lib/email/resend"
 import { createNotification } from "@/lib/notifications"
 import { appUrl, vitrineUrl as buildVitrineUrl } from "@/lib/tenant/urls"
+import { generateUniqueReferralCode } from "@/lib/referrals/code"
+import { resolveReferrerFromCookie } from "@/lib/referrals/capture"
 
 export async function GET(request: Request) {
   const ctx = await requireAdminSession()
@@ -267,6 +269,9 @@ export async function POST(request: Request) {
     }
   }
 
+  const referralCode = await generateUniqueReferralCode(data.slug)
+  const referrerTenantId = await resolveReferrerFromCookie()
+
   const tenant = await prisma.tenant.create({
     data: {
       name: data.name,
@@ -278,6 +283,8 @@ export async function POST(request: Request) {
       asaasSubscriptionId,
       accountManagerId: data.accountManagerId ?? null,
       poloName: data.slug,
+      referralCode,
+      referrerTenantId,
       updatedAt: new Date(),
     },
     select: { id: true, slug: true, name: true, status: true },

@@ -1,3 +1,4 @@
+import { Suspense } from "react"
 import { HeroCTA } from "@/components/main/hero-cta"
 import { VantagensQuadrinhos } from "@/components/main/vantagens-quadrinhos"
 import { ManifestoFundador } from "@/components/main/manifesto-fundador"
@@ -11,6 +12,7 @@ import { FAQAccordion } from "@/components/main/faq-accordion"
 import { FormularioInteresse } from "@/components/main/formulario-interesse"
 import { LandingAnimations } from "@/components/main/anim/landing-animations"
 import { faqs } from "@/components/main/faq-data"
+import { RefCookieCapture } from "@/components/shared/ref-cookie-capture"
 
 export const metadata = {
   title:
@@ -40,6 +42,9 @@ export default function SejaRevendedorPage() {
         dangerouslySetInnerHTML={{ __html: JSON.stringify(faqSchema) }}
       />
       <LandingAnimations />
+      <Suspense fallback={null}>
+        <RefCookieCapture />
+      </Suspense>
       <HeroCTA />
       <VantagensQuadrinhos />
       <ManifestoFundador />

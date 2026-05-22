@@ -83,6 +83,7 @@ async function main() {
       planValue: 99.9,
       tagline: "Cursos profissionalizantes",
       accountManagerId: mgr.id,
+      referralCode: "REVENDA1-SEED",
       updatedAt: new Date(),
     },
   })
@@ -97,6 +98,7 @@ async function main() {
       billingMode: BillingMode.MANUAL,
       planValue: 99.9,
       accountManagerId: null,
+      referralCode: "REVENDA2-SEED",
       updatedAt: new Date(),
     },
   })
@@ -111,6 +113,7 @@ async function main() {
       status: TenantStatus.ACTIVE,
       billingMode: BillingMode.MANUAL,
       planValue: 99.9,
+      referralCode: "DEMO-SEED",
       updatedAt: new Date(),
     },
   })

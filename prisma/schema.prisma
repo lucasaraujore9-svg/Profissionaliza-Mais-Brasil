@@ -215,16 +215,33 @@ model Tenant {
   // Membros do tenant (para multiplos admins/gerentes no futuro)
   members TenantMember[]
 
+  // Indicacao (1-nivel)
+  referralCode     String   @unique @map("referral_code")
+  referrerTenantId String?  @map("referrer_tenant_id")
+  referrer         Tenant?  @relation("TenantReferrals", fields: [referrerTenantId], references: [id])
+  referrals        Tenant[] @relation("TenantReferrals")
+  // Override individual do % de comissao (Decimal 0-100). Null = usa SystemSettings.defaultReferralPercent
+  referralPercent  Decimal? @map("referral_percent") @db.Decimal(5, 2)
+
+  // Dados PIX para receber comissoes (PIX do indicador)
+  pixKey     String? @map("pix_key")
+  pixKeyType String? @map("pix_key_type") // CPF, CNPJ, EMAIL, PHONE, EVP
+
   // Relacoes
-  tenantCourses  TenantCourse[]
-  students       Student[]
-  enrollments    Enrollment[]
-  payments       Payment[]
-  coupons        Coupon[]
-  tenantPayments TenantPayment[]
-  webhookLogs    WebhookLog[]
-  leads          Lead[]
-  supportNotes   TenantSupportNote[]
+  tenantCourses        TenantCourse[]
+  students             Student[]
+  enrollments          Enrollment[]
+  payments             Payment[]
+  coupons              Coupon[]
+  tenantPayments       TenantPayment[]
+  webhookLogs          WebhookLog[]
+  leads                Lead[]
+  supportNotes         TenantSupportNote[]
+  referralCommissionsReceived ReferralCommission[] @relation("ReferrerCommissions")
+  referralCommissionsGenerated ReferralCommission[] @relation("ReferredCommissions")
+  referralPayouts      ReferralPayout[]
+  certificates         Certificate[]
+  certificateTemplate  CertificateTemplate?
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -233,6 +250,8 @@ model Tenant {
   @@index([customDomain])
   @@index([status])
   @@index([accountManagerId])
+  @@index([referrerTenantId])
+  @@index([referralCode])
   @@map("tenants")
 }
 
@@ -301,6 +320,7 @@ model Course {
   tenantCourses TenantCourse[]
   enrollments   Enrollment[]
   courseLessons CourseLesson[]
+  certificates  Certificate[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -415,7 +435,8 @@ model Student {
   lastLoginAt        DateTime? @map("last_login_at")
 
   // Relacoes
-  enrollments Enrollment[]
+  enrollments  Enrollment[]
+  certificates Certificate[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -483,8 +504,16 @@ model Enrollment {
   expiresAt   DateTime? @map("expires_at")
   cancelledAt DateTime? @map("cancelled_at")
 
+  // Progresso sincronizado da plataforma parceira (cursosvinculados)
+  // Match feito por NOME do curso (API nao retorna ID confiavel)
+  progressPercent  Int?      @default(0) @map("progress_percent") // 0-100
+  progressStatus   String?   @map("progress_status") // EM_ANDAMENTO, CONCLUIDO, AGUARDANDO
+  lastLessonAt     DateTime? @map("last_lesson_at")
+  progressSyncedAt DateTime? @map("progress_synced_at")
+
   // Relacoes
-  payments Payment[]
+  payments     Payment[]
+  certificates Certificate[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -496,6 +525,7 @@ model Enrollment {
   @@index([mpSubscriptionId])
   @@index([externalReference])
   @@index([asaasPaymentId])
+  @@index([progressStatus])
   @@map("enrollments")
 }
 
@@ -601,6 +631,12 @@ model TenantPayment {
   dueDate DateTime  @map("due_date")
   paidAt  DateTime? @map("paid_at")
 
+  // Indicacao (1-nivel)
+  referralCommission ReferralCommission?
+  // Desconto aplicado vindo de um ReferralPayout (DESCONTO_MENSALIDADE)
+  appliedPayoutId    String?              @unique @map("applied_payout_id")
+  appliedPayout      ReferralPayout?      @relation("AppliedToTenantPayment", fields: [appliedPayoutId], references: [id])
+
   createdAt DateTime @default(now()) @map("created_at")
 
   @@index([tenantId])
@@ -645,6 +681,47 @@ enum LeadStatus {
   CONTACTED
   CONVERTED
   LOST
+}
+
+// ============================================================
+// INDICACOES (referral 1-nivel)
+// ============================================================
+
+enum ReferralCommissionStatus {
+  PENDING // Aguardando data de liberacao (dia 20 do mes seguinte)
+  AVAILABLE // Liberada para saque, ainda nao paga
+  PAID // Paga ao indicador
+  CANCELLED // Estorno da mensalidade base
+}
+
+enum ReferralPayoutMethod {
+  ASAAS_PIX // PIX via Asaas Transfer
+  DESCONTO_MENSALIDADE // Aplicado como desconto na proxima TenantPayment
+  MANUAL // Pago manualmente pelo admin (registro)
+}
+
+enum ReferralPayoutStatus {
+  REQUESTED
+  PROCESSING
+  PAID
+  FAILED
+  CANCELLED
+}
+
+// ============================================================
+// CERTIFICADOS
+// ============================================================
+
+enum CertificateSource {
+  AUTO // Emitido automaticamente via cron de progresso
+  MANUAL_ADMIN // Emitido manualmente pelo admin
+  MANUAL_RESELLER // Emitido manualmente pelo revendedor
+}
+
+enum CertificateLayout {
+  CLASSIC
+  MODERN
+  MINIMAL
 }
 
 model Lead {
@@ -738,11 +815,205 @@ model NotificationPreference {
 }
 
 model SystemSettings {
-  id                     String         @id @default("default")
-  pmbDirectSaleGateway   PaymentGateway @default(MP) @map("pmb_direct_sale_gateway")
-  pmbMpAccessTokenEnc    String?        @map("pmb_mp_access_token_enc") @db.Text
-  lastCatalogSyncJson    String?        @map("last_catalog_sync_json") @db.Text
-  updatedAt              DateTime       @updatedAt @map("updated_at")
+  id                   String         @id @default("default")
+  pmbDirectSaleGateway PaymentGateway @default(MP) @map("pmb_direct_sale_gateway")
+  pmbMpAccessTokenEnc  String?        @map("pmb_mp_access_token_enc") @db.Text
+  lastCatalogSyncJson  String?        @map("last_catalog_sync_json") @db.Text
+
+  // Indicacoes
+  referralEnabled         Boolean @default(true) @map("referral_enabled")
+  defaultReferralPercent  Decimal @default(5.00) @map("default_referral_percent") @db.Decimal(5, 2) // 5%
+  referralMinPayout       Decimal @default(50.00) @map("referral_min_payout") @db.Decimal(10, 2) // R$50
+  // Janela mensal: comissoes referentes a TenantPayments pagos no mes M
+  // ficam AVAILABLE no dia X do mes M+1 (referralPayoutDay).
+  referralPayoutDay       Int     @default(20) @map("referral_payout_day") // dia do mes do pagamento (1-28)
+
+  // Certificados
+  certificateMinPercent  Int     @default(80) @map("certificate_min_percent") // % minimo na plataforma p/ auto-emissao
+  certificateAutoIssue   Boolean @default(true) @map("certificate_auto_issue")
+  certificateRequireCpf  Boolean @default(false) @map("certificate_require_cpf") // se true, nao emite sem CPF
+
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("system_settings")
+}
+
+// ============================================================
+// INDICACOES — COMISSOES (1-nivel)
+// ============================================================
+// Regra: ReferralCommission so e criada se Tenant.referrerTenantId != null.
+// NUNCA olhamos referrer.referrerTenantId — impossivel virar multi-nivel.
+// availableAt = dia X (SystemSettings.referralPayoutDay) do mes seguinte ao paidAt da TenantPayment.
+
+model ReferralCommission {
+  id                String @id @default(cuid())
+  referrerTenantId  String @map("referrer_tenant_id")
+  referrer          Tenant @relation("ReferrerCommissions", fields: [referrerTenantId], references: [id], onDelete: Cascade)
+  referredTenantId  String @map("referred_tenant_id")
+  referred          Tenant @relation("ReferredCommissions", fields: [referredTenantId], references: [id], onDelete: Cascade)
+
+  tenantPaymentId String        @unique @map("tenant_payment_id")
+  tenantPayment   TenantPayment @relation(fields: [tenantPaymentId], references: [id], onDelete: Cascade)
+
+  baseAmount Decimal                  @map("base_amount") @db.Decimal(10, 2)
+  percent    Decimal                  @db.Decimal(5, 2) // snapshot do % aplicado
+  amount     Decimal                  @db.Decimal(10, 2) // baseAmount * percent / 100
+  status     ReferralCommissionStatus @default(PENDING)
+
+  availableAt DateTime  @map("available_at") // dia X do mes seguinte ao paidAt
+  paidAt      DateTime? @map("paid_at")
+  cancelledAt DateTime? @map("cancelled_at")
+  cancelReason String?  @map("cancel_reason")
+
+  // Vinculo com o payout que liquidou esta comissao (quando paga)
+  payoutId String?         @map("payout_id")
+  payout   ReferralPayout? @relation(fields: [payoutId], references: [id])
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([referrerTenantId, status])
+  @@index([referredTenantId])
+  @@index([status, availableAt])
+  @@index([payoutId])
+  @@map("referral_commissions")
+}
+
+// ============================================================
+// INDICACOES — SAQUES (payout)
+// ============================================================
+
+model ReferralPayout {
+  id               String @id @default(cuid())
+  referrerTenantId String @map("referrer_tenant_id")
+  referrer         Tenant @relation(fields: [referrerTenantId], references: [id], onDelete: Cascade)
+
+  amount      Decimal              @db.Decimal(10, 2)
+  method      ReferralPayoutMethod @default(ASAAS_PIX)
+  status      ReferralPayoutStatus @default(REQUESTED)
+
+  // Snapshot do PIX no momento do saque (se method = ASAAS_PIX)
+  pixKey     String? @map("pix_key")
+  pixKeyType String? @map("pix_key_type")
+
+  asaasTransferId String? @map("asaas_transfer_id")
+  failureReason   String? @map("failure_reason")
+  notes           String? @db.Text
+
+  // Se method = DESCONTO_MENSALIDADE, a TenantPayment alvo
+  appliedToTenantPayment TenantPayment? @relation("AppliedToTenantPayment")
+
+  // Comissoes liquidadas por este payout
+  commissions ReferralCommission[]
+
+  requestedAt DateTime  @default(now()) @map("requested_at")
+  processedAt DateTime? @map("processed_at")
+  paidAt      DateTime? @map("paid_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([referrerTenantId, status])
+  @@index([status, requestedAt])
+  @@map("referral_payouts")
+}
+
+// ============================================================
+// CERTIFICADOS — TEMPLATES
+// ============================================================
+// 1 template por tenant (revendedor). 1 template global PMB (tenantId = null).
+// Tres layouts disponiveis: CLASSIC, MODERN, MINIMAL.
+
+model CertificateTemplate {
+  id       String  @id @default(cuid())
+  tenantId String? @unique @map("tenant_id") // null = template PMB padrao
+  tenant   Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  layout         CertificateLayout @default(CLASSIC)
+  // Imagem de fundo do certificado (em destaque). Path no Supabase Storage.
+  backgroundUrl  String?           @map("background_url")
+  // Logo da unidade (em destaque, sobre o fundo). Path no Supabase Storage.
+  logoUrl        String?           @map("logo_url")
+  // Selo / brasao secundario (opcional)
+  sealUrl        String?           @map("seal_url")
+  // Imagem de assinatura digital
+  signatureUrl   String?           @map("signature_url")
+
+  // Cores override (opcionais; defaults pegam tenant.primaryColor)
+  primaryColor   String? @map("primary_color")
+  secondaryColor String? @map("secondary_color")
+
+  // Texto do certificado com placeholders:
+  // {nome}, {cpf}, {curso}, {carga_horaria}, {data_conclusao}, {codigo}, {unidade}
+  titleText String  @default("CERTIFICADO DE CONCLUSAO") @map("title_text")
+  bodyText  String  @default("Certificamos que {nome} concluiu com aproveitamento o curso de {curso}, com carga horaria de {carga_horaria}, em {data_conclusao}.") @map("body_text") @db.Text
+  footerText String? @map("footer_text") @db.Text
+
+  // Dados do signatario impressos no certificado
+  signerName  String? @map("signer_name")
+  signerTitle String? @map("signer_title")
+
+  // Toggles
+  showQrCode        Boolean @default(true) @map("show_qr_code")
+  showValidationUrl Boolean @default(true) @map("show_validation_url")
+  showSeal          Boolean @default(false) @map("show_seal")
+  isActive          Boolean @default(true) @map("is_active")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("certificate_templates")
+}
+
+// ============================================================
+// CERTIFICADOS — EMITIDOS
+// ============================================================
+
+model Certificate {
+  id   String @id @default(cuid())
+  // Codigo curto para validacao publica (/validar/{code})
+  code String @unique // ex: PMB-7K3X9A2
+
+  studentId    String     @map("student_id")
+  student      Student    @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  enrollmentId String     @map("enrollment_id")
+  enrollment   Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  courseId     String     @map("course_id")
+  course       Course     @relation(fields: [courseId], references: [id])
+
+  // tenantId = null indica certificado da vitrine PMB
+  tenantId String? @map("tenant_id")
+  tenant   Tenant? @relation(fields: [tenantId], references: [id])
+
+  // Snapshot (nao muda se aluno trocar nome ou template mudar)
+  studentName    String   @map("student_name")
+  studentCpf     String?  @map("student_cpf")
+  courseName     String   @map("course_name")
+  cargaHoraria   String?  @map("carga_horaria")
+  completionDate DateTime @map("completion_date")
+
+  // Template usado (snapshot completo em JSON para regerar com mesma aparencia)
+  templateSnapshot Json @map("template_snapshot")
+
+  // PDF armazenado no Supabase Storage
+  pdfUrl         String?   @map("pdf_url")
+  pdfGeneratedAt DateTime? @map("pdf_generated_at")
+
+  // Origem
+  source         CertificateSource
+  issuedByUserId String?           @map("issued_by_user_id")
+
+  // Revogacao
+  revokedAt     DateTime? @map("revoked_at")
+  revokedReason String?   @map("revoked_reason")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([studentId])
+  @@index([enrollmentId])
+  @@index([tenantId, courseId])
+  @@index([code])
+  @@index([revokedAt])
+  @@map("certificates")
 }
