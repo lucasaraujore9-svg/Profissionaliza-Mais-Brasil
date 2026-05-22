@@ -5,6 +5,10 @@ import { fulfillEnrollment } from "@/lib/enrollment/fulfill"
 import { pmbPlataformaPolo, pmbPlataformaVendedorId } from "@/lib/pmb-config"
 import { createNotification } from "@/lib/notifications"
 import { invalidateTenant } from "@/lib/redis/tenant-cache"
+import {
+  createCommissionForTenantPayment,
+  cancelCommissionForTenantPayment,
+} from "@/lib/referrals/commission"
 import type { AsaasWebhookPayload } from "./types"
 
 function formatMoney(value: number): string {
@@ -163,7 +167,7 @@ export async function processAsaasWebhook(
 
     const paidAt = payment.paymentDate ? new Date(payment.paymentDate) : null
 
-    await prisma.tenantPayment.upsert({
+    const tenantPaymentRow = await prisma.tenantPayment.upsert({
       where: { asaasPaymentId: payment.id },
       update: {
         status: payment.status,
@@ -182,6 +186,7 @@ export async function processAsaasWebhook(
         invoiceUrl: payment.invoiceUrl ?? null,
         bankSlipUrl: payment.bankSlipUrl ?? null,
       },
+      select: { id: true },
     })
 
     switch (event) {
@@ -233,6 +238,16 @@ export async function processAsaasWebhook(
           category: "tenant-billing",
           href: "/painel/financeiro",
         })
+
+        // Cria comissao de indicacao (1-nivel) se o tenant possui referrer
+        await createCommissionForTenantPayment(tenantPaymentRow.id).catch(
+          (err) => {
+            console.error(
+              "[asaas] createCommissionForTenantPayment falhou:",
+              err,
+            )
+          },
+        )
         break
       }
 
@@ -311,6 +326,17 @@ export async function processAsaasWebhook(
             data: { status: payment.status },
           })
           .catch(() => undefined)
+
+        // Cancela comissao de indicacao (se houver)
+        await cancelCommissionForTenantPayment(
+          tenantPaymentRow.id,
+          event === "PAYMENT_REFUNDED" ? "refund" : "partial_refund",
+        ).catch((err) => {
+          console.error(
+            "[asaas] cancelCommissionForTenantPayment falhou:",
+            err,
+          )
+        })
 
         // Verifica se ainda há algum pagamento RECEIVED/CONFIRMED para este tenant.
         // Se não houver, suspende a conta (dinheiro foi devolvido = não pagou).

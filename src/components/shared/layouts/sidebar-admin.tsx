@@ -18,6 +18,8 @@ import {
   FileText,
   Bell,
   LogOut,
+  Award,
+  Share2,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -34,6 +36,8 @@ const ALL_ITEMS: {
   { href: "/admin/alunos", label: "Alunos", icon: GraduationCap, roles: ["SUPER_ADMIN"] },
   { href: "/admin/vendas", label: "Vendas diretas", icon: ShoppingCart, roles: ["SUPER_ADMIN", "PMB_SALES"] },
   { href: "/admin/financeiro", label: "Financeiro", icon: DollarSign, roles: ["SUPER_ADMIN"] },
+  { href: "/admin/indicacoes", label: "Indicações", icon: Share2, roles: ["SUPER_ADMIN", "PMB_RESELLER_MGR"] },
+  { href: "/admin/certificados", label: "Certificados", icon: Award, roles: ["SUPER_ADMIN"] },
   { href: "/admin/catalogo", label: "Catálogo", icon: BookOpen, roles: ["SUPER_ADMIN", "PMB_SALES", "PMB_RESELLER_MGR"] },
   { href: "/admin/analytics", label: "Analytics", icon: BarChart3, roles: ["SUPER_ADMIN"] },
   { href: "/admin/relatorios", label: "Relatórios", icon: FileText, roles: ["SUPER_ADMIN", "PMB_SALES", "PMB_RESELLER_MGR"] },

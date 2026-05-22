@@ -19,6 +19,8 @@ export async function getOrCreatePmbTenant(): Promise<{ id: string; slug: string
       status: "ACTIVE",
       billingMode: "MANUAL",
       planValue: 0,
+      // PMB placeholder usa um codigo de indicacao "interno" — nunca exposto.
+      referralCode: "__PMB__",
       updatedAt: new Date(),
     },
     select: { id: true, slug: true },

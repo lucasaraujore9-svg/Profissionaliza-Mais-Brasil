@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { requireStudentSession } from "@/lib/auth/student-session"
+import { syncStudentProgress } from "@/lib/students/progress"
 
 const STATUS_LABEL: Record<string, string> = {
   PENDING: "Aguardando pagamento",
@@ -17,9 +18,22 @@ const STATUS_COLOR: Record<string, string> = {
   COMPLETED: "bg-blue-100 text-blue-700",
 }
 
+const PROGRESS_STATUS_LABEL: Record<string, string> = {
+  EM_ANDAMENTO: "Em andamento",
+  CONCLUIDO: "Concluído",
+  AGUARDANDO: "Aguardando",
+}
+
 export default async function StudentCoursesPage() {
   const session = await requireStudentSession()
   if (!session) return null
+
+  // Best-effort: sincroniza progresso (não bloqueia a página em caso de erro)
+  try {
+    await syncStudentProgress(session.studentId)
+  } catch (err) {
+    console.warn("[aluno/cursos] syncStudentProgress falhou:", err)
+  }
 
   const enrollments = await prisma.enrollment.findMany({
     where: { studentId: session.studentId },
@@ -33,6 +47,12 @@ export default async function StudentCoursesPage() {
           capaOverride: true,
           categoriaLoja: true,
         },
+      },
+      certificates: {
+        where: { revokedAt: null },
+        orderBy: { createdAt: "desc" },
+        take: 1,
+        select: { id: true, code: true, pdfUrl: true },
       },
     },
     orderBy: { createdAt: "desc" },
@@ -48,8 +68,8 @@ export default async function StudentCoursesPage() {
           Meus cursos
         </h1>
         <p className="mt-1 text-sm text-gray-600">
-          Cursos que você adquiriu. Ative o acesso na plataforma de aulas para
-          começar a estudar.
+          Acompanhe seu progresso, acesse as aulas e baixe seus certificados
+          quando concluir o curso.
         </p>
       </header>
 
@@ -65,59 +85,93 @@ export default async function StudentCoursesPage() {
             const capa = e.course.capaOverride ?? e.course.capaImageUrl ?? null
             const descricao =
               e.course.descricaoOverride ?? e.course.descricao ?? null
+            const certificate = e.certificates[0] ?? null
+            const percent = e.progressPercent ?? 0
+            const progressLabel = e.progressStatus
+              ? PROGRESS_STATUS_LABEL[e.progressStatus] ?? e.progressStatus
+              : null
             return (
-            <article
-              key={e.id}
-              className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm"
-            >
-              {capa && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={capa}
-                  alt={e.course.nome}
-                  className="h-32 w-full object-cover"
-                />
-              )}
-              <div className="p-5">
-                <div className="flex items-center justify-between gap-2">
-                  <h3 className="text-sm font-semibold text-[var(--color-pmb-green-900)]">
-                    {e.course.nome}
-                  </h3>
-                  <span
-                    className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${STATUS_COLOR[e.status] ?? "bg-gray-100 text-gray-700"}`}
-                  >
-                    {STATUS_LABEL[e.status] ?? e.status}
-                  </span>
-                </div>
-                {e.course.categoriaLoja && (
-                  <p className="mt-1 text-[11px] uppercase tracking-wide text-gray-500">
-                    {e.course.categoriaLoja}
-                  </p>
+              <article
+                key={e.id}
+                className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm"
+              >
+                {capa && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={capa}
+                    alt={e.course.nome}
+                    className="h-32 w-full object-cover"
+                  />
                 )}
-                {descricao && (
-                  <p className="mt-3 line-clamp-3 text-xs text-gray-600">
-                    {descricao}
-                  </p>
-                )}
-
-                <div className="mt-4 flex items-center justify-between text-xs">
-                  <span className="text-gray-500">
-                    Comprado em{" "}
-                    {new Date(e.createdAt).toLocaleDateString("pt-BR")}
-                  </span>
-                  {e.status === "ACTIVE" || e.status === "COMPLETED" ? (
-                    <a
-                      href={plataformaLoginUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="rounded-md bg-[var(--color-pmb-green)] px-3 py-1 font-semibold text-white hover:bg-[var(--color-pmb-green-700)]"
+                <div className="p-5">
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="text-sm font-semibold text-[var(--color-pmb-green-900)]">
+                      {e.course.nome}
+                    </h3>
+                    <span
+                      className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${STATUS_COLOR[e.status] ?? "bg-gray-100 text-gray-700"}`}
                     >
-                      Acessar aulas
-                    </a>
-                  ) : null}
+                      {STATUS_LABEL[e.status] ?? e.status}
+                    </span>
+                  </div>
+                  {e.course.categoriaLoja && (
+                    <p className="mt-1 text-[11px] uppercase tracking-wide text-gray-500">
+                      {e.course.categoriaLoja}
+                    </p>
+                  )}
+                  {descricao && (
+                    <p className="mt-3 line-clamp-3 text-xs text-gray-600">
+                      {descricao}
+                    </p>
+                  )}
+
+                  {(e.status === "ACTIVE" || e.status === "COMPLETED") && (
+                    <div className="mt-4">
+                      <div className="flex items-center justify-between text-[11px] text-gray-600">
+                        <span>
+                          Progresso{progressLabel ? ` · ${progressLabel}` : ""}
+                        </span>
+                        <span className="font-semibold text-[var(--color-pmb-green-900)]">
+                          {percent}%
+                        </span>
+                      </div>
+                      <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-gray-100">
+                        <div
+                          className="h-2 rounded-full bg-[var(--color-pmb-green)]"
+                          style={{ width: `${Math.max(0, Math.min(100, percent))}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="mt-4 flex flex-wrap items-center justify-between gap-2 text-xs">
+                    <span className="text-gray-500">
+                      Comprado em{" "}
+                      {new Date(e.createdAt).toLocaleDateString("pt-BR")}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      {certificate ? (
+                        <a
+                          href={`/aluno/certificados/${certificate.id}`}
+                          className="rounded-md border border-[var(--color-pmb-green)] px-3 py-1 font-semibold text-[var(--color-pmb-green)] hover:bg-[var(--color-pmb-green)]/5"
+                        >
+                          Baixar certificado
+                        </a>
+                      ) : null}
+                      {e.status === "ACTIVE" || e.status === "COMPLETED" ? (
+                        <a
+                          href={plataformaLoginUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="rounded-md bg-[var(--color-pmb-green)] px-3 py-1 font-semibold text-white hover:bg-[var(--color-pmb-green-700)]"
+                        >
+                          Acessar aulas
+                        </a>
+                      ) : null}
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </article>
+              </article>
             )
           })}
         </div>
