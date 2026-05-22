@@ -24,7 +24,7 @@ export default function PainelCertificadosEmitidosPage() {
 
       <CertificatesList
         listEndpoint="/api/painel/certificates"
-        revokeEndpoint={(id) => `/api/painel/certificates/${id}/revoke`}
+        revokeEndpoint="/api/painel/certificates/{id}/revoke"
       />
     </div>
   )

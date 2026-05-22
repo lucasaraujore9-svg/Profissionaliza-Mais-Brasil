@@ -62,8 +62,8 @@ export default async function AdminSaquesPage() {
         Voltar
       </Link>
       <PageHeader
-        title="Saques de indicacao"
-        description="Aprove ou recuse saques solicitados pelos revendedores."
+        title="Pagamentos de indicacao"
+        description="Comissoes geradas automaticamente no dia configurado. Processe o PIX e marque como pago."
       />
 
       <Card className="overflow-hidden">

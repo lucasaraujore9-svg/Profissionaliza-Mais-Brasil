@@ -64,7 +64,7 @@ export default async function AdminCertificadosPage() {
 
       <CertificatesList
         listEndpoint="/api/admin/certificates"
-        revokeEndpoint={(id) => `/api/admin/certificates/${id}/revoke`}
+        revokeEndpoint="/api/admin/certificates/{id}/revoke"
         tenantOptions={tenantOptions}
         showTenantColumn
       />

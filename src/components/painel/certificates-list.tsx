@@ -28,7 +28,14 @@ export interface TenantOption {
 
 interface Props {
   listEndpoint: string
-  revokeEndpoint: (id: string) => string
+  /**
+   * Template de URL para revogacao. Use `{id}` como placeholder.
+   * Ex: "/api/admin/certificates/{id}/revoke"
+   *
+   * (Server Components nao podem passar funcoes para Client Components,
+   * por isso usamos string template aqui.)
+   */
+  revokeEndpoint: string
   /**
    * Se passado, mostra dropdown de tenants (uso admin).
    */
@@ -108,7 +115,7 @@ export function CertificatesList({
     setRevokeSubmitting(true)
     setRevokeError(null)
     try {
-      const res = await fetch(revokeEndpoint(revoking.id), {
+      const res = await fetch(revokeEndpoint.replace("{id}", revoking.id), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ reason: revokeReason.trim() }),

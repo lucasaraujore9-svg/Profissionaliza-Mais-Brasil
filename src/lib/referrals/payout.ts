@@ -234,21 +234,28 @@ export async function failPayout(
 /**
  * Executado pelo cron mensal (dia X).
  *
- * 1. Promove ReferralCommission PENDING → AVAILABLE quando availableAt <= now().
- * 2. Notifica cada referrer com saldo recem-liberado.
+ * Fluxo AUTOMATICO (revendedor nao solicita saque):
+ *   1. Promove ReferralCommission PENDING → AVAILABLE quando availableAt <= now().
+ *   2. Para cada referrer com saldo AVAILABLE (mesmo abaixo do minimo), cria
+ *      automaticamente um ReferralPayout em status REQUESTED, vinculando as
+ *      comissoes. Admin processa o PIX e marca como PAID via /admin/indicacoes/saques.
+ *   3. Notifica admin (precisa processar) e revendedor (saiu da casinha).
  *
- * MVP: NAO cria payouts automaticamente — revendedor solicita manualmente.
- *
- * Futura melhoria: se Tenant.pixKey preenchido e saldo AVAILABLE >= referralMinPayout,
- * criar automaticamente um ReferralPayout REQUESTED para aprovacao do admin.
+ * Idempotente: comissoes ja vinculadas a um payout (payoutId != null) sao puladas.
  */
 export async function processMonthlyPayouts(): Promise<{
   released: number
+  payoutsCreated: number
   notifiedTenants: number
 }> {
+  const settings = await readSettings()
+  if (!settings.enabled) {
+    return { released: 0, payoutsCreated: 0, notifiedTenants: 0 }
+  }
+
   const now = new Date()
 
-  // Promove PENDING → AVAILABLE para todas que ja venceram
+  // 1. Promove PENDING → AVAILABLE para todas que ja venceram
   const eligible = await prisma.referralCommission.findMany({
     where: {
       status: "PENDING",
@@ -257,35 +264,109 @@ export async function processMonthlyPayouts(): Promise<{
     select: { id: true, referrerTenantId: true, amount: true },
   })
 
-  if (eligible.length === 0) {
-    return { released: 0, notifiedTenants: 0 }
+  if (eligible.length > 0) {
+    await prisma.referralCommission.updateMany({
+      where: { id: { in: eligible.map((c) => c.id) } },
+      data: { status: "AVAILABLE" },
+    })
   }
 
-  await prisma.referralCommission.updateMany({
-    where: { id: { in: eligible.map((c) => c.id) } },
-    data: { status: "AVAILABLE" },
+  // 2. Cria payouts automaticos para todos os referrers com saldo AVAILABLE
+  // (independente do minimo — pagamento e mensal sem solicitacao).
+  // Inclui comissoes que ja estavam AVAILABLE de meses anteriores e ainda nao
+  // tinham payout (raro, mas pode ocorrer se houve falha no cron passado).
+  const availableUnattached = await prisma.referralCommission.findMany({
+    where: {
+      status: "AVAILABLE",
+      payoutId: null,
+    },
+    select: { id: true, referrerTenantId: true, amount: true },
   })
 
-  // Agrupa por referrer para notificar
-  const byReferrer = new Map<string, Prisma.Decimal>()
-  for (const c of eligible) {
-    const prev = byReferrer.get(c.referrerTenantId) ?? new Prisma.Decimal(0)
-    byReferrer.set(c.referrerTenantId, prev.add(c.amount))
+  // Agrupa por referrer
+  const byReferrer = new Map<
+    string,
+    { total: Prisma.Decimal; ids: string[] }
+  >()
+  for (const c of availableUnattached) {
+    const cur = byReferrer.get(c.referrerTenantId) ?? {
+      total: new Prisma.Decimal(0),
+      ids: [],
+    }
+    cur.total = cur.total.add(c.amount)
+    cur.ids.push(c.id)
+    byReferrer.set(c.referrerTenantId, cur)
   }
 
+  let payoutsCreated = 0
   let notifiedTenants = 0
-  for (const [tenantId, total] of byReferrer.entries()) {
+
+  for (const [tenantId, { total, ids }] of byReferrer.entries()) {
+    // Pula referrers que ja tem um payout em aberto (REQUESTED/PROCESSING)
+    const existingPending = await prisma.referralPayout.findFirst({
+      where: {
+        referrerTenantId: tenantId,
+        status: { in: ["REQUESTED", "PROCESSING"] },
+      },
+      select: { id: true },
+    })
+    if (existingPending) continue
+
+    // Carrega PIX cadastrado do tenant (pode ser null — admin vai processar
+    // como MANUAL nesse caso)
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { name: true, pixKey: true, pixKeyType: true },
+    })
+    const hasPix = Boolean(tenant?.pixKey && tenant?.pixKeyType)
+
+    const payout = await prisma.referralPayout.create({
+      data: {
+        referrerTenantId: tenantId,
+        amount: total,
+        method: hasPix ? "ASAAS_PIX" : "MANUAL",
+        status: "REQUESTED",
+        pixKey: tenant?.pixKey ?? null,
+        pixKeyType: tenant?.pixKeyType ?? null,
+        requestedAt: now,
+        notes:
+          "Gerado automaticamente pelo cron mensal (pagamento dia X do mes seguinte).",
+      },
+    })
+
+    await prisma.referralCommission.updateMany({
+      where: { id: { in: ids } },
+      data: { payoutId: payout.id },
+    })
+    payoutsCreated += 1
+
+    // Notifica revendedor
     await createNotification({
       audience: "TENANT",
       tenantId,
       level: "SUCCESS",
-      title: "Comissoes disponiveis para saque",
-      body: `R$ ${total.toFixed(2).replace(".", ",")} liberado(s). Solicite o saque em /painel/indicacoes.`,
+      title: "Comissao de indicacao processada",
+      body: `R$ ${total.toFixed(2).replace(".", ",")} em pagamento. Voce recebera no PIX cadastrado.`,
       category: "referral",
       href: "/painel/indicacoes",
+    })
+
+    // Notifica admin
+    await createNotification({
+      audience: "ROLE",
+      roleTarget: "SUPER_ADMIN",
+      level: "WARNING",
+      title: `Comissao a pagar: ${tenant?.name ?? tenantId}`,
+      body: `R$ ${total.toFixed(2).replace(".", ",")} ${hasPix ? "via PIX" : "(sem PIX cadastrado, pagar manual)"}. Processar em /admin/indicacoes/saques.`,
+      category: "referral",
+      href: "/admin/indicacoes/saques",
     })
     notifiedTenants += 1
   }
 
-  return { released: eligible.length, notifiedTenants }
+  return {
+    released: eligible.length,
+    payoutsCreated,
+    notifiedTenants,
+  }
 }

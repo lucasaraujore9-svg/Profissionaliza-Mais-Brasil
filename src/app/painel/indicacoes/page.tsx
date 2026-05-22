@@ -7,7 +7,6 @@ import { ensureReferralCode } from "@/lib/referrals/code"
 import { summaryForTenant } from "@/lib/referrals/commission"
 import { vitrineDomain } from "@/lib/tenant/urls"
 import { Card } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import {
   Table,
@@ -60,6 +59,28 @@ export default async function PainelIndicacoesPage() {
   })
   if (!tenant) redirect("/painel")
 
+  // Calcula proxima data de pagamento (dia X do mes seguinte, default 20)
+  const settings = await prisma.systemSettings.findUnique({
+    where: { id: "default" },
+    select: { referralPayoutDay: true },
+  })
+  const payoutDay = settings?.referralPayoutDay ?? 20
+  const today = new Date()
+  const nextPayout = new Date(
+    today.getUTCFullYear(),
+    today.getUTCMonth(),
+    payoutDay,
+  )
+  // Se o dia X deste mes ja passou, vai pro mes seguinte
+  if (nextPayout <= today) {
+    nextPayout.setUTCMonth(nextPayout.getUTCMonth() + 1)
+  }
+  const nextPayoutLabel = nextPayout.toLocaleDateString("pt-BR", {
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+  })
+
   const [summary, referrals] = await Promise.all([
     summaryForTenant(tenant.id),
     prisma.tenant.findMany({
@@ -106,29 +127,50 @@ export default async function PainelIndicacoesPage() {
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <SummaryTile label="Indicados ativos" value={String(summary.totalReferrals)} />
-        <SummaryTile label="Pendente" value={formatMoney(summary.pending)} hint="Aguardando data de liberacao" />
+        <SummaryTile label="Pendente" value={formatMoney(summary.pending)} hint="Aguarda data de liberacao" />
         <SummaryTile
-          label="Disponivel"
+          label="A receber"
           value={formatMoney(summary.available)}
-          hint="Pronto para saque"
+          hint={`Pagamento dia ${payoutDay}`}
           highlight
         />
         <SummaryTile label="Total pago" value={formatMoney(summary.paid)} />
       </div>
 
+      <Card className="border-[var(--color-pmb-green-900)]/20 bg-[var(--color-pmb-green-900)]/5 p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-[var(--color-pmb-green-900)]">
+              Pagamento automatico
+            </p>
+            <p className="mt-1 text-sm text-gray-700">
+              Voce nao precisa solicitar saque. As comissoes sao pagas
+              automaticamente todo dia {payoutDay} do mes seguinte ao pagamento
+              do indicado.
+            </p>
+            <p className="mt-2 text-xs text-gray-600">
+              Proximo pagamento: <strong>{nextPayoutLabel}</strong>
+            </p>
+          </div>
+          {!tenant.pixKey ? (
+            <Link
+              href="/painel/configuracoes"
+              className="inline-flex items-center gap-2 rounded-lg bg-[var(--color-pmb-green)] px-3 py-2 text-sm font-semibold text-white hover:bg-[var(--color-pmb-green-700)]"
+            >
+              Cadastrar PIX
+            </Link>
+          ) : (
+            <div className="text-xs text-gray-600">
+              PIX cadastrado: <span className="font-mono">{tenant.pixKeyType}</span>
+            </div>
+          )}
+        </div>
+      </Card>
+
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-base font-semibold text-[var(--color-pmb-green-900)]">
           Seus indicados ({referrals.length})
         </h2>
-        {summary.available > 0 ? (
-          <Link href="/painel/indicacoes/sacar">
-            <Button>Solicitar saque</Button>
-          </Link>
-        ) : (
-          <Button disabled title="Sem saldo disponivel para saque">
-            Solicitar saque
-          </Button>
-        )}
       </div>
 
       {referrals.length === 0 ? (

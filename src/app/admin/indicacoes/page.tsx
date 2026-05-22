@@ -100,7 +100,7 @@ export default async function AdminIndicacoesPage() {
               href="/admin/indicacoes/saques"
               className="font-medium text-[var(--color-pmb-green-900)] underline-offset-4 hover:underline"
             >
-              Saques
+              Pagamentos
             </Link>
           </div>
         }
