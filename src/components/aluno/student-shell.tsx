@@ -12,6 +12,7 @@ import {
   ShoppingBag,
   Bell,
   LogOut,
+  Award,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { NotificationBell } from "@/components/shared/notification-bell"
@@ -25,6 +26,7 @@ interface SessionShape {
 const NAV = [
   { href: "/aluno", label: "Visão geral", icon: LayoutDashboard },
   { href: "/aluno/cursos", label: "Meus cursos", icon: GraduationCap },
+  { href: "/aluno/certificados", label: "Certificados", icon: Award },
   { href: "/aluno/comprar", label: "Comprar curso", icon: ShoppingBag },
   { href: "/aluno/pagamentos", label: "Pagamentos", icon: CreditCard },
   { href: "/aluno/notificacoes", label: "Notificações", icon: Bell },
