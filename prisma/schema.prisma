@@ -122,6 +122,10 @@ model User {
   // Notas de suporte escritas por este usuario
   supportNotes TenantSupportNote[] @relation("SupportNotes")
 
+  // TenantPayments / ReferralPayouts marcados manualmente como pagos por este admin
+  markedTenantPayments  TenantPayment[]  @relation("MarkedTenantPayments")
+  markedReferralPayouts ReferralPayout[] @relation("MarkedReferralPayouts")
+
   // Reset password
   resetToken        String?   @unique @map("reset_token")
   resetTokenExpires DateTime? @map("reset_token_expires")
@@ -637,6 +641,12 @@ model TenantPayment {
   appliedPayoutId    String?              @unique @map("applied_payout_id")
   appliedPayout      ReferralPayout?      @relation("AppliedToTenantPayment", fields: [appliedPayoutId], references: [id])
 
+  // Gestao financeira manual (admin marca pago/anota)
+  notes          String?   @db.Text @map("notes") // anotacoes do financeiro
+  markedPaidAt   DateTime? @map("marked_paid_at") // quando admin marcou manualmente como pago
+  markedPaidById String?   @map("marked_paid_by_id") // userId do admin que marcou
+  markedPaidBy   User?     @relation("MarkedTenantPayments", fields: [markedPaidById], references: [id])
+
   createdAt DateTime @default(now()) @map("created_at")
 
   @@index([tenantId])
@@ -899,6 +909,10 @@ model ReferralPayout {
   asaasTransferId String? @map("asaas_transfer_id")
   failureReason   String? @map("failure_reason")
   notes           String? @db.Text
+
+  // Gestao financeira manual (admin marca/anota)
+  markedPaidById String? @map("marked_paid_by_id")
+  markedPaidBy   User?   @relation("MarkedReferralPayouts", fields: [markedPaidById], references: [id])
 
   // Se method = DESCONTO_MENSALIDADE, a TenantPayment alvo
   appliedToTenantPayment TenantPayment? @relation("AppliedToTenantPayment")

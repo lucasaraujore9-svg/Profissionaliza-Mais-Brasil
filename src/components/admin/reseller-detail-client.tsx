@@ -19,6 +19,11 @@ import {
 import { ResellerSupportNotes } from "./reseller-support-notes"
 import { ResellerImpersonateButton } from "./reseller-impersonate-button"
 import { ResellerBillingEdit } from "./reseller-billing-edit"
+import {
+  ResellerReferralConfig,
+  type ReferralStats,
+  type ReferrerSummary,
+} from "./reseller-referral-config"
 
 interface DetailResponse {
   reseller: ResellerProfileData & {
@@ -29,7 +34,13 @@ interface DetailResponse {
     asaasNextDueDate: string | null
     asaasSubscriptionStatus: string | null
     asaasSubscriptionValue: number | null
+    referralCode: string
+    referralPercent: number | null
+    pixKey: string | null
+    pixKeyType: string | null
   }
+  referrer: ReferrerSummary | null
+  referralStats: ReferralStats
   payments: ResellerPayment[]
   students: ResellerStudentsBreakdown
 }
@@ -115,6 +126,16 @@ export function ResellerDetailClient({ tenantId }: ResellerDetailClientProps) {
         </div>
         <div className="space-y-6">
           <ResellerStudentCount students={data.students} />
+          <ResellerReferralConfig
+            tenantId={tenantId}
+            referralCode={data.reseller.referralCode}
+            referralPercent={data.reseller.referralPercent}
+            pixKey={data.reseller.pixKey}
+            pixKeyType={data.reseller.pixKeyType}
+            referrer={data.referrer}
+            stats={data.referralStats}
+            onSaved={load}
+          />
           <ResellerActionButtons
             tenantId={tenantId}
             status={data.reseller.status}

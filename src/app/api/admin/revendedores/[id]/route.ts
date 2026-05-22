@@ -25,6 +25,7 @@ export async function GET(
     include: {
       owner: { select: { email: true, name: true } },
       accountManager: { select: { id: true, name: true } },
+      referrer: { select: { id: true, name: true, slug: true } },
       tenantPayments: {
         orderBy: { dueDate: "desc" },
         take: 24,
@@ -63,6 +64,59 @@ export async function GET(
   }
 
   const totalStudents = Object.values(studentsMap).reduce((a, b) => a + b, 0)
+
+  // ---- Stats de indicacao ----
+  // defaultPercent vem do SystemSettings; usado quando referralPercent (override) e null.
+  // totalReferrals: tenants indicados por ESTE tenant (qualquer status, exceto CANCELLED).
+  // totalCommissionGenerated: somatorio de comissoes que ESTE tenant gerou para o seu referrer
+  //   (status != CANCELLED). Representa quanto o indicador dele ja recebeu/recebera por causa dele.
+  // totalCommissionReceived: somatorio de comissoes que ESTE tenant ja recebeu (status=PAID)
+  //   por causa de tenants que ele indicou.
+  // totalReferralsPaidToMe: somatorio do que ele tem disponivel + ja pago (AVAILABLE + PAID)
+  //   — view util para o card de pagamento proximo.
+  const [systemSettings, referralsCount, generatedAgg, receivedPaidAgg, receivedAvailableAgg] =
+    await Promise.all([
+      prisma.systemSettings.findUnique({
+        where: { id: "default" },
+        select: { defaultReferralPercent: true, referralPayoutDay: true },
+      }),
+      prisma.tenant.count({ where: { referrerTenantId: id } }),
+      prisma.referralCommission.aggregate({
+        where: {
+          referredTenantId: id,
+          status: { in: ["PENDING", "AVAILABLE", "PAID"] },
+        },
+        _sum: { amount: true },
+      }),
+      prisma.referralCommission.aggregate({
+        where: {
+          referrerTenantId: id,
+          status: "PAID",
+        },
+        _sum: { amount: true },
+      }),
+      prisma.referralCommission.aggregate({
+        where: {
+          referrerTenantId: id,
+          status: { in: ["AVAILABLE", "PAID"] },
+        },
+        _sum: { amount: true },
+      }),
+    ])
+
+  const defaultReferralPercent = Number(
+    systemSettings?.defaultReferralPercent ?? 5,
+  )
+  const referralPayoutDay = systemSettings?.referralPayoutDay ?? 20
+
+  const referralStats = {
+    defaultPercent: defaultReferralPercent,
+    payoutDay: referralPayoutDay,
+    totalReferrals: referralsCount,
+    totalCommissionGenerated: Number(generatedAgg._sum.amount ?? 0),
+    totalCommissionReceived: Number(receivedPaidAgg._sum.amount ?? 0),
+    totalReferralsPaidToMe: Number(receivedAvailableAgg._sum.amount ?? 0),
+  }
 
   // Busca dados atualizados do Asaas: subscription + pagamentos.
   // Falha silenciosamente — front trata campos como null e usa dados do banco.
@@ -203,7 +257,21 @@ export async function GET(
         asaasNextDueDate,
         asaasSubscriptionStatus,
         asaasSubscriptionValue,
+        // Indicacao
+        referralCode: tenant.referralCode,
+        referralPercent:
+          tenant.referralPercent != null ? Number(tenant.referralPercent) : null,
+        pixKey: tenant.pixKey,
+        pixKeyType: tenant.pixKeyType,
       },
+      referrer: tenant.referrer
+        ? {
+            id: tenant.referrer.id,
+            name: tenant.referrer.name,
+            slug: tenant.referrer.slug,
+          }
+        : null,
+      referralStats,
       payments,
       students: {
         total: totalStudents,
