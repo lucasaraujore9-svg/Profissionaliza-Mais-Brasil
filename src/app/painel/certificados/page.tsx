@@ -53,8 +53,14 @@ export default async function PainelCertificadosPage() {
         />
         <SummaryCard
           icon={<Palette className="h-5 w-5" />}
-          label="Template"
-          value={template ? "Configurado" : "Padrão PMB"}
+          label="Layout"
+          value={
+            template?.layout === "MODERN"
+              ? "Moderno"
+              : template?.layout === "MINIMAL"
+                ? "Minimalista"
+                : "Classico"
+          }
           isString
         />
       </div>
@@ -63,8 +69,8 @@ export default async function PainelCertificadosPage() {
         <NavCard
           href="/painel/certificados/template"
           icon={<Palette className="h-5 w-5" />}
-          title="Template visual"
-          description="Personalize o layout, cores, logos e textos do certificado da sua escola."
+          title="Escolher layout"
+          description="Selecione entre os layouts pre-prontos. A logo do certificado e puxada automaticamente da sua escola."
         />
         <NavCard
           href="/painel/certificados/emitidos"

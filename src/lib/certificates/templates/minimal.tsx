@@ -80,7 +80,6 @@ export function MinimalCertificate(data: CertificateRenderData) {
       fontSize: 42,
       fontFamily: "Helvetica-Bold",
       color: t.secondaryColor,
-      letterSpacing: -0.5,
       marginBottom: 18,
     },
     body: {
@@ -92,11 +91,11 @@ export function MinimalCertificate(data: CertificateRenderData) {
     },
     metaRow: {
       flexDirection: "row",
-      gap: 36,
       marginBottom: 36,
     },
     metaItem: {
       maxWidth: 200,
+      marginRight: 36,
     },
     metaLabel: {
       fontSize: 8,

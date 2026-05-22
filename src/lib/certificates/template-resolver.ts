@@ -45,6 +45,28 @@ export const DEFAULT_TEMPLATE: ResolvedTemplate = {
   showSeal: false,
 }
 
+/**
+ * Defaults aplicados a TODAS as unidades (tenants).
+ * Unidades nao customizam textos/cores/uploads — apenas escolhem o layout.
+ * Logo e puxada automaticamente de `tenant.logoUrl`.
+ */
+const UNIT_DEFAULTS: Omit<ResolvedTemplate, "layout" | "logoUrl"> = {
+  primaryColor: DEFAULT_PRIMARY,
+  secondaryColor: DEFAULT_SECONDARY,
+  titleText: "CERTIFICADO DE CONCLUSAO",
+  bodyText:
+    "Certificamos que {nome} concluiu com aproveitamento o curso de {curso}, com carga horaria de {carga_horaria}, em {data_conclusao}.",
+  footerText: null,
+  signerName: null,
+  signerTitle: null,
+  signatureUrl: null,
+  sealUrl: null,
+  backgroundUrl: null,
+  showQrCode: true,
+  showValidationUrl: true,
+  showSeal: false,
+}
+
 function fromPrisma(t: CertificateTemplate, fallbackPrimary?: string | null, fallbackSecondary?: string | null): ResolvedTemplate {
   return {
     layout: t.layout,
@@ -67,35 +89,37 @@ function fromPrisma(t: CertificateTemplate, fallbackPrimary?: string | null, fal
 
 /**
  * Resolve template ativo para um certificado.
- * Ordem: tenant.certificateTemplate (se ativo) -> template global (tenantId=null) -> defaults.
+ *
+ * Regras:
+ * - Unidade (tenantId != null): usa UNIT_DEFAULTS para textos/cores/uploads
+ *   e puxa apenas o `layout` do CertificateTemplate do tenant. A logo e
+ *   automaticamente lida de `tenant.logoUrl` — unidades nao fazem upload.
+ * - PMB (tenantId === null): le o template global (editado pelo SUPER_ADMIN).
+ *   Cai pro DEFAULT_TEMPLATE se nao houver registro.
  */
 export async function resolveCertificateTemplate(
   tenantId: string | null,
 ): Promise<ResolvedTemplate> {
-  // Se ha tenant, tenta template do tenant primeiro (e cores do tenant como fallback de cor)
+  // Unidade — defaults fixos + layout escolhido pelo revendedor + logo do tenant
   if (tenantId) {
-    const [tenantTemplate, tenant] = await Promise.all([
-      prisma.certificateTemplate.findUnique({ where: { tenantId } }),
+    const [tenant, tenantTemplate] = await Promise.all([
       prisma.tenant.findUnique({
         where: { id: tenantId },
-        select: { primaryColor: true, secondaryColor: true, logoUrl: true },
+        select: { logoUrl: true },
+      }),
+      prisma.certificateTemplate.findUnique({
+        where: { tenantId },
+        select: { layout: true },
       }),
     ])
-    if (tenantTemplate && tenantTemplate.isActive) {
-      const resolved = fromPrisma(
-        tenantTemplate,
-        tenant?.primaryColor,
-        tenant?.secondaryColor,
-      )
-      // Se template nao define logo proprio, usa logo do tenant como fallback
-      if (!resolved.logoUrl && tenant?.logoUrl) {
-        resolved.logoUrl = tenant.logoUrl
-      }
-      return resolved
+    return {
+      ...UNIT_DEFAULTS,
+      layout: tenantTemplate?.layout ?? "CLASSIC",
+      logoUrl: tenant?.logoUrl ?? null,
     }
   }
 
-  // Template global PMB
+  // PMB — template global (tenantId=null)
   const global = await prisma.certificateTemplate.findFirst({
     where: { tenantId: null, isActive: true },
   })

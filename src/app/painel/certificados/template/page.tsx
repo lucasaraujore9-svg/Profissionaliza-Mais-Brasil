@@ -2,10 +2,7 @@ import { redirect } from "next/navigation"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { PageHeader } from "@/components/painel/page-header"
-import {
-  CertificateTemplateEditor,
-  type CertificateTemplateData,
-} from "@/components/painel/certificate-template-editor"
+import { CertificateLayoutSelector } from "@/components/painel/certificate-layout-selector"
 
 export const dynamic = "force-dynamic"
 
@@ -20,43 +17,30 @@ export default async function PainelCertificadosTemplatePage() {
 
   const tenantId = user.tenantId
 
-  const template = await prisma.certificateTemplate.findUnique({
-    where: { tenantId },
-  })
+  const [tenant, template] = await Promise.all([
+    prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { name: true, logoUrl: true },
+    }),
+    prisma.certificateTemplate.findUnique({
+      where: { tenantId },
+      select: { layout: true },
+    }),
+  ])
 
-  const initial: CertificateTemplateData | null = template
-    ? {
-        layout: template.layout,
-        backgroundUrl: template.backgroundUrl,
-        logoUrl: template.logoUrl,
-        sealUrl: template.sealUrl,
-        signatureUrl: template.signatureUrl,
-        primaryColor: template.primaryColor,
-        secondaryColor: template.secondaryColor,
-        titleText: template.titleText,
-        bodyText: template.bodyText,
-        footerText: template.footerText,
-        signerName: template.signerName,
-        signerTitle: template.signerTitle,
-        showQrCode: template.showQrCode,
-        showValidationUrl: template.showValidationUrl,
-        showSeal: template.showSeal,
-        isActive: template.isActive,
-      }
-    : null
+  const initialLayout = template?.layout ?? "CLASSIC"
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Template do certificado"
-        description="Edite o layout do certificado que será emitido para os seus alunos."
+        title="Layout do certificado"
+        description="Escolha entre os layouts disponiveis. A logo, o texto e as cores sao padronizados — a logo e puxada automaticamente da sua escola."
       />
 
-      <CertificateTemplateEditor
-        initial={initial}
-        saveEndpoint="/api/painel/certificate-template"
-        uploadEndpoint="/api/painel/certificate-template/upload"
-        scopeLabel="Template da sua escola"
+      <CertificateLayoutSelector
+        initialLayout={initialLayout}
+        tenantLogoUrl={tenant?.logoUrl ?? null}
+        tenantName={tenant?.name ?? "sua escola"}
       />
     </div>
   )

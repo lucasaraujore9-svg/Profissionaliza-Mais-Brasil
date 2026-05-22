@@ -37,6 +37,9 @@ export function ModernCertificate(data: CertificateRenderData) {
       alignItems: "center",
       justifyContent: "space-between",
     },
+    sidebarTop: {
+      alignItems: "center",
+    },
     sidebarLogo: {
       maxWidth: 120,
       maxHeight: 90,
@@ -56,6 +59,9 @@ export function ModernCertificate(data: CertificateRenderData) {
       textAlign: "center",
       letterSpacing: 1.4,
       marginTop: 16,
+    },
+    sidebarUnidadeTop: {
+      marginTop: 0,
     },
     content: {
       flex: 1,
@@ -177,11 +183,11 @@ export function ModernCertificate(data: CertificateRenderData) {
           <Image src={t.backgroundUrl} style={styles.background} />
         ) : null}
         <View style={styles.sidebar}>
-          <View>
+          <View style={styles.sidebarTop}>
             {t.logoUrl ? (
               <Image src={t.logoUrl} style={styles.sidebarLogo} />
             ) : (
-              <Text style={{ ...styles.sidebarUnidade, marginTop: 0 }}>
+              <Text style={[styles.sidebarUnidade, styles.sidebarUnidadeTop]}>
                 {data.unidade}
               </Text>
             )}
@@ -234,10 +240,10 @@ export function ModernCertificate(data: CertificateRenderData) {
             </View>
             <View style={styles.qrBlock}>
               {t.showQrCode && data.qrCodeDataUrl ? (
-                <>
-                  <Image src={data.qrCodeDataUrl} style={styles.qrImage} />
-                  <Text style={styles.qrLabel}>Validacao</Text>
-                </>
+                <Image src={data.qrCodeDataUrl} style={styles.qrImage} />
+              ) : null}
+              {t.showQrCode && data.qrCodeDataUrl ? (
+                <Text style={styles.qrLabel}>Validacao</Text>
               ) : null}
               <Text style={styles.code}>{data.code}</Text>
               {t.showValidationUrl ? (
