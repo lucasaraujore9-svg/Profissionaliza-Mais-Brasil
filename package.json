@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "npm run db:apply-pending && next build",
+    "db:apply-pending": "prisma db execute --file prisma/migrations/20260523_categories_table/migration.sql --schema prisma/schema.prisma",
     "start": "next start",
     "lint": "eslint",
     "email": "email dev --dir src/lib/email/templates --port 3001",
