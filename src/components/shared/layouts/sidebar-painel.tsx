@@ -16,6 +16,7 @@ import {
   ShoppingCart,
   Award,
   Share2,
+  MessageSquare,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -34,6 +35,7 @@ const ALL_ITEMS: {
   { href: "/painel/indicacoes", label: "Indicações", icon: Share2, ownerOnly: true },
   { href: "/painel/certificados", label: "Certificados", icon: Award, ownerOnly: true },
   { href: "/painel/equipe", label: "Equipe", icon: UserCog, ownerOnly: true },
+  { href: "/painel/comunicacao", label: "Comunicação", icon: MessageSquare, ownerOnly: true },
   { href: "/painel/dominio", label: "Domínio", icon: Globe, ownerOnly: true },
   { href: "/painel/vitrine", label: "Vitrine", icon: Palette, ownerOnly: true },
   { href: "/painel/configuracoes", label: "Configurações", icon: Settings, ownerOnly: true },

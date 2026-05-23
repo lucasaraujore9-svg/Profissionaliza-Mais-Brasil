@@ -19,6 +19,7 @@ import {
   LogOut,
   Award,
   Share2,
+  MessageSquare,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -41,6 +42,7 @@ const ALL_ITEMS: {
   { href: "/admin/analytics", label: "Analytics", icon: BarChart3, roles: ["SUPER_ADMIN"] },
   { href: "/admin/relatorios", label: "Relatórios", icon: FileText, roles: ["SUPER_ADMIN", "PMB_SALES", "PMB_RESELLER_MGR"] },
   { href: "/admin/equipe", label: "Equipe", icon: UserCog, roles: ["SUPER_ADMIN"] },
+  { href: "/admin/comunicacao", label: "Comunicação", icon: MessageSquare, roles: ["SUPER_ADMIN"] },
   { href: "/admin/configuracoes", label: "Configurações", icon: Settings, roles: ["SUPER_ADMIN"] },
   { href: "/admin/meu-perfil", label: "Meu perfil", icon: UserCircle, roles: ["SUPER_ADMIN", "PMB_SALES", "PMB_RESELLER_MGR"] },
 ]

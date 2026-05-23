@@ -6,6 +6,71 @@ import type {
 } from "@prisma/client"
 import { sendPushToTarget, sendPushToUsers } from "@/lib/notifications/push-server"
 
+export type NotificationConfigTarget = "TENANT" | "STUDENT" | "ADMIN"
+
+function audienceToConfigTarget(
+  audience: NotificationAudience,
+): NotificationConfigTarget {
+  switch (audience) {
+    case "STUDENT":
+      return "STUDENT"
+    case "TENANT":
+      return "TENANT"
+    case "ROLE":
+    case "USER":
+      return "ADMIN"
+  }
+}
+
+/**
+ * Kill-switch global: se a categoria estiver desligada em
+ * `notification_category_configs` para aquele target, nao cria
+ * notificacao nem dispara push. Categorias sem registro sao tratadas
+ * como ENABLED (compat com automaticos que nao caem no admin UI ainda).
+ */
+async function isCategoryEnabled(
+  target: NotificationConfigTarget,
+  category: string | undefined,
+): Promise<boolean> {
+  if (!category) return true
+  try {
+    const cfg = await prisma.notificationCategoryConfig.findUnique({
+      where: { target_category: { target, category } },
+      select: { enabled: true },
+    })
+    return cfg?.enabled !== false
+  } catch {
+    return true
+  }
+}
+
+/**
+ * Combina kill-switch global (target=STUDENT) com override por tenant.
+ * Regra: global=false bloqueia tudo · global=true + override=false bloqueia
+ * apenas neste tenant · global=true sem override envia normalmente.
+ */
+async function isStudentCategoryEnabled(
+  category: string | undefined,
+  studentId: string,
+): Promise<boolean> {
+  if (!category) return true
+  if (!(await isCategoryEnabled("STUDENT", category))) return false
+  try {
+    const student = await prisma.student.findUnique({
+      where: { id: studentId },
+      select: { tenantId: true },
+    })
+    if (!student?.tenantId) return true
+    const override = await prisma.tenantNotificationOverride.findUnique({
+      where: { tenantId_category: { tenantId: student.tenantId, category } },
+      select: { enabled: true },
+    })
+    return override?.enabled !== false
+  } catch {
+    return true
+  }
+}
+
 /**
  * Cria notificacoes in-app. Existem 4 audiencias:
  *
@@ -85,6 +150,14 @@ export async function createNotification(
   input: CreateNotificationInput,
 ): Promise<void> {
   try {
+    // Para STUDENT, o gate combina global + override por tenant; e feito mais
+    // abaixo, no proprio branch da audience. Para os demais, basta o global.
+    if (
+      input.audience !== "STUDENT" &&
+      !(await isCategoryEnabled(audienceToConfigTarget(input.audience), input.category))
+    ) {
+      return
+    }
     if (input.audience === "TENANT") {
       // Expande para todos os Users do tenant (owner + memberships)
       const [owner, members] = await Promise.all([
@@ -181,6 +254,13 @@ export async function createNotification(
       input.audience === "USER"
         ? { userId: input.userId }
         : { studentId: input.studentId }
+    // Gate global + override por tenant para STUDENT
+    if (
+      input.audience === "STUDENT" &&
+      !(await isStudentCategoryEnabled(input.category, input.studentId))
+    ) {
+      return
+    }
     if (!(await isChannelEnabled("in_app", input.category, target))) {
       return
     }

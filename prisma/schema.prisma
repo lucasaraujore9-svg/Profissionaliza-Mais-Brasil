@@ -252,6 +252,7 @@ model Tenant {
   referralPayouts      ReferralPayout[]
   certificates         Certificate[]
   certificateTemplate  CertificateTemplate?
+  notificationOverrides TenantNotificationOverride[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -888,6 +889,47 @@ model NotificationPreference {
   @@index([userId])
   @@index([studentId])
   @@map("notification_preferences")
+}
+
+// Kill-switch global por (target, categoria) das notificacoes automaticas.
+// Quando enabled=false, `createNotification` ignora aquela combinacao sem
+// criar registro nem enviar push. NotificationPreference por usuario
+// continua valendo em cima do que estiver enabled aqui.
+//
+// target = TENANT | STUDENT | ADMIN — derivado da audience:
+//   STUDENT -> STUDENT
+//   TENANT  -> TENANT
+//   ROLE    -> ADMIN
+//   USER    -> ADMIN (broadcasts manuais e admin tooling)
+model NotificationCategoryConfig {
+  target       String            // TENANT | STUDENT | ADMIN
+  category     String
+  label        String
+  description  String?           @db.Text
+  enabled      Boolean           @default(true)
+  defaultLevel NotificationLevel @default(INFO) @map("default_level")
+  updatedAt    DateTime          @updatedAt @map("updated_at")
+
+  @@id([target, category])
+  @@map("notification_category_configs")
+}
+
+// Override por revenda: cada tenant pode desligar categorias automaticas
+// (target=STUDENT) que vao para os alunos dele. Combinacao com a config
+// global:
+//   global=FALSE                      -> bloqueia para todos
+//   global=TRUE + override=FALSE       -> bloqueia so neste tenant
+//   global=TRUE + sem override         -> envia
+model TenantNotificationOverride {
+  tenantId  String   @map("tenant_id")
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  category  String
+  enabled   Boolean  @default(true)
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@id([tenantId, category])
+  @@index([tenantId])
+  @@map("tenant_notification_overrides")
 }
 
 model SystemSettings {
