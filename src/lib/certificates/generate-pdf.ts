@@ -1,19 +1,22 @@
 import { renderToBuffer } from "@react-pdf/renderer"
 import QRCode from "qrcode"
 import { prisma } from "@/lib/prisma"
-import { appDomain } from "@/lib/tenant/urls"
+import { vitrineDomain } from "@/lib/tenant/urls"
 import { PMB_TENANT_NAME, PMB_TENANT_SLUG } from "@/lib/pmb-config"
 import {
   applyPlaceholders,
   formatCompletionDate,
   type CertificatePlaceholders,
 } from "./placeholders"
-import { readSnapshot } from "./template-resolver"
+import { readSnapshot, refreshGroupBranding } from "./template-resolver"
 import { renderCertificateByLayout } from "./templates"
 import { uploadCertificatePdf } from "./storage"
 
 function validationUrlFor(code: string): string {
-  return `https://${appDomain()}/validar/${code}`
+  // URL publica de validacao do certificado (QR code + texto). Aponta para o
+  // dominio da vitrine (livrecursos.com.br) com prefixo www, que serve a rota
+  // /validar/[code] via proxy.
+  return `https://www.${vitrineDomain()}/validar/${code}`
 }
 
 async function makeQrDataUrl(text: string): Promise<string | null> {
@@ -50,7 +53,10 @@ export async function generateAndUploadPdf(
     throw new Error(`Certificate ${certificateId} nao encontrado`)
   }
 
-  const template = readSnapshot(cert.templateSnapshot)
+  // Snapshot preserva texto/cores/layout. O branding do grupo (logo + nome)
+  // sempre reflete o estado ATUAL do SystemSettings — assim trocar a logo
+  // no admin se propaga em re-emissoes sem precisar editar snapshots antigos.
+  const template = await refreshGroupBranding(readSnapshot(cert.templateSnapshot))
   const unidade = cert.tenantId
     ? cert.tenant?.name ?? PMB_TENANT_NAME
     : PMB_TENANT_NAME
@@ -87,6 +93,8 @@ export async function generateAndUploadPdf(
     qrCodeDataUrl,
     bodyResolved,
     footerResolved,
+    groupLogoUrl: template.groupLogoUrl,
+    groupName: template.groupName,
   })
 
   const buffer = await renderToBuffer(element)

@@ -27,6 +27,16 @@ export interface CertificateRenderData {
    * Texto do rodape ja com placeholders substituidos (ou null).
    */
   footerResolved: string | null
+  /**
+   * Logo do Grupo Bolsa Mais Brasil — selo "powered by" em rodape.
+   * Null = renderiza apenas o texto do `groupName`.
+   */
+  groupLogoUrl: string | null
+  /**
+   * Nome do grupo exibido junto ao selo de plataforma.
+   * Default: "Grupo Bolsa Mais Brasil".
+   */
+  groupName: string
 }
 
 /**
@@ -195,6 +205,26 @@ export function ClassicCertificate(data: CertificateRenderData) {
       height: 78,
       objectFit: "contain",
     },
+    groupBrand: {
+      position: "absolute",
+      bottom: 6,
+      left: 0,
+      right: 0,
+      flexDirection: "column",
+      alignItems: "center",
+    },
+    groupLogo: {
+      maxHeight: 18,
+      maxWidth: 80,
+      objectFit: "contain",
+      marginBottom: 1,
+    },
+    groupText: {
+      fontSize: 7,
+      color: "#9CA3AF",
+      letterSpacing: 1,
+      textAlign: "center",
+    },
   })
 
   return (
@@ -266,6 +296,15 @@ export function ClassicCertificate(data: CertificateRenderData) {
               <Text style={styles.qrLabel}>Escaneie para validar</Text>
             </View>
           ) : null}
+        </View>
+
+        <View style={styles.groupBrand}>
+          {data.groupLogoUrl ? (
+            <Image src={data.groupLogoUrl} style={styles.groupLogo} />
+          ) : null}
+          <Text style={styles.groupText}>
+            Plataforma do {data.groupName}
+          </Text>
         </View>
       </Page>
     </Document>

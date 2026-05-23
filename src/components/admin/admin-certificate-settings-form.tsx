@@ -1,44 +1,68 @@
 "use client"
 
-import { useState } from "react"
-import { Loader2, Save } from "lucide-react"
+import { useRef, useState } from "react"
+import { ImageIcon, Loader2, Save, Trash2, Upload } from "lucide-react"
 
 interface SettingsData {
   certificateAutoIssue: boolean
   certificateMinPercent: number
   certificateRequireCpf: boolean
+  groupLogoUrl: string | null
+  groupName: string
 }
 
 interface Props {
   initial: SettingsData
 }
 
+const DEFAULT_GROUP_NAME = "Grupo Bolsa Mais Brasil"
+
 export function AdminCertificateSettingsForm({ initial }: Props) {
   const [data, setData] = useState<SettingsData>(initial)
+  const [savedSnapshot, setSavedSnapshot] = useState<SettingsData>(initial)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [ok, setOk] = useState(false)
 
+  // Estado de upload da logo do grupo (separado do save geral).
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const [uploading, setUploading] = useState(false)
+  const [removing, setRemoving] = useState(false)
+  const [logoError, setLogoError] = useState<string | null>(null)
+
   const dirty =
-    data.certificateAutoIssue !== initial.certificateAutoIssue ||
-    data.certificateMinPercent !== initial.certificateMinPercent ||
-    data.certificateRequireCpf !== initial.certificateRequireCpf
+    data.certificateAutoIssue !== savedSnapshot.certificateAutoIssue ||
+    data.certificateMinPercent !== savedSnapshot.certificateMinPercent ||
+    data.certificateRequireCpf !== savedSnapshot.certificateRequireCpf ||
+    data.groupName.trim() !== savedSnapshot.groupName.trim()
 
   async function save() {
     setSaving(true)
     setError(null)
     setOk(false)
     try {
+      const payload = {
+        certificateAutoIssue: data.certificateAutoIssue,
+        certificateMinPercent: data.certificateMinPercent,
+        certificateRequireCpf: data.certificateRequireCpf,
+        groupName: data.groupName.trim() || DEFAULT_GROUP_NAME,
+      }
       const res = await fetch("/api/admin/system-settings/certificates", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
+        body: JSON.stringify(payload),
       })
       const body = await res.json()
       if (!res.ok) {
         setError(body.error ?? "Falha ao salvar")
         return
       }
+      const next: SettingsData = {
+        ...data,
+        groupName: payload.groupName,
+      }
+      setData(next)
+      setSavedSnapshot(next)
       setOk(true)
     } catch {
       setError("Erro de rede")
@@ -47,8 +71,162 @@ export function AdminCertificateSettingsForm({ initial }: Props) {
     }
   }
 
+  async function uploadLogo(file: File) {
+    setUploading(true)
+    setLogoError(null)
+    try {
+      const fd = new FormData()
+      fd.append("file", file)
+      const res = await fetch(
+        "/api/admin/system-settings/group-logo/upload",
+        { method: "POST", body: fd },
+      )
+      const body = await res.json()
+      if (!res.ok) {
+        setLogoError(body.error ?? "Falha no upload")
+        return
+      }
+      const newUrl: string | null = body?.data?.url ?? null
+      setData((d) => ({ ...d, groupLogoUrl: newUrl }))
+      setSavedSnapshot((s) => ({ ...s, groupLogoUrl: newUrl }))
+    } catch {
+      setLogoError("Erro de rede no upload")
+    } finally {
+      setUploading(false)
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ""
+      }
+    }
+  }
+
+  async function removeLogo() {
+    if (!data.groupLogoUrl) return
+    setRemoving(true)
+    setLogoError(null)
+    try {
+      const res = await fetch(
+        "/api/admin/system-settings/group-logo/upload",
+        { method: "DELETE" },
+      )
+      const body = await res.json()
+      if (!res.ok) {
+        setLogoError(body.error ?? "Falha ao remover logo")
+        return
+      }
+      setData((d) => ({ ...d, groupLogoUrl: null }))
+      setSavedSnapshot((s) => ({ ...s, groupLogoUrl: null }))
+    } catch {
+      setLogoError("Erro de rede ao remover")
+    } finally {
+      setRemoving(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
+      <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+        <div className="mb-4">
+          <h3 className="text-sm font-semibold text-[var(--color-pmb-green-900)]">
+            Logo do Grupo Bolsa Mais Brasil
+          </h3>
+          <p className="mt-1 text-xs text-gray-600">
+            Imagem usada em <strong>todos</strong> os certificados (PMB e
+            unidades). Aparece junto a logo do revendedor.
+            Recomendado: PNG transparente, proporção horizontal, até 2MB.
+          </p>
+        </div>
+
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+          <div className="flex h-32 w-56 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-dashed border-gray-300 bg-gray-50">
+            {data.groupLogoUrl ? (
+              // Usamos <img> para nao precisar configurar domain no next.config
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={data.groupLogoUrl}
+                alt="Logo do Grupo"
+                className="max-h-full max-w-full object-contain"
+              />
+            ) : (
+              <div className="flex flex-col items-center gap-1 text-gray-400">
+                <ImageIcon className="h-6 w-6" />
+                <span className="text-[10px] uppercase tracking-wide">
+                  Sem logo
+                </span>
+              </div>
+            )}
+          </div>
+
+          <div className="flex-1 space-y-3">
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading || removing}
+                className="inline-flex items-center gap-2 rounded-lg border border-[var(--color-pmb-green)] bg-white px-3 py-2 text-xs font-semibold text-[var(--color-pmb-green-900)] transition-colors hover:bg-[var(--color-pmb-green)] hover:text-white disabled:opacity-50"
+              >
+                {uploading ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Upload className="h-3.5 w-3.5" />
+                )}
+                {data.groupLogoUrl ? "Trocar logo" : "Enviar nova logo"}
+              </button>
+
+              {data.groupLogoUrl && (
+                <button
+                  type="button"
+                  onClick={removeLogo}
+                  disabled={uploading || removing}
+                  className="inline-flex items-center gap-2 rounded-lg border border-red-300 bg-white px-3 py-2 text-xs font-semibold text-red-700 transition-colors hover:bg-red-50 disabled:opacity-50"
+                >
+                  {removing ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-3.5 w-3.5" />
+                  )}
+                  Remover logo
+                </button>
+              )}
+
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0] ?? null
+                  if (file) uploadLogo(file)
+                }}
+              />
+            </div>
+
+            {logoError && (
+              <p className="text-xs font-semibold text-red-700">{logoError}</p>
+            )}
+
+            <div>
+              <label className="text-xs font-semibold text-[var(--color-pmb-green-900)]">
+                Nome do grupo
+              </label>
+              <input
+                type="text"
+                value={data.groupName}
+                maxLength={160}
+                onChange={(e) =>
+                  setData((d) => ({ ...d, groupName: e.target.value }))
+                }
+                placeholder={DEFAULT_GROUP_NAME}
+                className="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-[var(--color-pmb-green)] focus:outline-none focus:ring-1 focus:ring-[var(--color-pmb-green)]"
+              />
+              <p className="mt-1 text-[11px] text-gray-500">
+                Usado no rodape e na assinatura institucional dos certificados.
+              </p>
+            </div>
+          </div>
+        </div>
+
+      </section>
+
       <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
         <ToggleRow
           label="Auto-emitir certificados ao concluir curso"

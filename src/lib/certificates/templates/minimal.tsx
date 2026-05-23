@@ -168,6 +168,26 @@ export function MinimalCertificate(data: CertificateRenderData) {
       right: 90,
       textAlign: "center",
     },
+    groupBrand: {
+      position: "absolute",
+      bottom: 12,
+      left: 90,
+      right: 90,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    groupLogo: {
+      maxHeight: 16,
+      maxWidth: 64,
+      objectFit: "contain",
+      marginRight: 6,
+    },
+    groupText: {
+      fontSize: 7,
+      color: "#9CA3AF",
+      letterSpacing: 1,
+    },
   })
 
   return (
@@ -241,6 +261,15 @@ export function MinimalCertificate(data: CertificateRenderData) {
         {data.footerResolved ? (
           <Text style={styles.footerText}>{data.footerResolved}</Text>
         ) : null}
+
+        <View style={styles.groupBrand}>
+          {data.groupLogoUrl ? (
+            <Image src={data.groupLogoUrl} style={styles.groupLogo} />
+          ) : null}
+          <Text style={styles.groupText}>
+            Plataforma do {data.groupName}
+          </Text>
+        </View>
       </Page>
     </Document>
   )

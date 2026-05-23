@@ -842,6 +842,9 @@ model SystemSettings {
   certificateMinPercent  Int     @default(80) @map("certificate_min_percent") // % minimo na plataforma p/ auto-emissao
   certificateAutoIssue   Boolean @default(true) @map("certificate_auto_issue")
   certificateRequireCpf  Boolean @default(false) @map("certificate_require_cpf") // se true, nao emite sem CPF
+  // Logo do Grupo Bolsa Mais Brasil (aparece em TODOS os certificados — PMB e unidade)
+  groupLogoUrl           String? @map("group_logo_url")
+  groupName              String  @default("Grupo Bolsa Mais Brasil") @map("group_name")
 
   updatedAt DateTime @updatedAt @map("updated_at")
 

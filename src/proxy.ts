@@ -189,6 +189,13 @@ export default async function proxy(request: NextRequest) {
   // Apex da vitrine (livrecursos.com.br/, www.livrecursos.com.br/, ou subdominios
   // reservados como www): renderiza a landing dedicada de captacao em /livrecursos.
   if (host.kind === "vitrine_apex") {
+    // Rotas publicas servidas direto no dominio da vitrine (sem rewrite):
+    //   /validar/[code] → pagina publica de validacao de certificados.
+    // O QR code dos certificados aponta para www.livrecursos.com.br/validar/...
+    if (pathname === "/validar" || pathname.startsWith("/validar/")) {
+      return NextResponse.next()
+    }
+
     const url = request.nextUrl.clone()
     url.pathname = pathname === "/" ? "/livrecursos" : `/livrecursos${pathname}`
     return NextResponse.rewrite(url)

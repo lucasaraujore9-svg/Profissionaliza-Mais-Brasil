@@ -65,6 +65,16 @@ interface Props {
   saveEndpoint: string
   uploadEndpoint: string
   scopeLabel: string
+  /**
+   * Logo do Grupo Bolsa Mais Brasil (selo "powered by") configurada em
+   * SystemSettings pelo admin. Aparece no rodape do preview de todos os
+   * layouts. Null = mostra apenas o texto do `groupName`.
+   */
+  groupLogoUrl?: string | null
+  /**
+   * Nome do grupo exibido junto ao selo. Default "Grupo Bolsa Mais Brasil".
+   */
+  groupName?: string
 }
 
 export function CertificateTemplateEditor({
@@ -72,6 +82,8 @@ export function CertificateTemplateEditor({
   saveEndpoint,
   uploadEndpoint,
   scopeLabel,
+  groupLogoUrl = null,
+  groupName = "Grupo Bolsa Mais Brasil",
 }: Props) {
   const [data, setData] = useState<CertificateTemplateData>(
     initial ?? DEFAULT_TEMPLATE,
@@ -443,7 +455,11 @@ export function CertificateTemplateEditor({
         <h3 className="text-sm font-semibold text-[var(--color-pmb-green-900)]">
           Pré-visualização
         </h3>
-        <CertificatePreview data={data} />
+        <CertificatePreview
+          data={data}
+          groupLogoUrl={groupLogoUrl}
+          groupName={groupName}
+        />
         <p className="text-[11px] text-gray-500">
           Dados mostrados são de exemplo. O certificado real usa os dados do
           aluno e do curso.
@@ -463,7 +479,15 @@ interface SampleData {
   unidade: string
 }
 
-function CertificatePreview({ data }: { data: CertificateTemplateData }) {
+function CertificatePreview({
+  data,
+  groupLogoUrl,
+  groupName,
+}: {
+  data: CertificateTemplateData
+  groupLogoUrl: string | null
+  groupName: string
+}) {
   const sample = useMemo<SampleData>(
     () => ({
       nome: "Maria da Silva",
@@ -498,16 +522,37 @@ function CertificatePreview({ data }: { data: CertificateTemplateData }) {
 
   if (data.layout === "MODERN") {
     return (
-      <ModernPreview data={data} sample={sample} bodyResolved={bodyResolved} footerResolved={footerResolved} />
+      <ModernPreview
+        data={data}
+        sample={sample}
+        bodyResolved={bodyResolved}
+        footerResolved={footerResolved}
+        groupLogoUrl={groupLogoUrl}
+        groupName={groupName}
+      />
     )
   }
   if (data.layout === "MINIMAL") {
     return (
-      <MinimalPreview data={data} sample={sample} bodyResolved={bodyResolved} footerResolved={footerResolved} />
+      <MinimalPreview
+        data={data}
+        sample={sample}
+        bodyResolved={bodyResolved}
+        footerResolved={footerResolved}
+        groupLogoUrl={groupLogoUrl}
+        groupName={groupName}
+      />
     )
   }
   return (
-    <ClassicPreview data={data} sample={sample} bodyResolved={bodyResolved} footerResolved={footerResolved} />
+    <ClassicPreview
+      data={data}
+      sample={sample}
+      bodyResolved={bodyResolved}
+      footerResolved={footerResolved}
+      groupLogoUrl={groupLogoUrl}
+      groupName={groupName}
+    />
   )
 }
 
@@ -516,9 +561,45 @@ interface PreviewVariantProps {
   sample: SampleData
   bodyResolved: string
   footerResolved: string | null
+  groupLogoUrl: string | null
+  groupName: string
 }
 
-function ClassicPreview({ data, sample, bodyResolved, footerResolved }: PreviewVariantProps) {
+function GroupBrandStripe({
+  groupLogoUrl,
+  groupName,
+}: {
+  groupLogoUrl: string | null
+  groupName: string
+}) {
+  return (
+    <div className="pointer-events-none absolute inset-x-0 bottom-1 flex flex-col items-center justify-center gap-0.5 text-gray-400">
+      {groupLogoUrl ? (
+        <div className="relative h-3 w-12 sm:h-4 sm:w-16">
+          <Image
+            src={groupLogoUrl}
+            alt={groupName}
+            fill
+            className="object-contain"
+            unoptimized
+          />
+        </div>
+      ) : null}
+      <span className="text-[6px] sm:text-[7px] tracking-wider">
+        Plataforma do {groupName}
+      </span>
+    </div>
+  )
+}
+
+function ClassicPreview({
+  data,
+  sample,
+  bodyResolved,
+  footerResolved,
+  groupLogoUrl,
+  groupName,
+}: PreviewVariantProps) {
   const primary = data.primaryColor ?? "#16653f"
   const secondary = data.secondaryColor ?? "#0f3d24"
 
@@ -645,11 +726,20 @@ function ClassicPreview({ data, sample, bodyResolved, footerResolved }: PreviewV
           </div>
         </div>
       </div>
+
+      <GroupBrandStripe groupLogoUrl={groupLogoUrl} groupName={groupName} />
     </div>
   )
 }
 
-function ModernPreview({ data, sample, bodyResolved, footerResolved }: PreviewVariantProps) {
+function ModernPreview({
+  data,
+  sample,
+  bodyResolved,
+  footerResolved,
+  groupLogoUrl,
+  groupName,
+}: PreviewVariantProps) {
   const primary = data.primaryColor ?? "#16653f"
   const secondary = data.secondaryColor ?? "#0f3d24"
 
@@ -808,11 +898,20 @@ function ModernPreview({ data, sample, bodyResolved, footerResolved }: PreviewVa
           )}
         </div>
       </div>
+
+      <GroupBrandStripe groupLogoUrl={groupLogoUrl} groupName={groupName} />
     </div>
   )
 }
 
-function MinimalPreview({ data, sample, bodyResolved, footerResolved }: PreviewVariantProps) {
+function MinimalPreview({
+  data,
+  sample,
+  bodyResolved,
+  footerResolved,
+  groupLogoUrl,
+  groupName,
+}: PreviewVariantProps) {
   const primary = data.primaryColor ?? "#16653f"
   const secondary = data.secondaryColor ?? "#0f3d24"
 
@@ -959,6 +1058,8 @@ function MinimalPreview({ data, sample, bodyResolved, footerResolved }: PreviewV
           </div>
         )}
       </div>
+
+      <GroupBrandStripe groupLogoUrl={groupLogoUrl} groupName={groupName} />
     </div>
   )
 }

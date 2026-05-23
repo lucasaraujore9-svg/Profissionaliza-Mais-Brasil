@@ -9,7 +9,17 @@ const schema = z.object({
   certificateAutoIssue: z.boolean().optional(),
   certificateMinPercent: z.number().int().min(50).max(100).optional(),
   certificateRequireCpf: z.boolean().optional(),
+  groupLogoUrl: z.string().url().nullable().optional(),
+  groupName: z.string().trim().min(1).max(160).optional(),
 })
+
+const SELECT = {
+  certificateAutoIssue: true,
+  certificateMinPercent: true,
+  certificateRequireCpf: true,
+  groupLogoUrl: true,
+  groupName: true,
+} as const
 
 export async function GET() {
   const guard = await requireSuperAdmin()
@@ -19,11 +29,7 @@ export async function GET() {
     where: { id: SETTINGS_ID },
     update: {},
     create: { id: SETTINGS_ID },
-    select: {
-      certificateAutoIssue: true,
-      certificateMinPercent: true,
-      certificateRequireCpf: true,
-    },
+    select: SELECT,
   })
 
   return NextResponse.json({ data: row })
@@ -52,6 +58,8 @@ export async function PUT(request: Request) {
     certificateAutoIssue?: boolean
     certificateMinPercent?: number
     certificateRequireCpf?: boolean
+    groupLogoUrl?: string | null
+    groupName?: string
   } = {}
   if (parsed.data.certificateAutoIssue !== undefined) {
     updateData.certificateAutoIssue = parsed.data.certificateAutoIssue
@@ -62,16 +70,18 @@ export async function PUT(request: Request) {
   if (parsed.data.certificateRequireCpf !== undefined) {
     updateData.certificateRequireCpf = parsed.data.certificateRequireCpf
   }
+  if (parsed.data.groupLogoUrl !== undefined) {
+    updateData.groupLogoUrl = parsed.data.groupLogoUrl
+  }
+  if (parsed.data.groupName !== undefined) {
+    updateData.groupName = parsed.data.groupName
+  }
 
   const row = await prisma.systemSettings.upsert({
     where: { id: SETTINGS_ID },
     update: updateData,
     create: { id: SETTINGS_ID, ...updateData },
-    select: {
-      certificateAutoIssue: true,
-      certificateMinPercent: true,
-      certificateRequireCpf: true,
-    },
+    select: SELECT,
   })
 
   return NextResponse.json({ data: row })

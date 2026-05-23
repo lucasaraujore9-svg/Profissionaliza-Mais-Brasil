@@ -22,6 +22,8 @@ export default async function AdminCertificadosConfigPage() {
       certificateAutoIssue: true,
       certificateMinPercent: true,
       certificateRequireCpf: true,
+      groupLogoUrl: true,
+      groupName: true,
     },
   })
 

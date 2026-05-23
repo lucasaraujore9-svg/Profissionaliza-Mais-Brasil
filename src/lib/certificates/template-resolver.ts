@@ -21,10 +21,22 @@ export interface ResolvedTemplate {
   showQrCode: boolean
   showValidationUrl: boolean
   showSeal: boolean
+  /**
+   * Logo do Grupo Bolsa Mais Brasil (selo "powered by") — aparece como
+   * rodape em TODOS os certificados, tanto da vitrine PMB quanto das
+   * unidades/revendedores. Carregado de SystemSettings.groupLogoUrl.
+   */
+  groupLogoUrl: string | null
+  /**
+   * Nome do grupo exibido junto ao selo de plataforma. Carregado de
+   * SystemSettings.groupName (default "Grupo Bolsa Mais Brasil").
+   */
+  groupName: string
 }
 
 const DEFAULT_PRIMARY = "#16653f" // PMB green-700
 const DEFAULT_SECONDARY = "#0f3d24" // PMB green-900
+const DEFAULT_GROUP_NAME = "Grupo Bolsa Mais Brasil"
 
 export const DEFAULT_TEMPLATE: ResolvedTemplate = {
   layout: "CLASSIC",
@@ -43,6 +55,8 @@ export const DEFAULT_TEMPLATE: ResolvedTemplate = {
   showQrCode: true,
   showValidationUrl: true,
   showSeal: false,
+  groupLogoUrl: null,
+  groupName: DEFAULT_GROUP_NAME,
 }
 
 /**
@@ -50,7 +64,10 @@ export const DEFAULT_TEMPLATE: ResolvedTemplate = {
  * Unidades nao customizam textos/cores/uploads — apenas escolhem o layout.
  * Logo e puxada automaticamente de `tenant.logoUrl`.
  */
-const UNIT_DEFAULTS: Omit<ResolvedTemplate, "layout" | "logoUrl"> = {
+const UNIT_DEFAULTS: Omit<
+  ResolvedTemplate,
+  "layout" | "logoUrl" | "groupLogoUrl" | "groupName"
+> = {
   primaryColor: DEFAULT_PRIMARY,
   secondaryColor: DEFAULT_SECONDARY,
   titleText: "CERTIFICADO DE CONCLUSAO",
@@ -67,7 +84,35 @@ const UNIT_DEFAULTS: Omit<ResolvedTemplate, "layout" | "logoUrl"> = {
   showSeal: false,
 }
 
-function fromPrisma(t: CertificateTemplate, fallbackPrimary?: string | null, fallbackSecondary?: string | null): ResolvedTemplate {
+/**
+ * Carrega as configuracoes globais do grupo (logo + nome) do SystemSettings.
+ * Em caso de erro/registro ausente, retorna defaults seguros.
+ */
+async function loadGroupBranding(): Promise<{
+  groupLogoUrl: string | null
+  groupName: string
+}> {
+  try {
+    const row = await prisma.systemSettings.findUnique({
+      where: { id: "default" },
+      select: { groupLogoUrl: true, groupName: true },
+    })
+    return {
+      groupLogoUrl: row?.groupLogoUrl ?? null,
+      groupName: row?.groupName?.trim() || DEFAULT_GROUP_NAME,
+    }
+  } catch {
+    return { groupLogoUrl: null, groupName: DEFAULT_GROUP_NAME }
+  }
+}
+
+function fromPrisma(
+  t: CertificateTemplate,
+  groupLogoUrl: string | null,
+  groupName: string,
+  fallbackPrimary?: string | null,
+  fallbackSecondary?: string | null,
+): ResolvedTemplate {
   return {
     layout: t.layout,
     backgroundUrl: t.backgroundUrl ?? null,
@@ -84,6 +129,8 @@ function fromPrisma(t: CertificateTemplate, fallbackPrimary?: string | null, fal
     showQrCode: t.showQrCode,
     showValidationUrl: t.showValidationUrl,
     showSeal: t.showSeal,
+    groupLogoUrl,
+    groupName,
   }
 }
 
@@ -102,7 +149,7 @@ export async function resolveCertificateTemplate(
 ): Promise<ResolvedTemplate> {
   // Unidade — defaults fixos + layout escolhido pelo revendedor + logo do tenant
   if (tenantId) {
-    const [tenant, tenantTemplate] = await Promise.all([
+    const [tenant, tenantTemplate, branding] = await Promise.all([
       prisma.tenant.findUnique({
         where: { id: tenantId },
         select: { logoUrl: true },
@@ -111,21 +158,33 @@ export async function resolveCertificateTemplate(
         where: { tenantId },
         select: { layout: true },
       }),
+      loadGroupBranding(),
     ])
     return {
       ...UNIT_DEFAULTS,
       layout: tenantTemplate?.layout ?? "CLASSIC",
       logoUrl: tenant?.logoUrl ?? null,
+      groupLogoUrl: branding.groupLogoUrl,
+      groupName: branding.groupName,
     }
   }
 
   // PMB — template global (tenantId=null)
-  const global = await prisma.certificateTemplate.findFirst({
-    where: { tenantId: null, isActive: true },
-  })
-  if (global) return fromPrisma(global)
+  const [global, branding] = await Promise.all([
+    prisma.certificateTemplate.findFirst({
+      where: { tenantId: null, isActive: true },
+    }),
+    loadGroupBranding(),
+  ])
+  if (global) {
+    return fromPrisma(global, branding.groupLogoUrl, branding.groupName)
+  }
 
-  return { ...DEFAULT_TEMPLATE }
+  return {
+    ...DEFAULT_TEMPLATE,
+    groupLogoUrl: branding.groupLogoUrl,
+    groupName: branding.groupName,
+  }
 }
 
 /**
@@ -153,5 +212,28 @@ export function readSnapshot(snapshot: unknown): ResolvedTemplate {
   if (typeof s.showQrCode === "boolean") base.showQrCode = s.showQrCode
   if (typeof s.showValidationUrl === "boolean") base.showValidationUrl = s.showValidationUrl
   if (typeof s.showSeal === "boolean") base.showSeal = s.showSeal
+  if (typeof s.groupLogoUrl === "string" || s.groupLogoUrl === null) {
+    base.groupLogoUrl = (s.groupLogoUrl as string | null) ?? null
+  }
+  if (typeof s.groupName === "string" && s.groupName.trim()) {
+    base.groupName = s.groupName
+  }
   return base
+}
+
+/**
+ * Re-aplica o branding do grupo (logo + nome) atualizado de SystemSettings
+ * em um snapshot ja resolvido. Util quando o admin troca a logo do grupo —
+ * certificados existentes regerados devem mostrar a nova logo, mesmo que o
+ * snapshot original tenha sido salvo com a logo antiga (ou sem logo).
+ */
+export async function refreshGroupBranding(
+  template: ResolvedTemplate,
+): Promise<ResolvedTemplate> {
+  const branding = await loadGroupBranding()
+  return {
+    ...template,
+    groupLogoUrl: branding.groupLogoUrl,
+    groupName: branding.groupName,
+  }
 }

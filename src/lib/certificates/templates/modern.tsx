@@ -174,6 +174,26 @@ export function ModernCertificate(data: CertificateRenderData) {
       color: "#6B7280",
       marginTop: 8,
     },
+    groupBrand: {
+      position: "absolute",
+      bottom: 14,
+      left: 56,
+      right: 56,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    groupLogo: {
+      maxHeight: 18,
+      maxWidth: 70,
+      objectFit: "contain",
+      marginRight: 6,
+    },
+    groupText: {
+      fontSize: 7,
+      color: "#9CA3AF",
+      letterSpacing: 1,
+    },
   })
 
   return (
@@ -255,6 +275,15 @@ export function ModernCertificate(data: CertificateRenderData) {
           {data.footerResolved ? (
             <Text style={styles.footerText}>{data.footerResolved}</Text>
           ) : null}
+
+          <View style={styles.groupBrand}>
+            {data.groupLogoUrl ? (
+              <Image src={data.groupLogoUrl} style={styles.groupLogo} />
+            ) : null}
+            <Text style={styles.groupText}>
+              Plataforma do {data.groupName}
+            </Text>
+          </View>
         </View>
       </Page>
     </Document>
