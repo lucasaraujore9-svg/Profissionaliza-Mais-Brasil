@@ -61,6 +61,12 @@ enum PaymentType {
   MONTHLY // Assinatura mensal
 }
 
+enum CourseVisibility {
+  ALL // disponivel para todos os tenants ativos
+  ALLOWLIST // apenas os tenants em allowedTenantIds
+  DENYLIST // todos exceto os tenants em blockedTenantIds
+}
+
 enum PaymentStatus {
   PENDING
   APPROVED
@@ -301,6 +307,16 @@ model Course {
   categoriaLoja    String? @map("categoria_loja")
   categoryId       String? @map("category_id")
   category         Category? @relation(fields: [categoryId], references: [id])
+
+  // Visibilidade nas vitrines de revendas (independente de hiddenMain, que
+  // controla so a vitrine principal PMB).
+  //   ALL        — disponivel para todos os revendedores ativos (default)
+  //   ALLOWLIST  — apenas os tenants em `allowedTenantIds` veem
+  //   DENYLIST   — todos veem EXCETO os tenants em `blockedTenantIds`
+  // Cada tenant ainda pode ocultar individualmente via TenantCourse.isVisible.
+  visibilityMode    CourseVisibility @default(ALL) @map("visibility_mode")
+  allowedTenantIds  String[]         @default([]) @map("allowed_tenant_ids")
+  blockedTenantIds  String[]         @default([]) @map("blocked_tenant_ids")
 
   // Exibicao
   destaque     Boolean @default(false)

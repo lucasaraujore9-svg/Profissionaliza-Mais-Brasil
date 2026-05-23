@@ -23,6 +23,23 @@ interface ListFilters {
   offset?: number
 }
 
+/**
+ * Filtro aplicado em todas as queries de catalogo do tenant para respeitar
+ * a visibilidade granular (`Course.visibilityMode`):
+ *   - ALL       → todos podem ver (sem restricao)
+ *   - ALLOWLIST → so se o tenant estiver em `allowedTenantIds`
+ *   - DENYLIST  → todos exceto se o tenant estiver em `blockedTenantIds`
+ */
+function visibilityFilter(tenantId: string): Prisma.CourseWhereInput {
+  return {
+    OR: [
+      { visibilityMode: "ALL" },
+      { visibilityMode: "ALLOWLIST", allowedTenantIds: { has: tenantId } },
+      { visibilityMode: "DENYLIST", NOT: { blockedTenantIds: { has: tenantId } } },
+    ],
+  }
+}
+
 export async function listTenantCourses(
   filters: ListFilters,
 ): Promise<{ items: TenantCourseListItem[]; total: number }> {
@@ -31,6 +48,7 @@ export async function listTenantCourses(
     isVisible: true,
     course: {
       status: "ATIVO",
+      ...visibilityFilter(filters.tenantId),
       ...(filters.category && filters.category !== "todos"
         ? {
             categoriaLoja: {
@@ -106,7 +124,7 @@ export async function getTenantCourseBySlug(
       where: {
         tenantId,
         isVisible: true,
-        course: { status: "ATIVO", slug },
+        course: { status: "ATIVO", slug, ...visibilityFilter(tenantId) },
       },
       include: {
         course: {
@@ -162,7 +180,11 @@ export async function getTenantCourseBySlug(
 export async function listTenantCategories(tenantId: string): Promise<string[]> {
   try {
     const result = await prisma.tenantCourse.findMany({
-      where: { tenantId, isVisible: true, course: { status: "ATIVO" } },
+      where: {
+        tenantId,
+        isVisible: true,
+        course: { status: "ATIVO", ...visibilityFilter(tenantId) },
+      },
       select: {
         course: { select: { categoriaLoja: true, categoriaInterna: true } },
       },

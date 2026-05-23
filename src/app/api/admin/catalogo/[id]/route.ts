@@ -17,6 +17,9 @@ const patchSchema = z.object({
   hiddenMain: z.boolean().optional(),
   paymentTypeMain: z.enum(["ONE_TIME", "MONTHLY"]).optional(),
   monthlyMonthsMain: z.number().int().min(1).max(60).nullable().optional(),
+  visibilityMode: z.enum(["ALL", "ALLOWLIST", "DENYLIST"]).optional(),
+  allowedTenantIds: z.array(z.string().cuid()).optional(),
+  blockedTenantIds: z.array(z.string().cuid()).optional(),
 })
 
 export async function GET(
@@ -41,6 +44,9 @@ export async function GET(
       categoriaLoja: true,
       categoryId: true,
       category: { select: { id: true, name: true, slug: true } },
+      visibilityMode: true,
+      allowedTenantIds: true,
+      blockedTenantIds: true,
       status: true,
       capaImageUrl: true,
       precoVitrineMain: true,
@@ -104,6 +110,9 @@ export async function PATCH(
       parcelasOverride: true,
       categoriaLoja: true,
       categoryId: true,
+      visibilityMode: true,
+      allowedTenantIds: true,
+      blockedTenantIds: true,
       status: true,
       hiddenMain: true,
       paymentTypeMain: true,

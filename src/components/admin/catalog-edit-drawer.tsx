@@ -34,6 +34,16 @@ interface CourseDetail {
   hiddenMain: boolean
   paymentTypeMain: "ONE_TIME" | "MONTHLY"
   monthlyMonthsMain: number | null
+  visibilityMode: "ALL" | "ALLOWLIST" | "DENYLIST"
+  allowedTenantIds: string[]
+  blockedTenantIds: string[]
+}
+
+interface TenantLookup {
+  id: string
+  name: string
+  slug: string
+  status: "ACTIVE" | "PENDING" | "SUSPENDED" | "CANCELLED"
 }
 
 type Visibility = "all" | "main_only_hidden" | "none"
@@ -49,6 +59,8 @@ export function CatalogEditDrawer({ courseId, open, onOpenChange, onSaved }: Cat
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [categories, setCategories] = useState<Category[]>([])
+  const [tenants, setTenants] = useState<TenantLookup[]>([])
+  const [tenantFilter, setTenantFilter] = useState("")
   const [categoryDialogOpen, setCategoryDialogOpen] = useState(false)
 
   const loadCategories = useCallback(async () => {
@@ -63,10 +75,23 @@ export function CatalogEditDrawer({ courseId, open, onOpenChange, onSaved }: Cat
     }
   }, [])
 
+  const loadTenants = useCallback(async () => {
+    try {
+      const res = await fetch("/api/admin/catalogo/tenants-lookup")
+      const json = await res.json()
+      if (res.ok && Array.isArray(json.data)) {
+        setTenants(json.data as TenantLookup[])
+      }
+    } catch {
+      // Erro silencioso
+    }
+  }, [])
+
   useEffect(() => {
     if (!courseId || !open) return
     setError(null)
     setDetail(null)
+    setTenantFilter("")
     fetch(`/api/admin/catalogo/${courseId}`)
       .then((r) => r.json())
       .then((b) => {
@@ -75,7 +100,8 @@ export function CatalogEditDrawer({ courseId, open, onOpenChange, onSaved }: Cat
       })
       .catch(() => setError("Erro de rede"))
     loadCategories()
-  }, [courseId, open, loadCategories])
+    loadTenants()
+  }, [courseId, open, loadCategories, loadTenants])
 
   async function handleSave(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -99,6 +125,12 @@ export function CatalogEditDrawer({ courseId, open, onOpenChange, onSaved }: Cat
         detail.paymentTypeMain === "MONTHLY"
           ? detail.monthlyMonthsMain ?? 12
           : null,
+      visibilityMode: detail.visibilityMode,
+      // Envia apenas a lista relevante (zera a outra para evitar lixo)
+      allowedTenantIds:
+        detail.visibilityMode === "ALLOWLIST" ? detail.allowedTenantIds : [],
+      blockedTenantIds:
+        detail.visibilityMode === "DENYLIST" ? detail.blockedTenantIds : [],
     }
     const res = await fetch(`/api/admin/catalogo/${detail.id}`, {
       method: "PATCH",
@@ -470,6 +502,96 @@ export function CatalogEditDrawer({ courseId, open, onOpenChange, onSaved }: Cat
               </div>
             </fieldset>
 
+            {detail.status === "ATIVO" && (
+              <fieldset className="rounded-lg border border-gray-200 p-4">
+                <legend className="px-2 text-xs font-bold uppercase tracking-wide text-gray-600">
+                  Visibilidade nas revendas
+                </legend>
+                <div className="space-y-2.5">
+                  <label className="flex cursor-pointer items-start gap-3 rounded-md p-2 hover:bg-gray-50">
+                    <input
+                      type="radio"
+                      name="visibility-mode"
+                      className="mt-0.5"
+                      checked={detail.visibilityMode === "ALL"}
+                      onChange={() =>
+                        setDetail({ ...detail, visibilityMode: "ALL" })
+                      }
+                    />
+                    <div>
+                      <div className="text-sm font-semibold text-[var(--color-pmb-green-900)]">
+                        Mostrar para todas as revendas
+                      </div>
+                      <div className="text-[11px] text-gray-500">
+                        Comportamento padrão. Todos os revendedores ativos podem
+                        listar este curso na vitrine deles.
+                      </div>
+                    </div>
+                  </label>
+                  <label className="flex cursor-pointer items-start gap-3 rounded-md p-2 hover:bg-gray-50">
+                    <input
+                      type="radio"
+                      name="visibility-mode"
+                      className="mt-0.5"
+                      checked={detail.visibilityMode === "ALLOWLIST"}
+                      onChange={() =>
+                        setDetail({ ...detail, visibilityMode: "ALLOWLIST" })
+                      }
+                    />
+                    <div>
+                      <div className="text-sm font-semibold text-[var(--color-pmb-green-900)]">
+                        Ocultar para todas EXCETO as selecionadas
+                      </div>
+                      <div className="text-[11px] text-gray-500">
+                        Curso exclusivo: só aparece nas revendas marcadas
+                        abaixo.
+                      </div>
+                    </div>
+                  </label>
+                  <label className="flex cursor-pointer items-start gap-3 rounded-md p-2 hover:bg-gray-50">
+                    <input
+                      type="radio"
+                      name="visibility-mode"
+                      className="mt-0.5"
+                      checked={detail.visibilityMode === "DENYLIST"}
+                      onChange={() =>
+                        setDetail({ ...detail, visibilityMode: "DENYLIST" })
+                      }
+                    />
+                    <div>
+                      <div className="text-sm font-semibold text-[var(--color-pmb-green-900)]">
+                        Mostrar para todas EXCETO as selecionadas
+                      </div>
+                      <div className="text-[11px] text-gray-500">
+                        Todos os revendedores listam, exceto os marcados abaixo.
+                      </div>
+                    </div>
+                  </label>
+                </div>
+
+                {detail.visibilityMode !== "ALL" && (
+                  <TenantPicker
+                    tenants={tenants}
+                    selected={
+                      detail.visibilityMode === "ALLOWLIST"
+                        ? detail.allowedTenantIds
+                        : detail.blockedTenantIds
+                    }
+                    onChange={(next) =>
+                      setDetail(
+                        detail.visibilityMode === "ALLOWLIST"
+                          ? { ...detail, allowedTenantIds: next }
+                          : { ...detail, blockedTenantIds: next },
+                      )
+                    }
+                    filter={tenantFilter}
+                    onFilterChange={setTenantFilter}
+                    mode={detail.visibilityMode}
+                  />
+                )}
+              </fieldset>
+            )}
+
             <div className="flex justify-end gap-2 pt-4">
               <button
                 type="button"
@@ -499,5 +621,117 @@ export function CatalogEditDrawer({ courseId, open, onOpenChange, onSaved }: Cat
         }}
       />
     </Sheet>
+  )
+}
+
+interface TenantPickerProps {
+  tenants: TenantLookup[]
+  selected: string[]
+  onChange: (next: string[]) => void
+  filter: string
+  onFilterChange: (q: string) => void
+  mode: "ALLOWLIST" | "DENYLIST"
+}
+
+function TenantPicker({
+  tenants,
+  selected,
+  onChange,
+  filter,
+  onFilterChange,
+  mode,
+}: TenantPickerProps) {
+  const selectedSet = new Set(selected)
+  const filterLower = filter.trim().toLowerCase()
+  const filtered = filterLower
+    ? tenants.filter(
+        (t) =>
+          t.name.toLowerCase().includes(filterLower) ||
+          t.slug.toLowerCase().includes(filterLower),
+      )
+    : tenants
+
+  function toggle(id: string) {
+    if (selectedSet.has(id)) {
+      onChange(selected.filter((s) => s !== id))
+    } else {
+      onChange([...selected, id])
+    }
+  }
+
+  const placeholderText =
+    mode === "ALLOWLIST"
+      ? "Nenhuma revenda selecionada — o curso ficará oculto para TODOS"
+      : "Nenhuma revenda selecionada — comportamento equivale a 'Mostrar para todas'"
+
+  return (
+    <div className="mt-3 rounded-lg border border-gray-200 bg-gray-50 p-3">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[11px] font-bold uppercase tracking-wide text-gray-600">
+          Revendas {mode === "ALLOWLIST" ? "permitidas" : "bloqueadas"} (
+          {selected.length})
+        </p>
+        {selected.length > 0 && (
+          <button
+            type="button"
+            onClick={() => onChange([])}
+            className="text-[11px] text-gray-500 hover:text-rose-600 hover:underline"
+          >
+            Limpar
+          </button>
+        )}
+      </div>
+
+      <input
+        type="search"
+        value={filter}
+        onChange={(e) => onFilterChange(e.target.value)}
+        placeholder="Buscar revenda pelo nome ou slug…"
+        className="mt-2 w-full rounded-md border border-gray-200 bg-white px-2 py-1.5 text-xs focus:border-[var(--color-pmb-green)] focus:outline-none"
+      />
+
+      <div className="mt-2 max-h-44 overflow-y-auto rounded-md border border-gray-200 bg-white">
+        {filtered.length === 0 ? (
+          <p className="p-3 text-center text-[11px] text-gray-500">
+            {tenants.length === 0
+              ? "Nenhuma revenda cadastrada"
+              : "Nenhuma revenda corresponde ao filtro"}
+          </p>
+        ) : (
+          <ul className="divide-y divide-gray-100">
+            {filtered.map((t) => {
+              const checked = selectedSet.has(t.id)
+              return (
+                <li key={t.id}>
+                  <label className="flex cursor-pointer items-center gap-2 px-2 py-1.5 text-xs hover:bg-gray-50">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggle(t.id)}
+                      className="h-3.5 w-3.5"
+                    />
+                    <span className="flex-1 truncate font-medium text-[var(--color-pmb-green-900)]">
+                      {t.name}
+                    </span>
+                    <span className="text-[10px] uppercase text-gray-400">
+                      {t.slug}
+                    </span>
+                    {t.status !== "ACTIVE" && (
+                      <span className="rounded bg-gray-100 px-1 py-0.5 text-[10px] uppercase text-gray-500">
+                        {t.status === "PENDING" ? "pend." : "susp."}
+                      </span>
+                    )}
+                  </label>
+                </li>
+              )
+            })}
+          </ul>
+        )}
+      </div>
+
+      {selected.length === 0 && (
+        <p className="mt-2 text-[11px] italic text-gray-500">{placeholderText}</p>
+      )}
+    </div>
   )
 }
