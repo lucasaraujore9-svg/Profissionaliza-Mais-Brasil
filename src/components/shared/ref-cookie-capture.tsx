@@ -53,8 +53,8 @@ export function RefCookieCapture() {
 
   return (
     <div className="bg-[var(--color-pmb-green-900)] text-white text-center text-sm py-2 px-4">
-      Voce foi indicado por <span className="font-semibold">{tenantName}</span>.
-      Ao se tornar revendedor, ele recebera uma comissao.
+      Você foi indicado por <span className="font-semibold">{tenantName}</span>.
+      Ao se tornar revendedor, ele receberá uma comissão.
     </div>
   )
 }

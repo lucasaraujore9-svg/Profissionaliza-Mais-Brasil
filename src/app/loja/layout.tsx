@@ -55,7 +55,7 @@ export default async function LojaLayout({
         tenantName={tenant?.name ?? null}
       />
       <main className="flex-1">{children}</main>
-      <FooterMain />
+      <FooterMain categorias={categorias} />
     </div>
   )
 }

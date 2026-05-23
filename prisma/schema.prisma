@@ -294,8 +294,13 @@ model Course {
   parcelasSugeridas Int?     @map("parcelas_sugeridas") // Campo "parcelas"
 
   // Categorias
+  // categoriaLoja/categoriaInterna sao o "raw" vindo da plataforma parceira
+  // pelo sync — preservados para audit/match. A categoria EFETIVA usada nas
+  // vitrines, menus e filtros e Category via categoryId.
   categoriaInterna String? @map("categoria_interna")
   categoriaLoja    String? @map("categoria_loja")
+  categoryId       String? @map("category_id")
+  category         Category? @relation(fields: [categoryId], references: [id])
 
   // Exibicao
   destaque     Boolean @default(false)
@@ -331,7 +336,29 @@ model Course {
 
   @@index([status])
   @@index([categoriaLoja])
+  @@index([categoryId])
   @@map("courses")
+}
+
+/// Categorias curadas pelo admin. Sincronizadas a partir de
+/// Course.categoriaLoja (sync da plataforma parceira) mas tambem podem ser
+/// criadas/editadas manualmente. Cursos sem categoryId aparecem em
+/// "sem categoria" e nao listam no menu publico de categorias.
+model Category {
+  id           String  @id @default(cuid())
+  name         String  @unique
+  slug         String  @unique
+  displayOrder Int     @default(0) @map("display_order")
+  isActive     Boolean @default(true) @map("is_active")
+  description  String? @db.Text
+
+  courses Course[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([isActive, displayOrder])
+  @@map("categories")
 }
 
 model CourseLesson {

@@ -1,18 +1,15 @@
 import { ArrowRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { prisma } from "@/lib/prisma"
-import { CountUp } from "./anim/count-up"
 import { HeroMockup } from "./hero-mockup"
 
-const FALLBACK_CURSOS = 100
-
-async function loadCursoCount(): Promise<number> {
+async function loadCursoCount(): Promise<number | null> {
   try {
     const real = await prisma.course.count({ where: { status: "ATIVO" } })
-    return Math.max(real, FALLBACK_CURSOS)
+    return real > 0 ? real : null
   } catch (error) {
-    console.error("[HeroCTA] fallback:", error)
-    return FALLBACK_CURSOS
+    console.error("[HeroCTA] curso count failed:", error)
+    return null
   }
 }
 
@@ -67,8 +64,9 @@ export async function HeroCTA() {
               data-reveal-delay="0.2"
               className="mt-5 max-w-xl text-sm leading-relaxed text-white/85 sm:mt-6 sm:text-base md:text-lg"
             >
-              Empreenda na educação com acesso a mais de {cursos} cursos
-              prontos pra comercializar em todo o Brasil. Site com a sua marca,
+              Empreenda na educação com acesso a um catálogo
+              {cursos ? <> de mais de <strong className="font-bold text-white">{cursos}</strong></> : null} {" "}
+              cursos prontos pra vender em todo o Brasil. Site com a sua marca,
               pagamento direto na sua conta, mensalidade fixa de{" "}
               <strong className="font-bold text-white">R$ 209</strong>. Sem
               CNPJ, sem gravar aula, sem comissão sobre vendas.
@@ -126,14 +124,14 @@ export async function HeroCTA() {
           </aside>
         </div>
 
-        {/* Stats strip — full bleed na borda inferior da seção */}
+        {/* Proof strip — full bleed na borda inferior da seção */}
         <div className="relative -mx-4 grid grid-cols-1 divide-y divide-white/15 border-t border-white/15 sm:grid-cols-3 sm:divide-x sm:divide-y-0 md:-mx-8">
           <div className="px-4 py-5 text-left sm:px-6 sm:py-7 sm:text-center md:px-8 md:py-8" data-reveal>
             <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-yellow-300/80">
-              Cursos no catálogo
+              Catálogo profissionalizante
             </p>
-            <p className="mt-1.5 text-3xl font-black text-white sm:mt-2 md:text-5xl">
-              <CountUp target={cursos} suffix="+" />
+            <p className="mt-1.5 text-base font-bold text-white sm:mt-2 md:text-lg">
+              Cursos prontos, atualizados e com certificado de conclusão
             </p>
           </div>
           <div
@@ -142,10 +140,10 @@ export async function HeroCTA() {
             data-reveal-delay="0.1"
           >
             <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-yellow-300/80">
-              Alunos impactados pelo grupo
+              Suporte do Grupo Bolsa Mais Brasil
             </p>
-            <p className="mt-1.5 text-3xl font-black text-white sm:mt-2 md:text-5xl">
-              <CountUp target={1_500_000} compact suffix="+" />
+            <p className="mt-1.5 text-base font-bold text-white sm:mt-2 md:text-lg">
+              Há mais de uma década na educação profissionalizante
             </p>
           </div>
           <div
@@ -154,10 +152,10 @@ export async function HeroCTA() {
             data-reveal-delay="0.2"
           >
             <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-yellow-300/80">
-              Parceiros em todo o Brasil
+              Operação completa
             </p>
-            <p className="mt-1.5 text-3xl font-black text-white sm:mt-2 md:text-5xl">
-              <CountUp target={3} suffix=" MIL+" />
+            <p className="mt-1.5 text-base font-bold text-white sm:mt-2 md:text-lg">
+              Vitrine, matrícula, pagamento e certificado, tudo automatizado
             </p>
           </div>
         </div>

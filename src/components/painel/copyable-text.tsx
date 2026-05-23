@@ -15,7 +15,7 @@ export function CopyableText({ text }: { text: string }) {
       toast.success("Copiado!")
       setTimeout(() => setCopied(false), 2200)
     } catch {
-      toast.error("Nao foi possivel copiar")
+      toast.error("Não foi possível copiar")
     }
   }
 

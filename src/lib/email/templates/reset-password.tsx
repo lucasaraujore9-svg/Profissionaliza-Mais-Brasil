@@ -77,7 +77,7 @@ const paragraph = {
 }
 
 const button = {
-  backgroundColor: "#3B82F6",
+  backgroundColor: "#025918",
   borderRadius: "8px",
   color: "#FFFFFF",
   fontSize: "16px",

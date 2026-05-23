@@ -196,10 +196,18 @@ export type AsaasWebhookEvent =
   | "PAYMENT_SPLIT_CANCELLED"
   | "PAYMENT_SPLIT_DIVERGENCE_BLOCK"
   | "PAYMENT_SPLIT_DIVERGENCE_BLOCK_FINISHED"
+  | "SUBSCRIPTION_CREATED"
+  | "SUBSCRIPTION_UPDATED"
+  | "SUBSCRIPTION_INACTIVATED"
+  | "SUBSCRIPTION_DELETED"
 
 export interface AsaasWebhookPayload {
   event: AsaasWebhookEvent
-  payment: AsaasPayment
+  // Eventos PAYMENT_* trazem `payment`. Eventos SUBSCRIPTION_* trazem
+  // `subscription` em vez disso. Modelamos ambos opcionais para suportar
+  // os dois fluxos no mesmo handler.
+  payment?: AsaasPayment
+  subscription?: AsaasSubscription
 }
 
 // ── API Error ──

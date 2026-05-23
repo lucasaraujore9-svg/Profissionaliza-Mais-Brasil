@@ -45,16 +45,16 @@ export function InviteTemplate({
   return (
     <Html>
       <Head />
-      <Preview>{`${inviterName} convidou voce para fazer parte da equipe`}</Preview>
+      <Preview>{`${inviterName} convidou você para fazer parte da equipe`}</Preview>
       <Body style={main}>
         <Container style={container}>
           <Heading style={h1}>{headline}</Heading>
-          <Text style={paragraph}>Ola, {userName}.</Text>
+          <Text style={paragraph}>Olá, {userName}.</Text>
           <Text style={paragraph}>
-            {inviterName} convidou voce para atuar como <strong>{label}</strong>.
+            {inviterName} convidou você para atuar como <strong>{label}</strong>.
           </Text>
           <Text style={paragraph}>
-            Clique no botao abaixo para definir sua senha e acessar a plataforma. Este link expira em{" "}
+            Clique no botão abaixo para definir sua senha e acessar a plataforma. Este link expira em{" "}
             <strong>{expirationDays} dias</strong>.
           </Text>
           <Section style={{ textAlign: "center" as const, margin: "32px 0" }}>
@@ -63,7 +63,7 @@ export function InviteTemplate({
             </Button>
           </Section>
           <Text style={footer}>
-            Se voce nao esperava este convite, ignore este email.
+            Se você não esperava este convite, ignore este email.
           </Text>
         </Container>
       </Body>

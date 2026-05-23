@@ -33,7 +33,7 @@ function buildDemoMonthOptions(
   const labelMonths = [
     "Janeiro",
     "Fevereiro",
-    "Marco",
+    "Março",
     "Abril",
     "Maio",
     "Junho",
@@ -61,7 +61,7 @@ function statusLabel(status: string): string {
     case "ACTIVE":
       return "Ativo"
     case "PENDING":
-      return "Aguardando 1o pagamento"
+      return "Aguardando 1º pagamento"
     case "SUSPENDED":
       return "Suspenso"
     case "CANCELLED":
@@ -139,8 +139,8 @@ export default async function PainelIndicacoesPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Indicacoes"
-        description="Indique novos revendedores e ganhe comissoes recorrentes."
+        title="Indicações"
+        description="Indique novos revendedores e ganhe comissões recorrentes."
         actions={
           <Link
             href="/painel/indicacoes/materiais"
@@ -153,14 +153,14 @@ export default async function PainelIndicacoesPage() {
 
       <Card className="p-6">
         <h2 className="text-sm font-semibold text-gray-700 mb-3">
-          Seu link de indicacao
+          Seu link de indicação
         </h2>
         <ReferralLinkCopy link={referralLink} code={referralCode} />
       </Card>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <SummaryTile label="Indicados ativos" value={String(summary.totalReferrals)} />
-        <SummaryTile label="Pendente" value={formatMoney(summary.pending)} hint="Aguarda data de liberacao" />
+        <SummaryTile label="Pendente" value={formatMoney(summary.pending)} hint="Aguarda data de liberação" />
         <SummaryTile
           label="A receber"
           value={formatMoney(summary.available)}
@@ -174,15 +174,15 @@ export default async function PainelIndicacoesPage() {
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <p className="text-sm font-semibold text-[var(--color-pmb-green-900)]">
-              Pagamento automatico
+              Pagamento automático
             </p>
             <p className="mt-1 text-sm text-gray-700">
-              Voce nao precisa solicitar saque. As comissoes sao pagas
-              automaticamente todo dia {payoutDay} do mes seguinte ao pagamento
+              Você não precisa solicitar saque. As comissões são pagas
+              automaticamente todo dia {payoutDay} do mês seguinte ao pagamento
               do indicado.
             </p>
             <p className="mt-2 text-xs text-gray-600">
-              Proximo pagamento: <strong>{nextPayoutLabel}</strong>
+              Próximo pagamento: <strong>{nextPayoutLabel}</strong>
             </p>
           </div>
           {!tenant.pixKey ? (
@@ -205,7 +205,7 @@ export default async function PainelIndicacoesPage() {
             Demonstrativo mensal (PDF)
           </p>
           <p className="mt-1 text-xs text-gray-600">
-            Recibo das comissoes pagas no mes selecionado.
+            Recibo das comissões pagas no mês selecionado.
           </p>
           <form
             method="get"
@@ -213,7 +213,7 @@ export default async function PainelIndicacoesPage() {
             className="mt-3 flex flex-wrap items-center gap-2"
           >
             <label htmlFor="demo-month" className="sr-only">
-              Mes de referencia
+              Mês de referência
             </label>
             <select
               id="demo-month"
@@ -245,7 +245,7 @@ export default async function PainelIndicacoesPage() {
 
       {referrals.length === 0 ? (
         <Card className="p-8 text-center text-sm text-gray-500">
-          Voce ainda nao tem indicados. Compartilhe seu link acima.
+          Você ainda não tem indicados. Compartilhe seu link acima.
         </Card>
       ) : (
         <Card className="overflow-hidden">

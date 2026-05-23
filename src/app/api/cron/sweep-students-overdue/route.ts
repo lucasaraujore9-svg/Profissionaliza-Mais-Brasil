@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { blockStudentInEA } from "@/lib/students/plataforma-actions"
 import { createNotification } from "@/lib/notifications"
 
-export const maxDuration = 60
+export const maxDuration = 300
 export const dynamic = "force-dynamic"
 
 function authorized(request: Request): boolean {
@@ -72,10 +72,13 @@ async function processOverdueStudents() {
     if (!enrollment.startedAt || !enrollment.installmentsTotal) continue
     if (enrollment.installmentsPaid >= enrollment.installmentsTotal) continue
 
-    // Vencimento esperado da proxima parcela
+    // Vencimento esperado da proxima parcela: cada parcela paga corresponde
+    // a um mes inteiro. Aluno com `installmentsPaid=1` (1a parcela paga ao
+    // comprar) e `startedAt=Jan/1` tem proxima parcela em Fev/1 — entao o
+    // offset e exatamente `installmentsPaid` meses a partir de `startedAt`.
     const expectedNextDue = new Date(enrollment.startedAt)
     expectedNextDue.setMonth(
-      expectedNextDue.getMonth() + enrollment.installmentsPaid + 1,
+      expectedNextDue.getMonth() + enrollment.installmentsPaid,
     )
     const ageDays = Math.floor(
       (now.getTime() - expectedNextDue.getTime()) / (1000 * 60 * 60 * 24),
@@ -97,7 +100,7 @@ async function processOverdueStudents() {
         if (e.installmentsPaid >= e.installmentsTotal) return true
         if (!e.startedAt) return true
         const due = new Date(e.startedAt)
-        due.setMonth(due.getMonth() + e.installmentsPaid + 1)
+        due.setMonth(due.getMonth() + e.installmentsPaid)
         return now.getTime() < due.getTime() + STUDENT_GRACE_DAYS * 86400_000
       })
 

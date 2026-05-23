@@ -58,8 +58,9 @@ export default async function StudentCoursesPage() {
     orderBy: { createdAt: "desc" },
   })
 
-  const plataformaLoginUrl =
-    process.env.EA_STUDENT_LOGIN_URL ?? "https://escolaavancada.com.br/aluno"
+  // Sem fallback: se a env nao estiver configurada, escondemos o CTA externo
+  // em vez de vazar a URL da plataforma parceira (quebra o white-label).
+  const plataformaLoginUrl = process.env.EA_STUDENT_LOGIN_URL?.trim() || null
 
   return (
     <div className="space-y-6">
@@ -158,7 +159,8 @@ export default async function StudentCoursesPage() {
                           Baixar certificado
                         </a>
                       ) : null}
-                      {e.status === "ACTIVE" || e.status === "COMPLETED" ? (
+                      {plataformaLoginUrl &&
+                      (e.status === "ACTIVE" || e.status === "COMPLETED") ? (
                         <a
                           href={plataformaLoginUrl}
                           target="_blank"

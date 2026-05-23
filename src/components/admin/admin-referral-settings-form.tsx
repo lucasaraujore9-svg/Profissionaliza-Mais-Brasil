@@ -33,7 +33,7 @@ export function AdminReferralSettingsForm({
       return
     }
     if (form.referralMinPayout < 0) {
-      toast.error("Saque minimo invalido")
+      toast.error("Saque mínimo inválido")
       return
     }
     if (form.referralPayoutDay < 1 || form.referralPayoutDay > 28) {
@@ -52,7 +52,7 @@ export function AdminReferralSettingsForm({
         toast.error(body.error ?? "Falha ao salvar")
         return
       }
-      toast.success("Configuracoes atualizadas")
+      toast.success("Configurações atualizadas")
       router.refresh()
     })
   }
@@ -68,15 +68,15 @@ export function AdminReferralSettingsForm({
               setForm((f) => ({ ...f, referralEnabled: e.target.checked }))
             }
           />
-          Programa de indicacao ativo
+          Programa de indicação ativo
         </Label>
         <p className="text-xs text-gray-500">
-          Quando desativado, novas comissoes deixam de ser geradas.
+          Quando desativado, novas comissões deixam de ser geradas.
         </p>
       </div>
 
       <div className="space-y-2">
-        <Label>Percentual padrao (%)</Label>
+        <Label>Percentual padrão (%)</Label>
         <Input
           type="number"
           step="0.01"
@@ -96,7 +96,7 @@ export function AdminReferralSettingsForm({
       </div>
 
       <div className="space-y-2">
-        <Label>Valor minimo de saque (R$)</Label>
+        <Label>Valor mínimo de saque (R$)</Label>
         <Input
           type="number"
           step="0.01"
@@ -126,14 +126,14 @@ export function AdminReferralSettingsForm({
           }
         />
         <p className="text-xs text-gray-500">
-          Comissoes referentes a pagamentos do mes M ficam disponiveis no dia
-          escolhido do mes M+1.
+          Comissões referentes a pagamentos do mês M ficam disponíveis no dia
+          escolhido do mês M+1.
         </p>
       </div>
 
       <div className="flex justify-end">
         <Button onClick={submit} disabled={pending}>
-          {pending ? "Salvando..." : "Salvar configuracoes"}
+          {pending ? "Salvando..." : "Salvar configurações"}
         </Button>
       </div>
     </Card>

@@ -1,6 +1,13 @@
+// CSV/Excel: celulas que comecam com `=`, `+`, `-`, `@` ou TAB sao
+// interpretadas como formula pelo Excel/LibreOffice e podem executar
+// codigo (CVE conhecido como "CSV injection" / "Formula injection").
+// Prefixamos com `'` para neutralizar — o caractere e descartado na exibicao.
 export function escapeCsv(value: unknown): string {
   if (value === null || value === undefined) return ""
-  const str = String(value)
+  let str = String(value)
+  if (/^[=+\-@\t\r]/.test(str)) {
+    str = "'" + str
+  }
   if (/[",\n;]/.test(str)) {
     return `"${str.replace(/"/g, '""')}"`
   }

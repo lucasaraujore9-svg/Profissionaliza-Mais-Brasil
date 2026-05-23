@@ -10,7 +10,21 @@ interface AnalyticsChartsProps {
   data: AnalyticsChartsData
 }
 
-const DONUT_COLORS = ["#3B82F6", "#10B981", "#F59E0B", "#6366F1", "#F97316", "#14B8A6"]
+// Paleta PMB para charts. Verde principal, dourado de destaque e tons
+// derivados — alinhada ao restante do app.
+const PMB_GREEN = "#025918"
+const PMB_GOLD = "#F2B705"
+const PMB_LIME = "#7EBC2D"
+const PMB_GREEN_700 = "#024212"
+const PMB_GREEN_900 = "#011F08"
+const DONUT_COLORS = [
+  PMB_GREEN,
+  PMB_GOLD,
+  PMB_LIME,
+  PMB_GREEN_700,
+  "#A88500",
+  "#3B7A1F",
+]
 
 interface ChartWrapperProps {
   title: string
@@ -158,15 +172,15 @@ export function AnalyticsCharts({ data }: AnalyticsChartsProps) {
   return (
     <div className="grid gap-6 lg:grid-cols-2 xl:grid-cols-3">
       <ChartWrapper title="Receita mensal" subtitle={`Pagamentos · ${monthsLabel}`}>
-        <LineChart values={data.revenueByMonth} color="#3B82F6" />
+        <LineChart values={data.revenueByMonth} color={PMB_GREEN} />
       </ChartWrapper>
       <ChartWrapper title="Crescimento de alunos" subtitle={`Matrículas · ${monthsLabel}`}>
-        <LineChart values={data.studentsByMonth} color="#10B981" />
+        <LineChart values={data.studentsByMonth} color={PMB_LIME} />
       </ChartWrapper>
       <ChartWrapper title="Conversão checkout" subtitle="% por mês">
         <BarChart
           values={data.conversionByMonth}
-          color="linear-gradient(180deg, #6366F1, #3B82F6)"
+          color={`linear-gradient(180deg, ${PMB_GREEN_900}, ${PMB_GREEN})`}
         />
       </ChartWrapper>
       <ChartWrapper title="Distribuição revendedores" subtitle="Por valor de plano">

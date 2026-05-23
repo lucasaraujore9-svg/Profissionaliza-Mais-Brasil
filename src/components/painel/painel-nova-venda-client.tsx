@@ -113,7 +113,7 @@ export function PainelNovaVendaClient({ courses }: { courses: CourseOption[] }) 
             <a
               href={created.initPoint}
               target="_blank"
-              rel="noreferrer"
+              rel="noopener noreferrer"
               className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-pmb-green)] px-4 py-2.5 text-xs font-bold text-white hover:bg-[var(--color-pmb-green-700)]"
             >
               Abrir link de pagamento

@@ -1,30 +1,23 @@
 import { ArrowRight, Quote } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { CountUp } from "./anim/count-up"
 
-interface Numero {
-  valor: number
-  compact?: boolean
-  suffix: string
+interface Pilar {
+  titulo: string
   rotulo: string
 }
 
-const numeros: Numero[] = [
+const pilares: Pilar[] = [
   {
-    valor: 1_500_000,
-    compact: true,
-    suffix: "+",
-    rotulo: "vidas transformadas",
+    titulo: "Educação que muda vidas",
+    rotulo: "nossa missão desde o começo",
   },
   {
-    valor: 3,
-    suffix: " MIL+",
-    rotulo: "parceiros no Brasil",
+    titulo: "Rede de parceiros no Brasil",
+    rotulo: "empreendendo com a nossa marca",
   },
   {
-    valor: 100,
-    suffix: "+",
-    rotulo: "cursos profissionalizantes",
+    titulo: "Catálogo profissionalizante",
+    rotulo: "pronto para você comercializar",
   },
 ]
 
@@ -54,16 +47,16 @@ export function ManifestoFundador() {
         </header>
 
         <div className="mt-14 grid grid-cols-1 gap-y-3 lg:grid-cols-3 lg:gap-x-10" data-stagger>
-          {numeros.map((n) => (
+          {pilares.map((p) => (
             <div
-              key={n.rotulo}
+              key={p.titulo}
               className="border-t border-[var(--color-pmb-green-900)]/10 pt-4"
             >
-              <p className="text-5xl font-black tracking-tight text-[var(--color-pmb-green-900)] md:text-6xl">
-                <CountUp target={n.valor} compact={n.compact} suffix={n.suffix} />
+              <p className="text-2xl font-black leading-tight tracking-tight text-[var(--color-pmb-green-900)] md:text-3xl">
+                {p.titulo}
               </p>
-              <p className="mt-1 font-mono text-[11px] uppercase tracking-[0.2em] text-gray-500">
-                {n.rotulo}
+              <p className="mt-2 font-mono text-[11px] uppercase tracking-[0.2em] text-gray-500">
+                {p.rotulo}
               </p>
             </div>
           ))}
@@ -79,8 +72,8 @@ export function ManifestoFundador() {
             </p>
             <p className="text-base leading-relaxed text-gray-800 md:text-lg">
               Você vai ter um portal próprio, totalmente personalizado com as
-              suas cores, sua logomarca e seu endereço eletrônico, com mais de
-              100 cursos profissionalizantes pra comercializar. E o melhor:{" "}
+              suas cores, sua logomarca e seu endereço eletrônico, com um
+              catálogo amplo de cursos profissionalizantes pra comercializar. E o melhor:{" "}
               <strong className="text-[var(--color-pmb-green-900)]">
                 você mesmo define o preço de cada curso
               </strong>

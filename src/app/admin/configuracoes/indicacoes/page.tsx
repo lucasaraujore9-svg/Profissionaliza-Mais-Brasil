@@ -32,12 +32,12 @@ export default async function AdminReferralSettingsPage() {
         className="inline-flex items-center gap-2 text-xs font-semibold text-gray-600 hover:text-[var(--color-pmb-green-900)]"
       >
         <ArrowLeft className="h-3.5 w-3.5" />
-        Voltar para configuracoes
+        Voltar para configurações
       </Link>
 
       <PageHeader
-        title="Configuracoes do programa de indicacao"
-        description="Defina o percentual padrao, valor minimo de saque e o dia do mes em que comissoes ficam disponiveis."
+        title="Configurações do programa de indicação"
+        description="Defina o percentual padrão, valor mínimo de saque e o dia do mês em que comissões ficam disponíveis."
       />
 
       <AdminReferralSettingsForm

@@ -62,8 +62,8 @@ export default async function AdminSaquesPage() {
         Voltar
       </Link>
       <PageHeader
-        title="Pagamentos de indicacao"
-        description="Comissoes geradas automaticamente no dia configurado. Processe o PIX e marque como pago."
+        title="Pagamentos de indicação"
+        description="Comissões geradas automaticamente no dia configurado. Processe o PIX e marque como pago."
       />
 
       <Card className="overflow-hidden">
@@ -73,10 +73,10 @@ export default async function AdminSaquesPage() {
               <TableHead>Solicitado em</TableHead>
               <TableHead>Indicador</TableHead>
               <TableHead className="text-right">Valor</TableHead>
-              <TableHead>Metodo</TableHead>
+              <TableHead>Método</TableHead>
               <TableHead>Chave</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead className="text-right">Acoes</TableHead>
+              <TableHead className="text-right">Ações</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>

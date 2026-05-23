@@ -16,6 +16,8 @@ build/
 .env.development.local
 .env.test.local
 .env.production.local
+# Output do `vercel env pull` (contem secrets exportados)
+.env.vercel.*
 
 # MCP config (contem tokens sensiveis)
 .mcp.json
@@ -41,6 +43,9 @@ prisma/*.db
 
 # Vercel
 .vercel
+
+# Claude Code runtime
+.claude/scheduled_tasks.lock
 
 # Stitch designs (HTMLs pesados)
 .stitch/designs/*.html

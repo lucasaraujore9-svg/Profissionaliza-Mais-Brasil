@@ -9,6 +9,18 @@
       "schedule": "0 7 * * *"
     },
     {
+      "path": "/api/cron/sweep-tenants-overdue",
+      "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/cron/sweep-students-overdue",
+      "schedule": "30 3 * * *"
+    },
+    {
+      "path": "/api/cron/reactivate-paid",
+      "schedule": "0 4 * * *"
+    },
+    {
       "path": "/api/cron/referral-monthly-payout",
       "schedule": "0 5 20 * *"
     }

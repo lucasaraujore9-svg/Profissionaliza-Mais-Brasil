@@ -1,8 +1,13 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
+import { Settings2 } from "lucide-react"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet"
 import { appDomain } from "@/lib/tenant/urls"
+import {
+  CategoryManagerDialog,
+  type Category,
+} from "./category-manager-dialog"
 
 export interface CatalogEditDrawerProps {
   courseId: string | null
@@ -21,6 +26,8 @@ interface CourseDetail {
   descricaoOverride: string | null
   capaOverride: string | null
   categoriaLoja: string | null
+  categoryId: string | null
+  category: { id: string; name: string; slug: string } | null
   status: string
   parcelasSugeridas: number | null
   parcelasOverride: number | null
@@ -41,6 +48,20 @@ export function CatalogEditDrawer({ courseId, open, onOpenChange, onSaved }: Cat
   const [detail, setDetail] = useState<CourseDetail | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [categories, setCategories] = useState<Category[]>([])
+  const [categoryDialogOpen, setCategoryDialogOpen] = useState(false)
+
+  const loadCategories = useCallback(async () => {
+    try {
+      const res = await fetch("/api/admin/catalogo/categorias")
+      const json = await res.json()
+      if (res.ok && Array.isArray(json.data)) {
+        setCategories(json.data as Category[])
+      }
+    } catch {
+      // Erro silencioso: select fica com a lista atual.
+    }
+  }, [])
 
   useEffect(() => {
     if (!courseId || !open) return
@@ -53,7 +74,8 @@ export function CatalogEditDrawer({ courseId, open, onOpenChange, onSaved }: Cat
         else setError(b.error ?? "Falha ao carregar curso")
       })
       .catch(() => setError("Erro de rede"))
-  }, [courseId, open])
+    loadCategories()
+  }, [courseId, open, loadCategories])
 
   async function handleSave(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -69,6 +91,7 @@ export function CatalogEditDrawer({ courseId, open, onOpenChange, onSaved }: Cat
       capaOverride: detail.capaOverride,
       parcelasOverride: detail.parcelasOverride,
       categoriaLoja: detail.categoriaLoja,
+      categoryId: detail.categoryId,
       status: visibility === "none" ? "INATIVO" : "ATIVO",
       hiddenMain: visibility === "main_only_hidden",
       paymentTypeMain: detail.paymentTypeMain,
@@ -282,15 +305,43 @@ export function CatalogEditDrawer({ courseId, open, onOpenChange, onSaved }: Cat
             </div>
 
             <div>
-              <label className="text-xs font-semibold text-gray-700">Categoria loja</label>
-              <input
-                type="text"
-                value={detail.categoriaLoja ?? ""}
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold text-gray-700">
+                  Categoria
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setCategoryDialogOpen(true)}
+                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-[var(--color-pmb-green)] hover:underline"
+                >
+                  <Settings2 className="h-3 w-3" />
+                  Gerenciar categorias
+                </button>
+              </div>
+              <select
+                value={detail.categoryId ?? ""}
                 onChange={(e) =>
-                  setDetail({ ...detail, categoriaLoja: e.target.value === "" ? null : e.target.value })
+                  setDetail({
+                    ...detail,
+                    categoryId: e.target.value === "" ? null : e.target.value,
+                  })
                 }
-                className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-              />
+                className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-[var(--color-pmb-green)] focus:outline-none"
+              >
+                <option value="">— Sem categoria —</option>
+                {categories.map((cat) => (
+                  <option key={cat.id} value={cat.id}>
+                    {cat.name}
+                    {!cat.isActive ? " (inativa)" : ""}
+                  </option>
+                ))}
+              </select>
+              {detail.categoriaLoja && (
+                <p className="mt-1 text-[11px] text-gray-500">
+                  Categoria original do sync:{" "}
+                  <span className="font-mono">{detail.categoriaLoja}</span>
+                </p>
+              )}
             </div>
 
             <div>
@@ -439,6 +490,14 @@ export function CatalogEditDrawer({ courseId, open, onOpenChange, onSaved }: Cat
           ) : null}
         </div>
       </SheetContent>
+
+      <CategoryManagerDialog
+        open={categoryDialogOpen}
+        onOpenChange={setCategoryDialogOpen}
+        onChanged={() => {
+          loadCategories()
+        }}
+      />
     </Sheet>
   )
 }

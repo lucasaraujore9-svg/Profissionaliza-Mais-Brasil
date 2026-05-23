@@ -71,15 +71,38 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           const isValid = await compare(parsed.data.password, user.passwordHash)
           if (!isValid) return null
 
+          // Consultor convidado por revendedor: o User e criado com
+          // role=RESELLER mas SEM tenantId direto — o vinculo vive em
+          // TenantMember. Buscamos a membership ativa para popular tenantId
+          // no JWT, caso contrario requireResellerSession sempre rejeita.
+          let effectiveTenantId = user.tenantId
+          let effectiveTenantStatus = user.tenant?.status ?? null
+          let memberRole: "owner" | "consultant" | null =
+            user.tenantId ? "owner" : null
+
+          if (!effectiveTenantId && user.role === "RESELLER") {
+            const membership = await prisma.tenantMember.findFirst({
+              where: { userId: user.id, status: "ATIVO" },
+              include: { tenant: { select: { id: true, status: true } } },
+              orderBy: { createdAt: "asc" },
+            })
+            if (membership?.tenant) {
+              effectiveTenantId = membership.tenant.id
+              effectiveTenantStatus = membership.tenant.status
+              memberRole = "consultant"
+            }
+          }
+
           return {
             id: user.id,
             email: user.email,
             name: user.name,
             role: user.role,
-            tenantId: user.tenantId,
+            tenantId: effectiveTenantId,
             studentId: null,
             mustChangePassword: user.mustChangePassword,
-            tenantStatus: user.tenant?.status ?? null,
+            tenantStatus: effectiveTenantStatus,
+            memberRole,
           }
         }
 
@@ -140,6 +163,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           (user as { mustChangePassword?: boolean }).mustChangePassword ?? false
         token.tenantStatus =
           (user as { tenantStatus?: string | null }).tenantStatus ?? null
+        token.memberRole =
+          (user as { memberRole?: "owner" | "consultant" | null }).memberRole ??
+          null
       }
       return token
     },
@@ -155,6 +181,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           (token.mustChangePassword as boolean | undefined) ?? false
         ;(session.user as unknown as { tenantStatus: string | null }).tenantStatus =
           (token.tenantStatus as string | null | undefined) ?? null
+        ;(session.user as unknown as {
+          memberRole: "owner" | "consultant" | null
+        }).memberRole =
+          (token.memberRole as "owner" | "consultant" | null | undefined) ??
+          null
       }
       return session
     },

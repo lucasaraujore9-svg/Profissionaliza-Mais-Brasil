@@ -3,6 +3,7 @@ import { randomBytes } from "node:crypto"
 import { z, ZodError } from "zod"
 import { prisma } from "@/lib/prisma"
 import { sendEmail } from "@/lib/email/resend"
+import { rateLimit, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
 
 const RESET_EXPIRATION_MINUTES = 5
 
@@ -11,6 +12,9 @@ const schema = z.object({
 })
 
 export async function POST(request: Request) {
+  const rl = await rateLimit(request, RATE_LIMITS.authForgot)
+  if (!rl.ok) return rateLimitResponse(rl)
+
   let payload: unknown
   try {
     payload = await request.json()

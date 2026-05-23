@@ -103,8 +103,8 @@ export default async function AdminComissoesPage({
       </Link>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <PageHeader
-          title="Comissoes"
-          description="Historico de comissoes geradas pelo programa de indicacao."
+          title="Comissões"
+          description="Histórico de comissões geradas pelo programa de indicação."
         />
         <a
           href={exportHref}
@@ -132,7 +132,7 @@ export default async function AdminComissoesPage({
           </select>
         </label>
         <label className="flex items-center gap-2">
-          Periodo:
+          Período:
           <select
             name="days"
             defaultValue={sp.days ?? "90"}
@@ -163,8 +163,8 @@ export default async function AdminComissoesPage({
               <TableHead>Indicado</TableHead>
               <TableHead className="text-right">Base</TableHead>
               <TableHead className="text-right">%</TableHead>
-              <TableHead className="text-right">Comissao</TableHead>
-              <TableHead>Liberacao</TableHead>
+              <TableHead className="text-right">Comissão</TableHead>
+              <TableHead>Liberação</TableHead>
               <TableHead>Status</TableHead>
             </TableRow>
           </TableHeader>
@@ -172,7 +172,7 @@ export default async function AdminComissoesPage({
             {commissions.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={8} className="text-center text-sm text-gray-500 py-8">
-                  Nenhuma comissao encontrada.
+                  Nenhuma comissão encontrada.
                 </TableCell>
               </TableRow>
             ) : (

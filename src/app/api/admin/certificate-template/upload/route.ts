@@ -8,12 +8,12 @@ import {
 } from "@/lib/supabase/storage"
 
 const MAX_BYTES = 5 * 1024 * 1024
+// SVG bloqueado: XSS persistente via <script> embarcado seria servido inline.
 const ALLOWED_TYPES = new Set([
   "image/png",
   "image/jpeg",
   "image/jpg",
   "image/webp",
-  "image/svg+xml",
 ])
 const ALLOWED_KINDS = new Set(["background", "logo", "seal", "signature"])
 
@@ -38,8 +38,6 @@ function extensionFor(mime: string): string {
       return "jpg"
     case "image/webp":
       return "webp"
-    case "image/svg+xml":
-      return "svg"
     default:
       return "bin"
   }
@@ -66,7 +64,7 @@ export async function POST(request: Request) {
   }
   if (!ALLOWED_TYPES.has(file.type)) {
     return NextResponse.json(
-      { error: "Formato não suportado (PNG, JPG, WEBP, SVG)" },
+      { error: "Formato não suportado (PNG, JPG, WEBP)" },
       { status: 400 },
     )
   }

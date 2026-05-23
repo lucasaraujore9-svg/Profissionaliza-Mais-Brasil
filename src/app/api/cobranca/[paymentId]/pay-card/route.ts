@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { payWithCreditCard, getPayment, AsaasApiError } from "@/lib/asaas/client"
+import { isKnownAsaasPayment } from "@/lib/asaas/ownership"
+import { rateLimit, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
 
 interface Ctx {
   params: Promise<{ paymentId: string }>
@@ -27,7 +29,14 @@ const bodySchema = z.object({
 })
 
 export async function POST(request: Request, ctx: Ctx) {
+  const rl = await rateLimit(request, RATE_LIMITS.cobrancaPayCard)
+  if (!rl.ok) return rateLimitResponse(rl)
+
   const { paymentId } = await ctx.params
+
+  if (!(await isKnownAsaasPayment(paymentId))) {
+    return NextResponse.json({ error: "Cobrança não encontrada" }, { status: 404 })
+  }
 
   let body: unknown
   try {

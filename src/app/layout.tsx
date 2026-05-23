@@ -3,6 +3,8 @@ import { DM_Sans, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ServiceWorkerRegister } from "@/components/pwa/sw-register";
 import { PwaInstallPrompt } from "@/components/pwa/install-prompt";
+import { CookieConsent } from "@/components/shared/cookie-consent";
+import { Toaster } from "sonner";
 
 const dmSans = DM_Sans({
   variable: "--font-sans",
@@ -20,13 +22,16 @@ const APP_URL =
   process.env.NEXT_PUBLIC_APP_URL ??
   "https://www.profissionalizamaisbrasil.com.br";
 
+const DEFAULT_DESCRIPTION =
+  "Cursos profissionalizantes online com certificado reconhecido nacionalmente. Estude pelo celular, pague no Pix e ganhe uma profissão no seu ritmo."
+
 export const metadata: Metadata = {
   metadataBase: new URL(APP_URL),
   title: {
     default: "Profissionaliza Mais Brasil",
     template: "%s · Profissionaliza Mais Brasil",
   },
-  description: "Plataforma de cursos profissionalizantes online",
+  description: DEFAULT_DESCRIPTION,
   applicationName: "Profissionaliza Mais Brasil",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
@@ -50,6 +55,23 @@ export const metadata: Metadata = {
     type: "website",
     siteName: "Profissionaliza Mais Brasil",
     locale: "pt_BR",
+    url: APP_URL,
+    title: "Profissionaliza Mais Brasil",
+    description: DEFAULT_DESCRIPTION,
+    images: [
+      {
+        url: "/icons/icon-512.png",
+        width: 512,
+        height: 512,
+        alt: "Profissionaliza Mais Brasil",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Profissionaliza Mais Brasil",
+    description: DEFAULT_DESCRIPTION,
+    images: ["/icons/icon-512.png"],
   },
 };
 
@@ -73,6 +95,8 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col">
         {children}
+        <Toaster position="top-right" richColors closeButton />
+        <CookieConsent />
         <ServiceWorkerRegister />
         <PwaInstallPrompt />
       </body>

@@ -1,5 +1,6 @@
 import Link from "next/link"
 import { PageHero, PageBody } from "@/components/main/static/page-hero"
+import { getSupportContacts } from "@/lib/branding"
 
 const FAQ = [
   {
@@ -12,7 +13,7 @@ const FAQ = [
   },
   {
     p: "Por quanto tempo posso assistir às aulas?",
-    r: "Acesso vitalício. Uma vez comprado, o curso é seu para sempre — estude no seu ritmo, sem prazo.",
+    r: "Acesso ininterrupto enquanto o curso estiver disponível na plataforma — estude no seu ritmo, sem prazo determinado.",
   },
   {
     p: "Posso assistir pelo celular?",
@@ -42,6 +43,8 @@ export const metadata = {
 }
 
 export default function AjudaPage() {
+  const support = getSupportContacts()
+
   return (
     <>
       <PageHero
@@ -72,7 +75,21 @@ export default function AjudaPage() {
         <div className="mt-10 rounded-xl border border-[rgba(2,89,24,0.08)] bg-white p-6 text-center">
           <h3 className="text-[18px] font-black text-[var(--color-pmb-green)]">Não achou sua dúvida?</h3>
           <p className="mt-1 text-[14px] text-[rgba(2,89,24,0.7)]">
-            Chama a gente no WhatsApp: <strong>(11) 4000-0000</strong>
+            {support.phoneLabel && support.phoneUrl ? (
+              <>
+                {support.isWhatsapp ? "Chama a gente no WhatsApp" : "Ligue para a nossa central"}:{" "}
+                <a
+                  href={support.phoneUrl}
+                  target={support.isWhatsapp ? "_blank" : undefined}
+                  rel={support.isWhatsapp ? "noopener noreferrer" : undefined}
+                  className="font-bold underline"
+                >
+                  {support.phoneLabel}
+                </a>
+              </>
+            ) : (
+              "Fala com a gente — respondemos em até 1 dia útil."
+            )}
           </p>
           <Link
             href="/contato"

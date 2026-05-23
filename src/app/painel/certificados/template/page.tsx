@@ -34,7 +34,7 @@ export default async function PainelCertificadosTemplatePage() {
     <div className="space-y-6">
       <PageHeader
         title="Layout do certificado"
-        description="Escolha entre os layouts disponiveis. A logo, o texto e as cores sao padronizados — a logo e puxada automaticamente da sua escola."
+        description="Escolha entre os layouts disponíveis. A logo, o texto e as cores são padronizados — a logo é puxada automaticamente da sua escola."
       />
 
       <CertificateLayoutSelector

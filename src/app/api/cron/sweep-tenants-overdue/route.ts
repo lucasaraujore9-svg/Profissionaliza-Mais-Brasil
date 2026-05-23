@@ -4,7 +4,7 @@ import { blockTenantStudents } from "@/lib/auto-block"
 import { sendEmail } from "@/lib/email/resend"
 import { createNotification } from "@/lib/notifications"
 
-export const maxDuration = 60
+export const maxDuration = 300
 export const dynamic = "force-dynamic"
 
 function authorized(request: Request): boolean {

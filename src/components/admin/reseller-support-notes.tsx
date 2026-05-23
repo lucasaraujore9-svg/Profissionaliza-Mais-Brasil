@@ -70,7 +70,7 @@ export function ResellerSupportNotes({
           <a
             href={waLink}
             target="_blank"
-            rel="noreferrer"
+            rel="noopener noreferrer"
             className="inline-flex items-center gap-2 rounded-lg bg-emerald-100 px-3 py-1.5 text-xs font-semibold text-emerald-800 hover:bg-emerald-200"
           >
             <MessageCircle className="h-3.5 w-3.5" /> WhatsApp

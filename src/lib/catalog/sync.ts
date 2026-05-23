@@ -2,6 +2,58 @@ import { prisma } from "@/lib/prisma"
 import { listarCursos } from "@/lib/plataforma-cursos/client"
 import { parseBRPrice, slugify } from "@/lib/utils"
 import { pushSyncLog, type SyncLogEntry } from "./sync-log"
+import { slugifyCategoria } from "./home"
+
+const TITLECASE_LOWER_WORDS = new Set(["e", "de", "da", "do", "das", "dos", "para", "com", "em"])
+
+function titleCaseCategoria(nome: string): string {
+  const words = nome.toLowerCase().split(/\s+/)
+  return words
+    .map((w, i) => {
+      if (i > 0 && TITLECASE_LOWER_WORDS.has(w)) return w
+      return w.replace(/^\p{L}/u, (m) => m.toUpperCase())
+    })
+    .join(" ")
+}
+
+const categoryCache = new Map<string, string>()
+
+/**
+ * Garante que existe uma Category para o `categoriaLoja` recebido do sync e
+ * retorna o `categoryId`. Idempotente: se ja existe, reutiliza. Renomear ou
+ * desativar Category fica a cargo do admin via CRUD — o sync nunca sobrescreve.
+ */
+async function ensureCategory(
+  categoriaLojaRaw: string | null,
+): Promise<string | null> {
+  if (!categoriaLojaRaw) return null
+  const raw = categoriaLojaRaw.trim()
+  if (!raw) return null
+
+  if (categoryCache.has(raw)) {
+    return categoryCache.get(raw) ?? null
+  }
+
+  const name = titleCaseCategoria(raw)
+  const slug = slugifyCategoria(raw)
+
+  // Procura por slug primeiro (slug e' a chave estavel mesmo se o nome muda).
+  const existing = await prisma.category.findFirst({
+    where: { OR: [{ slug }, { name }] },
+    select: { id: true },
+  })
+  if (existing) {
+    categoryCache.set(raw, existing.id)
+    return existing.id
+  }
+
+  const created = await prisma.category.create({
+    data: { name, slug, isActive: true, displayOrder: 0 },
+    select: { id: true },
+  })
+  categoryCache.set(raw, created.id)
+  return created.id
+}
 
 /**
  * O endpoint cursos/listar nao retorna o ID numerico do curso na plataforma.
@@ -65,6 +117,9 @@ export async function syncCatalogFromEA(
 
       const courseIdFromCapa = extractCourseIdFromCapa(curso.capa_image)
 
+      const categoriaLojaTrim = curso.categoria_loja?.trim() || null
+      const categoryId = await ensureCategory(categoriaLojaTrim)
+
       const dataBase = {
         nome: curso.nome,
         descricao: curso.obs || null,
@@ -74,7 +129,8 @@ export async function syncCatalogFromEA(
         precoPromocional: precoPromo && precoPromo > 0 ? precoPromo : null,
         parcelasSugeridas: parcelas,
         categoriaInterna: curso.categoria_interna || null,
-        categoriaLoja: curso.categoria_loja || null,
+        categoriaLoja: categoriaLojaTrim,
+        categoryId,
         destaque: isDestaque,
         status: curso.status || "ATIVO",
         precoMostrar: isPrecoMostrar,
@@ -84,8 +140,14 @@ export async function syncCatalogFromEA(
 
       const existing = await prisma.course.findUnique({
         where: { nome: curso.nome },
-        select: { id: true, plataformaCourseId: true },
+        select: { id: true, plataformaCourseId: true, categoryId: true },
       })
+
+      // Em update, so substitui categoryId se o curso ainda nao tem um vinculo
+      // manual. Isso preserva remapeamentos feitos pelo admin (ex: o curso
+      // "Excel Avancado" foi movido manualmente de "Informatica" para "Diversas
+      // Areas" — o sync subsequente nao deve reverter).
+      const effectiveCategoryId = existing?.categoryId ?? categoryId
 
       // plataformaCourseId tem unique constraint. So escreve quando:
       // 1) tem id extraido da capa
@@ -110,6 +172,7 @@ export async function syncCatalogFromEA(
           where: { nome: curso.nome },
           data: {
             ...dataBase,
+            categoryId: effectiveCategoryId,
             ...(canSetEaCourseId
               ? { plataformaCourseId: courseIdFromCapa }
               : {}),

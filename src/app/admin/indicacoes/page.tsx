@@ -86,15 +86,15 @@ export default async function AdminIndicacoesPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Indicacoes"
-        description="Visao global do programa de indicacao 1-nivel."
+        title="Indicações"
+        description="Visão global do programa de indicação 1-nível."
         actions={
           <div className="flex gap-2 text-sm">
             <Link
               href="/admin/indicacoes/comissoes"
               className="font-medium text-[var(--color-pmb-green-900)] underline-offset-4 hover:underline"
             >
-              Comissoes
+              Comissões
             </Link>
             <Link
               href="/admin/indicacoes/saques"
@@ -108,7 +108,7 @@ export default async function AdminIndicacoesPage() {
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <SummaryTile label="Pendente" value={formatMoney(totalsMap.PENDING)} />
-        <SummaryTile label="Disponivel" value={formatMoney(totalsMap.AVAILABLE)} highlight />
+        <SummaryTile label="Disponível" value={formatMoney(totalsMap.AVAILABLE)} highlight />
         <SummaryTile label="Pago" value={formatMoney(totalsMap.PAID)} />
         <SummaryTile label="Cancelado" value={formatMoney(totalsMap.CANCELLED)} />
       </div>
@@ -121,7 +121,7 @@ export default async function AdminIndicacoesPage() {
               <TableHead>Slug</TableHead>
               <TableHead className="text-right">Qtd indicados</TableHead>
               <TableHead className="text-right">Pendente</TableHead>
-              <TableHead className="text-right">Disponivel</TableHead>
+              <TableHead className="text-right">Disponível</TableHead>
               <TableHead className="text-right">Pago</TableHead>
             </TableRow>
           </TableHeader>
@@ -129,7 +129,7 @@ export default async function AdminIndicacoesPage() {
             {items.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={6} className="text-center text-sm text-gray-500 py-8">
-                  Nenhum revendedor com indicacoes ainda.
+                  Nenhum revendedor com indicações ainda.
                 </TableCell>
               </TableRow>
             ) : (

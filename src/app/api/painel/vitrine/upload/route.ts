@@ -9,12 +9,13 @@ import {
 } from "@/lib/supabase/storage"
 
 const MAX_BYTES = 5 * 1024 * 1024 // 5MB
+// SVGs sao bloqueados deliberadamente: podem carregar <script>/<foreignObject>
+// e o asset e' servido inline pelo Supabase Storage com Content-Type=image/svg+xml.
 const ALLOWED_TYPES = new Set([
   "image/png",
   "image/jpeg",
   "image/jpg",
   "image/webp",
-  "image/svg+xml",
 ])
 const ALLOWED_KINDS = new Set(["logo", "banner"])
 
@@ -27,8 +28,6 @@ function extensionFor(mime: string): string {
       return "jpg"
     case "image/webp":
       return "webp"
-    case "image/svg+xml":
-      return "svg"
     default:
       return "bin"
   }
@@ -61,7 +60,7 @@ export async function POST(request: Request) {
   }
   if (!ALLOWED_TYPES.has(file.type)) {
     return NextResponse.json(
-      { error: "Formato não suportado (use PNG, JPG, WEBP ou SVG)" },
+      { error: "Formato não suportado (use PNG, JPG ou WEBP)" },
       { status: 400 },
     )
   }

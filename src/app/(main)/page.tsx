@@ -23,9 +23,9 @@ export default async function LandingPage() {
   ] = await Promise.all([
     loadShowcase(),
     loadCurated(),
-    loadByCategoria("INFORMÁTICA E TECNOLOGIA"),
-    loadByCategoria("ADMINISTRATIVO"),
-    loadByCategoria("DIVERSAS ÁREAS"),
+    loadByCategoria("informatica"),
+    loadByCategoria("administrativo"),
+    loadByCategoria("diversas"),
     loadCategorias(),
   ])
 
@@ -45,7 +45,7 @@ export default async function LandingPage() {
         <CourseRow
           titulo="Informática e Tecnologia"
           subtitulo="Profissões em alta no mercado digital"
-          verTodosHref="/cursos?categoria=Informática+e+Tecnologia"
+          verTodosHref="/cursos?categoria=informatica"
           cursos={informatica}
         />
       )}
@@ -54,7 +54,7 @@ export default async function LandingPage() {
         <CourseRow
           titulo="Administrativo"
           subtitulo="Da rotina ao planejamento — capacite-se pra qualquer empresa"
-          verTodosHref="/cursos?categoria=Administrativo"
+          verTodosHref="/cursos?categoria=administrativo"
           cursos={administrativo}
         />
       )}
@@ -62,7 +62,7 @@ export default async function LandingPage() {
         <CourseRow
           titulo="Diversas áreas"
           subtitulo="Beleza, saúde, segurança do trabalho e muito mais"
-          verTodosHref="/cursos?categoria=Diversas+Áreas"
+          verTodosHref="/cursos?categoria=diversas"
           cursos={diversas}
         />
       )}

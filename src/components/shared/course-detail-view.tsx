@@ -12,7 +12,6 @@ import {
   PlayCircle,
   ShieldCheck,
   Smartphone,
-  Star,
 } from "lucide-react"
 
 export interface CourseDetailData {
@@ -169,12 +168,11 @@ export function CourseDetailView({
 
               <div className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-3 text-[13.5px] text-white/85">
                 <span className="flex items-center gap-1.5">
-                  <Star
-                    className="h-4 w-4 fill-[var(--color-pmb-gold)] text-[var(--color-pmb-gold)]"
+                  <ShieldCheck
+                    className="h-4 w-4 text-[var(--color-pmb-gold)]"
                     aria-hidden
                   />
-                  <strong className="font-bold text-white">4.9</strong>
-                  <span className="text-white/65">avaliação</span>
+                  <span className="text-white/85">Certificado oficial pelo Grupo Bolsa Mais Brasil</span>
                 </span>
                 <span className="flex items-center gap-1.5">
                   <Clock className="h-4 w-4 text-[var(--color-pmb-gold)]" aria-hidden />

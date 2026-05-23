@@ -52,7 +52,7 @@ export function CatalogoPreview() {
               O que você vai vender
             </p>
             <h2 className="mt-4 text-4xl font-black leading-[1.05] tracking-tight text-[var(--color-pmb-green-900)] md:text-5xl">
-              Mais de 100 cursos profissionalizantes.
+              Catálogo com dezenas de cursos profissionalizantes.
               <br />
               <span className="text-gray-400">Aqui vão alguns.</span>
             </h2>

@@ -25,39 +25,39 @@ export default async function PainelIndicacoesMateriaisPage() {
   const messages: { label: string; text: string }[] = [
     {
       label: "WhatsApp / mensagem direta",
-      text: `Oi! Conheco a Profissionaliza Mais Brasil, que ajuda quem quer empreender em educacao a montar a propria escola online de cursos profissionalizantes. Eles tem mais de 100 cursos prontos, plataforma de aulas, certificados e suporte. Sem comissao por aluno, so uma mensalidade.
+      text: `Oi! Conheço a Profissionaliza Mais Brasil, que ajuda quem quer empreender em educação a montar a própria escola online de cursos profissionalizantes. Eles têm mais de 100 cursos prontos, plataforma de aulas, certificados e suporte. Sem comissão por aluno, só uma mensalidade.
 
-Se voce esta pensando em ter o proprio portal de cursos, da uma olhada aqui:
+Se você está pensando em ter o próprio portal de cursos, dá uma olhada aqui:
 ${link}`,
     },
     {
       label: "Instagram / Stories",
-      text: `Conheca a oportunidade de ter sua propria escola online de cursos profissionalizantes! Mais de 100 cursos prontos + vitrine personalizada + suporte do maior grupo educacional do Brasil. Confira: ${link}`,
+      text: `Conheça a oportunidade de ter sua própria escola online de cursos profissionalizantes! Mais de 100 cursos prontos + vitrine personalizada + suporte do maior grupo educacional do Brasil. Confira: ${link}`,
     },
     {
       label: "Email",
-      text: `Assunto: Tenha sua propria escola online de cursos profissionalizantes
+      text: `Assunto: Tenha sua própria escola online de cursos profissionalizantes
 
-Ola,
+Olá,
 
-Quero te apresentar a Profissionaliza Mais Brasil — uma plataforma que permite a qualquer pessoa empreender em educacao com a propria vitrine de cursos profissionalizantes online.
+Quero te apresentar a Profissionaliza Mais Brasil — uma plataforma que permite a qualquer pessoa empreender em educação com a própria vitrine de cursos profissionalizantes online.
 
-Voce recebe:
+Você recebe:
 - Mais de 100 cursos prontos
-- Sua propria vitrine com dominio personalizado
-- Plataforma de aulas, certificados e gestao
+- Sua própria vitrine com domínio personalizado
+- Plataforma de aulas, certificados e gestão
 - Suporte completo
 
-Modelo: mensalidade fixa, sem comissao por aluno.
+Modelo: mensalidade fixa, sem comissão por aluno.
 
 Use o link abaixo para conhecer e se cadastrar:
 ${link}
 
-Estou indicando porque acredito no projeto. Qualquer duvida, me fale.`,
+Estou indicando porque acredito no projeto. Qualquer dúvida, me fale.`,
     },
     {
       label: "Texto curto para bio / link tree",
-      text: `Quer ter sua propria escola online de cursos profissionalizantes? Confira: ${link}`,
+      text: `Quer ter sua própria escola online de cursos profissionalizantes? Confira: ${link}`,
     },
   ]
 
@@ -71,8 +71,8 @@ Estou indicando porque acredito no projeto. Qualquer duvida, me fale.`,
         Voltar
       </Link>
       <PageHeader
-        title="Materiais de indicacao"
-        description="Mensagens prontas para divulgar seu link. Personalize a vontade."
+        title="Materiais de indicação"
+        description="Mensagens prontas para divulgar seu link. Personalize à vontade."
       />
 
       <div className="grid gap-4">

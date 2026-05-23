@@ -27,6 +27,73 @@ function formatDate(iso: string | null | undefined): string {
   }
 }
 
+/**
+ * Suspende o tenant cuja Asaas subscription foi inativada/cancelada. Sem isso
+ * o sweep so detectaria ~3 dias apos a proxima cobranca vencer.
+ */
+async function handleSubscriptionCancellation(
+  logId: string,
+  payload: AsaasWebhookPayload,
+): Promise<void> {
+  const { event, subscription } = payload
+  const subscriptionId = subscription?.id
+  if (!subscriptionId) {
+    await markLog(logId, true, `${event} sem subscription.id`)
+    return
+  }
+
+  const tenant = await prisma.tenant.findFirst({
+    where: { asaasSubscriptionId: subscriptionId },
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+      customDomain: true,
+      status: true,
+      owner: { select: { email: true, name: true } },
+    },
+  })
+
+  if (!tenant) {
+    await markLog(logId, true, `tenant nao encontrado para ${subscriptionId}`)
+    return
+  }
+
+  await prisma.webhookLog
+    .update({ where: { id: logId }, data: { tenantId: tenant.id } })
+    .catch(() => undefined)
+
+  if (tenant.status !== "SUSPENDED" && tenant.status !== "CANCELLED") {
+    await prisma.tenant.update({
+      where: { id: tenant.id },
+      data: { status: "SUSPENDED" },
+    })
+
+    invalidateTenant({
+      id: tenant.id,
+      slug: tenant.slug,
+      customDomain: tenant.customDomain,
+    }).catch(() => undefined)
+
+    const blockResult = await blockTenantStudents(tenant.id)
+    if (blockResult.errors.length > 0) {
+      console.error(`[asaas] block errors for ${tenant.id}:`, blockResult.errors)
+    }
+
+    await createNotification({
+      audience: "ROLE",
+      roleTarget: "SUPER_ADMIN",
+      level: "WARNING",
+      title: `Revendedor ${tenant.name} teve assinatura cancelada`,
+      body: `Assinatura Asaas ${subscriptionId} foi ${event === "SUBSCRIPTION_DELETED" ? "removida" : "inativada"}. Tenant suspenso automaticamente.`,
+      category: "tenant-billing",
+      href: `/admin/revendedores/${tenant.id}`,
+    })
+  }
+
+  await markLog(logId, true, `${event} processado`)
+}
+
 async function markLog(
   logId: string,
   success: boolean,
@@ -47,7 +114,7 @@ async function markLog(
 async function processPmbDirectSale(
   logId: string,
   event: string,
-  payment: AsaasWebhookPayload["payment"],
+  payment: NonNullable<AsaasWebhookPayload["payment"]>,
 ): Promise<boolean> {
   // Detecta venda direta PMB por:
   // 1. externalReference (pmb_enr_<id>) — propagado para todas as cobrancas da subscription
@@ -121,7 +188,29 @@ export async function processAsaasWebhook(
   payload: AsaasWebhookPayload,
 ): Promise<void> {
   try {
-    const { event, payment } = payload
+    const { event } = payload
+
+    // Eventos de assinatura (cancelamento/inativacao) chegam com `subscription`
+    // em vez de `payment`. Tratamos primeiro para suspender o tenant antes
+    // de qualquer logica que dependa de `payment`.
+    if (
+      event === "SUBSCRIPTION_INACTIVATED" ||
+      event === "SUBSCRIPTION_DELETED"
+    ) {
+      await handleSubscriptionCancellation(logId, payload)
+      return
+    }
+
+    if (event === "SUBSCRIPTION_CREATED" || event === "SUBSCRIPTION_UPDATED") {
+      await markLog(logId, true, `assinatura ${event.toLowerCase()} — no-op`)
+      return
+    }
+
+    const { payment } = payload
+    if (!payment) {
+      await markLog(logId, true, `evento ${event} sem payment`)
+      return
+    }
 
     const subscriptionId = payment.subscription
     if (!subscriptionId) {

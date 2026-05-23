@@ -49,7 +49,7 @@ export function CategoriesGrid({ categorias }: { categorias: CategoriaInfo[] }) 
             return (
               <li key={cat.slug}>
                 <Link
-                  href={`/cursos?categoria=${encodeURIComponent(cat.nome)}`}
+                  href={`/cursos?categoria=${cat.slug}`}
                   className="group flex items-center gap-3 rounded-xl border border-[rgba(2,89,24,0.08)] bg-white p-4 transition-all hover:-translate-y-0.5 hover:border-[rgba(2,89,24,0.22)] hover:shadow-[0_10px_24px_-12px_rgba(2,89,24,0.2)]"
                 >
                   <span

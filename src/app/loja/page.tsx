@@ -28,9 +28,6 @@ async function loadTenantOrGlobalCurated(tenantId: string): Promise<Course[]> {
         slug: c.slug,
         categoria: c.categoria ?? "Curso profissionalizante",
         titulo: c.nome,
-        instrutor: "Equipe PMB",
-        rating: "4.9",
-        alunos: "—",
         horas: c.horas ? `${c.horas}h` : "Curso online",
         preco: formatPrice(c.price),
         parcelas: "12x sem juros",
@@ -70,9 +67,9 @@ export default async function LojaHomePage() {
   ] = await Promise.all([
     loadShowcase(),
     loadTenantOrGlobalCurated(tenant.id),
-    loadByCategoria("INFORMÁTICA E TECNOLOGIA"),
-    loadByCategoria("ADMINISTRATIVO"),
-    loadByCategoria("DIVERSAS ÁREAS"),
+    loadByCategoria("informatica"),
+    loadByCategoria("administrativo"),
+    loadByCategoria("diversas"),
     loadCategorias(),
   ])
 
@@ -92,7 +89,7 @@ export default async function LojaHomePage() {
         <CourseRow
           titulo="Informática e Tecnologia"
           subtitulo="Profissões em alta no mercado digital"
-          verTodosHref="/cursos?categoria=Informática+e+Tecnologia"
+          verTodosHref="/cursos?categoria=informatica"
           cursos={informatica}
         />
       )}
@@ -101,7 +98,7 @@ export default async function LojaHomePage() {
         <CourseRow
           titulo="Administrativo"
           subtitulo="Da rotina ao planejamento — capacite-se pra qualquer empresa"
-          verTodosHref="/cursos?categoria=Administrativo"
+          verTodosHref="/cursos?categoria=administrativo"
           cursos={administrativo}
         />
       )}
@@ -109,7 +106,7 @@ export default async function LojaHomePage() {
         <CourseRow
           titulo="Diversas áreas"
           subtitulo="Beleza, saúde, segurança do trabalho e muito mais"
-          verTodosHref="/cursos?categoria=Diversas+Áreas"
+          verTodosHref="/cursos?categoria=diversas"
           cursos={diversas}
         />
       )}

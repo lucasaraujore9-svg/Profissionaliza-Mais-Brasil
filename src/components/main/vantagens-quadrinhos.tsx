@@ -11,9 +11,9 @@ const vantagens = [
   {
     icon: Building2,
     rotulo: "Quem está com você",
-    titulo: "Maior grupo educacional do país",
+    titulo: "Grupo Bolsa Mais Brasil ao seu lado",
     descricao:
-      "Somos o GRUPO BOLSA MAIS BRASIL. Já impactamos mais de 1,5 milhão de alunos e te ensinamos, na íntegra, como replicar o nosso modelo de negócio.",
+      "Somos o GRUPO BOLSA MAIS BRASIL. Há mais de uma década na educação profissionalizante e te ensinamos, na íntegra, como replicar o nosso modelo de negócio.",
   },
   {
     icon: Headset,
@@ -32,7 +32,7 @@ const vantagens = [
   {
     icon: BookOpenCheck,
     rotulo: "Catálogo pronto",
-    titulo: "Mais de 100 cursos pra vender",
+    titulo: "Catálogo amplo de cursos pra vender",
     descricao:
       "O catálogo já chega pronto, com aulas e certificado. E se quiser, você ainda pode criar e ofertar os seus próprios cursos dentro da plataforma.",
   },

@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { auth } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
 
 const ONBOARDING_TOTAL_STEPS = 5
 
@@ -35,21 +34,17 @@ export async function POST(request: Request) {
     )
   }
 
-  const isFinalStep =
+  // Ativação do tenant é responsabilidade exclusiva do webhook Asaas
+  // (PAYMENT_RECEIVED em src/lib/asaas/process.ts). O onboarding apenas
+  // registra a progressão de UI; nunca altera tenant.status.
+  const completed =
     parsed.data.step === ONBOARDING_TOTAL_STEPS && parsed.data.completed === true
-
-  if (isFinalStep) {
-    await prisma.tenant.update({
-      where: { id: session.user.tenantId as string },
-      data: { status: "ACTIVE" },
-    })
-  }
 
   return NextResponse.json({
     data: {
       step: parsed.data.step,
-      completed: parsed.data.completed ?? false,
-      tenantActivated: isFinalStep,
+      completed,
+      tenantActivated: false,
     },
   })
 }

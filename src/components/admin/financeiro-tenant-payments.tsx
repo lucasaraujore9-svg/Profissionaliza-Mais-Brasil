@@ -492,7 +492,7 @@ export function FinanceiroTenantPayments({
                   <a
                     href={detailRow.invoiceUrl}
                     target="_blank"
-                    rel="noreferrer"
+                    rel="noopener noreferrer"
                     className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--color-pmb-green)] hover:underline"
                   >
                     <ExternalLink className="size-3" />

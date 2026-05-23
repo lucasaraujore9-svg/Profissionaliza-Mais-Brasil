@@ -2,17 +2,17 @@ import { Users, GraduationCap, BookOpen, DollarSign } from "lucide-react"
 import { prisma } from "@/lib/prisma"
 
 interface PublicMetrics {
-  resellers: number
-  courses: number
-  students: number
-  revenue: number
+  resellers: number | null
+  courses: number | null
+  students: number | null
+  revenue: number | null
 }
 
-const FALLBACK: PublicMetrics = {
-  resellers: 500,
-  courses: 120,
-  students: 15000,
-  revenue: 2_800_000,
+const PLACEHOLDER: PublicMetrics = {
+  resellers: null,
+  courses: null,
+  students: null,
+  revenue: null,
 }
 
 async function loadMetrics(): Promise<PublicMetrics> {
@@ -33,12 +33,13 @@ async function loadMetrics(): Promise<PublicMetrics> {
       revenue: Number(revenueAgg._sum.amount ?? 0),
     }
   } catch (error) {
-    console.error("[NumerosBento] fallback:", error)
-    return FALLBACK
+    console.error("[NumerosBento] sem dados:", error)
+    return PLACEHOLDER
   }
 }
 
-function formatCount(value: number): string {
+function formatCount(value: number | null): string {
+  if (value === null) return "—"
   if (value >= 1000) {
     const thousands = value / 1000
     return `${thousands.toFixed(thousands >= 10 ? 0 : 1).replace(".", ",")}K+`
@@ -46,7 +47,8 @@ function formatCount(value: number): string {
   return `${value}+`
 }
 
-function formatRevenue(value: number): string {
+function formatRevenue(value: number | null): string {
+  if (value === null) return "—"
   if (value >= 1_000_000) {
     return `R$ ${(value / 1_000_000).toFixed(1).replace(".", ",")}M`
   }
@@ -71,7 +73,7 @@ export async function NumerosBento() {
     {
       icon: BookOpen,
       label: "Cursos disponíveis",
-      value: String(metrics.courses),
+      value: metrics.courses === null ? "—" : String(metrics.courses),
       hint: "Catálogo atualizado",
       color: "bg-purple-50 text-purple-600",
       span: "",

@@ -4,9 +4,9 @@ import { FooterMain } from "@/components/shared/layouts/footer-main"
 import { loadCategorias } from "@/lib/catalog/home"
 
 export const metadata: Metadata = {
-  title: "Profissionaliza Mais Brasil — Cursos Profissionalizantes Online",
+  title: "Profissionaliza Mais Brasil — Cursos profissionalizantes online",
   description:
-    "Plataforma de revenda de cursos profissionalizantes online. Tenha sua própria vitrine e comece a vender.",
+    "Cursos profissionalizantes online com certificado reconhecido nacionalmente. Estude pelo celular, pague no Pix e ganhe uma profissão no seu ritmo.",
 }
 
 export default async function MainLayout({
@@ -19,7 +19,7 @@ export default async function MainLayout({
     <>
       <NavbarMain categorias={categorias} />
       <main className="flex-1">{children}</main>
-      <FooterMain />
+      <FooterMain categorias={categorias} />
     </>
   )
 }

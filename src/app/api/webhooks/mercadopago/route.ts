@@ -20,6 +20,15 @@ function pickHeaders(request: Request): Record<string, string> {
 }
 
 export async function POST(request: Request) {
+  // Defesa basica anti-flood: webhooks legitimos do MP sempre carregam
+  // x-signature + x-request-id. Sem isso nao criamos WebhookLog nem fazemos
+  // queries — bots apontados ao endpoint sao descartados cedo.
+  const xSignature = request.headers.get("x-signature")
+  const xRequestId = request.headers.get("x-request-id")
+  if (process.env.NODE_ENV === "production" && (!xSignature || !xRequestId)) {
+    return NextResponse.json({ error: "missing signature" }, { status: 401 })
+  }
+
   let body: MPWebhookNotification | null = null
   try {
     const raw = await request.text()
@@ -84,8 +93,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ received: true }, { status: 200 })
   }
 
-  const xSignature = request.headers.get("x-signature")
-  const xRequestId = request.headers.get("x-request-id")
   const tenantSlug = searchParams.get("tenant") ?? null
 
   void processMpWebhook({

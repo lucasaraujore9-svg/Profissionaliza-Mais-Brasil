@@ -5,10 +5,12 @@ import { Loader2 } from "lucide-react"
 import { AccountForm } from "./account-form"
 import { BillingSection } from "./billing-section"
 import { SecurityForm } from "./security-form"
+import { PixForm } from "./pix-form"
 
 const tabs = [
   { id: "conta", label: "Conta" },
   { id: "pagamento", label: "Pagamento" },
+  { id: "pix", label: "PIX (comissões)" },
   { id: "seguranca", label: "Segurança" },
 ] as const
 
@@ -106,6 +108,7 @@ export function ConfigTabs() {
         {active === "pagamento" && (
           <BillingSection data={data} onUpdate={handleConfigUpdate} />
         )}
+        {active === "pix" && <PixForm />}
         {active === "seguranca" && <SecurityForm />}
       </div>
     </div>

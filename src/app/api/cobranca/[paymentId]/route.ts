@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { getPayment, AsaasApiError } from "@/lib/asaas/client"
+import { isKnownAsaasPayment } from "@/lib/asaas/ownership"
 
 interface Ctx {
   params: Promise<{ paymentId: string }>
@@ -7,6 +8,10 @@ interface Ctx {
 
 export async function GET(_request: Request, ctx: Ctx) {
   const { paymentId } = await ctx.params
+
+  if (!(await isKnownAsaasPayment(paymentId))) {
+    return NextResponse.json({ error: "Cobrança não encontrada" }, { status: 404 })
+  }
 
   try {
     const payment = await getPayment(paymentId)

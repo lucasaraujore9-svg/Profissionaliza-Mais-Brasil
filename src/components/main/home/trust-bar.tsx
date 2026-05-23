@@ -16,7 +16,7 @@ const SELOS = [
   {
     icon: Smartphone,
     title: "Estude pelo celular",
-    subtitle: "Acesso por 12 meses",
+    subtitle: "No seu ritmo",
     color: "var(--color-pmb-gold)",
   },
   {

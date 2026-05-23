@@ -63,14 +63,14 @@ interface ResellerCommissionsTabsProps {
 const STATUS_OPTS: Array<{ value: ReferralCommissionStatus | "ALL"; label: string }> = [
   { value: "ALL", label: "Todos" },
   { value: "PENDING", label: "Pendente" },
-  { value: "AVAILABLE", label: "Disponivel" },
+  { value: "AVAILABLE", label: "Disponível" },
   { value: "PAID", label: "Pago" },
   { value: "CANCELLED", label: "Cancelada" },
 ]
 
 const STATUS_LABEL: Record<ReferralCommissionStatus, string> = {
   PENDING: "Pendente",
-  AVAILABLE: "Disponivel",
+  AVAILABLE: "Disponível",
   PAID: "Pago",
   CANCELLED: "Cancelada",
 }
@@ -155,7 +155,7 @@ function SummaryTilesView({ totals }: { totals: SummaryTiles }) {
       tone: "bg-amber-50 text-amber-900 border-amber-200",
     },
     {
-      label: "Disponivel",
+      label: "Disponível",
       value: totals.available,
       tone: "bg-emerald-50 text-emerald-900 border-emerald-200",
     },
@@ -239,7 +239,7 @@ function FilterBar({ status, from, to, onChange, onClear }: FilterBarProps) {
       </div>
       <div className="flex flex-col gap-1">
         <label className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
-          Ate
+          Até
         </label>
         <input
           type="date"
@@ -278,10 +278,10 @@ function CommissionsTable({
         <TableHeader>
           <TableRow>
             <TableHead>{counterpartyLabel}</TableHead>
-            <TableHead>Competencia</TableHead>
+            <TableHead>Competência</TableHead>
             <TableHead className="text-right">Base</TableHead>
             <TableHead className="text-right">%</TableHead>
-            <TableHead className="text-right">Comissao</TableHead>
+            <TableHead className="text-right">Comissão</TableHead>
             <TableHead>Status</TableHead>
             <TableHead>Libera em</TableHead>
             <TableHead>Payout</TableHead>
@@ -294,7 +294,7 @@ function CommissionsTable({
                 colSpan={8}
                 className="py-8 text-center text-sm text-gray-500"
               >
-                Nenhuma comissao encontrada com os filtros atuais.
+                Nenhuma comissão encontrada com os filtros atuais.
               </TableCell>
             </TableRow>
           ) : (
@@ -412,10 +412,10 @@ export function ResellerCommissionsTabs({
     <Tabs defaultValue="received" className="gap-4">
       <TabsList>
         <TabsTrigger value="received">
-          Comissoes recebidas ({received.length})
+          Comissões recebidas ({received.length})
         </TabsTrigger>
         <TabsTrigger value="generated">
-          Comissoes geradas ({generated.length})
+          Comissões geradas ({generated.length})
         </TabsTrigger>
       </TabsList>
 
@@ -440,7 +440,7 @@ export function ResellerCommissionsTabs({
       <TabsContent value="generated" className="space-y-4">
         {!hasReferrer ? (
           <Card className="p-10 text-center text-sm text-gray-500">
-            Esta unidade nao foi indicada por ninguem.
+            Esta unidade não foi indicada por ninguém.
           </Card>
         ) : (
           <>

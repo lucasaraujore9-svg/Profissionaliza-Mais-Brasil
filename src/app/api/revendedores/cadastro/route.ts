@@ -19,6 +19,7 @@ import {
 } from "@/lib/revendedor/plano"
 import { generateUniqueReferralCode } from "@/lib/referrals/code"
 import { resolveReferrerFromCookie } from "@/lib/referrals/capture"
+import { rateLimit, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
 
 const RESERVED_SLUGS = new Set([
   "www",
@@ -59,6 +60,9 @@ async function buildUniqueSlug(base: string): Promise<string> {
 }
 
 export async function POST(request: Request) {
+  const rl = await rateLimit(request, RATE_LIMITS.revendedorCadastro)
+  if (!rl.ok) return rateLimitResponse(rl)
+
   let payload: unknown
   try {
     payload = await request.json()

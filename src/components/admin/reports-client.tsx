@@ -2,7 +2,17 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
-import { ArrowRight, FileSpreadsheet } from "lucide-react"
+import {
+  ArrowRight,
+  FileSpreadsheet,
+  Briefcase,
+  GraduationCap,
+  Store,
+  DollarSign,
+  BookOpen,
+  FileText,
+  type LucideIcon,
+} from "lucide-react"
 
 interface ReportItem {
   id: string
@@ -11,12 +21,12 @@ interface ReportItem {
   description: string
 }
 
-const GROUP_ICONS: Record<string, string> = {
-  Vendas: "💼",
-  Alunos: "🎓",
-  Revendedores: "🏪",
-  Financeiro: "💰",
-  Catálogo: "📚",
+const GROUP_ICONS: Record<string, LucideIcon> = {
+  Vendas: Briefcase,
+  Alunos: GraduationCap,
+  Revendedores: Store,
+  Financeiro: DollarSign,
+  Catálogo: BookOpen,
 }
 
 export function ReportsClient() {
@@ -127,7 +137,15 @@ export function ReportsClient() {
           className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm"
         >
           <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-[var(--color-pmb-green-900)]">
-            <span aria-hidden>{GROUP_ICONS[group] ?? "📄"}</span>
+            {(() => {
+              const Icon = GROUP_ICONS[group] ?? FileText
+              return (
+                <Icon
+                  className="h-4 w-4 text-[var(--color-pmb-green)]"
+                  aria-hidden
+                />
+              )
+            })()}
             {group}
           </h2>
           <div className="mt-4 grid gap-3 lg:grid-cols-2">

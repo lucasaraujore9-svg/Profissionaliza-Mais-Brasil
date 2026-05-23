@@ -175,13 +175,20 @@ export default async function proxy(request: NextRequest) {
   const hostname = request.headers.get("host") ?? ""
   const { pathname, origin } = request.nextUrl
 
+  // Sempre remove headers de tenant que possam ter sido injetados pelo cliente
+  // antes de classificar o host. Eles só voltam a ser setados pelo proxy
+  // quando o host é efetivamente um tenant resolvido (subdomínio ou custom domain).
+  const sanitizedHeaders = new Headers(request.headers)
+  sanitizedHeaders.delete("x-tenant-id")
+  sanitizedHeaders.delete("x-tenant-slug")
+
   if (
     pathname.startsWith("/_next") ||
     pathname.startsWith("/api/internal") ||
     pathname.startsWith("/favicon.ico") ||
     pathname.includes(".")
   ) {
-    return NextResponse.next()
+    return NextResponse.next({ request: { headers: sanitizedHeaders } })
   }
 
   const host = classifyHost(hostname)
@@ -193,12 +200,14 @@ export default async function proxy(request: NextRequest) {
     //   /validar/[code] → pagina publica de validacao de certificados.
     // O QR code dos certificados aponta para www.livrecursos.com.br/validar/...
     if (pathname === "/validar" || pathname.startsWith("/validar/")) {
-      return NextResponse.next()
+      return NextResponse.next({ request: { headers: sanitizedHeaders } })
     }
 
     const url = request.nextUrl.clone()
     url.pathname = pathname === "/" ? "/livrecursos" : `/livrecursos${pathname}`
-    return NextResponse.rewrite(url)
+    return NextResponse.rewrite(url, {
+      request: { headers: sanitizedHeaders },
+    })
   }
 
   let tenantSlug: string | null = null
@@ -220,14 +229,14 @@ export default async function proxy(request: NextRequest) {
   }
 
   if (!tenantSlug) {
-    return NextResponse.next()
+    return NextResponse.next({ request: { headers: sanitizedHeaders } })
   }
 
   // Em subdomínio de tenant, só reescreve para /loja se for caminho de vitrine.
   // /admin, /painel, /login, /api, /cursos, /sobre etc. ficam servidos pelo
   // site principal sem rewrite.
   if (!isVitrinePath(pathname)) {
-    const requestHeaders = new Headers(request.headers)
+    const requestHeaders = new Headers(sanitizedHeaders)
     requestHeaders.set("x-tenant-slug", tenantSlug)
     return NextResponse.next({
       request: { headers: requestHeaders },
@@ -238,13 +247,15 @@ export default async function proxy(request: NextRequest) {
   if (cachedTenant && cachedTenant.status !== "ACTIVE") {
     const url = request.nextUrl.clone()
     url.pathname = "/loja/suspended"
-    return NextResponse.rewrite(url)
+    return NextResponse.rewrite(url, {
+      request: { headers: sanitizedHeaders },
+    })
   }
 
   const url = request.nextUrl.clone()
   url.pathname = pathname === "/" ? "/loja" : `/loja${pathname}`
 
-  const requestHeaders = new Headers(request.headers)
+  const requestHeaders = new Headers(sanitizedHeaders)
   requestHeaders.set("x-tenant-slug", tenantSlug)
   if (cachedTenant) {
     requestHeaders.set("x-tenant-id", cachedTenant.id)

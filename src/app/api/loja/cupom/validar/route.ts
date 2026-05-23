@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
+import { rateLimit, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
 
 const bodySchema = z.object({
   code: z.string().trim().min(1).max(64).transform((v) => v.toUpperCase()),
@@ -8,6 +9,9 @@ const bodySchema = z.object({
 })
 
 export async function POST(request: Request) {
+  const rl = await rateLimit(request, RATE_LIMITS.publicCupom)
+  if (!rl.ok) return rateLimitResponse(rl)
+
   const tenantId = request.headers.get("x-tenant-id")
 
   if (!tenantId) {

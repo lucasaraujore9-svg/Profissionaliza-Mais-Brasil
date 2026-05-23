@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { processMonthlyPayouts } from "@/lib/referrals/payout"
 
-export const maxDuration = 60
+export const maxDuration = 300
 
 function authorized(request: Request): boolean {
   const secret = process.env.CRON_SECRET

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { hash } from "bcryptjs"
 import { z, ZodError } from "zod"
 import { prisma } from "@/lib/prisma"
+import { rateLimit, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
 
 const schema = z.object({
   token: z.string().min(10, "Token inválido"),
@@ -12,6 +13,9 @@ const schema = z.object({
 })
 
 export async function POST(request: Request) {
+  const rl = await rateLimit(request, RATE_LIMITS.authReset)
+  if (!rl.ok) return rateLimitResponse(rl)
+
   let payload: unknown
   try {
     payload = await request.json()

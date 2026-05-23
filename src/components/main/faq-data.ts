@@ -23,7 +23,7 @@ export const faqs: FAQItem[] = [
   {
     pergunta: "Quanto posso lucrar tendo o meu site personalizado?",
     resposta:
-      "A sua ambição é o seu limite. Você vende quantos cursos quiser, pelo valor que definir. Temos parceiros faturando mais de R$ 40 mil por mês, e alguns já ultrapassaram a marca de R$ 60 mil mensais. Não limitamos os seus ganhos.",
+      "Você vende quantos cursos quiser, pelo valor que definir. Alguns parceiros relatam faturar valores expressivos, mas os resultados dependem de dedicação, região e estratégia de marketing — não garantimos rendimento.",
   },
   {
     pergunta: "Preciso ter ponto comercial ou espaço físico?",

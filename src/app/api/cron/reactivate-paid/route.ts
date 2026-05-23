@@ -4,7 +4,7 @@ import { unblockTenantStudents } from "@/lib/auto-block"
 import { unblockStudentInEA } from "@/lib/students/plataforma-actions"
 import { createNotification } from "@/lib/notifications"
 
-export const maxDuration = 60
+export const maxDuration = 300
 export const dynamic = "force-dynamic"
 
 function authorized(request: Request): boolean {

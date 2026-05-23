@@ -6,14 +6,6 @@ import { useEffect, useRef, useState } from "react"
 import { Search, Menu, X, ChevronDown, User } from "lucide-react"
 import type { CategoriaInfo } from "@/lib/catalog/home"
 
-const FALLBACK_CATEGORIAS: CategoriaInfo[] = [
-  { nome: "Informática e Tecnologia", slug: "informatica", count: 0 },
-  { nome: "Administrativo", slug: "administrativo", count: 0 },
-  { nome: "Diversas Áreas", slug: "diversas", count: 0 },
-  { nome: "Preparatórios", slug: "preparatorios", count: 0 },
-  { nome: "Idiomas", slug: "idiomas", count: 0 },
-]
-
 interface NavbarMainProps {
   categorias?: CategoriaInfo[]
   tenantLogoUrl?: string | null
@@ -25,8 +17,10 @@ export function NavbarMain({
   tenantLogoUrl,
   tenantName,
 }: NavbarMainProps = {}) {
-  const lista =
-    categorias && categorias.length > 0 ? categorias : FALLBACK_CATEGORIAS
+  // Sem fallback hardcoded: se nao houver categorias com cursos ativos, o
+  // botao "Categorias" e a lista no mobile menu simplesmente nao aparecem.
+  const lista = categorias && categorias.length > 0 ? categorias : []
+  const hasCategorias = lista.length > 0
   const [mobileOpen, setMobileOpen] = useState(false)
   const [categoriasOpen, setCategoriasOpen] = useState(false)
   const categoriasRef = useRef<HTMLDivElement | null>(null)
@@ -83,7 +77,7 @@ export function NavbarMain({
 
         <div
           ref={categoriasRef}
-          className="relative hidden lg:block"
+          className={`relative ${hasCategorias ? "hidden lg:block" : "hidden"}`}
         >
           <button
             type="button"
@@ -110,7 +104,7 @@ export function NavbarMain({
                 {lista.map((cat) => (
                   <li key={cat.slug}>
                     <Link
-                      href={`/cursos?categoria=${encodeURIComponent(cat.nome)}`}
+                      href={`/cursos?categoria=${cat.slug}`}
                       onClick={() => setCategoriasOpen(false)}
                       role="menuitem"
                       className="flex items-center justify-between rounded-md px-3 py-2 text-[13.5px] font-medium text-[var(--color-pmb-green)] hover:bg-[var(--color-pmb-mist)]"
@@ -225,23 +219,25 @@ export function NavbarMain({
             >
               Ajuda
             </Link>
-            <div className="mt-2 pt-2 border-t border-[rgba(2,89,24,0.08)]">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-[rgba(2,89,24,0.55)] mb-1">
-                Categorias
-              </p>
-              <div className="flex flex-wrap gap-1.5 py-1">
-                {lista.map((cat) => (
-                  <Link
-                    key={cat.slug}
-                    href={`/cursos?categoria=${encodeURIComponent(cat.nome)}`}
-                    onClick={() => setMobileOpen(false)}
-                    className="inline-block px-2.5 py-1 rounded-md bg-[var(--color-pmb-mist)] text-[12px] text-[var(--color-pmb-green)]"
-                  >
-                    {cat.nome}
-                  </Link>
-                ))}
+            {hasCategorias && (
+              <div className="mt-2 pt-2 border-t border-[rgba(2,89,24,0.08)]">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-[rgba(2,89,24,0.55)] mb-1">
+                  Categorias
+                </p>
+                <div className="flex flex-wrap gap-1.5 py-1">
+                  {lista.map((cat) => (
+                    <Link
+                      key={cat.slug}
+                      href={`/cursos?categoria=${cat.slug}`}
+                      onClick={() => setMobileOpen(false)}
+                      className="inline-block px-2.5 py-1 rounded-md bg-[var(--color-pmb-mist)] text-[12px] text-[var(--color-pmb-green)]"
+                    >
+                      {cat.nome}
+                    </Link>
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
       )}

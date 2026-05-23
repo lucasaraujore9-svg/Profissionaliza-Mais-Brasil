@@ -16,7 +16,7 @@ interface LayoutOption {
 const OPTIONS: LayoutOption[] = [
   {
     id: "CLASSIC",
-    title: "Classico",
+    title: "Clássico",
     description:
       "Layout tradicional com bordas decorativas, ideal para um visual elegante e formal.",
     preview: <ClassicPreview />,
@@ -25,14 +25,14 @@ const OPTIONS: LayoutOption[] = [
     id: "MODERN",
     title: "Moderno",
     description:
-      "Layout limpo com faixa lateral colorida, perfeito para uma identidade contemporanea.",
+      "Layout limpo com faixa lateral colorida, perfeito para uma identidade contemporânea.",
     preview: <ModernPreview />,
   },
   {
     id: "MINIMAL",
     title: "Minimalista",
     description:
-      "Layout simples e direto, focado no conteudo e na clareza da informacao.",
+      "Layout simples e direto, focado no conteúdo e na clareza da informação.",
     preview: <MinimalPreview />,
   },
 ]
@@ -109,13 +109,13 @@ export function CertificateLayoutSelector({
               Logo da sua escola
             </h3>
             <p className="mt-1 text-xs text-gray-600">
-              A logo do certificado e puxada automaticamente da sua escola{" "}
-              <strong>{tenantName}</strong>. Para troca-la, va em{" "}
+              A logo do certificado é puxada automaticamente da sua escola{" "}
+              <strong>{tenantName}</strong>. Para trocá-la, vá em{" "}
               <a
                 href="/painel/vitrine"
                 className="font-semibold text-[var(--color-pmb-green)] hover:underline"
               >
-                Configuracoes da vitrine
+                Configurações da vitrine
               </a>
               .
             </p>
@@ -128,8 +128,8 @@ export function CertificateLayoutSelector({
           Escolha um layout
         </h2>
         <p className="mt-1 text-sm text-gray-600">
-          O texto, as cores e o conteudo do certificado sao padronizados. Voce
-          escolhe apenas o estilo visual entre as opcoes abaixo.
+          O texto, as cores e o conteúdo do certificado são padronizados. Você
+          escolhe apenas o estilo visual entre as opções abaixo.
         </p>
       </div>
 
@@ -175,7 +175,7 @@ export function CertificateLayoutSelector({
       )}
       {success && !dirty && (
         <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
-          Layout salvo com sucesso. Novos certificados emitidos usarao este
+          Layout salvo com sucesso. Novos certificados emitidos usarão este
           modelo.
         </div>
       )}

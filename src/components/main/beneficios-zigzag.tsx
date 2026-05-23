@@ -12,7 +12,7 @@ const beneficios = [
     icon: ShoppingBag,
     title: "Catálogo pronto",
     description:
-      "Mais de 120 cursos profissionalizantes em 12 categorias. Você escolhe quais vender.",
+      "Catálogo amplo de cursos profissionalizantes em diversas categorias. Você escolhe quais vender.",
     gradient: "from-purple-500 to-pink-500",
   },
   {

@@ -282,9 +282,7 @@ export async function POST(request: Request) {
         reason: `Mensalidade — ${course.nome}`,
         external_reference: externalReference,
         payer_email: student.email,
-        back_url: appUrl
-          ? `${appUrl}/admin/vendas?ok=${enrollment.id}`
-          : "https://www.profissionalizamaisbrasil.com.br/admin/vendas",
+        back_url: `${appUrl || `https://${process.env.NEXT_PUBLIC_APP_DOMAIN ?? "profissionalizamaisbrasil.com.br"}`}/admin/vendas?ok=${enrollment.id}`,
         notification_url: appUrl ? `${appUrl}/api/webhooks/mercadopago` : undefined,
         auto_recurring: {
           frequency: 1,

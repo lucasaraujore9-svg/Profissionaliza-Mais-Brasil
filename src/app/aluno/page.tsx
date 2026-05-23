@@ -31,8 +31,9 @@ export default async function StudentDashboardPage() {
   const pendingEnrollments = enrollments.filter((e) => e.status === "PENDING")
   const totalPaid = payments.reduce((sum, p) => sum + Number(p.amount), 0)
 
-  const plataformaLoginUrl =
-    process.env.EA_STUDENT_LOGIN_URL ?? "https://escolaavancada.com.br/aluno"
+  // Sem fallback: se a env nao estiver configurada, escondemos o CTA externo
+  // em vez de vazar a URL da plataforma parceira (quebra o white-label).
+  const plataformaLoginUrl = process.env.EA_STUDENT_LOGIN_URL?.trim() || null
 
   return (
     <div className="space-y-6">
@@ -192,24 +193,26 @@ export default async function StudentDashboardPage() {
           </div>
         </Link>
 
-        <a
-          href={plataformaLoginUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center gap-4 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm transition-all hover:border-[var(--color-pmb-green)] hover:shadow-md"
-        >
-          <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-[var(--color-pmb-lime-50)] text-[var(--color-pmb-green)]">
-            <GraduationCap className="h-5 w-5" />
-          </span>
-          <div className="flex-1">
-            <p className="text-sm font-semibold text-[var(--color-pmb-green-900)]">
-              Acesse sua área de aulas →
-            </p>
-            <p className="mt-0.5 text-xs text-gray-600">
-              Use as credenciais enviadas por email.
-            </p>
-          </div>
-        </a>
+        {plataformaLoginUrl && (
+          <a
+            href={plataformaLoginUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-4 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm transition-all hover:border-[var(--color-pmb-green)] hover:shadow-md"
+          >
+            <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-[var(--color-pmb-lime-50)] text-[var(--color-pmb-green)]">
+              <GraduationCap className="h-5 w-5" />
+            </span>
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-[var(--color-pmb-green-900)]">
+                Acesse sua área de aulas →
+              </p>
+              <p className="mt-0.5 text-xs text-gray-600">
+                Use as credenciais enviadas por email.
+              </p>
+            </div>
+          </a>
+        )}
       </div>
     </div>
   )

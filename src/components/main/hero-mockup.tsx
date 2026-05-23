@@ -85,7 +85,7 @@ export function HeroMockup() {
               Profissionalize-se sem sair de casa
             </p>
             <p className="mt-1 text-[10px] text-white/70">
-              Certificado nacional, suporte e acesso vitalício
+              Certificado nacional, suporte e acesso contínuo
             </p>
           </div>
 

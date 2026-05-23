@@ -43,8 +43,7 @@ export function HeroBanner({
 
           <p className="mt-4 text-[16px] md:text-[18px] leading-relaxed text-white/85">
             Cursos online profissionalizantes com <strong className="font-bold text-white">certificado reconhecido</strong>.
-            Estude pelo celular, pague no Pix e comece hoje mesmo —
-            <span className="whitespace-nowrap"> a partir de R$ 47,00</span>.
+            Estude pelo celular, pague no Pix e comece hoje mesmo.
           </p>
 
           <form

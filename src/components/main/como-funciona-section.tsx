@@ -30,7 +30,7 @@ const passos = [
 
 export function ComoFuncionaSection() {
   return (
-    <section className="bg-[var(--color-pmb-mist)] py-20 md:py-28">
+    <section id="como-funciona" className="bg-[var(--color-pmb-mist)] py-20 md:py-28">
       <div className="mx-auto max-w-6xl px-4 md:px-8">
         <div className="grid grid-cols-1 gap-12 lg:grid-cols-12 lg:gap-16">
           <header className="lg:col-span-4" data-reveal>

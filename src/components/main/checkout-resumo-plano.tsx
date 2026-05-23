@@ -1,36 +1,38 @@
 import { Check, Shield } from "lucide-react"
 
-const planFeatures = [
-  "Vitrine com domínio personalizado",
-  "Até 500 alunos ativos",
-  "Integração com gateway de pagamento",
-  "Catálogo com 200+ cursos",
-  "Suporte por WhatsApp",
-] as const
+// Plano único PMB (alinhado a plano-unico.tsx). Caso o catálogo cresça e
+// existam planos adicionais no futuro, este componente passa a receber o
+// plano selecionado via props em vez de hardcoded.
+const PLAN = {
+  name: "Plano Profissionaliza",
+  priceLabel: "R$ 209",
+  cadenceLabel: "/mês",
+  pitch: "Tudo o que você precisa para montar sua escola digital.",
+  features: [
+    "Vitrine personalizada com seu domínio (ou subdomínio livrecursos.com.br)",
+    "Catálogo completo de cursos profissionalizantes liberado",
+    "Mercado Pago integrado — receba direto na sua conta",
+    "Matrícula automática do aluno após o pagamento",
+    "Cupons de desconto, equipe e suporte por WhatsApp",
+  ],
+}
 
 export function CheckoutResumoPlano() {
   return (
     <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm lg:sticky lg:top-24">
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-medium uppercase tracking-wider text-[var(--color-pmb-green)]">
-          Plano escolhido
-        </span>
-        <span className="rounded-full bg-[var(--color-pmb-lime-50)] px-2.5 py-0.5 text-xs font-semibold text-[var(--color-pmb-green-700)]">
-          Growth
-        </span>
-      </div>
+      <span className="text-xs font-medium uppercase tracking-wider text-[var(--color-pmb-green)]">
+        Plano escolhido
+      </span>
 
       <h3 className="mt-2 text-lg font-bold text-[var(--color-pmb-green-900)]">
-        Plano Growth
+        {PLAN.name}
       </h3>
-      <p className="mt-1 text-sm text-gray-600">
-        Ideal para quem já tem base de alunos.
-      </p>
+      <p className="mt-1 text-sm text-gray-600">{PLAN.pitch}</p>
 
       <div className="mt-5 rounded-xl bg-gradient-to-br from-[var(--color-pmb-green)] to-[var(--color-pmb-green-700)] p-5 text-white">
         <div className="flex items-baseline gap-1">
-          <span className="font-mono text-3xl font-bold">R$ 297</span>
-          <span className="text-sm opacity-80">/mês</span>
+          <span className="font-mono text-3xl font-bold">{PLAN.priceLabel}</span>
+          <span className="text-sm opacity-80">{PLAN.cadenceLabel}</span>
         </div>
         <p className="mt-1 text-xs opacity-80">
           Cobrança recorrente. Cancele quando quiser.
@@ -38,8 +40,11 @@ export function CheckoutResumoPlano() {
       </div>
 
       <ul className="mt-5 space-y-2.5">
-        {planFeatures.map((feature) => (
-          <li key={feature} className="flex items-start gap-2 text-sm text-gray-700">
+        {PLAN.features.map((feature) => (
+          <li
+            key={feature}
+            className="flex items-start gap-2 text-sm text-gray-700"
+          >
             <Check className="mt-0.5 h-4 w-4 shrink-0 text-green-600" />
             <span>{feature}</span>
           </li>

@@ -35,9 +35,6 @@ function toCourse(c: RawCourse, idx: number, selo?: Course["selo"]): Course {
     slug: c.slug,
     categoria: c.categoriaLoja ?? "Curso profissionalizante",
     titulo: c.nome,
-    instrutor: "Equipe PMB",
-    rating: "4.9",
-    alunos: "—",
     horas: c.cargaHoraria ? `${c.cargaHoraria}h` : `${c.qtdAulas} aulas`,
     preco: formatPrice(pickPrice(c)),
     parcelas: parcelas ? `${parcelas}x sem juros` : "12x sem juros",
@@ -128,13 +125,29 @@ export async function loadCurated(take = 8): Promise<Course[]> {
   }
 }
 
-export async function loadByCategoria(categoria: string, take = 8): Promise<Course[]> {
+export async function loadByCategoria(
+  slugOrName: string,
+  take = 8,
+): Promise<Course[]> {
   try {
+    // Resolve para Category preferindo slug; fallback para name (insensitive).
+    const category = await prisma.category.findFirst({
+      where: {
+        OR: [
+          { slug: slugOrName },
+          { name: { equals: slugOrName, mode: "insensitive" } },
+        ],
+        isActive: true,
+      },
+      select: { id: true },
+    })
+    if (!category) return []
+
     const rows = await prisma.course.findMany({
       where: {
         status: "ATIVO",
         hiddenMain: false,
-        categoriaLoja: { equals: categoria, mode: "insensitive" },
+        categoryId: category.id,
       },
       orderBy: { nome: "asc" },
       take,
@@ -152,6 +165,9 @@ export interface CategoriaInfo {
   count: number
 }
 
+// Overrides para deixar URLs amigaveis em categorias com nomes longos vindos
+// da plataforma parceira. Qualquer categoria nao listada cai no slugify
+// generico (NFD + lower + a-z0-9-) abaixo.
 const CATEGORIA_SLUG_OVERRIDES: Record<string, string> = {
   "INFORMÁTICA E TECNOLOGIA": "informatica",
   "DIVERSAS ÁREAS": "diversas",
@@ -160,7 +176,7 @@ const CATEGORIA_SLUG_OVERRIDES: Record<string, string> = {
   IDIOMAS: "idiomas",
 }
 
-function slugifyCategoria(nome: string): string {
+export function slugifyCategoria(nome: string): string {
   const override = CATEGORIA_SLUG_OVERRIDES[nome.toUpperCase()]
   if (override) return override
   return nome
@@ -197,23 +213,31 @@ function titleCaseCategoria(nome: string): string {
 
 export async function loadCategorias(minCount = 3): Promise<CategoriaInfo[]> {
   try {
-    const grouped = await prisma.course.groupBy({
-      by: ["categoriaLoja"],
-      where: {
-        status: "ATIVO",
-        hiddenMain: false,
-        categoriaLoja: { not: null },
+    // Fonte canonica: tabela Category curada pelo admin. So lista categorias
+    // ativas que possuam pelo menos `minCount` cursos visiveis na vitrine
+    // principal. Ordena por displayOrder primeiro, depois alfabetico.
+    const categories = await prisma.category.findMany({
+      where: { isActive: true },
+      orderBy: [{ displayOrder: "asc" }, { name: "asc" }],
+      select: {
+        name: true,
+        slug: true,
+        _count: {
+          select: {
+            courses: {
+              where: { status: "ATIVO", hiddenMain: false },
+            },
+          },
+        },
       },
-      _count: { _all: true },
-      orderBy: { _count: { categoriaLoja: "desc" } },
     })
 
-    return grouped
-      .filter((g) => g.categoriaLoja && g._count._all >= minCount)
-      .map((g) => ({
-        nome: titleCaseCategoria(g.categoriaLoja!),
-        slug: slugifyCategoria(g.categoriaLoja!),
-        count: g._count._all,
+    return categories
+      .filter((c) => c._count.courses >= minCount)
+      .map((c) => ({
+        nome: c.name,
+        slug: c.slug,
+        count: c._count.courses,
       }))
   } catch {
     return []
@@ -228,7 +252,6 @@ export interface ShowcaseCard {
   imageUrl: string | null
   selo: "novo" | "mais-vendido"
   accent: "gold" | "cyan" | "lime"
-  rating: string
 }
 
 export async function loadCatalogo({
@@ -254,16 +277,13 @@ export async function loadCatalogo({
     }
 
     if (categoriaSlug) {
-      const real = await prisma.course.groupBy({
-        by: ["categoriaLoja"],
-        where: { status: "ATIVO", hiddenMain: false, categoriaLoja: { not: null } },
-        _count: { _all: true },
+      // Resolve slug → Category. Categoria inativa nao filtra (retorna vazio).
+      const category = await prisma.category.findUnique({
+        where: { slug: categoriaSlug },
+        select: { id: true, isActive: true },
       })
-      const realName = real
-        .map((r) => r.categoriaLoja!)
-        .find((n) => slugifyCategoria(n) === categoriaSlug)
-      if (!realName) return { cursos: [], total: 0 }
-      where.categoriaLoja = { equals: realName, mode: "insensitive" }
+      if (!category || !category.isActive) return { cursos: [], total: 0 }
+      where.categoryId = category.id
     }
 
     const [rows, total] = await Promise.all([
@@ -326,7 +346,6 @@ export async function loadShowcase(): Promise<ShowcaseCard[]> {
         imageUrl: n.capaImageUrl,
         selo: selos[idx],
         accent: accents[idx],
-        rating: "4.9",
       }
     })
   } catch {

@@ -77,7 +77,7 @@ const container = {
 }
 
 const h1 = {
-  color: "#10B981",
+  color: "#025918",
   fontSize: "28px",
   fontWeight: "700",
   margin: "0 0 16px",
@@ -104,7 +104,7 @@ const detailLine = {
 }
 
 const button = {
-  backgroundColor: "#3B82F6",
+  backgroundColor: "#025918",
   borderRadius: "8px",
   color: "#FFFFFF",
   fontSize: "16px",

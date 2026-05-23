@@ -8,14 +8,14 @@ export function LivrecursosHeader() {
           Livre<span className="text-[var(--color-pmb-green)]">Cursos</span>
         </Link>
         <nav className="flex items-center gap-6 text-sm font-medium text-gray-700">
-          <Link href="#beneficios" className="hover:text-[var(--color-pmb-green)]">
+          <Link href="#como-funciona" className="hover:text-[var(--color-pmb-green)]">
             Como funciona
           </Link>
-          <Link href="#planos" className="hover:text-[var(--color-pmb-green)]">
-            Planos
+          <Link href="#plano" className="hover:text-[var(--color-pmb-green)]">
+            Plano
           </Link>
           <Link
-            href="#cadastro"
+            href="#formulario"
             className="rounded-lg bg-[var(--color-pmb-gold)] px-4 py-2 text-[var(--color-pmb-green-900)] transition-colors hover:brightness-105"
           >
             Quero ser revendedor

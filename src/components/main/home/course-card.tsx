@@ -1,14 +1,11 @@
 import Link from "next/link"
-import { Star, Clock, Award } from "lucide-react"
+import { Clock, Award } from "lucide-react"
 import { CourseThumb } from "./course-thumb"
 
 export interface Course {
   slug: string
   categoria: string
   titulo: string
-  instrutor: string
-  rating: string
-  alunos: string
   horas: string
   preco: string
   precoDe?: string
@@ -27,8 +24,6 @@ export function CourseCard({ course }: CourseCardProps) {
     slug,
     categoria,
     titulo,
-    rating,
-    alunos,
     horas,
     preco,
     precoDe,
@@ -77,21 +72,6 @@ export function CourseCard({ course }: CourseCardProps) {
         <h3 className="mt-1 line-clamp-2 text-[15px] font-bold leading-snug text-[var(--color-pmb-green)] group-hover:underline decoration-[var(--color-pmb-gold)] underline-offset-4">
           {titulo}
         </h3>
-
-        <div className="mt-2 flex items-center gap-1.5 text-[12px]">
-          <span className="font-bold text-[var(--color-pmb-gold-600)]">
-            {rating}
-          </span>
-          <span className="flex gap-[1px]" aria-hidden>
-            {[0, 1, 2, 3, 4].map((i) => (
-              <Star
-                key={i}
-                className="h-3.5 w-3.5 fill-[var(--color-pmb-gold)] text-[var(--color-pmb-gold)]"
-              />
-            ))}
-          </span>
-          <span className="text-[rgba(2,89,24,0.55)]">({alunos})</span>
-        </div>
 
         <ul className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11.5px] text-[rgba(2,89,24,0.65)]">
           <li className="flex items-center gap-1">

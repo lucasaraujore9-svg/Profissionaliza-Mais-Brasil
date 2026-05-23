@@ -6,7 +6,7 @@ export async function POST() {
   return NextResponse.json(
     {
       error:
-        "Pagamentos agora sao automaticos no dia configurado do mes seguinte. Cadastre seu PIX em Configuracoes.",
+        "Pagamentos agora são automáticos no dia configurado do mês seguinte. Cadastre seu PIX em Configurações.",
       code: "AUTO_PAYOUT",
     },
     { status: 410 },

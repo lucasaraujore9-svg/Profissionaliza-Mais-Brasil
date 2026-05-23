@@ -343,7 +343,7 @@ function CreatedSuccess({
             <a
               href={paymentLink}
               target="_blank"
-              rel="noreferrer"
+              rel="noopener noreferrer"
               className="flex flex-1 items-center gap-1 truncate text-xs text-[var(--color-pmb-green)] underline underline-offset-2"
             >
               <ExternalLink className="h-3 w-3 shrink-0" />

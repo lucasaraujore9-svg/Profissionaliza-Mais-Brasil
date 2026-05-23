@@ -1,5 +1,6 @@
 import Image from "next/image"
 import Link from "next/link"
+import { appUrl } from "@/lib/tenant/urls"
 
 interface FooterLojaProps {
   tenantName?: string
@@ -15,9 +16,9 @@ export function FooterLoja({ tenantName }: FooterLojaProps) {
           </p>
 
           <Link
-            href="https://profissionalizamaisbrasil.com.br"
+            href={appUrl()}
             target="_blank"
-            rel="noopener"
+            rel="noopener noreferrer"
             className="inline-flex items-center gap-3 rounded-full bg-white px-4 py-2 text-xs font-semibold text-[var(--color-pmb-green)] hover:bg-[var(--color-pmb-lime-50)] transition-colors"
           >
             <Image

@@ -13,7 +13,7 @@ export default function SobrePage() {
       <PageHero
         eyebrow="Quem somos"
         titulo="Educação que muda vidas, no Brasil inteiro"
-        subtitulo="Somos uma plataforma de cursos profissionalizantes online com preço justo, certificado reconhecido e acesso vitalício. Acreditamos que aprender uma profissão é o caminho mais curto para mudar de vida."
+        subtitulo="Somos uma plataforma de cursos profissionalizantes online com preço justo, certificado reconhecido e acesso contínuo. Acreditamos que aprender uma profissão é o caminho mais curto para mudar de vida."
       />
       <PageBody>
         <div className="grid gap-4 md:grid-cols-3">
@@ -31,7 +31,7 @@ export default function SobrePage() {
             {
               icon: TrendingUp,
               titulo: "Nosso impacto",
-              texto: "Mais de 50 mil alunos formados em 12 áreas profissionais. Histórias reais de quem saiu do zero para o mercado.",
+              texto: "Mais de uma década de operação no setor de educação profissionalizante. Histórias reais de quem saiu do zero para o mercado.",
             },
           ].map((b) => (
             <div key={b.titulo} className="rounded-xl border border-[rgba(2,89,24,0.08)] bg-white p-6">
@@ -55,8 +55,9 @@ export default function SobrePage() {
             técnica. Cada aluno que se forma é uma história de transformação.
           </p>
           <p className="mt-3 text-[14.5px] leading-relaxed text-[rgba(2,89,24,0.8)]">
-            Hoje, somos uma plataforma nacional com mais de 2.400 cursos, dezenas de revendedores
-            parceiros e um time dedicado a fazer da educação um caminho real de mobilidade social.
+            Hoje, somos uma plataforma nacional com centenas de cursos profissionalizantes,
+            uma rede de revendedores parceiros e um time dedicado a fazer da educação um caminho real
+            de mobilidade social.
           </p>
         </div>
 

@@ -294,9 +294,7 @@ export async function POST(request: Request) {
       reason: `Mensalidade — ${tenantCourse.course.nome}`,
       external_reference: externalReference,
       payer_email: student.email ?? data.email,
-      back_url: appUrl
-        ? `${appUrl}/painel/vendas?ok=${enrollment.id}`
-        : "https://www.profissionalizamaisbrasil.com.br/painel/vendas",
+      back_url: `${appUrl || `https://${process.env.NEXT_PUBLIC_APP_DOMAIN ?? "profissionalizamaisbrasil.com.br"}`}/painel/vendas?ok=${enrollment.id}`,
       notification_url: appUrl
         ? `${appUrl}/api/webhooks/mercadopago?tenant=${tenant.slug}`
         : undefined,

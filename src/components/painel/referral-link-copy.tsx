@@ -21,7 +21,7 @@ export function ReferralLinkCopy({
       toast.success("Link copiado!")
       setTimeout(() => setCopied(false), 2200)
     } catch {
-      toast.error("Nao foi possivel copiar")
+      toast.error("Não foi possível copiar")
     }
   }
 
@@ -46,7 +46,7 @@ export function ReferralLinkCopy({
         </Button>
       </div>
       <p className="text-xs text-gray-500">
-        Codigo da indicacao:{" "}
+        Código da indicação:{" "}
         <span className="font-mono font-semibold">{code}</span>
       </p>
     </div>

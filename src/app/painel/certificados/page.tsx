@@ -59,7 +59,7 @@ export default async function PainelCertificadosPage() {
               ? "Moderno"
               : template?.layout === "MINIMAL"
                 ? "Minimalista"
-                : "Classico"
+                : "Clássico"
           }
           isString
         />
@@ -70,7 +70,7 @@ export default async function PainelCertificadosPage() {
           href="/painel/certificados/template"
           icon={<Palette className="h-5 w-5" />}
           title="Escolher layout"
-          description="Selecione entre os layouts pre-prontos. A logo do certificado e puxada automaticamente da sua escola."
+          description="Selecione entre os layouts pré-prontos. A logo do certificado é puxada automaticamente da sua escola."
         />
         <NavCard
           href="/painel/certificados/emitidos"

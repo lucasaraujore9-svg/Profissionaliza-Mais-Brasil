@@ -27,7 +27,11 @@ export default function ReembolsoPage() {
           <ul>
             <li>Envie um email para <strong>financeiro@profissionalizamaisbrasil.com.br</strong></li>
             <li>Inclua: nome completo, CPF e o nome do curso</li>
-            <li>Se preferir, chame no WhatsApp: (11) 4000-0000</li>
+            <li>
+              Se preferir, fale com a gente pelo{" "}
+              <Link href="/contato">formulário de contato</Link> ou WhatsApp
+              listado em <Link href="/contato">Contato</Link>.
+            </li>
           </ul>
 
           <h2>Quando o dinheiro volta?</h2>

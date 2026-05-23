@@ -19,53 +19,63 @@ function formatCurrency(value: number): string {
   })
 }
 
+// Paleta PMB: destaque verde para a metrica primaria (Receita do mes),
+// cards brancos com icone tonal para os complementares. Mantemos coerencia
+// visual com o restante do painel/admin.
 export function FinanceSummaryCards({ metrics }: FinanceSummaryCardsProps) {
-  const cards = [
-    {
-      label: "Receita do mês",
-      value: formatCurrency(metrics.monthRevenue),
-      icon: TrendingUp,
-      color: "from-[var(--color-pmb-green)] to-[var(--color-pmb-green-700)]",
-    },
-    {
-      label: "Recebido",
-      value: formatCurrency(metrics.received),
-      icon: CheckCircle2,
-      color: "from-emerald-500 to-green-600",
-    },
-    {
-      label: "Pendente",
-      value: formatCurrency(metrics.pending),
-      icon: Clock,
-      color: "from-amber-500 to-orange-500",
-    },
-    {
-      label: "A receber",
-      value: formatCurrency(metrics.toReceive),
-      icon: Wallet,
-      color: "from-purple-500 to-fuchsia-600",
-    },
-  ]
-
   return (
     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-      {cards.map((card) => {
-        const Icon = card.icon
-        return (
-          <div
-            key={card.label}
-            className={`relative overflow-hidden rounded-2xl bg-gradient-to-br p-5 text-white shadow-sm ${card.color}`}
-          >
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-medium uppercase tracking-wider opacity-90">
-                {card.label}
-              </span>
-              <Icon className="h-5 w-5 opacity-80" />
-            </div>
-            <div className="mt-3 font-mono text-2xl font-bold">{card.value}</div>
-          </div>
-        )
-      })}
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[var(--color-pmb-green)] to-[var(--color-pmb-green-700)] p-5 text-white shadow-sm">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-medium uppercase tracking-wider opacity-90">
+            Receita do mês
+          </span>
+          <TrendingUp className="h-5 w-5 opacity-80" />
+        </div>
+        <div className="mt-3 font-mono text-2xl font-bold">
+          {formatCurrency(metrics.monthRevenue)}
+        </div>
+      </div>
+
+      <NeutralFinanceCard
+        label="Recebido"
+        value={formatCurrency(metrics.received)}
+        icon={CheckCircle2}
+      />
+      <NeutralFinanceCard
+        label="Pendente"
+        value={formatCurrency(metrics.pending)}
+        icon={Clock}
+      />
+      <NeutralFinanceCard
+        label="A receber"
+        value={formatCurrency(metrics.toReceive)}
+        icon={Wallet}
+      />
+    </div>
+  )
+}
+
+interface NeutralFinanceCardProps {
+  label: string
+  value: string
+  icon: typeof Wallet
+}
+
+function NeutralFinanceCard({ label, value, icon: Icon }: NeutralFinanceCardProps) {
+  return (
+    <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-medium uppercase tracking-wider text-gray-500">
+          {label}
+        </span>
+        <span className="grid h-8 w-8 place-items-center rounded-lg bg-[var(--color-pmb-lime-50)] text-[var(--color-pmb-green)]">
+          <Icon className="h-4 w-4" />
+        </span>
+      </div>
+      <div className="mt-3 font-mono text-2xl font-bold text-[var(--color-pmb-green-900)]">
+        {value}
+      </div>
     </div>
   )
 }
