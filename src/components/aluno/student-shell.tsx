@@ -10,7 +10,6 @@ import {
   GraduationCap,
   UserCircle,
   ShoppingBag,
-  Bell,
   LogOut,
   Award,
 } from "lucide-react"
@@ -29,7 +28,6 @@ const NAV = [
   { href: "/aluno/certificados", label: "Certificados", icon: Award },
   { href: "/aluno/comprar", label: "Comprar curso", icon: ShoppingBag },
   { href: "/aluno/pagamentos", label: "Pagamentos", icon: CreditCard },
-  { href: "/aluno/notificacoes", label: "Notificações", icon: Bell },
   { href: "/aluno/perfil", label: "Meu perfil", icon: UserCircle },
 ]
 

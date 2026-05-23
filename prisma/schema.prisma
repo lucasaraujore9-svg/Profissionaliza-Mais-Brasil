@@ -848,6 +848,29 @@ model Notification {
   @@map("notifications")
 }
 
+// Assinatura de push do navegador (Web Push API). Cada par (user_id|student_id,
+// endpoint) e unico — um mesmo usuario pode ter varios dispositivos/browsers.
+// p256dh + auth sao as chaves de criptografia retornadas pelo PushSubscription
+// do navegador (RFC 8291). Pertence ao User OU Student (mutuamente exclusivo).
+model PushSubscription {
+  id         String   @id @default(cuid())
+  userId     String?  @map("user_id")
+  studentId  String?  @map("student_id")
+  endpoint   String   @db.Text
+  p256dh     String   @db.Text
+  auth       String   @db.Text
+  userAgent  String?  @map("user_agent") @db.Text
+  createdAt  DateTime @default(now()) @map("created_at")
+  lastUsedAt DateTime @default(now()) @map("last_used_at")
+  failureCount Int    @default(0) @map("failure_count")
+
+  @@unique([userId, endpoint])
+  @@unique([studentId, endpoint])
+  @@index([userId])
+  @@index([studentId])
+  @@map("push_subscriptions")
+}
+
 // Preferencias por categoria (User OU Student). Quando ausente, defaults
 // permitem todos os canais. Categorias livres: payment, enrollment, lead,
 // tenant, tenant-billing, sale, support.

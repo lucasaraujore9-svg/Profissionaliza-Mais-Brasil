@@ -1,17 +1,32 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
   Bell,
+  BellOff,
   CheckCheck,
   CircleAlert,
   CircleCheck,
   CircleX,
   Info,
   Loader2,
+  Volume2,
+  VolumeX,
 } from "lucide-react"
+import {
+  isNotificationSoundEnabled,
+  playNotificationSound,
+  setNotificationSoundEnabled,
+  unlockNotificationSound,
+} from "@/lib/notifications/sound"
+import {
+  getPushPermissionState,
+  isPushSupported,
+  subscribeToPush,
+  unsubscribeFromPush,
+} from "@/lib/notifications/push-client"
 
 interface Notification {
   id: string
@@ -66,6 +81,10 @@ export function NotificationBell({ variant = "light" }: NotificationBellProps) {
   const [unread, setUnread] = useState(0)
   const [loading, setLoading] = useState(false)
   const [marking, setMarking] = useState(false)
+  const [soundOn, setSoundOn] = useState(true)
+  const [pushState, setPushState] = useState<"unsupported" | "default" | "granted" | "denied" | "loading">("loading")
+  const [pushBusy, setPushBusy] = useState(false)
+  const prevUnreadRef = useRef<number | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const pathname = usePathname()
 
@@ -77,7 +96,7 @@ export function NotificationBell({ variant = "light" }: NotificationBellProps) {
         ? "/aluno/notificacoes"
         : "/aluno/notificacoes"
 
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true)
     try {
       const res = await fetch("/api/notifications?limit=20", {
@@ -85,12 +104,23 @@ export function NotificationBell({ variant = "light" }: NotificationBellProps) {
       })
       if (!res.ok) return
       const body = await res.json()
-      setItems(body.data?.items ?? [])
-      setUnread(body.data?.unreadCount ?? 0)
+      const nextItems: Notification[] = body.data?.items ?? []
+      const nextUnread: number = body.data?.unreadCount ?? 0
+
+      // Tocou aumentou desde a ultima leitura? Toca o som.
+      // 1a carga (prev === null) nao toca, evita "boas-vindas" sonoras.
+      const prev = prevUnreadRef.current
+      if (prev !== null && nextUnread > prev) {
+        playNotificationSound()
+      }
+      prevUnreadRef.current = nextUnread
+
+      setItems(nextItems)
+      setUnread(nextUnread)
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
   useEffect(() => {
     let interval: ReturnType<typeof setInterval> | null = null
@@ -126,7 +156,59 @@ export function NotificationBell({ variant = "light" }: NotificationBellProps) {
       document.removeEventListener("visibilitychange", onVisibility)
       window.removeEventListener("focus", onFocus)
     }
+  }, [load])
+
+  // Estado inicial: preferencia de som + estado da permissao de push
+  useEffect(() => {
+    setSoundOn(isNotificationSoundEnabled())
+    if (!isPushSupported()) {
+      setPushState("unsupported")
+    } else {
+      setPushState(getPushPermissionState())
+    }
   }, [])
+
+  // Destrava audio na 1a interacao do usuario com o documento.
+  // O browser exige um gesto humano antes de permitir play() programatico.
+  useEffect(() => {
+    const handler = () => {
+      unlockNotificationSound()
+      window.removeEventListener("pointerdown", handler)
+      window.removeEventListener("keydown", handler)
+    }
+    window.addEventListener("pointerdown", handler, { once: true })
+    window.addEventListener("keydown", handler, { once: true })
+    return () => {
+      window.removeEventListener("pointerdown", handler)
+      window.removeEventListener("keydown", handler)
+    }
+  }, [])
+
+  function toggleSound() {
+    const next = !soundOn
+    setSoundOn(next)
+    setNotificationSoundEnabled(next)
+    if (next) {
+      // pequena previa para confirmar que esta ligado
+      playNotificationSound({ force: true })
+    }
+  }
+
+  async function togglePush() {
+    if (pushBusy || pushState === "unsupported" || pushState === "loading") return
+    setPushBusy(true)
+    try {
+      if (pushState === "granted") {
+        await unsubscribeFromPush()
+        setPushState("default")
+      } else {
+        const result = await subscribeToPush()
+        setPushState(result === "granted" ? "granted" : result)
+      }
+    } finally {
+      setPushBusy(false)
+    }
+  }
 
   useEffect(() => {
     if (!open) return
@@ -191,8 +273,8 @@ export function NotificationBell({ variant = "light" }: NotificationBellProps) {
 
       {open && (
         <div className="absolute right-0 z-50 mt-2 w-80 origin-top-right rounded-2xl border border-gray-200 bg-white shadow-xl sm:w-96">
-          <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
-            <div>
+          <div className="flex items-center justify-between gap-2 border-b border-gray-100 px-4 py-3">
+            <div className="min-w-0">
               <h3 className="text-sm font-semibold text-[var(--color-pmb-green-900)]">
                 Notificações
               </h3>
@@ -202,21 +284,64 @@ export function NotificationBell({ variant = "light" }: NotificationBellProps) {
                   : `${unread} não lida${unread === 1 ? "" : "s"}`}
               </p>
             </div>
-            {unread > 0 && (
+            <div className="flex shrink-0 items-center gap-1">
               <button
                 type="button"
-                onClick={markAll}
-                disabled={marking}
-                className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold text-[var(--color-pmb-green)] hover:bg-[var(--color-pmb-lime-50)] disabled:opacity-50"
+                onClick={toggleSound}
+                className="rounded-md p-1.5 text-gray-500 hover:bg-gray-100"
+                aria-label={soundOn ? "Desligar som" : "Ligar som"}
+                title={soundOn ? "Som ligado" : "Som desligado"}
               >
-                {marking ? (
-                  <Loader2 className="h-3 w-3 animate-spin" />
+                {soundOn ? (
+                  <Volume2 className="h-4 w-4" />
                 ) : (
-                  <CheckCheck className="h-3 w-3" />
+                  <VolumeX className="h-4 w-4" />
                 )}
-                Marcar todas
               </button>
-            )}
+              {pushState !== "unsupported" && (
+                <button
+                  type="button"
+                  onClick={togglePush}
+                  disabled={pushBusy || pushState === "denied" || pushState === "loading"}
+                  className="rounded-md p-1.5 text-gray-500 hover:bg-gray-100 disabled:opacity-40"
+                  aria-label={
+                    pushState === "granted"
+                      ? "Desativar notificações do navegador"
+                      : "Ativar notificações do navegador"
+                  }
+                  title={
+                    pushState === "granted"
+                      ? "Notificações do navegador ativas"
+                      : pushState === "denied"
+                        ? "Notificações bloqueadas nas permissões do navegador"
+                        : "Ativar notificações do navegador"
+                  }
+                >
+                  {pushBusy ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : pushState === "granted" ? (
+                    <Bell className="h-4 w-4 text-[var(--color-pmb-green)]" />
+                  ) : (
+                    <BellOff className="h-4 w-4" />
+                  )}
+                </button>
+              )}
+              {unread > 0 && (
+                <button
+                  type="button"
+                  onClick={markAll}
+                  disabled={marking}
+                  className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold text-[var(--color-pmb-green)] hover:bg-[var(--color-pmb-lime-50)] disabled:opacity-50"
+                >
+                  {marking ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <CheckCheck className="h-3 w-3" />
+                  )}
+                  Marcar todas
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="max-h-[60vh] overflow-y-auto">

@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useSyncExternalStore } from "react"
 import Link from "next/link"
 import { Cookie } from "lucide-react"
 
@@ -23,30 +23,41 @@ function writeConsent(value: string) {
     // Cookie complementar para que o server possa ler em rotas futuras
     // (analytics opt-in/out). 6 meses; revogavel limpando o localStorage.
     document.cookie = `${STORAGE_KEY}=${value}; path=/; max-age=${60 * 60 * 24 * 180}; SameSite=Lax`
+    // Notifica a propria aba (event "storage" so dispara em outras abas).
+    window.dispatchEvent(new Event("pmb-consent-changed"))
   } catch {
     // ignora storage cheio / quota
   }
 }
 
+function subscribe(callback: () => void): () => void {
+  window.addEventListener("storage", callback)
+  window.addEventListener("pmb-consent-changed", callback)
+  return () => {
+    window.removeEventListener("storage", callback)
+    window.removeEventListener("pmb-consent-changed", callback)
+  }
+}
+
 export function CookieConsent() {
-  const [decided, setDecided] = useState<string | null | undefined>(undefined)
+  // useSyncExternalStore lê localStorage no mount sem setState-in-effect.
+  // server snapshot = null (banner so aparece apos hydrate, evita mismatch).
+  const decided = useSyncExternalStore(
+    subscribe,
+    readConsent,
+    () => null,
+  )
 
-  useEffect(() => {
-    setDecided(readConsent())
-  }, [])
-
-  if (decided === undefined || decided === ACCEPTED || decided === REJECTED) {
+  if (decided === ACCEPTED || decided === REJECTED) {
     return null
   }
 
   function accept() {
     writeConsent(ACCEPTED)
-    setDecided(ACCEPTED)
   }
 
   function reject() {
     writeConsent(REJECTED)
-    setDecided(REJECTED)
   }
 
   return (

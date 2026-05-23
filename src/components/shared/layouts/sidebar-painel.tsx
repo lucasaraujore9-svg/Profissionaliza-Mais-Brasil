@@ -14,7 +14,6 @@ import {
   Settings,
   UserCog,
   ShoppingCart,
-  Bell,
   Award,
   Share2,
 } from "lucide-react"
@@ -34,7 +33,6 @@ const ALL_ITEMS: {
   { href: "/painel/financeiro", label: "Financeiro", icon: CreditCard },
   { href: "/painel/indicacoes", label: "Indicações", icon: Share2, ownerOnly: true },
   { href: "/painel/certificados", label: "Certificados", icon: Award, ownerOnly: true },
-  { href: "/painel/notificacoes", label: "Notificações", icon: Bell },
   { href: "/painel/equipe", label: "Equipe", icon: UserCog, ownerOnly: true },
   { href: "/painel/dominio", label: "Domínio", icon: Globe, ownerOnly: true },
   { href: "/painel/vitrine", label: "Vitrine", icon: Palette, ownerOnly: true },

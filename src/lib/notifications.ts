@@ -4,6 +4,7 @@ import type {
   NotificationAudience,
   UserRole,
 } from "@prisma/client"
+import { sendPushToTarget, sendPushToUsers } from "@/lib/notifications/push-server"
 
 /**
  * Cria notificacoes in-app. Existem 4 audiencias:
@@ -124,6 +125,15 @@ export async function createNotification(
           href: input.href ?? null,
         })),
       })
+      // push em paralelo (best-effort, nao bloqueia)
+      void sendPushToUsers(filteredUserIds, {
+        title: input.title,
+        body: input.body,
+        href: input.href,
+        level: input.level,
+        category: input.category,
+        tag: input.category ?? "pmb-tenant",
+      })
       return
     }
 
@@ -155,6 +165,14 @@ export async function createNotification(
           href: input.href ?? null,
         })),
       })
+      void sendPushToUsers(filteredUserIds, {
+        title: input.title,
+        body: input.body,
+        href: input.href,
+        level: input.level,
+        category: input.category,
+        tag: input.category ?? "pmb-role",
+      })
       return
     }
 
@@ -178,7 +196,22 @@ export async function createNotification(
     if (input.audience === "USER") data.userId = input.userId
     if (input.audience === "STUDENT") data.studentId = input.studentId
 
-    await prisma.notification.create({ data })
+    const created = await prisma.notification.create({ data, select: { id: true } })
+
+    void sendPushToTarget(
+      input.audience === "USER"
+        ? { userId: input.userId }
+        : { studentId: input.studentId },
+      {
+        title: input.title,
+        body: input.body,
+        href: input.href,
+        level: input.level,
+        category: input.category,
+        tag: input.category ?? "pmb-notif",
+        notificationId: created.id,
+      },
+    )
   } catch (err) {
     console.error("[notifications] create falhou:", err)
   }
