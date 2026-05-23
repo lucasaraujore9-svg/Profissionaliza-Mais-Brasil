@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import {
   Share2,
   Copy,
@@ -14,6 +14,8 @@ import {
   CalendarClock,
   KeyRound,
   ExternalLink,
+  FileText,
+  Download,
 } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -80,6 +82,43 @@ function formatDateBR(d: Date): string {
   })
 }
 
+function currentMonthIso(): string {
+  const now = new Date()
+  const y = now.getFullYear()
+  const m = String(now.getMonth() + 1).padStart(2, "0")
+  return `${y}-${m}`
+}
+
+function buildMonthOptions(count: number): Array<{ value: string; label: string }> {
+  const opts: Array<{ value: string; label: string }> = []
+  const now = new Date()
+  const labelMonths = [
+    "Janeiro",
+    "Fevereiro",
+    "Marco",
+    "Abril",
+    "Maio",
+    "Junho",
+    "Julho",
+    "Agosto",
+    "Setembro",
+    "Outubro",
+    "Novembro",
+    "Dezembro",
+  ]
+  for (let i = 0; i < count; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+    const y = d.getFullYear()
+    const mIdx = d.getMonth()
+    const mStr = String(mIdx + 1).padStart(2, "0")
+    opts.push({
+      value: `${y}-${mStr}`,
+      label: `${labelMonths[mIdx]}/${y}`,
+    })
+  }
+  return opts
+}
+
 export function ResellerReferralConfig({
   tenantId,
   referralCode,
@@ -96,6 +135,11 @@ export function ResellerReferralConfig({
   const [saving, setSaving] = useState(false)
   const [resetting, setResetting] = useState(false)
   const [copied, setCopied] = useState(false)
+  const monthOptions = useMemo(() => buildMonthOptions(12), [])
+  const [demoMonth, setDemoMonth] = useState<string>(
+    monthOptions[0]?.value ?? currentMonthIso(),
+  )
+  const [downloading, setDownloading] = useState(false)
 
   useEffect(() => {
     setPercentInput(referralPercent != null ? String(referralPercent) : "")
@@ -170,6 +214,38 @@ export function ResellerReferralConfig({
       toast.error("Erro de rede ao redefinir")
     } finally {
       setResetting(false)
+    }
+  }
+
+  async function downloadDemonstrativo() {
+    if (!demoMonth) {
+      toast.error("Selecione um mes")
+      return
+    }
+    setDownloading(true)
+    try {
+      const res = await fetch(
+        `/api/admin/revendedores/${tenantId}/comissoes/demonstrativo?month=${encodeURIComponent(demoMonth)}`,
+      )
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        toast.error(body?.error ?? "Falha ao gerar demonstrativo")
+        return
+      }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `demonstrativo-${demoMonth}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+      toast.success("Demonstrativo baixado")
+    } catch {
+      toast.error("Erro de rede ao baixar")
+    } finally {
+      setDownloading(false)
     }
   }
 
@@ -363,6 +439,56 @@ export function ResellerReferralConfig({
             Nao cadastrado
           </div>
         )}
+      </div>
+
+      {/* Demonstrativo mensal */}
+      <div className="mt-5 space-y-2 border-t border-gray-100 pt-5">
+        <div className="flex items-center gap-1.5">
+          <FileText className="h-3.5 w-3.5 text-gray-500" />
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+            Demonstrativo mensal (PDF)
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <select
+            value={demoMonth}
+            onChange={(e) => setDemoMonth(e.target.value)}
+            disabled={downloading}
+            className="flex-1 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:border-[var(--color-pmb-green)] focus:outline-none focus:ring-1 focus:ring-[var(--color-pmb-green)]"
+          >
+            {monthOptions.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+          <Button
+            size="sm"
+            type="button"
+            variant="outline"
+            onClick={downloadDemonstrativo}
+            disabled={downloading}
+            className="shrink-0"
+          >
+            <Download className="mr-1.5 h-3.5 w-3.5" />
+            {downloading ? "Gerando..." : "Baixar PDF"}
+          </Button>
+        </div>
+        <p className="text-[11px] text-gray-500">
+          Relatorio das comissoes pagas neste mes (com totais e dados
+          bancarios).
+        </p>
+      </div>
+
+      {/* Drilldown */}
+      <div className="mt-5 border-t border-gray-100 pt-4">
+        <Link
+          href={`/admin/revendedores/${tenantId}/comissoes`}
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--color-pmb-green-900)] hover:text-[var(--color-pmb-green)]"
+        >
+          Ver detalhado
+          <ExternalLink className="h-3 w-3" />
+        </Link>
       </div>
     </div>
   )

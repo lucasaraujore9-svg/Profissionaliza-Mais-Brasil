@@ -27,6 +27,35 @@ function formatMoney(n: number): string {
   }).format(n)
 }
 
+function buildDemoMonthOptions(
+  count: number,
+): Array<{ value: string; label: string }> {
+  const labelMonths = [
+    "Janeiro",
+    "Fevereiro",
+    "Marco",
+    "Abril",
+    "Maio",
+    "Junho",
+    "Julho",
+    "Agosto",
+    "Setembro",
+    "Outubro",
+    "Novembro",
+    "Dezembro",
+  ]
+  const out: Array<{ value: string; label: string }> = []
+  const now = new Date()
+  for (let i = 0; i < count; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+    const y = d.getFullYear()
+    const mIdx = d.getMonth()
+    const mStr = String(mIdx + 1).padStart(2, "0")
+    out.push({ value: `${y}-${mStr}`, label: `${labelMonths[mIdx]}/${y}` })
+  }
+  return out
+}
+
 function statusLabel(status: string): string {
   switch (status) {
     case "ACTIVE":
@@ -103,6 +132,10 @@ export default async function PainelIndicacoesPage() {
   const baseUrl = `https://www.${vitrineDomain()}`
   const referralLink = `${baseUrl}/seja-revendedor?ref=${encodeURIComponent(referralCode)}`
 
+  // Opcoes de mes (ultimos 12) para o demonstrativo PDF.
+  const demoMonthOptions = buildDemoMonthOptions(12)
+  const defaultDemoMonth = demoMonthOptions[0]?.value ?? ""
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -164,6 +197,43 @@ export default async function PainelIndicacoesPage() {
               PIX cadastrado: <span className="font-mono">{tenant.pixKeyType}</span>
             </div>
           )}
+        </div>
+
+        {/* Demonstrativo mensal em PDF */}
+        <div className="mt-5 border-t border-[var(--color-pmb-green-900)]/15 pt-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-[var(--color-pmb-green-900)]">
+            Demonstrativo mensal (PDF)
+          </p>
+          <p className="mt-1 text-xs text-gray-600">
+            Recibo das comissoes pagas no mes selecionado.
+          </p>
+          <form
+            method="get"
+            action="/api/painel/indicacoes/demonstrativo"
+            className="mt-3 flex flex-wrap items-center gap-2"
+          >
+            <label htmlFor="demo-month" className="sr-only">
+              Mes de referencia
+            </label>
+            <select
+              id="demo-month"
+              name="month"
+              defaultValue={defaultDemoMonth}
+              className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:border-[var(--color-pmb-green)] focus:outline-none focus:ring-1 focus:ring-[var(--color-pmb-green)]"
+            >
+              {demoMonthOptions.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+            <button
+              type="submit"
+              className="inline-flex items-center gap-2 rounded-lg border border-[var(--color-pmb-green)] bg-white px-3 py-2 text-sm font-semibold text-[var(--color-pmb-green-900)] hover:bg-[var(--color-pmb-lime-50)]/40"
+            >
+              Baixar demonstrativo
+            </button>
+          </form>
         </div>
       </Card>
 

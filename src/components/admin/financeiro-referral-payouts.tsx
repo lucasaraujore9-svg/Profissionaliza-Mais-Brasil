@@ -5,6 +5,7 @@ import Link from "next/link"
 import {
   Ban,
   CheckCircle2,
+  Download,
   FileText,
   Loader2,
   RefreshCw,
@@ -169,6 +170,16 @@ export function FinanceiroReferralPayouts({
     load()
   }, [load])
 
+  const exportHref = useMemo(() => {
+    const params = new URLSearchParams()
+    if (status !== "all") params.set("status", status)
+    if (search.trim()) params.set("search", search.trim())
+    if (from) params.set("from", from)
+    if (to) params.set("to", to)
+    const qs = params.toString()
+    return `/api/admin/referrals/payouts/export${qs ? `?${qs}` : ""}`
+  }, [status, search, from, to])
+
   const totals = useMemo(() => {
     let pending = 0
     let paid = 0
@@ -257,7 +268,7 @@ export function FinanceiroReferralPayouts({
               onChange={(e) => setTo(e.target.value)}
             />
           </div>
-          <div className="flex items-end">
+          <div className="flex items-end gap-2">
             <Button
               variant="outline"
               onClick={load}
@@ -267,6 +278,13 @@ export function FinanceiroReferralPayouts({
               <RefreshCw className={loading ? "size-3.5 animate-spin" : "size-3.5"} />
               Atualizar
             </Button>
+            <a
+              href={exportHref}
+              className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-md border border-input bg-background px-4 py-2 text-sm font-medium shadow-xs transition-colors hover:bg-accent hover:text-accent-foreground lg:w-auto"
+            >
+              <Download className="size-3.5" />
+              Exportar CSV
+            </a>
           </div>
         </div>
       </div>

@@ -1,6 +1,6 @@
 import Link from "next/link"
 import { redirect } from "next/navigation"
-import { ArrowLeft } from "lucide-react"
+import { ArrowLeft, Download } from "lucide-react"
 import { prisma } from "@/lib/prisma"
 import { requireAdminSession } from "@/lib/auth/admin-session"
 import { PageHeader } from "@/components/painel/page-header"
@@ -49,6 +49,17 @@ export default async function AdminComissoesPage({
   }
 
   const sp = await searchParams
+  const exportParams = new URLSearchParams()
+  if (sp.status && STATUS_OPTS.includes(sp.status as ReferralCommissionStatus)) {
+    exportParams.set("status", sp.status)
+  }
+  if (sp.referrer) exportParams.set("referrerId", sp.referrer)
+  if (sp.referred) exportParams.set("referredId", sp.referred)
+  if (sp.days) exportParams.set("days", sp.days)
+  const exportHref = `/api/admin/referrals/commissions/export${
+    exportParams.toString() ? `?${exportParams.toString()}` : ""
+  }`
+
   const filters: Prisma.ReferralCommissionWhereInput = {}
   if (sp.referrer) filters.referrerTenantId = sp.referrer
   if (sp.referred) filters.referredTenantId = sp.referred
@@ -90,10 +101,19 @@ export default async function AdminComissoesPage({
         <ArrowLeft className="h-3.5 w-3.5" />
         Voltar
       </Link>
-      <PageHeader
-        title="Comissoes"
-        description="Historico de comissoes geradas pelo programa de indicacao."
-      />
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <PageHeader
+          title="Comissoes"
+          description="Historico de comissoes geradas pelo programa de indicacao."
+        />
+        <a
+          href={exportHref}
+          className="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 shadow-sm transition hover:border-[var(--color-pmb-green)] hover:text-[var(--color-pmb-green-900)]"
+        >
+          <Download className="h-3.5 w-3.5" />
+          Exportar CSV
+        </a>
+      </div>
 
       <form className="flex flex-wrap items-center gap-3 text-sm" method="get">
         <label className="flex items-center gap-2">
