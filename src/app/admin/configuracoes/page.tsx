@@ -1,21 +1,16 @@
 import Link from "next/link"
-import { Share2, Award, ChevronRight } from "lucide-react"
+import { Share2, ChevronRight } from "lucide-react"
 import { PageHeader } from "@/components/painel/page-header"
 import { AdminConfigClient } from "@/components/admin/admin-config-client"
 import { requireAdminSession } from "@/lib/auth/admin-session"
 
+// Configurações de Certificados agora vivem dentro de /admin/certificados/configuracoes.
 const SUB_SETTINGS = [
   {
     href: "/admin/configuracoes/indicacoes",
     label: "Indicações",
     description: "Comissão padrão, dia de pagamento, mínimo de saque",
     icon: Share2,
-  },
-  {
-    href: "/admin/configuracoes/certificados",
-    label: "Certificados",
-    description: "Auto-emissão, porcentagem mínima, exigência de CPF",
-    icon: Award,
   },
 ]
 

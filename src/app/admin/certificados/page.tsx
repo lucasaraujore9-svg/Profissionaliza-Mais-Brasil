@@ -1,6 +1,6 @@
 import Link from "next/link"
 import { redirect } from "next/navigation"
-import { Plus, Palette, Settings } from "lucide-react"
+import { Plus, Settings } from "lucide-react"
 import { prisma } from "@/lib/prisma"
 import { requireAdminSession } from "@/lib/auth/admin-session"
 import { PageHeader } from "@/components/painel/page-header"
@@ -38,18 +38,11 @@ export default async function AdminCertificadosPage() {
         actions={
           <div className="flex flex-wrap gap-2">
             <Link
-              href="/admin/configuracoes/certificados"
+              href="/admin/certificados/configuracoes"
               className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
             >
               <Settings className="h-4 w-4" />
               Configurações
-            </Link>
-            <Link
-              href="/admin/certificados/template-padrao"
-              className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
-            >
-              <Palette className="h-4 w-4" />
-              Template padrão
             </Link>
             <Link
               href="/admin/certificados/emitir"
