@@ -2,17 +2,19 @@ import { TrendingUp, Users, Target, Receipt } from "lucide-react"
 import { formatCurrency } from "@/lib/utils"
 
 export interface DashboardMetrics {
-  monthlyRevenue: number
-  monthlyRevenueChange: number | null
-  monthlyStudents: number
-  monthlyStudentsChange: number | null
+  revenue: number
+  revenueChange: number | null
+  students: number
+  studentsChange: number | null
   conversionRate: number | null
   ticketAverage: number
-  enrollmentsCount: number
+  enrollmentsApproved: number
+  enrollmentsTotal: number
 }
 
 interface MetricCardsProps {
   metrics: DashboardMetrics
+  periodLabel: string
 }
 
 function formatPercent(value: number | null): { label: string; positive: boolean } {
@@ -24,44 +26,44 @@ function formatPercent(value: number | null): { label: string; positive: boolean
   return { label: formatted, positive }
 }
 
-export function MetricCards({ metrics }: MetricCardsProps) {
-  const revenueChange = formatPercent(metrics.monthlyRevenueChange)
-  const studentsChange = formatPercent(metrics.monthlyStudentsChange)
+export function MetricCards({ metrics, periodLabel }: MetricCardsProps) {
+  const revenueChange = formatPercent(metrics.revenueChange)
+  const studentsChange = formatPercent(metrics.studentsChange)
   const conversion = metrics.conversionRate === null
     ? "—"
     : `${metrics.conversionRate.toFixed(1).replace(".", ",")}%`
 
   const items = [
     {
-      label: "Receita do mês",
-      value: formatCurrency(metrics.monthlyRevenue),
+      label: "Receita no período",
+      value: formatCurrency(metrics.revenue),
       change: revenueChange.label,
       positive: revenueChange.positive,
-      hint: "vs mês anterior",
+      hint: "vs período anterior",
       icon: TrendingUp,
     },
     {
       label: "Alunos novos",
-      value: String(metrics.monthlyStudents),
+      value: String(metrics.students),
       change: studentsChange.label,
       positive: studentsChange.positive,
-      hint: "vs mês anterior",
+      hint: "vs período anterior",
       icon: Users,
     },
     {
       label: "Taxa de conversão",
       value: conversion,
-      change: `${metrics.enrollmentsCount} matrículas`,
+      change: `${metrics.enrollmentsApproved}/${metrics.enrollmentsTotal} matrículas`,
       positive: true,
-      hint: "no mês",
+      hint: periodLabel,
       icon: Target,
     },
     {
       label: "Ticket médio",
       value: formatCurrency(metrics.ticketAverage),
-      change: `${metrics.enrollmentsCount} vendas`,
+      change: `${metrics.enrollmentsApproved} vendas`,
       positive: true,
-      hint: "no mês",
+      hint: periodLabel,
       icon: Receipt,
     },
   ]

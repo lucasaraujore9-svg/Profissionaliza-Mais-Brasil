@@ -21,7 +21,7 @@ export default async function PainelDashboardPage() {
     <div className="space-y-6">
       <PageHeader
         title={`Bem-vindo, ${firstName}`}
-        description="Aqui está o resumo da sua operação nos últimos 30 dias."
+        description="Acompanhe receita, alunos e conversão no período escolhido."
       />
 
       <DashboardWrapper />
