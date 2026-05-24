@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Cancela runs antigos do mesmo branch quando há push novo —
+# economiza CI minutes sem perder cobertura.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Lint + Typecheck + Audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      # Skip do db:apply-pending (não temos DB no CI) e do prisma generate
+      # roda via postinstall.
+      - name: Install deps
+        env:
+          # postinstall roda `prisma generate` — não precisa de DATABASE_URL.
+          SKIP_PENDING_MIGRATIONS: "1"
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      # audit não bloqueia: o build pode passar mesmo com vulns conhecidas
+      # (xlsx HIGH é risco aceito, documentado em docs/SECURITY.md).
+      # Útil só para visibilidade na PR.
+      - name: npm audit (informativo)
+        continue-on-error: true
+        run: npm audit --omit=dev --audit-level=high

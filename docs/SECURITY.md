@@ -303,6 +303,31 @@ Antes de aprovar um PR que toca em qualquer um dos seguintes, verifique:
 | 2026-05-24 | 2 | `assertEnv()` no boot, Prisma Pool, migrations dinâmicas, swallow helper | Manutenibilidade + 43 `.catch(()=>undefined)` migrados |
 | 2026-05-24 | 3 | `process.env` residuais, XSS/redirect, `npm audit` | Open-redirect em login fixado; xlsx documentado |
 | 2026-05-24 | 4 | Varredura final tenant isolation | Pattern oficial documentado |
+| 2026-05-24 | 5 | Timeouts em chamadas HTTP externas | `AbortSignal.timeout` em plataforma/asaas/mp/vercel |
+| 2026-05-24 | 6 | Plaintext-password leak da plataforma parceira | `student.plataformaAlunoSenha` zerada após email |
+| 2026-05-24 | 7 | Headers HTTP, performance (N+1, indexes), observabilidade, DX | Health check, error boundaries, composite indexes, GitHub Actions CI, Vercel Analytics |
+
+## 7. Áreas que ficaram fora desta auditoria (próximo investimento)
+
+### Observabilidade (próximo investimento maior)
+- **Sentry / error tracking** — Sem isso, erros 500 em prod só aparecem em logs do Vercel Runtime (sem alerta, sem grouping). Recomendação: `@sentry/nextjs` + DSN, integrar em `src/instrumentation.ts`.
+- **Logger estruturado** — `console.error/warn` espalhado em 60+ arquivos sem contexto (userId, tenantId, requestId). Criar `src/lib/logger.ts` e migrar gradualmente.
+- **Alertas de cron** — Crons falham silenciosamente. Webhook (Slack/n8n) deveria notificar 5xx. Cron monitor pattern: ping em cada execução, alerta se gap.
+- **Audit log** — Tabela `AuditLog` para mudanças críticas de admin (criar usuário, cancelar matrícula, alterar preço). Sem isso não há "quem fez o quê quando".
+- **PostHog / eventos de negócio** — Funnels (signup → primeira compra → churn) não rastreados.
+
+### Performance (após observabilidade revelar hotspots)
+- **N+1 em `/admin/indicacoes`** — Loop em JS substituível por `groupBy` em SQL. ~5-10x speedup com 100+ comissões.
+- **Cache de catálogo** — `loadCategorias()` em `src/lib/catalog/home.ts` roda COUNT JOIN em toda visita de home. Cachear no Redis por 1h.
+- **Paginação ausente** em `/api/admin/alunos/global` (findMany sem `take`).
+- **`force-dynamic` espalhado** em 50 páginas — algumas (`/cursos`, `/checkout/confirmacao`) podem usar `revalidate` em vez.
+
+### React 19 / Next 16
+- **Layout shells Client-only** em `admin/layout-shell.tsx` e `painel/layout-shell.tsx` — toda a árvore vira Client por causa de 1 sidebar. Server Component wrapper + sidebar isolada como Client.
+- **`generateMetadata` ausente** em `/cursos/[slug]/page.tsx` — SEO fraco.
+
+### CSP & headers
+- **`'unsafe-eval'` e `'unsafe-inline'`** em script-src — Justificado por Mercado Pago SDK + Tailwind inline styles. Para fechar precisaria nonces dinâmicas (refactor significativo). Aceitável hoje, registrar quando MP migrar para um SDK sem eval.
 
 ---
 

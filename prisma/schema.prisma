@@ -574,6 +574,10 @@ model Enrollment {
   @@index([externalReference])
   @@index([asaasPaymentId])
   @@index([progressStatus])
+  // Composite: dashboards do painel filtram constantemente por
+  // (tenantId + status) — dezenas de queries por load.
+  @@index([tenantId, status])
+  @@index([studentId, status])
   @@map("enrollments")
 }
 
@@ -616,6 +620,10 @@ model Payment {
   @@index([tenantId])
   @@index([mpPaymentId])
   @@index([enrollmentId])
+  // Composite: financeiro do revendedor lista pagamentos por janela
+  // de data dentro do tenant — sem index composto, full scan por tenant.
+  @@index([tenantId, createdAt])
+  @@index([tenantId, paidAt])
   @@map("payments")
 }
 
@@ -696,6 +704,11 @@ model TenantPayment {
   @@index([tenantId])
   @@index([status])
   @@index([dueDate])
+  // Composite: relatórios financeiros do admin filtram por tenant +
+  // janela de data (createdAt/dueDate). Status incluso pra cobrir
+  // queries tipo "todos OVERDUE deste tenant em X mês".
+  @@index([tenantId, status, dueDate])
+  @@index([tenantId, createdAt])
   @@map("tenant_payments")
 }
 
