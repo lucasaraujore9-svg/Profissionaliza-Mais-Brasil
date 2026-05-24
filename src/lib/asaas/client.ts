@@ -50,6 +50,8 @@ async function request<T>(
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
+      // Timeout 20s por tentativa. Sem isso, uma chamada lenta pendura
+      // a rota inteira até o maxDuration da Vercel (drena Active CPU).
       const res = await fetch(url, {
         method,
         headers: {
@@ -57,6 +59,7 @@ async function request<T>(
           access_token: apiKey,
         },
         body: body ? JSON.stringify(body) : undefined,
+        signal: AbortSignal.timeout(20_000),
       })
 
       if (!res.ok) {

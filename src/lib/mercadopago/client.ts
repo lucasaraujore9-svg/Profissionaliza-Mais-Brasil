@@ -51,6 +51,8 @@ async function request<T>(
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
+      // Timeout 20s por tentativa. MP costuma responder em <2s; teto
+      // evita pendurar rota se a API estiver degradada.
       const res = await fetch(url, {
         method,
         headers: {
@@ -58,6 +60,7 @@ async function request<T>(
           Authorization: `Bearer ${accessToken}`,
         },
         body: body ? JSON.stringify(body) : undefined,
+        signal: AbortSignal.timeout(20_000),
       })
 
       if (!res.ok) {

@@ -40,6 +40,9 @@ async function vercelFetch<T>(
 ): Promise<T> {
   const { token, teamId } = getConfig()
   const url = appendTeamId(`${VERCEL_API}${path}`, teamId)
+  // Timeout 15s — sem retry. Vercel API costuma responder rápido; falha
+  // = mostra erro pro user que tenta de novo manualmente (verify domínio,
+  // etc.). Não pode pendurar a rota se Vercel API estiver lenta.
   const res = await fetch(url, {
     ...init,
     headers: {
@@ -47,6 +50,7 @@ async function vercelFetch<T>(
       Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
     },
+    signal: AbortSignal.timeout(15_000),
   })
   const text = await res.text()
   let body: unknown = null

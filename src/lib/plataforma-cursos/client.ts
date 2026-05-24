@@ -57,7 +57,12 @@ async function requestWithRetry<T>(
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
-      const res = await fetch(fullUrl, options)
+      // Timeout 25s por tentativa. Plataforma parceira é PHP legado e
+      // pode demorar, mas sem teto pendura rota até maxDuration da Vercel.
+      const res = await fetch(fullUrl, {
+        ...options,
+        signal: AbortSignal.timeout(25_000),
+      })
 
       if (!res.ok) {
         throw new EAApiError(
