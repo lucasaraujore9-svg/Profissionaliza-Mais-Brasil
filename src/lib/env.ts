@@ -55,15 +55,23 @@ const envSchema = z.object({
   ENCRYPTION_KEY: requiredInProd(z.string().regex(/^[0-9a-f]{64}$/i, "ENCRYPTION_KEY deve ser 64 chars hex (32 bytes)")),
 
   // ── Redis / rate limiting ────────────────────────────────────────────────
-  // Opcional: sem Redis o rate-limit fica liberado (perigoso em prod).
-  // Em prod a ausência é um warning, não um erro — para permitir deploy
-  // inicial sem upstash, mas logs alertam.
-  UPSTASH_REDIS_REST_URL: z.string().url().optional(),
+  // Opcional em qualquer ambiente: sem Redis o rate-limit fica liberado
+  // (assertEnv emite warning em prod). Aceita string vazia (Vercel às vezes
+  // injeta "" em vez de unset) — tratada como ausente por quem consome.
+  UPSTASH_REDIS_REST_URL: z
+    .string()
+    .optional()
+    .transform((v) => (v && v.length > 0 ? v : undefined))
+    .pipe(z.string().url().optional()),
   UPSTASH_REDIS_REST_TOKEN: z.string().optional(),
 
   // ── Webhooks ─────────────────────────────────────────────────────────────
+  // ASAAS_WEBHOOK_TOKEN obrigatório em prod (webhook rejeita sem ele).
+  // MP_WEBHOOK_SECRET opcional: na ausência, processador MP em prod
+  // rejeita o webhook (linha 257 de mercadopago/process.ts). Não derruba
+  // a app — só impede fulfillment automático até a env ser configurada.
   ASAAS_WEBHOOK_TOKEN: requiredInProd(z.string().min(16, "ASAAS_WEBHOOK_TOKEN curto demais (>=16)")),
-  MP_WEBHOOK_SECRET: requiredInProd(z.string().min(16, "MP_WEBHOOK_SECRET curto demais (>=16)")),
+  MP_WEBHOOK_SECRET: z.string().min(16, "MP_WEBHOOK_SECRET curto demais (>=16)").optional(),
 
   // ── Cron / interno ───────────────────────────────────────────────────────
   CRON_SECRET: requiredInProd(z.string().min(32, "CRON_SECRET deve ter >=32 chars (openssl rand -hex 32)")),
@@ -154,6 +162,11 @@ export function assertEnv(): void {
     if (!cached.UPSTASH_REDIS_REST_URL || !cached.UPSTASH_REDIS_REST_TOKEN) {
       console.warn(
         "[env] Redis (Upstash) não configurado em produção — rate-limit DESLIGADO. Configure UPSTASH_REDIS_REST_*.",
+      )
+    }
+    if (!cached.MP_WEBHOOK_SECRET) {
+      console.warn(
+        "[env] MP_WEBHOOK_SECRET ausente em produção — webhooks do Mercado Pago serão REJEITADOS. Configure no painel MP + Vercel.",
       )
     }
     if (!cached.AUTH_SECRET && !cached.NEXTAUTH_SECRET) {
