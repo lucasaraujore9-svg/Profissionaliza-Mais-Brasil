@@ -9,6 +9,7 @@ import { generatePasswordWithHash } from "@/lib/students/generate-password"
 import { createNotification } from "@/lib/notifications"
 import { appUrl as resolveAppUrl, vitrineHost } from "@/lib/tenant/urls"
 import type { PaymentGateway, PaymentType } from "@prisma/client"
+import { swallow } from "@/lib/errors"
 
 export interface TenantContext {
   id: string
@@ -258,22 +259,39 @@ export async function fulfillEnrollment(
     const plataformaLoginUrl =
       process.env.EA_STUDENT_LOGIN_URL ?? "https://suaescola.com/aluno"
 
-    await sendEmail({
-      to: enrollment.student.email,
-      subject: `Matricula confirmada em ${enrollment.course.nome}`,
-      template: {
-        type: "enrollment",
-        props: {
-          studentName: enrollment.student.nome,
-          courseName: enrollment.course.nome,
-          plataformaLoginUrl,
-          studentLogin: String(plataformaAlunoId),
-          studentPassword: plataformaSenha ?? "(enviada em email separado)",
+    let emailSent = false
+    try {
+      await sendEmail({
+        to: enrollment.student.email,
+        subject: `Matricula confirmada em ${enrollment.course.nome}`,
+        template: {
+          type: "enrollment",
+          props: {
+            studentName: enrollment.student.nome,
+            courseName: enrollment.course.nome,
+            plataformaLoginUrl,
+            studentLogin: String(plataformaAlunoId),
+            studentPassword: plataformaSenha ?? "(enviada em email separado)",
+          },
         },
-      },
-    }).catch((err) => {
+      })
+      emailSent = true
+    } catch (err) {
       console.error(`[fulfill] enrollment email falhou:`, err)
-    })
+    }
+
+    // Segurança: zera a senha plaintext da plataforma do banco SOMENTE
+    // após o email ter sido entregue. Se DB vazar depois disso, atacante
+    // não consegue logar como aluno na plataforma — só restaria fluxo
+    // "esqueci senha" da plataforma parceira.
+    if (emailSent && plataformaSenha) {
+      await prisma.student
+        .update({
+          where: { id: enrollment.student.id },
+          data: { plataformaAlunoSenha: null },
+        })
+        .catch(swallow("fulfill.clearPlataformaSenha"))
+    }
   }
 
   // Notificacoes in-app

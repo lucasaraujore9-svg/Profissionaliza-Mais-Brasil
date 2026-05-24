@@ -108,6 +108,13 @@ explorar — duplo gate.
   aplicacionalmente hoje (DB at-rest fica com Supabase).
 - `ENCRYPTION_KEY` = 64 chars hex. Validado em `env.ts` E em `crypto.ts`.
 
+**`student.plataformaAlunoSenha` (plataforma parceira):** armazenada em
+plaintext APENAS durante a janela entre criação do aluno e envio do email
+de credenciais. Zerada (`NULL`) após `sendEmail` retornar sucesso em
+`src/lib/enrollment/fulfill.ts`. Se o aluno perder acesso, usar o fluxo
+"esqueci senha" da plataforma parceira. Nunca persistimos essa senha
+permanentemente.
+
 ### 2.6. Uploads (Supabase Storage)
 
 Toda rota de upload deve:
