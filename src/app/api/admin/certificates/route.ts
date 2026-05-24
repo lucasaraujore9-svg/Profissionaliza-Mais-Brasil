@@ -25,6 +25,25 @@ export async function GET(request: Request) {
     where.tenantId = tenantFilter
   }
 
+  // PMB_RESELLER_MGR só vê certificados dos tenants atribuídos a ele (ou PMB se permitido).
+  // PMB_SALES é equiparado: só certificados PMB.
+  if (ctx.role === "PMB_RESELLER_MGR") {
+    if (tenantFilter && tenantFilter !== "pmb" && tenantFilter !== "any" && tenantFilter !== "all") {
+      const t = await prisma.tenant.findUnique({
+        where: { id: tenantFilter },
+        select: { accountManagerId: true },
+      })
+      if (t?.accountManagerId !== ctx.userId) {
+        return NextResponse.json({ error: "Sem permissao para este tenant" }, { status: 403 })
+      }
+    } else {
+      // Sem tenant explícito ou "any"/"all" — restringe aos tenants do mgr.
+      where.tenant = { accountManagerId: ctx.userId }
+    }
+  } else if (ctx.role === "PMB_SALES") {
+    where.tenantId = null
+  }
+
   if (courseId) where.courseId = courseId
 
   if (status === "issued") {

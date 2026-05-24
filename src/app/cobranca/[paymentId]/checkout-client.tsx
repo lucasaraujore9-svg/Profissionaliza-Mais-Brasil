@@ -587,7 +587,6 @@ export function CheckoutClient({ paymentId, billingType }: Props) {
     if (!billingInfo.pix && billingInfo.bankSlip) {
       setTab("BOLETO")
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [billingInfo])
 
   const tabs = [

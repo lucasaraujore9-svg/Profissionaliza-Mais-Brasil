@@ -5,9 +5,13 @@ import { processMpWebhook } from "@/lib/mercadopago/process"
 import type { MPWebhookNotification } from "@/lib/mercadopago/types"
 import { getAuthorizedPayment } from "@/lib/mercadopago/client"
 import { pmbMpAccessToken } from "@/lib/pmb-config"
+import { swallow } from "@/lib/errors"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
+// Webhook processa síncrono (fulfillment + plataforma + email). Se falhar,
+// MP retenta — idempotência via mpPaymentId no fulfill garante segurança.
+export const maxDuration = 60
 
 function pickHeaders(request: Request): Record<string, string> {
   const keys = ["x-signature", "x-request-id", "user-agent", "content-type"]
@@ -89,20 +93,37 @@ export async function POST(request: Request) {
           error: "sem payment id",
         },
       })
-      .catch(() => undefined)
+      .catch(swallow("mp.webhook.markLog"))
     return NextResponse.json({ received: true }, { status: 200 })
   }
 
-  const tenantSlug = searchParams.get("tenant") ?? null
+  // tenantSlug vem da query `?tenant=<slug>` que NÓS preenchemos na
+  // notification_url ao criar a preference. Aceita só [a-z0-9_-] pra não
+  // virar vetor de log-injection / SSRF se alguém forjar um webhook.
+  // Defesa em profundidade real:
+  //  1) HMAC SHA256 com MP_WEBHOOK_SECRET (validado em processMpWebhook)
+  //  2) getPayment(tenant.mpAccessToken, paymentId) — paymentId precisa
+  //     pertencer à conta MP daquele tenant, senão a API MP retorna 404.
+  //  3) Idempotência por mpPaymentId — replays são no-op.
+  const rawTenant = searchParams.get("tenant")
+  const tenantSlug =
+    rawTenant && /^[a-z0-9_-]{1,64}$/i.test(rawTenant) ? rawTenant : null
 
-  void processMpWebhook({
-    logId: log.id,
-    paymentId,
-    xSignature,
-    xRequestId,
-    tenantSlug,
-    dataId: queryDataId ?? String(paymentId),
-  })
+  try {
+    await processMpWebhook({
+      logId: log.id,
+      paymentId,
+      xSignature,
+      xRequestId,
+      tenantSlug,
+      dataId: queryDataId ?? String(paymentId),
+    })
+  } catch (error) {
+    // 500 sinaliza ao MP que retente. WebhookLog já foi gravado com processed=false
+    // e o processador é idempotente (mpPaymentId check).
+    console.error("[mp webhook] processMpWebhook lançou:", error)
+    return NextResponse.json({ error: "processing failed" }, { status: 500 })
+  }
 
   return NextResponse.json({ received: true }, { status: 200 })
 }

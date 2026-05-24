@@ -2,9 +2,14 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { requireResellerSession } from "@/lib/auth/reseller-session"
 
+// Caracteres que iniciam fórmula em Excel/Sheets (CSV injection).
+const CSV_FORMULA_TRIGGERS = /^[=+\-@\t\r]/
+
 function escapeCsv(value: string | number | null): string {
   if (value === null || value === undefined) return ""
-  const str = String(value)
+  let str = String(value)
+  // Defesa contra formula injection: prefixa com aspa simples.
+  if (CSV_FORMULA_TRIGGERS.test(str)) str = `'${str}`
   if (/[",\n;]/.test(str)) {
     return `"${str.replace(/"/g, '""')}"`
   }
@@ -77,12 +82,15 @@ export async function GET(request: Request) {
     .join("\n")
 
   const filename = `financeiro-${new Date().toISOString().slice(0, 10)}.csv`
+  const safeAscii = filename.replace(/[\r\n"\\;]/g, "_")
+  const encoded = encodeURIComponent(filename)
 
   return new NextResponse(csv, {
     status: 200,
     headers: {
       "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": `attachment; filename="${filename}"`,
+      "Content-Disposition": `attachment; filename="${safeAscii}"; filename*=UTF-8''${encoded}`,
+      "Cache-Control": "no-store",
     },
   })
 }

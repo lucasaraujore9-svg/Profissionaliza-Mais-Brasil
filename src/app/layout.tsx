@@ -5,6 +5,11 @@ import { ServiceWorkerRegister } from "@/components/pwa/sw-register";
 import { PwaInstallPrompt } from "@/components/pwa/install-prompt";
 import { CookieConsent } from "@/components/shared/cookie-consent";
 import { Toaster } from "sonner";
+import { assertEnv } from "@/lib/env";
+
+// Fail-fast em produção se faltar env essencial (AUTH_SECRET, MP_WEBHOOK_SECRET,
+// CRON_SECRET, etc.). Em dev só emite warnings. Roda 1x no boot do servidor.
+assertEnv();
 
 const dmSans = DM_Sans({
   variable: "--font-sans",

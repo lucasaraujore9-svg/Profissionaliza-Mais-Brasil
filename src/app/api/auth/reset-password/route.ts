@@ -3,6 +3,7 @@ import { hash } from "bcryptjs"
 import { z, ZodError } from "zod"
 import { prisma } from "@/lib/prisma"
 import { rateLimit, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
+import { hashResetToken } from "@/lib/auth/reset-token"
 
 const schema = z.object({
   token: z.string().min(10, "Token inválido"),
@@ -45,9 +46,10 @@ export async function POST(request: Request) {
 
   try {
     const passwordHash = await hash(data.password, 12)
+    const tokenHash = hashResetToken(data.token)
 
     const user = await prisma.user.findUnique({
-      where: { resetToken: data.token },
+      where: { resetToken: tokenHash },
     })
 
     if (user) {
@@ -75,7 +77,7 @@ export async function POST(request: Request) {
 
     // Fallback: token de aluno
     const student = await prisma.student.findUnique({
-      where: { resetToken: data.token },
+      where: { resetToken: tokenHash },
     })
 
     if (!student) {

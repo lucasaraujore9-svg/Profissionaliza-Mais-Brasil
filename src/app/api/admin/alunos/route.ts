@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
+import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { requirePmbSales } from "@/lib/auth/guards"
 import { getOrCreatePmbTenant } from "@/lib/pmb-tenant"
@@ -129,20 +130,42 @@ export async function POST(request: Request) {
     })
   }
 
-  const student = await prisma.student.create({
-    data: {
-      tenantId: pmbTenant.id,
-      nome: parsed.data.nome,
-      email: parsed.data.email,
-      cpf,
-      fone: parsed.data.fone,
-      polo: pmbPlataformaPolo(),
-      vendedorId: pmbPlataformaVendedorId(),
-      plataformaAlunoId: `pending_${Date.now()}`,
-      status: "ATIVO",
-    },
-    select: { id: true, nome: true, email: true, cpf: true },
-  })
+  let student: { id: string; nome: string; email: string | null; cpf: string | null }
+  try {
+    student = await prisma.student.create({
+      data: {
+        tenantId: pmbTenant.id,
+        nome: parsed.data.nome,
+        email: parsed.data.email,
+        cpf,
+        fone: parsed.data.fone,
+        polo: pmbPlataformaPolo(),
+        vendedorId: pmbPlataformaVendedorId(),
+        plataformaAlunoId: `pending_${Date.now()}`,
+        status: "ATIVO",
+      },
+      select: { id: true, nome: true, email: true, cpf: true },
+    })
+  } catch (err) {
+    // P2002 = unique violation. Race entre o findFirst acima e o create:
+    // outra request criou o student com mesmo email/cpf no intervalo.
+    // Retorna o existente como se fosse o caminho normal de duplicate.
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+      const existed = await prisma.student.findFirst({
+        where: {
+          tenantId: pmbTenant.id,
+          OR: [{ email: parsed.data.email }, { cpf }],
+        },
+        select: { id: true, nome: true, email: true, cpf: true },
+      })
+      if (existed) {
+        return NextResponse.json({
+          data: { ...existed, existed: true },
+        })
+      }
+    }
+    throw err
+  }
 
   // Cria o aluno na plataforma imediatamente (não espera pelo pagamento)
   try {

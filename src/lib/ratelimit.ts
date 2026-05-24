@@ -68,6 +68,36 @@ export async function rateLimit(
   }
 }
 
+/**
+ * Aplica rate limit a partir de uma chave arbitrária (já contendo IP/identifier).
+ * Útil para Server Components onde o `Request` não está disponível diretamente
+ * — passe o IP extraído via `headers()` ou outro identificador estável.
+ */
+export async function rateLimitByKey(
+  identifier: string,
+  config: LimiterConfig,
+): Promise<RateLimitResult> {
+  const limiter = getLimiter(config)
+  if (!limiter) {
+    return {
+      ok: true,
+      remaining: config.limit,
+      limit: config.limit,
+      retryAfterSec: 0,
+    }
+  }
+
+  const key = `${config.name}:${identifier}`
+  const r = await limiter.limit(key)
+
+  return {
+    ok: r.success,
+    remaining: r.remaining,
+    limit: r.limit,
+    retryAfterSec: Math.max(0, Math.ceil((r.reset - Date.now()) / 1000)),
+  }
+}
+
 export function rateLimitResponse(result: RateLimitResult): Response {
   return new Response(
     JSON.stringify({
@@ -104,4 +134,6 @@ export const RATE_LIMITS = {
   publicCupom: { name: "loja-cupom", limit: 20, windowSec: 60 },
   revendedorCadastro: { name: "rev-cadastro", limit: 5, windowSec: 600 },
   cobrancaPayCard: { name: "cobranca-paycard", limit: 5, windowSec: 60 },
+  certificateValidate: { name: "cert-validate", limit: 30, windowSec: 60 },
+  upload: { name: "upload", limit: 10, windowSec: 60 },
 } as const

@@ -344,6 +344,7 @@ const RUNNERS: Record<string, ReportRunner> = {
       const rows = await prisma.enrollment.findMany({
         where: {
           couponId: { not: null },
+          ...(filters.tenantId ? { tenantId: filters.tenantId } : {}),
           ...(start || end
             ? { createdAt: { ...(start ? { gte: start } : {}), ...(end ? { lte: end } : {}) } }
             : {}),

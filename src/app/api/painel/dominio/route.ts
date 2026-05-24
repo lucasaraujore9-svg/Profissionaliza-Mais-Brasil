@@ -159,7 +159,7 @@ export async function POST(request: Request) {
 
   await prisma.tenant.update({
     where: { id: tenant.id },
-    data: { customDomain: domain },
+    data: { customDomain: domain, domainVerified: false },
   })
 
   await invalidateTenant({
@@ -209,7 +209,7 @@ export async function DELETE() {
 
   await prisma.tenant.update({
     where: { id: tenant.id },
-    data: { customDomain: null },
+    data: { customDomain: null, domainVerified: false },
   })
 
   await invalidateTenant({

@@ -1,18 +1,11 @@
 import { NextResponse } from "next/server"
 import { syncCatalogFromEA } from "@/lib/catalog/sync"
+import { isCronAuthorized } from "@/lib/auth/bearer"
 
 export const maxDuration = 300
 
-function authorized(request: Request): boolean {
-  const secret = process.env.CRON_SECRET
-  if (!secret) return false
-  const header = request.headers.get("authorization") ?? ""
-  const bearer = header.startsWith("Bearer ") ? header.slice(7) : header
-  return bearer === secret
-}
-
 export async function POST(request: Request) {
-  if (!authorized(request)) {
+  if (!isCronAuthorized(request)) {
     return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
   }
 

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { requireAdminSession } from "@/lib/auth/admin-session"
+import { requireSuperAdmin } from "@/lib/auth/guards"
 
 const FEE_RATE = 0.089 // 8.9% taxas médias Asaas+MP para cálculo de líquido aproximado
 
@@ -11,10 +11,8 @@ interface RevenuePoint {
 }
 
 export async function GET(request: Request) {
-  const ctx = await requireAdminSession()
-  if (!ctx) {
-    return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-  }
+  const guard = await requireSuperAdmin()
+  if (!guard.ok) return guard.response
 
   const { searchParams } = new URL(request.url)
   const periodRaw = searchParams.get("period") ?? "30d"

@@ -80,7 +80,7 @@ export function VitrineConfigForm({
         <div className="mt-5 grid gap-4 sm:grid-cols-2">
           <AssetUploader
             label="Logo"
-            hint="PNG, SVG ou WEBP (max 5MB)"
+            hint="PNG, JPG ou WEBP (max 5MB)"
             icon="logo"
             previewUrl={config.logoUrl}
             uploading={uploading === "logo"}
@@ -266,7 +266,7 @@ function AssetUploader({
             ref={inputRef}
             type="file"
             className="hidden"
-            accept="image/png,image/jpeg,image/webp,image/svg+xml"
+            accept="image/png,image/jpeg,image/webp"
             onChange={(e) => {
               const file = e.target.files?.[0] ?? null
               onChoose(file)

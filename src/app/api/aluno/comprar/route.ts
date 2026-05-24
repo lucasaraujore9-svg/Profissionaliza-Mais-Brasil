@@ -13,6 +13,8 @@ import {
   AsaasApiError,
 } from "@/lib/asaas/client"
 import { getSystemSettings } from "@/lib/system-settings"
+import { tryConsumeCoupon, releaseCoupon } from "@/lib/coupons/consume"
+import { swallow } from "@/lib/errors"
 
 const createSchema = z.object({
   courseId: z.string().min(1),
@@ -149,6 +151,10 @@ export async function POST(request: Request) {
         ? (basePrice * Number(coupon.discountValue)) / 100
         : Number(coupon.discountValue)
     discountAmount = Math.min(raw, basePrice)
+    const reserved = await tryConsumeCoupon(coupon.id)
+    if (!reserved) {
+      return NextResponse.json({ error: "Cupom esgotado" }, { status: 400 })
+    }
     couponId = coupon.id
   }
 
@@ -184,6 +190,7 @@ export async function POST(request: Request) {
     const mpToken = await pmbMpAccessToken()
     if (!mpToken) {
       await prisma.enrollment.delete({ where: { id: enrollment.id } })
+      if (couponId) await releaseCoupon(couponId).catch(swallow("aluno.comprar"))
       return NextResponse.json(
         { error: "Mercado Pago não configurado" },
         { status: 503 },
@@ -285,10 +292,12 @@ export async function POST(request: Request) {
   // ASAAS
   if (!process.env.ASAAS_API_URL || !process.env.ASAAS_API_KEY) {
     await prisma.enrollment.delete({ where: { id: enrollment.id } })
+    if (couponId) await releaseCoupon(couponId).catch(swallow("aluno.comprar"))
     return NextResponse.json({ error: "Asaas não configurado" }, { status: 503 })
   }
   if (!student.cpf) {
     await prisma.enrollment.delete({ where: { id: enrollment.id } })
+    if (couponId) await releaseCoupon(couponId).catch(swallow("aluno.comprar"))
     return NextResponse.json(
       { error: "Cadastre seu CPF no perfil antes de comprar via Asaas" },
       { status: 400 },
@@ -400,7 +409,10 @@ export async function POST(request: Request) {
   } catch (error) {
     await prisma.enrollment
       .delete({ where: { id: enrollment.id } })
-      .catch(() => undefined)
+      .catch(swallow("aluno.comprar"))
+    if (couponId) {
+      await releaseCoupon(couponId).catch(swallow("aluno.comprar"))
+    }
     const message =
       error instanceof AsaasApiError
         ? error.message

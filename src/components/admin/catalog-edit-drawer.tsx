@@ -89,18 +89,26 @@ export function CatalogEditDrawer({ courseId, open, onOpenChange, onSaved }: Cat
 
   useEffect(() => {
     if (!courseId || !open) return
+    // Reset síncrono ao trocar de curso evita mostrar dados do curso anterior
+    // enquanto o novo carrega. Os 3 setState abaixo são intencionais.
+    /* eslint-disable react-hooks/set-state-in-effect */
     setError(null)
     setDetail(null)
     setTenantFilter("")
-    fetch(`/api/admin/catalogo/${courseId}`)
+    /* eslint-enable react-hooks/set-state-in-effect */
+    const ctrl = new AbortController()
+    fetch(`/api/admin/catalogo/${courseId}`, { signal: ctrl.signal })
       .then((r) => r.json())
       .then((b) => {
         if (b.data) setDetail(b.data as CourseDetail)
         else setError(b.error ?? "Falha ao carregar curso")
       })
-      .catch(() => setError("Erro de rede"))
+      .catch((err) => {
+        if (err?.name !== "AbortError") setError("Erro de rede")
+      })
     loadCategories()
     loadTenants()
+    return () => ctrl.abort()
   }, [courseId, open, loadCategories, loadTenants])
 
   async function handleSave(e: React.FormEvent<HTMLFormElement>) {

@@ -1,15 +1,52 @@
 import type { UserRole } from "@prisma/client"
 
-// Extensão do NextAuth para incluir role e tenantId no JWT/session
+/**
+ * Tipos compartilhados pela sessão NextAuth.
+ *
+ * Centralizar aqui evita o anti-padrão `(session.user as unknown as { ... })`
+ * espalhado pelo app. Atualizar este arquivo + auth.ts garante que todos
+ * os consumidores vejam o shape correto.
+ */
+type MemberRole = "owner" | "consultant" | null
+
 declare module "next-auth" {
   interface User {
-    role: UserRole
+    role: UserRole | "STUDENT"
     tenantId: string | null
     studentId?: string | null
+    mustChangePassword?: boolean
+    tenantStatus?: string | null
+    memberRole?: MemberRole
+  }
+
+  interface Session {
+    user: {
+      id: string
+      name?: string | null
+      email?: string | null
+      image?: string | null
+      role: UserRole | "STUDENT"
+      tenantId: string | null
+      studentId: string | null
+      mustChangePassword: boolean
+      tenantStatus: string | null
+      memberRole: MemberRole
+    }
   }
 }
 
-// API Response padrão
+declare module "next-auth/jwt" {
+  interface JWT {
+    role?: UserRole | "STUDENT"
+    tenantId?: string | null
+    studentId?: string | null
+    mustChangePassword?: boolean
+    tenantStatus?: string | null
+    memberRole?: MemberRole
+  }
+}
+
+// API Response padrão (mantido para compat — preferir helper apiResponse de src/lib/api/response.ts)
 export interface ApiResponse<T = unknown> {
   success: boolean
   data?: T

@@ -10,6 +10,19 @@ export interface BlockResult {
   errors: string[]
 }
 
+// Concorrência limitada — evita estourar rate limit da plataforma de aulas.
+const BATCH_SIZE = 8
+
+async function runInBatches<T>(
+  items: T[],
+  fn: (item: T) => Promise<void>,
+): Promise<void> {
+  for (let i = 0; i < items.length; i += BATCH_SIZE) {
+    const slice = items.slice(i, i + BATCH_SIZE)
+    await Promise.all(slice.map(fn))
+  }
+}
+
 /**
  * Bloqueia todos os alunos do tenant na plataforma de aulas e marca as
  * matriculas ativas como SUSPENDED. Usado quando o tenant fica inadimplente
@@ -32,7 +45,7 @@ export async function blockTenantStudents(tenantId: string): Promise<BlockResult
     select: { id: true, plataformaAlunoId: true },
   })
 
-  for (const student of students) {
+  await runInBatches(students, async (student) => {
     try {
       await blockStudentInEA(student.id)
       const updated = await prisma.enrollment.updateMany({
@@ -45,7 +58,7 @@ export async function blockTenantStudents(tenantId: string): Promise<BlockResult
       const msg = error instanceof Error ? error.message : "erro desconhecido"
       errors.push(`student ${student.id}: ${msg}`)
     }
-  }
+  })
 
   return { affectedStudents, affectedEnrollments, errors }
 }
@@ -65,7 +78,7 @@ export async function unblockTenantStudents(tenantId: string): Promise<BlockResu
     select: { id: true, plataformaAlunoId: true },
   })
 
-  for (const student of students) {
+  await runInBatches(students, async (student) => {
     try {
       await unblockStudentInEA(student.id)
       const updated = await prisma.enrollment.updateMany({
@@ -78,7 +91,7 @@ export async function unblockTenantStudents(tenantId: string): Promise<BlockResu
       const msg = error instanceof Error ? error.message : "erro desconhecido"
       errors.push(`student ${student.id}: ${msg}`)
     }
-  }
+  })
 
   return { affectedStudents, affectedEnrollments, errors }
 }

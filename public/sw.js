@@ -247,7 +247,7 @@ self.addEventListener("pushsubscriptionchange", (event) => {
             auth,
           }),
         })
-      } catch (err) {
+      } catch {
         // sem console.warn aqui — SW pode nao ter contexto bom
       }
     })(),

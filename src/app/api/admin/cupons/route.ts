@@ -81,15 +81,21 @@ export async function POST(request: Request) {
     )
   }
 
-  const cap = guard.session.role === "PMB_SALES" ? PMB_SALES_CAP : 100
-  if (
-    parsed.data.discountType === "PERCENTAGE" &&
-    parsed.data.discountValue > cap
-  ) {
-    return NextResponse.json(
-      { error: `Seu cap de desconto é ${cap}%` },
-      { status: 403 },
-    )
+  if (guard.session.role === "PMB_SALES") {
+    if (parsed.data.discountType === "FIXED") {
+      return NextResponse.json(
+        {
+          error: `PMB_SALES só pode criar cupons percentuais (cap ${PMB_SALES_CAP}%)`,
+        },
+        { status: 403 },
+      )
+    }
+    if (parsed.data.discountValue > PMB_SALES_CAP) {
+      return NextResponse.json(
+        { error: `Seu cap de desconto é ${PMB_SALES_CAP}%` },
+        { status: 403 },
+      )
+    }
   }
 
   const code = parsed.data.code.toUpperCase()

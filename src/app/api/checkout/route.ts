@@ -16,12 +16,14 @@ import {
   AsaasApiError,
 } from "@/lib/asaas/client"
 import { getOrCreatePmbTenant } from "@/lib/pmb-tenant"
+import { tryConsumeCoupon, releaseCoupon } from "@/lib/coupons/consume"
 import {
   pmbPlataformaPolo,
   pmbPlataformaVendedorId,
   pmbMpAccessToken,
 } from "@/lib/pmb-config"
 import { getSystemSettings } from "@/lib/system-settings"
+import { swallow } from "@/lib/errors"
 import { upsertStudent } from "@/lib/students/upsert"
 import { provisionStudentAccess } from "@/lib/students/access"
 
@@ -112,6 +114,9 @@ export async function POST(request: Request) {
   }
 
   const data: ParsedBody = parsed.data
+
+  // Trackeia cupom consumido p/ liberar em caso de falha no fluxo.
+  let consumedCouponId: string | null = null
 
   try {
     const settings = await getSystemSettings()
@@ -229,7 +234,15 @@ export async function POST(request: Request) {
           ? (basePrice * Number(coupon.discountValue)) / 100
           : Number(coupon.discountValue)
       discountAmount = Math.min(raw, basePrice)
+      const reserved = await tryConsumeCoupon(coupon.id)
+      if (!reserved) {
+        return NextResponse.json(
+          { error: "Cupom esgotado", code: "COUPON_EXHAUSTED" },
+          { status: 400 },
+        )
+      }
       couponId = coupon.id
+      consumedCouponId = coupon.id
     }
 
     const finalAmount = Number((basePrice - discountAmount).toFixed(2))
@@ -614,7 +627,10 @@ export async function POST(request: Request) {
     } catch (error) {
       await prisma.enrollment
         .delete({ where: { id: enrollment.id } })
-        .catch(() => undefined)
+        .catch(swallow("pmb-checkout"))
+      if (consumedCouponId) {
+        await releaseCoupon(consumedCouponId).catch(swallow("pmb-checkout"))
+      }
       const message =
         error instanceof AsaasApiError
           ? error.message
@@ -627,6 +643,9 @@ export async function POST(request: Request) {
   } catch (error) {
     // Loga o erro completo no Vercel pra investigação futura.
     console.error("[pmb-checkout] error:", error)
+    if (consumedCouponId) {
+      await releaseCoupon(consumedCouponId).catch(swallow("pmb-checkout"))
+    }
     // Erros conhecidos da API Asaas viram resposta 502 com a mensagem real.
     if (error instanceof AsaasApiError) {
       return NextResponse.json(

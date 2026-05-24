@@ -23,6 +23,10 @@
     {
       "path": "/api/cron/referral-monthly-payout",
       "schedule": "0 5 20 * *"
+    },
+    {
+      "path": "/api/cron/cleanup-webhook-logs",
+      "schedule": "0 2 1 * *"
     }
   ]
 }

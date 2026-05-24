@@ -187,30 +187,6 @@ export function slugifyCategoria(nome: string): string {
     .replace(/^-+|-+$/g, "")
 }
 
-const LOWER_WORDS = new Set([
-  "e",
-  "de",
-  "da",
-  "do",
-  "das",
-  "dos",
-  "para",
-  "com",
-  "em",
-])
-
-function titleCaseCategoria(nome: string): string {
-  // plataforma retorna "INFORMÁTICA E TECNOLOGIA" em caps; converte para Title Case
-  // mantendo conectores (e, de, da, do…) em minúsculo no meio do texto.
-  const words = nome.toLowerCase().split(/\s+/)
-  return words
-    .map((w, i) => {
-      if (i > 0 && LOWER_WORDS.has(w)) return w
-      return w.replace(/^\p{L}/u, (m) => m.toUpperCase())
-    })
-    .join(" ")
-}
-
 export async function loadCategorias(minCount = 3): Promise<CategoriaInfo[]> {
   try {
     // Fonte canonica: tabela Category curada pelo admin. So lista categorias

@@ -6,6 +6,7 @@ import {
   extractAssetPath,
   uploadVitrineAsset,
 } from "@/lib/supabase/storage"
+import { isValidImageMagic } from "@/lib/storage/validate-image"
 
 const MAX_BYTES = 5 * 1024 * 1024
 // SVG bloqueado: XSS persistente via <script> embarcado seria servido inline.
@@ -83,6 +84,15 @@ export async function POST(request: Request) {
   let uploadedUrl: string
   try {
     const buffer = await file.arrayBuffer()
+    // Defesa contra MIME spoofing: confirma que o conteúdo bate com o
+    // formato declarado. Sem isso um atacante poderia subir HTML/SVG
+    // renderizado pelo Supabase com Content-Type confiável.
+    if (!isValidImageMagic(buffer, file.type)) {
+      return NextResponse.json(
+        { error: "Conteúdo do arquivo não corresponde ao formato declarado" },
+        { status: 400 },
+      )
+    }
     const result = await uploadVitrineAsset(path, buffer, file.type)
     uploadedUrl = result.publicUrl
   } catch (error) {

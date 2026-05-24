@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server"
-import { randomBytes } from "node:crypto"
 import { z, ZodError } from "zod"
 import { prisma } from "@/lib/prisma"
 import { sendEmail } from "@/lib/email/resend"
 import { rateLimit, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
+import { generateResetToken } from "@/lib/auth/reset-token"
 
 const RESET_EXPIRATION_MINUTES = 5
 
@@ -50,7 +50,7 @@ export async function POST(request: Request) {
   try {
     const user = await prisma.user.findUnique({ where: { email: data.email } })
 
-    const token = randomBytes(32).toString("hex")
+    const { plain: token, hash: tokenHash } = generateResetToken()
     const expires = new Date(Date.now() + RESET_EXPIRATION_MINUTES * 60 * 1000)
     const appUrl =
       process.env.NEXT_PUBLIC_APP_URL ??
@@ -60,7 +60,7 @@ export async function POST(request: Request) {
     if (user) {
       await prisma.user.update({
         where: { id: user.id },
-        data: { resetToken: token, resetTokenExpires: expires },
+        data: { resetToken: tokenHash, resetTokenExpires: expires },
       })
 
       await sendEmail({
@@ -87,7 +87,7 @@ export async function POST(request: Request) {
 
     await prisma.student.update({
       where: { id: student.id },
-      data: { resetToken: token, resetTokenExpires: expires },
+      data: { resetToken: tokenHash, resetTokenExpires: expires },
     })
 
     await sendEmail({

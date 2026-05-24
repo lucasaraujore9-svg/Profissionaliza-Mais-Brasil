@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { requireResellerSession } from "@/lib/auth/reseller-session"
 import { verifyProjectDomain, getProjectDomain } from "@/lib/vercel/client"
+import { swallow } from "@/lib/errors"
 
 export async function POST() {
   const ctx = await requireResellerSession()
@@ -28,6 +29,16 @@ export async function POST() {
 
   try {
     const info = await getProjectDomain(tenant.customDomain)
+
+    // Persiste o status de verificação no DB para que o proxy possa resolver
+    // o tenant via custom domain (proxy só usa `domainVerified=true`).
+    await prisma.tenant
+      .update({
+        where: { id: ctx.tenantId },
+        data: { domainVerified: info.verified },
+      })
+      .catch(swallow("painel.dominio.verify"))
+
     return NextResponse.json({
       data: {
         verified: info.verified,

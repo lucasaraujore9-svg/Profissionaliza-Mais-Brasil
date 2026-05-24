@@ -3,16 +3,16 @@ import { prisma } from "@/lib/prisma"
 import { blockTenantStudents } from "@/lib/auto-block"
 import { sendEmail } from "@/lib/email/resend"
 import { createNotification } from "@/lib/notifications"
+import { isCronAuthorized } from "@/lib/auth/bearer"
 
 export const maxDuration = 300
 export const dynamic = "force-dynamic"
 
-function authorized(request: Request): boolean {
-  const secret = process.env.CRON_SECRET
-  if (!secret) return false
-  const header = request.headers.get("authorization") ?? ""
-  const bearer = header.startsWith("Bearer ") ? header.slice(7) : header
-  return bearer === secret
+// Pequeno throttle entre emails para não estourar o rate limit do Resend
+// (dev: 10 req/s, prod típico: 14k req/dia). 120ms = ~8 req/s.
+const EMAIL_THROTTLE_MS = 120
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 interface CancellationPolicy {
@@ -113,6 +113,7 @@ async function processOverdueTenants() {
         }).catch((err) => {
           console.error(`[sweep-tenants] email falhou (${tenant.id}):`, err)
         })
+        await sleep(EMAIL_THROTTLE_MS)
       }
 
       await createNotification({
@@ -146,7 +147,7 @@ async function processOverdueTenants() {
 }
 
 export async function POST(request: Request) {
-  if (!authorized(request)) {
+  if (!isCronAuthorized(request)) {
     return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
   }
   const result = await processOverdueTenants()

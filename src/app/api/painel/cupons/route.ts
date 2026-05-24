@@ -89,14 +89,22 @@ export async function POST(request: Request) {
     membership &&
     membership.role === "consultant" &&
     membership.status === "ATIVO" &&
-    membership.maxDiscount !== null &&
-    parsed.data.discountType === "PERCENTAGE" &&
-    parsed.data.discountValue > membership.maxDiscount
+    membership.maxDiscount !== null
   ) {
-    return NextResponse.json(
-      { error: `Seu cap de desconto é ${membership.maxDiscount}%` },
-      { status: 403 },
-    )
+    if (parsed.data.discountType === "FIXED") {
+      return NextResponse.json(
+        {
+          error: `Consultor com cap de ${membership.maxDiscount}% só pode criar cupom percentual`,
+        },
+        { status: 403 },
+      )
+    }
+    if (parsed.data.discountValue > membership.maxDiscount) {
+      return NextResponse.json(
+        { error: `Seu cap de desconto é ${membership.maxDiscount}%` },
+        { status: 403 },
+      )
+    }
   }
 
   const existing = await prisma.coupon.findUnique({

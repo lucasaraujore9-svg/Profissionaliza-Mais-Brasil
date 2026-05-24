@@ -21,11 +21,19 @@ export function buildCsv(header: string[], rows: unknown[][]): string {
 }
 
 export function csvResponse(csv: string, filename: string): Response {
+  // Sanitiza filename para impedir CRLF injection em response headers e
+  // quebrar o parsing do Content-Disposition. Inclui filename*=UTF-8''...
+  // (RFC 5987/6266) para preservar acentos/símbolos.
+  const safeAscii = filename
+    .replace(/[\r\n"\\;]/g, "_")
+    .replace(/[^\x20-\x7E]/g, "_")
+  const encoded = encodeURIComponent(filename)
   return new Response("﻿" + csv, {
     status: 200,
     headers: {
       "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": `attachment; filename="${filename}"`,
+      "Content-Disposition": `attachment; filename="${safeAscii}"; filename*=UTF-8''${encoded}`,
+      "Cache-Control": "no-store",
     },
   })
 }

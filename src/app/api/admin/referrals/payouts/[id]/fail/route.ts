@@ -44,7 +44,7 @@ export async function POST(
 
   const payout = await prisma.referralPayout.findUnique({
     where: { id },
-    select: { id: true, status: true },
+    select: { id: true, status: true, referrerTenantId: true },
   })
   if (!payout) {
     return NextResponse.json({ error: "Saque nao encontrado" }, { status: 404 })
@@ -54,6 +54,17 @@ export async function POST(
       { error: `Saque ja esta em estado ${payout.status}` },
       { status: 409 },
     )
+  }
+
+  // PMB_RESELLER_MGR só pode falhar payouts de tenants atribuídos a ele.
+  if (session.role === "PMB_RESELLER_MGR") {
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: payout.referrerTenantId },
+      select: { accountManagerId: true },
+    })
+    if (tenant?.accountManagerId !== session.userId) {
+      return NextResponse.json({ error: "Sem permissao" }, { status: 403 })
+    }
   }
 
   try {

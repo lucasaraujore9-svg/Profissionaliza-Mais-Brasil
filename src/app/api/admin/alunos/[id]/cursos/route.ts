@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { requireAdminSession } from "@/lib/auth/admin-session"
+import { getOrCreatePmbTenant } from "@/lib/pmb-tenant"
 import {
   linkCourseToStudent,
   unlinkCourseFromStudent,
@@ -20,6 +21,16 @@ interface Ctx {
   params: Promise<{ id: string }>
 }
 
+async function assertPmbStudent(
+  studentId: string,
+): Promise<{ id: string } | null> {
+  const pmbTenant = await getOrCreatePmbTenant()
+  return prisma.student.findFirst({
+    where: { id: studentId, tenantId: pmbTenant.id },
+    select: { id: true },
+  })
+}
+
 export async function GET(_request: Request, ctx: Ctx) {
   const session = await requireAdminSession()
   if (!session) {
@@ -27,8 +38,13 @@ export async function GET(_request: Request, ctx: Ctx) {
   }
   const { id } = await ctx.params
 
+  const pmbStudent = await assertPmbStudent(id)
+  if (!pmbStudent) {
+    return NextResponse.json({ error: "Aluno não encontrado" }, { status: 404 })
+  }
+
   const enrollments = await prisma.enrollment.findMany({
-    where: { studentId: id },
+    where: { studentId: id, tenantId: null },
     orderBy: { createdAt: "desc" },
     include: {
       course: {
@@ -83,9 +99,10 @@ export async function POST(request: Request, ctx: Ctx) {
     return NextResponse.json({ error: "courseId inválido" }, { status: 400 })
   }
 
+  const pmbTenant = await getOrCreatePmbTenant()
   const [studentExists, course] = await Promise.all([
-    prisma.student.findUnique({
-      where: { id: studentId },
+    prisma.student.findFirst({
+      where: { id: studentId, tenantId: pmbTenant.id },
       select: { id: true, nome: true },
     }),
     prisma.course.findUnique({
@@ -157,6 +174,11 @@ export async function DELETE(request: Request, ctx: Ctx) {
   const courseId = url.searchParams.get("courseId")
   if (!courseId) {
     return NextResponse.json({ error: "courseId obrigatório" }, { status: 400 })
+  }
+
+  const pmbStudent = await assertPmbStudent(studentId)
+  if (!pmbStudent) {
+    return NextResponse.json({ error: "Aluno não encontrado" }, { status: 404 })
   }
 
   try {

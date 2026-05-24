@@ -3,13 +3,20 @@ import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto"
 const ALGORITHM = "aes-256-gcm"
 const IV_LENGTH = 12
 const TAG_LENGTH = 16
+const KEY_LENGTH = 32 // AES-256 exige chave de 32 bytes
 
 function getEncryptionKey(): Buffer {
   const key = process.env.ENCRYPTION_KEY
   if (!key) {
     throw new Error("ENCRYPTION_KEY environment variable is required")
   }
-  return Buffer.from(key, "hex")
+  const buf = Buffer.from(key, "hex")
+  if (buf.length !== KEY_LENGTH) {
+    throw new Error(
+      `ENCRYPTION_KEY must decode to ${KEY_LENGTH} bytes (got ${buf.length}). Generate with: openssl rand -hex 32`,
+    )
+  }
+  return buf
 }
 
 /**
@@ -51,6 +58,10 @@ export function decrypt(ciphertext: string): string {
   const iv = Buffer.from(ivHex, "hex")
   const encrypted = Buffer.from(encryptedHex, "hex")
   const tag = Buffer.from(tagHex, "hex")
+
+  if (iv.length !== IV_LENGTH || tag.length !== TAG_LENGTH) {
+    throw new Error("Invalid ciphertext: IV or auth tag has wrong length")
+  }
 
   const decipher = createDecipheriv(ALGORITHM, key, iv)
   decipher.setAuthTag(tag)

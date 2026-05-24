@@ -2,17 +2,10 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { blockStudentInEA } from "@/lib/students/plataforma-actions"
 import { createNotification } from "@/lib/notifications"
+import { isCronAuthorized } from "@/lib/auth/bearer"
 
 export const maxDuration = 300
 export const dynamic = "force-dynamic"
-
-function authorized(request: Request): boolean {
-  const secret = process.env.CRON_SECRET
-  if (!secret) return false
-  const header = request.headers.get("authorization") ?? ""
-  const bearer = header.startsWith("Bearer ") ? header.slice(7) : header
-  return bearer === secret
-}
 
 const STUDENT_GRACE_DAYS = 5
 
@@ -131,7 +124,7 @@ async function processOverdueStudents() {
 }
 
 export async function POST(request: Request) {
-  if (!authorized(request)) {
+  if (!isCronAuthorized(request)) {
     return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
   }
   const result = await processOverdueStudents()

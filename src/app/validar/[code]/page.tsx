@@ -1,7 +1,9 @@
 import Image from "next/image"
 import Link from "next/link"
+import { headers } from "next/headers"
 import { prisma } from "@/lib/prisma"
 import { PMB_TENANT_NAME } from "@/lib/pmb-config"
+import { rateLimitByKey, RATE_LIMITS } from "@/lib/ratelimit"
 
 function formatDate(d: Date): string {
   return new Date(d).toLocaleDateString("pt-BR", {
@@ -157,6 +159,32 @@ function DownloadIcon({ className = "" }: { className?: string }) {
 export default async function ValidateCertificatePage({ params }: Props) {
   const { code } = await params
   const normalizedCode = (code ?? "").trim().toUpperCase()
+
+  // Rate limit por IP para mitigar enumeration de códigos de certificado.
+  const hdrs = await headers()
+  const ip =
+    hdrs.get("x-forwarded-for")?.split(",")[0]?.trim() ??
+    hdrs.get("x-real-ip") ??
+    "anon"
+  const rl = await rateLimitByKey(ip, RATE_LIMITS.certificateValidate)
+  if (!rl.ok) {
+    return (
+      <PageShell>
+        <section className="overflow-hidden rounded-3xl border border-amber-200/70 bg-white shadow-sm">
+          <div className="flex items-center gap-4 bg-gradient-to-r from-amber-500 to-amber-600 px-6 py-5 text-white sm:px-8">
+            <h1 className="font-display text-2xl sm:text-3xl">
+              Muitas tentativas
+            </h1>
+          </div>
+          <div className="px-6 py-8 sm:px-8 sm:py-10">
+            <p className="text-base text-gray-700">
+              Aguarde alguns segundos e tente novamente.
+            </p>
+          </div>
+        </section>
+      </PageShell>
+    )
+  }
 
   const cert = normalizedCode
     ? await prisma.certificate.findUnique({

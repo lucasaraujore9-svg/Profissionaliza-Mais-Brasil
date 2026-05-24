@@ -8,6 +8,8 @@ import {
 } from "@/lib/mercadopago/client"
 import { upsertStudent } from "@/lib/students/upsert"
 import { provisionStudentAccess } from "@/lib/students/access"
+import { tryConsumeCoupon, releaseCoupon } from "@/lib/coupons/consume"
+import { swallow } from "@/lib/errors"
 
 const cpfRegex = /^\d{3}\.?\d{3}\.?\d{3}-?\d{2}$/
 const phoneRegex = /^\(?\d{2}\)?\s?\d{4,5}-?\d{4}$/
@@ -72,6 +74,9 @@ export async function POST(request: Request) {
 
   const data: ParsedBody = parsed.data
 
+  // Trackeia cupom consumido para liberar em caso de falha no fluxo abaixo.
+  let consumedCouponId: string | null = null
+
   try {
     const [tenant, tenantCourse] = await Promise.all([
       prisma.tenant.findUnique({
@@ -80,6 +85,7 @@ export async function POST(request: Request) {
           id: true,
           slug: true,
           name: true,
+          status: true,
           mpAccessToken: true,
           plataformaVendedorId: true,
         },
@@ -103,6 +109,16 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { error: "Tenant inválido", code: "TENANT_INVALID" },
         { status: 404 },
+      )
+    }
+
+    if (tenant.status !== "ACTIVE") {
+      return NextResponse.json(
+        {
+          error: "Esta loja não está aceitando vendas no momento",
+          code: "TENANT_INACTIVE",
+        },
+        { status: 403 },
       )
     }
 
@@ -158,7 +174,17 @@ export async function POST(request: Request) {
           ? (basePrice * Number(coupon.discountValue)) / 100
           : Number(coupon.discountValue)
       discountAmount = Math.min(raw, basePrice)
+
+      // Reserva atômica do cupom — evita estouro de maxUses em compras concorrentes.
+      const reserved = await tryConsumeCoupon(coupon.id)
+      if (!reserved) {
+        return NextResponse.json(
+          { error: "Cupom esgotado", code: "COUPON_EXHAUSTED" },
+          { status: 400 },
+        )
+      }
       couponId = coupon.id
+      consumedCouponId = coupon.id
     }
 
     const finalAmount = Number((basePrice - discountAmount).toFixed(2))
@@ -327,6 +353,10 @@ export async function POST(request: Request) {
     })
   } catch (error) {
     console.error("[checkout] error:", error)
+    // Libera reserva de cupom — checkout falhou, não consumimos o uso.
+    if (consumedCouponId) {
+      await releaseCoupon(consumedCouponId).catch(swallow("loja.checkout"))
+    }
     return NextResponse.json(
       { error: "Erro ao processar checkout", code: "INTERNAL_ERROR" },
       { status: 500 },

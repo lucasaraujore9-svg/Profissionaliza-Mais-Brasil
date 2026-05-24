@@ -6,6 +6,7 @@ import {
   extractAssetPath,
   uploadVitrineAsset,
 } from "@/lib/supabase/storage"
+import { isValidImageMagic } from "@/lib/storage/validate-image"
 
 const SETTINGS_ID = "default"
 const MAX_BYTES = 2 * 1024 * 1024
@@ -67,6 +68,12 @@ export async function POST(request: Request) {
   let uploadedUrl: string
   try {
     const buffer = await file.arrayBuffer()
+    if (!isValidImageMagic(buffer, file.type)) {
+      return NextResponse.json(
+        { error: "Conteúdo do arquivo não corresponde ao formato declarado" },
+        { status: 400 },
+      )
+    }
     const result = await uploadVitrineAsset(path, buffer, file.type)
     uploadedUrl = result.publicUrl
   } catch (error) {

@@ -8,6 +8,9 @@ import { processAsaasWebhook } from "@/lib/asaas/process"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
+// Asaas exige <22s de resposta — mas como fulfill é idempotente,
+// preferimos await + retry do Asaas a fire-and-forget que perde eventos.
+export const maxDuration = 60
 
 function pickHeaders(request: Request): Record<string, string> {
   const keys = [
@@ -61,7 +64,13 @@ export async function POST(request: Request) {
     select: { id: true },
   })
 
-  void processAsaasWebhook(log.id, payload)
+  try {
+    await processAsaasWebhook(log.id, payload)
+  } catch (error) {
+    // 500 → Asaas retenta. Processador é idempotente (asaasPaymentId check).
+    console.error("[asaas webhook] processAsaasWebhook lançou:", error)
+    return NextResponse.json({ error: "processing failed" }, { status: 500 })
+  }
 
   return NextResponse.json({ received: true }, { status: 200 })
 }

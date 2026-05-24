@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { requireAdminSession } from "@/lib/auth/admin-session"
+import { prisma } from "@/lib/prisma"
 import { buildCsv, csvResponse } from "@/lib/reports/csv"
 import {
   REPORT_DEFS,
@@ -40,10 +41,33 @@ export async function GET(request: Request, ctx: Ctx) {
 
   const url = new URL(request.url)
   const format = (url.searchParams.get("format") ?? "csv").toLowerCase()
+  const requestedTenantId = url.searchParams.get("tenantId") ?? undefined
+
+  // PMB_RESELLER_MGR só pode filtrar por tenants atribuídos a ele.
+  // Sem tenantId, força filtro implícito; com tenantId, valida ownership.
+  const tenantId = requestedTenantId
+  if (session.role === "PMB_RESELLER_MGR") {
+    if (requestedTenantId) {
+      const t = await prisma.tenant.findUnique({
+        where: { id: requestedTenantId },
+        select: { accountManagerId: true },
+      })
+      if (t?.accountManagerId !== session.userId) {
+        return NextResponse.json({ error: "Sem permissao para este tenant" }, { status: 403 })
+      }
+    } else {
+      // Sem tenantId explícito: o report cobriria todos os tenants — bloqueia.
+      return NextResponse.json(
+        { error: "Informe tenantId — você só tem acesso aos seus tenants" },
+        { status: 400 },
+      )
+    }
+  }
+
   const filters = {
     from: url.searchParams.get("from") ?? undefined,
     to: url.searchParams.get("to") ?? undefined,
-    tenantId: url.searchParams.get("tenantId") ?? undefined,
+    tenantId,
   }
 
   try {

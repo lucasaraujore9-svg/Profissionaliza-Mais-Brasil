@@ -48,6 +48,14 @@ export async function issueCertificateIfEligible(
   if (!enrollment.student) throw new Error("Aluno nao encontrado para a matricula")
   if (!enrollment.course) throw new Error("Curso nao encontrado para a matricula")
 
+  // Bloqueia emissão para matrículas que não pagaram (PENDING) ou foram canceladas/reembolsadas.
+  // ACTIVE (cursando), SUSPENDED (inadimplente — pode ter completado antes), COMPLETED são válidas.
+  if (enrollment.status === "PENDING" || enrollment.status === "CANCELLED") {
+    throw new Error(
+      `Matrícula ${enrollmentId} não está elegível para certificado (status=${enrollment.status})`,
+    )
+  }
+
   // Reusa certificado nao revogado existente (a nao ser que force=true)
   if (!options.force) {
     const existing = await prisma.certificate.findFirst({
@@ -91,8 +99,9 @@ export async function issueCertificateIfEligible(
     },
   })
 
-  // Marca Enrollment como COMPLETED se ainda nao estava
-  if (enrollment.status !== "COMPLETED" && enrollment.status !== "CANCELLED") {
+  // Marca Enrollment como COMPLETED se ainda nao estava (CANCELLED/PENDING
+  // já foram bloqueados acima).
+  if (enrollment.status !== "COMPLETED") {
     await prisma.enrollment.update({
       where: { id: enrollment.id },
       data: { status: "COMPLETED" },

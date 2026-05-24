@@ -4,6 +4,10 @@ import { prisma } from "@/lib/prisma"
 import { z } from "zod"
 import { compare } from "bcryptjs"
 import { PMB_TENANT_SLUG } from "@/lib/pmb-config"
+import { authSecret } from "@/lib/env"
+import { rateLimitByKey, RATE_LIMITS } from "@/lib/ratelimit"
+import { swallow } from "@/lib/errors"
+import "@/types"
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -44,10 +48,28 @@ async function resolveTenantIdFromRequest(
   return pmbTenant?.id ?? null
 }
 
+const isProd = process.env.NODE_ENV === "production"
+
+// Em produção, NextAuth lança se `secret` for undefined; em dev gera um
+// secret efêmero e loga warning. `authSecret()` mantém compat com AUTH_SECRET
+// (v5) e NEXTAUTH_SECRET (legado) — validação forte está em src/lib/env.ts.
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  secret: process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET,
+  secret: authSecret(),
   trustHost: true,
   session: { strategy: "jwt" },
+  // Explicit cookie hardening — defaults do NextAuth v5 já são seguros, mas
+  // declarar evita regressões silenciosas e documenta o intent.
+  cookies: {
+    sessionToken: {
+      name: isProd ? "__Secure-authjs.session-token" : "authjs.session-token",
+      options: {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        secure: isProd,
+      },
+    },
+  },
   pages: {
     signIn: "/login",
   },
@@ -61,6 +83,23 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const parsed = loginSchema.safeParse(credentials)
         if (!parsed.success) return null
 
+        // Rate-limit anti-brute-force: chave por IP + email lower-case.
+        // Bucket único pra User e Student — bloqueia tentativas vs ambos.
+        // Falha em modo aberto se o Redis não estiver configurado (dev).
+        const ipHint =
+          request?.headers?.get?.("x-forwarded-for")?.split(",")[0]?.trim() ??
+          request?.headers?.get?.("x-real-ip") ??
+          "anon"
+        const rlKey = `${ipHint}:${parsed.data.email}`
+        const rl = await rateLimitByKey(rlKey, RATE_LIMITS.authLogin)
+        if (!rl.ok) {
+          // NextAuth não tem 429 nativo no Credentials provider — retornar
+          // null devolve "credentials inválido", o que é OK do ponto de
+          // vista de UX e segurança (não revela rate-limit ao atacante).
+          console.warn("[auth] rate-limit hit:", rlKey)
+          return null
+        }
+
         // 1) Tenta como User (admin/equipe/revendedor)
         const user = await prisma.user.findUnique({
           where: { email: parsed.data.email },
@@ -70,6 +109,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         if (user) {
           const isValid = await compare(parsed.data.password, user.passwordHash)
           if (!isValid) return null
+
+          // Bloqueia login de usuário INATIVO/PENDING_INVITE — só ATIVO.
+          if (user.status !== "ATIVO") return null
 
           // Consultor convidado por revendedor: o User e criado com
           // role=RESELLER mas SEM tenantId direto — o vinculo vive em
@@ -90,6 +132,21 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
               effectiveTenantId = membership.tenant.id
               effectiveTenantStatus = membership.tenant.status
               memberRole = "consultant"
+            }
+          }
+
+          // RESELLER (owner ou consultor) só pode logar se o tenant estiver
+          // ACTIVE ou PENDING (PENDING = aguardando 1º pagamento mas pode
+          // configurar a loja). CANCELLED/SUSPENDED bloqueiam acesso.
+          // Roles PMB (SUPER_ADMIN, PMB_SALES, PMB_RESELLER_MGR) não dependem
+          // de tenant — passam direto.
+          if (user.role === "RESELLER") {
+            if (!effectiveTenantId) return null
+            if (
+              effectiveTenantStatus !== "ACTIVE" &&
+              effectiveTenantStatus !== "PENDING"
+            ) {
+              return null
             }
           }
 
@@ -125,6 +182,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             email: true,
             passwordHash: true,
             tenantId: true,
+            status: true,
           },
         })
 
@@ -133,12 +191,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const isValid = await compare(parsed.data.password, student.passwordHash)
         if (!isValid) return null
 
+        // Bloqueia login de aluno suspenso (BLOQUEADO) ou desativado (INATIVO).
+        // ATIVO, DEVEDOR (pra resolver pagamento), FORMADO, INTERESSADO podem logar.
+        if (student.status === "BLOQUEADO" || student.status === "INATIVO") {
+          return null
+        }
+
         await prisma.student
           .update({
             where: { id: student.id },
             data: { lastLoginAt: new Date() },
           })
-          .catch(() => undefined)
+          .catch(swallow("auth.lastLogin"))
 
         return {
           id: student.id,
@@ -153,39 +217,28 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     }),
   ],
   callbacks: {
+    // Tipos extendidos vivem em src/types/index.ts (declare module). Isso
+    // elimina os `as unknown as` que existiam aqui antes.
     async jwt({ token, user }) {
       if (user) {
-        token.role = (user as { role: string }).role
-        token.tenantId = (user as { tenantId: string | null }).tenantId
-        token.studentId =
-          (user as { studentId?: string | null }).studentId ?? null
-        token.mustChangePassword =
-          (user as { mustChangePassword?: boolean }).mustChangePassword ?? false
-        token.tenantStatus =
-          (user as { tenantStatus?: string | null }).tenantStatus ?? null
-        token.memberRole =
-          (user as { memberRole?: "owner" | "consultant" | null }).memberRole ??
-          null
+        token.role = user.role
+        token.tenantId = user.tenantId
+        token.studentId = user.studentId ?? null
+        token.mustChangePassword = user.mustChangePassword ?? false
+        token.tenantStatus = user.tenantStatus ?? null
+        token.memberRole = user.memberRole ?? null
       }
       return token
     },
     async session({ session, token }) {
       if (session.user) {
-        session.user.id = token.sub!
-        ;(session.user as { role: string }).role = token.role as string
-        ;(session.user as { tenantId: string | null }).tenantId =
-          token.tenantId as string | null
-        ;(session.user as { studentId: string | null }).studentId =
-          (token.studentId as string | null | undefined) ?? null
-        ;(session.user as unknown as { mustChangePassword: boolean }).mustChangePassword =
-          (token.mustChangePassword as boolean | undefined) ?? false
-        ;(session.user as unknown as { tenantStatus: string | null }).tenantStatus =
-          (token.tenantStatus as string | null | undefined) ?? null
-        ;(session.user as unknown as {
-          memberRole: "owner" | "consultant" | null
-        }).memberRole =
-          (token.memberRole as "owner" | "consultant" | null | undefined) ??
-          null
+        session.user.id = token.sub ?? session.user.id
+        session.user.role = token.role ?? session.user.role
+        session.user.tenantId = token.tenantId ?? null
+        session.user.studentId = token.studentId ?? null
+        session.user.mustChangePassword = token.mustChangePassword ?? false
+        session.user.tenantStatus = token.tenantStatus ?? null
+        session.user.memberRole = token.memberRole ?? null
       }
       return session
     },

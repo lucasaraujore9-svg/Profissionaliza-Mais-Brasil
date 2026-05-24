@@ -62,7 +62,20 @@ export function VendasCuponsClient({ role }: { role: string }) {
   }
 
   useEffect(() => {
-    void load()
+    let cancelled = false
+    fetch("/api/admin/cupons")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((body) => {
+        if (cancelled) return
+        if (body?.data) setItems(body.data)
+        setLoading(false)
+      })
+      .catch(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   function submit() {

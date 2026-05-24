@@ -1,12 +1,10 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { requireAdminSession } from "@/lib/auth/admin-session"
+import { requireSuperAdmin } from "@/lib/auth/guards"
 
 export async function GET() {
-  const ctx = await requireAdminSession()
-  if (!ctx) {
-    return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-  }
+  const guard = await requireSuperAdmin()
+  if (!guard.ok) return guard.response
 
   const now = new Date()
   const thirtyDaysAgo = new Date(now)

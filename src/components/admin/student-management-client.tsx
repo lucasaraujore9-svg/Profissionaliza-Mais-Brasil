@@ -61,11 +61,6 @@ function statusBadgeVariant(status: string): "default" | "outline" | "secondary"
   return "outline"
 }
 
-function studentStatusBadgeVariant(status: string): "default" | "outline" | "secondary" | "destructive" {
-  if (status === "ATIVO") return "default"
-  if (status === "BLOQUEADO") return "destructive"
-  return "outline"
-}
 
 function formatCurrency(value: number): string {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })

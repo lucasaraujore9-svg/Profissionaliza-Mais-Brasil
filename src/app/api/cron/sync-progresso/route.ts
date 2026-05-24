@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { syncStudentProgress } from "@/lib/students/progress"
+import { isCronAuthorized } from "@/lib/auth/bearer"
 
 export const maxDuration = 300
 export const dynamic = "force-dynamic"
@@ -8,14 +9,6 @@ export const dynamic = "force-dynamic"
 const BATCH_SIZE = 100
 const STALE_HOURS = 12
 const DELAY_BETWEEN_STUDENTS_MS = 200
-
-function authorized(request: Request): boolean {
-  const secret = process.env.CRON_SECRET
-  if (!secret) return false
-  const header = request.headers.get("authorization") ?? ""
-  const bearer = header.startsWith("Bearer ") ? header.slice(7) : header
-  return bearer === secret
-}
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -78,7 +71,7 @@ async function runSyncProgresso(): Promise<CronResult> {
 }
 
 export async function POST(request: Request) {
-  if (!authorized(request)) {
+  if (!isCronAuthorized(request)) {
     return NextResponse.json({ error: "Nao autorizado" }, { status: 401 })
   }
   try {

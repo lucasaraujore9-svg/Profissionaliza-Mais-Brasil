@@ -10,6 +10,7 @@ import {
   cancelCommissionForTenantPayment,
 } from "@/lib/referrals/commission"
 import type { AsaasWebhookPayload } from "./types"
+import { swallow } from "@/lib/errors"
 
 function formatMoney(value: number): string {
   return new Intl.NumberFormat("pt-BR", {
@@ -61,7 +62,7 @@ async function handleSubscriptionCancellation(
 
   await prisma.webhookLog
     .update({ where: { id: logId }, data: { tenantId: tenant.id } })
-    .catch(() => undefined)
+    .catch(swallow("asaas.process"))
 
   if (tenant.status !== "SUSPENDED" && tenant.status !== "CANCELLED") {
     await prisma.tenant.update({
@@ -69,11 +70,13 @@ async function handleSubscriptionCancellation(
       data: { status: "SUSPENDED" },
     })
 
-    invalidateTenant({
+    // Aguarda invalidação de cache antes de seguir — evita race onde requests
+    // simultâneos leem status cached ACTIVE enquanto DB já mudou para SUSPENDED.
+    await invalidateTenant({
       id: tenant.id,
       slug: tenant.slug,
       customDomain: tenant.customDomain,
-    }).catch(() => undefined)
+    }).catch(swallow("asaas.process"))
 
     const blockResult = await blockTenantStudents(tenant.id)
     if (blockResult.errors.length > 0) {
@@ -108,7 +111,7 @@ async function markLog(
         error: error ?? null,
       },
     })
-    .catch(() => undefined)
+    .catch(swallow("asaas.process"))
 }
 
 async function processPmbDirectSale(
@@ -176,7 +179,7 @@ async function processPmbDirectSale(
     await prisma.enrollment.update({
       where: { id: enrollment.id },
       data: { status: "SUSPENDED" },
-    }).catch(() => undefined)
+    }).catch(swallow("asaas.process"))
   }
 
   await markLog(logId, true, `pmb venda direta: ${event} sem fulfillment`)
@@ -252,7 +255,7 @@ export async function processAsaasWebhook(
     await prisma.webhookLog.update({
       where: { id: logId },
       data: { tenantId: tenant.id },
-    }).catch(() => undefined)
+    }).catch(swallow("asaas.process"))
 
     const paidAt = payment.paymentDate ? new Date(payment.paymentDate) : null
 
@@ -288,7 +291,7 @@ export async function processAsaasWebhook(
           data: { status: "ACTIVE" },
         })
 
-        invalidateTenant({ id: tenant.id, slug: tenant.slug, customDomain: tenant.customDomain }).catch(() => undefined)
+        await invalidateTenant({ id: tenant.id, slug: tenant.slug, customDomain: tenant.customDomain }).catch(swallow("asaas.process"))
 
         if (wasSuspended) {
           const result = await unblockTenantStudents(tenant.id)
@@ -346,7 +349,7 @@ export async function processAsaasWebhook(
           data: { status: "SUSPENDED" },
         })
 
-        invalidateTenant({ id: tenant.id, slug: tenant.slug, customDomain: tenant.customDomain }).catch(() => undefined)
+        await invalidateTenant({ id: tenant.id, slug: tenant.slug, customDomain: tenant.customDomain }).catch(swallow("asaas.process"))
 
         if (tenant.billingMode === "AUTO") {
           const result = await blockTenantStudents(tenant.id)
@@ -414,7 +417,7 @@ export async function processAsaasWebhook(
             where: { asaasPaymentId: payment.id, tenantId: tenant.id },
             data: { status: payment.status },
           })
-          .catch(() => undefined)
+          .catch(swallow("asaas.process"))
 
         // Cancela comissao de indicacao (se houver)
         await cancelCommissionForTenantPayment(
@@ -443,7 +446,7 @@ export async function processAsaasWebhook(
             where: { id: tenant.id },
             data: { status: "SUSPENDED" },
           })
-          invalidateTenant({ id: tenant.id, slug: tenant.slug, customDomain: tenant.customDomain }).catch(() => undefined)
+          await invalidateTenant({ id: tenant.id, slug: tenant.slug, customDomain: tenant.customDomain }).catch(swallow("asaas.process"))
 
           if (tenant.billingMode === "AUTO") {
             const result = await blockTenantStudents(tenant.id)
@@ -504,7 +507,7 @@ export async function processAsaasWebhook(
             where: { asaasPaymentId: payment.id, tenantId: tenant.id },
             data: { status: "DELETED" },
           })
-          .catch(() => undefined)
+          .catch(swallow("asaas.process"))
         break
       }
 

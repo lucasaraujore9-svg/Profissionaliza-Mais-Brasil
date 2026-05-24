@@ -68,11 +68,14 @@ export async function GET(_request: Request, { params }: RouteParams) {
   if (path) {
     try {
       const buffer = await downloadCertificatePdf(path)
+      // Defesa em profundidade: cert.code é gerado internamente, mas
+      // sanitizar evita CRLF injection caso o gerador mude no futuro.
+      const safeCode = String(cert.code).replace(/[^A-Za-z0-9_-]/g, "")
       return new NextResponse(buffer as unknown as BodyInit, {
         status: 200,
         headers: {
           "Content-Type": "application/pdf",
-          "Content-Disposition": `attachment; filename="certificado-${cert.code}.pdf"`,
+          "Content-Disposition": `attachment; filename="certificado-${safeCode}.pdf"`,
           "Cache-Control": "private, no-store",
         },
       })

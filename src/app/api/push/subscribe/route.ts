@@ -52,17 +52,9 @@ export async function POST(request: Request) {
 
   // upsert por (target, endpoint). Mesmo endpoint pode pertencer a outro
   // usuario apos logout → deletamos qualquer registro orfao desse endpoint
-  // antes de inserir o novo.
-  await prisma.pushSubscription.deleteMany({
-    where: {
-      endpoint,
-      NOT:
-        target.kind === "user"
-          ? { userId: target.id }
-          : { studentId: target.id },
-    },
-  })
-
+  // antes de inserir o novo. Tudo em uma transação para evitar race entre
+  // delete + upsert quando dois clients diferentes subscrevem o mesmo
+  // endpoint simultaneamente.
   const where =
     target.kind === "user"
       ? { userId_endpoint: { userId: target.id, endpoint } }
@@ -85,17 +77,28 @@ export async function POST(request: Request) {
           userAgent: userAgent ?? null,
         }
 
-  await prisma.pushSubscription.upsert({
-    where,
-    update: {
-      p256dh,
-      auth: authKey,
-      userAgent: userAgent ?? null,
-      lastUsedAt: new Date(),
-      failureCount: 0,
-    },
-    create,
-  })
+  await prisma.$transaction([
+    prisma.pushSubscription.deleteMany({
+      where: {
+        endpoint,
+        NOT:
+          target.kind === "user"
+            ? { userId: target.id }
+            : { studentId: target.id },
+      },
+    }),
+    prisma.pushSubscription.upsert({
+      where,
+      update: {
+        p256dh,
+        auth: authKey,
+        userAgent: userAgent ?? null,
+        lastUsedAt: new Date(),
+        failureCount: 0,
+      },
+      create,
+    }),
+  ])
 
   return NextResponse.json({ ok: true })
 }

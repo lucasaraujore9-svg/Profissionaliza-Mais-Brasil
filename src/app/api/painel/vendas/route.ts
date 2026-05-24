@@ -8,6 +8,8 @@ import {
   createPreapproval,
   decryptTenantMpToken,
 } from "@/lib/mercadopago/client"
+import { tryConsumeCoupon, releaseCoupon } from "@/lib/coupons/consume"
+import { swallow } from "@/lib/errors"
 
 const cpfRegex = /^\d{11}$/
 const phoneRegex = /^\d{10,11}$/
@@ -104,6 +106,7 @@ export async function POST(request: Request) {
     select: {
       id: true,
       slug: true,
+      status: true,
       mpAccessToken: true,
       plataformaVendedorId: true,
     },
@@ -112,6 +115,12 @@ export async function POST(request: Request) {
     return NextResponse.json(
       { error: "Tenant não encontrado" },
       { status: 404 },
+    )
+  }
+  if (tenant.status !== "ACTIVE") {
+    return NextResponse.json(
+      { error: "Sua loja está suspensa. Regularize o pagamento para vender." },
+      { status: 403 },
     )
   }
   if (!tenant.mpAccessToken) {
@@ -178,21 +187,29 @@ export async function POST(request: Request) {
     if (coupon.maxUses !== null && coupon.usedCount >= coupon.maxUses) {
       return NextResponse.json({ error: "Cupom esgotado" }, { status: 400 })
     }
-    if (
-      coupon.discountType === "PERCENTAGE" &&
-      Number(coupon.discountValue) > cap
-    ) {
-      return NextResponse.json(
-        { error: `Cupom excede seu cap de desconto (${cap}%)` },
-        { status: 403 },
-      )
-    }
-
     const raw =
       coupon.discountType === "PERCENTAGE"
         ? (basePrice * Number(coupon.discountValue)) / 100
         : Number(coupon.discountValue)
     discountAmount = Math.min(raw, basePrice)
+
+    // Aplica o cap percentual sobre o desconto efetivo (% sobre basePrice),
+    // assim cupons FIXED também são limitados — antes só PERCENTAGE era validado.
+    if (!isOwner && basePrice > 0) {
+      const effectivePct = (discountAmount / basePrice) * 100
+      if (effectivePct > cap) {
+        return NextResponse.json(
+          { error: `Cupom excede seu cap de desconto (${cap}%)` },
+          { status: 403 },
+        )
+      }
+    }
+
+    // Reserva atômica do cupom (evita estouro de maxUses em concorrência).
+    const reserved = await tryConsumeCoupon(coupon.id)
+    if (!reserved) {
+      return NextResponse.json({ error: "Cupom esgotado" }, { status: 400 })
+    }
     couponId = coupon.id
   }
 
@@ -241,6 +258,7 @@ export async function POST(request: Request) {
     select: { id: true, status: true },
   })
   if (existingEnrollment) {
+    if (couponId) await releaseCoupon(couponId).catch(swallow("painel.vendas"))
     return NextResponse.json(
       {
         error:

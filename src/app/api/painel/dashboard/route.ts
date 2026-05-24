@@ -95,7 +95,6 @@ export async function GET(request: Request) {
     studentsPrevCount,
     enrollmentsTotal,
     enrollmentsApproved,
-    enrollmentsApprovedPrev,
     chartRows,
     recentSales,
   ] = await Promise.all([
@@ -138,13 +137,6 @@ export async function GET(request: Request) {
         tenantId: ctx.tenantId,
         status: { in: ["ACTIVE", "COMPLETED"] },
         createdAt: { gte: cfg.start, lte: cfg.end },
-      },
-    }),
-    prisma.enrollment.count({
-      where: {
-        tenantId: ctx.tenantId,
-        status: { in: ["ACTIVE", "COMPLETED"] },
-        createdAt: { gte: cfg.previousStart, lte: cfg.previousEnd },
       },
     }),
     prisma.$queryRawUnsafe<Array<{ bucket: Date; revenue: number }>>(
@@ -285,5 +277,10 @@ function formatBucketLabel(d: Date, bucket: Bucket): string {
       return `${dd}/${mm}`
     case "month":
       return d.toLocaleDateString("pt-BR", { month: "short" }).replace(".", "")
+    default: {
+      // Exhaustiveness check — se um novo bucket for adicionado ao enum, o TS quebra aqui.
+      const _exhaustive: never = bucket
+      return _exhaustive
+    }
   }
 }

@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "npm run db:apply-pending && next build",
-    "db:apply-pending": "prisma db execute --file prisma/migrations/20260523_categories_table/migration.sql && prisma db execute --file prisma/migrations/20260523_course_visibility_mode/migration.sql && prisma db execute --file prisma/migrations/20260523_notification_category_configs/migration.sql && prisma db execute --file prisma/migrations/20260523_tenant_notification_overrides/migration.sql",
+    "db:apply-pending": "node scripts/apply-pending-migrations.mjs",
     "start": "next start",
     "lint": "eslint",
     "email": "email dev --dir src/lib/email/templates --port 3001",

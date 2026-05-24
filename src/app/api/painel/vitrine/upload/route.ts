@@ -7,6 +7,8 @@ import {
   extractAssetPath,
   uploadVitrineAsset,
 } from "@/lib/supabase/storage"
+import { isValidImageMagic } from "@/lib/storage/validate-image"
+import { rateLimit, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
 
 const MAX_BYTES = 5 * 1024 * 1024 // 5MB
 // SVGs sao bloqueados deliberadamente: podem carregar <script>/<foreignObject>
@@ -38,6 +40,9 @@ export async function POST(request: Request) {
   if (!ctx) {
     return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
   }
+
+  const rl = await rateLimit(request, RATE_LIMITS.upload)
+  if (!rl.ok) return rateLimitResponse(rl)
 
   let form: FormData
   try {
@@ -91,6 +96,13 @@ export async function POST(request: Request) {
   let uploadedUrl: string
   try {
     const buffer = await file.arrayBuffer()
+    // Magic byte check — mime declarado pelo client é spoofable; valida o conteúdo real.
+    if (!isValidImageMagic(buffer, file.type)) {
+      return NextResponse.json(
+        { error: "Conteúdo do arquivo não corresponde ao formato declarado" },
+        { status: 400 },
+      )
+    }
     const result = await uploadVitrineAsset(path, buffer, file.type)
     uploadedUrl = result.publicUrl
   } catch (error) {

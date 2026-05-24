@@ -48,6 +48,17 @@ export async function POST(
     return NextResponse.json({ error: "Saque ja pago" }, { status: 409 })
   }
 
+  // PMB_RESELLER_MGR só pode aprovar payouts de tenants atribuídos a ele.
+  if (session.role === "PMB_RESELLER_MGR") {
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: payout.referrerTenantId },
+      select: { accountManagerId: true },
+    })
+    if (tenant?.accountManagerId !== session.userId) {
+      return NextResponse.json({ error: "Sem permissao" }, { status: 403 })
+    }
+  }
+
   // Para DESCONTO_MENSALIDADE, registra somente — admin aplica desconto na proxima fatura manualmente.
   // Futura melhoria: criar TenantPayment com appliedPayoutId vinculando o desconto.
   try {

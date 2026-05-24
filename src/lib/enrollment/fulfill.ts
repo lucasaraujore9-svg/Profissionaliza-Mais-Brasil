@@ -87,31 +87,35 @@ export async function fulfillEnrollment(
       enrollment.installmentsTotal !== null &&
       newPaidCount >= enrollment.installmentsTotal
 
-    await prisma.payment.create({
-      data: {
-        tenantId: tenant.isPmbVitrine ? null : tenant.id,
-        enrollmentId: enrollment.id,
-        soldByUserId: enrollment.soldByUserId ?? null,
-        amount: event.amount,
-        type: event.paymentType ?? enrollment.paymentType,
-        gateway: event.gateway,
-        mpPaymentId: event.gateway === "MP" ? event.externalPaymentId : null,
-        asaasPaymentId:
-          event.gateway === "ASAAS" ? event.externalPaymentId : null,
-        mpStatus: "APPROVED",
-        mpPaymentType: event.mpPaymentType ?? null,
-        mpStatusDetail: event.mpStatusDetail ?? null,
-        paidAt: event.paidAt,
-      },
-    })
-
-    await prisma.enrollment.update({
-      where: { id: enrollment.id },
-      data: {
-        installmentsPaid: newPaidCount,
-        ...(reachedTotal ? { status: "COMPLETED" } : {}),
-      },
-    })
+    // Transação para garantir que Payment + Enrollment.update sejam atômicos.
+    // Se uma falha, nenhuma é persistida — o webhook é re-entregue e tudo
+    // re-tenta limpamente (idempotência via mpPaymentId no início da função).
+    await prisma.$transaction([
+      prisma.payment.create({
+        data: {
+          tenantId: tenant.isPmbVitrine ? null : tenant.id,
+          enrollmentId: enrollment.id,
+          soldByUserId: enrollment.soldByUserId ?? null,
+          amount: event.amount,
+          type: event.paymentType ?? enrollment.paymentType,
+          gateway: event.gateway,
+          mpPaymentId: event.gateway === "MP" ? event.externalPaymentId : null,
+          asaasPaymentId:
+            event.gateway === "ASAAS" ? event.externalPaymentId : null,
+          mpStatus: "APPROVED",
+          mpPaymentType: event.mpPaymentType ?? null,
+          mpStatusDetail: event.mpStatusDetail ?? null,
+          paidAt: event.paidAt,
+        },
+      }),
+      prisma.enrollment.update({
+        where: { id: enrollment.id },
+        data: {
+          installmentsPaid: newPaidCount,
+          ...(reachedTotal ? { status: "COMPLETED" } : {}),
+        },
+      }),
+    ])
 
     // Notifica o aluno: parcela paga
     await createNotification({
@@ -165,37 +169,40 @@ export async function fulfillEnrollment(
     enrollment.installmentsTotal !== null &&
     firstInstallmentPaid >= enrollment.installmentsTotal
 
-  await prisma.payment.create({
-    data: {
-      tenantId: tenant.isPmbVitrine ? null : tenant.id,
-      enrollmentId: enrollment.id,
-      soldByUserId: enrollment.soldByUserId ?? null,
-      amount: event.amount,
-      type: event.paymentType ?? enrollment.paymentType,
-      gateway: event.gateway,
-      mpPaymentId: event.gateway === "MP" ? event.externalPaymentId : null,
-      asaasPaymentId: event.gateway === "ASAAS" ? event.externalPaymentId : null,
-      mpStatus: "APPROVED",
-      mpPaymentType: event.mpPaymentType ?? null,
-      mpStatusDetail: event.mpStatusDetail ?? null,
-      paidAt: event.paidAt,
-    },
-  })
-
-  await prisma.enrollment.update({
-    where: { id: enrollment.id },
-    data: {
-      status: reachedTotalOnFirst ? "COMPLETED" : "ACTIVE",
-      mpPaymentId:
-        event.gateway === "MP" ? event.externalPaymentId : enrollment.mpPaymentId,
-      asaasPaymentId:
-        event.gateway === "ASAAS"
-          ? event.externalPaymentId
-          : enrollment.asaasPaymentId,
-      startedAt: new Date(),
-      installmentsPaid: firstInstallmentPaid,
-    },
-  })
+  // Transação para Payment + Enrollment.update — evita estado inconsistente
+  // (Payment órfão com Enrollment.PENDING) se a 2ª query falhar.
+  await prisma.$transaction([
+    prisma.payment.create({
+      data: {
+        tenantId: tenant.isPmbVitrine ? null : tenant.id,
+        enrollmentId: enrollment.id,
+        soldByUserId: enrollment.soldByUserId ?? null,
+        amount: event.amount,
+        type: event.paymentType ?? enrollment.paymentType,
+        gateway: event.gateway,
+        mpPaymentId: event.gateway === "MP" ? event.externalPaymentId : null,
+        asaasPaymentId: event.gateway === "ASAAS" ? event.externalPaymentId : null,
+        mpStatus: "APPROVED",
+        mpPaymentType: event.mpPaymentType ?? null,
+        mpStatusDetail: event.mpStatusDetail ?? null,
+        paidAt: event.paidAt,
+      },
+    }),
+    prisma.enrollment.update({
+      where: { id: enrollment.id },
+      data: {
+        status: reachedTotalOnFirst ? "COMPLETED" : "ACTIVE",
+        mpPaymentId:
+          event.gateway === "MP" ? event.externalPaymentId : enrollment.mpPaymentId,
+        asaasPaymentId:
+          event.gateway === "ASAAS"
+            ? event.externalPaymentId
+            : enrollment.asaasPaymentId,
+        startedAt: new Date(),
+        installmentsPaid: firstInstallmentPaid,
+      },
+    }),
+  ])
 
   // Gera credenciais do painel /aluno quando o aluno ainda não tem senha.
   // Vale tanto na 1ª compra (created=true) quanto em alunos antigos que nunca

@@ -14,6 +14,8 @@ import {
 } from "@/lib/asaas/client"
 import { getSystemSettings } from "@/lib/system-settings"
 import { provisionStudentAccess } from "@/lib/students/access"
+import { tryConsumeCoupon, releaseCoupon } from "@/lib/coupons/consume"
+import { swallow } from "@/lib/errors"
 
 const PMB_SALES_CAP = 50
 
@@ -228,6 +230,10 @@ export async function POST(request: Request) {
         ? (basePrice * Number(coupon.discountValue)) / 100
         : Number(coupon.discountValue)
     discountAmount = Math.min(raw, basePrice)
+    const reserved = await tryConsumeCoupon(coupon.id)
+    if (!reserved) {
+      return NextResponse.json({ error: "Cupom esgotado" }, { status: 400 })
+    }
     couponId = coupon.id
   }
 
@@ -263,6 +269,8 @@ export async function POST(request: Request) {
   if (gateway === "MP") {
     const mpToken = await pmbMpAccessToken()
     if (!mpToken) {
+      await prisma.enrollment.delete({ where: { id: enrollment.id } }).catch(swallow("admin.vendas"))
+      if (couponId) await releaseCoupon(couponId).catch(swallow("admin.vendas"))
       return NextResponse.json(
         { error: "Token Mercado Pago PMB não configurado" },
         { status: 503 },
@@ -368,6 +376,7 @@ export async function POST(request: Request) {
   // gateway === "ASAAS"
   if (!student.cpf) {
     await prisma.enrollment.delete({ where: { id: enrollment.id } })
+    if (couponId) await releaseCoupon(couponId).catch(swallow("admin.vendas"))
     return NextResponse.json(
       { error: "Aluno precisa ter CPF cadastrado para cobrança via Asaas" },
       { status: 400 },
@@ -375,7 +384,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { customer, created: customerCreated } = await findOrCreateAsaasCustomer({
+    const { customer } = await findOrCreateAsaasCustomer({
       name: student.nome,
       email: student.email ?? undefined,
       cpfCnpj: student.cpf,
@@ -477,7 +486,8 @@ export async function POST(request: Request) {
       },
     })
   } catch (error) {
-    await prisma.enrollment.delete({ where: { id: enrollment.id } }).catch(() => undefined)
+    await prisma.enrollment.delete({ where: { id: enrollment.id } }).catch(swallow("admin.vendas"))
+    if (couponId) await releaseCoupon(couponId).catch(swallow("admin.vendas"))
     const message =
       error instanceof AsaasApiError
         ? error.message

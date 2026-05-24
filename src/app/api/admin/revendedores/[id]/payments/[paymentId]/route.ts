@@ -8,6 +8,7 @@ import {
   AsaasApiError,
 } from "@/lib/asaas/client"
 import { prisma } from "@/lib/prisma"
+import { swallow } from "@/lib/errors"
 
 interface Ctx {
   params: Promise<{ id: string; paymentId: string }>
@@ -86,7 +87,7 @@ export async function PATCH(request: Request, ctx: Ctx) {
         ...(parsed.data.value !== undefined ? { amount: parsed.data.value } : {}),
       },
     })
-    .catch(() => undefined)
+    .catch(swallow("admin.revendedores.payments"))
 
   return NextResponse.json({ data: { ok: true } })
 }

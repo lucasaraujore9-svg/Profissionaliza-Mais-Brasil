@@ -8,6 +8,7 @@ import {
   listPayments,
   AsaasApiError,
 } from "@/lib/asaas/client"
+import { swallow } from "@/lib/errors"
 
 export async function GET(
   _request: Request,
@@ -181,9 +182,13 @@ export async function GET(
       const asaasIds = new Set(fromAsaas.map((p) => p.asaasPaymentId))
       const fromDb = payments.filter((p) => !asaasIds.has(p.asaasPaymentId))
 
-      payments = [...fromAsaas, ...fromDb].sort(
-        (a, b) => new Date(b.dueDate).getTime() - new Date(a.dueDate).getTime(),
-      )
+      payments = [...fromAsaas, ...fromDb].sort((a, b) => {
+        // dueDate pode vir de DB (Date) ou do Asaas API (string). Coerção segura
+        // para timestamps — null/inválido cai para 0 (vai pro final do sort).
+        const ta = a.dueDate ? new Date(a.dueDate).getTime() : 0
+        const tb = b.dueDate ? new Date(b.dueDate).getTime() : 0
+        return (Number.isNaN(tb) ? 0 : tb) - (Number.isNaN(ta) ? 0 : ta)
+      })
 
       // Auto-ativa o tenant se o Asaas mostra pagamento confirmado mas o banco
       // ainda está PENDING (webhook não recebido ou falhou).
@@ -200,7 +205,7 @@ export async function GET(
           id: tenant.id,
           slug: tenant.slug,
           customDomain: tenant.customDomain,
-        }).catch(() => undefined)
+        }).catch(swallow("admin.revendedores"))
 
         // Upsert dos TenantPayment confirmados para manter o banco consistente
         for (const p of asaasPayments.data) {
@@ -224,7 +229,7 @@ export async function GET(
               invoiceUrl: p.invoiceUrl ?? null,
               bankSlipUrl: p.bankSlipUrl ?? null,
             },
-          }).catch(() => undefined)
+          }).catch(swallow("admin.revendedores"))
         }
       }
     } catch (error) {
@@ -290,6 +295,13 @@ export async function DELETE(
   const ctx = await requireAdminSession()
   if (!ctx) {
     return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
+  }
+  // Cancelar tenant é ação destrutiva — restringe a SUPER_ADMIN.
+  if (ctx.role !== "SUPER_ADMIN") {
+    return NextResponse.json(
+      { error: "Apenas SUPER_ADMIN pode cancelar revendedor" },
+      { status: 403 },
+    )
   }
 
   const { id } = await params

@@ -26,12 +26,10 @@ function formatMoney(n: number): string {
 
 export function ReferralPayoutForm({
   availableAmount,
-  minPayout: _minPayout,
   initialPixKey,
   initialPixKeyType,
 }: {
   availableAmount: number
-  minPayout: number
   initialPixKey: string
   initialPixKeyType: string
 }) {

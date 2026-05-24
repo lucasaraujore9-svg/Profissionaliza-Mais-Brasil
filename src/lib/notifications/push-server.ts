@@ -2,6 +2,7 @@ import "server-only"
 import webpush from "web-push"
 import { prisma } from "@/lib/prisma"
 import type { NotificationLevel } from "@prisma/client"
+import { swallow } from "@/lib/errors"
 
 // VAPID config (gerar com `npx web-push generate-vapid-keys`):
 //   VAPID_PUBLIC_KEY  — exposto ao client via /api/push/public-key
@@ -102,7 +103,7 @@ export async function sendPushToTarget(
             where: { id: sub.id },
             data: { lastUsedAt: new Date(), failureCount: 0 },
           })
-          .catch(() => undefined)
+          .catch(swallow("push-server"))
       } catch (err: unknown) {
         const status =
           (err as { statusCode?: number }).statusCode ??
@@ -111,7 +112,7 @@ export async function sendPushToTarget(
         if (status === 404 || status === 410) {
           await prisma.pushSubscription
             .delete({ where: { id: sub.id } })
-            .catch(() => undefined)
+            .catch(swallow("push-server"))
           return
         }
         // erros transientes — incrementa contador, remove se passar de 5
@@ -120,14 +121,14 @@ export async function sendPushToTarget(
             where: { id: sub.id },
             data: { failureCount: { increment: 1 } },
           })
-          .catch(() => undefined)
+          .catch(swallow("push-server"))
         const next = await prisma.pushSubscription
           .findUnique({ where: { id: sub.id }, select: { failureCount: true } })
           .catch(() => null)
         if (next && next.failureCount > 5) {
           await prisma.pushSubscription
             .delete({ where: { id: sub.id } })
-            .catch(() => undefined)
+            .catch(swallow("push-server"))
         }
         console.warn("[push] envio falhou", status, err)
       }

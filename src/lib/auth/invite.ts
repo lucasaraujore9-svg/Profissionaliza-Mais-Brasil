@@ -1,17 +1,17 @@
-import crypto from "node:crypto"
 import { prisma } from "@/lib/prisma"
 import { sendEmail } from "@/lib/email/resend"
+import { generateResetToken } from "@/lib/auth/reset-token"
 
 const INVITE_EXPIRATION_DAYS = 7
 
 export async function createInviteToken(userId: string): Promise<string> {
-  const token = crypto.randomBytes(32).toString("hex")
+  const { plain, hash } = generateResetToken()
   const expires = new Date(Date.now() + INVITE_EXPIRATION_DAYS * 24 * 60 * 60 * 1000)
   await prisma.user.update({
     where: { id: userId },
-    data: { resetToken: token, resetTokenExpires: expires },
+    data: { resetToken: hash, resetTokenExpires: expires },
   })
-  return token
+  return plain
 }
 
 export function buildInviteUrl(token: string): string {

@@ -62,8 +62,18 @@ export function LoginForm() {
         return
       }
 
+      // Open-redirect guard: aceita só paths internos.
+      //   "/admin" ✓        — path absoluto local
+      //   "//evil.com" ✗    — scheme-relative URL (sai do nosso domínio)
+      //   "/\\evil.com" ✗   — variante com backslash, vista em alguns browsers
+      //   "http://x.com" ✗  — absoluta externa
       const redirectTo = searchParams.get("callbackUrl")
-      if (redirectTo && redirectTo.startsWith("/")) {
+      const isSafePath =
+        !!redirectTo &&
+        redirectTo.startsWith("/") &&
+        !redirectTo.startsWith("//") &&
+        !redirectTo.startsWith("/\\")
+      if (isSafePath) {
         router.push(redirectTo)
         return
       }

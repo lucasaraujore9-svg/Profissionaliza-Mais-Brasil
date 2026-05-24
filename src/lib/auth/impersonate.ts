@@ -1,5 +1,6 @@
 import { encode, decode } from "next-auth/jwt"
 import type { UserRole } from "@prisma/client"
+import { authSecret } from "@/lib/env"
 
 const SESSION_MAX_AGE = 30 * 24 * 60 * 60 // 30 dias (igual ao default do NextAuth)
 
@@ -27,8 +28,12 @@ export interface SessionTokenPayload {
 }
 
 function getSecret(): string {
-  const secret = process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET
-  if (!secret) throw new Error("AUTH_SECRET ausente")
+  const secret = authSecret()
+  if (!secret) {
+    throw new Error(
+      "AUTH_SECRET ausente — impersonation requer secret válido. Configure no .env (openssl rand -hex 32).",
+    )
+  }
   return secret
 }
 
