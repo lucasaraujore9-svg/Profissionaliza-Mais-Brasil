@@ -8,8 +8,11 @@ import {
   updatePmbMpAccessToken,
   getPmbMpAccessTokenAsync,
 } from "@/lib/system-settings"
+import { withRequestContext } from "@/lib/observability/with-request-context"
 
-export async function GET() {
+export const GET = withRequestContext(
+  { action: "admin.config.get", route: "/api/admin/config" },
+  async () => {
   const ctx = await requireAdminSession()
   if (!ctx) {
     return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
@@ -60,14 +63,17 @@ export async function GET() {
       },
     },
   })
-}
+  },
+)
 
 const patchSchema = z.object({
   pmbDirectSaleGateway: z.enum(["MP", "ASAAS"]).optional(),
   pmbMpAccessToken: z.string().trim().min(1).max(500).nullable().optional(),
 })
 
-export async function PATCH(request: Request) {
+export const PATCH = withRequestContext(
+  { action: "admin.config.update", route: "/api/admin/config" },
+  async (request: Request) => {
   const ctx = await requireAdminSession()
   if (!ctx) {
     return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
@@ -126,4 +132,5 @@ export async function PATCH(request: Request) {
   }
 
   return NextResponse.json({ data: { ok: true } })
-}
+  },
+)

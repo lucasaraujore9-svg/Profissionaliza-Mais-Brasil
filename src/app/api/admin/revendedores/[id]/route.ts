@@ -9,11 +9,12 @@ import {
   AsaasApiError,
 } from "@/lib/asaas/client"
 import { swallow } from "@/lib/errors"
+import { contextLogger } from "@/lib/logger"
+import { withRequestContextParams } from "@/lib/observability/with-request-context"
 
-export async function GET(
-  _request: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
+export const GET = withRequestContextParams<{ id: string }>(
+  { action: "admin.revendedores.get", route: "/api/admin/revendedores/[id]" },
+  async (_request: Request, { params }) => {
   const ctx = await requireAdminSession()
   if (!ctx) {
     return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
@@ -233,7 +234,10 @@ export async function GET(
         }
       }
     } catch (error) {
-      console.warn("[reseller] Asaas fetch falhou, usando dados do banco:", error)
+      contextLogger().warn(
+        { err: error, event: "admin.reseller.asaas_fetch_failed", tenantId: tenant.id },
+        "Asaas fetch falhou — usando dados do banco",
+      )
     }
   }
 
@@ -286,12 +290,12 @@ export async function GET(
       },
     },
   })
-}
+  },
+)
 
-export async function DELETE(
-  _request: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
+export const DELETE = withRequestContextParams<{ id: string }>(
+  { action: "admin.revendedores.delete", route: "/api/admin/revendedores/[id]" },
+  async (_request: Request, { params }) => {
   const ctx = await requireAdminSession()
   if (!ctx) {
     return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
@@ -341,4 +345,5 @@ export async function DELETE(
   await invalidateTenant(tenant)
 
   return NextResponse.json({ data: { ok: true } })
-}
+  },
+)

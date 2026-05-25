@@ -16,6 +16,8 @@
  *   ✅ `.catch(swallow("contexto-curto"))`
  */
 
+import { contextLogger } from "@/lib/logger"
+
 /**
  * Cria um catch handler que loga warn e devolve undefined — não propaga.
  * Use APENAS em side-effects não-críticos. Se a operação for crítica
@@ -28,8 +30,7 @@ export function swallow(
   context: string,
 ): (error: unknown) => undefined {
   return (error: unknown) => {
-    const message = error instanceof Error ? error.message : String(error)
-    console.warn(`[swallow:${context}] ${message}`)
+    contextLogger().warn({ err: error, swallowed: context }, "swallowed error")
     return undefined
   }
 }
@@ -43,8 +44,7 @@ export function swallowCleanup(
   context: string,
 ): (error: unknown) => undefined {
   return (error: unknown) => {
-    const message = error instanceof Error ? error.message : String(error)
-    console.warn(`[cleanup-failed:${context}] ${message}`)
+    contextLogger().warn({ err: error, cleanup: context }, "cleanup failed")
     return undefined
   }
 }

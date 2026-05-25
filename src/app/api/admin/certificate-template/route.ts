@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { requireSuperAdmin } from "@/lib/auth/guards"
+import { withRequestContext } from "@/lib/observability/with-request-context"
 
 const layoutEnum = z.enum(["CLASSIC", "MODERN", "MINIMAL"])
 
@@ -29,7 +30,9 @@ const upsertSchema = z.object({
   isActive: z.boolean().optional(),
 })
 
-export async function GET() {
+export const GET = withRequestContext(
+  { action: "admin.certificate_template.get", route: "/api/admin/certificate-template" },
+  async () => {
   const guard = await requireSuperAdmin()
   if (!guard.ok) return guard.response
 
@@ -61,9 +64,12 @@ export async function GET() {
         }
       : null,
   })
-}
+  },
+)
 
-export async function PUT(request: Request) {
+export const PUT = withRequestContext(
+  { action: "admin.certificate_template.upsert", route: "/api/admin/certificate-template" },
+  async (request: Request) => {
   const guard = await requireSuperAdmin()
   if (!guard.ok) return guard.response
 
@@ -157,4 +163,5 @@ export async function PUT(request: Request) {
       isActive: template.isActive,
     },
   })
-}
+  },
+)

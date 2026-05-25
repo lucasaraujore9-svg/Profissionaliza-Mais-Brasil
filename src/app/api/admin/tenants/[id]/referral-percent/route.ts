@@ -3,16 +3,16 @@ import { z } from "zod"
 import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { requireAdminSession } from "@/lib/auth/admin-session"
+import { withRequestContextParams } from "@/lib/observability/with-request-context"
 
 const bodySchema = z.object({
   // Permite null para "voltar ao percentual padrao"
   percent: z.number().min(0).max(100).nullable(),
 })
 
-export async function PUT(
-  request: Request,
-  context: { params: Promise<{ id: string }> },
-) {
+export const PUT = withRequestContextParams<{ id: string }>(
+  { action: "admin.tenants.referral_percent.update", route: "/api/admin/tenants/[id]/referral-percent" },
+  async (request: Request, context) => {
   const session = await requireAdminSession()
   if (!session) {
     return NextResponse.json({ error: "Nao autenticado" }, { status: 401 })
@@ -66,4 +66,6 @@ export async function PUT(
         updated.referralPercent != null ? Number(updated.referralPercent) : null,
     },
   })
-}
+  },
+)
+

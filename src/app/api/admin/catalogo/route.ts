@@ -2,8 +2,11 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { requireAdminSession } from "@/lib/auth/admin-session"
 import { getLastSuccessfulSync } from "@/lib/catalog/sync-log"
+import { withRequestContext } from "@/lib/observability/with-request-context"
 
-export async function GET() {
+export const GET = withRequestContext(
+  { action: "admin.catalogo.list", route: "/api/admin/catalogo" },
+  async () => {
   const ctx = await requireAdminSession()
   if (!ctx) {
     return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
@@ -73,4 +76,5 @@ export async function GET() {
       total: courses.length,
     },
   })
-}
+  },
+)

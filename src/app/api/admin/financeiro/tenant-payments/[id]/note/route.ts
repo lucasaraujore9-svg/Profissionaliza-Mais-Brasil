@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { requireAdminSession } from "@/lib/auth/admin-session"
+import { withRequestContextParams } from "@/lib/observability/with-request-context"
 
 const bodySchema = z.object({
   note: z.string().min(1).max(2000),
@@ -19,10 +20,9 @@ function appendNote(
     : entry
 }
 
-export async function POST(
-  request: Request,
-  context: { params: Promise<{ id: string }> },
-) {
+export const POST = withRequestContextParams<{ id: string }>(
+  { action: "admin.financeiro.tenant_payments.note", route: "/api/admin/financeiro/tenant-payments/[id]/note" },
+  async (request: Request, context) => {
   const session = await requireAdminSession()
   if (!session) {
     return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
@@ -73,4 +73,5 @@ export async function POST(
   return NextResponse.json({
     data: { id: updated.id, notes: updated.notes },
   })
-}
+  },
+)

@@ -6,6 +6,11 @@ import type { MPWebhookNotification } from "@/lib/mercadopago/types"
 import { getAuthorizedPayment } from "@/lib/mercadopago/client"
 import { pmbMpAccessToken } from "@/lib/pmb-config"
 import { swallow } from "@/lib/errors"
+import {
+  runWithRequestContext,
+  extendRequestContext,
+} from "@/lib/observability/request-context"
+import { contextLogger } from "@/lib/logger"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
@@ -24,20 +29,34 @@ function pickHeaders(request: Request): Record<string, string> {
 }
 
 export async function POST(request: Request) {
+  return runWithRequestContext(
+    { action: "mp.webhook", route: "/api/webhooks/mercadopago" },
+    () => handle(request),
+  )
+}
+
+async function handle(request: Request) {
+  const log = contextLogger()
   // Defesa basica anti-flood: webhooks legitimos do MP sempre carregam
   // x-signature + x-request-id. Sem isso nao criamos WebhookLog nem fazemos
   // queries — bots apontados ao endpoint sao descartados cedo.
   const xSignature = request.headers.get("x-signature")
   const xRequestId = request.headers.get("x-request-id")
   if (process.env.NODE_ENV === "production" && (!xSignature || !xRequestId)) {
+    log.warn({ event: "mp.webhook.missing_signature" }, "request sem x-signature/x-request-id rejeitado")
     return NextResponse.json({ error: "missing signature" }, { status: 401 })
   }
+
+  // Propaga x-request-id do MP como nosso requestId quando disponível —
+  // permite correlacionar com logs do próprio MP em investigações.
+  if (xRequestId) extendRequestContext({ mpRequestId: xRequestId })
 
   let body: MPWebhookNotification | null = null
   try {
     const raw = await request.text()
     body = raw ? (JSON.parse(raw) as MPWebhookNotification) : null
-  } catch {
+  } catch (err) {
+    log.warn({ err, event: "mp.webhook.invalid_json" }, "body não é JSON válido")
     return NextResponse.json({ error: "invalid json" }, { status: 400 })
   }
 
@@ -49,6 +68,8 @@ export async function POST(request: Request) {
     searchParams.get("topic") ??
     searchParams.get("type") ??
     "unknown"
+
+  extendRequestContext({ topic })
 
   let paymentId = extractPaymentIdFromNotification(body, queryDataId)
 
@@ -68,11 +89,14 @@ export async function POST(request: Request) {
         if (ap.payment_id) paymentId = String(ap.payment_id)
       }
     } catch (err) {
-      console.warn("[mp webhook] authorized_payment lookup falhou:", err)
+      log.warn(
+        { err, event: "mp.webhook.authorized_payment_lookup_failed", queryDataId },
+        "authorized_payment lookup falhou",
+      )
     }
   }
 
-  const log = await prisma.webhookLog.create({
+  const dbLog = await prisma.webhookLog.create({
     data: {
       source: "MERCADO_PAGO",
       eventType: topic,
@@ -83,10 +107,13 @@ export async function POST(request: Request) {
     select: { id: true },
   })
 
+  extendRequestContext({ webhookLogId: dbLog.id, paymentId })
+  log.info({ event: "mp.webhook.received", webhookLogId: dbLog.id, topic, paymentId }, "webhook MP recebido")
+
   if (!paymentId) {
     await prisma.webhookLog
       .update({
-        where: { id: log.id },
+        where: { id: dbLog.id },
         data: {
           processed: true,
           processedAt: new Date(),
@@ -94,6 +121,7 @@ export async function POST(request: Request) {
         },
       })
       .catch(swallow("mp.webhook.markLog"))
+    log.info({ event: "mp.webhook.no_payment_id", webhookLogId: dbLog.id }, "notificação sem payment id — ignorada")
     return NextResponse.json({ received: true }, { status: 200 })
   }
 
@@ -108,20 +136,25 @@ export async function POST(request: Request) {
   const rawTenant = searchParams.get("tenant")
   const tenantSlug =
     rawTenant && /^[a-z0-9_-]{1,64}$/i.test(rawTenant) ? rawTenant : null
+  if (tenantSlug) extendRequestContext({ tenantSlug })
 
   try {
     await processMpWebhook({
-      logId: log.id,
+      logId: dbLog.id,
       paymentId,
       xSignature,
       xRequestId,
       tenantSlug,
       dataId: queryDataId ?? String(paymentId),
     })
+    log.info({ event: "mp.webhook.processed", webhookLogId: dbLog.id, paymentId }, "webhook MP processado")
   } catch (error) {
     // 500 sinaliza ao MP que retente. WebhookLog já foi gravado com processed=false
     // e o processador é idempotente (mpPaymentId check).
-    console.error("[mp webhook] processMpWebhook lançou:", error)
+    log.error(
+      { err: error, event: "mp.webhook.processing_failed", webhookLogId: dbLog.id, paymentId },
+      "processMpWebhook lançou — MP vai retentar",
+    )
     return NextResponse.json({ error: "processing failed" }, { status: 500 })
   }
 

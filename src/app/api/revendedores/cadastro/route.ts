@@ -13,6 +13,7 @@ import {
   listPayments,
   AsaasApiError,
 } from "@/lib/asaas/client"
+import { contextLogger } from "@/lib/logger"
 import {
   PLANO_GROWTH_VALOR,
   PLANO_GROWTH_DESCRICAO,
@@ -20,6 +21,7 @@ import {
 import { generateUniqueReferralCode } from "@/lib/referrals/code"
 import { resolveReferrerFromCookie } from "@/lib/referrals/capture"
 import { rateLimit, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
+import { withRequestContext } from "@/lib/observability/with-request-context"
 
 const RESERVED_SLUGS = new Set([
   "www",
@@ -59,7 +61,9 @@ async function buildUniqueSlug(base: string): Promise<string> {
   return slug
 }
 
-export async function POST(request: Request) {
+export const POST = withRequestContext(
+  { action: "revendedores.cadastro", route: "/api/revendedores/cadastro" },
+  async (request: Request) => {
   const rl = await rateLimit(request, RATE_LIMITS.revendedorCadastro)
   if (!rl.ok) return rateLimitResponse(rl)
 
@@ -177,9 +181,10 @@ export async function POST(request: Request) {
       })
     })
   } catch (error) {
-    if (process.env.NODE_ENV === "development") {
-      console.error("[Cadastro Revendedor] DB transaction failed", error)
-    }
+    contextLogger().error(
+      { err: error, event: "revendedores.cadastro.db_tx_failed" },
+      "cadastro de revendedor: transação no DB falhou",
+    )
     return NextResponse.json(
       {
         error: "Falha ao salvar cadastro. Entre em contato com o suporte.",
@@ -214,4 +219,5 @@ export async function POST(request: Request) {
     },
     { status: 201 },
   )
-}
+  },
+)

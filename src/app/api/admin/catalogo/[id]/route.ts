@@ -3,6 +3,7 @@ import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { requireAdminSession } from "@/lib/auth/admin-session"
 import { requireSuperAdmin } from "@/lib/auth/guards"
+import { withRequestContextParams } from "@/lib/observability/with-request-context"
 
 const patchSchema = z.object({
   precoVitrineMain: z.number().nonnegative().nullable().optional(),
@@ -22,10 +23,9 @@ const patchSchema = z.object({
   blockedTenantIds: z.array(z.string().cuid()).optional(),
 })
 
-export async function GET(
-  _req: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
+export const GET = withRequestContextParams<{ id: string }>(
+  { action: "admin.catalogo.get", route: "/api/admin/catalogo/[id]" },
+  async (_req: Request, { params }) => {
   const ctx = await requireAdminSession()
   if (!ctx) return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
 
@@ -71,12 +71,12 @@ export async function GET(
       precoVitrineMain: course.precoVitrineMain ? Number(course.precoVitrineMain) : null,
     },
   })
-}
+  },
+)
 
-export async function PATCH(
-  req: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
+export const PATCH = withRequestContextParams<{ id: string }>(
+  { action: "admin.catalogo.update", route: "/api/admin/catalogo/[id]" },
+  async (req: Request, { params }) => {
   const guard = await requireSuperAdmin()
   if (!guard.ok) return guard.response
 
@@ -126,4 +126,5 @@ export async function PATCH(
       precoVitrineMain: updated.precoVitrineMain ? Number(updated.precoVitrineMain) : null,
     },
   })
-}
+  },
+)

@@ -4,6 +4,8 @@ import { z, ZodError } from "zod"
 import { prisma } from "@/lib/prisma"
 import { rateLimit, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
 import { hashResetToken } from "@/lib/auth/reset-token"
+import { contextLogger } from "@/lib/logger"
+import { withRequestContext } from "@/lib/observability/with-request-context"
 
 const schema = z.object({
   token: z.string().min(10, "Token inválido"),
@@ -13,7 +15,9 @@ const schema = z.object({
     .max(128),
 })
 
-export async function POST(request: Request) {
+export const POST = withRequestContext(
+  { action: "auth.reset_password", route: "/api/auth/reset-password" },
+  async (request: Request) => {
   const rl = await rateLimit(request, RATE_LIMITS.authReset)
   if (!rl.ok) return rateLimitResponse(rl)
 
@@ -108,10 +112,14 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ data: { message: "Senha atualizada." } })
   } catch (error) {
-    console.error("[reset-password] error:", error)
+    contextLogger().error(
+      { err: error, event: "auth.reset_password.failed" },
+      "reset-password falhou",
+    )
     return NextResponse.json(
       { error: "Erro ao redefinir senha", code: "DB_ERROR" },
       { status: 500 },
     )
   }
-}
+  },
+)

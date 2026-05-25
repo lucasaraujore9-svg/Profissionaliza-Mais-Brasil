@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect } from "react"
+import { clientLogger } from "@/lib/logger-client"
 
 export default function AlunoError({
   error,
@@ -10,7 +11,10 @@ export default function AlunoError({
   reset: () => void
 }) {
   useEffect(() => {
-    console.error("[aluno/error] route error:", error)
+    clientLogger.error(
+      { err: String(error), digest: error.digest, event: "aluno.error_boundary", segment: "aluno" },
+      "aluno route error",
+    )
   }, [error])
 
   return (

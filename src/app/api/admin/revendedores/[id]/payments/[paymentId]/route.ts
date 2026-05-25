@@ -9,10 +9,7 @@ import {
 } from "@/lib/asaas/client"
 import { prisma } from "@/lib/prisma"
 import { swallow } from "@/lib/errors"
-
-interface Ctx {
-  params: Promise<{ id: string; paymentId: string }>
-}
+import { withRequestContextParams } from "@/lib/observability/with-request-context"
 
 const patchSchema = z.object({
   dueDate: z
@@ -22,7 +19,9 @@ const patchSchema = z.object({
   value: z.number().positive().max(100000).optional(),
 })
 
-export async function PATCH(request: Request, ctx: Ctx) {
+export const PATCH = withRequestContextParams<{ id: string; paymentId: string }>(
+  { action: "admin.revendedores.payments.update", route: "/api/admin/revendedores/[id]/payments/[paymentId]" },
+  async (request: Request, ctx) => {
   const guard = await requireSuperAdmin()
   if (!guard.ok) return guard.response
 
@@ -90,9 +89,12 @@ export async function PATCH(request: Request, ctx: Ctx) {
     .catch(swallow("admin.revendedores.payments"))
 
   return NextResponse.json({ data: { ok: true } })
-}
+  },
+)
 
-export async function DELETE(_request: Request, ctx: Ctx) {
+export const DELETE = withRequestContextParams<{ id: string; paymentId: string }>(
+  { action: "admin.revendedores.payments.delete", route: "/api/admin/revendedores/[id]/payments/[paymentId]" },
+  async (_request: Request, ctx) => {
   const guard = await requireSuperAdmin()
   if (!guard.ok) return guard.response
 
@@ -109,4 +111,5 @@ export async function DELETE(_request: Request, ctx: Ctx) {
       error instanceof AsaasApiError ? error.message : "Falha ao cancelar cobrança no Asaas"
     return NextResponse.json({ error: message }, { status: 502 })
   }
-}
+  },
+)

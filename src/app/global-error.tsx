@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect } from "react"
+import { clientLogger } from "@/lib/logger-client"
 
 interface GlobalErrorProps {
   error: Error & { digest?: string }
@@ -9,7 +10,10 @@ interface GlobalErrorProps {
 
 export default function GlobalError({ error, reset }: GlobalErrorProps) {
   useEffect(() => {
-    console.error("[global error]", error)
+    clientLogger.error(
+      { err: String(error), digest: error.digest, event: "global_error.boundary" },
+      "global error boundary",
+    )
   }, [error])
 
   return (

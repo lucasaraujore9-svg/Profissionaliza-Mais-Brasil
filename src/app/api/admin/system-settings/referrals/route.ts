@@ -3,6 +3,7 @@ import { z } from "zod"
 import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { requireSuperAdmin } from "@/lib/auth/guards"
+import { withRequestContext } from "@/lib/observability/with-request-context"
 
 const bodySchema = z.object({
   referralEnabled: z.boolean(),
@@ -11,7 +12,9 @@ const bodySchema = z.object({
   referralPayoutDay: z.number().int().min(1).max(28),
 })
 
-export async function PUT(request: Request) {
+export const PUT = withRequestContext(
+  { action: "admin.system_settings.referrals.update", route: "/api/admin/system-settings/referrals" },
+  async (request: Request) => {
   const guard = await requireSuperAdmin()
   if (!guard.ok) return guard.response
 
@@ -64,4 +67,5 @@ export async function PUT(request: Request) {
       referralPayoutDay: updated.referralPayoutDay,
     },
   })
-}
+  },
+)

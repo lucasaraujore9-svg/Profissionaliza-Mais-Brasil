@@ -3,6 +3,7 @@ import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { requireResellerSession } from "@/lib/auth/reseller-session"
 import { requireResellerOwner } from "@/lib/auth/guards"
+import { withRequestContext } from "@/lib/observability/with-request-context"
 
 /**
  * Unidades (revendedores) NAO editam textos, cores ou uploads do certificado.
@@ -16,73 +17,79 @@ const upsertSchema = z.object({
   layout: layoutEnum,
 })
 
-export async function GET() {
-  const ctx = await requireResellerSession()
-  if (!ctx) {
-    return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-  }
+export const GET = withRequestContext(
+  { action: "painel.certificate_template.get", route: "/api/painel/certificate-template" },
+  async () => {
+    const ctx = await requireResellerSession()
+    if (!ctx) {
+      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
+    }
 
-  const guard = await requireResellerOwner(ctx.tenantId)
-  if (!guard.ok) return guard.response
+    const guard = await requireResellerOwner(ctx.tenantId)
+    if (!guard.ok) return guard.response
 
-  const template = await prisma.certificateTemplate.findUnique({
-    where: { tenantId: ctx.tenantId },
-    select: { id: true, tenantId: true, layout: true },
-  })
+    const template = await prisma.certificateTemplate.findUnique({
+      where: { tenantId: ctx.tenantId },
+      select: { id: true, tenantId: true, layout: true },
+    })
 
-  return NextResponse.json({
-    data: template
-      ? {
-          id: template.id,
-          tenantId: template.tenantId,
-          layout: template.layout,
-        }
-      : null,
-  })
-}
+    return NextResponse.json({
+      data: template
+        ? {
+            id: template.id,
+            tenantId: template.tenantId,
+            layout: template.layout,
+          }
+        : null,
+    })
+  },
+)
 
-export async function PUT(request: Request) {
-  const ctx = await requireResellerSession()
-  if (!ctx) {
-    return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-  }
-  const guard = await requireResellerOwner(ctx.tenantId)
-  if (!guard.ok) return guard.response
+export const PUT = withRequestContext(
+  { action: "painel.certificate_template.update", route: "/api/painel/certificate-template" },
+  async (request: Request) => {
+    const ctx = await requireResellerSession()
+    if (!ctx) {
+      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
+    }
+    const guard = await requireResellerOwner(ctx.tenantId)
+    if (!guard.ok) return guard.response
 
-  let payload: unknown
-  try {
-    payload = await request.json()
-  } catch {
-    return NextResponse.json({ error: "JSON inválido" }, { status: 400 })
-  }
+    let payload: unknown
+    try {
+      payload = await request.json()
+    } catch {
+      return NextResponse.json({ error: "JSON inválido" }, { status: 400 })
+    }
 
-  const parsed = upsertSchema.safeParse(payload)
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: "Dados inválidos", fields: parsed.error.flatten().fieldErrors },
-      { status: 400 },
-    )
-  }
+    const parsed = upsertSchema.safeParse(payload)
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "Dados inválidos", fields: parsed.error.flatten().fieldErrors },
+        { status: 400 },
+      )
+    }
 
-  const { layout } = parsed.data
+    const { layout } = parsed.data
 
-  const template = await prisma.certificateTemplate.upsert({
-    where: { tenantId: ctx.tenantId },
-    create: {
-      tenantId: ctx.tenantId,
-      layout,
-    },
-    update: {
-      layout,
-    },
-    select: { id: true, tenantId: true, layout: true },
-  })
+    const template = await prisma.certificateTemplate.upsert({
+      where: { tenantId: ctx.tenantId },
+      create: {
+        tenantId: ctx.tenantId,
+        layout,
+      },
+      update: {
+        layout,
+      },
+      select: { id: true, tenantId: true, layout: true },
+    })
 
-  return NextResponse.json({
-    data: {
-      id: template.id,
-      tenantId: template.tenantId,
-      layout: template.layout,
-    },
-  })
-}
+    return NextResponse.json({
+      data: {
+        id: template.id,
+        tenantId: template.tenantId,
+        layout: template.layout,
+      },
+    })
+  },
+)

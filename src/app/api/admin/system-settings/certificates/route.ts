@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { requireSuperAdmin } from "@/lib/auth/guards"
+import { withRequestContext } from "@/lib/observability/with-request-context"
 
 const SETTINGS_ID = "default"
 
@@ -21,7 +22,9 @@ const SELECT = {
   groupName: true,
 } as const
 
-export async function GET() {
+export const GET = withRequestContext(
+  { action: "admin.system_settings.certificates.get", route: "/api/admin/system-settings/certificates" },
+  async () => {
   const guard = await requireSuperAdmin()
   if (!guard.ok) return guard.response
 
@@ -33,9 +36,12 @@ export async function GET() {
   })
 
   return NextResponse.json({ data: row })
-}
+  },
+)
 
-export async function PUT(request: Request) {
+export const PUT = withRequestContext(
+  { action: "admin.system_settings.certificates.update", route: "/api/admin/system-settings/certificates" },
+  async (request: Request) => {
   const guard = await requireSuperAdmin()
   if (!guard.ok) return guard.response
 
@@ -85,4 +91,5 @@ export async function PUT(request: Request) {
   })
 
   return NextResponse.json({ data: row })
-}
+  },
+)

@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { markAllAsRead } from "@/lib/notifications"
+import { withRequestContext } from "@/lib/observability/with-request-context"
 
-export async function POST() {
+export const POST = withRequestContext(
+  { action: "notifications.mark_all_read", route: "/api/notifications/read-all" },
+  async (_request: Request) => {
   const session = await auth()
   const user = session?.user as
     | {
@@ -27,4 +30,5 @@ export async function POST() {
         })
 
   return NextResponse.json({ data: { count } })
-}
+  },
+)

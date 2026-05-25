@@ -3,6 +3,8 @@ import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { requireStudentSession } from "@/lib/auth/student-session"
 import { syncStudentProfileToEA } from "@/lib/students/plataforma-actions"
+import { contextLogger } from "@/lib/logger"
+import { withRequestContext } from "@/lib/observability/with-request-context"
 
 const patchSchema = z.object({
   nome: z.string().trim().min(2).max(120),
@@ -21,7 +23,9 @@ function nullable(value: string | undefined): string | null {
   return trimmed.length > 0 ? trimmed : null
 }
 
-export async function PATCH(request: Request) {
+export const PATCH = withRequestContext(
+  { action: "aluno.perfil.update", route: "/api/aluno/perfil" },
+  async (request: Request) => {
   const session = await requireStudentSession()
   if (!session) {
     return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
@@ -66,8 +70,12 @@ export async function PATCH(request: Request) {
   } catch (err) {
     plataformaSynced = false
     plataformaError = err instanceof Error ? err.message : "Erro ao sincronizar"
-    console.warn("[aluno/perfil] sync com a plataforma falhou:", err)
+    contextLogger().warn(
+      { err, event: "aluno.perfil.sync_plataforma_failed", studentId: session.studentId },
+      "sync de perfil com a plataforma falhou",
+    )
   }
 
   return NextResponse.json({ data: { ok: true, plataformaSynced, plataformaError } })
-}
+  },
+)

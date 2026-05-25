@@ -6,15 +6,18 @@ import {
   downloadCertificatePdf,
   extractCertificatePath,
 } from "@/lib/certificates/storage"
+import { contextLogger } from "@/lib/logger"
+import { withRequestContextParams } from "@/lib/observability/with-request-context"
 
 export const dynamic = "force-dynamic"
 export const maxDuration = 60
 
-interface RouteParams {
-  params: Promise<{ id: string }>
-}
-
-export async function GET(_request: Request, { params }: RouteParams) {
+export const GET = withRequestContextParams<{ id: string }>(
+  {
+    action: "student.certificates.download",
+    route: "/api/student/certificates/[id]/download",
+  },
+  async (_request: Request, { params }) => {
   const session = await requireStudentSession()
   if (!session) {
     return NextResponse.json({ error: "Nao autenticado" }, { status: 401 })
@@ -45,9 +48,9 @@ export async function GET(_request: Request, { params }: RouteParams) {
       const r = await generateAndUploadPdf(cert.id)
       pdfUrl = r.pdfUrl
     } catch (err) {
-      console.error(
-        `[student/certificates/download] falha ao gerar PDF ${cert.id}:`,
-        err,
+      contextLogger().error(
+        { err, event: "student.certificates.pdf_gen_failed", certificateId: cert.id },
+        "falha ao gerar PDF do certificado",
       )
       return NextResponse.json(
         { error: "Falha ao gerar PDF" },
@@ -80,13 +83,14 @@ export async function GET(_request: Request, { params }: RouteParams) {
         },
       })
     } catch (err) {
-      console.error(
-        `[student/certificates/download] falha ao baixar PDF do bucket ${path}:`,
-        err,
+      contextLogger().error(
+        { err, event: "student.certificates.download_bucket_failed", certificateId: cert.id, path },
+        "falha ao baixar PDF do bucket — fallback pra URL pública",
       )
       // fallback: redireciona para a URL publica
     }
   }
 
   return NextResponse.redirect(pdfUrl, { status: 302 })
-}
+  },
+)

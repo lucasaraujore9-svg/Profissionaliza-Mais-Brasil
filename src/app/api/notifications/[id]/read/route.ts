@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { markAsRead } from "@/lib/notifications"
+import { withRequestContextParams } from "@/lib/observability/with-request-context"
 
-export async function POST(
-  _request: Request,
-  ctx: { params: Promise<{ id: string }> },
-) {
+export const POST = withRequestContextParams<{ id: string }>(
+  { action: "notifications.mark_read", route: "/api/notifications/[id]/read" },
+  async (_request: Request, ctx) => {
   const session = await auth()
   const user = session?.user as
     | {
@@ -34,4 +34,5 @@ export async function POST(
     return NextResponse.json({ error: "Não encontrado" }, { status: 404 })
   }
   return NextResponse.json({ data: { ok: true } })
-}
+  },
+)

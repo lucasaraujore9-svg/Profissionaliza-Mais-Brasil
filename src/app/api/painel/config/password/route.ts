@@ -3,6 +3,7 @@ import { z } from "zod"
 import { compare, hash } from "bcryptjs"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { withRequestContext } from "@/lib/observability/with-request-context"
 
 const bodySchema = z
   .object({
@@ -15,54 +16,57 @@ const bodySchema = z
     path: ["confirmPassword"],
   })
 
-export async function PUT(request: Request) {
-  const session = await auth()
-  if (!session?.user || !session.user.id) {
-    return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-  }
+export const PUT = withRequestContext(
+  { action: "painel.config.password", route: "/api/painel/config/password" },
+  async (request: Request) => {
+    const session = await auth()
+    if (!session?.user || !session.user.id) {
+      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
+    }
 
-  let payload: unknown
-  try {
-    payload = await request.json()
-  } catch {
-    return NextResponse.json({ error: "JSON inválido" }, { status: 400 })
-  }
+    let payload: unknown
+    try {
+      payload = await request.json()
+    } catch {
+      return NextResponse.json({ error: "JSON inválido" }, { status: 400 })
+    }
 
-  const parsed = bodySchema.safeParse(payload)
-  if (!parsed.success) {
-    return NextResponse.json(
-      {
-        error: "Dados inválidos",
-        fields: parsed.error.flatten().fieldErrors,
-      },
-      { status: 400 },
-    )
-  }
+    const parsed = bodySchema.safeParse(payload)
+    if (!parsed.success) {
+      return NextResponse.json(
+        {
+          error: "Dados inválidos",
+          fields: parsed.error.flatten().fieldErrors,
+        },
+        { status: 400 },
+      )
+    }
 
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: { passwordHash: true },
-  })
-  if (!user) {
-    return NextResponse.json({ error: "Usuário não encontrado" }, { status: 404 })
-  }
+    const user = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { passwordHash: true },
+    })
+    if (!user) {
+      return NextResponse.json({ error: "Usuário não encontrado" }, { status: 404 })
+    }
 
-  const valid = await compare(parsed.data.currentPassword, user.passwordHash)
-  if (!valid) {
-    return NextResponse.json(
-      {
-        error: "Senha atual incorreta",
-        fields: { currentPassword: ["Senha atual incorreta"] },
-      },
-      { status: 400 },
-    )
-  }
+    const valid = await compare(parsed.data.currentPassword, user.passwordHash)
+    if (!valid) {
+      return NextResponse.json(
+        {
+          error: "Senha atual incorreta",
+          fields: { currentPassword: ["Senha atual incorreta"] },
+        },
+        { status: 400 },
+      )
+    }
 
-  const newHash = await hash(parsed.data.newPassword, 12)
-  await prisma.user.update({
-    where: { id: session.user.id },
-    data: { passwordHash: newHash },
-  })
+    const newHash = await hash(parsed.data.newPassword, 12)
+    await prisma.user.update({
+      where: { id: session.user.id },
+      data: { passwordHash: newHash },
+    })
 
-  return NextResponse.json({ data: { ok: true } })
-}
+    return NextResponse.json({ data: { ok: true } })
+  },
+)

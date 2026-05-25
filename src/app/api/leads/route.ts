@@ -4,6 +4,8 @@ import { prisma } from "@/lib/prisma"
 import { sendEmail, EmailError } from "@/lib/email/resend"
 import { createNotification } from "@/lib/notifications"
 import { rateLimit, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
+import { contextLogger } from "@/lib/logger"
+import { withRequestContext } from "@/lib/observability/with-request-context"
 
 const phoneRegex = /^\(?\d{2}\)?\s?\d{4,5}-?\d{4}$/
 
@@ -50,7 +52,9 @@ function notesFrom(input: z.infer<typeof leadSchema>): string | null {
   return parts.length ? parts.join("\n\n") : null
 }
 
-export async function POST(request: Request) {
+export const POST = withRequestContext(
+  { action: "leads.create", route: "/api/leads" },
+  async (request: Request) => {
   const rl = await rateLimit(request, RATE_LIMITS.leads)
   if (!rl.ok) return rateLimitResponse(rl)
 
@@ -104,11 +108,15 @@ export async function POST(request: Request) {
         props: { companyName },
       },
     }).catch((err: unknown) => {
-      if (err instanceof EmailError) {
-        console.error("[leads] email failed:", err.message)
-      } else {
-        console.error("[leads] email unexpected error:", err)
-      }
+      contextLogger().error(
+        {
+          err,
+          event: "leads.confirmation_email_failed",
+          leadEmail: data.email,
+          emailErrorType: err instanceof EmailError ? "EmailError" : "Unexpected",
+        },
+        "envio de email de confirmação do lead falhou",
+      )
     })
 
     // Notifica equipe interna sobre novo lead — equipe de vendas tipicamente
@@ -135,10 +143,14 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ data: { id: lead.id } }, { status: 201 })
   } catch (error) {
-    console.error("[leads] create error:", error)
+    contextLogger().error(
+      { err: error, event: "leads.create_failed" },
+      "criar lead falhou",
+    )
     return NextResponse.json(
       { error: "Erro ao salvar lead", code: "DB_ERROR" },
       { status: 500 },
     )
   }
-}
+  },
+)

@@ -16,6 +16,7 @@ import {
   type EARemoverCursoParams,
 } from "./types"
 import { EAApiError, EANetworkError } from "./errors"
+import { contextLogger } from "@/lib/logger"
 
 const MAX_RETRIES = 3
 const INITIAL_BACKOFF_MS = 500
@@ -103,7 +104,10 @@ async function requestWithRetry<T>(
 
       const backoff = INITIAL_BACKOFF_MS * Math.pow(2, attempt)
       if (process.env.NODE_ENV === "development") {
-        console.warn(`[plataforma] Retry ${attempt + 1}/${MAX_RETRIES} for ${endpoint} in ${backoff}ms`)
+        contextLogger().warn(
+          { event: "plataforma.client.retry", endpoint, attempt: attempt + 1, maxRetries: MAX_RETRIES, backoffMs: backoff },
+          "plataforma retry",
+        )
       }
       await sleep(backoff)
     }

@@ -15,6 +15,7 @@ import {
   cnameTarget as resolveCnameTarget,
   vitrineDomain as resolveVitrineDomain,
 } from "@/lib/tenant/urls"
+import { withRequestContext } from "@/lib/observability/with-request-context"
 
 async function fetchTenantDomainInfo(tenantId: string) {
   const tenant = await prisma.tenant.findUnique({
@@ -62,18 +63,21 @@ async function fetchTenantDomainInfo(tenantId: string) {
   }
 }
 
-export async function GET() {
-  const ctx = await requireResellerSession()
-  if (!ctx) {
-    return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-  }
+export const GET = withRequestContext(
+  { action: "painel.dominio.get", route: "/api/painel/dominio" },
+  async () => {
+    const ctx = await requireResellerSession()
+    if (!ctx) {
+      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
+    }
 
-  const info = await fetchTenantDomainInfo(ctx.tenantId)
-  if (!info) {
-    return NextResponse.json({ error: "Tenant não encontrado" }, { status: 404 })
-  }
-  return NextResponse.json({ data: info })
-}
+    const info = await fetchTenantDomainInfo(ctx.tenantId)
+    if (!info) {
+      return NextResponse.json({ error: "Tenant não encontrado" }, { status: 404 })
+    }
+    return NextResponse.json({ data: info })
+  },
+)
 
 const domainSchema = z.object({
   domain: z
@@ -88,136 +92,142 @@ const domainSchema = z.object({
     ),
 })
 
-export async function POST(request: Request) {
-  const ctx = await requireResellerSession()
-  if (!ctx) {
-    return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-  }
-
-  let payload: unknown
-  try {
-    payload = await request.json()
-  } catch {
-    return NextResponse.json({ error: "JSON inválido" }, { status: 400 })
-  }
-
-  const parsed = domainSchema.safeParse(payload)
-  if (!parsed.success) {
-    return NextResponse.json(
-      {
-        error: "Dados inválidos",
-        fields: parsed.error.flatten().fieldErrors,
-      },
-      { status: 400 },
-    )
-  }
-
-  const domain = parsed.data.domain
-  const appDomain = resolveAppDomain()
-  const vitrineDomain = resolveVitrineDomain()
-  if (
-    (appDomain && domain.endsWith(`.${appDomain}`)) ||
-    (vitrineDomain && domain.endsWith(`.${vitrineDomain}`))
-  ) {
-    return NextResponse.json(
-      { error: "Use apenas domínio próprio, não um subdomínio da plataforma" },
-      { status: 400 },
-    )
-  }
-
-  const existing = await prisma.tenant.findUnique({
-    where: { customDomain: domain },
-    select: { id: true },
-  })
-  if (existing && existing.id !== ctx.tenantId) {
-    return NextResponse.json(
-      { error: "Este domínio já está sendo usado por outro revendedor" },
-      { status: 409 },
-    )
-  }
-
-  const tenant = await prisma.tenant.findUnique({
-    where: { id: ctx.tenantId },
-    select: { id: true, slug: true, customDomain: true },
-  })
-  if (!tenant) {
-    return NextResponse.json({ error: "Tenant não encontrado" }, { status: 404 })
-  }
-
-  try {
-    await addProjectDomain(domain)
-  } catch (error) {
-    if (error instanceof VercelNotConfiguredError) {
-      return NextResponse.json({ error: error.message }, { status: 503 })
+export const POST = withRequestContext(
+  { action: "painel.dominio.add", route: "/api/painel/dominio" },
+  async (request: Request) => {
+    const ctx = await requireResellerSession()
+    if (!ctx) {
+      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
     }
-    const message = error instanceof Error ? error.message : "Erro Vercel"
-    return NextResponse.json(
-      { error: `Falha ao adicionar domínio: ${message}` },
-      { status: 502 },
-    )
-  }
 
-  await prisma.tenant.update({
-    where: { id: tenant.id },
-    data: { customDomain: domain, domainVerified: false },
-  })
-
-  await invalidateTenant({
-    id: tenant.id,
-    slug: tenant.slug,
-    customDomain: tenant.customDomain,
-  })
-
-  const info = await fetchTenantDomainInfo(tenant.id)
-  return NextResponse.json({ data: info })
-}
-
-export async function DELETE() {
-  const ctx = await requireResellerSession()
-  if (!ctx) {
-    return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-  }
-
-  const tenant = await prisma.tenant.findUnique({
-    where: { id: ctx.tenantId },
-    select: { id: true, slug: true, customDomain: true },
-  })
-  if (!tenant) {
-    return NextResponse.json({ error: "Tenant não encontrado" }, { status: 404 })
-  }
-  if (!tenant.customDomain) {
-    return NextResponse.json(
-      { error: "Nenhum domínio personalizado para remover" },
-      { status: 400 },
-    )
-  }
-
-  try {
-    await removeProjectDomain(tenant.customDomain)
-  } catch (error) {
-    if (error instanceof VercelNotConfiguredError) {
-      return NextResponse.json({ error: error.message }, { status: 503 })
+    let payload: unknown
+    try {
+      payload = await request.json()
+    } catch {
+      return NextResponse.json({ error: "JSON inválido" }, { status: 400 })
     }
-    const message = error instanceof Error ? error.message : "Erro Vercel"
-    if (!message.toLowerCase().includes("not found")) {
+
+    const parsed = domainSchema.safeParse(payload)
+    if (!parsed.success) {
       return NextResponse.json(
-        { error: `Falha ao remover domínio: ${message}` },
+        {
+          error: "Dados inválidos",
+          fields: parsed.error.flatten().fieldErrors,
+        },
+        { status: 400 },
+      )
+    }
+
+    const domain = parsed.data.domain
+    const appDomain = resolveAppDomain()
+    const vitrineDomain = resolveVitrineDomain()
+    if (
+      (appDomain && domain.endsWith(`.${appDomain}`)) ||
+      (vitrineDomain && domain.endsWith(`.${vitrineDomain}`))
+    ) {
+      return NextResponse.json(
+        { error: "Use apenas domínio próprio, não um subdomínio da plataforma" },
+        { status: 400 },
+      )
+    }
+
+    const existing = await prisma.tenant.findUnique({
+      where: { customDomain: domain },
+      select: { id: true },
+    })
+    if (existing && existing.id !== ctx.tenantId) {
+      return NextResponse.json(
+        { error: "Este domínio já está sendo usado por outro revendedor" },
+        { status: 409 },
+      )
+    }
+
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: ctx.tenantId },
+      select: { id: true, slug: true, customDomain: true },
+    })
+    if (!tenant) {
+      return NextResponse.json({ error: "Tenant não encontrado" }, { status: 404 })
+    }
+
+    try {
+      await addProjectDomain(domain)
+    } catch (error) {
+      if (error instanceof VercelNotConfiguredError) {
+        return NextResponse.json({ error: error.message }, { status: 503 })
+      }
+      const message = error instanceof Error ? error.message : "Erro Vercel"
+      return NextResponse.json(
+        { error: `Falha ao adicionar domínio: ${message}` },
         { status: 502 },
       )
     }
-  }
 
-  await prisma.tenant.update({
-    where: { id: tenant.id },
-    data: { customDomain: null, domainVerified: false },
-  })
+    await prisma.tenant.update({
+      where: { id: tenant.id },
+      data: { customDomain: domain, domainVerified: false },
+    })
 
-  await invalidateTenant({
-    id: tenant.id,
-    slug: tenant.slug,
-    customDomain: tenant.customDomain,
-  })
+    await invalidateTenant({
+      id: tenant.id,
+      slug: tenant.slug,
+      customDomain: tenant.customDomain,
+    })
 
-  const info = await fetchTenantDomainInfo(tenant.id)
-  return NextResponse.json({ data: info })
-}
+    const info = await fetchTenantDomainInfo(tenant.id)
+    return NextResponse.json({ data: info })
+  },
+)
+
+export const DELETE = withRequestContext(
+  { action: "painel.dominio.remove", route: "/api/painel/dominio" },
+  async () => {
+    const ctx = await requireResellerSession()
+    if (!ctx) {
+      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
+    }
+
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: ctx.tenantId },
+      select: { id: true, slug: true, customDomain: true },
+    })
+    if (!tenant) {
+      return NextResponse.json({ error: "Tenant não encontrado" }, { status: 404 })
+    }
+    if (!tenant.customDomain) {
+      return NextResponse.json(
+        { error: "Nenhum domínio personalizado para remover" },
+        { status: 400 },
+      )
+    }
+
+    try {
+      await removeProjectDomain(tenant.customDomain)
+    } catch (error) {
+      if (error instanceof VercelNotConfiguredError) {
+        return NextResponse.json({ error: error.message }, { status: 503 })
+      }
+      const message = error instanceof Error ? error.message : "Erro Vercel"
+      if (!message.toLowerCase().includes("not found")) {
+        return NextResponse.json(
+          { error: `Falha ao remover domínio: ${message}` },
+          { status: 502 },
+        )
+      }
+    }
+
+    await prisma.tenant.update({
+      where: { id: tenant.id },
+      data: { customDomain: null, domainVerified: false },
+    })
+
+    await invalidateTenant({
+      id: tenant.id,
+      slug: tenant.slug,
+      customDomain: tenant.customDomain,
+    })
+
+    const info = await fetchTenantDomainInfo(tenant.id)
+    return NextResponse.json({ data: info })
+  },
+)

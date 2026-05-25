@@ -1,11 +1,10 @@
 import { NextResponse } from "next/server"
 import { getTenantCourseBySlug } from "@/lib/tenant/courses"
+import { withRequestContextParams } from "@/lib/observability/with-request-context"
 
-interface RouteContext {
-  params: Promise<{ slug: string }>
-}
-
-export async function GET(request: Request, ctx: RouteContext) {
+export const GET = withRequestContextParams<{ slug: string }>(
+  { action: "loja.cursos.get", route: "/api/loja/cursos/[slug]" },
+  async (request: Request, ctx) => {
   const tenantId = request.headers.get("x-tenant-id")
 
   if (!tenantId) {
@@ -34,4 +33,5 @@ export async function GET(request: Request, ctx: RouteContext) {
   }
 
   return NextResponse.json({ data: course })
-}
+  },
+)

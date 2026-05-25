@@ -120,6 +120,13 @@ const envSchema = z.object({
   PMB_PLATAFORMA_POLO: z.string().optional(),
   PMB_EA_VENDEDOR_ID: z.string().optional(),
   PMB_EA_POLO: z.string().optional(),
+
+  // Observabilidade (opcional — preferimos Vercel Log Drain configurado
+  // no dashboard; estas envs ligam um fan-out HTTP direto pra Axiom).
+  LOG_LEVEL: z.enum(["trace", "debug", "info", "warn", "error", "fatal", "silent"]).optional(),
+  AXIOM_TOKEN: z.string().optional(),
+  AXIOM_DATASET: z.string().optional(),
+  AXIOM_URL: z.string().url().optional(),
 })
 
 export type Env = z.infer<typeof envSchema>
@@ -158,16 +165,26 @@ export function assertEnv(): void {
   if (!cached) cached = parse()
 
   // Avisos não-fatais (degradam features mas não derrubam a app).
+  // Usa JSON inline pra evitar import circular com logger (env é importado
+  // no boot via instrumentation.ts, antes do logger ser inicializado).
   if (cached.NODE_ENV === "production") {
     if (!cached.UPSTASH_REDIS_REST_URL || !cached.UPSTASH_REDIS_REST_TOKEN) {
-      console.warn(
-        "[env] Redis (Upstash) não configurado em produção — rate-limit DESLIGADO. Configure UPSTASH_REDIS_REST_*.",
-      )
+      // eslint-disable-next-line no-console
+      console.warn(JSON.stringify({
+        level: "warn",
+        event: "env.redis_missing",
+        msg: "Redis (Upstash) não configurado em produção — rate-limit DESLIGADO. Configure UPSTASH_REDIS_REST_*.",
+        time: new Date().toISOString(),
+      }))
     }
     if (!cached.MP_WEBHOOK_SECRET) {
-      console.warn(
-        "[env] MP_WEBHOOK_SECRET ausente em produção — webhooks do Mercado Pago serão REJEITADOS. Configure no painel MP + Vercel.",
-      )
+      // eslint-disable-next-line no-console
+      console.warn(JSON.stringify({
+        level: "warn",
+        event: "env.mp_webhook_secret_missing",
+        msg: "MP_WEBHOOK_SECRET ausente em produção — webhooks do Mercado Pago serão REJEITADOS. Configure no painel MP + Vercel.",
+        time: new Date().toISOString(),
+      }))
     }
     if (!cached.AUTH_SECRET && !cached.NEXTAUTH_SECRET) {
       throw new Error(

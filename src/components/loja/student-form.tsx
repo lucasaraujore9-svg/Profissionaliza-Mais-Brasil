@@ -5,6 +5,7 @@ import { User, Mail, IdCard, Phone, MapPin, Lock, AlertCircle } from "lucide-rea
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
+import { clientLogger } from "@/lib/logger-client"
 
 export interface StudentFormProps {
   courseId: string
@@ -119,7 +120,7 @@ export function StudentForm({
 
       window.location.href = payload.data.initPoint
     } catch (err) {
-      console.error("[checkout-form]", err)
+      clientLogger.error({ err: String(err), event: "checkout_form.submit_failed", courseId, hasCoupon: !!couponCode }, "checkout form submit falhou")
       setErrorMsg("Erro de conexão. Tente novamente.")
       setStatus("error")
     }

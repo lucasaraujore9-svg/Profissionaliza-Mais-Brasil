@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
 import { z, ZodError } from "zod"
 import { prisma } from "@/lib/prisma"
+import { contextLogger } from "@/lib/logger"
+import { withRequestContext } from "@/lib/observability/with-request-context"
 
 const querySchema = z.object({
   category: z.string().trim().optional(),
@@ -22,7 +24,9 @@ export interface LojaCourseDTO {
   isFeatured: boolean
 }
 
-export async function GET(request: Request) {
+export const GET = withRequestContext(
+  { action: "loja.courses.list", route: "/api/loja/courses" },
+  async (request: Request) => {
   const tenantId = request.headers.get("x-tenant-id")
   if (!tenantId) {
     return NextResponse.json(
@@ -106,10 +110,14 @@ export async function GET(request: Request) {
       meta: { total, limit: parsed.limit, offset: parsed.offset },
     })
   } catch (error) {
-    console.error("[loja/courses] error:", error)
+    contextLogger().error(
+      { err: error, event: "loja.courses.list_failed" },
+      "listagem de cursos da loja falhou",
+    )
     return NextResponse.json(
       { error: "Erro ao buscar cursos", code: "DB_ERROR" },
       { status: 500 },
     )
   }
-}
+  },
+)

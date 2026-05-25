@@ -2,33 +2,37 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { requireResellerSession } from "@/lib/auth/reseller-session"
+import { withRequestContext } from "@/lib/observability/with-request-context"
 
-export async function GET() {
-  const ctx = await requireResellerSession()
-  if (!ctx) {
-    return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-  }
+export const GET = withRequestContext(
+  { action: "painel.cupons.list", route: "/api/painel/cupons" },
+  async () => {
+    const ctx = await requireResellerSession()
+    if (!ctx) {
+      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
+    }
 
-  const coupons = await prisma.coupon.findMany({
-    where: { tenantId: ctx.tenantId },
-    orderBy: { createdAt: "desc" },
-  })
+    const coupons = await prisma.coupon.findMany({
+      where: { tenantId: ctx.tenantId },
+      orderBy: { createdAt: "desc" },
+    })
 
-  return NextResponse.json({
-    data: coupons.map((c) => ({
-      id: c.id,
-      code: c.code,
-      discountType: c.discountType,
-      discountValue: Number(c.discountValue),
-      maxUses: c.maxUses,
-      usedCount: c.usedCount,
-      validFrom: c.validFrom.toISOString(),
-      validUntil: c.validUntil.toISOString(),
-      isActive: c.isActive,
-      createdAt: c.createdAt.toISOString(),
-    })),
-  })
-}
+    return NextResponse.json({
+      data: coupons.map((c) => ({
+        id: c.id,
+        code: c.code,
+        discountType: c.discountType,
+        discountValue: Number(c.discountValue),
+        maxUses: c.maxUses,
+        usedCount: c.usedCount,
+        validFrom: c.validFrom.toISOString(),
+        validUntil: c.validUntil.toISOString(),
+        isActive: c.isActive,
+        createdAt: c.createdAt.toISOString(),
+      })),
+    })
+  },
+)
 
 const createSchema = z
   .object({
@@ -54,96 +58,99 @@ const createSchema = z
     { message: "Data final antes do início", path: ["validUntil"] },
   )
 
-export async function POST(request: Request) {
-  const ctx = await requireResellerSession()
-  if (!ctx) {
-    return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-  }
+export const POST = withRequestContext(
+  { action: "painel.cupons.create", route: "/api/painel/cupons" },
+  async (request: Request) => {
+    const ctx = await requireResellerSession()
+    if (!ctx) {
+      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
+    }
 
-  let payload: unknown
-  try {
-    payload = await request.json()
-  } catch {
-    return NextResponse.json({ error: "JSON inválido" }, { status: 400 })
-  }
+    let payload: unknown
+    try {
+      payload = await request.json()
+    } catch {
+      return NextResponse.json({ error: "JSON inválido" }, { status: 400 })
+    }
 
-  const parsed = createSchema.safeParse(payload)
-  if (!parsed.success) {
-    return NextResponse.json(
-      {
-        error: "Dados inválidos",
-        fields: parsed.error.flatten().fieldErrors,
-      },
-      { status: 400 },
-    )
-  }
-
-  const code = parsed.data.code.toUpperCase()
-
-  // Cap de desconto para consultor (TenantMember com maxDiscount)
-  const membership = await prisma.tenantMember.findUnique({
-    where: { tenantId_userId: { tenantId: ctx.tenantId, userId: ctx.userId } },
-    select: { role: true, maxDiscount: true, status: true },
-  })
-  if (
-    membership &&
-    membership.role === "consultant" &&
-    membership.status === "ATIVO" &&
-    membership.maxDiscount !== null
-  ) {
-    if (parsed.data.discountType === "FIXED") {
+    const parsed = createSchema.safeParse(payload)
+    if (!parsed.success) {
       return NextResponse.json(
         {
-          error: `Consultor com cap de ${membership.maxDiscount}% só pode criar cupom percentual`,
+          error: "Dados inválidos",
+          fields: parsed.error.flatten().fieldErrors,
         },
-        { status: 403 },
+        { status: 400 },
       )
     }
-    if (parsed.data.discountValue > membership.maxDiscount) {
+
+    const code = parsed.data.code.toUpperCase()
+
+    // Cap de desconto para consultor (TenantMember com maxDiscount)
+    const membership = await prisma.tenantMember.findUnique({
+      where: { tenantId_userId: { tenantId: ctx.tenantId, userId: ctx.userId } },
+      select: { role: true, maxDiscount: true, status: true },
+    })
+    if (
+      membership &&
+      membership.role === "consultant" &&
+      membership.status === "ATIVO" &&
+      membership.maxDiscount !== null
+    ) {
+      if (parsed.data.discountType === "FIXED") {
+        return NextResponse.json(
+          {
+            error: `Consultor com cap de ${membership.maxDiscount}% só pode criar cupom percentual`,
+          },
+          { status: 403 },
+        )
+      }
+      if (parsed.data.discountValue > membership.maxDiscount) {
+        return NextResponse.json(
+          { error: `Seu cap de desconto é ${membership.maxDiscount}%` },
+          { status: 403 },
+        )
+      }
+    }
+
+    const existing = await prisma.coupon.findUnique({
+      where: { tenantId_code: { tenantId: ctx.tenantId, code } },
+      select: { id: true },
+    })
+    if (existing) {
       return NextResponse.json(
-        { error: `Seu cap de desconto é ${membership.maxDiscount}%` },
-        { status: 403 },
+        { error: "Já existe um cupom com esse código" },
+        { status: 409 },
       )
     }
-  }
 
-  const existing = await prisma.coupon.findUnique({
-    where: { tenantId_code: { tenantId: ctx.tenantId, code } },
-    select: { id: true },
-  })
-  if (existing) {
-    return NextResponse.json(
-      { error: "Já existe um cupom com esse código" },
-      { status: 409 },
-    )
-  }
+    const coupon = await prisma.coupon.create({
+      data: {
+        tenantId: ctx.tenantId,
+        code,
+        discountType: parsed.data.discountType,
+        discountValue: parsed.data.discountValue,
+        maxUses: parsed.data.maxUses ?? null,
+        validFrom: new Date(parsed.data.validFrom),
+        validUntil: new Date(parsed.data.validUntil),
+        isActive: true,
+        createdByUserId: ctx.userId,
+        createdByRole: "RESELLER",
+      },
+    })
 
-  const coupon = await prisma.coupon.create({
-    data: {
-      tenantId: ctx.tenantId,
-      code,
-      discountType: parsed.data.discountType,
-      discountValue: parsed.data.discountValue,
-      maxUses: parsed.data.maxUses ?? null,
-      validFrom: new Date(parsed.data.validFrom),
-      validUntil: new Date(parsed.data.validUntil),
-      isActive: true,
-      createdByUserId: ctx.userId,
-      createdByRole: "RESELLER",
-    },
-  })
-
-  return NextResponse.json({
-    data: {
-      id: coupon.id,
-      code: coupon.code,
-      discountType: coupon.discountType,
-      discountValue: Number(coupon.discountValue),
-      maxUses: coupon.maxUses,
-      usedCount: coupon.usedCount,
-      validFrom: coupon.validFrom.toISOString(),
-      validUntil: coupon.validUntil.toISOString(),
-      isActive: coupon.isActive,
-    },
-  })
-}
+    return NextResponse.json({
+      data: {
+        id: coupon.id,
+        code: coupon.code,
+        discountType: coupon.discountType,
+        discountValue: Number(coupon.discountValue),
+        maxUses: coupon.maxUses,
+        usedCount: coupon.usedCount,
+        validFrom: coupon.validFrom.toISOString(),
+        validUntil: coupon.validUntil.toISOString(),
+        isActive: coupon.isActive,
+      },
+    })
+  },
+)

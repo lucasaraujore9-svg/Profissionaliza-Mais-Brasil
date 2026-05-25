@@ -3,15 +3,16 @@ import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { requireAdminSession } from "@/lib/auth/admin-session"
 import { failPayout } from "@/lib/referrals/payout"
+import { contextLogger } from "@/lib/logger"
+import { withRequestContextParams } from "@/lib/observability/with-request-context"
 
 const bodySchema = z.object({
   reason: z.string().min(3).max(500),
 })
 
-export async function POST(
-  request: Request,
-  context: { params: Promise<{ id: string }> },
-) {
+export const POST = withRequestContextParams<{ id: string }>(
+  { action: "admin.referrals.payouts.fail", route: "/api/admin/referrals/payouts/[id]/fail" },
+  async (request: Request, context) => {
   const session = await requireAdminSession()
   if (!session) {
     return NextResponse.json({ error: "Nao autenticado" }, { status: 401 })
@@ -74,7 +75,11 @@ export async function POST(
     })
   } catch (err) {
     const message = err instanceof Error ? err.message : "Erro interno"
-    console.error("[referrals] fail falhou:", err)
+    contextLogger().error(
+      { err, event: "admin.referrals.fail_failed", payoutId: id },
+      "failPayout falhou",
+    )
     return NextResponse.json({ error: message }, { status: 500 })
   }
-}
+  },
+)

@@ -4,6 +4,8 @@ import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { requireAdminSession } from "@/lib/auth/admin-session"
 import { markPayoutPaid } from "@/lib/referrals/payout"
+import { contextLogger } from "@/lib/logger"
+import { withRequestContextParams } from "@/lib/observability/with-request-context"
 
 const bodySchema = z.object({
   asaasTransferId: z.string().min(1).max(80).optional().nullable(),
@@ -22,10 +24,9 @@ function appendNote(
     : entry
 }
 
-export async function POST(
-  request: Request,
-  context: { params: Promise<{ id: string }> },
-) {
+export const POST = withRequestContextParams<{ id: string }>(
+  { action: "admin.financeiro.referral_payouts.mark_paid", route: "/api/admin/financeiro/referral-payouts/[id]/mark-paid" },
+  async (request: Request, context) => {
   const session = await requireAdminSession()
   if (!session) {
     return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
@@ -94,12 +95,17 @@ export async function POST(
       },
     })
   } catch (err) {
-    if (err instanceof Prisma.PrismaClientKnownRequestError) {
-      console.error("[financeiro] mark-paid payout prisma:", err)
-    } else {
-      console.error("[financeiro] mark-paid payout:", err)
-    }
+    contextLogger().error(
+      {
+        err,
+        event: "admin.financeiro.mark_paid_failed",
+        payoutId: id,
+        prismaError: err instanceof Prisma.PrismaClientKnownRequestError,
+      },
+      "mark-paid payout falhou",
+    )
     const message = err instanceof Error ? err.message : "Erro interno"
     return NextResponse.json({ error: message }, { status: 500 })
   }
-}
+  },
+)

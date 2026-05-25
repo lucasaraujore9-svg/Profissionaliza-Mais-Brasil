@@ -16,8 +16,12 @@ import { createNotification } from "@/lib/notifications"
 import { appUrl, vitrineUrl as buildVitrineUrl } from "@/lib/tenant/urls"
 import { generateUniqueReferralCode } from "@/lib/referrals/code"
 import { resolveReferrerFromCookie } from "@/lib/referrals/capture"
+import { contextLogger } from "@/lib/logger"
+import { withRequestContext } from "@/lib/observability/with-request-context"
 
-export async function GET(request: Request) {
+export const GET = withRequestContext(
+  { action: "admin.revendedores.list", route: "/api/admin/revendedores" },
+  async (request: Request) => {
   const ctx = await requireAdminSession()
   if (!ctx) {
     return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
@@ -112,7 +116,8 @@ export async function GET(request: Request) {
       role: ctx.role,
     },
   })
-}
+  },
+)
 
 // ─── POST: criar revenda ─────────────────────────────────────────────
 const SLUG_REGEX = /^[a-z0-9](?:[a-z0-9-]{1,30}[a-z0-9])?$/
@@ -157,7 +162,9 @@ function isoDayPlus(days: number): string {
   return d.toISOString().slice(0, 10)
 }
 
-export async function POST(request: Request) {
+export const POST = withRequestContext(
+  { action: "admin.revendedores.create", route: "/api/admin/revendedores" },
+  async (request: Request) => {
   const ctx = await requireAdminSession()
   if (!ctx) {
     return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
@@ -334,7 +341,10 @@ export async function POST(request: Request) {
     emailSent = true
   } catch (err) {
     emailError = err instanceof Error ? err.message : "Erro ao enviar email"
-    console.error("[revendedores] onboarding email falhou:", err)
+    contextLogger().error(
+      { err, event: "admin.revendedores.onboarding_email_failed" },
+      "onboarding email do revendedor falhou",
+    )
   }
 
   // Notifica gerentes de revendedor + super admin sobre novo revendedor
@@ -382,4 +392,5 @@ export async function POST(request: Request) {
       },
     },
   })
-}
+  },
+)

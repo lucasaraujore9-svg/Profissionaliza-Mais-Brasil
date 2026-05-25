@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { Loader2, Send, CheckCircle2, AlertCircle } from "lucide-react"
+import { clientLogger } from "@/lib/logger-client"
 
 type Level = "INFO" | "SUCCESS" | "WARNING" | "ERROR"
 type Scope = "ALL" | "ONE"
@@ -49,7 +50,13 @@ export function ResellerBroadcastForm() {
       .then((j) => {
         setStudents((j.data?.items ?? []) as StudentOption[])
       })
-      .catch(() => {})
+      .catch((err) => {
+        if (err instanceof DOMException && err.name === "AbortError") return
+        clientLogger.warn(
+          { err: String(err), event: "reseller_broadcast.student_fetch_failed" },
+          "busca de alunos do tenant falhou",
+        )
+      })
       .finally(() => setStudentLoading(false))
     return () => ctrl.abort()
   }, [studentQuery, scope])
@@ -88,7 +95,11 @@ export function ResellerBroadcastForm() {
       setTitle("")
       setBody("")
       setHref("")
-    } catch {
+    } catch (err) {
+      clientLogger.error(
+        { err: String(err), event: "reseller_broadcast.submit_failed" },
+        "envio de broadcast (reseller) falhou",
+      )
       setResult({ kind: "err", message: "Erro de rede" })
     } finally {
       setSubmitting(false)

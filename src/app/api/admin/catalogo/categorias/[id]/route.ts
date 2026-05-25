@@ -3,6 +3,7 @@ import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { requireSuperAdmin } from "@/lib/auth/guards"
 import { slugifyCategoria } from "@/lib/catalog/home"
+import { withRequestContextParams } from "@/lib/observability/with-request-context"
 
 const updateSchema = z
   .object({
@@ -16,11 +17,9 @@ const updateSchema = z
     message: "Forneça pelo menos um campo para atualizar",
   })
 
-interface Ctx {
-  params: Promise<{ id: string }>
-}
-
-export async function PATCH(request: Request, ctx: Ctx) {
+export const PATCH = withRequestContextParams<{ id: string }>(
+  { action: "admin.catalogo.categorias.update", route: "/api/admin/catalogo/categorias/[id]" },
+  async (request: Request, ctx) => {
   const guard = await requireSuperAdmin()
   if (!guard.ok) return guard.response
 
@@ -97,9 +96,12 @@ export async function PATCH(request: Request, ctx: Ctx) {
   })
 
   return NextResponse.json({ data: updated })
-}
+  },
+)
 
-export async function DELETE(_request: Request, ctx: Ctx) {
+export const DELETE = withRequestContextParams<{ id: string }>(
+  { action: "admin.catalogo.categorias.delete", route: "/api/admin/catalogo/categorias/[id]" },
+  async (_request: Request, ctx) => {
   const guard = await requireSuperAdmin()
   if (!guard.ok) return guard.response
 
@@ -119,4 +121,5 @@ export async function DELETE(_request: Request, ctx: Ctx) {
   return NextResponse.json({
     data: { id, courseCountReleased: current._count.courses },
   })
-}
+  },
+)

@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { requireStudentSession } from "@/lib/auth/student-session"
+import { withRequestContext } from "@/lib/observability/with-request-context"
 
-export async function GET() {
+export const GET = withRequestContext(
+  { action: "aluno.catalogo.list", route: "/api/aluno/catalogo" },
+  async (_request: Request) => {
   const session = await requireStudentSession()
   if (!session) {
     return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
@@ -63,4 +66,5 @@ export async function GET() {
       }),
     },
   })
-}
+  },
+)

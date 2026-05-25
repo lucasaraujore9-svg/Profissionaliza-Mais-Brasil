@@ -3,6 +3,7 @@ import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { requireResellerSession } from "@/lib/auth/reseller-session"
 import { invalidateTenant } from "@/lib/redis/tenant-cache"
+import { withRequestContext } from "@/lib/observability/with-request-context"
 
 interface VitrineDto {
   name: string
@@ -37,17 +38,20 @@ async function readTenant(tenantId: string): Promise<VitrineDto | null> {
   return tenant
 }
 
-export async function GET() {
-  const ctx = await requireResellerSession()
-  if (!ctx) {
-    return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-  }
-  const data = await readTenant(ctx.tenantId)
-  if (!data) {
-    return NextResponse.json({ error: "Tenant não encontrado" }, { status: 404 })
-  }
-  return NextResponse.json({ data })
-}
+export const GET = withRequestContext(
+  { action: "painel.vitrine.get", route: "/api/painel/vitrine" },
+  async () => {
+    const ctx = await requireResellerSession()
+    if (!ctx) {
+      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
+    }
+    const data = await readTenant(ctx.tenantId)
+    if (!data) {
+      return NextResponse.json({ error: "Tenant não encontrado" }, { status: 404 })
+    }
+    return NextResponse.json({ data })
+  },
+)
 
 const hexColor = z
   .string()
@@ -67,46 +71,49 @@ const updateSchema = z.object({
   bannerUrl: z.string().url().nullable().optional(),
 })
 
-export async function PUT(request: Request) {
-  const ctx = await requireResellerSession()
-  if (!ctx) {
-    return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-  }
+export const PUT = withRequestContext(
+  { action: "painel.vitrine.update", route: "/api/painel/vitrine" },
+  async (request: Request) => {
+    const ctx = await requireResellerSession()
+    if (!ctx) {
+      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
+    }
 
-  let payload: unknown
-  try {
-    payload = await request.json()
-  } catch {
-    return NextResponse.json({ error: "JSON inválido" }, { status: 400 })
-  }
+    let payload: unknown
+    try {
+      payload = await request.json()
+    } catch {
+      return NextResponse.json({ error: "JSON inválido" }, { status: 400 })
+    }
 
-  const parsed = updateSchema.safeParse(payload)
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: "Dados inválidos", fields: parsed.error.flatten().fieldErrors },
-      { status: 400 },
-    )
-  }
+    const parsed = updateSchema.safeParse(payload)
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "Dados inválidos", fields: parsed.error.flatten().fieldErrors },
+        { status: 400 },
+      )
+    }
 
-  const tenant = await prisma.tenant.findUnique({
-    where: { id: ctx.tenantId },
-    select: { id: true, slug: true, customDomain: true },
-  })
-  if (!tenant) {
-    return NextResponse.json({ error: "Tenant não encontrado" }, { status: 404 })
-  }
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: ctx.tenantId },
+      select: { id: true, slug: true, customDomain: true },
+    })
+    if (!tenant) {
+      return NextResponse.json({ error: "Tenant não encontrado" }, { status: 404 })
+    }
 
-  await prisma.tenant.update({
-    where: { id: tenant.id },
-    data: parsed.data,
-  })
+    await prisma.tenant.update({
+      where: { id: tenant.id },
+      data: parsed.data,
+    })
 
-  await invalidateTenant({
-    id: tenant.id,
-    slug: tenant.slug,
-    customDomain: tenant.customDomain,
-  })
+    await invalidateTenant({
+      id: tenant.id,
+      slug: tenant.slug,
+      customDomain: tenant.customDomain,
+    })
 
-  const data = await readTenant(tenant.id)
-  return NextResponse.json({ data })
-}
+    const data = await readTenant(tenant.id)
+    return NextResponse.json({ data })
+  },
+)

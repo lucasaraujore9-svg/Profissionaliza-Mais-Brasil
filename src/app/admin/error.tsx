@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect } from "react"
+import { clientLogger } from "@/lib/logger-client"
 
 /**
  * Error boundary específico do segmento /admin.
@@ -20,7 +21,10 @@ export default function AdminError({
   reset: () => void
 }) {
   useEffect(() => {
-    console.error("[admin/error] route error:", error)
+    clientLogger.error(
+      { err: String(error), digest: error.digest, event: "admin.error_boundary", segment: "admin" },
+      "admin route error",
+    )
   }, [error])
 
   return (

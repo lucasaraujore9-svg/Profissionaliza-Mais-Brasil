@@ -3,15 +3,15 @@ import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { requireAdminSession } from "@/lib/auth/admin-session"
 import { revokeCertificate } from "@/lib/certificates"
+import { withRequestContextParams } from "@/lib/observability/with-request-context"
 
 const schema = z.object({
   reason: z.string().trim().min(3, "Justificativa muito curta").max(500),
 })
 
-export async function POST(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
+export const POST = withRequestContextParams<{ id: string }>(
+  { action: "admin.certificates.revoke", route: "/api/admin/certificates/[id]/revoke" },
+  async (request: Request, { params }) => {
   const ctx = await requireAdminSession()
   if (!ctx) {
     return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
@@ -52,4 +52,5 @@ export async function POST(
     const message = err instanceof Error ? err.message : "Falha ao revogar certificado"
     return NextResponse.json({ error: message }, { status: 500 })
   }
-}
+  },
+)

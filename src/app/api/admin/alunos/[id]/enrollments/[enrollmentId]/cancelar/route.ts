@@ -6,16 +6,16 @@ import { cancelSubscription, deletePayment } from "@/lib/asaas/client"
 import { cancelPreapproval } from "@/lib/mercadopago/client"
 import { pmbMpAccessToken } from "@/lib/pmb-config"
 import { unlinkCourseFromStudent } from "@/lib/students/plataforma-actions"
+import { contextLogger } from "@/lib/logger"
+import { withRequestContextParams } from "@/lib/observability/with-request-context"
 
 const bodySchema = z.object({
   removeFromEA: z.boolean().optional().default(false),
 })
 
-interface Ctx {
-  params: Promise<{ id: string; enrollmentId: string }>
-}
-
-export async function POST(request: Request, ctx: Ctx) {
+export const POST = withRequestContextParams<{ id: string; enrollmentId: string }>(
+  { action: "admin.alunos.enrollments.cancel", route: "/api/admin/alunos/[id]/enrollments/[enrollmentId]/cancelar" },
+  async (request: Request, ctx) => {
   const guard = await requirePmbSales()
   if (!guard.ok) return guard.response
 
@@ -76,7 +76,10 @@ export async function POST(request: Request, ctx: Ctx) {
       }
     } catch (err) {
       gatewayError = err instanceof Error ? err.message : "Falha ao cancelar no Asaas"
-      console.error("[cancelar] falha no Asaas:", err)
+      contextLogger().error(
+        { err, event: "admin.enrollment.cancel.asaas_failed", enrollmentId: enrollment.id },
+        "falha ao cancelar no Asaas",
+      )
     }
   } else if (enrollment.gateway === "MP") {
     if (enrollment.mpSubscriptionId) {
@@ -89,7 +92,10 @@ export async function POST(request: Request, ctx: Ctx) {
         }
       } catch (err) {
         gatewayError = err instanceof Error ? err.message : "Falha ao cancelar no Mercado Pago"
-        console.error("[cancelar] falha no MP:", err)
+        contextLogger().error(
+          { err, event: "admin.enrollment.cancel.mp_failed", enrollmentId: enrollment.id },
+          "falha ao cancelar no MP",
+        )
       }
     }
   }
@@ -100,7 +106,10 @@ export async function POST(request: Request, ctx: Ctx) {
       await unlinkCourseFromStudent(studentId, enrollment.courseId)
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Falha ao remover acesso na plataforma"
-      console.error("[cancelar] falha ao desvincular curso na plataforma:", err)
+      contextLogger().error(
+        { err, event: "admin.enrollment.cancel.unlink_failed", enrollmentId: enrollment.id, studentId, courseId: enrollment.courseId },
+        "falha ao desvincular curso na plataforma",
+      )
       // Merge into gatewayError if not already set
       gatewayError = gatewayError ? `${gatewayError}; plataforma: ${msg}` : `Plataforma: ${msg}`
     }
@@ -118,4 +127,5 @@ export async function POST(request: Request, ctx: Ctx) {
       ...(gatewayError ? { gatewayError } : {}),
     },
   })
-}
+  },
+)

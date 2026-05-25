@@ -3,13 +3,16 @@ import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { requireAdminSession } from "@/lib/auth/admin-session"
 import { issueCertificateManual } from "@/lib/certificates"
+import { withRequestContext } from "@/lib/observability/with-request-context"
 
 const schema = z.object({
   enrollmentId: z.string().min(1),
   force: z.boolean().optional(),
 })
 
-export async function POST(request: Request) {
+export const POST = withRequestContext(
+  { action: "admin.certificates.issue", route: "/api/admin/certificates/issue" },
+  async (request: Request) => {
   const ctx = await requireAdminSession()
   if (!ctx) {
     return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
@@ -50,4 +53,5 @@ export async function POST(request: Request) {
     const message = err instanceof Error ? err.message : "Falha ao emitir certificado"
     return NextResponse.json({ error: message }, { status: 400 })
   }
-}
+  },
+)

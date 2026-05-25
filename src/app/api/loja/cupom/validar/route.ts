@@ -2,13 +2,17 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { rateLimit, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
+import { contextLogger } from "@/lib/logger"
+import { withRequestContext } from "@/lib/observability/with-request-context"
 
 const bodySchema = z.object({
   code: z.string().trim().min(1).max(64).transform((v) => v.toUpperCase()),
   courseId: z.string().cuid(),
 })
 
-export async function POST(request: Request) {
+export const POST = withRequestContext(
+  { action: "loja.cupom.validate", route: "/api/loja/cupom/validar" },
+  async (request: Request) => {
   const rl = await rateLimit(request, RATE_LIMITS.publicCupom)
   if (!rl.ok) return rateLimitResponse(rl)
 
@@ -119,10 +123,14 @@ export async function POST(request: Request) {
       },
     })
   } catch (error) {
-    console.error("[validar-cupom] error:", error)
+    contextLogger().error(
+      { err: error, event: "loja.cupom.validar_failed" },
+      "validação de cupom falhou",
+    )
     return NextResponse.json(
       { error: "Erro interno", code: "INTERNAL_ERROR" },
       { status: 500 },
     )
   }
-}
+  },
+)

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { requirePmbSales } from "@/lib/auth/guards"
+import { withRequestContext } from "@/lib/observability/with-request-context"
 
 const PMB_SALES_CAP = 50
 
@@ -10,7 +11,9 @@ const schema = z.object({
   courseId: z.string().min(1),
 })
 
-export async function POST(request: Request) {
+export const POST = withRequestContext(
+  { action: "admin.cupons.validate", route: "/api/admin/cupons/validate" },
+  async (request: Request) => {
   const guard = await requirePmbSales()
   if (!guard.ok) return guard.response
 
@@ -82,4 +85,5 @@ export async function POST(request: Request) {
       finalAmount,
     },
   })
-}
+  },
+)

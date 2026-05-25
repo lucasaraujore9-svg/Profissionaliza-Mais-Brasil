@@ -9,6 +9,7 @@ import {
   type VitrineAssetKind,
 } from "./vitrine-config-form"
 import { VitrinePreview } from "./vitrine-preview"
+import { clientLogger } from "@/lib/logger-client"
 
 const defaultConfig: VitrineConfig = {
   name: "",
@@ -48,7 +49,11 @@ export function VitrineEditor() {
         setConfig(body.data)
         setInitial(body.data)
       })
-      .catch(() => {
+      .catch((err) => {
+        clientLogger.warn(
+          { err: String(err), event: "vitrine_editor.load_failed" },
+          "carregar vitrine falhou",
+        )
         if (active) setError("Erro de rede ao carregar vitrine")
       })
       .finally(() => {
@@ -71,7 +76,12 @@ export function VitrineEditor() {
           setPreviewHost(info.subdomainFull)
         }
       })
-      .catch(() => {})
+      .catch((err) => {
+        clientLogger.warn(
+          { err: String(err), event: "vitrine_editor.dominio_fetch_failed" },
+          "fetch de domínio para preview falhou",
+        )
+      })
   }, [])
 
   const handleUpload = useCallback(

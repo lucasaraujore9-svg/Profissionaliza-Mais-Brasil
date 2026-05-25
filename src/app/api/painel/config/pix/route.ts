@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 import { requireResellerSession } from "@/lib/auth/reseller-session"
 import { prisma } from "@/lib/prisma"
+import { withRequestContext } from "@/lib/observability/with-request-context"
 
 const PIX_TYPES = ["CPF", "CNPJ", "EMAIL", "PHONE", "EVP"] as const
 type PixType = (typeof PIX_TYPES)[number]
@@ -46,63 +47,69 @@ function validatePixKey(type: PixType, key: string): string | null {
   return null
 }
 
-export async function GET() {
-  const ctx = await requireResellerSession()
-  if (!ctx) {
-    return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-  }
+export const GET = withRequestContext(
+  { action: "painel.config.pix.get", route: "/api/painel/config/pix" },
+  async () => {
+    const ctx = await requireResellerSession()
+    if (!ctx) {
+      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
+    }
 
-  const tenant = await prisma.tenant.findUnique({
-    where: { id: ctx.tenantId },
-    select: { pixKey: true, pixKeyType: true },
-  })
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: ctx.tenantId },
+      select: { pixKey: true, pixKeyType: true },
+    })
 
-  return NextResponse.json({
-    data: {
-      pixKey: tenant?.pixKey ?? null,
-      pixKeyType: tenant?.pixKeyType ?? null,
-    },
-  })
-}
+    return NextResponse.json({
+      data: {
+        pixKey: tenant?.pixKey ?? null,
+        pixKeyType: tenant?.pixKeyType ?? null,
+      },
+    })
+  },
+)
 
-export async function PATCH(request: Request) {
-  const ctx = await requireResellerSession()
-  if (!ctx) {
-    return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-  }
+export const PATCH = withRequestContext(
+  { action: "painel.config.pix.update", route: "/api/painel/config/pix" },
+  async (request: Request) => {
+    const ctx = await requireResellerSession()
+    if (!ctx) {
+      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
+    }
 
-  let payload: unknown
-  try {
-    payload = await request.json()
-  } catch {
-    return NextResponse.json({ error: "JSON inválido" }, { status: 400 })
-  }
+    let payload: unknown
+    try {
+      payload = await request.json()
+    } catch {
+      return NextResponse.json({ error: "JSON inválido" }, { status: 400 })
+    }
 
-  const parsed = updateSchema.safeParse(payload)
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: "Dados inválidos", fields: parsed.error.flatten().fieldErrors },
-      { status: 400 },
-    )
-  }
-
-  const pixKey = parsed.data.pixKey?.trim() || null
-  const pixKeyType = parsed.data.pixKeyType ?? null
-
-  if (pixKey && pixKeyType) {
-    const err = validatePixKey(pixKeyType, pixKey)
-    if (err) {
+    const parsed = updateSchema.safeParse(payload)
+    if (!parsed.success) {
       return NextResponse.json(
-        { error: err, fields: { pixKey: [err] } },
+        { error: "Dados inválidos", fields: parsed.error.flatten().fieldErrors },
         { status: 400 },
       )
     }
-  }
 
-  await prisma.tenant.update({
-    where: { id: ctx.tenantId },
-    data: { pixKey, pixKeyType },
-  })
+    const pixKey = parsed.data.pixKey?.trim() || null
+    const pixKeyType = parsed.data.pixKeyType ?? null
 
-  return NextResponse.json({ data: { pixKey, pixKeyType } })
-}
+    if (pixKey && pixKeyType) {
+      const err = validatePixKey(pixKeyType, pixKey)
+      if (err) {
+        return NextResponse.json(
+          { error: err, fields: { pixKey: [err] } },
+          { status: 400 },
+        )
+      }
+    }
+
+    await prisma.tenant.update({
+      where: { id: ctx.tenantId },
+      data: { pixKey, pixKeyType },
+    })
+
+    return NextResponse.json({ data: { pixKey, pixKeyType } })
+  },
+)

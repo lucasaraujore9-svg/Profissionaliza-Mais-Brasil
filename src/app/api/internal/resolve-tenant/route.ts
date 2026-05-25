@@ -2,6 +2,8 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { isInternalAuthorized } from "@/lib/auth/bearer"
 import { rateLimit, rateLimitResponse } from "@/lib/ratelimit"
+import { contextLogger } from "@/lib/logger"
+import { withRequestContext } from "@/lib/observability/with-request-context"
 
 // Validações server-side de slug e custom domain.
 // Slug: mesmo regex do Tenant.slug — letras minúsculas, números, hífen e underscore.
@@ -10,7 +12,9 @@ const SLUG_RE = /^[a-z0-9_-]{1,64}$/
 const DOMAIN_RE =
   /^(?=.{1,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/i
 
-export async function GET(request: Request) {
+export const GET = withRequestContext(
+  { action: "internal.resolve_tenant", route: "/api/internal/resolve-tenant" },
+  async (request: Request) => {
   // Rate-limit defense-in-depth: mesmo que o secret seja conhecido, bot
   // não consegue varrer slugs/domains do banco em massa.
   const rl = await rateLimit(request, {
@@ -52,7 +56,11 @@ export async function GET(request: Request) {
 
     return NextResponse.json(tenant)
   } catch (error) {
-    console.error("[resolve-tenant] error:", error)
+    contextLogger().error(
+      { err: error, event: "internal.resolve_tenant.failed" },
+      "resolve-tenant interno falhou",
+    )
     return NextResponse.json({ error: "internal error" }, { status: 500 })
   }
-}
+  },
+)

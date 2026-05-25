@@ -4,6 +4,8 @@ import { blockTenantStudents } from "@/lib/auto-block"
 import { sendEmail } from "@/lib/email/resend"
 import { createNotification } from "@/lib/notifications"
 import { isCronAuthorized } from "@/lib/auth/bearer"
+import { withRequestContext } from "@/lib/observability/with-request-context"
+import { contextLogger } from "@/lib/logger"
 
 export const maxDuration = 300
 export const dynamic = "force-dynamic"
@@ -34,6 +36,7 @@ const DEFAULT_GRACE_DAYS = 3
  * processado antes.
  */
 async function processOverdueTenants() {
+  const log = contextLogger()
   const now = new Date()
   const result = {
     inspected: 0,
@@ -62,6 +65,7 @@ async function processOverdueTenants() {
   })
 
   result.inspected = candidates.length
+  log.info({ event: "sweep_tenants.start", candidates: candidates.length }, "iniciando sweep de tenants overdue")
 
   for (const tenant of candidates) {
     const overdue = tenant.tenantPayments[0]
@@ -80,6 +84,10 @@ async function processOverdueTenants() {
         data: { status: "SUSPENDED" },
       })
       result.suspended += 1
+      log.warn(
+        { event: "sweep_tenants.suspended", tenantId: tenant.id, ageDays, billingMode: tenant.billingMode },
+        "tenant suspenso por inadimplência",
+      )
 
       if (tenant.billingMode === "AUTO" && !policy?.keepStudentsActive) {
         const block = await blockTenantStudents(tenant.id)
@@ -111,7 +119,10 @@ async function processOverdueTenants() {
             },
           },
         }).catch((err) => {
-          console.error(`[sweep-tenants] email falhou (${tenant.id}):`, err)
+          log.error(
+            { err, event: "sweep_tenants.email_failed", tenantId: tenant.id },
+            "sweep-tenants: envio de email falhou",
+          )
         })
         await sleep(EMAIL_THROTTLE_MS)
       }
@@ -140,19 +151,37 @@ async function processOverdueTenants() {
     } catch (error) {
       const message = error instanceof Error ? error.message : "erro desconhecido"
       result.errors.push(`tenant ${tenant.id}: ${message}`)
+      log.error(
+        { err: error, event: "sweep_tenants.tenant_failed", tenantId: tenant.id },
+        "sweep-tenants: falha no processamento do tenant",
+      )
     }
   }
+
+  log.info(
+    {
+      event: "sweep_tenants.done",
+      inspected: result.inspected,
+      suspended: result.suspended,
+      studentsBlocked: result.studentsBlocked,
+      errorCount: result.errors.length,
+    },
+    "sweep de tenants concluído",
+  )
 
   return result
 }
 
-export async function POST(request: Request) {
-  if (!isCronAuthorized(request)) {
-    return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
-  }
-  const result = await processOverdueTenants()
-  return NextResponse.json({ data: result })
-}
+export const POST = withRequestContext(
+  { action: "cron.sweep_tenants_overdue", route: "/api/cron/sweep-tenants-overdue" },
+  async (request: Request) => {
+    if (!isCronAuthorized(request)) {
+      return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+    }
+    const result = await processOverdueTenants()
+    return NextResponse.json({ data: result })
+  },
+)
 
 export async function GET(request: Request) {
   return POST(request)

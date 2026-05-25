@@ -7,6 +7,8 @@
 //
 // Para desativar: DELETE /api/push/subscribe + unsubscribe() local.
 
+import { clientLogger } from "@/lib/logger-client"
+
 function urlBase64ToUint8Array(base64String: string): Uint8Array<ArrayBuffer> {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4)
   const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/")
@@ -75,7 +77,7 @@ export async function subscribeToPush(): Promise<
 
   const publicKey = await fetchPublicKey()
   if (!publicKey) {
-    console.warn("[push] VAPID publica nao configurada no servidor")
+    clientLogger.warn({ event: "push.client.no_public_key" }, "VAPID pública não configurada no servidor")
     return "default"
   }
 
@@ -88,7 +90,7 @@ export async function subscribeToPush(): Promise<
         applicationServerKey: urlBase64ToUint8Array(publicKey),
       })
     } catch (err) {
-      console.warn("[push] subscribe falhou:", err)
+      clientLogger.warn({ err: String(err), event: "push.client.subscribe_failed" }, "subscribe falhou")
       return "default"
     }
   }
@@ -107,10 +109,10 @@ export async function subscribeToPush(): Promise<
       body: JSON.stringify(payload),
     })
     if (!res.ok) {
-      console.warn("[push] /api/push/subscribe respondeu", res.status)
+      clientLogger.warn({ event: "push.client.subscribe_api_error", status: res.status }, "/api/push/subscribe respondeu erro")
     }
   } catch (err) {
-    console.warn("[push] POST subscribe falhou:", err)
+    clientLogger.warn({ err: String(err), event: "push.client.subscribe_post_failed" }, "POST /api/push/subscribe falhou")
   }
 
   return "granted"

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { auth } from "@/lib/auth"
+import { withRequestContext } from "@/lib/observability/with-request-context"
 
 const ONBOARDING_TOTAL_STEPS = 5
 
@@ -9,42 +10,45 @@ const bodySchema = z.object({
   completed: z.boolean().optional(),
 })
 
-export async function POST(request: Request) {
-  const session = await auth()
-  if (
-    !session?.user ||
-    session.user.role !== "RESELLER" ||
-    !session.user.tenantId
-  ) {
-    return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-  }
+export const POST = withRequestContext(
+  { action: "painel.onboarding.progress", route: "/api/painel/onboarding" },
+  async (request: Request) => {
+    const session = await auth()
+    if (
+      !session?.user ||
+      session.user.role !== "RESELLER" ||
+      !session.user.tenantId
+    ) {
+      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
+    }
 
-  let payload: unknown
-  try {
-    payload = await request.json()
-  } catch {
-    return NextResponse.json({ error: "JSON inválido" }, { status: 400 })
-  }
+    let payload: unknown
+    try {
+      payload = await request.json()
+    } catch {
+      return NextResponse.json({ error: "JSON inválido" }, { status: 400 })
+    }
 
-  const parsed = bodySchema.safeParse(payload)
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: "Dados inválidos" },
-      { status: 400 },
-    )
-  }
+    const parsed = bodySchema.safeParse(payload)
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "Dados inválidos" },
+        { status: 400 },
+      )
+    }
 
-  // Ativação do tenant é responsabilidade exclusiva do webhook Asaas
-  // (PAYMENT_RECEIVED em src/lib/asaas/process.ts). O onboarding apenas
-  // registra a progressão de UI; nunca altera tenant.status.
-  const completed =
-    parsed.data.step === ONBOARDING_TOTAL_STEPS && parsed.data.completed === true
+    // Ativação do tenant é responsabilidade exclusiva do webhook Asaas
+    // (PAYMENT_RECEIVED em src/lib/asaas/process.ts). O onboarding apenas
+    // registra a progressão de UI; nunca altera tenant.status.
+    const completed =
+      parsed.data.step === ONBOARDING_TOTAL_STEPS && parsed.data.completed === true
 
-  return NextResponse.json({
-    data: {
-      step: parsed.data.step,
-      completed,
-      tenantActivated: false,
-    },
-  })
-}
+    return NextResponse.json({
+      data: {
+        step: parsed.data.step,
+        completed,
+        tenantActivated: false,
+      },
+    })
+  },
+)

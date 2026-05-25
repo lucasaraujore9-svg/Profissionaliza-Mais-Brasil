@@ -10,6 +10,7 @@ import { createNotification } from "@/lib/notifications"
 import { appUrl as resolveAppUrl, vitrineHost } from "@/lib/tenant/urls"
 import type { PaymentGateway, PaymentType } from "@prisma/client"
 import { swallow } from "@/lib/errors"
+import { contextLogger } from "@/lib/logger"
 
 export interface TenantContext {
   id: string
@@ -160,7 +161,10 @@ export async function fulfillEnrollment(
   // agora (evita spam em recompras).
   if (created) {
     await enviarEmailCredenciais(plataformaAlunoId).catch((err) => {
-      console.error(`[fulfill] envioemail da plataforma falhou para aluno ${plataformaAlunoId}:`, err)
+      contextLogger().error(
+        { err, event: "fulfill.plataforma_email_failed", plataformaAlunoId },
+        "envioemail da plataforma falhou para aluno",
+      )
     })
   }
 
@@ -219,7 +223,10 @@ export async function fulfillEnrollment(
       })
       panelPassword = plain
     } catch (err) {
-      console.error("[fulfill] falha ao gerar senha do painel:", err)
+      contextLogger().error(
+        { err, event: "fulfill.panel_password_failed", studentId: enrollment.student.id },
+        "falha ao gerar senha do painel do aluno",
+      )
     }
   }
 
@@ -251,7 +258,10 @@ export async function fulfillEnrollment(
         },
       },
     }).catch((err) => {
-      console.error("[fulfill] student-welcome email falhou:", err)
+      contextLogger().error(
+        { err, event: "fulfill.student_welcome_email_failed", studentId: enrollment.student.id },
+        "student-welcome email falhou",
+      )
     })
   }
 
@@ -277,7 +287,10 @@ export async function fulfillEnrollment(
       })
       emailSent = true
     } catch (err) {
-      console.error(`[fulfill] enrollment email falhou:`, err)
+      contextLogger().error(
+        { err, event: "fulfill.enrollment_email_failed", enrollmentId: enrollment.id, studentId: enrollment.student.id },
+        "enrollment email falhou",
+      )
     }
 
     // Segurança: zera a senha plaintext da plataforma do banco SOMENTE

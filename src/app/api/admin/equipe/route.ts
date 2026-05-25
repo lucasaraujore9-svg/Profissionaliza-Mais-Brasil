@@ -3,10 +3,13 @@ import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { requireSuperAdmin } from "@/lib/auth/guards"
 import { sendInvite } from "@/lib/auth/invite"
+import { withRequestContext } from "@/lib/observability/with-request-context"
 
 const PMB_ROLES = ["SUPER_ADMIN", "PMB_SALES", "PMB_RESELLER_MGR"] as const
 
-export async function GET() {
+export const GET = withRequestContext(
+  { action: "admin.equipe.list", route: "/api/admin/equipe" },
+  async () => {
   const guard = await requireSuperAdmin()
   if (!guard.ok) return guard.response
 
@@ -39,7 +42,8 @@ export async function GET() {
       createdAt: u.createdAt.toISOString(),
     })),
   })
-}
+  },
+)
 
 const createSchema = z.object({
   name: z.string().min(2),
@@ -48,7 +52,9 @@ const createSchema = z.object({
   phone: z.string().optional(),
 })
 
-export async function POST(req: Request) {
+export const POST = withRequestContext(
+  { action: "admin.equipe.create", route: "/api/admin/equipe" },
+  async (req: Request) => {
   const guard = await requireSuperAdmin()
   if (!guard.ok) return guard.response
 
@@ -100,4 +106,5 @@ export async function POST(req: Request) {
   })
 
   return NextResponse.json({ data: user }, { status: 201 })
-}
+  },
+)

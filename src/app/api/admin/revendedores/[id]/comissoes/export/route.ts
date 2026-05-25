@@ -7,6 +7,7 @@ import {
   csvResponseHeaders,
   type CsvHeader,
 } from "@/lib/csv"
+import { withRequestContextParams } from "@/lib/observability/with-request-context"
 
 export const dynamic = "force-dynamic"
 
@@ -44,10 +45,9 @@ const HEADERS: CsvHeader<UnitCommissionCsvRow>[] = [
   { key: "payout_id", label: "payout_id" },
 ]
 
-export async function GET(
-  _req: Request,
-  ctx: { params: Promise<{ id: string }> },
-) {
+export const GET = withRequestContextParams<{ id: string }>(
+  { action: "admin.revendedores.comissoes.export", route: "/api/admin/revendedores/[id]/comissoes/export" },
+  async (_req: Request, ctx) => {
   const session = await requireAdminSession()
   if (!session) {
     return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
@@ -111,4 +111,5 @@ export async function GET(
     status: 200,
     headers: csvResponseHeaders(filename),
   })
-}
+  },
+)

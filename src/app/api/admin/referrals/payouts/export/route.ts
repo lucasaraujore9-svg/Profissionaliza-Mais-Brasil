@@ -8,6 +8,7 @@ import {
   csvResponseHeaders,
   type CsvHeader,
 } from "@/lib/csv"
+import { withRequestContext } from "@/lib/observability/with-request-context"
 
 export const dynamic = "force-dynamic"
 
@@ -49,7 +50,9 @@ const HEADERS: CsvHeader<PayoutCsvRow>[] = [
   { key: "notes", label: "notes" },
 ]
 
-export async function GET(request: Request) {
+export const GET = withRequestContext(
+  { action: "admin.referrals.payouts.export", route: "/api/admin/referrals/payouts/export" },
+  async (request: Request) => {
   const session = await requireAdminSession()
   if (!session) {
     return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
@@ -141,4 +144,5 @@ export async function GET(request: Request) {
     status: 200,
     headers: csvResponseHeaders(filename),
   })
-}
+  },
+)

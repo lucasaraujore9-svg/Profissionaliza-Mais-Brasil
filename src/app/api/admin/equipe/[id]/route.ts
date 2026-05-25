@@ -2,10 +2,13 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { requireSuperAdmin } from "@/lib/auth/guards"
+import { withRequestContextParams } from "@/lib/observability/with-request-context"
 
 const PMB_ROLES = ["SUPER_ADMIN", "PMB_SALES", "PMB_RESELLER_MGR"] as const
 
-export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+export const GET = withRequestContextParams<{ id: string }>(
+  { action: "admin.equipe.get", route: "/api/admin/equipe/[id]" },
+  async (_req: Request, ctx) => {
   const guard = await requireSuperAdmin()
   if (!guard.ok) return guard.response
   const { id } = await ctx.params
@@ -44,7 +47,8 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
       createdAt: user.createdAt.toISOString(),
     },
   })
-}
+  },
+)
 
 const patchSchema = z.object({
   name: z.string().min(2).optional(),
@@ -55,7 +59,9 @@ const patchSchema = z.object({
   image: z.string().url().nullable().optional(),
 })
 
-export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }) {
+export const PATCH = withRequestContextParams<{ id: string }>(
+  { action: "admin.equipe.update", route: "/api/admin/equipe/[id]" },
+  async (req: Request, ctx) => {
   const guard = await requireSuperAdmin()
   if (!guard.ok) return guard.response
   const { id } = await ctx.params
@@ -102,9 +108,12 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   })
 
   return NextResponse.json({ data: updated })
-}
+  },
+)
 
-export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+export const DELETE = withRequestContextParams<{ id: string }>(
+  { action: "admin.equipe.delete", route: "/api/admin/equipe/[id]" },
+  async (_req: Request, ctx) => {
   const guard = await requireSuperAdmin()
   if (!guard.ok) return guard.response
   const { id } = await ctx.params
@@ -129,4 +138,5 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string 
 
   await prisma.user.update({ where: { id }, data: { status: "INATIVO" } })
   return NextResponse.json({ data: { id, status: "INATIVO" } })
-}
+  },
+)

@@ -3,6 +3,7 @@ import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { requireSuperAdmin } from "@/lib/auth/guards"
 import type { NotificationLevel } from "@prisma/client"
+import { withRequestContext } from "@/lib/observability/with-request-context"
 
 const VALID_TARGETS = ["TENANT", "STUDENT", "ADMIN"] as const
 type ConfigTarget = (typeof VALID_TARGETS)[number]
@@ -14,7 +15,9 @@ const NOTIFICATION_LEVELS: NotificationLevel[] = [
   "ERROR",
 ]
 
-export async function GET(request: Request) {
+export const GET = withRequestContext(
+  { action: "admin.notifications.auto_config.list", route: "/api/admin/notifications/auto-config" },
+  async (request: Request) => {
   const auth = await requireSuperAdmin()
   if (!auth.ok) return auth.response
 
@@ -42,7 +45,8 @@ export async function GET(request: Request) {
       })),
     },
   })
-}
+  },
+)
 
 const patchSchema = z.object({
   target: z.enum(VALID_TARGETS),
@@ -51,7 +55,9 @@ const patchSchema = z.object({
   defaultLevel: z.enum(NOTIFICATION_LEVELS as [NotificationLevel, ...NotificationLevel[]]).optional(),
 })
 
-export async function PATCH(request: Request) {
+export const PATCH = withRequestContext(
+  { action: "admin.notifications.auto_config.update", route: "/api/admin/notifications/auto-config" },
+  async (request: Request) => {
   const auth = await requireSuperAdmin()
   if (!auth.ok) return auth.response
 
@@ -105,4 +111,5 @@ export async function PATCH(request: Request) {
       defaultLevel: updated.defaultLevel,
     },
   })
-}
+  },
+)

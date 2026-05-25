@@ -4,6 +4,8 @@ import { prisma } from "@/lib/prisma"
 import { sendEmail } from "@/lib/email/resend"
 import { rateLimit, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
 import { generateResetToken } from "@/lib/auth/reset-token"
+import { contextLogger } from "@/lib/logger"
+import { withRequestContext } from "@/lib/observability/with-request-context"
 
 const RESET_EXPIRATION_MINUTES = 5
 
@@ -11,7 +13,9 @@ const schema = z.object({
   email: z.string().email().toLowerCase().trim(),
 })
 
-export async function POST(request: Request) {
+export const POST = withRequestContext(
+  { action: "auth.forgot_password", route: "/api/auth/forgot-password" },
+  async (request: Request) => {
   const rl = await rateLimit(request, RATE_LIMITS.authForgot)
   if (!rl.ok) return rateLimitResponse(rl)
 
@@ -103,8 +107,12 @@ export async function POST(request: Request) {
       },
     })
   } catch (error) {
-    console.error("[forgot-password] error:", error)
+    contextLogger().error(
+      { err: error, event: "auth.forgot_password.email_failed" },
+      "forgot-password: envio falhou",
+    )
   }
 
   return response
-}
+  },
+)

@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server"
 import { validateReferralCode } from "@/lib/referrals/capture"
+import { withRequestContext } from "@/lib/observability/with-request-context"
 
-export async function GET(request: Request) {
+export const GET = withRequestContext(
+  { action: "public.validate_ref", route: "/api/public/validate-ref" },
+  async (request: Request) => {
   const { searchParams } = new URL(request.url)
   const code = searchParams.get("code")?.trim() ?? ""
   if (!code) {
@@ -19,4 +22,5 @@ export async function GET(request: Request) {
     tenantName: result.tenantName,
     referralCode: result.referralCode,
   })
-}
+  },
+)

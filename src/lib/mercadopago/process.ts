@@ -7,6 +7,7 @@ import { fulfillEnrollment } from "@/lib/enrollment/fulfill"
 import { unlinkCourseFromStudent } from "@/lib/students/plataforma-actions"
 import { createNotification } from "@/lib/notifications"
 import { swallow } from "@/lib/errors"
+import { contextLogger } from "@/lib/logger"
 
 interface ProcessArgs {
   logId: string
@@ -143,9 +144,9 @@ async function revokeEnrollmentFromMp(
   // no nosso banco já reflete CANCELLED e o aluno não verá o curso no painel.
   await unlinkCourseFromStudent(enrollment.studentId, enrollment.courseId).catch(
     (err) => {
-      console.warn(
-        `[mp] revoke: unlink ${enrollment.courseId} de student ${enrollment.studentId} falhou:`,
-        err,
+      contextLogger().warn(
+        { err, event: "mp.revoke.unlink_failed", studentId: enrollment.studentId, courseId: enrollment.courseId },
+        "unlink de curso na plataforma falhou no revoke (best-effort)",
       )
     },
   )
@@ -318,7 +319,10 @@ export async function processMpWebhook(args: ProcessArgs): Promise<void> {
     await markLog(logId, true, `status=${payment.status} ignorado`)
   } catch (error) {
     const message = error instanceof Error ? error.message : "erro desconhecido"
-    console.error(`[mp] webhook processing failed (${logId}):`, error)
+    contextLogger().error(
+      { err: error, event: "mp.process.failed", webhookLogId: logId },
+      "webhook MP processing failed",
+    )
     await markLog(logId, false, message)
   }
 }

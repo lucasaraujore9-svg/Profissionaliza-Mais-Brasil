@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { contextLogger } from "@/lib/logger"
+import { withRequestContext } from "@/lib/observability/with-request-context"
 
 export const revalidate = 60
 
@@ -17,7 +19,9 @@ const FALLBACK: PublicMetrics = {
   revenue: 0,
 }
 
-export async function GET() {
+export const GET = withRequestContext(
+  { action: "metrics.public", route: "/api/metrics/public" },
+  async (_request: Request) => {
   try {
     const [resellers, courses, students, revenueAgg] = await Promise.all([
       prisma.tenant.count({ where: { status: "ACTIVE" } }),
@@ -38,7 +42,11 @@ export async function GET() {
 
     return NextResponse.json({ data })
   } catch (error) {
-    console.error("[metrics/public] error:", error)
+    contextLogger().error(
+      { err: error, event: "metrics.public.failed" },
+      "métricas públicas falharam — retornando fallback",
+    )
     return NextResponse.json({ data: FALLBACK })
   }
-}
+  },
+)

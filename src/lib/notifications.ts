@@ -5,6 +5,7 @@ import type {
   UserRole,
 } from "@prisma/client"
 import { sendPushToTarget, sendPushToUsers } from "@/lib/notifications/push-server"
+import { contextLogger } from "@/lib/logger"
 
 export type NotificationConfigTarget = "TENANT" | "STUDENT" | "ADMIN"
 
@@ -293,7 +294,10 @@ export async function createNotification(
       },
     )
   } catch (err) {
-    console.error("[notifications] create falhou:", err)
+    contextLogger().error(
+      { err, event: "notifications.create_failed", category: input.category, audience: input.audience },
+      "criar notificação falhou",
+    )
   }
 }
 

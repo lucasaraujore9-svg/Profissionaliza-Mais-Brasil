@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server"
 import { requireAdminSession } from "@/lib/auth/admin-session"
 import { AsaasApiError } from "@/lib/asaas/client"
+import { withRequestContext } from "@/lib/observability/with-request-context"
 
-export async function POST() {
+export const POST = withRequestContext(
+  { action: "admin.config.test_asaas", route: "/api/admin/config/test-asaas" },
+  async () => {
   const ctx = await requireAdminSession()
   if (!ctx) {
     return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
@@ -59,4 +62,5 @@ export async function POST() {
       },
     })
   }
-}
+  },
+)

@@ -11,6 +11,7 @@ import {
 } from "@/lib/referrals/commission"
 import type { AsaasWebhookPayload } from "./types"
 import { swallow } from "@/lib/errors"
+import { contextLogger } from "@/lib/logger"
 
 function formatMoney(value: number): string {
   return new Intl.NumberFormat("pt-BR", {
@@ -80,7 +81,10 @@ async function handleSubscriptionCancellation(
 
     const blockResult = await blockTenantStudents(tenant.id)
     if (blockResult.errors.length > 0) {
-      console.error(`[asaas] block errors for ${tenant.id}:`, blockResult.errors)
+      contextLogger().error(
+        { event: "asaas.subscription.block_errors", tenantId: tenant.id, errors: blockResult.errors },
+        "erros ao bloquear alunos após cancelamento de assinatura",
+      )
     }
 
     await createNotification({
@@ -296,7 +300,10 @@ export async function processAsaasWebhook(
         if (wasSuspended) {
           const result = await unblockTenantStudents(tenant.id)
           if (result.errors.length > 0) {
-            console.error(`[asaas] unblock errors for ${tenant.id}:`, result.errors)
+            contextLogger().error(
+              { event: "asaas.payment.unblock_errors", tenantId: tenant.id, errors: result.errors },
+              "erros ao desbloquear alunos após pagamento",
+            )
           }
         }
 
@@ -315,7 +322,10 @@ export async function processAsaasWebhook(
               },
             },
           }).catch((err) => {
-            console.error("[asaas] failed to send payment email:", err)
+            contextLogger().error(
+              { err, event: "asaas.payment.email_failed", tenantId: tenant.id },
+              "falha ao enviar email de confirmação de pagamento",
+            )
           })
         }
 
@@ -334,9 +344,9 @@ export async function processAsaasWebhook(
         // Cria comissao de indicacao (1-nivel) se o tenant possui referrer
         await createCommissionForTenantPayment(tenantPaymentRow.id).catch(
           (err) => {
-            console.error(
-              "[asaas] createCommissionForTenantPayment falhou:",
-              err,
+            contextLogger().error(
+              { err, event: "asaas.payment.commission_failed", tenantPaymentId: tenantPaymentRow.id },
+              "createCommissionForTenantPayment falhou",
             )
           },
         )
@@ -354,7 +364,10 @@ export async function processAsaasWebhook(
         if (tenant.billingMode === "AUTO") {
           const result = await blockTenantStudents(tenant.id)
           if (result.errors.length > 0) {
-            console.error(`[asaas] block errors for ${tenant.id}:`, result.errors)
+            contextLogger().error(
+              { event: "asaas.overdue.block_errors", tenantId: tenant.id, errors: result.errors },
+              "erros ao bloquear alunos após overdue",
+            )
           }
         }
 
@@ -380,7 +393,10 @@ export async function processAsaasWebhook(
               },
             },
           }).catch((err) => {
-            console.error("[asaas] failed to send overdue email:", err)
+            contextLogger().error(
+              { err, event: "asaas.overdue.email_failed", tenantId: tenant.id },
+              "falha ao enviar email de overdue",
+            )
           })
         }
 
@@ -424,9 +440,9 @@ export async function processAsaasWebhook(
           tenantPaymentRow.id,
           event === "PAYMENT_REFUNDED" ? "refund" : "partial_refund",
         ).catch((err) => {
-          console.error(
-            "[asaas] cancelCommissionForTenantPayment falhou:",
-            err,
+          contextLogger().error(
+            { err, event: "asaas.refund.cancel_commission_failed", tenantPaymentId: tenantPaymentRow.id },
+            "cancelCommissionForTenantPayment falhou",
           )
         })
 
@@ -451,7 +467,10 @@ export async function processAsaasWebhook(
           if (tenant.billingMode === "AUTO") {
             const result = await blockTenantStudents(tenant.id)
             if (result.errors.length > 0) {
-              console.error(`[asaas] block errors after refund for ${tenant.id}:`, result.errors)
+              contextLogger().error(
+                { event: "asaas.refund.block_errors", tenantId: tenant.id, errors: result.errors },
+                "erros ao bloquear alunos após refund",
+              )
             }
           }
         }
@@ -495,7 +514,10 @@ export async function processAsaasWebhook(
               },
             },
           }).catch((err) => {
-            console.error("[asaas] failed to send refund email:", err)
+            contextLogger().error(
+              { err, event: "asaas.refund.email_failed", tenantId: tenant.id },
+              "falha ao enviar email de estorno",
+            )
           })
         }
         break
@@ -520,7 +542,10 @@ export async function processAsaasWebhook(
     await markLog(logId, true)
   } catch (error) {
     const message = error instanceof Error ? error.message : "erro desconhecido"
-    console.error(`[asaas] webhook processing failed (${logId}):`, error)
+    contextLogger().error(
+      { err: error, event: "asaas.process.failed", webhookLogId: logId },
+      "webhook Asaas processing failed",
+    )
     await markLog(logId, false, message)
   }
 }

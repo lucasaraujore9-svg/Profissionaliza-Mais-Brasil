@@ -11,6 +11,7 @@ import {
 import { readSnapshot, refreshGroupBranding } from "./template-resolver"
 import { renderCertificateByLayout } from "./templates"
 import { uploadCertificatePdf } from "./storage"
+import { contextLogger } from "@/lib/logger"
 
 function validationUrlFor(code: string): string {
   // URL publica de validacao do certificado (QR code + texto). Aponta para o
@@ -27,7 +28,10 @@ async function makeQrDataUrl(text: string): Promise<string | null> {
       width: 256,
     })
   } catch (err) {
-    console.error("[certificates] QR code falhou:", err)
+    contextLogger().error(
+      { err, event: "certificates.qrcode_failed" },
+      "geração do QR code do certificado falhou",
+    )
     return null
   }
 }

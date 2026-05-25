@@ -3,6 +3,7 @@ import webpush from "web-push"
 import { prisma } from "@/lib/prisma"
 import type { NotificationLevel } from "@prisma/client"
 import { swallow } from "@/lib/errors"
+import { contextLogger } from "@/lib/logger"
 
 // VAPID config (gerar com `npx web-push generate-vapid-keys`):
 //   VAPID_PUBLIC_KEY  — exposto ao client via /api/push/public-key
@@ -25,7 +26,10 @@ function ensureVapid(): boolean {
     vapidConfigured = true
     return true
   } catch (err) {
-    console.error("[push] VAPID invalida:", err)
+    contextLogger().error(
+      { err, event: "push.vapid_invalid" },
+      "VAPID keys inválidas — push desabilitado",
+    )
     return false
   }
 }
@@ -130,7 +134,10 @@ export async function sendPushToTarget(
             .delete({ where: { id: sub.id } })
             .catch(swallow("push-server"))
         }
-        console.warn("[push] envio falhou", status, err)
+        contextLogger().warn(
+          { err, event: "push.send_failed", status, subscriptionId: sub.id },
+          "envio de push falhou",
+        )
       }
     }),
   )

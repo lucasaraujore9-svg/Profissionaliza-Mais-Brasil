@@ -1,6 +1,7 @@
 import { cache } from "react"
 import { headers } from "next/headers"
 import { prisma } from "@/lib/prisma"
+import { contextLogger } from "@/lib/logger"
 
 export interface CurrentTenant {
   id: string
@@ -44,7 +45,10 @@ export const getCurrentTenant = cache(
 
       return tenant
     } catch (error) {
-      console.error("[getCurrentTenant] error:", error)
+      contextLogger().error(
+        { err: error, event: "getCurrentTenant.failed" },
+        "getCurrentTenant falhou",
+      )
       return null
     }
   },

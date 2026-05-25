@@ -1,11 +1,14 @@
 import { NextResponse } from "next/server"
 import { requireAdminSession } from "@/lib/auth/admin-session"
 import { syncCatalogFromEA } from "@/lib/catalog/sync"
+import { withRequestContext } from "@/lib/observability/with-request-context"
 
 // Sync com 120+ cursos pode passar dos 10s default da Vercel.
 export const maxDuration = 60
 
-export async function POST() {
+export const POST = withRequestContext(
+  { action: "admin.catalogo.sync", route: "/api/admin/catalogo/sync" },
+  async () => {
   const ctx = await requireAdminSession()
   if (!ctx) {
     return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
@@ -21,4 +24,5 @@ export async function POST() {
       { status: 502 },
     )
   }
-}
+  },
+)

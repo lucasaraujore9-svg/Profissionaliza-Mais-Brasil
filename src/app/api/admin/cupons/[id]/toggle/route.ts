@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { requirePmbSales } from "@/lib/auth/guards"
+import { withRequestContextParams } from "@/lib/observability/with-request-context"
 
-export async function PATCH(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+export const PATCH = withRequestContextParams<{ id: string }>(
+  { action: "admin.cupons.toggle", route: "/api/admin/cupons/[id]/toggle" },
+  async (_req: Request, ctx) => {
   const guard = await requirePmbSales()
   if (!guard.ok) return guard.response
 
@@ -29,4 +32,5 @@ export async function PATCH(_req: Request, ctx: { params: Promise<{ id: string }
   })
 
   return NextResponse.json({ data: updated })
-}
+  },
+)

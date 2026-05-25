@@ -5,6 +5,7 @@ import { requireSuperAdmin } from "@/lib/auth/guards"
 import { createNotification } from "@/lib/notifications"
 import { getOrCreatePmbTenant } from "@/lib/pmb-tenant"
 import type { NotificationLevel } from "@prisma/client"
+import { withRequestContext } from "@/lib/observability/with-request-context"
 
 const NOTIFICATION_LEVELS: NotificationLevel[] = [
   "INFO",
@@ -39,7 +40,9 @@ const studentSchema = baseSchema.extend({
 
 const schema = z.discriminatedUnion("target", [tenantSchema, studentSchema])
 
-export async function POST(request: Request) {
+export const POST = withRequestContext(
+  { action: "admin.notifications.broadcast", route: "/api/admin/notifications/broadcast" },
+  async (request: Request) => {
   const auth = await requireSuperAdmin()
   if (!auth.ok) return auth.response
 
@@ -149,7 +152,8 @@ export async function POST(request: Request) {
   const students = await prisma.student.findMany({ select: { id: true } })
   await dispatchToStudents(students, baseFields)
   return NextResponse.json({ data: { delivered: students.length } })
-}
+  },
+)
 
 interface StudentRef {
   id: string

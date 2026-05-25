@@ -4,6 +4,7 @@ import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { requireAdminSession } from "@/lib/auth/admin-session"
 import { invalidateTenant } from "@/lib/redis/tenant-cache"
+import { withRequestContextParams } from "@/lib/observability/with-request-context"
 
 const schema = z.object({
   billingMode: z.enum(["AUTO", "MANUAL"]).optional(),
@@ -17,10 +18,9 @@ const schema = z.object({
     .optional(),
 })
 
-export async function PATCH(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
+export const PATCH = withRequestContextParams<{ id: string }>(
+  { action: "admin.revendedores.policy.update", route: "/api/admin/revendedores/[id]/policy" },
+  async (request: Request, { params }) => {
   const ctx = await requireAdminSession()
   if (!ctx) {
     return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
@@ -76,4 +76,5 @@ export async function PATCH(
       cancellationPolicy: updated.cancellationPolicy,
     },
   })
-}
+  },
+)

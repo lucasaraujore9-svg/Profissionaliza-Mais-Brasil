@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { requireSuperAdmin } from "@/lib/auth/guards"
+import { withRequestContext } from "@/lib/observability/with-request-context"
 
-export async function GET() {
+export const GET = withRequestContext(
+  { action: "admin.financeiro.get", route: "/api/admin/financeiro" },
+  async () => {
   const guard = await requireSuperAdmin()
   if (!guard.ok) return guard.response
 
@@ -104,4 +107,5 @@ export async function GET() {
       })),
     },
   })
-}
+  },
+)

@@ -3,6 +3,7 @@ import { z } from "zod"
 import { hash } from "bcryptjs"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { withRequestContext } from "@/lib/observability/with-request-context"
 
 const bodySchema = z.object({
   newPassword: z.string().min(8, "A senha deve ter no mínimo 8 caracteres"),
@@ -12,7 +13,9 @@ const bodySchema = z.object({
   path: ["confirmPassword"],
 })
 
-export async function POST(request: Request) {
+export const POST = withRequestContext(
+  { action: "auth.first_password_change", route: "/api/auth/alterar-senha-inicial" },
+  async (request: Request) => {
   const session = await auth()
   if (!session?.user) {
     return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
@@ -51,4 +54,5 @@ export async function POST(request: Request) {
   })
 
   return NextResponse.json({ data: { ok: true } })
-}
+  },
+)

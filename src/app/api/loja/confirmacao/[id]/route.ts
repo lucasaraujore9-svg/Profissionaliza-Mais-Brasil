@@ -1,11 +1,10 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { withRequestContextParams } from "@/lib/observability/with-request-context"
 
-interface RouteContext {
-  params: Promise<{ id: string }>
-}
-
-export async function GET(request: Request, ctx: RouteContext) {
+export const GET = withRequestContextParams<{ id: string }>(
+  { action: "loja.confirmacao.get", route: "/api/loja/confirmacao/[id]" },
+  async (request: Request, ctx) => {
   const tenantId = request.headers.get("x-tenant-id")
 
   if (!tenantId) {
@@ -45,4 +44,5 @@ export async function GET(request: Request, ctx: RouteContext) {
       course: enrollment.course,
     },
   })
-}
+  },
+)

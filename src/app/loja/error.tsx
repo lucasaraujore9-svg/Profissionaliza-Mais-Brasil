@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect } from "react"
+import { clientLogger } from "@/lib/logger-client"
 
 export default function LojaError({
   error,
@@ -10,7 +11,10 @@ export default function LojaError({
   reset: () => void
 }) {
   useEffect(() => {
-    console.error("[loja/error] route error:", error)
+    clientLogger.error(
+      { err: String(error), digest: error.digest, event: "loja.error_boundary", segment: "loja" },
+      "loja route error",
+    )
   }, [error])
 
   return (

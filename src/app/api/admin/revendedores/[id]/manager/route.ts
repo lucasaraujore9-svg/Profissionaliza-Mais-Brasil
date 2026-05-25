@@ -2,12 +2,15 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { requireSuperAdmin } from "@/lib/auth/guards"
+import { withRequestContextParams } from "@/lib/observability/with-request-context"
 
 const schema = z.object({
   managerId: z.string().nullable(),
 })
 
-export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }) {
+export const PATCH = withRequestContextParams<{ id: string }>(
+  { action: "admin.revendedores.manager.update", route: "/api/admin/revendedores/[id]/manager" },
+  async (req: Request, ctx) => {
   const guard = await requireSuperAdmin()
   if (!guard.ok) return guard.response
   const { id } = await ctx.params
@@ -48,4 +51,5 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   })
 
   return NextResponse.json({ data: updated })
-}
+  },
+)

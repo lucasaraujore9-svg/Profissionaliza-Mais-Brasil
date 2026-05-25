@@ -6,12 +6,15 @@ import {
   REFERRAL_COOKIE_MAX_AGE_SECONDS,
   validateReferralCode,
 } from "@/lib/referrals/capture"
+import { withRequestContext } from "@/lib/observability/with-request-context"
 
 const bodySchema = z.object({
   code: z.string().min(3).max(60),
 })
 
-export async function POST(request: Request) {
+export const POST = withRequestContext(
+  { action: "public.capture_ref", route: "/api/public/capture-ref" },
+  async (request: Request) => {
   let payload: unknown
   try {
     payload = await request.json()
@@ -42,4 +45,5 @@ export async function POST(request: Request) {
     tenantName: result.tenantName,
     referralCode: result.referralCode,
   })
-}
+  },
+)

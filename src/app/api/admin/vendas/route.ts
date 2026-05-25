@@ -13,13 +13,17 @@ import {
   AsaasApiError,
 } from "@/lib/asaas/client"
 import { getSystemSettings } from "@/lib/system-settings"
+import { contextLogger } from "@/lib/logger"
 import { provisionStudentAccess } from "@/lib/students/access"
 import { tryConsumeCoupon, releaseCoupon } from "@/lib/coupons/consume"
 import { swallow } from "@/lib/errors"
+import { withRequestContext } from "@/lib/observability/with-request-context"
 
 const PMB_SALES_CAP = 50
 
-export async function GET(request: Request) {
+export const GET = withRequestContext(
+  { action: "admin.vendas.list", route: "/api/admin/vendas" },
+  async (request: Request) => {
   const guard = await requirePmbSales()
   if (!guard.ok) return guard.response
 
@@ -60,7 +64,8 @@ export async function GET(request: Request) {
       createdAt: e.createdAt.toISOString(),
     })),
   })
-}
+  },
+)
 
 const createSchema = z.object({
   studentId: z.string().min(1),
@@ -75,7 +80,9 @@ function dueDateInDays(days: number): string {
 }
 
 
-export async function POST(request: Request) {
+export const POST = withRequestContext(
+  { action: "admin.vendas.create", route: "/api/admin/vendas" },
+  async (request: Request) => {
   const guard = await requirePmbSales()
   if (!guard.ok) return guard.response
 
@@ -156,7 +163,10 @@ export async function POST(request: Request) {
     isPmbVitrine: true,
     slug: pmbTenant.slug,
   }).catch((err) => {
-    console.error("[admin-vendas] provisionStudentAccess falhou:", err)
+    contextLogger().error(
+      { err, event: "admin.vendas.provision_access_failed", studentId: student.id },
+      "provisionStudentAccess falhou",
+    )
   })
 
   if (!course || course.status !== "ATIVO") {
@@ -494,4 +504,5 @@ export async function POST(request: Request) {
         : "Falha ao criar cobrança no Asaas"
     return NextResponse.json({ error: message }, { status: 502 })
   }
-}
+  },
+)

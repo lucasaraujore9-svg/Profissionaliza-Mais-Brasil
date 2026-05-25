@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { requireStudentSession } from "@/lib/auth/student-session"
 import { syncStudentProgress } from "@/lib/students/progress"
+import { contextLogger } from "@/lib/logger"
 
 const STATUS_LABEL: Record<string, string> = {
   PENDING: "Aguardando pagamento",
@@ -32,7 +33,10 @@ export default async function StudentCoursesPage() {
   try {
     await syncStudentProgress(session.studentId)
   } catch (err) {
-    console.warn("[aluno/cursos] syncStudentProgress falhou:", err)
+    contextLogger().warn(
+      { err, event: "aluno.cursos.sync_progress_failed", studentId: session.studentId },
+      "syncStudentProgress falhou na page — degrada UX mas não bloqueia",
+    )
   }
 
   const enrollments = await prisma.enrollment.findMany({

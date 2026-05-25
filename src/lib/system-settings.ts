@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import type { PaymentGateway } from "@prisma/client"
 import { encrypt, decrypt } from "@/lib/crypto"
+import { contextLogger } from "@/lib/logger"
 
 const SETTINGS_ID = "default"
 
@@ -70,7 +71,10 @@ export async function getPmbMpAccessTokenAsync(): Promise<string | null> {
     try {
       return decrypt(row.pmbMpAccessTokenEnc)
     } catch (err) {
-      console.error("[system-settings] falha ao decifrar pmbMpAccessToken:", err)
+      contextLogger().error(
+        { err, event: "system-settings.decrypt_failed", field: "pmbMpAccessToken" },
+        "falha ao decifrar pmbMpAccessToken — usando fallback de env",
+      )
     }
   }
   return process.env.PMB_MP_ACCESS_TOKEN?.trim() || null

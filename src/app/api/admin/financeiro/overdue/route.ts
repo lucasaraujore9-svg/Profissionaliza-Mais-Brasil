@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { requireAdminSession } from "@/lib/auth/admin-session"
+import { withRequestContext } from "@/lib/observability/with-request-context"
 
-export async function GET() {
+export const GET = withRequestContext(
+  { action: "admin.financeiro.overdue.list", route: "/api/admin/financeiro/overdue" },
+  async () => {
   const ctx = await requireAdminSession()
   if (!ctx) {
     return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
@@ -54,4 +57,5 @@ export async function GET() {
       },
     },
   })
-}
+  },
+)

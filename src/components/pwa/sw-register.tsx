@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect } from "react"
+import { clientLogger } from "@/lib/logger-client"
 
 export function ServiceWorkerRegister() {
   useEffect(() => {
@@ -28,7 +29,7 @@ export function ServiceWorkerRegister() {
           })
         })
       } catch (err) {
-        console.warn("[sw] register falhou:", err)
+        clientLogger.warn({ err: String(err), event: "sw.register_failed" }, "Service worker register falhou")
       }
     }
 

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import type { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { requireAdminSession } from "@/lib/auth/admin-session"
+import { withRequestContext } from "@/lib/observability/with-request-context"
 
 const ALLOWED_STATUS = new Set([
   "PENDING",
@@ -11,7 +12,9 @@ const ALLOWED_STATUS = new Set([
   "REFUNDED",
 ])
 
-export async function GET(request: Request) {
+export const GET = withRequestContext(
+  { action: "admin.financeiro.tenant_payments.list", route: "/api/admin/financeiro/tenant-payments" },
+  async (request: Request) => {
   const session = await requireAdminSession()
   if (!session) {
     return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
@@ -111,4 +114,5 @@ export async function GET(request: Request) {
       origin: p.markedPaidAt ? "MANUAL" : "ASAAS",
     })),
   })
-}
+  },
+)

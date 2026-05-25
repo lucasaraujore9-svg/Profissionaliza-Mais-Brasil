@@ -1,5 +1,6 @@
 import { Users, GraduationCap, BookOpen, DollarSign } from "lucide-react"
 import { prisma } from "@/lib/prisma"
+import { contextLogger } from "@/lib/logger"
 
 interface PublicMetrics {
   resellers: number | null
@@ -33,7 +34,10 @@ async function loadMetrics(): Promise<PublicMetrics> {
       revenue: Number(revenueAgg._sum.amount ?? 0),
     }
   } catch (error) {
-    console.error("[NumerosBento] sem dados:", error)
+    contextLogger().error(
+      { err: error, event: "numeros_bento.load_failed" },
+      "NumerosBento: load de métricas falhou — retornando placeholder",
+    )
     return PLACEHOLDER
   }
 }

@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma"
 import { sendEmail } from "@/lib/email/mailer"
 import { generatePasswordWithHash } from "@/lib/students/generate-password"
 import { appUrl as resolveAppUrl, vitrineHost } from "@/lib/tenant/urls"
+import { contextLogger } from "@/lib/logger"
 
 export interface ProvisionAccessTenant {
   isPmbVitrine: boolean
@@ -62,7 +63,10 @@ export async function provisionStudentAccess(
       },
     },
   }).catch((err) => {
-    console.error("[provision] student-welcome email falhou:", err)
+    contextLogger().error(
+      { err, event: "provision.student_welcome_email_failed", studentId: student.id },
+      "provision: student-welcome email falhou",
+    )
   })
 
   return { created: true }

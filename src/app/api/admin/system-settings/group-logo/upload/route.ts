@@ -7,6 +7,7 @@ import {
   uploadVitrineAsset,
 } from "@/lib/supabase/storage"
 import { isValidImageMagic } from "@/lib/storage/validate-image"
+import { withRequestContext } from "@/lib/observability/with-request-context"
 
 const SETTINGS_ID = "default"
 const MAX_BYTES = 2 * 1024 * 1024
@@ -32,7 +33,9 @@ function extensionFor(mime: string): string {
   }
 }
 
-export async function POST(request: Request) {
+export const POST = withRequestContext(
+  { action: "admin.system_settings.group_logo.upload", route: "/api/admin/system-settings/group-logo/upload" },
+  async (request: Request) => {
   const guard = await requireSuperAdmin()
   if (!guard.ok) return guard.response
 
@@ -104,9 +107,12 @@ export async function POST(request: Request) {
   }
 
   return NextResponse.json({ data: { url: row.groupLogoUrl } })
-}
+  },
+)
 
-export async function DELETE() {
+export const DELETE = withRequestContext(
+  { action: "admin.system_settings.group_logo.delete", route: "/api/admin/system-settings/group-logo/upload" },
+  async () => {
   const guard = await requireSuperAdmin()
   if (!guard.ok) return guard.response
 
@@ -135,4 +141,5 @@ export async function DELETE() {
   }
 
   return NextResponse.json({ data: { url: null } })
-}
+  },
+)

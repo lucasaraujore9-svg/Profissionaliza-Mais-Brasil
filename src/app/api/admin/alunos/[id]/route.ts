@@ -2,12 +2,11 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { requirePmbSales } from "@/lib/auth/guards"
 import { getOrCreatePmbTenant } from "@/lib/pmb-tenant"
+import { withRequestContextParams } from "@/lib/observability/with-request-context"
 
-interface Ctx {
-  params: Promise<{ id: string }>
-}
-
-export async function GET(_request: Request, ctx: Ctx) {
+export const GET = withRequestContextParams<{ id: string }>(
+  { action: "admin.alunos.get", route: "/api/admin/alunos/[id]" },
+  async (_request: Request, ctx) => {
   const guard = await requirePmbSales()
   if (!guard.ok) return guard.response
 
@@ -105,4 +104,5 @@ export async function GET(_request: Request, ctx: Ctx) {
       })),
     },
   })
-}
+  },
+)

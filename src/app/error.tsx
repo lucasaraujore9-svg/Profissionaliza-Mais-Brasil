@@ -2,6 +2,7 @@
 
 import { useEffect } from "react"
 import Link from "next/link"
+import { clientLogger } from "@/lib/logger-client"
 
 interface ErrorProps {
   error: Error & { digest?: string }
@@ -10,9 +11,12 @@ interface ErrorProps {
 
 export default function AppError({ error, reset }: ErrorProps) {
   useEffect(() => {
-    // O Vercel/Next captura o stack em logs de runtime. Mantemos um console
-    // de fallback para inspecao em dev/staging sem expor o stack ao usuario.
-    console.error("[app error]", error)
+    // O Vercel/Next captura o stack em logs de runtime. Logger client
+    // estruturado para inspecao em dev/staging sem expor stack ao usuario.
+    clientLogger.error(
+      { err: String(error), digest: error.digest, event: "app_error.boundary" },
+      "app error boundary",
+    )
   }, [error])
 
   return (

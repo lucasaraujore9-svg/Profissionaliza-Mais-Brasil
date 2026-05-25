@@ -19,6 +19,20 @@ const eslintConfig = defineConfig([
       ],
     },
   },
+  // Observabilidade: bane `console.*` em libs server e handlers de API —
+  // exigir `contextLogger()` (Pino com redact). Há exceções pontuais
+  // marcadas com eslint-disable-next-line em redis*.ts/env.ts (edge runtime
+  // que não pode importar Pino).
+  {
+    files: ["src/lib/**/*.ts", "src/app/api/**/*.ts"],
+    ignores: [
+      // Logger client é browser-only e usa console intencionalmente.
+      "src/lib/logger-client.ts",
+    ],
+    rules: {
+      "no-console": "error",
+    },
+  },
   // Override default ignores of eslint-config-next.
   globalIgnores([
     // Default ignores of eslint-config-next:

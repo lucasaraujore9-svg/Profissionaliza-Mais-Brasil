@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect } from "react"
+import { clientLogger } from "@/lib/logger-client"
 
 export default function PainelError({
   error,
@@ -10,7 +11,10 @@ export default function PainelError({
   reset: () => void
 }) {
   useEffect(() => {
-    console.error("[painel/error] route error:", error)
+    clientLogger.error(
+      { err: String(error), digest: error.digest, event: "painel.error_boundary", segment: "painel" },
+      "painel route error",
+    )
   }, [error])
 
   return (

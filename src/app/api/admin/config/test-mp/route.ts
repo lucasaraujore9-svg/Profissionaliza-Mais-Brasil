@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { requireAdminSession } from "@/lib/auth/admin-session"
+import { withRequestContext } from "@/lib/observability/with-request-context"
 
-export async function POST() {
+export const POST = withRequestContext(
+  { action: "admin.config.test_mp", route: "/api/admin/config/test-mp" },
+  async () => {
   const ctx = await requireAdminSession()
   if (!ctx) {
     return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
@@ -22,4 +25,5 @@ export async function POST() {
       durationMs: Date.now() - startedAt,
     },
   })
-}
+  },
+)

@@ -2,10 +2,13 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { requirePmbSales } from "@/lib/auth/guards"
+import { withRequestContext } from "@/lib/observability/with-request-context"
 
 const PMB_SALES_CAP = 50
 
-export async function GET() {
+export const GET = withRequestContext(
+  { action: "admin.cupons.list", route: "/api/admin/cupons" },
+  async () => {
   const guard = await requirePmbSales()
   if (!guard.ok) return guard.response
 
@@ -37,7 +40,8 @@ export async function GET() {
       createdByName: c.createdByUser?.name ?? null,
     })),
   })
-}
+  },
+)
 
 const createSchema = z
   .object({
@@ -62,7 +66,9 @@ const createSchema = z
     { message: "Data final antes do início", path: ["validUntil"] },
   )
 
-export async function POST(request: Request) {
+export const POST = withRequestContext(
+  { action: "admin.cupons.create", route: "/api/admin/cupons" },
+  async (request: Request) => {
   const guard = await requirePmbSales()
   if (!guard.ok) return guard.response
 
@@ -139,4 +145,5 @@ export async function POST(request: Request) {
       isActive: coupon.isActive,
     },
   })
-}
+  },
+)

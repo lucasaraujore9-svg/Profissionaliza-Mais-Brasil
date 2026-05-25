@@ -10,6 +10,8 @@ import { upsertStudent } from "@/lib/students/upsert"
 import { provisionStudentAccess } from "@/lib/students/access"
 import { tryConsumeCoupon, releaseCoupon } from "@/lib/coupons/consume"
 import { swallow } from "@/lib/errors"
+import { contextLogger } from "@/lib/logger"
+import { withRequestContext } from "@/lib/observability/with-request-context"
 
 const cpfRegex = /^\d{3}\.?\d{3}\.?\d{3}-?\d{2}$/
 const phoneRegex = /^\(?\d{2}\)?\s?\d{4,5}-?\d{4}$/
@@ -39,7 +41,9 @@ function normalize(s: string): string {
   return s.trim()
 }
 
-export async function POST(request: Request) {
+export const POST = withRequestContext(
+  { action: "loja.checkout.start", route: "/api/loja/checkout" },
+  async (request: Request) => {
   const tenantId = request.headers.get("x-tenant-id")
   const tenantSlug = request.headers.get("x-tenant-slug")
 
@@ -206,7 +210,10 @@ export async function POST(request: Request) {
       slug: tenant.slug,
       name: tenant.name,
     }).catch((err) => {
-      console.error("[loja-checkout] provisionStudentAccess falhou:", err)
+      contextLogger().error(
+        { err, event: "loja_checkout.provision_access_failed", studentId: student.id, tenantSlug: tenant.slug },
+        "provisionStudentAccess falhou",
+      )
     })
 
     const existingEnrollment = await prisma.enrollment.findFirst({
@@ -352,7 +359,10 @@ export async function POST(request: Request) {
       },
     })
   } catch (error) {
-    console.error("[checkout] error:", error)
+    contextLogger().error(
+      { err: error, event: "loja_checkout.failed" },
+      "loja checkout falhou",
+    )
     // Libera reserva de cupom — checkout falhou, não consumimos o uso.
     if (consumedCouponId) {
       await releaseCoupon(consumedCouponId).catch(swallow("loja.checkout"))
@@ -362,4 +372,5 @@ export async function POST(request: Request) {
       { status: 500 },
     )
   }
-}
+  },
+)

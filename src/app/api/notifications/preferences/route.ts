@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { withRequestContext } from "@/lib/observability/with-request-context"
 
 const CATEGORIES = [
   "payment",
@@ -31,7 +32,9 @@ async function getTarget() {
   return { kind: "user" as const, id: user.id }
 }
 
-export async function GET() {
+export const GET = withRequestContext(
+  { action: "notifications.preferences.list", route: "/api/notifications/preferences" },
+  async (_request: Request) => {
   const target = await getTarget()
   if (!target) {
     return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
@@ -54,7 +57,8 @@ export async function GET() {
       })),
     },
   })
-}
+  },
+)
 
 const patchSchema = z.object({
   category: z.enum(CATEGORIES),
@@ -62,7 +66,9 @@ const patchSchema = z.object({
   email: z.boolean().optional(),
 })
 
-export async function PATCH(request: Request) {
+export const PATCH = withRequestContext(
+  { action: "notifications.preferences.update", route: "/api/notifications/preferences" },
+  async (request: Request) => {
   const target = await getTarget()
   if (!target) {
     return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
@@ -122,4 +128,5 @@ export async function PATCH(request: Request) {
   })
 
   return NextResponse.json({ data: result })
-}
+  },
+)

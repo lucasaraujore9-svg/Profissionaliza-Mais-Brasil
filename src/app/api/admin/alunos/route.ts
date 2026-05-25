@@ -8,6 +8,8 @@ import { pmbPlataformaPolo, pmbPlataformaVendedorId } from "@/lib/pmb-config"
 import { ensureStudentOnPlatform } from "@/lib/students/plataforma-actions"
 import { findOrCreateAsaasCustomer } from "@/lib/asaas/client"
 import { getSystemSettings } from "@/lib/system-settings"
+import { contextLogger } from "@/lib/logger"
+import { withRequestContext } from "@/lib/observability/with-request-context"
 
 function isValidCpf(cpf: string): boolean {
   const d = cpf.replace(/\D/g, "")
@@ -24,7 +26,9 @@ function isValidCpf(cpf: string): boolean {
   return r === +d[10]
 }
 
-export async function GET(request: Request) {
+export const GET = withRequestContext(
+  { action: "admin.alunos.list", route: "/api/admin/alunos" },
+  async (request: Request) => {
   const guard = await requirePmbSales()
   if (!guard.ok) return guard.response
 
@@ -82,7 +86,8 @@ export async function GET(request: Request) {
       createdAt: s.createdAt.toISOString(),
     })),
   })
-}
+  },
+)
 
 const createSchema = z.object({
   nome: z.string().trim().min(3).max(160),
@@ -91,7 +96,9 @@ const createSchema = z.object({
   fone: z.string().trim().optional(),
 })
 
-export async function POST(request: Request) {
+export const POST = withRequestContext(
+  { action: "admin.alunos.create", route: "/api/admin/alunos" },
+  async (request: Request) => {
   const guard = await requirePmbSales()
   if (!guard.ok) return guard.response
 
@@ -171,7 +178,10 @@ export async function POST(request: Request) {
   try {
     await ensureStudentOnPlatform(student.id)
   } catch (err) {
-    console.error("[alunos/POST] falha ao criar aluno na plataforma:", err)
+    contextLogger().error(
+      { err, event: "admin.alunos.create.plataforma_failed", studentId: student.id },
+      "falha ao criar aluno na plataforma — será tentado novamente no fulfill",
+    )
     // Não bloqueia — será tentado novamente no fulfill do pagamento
   }
 
@@ -192,11 +202,15 @@ export async function POST(request: Request) {
       })
     }
   } catch (err) {
-    console.error("[alunos/POST] falha ao criar customer no Asaas:", err)
+    contextLogger().error(
+      { err, event: "admin.alunos.create.asaas_customer_failed", studentId: student.id },
+      "falha ao criar customer no Asaas — será criado/reutilizado na geração do link",
+    )
     // Não bloqueia — será criado/reutilizado na geração do link
   }
 
   return NextResponse.json({
     data: { id: student.id, nome: student.nome, email: student.email, cpf: student.cpf, existed: false },
   })
-}
+  },
+)

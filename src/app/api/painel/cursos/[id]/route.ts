@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { requireResellerSession } from "@/lib/auth/reseller-session"
+import { withRequestContextParams } from "@/lib/observability/with-request-context"
 
 const updateSchema = z.object({
   price: z.number().positive("Preço deve ser maior que zero"),
@@ -21,156 +22,165 @@ async function requireOwnCourse(tenantId: string, id: string) {
   return tc !== null
 }
 
-export async function GET(
-  _request: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
-  const ctx = await requireResellerSession()
-  if (!ctx) {
-    return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-  }
+export const GET = withRequestContextParams<{ id: string }>(
+  { action: "painel.cursos.get", route: "/api/painel/cursos/[id]" },
+  async (
+    _request: Request,
+    { params }: { params: Promise<{ id: string }> },
+  ) => {
+    const ctx = await requireResellerSession()
+    if (!ctx) {
+      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
+    }
 
-  const { id } = await params
-  const tc = await prisma.tenantCourse.findFirst({
-    where: { id, tenantId: ctx.tenantId },
-    include: {
-      course: true,
-      _count: { select: { enrollments: true } },
-    },
-  })
-
-  if (!tc) {
-    return NextResponse.json({ error: "Curso não encontrado" }, { status: 404 })
-  }
-
-  return NextResponse.json({
-    data: {
-      id: tc.id,
-      courseId: tc.courseId,
-      title: tc.course.nome,
-      // Hierarquia: tenant > admin > plataforma bruto
-      description:
-        tc.customDescription ??
-        tc.course.descricaoOverride ??
-        tc.course.descricao,
-      capaImageUrl:
-        tc.customCapaUrl ?? tc.course.capaOverride ?? tc.course.capaImageUrl,
-      qtdAulas: tc.course.qtdAulas,
-      cargaHoraria: tc.course.cargaHoraria,
-      price: Number(tc.price),
-      parcelas:
-        tc.customParcelas ??
-        tc.course.parcelasOverride ??
-        tc.course.parcelasSugeridas,
-      paymentType: tc.paymentType,
-      isVisible: tc.isVisible,
-      isFeatured: tc.isFeatured,
-      customOrder: tc.customOrder,
-      customDescription: tc.customDescription,
-      customCapaUrl: tc.customCapaUrl,
-      customParcelas: tc.customParcelas,
-      // Defaults vindos do catálogo (úteis pro form mostrar "valor padrão")
-      defaultCapaUrl: tc.course.capaOverride ?? tc.course.capaImageUrl,
-      defaultParcelas:
-        tc.course.parcelasOverride ?? tc.course.parcelasSugeridas,
-      defaultDescription: tc.course.descricaoOverride ?? tc.course.descricao,
-      enrollmentsCount: tc._count.enrollments,
-    },
-  })
-}
-
-export async function PUT(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
-  const ctx = await requireResellerSession()
-  if (!ctx) {
-    return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-  }
-
-  const { id } = await params
-  if (!(await requireOwnCourse(ctx.tenantId, id))) {
-    return NextResponse.json({ error: "Curso não encontrado" }, { status: 404 })
-  }
-
-  let payload: unknown
-  try {
-    payload = await request.json()
-  } catch {
-    return NextResponse.json({ error: "JSON inválido" }, { status: 400 })
-  }
-
-  const parsed = updateSchema.safeParse(payload)
-  if (!parsed.success) {
-    return NextResponse.json(
-      {
-        error: "Dados inválidos",
-        fields: parsed.error.flatten().fieldErrors,
+    const { id } = await params
+    const tc = await prisma.tenantCourse.findFirst({
+      where: { id, tenantId: ctx.tenantId },
+      include: {
+        course: true,
+        _count: { select: { enrollments: true } },
       },
-      { status: 400 },
-    )
-  }
+    })
 
-  const updated = await prisma.tenantCourse.update({
-    where: { id },
-    data: {
-      price: parsed.data.price,
-      paymentType: parsed.data.paymentType,
-      customDescription: parsed.data.customDescription ?? null,
-      ...(parsed.data.customCapaUrl !== undefined && {
-        customCapaUrl: parsed.data.customCapaUrl,
-      }),
-      ...(parsed.data.customParcelas !== undefined && {
-        customParcelas: parsed.data.customParcelas,
-      }),
-      ...(parsed.data.isFeatured !== undefined && { isFeatured: parsed.data.isFeatured }),
-      ...(parsed.data.customOrder !== undefined && { customOrder: parsed.data.customOrder }),
-    },
-  })
+    if (!tc) {
+      return NextResponse.json({ error: "Curso não encontrado" }, { status: 404 })
+    }
 
-  return NextResponse.json({
-    data: {
-      id: updated.id,
-      price: Number(updated.price),
-      paymentType: updated.paymentType,
-      customDescription: updated.customDescription,
-      customCapaUrl: updated.customCapaUrl,
-      customParcelas: updated.customParcelas,
-      isFeatured: updated.isFeatured,
-      customOrder: updated.customOrder,
-    },
-  })
-}
-
-export async function DELETE(
-  _request: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
-  const ctx = await requireResellerSession()
-  if (!ctx) {
-    return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-  }
-
-  const { id } = await params
-  if (!(await requireOwnCourse(ctx.tenantId, id))) {
-    return NextResponse.json({ error: "Curso não encontrado" }, { status: 404 })
-  }
-
-  const enrollments = await prisma.enrollment.count({
-    where: { tenantCourseId: id, status: { in: ["ACTIVE", "PENDING"] } },
-  })
-
-  if (enrollments > 0) {
-    return NextResponse.json(
-      {
-        error: "Não é possível remover curso com matrículas ativas ou pendentes.",
-        code: "HAS_ACTIVE_ENROLLMENTS",
+    return NextResponse.json({
+      data: {
+        id: tc.id,
+        courseId: tc.courseId,
+        title: tc.course.nome,
+        // Hierarquia: tenant > admin > plataforma bruto
+        description:
+          tc.customDescription ??
+          tc.course.descricaoOverride ??
+          tc.course.descricao,
+        capaImageUrl:
+          tc.customCapaUrl ?? tc.course.capaOverride ?? tc.course.capaImageUrl,
+        qtdAulas: tc.course.qtdAulas,
+        cargaHoraria: tc.course.cargaHoraria,
+        price: Number(tc.price),
+        parcelas:
+          tc.customParcelas ??
+          tc.course.parcelasOverride ??
+          tc.course.parcelasSugeridas,
+        paymentType: tc.paymentType,
+        isVisible: tc.isVisible,
+        isFeatured: tc.isFeatured,
+        customOrder: tc.customOrder,
+        customDescription: tc.customDescription,
+        customCapaUrl: tc.customCapaUrl,
+        customParcelas: tc.customParcelas,
+        // Defaults vindos do catálogo (úteis pro form mostrar "valor padrão")
+        defaultCapaUrl: tc.course.capaOverride ?? tc.course.capaImageUrl,
+        defaultParcelas:
+          tc.course.parcelasOverride ?? tc.course.parcelasSugeridas,
+        defaultDescription: tc.course.descricaoOverride ?? tc.course.descricao,
+        enrollmentsCount: tc._count.enrollments,
       },
-      { status: 409 },
-    )
-  }
+    })
+  },
+)
 
-  await prisma.tenantCourse.delete({ where: { id } })
+export const PUT = withRequestContextParams<{ id: string }>(
+  { action: "painel.cursos.update", route: "/api/painel/cursos/[id]" },
+  async (
+    request: Request,
+    { params }: { params: Promise<{ id: string }> },
+  ) => {
+    const ctx = await requireResellerSession()
+    if (!ctx) {
+      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
+    }
 
-  return NextResponse.json({ data: { ok: true } })
-}
+    const { id } = await params
+    if (!(await requireOwnCourse(ctx.tenantId, id))) {
+      return NextResponse.json({ error: "Curso não encontrado" }, { status: 404 })
+    }
+
+    let payload: unknown
+    try {
+      payload = await request.json()
+    } catch {
+      return NextResponse.json({ error: "JSON inválido" }, { status: 400 })
+    }
+
+    const parsed = updateSchema.safeParse(payload)
+    if (!parsed.success) {
+      return NextResponse.json(
+        {
+          error: "Dados inválidos",
+          fields: parsed.error.flatten().fieldErrors,
+        },
+        { status: 400 },
+      )
+    }
+
+    const updated = await prisma.tenantCourse.update({
+      where: { id },
+      data: {
+        price: parsed.data.price,
+        paymentType: parsed.data.paymentType,
+        customDescription: parsed.data.customDescription ?? null,
+        ...(parsed.data.customCapaUrl !== undefined && {
+          customCapaUrl: parsed.data.customCapaUrl,
+        }),
+        ...(parsed.data.customParcelas !== undefined && {
+          customParcelas: parsed.data.customParcelas,
+        }),
+        ...(parsed.data.isFeatured !== undefined && { isFeatured: parsed.data.isFeatured }),
+        ...(parsed.data.customOrder !== undefined && { customOrder: parsed.data.customOrder }),
+      },
+    })
+
+    return NextResponse.json({
+      data: {
+        id: updated.id,
+        price: Number(updated.price),
+        paymentType: updated.paymentType,
+        customDescription: updated.customDescription,
+        customCapaUrl: updated.customCapaUrl,
+        customParcelas: updated.customParcelas,
+        isFeatured: updated.isFeatured,
+        customOrder: updated.customOrder,
+      },
+    })
+  },
+)
+
+export const DELETE = withRequestContextParams<{ id: string }>(
+  { action: "painel.cursos.delete", route: "/api/painel/cursos/[id]" },
+  async (
+    _request: Request,
+    { params }: { params: Promise<{ id: string }> },
+  ) => {
+    const ctx = await requireResellerSession()
+    if (!ctx) {
+      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
+    }
+
+    const { id } = await params
+    if (!(await requireOwnCourse(ctx.tenantId, id))) {
+      return NextResponse.json({ error: "Curso não encontrado" }, { status: 404 })
+    }
+
+    const enrollments = await prisma.enrollment.count({
+      where: { tenantCourseId: id, status: { in: ["ACTIVE", "PENDING"] } },
+    })
+
+    if (enrollments > 0) {
+      return NextResponse.json(
+        {
+          error: "Não é possível remover curso com matrículas ativas ou pendentes.",
+          code: "HAS_ACTIVE_ENROLLMENTS",
+        },
+        { status: 409 },
+      )
+    }
+
+    await prisma.tenantCourse.delete({ where: { id } })
+
+    return NextResponse.json({ data: { ok: true } })
+  },
+)

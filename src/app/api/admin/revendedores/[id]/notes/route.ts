@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { requirePmbTeam } from "@/lib/auth/guards"
+import { withRequestContextParams } from "@/lib/observability/with-request-context"
 
 async function assertCanAccess(tenantId: string, session: { userId: string; role: string }) {
   if (session.role === "SUPER_ADMIN") return true
@@ -13,7 +14,9 @@ async function assertCanAccess(tenantId: string, session: { userId: string; role
   return t?.accountManagerId === session.userId
 }
 
-export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+export const GET = withRequestContextParams<{ id: string }>(
+  { action: "admin.revendedores.notes.list", route: "/api/admin/revendedores/[id]/notes" },
+  async (_req: Request, ctx) => {
   const guard = await requirePmbTeam()
   if (!guard.ok) return guard.response
   const { id } = await ctx.params
@@ -36,11 +39,14 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
       createdAt: n.createdAt.toISOString(),
     })),
   })
-}
+  },
+)
 
 const createSchema = z.object({ body: z.string().min(1).max(4000) })
 
-export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
+export const POST = withRequestContextParams<{ id: string }>(
+  { action: "admin.revendedores.notes.create", route: "/api/admin/revendedores/[id]/notes" },
+  async (req: Request, ctx) => {
   const guard = await requirePmbTeam()
   if (!guard.ok) return guard.response
   const { id } = await ctx.params
@@ -78,4 +84,5 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       createdAt: note.createdAt.toISOString(),
     },
   })
-}
+  },
+)

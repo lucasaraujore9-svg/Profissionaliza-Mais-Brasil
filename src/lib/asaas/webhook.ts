@@ -1,5 +1,6 @@
 import { timingSafeEqual } from "node:crypto"
 import type { AsaasWebhookPayload } from "./types"
+import { contextLogger } from "@/lib/logger"
 
 /**
  * Valida o token do webhook do Asaas em tempo constante.
@@ -17,8 +18,9 @@ export function validateAsaasWebhook(
 ): boolean {
   const expectedToken = process.env.ASAAS_WEBHOOK_TOKEN
   if (!expectedToken) {
-    console.error(
-      "[asaas-webhook] ASAAS_WEBHOOK_TOKEN ausente — rejeitando. Defina a env mesmo em dev.",
+    contextLogger().error(
+      { event: "asaas.webhook.missing_token_env" },
+      "ASAAS_WEBHOOK_TOKEN ausente — rejeitando. Defina a env mesmo em dev.",
     )
     return false
   }

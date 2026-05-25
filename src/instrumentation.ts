@@ -13,12 +13,17 @@ export async function register(): Promise<void> {
   if (process.env.NEXT_RUNTIME !== "nodejs") return
 
   const { assertEnv } = await import("@/lib/env")
+  const { logger } = await import("@/lib/logger")
   try {
     assertEnv()
+    logger.info({ event: "boot" }, "instrumentation: env válida, app pronto")
   } catch (err) {
     // Em prod: re-lançar derruba o servidor (fail-fast desejado).
     // Em dev: só loga pra não bloquear desenvolvimento local.
-    if (process.env.NODE_ENV === "production") throw err
-    console.error("[instrumentation] env validation:", err)
+    if (process.env.NODE_ENV === "production") {
+      logger.fatal({ err, event: "boot.env.invalid" }, "env validation falhou em produção — abortando")
+      throw err
+    }
+    logger.warn({ err, event: "boot.env.invalid" }, "env validation falhou (dev)")
   }
 }

@@ -2,13 +2,17 @@ import { ArrowRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { prisma } from "@/lib/prisma"
 import { HeroMockup } from "./hero-mockup"
+import { contextLogger } from "@/lib/logger"
 
 async function loadCursoCount(): Promise<number | null> {
   try {
     const real = await prisma.course.count({ where: { status: "ATIVO" } })
     return real > 0 ? real : null
   } catch (error) {
-    console.error("[HeroCTA] curso count failed:", error)
+    contextLogger().error(
+      { err: error, event: "hero_cta.curso_count_failed" },
+      "HeroCTA curso count falhou",
+    )
     return null
   }
 }

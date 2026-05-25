@@ -3,6 +3,7 @@ import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { requireResellerOwner } from "@/lib/auth/guards"
 import { auth } from "@/lib/auth"
+import { withRequestContextParams } from "@/lib/observability/with-request-context"
 
 async function currentTenantId(): Promise<string | null> {
   const session = await auth()
@@ -15,50 +16,56 @@ const patchSchema = z.object({
   status: z.enum(["ATIVO", "INATIVO"]).optional(),
 })
 
-export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }) {
-  const tenantId = await currentTenantId()
-  if (!tenantId) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-  const guard = await requireResellerOwner(tenantId)
-  if (!guard.ok) return guard.response
-  const { id } = await ctx.params
+export const PATCH = withRequestContextParams<{ id: string }>(
+  { action: "painel.equipe.update", route: "/api/painel/equipe/[id]" },
+  async (req: Request, ctx: { params: Promise<{ id: string }> }) => {
+    const tenantId = await currentTenantId()
+    if (!tenantId) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+    const guard = await requireResellerOwner(tenantId)
+    if (!guard.ok) return guard.response
+    const { id } = await ctx.params
 
-  let body: unknown
-  try {
-    body = await req.json()
-  } catch {
-    return NextResponse.json({ error: "JSON inválido" }, { status: 400 })
-  }
+    let body: unknown
+    try {
+      body = await req.json()
+    } catch {
+      return NextResponse.json({ error: "JSON inválido" }, { status: 400 })
+    }
 
-  const parsed = patchSchema.safeParse(body)
-  if (!parsed.success) {
-    return NextResponse.json({ error: "Dados inválidos" }, { status: 400 })
-  }
+    const parsed = patchSchema.safeParse(body)
+    if (!parsed.success) {
+      return NextResponse.json({ error: "Dados inválidos" }, { status: 400 })
+    }
 
-  const member = await prisma.tenantMember.findUnique({ where: { id } })
-  if (!member || member.tenantId !== tenantId) {
-    return NextResponse.json({ error: "Não encontrado" }, { status: 404 })
-  }
+    const member = await prisma.tenantMember.findUnique({ where: { id } })
+    if (!member || member.tenantId !== tenantId) {
+      return NextResponse.json({ error: "Não encontrado" }, { status: 404 })
+    }
 
-  const updated = await prisma.tenantMember.update({
-    where: { id },
-    data: parsed.data,
-  })
+    const updated = await prisma.tenantMember.update({
+      where: { id },
+      data: parsed.data,
+    })
 
-  return NextResponse.json({ data: updated })
-}
+    return NextResponse.json({ data: updated })
+  },
+)
 
-export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string }> }) {
-  const tenantId = await currentTenantId()
-  if (!tenantId) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-  const guard = await requireResellerOwner(tenantId)
-  if (!guard.ok) return guard.response
-  const { id } = await ctx.params
+export const DELETE = withRequestContextParams<{ id: string }>(
+  { action: "painel.equipe.delete", route: "/api/painel/equipe/[id]" },
+  async (_req: Request, ctx: { params: Promise<{ id: string }> }) => {
+    const tenantId = await currentTenantId()
+    if (!tenantId) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+    const guard = await requireResellerOwner(tenantId)
+    if (!guard.ok) return guard.response
+    const { id } = await ctx.params
 
-  const member = await prisma.tenantMember.findUnique({ where: { id } })
-  if (!member || member.tenantId !== tenantId) {
-    return NextResponse.json({ error: "Não encontrado" }, { status: 404 })
-  }
+    const member = await prisma.tenantMember.findUnique({ where: { id } })
+    if (!member || member.tenantId !== tenantId) {
+      return NextResponse.json({ error: "Não encontrado" }, { status: 404 })
+    }
 
-  await prisma.tenantMember.update({ where: { id }, data: { status: "INATIVO" } })
-  return NextResponse.json({ data: { id, status: "INATIVO" } })
-}
+    await prisma.tenantMember.update({ where: { id }, data: { status: "INATIVO" } })
+    return NextResponse.json({ data: { id, status: "INATIVO" } })
+  },
+)

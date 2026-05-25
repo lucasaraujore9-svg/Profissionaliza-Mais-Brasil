@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { redis } from "@/lib/redis"
+import { withRequestContext } from "@/lib/observability/with-request-context"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
@@ -21,7 +22,9 @@ export const maxDuration = 10
  *   curl https://profissionalizamaisbrasil.com.br/api/health
  *   → { "status": "healthy", "checks": { "database": true, "redis": true } }
  */
-export async function GET() {
+export const GET = withRequestContext(
+  { action: "health.check", route: "/api/health" },
+  async (_request: Request) => {
   const start = Date.now()
   const checks: { database: boolean; redis: boolean | "disabled" } = {
     database: false,
@@ -59,4 +62,5 @@ export async function GET() {
     latencyMs: Date.now() - start,
     timestamp: new Date().toISOString(),
   })
-}
+  },
+)

@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client"
 import type { ReferralCommission } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { createNotification } from "@/lib/notifications"
+import { contextLogger } from "@/lib/logger"
 
 const SETTINGS_ID = "default"
 const DEFAULT_PERCENT = 5
@@ -113,8 +114,9 @@ export async function createCommissionForTenantPayment(
       select: { email: true },
     })
     if (referredOwner?.email && referredOwner.email === referrer.owner.email) {
-      console.warn(
-        `[referrals] mesmo email entre referrer e referred (${referrer.owner.email}) — comissao nao criada`,
+      contextLogger().warn(
+        { event: "referrals.same_owner_email", referrerId: referrer.id, referredId: referred.id },
+        "mesmo email entre referrer e referred — comissão não criada",
       )
       return null
     }
@@ -201,8 +203,9 @@ export async function cancelCommissionForTenantPayment(
   if (commission.status === "CANCELLED") return commission
 
   if (commission.status === "PAID") {
-    console.warn(
-      `[referrals] cancel solicitado mas comissao ja paga: ${commission.id} (${reason})`,
+    contextLogger().warn(
+      { event: "referrals.cancel_after_paid", commissionId: commission.id, reason },
+      "cancel solicitado mas comissão já paga",
     )
     await createNotification({
       audience: "ROLE",

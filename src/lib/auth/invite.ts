@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { sendEmail } from "@/lib/email/resend"
 import { generateResetToken } from "@/lib/auth/reset-token"
+import { contextLogger } from "@/lib/logger"
 
 const INVITE_EXPIRATION_DAYS = 7
 
@@ -52,7 +53,10 @@ export async function sendInvite(params: SendInviteParams): Promise<void> {
       },
     })
   } catch (err) {
-    // Em dev sem RESEND_API_KEY nao quebra o fluxo — loga o link
-    console.warn("[invite] Falha ao enviar email, link manual:", inviteUrl, err)
+    // Em dev sem RESEND_API_KEY nao quebra o fluxo — loga o link manual
+    contextLogger().warn(
+      { err, event: "invite.email_failed", inviteUrl },
+      "falha ao enviar email de convite — link manual disponível no log",
+    )
   }
 }

@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { withRequestContext } from "@/lib/observability/with-request-context"
 
-export async function GET(request: Request) {
+export const GET = withRequestContext(
+  { action: "pmb.checkout.status", route: "/api/checkout/status" },
+  async (request: Request) => {
   const url = new URL(request.url)
   const enrollmentId = url.searchParams.get("enrollment_id")
   if (!enrollmentId) {
@@ -39,4 +42,5 @@ export async function GET(request: Request) {
         enrollment.status === "ACTIVE" || enrollment.status === "COMPLETED",
     },
   })
-}
+  },
+)

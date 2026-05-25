@@ -5,13 +5,13 @@ import { getPayment as getAsaasPayment, listPayments as listAsaasPayments } from
 import { searchPayments as searchMpPayments } from "@/lib/mercadopago/client"
 import { pmbMpAccessToken, pmbPlataformaPolo, pmbPlataformaVendedorId } from "@/lib/pmb-config"
 import { fulfillEnrollment } from "@/lib/enrollment/fulfill"
+import { withRequestContextParams } from "@/lib/observability/with-request-context"
 
 export const dynamic = "force-dynamic"
 
-export async function POST(
-  _request: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
+export const POST = withRequestContextParams<{ id: string }>(
+  { action: "admin.vendas.sync_payment", route: "/api/admin/vendas/[id]/sync-payment" },
+  async (_request: Request, { params }) => {
   const guard = await requirePmbSales()
   if (!guard.ok) return guard.response
 
@@ -183,4 +183,5 @@ export async function POST(
     { error: `Gateway não suportado: ${enrollment.gateway}` },
     { status: 400 },
   )
-}
+  },
+)

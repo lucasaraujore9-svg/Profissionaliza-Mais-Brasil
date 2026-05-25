@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { withRequestContext } from "@/lib/observability/with-request-context"
 
 const subscribeSchema = z.object({
   endpoint: z.string().url().max(2048),
@@ -30,7 +31,9 @@ async function getTarget() {
   return { kind: "user" as const, id: user.id }
 }
 
-export async function POST(request: Request) {
+export const POST = withRequestContext(
+  { action: "push.subscribe", route: "/api/push/subscribe" },
+  async (request: Request) => {
   const target = await getTarget()
   if (!target) {
     return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
@@ -101,9 +104,12 @@ export async function POST(request: Request) {
   ])
 
   return NextResponse.json({ ok: true })
-}
+  },
+)
 
-export async function DELETE(request: Request) {
+export const DELETE = withRequestContext(
+  { action: "push.unsubscribe", route: "/api/push/subscribe" },
+  async (request: Request) => {
   const target = await getTarget()
   if (!target) {
     return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
@@ -131,4 +137,5 @@ export async function DELETE(request: Request) {
   })
 
   return NextResponse.json({ ok: true })
-}
+  },
+)

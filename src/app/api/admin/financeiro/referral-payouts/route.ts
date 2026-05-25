@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import type { Prisma, ReferralPayoutStatus } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { requireAdminSession } from "@/lib/auth/admin-session"
+import { withRequestContext } from "@/lib/observability/with-request-context"
 
 const ALLOWED_STATUS: ReferralPayoutStatus[] = [
   "REQUESTED",
@@ -11,7 +12,9 @@ const ALLOWED_STATUS: ReferralPayoutStatus[] = [
   "CANCELLED",
 ]
 
-export async function GET(request: Request) {
+export const GET = withRequestContext(
+  { action: "admin.financeiro.referral_payouts.list", route: "/api/admin/financeiro/referral-payouts" },
+  async (request: Request) => {
   const session = await requireAdminSession()
   if (!session) {
     return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
@@ -130,4 +133,5 @@ export async function GET(request: Request) {
         : null,
     })),
   })
-}
+  },
+)

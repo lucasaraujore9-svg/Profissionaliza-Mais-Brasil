@@ -3,6 +3,7 @@ import { z } from "zod"
 import { compare, hash } from "bcryptjs"
 import { prisma } from "@/lib/prisma"
 import { requireAdminSession } from "@/lib/auth/admin-session"
+import { withRequestContext } from "@/lib/observability/with-request-context"
 
 const bodySchema = z
   .object({
@@ -15,7 +16,9 @@ const bodySchema = z
     path: ["confirmPassword"],
   })
 
-export async function PUT(request: Request) {
+export const PUT = withRequestContext(
+  { action: "admin.me.password.update", route: "/api/admin/me/password" },
+  async (request: Request) => {
   const ctx = await requireAdminSession()
   if (!ctx) {
     return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
@@ -65,4 +68,5 @@ export async function PUT(request: Request) {
   })
 
   return NextResponse.json({ data: { ok: true } })
-}
+  },
+)

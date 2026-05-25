@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import type { Prisma } from "@prisma/client"
+import { contextLogger } from "@/lib/logger"
 
 export interface TenantCourseListItem {
   id: string
@@ -102,7 +103,10 @@ export async function listTenantCourses(
       })),
     }
   } catch (error) {
-    console.error("[listTenantCourses] error:", error)
+    contextLogger().error(
+      { err: error, event: "tenant.listCourses_failed" },
+      "listTenantCourses falhou",
+    )
     return { items: [], total: 0 }
   }
 }
@@ -172,7 +176,10 @@ export async function getTenantCourseBySlug(
       })),
     }
   } catch (error) {
-    console.error("[getTenantCourseBySlug] error:", error)
+    contextLogger().error(
+      { err: error, event: "tenant.getCourseBySlug_failed" },
+      "getTenantCourseBySlug falhou",
+    )
     return null
   }
 }
@@ -197,7 +204,10 @@ export async function listTenantCategories(tenantId: string): Promise<string[]> 
     }
     return Array.from(set).sort((a, b) => a.localeCompare(b, "pt-BR"))
   } catch (error) {
-    console.error("[listTenantCategories] error:", error)
+    contextLogger().error(
+      { err: error, event: "tenant.listCategories_failed", tenantId },
+      "listTenantCategories falhou",
+    )
     return []
   }
 }

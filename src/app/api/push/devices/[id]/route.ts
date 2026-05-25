@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { withRequestContextParams } from "@/lib/observability/with-request-context"
 
 interface SessionUser {
   id?: string
@@ -18,10 +19,9 @@ async function getTarget() {
   return { kind: "user" as const, id: user.id }
 }
 
-export async function DELETE(
-  _request: Request,
-  context: { params: Promise<{ id: string }> },
-) {
+export const DELETE = withRequestContextParams<{ id: string }>(
+  { action: "push.devices.delete", route: "/api/push/devices/[id]" },
+  async (_request: Request, context) => {
   const target = await getTarget()
   if (!target) {
     return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
@@ -42,4 +42,5 @@ export async function DELETE(
   }
 
   return NextResponse.json({ ok: true })
-}
+  },
+)

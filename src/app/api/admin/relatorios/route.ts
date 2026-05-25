@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server"
 import { requireAdminSession } from "@/lib/auth/admin-session"
 import { REPORT_DEFS } from "@/lib/reports/definitions"
+import { withRequestContext } from "@/lib/observability/with-request-context"
 
-export async function GET() {
+export const GET = withRequestContext(
+  { action: "admin.relatorios.list", route: "/api/admin/relatorios" },
+  async () => {
   const session = await requireAdminSession()
   if (!session) {
     return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
@@ -18,4 +21,5 @@ export async function GET() {
   }))
 
   return NextResponse.json({ data: { reports, role: session.role } })
-}
+  },
+)

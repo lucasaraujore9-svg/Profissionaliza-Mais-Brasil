@@ -15,6 +15,7 @@ import {
 import { getSystemSettings } from "@/lib/system-settings"
 import { tryConsumeCoupon, releaseCoupon } from "@/lib/coupons/consume"
 import { swallow } from "@/lib/errors"
+import { withRequestContext } from "@/lib/observability/with-request-context"
 
 const createSchema = z.object({
   courseId: z.string().min(1),
@@ -28,7 +29,9 @@ function dueDateInDays(days: number): string {
 }
 
 
-export async function POST(request: Request) {
+export const POST = withRequestContext(
+  { action: "aluno.comprar", route: "/api/aluno/comprar" },
+  async (request: Request) => {
   const session = await requireStudentSession()
   if (!session) {
     return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
@@ -419,4 +422,5 @@ export async function POST(request: Request) {
         : "Falha ao gerar cobrança no Asaas"
     return NextResponse.json({ error: message }, { status: 502 })
   }
-}
+  },
+)

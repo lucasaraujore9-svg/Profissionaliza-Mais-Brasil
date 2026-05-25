@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { Loader2, Send, CheckCircle2, AlertCircle } from "lucide-react"
+import { clientLogger } from "@/lib/logger-client"
 
 type Level = "INFO" | "SUCCESS" | "WARNING" | "ERROR"
 
@@ -87,7 +88,13 @@ export function AdminBroadcastForm() {
         )
         setTenants(items)
       })
-      .catch(() => {})
+      .catch((err) => {
+        if (err instanceof DOMException && err.name === "AbortError") return
+        clientLogger.warn(
+          { err: String(err), event: "admin_broadcast.tenant_fetch_failed" },
+          "busca de tenants falhou",
+        )
+      })
       .finally(() => setTenantLoading(false))
     return () => ctrl.abort()
   }, [tenantQuery, needsTenant])
@@ -117,7 +124,13 @@ export function AdminBroadcastForm() {
         )
         setStudents(items)
       })
-      .catch(() => {})
+      .catch((err) => {
+        if (err instanceof DOMException && err.name === "AbortError") return
+        clientLogger.warn(
+          { err: String(err), event: "admin_broadcast.student_fetch_failed" },
+          "busca de alunos falhou",
+        )
+      })
       .finally(() => setStudentLoading(false))
     return () => ctrl.abort()
   }, [studentQuery, needsStudent])
@@ -158,7 +171,11 @@ export function AdminBroadcastForm() {
       setTitle("")
       setBody("")
       setHref("")
-    } catch {
+    } catch (err) {
+      clientLogger.error(
+        { err: String(err), event: "admin_broadcast.submit_failed" },
+        "envio de broadcast (admin) falhou",
+      )
       setResult({ kind: "err", message: "Erro de rede" })
     } finally {
       setSubmitting(false)

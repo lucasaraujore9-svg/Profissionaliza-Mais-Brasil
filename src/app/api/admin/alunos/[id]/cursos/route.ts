@@ -7,19 +7,17 @@ import {
   linkCourseToStudent,
   unlinkCourseFromStudent,
 } from "@/lib/students/plataforma-actions"
+import { contextLogger } from "@/lib/logger"
 import {
   EAApiError,
   EANetworkError,
 } from "@/lib/plataforma-cursos/errors"
 import { createNotification } from "@/lib/notifications"
+import { withRequestContextParams } from "@/lib/observability/with-request-context"
 
 const linkSchema = z.object({
   courseId: z.string().cuid(),
 })
-
-interface Ctx {
-  params: Promise<{ id: string }>
-}
 
 async function assertPmbStudent(
   studentId: string,
@@ -31,7 +29,9 @@ async function assertPmbStudent(
   })
 }
 
-export async function GET(_request: Request, ctx: Ctx) {
+export const GET = withRequestContextParams<{ id: string }>(
+  { action: "admin.alunos.cursos.list", route: "/api/admin/alunos/[id]/cursos" },
+  async (_request: Request, ctx) => {
   const session = await requireAdminSession()
   if (!session) {
     return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
@@ -64,7 +64,8 @@ export async function GET(_request: Request, ctx: Ctx) {
       createdAt: e.createdAt.toISOString(),
     })),
   })
-}
+  },
+)
 
 /**
  * Vincula manualmente um curso ao aluno na plataforma de aulas.
@@ -73,7 +74,9 @@ export async function GET(_request: Request, ctx: Ctx) {
  * fluxo automatico de venda. Para na plataforma nao ha distincao entre venda PMB,
  * venda revendedor e concessao manual.
  */
-export async function POST(request: Request, ctx: Ctx) {
+export const POST = withRequestContextParams<{ id: string }>(
+  { action: "admin.alunos.cursos.link", route: "/api/admin/alunos/[id]/cursos" },
+  async (request: Request, ctx) => {
   const session = await requireAdminSession()
   if (!session) {
     return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
@@ -148,16 +151,22 @@ export async function POST(request: Request, ctx: Ctx) {
           : error instanceof Error
             ? error.message
             : "Falha ao integrar com a plataforma de aulas"
-    console.error("[admin/alunos/cursos] POST falhou:", error)
+    contextLogger().error(
+      { err: error, event: "admin.alunos.cursos.link_failed" },
+      "POST /admin/alunos/[id]/cursos falhou",
+    )
     return NextResponse.json({ error: message }, { status: 502 })
   }
-}
+  },
+)
 
 /**
  * Desvincula manualmente um curso do aluno na plataforma de aulas.
  * Body: { courseId } (cuid do curso interno).
  */
-export async function DELETE(request: Request, ctx: Ctx) {
+export const DELETE = withRequestContextParams<{ id: string }>(
+  { action: "admin.alunos.cursos.unlink", route: "/api/admin/alunos/[id]/cursos" },
+  async (request: Request, ctx) => {
   const session = await requireAdminSession()
   if (!session) {
     return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
@@ -210,4 +219,5 @@ export async function DELETE(request: Request, ctx: Ctx) {
             : "Falha ao desvincular curso"
     return NextResponse.json({ error: message }, { status: 502 })
   }
-}
+  },
+)

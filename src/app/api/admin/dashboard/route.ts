@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { requireSuperAdmin } from "@/lib/auth/guards"
+import { withRequestContext } from "@/lib/observability/with-request-context"
 
 const FEE_RATE = 0.089 // 8.9% taxas médias Asaas+MP para cálculo de líquido aproximado
 
@@ -10,7 +11,9 @@ interface RevenuePoint {
   liquida: number
 }
 
-export async function GET(request: Request) {
+export const GET = withRequestContext(
+  { action: "admin.dashboard.get", route: "/api/admin/dashboard" },
+  async (request: Request) => {
   const guard = await requireSuperAdmin()
   if (!guard.ok) return guard.response
 
@@ -162,7 +165,8 @@ export async function GET(request: Request) {
       alerts,
     },
   })
-}
+  },
+)
 
 function sevenDaysAgo(ref: Date): Date {
   const d = new Date(ref)

@@ -8,6 +8,7 @@ import {
   type ResolvedTemplate,
 } from "./template-resolver"
 import { generateAndUploadPdf } from "./generate-pdf"
+import { contextLogger } from "@/lib/logger"
 
 const SETTINGS_ID = "default"
 
@@ -118,9 +119,9 @@ export async function issueCertificateIfEligible(
 
   // Geracao de PDF assincrona — nao bloqueia o caller
   void generateAndUploadPdf(created.id).catch((err) => {
-    console.error(
-      `[certificates] falha ao gerar PDF de ${created.id} (${created.code}):`,
-      err,
+    contextLogger().error(
+      { err, event: "certificates.pdf_gen_failed", certificateId: created.id, code: created.code },
+      "falha ao gerar PDF do certificado",
     )
   })
 

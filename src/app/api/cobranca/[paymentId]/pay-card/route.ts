@@ -3,10 +3,7 @@ import { z } from "zod"
 import { payWithCreditCard, getPayment, AsaasApiError } from "@/lib/asaas/client"
 import { isKnownAsaasPayment } from "@/lib/asaas/ownership"
 import { rateLimit, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
-
-interface Ctx {
-  params: Promise<{ paymentId: string }>
-}
+import { withRequestContextParams } from "@/lib/observability/with-request-context"
 
 const bodySchema = z.object({
   creditCard: z.object({
@@ -28,7 +25,12 @@ const bodySchema = z.object({
   }),
 })
 
-export async function POST(request: Request, ctx: Ctx) {
+export const POST = withRequestContextParams<{ paymentId: string }>(
+  {
+    action: "cobranca.pay_card",
+    route: "/api/cobranca/[paymentId]/pay-card",
+  },
+  async (request: Request, ctx) => {
   const rl = await rateLimit(request, RATE_LIMITS.cobrancaPayCard)
   if (!rl.ok) return rateLimitResponse(rl)
 
@@ -93,4 +95,5 @@ export async function POST(request: Request, ctx: Ctx) {
     }
     return NextResponse.json({ error: "Erro ao processar pagamento" }, { status: 502 })
   }
-}
+  },
+)

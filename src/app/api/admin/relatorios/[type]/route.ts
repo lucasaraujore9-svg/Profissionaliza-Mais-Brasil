@@ -6,14 +6,14 @@ import {
   REPORT_DEFS,
   getReportRunner,
 } from "@/lib/reports/definitions"
+import { contextLogger } from "@/lib/logger"
+import { withRequestContextParams } from "@/lib/observability/with-request-context"
 
 export const dynamic = "force-dynamic"
 
-interface Ctx {
-  params: Promise<{ type: string }>
-}
-
-export async function GET(request: Request, ctx: Ctx) {
+export const GET = withRequestContextParams<{ type: string }>(
+  { action: "admin.relatorios.generate", route: "/api/admin/relatorios/[type]" },
+  async (request: Request, ctx) => {
   const session = await requireAdminSession()
   if (!session) {
     return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
@@ -92,11 +92,15 @@ export async function GET(request: Request, ctx: Ctx) {
     const csv = buildCsv(header, rows)
     return csvResponse(csv, `${filename}-${dateStamp}.csv`)
   } catch (error) {
-    console.error("[reports] failed:", error)
+    contextLogger().error(
+      { err: error, event: "admin.relatorios.generate_failed" },
+      "geração de relatório falhou",
+    )
     const message = error instanceof Error ? error.message : "Erro desconhecido"
     return NextResponse.json(
       { error: `Falha ao gerar relatório: ${message}` },
       { status: 500 },
     )
   }
-}
+  },
+)

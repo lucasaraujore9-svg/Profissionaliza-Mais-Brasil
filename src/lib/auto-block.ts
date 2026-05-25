@@ -3,6 +3,7 @@ import {
   blockStudentInEA,
   unblockStudentInEA,
 } from "@/lib/students/plataforma-actions"
+import { contextLogger } from "@/lib/logger"
 
 export interface BlockResult {
   affectedStudents: number
@@ -33,6 +34,7 @@ async function runInBatches<T>(
  * em todos os caminhos.
  */
 export async function blockTenantStudents(tenantId: string): Promise<BlockResult> {
+  const log = contextLogger().child({ tenantId, action: "auto-block.tenant" })
   const errors: string[] = []
   let affectedStudents = 0
   let affectedEnrollments = 0
@@ -44,6 +46,8 @@ export async function blockTenantStudents(tenantId: string): Promise<BlockResult
     },
     select: { id: true, plataformaAlunoId: true },
   })
+
+  log.info({ event: "auto-block.start", count: students.length }, "iniciando bloqueio em massa")
 
   await runInBatches(students, async (student) => {
     try {
@@ -57,8 +61,22 @@ export async function blockTenantStudents(tenantId: string): Promise<BlockResult
     } catch (error) {
       const msg = error instanceof Error ? error.message : "erro desconhecido"
       errors.push(`student ${student.id}: ${msg}`)
+      log.error(
+        { err: error, event: "auto-block.student_failed", studentId: student.id },
+        "falha ao bloquear aluno",
+      )
     }
   })
+
+  log.info(
+    {
+      event: "auto-block.done",
+      affectedStudents,
+      affectedEnrollments,
+      errorCount: errors.length,
+    },
+    "bloqueio em massa concluído",
+  )
 
   return { affectedStudents, affectedEnrollments, errors }
 }
@@ -69,6 +87,7 @@ export async function blockTenantStudents(tenantId: string): Promise<BlockResult
  * individual.
  */
 export async function unblockTenantStudents(tenantId: string): Promise<BlockResult> {
+  const log = contextLogger().child({ tenantId, action: "auto-unblock.tenant" })
   const errors: string[] = []
   let affectedStudents = 0
   let affectedEnrollments = 0
@@ -77,6 +96,8 @@ export async function unblockTenantStudents(tenantId: string): Promise<BlockResu
     where: { tenantId, status: "BLOQUEADO" },
     select: { id: true, plataformaAlunoId: true },
   })
+
+  log.info({ event: "auto-unblock.start", count: students.length }, "iniciando desbloqueio em massa")
 
   await runInBatches(students, async (student) => {
     try {
@@ -90,8 +111,22 @@ export async function unblockTenantStudents(tenantId: string): Promise<BlockResu
     } catch (error) {
       const msg = error instanceof Error ? error.message : "erro desconhecido"
       errors.push(`student ${student.id}: ${msg}`)
+      log.error(
+        { err: error, event: "auto-unblock.student_failed", studentId: student.id },
+        "falha ao desbloquear aluno",
+      )
     }
   })
+
+  log.info(
+    {
+      event: "auto-unblock.done",
+      affectedStudents,
+      affectedEnrollments,
+      errorCount: errors.length,
+    },
+    "desbloqueio em massa concluído",
+  )
 
   return { affectedStudents, affectedEnrollments, errors }
 }

@@ -3,6 +3,7 @@ import { cursosVinculados } from "@/lib/plataforma-cursos/client"
 import type { EACursoVinculado } from "@/lib/plataforma-cursos/types"
 import { issueCertificateIfEligible } from "@/lib/certificates/issue"
 import { get as cacheGet, set as cacheSet } from "@/lib/redis/cache"
+import { contextLogger } from "@/lib/logger"
 
 const PROGRESS_TTL_SECONDS = 300 // 5 min — espelha o "skip" abaixo
 const PROGRESS_SKIP_MS = 5 * 60 * 1000
@@ -143,9 +144,9 @@ export async function syncStudentProgress(
   try {
     lista = await cursosVinculados(idAluno)
   } catch (err) {
-    console.warn(
-      `[student-progress] falha ao consultar cursosVinculados(${idAluno}):`,
-      err,
+    contextLogger().warn(
+      { err, event: "student-progress.cursosVinculados_failed", plataformaAlunoId: idAluno, studentId },
+      "falha ao consultar cursosVinculados",
     )
     await prisma.enrollment.updateMany({
       where: { studentId, status: { in: ["ACTIVE", "COMPLETED"] } },
@@ -161,7 +162,12 @@ export async function syncStudentProgress(
     })
     try {
       await cacheSet(progressCacheKey(studentId), "1", PROGRESS_TTL_SECONDS)
-    } catch {}
+    } catch (err) {
+      contextLogger().warn(
+        { err, event: "student-progress.cache_set_failed", studentId },
+        "cache de progresso falhou (degrada — sync vai tentar de novo)",
+      )
+    }
     return { updated: 0, certificatesIssued: 0 }
   }
 
@@ -261,9 +267,9 @@ export async function syncStudentProgress(
       await issueCertificateIfEligible(enrollmentId, "AUTO")
       certificatesIssued++
     } catch (err) {
-      console.error(
-        `[student-progress] falha ao emitir certificado para enrollment ${enrollmentId}:`,
-        err,
+      contextLogger().error(
+        { err, event: "student-progress.cert_issue_failed", enrollmentId, studentId },
+        "falha ao emitir certificado para enrollment",
       )
     }
   }

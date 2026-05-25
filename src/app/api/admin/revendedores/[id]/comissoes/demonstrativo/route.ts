@@ -3,15 +3,16 @@ import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { requireAdminSession } from "@/lib/auth/admin-session"
 import { generateDemonstrativoPdf } from "@/lib/referrals/demonstrativo"
+import { contextLogger } from "@/lib/logger"
+import { withRequestContextParams } from "@/lib/observability/with-request-context"
 
 const querySchema = z.object({
   month: z.string().regex(/^\d{4}-\d{2}$/, "Mes invalido (YYYY-MM)"),
 })
 
-export async function GET(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
+export const GET = withRequestContextParams<{ id: string }>(
+  { action: "admin.revendedores.comissoes.demonstrativo", route: "/api/admin/revendedores/[id]/comissoes/demonstrativo" },
+  async (request: Request, { params }) => {
   const ctx = await requireAdminSession()
   if (!ctx) {
     return NextResponse.json({ error: "Nao autenticado" }, { status: 401 })
@@ -74,7 +75,11 @@ export async function GET(
   } catch (err) {
     const message =
       err instanceof Error ? err.message : "Falha ao gerar demonstrativo"
-    console.error("[demonstrativo:admin]", err)
+    contextLogger().error(
+      { err, event: "admin.demonstrativo.generate_failed" },
+      "geração do demonstrativo PDF falhou",
+    )
     return NextResponse.json({ error: message }, { status: 400 })
   }
-}
+  },
+)

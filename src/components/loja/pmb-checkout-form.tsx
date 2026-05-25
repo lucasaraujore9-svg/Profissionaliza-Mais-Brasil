@@ -18,6 +18,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
+import { clientLogger } from "@/lib/logger-client"
 
 export interface PmbCheckoutFormProps {
   courseId: string
@@ -256,7 +257,7 @@ export function PmbCheckoutForm({ courseId, couponCode }: PmbCheckoutFormProps) 
           })
       }
     } catch (err) {
-      console.error("[pmb-checkout]", err)
+      clientLogger.error({ err: String(err), event: "pmb_checkout.submit_failed", courseId, hasCoupon: !!couponCode }, "pmb-checkout submit falhou")
       setStatus({
         kind: "error",
         message: "Erro de conexão. Tente novamente.",

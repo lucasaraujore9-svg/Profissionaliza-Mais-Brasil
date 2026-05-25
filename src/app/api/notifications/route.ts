@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { listForUser, listForStudent } from "@/lib/notifications"
+import { withRequestContext } from "@/lib/observability/with-request-context"
 
-export async function GET(request: Request) {
+export const GET = withRequestContext(
+  { action: "notifications.list", route: "/api/notifications" },
+  async (request: Request) => {
   const session = await auth()
   const user = session?.user as
     | {
@@ -49,4 +52,5 @@ export async function GET(request: Request) {
       })),
     },
   })
-}
+  },
+)

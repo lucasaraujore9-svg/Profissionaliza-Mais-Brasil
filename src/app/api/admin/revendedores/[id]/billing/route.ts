@@ -11,6 +11,7 @@ import {
   updateSubscription,
   AsaasApiError,
 } from "@/lib/asaas/client"
+import { withRequestContextParams } from "@/lib/observability/with-request-context"
 
 const patchSchema = z.object({
   planValue: z.number().min(0).max(100000).optional(),
@@ -22,17 +23,15 @@ const patchSchema = z.object({
   syncWithAsaas: z.boolean().default(true),
 })
 
-interface Ctx {
-  params: Promise<{ id: string }>
-}
-
 function isoDayPlus(days: number): string {
   const d = new Date()
   d.setDate(d.getDate() + days)
   return d.toISOString().slice(0, 10)
 }
 
-export async function PATCH(request: Request, ctx: Ctx) {
+export const PATCH = withRequestContextParams<{ id: string }>(
+  { action: "admin.revendedores.billing.update", route: "/api/admin/revendedores/[id]/billing" },
+  async (request: Request, ctx) => {
   const guard = await requireSuperAdmin()
   if (!guard.ok) return guard.response
 
@@ -277,4 +276,5 @@ export async function PATCH(request: Request, ctx: Ctx) {
       firstPaymentId,
     },
   })
-}
+  },
+)

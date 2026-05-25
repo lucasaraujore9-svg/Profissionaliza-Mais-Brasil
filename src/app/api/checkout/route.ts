@@ -26,6 +26,8 @@ import { getSystemSettings } from "@/lib/system-settings"
 import { swallow } from "@/lib/errors"
 import { upsertStudent } from "@/lib/students/upsert"
 import { provisionStudentAccess } from "@/lib/students/access"
+import { contextLogger } from "@/lib/logger"
+import { withRequestContext } from "@/lib/observability/with-request-context"
 
 const cpfRegex = /^\d{3}\.?\d{3}\.?\d{3}-?\d{2}$/
 const phoneRegex = /^\(?\d{2}\)?\s?\d{4,5}-?\d{4}$/
@@ -90,7 +92,9 @@ function dueDateInDays(days: number): string {
   return d.toISOString().slice(0, 10)
 }
 
-export async function POST(request: Request) {
+export const POST = withRequestContext(
+  { action: "pmb.checkout.start", route: "/api/checkout" },
+  async (request: Request) => {
   let payload: unknown
   try {
     payload = await request.json()
@@ -265,7 +269,10 @@ export async function POST(request: Request) {
       isPmbVitrine: true,
       slug: pmbTenant.slug,
     }).catch((err) => {
-      console.error("[pmb-checkout] provisionStudentAccess falhou:", err)
+      contextLogger().error(
+        { err, event: "pmb_checkout.provision_access_failed", studentId: student.id },
+        "provisionStudentAccess falhou",
+      )
     })
 
     const existingEnrollment = await prisma.enrollment.findFirst({
@@ -641,8 +648,11 @@ export async function POST(request: Request) {
       )
     }
   } catch (error) {
-    // Loga o erro completo no Vercel pra investigação futura.
-    console.error("[pmb-checkout] error:", error)
+    // Loga o erro completo pra investigação futura (Pino redacta tokens).
+    contextLogger().error(
+      { err: error, event: "pmb_checkout.failed" },
+      "pmb-checkout falhou",
+    )
     if (consumedCouponId) {
       await releaseCoupon(consumedCouponId).catch(swallow("pmb-checkout"))
     }
@@ -665,4 +675,5 @@ export async function POST(request: Request) {
       { status: 500 },
     )
   }
-}
+  },
+)

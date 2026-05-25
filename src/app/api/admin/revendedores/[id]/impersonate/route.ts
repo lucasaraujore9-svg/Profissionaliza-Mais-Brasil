@@ -10,11 +10,11 @@ import {
   IMPERSONATION_FLAG_COOKIE,
   sessionCookieName,
 } from "@/lib/auth/impersonate"
+import { withRequestContextParams } from "@/lib/observability/with-request-context"
 
-export async function POST(
-  _request: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
+export const POST = withRequestContextParams<{ id: string }>(
+  { action: "admin.revendedores.impersonate", route: "/api/admin/revendedores/[id]/impersonate" },
+  async (_request: Request, { params }) => {
   const admin = await requireAdminSession()
   if (!admin) {
     return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
@@ -95,4 +95,5 @@ export async function POST(
   })
 
   return NextResponse.json({ data: { redirect: "/painel" } })
-}
+  },
+)

@@ -12,6 +12,7 @@ import type {
   AsaasPayWithCreditCardParams,
   AsaasErrorResponse,
 } from "./types"
+import { contextLogger } from "@/lib/logger"
 
 const MAX_RETRIES = 3
 const INITIAL_BACKOFF_MS = 500
@@ -84,7 +85,10 @@ async function request<T>(
 
       const backoff = INITIAL_BACKOFF_MS * Math.pow(2, attempt)
       if (process.env.NODE_ENV === "development") {
-        console.warn(`[Asaas] Retry ${attempt + 1}/${MAX_RETRIES} for ${path} in ${backoff}ms`)
+        contextLogger().warn(
+          { event: "asaas.client.retry", path, attempt: attempt + 1, maxRetries: MAX_RETRIES, backoffMs: backoff },
+          "Asaas retry",
+        )
       }
       await sleep(backoff)
     }

@@ -19,7 +19,15 @@ async function upstashRequest<T>(
   const config = getUpstashConfig()
   if (!config) {
     if (process.env.NODE_ENV === "development") {
-      console.warn(`[redis-cache] Redis not configured — skipping ${operation}`)
+      // Edge-runtime compatível: NÃO importar Pino (roda no middleware).
+      // eslint-disable-next-line no-console
+      console.warn(JSON.stringify({
+        level: "warn",
+        msg: "redis-cache: Redis not configured — skipping operation",
+        event: "redis.cache.skip",
+        operation,
+        time: new Date().toISOString(),
+      }))
     }
     return null
   }
@@ -45,7 +53,15 @@ async function upstashRequest<T>(
     return data.result ?? null
   } catch (error) {
     if (process.env.NODE_ENV === "development") {
-      console.error(`[redis-cache] ${operation} failed`, error)
+      // eslint-disable-next-line no-console
+      console.error(JSON.stringify({
+        level: "error",
+        msg: `redis-cache: ${operation} failed`,
+        event: "redis.cache.failed",
+        operation,
+        error: error instanceof Error ? { type: error.name, message: error.message } : String(error),
+        time: new Date().toISOString(),
+      }))
     }
     throw new RedisError(`Redis ${operation} failed`, operation, error)
   }

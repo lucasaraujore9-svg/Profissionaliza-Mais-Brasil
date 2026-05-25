@@ -7,6 +7,7 @@ import type {
   MPCreatePreapprovalParams,
   MPAuthorizedPayment,
 } from "./types"
+import { contextLogger } from "@/lib/logger"
 
 const MP_BASE_URL = "https://api.mercadopago.com"
 const MAX_RETRIES = 3
@@ -86,7 +87,10 @@ async function request<T>(
 
       const backoff = INITIAL_BACKOFF_MS * Math.pow(2, attempt)
       if (process.env.NODE_ENV === "development") {
-        console.warn(`[MP] Retry ${attempt + 1}/${MAX_RETRIES} for ${path} in ${backoff}ms`)
+        contextLogger().warn(
+          { event: "mp.client.retry", path, attempt: attempt + 1, maxRetries: MAX_RETRIES, backoffMs: backoff },
+          "MP retry",
+        )
       }
       await sleep(backoff)
     }

@@ -7,6 +7,7 @@ import { PMB_TENANT_SLUG } from "@/lib/pmb-config"
 import { authSecret } from "@/lib/env"
 import { rateLimitByKey, RATE_LIMITS } from "@/lib/ratelimit"
 import { swallow } from "@/lib/errors"
+import { contextLogger } from "@/lib/logger"
 import "@/types"
 
 const loginSchema = z.object({
@@ -96,7 +97,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           // NextAuth não tem 429 nativo no Credentials provider — retornar
           // null devolve "credentials inválido", o que é OK do ponto de
           // vista de UX e segurança (não revela rate-limit ao atacante).
-          console.warn("[auth] rate-limit hit:", rlKey)
+          contextLogger().warn(
+            { event: "auth.rate_limit", email: parsed.data.email, ipHint },
+            "rate-limit de login",
+          )
           return null
         }
 

@@ -3,13 +3,16 @@ import { z } from "zod"
 import { compare, hash } from "bcryptjs"
 import { prisma } from "@/lib/prisma"
 import { requireStudentSession } from "@/lib/auth/student-session"
+import { withRequestContext } from "@/lib/observability/with-request-context"
 
 const patchSchema = z.object({
   currentPassword: z.string().nullable().optional(),
   newPassword: z.string().min(8).max(200),
 })
 
-export async function PATCH(request: Request) {
+export const PATCH = withRequestContext(
+  { action: "aluno.senha.update", route: "/api/aluno/senha" },
+  async (request: Request) => {
   const session = await requireStudentSession()
   if (!session) {
     return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
@@ -62,4 +65,5 @@ export async function PATCH(request: Request) {
   })
 
   return NextResponse.json({ data: { ok: true } })
-}
+  },
+)

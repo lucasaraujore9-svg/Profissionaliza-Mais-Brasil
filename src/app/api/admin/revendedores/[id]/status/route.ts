@@ -3,15 +3,15 @@ import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { requireAdminSession } from "@/lib/auth/admin-session"
 import { invalidateTenant } from "@/lib/redis/tenant-cache"
+import { withRequestContextParams } from "@/lib/observability/with-request-context"
 
 const schema = z.object({
   status: z.enum(["ACTIVE", "SUSPENDED", "PENDING", "CANCELLED"]),
 })
 
-export async function PATCH(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
+export const PATCH = withRequestContextParams<{ id: string }>(
+  { action: "admin.revendedores.status.update", route: "/api/admin/revendedores/[id]/status" },
+  async (request: Request, { params }) => {
   const ctx = await requireAdminSession()
   if (!ctx) {
     return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
@@ -51,4 +51,5 @@ export async function PATCH(
   await invalidateTenant(tenant)
 
   return NextResponse.json({ data: { status: parsed.data.status } })
-}
+  },
+)

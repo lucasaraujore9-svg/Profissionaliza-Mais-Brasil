@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { withRequestContextParams } from "@/lib/observability/with-request-context"
 
-interface RouteContext {
-  params: Promise<{ id: string }>
-}
-
-export async function GET(_request: Request, ctx: RouteContext) {
+export const GET = withRequestContextParams<{ id: string }>(
+  {
+    action: "pmb.checkout.confirmacao.status",
+    route: "/api/checkout/confirmacao/[id]/status",
+  },
+  async (_request: Request, ctx) => {
   const { id } = await ctx.params
 
   const enrollment = await prisma.enrollment.findFirst({
@@ -23,6 +25,7 @@ export async function GET(_request: Request, ctx: RouteContext) {
   return NextResponse.json({
     data: { id: enrollment.id, status: enrollment.status },
   })
-}
+  },
+)
 
 export const dynamic = "force-dynamic"

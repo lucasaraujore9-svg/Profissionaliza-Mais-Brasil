@@ -2,11 +2,11 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { requireAdminSession } from "@/lib/auth/admin-session"
 import { unblockStudentInEA } from "@/lib/students/plataforma-actions"
+import { withRequestContextParams } from "@/lib/observability/with-request-context"
 
-export async function POST(
-  _request: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
+export const POST = withRequestContextParams<{ id: string }>(
+  { action: "admin.alunos.unblock", route: "/api/admin/alunos/[id]/desbloquear" },
+  async (_request: Request, { params }) => {
   const session = await requireAdminSession()
   if (!session) {
     return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
@@ -48,4 +48,5 @@ export async function POST(
     select: { id: true, status: true, apostila: true },
   })
   return NextResponse.json({ data: updated })
-}
+  },
+)

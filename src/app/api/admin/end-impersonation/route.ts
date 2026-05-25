@@ -7,8 +7,11 @@ import {
   IMPERSONATION_FLAG_COOKIE,
   sessionCookieName,
 } from "@/lib/auth/impersonate"
+import { withRequestContext } from "@/lib/observability/with-request-context"
 
-export async function POST() {
+export const POST = withRequestContext(
+  { action: "admin.end_impersonation", route: "/api/admin/end-impersonation" },
+  async () => {
   const cookieStore = await cookies()
   const flag = decodeImpersonationFlag(
     cookieStore.get(IMPERSONATION_FLAG_COOKIE)?.value,
@@ -45,4 +48,5 @@ export async function POST() {
   return NextResponse.json({
     data: { redirect: backup?.value ? "/admin/revendedores" : "/login" },
   })
-}
+  },
+)

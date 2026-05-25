@@ -7,6 +7,7 @@ import {
   uploadVitrineAsset,
 } from "@/lib/supabase/storage"
 import { isValidImageMagic } from "@/lib/storage/validate-image"
+import { withRequestContext } from "@/lib/observability/with-request-context"
 
 const MAX_BYTES = 5 * 1024 * 1024
 // SVG bloqueado: XSS persistente via <script> embarcado seria servido inline.
@@ -44,7 +45,9 @@ function extensionFor(mime: string): string {
   }
 }
 
-export async function POST(request: Request) {
+export const POST = withRequestContext(
+  { action: "admin.certificate_template.upload", route: "/api/admin/certificate-template/upload" },
+  async (request: Request) => {
   const guard = await requireSuperAdmin()
   if (!guard.ok) return guard.response
 
@@ -129,9 +132,12 @@ export async function POST(request: Request) {
   }
 
   return NextResponse.json({ data: { kind, url: uploadedUrl } })
-}
+  },
+)
 
-export async function DELETE(request: Request) {
+export const DELETE = withRequestContext(
+  { action: "admin.certificate_template.upload.delete", route: "/api/admin/certificate-template/upload" },
+  async (request: Request) => {
   const guard = await requireSuperAdmin()
   if (!guard.ok) return guard.response
 
@@ -166,4 +172,5 @@ export async function DELETE(request: Request) {
   }
 
   return NextResponse.json({ data: { kind, url: null } })
-}
+  },
+)

@@ -6,7 +6,14 @@ function createRedisClient(): Redis | null {
 
   if (!url || !token) {
     if (process.env.NODE_ENV !== "production") {
-      console.warn("[redis] UPSTASH_REDIS_REST_URL or TOKEN not set — Redis disabled")
+      // Edge-runtime compatível: NÃO importar Pino aqui (esse módulo roda no middleware).
+      // eslint-disable-next-line no-console
+      console.warn(JSON.stringify({
+        level: "warn",
+        msg: "Redis disabled — UPSTASH_REDIS_REST_URL/TOKEN ausentes",
+        event: "redis.disabled",
+        time: new Date().toISOString(),
+      }))
     }
     return null
   }

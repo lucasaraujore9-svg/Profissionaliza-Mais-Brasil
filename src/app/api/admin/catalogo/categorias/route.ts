@@ -3,6 +3,7 @@ import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { requireSuperAdmin } from "@/lib/auth/guards"
 import { slugifyCategoria } from "@/lib/catalog/home"
+import { withRequestContext } from "@/lib/observability/with-request-context"
 
 const createSchema = z.object({
   name: z.string().trim().min(2, "Nome muito curto").max(80),
@@ -12,7 +13,9 @@ const createSchema = z.object({
   description: z.string().trim().max(500).optional().nullable(),
 })
 
-export async function GET() {
+export const GET = withRequestContext(
+  { action: "admin.catalogo.categorias.list", route: "/api/admin/catalogo/categorias" },
+  async () => {
   const guard = await requireSuperAdmin()
   if (!guard.ok) return guard.response
 
@@ -40,9 +43,12 @@ export async function GET() {
       courseCount: c._count.courses,
     })),
   })
-}
+  },
+)
 
-export async function POST(request: Request) {
+export const POST = withRequestContext(
+  { action: "admin.catalogo.categorias.create", route: "/api/admin/catalogo/categorias" },
+  async (request: Request) => {
   const guard = await requireSuperAdmin()
   if (!guard.ok) return guard.response
 
@@ -96,4 +102,5 @@ export async function POST(request: Request) {
   })
 
   return NextResponse.json({ data: category }, { status: 201 })
-}
+  },
+)

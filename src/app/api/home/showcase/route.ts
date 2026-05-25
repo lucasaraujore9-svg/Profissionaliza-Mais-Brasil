@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { withRequestContext } from "@/lib/observability/with-request-context"
 
-export async function GET() {
+export const GET = withRequestContext(
+  { action: "home.showcase", route: "/api/home/showcase" },
+  async (_request: Request) => {
   const courses = await prisma.course.findMany({
     where: { destaqueHome: true, status: "ATIVO" },
     orderBy: [{ ordemHome: "asc" }, { nome: "asc" }],
@@ -35,4 +38,5 @@ export async function GET() {
       categoria: c.categoriaLoja,
     })),
   })
-}
+  },
+)

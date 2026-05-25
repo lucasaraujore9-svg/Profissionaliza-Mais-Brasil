@@ -1,12 +1,14 @@
 import { NextResponse } from "next/server"
 import { getBillingInfo, getPixQrCode, getPayment, AsaasApiError } from "@/lib/asaas/client"
 import { isKnownAsaasPayment } from "@/lib/asaas/ownership"
+import { withRequestContextParams } from "@/lib/observability/with-request-context"
 
-interface Ctx {
-  params: Promise<{ paymentId: string }>
-}
-
-export async function GET(_request: Request, ctx: Ctx) {
+export const GET = withRequestContextParams<{ paymentId: string }>(
+  {
+    action: "cobranca.billing_info",
+    route: "/api/cobranca/[paymentId]/billing-info",
+  },
+  async (_request: Request, ctx) => {
   const { paymentId } = await ctx.params
 
   if (!(await isKnownAsaasPayment(paymentId))) {
@@ -44,4 +46,5 @@ export async function GET(_request: Request, ctx: Ctx) {
     }
     return NextResponse.json({ error: "Erro ao buscar informações de pagamento" }, { status: 502 })
   }
-}
+  },
+)
