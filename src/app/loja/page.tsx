@@ -8,6 +8,7 @@ import { FinalCta } from "@/components/main/home/final-cta"
 import type { Course } from "@/components/main/home/course-card"
 import { getCurrentTenant } from "@/lib/tenant/current"
 import { listTenantCourses } from "@/lib/tenant/courses"
+import { prisma } from "@/lib/prisma"
 import {
   loadCurated,
   loadByCategoria,
@@ -64,6 +65,7 @@ export default async function LojaHomePage() {
     administrativo,
     diversas,
     categorias,
+    bannerSlides,
   ] = await Promise.all([
     loadShowcase(),
     loadTenantOrGlobalCurated(tenant.id),
@@ -71,11 +73,25 @@ export default async function LojaHomePage() {
     loadByCategoria("administrativo"),
     loadByCategoria("diversas"),
     loadCategorias(),
+    prisma.bannerSlide.findMany({
+      where: { tenantId: tenant.id, active: true },
+      orderBy: [{ order: "asc" }, { createdAt: "asc" }],
+      select: {
+        id: true,
+        desktopUrl: true,
+        mobileUrl: true,
+        linkUrl: true,
+      },
+    }),
   ])
 
   return (
     <>
-      <HeroBanner showcase={showcase} tenantBannerUrl={tenant.bannerUrl} />
+      <HeroBanner
+        showcase={showcase}
+        tenantBannerUrl={tenant.bannerUrl}
+        slides={bannerSlides}
+      />
       <TrustBar />
       {curated.length > 0 && (
         <CourseRow

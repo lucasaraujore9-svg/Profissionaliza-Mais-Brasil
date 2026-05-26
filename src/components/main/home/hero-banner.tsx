@@ -1,16 +1,29 @@
 import { Search } from "lucide-react"
 import { ShowcaseCards } from "./showcase-cards"
+import { HeroSlides, type HeroSlide } from "./hero-slides"
 import type { ShowcaseCard } from "@/lib/catalog/home"
 
 interface HeroBannerProps {
   showcase?: ShowcaseCard[]
   tenantBannerUrl?: string | null
+  /**
+   * Slides do banner editavel. Quando ha pelo menos 1 slide ativo, a hero
+   * renderiza so a imagem (sem headline/busca/badges). 0 slides => fallback
+   * para o hero hardcoded atual.
+   */
+  slides?: HeroSlide[]
 }
 
 export function HeroBanner({
   showcase,
   tenantBannerUrl,
+  slides,
 }: HeroBannerProps = {}) {
+  // Hero "imagem-only": substitui completamente o headline + busca + badges.
+  if (slides && slides.length > 0) {
+    return <HeroSlides slides={slides} />
+  }
+
   return (
     <section className="relative overflow-hidden bg-[var(--color-pmb-green)] text-white">
       {tenantBannerUrl ? (

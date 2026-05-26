@@ -253,6 +253,7 @@ model Tenant {
   certificates         Certificate[]
   certificateTemplate  CertificateTemplate?
   notificationOverrides TenantNotificationOverride[]
+  bannerSlides         BannerSlide[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -1154,4 +1155,24 @@ model Certificate {
   @@index([code])
   @@index([revokedAt])
   @@map("certificates")
+}
+
+/// Slides do banner principal (hero). tenantId=null => banner do site PMB
+/// (singleton agregado); tenantId!=null => banner da vitrine daquele revendedor.
+/// Cada slide carrega uma imagem desktop (1920x600) e uma mobile (1080x1080).
+model BannerSlide {
+  id         String   @id @default(cuid())
+  tenantId   String?  @map("tenant_id")
+  order      Int      @default(0)
+  desktopUrl String   @map("desktop_url")
+  mobileUrl  String   @map("mobile_url")
+  linkUrl    String?  @map("link_url")
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, order])
+  @@map("banner_slides")
 }

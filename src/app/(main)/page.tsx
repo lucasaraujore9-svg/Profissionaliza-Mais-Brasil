@@ -5,6 +5,7 @@ import { CategoriesGrid } from "@/components/main/home/categories-grid"
 import { LearnAnywhere } from "@/components/main/home/learn-anywhere"
 import { Testimonials } from "@/components/main/home/testimonials"
 import { FinalCta } from "@/components/main/home/final-cta"
+import { prisma } from "@/lib/prisma"
 import {
   loadCurated,
   loadByCategoria,
@@ -20,6 +21,7 @@ export default async function LandingPage() {
     administrativo,
     diversas,
     categorias,
+    bannerSlides,
   ] = await Promise.all([
     loadShowcase(),
     loadCurated(),
@@ -27,11 +29,21 @@ export default async function LandingPage() {
     loadByCategoria("administrativo"),
     loadByCategoria("diversas"),
     loadCategorias(),
+    prisma.bannerSlide.findMany({
+      where: { tenantId: null, active: true },
+      orderBy: [{ order: "asc" }, { createdAt: "asc" }],
+      select: {
+        id: true,
+        desktopUrl: true,
+        mobileUrl: true,
+        linkUrl: true,
+      },
+    }),
   ])
 
   return (
     <>
-      <HeroBanner showcase={showcase} />
+      <HeroBanner showcase={showcase} slides={bannerSlides} />
       <TrustBar />
       {curated.length > 0 && (
         <CourseRow
