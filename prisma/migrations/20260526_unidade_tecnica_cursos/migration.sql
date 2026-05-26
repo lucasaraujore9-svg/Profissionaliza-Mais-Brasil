@@ -14,9 +14,10 @@ ALTER TABLE "system_settings"
   ADD COLUMN IF NOT EXISTS "tecnica_courses" JSONB;
 
 -- Seed do PMB (system_settings id='default') — so se ainda nao estiver setado.
--- Garante a row existente sem precisar de upsert no app.
-INSERT INTO "system_settings" ("id", "pmb_direct_sale_gateway")
-VALUES ('default', 'MP')
+-- Garante a row existente sem precisar de upsert no app. updated_at e NOT NULL
+-- sem default no schema, precisa ser explicito no INSERT.
+INSERT INTO "system_settings" ("id", "pmb_direct_sale_gateway", "updated_at")
+VALUES ('default', 'MP', NOW())
 ON CONFLICT ("id") DO NOTHING;
 
 -- URL padrao: so seta se tecnica_url for NULL/vazio
