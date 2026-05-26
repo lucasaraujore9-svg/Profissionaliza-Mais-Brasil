@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { Share2, ChevronRight } from "lucide-react"
+import { Share2, ChevronRight, Building2 } from "lucide-react"
 import { PageHeader } from "@/components/painel/page-header"
 import { AdminConfigClient } from "@/components/admin/admin-config-client"
 import { requireAdminSession } from "@/lib/auth/admin-session"
@@ -11,6 +11,12 @@ const SUB_SETTINGS = [
     label: "Indicações",
     description: "Comissão padrão, dia de pagamento, mínimo de saque",
     icon: Share2,
+  },
+  {
+    href: "/admin/configuracoes/unidade-tecnica",
+    label: "Unidade Técnica",
+    description: "Link da escola técnica do site PMB institucional",
+    icon: Building2,
   },
 ]
 

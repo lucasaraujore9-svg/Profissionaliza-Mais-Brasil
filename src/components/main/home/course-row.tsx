@@ -33,8 +33,10 @@ export function CourseRow({ titulo, subtitulo, verTodosHref = "/cursos", cursos 
           </Link>
         </div>
 
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 md:gap-4 lg:grid-cols-5">
-          {cursos.map((curso) => (
+        {/* 2 linhas x 4 cursos = 8 cards no desktop. Limita a 8 para nao
+            estourar a grade quando o caller passar mais itens. */}
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 md:gap-4 lg:grid-cols-4">
+          {cursos.slice(0, 8).map((curso) => (
             <CourseCard key={curso.slug} course={curso} />
           ))}
         </div>

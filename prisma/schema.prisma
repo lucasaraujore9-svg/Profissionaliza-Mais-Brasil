@@ -237,6 +237,13 @@ model Tenant {
   pixKey     String? @map("pix_key")
   pixKeyType String? @map("pix_key_type") // CPF, CNPJ, EMAIL, PHONE, EVP
 
+  // Unidade Tecnica — link externo para escola tecnica do revendedor.
+  // Quando habilitado pelo admin, exibe categoria/menu/secao "Cursos Tecnicos"
+  // na vitrine; o clique abre uma tela de loading que redireciona para tecnicaUrl.
+  tecnicaEnabled Boolean @default(false) @map("tecnica_enabled")
+  tecnicaUrl     String? @map("tecnica_url")
+  tecnicaLabel   String? @map("tecnica_label") // null = "Cursos Tecnicos"
+
   // Relacoes
   tenantCourses        TenantCourse[]
   students             Student[]
@@ -967,6 +974,11 @@ model SystemSettings {
   // Logo do Grupo Bolsa Mais Brasil (aparece em TODOS os certificados — PMB e unidade)
   groupLogoUrl           String? @map("group_logo_url")
   groupName              String  @default("Grupo Bolsa Mais Brasil") @map("group_name")
+
+  // Unidade Tecnica do site PMB institucional (profissionalizamaisbrasil.com.br)
+  tecnicaEnabled Boolean @default(false) @map("tecnica_enabled")
+  tecnicaUrl     String? @map("tecnica_url")
+  tecnicaLabel   String? @map("tecnica_label")
 
   updatedAt DateTime @updatedAt @map("updated_at")
 

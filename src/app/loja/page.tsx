@@ -5,9 +5,11 @@ import { CategoriesGrid } from "@/components/main/home/categories-grid"
 import { LearnAnywhere } from "@/components/main/home/learn-anywhere"
 import { Testimonials } from "@/components/main/home/testimonials"
 import { FinalCta } from "@/components/main/home/final-cta"
+import { TecnicaSection } from "@/components/main/home/tecnica-section"
 import type { Course } from "@/components/main/home/course-card"
 import { getCurrentTenant } from "@/lib/tenant/current"
 import { listTenantCourses } from "@/lib/tenant/courses"
+import { tecnicaFromTenant } from "@/lib/catalog/tecnica"
 import { prisma } from "@/lib/prisma"
 import {
   loadCurated,
@@ -85,6 +87,8 @@ export default async function LojaHomePage() {
     }),
   ])
 
+  const tecnica = tecnicaFromTenant(tenant)
+
   return (
     <>
       <HeroBanner
@@ -100,7 +104,11 @@ export default async function LojaHomePage() {
           cursos={curated}
         />
       )}
-      <CategoriesGrid categorias={categorias} />
+      <CategoriesGrid
+        categorias={categorias}
+        tecnicaEnabled={tecnica.enabled}
+        tecnicaLabel={tecnica.label}
+      />
       {informatica.length > 0 && (
         <CourseRow
           titulo="Informática e Tecnologia"
@@ -126,6 +134,7 @@ export default async function LojaHomePage() {
           cursos={diversas}
         />
       )}
+      {tecnica.enabled && <TecnicaSection label={tecnica.label} />}
       <Testimonials />
       <FinalCta />
     </>

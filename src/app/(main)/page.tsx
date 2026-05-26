@@ -5,6 +5,7 @@ import { CategoriesGrid } from "@/components/main/home/categories-grid"
 import { LearnAnywhere } from "@/components/main/home/learn-anywhere"
 import { Testimonials } from "@/components/main/home/testimonials"
 import { FinalCta } from "@/components/main/home/final-cta"
+import { TecnicaSection } from "@/components/main/home/tecnica-section"
 import { prisma } from "@/lib/prisma"
 import {
   loadCurated,
@@ -12,6 +13,7 @@ import {
   loadShowcase,
   loadCategorias,
 } from "@/lib/catalog/home"
+import { loadPmbTecnicaConfig } from "@/lib/catalog/tecnica"
 
 export default async function LandingPage() {
   const [
@@ -22,6 +24,7 @@ export default async function LandingPage() {
     diversas,
     categorias,
     bannerSlides,
+    tecnica,
   ] = await Promise.all([
     loadShowcase(),
     loadCurated(),
@@ -39,6 +42,7 @@ export default async function LandingPage() {
         linkUrl: true,
       },
     }),
+    loadPmbTecnicaConfig(),
   ])
 
   return (
@@ -52,7 +56,11 @@ export default async function LandingPage() {
           cursos={curated}
         />
       )}
-      <CategoriesGrid categorias={categorias} />
+      <CategoriesGrid
+        categorias={categorias}
+        tecnicaEnabled={tecnica.enabled}
+        tecnicaLabel={tecnica.label}
+      />
       {informatica.length > 0 && (
         <CourseRow
           titulo="Informática e Tecnologia"
@@ -78,6 +86,7 @@ export default async function LandingPage() {
           cursos={diversas}
         />
       )}
+      {tecnica.enabled && <TecnicaSection label={tecnica.label} />}
       <Testimonials />
       <FinalCta />
     </>

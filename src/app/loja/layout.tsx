@@ -3,6 +3,7 @@ import { NavbarMain } from "@/components/shared/layouts/navbar-main"
 import { FooterMain } from "@/components/shared/layouts/footer-main"
 import { loadCategorias } from "@/lib/catalog/home"
 import { getCurrentTenant } from "@/lib/tenant/current"
+import { tecnicaFromTenant } from "@/lib/catalog/tecnica"
 
 export const metadata: Metadata = {
   title: "Cursos Online",
@@ -53,6 +54,10 @@ export default async function LojaLayout({
         categorias={categorias}
         tenantLogoUrl={tenant?.logoUrl ?? null}
         tenantName={tenant?.name ?? null}
+        tecnica={(() => {
+          const t = tecnicaFromTenant(tenant)
+          return { enabled: t.enabled, label: t.label }
+        })()}
       />
       <main className="flex-1">{children}</main>
       <FooterMain categorias={categorias} />

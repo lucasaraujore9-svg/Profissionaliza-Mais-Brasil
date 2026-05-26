@@ -14,6 +14,9 @@ export interface CurrentTenant {
   secondaryColor: string
   tagline: string | null
   description: string | null
+  tecnicaEnabled: boolean
+  tecnicaUrl: string | null
+  tecnicaLabel: string | null
 }
 
 export const getCurrentTenant = cache(
@@ -40,6 +43,9 @@ export const getCurrentTenant = cache(
           secondaryColor: true,
           tagline: true,
           description: true,
+          tecnicaEnabled: true,
+          tecnicaUrl: true,
+          tecnicaLabel: true,
         },
       })
 

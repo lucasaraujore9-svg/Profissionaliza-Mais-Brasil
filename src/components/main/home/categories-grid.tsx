@@ -6,6 +6,8 @@ import {
   Languages,
   Sparkles,
   Layers,
+  Building2,
+  ExternalLink,
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 import type { CategoriaInfo } from "@/lib/catalog/home"
@@ -27,8 +29,18 @@ function getIconConfig(slug: string): IconConfig {
   return ICON_BY_SLUG[slug] ?? { icon: Sparkles, cor: "var(--color-pmb-green)" }
 }
 
-export function CategoriesGrid({ categorias }: { categorias: CategoriaInfo[] }) {
-  if (categorias.length === 0) return null
+interface CategoriesGridProps {
+  categorias: CategoriaInfo[]
+  tecnicaEnabled?: boolean
+  tecnicaLabel?: string
+}
+
+export function CategoriesGrid({
+  categorias,
+  tecnicaEnabled = false,
+  tecnicaLabel = "Cursos Técnicos",
+}: CategoriesGridProps) {
+  if (categorias.length === 0 && !tecnicaEnabled) return null
 
   return (
     <section className="border-b border-[rgba(2,89,24,0.08)] bg-[var(--color-pmb-mist)]">
@@ -74,6 +86,34 @@ export function CategoriesGrid({ categorias }: { categorias: CategoriaInfo[] }) 
               </li>
             )
           })}
+          {tecnicaEnabled && (
+            <li>
+              <Link
+                href="/cursos-tecnicos"
+                className="group relative flex items-center gap-3 overflow-hidden rounded-xl border border-[rgba(2,89,24,0.18)] bg-[var(--color-pmb-green)] p-4 text-white transition-all hover:-translate-y-0.5 hover:shadow-[0_14px_28px_-12px_rgba(2,89,24,0.45)]"
+              >
+                <span className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-[var(--color-pmb-gold)]">
+                  <Building2
+                    className="h-5 w-5 text-[var(--color-pmb-green)]"
+                    strokeWidth={2.25}
+                    aria-hidden
+                  />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[14px] font-bold group-hover:underline">
+                    {tecnicaLabel}
+                  </p>
+                  <p className="truncate text-[11px] text-[var(--color-pmb-lime)]">
+                    Unidade técnica
+                  </p>
+                </div>
+                <ExternalLink
+                  className="h-3.5 w-3.5 shrink-0 text-[var(--color-pmb-lime)]"
+                  aria-hidden
+                />
+              </Link>
+            </li>
+          )}
         </ul>
       </div>
     </section>

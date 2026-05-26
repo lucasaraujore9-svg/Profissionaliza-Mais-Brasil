@@ -24,6 +24,7 @@ import {
   type ReferralStats,
   type ReferrerSummary,
 } from "./reseller-referral-config"
+import { ResellerTecnicaConfig } from "./reseller-tecnica-config"
 
 interface DetailResponse {
   reseller: ResellerProfileData & {
@@ -38,6 +39,9 @@ interface DetailResponse {
     referralPercent: number | null
     pixKey: string | null
     pixKeyType: string | null
+    tecnicaEnabled: boolean
+    tecnicaUrl: string | null
+    tecnicaLabel: string | null
   }
   referrer: ReferrerSummary | null
   referralStats: ReferralStats
@@ -121,6 +125,13 @@ export function ResellerDetailClient({ tenantId }: ResellerDetailClientProps) {
             tenantId={tenantId}
             billingMode={data.reseller.billingMode}
             cancellationPolicy={data.reseller.cancellationPolicy}
+            onSaved={load}
+          />
+          <ResellerTecnicaConfig
+            tenantId={tenantId}
+            tecnicaEnabled={data.reseller.tecnicaEnabled}
+            tecnicaUrl={data.reseller.tecnicaUrl}
+            tecnicaLabel={data.reseller.tecnicaLabel}
             onSaved={load}
           />
         </div>

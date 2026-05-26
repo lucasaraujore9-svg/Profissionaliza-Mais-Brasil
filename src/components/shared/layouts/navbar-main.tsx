@@ -3,24 +3,33 @@
 import Link from "next/link"
 import Image from "next/image"
 import { useEffect, useRef, useState } from "react"
-import { Search, Menu, X, ChevronDown, User } from "lucide-react"
+import { Search, Menu, X, ChevronDown, User, Building2 } from "lucide-react"
 import type { CategoriaInfo } from "@/lib/catalog/home"
+
+interface NavbarTecnicaConfig {
+  enabled: boolean
+  label: string
+}
 
 interface NavbarMainProps {
   categorias?: CategoriaInfo[]
   tenantLogoUrl?: string | null
   tenantName?: string | null
+  tecnica?: NavbarTecnicaConfig
 }
 
 export function NavbarMain({
   categorias,
   tenantLogoUrl,
   tenantName,
+  tecnica,
 }: NavbarMainProps = {}) {
   // Sem fallback hardcoded: se nao houver categorias com cursos ativos, o
   // botao "Categorias" e a lista no mobile menu simplesmente nao aparecem.
   const lista = categorias && categorias.length > 0 ? categorias : []
   const hasCategorias = lista.length > 0
+  const tecnicaEnabled = tecnica?.enabled ?? false
+  const tecnicaLabel = tecnica?.label ?? "Cursos Técnicos"
   const [mobileOpen, setMobileOpen] = useState(false)
   const [categoriasOpen, setCategoriasOpen] = useState(false)
   const categoriasRef = useRef<HTMLDivElement | null>(null)
@@ -77,7 +86,7 @@ export function NavbarMain({
 
         <div
           ref={categoriasRef}
-          className={`relative ${hasCategorias ? "hidden lg:block" : "hidden"}`}
+          className={`relative ${hasCategorias || tecnicaEnabled ? "hidden lg:block" : "hidden"}`}
         >
           <button
             type="button"
@@ -118,6 +127,22 @@ export function NavbarMain({
                     </Link>
                   </li>
                 ))}
+                {tecnicaEnabled && (
+                  <li>
+                    <Link
+                      href="/cursos-tecnicos"
+                      onClick={() => setCategoriasOpen(false)}
+                      role="menuitem"
+                      className="mt-1 flex items-center gap-2 rounded-md border border-[rgba(2,89,24,0.1)] bg-[var(--color-pmb-mist)] px-3 py-2 text-[13.5px] font-bold text-[var(--color-pmb-green)] hover:border-[var(--color-pmb-green)] hover:bg-white"
+                    >
+                      <Building2 className="h-4 w-4 text-[var(--color-pmb-gold-600)]" aria-hidden />
+                      <span className="flex-1">{tecnicaLabel}</span>
+                      <span className="text-[10px] font-black uppercase tracking-widest text-[var(--color-pmb-gold-600)]">
+                        Técnica
+                      </span>
+                    </Link>
+                  </li>
+                )}
               </ul>
               <div className="mt-1 border-t border-[rgba(2,89,24,0.08)] pt-2">
                 <Link
@@ -154,6 +179,15 @@ export function NavbarMain({
         </form>
 
         <nav className="hidden lg:flex items-center gap-5 text-[14px] font-medium text-[var(--color-pmb-green)]">
+          {tecnicaEnabled && (
+            <Link
+              href="/cursos-tecnicos"
+              className="inline-flex items-center gap-1.5 rounded-md bg-[var(--color-pmb-lime)]/40 px-2.5 py-1 font-bold text-[var(--color-pmb-green)] hover:bg-[var(--color-pmb-lime)]/60"
+            >
+              <Building2 className="h-3.5 w-3.5" aria-hidden />
+              {tecnicaLabel}
+            </Link>
+          )}
           <Link href="/como-funciona" className="hover:underline underline-offset-4">
             Como funciona
           </Link>
@@ -198,6 +232,16 @@ export function NavbarMain({
             >
               Quero estudar
             </Link>
+            {tecnicaEnabled && (
+              <Link
+                href="/cursos-tecnicos"
+                onClick={() => setMobileOpen(false)}
+                className="mb-2 inline-flex items-center justify-center gap-2 h-11 px-4 rounded-lg border border-[var(--color-pmb-green)] bg-white text-[var(--color-pmb-green)] text-[14px] font-bold"
+              >
+                <Building2 className="h-4 w-4" aria-hidden />
+                {tecnicaLabel}
+              </Link>
+            )}
             <Link
               href="/login"
               onClick={() => setMobileOpen(false)}
