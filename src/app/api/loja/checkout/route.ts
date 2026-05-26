@@ -9,6 +9,8 @@ import {
 import { upsertStudent } from "@/lib/students/upsert"
 import { provisionStudentAccess } from "@/lib/students/access"
 import { tryConsumeCoupon, releaseCoupon } from "@/lib/coupons/consume"
+import { applyCouponDiscount } from "@/lib/coupons/discount"
+import { rateLimit, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
 import { swallow } from "@/lib/errors"
 import { contextLogger } from "@/lib/logger"
 import { withRequestContext } from "@/lib/observability/with-request-context"
@@ -44,6 +46,12 @@ function normalize(s: string): string {
 export const POST = withRequestContext(
   { action: "loja.checkout.start", route: "/api/loja/checkout" },
   async (request: Request) => {
+  // Endpoint público — vitrine de revendedor. Sem rate-limit, atacante pode
+  // disparar centenas de checkouts/seg gerando custo Resend + ruído no DB +
+  // bloqueio do MP do revendedor por rate-limit upstream.
+  const rl = await rateLimit(request, RATE_LIMITS.publicCheckout)
+  if (!rl.ok) return rateLimitResponse(rl)
+
   const tenantId = request.headers.get("x-tenant-id")
   const tenantSlug = request.headers.get("x-tenant-slug")
 
@@ -78,8 +86,13 @@ export const POST = withRequestContext(
 
   const data: ParsedBody = parsed.data
 
-  // Trackeia cupom consumido para liberar em caso de falha no fluxo abaixo.
+  // Trackeia cupom consumido + enrollment criada para limpar em caso de
+  // falha no fluxo abaixo. Antes só o cupom era liberado; a enrollment
+  // ficava órfã (status PENDING) e bloqueava o aluno de re-tentar
+  // (cai em DUPLICATE_ENROLLMENT). Espelha o rollback das outras 3 rotas
+  // de checkout (/aluno/comprar, /painel/vendas, /admin/vendas).
   let consumedCouponId: string | null = null
+  let createdEnrollmentId: string | null = null
 
   try {
     const [tenant, tenantCourse] = await Promise.all([
@@ -147,6 +160,7 @@ export const POST = withRequestContext(
 
     let discountAmount = 0
     let couponId: string | null = null
+    let finalAmountFromCoupon: number | null = null
     if (data.couponCode) {
       const now = new Date()
       const coupon = await prisma.coupon.findFirst({
@@ -173,11 +187,16 @@ export const POST = withRequestContext(
         )
       }
 
-      const raw =
-        coupon.discountType === "PERCENTAGE"
-          ? (basePrice * Number(coupon.discountValue)) / 100
-          : Number(coupon.discountValue)
-      discountAmount = Math.min(raw, basePrice)
+      // Cálculo via helper centralizado (Prisma.Decimal) — alinha com
+      // /api/aluno/comprar e /api/painel/vendas. Antes cada rota fazia
+      // (basePrice * Number(val)) / 100 em float, divergindo arredondamento.
+      const calc = applyCouponDiscount({
+        basePrice,
+        discountType: coupon.discountType,
+        discountValue: coupon.discountValue,
+      })
+      discountAmount = calc.discountAmount
+      finalAmountFromCoupon = calc.finalAmount
 
       // Reserva atômica do cupom — evita estouro de maxUses em compras concorrentes.
       const reserved = await tryConsumeCoupon(coupon.id)
@@ -191,7 +210,7 @@ export const POST = withRequestContext(
       consumedCouponId = coupon.id
     }
 
-    const finalAmount = Number((basePrice - discountAmount).toFixed(2))
+    const finalAmount = finalAmountFromCoupon ?? basePrice
 
     const student = await upsertStudent({
       tenantId,
@@ -260,6 +279,7 @@ export const POST = withRequestContext(
       },
       select: { id: true },
     })
+    createdEnrollmentId = enrollment.id
 
     const externalReference = `enr_${enrollment.id}`
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? ""
@@ -363,6 +383,14 @@ export const POST = withRequestContext(
       { err: error, event: "loja_checkout.failed" },
       "loja checkout falhou",
     )
+    // Limpa enrollment órfã — se mantida, próxima tentativa do mesmo aluno
+    // cai em DUPLICATE_ENROLLMENT (409) e ele fica permanentemente bloqueado
+    // do curso até intervenção manual no DB.
+    if (createdEnrollmentId) {
+      await prisma.enrollment
+        .delete({ where: { id: createdEnrollmentId } })
+        .catch(swallow("loja.checkout.rollback"))
+    }
     // Libera reserva de cupom — checkout falhou, não consumimos o uso.
     if (consumedCouponId) {
       await releaseCoupon(consumedCouponId).catch(swallow("loja.checkout"))

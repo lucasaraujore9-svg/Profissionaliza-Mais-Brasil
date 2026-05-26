@@ -14,6 +14,7 @@ import {
 } from "@/lib/asaas/client"
 import { getSystemSettings } from "@/lib/system-settings"
 import { tryConsumeCoupon, releaseCoupon } from "@/lib/coupons/consume"
+import { applyCouponDiscount } from "@/lib/coupons/discount"
 import { swallow } from "@/lib/errors"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 
@@ -131,6 +132,7 @@ export const POST = withRequestContext(
 
   let discountAmount = 0
   let couponId: string | null = null
+  let finalAmountFromHelper: number | null = null
   if (parsed.data.couponCode) {
     const code = parsed.data.couponCode.toUpperCase()
     const now = new Date()
@@ -149,11 +151,15 @@ export const POST = withRequestContext(
     if (coupon.maxUses !== null && coupon.usedCount >= coupon.maxUses) {
       return NextResponse.json({ error: "Cupom esgotado" }, { status: 400 })
     }
-    const raw =
-      coupon.discountType === "PERCENTAGE"
-        ? (basePrice * Number(coupon.discountValue)) / 100
-        : Number(coupon.discountValue)
-    discountAmount = Math.min(raw, basePrice)
+    // Cálculo via helper centralizado com Prisma.Decimal — evita drift de
+    // arredondamento entre rotas e elimina float em arithmetic financeira.
+    const result = applyCouponDiscount({
+      basePrice,
+      discountType: coupon.discountType,
+      discountValue: coupon.discountValue,
+    })
+    discountAmount = result.discountAmount
+    finalAmountFromHelper = result.finalAmount
     const reserved = await tryConsumeCoupon(coupon.id)
     if (!reserved) {
       return NextResponse.json({ error: "Cupom esgotado" }, { status: 400 })
@@ -161,7 +167,7 @@ export const POST = withRequestContext(
     couponId = coupon.id
   }
 
-  const finalAmount = Number((basePrice - discountAmount).toFixed(2))
+  const finalAmount = finalAmountFromHelper ?? basePrice
 
   const isMonthly = course.paymentTypeMain === "MONTHLY"
   const monthlyMonths = isMonthly ? course.monthlyMonthsMain ?? 12 : null
@@ -200,35 +206,90 @@ export const POST = withRequestContext(
       )
     }
 
-    if (isMonthly && monthlyMonths) {
-      const startDate = new Date(Date.now() + 60_000).toISOString()
-      const endDate = new Date(
-        Date.now() +
-          monthlyMonths * 31 * 24 * 60 * 60 * 1000 +
-          3 * 24 * 60 * 60 * 1000,
-      ).toISOString()
+    // Wrapper try/catch obrigatório: se MP retornar 5xx/timeout, precisamos
+    // deletar a enrollment PENDING (evita "duplicate enrollment" em retry) e
+    // liberar o cupom (caso contrário o usedCount fica inflado pra sempre).
+    // Antes este bloco rodava sem proteção e órfãos contaminavam o estoque
+    // de cupons + bloqueavam novas compras.
+    try {
+      if (isMonthly && monthlyMonths) {
+        const startDate = new Date(Date.now() + 60_000).toISOString()
+        const endDate = new Date(
+          Date.now() +
+            monthlyMonths * 31 * 24 * 60 * 60 * 1000 +
+            3 * 24 * 60 * 60 * 1000,
+        ).toISOString()
 
-      const preapproval = await createPreapproval(mpToken, {
-        reason: `Mensalidade — ${course.nome}`,
-        external_reference: externalReference,
-        payer_email: student.email,
-        back_url: `${appUrl || `https://${process.env.NEXT_PUBLIC_APP_DOMAIN ?? "profissionalizamaisbrasil.com.br"}`}/aluno/pagamentos?ok=${enrollment.id}`,
-        notification_url: appUrl ? `${appUrl}/api/webhooks/mercadopago` : undefined,
-        auto_recurring: {
-          frequency: 1,
-          frequency_type: "months",
-          transaction_amount: finalAmount,
-          currency_id: "BRL",
-          start_date: startDate,
-          end_date: endDate,
+        const preapproval = await createPreapproval(mpToken, {
+          reason: `Mensalidade — ${course.nome}`,
+          external_reference: externalReference,
+          payer_email: student.email,
+          back_url: `${appUrl || `https://${process.env.NEXT_PUBLIC_APP_DOMAIN ?? "profissionalizamaisbrasil.com.br"}`}/aluno/pagamentos?ok=${enrollment.id}`,
+          notification_url: appUrl ? `${appUrl}/api/webhooks/mercadopago` : undefined,
+          auto_recurring: {
+            frequency: 1,
+            frequency_type: "months",
+            transaction_amount: finalAmount,
+            currency_id: "BRL",
+            start_date: startDate,
+            end_date: endDate,
+          },
+          status: "pending",
+        })
+
+        await prisma.enrollment.update({
+          where: { id: enrollment.id },
+          data: {
+            mpSubscriptionId: preapproval.id,
+            externalReference,
+          },
+        })
+
+        return NextResponse.json({
+          data: {
+            enrollmentId: enrollment.id,
+            gateway: "MP",
+            mode: "subscription",
+            installmentsTotal: monthlyMonths,
+            initPoint: preapproval.init_point,
+            finalAmount,
+          },
+        })
+      }
+
+      const preference = await createPreference(mpToken, {
+        items: [
+          {
+            id: course.id,
+            title: course.nome,
+            quantity: 1,
+            unit_price: finalAmount,
+            currency_id: "BRL",
+          },
+        ],
+        payer: {
+          name: student.nome,
+          email: student.email,
+          identification: student.cpf
+            ? { type: "CPF", number: student.cpf }
+            : undefined,
         },
-        status: "pending",
+        back_urls: appUrl
+          ? {
+              success: `${appUrl}/aluno/pagamentos?ok=${enrollment.id}`,
+              failure: `${appUrl}/aluno/pagamentos?err=${enrollment.id}`,
+              pending: `${appUrl}/aluno/pagamentos?pend=${enrollment.id}`,
+            }
+          : undefined,
+        auto_return: "approved",
+        external_reference: externalReference,
+        notification_url: appUrl ? `${appUrl}/api/webhooks/mercadopago` : undefined,
       })
 
       await prisma.enrollment.update({
         where: { id: enrollment.id },
         data: {
-          mpSubscriptionId: preapproval.id,
+          mpPreferenceId: preference.id,
           externalReference,
         },
       })
@@ -237,59 +298,15 @@ export const POST = withRequestContext(
         data: {
           enrollmentId: enrollment.id,
           gateway: "MP",
-          mode: "subscription",
-          installmentsTotal: monthlyMonths,
-          initPoint: preapproval.init_point,
+          initPoint: preference.init_point,
           finalAmount,
         },
       })
+    } catch (mpError) {
+      await prisma.enrollment.delete({ where: { id: enrollment.id } }).catch(swallow("aluno.comprar.rollback"))
+      if (couponId) await releaseCoupon(couponId).catch(swallow("aluno.comprar.rollback"))
+      throw mpError
     }
-
-    const preference = await createPreference(mpToken, {
-      items: [
-        {
-          id: course.id,
-          title: course.nome,
-          quantity: 1,
-          unit_price: finalAmount,
-          currency_id: "BRL",
-        },
-      ],
-      payer: {
-        name: student.nome,
-        email: student.email,
-        identification: student.cpf
-          ? { type: "CPF", number: student.cpf }
-          : undefined,
-      },
-      back_urls: appUrl
-        ? {
-            success: `${appUrl}/aluno/pagamentos?ok=${enrollment.id}`,
-            failure: `${appUrl}/aluno/pagamentos?err=${enrollment.id}`,
-            pending: `${appUrl}/aluno/pagamentos?pend=${enrollment.id}`,
-          }
-        : undefined,
-      auto_return: "approved",
-      external_reference: externalReference,
-      notification_url: appUrl ? `${appUrl}/api/webhooks/mercadopago` : undefined,
-    })
-
-    await prisma.enrollment.update({
-      where: { id: enrollment.id },
-      data: {
-        mpPreferenceId: preference.id,
-        externalReference,
-      },
-    })
-
-    return NextResponse.json({
-      data: {
-        enrollmentId: enrollment.id,
-        gateway: "MP",
-        initPoint: preference.init_point,
-        finalAmount,
-      },
-    })
   }
 
   // ASAAS

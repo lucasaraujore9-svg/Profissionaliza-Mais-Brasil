@@ -6,6 +6,7 @@ import { createNotification } from "@/lib/notifications"
 import { isCronAuthorized } from "@/lib/auth/bearer"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { contextLogger } from "@/lib/logger"
+import { PMB_TENANT_SLUG } from "@/lib/pmb-config"
 
 export const maxDuration = 300
 export const dynamic = "force-dynamic"
@@ -49,7 +50,7 @@ async function processOverdueTenants() {
   const candidates = await prisma.tenant.findMany({
     where: {
       status: "ACTIVE",
-      slug: { not: "__pmb__" },
+      slug: { not: PMB_TENANT_SLUG },
       tenantPayments: {
         some: { status: "OVERDUE" },
       },

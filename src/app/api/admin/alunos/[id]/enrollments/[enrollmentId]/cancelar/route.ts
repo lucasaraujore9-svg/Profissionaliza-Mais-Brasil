@@ -2,15 +2,28 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { requirePmbSales } from "@/lib/auth/guards"
-import { cancelSubscription, deletePayment } from "@/lib/asaas/client"
-import { cancelPreapproval } from "@/lib/mercadopago/client"
+import {
+  cancelSubscription,
+  deletePayment,
+  refundPayment as refundAsaasPayment,
+} from "@/lib/asaas/client"
+import {
+  cancelPreapproval,
+  refundPayment as refundMpPayment,
+} from "@/lib/mercadopago/client"
 import { pmbMpAccessToken } from "@/lib/pmb-config"
 import { unlinkCourseFromStudent } from "@/lib/students/plataforma-actions"
 import { contextLogger } from "@/lib/logger"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
+import { logAudit } from "@/lib/audit"
 
 const bodySchema = z.object({
   removeFromEA: z.boolean().optional().default(false),
+  // Estorno opcional ao aluno (CDC art. 49: cliente pode desistir em até 7
+  // dias da compra online). UI deve perguntar "Reembolsar pagamento?" ao
+  // cancelar enrollment paga. Default false pra não estornar acidentalmente.
+  refund: z.boolean().optional().default(false),
+  refundReason: z.string().trim().max(500).optional(),
 })
 
 export const POST = withRequestContextParams<{ id: string; enrollmentId: string }>(
@@ -32,7 +45,7 @@ export const POST = withRequestContextParams<{ id: string; enrollmentId: string 
   if (!parsed.success) {
     return NextResponse.json({ error: "Payload inválido" }, { status: 400 })
   }
-  const { removeFromEA } = parsed.data
+  const { removeFromEA, refund, refundReason } = parsed.data
 
   const whereEnrollment =
     guard.session.role === "SUPER_ADMIN"
@@ -115,16 +128,96 @@ export const POST = withRequestContextParams<{ id: string; enrollmentId: string 
     }
   }
 
+  // Estorno (refund) ao aluno quando solicitado. Aplica em todos os Payments
+  // APPROVED ainda não estornados desta enrollment. Para CDC art. 49 e
+  // suporte ao cliente. Erros aqui são registrados mas não bloqueiam o
+  // cancelamento (UI mostra refundError).
+  const refundErrors: string[] = []
+  let refundedCount = 0
+  if (refund) {
+    const payments = await prisma.payment.findMany({
+      where: { enrollmentId: enrollment.id, mpStatus: "APPROVED" },
+      select: {
+        id: true,
+        amount: true,
+        gateway: true,
+        mpPaymentId: true,
+        asaasPaymentId: true,
+      },
+    })
+    for (const p of payments) {
+      try {
+        if (p.gateway === "ASAAS" && p.asaasPaymentId) {
+          await refundAsaasPayment(p.asaasPaymentId)
+        } else if (p.gateway === "MP" && p.mpPaymentId) {
+          const mpToken = await pmbMpAccessToken()
+          if (!mpToken) throw new Error("Token MP PMB não configurado")
+          await refundMpPayment(mpToken, p.mpPaymentId)
+        } else {
+          continue
+        }
+        // Marca o Payment como REFUNDED no nosso banco. Os webhooks
+        // PAYMENT_REFUNDED do gateway vão chegar depois e também atualizam,
+        // mas marcar agora torna o estado visível imediatamente no painel.
+        await prisma.payment.update({
+          where: { id: p.id },
+          data: { mpStatus: "REFUNDED" },
+        })
+        refundedCount += 1
+        await logAudit({
+          action: "enrollment.refund",
+          resource: "Payment",
+          resourceId: p.id,
+          actorUserId: guard.session.userId,
+          actorRole: guard.session.role,
+          payloadAfter: {
+            enrollmentId: enrollment.id,
+            studentId,
+            amount: Number(p.amount),
+            gateway: p.gateway,
+            reason: refundReason ?? null,
+          },
+        })
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Falha no refund"
+        refundErrors.push(`payment ${p.id}: ${msg}`)
+        contextLogger().error(
+          { err, event: "admin.enrollment.cancel.refund_failed", paymentId: p.id },
+          "falha ao processar refund",
+        )
+      }
+    }
+  }
+
   // Update enrollment status to CANCELLED
   await prisma.enrollment.update({
     where: { id: enrollment.id },
     data: { status: "CANCELLED" },
   })
 
+  // Audit log estruturado (sem tabela dedicada — ver REVIEW.md)
+  await logAudit({
+    action: "enrollment.cancel",
+    resource: "Enrollment",
+    resourceId: enrollment.id,
+    actorUserId: guard.session.userId,
+    actorRole: guard.session.role,
+    payloadBefore: { status: enrollment.status, gateway: enrollment.gateway },
+    payloadAfter: {
+      status: "CANCELLED",
+      removeFromEA,
+      refunded: refundedCount,
+      hadGatewayError: Boolean(gatewayError),
+      studentId,
+    },
+  })
+
   return NextResponse.json({
     data: {
       ok: true,
+      refundedCount,
       ...(gatewayError ? { gatewayError } : {}),
+      ...(refundErrors.length > 0 ? { refundErrors } : {}),
     },
   })
   },

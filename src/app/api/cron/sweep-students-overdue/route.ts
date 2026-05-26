@@ -10,6 +10,24 @@ export const dynamic = "force-dynamic"
 const STUDENT_GRACE_DAYS = 5
 
 /**
+ * Soma `months` meses à data preservando o dia. Se o mês alvo não tiver o
+ * dia (ex: 31/jan + 1 mês = 28/fev), clampa para o último dia do mês alvo.
+ * `Date.setMonth` nativo faz overflow para o mês seguinte (3/mar), o que
+ * subestima `ageDays` e atrasa o bloqueio.
+ */
+function addMonthsClamped(base: Date, months: number): Date {
+  const out = new Date(base)
+  const targetMonth = out.getMonth() + months
+  const targetDay = out.getDate()
+  out.setDate(1) // evita overflow durante o setMonth
+  out.setMonth(targetMonth)
+  // Último dia válido do mês alvo
+  const lastDay = new Date(out.getFullYear(), out.getMonth() + 1, 0).getDate()
+  out.setDate(Math.min(targetDay, lastDay))
+  return out
+}
+
+/**
  * Sweep diario para alunos individuais inadimplentes.
  *
  * Cenario: aluno comprou um curso MONTHLY (gateway ASAAS), pagou a 1a
@@ -69,9 +87,11 @@ async function processOverdueStudents() {
     // a um mes inteiro. Aluno com `installmentsPaid=1` (1a parcela paga ao
     // comprar) e `startedAt=Jan/1` tem proxima parcela em Fev/1 — entao o
     // offset e exatamente `installmentsPaid` meses a partir de `startedAt`.
-    const expectedNextDue = new Date(enrollment.startedAt)
-    expectedNextDue.setMonth(
-      expectedNextDue.getMonth() + enrollment.installmentsPaid,
+    // Edge case: setMonth(getMonth()+1) em 31/jan vira 3/mar (Feb tem 28d) e
+    // bloqueio fica atrasado. Clampamos para o último dia do mês alvo.
+    const expectedNextDue = addMonthsClamped(
+      enrollment.startedAt,
+      enrollment.installmentsPaid,
     )
     const ageDays = Math.floor(
       (now.getTime() - expectedNextDue.getTime()) / (1000 * 60 * 60 * 24),

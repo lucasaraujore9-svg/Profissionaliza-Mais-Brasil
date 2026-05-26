@@ -247,4 +247,42 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       return session
     },
   },
+  // Events emitem ao stream estruturado de Pino — permite que dataset
+  // externo (Axiom/Datadog) indexe `event:audit.auth.*` para investigação
+  // de incidentes (brute-force, conta comprometida, login anômalo).
+  events: {
+    async signIn({ user }) {
+      const u = user as {
+        id?: string
+        role?: string
+        email?: string
+        tenantId?: string | null
+        studentId?: string | null
+      }
+      contextLogger().info(
+        {
+          event: "audit.auth.signin",
+          userId: u.id ?? null,
+          role: u.role ?? null,
+          email: u.email ?? null,
+          tenantId: u.tenantId ?? null,
+          studentId: u.studentId ?? null,
+        },
+        "auth: login bem-sucedido",
+      )
+    },
+    async signOut(message) {
+      // SignOutMessage tem `token` (JWT strategy) ou `session` (database).
+      // Suportamos JWT — pegamos `sub` do token.
+      const m = message as { token?: { sub?: string; role?: string } }
+      contextLogger().info(
+        {
+          event: "audit.auth.signout",
+          userId: m.token?.sub ?? null,
+          role: m.token?.role ?? null,
+        },
+        "auth: logout",
+      )
+    },
+  },
 })

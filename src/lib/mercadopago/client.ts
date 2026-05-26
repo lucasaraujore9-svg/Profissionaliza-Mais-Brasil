@@ -158,3 +158,32 @@ export async function cancelPreapproval(
 ): Promise<MPPreapproval> {
   return request<MPPreapproval>("PUT", `/preapproval/${preapprovalId}`, accessToken, { status: "cancelled" })
 }
+
+export interface MPRefund {
+  id: number
+  payment_id: number
+  amount: number
+  status: string
+  date_created: string
+}
+
+/**
+ * Estorna um pagamento confirmado no Mercado Pago (CDC art. 49 / cancelamento
+ * voluntário). Refund total quando `amount` não é passado; parcial caso
+ * contrário. Para PIX/Boleto não-pago use cancelPayment (não implementado).
+ *
+ * https://www.mercadopago.com.br/developers/pt/reference/chargebacks/_payments_id_refunds/post
+ */
+export async function refundPayment(
+  accessToken: string,
+  paymentId: string,
+  amount?: number,
+): Promise<MPRefund> {
+  const body = amount !== undefined ? { amount } : {}
+  return request<MPRefund>(
+    "POST",
+    `/v1/payments/${paymentId}/refunds`,
+    accessToken,
+    body,
+  )
+}

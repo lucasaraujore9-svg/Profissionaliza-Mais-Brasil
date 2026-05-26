@@ -221,6 +221,24 @@ export async function deletePayment(
   )
 }
 
+/**
+ * Estorna um pagamento confirmado no Asaas (CDC art. 49 / cancelamento
+ * voluntário). Asaas só aceita refund em pagamentos `RECEIVED` ou
+ * `CONFIRMED`. Para `PENDING`/`AWAITING_RISK_ANALYSIS`, use deletePayment.
+ *
+ * https://docs.asaas.com/reference/estornar-cobranca
+ */
+export async function refundPayment(
+  paymentId: string,
+  options?: { value?: number; description?: string },
+): Promise<AsaasPayment> {
+  return request<AsaasPayment>(
+    "POST",
+    `/payments/${paymentId}/refund`,
+    options ?? {},
+  )
+}
+
 export interface AsaasUpdatePaymentParams {
   dueDate?: string   // YYYY-MM-DD
   value?: number

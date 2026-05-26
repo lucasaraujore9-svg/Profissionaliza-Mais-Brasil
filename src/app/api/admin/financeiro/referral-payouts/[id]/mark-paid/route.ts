@@ -6,6 +6,7 @@ import { requireAdminSession } from "@/lib/auth/admin-session"
 import { markPayoutPaid } from "@/lib/referrals/payout"
 import { contextLogger } from "@/lib/logger"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
+import { logAudit } from "@/lib/audit"
 
 const bodySchema = z.object({
   asaasTransferId: z.string().min(1).max(80).optional().nullable(),
@@ -84,6 +85,21 @@ export const POST = withRequestContextParams<{ id: string }>(
       data: {
         markedPaidById: session.userId,
         notes: nextNotes,
+      },
+    })
+
+    await logAudit({
+      action: "payout.mark_paid",
+      resource: "ReferralPayout",
+      resourceId: payout.id,
+      actorUserId: session.userId,
+      actorRole: session.role,
+      actorEmail: session.email,
+      payloadBefore: { status: payout.status },
+      payloadAfter: {
+        status: updated.status,
+        amount: Number(updated.amount),
+        asaasTransferId: parsed.data.asaasTransferId ?? null,
       },
     })
 

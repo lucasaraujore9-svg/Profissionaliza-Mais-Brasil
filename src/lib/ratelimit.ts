@@ -3,8 +3,21 @@ import { Ratelimit } from "@upstash/ratelimit"
 
 const url = process.env.UPSTASH_REDIS_REST_URL
 const token = process.env.UPSTASH_REDIS_REST_TOKEN
+const isProd = process.env.NODE_ENV === "production"
 
 const redis = url && token ? new Redis({ url, token }) : null
+
+// Em produção sem Redis configurado: fail-closed. O default antigo era
+// fail-open (qualquer request passava), o que abria a porta para brute-force
+// em /login, spam em /forgot-password, enumeration de cupons, etc. assertEnv
+// emite warning no boot, mas se o operador ignorar, este check garante que
+// não vamos servir tráfego com rate-limit desligado.
+if (isProd && !redis) {
+  throw new Error(
+    "[ratelimit] UPSTASH_REDIS_REST_URL/TOKEN são obrigatórios em produção. " +
+      "Configure Upstash no painel do Vercel ou suba a app em modo não-prod.",
+  )
+}
 
 interface LimiterConfig {
   /** Identificador unico do bucket. */

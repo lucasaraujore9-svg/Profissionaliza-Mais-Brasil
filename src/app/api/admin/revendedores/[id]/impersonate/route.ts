@@ -11,6 +11,8 @@ import {
   sessionCookieName,
 } from "@/lib/auth/impersonate"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
+import { contextLogger } from "@/lib/logger"
+import { logAudit } from "@/lib/audit"
 
 export const POST = withRequestContextParams<{ id: string }>(
   { action: "admin.revendedores.impersonate", route: "/api/admin/revendedores/[id]/impersonate" },
@@ -18,6 +20,17 @@ export const POST = withRequestContextParams<{ id: string }>(
   const admin = await requireAdminSession()
   if (!admin) {
     return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
+  }
+
+  // Impersonação é privilégio crítico — só SUPER_ADMIN pode assumir identidade de
+  // revendedor. PMB_SALES e PMB_RESELLER_MGR ficam fora pra não conseguirem trocar
+  // o token MP / alterar preços / acessar o financeiro do tenant.
+  if (admin.role !== "SUPER_ADMIN") {
+    contextLogger().warn(
+      { event: "impersonate.denied", actorId: admin.userId, actorRole: admin.role },
+      "tentativa de impersonate por papel não-SUPER_ADMIN",
+    )
+    return NextResponse.json({ error: "Permissão negada" }, { status: 403 })
   }
 
   const { id: tenantId } = await params
@@ -92,6 +105,17 @@ export const POST = withRequestContextParams<{ id: string }>(
     sameSite: "lax",
     path: "/",
     maxAge: 60 * 60 * 8,
+  })
+
+  await logAudit({
+    action: "impersonation.start",
+    resource: "Tenant",
+    resourceId: tenant.id,
+    actorUserId: admin.userId,
+    actorRole: admin.role,
+    actorEmail: admin.email,
+    tenantId: tenant.id,
+    payloadAfter: { targetUserId: owner.id, targetEmail: owner.email },
   })
 
   return NextResponse.json({ data: { redirect: "/painel" } })

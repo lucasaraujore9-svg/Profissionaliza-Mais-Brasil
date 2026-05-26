@@ -236,11 +236,21 @@ export async function processMpWebhook(args: ProcessArgs): Promise<void> {
     //    (regex /^[a-z0-9_-]{1,64}$/i) — não há log/SQL injection.
     const secret = process.env.MP_WEBHOOK_SECRET
     if (!secret) {
-      if (process.env.NODE_ENV === "production") {
-        await markLog(logId, false, "MP_WEBHOOK_SECRET ausente em producao")
+      // Antes: dev sem secret seguia sem validar — qualquer ambiente não-prod
+      // (preview público, staging mal-configurado) virava bypass de HMAC.
+      // Agora: bypass exige flag explícita MP_WEBHOOK_DEV_BYPASS=1 e nunca
+      // em produção. Dev local: defina ambas no .env.local pra testes ngrok.
+      const explicitBypass =
+        process.env.MP_WEBHOOK_DEV_BYPASS === "1" &&
+        process.env.NODE_ENV !== "production"
+      if (!explicitBypass) {
+        await markLog(logId, false, "MP_WEBHOOK_SECRET ausente — request rejeitado")
         return
       }
-      // Dev: segue sem validar para permitir testes com ngrok.
+      contextLogger().warn(
+        { event: "mp.webhook.dev_bypass_active" },
+        "MP_WEBHOOK_DEV_BYPASS ativo — validação de HMAC pulada (apenas dev)",
+      )
     } else {
       const valid = validateMpWebhookSignature(
         xSignature,

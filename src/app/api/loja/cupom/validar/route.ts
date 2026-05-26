@@ -63,14 +63,12 @@ export const POST = withRequestContext(
     }
 
     const now = new Date()
+    // Busca o cupom sem filtrar isActive/validade para que possamos diferenciar
+    // mensagens de erro (cupom desativado vs expirado vs nunca existiu).
+    // Antes: filtrava tudo e devolvia "inválido ou expirado" — UX ruim porque
+    // o usuário não sabia se era digitação ou link velho.
     const coupon = await prisma.coupon.findFirst({
-      where: {
-        tenantId,
-        code,
-        isActive: true,
-        validFrom: { lte: now },
-        validUntil: { gte: now },
-      },
+      where: { tenantId, code },
       select: {
         id: true,
         code: true,
@@ -78,14 +76,41 @@ export const POST = withRequestContext(
         discountValue: true,
         maxUses: true,
         usedCount: true,
+        isActive: true,
+        validFrom: true,
+        validUntil: true,
       },
     })
 
     if (!coupon) {
       return NextResponse.json(
+        { error: "Cupom não encontrado. Confira a digitação.", code: "COUPON_NOT_FOUND" },
+        { status: 400 },
+      )
+    }
+
+    if (!coupon.isActive) {
+      return NextResponse.json(
+        { error: "Este cupom foi desativado pela loja.", code: "COUPON_INACTIVE" },
+        { status: 400 },
+      )
+    }
+
+    if (coupon.validFrom > now) {
+      return NextResponse.json(
         {
-          error: "Cupom inválido ou expirado",
-          code: "COUPON_INVALID",
+          error: `Cupom ainda não está válido (começa em ${coupon.validFrom.toLocaleDateString("pt-BR")}).`,
+          code: "COUPON_NOT_YET_VALID",
+        },
+        { status: 400 },
+      )
+    }
+
+    if (coupon.validUntil < now) {
+      return NextResponse.json(
+        {
+          error: `Este cupom expirou em ${coupon.validUntil.toLocaleDateString("pt-BR")}.`,
+          code: "COUPON_EXPIRED",
         },
         { status: 400 },
       )
@@ -93,7 +118,7 @@ export const POST = withRequestContext(
 
     if (coupon.maxUses !== null && coupon.usedCount >= coupon.maxUses) {
       return NextResponse.json(
-        { error: "Cupom esgotado", code: "COUPON_EXHAUSTED" },
+        { error: "Cupom esgotado — todas as utilizações já foram usadas.", code: "COUPON_EXHAUSTED" },
         { status: 400 },
       )
     }

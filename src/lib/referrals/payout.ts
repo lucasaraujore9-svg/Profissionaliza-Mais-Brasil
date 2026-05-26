@@ -150,45 +150,72 @@ export async function requestPayout(
 /**
  * Marca um payout como PAID. Atualiza comissoes vinculadas para PAID.
  * Se ASAAS_PIX, recebe opcionalmente o asaasTransferId.
+ *
+ * Atomicidade: o update do payout usa `updateMany` com `status: { not: "PAID" }`
+ * — duas chamadas concorrentes (admin double-click, retry de PIX) só veem o
+ * primeiro `count: 1`. O segundo dá `count: 0` e o payout existente é
+ * retornado sem disparar notificação/transferência duplicada. Toda a operação
+ * fica numa transação para garantir que payout.PAID + commissions.PAID
+ * acontecem juntos.
  */
 export async function markPayoutPaid(
   payoutId: string,
   asaasTransferId?: string | null,
 ): Promise<ReferralPayout> {
-  const payout = await prisma.referralPayout.findUnique({
-    where: { id: payoutId },
-    include: { referrer: { select: { id: true, name: true } } },
-  })
-  if (!payout) throw new Error(`Payout ${payoutId} nao encontrado`)
-  if (payout.status === "PAID") return payout
-
   const now = new Date()
-  const updated = await prisma.referralPayout.update({
-    where: { id: payoutId },
-    data: {
-      status: "PAID",
-      asaasTransferId: asaasTransferId ?? payout.asaasTransferId ?? null,
-      processedAt: payout.processedAt ?? now,
-      paidAt: now,
-    },
+
+  const result = await prisma.$transaction(async (tx) => {
+    const existing = await tx.referralPayout.findUnique({
+      where: { id: payoutId },
+      select: {
+        id: true,
+        status: true,
+        amount: true,
+        asaasTransferId: true,
+        processedAt: true,
+        referrerTenantId: true,
+      },
+    })
+    if (!existing) throw new Error(`Payout ${payoutId} nao encontrado`)
+
+    const casUpdate = await tx.referralPayout.updateMany({
+      where: { id: payoutId, status: { not: "PAID" } },
+      data: {
+        status: "PAID",
+        asaasTransferId: asaasTransferId ?? existing.asaasTransferId ?? null,
+        processedAt: existing.processedAt ?? now,
+        paidAt: now,
+      },
+    })
+
+    if (casUpdate.count === 0) {
+      // Já estava PAID (ou concorrente acabou de marcar) — no-op idempotente.
+      const reread = await tx.referralPayout.findUniqueOrThrow({ where: { id: payoutId } })
+      return { freshlyPaid: false, payout: reread, referrerTenantId: existing.referrerTenantId, amount: existing.amount }
+    }
+
+    await tx.referralCommission.updateMany({
+      where: { payoutId },
+      data: { status: "PAID", paidAt: now },
+    })
+
+    const reread = await tx.referralPayout.findUniqueOrThrow({ where: { id: payoutId } })
+    return { freshlyPaid: true, payout: reread, referrerTenantId: existing.referrerTenantId, amount: existing.amount }
   })
 
-  await prisma.referralCommission.updateMany({
-    where: { payoutId },
-    data: { status: "PAID", paidAt: now },
-  })
+  if (result.freshlyPaid) {
+    await createNotification({
+      audience: "TENANT",
+      tenantId: result.referrerTenantId,
+      level: "SUCCESS",
+      title: "Saque de indicacao pago",
+      body: `R$ ${Number(result.amount).toFixed(2).replace(".", ",")} liberado.`,
+      category: "referral",
+      href: "/painel/indicacoes",
+    })
+  }
 
-  await createNotification({
-    audience: "TENANT",
-    tenantId: payout.referrerTenantId,
-    level: "SUCCESS",
-    title: "Saque de indicacao pago",
-    body: `R$ ${Number(payout.amount).toFixed(2).replace(".", ",")} liberado.`,
-    category: "referral",
-    href: "/painel/indicacoes",
-  })
-
-  return updated
+  return result.payout
 }
 
 /**
@@ -302,42 +329,83 @@ export async function processMonthlyPayouts(): Promise<{
   let notifiedTenants = 0
 
   for (const [tenantId, { total, ids }] of byReferrer.entries()) {
-    // Pula referrers que ja tem um payout em aberto (REQUESTED/PROCESSING)
-    const existingPending = await prisma.referralPayout.findFirst({
+    // BLOQUEIO POR CLAWBACK: se houver alguma comissão PAID marcada como
+    // CLAWBACK_PENDING para este referrer, NÃO criamos payout automático
+    // até admin resolver. O cancelReason começa com [CLAWBACK_PENDING] —
+    // ver cancelCommissionForTenantPayment em commission.ts.
+    const clawbackPending = await prisma.referralCommission.findFirst({
       where: {
         referrerTenantId: tenantId,
-        status: { in: ["REQUESTED", "PROCESSING"] },
+        status: "PAID",
+        cancelReason: { startsWith: "[CLAWBACK_PENDING]" },
       },
-      select: { id: true },
+      select: { id: true, amount: true },
     })
-    if (existingPending) continue
+    if (clawbackPending) {
+      await createNotification({
+        audience: "ROLE",
+        roleTarget: "SUPER_ADMIN",
+        level: "WARNING",
+        title: `Payout automático pulado por clawback pendente`,
+        body: `Indicador ${tenantId}: R$ ${total.toFixed(2).replace(".", ",")} aguardando — resolva o clawback primeiro em /admin/indicacoes/comissoes.`,
+        category: "referral",
+        href: "/admin/indicacoes/comissoes",
+      }).catch(() => {})
+      continue
+    }
 
-    // Carrega PIX cadastrado do tenant (pode ser null — admin vai processar
-    // como MANUAL nesse caso)
-    const tenant = await prisma.tenant.findUnique({
-      where: { id: tenantId },
-      select: { name: true, pixKey: true, pixKeyType: true },
-    })
-    const hasPix = Boolean(tenant?.pixKey && tenant?.pixKeyType)
+    // Atomicidade: cada referrer é processado dentro de uma transação. A
+    // criação do payout + vinculação das comissões usa CAS — o updateMany
+    // exige `payoutId: null` na cláusula where, então duas invocações
+    // concorrentes do cron (Vercel pode reentregar em retry) competem; só
+    // uma consegue criar+vincular, a outra vê 0 linhas atualizadas e aborta
+    // (rollback descarta o payout duplicado).
+    const txResult = await prisma.$transaction(async (tx) => {
+      const existingPending = await tx.referralPayout.findFirst({
+        where: {
+          referrerTenantId: tenantId,
+          status: { in: ["REQUESTED", "PROCESSING"] },
+        },
+        select: { id: true },
+      })
+      if (existingPending) return null
 
-    const payout = await prisma.referralPayout.create({
-      data: {
-        referrerTenantId: tenantId,
-        amount: total,
-        method: hasPix ? "ASAAS_PIX" : "MANUAL",
-        status: "REQUESTED",
-        pixKey: tenant?.pixKey ?? null,
-        pixKeyType: tenant?.pixKeyType ?? null,
-        requestedAt: now,
-        notes:
-          "Gerado automaticamente pelo cron mensal (pagamento dia X do mes seguinte).",
-      },
+      const tenant = await tx.tenant.findUnique({
+        where: { id: tenantId },
+        select: { name: true, pixKey: true, pixKeyType: true },
+      })
+      const hasPix = Boolean(tenant?.pixKey && tenant?.pixKeyType)
+
+      const payout = await tx.referralPayout.create({
+        data: {
+          referrerTenantId: tenantId,
+          amount: total,
+          method: hasPix ? "ASAAS_PIX" : "MANUAL",
+          status: "REQUESTED",
+          pixKey: tenant?.pixKey ?? null,
+          pixKeyType: tenant?.pixKeyType ?? null,
+          requestedAt: now,
+          notes:
+            "Gerado automaticamente pelo cron mensal (pagamento dia X do mes seguinte).",
+        },
+      })
+
+      // CAS: só vincula comissões que ainda estão sem payout. Se outro processo
+      // pegou as mesmas comissões enquanto montávamos o payout, este updateMany
+      // devolve count=0 e jogamos fora o payout (throw aborta a transação).
+      const linked = await tx.referralCommission.updateMany({
+        where: { id: { in: ids }, payoutId: null, status: "AVAILABLE" },
+        data: { payoutId: payout.id },
+      })
+      if (linked.count === 0) {
+        throw new Error("payout_race_detected")
+      }
+      return { tenant, payout, hasPix }
     })
 
-    await prisma.referralCommission.updateMany({
-      where: { id: { in: ids } },
-      data: { payoutId: payout.id },
-    })
+    if (!txResult) continue
+
+    const { tenant, hasPix } = txResult
     payoutsCreated += 1
 
     // Notifica revendedor

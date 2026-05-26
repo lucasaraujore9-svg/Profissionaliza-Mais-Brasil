@@ -427,6 +427,8 @@ export async function processAsaasWebhook(
 
       case "PAYMENT_REFUNDED":
       case "PAYMENT_PARTIALLY_REFUNDED": {
+        const isPartial = event === "PAYMENT_PARTIALLY_REFUNDED"
+
         // Atualiza status da cobrança no banco
         await prisma.tenantPayment
           .updateMany({
@@ -435,19 +437,39 @@ export async function processAsaasWebhook(
           })
           .catch(swallow("asaas.process"))
 
-        // Cancela comissao de indicacao (se houver)
-        await cancelCommissionForTenantPayment(
-          tenantPaymentRow.id,
-          event === "PAYMENT_REFUNDED" ? "refund" : "partial_refund",
-        ).catch((err) => {
-          contextLogger().error(
-            { err, event: "asaas.refund.cancel_commission_failed", tenantPaymentId: tenantPaymentRow.id },
-            "cancelCommissionForTenantPayment falhou",
-          )
-        })
+        // Cancela comissao de indicacao (se houver). Para refund TOTAL,
+        // a comissão é cancelada inteira. Para refund PARCIAL, só
+        // anulamos se o refund cobre a comissão integral; caso contrário
+        // a deixamos para revisão manual (admin avalia se é proporcional).
+        // Antes, refund parcial CANCELAVA toda a comissão — desproporcional
+        // pra refund de R$10 em fatura de R$200.
+        if (!isPartial) {
+          await cancelCommissionForTenantPayment(
+            tenantPaymentRow.id,
+            "refund",
+          ).catch((err) => {
+            contextLogger().error(
+              { err, event: "asaas.refund.cancel_commission_failed", tenantPaymentId: tenantPaymentRow.id },
+              "cancelCommissionForTenantPayment falhou",
+            )
+          })
+        } else {
+          // Refund parcial: notifica admin para tratar manualmente. Não
+          // cancela automaticamente (evita over-clawback em refund pequeno).
+          await createNotification({
+            audience: "ROLE",
+            roleTarget: "SUPER_ADMIN",
+            level: "WARNING",
+            title: `Refund parcial em ${tenant.name}`,
+            body: `Pagamento ${payment.id} estornado parcialmente. Comissão de indicação NÃO foi ajustada automaticamente — revise manualmente em /admin/indicacoes/comissoes.`,
+            category: "referral",
+            href: `/admin/indicacoes/comissoes`,
+          }).catch(() => {})
+        }
 
         // Verifica se ainda há algum pagamento RECEIVED/CONFIRMED para este tenant.
         // Se não houver, suspende a conta (dinheiro foi devolvido = não pagou).
+        // Para refund PARCIAL, NÃO suspende — tenant ainda pagou parte.
         const otherConfirmed = await prisma.tenantPayment.findFirst({
           where: {
             tenantId: tenant.id,
@@ -457,7 +479,7 @@ export async function processAsaasWebhook(
           select: { id: true },
         })
 
-        if (!otherConfirmed && tenant.status === "ACTIVE") {
+        if (!isPartial && !otherConfirmed && tenant.status === "ACTIVE") {
           await prisma.tenant.update({
             where: { id: tenant.id },
             data: { status: "SUSPENDED" },
@@ -481,7 +503,7 @@ export async function processAsaasWebhook(
           roleTarget: "SUPER_ADMIN",
           level: "WARNING",
           title: `Estorno detectado: ${tenant.name}`,
-          body: `Pagamento de ${formatMoney(payment.value)} foi ${event === "PAYMENT_REFUNDED" ? "estornado" : "parcialmente estornado"}.${!otherConfirmed ? " Conta suspensa automaticamente." : ""}`,
+          body: `Pagamento de ${formatMoney(payment.value)} foi ${isPartial ? "parcialmente estornado" : "estornado"}.${!isPartial && !otherConfirmed ? " Conta suspensa automaticamente." : ""}`,
           category: "tenant-billing",
           href: `/admin/revendedores/${tenant.id}`,
         })

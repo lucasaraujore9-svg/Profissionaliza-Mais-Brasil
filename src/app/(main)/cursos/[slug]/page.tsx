@@ -1,3 +1,4 @@
+import type { Metadata } from "next"
 import { notFound } from "next/navigation"
 import { prisma } from "@/lib/prisma"
 import {
@@ -53,6 +54,38 @@ async function loadCurso(slug: string): Promise<LoadedCurso | null> {
     }
   } catch {
     return null
+  }
+}
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>
+}): Promise<Metadata> {
+  const { slug } = await params
+  const curso = await loadCurso(slug)
+  if (!curso) {
+    return { title: "Curso não encontrado" }
+  }
+  const title = `${curso.nome} — Profissionaliza Mais Brasil`
+  const description =
+    (curso.descricao ?? "").slice(0, 160) ||
+    `Curso ${curso.nome} com certificado válido em todo o Brasil. Matricule-se agora.`
+  const imageUrl = curso.imageUrl ?? null
+  return {
+    title,
+    description,
+    openGraph: {
+      title,
+      description,
+      type: "website",
+      images: imageUrl ? [{ url: imageUrl }] : undefined,
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+    },
   }
 }
 

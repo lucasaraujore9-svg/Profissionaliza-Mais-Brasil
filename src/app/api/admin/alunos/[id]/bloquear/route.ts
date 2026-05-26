@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { requireAdminSession } from "@/lib/auth/admin-session"
 import { blockStudentInEA } from "@/lib/students/plataforma-actions"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
+import { logAudit } from "@/lib/audit"
 
 export const POST = withRequestContextParams<{ id: string }>(
   { action: "admin.alunos.block", route: "/api/admin/alunos/[id]/bloquear" },
@@ -21,7 +22,7 @@ export const POST = withRequestContextParams<{ id: string }>(
   const { id } = await params
   const student = await prisma.student.findUnique({
     where: { id },
-    select: { id: true },
+    select: { id: true, status: true, tenantId: true },
   })
   if (!student) {
     return NextResponse.json({ error: "Aluno não encontrado" }, { status: 404 })
@@ -48,6 +49,19 @@ export const POST = withRequestContextParams<{ id: string }>(
     where: { id: student.id },
     select: { id: true, status: true, apostila: true },
   })
+
+  await logAudit({
+    action: "student.block",
+    resource: "Student",
+    resourceId: student.id,
+    actorUserId: session.userId,
+    actorRole: session.role,
+    actorEmail: session.email,
+    tenantId: student.tenantId,
+    payloadBefore: { status: student.status },
+    payloadAfter: { status: updated?.status ?? "BLOQUEADO" },
+  })
+
   return NextResponse.json({ data: updated })
   },
 )

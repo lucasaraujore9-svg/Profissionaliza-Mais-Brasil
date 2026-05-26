@@ -1,4 +1,5 @@
 import { encode, decode } from "next-auth/jwt"
+import { createHmac, timingSafeEqual } from "node:crypto"
 import type { UserRole } from "@prisma/client"
 import { authSecret } from "@/lib/env"
 
@@ -76,8 +77,30 @@ export interface ImpersonationFlag {
   startedAt: number
 }
 
+/**
+ * Codifica o flag com HMAC SHA-256 para impedir forjamento via XSS/cookie
+ * injection. Formato: `<base64url(json)>.<base64url(hmac)>`. O endpoint
+ * `end-impersonation` exige assinatura válida antes de restaurar a sessão
+ * de admin — antes o cookie era base64 puro e qualquer atacante que
+ * pudesse setar `pmb_impersonation` + `pmb_admin_backup` ganhava acesso ao
+ * JWT salvo (escalation a partir de XSS/sub-domain takeover).
+ */
+function hmacSign(data: string): string {
+  return createHmac("sha256", getSecret()).update(data).digest("base64url")
+}
+
+function hmacVerify(data: string, sig: string): boolean {
+  const expected = hmacSign(data)
+  const a = Buffer.from(expected)
+  const b = Buffer.from(sig)
+  if (a.length !== b.length) return false
+  return timingSafeEqual(a, b)
+}
+
 export function encodeImpersonationFlag(flag: ImpersonationFlag): string {
-  return Buffer.from(JSON.stringify(flag)).toString("base64url")
+  const payload = Buffer.from(JSON.stringify(flag)).toString("base64url")
+  const sig = hmacSign(payload)
+  return `${payload}.${sig}`
 }
 
 export function decodeImpersonationFlag(
@@ -85,7 +108,10 @@ export function decodeImpersonationFlag(
 ): ImpersonationFlag | null {
   if (!raw) return null
   try {
-    const json = Buffer.from(raw, "base64url").toString("utf-8")
+    const [payload, sig] = raw.split(".")
+    if (!payload || !sig) return null
+    if (!hmacVerify(payload, sig)) return null
+    const json = Buffer.from(payload, "base64url").toString("utf-8")
     const parsed = JSON.parse(json) as ImpersonationFlag
     if (!parsed.adminUserId || !parsed.targetUserId) return null
     return parsed

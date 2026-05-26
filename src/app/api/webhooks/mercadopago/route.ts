@@ -19,11 +19,20 @@ export const runtime = "nodejs"
 export const maxDuration = 60
 
 function pickHeaders(request: Request): Record<string, string> {
-  const keys = ["x-signature", "x-request-id", "user-agent", "content-type"]
+  // Redact `x-signature` ao persistir no WebhookLog: contém HMAC ts+v1 que,
+  // junto com o payload + MP_WEBHOOK_SECRET, permitiria a um atacante validar
+  // se conseguiu forjar webhook. Mantemos apenas o `ts=` para troubleshooting
+  // de relógio dessincronizado (problema comum em deploys de containers).
+  const keys = ["x-request-id", "user-agent", "content-type"]
   const out: Record<string, string> = {}
   for (const key of keys) {
     const value = request.headers.get(key)
     if (value) out[key] = value
+  }
+  const sigRaw = request.headers.get("x-signature")
+  if (sigRaw) {
+    const ts = sigRaw.match(/ts=(\d+)/)?.[1]
+    out["x-signature"] = ts ? `ts=${ts},v1=[redacted]` : "[redacted]"
   }
   return out
 }

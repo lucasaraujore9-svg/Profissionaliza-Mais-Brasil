@@ -18,16 +18,21 @@ export const runtime = "nodejs"
 export const maxDuration = 60
 
 function pickHeaders(request: Request): Record<string, string> {
-  const keys = [
-    "asaas-access-token",
-    "user-agent",
-    "content-type",
-    "x-forwarded-for",
-  ]
+  // Redact `asaas-access-token` ao persistir no WebhookLog: o valor cru
+  // permitiria a alguém com acesso ao DB forjar webhooks. Guardamos apenas
+  // os primeiros e últimos 4 chars + sufixo de hash para troubleshooting de
+  // configs erradas sem expor o segredo inteiro.
+  const keys = ["user-agent", "content-type", "x-forwarded-for"]
   const out: Record<string, string> = {}
   for (const key of keys) {
     const value = request.headers.get(key)
     if (value) out[key] = value
+  }
+  const tokenRaw = request.headers.get("asaas-access-token")
+  if (tokenRaw) {
+    const len = tokenRaw.length
+    out["asaas-access-token"] =
+      len > 8 ? `${tokenRaw.slice(0, 4)}…${tokenRaw.slice(-4)} (len=${len})` : "[redacted]"
   }
   return out
 }

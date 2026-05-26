@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto"
 import { prisma } from "@/lib/prisma"
 import { sendEmail } from "@/lib/email/mailer"
 import { enviarEmailCredenciais } from "@/lib/plataforma-cursos/client"
@@ -11,6 +12,30 @@ import { appUrl as resolveAppUrl, vitrineHost } from "@/lib/tenant/urls"
 import type { PaymentGateway, PaymentType } from "@prisma/client"
 import { swallow } from "@/lib/errors"
 import { contextLogger } from "@/lib/logger"
+
+/**
+ * Postgres advisory lock por externalPaymentId. Serializa fulfill de dois
+ * webhooks paralelos (MP/Asaas re-entregam em casos de timeout) — evita que
+ * `ensureStudentOnPlatform` e `linkCourseToStudent` sejam chamados duas vezes,
+ * o que criaria aluno duplicado na plataforma parceira ou enviaria email de
+ * boas-vindas duplicado.
+ *
+ * Idempotência via findFirst({mpPaymentId}) sozinha NÃO basta: há uma janela
+ * entre o findFirst e o payment.create onde dois processos paralelos podem
+ * ambos passar o check. Com o lock, o segundo espera o primeiro terminar e
+ * então encontra o Payment criado, fazendo no-op.
+ *
+ * Use `pg_try_advisory_xact_lock` (não-bloqueante) com hash 64-bit do
+ * externalPaymentId. Se outro processo segura o lock, aborta — webhook é
+ * re-entregue mais tarde quando o primeiro já terminou.
+ */
+function advisoryLockKey(gateway: PaymentGateway, externalPaymentId: string): bigint {
+  // Hash truncado para 63 bits (Postgres bigint signed, evita overflow).
+  // BigInt() constructor em vez de literal `n` pra compat com target ES2017.
+  const h = createHash("sha256").update(`${gateway}:${externalPaymentId}`).digest()
+  const high = h.readBigUInt64BE(0)
+  return high & BigInt("0x7fffffffffffffff")
+}
 
 export interface TenantContext {
   id: string
@@ -47,6 +72,43 @@ export interface PaymentEvent {
  * cupom) fica no nosso banco e nunca e enviada para a plataforma.
  */
 export async function fulfillEnrollment(
+  tenant: TenantContext,
+  enrollmentId: string,
+  event: PaymentEvent,
+): Promise<void> {
+  // ── Lock distribuído via Postgres advisory lock ──────────────────────────
+  // Garante que apenas UM processo executa fulfill para um dado externalPaymentId
+  // por vez. `pg_try_advisory_lock` é não-bloqueante: se outro processo segura
+  // o lock, retorna false e abortamos — webhook é re-entregue depois.
+  // O lock vive enquanto a conexão estiver aberta; liberamos explicitamente
+  // no finally pra não vazar em pools longos (Supabase pooler).
+  const lockKey = advisoryLockKey(event.gateway, event.externalPaymentId)
+  const lockResult = await prisma.$queryRaw<Array<{ pg_try_advisory_lock: boolean }>>`
+    SELECT pg_try_advisory_lock(${lockKey}::bigint)
+  `
+  const acquired = lockResult[0]?.pg_try_advisory_lock === true
+  if (!acquired) {
+    contextLogger().info(
+      {
+        event: "fulfill.lock_busy",
+        gateway: event.gateway,
+        externalPaymentId: event.externalPaymentId,
+      },
+      "outro processo já está executando fulfill deste pagamento — abortando",
+    )
+    return
+  }
+
+  try {
+    await fulfillEnrollmentLocked(tenant, enrollmentId, event)
+  } finally {
+    await prisma.$queryRaw`SELECT pg_advisory_unlock(${lockKey}::bigint)`.catch(
+      swallow("fulfill.unlock"),
+    )
+  }
+}
+
+async function fulfillEnrollmentLocked(
   tenant: TenantContext,
   enrollmentId: string,
   event: PaymentEvent,

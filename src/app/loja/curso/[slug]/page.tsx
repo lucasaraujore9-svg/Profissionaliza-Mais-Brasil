@@ -1,3 +1,4 @@
+import type { Metadata } from "next"
 import { notFound } from "next/navigation"
 import { prisma } from "@/lib/prisma"
 import { getCurrentTenant } from "@/lib/tenant/current"
@@ -9,6 +10,35 @@ import {
 
 interface CoursePageProps {
   params: Promise<{ slug: string }>
+}
+
+export async function generateMetadata({
+  params,
+}: CoursePageProps): Promise<Metadata> {
+  const tenant = await getCurrentTenant()
+  const { slug } = await params
+  if (!tenant) return { title: "Curso" }
+  const course = await getTenantCourseBySlug(tenant.id, slug)
+  if (!course) return { title: "Curso não encontrado" }
+  const title = `${course.nome} — ${tenant.name}`
+  const description =
+    (course.descricao ?? "").slice(0, 160) ||
+    `Matricule-se em ${course.nome} pela vitrine ${tenant.name}.`
+  return {
+    title,
+    description,
+    openGraph: {
+      title,
+      description,
+      type: "website",
+      images: course.imageUrl ? [{ url: course.imageUrl }] : undefined,
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+    },
+  }
 }
 
 function whatsappLink(whatsapp: string, courseName: string): string {

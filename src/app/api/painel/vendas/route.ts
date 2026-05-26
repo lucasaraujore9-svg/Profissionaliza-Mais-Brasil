@@ -9,6 +9,7 @@ import {
   decryptTenantMpToken,
 } from "@/lib/mercadopago/client"
 import { tryConsumeCoupon, releaseCoupon } from "@/lib/coupons/consume"
+import { applyCouponDiscount } from "@/lib/coupons/discount"
 import { swallow } from "@/lib/errors"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 
@@ -175,12 +176,17 @@ export const POST = withRequestContext(
 
     let discountAmount = 0
     let couponId: string | null = null
+    let finalAmountFromCoupon: number | null = null
     if (data.couponCode) {
       const code = data.couponCode.toUpperCase()
       const now = new Date()
+      // Cupom só do próprio tenant — cupons PMB (tenantId=null) não vazam
+      // para checkout de revendedor. Antes o OR aceitava `tenantId: null` e
+      // permitia que cupons criados em /admin/vendas/cupons fossem aplicados
+      // em vendas de tenants, consumindo `usedCount` global indevidamente.
       const coupon = await prisma.coupon.findFirst({
         where: {
-          OR: [{ tenantId: tenant.id }, { tenantId: null }],
+          tenantId: tenant.id,
           code,
           isActive: true,
           validFrom: { lte: now },
@@ -193,11 +199,14 @@ export const POST = withRequestContext(
       if (coupon.maxUses !== null && coupon.usedCount >= coupon.maxUses) {
         return NextResponse.json({ error: "Cupom esgotado" }, { status: 400 })
       }
-      const raw =
-        coupon.discountType === "PERCENTAGE"
-          ? (basePrice * Number(coupon.discountValue)) / 100
-          : Number(coupon.discountValue)
-      discountAmount = Math.min(raw, basePrice)
+      // Cálculo via helper centralizado (Prisma.Decimal).
+      const calc = applyCouponDiscount({
+        basePrice,
+        discountType: coupon.discountType,
+        discountValue: coupon.discountValue,
+      })
+      discountAmount = calc.discountAmount
+      finalAmountFromCoupon = calc.finalAmount
 
       // Aplica o cap percentual sobre o desconto efetivo (% sobre basePrice),
       // assim cupons FIXED também são limitados — antes só PERCENTAGE era validado.
@@ -219,7 +228,7 @@ export const POST = withRequestContext(
       couponId = coupon.id
     }
 
-    const finalAmount = Number((basePrice - discountAmount).toFixed(2))
+    const finalAmount = finalAmountFromCoupon ?? basePrice
 
     // Cria ou reaproveita aluno por CPF (no contexto do tenant)
     const existingStudent = await prisma.student.findFirst({
@@ -306,96 +315,105 @@ export const POST = withRequestContext(
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? ""
     const accessToken = decryptTenantMpToken(tenant.mpAccessToken)
 
-    if (isMonthly && monthlyMonths) {
-      const startDate = new Date(Date.now() + 60_000).toISOString()
-      const endDate = new Date(
-        Date.now() +
-          monthlyMonths * 31 * 24 * 60 * 60 * 1000 +
-          3 * 24 * 60 * 60 * 1000,
-      ).toISOString()
+    // Wrapper try/catch obrigatório: ver explicação na rota /api/aluno/comprar.
+    // Sem isso, falha de MP (5xx, timeout) deixa enrollment PENDING órfã +
+    // cupom com usedCount inflado pra sempre.
+    try {
+      if (isMonthly && monthlyMonths) {
+        const startDate = new Date(Date.now() + 60_000).toISOString()
+        const endDate = new Date(
+          Date.now() +
+            monthlyMonths * 31 * 24 * 60 * 60 * 1000 +
+            3 * 24 * 60 * 60 * 1000,
+        ).toISOString()
 
-      const preapproval = await createPreapproval(accessToken, {
-        reason: `Mensalidade — ${tenantCourse.course.nome}`,
-        external_reference: externalReference,
-        payer_email: student.email ?? data.email,
-        back_url: `${appUrl || `https://${process.env.NEXT_PUBLIC_APP_DOMAIN ?? "profissionalizamaisbrasil.com.br"}`}/painel/vendas?ok=${enrollment.id}`,
-        notification_url: appUrl
-          ? `${appUrl}/api/webhooks/mercadopago?tenant=${tenant.slug}`
-          : undefined,
-        auto_recurring: {
-          frequency: 1,
-          frequency_type: "months",
-          transaction_amount: finalAmount,
-          currency_id: "BRL",
-          start_date: startDate,
-          end_date: endDate,
+        const preapproval = await createPreapproval(accessToken, {
+          reason: `Mensalidade — ${tenantCourse.course.nome}`,
+          external_reference: externalReference,
+          payer_email: student.email ?? data.email,
+          back_url: `${appUrl || `https://${process.env.NEXT_PUBLIC_APP_DOMAIN ?? "profissionalizamaisbrasil.com.br"}`}/painel/vendas?ok=${enrollment.id}`,
+          notification_url: appUrl
+            ? `${appUrl}/api/webhooks/mercadopago?tenant=${tenant.slug}`
+            : undefined,
+          auto_recurring: {
+            frequency: 1,
+            frequency_type: "months",
+            transaction_amount: finalAmount,
+            currency_id: "BRL",
+            start_date: startDate,
+            end_date: endDate,
+          },
+          status: "pending",
+        })
+
+        await prisma.enrollment.update({
+          where: { id: enrollment.id },
+          data: { mpSubscriptionId: preapproval.id, externalReference },
+        })
+
+        return NextResponse.json({
+          data: {
+            enrollmentId: enrollment.id,
+            mode: "subscription",
+            installmentsTotal: monthlyMonths,
+            initPoint: preapproval.init_point,
+            finalAmount,
+            discountAmount,
+            basePrice,
+            studentId: student.id,
+          },
+        })
+      }
+
+      const preference = await createPreference(accessToken, {
+        items: [
+          {
+            id: tenantCourse.course.id,
+            title: tenantCourse.course.nome,
+            quantity: 1,
+            unit_price: finalAmount,
+            currency_id: "BRL",
+          },
+        ],
+        payer: {
+          name: student.nome,
+          email: student.email ?? data.email,
+          identification: student.cpf
+            ? { type: "CPF", number: student.cpf }
+            : undefined,
         },
-        status: "pending",
+        back_urls: appUrl
+          ? {
+              success: `${appUrl}/painel/vendas?ok=${enrollment.id}`,
+              failure: `${appUrl}/painel/vendas?err=${enrollment.id}`,
+              pending: `${appUrl}/painel/vendas?pend=${enrollment.id}`,
+            }
+          : undefined,
+        auto_return: "approved",
+        external_reference: externalReference,
+        notification_url: appUrl ? `${appUrl}/api/webhooks/mercadopago?tenant=${tenant.slug}` : undefined,
       })
 
       await prisma.enrollment.update({
         where: { id: enrollment.id },
-        data: { mpSubscriptionId: preapproval.id, externalReference },
+        data: { mpPreferenceId: preference.id, externalReference },
       })
 
       return NextResponse.json({
         data: {
           enrollmentId: enrollment.id,
-          mode: "subscription",
-          installmentsTotal: monthlyMonths,
-          initPoint: preapproval.init_point,
+          mode: "one_time",
+          initPoint: preference.init_point,
           finalAmount,
           discountAmount,
           basePrice,
           studentId: student.id,
         },
       })
+    } catch (mpError) {
+      await prisma.enrollment.delete({ where: { id: enrollment.id } }).catch(() => {})
+      if (couponId) await releaseCoupon(couponId).catch(() => {})
+      throw mpError
     }
-
-    const preference = await createPreference(accessToken, {
-      items: [
-        {
-          id: tenantCourse.course.id,
-          title: tenantCourse.course.nome,
-          quantity: 1,
-          unit_price: finalAmount,
-          currency_id: "BRL",
-        },
-      ],
-      payer: {
-        name: student.nome,
-        email: student.email ?? data.email,
-        identification: student.cpf
-          ? { type: "CPF", number: student.cpf }
-          : undefined,
-      },
-      back_urls: appUrl
-        ? {
-            success: `${appUrl}/painel/vendas?ok=${enrollment.id}`,
-            failure: `${appUrl}/painel/vendas?err=${enrollment.id}`,
-            pending: `${appUrl}/painel/vendas?pend=${enrollment.id}`,
-          }
-        : undefined,
-      auto_return: "approved",
-      external_reference: externalReference,
-      notification_url: appUrl ? `${appUrl}/api/webhooks/mercadopago?tenant=${tenant.slug}` : undefined,
-    })
-
-    await prisma.enrollment.update({
-      where: { id: enrollment.id },
-      data: { mpPreferenceId: preference.id, externalReference },
-    })
-
-    return NextResponse.json({
-      data: {
-        enrollmentId: enrollment.id,
-        mode: "one_time",
-        initPoint: preference.init_point,
-        finalAmount,
-        discountAmount,
-        basePrice,
-        studentId: student.id,
-      },
-    })
   },
 )

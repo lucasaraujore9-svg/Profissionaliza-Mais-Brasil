@@ -16,11 +16,18 @@ const DEFAULT_PAYOUT_DAY = 20
  *   2026-02-15 → 2026-03-20
  *   2026-02-28 → 2026-03-20
  *   2026-03-01 → 2026-04-20
+ *
+ * Edge case: payoutDay=31 e mes alvo com 30 dias → setUTCDate(31) overflow
+ * para 01 do mes seguinte. Clampamos para o último dia do mês alvo.
  */
 export function computeAvailableAt(paidAt: Date, payoutDay = DEFAULT_PAYOUT_DAY): Date {
   const d = new Date(paidAt)
+  d.setUTCDate(1) // evita overflow durante o setMonth (31/jan + 1 mes != 3/mar)
   d.setUTCMonth(d.getUTCMonth() + 1)
-  d.setUTCDate(payoutDay)
+  const lastDayOfTargetMonth = new Date(
+    Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0),
+  ).getUTCDate()
+  d.setUTCDate(Math.min(payoutDay, lastDayOfTargetMonth))
   d.setUTCHours(0, 0, 0, 0)
   return d
 }
@@ -203,20 +210,43 @@ export async function cancelCommissionForTenantPayment(
   if (commission.status === "CANCELLED") return commission
 
   if (commission.status === "PAID") {
-    contextLogger().warn(
-      { event: "referrals.cancel_after_paid", commissionId: commission.id, reason },
-      "cancel solicitado mas comissão já paga",
+    // Marca explicitamente a comissão como "estornada após pago" preservando
+    // o registro PAID original (para o demonstrativo permanecer correto).
+    // Esse marcador é lido em processMonthlyPayouts para BLOQUEAR a criação
+    // de novos payouts automáticos para este referrer até que o débito seja
+    // resolvido manualmente pelo admin (clawback).
+    const clawbackMarker = `[CLAWBACK_PENDING] valor R$ ${Number(commission.amount).toFixed(2).replace(".", ",")} — motivo: ${reason}`
+    const updated = await prisma.referralCommission.update({
+      where: { id: commission.id },
+      data: {
+        // status fica PAID (histórico preservado), mas registramos no
+        // cancelReason o pendente para auditoria.
+        cancelReason: clawbackMarker,
+        cancelledAt: new Date(),
+      },
+    })
+
+    contextLogger().error(
+      {
+        event: "audit.referrals.clawback_pending",
+        commissionId: commission.id,
+        referrerTenantId: commission.referrerTenantId,
+        amount: Number(commission.amount),
+        reason,
+      },
+      "comissão PAID precisa de clawback — admin deve resolver manualmente",
     )
+
     await createNotification({
       audience: "ROLE",
       roleTarget: "SUPER_ADMIN",
-      level: "WARNING",
-      title: `Estorno apos comissao paga: ${commission.referrer.name}`,
-      body: `A comissao ${commission.id} (R$ ${Number(commission.amount).toFixed(2).replace(".", ",")}) ja havia sido paga ao indicador ${commission.referrer.name}, mas a mensalidade ${commission.referred.name} foi estornada. Tratar manualmente.`,
+      level: "ERROR",
+      title: `⚠️ Clawback pendente: ${commission.referrer.name}`,
+      body: `A comissão ${commission.id} (R$ ${Number(commission.amount).toFixed(2).replace(".", ",")}) já havia sido paga, mas a mensalidade ${commission.referred.name} foi estornada. Próximos payouts automáticos do indicador ficam BLOQUEADOS até resolver. Verifique /admin/indicacoes/comissoes.`,
       category: "referral",
       href: `/admin/indicacoes/comissoes`,
     })
-    return commission
+    return updated
   }
 
   const updated = await prisma.referralCommission.update({

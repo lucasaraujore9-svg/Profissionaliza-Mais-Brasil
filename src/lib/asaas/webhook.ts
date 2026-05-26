@@ -33,13 +33,21 @@ export function validateAsaasWebhook(
 
 /**
  * Parse e valida o payload do webhook.
+ *
+ * `event` é sempre obrigatório. `payment` aparece em PAYMENT_* events,
+ * `subscription` em SUBSCRIPTION_* events — exigimos pelo menos um. Antes
+ * exigíamos `payment` em todos, o que rejeitava SUBSCRIPTION_INACTIVATED/
+ * DELETED com 400 e impedia a suspensão automática do tenant via webhook.
  */
 export function parseAsaasWebhookPayload(
   body: unknown,
 ): AsaasWebhookPayload {
   const payload = body as AsaasWebhookPayload
-  if (!payload?.event || !payload?.payment) {
-    throw new Error("Invalid Asaas webhook payload")
+  if (!payload?.event) {
+    throw new Error("Invalid Asaas webhook payload: missing event")
+  }
+  if (!payload.payment && !payload.subscription) {
+    throw new Error("Invalid Asaas webhook payload: missing payment or subscription")
   }
   return payload
 }
