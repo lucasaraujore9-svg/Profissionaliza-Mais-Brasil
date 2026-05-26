@@ -20,7 +20,7 @@ import {
   Award,
   Share2,
   MessageSquare,
-  Image as ImageIcon,
+  Palette,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -40,7 +40,7 @@ const ALL_ITEMS: {
   { href: "/admin/indicacoes", label: "Indicações", icon: Share2, roles: ["SUPER_ADMIN", "PMB_RESELLER_MGR"] },
   { href: "/admin/certificados", label: "Certificados", icon: Award, roles: ["SUPER_ADMIN"] },
   { href: "/admin/catalogo", label: "Catálogo", icon: BookOpen, roles: ["SUPER_ADMIN", "PMB_SALES", "PMB_RESELLER_MGR"] },
-  { href: "/admin/banner", label: "Banner", icon: ImageIcon, roles: ["SUPER_ADMIN"] },
+  { href: "/admin/vitrine", label: "Vitrine", icon: Palette, roles: ["SUPER_ADMIN"] },
   { href: "/admin/analytics", label: "Analytics", icon: BarChart3, roles: ["SUPER_ADMIN"] },
   { href: "/admin/relatorios", label: "Relatórios", icon: FileText, roles: ["SUPER_ADMIN", "PMB_SALES", "PMB_RESELLER_MGR"] },
   { href: "/admin/equipe", label: "Equipe", icon: UserCog, roles: ["SUPER_ADMIN"] },
