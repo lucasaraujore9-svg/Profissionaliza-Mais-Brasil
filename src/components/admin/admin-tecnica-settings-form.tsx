@@ -8,11 +8,16 @@ import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import {
+  TecnicaCoursesEditor,
+  type TecnicaCourseDraft,
+} from "./tecnica-courses-editor"
 
 interface InitialValues {
   enabled: boolean
   url: string | null
   label: string | null
+  courses: TecnicaCourseDraft[]
 }
 
 export function AdminTecnicaSettingsForm({
@@ -25,6 +30,7 @@ export function AdminTecnicaSettingsForm({
   const [enabled, setEnabled] = useState(initial.enabled)
   const [url, setUrl] = useState(initial.url ?? "")
   const [label, setLabel] = useState(initial.label ?? "")
+  const [courses, setCourses] = useState<TecnicaCourseDraft[]>(initial.courses)
 
   function submit() {
     const trimmedUrl = url.trim()
@@ -40,6 +46,22 @@ export function AdminTecnicaSettingsForm({
         return
       }
     }
+    // Valida cursos antes de enviar
+    for (let i = 0; i < courses.length; i++) {
+      const c = courses[i]
+      if (!c.name.trim()) {
+        toast.error(`Curso #${i + 1}: nome obrigatório`)
+        return
+      }
+      if (c.url.trim()) {
+        try {
+          new URL(c.url.trim())
+        } catch {
+          toast.error(`Curso #${i + 1}: URL inválida`)
+          return
+        }
+      }
+    }
 
     startTransition(async () => {
       const res = await fetch("/api/admin/system-settings/tecnica", {
@@ -49,6 +71,11 @@ export function AdminTecnicaSettingsForm({
           enabled,
           url: trimmedUrl || null,
           label: label.trim() || null,
+          courses: courses.map((c, i) => ({
+            name: c.name.trim(),
+            url: c.url.trim(),
+            order: i,
+          })),
         }),
       })
       const body = await res.json().catch(() => ({}))
@@ -67,8 +94,8 @@ export function AdminTecnicaSettingsForm({
         <Building2 className="mt-0.5 h-5 w-5 shrink-0 text-[var(--color-pmb-green)]" />
         <div className="text-xs text-[var(--color-pmb-green-900)]">
           Ao ativar, o site institucional exibe um card de categoria, um item
-          de menu e uma seção “Cursos Técnicos”. O clique mostra uma tela de
-          loading e redireciona para a URL configurada.
+          de menu e uma seção “Cursos Técnicos” com a lista de cursos abaixo.
+          Cada curso pode ter URL própria; sem URL, usa a base configurada acima.
         </div>
       </div>
 
@@ -90,7 +117,7 @@ export function AdminTecnicaSettingsForm({
             type="url"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
-            placeholder="https://escolatecnica.com.br"
+            placeholder="https://escolatecnicadobrasil.com.br/"
           />
           {url.trim() && (
             <a
@@ -105,7 +132,7 @@ export function AdminTecnicaSettingsForm({
           )}
         </div>
         <p className="text-xs text-gray-500">
-          Destino do redirect quando alguém clica em “Cursos Técnicos”.
+          URL base usada como fallback quando um curso não tem URL própria.
         </p>
       </div>
 
@@ -121,6 +148,15 @@ export function AdminTecnicaSettingsForm({
         <p className="text-xs text-gray-500">
           Como o card e o item de menu aparecem. Vazio = “Cursos Técnicos”.
         </p>
+      </div>
+
+      <div className="rounded-lg border border-gray-200 bg-gray-50/40 p-4">
+        <TecnicaCoursesEditor
+          courses={courses}
+          onChange={setCourses}
+          fallbackUrl={url.trim() || null}
+          disabled={pending}
+        />
       </div>
 
       <div className="flex justify-end">

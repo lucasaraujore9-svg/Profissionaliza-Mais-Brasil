@@ -17,6 +17,7 @@ export interface CurrentTenant {
   tecnicaEnabled: boolean
   tecnicaUrl: string | null
   tecnicaLabel: string | null
+  tecnicaCourses: unknown // Json — parseado em tecnicaFromTenant
 }
 
 export const getCurrentTenant = cache(
@@ -46,6 +47,7 @@ export const getCurrentTenant = cache(
           tecnicaEnabled: true,
           tecnicaUrl: true,
           tecnicaLabel: true,
+          tecnicaCourses: true,
         },
       })
 

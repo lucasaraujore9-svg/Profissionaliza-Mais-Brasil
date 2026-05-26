@@ -86,7 +86,13 @@ export default async function LandingPage() {
           cursos={diversas}
         />
       )}
-      {tecnica.enabled && <TecnicaSection label={tecnica.label} />}
+      {tecnica.enabled && (
+        <TecnicaSection
+          label={tecnica.label}
+          courses={tecnica.courses}
+          fallbackUrl={tecnica.url}
+        />
+      )}
       <Testimonials />
       <FinalCta />
     </>

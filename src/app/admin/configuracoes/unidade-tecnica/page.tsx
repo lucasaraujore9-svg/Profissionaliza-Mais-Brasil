@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { requireAdminSession } from "@/lib/auth/admin-session"
 import { PageHeader } from "@/components/painel/page-header"
 import { AdminTecnicaSettingsForm } from "@/components/admin/admin-tecnica-settings-form"
+import { parseTecnicaCourses } from "@/lib/catalog/tecnica"
 
 export const dynamic = "force-dynamic"
 
@@ -21,8 +22,14 @@ export default async function AdminTecnicaSettingsPage() {
       tecnicaEnabled: true,
       tecnicaUrl: true,
       tecnicaLabel: true,
+      tecnicaCourses: true,
     },
   })
+
+  const coursesNormalized = parseTecnicaCourses(
+    settings.tecnicaCourses,
+    settings.tecnicaUrl,
+  )
 
   return (
     <div className="space-y-6">
@@ -44,6 +51,12 @@ export default async function AdminTecnicaSettingsPage() {
           enabled: settings.tecnicaEnabled,
           url: settings.tecnicaUrl,
           label: settings.tecnicaLabel,
+          courses: coursesNormalized.map((c) => ({
+            name: c.name,
+            // Esconde a URL no editor quando ela coincide com a base — assim
+            // o admin nao precisa repetir manualmente a URL em todo curso.
+            url: c.url === settings.tecnicaUrl ? "" : c.url,
+          })),
         }}
       />
     </div>

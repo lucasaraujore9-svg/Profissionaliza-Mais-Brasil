@@ -134,7 +134,13 @@ export default async function LojaHomePage() {
           cursos={diversas}
         />
       )}
-      {tecnica.enabled && <TecnicaSection label={tecnica.label} />}
+      {tecnica.enabled && (
+        <TecnicaSection
+          label={tecnica.label}
+          courses={tecnica.courses}
+          fallbackUrl={tecnica.url}
+        />
+      )}
       <Testimonials />
       <FinalCta />
     </>

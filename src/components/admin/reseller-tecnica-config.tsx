@@ -4,12 +4,17 @@ import { useEffect, useState } from "react"
 import { Building2, Save, ExternalLink, Loader2 } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
+import {
+  TecnicaCoursesEditor,
+  type TecnicaCourseDraft,
+} from "./tecnica-courses-editor"
 
 interface ResellerTecnicaConfigProps {
   tenantId: string
   tecnicaEnabled: boolean
   tecnicaUrl: string | null
   tecnicaLabel: string | null
+  tecnicaCourses: TecnicaCourseDraft[]
   onSaved?: () => void
 }
 
@@ -18,18 +23,21 @@ export function ResellerTecnicaConfig({
   tecnicaEnabled,
   tecnicaUrl,
   tecnicaLabel,
+  tecnicaCourses,
   onSaved,
 }: ResellerTecnicaConfigProps) {
   const [enabled, setEnabled] = useState(tecnicaEnabled)
   const [url, setUrl] = useState(tecnicaUrl ?? "")
   const [label, setLabel] = useState(tecnicaLabel ?? "")
+  const [courses, setCourses] = useState<TecnicaCourseDraft[]>(tecnicaCourses)
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     setEnabled(tecnicaEnabled)
     setUrl(tecnicaUrl ?? "")
     setLabel(tecnicaLabel ?? "")
-  }, [tecnicaEnabled, tecnicaUrl, tecnicaLabel])
+    setCourses(tecnicaCourses)
+  }, [tecnicaEnabled, tecnicaUrl, tecnicaLabel, tecnicaCourses])
 
   async function save() {
     const trimmedUrl = url.trim()
@@ -45,6 +53,21 @@ export function ResellerTecnicaConfig({
         return
       }
     }
+    for (let i = 0; i < courses.length; i++) {
+      const c = courses[i]
+      if (!c.name.trim()) {
+        toast.error(`Curso #${i + 1}: nome obrigatório`)
+        return
+      }
+      if (c.url.trim()) {
+        try {
+          new URL(c.url.trim())
+        } catch {
+          toast.error(`Curso #${i + 1}: URL inválida`)
+          return
+        }
+      }
+    }
 
     setSaving(true)
     try {
@@ -55,6 +78,11 @@ export function ResellerTecnicaConfig({
           enabled,
           url: trimmedUrl || null,
           label: label.trim() || null,
+          courses: courses.map((c, i) => ({
+            name: c.name.trim(),
+            url: c.url.trim(),
+            order: i,
+          })),
         }),
       })
       const body = await res.json().catch(() => ({}))
@@ -158,6 +186,15 @@ export function ResellerTecnicaConfig({
           Como o card e o item de menu aparecem na vitrine. Vazio = “Cursos
           Técnicos”.
         </p>
+      </div>
+
+      <div className="mt-5 rounded-lg border border-gray-200 bg-gray-50/40 p-4">
+        <TecnicaCoursesEditor
+          courses={courses}
+          onChange={setCourses}
+          fallbackUrl={url.trim() || null}
+          disabled={saving}
+        />
       </div>
 
       <div className="mt-5 flex justify-end">

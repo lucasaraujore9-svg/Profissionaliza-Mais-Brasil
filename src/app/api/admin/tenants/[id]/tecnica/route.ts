@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
+import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { requireAdminSession } from "@/lib/auth/admin-session"
 import { invalidateTenant } from "@/lib/redis/tenant-cache"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
+import { validateTecnicaCoursesInput } from "@/lib/catalog/tecnica"
 
 const bodySchema = z
   .object({
@@ -16,6 +18,7 @@ const bodySchema = z
       .nullable()
       .optional(),
     label: z.string().trim().max(60).nullable().optional(),
+    courses: z.unknown().optional(),
   })
   .superRefine((data, ctx) => {
     if (data.enabled && !data.url) {
@@ -88,18 +91,25 @@ export const PUT = withRequestContextParams<{ id: string }>(
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
+    const coursesResult = validateTecnicaCoursesInput(parsed.data.courses)
+    if (!coursesResult.ok) {
+      return NextResponse.json({ error: coursesResult.error }, { status: 400 })
+    }
+
     const updated = await prisma.tenant.update({
       where: { id },
       data: {
         tecnicaEnabled: parsed.data.enabled,
         tecnicaUrl: parsed.data.url ?? null,
         tecnicaLabel: parsed.data.label?.trim() || null,
+        tecnicaCourses: coursesResult.courses as unknown as Prisma.InputJsonValue,
       },
       select: {
         id: true,
         tecnicaEnabled: true,
         tecnicaUrl: true,
         tecnicaLabel: true,
+        tecnicaCourses: true,
       },
     })
 
@@ -115,6 +125,7 @@ export const PUT = withRequestContextParams<{ id: string }>(
         tecnicaEnabled: updated.tecnicaEnabled,
         tecnicaUrl: updated.tecnicaUrl,
         tecnicaLabel: updated.tecnicaLabel,
+        tecnicaCourses: updated.tecnicaCourses,
       },
     })
   },

@@ -276,6 +276,22 @@ export const GET = withRequestContextParams<{ id: string }>(
         tecnicaEnabled: tenant.tecnicaEnabled,
         tecnicaUrl: tenant.tecnicaUrl,
         tecnicaLabel: tenant.tecnicaLabel,
+        tecnicaCourses: (() => {
+          const raw = tenant.tecnicaCourses
+          if (!Array.isArray(raw)) return []
+          return raw
+            .map((item: unknown, idx: number) => {
+              if (!item || typeof item !== "object") return null
+              const obj = item as Record<string, unknown>
+              const name = typeof obj.name === "string" ? obj.name : ""
+              const url = typeof obj.url === "string" ? obj.url : ""
+              if (!name) return null
+              return { name, url, order: typeof obj.order === "number" ? obj.order : idx }
+            })
+            .filter((x): x is { name: string; url: string; order: number } => x !== null)
+            .sort((a, b) => a.order - b.order)
+            .map((c) => ({ name: c.name, url: c.url }))
+        })(),
       },
       referrer: tenant.referrer
         ? {

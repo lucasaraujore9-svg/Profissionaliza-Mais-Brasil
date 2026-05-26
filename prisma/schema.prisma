@@ -243,6 +243,10 @@ model Tenant {
   tecnicaEnabled Boolean @default(false) @map("tecnica_enabled")
   tecnicaUrl     String? @map("tecnica_url")
   tecnicaLabel   String? @map("tecnica_label") // null = "Cursos Tecnicos"
+  // Lista editavel de cursos exibidos na secao. Formato JSON:
+  // [{ name: string, url: string, order: number }]. null/empty => sem cursos
+  // (cai no fallback de mostrar so o CTA com tecnicaUrl).
+  tecnicaCourses Json?   @map("tecnica_courses")
 
   // Relacoes
   tenantCourses        TenantCourse[]
@@ -979,6 +983,7 @@ model SystemSettings {
   tecnicaEnabled Boolean @default(false) @map("tecnica_enabled")
   tecnicaUrl     String? @map("tecnica_url")
   tecnicaLabel   String? @map("tecnica_label")
+  tecnicaCourses Json?   @map("tecnica_courses")
 
   updatedAt DateTime @updatedAt @map("updated_at")
 

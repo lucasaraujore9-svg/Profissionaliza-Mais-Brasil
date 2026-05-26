@@ -42,6 +42,7 @@ interface DetailResponse {
     tecnicaEnabled: boolean
     tecnicaUrl: string | null
     tecnicaLabel: string | null
+    tecnicaCourses: Array<{ name: string; url: string }>
   }
   referrer: ReferrerSummary | null
   referralStats: ReferralStats
@@ -132,6 +133,7 @@ export function ResellerDetailClient({ tenantId }: ResellerDetailClientProps) {
             tecnicaEnabled={data.reseller.tecnicaEnabled}
             tecnicaUrl={data.reseller.tecnicaUrl}
             tecnicaLabel={data.reseller.tecnicaLabel}
+            tecnicaCourses={data.reseller.tecnicaCourses}
             onSaved={load}
           />
         </div>
