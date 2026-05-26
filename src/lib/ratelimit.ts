@@ -7,17 +7,10 @@ const isProd = process.env.NODE_ENV === "production"
 
 const redis = url && token ? new Redis({ url, token }) : null
 
-// Em produção sem Redis configurado: fail-closed. O default antigo era
-// fail-open (qualquer request passava), o que abria a porta para brute-force
-// em /login, spam em /forgot-password, enumeration de cupons, etc. assertEnv
-// emite warning no boot, mas se o operador ignorar, este check garante que
-// não vamos servir tráfego com rate-limit desligado.
-if (isProd && !redis) {
-  throw new Error(
-    "[ratelimit] UPSTASH_REDIS_REST_URL/TOKEN são obrigatórios em produção. " +
-      "Configure Upstash no painel do Vercel ou suba a app em modo não-prod.",
-  )
-}
+// Fail-closed em produção sem Redis: ver checagem dentro de rateLimit/rateLimitByKey.
+// Antes essa guarda era um throw em tempo de import, mas isso quebra o
+// `next build` (page-data collection) na Vercel — o assertEnv em
+// instrumentation.ts já cobre o boot. Aqui só formalizamos o request-time deny.
 
 interface LimiterConfig {
   /** Identificador unico do bucket. */
@@ -61,11 +54,13 @@ export async function rateLimit(
 ): Promise<RateLimitResult> {
   const limiter = getLimiter(config)
   if (!limiter) {
+    // Fail-closed em prod: nega tráfego enquanto Upstash não estiver
+    // configurado. Em dev: fail-open (libera) pra não atrapalhar trabalho local.
     return {
-      ok: true,
-      remaining: config.limit,
+      ok: !isProd,
+      remaining: 0,
       limit: config.limit,
-      retryAfterSec: 0,
+      retryAfterSec: isProd ? 60 : 0,
     }
   }
 
@@ -93,10 +88,10 @@ export async function rateLimitByKey(
   const limiter = getLimiter(config)
   if (!limiter) {
     return {
-      ok: true,
-      remaining: config.limit,
+      ok: !isProd,
+      remaining: 0,
       limit: config.limit,
-      retryAfterSec: 0,
+      retryAfterSec: isProd ? 60 : 0,
     }
   }
 
