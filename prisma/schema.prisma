@@ -265,6 +265,7 @@ model Tenant {
   certificateTemplate  CertificateTemplate?
   notificationOverrides TenantNotificationOverride[]
   bannerSlides         BannerSlide[]
+  homeSections         HomeSection[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -1192,4 +1193,24 @@ model BannerSlide {
 
   @@index([tenantId, order])
   @@map("banner_slides")
+}
+
+/// Seções configuráveis da home. tenantId=null => config do site PMB
+/// (fallback); tenantId!=null => config própria da vitrine daquela revenda.
+/// `kind` controla qual renderer é usado; `config` é um JSON com shape
+/// específico por kind (validado em src/lib/home/sections.ts).
+model HomeSection {
+  id        String   @id @default(cuid())
+  tenantId  String?  @map("tenant_id")
+  kind      String // "bestsellers" | "category_courses" | "categories_grid" | "institutional"
+  position  Int      @default(0)
+  enabled   Boolean  @default(true)
+  config    Json
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, position])
+  @@map("home_sections")
 }
