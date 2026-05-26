@@ -14,7 +14,6 @@ export interface BestsellersConfig {
   subtitle: string
   mode: SectionMode
   count: SectionCount
-  /** Quando mode==="manual", esses IDs sao os exibidos. Vazio em modo random. */
   courseIds: string[]
 }
 
@@ -26,13 +25,53 @@ export interface CategoryCoursesConfig {
   mode: SectionMode
   count: SectionCount
   courseIds: string[]
-  /** Mostrar botao "Ver todos os cursos da categoria". */
   showSeeMore: boolean
 }
 
-export type AnySectionConfig = BestsellersConfig | CategoryCoursesConfig
+export interface CategoriesGridConfig {
+  kind: "categories_grid"
+  title: string
+  subtitle: string
+  /** Vazio = mostra todas as categorias ativas (ordem do banco). Não-vazio = só essas, na ordem dada. */
+  categoryIds: string[]
+}
 
-/** Persistido em home_sections (1 row por seção). */
+export type InstitutionalVariant =
+  | "trust_bar"
+  | "learn_anywhere"
+  | "testimonials"
+  | "final_cta"
+  | "benefits"
+  | "custom"
+
+export interface InstitutionalItem {
+  title: string
+  body: string
+  iconName: string | null
+  imageUrl: string | null
+  meta: string | null
+}
+
+export interface InstitutionalConfig {
+  kind: "institutional"
+  variant: InstitutionalVariant
+  title: string
+  subtitle: string
+  body: string
+  imageUrl: string | null
+  buttonText: string | null
+  buttonHref: string | null
+  secondaryButtonText: string | null
+  secondaryButtonHref: string | null
+  items: InstitutionalItem[]
+}
+
+export type AnySectionConfig =
+  | BestsellersConfig
+  | CategoryCoursesConfig
+  | CategoriesGridConfig
+  | InstitutionalConfig
+
 export interface HomeSectionRecord<T extends AnySectionConfig = AnySectionConfig> {
   id: string
   tenantId: string | null
@@ -46,8 +85,24 @@ export interface HomeSectionRecord<T extends AnySectionConfig = AnySectionConfig
 // Validacao
 // ---------------------------------------------------------------------------
 
-export const SECTION_KINDS = ["bestsellers", "category_courses"] as const
+export const SECTION_KINDS = [
+  "bestsellers",
+  "category_courses",
+  "categories_grid",
+  "institutional",
+] as const
 export type SectionKind = (typeof SECTION_KINDS)[number]
+
+const INSTITUTIONAL_VARIANTS: InstitutionalVariant[] = [
+  "trust_bar",
+  "learn_anywhere",
+  "testimonials",
+  "final_cta",
+  "benefits",
+  "custom",
+]
+
+const MAX_ITEMS = 16
 
 export function isSectionKind(value: unknown): value is SectionKind {
   return typeof value === "string" && (SECTION_KINDS as readonly string[]).includes(value)
@@ -63,10 +118,35 @@ interface ValidationErr {
   error: string
 }
 
-/**
- * Valida um payload bruto e retorna a config normalizada (com defaults).
- * Validacao de existencia de cursos/categoria fica para o caller (precisa de DB).
- */
+function strOrEmpty(v: unknown, max = 200): string {
+  return typeof v === "string" ? v.trim().slice(0, max) : ""
+}
+function strOrNull(v: unknown, max = 500): string | null {
+  if (typeof v !== "string") return null
+  const t = v.trim()
+  return t.length === 0 ? null : t.slice(0, max)
+}
+
+function validateInstitutionalItems(raw: unknown): InstitutionalItem[] | string {
+  if (raw == null) return []
+  if (!Array.isArray(raw)) return "items deve ser uma lista"
+  if (raw.length > MAX_ITEMS) return `Máximo ${MAX_ITEMS} itens por bloco`
+  const out: InstitutionalItem[] = []
+  for (let i = 0; i < raw.length; i++) {
+    const r = raw[i]
+    if (!r || typeof r !== "object") return `Item #${i + 1}: formato inválido`
+    const o = r as Record<string, unknown>
+    out.push({
+      title: strOrEmpty(o.title, 120),
+      body: strOrEmpty(o.body, 600),
+      iconName: strOrNull(o.iconName, 40),
+      imageUrl: strOrNull(o.imageUrl, 500),
+      meta: strOrNull(o.meta, 120),
+    })
+  }
+  return out
+}
+
 export function validateSectionPayload(
   kind: unknown,
   rawConfig: unknown,
@@ -79,10 +159,60 @@ export function validateSectionPayload(
   }
   const c = rawConfig as Record<string, unknown>
 
-  const title = typeof c.title === "string" ? c.title.trim() : ""
+  // ---------- categories_grid ----------
+  if (kind === "categories_grid") {
+    const title = strOrEmpty(c.title, 120) || "Qual profissão você quer aprender?"
+    const subtitle = strOrEmpty(c.subtitle, 200)
+    let categoryIds: string[] = []
+    if (Array.isArray(c.categoryIds)) {
+      categoryIds = c.categoryIds.filter((x): x is string => typeof x === "string")
+    }
+    return {
+      ok: true,
+      kind,
+      config: { kind: "categories_grid", title, subtitle, categoryIds },
+    }
+  }
+
+  // ---------- institutional ----------
+  if (kind === "institutional") {
+    const variant =
+      typeof c.variant === "string" && INSTITUTIONAL_VARIANTS.includes(c.variant as InstitutionalVariant)
+        ? (c.variant as InstitutionalVariant)
+        : "custom"
+    const title = strOrEmpty(c.title, 120)
+    const subtitle = strOrEmpty(c.subtitle, 200)
+    const body = strOrEmpty(c.body, 2000)
+    const imageUrl = strOrNull(c.imageUrl)
+    const buttonText = strOrNull(c.buttonText, 60)
+    const buttonHref = strOrNull(c.buttonHref)
+    const secondaryButtonText = strOrNull(c.secondaryButtonText, 60)
+    const secondaryButtonHref = strOrNull(c.secondaryButtonHref)
+    const itemsRes = validateInstitutionalItems(c.items)
+    if (typeof itemsRes === "string") return { ok: false, error: itemsRes }
+    return {
+      ok: true,
+      kind,
+      config: {
+        kind: "institutional",
+        variant,
+        title,
+        subtitle,
+        body,
+        imageUrl,
+        buttonText,
+        buttonHref,
+        secondaryButtonText,
+        secondaryButtonHref,
+        items: itemsRes,
+      },
+    }
+  }
+
+  // ---------- bestsellers / category_courses ----------
+  const title = strOrEmpty(c.title, 120)
   if (!title) return { ok: false, error: "Título obrigatório" }
-  if (title.length > 120) return { ok: false, error: "Título muito longo (máx 120)" }
-  const subtitle = typeof c.subtitle === "string" ? c.subtitle.trim().slice(0, 200) : ""
+  const subtitle = strOrEmpty(c.subtitle, 200)
 
   const mode = c.mode === "manual" || c.mode === "random" ? c.mode : null
   if (!mode) return { ok: false, error: "Modo deve ser 'manual' ou 'random'" }
@@ -96,13 +226,8 @@ export function validateSectionPayload(
   }
 
   if (mode === "manual") {
-    if (courseIds.length < 4) {
-      return { ok: false, error: "No modo manual, selecione pelo menos 4 cursos" }
-    }
-    if (courseIds.length > 8) {
-      return { ok: false, error: "Máximo 8 cursos por seção" }
-    }
-    // Em manual, count e' efetivamente courseIds.length (mas validamos coerencia)
+    if (courseIds.length < 4) return { ok: false, error: "No modo manual, selecione pelo menos 4 cursos" }
+    if (courseIds.length > 8) return { ok: false, error: "Máximo 8 cursos por seção" }
     if (courseIds.length !== count) {
       return {
         ok: false,
@@ -110,7 +235,6 @@ export function validateSectionPayload(
       }
     }
   } else {
-    // random — courseIds e' irrelevante
     courseIds = []
   }
 
@@ -118,23 +242,13 @@ export function validateSectionPayload(
     return {
       ok: true,
       kind,
-      config: {
-        kind: "bestsellers",
-        title,
-        subtitle,
-        mode,
-        count,
-        courseIds,
-      },
+      config: { kind: "bestsellers", title, subtitle, mode, count, courseIds },
     }
   }
 
-  // kind === "category_courses"
   const categoryId = typeof c.categoryId === "string" ? c.categoryId : ""
-  if (!categoryId) {
-    return { ok: false, error: "Selecione uma categoria" }
-  }
-  const showSeeMore = c.showSeeMore !== false // default true
+  if (!categoryId) return { ok: false, error: "Selecione uma categoria" }
+  const showSeeMore = c.showSeeMore !== false
   return {
     ok: true,
     kind,
@@ -158,7 +272,6 @@ export function validateSectionPayload(
 export async function loadHomeSections(
   tenantId: string | null,
 ): Promise<HomeSectionRecord[]> {
-  // Tenant tem suas proprias secoes? Senao, herda do PMB.
   if (tenantId) {
     const own = await prisma.homeSection.findMany({
       where: { tenantId },
@@ -194,8 +307,7 @@ function parseRow(r: {
 }
 
 // ---------------------------------------------------------------------------
-// Expansao: pega uma section + cookie de bestsellers (read-only) e retorna
-// a lista de cursos a renderizar.
+// Bestsellers cache via cookie
 // ---------------------------------------------------------------------------
 
 export const BESTSELLERS_COOKIE = "pmb_bestsellers_v1"
@@ -229,14 +341,10 @@ export function serializeBestsellersCookie(snapshot: BestsellersSnapshot): strin
   return encodeURIComponent(JSON.stringify(snapshot))
 }
 
-/**
- * Resolve qual conjunto de cursos exibir para uma seção e retorna os cards
- * (formato Course da home). Retorna null se a seção for inválida/sem cursos.
- *
- * Para bestsellers em modo random: usa `bestsellersSnapshot` (do cookie) se
- * existir. Caso contrário, sorteia e devolve as IDs novas para o caller
- * gravar no cookie.
- */
+// ---------------------------------------------------------------------------
+// Expansao de courses (apenas para kinds que tem cursos)
+// ---------------------------------------------------------------------------
+
 export async function resolveSectionCourses(
   section: HomeSectionRecord,
   tenantId: string | null,
@@ -246,6 +354,7 @@ export async function resolveSectionCourses(
   },
 ): Promise<{ courses: Course[]; meta: { categorySlug?: string } } | null> {
   const cfg = section.config
+  if (cfg.kind !== "bestsellers" && cfg.kind !== "category_courses") return null
   const count = cfg.count
 
   if (cfg.kind === "bestsellers") {
@@ -253,7 +362,6 @@ export async function resolveSectionCourses(
     if (cfg.mode === "manual") {
       ids = cfg.courseIds.slice(0, count)
     } else {
-      // random — preserva snapshot da sessao
       if (options.bestsellersSnapshot && options.bestsellersSnapshot.ids.length === count) {
         ids = options.bestsellersSnapshot.ids
       } else {
@@ -268,24 +376,21 @@ export async function resolveSectionCourses(
     return { courses, meta: {} }
   }
 
-  if (cfg.kind === "category_courses") {
-    let ids: string[]
-    if (cfg.mode === "manual") {
-      ids = cfg.courseIds.slice(0, count)
-    } else {
-      ids = await pickRandomCourseIds({ tenantId, count, categoryId: cfg.categoryId })
-    }
-    if (ids.length < 4) return null
-    const courses = await fetchCoursesByIds(ids)
-    if (courses.length < 4) return null
-    const category = await prisma.category.findUnique({
-      where: { id: cfg.categoryId },
-      select: { slug: true },
-    })
-    return { courses, meta: { categorySlug: category?.slug } }
+  // category_courses
+  let ids: string[]
+  if (cfg.mode === "manual") {
+    ids = cfg.courseIds.slice(0, count)
+  } else {
+    ids = await pickRandomCourseIds({ tenantId, count, categoryId: cfg.categoryId })
   }
-
-  return null
+  if (ids.length < 4) return null
+  const courses = await fetchCoursesByIds(ids)
+  if (courses.length < 4) return null
+  const category = await prisma.category.findUnique({
+    where: { id: cfg.categoryId },
+    select: { slug: true },
+  })
+  return { courses, meta: { categorySlug: category?.slug } }
 }
 
 async function pickRandomCourseIds(args: {
@@ -293,9 +398,6 @@ async function pickRandomCourseIds(args: {
   count: number
   categoryId?: string
 }): Promise<string[]> {
-  // Cursos elegiveis: status=ATIVO + nao escondido na main. Para vitrine de
-  // revenda poderiamos filtrar tambem por TenantCourse.isVisible — mas como
-  // a home atual ja usa cursos globais, mantemos o mesmo escopo nesta fase.
   const rows = await prisma.course.findMany({
     where: {
       status: "ATIVO",
@@ -304,10 +406,8 @@ async function pickRandomCourseIds(args: {
     },
     select: { id: true },
   })
-  // void tenantId aqui (mesma fonte de dados que a home atual)
   void args.tenantId
   if (rows.length === 0) return []
-  // Fisher-Yates parcial
   const ids = rows.map((r) => r.id)
   for (let i = ids.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1))
@@ -329,7 +429,6 @@ async function fetchCoursesByIds(ids: string[]): Promise<Course[]> {
     },
     select: courseSelect,
   })
-  // Mantem a ordem original dos IDs
   const byId = new Map(rows.map((r) => [r.id, r]))
   const ordered = ids
     .map((id) => byId.get(id))
@@ -337,14 +436,41 @@ async function fetchCoursesByIds(ids: string[]): Promise<Course[]> {
   return ordered.map((r, idx) => toCourse(normalizeCourseRow(r), idx, null))
 }
 
+/**
+ * Resolve a lista de categorias a renderizar para uma seção `categories_grid`.
+ * Vazio = todas ativas; senão, na ordem configurada (e só ativas).
+ */
+export async function resolveCategoriesForSection(
+  section: HomeSectionRecord<CategoriesGridConfig>,
+): Promise<Array<{ id: string; nome: string; slug: string; iconName?: string | null }>> {
+  if (section.kind !== "categories_grid") return []
+  const ids = section.config.categoryIds
+  if (ids.length === 0) {
+    const rows = await prisma.category.findMany({
+      where: { isActive: true },
+      orderBy: [{ displayOrder: "asc" }, { name: "asc" }],
+      select: { id: true, name: true, slug: true },
+    })
+    return rows.map((r) => ({ id: r.id, nome: r.name, slug: r.slug }))
+  }
+  const rows = await prisma.category.findMany({
+    where: { id: { in: ids }, isActive: true },
+    select: { id: true, name: true, slug: true },
+  })
+  const byId = new Map(rows.map((r) => [r.id, r]))
+  return ids
+    .map((id) => byId.get(id))
+    .filter((r): r is NonNullable<typeof r> => r != null)
+    .map((r) => ({ id: r.id, nome: r.name, slug: r.slug }))
+}
+
 // ---------------------------------------------------------------------------
-// Helper: cria default sections para um tenant que ainda nao tem (fallback)
+// Fallback: clona PMB para tenant que ainda nao tem secoes proprias
 // ---------------------------------------------------------------------------
 
 export async function ensureTenantHomeSections(tenantId: string): Promise<void> {
   const count = await prisma.homeSection.count({ where: { tenantId } })
   if (count > 0) return
-  // Copia as secoes do PMB
   const pmbSections = await prisma.homeSection.findMany({
     where: { tenantId: null },
     orderBy: { position: "asc" },

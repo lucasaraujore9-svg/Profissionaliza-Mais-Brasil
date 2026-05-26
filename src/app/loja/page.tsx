@@ -1,15 +1,10 @@
 import { HeroBanner } from "@/components/main/home/hero-banner"
-import { TrustBar } from "@/components/main/home/trust-bar"
-import { CategoriesGrid } from "@/components/main/home/categories-grid"
-import { LearnAnywhere } from "@/components/main/home/learn-anywhere"
-import { Testimonials } from "@/components/main/home/testimonials"
-import { FinalCta } from "@/components/main/home/final-cta"
 import { TecnicaSection } from "@/components/main/home/tecnica-section"
 import { DynamicHomeSections } from "@/components/main/home/dynamic-home-sections"
 import { getCurrentTenant } from "@/lib/tenant/current"
 import { tecnicaFromTenant } from "@/lib/catalog/tecnica"
 import { prisma } from "@/lib/prisma"
-import { loadShowcase, loadCategorias } from "@/lib/catalog/home"
+import { loadShowcase } from "@/lib/catalog/home"
 
 export const dynamic = "force-dynamic"
 
@@ -30,9 +25,8 @@ export default async function LojaHomePage() {
     )
   }
 
-  const [showcase, categorias, bannerSlides] = await Promise.all([
+  const [showcase, bannerSlides] = await Promise.all([
     loadShowcase(),
-    loadCategorias(),
     prisma.bannerSlide.findMany({
       where: { tenantId: tenant.id, active: true },
       orderBy: [{ order: "asc" }, { createdAt: "asc" }],
@@ -54,14 +48,11 @@ export default async function LojaHomePage() {
         tenantBannerUrl={tenant.bannerUrl}
         slides={bannerSlides}
       />
-      <TrustBar />
-      <CategoriesGrid
-        categorias={categorias}
+      <DynamicHomeSections
+        tenantId={tenant.id}
         tecnicaEnabled={tecnica.enabled}
         tecnicaLabel={tecnica.label}
       />
-      <DynamicHomeSections tenantId={tenant.id} />
-      <LearnAnywhere />
       {tecnica.enabled && (
         <TecnicaSection
           label={tecnica.label}
@@ -69,8 +60,6 @@ export default async function LojaHomePage() {
           fallbackUrl={tecnica.url}
         />
       )}
-      <Testimonials />
-      <FinalCta />
     </>
   )
 }

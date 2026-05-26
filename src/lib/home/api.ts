@@ -6,16 +6,6 @@ import {
   type AnySectionConfig,
 } from "./sections"
 
-/**
- * Operações compartilhadas entre /api/admin/home-sections e /api/painel/home-sections.
- *
- * `scope.tenantId === null` => operando sobre as seções globais (PMB);
- * `scope.tenantId === "abc123"` => operando sobre as seções daquela revenda.
- *
- * Cada handler aqui assume que o caller (route file) já validou autenticação
- * e permissão antes de chamar.
- */
-
 interface Scope {
   tenantId: string | null
 }
@@ -37,11 +27,6 @@ export async function listSections(scope: Scope) {
   })
 }
 
-/**
- * POST /api/.../home-sections — cria uma nova seção.
- * Body: { kind, config }. position é calculado (último).
- * Para bestsellers: força enabled=true e bloqueia duplicata.
- */
 export async function createSection(scope: Scope, body: unknown) {
   if (!body || typeof body !== "object") {
     return NextResponse.json({ error: "Payload inválido" }, { status: 400 })
@@ -51,20 +36,26 @@ export async function createSection(scope: Scope, body: unknown) {
   if (!validation.ok) {
     return NextResponse.json({ error: validation.error }, { status: 400 })
   }
-  // Para bestsellers: só pode existir uma por escopo.
-  if (validation.kind === "bestsellers") {
+
+  // Singletons: bestsellers e categories_grid só podem existir uma vez.
+  if (validation.kind === "bestsellers" || validation.kind === "categories_grid") {
     const exists = await prisma.homeSection.findFirst({
-      where: { tenantId: scope.tenantId, kind: "bestsellers" },
+      where: { tenantId: scope.tenantId, kind: validation.kind },
       select: { id: true },
     })
     if (exists) {
       return NextResponse.json(
-        { error: "Já existe uma seção “Mais vendidos” — edite a existente" },
+        {
+          error:
+            validation.kind === "bestsellers"
+              ? "Já existe uma seção “Mais vendidos” — edite a existente"
+              : "Já existe um bloco de categorias — edite o existente",
+        },
         { status: 409 },
       )
     }
   }
-  // Para category_courses: bloqueia duplicar a mesma categoria
+
   if (validation.kind === "category_courses") {
     const cfg = validation.config as Extract<AnySectionConfig, { kind: "category_courses" }>
     const exists = await prisma.homeSection.findFirst({
@@ -81,7 +72,6 @@ export async function createSection(scope: Scope, body: unknown) {
         { status: 409 },
       )
     }
-    // Verifica que a categoria existe e tem >=4 cursos ativos (se modo random)
     if (cfg.mode === "random") {
       const courseCount = await prisma.course.count({
         where: { categoryId: cfg.categoryId, status: "ATIVO", hiddenMain: false },
@@ -107,21 +97,13 @@ export async function createSection(scope: Scope, body: unknown) {
       tenantId: scope.tenantId,
       kind: validation.kind,
       position: nextPosition,
-      enabled: validation.kind === "bestsellers" ? true : true,
+      enabled: true,
       config: validation.config as unknown as Prisma.InputJsonValue,
     },
   })
   return NextResponse.json({ data: created }, { status: 201 })
 }
 
-/**
- * PATCH /api/.../home-sections/[id]
- * Body parcial: { config?, enabled?, position? }
- * Regras:
- *  - bestsellers: enabled forçado true (não pode desativar)
- *  - bestsellers: position forçada como mínima entre seções de curso
- *    (sempre antes de category_courses) — aplicado em normalizePositions()
- */
 export async function updateSection(
   scope: Scope,
   id: string,
@@ -148,7 +130,6 @@ export async function updateSection(
     if (!validation.ok) {
       return NextResponse.json({ error: validation.error }, { status: 400 })
     }
-    // Em category_courses modo random, valida pelo menos 4 cursos ativos
     if (validation.kind === "category_courses") {
       const cfg = validation.config as Extract<AnySectionConfig, { kind: "category_courses" }>
       if (cfg.mode === "random") {
@@ -215,11 +196,6 @@ export async function deleteSection(scope: Scope, id: string): Promise<Response>
   return NextResponse.json({ data: { ok: true } })
 }
 
-/**
- * Reordena todas as seções do escopo num único PATCH. Body: { order: string[] }
- * (IDs na ordem desejada). bestsellers é forçado para a primeira posição entre
- * seções de curso.
- */
 export async function reorderSections(scope: Scope, body: unknown): Promise<Response> {
   if (!body || typeof body !== "object") {
     return NextResponse.json({ error: "Payload inválido" }, { status: 400 })
@@ -236,7 +212,6 @@ export async function reorderSections(scope: Scope, body: unknown): Promise<Resp
   if (sections.length !== ids.length) {
     return NextResponse.json({ error: "IDs inválidos" }, { status: 400 })
   }
-  // Atualiza positions
   const updates = ids.map((id, idx) =>
     prisma.homeSection.update({ where: { id }, data: { position: idx } }),
   )
@@ -246,19 +221,30 @@ export async function reorderSections(scope: Scope, body: unknown): Promise<Resp
 }
 
 /**
- * Garante que bestsellers seja a primeira seção de curso (position mínima
- * entre seções de curso). Também compacta as positions (0..n-1).
+ * Mantém uma única invariante: entre seções de cursos (bestsellers e
+ * category_courses), bestsellers deve vir primeiro. Institutional e
+ * categories_grid podem aparecer em qualquer ordem.
+ *
+ * Algoritmo: se a posição de bestsellers > posição mínima de algum
+ * category_courses, swap bestsellers com aquele category_courses; depois
+ * compacta as positions (0..n-1).
  */
 async function normalizePositions(scope: Scope) {
   const sections = await prisma.homeSection.findMany({
     where: { tenantId: scope.tenantId },
     orderBy: [{ position: "asc" }, { createdAt: "asc" }],
   })
-  // Garante bestsellers primeiro entre cursos
   const idxBest = sections.findIndex((s) => s.kind === "bestsellers")
-  if (idxBest > 0) {
-    const [best] = sections.splice(idxBest, 1)
-    sections.unshift(best)
+  if (idxBest >= 0) {
+    const idxFirstCategoryCourses = sections.findIndex(
+      (s, i) => i !== idxBest && s.kind === "category_courses",
+    )
+    if (idxFirstCategoryCourses >= 0 && idxFirstCategoryCourses < idxBest) {
+      // bestsellers veio depois de um category_courses — move bestsellers
+      // pra logo antes do primeiro category_courses.
+      const [best] = sections.splice(idxBest, 1)
+      sections.splice(idxFirstCategoryCourses, 0, best)
+    }
   }
   await prisma.$transaction(
     sections.map((s, i) =>

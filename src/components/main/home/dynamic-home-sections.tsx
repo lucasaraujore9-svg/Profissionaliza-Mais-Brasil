@@ -1,33 +1,33 @@
 import { cookies } from "next/headers"
 import { CourseRow } from "./course-row"
 import {
+  CategoriesGridSection,
+  InstitutionalSection,
+} from "./section-renderers"
+import {
   loadHomeSections,
   resolveSectionCourses,
+  resolveCategoriesForSection,
   parseBestsellersCookie,
   serializeBestsellersCookie,
   BESTSELLERS_COOKIE,
   type BestsellersSnapshot,
+  type HomeSectionRecord,
+  type CategoriesGridConfig,
+  type InstitutionalConfig,
 } from "@/lib/home/sections"
 
 interface DynamicHomeSectionsProps {
   tenantId: string | null
+  /** Forwarded para CategoriesGridSection — adiciona pill da Unidade Técnica. */
+  tecnicaEnabled?: boolean
+  tecnicaLabel?: string
 }
 
-/**
- * Server Component que carrega `home_sections` do tenant (ou PMB) e renderiza
- * cada seção habilitada como um <CourseRow/>.
- *
- * Estratégia de cache do "Mais vendidos" em modo random:
- *   1. Lê o cookie pmb_bestsellers_v1 (snapshot da sessão atual).
- *   2. Se existir e for válido, usa os mesmos IDs.
- *   3. Se não, sorteia novos IDs e tenta gravar via `cookies().set()`.
- *
- * Important: `cookies().set()` em Server Component só funciona quando a página
- * é renderizada dinamicamente (não estaticamente). As home pages que usam isso
- * já são dinâmicas porque carregam cursos do banco a cada request.
- */
 export async function DynamicHomeSections({
   tenantId,
+  tecnicaEnabled,
+  tecnicaLabel,
 }: DynamicHomeSectionsProps) {
   const sections = await loadHomeSections(tenantId)
   const enabled = sections.filter((s) => s.enabled)
@@ -39,45 +39,23 @@ export async function DynamicHomeSections({
 
   let nextSnapshot: BestsellersSnapshot | null = null
 
-  // Resolve cursos de cada seção em série (manter ordem, ainda barato — 4-8 secoes)
-  const rendered: {
-    id: string
-    title: string
-    subtitle: string
-    courses: Awaited<
-      ReturnType<typeof resolveSectionCourses>
-    > extends infer R
-      ? R extends { courses: infer C }
-        ? C
-        : never
-      : never
-    seeMoreHref?: string
-  }[] = []
+  // Pré-processa cada seção, gerando o nó React correspondente.
+  const nodes: { id: string; node: React.ReactNode }[] = []
 
   for (const section of enabled) {
-    const resolved = await resolveSectionCourses(section, tenantId, {
+    const node = await renderSection(section, {
+      tenantId,
       bestsellersSnapshot: initialSnapshot,
       onNewBestsellersSnapshot: (snap) => {
         nextSnapshot = snap
       },
+      tecnicaEnabled: tecnicaEnabled ?? false,
+      tecnicaLabel,
     })
-    if (!resolved) continue
-    const cfg = section.config
-    let seeMoreHref: string | undefined
-    if (cfg.kind === "category_courses" && cfg.showSeeMore && resolved.meta.categorySlug) {
-      seeMoreHref = `/cursos?categoria=${resolved.meta.categorySlug}`
-    }
-    rendered.push({
-      id: section.id,
-      title: cfg.title,
-      subtitle: cfg.subtitle,
-      courses: resolved.courses,
-      seeMoreHref,
-    })
+    if (node) nodes.push({ id: section.id, node })
   }
 
-  // Persiste novo snapshot do bestsellers (se gerou) — best-effort, falha
-  // silenciosamente em pre-render estático.
+  // Persiste snapshot novo (best-effort).
   if (nextSnapshot) {
     try {
       cookieStore.set({
@@ -86,24 +64,75 @@ export async function DynamicHomeSections({
         httpOnly: true,
         sameSite: "lax",
         path: "/",
-        maxAge: 60 * 60 * 24, // 24h
+        maxAge: 60 * 60 * 24,
       })
     } catch {
-      // OK — em modo estático, cookies().set() lança. Próxima sessão regenera.
+      // pre-render estático lança — ignora.
     }
   }
 
   return (
     <>
-      {rendered.map((r) => (
-        <CourseRow
-          key={r.id}
-          titulo={r.title}
-          subtitulo={r.subtitle || undefined}
-          verTodosHref={r.seeMoreHref}
-          cursos={r.courses}
-        />
+      {nodes.map((n) => (
+        <div key={n.id}>{n.node}</div>
       ))}
     </>
   )
+}
+
+async function renderSection(
+  section: HomeSectionRecord,
+  ctx: {
+    tenantId: string | null
+    bestsellersSnapshot: BestsellersSnapshot | null
+    onNewBestsellersSnapshot: (snap: BestsellersSnapshot) => void
+    tecnicaEnabled: boolean
+    tecnicaLabel?: string
+  },
+): Promise<React.ReactNode | null> {
+  const cfg = section.config
+
+  if (cfg.kind === "bestsellers" || cfg.kind === "category_courses") {
+    const resolved = await resolveSectionCourses(section, ctx.tenantId, {
+      bestsellersSnapshot: ctx.bestsellersSnapshot,
+      onNewBestsellersSnapshot: ctx.onNewBestsellersSnapshot,
+    })
+    if (!resolved) return null
+    let seeMoreHref: string | undefined
+    if (
+      cfg.kind === "category_courses" &&
+      cfg.showSeeMore &&
+      resolved.meta.categorySlug
+    ) {
+      seeMoreHref = `/cursos?categoria=${resolved.meta.categorySlug}`
+    }
+    return (
+      <CourseRow
+        titulo={cfg.title}
+        subtitulo={cfg.subtitle || undefined}
+        verTodosHref={seeMoreHref}
+        cursos={resolved.courses}
+      />
+    )
+  }
+
+  if (cfg.kind === "categories_grid") {
+    const categories = await resolveCategoriesForSection(
+      section as HomeSectionRecord<CategoriesGridConfig>,
+    )
+    return (
+      <CategoriesGridSection
+        config={cfg}
+        categories={categories}
+        tecnicaEnabled={ctx.tecnicaEnabled}
+        tecnicaLabel={ctx.tecnicaLabel}
+      />
+    )
+  }
+
+  if (cfg.kind === "institutional") {
+    return <InstitutionalSection config={cfg as InstitutionalConfig} />
+  }
+
+  return null
 }
