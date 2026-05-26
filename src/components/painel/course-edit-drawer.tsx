@@ -71,7 +71,12 @@ export function CourseEditDrawer({
         }
         const data = body.data as CourseDetail
         setDetail(data)
-        setPrice(String(data.price).replace(".", ","))
+        setPrice(
+          data.price.toLocaleString("pt-BR", {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          }),
+        )
         setPaymentType(data.paymentType)
         setDescription(data.customDescription ?? "")
         setParcelas(
@@ -142,7 +147,7 @@ export function CourseEditDrawer({
     setSaving(true)
     setError(null)
 
-    const numericPrice = parseFloat(price.replace(".", "").replace(",", "."))
+    const numericPrice = parseFloat(price.replace(/\./g, "").replace(",", "."))
     if (Number.isNaN(numericPrice) || numericPrice <= 0) {
       setError("Preço inválido")
       setSaving(false)

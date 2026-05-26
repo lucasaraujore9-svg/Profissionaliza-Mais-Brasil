@@ -51,7 +51,7 @@ export function CatalogCourseGrid({ courses, canEdit = false, onEdit }: CatalogC
       ) : (
         <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {courses.map((c) => {
-            const preco = c.precoPromocional ?? c.precoOriginal
+            const preco = c.precoVitrineMain ?? c.precoPromocional ?? c.precoOriginal
             return (
               <article
                 key={c.id}
