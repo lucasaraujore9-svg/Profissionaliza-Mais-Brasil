@@ -296,13 +296,24 @@ function parseRow(r: {
   enabled: boolean
   config: unknown
 }): HomeSectionRecord {
+  // Configs antigas (seed inicial) podem não trazer o campo `kind` dentro do
+  // JSON — injetamos a partir da coluna do DB para que resolveSectionCourses
+  // e os renderers possam fazer narrowing com `cfg.kind`.
+  let config = r.config as AnySectionConfig
+  if (config && typeof config === "object") {
+    const obj = config as unknown as Record<string, unknown>
+    if (!obj.kind) {
+      obj.kind = r.kind
+      config = obj as unknown as AnySectionConfig
+    }
+  }
   return {
     id: r.id,
     tenantId: r.tenantId,
     kind: r.kind as SectionKind,
     position: r.position,
     enabled: r.enabled,
-    config: r.config as AnySectionConfig,
+    config,
   }
 }
 
