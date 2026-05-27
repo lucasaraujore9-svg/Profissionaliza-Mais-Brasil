@@ -1,36 +1,3 @@
 {
-  "crons": [
-    {
-      "path": "/api/cron/sync-cursos",
-      "schedule": "0 9 * * *"
-    },
-    {
-      "path": "/api/cron/sync-progresso",
-      "schedule": "0 7 * * *"
-    },
-    {
-      "path": "/api/cron/sweep-tenants-overdue",
-      "schedule": "0 3 * * *"
-    },
-    {
-      "path": "/api/cron/sweep-students-overdue",
-      "schedule": "30 3 * * *"
-    },
-    {
-      "path": "/api/cron/reactivate-paid",
-      "schedule": "0 4 * * *"
-    },
-    {
-      "path": "/api/cron/referral-monthly-payout",
-      "schedule": "0 5 20 * *"
-    },
-    {
-      "path": "/api/cron/cleanup-webhook-logs",
-      "schedule": "0 2 1 * *"
-    },
-    {
-      "path": "/api/cron/sweep-abandoned-leads",
-      "schedule": "15 */2 * * *"
-    }
-  ]
+  "crons": []
 }
