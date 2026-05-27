@@ -13,8 +13,11 @@ const SECURITY_HEADERS = [
   { key: "X-Frame-Options", value: "DENY" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   {
+    // interest-cohort=() foi removido — FLoC foi descontinuado em 2024
+    // (substituido pela Topics API). Browsers modernos geram warning
+    // "Unrecognized feature: 'interest-cohort'" quando veem isso.
     key: "Permissions-Policy",
-    value: "camera=(), microphone=(), geolocation=(), interest-cohort=()",
+    value: "camera=(), microphone=(), geolocation=()",
   },
   {
     key: "Content-Security-Policy",
