@@ -1,11 +1,17 @@
 import Link from "next/link"
-import { Share2, ChevronRight, Building2 } from "lucide-react"
+import { Share2, ChevronRight, Building2, Zap } from "lucide-react"
 import { PageHeader } from "@/components/painel/page-header"
 import { AdminConfigClient } from "@/components/admin/admin-config-client"
 import { requireAdminSession } from "@/lib/auth/admin-session"
 
 // Configurações de Certificados agora vivem dentro de /admin/certificados/configuracoes.
 const SUB_SETTINGS = [
+  {
+    href: "/admin/configuracoes/automacao",
+    label: "Automação",
+    description: "Liga/desliga WhatsApp + CRM Kanban do site PMB institucional",
+    icon: Zap,
+  },
   {
     href: "/admin/configuracoes/indicacoes",
     label: "Indicações",
