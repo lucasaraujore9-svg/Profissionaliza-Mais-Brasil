@@ -214,9 +214,8 @@ async function fulfillEnrollmentLocked(
 
   // Primeira cobranca: garante aluno na plataforma + vincula o curso (mesma rota
   // usada pelas concessoes manuais via /admin/alunos/[id]/cursos).
-  const { plataformaAlunoId, created, plataformaSenha } = await ensureStudentOnPlatform(
-    enrollment.student.id,
-  )
+  const { plataformaAlunoId, created, plataformaSenha } =
+    await ensureStudentOnPlatform(enrollment.student.id)
   await linkCourseToStudent(enrollment.student.id, enrollment.course.id)
 
   // Envia email de boas-vindas com credenciais somente quando criamos o aluno
@@ -328,22 +327,33 @@ async function fulfillEnrollmentLocked(
   }
 
   if (created && enrollment.student.email) {
-    const plataformaLoginUrl =
-      process.env.EA_STUDENT_LOGIN_URL ?? "https://suaescola.com/aluno"
+    // Link sempre aponta para a área do aluno DENTRO do nosso sistema
+    // (vitrine do revendedor ou app PMB). De lá o aluno encontra o botão
+    // "área de aulas" que abre a plataforma parceira. Evita vazar URL da
+    // plataforma parceira e mantém o white-label.
+    const appBase = resolveAppUrl().replace(/\/$/, "")
+    let studentPanelUrl: string
+    let storeName: string
+    if (tenant.isPmbVitrine) {
+      studentPanelUrl = `${appBase}/aluno`
+      storeName = "Profissionaliza Mais Brasil"
+    } else {
+      studentPanelUrl = `https://${vitrineHost(tenant.slug)}/aluno`
+      storeName = tenant.name ?? `Loja ${tenant.slug}`
+    }
 
     let emailSent = false
     try {
       await sendEmail({
         to: enrollment.student.email,
-        subject: `Matricula confirmada em ${enrollment.course.nome}`,
+        subject: `Matrícula confirmada em ${enrollment.course.nome}`,
         template: {
           type: "enrollment",
           props: {
             studentName: enrollment.student.nome,
             courseName: enrollment.course.nome,
-            plataformaLoginUrl,
-            studentLogin: String(plataformaAlunoId),
-            studentPassword: plataformaSenha ?? "(enviada em email separado)",
+            studentPanelUrl,
+            storeName,
           },
         },
       })
@@ -355,8 +365,10 @@ async function fulfillEnrollmentLocked(
       )
     }
 
-    // Segurança: zera a senha plaintext da plataforma do banco SOMENTE
-    // após o email ter sido entregue. Se DB vazar depois disso, atacante
+    // Segurança: zera a senha plaintext da plataforma do banco assim que
+    // confirmamos a entrega do email. A senha da plataforma é entregue
+    // separadamente pelo `enviarEmailCredenciais` (chamado acima); aqui
+    // só limpamos o cache local. Se DB vazar depois disso, atacante
     // não consegue logar como aluno na plataforma — só restaria fluxo
     // "esqueci senha" da plataforma parceira.
     if (emailSent && plataformaSenha) {

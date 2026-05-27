@@ -161,7 +161,7 @@ export async function sendEmail({
     from:
       from ??
       process.env.SMTP_FROM ??
-      "Profissionaliza Mais Brasil <bem-vindo@bmbr.com.br>",
+      "Profissionaliza Mais Brasil <profissionaliza@bmbr.com.br>",
     to,
     subject,
     html,

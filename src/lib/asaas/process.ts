@@ -317,8 +317,10 @@ export async function processAsaasWebhook(
                 customerName: tenant.owner.name ?? tenant.name,
                 amount: formatMoney(payment.value),
                 paymentDate: formatDate(payment.paymentDate),
-                description: "Mensalidade Profissionaliza Mais Brasil",
+                description:
+                  "Recebemos sua mensalidade do Profissionaliza Mais Brasil — obrigado! Sua vitrine segue ativa.",
                 receiptUrl: payment.transactionReceiptUrl ?? undefined,
+                variant: "confirmed",
               },
             },
           }).catch((err) => {
@@ -374,8 +376,8 @@ export async function processAsaasWebhook(
         if (tenant.owner?.email) {
           const subject =
             tenant.billingMode === "AUTO"
-              ? "Sua assinatura esta vencida — alunos bloqueados"
-              : "Sua assinatura esta vencida"
+              ? "Sua mensalidade venceu — alunos bloqueados"
+              : "Sua mensalidade venceu"
           await sendEmail({
             to: tenant.owner.email,
             subject,
@@ -387,9 +389,10 @@ export async function processAsaasWebhook(
                 paymentDate: formatDate(payment.dueDate),
                 description:
                   tenant.billingMode === "AUTO"
-                    ? "Mensalidade vencida. Seus alunos foram bloqueados ate o pagamento."
-                    : "Mensalidade vencida. Regularize para evitar bloqueios.",
+                    ? "Sua mensalidade venceu. Para evitar perda de receita, seus alunos foram bloqueados temporariamente até a regularização."
+                    : "Sua mensalidade venceu. Regularize agora para manter a vitrine ativa e evitar o bloqueio dos seus alunos.",
                 receiptUrl: payment.invoiceUrl ?? undefined,
+                variant: "overdue",
               },
             },
           }).catch((err) => {
@@ -522,7 +525,7 @@ export async function processAsaasWebhook(
         if (tenant.owner?.email) {
           await sendEmail({
             to: tenant.owner.email,
-            subject: "Estorno detectado na sua assinatura",
+            subject: "Pagamento estornado",
             template: {
               type: "payment",
               props: {
@@ -530,9 +533,10 @@ export async function processAsaasWebhook(
                 amount: formatMoney(payment.value),
                 paymentDate: formatDate(payment.paymentDate),
                 description: !otherConfirmed
-                  ? "O pagamento foi estornado e sua conta foi suspensa. Faça um novo pagamento para reativar."
-                  : "Um pagamento foi estornado. Sua conta permanece ativa pois há outros pagamentos confirmados.",
+                  ? "Identificamos o estorno deste pagamento e sua conta foi suspensa. Para reativar a vitrine, faça uma nova cobrança."
+                  : "Identificamos um estorno. Sua conta permanece ativa porque há outros pagamentos confirmados no período.",
                 receiptUrl: payment.invoiceUrl ?? undefined,
+                variant: "refunded",
               },
             },
           }).catch((err) => {

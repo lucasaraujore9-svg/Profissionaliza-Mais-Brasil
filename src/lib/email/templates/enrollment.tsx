@@ -1,131 +1,76 @@
-import {
-  Body,
-  Button,
-  Container,
-  Head,
-  Heading,
-  Html,
-  Preview,
-  Section,
-  Text,
-} from "@react-email/components"
+import { Button, Hr, Section, Text } from "@react-email/components"
+import { EmailLayout, styles } from "./_layout"
 
 export interface EnrollmentTemplateProps {
   studentName: string
   courseName: string
-  plataformaLoginUrl: string
-  studentLogin: string
-  studentPassword: string
+  /** URL do painel do aluno (sua área dentro do sistema da revenda/PMB). */
+  studentPanelUrl: string
+  /** Nome da loja/revenda. Usado no rodapé. */
+  storeName?: string
 }
 
 export function EnrollmentTemplate({
   studentName,
   courseName,
-  plataformaLoginUrl,
-  studentLogin,
-  studentPassword,
+  studentPanelUrl,
+  storeName,
 }: EnrollmentTemplateProps) {
+  const firstName = studentName.split(" ")[0] || studentName
+
   return (
-    <Html>
-      <Head />
-      <Preview>Sua matrícula em {courseName} foi confirmada!</Preview>
-      <Body style={main}>
-        <Container style={container}>
-          <Heading style={h1}>Parabéns, {studentName}!</Heading>
-          <Text style={paragraph}>
-            Sua matrícula no curso <strong>{courseName}</strong> foi confirmada.
-          </Text>
-          <Text style={paragraph}>
-            Você já pode acessar a plataforma com os dados abaixo:
-          </Text>
-          <Section style={credentialsBox}>
-            <Text style={credentialLine}>
-              <strong>Login:</strong> {studentLogin}
-            </Text>
-            <Text style={credentialLine}>
-              <strong>Senha:</strong> {studentPassword}
-            </Text>
-          </Section>
-          <Section style={{ textAlign: "center" as const, margin: "32px 0" }}>
-            <Button style={button} href={plataformaLoginUrl}>
-              Acessar Área do Aluno
-            </Button>
-          </Section>
-          <Text style={footer}>
-            Recomendamos alterar sua senha no primeiro acesso.
-          </Text>
-        </Container>
-      </Body>
-    </Html>
+    <EmailLayout
+      preview={`Matrícula confirmada em ${courseName}`}
+      brandName={storeName ?? "Profissionaliza Mais Brasil"}
+      brandTagline={storeName ? "via Profissionaliza Mais Brasil" : undefined}
+    >
+      <Text style={styles.h1}>Tudo certo, {firstName}!</Text>
+      <Text style={styles.paragraph}>
+        Sua matrícula no curso <strong>{courseName}</strong> foi confirmada.
+        Agora é só acessar sua área do aluno e começar.
+      </Text>
+
+      <Section style={styles.buttonRow}>
+        <Button style={styles.primaryButton} href={studentPanelUrl}>
+          Ir para minha área do aluno
+        </Button>
+      </Section>
+
+      <Text style={styles.paragraphMuted}>
+        Se o botão não funcionar, copie e cole no navegador:{" "}
+        <a href={studentPanelUrl} style={styles.link}>
+          {studentPanelUrl}
+        </a>
+      </Text>
+
+      <Hr style={styles.hr} />
+
+      <Section>
+        <Text style={styles.h2}>O que fazer agora</Text>
+        <Text style={styles.step}>
+          1. Acesse sua área do aluno com o email e senha que você já cadastrou.
+        </Text>
+        <Text style={styles.step}>
+          2. Clique em <strong>{courseName}</strong> para abrir a área de aulas.
+        </Text>
+        <Text style={styles.step}>
+          3. Assista, faça as atividades e acompanhe seu progresso por lá.
+        </Text>
+      </Section>
+
+      <Text style={styles.paragraphMuted}>
+        Bons estudos! Qualquer dúvida, responda este email que a gente te
+        ajuda.
+      </Text>
+    </EmailLayout>
   )
-}
-
-const main = {
-  backgroundColor: "#FAFAFA",
-  fontFamily: "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif",
-}
-
-const container = {
-  backgroundColor: "#FFFFFF",
-  margin: "0 auto",
-  padding: "32px",
-  maxWidth: "560px",
-  borderRadius: "12px",
-}
-
-const h1 = {
-  color: "#1A1A2E",
-  fontSize: "28px",
-  fontWeight: "700",
-  margin: "0 0 16px",
-}
-
-const paragraph = {
-  color: "#1A1A2E",
-  fontSize: "16px",
-  lineHeight: "1.6",
-  margin: "0 0 16px",
-}
-
-const credentialsBox = {
-  backgroundColor: "#F3F4F6",
-  borderRadius: "8px",
-  padding: "16px",
-  margin: "16px 0",
-}
-
-const credentialLine = {
-  color: "#1A1A2E",
-  fontSize: "14px",
-  fontFamily: "'JetBrains Mono','Courier New',monospace",
-  margin: "4px 0",
-}
-
-const button = {
-  backgroundColor: "#025918",
-  borderRadius: "8px",
-  color: "#FFFFFF",
-  fontSize: "16px",
-  fontWeight: "600",
-  textDecoration: "none",
-  textAlign: "center" as const,
-  padding: "12px 24px",
-}
-
-const footer = {
-  color: "#9CA3AF",
-  fontSize: "12px",
-  lineHeight: "1.4",
-  margin: "24px 0 0",
-  textAlign: "center" as const,
 }
 
 EnrollmentTemplate.PreviewProps = {
   studentName: "Beatriz Souza",
   courseName: "Auxiliar Administrativo",
-  plataformaLoginUrl: "https://escola.com/login",
-  studentLogin: "beatriz.souza@gmail.com",
-  studentPassword: "Curso@2026",
+  studentPanelUrl: "https://cursos-pro-joao.livrecursos.com.br/aluno",
+  storeName: "Cursos Pro João",
 } satisfies EnrollmentTemplateProps
 
 export default EnrollmentTemplate

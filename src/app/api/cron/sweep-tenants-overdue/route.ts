@@ -103,7 +103,7 @@ async function processOverdueTenants() {
       if (tenant.owner?.email) {
         await sendEmail({
           to: tenant.owner.email,
-          subject: "Sua assinatura está vencida",
+          subject: "Sua mensalidade está vencida",
           template: {
             type: "payment",
             props: {
@@ -115,8 +115,9 @@ async function processOverdueTenants() {
               paymentDate: overdue.dueDate.toLocaleDateString("pt-BR"),
               description:
                 tenant.billingMode === "AUTO"
-                  ? "Mensalidade vencida. Seus alunos foram bloqueados até o pagamento."
-                  : "Mensalidade vencida. Regularize para evitar bloqueios.",
+                  ? "Sua mensalidade venceu. Para evitar perda de receita, seus alunos foram bloqueados temporariamente até a regularização."
+                  : "Sua mensalidade venceu. Regularize agora para manter a vitrine ativa e evitar o bloqueio dos seus alunos.",
+              variant: "overdue",
             },
           },
         }).catch((err) => {
