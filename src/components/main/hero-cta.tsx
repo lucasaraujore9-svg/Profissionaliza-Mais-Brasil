@@ -40,13 +40,13 @@ export async function HeroCTA() {
               data-reveal
               className="font-mono text-[10px] uppercase tracking-[0.2em] text-yellow-300/90 sm:text-xs"
             >
-              Profissionaliza Mais Brasil
+              Para quem vai empreender em educação
             </p>
 
             <h1
               data-reveal
               data-reveal-delay="0.1"
-              className="mt-4 text-[clamp(1.85rem,6.5vw,4.5rem)] font-black leading-[0.95] tracking-tight text-white sm:mt-5 lg:text-[clamp(2.75rem,5vw,5.5rem)]"
+              className="mt-4 text-[clamp(1.85rem,5.6vw,3.25rem)] font-black leading-[0.95] tracking-tight text-white sm:mt-5 lg:text-[clamp(2.5rem,3.8vw,3.75rem)]"
             >
               <span className="block sm:inline">Tenha o seu</span>{" "}
               <span className="relative inline-block px-2">
@@ -68,12 +68,12 @@ export async function HeroCTA() {
               data-reveal-delay="0.2"
               className="mt-5 max-w-xl text-sm leading-relaxed text-white/85 sm:mt-6 sm:text-base md:text-lg"
             >
-              Empreenda na educação com acesso a um catálogo
-              {cursos ? <> de mais de <strong className="font-bold text-white">{cursos}</strong></> : null} {" "}
-              cursos prontos pra vender em todo o Brasil. Site com a sua marca,
-              pagamento direto na sua conta, mensalidade fixa de{" "}
-              <strong className="font-bold text-white">R$ 209</strong>. Sem
-              CNPJ, sem gravar aula, sem comissão sobre vendas.
+              Educação muda vida — e dá pra viver dela. Tenha um catálogo
+              {cursos ? <> de <strong className="font-bold text-white">mais de {cursos} cursos</strong></> : <> <strong className="font-bold text-white">completo de cursos</strong></>}{" "}
+              profissionalizantes pra vender com a sua marca, no Brasil inteiro.
+              Você define cada preço, recebe direto na sua conta e a matrícula é
+              automática. <strong className="font-bold text-white">R$ 209 por mês</strong>{" "}
+              — sem CNPJ, sem gravar aula, sem comissão sobre as suas vendas.
             </p>
 
             <div
@@ -86,7 +86,7 @@ export async function HeroCTA() {
                   size="lg"
                   className="h-12 w-full bg-yellow-300 px-6 text-sm font-bold text-[var(--color-pmb-green-900)] transition-transform hover:scale-[1.02] hover:bg-yellow-400 sm:h-13 sm:w-auto sm:px-8 sm:text-base"
                 >
-                  Quero ser um parceiro
+                  Quero o meu portal
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
               </a>
@@ -94,7 +94,7 @@ export async function HeroCTA() {
                 href="#plano"
                 className="text-center text-sm font-medium text-white/80 underline-offset-4 hover:text-yellow-300 hover:underline sm:text-left"
               >
-                Ou veja quanto custa primeiro
+                Antes, quero ver o preço
               </a>
             </div>
 
@@ -105,15 +105,15 @@ export async function HeroCTA() {
             >
               <li className="flex items-center gap-2">
                 <span className="h-1.5 w-1.5 rounded-full bg-yellow-300" />
-                Seu site personalizado
+                Site no ar em poucas horas
               </li>
               <li className="flex items-center gap-2">
                 <span className="h-1.5 w-1.5 rounded-full bg-yellow-300" />
-                Você define os preços
+                Cada preço é decisão sua
               </li>
               <li className="flex items-center gap-2">
                 <span className="h-1.5 w-1.5 rounded-full bg-yellow-300" />
-                Suporte do maior grupo educacional do país
+                Suporte do Grupo Bolsa Mais Brasil
               </li>
             </ul>
           </div>
@@ -132,10 +132,10 @@ export async function HeroCTA() {
         <div className="relative -mx-4 grid grid-cols-1 divide-y divide-white/15 border-t border-white/15 sm:grid-cols-3 sm:divide-x sm:divide-y-0 md:-mx-8">
           <div className="px-4 py-5 text-left sm:px-6 sm:py-7 sm:text-center md:px-8 md:py-8" data-reveal>
             <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-yellow-300/80">
-              Catálogo profissionalizante
+              Catálogo pronto
             </p>
             <p className="mt-1.5 text-base font-bold text-white sm:mt-2 md:text-lg">
-              Cursos prontos, atualizados e com certificado de conclusão
+              Cursos profissionalizantes com certificado nacional, prontos pra vender
             </p>
           </div>
           <div
@@ -144,10 +144,10 @@ export async function HeroCTA() {
             data-reveal-delay="0.1"
           >
             <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-yellow-300/80">
-              Suporte do Grupo Bolsa Mais Brasil
+              10+ anos de estrada
             </p>
             <p className="mt-1.5 text-base font-bold text-white sm:mt-2 md:text-lg">
-              Há mais de uma década na educação profissionalizante
+              Grupo Bolsa Mais Brasil — referência em educação profissionalizante
             </p>
           </div>
           <div
@@ -156,10 +156,10 @@ export async function HeroCTA() {
             data-reveal-delay="0.2"
           >
             <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-yellow-300/80">
-              Operação completa
+              Tudo automático
             </p>
             <p className="mt-1.5 text-base font-bold text-white sm:mt-2 md:text-lg">
-              Vitrine, matrícula, pagamento e certificado, tudo automatizado
+              Vitrine, matrícula, pagamento e certificado — você foca em vender
             </p>
           </div>
         </div>
