@@ -1,29 +1,70 @@
+import { prisma } from "@/lib/prisma"
+import { requireResellerSession } from "@/lib/auth/reseller-session"
 import { PageHeader } from "@/components/painel/page-header"
 import { VitrineEditor } from "@/components/painel/vitrine-editor"
 import { BannerSlidesManager } from "@/components/shared/banner-slides-manager"
-import { HomeSectionsManager } from "@/components/shared/home-sections-manager"
+import { VitrineTabsShell } from "@/components/vitrine/tabs-shell"
+import { HomeSectionsPanel } from "@/components/vitrine/home-sections-panel"
+import { vitrineUrl } from "@/lib/tenant/urls"
 
-export default function PainelVitrinePage() {
+export default async function PainelVitrinePage() {
+  // Best-effort: link de preview da vitrine do revendedor logado.
+  let previewUrl: string | null = null
+  try {
+    const session = await requireResellerSession()
+    if (session) {
+      const tenant = await prisma.tenant.findUnique({
+        where: { id: session.tenantId },
+        select: { slug: true, customDomain: true },
+      })
+      if (tenant?.customDomain) {
+        previewUrl = `https://${tenant.customDomain}`
+      } else if (tenant?.slug) {
+        previewUrl = vitrineUrl(tenant.slug)
+      }
+    }
+  } catch {
+    // ignora — botão de preview é cosmético.
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
         title="Minha vitrine"
-        description="Personalize a identidade visual da sua loja. O preview atualiza em tempo real."
+        description="Personalize sua loja em poucos cliques. Cada aba é uma área independente — banner principal, seções da home e identidade visual."
       />
 
-      <BannerSlidesManager
-        apiBase="/api/painel/banner"
-        title="Banner principal da vitrine"
-        description="Adicione uma imagem única ou múltiplos slides. Cada slide precisa de versão desktop (1920×600px) e mobile (1080×1080px). Enquanto houver pelo menos 1 slide ativo, a hero exibe só a imagem (sem headline ou busca por cima)."
+      <VitrineTabsShell
+        previewUrl={previewUrl}
+        tabs={[
+          {
+            value: "banner",
+            label: "Banner principal",
+            content: (
+              <BannerSlidesManager
+                apiBase="/api/painel/banner"
+                title="Banner principal da vitrine"
+                description="Adicione uma imagem única ou múltiplos slides. Cada slide precisa de versão desktop (1920×600px) e mobile (1080×1080px)."
+              />
+            ),
+          },
+          {
+            value: "secoes",
+            label: "Seções da home",
+            content: (
+              <HomeSectionsPanel
+                apiBase="/api/painel/home-sections"
+                hint="A primeira seção (“Cursos mais vendidos da semana”) é fixa. As outras você pode ligar, desligar, reordenar e personalizar — toda categoria nova aparece aqui automaticamente, desativada, esperando você ativar."
+              />
+            ),
+          },
+          {
+            value: "personalizacao",
+            label: "Personalização",
+            content: <VitrineEditor />,
+          },
+        ]}
       />
-
-      <HomeSectionsManager
-        apiBase="/api/painel/home-sections"
-        title="Seções de cursos da home"
-        description="Configure as seções de cursos da sua vitrine: ordem, modo (manual/aleatório), quantidade (4 ou 8 cursos) e cursos exibidos. “Os cursos mais vendidos da semana” é a primeira seção e não pode ser desativada. Sem configuração própria, a vitrine usa o padrão PMB como fallback."
-      />
-
-      <VitrineEditor />
     </div>
   )
 }

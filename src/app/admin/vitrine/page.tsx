@@ -1,8 +1,10 @@
+import { redirect } from "next/navigation"
 import { PageHeader } from "@/components/painel/page-header"
 import { BannerSlidesManager } from "@/components/shared/banner-slides-manager"
-import { HomeSectionsManager } from "@/components/shared/home-sections-manager"
+import { VitrineTabsShell } from "@/components/vitrine/tabs-shell"
+import { HomeSectionsPanel } from "@/components/vitrine/home-sections-panel"
 import { requireSuperAdmin } from "@/lib/auth/guards"
-import { redirect } from "next/navigation"
+import { appUrl } from "@/lib/tenant/urls"
 
 export default async function AdminVitrinePage() {
   const guard = await requireSuperAdmin()
@@ -14,19 +16,34 @@ export default async function AdminVitrinePage() {
     <div className="space-y-6">
       <PageHeader
         title="Vitrine principal"
-        description="Personalização do site PMB (profissionalizamaisbrasil.com.br). Todos os ajustes visuais da home ficam aqui."
+        description="Personalize a home do site PMB. Cada aba é uma área de edição independente — pode ativar e desativar peças sem mexer no resto."
       />
 
-      <BannerSlidesManager
-        apiBase="/api/admin/banner"
-        title="Banner principal"
-        description="Adicione uma imagem única ou múltiplos slides (carrossel). Cada slide precisa de desktop (1920×600px) e mobile (1080×1080px). Enquanto houver pelo menos 1 slide ativo, a hero exibe só a imagem (sem headline ou busca por cima)."
-      />
-
-      <HomeSectionsManager
-        apiBase="/api/admin/home-sections"
-        title="Seções de cursos da home"
-        description="Configure as seções de cursos do site PMB: ordem, modo (manual/aleatório), quantidade (4 ou 8 cursos) e cursos exibidos. “Os cursos mais vendidos da semana” é a primeira seção e não pode ser desativada."
+      <VitrineTabsShell
+        previewUrl={appUrl()}
+        tabs={[
+          {
+            value: "banner",
+            label: "Banner principal",
+            content: (
+              <BannerSlidesManager
+                apiBase="/api/admin/banner"
+                title="Banner principal"
+                description="Adicione uma imagem única ou múltiplos slides (carrossel). Cada slide precisa de versão desktop (1920×600px) e mobile (1080×1080px)."
+              />
+            ),
+          },
+          {
+            value: "secoes",
+            label: "Seções da home",
+            content: (
+              <HomeSectionsPanel
+                apiBase="/api/admin/home-sections"
+                hint="A primeira seção (“Cursos mais vendidos da semana”) é fixa e sempre aparece. As outras você pode ligar, desligar, reordenar e personalizar."
+              />
+            ),
+          },
+        ]}
       />
     </div>
   )

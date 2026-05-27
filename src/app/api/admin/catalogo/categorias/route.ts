@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { requireSuperAdmin } from "@/lib/auth/guards"
 import { slugifyCategoria } from "@/lib/catalog/home"
 import { withRequestContext } from "@/lib/observability/with-request-context"
+import { contextLogger } from "@/lib/logger"
 
 const createSchema = z.object({
   name: z.string().trim().min(2, "Nome muito curto").max(80),
@@ -100,6 +101,48 @@ export const POST = withRequestContext(
       description: parsed.data.description ?? null,
     },
   })
+
+  // Fan-out: cria uma seção "Cursos de {categoria}" DESATIVADA para o
+  // universo PMB (tenantId=null) e para todos os tenants. O revendedor abre
+  // a vitrine e já encontra a sanfona pronta — só precisa ativar.
+  // Falha aqui é não-bloqueante (categoria criada > seções nascem erradas).
+  try {
+    const config = {
+      kind: "category_courses" as const,
+      title: "",
+      subtitle: "",
+      categoryId: category.id,
+      mode: "manual" as const,
+      count: 4 as const,
+      courseIds: [] as string[],
+      showSeeMore: true,
+    }
+    await prisma.$transaction(async (tx) => {
+      const tenants = await tx.tenant.findMany({ select: { id: true } })
+      const scopes: (string | null)[] = [null, ...tenants.map((t) => t.id)]
+      for (const tenantId of scopes) {
+        const last = await tx.homeSection.findFirst({
+          where: { tenantId },
+          orderBy: { position: "desc" },
+          select: { position: true },
+        })
+        await tx.homeSection.create({
+          data: {
+            tenantId,
+            kind: "category_courses",
+            position: (last?.position ?? -1) + 1,
+            enabled: false,
+            config,
+          },
+        })
+      }
+    })
+  } catch (err) {
+    contextLogger().warn(
+      { err: String(err), event: "categorias.create.auto_home_section_failed", categoryId: category.id },
+      "auto-criação de HomeSections falhou — categoria criada normalmente",
+    )
+  }
 
   return NextResponse.json({ data: category }, { status: 201 })
   },
