@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { ArrowRight, GraduationCap } from "lucide-react"
+import { ArrowRight, ArrowUpRight, ShieldCheck } from "lucide-react"
 import type { TecnicaCourse } from "@/lib/catalog/tecnica"
 import { tecnicaRedirectHref } from "@/lib/catalog/tecnica-redirect"
 
@@ -10,16 +10,14 @@ interface TecnicaSectionProps {
 }
 
 /**
- * Seção "Cursos Técnicos" da home — estilo limpo, igual aos demais
- * CourseRows. Cada card leva para a página interna de redirecionamento
- * /cursos-tecnicos/ir, que valida e encaminha para o site da Escola
- * Técnica parceira.
- *
- * Se não houver cursos cadastrados, a seção não renderiza (preferimos
- * silêncio a um placeholder vazio quando o operador ainda não populou).
+ * Seção "Cursos Técnicos" da home — bloco de destaque em alto contraste
+ * (gradiente verde profundo com glow dourado) usando tipografia black e
+ * cards numerados em vez de imagens. O objetivo é "quebrar" a verticalidade
+ * branca da home para chamar atenção, mantendo a hierarquia visual da
+ * identidade PMB (verde + dourado + lime).
  */
 export function TecnicaSection({
-  label,
+  label: _label,
   courses = [],
   fallbackUrl,
 }: TecnicaSectionProps) {
@@ -27,58 +25,92 @@ export function TecnicaSection({
   if (visibleCourses.length === 0) return null
 
   return (
-    <section className="border-b border-[rgba(2,89,24,0.08)] bg-white">
+    <section className="bg-white">
       <div className="mx-auto max-w-[1280px] px-4 py-10 md:px-6 md:py-14">
-        {/* Cabeçalho enxuto, no mesmo formato dos outros CourseRows */}
-        <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <div className="min-w-0">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--color-pmb-lime)]/40 px-2.5 py-0.5 text-[10.5px] font-black uppercase tracking-widest text-[var(--color-pmb-green)]">
-              Reconhecido pelo MEC
-            </span>
-            <h2 className="mt-2 text-[22px] font-black leading-tight text-[var(--color-pmb-green)] md:text-[28px]">
-              {label || "Cursos técnicos"}
-            </h2>
-            <p className="mt-1 max-w-2xl text-[14px] leading-relaxed text-[rgba(2,89,24,0.7)]">
-              Diploma de técnico em apenas 7 meses e mercado pronto te esperando.
-            </p>
-          </div>
-          <Link
-            href="/cursos-tecnicos"
-            className="shrink-0 text-[13.5px] font-bold text-[var(--color-pmb-green)] hover:underline"
-          >
-            Ver todos →
-          </Link>
-        </div>
+        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#013d10] via-[var(--color-pmb-green,#025918)] to-[#013d10] p-6 shadow-[0_30px_60px_-30px_rgba(2,89,24,0.5)] sm:p-8 md:p-12">
+          {/* Glow decorativo dourado (canto direito superior) */}
+          <div
+            aria-hidden
+            className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-[var(--color-pmb-gold,#F2B705)] opacity-25 blur-3xl"
+          />
+          {/* Glow decorativo lime (canto esquerdo inferior) */}
+          <div
+            aria-hidden
+            className="pointer-events-none absolute -left-20 -bottom-24 h-72 w-72 rounded-full bg-[var(--color-pmb-lime,#C0D904)] opacity-20 blur-3xl"
+          />
 
-        {/* Grid de cards limpos */}
-        <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-          {visibleCourses.map((course) => (
-            <li key={course.name}>
-              <Link
-                href={tecnicaRedirectHref(course.name, course.url || fallbackUrl)}
-                className="group flex h-full flex-col rounded-xl border border-[rgba(2,89,24,0.08)] bg-white p-3 transition hover:-translate-y-0.5 hover:border-[var(--color-pmb-green)] hover:shadow-md"
-              >
-                <div className="grid aspect-[4/3] place-items-center rounded-lg bg-[var(--color-pmb-lime-50)]">
-                  <GraduationCap
-                    className="h-9 w-9 text-[var(--color-pmb-green)] opacity-80"
-                    strokeWidth={1.6}
-                    aria-hidden
-                  />
-                </div>
-                <h3 className="mt-3 line-clamp-2 text-[14px] font-bold leading-snug text-[var(--color-pmb-green-900)]">
-                  {course.name}
-                </h3>
-                <p className="mt-0.5 flex items-center gap-1 text-[11.5px] text-zinc-500">
-                  Técnico · MEC
-                  <ArrowRight
-                    className="ml-auto h-3.5 w-3.5 text-zinc-400 transition group-hover:translate-x-0.5 group-hover:text-[var(--color-pmb-green)]"
-                    aria-hidden
-                  />
+          <div className="relative">
+            {/* Header */}
+            <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+              <div className="max-w-[640px]">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--color-pmb-gold,#F2B705)] px-3 py-1 text-[11px] font-black uppercase tracking-widest text-[#013d10]">
+                  <ShieldCheck className="h-3.5 w-3.5" aria-hidden />
+                  Reconhecido pelo MEC
+                </span>
+                <h2 className="mt-4 text-[28px] font-black leading-[1.05] tracking-tight text-white sm:text-[34px] md:text-[42px]">
+                  Carreira técnica em{" "}
+                  <span className="bg-gradient-to-r from-[var(--color-pmb-gold,#F2B705)] to-[var(--color-pmb-lime,#C0D904)] bg-clip-text text-transparent">
+                    7 meses
+                  </span>
+                  .
+                  <br />
+                  Diploma do MEC.
+                </h2>
+                <p className="mt-3 text-[14px] leading-relaxed text-white/75 md:text-[15px]">
+                  {visibleCourses.length} {visibleCourses.length === 1 ? "curso técnico disponível" : "cursos técnicos disponíveis"} pela nossa escola técnica parceira — uma das maiores do país.
                 </p>
+              </div>
+
+              {/* CTA "Ver todos" — destacado em dourado */}
+              <Link
+                href="/cursos-tecnicos"
+                className="group inline-flex shrink-0 items-center gap-2 self-start rounded-full bg-[var(--color-pmb-gold,#F2B705)] px-5 py-3 text-[14px] font-black text-[#013d10] transition hover:bg-white md:self-end"
+              >
+                Conhecer todos
+                <ArrowRight
+                  className="h-4 w-4 transition-transform group-hover:translate-x-0.5"
+                  aria-hidden
+                />
               </Link>
-            </li>
-          ))}
-        </ul>
+            </div>
+
+            {/* Grade de cursos com números grandes */}
+            <ul className="mt-7 grid grid-cols-2 gap-3 md:mt-9 md:grid-cols-3 lg:grid-cols-4">
+              {visibleCourses.map((course, i) => (
+                <li key={course.name}>
+                  <Link
+                    href={tecnicaRedirectHref(
+                      course.name,
+                      course.url || fallbackUrl,
+                    )}
+                    className="group relative flex h-full flex-col justify-between overflow-hidden rounded-2xl border border-white/10 bg-white/[0.04] p-4 backdrop-blur-sm transition hover:-translate-y-0.5 hover:border-[var(--color-pmb-gold,#F2B705)]/60 hover:bg-white/[0.08] sm:p-5"
+                  >
+                    {/* Número grande estilizado */}
+                    <div className="flex items-start justify-between">
+                      <span className="text-[44px] font-black leading-none text-white/15 transition-colors group-hover:text-[var(--color-pmb-gold,#F2B705)]/60 sm:text-[52px]">
+                        {String(i + 1).padStart(2, "0")}
+                      </span>
+                      <ArrowUpRight
+                        className="h-4 w-4 text-white/40 transition group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:text-[var(--color-pmb-gold,#F2B705)]"
+                        aria-hidden
+                      />
+                    </div>
+
+                    {/* Nome do curso */}
+                    <div className="mt-6">
+                      <h3 className="line-clamp-2 text-[14.5px] font-bold leading-snug text-white sm:text-[15px]">
+                        {course.name}
+                      </h3>
+                      <p className="mt-1.5 text-[11.5px] font-medium uppercase tracking-wider text-[var(--color-pmb-lime,#C0D904)]/90">
+                        7 meses · MEC
+                      </p>
+                    </div>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
       </div>
     </section>
   )
