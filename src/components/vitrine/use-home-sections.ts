@@ -120,6 +120,15 @@ export function useHomeSections({ apiBase }: UseHomeSectionsOptions) {
   const [options, setOptions] = useState<SectionOptions | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
+  /**
+   * Drafts em edição. Cada chave é um section.id; valor é a config sendo
+   * editada (snapshot local). Não é persistida enquanto o usuário não clicar
+   * em "Salvar". Permite trocar modo/contagem/cursos livremente sem disparar
+   * validação prematura no servidor (ex: "manual sem cursos").
+   */
+  const [drafts, setDrafts] = useState<Record<string, AnySectionConfig>>({})
+  /** Quais drafts estão sendo enviados ao servidor agora. */
+  const [savingIds, setSavingIds] = useState<Set<string>>(new Set())
 
   const load = useCallback(async () => {
     setLoadError(null)
@@ -175,35 +184,98 @@ export function useHomeSections({ apiBase }: UseHomeSectionsOptions) {
     [apiBase, sections],
   )
 
-  /** Update parcial da config (mode, count, courseIds, title, etc.). */
-  const updateConfig = useCallback(
-    async (id: string, patch: Partial<AnySectionConfig>) => {
-      const prev = sections
-      if (!prev) return
-      const next = prev.map((s) =>
-        s.id === id
-          ? ({ ...s, config: { ...s.config, ...patch } as AnySectionConfig })
-          : s,
-      )
-      setSections(next)
-      const target = next.find((s) => s.id === id)
-      if (!target) return
+  /**
+   * Inicia (ou retoma) edição de uma seção. Cria um draft fazendo snapshot
+   * da config persistida. Idempotente — chamar várias vezes não sobrescreve
+   * o draft em andamento.
+   */
+  const startEditingDraft = useCallback(
+    (id: string) => {
+      setDrafts((d) => {
+        if (id in d) return d
+        const s = sections?.find((x) => x.id === id)
+        if (!s) return d
+        return { ...d, [id]: s.config }
+      })
+    },
+    [sections],
+  )
+
+  /**
+   * Aplica patch parcial ao draft (modo, contagem, courseIds, título, etc.).
+   * Se ainda não tem draft, cria a partir da config persistida.
+   * **NÃO faz fetch.** O servidor só vê a mudança após `saveDraft`.
+   */
+  const patchDraft = useCallback(
+    (id: string, patch: Partial<AnySectionConfig>) => {
+      setDrafts((d) => {
+        const base = d[id] ?? sections?.find((s) => s.id === id)?.config
+        if (!base) return d
+        return {
+          ...d,
+          [id]: { ...base, ...patch } as AnySectionConfig,
+        }
+      })
+    },
+    [sections],
+  )
+
+  /** Descarta o draft, voltando ao valor persistido. */
+  const discardDraft = useCallback((id: string) => {
+    setDrafts((d) => {
+      if (!(id in d)) return d
+      const next = { ...d }
+      delete next[id]
+      return next
+    })
+  }, [])
+
+  /**
+   * Persiste o draft no servidor. Em sucesso, limpa o draft e atualiza a
+   * lista local. Em erro, mostra a mensagem real do servidor mas mantém o
+   * draft (usuário ajusta e re-salva).
+   * @returns true se salvou; false em erro
+   */
+  const saveDraft = useCallback(
+    async (id: string): Promise<boolean> => {
+      const draft = drafts[id]
+      if (!draft) return true // nada a salvar
+      setSavingIds((s) => new Set(s).add(id))
       try {
         const res = await fetch(`${apiBase}/${id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ config: target.config }),
+          body: JSON.stringify({ config: draft }),
         })
         if (!res.ok) {
           const body = await res.json().catch(() => ({}))
           throw new Error(body?.error ?? "Falha ao salvar")
         }
+        // Sucesso: aplica na lista, limpa draft.
+        setSections((prev) =>
+          prev
+            ? prev.map((s) => (s.id === id ? { ...s, config: draft } : s))
+            : prev,
+        )
+        setDrafts((d) => {
+          const next = { ...d }
+          delete next[id]
+          return next
+        })
+        toast.success("Seção salva")
+        return true
       } catch (err) {
-        setSections(prev)
         toast.error(err instanceof Error ? err.message : "Erro ao salvar")
+        return false
+      } finally {
+        setSavingIds((s) => {
+          const next = new Set(s)
+          next.delete(id)
+          return next
+        })
       }
     },
-    [apiBase, sections],
+    [apiBase, drafts],
   )
 
   /** Mover seção `n` posições (positivo = baixo, negativo = cima). Atomicamente otimista. */
@@ -316,10 +388,16 @@ export function useHomeSections({ apiBase }: UseHomeSectionsOptions) {
     loadError,
     reload: load,
     toggleEnabled,
-    updateConfig,
     move,
     reorder,
     createSection,
     removeSection,
+    // Draft API (edição bufferizada com botão Salvar explícito)
+    drafts,
+    savingIds,
+    startEditingDraft,
+    patchDraft,
+    saveDraft,
+    discardDraft,
   }
 }

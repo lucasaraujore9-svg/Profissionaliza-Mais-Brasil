@@ -22,10 +22,15 @@ export function HomeSectionsPanel({ apiBase, hint }: HomeSectionsPanelProps) {
     loadError,
     reload,
     toggleEnabled,
-    updateConfig,
     move,
     reorder,
     removeSection,
+    drafts,
+    savingIds,
+    startEditingDraft,
+    patchDraft,
+    saveDraft,
+    discardDraft,
   } = useHomeSections({ apiBase })
 
   return (
@@ -72,10 +77,15 @@ export function HomeSectionsPanel({ apiBase, hint }: HomeSectionsPanelProps) {
             sections={sections}
             options={options}
             onToggleEnabled={toggleEnabled}
-            onUpdateConfig={updateConfig}
             onMove={move}
             onReorder={reorder}
             onRemove={removeSection}
+            drafts={drafts}
+            savingIds={savingIds}
+            onStartEditing={startEditingDraft}
+            onPatchDraft={patchDraft}
+            onSaveDraft={saveDraft}
+            onDiscardDraft={discardDraft}
           />
         )}
 

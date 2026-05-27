@@ -7,11 +7,14 @@ import {
   ChevronUp,
   GripVertical,
   Layers,
+  Loader2,
   Lock,
   Megaphone,
+  Save,
   Sparkles,
   Trash2,
 } from "lucide-react"
+import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
 import {
   Tooltip,
@@ -62,20 +65,31 @@ interface SectionListProps {
   sections: SectionRecord[]
   options: SectionOptions
   onToggleEnabled: (id: string, enabled: boolean) => void
-  onUpdateConfig: (id: string, patch: Partial<AnySectionConfig>) => void
   onMove: (id: string, delta: -1 | 1) => void
   onReorder: (nextOrder: string[]) => void
   onRemove: (id: string) => void
+  /** Draft API: drafts[id] existe => seção em edição. */
+  drafts: Record<string, AnySectionConfig>
+  savingIds: Set<string>
+  onStartEditing: (id: string) => void
+  onPatchDraft: (id: string, patch: Partial<AnySectionConfig>) => void
+  onSaveDraft: (id: string) => Promise<boolean>
+  onDiscardDraft: (id: string) => void
 }
 
 export function SectionList({
   sections,
   options,
   onToggleEnabled,
-  onUpdateConfig,
   onMove,
   onReorder,
   onRemove,
+  drafts,
+  savingIds,
+  onStartEditing,
+  onPatchDraft,
+  onSaveDraft,
+  onDiscardDraft,
 }: SectionListProps) {
   const [draggingId, setDraggingId] = useState<string | null>(null)
   const [overId, setOverId] = useState<string | null>(null)
@@ -120,7 +134,16 @@ export function SectionList({
   }
 
   return (
-    <Accordion multiple>
+    <Accordion
+      multiple
+      onValueChange={(open) => {
+        // base-ui devolve string | string[]; multiple => array
+        const opened = Array.isArray(open) ? open : open ? [open] : []
+        for (const id of opened) {
+          if (typeof id === "string") onStartEditing(id)
+        }
+      }}
+    >
       {sections.map((s, index) => {
         const isLocked = s.kind === "bestsellers"
         const canMoveUp = index > 0 && !isLocked && !(index === 1 && sections[0]?.kind === "bestsellers")
@@ -133,6 +156,16 @@ export function SectionList({
                 (s.config as CategoryCoursesConfig).categoryId,
               )?.name
             : undefined
+        // Draft em edição. Se não existe, mostra config persistida (read-only
+        // até abrir a sanfona, que dispara onStartEditing).
+        const draft = drafts[s.id]
+        const isDirty = Boolean(draft)
+        const isSaving = savingIds.has(s.id)
+        const effectiveConfig = draft ?? s.config
+        const sectionForEditor: SectionRecord = isDirty
+          ? { ...s, config: effectiveConfig }
+          : s
+        const validation = validateLocal(effectiveConfig)
 
         return (
           <AccordionItem
@@ -236,11 +269,18 @@ export function SectionList({
                   <div className="flex flex-1 items-center gap-3 text-left">
                     <SectionIcon kind={s.kind} />
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold text-zinc-800">
-                        {titleOfSection(s, categoryName)}
+                      <p className="flex items-center gap-2 truncate text-sm font-semibold text-zinc-800">
+                        <span className="truncate">
+                          {titleOfSection({ ...s, config: effectiveConfig }, categoryName)}
+                        </span>
+                        {isDirty && (
+                          <span className="shrink-0 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-700">
+                            Não salvo
+                          </span>
+                        )}
                       </p>
                       <p className="truncate text-[11.5px] text-zinc-500">
-                        {summaryOfSection(s)}
+                        {summaryOfSection({ ...s, config: effectiveConfig })}
                       </p>
                     </div>
                   </div>
@@ -291,11 +331,45 @@ export function SectionList({
             </AccordionHeader>
 
             <AccordionContent>
-              <EditorForKind
-                section={s}
-                options={options}
-                onPatch={(patch) => onUpdateConfig(s.id, patch)}
-              />
+              <div className="space-y-4">
+                <EditorForKind
+                  section={sectionForEditor}
+                  options={options}
+                  onPatch={(patch) => onPatchDraft(s.id, patch)}
+                />
+
+                {/* Footer: estado + ações Salvar/Cancelar */}
+                <div className="-mx-4 -mb-4 flex flex-col items-stretch gap-3 border-t border-[rgba(2,89,24,0.08)] bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                  <SaveStatus
+                    isDirty={isDirty}
+                    isSaving={isSaving}
+                    validationError={validation.ok ? null : validation.error}
+                  />
+                  <div className="flex shrink-0 gap-2 sm:justify-end">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={!isDirty || isSaving}
+                      onClick={() => onDiscardDraft(s.id)}
+                    >
+                      Cancelar
+                    </Button>
+                    <Button
+                      size="sm"
+                      disabled={!isDirty || isSaving || !validation.ok}
+                      onClick={() => void onSaveDraft(s.id)}
+                      className="bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)]"
+                    >
+                      {isSaving ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                      ) : (
+                        <Save className="h-3.5 w-3.5" aria-hidden />
+                      )}
+                      {isSaving ? "Salvando..." : "Salvar"}
+                    </Button>
+                  </div>
+                </div>
+              </div>
             </AccordionContent>
           </AccordionItem>
         )
@@ -452,6 +526,68 @@ function labelOfVariant(v: InstitutionalConfig["variant"]) {
     default:
       return "Personalizado"
   }
+}
+
+// ---------------------------------------------------------------------------
+// Validação local (antes de habilitar "Salvar"). Espelha as regras do
+// servidor pra evitar round-trips inúteis.
+// ---------------------------------------------------------------------------
+
+type LocalValidation = { ok: true } | { ok: false; error: string }
+
+function validateLocal(config: AnySectionConfig): LocalValidation {
+  if (config.kind === "bestsellers" || config.kind === "category_courses") {
+    if (config.mode === "manual" && config.courseIds.length !== config.count) {
+      const diff = config.count - config.courseIds.length
+      if (diff > 0) {
+        return {
+          ok: false,
+          error: `No modo personalizado, selecione exatamente ${config.count} cursos (faltam ${diff})`,
+        }
+      }
+      return {
+        ok: false,
+        error: `Você selecionou ${config.courseIds.length} cursos, mas o limite é ${config.count}`,
+      }
+    }
+  }
+  return { ok: true }
+}
+
+function SaveStatus({
+  isDirty,
+  isSaving,
+  validationError,
+}: {
+  isDirty: boolean
+  isSaving: boolean
+  validationError: string | null
+}) {
+  if (isSaving) {
+    return (
+      <p className="flex items-center gap-1.5 text-xs text-zinc-500">
+        <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
+        Salvando alterações...
+      </p>
+    )
+  }
+  if (validationError) {
+    return (
+      <p className="text-xs font-medium text-amber-700">{validationError}</p>
+    )
+  }
+  if (isDirty) {
+    return (
+      <p className="text-xs text-zinc-500">
+        Você tem alterações não salvas.
+      </p>
+    )
+  }
+  return (
+    <p className="text-xs text-zinc-400">
+      Tudo salvo. Edite os campos acima e clique em <b>Salvar</b>.
+    </p>
+  )
 }
 
 function EditorForKind({
