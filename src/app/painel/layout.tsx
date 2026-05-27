@@ -33,7 +33,7 @@ export default async function PainelLayout({
     cookies(),
     prisma.tenant.findUnique({
       where: { id: session.user.tenantId },
-      select: { name: true },
+      select: { name: true, automationEnabled: true },
     }),
   ])
 
@@ -53,6 +53,7 @@ export default async function PainelLayout({
         userName={session.user.name ?? "Revendedor"}
         userEmail={session.user.email ?? ""}
         tenantName={tenant?.name ?? null}
+        automationEnabled={tenant?.automationEnabled ?? false}
       >
         {children}
       </PainelLayoutShell>

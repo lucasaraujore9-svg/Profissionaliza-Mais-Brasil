@@ -1006,6 +1006,19 @@ model SystemSettings {
   tecnicaLabel   String? @map("tecnica_label")
   tecnicaCourses Json?   @map("tecnica_courses")
 
+  // Modulo Automacao do site PMB institucional. Espelha os campos
+  // `automation*`/`wa*` do Tenant, mas para a vitrine PMB (sistema mae).
+  // Default TRUE: no sistema mae o modulo vem sempre ligado; admin nao
+  // precisa "habilitar" — so configurar a conexao WA. Em contraste,
+  // unidades (Tenant.automationEnabled) tem default FALSE e o admin
+  // ativa por revendedor no /admin/revendedores/[id].
+  pmbAutomationEnabled   Boolean   @default(true) @map("pmb_automation_enabled")
+  pmbWaSessionName       String?   @unique @map("pmb_wa_session_name")
+  pmbWaConnectedPhone    String?   @unique @map("pmb_wa_connected_phone")
+  pmbWaStatus            String    @default("DISCONNECTED") @map("pmb_wa_status")
+  pmbWaStatusUpdatedAt   DateTime? @map("pmb_wa_status_updated_at")
+  pmbAbandonedAfterHours Int       @default(24) @map("pmb_abandoned_after_hours")
+
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("system_settings")
@@ -1276,9 +1289,11 @@ enum AutomationTemplateKey {
 }
 
 model StudentLead {
-  id       String @id @default(cuid())
-  tenantId String @map("tenant_id")
-  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  id       String  @id @default(cuid())
+  // null = vitrine PMB institucional (sistema mae). Segue o padrao de
+  // Enrollment/Payment/Coupon onde tenantId nullable indica venda PMB.
+  tenantId String? @map("tenant_id")
+  tenant   Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   // Dados de contato (snapshot — nao FK pra Student; lead pode existir
   // antes de virar aluno, e podem ser duplicados ate convergirem).
@@ -1353,9 +1368,13 @@ model StudentLeadActivity {
 }
 
 model AutomationMessageTemplate {
-  id       String @id @default(cuid())
-  tenantId String @map("tenant_id")
-  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  id       String  @id @default(cuid())
+  // null = templates da vitrine PMB institucional. Como o unique
+  // composite (tenantId, key) nao dedupe com NULL no Postgres, o
+  // sistema usa findFirst+create para inicializar templates PMB
+  // em vez de upsert direto.
+  tenantId String? @map("tenant_id")
+  tenant   Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   key     AutomationTemplateKey
   // Corpo da mensagem com placeholders: {{aluno_nome}}, {{curso}}, {{escola}},

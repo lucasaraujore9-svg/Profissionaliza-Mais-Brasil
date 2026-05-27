@@ -37,7 +37,14 @@ function emptyBoard(): BoardData {
   }, {} as BoardData)
 }
 
-export function LeadsKanbanBoard() {
+interface LeadsKanbanBoardProps {
+  /** Base da API de leads. Default = painel revendedor. PMB usa "/api/admin/leads". */
+  apiBase?: string
+}
+
+export function LeadsKanbanBoard({
+  apiBase = "/api/painel/leads",
+}: LeadsKanbanBoardProps = {}) {
   const [board, setBoard] = useState<BoardData>(emptyBoard())
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -47,7 +54,7 @@ export function LeadsKanbanBoard() {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch("/api/painel/leads", { cache: "no-store" })
+      const res = await fetch(apiBase, { cache: "no-store" })
       const body = await res.json()
       if (!res.ok) {
         setError(body.error ?? "Falha ao carregar leads")
@@ -80,7 +87,7 @@ export function LeadsKanbanBoard() {
       setBoard(next)
 
       try {
-        const res = await fetch(`/api/painel/leads/${leadId}/stage`, {
+        const res = await fetch(`${apiBase}/${leadId}/stage`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ stage: toStage }),
@@ -135,6 +142,7 @@ export function LeadsKanbanBoard() {
 
       <LeadDetailDrawer
         leadId={selectedId}
+        apiBase={apiBase}
         onClose={() => setSelectedId(null)}
         onChanged={load}
       />

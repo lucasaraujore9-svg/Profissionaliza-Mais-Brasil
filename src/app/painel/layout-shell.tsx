@@ -8,6 +8,7 @@ export interface PainelLayoutShellProps {
   userName: string
   userEmail: string
   tenantName?: string | null
+  automationEnabled?: boolean
 }
 
 export function PainelLayoutShell({
@@ -15,6 +16,7 @@ export function PainelLayoutShell({
   userName,
   userEmail,
   tenantName,
+  automationEnabled = false,
 }: PainelLayoutShellProps) {
   return (
     <div className="flex h-screen overflow-hidden">
@@ -22,6 +24,7 @@ export function PainelLayoutShell({
         <SidebarPainel
           tenantName={tenantName ?? undefined}
           userEmail={userEmail}
+          automationEnabled={automationEnabled}
         />
       </div>
       <div className="flex flex-1 flex-col overflow-hidden">
@@ -30,6 +33,7 @@ export function PainelLayoutShell({
             <SidebarPainel
               tenantName={tenantName ?? undefined}
               userEmail={userEmail}
+              automationEnabled={automationEnabled}
             />
           }
           userName={userName}

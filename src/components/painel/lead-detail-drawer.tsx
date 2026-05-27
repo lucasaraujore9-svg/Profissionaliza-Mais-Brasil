@@ -41,6 +41,7 @@ interface LeadDetail {
 
 interface LeadDetailDrawerProps {
   leadId: string | null
+  apiBase?: string
   onClose: () => void
   onChanged: () => void
 }
@@ -57,6 +58,7 @@ const ACTIVITY_KIND_LABEL: Record<string, string> = {
 
 export function LeadDetailDrawer({
   leadId,
+  apiBase = "/api/painel/leads",
   onClose,
   onChanged,
 }: LeadDetailDrawerProps) {
@@ -69,7 +71,7 @@ export function LeadDetailDrawer({
     if (!leadId) return
     setLoading(true)
     try {
-      const res = await fetch(`/api/painel/leads/${leadId}`, {
+      const res = await fetch(`${apiBase}/${leadId}`, {
         cache: "no-store",
       })
       const body = await res.json()
@@ -98,7 +100,7 @@ export function LeadDetailDrawer({
     if (!leadId || !note.trim()) return
     setPosting(true)
     try {
-      const res = await fetch(`/api/painel/leads/${leadId}/activities`, {
+      const res = await fetch(`${apiBase}/${leadId}/activities`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ body: note.trim() }),
@@ -121,7 +123,7 @@ export function LeadDetailDrawer({
     if (!leadId) return
     if (!confirm("Descartar este lead? Vai para a coluna Perdidos.")) return
     try {
-      const res = await fetch(`/api/painel/leads/${leadId}`, {
+      const res = await fetch(`${apiBase}/${leadId}`, {
         method: "DELETE",
       })
       if (!res.ok) {

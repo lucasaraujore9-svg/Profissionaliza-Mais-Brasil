@@ -28,6 +28,7 @@ import { upsertStudent } from "@/lib/students/upsert"
 import { provisionStudentAccess } from "@/lib/students/access"
 import { contextLogger } from "@/lib/logger"
 import { withRequestContext } from "@/lib/observability/with-request-context"
+import { upsertLeadFromCheckout } from "@/lib/automation/leads"
 
 const cpfRegex = /^\d{3}\.?\d{3}\.?\d{3}-?\d{2}$/
 const phoneRegex = /^\(?\d{2}\)?\s?\d{4,5}-?\d{4}$/
@@ -314,6 +315,27 @@ export const POST = withRequestContext(
       },
       select: { id: true },
     })
+
+    // Modulo Automacao PMB: gera StudentLead com stage=CHECKOUT_STARTED.
+    // Cron sweep-abandoned-leads move pra ABANDONED apos N horas; webhook
+    // MP move pra WON quando aprovado.
+    const pmbSettings = await prisma.systemSettings
+      .findUnique({
+        where: { id: "default" },
+        select: { pmbAutomationEnabled: true },
+      })
+      .catch(() => null)
+    if (pmbSettings?.pmbAutomationEnabled) {
+      upsertLeadFromCheckout({
+        tenantId: null,
+        enrollmentId: enrollment.id,
+        nome: normalize(data.nome),
+        email: data.email,
+        telefone: data.fone,
+        courseId: course.id,
+        courseSnapshot: course.nome,
+      }).catch(swallow("pmb_checkout.lead_link"))
+    }
 
     const externalReference = `pmb_enr_${enrollment.id}`
     const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/$/, "")

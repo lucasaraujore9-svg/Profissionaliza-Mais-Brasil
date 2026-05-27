@@ -58,7 +58,14 @@ const VARIABLES = [
   { token: "{{valor}}", desc: "Valor (quando aplicável)" },
 ]
 
-export function MessageTemplateEditor() {
+interface MessageTemplateEditorProps {
+  /** Base da API. Default = painel do revendedor. PMB usa "/api/admin/automacao". */
+  apiBase?: string
+}
+
+export function MessageTemplateEditor({
+  apiBase = "/api/painel/automacao",
+}: MessageTemplateEditorProps = {}) {
   const [templates, setTemplates] = useState<Template[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -66,7 +73,7 @@ export function MessageTemplateEditor() {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await fetch("/api/painel/automacao/templates", {
+      const res = await fetch(`${apiBase}/templates`, {
         cache: "no-store",
       })
       const body = await res.json()
@@ -95,7 +102,7 @@ export function MessageTemplateEditor() {
   async function save() {
     setSaving(true)
     try {
-      const res = await fetch("/api/painel/automacao/templates", {
+      const res = await fetch(`${apiBase}/templates`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

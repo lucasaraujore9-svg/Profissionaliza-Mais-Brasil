@@ -5,6 +5,7 @@ import {
   CourseDetailView,
   type CourseDetailData,
 } from "@/components/shared/course-detail-view"
+import { LeadInquiryCard } from "@/components/loja/lead-inquiry-card"
 
 type LoadedCurso = CourseDetailData & {
   id: string
@@ -98,6 +99,13 @@ export default async function CursoDetalhePage({
   const curso = await loadCurso(slug)
   if (!curso) notFound()
 
+  const settings = await prisma.systemSettings.upsert({
+    where: { id: "default" },
+    create: { id: "default" },
+    update: {},
+    select: { pmbAutomationEnabled: true },
+  })
+
   // CTA sempre tenta checkout quando há preço. O backend define o gateway
   // ativo (Asaas ou MP via pmbDirectSaleGateway) e a página /checkout trata
   // os casos de borda (curso MONTHLY → "atendimento personalizado", gateway
@@ -106,6 +114,15 @@ export default async function CursoDetalhePage({
     ? `/checkout?course_id=${curso.id}`
     : `/contato?curso=${encodeURIComponent(curso.slug)}`
   const ctaLabel = curso.hasPrice ? "Quero me matricular" : "Falar com a equipe"
+
+  const inquirySlot = settings.pmbAutomationEnabled ? (
+    <LeadInquiryCard
+      courseSlug={curso.slug}
+      courseName={curso.nome}
+      escolaName="Profissionaliza Mais Brasil"
+      endpoint="/api/pmb/leads"
+    />
+  ) : null
 
   return (
     <CourseDetailView
@@ -116,6 +133,7 @@ export default async function CursoDetalhePage({
       backLabel="Voltar para o catálogo"
       secondaryCtaHref="/ajuda"
       secondaryCtaLabel="Tirar dúvidas"
+      inquirySlot={inquirySlot}
     />
   )
 }

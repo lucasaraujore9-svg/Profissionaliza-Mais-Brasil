@@ -4,6 +4,7 @@ import { AutomationTemplateKey } from "@prisma/client"
 import { renderTemplate } from "./templates"
 import { sendTextMessage } from "./wa-client"
 import { rateLimitByKey, RATE_LIMITS } from "@/lib/ratelimit"
+import { resolveAutomationContext } from "./context"
 
 interface QueueLeadMessageArgs {
   leadId: string
@@ -11,13 +12,9 @@ interface QueueLeadMessageArgs {
 }
 
 /**
- * Enfileira disparo de WhatsApp para um lead. Fire-and-forget: a request
- * que chama retorna antes do envio completar. Em Vercel Functions, o
- * runtime aguarda alguns ms a mais antes de encerrar — suficiente pro
- * engine local (200-500ms).
- *
- * Falhas sao logadas e gravam StudentLeadActivity{kind:WA_MESSAGE_FAILED}
- * para auditoria; nao propagam erro para o caller.
+ * Enfileira disparo de WhatsApp para um lead. Fire-and-forget.
+ * Tratado uniformemente para tenant (unidade) e PMB (sistema mae) via
+ * AutomationContext.
  */
 export async function queueLeadMessage(
   args: QueueLeadMessageArgs,
@@ -32,10 +29,6 @@ export async function queueLeadMessage(
   }
 }
 
-/**
- * Envia a mensagem agora (await). Usado por `queueLeadMessage` e por
- * caminhos que precisam aguardar (ex: testes).
- */
 export async function sendLeadMessage(args: QueueLeadMessageArgs): Promise<void> {
   const { leadId, templateKey } = args
   const lead = await prisma.studentLead.findUnique({
@@ -48,33 +41,36 @@ export async function sendLeadMessage(args: QueueLeadMessageArgs): Promise<void>
       courseSnapshot: true,
       courseId: true,
       course: { select: { slug: true } },
-      tenant: {
-        select: {
-          name: true,
-          slug: true,
-          automationEnabled: true,
-          waSessionName: true,
-          waStatus: true,
-        },
-      },
     },
   })
 
   if (!lead) return
 
-  if (!lead.tenant.automationEnabled) {
+  const ctx = await resolveAutomationContext(lead.tenantId)
+  if (!ctx) {
+    await recordFailure(leadId, templateKey, "context_not_found")
+    return
+  }
+
+  if (!ctx.enabled) {
     await recordFailure(leadId, templateKey, "automation_disabled")
     return
   }
-  if (lead.tenant.waStatus !== "WORKING" || !lead.tenant.waSessionName) {
+  if (ctx.waStatus !== "WORKING" || !ctx.waSessionName) {
     await recordFailure(leadId, templateKey, "wa_not_connected")
     return
   }
 
-  const template = await prisma.automationMessageTemplate.findUnique({
-    where: { tenantId_key: { tenantId: lead.tenantId, key: templateKey } },
-    select: { body: true, enabled: true },
-  })
+  // Busca template do contexto (tenantId null = PMB)
+  const template = lead.tenantId
+    ? await prisma.automationMessageTemplate.findUnique({
+        where: { tenantId_key: { tenantId: lead.tenantId, key: templateKey } },
+        select: { body: true, enabled: true },
+      })
+    : await prisma.automationMessageTemplate.findFirst({
+        where: { tenantId: null, key: templateKey },
+        select: { body: true, enabled: true },
+      })
 
   if (!template || !template.enabled) {
     await recordFailure(leadId, templateKey, "template_missing_or_disabled")
@@ -82,19 +78,19 @@ export async function sendLeadMessage(args: QueueLeadMessageArgs): Promise<void>
   }
 
   const courseLink = lead.course?.slug
-    ? `https://${lead.tenant.slug}.livrecursos.com.br/curso/${lead.course.slug}`
+    ? `https://${ctx.publicHost}/${lead.tenantId === null ? "cursos" : "curso"}/${lead.course.slug}`
     : null
 
   const body = renderTemplate(template.body, {
     aluno_nome: lead.nome,
     curso: lead.courseSnapshot ?? "seu curso de interesse",
-    escola: lead.tenant.name,
+    escola: ctx.displayName,
     link_curso: courseLink ?? "",
     valor: "",
   })
 
   const sessionRl = await rateLimitByKey(
-    lead.tenant.waSessionName,
+    ctx.waSessionName,
     RATE_LIMITS.waSend,
   )
   if (!sessionRl.ok) {
@@ -104,7 +100,7 @@ export async function sendLeadMessage(args: QueueLeadMessageArgs): Promise<void>
 
   try {
     const result = await sendTextMessage({
-      sessionName: lead.tenant.waSessionName,
+      sessionName: ctx.waSessionName,
       toPhone: lead.telefone,
       body,
     })

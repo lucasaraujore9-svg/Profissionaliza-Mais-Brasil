@@ -210,13 +210,12 @@ async function fulfillFromMp(
 
   // Modulo Automacao: move StudentLead vinculado para WON e dispara o
   // template PURCHASE_CONFIRMED. Silencioso quando nao ha lead.
-  if (!tenant.isPmbVitrine) {
-    await markLeadAsWon({
-      enrollmentId,
-      tenantId: tenant.id,
-      amount: payment.transaction_amount,
-    }).catch(swallow("mp.process.lead_won"))
-  }
+  // PMB usa tenantId=null; revendedor usa tenant.id.
+  await markLeadAsWon({
+    enrollmentId,
+    tenantId: tenant.isPmbVitrine ? null : tenant.id,
+    amount: payment.transaction_amount,
+  }).catch(swallow("mp.process.lead_won"))
 }
 
 export async function processMpWebhook(args: ProcessArgs): Promise<void> {

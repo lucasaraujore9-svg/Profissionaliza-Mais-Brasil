@@ -7,6 +7,8 @@ interface LeadInquiryCardProps {
   courseSlug: string
   courseName: string
   escolaName: string
+  /** Endpoint POST. Default = vitrine de revendedor. PMB usa "/api/pmb/leads". */
+  endpoint?: string
 }
 
 function formatPhone(value: string): string {
@@ -22,6 +24,7 @@ export function LeadInquiryCard({
   courseSlug,
   courseName,
   escolaName,
+  endpoint = "/api/loja/leads",
 }: LeadInquiryCardProps) {
   const [nome, setNome] = useState("")
   const [email, setEmail] = useState("")
@@ -38,7 +41,7 @@ export function LeadInquiryCard({
     setErrorMsg(null)
 
     try {
-      const res = await fetch("/api/loja/leads", {
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

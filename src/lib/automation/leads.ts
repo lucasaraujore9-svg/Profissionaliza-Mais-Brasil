@@ -1,11 +1,13 @@
 import { prisma } from "@/lib/prisma"
 import { contextLogger } from "@/lib/logger"
 import { queueLeadMessage } from "./dispatch"
+import { resolveAutomationContext } from "./context"
 
 const DEDUP_WINDOW_MS = 48 * 60 * 60 * 1000
 
 interface UpsertLeadFromCheckoutArgs {
-  tenantId: string
+  // null = vitrine PMB (sistema mae)
+  tenantId: string | null
   enrollmentId: string
   nome: string
   email: string | null
@@ -15,13 +17,8 @@ interface UpsertLeadFromCheckoutArgs {
 }
 
 /**
- * Chamado quando um Enrollment PENDING e criado via /api/loja/checkout.
- * Procura um StudentLead recente que possa ser linkado; senao, cria novo
- * com source=CHECKOUT_ABANDON e stage=CHECKOUT_STARTED.
- *
- * Importante: NAO dispara WhatsApp aqui. O lead so vai disparar:
- *   - PURCHASE_CONFIRMED quando pagar (markLeadAsWon via webhook MP)
- *   - CHECKOUT_ABANDONED quando o cron mover pra ABANDONED
+ * Chamado quando um Enrollment PENDING e criado (vitrine de revendedor OU
+ * vitrine PMB). Procura StudentLead recente para linkar; senao, cria novo.
  */
 export async function upsertLeadFromCheckout(
   args: UpsertLeadFromCheckoutArgs,
@@ -45,8 +42,6 @@ export async function upsertLeadFromCheckout(
 
   if (existing) {
     if (existing.enrollmentId && existing.enrollmentId !== args.enrollmentId) {
-      // Lead ja tem enrollment vinculado diferente — cria novo para nao
-      // sobrescrever o vinculo anterior.
       await createNewLead(args)
       return
     }
@@ -104,17 +99,13 @@ async function createNewLead(args: UpsertLeadFromCheckoutArgs): Promise<void> {
 
 interface MarkLeadAsWonArgs {
   enrollmentId: string
+  // Quando vier do webhook de revendedor, eh o tenantId esperado.
+  // Quando vier do webhook PMB, eh null (e o lead vinculado tambem
+  // precisa ter tenantId=null).
   tenantId: string | null
   amount: number
 }
 
-/**
- * Chamado pelo webhook MP em fulfillFromMp apos fulfillEnrollment confirmar
- * o pagamento. Procura o StudentLead vinculado a essa enrollment e move
- * para WON. Dispara mensagem de confirmacao via WhatsApp.
- *
- * E silencioso para enrollments sem lead (ex: vendas diretas /admin, /aluno).
- */
 export async function markLeadAsWon(args: MarkLeadAsWonArgs): Promise<void> {
   const lead = await prisma.studentLead.findUnique({
     where: { enrollmentId: args.enrollmentId },
@@ -122,7 +113,7 @@ export async function markLeadAsWon(args: MarkLeadAsWonArgs): Promise<void> {
   })
 
   if (!lead) return
-  if (args.tenantId && lead.tenantId !== args.tenantId) {
+  if (lead.tenantId !== args.tenantId) {
     contextLogger().warn(
       {
         event: "automation.leads.tenant_mismatch",
@@ -174,11 +165,11 @@ interface SweepResult {
 }
 
 /**
- * Move para ABANDONED os leads CHECKOUT_STARTED que passaram do janela
- * configurada por tenant sem pagamento aprovado. Usado pelo cron.
+ * Move para ABANDONED os leads CHECKOUT_STARTED do contexto (tenant ou PMB)
+ * que passaram da janela sem pagamento aprovado.
  */
-export async function sweepAbandonedLeadsForTenant(
-  tenantId: string,
+export async function sweepAbandonedLeadsForContext(
+  tenantId: string | null,
   hours: number,
 ): Promise<SweepResult> {
   const cutoff = new Date(Date.now() - hours * 60 * 60 * 1000)
@@ -236,6 +227,14 @@ export async function sweepAbandonedLeadsForTenant(
   return { swept }
 }
 
+// Backward-compat: nome antigo, redireciona para a versao generica.
+export async function sweepAbandonedLeadsForTenant(
+  tenantId: string,
+  hours: number,
+): Promise<SweepResult> {
+  return sweepAbandonedLeadsForContext(tenantId, hours)
+}
+
 function normalizeE164(value: string): string {
   const digits = value.replace(/\D/g, "")
   if (!digits) return value
@@ -243,3 +242,6 @@ function normalizeE164(value: string): string {
   if (digits.length === 10 || digits.length === 11) return `+55${digits}`
   return `+${digits}`
 }
+
+// Re-export do resolveAutomationContext para conveniencia
+export { resolveAutomationContext } from "./context"

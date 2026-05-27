@@ -23,6 +23,8 @@ type WaStatus =
 interface PanelProps {
   initialStatus: string
   initialPhone: string | null
+  /** Base da API. Default = painel do revendedor. PMB usa "/api/admin/automacao". */
+  apiBase?: string
 }
 
 const POLL_MS = 3500
@@ -30,6 +32,7 @@ const POLL_MS = 3500
 export function WhatsAppConnectionPanel({
   initialStatus,
   initialPhone,
+  apiBase = "/api/painel/automacao",
 }: PanelProps) {
   const [status, setStatus] = useState<WaStatus>(initialStatus as WaStatus)
   const [phone, setPhone] = useState<string | null>(initialPhone)
@@ -48,7 +51,7 @@ export function WhatsAppConnectionPanel({
 
   const poll = useCallback(async () => {
     try {
-      const res = await fetch("/api/painel/automacao/whatsapp/status", {
+      const res = await fetch(`${apiBase}/whatsapp/status`, {
         cache: "no-store",
       })
       const body = await res.json()
@@ -84,7 +87,7 @@ export function WhatsAppConnectionPanel({
     setBusy(true)
     setPollingError(null)
     try {
-      const res = await fetch("/api/painel/automacao/whatsapp/connect", {
+      const res = await fetch(`${apiBase}/whatsapp/connect`, {
         method: "POST",
       })
       const body = await res.json()
@@ -110,7 +113,7 @@ export function WhatsAppConnectionPanel({
     if (!confirm("Desconectar o WhatsApp? Os disparos automáticos vão parar.")) return
     setBusy(true)
     try {
-      const res = await fetch("/api/painel/automacao/whatsapp/disconnect", {
+      const res = await fetch(`${apiBase}/whatsapp/disconnect`, {
         method: "POST",
       })
       const body = await res.json()

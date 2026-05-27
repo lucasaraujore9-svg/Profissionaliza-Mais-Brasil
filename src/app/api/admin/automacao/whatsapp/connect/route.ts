@@ -1,0 +1,81 @@
+import { NextResponse } from "next/server"
+import { randomBytes } from "node:crypto"
+import { prisma } from "@/lib/prisma"
+import { requireAdminSession } from "@/lib/auth/admin-session"
+import { withRequestContext } from "@/lib/observability/with-request-context"
+import { startSession, getSessionStatus } from "@/lib/automation/wa-client"
+import { contextLogger } from "@/lib/logger"
+
+export const POST = withRequestContext(
+  {
+    action: "admin.automacao.wa.connect",
+    route: "/api/admin/automacao/whatsapp/connect",
+  },
+  async () => {
+    const ctx = await requireAdminSession()
+    if (!ctx) {
+      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
+    }
+    if (ctx.role !== "SUPER_ADMIN") {
+      return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
+    }
+
+    const settings = await prisma.systemSettings.upsert({
+      where: { id: "default" },
+      create: { id: "default" },
+      update: {},
+      select: {
+        pmbAutomationEnabled: true,
+        pmbWaSessionName: true,
+      },
+    })
+
+    if (!settings.pmbAutomationEnabled) {
+      return NextResponse.json(
+        { error: "Automação PMB desativada" },
+        { status: 403 },
+      )
+    }
+
+    let sessionName = settings.pmbWaSessionName
+    if (!sessionName) {
+      sessionName = `s_pmb_${randomBytes(6).toString("hex")}`
+      await prisma.systemSettings.update({
+        where: { id: "default" },
+        data: { pmbWaSessionName: sessionName },
+      })
+    }
+
+    try {
+      await startSession(sessionName)
+    } catch (err) {
+      contextLogger().error(
+        { err, event: "admin.automacao.wa.start_failed", sessionName },
+        "Falha ao iniciar sessao no engine",
+      )
+      return NextResponse.json(
+        { error: "Falha ao conectar ao gateway de WhatsApp. Tente novamente." },
+        { status: 502 },
+      )
+    }
+
+    const status = await getSessionStatus(sessionName)
+
+    await prisma.systemSettings.update({
+      where: { id: "default" },
+      data: {
+        pmbWaStatus: status.status,
+        pmbWaConnectedPhone: status.connectedPhone,
+        pmbWaStatusUpdatedAt: new Date(),
+      },
+    })
+
+    return NextResponse.json({
+      data: {
+        status: status.status,
+        connectedPhone: status.connectedPhone,
+        qrDataUrl: status.qrDataUrl,
+      },
+    })
+  },
+)
