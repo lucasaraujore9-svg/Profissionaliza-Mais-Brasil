@@ -1,4 +1,3 @@
-import { NextResponse } from "next/server"
 import { requireSuperAdmin } from "@/lib/auth/guards"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { listSections, createSection } from "@/lib/home/api"

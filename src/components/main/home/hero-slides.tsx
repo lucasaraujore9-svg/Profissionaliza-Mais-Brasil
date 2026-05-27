@@ -47,7 +47,6 @@ export function HeroSlides({ slides, intervalMs = 6000 }: HeroSlidesProps) {
           const img = (
             <picture>
               <source media="(min-width: 768px)" srcSet={slide.desktopUrl} />
-              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={slide.mobileUrl}
                 alt=""

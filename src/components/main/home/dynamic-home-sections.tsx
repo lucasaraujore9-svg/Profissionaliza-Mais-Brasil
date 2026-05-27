@@ -37,7 +37,11 @@ export async function DynamicHomeSections({
     cookieStore.get(BESTSELLERS_COOKIE)?.value,
   )
 
-  let nextSnapshot: BestsellersSnapshot | null = null
+  // Holder object: mutar `current` em callbacks evita o erro
+  // `react-hooks/immutability` que vetaria reatribuir uma `let` capturada.
+  const snapshotHolder: { current: BestsellersSnapshot | null } = {
+    current: null,
+  }
 
   // Pré-processa cada seção, gerando o nó React correspondente.
   const nodes: { id: string; node: React.ReactNode }[] = []
@@ -47,7 +51,7 @@ export async function DynamicHomeSections({
       tenantId,
       bestsellersSnapshot: initialSnapshot,
       onNewBestsellersSnapshot: (snap) => {
-        nextSnapshot = snap
+        snapshotHolder.current = snap
       },
       tecnicaEnabled: tecnicaEnabled ?? false,
       tecnicaLabel,
@@ -56,11 +60,11 @@ export async function DynamicHomeSections({
   }
 
   // Persiste snapshot novo (best-effort).
-  if (nextSnapshot) {
+  if (snapshotHolder.current) {
     try {
       cookieStore.set({
         name: BESTSELLERS_COOKIE,
-        value: serializeBestsellersCookie(nextSnapshot),
+        value: serializeBestsellersCookie(snapshotHolder.current),
         httpOnly: true,
         sameSite: "lax",
         path: "/",

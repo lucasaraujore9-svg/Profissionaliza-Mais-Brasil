@@ -36,6 +36,20 @@ function iconFor(name: string | null | undefined): LucideIcon | null {
   return ICON_MAP[name] ?? null
 }
 
+// Helper que renderiza um ícone lucide pelo nome retornando JSX já pronto.
+// Mantemos a seleção em escopo de função (sem armazenar o componente em uma
+// `const` PascalCase dentro do render), o que satisfaz a regra
+// `react-hooks/static-components` do React 19.
+function renderIconByName(
+  name: string | null | undefined,
+  props: { className?: string; strokeWidth?: number },
+  fallback: LucideIcon | null = null,
+): React.ReactNode {
+  const Cmp = iconFor(name) ?? fallback
+  if (!Cmp) return null
+  return <Cmp {...props} aria-hidden />
+}
+
 // ---------------------------------------------------------------------------
 // categories_grid
 // ---------------------------------------------------------------------------
@@ -139,11 +153,14 @@ function TrustBarVariant({ config }: { config: InstitutionalConfig }) {
 }
 
 function TrustItem({ item }: { item: InstitutionalItem }) {
-  const Icon = iconFor(item.iconName) ?? Award
   return (
     <li className="flex items-center gap-3">
       <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[var(--color-pmb-lime-50)]">
-        <Icon className="h-5 w-5 text-[var(--color-pmb-green)]" strokeWidth={2.25} aria-hidden />
+        {renderIconByName(
+          item.iconName,
+          { className: "h-5 w-5 text-[var(--color-pmb-green)]", strokeWidth: 2.25 },
+          Award,
+        )}
       </span>
       <div className="leading-tight">
         <p className="text-[13px] font-bold text-[var(--color-pmb-green)]">{item.title}</p>
@@ -176,12 +193,14 @@ function LearnAnywhereVariant({ config }: { config: InstitutionalConfig }) {
           {config.items.length > 0 && (
             <ul className="mt-6 space-y-3">
               {config.items.map((it, i) => {
-                const Icon = iconFor(it.iconName)
+                const iconNode = renderIconByName(it.iconName, {
+                  className: "h-3.5 w-3.5 text-[var(--color-pmb-green)]",
+                })
                 return (
                   <li key={i} className="flex items-start gap-3">
-                    {Icon && (
+                    {iconNode && (
                       <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[var(--color-pmb-lime-50)]">
-                        <Icon className="h-3.5 w-3.5 text-[var(--color-pmb-green)]" aria-hidden />
+                        {iconNode}
                       </span>
                     )}
                     <div>
@@ -369,14 +388,17 @@ function BenefitsVariant({ config }: { config: InstitutionalConfig }) {
         )}
         <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {config.items.map((it, i) => {
-            const Icon = iconFor(it.iconName) ?? Award
             return (
               <li
                 key={i}
                 className="rounded-2xl border border-[rgba(2,89,24,0.08)] bg-white p-5"
               >
                 <span className="grid h-12 w-12 place-items-center rounded-full bg-[var(--color-pmb-lime-50)]">
-                  <Icon className="h-6 w-6 text-[var(--color-pmb-green)]" aria-hidden />
+                  {renderIconByName(
+                    it.iconName,
+                    { className: "h-6 w-6 text-[var(--color-pmb-green)]" },
+                    Award,
+                  )}
                 </span>
                 <h3 className="mt-3 text-[15px] font-bold text-[var(--color-pmb-green-900)]">
                   {it.title}
