@@ -1,5 +1,4 @@
 import Link from "next/link"
-import Image from "next/image"
 import {
   ArrowRight,
   Award,
@@ -285,6 +284,11 @@ function LearnAnywhereVariant({ config }: { config: InstitutionalConfig }) {
 }
 
 function TestimonialsVariant({ config }: { config: InstitutionalConfig }) {
+  // Sem depoimentos cadastrados, nao renderiza nada — evita o empty state
+  // "Em breve..." aparecer publicamente quando a secao foi criada mas nunca
+  // teve items preenchidos.
+  if (config.items.length === 0) return null
+
   return (
     <section className="border-b border-[rgba(2,89,24,0.08)] bg-[var(--color-pmb-mist)]">
       <div className="mx-auto max-w-[1280px] px-4 py-14 md:px-6 md:py-18">
@@ -302,55 +306,36 @@ function TestimonialsVariant({ config }: { config: InstitutionalConfig }) {
           )}
         </div>
 
-        {config.items.length === 0 ? (
-          <div className="mx-auto flex max-w-2xl flex-col items-center justify-center rounded-2xl border border-dashed border-[rgba(2,89,24,0.18)] bg-white px-6 py-12 text-center">
-            <Quote
-              className="h-10 w-10 text-[var(--color-pmb-lime)] opacity-80"
-              strokeWidth={2}
-              aria-hidden
-            />
-            <p className="mt-4 text-[15px] font-bold text-[var(--color-pmb-green)]">
-              Em breve, depoimentos de quem já faz parte da nossa rede.
-            </p>
-          </div>
-        ) : (
-          <ul className="grid gap-5 md:grid-cols-3">
-            {config.items.map((it, i) => (
-              <li
-                key={i}
-                className="relative flex flex-col rounded-2xl border border-[rgba(2,89,24,0.08)] bg-white p-6 shadow-[0_10px_30px_-18px_rgba(2,89,24,0.2)]"
-              >
-                <Quote
-                  className="absolute right-5 top-5 h-8 w-8 text-[var(--color-pmb-lime)] opacity-60"
-                  strokeWidth={2}
-                  aria-hidden
-                />
-                <p className="mt-3 flex-1 text-[14.5px] leading-relaxed text-[rgba(2,89,24,0.82)]">
-                  &ldquo;{it.body}&rdquo;
-                </p>
-                <div className="mt-5 flex items-center gap-3 border-t border-[rgba(2,89,24,0.08)] pt-4">
-                  {it.imageUrl ? (
-                    <span className="relative h-11 w-11 shrink-0 overflow-hidden rounded-full">
-                      <Image src={it.imageUrl} alt="" fill unoptimized sizes="44px" className="object-cover" />
-                    </span>
-                  ) : (
-                    <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-[var(--color-pmb-lime-50)] text-[13px] font-black text-[var(--color-pmb-green)]">
-                      {it.title.slice(0, 2).toUpperCase()}
-                    </span>
+        <ul className="grid gap-5 md:grid-cols-3">
+          {config.items.map((it, i) => (
+            <li
+              key={i}
+              className="relative flex flex-col rounded-2xl border border-[rgba(2,89,24,0.08)] bg-white p-6 shadow-[0_10px_30px_-18px_rgba(2,89,24,0.2)]"
+            >
+              <Quote
+                className="absolute right-5 top-5 h-8 w-8 text-[var(--color-pmb-lime)] opacity-60"
+                strokeWidth={2}
+                aria-hidden
+              />
+              <p className="mt-3 flex-1 text-[14.5px] leading-relaxed text-[rgba(2,89,24,0.82)]">
+                &ldquo;{it.body}&rdquo;
+              </p>
+              <div className="mt-5 flex items-center gap-3 border-t border-[rgba(2,89,24,0.08)] pt-4">
+                <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-[var(--color-pmb-lime-50)] text-[13px] font-black text-[var(--color-pmb-green)]">
+                  {it.title.slice(0, 2).toUpperCase()}
+                </span>
+                <div className="min-w-0">
+                  <p className="truncate text-[14px] font-bold text-[var(--color-pmb-green)]">
+                    {it.title}
+                  </p>
+                  {it.meta && (
+                    <p className="truncate text-[12px] text-[rgba(2,89,24,0.6)]">{it.meta}</p>
                   )}
-                  <div className="min-w-0">
-                    <p className="truncate text-[14px] font-bold text-[var(--color-pmb-green)]">
-                      {it.title}
-                    </p>
-                    {it.meta && (
-                      <p className="truncate text-[12px] text-[rgba(2,89,24,0.6)]">{it.meta}</p>
-                    )}
-                  </div>
                 </div>
-              </li>
-            ))}
-          </ul>
-        )}
+              </div>
+            </li>
+          ))}
+        </ul>
       </div>
     </section>
   )
