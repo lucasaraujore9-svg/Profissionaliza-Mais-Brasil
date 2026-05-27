@@ -114,7 +114,7 @@ export function CourseDetailView({
       : null
 
   return (
-    <div className="bg-[var(--color-pmb-mist)]">
+    <div className="bg-[var(--color-pmb-mist)] pb-24 lg:pb-0">
       {/* HERO ---------------------------------------------------- */}
       <section className="relative overflow-hidden bg-[var(--color-pmb-green)] text-white">
         {course.imageUrl ? (
@@ -449,6 +449,33 @@ export function CourseDetailView({
           </aside>
         </div>
       </section>
+
+      {/* Sticky CTA mobile — leigos não rolam até a sidebar; mostramos preço + CTA fixos no rodapé */}
+      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-[rgba(2,89,24,0.12)] bg-white shadow-[0_-8px_30px_-12px_rgba(2,89,24,0.25)] lg:hidden">
+        <div className="mx-auto flex max-w-[1280px] items-center gap-3 px-4 py-3">
+          <div className="min-w-0 flex-1">
+            {desconto && (
+              <span className="inline-block rounded-full bg-[var(--color-pmb-gold)]/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[var(--color-pmb-gold-600)]">
+                {desconto}% OFF
+              </span>
+            )}
+            <p className="truncate text-[18px] font-black leading-tight text-[var(--color-pmb-green)]">
+              {formatBRL(course.price)}
+            </p>
+            {course.price > 0 && parcelas > 1 && (
+              <p className="truncate text-[11px] text-[rgba(2,89,24,0.65)]">
+                ou {parcelas}x de {formatBRL(valorParcela)}
+              </p>
+            )}
+          </div>
+          <Link
+            href={ctaHref}
+            className="inline-flex shrink-0 items-center justify-center rounded-lg bg-[var(--color-pmb-gold)] px-5 py-3 text-[14px] font-black text-[var(--color-pmb-green)] transition-colors hover:bg-[var(--color-pmb-gold-600)]"
+          >
+            {ctaLabel}
+          </Link>
+        </div>
+      </div>
     </div>
   )
 }

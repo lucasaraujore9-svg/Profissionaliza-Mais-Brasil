@@ -1,80 +1,76 @@
-"use client"
-
-import { useState } from "react"
-import { CreditCard, Landmark, QrCode } from "lucide-react"
+import { CreditCard, Landmark, QrCode, ShieldCheck, Lock } from "lucide-react"
 
 const metodos = [
   {
+    id: "pix",
+    label: "PIX",
+    hint: "Aprovação imediata",
+    icon: QrCode,
+  },
+  {
     id: "credito",
     label: "Cartão de Crédito",
-    hint: "Em até 3x sem juros",
+    hint: "Parcele em até 12x",
     icon: CreditCard,
   },
   {
-    id: "debito",
-    label: "Cartão de Débito",
-    hint: "Aprovação imediata",
+    id: "boleto",
+    label: "Boleto bancário",
+    hint: "Vence em até 3 dias",
     icon: Landmark,
-  },
-  {
-    id: "pix",
-    label: "PIX",
-    hint: "Desconto de 5% à vista",
-    icon: QrCode,
   },
 ]
 
 export function PaymentInfo() {
-  const [selected, setSelected] = useState("credito")
-
   return (
     <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm lg:p-8">
       <div className="flex items-center gap-2">
         <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--color-pmb-lime-50)] font-mono text-sm font-semibold text-[var(--color-pmb-green)]">
           02
         </div>
-        <h2 className="text-base font-semibold text-[var(--color-pmb-green-900)]">Forma de pagamento</h2>
+        <h2 className="text-base font-semibold text-[var(--color-pmb-green-900)]">
+          Como você vai pagar
+        </h2>
       </div>
 
-      <div className="mt-6 space-y-3">
+      <p className="mt-4 text-sm text-gray-600">
+        Após clicar em <strong className="font-semibold text-[var(--color-pmb-green-900)]">Finalizar compra</strong>,
+        você será levado para uma tela segura para escolher como pagar:
+      </p>
+
+      <ul className="mt-5 grid gap-3 sm:grid-cols-3">
         {metodos.map((m) => {
-          const isActive = selected === m.id
+          const Icon = m.icon
           return (
-            <button
+            <li
               key={m.id}
-              type="button"
-              onClick={() => setSelected(m.id)}
-              className={`flex w-full items-center gap-4 rounded-xl border p-4 text-left transition-all ${
-                isActive
-                  ? "border-[var(--color-pmb-green)] bg-[var(--color-pmb-lime-50)]/50 shadow-sm"
-                  : "border-gray-200 bg-white hover:border-gray-300"
-              }`}
+              className="flex items-start gap-3 rounded-xl border border-gray-200 bg-[var(--color-pmb-mist)]/40 p-4"
             >
-              <div
-                className={`flex h-10 w-10 items-center justify-center rounded-lg ${
-                  isActive ? "bg-[var(--color-pmb-green)] text-white" : "bg-gray-100 text-gray-600"
-                }`}
-              >
-                <m.icon className="h-5 w-5" />
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-[var(--color-pmb-green)] shadow-sm">
+                <Icon className="h-4 w-4" />
               </div>
-              <div className="flex-1">
-                <div className="text-sm font-medium text-[var(--color-pmb-green-900)]">{m.label}</div>
+              <div className="min-w-0">
+                <div className="text-sm font-semibold text-[var(--color-pmb-green-900)]">
+                  {m.label}
+                </div>
                 <div className="text-xs text-gray-500">{m.hint}</div>
               </div>
-              <div
-                className={`h-5 w-5 shrink-0 rounded-full border-2 ${
-                  isActive
-                    ? "border-[var(--color-pmb-green)] bg-[var(--color-pmb-green)]"
-                    : "border-gray-300 bg-white"
-                }`}
-              >
-                {isActive && (
-                  <div className="h-full w-full rounded-full border-2 border-white bg-[var(--color-pmb-green)]" />
-                )}
-              </div>
-            </button>
+            </li>
           )
         })}
+      </ul>
+
+      <div className="mt-5 flex items-start gap-2 rounded-xl border border-emerald-100 bg-emerald-50 p-3 text-xs text-emerald-800">
+        <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
+        <span>
+          Seu pagamento é processado pelo <strong className="font-semibold">Mercado Pago</strong>,
+          com criptografia ponta a ponta. Não armazenamos dados de cartão.
+        </span>
+      </div>
+
+      <div className="mt-2 flex items-center gap-2 text-[11px] text-gray-500">
+        <Lock className="h-3 w-3" />
+        Conexão segura via HTTPS
       </div>
     </div>
   )

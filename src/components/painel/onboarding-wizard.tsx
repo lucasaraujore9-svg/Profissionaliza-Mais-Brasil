@@ -1,11 +1,13 @@
 "use client"
 
 import { useState } from "react"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
 import {
   ArrowLeft,
   ArrowRight,
   Check,
+  ExternalLink,
   Loader2,
   PartyPopper,
   User,
@@ -22,6 +24,37 @@ const steps = [
   { id: 4, label: "Vitrine", icon: Palette },
   { id: 5, label: "Conclusão", icon: Sparkles },
 ] as const
+
+interface StepContent {
+  title: string
+  description: string
+  href?: string
+  hrefLabel?: string
+}
+
+const STEP_DETAILS: Record<number, StepContent> = {
+  2: {
+    title: "Confirme seus dados",
+    description:
+      "Antes de seguir, abra Configurações → Conta e revise seu nome, email e dados da empresa. Tudo certo? Volte aqui e clique em Próximo.",
+    href: "/painel/configuracoes",
+    hrefLabel: "Abrir configurações",
+  },
+  3: {
+    title: "Defina seu endereço na internet",
+    description:
+      "Sua escola precisa de um endereço. Você pode usar o subdomínio gratuito (algo.livrecursos.com.br) ou apontar um domínio próprio que já comprou.",
+    href: "/painel/dominio",
+    hrefLabel: "Configurar domínio",
+  },
+  4: {
+    title: "Personalize a vitrine",
+    description:
+      "Envie sua logo, escolha as cores da sua marca e escreva o texto de boas-vindas. É isso que seus alunos vão ver primeiro.",
+    href: "/painel/vitrine",
+    hrefLabel: "Editar vitrine",
+  },
+}
 
 export function OnboardingWizard() {
   const router = useRouter()
@@ -80,6 +113,8 @@ export function OnboardingWizard() {
     router.refresh()
   }
 
+  const stepDetails = STEP_DETAILS[current]
+
   return (
     <div className="rounded-2xl border border-gray-200 bg-white shadow-sm">
       <div className="border-b border-gray-200 px-6 py-5">
@@ -132,37 +167,36 @@ export function OnboardingWizard() {
             </h3>
             <p className="mx-auto mt-2 max-w-md text-sm text-gray-600">
               Vamos preparar sua vitrine em 4 passos rápidos. Leva menos de 10
-              minutos.
+              minutos e você pode pausar a qualquer momento — voltamos do
+              ponto onde você parou.
             </p>
           </div>
         )}
-        {current === 2 && (
-          <div>
-            <h3 className="text-lg font-bold text-[var(--color-pmb-green-900)]">Confirme seus dados</h3>
-            <p className="mt-1 text-sm text-gray-600">
-              Abra a aba <strong>Configurações → Conta</strong> e valide nome,
-              email e empresa antes de seguir.
+
+        {stepDetails && (
+          <div className="mx-auto max-w-lg">
+            <h3 className="text-lg font-bold text-[var(--color-pmb-green-900)]">
+              {stepDetails.title}
+            </h3>
+            <p className="mt-2 text-sm leading-relaxed text-gray-600">
+              {stepDetails.description}
+            </p>
+            {stepDetails.href && stepDetails.hrefLabel && (
+              <Link
+                href={stepDetails.href}
+                target="_blank"
+                className="mt-5 inline-flex items-center gap-2 rounded-lg bg-[var(--color-pmb-green)] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[var(--color-pmb-green-700)]"
+              >
+                {stepDetails.hrefLabel}
+                <ExternalLink className="h-4 w-4" />
+              </Link>
+            )}
+            <p className="mt-4 text-xs text-gray-500">
+              Abrimos em uma nova guia para você não perder o passo a passo.
             </p>
           </div>
         )}
-        {current === 3 && (
-          <div>
-            <h3 className="text-lg font-bold text-[var(--color-pmb-green-900)]">Defina seu endereço</h3>
-            <p className="mt-1 text-sm text-gray-600">
-              Escolha o subdomínio gratuito ou aponte um domínio próprio em{" "}
-              <strong>Vitrine → Domínio</strong>.
-            </p>
-          </div>
-        )}
-        {current === 4 && (
-          <div>
-            <h3 className="text-lg font-bold text-[var(--color-pmb-green-900)]">Personalize a vitrine</h3>
-            <p className="mt-1 text-sm text-gray-600">
-              Envie o logo, escolha cores e escreva o texto de boas-vindas em{" "}
-              <strong>Vitrine → Editor</strong>.
-            </p>
-          </div>
-        )}
+
         {current === 5 && (
           <div className="text-center">
             <Sparkles className="mx-auto h-12 w-12 text-[var(--color-pmb-green)]" />
@@ -171,7 +205,7 @@ export function OnboardingWizard() {
             </h3>
             <p className="mx-auto mt-2 max-w-md text-sm text-gray-600">
               {finished
-                ? "Sua vitrine está no ar. Agora é hora de compartilhar com os primeiros alunos."
+                ? "Sua vitrine está no ar. Agora é hora de compartilhar o link com os primeiros alunos e começar a vender."
                 : "Estamos finalizando a ativação. Aguarde um instante."}
             </p>
           </div>

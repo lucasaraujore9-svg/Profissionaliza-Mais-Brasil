@@ -6,18 +6,20 @@ import {
   BookOpen,
   Eye,
   EyeOff,
+  HelpCircle,
+  Info,
   Loader2,
   Pencil,
   Search,
   Sparkles,
   Star,
+  X,
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { CourseEditDrawer } from "./course-edit-drawer"
 import type { CourseListItem } from "./course-list-table"
 
-const filters = ["Todos", "Visíveis", "Ocultos", "Em destaque"] as const
-type FilterValue = (typeof filters)[number]
+type FilterValue = "Todos" | "Visíveis" | "Ocultos" | "Em destaque"
 
 function formatBRL(value: number): string {
   if (!value || value <= 0) return "—"
@@ -53,6 +55,16 @@ export function CourseListWrapper() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadCourses()
   }, [loadCourses])
+
+  const stats = useMemo(() => {
+    if (!courses) return { total: 0, visible: 0, hidden: 0, featured: 0 }
+    return {
+      total: courses.length,
+      visible: courses.filter((c) => c.isVisible).length,
+      hidden: courses.filter((c) => !c.isVisible).length,
+      featured: courses.filter((c) => c.isFeatured).length,
+    }
+  }, [courses])
 
   const filtered = useMemo(() => {
     if (!courses) return []
@@ -93,35 +105,93 @@ export function CourseListWrapper() {
     void loadCourses()
   }
 
+  const hasFilters = filter !== "Todos" || search.trim().length > 0
+
   return (
     <>
-      <div className="flex flex-col gap-3 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm md:flex-row md:items-center md:justify-between">
-        <div className="relative flex-1 md:max-w-md">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-          <Input
-            placeholder="Buscar curso por título..."
-            className="pl-9"
-            type="search"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
+      {/* Cards de estatísticas clicáveis (também funcionam como filtros) */}
+      {courses && courses.length > 0 && (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <StatCard
+            label="Total de cursos"
+            value={stats.total}
+            active={filter === "Todos"}
+            onClick={() => setFilter("Todos")}
+            icon={BookOpen}
+            tone="neutral"
+          />
+          <StatCard
+            label="Visíveis na vitrine"
+            value={stats.visible}
+            active={filter === "Visíveis"}
+            onClick={() => setFilter("Visíveis")}
+            icon={Eye}
+            tone="success"
+          />
+          <StatCard
+            label="Ocultos"
+            value={stats.hidden}
+            active={filter === "Ocultos"}
+            onClick={() => setFilter("Ocultos")}
+            icon={EyeOff}
+            tone="muted"
+          />
+          <StatCard
+            label="Em destaque"
+            value={stats.featured}
+            active={filter === "Em destaque"}
+            onClick={() => setFilter("Em destaque")}
+            icon={Star}
+            tone="warning"
           />
         </div>
+      )}
 
-        <div className="flex flex-wrap items-center gap-1 rounded-lg border border-gray-200 bg-gray-50 p-1">
-          {filters.map((f) => (
+      {/* Toolbar de busca + dica */}
+      <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div className="relative w-full md:max-w-md">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            <Input
+              placeholder="Buscar por título do curso..."
+              className="pl-9 pr-9"
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch("")}
+                aria-label="Limpar busca"
+                className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+
+          {hasFilters && (
             <button
-              key={f}
               type="button"
-              onClick={() => setFilter(f)}
-              className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
-                filter === f
-                  ? "bg-white text-[var(--color-pmb-green-900)] shadow-sm"
-                  : "text-gray-600 hover:text-[var(--color-pmb-green-900)]"
-              }`}
+              onClick={() => {
+                setSearch("")
+                setFilter("Todos")
+              }}
+              className="self-start rounded-md px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100 hover:text-[var(--color-pmb-green-900)]"
             >
-              {f}
+              Limpar filtros
             </button>
-          ))}
+          )}
+        </div>
+
+        <div className="mt-3 flex items-start gap-2 rounded-lg border border-[rgba(2,89,24,0.08)] bg-[var(--color-pmb-mist)]/40 p-3 text-xs text-[rgba(2,89,24,0.7)]">
+          <HelpCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--color-pmb-green)]" />
+          <p>
+            <strong className="font-semibold text-[var(--color-pmb-green-900)]">Dica:</strong>{" "}
+            Use o ícone do olho para mostrar ou ocultar um curso na sua vitrine.
+            Edite preço, descrição e capa para personalizar cada curso para seus alunos.
+          </p>
         </div>
       </div>
 
@@ -134,22 +204,52 @@ export function CourseListWrapper() {
           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
           Carregando cursos...
         </div>
+      ) : courses.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-[rgba(2,89,24,0.18)] bg-white p-10 text-center shadow-sm">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--color-pmb-lime-50)] text-[var(--color-pmb-green)]">
+            <BookOpen className="h-6 w-6" />
+          </div>
+          <h3 className="mt-4 text-lg font-semibold text-[var(--color-pmb-green-900)]">
+            Catálogo ainda não disponível
+          </h3>
+          <p className="mx-auto mt-2 max-w-md text-sm text-gray-600">
+            Os cursos da plataforma aparecem aqui automaticamente. Aguarde a
+            sincronização inicial ou contate o suporte se demorar mais de 1 hora.
+          </p>
+        </div>
       ) : (
         <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <h3 className="text-sm font-semibold text-[var(--color-pmb-green-900)]">
               {filtered.length}{" "}
-              {filtered.length === 1 ? "curso" : "cursos"}
+              {filtered.length === 1 ? "curso encontrado" : "cursos encontrados"}
               {filter !== "Todos" ? ` · ${filter.toLowerCase()}` : ""}
             </h3>
-            <span className="text-xs text-gray-500">
-              Toda alteração afeta apenas a sua vitrine
+            <span className="inline-flex items-center gap-1 text-[11px] text-gray-500">
+              <Info className="h-3 w-3" />
+              Alterações afetam apenas a sua vitrine
             </span>
           </div>
 
           {filtered.length === 0 ? (
-            <div className="mt-6 rounded-xl border border-dashed border-gray-300 bg-gray-50 p-10 text-center text-sm text-gray-500">
-              Nenhum curso encontrado com os filtros atuais.
+            <div className="mt-6 rounded-xl border border-dashed border-gray-300 bg-gray-50 p-10 text-center">
+              <p className="text-sm font-medium text-gray-700">
+                Nenhum curso encontrado
+              </p>
+              <p className="mx-auto mt-1 max-w-sm text-xs text-gray-500">
+                Tente ajustar os filtros ou{" "}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearch("")
+                    setFilter("Todos")
+                  }}
+                  className="font-semibold text-[var(--color-pmb-green)] underline hover:text-[var(--color-pmb-green-700)]"
+                >
+                  ver todos os cursos
+                </button>
+                .
+              </p>
             </div>
           ) : (
             <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -285,5 +385,72 @@ export function CourseListWrapper() {
         onSaved={handleSaved}
       />
     </>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* StatCard — card clicável usado como filtro                          */
+/* ------------------------------------------------------------------ */
+
+type StatTone = "neutral" | "success" | "muted" | "warning"
+
+const TONE_STYLES: Record<StatTone, { icon: string; activeBorder: string }> = {
+  neutral: {
+    icon: "bg-[var(--color-pmb-lime-50)] text-[var(--color-pmb-green)]",
+    activeBorder: "border-[var(--color-pmb-green)]",
+  },
+  success: {
+    icon: "bg-emerald-50 text-emerald-600",
+    activeBorder: "border-emerald-500",
+  },
+  muted: {
+    icon: "bg-gray-100 text-gray-500",
+    activeBorder: "border-gray-400",
+  },
+  warning: {
+    icon: "bg-amber-50 text-amber-600",
+    activeBorder: "border-amber-500",
+  },
+}
+
+function StatCard({
+  label,
+  value,
+  active,
+  onClick,
+  icon: Icon,
+  tone,
+}: {
+  label: string
+  value: number
+  active: boolean
+  onClick: () => void
+  icon: typeof BookOpen
+  tone: StatTone
+}) {
+  const tones = TONE_STYLES[tone]
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex items-center gap-3 rounded-2xl border bg-white p-4 text-left shadow-sm transition-all hover:shadow-md ${
+        active
+          ? `${tones.activeBorder} ring-2 ring-offset-1 ring-[var(--color-pmb-lime)]`
+          : "border-gray-200"
+      }`}
+      aria-pressed={active}
+    >
+      <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${tones.icon}`}>
+        <Icon className="h-4 w-4" />
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+          {label}
+        </p>
+        <p className="mt-0.5 text-xl font-bold text-[var(--color-pmb-green-900)]">
+          {value}
+        </p>
+      </div>
+    </button>
   )
 }

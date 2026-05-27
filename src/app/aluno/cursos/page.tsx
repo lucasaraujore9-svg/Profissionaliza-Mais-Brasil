@@ -1,28 +1,58 @@
+import Link from "next/link"
 import { prisma } from "@/lib/prisma"
 import { requireStudentSession } from "@/lib/auth/student-session"
 import { syncStudentProgress } from "@/lib/students/progress"
 import { contextLogger } from "@/lib/logger"
+import {
+  ArrowRight,
+  Award,
+  BookOpen,
+  CheckCircle2,
+  Clock,
+  ExternalLink,
+  GraduationCap,
+  ShoppingBag,
+  XCircle,
+} from "lucide-react"
 
-const STATUS_LABEL: Record<string, string> = {
-  PENDING: "Aguardando pagamento",
-  ACTIVE: "Ativo",
-  SUSPENDED: "Suspenso",
-  CANCELLED: "Cancelado",
-  COMPLETED: "Concluído",
+interface StatusBadge {
+  label: string
+  icon: typeof Clock
+  className: string
 }
 
-const STATUS_COLOR: Record<string, string> = {
-  PENDING: "bg-amber-100 text-amber-800",
-  ACTIVE: "bg-emerald-100 text-emerald-700",
-  SUSPENDED: "bg-rose-100 text-rose-700",
-  CANCELLED: "bg-gray-100 text-gray-700",
-  COMPLETED: "bg-blue-100 text-blue-700",
+const STATUS_BADGE: Record<string, StatusBadge> = {
+  PENDING: {
+    label: "Aguardando pagamento",
+    icon: Clock,
+    className: "bg-amber-50 text-amber-800 ring-1 ring-amber-200",
+  },
+  ACTIVE: {
+    label: "Liberado",
+    icon: CheckCircle2,
+    className: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200",
+  },
+  SUSPENDED: {
+    label: "Suspenso",
+    icon: XCircle,
+    className: "bg-rose-50 text-rose-700 ring-1 ring-rose-200",
+  },
+  CANCELLED: {
+    label: "Cancelado",
+    icon: XCircle,
+    className: "bg-gray-100 text-gray-700 ring-1 ring-gray-200",
+  },
+  COMPLETED: {
+    label: "Concluído",
+    icon: Award,
+    className: "bg-blue-50 text-blue-700 ring-1 ring-blue-200",
+  },
 }
 
 const PROGRESS_STATUS_LABEL: Record<string, string> = {
   EM_ANDAMENTO: "Em andamento",
   CONCLUIDO: "Concluído",
-  AGUARDANDO: "Aguardando",
+  AGUARDANDO: "Aguardando início",
 }
 
 export default async function StudentCoursesPage() {
@@ -79,10 +109,24 @@ export default async function StudentCoursesPage() {
       </header>
 
       {enrollments.length === 0 ? (
-        <div className="rounded-2xl border border-gray-200 bg-white p-10 text-center shadow-sm">
-          <p className="text-sm text-gray-500">
-            Você ainda não tem cursos contratados.
+        <div className="rounded-2xl border border-dashed border-[rgba(2,89,24,0.18)] bg-white p-10 text-center shadow-sm">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--color-pmb-lime-50)] text-[var(--color-pmb-green)]">
+            <BookOpen className="h-6 w-6" />
+          </div>
+          <h2 className="mt-4 text-lg font-semibold text-[var(--color-pmb-green-900)]">
+            Você ainda não tem cursos
+          </h2>
+          <p className="mx-auto mt-2 max-w-md text-sm text-gray-600">
+            Escolha um curso no nosso catálogo e comece a estudar hoje mesmo.
+            O pagamento pode ser feito no Pix, cartão ou boleto.
           </p>
+          <Link
+            href="/aluno/comprar"
+            className="mt-6 inline-flex items-center gap-2 rounded-lg bg-[var(--color-pmb-green)] px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[var(--color-pmb-green-700)]"
+          >
+            <ShoppingBag className="h-4 w-4" />
+            Ver catálogo de cursos
+          </Link>
         </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2">
@@ -95,44 +139,57 @@ export default async function StudentCoursesPage() {
             const progressLabel = e.progressStatus
               ? PROGRESS_STATUS_LABEL[e.progressStatus] ?? e.progressStatus
               : null
+            const badge = STATUS_BADGE[e.status] ?? STATUS_BADGE.CANCELLED
+            const BadgeIcon = badge.icon
+            const isActive = e.status === "ACTIVE" || e.status === "COMPLETED"
+            const isPending = e.status === "PENDING"
+
             return (
               <article
                 key={e.id}
-                className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm"
+                className="flex flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm transition-shadow hover:shadow-md"
               >
-                {capa && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={capa}
-                    alt={e.course.nome}
-                    className="h-32 w-full object-cover"
-                  />
-                )}
-                <div className="p-5">
-                  <div className="flex items-center justify-between gap-2">
-                    <h3 className="text-sm font-semibold text-[var(--color-pmb-green-900)]">
-                      {e.course.nome}
-                    </h3>
-                    <span
-                      className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${STATUS_COLOR[e.status] ?? "bg-gray-100 text-gray-700"}`}
-                    >
-                      {STATUS_LABEL[e.status] ?? e.status}
-                    </span>
-                  </div>
+                {/* Capa do curso (com fallback visual quando não há imagem) */}
+                <div className="relative h-36 w-full bg-gradient-to-br from-[var(--color-pmb-green)] to-[var(--color-pmb-green-900)]">
+                  {capa ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={capa}
+                      alt={e.course.nome}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center text-[var(--color-pmb-lime)]">
+                      <GraduationCap className="h-14 w-14 opacity-70" aria-hidden />
+                    </div>
+                  )}
+                  <span
+                    className={`absolute right-3 top-3 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${badge.className}`}
+                  >
+                    <BadgeIcon className="h-3 w-3" aria-hidden />
+                    {badge.label}
+                  </span>
+                </div>
+
+                <div className="flex flex-1 flex-col p-5">
+                  <h3 className="text-base font-semibold leading-snug text-[var(--color-pmb-green-900)]">
+                    {e.course.nome}
+                  </h3>
                   {e.course.categoriaLoja && (
-                    <p className="mt-1 text-[11px] uppercase tracking-wide text-gray-500">
+                    <p className="mt-1 text-[11px] font-medium uppercase tracking-wide text-gray-500">
                       {e.course.categoriaLoja}
                     </p>
                   )}
                   {descricao && (
-                    <p className="mt-3 line-clamp-3 text-xs text-gray-600">
+                    <p className="mt-3 line-clamp-2 text-sm text-gray-600">
                       {descricao}
                     </p>
                   )}
 
-                  {(e.status === "ACTIVE" || e.status === "COMPLETED") && (
+                  {/* Progresso (só pra cursos ativos/concluídos) */}
+                  {isActive && (
                     <div className="mt-4">
-                      <div className="flex items-center justify-between text-[11px] text-gray-600">
+                      <div className="flex items-center justify-between text-xs text-gray-600">
                         <span>
                           Progresso{progressLabel ? ` · ${progressLabel}` : ""}
                         </span>
@@ -140,41 +197,71 @@ export default async function StudentCoursesPage() {
                           {percent}%
                         </span>
                       </div>
-                      <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-gray-100">
+                      <div
+                        className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-gray-100"
+                        role="progressbar"
+                        aria-valuenow={percent}
+                        aria-valuemin={0}
+                        aria-valuemax={100}
+                      >
                         <div
-                          className="h-2 rounded-full bg-[var(--color-pmb-green)]"
-                          style={{ width: `${Math.max(0, Math.min(100, percent))}%` }}
+                          className="h-2 rounded-full bg-[var(--color-pmb-green)] transition-all"
+                          style={{
+                            width: `${Math.max(0, Math.min(100, percent))}%`,
+                          }}
                         />
                       </div>
                     </div>
                   )}
 
-                  <div className="mt-4 flex flex-wrap items-center justify-between gap-2 text-xs">
-                    <span className="text-gray-500">
+                  {/* Aviso pendente — mensagem clara para leigos */}
+                  {isPending && (
+                    <div className="mt-4 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+                      <Clock className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                      <span>
+                        Conclua o pagamento para liberar o acesso às aulas.
+                      </span>
+                    </div>
+                  )}
+
+                  <div className="mt-5 flex flex-1 flex-col justify-end gap-3">
+                    {/* CTA PRIMÁRIO destacado para a ação mais importante */}
+                    {isActive && plataformaLoginUrl && (
+                      <a
+                        href={plataformaLoginUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--color-pmb-green)] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[var(--color-pmb-green-700)]"
+                      >
+                        Acessar aulas
+                        <ExternalLink className="h-4 w-4" />
+                      </a>
+                    )}
+                    {isPending && (
+                      <Link
+                        href="/aluno/pagamentos"
+                        className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-amber-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-amber-600"
+                      >
+                        Pagar agora
+                        <ArrowRight className="h-4 w-4" />
+                      </Link>
+                    )}
+
+                    {/* CTA secundário (certificado) */}
+                    {certificate && (
+                      <a
+                        href={`/aluno/certificados/${certificate.id}`}
+                        className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-[var(--color-pmb-green)] px-4 py-2 text-sm font-semibold text-[var(--color-pmb-green)] transition-colors hover:bg-[var(--color-pmb-green)]/5"
+                      >
+                        <Award className="h-4 w-4" />
+                        Baixar certificado
+                      </a>
+                    )}
+
+                    <p className="text-center text-[11px] text-gray-500">
                       Comprado em{" "}
                       {new Date(e.createdAt).toLocaleDateString("pt-BR")}
-                    </span>
-                    <div className="flex items-center gap-2">
-                      {certificate ? (
-                        <a
-                          href={`/aluno/certificados/${certificate.id}`}
-                          className="rounded-md border border-[var(--color-pmb-green)] px-3 py-1 font-semibold text-[var(--color-pmb-green)] hover:bg-[var(--color-pmb-green)]/5"
-                        >
-                          Baixar certificado
-                        </a>
-                      ) : null}
-                      {plataformaLoginUrl &&
-                      (e.status === "ACTIVE" || e.status === "COMPLETED") ? (
-                        <a
-                          href={plataformaLoginUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="rounded-md bg-[var(--color-pmb-green)] px-3 py-1 font-semibold text-white hover:bg-[var(--color-pmb-green-700)]"
-                        >
-                          Acessar aulas
-                        </a>
-                      ) : null}
-                    </div>
+                    </p>
                   </div>
                 </div>
               </article>
