@@ -23,7 +23,7 @@ export default async function MainLayout({
     <>
       <NavbarMain
         categorias={categorias}
-        tecnica={{ enabled: tecnica.enabled, label: tecnica.label }}
+        tecnica={{ enabled: tecnica.enabled, label: tecnica.label, url: tecnica.url }}
       />
       <main className="flex-1">{children}</main>
       <FooterMain categorias={categorias} />

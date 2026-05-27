@@ -56,7 +56,7 @@ export default async function LojaLayout({
         tenantName={tenant?.name ?? null}
         tecnica={(() => {
           const t = tecnicaFromTenant(tenant)
-          return { enabled: t.enabled, label: t.label }
+          return { enabled: t.enabled, label: t.label, url: t.url }
         })()}
       />
       <main className="flex-1">{children}</main>

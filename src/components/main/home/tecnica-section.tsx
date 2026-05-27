@@ -11,10 +11,15 @@ interface TecnicaSectionProps {
 
 /**
  * Seção "Cursos Técnicos" da home — bloco de destaque em alto contraste
- * (gradiente verde profundo com glow dourado) usando tipografia black e
- * cards numerados em vez de imagens. O objetivo é "quebrar" a verticalidade
- * branca da home para chamar atenção, mantendo a hierarquia visual da
- * identidade PMB (verde + dourado + lime).
+ * (gradiente verde profundo com glow dourado) usando tipografia black.
+ *
+ * Cada card e o CTA "Conhecer todos" abrem em nova guia na tela interna
+ * de loading (/cursos-tecnicos/ir), que valida e redireciona para o
+ * site externo da Escola Técnica parceira.
+ *
+ * NÃO mostramos duração nem numeração ordinal nos cards — a Escola Técnica
+ * tem 40+ cursos com tempos diferentes, qualquer rótulo fixo seria
+ * impreciso. Mantemos apenas o selo "MEC" como signo de credibilidade.
  */
 export function TecnicaSection({
   label: _label,
@@ -48,22 +53,23 @@ export function TecnicaSection({
                   Reconhecido pelo MEC
                 </span>
                 <h2 className="mt-4 text-[28px] font-black leading-[1.05] tracking-tight text-white sm:text-[34px] md:text-[42px]">
-                  Carreira técnica em{" "}
+                  Sua{" "}
                   <span className="bg-gradient-to-r from-[var(--color-pmb-gold,#F2B705)] to-[var(--color-pmb-lime,#C0D904)] bg-clip-text text-transparent">
-                    7 meses
+                    carreira técnica
                   </span>
-                  .
                   <br />
-                  Diploma do MEC.
+                  começa aqui.
                 </h2>
                 <p className="mt-3 text-[14px] leading-relaxed text-white/75 md:text-[15px]">
-                  {visibleCourses.length} {visibleCourses.length === 1 ? "curso técnico disponível" : "cursos técnicos disponíveis"} pela nossa escola técnica parceira — uma das maiores do país.
+                  Mais de 40 cursos técnicos pela nossa escola parceira — uma
+                  das maiores do país, com diploma do MEC e mercado real
+                  esperando por você.
                 </p>
               </div>
 
-              {/* CTA "Ver todos" — destacado em dourado */}
+              {/* CTA "Conhecer todos" — abre direto a tela de loading */}
               <Link
-                href="/cursos-tecnicos"
+                href={tecnicaRedirectHref(null, fallbackUrl)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="group inline-flex shrink-0 items-center gap-2 self-start rounded-full bg-[var(--color-pmb-gold,#F2B705)] px-5 py-3 text-[14px] font-black text-[#013d10] transition hover:bg-white md:self-end"
@@ -76,9 +82,9 @@ export function TecnicaSection({
               </Link>
             </div>
 
-            {/* Grade de cursos com números grandes */}
+            {/* Grade de cursos — sem número, sem duração */}
             <ul className="mt-7 grid grid-cols-2 gap-3 md:mt-9 md:grid-cols-3 lg:grid-cols-4">
-              {visibleCourses.map((course, i) => (
+              {visibleCourses.map((course) => (
                 <li key={course.name}>
                   <Link
                     href={tecnicaRedirectHref(
@@ -87,12 +93,12 @@ export function TecnicaSection({
                     )}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="group relative flex h-full flex-col justify-between overflow-hidden rounded-2xl border border-white/10 bg-white/[0.04] p-4 backdrop-blur-sm transition hover:-translate-y-0.5 hover:border-[var(--color-pmb-gold,#F2B705)]/60 hover:bg-white/[0.08] sm:p-5"
+                    className="group relative flex h-full min-h-[120px] flex-col justify-between overflow-hidden rounded-2xl border border-white/10 bg-white/[0.04] p-4 backdrop-blur-sm transition hover:-translate-y-0.5 hover:border-[var(--color-pmb-gold,#F2B705)]/60 hover:bg-white/[0.08] sm:p-5"
                   >
-                    {/* Número grande estilizado */}
+                    {/* Topo: selo MEC discreto + arrow */}
                     <div className="flex items-start justify-between">
-                      <span className="text-[44px] font-black leading-none text-white/15 transition-colors group-hover:text-[var(--color-pmb-gold,#F2B705)]/60 sm:text-[52px]">
-                        {String(i + 1).padStart(2, "0")}
+                      <span className="text-[10.5px] font-black uppercase tracking-widest text-[var(--color-pmb-lime,#C0D904)]/90">
+                        MEC
                       </span>
                       <ArrowUpRight
                         className="h-4 w-4 text-white/40 transition group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:text-[var(--color-pmb-gold,#F2B705)]"
@@ -100,15 +106,10 @@ export function TecnicaSection({
                       />
                     </div>
 
-                    {/* Nome do curso */}
-                    <div className="mt-6">
-                      <h3 className="line-clamp-2 text-[14.5px] font-bold leading-snug text-white sm:text-[15px]">
-                        {course.name}
-                      </h3>
-                      <p className="mt-1.5 text-[11.5px] font-medium uppercase tracking-wider text-[var(--color-pmb-lime,#C0D904)]/90">
-                        7 meses · MEC
-                      </p>
-                    </div>
+                    {/* Nome do curso — protagonista do card */}
+                    <h3 className="mt-3 line-clamp-3 text-[15px] font-bold leading-snug text-white sm:text-[16px]">
+                      {course.name}
+                    </h3>
                   </Link>
                 </li>
               ))}

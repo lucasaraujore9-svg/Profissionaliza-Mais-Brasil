@@ -5,10 +5,12 @@ import Image from "next/image"
 import { useEffect, useRef, useState } from "react"
 import { Search, Menu, X, ChevronDown, User, Building2 } from "lucide-react"
 import type { CategoriaInfo } from "@/lib/catalog/home"
+import { tecnicaRedirectHref } from "@/lib/catalog/tecnica-redirect"
 
 interface NavbarTecnicaConfig {
   enabled: boolean
   label: string
+  url: string | null
 }
 
 interface NavbarMainProps {
@@ -30,6 +32,7 @@ export function NavbarMain({
   const hasCategorias = lista.length > 0
   const tecnicaEnabled = tecnica?.enabled ?? false
   const tecnicaLabel = tecnica?.label ?? "Cursos Técnicos"
+  const tecnicaHref = tecnicaRedirectHref(null, tecnica?.url ?? null)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [categoriasOpen, setCategoriasOpen] = useState(false)
   const categoriasRef = useRef<HTMLDivElement | null>(null)
@@ -127,10 +130,12 @@ export function NavbarMain({
                     </Link>
                   </li>
                 ))}
-                {tecnicaEnabled && (
+                {tecnicaEnabled && tecnica?.url && (
                   <li>
                     <Link
-                      href="/cursos-tecnicos"
+                      href={tecnicaHref}
+                      target="_blank"
+                      rel="noopener noreferrer"
                       onClick={() => setCategoriasOpen(false)}
                       role="menuitem"
                       className="mt-1 flex items-center gap-2 rounded-md border border-[rgba(2,89,24,0.1)] bg-[var(--color-pmb-mist)] px-3 py-2 text-[13.5px] font-bold text-[var(--color-pmb-green)] hover:border-[var(--color-pmb-green)] hover:bg-white"

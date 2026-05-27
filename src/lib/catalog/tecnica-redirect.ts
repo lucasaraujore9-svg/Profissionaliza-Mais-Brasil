@@ -15,16 +15,21 @@
  */
 
 const REDIRECT_PATH = "/cursos-tecnicos/ir"
+const FALLBACK = "/"
 
+/**
+ * Monta o href interno para a tela de loading da Unidade Técnica.
+ * - `externalUrl` vazio → fallback para a home (não há para onde ir).
+ * - `courseName` opcional → omitido se a UI quer redirect genérico
+ *   (ex: botão "Conhecer todos" usando a URL base da escola).
+ */
 export function tecnicaRedirectHref(
-  courseName: string,
+  courseName: string | null | undefined,
   externalUrl: string | null | undefined,
 ): string {
-  if (!externalUrl) return "/cursos-tecnicos"
-  const params = new URLSearchParams({
-    n: courseName,
-    u: externalUrl,
-  })
+  if (!externalUrl) return FALLBACK
+  const params = new URLSearchParams({ u: externalUrl })
+  if (courseName) params.set("n", courseName)
   return `${REDIRECT_PATH}?${params.toString()}`
 }
 

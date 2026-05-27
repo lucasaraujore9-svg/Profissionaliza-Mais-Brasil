@@ -1,6 +1,5 @@
 "use client"
 
-import Link from "next/link"
 import { useEffect, useState } from "react"
 import {
   ArrowRight,
@@ -157,13 +156,7 @@ export function TecnicaRedirect({
 
         {cancelled && (
           <p className="mt-4 text-center text-[12px] text-[rgba(2,89,24,0.6)]">
-            Mudou de ideia?{" "}
-            <Link
-              href="/cursos-tecnicos"
-              className="font-bold text-[var(--color-pmb-green)] underline underline-offset-4"
-            >
-              Ver outros cursos técnicos
-            </Link>
+            Quando quiser, é só clicar em <b>Ir agora</b>.
           </p>
         )}
       </div>
