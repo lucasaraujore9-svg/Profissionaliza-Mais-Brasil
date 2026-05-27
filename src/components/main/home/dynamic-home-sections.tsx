@@ -19,15 +19,10 @@ import {
 
 interface DynamicHomeSectionsProps {
   tenantId: string | null
-  /** Forwarded para CategoriesGridSection — adiciona pill da Unidade Técnica. */
-  tecnicaEnabled?: boolean
-  tecnicaLabel?: string
 }
 
 export async function DynamicHomeSections({
   tenantId,
-  tecnicaEnabled,
-  tecnicaLabel,
 }: DynamicHomeSectionsProps) {
   const sections = await loadHomeSections(tenantId)
   const enabled = sections.filter((s) => s.enabled)
@@ -53,8 +48,6 @@ export async function DynamicHomeSections({
       onNewBestsellersSnapshot: (snap) => {
         snapshotHolder.current = snap
       },
-      tecnicaEnabled: tecnicaEnabled ?? false,
-      tecnicaLabel,
     })
     if (node) nodes.push({ id: section.id, node })
   }
@@ -90,8 +83,6 @@ async function renderSection(
     tenantId: string | null
     bestsellersSnapshot: BestsellersSnapshot | null
     onNewBestsellersSnapshot: (snap: BestsellersSnapshot) => void
-    tecnicaEnabled: boolean
-    tecnicaLabel?: string
   },
 ): Promise<React.ReactNode | null> {
   const cfg = section.config
@@ -124,14 +115,7 @@ async function renderSection(
     const categories = await resolveCategoriesForSection(
       section as HomeSectionRecord<CategoriesGridConfig>,
     )
-    return (
-      <CategoriesGridSection
-        config={cfg}
-        categories={categories}
-        tecnicaEnabled={ctx.tecnicaEnabled}
-        tecnicaLabel={ctx.tecnicaLabel}
-      />
-    )
+    return <CategoriesGridSection config={cfg} categories={categories} />
   }
 
   if (cfg.kind === "institutional") {

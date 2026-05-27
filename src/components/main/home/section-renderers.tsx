@@ -63,15 +63,11 @@ interface CategoryItem {
 export function CategoriesGridSection({
   config,
   categories,
-  tecnicaEnabled = false,
-  tecnicaLabel,
 }: {
   config: CategoriesGridConfig
   categories: CategoryItem[]
-  tecnicaEnabled?: boolean
-  tecnicaLabel?: string
 }) {
-  if (categories.length === 0 && !tecnicaEnabled) return null
+  if (categories.length === 0) return null
   return (
     <section className="border-b border-[rgba(2,89,24,0.08)] bg-[var(--color-pmb-mist)]">
       <div className="mx-auto max-w-[1280px] px-4 py-10 md:px-6 md:py-14">
@@ -96,16 +92,6 @@ export function CategoriesGridSection({
               </Link>
             </li>
           ))}
-          {tecnicaEnabled && (
-            <li>
-              <Link
-                href="/cursos-tecnicos"
-                className="flex h-full items-center justify-center rounded-xl border border-[var(--color-pmb-green)] bg-[var(--color-pmb-green)] px-3 py-4 text-center text-[13px] font-bold text-white transition hover:-translate-y-0.5"
-              >
-                {tecnicaLabel ?? "Cursos Técnicos"}
-              </Link>
-            </li>
-          )}
         </ul>
       </div>
     </section>

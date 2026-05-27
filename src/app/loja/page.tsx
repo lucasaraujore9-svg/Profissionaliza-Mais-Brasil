@@ -48,11 +48,7 @@ export default async function LojaHomePage() {
         tenantBannerUrl={tenant.bannerUrl}
         slides={bannerSlides}
       />
-      <DynamicHomeSections
-        tenantId={tenant.id}
-        tecnicaEnabled={tecnica.enabled}
-        tecnicaLabel={tecnica.label}
-      />
+      <DynamicHomeSections tenantId={tenant.id} />
       {tecnica.enabled && (
         <TecnicaSection
           label={tecnica.label}

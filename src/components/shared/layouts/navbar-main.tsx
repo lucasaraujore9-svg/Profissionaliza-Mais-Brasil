@@ -179,15 +179,6 @@ export function NavbarMain({
         </form>
 
         <nav className="hidden lg:flex items-center gap-5 text-[14px] font-medium text-[var(--color-pmb-green)]">
-          {tecnicaEnabled && (
-            <Link
-              href="/cursos-tecnicos"
-              className="inline-flex items-center gap-1.5 rounded-md bg-[var(--color-pmb-lime)]/40 px-2.5 py-1 font-bold text-[var(--color-pmb-green)] hover:bg-[var(--color-pmb-lime)]/60"
-            >
-              <Building2 className="h-3.5 w-3.5" aria-hidden />
-              {tecnicaLabel}
-            </Link>
-          )}
           <Link href="/como-funciona" className="hover:underline underline-offset-4">
             Como funciona
           </Link>
@@ -232,16 +223,6 @@ export function NavbarMain({
             >
               Quero estudar
             </Link>
-            {tecnicaEnabled && (
-              <Link
-                href="/cursos-tecnicos"
-                onClick={() => setMobileOpen(false)}
-                className="mb-2 inline-flex items-center justify-center gap-2 h-11 px-4 rounded-lg border border-[var(--color-pmb-green)] bg-white text-[var(--color-pmb-green)] text-[14px] font-bold"
-              >
-                <Building2 className="h-4 w-4" aria-hidden />
-                {tecnicaLabel}
-              </Link>
-            )}
             <Link
               href="/login"
               onClick={() => setMobileOpen(false)}

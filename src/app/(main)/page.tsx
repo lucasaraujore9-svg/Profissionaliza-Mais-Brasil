@@ -26,11 +26,7 @@ export default async function LandingPage() {
   return (
     <>
       <HeroBanner showcase={showcase} slides={bannerSlides} />
-      <DynamicHomeSections
-        tenantId={null}
-        tecnicaEnabled={tecnica.enabled}
-        tecnicaLabel={tecnica.label}
-      />
+      <DynamicHomeSections tenantId={null} />
       {tecnica.enabled && (
         <TecnicaSection
           label={tecnica.label}

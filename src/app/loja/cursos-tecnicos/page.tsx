@@ -26,11 +26,5 @@ export default async function LojaCursosTecnicosPage() {
       />
     )
   }
-  return (
-    <TecnicaRedirect
-      url={tecnica.url}
-      label={tecnica.label}
-      tenantName={tenant?.name ?? null}
-    />
-  )
+  return <TecnicaRedirect url={tecnica.url} />
 }

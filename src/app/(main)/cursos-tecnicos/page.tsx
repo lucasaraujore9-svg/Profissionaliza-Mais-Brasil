@@ -7,6 +7,8 @@ export const dynamic = "force-dynamic"
 
 export const metadata = {
   title: "Cursos Técnicos",
+  description:
+    "Cursos técnicos reconhecidos pelo MEC — diploma em até 7 meses pela nossa escola técnica parceira.",
 }
 
 export default async function CursosTecnicosPage() {
@@ -25,5 +27,5 @@ export default async function CursosTecnicosPage() {
       />
     )
   }
-  return <TecnicaRedirect url={tecnica.url} label={tecnica.label} />
+  return <TecnicaRedirect url={tecnica.url} />
 }
