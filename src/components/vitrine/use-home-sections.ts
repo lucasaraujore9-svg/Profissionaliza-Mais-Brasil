@@ -158,7 +158,7 @@ export function useHomeSections({ apiBase }: UseHomeSectionsOptions) {
       )
       try {
         const res = await fetch(`${apiBase}/${id}`, {
-          method: "PUT",
+          method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ enabled }),
         })
@@ -190,7 +190,7 @@ export function useHomeSections({ apiBase }: UseHomeSectionsOptions) {
       if (!target) return
       try {
         const res = await fetch(`${apiBase}/${id}`, {
-          method: "PUT",
+          method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ config: target.config }),
         })
@@ -220,7 +220,7 @@ export function useHomeSections({ apiBase }: UseHomeSectionsOptions) {
       setSections(next)
       try {
         const res = await fetch(`${apiBase}/reorder`, {
-          method: "POST",
+          method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ order: next.map((s) => s.id) }),
         })
@@ -249,7 +249,7 @@ export function useHomeSections({ apiBase }: UseHomeSectionsOptions) {
       setSections(next)
       try {
         const res = await fetch(`${apiBase}/reorder`, {
-          method: "POST",
+          method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ order: nextOrder }),
         })
