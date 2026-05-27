@@ -41,6 +41,12 @@ interface CourseDetailViewProps {
   backLabel?: string
   secondaryCtaHref?: string
   secondaryCtaLabel?: string
+  /**
+   * Slot opcional renderizado no sidebar sticky, dentro de `space-y-5 p-5`,
+   * logo apos a lista de features. Usado por revendas com modulo Automacao
+   * para exibir o card "Receba mais informacoes".
+   */
+  inquirySlot?: React.ReactNode
 }
 
 const APRENDIZADO_DEFAULT = [
@@ -99,6 +105,7 @@ export function CourseDetailView({
   backLabel = "Voltar para o catálogo",
   secondaryCtaHref,
   secondaryCtaLabel,
+  inquirySlot,
 }: CourseDetailViewProps) {
   const paragrafos = splitParagraphs(course.descricao)
   const cargaHoraria = course.cargaHoraria
@@ -444,6 +451,8 @@ export function CourseDetailView({
                     Garantia de 7 dias
                   </li>
                 </ul>
+
+                {inquirySlot}
               </div>
             </div>
           </aside>

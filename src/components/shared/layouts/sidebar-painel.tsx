@@ -17,6 +17,8 @@ import {
   Award,
   Share2,
   MessageSquare,
+  Zap,
+  Inbox,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -29,6 +31,7 @@ const ALL_ITEMS: {
   { href: "/painel", label: "Dashboard", icon: LayoutDashboard },
   { href: "/painel/cursos", label: "Catálogo", icon: GraduationCap },
   { href: "/painel/alunos", label: "Alunos", icon: Users },
+  { href: "/painel/leads", label: "Leads", icon: Inbox, ownerOnly: true },
   { href: "/painel/vendas", label: "Vendas diretas", icon: ShoppingCart },
   { href: "/painel/cupons", label: "Cupons", icon: Tag },
   { href: "/painel/financeiro", label: "Financeiro", icon: CreditCard },
@@ -36,6 +39,7 @@ const ALL_ITEMS: {
   { href: "/painel/certificados", label: "Certificados", icon: Award, ownerOnly: true },
   { href: "/painel/equipe", label: "Equipe", icon: UserCog, ownerOnly: true },
   { href: "/painel/comunicacao", label: "Comunicação", icon: MessageSquare, ownerOnly: true },
+  { href: "/painel/automacao", label: "Automação", icon: Zap, ownerOnly: true },
   { href: "/painel/dominio", label: "Domínio", icon: Globe, ownerOnly: true },
   { href: "/painel/vitrine", label: "Vitrine", icon: Palette, ownerOnly: true },
   { href: "/painel/configuracoes", label: "Configurações", icon: Settings, ownerOnly: true },

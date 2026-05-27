@@ -25,6 +25,7 @@ import {
   type ReferrerSummary,
 } from "./reseller-referral-config"
 import { ResellerTecnicaConfig } from "./reseller-tecnica-config"
+import { ResellerAutomationConfig } from "./reseller-automation-config"
 
 interface DetailResponse {
   reseller: ResellerProfileData & {
@@ -43,6 +44,9 @@ interface DetailResponse {
     tecnicaUrl: string | null
     tecnicaLabel: string | null
     tecnicaCourses: Array<{ name: string; url: string }>
+    automationEnabled: boolean
+    waConnectedPhone: string | null
+    waStatus: string
   }
   referrer: ReferrerSummary | null
   referralStats: ReferralStats
@@ -134,6 +138,13 @@ export function ResellerDetailClient({ tenantId }: ResellerDetailClientProps) {
             tecnicaUrl={data.reseller.tecnicaUrl}
             tecnicaLabel={data.reseller.tecnicaLabel}
             tecnicaCourses={data.reseller.tecnicaCourses}
+            onSaved={load}
+          />
+          <ResellerAutomationConfig
+            tenantId={tenantId}
+            automationEnabled={data.reseller.automationEnabled}
+            waConnectedPhone={data.reseller.waConnectedPhone}
+            waStatus={data.reseller.waStatus}
             onSaved={load}
           />
         </div>

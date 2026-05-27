@@ -292,6 +292,10 @@ export const GET = withRequestContextParams<{ id: string }>(
             .sort((a, b) => a.order - b.order)
             .map((c) => ({ name: c.name, url: c.url }))
         })(),
+        // Automacao (WhatsApp + Leads CRM)
+        automationEnabled: tenant.automationEnabled,
+        waConnectedPhone: tenant.waConnectedPhone,
+        waStatus: tenant.waStatus,
       },
       referrer: tenant.referrer
         ? {

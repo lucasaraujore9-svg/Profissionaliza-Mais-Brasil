@@ -14,6 +14,7 @@ import { rateLimit, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
 import { swallow } from "@/lib/errors"
 import { contextLogger } from "@/lib/logger"
 import { withRequestContext } from "@/lib/observability/with-request-context"
+import { upsertLeadFromCheckout } from "@/lib/automation/leads"
 
 const cpfRegex = /^\d{3}\.?\d{3}\.?\d{3}-?\d{2}$/
 const phoneRegex = /^\(?\d{2}\)?\s?\d{4,5}-?\d{4}$/
@@ -105,6 +106,7 @@ export const POST = withRequestContext(
           status: true,
           mpAccessToken: true,
           plataformaVendedorId: true,
+          automationEnabled: true,
         },
       }),
       prisma.tenantCourse.findFirst({
@@ -280,6 +282,18 @@ export const POST = withRequestContext(
       select: { id: true },
     })
     createdEnrollmentId = enrollment.id
+
+    if (tenant.automationEnabled) {
+      upsertLeadFromCheckout({
+        tenantId,
+        enrollmentId: enrollment.id,
+        nome: normalize(data.nome),
+        email: data.email,
+        telefone: data.fone,
+        courseId: tenantCourse.courseId,
+        courseSnapshot: tenantCourse.course.nome,
+      }).catch(swallow("loja_checkout.lead_link"))
+    }
 
     const externalReference = `enr_${enrollment.id}`
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? ""

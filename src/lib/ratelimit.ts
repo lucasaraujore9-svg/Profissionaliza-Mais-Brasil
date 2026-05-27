@@ -144,4 +144,8 @@ export const RATE_LIMITS = {
   cobrancaPayCard: { name: "cobranca-paycard", limit: 5, windowSec: 60 },
   certificateValidate: { name: "cert-validate", limit: 30, windowSec: 60 },
   upload: { name: "upload", limit: 10, windowSec: 60 },
+  // Automacao
+  lojaLeads: { name: "loja-leads", limit: 5, windowSec: 60 },
+  lojaLeadsByEmail: { name: "loja-leads-email", limit: 3, windowSec: 3600 },
+  waSend: { name: "wa-send", limit: 20, windowSec: 60 },
 } as const

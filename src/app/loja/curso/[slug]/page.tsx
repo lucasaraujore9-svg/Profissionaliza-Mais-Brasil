@@ -7,6 +7,7 @@ import {
   CourseDetailView,
   type CourseDetailData,
 } from "@/components/shared/course-detail-view"
+import { LeadInquiryCard } from "@/components/loja/lead-inquiry-card"
 
 interface CoursePageProps {
   params: Promise<{ slug: string }>
@@ -100,6 +101,14 @@ export default async function CoursePage({ params }: CoursePageProps) {
       : "#"
   const ctaLabel = canCheckout ? "Comprar agora" : "Quero me matricular"
 
+  const inquirySlot = tenant.automationEnabled ? (
+    <LeadInquiryCard
+      courseSlug={course.slug}
+      courseName={course.nome}
+      escolaName={tenant.name}
+    />
+  ) : null
+
   return (
     <CourseDetailView
       course={data}
@@ -107,6 +116,7 @@ export default async function CoursePage({ params }: CoursePageProps) {
       ctaLabel={ctaLabel}
       backHref="/"
       backLabel="Voltar para a loja"
+      inquirySlot={inquirySlot}
     />
   )
 }

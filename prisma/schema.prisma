@@ -213,7 +213,7 @@ model Tenant {
   // Integracao com a plataforma de aulas
   plataformaVendedorId    String? @map("ea_vendedor_id") // ID do funcionario criado na plataforma
   plataformaVendedorLogin String? @map("ea_vendedor_login") // Login retornado pelo funcionarios/novo
-  poloName        String? @map("polo_name") // Nome do polo usado no campo "polo" da plataforma
+  poloName                String? @map("polo_name") // Nome do polo usado no campo "polo" da plataforma
 
   // Dono do tenant (owner principal)
   owner User? @relation("TenantOwner")
@@ -248,24 +248,42 @@ model Tenant {
   // (cai no fallback de mostrar so o CTA com tecnicaUrl).
   tecnicaCourses Json?   @map("tecnica_courses")
 
+  // Modulo Automacao — disparo de WhatsApp + CRM de leads. Quando habilitado
+  // pelo admin, a vitrine exibe um card "Receba mais informacoes" na pagina
+  // do curso e o painel ganha menus Automacao + Leads.
+  automationEnabled   Boolean   @default(false) @map("automation_enabled")
+  // Nome unico da sessao no engine de WhatsApp (gerado como cuid na 1a conexao).
+  waSessionName       String?   @unique @map("wa_session_name")
+  // Telefone E.164 conectado (snapshot apos QR scan). Unique = um numero
+  // so pode estar conectado a um tenant.
+  waConnectedPhone    String?   @unique @map("wa_connected_phone")
+  // Status local espelhado do engine: DISCONNECTED, CONNECTING, SCAN_QR_CODE,
+  // WORKING, FAILED. Refrescado por polling.
+  waStatus            String    @default("DISCONNECTED") @map("wa_status")
+  waStatusUpdatedAt   DateTime? @map("wa_status_updated_at")
+  // Horas apos checkout_started sem pagamento aprovado pra cair em ABANDONED.
+  abandonedAfterHours Int       @default(24) @map("abandoned_after_hours")
+
   // Relacoes
-  tenantCourses        TenantCourse[]
-  students             Student[]
-  enrollments          Enrollment[]
-  payments             Payment[]
-  coupons              Coupon[]
-  tenantPayments       TenantPayment[]
-  webhookLogs          WebhookLog[]
-  leads                Lead[]
-  supportNotes         TenantSupportNote[]
-  referralCommissionsReceived ReferralCommission[] @relation("ReferrerCommissions")
-  referralCommissionsGenerated ReferralCommission[] @relation("ReferredCommissions")
-  referralPayouts      ReferralPayout[]
-  certificates         Certificate[]
-  certificateTemplate  CertificateTemplate?
-  notificationOverrides TenantNotificationOverride[]
-  bannerSlides         BannerSlide[]
-  homeSections         HomeSection[]
+  tenantCourses                TenantCourse[]
+  students                     Student[]
+  enrollments                  Enrollment[]
+  payments                     Payment[]
+  coupons                      Coupon[]
+  tenantPayments               TenantPayment[]
+  webhookLogs                  WebhookLog[]
+  leads                        Lead[]
+  supportNotes                 TenantSupportNote[]
+  referralCommissionsReceived  ReferralCommission[]         @relation("ReferrerCommissions")
+  referralCommissionsGenerated ReferralCommission[]         @relation("ReferredCommissions")
+  referralPayouts              ReferralPayout[]
+  certificates                 Certificate[]
+  certificateTemplate          CertificateTemplate?
+  notificationOverrides        TenantNotificationOverride[]
+  bannerSlides                 BannerSlide[]
+  homeSections                 HomeSection[]
+  studentLeads                 StudentLead[]
+  automationTemplates          AutomationMessageTemplate[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -304,22 +322,22 @@ model Course {
   // ATENCAO: a API cursos/listar NAO retorna ID do curso!
   // plataformaCourseId pode ser: (1) descoberto via testes, (2) inferido da ordem, ou (3) null
   // O campo "nome" e usado como chave alternativa de match no sync
-  plataformaCourseId        String?  @unique @map("ea_course_id") // ID na plataforma (pode ser null se API nao retornar)
-  nome              String   @unique // Nome e a chave de match primaria no sync
-  descricao         String?  @db.Text // Campo "obs" da API
-  qtdAulas          Int      @map("qtd_aulas") // Campo "aulas"
-  cargaHoraria      String?  @map("carga_horaria")
-  precoOriginal     Decimal? @map("preco_original") @db.Decimal(10, 2) // Parseado do formato BR
-  precoPromocional  Decimal? @map("preco_promocional") @db.Decimal(10, 2)
-  parcelasSugeridas Int?     @map("parcelas_sugeridas") // Campo "parcelas"
+  plataformaCourseId String?  @unique @map("ea_course_id") // ID na plataforma (pode ser null se API nao retornar)
+  nome               String   @unique // Nome e a chave de match primaria no sync
+  descricao          String?  @db.Text // Campo "obs" da API
+  qtdAulas           Int      @map("qtd_aulas") // Campo "aulas"
+  cargaHoraria       String?  @map("carga_horaria")
+  precoOriginal      Decimal? @map("preco_original") @db.Decimal(10, 2) // Parseado do formato BR
+  precoPromocional   Decimal? @map("preco_promocional") @db.Decimal(10, 2)
+  parcelasSugeridas  Int?     @map("parcelas_sugeridas") // Campo "parcelas"
 
   // Categorias
   // categoriaLoja/categoriaInterna sao o "raw" vindo da plataforma parceira
   // pelo sync — preservados para audit/match. A categoria EFETIVA usada nas
   // vitrines, menus e filtros e Category via categoryId.
-  categoriaInterna String? @map("categoria_interna")
-  categoriaLoja    String? @map("categoria_loja")
-  categoryId       String? @map("category_id")
+  categoriaInterna String?   @map("categoria_interna")
+  categoriaLoja    String?   @map("categoria_loja")
+  categoryId       String?   @map("category_id")
   category         Category? @relation(fields: [categoryId], references: [id])
 
   // Visibilidade nas vitrines de revendas (independente de hiddenMain, que
@@ -328,9 +346,9 @@ model Course {
   //   ALLOWLIST  — apenas os tenants em `allowedTenantIds` veem
   //   DENYLIST   — todos veem EXCETO os tenants em `blockedTenantIds`
   // Cada tenant ainda pode ocultar individualmente via TenantCourse.isVisible.
-  visibilityMode    CourseVisibility @default(ALL) @map("visibility_mode")
-  allowedTenantIds  String[]         @default([]) @map("allowed_tenant_ids")
-  blockedTenantIds  String[]         @default([]) @map("blocked_tenant_ids")
+  visibilityMode   CourseVisibility @default(ALL) @map("visibility_mode")
+  allowedTenantIds String[]         @default([]) @map("allowed_tenant_ids")
+  blockedTenantIds String[]         @default([]) @map("blocked_tenant_ids")
 
   // Exibicao
   destaque     Boolean @default(false)
@@ -360,6 +378,7 @@ model Course {
   enrollments   Enrollment[]
   courseLessons CourseLesson[]
   certificates  Certificate[]
+  studentLeads  StudentLead[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -476,8 +495,8 @@ model Student {
   // plataforma de aulas
   plataformaAlunoId    String  @map("ea_aluno_id") // Login retornado por usuarios/novo
   plataformaAlunoSenha String? @map("ea_aluno_senha") // Criptografada
-  polo         String // = tenant.slug (enviado a plataforma)
-  vendedorId   String? @map("vendedor_id") // = tenant.plataformaVendedorId
+  polo                 String // = tenant.slug (enviado a plataforma)
+  vendedorId           String? @map("vendedor_id") // = tenant.plataformaVendedorId
 
   // Status na plataforma
   status   StudentStatus  @default(ATIVO)
@@ -489,11 +508,11 @@ model Student {
   dataFinal   DateTime? @map("data_final") // Data final do acesso
 
   // Acesso ao painel /aluno
-  passwordHash       String?   @map("password_hash") // null = ainda nao definiu senha
-  passwordSetAt      DateTime? @map("password_set_at")
-  resetToken         String?   @unique @map("reset_token")
-  resetTokenExpires  DateTime? @map("reset_token_expires")
-  lastLoginAt        DateTime? @map("last_login_at")
+  passwordHash      String?   @map("password_hash") // null = ainda nao definiu senha
+  passwordSetAt     DateTime? @map("password_set_at")
+  resetToken        String?   @unique @map("reset_token")
+  resetTokenExpires DateTime? @map("reset_token_expires")
+  lastLoginAt       DateTime? @map("last_login_at")
 
   // Relacoes
   enrollments  Enrollment[]
@@ -575,6 +594,7 @@ model Enrollment {
   // Relacoes
   payments     Payment[]
   certificates Certificate[]
+  studentLead  StudentLead?
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -703,11 +723,11 @@ model TenantPayment {
   // Indicacao (1-nivel)
   referralCommission ReferralCommission?
   // Desconto aplicado vindo de um ReferralPayout (DESCONTO_MENSALIDADE)
-  appliedPayoutId    String?              @unique @map("applied_payout_id")
-  appliedPayout      ReferralPayout?      @relation("AppliedToTenantPayment", fields: [appliedPayoutId], references: [id])
+  appliedPayoutId    String?             @unique @map("applied_payout_id")
+  appliedPayout      ReferralPayout?     @relation("AppliedToTenantPayment", fields: [appliedPayoutId], references: [id])
 
   // Gestao financeira manual (admin marca pago/anota)
-  notes          String?   @db.Text @map("notes") // anotacoes do financeiro
+  notes          String?   @map("notes") @db.Text // anotacoes do financeiro
   markedPaidAt   DateTime? @map("marked_paid_at") // quando admin marcou manualmente como pago
   markedPaidById String?   @map("marked_paid_by_id") // userId do admin que marcou
   markedPaidBy   User?     @relation("MarkedTenantPayments", fields: [markedPaidById], references: [id])
@@ -841,31 +861,31 @@ enum NotificationLevel {
 }
 
 enum NotificationAudience {
-  USER     // entregue para um User especifico (User.id)
-  STUDENT  // entregue para um Student especifico (Student.id)
-  TENANT   // entregue para todos os usuarios do tenant
-  ROLE     // entregue para todos os Users com determinado UserRole
+  USER // entregue para um User especifico (User.id)
+  STUDENT // entregue para um Student especifico (Student.id)
+  TENANT // entregue para todos os usuarios do tenant
+  ROLE // entregue para todos os Users com determinado UserRole
 }
 
 model Notification {
-  id           String                @id @default(cuid())
-  audience     NotificationAudience
+  id         String               @id @default(cuid())
+  audience   NotificationAudience
   // alvo concreto (depende de audience):
-  userId       String?               @map("user_id")
-  studentId    String?               @map("student_id")
-  tenantId     String?               @map("tenant_id")
-  roleTarget   UserRole?             @map("role_target")
+  userId     String?              @map("user_id")
+  studentId  String?              @map("student_id")
+  tenantId   String?              @map("tenant_id")
+  roleTarget UserRole?            @map("role_target")
 
-  level        NotificationLevel     @default(INFO)
-  title        String
-  body         String?               @db.Text
+  level    NotificationLevel @default(INFO)
+  title    String
+  body     String?           @db.Text
   // categoria livre para filtros (ex: "payment", "enrollment", "tenant", "support")
-  category     String?
+  category String?
   // link opcional dentro do app
-  href         String?
+  href     String?
 
-  readAt       DateTime?             @map("read_at")
-  createdAt    DateTime              @default(now()) @map("created_at")
+  readAt    DateTime? @map("read_at")
+  createdAt DateTime  @default(now()) @map("created_at")
 
   @@index([userId, readAt])
   @@index([studentId, readAt])
@@ -880,16 +900,16 @@ model Notification {
 // p256dh + auth sao as chaves de criptografia retornadas pelo PushSubscription
 // do navegador (RFC 8291). Pertence ao User OU Student (mutuamente exclusivo).
 model PushSubscription {
-  id         String   @id @default(cuid())
-  userId     String?  @map("user_id")
-  studentId  String?  @map("student_id")
-  endpoint   String   @db.Text
-  p256dh     String   @db.Text
-  auth       String   @db.Text
-  userAgent  String?  @map("user_agent") @db.Text
-  createdAt  DateTime @default(now()) @map("created_at")
-  lastUsedAt DateTime @default(now()) @map("last_used_at")
-  failureCount Int    @default(0) @map("failure_count")
+  id           String   @id @default(cuid())
+  userId       String?  @map("user_id")
+  studentId    String?  @map("student_id")
+  endpoint     String   @db.Text
+  p256dh       String   @db.Text
+  auth         String   @db.Text
+  userAgent    String?  @map("user_agent") @db.Text
+  createdAt    DateTime @default(now()) @map("created_at")
+  lastUsedAt   DateTime @default(now()) @map("last_used_at")
+  failureCount Int      @default(0) @map("failure_count")
 
   @@unique([userId, endpoint])
   @@unique([studentId, endpoint])
@@ -928,7 +948,7 @@ model NotificationPreference {
 //   ROLE    -> ADMIN
 //   USER    -> ADMIN (broadcasts manuais e admin tooling)
 model NotificationCategoryConfig {
-  target       String            // TENANT | STUDENT | ADMIN
+  target       String // TENANT | STUDENT | ADMIN
   category     String
   label        String
   description  String?           @db.Text
@@ -965,20 +985,20 @@ model SystemSettings {
   lastCatalogSyncJson  String?        @map("last_catalog_sync_json") @db.Text
 
   // Indicacoes
-  referralEnabled         Boolean @default(true) @map("referral_enabled")
-  defaultReferralPercent  Decimal @default(5.00) @map("default_referral_percent") @db.Decimal(5, 2) // 5%
-  referralMinPayout       Decimal @default(50.00) @map("referral_min_payout") @db.Decimal(10, 2) // R$50
+  referralEnabled        Boolean @default(true) @map("referral_enabled")
+  defaultReferralPercent Decimal @default(5.00) @map("default_referral_percent") @db.Decimal(5, 2) // 5%
+  referralMinPayout      Decimal @default(50.00) @map("referral_min_payout") @db.Decimal(10, 2) // R$50
   // Janela mensal: comissoes referentes a TenantPayments pagos no mes M
   // ficam AVAILABLE no dia X do mes M+1 (referralPayoutDay).
-  referralPayoutDay       Int     @default(20) @map("referral_payout_day") // dia do mes do pagamento (1-28)
+  referralPayoutDay      Int     @default(20) @map("referral_payout_day") // dia do mes do pagamento (1-28)
 
   // Certificados
-  certificateMinPercent  Int     @default(80) @map("certificate_min_percent") // % minimo na plataforma p/ auto-emissao
-  certificateAutoIssue   Boolean @default(true) @map("certificate_auto_issue")
-  certificateRequireCpf  Boolean @default(false) @map("certificate_require_cpf") // se true, nao emite sem CPF
+  certificateMinPercent Int     @default(80) @map("certificate_min_percent") // % minimo na plataforma p/ auto-emissao
+  certificateAutoIssue  Boolean @default(true) @map("certificate_auto_issue")
+  certificateRequireCpf Boolean @default(false) @map("certificate_require_cpf") // se true, nao emite sem CPF
   // Logo do Grupo Bolsa Mais Brasil (aparece em TODOS os certificados — PMB e unidade)
-  groupLogoUrl           String? @map("group_logo_url")
-  groupName              String  @default("Grupo Bolsa Mais Brasil") @map("group_name")
+  groupLogoUrl          String? @map("group_logo_url")
+  groupName             String  @default("Grupo Bolsa Mais Brasil") @map("group_name")
 
   // Unidade Tecnica do site PMB institucional (profissionalizamaisbrasil.com.br)
   tecnicaEnabled Boolean @default(false) @map("tecnica_enabled")
@@ -999,11 +1019,11 @@ model SystemSettings {
 // availableAt = dia X (SystemSettings.referralPayoutDay) do mes seguinte ao paidAt da TenantPayment.
 
 model ReferralCommission {
-  id                String @id @default(cuid())
-  referrerTenantId  String @map("referrer_tenant_id")
-  referrer          Tenant @relation("ReferrerCommissions", fields: [referrerTenantId], references: [id], onDelete: Cascade)
-  referredTenantId  String @map("referred_tenant_id")
-  referred          Tenant @relation("ReferredCommissions", fields: [referredTenantId], references: [id], onDelete: Cascade)
+  id               String @id @default(cuid())
+  referrerTenantId String @map("referrer_tenant_id")
+  referrer         Tenant @relation("ReferrerCommissions", fields: [referrerTenantId], references: [id], onDelete: Cascade)
+  referredTenantId String @map("referred_tenant_id")
+  referred         Tenant @relation("ReferredCommissions", fields: [referredTenantId], references: [id], onDelete: Cascade)
 
   tenantPaymentId String        @unique @map("tenant_payment_id")
   tenantPayment   TenantPayment @relation(fields: [tenantPaymentId], references: [id], onDelete: Cascade)
@@ -1013,10 +1033,10 @@ model ReferralCommission {
   amount     Decimal                  @db.Decimal(10, 2) // baseAmount * percent / 100
   status     ReferralCommissionStatus @default(PENDING)
 
-  availableAt DateTime  @map("available_at") // dia X do mes seguinte ao paidAt
-  paidAt      DateTime? @map("paid_at")
-  cancelledAt DateTime? @map("cancelled_at")
-  cancelReason String?  @map("cancel_reason")
+  availableAt  DateTime  @map("available_at") // dia X do mes seguinte ao paidAt
+  paidAt       DateTime? @map("paid_at")
+  cancelledAt  DateTime? @map("cancelled_at")
+  cancelReason String?   @map("cancel_reason")
 
   // Vinculo com o payout que liquidou esta comissao (quando paga)
   payoutId String?         @map("payout_id")
@@ -1041,9 +1061,9 @@ model ReferralPayout {
   referrerTenantId String @map("referrer_tenant_id")
   referrer         Tenant @relation(fields: [referrerTenantId], references: [id], onDelete: Cascade)
 
-  amount      Decimal              @db.Decimal(10, 2)
-  method      ReferralPayoutMethod @default(ASAAS_PIX)
-  status      ReferralPayoutStatus @default(REQUESTED)
+  amount Decimal              @db.Decimal(10, 2)
+  method ReferralPayoutMethod @default(ASAAS_PIX)
+  status ReferralPayoutStatus @default(REQUESTED)
 
   // Snapshot do PIX no momento do saque (se method = ASAAS_PIX)
   pixKey     String? @map("pix_key")
@@ -1086,15 +1106,15 @@ model CertificateTemplate {
   tenantId String? @unique @map("tenant_id") // null = template PMB padrao
   tenant   Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
-  layout         CertificateLayout @default(CLASSIC)
+  layout        CertificateLayout @default(CLASSIC)
   // Imagem de fundo do certificado (em destaque). Path no Supabase Storage.
-  backgroundUrl  String?           @map("background_url")
+  backgroundUrl String?           @map("background_url")
   // Logo da unidade (em destaque, sobre o fundo). Path no Supabase Storage.
-  logoUrl        String?           @map("logo_url")
+  logoUrl       String?           @map("logo_url")
   // Selo / brasao secundario (opcional)
-  sealUrl        String?           @map("seal_url")
+  sealUrl       String?           @map("seal_url")
   // Imagem de assinatura digital
-  signatureUrl   String?           @map("signature_url")
+  signatureUrl  String?           @map("signature_url")
 
   // Cores override (opcionais; defaults pegam tenant.primaryColor)
   primaryColor   String? @map("primary_color")
@@ -1102,8 +1122,8 @@ model CertificateTemplate {
 
   // Texto do certificado com placeholders:
   // {nome}, {cpf}, {curso}, {carga_horaria}, {data_conclusao}, {codigo}, {unidade}
-  titleText String  @default("CERTIFICADO DE CONCLUSAO") @map("title_text")
-  bodyText  String  @default("Certificamos que {nome} concluiu com aproveitamento o curso de {curso}, com carga horaria de {carga_horaria}, em {data_conclusao}.") @map("body_text") @db.Text
+  titleText  String  @default("CERTIFICADO DE CONCLUSAO") @map("title_text")
+  bodyText   String  @default("Certificamos que {nome} concluiu com aproveitamento o curso de {curso}, com carga horaria de {carga_horaria}, em {data_conclusao}.") @map("body_text") @db.Text
   footerText String? @map("footer_text") @db.Text
 
   // Dados do signatario impressos no certificado
@@ -1213,4 +1233,139 @@ model HomeSection {
 
   @@index([tenantId, position])
   @@map("home_sections")
+}
+
+// ============================================================
+// AUTOMACAO — CRM Kanban de Leads B2C (aluno x curso x revenda)
+// ============================================================
+// Diferente de Lead (B2B — interessado em virar revendedor PMB), o
+// StudentLead representa um aluno potencial de uma vitrine de revendedor.
+// Originado por: formulario na pagina do curso, checkout iniciado, ou
+// criacao manual no Kanban. Convertido em Student quando paga.
+
+enum StudentLeadStage {
+  NEW // Formulario preenchido na pagina do curso
+  CONTACTED // Coluna manual: revendedor ja conversou
+  CHECKOUT_STARTED // Iniciou checkout (gerou Enrollment PENDING)
+  ABANDONED // Cron moveu apos N horas sem APPROVED
+  WON // Pagamento APPROVED — convertido
+  LOST // Manual: descartado
+}
+
+enum StudentLeadSource {
+  FORM_COURSE // Form "Receba mais informacoes" na pagina do curso
+  CHECKOUT_ABANDON // Criado direto pelo loja/checkout
+  MANUAL // Revendedor adicionou na mao
+}
+
+enum StudentLeadActivityKind {
+  STAGE_CHANGED // Mudanca de coluna (auto ou manual)
+  WA_MESSAGE_SENT // Enviou template via engine WhatsApp
+  WA_MESSAGE_FAILED // Engine rejeitou (nao conectado, numero invalido)
+  NOTE // Anotacao manual do revendedor
+  LEAD_CREATED // Origem (snapshot do source)
+  ENROLLMENT_LINKED // Enrollment criada via checkout
+  PAYMENT_APPROVED // Webhook MP aprovou
+}
+
+enum AutomationTemplateKey {
+  FORM_SUBMITTED // Aluno preencheu form na pagina do curso
+  CHECKOUT_ABANDONED // Carrinho abandonado (cron disparou)
+  PURCHASE_CONFIRMED // Pagamento aprovado
+  WELCOME // Boas vindas (manual/opcional)
+}
+
+model StudentLead {
+  id       String @id @default(cuid())
+  tenantId String @map("tenant_id")
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  // Dados de contato (snapshot — nao FK pra Student; lead pode existir
+  // antes de virar aluno, e podem ser duplicados ate convergirem).
+  nome     String
+  email    String
+  telefone String // E.164 normalizado (ex: +5511999999999)
+  notes    String? @db.Text
+
+  // Curso de interesse — referencia ao Course (nao TenantCourse) por estabilidade:
+  // tenant pode ocultar/remover TenantCourse sem perder a procedencia do lead.
+  // courseId pode ser null pra leads adicionados manualmente sem curso especifico.
+  courseId       String? @map("course_id")
+  course         Course? @relation(fields: [courseId], references: [id])
+  courseSnapshot String? @map("course_snapshot") // nome do curso no momento do lead
+
+  // Pipeline
+  stage  StudentLeadStage  @default(NEW)
+  source StudentLeadSource @default(FORM_COURSE)
+
+  // Quando ja existe enrollment vinculado (CHECKOUT_STARTED em diante).
+  enrollmentId String?     @unique @map("enrollment_id")
+  enrollment   Enrollment? @relation(fields: [enrollmentId], references: [id])
+
+  // Quando vira WON, snapshot da venda.
+  studentId    String?  @map("student_id")
+  paymentValue Decimal? @map("payment_value") @db.Decimal(10, 2)
+
+  // Atribuicao manual a um consultor (TenantMember).
+  ownerUserId String? @map("owner_user_id")
+
+  // Posicao livre dentro da coluna (drag-and-drop manual / re-ordenacao).
+  columnOrder Int @default(0) @map("column_order")
+
+  // LGPD / auditoria
+  ipAddress       String? @map("ip_address")
+  userAgent       String? @map("user_agent") @db.Text
+  consentAccepted Boolean @default(false) @map("consent_accepted")
+  consentVersion  String? @map("consent_version")
+
+  activities StudentLeadActivity[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([tenantId, stage, columnOrder])
+  @@index([tenantId, createdAt])
+  @@index([tenantId, source])
+  @@index([enrollmentId])
+  @@index([courseId])
+  @@map("student_leads")
+}
+
+model StudentLeadActivity {
+  id     String      @id @default(cuid())
+  leadId String      @map("lead_id")
+  lead   StudentLead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  kind     StudentLeadActivityKind
+  // Texto livre exibido no historico. Para WA_MESSAGE_SENT, contem o corpo
+  // efetivamente enviado (com variaveis ja interpoladas).
+  body     String?                 @db.Text
+  // Snapshot estruturado: { fromStage, toStage, templateKey, engineMessageId }
+  metadata Json?
+
+  // Author quando manual (NOTE, mudanca manual de stage). null = sistema.
+  authorUserId String? @map("author_user_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([leadId, createdAt])
+  @@map("student_lead_activities")
+}
+
+model AutomationMessageTemplate {
+  id       String @id @default(cuid())
+  tenantId String @map("tenant_id")
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  key     AutomationTemplateKey
+  // Corpo da mensagem com placeholders: {{aluno_nome}}, {{curso}}, {{escola}},
+  // {{link_curso}}, {{valor}}. Renderizado em src/lib/automation/templates.ts.
+  body    String                @db.Text
+  enabled Boolean               @default(true)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([tenantId, key])
+  @@map("automation_message_templates")
 }
