@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { requireSuperAdmin } from "@/lib/auth/guards"
 import { slugifyCategoria } from "@/lib/catalog/home"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
+import { contextLogger } from "@/lib/logger"
 
 const updateSchema = z
   .object({
@@ -117,6 +118,24 @@ export const DELETE = withRequestContextParams<{ id: string }>(
 
   // FK ON DELETE SET NULL → cursos passam a ficar `categoryId: null`.
   await prisma.category.delete({ where: { id } })
+
+  // Espelha a criação automática feita em POST /categorias: ao apagar a
+  // categoria, removemos todas as seções "category_courses" vinculadas a ela
+  // (PMB + todos os tenants). Falha aqui é não-bloqueante para não reverter o
+  // delete que já aconteceu.
+  try {
+    await prisma.homeSection.deleteMany({
+      where: {
+        kind: "category_courses",
+        config: { path: ["categoryId"], equals: id },
+      },
+    })
+  } catch (err) {
+    contextLogger().warn(
+      { err: String(err), event: "categorias.delete.auto_home_section_failed", categoryId: id },
+      "auto-remoção de HomeSections falhou — categoria removida normalmente",
+    )
+  }
 
   return NextResponse.json({
     data: { id, courseCountReleased: current._count.courses },

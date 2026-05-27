@@ -24,7 +24,6 @@ export function HomeSectionsPanel({ apiBase, hint }: HomeSectionsPanelProps) {
     toggleEnabled,
     move,
     reorder,
-    removeSection,
     drafts,
     savingIds,
     startEditingDraft,
@@ -79,7 +78,6 @@ export function HomeSectionsPanel({ apiBase, hint }: HomeSectionsPanelProps) {
             onToggleEnabled={toggleEnabled}
             onMove={move}
             onReorder={reorder}
-            onRemove={removeSection}
             drafts={drafts}
             savingIds={savingIds}
             onStartEditing={startEditingDraft}

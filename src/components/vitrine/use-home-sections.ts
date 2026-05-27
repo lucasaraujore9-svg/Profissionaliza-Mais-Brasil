@@ -360,27 +360,6 @@ export function useHomeSections({ apiBase }: UseHomeSectionsOptions) {
     [apiBase, load],
   )
 
-  /** Remove uma seção. Bestsellers não pode (servidor recusa). */
-  const removeSection = useCallback(
-    async (id: string) => {
-      const prev = sections
-      if (!prev) return
-      setSections(prev.filter((s) => s.id !== id))
-      try {
-        const res = await fetch(`${apiBase}/${id}`, { method: "DELETE" })
-        if (!res.ok) {
-          const body = await res.json().catch(() => ({}))
-          throw new Error(body?.error ?? "Falha ao remover")
-        }
-        toast.success("Seção removida")
-      } catch (err) {
-        setSections(prev)
-        toast.error(err instanceof Error ? err.message : "Erro ao remover")
-      }
-    },
-    [apiBase, sections],
-  )
-
   return {
     sections,
     options,
@@ -391,7 +370,6 @@ export function useHomeSections({ apiBase }: UseHomeSectionsOptions) {
     move,
     reorder,
     createSection,
-    removeSection,
     // Draft API (edição bufferizada com botão Salvar explícito)
     drafts,
     savingIds,

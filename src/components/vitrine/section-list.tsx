@@ -12,7 +12,6 @@ import {
   Megaphone,
   Save,
   Sparkles,
-  Trash2,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
@@ -28,17 +27,6 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion"
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog"
 import {
   BestsellersEditor,
   CategoriesGridEditor,
@@ -67,7 +55,6 @@ interface SectionListProps {
   onToggleEnabled: (id: string, enabled: boolean) => void
   onMove: (id: string, delta: -1 | 1) => void
   onReorder: (nextOrder: string[]) => void
-  onRemove: (id: string) => void
   /** Draft API: drafts[id] existe => seção em edição. */
   drafts: Record<string, AnySectionConfig>
   savingIds: Set<string>
@@ -83,7 +70,6 @@ export function SectionList({
   onToggleEnabled,
   onMove,
   onReorder,
-  onRemove,
   drafts,
   savingIds,
   onStartEditing,
@@ -318,14 +304,6 @@ export function SectionList({
                     </TooltipTrigger>
                     <TooltipContent>Mover para baixo</TooltipContent>
                   </Tooltip>
-
-                  {/* Remover (não-bestsellers) */}
-                  {!isLocked && s.kind === "institutional" && (
-                    <RemoveButton
-                      onConfirm={() => onRemove(s.id)}
-                      label={titleOfSection(s, categoryName)}
-                    />
-                  )}
                 </div>
               </div>
             </AccordionHeader>
@@ -381,46 +359,6 @@ export function SectionList({
 // ---------------------------------------------------------------------------
 // Sub-componentes
 // ---------------------------------------------------------------------------
-
-function RemoveButton({
-  onConfirm,
-  label,
-}: {
-  onConfirm: () => void
-  label: string
-}) {
-  return (
-    <AlertDialog>
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <AlertDialogTrigger
-              className="grid h-7 w-7 place-items-center rounded text-rose-400 hover:bg-rose-50 hover:text-rose-600"
-              aria-label="Remover esta seção"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </AlertDialogTrigger>
-          }
-        />
-        <TooltipContent>Remover esta seção</TooltipContent>
-      </Tooltip>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Remover &ldquo;{label}&rdquo;?</AlertDialogTitle>
-          <AlertDialogDescription>
-            A seção é removida permanentemente. Você pode criar de novo depois,
-            se quiser.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel>Cancelar</AlertDialogCancel>
-          <AlertDialogAction onClick={onConfirm}>Remover</AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
-  )
-}
 
 function SectionIcon({ kind }: { kind: SectionRecord["kind"] }) {
   const map: Record<SectionRecord["kind"], { icon: typeof Sparkles; bg: string; fg: string }> = {
