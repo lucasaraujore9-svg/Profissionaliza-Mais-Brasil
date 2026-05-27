@@ -78,9 +78,13 @@ const DEPOIMENTOS: Depoimento[] = [
   },
 ]
 
+// Duplicamos a lista para que o marquee CSS (-50% translate) pareca um loop
+// continuo. Sem a copia, o salto entre fim e inicio ficaria visivel.
+const TRACK = [...DEPOIMENTOS, ...DEPOIMENTOS]
+
 export function Testimonials() {
   return (
-    <section className="border-b border-[rgba(2,89,24,0.08)] bg-[var(--color-pmb-mist)]">
+    <section className="border-b border-[rgba(2,89,24,0.08)] bg-[var(--color-pmb-mist)] overflow-hidden">
       <div className="mx-auto max-w-[1280px] px-4 py-14 md:px-6 md:py-18">
         <div className="mb-10 text-center">
           <p className="text-[11px] font-black uppercase tracking-widest text-[var(--color-pmb-gold-600)]">
@@ -93,42 +97,69 @@ export function Testimonials() {
             Depoimentos de alunos que conquistaram uma profissão com o Profissionaliza Mais Brasil.
           </p>
         </div>
+      </div>
 
-        <ul className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
-          {DEPOIMENTOS.map((d) => (
-            <li
-              key={d.nome}
-              className="relative flex flex-col rounded-2xl border border-[rgba(2,89,24,0.08)] bg-white p-6 shadow-[0_10px_30px_-18px_rgba(2,89,24,0.2)]"
-            >
-              <Quote
-                className="absolute right-5 top-5 h-8 w-8 text-[var(--color-pmb-lime)] opacity-60"
-                strokeWidth={2}
-                aria-hidden
-              />
-
-              <p className="mt-3 flex-1 text-[14.5px] leading-relaxed text-[rgba(2,89,24,0.82)]">
-                &ldquo;{d.texto}&rdquo;
-              </p>
-
-              <div className="mt-5 flex items-center gap-3 border-t border-[rgba(2,89,24,0.08)] pt-4">
-                <span
-                  className="grid h-11 w-11 shrink-0 place-items-center rounded-full text-[13px] font-black text-[var(--color-pmb-green)]"
-                  style={{ background: d.cor }}
+      {/* Carrossel infinito: mascara nas laterais + track animada.
+          Mobile: ~1 card visivel; sm: ~2; md: ~3; lg+: 4 simultaneos. */}
+      <div
+        className="relative w-full"
+        style={
+          {
+            // Mascara suave nas bordas para destacar que o conteudo continua.
+            maskImage:
+              "linear-gradient(90deg, transparent 0, #000 80px, #000 calc(100% - 80px), transparent 100%)",
+            WebkitMaskImage:
+              "linear-gradient(90deg, transparent 0, #000 80px, #000 calc(100% - 80px), transparent 100%)",
+            // Duracao proporcional ao numero de itens (mais itens = roda mais
+            // devagar pra cada card ficar tempo legivel em tela)
+            "--pmb-marquee-duration": "55s",
+          } as React.CSSProperties
+        }
+      >
+        <ul
+          className="animate-pmb-marquee flex w-max gap-5 pb-10"
+          aria-label="Depoimentos de alunos"
+        >
+          {TRACK.map((d, idx) => {
+            // Iniciais reais (1a metade) e duplicadas (2a metade) compartilham
+            // o mesmo conteudo, mas precisam de keys distintas.
+            const half = idx < DEPOIMENTOS.length ? "a" : "b"
+            return (
+              <li
+                key={`${d.nome}-${half}`}
+                aria-hidden={half === "b"}
+                className="relative flex w-[85vw] max-w-[340px] shrink-0 flex-col rounded-2xl border border-[rgba(2,89,24,0.08)] bg-white p-6 shadow-[0_10px_30px_-18px_rgba(2,89,24,0.2)] sm:w-[320px] md:w-[300px]"
+              >
+                <Quote
+                  className="absolute right-5 top-5 h-8 w-8 text-[var(--color-pmb-lime)] opacity-60"
+                  strokeWidth={2}
                   aria-hidden
-                >
-                  {d.iniciais}
-                </span>
-                <div className="min-w-0">
-                  <p className="truncate text-[14px] font-bold text-[var(--color-pmb-green)]">
-                    {d.nome}
-                  </p>
-                  <p className="truncate text-[12px] text-[rgba(2,89,24,0.55)]">
-                    Aluno Profissionaliza Mais Brasil
-                  </p>
+                />
+
+                <p className="mt-3 flex-1 text-[14.5px] leading-relaxed text-[rgba(2,89,24,0.82)]">
+                  &ldquo;{d.texto}&rdquo;
+                </p>
+
+                <div className="mt-5 flex items-center gap-3 border-t border-[rgba(2,89,24,0.08)] pt-4">
+                  <span
+                    className="grid h-11 w-11 shrink-0 place-items-center rounded-full text-[13px] font-black text-[var(--color-pmb-green)]"
+                    style={{ background: d.cor }}
+                    aria-hidden
+                  >
+                    {d.iniciais}
+                  </span>
+                  <div className="min-w-0">
+                    <p className="truncate text-[14px] font-bold text-[var(--color-pmb-green)]">
+                      {d.nome}
+                    </p>
+                    <p className="truncate text-[12px] text-[rgba(2,89,24,0.55)]">
+                      Aluno Profissionaliza Mais Brasil
+                    </p>
+                  </div>
                 </div>
-              </div>
-            </li>
-          ))}
+              </li>
+            )
+          })}
         </ul>
       </div>
     </section>

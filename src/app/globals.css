@@ -147,4 +147,30 @@
     font-weight: 700;
     letter-spacing: -0.02em;
   }
+
+  /* Marquee infinito usado em carrosseis (ex: depoimentos da home).
+     Requer que o conteudo da track seja duplicado em codigo (lista original
+     + copia) para que o salto de -50% pareca seamless. */
+  @keyframes pmb-marquee {
+    from {
+      transform: translateX(0);
+    }
+    to {
+      transform: translateX(-50%);
+    }
+  }
+
+  .animate-pmb-marquee {
+    animation: pmb-marquee var(--pmb-marquee-duration, 50s) linear infinite;
+  }
+
+  .animate-pmb-marquee:hover {
+    animation-play-state: paused;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .animate-pmb-marquee {
+      animation: none;
+    }
+  }
 }
