@@ -81,9 +81,9 @@ export function CategoriesGridSection({
             </p>
           )}
         </div>
-        <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+        <ul className="flex flex-wrap justify-center gap-3">
           {categories.map((c) => (
-            <li key={c.id}>
+            <li key={c.id} className="w-[calc(50%-0.375rem)] sm:w-[calc(33.333%-0.5rem)] md:w-[calc(25%-0.5625rem)] lg:w-[180px]">
               <Link
                 href={`/cursos?categoria=${c.slug}`}
                 className="flex h-full items-center justify-center rounded-xl border border-[rgba(2,89,24,0.08)] bg-white px-3 py-4 text-center text-[13px] font-bold text-[var(--color-pmb-green-900)] transition hover:-translate-y-0.5 hover:border-[var(--color-pmb-green)] hover:shadow-md"
@@ -159,42 +159,109 @@ function TrustItem({ item }: { item: InstitutionalItem }) {
 }
 
 function LearnAnywhereVariant({ config }: { config: InstitutionalConfig }) {
+  // Mockup do celular à esquerda (decorativo, hardcoded) + bloco
+  // editável à direita (subtitle/title/body/items/buttonText vêm do
+  // painel de Vitrine).
   return (
-    <section className="border-b border-[rgba(2,89,24,0.08)] bg-[var(--color-pmb-mist)]">
-      <div className="mx-auto grid max-w-[1280px] gap-10 px-4 py-12 md:grid-cols-[1fr_1fr] md:px-6 md:py-16">
-        <div>
+    <section className="border-b border-[rgba(2,89,24,0.08)] bg-white">
+      <div className="mx-auto grid max-w-[1280px] gap-10 px-4 py-14 md:grid-cols-2 md:px-6 md:py-18 lg:gap-16">
+        {/* Mockup decorativo do celular */}
+        <div className="relative">
+          <div className="relative mx-auto aspect-[3/4] w-full max-w-[380px] overflow-hidden rounded-[28px] bg-[var(--color-pmb-green)] shadow-[0_30px_60px_-24px_rgba(2,89,24,0.45)]">
+            <div
+              aria-hidden
+              className="absolute -right-10 -top-10 h-56 w-56 rounded-full"
+              style={{ background: "var(--color-pmb-gold)", opacity: 0.25 }}
+            />
+            <div
+              aria-hidden
+              className="absolute -left-14 bottom-[-40px] h-72 w-72 rounded-full"
+              style={{ background: "var(--color-pmb-cyan)", opacity: 0.18 }}
+            />
+
+            <div className="relative flex h-full flex-col justify-between gap-6 p-8">
+              <div className="flex items-center gap-2 text-white/85">
+                <span className="grid h-9 w-9 place-items-center rounded-xl bg-white/15 backdrop-blur">
+                  <Smartphone
+                    className="h-4 w-4 text-white"
+                    strokeWidth={2.5}
+                    aria-hidden
+                  />
+                </span>
+                <span className="text-[12px] font-bold uppercase tracking-wider">
+                  Profissionaliza
+                </span>
+              </div>
+
+              <div>
+                <h3 className="text-[32px] font-black leading-[1.05] text-white md:text-[36px]">
+                  Sua escola
+                  <br />
+                  no bolso.
+                </h3>
+                <p className="mt-3 max-w-[260px] text-[14px] leading-relaxed text-white/80">
+                  Assista aulas no ônibus, na hora do almoço, antes de dormir.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-3 rounded-2xl bg-white/10 p-3 backdrop-blur">
+                <div className="h-12 w-12 shrink-0 rounded-xl bg-[var(--color-pmb-gold)]" />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[13px] font-bold text-white">
+                    Confeitaria Lucrativa
+                  </p>
+                  <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-white/20">
+                    <div className="h-full w-3/5 rounded-full bg-[var(--color-pmb-lime)]" />
+                  </div>
+                  <p className="mt-1 text-[11px] text-white/70">
+                    Aula 14 de 30 · 60% concluído
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Bloco editável (vem do painel de Vitrine) */}
+        <div className="flex flex-col justify-center">
           {config.subtitle && (
-            <span className="inline-block text-[11px] font-black uppercase tracking-widest text-[var(--color-pmb-green)]">
+            <p className="text-[11px] font-black uppercase tracking-widest text-[var(--color-pmb-gold-600)]">
               {config.subtitle}
-            </span>
+            </p>
           )}
-          <h2 className="mt-2 text-[28px] font-black leading-tight text-[var(--color-pmb-green-900)] md:text-[36px]">
-            {config.title}
-          </h2>
+          {config.title && (
+            <h2 className="mt-1 text-[28px] font-black leading-[1.1] text-[var(--color-pmb-green)] md:text-[36px]">
+              {config.title}
+            </h2>
+          )}
           {config.body && (
-            <p className="mt-3 max-w-md text-[15px] leading-relaxed text-[rgba(2,89,24,0.75)]">
+            <p className="mt-3 text-[15px] leading-relaxed text-[rgba(2,89,24,0.72)]">
               {config.body}
             </p>
           )}
           {config.items.length > 0 && (
-            <ul className="mt-6 space-y-3">
+            <ul className="mt-6 grid gap-4 sm:grid-cols-2">
               {config.items.map((it, i) => {
                 const iconNode = renderIconByName(it.iconName, {
-                  className: "h-3.5 w-3.5 text-[var(--color-pmb-green)]",
+                  className:
+                    "h-5 w-5 text-[var(--color-pmb-green)]",
+                  strokeWidth: 2.25,
                 })
                 return (
-                  <li key={i} className="flex items-start gap-3">
+                  <li key={i} className="flex gap-3">
                     {iconNode && (
-                      <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[var(--color-pmb-lime-50)]">
+                      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-[var(--color-pmb-lime-50)]">
                         {iconNode}
                       </span>
                     )}
                     <div>
-                      <p className="text-[14px] font-bold text-[var(--color-pmb-green-900)]">
+                      <p className="text-[14px] font-bold text-[var(--color-pmb-green)]">
                         {it.title}
                       </p>
                       {it.body && (
-                        <p className="text-[13px] text-[rgba(2,89,24,0.7)]">{it.body}</p>
+                        <p className="mt-0.5 text-[13px] leading-relaxed text-[rgba(2,89,24,0.65)]">
+                          {it.body}
+                        </p>
                       )}
                     </div>
                   </li>
@@ -205,33 +272,11 @@ function LearnAnywhereVariant({ config }: { config: InstitutionalConfig }) {
           {config.buttonText && config.buttonHref && (
             <Link
               href={config.buttonHref}
-              className="mt-6 inline-flex items-center gap-2 rounded-full bg-[var(--color-pmb-green)] px-5 py-3 text-[14px] font-black text-white transition hover:bg-[var(--color-pmb-green-700)]"
+              className="mt-6 inline-flex w-fit items-center gap-2 rounded-full bg-[var(--color-pmb-green)] px-5 py-3 text-[14px] font-black text-white transition hover:bg-[var(--color-pmb-green-700)]"
             >
               {config.buttonText}
               <ArrowRight className="h-4 w-4" aria-hidden />
             </Link>
-          )}
-        </div>
-        <div className="relative hidden md:block">
-          {config.imageUrl ? (
-            <div className="relative h-full min-h-[280px] overflow-hidden rounded-2xl bg-white shadow-md">
-              <Image
-                src={config.imageUrl}
-                alt=""
-                fill
-                unoptimized
-                sizes="(max-width:768px) 100vw, 50vw"
-                className="object-cover"
-              />
-            </div>
-          ) : (
-            <div className="grid h-full min-h-[280px] place-items-center rounded-2xl border border-dashed border-[var(--color-pmb-green)]/20 bg-white">
-              <Smartphone
-                className="h-20 w-20 text-[var(--color-pmb-green)] opacity-30"
-                strokeWidth={1.5}
-                aria-hidden
-              />
-            </div>
           )}
         </div>
       </div>

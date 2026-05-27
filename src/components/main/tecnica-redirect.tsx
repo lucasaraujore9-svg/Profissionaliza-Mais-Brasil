@@ -13,25 +13,20 @@ import {
 interface TecnicaRedirectProps {
   url: string
   courseName?: string | null
+  /**
+   * Tempo (ms) que a tela permanece visível antes de redirecionar.
+   * Calibrado em 7000ms para permitir leitura confortável do texto
+   * institucional (~60 palavras + 3 selos).
+   */
   delayMs?: number
 }
 
-/**
- * Página intermediária de redirecionamento para a Escola Técnica parceira.
- * Mostra:
- *  - Mensagem institucional curta (copy revisada).
- *  - Barra de progresso visual (não polling — só animação CSS) + countdown
- *    pra dar contexto temporal.
- *  - Botão "Ir agora" pra quem quer pular a espera.
- *  - Botão "Voltar" pra cancelar.
- *
- * Respeita prefers-reduced-motion: quem desativa animações vê o card sem
- * barra animada e o redirect cumpre o mesmo timer.
- */
+const DEFAULT_DELAY_MS = 7000
+
 export function TecnicaRedirect({
   url,
   courseName,
-  delayMs = 2500,
+  delayMs = DEFAULT_DELAY_MS,
 }: TecnicaRedirectProps) {
   const [remaining, setRemaining] = useState(() => Math.ceil(delayMs / 1000))
   const [cancelled, setCancelled] = useState(false)
@@ -52,6 +47,10 @@ export function TecnicaRedirect({
     }
   }, [url, delayMs, cancelled])
 
+  // duração CSS (string) baseada no delay — barra completa exatamente em
+  // sync com o timer do redirect.
+  const progressDurationMs = `${delayMs}ms`
+
   return (
     <section className="flex min-h-[calc(100vh-180px)] items-center justify-center bg-[var(--color-pmb-mist)] px-4 py-12">
       <div className="w-full max-w-xl rounded-2xl border border-[rgba(2,89,24,0.1)] bg-white p-7 shadow-[0_18px_40px_-18px_rgba(2,89,24,0.25)] sm:p-10">
@@ -63,22 +62,30 @@ export function TecnicaRedirect({
 
         {/* Headline */}
         <h1 className="mt-3 text-[22px] font-black leading-tight text-[var(--color-pmb-green)] sm:text-[26px]">
-          Te levando pra Escola Técnica…
+          Sua nova carreira começa aqui.
         </h1>
 
-        {/* Body */}
-        <p className="mt-3 text-[14.5px] leading-relaxed text-[rgba(2,89,24,0.78)]">
-          Em instantes você vai conhecer{" "}
-          {courseName ? (
-            <>
-              o curso de <b>{courseName}</b>
-            </>
-          ) : (
-            "os cursos"
-          )}{" "}
-          da nossa parceira — uma das maiores escolas técnicas do país, com
-          diploma reconhecido pelo MEC e formação a partir de 7 meses.
-        </p>
+        {/* Body — copy revisada, mais aspiracional e clara */}
+        <div className="mt-3 space-y-2.5 text-[14.5px] leading-relaxed text-[rgba(2,89,24,0.78)]">
+          <p>
+            Estamos te conectando com a nossa{" "}
+            <b>Escola Técnica parceira</b> — referência nacional em formação
+            técnica.
+          </p>
+          <p>
+            Em alguns segundos você vai poder conhecer{" "}
+            {courseName ? (
+              <>
+                o curso de <b>{courseName}</b>
+              </>
+            ) : (
+              <>os cursos disponíveis</>
+            )}
+            , escolher quando começar e dar o próximo passo na sua carreira —
+            tudo com diploma reconhecido pelo MEC e mercado de trabalho real
+            esperando por você.
+          </p>
+        </div>
 
         {/* Selos curtos */}
         <ul className="mt-5 grid gap-2 text-[13px] text-[rgba(2,89,24,0.78)] sm:grid-cols-3">
@@ -101,11 +108,11 @@ export function TecnicaRedirect({
               className="h-4 w-4 shrink-0 text-[var(--color-pmb-green)]"
               aria-hidden
             />
-            Matrícula online
+            Matrícula 100% online
           </li>
         </ul>
 
-        {/* Barra de progresso + contagem */}
+        {/* Barra de progresso + contagem (duração casa com delayMs) */}
         <div className="mt-6">
           <div className="flex items-center justify-between text-[12px] font-medium text-[rgba(2,89,24,0.55)]">
             <span>{cancelled ? "Redirecionamento pausado" : "Redirecionando"}</span>
@@ -119,9 +126,10 @@ export function TecnicaRedirect({
           </div>
           <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-[rgba(2,89,24,0.08)]">
             <div
-              className="h-full rounded-full bg-[var(--color-pmb-green)] motion-safe:transition-[width] motion-safe:duration-[2500ms] motion-safe:ease-linear motion-reduce:duration-0"
+              className="h-full rounded-full bg-[var(--color-pmb-green)] motion-safe:transition-[width] motion-safe:ease-linear motion-reduce:duration-0"
               style={{
                 width: cancelled ? "0%" : "100%",
+                transitionDuration: cancelled ? "0ms" : progressDurationMs,
                 transitionDelay: cancelled ? "0s" : "60ms",
               }}
             />

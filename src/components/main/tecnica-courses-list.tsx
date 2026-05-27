@@ -48,6 +48,8 @@ export function TecnicaCoursesList({
             <Link
               key={course.name}
               href={tecnicaRedirectHref(course.name, course.url || url)}
+              target="_blank"
+              rel="noopener noreferrer"
               className="group flex h-full flex-col rounded-xl border border-[rgba(2,89,24,0.08)] bg-white p-3 transition hover:-translate-y-0.5 hover:border-[var(--color-pmb-green)] hover:shadow-md"
             >
               <div className="grid aspect-[4/3] place-items-center rounded-lg bg-[var(--color-pmb-lime-50)]">

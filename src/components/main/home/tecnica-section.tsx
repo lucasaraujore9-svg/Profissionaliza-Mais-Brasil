@@ -64,6 +64,8 @@ export function TecnicaSection({
               {/* CTA "Ver todos" — destacado em dourado */}
               <Link
                 href="/cursos-tecnicos"
+                target="_blank"
+                rel="noopener noreferrer"
                 className="group inline-flex shrink-0 items-center gap-2 self-start rounded-full bg-[var(--color-pmb-gold,#F2B705)] px-5 py-3 text-[14px] font-black text-[#013d10] transition hover:bg-white md:self-end"
               >
                 Conhecer todos
@@ -83,6 +85,8 @@ export function TecnicaSection({
                       course.name,
                       course.url || fallbackUrl,
                     )}
+                    target="_blank"
+                    rel="noopener noreferrer"
                     className="group relative flex h-full flex-col justify-between overflow-hidden rounded-2xl border border-white/10 bg-white/[0.04] p-4 backdrop-blur-sm transition hover:-translate-y-0.5 hover:border-[var(--color-pmb-gold,#F2B705)]/60 hover:bg-white/[0.08] sm:p-5"
                   >
                     {/* Número grande estilizado */}
