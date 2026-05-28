@@ -82,13 +82,23 @@ export async function startSession(sessionName: string): Promise<{ status: WaSta
     body: JSON.stringify({ name: sessionName }),
   })
 
-  if (!res.ok && res.status !== 409 /* ja existe */) {
+  if (!res.ok) {
     const txt = await res.text().catch(() => "")
-    contextLogger().error(
-      { event: "wa.start_failed", sessionName, status: res.status, body: txt },
-      "Falha ao iniciar sessao WhatsApp",
-    )
-    throw new Error(`Engine recusou start (${res.status})`)
+    // Idempotente: a sessao ja estar de pe NAO e erro. Engines diferentes
+    // sinalizam isso de formas distintas: 409 (Conflict / "already exists") ou
+    // 422 ("Session '...' is already started/running"). Nesses casos seguimos
+    // adiante — quem entrega o QR/estado atual e o getSessionStatus no caller.
+    const alreadyUp =
+      res.status === 409 ||
+      (res.status === 422 && /already\s+(started|exists|running)/i.test(txt))
+    if (!alreadyUp) {
+      contextLogger().error(
+        { event: "wa.start_failed", sessionName, status: res.status, body: txt },
+        "Falha ao iniciar sessao WhatsApp",
+      )
+      throw new Error(`Engine recusou start (${res.status})`)
+    }
+    return { status: "CONNECTING" }
   }
 
   const data = (await res.json().catch(() => ({}))) as { status?: unknown }
