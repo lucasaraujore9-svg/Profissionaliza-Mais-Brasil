@@ -29,11 +29,9 @@ export default async function PainelLayout({
     redirect("/login?callbackUrl=/painel")
   }
 
-  // Enforce server-side: usuários que precisam trocar senha são bloqueados
-  // antes de acessar qualquer área protegida.
-  if (session.user.mustChangePassword) {
-    redirect("/alterar-senha-inicial")
-  }
+  // NOTA: enforcement server-side de mustChangePassword REVERTIDO (bloqueava
+  // contas existentes em produção). Re-introduzir só com revalidação de JWT
+  // pós-troca e limpeza da flag legada em contas ativas. Ver R22.
 
   const [cookieStore, tenant] = await Promise.all([
     cookies(),

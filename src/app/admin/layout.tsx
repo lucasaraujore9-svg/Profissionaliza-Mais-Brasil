@@ -1,7 +1,6 @@
 import type { Metadata } from "next"
 import { redirect } from "next/navigation"
 import { requireAdminSession } from "@/lib/auth/admin-session"
-import { auth } from "@/lib/auth"
 import { AdminLayoutShell } from "./layout-shell"
 
 export const metadata: Metadata = {
@@ -17,12 +16,10 @@ export default async function AdminLayout({
   const session = await requireAdminSession()
   if (!session) redirect("/login?callbackUrl=/admin")
 
-  // Enforce server-side: usuários que precisam trocar senha são bloqueados
-  // antes de acessar qualquer área protegida.
-  const rawSession = await auth()
-  if (rawSession?.user?.mustChangePassword) {
-    redirect("/alterar-senha-inicial")
-  }
+  // NOTA: o enforcement server-side de mustChangePassword foi REVERTIDO aqui —
+  // estava bloqueando contas existentes (super admin com flag legada) em
+  // produção. Re-introduzir só após garantir que (a) contas ativas não tenham
+  // a flag legada e (b) o JWT seja revalidado pós-troca (evita loop). Ver R22.
 
   return (
     <AdminLayoutShell
