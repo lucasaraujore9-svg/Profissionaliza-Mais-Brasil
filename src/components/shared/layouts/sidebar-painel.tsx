@@ -32,7 +32,7 @@ const ALL_ITEMS: {
   { href: "/painel", label: "Dashboard", icon: LayoutDashboard },
   { href: "/painel/cursos", label: "Catálogo", icon: GraduationCap },
   { href: "/painel/alunos", label: "Alunos", icon: Users },
-  { href: "/painel/leads", label: "Leads", icon: Inbox, ownerOnly: true, automationOnly: true },
+  { href: "/painel/leads", label: "Vendas", icon: Inbox, ownerOnly: true, automationOnly: true },
   { href: "/painel/vendas", label: "Vendas diretas", icon: ShoppingCart },
   { href: "/painel/cupons", label: "Cupons", icon: Tag },
   { href: "/painel/financeiro", label: "Financeiro", icon: CreditCard },

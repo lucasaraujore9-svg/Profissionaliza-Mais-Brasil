@@ -100,10 +100,15 @@ export interface SocialLinks {
   tiktok: string | null
 }
 
+// Instagram e Facebook sao perfis oficiais fixos da PMB — fixados no codigo
+// para nao dependerem de env (que estava apontando para perfis errados em prod).
+const PMB_INSTAGRAM_URL = "https://www.instagram.com/profissionalizamaisbrasil_oficial"
+const PMB_FACEBOOK_URL = "https://www.facebook.com/profissionalizamaisbrasil_oficial"
+
 export function getSocialLinks(): SocialLinks {
   return {
-    instagram: process.env.NEXT_PUBLIC_INSTAGRAM_URL?.trim() || null,
-    facebook: process.env.NEXT_PUBLIC_FACEBOOK_URL?.trim() || null,
+    instagram: PMB_INSTAGRAM_URL,
+    facebook: PMB_FACEBOOK_URL,
     youtube: process.env.NEXT_PUBLIC_YOUTUBE_URL?.trim() || null,
     tiktok: process.env.NEXT_PUBLIC_TIKTOK_URL?.trim() || null,
   }
