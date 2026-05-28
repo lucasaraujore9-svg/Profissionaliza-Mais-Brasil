@@ -38,6 +38,14 @@ const CATEGORY_LABELS: Record<string, { label: string; description: string }> = 
     label: "Suporte",
     description: "Mensagens diretas e tickets internos.",
   },
+  referral: {
+    label: "Indicações",
+    description: "Comissões de indicação ganhas, liberadas ou canceladas.",
+  },
+  certificate: {
+    label: "Certificados",
+    description: "Emissão e revogação dos seus certificados.",
+  },
 }
 
 export function NotificationPreferencesPanel() {

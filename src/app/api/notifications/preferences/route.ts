@@ -4,7 +4,9 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 
-const CATEGORIES = [
+// Categorias que cada audiencia efetivamente recebe (e portanto pode silenciar).
+// Usuario admin/equipe/revendedor:
+const USER_CATEGORIES = [
   "payment",
   "enrollment",
   "tenant-billing",
@@ -12,9 +14,16 @@ const CATEGORIES = [
   "sale",
   "lead",
   "support",
+  "referral",
 ] as const
 
-type Category = (typeof CATEGORIES)[number]
+// Aluno: so categorias que chegam para ele.
+const STUDENT_CATEGORIES = ["payment", "enrollment", "certificate"] as const
+
+// Uniao usada para validar o PATCH (qualquer audiencia).
+const ALL_CATEGORIES: readonly string[] = Array.from(
+  new Set<string>([...USER_CATEGORIES, ...STUDENT_CATEGORIES]),
+)
 
 interface SessionUser {
   id?: string
@@ -47,10 +56,12 @@ export const GET = withRequestContext(
 
   const rows = await prisma.notificationPreference.findMany({ where })
   const byCategory = new Map(rows.map((r) => [r.category, r]))
+  const categories =
+    target.kind === "student" ? STUDENT_CATEGORIES : USER_CATEGORIES
 
   return NextResponse.json({
     data: {
-      preferences: CATEGORIES.map((c) => ({
+      preferences: categories.map((c) => ({
         category: c,
         inApp: byCategory.get(c)?.inApp ?? true,
         email: byCategory.get(c)?.email ?? true,
@@ -61,7 +72,13 @@ export const GET = withRequestContext(
 )
 
 const patchSchema = z.object({
-  category: z.enum(CATEGORIES),
+  category: z
+    .string()
+    .min(1)
+    .max(64)
+    .refine((c) => ALL_CATEGORIES.includes(c), {
+      message: "Categoria inválida",
+    }),
   inApp: z.boolean().optional(),
   email: z.boolean().optional(),
 })
@@ -109,13 +126,13 @@ export const PATCH = withRequestContext(
     target.kind === "student"
       ? {
           studentId: target.id,
-          category: parsed.data.category as Category,
+          category: parsed.data.category,
           inApp: parsed.data.inApp ?? true,
           email: parsed.data.email ?? true,
         }
       : {
           userId: target.id,
-          category: parsed.data.category as Category,
+          category: parsed.data.category,
           inApp: parsed.data.inApp ?? true,
           email: parsed.data.email ?? true,
         }

@@ -76,9 +76,9 @@ export async function notifyStudent(
   studentId: string,
   input: NotifyStudentInput,
 ): Promise<{ id: string; title: string; body: string | null; level: string; createdAt: string; readAt: null }> {
-  // createNotification ja faz push + respeita preferencias. Aqui criamos manualmente
-  // para retornar o registro inserido na UI imediatamente.
-  await createNotification({
+  // createNotification ja faz push + respeita preferencias e retorna o id da
+  // linha criada (ou null se a categoria/preferencia bloqueou o envio).
+  const result = await createNotification({
     audience: "STUDENT",
     studentId,
     title: input.title.trim(),
@@ -88,12 +88,14 @@ export async function notifyStudent(
     category: "admin-broadcast",
   })
 
-  // Le a notificacao recem criada (pode nao ter sido criada se categoria desligada)
-  const created = await prisma.notification.findFirst({
-    where: { studentId, title: input.title.trim() },
-    orderBy: { createdAt: "desc" },
-    select: { id: true, title: true, body: true, level: true, createdAt: true },
-  })
+  // Le exatamente a notificacao criada (por id) para refletir na UI. Se nada
+  // foi criado, devolve um registro sintetico a partir do input.
+  const created = result
+    ? await prisma.notification.findUnique({
+        where: { id: result.id },
+        select: { id: true, title: true, body: true, level: true, createdAt: true },
+      })
+    : null
   return {
     id: created?.id ?? "",
     title: created?.title ?? input.title,

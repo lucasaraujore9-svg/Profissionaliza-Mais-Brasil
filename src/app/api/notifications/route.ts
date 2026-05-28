@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { listForUser, listForStudent } from "@/lib/notifications"
+import {
+  listForUser,
+  listForStudent,
+  countUnreadForUser,
+  countUnreadForStudent,
+} from "@/lib/notifications"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 
 export const GET = withRequestContext(
@@ -23,19 +28,23 @@ export const GET = withRequestContext(
   const onlyUnread = url.searchParams.get("unread") === "1"
   const limit = Math.min(Number(url.searchParams.get("limit") ?? "50"), 200)
 
-  const items =
-    user.role === "STUDENT" && user.studentId
-      ? await listForStudent(user.studentId, { onlyUnread, limit })
-      : await listForUser(
-          {
-            userId: user.id,
-            role: user.role as never,
-            tenantId: user.tenantId ?? null,
-          },
-          { onlyUnread, limit },
-        )
+  const isStudent = user.role === "STUDENT" && Boolean(user.studentId)
+  const userScope = {
+    userId: user.id,
+    role: user.role as never,
+    tenantId: user.tenantId ?? null,
+  }
 
-  const unread = items.filter((n) => n.readAt === null).length
+  // Contagem real de nao-lidas (independente do `limit` da pagina) em paralelo
+  // com a busca dos itens. Sem isso o badge ficaria limitado ao tamanho do lote.
+  const [items, unread] = await Promise.all([
+    isStudent
+      ? listForStudent(user.studentId!, { onlyUnread, limit })
+      : listForUser(userScope, { onlyUnread, limit }),
+    isStudent
+      ? countUnreadForStudent(user.studentId!)
+      : countUnreadForUser(userScope),
+  ])
 
   return NextResponse.json({
     data: {

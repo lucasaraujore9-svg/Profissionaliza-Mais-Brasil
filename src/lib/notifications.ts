@@ -9,6 +9,16 @@ import { contextLogger } from "@/lib/logger"
 
 export type NotificationConfigTarget = "TENANT" | "STUDENT" | "ADMIN"
 
+/**
+ * Categorias da audiencia TENANT que pertencem ao DONO da revenda (financeiro
+ * e comissoes de indicacao). Nao devem ser entregues aos consultores
+ * (TenantMember) — so ao owner do tenant.
+ */
+const OWNER_ONLY_TENANT_CATEGORIES = new Set<string>([
+  "tenant-billing",
+  "referral",
+])
+
 function audienceToConfigTarget(
   audience: NotificationAudience,
 ): NotificationConfigTarget {
@@ -147,9 +157,15 @@ export async function shouldSendEmail(
   return isChannelEnabled("email", category, target)
 }
 
+/**
+ * Cria a(s) notificacao(oes) e dispara push (best-effort). Para audiencias de
+ * alvo unico (USER/STUDENT) retorna `{ id }` da linha criada; para fan-out
+ * (TENANT/ROLE) ou quando nada e criado (categoria desligada/preferencia off)
+ * retorna `null`. Nunca lanca.
+ */
 export async function createNotification(
   input: CreateNotificationInput,
-): Promise<void> {
+): Promise<{ id: string } | null> {
   try {
     // Para STUDENT, o gate combina global + override por tenant; e feito mais
     // abaixo, no proprio branch da audience. Para os demais, basta o global.
@@ -157,25 +173,32 @@ export async function createNotification(
       input.audience !== "STUDENT" &&
       !(await isCategoryEnabled(audienceToConfigTarget(input.audience), input.category))
     ) {
-      return
+      return null
     }
     if (input.audience === "TENANT") {
-      // Expande para todos os Users do tenant (owner + memberships)
+      // Expande para os Users do tenant (owner + memberships). Categorias
+      // financeiras (cobranca da revenda, comissoes) sao so do dono — nao
+      // vazam para consultores.
+      const ownerOnly = input.category
+        ? OWNER_ONLY_TENANT_CATEGORIES.has(input.category)
+        : false
       const [owner, members] = await Promise.all([
         prisma.user.findFirst({
           where: { tenantId: input.tenantId },
           select: { id: true },
         }),
-        prisma.tenantMember.findMany({
-          where: { tenantId: input.tenantId },
-          select: { userId: true },
-        }),
+        ownerOnly
+          ? Promise.resolve([] as { userId: string }[])
+          : prisma.tenantMember.findMany({
+              where: { tenantId: input.tenantId },
+              select: { userId: true },
+            }),
       ])
       const userIds = new Set<string>()
       if (owner) userIds.add(owner.id)
       for (const m of members) userIds.add(m.userId)
 
-      if (userIds.size === 0) return
+      if (userIds.size === 0) return null
       // Filtra cada userId pelas suas preferencias in-app
       const enabled = await Promise.all(
         [...userIds].map(async (userId) =>
@@ -185,7 +208,7 @@ export async function createNotification(
         ),
       )
       const filteredUserIds = enabled.filter((u): u is string => u !== null)
-      if (filteredUserIds.length === 0) return
+      if (filteredUserIds.length === 0) return null
 
       await prisma.notification.createMany({
         data: filteredUserIds.map((userId) => ({
@@ -208,7 +231,7 @@ export async function createNotification(
         category: input.category,
         tag: input.category ?? "pmb-tenant",
       })
-      return
+      return null
     }
 
     if (input.audience === "ROLE") {
@@ -216,7 +239,7 @@ export async function createNotification(
         where: { role: input.roleTarget, status: "ATIVO" },
         select: { id: true },
       })
-      if (users.length === 0) return
+      if (users.length === 0) return null
       const enabled = await Promise.all(
         users.map(async (u) =>
           (await isChannelEnabled("in_app", input.category, { userId: u.id }))
@@ -225,7 +248,7 @@ export async function createNotification(
         ),
       )
       const filteredUserIds = enabled.filter((u): u is string => u !== null)
-      if (filteredUserIds.length === 0) return
+      if (filteredUserIds.length === 0) return null
 
       await prisma.notification.createMany({
         data: filteredUserIds.map((userId) => ({
@@ -247,7 +270,7 @@ export async function createNotification(
         category: input.category,
         tag: input.category ?? "pmb-role",
       })
-      return
+      return null
     }
 
     // USER ou STUDENT — checa preferencia individual
@@ -260,10 +283,10 @@ export async function createNotification(
       input.audience === "STUDENT" &&
       !(await isStudentCategoryEnabled(input.category, input.studentId))
     ) {
-      return
+      return null
     }
     if (!(await isChannelEnabled("in_app", input.category, target))) {
-      return
+      return null
     }
 
     const data: Parameters<typeof prisma.notification.create>[0]["data"] = {
@@ -293,11 +316,14 @@ export async function createNotification(
         notificationId: created.id,
       },
     )
+
+    return { id: created.id }
   } catch (err) {
     contextLogger().error(
       { err, event: "notifications.create_failed", category: input.category, audience: input.audience },
       "criar notificação falhou",
     )
+    return null
   }
 }
 
@@ -309,9 +335,12 @@ interface ScopeForUser {
 
 /**
  * Lista as notificacoes visiveis para um User (admin/equipe/revendedor).
- * Inclui: USER (proprias) + ROLE (papel) + TENANT (do tenant que pertence).
- * Em pratica today todas as TENANT/ROLE viram USER no createNotification, mas
- * mantemos a leitura tolerante.
+ *
+ * `createNotification` SEMPRE materializa TENANT/ROLE como N linhas USER (uma
+ * por destinatario, com `userId` proprio). Por isso casamos apenas por
+ * `userId` — NAO por `roleTarget`. Casar por roleTarget faria cada usuario ver
+ * (e poder marcar como lida) as copias de TODOS os outros do mesmo papel,
+ * duplicando o feed e corrompendo o estado de leitura entre eles.
  */
 export async function listForUser(
   scope: ScopeForUser,
@@ -322,7 +351,6 @@ export async function listForUser(
     where: {
       OR: [
         { userId: scope.userId },
-        { roleTarget: scope.role },
         ...(scope.tenantId
           ? [{ tenantId: scope.tenantId, audience: "TENANT" as const }]
           : []),
@@ -332,6 +360,29 @@ export async function listForUser(
     orderBy: { createdAt: "desc" },
     take: limit,
   })
+}
+
+/**
+ * Conta as notificacoes nao-lidas de um User. Espelha o `where` de
+ * `listForUser` mas sem `take`, para o badge nao ficar limitado ao tamanho
+ * da pagina retornada.
+ */
+export async function countUnreadForUser(scope: ScopeForUser): Promise<number> {
+  return prisma.notification.count({
+    where: {
+      readAt: null,
+      OR: [
+        { userId: scope.userId },
+        ...(scope.tenantId
+          ? [{ tenantId: scope.tenantId, audience: "TENANT" as const }]
+          : []),
+      ],
+    },
+  })
+}
+
+export async function countUnreadForStudent(studentId: string): Promise<number> {
+  return prisma.notification.count({ where: { studentId, readAt: null } })
 }
 
 export async function listForStudent(
@@ -361,7 +412,6 @@ export async function markAsRead(
           id: notificationId,
           OR: [
             { userId: ownerCheck.userId },
-            { roleTarget: ownerCheck.role },
             ...(ownerCheck.tenantId
               ? [
                   {
@@ -392,7 +442,6 @@ export async function markAllAsRead(
           readAt: null,
           OR: [
             { userId: ownerCheck.userId },
-            { roleTarget: ownerCheck.role },
             ...(ownerCheck.tenantId
               ? [
                   {

@@ -164,8 +164,11 @@ self.addEventListener("push", (event) => {
     },
     // Vibra so em mobile que suporta — desktop ignora
     vibrate: [80, 40, 80],
-    // renotify=true faz tocar/vibrar de novo mesmo com mesma tag
-    renotify: false,
+    // Como a `tag` agrupa por categoria, uma nova notificacao substitui a
+    // anterior de mesma categoria. renotify=true garante que essa substituicao
+    // ainda alerte (som/vibracao) — senao eventos distintos (ex: 2 mensalidades)
+    // seriam trocados silenciosamente e passariam despercebidos.
+    renotify: true,
   }
 
   event.waitUntil(self.registration.showNotification(title, options))

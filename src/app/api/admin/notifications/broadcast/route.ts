@@ -192,6 +192,18 @@ async function bulkDispatchToStudents(
     tenantOverrides.filter((o) => o.enabled === false).map((o) => o.tenantId),
   )
 
+  // Pré-carrega alunos que desativaram in-app para esta categoria, para o
+  // envio em massa respeitar a preferência individual igual ao envio único
+  // (createNotification). (1 query)
+  const optedOutStudents = new Set<string>()
+  if (fields.category) {
+    const prefs = await prisma.notificationPreference.findMany({
+      where: { category: fields.category, inApp: false, studentId: { not: null } },
+      select: { studentId: true },
+    })
+    for (const p of prefs) if (p.studentId) optedOutStudents.add(p.studentId)
+  }
+
   let delivered = 0
   let cursor: string | undefined = undefined
 
@@ -208,9 +220,12 @@ async function bulkDispatchToStudents(
     if (students.length === 0) break
     cursor = students[students.length - 1].id
 
-    // Filtra alunos cujo tenant tem override desativado
+    // Filtra alunos cujo tenant tem override desativado ou que silenciaram
+    // a categoria individualmente
     const eligible = students.filter(
-      (s) => !s.tenantId || !blockedTenants.has(s.tenantId),
+      (s) =>
+        (!s.tenantId || !blockedTenants.has(s.tenantId)) &&
+        !optedOutStudents.has(s.id),
     )
 
     // Insere em sub-lotes para não exceder parâmetros do Postgres
