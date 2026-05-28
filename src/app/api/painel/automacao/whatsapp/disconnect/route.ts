@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { requireResellerSession } from "@/lib/auth/reseller-session"
 import { withRequestContext } from "@/lib/observability/with-request-context"
-import { stopSession } from "@/lib/automation/wa-client"
+import { disconnectSession } from "@/lib/automation/wa-client"
 
 export const POST = withRequestContext(
   {
@@ -21,12 +21,15 @@ export const POST = withRequestContext(
     })
 
     if (tenant?.waSessionName) {
-      await stopSession(tenant.waSessionName)
+      await disconnectSession(tenant.waSessionName)
     }
 
+    // Zera waSessionName porque a sessao foi apagada do engine — proxima
+    // conexao gera nome novo e cria sessao do zero.
     await prisma.tenant.update({
       where: { id: ctx.tenantId },
       data: {
+        waSessionName: null,
         waStatus: "DISCONNECTED",
         waConnectedPhone: null,
         waStatusUpdatedAt: new Date(),

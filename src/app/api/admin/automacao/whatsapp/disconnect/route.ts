@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { requireAdminSession } from "@/lib/auth/admin-session"
 import { withRequestContext } from "@/lib/observability/with-request-context"
-import { stopSession } from "@/lib/automation/wa-client"
+import { disconnectSession } from "@/lib/automation/wa-client"
 
 export const POST = withRequestContext(
   {
@@ -24,12 +24,15 @@ export const POST = withRequestContext(
     })
 
     if (settings?.pmbWaSessionName) {
-      await stopSession(settings.pmbWaSessionName)
+      await disconnectSession(settings.pmbWaSessionName)
     }
 
+    // Zera pmbWaSessionName porque a sessao foi apagada do engine —
+    // proxima conexao gera nome novo e cria sessao do zero.
     await prisma.systemSettings.update({
       where: { id: "default" },
       data: {
+        pmbWaSessionName: null,
         pmbWaStatus: "DISCONNECTED",
         pmbWaConnectedPhone: null,
         pmbWaStatusUpdatedAt: new Date(),

@@ -169,10 +169,11 @@ function normalizePhone(raw: string): string {
 }
 
 /**
- * Para a sessao no engine (logout).
+ * Para o worker da sessao no engine. Mantem credenciais salvas — para
+ * encerrar a sessao no celular do usuario use logoutSession.
  */
 export async function stopSession(sessionName: string): Promise<void> {
-  await gatewayFetch(`/api/sessions/stop`, {
+  const res = await gatewayFetch(`/api/sessions/stop`, {
     method: "POST",
     body: JSON.stringify({ name: sessionName }),
   }).catch((err) => {
@@ -180,7 +181,74 @@ export async function stopSession(sessionName: string): Promise<void> {
       { err, event: "wa.stop_failed", sessionName },
       "Falha ao parar sessao no engine (ignorado)",
     )
+    return null
   })
+  if (res && !res.ok && res.status !== 404) {
+    contextLogger().warn(
+      { event: "wa.stop_non_ok", sessionName, status: res.status },
+      "Engine respondeu nao-ok no stop (ignorado)",
+    )
+  }
+}
+
+/**
+ * Encerra a sessao no celular do usuario (logout efetivo). Apaga as
+ * credenciais salvas — proxima conexao precisa escanear QR de novo.
+ * Requer que a sessao esteja rodando no engine para funcionar.
+ */
+export async function logoutSession(sessionName: string): Promise<void> {
+  const res = await gatewayFetch(`/api/sessions/logout`, {
+    method: "POST",
+    body: JSON.stringify({ name: sessionName }),
+  }).catch((err) => {
+    contextLogger().warn(
+      { err, event: "wa.logout_failed", sessionName },
+      "Falha ao deslogar sessao no engine (ignorado)",
+    )
+    return null
+  })
+  if (res && !res.ok && res.status !== 404) {
+    contextLogger().warn(
+      { event: "wa.logout_non_ok", sessionName, status: res.status },
+      "Engine respondeu nao-ok no logout (ignorado)",
+    )
+  }
+}
+
+/**
+ * Exclui completamente a sessao no engine (arquivos + config + state).
+ * Apos esta chamada a proxima conexao precisa criar um sessionName novo.
+ */
+export async function deleteSession(sessionName: string): Promise<void> {
+  const res = await gatewayFetch(
+    `/api/sessions/${encodeURIComponent(sessionName)}`,
+    { method: "DELETE" },
+  ).catch((err) => {
+    contextLogger().warn(
+      { err, event: "wa.delete_failed", sessionName },
+      "Falha ao excluir sessao no engine (ignorado)",
+    )
+    return null
+  })
+  if (res && !res.ok && res.status !== 404) {
+    contextLogger().warn(
+      { event: "wa.delete_non_ok", sessionName, status: res.status },
+      "Engine respondeu nao-ok no delete (ignorado)",
+    )
+  }
+}
+
+/**
+ * Desconexao completa: logout → stop → delete. Cada passo e tolerante a
+ * falhas (logs warn) — garante que o estado local sempre limpe mesmo se
+ * o engine estiver fora do ar. Apos esta chamada, callers devem zerar
+ * o sessionName no banco para que um novo nome seja gerado na proxima
+ * conexao (a sessao no engine foi apagada).
+ */
+export async function disconnectSession(sessionName: string): Promise<void> {
+  await logoutSession(sessionName)
+  await stopSession(sessionName)
+  await deleteSession(sessionName)
 }
 
 interface SendTextMessageArgs {
