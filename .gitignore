@@ -50,6 +50,13 @@ prisma/*.db
 # Stitch designs (HTMLs pesados)
 .stitch/designs/*.html
 
+# Scripts operacionais ad-hoc (recuperacao/queries manuais — nao versionar)
+scripts/fix-superadmin.mjs
+scripts/sb-query.mjs
+
+# Claude Code task tracking (estado local efemero)
+.task/
+
 # misc
 *.tsbuildinfo
 next-env.d.ts
