@@ -11,6 +11,7 @@ import {
   Power,
   RefreshCw,
   QrCode,
+  KeyRound,
 } from "lucide-react"
 
 type WaStatus =
@@ -20,6 +21,8 @@ type WaStatus =
   | "WORKING"
   | "FAILED"
 
+type Method = "qr" | "code"
+
 interface PanelProps {
   initialStatus: string
   initialPhone: string | null
@@ -28,6 +31,17 @@ interface PanelProps {
 }
 
 const POLL_MS = 3500
+
+/** Normaliza o telefone digitado para dígitos com DDI. BR sem DDI ganha 55. */
+function normalizePhone(raw: string): string {
+  const digits = raw.replace(/\D/g, "")
+  if (!digits) return ""
+  // 10 (fixo+DDD) ou 11 (móvel+DDD) dígitos sem DDI → assume Brasil (+55)
+  if (!digits.startsWith("55") && (digits.length === 10 || digits.length === 11)) {
+    return `55${digits}`
+  }
+  return digits
+}
 
 export function WhatsAppConnectionPanel({
   initialStatus,
@@ -39,6 +53,9 @@ export function WhatsAppConnectionPanel({
   const [qr, setQr] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [pollingError, setPollingError] = useState<string | null>(null)
+  const [method, setMethod] = useState<Method>("qr")
+  const [pairPhone, setPairPhone] = useState("")
+  const [pairCode, setPairCode] = useState<string | null>(null)
 
   const pollingRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -65,6 +82,7 @@ export function WhatsAppConnectionPanel({
       setQr(body.data.qrDataUrl)
       if (body.data.status === "WORKING" || body.data.status === "FAILED") {
         clearPolling()
+        if (body.data.status === "WORKING") setPairCode(null)
       } else {
         pollingRef.current = setTimeout(poll, POLL_MS)
       }
@@ -86,6 +104,7 @@ export function WhatsAppConnectionPanel({
   async function connect() {
     setBusy(true)
     setPollingError(null)
+    setPairCode(null)
     try {
       const res = await fetch(`${apiBase}/whatsapp/connect`, {
         method: "POST",
@@ -109,6 +128,38 @@ export function WhatsAppConnectionPanel({
     }
   }
 
+  async function pairConnect() {
+    const normalized = normalizePhone(pairPhone)
+    if (normalized.length < 10) {
+      toast.error("Digite o número com DDI e DDD (ex.: 5511999998888)")
+      return
+    }
+    setBusy(true)
+    setPollingError(null)
+    setQr(null)
+    setPairCode(null)
+    try {
+      const res = await fetch(`${apiBase}/whatsapp/pair`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: normalized }),
+      })
+      const body = await res.json()
+      if (!res.ok) {
+        toast.error(body.error ?? "Falha ao gerar código")
+        return
+      }
+      setPairCode(body.data.code)
+      setStatus(body.data.status)
+      clearPolling()
+      pollingRef.current = setTimeout(poll, POLL_MS)
+    } catch {
+      toast.error("Erro de rede")
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function disconnect() {
     if (!confirm("Desconectar o WhatsApp? Os disparos automáticos vão parar.")) return
     setBusy(true)
@@ -125,6 +176,7 @@ export function WhatsAppConnectionPanel({
       setStatus("DISCONNECTED")
       setPhone(null)
       setQr(null)
+      setPairCode(null)
       toast.success("WhatsApp desconectado")
     } catch {
       toast.error("Erro de rede")
@@ -133,8 +185,15 @@ export function WhatsAppConnectionPanel({
     }
   }
 
+  function switchMethod(next: Method) {
+    if (next === method) return
+    setMethod(next)
+    setPollingError(null)
+  }
+
   const isConnected = status === "WORKING"
-  const showQr = status === "SCAN_QR_CODE" && qr
+  const showQr = method === "qr" && status === "SCAN_QR_CODE" && qr
+  const showCode = method === "code" && pairCode
 
   return (
     <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
@@ -165,32 +224,102 @@ export function WhatsAppConnectionPanel({
           </p>
         )}
 
-        <div className="mt-6 flex flex-wrap items-center gap-2">
-          {!isConnected && (
-            <button
-              onClick={connect}
-              disabled={busy}
-              className="inline-flex items-center gap-1.5 rounded-md bg-[var(--color-pmb-green)] px-3 py-2 text-xs font-semibold text-white hover:bg-[var(--color-pmb-green-700)] disabled:opacity-50"
-            >
-              {busy ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        {!isConnected && (
+          <>
+            {/* Seletor de método de conexão */}
+            <div className="mt-6">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                Como conectar
+              </p>
+              <div className="mt-2 inline-flex rounded-lg border border-gray-300 bg-white p-0.5">
+                <button
+                  type="button"
+                  onClick={() => switchMethod("qr")}
+                  className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
+                    method === "qr"
+                      ? "bg-[var(--color-pmb-green)] text-white"
+                      : "text-gray-600 hover:bg-gray-50"
+                  }`}
+                >
+                  <QrCode className="h-3.5 w-3.5" />
+                  QR Code
+                </button>
+                <button
+                  type="button"
+                  onClick={() => switchMethod("code")}
+                  className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
+                    method === "code"
+                      ? "bg-[var(--color-pmb-green)] text-white"
+                      : "text-gray-600 hover:bg-gray-50"
+                  }`}
+                >
+                  <KeyRound className="h-3.5 w-3.5" />
+                  Código
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-4 flex flex-wrap items-end gap-2">
+              {method === "qr" ? (
+                <button
+                  onClick={connect}
+                  disabled={busy}
+                  className="inline-flex items-center gap-1.5 rounded-md bg-[var(--color-pmb-green)] px-3 py-2 text-xs font-semibold text-white hover:bg-[var(--color-pmb-green-700)] disabled:opacity-50"
+                >
+                  {busy ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Smartphone className="h-3.5 w-3.5" />
+                  )}
+                  Iniciar conexão
+                </button>
               ) : (
-                <Smartphone className="h-3.5 w-3.5" />
+                <>
+                  <div className="flex-1 min-w-[180px]">
+                    <label className="text-[11px] font-medium text-gray-600">
+                      Número com DDI + DDD
+                    </label>
+                    <input
+                      type="tel"
+                      inputMode="numeric"
+                      value={pairPhone}
+                      onChange={(e) => setPairPhone(e.target.value)}
+                      placeholder="55 11 99999-8888"
+                      disabled={busy}
+                      className="mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:border-[var(--color-pmb-green)] focus:outline-none focus:ring-1 focus:ring-[var(--color-pmb-green)] disabled:opacity-50"
+                    />
+                  </div>
+                  <button
+                    onClick={pairConnect}
+                    disabled={busy}
+                    className="inline-flex items-center gap-1.5 rounded-md bg-[var(--color-pmb-green)] px-3 py-2 text-xs font-semibold text-white hover:bg-[var(--color-pmb-green-700)] disabled:opacity-50"
+                  >
+                    {busy ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <KeyRound className="h-3.5 w-3.5" />
+                    )}
+                    Gerar código
+                  </button>
+                </>
               )}
-              Iniciar conexão
-            </button>
-          )}
-          {(status === "CONNECTING" || status === "SCAN_QR_CODE") && (
-            <button
-              onClick={poll}
-              disabled={busy}
-              className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-            >
-              <RefreshCw className="h-3.5 w-3.5" />
-              Atualizar status
-            </button>
-          )}
-          {(isConnected || status === "FAILED") && (
+
+              {(status === "CONNECTING" || status === "SCAN_QR_CODE") && (
+                <button
+                  onClick={poll}
+                  disabled={busy}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                >
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  Atualizar status
+                </button>
+              )}
+            </div>
+          </>
+        )}
+
+        {(isConnected || status === "FAILED") && (
+          <div className="mt-6">
             <button
               onClick={disconnect}
               disabled={busy}
@@ -199,8 +328,8 @@ export function WhatsAppConnectionPanel({
               <Power className="h-3.5 w-3.5" />
               Desconectar
             </button>
-          )}
-        </div>
+          </div>
+        )}
 
         <ul className="mt-6 list-disc space-y-1 pl-5 text-xs text-gray-600">
           <li>Use um número exclusivo da unidade (não use o pessoal).</li>
@@ -211,35 +340,71 @@ export function WhatsAppConnectionPanel({
 
       <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
         <h2 className="flex items-center gap-2 text-base font-semibold text-[var(--color-pmb-green-900)]">
-          <QrCode className="h-4 w-4" />
-          QR Code
+          {method === "qr" ? (
+            <>
+              <QrCode className="h-4 w-4" />
+              QR Code
+            </>
+          ) : (
+            <>
+              <KeyRound className="h-4 w-4" />
+              Código de pareamento
+            </>
+          )}
         </h2>
 
-        {showQr ? (
+        {method === "qr" ? (
+          showQr ? (
+            <div className="mt-4 space-y-3">
+              <div className="overflow-hidden rounded-lg border border-gray-200 bg-white p-2">
+                <Image
+                  src={qr}
+                  alt="QR Code WhatsApp"
+                  width={300}
+                  height={300}
+                  className="h-auto w-full"
+                  unoptimized
+                />
+              </div>
+              <ol className="list-decimal space-y-1 pl-5 text-xs text-gray-600">
+                <li>Abra o WhatsApp no celular da unidade.</li>
+                <li>Vá em <strong>Aparelhos conectados</strong> → <strong>Conectar um aparelho</strong>.</li>
+                <li>Aponte a câmera para este QR.</li>
+              </ol>
+            </div>
+          ) : (
+            <p className="mt-3 rounded-lg border border-dashed border-gray-300 bg-gray-50 p-4 text-center text-xs text-gray-500">
+              {isConnected
+                ? "Já conectado. Sem QR para exibir."
+                : status === "CONNECTING"
+                  ? "Aguardando o engine gerar o QR…"
+                  : "Clique em \"Iniciar conexão\" para gerar o QR."}
+            </p>
+          )
+        ) : showCode ? (
           <div className="mt-4 space-y-3">
-            <div className="overflow-hidden rounded-lg border border-gray-200 bg-white p-2">
-              <Image
-                src={qr}
-                alt="QR Code WhatsApp"
-                width={300}
-                height={300}
-                className="h-auto w-full"
-                unoptimized
-              />
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 text-center">
+              <p className="text-[11px] uppercase tracking-wide text-gray-500">
+                Digite este código no WhatsApp
+              </p>
+              <p className="mt-1 select-all font-mono text-2xl font-bold tracking-[0.3em] text-[var(--color-pmb-green-900)]">
+                {pairCode}
+              </p>
             </div>
             <ol className="list-decimal space-y-1 pl-5 text-xs text-gray-600">
               <li>Abra o WhatsApp no celular da unidade.</li>
               <li>Vá em <strong>Aparelhos conectados</strong> → <strong>Conectar um aparelho</strong>.</li>
-              <li>Aponte a câmera para este QR.</li>
+              <li>Toque em <strong>Conectar com número de telefone</strong> e digite o código acima.</li>
             </ol>
+            <p className="text-[11px] text-amber-700">
+              O código expira em cerca de 1 minuto. Se expirar, gere outro.
+            </p>
           </div>
         ) : (
           <p className="mt-3 rounded-lg border border-dashed border-gray-300 bg-gray-50 p-4 text-center text-xs text-gray-500">
             {isConnected
-              ? "Já conectado. Sem QR para exibir."
-              : status === "CONNECTING"
-                ? "Aguardando o engine gerar o QR…"
-                : "Clique em \"Iniciar conexão\" para gerar o QR."}
+              ? "Já conectado. Sem código para exibir."
+              : "Digite o número e clique em \"Gerar código\"."}
           </p>
         )}
       </div>

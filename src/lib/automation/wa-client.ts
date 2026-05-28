@@ -420,3 +420,74 @@ function toChatId(phone: string): string {
   const digits = phone.replace(/\D/g, "")
   return `${digits}@c.us`
 }
+
+interface RequestPairingCodeArgs {
+  sessionName: string
+  phone: string
+}
+
+/**
+ * Solicita um codigo de pareamento (alternativa ao QR). O usuario digita esse
+ * codigo no WhatsApp: Aparelhos conectados → Conectar → "Vincular com numero
+ * de telefone".
+ *
+ * Blindagem: resolve o numero real via check-exists (mesma logica do envio)
+ * antes de pedir o codigo — mitiga erro de digitacao / 9o digito BR. Lanca
+ * WhatsAppNumberNotFoundError se o numero nao tiver WhatsApp. A sessao precisa
+ * ja estar iniciada (SCAN_QR_CODE) — o caller chama startSession antes.
+ */
+export async function requestPairingCode(
+  args: RequestPairingCodeArgs,
+): Promise<{ code: string; phone: string }> {
+  const resolved = await resolveChatId(args.sessionName, args.phone)
+  if (resolved === null) {
+    throw new WhatsAppNumberNotFoundError(args.phone)
+  }
+  // digits do chatId canonico (preferido) ou fallback do que o usuario digitou
+  const phoneNumber = (resolved ?? args.phone)
+    .replace(/@c\.us$/i, "")
+    .replace(/\D/g, "")
+  if (!phoneNumber) {
+    throw new Error("Numero invalido para pareamento")
+  }
+
+  const res = await gatewayFetch(
+    `/api/${encodeURIComponent(args.sessionName)}/auth/request-code`,
+    { method: "POST", body: JSON.stringify({ phoneNumber }) },
+  )
+
+  const txt = await res.text().catch(() => "")
+  if (!res.ok) {
+    contextLogger().error(
+      {
+        event: "wa.request_code_failed",
+        sessionName: args.sessionName,
+        status: res.status,
+        bodyPreview: txt.slice(0, 200),
+      },
+      "Engine recusou pedido de codigo de pareamento",
+    )
+    throw new Error(`Engine recusou request-code (${res.status})`)
+  }
+
+  // Resposta pode vir como JSON { code } ou string crua — toleramos ambos.
+  let code: string | undefined
+  try {
+    const json = JSON.parse(txt) as { code?: string; pairingCode?: string }
+    code = json.code ?? json.pairingCode
+  } catch {
+    code = txt.trim() || undefined
+  }
+  if (!code) {
+    contextLogger().error(
+      {
+        event: "wa.request_code_no_code",
+        sessionName: args.sessionName,
+        bodyPreview: txt.slice(0, 200),
+      },
+      "request-code respondeu sem codigo",
+    )
+    throw new Error("Engine nao retornou o codigo de pareamento")
+  }
+  return { code, phone: phoneNumber }
+}
