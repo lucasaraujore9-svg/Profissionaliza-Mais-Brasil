@@ -28,7 +28,7 @@ Legenda: ✅ Concluído · ⚠️ Parcial · ⏸️ Bloqueado (decisão/externo)
 | 110 | Testes dos fluxos críticos | regressão | ⚠️ **23 testes** cobrindo `applyCouponDiscount` (R5/R6), `validateMpWebhookSignature` (anti-forja), `encrypt/decrypt`, `isValidCpf`, `addMonthsClamped` (R7). Resta: idempotência de `fulfill` (integração c/ DB) e e2e Playwright |
 | 111 | Performance: limites + SQL + batch | R16 | ✅ `take` em relatórios, `date_trunc GROUP BY` no analytics, broadcast em lotes + `createMany` |
 | 112 | Acessibilidade WCAG nível Alto | R30 | ✅ foco visível, `role="alert"`, `autocomplete`, headings, pausa do slideshow |
-| 113 | IDOR cobrança + mustChangePassword | R21, R22 | ✅ rate-limit em `cobranca/*`; enforce server-side de `mustChangePassword` em layouts admin/painel |
+| 113 | IDOR cobrança + mustChangePassword | R21, R22 | ⚠️ R21 ✅ (rate-limit em `cobranca/*`). **R22 REVERTIDO** (hotfix `7d0c630`): o enforce server-side bloqueava contas com flag legada (super admin) em produção. Re-introduzir só após limpar a flag em contas ativas + revalidar JWT pós-troca. |
 | 114 | Refactor: helper único de checkout | R29 | ⚠️ `dueDateInDays` extraído p/ `src/lib/checkout/due-date.ts` e usado nas 3 rotas. Refactor amplo do fluxo adiado (bugs já corrigidos; pede mais testes) |
 | 115 | Hardening edge: IP + matcher do proxy | R20, R28 | ✅ `ipFrom` usa IP confiável; proxy só pula assets estáticos reais |
 
