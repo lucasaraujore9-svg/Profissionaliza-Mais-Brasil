@@ -297,7 +297,9 @@ export function CertificatesList({
                         </a>
                         {row.pdfUrl && (
                           <a
-                            href={row.pdfUrl}
+                            href={revokeEndpoint
+                              .replace("/revoke", "/download")
+                              .replace("{id}", row.id)}
                             target="_blank"
                             rel="noopener noreferrer"
                             download

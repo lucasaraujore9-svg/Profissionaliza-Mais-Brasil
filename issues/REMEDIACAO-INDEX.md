@@ -11,7 +11,7 @@ Legenda: ✅ Concluído · ⚠️ Parcial · ⏸️ Bloqueado (decisão/externo)
 ## ETAPA 1 — Bloqueadores de produção (P0/P1)
 | # | Issue | Riscos | Status |
 |---|---|---|---|
-| 100 | PII (CPF) em bucket público de certificados | R1, R12 | ⚠️ **Read path 100% migrado:** download autenticado já faz stream via service-role; `/validar` agora serve **signed URL** de 5 min (não a URL pública permanente); paths de novos certificados usam cuid não-enumerável; rate-limit no `/validar`. **Resta só (1 clique externo):** virar o bucket `certificates` privado no Supabase. |
+| 100 | PII (CPF) em bucket público de certificados | R1, R12 | ⚠️ **Read path 100% migrado e deployado:** aluno, admin e painel baixam via endpoints que fazem **stream service-role** (`/api/{student,admin,painel}/certificates/[id]/download`, com escopo de tenant no painel); `/validar` serve **signed URL** de 5 min; novos certificados usam path cuid não-enumerável; rate-limit no `/validar`. Nenhuma UI linka mais a URL pública permanente. **Resta só 1 clique:** virar o bucket `certificates` privado no Supabase (zero quebra — fallback cobre a transição). |
 | 101 | Escopar autorização dos papéis PMB | R4, R24 | ✅ `status` escopado por `accountManagerId`; `policy` restrito a SUPER_ADMIN; `billing`/`manager` já eram SUPER_ADMIN; revoke de certificado escopado |
 | 102 | Rollback de enrollment órfão no `/api/checkout` | R2 | ✅ `createdEnrollmentId` rastreado + deletado no catch |
 | 103 | Cálculo de desconto em Decimal | R5 | ✅ `applyCouponDiscount` em `/api/checkout` e `/api/admin/vendas` |
@@ -19,7 +19,7 @@ Legenda: ✅ Concluído · ⚠️ Parcial · ⏸️ Bloqueado (decisão/externo)
 | 105 | Inadimplência consistente | R7, R8 | ✅ R7 (`addMonthsClamped`); R8 — o sweep agora varre `SUSPENDED` (pega os suspensos-por-webhook que não eram bloqueados na plataforma), preservando a carência e sem spam de notificação |
 | 106 | Rate-limit faltante (checkout/senha/uploads) | R9, R11, R19 | ✅ `/api/checkout`, `alterar-senha-inicial` e rotas de upload admin |
 | 107 | Não expor senha temporária em JSON | R10 | ✅ senha agora é **email-only** por default (e-mail de onboarding); o JSON só retorna a senha quando o e-mail falha (fallback); UI degrada para aviso "enviada por e-mail" |
-| 108 | Configurar env obrigatória no Vercel | R31 | ⏸️ Operacional — `.env.example` ✅ alinhado a `env.ts`; resta setar vars no Vercel (esp. `MP_WEBHOOK_SECRET`) |
+| 108 | Configurar env obrigatória no Vercel | R31 | ⚠️ **Verificado via Vercel CLI: TODAS as obrigatórias de `env.ts` já estão em produção, exceto `MP_WEBHOOK_SECRET`.** O valor não existe localmente (é o segredo do webhook no painel do Mercado Pago) — só você pode obtê-lo e rodar `vercel env add MP_WEBHOOK_SECRET production`. |
 
 ## ETAPA 2 — Curto prazo
 | # | Issue | Riscos | Status |
