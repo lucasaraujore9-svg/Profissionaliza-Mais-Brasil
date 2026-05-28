@@ -85,6 +85,34 @@ export function certificatePublicUrl(path: string): string {
 }
 
 /**
+ * Gera uma signed URL de curta duração para o PDF do certificado.
+ * Pré-requisito para tornar o bucket `certificates` PRIVADO (issue 100/R1):
+ * uma vez privado, as rotas autenticadas/validação devem servir o PDF via
+ * esta função em vez de `certificatePublicUrl`. Funciona em bucket público
+ * também — é seguro migrar o read path antes do toggle do bucket.
+ */
+export async function createSignedCertificateUrl(
+  path: string,
+  expiresInSec = 120,
+): Promise<string> {
+  const { url, serviceRoleKey } = getConfig()
+  const signUrl = `${url}/storage/v1/object/sign/${BUCKET}/${path}`
+  const response = await fetch(signUrl, {
+    method: "POST",
+    headers: { ...authHeaders(serviceRoleKey), "Content-Type": "application/json" },
+    body: JSON.stringify({ expiresIn: expiresInSec }),
+  })
+  if (!response.ok) {
+    const message = await extractError(response, "Falha ao assinar URL do certificado")
+    throw new Error(message)
+  }
+  const body = (await response.json()) as { signedURL?: string }
+  if (!body.signedURL) throw new Error("Resposta de signed URL sem signedURL")
+  // signedURL vem como caminho relativo "/object/sign/...": prefixa o host.
+  return `${url}/storage/v1${body.signedURL}`
+}
+
+/**
  * Baixa o PDF (server-side). Util quando queremos servir o conteudo
  * direto via /api (sem expor a URL publica).
  */

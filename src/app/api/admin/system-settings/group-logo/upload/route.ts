@@ -7,6 +7,7 @@ import {
   uploadVitrineAsset,
 } from "@/lib/supabase/storage"
 import { isValidImageMagic } from "@/lib/storage/validate-image"
+import { rateLimit, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 
 const SETTINGS_ID = "default"
@@ -38,6 +39,9 @@ export const POST = withRequestContext(
   async (request: Request) => {
   const guard = await requireSuperAdmin()
   if (!guard.ok) return guard.response
+
+  const rl = await rateLimit(request, RATE_LIMITS.upload)
+  if (!rl.ok) return rateLimitResponse(rl)
 
   let form: FormData
   try {
@@ -112,9 +116,12 @@ export const POST = withRequestContext(
 
 export const DELETE = withRequestContext(
   { action: "admin.system_settings.group_logo.delete", route: "/api/admin/system-settings/group-logo/upload" },
-  async () => {
+  async (request: Request) => {
   const guard = await requireSuperAdmin()
   if (!guard.ok) return guard.response
+
+  const rl = await rateLimit(request, RATE_LIMITS.upload)
+  if (!rl.ok) return rateLimitResponse(rl)
 
   const existing = await prisma.systemSettings.findUnique({
     where: { id: SETTINGS_ID },

@@ -91,7 +91,7 @@ export function ContactForm() {
             required
             minLength={2}
             autoComplete="name"
-            className="mt-1.5 w-full rounded-lg border border-[rgba(2,89,24,0.15)] bg-white px-3.5 py-2.5 text-[14px] text-[var(--color-pmb-green)] outline-none focus:border-[var(--color-pmb-green)]"
+            className="mt-1.5 w-full rounded-lg border border-[rgba(2,89,24,0.15)] bg-white px-3.5 py-2.5 text-[14px] text-[var(--color-pmb-green)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-pmb-green)] focus-visible:ring-offset-2 focus:border-[var(--color-pmb-green)]"
           />
         </label>
         <div className="grid gap-4 sm:grid-cols-2">
@@ -102,7 +102,7 @@ export function ContactForm() {
               type="email"
               required
               autoComplete="email"
-              className="mt-1.5 w-full rounded-lg border border-[rgba(2,89,24,0.15)] bg-white px-3.5 py-2.5 text-[14px] text-[var(--color-pmb-green)] outline-none focus:border-[var(--color-pmb-green)]"
+              className="mt-1.5 w-full rounded-lg border border-[rgba(2,89,24,0.15)] bg-white px-3.5 py-2.5 text-[14px] text-[var(--color-pmb-green)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-pmb-green)] focus-visible:ring-offset-2 focus:border-[var(--color-pmb-green)]"
             />
           </label>
           <label className="block">
@@ -112,7 +112,7 @@ export function ContactForm() {
               type="tel"
               placeholder="(00) 00000-0000"
               autoComplete="tel-national"
-              className="mt-1.5 w-full rounded-lg border border-[rgba(2,89,24,0.15)] bg-white px-3.5 py-2.5 text-[14px] text-[var(--color-pmb-green)] outline-none focus:border-[var(--color-pmb-green)]"
+              className="mt-1.5 w-full rounded-lg border border-[rgba(2,89,24,0.15)] bg-white px-3.5 py-2.5 text-[14px] text-[var(--color-pmb-green)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-pmb-green)] focus-visible:ring-offset-2 focus:border-[var(--color-pmb-green)]"
             />
           </label>
         </div>
@@ -123,7 +123,7 @@ export function ContactForm() {
             required
             minLength={10}
             rows={5}
-            className="mt-1.5 w-full rounded-lg border border-[rgba(2,89,24,0.15)] bg-white px-3.5 py-2.5 text-[14px] text-[var(--color-pmb-green)] outline-none focus:border-[var(--color-pmb-green)]"
+            className="mt-1.5 w-full rounded-lg border border-[rgba(2,89,24,0.15)] bg-white px-3.5 py-2.5 text-[14px] text-[var(--color-pmb-green)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-pmb-green)] focus-visible:ring-offset-2 focus:border-[var(--color-pmb-green)]"
           />
         </label>
 

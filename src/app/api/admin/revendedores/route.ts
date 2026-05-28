@@ -222,7 +222,7 @@ export const POST = withRequestContext(
   // Senha temporária — admin deve enviar manualmente; pode disparar
   // /forgot-password depois.
   const tempPassword = randomBytes(9).toString("base64url")
-  const passwordHash = await hash(tempPassword, 10)
+  const passwordHash = await hash(tempPassword, 12)
 
   // Tenta criar customer + subscription no Asaas. Se ASAAS_API_KEY não
   // estiver configurada, segue sem (admin pode anexar manual depois).
@@ -375,7 +375,10 @@ export const POST = withRequestContext(
     data: {
       tenant,
       owner: { id: user.id, email: user.email },
-      tempPassword,
+      // Só retorna a senha em claro quando o e-mail de onboarding NÃO foi enviado
+      // (fallback para o admin repassar). Com e-mail entregue, o revendedor já
+      // recebeu as credenciais — evita expor a senha no corpo da resposta (R10).
+      tempPassword: emailSent ? null : tempPassword,
       vitrineUrl,
       asaas: {
         configured: Boolean(process.env.ASAAS_API_KEY),

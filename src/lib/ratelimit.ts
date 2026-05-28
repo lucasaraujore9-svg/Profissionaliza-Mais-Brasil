@@ -125,10 +125,17 @@ export function rateLimitResponse(result: RateLimitResult): Response {
 }
 
 function ipFrom(request: Request): string {
-  const xff = request.headers.get("x-forwarded-for")
-  if (xff) return xff.split(",")[0].trim()
+  // Na Vercel, o proxy confiável sempre ANEXA o IP real do cliente como
+  // último segmento de x-forwarded-for. Usar o primeiro segmento é inseguro
+  // pois pode ser forjado pelo cliente. Preferimos x-real-ip (já sanitizado
+  // pela Vercel) e, como fallback, o ÚLTIMO segmento de XFF.
   const real = request.headers.get("x-real-ip")
-  if (real) return real
+  if (real) return real.trim()
+  const xff = request.headers.get("x-forwarded-for")
+  if (xff) {
+    const segments = xff.split(",")
+    return segments[segments.length - 1].trim()
+  }
   return "anon"
 }
 

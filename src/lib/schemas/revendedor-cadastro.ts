@@ -1,8 +1,8 @@
 import { z } from "zod"
+import { isValidCpf } from "@/lib/validation/cpf"
+import { isValidPhone } from "@/lib/validation/phone"
 
-const cpfRegex = /^\d{3}\.?\d{3}\.?\d{3}-?\d{2}$/
 const cnpjRegex = /^\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}$/
-const phoneRegex = /^\(?\d{2}\)?\s?\d{4,5}-?\d{4}$/
 
 export const pessoalSchema = z.object({
   nome: z
@@ -19,11 +19,11 @@ export const pessoalSchema = z.object({
   telefone: z
     .string()
     .trim()
-    .regex(phoneRegex, "Telefone inválido"),
+    .refine(isValidPhone, "Telefone inválido"),
   cpf: z
     .string()
     .trim()
-    .regex(cpfRegex, "CPF inválido"),
+    .refine(isValidCpf, "CPF inválido"),
 })
 
 export const empresaSchema = z.object({

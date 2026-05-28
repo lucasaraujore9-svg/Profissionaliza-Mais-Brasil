@@ -186,7 +186,7 @@ export default async function proxy(request: NextRequest) {
     pathname.startsWith("/_next") ||
     pathname.startsWith("/api/internal") ||
     pathname.startsWith("/favicon.ico") ||
-    pathname.includes(".")
+    /\.(?:ico|png|jpg|jpeg|gif|webp|svg|css|js|map|txt|xml|woff2?|ttf|eot|json)$/i.test(pathname)
   ) {
     return NextResponse.next({ request: { headers: sanitizedHeaders } })
   }

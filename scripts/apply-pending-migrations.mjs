@@ -39,6 +39,7 @@ const { Client } = pg
 
 const MIGRATIONS_DIR = resolve(process.cwd(), "prisma/migrations")
 const TRACKING_TABLE = "_pmb_applied_migrations"
+const MIGRATION_LOCK_ID = 727274
 
 if (process.env.SKIP_PENDING_MIGRATIONS === "1") {
   console.log("[apply-pending] SKIP_PENDING_MIGRATIONS=1 — pulando.")
@@ -162,6 +163,7 @@ async function main() {
 
   const client = new Client({ connectionString: DATABASE_URL })
   await client.connect()
+  await client.query("SELECT pg_advisory_lock($1)", [MIGRATION_LOCK_ID])
   try {
     const isFreshTable = await ensureTracking(client)
 
@@ -192,6 +194,7 @@ async function main() {
       `[apply-pending] concluído. ${applied} aplicadas, ${skipped} já existentes.`,
     )
   } finally {
+    await client.query("SELECT pg_advisory_unlock($1)", [MIGRATION_LOCK_ID])
     await client.end()
   }
 }

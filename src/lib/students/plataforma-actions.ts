@@ -68,8 +68,14 @@ export async function ensureStudentOnPlatform(
   })
   if (!student) throw new Error(`student ${studentId} nao encontrado`)
 
+  // O upsertStudent usa `pending_<timestamp>` como fallback enquanto o aluno
+  // ainda não foi para a plataforma — `parseExternalId` retorna null nesse
+  // caso (NaN não passa o isFinite), então a guarda abaixo já cobre. Mantemos
+  // o startsWith como defesa extra contra valores legados/inconsistentes.
   const existingId = parseExternalId(student.plataformaAlunoId)
-  if (existingId !== null && student.plataformaAlunoId !== "pending") {
+  const isPendingPlaceholder =
+    student.plataformaAlunoId?.startsWith("pending") ?? false
+  if (existingId !== null && !isPendingPlaceholder) {
     return {
       plataformaAlunoId: existingId,
       created: false,

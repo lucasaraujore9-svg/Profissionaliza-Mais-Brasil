@@ -157,7 +157,7 @@ export function LoginForm() {
       </label>
 
       {state.kind === "error" && (
-        <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+        <div role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
           {state.message}
         </div>
       )}

@@ -50,6 +50,7 @@ export function CheckoutFormEmpresa({
               className="pl-9"
               value={value.razaoSocial}
               onChange={(e) => update("razaoSocial", e.target.value)}
+              autoComplete="organization"
             />
           </div>
           {errors.razaoSocial && (
@@ -99,6 +100,7 @@ export function CheckoutFormEmpresa({
               className="pl-9"
               value={value.cidade}
               onChange={(e) => update("cidade", e.target.value)}
+              autoComplete="address-level2"
             />
           </div>
           {errors.cidade && <p className="mt-1 text-xs text-red-600">{errors.cidade}</p>}

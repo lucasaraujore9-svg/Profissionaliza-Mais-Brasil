@@ -1413,3 +1413,31 @@ model AutomationMessageTemplate {
   @@unique([tenantId, key])
   @@map("automation_message_templates")
 }
+
+// Trilha de auditoria persistente para ações sensíveis (block/unblock,
+// impersonation, mudanças financeiras, alteração de permissão, exclusão de
+// dados). Sem FKs de propósito: o registro deve sobreviver à exclusão do ator
+// ou do recurso (imutabilidade forense / LGPD). Escrito por src/lib/audit.ts.
+model AuditLog {
+  id             String   @id @default(cuid())
+  action         String
+  resource       String
+  resourceId     String?  @map("resource_id")
+  actorUserId    String?  @map("actor_user_id")
+  actorStudentId String?  @map("actor_student_id")
+  actorRole      String   @map("actor_role")
+  actorEmail     String?  @map("actor_email")
+  tenantId       String?  @map("tenant_id")
+  payloadBefore  Json?    @map("payload_before")
+  payloadAfter   Json?    @map("payload_after")
+  ip             String?
+  userAgent      String?  @map("user_agent")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@index([actorUserId, createdAt])
+  @@index([tenantId, createdAt])
+  @@index([resource, resourceId])
+  @@index([action, createdAt])
+  @@index([createdAt])
+  @@map("audit_logs")
+}

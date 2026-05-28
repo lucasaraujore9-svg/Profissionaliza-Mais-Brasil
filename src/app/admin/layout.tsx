@@ -1,6 +1,7 @@
 import type { Metadata } from "next"
 import { redirect } from "next/navigation"
 import { requireAdminSession } from "@/lib/auth/admin-session"
+import { auth } from "@/lib/auth"
 import { AdminLayoutShell } from "./layout-shell"
 
 export const metadata: Metadata = {
@@ -15,6 +16,13 @@ export default async function AdminLayout({
 }) {
   const session = await requireAdminSession()
   if (!session) redirect("/login?callbackUrl=/admin")
+
+  // Enforce server-side: usuários que precisam trocar senha são bloqueados
+  // antes de acessar qualquer área protegida.
+  const rawSession = await auth()
+  if (rawSession?.user?.mustChangePassword) {
+    redirect("/alterar-senha-inicial")
+  }
 
   return (
     <AdminLayoutShell

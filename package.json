@@ -7,12 +7,14 @@
     "build": "npm run db:apply-pending && next build",
     "db:apply-pending": "node scripts/apply-pending-migrations.mjs",
     "db:seed": "prisma db seed",
-    "db:reset": "prisma migrate reset --force",
+    "db:reset": "node -e \"if(process.env.NODE_ENV==='production'){console.error('db:reset BLOQUEADO em produção');process.exit(1)}\" && prisma migrate reset --force",
     "db:studio": "prisma studio",
     "start": "next start",
     "lint": "eslint",
     "lint:fix": "eslint --fix",
     "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "audit:prod": "npm audit --omit=dev --audit-level=high",
     "email": "email dev --dir src/lib/email/templates --port 3001",
     "postinstall": "prisma generate"
@@ -28,7 +30,6 @@
     "@upstash/redis": "^1.37.0",
     "@vercel/analytics": "^2.0.1",
     "@vercel/speed-insights": "^2.0.0",
-    "animejs": "^4.4.1",
     "bcryptjs": "^3.0.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -50,14 +51,12 @@
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
     "resend": "^6.11.0",
-    "shadcn": "^4.2.0",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.5.0",
     "tw-animate-css": "^1.4.0",
     "web-push": "^3.6.7",
     "xlsx": "^0.18.5",
-    "zod": "^4.3.6",
-    "zustand": "^5.0.12"
+    "zod": "^4.3.6"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
@@ -77,8 +76,10 @@
     "eslint-config-next": "^16.2.6",
     "pino-pretty": "^13.1.3",
     "react-email": "^6.1.5",
+    "shadcn": "^4.2.0",
     "tailwindcss": "^4",
     "tsx": "^4.21.0",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^3.2.4"
   }
 }

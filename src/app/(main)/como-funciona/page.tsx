@@ -49,14 +49,14 @@ export default function ComoFuncionaPage() {
                 {String(i + 1).padStart(2, "0")}
               </span>
               <p.icon className="h-9 w-9 text-[var(--color-pmb-gold-600)]" strokeWidth={2} aria-hidden />
-              <h3 className="mt-4 text-[18px] font-black text-[var(--color-pmb-green)]">{p.titulo}</h3>
+              <h2 className="mt-4 text-[18px] font-black text-[var(--color-pmb-green)]">{p.titulo}</h2>
               <p className="mt-2 text-[14px] leading-relaxed text-[rgba(2,89,24,0.75)]">{p.texto}</p>
             </li>
           ))}
         </ol>
 
         <div className="mt-10 flex flex-col items-center gap-3 rounded-xl bg-[var(--color-pmb-green)] p-8 text-center text-white">
-          <h3 className="text-[22px] font-black">Pronto para começar?</h3>
+          <h2 className="text-[22px] font-black">Pronto para começar?</h2>
           <p className="max-w-xl text-[14px] text-white/80">
             Escolha seu curso e dê o primeiro passo para uma nova profissão hoje mesmo.
           </p>

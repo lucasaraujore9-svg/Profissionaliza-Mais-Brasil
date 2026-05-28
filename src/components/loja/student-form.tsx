@@ -151,6 +151,7 @@ export function StudentForm({
                 onChange={(e) => setField("nome", e.target.value)}
                 required
                 disabled={submitting}
+                autoComplete="name"
               />
             </div>
             {fieldErrors.nome && (
@@ -172,6 +173,7 @@ export function StudentForm({
                   onChange={(e) => setField("email", e.target.value)}
                   required
                   disabled={submitting}
+                  autoComplete="email"
                 />
               </div>
               {fieldErrors.email && (
@@ -191,6 +193,7 @@ export function StudentForm({
                   onChange={(e) => setField("telefone", formatPhone(e.target.value))}
                   required
                   disabled={submitting}
+                  autoComplete="tel"
                 />
               </div>
               {fieldErrors.telefone && (
@@ -236,8 +239,8 @@ export function StudentForm({
       </div>
 
       {errorMsg && (
-        <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+        <div role="alert" className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
           <span>{errorMsg}</span>
         </div>
       )}

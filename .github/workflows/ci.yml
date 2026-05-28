@@ -39,6 +39,9 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Unit tests
+        run: npm test
+
       # audit não bloqueia: o build pode passar mesmo com vulns conhecidas
       # (xlsx HIGH é risco aceito, documentado em docs/SECURITY.md).
       # Útil só para visibilidade na PR.

@@ -15,6 +15,7 @@ import {
 import { getSystemSettings } from "@/lib/system-settings"
 import { tryConsumeCoupon, releaseCoupon } from "@/lib/coupons/consume"
 import { applyCouponDiscount } from "@/lib/coupons/discount"
+import { dueDateInDays } from "@/lib/checkout/due-date"
 import { swallow } from "@/lib/errors"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 
@@ -22,12 +23,6 @@ const createSchema = z.object({
   courseId: z.string().min(1),
   couponCode: z.string().trim().max(64).optional(),
 })
-
-function dueDateInDays(days: number): string {
-  const d = new Date()
-  d.setDate(d.getDate() + days)
-  return d.toISOString().slice(0, 10)
-}
 
 
 export const POST = withRequestContext(

@@ -7,6 +7,7 @@ import {
   uploadVitrineAsset,
 } from "@/lib/supabase/storage"
 import { isValidImageMagic } from "@/lib/storage/validate-image"
+import { rateLimit, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 
 const MAX_BYTES = 5 * 1024 * 1024
@@ -50,6 +51,9 @@ export const POST = withRequestContext(
   async (request: Request) => {
   const guard = await requireSuperAdmin()
   if (!guard.ok) return guard.response
+
+  const rl = await rateLimit(request, RATE_LIMITS.upload)
+  if (!rl.ok) return rateLimitResponse(rl)
 
   let form: FormData
   try {
@@ -140,6 +144,9 @@ export const DELETE = withRequestContext(
   async (request: Request) => {
   const guard = await requireSuperAdmin()
   if (!guard.ok) return guard.response
+
+  const rl = await rateLimit(request, RATE_LIMITS.upload)
+  if (!rl.ok) return rateLimitResponse(rl)
 
   const url = new URL(request.url)
   const kind = (url.searchParams.get("kind") ?? "").trim() as Kind

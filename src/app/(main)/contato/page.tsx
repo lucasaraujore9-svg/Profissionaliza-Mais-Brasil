@@ -37,9 +37,9 @@ export default function ContatoPage() {
                     aria-hidden
                   />
                 )}
-                <h3 className="mt-3 text-[15px] font-black text-[var(--color-pmb-green)]">
+                <h2 className="mt-3 text-[15px] font-black text-[var(--color-pmb-green)]">
                   {support.isWhatsapp ? "WhatsApp" : "Central de atendimento"}
-                </h3>
+                </h2>
                 {support.phoneLabel && (
                   <p className="mt-1 text-[14px] text-[rgba(2,89,24,0.75)]">
                     {support.phoneLabel}
@@ -64,9 +64,9 @@ export default function ContatoPage() {
                 strokeWidth={2}
                 aria-hidden
               />
-              <h3 className="mt-3 text-[15px] font-black text-[var(--color-pmb-green)]">
+              <h2 className="mt-3 text-[15px] font-black text-[var(--color-pmb-green)]">
                 E-mail
-              </h3>
+              </h2>
               <p className="mt-1 break-all text-[14px] text-[rgba(2,89,24,0.75)]">
                 {support.email}
               </p>
@@ -78,9 +78,9 @@ export default function ContatoPage() {
                 strokeWidth={2}
                 aria-hidden
               />
-              <h3 className="mt-3 text-[15px] font-black text-[var(--color-pmb-green)]">
+              <h2 className="mt-3 text-[15px] font-black text-[var(--color-pmb-green)]">
                 Horário
-              </h3>
+              </h2>
               <p className="mt-1 text-[14px] text-[rgba(2,89,24,0.75)]">
                 {support.hours}
               </p>
@@ -92,9 +92,9 @@ export default function ContatoPage() {
                 strokeWidth={2}
                 aria-hidden
               />
-              <h3 className="mt-3 text-[15px] font-black text-[var(--color-pmb-green)]">
+              <h2 className="mt-3 text-[15px] font-black text-[var(--color-pmb-green)]">
                 Onde estamos
-              </h3>
+              </h2>
               <p className="mt-1 text-[14px] text-[rgba(2,89,24,0.75)]">
                 Atendimento 100% online em todo o Brasil
               </p>

@@ -36,8 +36,12 @@ async function makeQrDataUrl(text: string): Promise<string | null> {
   }
 }
 
-function pdfPathFor(tenantId: string | null, code: string): string {
-  return `${tenantId ?? "pmb"}/${code}.pdf`
+function pdfPathFor(tenantId: string | null, certId: string): string {
+  // Usa o id (cuid) do certificado, NÃO o `code` público. O `code` aparece em
+  // /validar/{code} (~28 bits) — usá-lo no path tornava a URL do PDF enumerável,
+  // permitindo raspagem em massa de PDFs com CPF (R1). O cuid não é exposto e é
+  // estável (re-gerar sobrescreve o mesmo objeto — mantém idempotência).
+  return `${tenantId ?? "pmb"}/${certId}.pdf`
 }
 
 /**
@@ -102,7 +106,7 @@ export async function generateAndUploadPdf(
   })
 
   const buffer = await renderToBuffer(element)
-  const path = pdfPathFor(cert.tenantId, cert.code)
+  const path = pdfPathFor(cert.tenantId, cert.id)
   const upload = await uploadCertificatePdf(path, buffer)
 
   await prisma.certificate.update({

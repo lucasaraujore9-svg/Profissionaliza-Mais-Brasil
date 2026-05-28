@@ -36,13 +36,22 @@ export const POST = withRequestContextParams<{ id: string }>(
 
   const cert = await prisma.certificate.findUnique({
     where: { id },
-    select: { id: true, revokedAt: true },
+    select: { id: true, revokedAt: true, tenantId: true },
   })
   if (!cert) {
     return NextResponse.json({ error: "Certificado não encontrado" }, { status: 404 })
   }
   if (cert.revokedAt) {
     return NextResponse.json({ error: "Certificado já está revogado" }, { status: 409 })
+  }
+
+  // R24: PMB staff (PMB_SALES, PMB_RESELLER_MGR) só podem revogar certificados PMB
+  // (tenantId = null). Certificados de revendedores (tenantId != null) exigem SUPER_ADMIN.
+  if (cert.tenantId !== null && ctx.role !== "SUPER_ADMIN") {
+    return NextResponse.json(
+      { error: "Apenas SUPER_ADMIN pode revogar certificados de revendedores" },
+      { status: 403 },
+    )
   }
 
   try {

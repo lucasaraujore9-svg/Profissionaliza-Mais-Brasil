@@ -335,7 +335,8 @@ function CardTab({
               value={form.holderName}
               onChange={(e) => set("holderName", e.target.value.toUpperCase())}
               placeholder="COMO IMPRESSO NO CARTÃO"
-              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-[var(--color-pmb-green)] focus:outline-none"
+              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-[var(--color-pmb-green)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-pmb-green)] focus-visible:ring-offset-2"
+              autoComplete="cc-name"
             />
           </Field>
           <Field label="Número do cartão">
@@ -346,7 +347,8 @@ function CardTab({
               value={form.number}
               onChange={(e) => set("number", formatCardNumber(e.target.value))}
               placeholder="0000 0000 0000 0000"
-              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-[var(--color-pmb-green)] focus:outline-none font-mono tracking-widest"
+              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-[var(--color-pmb-green)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-pmb-green)] focus-visible:ring-offset-2 font-mono tracking-widest"
+              autoComplete="cc-number"
               maxLength={19}
             />
           </Field>
@@ -361,8 +363,9 @@ function CardTab({
                   set("expiryMonth", e.target.value.replace(/\D/g, "").slice(0, 2))
                 }
                 placeholder="MM"
-                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-[var(--color-pmb-green)] focus:outline-none font-mono"
+                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-[var(--color-pmb-green)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-pmb-green)] focus-visible:ring-offset-2 font-mono"
                 maxLength={2}
+                autoComplete="cc-exp-month"
               />
             </Field>
             <Field label="Ano">
@@ -375,8 +378,9 @@ function CardTab({
                   set("expiryYear", e.target.value.replace(/\D/g, "").slice(0, 4))
                 }
                 placeholder="AAAA"
-                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-[var(--color-pmb-green)] focus:outline-none font-mono"
+                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-[var(--color-pmb-green)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-pmb-green)] focus-visible:ring-offset-2 font-mono"
                 maxLength={4}
+                autoComplete="cc-exp-year"
               />
             </Field>
             <Field label="CVV">
@@ -389,8 +393,9 @@ function CardTab({
                   set("ccv", e.target.value.replace(/\D/g, "").slice(0, 4))
                 }
                 placeholder="000"
-                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-[var(--color-pmb-green)] focus:outline-none font-mono"
+                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-[var(--color-pmb-green)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-pmb-green)] focus-visible:ring-offset-2 font-mono"
                 maxLength={4}
+                autoComplete="cc-csc"
               />
             </Field>
           </div>
@@ -409,7 +414,8 @@ function CardTab({
               value={form.name}
               onChange={(e) => set("name", e.target.value)}
               placeholder="Seu nome completo"
-              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-[var(--color-pmb-green)] focus:outline-none"
+              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-[var(--color-pmb-green)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-pmb-green)] focus-visible:ring-offset-2"
+              autoComplete="name"
             />
           </Field>
           <Field label="E-mail">
@@ -419,7 +425,8 @@ function CardTab({
               value={form.email}
               onChange={(e) => set("email", e.target.value)}
               placeholder="seu@email.com"
-              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-[var(--color-pmb-green)] focus:outline-none"
+              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-[var(--color-pmb-green)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-pmb-green)] focus-visible:ring-offset-2"
+              autoComplete="email"
             />
           </Field>
           <div className="grid grid-cols-2 gap-3">
@@ -433,7 +440,7 @@ function CardTab({
                   set("cpfCnpj", e.target.value.replace(/\D/g, "").slice(0, 14))
                 }
                 placeholder="000.000.000-00"
-                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-[var(--color-pmb-green)] focus:outline-none font-mono"
+                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-[var(--color-pmb-green)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-pmb-green)] focus-visible:ring-offset-2 font-mono"
               />
             </Field>
             <Field label="Telefone">
@@ -446,7 +453,8 @@ function CardTab({
                   set("phone", e.target.value.replace(/\D/g, "").slice(0, 11))
                 }
                 placeholder="(00) 00000-0000"
-                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-[var(--color-pmb-green)] focus:outline-none font-mono"
+                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-[var(--color-pmb-green)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-pmb-green)] focus-visible:ring-offset-2 font-mono"
+                autoComplete="tel"
               />
             </Field>
           </div>
@@ -461,7 +469,8 @@ function CardTab({
                   set("postalCode", e.target.value.replace(/\D/g, "").slice(0, 8))
                 }
                 placeholder="00000-000"
-                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-[var(--color-pmb-green)] focus:outline-none font-mono"
+                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-[var(--color-pmb-green)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-pmb-green)] focus-visible:ring-offset-2 font-mono"
+                autoComplete="postal-code"
               />
             </Field>
             <Field label="Número">
@@ -471,7 +480,8 @@ function CardTab({
                 value={form.addressNumber}
                 onChange={(e) => set("addressNumber", e.target.value)}
                 placeholder="123"
-                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-[var(--color-pmb-green)] focus:outline-none"
+                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-[var(--color-pmb-green)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-pmb-green)] focus-visible:ring-offset-2"
+                autoComplete="address-line2"
               />
             </Field>
           </div>
@@ -479,7 +489,7 @@ function CardTab({
       </div>
 
       {error && (
-        <div className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">
+        <div role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">
           {error}
         </div>
       )}

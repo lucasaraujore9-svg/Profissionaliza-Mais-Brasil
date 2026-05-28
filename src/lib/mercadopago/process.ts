@@ -288,11 +288,26 @@ export async function processMpWebhook(args: ProcessArgs): Promise<void> {
     }
 
     if (!tenant || !tenant.mpAccessToken) {
-      await markLog(
-        logId,
-        true,
-        `tenant nao resolvido: slug=${tenantSlug ?? "(pmb)"}`,
+      // Antes marcávamos como processed=true e retornávamos 200 ao MP —
+      // pagamento aprovado virava aluno NUNCA matriculado, sem retry e sem
+      // visibilidade. Agora: deixamos processed=false (para inspeção via
+      // WebhookLog) e alertamos os admins para investigar. NÃO lançamos erro
+      // (causaria retry infinito do MP enquanto o slug não for corrigido).
+      const reason = `tenant nao resolvido: slug=${tenantSlug ?? "(pmb)"}`
+      await markLog(logId, false, reason)
+      contextLogger().error(
+        { event: "mp.process.tenant_unresolved", tenantSlug, paymentId },
+        "webhook MP recebido mas tenant nao foi resolvido — pagamento orfao",
       )
+      await createNotification({
+        audience: "ROLE",
+        roleTarget: "SUPER_ADMIN",
+        level: "ERROR",
+        title: "Webhook MP sem tenant",
+        body: `paymentId=${paymentId} slug=${tenantSlug ?? "(pmb)"} — pagamento aprovado pode estar sem matricula. Verifique WebhookLog ${logId}.`,
+        category: "webhook",
+        href: "/admin/webhooks",
+      }).catch(swallow("mp.process.notify"))
       return
     }
 

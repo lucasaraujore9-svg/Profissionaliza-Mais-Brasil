@@ -4,9 +4,8 @@ import "./globals.css";
 import { ServiceWorkerRegister } from "@/components/pwa/sw-register";
 import { PwaInstallPrompt } from "@/components/pwa/install-prompt";
 import { CookieConsent } from "@/components/shared/cookie-consent";
+import { AnalyticsGate } from "@/components/shared/analytics-gate";
 import { Toaster } from "sonner";
-import { Analytics } from "@vercel/analytics/react";
-import { SpeedInsights } from "@vercel/speed-insights/next";
 
 // Validação de envs roda via src/instrumentation.ts (runtime-only).
 // NÃO chamar assertEnv() aqui — o layout é executado durante "next build"
@@ -105,10 +104,9 @@ export default function RootLayout({
         <CookieConsent />
         <ServiceWorkerRegister />
         <PwaInstallPrompt />
-        {/* Vercel Analytics + Speed Insights — métricas de Web Vitals
-            (LCP, INP, CLS) e tráfego sem cookies. Auto-disable em dev. */}
-        <Analytics />
-        <SpeedInsights />
+        {/* Vercel Analytics + Speed Insights — carregam SOMENTE após
+            consentimento explícito (LGPD R15). Gerenciado por AnalyticsGate. */}
+        <AnalyticsGate />
       </body>
     </html>
   );

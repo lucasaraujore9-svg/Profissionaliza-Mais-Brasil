@@ -1,4 +1,7 @@
 import { contextLogger } from "@/lib/logger"
+import { prisma } from "@/lib/prisma"
+import { swallow } from "@/lib/errors"
+import { Prisma } from "@prisma/client"
 
 /**
  * Audit log estruturado.
@@ -8,15 +11,11 @@ import { contextLogger } from "@/lib/logger"
  *   mark-paid, criação/desativação de cupom, impersonation, refund) precisam
  *   deixar trilha permanente para investigação forense e conformidade LGPD.
  *
- *   A versão definitiva exigiria um model `AuditLog` no Prisma. A migration
- *   foi suspensa porque DB compartilhado precisa autorização explícita do
- *   operador — em vez disso, padronizamos a emissão via logger Pino com
- *   `event: "audit.*"` para que dataset Axiom/Logflare/Datadog indexe e
- *   permita queries (`event:audit.*`).
- *
- *   Quando AuditLog table existir, basta trocar `logger.info` por
- *   `prisma.auditLog.create` aqui — todos os call-sites já passam os
- *   campos corretos.
+ *   Persiste na tabela `audit_logs` (model AuditLog) E emite no logger Pino
+ *   (`event: "audit.*"`) — redundância: o banco dá trilha consultável/forense
+ *   e o stream Pino alimenta dataset externo (Axiom/Datadog) para alertas.
+ *   A persistência falha de forma segura (swallow) para nunca derrubar a
+ *   operação de negócio caso o INSERT de auditoria falhe.
  *
  * Como usar:
  *   await logAudit({
@@ -47,6 +46,33 @@ export interface AuditEntry {
 }
 
 export async function logAudit(entry: AuditEntry): Promise<void> {
+  // Persiste no banco (trilha forense consultável). Falha de forma segura —
+  // auditoria nunca deve derrubar a operação de negócio que a disparou.
+  await prisma.auditLog
+    .create({
+      data: {
+        action: entry.action,
+        resource: entry.resource,
+        resourceId: entry.resourceId ?? null,
+        actorUserId: entry.actorUserId ?? null,
+        actorStudentId: entry.actorStudentId ?? null,
+        actorRole: entry.actorRole,
+        actorEmail: entry.actorEmail ?? null,
+        tenantId: entry.tenantId ?? null,
+        payloadBefore:
+          entry.payloadBefore == null
+            ? Prisma.DbNull
+            : (entry.payloadBefore as Prisma.InputJsonValue),
+        payloadAfter:
+          entry.payloadAfter == null
+            ? Prisma.DbNull
+            : (entry.payloadAfter as Prisma.InputJsonValue),
+        ip: entry.ip ?? null,
+        userAgent: entry.userAgent ?? null,
+      },
+    })
+    .catch(swallow("audit.persist"))
+
   contextLogger().info(
     {
       event: `audit.${entry.action}`,

@@ -6,8 +6,7 @@ import { createNotification } from "@/lib/notifications"
 import { rateLimit, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
 import { contextLogger } from "@/lib/logger"
 import { withRequestContext } from "@/lib/observability/with-request-context"
-
-const phoneRegex = /^\(?\d{2}\)?\s?\d{4,5}-?\d{4}$/
+import { isValidPhone } from "@/lib/validation/phone"
 
 // Aceita ambos `companyName` (landing de revendedor) e `name`/`nome`
 // (form de contato). Telefone passa a ser opcional para suportar mensagens
@@ -34,7 +33,7 @@ const leadSchema = z
   .refine(
     (v) => {
       const phone = (v.phone ?? v.telefone ?? "").trim()
-      return phone.length === 0 || phoneRegex.test(phone)
+      return phone.length === 0 || isValidPhone(phone)
     },
     { message: "Telefone inválido. Use (11) 99999-9999", path: ["phone"] },
   )

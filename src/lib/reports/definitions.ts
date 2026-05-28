@@ -32,6 +32,9 @@ export interface ReportDef {
   needsSuperAdmin?: boolean
 }
 
+/** Limite de segurança: nenhum relatório exporta mais que MAX_REPORT_ROWS linhas */
+const MAX_REPORT_ROWS = 10_000
+
 export const REPORT_DEFS: ReportDef[] = [
   // ── Vendas ──
   {
@@ -182,6 +185,7 @@ const RUNNERS: Record<string, ReportRunner> = {
       const rows = await prisma.enrollment.findMany({
         where,
         orderBy: { createdAt: "desc" },
+        take: MAX_REPORT_ROWS,
         include: {
           student: { select: { nome: true, email: true, cpf: true } },
           course: { select: { nome: true, categoriaLoja: true } },
@@ -247,6 +251,7 @@ const RUNNERS: Record<string, ReportRunner> = {
             : {}),
         },
         orderBy: { createdAt: "desc" },
+        take: MAX_REPORT_ROWS,
         include: {
           student: { select: { nome: true, email: true, cpf: true } },
           course: { select: { nome: true } },
@@ -302,6 +307,7 @@ const RUNNERS: Record<string, ReportRunner> = {
             : {}),
         },
         orderBy: { createdAt: "desc" },
+        take: MAX_REPORT_ROWS,
         include: {
           student: { select: { nome: true, email: true } },
           course: { select: { nome: true } },
@@ -350,6 +356,7 @@ const RUNNERS: Record<string, ReportRunner> = {
             : {}),
         },
         orderBy: { createdAt: "desc" },
+        take: MAX_REPORT_ROWS,
         include: {
           student: { select: { nome: true } },
           course: { select: { nome: true } },
@@ -404,6 +411,7 @@ const RUNNERS: Record<string, ReportRunner> = {
       const rows = await prisma.student.findMany({
         where: filters.tenantId ? { tenantId: filters.tenantId } : undefined,
         orderBy: { createdAt: "desc" },
+        take: MAX_REPORT_ROWS,
         include: {
           tenant: { select: { name: true, slug: true } },
           _count: {
@@ -450,6 +458,7 @@ const RUNNERS: Record<string, ReportRunner> = {
       const rows = await prisma.student.findMany({
         where: { tenant: { slug: "__pmb__" } },
         orderBy: { createdAt: "desc" },
+        take: MAX_REPORT_ROWS,
         include: {
           _count: {
             select: {
@@ -478,6 +487,7 @@ const RUNNERS: Record<string, ReportRunner> = {
     async generate() {
       const tenants = await prisma.tenant.findMany({
         orderBy: { name: "asc" },
+        take: MAX_REPORT_ROWS,
         select: {
           id: true,
           name: true,
@@ -523,6 +533,7 @@ const RUNNERS: Record<string, ReportRunner> = {
     async generate() {
       const tenants = await prisma.tenant.findMany({
         orderBy: { createdAt: "desc" },
+        take: MAX_REPORT_ROWS,
         include: {
           owner: { select: { name: true, email: true } },
           accountManager: { select: { name: true } },
@@ -621,6 +632,7 @@ const RUNNERS: Record<string, ReportRunner> = {
           ...(filters.tenantId ? { tenantId: filters.tenantId } : {}),
         },
         orderBy: { paidAt: "desc" },
+        take: MAX_REPORT_ROWS,
         include: {
           enrollment: {
             include: {
@@ -676,6 +688,7 @@ const RUNNERS: Record<string, ReportRunner> = {
             : {}),
         },
         orderBy: { dueDate: "desc" },
+        take: MAX_REPORT_ROWS,
         include: { tenant: { select: { name: true, slug: true } } },
       })
       return {
@@ -709,6 +722,7 @@ const RUNNERS: Record<string, ReportRunner> = {
       const rows = await prisma.tenantPayment.findMany({
         where: { status: "OVERDUE" },
         orderBy: { dueDate: "asc" },
+        take: MAX_REPORT_ROWS,
         include: {
           tenant: {
             select: {
@@ -787,6 +801,7 @@ const RUNNERS: Record<string, ReportRunner> = {
             ? { createdAt: { ...(start ? { gte: start } : {}), ...(end ? { lte: end } : {}) } }
             : {}),
         },
+        take: MAX_REPORT_ROWS,
         select: {
           finalAmount: true,
           tenantId: true,
@@ -794,6 +809,7 @@ const RUNNERS: Record<string, ReportRunner> = {
         },
       })
       const courses = await prisma.course.findMany({
+        take: MAX_REPORT_ROWS,
         select: { id: true, nome: true, categoriaLoja: true, status: true },
       })
       type Row = {

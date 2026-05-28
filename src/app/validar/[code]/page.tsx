@@ -4,6 +4,11 @@ import { headers } from "next/headers"
 import { prisma } from "@/lib/prisma"
 import { PMB_TENANT_NAME } from "@/lib/pmb-config"
 import { rateLimitByKey, RATE_LIMITS } from "@/lib/ratelimit"
+import {
+  createSignedCertificateUrl,
+  extractCertificatePath,
+} from "@/lib/certificates/storage"
+import { swallow } from "@/lib/errors"
 
 function formatDate(d: Date): string {
   return new Date(d).toLocaleDateString("pt-BR", {
@@ -267,6 +272,20 @@ export default async function ValidateCertificatePage({ params }: Props) {
   const isRevoked = cert.revokedAt !== null
   const logoSrc = cert.tenant?.logoUrl ?? null
 
+  // Link de download via signed URL de curta duração (não expõe a URL pública
+  // permanente). Funciona com bucket público ou privado — pré-requisito para
+  // tornar o bucket privado (issue 100/R1). Fallback para a URL armazenada.
+  let pdfDownloadUrl: string | null = cert.pdfUrl
+  if (cert.pdfUrl && !isRevoked) {
+    const path = extractCertificatePath(cert.pdfUrl)
+    if (path) {
+      const signed = await createSignedCertificateUrl(path, 300).catch(
+        swallow("validar.sign_url"),
+      )
+      if (signed) pdfDownloadUrl = signed
+    }
+  }
+
   return (
     <PageShell>
       {/* Banner principal de status */}
@@ -456,9 +475,9 @@ export default async function ValidateCertificatePage({ params }: Props) {
                 </>
               )}
             </p>
-            {!isRevoked && cert.pdfUrl && (
+            {!isRevoked && pdfDownloadUrl && (
               <a
-                href={cert.pdfUrl}
+                href={pdfDownloadUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center justify-center gap-2 rounded-full bg-[var(--color-pmb-green)] px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[var(--color-pmb-green-700)]"

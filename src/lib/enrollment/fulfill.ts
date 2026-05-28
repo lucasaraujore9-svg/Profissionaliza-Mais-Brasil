@@ -214,19 +214,64 @@ async function fulfillEnrollmentLocked(
 
   // Primeira cobranca: garante aluno na plataforma + vincula o curso (mesma rota
   // usada pelas concessoes manuais via /admin/alunos/[id]/cursos).
-  const { plataformaAlunoId, created, plataformaSenha } =
-    await ensureStudentOnPlatform(enrollment.student.id)
-  await linkCourseToStudent(enrollment.student.id, enrollment.course.id)
+  // Erros aqui (ex: curso sem plataforma_course_id) NÃO devem ficar invisíveis:
+  // notificamos SUPER_ADMIN antes de relançar — o webhook é retentado pelo MP
+  // mas sem o aviso ninguém saberia que a esteira travou.
+  let plataformaAlunoId: number
+  let created: boolean
+  let plataformaSenha: string | null
+  try {
+    const ensured = await ensureStudentOnPlatform(enrollment.student.id)
+    plataformaAlunoId = ensured.plataformaAlunoId
+    created = ensured.created
+    plataformaSenha = ensured.plataformaSenha
+    await linkCourseToStudent(enrollment.student.id, enrollment.course.id)
+  } catch (err) {
+    contextLogger().error(
+      {
+        err,
+        event: "fulfill.platform_link_failed",
+        enrollmentId: enrollment.id,
+        studentId: enrollment.student.id,
+        courseId: enrollment.course.id,
+      },
+      "matricula na plataforma de aulas falhou — alertando admin",
+    )
+    await createNotification({
+      audience: "ROLE",
+      roleTarget: "SUPER_ADMIN",
+      level: "ERROR",
+      title: "Matricula na plataforma falhou",
+      body: `Aluno ${enrollment.student.nome} pagou ${enrollment.course.nome} mas a plataforma de aulas rejeitou a integracao. Erro: ${err instanceof Error ? err.message : "desconhecido"}`,
+      category: "fulfillment",
+      href: `/admin/alunos/${enrollment.student.id}`,
+    }).catch(swallow("fulfill.notify_admin"))
+    throw err
+  }
 
   // Envia email de boas-vindas com credenciais somente quando criamos o aluno
-  // agora (evita spam em recompras).
+  // agora (evita spam em recompras). Rastreamos o sucesso pra decidir se
+  // podemos zerar a senha plaintext do DB no fim do fluxo.
+  let credentialsEmailSent = false
   if (created) {
-    await enviarEmailCredenciais(plataformaAlunoId).catch((err) => {
+    try {
+      await enviarEmailCredenciais(plataformaAlunoId)
+      credentialsEmailSent = true
+    } catch (err) {
       contextLogger().error(
-        { err, event: "fulfill.plataforma_email_failed", plataformaAlunoId },
+        { err, event: "fulfill.plataforma_email_failed", plataformaAlunoId, studentId: enrollment.student.id },
         "envioemail da plataforma falhou para aluno",
       )
-    })
+      await createNotification({
+        audience: "ROLE",
+        roleTarget: "SUPER_ADMIN",
+        level: "WARNING",
+        title: "Email de credenciais da plataforma falhou",
+        body: `Aluno ${enrollment.student.nome} foi matriculado mas o email com login/senha da plataforma nao foi enviado. Reenvie manualmente.`,
+        category: "fulfillment",
+        href: `/admin/alunos/${enrollment.student.id}`,
+      }).catch(swallow("fulfill.notify_credentials"))
+    }
   }
 
   // Primeira cobranca cobre a 1a parcela quando MONTHLY
@@ -342,7 +387,6 @@ async function fulfillEnrollmentLocked(
       storeName = tenant.name ?? `Loja ${tenant.slug}`
     }
 
-    let emailSent = false
     try {
       await sendEmail({
         to: enrollment.student.email,
@@ -357,28 +401,28 @@ async function fulfillEnrollmentLocked(
           },
         },
       })
-      emailSent = true
     } catch (err) {
       contextLogger().error(
         { err, event: "fulfill.enrollment_email_failed", enrollmentId: enrollment.id, studentId: enrollment.student.id },
         "enrollment email falhou",
       )
     }
+  }
 
-    // Segurança: zera a senha plaintext da plataforma do banco assim que
-    // confirmamos a entrega do email. A senha da plataforma é entregue
-    // separadamente pelo `enviarEmailCredenciais` (chamado acima); aqui
-    // só limpamos o cache local. Se DB vazar depois disso, atacante
-    // não consegue logar como aluno na plataforma — só restaria fluxo
-    // "esqueci senha" da plataforma parceira.
-    if (emailSent && plataformaSenha) {
-      await prisma.student
-        .update({
-          where: { id: enrollment.student.id },
-          data: { plataformaAlunoSenha: null },
-        })
-        .catch(swallow("fulfill.clearPlataformaSenha"))
-    }
+  // Segurança: zera a senha plaintext da plataforma do banco APENAS quando
+  // confirmamos que o email com as credenciais foi enviado (enviarEmailCredenciais
+  // acima). Antes a flag dependia do email de "Matrícula confirmada" — que pode
+  // ser enviado mesmo quando o email de credenciais falha, deixando o aluno sem
+  // login na plataforma e sem senha no DB. Agora só limpa se a entrega real
+  // aconteceu. Recompras (created=false) não geram nova senha, então não há
+  // o que zerar.
+  if (credentialsEmailSent && plataformaSenha) {
+    await prisma.student
+      .update({
+        where: { id: enrollment.student.id },
+        data: { plataformaAlunoSenha: null },
+      })
+      .catch(swallow("fulfill.clearPlataformaSenha"))
   }
 
   // Notificacoes in-app

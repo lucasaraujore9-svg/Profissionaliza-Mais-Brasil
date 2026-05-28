@@ -17,6 +17,9 @@ import {
 } from "@/lib/asaas/client"
 import { getOrCreatePmbTenant } from "@/lib/pmb-tenant"
 import { tryConsumeCoupon, releaseCoupon } from "@/lib/coupons/consume"
+import { applyCouponDiscount } from "@/lib/coupons/discount"
+import { dueDateInDays } from "@/lib/checkout/due-date"
+import { rateLimit, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
 import {
   pmbPlataformaPolo,
   pmbPlataformaVendedorId,
@@ -24,14 +27,13 @@ import {
 } from "@/lib/pmb-config"
 import { getSystemSettings } from "@/lib/system-settings"
 import { swallow } from "@/lib/errors"
-import { upsertStudent } from "@/lib/students/upsert"
+import { upsertStudent, StudentEmailConflictError } from "@/lib/students/upsert"
 import { provisionStudentAccess } from "@/lib/students/access"
 import { contextLogger } from "@/lib/logger"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { upsertLeadFromCheckout } from "@/lib/automation/leads"
-
-const cpfRegex = /^\d{3}\.?\d{3}\.?\d{3}-?\d{2}$/
-const phoneRegex = /^\(?\d{2}\)?\s?\d{4,5}-?\d{4}$/
+import { isValidCpf, stripCpf } from "@/lib/validation/cpf"
+import { isValidPhone, normalizePhone } from "@/lib/validation/phone"
 
 // Cartão: aceitamos número com espaços, validade MM/AA ou MM/AAAA, CCV 3-4 dígitos.
 const creditCardSchema = z.object({
@@ -72,9 +74,13 @@ const bodySchema = z.object({
   cpf: z
     .string()
     .trim()
-    .regex(cpfRegex, "CPF inválido")
-    .transform((v) => v.replace(/\D/g, "")),
-  fone: z.string().trim().regex(phoneRegex, "Telefone inválido"),
+    .refine(isValidCpf, "CPF inválido")
+    .transform(stripCpf),
+  fone: z
+    .string()
+    .trim()
+    .refine(isValidPhone, "Telefone inválido")
+    .transform(normalizePhone),
   endereco: z.string().trim().max(300).optional(),
   paymentMethod: z.enum(["PIX", "BOLETO", "CREDIT_CARD"]).optional(),
   creditCard: creditCardSchema.optional(),
@@ -87,15 +93,14 @@ function normalize(s: string): string {
   return s.trim()
 }
 
-function dueDateInDays(days: number): string {
-  const d = new Date()
-  d.setDate(d.getDate() + days)
-  return d.toISOString().slice(0, 10)
-}
-
 export const POST = withRequestContext(
   { action: "pmb.checkout.start", route: "/api/checkout" },
   async (request: Request) => {
+  // Rate-limit anti-flood: a vitrine PMB é pública e cria cobranças Asaas/MP.
+  // Mesmo bucket de /api/loja/checkout — bots não conseguem gerar cobranças em massa.
+  const rl = await rateLimit(request, RATE_LIMITS.publicCheckout)
+  if (!rl.ok) return rateLimitResponse(rl)
+
   let payload: unknown
   try {
     payload = await request.json()
@@ -122,6 +127,10 @@ export const POST = withRequestContext(
 
   // Trackeia cupom consumido p/ liberar em caso de falha no fluxo.
   let consumedCouponId: string | null = null
+  // Trackeia enrollment criado p/ deletar em caso de falha (evita órfão que
+  // bloqueia recompra com 409 DUPLICATE_ENROLLMENT). O branch Asaas já limpa
+  // no seu catch interno; aqui cobrimos também a falha do branch MP.
+  let createdEnrollmentId: string | null = null
 
   try {
     const settings = await getSystemSettings()
@@ -208,6 +217,7 @@ export const POST = withRequestContext(
     }
 
     let discountAmount = 0
+    let finalAmount = basePrice
     let couponId: string | null = null
     if (data.couponCode) {
       const now = new Date()
@@ -234,11 +244,15 @@ export const POST = withRequestContext(
         )
       }
 
-      const raw =
-        coupon.discountType === "PERCENTAGE"
-          ? (basePrice * Number(coupon.discountValue)) / 100
-          : Number(coupon.discountValue)
-      discountAmount = Math.min(raw, basePrice)
+      // Cálculo unificado em Prisma.Decimal (mesmo helper das outras rotas) —
+      // evita divergência de centavos entre o valor cobrado e os relatórios.
+      const applied = applyCouponDiscount({
+        basePrice,
+        discountType: coupon.discountType,
+        discountValue: coupon.discountValue,
+      })
+      discountAmount = applied.discountAmount
+      finalAmount = applied.finalAmount
       const reserved = await tryConsumeCoupon(coupon.id)
       if (!reserved) {
         return NextResponse.json(
@@ -249,8 +263,6 @@ export const POST = withRequestContext(
       couponId = coupon.id
       consumedCouponId = coupon.id
     }
-
-    const finalAmount = Number((basePrice - discountAmount).toFixed(2))
 
     const pmbTenant = await getOrCreatePmbTenant()
 
@@ -315,6 +327,7 @@ export const POST = withRequestContext(
       },
       select: { id: true },
     })
+    createdEnrollmentId = enrollment.id
 
     // Modulo Automacao PMB: gera StudentLead com stage=CHECKOUT_STARTED.
     // Cron sweep-abandoned-leads move pra ABANDONED apos N horas; webhook
@@ -675,6 +688,13 @@ export const POST = withRequestContext(
       { err: error, event: "pmb_checkout.failed" },
       "pmb-checkout falhou",
     )
+    // Limpa o enrollment PENDING órfão (ex: falha ao criar preference/preapproval
+    // no MP), senão o aluno fica travado em 409 DUPLICATE_ENROLLMENT pra sempre.
+    if (createdEnrollmentId) {
+      await prisma.enrollment
+        .delete({ where: { id: createdEnrollmentId } })
+        .catch(swallow("pmb-checkout.cleanup"))
+    }
     if (consumedCouponId) {
       await releaseCoupon(consumedCouponId).catch(swallow("pmb-checkout"))
     }
@@ -687,6 +707,13 @@ export const POST = withRequestContext(
           details: error.errors,
         },
         { status: 502 },
+      )
+    }
+    // Conflito de email entre alunos: devolve 409 com mensagem clara.
+    if (error instanceof StudentEmailConflictError) {
+      return NextResponse.json(
+        { error: error.message, code: error.code },
+        { status: 409 },
       )
     }
     // Demais erros: devolve a mensagem do Error pra acelerar diagnóstico.

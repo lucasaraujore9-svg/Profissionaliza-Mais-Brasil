@@ -7,6 +7,9 @@ import { getOrCreatePmbTenant } from "@/lib/pmb-tenant"
 import type { NotificationLevel } from "@prisma/client"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 
+/** Permite até 5 min para broadcasts grandes */
+export const maxDuration = 300
+
 const NOTIFICATION_LEVELS: NotificationLevel[] = [
   "INFO",
   "SUCCESS",
@@ -130,34 +133,24 @@ export const POST = withRequestContext(
     if (!input.tenantId) {
       return NextResponse.json({ error: "tenantId obrigatório" }, { status: 400 })
     }
-    const students = await prisma.student.findMany({
-      where: { tenantId: input.tenantId },
-      select: { id: true },
-    })
-    await dispatchToStudents(students, baseFields)
-    return NextResponse.json({ data: { delivered: students.length } })
+    const count = await bulkDispatchToStudents(
+      { tenantId: input.tenantId },
+      baseFields,
+    )
+    return NextResponse.json({ data: { delivered: count } })
   }
 
   if (input.scope === "PMB") {
     const pmb = await getOrCreatePmbTenant()
-    const students = await prisma.student.findMany({
-      where: { tenantId: pmb.id },
-      select: { id: true },
-    })
-    await dispatchToStudents(students, baseFields)
-    return NextResponse.json({ data: { delivered: students.length } })
+    const count = await bulkDispatchToStudents({ tenantId: pmb.id }, baseFields)
+    return NextResponse.json({ data: { delivered: count } })
   }
 
-  // ALL
-  const students = await prisma.student.findMany({ select: { id: true } })
-  await dispatchToStudents(students, baseFields)
-  return NextResponse.json({ data: { delivered: students.length } })
+  // ALL — busca destinatários em lotes por cursor para evitar OOM
+  const count = await bulkDispatchToStudents({}, baseFields)
+  return NextResponse.json({ data: { delivered: count } })
   },
 )
-
-interface StudentRef {
-  id: string
-}
 
 interface PayloadFields {
   level: NotificationLevel
@@ -167,21 +160,79 @@ interface PayloadFields {
   category: string
 }
 
-async function dispatchToStudents(
-  students: StudentRef[],
+/**
+ * Envia notificação para todos os alunos que correspondem ao where.
+ * Pré-carrega o kill-switch global e os overrides de tenant uma única vez
+ * (evita N+1), depois insere as notificações em lotes via createMany.
+ */
+async function bulkDispatchToStudents(
+  where: { tenantId?: string },
   fields: PayloadFields,
-): Promise<void> {
-  const BATCH = 25
-  for (let i = 0; i < students.length; i += BATCH) {
-    const chunk = students.slice(i, i + BATCH)
-    await Promise.all(
-      chunk.map((s) =>
-        createNotification({
-          ...fields,
-          audience: "STUDENT",
-          studentId: s.id,
-        }),
-      ),
+): Promise<number> {
+  const CURSOR_BATCH = 500
+  const INSERT_BATCH = 1000
+
+  // Pré-carrega kill-switch global para a categoria (1 query)
+  const globalCfg = fields.category
+    ? await prisma.notificationCategoryConfig.findUnique({
+        where: { target_category: { target: "STUDENT", category: fields.category } },
+        select: { enabled: true },
+      })
+    : null
+  if (globalCfg?.enabled === false) return 0
+
+  // Pré-carrega overrides de tenant para a categoria (1 query)
+  const tenantOverrides = fields.category
+    ? await prisma.tenantNotificationOverride.findMany({
+        where: { category: fields.category },
+        select: { tenantId: true, enabled: true },
+      })
+    : []
+  const blockedTenants = new Set(
+    tenantOverrides.filter((o) => o.enabled === false).map((o) => o.tenantId),
+  )
+
+  let delivered = 0
+  let cursor: string | undefined = undefined
+
+  // Paginação por cursor para não carregar toda a tabela na memória
+  while (true) {
+    const students: { id: string; tenantId: string | null }[] =
+      await prisma.student.findMany({
+        where,
+        select: { id: true, tenantId: true },
+        orderBy: { id: "asc" },
+        take: CURSOR_BATCH,
+        ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
+      })
+    if (students.length === 0) break
+    cursor = students[students.length - 1].id
+
+    // Filtra alunos cujo tenant tem override desativado
+    const eligible = students.filter(
+      (s) => !s.tenantId || !blockedTenants.has(s.tenantId),
     )
+
+    // Insere em sub-lotes para não exceder parâmetros do Postgres
+    for (let i = 0; i < eligible.length; i += INSERT_BATCH) {
+      const chunk = eligible.slice(i, i + INSERT_BATCH)
+      await prisma.notification.createMany({
+        data: chunk.map((s) => ({
+          audience: "STUDENT" as const,
+          studentId: s.id,
+          level: fields.level,
+          title: fields.title,
+          body: fields.body ?? null,
+          category: fields.category ?? null,
+          href: fields.href ?? null,
+        })),
+        skipDuplicates: true,
+      })
+      delivered += chunk.length
+    }
+
+    if (students.length < CURSOR_BATCH) break
   }
+
+  return delivered
 }

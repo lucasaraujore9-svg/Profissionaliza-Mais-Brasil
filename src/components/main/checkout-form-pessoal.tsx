@@ -60,6 +60,7 @@ export function CheckoutFormPessoal({
               className="pl-9"
               value={value.nome}
               onChange={(e) => update("nome", e.target.value)}
+              autoComplete="name"
             />
           </div>
           {errors.nome && <p className="mt-1 text-xs text-red-600">{errors.nome}</p>}
@@ -76,6 +77,7 @@ export function CheckoutFormPessoal({
               className="pl-9"
               value={value.email}
               onChange={(e) => update("email", e.target.value)}
+              autoComplete="email"
             />
           </div>
           {errors.email && <p className="mt-1 text-xs text-red-600">{errors.email}</p>}
@@ -91,6 +93,7 @@ export function CheckoutFormPessoal({
               className="pl-9"
               value={value.telefone}
               onChange={(e) => update("telefone", formatPhone(e.target.value))}
+              autoComplete="tel"
             />
           </div>
           {errors.telefone && <p className="mt-1 text-xs text-red-600">{errors.telefone}</p>}
@@ -122,6 +125,7 @@ export function CheckoutFormPessoal({
               className="pl-9"
               value={value.password}
               onChange={(e) => update("password", e.target.value)}
+              autoComplete="new-password"
             />
           </div>
           {errors.password && (

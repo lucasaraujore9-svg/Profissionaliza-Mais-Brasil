@@ -125,7 +125,7 @@ export async function resetStudentPassword(
   if (!student.email) return { error: "Aluno sem email cadastrado" }
 
   const plain = generateTemporaryPassword()
-  const hashed = await hash(plain, 10)
+  const hashed = await hash(plain, 12)
 
   await prisma.student.update({
     where: { id: studentId },

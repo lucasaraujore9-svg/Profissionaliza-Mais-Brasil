@@ -45,6 +45,17 @@ Redesenhos premium via Google Stitch MCP, com direção editorial e palette BR.
 
 - **054**: Home page premium (hero split, bento grid, zig-zag, FAQ editorial)
 
+### Remediação / Hardening (100-123) — Pós-Auditoria
+Issues derivadas da auditoria técnica multiagente (2026-05-28). Corrigem segurança,
+fluxos de dinheiro, permissões, LGPD, performance, testes e DevOps. Organizadas em 3 etapas.
+
+- **Índice:** `issues/REMEDIACAO-INDEX.md` · **SPEC:** `audit/REMEDIACAO-SPEC.md`
+- **Etapa 1 (100-108)** — bloqueadores de produção (P0/P1): PII de certificados, escopo de papéis,
+  bugs de checkout/desconto/cupom/inadimplência, rate-limits, senha temporária, env do Vercel
+- **Etapa 2 (109-115)** — testes (Vitest+Playwright), performance de relatórios, WCAG, IDOR, refactor de checkout
+- **Etapa 3 (116-123)** — LGPD (exclusão/audit log/consentimento), RLS/defesa em profundidade,
+  deploy seguro, hardening de sessão/CSP, cache/pooler, limpeza de dependências
+
 ## Workflow
 
 **Recommended execution order:**

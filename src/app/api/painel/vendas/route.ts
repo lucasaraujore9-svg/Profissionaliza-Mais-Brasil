@@ -12,9 +12,9 @@ import { tryConsumeCoupon, releaseCoupon } from "@/lib/coupons/consume"
 import { applyCouponDiscount } from "@/lib/coupons/discount"
 import { swallow } from "@/lib/errors"
 import { withRequestContext } from "@/lib/observability/with-request-context"
-
-const cpfRegex = /^\d{11}$/
-const phoneRegex = /^\d{10,11}$/
+import { upsertStudent, StudentEmailConflictError } from "@/lib/students/upsert"
+import { isValidCpf, stripCpf } from "@/lib/validation/cpf"
+import { isValidPhone, normalizePhone } from "@/lib/validation/phone"
 
 const createSchema = z.object({
   // Dados do aluno (cria ou reaproveita por CPF/email)
@@ -23,13 +23,13 @@ const createSchema = z.object({
   cpf: z
     .string()
     .trim()
-    .transform((v) => v.replace(/\D/g, ""))
-    .pipe(z.string().regex(cpfRegex, "CPF inválido")),
+    .refine(isValidCpf, "CPF inválido")
+    .transform(stripCpf),
   fone: z
     .string()
     .trim()
-    .transform((v) => v.replace(/\D/g, ""))
-    .pipe(z.string().regex(phoneRegex, "Telefone inválido")),
+    .refine(isValidPhone, "Telefone inválido")
+    .transform(normalizePhone),
 
   // Curso a vender (TenantCourse do próprio tenant)
   tenantCourseId: z.string().min(1),
@@ -230,38 +230,32 @@ export const POST = withRequestContext(
 
     const finalAmount = finalAmountFromCoupon ?? basePrice
 
-    // Cria ou reaproveita aluno por CPF (no contexto do tenant)
-    const existingStudent = await prisma.student.findFirst({
-      where: { tenantId: tenant.id, cpf: data.cpf },
-      select: { id: true },
-    })
-
-    const student = existingStudent
-      ? await prisma.student.update({
-          where: { id: existingStudent.id },
-          data: {
-            nome: data.nome,
-            email: data.email,
-            fone: data.fone,
-            updatedAt: new Date(),
-          },
-          select: { id: true, nome: true, email: true, cpf: true },
-        })
-      : await prisma.student.create({
-          data: {
-            tenantId: tenant.id,
-            nome: data.nome,
-            email: data.email,
-            fone: data.fone,
-            cpf: data.cpf,
-            plataformaAlunoId: `pending_${Date.now()}`,
-            polo: tenant.slug,
-            vendedorId: tenant.plataformaVendedorId,
-            status: "INTERESSADO",
-            updatedAt: new Date(),
-          },
-          select: { id: true, nome: true, email: true, cpf: true },
-        })
+    // Reuso o upsertStudent: protege contra corrupção de CPF entre alunos
+    // distintos com o mesmo email e trata race condition de checkouts paralelos.
+    // Status inicial "INTERESSADO" porque o aluno ainda não pagou — o fulfill
+    // promove para ATIVO quando o webhook confirma.
+    let student: { id: string; nome: string; email: string | null; cpf: string | null }
+    try {
+      student = await upsertStudent({
+        tenantId: tenant.id,
+        nome: data.nome,
+        email: data.email,
+        cpf: data.cpf,
+        fone: data.fone,
+        polo: tenant.slug,
+        vendedorId: tenant.plataformaVendedorId,
+        plataformaAlunoIdFallback: `pending_${Date.now()}`,
+        initialStatus: "INTERESSADO",
+      })
+    } catch (err) {
+      if (err instanceof StudentEmailConflictError) {
+        return NextResponse.json(
+          { error: err.message, code: err.code },
+          { status: 409 },
+        )
+      }
+      throw err
+    }
 
     const existingEnrollment = await prisma.enrollment.findFirst({
       where: {

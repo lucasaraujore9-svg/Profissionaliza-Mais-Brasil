@@ -3,6 +3,7 @@ import { z } from "zod"
 import { hash } from "bcryptjs"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { rateLimit, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 
 const bodySchema = z.object({
@@ -16,6 +17,10 @@ const bodySchema = z.object({
 export const POST = withRequestContext(
   { action: "auth.first_password_change", route: "/api/auth/alterar-senha-inicial" },
   async (request: Request) => {
+  // Rate-limit defense-in-depth na troca de senha obrigatória.
+  const rl = await rateLimit(request, RATE_LIMITS.authReset)
+  if (!rl.ok) return rateLimitResponse(rl)
+
   const session = await auth()
   if (!session?.user) {
     return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
@@ -42,7 +47,7 @@ export const POST = withRequestContext(
     )
   }
 
-  const passwordHash = await hash(parsed.data.newPassword, 10)
+  const passwordHash = await hash(parsed.data.newPassword, 12)
 
   await prisma.user.update({
     where: { id: userId },

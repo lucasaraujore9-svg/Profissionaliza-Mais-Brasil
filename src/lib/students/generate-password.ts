@@ -29,6 +29,6 @@ export async function generatePasswordWithHash(): Promise<{
   hash: string
 }> {
   const plain = generateTemporaryPassword()
-  const hashed = await hash(plain, 10)
+  const hashed = await hash(plain, 12)
   return { plain, hash: hashed }
 }

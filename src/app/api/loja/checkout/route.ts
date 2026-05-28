@@ -6,7 +6,7 @@ import {
   createPreapproval,
   decryptTenantMpToken,
 } from "@/lib/mercadopago/client"
-import { upsertStudent } from "@/lib/students/upsert"
+import { upsertStudent, StudentEmailConflictError } from "@/lib/students/upsert"
 import { provisionStudentAccess } from "@/lib/students/access"
 import { tryConsumeCoupon, releaseCoupon } from "@/lib/coupons/consume"
 import { applyCouponDiscount } from "@/lib/coupons/discount"
@@ -15,9 +15,8 @@ import { swallow } from "@/lib/errors"
 import { contextLogger } from "@/lib/logger"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { upsertLeadFromCheckout } from "@/lib/automation/leads"
-
-const cpfRegex = /^\d{3}\.?\d{3}\.?\d{3}-?\d{2}$/
-const phoneRegex = /^\(?\d{2}\)?\s?\d{4,5}-?\d{4}$/
+import { isValidCpf, stripCpf } from "@/lib/validation/cpf"
+import { isValidPhone, normalizePhone } from "@/lib/validation/phone"
 
 const bodySchema = z.object({
   courseId: z.string().min(1),
@@ -32,9 +31,13 @@ const bodySchema = z.object({
   cpf: z
     .string()
     .trim()
-    .regex(cpfRegex, "CPF inválido")
-    .transform((v) => v.replace(/\D/g, "")),
-  fone: z.string().trim().regex(phoneRegex, "Telefone inválido"),
+    .refine(isValidCpf, "CPF inválido")
+    .transform(stripCpf),
+  fone: z
+    .string()
+    .trim()
+    .refine(isValidPhone, "Telefone inválido")
+    .transform(normalizePhone),
   endereco: z.string().trim().max(300).optional(),
 })
 
@@ -408,6 +411,15 @@ export const POST = withRequestContext(
     // Libera reserva de cupom — checkout falhou, não consumimos o uso.
     if (consumedCouponId) {
       await releaseCoupon(consumedCouponId).catch(swallow("loja.checkout"))
+    }
+    // Conflito de email entre alunos diferentes da mesma loja — devolve 409
+    // com mensagem específica em vez de 500 genérico (o aluno corrige o email
+    // e refaz o checkout).
+    if (error instanceof StudentEmailConflictError) {
+      return NextResponse.json(
+        { error: error.message, code: error.code },
+        { status: 409 },
+      )
     }
     return NextResponse.json(
       { error: "Erro ao processar checkout", code: "INTERNAL_ERROR" },

@@ -30,7 +30,7 @@ interface NewResellerDialogProps {
 interface CreatedResult {
   tenant: { id: string; slug: string; name: string }
   owner: { id: string; email: string }
-  tempPassword: string
+  tempPassword: string | null
   vitrineUrl: string
   asaas: {
     configured: boolean
@@ -300,14 +300,21 @@ function CreatedSuccess({
             onCopy={() => copy("email", result.owner.email)}
             copied={copied === "email"}
           />
-          <Field
-            label="Senha inicial (trocar no primeiro acesso)"
-            value={result.tempPassword}
-            onCopy={() => copy("senha", result.tempPassword)}
-            copied={copied === "senha"}
-            mono
-            highlight
-          />
+          {result.tempPassword ? (
+            <Field
+              label="Senha inicial (trocar no primeiro acesso)"
+              value={result.tempPassword}
+              onCopy={() => copy("senha", result.tempPassword ?? "")}
+              copied={copied === "senha"}
+              mono
+              highlight
+            />
+          ) : (
+            <p className="rounded-lg bg-[var(--color-pmb-green)]/10 px-3 py-2 text-xs text-[var(--color-pmb-green-900)]">
+              Senha inicial enviada por e-mail para <strong>{result.owner.email}</strong>.
+              Caso não receba, o revendedor pode usar &ldquo;Esqueci minha senha&rdquo; na tela de login.
+            </p>
+          )}
           <Field
             label="Vitrine"
             value={vitrineUrl}

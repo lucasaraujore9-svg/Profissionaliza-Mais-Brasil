@@ -16,6 +16,8 @@ import { getSystemSettings } from "@/lib/system-settings"
 import { contextLogger } from "@/lib/logger"
 import { provisionStudentAccess } from "@/lib/students/access"
 import { tryConsumeCoupon, releaseCoupon } from "@/lib/coupons/consume"
+import { applyCouponDiscount } from "@/lib/coupons/discount"
+import { dueDateInDays } from "@/lib/checkout/due-date"
 import { swallow } from "@/lib/errors"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 
@@ -72,13 +74,6 @@ const createSchema = z.object({
   courseId: z.string().min(1),
   couponCode: z.string().trim().max(64).optional(),
 })
-
-function dueDateInDays(days: number): string {
-  const d = new Date()
-  d.setDate(d.getDate() + days)
-  return d.toISOString().slice(0, 10)
-}
-
 
 export const POST = withRequestContext(
   { action: "admin.vendas.create", route: "/api/admin/vendas" },
@@ -204,6 +199,7 @@ export const POST = withRequestContext(
   }
 
   let discountAmount = 0
+  let finalAmount = basePrice
   let couponId: string | null = null
   if (parsed.data.couponCode) {
     const code = parsed.data.couponCode.toUpperCase()
@@ -224,30 +220,34 @@ export const POST = withRequestContext(
       return NextResponse.json({ error: "Cupom esgotado" }, { status: 400 })
     }
 
+    // Cálculo unificado em Prisma.Decimal (mesmo helper das demais rotas) —
+    // evita divergência de centavos entre o valor cobrado e os relatórios.
+    const applied = applyCouponDiscount({
+      basePrice,
+      discountType: coupon.discountType,
+      discountValue: coupon.discountValue,
+    })
+
+    // Cap aplicado sobre o desconto EFETIVO (cobre PERCENTAGE e FIXED).
+    // Antes o cap só checava PERCENTAGE, então um cupom FIXED zerava o preço
+    // e burlava o limite de 50% do PMB_SALES.
     const cap = guard.session.role === "PMB_SALES" ? PMB_SALES_CAP : 100
-    if (
-      coupon.discountType === "PERCENTAGE" &&
-      Number(coupon.discountValue) > cap
-    ) {
+    const effectivePct = (applied.discountAmount / basePrice) * 100
+    if (effectivePct > cap + 0.01) {
       return NextResponse.json(
         { error: `Cupom excede seu cap (${cap}%)` },
         { status: 403 },
       )
     }
 
-    const raw =
-      coupon.discountType === "PERCENTAGE"
-        ? (basePrice * Number(coupon.discountValue)) / 100
-        : Number(coupon.discountValue)
-    discountAmount = Math.min(raw, basePrice)
+    discountAmount = applied.discountAmount
+    finalAmount = applied.finalAmount
     const reserved = await tryConsumeCoupon(coupon.id)
     if (!reserved) {
       return NextResponse.json({ error: "Cupom esgotado" }, { status: 400 })
     }
     couponId = coupon.id
   }
-
-  const finalAmount = Number((basePrice - discountAmount).toFixed(2))
 
   const isMonthly = course.paymentTypeMain === "MONTHLY"
   const monthlyMonths = isMonthly ? course.monthlyMonthsMain ?? 12 : null

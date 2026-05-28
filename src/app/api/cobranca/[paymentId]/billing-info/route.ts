@@ -2,6 +2,10 @@ import { NextResponse } from "next/server"
 import { getBillingInfo, getPixQrCode, getPayment, AsaasApiError } from "@/lib/asaas/client"
 import { isKnownAsaasPayment } from "@/lib/asaas/ownership"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
+import { rateLimit, rateLimitResponse } from "@/lib/ratelimit"
+
+// TODO(segurança): ver comentário em ../route.ts — token por-cobrança seria
+// a defesa ideal; rate-limit por IP cobre enumeração automatizada por ora.
 
 export const GET = withRequestContextParams<{ paymentId: string }>(
   {
@@ -9,6 +13,9 @@ export const GET = withRequestContextParams<{ paymentId: string }>(
     route: "/api/cobranca/[paymentId]/billing-info",
   },
   async (_request: Request, ctx) => {
+  const rl = await rateLimit(_request, { name: "cobranca-get", limit: 20, windowSec: 60 })
+  if (!rl.ok) return rateLimitResponse(rl)
+
   const { paymentId } = await ctx.params
 
   if (!(await isKnownAsaasPayment(paymentId))) {

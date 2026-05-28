@@ -28,6 +28,53 @@ function monthKey(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`
 }
 
+/** Agrega receita de pagamentos aprovados por mês via SQL (evita carregar todas as linhas em JS) */
+async function fetchRevenueByMonthSQL(
+  since: Date,
+): Promise<Map<string, number>> {
+  const rows = await prisma.$queryRawUnsafe<{ bucket: Date; total: number }[]>(
+    `SELECT date_trunc('month', created_at) AS bucket,
+            COALESCE(SUM(amount), 0)::float AS total
+     FROM payments
+     WHERE mp_status = 'APPROVED'
+       AND created_at >= $1
+     GROUP BY 1
+     ORDER BY 1 ASC`,
+    since,
+  )
+  const map = new Map<string, number>()
+  for (const r of rows) {
+    map.set(monthKey(new Date(r.bucket)), Number(r.total))
+  }
+  return map
+}
+
+/** Agrega matrículas por mês via SQL, com contagem de pagas (tem mp_payment_id ou asaas_payment_id) */
+async function fetchEnrollmentsByMonthSQL(since: Date): Promise<
+  Map<string, { total: number; paid: number }>
+> {
+  const rows = await prisma.$queryRawUnsafe<
+    { bucket: Date; total: bigint; paid: bigint }[]
+  >(
+    `SELECT date_trunc('month', created_at) AS bucket,
+            COUNT(*)::bigint AS total,
+            COUNT(*) FILTER (WHERE mp_payment_id IS NOT NULL OR asaas_payment_id IS NOT NULL)::bigint AS paid
+     FROM enrollments
+     WHERE created_at >= $1
+     GROUP BY 1
+     ORDER BY 1 ASC`,
+    since,
+  )
+  const map = new Map<string, { total: number; paid: number }>()
+  for (const r of rows) {
+    map.set(monthKey(new Date(r.bucket)), {
+      total: Number(r.total),
+      paid: Number(r.paid),
+    })
+  }
+  return map
+}
+
 export const GET = withRequestContext(
   { action: "admin.analytics.get", route: "/api/admin/analytics" },
   async (request: Request) => {
@@ -41,6 +88,8 @@ export const GET = withRequestContext(
   const days = PERIODS[periodParam] ?? 30
   const since = startOfDay(subDays(new Date(), days))
 
+  const sixMonthsAgo = subDays(new Date(), 180)
+
   const [
     newResellers,
     newStudents,
@@ -50,8 +99,8 @@ export const GET = withRequestContext(
     totalTenants,
     cancelledTenants,
     activeMrrAgg,
-    revenueByMonth,
-    studentsByMonth,
+    revenueByMonthMap,
+    enrollmentsByMonthMap,
     distributionByPlanRows,
     rankingMrr,
     rankingStudents,
@@ -69,14 +118,8 @@ export const GET = withRequestContext(
       where: { status: "ACTIVE" },
       _sum: { planValue: true },
     }),
-    prisma.payment.findMany({
-      where: { mpStatus: "APPROVED", createdAt: { gte: subDays(new Date(), 180) } },
-      select: { amount: true, createdAt: true },
-    }),
-    prisma.enrollment.findMany({
-      where: { createdAt: { gte: subDays(new Date(), 180) } },
-      select: { createdAt: true, status: true, mpPaymentId: true, asaasPaymentId: true },
-    }),
+    fetchRevenueByMonthSQL(sixMonthsAgo),
+    fetchEnrollmentsByMonthSQL(sixMonthsAgo),
     prisma.tenant.groupBy({
       by: ["planValue"],
       where: { status: "ACTIVE" },
@@ -115,29 +158,16 @@ export const GET = withRequestContext(
     months.push(monthKey(d))
   }
 
-  const revenueMap = new Map<string, number>(months.map((m) => [m, 0]))
-  for (const p of revenueByMonth) {
-    const k = monthKey(p.createdAt)
-    if (revenueMap.has(k)) {
-      revenueMap.set(k, (revenueMap.get(k) ?? 0) + Number(p.amount))
-    }
-  }
+  // SQL aggregation already grouped by month — just read from the maps
+  const revenueMap = new Map<string, number>(months.map((m) => [m, revenueByMonthMap.get(m) ?? 0]))
 
-  const studentsMap = new Map<string, number>(months.map((m) => [m, 0]))
-  const enrollMap = new Map<string, number>(months.map((m) => [m, 0]))
-  const paidMap = new Map<string, number>(months.map((m) => [m, 0]))
-  for (const e of studentsByMonth) {
-    const k = monthKey(e.createdAt)
-    if (studentsMap.has(k)) {
-      studentsMap.set(k, (studentsMap.get(k) ?? 0) + 1)
-      enrollMap.set(k, (enrollMap.get(k) ?? 0) + 1)
-      const isPaid = Boolean(e.mpPaymentId) || Boolean(e.asaasPaymentId)
-      if (isPaid) paidMap.set(k, (paidMap.get(k) ?? 0) + 1)
-    }
-  }
+  const studentsMap = new Map<string, number>(
+    months.map((m) => [m, enrollmentsByMonthMap.get(m)?.total ?? 0]),
+  )
   const conversionByMonthArr = months.map((m) => {
-    const enr = enrollMap.get(m) ?? 0
-    const paid = paidMap.get(m) ?? 0
+    const bucket = enrollmentsByMonthMap.get(m)
+    const enr = bucket?.total ?? 0
+    const paid = bucket?.paid ?? 0
     return enr > 0 ? Number(((paid / enr) * 100).toFixed(1)) : 0
   })
 

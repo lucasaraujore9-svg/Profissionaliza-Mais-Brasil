@@ -10,21 +10,7 @@ import { findOrCreateAsaasCustomer } from "@/lib/asaas/client"
 import { getSystemSettings } from "@/lib/system-settings"
 import { contextLogger } from "@/lib/logger"
 import { withRequestContext } from "@/lib/observability/with-request-context"
-
-function isValidCpf(cpf: string): boolean {
-  const d = cpf.replace(/\D/g, "")
-  if (d.length !== 11 || /^(\d)\1+$/.test(d)) return false
-  let s = 0
-  for (let i = 0; i < 9; i++) s += +d[i] * (10 - i)
-  let r = (s * 10) % 11
-  if (r >= 10) r = 0
-  if (r !== +d[9]) return false
-  s = 0
-  for (let i = 0; i < 10; i++) s += +d[i] * (11 - i)
-  r = (s * 10) % 11
-  if (r >= 10) r = 0
-  return r === +d[10]
-}
+import { isValidCpf, stripCpf } from "@/lib/validation/cpf"
 
 export const GET = withRequestContext(
   { action: "admin.alunos.list", route: "/api/admin/alunos" },
@@ -117,10 +103,10 @@ export const POST = withRequestContext(
     )
   }
 
-  const cpf = parsed.data.cpf.replace(/\D/g, "")
-  if (!isValidCpf(cpf)) {
+  if (!isValidCpf(parsed.data.cpf)) {
     return NextResponse.json({ error: "CPF inválido" }, { status: 400 })
   }
+  const cpf = stripCpf(parsed.data.cpf)
 
   const pmbTenant = await getOrCreatePmbTenant()
 

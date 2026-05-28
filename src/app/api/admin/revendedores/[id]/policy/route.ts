@@ -26,6 +26,12 @@ export const PATCH = withRequestContextParams<{ id: string }>(
     return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
   }
 
+  // billingMode/política de cancelamento afetam cobrança e o auto-block de
+  // inadimplência — restrito a SUPER_ADMIN (PMB_SALES/MGR não alteram).
+  if (ctx.role !== "SUPER_ADMIN") {
+    return NextResponse.json({ error: "Apenas SUPER_ADMIN pode alterar a política" }, { status: 403 })
+  }
+
   const { id } = await params
 
   let body: unknown

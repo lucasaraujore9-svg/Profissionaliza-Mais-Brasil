@@ -36,7 +36,7 @@ export default function SobrePage() {
           ].map((b) => (
             <div key={b.titulo} className="rounded-xl border border-[rgba(2,89,24,0.08)] bg-white p-6">
               <b.icon className="h-9 w-9 text-[var(--color-pmb-gold-600)]" strokeWidth={2} aria-hidden />
-              <h3 className="mt-4 text-[17px] font-black text-[var(--color-pmb-green)]">{b.titulo}</h3>
+              <h2 className="mt-4 text-[17px] font-black text-[var(--color-pmb-green)]">{b.titulo}</h2>
               <p className="mt-2 text-[13.5px] leading-relaxed text-[rgba(2,89,24,0.75)]">{b.texto}</p>
             </div>
           ))}
@@ -62,7 +62,7 @@ export default function SobrePage() {
         </div>
 
         <div className="mt-10 flex flex-col items-center gap-3 rounded-xl bg-[var(--color-pmb-green)] p-8 text-center text-white">
-          <h3 className="text-[22px] font-black">Vem com a gente</h3>
+          <h2 className="text-[22px] font-black">Vem com a gente</h2>
           <p className="max-w-xl text-[14px] text-white/80">
             Se você quer aprender uma profissão ou revender nossos cursos, tem lugar aqui.
           </p>

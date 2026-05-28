@@ -3,29 +3,12 @@ import { prisma } from "@/lib/prisma"
 import { blockStudentInEA } from "@/lib/students/plataforma-actions"
 import { createNotification } from "@/lib/notifications"
 import { isCronAuthorized } from "@/lib/auth/bearer"
+import { addMonthsClamped } from "@/lib/dates"
 
 export const maxDuration = 300
 export const dynamic = "force-dynamic"
 
 const STUDENT_GRACE_DAYS = 5
-
-/**
- * Soma `months` meses à data preservando o dia. Se o mês alvo não tiver o
- * dia (ex: 31/jan + 1 mês = 28/fev), clampa para o último dia do mês alvo.
- * `Date.setMonth` nativo faz overflow para o mês seguinte (3/mar), o que
- * subestima `ageDays` e atrasa o bloqueio.
- */
-function addMonthsClamped(base: Date, months: number): Date {
-  const out = new Date(base)
-  const targetMonth = out.getMonth() + months
-  const targetDay = out.getDate()
-  out.setDate(1) // evita overflow durante o setMonth
-  out.setMonth(targetMonth)
-  // Último dia válido do mês alvo
-  const lastDay = new Date(out.getFullYear(), out.getMonth() + 1, 0).getDate()
-  out.setDate(Math.min(targetDay, lastDay))
-  return out
-}
 
 /**
  * Sweep diario para alunos individuais inadimplentes.
@@ -56,7 +39,11 @@ async function processOverdueStudents() {
 
   const candidates = await prisma.enrollment.findMany({
     where: {
-      status: "ACTIVE",
+      // Inclui SUSPENDED: o webhook Asaas/MP marca SUSPENDED no OVERDUE mas NÃO
+      // bloqueia na plataforma parceira (R8). Sem varrer SUSPENDED aqui, esses
+      // alunos manteriam acesso na plataforma indefinidamente (a query antiga só
+      // pegava ACTIVE). O período de carência continua respeitado via ageDays.
+      status: { in: ["ACTIVE", "SUSPENDED"] },
       installmentsTotal: { not: null },
       OR: [
         { asaasSubscriptionId: { not: null } },
@@ -99,11 +86,16 @@ async function processOverdueStudents() {
     if (ageDays < STUDENT_GRACE_DAYS) continue
 
     try {
-      await prisma.enrollment.update({
-        where: { id: enrollment.id },
-        data: { status: "SUSPENDED" },
-      })
-      result.enrollmentsSuspended += 1
+      // Só transiciona/conta quando estava ACTIVE — já-suspensos (pelo webhook)
+      // não re-disparam update nem notificação a cada execução.
+      const wasActive = enrollment.status === "ACTIVE"
+      if (wasActive) {
+        await prisma.enrollment.update({
+          where: { id: enrollment.id },
+          data: { status: "SUSPENDED" },
+        })
+        result.enrollmentsSuspended += 1
+      }
 
       // So bloqueia o aluno se nao houver outra matricula ATIVA em dia
       const stillActive = enrollment.student.enrollments.filter((e) => {
@@ -112,28 +104,34 @@ async function processOverdueStudents() {
         if (e.installmentsTotal === null) return true
         if (e.installmentsPaid >= e.installmentsTotal) return true
         if (!e.startedAt) return true
-        const due = new Date(e.startedAt)
-        due.setMonth(due.getMonth() + e.installmentsPaid)
+        // Usa o mesmo clamp do cálculo principal — setMonth nativo faz overflow
+        // (31/jan + 1 mês = 3/mar) e atrasaria o bloqueio em ~1 mês.
+        const due = addMonthsClamped(e.startedAt, e.installmentsPaid)
         return now.getTime() < due.getTime() + STUDENT_GRACE_DAYS * 86400_000
       })
 
       if (stillActive.length === 0 && enrollment.student.status === "ATIVO") {
+        // blockStudentInEA seta status=BLOQUEADO, então o guard acima impede
+        // re-bloqueio nas execuções seguintes (idempotente na prática).
         await blockStudentInEA(enrollment.student.id)
         result.studentsBlocked += 1
       }
 
-      await createNotification({
-        audience: "STUDENT",
-        studentId: enrollment.student.id,
-        level: "ERROR",
-        title: "Mensalidade em atraso — acesso suspenso",
-        body:
-          stillActive.length === 0
-            ? `Vencimento atrasado em ${ageDays} dia(s). Pague para liberar o acesso.`
-            : `Vencimento atrasado em ${ageDays} dia(s). A matrícula deste curso foi suspensa.`,
-        category: "payment",
-        href: "/aluno/pagamentos",
-      })
+      // Notifica apenas na transição (evita spam diário aos já-suspensos).
+      if (wasActive) {
+        await createNotification({
+          audience: "STUDENT",
+          studentId: enrollment.student.id,
+          level: "ERROR",
+          title: "Mensalidade em atraso — acesso suspenso",
+          body:
+            stillActive.length === 0
+              ? `Vencimento atrasado em ${ageDays} dia(s). Pague para liberar o acesso.`
+              : `Vencimento atrasado em ${ageDays} dia(s). A matrícula deste curso foi suspensa.`,
+          category: "payment",
+          href: "/aluno/pagamentos",
+        })
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : "erro desconhecido"
       result.errors.push(`enrollment ${enrollment.id}: ${message}`)
