@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma"
 import { contextLogger } from "@/lib/logger"
 import { AutomationTemplateKey } from "@prisma/client"
 import { renderTemplate } from "./templates"
-import { sendTextMessage } from "./wa-client"
+import { sendTextMessage, WhatsAppNumberNotFoundError } from "./wa-client"
 import { rateLimitByKey, RATE_LIMITS } from "@/lib/ratelimit"
 import { resolveAutomationContext } from "./context"
 
@@ -117,6 +117,20 @@ export async function sendLeadMessage(args: QueueLeadMessageArgs): Promise<void>
       },
     })
   } catch (err) {
+    // Numero sem WhatsApp: caso esperado e legivel, nao um erro de engine.
+    if (err instanceof WhatsAppNumberNotFoundError) {
+      contextLogger().warn(
+        { event: "automation.dispatch.no_whatsapp", leadId, templateKey },
+        "Numero do lead nao possui WhatsApp",
+      )
+      await recordFailure(
+        leadId,
+        templateKey,
+        "no_whatsapp",
+        "Número não possui WhatsApp",
+      )
+      return
+    }
     contextLogger().error(
       { err, event: "automation.dispatch.send_failed", leadId, templateKey },
       "Engine WhatsApp rejeitou o envio",
@@ -129,17 +143,23 @@ export async function sendLeadMessage(args: QueueLeadMessageArgs): Promise<void>
   }
 }
 
+/**
+ * Registra falha de envio no historico do lead. `reason` e o codigo de
+ * maquina (metadata); `message` e o texto amigavel mostrado na UI — quando
+ * ausente, usa o proprio reason.
+ */
 async function recordFailure(
   leadId: string,
   templateKey: AutomationTemplateKey,
   reason: string,
+  message?: string,
 ): Promise<void> {
   await prisma.studentLeadActivity
     .create({
       data: {
         leadId,
         kind: "WA_MESSAGE_FAILED",
-        body: reason,
+        body: message ?? reason,
         metadata: { templateKey, reason },
       },
     })

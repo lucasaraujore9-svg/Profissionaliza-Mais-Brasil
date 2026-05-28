@@ -43,6 +43,7 @@ async function gatewayFetch(
       ...init,
       headers: {
         "Content-Type": "application/json",
+        Accept: "application/json",
         "X-Api-Key": cfg.apiKey,
         ...(init.headers ?? {}),
       },
@@ -258,12 +259,82 @@ interface SendTextMessageArgs {
 }
 
 /**
+ * Lancado quando o check-exists confirma que o numero NAO possui WhatsApp
+ * (numberExists=false). Permite ao caller tratar este caso de forma distinta
+ * de uma falha generica do engine (ex: mostrar "numero sem WhatsApp" na UI).
+ */
+export class WhatsAppNumberNotFoundError extends Error {
+  readonly phone: string
+  constructor(phone: string) {
+    super(`Numero ${phone} nao possui WhatsApp`)
+    this.name = "WhatsAppNumberNotFoundError"
+    this.phone = phone
+  }
+}
+
+/**
+ * Resolve o chatId REAL do numero no WhatsApp antes de enviar.
+ *
+ * Por que: numeros BR sofrem do "nono digito" — o id efetivamente registrado
+ * no WhatsApp pode diferir do `{digits}@c.us` ingenuo (com/sem o 9 apos o DDD).
+ * Disparar para o id errado faz a mensagem sumir sem erro claro. O engine
+ * expoe `check-exists`, que devolve o `chatId` canonico — e esse id que deve
+ * ir no POST de envio.
+ *
+ * Retorno:
+ *  - string    -> chatId canonico (numero existe no WhatsApp)
+ *  - null      -> numero NAO existe no WhatsApp (nao adianta enviar)
+ *  - undefined -> lookup indisponivel/inconclusivo (usa fallback ingenuo)
+ */
+async function resolveChatId(
+  sessionName: string,
+  phone: string,
+): Promise<string | null | undefined> {
+  const digits = phone.replace(/\D/g, "")
+  if (!digits) return undefined
+  try {
+    const res = await gatewayFetch(
+      `/api/contacts/check-exists?phone=${encodeURIComponent(digits)}&session=${encodeURIComponent(sessionName)}`,
+      { method: "GET" },
+    )
+    // Endpoint ausente/erro no engine → fallback (nao bloqueia o envio)
+    if (!res.ok) return undefined
+    const data = (await res.json().catch(() => ({}))) as {
+      numberExists?: boolean
+      chatId?: string
+    }
+    if (data.numberExists === false) return null
+    return data.chatId ?? undefined
+  } catch {
+    return undefined
+  }
+}
+
+/**
  * Envia mensagem de texto via engine. Retorna ID engine-side para log.
+ *
+ * Fluxo: (1) resolve o chatId real do numero (check-exists); (2) dispara o
+ * POST de envio usando esse id. Se o numero nao tem WhatsApp, lanca erro
+ * (logado como falha de envio pelo caller). Se a checagem nao estiver
+ * disponivel, cai no chatId ingenuo (comportamento legado).
  */
 export async function sendTextMessage(
   args: SendTextMessageArgs,
 ): Promise<{ engineMessageId: string }> {
-  const chatId = toChatId(args.toPhone)
+  // (1) encontra o id do contato para enviar
+  const resolved = await resolveChatId(args.sessionName, args.toPhone)
+  if (resolved === null) {
+    throw new WhatsAppNumberNotFoundError(args.toPhone)
+  }
+  const chatId = resolved ?? toChatId(args.toPhone)
+  if (!resolved) {
+    contextLogger().warn(
+      { event: "wa.chatid_fallback", sessionName: args.sessionName },
+      "check-exists indisponivel — usando chatId ingenuo",
+    )
+  }
+
+  // (2) dispara a mensagem usando o id resolvido
   const res = await gatewayFetch(`/api/sendText`, {
     method: "POST",
     body: JSON.stringify({
