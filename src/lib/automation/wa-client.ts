@@ -159,17 +159,64 @@ async function fetchQrAsDataUrl(
     }
   }
 
-  // Caso 2: buscar o PNG no endpoint dedicado
+  // Caso 2: buscar o QR no endpoint dedicado. Forca Accept de imagem (o
+  // default application/json do gatewayFetch pode atrapalhar a negociacao) e
+  // tolera tanto PNG binario quanto JSON com base64 embutido.
   try {
     const res = await gatewayFetch(
       `/api/${encodeURIComponent(sessionName)}/auth/qr?format=image`,
-      { method: "GET" },
+      {
+        method: "GET",
+        headers: { Accept: "image/png,image/*;q=0.9,*/*;q=0.8" },
+      },
     )
-    if (!res.ok) return null
-    const contentType = res.headers.get("content-type") ?? "image/png"
+    const contentType = res.headers.get("content-type") ?? ""
+    if (!res.ok) {
+      const body = await res.text().catch(() => "")
+      contextLogger().warn(
+        {
+          event: "wa.qr_fetch_failed",
+          sessionName,
+          status: res.status,
+          contentType,
+          bodyPreview: body.slice(0, 200),
+        },
+        "Falha ao buscar QR no engine",
+      )
+      return null
+    }
+    // Algumas versoes devolvem JSON { data|value: base64, mimetype }
+    if (contentType.includes("application/json")) {
+      const json = (await res.json().catch(() => ({}))) as {
+        data?: string
+        value?: string
+        mimetype?: string
+      }
+      const b64 = json.data ?? json.value
+      if (b64 && /^[A-Za-z0-9+/=]+$/.test(b64) && b64.length > 100) {
+        return `data:${json.mimetype ?? "image/png"};base64,${b64}`
+      }
+      contextLogger().warn(
+        { event: "wa.qr_json_unhandled", sessionName, keys: Object.keys(json) },
+        "QR retornou JSON em formato inesperado",
+      )
+      return null
+    }
+    // PNG binario
     const buf = Buffer.from(await res.arrayBuffer())
-    return `data:${contentType};base64,${buf.toString("base64")}`
-  } catch {
+    if (buf.length === 0) {
+      contextLogger().warn(
+        { event: "wa.qr_empty", sessionName, contentType },
+        "QR retornou corpo vazio",
+      )
+      return null
+    }
+    return `data:${contentType || "image/png"};base64,${buf.toString("base64")}`
+  } catch (err) {
+    contextLogger().warn(
+      { err, event: "wa.qr_fetch_error", sessionName },
+      "Erro ao buscar QR no engine",
+    )
     return null
   }
 }
