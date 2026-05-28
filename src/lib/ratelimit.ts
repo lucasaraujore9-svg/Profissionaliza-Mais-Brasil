@@ -19,6 +19,13 @@ interface LimiterConfig {
   limit: number
   /** Janela em segundos. */
   windowSec: number
+  /**
+   * Se true, LIBERA (fail-open) quando o Redis estiver indisponível, em vez de
+   * negar. Usado nos fluxos de AUTH (login/forgot/reset): uma queda do Upstash
+   * não pode trancar o login de todos os usuários. Demais buckets continuam
+   * fail-closed em prod (protege endpoints públicos abusáveis).
+   */
+  failOpen?: boolean
 }
 
 const limiters = new Map<string, Ratelimit>()
@@ -54,13 +61,15 @@ export async function rateLimit(
 ): Promise<RateLimitResult> {
   const limiter = getLimiter(config)
   if (!limiter) {
-    // Fail-closed em prod: nega tráfego enquanto Upstash não estiver
-    // configurado. Em dev: fail-open (libera) pra não atrapalhar trabalho local.
+    // Redis indisponível. Buckets de auth (failOpen) LIBERAM para não trancar o
+    // login durante outage do Upstash; demais buckets negam em prod (protege
+    // endpoints públicos). Em dev tudo libera.
+    const allow = config.failOpen ? true : !isProd
     return {
-      ok: !isProd,
+      ok: allow,
       remaining: 0,
       limit: config.limit,
-      retryAfterSec: isProd ? 60 : 0,
+      retryAfterSec: allow ? 0 : 60,
     }
   }
 
@@ -87,11 +96,13 @@ export async function rateLimitByKey(
 ): Promise<RateLimitResult> {
   const limiter = getLimiter(config)
   if (!limiter) {
+    // Ver explicação em rateLimit(): auth = fail-open; resto = fail-closed em prod.
+    const allow = config.failOpen ? true : !isProd
     return {
-      ok: !isProd,
+      ok: allow,
       remaining: 0,
       limit: config.limit,
-      retryAfterSec: isProd ? 60 : 0,
+      retryAfterSec: allow ? 0 : 60,
     }
   }
 
@@ -141,9 +152,10 @@ function ipFrom(request: Request): string {
 
 // Buckets pre-definidos para rotas criticas.
 export const RATE_LIMITS = {
-  authLogin: { name: "auth-login", limit: 8, windowSec: 60 },
-  authForgot: { name: "auth-forgot", limit: 4, windowSec: 60 },
-  authReset: { name: "auth-reset", limit: 6, windowSec: 60 },
+  // failOpen: auth não pode trancar se o Upstash cair (libera durante outage).
+  authLogin: { name: "auth-login", limit: 8, windowSec: 60, failOpen: true },
+  authForgot: { name: "auth-forgot", limit: 4, windowSec: 60, failOpen: true },
+  authReset: { name: "auth-reset", limit: 6, windowSec: 60, failOpen: true },
   leads: { name: "leads", limit: 6, windowSec: 60 },
   publicCheckout: { name: "loja-checkout", limit: 10, windowSec: 60 },
   publicCupom: { name: "loja-cupom", limit: 20, windowSec: 60 },
