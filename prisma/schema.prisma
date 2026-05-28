@@ -128,6 +128,9 @@ model User {
   // Notas de suporte escritas por este usuario
   supportNotes TenantSupportNote[] @relation("SupportNotes")
 
+  // Notas internas escritas sobre alunos por este usuario
+  studentNotes StudentNote[] @relation("StudentNotes")
+
   // TenantPayments / ReferralPayouts marcados manualmente como pagos por este admin
   markedTenantPayments  TenantPayment[]  @relation("MarkedTenantPayments")
   markedReferralPayouts ReferralPayout[] @relation("MarkedReferralPayouts")
@@ -309,6 +312,27 @@ model TenantSupportNote {
 
   @@index([tenantId, createdAt])
   @@map("tenant_support_notes")
+}
+
+// ============================================================
+// NOTAS INTERNAS POR ALUNO (visiveis a admin/equipe/revendedor)
+// ============================================================
+// Comentarios da gestao sobre um aluno especifico — historico de
+// suporte, observacoes, contexto que admin/revendedor anota.
+// Nao e visivel para o aluno; vive em /admin/alunos/[id] e
+// /painel/alunos/[id], aba "Notas".
+
+model StudentNote {
+  id        String   @id @default(cuid())
+  studentId String   @map("student_id")
+  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  authorId  String   @map("author_id")
+  author    User     @relation("StudentNotes", fields: [authorId], references: [id])
+  body      String   @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([studentId, createdAt])
+  @@map("student_notes")
 }
 
 // ============================================================
@@ -517,6 +541,7 @@ model Student {
   // Relacoes
   enrollments  Enrollment[]
   certificates Certificate[]
+  notes        StudentNote[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")

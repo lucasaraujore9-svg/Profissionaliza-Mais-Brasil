@@ -15,6 +15,7 @@ import {
   Award,
   Menu,
   X,
+  HelpCircle,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { NotificationBell } from "@/components/shared/notification-bell"
@@ -31,6 +32,7 @@ const NAV = [
   { href: "/aluno/certificados", label: "Certificados", icon: Award },
   { href: "/aluno/comprar", label: "Comprar curso", icon: ShoppingBag },
   { href: "/aluno/pagamentos", label: "Pagamentos", icon: CreditCard },
+  { href: "/aluno/suporte", label: "Suporte", icon: HelpCircle },
   { href: "/aluno/perfil", label: "Meu perfil", icon: UserCircle },
 ]
 

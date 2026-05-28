@@ -8,6 +8,7 @@ import {
   CreditCard,
   ExternalLink,
   GraduationCap,
+  HelpCircle,
   ShoppingBag,
 } from "lucide-react"
 
@@ -265,7 +266,7 @@ export default async function StudentDashboardPage() {
 
       {/* Acessos secundários (só aparece se já tem cursos para evitar redundância) */}
       {!hasNoEnrollments && (
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-4 sm:grid-cols-3">
           <Link
             href="/aluno/cursos"
             className="group flex items-center gap-4 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm transition-all hover:border-[var(--color-pmb-green)] hover:shadow-md"
@@ -278,7 +279,7 @@ export default async function StudentDashboardPage() {
                 Meus cursos
               </p>
               <p className="mt-0.5 text-xs text-gray-600">
-                Veja progresso e baixe seus certificados.
+                Veja progresso e baixe certificados.
               </p>
             </div>
             <ArrowRight className="h-4 w-4 text-gray-400 transition-transform group-hover:translate-x-0.5" />
@@ -297,6 +298,24 @@ export default async function StudentDashboardPage() {
               </p>
               <p className="mt-0.5 text-xs text-gray-600">
                 Acesse o catálogo e contrate em poucos cliques.
+              </p>
+            </div>
+            <ArrowRight className="h-4 w-4 text-gray-400 transition-transform group-hover:translate-x-0.5" />
+          </Link>
+
+          <Link
+            href="/aluno/suporte"
+            className="group flex items-center gap-4 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm transition-all hover:border-[var(--color-pmb-green)] hover:shadow-md"
+          >
+            <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-[var(--color-pmb-lime-50)] text-[var(--color-pmb-green)]">
+              <HelpCircle className="h-5 w-5" />
+            </span>
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-[var(--color-pmb-green-900)]">
+                Suporte
+              </p>
+              <p className="mt-0.5 text-xs text-gray-600">
+                Tire dúvidas ou fale com a equipe.
               </p>
             </div>
             <ArrowRight className="h-4 w-4 text-gray-400 transition-transform group-hover:translate-x-0.5" />

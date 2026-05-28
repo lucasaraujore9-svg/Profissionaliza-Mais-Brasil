@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { Eye, Ban, Unlock } from "lucide-react"
 
 export type StudentStatus =
@@ -107,14 +108,17 @@ export function StudentTable({
               return (
                 <tr key={student.id} className="hover:bg-gray-50/60">
                   <td className="px-4 py-3">
-                    <div className="flex items-center gap-3">
+                    <Link
+                      href={`/painel/alunos/${student.id}`}
+                      className="flex items-center gap-3 hover:text-[var(--color-pmb-green)]"
+                    >
                       <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--color-pmb-lime-50)] text-[10px] font-semibold text-[var(--color-pmb-green-700)]">
                         {initials(student.nome)}
                       </div>
-                      <span className="text-sm font-medium text-[var(--color-pmb-green-900)]">
+                      <span className="text-sm font-medium text-[var(--color-pmb-green-900)] hover:underline">
                         {student.nome}
                       </span>
-                    </div>
+                    </Link>
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-600">{student.email}</td>
                   <td className="px-4 py-3 font-mono text-sm text-gray-700">

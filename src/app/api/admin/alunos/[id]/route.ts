@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { requirePmbSales } from "@/lib/auth/guards"
+import { requirePmbSales, requirePmbTeam } from "@/lib/auth/guards"
 import { getOrCreatePmbTenant } from "@/lib/pmb-tenant"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
+import { applyStudentEdit, editSchema } from "@/lib/students/management"
 
 export const GET = withRequestContextParams<{ id: string }>(
   { action: "admin.alunos.get", route: "/api/admin/alunos/[id]" },
@@ -104,5 +105,52 @@ export const GET = withRequestContextParams<{ id: string }>(
       })),
     },
   })
+  },
+)
+
+/**
+ * PATCH /api/admin/alunos/[id] — edita dados do aluno.
+ * Acessivel a todo time PMB (SUPER_ADMIN, PMB_SALES, PMB_RESELLER_MGR).
+ */
+export const PATCH = withRequestContextParams<{ id: string }>(
+  { action: "admin.alunos.update", route: "/api/admin/alunos/[id]" },
+  async (request: Request, ctx) => {
+    const guard = await requirePmbTeam()
+    if (!guard.ok) return guard.response
+
+    const { id } = await ctx.params
+
+    let payload: unknown
+    try {
+      payload = await request.json()
+    } catch {
+      return NextResponse.json({ error: "JSON inválido" }, { status: 400 })
+    }
+
+    const parsed = editSchema.safeParse(payload)
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "Dados inválidos", issues: parsed.error.flatten() },
+        { status: 400 },
+      )
+    }
+
+    const exists = await prisma.student.findUnique({
+      where: { id },
+      select: { id: true },
+    })
+    if (!exists) {
+      return NextResponse.json({ error: "Aluno não encontrado" }, { status: 404 })
+    }
+
+    try {
+      await applyStudentEdit(id, parsed.data)
+    } catch (err) {
+      // unique constraint (email/cpf por tenant)
+      const msg = (err as Error).message ?? "Falha ao salvar"
+      return NextResponse.json({ error: msg }, { status: 409 })
+    }
+
+    return NextResponse.json({ ok: true })
   },
 )

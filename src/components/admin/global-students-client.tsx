@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
+import Link from "next/link"
 import { Input } from "@/components/ui/input"
 import { Loader2 } from "lucide-react"
 import { vitrineHost } from "@/lib/tenant/urls"
@@ -158,9 +159,12 @@ export function GlobalStudentsClient() {
                   return (
                     <tr key={s.id} className="hover:bg-gray-50/50">
                       <td className="px-4 py-3">
-                        <div className="font-semibold text-[var(--color-pmb-green-900)]">
+                        <Link
+                          href={`/admin/alunos/${s.id}`}
+                          className="font-semibold text-[var(--color-pmb-green-900)] hover:text-[var(--color-pmb-green)] hover:underline"
+                        >
                           {s.nome}
-                        </div>
+                        </Link>
                         {s.cpf && (
                           <div className="text-[11px] text-gray-500">
                             CPF: {s.cpf}

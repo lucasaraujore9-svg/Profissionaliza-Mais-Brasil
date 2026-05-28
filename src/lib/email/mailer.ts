@@ -31,6 +31,10 @@ import {
   StudentWelcomeTemplate,
   type StudentWelcomeTemplateProps,
 } from "./templates/student-welcome"
+import {
+  StudentSupportTemplate,
+  type StudentSupportTemplateProps,
+} from "./templates/student-support"
 import { sendSmtp, getDefaultFrom } from "./smtp"
 
 export class EmailError extends Error {
@@ -52,6 +56,7 @@ export type EmailTemplate =
       props: ResellerOnboardingTemplateProps
     }
   | { type: "student-welcome"; props: StudentWelcomeTemplateProps }
+  | { type: "student-support"; props: StudentSupportTemplateProps }
 
 interface SendEmailParams {
   to: string | string[]
@@ -79,6 +84,8 @@ function renderTemplate(template: EmailTemplate): React.ReactElement {
       return ResellerOnboardingTemplate(template.props)
     case "student-welcome":
       return StudentWelcomeTemplate(template.props)
+    case "student-support":
+      return StudentSupportTemplate(template.props)
   }
 }
 

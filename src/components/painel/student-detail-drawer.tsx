@@ -1,7 +1,17 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { X, Mail, MessageSquare, Ban, Unlock, Phone, IdCard } from "lucide-react"
+import Link from "next/link"
+import {
+  X,
+  Mail,
+  MessageSquare,
+  Ban,
+  Unlock,
+  Phone,
+  IdCard,
+  ArrowRight,
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import type { StudentStatus } from "./student-table"
 
@@ -172,9 +182,20 @@ export function StudentDetailDrawer({
       />
       <aside className="relative ml-auto flex h-full w-full max-w-md flex-col overflow-y-auto bg-white shadow-xl">
         <header className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
-          <h2 className="text-base font-semibold text-[var(--color-pmb-green-900)]">
-            Detalhes do aluno
-          </h2>
+          <div className="flex items-center gap-3">
+            <h2 className="text-base font-semibold text-[var(--color-pmb-green-900)]">
+              Detalhes do aluno
+            </h2>
+            {studentId && (
+              <Link
+                href={`/painel/alunos/${studentId}`}
+                className="inline-flex items-center gap-0.5 rounded-md bg-[var(--color-pmb-lime-50)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--color-pmb-green-700)] hover:bg-[var(--color-pmb-lime-100)]"
+              >
+                Ver perfil completo
+                <ArrowRight className="h-3 w-3" />
+              </Link>
+            )}
+          </div>
           <button
             type="button"
             onClick={onClose}

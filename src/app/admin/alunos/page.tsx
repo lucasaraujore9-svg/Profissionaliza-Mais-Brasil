@@ -8,7 +8,8 @@ export const dynamic = "force-dynamic"
 export default async function AdminAlunosPage() {
   const session = await requireAdminSession()
   if (!session) redirect("/login?callbackUrl=/admin/alunos")
-  if (session.role !== "SUPER_ADMIN") redirect("/admin")
+  // requireAdminSession ja garante papel do time PMB. Os tres papeis (SUPER_ADMIN,
+  // PMB_SALES, PMB_RESELLER_MGR) podem visualizar a lista global de alunos.
 
   return (
     <div className="space-y-6">

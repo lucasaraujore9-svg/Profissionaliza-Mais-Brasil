@@ -1,0 +1,85 @@
+/**
+ * Tipos compartilhados entre /admin/alunos/[id] e /painel/alunos/[id].
+ * Mesmo shape de dados, mesmo client component, endpoints diferentes
+ * via prop `scope`.
+ */
+export interface StudentEnrollmentItem {
+  id: string
+  courseName: string
+  status: string
+  paymentType: string
+  gateway: string
+  finalAmount: number
+  installmentsTotal: number | null
+  installmentsPaid: number
+  asaasInvoiceUrl: string | null
+  startedAt: string | null
+  createdAt: string
+}
+
+export interface StudentPaymentItem {
+  id: string
+  amount: number
+  status: string
+  paidAt: string | null
+  courseName: string
+  createdAt: string
+}
+
+export interface StudentNoteItem {
+  id: string
+  body: string
+  createdAt: string
+  authorName: string
+  authorId: string
+}
+
+export interface StudentNotificationItem {
+  id: string
+  title: string
+  body: string | null
+  level: string
+  createdAt: string
+  readAt: string | null
+}
+
+export interface StudentData {
+  id: string
+  nome: string
+  email: string | null
+  cpf: string | null
+  fone: string | null
+  fone2: string | null
+  cidade: string | null
+  estado: string | null
+  cep: string | null
+  rua: string | null
+  bairro: string | null
+  numero: string | null
+  nascimento: string | null
+  status: string
+  apostila: string
+  plataformaAlunoId: string | null
+  asaasCustomerId: string | null
+  tenantName: string
+  tenantSlug: string
+  passwordSetAt: string | null
+  lastLoginAt: string | null
+  createdAt: string
+  totalPaid: number
+  enrollments: StudentEnrollmentItem[]
+  payments: StudentPaymentItem[]
+  notes: StudentNoteItem[]
+  notifications: StudentNotificationItem[]
+}
+
+/** Define qual API root + permissoes o componente usa. */
+export type ManagementScope =
+  | { kind: "admin"; canEdit: boolean; canResetPassword: boolean }
+  | { kind: "painel" }
+
+export function apiBase(scope: ManagementScope, studentId: string): string {
+  return scope.kind === "admin"
+    ? `/api/admin/alunos/${studentId}`
+    : `/api/painel/alunos/${studentId}`
+}
