@@ -35,7 +35,7 @@ export const GET = withRequestContext(
       general: {
         appName: "Profissionaliza Mais Brasil",
         appDomain: process.env.NEXT_PUBLIC_APP_DOMAIN ?? "",
-        supportEmail: "suporte@profissionalizamaisbrasil.com.br",
+        supportEmail: "atendimento@profissionalizamaisbrasil.com.br",
         pmbDirectSaleGateway: settings.pmbDirectSaleGateway,
       },
       integrations: {

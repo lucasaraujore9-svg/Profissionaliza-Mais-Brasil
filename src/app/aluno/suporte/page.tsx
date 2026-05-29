@@ -42,7 +42,7 @@ export default async function StudentSupportPage() {
   const channels: ContactChannels = isPmb || !student?.tenant
     ? {
         whatsapp: null, // PMB nao expoe WhatsApp aqui — mensagem cai no admin
-        email: "suporte@profissionalizamaisbrasil.com.br",
+        email: "atendimento@profissionalizamaisbrasil.com.br",
         storeName: "Profissionaliza Mais Brasil",
       }
     : {
