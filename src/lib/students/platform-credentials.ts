@@ -2,6 +2,24 @@ import { prisma } from "@/lib/prisma"
 import { decrypt } from "@/lib/crypto"
 import { contextLogger } from "@/lib/logger"
 
+/**
+ * URL padrão da tela de login da plataforma de aulas (playcurso). Usada como
+ * fallback quando `EA_STUDENT_LOGIN_URL` não está configurada no ambiente — os
+ * alunos da venda direta PMB acessam todos a mesma plataforma, então o botão
+ * "Acessar plataforma de aulas" precisa sempre funcionar.
+ */
+const DEFAULT_STUDENT_LOGIN_URL =
+  "https://playcurso.com/bolsamaisbrasil/metodo/login.php"
+
+/**
+ * Retorna a URL de login da plataforma de aulas exibida na área do aluno.
+ * Prioriza `EA_STUDENT_LOGIN_URL`; cai no padrão do playcurso se não estiver
+ * configurada.
+ */
+export function getStudentPlatformLoginUrl(): string {
+  return process.env.EA_STUDENT_LOGIN_URL?.trim() || DEFAULT_STUDENT_LOGIN_URL
+}
+
 export interface StudentPlatformCredentials {
   /** Login (usuário) do aluno na plataforma de aulas. */
   login: string

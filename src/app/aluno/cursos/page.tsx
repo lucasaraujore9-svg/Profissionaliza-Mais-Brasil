@@ -2,6 +2,7 @@ import Link from "next/link"
 import { prisma } from "@/lib/prisma"
 import { requireStudentSession } from "@/lib/auth/student-session"
 import { syncStudentProgress } from "@/lib/students/progress"
+import { getStudentPlatformLoginUrl } from "@/lib/students/platform-credentials"
 import { contextLogger } from "@/lib/logger"
 import {
   ArrowRight,
@@ -92,9 +93,8 @@ export default async function StudentCoursesPage() {
     orderBy: { createdAt: "desc" },
   })
 
-  // Sem fallback: se a env nao estiver configurada, escondemos o CTA externo
-  // em vez de vazar a URL da plataforma parceira (quebra o white-label).
-  const plataformaLoginUrl = process.env.EA_STUDENT_LOGIN_URL?.trim() || null
+  // URL da plataforma de aulas (env EA_STUDENT_LOGIN_URL com fallback playcurso).
+  const plataformaLoginUrl = getStudentPlatformLoginUrl()
 
   return (
     <div className="space-y-6">

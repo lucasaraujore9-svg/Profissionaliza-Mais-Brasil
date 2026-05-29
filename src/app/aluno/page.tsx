@@ -1,7 +1,10 @@
 import Link from "next/link"
 import { prisma } from "@/lib/prisma"
 import { requireStudentSession } from "@/lib/auth/student-session"
-import { getStudentPlatformCredentials } from "@/lib/students/platform-credentials"
+import {
+  getStudentPlatformCredentials,
+  getStudentPlatformLoginUrl,
+} from "@/lib/students/platform-credentials"
 import { PlatformCredentialsCard } from "@/components/aluno/platform-credentials-card"
 import {
   AlertCircle,
@@ -55,9 +58,8 @@ export default async function StudentDashboardPage() {
   const hasNoEnrollments = enrollments.length === 0
   const continueEnrollment = activeEnrollments[0] ?? null
 
-  // Sem fallback: se a env nao estiver configurada, escondemos o CTA externo
-  // em vez de vazar a URL da plataforma parceira (quebra o white-label).
-  const plataformaLoginUrl = process.env.EA_STUDENT_LOGIN_URL?.trim() || null
+  // URL da plataforma de aulas (env EA_STUDENT_LOGIN_URL com fallback playcurso).
+  const plataformaLoginUrl = getStudentPlatformLoginUrl()
 
   const firstName = session.name?.split(" ")[0] ?? "aluno"
 
