@@ -10,6 +10,7 @@ import {
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { contextLogger } from "@/lib/logger"
 import { queueLeadMessage } from "@/lib/automation/dispatch"
+import { resolveTenantFromRequest } from "@/lib/tenant/from-request"
 
 const CONSENT_VERSION = "2026-05-v1"
 const DEDUP_WINDOW_MS = 24 * 60 * 60 * 1000
@@ -42,8 +43,12 @@ export const POST = withRequestContext(
     const rl = await rateLimit(request, RATE_LIMITS.lojaLeads)
     if (!rl.ok) return rateLimitResponse(rl)
 
-    const tenantId = request.headers.get("x-tenant-id")
-    if (!tenantId) {
+    // O proxy injeta x-tenant-slug (e, em paths de vitrine, x-tenant-id). Para
+    // /api/* so vem o slug, entao resolvemos por qualquer um dos dois.
+    const hasTenantHeader =
+      !!request.headers.get("x-tenant-id")?.trim() ||
+      !!request.headers.get("x-tenant-slug")?.trim()
+    if (!hasTenantHeader) {
       return NextResponse.json(
         { error: "Tenant não identificado", code: "TENANT_MISSING" },
         { status: 400 },
@@ -74,21 +79,7 @@ export const POST = withRequestContext(
 
     const data = parsed.data
 
-    const emailRl = await rateLimitByKey(
-      `${tenantId}:${data.email}`,
-      RATE_LIMITS.lojaLeadsByEmail,
-    )
-    if (!emailRl.ok) return rateLimitResponse(emailRl)
-
-    const tenant = await prisma.tenant.findUnique({
-      where: { id: tenantId },
-      select: {
-        id: true,
-        name: true,
-        slug: true,
-        automationEnabled: true,
-      },
-    })
+    const tenant = await resolveTenantFromRequest(request)
 
     if (!tenant) {
       return NextResponse.json(
@@ -96,6 +87,12 @@ export const POST = withRequestContext(
         { status: 404 },
       )
     }
+
+    const emailRl = await rateLimitByKey(
+      `${tenant.id}:${data.email}`,
+      RATE_LIMITS.lojaLeadsByEmail,
+    )
+    if (!emailRl.ok) return rateLimitResponse(emailRl)
 
     if (!tenant.automationEnabled) {
       return NextResponse.json(

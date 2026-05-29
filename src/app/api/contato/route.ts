@@ -11,6 +11,7 @@ import {
 import { contextLogger } from "@/lib/logger"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { isValidPhone } from "@/lib/validation/phone"
+import { resolveTenantFromRequest } from "@/lib/tenant/from-request"
 
 // Contato publico roteado por tenant (ContactMessage kind=CONTACT).
 // - Com header `x-tenant-id` (storefront de revenda) -> cai na unidade dona.
@@ -67,14 +68,14 @@ export const POST = withRequestContext(
       throw error
     }
 
-    // Resolve dono: header x-tenant-id (storefront) => unidade; ausente => PMB.
-    const headerTenantId = request.headers.get("x-tenant-id")?.trim() || null
+    // Resolve dono pelos headers do proxy (x-tenant-id OU x-tenant-slug).
+    // Storefront => unidade; sem headers (site PMB) => PMB.
+    const hasTenantHeader =
+      !!request.headers.get("x-tenant-id")?.trim() ||
+      !!request.headers.get("x-tenant-slug")?.trim()
     let tenant: { id: string; slug: string } | null = null
-    if (headerTenantId) {
-      tenant = await prisma.tenant.findUnique({
-        where: { id: headerTenantId },
-        select: { id: true, slug: true },
-      })
+    if (hasTenantHeader) {
+      tenant = await resolveTenantFromRequest(request)
       if (!tenant) {
         return NextResponse.json(
           { error: "Tenant não encontrado", code: "TENANT_NOT_FOUND" },
