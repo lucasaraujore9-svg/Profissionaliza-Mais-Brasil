@@ -143,6 +143,112 @@ export async function sendLeadMessage(args: QueueLeadMessageArgs): Promise<void>
   }
 }
 
+export type ManualSendResult =
+  | { ok: true; engineMessageId: string }
+  | {
+      ok: false
+      code: "wa_not_connected" | "no_whatsapp" | "engine_error"
+      message: string
+    }
+
+/**
+ * Envia uma mensagem de texto LIVRE (digitada pelo operador) para o lead.
+ * Diferente de `sendLeadMessage`, que renderiza um template. Reutiliza o mesmo
+ * fluxo do engine: check-exists → chatId → envio. Distingue o caso "numero sem
+ * WhatsApp" (no_whatsapp) para a UI mostrar a mensagem apropriada.
+ *
+ * Pre-condicao: o caller ja validou que o lead pertence ao seu escopo (tenant
+ * ou PMB) — aqui so resolvemos o contexto de automacao a partir do lead.
+ */
+export async function sendManualWhatsAppToLead(
+  leadId: string,
+  body: string,
+): Promise<ManualSendResult> {
+  const lead = await prisma.studentLead.findUnique({
+    where: { id: leadId },
+    select: { id: true, tenantId: true, telefone: true },
+  })
+  if (!lead) {
+    return { ok: false, code: "engine_error", message: "Lead não encontrado." }
+  }
+
+  const ctx = await resolveAutomationContext(lead.tenantId)
+  if (!ctx || !ctx.enabled || ctx.waStatus !== "WORKING" || !ctx.waSessionName) {
+    return {
+      ok: false,
+      code: "wa_not_connected",
+      message: "WhatsApp não conectado. Conecte em Automação para enviar mensagens.",
+    }
+  }
+
+  const sessionRl = await rateLimitByKey(ctx.waSessionName, RATE_LIMITS.waSend)
+  if (!sessionRl.ok) {
+    return {
+      ok: false,
+      code: "engine_error",
+      message: "Muitos envios em sequência. Aguarde um momento e tente de novo.",
+    }
+  }
+
+  try {
+    const result = await sendTextMessage({
+      sessionName: ctx.waSessionName,
+      toPhone: lead.telefone,
+      body,
+    })
+    await prisma.studentLeadActivity.create({
+      data: {
+        leadId,
+        kind: "WA_MESSAGE_SENT",
+        body,
+        metadata: { manual: true, engineMessageId: result.engineMessageId },
+      },
+    })
+    return { ok: true, engineMessageId: result.engineMessageId }
+  } catch (err) {
+    if (err instanceof WhatsAppNumberNotFoundError) {
+      contextLogger().warn(
+        { event: "automation.dispatch.manual_no_whatsapp", leadId },
+        "Envio manual: numero do lead nao possui WhatsApp",
+      )
+      await prisma.studentLeadActivity
+        .create({
+          data: {
+            leadId,
+            kind: "WA_MESSAGE_FAILED",
+            body: "Número não possui WhatsApp",
+            metadata: { manual: true, reason: "no_whatsapp" },
+          },
+        })
+        .catch(() => {})
+      return {
+        ok: false,
+        code: "no_whatsapp",
+        message: "Este número não possui conta no WhatsApp.",
+      }
+    }
+    contextLogger().error(
+      { err, event: "automation.dispatch.manual_send_failed", leadId },
+      "Engine WhatsApp rejeitou o envio manual",
+    )
+    await prisma.studentLeadActivity
+      .create({
+        data: {
+          leadId,
+          kind: "WA_MESSAGE_FAILED",
+          body: "Falha ao enviar mensagem",
+          metadata: { manual: true, reason: "engine_error" },
+        },
+      })
+      .catch(() => {})
+    return {
+      ok: false,
+      code: "engine_error",
+      message: "Falha ao enviar a mensagem. Tente novamente.",
+    }
+  }
+}
+
 /**
  * Registra falha de envio no historico do lead. `reason` e o codigo de
  * maquina (metadata); `message` e o texto amigavel mostrado na UI — quando

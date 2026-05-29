@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { requireResellerSession } from "@/lib/auth/reseller-session"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
+import { getLeadCourseTimeline } from "@/lib/automation/leads"
 
 export const GET = withRequestContextParams<{ id: string }>(
   { action: "painel.leads.get", route: "/api/painel/leads/[id]" },
@@ -33,6 +34,12 @@ export const GET = withRequestContextParams<{ id: string }>(
       )
     }
 
+    const courseTimeline = await getLeadCourseTimeline(
+      ctx.tenantId,
+      lead.email,
+      lead.telefone,
+    )
+
     return NextResponse.json({
       data: {
         id: lead.id,
@@ -54,6 +61,7 @@ export const GET = withRequestContextParams<{ id: string }>(
           : null,
         createdAt: lead.createdAt.toISOString(),
         updatedAt: lead.updatedAt.toISOString(),
+        courseTimeline,
         activities: lead.activities.map((a) => ({
           id: a.id,
           kind: a.kind,

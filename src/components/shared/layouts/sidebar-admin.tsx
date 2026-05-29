@@ -37,7 +37,7 @@ const ALL_ITEMS: {
   { href: "/admin", label: "Dashboard", icon: LayoutDashboard, roles: ["SUPER_ADMIN", "PMB_SALES", "PMB_RESELLER_MGR"] },
   { href: "/admin/revendedores", label: "Revendedores", icon: Users, roles: ["SUPER_ADMIN", "PMB_RESELLER_MGR"] },
   { href: "/admin/alunos", label: "Alunos", icon: GraduationCap, roles: ["SUPER_ADMIN"] },
-  { href: "/admin/leads", label: "Vendas", icon: Inbox, roles: ["SUPER_ADMIN", "PMB_SALES"] },
+  { href: "/admin/leads", label: "Leads", icon: Inbox, roles: ["SUPER_ADMIN", "PMB_SALES"] },
   { href: "/admin/vendas", label: "Vendas diretas", icon: ShoppingCart, roles: ["SUPER_ADMIN", "PMB_SALES"] },
   { href: "/admin/financeiro", label: "Financeiro", icon: DollarSign, roles: ["SUPER_ADMIN"] },
   { href: "/admin/indicacoes", label: "Indicações", icon: Share2, roles: ["SUPER_ADMIN", "PMB_RESELLER_MGR"] },

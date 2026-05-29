@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { requireAdminSession } from "@/lib/auth/admin-session"
 import { withRequestContext } from "@/lib/observability/with-request-context"
+import { reconcileLeadStages } from "@/lib/automation/leads"
 import { StudentLeadStage } from "@prisma/client"
 
 const ALL_STAGES: StudentLeadStage[] = [
@@ -24,6 +25,14 @@ export const GET = withRequestContext(
     if (ctx.role !== "SUPER_ADMIN" && ctx.role !== "PMB_SALES") {
       return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
     }
+
+    // Reconcilia colunas com o estado real (paga → WON, expirada → ABANDONED)
+    // antes de montar o board. Cobre webhooks perdidos / cron atrasado.
+    const settings = await prisma.systemSettings.findUnique({
+      where: { id: "default" },
+      select: { pmbAbandonedAfterHours: true },
+    })
+    await reconcileLeadStages(null, settings?.pmbAbandonedAfterHours ?? 24)
 
     const url = new URL(request.url)
     const courseSlug = url.searchParams.get("courseSlug")

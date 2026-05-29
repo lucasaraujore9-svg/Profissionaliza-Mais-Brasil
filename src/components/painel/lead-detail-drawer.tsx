@@ -11,6 +11,8 @@ import {
   Send,
   Trash2,
   Activity,
+  MessageCircle,
+  GraduationCap,
 } from "lucide-react"
 import { STAGE_META, type StageKey } from "./lead-kanban-column"
 
@@ -19,6 +21,14 @@ interface LeadActivity {
   kind: string
   body: string | null
   metadata: unknown
+  createdAt: string
+}
+
+interface CourseTimelineEntry {
+  id: string
+  courseName: string
+  stage: StageKey
+  paymentValue: number | null
   createdAt: string
 }
 
@@ -36,7 +46,17 @@ interface LeadDetail {
   enrollment: { id: string; status: string; finalAmount: number } | null
   createdAt: string
   updatedAt: string
+  courseTimeline: CourseTimelineEntry[]
   activities: LeadActivity[]
+}
+
+const OUTCOME_LABEL: Record<StageKey, string> = {
+  NEW: "Demonstrou interesse",
+  CONTACTED: "Em contato",
+  CHECKOUT_STARTED: "Iniciou o checkout",
+  ABANDONED: "Abandonou o carrinho",
+  WON: "Concluiu o pagamento",
+  LOST: "Descartado",
 }
 
 interface LeadDetailDrawerProps {
@@ -66,6 +86,9 @@ export function LeadDetailDrawer({
   const [loading, setLoading] = useState(false)
   const [note, setNote] = useState("")
   const [posting, setPosting] = useState(false)
+  const [waMessage, setWaMessage] = useState("")
+  const [waSending, setWaSending] = useState(false)
+  const [waError, setWaError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     if (!leadId) return
@@ -94,7 +117,39 @@ export function LeadDetailDrawer({
       setLead(null)
       setNote("")
     }
+    setWaMessage("")
+    setWaError(null)
   }, [leadId, load])
+
+  async function sendWhatsApp() {
+    if (!leadId || !waMessage.trim()) return
+    setWaSending(true)
+    setWaError(null)
+    try {
+      const res = await fetch(`${apiBase}/${leadId}/whatsapp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: waMessage.trim() }),
+      })
+      const body = await res.json().catch(() => ({}))
+      if (res.ok) {
+        toast.success("Mensagem enviada pelo WhatsApp")
+        setWaMessage("")
+        await load()
+        return
+      }
+      // Numero sem WhatsApp: mostra inline (esperado). Demais: toast.
+      if (body.code === "no_whatsapp") {
+        setWaError(body.error ?? "Este número não possui conta no WhatsApp.")
+      } else {
+        toast.error(body.error ?? "Falha ao enviar mensagem")
+      }
+    } catch {
+      toast.error("Erro de rede")
+    } finally {
+      setWaSending(false)
+    }
+  }
 
   async function postNote() {
     if (!leadId || !note.trim()) return
@@ -209,6 +264,53 @@ export function LeadDetailDrawer({
               )}
             </div>
 
+            {lead.courseTimeline.length > 0 && (
+              <div className="mt-6">
+                <h4 className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                  <GraduationCap className="h-3.5 w-3.5" />
+                  Cursos visitados
+                </h4>
+                <ol className="mt-2 space-y-0">
+                  {lead.courseTimeline.map((c, i) => (
+                    <li key={c.id} className="relative flex gap-3 pb-4 last:pb-0">
+                      {i < lead.courseTimeline.length - 1 && (
+                        <span
+                          aria-hidden
+                          className="absolute left-[5px] top-3 h-full w-px bg-gray-200"
+                        />
+                      )}
+                      <span
+                        aria-hidden
+                        className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${STAGE_META[c.stage].badge}`}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <p className="flex items-center gap-1.5 text-[12.5px] font-semibold text-[var(--color-pmb-green-900)]">
+                          <span className="truncate">{c.courseName}</span>
+                          {c.id === lead.id && (
+                            <span className="shrink-0 rounded bg-[var(--color-pmb-mist)] px-1.5 py-0.5 text-[9px] font-bold uppercase text-[var(--color-pmb-green-900)]">
+                              Atual
+                            </span>
+                          )}
+                        </p>
+                        <p className="text-[11px] text-gray-600">
+                          {OUTCOME_LABEL[c.stage]}
+                          {c.stage === "WON" && c.paymentValue !== null && (
+                            <span className="font-semibold text-emerald-700">
+                              {" "}
+                              · R$ {c.paymentValue.toFixed(2).replace(".", ",")}
+                            </span>
+                          )}
+                        </p>
+                        <p className="text-[10px] text-gray-400">
+                          {new Date(c.createdAt).toLocaleString("pt-BR")}
+                        </p>
+                      </div>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            )}
+
             <div className="mt-6">
               <h4 className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
                 <Activity className="h-3.5 w-3.5" />
@@ -239,6 +341,43 @@ export function LeadDetailDrawer({
                   <li className="text-[11px] text-gray-400">Sem atividades</li>
                 )}
               </ul>
+            </div>
+
+            <div className="mt-6">
+              <h4 className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                <MessageCircle className="h-3.5 w-3.5" />
+                Enviar WhatsApp
+              </h4>
+              <textarea
+                value={waMessage}
+                onChange={(e) => {
+                  setWaMessage(e.target.value)
+                  if (waError) setWaError(null)
+                }}
+                placeholder="Escreva uma mensagem para o WhatsApp do lead…"
+                rows={3}
+                className="mt-1.5 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-[12.5px] focus:border-[var(--color-pmb-green)] focus:outline-none focus:ring-1 focus:ring-[var(--color-pmb-green)]"
+              />
+              {waError && (
+                <p className="mt-1.5 rounded-md bg-red-50 px-2.5 py-1.5 text-[11.5px] font-medium text-red-700">
+                  {waError}
+                </p>
+              )}
+              <button
+                onClick={sendWhatsApp}
+                disabled={waSending || !waMessage.trim()}
+                className="mt-2 inline-flex items-center gap-1.5 rounded-md bg-[#25D366] px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-[#1ebe5b] disabled:opacity-50"
+              >
+                {waSending ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <MessageCircle className="h-3.5 w-3.5" />
+                )}
+                Enviar WhatsApp
+              </button>
+              <p className="mt-1.5 text-[10px] text-gray-400">
+                Verificamos se o número tem conta no WhatsApp antes de enviar.
+              </p>
             </div>
 
             <div className="mt-6">

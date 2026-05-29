@@ -1,7 +1,6 @@
 import Link from "next/link"
 import { redirect } from "next/navigation"
 import {
-  Zap,
   MessageCircle,
   ListChecks,
   Inbox,
@@ -11,6 +10,7 @@ import {
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { PageHeader } from "@/components/painel/page-header"
+import { AutomationGate } from "@/components/painel/automation-gate"
 
 const WA_STATUS_LABEL: Record<string, { label: string; color: string }> = {
   WORKING: { label: "Conectado", color: "text-emerald-700" },
@@ -39,30 +39,9 @@ export default async function PainelAutomacaoPage() {
     },
   })
 
-  if (!tenant?.automationEnabled) {
-    return (
-      <div className="space-y-6">
-        <PageHeader
-          title="Automação"
-          description="Disparo automático de WhatsApp e CRM de leads."
-        />
-        <div className="rounded-2xl border border-dashed border-gray-300 bg-white p-10 text-center">
-          <Zap className="mx-auto h-10 w-10 text-gray-300" aria-hidden />
-          <h2 className="mt-3 text-base font-semibold text-[var(--color-pmb-green-900)]">
-            Módulo Automação não habilitado
-          </h2>
-          <p className="mt-1 mx-auto max-w-md text-sm text-gray-600">
-            Com o módulo Automação, alunos podem solicitar contato direto na
-            página do curso e você dispara mensagens automáticas no WhatsApp.
-            Fale com seu account manager para habilitar.
-          </p>
-        </div>
-      </div>
-    )
-  }
-
-  const statusMeta = WA_STATUS_LABEL[tenant.waStatus] ?? WA_STATUS_LABEL.DISCONNECTED
-  const isConnected = tenant.waStatus === "WORKING"
+  const waStatus = tenant?.waStatus ?? "DISCONNECTED"
+  const statusMeta = WA_STATUS_LABEL[waStatus] ?? WA_STATUS_LABEL.DISCONNECTED
+  const isConnected = waStatus === "WORKING"
 
   return (
     <div className="space-y-6">
@@ -71,61 +50,65 @@ export default async function PainelAutomacaoPage() {
         description="Configure o WhatsApp da unidade, as mensagens automáticas e acompanhe os leads."
       />
 
-      <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-        <div className="flex items-start gap-3">
-          <div
-            className={`rounded-lg p-2 ${
-              isConnected ? "bg-emerald-50" : "bg-gray-100"
-            }`}
-          >
-            {isConnected ? (
-              <CheckCircle2 className="h-5 w-5 text-emerald-600" />
-            ) : (
-              <XCircle className="h-5 w-5 text-gray-400" />
-            )}
+      <AutomationGate enabled={!!tenant?.automationEnabled}>
+        <div className="space-y-6">
+          <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+            <div className="flex items-start gap-3">
+              <div
+                className={`rounded-lg p-2 ${
+                  isConnected ? "bg-emerald-50" : "bg-gray-100"
+                }`}
+              >
+                {isConnected ? (
+                  <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                ) : (
+                  <XCircle className="h-5 w-5 text-gray-400" />
+                )}
+              </div>
+              <div className="flex-1">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                  Status WhatsApp
+                </p>
+                <p className={`text-base font-bold ${statusMeta.color}`}>
+                  {statusMeta.label}
+                </p>
+                {tenant?.waConnectedPhone && (
+                  <p className="font-mono text-sm text-gray-700">
+                    {tenant.waConnectedPhone}
+                  </p>
+                )}
+              </div>
+              <Link
+                href="/painel/automacao/conexao"
+                className="rounded-md border border-[var(--color-pmb-green)] px-3 py-1.5 text-xs font-semibold text-[var(--color-pmb-green)] hover:bg-[var(--color-pmb-mist)]"
+              >
+                {isConnected ? "Gerenciar" : "Conectar"}
+              </Link>
+            </div>
           </div>
-          <div className="flex-1">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
-              Status WhatsApp
-            </p>
-            <p className={`text-base font-bold ${statusMeta.color}`}>
-              {statusMeta.label}
-            </p>
-            {tenant.waConnectedPhone && (
-              <p className="font-mono text-sm text-gray-700">
-                {tenant.waConnectedPhone}
-              </p>
-            )}
-          </div>
-          <Link
-            href="/painel/automacao/conexao"
-            className="rounded-md border border-[var(--color-pmb-green)] px-3 py-1.5 text-xs font-semibold text-[var(--color-pmb-green)] hover:bg-[var(--color-pmb-mist)]"
-          >
-            {isConnected ? "Gerenciar" : "Conectar"}
-          </Link>
-        </div>
-      </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <NavCard
-          href="/painel/automacao/conexao"
-          icon={<MessageCircle className="h-5 w-5" />}
-          title="Conexão WhatsApp"
-          description="Conecte o número da unidade escaneando um QR Code."
-        />
-        <NavCard
-          href="/painel/automacao/mensagens"
-          icon={<ListChecks className="h-5 w-5" />}
-          title="Mensagens automáticas"
-          description="Edite os templates enviados em cada etapa do funil."
-        />
-        <NavCard
-          href="/painel/leads"
-          icon={<Inbox className="h-5 w-5" />}
-          title="Kanban de Leads"
-          description="Visualize e trabalhe seus leads em pipeline."
-        />
-      </div>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <NavCard
+              href="/painel/automacao/conexao"
+              icon={<MessageCircle className="h-5 w-5" />}
+              title="Conexão WhatsApp"
+              description="Conecte o número da unidade escaneando um QR Code."
+            />
+            <NavCard
+              href="/painel/automacao/mensagens"
+              icon={<ListChecks className="h-5 w-5" />}
+              title="Mensagens automáticas"
+              description="Edite os templates enviados em cada etapa do funil."
+            />
+            <NavCard
+              href="/painel/leads"
+              icon={<Inbox className="h-5 w-5" />}
+              title="Kanban de Leads"
+              description="Visualize e trabalhe seus leads em pipeline."
+            />
+          </div>
+        </div>
+      </AutomationGate>
     </div>
   )
 }

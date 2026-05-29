@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma"
 import { contextLogger } from "@/lib/logger"
 import { queueLeadMessage } from "./dispatch"
 import { resolveAutomationContext } from "./context"
+import { StudentLeadStage } from "@prisma/client"
 
 const DEDUP_WINDOW_MS = 48 * 60 * 60 * 1000
 
@@ -233,6 +234,157 @@ export async function sweepAbandonedLeadsForTenant(
   hours: number,
 ): Promise<SweepResult> {
   return sweepAbandonedLeadsForContext(tenantId, hours)
+}
+
+/**
+ * Reconciliacao self-healing chamada a cada carregamento do board (GET).
+ * O webhook MP (→ WON) e o cron (→ ABANDONED) sao os caminhos primarios, mas
+ * se algum deles nao disparar (webhook perdido, cron atrasado) o lead fica
+ * preso na coluna errada. Esta funcao reposiciona com base no estado REAL da
+ * matricula/pagamento, sem enfileirar mensagens (so corrige a coluna):
+ *
+ *  - matricula paga (payment APPROVED ou enrollment ACTIVE/COMPLETED) → WON
+ *  - CHECKOUT_STARTED alem da janela sem pagamento aprovado            → ABANDONED
+ *
+ * LOST e WON nao sao tocados (decisoes deliberadas / ja convertidos).
+ */
+export async function reconcileLeadStages(
+  tenantId: string | null,
+  hours: number,
+): Promise<void> {
+  const cutoff = new Date(Date.now() - hours * 60 * 60 * 1000)
+
+  const leads = await prisma.studentLead.findMany({
+    where: {
+      tenantId,
+      stage: { in: ["NEW", "CONTACTED", "CHECKOUT_STARTED", "ABANDONED"] },
+      enrollmentId: { not: null },
+    },
+    select: {
+      id: true,
+      stage: true,
+      createdAt: true,
+      enrollment: {
+        select: {
+          status: true,
+          finalAmount: true,
+          payments: {
+            where: { mpStatus: "APPROVED" },
+            select: { amount: true },
+            take: 1,
+          },
+        },
+      },
+    },
+  })
+
+  for (const lead of leads) {
+    const enr = lead.enrollment
+    if (!enr) continue
+    const approved = enr.payments[0]
+    const isPaid =
+      !!approved || enr.status === "ACTIVE" || enr.status === "COMPLETED"
+
+    if (isPaid) {
+      const amount = Number((approved?.amount ?? enr.finalAmount).toString())
+      await prisma
+        .$transaction([
+          prisma.studentLead.update({
+            where: { id: lead.id },
+            data: { stage: "WON", paymentValue: amount },
+          }),
+          prisma.studentLeadActivity.create({
+            data: {
+              leadId: lead.id,
+              kind: "PAYMENT_APPROVED",
+              metadata: {
+                fromStage: lead.stage,
+                toStage: "WON",
+                amount,
+                reason: "reconcile",
+              },
+            },
+          }),
+        ])
+        .catch((err) => {
+          contextLogger().error(
+            { err, event: "automation.leads.reconcile_won_failed", leadId: lead.id },
+            "Falha ao reconciliar lead para WON",
+          )
+        })
+    } else if (lead.stage === "CHECKOUT_STARTED" && lead.createdAt <= cutoff) {
+      await prisma
+        .$transaction([
+          prisma.studentLead.update({
+            where: { id: lead.id },
+            data: { stage: "ABANDONED" },
+          }),
+          prisma.studentLeadActivity.create({
+            data: {
+              leadId: lead.id,
+              kind: "STAGE_CHANGED",
+              metadata: {
+                fromStage: "CHECKOUT_STARTED",
+                toStage: "ABANDONED",
+                reason: "reconcile",
+              },
+            },
+          }),
+        ])
+        .catch((err) => {
+          contextLogger().error(
+            { err, event: "automation.leads.reconcile_abandon_failed", leadId: lead.id },
+            "Falha ao reconciliar lead para ABANDONED",
+          )
+        })
+    }
+  }
+}
+
+export interface CourseTimelineEntry {
+  id: string
+  courseName: string
+  stage: StudentLeadStage
+  paymentValue: number | null
+  createdAt: string
+}
+
+/**
+ * Linha do tempo de cursos da pessoa (agrupada por email/telefone dentro do
+ * contexto). Cada lead = um curso pelo qual a pessoa demonstrou interesse;
+ * o `stage` revela o desfecho (abandonou o carrinho, concluiu o pagamento...).
+ * Ignora os placeholders de email/telefone para nao agrupar leads sem contato.
+ */
+export async function getLeadCourseTimeline(
+  tenantId: string | null,
+  email: string,
+  telefone: string,
+): Promise<CourseTimelineEntry[]> {
+  const matchers: Array<{ email: string } | { telefone: string }> = []
+  if (email && !email.endsWith("@noemail.local")) matchers.push({ email })
+  if (telefone && telefone !== "+5500000000000") matchers.push({ telefone })
+  if (matchers.length === 0) return []
+
+  const rows = await prisma.studentLead.findMany({
+    where: { tenantId, OR: matchers },
+    orderBy: { createdAt: "asc" },
+    select: {
+      id: true,
+      courseSnapshot: true,
+      stage: true,
+      paymentValue: true,
+      createdAt: true,
+      course: { select: { nome: true } },
+    },
+  })
+
+  return rows.map((r) => ({
+    id: r.id,
+    courseName: r.courseSnapshot ?? r.course?.nome ?? "Curso",
+    stage: r.stage,
+    paymentValue: r.paymentValue ? Number(r.paymentValue.toString()) : null,
+    createdAt: r.createdAt.toISOString(),
+  }))
 }
 
 function normalizeE164(value: string): string {

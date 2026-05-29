@@ -19,6 +19,7 @@ import {
   MessageSquare,
   Zap,
   Inbox,
+  Lock,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -32,7 +33,7 @@ const ALL_ITEMS: {
   { href: "/painel", label: "Dashboard", icon: LayoutDashboard },
   { href: "/painel/cursos", label: "Catálogo", icon: GraduationCap },
   { href: "/painel/alunos", label: "Alunos", icon: Users },
-  { href: "/painel/leads", label: "Vendas", icon: Inbox, ownerOnly: true, automationOnly: true },
+  { href: "/painel/leads", label: "Leads", icon: Inbox, ownerOnly: true, automationOnly: true },
   { href: "/painel/vendas", label: "Vendas diretas", icon: ShoppingCart },
   { href: "/painel/cupons", label: "Cupons", icon: Tag },
   { href: "/painel/financeiro", label: "Financeiro", icon: CreditCard },
@@ -60,9 +61,11 @@ export function SidebarPainel({
   automationEnabled = false,
 }: SidebarPainelProps) {
   const pathname = usePathname()
+  // Itens de automação continuam VISÍVEIS mesmo sem o módulo ativo — ao clicar,
+  // a página mostra o paywall (fundo desfocado + pop-up comercial). Só ocultamos
+  // por papel (ownerOnly).
   const navItems = ALL_ITEMS.filter((item) => {
     if (item.ownerOnly && !isOwner) return false
-    if (item.automationOnly && !automationEnabled) return false
     return true
   })
 
@@ -93,6 +96,7 @@ export function SidebarPainel({
           const isActive =
             pathname === item.href ||
             (item.href !== "/painel" && pathname.startsWith(item.href))
+          const locked = !!item.automationOnly && !automationEnabled
           return (
             <Link
               key={item.href}
@@ -105,7 +109,16 @@ export function SidebarPainel({
               )}
             >
               <item.icon className="h-5 w-5" />
-              <span>{item.label}</span>
+              <span className="flex-1">{item.label}</span>
+              {locked && (
+                <Lock
+                  className={cn(
+                    "h-3.5 w-3.5",
+                    isActive ? "text-[var(--color-pmb-green-900)]/50" : "text-white/45",
+                  )}
+                  aria-label="Recurso premium"
+                />
+              )}
             </Link>
           )
         })}
