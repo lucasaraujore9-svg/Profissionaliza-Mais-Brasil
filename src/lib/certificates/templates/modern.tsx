@@ -185,10 +185,10 @@ export function ModernCertificate(data: CertificateRenderData) {
       justifyContent: "center",
     },
     groupLogo: {
-      maxHeight: 18,
+      maxHeight: 16,
       maxWidth: 70,
       objectFit: "contain",
-      marginRight: 6,
+      marginLeft: 4,
     },
     groupText: {
       fontSize: 7,
@@ -201,7 +201,7 @@ export function ModernCertificate(data: CertificateRenderData) {
     <Document>
       <Page size="A4" orientation="landscape" style={styles.page}>
         {t.backgroundUrl ? (
-          <Image src={t.backgroundUrl} style={styles.background} />
+          <Image src={t.backgroundUrl} style={styles.background} fixed />
         ) : null}
         <View style={styles.sidebar}>
           <View style={styles.sidebarTop}>
@@ -278,12 +278,12 @@ export function ModernCertificate(data: CertificateRenderData) {
           ) : null}
 
           <View style={styles.groupBrand}>
+            <Text style={styles.groupText}>
+              Plataforma do{data.groupLogoUrl ? " " : ` ${data.groupName}`}
+            </Text>
             {data.groupLogoUrl ? (
               <Image src={data.groupLogoUrl} style={styles.groupLogo} />
             ) : null}
-            <Text style={styles.groupText}>
-              Plataforma do {data.groupName}
-            </Text>
           </View>
         </View>
       </Page>

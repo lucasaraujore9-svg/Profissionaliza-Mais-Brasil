@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { Download, Eye, FileText, Loader2, X } from "lucide-react"
+import { Download, Eye, FileText, Loader2, RefreshCw, X } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 
@@ -70,6 +70,8 @@ export function CertificatesList({
   const [revokeSubmitting, setRevokeSubmitting] = useState(false)
   const [revokeError, setRevokeError] = useState<string | null>(null)
 
+  const [regeneratingId, setRegeneratingId] = useState<string | null>(null)
+
   const queryString = useMemo(() => {
     const sp = new URLSearchParams()
     if (q) sp.set("q", q)
@@ -132,6 +134,27 @@ export function CertificatesList({
       setRevokeError("Erro de rede")
     } finally {
       setRevokeSubmitting(false)
+    }
+  }
+
+  async function handleRegenerate(row: CertificateRow) {
+    setRegeneratingId(row.id)
+    setError(null)
+    try {
+      const endpoint = revokeEndpoint
+        .replace("/revoke", "/regenerate")
+        .replace("{id}", row.id)
+      const res = await fetch(endpoint, { method: "POST" })
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setError(body.error ?? "Falha ao regenerar PDF")
+        return
+      }
+      await load()
+    } catch {
+      setError("Erro de rede ao regenerar PDF")
+    } finally {
+      setRegeneratingId(null)
     }
   }
 
@@ -311,6 +334,19 @@ export function CertificatesList({
                           >
                             <Download className="h-3.5 w-3.5" />
                           </a>
+                        )}
+                        {!revoked && (
+                          <button
+                            type="button"
+                            onClick={() => handleRegenerate(row)}
+                            disabled={regeneratingId === row.id}
+                            title="Regenerar PDF (aplica o layout/branding atual)"
+                            className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+                          >
+                            <RefreshCw
+                              className={`h-3.5 w-3.5 ${regeneratingId === row.id ? "animate-spin" : ""}`}
+                            />
+                          </button>
                         )}
                         <a
                           href={`/validar/${row.code}`}

@@ -16,6 +16,12 @@ import { getPmbMpAccessTokenAsync } from "@/lib/system-settings"
 
 export const PMB_TENANT_SLUG = "__pmb__"
 export const PMB_TENANT_NAME = "Profissionaliza Mais Brasil (Vitrine)"
+/**
+ * Nome público da vitrine PMB — usado em material visto pelo aluno
+ * (ex.: certificados). Sem o sufixo interno "(Vitrine)", que só serve para
+ * distinguir o tenant placeholder no admin.
+ */
+export const PMB_PUBLIC_NAME = "Profissionaliza Mais Brasil"
 
 /**
  * Le do banco (criptografado) com fallback para PMB_MP_ACCESS_TOKEN no env.

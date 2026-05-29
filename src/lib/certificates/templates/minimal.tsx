@@ -179,10 +179,10 @@ export function MinimalCertificate(data: CertificateRenderData) {
       justifyContent: "center",
     },
     groupLogo: {
-      maxHeight: 16,
+      maxHeight: 15,
       maxWidth: 64,
       objectFit: "contain",
-      marginRight: 6,
+      marginLeft: 4,
     },
     groupText: {
       fontSize: 7,
@@ -195,7 +195,7 @@ export function MinimalCertificate(data: CertificateRenderData) {
     <Document>
       <Page size="A4" orientation="landscape" style={styles.page}>
         {t.backgroundUrl ? (
-          <Image src={t.backgroundUrl} style={styles.background} />
+          <Image src={t.backgroundUrl} style={styles.background} fixed />
         ) : null}
         <View style={styles.topBar} />
 
@@ -264,12 +264,12 @@ export function MinimalCertificate(data: CertificateRenderData) {
         ) : null}
 
         <View style={styles.groupBrand}>
+          <Text style={styles.groupText}>
+            Plataforma do{data.groupLogoUrl ? " " : ` ${data.groupName}`}
+          </Text>
           {data.groupLogoUrl ? (
             <Image src={data.groupLogoUrl} style={styles.groupLogo} />
           ) : null}
-          <Text style={styles.groupText}>
-            Plataforma do {data.groupName}
-          </Text>
         </View>
       </Page>
     </Document>

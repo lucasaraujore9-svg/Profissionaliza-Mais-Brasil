@@ -2,7 +2,7 @@ import { renderToBuffer } from "@react-pdf/renderer"
 import QRCode from "qrcode"
 import { prisma } from "@/lib/prisma"
 import { vitrineDomain } from "@/lib/tenant/urls"
-import { PMB_TENANT_NAME, PMB_TENANT_SLUG } from "@/lib/pmb-config"
+import { PMB_PUBLIC_NAME, PMB_TENANT_NAME, PMB_TENANT_SLUG } from "@/lib/pmb-config"
 import {
   applyPlaceholders,
   formatCompletionDate,
@@ -65,9 +65,12 @@ export async function generateAndUploadPdf(
   // sempre reflete o estado ATUAL do SystemSettings — assim trocar a logo
   // no admin se propaga em re-emissoes sem precisar editar snapshots antigos.
   const template = await refreshGroupBranding(readSnapshot(cert.templateSnapshot))
+  // Nome da unidade exibido no certificado (visto pelo aluno). Para a vitrine
+  // PMB usa o nome público (sem o sufixo interno "(Vitrine)"). Unidades de
+  // revendedores usam o próprio nome do tenant.
   const unidade = cert.tenantId
-    ? cert.tenant?.name ?? PMB_TENANT_NAME
-    : PMB_TENANT_NAME
+    ? cert.tenant?.name ?? PMB_PUBLIC_NAME
+    : PMB_PUBLIC_NAME
 
   const placeholders: CertificatePlaceholders = {
     nome: cert.studentName,

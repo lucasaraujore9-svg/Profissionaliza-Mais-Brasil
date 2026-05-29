@@ -208,17 +208,18 @@ export function ClassicCertificate(data: CertificateRenderData) {
     },
     groupBrand: {
       position: "absolute",
-      bottom: 6,
+      bottom: 8,
       left: 0,
       right: 0,
-      flexDirection: "column",
+      flexDirection: "row",
       alignItems: "center",
+      justifyContent: "center",
     },
     groupLogo: {
-      maxHeight: 18,
+      maxHeight: 16,
       maxWidth: 80,
       objectFit: "contain",
-      marginBottom: 1,
+      marginLeft: 4,
     },
     groupText: {
       fontSize: 7,
@@ -232,7 +233,7 @@ export function ClassicCertificate(data: CertificateRenderData) {
     <Document>
       <Page size="A4" orientation="landscape" style={styles.page}>
         {t.backgroundUrl ? (
-          <Image src={t.backgroundUrl} style={styles.background} />
+          <Image src={t.backgroundUrl} style={styles.background} fixed />
         ) : null}
         <View style={styles.outerBorder} />
         <View style={styles.innerBorder} />
@@ -300,12 +301,12 @@ export function ClassicCertificate(data: CertificateRenderData) {
         </View>
 
         <View style={styles.groupBrand}>
+          <Text style={styles.groupText}>
+            Plataforma do{data.groupLogoUrl ? " " : ` ${data.groupName}`}
+          </Text>
           {data.groupLogoUrl ? (
             <Image src={data.groupLogoUrl} style={styles.groupLogo} />
           ) : null}
-          <Text style={styles.groupText}>
-            Plataforma do {data.groupName}
-          </Text>
         </View>
       </Page>
     </Document>
