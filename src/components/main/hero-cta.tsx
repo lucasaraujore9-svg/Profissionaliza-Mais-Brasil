@@ -72,7 +72,7 @@ export async function HeroCTA() {
               {cursos ? <> de <strong className="font-bold text-white">mais de {cursos} cursos</strong></> : <> <strong className="font-bold text-white">completo de cursos</strong></>}{" "}
               profissionalizantes pra vender com a sua marca, no Brasil inteiro.
               Você define cada preço, recebe direto na sua conta e a matrícula é
-              automática. <strong className="font-bold text-white">R$ 209 por mês</strong>{" "}
+              automática. <strong className="font-bold text-white">A partir de R$ 209/mês</strong>{" "}
               — sem CNPJ, sem gravar aula, sem comissão sobre as suas vendas.
             </p>
 
@@ -91,10 +91,10 @@ export async function HeroCTA() {
                 </Button>
               </a>
               <a
-                href="#plano"
+                href="#planos"
                 className="text-center text-sm font-medium text-white/80 underline-offset-4 hover:text-yellow-300 hover:underline sm:text-left"
               >
-                Antes, quero ver o preço
+                Antes, quero ver os planos
               </a>
             </div>
 

@@ -3,7 +3,8 @@ import { HeroCTA } from "@/components/main/hero-cta"
 import { VantagensQuadrinhos } from "@/components/main/vantagens-quadrinhos"
 import { ManifestoFundador } from "@/components/main/manifesto-fundador"
 import { CatalogoPreview } from "@/components/main/catalogo-preview"
-import { PlanoUnico } from "@/components/main/plano-unico"
+import { AutomacaoSection } from "@/components/main/automacao-section"
+import { PlanosPMB } from "@/components/main/planos-pmb"
 import { ComoFuncionaSection } from "@/components/main/como-funciona-section"
 import { DepoimentosSection } from "@/components/main/depoimentos-section"
 import { CTABannerMid } from "@/components/main/cta-banner-mid"
@@ -18,7 +19,7 @@ export const metadata = {
   title:
     "Tenha o seu portal de cursos profissionalizantes | Profissionaliza Mais Brasil",
   description:
-    "Empreenda na educação com um modelo inovador. Acesso a mais de 100 cursos profissionalizantes prontos, site personalizado e suporte do maior grupo educacional do Brasil. R$ 209 por mês, sem comissão.",
+    "Empreenda na educação com um modelo inovador. Mais de 100 cursos profissionalizantes prontos, site personalizado e suporte do maior grupo educacional do Brasil. A partir de R$ 209/mês, sem comissão — ou R$ 239/mês com a Automação que vende no WhatsApp por você.",
 }
 
 const faqSchema = {
@@ -49,7 +50,8 @@ export default function SejaRevendedorPage() {
       <VantagensQuadrinhos />
       <ManifestoFundador />
       <CatalogoPreview />
-      <PlanoUnico />
+      <AutomacaoSection />
+      <PlanosPMB />
       <ComoFuncionaSection />
       <DepoimentosSection />
       <CTABannerMid />

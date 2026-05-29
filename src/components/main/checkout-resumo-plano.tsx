@@ -1,8 +1,10 @@
 import { Check, Shield } from "lucide-react"
 
-// Plano único PMB (alinhado a plano-unico.tsx). Caso o catálogo cresça e
-// existam planos adicionais no futuro, este componente passa a receber o
-// plano selecionado via props em vez de hardcoded.
+// Resumo do plano base (Profissionaliza, R$ 209) para o checkout direto.
+// A landing /seja-revendedor agora oferece dois planos (ver planos-pmb.tsx):
+// Profissionaliza e Profissionaliza PRO (+R$ 30, com Automação). Quando o
+// checkout passar a vender o PRO, este componente deve receber o plano
+// selecionado via props em vez de hardcoded.
 const PLAN = {
   name: "Plano Profissionaliza",
   priceLabel: "R$ 209",

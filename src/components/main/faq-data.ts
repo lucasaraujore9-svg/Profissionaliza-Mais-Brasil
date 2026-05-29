@@ -21,6 +21,16 @@ export const faqs: FAQItem[] = [
       "A partir de R$ 209 por mês você tem o seu site totalmente personalizado, com mais de 100 cursos profissionalizantes disponíveis pra vender. Sem taxa de adesão, sem comissão sobre vendas. O catálogo é atualizado e você pode ofertar os cursos pelo valor que quiser.",
   },
   {
+    pergunta: "Qual a diferença entre o Profissionaliza e o Profissionaliza PRO?",
+    resposta:
+      "Os dois planos vêm com a escola completa: site personalizado, catálogo liberado, pagamento direto na sua conta e matrícula automática. O Profissionaliza (R$ 209/mês) é a operação completa no manual. O Profissionaliza PRO (R$ 239/mês) adiciona a Automação: WhatsApp no piloto automático, recuperação de carrinho abandonado, CRM visual de leads e captura de contatos na página do curso. São só R$ 30 a mais pra ter um vendedor trabalhando por você 24 horas por dia — muitas vezes uma única venda recuperada já paga a diferença do mês.",
+  },
+  {
+    pergunta: "Posso começar no Profissionaliza e migrar pro PRO depois?",
+    resposta:
+      "Pode. Você começa no plano que fizer mais sentido agora e, quando quiser ligar a Automação, é só falar com o seu gerente de conta. A ativação é feita pela nossa equipe e a sua escola continua a mesma — você só ganha as ferramentas de venda automática.",
+  },
+  {
     pergunta: "Quanto posso lucrar tendo o meu site personalizado?",
     resposta:
       "Você vende quantos cursos quiser, pelo valor que definir. Alguns parceiros relatam faturar valores expressivos, mas os resultados dependem de dedicação, região e estratégia de marketing — não garantimos rendimento.",
@@ -58,6 +68,6 @@ export const faqs: FAQItem[] = [
   {
     pergunta: "Vocês cobram alguma taxa por venda?",
     resposta:
-      "Claro que não. Você paga apenas uma mensalidade fixa de R$ 209, e muitas vezes com uma única venda já cobre essa mensalidade. O restante é lucro pra você. Não cobramos nenhuma taxa sobre as suas vendas.",
+      "Claro que não. Você paga apenas uma mensalidade fixa (a partir de R$ 209), e muitas vezes com uma única venda já cobre essa mensalidade. O restante é lucro pra você. Não cobramos nenhuma taxa sobre as suas vendas.",
   },
 ]

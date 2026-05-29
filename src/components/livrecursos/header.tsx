@@ -11,8 +11,8 @@ export function LivrecursosHeader() {
           <Link href="#como-funciona" className="hover:text-[var(--color-pmb-green)]">
             Como funciona
           </Link>
-          <Link href="#plano" className="hover:text-[var(--color-pmb-green)]">
-            Plano
+          <Link href="#planos" className="hover:text-[var(--color-pmb-green)]">
+            Planos
           </Link>
           <Link
             href="#formulario"
