@@ -162,6 +162,7 @@ export const RATE_LIMITS = {
   revendedorCadastro: { name: "rev-cadastro", limit: 5, windowSec: 600 },
   cobrancaPayCard: { name: "cobranca-paycard", limit: 5, windowSec: 60 },
   certificateValidate: { name: "cert-validate", limit: 30, windowSec: 60 },
+  alunoVerificarPagamento: { name: "aluno-verificar-pag", limit: 6, windowSec: 60 },
   upload: { name: "upload", limit: 10, windowSec: 60 },
   // Automacao
   lojaLeads: { name: "loja-leads", limit: 5, windowSec: 60 },

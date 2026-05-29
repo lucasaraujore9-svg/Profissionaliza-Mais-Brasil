@@ -1,5 +1,9 @@
 import { prisma } from "@/lib/prisma"
-import { decryptTenantMpToken, getPayment } from "./client"
+import { decryptTenantMpToken, getPayment, searchPayments } from "./client"
+import {
+  getPayment as getAsaasPayment,
+  listPayments as listAsaasPayments,
+} from "@/lib/asaas/client"
 import { validateMpWebhookSignature } from "./webhook"
 import type { MPPayment } from "./types"
 import { pmbPlataformaPolo, pmbPlataformaVendedorId, pmbMpAccessToken } from "@/lib/pmb-config"
@@ -58,6 +62,22 @@ async function buildPmbContext(): Promise<TenantContext | null> {
     primaryColor: "#00a862",
     isPmbVitrine: true,
   }
+}
+
+async function resolveTenantById(id: string): Promise<TenantContext | null> {
+  const tenant = await prisma.tenant.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+      plataformaVendedorId: true,
+      mpAccessToken: true,
+      primaryColor: true,
+    },
+  })
+  if (!tenant || !tenant.mpAccessToken) return null
+  return tenant
 }
 
 async function resolveTenantBySlug(slug: string): Promise<TenantContext | null> {
@@ -360,4 +380,140 @@ export async function processMpWebhook(args: ProcessArgs): Promise<void> {
     )
     await markLog(logId, false, message)
   }
+}
+
+export type ReconcileResult =
+  /** Pagamento aprovado no gateway — matrícula efetivada (ou já estava). */
+  | { status: "confirmed" }
+  /** Sem pagamento aprovado no gateway ainda — pedir para aguardar. */
+  | { status: "pending" }
+  /** Não há como verificar automaticamente (ex: gateway Asaas, sem referência). */
+  | { status: "unsupported" }
+
+/**
+ * Reconciliação sob demanda disparada pelo aluno ("Já fiz o pagamento").
+ *
+ * Consulta o gateway da matrícula (Mercado Pago OU Asaas) e, se houver um
+ * pagamento aprovado/confirmado, roda o mesmo `fulfillEnrollment` do webhook
+ * (idempotente — se já foi processado, é no-op). Serve de rede de segurança
+ * quando o webhook atrasa ou não chega. Espelha a verificação ativa que o
+ * admin já faz em /api/admin/vendas/[id]/sync-payment.
+ *
+ * NÃO confia em input do aluno: só efetiva se o GATEWAY confirmar o pagamento.
+ */
+export async function reconcilePendingEnrollment(
+  enrollmentId: string,
+): Promise<ReconcileResult> {
+  const enrollment = await prisma.enrollment.findUnique({
+    where: { id: enrollmentId },
+    select: {
+      id: true,
+      status: true,
+      tenantId: true,
+      gateway: true,
+      paymentType: true,
+      externalReference: true,
+      asaasPaymentId: true,
+      asaasSubscriptionId: true,
+    },
+  })
+  if (!enrollment) return { status: "unsupported" }
+
+  // Já liberado (webhook chegou antes, ou clique duplo) — devolve confirmado.
+  if (enrollment.status === "ACTIVE" || enrollment.status === "COMPLETED") {
+    return { status: "confirmed" }
+  }
+
+  // ── Asaas ──────────────────────────────────────────────────────────────
+  // Key global; vendas via Asaas são da vitrine PMB (tenantId=null). Buscamos
+  // pelo paymentId direto ou pela 1ª cobrança da assinatura.
+  if (enrollment.gateway === "ASAAS") {
+    const ctx =
+      enrollment.tenantId === null
+        ? {
+            id: "__pmb__",
+            slug: pmbPlataformaPolo(),
+            name: "Profissionaliza Mais Brasil",
+            plataformaVendedorId: pmbPlataformaVendedorId(),
+            isPmbVitrine: true as const,
+          }
+        : await resolveTenantById(enrollment.tenantId)
+    if (!ctx) return { status: "unsupported" }
+
+    let asaasPaymentId = enrollment.asaasPaymentId
+    let asaasStatus: string | null = null
+    let asaasValue = 0
+    let asaasPaymentDate: string | null = null
+
+    if (asaasPaymentId) {
+      const payment = await getAsaasPayment(asaasPaymentId)
+      asaasStatus = payment.status
+      asaasValue = payment.value
+      asaasPaymentDate = payment.paymentDate ?? null
+    } else if (enrollment.asaasSubscriptionId) {
+      const list = await listAsaasPayments({
+        subscription: enrollment.asaasSubscriptionId,
+        limit: 1,
+        offset: 0,
+      })
+      const first = list.data?.[0]
+      if (first) {
+        asaasPaymentId = first.id
+        asaasStatus = first.status
+        asaasValue = first.value
+        asaasPaymentDate = first.paymentDate ?? null
+      }
+    }
+
+    // Sem cobrança localizável ou ainda não confirmada → pedir para aguardar.
+    if (!asaasPaymentId || !asaasStatus) return { status: "pending" }
+    if (asaasStatus !== "RECEIVED" && asaasStatus !== "CONFIRMED") {
+      return { status: "pending" }
+    }
+
+    await fulfillEnrollment(
+      {
+        id: ctx.id,
+        slug: ctx.slug,
+        name: ctx.name,
+        plataformaVendedorId: ctx.plataformaVendedorId,
+        isPmbVitrine: ctx.isPmbVitrine,
+      },
+      enrollment.id,
+      {
+        gateway: "ASAAS",
+        externalPaymentId: asaasPaymentId,
+        amount: asaasValue,
+        paidAt: asaasPaymentDate ? new Date(asaasPaymentDate) : new Date(),
+        paymentType: enrollment.paymentType,
+      },
+    )
+    return { status: "confirmed" }
+  }
+
+  // ── Mercado Pago ─────────────────────────────────────────────────────────
+  if (enrollment.gateway === "MP") {
+    if (!enrollment.externalReference) return { status: "unsupported" }
+
+    const tenant =
+      enrollment.tenantId === null
+        ? await buildPmbContext()
+        : await resolveTenantById(enrollment.tenantId)
+    if (!tenant || !tenant.mpAccessToken) return { status: "unsupported" }
+
+    const accessToken = tenant.isPmbVitrine
+      ? tenant.mpAccessToken
+      : decryptTenantMpToken(tenant.mpAccessToken)
+
+    const { results } = await searchPayments(accessToken, {
+      external_reference: enrollment.externalReference,
+    })
+    const approved = results.find((p) => p.status === "approved")
+    if (!approved) return { status: "pending" }
+
+    await fulfillFromMp(tenant, enrollment.id, approved)
+    return { status: "confirmed" }
+  }
+
+  return { status: "unsupported" }
 }

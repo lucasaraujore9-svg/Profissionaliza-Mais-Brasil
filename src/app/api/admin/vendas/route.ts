@@ -15,6 +15,7 @@ import {
 import { getSystemSettings } from "@/lib/system-settings"
 import { contextLogger } from "@/lib/logger"
 import { provisionStudentAccess } from "@/lib/students/access"
+import { fulfillScholarshipEnrollment } from "@/lib/enrollment/fulfill"
 import { tryConsumeCoupon, releaseCoupon } from "@/lib/coupons/consume"
 import { applyCouponDiscount } from "@/lib/coupons/discount"
 import { dueDateInDays } from "@/lib/checkout/due-date"
@@ -73,6 +74,8 @@ const createSchema = z.object({
   studentId: z.string().min(1),
   courseId: z.string().min(1),
   couponCode: z.string().trim().max(64).optional(),
+  // Bolsa de estudo: cria o aluno na plataforma sem gerar cobranca no gateway.
+  bolsista: z.boolean().optional(),
 })
 
 export const POST = withRequestContext(
@@ -96,23 +99,28 @@ export const POST = withRequestContext(
     )
   }
 
+  const isBolsista = parsed.data.bolsista === true
+
   const settings = await getSystemSettings()
   const gateway = settings.pmbDirectSaleGateway
 
-  if (gateway === "MP") {
-    const exists = await pmbMpAccessToken()
-    if (!exists) {
+  // Bolsa nao toca no gateway — pulamos a validacao de credenciais MP/Asaas.
+  if (!isBolsista) {
+    if (gateway === "MP") {
+      const exists = await pmbMpAccessToken()
+      if (!exists) {
+        return NextResponse.json(
+          { error: "Token Mercado Pago PMB não configurado" },
+          { status: 503 },
+        )
+      }
+    }
+    if (gateway === "ASAAS" && (!process.env.ASAAS_API_URL || !process.env.ASAAS_API_KEY)) {
       return NextResponse.json(
-        { error: "Token Mercado Pago PMB não configurado" },
+        { error: "Asaas não configurado (ASAAS_API_URL/ASAAS_API_KEY)" },
         { status: 503 },
       )
     }
-  }
-  if (gateway === "ASAAS" && (!process.env.ASAAS_API_URL || !process.env.ASAAS_API_KEY)) {
-    return NextResponse.json(
-      { error: "Asaas não configurado (ASAAS_API_URL/ASAAS_API_KEY)" },
-      { status: 503 },
-    )
   }
 
   const pmbTenant = await getOrCreatePmbTenant()
@@ -154,15 +162,19 @@ export const POST = withRequestContext(
     )
   }
 
-  await provisionStudentAccess(student.id, {
-    isPmbVitrine: true,
-    slug: pmbTenant.slug,
-  }).catch((err) => {
-    contextLogger().error(
-      { err, event: "admin.vendas.provision_access_failed", studentId: student.id },
-      "provisionStudentAccess falhou",
-    )
-  })
+  // Na bolsa o fulfillScholarshipEnrollment cuida da senha do painel + email de
+  // boas-vindas de forma sincrona, entao pulamos aqui pra nao reenviar.
+  if (!isBolsista) {
+    await provisionStudentAccess(student.id, {
+      isPmbVitrine: true,
+      slug: pmbTenant.slug,
+    }).catch((err) => {
+      contextLogger().error(
+        { err, event: "admin.vendas.provision_access_failed", studentId: student.id },
+        "provisionStudentAccess falhou",
+      )
+    })
+  }
 
   if (!course || course.status !== "ATIVO") {
     return NextResponse.json({ error: "Curso não disponível" }, { status: 404 })
@@ -196,6 +208,70 @@ export const POST = withRequestContext(
       { error: "Curso sem preço da vitrine PMB" },
       { status: 400 },
     )
+  }
+
+  // ── Bolsa de estudo ─────────────────────────────────────────────────────
+  // Sem cobranca: marca o aluno como bolsista, cria a matricula ja ACTIVE e
+  // provisiona o acesso na plataforma de aulas de forma sincrona. Cupom e
+  // ignorado (nao ha valor a descontar). Valor cheio vai como desconto pra
+  // refletir nos relatorios o quanto foi concedido.
+  if (isBolsista) {
+    await prisma.student.update({
+      where: { id: student.id },
+      data: { bolsista: true },
+    })
+
+    const enrollment = await prisma.enrollment.create({
+      data: {
+        tenantId: null,
+        studentId: student.id,
+        tenantCourseId: null,
+        courseId: course.id,
+        soldByUserId: guard.session.userId,
+        paymentType: course.paymentTypeMain,
+        status: "PENDING",
+        gateway,
+        originalAmount: basePrice,
+        discountAmount: basePrice,
+        finalAmount: 0,
+        couponId: null,
+        installmentsTotal: null,
+      },
+      select: { id: true },
+    })
+
+    try {
+      await fulfillScholarshipEnrollment(
+        {
+          id: pmbTenant.id,
+          slug: pmbTenant.slug,
+          plataformaVendedorId: null,
+          isPmbVitrine: true,
+          name: "Profissionaliza Mais Brasil",
+        },
+        enrollment.id,
+      )
+    } catch (err) {
+      await prisma.enrollment
+        .delete({ where: { id: enrollment.id } })
+        .catch(swallow("admin.vendas.bolsa.rollback"))
+      contextLogger().error(
+        { err, event: "admin.vendas.bolsa_failed", studentId: student.id, courseId: course.id },
+        "concessao de bolsa falhou",
+      )
+      return NextResponse.json(
+        { error: "Falha ao matricular o aluno na plataforma de aulas. Tente novamente." },
+        { status: 502 },
+      )
+    }
+
+    return NextResponse.json({
+      data: {
+        enrollmentId: enrollment.id,
+        scholarship: true,
+        finalAmount: 0,
+      },
+    })
   }
 
   let discountAmount = 0

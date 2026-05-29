@@ -100,13 +100,17 @@ export function NovaVendaClient({
   const [couponError, setCouponError] = useState<string | null>(null)
   const [validatingCoupon, setValidatingCoupon] = useState(false)
 
+  // Bolsa de estudo (sem cobrança)
+  const [bolsista, setBolsista] = useState(false)
+
   // Step 4 — Link
   const [generatingLink, setGeneratingLink] = useState(false)
   const [linkResult, setLinkResult] = useState<{
-    initPoint: string
+    initPoint?: string
     finalAmount: number
-    discountAmount: number
-    gateway: string
+    discountAmount?: number
+    gateway?: string
+    scholarship?: boolean
   } | null>(null)
 
   // Search students (debounced)
@@ -138,6 +142,16 @@ export function NovaVendaClient({
   useEffect(() => {
     setLinkResult(null)
   }, [selectedStudent, selectedCourse])
+
+  // Ao ativar a bolsa, zera o cupom (não há valor a descontar) e o link.
+  useEffect(() => {
+    setLinkResult(null)
+    if (bolsista) {
+      setCouponResult(null)
+      setCouponCode("")
+      setCouponError(null)
+    }
+  }, [bolsista])
 
   function handleCpfChange(v: string) {
     setNewStudent((s) => ({ ...s, cpf: maskCpf(v) }))
@@ -218,16 +232,21 @@ export function NovaVendaClient({
         body: JSON.stringify({
           studentId: selectedStudent.id,
           courseId: selectedCourse.id,
-          couponCode: couponResult ? couponCode.trim() : undefined,
+          couponCode: bolsista || !couponResult ? undefined : couponCode.trim(),
+          bolsista: bolsista || undefined,
         }),
       })
       const body = await res.json()
       if (!res.ok) {
-        toast.error(body.error ?? "Falha ao gerar link")
+        toast.error(body.error ?? (bolsista ? "Falha ao conceder bolsa" : "Falha ao gerar link"))
         return
       }
       setLinkResult(body.data)
-      toast.success("Link de pagamento gerado!")
+      toast.success(
+        body.data?.scholarship
+          ? "Bolsa concedida! Aluno matriculado na plataforma de aulas."
+          : "Link de pagamento gerado!",
+      )
     } catch {
       toast.error("Erro de rede ao gerar link")
     } finally {
@@ -239,9 +258,11 @@ export function NovaVendaClient({
     c.nome.toLowerCase().includes(courseSearch.toLowerCase()),
   )
 
-  const finalPrice = couponResult
-    ? couponResult.finalAmount
-    : selectedCourse?.preco ?? 0
+  const finalPrice = bolsista
+    ? 0
+    : couponResult
+      ? couponResult.finalAmount
+      : selectedCourse?.preco ?? 0
 
   // ─── Render ───────────────────────────────────────────────────────────────
 
@@ -250,10 +271,33 @@ export function NovaVendaClient({
       <div>
         <h1 className="text-2xl font-bold text-[var(--color-pmb-green-900)]">Nova venda direta</h1>
         <p className="mt-1 text-sm text-gray-500">
-          Gateway: <strong>{gateway === "ASAAS" ? "Asaas" : "Mercado Pago"}</strong>
-          {" · "}Cap de desconto: <strong>{cap}%</strong>
+          {bolsista ? (
+            <>Bolsa de estudo — <strong>sem cobrança</strong></>
+          ) : (
+            <>
+              Gateway: <strong>{gateway === "ASAAS" ? "Asaas" : "Mercado Pago"}</strong>
+              {" · "}Cap de desconto: <strong>{cap}%</strong>
+            </>
+          )}
         </p>
       </div>
+
+      {/* ── Bolsa de estudo ─────────────────────────────────────────────── */}
+      <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+        <input
+          type="checkbox"
+          checked={bolsista}
+          onChange={(e) => setBolsista(e.target.checked)}
+          className="mt-0.5 h-4 w-4 accent-amber-600"
+        />
+        <span className="text-sm">
+          <span className="font-semibold text-amber-900">Bolsista (bolsa de estudo)</span>
+          <span className="mt-0.5 block text-xs text-amber-700">
+            O aluno é criado na plataforma de aulas e matriculado imediatamente,
+            <strong> sem gerar cobrança</strong> no gateway de pagamento.
+          </span>
+        </span>
+      </label>
 
       {/* ── 1. Aluno ─────────────────────────────────────────────────────── */}
       <Section title="1. Aluno" done={!!selectedStudent}>
@@ -418,6 +462,7 @@ export function NovaVendaClient({
       </Section>
 
       {/* ── 3. Cupom ─────────────────────────────────────────────────────── */}
+      {!bolsista && (
       <Section title="3. Cupom (opcional)" done={!!couponResult}>
         {couponResult ? (
           <div className="flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 p-4">
@@ -463,18 +508,23 @@ export function NovaVendaClient({
           </div>
         )}
       </Section>
+      )}
 
-      {/* ── 4. Gerar link ────────────────────────────────────────────────── */}
-      <Section title="4. Gerar link de pagamento" done={!!linkResult}>
+      {/* ── 4. Gerar link / Conceder bolsa ───────────────────────────────── */}
+      <Section title={bolsista ? "4. Conceder bolsa" : "4. Gerar link de pagamento"} done={!!linkResult}>
         {selectedStudent && selectedCourse ? (
           <div className="space-y-4">
             <div className="rounded-xl bg-gray-50 p-4 text-sm space-y-1">
               <Row label="Aluno" value={selectedStudent.nome} />
               <Row label="Curso" value={selectedCourse.nome} />
-              <Row label="Preço base" value={fmt(selectedCourse.preco)} />
-              {couponResult && <Row label="Desconto" value={`− ${fmt(couponResult.discountAmount)}`} className="text-emerald-600" />}
+              <Row label={bolsista ? "Valor do curso" : "Preço base"} value={fmt(selectedCourse.preco)} />
+              {bolsista ? (
+                <Row label="Bolsa de estudo" value={`− ${fmt(selectedCourse.preco)}`} className="text-amber-600" />
+              ) : (
+                couponResult && <Row label="Desconto" value={`− ${fmt(couponResult.discountAmount)}`} className="text-emerald-600" />
+              )}
               <Row label="Total" value={fmt(finalPrice)} bold />
-              <Row label="Gateway" value={gateway === "ASAAS" ? "Asaas" : "Mercado Pago"} />
+              <Row label={bolsista ? "Cobrança" : "Gateway"} value={bolsista ? "Nenhuma (bolsa)" : gateway === "ASAAS" ? "Asaas" : "Mercado Pago"} />
             </div>
 
             {!linkResult ? (
@@ -483,8 +533,36 @@ export function NovaVendaClient({
                 disabled={generatingLink}
                 className="bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)]"
               >
-                {generatingLink ? "Gerando…" : "Gerar link de pagamento"}
+                {generatingLink
+                  ? bolsista ? "Concedendo…" : "Gerando…"
+                  : bolsista ? "Conceder bolsa de estudo" : "Gerar link de pagamento"}
               </Button>
+            ) : linkResult.scholarship ? (
+              <div className="space-y-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
+                <div className="flex items-center gap-2 font-semibold text-amber-700">
+                  <CheckCircle2 className="h-4 w-4" /> Bolsa concedida
+                </div>
+                <p className="text-sm text-amber-800">
+                  {selectedStudent.nome} foi matriculado em <strong>{selectedCourse.nome}</strong> na
+                  plataforma de aulas, sem cobrança. As credenciais de acesso foram enviadas por e-mail.
+                </p>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="text-gray-500"
+                  onClick={() => {
+                    setSelectedStudent(null)
+                    setSelectedCourse(null)
+                    setCouponResult(null)
+                    setCouponCode("")
+                    setLinkResult(null)
+                    setBolsista(false)
+                    setNewStudent({ nome: "", email: "", cpf: "", fone: "" })
+                  }}
+                >
+                  Nova venda
+                </Button>
+              </div>
             ) : (
               <div className="space-y-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
                 <div className="flex items-center gap-2 font-semibold text-emerald-700">
@@ -495,7 +573,7 @@ export function NovaVendaClient({
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => { navigator.clipboard.writeText(linkResult.initPoint); toast.success("Link copiado") }}
+                    onClick={() => { if (linkResult.initPoint) { navigator.clipboard.writeText(linkResult.initPoint); toast.success("Link copiado") } }}
                   >
                     <Copy className="h-3.5 w-3.5 mr-1" /> Copiar
                   </Button>

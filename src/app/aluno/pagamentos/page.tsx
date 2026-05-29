@@ -1,6 +1,7 @@
 import { CheckCircle2, Clock, CreditCard, FileText, XCircle } from "lucide-react"
 import { prisma } from "@/lib/prisma"
 import { requireStudentSession } from "@/lib/auth/student-session"
+import { PaymentCheckButton } from "@/components/aluno/payment-check-button"
 
 function brl(value: number): string {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
@@ -155,16 +156,19 @@ export default async function StudentPaymentsPage() {
                     · {brl(Number(e.finalAmount))}
                   </p>
                 </div>
-                {e.asaasInvoiceUrl && (
-                  <a
-                    href={e.asaasInvoiceUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-[var(--color-pmb-green)] px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[var(--color-pmb-green-700)] sm:w-auto"
-                  >
-                    Pagar agora
-                  </a>
-                )}
+                <div className="flex flex-col items-stretch gap-2 sm:items-end">
+                  {e.asaasInvoiceUrl && (
+                    <a
+                      href={e.asaasInvoiceUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-[var(--color-pmb-green)] px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[var(--color-pmb-green-700)] sm:w-auto"
+                    >
+                      Pagar agora
+                    </a>
+                  )}
+                  <PaymentCheckButton enrollmentId={e.id} />
+                </div>
               </li>
             ))}
           </ul>

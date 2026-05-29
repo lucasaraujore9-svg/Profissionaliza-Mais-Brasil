@@ -1,6 +1,8 @@
 import Link from "next/link"
 import { prisma } from "@/lib/prisma"
 import { requireStudentSession } from "@/lib/auth/student-session"
+import { getStudentPlatformCredentials } from "@/lib/students/platform-credentials"
+import { PlatformCredentialsCard } from "@/components/aluno/platform-credentials-card"
 import {
   AlertCircle,
   ArrowRight,
@@ -27,7 +29,7 @@ export default async function StudentDashboardPage() {
   const session = await requireStudentSession()
   if (!session) return null
 
-  const [enrollments, payments] = await Promise.all([
+  const [enrollments, payments, platformCredentials] = await Promise.all([
     prisma.enrollment.findMany({
       where: { studentId: session.studentId },
       include: {
@@ -41,6 +43,7 @@ export default async function StudentDashboardPage() {
       take: 5,
       include: { enrollment: { include: { course: { select: { nome: true } } } } },
     }),
+    getStudentPlatformCredentials(session.studentId),
   ])
 
   const activeEnrollments = enrollments.filter(
@@ -103,6 +106,15 @@ export default async function StudentDashboardPage() {
             <ExternalLink className="h-4 w-4" />
           </span>
         </a>
+      )}
+
+      {/* Credenciais da plataforma de aulas — só aparece com matrícula paga */}
+      {platformCredentials && (
+        <PlatformCredentialsCard
+          login={platformCredentials.login}
+          senha={platformCredentials.senha}
+          loginUrl={plataformaLoginUrl}
+        />
       )}
 
       {/* Empty state quando aluno ainda não tem cursos */}

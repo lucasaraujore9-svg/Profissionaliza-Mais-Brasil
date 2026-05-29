@@ -212,67 +212,9 @@ async function fulfillEnrollmentLocked(
     return
   }
 
-  // Primeira cobranca: garante aluno na plataforma + vincula o curso (mesma rota
-  // usada pelas concessoes manuais via /admin/alunos/[id]/cursos).
-  // Erros aqui (ex: curso sem plataforma_course_id) NÃO devem ficar invisíveis:
-  // notificamos SUPER_ADMIN antes de relançar — o webhook é retentado pelo MP
-  // mas sem o aviso ninguém saberia que a esteira travou.
-  let plataformaAlunoId: number
-  let created: boolean
-  let plataformaSenha: string | null
-  try {
-    const ensured = await ensureStudentOnPlatform(enrollment.student.id)
-    plataformaAlunoId = ensured.plataformaAlunoId
-    created = ensured.created
-    plataformaSenha = ensured.plataformaSenha
-    await linkCourseToStudent(enrollment.student.id, enrollment.course.id)
-  } catch (err) {
-    contextLogger().error(
-      {
-        err,
-        event: "fulfill.platform_link_failed",
-        enrollmentId: enrollment.id,
-        studentId: enrollment.student.id,
-        courseId: enrollment.course.id,
-      },
-      "matricula na plataforma de aulas falhou — alertando admin",
-    )
-    await createNotification({
-      audience: "ROLE",
-      roleTarget: "SUPER_ADMIN",
-      level: "ERROR",
-      title: "Matricula na plataforma falhou",
-      body: `Aluno ${enrollment.student.nome} pagou ${enrollment.course.nome} mas a plataforma de aulas rejeitou a integracao. Erro: ${err instanceof Error ? err.message : "desconhecido"}`,
-      category: "fulfillment",
-      href: `/admin/alunos/${enrollment.student.id}`,
-    }).catch(swallow("fulfill.notify_admin"))
-    throw err
-  }
-
-  // Envia email de boas-vindas com credenciais somente quando criamos o aluno
-  // agora (evita spam em recompras). Rastreamos o sucesso pra decidir se
-  // podemos zerar a senha plaintext do DB no fim do fluxo.
-  let credentialsEmailSent = false
-  if (created) {
-    try {
-      await enviarEmailCredenciais(plataformaAlunoId)
-      credentialsEmailSent = true
-    } catch (err) {
-      contextLogger().error(
-        { err, event: "fulfill.plataforma_email_failed", plataformaAlunoId, studentId: enrollment.student.id },
-        "envioemail da plataforma falhou para aluno",
-      )
-      await createNotification({
-        audience: "ROLE",
-        roleTarget: "SUPER_ADMIN",
-        level: "WARNING",
-        title: "Email de credenciais da plataforma falhou",
-        body: `Aluno ${enrollment.student.nome} foi matriculado mas o email com login/senha da plataforma nao foi enviado. Reenvie manualmente.`,
-        category: "fulfillment",
-        href: `/admin/alunos/${enrollment.student.id}`,
-      }).catch(swallow("fulfill.notify_credentials"))
-    }
-  }
+  // Primeira cobranca: provisiona acesso do aluno (plataforma de aulas + emails).
+  // Reutilizado pela concessao de bolsa (fulfillScholarshipEnrollment).
+  await provisionEnrollmentAccess(tenant, enrollment)
 
   // Primeira cobranca cobre a 1a parcela quando MONTHLY
   const firstInstallmentPaid = enrollment.installmentsTotal !== null ? 1 : 0
@@ -315,10 +257,126 @@ async function fulfillEnrollmentLocked(
     }),
   ])
 
+  // Notificacoes in-app
+  await createNotification({
+    audience: "STUDENT",
+    studentId: enrollment.student.id,
+    level: "SUCCESS",
+    title: `Matrícula confirmada em ${enrollment.course.nome}`,
+    body: enrollment.installmentsTotal
+      ? `Primeira de ${enrollment.installmentsTotal} mensalidades paga.`
+      : "Acesse a área de aulas para começar agora.",
+    category: "enrollment",
+    href: "/aluno/cursos",
+  })
+
+  if (!tenant.isPmbVitrine) {
+    await createNotification({
+      audience: "TENANT",
+      tenantId: tenant.id,
+      level: "SUCCESS",
+      title: `Nova venda — ${enrollment.course.nome}`,
+      body: `${enrollment.student.nome} comprou por R$ ${event.amount
+        .toFixed(2)
+        .replace(".", ",")}.`,
+      category: "sale",
+      href: "/painel/vendas",
+    })
+  } else {
+    await createNotification({
+      audience: "ROLE",
+      roleTarget: "SUPER_ADMIN",
+      level: "SUCCESS",
+      title: `Venda direta — ${enrollment.course.nome}`,
+      body: `${enrollment.student.nome} (vitrine PMB) — R$ ${event.amount
+        .toFixed(2)
+        .replace(".", ",")}.`,
+      category: "sale",
+      href: "/admin/vendas",
+    })
+  }
+}
+
+/** Forma minima do enrollment carregado que provisionEnrollmentAccess precisa. */
+interface EnrollmentForProvision {
+  id: string
+  student: {
+    id: string
+    email: string | null
+    nome: string
+    passwordHash: string | null
+  }
+  course: { id: string; nome: string }
+}
+
+/**
+ * Garante o aluno na plataforma de aulas, vincula o curso e dispara os emails
+ * de credenciais/boas-vindas/matricula. NAO mexe em Payment nem em status da
+ * matricula — isso fica a cargo do chamador (pagamento vs bolsa).
+ *
+ * Erros de plataforma (ex: curso sem plataforma_course_id) NAO ficam
+ * invisiveis: notificamos SUPER_ADMIN antes de relancar — no fluxo de webhook
+ * o MP reentrega; no fluxo de bolsa a rota responde erro ao operador.
+ */
+async function provisionEnrollmentAccess(
+  tenant: TenantContext,
+  enrollment: EnrollmentForProvision,
+): Promise<void> {
+  let plataformaAlunoId: number
+  let created: boolean
+  try {
+    const ensured = await ensureStudentOnPlatform(enrollment.student.id)
+    plataformaAlunoId = ensured.plataformaAlunoId
+    created = ensured.created
+    await linkCourseToStudent(enrollment.student.id, enrollment.course.id)
+  } catch (err) {
+    contextLogger().error(
+      {
+        err,
+        event: "fulfill.platform_link_failed",
+        enrollmentId: enrollment.id,
+        studentId: enrollment.student.id,
+        courseId: enrollment.course.id,
+      },
+      "matricula na plataforma de aulas falhou — alertando admin",
+    )
+    await createNotification({
+      audience: "ROLE",
+      roleTarget: "SUPER_ADMIN",
+      level: "ERROR",
+      title: "Matricula na plataforma falhou",
+      body: `Aluno ${enrollment.student.nome} / ${enrollment.course.nome}: a plataforma de aulas rejeitou a integracao. Erro: ${err instanceof Error ? err.message : "desconhecido"}`,
+      category: "fulfillment",
+      href: `/admin/alunos/${enrollment.student.id}`,
+    }).catch(swallow("fulfill.notify_admin"))
+    throw err
+  }
+
+  // Email de credenciais da plataforma somente quando criamos o aluno agora
+  // (evita spam em recompras / re-matriculas).
+  if (created) {
+    try {
+      await enviarEmailCredenciais(plataformaAlunoId)
+    } catch (err) {
+      contextLogger().error(
+        { err, event: "fulfill.plataforma_email_failed", plataformaAlunoId, studentId: enrollment.student.id },
+        "envioemail da plataforma falhou para aluno",
+      )
+      await createNotification({
+        audience: "ROLE",
+        roleTarget: "SUPER_ADMIN",
+        level: "WARNING",
+        title: "Email de credenciais da plataforma falhou",
+        body: `Aluno ${enrollment.student.nome} foi matriculado mas o email com login/senha da plataforma nao foi enviado. Reenvie manualmente.`,
+        category: "fulfillment",
+        href: `/admin/alunos/${enrollment.student.id}`,
+      }).catch(swallow("fulfill.notify_credentials"))
+    }
+  }
+
   // Gera credenciais do painel /aluno quando o aluno ainda não tem senha.
   // Vale tanto na 1ª compra (created=true) quanto em alunos antigos que nunca
-  // logaram (passwordHash=null) — assim qualquer compra concluída garante
-  // acesso ao painel.
+  // logaram (passwordHash=null) — assim qualquer matricula garante acesso ao painel.
   let panelPassword: string | null = null
   if (enrollment.student.email && !enrollment.student.passwordHash) {
     try {
@@ -337,7 +395,6 @@ async function fulfillEnrollmentLocked(
   }
 
   // Email de boas-vindas ao painel /aluno (com senha temporária).
-  // Disparamos quando geramos a senha agora — evita reenvio em recompras.
   if (panelPassword && enrollment.student.email) {
     const appUrl = resolveAppUrl().replace(/\/$/, "")
     let loginUrl: string
@@ -373,9 +430,7 @@ async function fulfillEnrollmentLocked(
 
   if (created && enrollment.student.email) {
     // Link sempre aponta para a área do aluno DENTRO do nosso sistema
-    // (vitrine do revendedor ou app PMB). De lá o aluno encontra o botão
-    // "área de aulas" que abre a plataforma parceira. Evita vazar URL da
-    // plataforma parceira e mantém o white-label.
+    // (vitrine do revendedor ou app PMB). Mantém o white-label.
     const appBase = resolveAppUrl().replace(/\/$/, "")
     let studentPanelUrl: string
     let storeName: string
@@ -408,32 +463,46 @@ async function fulfillEnrollmentLocked(
       )
     }
   }
+}
 
-  // Segurança: zera a senha plaintext da plataforma do banco APENAS quando
-  // confirmamos que o email com as credenciais foi enviado (enviarEmailCredenciais
-  // acima). Antes a flag dependia do email de "Matrícula confirmada" — que pode
-  // ser enviado mesmo quando o email de credenciais falha, deixando o aluno sem
-  // login na plataforma e sem senha no DB. Agora só limpa se a entrega real
-  // aconteceu. Recompras (created=false) não geram nova senha, então não há
-  // o que zerar.
-  if (credentialsEmailSent && plataformaSenha) {
-    await prisma.student
-      .update({
-        where: { id: enrollment.student.id },
-        data: { plataformaAlunoSenha: null },
-      })
-      .catch(swallow("fulfill.clearPlataformaSenha"))
-  }
+/**
+ * Concede bolsa de estudo: cria o aluno na plataforma (com bolsista=S, via flag
+ * no Student), vincula o curso e dispara os emails — SEM cobranca em gateway e
+ * SEM registro de Payment. Marca a matricula como ACTIVE imediatamente.
+ *
+ * Chamado de forma SINCRONA pelas rotas de venda direta (admin e painel), so
+ * em venda direta. Idempotente via `startedAt`: se a matricula ja foi
+ * provisionada, faz no-op.
+ */
+export async function fulfillScholarshipEnrollment(
+  tenant: TenantContext,
+  enrollmentId: string,
+): Promise<void> {
+  const enrollment = await prisma.enrollment.findUnique({
+    where: { id: enrollmentId },
+    include: {
+      student: {
+        select: { id: true, email: true, nome: true, passwordHash: true },
+      },
+      course: { select: { id: true, nome: true } },
+    },
+  })
+  if (!enrollment) throw new Error(`enrollment ${enrollmentId} nao encontrado`)
+  if (enrollment.startedAt) return // ja provisionada
 
-  // Notificacoes in-app
+  await provisionEnrollmentAccess(tenant, enrollment)
+
+  await prisma.enrollment.update({
+    where: { id: enrollment.id },
+    data: { status: "ACTIVE", startedAt: new Date() },
+  })
+
   await createNotification({
     audience: "STUDENT",
     studentId: enrollment.student.id,
     level: "SUCCESS",
-    title: `Matrícula confirmada em ${enrollment.course.nome}`,
-    body: enrollment.installmentsTotal
-      ? `Primeira de ${enrollment.installmentsTotal} mensalidades paga.`
-      : "Acesse a área de aulas para começar agora.",
+    title: `Bolsa de estudo concedida — ${enrollment.course.nome}`,
+    body: "Acesse a área de aulas para começar agora — sem nenhuma cobrança.",
     category: "enrollment",
     href: "/aluno/cursos",
   })
@@ -443,10 +512,8 @@ async function fulfillEnrollmentLocked(
       audience: "TENANT",
       tenantId: tenant.id,
       level: "SUCCESS",
-      title: `Nova venda — ${enrollment.course.nome}`,
-      body: `${enrollment.student.nome} comprou por R$ ${event.amount
-        .toFixed(2)
-        .replace(".", ",")}.`,
+      title: `Bolsa concedida — ${enrollment.course.nome}`,
+      body: `${enrollment.student.nome} recebeu bolsa de estudo (sem cobrança).`,
       category: "sale",
       href: "/painel/vendas",
     })
@@ -455,10 +522,8 @@ async function fulfillEnrollmentLocked(
       audience: "ROLE",
       roleTarget: "SUPER_ADMIN",
       level: "SUCCESS",
-      title: `Venda direta — ${enrollment.course.nome}`,
-      body: `${enrollment.student.nome} (vitrine PMB) — R$ ${event.amount
-        .toFixed(2)
-        .replace(".", ",")}.`,
+      title: `Bolsa de estudo — ${enrollment.course.nome}`,
+      body: `${enrollment.student.nome} (vitrine PMB) recebeu bolsa de estudo (sem cobrança).`,
       category: "sale",
       href: "/admin/vendas",
     })

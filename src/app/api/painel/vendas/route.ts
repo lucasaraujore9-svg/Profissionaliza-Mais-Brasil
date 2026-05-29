@@ -11,8 +11,10 @@ import {
 import { tryConsumeCoupon, releaseCoupon } from "@/lib/coupons/consume"
 import { applyCouponDiscount } from "@/lib/coupons/discount"
 import { swallow } from "@/lib/errors"
+import { contextLogger } from "@/lib/logger"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { upsertStudent, StudentEmailConflictError } from "@/lib/students/upsert"
+import { fulfillScholarshipEnrollment } from "@/lib/enrollment/fulfill"
 import { isValidCpf, stripCpf } from "@/lib/validation/cpf"
 import { isValidPhone, normalizePhone } from "@/lib/validation/phone"
 
@@ -34,6 +36,8 @@ const createSchema = z.object({
   // Curso a vender (TenantCourse do próprio tenant)
   tenantCourseId: z.string().min(1),
   couponCode: z.string().trim().max(64).optional(),
+  // Bolsa de estudo: matricula sem cobranca no Mercado Pago.
+  bolsista: z.boolean().optional(),
 })
 
 export const GET = withRequestContext(
@@ -107,12 +111,14 @@ export const POST = withRequestContext(
       )
     }
     const data = parsed.data
+    const isBolsista = data.bolsista === true
 
     const tenant = await prisma.tenant.findUnique({
       where: { id: ctx.tenantId },
       select: {
         id: true,
         slug: true,
+        name: true,
         status: true,
         mpAccessToken: true,
         plataformaVendedorId: true,
@@ -130,7 +136,8 @@ export const POST = withRequestContext(
         { status: 403 },
       )
     }
-    if (!tenant.mpAccessToken) {
+    // Bolsa nao usa gateway — so exigimos Mercado Pago em vendas com cobranca.
+    if (!isBolsista && !tenant.mpAccessToken) {
       return NextResponse.json(
         { error: "Conecte o Mercado Pago em /painel/configuracoes" },
         { status: 503 },
@@ -177,7 +184,7 @@ export const POST = withRequestContext(
     let discountAmount = 0
     let couponId: string | null = null
     let finalAmountFromCoupon: number | null = null
-    if (data.couponCode) {
+    if (!isBolsista && data.couponCode) {
       const code = data.couponCode.toUpperCase()
       const now = new Date()
       // Cupom só do próprio tenant — cupons PMB (tenantId=null) não vazam
@@ -279,6 +286,70 @@ export const POST = withRequestContext(
       )
     }
 
+    // ── Bolsa de estudo ───────────────────────────────────────────────────
+    // Sem cobranca no Mercado Pago: marca o aluno como bolsista, matricula ja
+    // ACTIVE e provisiona o acesso na plataforma de aulas de forma sincrona.
+    // Valor cheio entra como desconto pra refletir nos relatorios.
+    if (isBolsista) {
+      await prisma.student.update({
+        where: { id: student.id },
+        data: { bolsista: true },
+      })
+
+      const enrollment = await prisma.enrollment.create({
+        data: {
+          tenantId: tenant.id,
+          studentId: student.id,
+          tenantCourseId: tenantCourse.id,
+          courseId: tenantCourse.courseId,
+          soldByUserId: userId,
+          paymentType: tenantCourse.paymentType,
+          status: "PENDING",
+          gateway: "MP",
+          originalAmount: basePrice,
+          discountAmount: basePrice,
+          finalAmount: 0,
+          couponId: null,
+          installmentsTotal: null,
+        },
+        select: { id: true },
+      })
+
+      try {
+        await fulfillScholarshipEnrollment(
+          {
+            id: tenant.id,
+            slug: tenant.slug,
+            plataformaVendedorId: tenant.plataformaVendedorId,
+            isPmbVitrine: false,
+            name: tenant.name,
+          },
+          enrollment.id,
+        )
+      } catch (err) {
+        await prisma.enrollment
+          .delete({ where: { id: enrollment.id } })
+          .catch(() => {})
+        contextLogger().error(
+          { err, event: "painel.vendas.bolsa_failed", studentId: student.id },
+          "concessao de bolsa falhou",
+        )
+        return NextResponse.json(
+          { error: "Falha ao matricular o aluno na plataforma de aulas. Tente novamente." },
+          { status: 502 },
+        )
+      }
+
+      return NextResponse.json({
+        data: {
+          enrollmentId: enrollment.id,
+          scholarship: true,
+          finalAmount: 0,
+          studentId: student.id,
+        },
+      })
+    }
+
     const isMonthly = tenantCourse.paymentType === "MONTHLY"
     const monthlyMonths = isMonthly
       ? tenantCourse.course.monthlyMonthsMain ?? 12
@@ -307,6 +378,16 @@ export const POST = withRequestContext(
     // identifica o tenant pela query string `?tenant=<slug>` na notification_url.
     const externalReference = `enr_${enrollment.id}`
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? ""
+    // Re-checagem para narrowing: o guard de mpAccessToken acima e condicional
+    // (bolsa pula), mas a bolsa ja retornou antes daqui — entao o token existe.
+    if (!tenant.mpAccessToken) {
+      await prisma.enrollment.delete({ where: { id: enrollment.id } }).catch(() => {})
+      if (couponId) await releaseCoupon(couponId).catch(() => {})
+      return NextResponse.json(
+        { error: "Conecte o Mercado Pago em /painel/configuracoes" },
+        { status: 503 },
+      )
+    }
     const accessToken = decryptTenantMpToken(tenant.mpAccessToken)
 
     // Wrapper try/catch obrigatório: ver explicação na rota /api/aluno/comprar.

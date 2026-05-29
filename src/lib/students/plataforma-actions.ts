@@ -6,6 +6,7 @@ import {
   removerCurso,
 } from "@/lib/plataforma-cursos/client"
 import { pmbPlataformaPolo, pmbPlataformaVendedorId, PMB_TENANT_SLUG } from "@/lib/pmb-config"
+import { encrypt } from "@/lib/crypto"
 
 /**
  * Camada UNICA de integracao com a plataforma de aulas (plataforma).
@@ -76,10 +77,13 @@ export async function ensureStudentOnPlatform(
   const isPendingPlaceholder =
     student.plataformaAlunoId?.startsWith("pending") ?? false
   if (existingId !== null && !isPendingPlaceholder) {
+    // Aluno já existe na plataforma: a senha guardada está criptografada e não
+    // temos o texto puro aqui. O chamador não precisa dele neste caminho
+    // (recompra não reenvia credenciais), então retornamos null.
     return {
       plataformaAlunoId: existingId,
       created: false,
-      plataformaSenha: student.plataformaAlunoSenha,
+      plataformaSenha: null,
     }
   }
 
@@ -107,6 +111,10 @@ export async function ensureStudentOnPlatform(
     status: "ativo",
     apostila: "liberar",
     vendedor: vendedor ? Number.parseInt(vendedor, 10) || undefined : undefined,
+    // Bolsista (bolsa de estudo): a plataforma espera "S"/"N". So enviamos
+    // quando o aluno foi marcado como bolsista numa venda direta — o EA libera
+    // o acesso sem vincular cobranca financeira na plataforma.
+    bolsista: student.bolsista ? "S" : undefined,
   })
 
   const platformLogin = String(result.login)
@@ -116,7 +124,9 @@ export async function ensureStudentOnPlatform(
     where: { id: student.id },
     data: {
       plataformaAlunoId: platformLogin,
-      plataformaAlunoSenha: plataformaSenha,
+      // Criptografada (AES-256-GCM) — exibida na área do aluno após o pagamento.
+      // Não é mais zerada após o email: o aluno precisa dela no painel /aluno.
+      plataformaAlunoSenha: encrypt(plataformaSenha),
       status: "ATIVO",
       apostila: "LIBERADA",
       polo,

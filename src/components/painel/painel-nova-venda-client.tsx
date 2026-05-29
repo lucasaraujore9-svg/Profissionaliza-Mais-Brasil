@@ -20,10 +20,11 @@ function formatBRL(n: number): string {
 
 interface CreatedVenda {
   enrollmentId: string
-  initPoint: string
-  basePrice: number
+  initPoint?: string
+  basePrice?: number
   finalAmount: number
-  discountAmount: number
+  discountAmount?: number
+  scholarship?: boolean
 }
 
 export function PainelNovaVendaClient({ courses }: { courses: CourseOption[] }) {
@@ -39,6 +40,7 @@ export function PainelNovaVendaClient({ courses }: { courses: CourseOption[] }) 
     fone: "",
     tenantCourseId: "",
     couponCode: "",
+    bolsista: false,
   })
 
   const selectedCourse = courses.find((c) => c.id === form.tenantCourseId) ?? null
@@ -58,7 +60,8 @@ export function PainelNovaVendaClient({ courses }: { courses: CourseOption[] }) 
           cpf: form.cpf.replace(/\D/g, ""),
           fone: form.fone.replace(/\D/g, ""),
           tenantCourseId: form.tenantCourseId,
-          couponCode: form.couponCode.trim() || undefined,
+          couponCode: form.bolsista ? undefined : form.couponCode.trim() || undefined,
+          bolsista: form.bolsista || undefined,
         }),
       })
       const body = await res.json()
@@ -80,7 +83,7 @@ export function PainelNovaVendaClient({ courses }: { courses: CourseOption[] }) 
   }
 
   async function copyLink() {
-    if (!created) return
+    if (!created?.initPoint) return
     await navigator.clipboard.writeText(created.initPoint)
     setCopied(true)
     setTimeout(() => setCopied(false), 1500)
@@ -89,6 +92,17 @@ export function PainelNovaVendaClient({ courses }: { courses: CourseOption[] }) 
   if (created) {
     return (
       <div className="space-y-5">
+        {created.scholarship ? (
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-amber-900">
+            <h2 className="text-base font-bold">
+              Bolsa de estudo concedida
+            </h2>
+            <p className="mt-2 text-sm">
+              O aluno foi matriculado na plataforma de aulas <strong>sem cobrança</strong>.
+              As credenciais de acesso foram enviadas para o e-mail informado.
+            </p>
+          </div>
+        ) : (
         <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-6 text-emerald-900">
           <h2 className="text-base font-bold">
             Venda criada — link de pagamento gerado
@@ -100,8 +114,8 @@ export function PainelNovaVendaClient({ courses }: { courses: CourseOption[] }) 
           </p>
 
           <div className="mt-4 grid gap-2 sm:grid-cols-3">
-            <Mini label="Original" value={formatBRL(created.basePrice)} />
-            <Mini label="Desconto" value={formatBRL(created.discountAmount)} />
+            <Mini label="Original" value={formatBRL(created.basePrice ?? 0)} />
+            <Mini label="Desconto" value={formatBRL(created.discountAmount ?? 0)} />
             <Mini
               label="Final"
               value={formatBRL(created.finalAmount)}
@@ -129,6 +143,7 @@ export function PainelNovaVendaClient({ courses }: { courses: CourseOption[] }) 
             </button>
           </div>
         </div>
+        )}
 
         <div className="flex gap-3">
           <Button
@@ -143,6 +158,7 @@ export function PainelNovaVendaClient({ courses }: { courses: CourseOption[] }) 
                 cpf: "",
                 fone: "",
                 couponCode: "",
+                bolsista: false,
               }))
             }}
           >
@@ -251,19 +267,37 @@ export function PainelNovaVendaClient({ courses }: { courses: CourseOption[] }) 
               </p>
             )}
           </div>
-          <div>
-            <Label htmlFor="v-cupom">Cupom (opcional)</Label>
-            <Input
-              id="v-cupom"
-              value={form.couponCode}
-              onChange={(e) =>
-                setForm({ ...form, couponCode: e.target.value.toUpperCase() })
-              }
-              className="mt-1.5"
-              placeholder="Ex: BLACKFRIDAY"
-            />
-          </div>
+          {!form.bolsista && (
+            <div>
+              <Label htmlFor="v-cupom">Cupom (opcional)</Label>
+              <Input
+                id="v-cupom"
+                value={form.couponCode}
+                onChange={(e) =>
+                  setForm({ ...form, couponCode: e.target.value.toUpperCase() })
+                }
+                className="mt-1.5"
+                placeholder="Ex: BLACKFRIDAY"
+              />
+            </div>
+          )}
         </div>
+
+        <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3">
+          <input
+            type="checkbox"
+            checked={form.bolsista}
+            onChange={(e) => setForm({ ...form, bolsista: e.target.checked })}
+            className="mt-0.5 h-4 w-4 accent-amber-600"
+          />
+          <span className="text-sm">
+            <span className="font-semibold text-amber-900">Bolsista (bolsa de estudo)</span>
+            <span className="mt-0.5 block text-xs text-amber-700">
+              Matricula o aluno na plataforma de aulas <strong>sem gerar cobrança</strong> no
+              Mercado Pago. Nenhum link de pagamento é criado.
+            </span>
+          </span>
+        </label>
       </div>
 
       {error && (
@@ -287,8 +321,10 @@ export function PainelNovaVendaClient({ courses }: { courses: CourseOption[] }) 
           {submitting ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Gerando link...
+              {form.bolsista ? "Concedendo bolsa..." : "Gerando link..."}
             </>
+          ) : form.bolsista ? (
+            "Conceder bolsa de estudo"
           ) : (
             "Gerar link de pagamento"
           )}
