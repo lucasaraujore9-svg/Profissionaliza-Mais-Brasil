@@ -16,12 +16,14 @@ export const maxDuration = 60
 // Escopo por tenant: revendedor só baixa certificados da própria loja.
 export const GET = withRequestContextParams<{ id: string }>(
   { action: "painel.certificates.download", route: "/api/painel/certificates/[id]/download" },
-  async (_request: Request, { params }) => {
+  async (request: Request, { params }) => {
     const ctx = await requireResellerSession()
     if (!ctx) {
       return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
     }
 
+    // ?inline=1 exibe o PDF no navegador (visualizar); padrão é baixar (attachment).
+    const inline = new URL(request.url).searchParams.get("inline") === "1"
     const { id } = await params
     const cert = await prisma.certificate.findUnique({ where: { id } })
     if (!cert) {
@@ -59,7 +61,7 @@ export const GET = withRequestContextParams<{ id: string }>(
           status: 200,
           headers: {
             "Content-Type": "application/pdf",
-            "Content-Disposition": `attachment; filename="certificado-${safeCode}.pdf"`,
+            "Content-Disposition": `${inline ? "inline" : "attachment"}; filename="certificado-${safeCode}.pdf"`,
             "Cache-Control": "private, no-store",
           },
         })

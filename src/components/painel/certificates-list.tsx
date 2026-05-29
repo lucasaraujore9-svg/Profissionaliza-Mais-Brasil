@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { Download, Eye, Loader2, X } from "lucide-react"
+import { Download, Eye, FileText, Loader2, X } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 
@@ -247,6 +247,9 @@ export function CertificatesList({
             ) : (
               rows.map((row) => {
                 const revoked = !!row.revokedAt
+                const downloadUrl = revokeEndpoint
+                  .replace("/revoke", "/download")
+                  .replace("{id}", row.id)
                 return (
                   <tr key={row.id} className="hover:bg-gray-50">
                     <Td>
@@ -286,20 +289,20 @@ export function CertificatesList({
                     </Td>
                     <Td className="text-right">
                       <div className="flex items-center justify-end gap-1.5">
-                        <a
-                          href={`/validar/${row.code}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          title="Visualizar página pública"
-                          className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50"
-                        >
-                          <Eye className="h-3.5 w-3.5" />
-                        </a>
-                        {row.pdfUrl && (
+                        {!revoked && (
                           <a
-                            href={revokeEndpoint
-                              .replace("/revoke", "/download")
-                              .replace("{id}", row.id)}
+                            href={`${downloadUrl}?inline=1`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title="Ver PDF do certificado"
+                            className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50"
+                          >
+                            <FileText className="h-3.5 w-3.5" />
+                          </a>
+                        )}
+                        {!revoked && (
+                          <a
+                            href={downloadUrl}
                             target="_blank"
                             rel="noopener noreferrer"
                             download
@@ -309,6 +312,15 @@ export function CertificatesList({
                             <Download className="h-3.5 w-3.5" />
                           </a>
                         )}
+                        <a
+                          href={`/validar/${row.code}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title="Visualizar página pública (validador)"
+                          className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50"
+                        >
+                          <Eye className="h-3.5 w-3.5" />
+                        </a>
                         {!revoked && (
                           <button
                             type="button"
