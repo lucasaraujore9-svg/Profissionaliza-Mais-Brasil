@@ -20,7 +20,7 @@ export default function PrivacidadePage() {
       <PageHero
         eyebrow="Política de Privacidade"
         titulo="Política de Privacidade e Segurança de Dados"
-        subtitulo="Versão 1.1 — Atualizada em 21 de maio de 2026. Em conformidade com a LGPD, o Marco Civil da Internet e o CDC."
+        subtitulo="Versão 1.2 — Atualizada em 29 de maio de 2026. Em conformidade com a LGPD, o Marco Civil da Internet e o CDC."
       />
       <PageBody>
         <Prose>

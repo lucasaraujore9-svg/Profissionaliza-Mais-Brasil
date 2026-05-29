@@ -2,8 +2,8 @@
 
 **Profissionaliza Mais Brasil**
 
-> Atualizado pela última vez em: 21/05/2026
-> Versão: 1.1
+> Atualizado pela última vez em: 29/05/2026
+> Versão: 1.2
 
 ---
 
@@ -35,27 +35,27 @@ As expressões a seguir constantes neste Termo, no plural ou no singular, terão
 
 **Vitrine**: cada loja virtual operada por uma Unidade parceira, acessível por meio de subdomínio em `livrecursos.com.br` ou por domínio personalizado configurado pela Unidade.
 
-**Unidade**: pessoa física ou jurídica parceira comercial do PMB que, mediante contrato próprio, contrata a Plataforma como ferramenta para revender Cursos da plataforma parceira ao Aluno final, com **autonomia para definir preços, condições, cupons, políticas e identidade visual** da sua Vitrine.
+**Unidade**: pessoa física ou jurídica parceira comercial do PMB que, mediante contrato próprio, contrata a Plataforma como ferramenta para revender Cursos da Plataforma de Ensino ao Aluno final, com **autonomia para definir preços, condições, cupons, políticas e identidade visual** da sua Vitrine.
 
 **Aluno**: pessoa física, maior de idade ou devidamente representada/assistida, que se cadastra na Plataforma e adquire um ou mais Cursos por meio de uma Vitrine ou diretamente pelo Site Institucional.
 
 **Visitante**: pessoa física que acessa a Plataforma sem realizar cadastro.
 
-**Curso**: conteúdo educacional online (videoaulas, apostilas, exercícios, certificado), de cunho **profissionalizante e livre** (não regulado pelo MEC como ensino formal), produzido, hospedado e ministrado pela **plataforma parceira**, e disponibilizado ao Aluno após a confirmação do pagamento.
+**Curso**: conteúdo educacional online (videoaulas, apostilas, exercícios, certificado), de cunho **profissionalizante e livre** (não regulado pelo MEC como ensino formal), produzido, hospedado e ministrado pela **Plataforma de Ensino**, e disponibilizado ao Aluno após a confirmação do pagamento.
 
-**plataforma parceira de conteúdo educacional**: terceira plataforma educacional, contratada pelo PMB sob regime de white-label/API, responsável pelo **conteúdo, hospedagem das aulas, emissão de certificados e gestão acadêmica** dos Cursos.
+**Plataforma de Ensino**: terceira plataforma educacional, contratada pelo PMB, responsável pelo **conteúdo, hospedagem das aulas, emissão de certificados e gestão acadêmica** dos Cursos.
 
-**Catálogo**: conjunto de Cursos disponibilizados à Unidade pelo PMB, sincronizado periodicamente com a plataforma parceira.
+**Catálogo**: conjunto de Cursos disponibilizados à Unidade pelo PMB, sincronizado periodicamente com a Plataforma de Ensino.
 
-**Mercado Pago**: gateway de pagamentos contratado **diretamente pela Unidade** (ou pelo próprio PMB, na hipótese de vendas diretas pelo Site Institucional), responsável pelo processamento das transações de aquisição dos Cursos pelo Aluno.
+**Gateway de Pagamento**: provedor de processamento de pagamentos contratado **diretamente pela Unidade** (ou pelo próprio PMB, na hipótese de vendas diretas pelo Site Institucional), responsável pelo processamento das transações de aquisição dos Cursos pelo Aluno.
 
 **Cadastro**: conjunto de informações pessoais, de contato e de pagamento prestadas pelo Aluno no momento da criação da sua conta.
 
-**Login** e **Senha**: credenciais individuais, pessoais e intransferíveis de acesso do Aluno à Plataforma, à Vitrine e à plataforma parceira.
+**Login** e **Senha**: credenciais individuais, pessoais e intransferíveis de acesso do Aluno à Plataforma, à Vitrine e à Plataforma de Ensino.
 
 **Painel do Aluno**: área logada, acessível em `aluno.profissionalizamaisbrasil.com.br` ou na Vitrine de origem da compra, onde o Aluno acompanha pedidos, recibos, status de matrícula e dados cadastrais.
 
-**Bloqueio por Inadimplência**: suspensão automática ou manual do acesso do Aluno ao Curso na plataforma parceira, em razão de não pagamento, quando o Curso for adquirido sob modalidade de **assinatura mensal**.
+**Bloqueio por Inadimplência**: suspensão automática ou manual do acesso do Aluno ao Curso na Plataforma de Ensino, em razão de não pagamento, quando o Curso for adquirido sob modalidade de **assinatura mensal**.
 
 **Notificações**: comunicações enviadas pela Plataforma ao Aluno por e-mail, SMS, WhatsApp, push ou qualquer meio de comunicação cadastrado.
 
@@ -67,7 +67,7 @@ As expressões a seguir constantes neste Termo, no plural ou no singular, terão
 
 (i) **Unidades parceiras** — que comercializam Cursos profissionalizantes online por meio de Vitrines hospedadas na infraestrutura do PMB;
 
-(ii) **plataforma parceira** — terceira responsável pela produção, hospedagem, ministração e certificação dos Cursos; e
+(ii) **Plataforma de Ensino** — terceira responsável pela produção, hospedagem, ministração e certificação dos Cursos; e
 
 (iii) **Alunos** — adquirentes finais dos Cursos.
 
@@ -75,23 +75,23 @@ As expressões a seguir constantes neste Termo, no plural ou no singular, terão
 
 a) **Instituição de ensino**, nem oferece cursos próprios reconhecidos pelo MEC;
 
-b) **Produtora de conteúdo** — o conteúdo dos Cursos é integralmente produzido e hospedado pela **plataforma parceira**, sobre o qual o PMB não exerce qualquer ingerência editorial, pedagógica, didática ou de cronograma;
+b) **Produtora de conteúdo** — o conteúdo dos Cursos é integralmente produzido e hospedado pela **Plataforma de Ensino**, sobre o qual o PMB não exerce qualquer ingerência editorial, pedagógica, didática ou de cronograma;
 
 c) **Empregadora ou sócia** das Unidades — cada Unidade é **pessoa física ou jurídica independente**, com autonomia comercial plena para definir preços, condições, políticas internas e atendimento ao Aluno em sua Vitrine;
 
-d) **Instituição financeira** — todas as transações de pagamento são processadas por **Mercado Pago** e outros gateways especializados, sendo o PMB mera interface tecnológica.
+d) **Instituição financeira** — todas as transações de pagamento são processadas por **gateways de pagamento especializados**, sendo o PMB mera interface tecnológica.
 
 **2.3. A relação jurídica de compra e venda do Curso ocorre entre o ALUNO e a UNIDADE** titular da Vitrine onde a compra foi realizada (ou diretamente com o PMB, exclusivamente quando a compra for efetuada no Site Institucional `profissionalizamaisbrasil.com.br`). O PMB atua como intermediador tecnológico e operacional da transação.
 
 **2.4.** O Aluno **declara expressamente compreender e aceitar** que:
 
-a) O acesso às aulas e a fruição do conteúdo educacional ocorrem **integralmente na plataforma da plataforma parceira**, sob domínio e infraestrutura próprios daquela;
+a) O acesso às aulas e a fruição do conteúdo educacional ocorrem **integralmente na plataforma da Plataforma de Ensino**, sob domínio e infraestrutura próprios daquela;
 
-b) Eventuais **problemas técnicos, indisponibilidades, falhas de áudio/vídeo ou questionamentos sobre o conteúdo das aulas** são de responsabilidade da plataforma parceira;
+b) Eventuais **problemas técnicos, indisponibilidades, falhas de áudio/vídeo ou questionamentos sobre o conteúdo das aulas** são de responsabilidade da Plataforma de Ensino;
 
 c) Eventuais **questionamentos sobre preço, cupom, política comercial, suporte, atendimento ou emissão de nota fiscal da compra** são de responsabilidade direta da Unidade titular da Vitrine onde foi feita a compra;
 
-d) O PMB poderá, a seu critério e como cortesia, intermediar a resolução de conflitos, **sem que isso configure assunção de responsabilidade pela Unidade ou pela plataforma parceira**.
+d) O PMB poderá, a seu critério e como cortesia, intermediar a resolução de conflitos, **sem que isso configure assunção de responsabilidade pela Unidade ou pela Plataforma de Ensino**.
 
 ---
 
@@ -101,9 +101,9 @@ d) O PMB poderá, a seu critério e como cortesia, intermediar a resolução de 
 
 **3.2.** A manifestação de aceite eletrônico aos Termos de Uso e à Política de Privacidade — por meio de check-box, botão de confirmação ou prosseguimento das etapas de cadastro, checkout ou primeiro acesso à Plataforma — expressa a vontade livre, consciente e informada do Usuário de cumprir integralmente os direitos e obrigações decorrentes deste instrumento. Recomenda-se que o Usuário imprima ou salve uma cópia deste documento para futura referência.
 
-**3.3.** No ato de aceitação, o Usuário **autoriza expressamente** que a equipe do Profissionaliza Mais Brasil, da Unidade titular da Vitrine onde efetuou compra e da plataforma parceira entrem em contato por todos os meios de comunicação informados no Cadastro, incluindo, sem limitação: carta, e-mail, ligações telefônicas, mensagens de texto/SMS, push notifications, softwares de mensagens instantâneas (WhatsApp, Telegram, Messenger, etc.).
+**3.3.** No ato de aceitação, o Usuário **autoriza expressamente** que a equipe do Profissionaliza Mais Brasil, da Unidade titular da Vitrine onde efetuou compra e da Plataforma de Ensino entrem em contato por todos os meios de comunicação informados no Cadastro, incluindo, sem limitação: carta, e-mail, ligações telefônicas, mensagens de texto/SMS, push notifications, softwares de mensagens instantâneas (WhatsApp, Telegram, Messenger, etc.).
 
-**3.4.** O Usuário **aceita expressamente** o envio de comunicações de caráter informativo, transacional e comercial, incluindo ofertas de novos cursos, novidades da Plataforma, ofertas de Unidades parceiras e da plataforma parceira.
+**3.4.** O Usuário **aceita expressamente** o envio de comunicações de caráter informativo, transacional e comercial, incluindo ofertas de novos cursos, novidades da Plataforma, ofertas de Unidades parceiras e da Plataforma de Ensino.
 
 **3.5.** Caso o Usuário opte por **não receber comunicações comerciais (opt-out)**, poderá fazê-lo a qualquer momento mediante solicitação ao canal oficial de atendimento do PMB pelo e-mail `profissionaliza@grupobolsamaisbrasil.com.br`, indicando como assunto **"Opt-out — Comunicações Comerciais"** e informando nome completo, CPF e e-mail cadastrado. **Comunicações transacionais (confirmação de compra, acesso ao curso, cobrança, segurança da conta) não podem ser desativadas**, pois são essenciais à execução do contrato.
 
@@ -135,9 +135,9 @@ d) O PMB poderá, a seu critério e como cortesia, intermediar a resolução de 
 
 **5.2.** O Cadastro somente será confirmado mediante preenchimento de **todos os campos obrigatórios**, com informações **exatas, precisas e verdadeiras**. O Aluno assume o compromisso integral de manter os dados pessoais sempre atualizados.
 
-**5.3.** O PMB **não se responsabiliza** pela correção, exatidão ou veracidade dos dados pessoais inseridos pelo Aluno. O Aluno garante e responde, em qualquer caso, pela veracidade, exatidão e autenticidade dos dados cadastrados, isentando o PMB de quaisquer prejuízos decorrentes da incorreção destas informações — incluindo, sem limitação, falha no envio de e-mail de acesso, demora na liberação do curso na plataforma parceira ou impossibilidade de emissão de nota fiscal.
+**5.3.** O PMB **não se responsabiliza** pela correção, exatidão ou veracidade dos dados pessoais inseridos pelo Aluno. O Aluno garante e responde, em qualquer caso, pela veracidade, exatidão e autenticidade dos dados cadastrados, isentando o PMB de quaisquer prejuízos decorrentes da incorreção destas informações — incluindo, sem limitação, falha no envio de e-mail de acesso, demora na liberação do curso na Plataforma de Ensino ou impossibilidade de emissão de nota fiscal.
 
-**5.4.** O PMB **PODERÁ CANCELAR OU SUSPENDER A CONTA DO ALUNO COMO MEDIDA DE PROTEÇÃO À PLATAFORMA, A UNIDADES, À ESCOLA AVANÇADA E A TERCEIROS**, sempre que houver indícios de:
+**5.4.** O PMB **PODERÁ CANCELAR OU SUSPENDER A CONTA DO ALUNO COMO MEDIDA DE PROTEÇÃO À PLATAFORMA, A UNIDADES, À PLATAFORMA DE ENSINO E A TERCEIROS**, sempre que houver indícios de:
 
 a) Roubo de identidade ou falsificação documental;
 
@@ -155,13 +155,13 @@ d) Qualquer outra atividade fraudulenta, abusiva ou contrária a estes Termos.
 
 **5.7.** É **vedada a cessão, venda, aluguel ou transferência da conta** sob qualquer modalidade, sob pena de cancelamento imediato.
 
-**5.8.** O Aluno é responsável por certificar-se de que seus equipamentos (hardware, conexão à internet, navegador, aplicativos) atendem aos **requisitos técnicos mínimos** para o acesso à Plataforma e à plataforma parceira, não sendo o PMB responsável por incompatibilidades, lentidão, perda de dados ou impossibilidade de acesso decorrentes do ambiente do próprio Aluno.
+**5.8.** O Aluno é responsável por certificar-se de que seus equipamentos (hardware, conexão à internet, navegador, aplicativos) atendem aos **requisitos técnicos mínimos** para o acesso à Plataforma e à Plataforma de Ensino, não sendo o PMB responsável por incompatibilidades, lentidão, perda de dados ou impossibilidade de acesso decorrentes do ambiente do próprio Aluno.
 
 ---
 
 ## 6. CATÁLOGO, CURSOS E UNIDADES
 
-**6.1.** Os Cursos disponíveis no Catálogo são produzidos e hospedados pela **plataforma parceira**, e disponibilizados às Vitrines das Unidades pelo PMB por meio de integração técnica (API).
+**6.1.** Os Cursos disponíveis no Catálogo são produzidos e hospedados pela **Plataforma de Ensino**, e disponibilizados às Vitrines das Unidades pelo PMB por meio de integração técnica (API).
 
 **6.2.** Cada Unidade **tem autonomia plena para**:
 
@@ -181,7 +181,7 @@ f) Prestar **atendimento direto ao Aluno** em questões comerciais.
 
 **6.3.1.** O PMB **não garante a exatidão, integralidade ou atualização** de qualquer informação divulgada nas Vitrines das Unidades, sendo a Unidade o **único responsável** pela veracidade dos preços, descrições, condições comerciais e ofertas publicadas em sua Vitrine.
 
-**6.3.2.** Características de Curso (ementa, carga horária, certificado, materiais), preços e demais condições poderão **sofrer alterações pela plataforma parceira ou pela Unidade sem aviso prévio**, prevalecendo, em caso de divergência, a informação atualizada na Vitrine no momento do pagamento.
+**6.3.2.** Características de Curso (ementa, carga horária, certificado, materiais), preços e demais condições poderão **sofrer alterações pela Plataforma de Ensino ou pela Unidade sem aviso prévio**, prevalecendo, em caso de divergência, a informação atualizada na Vitrine no momento do pagamento.
 
 **6.3.3.** O Aluno reconhece que **a aquisição de um Curso é entendida no momento da confirmação do pagamento**, sendo aquele o instante em que se cristalizam as condições contratuais.
 
@@ -191,9 +191,9 @@ a) Resultado profissional, empregabilidade, aprovação em provas, certificaçõ
 
 b) Equivalência dos Cursos a qualquer modalidade de ensino reconhecida pelo MEC (graduação, pós-graduação, técnico, EJA, supletivo, certificação de ensino médio), uma vez que se tratam de **cursos livres de capacitação profissional**;
 
-c) Validade de eventuais certificados emitidos pela plataforma parceira para fins de concurso público, registro profissional ou progressão de carreira em órgãos públicos — a aceitação do certificado é de critério exclusivo do órgão ou instituição destinatária.
+c) Validade de eventuais certificados emitidos pela Plataforma de Ensino para fins de concurso público, registro profissional ou progressão de carreira em órgãos públicos — a aceitação do certificado é de critério exclusivo do órgão ou instituição destinatária.
 
-**6.5.** Compras Diretas pelo Site Institucional. Quando o Aluno adquirir um Curso diretamente em `profissionalizamaisbrasil.com.br` (e não em uma Vitrine de Unidade), a relação comercial será diretamente entre **PMB e Aluno**, sendo o PMB a responsável comercial pela transação, sem prejuízo da responsabilidade técnica e pedagógica da plataforma parceira pelo conteúdo.
+**6.5.** Compras Diretas pelo Site Institucional. Quando o Aluno adquirir um Curso diretamente em `profissionalizamaisbrasil.com.br` (e não em uma Vitrine de Unidade), a relação comercial será diretamente entre **PMB e Aluno**, sendo o PMB a responsável comercial pela transação, sem prejuízo da responsabilidade técnica e pedagógica da Plataforma de Ensino pelo conteúdo.
 
 ---
 
@@ -209,15 +209,15 @@ c) Validade de eventuais certificados emitidos pela plataforma parceira para fin
 
 (iv) **Aceite expresso** destes Termos e da Política de Privacidade;
 
-(v) **Pagamento** via gateway Mercado Pago (cartão de crédito, PIX ou boleto, conforme disponibilidade);
+(v) **Pagamento** via gateway de pagamento (cartão de crédito, PIX ou boleto, conforme disponibilidade);
 
 (vi) **Confirmação do pagamento** pela operadora de pagamentos;
 
-(vii) **Matrícula automática** do Aluno na plataforma parceira e envio de credenciais por e-mail.
+(vii) **Matrícula automática** do Aluno na Plataforma de Ensino e envio de credenciais por e-mail.
 
-**7.2.** O pagamento será processado pelo Mercado Pago (ou gateway equivalente), que é a **única responsável** pela confirmação da transação, segurança dos dados financeiros e disponibilização dos meios de pagamento.
+**7.2.** O pagamento será processado pelo Gateway de Pagamento, que é o **único responsável** pela confirmação da transação, segurança dos dados financeiros e disponibilização dos meios de pagamento.
 
-**7.2.1.** A **PMB não armazena dados financeiros** do Aluno (números de cartão, CVV, dados bancários). Tais informações são fornecidas diretamente ao gateway e processadas em ambiente PCI-DSS compliant pelo Mercado Pago.
+**7.2.1.** O **PMB não armazena dados financeiros** do Aluno (números de cartão, CVV, dados bancários). Tais informações são fornecidas diretamente ao Gateway de Pagamento e processadas em ambiente certificado PCI-DSS.
 
 **7.2.2.** O PMB **não pode garantir** o pleno funcionamento, a disponibilidade ou a ausência de falhas dos serviços prestados pelo gateway de pagamento, nem se responsabiliza por atrasos, recusas indevidas, problemas de antifraude ou indisponibilidade do gateway. Em tais casos, o Aluno deverá tratar diretamente com a operadora de pagamentos.
 
@@ -229,13 +229,13 @@ b) **Cartão de crédito**: até 48 (quarenta e oito) horas;
 
 c) **Boleto**: até 3 (três) dias úteis após o pagamento na rede bancária.
 
-**7.4.** Após a confirmação do pagamento, o sistema executará automaticamente a **matrícula do Aluno na plataforma parceira**, criando a conta de acesso e enviando, ao e-mail cadastrado, as credenciais (login/senha provisórios) e o link de acesso à plataforma de aulas.
+**7.4.** Após a confirmação do pagamento, o sistema executará automaticamente a **matrícula do Aluno na Plataforma de Ensino**, criando a conta de acesso e enviando, ao e-mail cadastrado, as credenciais (login/senha provisórios) e o link de acesso à plataforma de aulas.
 
 **7.4.1.** É **dever do Aluno** verificar a caixa de entrada e a pasta de spam/lixo eletrônico do e-mail cadastrado. **O PMB não se responsabiliza** por erro de digitação de e-mail, bloqueios por antispam, caixa cheia ou qualquer outra falha de recepção decorrente do ambiente do Aluno.
 
 **7.4.2.** Caso o Aluno não receba as credenciais em até 24 (vinte e quatro) horas após a confirmação do pagamento, deverá entrar em contato com os canais de atendimento do PMB (Cláusula 19) para reenvio.
 
-**7.4.3.** A posse das credenciais e o efetivo primeiro acesso à plataforma da plataforma parceira **caracterizam o início da fruição do Curso**, com os efeitos jurídicos descritos nas Cláusulas 8 e 9.
+**7.4.3.** A posse das credenciais e o efetivo primeiro acesso à plataforma da Plataforma de Ensino **caracterizam o início da fruição do Curso**, com os efeitos jurídicos descritos nas Cláusulas 8 e 9.
 
 **7.5.** Em hipótese alguma o Curso será liberado antes da confirmação do pagamento. Em caso de pagamento via boleto, o prazo de validade do boleto é definido no momento da emissão, não podendo o Aluno reivindicar acesso antes do efetivo crédito.
 
@@ -251,7 +251,7 @@ b) A **manutenção do acesso ao Curso enquanto adimplente**, ficando o acesso c
 
 **8.2. Bloqueio por inadimplência.** Em caso de não pagamento de qualquer parcela mensal:
 
-a) **Modo Automático**: o sistema **suspenderá automaticamente o acesso** do Aluno ao Curso na plataforma parceira após o vencimento, retomando o acesso após o efetivo crédito da parcela em atraso;
+a) **Modo Automático**: o sistema **suspenderá automaticamente o acesso** do Aluno ao Curso na Plataforma de Ensino após o vencimento, retomando o acesso após o efetivo crédito da parcela em atraso;
 
 b) **Modo Manual**: a Unidade poderá optar por bloquear o acesso a seu critério, com ou sem aviso prévio.
 
@@ -281,9 +281,9 @@ b) **Modo Manual**: a Unidade poderá optar por bloquear o acesso a seu critéri
 
 **9.2. Outras hipóteses de reembolso.** Além do direito de arrependimento, o Aluno terá direito a reembolso integral nas seguintes hipóteses:
 
-a) **Retirada do Curso do Catálogo** pela plataforma parceira após a compra, sem oferta de substituição equivalente;
+a) **Retirada do Curso do Catálogo** pela Plataforma de Ensino após a compra, sem oferta de substituição equivalente;
 
-b) **Indisponibilidade técnica prolongada** (superior a 30 dias corridos) da plataforma da plataforma parceira por culpa exclusiva desta, impeditiva do início do Curso;
+b) **Indisponibilidade técnica prolongada** (superior a 30 dias corridos) da plataforma da Plataforma de Ensino por culpa exclusiva desta, impeditiva do início do Curso;
 
 c) **Cobrança em duplicidade** comprovada;
 
@@ -297,7 +297,7 @@ b) **Conclusão do Curso** ou avanço significativo da carga horária após o pr
 
 c) **Inadimplência** ou bloqueio de acesso por descumprimento contratual do Aluno;
 
-d) **Sanções acadêmicas, disciplinares ou administrativas** aplicadas pela plataforma parceira em razão de conduta indevida do Aluno;
+d) **Sanções acadêmicas, disciplinares ou administrativas** aplicadas pela Plataforma de Ensino em razão de conduta indevida do Aluno;
 
 e) **Alegação de fraude infundada** junto à operadora de cartão de crédito (chargeback de má-fé) — neste caso, o Aluno responderá pelo valor integral do Curso, **acrescido das taxas administrativas e custos de cobrança**, sem prejuízo de medidas judiciais cabíveis;
 
@@ -313,7 +313,7 @@ a) **PIX/Boleto**: depósito na conta de titularidade do Aluno;
 
 b) **Cartão de crédito**: estorno na fatura do cartão utilizado na compra, sujeito aos prazos da bandeira/operadora, pelos quais o PMB **não se responsabiliza**;
 
-c) Será **autorizado o abatimento das taxas administrativas do gateway de pagamento** (Mercado Pago), por se tratarem de custos não recuperáveis pelo PMB.
+c) Será **autorizado o abatimento das taxas administrativas do gateway de pagamento**, por se tratarem de custos não recuperáveis pelo PMB.
 
 **9.5.1.** **Não se realiza reembolso em conta de terceiros**. Reembolsos somente serão efetuados na mesma forma de pagamento originária e em titularidade do Aluno.
 
@@ -323,17 +323,17 @@ c) Será **autorizado o abatimento das taxas administrativas do gateway de pagam
 
 ---
 
-## 10. CONTEÚDO DOS CURSOS, ESCOLA AVANÇADA E CERTIFICAÇÃO
+## 10. CONTEÚDO DOS CURSOS, PLATAFORMA DE ENSINO E CERTIFICAÇÃO
 
-**10.1.** Todo o **conteúdo educacional** (videoaulas, apostilas, exercícios, avaliações, materiais complementares, certificados) é produzido, hospedado, mantido e ministrado pela **plataforma parceira**, terceira contratada pelo PMB sob modelo white-label.
+**10.1.** Todo o **conteúdo educacional** (videoaulas, apostilas, exercícios, avaliações, materiais complementares, certificados) é produzido, hospedado, mantido e ministrado pela **Plataforma de Ensino**, terceira contratada pelo PMB.
 
 **10.2.** O PMB e a Unidade **NÃO RESPONDEM PEDAGÓGICA OU TECNICAMENTE** pelo conteúdo dos Cursos. Reclamações sobre conteúdo, qualidade didática, falhas técnicas de reprodução, indisponibilidade de aulas, atualizações curriculares ou emissão de certificados deverão ser direcionadas:
 
-a) **Em primeira instância**: à Unidade titular da Vitrine ou ao suporte do PMB, que **encaminharão à plataforma parceira**;
+a) **Em primeira instância**: à Unidade titular da Vitrine ou ao suporte do PMB, que **encaminharão à Plataforma de Ensino**;
 
-b) **Diretamente à plataforma parceira**: pelos canais oficiais informados em sua plataforma.
+b) **Diretamente à Plataforma de Ensino**: pelos canais oficiais informados em sua plataforma.
 
-**10.3.** O Aluno reconhece que os Cursos são de **natureza livre/profissionalizante**, **NÃO se confundem com cursos de graduação, pós-graduação, técnico, EJA, supletivo ou qualquer modalidade regulada pelo Ministério da Educação (MEC)**, e os certificados emitidos pela plataforma parceira possuem o efeito de **certificado de capacitação profissional**, nos termos do art. 42 do Decreto nº 5.154/2004 e da Lei nº 9.394/1996 (LDB), art. 81, sem prejuízo da política de cada órgão público ou empregador quanto à sua aceitação.
+**10.3.** O Aluno reconhece que os Cursos são de **natureza livre/profissionalizante**, **NÃO se confundem com cursos de graduação, pós-graduação, técnico, EJA, supletivo ou qualquer modalidade regulada pelo Ministério da Educação (MEC)**, e os certificados emitidos pela Plataforma de Ensino possuem o efeito de **certificado de capacitação profissional**, nos termos do art. 42 do Decreto nº 5.154/2004 e da Lei nº 9.394/1996 (LDB), art. 81, sem prejuízo da política de cada órgão público ou empregador quanto à sua aceitação.
 
 **10.4.** O acesso ao Curso é **pessoal, individual e intransferível**, sendo vedado o compartilhamento de credenciais. Em caso de detecção de uso simultâneo de credenciais por múltiplos dispositivos/IPs em curto intervalo, o acesso poderá ser bloqueado sem aviso prévio, sem direito a reembolso.
 
@@ -361,15 +361,15 @@ a) Quando a compra é feita em **Vitrine de Unidade**: a **Unidade é Controlado
 
 b) Quando a compra é feita **diretamente no Site Institucional** PMB: o **PMB é Controlador** dos dados;
 
-c) A **plataforma parceira é Operadora** quanto aos dados necessários à matrícula e à manutenção do acesso ao Curso, e Controladora quanto aos dados de progresso pedagógico do Aluno em sua plataforma.
+c) A **Plataforma de Ensino é Operadora** quanto aos dados necessários à matrícula e à manutenção do acesso ao Curso, e Controladora quanto aos dados de progresso pedagógico do Aluno em sua plataforma.
 
 **11.3.** O Aluno poderá exercer seus direitos de titular de dados (acesso, correção, anonimização, portabilidade, eliminação, oposição, revogação de consentimento) entrando em contato com:
 
 - **PMB / Encarregado de Proteção de Dados (DPO/LGPD)**: `profissionaliza@grupobolsamaisbrasil.com.br`
 - **Unidade titular da Vitrine**: pelos canais de atendimento informados na Vitrine
-- **plataforma parceira**: pelos canais informados em sua plataforma
+- **Plataforma de Ensino**: pelos canais informados em sua plataforma
 
-**11.4.** O PMB adota medidas técnicas e administrativas razoáveis para proteção dos dados pessoais (criptografia em trânsito e em repouso para credenciais e tokens financeiros, controle de acesso, logs de auditoria, isolamento multi-tenant). Contudo, **nenhuma medida de segurança é infalível**, e o PMB não pode garantir, em termos absolutos, a inviolabilidade dos dados frente a eventos de força maior ou ataques cibernéticos de elevada sofisticação.
+**11.4.** O PMB adota medidas técnicas e administrativas razoáveis para proteção dos dados pessoais (criptografia em trânsito e em repouso para credenciais e dados financeiros, controle de acesso, registros de auditoria, isolamento lógico entre lojas). Contudo, **nenhuma medida de segurança é infalível**, e o PMB não pode garantir, em termos absolutos, a inviolabilidade dos dados frente a eventos de força maior ou ataques cibernéticos de elevada sofisticação.
 
 ---
 
@@ -379,11 +379,11 @@ c) A **plataforma parceira é Operadora** quanto aos dados necessários à matr�
 
 **12.2.** A marca, logotipo, identidade visual e conteúdo institucional das **Vitrines** são de propriedade dos respectivos **Unidades**, com licença de uso operacional para o PMB exclusivamente para fins de hospedagem e exibição na infraestrutura da Plataforma.
 
-**12.3.** O conteúdo dos **Cursos** (videoaulas, apostilas, certificados, materiais) é de propriedade da **plataforma parceira** ou de terceiros licenciantes.
+**12.3.** O conteúdo dos **Cursos** (videoaulas, apostilas, certificados, materiais) é de propriedade da **Plataforma de Ensino** ou de terceiros licenciantes.
 
 **12.4.** É **VEDADO** ao Usuário copiar, vender, revender, exibir, reproduzir, publicar, modificar, criar trabalhos derivados, transferir, distribuir ou explorar comercialmente, no todo ou em parte, qualquer conteúdo da Plataforma, sem prévia e expressa autorização por escrito dos respectivos titulares.
 
-**12.5.** A utilização indevida do material disponível na Plataforma poderá representar, além da violação de direitos do PMB, violação dos direitos de Unidades, da plataforma parceira e/ou de terceiros, sendo o Usuário **exclusivamente responsável** por toda e qualquer reparação de danos e despesas incorridas.
+**12.5.** A utilização indevida do material disponível na Plataforma poderá representar, além da violação de direitos do PMB, violação dos direitos de Unidades, da Plataforma de Ensino e/ou de terceiros, sendo o Usuário **exclusivamente responsável** por toda e qualquer reparação de danos e despesas incorridas.
 
 ---
 
@@ -427,7 +427,7 @@ c) Compatibilidade com todos os equipamentos, navegadores ou sistemas operaciona
 
 a) **Atos praticados ou danos causados pelas Unidades** ao Aluno (incluindo, sem limitação: descumprimento da política comercial da Vitrine, falha no atendimento, divulgação de informação incorreta, falha na entrega de cupom, bloqueio indevido de acesso por inadimplência);
 
-b) **Atos praticados ou danos causados pela plataforma parceira** ao Aluno (incluindo, sem limitação: indisponibilidade técnica, falhas no conteúdo, atrasos na emissão de certificados, problemas no progresso pedagógico, mudança de ementa);
+b) **Atos praticados ou danos causados pela Plataforma de Ensino** ao Aluno (incluindo, sem limitação: indisponibilidade técnica, falhas no conteúdo, atrasos na emissão de certificados, problemas no progresso pedagógico, mudança de ementa);
 
 c) **Atos praticados ou danos causados por terceiros, gateways de pagamento, operadoras de cartão de crédito, bancos ou provedores de internet**;
 
@@ -437,7 +437,7 @@ e) **Fraude, omissão ou erro do Aluno** no preenchimento dos seus dados cadastr
 
 f) **Política de preços, cupons e promoções** praticada por cada Unidade em sua Vitrine;
 
-g) **Alteração unilateral, pela plataforma parceira ou pela Unidade**, das condições do Curso (ementa, preço, carga horária);
+g) **Alteração unilateral, pela Plataforma de Ensino ou pela Unidade**, das condições do Curso (ementa, preço, carga horária);
 
 h) **Falha do Aluno** em verificar a caixa de entrada/spam do e-mail cadastrado;
 
@@ -447,9 +447,9 @@ j) **Acesso não autorizado à conta do Aluno por terceiros** decorrente de comp
 
 k) **Conteúdo, práticas ou políticas de sites de terceiros** cujos links sejam eventualmente disponibilizados na Plataforma;
 
-l) **Cobranças indevidas ou erros** decorrentes de informações fornecidas pela plataforma parceira ou pela Unidade ao PMB;
+l) **Cobranças indevidas ou erros** decorrentes de informações fornecidas pela Plataforma de Ensino ou pela Unidade ao PMB;
 
-m) **Insolvência, falência, recuperação judicial ou encerramento das atividades** da plataforma parceira ou de qualquer Unidade — sem prejuízo da obrigação do PMB de envidar esforços razoáveis para migrar ou indenizar o Aluno apenas no caso de compras feitas diretamente no Site Institucional;
+m) **Insolvência, falência, recuperação judicial ou encerramento das atividades** da Plataforma de Ensino ou de qualquer Unidade — sem prejuízo da obrigação do PMB de envidar esforços razoáveis para migrar ou indenizar o Aluno apenas no caso de compras feitas diretamente no Site Institucional;
 
 n) **Caso fortuito ou força maior**, nos termos do art. 393 do Código Civil Brasileiro;
 
@@ -515,7 +515,7 @@ p) **Danos decorrentes de vírus, ataques cibernéticos ou códigos maliciosos**
 
 **19.2. Resolução de Controvérsias.** Fica eleito o **foro do domicílio do Aluno** como único competente para dirimir eventuais controvérsias, com renúncia a qualquer outro, por mais especial ou privilegiado que seja.
 
-**19.3. Solução Amigável.** Antes de qualquer medida judicial, o Usuário é incentivado a buscar o suporte do PMB, da Unidade ou da plataforma parceira para resolução amigável da questão. O PMB se compromete a empregar seus melhores esforços para mediação consensual.
+**19.3. Solução Amigável.** Antes de qualquer medida judicial, o Usuário é incentivado a buscar o suporte do PMB, da Unidade ou da Plataforma de Ensino para resolução amigável da questão. O PMB se compromete a empregar seus melhores esforços para mediação consensual.
 
 ---
 
@@ -530,4 +530,4 @@ p) **Danos decorrentes de vírus, ataques cibernéticos ou códigos maliciosos**
 
 ---
 
-> **LI ATENTAMENTE E COMPREENDI INTEGRALMENTE AS REGRAS DESTE TERMO DE USO E SUAS CONDIÇÕES, QUE REGULAM O USO DA PLATAFORMA PROFISSIONALIZA MAIS BRASIL. ADERI À PLATAFORMA POR CONCORDAR INTEGRALMENTE COM SUAS REGRAS E CONDIÇÕES, ESTANDO APTO A CUMPRI-LAS. PREVIAMENTE À AQUISIÇÃO DE QUALQUER CURSO, TIVE CIÊNCIA DE QUE O CONTEÚDO É PRODUZIDO E HOSPEDADO PELA ESCOLA AVANÇADA, DE QUE O PMB É INTERMEDIADOR TECNOLÓGICO E COMERCIAL, E DE QUE EVENTUAIS UNIDADES OPERAM SUAS VITRINES COM AUTONOMIA COMERCIAL.**
+> **LI ATENTAMENTE E COMPREENDI INTEGRALMENTE AS REGRAS DESTE TERMO DE USO E SUAS CONDIÇÕES, QUE REGULAM O USO DA PLATAFORMA PROFISSIONALIZA MAIS BRASIL. ADERI À PLATAFORMA POR CONCORDAR INTEGRALMENTE COM SUAS REGRAS E CONDIÇÕES, ESTANDO APTO A CUMPRI-LAS. PREVIAMENTE À AQUISIÇÃO DE QUALQUER CURSO, TIVE CIÊNCIA DE QUE O CONTEÚDO É PRODUZIDO E HOSPEDADO PELA PLATAFORMA DE ENSINO, DE QUE O PMB É INTERMEDIADOR TECNOLÓGICO E COMERCIAL, E DE QUE EVENTUAIS UNIDADES OPERAM SUAS VITRINES COM AUTONOMIA COMERCIAL.**

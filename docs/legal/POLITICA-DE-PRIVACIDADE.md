@@ -2,8 +2,8 @@
 
 **Profissionaliza Mais Brasil**
 
-> Atualizado pela última vez em: 21/05/2026
-> Versão: 1.1
+> Atualizado pela última vez em: 29/05/2026
+> Versão: 1.2
 
 ---
 
@@ -19,7 +19,7 @@ Esta Política aplica-se a:
 
 (iii) Domínios personalizados de **Unidades parceiras** que apontem para a infraestrutura do PMB;
 
-(iv) Os fluxos de matrícula automática na **plataforma parceira** e demais integrações com gateways de pagamento e sistemas terceiros, **na exata medida em que o PMB intermedeia o tratamento desses dados**.
+(iv) Os fluxos de matrícula automática na **Plataforma de Ensino** e demais integrações com gateways de pagamento e sistemas terceiros, **na exata medida em que o PMB intermedeia o tratamento desses dados**.
 
 A presente Política está em conformidade com a **Lei Geral de Proteção de Dados Pessoais (Lei nº 13.709/2018 — "LGPD")**, com o **Marco Civil da Internet (Lei nº 12.965/2014)**, com o **Decreto nº 8.771/2016** e com as melhores práticas internacionais de privacidade.
 
@@ -32,7 +32,7 @@ A presente Política está em conformidade com a **Lei Geral de Proteção de Da
 ## ÍNDICE
 
 1. Definições
-2. Papéis das Partes no Tratamento de Dados (PMB, Unidade, plataforma parceira)
+2. Papéis das Partes no Tratamento de Dados (PMB, Unidade, Plataforma de Ensino)
 3. Dados que Coletamos
 4. Como Coletamos seus Dados
 5. Base Legal para o Tratamento
@@ -83,7 +83,7 @@ Para os fins desta Política, devem ser consideradas as seguintes definições, 
 
 **Unidade**: pessoa física ou jurídica parceira comercial que opera uma Vitrine na infraestrutura do PMB, conforme **Contrato da Unidade**.
 
-**plataforma parceira de conteúdo educacional**: plataforma educacional terceira, contratada pelo PMB sob modelo white-label/API, responsável pela hospedagem e ministração dos Cursos.
+**Plataforma de Ensino**: plataforma educacional terceira, contratada pelo PMB, responsável pela hospedagem e ministração dos Cursos.
 
 **Vitrine**: loja virtual operada por uma Unidade, acessível por subdomínio em `livrecursos.com.br` ou por domínio personalizado.
 
@@ -103,12 +103,12 @@ O **PMB é CONTROLADOR** dos seus dados de navegação, cookies, contatos via fo
 
 - A **UNIDADE é a CONTROLADORA** dos seus dados de cadastro, compra, contato e relacionamento comercial referentes à venda realizada em sua Vitrine;
 - O **PMB é OPERADOR** desses dados, atuando **sob as instruções da Unidade** e nos limites necessários à execução do Contrato da Unidade, dos Termos de Uso e desta Política;
-- A **ESCOLA AVANÇADA é OPERADORA** dos dados necessários à criação da matrícula e ao acesso ao Curso, e **CONTROLADORA** dos dados de progresso pedagógico, conclusão e emissão de certificado em sua plataforma.
+- A **Plataforma de Ensino é OPERADORA** dos dados necessários à criação da matrícula e ao acesso ao Curso, e **CONTROLADORA** dos dados de progresso pedagógico, conclusão e emissão de certificado em sua plataforma.
 
 ### 2.3. Quando você é ALUNO que comprou um Curso diretamente no Site Institucional PMB
 
 - O **PMB é CONTROLADOR** dos seus dados de cadastro, compra e relacionamento;
-- A **ESCOLA AVANÇADA é OPERADORA** dos dados de matrícula e Controladora dos dados de progresso pedagógico.
+- A **Plataforma de Ensino é OPERADORA** dos dados de matrícula e Controladora dos dados de progresso pedagógico.
 
 ### 2.4. Quando você é UNIDADE ou CONSULTOR
 
@@ -118,9 +118,9 @@ O **PMB é CONTROLADOR** dos seus dados de cadastro, contratuais, comerciais, fi
 
 A **UNIDADE é a CONTROLADORA** dos seus dados como colaborador. O PMB atua como Operador ao prover a credencial de acesso ao painel.
 
-### 2.6. Independência dos Sub-operadores
+### 2.6. Independência dos Operadores e Sub-operadores
 
-Os gateways de pagamento (Mercado Pago e Asaas), os provedores de infraestrutura (Vercel, Supabase, Upstash, Resend) e demais terceiros listados na Cláusula 7 atuam como **Controladores independentes** ou **sub-operadores**, conforme contratos firmados, sendo cada um responsável pelo cumprimento da LGPD em seu escopo de atuação.
+Os gateways de pagamento, os provedores de infraestrutura em nuvem, a Plataforma de Ensino e demais terceiros referidos na Cláusula 7 atuam como **Controladores independentes** ou **operadores**, conforme os contratos firmados, sendo cada um responsável pelo cumprimento da LGPD em seu escopo de atuação.
 
 ---
 
@@ -134,7 +134,7 @@ Os gateways de pagamento (Mercado Pago e Asaas), os provedores de infraestrutura
 - CPF
 - E-mail
 - Telefone (com WhatsApp, opcionalmente)
-- Senha (armazenada de forma criptografada — bcrypt)
+- Senha (armazenada de forma cifrada e irreversível, nunca em texto puro)
 
 **No Cadastro (Unidade / Consultor):**
 
@@ -143,13 +143,13 @@ Os gateways de pagamento (Mercado Pago e Asaas), os provedores de infraestrutura
 - Inscrição estadual/municipal (quando aplicável)
 - Endereço completo
 - E-mail e telefone comerciais
-- Conta bancária e/ou conta no Mercado Pago (informações para configuração — armazenadas de forma criptografada quando aplicável)
+- Conta bancária e/ou dados de conta no gateway de pagamento (informações para configuração — armazenadas de forma cifrada quando aplicável)
 - Documento de identidade (RG ou CNH) e comprovante de residência, quando solicitado para validação KYC
 
 **No Checkout de Curso:**
 
 - Dados de cobrança (nome, CPF, e-mail, endereço)
-- **Dados de pagamento**: o PMB **NÃO armazena** dados de cartão, CVV ou credenciais bancárias. Esses dados são fornecidos diretamente ao gateway (Mercado Pago) e processados em ambiente PCI-DSS
+- **Dados de pagamento**: o PMB **NÃO armazena** dados de cartão, CVV ou credenciais bancárias. Esses dados são fornecidos diretamente ao gateway de pagamento e processados em ambiente certificado PCI-DSS
 
 **Em formulários de contato, suporte, newsletter e onboarding:**
 
@@ -165,13 +165,13 @@ Os gateways de pagamento (Mercado Pago e Asaas), os provedores de infraestrutura
 - **Cookies, local storage e session storage** (Cláusula 12)
 - **Logs de autenticação** (data, hora, IP, navegador) — para fins de segurança
 - **Webhooks de pagamento** dos gateways, com dados da transação (sem dados sensíveis de cartão)
-- **Eventos de progresso pedagógico** retornados pela plataforma parceira (acessos, percentual concluído)
+- **Eventos de progresso pedagógico** retornados pela Plataforma de Ensino (acessos, percentual concluído)
 
 ### 3.3. Dados recebidos de terceiros
 
-- Da **plataforma parceira**: dados de matrícula, progresso, conclusão e certificação
-- Do **Mercado Pago**: status de pagamento, ID da transação, valor, método (sem CVV/PAN)
-- Do **Asaas**: status de cobrança da mensalidade da Unidade
+- Da **Plataforma de Ensino**: dados de matrícula, progresso, conclusão e certificação
+- Do **gateway de pagamento**: status de pagamento, identificador da transação, valor, método (sem CVV/PAN)
+- Do **provedor de cobrança de assinaturas**: status de cobrança da mensalidade da Unidade
 - De provedores de **antifraude** (quando aplicável)
 - De **redes sociais** (caso o Usuário opte por login social — recurso futuro)
 
@@ -193,7 +193,7 @@ b) **Navegação na Plataforma**, por meio de cookies e tecnologias similares (C
 
 c) **Comunicações com nossa equipe** (e-mail, chat, WhatsApp, telefone);
 
-d) **Integrações automáticas** com gateways de pagamento e com a plataforma parceira;
+d) **Integrações automáticas** com gateways de pagamento e com a Plataforma de Ensino;
 
 e) **Recebimento de webhooks** de eventos de pagamento, matrícula e progresso;
 
@@ -235,9 +235,9 @@ Os Dados Pessoais coletados poderão ser utilizados para as seguintes finalidade
 
 a) Permitir o cadastro, autenticação e acesso à sua conta;
 
-b) Processar a aquisição de Cursos e efetivar a matrícula automática na plataforma parceira;
+b) Processar a aquisição de Cursos e efetivar a matrícula automática na Plataforma de Ensino;
 
-c) Processar pagamentos via Mercado Pago e/ou Asaas;
+c) Processar pagamentos e cobranças por meio dos gateways de pagamento contratados;
 
 d) Permitir o acesso às aulas, materiais e certificados;
 
@@ -301,20 +301,22 @@ O PMB **não vende, aluga, cede ou troca** seus Dados Pessoais com terceiros par
 
 Compartilhamos seus dados **apenas** nas hipóteses descritas abaixo, sempre observando os princípios da LGPD e mediante contratos com cláusulas de confidencialidade e segurança.
 
-### 7.2. Sub-operadores essenciais à prestação do serviço
+### 7.2. Operadores e parceiros essenciais à prestação do serviço
 
-| Sub-operador | Finalidade | Categoria de Dados | Localização |
+Para operar a Plataforma, o PMB se apoia em prestadores especializados, que tratam dados pessoais **exclusivamente** conforme as instruções e finalidades aqui descritas, sob contrato com cláusulas de confidencialidade e segurança. As **categorias** de operadores são:
+
+| Categoria de operador | Finalidade | Dados tratados | Localização |
 |---|---|---|---|
-| **Vercel Inc.** | Hospedagem da Plataforma, CDN, gerenciamento de domínios | Logs de requisição, IP, headers | EUA / Global |
-| **Supabase** | Banco de dados PostgreSQL, autenticação | Todos os dados cadastrais e transacionais | EUA |
-| **Upstash** | Cache de tenant, rate limiting | IP, tenant ID, contadores | Global |
-| **Asaas** | Cobrança da mensalidade da Unidade | Nome, CPF/CNPJ, e-mail, telefone da Unidade | Brasil |
-| **Mercado Pago** | Gateway de pagamento de Cursos | Nome, CPF, e-mail, dados de pagamento | Brasil |
-| **plataforma parceira** | Hospedagem e ministração dos Cursos | Nome, CPF, e-mail, senha de acesso, dados de progresso | Brasil |
-| **Resend** | Envio de e-mails transacionais | Nome, e-mail, conteúdo da mensagem | EUA |
-| **Hostinger SMTP** | Envio de e-mails via servidor SMTP | Nome, e-mail | UE / EUA |
-| **Google Analytics** (quando ativado) | Métricas de navegação | IP anonimizado, eventos, identificador de sessão | EUA / Global |
-| **Vercel Analytics** | Métricas de performance e Core Web Vitals | IP anonimizado, métricas de performance | EUA |
+| **Infraestrutura de hospedagem e entrega de conteúdo (CDN)** | Hospedar a Plataforma, entregar conteúdo e gerenciar domínios | Logs de requisição, IP | Brasil e exterior |
+| **Banco de dados e autenticação** | Armazenar e processar dados cadastrais e transacionais | Dados de cadastro, compra e uso | Brasil e exterior |
+| **Cache e proteção de tráfego** | Acelerar respostas e prevenir abusos | IP, identificadores técnicos | Brasil e exterior |
+| **Gateway de pagamento de Cursos** | Processar pagamentos das compras | Nome, CPF, e-mail, dados de pagamento | Brasil |
+| **Cobrança de assinaturas da Unidade** | Cobrar a mensalidade das Unidades | Nome, CPF/CNPJ, e-mail, telefone da Unidade | Brasil |
+| **Plataforma de Ensino** | Hospedar e ministrar os Cursos | Nome, CPF, e-mail, dados de acesso e progresso | Brasil |
+| **Envio de e-mails transacionais** | Enviar confirmações, credenciais e avisos | Nome, e-mail, conteúdo da mensagem | Brasil e exterior |
+| **Análise de uso e performance** (quando ativada) | Métricas de navegação e desempenho | IP anonimizado, eventos de navegação | Brasil e exterior |
+
+**7.2.1.** A **relação nominal e atualizada** dos operadores e sub-operadores efetivamente contratados está à disposição do Titular **mediante solicitação ao Encarregado (DPO)**, pelos canais da Cláusula 16, em atendimento ao art. 18, VII, da LGPD.
 
 ### 7.3. Compartilhamento com Unidades
 
@@ -322,9 +324,9 @@ Quando o Aluno realiza compra em uma Vitrine, **os Dados Pessoais necessários �
 
 O PMB **não compartilha dados de Alunos de uma Vitrine com Unidades de outras Vitrines**.
 
-### 7.4. Compartilhamento com a plataforma parceira
+### 7.4. Compartilhamento com a Plataforma de Ensino
 
-Para a matrícula automática e a fruição do Curso, **os Dados Pessoais necessários à criação da conta na plataforma parceira são automaticamente transmitidos** (nome, CPF, e-mail, telefone). A plataforma parceira possui sua própria política de privacidade, à qual o Aluno deve dar atenção.
+Para a matrícula automática e a fruição do Curso, **os Dados Pessoais necessários à criação da conta na Plataforma de Ensino são automaticamente transmitidos** (nome, CPF, e-mail, telefone). A Plataforma de Ensino possui sua própria política de privacidade, à qual o Aluno deve dar atenção.
 
 ### 7.5. Compartilhamento com Autoridades
 
@@ -374,25 +376,25 @@ O PMB adota medidas **técnicas, administrativas e organizacionais** razoáveis 
 
 ### 9.1. Medidas Técnicas
 
-- **Criptografia em trânsito**: todo tráfego protegido por HTTPS/TLS 1.2+, com certificados SSL gerenciados pela Vercel
-- **Criptografia em repouso** para dados sensíveis (tokens de gateways, segredos de OAuth) — algoritmo **AES-256-GCM**
-- **Senhas armazenadas com hash bcrypt** (não reversível)
-- **Isolamento multi-tenant**: queries no banco de dados sempre filtradas pelo `tenant_id` apropriado, impedindo acesso cross-tenant
-- **Tokens JWT** com expiração curta e rotação para sessões autenticadas
-- **Rate limiting** via Upstash Redis para prevenir abuso e brute-force
-- **Webhooks autenticados** por token compartilhado (Asaas) e HMAC-SHA256 (Mercado Pago)
-- **Logs de auditoria** das ações administrativas e webhooks (tabela `WebhookLog` e logs do provedor de hospedagem)
-- **Backups automáticos** do banco de dados pelo Supabase
-- **Monitoramento contínuo** de uptime e detecção de anomalias
+- **Criptografia em trânsito**: todo o tráfego entre o seu navegador e a Plataforma é protegido por conexão segura (HTTPS), com certificados digitais válidos
+- **Criptografia em repouso**: dados sensíveis (como credenciais de integração e segredos de acesso) são armazenados de forma cifrada, com padrões robustos de mercado
+- **Senhas protegidas** por algoritmo de hash irreversível, nunca armazenadas em texto puro
+- **Isolamento entre lojas**: os dados de cada Vitrine são logicamente segregados, impedindo o acesso de uma Unidade aos dados de outra
+- **Sessões autenticadas** com expiração e renovação periódica de credenciais
+- **Limitação de tentativas de acesso** e mecanismos de proteção contra abuso e ataques automatizados
+- **Integrações autenticadas** com gateways de pagamento e demais parceiros, com verificação da origem das comunicações recebidas
+- **Registros de auditoria** das ações administrativas e dos eventos relevantes da Plataforma
+- **Backups periódicos** das bases de dados
+- **Monitoramento contínuo** de disponibilidade e detecção de anomalias
 
 ### 9.2. Medidas Administrativas
 
-- **Controle de acesso baseado em papéis** (RBAC): SUPER_ADMIN, PMB_SALES, PMB_RESELLER_MGR, RESELLER, CONSULTOR — cada um com permissões mínimas necessárias
+- **Controle de acesso baseado em papéis**, com concessão das permissões mínimas necessárias a cada função
 - **Política de senhas fortes** para acesso administrativo
-- **Acesso a dados pessoais restrito** à Equipe do PMB com necessidade legítima de saber, sob obrigações de confidencialidade
+- **Acesso a dados pessoais restrito** à equipe do PMB com necessidade legítima de saber, sob obrigações de confidencialidade
 - **Treinamento periódico** da equipe em LGPD e segurança da informação
 - **Procedimentos para resposta a incidentes** (Cláusula 14)
-- **Avaliação contínua** de fornecedores e sub-operadores
+- **Avaliação contínua** de fornecedores e operadores
 
 ### 9.3. Limitações
 
@@ -416,7 +418,7 @@ O Titular também é corresponsável pela segurança ao manter senhas fortes, n�
 | Logs de aplicação (eventos do sistema) | **12 meses** | Legítimo interesse de segurança |
 | Cadastro de Unidade (contrato ativo) | Enquanto vigente o contrato | Execução de contrato |
 | Cadastro de Unidade (após encerramento) | **5 anos** | Defesa de direitos |
-| Webhooks e tokens criptografados de pagamento | Enquanto necessário ao serviço | Execução de contrato |
+| Tokens de integração de pagamento (cifrados) | Enquanto necessário ao serviço | Execução de contrato |
 | Comunicações de marketing (consentimento) | Até a revogação do consentimento | Consentimento |
 | Cookies e identificadores | Conforme Cláusula 12 | Consentimento ou Legítimo interesse |
 
@@ -468,12 +470,12 @@ d) Defesa de direitos do PMB, das Unidades e dos Titulares.
 
 | Categoria | Finalidade | Base Legal | Como desabilitar |
 |---|---|---|---|
-| **Estritamente necessários** | Manter sessão autenticada, segurança CSRF, idioma | Execução de contrato | Não passível de opt-out (essencial) |
+| **Estritamente necessários** | Manter sessão autenticada, segurança, idioma | Execução de contrato | Não passível de opt-out (essencial) |
 | **Funcionais** | Lembrar preferências (tema, idioma, carrinho) | Legítimo interesse | Configurações do navegador |
-| **Performance / Analytics** | Métricas de uso, Core Web Vitals, Google Analytics, Vercel Analytics | Consentimento ou Legítimo interesse (IP anonimizado) | Banner de cookies ou navegador |
-| **Marketing** | Remarketing, campanhas, pixels de conversão (Facebook/Meta, Google Ads) — quando ativados | Consentimento | Banner de cookies ou navegador |
+| **Performance / Analytics** | Métricas de uso e desempenho, por meio de ferramentas de análise (com IP anonimizado) | Consentimento ou Legítimo interesse | Banner de cookies ou navegador |
+| **Marketing** | Remarketing, campanhas e pixels de conversão de redes sociais e plataformas de anúncios — quando ativados | Consentimento | Banner de cookies ou navegador |
 
-**12.3. Isolamento multi-tenant.** Os cookies de sessão são **isolados por domínio**, de forma que a autenticação em `profissionalizamaisbrasil.com.br` (área administrativa/aluno) **não se confunde** com a autenticação em uma Vitrine de Unidade em `livrecursos.com.br`.
+**12.3. Isolamento por domínio.** Os cookies de sessão são **isolados por domínio**, de forma que a autenticação no site institucional (área administrativa/aluno) **não se confunde** com a autenticação em uma Vitrine de Unidade.
 
 **12.4. Como gerenciar cookies.** O Usuário pode:
 

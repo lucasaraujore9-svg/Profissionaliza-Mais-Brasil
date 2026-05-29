@@ -2,8 +2,8 @@
 
 **Profissionaliza Mais Brasil**
 
-> Atualizado pela última vez em: 21/05/2026
-> Versão: 1.1
+> Atualizado pela última vez em: 29/05/2026
+> Versão: 1.2
 
 ---
 
@@ -25,7 +25,7 @@ PMB e UNIDADE, doravante referidos individualmente como **"Parte"** e em conjunt
 
 Os termos abaixo, no plural ou no singular, terão os seguintes significados:
 
-**Plataforma**: software multi-tenant de propriedade do PMB, disponibilizado em modelo SaaS (Software as a Service), que permite à Unidade publicar uma **Vitrine** virtual, comercializar **Cursos** ao **Aluno** final, processar pagamentos via gateway e gerenciar vendas, alunos, cupons e finanças.
+**Plataforma**: software de propriedade do PMB, disponibilizado em modelo SaaS (Software as a Service), que permite à Unidade publicar uma **Vitrine** virtual, comercializar **Cursos** ao **Aluno** final, processar pagamentos via gateway e gerenciar vendas, alunos, cupons e finanças.
 
 **Vitrine**: loja virtual exclusiva da Unidade, hospedada na infraestrutura do PMB e acessível por:
 
@@ -37,15 +37,15 @@ Os termos abaixo, no plural ou no singular, terão os seguintes significados:
 
 **Plano**: pacote de funcionalidades, limites técnicos e mensalidade fixa contratado pela Unidade, cuja descrição vigente está publicada no Site Institucional e poderá ser alterada conforme Cláusula 14.
 
-**Mensalidade**: valor recorrente devido pela Unidade ao PMB, em contraprestação ao licenciamento da Plataforma e aos serviços conexos, cobrado via **Asaas**.
+**Mensalidade**: valor recorrente devido pela Unidade ao PMB, em contraprestação ao licenciamento da Plataforma e aos serviços conexos, cobrado por meio do **Provedor de Cobrança**.
 
-**Asaas**: instituição financeira contratada pelo PMB para gestão de cobrança da Mensalidade da Unidade.
+**Provedor de Cobrança**: instituição ou serviço de pagamento contratado pelo PMB para a gestão de cobrança da Mensalidade da Unidade.
 
-**Mercado Pago**: gateway de pagamentos contratado **diretamente pela Unidade** (com sua própria conta e CNPJ/CPF), por meio do qual a Unidade recebe as vendas de Cursos efetuadas em sua Vitrine.
+**Gateway de Pagamento**: provedor de processamento de pagamentos contratado **diretamente pela Unidade** (com sua própria conta e CNPJ/CPF), por meio do qual a Unidade recebe as vendas de Cursos efetuadas em sua Vitrine.
 
-**plataforma parceira de conteúdo educacional**: terceira plataforma educacional contratada pelo PMB sob modelo white-label/API, responsável pelo **conteúdo, hospedagem, ministração e certificação** dos Cursos.
+**Plataforma de Ensino**: terceira plataforma educacional contratada pelo PMB, responsável pelo **conteúdo, hospedagem, ministração e certificação** dos Cursos.
 
-**Catálogo**: conjunto de Cursos disponibilizados pelo PMB à Unidade para revenda, sincronizado periodicamente com a plataforma parceira.
+**Catálogo**: conjunto de Cursos disponibilizados pelo PMB à Unidade para revenda, sincronizado periodicamente com a Plataforma de Ensino.
 
 **Curso**: cada produto educacional do Catálogo, comercializado pela Unidade em sua Vitrine ao Aluno final.
 
@@ -71,7 +71,7 @@ Os termos abaixo, no plural ou no singular, terão os seguintes significados:
 
 a) Publicação e operação de uma **Vitrine virtual** de cursos profissionalizantes online;
 
-b) Revenda de **Cursos** do Catálogo (produzidos e hospedados pela plataforma parceira) ao **Aluno** final;
+b) Revenda de **Cursos** do Catálogo (produzidos e hospedados pela Plataforma de Ensino) ao **Aluno** final;
 
 c) Processamento e gestão de **vendas, cupons, alunos, relatórios financeiros** e demais funcionalidades descritas no Plano contratado.
 
@@ -99,7 +99,7 @@ c) A Unidade opera com **independência, autonomia e por sua conta e risco**, ex
 
 (iii) Escolher o **Plano** desejado;
 
-(iv) Concluir o **pagamento da primeira Mensalidade** via Asaas;
+(iv) Concluir o **pagamento da primeira Mensalidade** via Provedor de Cobrança;
 
 (v) Após confirmação do pagamento e validação dos dados pelo PMB, a conta será **ativada** e a Unidade receberá credenciais de acesso ao Painel.
 
@@ -111,7 +111,7 @@ c) A Unidade opera com **independência, autonomia e por sua conta e risco**, ex
 
 a) Sua inscrição perante a Receita Federal (CPF/CNPJ);
 
-b) Conta bancária e/ou conta no Mercado Pago em sua titularidade, apta a receber pagamentos;
+b) Conta bancária e/ou conta no Gateway de Pagamento em sua titularidade, apta a receber pagamentos;
 
 c) Endereço de e-mail e telefone funcionais;
 
@@ -127,13 +127,13 @@ a) **Acesso à Plataforma** (Painel da Unidade) com as funcionalidades descritas
 
 b) **Hospedagem da Vitrine** em subdomínio `{slug}.livrecursos.com.br`;
 
-c) **Suporte ao registro de Domínio Personalizado** (configuração de CNAME pela API da Vercel), ressalvado que a aquisição e manutenção do domínio é de responsabilidade exclusiva da Unidade;
+c) **Suporte ao registro de Domínio Personalizado** (configuração de CNAME junto ao provedor de hospedagem), ressalvado que a aquisição e manutenção do domínio é de responsabilidade exclusiva da Unidade;
 
-d) **Acesso ao Catálogo** sincronizado com a plataforma parceira;
+d) **Acesso ao Catálogo** sincronizado com a Plataforma de Ensino;
 
-e) **Integração técnica** com o Mercado Pago (token da Unidade) para processamento das vendas;
+e) **Integração técnica** com o Gateway de Pagamento (credencial da Unidade) para processamento das vendas;
 
-f) **Matrícula automática** do Aluno na plataforma parceira após a confirmação do pagamento, por integração via API;
+f) **Matrícula automática** do Aluno na Plataforma de Ensino após a confirmação do pagamento, por integração automática;
 
 g) **Webhooks** de gestão de status de pagamentos e acesso (bloqueio automático ou manual em caso de inadimplência do Aluno, conforme política configurada pela Unidade);
 
@@ -159,7 +159,7 @@ f) Garantia de volume de vendas, performance, conversão ou retorno financeiro.
 
 a) Janelas de manutenção programada (comunicadas com 24h de antecedência);
 
-b) Indisponibilidade de terceiros (Vercel, Supabase, Asaas, Mercado Pago, plataforma parceira, Resend, Upstash, registradores de domínio, provedores de DNS);
+b) Indisponibilidade de terceiros (provedores de infraestrutura e hospedagem, Provedor de Cobrança, Gateway de Pagamento, Plataforma de Ensino, serviço de e-mail, registradores de domínio, provedores de DNS);
 
 c) Caso fortuito ou força maior;
 
@@ -175,9 +175,9 @@ d) Ataques cibernéticos de natureza extraordinária.
 
 **5.2.** A Mensalidade é **fixa, recorrente e independente do volume de vendas** realizadas pela Unidade. O PMB **não cobra percentual de comissão sobre vendas, taxa de sucesso, royalty ou repasse** (salvo cláusula expressa em adendo específico).
 
-**5.3. Pagamento via Asaas.** A Unidade expressamente autoriza:
+**5.3. Pagamento via Provedor de Cobrança.** A Unidade expressamente autoriza:
 
-a) A geração automática de cobranças mensais via Asaas;
+a) A geração automática de cobranças mensais via Provedor de Cobrança;
 
 b) O envio de comunicações de cobrança (faturas, lembretes, avisos de vencimento) pelos canais cadastrados;
 
@@ -193,7 +193,7 @@ a) **Até 5 dias de atraso**: aviso amigável de cobrança, sem suspensão;
 
 b) **De 6 a 15 dias de atraso**: notificação formal de cobrança, com **bloqueio das funcionalidades de gestão** do Painel (mantendo-se, por critério do PMB, a Vitrine acessível ao Aluno);
 
-c) **De 16 a 30 dias de atraso**: **suspensão total da Vitrine** (acesso aos Alunos suspenso na plataforma parceira conforme política configurada pela Unidade, podendo o PMB acionar diretamente a plataforma parceira para preservar o serviço aos Alunos);
+c) **De 16 a 30 dias de atraso**: **suspensão total da Vitrine** (acesso aos Alunos suspenso na Plataforma de Ensino conforme política configurada pela Unidade, podendo o PMB acionar diretamente a Plataforma de Ensino para preservar o serviço aos Alunos);
 
 d) **A partir de 31 dias de atraso**: **rescisão automática** do Contrato por culpa exclusiva da Unidade, com perda do slug, do Domínio Personalizado configurado e dos dados de configuração da Vitrine, sem prejuízo da cobrança das parcelas vencidas, multa contratual da Cláusula 16 e custas de cobrança.
 
@@ -259,7 +259,7 @@ b) Praticar **publicidade comparativa desleal** com outras Unidades ou plataform
 
 c) Veicular conteúdo **ilegal, obsceno, racista, homofóbico, religiosamente discriminatório, de ódio ou que incite violência**;
 
-d) Comercializar Cursos que **não estejam no Catálogo** ou que tenham sido descontinuados pela plataforma parceira;
+d) Comercializar Cursos que **não estejam no Catálogo** ou que tenham sido descontinuados pela Plataforma de Ensino;
 
 e) Utilizar a Plataforma como **veículo de fraude, lavagem de dinheiro, esquema de pirâmide, marketing multinível com bonificação cumulativa, financiamento ao terrorismo** ou qualquer atividade ilícita;
 
@@ -279,29 +279,29 @@ k) Promover concorrência desleal contra o PMB (Cláusula 11).
 
 ---
 
-## 7. MERCADO PAGO E RECEBIMENTO DAS VENDAS
+## 7. GATEWAY DE PAGAMENTO E RECEBIMENTO DAS VENDAS
 
-**7.1.** As vendas realizadas na Vitrine da Unidade são processadas **diretamente na conta Mercado Pago da Unidade**, configurada por ela no Painel mediante fornecimento do **access token** próprio.
+**7.1.** As vendas realizadas na Vitrine da Unidade são processadas **diretamente na conta da Unidade no Gateway de Pagamento**, configurada por ela no Painel mediante fornecimento da **credencial de acesso** própria.
 
 **7.2.** As Partes reconhecem que:
 
-a) Os **valores das vendas são creditados diretamente à Unidade** pela operadora Mercado Pago, **sem intermediação financeira do PMB**;
+a) Os **valores das vendas são creditados diretamente à Unidade** pelo Gateway de Pagamento, **sem intermediação financeira do PMB**;
 
-b) O PMB **não retém, não recebe e não tem acesso aos valores** das vendas — atua apenas como integradora técnica que orquestra a criação da preferência de pagamento e o recebimento dos webhooks;
+b) O PMB **não retém, não recebe e não tem acesso aos valores** das vendas — atua apenas como integrador técnico que orquestra a criação da cobrança e o recebimento das confirmações de pagamento;
 
-c) **Taxas, encargos, prazos de liberação, antecipação, chargebacks e qualquer questão financeira** relativa às vendas é responsabilidade exclusiva da Unidade perante o Mercado Pago, conforme contrato firmado diretamente entre eles;
+c) **Taxas, encargos, prazos de liberação, antecipação, chargebacks e qualquer questão financeira** relativa às vendas é responsabilidade exclusiva da Unidade perante o Gateway de Pagamento, conforme contrato firmado diretamente entre eles;
 
-d) O **access token** do Mercado Pago é armazenado de forma criptografada (AES-256-GCM) pelo PMB, exclusivamente para fins de execução do contrato. A Unidade poderá revogá-lo a qualquer tempo no Painel ou diretamente no Mercado Pago, ciente de que essa revogação interrompe o funcionamento das vendas na Vitrine.
+d) A **credencial de acesso** ao Gateway de Pagamento é armazenada de forma cifrada, com padrões robustos de mercado, exclusivamente para fins de execução do contrato. A Unidade poderá revogá-la a qualquer tempo no Painel ou diretamente no Gateway de Pagamento, ciente de que essa revogação interrompe o funcionamento das vendas na Vitrine.
 
-**7.3. Chargeback.** Em caso de chargeback, contestação ou estorno solicitado pelo Aluno e processado pelo Mercado Pago:
+**7.3. Chargeback.** Em caso de chargeback, contestação ou estorno solicitado pelo Aluno e processado pelo Gateway de Pagamento:
 
-a) A **PMB não responde pela devolução** dos valores ao Aluno — essa responsabilidade é da Unidade, conforme política do Mercado Pago;
+a) O **PMB não responde pela devolução** dos valores ao Aluno — essa responsabilidade é da Unidade, conforme política do Gateway de Pagamento;
 
-b) O PMB **executará as integrações necessárias** para sincronizar o status (p.ex., revogar acesso do Aluno na plataforma parceira);
+b) O PMB **executará as integrações necessárias** para sincronizar o status (p.ex., revogar acesso do Aluno na Plataforma de Ensino);
 
 c) **A taxa de Mensalidade do PMB permanece devida** integralmente, independente de chargebacks na carteira da Unidade.
 
-**7.4. Fraude e Antilavagem.** A Unidade declara que **conhece e cumprirá** a regulamentação aplicável a Prevenção à Lavagem de Dinheiro (Lei nº 9.613/1998), Combate ao Financiamento do Terrorismo e regras de KYC do Mercado Pago, isentando o PMB de qualquer responsabilidade por irregularidades na sua atividade.
+**7.4. Fraude e Antilavagem.** A Unidade declara que **conhece e cumprirá** a regulamentação aplicável a Prevenção à Lavagem de Dinheiro (Lei nº 9.613/1998), Combate ao Financiamento do Terrorismo e regras de KYC do Gateway de Pagamento, isentando o PMB de qualquer responsabilidade por irregularidades na sua atividade.
 
 ---
 
@@ -313,7 +313,7 @@ c) **A taxa de Mensalidade do PMB permanece devida** integralmente, independente
 
 (ii) Configuração de **CNAME** apontando para `cname.livrecursos.com.br`;
 
-(iii) Cadastro do domínio no Painel para emissão de certificado SSL pela Vercel.
+(iii) Cadastro do domínio no Painel para emissão do certificado de segurança (SSL).
 
 **8.2.** O PMB:
 
@@ -329,31 +329,31 @@ d) Poderá, a seu critério, **recusar Domínios Personalizados** que violem dir
 
 ---
 
-## 9. CATÁLOGO, ESCOLA AVANÇADA E ENTREGA DO CURSO
+## 9. CATÁLOGO, PLATAFORMA DE ENSINO E ENTREGA DO CURSO
 
-**9.1.** O Catálogo é fornecido pelo PMB à Unidade **conforme disponibilizado pela plataforma parceira**, sem qualquer garantia de:
+**9.1.** O Catálogo é fornecido pelo PMB à Unidade **conforme disponibilizado pela Plataforma de Ensino**, sem qualquer garantia de:
 
-a) Manutenção integral do Catálogo durante a vigência (Cursos podem ser **adicionados, modificados ou descontinuados** pela plataforma parceira a qualquer tempo);
+a) Manutenção integral do Catálogo durante a vigência (Cursos podem ser **adicionados, modificados ou descontinuados** pela Plataforma de Ensino a qualquer tempo);
 
 b) Equivalência dos Cursos a modalidades de ensino regulado pelo MEC;
 
-c) Aceitação dos certificados emitidos pela plataforma parceira em concursos públicos, conselhos profissionais ou órgãos reguladores;
+c) Aceitação dos certificados emitidos pela Plataforma de Ensino em concursos públicos, conselhos profissionais ou órgãos reguladores;
 
-d) Continuidade da relação contratual entre PMB e plataforma parceira — em caso de descontinuação dessa relação, o PMB envidará esforços razoáveis para substituir o provedor de conteúdo, **podendo, alternativamente, encerrar este Contrato** mediante aviso de **60 (sessenta) dias**, sem multa.
+d) Continuidade da relação contratual entre PMB e Plataforma de Ensino — em caso de descontinuação dessa relação, o PMB envidará esforços razoáveis para substituir o provedor de conteúdo, **podendo, alternativamente, encerrar este Contrato** mediante aviso de **60 (sessenta) dias**, sem multa.
 
 **9.2.** O PMB **NÃO RESPONDE**:
 
 a) Pelo **conteúdo pedagógico** dos Cursos (qualidade, atualização, didática, ementa, erros materiais);
 
-b) Pela **disponibilidade técnica** da plataforma de aulas da plataforma parceira;
+b) Pela **disponibilidade técnica** da plataforma de aulas da Plataforma de Ensino;
 
-c) Pela **emissão e validação de certificados** pela plataforma parceira;
+c) Pela **emissão e validação de certificados** pela Plataforma de Ensino;
 
-d) Por **atrasos ou falhas** da plataforma parceira na matrícula automática do Aluno;
+d) Por **atrasos ou falhas** da Plataforma de Ensino na matrícula automática do Aluno;
 
-e) Por **alterações unilaterais** efetuadas pela plataforma parceira em ementa, carga horária, materiais ou preço-base.
+e) Por **alterações unilaterais** efetuadas pela Plataforma de Ensino em ementa, carga horária, materiais ou preço-base.
 
-**9.3.** A Unidade reconhece que, em caso de reclamação do Aluno sobre o conteúdo do Curso, a **responsabilidade primária é da plataforma parceira**, e a **responsabilidade comercial perante o Aluno é da Unidade** (CDC), cabendo ao PMB exclusivamente a intermediação técnica.
+**9.3.** A Unidade reconhece que, em caso de reclamação do Aluno sobre o conteúdo do Curso, a **responsabilidade primária é da Plataforma de Ensino**, e a **responsabilidade comercial perante o Aluno é da Unidade** (CDC), cabendo ao PMB exclusivamente a intermediação técnica.
 
 ---
 
@@ -383,7 +383,7 @@ d) Garantir o cumprimento da LGPD pelos seus Consultores no tratamento dos dados
 
 **11.2. Propriedade da Unidade.** A marca, o logotipo, a identidade visual e os textos institucionais da **Vitrine** são de propriedade da Unidade, que outorga ao PMB uma **licença não exclusiva, gratuita, mundial e revogável** para uso operacional desses elementos exclusivamente para hospedagem e exibição na Plataforma durante a vigência deste Contrato.
 
-**11.3. Conteúdo dos Cursos.** Permanece sob propriedade da **plataforma parceira** ou de seus licenciantes.
+**11.3. Conteúdo dos Cursos.** Permanece sob propriedade da **Plataforma de Ensino** ou de seus licenciantes.
 
 **11.4. Vedações à Unidade.** É VEDADO à Unidade:
 
@@ -399,7 +399,7 @@ e) Atuar como **representante, agente ou porta-voz** do PMB perante terceiros.
 
 **11.5. Não-Concorrência durante a vigência.** Durante toda a vigência deste Contrato, a Unidade **NÃO PODERÁ**:
 
-a) **Desenvolver ou comercializar plataforma concorrente** que ofereça serviço substancialmente equivalente ao do PMB (revenda de cursos da plataforma parceira em modelo multi-tenant) usando dados, conhecimento técnico ou contatos obtidos por meio da Plataforma;
+a) **Desenvolver ou comercializar plataforma concorrente** que ofereça serviço substancialmente equivalente ao do PMB (revenda de cursos da Plataforma de Ensino em modelo de múltiplas lojas) usando dados, conhecimento técnico ou contatos obtidos por meio da Plataforma;
 
 b) Praticar **aliciamento desleal de outras Unidades** parceiros para migração para plataformas concorrentes mediante divulgação de informações obtidas confidencialmente.
 
@@ -411,7 +411,7 @@ b) Praticar **aliciamento desleal de outras Unidades** parceiros para migração
 
 ## 12. RESPONSABILIDADE DA UNIDADE PERANTE O ALUNO (CDC)
 
-**12.1.** A Unidade reconhece que, na revenda de Cursos ao Aluno final na sua Vitrine, **figura como FORNECEDORA perante o consumidor**, nos termos do art. 3º do **Código de Defesa do Consumidor (Lei nº 8.078/1990)**, sendo solidariamente responsável com a plataforma parceira e o PMB perante o Aluno.
+**12.1.** A Unidade reconhece que, na revenda de Cursos ao Aluno final na sua Vitrine, **figura como FORNECEDORA perante o consumidor**, nos termos do art. 3º do **Código de Defesa do Consumidor (Lei nº 8.078/1990)**, sendo solidariamente responsável com a Plataforma de Ensino e o PMB perante o Aluno.
 
 **12.2.** A Unidade obriga-se a:
 
@@ -421,13 +421,13 @@ b) **Atender o Aluno em primeira instância** em todas as questões comerciais e
 
 c) **Garantir o direito de arrependimento** previsto no art. 49 do CDC (7 dias);
 
-d) **Processar reembolsos devidos** ao Aluno por meio do seu Mercado Pago, observado o disposto nos Termos de Uso do Aluno;
+d) **Processar reembolsos devidos** ao Aluno por meio do seu Gateway de Pagamento, observado o disposto nos Termos de Uso do Aluno;
 
 e) **Emitir nota fiscal** das vendas realizadas em sua Vitrine;
 
 f) **Atender órgãos de defesa do consumidor** (PROCON, consumidor.gov.br) e demandas judiciais relativas a sua Vitrine, **assumindo polo passivo** em ações ajuizadas por Aluno.
 
-**12.3. Cláusula de Mantença de Indenidade (Indenização).** A Unidade obriga-se a **manter o PMB e a plataforma parceira indenes** de qualquer reclamação, demanda administrativa, ação judicial, multa, condenação, custas, honorários, danos materiais ou morais, decorrente de:
+**12.3. Cláusula de Mantença de Indenidade (Indenização).** A Unidade obriga-se a **manter o PMB e a Plataforma de Ensino indenes** de qualquer reclamação, demanda administrativa, ação judicial, multa, condenação, custas, honorários, danos materiais ou morais, decorrente de:
 
 a) Descumprimento, pela Unidade, dos Termos de Uso do Aluno, do CDC, da LGPD ou de qualquer legislação aplicável;
 
@@ -461,7 +461,7 @@ a) A **Unidade é o CONTROLADOR**, nos termos do art. 5º, VI, da LGPD;
 
 b) A **PMB é o OPERADOR**, nos termos do art. 5º, VII, da LGPD, atuando sob as instruções da Unidade e nos limites operacionais necessários à execução deste Contrato;
 
-c) A **plataforma parceira é a OPERADORA** quanto aos dados necessários à matrícula e gestão do acesso aos Cursos, e **CONTROLADORA** quanto aos dados de progresso pedagógico e certificação.
+c) A **Plataforma de Ensino é a OPERADORA** quanto aos dados necessários à matrícula e gestão do acesso aos Cursos, e **CONTROLADORA** quanto aos dados de progresso pedagógico e certificação.
 
 **13.2. Obrigações da Unidade como Controlador:**
 
@@ -491,9 +491,9 @@ d) Auxiliar a Unidade no atendimento a solicitações de titulares e da ANPD;
 
 e) Comunicar incidentes de segurança à Unidade em prazo razoável.
 
-**13.4. Subcontratação.** A Unidade autoriza o PMB a subcontratar, como **sub-operadoras**, as seguintes entidades necessárias à prestação dos serviços: Vercel (hospedagem), Supabase (banco de dados), Upstash (cache), Asaas (cobrança da Mensalidade), Mercado Pago (gateway de vendas), Resend (e-mails transacionais), plataforma parceira (matrícula e aulas), e outras necessárias à evolução do produto, com comunicação prévia em caso de mudança material.
+**13.4. Subcontratação.** A Unidade autoriza o PMB a subcontratar, como **sub-operadores**, as categorias de entidades necessárias à prestação dos serviços: provedores de infraestrutura, hospedagem e banco de dados; serviços de cache e proteção de tráfego; Provedor de Cobrança (cobrança da Mensalidade); Gateway de Pagamento (recebimento das vendas); serviço de e-mails transacionais; e Plataforma de Ensino (matrícula e aulas), além de outros necessários à evolução do produto, com comunicação prévia em caso de mudança material. A relação nominal e atualizada dos sub-operadores está disponível mediante solicitação ao PMB.
 
-**13.5. Transferência Internacional.** A Unidade autoriza o PMB a tratar dados em servidores localizados no Brasil ou no exterior (em especial, infraestrutura Vercel/Supabase), observados os requisitos do Capítulo V da LGPD.
+**13.5. Transferência Internacional.** A Unidade autoriza o PMB a tratar dados em servidores localizados no Brasil ou no exterior, observados os requisitos do Capítulo V da LGPD.
 
 **13.6. Após o término do Contrato**, o PMB armazenará os dados de Alunos da Unidade pelos prazos legais (cumprimento de obrigações legais e regulatórias, defesa em juízo) e, após, procederá com a anonimização ou exclusão, conforme aplicável.
 
@@ -565,7 +565,7 @@ c) O subdomínio `{slug}.livrecursos.com.br` poderá ser **liberado para uso fut
 
 d) Domínios Personalizados serão **desconectados** da Plataforma;
 
-e) **Alunos ativos** com cursos em curso continuarão tendo acesso ao conteúdo na **plataforma parceira**, conforme política de cancelamento individual aplicada pelo PMB à Unidade (Cláusula 16.7);
+e) **Alunos ativos** com cursos em curso continuarão tendo acesso ao conteúdo na **Plataforma de Ensino**, conforme política de cancelamento individual aplicada pelo PMB à Unidade (Cláusula 16.7);
 
 f) Mensalidades vencidas e demais valores devidos permanecem **exigíveis**, sem prejuízo de multa.
 
@@ -573,7 +573,7 @@ f) Mensalidades vencidas e demais valores devidos permanecem **exigíveis**, sem
 
 **16.7. Política de cancelamento individual e Alunos ativos.** Em qualquer hipótese de rescisão, o PMB decidirá individualmente, conforme política previamente acordada com a Unidade, sobre o destino dos Alunos ativos da Vitrine encerrada, podendo:
 
-(i) **Manter ativos os Alunos** na plataforma parceira até o final do prazo já adquirido (proteção do consumidor — CDC);
+(i) **Manter ativos os Alunos** na Plataforma de Ensino até o final do prazo já adquirido (proteção do consumidor — CDC);
 
 (ii) **Migrar a carteira** para outra Unidade ou para venda direta pelo Site Institucional do PMB;
 
@@ -591,9 +591,9 @@ f) Mensalidades vencidas e demais valores devidos permanecem **exigíveis**, sem
 
 a) **Lucros cessantes, perda de oportunidade, perda de clientes, perda de receita** ou qualquer dano indireto, mediato ou consequencial;
 
-b) **Atos ou omissões da plataforma parceira**, do Mercado Pago, do Asaas, da Vercel, da Supabase, da Upstash, de registradores de domínio, provedores de DNS ou de qualquer terceiro contratado;
+b) **Atos ou omissões da Plataforma de Ensino**, do Gateway de Pagamento, do Provedor de Cobrança, dos provedores de infraestrutura e hospedagem, de registradores de domínio, provedores de DNS ou de qualquer terceiro contratado;
 
-c) **Decisões administrativas, regulatórias ou judiciais** que afetem o Catálogo, a operação da plataforma parceira ou o setor de educação livre/profissionalizante;
+c) **Decisões administrativas, regulatórias ou judiciais** que afetem o Catálogo, a operação da Plataforma de Ensino ou o setor de educação livre/profissionalizante;
 
 d) **Caso fortuito ou força maior**, nos termos do art. 393 do Código Civil;
 
@@ -673,7 +673,7 @@ b) A **PMB** poderá ceder ou transferir este Contrato em casos de venda total o
 >
 > 2. ESTOU CIENTE DE QUE O CONTRATO É DE NATUREZA EMPRESARIAL (B2B) E DE QUE NÃO SE APLICA O CÓDIGO DE DEFESA DO CONSUMIDOR À MINHA RELAÇÃO COM O PMB;
 >
-> 3. RECONHEÇO QUE O PMB É APENAS LICENCIADORA DE TECNOLOGIA E INTERMEDIADORA, NÃO RESPONDENDO PELO CONTEÚDO DOS CURSOS (ESCOLA AVANÇADA) NEM PELOS VALORES RECEBIDOS POR MIM (MERCADO PAGO);
+> 3. RECONHEÇO QUE O PMB É APENAS LICENCIADOR DE TECNOLOGIA E INTERMEDIADOR, NÃO RESPONDENDO PELO CONTEÚDO DOS CURSOS (PRODUZIDO PELA PLATAFORMA DE ENSINO) NEM PELOS VALORES RECEBIDOS POR MIM (PROCESSADOS PELO GATEWAY DE PAGAMENTO);
 >
 > 4. ASSUMO INTEGRAL RESPONSABILIDADE PERANTE OS ALUNOS DA MINHA VITRINE, NOS TERMOS DO CDC, DA LGPD E DEMAIS NORMAS APLICÁVEIS;
 >
