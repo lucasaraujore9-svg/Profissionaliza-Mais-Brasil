@@ -41,7 +41,7 @@ export const GEO = {
 // Redes sociais oficiais (entram em sameAs do JSON-LD). Ajuste conforme os
 // perfis reais forem confirmados.
 export const SOCIAL_PROFILES: string[] = [
-  "https://www.instagram.com/profissionalizamaisbrasil",
+  "https://www.instagram.com/profissionaliza_maisbrasil",
   "https://www.facebook.com/profissionalizamaisbrasil",
 ]
 

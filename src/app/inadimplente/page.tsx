@@ -91,7 +91,7 @@ export default async function InadimplentePage() {
             </div>
           ) : (
             <div className="mb-6 rounded-xl border border-gray-200 bg-gray-50 p-4 text-center text-sm text-gray-500">
-              Entre em contato com o suporte da Profissionaliza Mais Brasil para
+              Entre em contato com o suporte do Profissionaliza Mais Brasil para
               regularizar sua conta.
             </div>
           )}

@@ -18,7 +18,7 @@ export default function ReembolsoPage() {
         <Prose>
           <h2>Como funciona a garantia</h2>
           <p>
-            Todo curso da Profissionaliza Mais Brasil tem <strong>7 dias corridos de garantia</strong>,
+            Todo curso do Profissionaliza Mais Brasil tem <strong>7 dias corridos de garantia</strong>,
             contados a partir da data da compra. Nesse período, se você não gostar do conteúdo, basta
             pedir o reembolso e devolvemos o valor integral. Simples assim.
           </p>

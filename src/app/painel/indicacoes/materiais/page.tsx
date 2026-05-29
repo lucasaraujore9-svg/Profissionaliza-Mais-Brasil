@@ -25,7 +25,7 @@ export default async function PainelIndicacoesMateriaisPage() {
   const messages: { label: string; text: string }[] = [
     {
       label: "WhatsApp / mensagem direta",
-      text: `Oi! Conheço a Profissionaliza Mais Brasil, que ajuda quem quer empreender em educação a montar a própria escola online de cursos profissionalizantes. Eles têm mais de 100 cursos prontos, plataforma de aulas, certificados e suporte. Sem comissão por aluno, só uma mensalidade.
+      text: `Oi! Conheço o Profissionaliza Mais Brasil, que ajuda quem quer empreender em educação a montar a própria escola online de cursos profissionalizantes. Eles têm mais de 100 cursos prontos, plataforma de aulas, certificados e suporte. Sem comissão por aluno, só uma mensalidade.
 
 Se você está pensando em ter o próprio portal de cursos, dá uma olhada aqui:
 ${link}`,
@@ -40,7 +40,7 @@ ${link}`,
 
 Olá,
 
-Quero te apresentar a Profissionaliza Mais Brasil — uma plataforma que permite a qualquer pessoa empreender em educação com a própria vitrine de cursos profissionalizantes online.
+Quero te apresentar o Profissionaliza Mais Brasil — uma plataforma que permite a qualquer pessoa empreender em educação com a própria vitrine de cursos profissionalizantes online.
 
 Você recebe:
 - Mais de 100 cursos prontos

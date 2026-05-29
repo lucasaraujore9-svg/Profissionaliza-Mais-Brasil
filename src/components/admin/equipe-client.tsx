@@ -92,7 +92,7 @@ export function EquipeClient({ initialItems }: { initialItems: EquipeItem[] }) {
             Equipe PMB
           </h1>
           <p className="text-sm text-muted-foreground">
-            Gerencie os usuários internos da Profissionaliza Mais Brasil
+            Gerencie os usuários internos do Profissionaliza Mais Brasil
           </p>
         </div>
         <Button

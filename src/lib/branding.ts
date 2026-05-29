@@ -102,7 +102,7 @@ export interface SocialLinks {
 
 // Instagram e Facebook sao perfis oficiais fixos da PMB — fixados no codigo
 // para nao dependerem de env (que estava apontando para perfis errados em prod).
-const PMB_INSTAGRAM_URL = "https://www.instagram.com/profissionalizamaisbrasil_oficial"
+const PMB_INSTAGRAM_URL = "https://www.instagram.com/profissionaliza_maisbrasil"
 const PMB_FACEBOOK_URL = "https://www.facebook.com/profissionalizamaisbrasil_oficial"
 
 export function getSocialLinks(): SocialLinks {
