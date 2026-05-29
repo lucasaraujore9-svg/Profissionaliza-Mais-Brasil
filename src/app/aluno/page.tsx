@@ -6,6 +6,7 @@ import {
   getStudentPlatformLoginUrl,
 } from "@/lib/students/platform-credentials"
 import { PlatformCredentialsCard } from "@/components/aluno/platform-credentials-card"
+import { PaymentCheckButton } from "@/components/aluno/payment-check-button"
 import {
   AlertCircle,
   ArrowRight,
@@ -217,24 +218,20 @@ export default async function StudentDashboardPage() {
                       Valor: <span className="font-mono">{brl(Number(e.finalAmount))}</span>
                     </p>
                   </div>
-                  {link ? (
-                    <a
-                      href={link}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-[var(--color-pmb-green)] px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[var(--color-pmb-green-700)]"
-                    >
-                      Pagar agora
-                      <ArrowRight className="h-4 w-4" />
-                    </a>
-                  ) : (
-                    <Link
-                      href="/aluno/pagamentos"
-                      className="text-sm font-semibold text-[var(--color-pmb-green)] hover:underline"
-                    >
-                      Ver detalhes →
-                    </Link>
-                  )}
+                  <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:justify-end">
+                    {link && (
+                      <a
+                        href={link}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-[var(--color-pmb-green)] px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[var(--color-pmb-green-700)]"
+                      >
+                        Pagar agora
+                        <ArrowRight className="h-4 w-4" />
+                      </a>
+                    )}
+                    <PaymentCheckButton enrollmentId={e.id} />
+                  </div>
                 </li>
               )
             })}
