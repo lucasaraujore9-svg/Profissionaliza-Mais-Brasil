@@ -101,9 +101,12 @@ export function SidebarAdmin({
 
       <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
         {navItems.map((item) => {
+          // Casa em fronteira de segmento (href + "/") para nao acender itens
+          // cujo href e prefixo de string de outro (ex: /admin/leads vs
+          // /admin/leads-revenda).
           const isActive =
             pathname === item.href ||
-            (item.href !== "/admin" && pathname.startsWith(item.href))
+            (item.href !== "/admin" && pathname.startsWith(item.href + "/"))
           return (
             <Link
               key={item.href}

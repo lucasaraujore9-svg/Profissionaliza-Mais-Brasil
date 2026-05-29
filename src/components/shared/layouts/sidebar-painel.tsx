@@ -95,9 +95,11 @@ export function SidebarPainel({
 
       <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
         {navItems.map((item) => {
+          // Casa em fronteira de segmento (href + "/") para nao acender itens
+          // cujo href e prefixo de string de outro.
           const isActive =
             pathname === item.href ||
-            (item.href !== "/painel" && pathname.startsWith(item.href))
+            (item.href !== "/painel" && pathname.startsWith(item.href + "/"))
           const locked = !!item.automationOnly && !automationEnabled
           return (
             <Link
