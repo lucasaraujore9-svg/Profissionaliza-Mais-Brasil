@@ -60,31 +60,6 @@ export const DEFAULT_TEMPLATE: ResolvedTemplate = {
 }
 
 /**
- * Defaults aplicados a TODAS as unidades (tenants).
- * Unidades nao customizam textos/cores/uploads — apenas escolhem o layout.
- * Logo e puxada automaticamente de `tenant.logoUrl`.
- */
-const UNIT_DEFAULTS: Omit<
-  ResolvedTemplate,
-  "layout" | "logoUrl" | "groupLogoUrl" | "groupName"
-> = {
-  primaryColor: DEFAULT_PRIMARY,
-  secondaryColor: DEFAULT_SECONDARY,
-  titleText: "CERTIFICADO DE CONCLUSAO",
-  bodyText:
-    "Certificamos que {nome} concluiu com aproveitamento o curso de {curso}, com carga horaria de {carga_horaria}, em {data_conclusao}.",
-  footerText: null,
-  signerName: null,
-  signerTitle: null,
-  signatureUrl: null,
-  sealUrl: null,
-  backgroundUrl: null,
-  showQrCode: true,
-  showValidationUrl: true,
-  showSeal: false,
-}
-
-/**
  * Carrega as configuracoes globais do grupo (logo + nome) do SystemSettings.
  * Em caso de erro/registro ausente, retorna defaults seguros.
  */
@@ -138,18 +113,20 @@ function fromPrisma(
  * Resolve template ativo para um certificado.
  *
  * Regras:
- * - Unidade (tenantId != null): usa UNIT_DEFAULTS para textos/cores/uploads
- *   e puxa apenas o `layout` do CertificateTemplate do tenant. A logo e
- *   automaticamente lida de `tenant.logoUrl` — unidades nao fazem upload.
+ * - Unidade (tenantId != null): herda TODO o design do template global do PMB
+ *   (cores, textos, assinatura, selo, fundo, toggles). A unica diferenca e a
+ *   `logoUrl` (lida de `tenant.logoUrl`) e o `layout` (escolhido pelo revendedor).
+ *   O branding do grupo e identico ao do PMB.
  * - PMB (tenantId === null): le o template global (editado pelo SUPER_ADMIN).
  *   Cai pro DEFAULT_TEMPLATE se nao houver registro.
  */
 export async function resolveCertificateTemplate(
   tenantId: string | null,
 ): Promise<ResolvedTemplate> {
-  // Unidade — defaults fixos + layout escolhido pelo revendedor + logo do tenant
+  // Unidade — herda o design do sistema-mae (template global PMB), trocando
+  // apenas a logo (logo da unidade) e o layout (escolha do revendedor).
   if (tenantId) {
-    const [tenant, tenantTemplate, branding] = await Promise.all([
+    const [tenant, tenantTemplate, pmbGlobal, branding] = await Promise.all([
       prisma.tenant.findUnique({
         where: { id: tenantId },
         select: { logoUrl: true },
@@ -158,14 +135,26 @@ export async function resolveCertificateTemplate(
         where: { tenantId },
         select: { layout: true },
       }),
+      prisma.certificateTemplate.findFirst({
+        where: { tenantId: null, isActive: true },
+      }),
       loadGroupBranding(),
     ])
+
+    // Base = design do sistema-mae; cai pro DEFAULT_TEMPLATE se ainda nao
+    // houver template global configurado.
+    const base: ResolvedTemplate = pmbGlobal
+      ? fromPrisma(pmbGlobal, branding.groupLogoUrl, branding.groupName)
+      : {
+          ...DEFAULT_TEMPLATE,
+          groupLogoUrl: branding.groupLogoUrl,
+          groupName: branding.groupName,
+        }
+
     return {
-      ...UNIT_DEFAULTS,
-      layout: tenantTemplate?.layout ?? "CLASSIC",
+      ...base,
+      layout: tenantTemplate?.layout ?? base.layout,
       logoUrl: tenant?.logoUrl ?? null,
-      groupLogoUrl: branding.groupLogoUrl,
-      groupName: branding.groupName,
     }
   }
 

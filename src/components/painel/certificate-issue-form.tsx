@@ -32,6 +32,12 @@ interface Props {
    * Se true, mostra coluna de tenant nos resultados (admin).
    */
   showTenantContext?: boolean
+  /**
+   * Se true, permite forcar a emissao para matriculas nao concluidas
+   * (exclusivo do SUPER_ADMIN). Demais papeis veem apenas a mensagem de
+   * bloqueio. A regra tambem e aplicada no servidor.
+   */
+  canForce?: boolean
   successHref?: string
 }
 
@@ -40,6 +46,7 @@ export function CertificateIssueForm({
   enrollmentsEndpoint,
   issueEndpoint,
   showTenantContext,
+  canForce = false,
   successHref,
 }: Props) {
   const [q, setQ] = useState("")
@@ -74,7 +81,15 @@ export function CertificateIssueForm({
           setStudents([])
           return
         }
-        const data = (body.data as Array<Record<string, unknown>>) ?? []
+        // Os endpoints retornam { data: { students: [...] } }; aceitamos
+        // tambem o formato de array direto por robustez.
+        const raw = body.data as
+          | Array<Record<string, unknown>>
+          | { students?: Array<Record<string, unknown>> }
+          | null
+        const data: Array<Record<string, unknown>> = Array.isArray(raw)
+          ? raw
+          : raw?.students ?? []
         const list: StudentOption[] = data.map((s) => ({
           id: String(s.id ?? ""),
           nome: String(s.nome ?? ""),
@@ -367,7 +382,7 @@ export function CertificateIssueForm({
             3. Confirmar emissão
           </h3>
 
-          {selectedEnrollment.status !== "COMPLETED" && (
+          {selectedEnrollment.status !== "COMPLETED" && canForce && (
             <div className="mt-4 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
               <div className="flex-1">
@@ -375,8 +390,8 @@ export function CertificateIssueForm({
                   Matrícula não está marcada como concluída
                 </p>
                 <p className="mt-1 text-xs text-amber-800">
-                  O progresso atual é {selectedEnrollment.progressPercent}%. Você
-                  pode forçar a emissão se for um caso excepcional.
+                  O progresso atual é {selectedEnrollment.progressPercent}%. Como
+                  administrador do sistema, você pode emitir mesmo sem conclusão.
                 </p>
                 <Label
                   htmlFor="force-issue"
@@ -390,9 +405,25 @@ export function CertificateIssueForm({
                     className="h-4 w-4 rounded border-amber-400"
                   />
                   <span className="text-xs font-semibold text-amber-900">
-                    Forçar emissão mesmo assim
+                    Emitir mesmo sem concluir o curso
                   </span>
                 </Label>
+              </div>
+            </div>
+          )}
+
+          {selectedEnrollment.status !== "COMPLETED" && !canForce && (
+            <div className="mt-4 flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-700" />
+              <div className="flex-1">
+                <p className="text-xs font-semibold text-red-900">
+                  Aluno ainda não concluiu o curso
+                </p>
+                <p className="mt-1 text-xs text-red-800">
+                  O progresso atual é {selectedEnrollment.progressPercent}%. O
+                  aluno ainda não concluiu o curso, por isso não é possível
+                  emitir o certificado.
+                </p>
               </div>
             </div>
           )}
@@ -403,20 +434,22 @@ export function CertificateIssueForm({
             </p>
           )}
 
-          <div className="mt-5 flex justify-end">
-            <button
-              type="button"
-              onClick={submit}
-              disabled={
-                submitting ||
-                (selectedEnrollment.status !== "COMPLETED" && !force)
-              }
-              className="inline-flex items-center gap-2 rounded-lg bg-[var(--color-pmb-green)] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[var(--color-pmb-green-700)] disabled:opacity-50"
-            >
-              {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
-              Emitir certificado
-            </button>
-          </div>
+          {!(selectedEnrollment.status !== "COMPLETED" && !canForce) && (
+            <div className="mt-5 flex justify-end">
+              <button
+                type="button"
+                onClick={submit}
+                disabled={
+                  submitting ||
+                  (selectedEnrollment.status !== "COMPLETED" && !force)
+                }
+                className="inline-flex items-center gap-2 rounded-lg bg-[var(--color-pmb-green)] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[var(--color-pmb-green-700)] disabled:opacity-50"
+              >
+                {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
+                Emitir certificado
+              </button>
+            </div>
+          )}
         </section>
       )}
     </div>

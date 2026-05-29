@@ -142,6 +142,10 @@ export async function issueCertificateIfEligible(
 
 /**
  * Emissao manual (admin/revendedor). Wrapper com source MANUAL_*.
+ *
+ * Exige que o curso esteja concluido (Enrollment.status === COMPLETED), a
+ * menos que `force=true`. O `force` so e concedido ao SUPER_ADMIN pela camada
+ * de API — demais papeis recebem a mensagem de bloqueio.
  */
 export async function issueCertificateManual(params: {
   enrollmentId: string
@@ -149,6 +153,21 @@ export async function issueCertificateManual(params: {
   source: "MANUAL_ADMIN" | "MANUAL_RESELLER"
   force?: boolean
 }): Promise<Certificate> {
+  if (!params.force) {
+    const enrollment = await prisma.enrollment.findUnique({
+      where: { id: params.enrollmentId },
+      select: { status: true },
+    })
+    if (!enrollment) {
+      throw new Error(`Enrollment ${params.enrollmentId} nao encontrado`)
+    }
+    if (enrollment.status !== "COMPLETED") {
+      throw new Error(
+        "O aluno ainda não concluiu o curso, por isso não é possível emitir o certificado.",
+      )
+    }
+  }
+
   return issueCertificateIfEligible(
     params.enrollmentId,
     params.source,

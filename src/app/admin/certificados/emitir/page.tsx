@@ -22,6 +22,7 @@ export default async function AdminCertificadosEmitirPage() {
         issueEndpoint="/api/admin/certificates/issue"
         successHref="/admin/certificados"
         showTenantContext
+        canForce={ctx.role === "SUPER_ADMIN"}
       />
     </div>
   )

@@ -16,6 +16,7 @@ export default function PainelCertificadosEmitirPage() {
         enrollmentsEndpoint="/api/painel/certificates/enrollments"
         issueEndpoint="/api/painel/certificates/issue"
         successHref="/painel/certificados/emitidos"
+        canForce={false}
       />
     </div>
   )

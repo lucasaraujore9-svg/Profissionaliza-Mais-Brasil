@@ -17,10 +17,13 @@ export const GET = withRequestContext(
   const where: Prisma.StudentWhereInput = {}
 
   if (q) {
+    const digits = q.replace(/\D/g, "")
     where.OR = [
       { email: { contains: q, mode: "insensitive" } },
       { nome: { contains: q, mode: "insensitive" } },
-      { cpf: { contains: q.replace(/\D/g, "") } },
+      // So busca por CPF quando ha digitos, senao `contains: ""` casaria
+      // com todos os alunos com CPF.
+      ...(digits ? [{ cpf: { contains: digits } }] : []),
     ]
   }
 

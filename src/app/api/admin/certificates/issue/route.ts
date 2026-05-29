@@ -41,12 +41,16 @@ export const POST = withRequestContext(
     return NextResponse.json({ error: "Matrícula não encontrada" }, { status: 404 })
   }
 
+  // Somente o SUPER_ADMIN pode forcar emissao sem conclusao do curso.
+  // Demais papeis da equipe PMB recebem a mensagem de bloqueio.
+  const canForce = ctx.role === "SUPER_ADMIN"
+
   try {
     const certificate = await issueCertificateManual({
       enrollmentId: parsed.data.enrollmentId,
       source: "MANUAL_ADMIN",
       issuedByUserId: ctx.userId,
-      force: parsed.data.force ?? false,
+      force: canForce ? parsed.data.force ?? false : false,
     })
     return NextResponse.json({ data: { certificate } })
   } catch (err) {

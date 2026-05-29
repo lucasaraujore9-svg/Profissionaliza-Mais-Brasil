@@ -26,6 +26,11 @@ export const GET = withRequestContext(
                 OR: [
                   { nome: { contains: search, mode: "insensitive" } },
                   { email: { contains: search, mode: "insensitive" } },
+                  // So adiciona busca por CPF quando ha digitos, senao
+                  // `contains: ""` casaria com todos os alunos com CPF.
+                  ...(search.replace(/\D/g, "")
+                    ? [{ cpf: { contains: search.replace(/\D/g, "") } }]
+                    : []),
                 ],
               }
             : {}),

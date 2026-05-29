@@ -46,11 +46,13 @@ export const POST = withRequestContext(
     }
 
     try {
+      // Revendedores nunca forcam emissao sem conclusao — exclusivo do
+      // SUPER_ADMIN. Ignoramos qualquer `force` vindo do client.
       const certificate = await issueCertificateManual({
         enrollmentId: parsed.data.enrollmentId,
         source: "MANUAL_RESELLER",
         issuedByUserId: ctx.userId,
-        force: parsed.data.force ?? false,
+        force: false,
       })
       return NextResponse.json({ data: { certificate } })
     } catch (err) {
