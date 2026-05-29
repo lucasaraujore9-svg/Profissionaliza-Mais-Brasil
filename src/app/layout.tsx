@@ -6,6 +6,7 @@ import { PwaInstallPrompt } from "@/components/pwa/install-prompt";
 import { CookieConsent } from "@/components/shared/cookie-consent";
 import { AnalyticsGate } from "@/components/shared/analytics-gate";
 import { Toaster } from "sonner";
+import { SITE_KEYWORDS, GEO } from "@/lib/seo/site";
 
 // Validação de envs roda via src/instrumentation.ts (runtime-only).
 // NÃO chamar assertEnv() aqui — o layout é executado durante "next build"
@@ -38,6 +39,13 @@ export const metadata: Metadata = {
   },
   description: DEFAULT_DESCRIPTION,
   applicationName: "Profissionaliza Mais Brasil",
+  keywords: SITE_KEYWORDS,
+  authors: [{ name: "Profissionaliza Mais Brasil" }],
+  creator: "Profissionaliza Mais Brasil",
+  publisher: "Profissionaliza Mais Brasil",
+  category: "education",
+  // canonical é definido por rota (generateMetadata) para evitar que todas as
+  // páginas herdem o canonical da home.
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
@@ -55,6 +63,22 @@ export const metadata: Metadata = {
   },
   formatDetection: {
     telephone: false,
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+      "max-video-preview": -1,
+    },
+  },
+  // Sinais geográficos (SEO local/nacional) — alcance Brasil inteiro.
+  other: {
+    "geo.region": GEO.region,
+    "geo.placename": GEO.placename,
   },
   openGraph: {
     type: "website",

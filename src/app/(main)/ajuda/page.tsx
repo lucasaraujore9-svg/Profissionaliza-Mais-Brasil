@@ -1,6 +1,8 @@
 import Link from "next/link"
 import { PageHero, PageBody } from "@/components/main/static/page-hero"
 import { getSupportContacts } from "@/lib/branding"
+import { JsonLd } from "@/components/seo/json-ld"
+import { faqJsonLd } from "@/lib/seo/jsonld"
 
 const FAQ = [
   {
@@ -40,6 +42,7 @@ const FAQ = [
 export const metadata = {
   title: "Central de Ajuda — Profissionaliza Mais Brasil",
   description: "Dúvidas frequentes sobre cursos, pagamentos, certificados e acesso.",
+  alternates: { canonical: "/ajuda" },
 }
 
 export default function AjudaPage() {
@@ -47,6 +50,9 @@ export default function AjudaPage() {
 
   return (
     <>
+      <JsonLd
+        data={faqJsonLd(FAQ.map((item) => ({ question: item.p, answer: item.r })))}
+      />
       <PageHero
         eyebrow="Central de ajuda"
         titulo="Dúvidas frequentes"

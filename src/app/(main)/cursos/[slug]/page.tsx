@@ -6,6 +6,9 @@ import {
   type CourseDetailData,
 } from "@/components/shared/course-detail-view"
 import { LeadInquiryCard } from "@/components/loja/lead-inquiry-card"
+import { JsonLd } from "@/components/seo/json-ld"
+import { courseJsonLd, breadcrumbJsonLd } from "@/lib/seo/jsonld"
+import { SITE_NAME, siteUrl } from "@/lib/seo/site"
 
 type LoadedCurso = CourseDetailData & {
   id: string
@@ -76,10 +79,12 @@ export async function generateMetadata({
   return {
     title,
     description,
+    alternates: { canonical: `/cursos/${curso.slug}` },
     openGraph: {
       title,
       description,
       type: "website",
+      url: `${siteUrl()}/cursos/${curso.slug}`,
       images: imageUrl ? [{ url: imageUrl }] : undefined,
     },
     twitter: {
@@ -124,17 +129,41 @@ export default async function CursoDetalhePage({
     />
   ) : null
 
+  const base = siteUrl()
+  const courseUrl = `${base}/cursos/${curso.slug}`
+
   return (
-    <CourseDetailView
-      course={curso}
-      ctaHref={ctaHref}
-      ctaLabel={ctaLabel}
-      backHref="/cursos"
-      backLabel="Voltar para o catálogo"
-      secondaryCtaHref="/ajuda"
-      secondaryCtaLabel="Tirar dúvidas"
-      inquirySlot={inquirySlot}
-    />
+    <>
+      <JsonLd
+        data={[
+          courseJsonLd({
+            name: curso.nome,
+            url: courseUrl,
+            description: curso.descricao,
+            image: curso.imageUrl,
+            providerName: SITE_NAME,
+            providerUrl: base,
+            price: curso.hasPrice ? curso.price : null,
+            hours: curso.cargaHoraria,
+          }),
+          breadcrumbJsonLd([
+            { name: "Início", url: base },
+            { name: "Cursos", url: `${base}/cursos` },
+            { name: curso.nome, url: courseUrl },
+          ]),
+        ]}
+      />
+      <CourseDetailView
+        course={curso}
+        ctaHref={ctaHref}
+        ctaLabel={ctaLabel}
+        backHref="/cursos"
+        backLabel="Voltar para o catálogo"
+        secondaryCtaHref="/ajuda"
+        secondaryCtaLabel="Tirar dúvidas"
+        inquirySlot={inquirySlot}
+      />
+    </>
   )
 }
 

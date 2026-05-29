@@ -3,6 +3,8 @@ import { NavbarMain } from "@/components/shared/layouts/navbar-main"
 import { FooterMain } from "@/components/shared/layouts/footer-main"
 import { loadCategorias } from "@/lib/catalog/home"
 import { loadPmbTecnicaConfig } from "@/lib/catalog/tecnica"
+import { JsonLd } from "@/components/seo/json-ld"
+import { organizationJsonLd, webSiteJsonLd } from "@/lib/seo/jsonld"
 
 export const metadata: Metadata = {
   title: "Profissionaliza Mais Brasil — Cursos profissionalizantes online",
@@ -21,6 +23,12 @@ export default async function MainLayout({
   ])
   return (
     <>
+      <JsonLd
+        data={[
+          organizationJsonLd(),
+          webSiteJsonLd({ searchPath: "/cursos?q=" }),
+        ]}
+      />
       <NavbarMain
         categorias={categorias}
         tecnica={{ enabled: tecnica.enabled, label: tecnica.label, url: tecnica.url }}

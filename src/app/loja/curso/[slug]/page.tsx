@@ -8,6 +8,9 @@ import {
   type CourseDetailData,
 } from "@/components/shared/course-detail-view"
 import { LeadInquiryCard } from "@/components/loja/lead-inquiry-card"
+import { getRequestOrigin } from "@/lib/seo/host"
+import { JsonLd } from "@/components/seo/json-ld"
+import { courseJsonLd, breadcrumbJsonLd } from "@/lib/seo/jsonld"
 
 interface CoursePageProps {
   params: Promise<{ slug: string }>
@@ -25,13 +28,18 @@ export async function generateMetadata({
   const description =
     (course.descricao ?? "").slice(0, 160) ||
     `Matricule-se em ${course.nome} pela vitrine ${tenant.name}.`
+  const origin = await getRequestOrigin()
+  const courseUrl = origin ? `${origin}/curso/${course.slug}` : undefined
   return {
     title,
     description,
+    ...(origin ? { metadataBase: new URL(origin) } : {}),
+    alternates: { canonical: `/curso/${course.slug}` },
     openGraph: {
       title,
       description,
       type: "website",
+      ...(courseUrl ? { url: courseUrl } : {}),
       images: course.imageUrl ? [{ url: course.imageUrl }] : undefined,
     },
     twitter: {
@@ -109,15 +117,39 @@ export default async function CoursePage({ params }: CoursePageProps) {
     />
   ) : null
 
+  const origin = await getRequestOrigin()
+  const jsonLd =
+    origin != null
+      ? [
+          courseJsonLd({
+            name: course.nome,
+            url: `${origin}/curso/${course.slug}`,
+            description: course.descricao,
+            image: course.imageUrl,
+            providerName: tenant.name,
+            providerUrl: origin,
+            price: course.price,
+            hours: course.horas,
+          }),
+          breadcrumbJsonLd([
+            { name: tenant.name, url: origin },
+            { name: course.nome, url: `${origin}/curso/${course.slug}` },
+          ]),
+        ]
+      : null
+
   return (
-    <CourseDetailView
-      course={data}
-      ctaHref={ctaHref}
-      ctaLabel={ctaLabel}
-      backHref="/"
-      backLabel="Voltar para a loja"
-      inquirySlot={inquirySlot}
-    />
+    <>
+      {jsonLd ? <JsonLd data={jsonLd} /> : null}
+      <CourseDetailView
+        course={data}
+        ctaHref={ctaHref}
+        ctaLabel={ctaLabel}
+        backHref="/"
+        backLabel="Voltar para a loja"
+        inquirySlot={inquirySlot}
+      />
+    </>
   )
 }
 

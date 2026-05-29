@@ -14,6 +14,8 @@ export interface CurrentTenant {
   secondaryColor: string
   tagline: string | null
   description: string | null
+  instagram: string | null
+  facebook: string | null
   tecnicaEnabled: boolean
   tecnicaUrl: string | null
   tecnicaLabel: string | null
@@ -45,6 +47,8 @@ export const getCurrentTenant = cache(
           secondaryColor: true,
           tagline: true,
           description: true,
+          instagram: true,
+          facebook: true,
           tecnicaEnabled: true,
           tecnicaUrl: true,
           tecnicaLabel: true,
