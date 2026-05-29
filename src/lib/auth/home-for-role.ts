@@ -8,6 +8,8 @@ export function homeForRole(role?: UserRole | string | null): string {
       return "/admin"
     case "RESELLER":
       return "/painel"
+    case "STUDENT":
+      return "/aluno"
     default:
       return "/"
   }
