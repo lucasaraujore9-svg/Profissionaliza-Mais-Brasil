@@ -38,6 +38,10 @@ const SECURITY_HEADERS = [
 ];
 
 const nextConfig: NextConfig = {
+  // Pacotes pesados/CJS usados apenas no servidor (geracao de PDF do
+  // certificado). Mante-los externos evita que o bundler do Next tente
+  // empacota-los em paginas/rotas server.
+  serverExternalPackages: ["@react-pdf/renderer", "qrcode"],
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "*.supabase.co" },

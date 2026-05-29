@@ -1,6 +1,7 @@
 import Link from "next/link"
 import { prisma } from "@/lib/prisma"
 import { requireStudentSession } from "@/lib/auth/student-session"
+import { lowerCert } from "@/lib/certificates/text"
 
 function formatDate(d: Date): string {
   return new Date(d).toLocaleDateString("pt-BR", {
@@ -57,7 +58,7 @@ export default async function StudentCertificatesPage() {
                     <div className="flex items-start justify-between gap-2">
                       <div>
                         <h3 className="text-sm font-semibold text-[var(--color-pmb-green-900)]">
-                          {c.courseName}
+                          {lowerCert(c.courseName)}
                         </h3>
                         <p className="mt-1 text-xs text-gray-500">
                           Emitido em {formatDate(c.completionDate)}
@@ -71,7 +72,7 @@ export default async function StudentCertificatesPage() {
                     <div className="mt-4 rounded-md bg-gray-50 px-3 py-2 text-[11px]">
                       <span className="text-gray-500">Código: </span>
                       <span className="font-mono font-semibold text-[var(--color-pmb-green-900)]">
-                        {c.code}
+                        {lowerCert(c.code)}
                       </span>
                     </div>
 
@@ -109,7 +110,7 @@ export default async function StudentCertificatesPage() {
                     <div className="flex items-start justify-between gap-2">
                       <div>
                         <h3 className="text-sm font-semibold text-rose-900">
-                          {c.courseName}
+                          {lowerCert(c.courseName)}
                         </h3>
                         <p className="mt-1 text-xs text-rose-700">
                           Revogado em{" "}
@@ -126,7 +127,7 @@ export default async function StudentCertificatesPage() {
                       </p>
                     )}
                     <div className="mt-3 text-[11px] text-rose-700/80">
-                      Código: <span className="font-mono">{c.code}</span>
+                      Código: <span className="font-mono">{lowerCert(c.code)}</span>
                     </div>
                   </article>
                 ))}

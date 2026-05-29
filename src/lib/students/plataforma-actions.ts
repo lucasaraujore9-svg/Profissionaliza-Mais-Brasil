@@ -138,6 +138,45 @@ export async function ensureStudentOnPlatform(
 }
 
 /**
+ * Altera a senha do aluno na plataforma de aulas (EA) e sincroniza a copia
+ * criptografada no nosso banco (exibida na area do aluno).
+ *
+ * A plataforma de aulas e a fonte da verdade do acesso as aulas, entao a senha
+ * e trocada la primeiro via `usuarios/editar`; so depois atualizamos o snapshot
+ * criptografado em `plataformaAlunoSenha`.
+ *
+ * Retorna `{ onPlatform: false }` quando o aluno ainda nao foi cadastrado na
+ * plataforma (sem matricula paga) — nesse caso nao ha senha a alterar.
+ */
+export async function changeStudentPlatformPassword(
+  studentId: string,
+  newPassword: string,
+): Promise<{ onPlatform: boolean }> {
+  const student = await prisma.student.findUnique({
+    where: { id: studentId },
+    select: { id: true, plataformaAlunoId: true },
+  })
+  if (!student) throw new Error(`student ${studentId} nao encontrado`)
+
+  const plataformaId = parseExternalId(student.plataformaAlunoId)
+  const isPending = student.plataformaAlunoId?.startsWith("pending") ?? false
+  if (plataformaId === null || isPending) {
+    return { onPlatform: false }
+  }
+
+  // Troca a senha na plataforma de aulas.
+  await editarAluno({ id_aluno: plataformaId, senha: newPassword })
+
+  // Sincroniza a copia criptografada exibida no painel do aluno.
+  await prisma.student.update({
+    where: { id: student.id },
+    data: { plataformaAlunoSenha: encrypt(newPassword) },
+  })
+
+  return { onPlatform: true }
+}
+
+/**
  * Vincula um curso ao aluno na plataforma. Cria o aluno na plataforma se ainda nao existir.
  * Idempotente: a plataforma e tolerante a multiplos vincularCurso para o mesmo par.
  */

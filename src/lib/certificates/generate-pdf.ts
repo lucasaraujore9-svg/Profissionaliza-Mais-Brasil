@@ -1,7 +1,6 @@
 import { renderToBuffer } from "@react-pdf/renderer"
 import QRCode from "qrcode"
 import { prisma } from "@/lib/prisma"
-import { vitrineDomain } from "@/lib/tenant/urls"
 import { PMB_PUBLIC_NAME, PMB_TENANT_NAME, PMB_TENANT_SLUG } from "@/lib/pmb-config"
 import {
   applyPlaceholders,
@@ -11,14 +10,9 @@ import {
 import { readSnapshot, refreshGroupBranding } from "./template-resolver"
 import { renderCertificateByLayout } from "./templates"
 import { uploadCertificatePdf } from "./storage"
+import { validationUrlFor } from "./urls"
+import { lowerCert } from "./text"
 import { contextLogger } from "@/lib/logger"
-
-function validationUrlFor(code: string): string {
-  // URL publica de validacao do certificado (QR code + texto). Aponta para o
-  // dominio da vitrine (livrecursos.com.br) com prefixo www, que serve a rota
-  // /validar/[code] via proxy.
-  return `https://www.${vitrineDomain()}/validar/${code}`
-}
 
 async function makeQrDataUrl(text: string): Promise<string | null> {
   try {
@@ -72,34 +66,38 @@ export async function generateAndUploadPdf(
     ? cert.tenant?.name ?? PMB_PUBLIC_NAME
     : PMB_PUBLIC_NAME
 
+  // Nomes e parametros do certificado sao sempre exibidos em minusculo
+  // (regra de negocio). lowerCert centraliza a normalizacao.
   const placeholders: CertificatePlaceholders = {
-    nome: cert.studentName,
-    cpf: cert.studentCpf ?? "",
-    curso: cert.courseName,
-    carga_horaria: cert.cargaHoraria ?? "",
-    data_conclusao: formatCompletionDate(cert.completionDate),
-    codigo: cert.code,
-    unidade,
+    nome: lowerCert(cert.studentName),
+    cpf: lowerCert(cert.studentCpf),
+    curso: lowerCert(cert.courseName),
+    carga_horaria: lowerCert(cert.cargaHoraria),
+    data_conclusao: lowerCert(formatCompletionDate(cert.completionDate)),
+    codigo: lowerCert(cert.code),
+    unidade: lowerCert(unidade),
   }
 
   const bodyResolved = applyPlaceholders(template.bodyText, placeholders)
   const footerResolved = template.footerText
     ? applyPlaceholders(template.footerText, placeholders)
     : null
-  const validationUrl = validationUrlFor(cert.code)
+  // URL exibida e codificada no QR em minusculo. A rota /validar normaliza o
+  // codigo com toUpperCase(), entao o link continua validando.
+  const validationUrl = lowerCert(validationUrlFor(cert.code))
   const qrCodeDataUrl = template.showQrCode
     ? await makeQrDataUrl(validationUrl)
     : null
 
   const element = renderCertificateByLayout(template.layout, {
     template,
-    studentName: cert.studentName,
-    studentCpf: cert.studentCpf,
-    courseName: cert.courseName,
-    cargaHoraria: cert.cargaHoraria,
-    completionDateFormatted: formatCompletionDate(cert.completionDate),
-    code: cert.code,
-    unidade,
+    studentName: lowerCert(cert.studentName),
+    studentCpf: cert.studentCpf ? lowerCert(cert.studentCpf) : null,
+    courseName: lowerCert(cert.courseName),
+    cargaHoraria: cert.cargaHoraria ? lowerCert(cert.cargaHoraria) : null,
+    completionDateFormatted: lowerCert(formatCompletionDate(cert.completionDate)),
+    code: lowerCert(cert.code),
+    unidade: lowerCert(unidade),
     validationUrl,
     qrCodeDataUrl,
     bodyResolved,

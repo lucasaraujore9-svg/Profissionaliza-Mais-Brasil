@@ -57,7 +57,6 @@ export function MinimalCertificate(data: CertificateRenderData) {
       fontSize: 9,
       letterSpacing: 3,
       color: "#6B7280",
-      textTransform: "uppercase",
     },
     title: {
       fontSize: 14,

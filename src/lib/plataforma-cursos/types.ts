@@ -64,6 +64,11 @@ export interface EANovoAlunoResult {
 
 export interface EAEditarAlunoParams extends Partial<EANovoAlunoParams> {
   id_aluno: number
+  /**
+   * Nova senha do aluno na plataforma de aulas. `usuarios/novo` gera a senha
+   * automaticamente, mas `usuarios/editar` aceita o campo para redefini-la.
+   */
+  senha?: string
 }
 
 export interface EAAluno {
