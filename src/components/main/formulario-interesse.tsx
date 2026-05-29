@@ -35,12 +35,11 @@ export function FormularioInteresse() {
 
     const form = event.currentTarget
     const formData = new FormData(form)
-    // TODO: estender o lead model pra persistir `interesse` (profissionaliza vs profissionaliza+tecnico)
-    // e `cidade`/`estado`. Hoje a API aceita apenas email/companyName/phone.
     const body = {
       email: String(formData.get("email") ?? ""),
       companyName: String(formData.get("nome") ?? ""),
       phone: String(formData.get("telefone") ?? ""),
+      source: "/seja-revendedor",
     }
 
     try {

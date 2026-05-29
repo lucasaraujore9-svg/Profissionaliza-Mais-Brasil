@@ -67,6 +67,29 @@ export const POST = withRequestContext(
 
     // 1) Notificacao in-app (mesma logica do passo anterior).
     const isPmb = student.tenant?.slug === PMB_TENANT_SLUG
+
+    // 0) Persiste na caixa de atendimento do dono (PMB null / unidade tenantId).
+    // Da historico/auditoria — antes o chamado so existia em email+notificacao.
+    try {
+      await prisma.contactMessage.create({
+        data: {
+          kind: "STUDENT_SUPPORT",
+          tenantId: isPmb ? null : student.tenantId,
+          studentId: student.id,
+          nome: student.nome,
+          email: student.email ?? null,
+          telefone: student.fone ?? null,
+          assunto,
+          mensagem,
+          source: "aluno",
+        },
+      })
+    } catch (err) {
+      contextLogger().error(
+        { err, event: "aluno.suporte.persist_failed", studentId: student.id },
+        "Falha ao persistir ContactMessage de suporte — segue com notificacao/email",
+      )
+    }
     if (isPmb) {
       await createNotification({
         audience: "ROLE",

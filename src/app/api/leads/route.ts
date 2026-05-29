@@ -8,9 +8,12 @@ import { contextLogger } from "@/lib/logger"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { isValidPhone } from "@/lib/validation/phone"
 
-// Aceita ambos `companyName` (landing de revendedor) e `name`/`nome`
-// (form de contato). Telefone passa a ser opcional para suportar mensagens
-// genericas. Campos extras opcionais sao serializados em `notes`.
+// Endpoint EXCLUSIVO de revenda (interessado em virar revendedor PMB).
+// Contato generico migrou para /api/contato (ContactMessage roteado por
+// tenant); suporte de aluno vive em /api/aluno/suporte. Aqui so cai quem
+// quer abrir uma vitrine — relacao sempre com a PMB, nunca com uma unidade.
+// Aceita `companyName` (landing) ou `name`/`nome`. Campos de segmentacao
+// (plan/city/state/source) sao persistidos em colunas dedicadas.
 const leadSchema = z
   .object({
     email: z.string().email("Email inválido").toLowerCase().trim(),
@@ -19,12 +22,11 @@ const leadSchema = z
     nome: z.string().trim().optional(),
     phone: z.string().trim().optional(),
     telefone: z.string().trim().optional(),
-    message: z.string().trim().optional(),
-    mensagem: z.string().trim().optional(),
-    interest: z.string().trim().optional(),
-    city: z.string().trim().optional(),
+    plan: z.string().trim().max(60).optional(),
+    city: z.string().trim().max(120).optional(),
     state: z.string().trim().max(4).optional(),
-    source: z.string().trim().optional(),
+    source: z.string().trim().max(120).optional(),
+    notes: z.string().trim().max(2000).optional(),
   })
   .refine(
     (v) => (v.companyName ?? v.name ?? v.nome ?? "").trim().length >= 2,
@@ -37,19 +39,6 @@ const leadSchema = z
     },
     { message: "Telefone inválido. Use (11) 99999-9999", path: ["phone"] },
   )
-
-function notesFrom(input: z.infer<typeof leadSchema>): string | null {
-  const parts: string[] = []
-  const msg = (input.message ?? input.mensagem ?? "").trim()
-  if (msg) parts.push(msg)
-  const meta: string[] = []
-  if (input.interest) meta.push(`Interesse: ${input.interest}`)
-  if (input.city) meta.push(`Cidade: ${input.city}`)
-  if (input.state) meta.push(`UF: ${input.state}`)
-  if (input.source) meta.push(`Origem: ${input.source}`)
-  if (meta.length) parts.push(meta.join(" · "))
-  return parts.length ? parts.join("\n\n") : null
-}
 
 export const POST = withRequestContext(
   { action: "leads.create", route: "/api/leads" },
@@ -86,7 +75,6 @@ export const POST = withRequestContext(
 
   const companyName = (data.companyName ?? data.name ?? data.nome ?? "").trim()
   const phone = (data.phone ?? data.telefone ?? "").trim()
-  const notes = notesFrom(data)
 
   try {
     const lead = await prisma.lead.create({
@@ -94,7 +82,11 @@ export const POST = withRequestContext(
         email: data.email,
         companyName,
         phone: phone || "",
-        notes,
+        plan: data.plan || null,
+        city: data.city || null,
+        state: data.state || null,
+        source: data.source || null,
+        notes: data.notes || null,
       },
     })
 
@@ -120,7 +112,12 @@ export const POST = withRequestContext(
 
     // Notifica equipe interna sobre novo lead — equipe de vendas tipicamente
     // tem PMB_SALES, mas sem alguem com esse papel cai pro SUPER_ADMIN.
-    const summary = phone ? `${data.email} · ${phone}` : data.email
+    const summaryParts = [data.email]
+    if (phone) summaryParts.push(phone)
+    if (data.plan) summaryParts.push(`Plano: ${data.plan}`)
+    const locale = [data.city, data.state].filter(Boolean).join("/")
+    if (locale) summaryParts.push(locale)
+    const summary = summaryParts.join(" · ")
     await createNotification({
       audience: "ROLE",
       roleTarget: "PMB_SALES",
@@ -128,7 +125,7 @@ export const POST = withRequestContext(
       title: `Novo lead: ${companyName}`,
       body: summary,
       category: "lead",
-      href: "/admin/revendedores",
+      href: "/admin/leads-revenda",
     })
     await createNotification({
       audience: "ROLE",
@@ -137,7 +134,7 @@ export const POST = withRequestContext(
       title: `Novo lead: ${companyName}`,
       body: summary,
       category: "lead",
-      href: "/admin/revendedores",
+      href: "/admin/leads-revenda",
     })
 
     return NextResponse.json({ data: { id: lead.id } }, { status: 201 })

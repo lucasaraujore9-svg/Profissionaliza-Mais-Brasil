@@ -3,7 +3,13 @@
 import { useState } from "react"
 import { toast } from "sonner"
 
-export function ContactForm() {
+interface ContactFormProps {
+  // Quando renderizado no storefront de uma unidade, identifica o tenant dono
+  // (a mensagem cai no /painel daquela revenda). Ausente = site PMB.
+  tenantId?: string
+}
+
+export function ContactForm({ tenantId }: ContactFormProps = {}) {
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
 
@@ -14,18 +20,22 @@ export function ContactForm() {
     const form = event.currentTarget
     const data = new FormData(form)
     const payload = {
-      name: String(data.get("nome") ?? "").trim(),
+      nome: String(data.get("nome") ?? "").trim(),
       email: String(data.get("email") ?? "").trim(),
-      phone: String(data.get("telefone") ?? "").trim(),
-      message: String(data.get("mensagem") ?? "").trim(),
+      telefone: String(data.get("telefone") ?? "").trim(),
+      mensagem: String(data.get("mensagem") ?? "").trim(),
       source: "/contato",
     }
 
     setSubmitting(true)
     try {
-      const res = await fetch("/api/leads", {
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      }
+      if (tenantId) headers["x-tenant-id"] = tenantId
+      const res = await fetch("/api/contato", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify(payload),
       })
 

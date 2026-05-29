@@ -292,6 +292,7 @@ model Tenant {
   homeSections                 HomeSection[]
   studentLeads                 StudentLead[]
   automationTemplates          AutomationMessageTemplate[]
+  contactMessages              ContactMessage[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -544,9 +545,10 @@ model Student {
   lastLoginAt       DateTime? @map("last_login_at")
 
   // Relacoes
-  enrollments  Enrollment[]
-  certificates Certificate[]
-  notes        StudentNote[]
+  enrollments     Enrollment[]
+  certificates    Certificate[]
+  notes           StudentNote[]
+  contactMessages ContactMessage[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -861,6 +863,12 @@ model Lead {
   phone       String
   status      LeadStatus @default(NEW)
 
+  // Segmentacao do interesse (antes serializado em `notes`)
+  plan   String? // plano de interesse: "Profissionaliza" / "PRO"
+  city   String?
+  state  String? @db.VarChar(4)
+  source String? // origem do lead (ex: "/seja-revendedor")
+
   // Quando converter em revendedor, liga ao tenant
   tenantId String? @map("tenant_id")
   tenant   Tenant? @relation(fields: [tenantId], references: [id])
@@ -873,6 +881,61 @@ model Lead {
   @@index([email])
   @@index([createdAt])
   @@map("leads")
+}
+
+// ============================================================
+// ATENDIMENTO — Contato publico + Suporte do aluno (caixa por dono)
+// ============================================================
+// Diferente de Lead (B2B revenda) e StudentLead (interesse em curso), o
+// ContactMessage e a caixa de atendimento de quem ja e dono da relacao:
+// PMB (tenantId null) ou a unidade (tenantId). Recebe tanto contato publico
+// anonimo (kind=CONTACT) quanto chamados de aluno logado (kind=STUDENT_SUPPORT).
+
+enum ContactMessageKind {
+  CONTACT // visitante (form publico /contato ou storefront da unidade)
+  STUDENT_SUPPORT // aluno logado abriu chamado
+}
+
+enum ContactMessageStatus {
+  OPEN
+  RESOLVED
+}
+
+model ContactMessage {
+  id String @id @default(cuid())
+  // null = PMB institucional · senao a unidade (tenant) dona da relacao
+  tenantId String? @map("tenant_id")
+  tenant   Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  kind   ContactMessageKind
+  status ContactMessageStatus @default(OPEN)
+
+  // Contato (snapshot — anonimo no caso de visitante)
+  nome     String
+  email    String?
+  telefone String?
+  assunto  String?
+  mensagem String  @db.Text
+
+  // Preenchido apenas quando kind=STUDENT_SUPPORT
+  studentId String?  @map("student_id")
+  student   Student? @relation(fields: [studentId], references: [id], onDelete: SetNull)
+
+  // Proveniencia / LGPD
+  source    String? // "/contato", "loja:{slug}", "aluno"
+  ipAddress String? @map("ip_address")
+  userAgent String? @map("user_agent") @db.Text
+
+  // Resolucao
+  resolvedAt       DateTime? @map("resolved_at")
+  resolvedByUserId String?   @map("resolved_by_user_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([tenantId, status, createdAt])
+  @@index([studentId])
+  @@map("contact_messages")
 }
 
 // ============================================================
