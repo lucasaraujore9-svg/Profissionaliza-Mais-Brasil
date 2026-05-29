@@ -8,9 +8,9 @@ import nodemailer, { type Transporter } from "nodemailer"
  *
  *   SMTP_HOST=smtp.hostinger.com
  *   SMTP_PORT=465                # 465 (SSL) ou 587 (STARTTLS)
- *   SMTP_USER=profissionaliza@bmbr.com.br
+ *   SMTP_USER=nao-responda@profissionalizamaisbrasil.com.br
  *   SMTP_PASSWORD=********
- *   SMTP_FROM="Profissionaliza Mais Brasil <profissionaliza@bmbr.com.br>"
+ *   SMTP_FROM="Profissionaliza Mais Brasil <nao-responda@profissionalizamaisbrasil.com.br>"
  *
  * Para Hostinger especificamente: o SMTP_USER deve ser o email completo
  * (inclui o domínio) e SMTP_PASSWORD é a senha da caixa de email.

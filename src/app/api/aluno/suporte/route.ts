@@ -15,7 +15,7 @@ const schema = z.object({
 })
 
 const PMB_SUPPORT_EMAIL =
-  process.env.PMB_SUPPORT_EMAIL?.trim() || "profissionaliza@bmbr.com.br"
+  process.env.PMB_SUPPORT_EMAIL?.trim() || "suporte@profissionalizamaisbrasil.com.br"
 
 export const POST = withRequestContext(
   { action: "aluno.suporte.create", route: "/api/aluno/suporte" },
