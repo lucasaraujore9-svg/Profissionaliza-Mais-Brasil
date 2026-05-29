@@ -16,7 +16,6 @@ const defaultConfig: VitrineConfig = {
   tagline: null,
   description: null,
   logoUrl: null,
-  bannerUrl: null,
   primaryColor: "#2563eb",
   secondaryColor: "#1e40af",
   whatsapp: null,
@@ -100,14 +99,8 @@ export function VitrineEditor() {
           throw new Error(body.error ?? "Falha ao enviar arquivo")
         }
         const url = body.data.url as string
-        setConfig((prev) => ({
-          ...prev,
-          ...(kind === "logo" ? { logoUrl: url } : { bannerUrl: url }),
-        }))
-        setInitial((prev) => ({
-          ...prev,
-          ...(kind === "logo" ? { logoUrl: url } : { bannerUrl: url }),
-        }))
+        setConfig((prev) => ({ ...prev, logoUrl: url }))
+        setInitial((prev) => ({ ...prev, logoUrl: url }))
       } finally {
         setUploading(null)
       }
@@ -125,14 +118,8 @@ export function VitrineEditor() {
       if (!res.ok) {
         throw new Error(body.error ?? "Falha ao remover arquivo")
       }
-      setConfig((prev) => ({
-        ...prev,
-        ...(kind === "logo" ? { logoUrl: null } : { bannerUrl: null }),
-      }))
-      setInitial((prev) => ({
-        ...prev,
-        ...(kind === "logo" ? { logoUrl: null } : { bannerUrl: null }),
-      }))
+      setConfig((prev) => ({ ...prev, logoUrl: null }))
+      setInitial((prev) => ({ ...prev, logoUrl: null }))
     } finally {
       setUploading(null)
     }

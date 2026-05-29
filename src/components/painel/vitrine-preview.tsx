@@ -7,9 +7,7 @@ interface VitrinePreviewProps {
 }
 
 export function VitrinePreview({ config, previewHost }: VitrinePreviewProps) {
-  const heroBackground = config.bannerUrl
-    ? `linear-gradient(135deg, ${hexToRgba(config.primaryColor, 0.85)}, ${hexToRgba(config.secondaryColor, 0.75)}), url(${config.bannerUrl})`
-    : `linear-gradient(135deg, ${config.primaryColor}, ${config.secondaryColor})`
+  const heroBackground = `linear-gradient(135deg, ${config.primaryColor}, ${config.secondaryColor})`
 
   return (
     <div className="sticky top-4 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-lg">
@@ -103,18 +101,4 @@ export function VitrinePreview({ config, previewHost }: VitrinePreviewProps) {
       </div>
     </div>
   )
-}
-
-function hexToRgba(hex: string, alpha: number): string {
-  const clean = hex.replace("#", "")
-  const full = clean.length === 3
-    ? clean.split("").map((c) => c + c).join("")
-    : clean
-  const r = parseInt(full.slice(0, 2), 16)
-  const g = parseInt(full.slice(2, 4), 16)
-  const b = parseInt(full.slice(4, 6), 16)
-  if (Number.isNaN(r) || Number.isNaN(g) || Number.isNaN(b)) {
-    return `rgba(0,0,0,${alpha})`
-  }
-  return `rgba(${r},${g},${b},${alpha})`
 }

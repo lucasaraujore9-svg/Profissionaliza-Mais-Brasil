@@ -32,9 +32,14 @@ interface HeroSlidesProps {
 }
 
 /**
- * Hero "imagem-only": ocupa 100% da hero, sem headline/busca/badges por cima.
- * Mantém aspect-ratio diferente para desktop (16:5 = 1920x600) e mobile (1:1 = 1080x1080)
- * via `<picture>` + media query.
+ * Hero "imagem-only": ocupa 100% da largura da página, sem headline/busca/badges
+ * por cima. A imagem é exibida inteira (nunca recortada) — a altura acompanha a
+ * largura naturalmente (`w-full h-auto`). Em telas estreitas (<768px) troca para
+ * a versão mobile via `<picture>`, ficando completamente responsiva.
+ *
+ * Os slides são empilhados na mesma célula de grid (`row/col-start-1`), então o
+ * container assume a altura natural da imagem e o crossfade acontece por opacity
+ * sem recortar nada.
  */
 export function HeroSlides({ slides, intervalMs = 6000 }: HeroSlidesProps) {
   const [index, setIndex] = useState(0)
@@ -61,8 +66,9 @@ export function HeroSlides({ slides, intervalMs = 6000 }: HeroSlidesProps) {
       aria-roledescription="carousel"
       className="relative w-full overflow-hidden bg-black"
     >
-      {/* Aspect ratio: 1:1 no mobile, 16:5 no desktop (matches 1920x600). */}
-      <div className="relative w-full aspect-square md:aspect-[16/5]">
+      {/* Slides empilhados na mesma célula: o container assume a altura natural
+          da imagem (full width, sem corte). Mobile (<768px) usa a imagem 1:1. */}
+      <div className="grid w-full">
         {slides.map((slide, i) => {
           const isActive = i === index
           const img = (
@@ -71,7 +77,7 @@ export function HeroSlides({ slides, intervalMs = 6000 }: HeroSlidesProps) {
               <img
                 src={slide.mobileUrl}
                 alt=""
-                className="h-full w-full object-cover"
+                className="block h-auto w-full"
                 loading={i === 0 ? "eager" : "lazy"}
                 draggable={false}
               />
@@ -81,7 +87,7 @@ export function HeroSlides({ slides, intervalMs = 6000 }: HeroSlidesProps) {
             <div
               key={slide.id}
               aria-hidden={!isActive}
-              className={`absolute inset-0 transition-opacity duration-700 ease-in-out ${
+              className={`col-start-1 row-start-1 transition-opacity duration-700 ease-in-out ${
                 isActive ? "opacity-100" : "opacity-0 pointer-events-none"
               }`}
             >

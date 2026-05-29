@@ -5,18 +5,16 @@ import type { ShowcaseCard } from "@/lib/catalog/home"
 
 interface HeroBannerProps {
   showcase?: ShowcaseCard[]
-  tenantBannerUrl?: string | null
   /**
-   * Slides do banner editavel. Quando ha pelo menos 1 slide ativo, a hero
-   * renderiza so a imagem (sem headline/busca/badges). 0 slides => fallback
-   * para o hero hardcoded atual.
+   * Slides do banner editavel (aba "Banner principal"). Quando ha pelo menos 1
+   * slide ativo, a hero renderiza so a imagem (sem headline/busca/badges):
+   * 1 slide => banner unico, 2+ => carrossel. 0 slides => hero hardcoded padrao.
    */
   slides?: HeroSlide[]
 }
 
 export function HeroBanner({
   showcase,
-  tenantBannerUrl,
   slides,
 }: HeroBannerProps = {}) {
   // Hero "imagem-only": substitui completamente o headline + busca + badges.
@@ -26,28 +24,14 @@ export function HeroBanner({
 
   return (
     <section className="relative overflow-hidden bg-[var(--color-pmb-green)] text-white">
-      {tenantBannerUrl ? (
-        <>
-          <div
-            aria-hidden
-            className="absolute inset-0 bg-cover bg-center"
-            style={{ backgroundImage: `url(${tenantBannerUrl})` }}
-          />
-          <div
-            aria-hidden
-            className="absolute inset-0 bg-gradient-to-br from-[var(--color-pmb-green)]/85 via-[var(--color-pmb-green)]/70 to-black/55"
-          />
-        </>
-      ) : (
-        <div
-          aria-hidden
-          className="absolute inset-0 opacity-[0.08] pointer-events-none"
-          style={{
-            backgroundImage:
-              "radial-gradient(circle at 20% 30%, #C0D904 0, transparent 38%), radial-gradient(circle at 85% 75%, #F2B705 0, transparent 40%)",
-          }}
-        />
-      )}
+      <div
+        aria-hidden
+        className="absolute inset-0 opacity-[0.08] pointer-events-none"
+        style={{
+          backgroundImage:
+            "radial-gradient(circle at 20% 30%, #C0D904 0, transparent 38%), radial-gradient(circle at 85% 75%, #F2B705 0, transparent 40%)",
+        }}
+      />
       <div className="relative mx-auto grid max-w-[1280px] grid-cols-1 items-center gap-10 px-4 py-12 md:px-6 md:py-16 lg:grid-cols-[1.05fr_0.95fr] lg:gap-16 lg:py-20">
         <div className="max-w-[620px]">
           <h1 className="text-[34px] md:text-[44px] lg:text-[52px] font-bold leading-[1.08] tracking-tight">

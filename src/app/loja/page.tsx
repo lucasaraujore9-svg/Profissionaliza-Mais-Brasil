@@ -43,11 +43,7 @@ export default async function LojaHomePage() {
 
   return (
     <>
-      <HeroBanner
-        showcase={showcase}
-        tenantBannerUrl={tenant.bannerUrl}
-        slides={bannerSlides}
-      />
+      <HeroBanner showcase={showcase} slides={bannerSlides} />
       <DynamicHomeSections tenantId={tenant.id} />
       {tecnica.enabled && (
         <TecnicaSection

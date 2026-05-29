@@ -68,8 +68,9 @@ export function AutomationGate({ enabled, children }: AutomationGateProps) {
       </div>
 
       {/* Camada de bloqueio + pop-up comercial. */}
-      <div className="absolute inset-0 z-30 flex items-start justify-center overflow-y-auto bg-[var(--color-pmb-mist)]/50 px-4 py-6 backdrop-blur-[2px] sm:items-center">
-        <div className="w-full max-w-lg overflow-hidden rounded-3xl border border-[var(--color-pmb-green)]/15 bg-white shadow-2xl">
+      <div className="absolute inset-0 z-30 overflow-y-auto bg-[var(--color-pmb-mist)]/50 backdrop-blur-[2px]">
+        <div className="flex min-h-full items-start justify-center px-4 py-6 sm:items-center">
+          <div className="w-full max-w-lg overflow-hidden rounded-3xl border border-[var(--color-pmb-green)]/15 bg-white shadow-2xl">
           <div className="bg-gradient-to-br from-[var(--color-pmb-green)] to-[var(--color-pmb-green-700)] px-6 py-5 text-white">
             <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider">
               <Lock className="h-3 w-3" /> Recurso Premium
@@ -151,6 +152,7 @@ export function AutomationGate({ enabled, children }: AutomationGateProps) {
               <ArrowLeft className="h-3.5 w-3.5" />
               Voltar ao painel
             </Link>
+          </div>
           </div>
         </div>
       </div>

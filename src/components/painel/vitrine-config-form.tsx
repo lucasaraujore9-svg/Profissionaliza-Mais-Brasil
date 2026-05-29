@@ -1,7 +1,7 @@
 "use client"
 
 import { useRef, useState } from "react"
-import { Upload, Image as ImageIcon, Loader2, Trash2 } from "lucide-react"
+import { Upload, Loader2, Trash2 } from "lucide-react"
 import Image from "next/image"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -12,7 +12,6 @@ export interface VitrineConfig {
   tagline: string | null
   description: string | null
   logoUrl: string | null
-  bannerUrl: string | null
   primaryColor: string
   secondaryColor: string
   whatsapp: string | null
@@ -20,7 +19,7 @@ export interface VitrineConfig {
   facebook: string | null
 }
 
-export type VitrineAssetKind = "logo" | "banner"
+export type VitrineAssetKind = "logo"
 
 interface VitrineConfigFormProps {
   config: VitrineConfig
@@ -39,7 +38,6 @@ export function VitrineConfigForm({
 }: VitrineConfigFormProps) {
   const [uploadError, setUploadError] = useState<string | null>(null)
   const logoInputRef = useRef<HTMLInputElement | null>(null)
-  const bannerInputRef = useRef<HTMLInputElement | null>(null)
 
   const update = <K extends keyof VitrineConfig>(
     key: K,
@@ -60,8 +58,7 @@ export function VitrineConfigForm({
 
   async function handleRemove(kind: VitrineAssetKind) {
     setUploadError(null)
-    const label = kind === "logo" ? "logo" : "banner"
-    if (!confirm(`Remover o ${label}?`)) return
+    if (!confirm("Remover o logo?")) return
     try {
       await onRemove(kind)
     } catch (err) {
@@ -81,24 +78,19 @@ export function VitrineConfigForm({
           <AssetUploader
             label="Logo"
             hint="PNG, JPG ou WEBP (max 5MB)"
-            icon="logo"
             previewUrl={config.logoUrl}
             uploading={uploading === "logo"}
             inputRef={logoInputRef}
             onChoose={(file) => handleFile("logo", file)}
             onRemove={() => handleRemove("logo")}
           />
-          <AssetUploader
-            label="Banner hero"
-            hint="Recomendado 1920x600 (max 5MB)"
-            icon="banner"
-            previewUrl={config.bannerUrl}
-            uploading={uploading === "banner"}
-            inputRef={bannerInputRef}
-            onChoose={(file) => handleFile("banner", file)}
-            onRemove={() => handleRemove("banner")}
-          />
         </div>
+
+        <p className="mt-4 rounded-lg border border-[var(--color-pmb-green)]/20 bg-[var(--color-pmb-lime-50)]/50 px-3 py-2 text-xs text-gray-600">
+          Para personalizar o banner principal (hero) da sua vitrine, adicione
+          imagens na aba <strong className="font-semibold text-[var(--color-pmb-green-900)]">Banner principal</strong>.
+          Com 1 imagem o banner é único; com mais de uma vira um carrossel.
+        </p>
 
         {uploadError && (
           <div className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
@@ -214,7 +206,6 @@ export function VitrineConfigForm({
 interface AssetUploaderProps {
   label: string
   hint: string
-  icon: "logo" | "banner"
   previewUrl: string | null
   uploading: boolean
   inputRef: React.RefObject<HTMLInputElement | null>
@@ -225,7 +216,6 @@ interface AssetUploaderProps {
 function AssetUploader({
   label,
   hint,
-  icon,
   previewUrl,
   uploading,
   inputRef,
@@ -254,11 +244,7 @@ function AssetUploader({
             </div>
           ) : (
             <>
-              {icon === "logo" ? (
-                <Upload className="h-5 w-5" />
-              ) : (
-                <ImageIcon className="h-5 w-5" />
-              )}
+              <Upload className="h-5 w-5" />
               <span>{hint}</span>
             </>
           )}
