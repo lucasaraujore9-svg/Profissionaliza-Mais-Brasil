@@ -298,10 +298,14 @@ export function PmbCheckoutForm({ courseId, couponCode }: PmbCheckoutFormProps) 
 
   // ─── Telas de resultado (substituem o form quando há um modo ativo) ───
   if (status.kind === "pix") {
-    return <PixResult status={status} />
+    return (
+      <PixResult status={status} onBack={() => setStatus({ kind: "idle" })} />
+    )
   }
   if (status.kind === "boleto") {
-    return <BoletoResult status={status} />
+    return (
+      <BoletoResult status={status} onBack={() => setStatus({ kind: "idle" })} />
+    )
   }
   if (status.kind === "approved") {
     return (
@@ -673,8 +677,10 @@ function MethodButton({
 
 function PixResult({
   status,
+  onBack,
 }: {
   status: Extract<Status, { kind: "pix" }>
+  onBack: () => void
 }) {
   const [copied, setCopied] = useState(false)
   async function copyPayload() {
@@ -738,14 +744,24 @@ function PixResult({
           automaticamente assim que recebermos a confirmação.
         </span>
       </div>
+
+      <button
+        type="button"
+        onClick={onBack}
+        className="mt-4 w-full text-center text-sm font-medium text-[var(--color-pmb-green)] underline-offset-4 hover:underline"
+      >
+        Escolher outra forma de pagamento
+      </button>
     </div>
   )
 }
 
 function BoletoResult({
   status,
+  onBack,
 }: {
   status: Extract<Status, { kind: "boleto" }>
+  onBack: () => void
 }) {
   const [copied, setCopied] = useState(false)
   async function copyField() {
@@ -810,6 +826,14 @@ function BoletoResult({
           receberá um email quando a matrícula for ativada.
         </span>
       </div>
+
+      <button
+        type="button"
+        onClick={onBack}
+        className="mt-4 w-full text-center text-sm font-medium text-[var(--color-pmb-green)] underline-offset-4 hover:underline"
+      >
+        Escolher outra forma de pagamento
+      </button>
     </div>
   )
 }

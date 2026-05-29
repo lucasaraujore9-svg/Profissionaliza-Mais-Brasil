@@ -10,6 +10,8 @@ import {
   createPayment as createAsaasPayment,
   createSubscription as createAsaasSubscription,
   listPayments as listAsaasPayments,
+  deletePayment as deleteAsaasPayment,
+  cancelSubscription as cancelAsaasSubscription,
   getPixQrCode,
   getBillingInfo,
   payWithCreditCard,
@@ -216,6 +218,85 @@ export const POST = withRequestContext(
       )
     }
 
+    const pmbTenant = await getOrCreatePmbTenant()
+
+    const student = await upsertStudent({
+      tenantId: pmbTenant.id,
+      nome: normalize(data.nome),
+      email: data.email,
+      cpf: data.cpf,
+      fone: data.fone,
+      endereco: data.endereco,
+      polo: pmbPlataformaPolo(),
+      vendedorId: pmbPlataformaVendedorId(),
+      plataformaAlunoIdFallback: `pending_${Date.now()}`,
+    })
+
+    await provisionStudentAccess(student.id, {
+      isPmbVitrine: true,
+      slug: pmbTenant.slug,
+    }).catch((err) => {
+      contextLogger().error(
+        { err, event: "pmb_checkout.provision_access_failed", studentId: student.id },
+        "provisionStudentAccess falhou",
+      )
+    })
+
+    // Detecta matrícula existente ANTES de consumir o cupom — assim, ao trocar
+    // de forma de pagamento, o cupom reservado pela cobrança anterior é
+    // liberado antes de o novo consumo acontecer (senão a troca com cupom de
+    // uso único cairia em COUPON_EXHAUSTED).
+    const existingEnrollment = await prisma.enrollment.findFirst({
+      where: {
+        studentId: student.id,
+        courseId: course.id,
+        tenantId: null,
+        status: { in: ["PENDING", "ACTIVE", "COMPLETED"] },
+      },
+      select: {
+        id: true,
+        status: true,
+        couponId: true,
+        gateway: true,
+        asaasPaymentId: true,
+        asaasSubscriptionId: true,
+      },
+    })
+    if (existingEnrollment) {
+      // ACTIVE/COMPLETED: o aluno já comprou o curso — bloqueia de fato.
+      if (existingEnrollment.status !== "PENDING") {
+        return NextResponse.json(
+          { error: "Você já possui este curso", code: "DUPLICATE_ENROLLMENT" },
+          { status: 409 },
+        )
+      }
+      // PENDING: o aluno está trocando de forma de pagamento (ex.: gerou um PIX
+      // e agora quer pagar no cartão). Antes isto retornava 409 e travava a
+      // troca. Cancelamos a cobrança anterior no Asaas pra não deixar duas
+      // cobranças em aberto, liberamos o cupom reservado e removemos a
+      // enrollment órfã — o fluxo abaixo recria tudo com o novo método.
+      if (existingEnrollment.gateway === "ASAAS") {
+        if (existingEnrollment.asaasSubscriptionId) {
+          await cancelAsaasSubscription(
+            existingEnrollment.asaasSubscriptionId,
+          ).catch(swallow("pmb-checkout.switch.cancel_subscription"))
+        }
+        if (existingEnrollment.asaasPaymentId) {
+          await deleteAsaasPayment(existingEnrollment.asaasPaymentId).catch(
+            swallow("pmb-checkout.switch.delete_payment"),
+          )
+        }
+      }
+      if (existingEnrollment.couponId) {
+        await releaseCoupon(existingEnrollment.couponId).catch(
+          swallow("pmb-checkout.switch.release_coupon"),
+        )
+      }
+      await prisma.enrollment
+        .delete({ where: { id: existingEnrollment.id } })
+        .catch(swallow("pmb-checkout.switch.delete_enrollment"))
+    }
+
     let discountAmount = 0
     let finalAmount = basePrice
     let couponId: string | null = null
@@ -262,52 +343,6 @@ export const POST = withRequestContext(
       }
       couponId = coupon.id
       consumedCouponId = coupon.id
-    }
-
-    const pmbTenant = await getOrCreatePmbTenant()
-
-    const student = await upsertStudent({
-      tenantId: pmbTenant.id,
-      nome: normalize(data.nome),
-      email: data.email,
-      cpf: data.cpf,
-      fone: data.fone,
-      endereco: data.endereco,
-      polo: pmbPlataformaPolo(),
-      vendedorId: pmbPlataformaVendedorId(),
-      plataformaAlunoIdFallback: `pending_${Date.now()}`,
-    })
-
-    await provisionStudentAccess(student.id, {
-      isPmbVitrine: true,
-      slug: pmbTenant.slug,
-    }).catch((err) => {
-      contextLogger().error(
-        { err, event: "pmb_checkout.provision_access_failed", studentId: student.id },
-        "provisionStudentAccess falhou",
-      )
-    })
-
-    const existingEnrollment = await prisma.enrollment.findFirst({
-      where: {
-        studentId: student.id,
-        courseId: course.id,
-        tenantId: null,
-        status: { in: ["PENDING", "ACTIVE", "COMPLETED"] },
-      },
-      select: { id: true, status: true },
-    })
-    if (existingEnrollment) {
-      return NextResponse.json(
-        {
-          error:
-            existingEnrollment.status === "PENDING"
-              ? "Você já tem uma cobrança pendente para este curso"
-              : "Você já possui este curso",
-          code: "DUPLICATE_ENROLLMENT",
-        },
-        { status: 409 },
-      )
     }
 
     const enrollment = await prisma.enrollment.create({
