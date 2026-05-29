@@ -101,6 +101,7 @@ export function SidebarPainel({
             <Link
               key={item.href}
               href={item.href}
+              data-tour={`nav:${item.href}`}
               className={cn(
                 "flex items-center gap-3 rounded-lg px-4 py-2.5 text-sm font-medium transition-colors",
                 isActive

@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { signOut } from "next-auth/react"
-import { Menu, LogOut, UserCog } from "lucide-react"
+import { Menu, LogOut, UserCog, HelpCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { NotificationBell } from "@/components/shared/notification-bell"
@@ -12,6 +12,8 @@ interface HeaderDashboardProps {
   userName?: string
   profileHref?: string
   onSignOut?: () => void
+  /** Mostra o botão de ajuda que reabre o tutorial guiado (só no painel). */
+  showTourHelp?: boolean
 }
 
 export function HeaderDashboard({
@@ -19,9 +21,16 @@ export function HeaderDashboard({
   userName,
   profileHref,
   onSignOut,
+  showTourHelp = false,
 }: HeaderDashboardProps) {
   const handleSignOut =
     onSignOut ?? (() => signOut({ callbackUrl: "/login" }))
+
+  // Reabrir o tour é responsabilidade do OnboardingTour (que conhece o
+  // roteiro por papel). Aqui só emitimos o evento — desacopla o header da
+  // lib de tour e evita carregar o driver.js neste componente.
+  const handleReplayTour = () =>
+    window.dispatchEvent(new CustomEvent("pmb:replay-tour"))
 
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b border-[rgba(2,89,24,0.1)] bg-white px-4 lg:px-6">
@@ -38,6 +47,19 @@ export function HeaderDashboard({
       </Sheet>
 
       <div className="flex-1" />
+
+      {showTourHelp && (
+        <button
+          type="button"
+          onClick={handleReplayTour}
+          data-tour="tour-help"
+          aria-label="Refazer tutorial"
+          title="Refazer tutorial"
+          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[var(--color-pmb-green)] hover:bg-[var(--color-pmb-lime-50)]"
+        >
+          <HelpCircle className="h-5 w-5" />
+        </button>
+      )}
 
       <NotificationBell />
 

@@ -2,6 +2,9 @@
 
 import { SidebarPainel } from "@/components/shared/layouts/sidebar-painel"
 import { HeaderDashboard } from "@/components/shared/layouts/header-dashboard"
+import { OnboardingTour } from "@/components/painel/onboarding-tour"
+
+type MemberRole = "owner" | "consultant" | null
 
 export interface PainelLayoutShellProps {
   children: React.ReactNode
@@ -9,6 +12,8 @@ export interface PainelLayoutShellProps {
   userEmail: string
   tenantName?: string | null
   automationEnabled?: boolean
+  memberRole?: MemberRole
+  tourCompleted?: boolean
 }
 
 export function PainelLayoutShell({
@@ -17,6 +22,8 @@ export function PainelLayoutShell({
   userEmail,
   tenantName,
   automationEnabled = false,
+  memberRole = "owner",
+  tourCompleted = false,
 }: PainelLayoutShellProps) {
   return (
     <div className="flex h-screen overflow-hidden">
@@ -38,11 +45,13 @@ export function PainelLayoutShell({
           }
           userName={userName}
           profileHref="/painel/configuracoes"
+          showTourHelp
         />
         <main className="flex-1 overflow-y-auto bg-[var(--color-pmb-mist)] p-4 lg:p-8">
           {children}
         </main>
       </div>
+      <OnboardingTour memberRole={memberRole} completed={tourCompleted} />
     </div>
   )
 }

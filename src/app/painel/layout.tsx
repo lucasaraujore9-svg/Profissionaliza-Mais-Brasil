@@ -33,11 +33,15 @@ export default async function PainelLayout({
   // contas existentes em produção). Re-introduzir só com revalidação de JWT
   // pós-troca e limpeza da flag legada em contas ativas. Ver R22.
 
-  const [cookieStore, tenant] = await Promise.all([
+  const [cookieStore, tenant, currentUser] = await Promise.all([
     cookies(),
     prisma.tenant.findUnique({
       where: { id: session.user.tenantId },
       select: { name: true, automationEnabled: true },
+    }),
+    prisma.user.findUnique({
+      where: { id: session.user.id as string },
+      select: { onboardingTourCompletedAt: true },
     }),
   ])
 
@@ -58,6 +62,8 @@ export default async function PainelLayout({
         userEmail={session.user.email ?? ""}
         tenantName={tenant?.name ?? null}
         automationEnabled={tenant?.automationEnabled ?? false}
+        memberRole={session.user.memberRole ?? "owner"}
+        tourCompleted={!!currentUser?.onboardingTourCompletedAt}
       >
         {children}
       </PainelLayoutShell>
