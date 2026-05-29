@@ -36,11 +36,21 @@ export default async function AdminLeadsRevendaPage({
     ? (sp.status as LeadStatus)
     : "ALL"
 
-  const rows = await prisma.lead.findMany({
+  const allRows = await prisma.lead.findMany({
     where: status !== "ALL" ? { status } : {},
     orderBy: { createdAt: "desc" },
     take: 100,
   })
+
+  // Esconde leads legados de origem contato — antes da separacao contato/revenda
+  // o formulario de contato caia em /api/leads e a origem ficava serializada em
+  // `notes` ("Origem: /contato"). Hoje contato vira ContactMessage; estes
+  // registros antigos nao pertencem ao funil de revenda.
+  const rows = allRows.filter(
+    (l) =>
+      l.source !== "/contato" &&
+      !(l.notes ?? "").includes("Origem: /contato"),
+  )
 
   const leads: RevendaLead[] = rows.map((l) => ({
     id: l.id,
