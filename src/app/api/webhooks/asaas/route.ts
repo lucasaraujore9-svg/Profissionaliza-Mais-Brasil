@@ -54,9 +54,10 @@ async function handle(request: Request) {
       return NextResponse.json({ error: "invalid token" }, { status: 401 })
     }
   } catch (error) {
+    // Detalhe fica no log (interno); ao chamador não-autenticado devolvemos
+    // mensagem genérica para não vazar estado de configuração do servidor.
     log.error({ err: error, event: "asaas.webhook.config_error" }, "erro de config no validateAsaasWebhook")
-    const message = error instanceof Error ? error.message : "config error"
-    return NextResponse.json({ error: message }, { status: 500 })
+    return NextResponse.json({ error: "internal error" }, { status: 500 })
   }
 
   let body: unknown

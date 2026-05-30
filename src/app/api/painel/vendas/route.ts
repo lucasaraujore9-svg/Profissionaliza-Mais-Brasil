@@ -329,7 +329,7 @@ export const POST = withRequestContext(
       } catch (err) {
         await prisma.enrollment
           .delete({ where: { id: enrollment.id } })
-          .catch(() => {})
+          .catch(swallow("painel.vendas.bolsa_rollback"))
         contextLogger().error(
           { err, event: "painel.vendas.bolsa_failed", studentId: student.id },
           "concessao de bolsa falhou",
@@ -381,8 +381,8 @@ export const POST = withRequestContext(
     // Re-checagem para narrowing: o guard de mpAccessToken acima e condicional
     // (bolsa pula), mas a bolsa ja retornou antes daqui — entao o token existe.
     if (!tenant.mpAccessToken) {
-      await prisma.enrollment.delete({ where: { id: enrollment.id } }).catch(() => {})
-      if (couponId) await releaseCoupon(couponId).catch(() => {})
+      await prisma.enrollment.delete({ where: { id: enrollment.id } }).catch(swallow("painel.vendas.rollback"))
+      if (couponId) await releaseCoupon(couponId).catch(swallow("painel.vendas.rollback"))
       return NextResponse.json(
         { error: "Conecte o Mercado Pago em /painel/configuracoes" },
         { status: 503 },
@@ -486,8 +486,8 @@ export const POST = withRequestContext(
         },
       })
     } catch (mpError) {
-      await prisma.enrollment.delete({ where: { id: enrollment.id } }).catch(() => {})
-      if (couponId) await releaseCoupon(couponId).catch(() => {})
+      await prisma.enrollment.delete({ where: { id: enrollment.id } }).catch(swallow("painel.vendas.rollback"))
+      if (couponId) await releaseCoupon(couponId).catch(swallow("painel.vendas.rollback"))
       throw mpError
     }
   },
