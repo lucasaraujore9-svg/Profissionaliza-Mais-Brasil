@@ -6,6 +6,7 @@ import { getCurrentTenant } from "@/lib/tenant/current"
 import { tecnicaFromTenant } from "@/lib/catalog/tecnica"
 import { getRequestOrigin } from "@/lib/seo/host"
 import { normalizeSocialUrl } from "@/lib/branding"
+import { vitrineDomain } from "@/lib/tenant/urls"
 import { JsonLd } from "@/components/seo/json-ld"
 import { storeJsonLd, webSiteJsonLd } from "@/lib/seo/jsonld"
 import { SITE_NAME } from "@/lib/seo/site"
@@ -126,6 +127,14 @@ export default async function LojaLayout({
     (v): v is string => Boolean(v),
   )
 
+  // Link "Seja revendedor" do rodapé desta unidade → carrega o referralCode do
+  // tenant para atribuir a indicação ao dono da vitrine. Aponta sempre para o
+  // domínio canônico de captação. Sem referralCode (tenant legado) cai no link
+  // padrão sem ref.
+  const sejaRevendedorHref = tenant?.referralCode
+    ? `https://www.${vitrineDomain()}/seja-revendedor?ref=${encodeURIComponent(tenant.referralCode)}`
+    : undefined
+
   return (
     <div style={customStyle} className="contents">
       {tenant && origin ? (
@@ -164,6 +173,7 @@ export default async function LojaLayout({
           facebook: facebookUrl,
           youtube: null,
         }}
+        sejaRevendedorHref={sejaRevendedorHref}
       />
     </div>
   )

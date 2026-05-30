@@ -16,6 +16,7 @@ export interface CurrentTenant {
   description: string | null
   instagram: string | null
   facebook: string | null
+  referralCode: string | null
   tecnicaEnabled: boolean
   tecnicaUrl: string | null
   tecnicaLabel: string | null
@@ -49,6 +50,7 @@ export const getCurrentTenant = cache(
           description: true,
           instagram: true,
           facebook: true,
+          referralCode: true,
           tecnicaEnabled: true,
           tecnicaUrl: true,
           tecnicaLabel: true,

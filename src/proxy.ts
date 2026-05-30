@@ -61,6 +61,25 @@ function isVitrinePath(pathname: string): boolean {
   )
 }
 
+// Paths servidos DIRETO no apex da vitrine (livrecursos.com.br / www), sem
+// rewrite para /livrecursos: paginas de captacao de revendedor + APIs publicas
+// que elas consomem (validacao/captura de ref, leads) + validacao de
+// certificado. O link de indicacao (`/seja-revendedor?ref=CODE`) gerado no
+// painel aponta exatamente para este dominio — sem o pass-through ele caia em
+// /livrecursos/seja-revendedor (404).
+const VITRINE_APEX_PASSTHROUGH = [
+  "/seja-revendedor",
+  "/contrato-de-revenda",
+  "/validar",
+  "/api",
+]
+
+function isApexPassthrough(pathname: string): boolean {
+  return VITRINE_APEX_PASSTHROUGH.some(
+    (p) => pathname === p || pathname.startsWith(`${p}/`)
+  )
+}
+
 function stripPort(hostname: string): string {
   return hostname.split(":")[0]
 }
@@ -197,9 +216,10 @@ export default async function proxy(request: NextRequest) {
   // reservados como www): renderiza a landing dedicada de captacao em /livrecursos.
   if (host.kind === "vitrine_apex") {
     // Rotas publicas servidas direto no dominio da vitrine (sem rewrite):
-    //   /validar/[code] → pagina publica de validacao de certificados.
-    // O QR code dos certificados aponta para www.livrecursos.com.br/validar/...
-    if (pathname === "/validar" || pathname.startsWith("/validar/")) {
+    // captacao de revendedor (/seja-revendedor, /contrato-de-revenda),
+    // validacao de certificado (/validar — QR aponta p/ www.livrecursos.com.br)
+    // e as APIs publicas consumidas por elas (/api/*).
+    if (isApexPassthrough(pathname)) {
       return NextResponse.next({ request: { headers: sanitizedHeaders } })
     }
 

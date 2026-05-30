@@ -65,12 +65,19 @@ interface FooterMainProps {
   social?: { instagram?: string | null; facebook?: string | null; youtube?: string | null }
   /** Exibe a linha do CNPJ da PMB. A vitrine do revendedor passa `false`. */
   showCnpj?: boolean
+  /**
+   * Sobrescreve o href do link "Seja revendedor" do bloco Institucional.
+   * A vitrine passa o link de indicacao do tenant (`.../seja-revendedor?ref=CODE`)
+   * para que quem se cadastrar a partir daquela unidade gere comissao ao dono.
+   */
+  sejaRevendedorHref?: string
 }
 
 export function FooterMain({
   categorias = [],
   social: socialOverride,
   showCnpj = true,
+  sejaRevendedorHref,
 }: FooterMainProps) {
   const support = getSupportContacts()
   const social = socialOverride ?? getSocialLinks()
@@ -79,6 +86,11 @@ export function FooterMain({
     href: `/cursos?categoria=${cat.slug}`,
   }))
   const showCategoriasColumn = categoriaLinks.length > 0
+  const institucionalLinks: NavLink[] = sejaRevendedorHref
+    ? INSTITUCIONAL_LINKS.map((l) =>
+        l.href === "/seja-revendedor" ? { ...l, href: sejaRevendedorHref } : l,
+      )
+    : INSTITUCIONAL_LINKS
 
   return (
     <footer className="bg-[var(--color-pmb-green)] text-white">
@@ -203,7 +215,7 @@ export function FooterMain({
             />
           )}
           <FooterColumn title="Aluno" links={ALUNO_LINKS} />
-          <FooterColumn title="Institucional" links={INSTITUCIONAL_LINKS} />
+          <FooterColumn title="Institucional" links={institucionalLinks} />
         </div>
 
         <div className="mt-12 flex flex-col items-start justify-between gap-3 border-t border-white/10 pt-6 text-[12px] text-white/60 md:flex-row md:items-center">
