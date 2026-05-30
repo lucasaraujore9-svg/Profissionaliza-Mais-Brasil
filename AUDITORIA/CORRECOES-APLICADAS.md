@@ -77,6 +77,19 @@ A verificação adversarial e a leitura manual revelaram que **boa parte dos ach
 - **Vercel Preview deploy:** ✅ **RESOLVIDO**. Falhava de forma **pré-existente** (já quebrado 14h antes deste trabalho; Production sempre `Ready`). Causa: `env.ts` validava o schema inteiro durante a coleta de page-data do build, exigindo `ASAAS_WEBHOOK_TOKEN` (`requiredInProd`), ausente no **ambiente Preview** da Vercel.
   - **Fix aplicado (commit `fix(env)`):** durante `next build` (`NEXT_PHASE=phase-production-build`), as envs `requiredInProd` deixam de ser obrigatórias. A validação **fail-closed permanece intacta em RUNTIME** (inclusive produção) — só o build deixa de travar. Concretiza a intenção já documentada do proxy lazy. Verificado: o build local passa a reclamar só de `DATABASE_URL` (única sempre-obrigatória, que o Preview tem) e o deploy Preview da Vercel ficou **verde**.
 
+## Rodada final — varredura "até o fim" dos itens restantes
+
+Aplicado (seguro e aditivo):
+- **`painel/vendas` — rollbacks silenciosos:** os `.catch(() => {})` de rollback (delete de enrollment / release de cupom) passaram a usar `swallow("painel.vendas.rollback")`, que **loga** a falha de rollback (antes sumia). O erro de operação principal já era logado.
+- **`webhooks/asaas` — vazamento de config:** quando o validador lança, devolve mensagem **genérica** ao chamador não-autenticado (o detalhe segue no log interno).
+
+Investigado e **adequadamente mitigado / sem ação segura** (com justificativa):
+- **Guards das 6 páginas `/admin`:** o `admin/layout.tsx` **já autentica server-side** (`requireAdminSession` + redirect) e as páginas são shells client cujos dados vêm de APIs role-gated — **sem vazamento server-side**. Guards por página seriam redundantes (mesmo check do layout) e poderiam causar lockout por papel errado. Mantido como está.
+- **`painel/dominio` — erro do Vercel ao cliente:** o cliente é o **revendedor autenticado** configurando o próprio domínio; a mensagem ("domínio já em uso", etc.) é feedback útil e benigno. Mantido (UX > risco marginal).
+- **CSP `unsafe-inline`/`unsafe-eval`:** removê-los exige nonces e pode quebrar o SDK do Mercado Pago (não testável aqui sem o checkout real). Não alterado — requer teste e2e do checkout.
+- **Housekeeping:** `*.tsbuildinfo` **já está no `.gitignore`**. Os diretórios de scaffold (`.claude-skills/`, `vibe-scaffold/`) são tooling do projeto, versionados de propósito — não removidos unilateralmente (decisão de organização do time; sem impacto em runtime).
+- **`process.env` direto em `admin/config`:** rota admin que testa integrações lendo envs — centralizar via `env.ts` é cosmético, baixo valor. Mantido.
+
 ## Itens deferidos — resolução final
 
 - **(c) Emissão manual de certificado sem checar conclusão** → **FALSO POSITIVO**. `issueCertificateManual` (`src/lib/certificates/issue.ts:164`) **já exige** `Enrollment.status === COMPLETED` quando `force=false`, e `force` é restrito a SUPER_ADMIN na rota. Nada a corrigir.
