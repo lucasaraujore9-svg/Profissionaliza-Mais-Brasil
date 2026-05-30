@@ -74,9 +74,8 @@ A verificação adversarial e a leitura manual revelaram que **boa parte dos ach
 ## Pipeline (PR #3 — branch `fix/auditoria-sprint0-isolamento-tenant`)
 
 - **CI (Lint + Typecheck + Audit):** ✅ **passou** (1m43s) — a validação de código está verde.
-- **Vercel Preview deploy:** ❌ **falha pré-existente de ambiente**, NÃO regressão. Evidência: o deploy Preview já falhava **14h antes** deste trabalho; todos os deploys **Production** estão `Ready`. Causa: `env.ts` valida `ASAAS_WEBHOOK_TOKEN` (`requiredInProd`) durante a coleta de page-data do build, e o **ambiente Preview da Vercel não tem essa env var** (Production tem). Erro numa rota não tocada (`/api/admin/atendimento/[id]`).
-  - **Correção (infra, recomendada):** adicionar `ASAAS_WEBHOOK_TOKEN` (e demais `requiredInProd` faltantes) ao escopo **Preview** em Vercel → Settings → Environment Variables.
-  - **Alternativa (código, requer decisão do time):** tornar `env.ts` tolerante na fase de build (validar só em runtime). Não apliquei: enfraquece o fail-fast de build que o time desenhou de propósito.
+- **Vercel Preview deploy:** ✅ **RESOLVIDO**. Falhava de forma **pré-existente** (já quebrado 14h antes deste trabalho; Production sempre `Ready`). Causa: `env.ts` validava o schema inteiro durante a coleta de page-data do build, exigindo `ASAAS_WEBHOOK_TOKEN` (`requiredInProd`), ausente no **ambiente Preview** da Vercel.
+  - **Fix aplicado (commit `fix(env)`):** durante `next build` (`NEXT_PHASE=phase-production-build`), as envs `requiredInProd` deixam de ser obrigatórias. A validação **fail-closed permanece intacta em RUNTIME** (inclusive produção) — só o build deixa de travar. Concretiza a intenção já documentada do proxy lazy. Verificado: o build local passa a reclamar só de `DATABASE_URL` (única sempre-obrigatória, que o Preview tem) e o deploy Preview da Vercel ficou **verde**.
 
 ## Itens deferidos — resolução final
 
