@@ -67,4 +67,19 @@ A verificação adversarial e a leitura manual revelaram que **boa parte dos ach
 
 ## Resumo
 
-18 arquivos de código alterados (+156/−40), 1 arquivo de teste novo. 3 correções de segurança reais, 7 de qualidade/a11y. **0 regressões**: tsc, eslint, 28 testes e a compilação do build passam. As mudanças preservam todos os fluxos intencionais e nada foi commitado/empurrado (aguardando sua revisão na branch).
+18 arquivos de código alterados (+156/−40), 1 arquivo de teste novo. 3 correções de segurança reais, 7 de qualidade/a11y. **0 regressões**: tsc, eslint, 28 testes e a compilação do build passam. As mudanças preservam todos os fluxos intencionais.
+
+---
+
+## Pipeline (PR #3 — branch `fix/auditoria-sprint0-isolamento-tenant`)
+
+- **CI (Lint + Typecheck + Audit):** ✅ **passou** (1m43s) — a validação de código está verde.
+- **Vercel Preview deploy:** ❌ **falha pré-existente de ambiente**, NÃO regressão. Evidência: o deploy Preview já falhava **14h antes** deste trabalho; todos os deploys **Production** estão `Ready`. Causa: `env.ts` valida `ASAAS_WEBHOOK_TOKEN` (`requiredInProd`) durante a coleta de page-data do build, e o **ambiente Preview da Vercel não tem essa env var** (Production tem). Erro numa rota não tocada (`/api/admin/atendimento/[id]`).
+  - **Correção (infra, recomendada):** adicionar `ASAAS_WEBHOOK_TOKEN` (e demais `requiredInProd` faltantes) ao escopo **Preview** em Vercel → Settings → Environment Variables.
+  - **Alternativa (código, requer decisão do time):** tornar `env.ts` tolerante na fase de build (validar só em runtime). Não apliquei: enfraquece o fail-fast de build que o time desenhou de propósito.
+
+## Itens deferidos — resolução final
+
+- **(c) Emissão manual de certificado sem checar conclusão** → **FALSO POSITIVO**. `issueCertificateManual` (`src/lib/certificates/issue.ts:164`) **já exige** `Enrollment.status === COMPLETED` quando `force=false`, e `force` é restrito a SUPER_ADMIN na rota. Nada a corrigir.
+- **(b) Escopo de PMB_SALES** → **política de produto**, não bug. O time já restringe as operações sensíveis (bloquear/desbloquear aluno, vincular curso, forçar certificado) a SUPER_ADMIN; editar/notificar abertos ao time PMB é decisão de negócio. Sem alteração sem confirmação da política desejada.
+- **(a) Token assinado em `/cobranca/[paymentId]`** → **deferido para PR dedicado**. Exigiria threading de token por ~8 arquivos (3 geradores admin + página + client com 3 fetches + 3 rotas) e teste end-to-end do fluxo de pagamento — risco desproporcional ao ganho (paymentId é ID Asaas longo + rate-limit 20/min já mitiga). Recomendado endereçar com teste e2e do pagamento.
