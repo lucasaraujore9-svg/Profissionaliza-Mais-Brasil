@@ -24,7 +24,7 @@ export const POST = withRequestContextParams<{ id: string }>(
       return NextResponse.json({ error: "Aluno não encontrado" }, { status: 404 })
     }
 
-    const result = await resetStudentPassword(id)
+    const result = await resetStudentPassword(id, ctx.tenantId)
     if ("error" in result) {
       return NextResponse.json({ error: result.error }, { status: 400 })
     }

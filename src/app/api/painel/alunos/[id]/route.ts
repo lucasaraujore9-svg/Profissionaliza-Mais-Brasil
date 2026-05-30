@@ -93,16 +93,13 @@ export const PATCH = withRequestContextParams<{ id: string }>(
       )
     }
 
-    const exists = await prisma.student.findFirst({
-      where: { id, tenantId: ctx.tenantId },
-      select: { id: true },
-    })
-    if (!exists) {
-      return NextResponse.json({ error: "Aluno não encontrado" }, { status: 404 })
-    }
-
     try {
-      await applyStudentEdit(id, parsed.data)
+      // Escopo autoritativo por tenant: nenhum id forjado alcança aluno de
+      // outra loja. Devolve false se o id não pertence a este tenant.
+      const updated = await applyStudentEdit(id, parsed.data, ctx.tenantId)
+      if (!updated) {
+        return NextResponse.json({ error: "Aluno não encontrado" }, { status: 404 })
+      }
     } catch (err) {
       const msg = (err as Error).message ?? "Falha ao salvar"
       return NextResponse.json({ error: msg }, { status: 409 })

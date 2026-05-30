@@ -36,12 +36,25 @@ function nullable(value: string | undefined): string | null {
   return t.length > 0 ? t : null
 }
 
+/**
+ * Edita os dados cadastrais do aluno.
+ *
+ * `tenantId` (defesa em profundidade): quando informado, o update SÓ afeta o
+ * aluno daquele tenant (`updateMany where {id, tenantId}`) — o painel do
+ * revendedor SEMPRE deve passar `ctx.tenantId` para que nenhum `id` forjado
+ * alcance aluno de outra loja. O admin PMB gerencia alunos de qualquer tenant
+ * (vide `loadStudentDetail`) e omite o parâmetro.
+ *
+ * @returns `true` se algum registro foi atualizado; `false` se nada casou o
+ *          escopo (id inexistente ou de outro tenant) — o caller deve devolver 404.
+ */
 export async function applyStudentEdit(
   studentId: string,
   data: EditStudentInput,
-): Promise<void> {
-  await prisma.student.update({
-    where: { id: studentId },
+  tenantId?: string,
+): Promise<boolean> {
+  const result = await prisma.student.updateMany({
+    where: tenantId ? { id: studentId, tenantId } : { id: studentId },
     data: {
       nome: data.nome.trim(),
       email: nullable(data.email),
@@ -57,6 +70,7 @@ export async function applyStudentEdit(
       nascimento: data.nascimento ? new Date(data.nascimento) : null,
     },
   })
+  return result.count > 0
 }
 
 export const noteSchema = z.object({
@@ -113,9 +127,10 @@ interface ResetPasswordResult {
 
 export async function resetStudentPassword(
   studentId: string,
+  tenantId?: string,
 ): Promise<ResetPasswordResult | { error: string }> {
-  const student = await prisma.student.findUnique({
-    where: { id: studentId },
+  const student = await prisma.student.findFirst({
+    where: tenantId ? { id: studentId, tenantId } : { id: studentId },
     select: {
       id: true,
       nome: true,

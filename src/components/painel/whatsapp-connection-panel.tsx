@@ -89,7 +89,7 @@ export function WhatsAppConnectionPanel({
     } catch {
       setPollingError("Erro de rede")
     }
-  }, [clearPolling])
+  }, [clearPolling, apiBase])
 
   useEffect(() => () => clearPolling(), [clearPolling])
 

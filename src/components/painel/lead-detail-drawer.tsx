@@ -108,7 +108,7 @@ export function LeadDetailDrawer({
     } finally {
       setLoading(false)
     }
-  }, [leadId])
+  }, [leadId, apiBase])
 
   useEffect(() => {
     if (leadId) {

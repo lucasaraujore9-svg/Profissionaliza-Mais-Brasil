@@ -9,7 +9,6 @@ import { normalizeSocialUrl } from "@/lib/branding"
 import { vitrineDomain } from "@/lib/tenant/urls"
 import { JsonLd } from "@/components/seo/json-ld"
 import { storeJsonLd, webSiteJsonLd } from "@/lib/seo/jsonld"
-import { SITE_NAME } from "@/lib/seo/site"
 
 const PMB_GREEN_DEFAULT = "#025918"
 const PMB_GOLD_DEFAULT = "#F2B705"
