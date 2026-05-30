@@ -35,7 +35,13 @@ const faqSchema = {
   })),
 }
 
-export default function SejaRevendedorPage() {
+export default async function SejaRevendedorPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ ref?: string }>
+}) {
+  const sp = await searchParams
+  const initialRef = typeof sp.ref === "string" ? sp.ref.trim() : ""
   return (
     <>
       <script
@@ -57,7 +63,7 @@ export default function SejaRevendedorPage() {
       <CTABannerMid />
       <AutoridadePMB />
       <FAQAccordion />
-      <FormularioInteresse />
+      <FormularioInteresse initialRef={initialRef} />
     </>
   )
 }

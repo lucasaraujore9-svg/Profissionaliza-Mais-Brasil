@@ -24,7 +24,11 @@ interface ApiError {
   details?: Record<string, string[] | undefined>
 }
 
-export function FormularioInteresse() {
+export function FormularioInteresse({
+  initialRef = "",
+}: {
+  initialRef?: string
+}) {
   const [state, setState] = useState<SubmitState>({ kind: "idle" })
   const [errors, setErrors] = useState<FormErrors>({})
 
@@ -35,11 +39,13 @@ export function FormularioInteresse() {
 
     const form = event.currentTarget
     const formData = new FormData(form)
+    const ref = String(formData.get("ref") ?? "").trim()
     const body = {
       email: String(formData.get("email") ?? ""),
       companyName: String(formData.get("nome") ?? ""),
       phone: String(formData.get("telefone") ?? ""),
       source: "/seja-revendedor",
+      ...(ref ? { ref } : {}),
     }
 
     try {
@@ -213,6 +219,28 @@ export function FormularioInteresse() {
                     {errors.phone && (
                       <p className="text-xs text-rose-600">{errors.phone}</p>
                     )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="ref">
+                      Código de indicação{" "}
+                      <span className="font-normal text-gray-400">
+                        (opcional)
+                      </span>
+                    </Label>
+                    <Input
+                      id="ref"
+                      name="ref"
+                      type="text"
+                      placeholder="Ex: NOME-1A2B"
+                      defaultValue={initialRef}
+                      autoCapitalize="characters"
+                      className="uppercase"
+                    />
+                    <p className="text-[11px] text-gray-400">
+                      Recebeu uma indicação de um revendedor? Informe o código
+                      dele aqui.
+                    </p>
                   </div>
 
                   {state.kind === "error" && (

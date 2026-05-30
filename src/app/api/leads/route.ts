@@ -7,6 +7,10 @@ import { rateLimit, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
 import { contextLogger } from "@/lib/logger"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { isValidPhone } from "@/lib/validation/phone"
+import {
+  validateReferralCode,
+  resolveReferrerFromCookie,
+} from "@/lib/referrals/capture"
 
 // Endpoint EXCLUSIVO de revenda (interessado em virar revendedor PMB).
 // Contato generico migrou para /api/contato (ContactMessage roteado por
@@ -27,6 +31,9 @@ const leadSchema = z
     state: z.string().trim().max(4).optional(),
     source: z.string().trim().max(120).optional(),
     notes: z.string().trim().max(2000).optional(),
+    // Codigo de indicacao informado no formulario (opcional). Tem prioridade
+    // sobre o cookie pmb_referral.
+    ref: z.string().trim().max(60).optional(),
   })
   .refine(
     (v) => (v.companyName ?? v.name ?? v.nome ?? "").trim().length >= 2,
@@ -76,6 +83,19 @@ export const POST = withRequestContext(
   const companyName = (data.companyName ?? data.name ?? data.nome ?? "").trim()
   const phone = (data.phone ?? data.telefone ?? "").trim()
 
+  // Atribuicao de indicacao: o codigo digitado no formulario (?ref) tem
+  // prioridade; sem ele, cai no cookie pmb_referral capturado quando o
+  // visitante abriu /seja-revendedor?ref=CODE. Persistido no lead para que a
+  // conversao (mesmo feita pela equipe) credite o revendedor que indicou.
+  let referrerTenantId: string | null = null
+  if (data.ref) {
+    const validated = await validateReferralCode(data.ref)
+    referrerTenantId = validated?.tenantId ?? null
+  }
+  if (!referrerTenantId) {
+    referrerTenantId = await resolveReferrerFromCookie()
+  }
+
   try {
     const lead = await prisma.lead.create({
       data: {
@@ -87,6 +107,7 @@ export const POST = withRequestContext(
         state: data.state || null,
         source: data.source || null,
         notes: data.notes || null,
+        referrerTenantId,
       },
     })
 

@@ -280,7 +280,8 @@ model Tenant {
   coupons                      Coupon[]
   tenantPayments               TenantPayment[]
   webhookLogs                  WebhookLog[]
-  leads                        Lead[]
+  leads                        Lead[]                       @relation("LeadConvertedTenant")
+  referredLeads                Lead[]                       @relation("LeadReferrer")
   supportNotes                 TenantSupportNote[]
   referralCommissionsReceived  ReferralCommission[]         @relation("ReferrerCommissions")
   referralCommissionsGenerated ReferralCommission[]         @relation("ReferredCommissions")
@@ -869,9 +870,15 @@ model Lead {
   state  String? @db.VarChar(4)
   source String? // origem do lead (ex: "/seja-revendedor")
 
-  // Quando converter em revendedor, liga ao tenant
+  // Quando converter em revendedor, liga ao tenant criado
   tenantId String? @map("tenant_id")
-  tenant   Tenant? @relation(fields: [tenantId], references: [id])
+  tenant   Tenant? @relation("LeadConvertedTenant", fields: [tenantId], references: [id])
+
+  // Indicacao: revendedor que indicou este interessado (capturado do ?ref na
+  // pagina /seja-revendedor ou do cookie pmb_referral). Preserva a atribuicao
+  // mesmo quando a conversao e feita pela equipe — nao depende do cookie do admin.
+  referrerTenantId String? @map("referrer_tenant_id")
+  referrer         Tenant? @relation("LeadReferrer", fields: [referrerTenantId], references: [id])
 
   notes     String?  @db.Text
   createdAt DateTime @default(now()) @map("created_at")
@@ -880,6 +887,7 @@ model Lead {
   @@index([status])
   @@index([email])
   @@index([createdAt])
+  @@index([referrerTenantId])
   @@map("leads")
 }
 

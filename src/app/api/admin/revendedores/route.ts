@@ -154,6 +154,10 @@ const createSchema = z.object({
   ownerPhone: z.string().min(8).max(20).optional(),
   planValue: z.number().positive().max(99999),
   accountManagerId: z.string().optional().nullable(),
+  // Conversao de lead → revenda: id do Lead de origem. Quando presente, a
+  // indicacao vem do referrerTenantId gravado no lead (nao do cookie do admin)
+  // e o lead e marcado CONVERTED + ligado ao tenant criado.
+  leadId: z.string().optional().nullable(),
 })
 
 function isoDayPlus(days: number): string {
@@ -277,7 +281,21 @@ export const POST = withRequestContext(
   }
 
   const referralCode = await generateUniqueReferralCode(data.slug)
-  const referrerTenantId = await resolveReferrerFromCookie()
+
+  // Atribuicao da indicacao: numa conversao de lead, usamos o referrer gravado
+  // no proprio lead (capturado quando o interessado preencheu o formulario) —
+  // o cookie pmb_referral aqui seria o do navegador do admin, nao do indicado.
+  // Fora da conversao, mantemos o cookie como fonte.
+  let lead: { id: string; referrerTenantId: string | null } | null = null
+  if (data.leadId) {
+    lead = await prisma.lead.findUnique({
+      where: { id: data.leadId },
+      select: { id: true, referrerTenantId: true },
+    })
+  }
+  const referrerTenantId = lead
+    ? lead.referrerTenantId
+    : await resolveReferrerFromCookie()
 
   const tenant = await prisma.tenant.create({
     data: {
@@ -311,6 +329,21 @@ export const POST = withRequestContext(
     },
     select: { id: true, email: true },
   })
+
+  // Conversao de lead: marca como convertido e liga ao tenant criado.
+  if (lead) {
+    await prisma.lead
+      .update({
+        where: { id: lead.id },
+        data: { status: "CONVERTED", tenantId: tenant.id },
+      })
+      .catch((err: unknown) => {
+        contextLogger().error(
+          { err, event: "admin.revendedores.lead_convert_link_failed", leadId: lead?.id },
+          "falha ao marcar lead como convertido",
+        )
+      })
+  }
 
   // Dispara email de onboarding com credenciais e link de pagamento.
   // Falha silenciosa se nenhum provedor estiver configurado — não quebra a criação.

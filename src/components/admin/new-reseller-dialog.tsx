@@ -25,6 +25,19 @@ import { appDomain, vitrineDomain, vitrineUrl as buildVitrineUrl } from "@/lib/t
 
 interface NewResellerDialogProps {
   onCreated: () => void
+  /** Pré-preenche os campos (usado na conversão de um lead em revenda). */
+  initialValues?: {
+    name?: string
+    ownerName?: string
+    ownerEmail?: string
+    ownerPhone?: string
+  }
+  /** Quando presente, vincula a criação ao lead (atribui referrer + marca CONVERTED). */
+  leadId?: string
+  /** Texto do botão de abertura. Padrão: "Nova revenda". */
+  triggerLabel?: string
+  /** Estilo alternativo do gatilho (compacto, p/ lista de leads). */
+  triggerVariant?: "primary" | "outline"
 }
 
 interface CreatedResult {
@@ -47,7 +60,13 @@ interface CreatedResult {
   }
 }
 
-export function NewResellerDialog({ onCreated }: NewResellerDialogProps) {
+export function NewResellerDialog({
+  onCreated,
+  initialValues,
+  leadId,
+  triggerLabel = "Nova revenda",
+  triggerVariant = "primary",
+}: NewResellerDialogProps) {
   const [open, setOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -73,6 +92,7 @@ export function NewResellerDialog({ onCreated }: NewResellerDialogProps) {
       ownerCpfCnpj: String(formData.get("ownerCpfCnpj") ?? "").replace(/\D/g, ""),
       ownerPhone: String(formData.get("ownerPhone") ?? "").trim(),
       planValue: Number(formData.get("planValue") ?? 0),
+      ...(leadId ? { leadId } : {}),
     }
 
     try {
@@ -107,13 +127,25 @@ export function NewResellerDialog({ onCreated }: NewResellerDialogProps) {
 
   return (
     <>
-      <Button
-        onClick={() => setOpen(true)}
-        className="bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)]"
-      >
-        <Plus className="mr-1.5 h-4 w-4" />
-        Nova revenda
-      </Button>
+      {triggerVariant === "outline" ? (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => setOpen(true)}
+        >
+          <Plus className="mr-1.5 h-3.5 w-3.5" />
+          {triggerLabel}
+        </Button>
+      ) : (
+        <Button
+          onClick={() => setOpen(true)}
+          className="bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)]"
+        >
+          <Plus className="mr-1.5 h-4 w-4" />
+          {triggerLabel}
+        </Button>
+      )}
 
       <Dialog open={open} onOpenChange={(o) => (o ? setOpen(true) : close())}>
         <DialogContent className="sm:max-w-lg">
@@ -135,6 +167,7 @@ export function NewResellerDialog({ onCreated }: NewResellerDialogProps) {
                     name="name"
                     required
                     placeholder="Ex: Cursos da Maria"
+                    defaultValue={initialValues?.name ?? ""}
                     className="mt-1.5"
                   />
                 </div>
@@ -164,6 +197,7 @@ export function NewResellerDialog({ onCreated }: NewResellerDialogProps) {
                     required
                     className="mt-1.5"
                     placeholder="Nome completo"
+                    defaultValue={initialValues?.ownerName ?? ""}
                   />
                 </div>
                 <div>
@@ -175,6 +209,7 @@ export function NewResellerDialog({ onCreated }: NewResellerDialogProps) {
                     required
                     className="mt-1.5"
                     placeholder="email@empresa.com"
+                    defaultValue={initialValues?.ownerEmail ?? ""}
                   />
                 </div>
                 <div>
@@ -195,6 +230,7 @@ export function NewResellerDialog({ onCreated }: NewResellerDialogProps) {
                     name="ownerPhone"
                     className="mt-1.5"
                     placeholder="(11) 99999-9999"
+                    defaultValue={initialValues?.ownerPhone ?? ""}
                   />
                 </div>
                 <div className="sm:col-span-2">

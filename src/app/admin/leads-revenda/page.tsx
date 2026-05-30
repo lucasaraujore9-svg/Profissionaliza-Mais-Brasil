@@ -40,6 +40,7 @@ export default async function AdminLeadsRevendaPage({
     where: status !== "ALL" ? { status } : {},
     orderBy: { createdAt: "desc" },
     take: 100,
+    include: { referrer: { select: { name: true } } },
   })
 
   // Esconde leads legados de origem contato — antes da separacao contato/revenda
@@ -64,7 +65,11 @@ export default async function AdminLeadsRevendaPage({
     status: l.status,
     notes: l.notes,
     createdAt: l.createdAt.toISOString(),
+    referrerName: l.referrer?.name ?? null,
+    convertedTenantId: l.tenantId,
   }))
+
+  const canConvert = session.role === "SUPER_ADMIN"
 
   return (
     <div className="space-y-6">
@@ -96,7 +101,11 @@ export default async function AdminLeadsRevendaPage({
         })}
       </div>
 
-      <LeadsRevendaList leads={leads} apiBase="/api/admin/leads-revenda" />
+      <LeadsRevendaList
+        leads={leads}
+        apiBase="/api/admin/leads-revenda"
+        canConvert={canConvert}
+      />
     </div>
   )
 }

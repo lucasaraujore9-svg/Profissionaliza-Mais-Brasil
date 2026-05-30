@@ -3,7 +3,8 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
-import { Building2, Mail, MapPin, Phone } from "lucide-react"
+import { Building2, Mail, MapPin, Phone, UserPlus } from "lucide-react"
+import { NewResellerDialog } from "@/components/admin/new-reseller-dialog"
 
 export type LeadStatus = "NEW" | "CONTACTED" | "CONVERTED" | "LOST"
 
@@ -19,6 +20,10 @@ export interface RevendaLead {
   status: LeadStatus
   notes: string | null
   createdAt: string
+  /** Nome do revendedor que indicou este lead (se houve indicação). */
+  referrerName: string | null
+  /** Tenant criado quando o lead foi convertido em revenda. */
+  convertedTenantId: string | null
 }
 
 const STATUS_OPTIONS: { value: LeadStatus; label: string }[] = [
@@ -41,9 +46,12 @@ function formatDate(iso: string): string {
 export function LeadsRevendaList({
   leads,
   apiBase,
+  canConvert = false,
 }: {
   leads: RevendaLead[]
   apiBase: string
+  /** Só SUPER_ADMIN pode criar revenda — controla o botão "Converter". */
+  canConvert?: boolean
 }) {
   const router = useRouter()
   const [saving, setSaving] = useState<string | null>(null)
@@ -126,6 +134,12 @@ export function LeadsRevendaList({
                     {l.source}
                   </span>
                 )}
+                {l.referrerName && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 font-semibold text-amber-700">
+                    <UserPlus className="h-3 w-3" aria-hidden />
+                    Indicado por {l.referrerName}
+                  </span>
+                )}
                 <span className="text-gray-400">{formatDate(l.createdAt)}</span>
               </div>
               {l.notes && (
@@ -135,18 +149,42 @@ export function LeadsRevendaList({
               )}
             </div>
 
-            <select
-              value={l.status}
-              disabled={saving === l.id}
-              onChange={(e) => updateStatus(l.id, e.target.value as LeadStatus)}
-              className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-bold text-[var(--color-pmb-green)] disabled:opacity-60"
-            >
-              {STATUS_OPTIONS.map((s) => (
-                <option key={s.value} value={s.value}>
-                  {s.label}
-                </option>
-              ))}
-            </select>
+            <div className="flex shrink-0 flex-col items-end gap-2">
+              <select
+                value={l.status}
+                disabled={saving === l.id}
+                onChange={(e) =>
+                  updateStatus(l.id, e.target.value as LeadStatus)
+                }
+                className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-bold text-[var(--color-pmb-green)] disabled:opacity-60"
+              >
+                {STATUS_OPTIONS.map((s) => (
+                  <option key={s.value} value={s.value}>
+                    {s.label}
+                  </option>
+                ))}
+              </select>
+
+              {canConvert &&
+                (l.convertedTenantId || l.status === "CONVERTED" ? (
+                  <span className="text-[11px] font-semibold text-gray-400">
+                    Convertido em revenda
+                  </span>
+                ) : (
+                  <NewResellerDialog
+                    onCreated={() => router.refresh()}
+                    leadId={l.id}
+                    triggerLabel="Converter em revenda"
+                    triggerVariant="outline"
+                    initialValues={{
+                      name: l.companyName,
+                      ownerName: l.companyName,
+                      ownerEmail: l.email,
+                      ownerPhone: l.phone,
+                    }}
+                  />
+                ))}
+            </div>
           </div>
         </li>
       ))}
