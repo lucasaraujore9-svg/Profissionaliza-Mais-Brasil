@@ -57,11 +57,23 @@ const INSTITUCIONAL_LINKS: NavLink[] = [
 
 interface FooterMainProps {
   categorias?: CategoriaInfo[]
+  /**
+   * Sobrescreve os links de redes sociais. A vitrine do revendedor passa os
+   * perfis preenchidos na personalização da vitrine (tenant) em vez dos
+   * perfis oficiais da PMB.
+   */
+  social?: { instagram?: string | null; facebook?: string | null; youtube?: string | null }
+  /** Exibe a linha do CNPJ da PMB. A vitrine do revendedor passa `false`. */
+  showCnpj?: boolean
 }
 
-export function FooterMain({ categorias = [] }: FooterMainProps) {
+export function FooterMain({
+  categorias = [],
+  social: socialOverride,
+  showCnpj = true,
+}: FooterMainProps) {
   const support = getSupportContacts()
-  const social = getSocialLinks()
+  const social = socialOverride ?? getSocialLinks()
   const categoriaLinks: NavLink[] = categorias.slice(0, 6).map((cat) => ({
     label: cat.nome,
     href: `/cursos?categoria=${cat.slug}`,
@@ -199,7 +211,9 @@ export function FooterMain({ categorias = [] }: FooterMainProps) {
             © {new Date().getFullYear()} Profissionaliza Mais Brasil · Todos
             os direitos reservados
           </p>
-          <p>CNPJ 66.553.170/0001-01 · Pagamentos 100% seguros</p>
+          <p>
+            {showCnpj ? "CNPJ 66.553.170/0001-01 · " : ""}Pagamentos 100% seguros
+          </p>
         </div>
       </div>
     </footer>

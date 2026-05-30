@@ -27,7 +27,10 @@ export function TecnicaSection({
   fallbackUrl,
 }: TecnicaSectionProps) {
   const visibleCourses = courses.slice(0, 8)
-  if (visibleCourses.length === 0) return null
+  // Mesmo sem cursos individuais cadastrados, a seção continua funcional
+  // (header + CTA "Conhecer todos") desde que haja a URL base — só escondemos
+  // quando não há nem cursos nem URL para onde redirecionar.
+  if (visibleCourses.length === 0 && !fallbackUrl) return null
 
   return (
     <section className="bg-white">
@@ -82,7 +85,10 @@ export function TecnicaSection({
               </Link>
             </div>
 
-            {/* Grade de cursos — sem número, sem duração */}
+            {/* Grade de cursos — sem número, sem duração.
+                Só renderiza quando há cursos cadastrados; sem lista, a seção
+                fica apenas com o header + CTA "Conhecer todos". */}
+            {visibleCourses.length > 0 && (
             <ul className="mt-7 grid grid-cols-2 gap-3 md:mt-9 md:grid-cols-3 lg:grid-cols-4">
               {visibleCourses.map((course) => (
                 <li key={course.name}>
@@ -114,6 +120,7 @@ export function TecnicaSection({
                 </li>
               ))}
             </ul>
+            )}
           </div>
         </div>
       </div>

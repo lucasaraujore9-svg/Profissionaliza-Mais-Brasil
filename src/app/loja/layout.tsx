@@ -5,6 +5,7 @@ import { loadCategorias } from "@/lib/catalog/home"
 import { getCurrentTenant } from "@/lib/tenant/current"
 import { tecnicaFromTenant } from "@/lib/catalog/tecnica"
 import { getRequestOrigin } from "@/lib/seo/host"
+import { normalizeSocialUrl } from "@/lib/branding"
 import { JsonLd } from "@/components/seo/json-ld"
 import { storeJsonLd, webSiteJsonLd } from "@/lib/seo/jsonld"
 import { SITE_NAME } from "@/lib/seo/site"
@@ -116,8 +117,12 @@ export default async function LojaLayout({
     })
   }
 
+  // Redes sociais do revendedor, normalizadas (handle/@/URL → URL absoluta).
+  const instagramUrl = normalizeSocialUrl(tenant?.instagram, "instagram")
+  const facebookUrl = normalizeSocialUrl(tenant?.facebook, "facebook")
+
   // JSON-LD da vitrine (Store) + WebSite — só faz sentido com tenant + origem.
-  const sameAs = [tenant?.instagram, tenant?.facebook].filter(
+  const sameAs = [instagramUrl, facebookUrl].filter(
     (v): v is string => Boolean(v),
   )
 
@@ -151,7 +156,15 @@ export default async function LojaLayout({
         })()}
       />
       <main className="flex-1">{children}</main>
-      <FooterMain categorias={categorias} />
+      <FooterMain
+        categorias={categorias}
+        showCnpj={false}
+        social={{
+          instagram: instagramUrl,
+          facebook: facebookUrl,
+          youtube: null,
+        }}
+      />
     </div>
   )
 }

@@ -113,3 +113,34 @@ export function getSocialLinks(): SocialLinks {
     tiktok: process.env.NEXT_PUBLIC_TIKTOK_URL?.trim() || null,
   }
 }
+
+/**
+ * Normaliza um valor de rede social para uma URL absoluta clicavel.
+ *
+ * Os campos `instagram`/`facebook` do tenant aceitam texto livre na
+ * personalizacao da vitrine — o revendedor costuma digitar so o `@usuario`
+ * ou `usuario`. Sem normalizar, `<a href="usuario">` resolveria relativo ao
+ * dominio da vitrine (link quebrado). Aceita: URL completa, dominio sem
+ * protocolo (`instagram.com/x`) ou handle (`@x` / `x`). Retorna null se vazio.
+ */
+export function normalizeSocialUrl(
+  value: string | null | undefined,
+  platform: "instagram" | "facebook",
+): string | null {
+  const v = value?.trim()
+  if (!v) return null
+  // Ja e URL absoluta.
+  if (/^https?:\/\//i.test(v)) return v
+  // Dominio sem protocolo (ex: "instagram.com/fulano", "www.facebook.com/x").
+  if (/^(?:www\.)?(?:instagram\.com|facebook\.com|fb\.com)\//i.test(v)) {
+    return `https://${v.replace(/^www\./i, "")}`
+  }
+  // Handle solto: remove @ e barras das pontas.
+  const handle = v.replace(/^@/, "").replace(/^\/+|\/+$/g, "")
+  if (!handle) return null
+  const base =
+    platform === "instagram"
+      ? "https://www.instagram.com/"
+      : "https://www.facebook.com/"
+  return `${base}${handle}`
+}
