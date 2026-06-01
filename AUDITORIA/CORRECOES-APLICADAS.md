@@ -90,6 +90,12 @@ Investigado e **adequadamente mitigado / sem ação segura** (com justificativa)
 - **Housekeeping:** `*.tsbuildinfo` **já está no `.gitignore`**. Os diretórios de scaffold (`.claude-skills/`, `vibe-scaffold/`) são tooling do projeto, versionados de propósito — não removidos unilateralmente (decisão de organização do time; sem impacto em runtime).
 - **`process.env` direto em `admin/config`:** rota admin que testa integrações lendo envs — centralizar via `env.ts` é cosmético, baixo valor. Mantido.
 
+## Decisões do dono do produto (2026-05-31) — itens encerrados
+
+- **PMB_SALES gerencia alunos de qualquer tenant:** **MANTER** (confirmado pelo dono). É comportamento intencional; operações destrutivas já são SUPER_ADMIN-only. Sem alteração.
+- **CSP estrita (nonces):** **DEIXAR PARA DEPOIS** (confirmado) — depende de ambiente para testar o checkout do Mercado Pago.
+- **Token em `/cobranca`:** **MANTER a proteção atual (rate-limit)**, considerada suficiente pela própria verificação. Não alterado para não arriscar o fluxo de pagamento (links já enviados a pagadores deslogados quebrariam). Token assinado fica como melhoria futura, se algum dia se quiser fechar 100% a enumeração, com janela de migração e teste e2e.
+
 ## Itens deferidos — resolução final
 
 - **(c) Emissão manual de certificado sem checar conclusão** → **FALSO POSITIVO**. `issueCertificateManual` (`src/lib/certificates/issue.ts:164`) **já exige** `Enrollment.status === COMPLETED` quando `force=false`, e `force` é restrito a SUPER_ADMIN na rota. Nada a corrigir.
