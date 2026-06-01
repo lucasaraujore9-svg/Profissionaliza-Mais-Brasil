@@ -21,6 +21,8 @@ export interface CourseListItem {
   hasCustomDescription?: boolean
   hasCustomParcelas?: boolean
   enrollmentsCount: number
+  createdAt?: string
+  updatedAt?: string
 }
 
 interface CourseListTableProps {

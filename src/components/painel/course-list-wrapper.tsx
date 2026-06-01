@@ -3,13 +3,17 @@
 import Image from "next/image"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import {
+  ArrowUpDown,
   BookOpen,
+  CreditCard,
   Eye,
   EyeOff,
   HelpCircle,
   Info,
+  Layers,
   Loader2,
   Pencil,
+  Repeat,
   Search,
   Sparkles,
   Star,
@@ -20,6 +24,25 @@ import { CourseEditDrawer } from "./course-edit-drawer"
 import type { CourseListItem } from "./course-list-table"
 
 type FilterValue = "Todos" | "Visíveis" | "Ocultos" | "Em destaque"
+type PaymentFilter = "all" | "ONE_TIME" | "MONTHLY"
+type SortValue =
+  | "ordem"
+  | "recent-edit"
+  | "recent-add"
+  | "price-desc"
+  | "price-asc"
+  | "title-asc"
+  | "enrollments-desc"
+
+const SORT_OPTIONS: { value: SortValue; label: string }[] = [
+  { value: "ordem", label: "Ordem da vitrine (padrão)" },
+  { value: "recent-edit", label: "Editados recentemente" },
+  { value: "recent-add", label: "Adicionados recentemente" },
+  { value: "price-desc", label: "Maior preço" },
+  { value: "price-asc", label: "Menor preço" },
+  { value: "title-asc", label: "Título (A–Z)" },
+  { value: "enrollments-desc", label: "Mais matrículas" },
+]
 
 function formatBRL(value: number): string {
   if (!value || value <= 0) return "—"
@@ -35,6 +58,8 @@ export function CourseListWrapper() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [search, setSearch] = useState("")
   const [filter, setFilter] = useState<FilterValue>("Todos")
+  const [payment, setPayment] = useState<PaymentFilter>("all")
+  const [sort, setSort] = useState<SortValue>("ordem")
 
   const loadCourses = useCallback(async () => {
     setLoadError(null)
@@ -57,27 +82,63 @@ export function CourseListWrapper() {
   }, [loadCourses])
 
   const stats = useMemo(() => {
-    if (!courses) return { total: 0, visible: 0, hidden: 0, featured: 0 }
+    if (!courses)
+      return { total: 0, visible: 0, hidden: 0, featured: 0, oneTime: 0, monthly: 0 }
     return {
       total: courses.length,
       visible: courses.filter((c) => c.isVisible).length,
       hidden: courses.filter((c) => !c.isVisible).length,
       featured: courses.filter((c) => c.isFeatured).length,
+      oneTime: courses.filter((c) => c.paymentType === "ONE_TIME").length,
+      monthly: courses.filter((c) => c.paymentType === "MONTHLY").length,
     }
   }, [courses])
 
   const filtered = useMemo(() => {
     if (!courses) return []
-    return courses.filter((course) => {
+    const list = courses.filter((course) => {
       if (filter === "Visíveis" && !course.isVisible) return false
       if (filter === "Ocultos" && course.isVisible) return false
       if (filter === "Em destaque" && !course.isFeatured) return false
+      if (payment === "ONE_TIME" && course.paymentType !== "ONE_TIME") return false
+      if (payment === "MONTHLY" && course.paymentType !== "MONTHLY") return false
       if (search.trim()) {
         return course.title.toLowerCase().includes(search.trim().toLowerCase())
       }
       return true
     })
-  }, [courses, filter, search])
+
+    const byDate = (a?: string, b?: string) => (b ?? "").localeCompare(a ?? "")
+    const sorted = [...list]
+    switch (sort) {
+      case "recent-edit":
+        sorted.sort((a, b) => byDate(a.updatedAt, b.updatedAt))
+        break
+      case "recent-add":
+        sorted.sort((a, b) => byDate(a.createdAt, b.createdAt))
+        break
+      case "price-desc":
+        sorted.sort((a, b) => b.price - a.price)
+        break
+      case "price-asc":
+        sorted.sort((a, b) => a.price - b.price)
+        break
+      case "title-asc":
+        sorted.sort((a, b) => a.title.localeCompare(b.title, "pt-BR"))
+        break
+      case "enrollments-desc":
+        sorted.sort((a, b) => b.enrollmentsCount - a.enrollmentsCount)
+        break
+      case "ordem":
+      default:
+        sorted.sort(
+          (a, b) =>
+            a.customOrder - b.customOrder || byDate(a.createdAt, b.createdAt),
+        )
+        break
+    }
+    return sorted
+  }, [courses, filter, payment, search, sort])
 
   const editingCourse = useMemo(
     () => (editingId ? courses?.find((c) => c.id === editingId) ?? null : null),
@@ -105,7 +166,18 @@ export function CourseListWrapper() {
     void loadCourses()
   }
 
-  const hasFilters = filter !== "Todos" || search.trim().length > 0
+  const hasFilters =
+    filter !== "Todos" ||
+    payment !== "all" ||
+    sort !== "ordem" ||
+    search.trim().length > 0
+
+  const resetFilters = () => {
+    setSearch("")
+    setFilter("Todos")
+    setPayment("all")
+    setSort("ordem")
+  }
 
   return (
     <>
@@ -174,15 +246,60 @@ export function CourseListWrapper() {
           {hasFilters && (
             <button
               type="button"
-              onClick={() => {
-                setSearch("")
-                setFilter("Todos")
-              }}
+              onClick={resetFilters}
               className="self-start rounded-md px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100 hover:text-[var(--color-pmb-green-900)]"
             >
               Limpar filtros
             </button>
           )}
+        </div>
+
+        {/* Filtro por modo de pagamento + ordenação */}
+        <div className="mt-3 flex flex-col gap-3 border-t border-gray-100 pt-3 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+              Modo de pagamento
+            </span>
+            <div className="inline-flex flex-wrap gap-1 rounded-lg bg-gray-100 p-1">
+              <SegmentButton
+                active={payment === "all"}
+                onClick={() => setPayment("all")}
+                icon={Layers}
+                label="Todos"
+                count={stats.total}
+              />
+              <SegmentButton
+                active={payment === "ONE_TIME"}
+                onClick={() => setPayment("ONE_TIME")}
+                icon={CreditCard}
+                label="Pagamento único"
+                count={stats.oneTime}
+              />
+              <SegmentButton
+                active={payment === "MONTHLY"}
+                onClick={() => setPayment("MONTHLY")}
+                icon={Repeat}
+                label="Mensalidade"
+                count={stats.monthly}
+              />
+            </div>
+          </div>
+
+          <label className="flex items-center gap-2 text-xs font-medium text-gray-600">
+            <ArrowUpDown className="h-3.5 w-3.5 text-gray-400" />
+            <span className="shrink-0">Ordenar por</span>
+            <select
+              value={sort}
+              onChange={(e) => setSort(e.target.value as SortValue)}
+              className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-[var(--color-pmb-green-900)] shadow-sm outline-none focus:border-[var(--color-pmb-green)] focus:ring-1 focus:ring-[var(--color-pmb-lime)]"
+            >
+              {SORT_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
 
         <div className="mt-3 flex items-start gap-2 rounded-lg border border-[rgba(2,89,24,0.08)] bg-[var(--color-pmb-mist)]/40 p-3 text-xs text-[rgba(2,89,24,0.7)]">
@@ -224,6 +341,11 @@ export function CourseListWrapper() {
               {filtered.length}{" "}
               {filtered.length === 1 ? "curso encontrado" : "cursos encontrados"}
               {filter !== "Todos" ? ` · ${filter.toLowerCase()}` : ""}
+              {payment === "ONE_TIME"
+                ? " · pagamento único"
+                : payment === "MONTHLY"
+                  ? " · mensalidade"
+                  : ""}
             </h3>
             <span className="inline-flex items-center gap-1 text-[11px] text-gray-500">
               <Info className="h-3 w-3" />
@@ -240,10 +362,7 @@ export function CourseListWrapper() {
                 Tente ajustar os filtros ou{" "}
                 <button
                   type="button"
-                  onClick={() => {
-                    setSearch("")
-                    setFilter("Todos")
-                  }}
+                  onClick={resetFilters}
                   className="font-semibold text-[var(--color-pmb-green)] underline hover:text-[var(--color-pmb-green-700)]"
                 >
                   ver todos os cursos
@@ -385,6 +504,49 @@ export function CourseListWrapper() {
         onSaved={handleSaved}
       />
     </>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* SegmentButton — botão de filtro segmentado (modo de pagamento)      */
+/* ------------------------------------------------------------------ */
+
+function SegmentButton({
+  active,
+  onClick,
+  icon: Icon,
+  label,
+  count,
+}: {
+  active: boolean
+  onClick: () => void
+  icon: typeof BookOpen
+  label: string
+  count: number
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
+        active
+          ? "bg-white text-[var(--color-pmb-green-900)] shadow-sm"
+          : "text-gray-500 hover:text-[var(--color-pmb-green-900)]"
+      }`}
+    >
+      <Icon className="h-3.5 w-3.5" />
+      {label}
+      <span
+        className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
+          active
+            ? "bg-[var(--color-pmb-lime-50)] text-[var(--color-pmb-green)]"
+            : "bg-gray-200 text-gray-500"
+        }`}
+      >
+        {count}
+      </span>
+    </button>
   )
 }
 

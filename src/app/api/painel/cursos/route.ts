@@ -65,6 +65,8 @@ export const GET = withRequestContext(
         hasCustomDescription: tc.customDescription != null,
         hasCustomParcelas: tc.customParcelas != null,
         enrollmentsCount: tc._count.enrollments,
+        createdAt: tc.createdAt.toISOString(),
+        updatedAt: tc.updatedAt.toISOString(),
       })),
     })
   },

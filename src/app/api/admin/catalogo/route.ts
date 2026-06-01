@@ -27,6 +27,7 @@ export const GET = withRequestContext(
         status: true,
         capaImageUrl: true,
         syncedAt: true,
+        updatedAt: true,
         precoVitrineMain: true,
         destaqueHome: true,
         paymentTypeMain: true,
@@ -58,12 +59,14 @@ export const GET = withRequestContext(
         status: c.status,
         capaImageUrl: c.capaImageUrl,
         syncedAt: c.syncedAt.toISOString(),
+        updatedAt: c.updatedAt.toISOString(),
         resellers: c._count.tenantCourses,
         students: c._count.enrollments,
         precoVitrineMain: c.precoVitrineMain ? Number(c.precoVitrineMain) : null,
         destaqueHome: c.destaqueHome,
         paymentTypeMain: c.paymentTypeMain,
         monthlyMonthsMain: c.monthlyMonthsMain,
+        hasOverride: c.precoVitrineMain != null,
       })),
       lastSync: lastSync
         ? {

@@ -14,6 +14,7 @@ export interface CatalogCourse {
   status: string
   capaImageUrl: string | null
   syncedAt: string
+  updatedAt?: string
   resellers: number
   students: number
   precoVitrineMain?: number | null
@@ -27,6 +28,9 @@ interface CatalogCourseGridProps {
   courses: CatalogCourse[]
   canEdit?: boolean
   onEdit?: (id: string) => void
+  /** Total de cursos antes dos filtros — usado para diferenciar
+   *  "catálogo vazio" de "nenhum resultado para o filtro". */
+  totalCount?: number
 }
 
 function formatMoney(v: number | null): string {
@@ -34,19 +38,25 @@ function formatMoney(v: number | null): string {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
 }
 
-export function CatalogCourseGrid({ courses, canEdit = false, onEdit }: CatalogCourseGridProps) {
+export function CatalogCourseGrid({ courses, canEdit = false, onEdit, totalCount }: CatalogCourseGridProps) {
+  const total = totalCount ?? courses.length
+  const isFiltered = totalCount != null && courses.length !== totalCount
   return (
     <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold text-[var(--color-pmb-green-900)]">
-          {courses.length} cursos no catálogo
+          {isFiltered
+            ? `${courses.length} de ${total} cursos`
+            : `${courses.length} cursos no catálogo`}
         </h3>
         <span className="text-xs text-gray-500">Agregado de todos os revendedores</span>
       </div>
 
       {courses.length === 0 ? (
         <div className="mt-6 rounded-xl border border-dashed border-gray-300 bg-gray-50 p-10 text-center text-sm text-gray-500">
-          Nenhum curso no catálogo. Execute uma sincronização para puxar os cursos.
+          {total === 0
+            ? "Nenhum curso no catálogo. Execute uma sincronização para puxar os cursos."
+            : "Nenhum curso corresponde aos filtros selecionados."}
         </div>
       ) : (
         <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
