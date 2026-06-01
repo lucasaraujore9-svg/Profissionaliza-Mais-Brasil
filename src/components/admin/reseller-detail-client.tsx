@@ -19,6 +19,7 @@ import {
 import { ResellerSupportNotes } from "./reseller-support-notes"
 import { ResellerImpersonateButton } from "./reseller-impersonate-button"
 import { ResellerBillingEdit } from "./reseller-billing-edit"
+import { ResellerPasswordEdit } from "./reseller-password-edit"
 import {
   ResellerReferralConfig,
   type ReferralStats,
@@ -159,6 +160,10 @@ export function ResellerDetailClient({ tenantId }: ResellerDetailClientProps) {
             referrer={data.referrer}
             stats={data.referralStats}
             onSaved={load}
+          />
+          <ResellerPasswordEdit
+            tenantId={tenantId}
+            ownerEmail={data.reseller.email}
           />
           <ResellerActionButtons
             tenantId={tenantId}

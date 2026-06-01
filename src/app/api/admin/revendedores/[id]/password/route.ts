@@ -1,0 +1,101 @@
+import { NextResponse } from "next/server"
+import { z } from "zod"
+import { hash } from "bcryptjs"
+import { prisma } from "@/lib/prisma"
+import { requireAdminSession } from "@/lib/auth/admin-session"
+import { generateTemporaryPassword } from "@/lib/students/generate-password"
+import { withRequestContextParams } from "@/lib/observability/with-request-context"
+
+// Aceita ou uma senha digitada pelo admin, ou a flag `generate` para o sistema
+// criar uma aleatória. Por questão de segurança, a senha NUNCA é "visualizada"
+// (o banco só guarda o hash bcrypt) — o admin define uma nova e o endpoint a
+// devolve em texto puro uma única vez para repasse ao revendedor.
+const bodySchema = z
+  .object({
+    newPassword: z.string().min(8, "A senha precisa ter pelo menos 8 caracteres").max(72).optional(),
+    generate: z.boolean().optional(),
+  })
+  .refine((data) => Boolean(data.generate) || Boolean(data.newPassword), {
+    message: "Informe uma senha ou marque para gerar automaticamente",
+    path: ["newPassword"],
+  })
+
+export const PATCH = withRequestContextParams<{ id: string }>(
+  { action: "admin.revendedores.password.update", route: "/api/admin/revendedores/[id]/password" },
+  async (request: Request, { params }) => {
+    const ctx = await requireAdminSession()
+    if (!ctx) {
+      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
+    }
+
+    const { id } = await params
+
+    let payload: unknown
+    try {
+      payload = await request.json()
+    } catch {
+      return NextResponse.json({ error: "JSON inválido" }, { status: 400 })
+    }
+
+    const parsed = bodySchema.safeParse(payload)
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "Dados inválidos", fields: parsed.error.flatten().fieldErrors },
+        { status: 400 },
+      )
+    }
+
+    const tenant = await prisma.tenant.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        slug: true,
+        accountManagerId: true,
+        owner: { select: { id: true, email: true, name: true } },
+      },
+    })
+
+    if (!tenant) {
+      return NextResponse.json({ error: "Revendedor não encontrado" }, { status: 404 })
+    }
+    if (tenant.slug === "__pmb__") {
+      return NextResponse.json({ error: "Tenant interno PMB não pode ser editado" }, { status: 400 })
+    }
+    if (!tenant.owner) {
+      return NextResponse.json(
+        { error: "Este revendedor não possui usuário dono cadastrado" },
+        { status: 400 },
+      )
+    }
+
+    // Escopo de autorização: SUPER_ADMIN gerencia todos; PMB_RESELLER_MGR só os
+    // revendedores que gerencia (accountManagerId). PMB_SALES não troca senha.
+    if (
+      ctx.role !== "SUPER_ADMIN" &&
+      !(ctx.role === "PMB_RESELLER_MGR" && tenant.accountManagerId === ctx.userId)
+    ) {
+      return NextResponse.json({ error: "Sem permissão para este revendedor" }, { status: 403 })
+    }
+
+    const plain = parsed.data.generate
+      ? generateTemporaryPassword(12)
+      : parsed.data.newPassword!
+
+    const passwordHash = await hash(plain, 12)
+
+    await prisma.user.update({
+      where: { id: tenant.owner.id },
+      // Não força troca no próximo login — o admin definiu uma senha conhecida.
+      data: { passwordHash, mustChangePassword: false },
+    })
+
+    return NextResponse.json({
+      data: {
+        ok: true,
+        password: plain,
+        ownerEmail: tenant.owner.email,
+        ownerName: tenant.owner.name,
+      },
+    })
+  },
+)
