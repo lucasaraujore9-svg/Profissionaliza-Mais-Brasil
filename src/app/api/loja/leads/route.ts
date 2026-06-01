@@ -15,8 +15,6 @@ import { resolveTenantFromRequest } from "@/lib/tenant/from-request"
 const CONSENT_VERSION = "2026-05-v1"
 const DEDUP_WINDOW_MS = 24 * 60 * 60 * 1000
 
-const phoneRegex = /^\+?\d{10,15}$/
-
 const bodySchema = z.object({
   nome: z.string().trim().min(2).max(160),
   email: z.string().email().toLowerCase().trim(),

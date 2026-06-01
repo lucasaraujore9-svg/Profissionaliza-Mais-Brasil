@@ -1,7 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { contextLogger } from "@/lib/logger"
 import { queueLeadMessage } from "./dispatch"
-import { resolveAutomationContext } from "./context"
 import { StudentLeadStage } from "@prisma/client"
 
 const DEDUP_WINDOW_MS = 48 * 60 * 60 * 1000

@@ -20,12 +20,19 @@ import { z } from "zod"
  *     importe `assertEnv()` em src/app/layout.tsx ou em um init bootstrap.
  */
 
-const isProd = process.env.NODE_ENV === "production"
+// Durante `next build` (coleta de page-data), o Next define NEXT_PHASE. Nessa
+// fase NÃO exigimos as envs de runtime: importar uma rota para coletar metadata
+// não deve travar o build por falta de um secret de integração (ex.: Preview
+// deploy sem ASAAS_WEBHOOK_TOKEN). A validação fail-closed continua valendo em
+// RUNTIME (NEXT_PHASE ausente), inclusive em produção — apenas o build deixa de
+// derrubar. Isso concretiza a intenção já documentada do proxy lazy abaixo.
+const isBuildPhase = process.env.NEXT_PHASE === "phase-production-build"
+const isProd = process.env.NODE_ENV === "production" && !isBuildPhase
 
 /**
  * `requiredInProd(name, schema)` — opcional em dev, obrigatório em prod.
  * Evita travar `npm run dev` quando o dev local não configurou todas as
- * integrações.
+ * integrações. Também é relaxado durante o build (ver `isBuildPhase`).
  */
 function requiredInProd<T extends z.ZodTypeAny>(schema: T) {
   return isProd ? schema : schema.optional()

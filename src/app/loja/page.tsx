@@ -26,7 +26,7 @@ export default async function LojaHomePage() {
   }
 
   const [showcase, bannerSlides] = await Promise.all([
-    loadShowcase(),
+    loadShowcase(tenant.id),
     prisma.bannerSlide.findMany({
       where: { tenantId: tenant.id, active: true },
       orderBy: [{ order: "asc" }, { createdAt: "asc" }],

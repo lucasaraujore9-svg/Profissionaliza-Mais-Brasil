@@ -12,11 +12,24 @@ describe("validateMpWebhookSignature", () => {
   const secret = "mp-webhook-secret-de-teste"
   const dataId = "123456789"
   const requestId = "req-abc-123"
-  const ts = "1700000000"
+  // ts fresco (epoch em segundos) — anti-replay exige janela recente.
+  const ts = String(Math.floor(Date.now() / 1000))
 
-  it("aceita assinatura HMAC válida", () => {
+  it("aceita assinatura HMAC válida e recente", () => {
     const xSig = sign(dataId, requestId, ts, secret)
     expect(validateMpWebhookSignature(xSig, requestId, dataId, secret)).toBe(true)
+  })
+
+  it("aceita ts em milissegundos (13 dígitos)", () => {
+    const tsMs = String(Date.now())
+    const xSig = sign(dataId, requestId, tsMs, secret)
+    expect(validateMpWebhookSignature(xSig, requestId, dataId, secret)).toBe(true)
+  })
+
+  it("rejeita replay: assinatura válida mas timestamp antigo (fora da janela)", () => {
+    const oldTs = String(Math.floor(Date.now() / 1000) - 3600) // 1h atrás
+    const xSig = sign(dataId, requestId, oldTs, secret)
+    expect(validateMpWebhookSignature(xSig, requestId, dataId, secret)).toBe(false)
   })
 
   it("rejeita hash forjado (assinado com outro secret)", () => {

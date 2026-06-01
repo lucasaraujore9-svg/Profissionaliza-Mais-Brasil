@@ -135,16 +135,14 @@ export const PATCH = withRequestContextParams<{ id: string }>(
       )
     }
 
-    const exists = await prisma.student.findUnique({
-      where: { id },
-      select: { id: true },
-    })
-    if (!exists) {
-      return NextResponse.json({ error: "Aluno não encontrado" }, { status: 404 })
-    }
-
+    // Admin PMB gerencia alunos de qualquer tenant (vide loadStudentDetail) —
+    // sem escopo de tenantId aqui, por design. applyStudentEdit devolve false
+    // se o id não existir.
     try {
-      await applyStudentEdit(id, parsed.data)
+      const updated = await applyStudentEdit(id, parsed.data)
+      if (!updated) {
+        return NextResponse.json({ error: "Aluno não encontrado" }, { status: 404 })
+      }
     } catch (err) {
       // unique constraint (email/cpf por tenant)
       const msg = (err as Error).message ?? "Falha ao salvar"

@@ -141,7 +141,11 @@ function LeadCard({ lead, currentStage, onClick, onMove }: LeadCardProps) {
         role="button"
         tabIndex={0}
         onKeyDown={(e) => {
-          if (e.key === "Enter") onClick()
+          // Botões devem ativar com Enter E Espaço (WCAG 2.1 — teclado).
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault()
+            onClick()
+          }
         }}
       >
         <div className="flex items-start justify-between gap-2">

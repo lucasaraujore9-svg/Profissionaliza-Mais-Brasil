@@ -281,7 +281,36 @@ export async function loadCatalogo({
   }
 }
 
-export async function loadShowcase(): Promise<ShowcaseCard[]> {
+/**
+ * Filtro de visibilidade granular do catalogo de um tenant (espelha
+ * `visibilityFilter` de src/lib/tenant/courses.ts). Mantido inline aqui para
+ * evitar dependencia cruzada entre os modulos de catalogo.
+ */
+function tenantVisibilityFilter(tenantId: string) {
+  return {
+    OR: [
+      { visibilityMode: "ALL" as const },
+      { visibilityMode: "ALLOWLIST" as const, allowedTenantIds: { has: tenantId } },
+      {
+        visibilityMode: "DENYLIST" as const,
+        NOT: { blockedTenantIds: { has: tenantId } },
+      },
+    ],
+  }
+}
+
+/**
+ * Showcase do hero.
+ *
+ * - Sem `tenantId` (site principal PMB): destaques globais do catalogo
+ *   institucional (`Course` com `hiddenMain: false`).
+ * - Com `tenantId` (vitrine de revendedor): SOMENTE cursos habilitados para
+ *   aquele tenant (`TenantCourse.isVisible` + `visibilityMode`), com o preco
+ *   e a capa configurados pela loja. Sem isso, a vitrine do revendedor exibia
+ *   o catalogo global PMB com preco PMB (vazamento/inconsistencia cross-tenant).
+ */
+export async function loadShowcase(tenantId?: string): Promise<ShowcaseCard[]> {
+  if (tenantId) return loadTenantShowcase(tenantId)
   try {
     const rows = await prisma.course.findMany({
       where: {
@@ -324,6 +353,41 @@ export async function loadShowcase(): Promise<ShowcaseCard[]> {
         accent: accents[idx],
       }
     })
+  } catch {
+    return []
+  }
+}
+
+async function loadTenantShowcase(tenantId: string): Promise<ShowcaseCard[]> {
+  try {
+    const visibility = tenantVisibilityFilter(tenantId)
+    const rows = await prisma.tenantCourse.findMany({
+      where: {
+        tenantId,
+        isVisible: true,
+        course: { status: "ATIVO", capaImageUrl: { not: null }, ...visibility },
+      },
+      orderBy: [{ isFeatured: "desc" }, { customOrder: "asc" }],
+      take: 3,
+      include: {
+        course: {
+          select: { slug: true, nome: true, categoriaLoja: true, capaImageUrl: true, capaOverride: true },
+        },
+      },
+    })
+
+    const accents: ShowcaseCard["accent"][] = ["gold", "cyan", "lime"]
+    const selos: ShowcaseCard["selo"][] = ["mais-vendido", "mais-vendido", "novo"]
+
+    return rows.map((tc, idx) => ({
+      slug: tc.course.slug,
+      titulo: tc.course.nome,
+      categoria: tc.course.categoriaLoja ?? "Curso profissionalizante",
+      preco: formatPrice(Number(tc.price)),
+      imageUrl: tc.customCapaUrl ?? tc.course.capaOverride ?? tc.course.capaImageUrl,
+      selo: selos[idx] ?? "novo",
+      accent: accents[idx] ?? "gold",
+    }))
   } catch {
     return []
   }

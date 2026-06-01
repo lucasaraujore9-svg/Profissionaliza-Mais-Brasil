@@ -87,7 +87,7 @@ export function MessageTemplateEditor({
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [apiBase])
 
   useEffect(() => {
     load()

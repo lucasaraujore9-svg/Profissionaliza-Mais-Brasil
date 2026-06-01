@@ -66,7 +66,7 @@ export function LeadsKanbanBoard({
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [apiBase])
 
   useEffect(() => {
     load()
@@ -104,7 +104,7 @@ export function LeadsKanbanBoard({
         setBoard(prev)
       }
     },
-    [board],
+    [board, apiBase],
   )
 
   if (loading) {
