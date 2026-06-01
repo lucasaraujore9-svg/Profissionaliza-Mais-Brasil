@@ -25,6 +25,10 @@ export interface CourseDetailData {
   price: number
   originalPrice: number | null
   parcelas: number | null
+  /** ONE_TIME = preco cheio; MONTHLY = mensalidade recorrente. */
+  paymentType?: "ONE_TIME" | "MONTHLY"
+  /** Quantidade total de mensalidades quando paymentType === "MONTHLY". */
+  monthlyMonths?: number | null
   lessons: Array<{ id: string; nome: string; ordem: number }>
 }
 
@@ -111,6 +115,8 @@ export function CourseDetailView({
   const cargaHoraria = course.cargaHoraria
     ? `${course.cargaHoraria}h`
     : `${course.qtdAulas} aulas`
+  const isMonthly = course.paymentType === "MONTHLY"
+  const monthlyMonths = isMonthly ? course.monthlyMonths ?? 12 : null
   const parcelas = course.parcelas ?? 12
   const valorParcela = course.price > 0 ? course.price / parcelas : 0
   const desconto =
@@ -398,15 +404,31 @@ export function CourseDetailView({
                     </p>
                   )}
                   <p className="text-[10.5px] font-bold uppercase tracking-widest text-[var(--color-pmb-gold-600)]">
-                    {desconto ? `Promoção · ${desconto}% OFF` : "Investimento"}
+                    {desconto
+                      ? `Promoção · ${desconto}% OFF`
+                      : isMonthly
+                        ? "Mensalidade"
+                        : "Investimento"}
                   </p>
                   <p className="mt-1 text-[36px] font-black leading-none text-[var(--color-pmb-green)]">
                     {formatBRL(course.price)}
+                    {isMonthly && (
+                      <span className="ml-1 text-[16px] font-bold text-[rgba(2,89,24,0.6)]">
+                        /mês
+                      </span>
+                    )}
                   </p>
-                  {course.price > 0 && parcelas > 1 && (
+                  {isMonthly && monthlyMonths ? (
                     <p className="mt-1.5 text-[13px] text-[rgba(2,89,24,0.7)]">
-                      ou {parcelas}x de {formatBRL(valorParcela)} sem juros
+                      {monthlyMonths} mensalidades de {formatBRL(course.price)}
                     </p>
+                  ) : (
+                    course.price > 0 &&
+                    parcelas > 1 && (
+                      <p className="mt-1.5 text-[13px] text-[rgba(2,89,24,0.7)]">
+                        ou {parcelas}x de {formatBRL(valorParcela)} sem juros
+                      </p>
+                    )
                   )}
                 </div>
 
@@ -470,11 +492,23 @@ export function CourseDetailView({
             )}
             <p className="truncate text-[18px] font-black leading-tight text-[var(--color-pmb-green)]">
               {formatBRL(course.price)}
+              {isMonthly && (
+                <span className="ml-1 text-[12px] font-bold text-[rgba(2,89,24,0.6)]">
+                  /mês
+                </span>
+              )}
             </p>
-            {course.price > 0 && parcelas > 1 && (
+            {isMonthly && monthlyMonths ? (
               <p className="truncate text-[11px] text-[rgba(2,89,24,0.65)]">
-                ou {parcelas}x de {formatBRL(valorParcela)}
+                {monthlyMonths} mensalidades
               </p>
+            ) : (
+              course.price > 0 &&
+              parcelas > 1 && (
+                <p className="truncate text-[11px] text-[rgba(2,89,24,0.65)]">
+                  ou {parcelas}x de {formatBRL(valorParcela)}
+                </p>
+              )
             )}
           </div>
           <Link

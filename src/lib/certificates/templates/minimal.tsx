@@ -15,6 +15,7 @@ import type { CertificateRenderData } from "./classic"
  */
 export function MinimalCertificate(data: CertificateRenderData) {
   const t = data.template
+  const displayUrl = data.validationUrl.replace(/^https?:\/\//, "")
   const styles = StyleSheet.create({
     page: {
       padding: 0,
@@ -36,17 +37,22 @@ export function MinimalCertificate(data: CertificateRenderData) {
       height: 6,
       backgroundColor: t.primaryColor,
     },
+    // Coluna unica em fluxo: cabecalho + conteudo (cresce) + rodape.
+    // Sem position absolute no rodape -> nada se sobrepoe.
     content: {
       flex: 1,
-      paddingTop: 88,
-      paddingBottom: 70,
-      paddingHorizontal: 90,
+      paddingTop: 70,
+      paddingBottom: 36,
+      paddingHorizontal: 84,
+    },
+    contentTop: {
+      flexGrow: 1,
     },
     headerRow: {
       flexDirection: "row",
       justifyContent: "space-between",
       alignItems: "center",
-      marginBottom: 40,
+      marginBottom: 36,
     },
     logo: {
       maxHeight: 50,
@@ -69,7 +75,7 @@ export function MinimalCertificate(data: CertificateRenderData) {
       width: 40,
       height: 2,
       backgroundColor: t.primaryColor,
-      marginBottom: 28,
+      marginBottom: 26,
     },
     intro: {
       fontSize: 11,
@@ -77,21 +83,20 @@ export function MinimalCertificate(data: CertificateRenderData) {
       marginBottom: 6,
     },
     studentName: {
-      fontSize: 42,
+      fontSize: 40,
       fontFamily: "Helvetica-Bold",
       color: t.secondaryColor,
-      marginBottom: 18,
+      marginBottom: 16,
     },
     body: {
       fontSize: 12,
       lineHeight: 1.7,
       color: "#374151",
-      marginBottom: 40,
-      maxWidth: 540,
+      marginBottom: 32,
+      maxWidth: 560,
     },
     metaRow: {
       flexDirection: "row",
-      marginBottom: 36,
     },
     metaItem: {
       maxWidth: 200,
@@ -109,13 +114,10 @@ export function MinimalCertificate(data: CertificateRenderData) {
       color: "#1F2937",
     },
     footerRow: {
-      position: "absolute",
-      bottom: 60,
-      left: 90,
-      right: 90,
       flexDirection: "row",
       justifyContent: "space-between",
       alignItems: "flex-end",
+      marginTop: 24,
     },
     signatureBlock: {
       maxWidth: 220,
@@ -143,7 +145,7 @@ export function MinimalCertificate(data: CertificateRenderData) {
       marginTop: 1,
     },
     qrBlock: {
-      alignItems: "flex-end",
+      alignItems: "center",
     },
     qrImage: {
       width: 56,
@@ -155,27 +157,26 @@ export function MinimalCertificate(data: CertificateRenderData) {
       fontFamily: "Helvetica-Bold",
       marginTop: 4,
     },
-    footerUrl: {
-      fontSize: 7,
-      color: "#9CA3AF",
+    footerMeta: {
+      marginTop: 14,
+      borderTopWidth: 1,
+      borderTopColor: "#E5E7EB",
+      paddingTop: 8,
     },
     footerText: {
       fontSize: 7,
       color: "#9CA3AF",
-      position: "absolute",
-      bottom: 30,
-      left: 90,
-      right: 90,
-      textAlign: "center",
+      lineHeight: 1.5,
+    },
+    footerUrl: {
+      fontSize: 7,
+      color: "#9CA3AF",
+      marginTop: 2,
     },
     groupBrand: {
-      position: "absolute",
-      bottom: 12,
-      left: 90,
-      right: 90,
+      marginTop: 8,
       flexDirection: "row",
       alignItems: "center",
-      justifyContent: "center",
     },
     groupLogo: {
       maxHeight: 15,
@@ -199,76 +200,85 @@ export function MinimalCertificate(data: CertificateRenderData) {
         <View style={styles.topBar} />
 
         <View style={styles.content}>
-          <View style={styles.headerRow}>
-            {t.logoUrl ? (
-              <Image src={t.logoUrl} style={styles.logo} />
-            ) : (
-              <Text style={styles.unidade}>{data.unidade}</Text>
-            )}
-            <Text style={styles.unidade}>{data.unidade}</Text>
-          </View>
-
-          <Text style={styles.title}>{t.titleText}</Text>
-          <View style={styles.titleLine} />
-
-          <Text style={styles.intro}>Certificamos que</Text>
-          <Text style={styles.studentName}>{data.studentName}</Text>
-
-          <Text style={styles.body}>{data.bodyResolved}</Text>
-
-          <View style={styles.metaRow}>
-            <View style={styles.metaItem}>
-              <Text style={styles.metaLabel}>Curso</Text>
-              <Text style={styles.metaValue}>{data.courseName}</Text>
+          <View style={styles.contentTop}>
+            <View style={styles.headerRow}>
+              {t.logoUrl ? (
+                <Image src={t.logoUrl} style={styles.logo} />
+              ) : (
+                <Text style={styles.unidade}>{data.unidade}</Text>
+              )}
+              {t.logoUrl ? (
+                <Text style={styles.unidade}>{data.unidade}</Text>
+              ) : null}
             </View>
-            {data.cargaHoraria ? (
+
+            <Text style={styles.title}>{t.titleText}</Text>
+            <View style={styles.titleLine} />
+
+            <Text style={styles.intro}>Certificamos que</Text>
+            <Text style={styles.studentName}>{data.studentName}</Text>
+
+            <Text style={styles.body}>{data.bodyResolved}</Text>
+
+            <View style={styles.metaRow}>
               <View style={styles.metaItem}>
-                <Text style={styles.metaLabel}>Carga horaria</Text>
-                <Text style={styles.metaValue}>{data.cargaHoraria}</Text>
+                <Text style={styles.metaLabel}>Curso</Text>
+                <Text style={styles.metaValue}>{data.courseName}</Text>
               </View>
-            ) : null}
-            <View style={styles.metaItem}>
-              <Text style={styles.metaLabel}>Conclusao</Text>
-              <Text style={styles.metaValue}>{data.completionDateFormatted}</Text>
+              {data.cargaHoraria ? (
+                <View style={styles.metaItem}>
+                  <Text style={styles.metaLabel}>Carga horária</Text>
+                  <Text style={styles.metaValue}>{data.cargaHoraria}</Text>
+                </View>
+              ) : null}
+              <View style={styles.metaItem}>
+                <Text style={styles.metaLabel}>Conclusão</Text>
+                <Text style={styles.metaValue}>
+                  {data.completionDateFormatted}
+                </Text>
+              </View>
             </View>
           </View>
-        </View>
 
-        <View style={styles.footerRow}>
-          <View style={styles.signatureBlock}>
-            {t.signatureUrl ? (
-              <Image src={t.signatureUrl} style={styles.signature} />
-            ) : null}
-            <View style={styles.signatureLine} />
-            {t.signerName ? (
-              <Text style={styles.signerName}>{t.signerName}</Text>
-            ) : null}
-            {t.signerTitle ? (
-              <Text style={styles.signerTitle}>{t.signerTitle}</Text>
-            ) : null}
+          <View style={styles.footerRow}>
+            <View style={styles.signatureBlock}>
+              {t.signatureUrl ? (
+                <Image src={t.signatureUrl} style={styles.signature} />
+              ) : null}
+              <View style={styles.signatureLine} />
+              {t.signerName ? (
+                <Text style={styles.signerName}>{t.signerName}</Text>
+              ) : null}
+              {t.signerTitle ? (
+                <Text style={styles.signerTitle}>{t.signerTitle}</Text>
+              ) : null}
+            </View>
+            <View style={styles.qrBlock}>
+              {t.showQrCode && data.qrCodeDataUrl ? (
+                <Image src={data.qrCodeDataUrl} style={styles.qrImage} />
+              ) : null}
+              <Text style={styles.code}>{data.code}</Text>
+            </View>
           </View>
-          <View style={styles.qrBlock}>
-            {t.showQrCode && data.qrCodeDataUrl ? (
-              <Image src={data.qrCodeDataUrl} style={styles.qrImage} />
+
+          <View style={styles.footerMeta}>
+            {data.footerResolved ? (
+              <Text style={styles.footerText}>{data.footerResolved}</Text>
             ) : null}
-            <Text style={styles.code}>{data.code}</Text>
             {t.showValidationUrl ? (
-              <Text style={styles.footerUrl}>{data.validationUrl}</Text>
+              <Text style={styles.footerUrl}>Validar em {displayUrl}</Text>
             ) : null}
+            <View style={styles.groupBrand}>
+              <Text style={styles.groupText}>
+                {data.groupLogoUrl
+                  ? "Uma plataforma do "
+                  : `Uma plataforma do ${data.groupName}`}
+              </Text>
+              {data.groupLogoUrl ? (
+                <Image src={data.groupLogoUrl} style={styles.groupLogo} />
+              ) : null}
+            </View>
           </View>
-        </View>
-
-        {data.footerResolved ? (
-          <Text style={styles.footerText}>{data.footerResolved}</Text>
-        ) : null}
-
-        <View style={styles.groupBrand}>
-          <Text style={styles.groupText}>
-            Plataforma do{data.groupLogoUrl ? " " : ` ${data.groupName}`}
-          </Text>
-          {data.groupLogoUrl ? (
-            <Image src={data.groupLogoUrl} style={styles.groupLogo} />
-          ) : null}
         </View>
       </Page>
     </Document>

@@ -15,6 +15,7 @@ import type { CertificateRenderData } from "./classic"
  */
 export function ModernCertificate(data: CertificateRenderData) {
   const t = data.template
+  const displayUrl = data.validationUrl.replace(/^https?:\/\//, "")
   const styles = StyleSheet.create({
     page: {
       padding: 0,
@@ -32,9 +33,9 @@ export function ModernCertificate(data: CertificateRenderData) {
     sidebar: {
       width: 170,
       backgroundColor: t.primaryColor,
-      paddingTop: 60,
+      paddingTop: 56,
       paddingBottom: 40,
-      paddingHorizontal: 24,
+      paddingHorizontal: 22,
       alignItems: "center",
       justifyContent: "space-between",
     },
@@ -42,34 +43,35 @@ export function ModernCertificate(data: CertificateRenderData) {
       alignItems: "center",
     },
     sidebarLogo: {
-      maxWidth: 120,
-      maxHeight: 90,
+      maxWidth: 122,
+      maxHeight: 88,
       objectFit: "contain",
     },
     sidebarSealBox: {
       alignItems: "center",
     },
     sidebarSeal: {
-      width: 80,
-      height: 80,
+      width: 76,
+      height: 76,
       objectFit: "contain",
+      marginBottom: 12,
     },
     sidebarUnidade: {
       fontSize: 9,
       color: "#FFFFFF",
       textAlign: "center",
       letterSpacing: 1.4,
-      marginTop: 16,
     },
-    sidebarUnidadeTop: {
-      marginTop: 0,
-    },
+    // Coluna de conteudo: bloco superior cresce (flexGrow) empurrando o
+    // rodape para a base — assim assinatura, QR e marca nunca se sobrepoem.
     content: {
       flex: 1,
-      paddingTop: 64,
-      paddingBottom: 50,
-      paddingHorizontal: 56,
-      position: "relative",
+      paddingTop: 56,
+      paddingBottom: 34,
+      paddingHorizontal: 52,
+    },
+    contentTop: {
+      flexGrow: 1,
     },
     eyebrow: {
       fontSize: 10,
@@ -79,29 +81,29 @@ export function ModernCertificate(data: CertificateRenderData) {
       marginBottom: 6,
     },
     title: {
-      fontSize: 28,
+      fontSize: 26,
       fontFamily: "Helvetica-Bold",
       color: t.secondaryColor,
       letterSpacing: 2,
-      marginBottom: 24,
+      marginBottom: 22,
     },
     body: {
       fontSize: 12,
       lineHeight: 1.7,
       color: "#374151",
       marginTop: 4,
-      marginBottom: 14,
+      marginBottom: 12,
     },
     studentNameLabel: {
       fontSize: 9,
       color: "#9CA3AF",
       letterSpacing: 3,
       textTransform: "uppercase",
-      marginTop: 8,
+      marginTop: 6,
       marginBottom: 4,
     },
     studentName: {
-      fontSize: 34,
+      fontSize: 32,
       fontFamily: "Helvetica-Bold",
       color: t.secondaryColor,
       marginBottom: 8,
@@ -110,7 +112,7 @@ export function ModernCertificate(data: CertificateRenderData) {
       width: 72,
       height: 3,
       backgroundColor: t.primaryColor,
-      marginBottom: 24,
+      marginBottom: 20,
     },
     courseInfo: {
       fontSize: 11,
@@ -121,7 +123,7 @@ export function ModernCertificate(data: CertificateRenderData) {
       flexDirection: "row",
       alignItems: "flex-end",
       justifyContent: "space-between",
-      marginTop: 30,
+      marginTop: 20,
     },
     signatureBlock: {
       maxWidth: 220,
@@ -149,11 +151,11 @@ export function ModernCertificate(data: CertificateRenderData) {
       marginTop: 1,
     },
     qrBlock: {
-      alignItems: "flex-end",
+      alignItems: "center",
     },
     qrImage: {
-      width: 64,
-      height: 64,
+      width: 60,
+      height: 60,
     },
     qrLabel: {
       fontSize: 7,
@@ -164,28 +166,33 @@ export function ModernCertificate(data: CertificateRenderData) {
       fontSize: 10,
       fontFamily: "Helvetica-Bold",
       color: t.primaryColor,
-      marginTop: 4,
+      marginTop: 3,
     },
-    footerUrl: {
-      fontSize: 7,
-      color: "#9CA3AF",
+    // Rodape em fluxo: separador de linha + texto + URL + marca, empilhados
+    // com espacamento — sem position absolute, sem sobreposicao.
+    footerDivider: {
+      borderTopWidth: 1,
+      borderTopColor: "#E5E7EB",
+      marginTop: 16,
+      marginBottom: 8,
     },
     footerText: {
       fontSize: 8,
       color: "#6B7280",
-      marginTop: 8,
+      lineHeight: 1.5,
+    },
+    footerUrl: {
+      fontSize: 7,
+      color: "#9CA3AF",
+      marginTop: 3,
     },
     groupBrand: {
-      position: "absolute",
-      bottom: 14,
-      left: 56,
-      right: 56,
+      marginTop: 8,
       flexDirection: "row",
       alignItems: "center",
-      justifyContent: "center",
     },
     groupLogo: {
-      maxHeight: 16,
+      maxHeight: 15,
       maxWidth: 70,
       objectFit: "contain",
       marginLeft: 4,
@@ -207,11 +214,7 @@ export function ModernCertificate(data: CertificateRenderData) {
           <View style={styles.sidebarTop}>
             {t.logoUrl ? (
               <Image src={t.logoUrl} style={styles.sidebarLogo} />
-            ) : (
-              <Text style={[styles.sidebarUnidade, styles.sidebarUnidadeTop]}>
-                {data.unidade}
-              </Text>
-            )}
+            ) : null}
           </View>
           <View style={styles.sidebarSealBox}>
             {t.showSeal && t.sealUrl ? (
@@ -222,29 +225,31 @@ export function ModernCertificate(data: CertificateRenderData) {
         </View>
 
         <View style={styles.content}>
-          <Text style={styles.eyebrow}>CERTIFICADO</Text>
-          <Text style={styles.title}>{t.titleText}</Text>
+          <View style={styles.contentTop}>
+            <Text style={styles.eyebrow}>CERTIFICADO</Text>
+            <Text style={styles.title}>{t.titleText}</Text>
 
-          <Text style={styles.body}>{data.bodyResolved}</Text>
+            <Text style={styles.body}>{data.bodyResolved}</Text>
 
-          <Text style={styles.studentNameLabel}>Aluno(a)</Text>
-          <Text style={styles.studentName}>{data.studentName}</Text>
-          <View style={styles.accentBar} />
+            <Text style={styles.studentNameLabel}>Aluno(a)</Text>
+            <Text style={styles.studentName}>{data.studentName}</Text>
+            <View style={styles.accentBar} />
 
-          <Text style={styles.courseInfo}>
-            <Text style={{ color: "#6B7280" }}>Curso: </Text>
-            {data.courseName}
-          </Text>
-          {data.cargaHoraria ? (
             <Text style={styles.courseInfo}>
-              <Text style={{ color: "#6B7280" }}>Carga horaria: </Text>
-              {data.cargaHoraria}
+              <Text style={{ color: "#6B7280" }}>Curso: </Text>
+              {data.courseName}
             </Text>
-          ) : null}
-          <Text style={styles.courseInfo}>
-            <Text style={{ color: "#6B7280" }}>Conclusao: </Text>
-            {data.completionDateFormatted}
-          </Text>
+            {data.cargaHoraria ? (
+              <Text style={styles.courseInfo}>
+                <Text style={{ color: "#6B7280" }}>Carga horária: </Text>
+                {data.cargaHoraria}
+              </Text>
+            ) : null}
+            <Text style={styles.courseInfo}>
+              <Text style={{ color: "#6B7280" }}>Conclusão: </Text>
+              {data.completionDateFormatted}
+            </Text>
+          </View>
 
           <View style={styles.signatureRow}>
             <View style={styles.signatureBlock}>
@@ -259,27 +264,33 @@ export function ModernCertificate(data: CertificateRenderData) {
                 <Text style={styles.signerTitle}>{t.signerTitle}</Text>
               ) : null}
             </View>
-            <View style={styles.qrBlock}>
-              {t.showQrCode && data.qrCodeDataUrl ? (
+            {t.showQrCode && data.qrCodeDataUrl ? (
+              <View style={styles.qrBlock}>
                 <Image src={data.qrCodeDataUrl} style={styles.qrImage} />
-              ) : null}
-              {t.showQrCode && data.qrCodeDataUrl ? (
-                <Text style={styles.qrLabel}>Validacao</Text>
-              ) : null}
-              <Text style={styles.code}>{data.code}</Text>
-              {t.showValidationUrl ? (
-                <Text style={styles.footerUrl}>{data.validationUrl}</Text>
-              ) : null}
-            </View>
+                <Text style={styles.qrLabel}>Validação</Text>
+                <Text style={styles.code}>{data.code}</Text>
+              </View>
+            ) : (
+              <View style={styles.qrBlock}>
+                <Text style={styles.qrLabel}>Código de validação</Text>
+                <Text style={styles.code}>{data.code}</Text>
+              </View>
+            )}
           </View>
 
+          <View style={styles.footerDivider} />
           {data.footerResolved ? (
             <Text style={styles.footerText}>{data.footerResolved}</Text>
+          ) : null}
+          {t.showValidationUrl ? (
+            <Text style={styles.footerUrl}>Validar em {displayUrl}</Text>
           ) : null}
 
           <View style={styles.groupBrand}>
             <Text style={styles.groupText}>
-              Plataforma do{data.groupLogoUrl ? " " : ` ${data.groupName}`}
+              {data.groupLogoUrl
+                ? "Uma plataforma do "
+                : `Uma plataforma do ${data.groupName}`}
             </Text>
             {data.groupLogoUrl ? (
               <Image src={data.groupLogoUrl} style={styles.groupLogo} />

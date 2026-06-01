@@ -10,6 +10,8 @@ export interface Course {
   preco: string
   precoDe?: string
   parcelas: string
+  /** MONTHLY exibe o preco como mensalidade recorrente (sufixo "/mês"). */
+  paymentType?: "ONE_TIME" | "MONTHLY"
   selo?: "novo" | "mais-vendido" | "pix-10" | null
   accent: "gold" | "cyan" | "lime" | "green" | "terracotta"
   imageUrl?: string | null
@@ -17,9 +19,16 @@ export interface Course {
 
 interface CourseCardProps {
   course: Course
+  /**
+   * Base do link de detalhe. Site PMB usa "/cursos" (rota `(main)/cursos/[slug]`);
+   * a vitrine do revendedor usa "/curso" (rota `loja/curso/[slug]`), que respeita
+   * o tenant e os precos da unidade. Sem isso, os cards da vitrine apontavam para
+   * o detalhe global da PMB.
+   */
+  hrefBase?: string
 }
 
-export function CourseCard({ course }: CourseCardProps) {
+export function CourseCard({ course, hrefBase = "/cursos" }: CourseCardProps) {
   const {
     slug,
     categoria,
@@ -28,14 +37,16 @@ export function CourseCard({ course }: CourseCardProps) {
     preco,
     precoDe,
     parcelas,
+    paymentType,
     selo,
     accent,
     imageUrl,
   } = course
+  const isMonthly = paymentType === "MONTHLY"
 
   return (
     <Link
-      href={`/cursos/${slug}`}
+      href={`${hrefBase}/${slug}`}
       className="group flex flex-col overflow-hidden rounded-xl border border-[rgba(2,89,24,0.08)] bg-white transition-all hover:-translate-y-0.5 hover:border-[rgba(2,89,24,0.2)] hover:shadow-[0_10px_30px_-12px_rgba(2,89,24,0.25)]"
     >
       <div className="relative">
@@ -93,6 +104,11 @@ export function CourseCard({ course }: CourseCardProps) {
           <div className="flex items-baseline gap-2">
             <span className="text-[20px] font-black text-[var(--color-pmb-green)]">
               {preco}
+              {isMonthly && (
+                <span className="text-[12px] font-bold text-[rgba(2,89,24,0.6)]">
+                  /mês
+                </span>
+              )}
             </span>
             <span className="text-[11px] text-[rgba(2,89,24,0.65)]">
               {parcelas}

@@ -5,7 +5,7 @@ import { loadCategorias } from "@/lib/catalog/home"
 import { getCurrentTenant } from "@/lib/tenant/current"
 import { tecnicaFromTenant } from "@/lib/catalog/tecnica"
 import { getRequestOrigin } from "@/lib/seo/host"
-import { normalizeSocialUrl } from "@/lib/branding"
+import { normalizeSocialUrl, buildTenantSupportContacts } from "@/lib/branding"
 import { vitrineDomain } from "@/lib/tenant/urls"
 import { JsonLd } from "@/components/seo/json-ld"
 import { storeJsonLd, webSiteJsonLd } from "@/lib/seo/jsonld"
@@ -173,6 +173,24 @@ export default async function LojaLayout({
           youtube: null,
         }}
         sejaRevendedorHref={sejaRevendedorHref}
+        brand={
+          tenant
+            ? {
+                name: tenant.name,
+                logoUrl: tenant.logoUrl,
+                description: tenant.description ?? tenant.tagline,
+              }
+            : undefined
+        }
+        support={
+          tenant
+            ? buildTenantSupportContacts({
+                whatsapp: tenant.whatsapp,
+                supportEmail: tenant.supportEmail,
+                supportHours: tenant.supportHours,
+              })
+            : undefined
+        }
       />
     </div>
   )

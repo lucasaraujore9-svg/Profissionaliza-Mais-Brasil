@@ -21,6 +21,8 @@ const defaultConfig: VitrineConfig = {
   whatsapp: null,
   instagram: null,
   facebook: null,
+  supportEmail: null,
+  supportHours: null,
 }
 
 export function VitrineEditor() {
@@ -141,6 +143,8 @@ export function VitrineEditor() {
           whatsapp: config.whatsapp,
           instagram: config.instagram,
           facebook: config.facebook,
+          supportEmail: config.supportEmail,
+          supportHours: config.supportHours,
         }),
       })
       const body = await res.json()

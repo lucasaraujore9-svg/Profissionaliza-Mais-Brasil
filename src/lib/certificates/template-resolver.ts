@@ -46,9 +46,9 @@ export const DEFAULT_TEMPLATE: ResolvedTemplate = {
   signatureUrl: null,
   primaryColor: DEFAULT_PRIMARY,
   secondaryColor: DEFAULT_SECONDARY,
-  titleText: "CERTIFICADO DE CONCLUSAO",
+  titleText: "CERTIFICADO DE CONCLUSÃO",
   bodyText:
-    "Certificamos que {nome} concluiu com aproveitamento o curso de {curso}, com carga horaria de {carga_horaria}, em {data_conclusao}.",
+    "Certificamos que {nome} concluiu com aproveitamento o curso de {curso}, com carga horária de {carga_horaria}, em {data_conclusao}.",
   footerText: null,
   signerName: null,
   signerTitle: null,

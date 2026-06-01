@@ -1,6 +1,26 @@
 import { prisma } from "@/lib/prisma"
 import type { Course } from "@/components/main/home/course-card"
 
+/**
+ * Filtro de visibilidade granular do catalogo para um tenant (espelha
+ * `visibilityFilter` de src/lib/tenant/courses.ts):
+ *   - ALL       → todos veem
+ *   - ALLOWLIST → so se o tenant estiver em `allowedTenantIds`
+ *   - DENYLIST  → todos exceto se estiver em `blockedTenantIds`
+ */
+function tenantVisibilityFilter(tenantId: string) {
+  return {
+    OR: [
+      { visibilityMode: "ALL" as const },
+      { visibilityMode: "ALLOWLIST" as const, allowedTenantIds: { has: tenantId } },
+      {
+        visibilityMode: "DENYLIST" as const,
+        NOT: { blockedTenantIds: { has: tenantId } },
+      },
+    ],
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Tipos das configs por kind (gravados em home_sections.config como JSON)
 // ---------------------------------------------------------------------------
@@ -382,7 +402,7 @@ export async function resolveSectionCourses(
         }
       }
     }
-    const courses = await fetchCoursesByIds(ids)
+    const courses = await fetchCoursesByIds(ids, tenantId)
     if (courses.length < 4) return null
     return { courses, meta: {} }
   }
@@ -395,7 +415,7 @@ export async function resolveSectionCourses(
     ids = await pickRandomCourseIds({ tenantId, count, categoryId: cfg.categoryId })
   }
   if (ids.length < 4) return null
-  const courses = await fetchCoursesByIds(ids)
+  const courses = await fetchCoursesByIds(ids, tenantId)
   if (courses.length < 4) return null
   const category = await prisma.category.findUnique({
     where: { id: cfg.categoryId },
@@ -409,17 +429,35 @@ async function pickRandomCourseIds(args: {
   count: number
   categoryId?: string
 }): Promise<string[]> {
-  const rows = await prisma.course.findMany({
-    where: {
-      status: "ATIVO",
-      hiddenMain: false,
-      ...(args.categoryId ? { categoryId: args.categoryId } : {}),
-    },
-    select: { id: true },
-  })
-  void args.tenantId
-  if (rows.length === 0) return []
-  const ids = rows.map((r) => r.id)
+  let ids: string[]
+  if (args.tenantId) {
+    // Vitrine de revendedor: sorteia somente entre os cursos habilitados para
+    // o tenant (TenantCourse.isVisible + visibilityMode), nao o catalogo global.
+    const rows = await prisma.tenantCourse.findMany({
+      where: {
+        tenantId: args.tenantId,
+        isVisible: true,
+        course: {
+          status: "ATIVO",
+          ...tenantVisibilityFilter(args.tenantId),
+          ...(args.categoryId ? { categoryId: args.categoryId } : {}),
+        },
+      },
+      select: { courseId: true },
+    })
+    ids = rows.map((r) => r.courseId)
+  } else {
+    const rows = await prisma.course.findMany({
+      where: {
+        status: "ATIVO",
+        hiddenMain: false,
+        ...(args.categoryId ? { categoryId: args.categoryId } : {}),
+      },
+      select: { id: true },
+    })
+    ids = rows.map((r) => r.id)
+  }
+  if (ids.length === 0) return []
   for (let i = ids.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1))
     const tmp = ids[i]
@@ -429,8 +467,26 @@ async function pickRandomCourseIds(args: {
   return ids.slice(0, args.count)
 }
 
-async function fetchCoursesByIds(ids: string[]): Promise<Course[]> {
+function formatTenantPrice(value: number): string {
+  if (value <= 0) return "Consulte"
+  return `R$ ${value.toFixed(2).replace(".", ",")}`
+}
+
+/**
+ * Carrega os cursos das secoes da home aplicando as customizacoes do tenant.
+ *
+ * Sem `tenantId` (site PMB): le o catalogo global (`Course`) com preco/capa
+ * institucionais. Com `tenantId` (vitrine do revendedor): le `TenantCourse`,
+ * exibindo o preco, a capa e as parcelas configurados pela unidade — sem isso
+ * os cards da home mostravam os dados do sistema mae mesmo apos o revendedor
+ * editar o curso.
+ */
+async function fetchCoursesByIds(
+  ids: string[],
+  tenantId: string | null,
+): Promise<Course[]> {
   if (ids.length === 0) return []
+  if (tenantId) return fetchTenantCoursesByIds(ids, tenantId)
   const { courseSelect, normalizeCourseRow, toCourse } = await import("./course-mapper")
   const rows = await prisma.course.findMany({
     where: {
@@ -445,6 +501,70 @@ async function fetchCoursesByIds(ids: string[]): Promise<Course[]> {
     .map((id) => byId.get(id))
     .filter((r): r is NonNullable<typeof r> => r != null)
   return ordered.map((r, idx) => toCourse(normalizeCourseRow(r), idx, null))
+}
+
+async function fetchTenantCoursesByIds(
+  ids: string[],
+  tenantId: string,
+): Promise<Course[]> {
+  const rows = await prisma.tenantCourse.findMany({
+    where: {
+      tenantId,
+      isVisible: true,
+      courseId: { in: ids },
+      course: { status: "ATIVO", ...tenantVisibilityFilter(tenantId) },
+    },
+    select: {
+      courseId: true,
+      price: true,
+      paymentType: true,
+      customCapaUrl: true,
+      customParcelas: true,
+      course: {
+        select: {
+          slug: true,
+          nome: true,
+          categoriaLoja: true,
+          qtdAulas: true,
+          cargaHoraria: true,
+          capaImageUrl: true,
+          capaOverride: true,
+          parcelasSugeridas: true,
+          parcelasOverride: true,
+          monthlyMonthsMain: true,
+        },
+      },
+    },
+  })
+  const byId = new Map(rows.map((r) => [r.courseId, r]))
+  const ordered = ids
+    .map((id) => byId.get(id))
+    .filter((r): r is NonNullable<typeof r> => r != null)
+  return ordered.map((tc, idx) => {
+    const c = tc.course
+    const isMonthly = tc.paymentType === "MONTHLY"
+    const parcelas =
+      tc.customParcelas ?? c.parcelasOverride ?? c.parcelasSugeridas
+    const monthlyMonths = c.monthlyMonthsMain
+    return {
+      slug: c.slug,
+      categoria: c.categoriaLoja ?? "Curso profissionalizante",
+      titulo: c.nome,
+      horas: c.cargaHoraria ? `${c.cargaHoraria}h` : `${c.qtdAulas} aulas`,
+      preco: formatTenantPrice(Number(tc.price)),
+      parcelas: isMonthly
+        ? monthlyMonths
+          ? `${monthlyMonths} mensalidades`
+          : "mensalidade"
+        : parcelas
+          ? `${parcelas}x sem juros`
+          : "12x sem juros",
+      paymentType: tc.paymentType,
+      selo: null,
+      accent: idx % 2 === 0 ? "gold" : "green",
+      imageUrl: tc.customCapaUrl ?? c.capaOverride ?? c.capaImageUrl,
+    }
+  })
 }
 
 /**

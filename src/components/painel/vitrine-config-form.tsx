@@ -17,6 +17,8 @@ export interface VitrineConfig {
   whatsapp: string | null
   instagram: string | null
   facebook: string | null
+  supportEmail: string | null
+  supportHours: string | null
 }
 
 export type VitrineAssetKind = "logo"
@@ -198,6 +200,34 @@ export function VitrineConfigForm({
             />
           </div>
         </div>
+
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <div>
+            <Label htmlFor="v-email">E-mail de atendimento</Label>
+            <Input
+              id="v-email"
+              type="email"
+              value={config.supportEmail ?? ""}
+              onChange={(e) => update("supportEmail", e.target.value || null)}
+              placeholder="atendimento@sualoja.com.br"
+              className="mt-1.5"
+            />
+          </div>
+          <div>
+            <Label htmlFor="v-hours">Horário de atendimento</Label>
+            <Input
+              id="v-hours"
+              value={config.supportHours ?? ""}
+              onChange={(e) => update("supportHours", e.target.value || null)}
+              placeholder="Segunda a sexta, 9h às 18h"
+              className="mt-1.5"
+            />
+          </div>
+        </div>
+        <p className="mt-3 text-[11px] text-gray-500">
+          Deixe em branco para esconder a linha no rodapé. Os dados da
+          Profissionaliza Mais Brasil não aparecem na sua vitrine.
+        </p>
       </section>
     </div>
   )

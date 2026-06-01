@@ -25,10 +25,10 @@ export interface SupportContacts {
   phoneUrl: string | null
   /** `true` quando o numero gera link wa.me; `false` quando e telefone tel:. */
   isWhatsapp: boolean
-  /** Email de atendimento (com fallback no @profissionalizamaisbrasil.com.br). */
-  email: string
-  /** Horario de atendimento. */
-  hours: string
+  /** Email de atendimento. `null` esconde a linha (vitrine sem e-mail proprio). */
+  email: string | null
+  /** Horario de atendimento. `null` esconde a linha. */
+  hours: string | null
 }
 
 const FALLBACK_EMAIL = "atendimento@profissionalizamaisbrasil.com.br"
@@ -62,10 +62,20 @@ function formatBrCelular(digits: string): string {
   return local
 }
 
-export function getSupportContacts(): SupportContacts {
-  const email = process.env.NEXT_PUBLIC_SUPPORT_EMAIL?.trim() || FALLBACK_EMAIL
-  const hours = process.env.NEXT_PUBLIC_SUPPORT_HOURS?.trim() || FALLBACK_HOURS
-  const digits = normalizeDigits(process.env.NEXT_PUBLIC_SUPPORT_WHATSAPP)
+/**
+ * Monta `SupportContacts` a partir de um telefone/whatsapp livre + email +
+ * horario. Sem fallback PMB: campos vazios viram `null` e somem do rodape.
+ * Usado tanto pela PMB (via `getSupportContacts`, com fallbacks de env) quanto
+ * pela vitrine do revendedor (`buildTenantSupportContacts`, dados do tenant).
+ */
+function buildSupportContacts(input: {
+  phone: string | null | undefined
+  email: string | null | undefined
+  hours: string | null | undefined
+}): SupportContacts {
+  const email = input.email?.trim() || null
+  const hours = input.hours?.trim() || null
+  const digits = normalizeDigits(input.phone ?? undefined)
 
   if (!digits) {
     return { phoneLabel: null, phoneUrl: null, isWhatsapp: false, email, hours }
@@ -91,6 +101,31 @@ export function getSupportContacts(): SupportContacts {
     email,
     hours,
   }
+}
+
+export function getSupportContacts(): SupportContacts {
+  return buildSupportContacts({
+    phone: process.env.NEXT_PUBLIC_SUPPORT_WHATSAPP,
+    email: process.env.NEXT_PUBLIC_SUPPORT_EMAIL?.trim() || FALLBACK_EMAIL,
+    hours: process.env.NEXT_PUBLIC_SUPPORT_HOURS?.trim() || FALLBACK_HOURS,
+  })
+}
+
+/**
+ * Contatos do rodape da vitrine do revendedor. Usa exclusivamente os dados do
+ * tenant — nunca cai nos contatos da PMB (evita "vazar" o atendimento do
+ * sistema mae na loja da unidade). Linhas sem dado simplesmente nao aparecem.
+ */
+export function buildTenantSupportContacts(tenant: {
+  whatsapp?: string | null
+  supportEmail?: string | null
+  supportHours?: string | null
+}): SupportContacts {
+  return buildSupportContacts({
+    phone: tenant.whatsapp,
+    email: tenant.supportEmail,
+    hours: tenant.supportHours,
+  })
 }
 
 export interface SocialLinks {

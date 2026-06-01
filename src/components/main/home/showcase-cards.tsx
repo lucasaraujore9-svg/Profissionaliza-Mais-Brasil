@@ -3,7 +3,8 @@ import { Award } from "lucide-react"
 import type { ShowcaseCard } from "@/lib/catalog/home"
 
 function CardPreview({ card }: { card: ShowcaseCard }) {
-  const { categoria, titulo, preco, imageUrl, selo, accent } = card
+  const { categoria, titulo, preco, imageUrl, selo, accent, paymentType } = card
+  const isMonthly = paymentType === "MONTHLY"
   return (
     <div className="w-[300px] rounded-xl bg-white text-[var(--color-pmb-green)] shadow-[0_20px_40px_-18px_rgba(0,0,0,0.55)] overflow-hidden">
       <div className="relative">
@@ -35,10 +36,15 @@ function CardPreview({ card }: { card: ShowcaseCard }) {
         <div className="mt-3 flex items-baseline gap-2">
           <span className="text-[20px] font-bold text-[var(--color-pmb-green)]">
             {preco}
+            {isMonthly && (
+              <span className="text-[12px] font-bold text-[rgba(2,89,24,0.6)]">
+                /mês
+              </span>
+            )}
           </span>
         </div>
         <p className="text-[11px] text-[rgba(2,89,24,0.65)]">
-          ou 12x no cartão sem juros
+          {isMonthly ? "mensalidade recorrente" : "ou 12x no cartão sem juros"}
         </p>
       </div>
     </div>

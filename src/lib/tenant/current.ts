@@ -14,8 +14,11 @@ export interface CurrentTenant {
   secondaryColor: string
   tagline: string | null
   description: string | null
+  whatsapp: string | null
   instagram: string | null
   facebook: string | null
+  supportEmail: string | null
+  supportHours: string | null
   referralCode: string | null
   tecnicaEnabled: boolean
   tecnicaUrl: string | null
@@ -48,8 +51,11 @@ export const getCurrentTenant = cache(
           secondaryColor: true,
           tagline: true,
           description: true,
+          whatsapp: true,
           instagram: true,
           facebook: true,
+          supportEmail: true,
+          supportHours: true,
           referralCode: true,
           tecnicaEnabled: true,
           tecnicaUrl: true,

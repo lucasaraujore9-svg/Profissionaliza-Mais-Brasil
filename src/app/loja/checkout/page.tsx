@@ -94,6 +94,7 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
           categoriaLoja: true,
           categoriaInterna: true,
           parcelasSugeridas: true,
+          monthlyMonthsMain: true,
         },
       },
     },
@@ -159,6 +160,8 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
               finalPrice={finalPrice}
               couponCode={validatedCoupon?.code ?? null}
               parcelasSugeridas={tenantCourse.course.parcelasSugeridas}
+              paymentType={tenantCourse.paymentType}
+              monthlyMonths={tenantCourse.course.monthlyMonthsMain}
             />
           </aside>
         </div>

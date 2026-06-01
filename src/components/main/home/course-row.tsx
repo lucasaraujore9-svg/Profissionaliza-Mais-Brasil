@@ -7,9 +7,11 @@ interface CourseRowProps {
   subtitulo?: string
   verTodosHref?: string
   cursos: Course[]
+  /** Base do link de detalhe dos cards. Repassado ao CourseCard. */
+  hrefBase?: string
 }
 
-export function CourseRow({ titulo, subtitulo, verTodosHref = "/cursos", cursos }: CourseRowProps) {
+export function CourseRow({ titulo, subtitulo, verTodosHref = "/cursos", cursos, hrefBase }: CourseRowProps) {
   return (
     <section className="border-b border-[rgba(2,89,24,0.08)] bg-white">
       <div className="mx-auto max-w-[1280px] px-4 py-8 md:px-6 md:py-10">
@@ -37,7 +39,7 @@ export function CourseRow({ titulo, subtitulo, verTodosHref = "/cursos", cursos 
             estourar a grade quando o caller passar mais itens. */}
         <div className="grid grid-cols-2 gap-3 md:grid-cols-3 md:gap-4 lg:grid-cols-4">
           {cursos.slice(0, 8).map((curso) => (
-            <CourseCard key={curso.slug} course={curso} />
+            <CourseCard key={curso.slug} course={curso} hrefBase={hrefBase} />
           ))}
         </div>
 

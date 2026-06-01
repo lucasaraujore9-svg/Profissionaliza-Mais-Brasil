@@ -14,6 +14,10 @@ export interface TenantCourseListItem {
   imageUrl: string | null
   parcelas: number | null
   isFeatured: boolean
+  /** ONE_TIME = preco cheio; MONTHLY = mensalidade recorrente. */
+  paymentType: "ONE_TIME" | "MONTHLY"
+  /** Quantidade total de mensalidades quando paymentType === "MONTHLY". */
+  monthlyMonths: number | null
 }
 
 interface ListFilters {
@@ -38,6 +42,42 @@ function visibilityFilter(tenantId: string): Prisma.CourseWhereInput {
       { visibilityMode: "ALLOWLIST", allowedTenantIds: { has: tenantId } },
       { visibilityMode: "DENYLIST", NOT: { blockedTenantIds: { has: tenantId } } },
     ],
+  }
+}
+
+type TenantCourseWithCourse = Prisma.TenantCourseGetPayload<{
+  include: { course: true }
+}>
+
+/**
+ * Mapeia um `TenantCourse` (com `course` incluido) para o item de catalogo
+ * exibido na vitrine, aplicando a hierarquia de override tenant > admin >
+ * plataforma bruto. Centralizado para que listagem e catalogo sejam consistentes.
+ */
+function mapTenantCourseItem(tc: TenantCourseWithCourse): TenantCourseListItem {
+  return {
+    id: tc.id,
+    slug: tc.course.slug,
+    nome: tc.course.nome,
+    descricao:
+      tc.customDescription ??
+      tc.course.descricaoOverride ??
+      tc.course.descricao,
+    categoria: tc.course.categoriaLoja ?? tc.course.categoriaInterna,
+    horas: tc.course.cargaHoraria,
+    price: Number(tc.price),
+    originalPrice: tc.course.precoOriginal
+      ? Number(tc.course.precoOriginal)
+      : null,
+    imageUrl:
+      tc.customCapaUrl ?? tc.course.capaOverride ?? tc.course.capaImageUrl,
+    parcelas:
+      tc.customParcelas ??
+      tc.course.parcelasOverride ??
+      tc.course.parcelasSugeridas,
+    isFeatured: tc.isFeatured,
+    paymentType: tc.paymentType,
+    monthlyMonths: tc.course.monthlyMonthsMain,
   }
 }
 
@@ -78,29 +118,7 @@ export async function listTenantCourses(
 
     return {
       total,
-      items: items.map((tc) => ({
-        id: tc.id,
-        slug: tc.course.slug,
-        nome: tc.course.nome,
-        // Hierarquia: tenant > admin > plataforma bruto
-        descricao:
-          tc.customDescription ??
-          tc.course.descricaoOverride ??
-          tc.course.descricao,
-        categoria: tc.course.categoriaLoja ?? tc.course.categoriaInterna,
-        horas: tc.course.cargaHoraria,
-        price: Number(tc.price),
-        originalPrice: tc.course.precoOriginal
-          ? Number(tc.course.precoOriginal)
-          : null,
-        imageUrl:
-          tc.customCapaUrl ?? tc.course.capaOverride ?? tc.course.capaImageUrl,
-        parcelas:
-          tc.customParcelas ??
-          tc.course.parcelasOverride ??
-          tc.course.parcelasSugeridas,
-        isFeatured: tc.isFeatured,
-      })),
+      items: items.map(mapTenantCourseItem),
     }
   } catch (error) {
     contextLogger().error(
@@ -108,6 +126,98 @@ export async function listTenantCourses(
       "listTenantCourses falhou",
     )
     return { items: [], total: 0 }
+  }
+}
+
+export interface TenantCatalogCategory {
+  nome: string
+  slug: string
+}
+
+/**
+ * Categorias (Category) que possuem ao menos um curso visivel na vitrine deste
+ * tenant. Usa slug+name canonicos da Category (mesma fonte do menu), para que os
+ * filtros do catalogo da loja casem com os links `/cursos?categoria={slug}`.
+ */
+async function tenantCatalogCategories(
+  tenantId: string,
+): Promise<TenantCatalogCategory[]> {
+  const cats = await prisma.category.findMany({
+    where: {
+      isActive: true,
+      courses: {
+        some: {
+          status: "ATIVO",
+          ...visibilityFilter(tenantId),
+          tenantCourses: { some: { tenantId, isVisible: true } },
+        },
+      },
+    },
+    orderBy: [{ displayOrder: "asc" }, { name: "asc" }],
+    select: { name: true, slug: true },
+  })
+  return cats.map((c) => ({ nome: c.name, slug: c.slug }))
+}
+
+/**
+ * Catalogo completo da vitrine do revendedor ("todos os cursos"). Diferente de
+ * `loadCatalogo` (catalogo global PMB), respeita o tenant: so cursos com
+ * `TenantCourse.isVisible` + `visibilityMode`, com preco/capa da unidade. O
+ * filtro de categoria recebe o SLUG da Category (resolvido para categoryId),
+ * coerente com os links do menu e da home.
+ */
+export async function listTenantCatalog(args: {
+  tenantId: string
+  categorySlug?: string
+  search?: string
+}): Promise<{
+  items: TenantCourseListItem[]
+  total: number
+  categories: TenantCatalogCategory[]
+}> {
+  const { tenantId, categorySlug, search } = args
+  try {
+    let categoryId: string | undefined
+    if (categorySlug && categorySlug !== "todos") {
+      const cat = await prisma.category.findUnique({
+        where: { slug: categorySlug },
+        select: { id: true, isActive: true },
+      })
+      // Categoria inexistente/inativa: catalogo vazio, mas ainda mostra os pills.
+      if (!cat || !cat.isActive) {
+        return { items: [], total: 0, categories: await tenantCatalogCategories(tenantId) }
+      }
+      categoryId = cat.id
+    }
+
+    const where: Prisma.TenantCourseWhereInput = {
+      tenantId,
+      isVisible: true,
+      course: {
+        status: "ATIVO",
+        ...visibilityFilter(tenantId),
+        ...(categoryId ? { categoryId } : {}),
+        ...(search ? { nome: { contains: search, mode: "insensitive" } } : {}),
+      },
+    }
+
+    const [rows, total, categories] = await Promise.all([
+      prisma.tenantCourse.findMany({
+        where,
+        include: { course: true },
+        orderBy: [{ isFeatured: "desc" }, { customOrder: "asc" }, { course: { nome: "asc" } }],
+      }),
+      prisma.tenantCourse.count({ where }),
+      tenantCatalogCategories(tenantId),
+    ])
+
+    return { items: rows.map(mapTenantCourseItem), total, categories }
+  } catch (error) {
+    contextLogger().error(
+      { err: error, event: "tenant.listCatalog_failed", tenantId },
+      "listTenantCatalog falhou",
+    )
+    return { items: [], total: 0, categories: [] }
   }
 }
 
@@ -163,6 +273,8 @@ export async function getTenantCourseBySlug(
         tc.course.parcelasOverride ??
         tc.course.parcelasSugeridas,
       isFeatured: tc.isFeatured,
+      paymentType: tc.paymentType,
+      monthlyMonths: tc.course.monthlyMonthsMain,
       qtdAulas: tc.course.qtdAulas,
       parcelasSugeridas:
         tc.customParcelas ??

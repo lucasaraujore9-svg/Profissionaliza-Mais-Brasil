@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { requireStudentSession } from "@/lib/auth/student-session"
 import { syncStudentProgress } from "@/lib/students/progress"
 import { getStudentPlatformLoginUrl } from "@/lib/students/platform-credentials"
+import { EmitCertificateButton } from "@/components/aluno/emit-certificate-button"
 import { contextLogger } from "@/lib/logger"
 import {
   ArrowRight,
@@ -93,6 +94,14 @@ export default async function StudentCoursesPage() {
     orderBy: { createdAt: "desc" },
   })
 
+  // % mínimo de progresso para o curso ser considerado concluído (libera a
+  // emissão do certificado pelo próprio aluno).
+  const settings = await prisma.systemSettings.findUnique({
+    where: { id: "default" },
+    select: { certificateMinPercent: true },
+  })
+  const minPercent = settings?.certificateMinPercent ?? 80
+
   // URL da plataforma de aulas (env EA_STUDENT_LOGIN_URL com fallback playcurso).
   const plataformaLoginUrl = getStudentPlatformLoginUrl()
 
@@ -143,6 +152,11 @@ export default async function StudentCoursesPage() {
             const BadgeIcon = badge.icon
             const isActive = e.status === "ACTIVE" || e.status === "COMPLETED"
             const isPending = e.status === "PENDING"
+            // Curso concluído (segundo o progresso da plataforma) e ainda sem
+            // certificado emitido → libera a emissão self-service.
+            const isConcluded =
+              e.progressStatus === "CONCLUIDO" || percent >= minPercent
+            const canEmitCertificate = isActive && isConcluded && !certificate
 
             return (
               <article
@@ -248,15 +262,17 @@ export default async function StudentCoursesPage() {
                     )}
 
                     {/* CTA secundário (certificado) */}
-                    {certificate && (
+                    {certificate ? (
                       <a
                         href={`/aluno/certificados/${certificate.id}`}
                         className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-[var(--color-pmb-green)] px-4 py-2 text-sm font-semibold text-[var(--color-pmb-green)] transition-colors hover:bg-[var(--color-pmb-green)]/5"
                       >
                         <Award className="h-4 w-4" />
-                        Baixar certificado
+                        Acessar certificado
                       </a>
-                    )}
+                    ) : canEmitCertificate ? (
+                      <EmitCertificateButton enrollmentId={e.id} />
+                    ) : null}
 
                     <p className="text-center text-[11px] text-gray-500">
                       Comprado em{" "}

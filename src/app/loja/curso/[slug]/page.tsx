@@ -99,6 +99,8 @@ export default async function CoursePage({ params }: CoursePageProps) {
     price: course.price,
     originalPrice: course.originalPrice,
     parcelas: course.parcelasSugeridas,
+    paymentType: course.paymentType,
+    monthlyMonths: course.monthlyMonths,
     lessons: course.lessons,
   }
 

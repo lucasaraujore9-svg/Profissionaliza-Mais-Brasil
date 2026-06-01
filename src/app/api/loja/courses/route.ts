@@ -22,6 +22,8 @@ export interface LojaCourseDTO {
   originalPrice: number | null
   imageUrl: string | null
   isFeatured: boolean
+  paymentType: "ONE_TIME" | "MONTHLY"
+  monthlyMonths: number | null
 }
 
 export const GET = withRequestContext(
@@ -103,6 +105,8 @@ export const GET = withRequestContext(
         : null,
       imageUrl: tc.course.capaImageUrl,
       isFeatured: tc.isFeatured,
+      paymentType: tc.paymentType,
+      monthlyMonths: tc.course.monthlyMonthsMain,
     }))
 
     return NextResponse.json({

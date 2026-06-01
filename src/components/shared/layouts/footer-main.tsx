@@ -28,7 +28,7 @@ function IconYoutube(props: React.SVGProps<SVGSVGElement>) {
     </svg>
   )
 }
-import { getSocialLinks, getSupportContacts } from "@/lib/branding"
+import { getSocialLinks, getSupportContacts, type SupportContacts } from "@/lib/branding"
 import type { CategoriaInfo } from "@/lib/catalog/home"
 
 interface NavLink {
@@ -71,16 +71,39 @@ interface FooterMainProps {
    * para que quem se cadastrar a partir daquela unidade gere comissao ao dono.
    */
   sejaRevendedorHref?: string
+  /**
+   * Identidade exibida no rodape. Omitido = marca PMB (logo + nome
+   * institucional). A vitrine do revendedor passa os dados do tenant:
+   * `logoUrl: null` exibe o nome da unidade em texto (nunca a logo da PMB).
+   */
+  brand?: { name: string; logoUrl: string | null; description: string | null }
+  /**
+   * Sobrescreve os contatos de atendimento. A vitrine passa os contatos do
+   * tenant (`buildTenantSupportContacts`); sem isso usa os contatos da PMB.
+   */
+  support?: SupportContacts
 }
+
+const PMB_DESCRIPTION =
+  "Cursos profissionalizantes online com certificado reconhecido. Aprenda uma profissão e comece a faturar sem sair de casa."
 
 export function FooterMain({
   categorias = [],
   social: socialOverride,
   showCnpj = true,
   sejaRevendedorHref,
+  brand,
+  support: supportOverride,
 }: FooterMainProps) {
-  const support = getSupportContacts()
+  const support = supportOverride ?? getSupportContacts()
   const social = socialOverride ?? getSocialLinks()
+  const brandName = brand?.name ?? "Profissionaliza Mais Brasil"
+  const brandDescription = brand
+    ? brand.description?.trim() || PMB_DESCRIPTION
+    : PMB_DESCRIPTION
+  // PMB → logo institucional. Tenant com logo → logo do tenant. Tenant sem
+  // logo (`brand` definido, logoUrl null) → nome em texto.
+  const logoSrc = brand ? brand.logoUrl : "/images/logo.png"
   const categoriaLinks: NavLink[] = categorias.slice(0, 6).map((cat) => ({
     label: cat.nome,
     href: `/cursos?categoria=${cat.slug}`,
@@ -97,23 +120,33 @@ export function FooterMain({
       <div className="mx-auto max-w-[1280px] px-4 pt-14 pb-8 md:px-6">
         <div className="grid gap-10 md:grid-cols-[1.4fr_1fr_1fr_1fr]">
           <div>
-            <Link
-              href="/"
-              aria-label="Profissionaliza Mais Brasil"
-              className="inline-flex items-center rounded-lg bg-white p-2"
-            >
-              <Image
-                src="/images/logo.png"
-                alt="Profissionaliza Mais Brasil"
-                width={1536}
-                height={1024}
-                className="h-10 w-auto"
-              />
-            </Link>
+            {logoSrc ? (
+              <Link
+                href="/"
+                aria-label={brandName}
+                className="inline-flex items-center rounded-lg bg-white p-2"
+              >
+                <Image
+                  src={logoSrc}
+                  alt={brandName}
+                  width={1536}
+                  height={1024}
+                  className="h-10 w-auto"
+                  unoptimized={Boolean(brand)}
+                />
+              </Link>
+            ) : (
+              <Link
+                href="/"
+                aria-label={brandName}
+                className="inline-flex items-center text-xl font-black text-white"
+              >
+                {brandName}
+              </Link>
+            )}
 
             <p className="mt-4 max-w-sm text-[13.5px] leading-relaxed text-white/75">
-              Cursos profissionalizantes online com certificado reconhecido.
-              Aprenda uma profissão e comece a faturar sem sair de casa.
+              {brandDescription}
             </p>
 
             <ul className="mt-5 space-y-2 text-[13px] text-white/80">
@@ -143,27 +176,31 @@ export function FooterMain({
                   </a>
                 </li>
               )}
-              <li className="flex items-center gap-2">
-                <Mail
-                  className="h-4 w-4 text-[var(--color-pmb-lime)]"
-                  strokeWidth={2.25}
-                  aria-hidden
-                />
-                <a
-                  href={`mailto:${support.email}`}
-                  className="hover:underline"
-                >
-                  {support.email}
-                </a>
-              </li>
-              <li className="flex items-center gap-2">
-                <Clock
-                  className="h-4 w-4 text-[var(--color-pmb-lime)]"
-                  strokeWidth={2.25}
-                  aria-hidden
-                />
-                {support.hours}
-              </li>
+              {support.email && (
+                <li className="flex items-center gap-2">
+                  <Mail
+                    className="h-4 w-4 text-[var(--color-pmb-lime)]"
+                    strokeWidth={2.25}
+                    aria-hidden
+                  />
+                  <a
+                    href={`mailto:${support.email}`}
+                    className="hover:underline"
+                  >
+                    {support.email}
+                  </a>
+                </li>
+              )}
+              {support.hours && (
+                <li className="flex items-center gap-2">
+                  <Clock
+                    className="h-4 w-4 text-[var(--color-pmb-lime)]"
+                    strokeWidth={2.25}
+                    aria-hidden
+                  />
+                  {support.hours}
+                </li>
+              )}
             </ul>
 
             {(social.instagram || social.facebook || social.youtube) && (
@@ -220,8 +257,8 @@ export function FooterMain({
 
         <div className="mt-12 flex flex-col items-start justify-between gap-3 border-t border-white/10 pt-6 text-[12px] text-white/60 md:flex-row md:items-center">
           <p>
-            © {new Date().getFullYear()} Profissionaliza Mais Brasil · Todos
-            os direitos reservados
+            © {new Date().getFullYear()} {brandName} · Todos os direitos
+            reservados
           </p>
           <p>
             {showCnpj ? "CNPJ 66.553.170/0001-01 · " : ""}Pagamentos 100% seguros

@@ -107,6 +107,9 @@ async function renderSection(
         subtitulo={cfg.subtitle || undefined}
         verTodosHref={seeMoreHref}
         cursos={resolved.courses}
+        // Na vitrine do revendedor (tenantId) os cards apontam para o detalhe
+        // da loja (`/curso/:slug`), nao para o detalhe global da PMB.
+        hrefBase={ctx.tenantId ? "/curso" : "/cursos"}
       />
     )
   }

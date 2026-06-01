@@ -228,6 +228,8 @@ export interface ShowcaseCard {
   imageUrl: string | null
   selo: "novo" | "mais-vendido"
   accent: "gold" | "cyan" | "lime"
+  /** MONTHLY exibe o preco como mensalidade recorrente (sufixo "/mês"). */
+  paymentType?: "ONE_TIME" | "MONTHLY"
 }
 
 export async function loadCatalogo({
@@ -387,6 +389,7 @@ async function loadTenantShowcase(tenantId: string): Promise<ShowcaseCard[]> {
       imageUrl: tc.customCapaUrl ?? tc.course.capaOverride ?? tc.course.capaImageUrl,
       selo: selos[idx] ?? "novo",
       accent: accents[idx] ?? "gold",
+      paymentType: tc.paymentType,
     }))
   } catch {
     return []
