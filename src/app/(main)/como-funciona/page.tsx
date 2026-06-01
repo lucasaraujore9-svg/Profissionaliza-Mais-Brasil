@@ -26,7 +26,7 @@ const PASSOS = [
 ]
 
 export const metadata = {
-  title: "Como funciona — Profissionaliza Mais Brasil",
+  title: "Como funciona",
   description: "Descubra em 4 passos como estudar e emitir seu certificado.",
 }
 

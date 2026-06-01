@@ -40,7 +40,7 @@ const FAQ = [
 ]
 
 export const metadata = {
-  title: "Central de Ajuda — Profissionaliza Mais Brasil",
+  title: "Central de Ajuda",
   description: "Dúvidas frequentes sobre cursos, pagamentos, certificados e acesso.",
   alternates: { canonical: "/ajuda" },
 }

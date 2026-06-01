@@ -2,9 +2,17 @@ import type { Metadata } from "next"
 import { BrandPanel } from "@/components/auth/brand-panel"
 import { getCurrentTenant } from "@/lib/tenant/current"
 
-export const metadata: Metadata = {
-  title: "Acessar conta | Profissionaliza Mais Brasil",
-  description: "Faça login na sua conta — alunos, revendedores e equipe.",
+// Título por contexto: no domínio do revendedor usa o nome da unidade.
+export async function generateMetadata(): Promise<Metadata> {
+  const tenant = await getCurrentTenant()
+  const name = tenant?.name ?? "Profissionaliza Mais Brasil"
+  return {
+    title: `Acessar conta | ${name}`,
+    description: "Faça login na sua conta — alunos, revendedores e equipe.",
+    ...(tenant?.logoUrl
+      ? { icons: { icon: [{ url: tenant.logoUrl }], apple: [{ url: tenant.logoUrl }] } }
+      : {}),
+  }
 }
 
 const PMB_GREEN_DEFAULT = "#025918"

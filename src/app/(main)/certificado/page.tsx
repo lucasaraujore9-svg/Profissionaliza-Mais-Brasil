@@ -3,7 +3,7 @@ import { Award, Download, Share2, Shield } from "lucide-react"
 import { PageHero, PageBody } from "@/components/main/static/page-hero"
 
 export const metadata = {
-  title: "Certificado — Profissionaliza Mais Brasil",
+  title: "Certificado",
   description: "Como acessar, baixar e validar seu certificado de conclusão.",
 }
 

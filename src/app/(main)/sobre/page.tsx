@@ -3,7 +3,7 @@ import { Target, Users, TrendingUp } from "lucide-react"
 import { PageHero, PageBody } from "@/components/main/static/page-hero"
 
 export const metadata = {
-  title: "Quem somos — Profissionaliza Mais Brasil",
+  title: "Quem somos",
   description: "Nossa missão é transformar vidas com educação profissionalizante acessível.",
 }
 

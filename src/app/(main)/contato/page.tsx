@@ -4,7 +4,7 @@ import { ContactForm } from "@/components/main/contact-form"
 import { getSupportContacts } from "@/lib/branding"
 
 export const metadata = {
-  title: "Contato — Profissionaliza Mais Brasil",
+  title: "Contato",
   description:
     "Tire dúvidas sobre cursos, suporte ou parcerias. Resposta em até 1 dia útil.",
 }

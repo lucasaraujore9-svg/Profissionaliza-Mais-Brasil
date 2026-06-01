@@ -22,10 +22,26 @@ function isCustomColor(value: string | null | undefined, fallback: string): bool
   return value.toLowerCase() !== fallback.toLowerCase()
 }
 
-export const metadata: Metadata = {
-  title: "Profissionaliza Mais Brasil — Cursos profissionalizantes online",
-  description:
-    "Cursos profissionalizantes online com certificado reconhecido nacionalmente. Estude pelo celular, pague no Pix e ganhe uma profissão no seu ritmo.",
+// Título/descrição/favicon por contexto: no domínio do revendedor puxam o nome,
+// a descrição e a logo da unidade; sem tenant, a identidade institucional PMB.
+// O `template` faz cada subpágina (que define só o título relativo, ex.
+// "Quem somos") sair como "Quem somos · {nome da unidade}".
+export async function generateMetadata(): Promise<Metadata> {
+  const tenant = await getCurrentTenant()
+  const name = tenant?.name ?? "Profissionaliza Mais Brasil"
+  const description = tenant
+    ? tenant.description ??
+      tenant.tagline ??
+      `Cursos profissionalizantes online com certificado na vitrine ${name}.`
+    : "Cursos profissionalizantes online com certificado reconhecido nacionalmente. Estude pelo celular, pague no Pix e ganhe uma profissão no seu ritmo."
+
+  return {
+    title: { default: name, template: `%s · ${name}` },
+    description,
+    ...(tenant?.logoUrl
+      ? { icons: { icon: [{ url: tenant.logoUrl }], apple: [{ url: tenant.logoUrl }] } }
+      : {}),
+  }
 }
 
 // O grupo (main) é servido tanto no domínio institucional da PMB quanto, em

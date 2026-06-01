@@ -5,7 +5,7 @@ import remarkGfm from "remark-gfm"
 import { PageHero, PageBody, Prose } from "@/components/main/static/page-hero"
 
 export const metadata = {
-  title: "Política de Privacidade — Profissionaliza Mais Brasil",
+  title: "Política de Privacidade",
   description:
     "Como coletamos, usamos e protegemos seus dados pessoais — em conformidade com a LGPD (Lei nº 13.709/2018).",
 }

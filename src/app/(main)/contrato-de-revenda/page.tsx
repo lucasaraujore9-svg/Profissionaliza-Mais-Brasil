@@ -5,7 +5,7 @@ import remarkGfm from "remark-gfm"
 import { PageHero, PageBody, Prose } from "@/components/main/static/page-hero"
 
 export const metadata = {
-  title: "Contrato de Revenda — Profissionaliza Mais Brasil",
+  title: "Contrato de Revenda",
   description:
     "Contrato de licenciamento de uso da plataforma e revenda de cursos profissionalizantes Profissionaliza Mais Brasil.",
 }

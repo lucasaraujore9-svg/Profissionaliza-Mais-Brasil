@@ -2,7 +2,7 @@ import Link from "next/link"
 import { PageHero, PageBody, Prose } from "@/components/main/static/page-hero"
 
 export const metadata = {
-  title: "Política de Reembolso — Profissionaliza Mais Brasil",
+  title: "Política de Reembolso",
   description: "Garantia de 7 dias corridos. Veja como pedir seu reembolso.",
 }
 
