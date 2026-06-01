@@ -12,7 +12,10 @@ type MemberRole = "owner" | "consultant" | null
  * - Roteiros distintos por papel: `owner` (revendedor dono) vê todos os
  *   módulos; `consultant` (consultor convidado pelo revendedor) vê o
  *   subconjunto que de fato aparece na sidebar dele.
- * - Auto-inicia 1x por usuário (controle em users.onboarding_tour_completed_at).
+ * - Auto-inicia a cada acesso enquanto o usuário não marcar "não mostrar
+ *   novamente" (controle em users.onboarding_tour_completed_at: NULL = volta
+ *   a aparecer; data = usuário optou por não rever). O checkbox aparece em
+ *   todos os passos; ao fechar o tour a preferência é salva no banco.
  *   Só dispara em telas grandes (lg+), onde a sidebar fica fixa — no mobile
  *   ela vive num drawer e o spotlight não teria âncora. O usuário pode
  *   reabrir pelo botão de ajuda no header (evento `pmb:replay-tour`).
@@ -220,6 +223,34 @@ function visibleSteps(steps: TourStep[]): TourStep[] {
   })
 }
 
+/**
+ * Injeta o checkbox "Não mostrar este tutorial novamente" no balão de cada
+ * passo, sincronizado com `ref`. Driver.js não tem checkbox nativo, então
+ * montamos o elemento no DOM do popover a cada render.
+ */
+function renderDontShowCheckbox(
+  footer: HTMLElement,
+  ref: { current: boolean },
+): void {
+  const label = document.createElement("label")
+  label.className = "pmb-tour-dontshow"
+
+  const input = document.createElement("input")
+  input.type = "checkbox"
+  input.checked = ref.current
+  input.addEventListener("change", () => {
+    ref.current = input.checked
+  })
+
+  const span = document.createElement("span")
+  span.textContent = "Não mostrar este tutorial novamente"
+
+  label.appendChild(input)
+  label.appendChild(span)
+  // Acima dos botões de navegação (progresso + Voltar/Próximo).
+  footer.parentElement?.insertBefore(label, footer)
+}
+
 export function OnboardingTour({
   memberRole,
   completed,
@@ -227,14 +258,17 @@ export function OnboardingTour({
   memberRole: MemberRole
   completed: boolean
 }) {
-  // Evita POST duplicado de conclusão e re-start concorrente.
-  const markedRef = useRef(false)
   const runningRef = useRef(false)
+  // Preferência marcada no checkbox durante a sessão do tour.
+  const dontShowAgainRef = useRef(completed)
+  // Último valor já gravado no banco (evita POSTs desnecessários).
+  const persistedRef = useRef(completed)
+  const savingRef = useRef(false)
 
   useEffect(() => {
     let cancelled = false
 
-    async function run(markOnEnd: boolean) {
+    async function run() {
       if (runningRef.current) return
       runningRef.current = true
 
@@ -272,24 +306,34 @@ export function OnboardingTour({
             align: s.align ?? "center",
           },
         })),
+        onPopoverRender: (popover) => {
+          renderDontShowCheckbox(popover.footer, dontShowAgainRef)
+        },
         onDestroyed: () => {
           runningRef.current = false
-          if (markOnEnd) void markCompleted()
+          void persistPreference()
         },
       })
 
       instance.drive()
     }
 
-    async function markCompleted() {
-      if (markedRef.current) return
-      markedRef.current = true
+    async function persistPreference() {
+      const desired = dontShowAgainRef.current
+      // Nada mudou em relação ao que já está no banco → não grava.
+      if (desired === persistedRef.current || savingRef.current) return
+      savingRef.current = true
       try {
-        await fetch("/api/painel/onboarding-tour", { method: "POST" })
+        await fetch("/api/painel/onboarding-tour", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ dontShowAgain: desired }),
+        })
+        persistedRef.current = desired
       } catch {
-        // Falha de rede não deve reabrir o tour de forma agressiva; o
-        // próximo carregamento tenta de novo se ainda não marcou no banco.
-        markedRef.current = false
+        // Falha de rede: mantém o estado e tenta de novo no próximo fechamento.
+      } finally {
+        savingRef.current = false
       }
     }
 
@@ -297,15 +341,17 @@ export function OnboardingTour({
       typeof window !== "undefined" &&
       window.matchMedia("(min-width: 1024px)").matches
 
-    // Auto-start no primeiro acesso (desktop). Pequeno atraso pra garantir
-    // que a sidebar já montou antes de medir os alvos.
+    // Auto-start a cada acesso enquanto o usuário não optar por não rever
+    // (completed === false). Pequeno atraso pra garantir que a sidebar já
+    // montou antes de medir os alvos.
     let startTimer: ReturnType<typeof setTimeout> | undefined
     if (!completed && isDesktop) {
-      startTimer = setTimeout(() => void run(true), 400)
+      startTimer = setTimeout(() => void run(), 400)
     }
 
-    // Reabrir manualmente pelo botão de ajuda (não re-marca: já está marcado).
-    const onReplay = () => void run(false)
+    // Reabrir manualmente pelo botão de ajuda. O checkbox também vale aqui:
+    // marcar "não mostrar" durante a revisão grava a preferência.
+    const onReplay = () => void run()
     window.addEventListener("pmb:replay-tour", onReplay)
 
     return () => {
