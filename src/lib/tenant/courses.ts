@@ -55,6 +55,14 @@ type TenantCourseWithCourse = Prisma.TenantCourseGetPayload<{
  * plataforma bruto. Centralizado para que listagem e catalogo sejam consistentes.
  */
 function mapTenantCourseItem(tc: TenantCourseWithCourse): TenantCourseListItem {
+  // Parcelas efetivas configuradas pela unidade. Para MONTHLY este mesmo valor
+  // representa a quantidade de mensalidades (o painel edita customParcelas como
+  // "quantidade de mensalidades"); por isso monthlyMonths deve respeitá-lo, com
+  // fallback no override admin global apenas quando a unidade não definiu nada.
+  const effectiveParcelas =
+    tc.customParcelas ??
+    tc.course.parcelasOverride ??
+    tc.course.parcelasSugeridas
   return {
     id: tc.id,
     slug: tc.course.slug,
@@ -71,13 +79,10 @@ function mapTenantCourseItem(tc: TenantCourseWithCourse): TenantCourseListItem {
       : null,
     imageUrl:
       tc.customCapaUrl ?? tc.course.capaOverride ?? tc.course.capaImageUrl,
-    parcelas:
-      tc.customParcelas ??
-      tc.course.parcelasOverride ??
-      tc.course.parcelasSugeridas,
+    parcelas: effectiveParcelas,
     isFeatured: tc.isFeatured,
     paymentType: tc.paymentType,
-    monthlyMonths: tc.course.monthlyMonthsMain,
+    monthlyMonths: effectiveParcelas ?? tc.course.monthlyMonthsMain,
   }
 }
 
@@ -251,6 +256,13 @@ export async function getTenantCourseBySlug(
 
     if (!tc) return null
 
+    // Parcelas efetivas da unidade. Para MONTHLY, equivale à quantidade de
+    // mensalidades (ver mapTenantCourseItem).
+    const effectiveParcelas =
+      tc.customParcelas ??
+      tc.course.parcelasOverride ??
+      tc.course.parcelasSugeridas
+
     return {
       id: tc.id,
       tenantCourseId: tc.id,
@@ -268,18 +280,12 @@ export async function getTenantCourseBySlug(
         : null,
       imageUrl:
         tc.customCapaUrl ?? tc.course.capaOverride ?? tc.course.capaImageUrl,
-      parcelas:
-        tc.customParcelas ??
-        tc.course.parcelasOverride ??
-        tc.course.parcelasSugeridas,
+      parcelas: effectiveParcelas,
       isFeatured: tc.isFeatured,
       paymentType: tc.paymentType,
-      monthlyMonths: tc.course.monthlyMonthsMain,
+      monthlyMonths: effectiveParcelas ?? tc.course.monthlyMonthsMain,
       qtdAulas: tc.course.qtdAulas,
-      parcelasSugeridas:
-        tc.customParcelas ??
-        tc.course.parcelasOverride ??
-        tc.course.parcelasSugeridas,
+      parcelasSugeridas: effectiveParcelas,
       plataformaCourseId: tc.course.plataformaCourseId,
       lessons: tc.course.courseLessons.map((l) => ({
         id: l.id,

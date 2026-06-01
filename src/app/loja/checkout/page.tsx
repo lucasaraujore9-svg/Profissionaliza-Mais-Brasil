@@ -94,6 +94,7 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
           categoriaLoja: true,
           categoriaInterna: true,
           parcelasSugeridas: true,
+          parcelasOverride: true,
           monthlyMonthsMain: true,
         },
       },
@@ -114,6 +115,12 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
   }
 
   const basePrice = Number(tenantCourse.price)
+  // Parcelas efetivas da unidade (customParcelas tem prioridade). Para MONTHLY,
+  // representa a quantidade de mensalidades. Espelha a hierarquia da vitrine.
+  const effectiveParcelas =
+    tenantCourse.customParcelas ??
+    tenantCourse.course.parcelasOverride ??
+    tenantCourse.course.parcelasSugeridas
   const validatedCoupon = couponParam
     ? await resolveCoupon(tenant.id, couponParam, basePrice)
     : null
@@ -159,9 +166,9 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
               discountAmount={discountAmount}
               finalPrice={finalPrice}
               couponCode={validatedCoupon?.code ?? null}
-              parcelasSugeridas={tenantCourse.course.parcelasSugeridas}
+              parcelasSugeridas={effectiveParcelas}
               paymentType={tenantCourse.paymentType}
-              monthlyMonths={tenantCourse.course.monthlyMonthsMain}
+              monthlyMonths={effectiveParcelas ?? tenantCourse.course.monthlyMonthsMain}
             />
           </aside>
         </div>
