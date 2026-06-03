@@ -301,7 +301,7 @@ function ClassicPreview({
 
           <div className="text-right">
             {data.showQrCode && (
-              <div className="inline-block h-12 w-12 sm:h-14 sm:w-14 border border-dashed border-gray-400 bg-white p-1 text-[8px] leading-tight text-gray-500">
+              <div className="inline-flex h-12 w-12 sm:h-14 sm:w-14 items-center justify-center rounded-md border border-gray-200 bg-white p-1 text-[8px] leading-tight text-gray-500 shadow-sm">
                 QR
               </div>
             )}
@@ -626,7 +626,7 @@ function MinimalPreview({
 
           <div className="flex flex-col items-end text-right">
             {data.showQrCode && (
-              <div className="h-9 w-9 sm:h-12 sm:w-12 border border-dashed border-gray-400 bg-white p-1 text-[8px] leading-tight text-gray-500 flex items-center justify-center">
+              <div className="flex h-9 w-9 sm:h-12 sm:w-12 items-center justify-center rounded-md border border-gray-200 bg-white p-1 text-[8px] leading-tight text-gray-500 shadow-sm">
                 QR
               </div>
             )}

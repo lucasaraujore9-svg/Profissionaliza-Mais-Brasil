@@ -148,10 +148,16 @@ export function MinimalCertificate(data: CertificateRenderData) {
     },
     qrBlock: {
       alignItems: "center",
+      backgroundColor: "#FFFFFF",
+      padding: 7,
+      borderRadius: 6,
+      borderWidth: 1,
+      borderColor: "#E5E7EB",
     },
     qrImage: {
       width: 56,
       height: 56,
+      backgroundColor: "#FFFFFF",
     },
     code: {
       fontSize: 9,
