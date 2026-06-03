@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Dices, Hand, Info } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -149,6 +149,15 @@ function CourseSelectionEditor({
     patch: Partial<BestsellersConfig | CategoryCoursesConfig>,
   ) => void
 }) {
+  // "Mais vendidos" é padronizada em 4 cursos: não expõe o seletor de
+  // quantidade e coage o config para 4 (cobrindo seções antigas com count=8).
+  const isBestsellers = config.kind === "bestsellers"
+  useEffect(() => {
+    if (isBestsellers && config.count !== 4) {
+      onChange({ count: 4, courseIds: config.courseIds.slice(0, 4) })
+    }
+  }, [isBestsellers, config.count, config.courseIds, onChange])
+
   return (
     <div className="space-y-4">
       {/* Modo */}
@@ -193,27 +202,39 @@ function CourseSelectionEditor({
         />
       </div>
 
-      {/* Quantidade */}
-      <div className="space-y-1.5">
-        <Label className="text-xs font-bold uppercase tracking-wide text-zinc-500">
-          Quantos cursos mostrar?
-        </Label>
-        <Segmented<SectionCount>
-          value={config.count}
-          onChange={(v) =>
-            onChange({
-              count: v,
-              // Ao reduzir, mantém apenas os primeiros N selecionados.
-              courseIds: config.courseIds.slice(0, v),
-            })
-          }
-          ariaLabel="Quantidade"
-          options={[
-            { value: 4, label: "4 cursos", sub: "Compacto" },
-            { value: 8, label: "8 cursos", sub: "Em destaque" },
-          ]}
-        />
-      </div>
+      {/* Quantidade — bestsellers é fixo em 4; categorias escolhem 4 ou 8. */}
+      {isBestsellers ? (
+        <div className="space-y-1.5">
+          <Label className="text-xs font-bold uppercase tracking-wide text-zinc-500">
+            Quantos cursos mostrar?
+          </Label>
+          <p className="rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2.5 text-sm text-zinc-600">
+            A seção <b>Mais vendidos da semana</b> exibe sempre{" "}
+            <b>4 cursos</b>, mantendo o padrão da vitrine.
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-1.5">
+          <Label className="text-xs font-bold uppercase tracking-wide text-zinc-500">
+            Quantos cursos mostrar?
+          </Label>
+          <Segmented<SectionCount>
+            value={config.count}
+            onChange={(v) =>
+              onChange({
+                count: v,
+                // Ao reduzir, mantém apenas os primeiros N selecionados.
+                courseIds: config.courseIds.slice(0, v),
+              })
+            }
+            ariaLabel="Quantidade"
+            options={[
+              { value: 4, label: "4 cursos", sub: "Compacto" },
+              { value: 8, label: "8 cursos", sub: "Em destaque" },
+            ]}
+          />
+        </div>
+      )}
 
       {/* Modo aleatório: aviso explicativo */}
       {config.mode === "random" && (

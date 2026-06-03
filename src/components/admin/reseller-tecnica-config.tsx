@@ -4,17 +4,18 @@ import { useEffect, useState } from "react"
 import { Building2, Save, ExternalLink, Loader2 } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
-import {
-  TecnicaCoursesEditor,
-  type TecnicaCourseDraft,
-} from "./tecnica-courses-editor"
+import { type TecnicaCourseDraft } from "./tecnica-courses-editor"
 
 interface ResellerTecnicaConfigProps {
   tenantId: string
   tecnicaEnabled: boolean
   tecnicaUrl: string | null
   tecnicaLabel: string | null
-  tecnicaCourses: TecnicaCourseDraft[]
+  /**
+   * Mantido por compatibilidade com o chamador. A lista/imagens dos cursos
+   * técnicos é padronizada pela PMB e não é mais editada por revendedor.
+   */
+  tecnicaCourses?: TecnicaCourseDraft[]
   onSaved?: () => void
 }
 
@@ -23,21 +24,18 @@ export function ResellerTecnicaConfig({
   tecnicaEnabled,
   tecnicaUrl,
   tecnicaLabel,
-  tecnicaCourses,
   onSaved,
 }: ResellerTecnicaConfigProps) {
   const [enabled, setEnabled] = useState(tecnicaEnabled)
   const [url, setUrl] = useState(tecnicaUrl ?? "")
   const [label, setLabel] = useState(tecnicaLabel ?? "")
-  const [courses, setCourses] = useState<TecnicaCourseDraft[]>(tecnicaCourses)
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     setEnabled(tecnicaEnabled)
     setUrl(tecnicaUrl ?? "")
     setLabel(tecnicaLabel ?? "")
-    setCourses(tecnicaCourses)
-  }, [tecnicaEnabled, tecnicaUrl, tecnicaLabel, tecnicaCourses])
+  }, [tecnicaEnabled, tecnicaUrl, tecnicaLabel])
 
   async function save() {
     const trimmedUrl = url.trim()
@@ -53,24 +51,9 @@ export function ResellerTecnicaConfig({
         return
       }
     }
-    for (let i = 0; i < courses.length; i++) {
-      const c = courses[i]
-      if (!c.name.trim()) {
-        toast.error(`Curso #${i + 1}: nome obrigatório`)
-        return
-      }
-      if (c.url.trim()) {
-        try {
-          new URL(c.url.trim())
-        } catch {
-          toast.error(`Curso #${i + 1}: URL inválida`)
-          return
-        }
-      }
-    }
-
     setSaving(true)
     try {
+      // Não enviamos `courses`: a lista/imagens são padronizadas pela PMB.
       const res = await fetch(`/api/admin/tenants/${tenantId}/tecnica`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -78,11 +61,6 @@ export function ResellerTecnicaConfig({
           enabled,
           url: trimmedUrl || null,
           label: label.trim() || null,
-          courses: courses.map((c, i) => ({
-            name: c.name.trim(),
-            url: c.url.trim(),
-            order: i,
-          })),
         }),
       })
       const body = await res.json().catch(() => ({}))
@@ -188,13 +166,11 @@ export function ResellerTecnicaConfig({
         </p>
       </div>
 
-      <div className="mt-5 rounded-lg border border-gray-200 bg-gray-50/40 p-4">
-        <TecnicaCoursesEditor
-          courses={courses}
-          onChange={setCourses}
-          fallbackUrl={url.trim() || null}
-          disabled={saving}
-        />
+      <div className="mt-5 rounded-lg border border-gray-200 bg-gray-50/40 p-4 text-xs text-gray-600">
+        A lista de cursos técnicos e suas imagens é{" "}
+        <b>padronizada pelo Profissionaliza Mais Brasil</b> e exibida igual em
+        toda a rede. A unidade controla apenas ativar/desativar, o rótulo e a
+        URL de destino acima.
       </div>
 
       <div className="mt-5 flex justify-end">

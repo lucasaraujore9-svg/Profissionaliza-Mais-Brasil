@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button"
 export interface TecnicaCourseDraft {
   name: string
   url: string
+  /** Imagem fixa do curso (URL https:// ou caminho público /...). Opcional. */
+  image?: string
 }
 
 interface TecnicaCoursesEditorProps {
@@ -51,7 +53,7 @@ export function TecnicaCoursesEditor({
 
   const add = () => {
     if (courses.length >= MAX_COURSES) return
-    onChange([...courses, { name: "", url: "" }])
+    onChange([...courses, { name: "", url: "", image: "" }])
   }
 
   return (
@@ -119,6 +121,14 @@ export function TecnicaCoursesEditor({
                   </button>
                 </div>
               </div>
+              <Input
+                type="text"
+                value={c.image ?? ""}
+                disabled={disabled}
+                onChange={(e) => update(i, { image: e.target.value })}
+                placeholder="Imagem do curso — https://… ou /images/tecnica/arquivo.jpg (opcional)"
+                className="mt-2"
+              />
             </li>
           ))}
         </ul>
