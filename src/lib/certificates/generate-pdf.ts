@@ -7,7 +7,11 @@ import {
   formatCompletionDate,
   type CertificatePlaceholders,
 } from "./placeholders"
-import { readSnapshot, refreshGroupBranding } from "./template-resolver"
+import {
+  readSnapshot,
+  refreshGroupBranding,
+  type ResolvedTemplate,
+} from "./template-resolver"
 import { renderCertificateByLayout } from "./templates"
 import { uploadCertificatePdf } from "./storage"
 import { validationUrlFor } from "./urls"
@@ -39,6 +43,74 @@ function pdfPathFor(tenantId: string | null, certId: string): string {
 }
 
 /**
+ * Dados de um certificado (do aluno + curso) necessários para renderizar o PDF.
+ * `completionDate` ainda é um Date — a formatação BR acontece aqui dentro.
+ */
+export interface CertificateRenderFields {
+  studentName: string
+  studentCpf: string | null
+  courseName: string
+  cargaHoraria: string | null
+  completionDate: Date
+  code: string
+  /** Nome da unidade emissora exibido no certificado. */
+  unidade: string
+}
+
+/**
+ * Renderiza o buffer PDF de um certificado a partir de um template já resolvido
+ * e dos dados do aluno/curso. É o coração compartilhado entre a emissão real
+ * (`generateAndUploadPdf`) e os previews — assim o que se vê no preview é
+ * exatamente o que será emitido (mesma normalização, placeholders e layout).
+ */
+export async function renderCertificateBuffer(
+  template: ResolvedTemplate,
+  fields: CertificateRenderFields,
+): Promise<Buffer> {
+  // Nomes e parametros do certificado sao sempre exibidos em minusculo
+  // (regra de negocio). lowerCert centraliza a normalizacao.
+  const placeholders: CertificatePlaceholders = {
+    nome: lowerCert(fields.studentName),
+    cpf: lowerCert(fields.studentCpf),
+    curso: lowerCert(fields.courseName),
+    carga_horaria: lowerCert(fields.cargaHoraria),
+    data_conclusao: lowerCert(formatCompletionDate(fields.completionDate)),
+    codigo: lowerCert(fields.code),
+    unidade: lowerCert(fields.unidade),
+  }
+
+  const bodyResolved = applyPlaceholders(template.bodyText, placeholders)
+  const footerResolved = template.footerText
+    ? applyPlaceholders(template.footerText, placeholders)
+    : null
+  // URL exibida e codificada no QR em minusculo. A rota /validar normaliza o
+  // codigo com toUpperCase(), entao o link continua validando.
+  const validationUrl = lowerCert(validationUrlFor(fields.code))
+  const qrCodeDataUrl = template.showQrCode
+    ? await makeQrDataUrl(validationUrl)
+    : null
+
+  const element = renderCertificateByLayout(template.layout, {
+    template,
+    studentName: lowerCert(fields.studentName),
+    studentCpf: fields.studentCpf ? lowerCert(fields.studentCpf) : null,
+    courseName: lowerCert(fields.courseName),
+    cargaHoraria: fields.cargaHoraria ? lowerCert(fields.cargaHoraria) : null,
+    completionDateFormatted: lowerCert(formatCompletionDate(fields.completionDate)),
+    code: lowerCert(fields.code),
+    unidade: lowerCert(fields.unidade),
+    validationUrl,
+    qrCodeDataUrl,
+    bodyResolved,
+    footerResolved,
+    groupLogoUrl: template.groupLogoUrl,
+    groupName: template.groupName,
+  })
+
+  return renderToBuffer(element)
+}
+
+/**
  * Gera o PDF do certificado, sobe no Supabase Storage e atualiza
  * Certificate.pdfUrl + pdfGeneratedAt. Idempotente — re-rodar sobrescreve.
  */
@@ -66,47 +138,15 @@ export async function generateAndUploadPdf(
     ? cert.tenant?.name ?? PMB_PUBLIC_NAME
     : PMB_PUBLIC_NAME
 
-  // Nomes e parametros do certificado sao sempre exibidos em minusculo
-  // (regra de negocio). lowerCert centraliza a normalizacao.
-  const placeholders: CertificatePlaceholders = {
-    nome: lowerCert(cert.studentName),
-    cpf: lowerCert(cert.studentCpf),
-    curso: lowerCert(cert.courseName),
-    carga_horaria: lowerCert(cert.cargaHoraria),
-    data_conclusao: lowerCert(formatCompletionDate(cert.completionDate)),
-    codigo: lowerCert(cert.code),
-    unidade: lowerCert(unidade),
-  }
-
-  const bodyResolved = applyPlaceholders(template.bodyText, placeholders)
-  const footerResolved = template.footerText
-    ? applyPlaceholders(template.footerText, placeholders)
-    : null
-  // URL exibida e codificada no QR em minusculo. A rota /validar normaliza o
-  // codigo com toUpperCase(), entao o link continua validando.
-  const validationUrl = lowerCert(validationUrlFor(cert.code))
-  const qrCodeDataUrl = template.showQrCode
-    ? await makeQrDataUrl(validationUrl)
-    : null
-
-  const element = renderCertificateByLayout(template.layout, {
-    template,
-    studentName: lowerCert(cert.studentName),
-    studentCpf: cert.studentCpf ? lowerCert(cert.studentCpf) : null,
-    courseName: lowerCert(cert.courseName),
-    cargaHoraria: cert.cargaHoraria ? lowerCert(cert.cargaHoraria) : null,
-    completionDateFormatted: lowerCert(formatCompletionDate(cert.completionDate)),
-    code: lowerCert(cert.code),
-    unidade: lowerCert(unidade),
-    validationUrl,
-    qrCodeDataUrl,
-    bodyResolved,
-    footerResolved,
-    groupLogoUrl: template.groupLogoUrl,
-    groupName: template.groupName,
+  const buffer = await renderCertificateBuffer(template, {
+    studentName: cert.studentName,
+    studentCpf: cert.studentCpf,
+    courseName: cert.courseName,
+    cargaHoraria: cert.cargaHoraria,
+    completionDate: cert.completionDate,
+    code: cert.code,
+    unidade,
   })
-
-  const buffer = await renderToBuffer(element)
   const path = pdfPathFor(cert.tenantId, cert.id)
   const upload = await uploadCertificatePdf(path, buffer)
 

@@ -103,6 +103,7 @@ export default async function AdminCertificadosConfiguracoesPage() {
           initial={initialTemplate}
           saveEndpoint="/api/admin/certificate-template"
           uploadEndpoint="/api/admin/certificate-template/upload"
+          previewEndpoint="/api/admin/certificate-template/preview"
           scopeLabel="Template padrão PMB (vitrine própria)"
           groupLogoUrl={settings.groupLogoUrl}
           groupName={settings.groupName}

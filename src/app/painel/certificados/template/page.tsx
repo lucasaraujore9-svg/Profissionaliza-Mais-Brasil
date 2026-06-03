@@ -3,6 +3,8 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { PageHeader } from "@/components/painel/page-header"
 import { CertificateLayoutSelector } from "@/components/painel/certificate-layout-selector"
+import { resolveCertificateTemplate } from "@/lib/certificates/template-resolver"
+import type { CertificateTemplateData } from "@/components/shared/certificate-html-preview"
 
 export const dynamic = "force-dynamic"
 
@@ -17,18 +19,39 @@ export default async function PainelCertificadosTemplatePage() {
 
   const tenantId = user.tenantId
 
-  const [tenant, template] = await Promise.all([
+  const [tenant, resolved] = await Promise.all([
     prisma.tenant.findUnique({
       where: { id: tenantId },
       select: { name: true, logoUrl: true },
     }),
-    prisma.certificateTemplate.findUnique({
-      where: { tenantId },
-      select: { layout: true },
-    }),
+    // Template resolvido = design herdado do PMB (cores, textos, assinatura)
+    // + a logo e o layout escolhido da própria escola. É exatamente o que
+    // será emitido, então a prévia é fiel.
+    resolveCertificateTemplate(tenantId),
   ])
 
-  const initialLayout = template?.layout ?? "CLASSIC"
+  const initialLayout = resolved.layout
+
+  // ResolvedTemplate -> shape do componente de prévia (groupLogo/groupName
+  // viajam separados; isActive não importa para a prévia).
+  const template: CertificateTemplateData = {
+    layout: resolved.layout,
+    backgroundUrl: resolved.backgroundUrl,
+    logoUrl: resolved.logoUrl,
+    sealUrl: resolved.sealUrl,
+    signatureUrl: resolved.signatureUrl,
+    primaryColor: resolved.primaryColor,
+    secondaryColor: resolved.secondaryColor,
+    titleText: resolved.titleText,
+    bodyText: resolved.bodyText,
+    footerText: resolved.footerText,
+    signerName: resolved.signerName,
+    signerTitle: resolved.signerTitle,
+    showQrCode: resolved.showQrCode,
+    showValidationUrl: resolved.showValidationUrl,
+    showSeal: resolved.showSeal,
+    isActive: true,
+  }
 
   return (
     <div className="space-y-6">
@@ -40,7 +63,10 @@ export default async function PainelCertificadosTemplatePage() {
       <CertificateLayoutSelector
         initialLayout={initialLayout}
         tenantLogoUrl={tenant?.logoUrl ?? null}
-        tenantName={tenant?.name ?? "sua escola"}
+        tenantName={tenant?.name ?? "Sua Escola"}
+        template={template}
+        groupLogoUrl={resolved.groupLogoUrl}
+        groupName={resolved.groupName}
       />
     </div>
   )

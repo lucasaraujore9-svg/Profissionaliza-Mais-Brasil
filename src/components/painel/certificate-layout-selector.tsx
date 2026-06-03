@@ -1,61 +1,71 @@
 "use client"
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
-import { Check, Loader2 } from "lucide-react"
+import { Check, Eye, Loader2 } from "lucide-react"
+import {
+  CertificateHtmlPreview,
+  buildSampleData,
+  type CertificateLayout,
+  type CertificateTemplateData,
+} from "@/components/shared/certificate-html-preview"
 
-type Layout = "CLASSIC" | "MODERN" | "MINIMAL"
-
-interface LayoutOption {
-  id: Layout
+const LAYOUT_META: {
+  id: CertificateLayout
   title: string
   description: string
-  preview: React.ReactNode
-}
-
-const OPTIONS: LayoutOption[] = [
+}[] = [
   {
     id: "CLASSIC",
     title: "Clássico",
     description:
       "Layout tradicional com bordas decorativas, ideal para um visual elegante e formal.",
-    preview: <ClassicPreview />,
   },
   {
     id: "MODERN",
     title: "Moderno",
     description:
       "Layout limpo com faixa lateral colorida, perfeito para uma identidade contemporânea.",
-    preview: <ModernPreview />,
   },
   {
     id: "MINIMAL",
     title: "Minimalista",
     description:
       "Layout simples e direto, focado no conteúdo e na clareza da informação.",
-    preview: <MinimalPreview />,
   },
 ]
 
 interface Props {
-  initialLayout: Layout
+  initialLayout: CertificateLayout
   tenantLogoUrl: string | null
   tenantName: string
+  /** Template resolvido (design herdado do PMB + logo da escola). */
+  template: CertificateTemplateData
+  groupLogoUrl: string | null
+  groupName: string
 }
 
 export function CertificateLayoutSelector({
   initialLayout,
   tenantLogoUrl,
   tenantName,
+  template,
+  groupLogoUrl,
+  groupName,
 }: Props) {
   const router = useRouter()
-  const [selected, setSelected] = useState<Layout>(initialLayout)
-  const [savedLayout, setSavedLayout] = useState<Layout>(initialLayout)
+  const [selected, setSelected] = useState<CertificateLayout>(initialLayout)
+  const [savedLayout, setSavedLayout] = useState<CertificateLayout>(initialLayout)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
+  // Layout cujo PDF real está sendo exibido (null = nenhum). Mostrar o PDF é
+  // explícito (botão) para não renderizar PDF a cada troca de modelo.
+  const [pdfLayout, setPdfLayout] = useState<CertificateLayout | null>(null)
 
   const dirty = selected !== savedLayout
+
+  const sample = useMemo(() => buildSampleData(tenantName), [tenantName])
 
   async function handleSave() {
     setSaving(true)
@@ -129,12 +139,13 @@ export function CertificateLayoutSelector({
         </h2>
         <p className="mt-1 text-sm text-gray-600">
           O texto, as cores e o conteúdo do certificado são padronizados. Você
-          escolhe apenas o estilo visual entre as opções abaixo.
+          escolhe apenas o estilo visual entre as opções abaixo. As prévias
+          mostram dados de exemplo com a identidade da sua escola.
         </p>
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">
-        {OPTIONS.map((option) => {
+        {LAYOUT_META.map((option) => {
           const isActive = selected === option.id
           return (
             <button
@@ -152,8 +163,13 @@ export function CertificateLayoutSelector({
                   <Check className="h-4 w-4" />
                 </div>
               )}
-              <div className="border-b border-gray-100 bg-gray-50 p-4">
-                {option.preview}
+              <div className="border-b border-gray-100 bg-gray-50 p-3">
+                <CertificateHtmlPreview
+                  data={{ ...template, layout: option.id }}
+                  groupLogoUrl={groupLogoUrl}
+                  groupName={groupName}
+                  sample={sample}
+                />
               </div>
               <div className="flex flex-1 flex-col p-4">
                 <h3 className="text-sm font-semibold text-[var(--color-pmb-green-900)]">
@@ -166,6 +182,63 @@ export function CertificateLayoutSelector({
             </button>
           )
         })}
+      </div>
+
+      {/* Prévia grande do modelo selecionado */}
+      <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <h3 className="text-sm font-semibold text-[var(--color-pmb-green-900)]">
+              Prévia —{" "}
+              {LAYOUT_META.find((o) => o.id === selected)?.title ?? selected}
+            </h3>
+            <p className="mt-0.5 text-xs text-gray-500">
+              Prévia aproximada com dados de exemplo. Veja o PDF real para o
+              resultado exato.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setPdfLayout(selected)}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-pmb-green)] px-3 py-1.5 text-xs font-semibold text-[var(--color-pmb-green)] transition-colors hover:bg-[var(--color-pmb-lime-50)]"
+          >
+            <Eye className="h-3.5 w-3.5" />
+            Ver PDF real
+          </button>
+        </div>
+
+        <div className="mt-4 grid gap-4 lg:grid-cols-2">
+          <CertificateHtmlPreview
+            data={{ ...template, layout: selected }}
+            groupLogoUrl={groupLogoUrl}
+            groupName={groupName}
+            sample={sample}
+          />
+
+          {pdfLayout && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-semibold text-[var(--color-pmb-green-900)]">
+                  PDF real
+                </h4>
+                <a
+                  href={`/api/painel/certificate-template/preview?layout=${pdfLayout}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs font-semibold text-[var(--color-pmb-green)] hover:underline"
+                >
+                  Abrir em nova aba
+                </a>
+              </div>
+              <iframe
+                key={pdfLayout}
+                src={`/api/painel/certificate-template/preview?layout=${pdfLayout}`}
+                title="Prévia em PDF do certificado"
+                className="aspect-[1.41/1] w-full rounded-xl border border-gray-200 bg-gray-50 shadow-sm"
+              />
+            </div>
+          )}
+        </div>
       </div>
 
       {error && (
@@ -184,7 +257,7 @@ export function CertificateLayoutSelector({
         <div className="text-xs text-gray-600">
           Layout atual:{" "}
           <strong className="text-[var(--color-pmb-green-900)]">
-            {OPTIONS.find((o) => o.id === savedLayout)?.title ?? savedLayout}
+            {LAYOUT_META.find((o) => o.id === savedLayout)?.title ?? savedLayout}
           </strong>
         </div>
         <button
@@ -202,59 +275,6 @@ export function CertificateLayoutSelector({
             "Salvar layout"
           )}
         </button>
-      </div>
-    </div>
-  )
-}
-
-function ClassicPreview() {
-  return (
-    <div className="relative mx-auto aspect-[1.4/1] w-full max-w-[220px] rounded-md bg-white p-3 shadow-inner ring-1 ring-gray-200">
-      <div className="h-full w-full rounded border-2 border-double border-[var(--color-pmb-green)] p-2">
-        <div className="flex h-full flex-col items-center justify-between">
-          <div className="h-3 w-12 rounded-sm bg-gray-300" />
-          <div className="flex flex-col items-center gap-1">
-            <div className="h-1.5 w-24 rounded-sm bg-[var(--color-pmb-green-900)]" />
-            <div className="h-1 w-16 rounded-sm bg-gray-300" />
-            <div className="h-1 w-20 rounded-sm bg-gray-200" />
-          </div>
-          <div className="flex w-full items-end justify-between">
-            <div className="h-2 w-10 rounded-sm bg-gray-200" />
-            <div className="h-4 w-4 rounded-full bg-yellow-400/70" />
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function ModernPreview() {
-  return (
-    <div className="relative mx-auto flex aspect-[1.4/1] w-full max-w-[220px] overflow-hidden rounded-md bg-white shadow-inner ring-1 ring-gray-200">
-      <div className="w-1/4 bg-[var(--color-pmb-green)]" />
-      <div className="flex flex-1 flex-col justify-between p-3">
-        <div className="h-3 w-12 rounded-sm bg-gray-300" />
-        <div className="flex flex-col gap-1">
-          <div className="h-1.5 w-24 rounded-sm bg-[var(--color-pmb-green-900)]" />
-          <div className="h-1 w-20 rounded-sm bg-gray-300" />
-          <div className="h-1 w-16 rounded-sm bg-gray-200" />
-        </div>
-        <div className="h-2 w-12 rounded-sm bg-gray-200" />
-      </div>
-    </div>
-  )
-}
-
-function MinimalPreview() {
-  return (
-    <div className="relative mx-auto aspect-[1.4/1] w-full max-w-[220px] rounded-md bg-white p-4 shadow-inner ring-1 ring-gray-200">
-      <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
-        <div className="h-2 w-10 rounded-sm bg-gray-300" />
-        <div className="h-px w-16 bg-[var(--color-pmb-green)]" />
-        <div className="h-1.5 w-24 rounded-sm bg-[var(--color-pmb-green-900)]" />
-        <div className="h-1 w-20 rounded-sm bg-gray-200" />
-        <div className="h-px w-16 bg-[var(--color-pmb-green)]" />
-        <div className="h-2 w-10 rounded-sm bg-gray-300" />
       </div>
     </div>
   )
