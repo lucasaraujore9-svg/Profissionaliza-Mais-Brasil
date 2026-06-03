@@ -259,6 +259,7 @@ export const GET = withRequestContextParams<{ id: string }>(
         ownerName: tenant.owner?.name ?? null,
         asaasCustomerId: tenant.asaasCustomerId,
         asaasSubscriptionId: tenant.asaasSubscriptionId,
+        asaasPromoSubscriptionId: tenant.asaasPromoSubscriptionId,
         mpConnected: tenant.mpConnected,
         plataformaVendedorId: tenant.plataformaVendedorId,
         accountManagerId: tenant.accountManagerId,
@@ -266,6 +267,8 @@ export const GET = withRequestContextParams<{ id: string }>(
         asaasNextDueDate,
         asaasSubscriptionStatus,
         asaasSubscriptionValue,
+        promoValue: tenant.promoValue != null ? Number(tenant.promoValue) : null,
+        promoMonths: tenant.promoMonths ?? null,
         // Indicacao
         referralCode: tenant.referralCode,
         referralPercent:

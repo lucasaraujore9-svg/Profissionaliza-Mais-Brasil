@@ -49,6 +49,8 @@ interface CreatedResult {
     configured: boolean
     customerId: string | null
     subscriptionId: string | null
+    promoSubscriptionId: string | null
+    free: boolean
     invoiceUrl: string | null
     firstPaymentId: string | null
     error: string | null
@@ -71,11 +73,19 @@ export function NewResellerDialog({
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [created, setCreated] = useState<CreatedResult | null>(null)
+  // Mensalidade controlada para alternar copy/promoção conforme o valor.
+  const [planValueStr, setPlanValueStr] = useState("99.90")
+  const [promoEnabled, setPromoEnabled] = useState(false)
+
+  const planValueNum = Number(planValueStr.replace(",", "."))
+  const isFree = planValueStr.trim() !== "" && planValueNum === 0
 
   const reset = () => {
     setError(null)
     setCreated(null)
     setSubmitting(false)
+    setPlanValueStr("99.90")
+    setPromoEnabled(false)
   }
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -84,6 +94,10 @@ export function NewResellerDialog({
     setError(null)
 
     const formData = new FormData(event.currentTarget)
+    const planValue = Number(
+      String(formData.get("planValue") ?? "0").replace(",", "."),
+    )
+    const usePromo = promoEnabled && planValue > 0
     const payload = {
       name: String(formData.get("name") ?? "").trim(),
       slug: String(formData.get("slug") ?? "").trim().toLowerCase(),
@@ -91,7 +105,15 @@ export function NewResellerDialog({
       ownerEmail: String(formData.get("ownerEmail") ?? "").trim().toLowerCase(),
       ownerCpfCnpj: String(formData.get("ownerCpfCnpj") ?? "").replace(/\D/g, ""),
       ownerPhone: String(formData.get("ownerPhone") ?? "").trim(),
-      planValue: Number(formData.get("planValue") ?? 0),
+      planValue,
+      ...(usePromo
+        ? {
+            promoMonths: Number(formData.get("promoMonths") ?? 0),
+            promoValue: Number(
+              String(formData.get("promoValue") ?? "0").replace(",", "."),
+            ),
+          }
+        : {}),
       ...(leadId ? { leadId } : {}),
     }
 
@@ -154,8 +176,25 @@ export function NewResellerDialog({
               <DialogHeader>
                 <DialogTitle>Cadastrar revenda</DialogTitle>
                 <DialogDescription>
-                  A revenda fica em <strong>aguardando pagamento</strong> até a
-                  primeira mensalidade ser confirmada.
+                  {isFree ? (
+                    <>
+                      Mensalidade <strong>R$ 0</strong>: a revenda fica{" "}
+                      <strong>ativa na hora</strong>, sem cobrança. Você pode
+                      ligar a cobrança depois na página da revenda.
+                    </>
+                  ) : promoEnabled ? (
+                    <>
+                      As primeiras mensalidades saem no{" "}
+                      <strong>valor promocional</strong>; depois a cobrança volta
+                      ao valor cheio. Fica em <strong>aguardando pagamento</strong>{" "}
+                      até a 1ª ser confirmada.
+                    </>
+                  ) : (
+                    <>
+                      A revenda fica em <strong>aguardando pagamento</strong> até a
+                      primeira mensalidade ser confirmada.
+                    </>
+                  )}
                 </DialogDescription>
               </DialogHeader>
 
@@ -234,18 +273,76 @@ export function NewResellerDialog({
                   />
                 </div>
                 <div className="sm:col-span-2">
-                  <Label htmlFor="r-plan">Mensalidade (R$)</Label>
+                  <Label htmlFor="r-plan">
+                    Mensalidade (R$){" "}
+                    <span className="font-normal text-gray-500">
+                      (0 = revenda gratuita)
+                    </span>
+                  </Label>
                   <Input
                     id="r-plan"
                     name="planValue"
                     type="number"
                     step="0.01"
-                    min={1}
+                    min={0}
                     required
-                    defaultValue={99.9}
+                    value={planValueStr}
+                    onChange={(e) => setPlanValueStr(e.target.value)}
                     className="mt-1.5"
                   />
                 </div>
+
+                {/* Promoção: as N primeiras mensalidades num valor reduzido */}
+                {!isFree && (
+                  <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 sm:col-span-2">
+                    <label className="flex items-center gap-2 text-sm font-medium text-gray-800">
+                      <input
+                        type="checkbox"
+                        checked={promoEnabled}
+                        onChange={(e) => setPromoEnabled(e.target.checked)}
+                        className="h-4 w-4 rounded border-gray-300"
+                      />
+                      Mensalidade promocional nas primeiras parcelas
+                    </label>
+                    {promoEnabled && (
+                      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                        <div>
+                          <Label htmlFor="r-promo-months">
+                            Nº de meses na promoção
+                          </Label>
+                          <Input
+                            id="r-promo-months"
+                            name="promoMonths"
+                            type="number"
+                            min={1}
+                            max={24}
+                            step={1}
+                            required={promoEnabled}
+                            defaultValue={3}
+                            className="mt-1.5"
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="r-promo-value">Valor promocional (R$)</Label>
+                          <Input
+                            id="r-promo-value"
+                            name="promoValue"
+                            type="number"
+                            min={0}
+                            step="0.01"
+                            required={promoEnabled}
+                            placeholder="Ex: 49.90"
+                            className="mt-1.5"
+                          />
+                        </div>
+                        <p className="text-[11px] text-gray-500 sm:col-span-2">
+                          As primeiras parcelas saem no valor promocional; a partir
+                          daí volta à mensalidade cheia acima.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               {error && (
@@ -376,8 +473,16 @@ function CreatedSuccess({
         </div>
       )}
 
-      {/* Link de pagamento da primeira fatura */}
-      {paymentLink ? (
+      {/* Revenda gratuita — sem cobrança */}
+      {result.asaas.free ? (
+        <div className="flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-2.5 text-xs text-emerald-800">
+          <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+          <span>
+            Revenda <strong>gratuita</strong> e já ativa — nenhuma cobrança foi
+            criada. Você pode ligar a mensalidade depois na página da revenda.
+          </span>
+        </div>
+      ) : paymentLink ? (
         <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
           <p className="mb-1.5 text-xs font-semibold text-gray-700">
             Link da primeira mensalidade

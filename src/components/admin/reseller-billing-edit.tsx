@@ -11,6 +11,9 @@ interface Props {
   asaasSubscriptionId: string | null
   asaasSubscriptionStatus: string | null
   asaasSubscriptionValue: number | null
+  asaasPromoSubscriptionId?: string | null
+  promoValue?: number | null
+  promoMonths?: number | null
   onSaved?: () => void
 }
 
@@ -40,6 +43,9 @@ export function ResellerBillingEdit({
   asaasSubscriptionId,
   asaasSubscriptionStatus,
   asaasSubscriptionValue,
+  asaasPromoSubscriptionId,
+  promoValue,
+  promoMonths,
   onSaved,
 }: Props) {
   const [value, setValue] = useState<string>(String(planValue))
@@ -47,26 +53,43 @@ export function ResellerBillingEdit({
     isoToYmd(asaasNextDueDate) || defaultDueDate(),
   )
   const [cpfCnpj, setCpfCnpj] = useState("")
+  const [promoEnabled, setPromoEnabled] = useState<boolean>(
+    Boolean(asaasPromoSubscriptionId),
+  )
+  const [promoValueStr, setPromoValueStr] = useState<string>(
+    promoValue != null ? String(promoValue) : "",
+  )
+  const [promoMonthsStr, setPromoMonthsStr] = useState<string>(
+    promoMonths != null ? String(promoMonths) : "3",
+  )
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [ok, setOk] = useState<string | null>(null)
   const [firstPaymentId, setFirstPaymentId] = useState<string | null>(null)
 
   const noSubscription = !asaasSubscriptionId
-  const needsCpf = noSubscription && !asaasCustomerId
+  const numericValue = Number(value.replace(",", "."))
+  const isFree = value.trim() !== "" && numericValue === 0
+  const needsCpf = !isFree && noSubscription && !asaasCustomerId
 
   // Compara contra o valor real do Asaas (não o banco) para detectar dessincronia.
   const effectiveValue = asaasSubscriptionValue ?? planValue
+  const hadPromo = Boolean(asaasPromoSubscriptionId)
+  const promoDirty =
+    promoEnabled !== hadPromo ||
+    (promoEnabled &&
+      (Number(promoValueStr.replace(",", ".")) !== (promoValue ?? -1) ||
+        Number(promoMonthsStr) !== (promoMonths ?? -1)))
   const dirty =
-    Number(value) !== effectiveValue ||
+    numericValue !== effectiveValue ||
     dueDate !== isoToYmd(asaasNextDueDate) ||
-    noSubscription
+    noSubscription ||
+    promoDirty
 
   async function save() {
     setError(null)
     setOk(null)
     setFirstPaymentId(null)
-    const numericValue = Number(value)
     if (!Number.isFinite(numericValue) || numericValue < 0) {
       setError("Valor inválido")
       return
@@ -80,16 +103,44 @@ export function ResellerBillingEdit({
       return
     }
 
+    const usePromo = promoEnabled && !isFree
+    const promoValueNum = Number(promoValueStr.replace(",", "."))
+    const promoMonthsNum = Number(promoMonthsStr)
+    if (usePromo) {
+      if (!Number.isFinite(promoValueNum) || promoValueNum < 0) {
+        setError("Valor promocional inválido")
+        return
+      }
+      if (!Number.isInteger(promoMonthsNum) || promoMonthsNum < 1) {
+        setError("Nº de meses da promoção inválido")
+        return
+      }
+      if (numericValue <= 0) {
+        setError("Promoção exige mensalidade cheia maior que zero")
+        return
+      }
+    }
+
     setSaving(true)
     try {
       const body: {
         planValue?: number
         nextDueDate?: string
         ownerCpfCnpj?: string
+        promoMonths?: number
+        promoValue?: number
       } = {}
-      if (numericValue !== effectiveValue) body.planValue = numericValue
-      if (dueDate) body.nextDueDate = dueDate
+      // Promo e "tornar grátis" exigem reenviar o planValue mesmo se igual,
+      // pois a rota decide o fluxo a partir dele.
+      if (numericValue !== effectiveValue || usePromo || isFree) {
+        body.planValue = numericValue
+      }
+      if (dueDate && !isFree) body.nextDueDate = dueDate
       if (needsCpf && cpfCnpj) body.ownerCpfCnpj = cpfCnpj.replace(/\D/g, "")
+      if (usePromo) {
+        body.promoMonths = promoMonthsNum
+        body.promoValue = promoValueNum
+      }
 
       const res = await fetch(
         `/api/admin/revendedores/${tenantId}/billing`,
@@ -109,7 +160,11 @@ export function ResellerBillingEdit({
         setFirstPaymentId(json.data.firstPaymentId)
       }
 
-      if (json.data?.subscriptionCreated) {
+      if (json.data?.free) {
+        setOk("Revenda agora é gratuita — cobrança removida do Asaas.")
+      } else if (json.data?.promo) {
+        setOk("Promoção configurada com sucesso.")
+      } else if (json.data?.subscriptionCreated) {
         setOk("Cobrança automática criada com sucesso.")
       } else if (json.data?.asaasUpdated) {
         setOk("Cobrança atualizada com sucesso.")
@@ -174,25 +229,93 @@ export function ResellerBillingEdit({
           </span>
         </label>
 
-        <label className="block">
-          <span className="flex items-center gap-1.5 text-xs font-semibold text-gray-700">
-            <CalendarClock className="h-3.5 w-3.5" />
-            {noSubscription ? "Primeiro vencimento" : "Próximo vencimento"}
-          </span>
-          <input
-            type="date"
-            value={dueDate}
-            onChange={(e) => setDueDate(e.target.value)}
-            className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-[var(--color-pmb-green)] focus:outline-none"
-          />
-          {!noSubscription && (
-            <span className="mt-1 block text-[11px] text-gray-500">
-              {asaasSubscriptionId
-                ? `${asaasNextDueDate ? new Date(asaasNextDueDate).toLocaleDateString("pt-BR") : "—"}${asaasSubscriptionStatus ? ` · ${asaasSubscriptionStatus}` : ""}`
-                : "Sem cobrança ativa configurada"}
+        {isFree && (
+          <div className="flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800">
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <span>
+              Valor <strong>R$ 0</strong>: ao salvar, qualquer cobrança no Asaas é
+              cancelada e a revenda fica <strong>gratuita</strong>.
             </span>
-          )}
-        </label>
+          </div>
+        )}
+
+        {!isFree && (
+          <label className="block">
+            <span className="flex items-center gap-1.5 text-xs font-semibold text-gray-700">
+              <CalendarClock className="h-3.5 w-3.5" />
+              {noSubscription ? "Primeiro vencimento" : "Próximo vencimento"}
+            </span>
+            <input
+              type="date"
+              value={dueDate}
+              onChange={(e) => setDueDate(e.target.value)}
+              className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-[var(--color-pmb-green)] focus:outline-none"
+            />
+            {!noSubscription && (
+              <span className="mt-1 block text-[11px] text-gray-500">
+                {asaasSubscriptionId
+                  ? `${asaasNextDueDate ? new Date(asaasNextDueDate).toLocaleDateString("pt-BR") : "—"}${asaasSubscriptionStatus ? ` · ${asaasSubscriptionStatus}` : ""}`
+                  : "Sem cobrança ativa configurada"}
+              </span>
+            )}
+          </label>
+        )}
+
+        {/* Promoção: as N primeiras mensalidades num valor reduzido */}
+        {!isFree && (
+          <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+            <label className="flex items-center gap-2 text-xs font-semibold text-gray-700">
+              <input
+                type="checkbox"
+                checked={promoEnabled}
+                onChange={(e) => setPromoEnabled(e.target.checked)}
+                className="h-4 w-4 rounded border-gray-300"
+              />
+              Mensalidade promocional nas primeiras parcelas
+            </label>
+            {hadPromo && (
+              <span className="mt-1.5 block text-[11px] text-emerald-700">
+                Promoção ativa: {promoMonths ?? "?"}× {promoValue != null ? brl(promoValue) : "—"}, depois {brl(effectiveValue)}.
+              </span>
+            )}
+            {promoEnabled && (
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <label className="block">
+                  <span className="text-[11px] font-semibold text-gray-700">
+                    Nº de meses na promoção
+                  </span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={24}
+                    step={1}
+                    value={promoMonthsStr}
+                    onChange={(e) => setPromoMonthsStr(e.target.value)}
+                    className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 font-mono text-sm focus:border-[var(--color-pmb-green)] focus:outline-none"
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-[11px] font-semibold text-gray-700">
+                    Valor promocional (R$)
+                  </span>
+                  <input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    value={promoValueStr}
+                    onChange={(e) => setPromoValueStr(e.target.value)}
+                    placeholder="Ex: 49.90"
+                    className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 font-mono text-sm focus:border-[var(--color-pmb-green)] focus:outline-none"
+                  />
+                </label>
+                <span className="text-[11px] text-gray-500 sm:col-span-2">
+                  Salvar recria as cobranças: as primeiras parcelas saem no valor
+                  promocional e depois volta à mensalidade cheia acima.
+                </span>
+              </div>
+            )}
+          </div>
+        )}
 
         {needsCpf && (
           <label className="block">
@@ -245,9 +368,13 @@ export function ResellerBillingEdit({
           <Save className="h-4 w-4" />
           {saving
             ? "Salvando..."
-            : noSubscription
-              ? "Configurar cobrança automática"
-              : "Salvar mensalidade"}
+            : isFree
+              ? "Tornar gratuita"
+              : promoEnabled
+                ? "Salvar promoção"
+                : noSubscription
+                  ? "Configurar cobrança automática"
+                  : "Salvar mensalidade"}
         </button>
       </div>
     </div>

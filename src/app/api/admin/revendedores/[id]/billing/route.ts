@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import type { Prisma } from "@prisma/client"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { requireSuperAdmin } from "@/lib/auth/guards"
@@ -11,17 +12,38 @@ import {
   updateSubscription,
   AsaasApiError,
 } from "@/lib/asaas/client"
+import { createPromoBilling } from "@/lib/asaas/promo"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 
-const patchSchema = z.object({
-  planValue: z.number().min(0).max(100000).optional(),
-  nextDueDate: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/, "formato esperado YYYY-MM-DD")
-    .optional(),
-  ownerCpfCnpj: z.string().min(11).max(20).optional(),
-  syncWithAsaas: z.boolean().default(true),
-})
+const patchSchema = z
+  .object({
+    // 0 = tornar a revenda gratuita (cancela cobrança no Asaas).
+    planValue: z.number().min(0).max(100000).optional(),
+    // Promoção: as primeiras `promoMonths` mensalidades saem por `promoValue`.
+    promoMonths: z.number().int().min(1).max(24).optional(),
+    promoValue: z.number().min(0).max(100000).optional(),
+    nextDueDate: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, "formato esperado YYYY-MM-DD")
+      .optional(),
+    ownerCpfCnpj: z.string().min(11).max(20).optional(),
+    syncWithAsaas: z.boolean().default(true),
+  })
+  .refine(
+    (d) =>
+      (d.promoMonths === undefined && d.promoValue === undefined) ||
+      (d.promoMonths !== undefined && d.promoValue !== undefined),
+    { message: "Informe promoMonths e promoValue juntos", path: ["promoValue"] },
+  )
+  .refine(
+    (d) =>
+      d.promoMonths === undefined ||
+      (d.planValue !== undefined && d.planValue > 0),
+    {
+      message: "Promoção exige a mensalidade cheia (planValue) maior que zero",
+      path: ["promoValue"],
+    },
+  )
 
 function isoDayPlus(days: number): string {
   const d = new Date()
@@ -67,6 +89,7 @@ export const PATCH = withRequestContextParams<{ id: string }>(
       name: true,
       asaasCustomerId: true,
       asaasSubscriptionId: true,
+      asaasPromoSubscriptionId: true,
       planValue: true,
       owner: {
         select: { name: true, email: true, phone: true },
@@ -99,55 +122,157 @@ export const PATCH = withRequestContextParams<{ id: string }>(
     }
   }
 
+  // Capturas não-nulas: TS não preserva o narrowing de `tenant`/`parsed.data`
+  // dentro das closures abaixo (ensureCustomerId).
+  const tenantRow = tenant
+  const data = parsed.data
+
   let asaasUpdated = false
   let invoiceUrl: string | null = null
   let firstPaymentId: string | null = null
   let newCustomerId: string | null = null
   let newSubscriptionId: string | null = null
+  let newPromoSubscriptionId: string | null = null
+  // null = limpar no banco; undefined = não mexer.
+  let promoValueUpdate: number | null | undefined = undefined
+  let promoMonthsUpdate: number | null | undefined = undefined
+  let clearSubscription = false // virou gratuita
+  let clearPromoSubscription = false // saiu de promo para valor único
+
+  const wantsFree = parsed.data.planValue === 0
+  const wantsPromo =
+    !wantsFree &&
+    parsed.data.promoMonths !== undefined &&
+    parsed.data.promoValue !== undefined
+
+  // Cancela uma subscription ignorando 404 (já inexistente no Asaas).
+  async function cancelIgnoring404(subId: string | null): Promise<void> {
+    if (!subId) return
+    try {
+      await cancelSubscription(subId)
+    } catch (error) {
+      if (!(error instanceof AsaasApiError && error.statusCode === 404)) throw error
+    }
+  }
+
+  // Garante um customer no Asaas (cria se faltar). Lança NextResponse(400) se
+  // precisar do CPF e ele não veio.
+  async function ensureCustomerId(): Promise<string> {
+    if (tenantRow.asaasCustomerId) return tenantRow.asaasCustomerId
+    if (!data.ownerCpfCnpj) {
+      throw NextResponse.json(
+        { error: "CPF/CNPJ do responsável é obrigatório para criar a assinatura no Asaas" },
+        { status: 400 },
+      )
+    }
+    const { customer } = await findOrCreateAsaasCustomer({
+      name: tenantRow.owner?.name ?? tenantRow.name,
+      email: tenantRow.owner?.email ?? undefined,
+      mobilePhone: tenantRow.owner?.phone ?? undefined,
+      cpfCnpj: data.ownerCpfCnpj,
+      externalReference: `tenant:${tenantRow.slug}`,
+    })
+    newCustomerId = customer.id // sempre persiste, seja novo ou encontrado
+    return customer.id
+  }
 
   if (parsed.data.syncWithAsaas) {
-    const hasSubscription = Boolean(tenant.asaasSubscriptionId)
-    const hasCustomer = Boolean(tenant.asaasCustomerId)
-
-    // ── Caso 1: já tem subscription ─────────────────────────────────────────
-    if (hasSubscription) {
-      // PUT /subscriptions/{id} não aceita "value" — para mudar o valor,
-      // cancela a subscription atual e cria uma nova. Sem comparação com o
-      // banco (pode estar dessincronizado do Asaas).
-      if (parsed.data.planValue !== undefined) {
-        // PUT /v3/subscriptions/{id} não suporta o campo "value".
-        // Único caminho: cancelar a subscription atual e criar uma nova.
-        try {
-          await cancelSubscription(tenant.asaasSubscriptionId!)
-        } catch (error) {
-          if (!(error instanceof AsaasApiError && error.statusCode === 404)) {
-            const message =
-              error instanceof AsaasApiError
-                ? error.message
-                : "Falha ao cancelar assinatura atual no Asaas"
-            return NextResponse.json(
-              { error: `Asaas: ${message}. Banco não foi alterado para manter consistência.` },
-              { status: 502 },
-            )
-          }
+    try {
+      if (wantsFree) {
+        // ── Tornar gratuita: cancela tudo e zera as assinaturas ──
+        await cancelIgnoring404(tenant.asaasSubscriptionId)
+        await cancelIgnoring404(tenant.asaasPromoSubscriptionId)
+        clearSubscription = true
+        promoValueUpdate = null
+        promoMonthsUpdate = null
+        asaasUpdated = true
+      } else if (wantsPromo) {
+        // ── Definir/recriar promoção: duas assinaturas (promo + regular) ──
+        if (!process.env.ASAAS_API_KEY) {
+          return NextResponse.json(
+            { error: "Asaas não configurado para criar cobrança" },
+            { status: 400 },
+          )
+        }
+        const customerId = await ensureCustomerId()
+        await cancelIgnoring404(tenant.asaasSubscriptionId)
+        await cancelIgnoring404(tenant.asaasPromoSubscriptionId)
+        const result = await createPromoBilling({
+          customerId,
+          slug: tenant.slug,
+          name: tenant.name,
+          planValue: parsed.data.planValue!,
+          promoValue: parsed.data.promoValue!,
+          promoMonths: parsed.data.promoMonths!,
+          baseDueDate: parsed.data.nextDueDate ?? isoDayPlus(3),
+        })
+        newSubscriptionId = result.regularSubscriptionId
+        newPromoSubscriptionId = result.promoSubscriptionId
+        invoiceUrl = result.invoiceUrl
+        firstPaymentId = result.firstPaymentId
+        promoValueUpdate = parsed.data.promoValue!
+        promoMonthsUpdate = parsed.data.promoMonths!
+        asaasUpdated = true
+      } else {
+        // ── Valor único (sem promo) ──
+        const hadPromo = Boolean(tenant.asaasPromoSubscriptionId)
+        // Se existia promoção, encerra-a e volta à cobrança simples.
+        if (hadPromo) {
+          await cancelIgnoring404(tenant.asaasPromoSubscriptionId)
+          clearPromoSubscription = true
+          promoValueUpdate = null
+          promoMonthsUpdate = null
         }
 
-        // Usa nextDueDate do input se fornecido, senão busca do Asaas, senão +3d
-        let dueDate = parsed.data.nextDueDate
-        if (!dueDate) {
-          try {
-            const sub = await getSubscription(tenant.asaasSubscriptionId!)
-            dueDate = sub.nextDueDate
-          } catch {
-            dueDate = isoDayPlus(3)
+        if (tenant.asaasSubscriptionId) {
+          // PUT /subscriptions/{id} não aceita "value": para mudar o valor (ou
+          // sair de promo) cancela e recria a assinatura regular.
+          if (parsed.data.planValue !== undefined || hadPromo) {
+            await cancelIgnoring404(tenant.asaasSubscriptionId)
+            let dueDate = parsed.data.nextDueDate
+            if (!dueDate) {
+              try {
+                const sub = await getSubscription(tenant.asaasSubscriptionId)
+                dueDate = sub.nextDueDate
+              } catch {
+                dueDate = isoDayPlus(3)
+              }
+            }
+            const subscription = await createSubscription({
+              customer: tenant.asaasCustomerId!,
+              billingType: "UNDEFINED",
+              value: parsed.data.planValue ?? Number(tenant.planValue),
+              nextDueDate: dueDate,
+              cycle: "MONTHLY",
+              description: `Mensalidade Profissionaliza Mais Brasil — ${tenant.name}`,
+              externalReference: `tenant:${tenant.slug}`,
+            })
+            newSubscriptionId = subscription.id
+            asaasUpdated = true
+            try {
+              const payments = await listPayments({ subscription: subscription.id, limit: 1 })
+              const firstPayment = payments.data[0] ?? null
+              invoiceUrl = firstPayment?.invoiceUrl ?? null
+              firstPaymentId = firstPayment?.id ?? null
+            } catch {
+              // webhook atualiza depois
+            }
+          } else if (parsed.data.nextDueDate !== undefined) {
+            // Só a data mudou — atualiza sem cancelar
+            await updateSubscription(tenant.asaasSubscriptionId, {
+              nextDueDate: parsed.data.nextDueDate,
+            })
+            asaasUpdated = true
           }
-        }
-
-        try {
+        } else if (process.env.ASAAS_API_KEY) {
+          // ── Sem subscription — criar customer (se precisar) + subscription ──
+          const customerId = await ensureCustomerId()
+          const planValue = parsed.data.planValue ?? Number(tenant.planValue)
+          const dueDate = parsed.data.nextDueDate ?? isoDayPlus(3)
           const subscription = await createSubscription({
-            customer: tenant.asaasCustomerId!,
+            customer: customerId,
             billingType: "UNDEFINED",
-            value: parsed.data.planValue!,
+            value: planValue,
             nextDueDate: dueDate,
             cycle: "MONTHLY",
             description: `Mensalidade Profissionaliza Mais Brasil — ${tenant.name}`,
@@ -155,7 +280,6 @@ export const PATCH = withRequestContextParams<{ id: string }>(
           })
           newSubscriptionId = subscription.id
           asaasUpdated = true
-
           try {
             const payments = await listPayments({ subscription: subscription.id, limit: 1 })
             const firstPayment = payments.data[0] ?? null
@@ -164,112 +288,47 @@ export const PATCH = withRequestContextParams<{ id: string }>(
           } catch {
             // webhook atualiza depois
           }
-        } catch (error) {
-          const message =
-            error instanceof AsaasApiError
-              ? error.message
-              : "Falha ao recriar assinatura no Asaas"
-          return NextResponse.json(
-            { error: `Asaas: ${message}` },
-            { status: 502 },
-          )
-        }
-      } else if (parsed.data.nextDueDate !== undefined) {
-        // Só a data mudou — atualiza sem cancelar
-        try {
-          await updateSubscription(tenant.asaasSubscriptionId!, {
-            nextDueDate: parsed.data.nextDueDate,
-          })
-          asaasUpdated = true
-        } catch (error) {
-          const message =
-            error instanceof AsaasApiError
-              ? error.message
-              : "Falha ao atualizar assinatura no Asaas"
-          return NextResponse.json(
-            { error: `Asaas: ${message}. Banco não foi alterado para manter consistência.` },
-            { status: 502 },
-          )
         }
       }
-    }
-
-    // ── Caso 2: sem subscription — criar customer (se precisar) + subscription ─
-    if (!hasSubscription && process.env.ASAAS_API_KEY) {
-      try {
-        let customerId = tenant.asaasCustomerId ?? null
-
-        if (!hasCustomer) {
-          if (!parsed.data.ownerCpfCnpj) {
-            return NextResponse.json(
-              { error: "CPF/CNPJ do responsável é obrigatório para criar a assinatura no Asaas" },
-              { status: 400 },
-            )
-          }
-          const { customer } = await findOrCreateAsaasCustomer({
-            name: tenant.owner?.name ?? tenant.name,
-            email: tenant.owner?.email ?? undefined,
-            mobilePhone: tenant.owner?.phone ?? undefined,
-            cpfCnpj: parsed.data.ownerCpfCnpj,
-            externalReference: `tenant:${tenant.slug}`,
-          })
-          customerId = customer.id
-          newCustomerId = customer.id // sempre persiste, seja novo ou encontrado
-        }
-
-        const planValue = parsed.data.planValue ?? Number(tenant.planValue)
-        const dueDate = parsed.data.nextDueDate ?? isoDayPlus(3)
-
-        const subscription = await createSubscription({
-          customer: customerId!,
-          billingType: "UNDEFINED",
-          value: planValue,
-          nextDueDate: dueDate,
-          cycle: "MONTHLY",
-          description: `Mensalidade Profissionaliza Mais Brasil — ${tenant.name}`,
-          externalReference: `tenant:${tenant.slug}`,
-        })
-        newSubscriptionId = subscription.id
-        asaasUpdated = true
-
-        // Tenta buscar invoiceUrl do primeiro pagamento criado
-        try {
-          const payments = await listPayments({ subscription: subscription.id, limit: 1 })
-          const firstPayment = payments.data[0] ?? null
-          invoiceUrl = firstPayment?.invoiceUrl ?? null
-          firstPaymentId = firstPayment?.id ?? null
-        } catch {
-          // webhook vai atualizar depois
-        }
-      } catch (error) {
-        if (error instanceof NextResponse) throw error
-        const message =
-          error instanceof AsaasApiError
-            ? error.message
-            : "Falha ao criar assinatura no Asaas"
-        return NextResponse.json(
-          { error: `Asaas: ${message}` },
-          { status: 502 },
-        )
-      }
+    } catch (error) {
+      // ensureCustomerId lança NextResponse (400) para erro de validação.
+      if (error instanceof NextResponse) return error
+      const message =
+        error instanceof AsaasApiError
+          ? error.message
+          : "Falha ao sincronizar cobrança no Asaas"
+      return NextResponse.json(
+        { error: `Asaas: ${message}. Banco não foi alterado para manter consistência.` },
+        { status: 502 },
+      )
     }
   }
 
   // Persiste todas as mudanças no banco
-  await prisma.tenant.update({
-    where: { id },
-    data: {
-      ...(parsed.data.planValue !== undefined ? { planValue: parsed.data.planValue } : {}),
-      ...(newCustomerId ? { asaasCustomerId: newCustomerId } : {}),
-      ...(newSubscriptionId ? { asaasSubscriptionId: newSubscriptionId } : {}),
-    },
-  })
+  const updateData: Prisma.TenantUncheckedUpdateInput = {}
+  if (parsed.data.planValue !== undefined) updateData.planValue = parsed.data.planValue
+  if (newCustomerId) updateData.asaasCustomerId = newCustomerId
+  if (clearSubscription) {
+    updateData.asaasSubscriptionId = null
+    updateData.asaasPromoSubscriptionId = null
+  } else {
+    if (newSubscriptionId) updateData.asaasSubscriptionId = newSubscriptionId
+    if (newPromoSubscriptionId) updateData.asaasPromoSubscriptionId = newPromoSubscriptionId
+    else if (clearPromoSubscription) updateData.asaasPromoSubscriptionId = null
+  }
+  if (promoValueUpdate !== undefined) updateData.promoValue = promoValueUpdate
+  if (promoMonthsUpdate !== undefined) updateData.promoMonths = promoMonthsUpdate
+  await prisma.tenant.update({ where: { id }, data: updateData })
 
   return NextResponse.json({
     data: {
       ok: true,
       asaasUpdated,
       subscriptionCreated: Boolean(newSubscriptionId),
+      free: clearSubscription,
+      promo: wantsPromo
+        ? { months: parsed.data.promoMonths, value: parsed.data.promoValue }
+        : null,
       planValue: parsed.data.planValue ?? Number(tenant.planValue),
       nextDueDate: parsed.data.nextDueDate ?? null,
       invoiceUrl,

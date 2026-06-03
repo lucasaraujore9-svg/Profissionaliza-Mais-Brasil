@@ -34,9 +34,12 @@ interface DetailResponse {
     cancellationPolicy: CancellationPolicy | null
     asaasCustomerId: string | null
     asaasSubscriptionId: string | null
+    asaasPromoSubscriptionId: string | null
     asaasNextDueDate: string | null
     asaasSubscriptionStatus: string | null
     asaasSubscriptionValue: number | null
+    promoValue: number | null
+    promoMonths: number | null
     referralCode: string
     referralPercent: number | null
     pixKey: string | null
@@ -124,6 +127,9 @@ export function ResellerDetailClient({
             asaasSubscriptionId={data.reseller.asaasSubscriptionId}
             asaasSubscriptionStatus={data.reseller.asaasSubscriptionStatus}
             asaasSubscriptionValue={data.reseller.asaasSubscriptionValue}
+            asaasPromoSubscriptionId={data.reseller.asaasPromoSubscriptionId}
+            promoValue={data.reseller.promoValue}
+            promoMonths={data.reseller.promoMonths}
             onSaved={load}
           />
           <ResellerPaymentHistory

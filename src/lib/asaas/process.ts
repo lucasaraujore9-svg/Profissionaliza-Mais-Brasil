@@ -45,13 +45,20 @@ async function handleSubscriptionCancellation(
   }
 
   const tenant = await prisma.tenant.findFirst({
-    where: { asaasSubscriptionId: subscriptionId },
+    where: {
+      OR: [
+        { asaasSubscriptionId: subscriptionId },
+        { asaasPromoSubscriptionId: subscriptionId },
+      ],
+    },
     select: {
       id: true,
       name: true,
       slug: true,
       customDomain: true,
       status: true,
+      asaasSubscriptionId: true,
+      asaasPromoSubscriptionId: true,
       owner: { select: { email: true, name: true } },
     },
   })
@@ -64,6 +71,18 @@ async function handleSubscriptionCancellation(
   await prisma.webhookLog
     .update({ where: { id: logId }, data: { tenantId: tenant.id } })
     .catch(swallow("asaas.process"))
+
+  // Encerramento NATURAL da promo: ao atingir maxPayments, o Asaas inativa a
+  // subscription promocional. Isso NAO pode suspender o tenant — a assinatura
+  // regular (valor cheio) assume a partir do mes N. So suspendemos quando a
+  // assinatura REGULAR e cancelada.
+  if (
+    subscriptionId === tenant.asaasPromoSubscriptionId &&
+    subscriptionId !== tenant.asaasSubscriptionId
+  ) {
+    await markLog(logId, true, `${event}: promo encerrada (maxPayments) — sem suspensao`)
+    return
+  }
 
   if (tenant.status !== "SUSPENDED" && tenant.status !== "CANCELLED") {
     await prisma.tenant.update({
@@ -238,8 +257,15 @@ export async function processAsaasWebhook(
       if (handled) return
     }
 
+    // Casa tanto a assinatura regular quanto a promocional (mensalidade
+    // promocional usa duas subscriptions; ambas cobram o mesmo tenant).
     const tenant = await prisma.tenant.findFirst({
-      where: { asaasSubscriptionId: subscriptionId },
+      where: {
+        OR: [
+          { asaasSubscriptionId: subscriptionId },
+          { asaasPromoSubscriptionId: subscriptionId },
+        ],
+      },
       select: {
         id: true,
         name: true,

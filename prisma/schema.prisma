@@ -211,7 +211,13 @@ model Tenant {
 
   // Integracao Asaas (mensalidade do revendedor)
   asaasCustomerId     String? @unique @map("asaas_customer_id") // cus_xxxx
-  asaasSubscriptionId String? @unique @map("asaas_subscription_id") // sub_xxxx
+  asaasSubscriptionId String? @unique @map("asaas_subscription_id") // sub_xxxx — assinatura regular (valor cheio)
+
+  // Promocao: as N primeiras mensalidades saem por uma subscription promo
+  // (maxPayments=N) com promoValue; a regular (planValue) assume no mes N.
+  asaasPromoSubscriptionId String?  @unique @map("asaas_promo_subscription_id") // sub_xxxx — assinatura promocional
+  promoValue               Decimal? @map("promo_value") @db.Decimal(10, 2) // Valor das primeiras mensalidades
+  promoMonths              Int?     @map("promo_months") // Quantidade de mensalidades no valor promo
 
   // Integracao Mercado Pago (vendas dos cursos)
   mpAccessToken  String? @map("mp_access_token") // Criptografado AES-256

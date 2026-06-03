@@ -11,6 +11,7 @@ import {
   createSubscription,
   listPayments,
 } from "@/lib/asaas/client"
+import { createPromoBilling } from "@/lib/asaas/promo"
 import { sendEmail, isEmailConfigured } from "@/lib/email/resend"
 import { createNotification } from "@/lib/notifications"
 import { appUrl, vitrineUrl as buildVitrineUrl } from "@/lib/tenant/urls"
@@ -152,13 +153,27 @@ const createSchema = z.object({
   ownerEmail: z.string().email().toLowerCase(),
   ownerCpfCnpj: z.string().min(11).max(20),
   ownerPhone: z.string().min(8).max(20).optional(),
-  planValue: z.number().positive().max(99999),
+  // planValue 0 = revenda gratuita (sem cobranca no Asaas, nasce ACTIVE).
+  planValue: z.number().min(0).max(99999),
+  // Promocao: as primeiras `promoMonths` mensalidades saem por `promoValue`.
+  promoMonths: z.number().int().min(1).max(24).optional(),
+  promoValue: z.number().min(0).max(99999).optional(),
   accountManagerId: z.string().optional().nullable(),
   // Conversao de lead → revenda: id do Lead de origem. Quando presente, a
   // indicacao vem do referrerTenantId gravado no lead (nao do cookie do admin)
   // e o lead e marcado CONVERTED + ligado ao tenant criado.
   leadId: z.string().optional().nullable(),
 })
+  .refine(
+    (d) =>
+      (d.promoMonths === undefined && d.promoValue === undefined) ||
+      (d.promoMonths !== undefined && d.promoValue !== undefined),
+    { message: "Informe promoMonths e promoValue juntos", path: ["promoValue"] },
+  )
+  .refine((d) => d.promoMonths === undefined || d.planValue > 0, {
+    message: "Promoção exige mensalidade cheia maior que zero",
+    path: ["promoValue"],
+  })
 
 function isoDayPlus(days: number): string {
   const d = new Date()
@@ -230,13 +245,20 @@ export const POST = withRequestContext(
 
   // Tenta criar customer + subscription no Asaas. Se ASAAS_API_KEY não
   // estiver configurada, segue sem (admin pode anexar manual depois).
+  // Revenda gratuita: mensalidade 0 → nasce ATIVA, sem cobranca no Asaas.
+  // O admin pode ligar a cobranca depois pela tela de billing.
+  const isFree = data.planValue === 0
+  const isPromo =
+    !isFree && data.promoMonths !== undefined && data.promoValue !== undefined
+
   let asaasCustomerId: string | null = null
   let asaasSubscriptionId: string | null = null
+  let asaasPromoSubscriptionId: string | null = null
   let invoiceUrl: string | null = null
   let firstPaymentId: string | null = null
   let asaasError: string | null = null
 
-  if (process.env.ASAAS_API_KEY) {
+  if (!isFree && process.env.ASAAS_API_KEY) {
     try {
       const customer = await createCustomer({
         name: data.ownerName,
@@ -247,28 +269,44 @@ export const POST = withRequestContext(
       })
       asaasCustomerId = customer.id
 
-      const subscription = await createSubscription({
-        customer: customer.id,
-        billingType: "UNDEFINED",
-        value: data.planValue,
-        nextDueDate: isoDayPlus(3),
-        cycle: "MONTHLY",
-        description: `Mensalidade Profissionaliza Mais Brasil — ${data.name}`,
-        externalReference: `tenant:${data.slug}`,
-      })
-      asaasSubscriptionId = subscription.id
-
-      // Buscar primeiro payment criado pela subscription para pegar invoiceUrl
-      try {
-        const payments = await listPayments({
-          subscription: subscription.id,
-          limit: 1,
+      if (isPromo) {
+        const result = await createPromoBilling({
+          customerId: customer.id,
+          slug: data.slug,
+          name: data.name,
+          planValue: data.planValue,
+          promoValue: data.promoValue!,
+          promoMonths: data.promoMonths!,
+          baseDueDate: isoDayPlus(3),
         })
-        const firstPayment = payments.data[0] ?? null
-        invoiceUrl = firstPayment?.invoiceUrl ?? null
-        firstPaymentId = firstPayment?.id ?? null
-      } catch {
-        // sem invoiceUrl ainda — webhook vai atualizar depois
+        asaasSubscriptionId = result.regularSubscriptionId
+        asaasPromoSubscriptionId = result.promoSubscriptionId
+        invoiceUrl = result.invoiceUrl
+        firstPaymentId = result.firstPaymentId
+      } else {
+        const subscription = await createSubscription({
+          customer: customer.id,
+          billingType: "UNDEFINED",
+          value: data.planValue,
+          nextDueDate: isoDayPlus(3),
+          cycle: "MONTHLY",
+          description: `Mensalidade Profissionaliza Mais Brasil — ${data.name}`,
+          externalReference: `tenant:${data.slug}`,
+        })
+        asaasSubscriptionId = subscription.id
+
+        // Buscar primeiro payment criado pela subscription para pegar invoiceUrl
+        try {
+          const payments = await listPayments({
+            subscription: subscription.id,
+            limit: 1,
+          })
+          const firstPayment = payments.data[0] ?? null
+          invoiceUrl = firstPayment?.invoiceUrl ?? null
+          firstPaymentId = firstPayment?.id ?? null
+        } catch {
+          // sem invoiceUrl ainda — webhook vai atualizar depois
+        }
       }
     } catch (error) {
       asaasError =
@@ -301,11 +339,16 @@ export const POST = withRequestContext(
     data: {
       name: data.name,
       slug: data.slug,
-      status: "PENDING",
+      // Gratuita ja nasce ATIVA (nao ha pagamento a aguardar). Caso contrario,
+      // aguarda o primeiro pagamento (webhook PAYMENT_RECEIVED ativa).
+      status: isFree ? "ACTIVE" : "PENDING",
       billingMode: "AUTO",
       planValue: data.planValue,
       asaasCustomerId,
       asaasSubscriptionId,
+      asaasPromoSubscriptionId,
+      promoValue: isPromo ? data.promoValue : null,
+      promoMonths: isPromo ? data.promoMonths : null,
       accountManagerId: data.accountManagerId ?? null,
       poloName: data.slug,
       referralCode,
@@ -417,6 +460,8 @@ export const POST = withRequestContext(
         configured: Boolean(process.env.ASAAS_API_KEY),
         customerId: asaasCustomerId,
         subscriptionId: asaasSubscriptionId,
+        promoSubscriptionId: asaasPromoSubscriptionId,
+        free: isFree,
         invoiceUrl,
         firstPaymentId,
         error: asaasError,
