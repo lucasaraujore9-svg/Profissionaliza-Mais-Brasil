@@ -184,10 +184,14 @@ export function CatalogEditDrawer({ courseId, open, onOpenChange, onSaved }: Cat
             </div>
 
             <div>
-              <label className="text-xs font-semibold text-gray-700">
+              <label id="payment-type-label" className="text-xs font-semibold text-gray-700">
                 Forma de pagamento
               </label>
-              <div className="mt-1 grid grid-cols-2 gap-2">
+              <div
+                role="group"
+                aria-labelledby="payment-type-label"
+                className="mt-1 grid grid-cols-2 gap-2"
+              >
                 <button
                   type="button"
                   onClick={() =>
@@ -237,10 +241,11 @@ export function CatalogEditDrawer({ courseId, open, onOpenChange, onSaved }: Cat
 
             {detail.paymentTypeMain === "MONTHLY" && (
               <div>
-                <label className="text-xs font-semibold text-gray-700">
+                <label htmlFor="monthly-months" className="text-xs font-semibold text-gray-700">
                   Quantidade de mensalidades
                 </label>
                 <input
+                  id="monthly-months"
                   type="number"
                   min={1}
                   max={60}
@@ -263,12 +268,13 @@ export function CatalogEditDrawer({ courseId, open, onOpenChange, onSaved }: Cat
             )}
 
             <div>
-              <label className="text-xs font-semibold text-gray-700">
+              <label htmlFor="preco-vitrine-main" className="text-xs font-semibold text-gray-700">
                 {detail.paymentTypeMain === "MONTHLY"
                   ? "Valor da mensalidade (R$)"
                   : "Preço vitrine principal (R$)"}
               </label>
               <input
+                id="preco-vitrine-main"
                 type="number"
                 step="0.01"
                 min="0"
@@ -332,8 +338,9 @@ export function CatalogEditDrawer({ courseId, open, onOpenChange, onSaved }: Cat
             </div>
 
             <div>
-              <label className="text-xs font-semibold text-gray-700">Ordem na home</label>
+              <label htmlFor="ordem-home" className="text-xs font-semibold text-gray-700">Ordem na home</label>
               <input
+                id="ordem-home"
                 type="number"
                 value={detail.ordemHome ?? ""}
                 onChange={(e) =>
@@ -346,7 +353,7 @@ export function CatalogEditDrawer({ courseId, open, onOpenChange, onSaved }: Cat
 
             <div>
               <div className="flex items-center justify-between">
-                <label className="text-xs font-semibold text-gray-700">
+                <label htmlFor="categoria-select" className="text-xs font-semibold text-gray-700">
                   Categoria
                 </label>
                 <button
@@ -359,6 +366,7 @@ export function CatalogEditDrawer({ courseId, open, onOpenChange, onSaved }: Cat
                 </button>
               </div>
               <select
+                id="categoria-select"
                 value={detail.categoryId ?? ""}
                 onChange={(e) =>
                   setDetail({
@@ -385,8 +393,9 @@ export function CatalogEditDrawer({ courseId, open, onOpenChange, onSaved }: Cat
             </div>
 
             <div>
-              <label className="text-xs font-semibold text-gray-700">Capa (URL Supabase)</label>
+              <label htmlFor="capa-override" className="text-xs font-semibold text-gray-700">Capa (URL Supabase)</label>
               <input
+                id="capa-override"
                 type="url"
                 value={detail.capaOverride ?? ""}
                 onChange={(e) =>
@@ -398,8 +407,9 @@ export function CatalogEditDrawer({ courseId, open, onOpenChange, onSaved }: Cat
             </div>
 
             <div>
-              <label className="text-xs font-semibold text-gray-700">Descricao override</label>
+              <label htmlFor="descricao-override" className="text-xs font-semibold text-gray-700">Descricao override</label>
               <textarea
+                id="descricao-override"
                 rows={4}
                 value={detail.descricaoOverride ?? ""}
                 onChange={(e) =>
@@ -414,13 +424,14 @@ export function CatalogEditDrawer({ courseId, open, onOpenChange, onSaved }: Cat
 
             {detail.paymentTypeMain === "ONE_TIME" && (
             <div>
-              <label className="text-xs font-semibold text-gray-700">
+              <label htmlFor="parcelas-override" className="text-xs font-semibold text-gray-700">
                 Parcelas (override) — vazio usa o padrão importado
                 {detail.parcelasSugeridas
                   ? ` (${detail.parcelasSugeridas}x)`
                   : ""}
               </label>
               <input
+                id="parcelas-override"
                 type="number"
                 min={1}
                 max={24}

@@ -5,6 +5,39 @@
 
 ---
 
+# 🔧 RODADA CORRETIVA 2026-06-03 — Erros e inconsistências corrigidos
+
+> **Esta seção é a 2ª passada (2026-06-03), posterior à auditoria/hardening de 2026-05-28 (commit `9cad7b5`).**
+> Documentos autoritativos desta rodada: **`CORRECOES_APLICADAS.md`** e **`INCONSISTENCIAS_CORRIGIDAS.md`**.
+
+**Metodologia:** 16 finders paralelos (autz por área, isolamento de tenant, consistência sistêmica + regras de negócio, bugs, a11y, performance, schema, secrets, diff em andamento) → **verificação adversarial** das descobertas critical/high → correção (inline para segurança; 9 agentes paralelos para a11y) → validação.
+
+**Descobertas (verificadas):** 66 — **0 Crítico · 10 Alto · 23 Médio · 21 Baixo · 12 Info** · 0 refutadas. Os 12 Info confirmaram que superfícies sensíveis (MRR/ARR, mark-paid, approve, impersonate, billing) **já estão corretamente restritas**.
+
+**Padrão dominante:** *remediação parcial entre rotas irmãs* na rodada anterior — o "representante" de cada família foi corrigido (`revoke`, `approve`, `comissoes/demonstrativo`), mas as **rotas irmãs** ficaram sem o mesmo gate. Esta rodada uniformizou cada família.
+
+### Erros e inconsistências corrigidos (resumo)
+1. **Escalonamento de privilégio** — `requireResellerOwner` deixava consultor passar no guard owner-only (podia elevar o próprio `maxDiscount` a 100%). Corrigido com checagem de owner direto (`User.tenantId`).
+2. **Vazamento/mutação cross-tenant de certificados (PII: nome+CPF)** — `download`/`regenerate`/`issue`/`enrollments` sem escopo de tenant. Corrigido com helper `adminCanAccessCertTenant` + escopo `__pmb__`-aware.
+3. **Vazamento financeiro cross-manager (PIX/valores)** — leitura/export de saques e comissões sem escopo de `accountManagerId`. Corrigido (PMB_SALES→403; MGR→escopo).
+4. **API × UI desalinhadas** — `analytics`, `tenant-payments`, `overdue`, `catalogo/sync(-log)` aceitavam toda a equipe PMB embora a UI seja SUPER_ADMIN-only. Corrigido.
+5. **Relatórios cross-tenant** — PMB_SALES gerava relatórios de todos os revendedores; agregado `alunos-por-revendedor` vazava a MGR. Corrigido (flag `pmbSalesAllowed` + `needsSuperAdmin`).
+6. **Bug de perda de dados** — salvar Unidade Técnica zerava `tecnicaCourses`. Corrigido (update condicional).
+7. **Drift monetário** — preview de cupom em float vs cobrado em `Decimal`. Corrigido (`applyCouponDiscount`).
+8. **Drift schema↔banco** — `onDelete` implícito `SetNull` vs `RESTRICT` real em `Enrollment`/`Payment`. Corrigido (anotação explícita).
+9. **IDOR `checkout/status`** + **rate-limit ausente** em `validate-ref`/`capture-ref`. Corrigido.
+10. **Acessibilidade** — 8 componentes (drawers sem dialog/Escape, inputs sem rótulo, ação destrutiva sem confirmação, botões-ícone sem nome, toggle sem `role=switch`). Corrigido.
+
+**Arquivos alterados:** 30 modificados + 3 novos (`src/lib/certificates/admin-scope.ts`, `.../admin-scope.test.ts`). **Validação:** typecheck ✅ · lint ✅ · vitest ✅ **33/33**.
+
+**Ainda aberto (decisão humana):** R1 (CPF em bucket público — **P0 infra**), R3 (RLS), R13/R15/R23 (LGPD/sessão), agendamento de crons (`vercel.json`×pg_cron), M7/M8 (sweep/prazo), CSP, índices/FK. Detalhe em `INCONSISTENCIAS_CORRIGIDAS.md › Pendências`.
+
+---
+
+# 📜 AUDITORIA 2026-05-28 (rodada anterior — preservada abaixo)
+
+---
+
 ## 1. Resumo executivo
 Sistema SaaS multi-tenant de revenda de cursos, **maduro e bem defendido** na superfície clássica de
 segurança. Typecheck, lint e (lógica de) build verdes. Riscos reais concentrados em: **1 Crítico de

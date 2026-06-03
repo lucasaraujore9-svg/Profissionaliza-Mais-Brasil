@@ -572,11 +572,14 @@ model Student {
 model Enrollment {
   id             String        @id @default(cuid())
   tenantId       String?       @map("tenant_id") // null = vitrine principal PMB
-  tenant         Tenant?       @relation(fields: [tenantId], references: [id])
+  // onDelete: Restrict explicito reflete o estado REAL do banco (init migration).
+  // Sem ele, o Prisma assumiria SetNull (default p/ relacao opcional) e um futuro
+  // `prisma migrate` geraria uma migration destrutiva trocando RESTRICT->SET NULL.
+  tenant         Tenant?       @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   studentId      String        @map("student_id")
   student        Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
   tenantCourseId String?       @map("tenant_course_id") // null para vendas vitrine PMB
-  tenantCourse   TenantCourse? @relation(fields: [tenantCourseId], references: [id])
+  tenantCourse   TenantCourse? @relation(fields: [tenantCourseId], references: [id], onDelete: Restrict)
 
   // Vendedor (PMB_SALES ou consultor que originou)
   soldByUserId String? @map("sold_by_user_id")

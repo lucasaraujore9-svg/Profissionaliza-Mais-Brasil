@@ -71,6 +71,17 @@ export async function requireResellerOwner(
   if (!session || session.role !== "RESELLER" || session.tenantId !== tenantId) {
     return { ok: false, response: deny() }
   }
+  // Garante OWNER DIRETO do tenant. `session.tenantId` tambem e populado para
+  // consultores (TenantMember -> effectiveTenantId no JWT), de modo que a
+  // checagem acima, sozinha, deixaria um consultor passar neste guard
+  // "owner-only" — podendo, p.ex., editar a propria membership e elevar o
+  // proprio `maxDiscount` (bypass do cap de desconto). `User.tenantId` e @unique
+  // e so e setado para o owner; consultores tem `User.tenantId = null`.
+  const owner = await prisma.user.findFirst({
+    where: { id: session.userId, tenantId },
+    select: { id: true },
+  })
+  if (!owner) return { ok: false, response: deny() }
   return { ok: true, session }
 }
 

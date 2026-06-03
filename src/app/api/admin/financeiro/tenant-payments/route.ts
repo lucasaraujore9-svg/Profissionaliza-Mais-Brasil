@@ -19,6 +19,11 @@ export const GET = withRequestContext(
   if (!session) {
     return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
   }
+  // Financeiro de revendedores (mensalidades/asaasPaymentId/notas) e a tela
+  // /admin/financeiro sao SUPER_ADMIN-only; alinha a API ao gate da UI.
+  if (session.role !== "SUPER_ADMIN") {
+    return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
+  }
 
   const url = new URL(request.url)
   const status = url.searchParams.get("status") ?? "all"

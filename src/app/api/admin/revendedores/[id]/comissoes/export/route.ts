@@ -57,10 +57,21 @@ export const GET = withRequestContextParams<{ id: string }>(
 
   const tenant = await prisma.tenant.findUnique({
     where: { id },
-    select: { id: true, slug: true },
+    select: { id: true, slug: true, accountManagerId: true },
   })
   if (!tenant) {
     return NextResponse.json({ error: "Revendedor não encontrado" }, { status: 404 })
+  }
+
+  // Mesmo escopo do irmao comissoes/demonstrativo: PMB_RESELLER_MGR so acessa
+  // tenants atribuidos; PMB_SALES nao tem acesso a financeiro de revenda. Sem
+  // isto, qualquer membro PMB baixaria o CSV de comissoes (valores/percentuais)
+  // de qualquer revendedor por id.
+  if (session.role === "PMB_RESELLER_MGR" && tenant.accountManagerId !== session.userId) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  }
+  if (session.role === "PMB_SALES") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
 
   const commissions = await prisma.referralCommission.findMany({

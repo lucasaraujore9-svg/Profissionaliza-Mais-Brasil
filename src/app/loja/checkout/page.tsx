@@ -3,6 +3,7 @@ import { OrderSummary } from "@/components/loja/order-summary"
 import { StudentForm } from "@/components/loja/student-form"
 import { PaymentInfo } from "@/components/loja/payment-info"
 import { getCurrentTenant } from "@/lib/tenant/current"
+import { applyCouponDiscount } from "@/lib/coupons/discount"
 import { prisma } from "@/lib/prisma"
 
 interface CheckoutPageProps {
@@ -35,16 +36,19 @@ async function resolveCoupon(
   if (!coupon) return null
   if (coupon.maxUses !== null && coupon.usedCount >= coupon.maxUses) return null
 
-  const raw =
-    coupon.discountType === "PERCENTAGE"
-      ? (basePrice * Number(coupon.discountValue)) / 100
-      : Number(coupon.discountValue)
-  const discountAmount = Math.min(raw, basePrice)
+  // Usa o helper central (Prisma.Decimal + half-even) para que o PREVIEW bata
+  // exatamente com o valor recalculado/cobrado no checkout — evita drift de
+  // arredondamento (float) entre o que o aluno vê e o que e cobrado.
+  const { discountAmount, finalAmount } = applyCouponDiscount({
+    basePrice,
+    discountType: coupon.discountType,
+    discountValue: coupon.discountValue,
+  })
 
   return {
     code: coupon.code,
-    discountAmount: Number(discountAmount.toFixed(2)),
-    finalPrice: Number((basePrice - discountAmount).toFixed(2)),
+    discountAmount,
+    finalPrice: finalAmount,
   }
 }
 

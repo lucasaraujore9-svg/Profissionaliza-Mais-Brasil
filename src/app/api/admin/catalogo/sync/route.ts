@@ -13,6 +13,12 @@ export const POST = withRequestContext(
   if (!ctx) {
     return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
   }
+  // Sync muta o catalogo GLOBAL (precos, categorias, status, HomeSections).
+  // Consistente com catalogo/[id], catalogo/categorias e system-settings,
+  // que sao SUPER_ADMIN-only.
+  if (ctx.role !== "SUPER_ADMIN") {
+    return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
+  }
 
   try {
     const result = await syncCatalogFromEA("manual")

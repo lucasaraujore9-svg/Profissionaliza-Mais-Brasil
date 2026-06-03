@@ -103,6 +103,19 @@ export const GET = withRequestContext(
     where.requestedAt = dateFilter
   }
 
+  // Escopo por papel (espelha approve/fail e a pagina /admin/indicacoes):
+  // PMB_SALES nao acessa financeiro de indicacao; PMB_RESELLER_MGR so exporta
+  // saques de tenants atribuidos a ele (CSV expoe PIX/valores — PII financeira).
+  if (session.role === "PMB_SALES") {
+    return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
+  }
+  if (session.role === "PMB_RESELLER_MGR") {
+    where.AND = [
+      ...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []),
+      { referrer: { accountManagerId: session.userId } },
+    ]
+  }
+
   const payouts = await prisma.referralPayout.findMany({
     where,
     select: {

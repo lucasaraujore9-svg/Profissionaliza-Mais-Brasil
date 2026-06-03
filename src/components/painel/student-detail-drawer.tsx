@@ -127,6 +127,17 @@ export function StudentDetailDrawer({
     }
   }, [open, studentId])
 
+  useEffect(() => {
+    if (!open) return
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose()
+    }
+    window.addEventListener("keydown", handleKeyDown)
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown)
+    }
+  }, [open, onClose])
+
   if (!open) return null
 
   async function handleSendMessage() {
@@ -180,10 +191,18 @@ export function StudentDetailDrawer({
         onClick={onClose}
         aria-hidden
       />
-      <aside className="relative ml-auto flex h-full w-full max-w-md flex-col overflow-y-auto bg-white shadow-xl">
+      <aside
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="student-detail-drawer-title"
+        className="relative ml-auto flex h-full w-full max-w-md flex-col overflow-y-auto bg-white shadow-xl"
+      >
         <header className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
           <div className="flex items-center gap-3">
-            <h2 className="text-base font-semibold text-[var(--color-pmb-green-900)]">
+            <h2
+              id="student-detail-drawer-title"
+              className="text-base font-semibold text-[var(--color-pmb-green-900)]"
+            >
               Detalhes do aluno
             </h2>
             {studentId && (
@@ -199,6 +218,7 @@ export function StudentDetailDrawer({
           <button
             type="button"
             onClick={onClose}
+            aria-label="Fechar"
             className="rounded-md p-1.5 text-gray-500 hover:bg-gray-100"
           >
             <X className="h-4 w-4" />

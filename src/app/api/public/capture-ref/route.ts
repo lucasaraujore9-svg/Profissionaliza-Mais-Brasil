@@ -6,6 +6,7 @@ import {
   REFERRAL_COOKIE_MAX_AGE_SECONDS,
   validateReferralCode,
 } from "@/lib/referrals/capture"
+import { rateLimit, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 
 const bodySchema = z.object({
@@ -15,6 +16,11 @@ const bodySchema = z.object({
 export const POST = withRequestContext(
   { action: "public.capture_ref", route: "/api/public/capture-ref" },
   async (request: Request) => {
+  // Endpoint publico nao autenticado que faz lookup no banco e revela
+  // tenantName — limita enumeracao/abuso por IP.
+  const rl = await rateLimit(request, RATE_LIMITS.leads)
+  if (!rl.ok) return rateLimitResponse(rl)
+
   let payload: unknown
   try {
     payload = await request.json()

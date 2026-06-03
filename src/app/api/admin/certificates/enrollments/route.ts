@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { requireAdminSession } from "@/lib/auth/admin-session"
+import { PMB_TENANT_SLUG } from "@/lib/pmb-config"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 
 export const GET = withRequestContext(
@@ -19,10 +20,33 @@ export const GET = withRequestContext(
 
   const student = await prisma.student.findUnique({
     where: { id: studentId },
-    select: { id: true, tenantId: true, nome: true, cpf: true },
+    select: {
+      id: true,
+      tenantId: true,
+      nome: true,
+      cpf: true,
+      tenant: { select: { slug: true, accountManagerId: true } },
+    },
   })
   if (!student) {
     return NextResponse.json({ error: "Aluno não encontrado" }, { status: 404 })
+  }
+
+  // Escopo por papel: a resposta carrega nome + CPF (PII) e a lista de
+  // matriculas. Sem isto, qualquer membro PMB enumeraria alunos de qualquer
+  // revendedor por studentId. Aluno PMB = tenant placeholder "__pmb__" (ou null).
+  const isPmbStudent =
+    student.tenantId === null || student.tenant?.slug === PMB_TENANT_SLUG
+  if (ctx.role === "PMB_SALES") {
+    if (!isPmbStudent) {
+      return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
+    }
+  } else if (ctx.role === "PMB_RESELLER_MGR") {
+    if (isPmbStudent || student.tenant?.accountManagerId !== ctx.userId) {
+      return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
+    }
+  } else if (ctx.role !== "SUPER_ADMIN") {
+    return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
   }
 
   const enrollments = await prisma.enrollment.findMany({

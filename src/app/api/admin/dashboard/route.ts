@@ -102,27 +102,29 @@ export const GET = withRequestContext(
     ? (studentsChange / totalStudentsPrev) * 100
     : 0
 
-  const chart = await buildRevenueChart(period, periodStart, now)
-
-  const topResellersRaw = await prisma.tenant.findMany({
-    where: { status: { in: ["ACTIVE", "PENDING", "SUSPENDED"] } },
-    select: {
-      id: true,
-      name: true,
-      slug: true,
-      status: true,
-      planValue: true,
-      _count: { select: { students: true } },
-      payments: {
-        where: {
-          mpStatus: "APPROVED",
-          paidAt: { gte: periodStart, lte: now },
+  const [chart, topResellersRaw, alerts] = await Promise.all([
+    buildRevenueChart(period, periodStart, now),
+    prisma.tenant.findMany({
+      where: { status: { in: ["ACTIVE", "PENDING", "SUSPENDED"] } },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        status: true,
+        planValue: true,
+        _count: { select: { students: true } },
+        payments: {
+          where: {
+            mpStatus: "APPROVED",
+            paidAt: { gte: periodStart, lte: now },
+          },
+          select: { amount: true },
         },
-        select: { amount: true },
       },
-    },
-    take: 50,
-  })
+      take: 50,
+    }),
+    buildAlerts(),
+  ])
 
   const topResellers = topResellersRaw
     .map((t) => {
@@ -138,8 +140,6 @@ export const GET = withRequestContext(
     })
     .sort((a, b) => b.mrr - a.mrr)
     .slice(0, 10)
-
-  const alerts = await buildAlerts()
 
   return NextResponse.json({
     data: {

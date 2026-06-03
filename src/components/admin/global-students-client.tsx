@@ -104,12 +104,14 @@ export function GlobalStudentsClient() {
       <div className="flex flex-col gap-3 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm md:flex-row md:items-center">
         <div className="flex-1">
           <Input
+            aria-label="Buscar alunos"
             placeholder="Buscar por email, nome ou CPF"
             value={q}
             onChange={(e) => setQ(e.target.value)}
           />
         </div>
         <select
+          aria-label="Filtrar por origem"
           value={tenantFilter}
           onChange={(e) => setTenantFilter(e.target.value)}
           className="h-10 rounded-md border border-gray-200 bg-white px-3 text-sm md:w-72"
