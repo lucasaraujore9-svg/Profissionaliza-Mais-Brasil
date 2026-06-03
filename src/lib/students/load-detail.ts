@@ -1,4 +1,6 @@
 import { prisma } from "@/lib/prisma"
+import { decrypt } from "@/lib/crypto"
+import { contextLogger } from "@/lib/logger"
 import type { StudentData } from "@/components/shared/student-management/types"
 
 /**
@@ -49,6 +51,21 @@ export async function loadStudentDetail(args: {
     }),
   ])
 
+  // Senha da plataforma de aulas (EA): guardada criptografada (AES-256-GCM).
+  // Descriptografamos para exibir na gestão. Valores legados em texto puro ou
+  // corrompidos degradam para `null` (só o login é mostrado) em vez de quebrar.
+  let plataformaSenha: string | null = null
+  if (student.plataformaAlunoSenha) {
+    try {
+      plataformaSenha = decrypt(student.plataformaAlunoSenha)
+    } catch (err) {
+      contextLogger().warn(
+        { err, event: "student.load_detail.decrypt_failed", studentId: student.id },
+        "falha ao descriptografar senha da plataforma — exibindo só o login",
+      )
+    }
+  }
+
   const totalPaid = payments.reduce(
     (sum, p) =>
       sum +
@@ -73,6 +90,7 @@ export async function loadStudentDetail(args: {
     status: student.status,
     apostila: student.apostila,
     plataformaAlunoId: student.plataformaAlunoId,
+    plataformaSenha,
     asaasCustomerId: student.asaasCustomerId,
     tenantName: student.tenant.name,
     tenantSlug: student.tenant.slug,

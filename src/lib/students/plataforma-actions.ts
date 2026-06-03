@@ -4,6 +4,7 @@ import {
   editarAluno,
   vincularCurso,
   removerCurso,
+  enviarEmailCredenciais,
 } from "@/lib/plataforma-cursos/client"
 import { pmbPlataformaPolo, pmbPlataformaVendedorId, PMB_TENANT_SLUG } from "@/lib/pmb-config"
 import { encrypt } from "@/lib/crypto"
@@ -173,6 +174,33 @@ export async function changeStudentPlatformPassword(
     data: { plataformaAlunoSenha: encrypt(newPassword) },
   })
 
+  return { onPlatform: true }
+}
+
+/**
+ * Reenvia, pela plataforma de aulas (EA), o email com as credenciais de acesso
+ * do aluno (login + senha). Util quando o aluno nao recebeu o email automatico
+ * disparado na matricula.
+ *
+ * Retorna `{ onPlatform: false }` quando o aluno ainda nao foi cadastrado na
+ * plataforma (sem matricula paga) — nesse caso nao ha o que reenviar.
+ */
+export async function resendStudentPlatformCredentials(
+  studentId: string,
+): Promise<{ onPlatform: boolean }> {
+  const student = await prisma.student.findUnique({
+    where: { id: studentId },
+    select: { plataformaAlunoId: true },
+  })
+  if (!student) throw new Error(`student ${studentId} nao encontrado`)
+
+  const plataformaId = parseExternalId(student.plataformaAlunoId)
+  const isPending = student.plataformaAlunoId?.startsWith("pending") ?? false
+  if (plataformaId === null || isPending) {
+    return { onPlatform: false }
+  }
+
+  await enviarEmailCredenciais(plataformaId)
   return { onPlatform: true }
 }
 

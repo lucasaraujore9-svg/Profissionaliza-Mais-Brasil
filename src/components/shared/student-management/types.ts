@@ -60,6 +60,13 @@ export interface StudentData {
   status: string
   apostila: string
   plataformaAlunoId: string | null
+  /**
+   * Senha do aluno na plataforma de aulas (EA), descriptografada para exibição
+   * na gestão. `null` quando o aluno ainda não está na plataforma ou quando a
+   * senha não pôde ser descriptografada (legado/zerada) — nesse caso só o login
+   * é exibido.
+   */
+  plataformaSenha: string | null
   asaasCustomerId: string | null
   tenantName: string
   tenantSlug: string
