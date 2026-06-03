@@ -15,7 +15,7 @@ import {
 import { renderCertificateByLayout } from "./templates"
 import { uploadCertificatePdf } from "./storage"
 import { validationUrlFor } from "./urls"
-import { lowerCert } from "./text"
+import { lowerCert, upperCert } from "./text"
 import { contextLogger } from "@/lib/logger"
 
 async function makeQrDataUrl(text: string): Promise<string | null> {
@@ -69,16 +69,16 @@ export async function renderCertificateBuffer(
   template: ResolvedTemplate,
   fields: CertificateRenderFields,
 ): Promise<Buffer> {
-  // Nomes e parametros do certificado sao sempre exibidos em minusculo
-  // (regra de negocio). lowerCert centraliza a normalizacao.
+  // Nomes e parametros do certificado sao sempre exibidos em MAIUSCULO
+  // (regra de negocio). upperCert centraliza a normalizacao.
   const placeholders: CertificatePlaceholders = {
-    nome: lowerCert(fields.studentName),
-    cpf: lowerCert(fields.studentCpf),
-    curso: lowerCert(fields.courseName),
-    carga_horaria: lowerCert(fields.cargaHoraria),
-    data_conclusao: lowerCert(formatCompletionDate(fields.completionDate)),
-    codigo: lowerCert(fields.code),
-    unidade: lowerCert(fields.unidade),
+    nome: upperCert(fields.studentName),
+    cpf: upperCert(fields.studentCpf),
+    curso: upperCert(fields.courseName),
+    carga_horaria: upperCert(fields.cargaHoraria),
+    data_conclusao: upperCert(formatCompletionDate(fields.completionDate)),
+    codigo: upperCert(fields.code),
+    unidade: upperCert(fields.unidade),
   }
 
   const bodyResolved = applyPlaceholders(template.bodyText, placeholders)
@@ -94,13 +94,13 @@ export async function renderCertificateBuffer(
 
   const element = renderCertificateByLayout(template.layout, {
     template,
-    studentName: lowerCert(fields.studentName),
-    studentCpf: fields.studentCpf ? lowerCert(fields.studentCpf) : null,
-    courseName: lowerCert(fields.courseName),
-    cargaHoraria: fields.cargaHoraria ? lowerCert(fields.cargaHoraria) : null,
-    completionDateFormatted: lowerCert(formatCompletionDate(fields.completionDate)),
-    code: lowerCert(fields.code),
-    unidade: lowerCert(fields.unidade),
+    studentName: upperCert(fields.studentName),
+    studentCpf: fields.studentCpf ? upperCert(fields.studentCpf) : null,
+    courseName: upperCert(fields.courseName),
+    cargaHoraria: fields.cargaHoraria ? upperCert(fields.cargaHoraria) : null,
+    completionDateFormatted: upperCert(formatCompletionDate(fields.completionDate)),
+    code: upperCert(fields.code),
+    unidade: upperCert(fields.unidade),
     progressPercent: fields.progressPercent,
     validationUrl,
     qrCodeDataUrl,

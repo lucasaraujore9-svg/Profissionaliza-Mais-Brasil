@@ -8,7 +8,7 @@ import {
   StyleSheet,
 } from "@react-pdf/renderer"
 import type { ResolvedTemplate } from "../template-resolver"
-import { certificateInfoPage } from "./info-page"
+import { certificateInfoPage, resolveCompletionPercent } from "./info-page"
 
 export interface CertificateRenderData {
   template: ResolvedTemplate
@@ -54,6 +54,7 @@ export interface CertificateRenderData {
 export function ClassicCertificate(data: CertificateRenderData) {
   const t = data.template
   const displayUrl = data.validationUrl.replace(/^https?:\/\//, "")
+  const pct = resolveCompletionPercent(data.progressPercent)
   const styles = StyleSheet.create({
     page: {
       padding: 0,
@@ -200,10 +201,16 @@ export function ClassicCertificate(data: CertificateRenderData) {
     qrBox: {
       alignItems: "center",
       marginLeft: 12,
+      backgroundColor: "#FFFFFF",
+      padding: 7,
+      borderRadius: 6,
+      borderWidth: 1,
+      borderColor: "#E5E7EB",
     },
     qrImage: {
       width: 60,
       height: 60,
+      backgroundColor: "#FFFFFF",
     },
     qrLabel: {
       fontSize: 7,
@@ -278,7 +285,7 @@ export function ClassicCertificate(data: CertificateRenderData) {
                 : ""}
             </Text>
             <Text style={styles.courseInfo}>
-              Concluído em {data.completionDateFormatted}
+              Concluído em {data.completionDateFormatted}  ·  Aproveitamento: {pct}%
             </Text>
 
             <View style={styles.signatureBlock}>

@@ -95,10 +95,21 @@ export function CertificateHtmlPreview({
   groupName = "Grupo Bolsa Mais Brasil",
   sample,
 }: Props) {
-  const resolvedSample = useMemo(
-    () => sample ?? buildSampleData(),
-    [sample],
-  )
+  // Variaveis do certificado sao sempre exibidas em MAIUSCULO (regra de
+  // negocio — espelha upperCert da pipeline do PDF). Uppercase aqui garante
+  // que a previa bata com o PDF real, qualquer que seja o `sample` recebido.
+  const resolvedSample = useMemo(() => {
+    const base = sample ?? buildSampleData()
+    return {
+      nome: base.nome.toUpperCase(),
+      cpf: base.cpf.toUpperCase(),
+      curso: base.curso.toUpperCase(),
+      carga_horaria: base.carga_horaria.toUpperCase(),
+      data_conclusao: base.data_conclusao.toUpperCase(),
+      codigo: base.codigo.toUpperCase(),
+      unidade: base.unidade.toUpperCase(),
+    }
+  }, [sample])
 
   const bodyResolved = useMemo(
     () => resolvePlaceholders(data.bodyText, resolvedSample),
@@ -239,6 +250,9 @@ function ClassicPreview({
           </p>
           <p className="text-[10px] sm:text-xs text-gray-700">
             Curso: {sample.curso} · {sample.carga_horaria} · {sample.data_conclusao}
+          </p>
+          <p className="text-[10px] sm:text-xs text-gray-700">
+            Aproveitamento: 100%
           </p>
         </div>
 
@@ -410,6 +424,10 @@ function ModernPreview({
                 <span className="text-gray-500">Conclusão: </span>
                 {sample.data_conclusao}
               </div>
+              <div>
+                <span className="text-gray-500">Aproveitamento: </span>
+                100%
+              </div>
             </div>
           </div>
 
@@ -441,7 +459,7 @@ function ModernPreview({
 
             <div className="flex flex-col items-end text-right">
               {data.showQrCode && (
-                <div className="h-10 w-10 sm:h-14 sm:w-14 border border-dashed border-gray-400 bg-white p-1 text-[8px] leading-tight text-gray-500 flex items-center justify-center">
+                <div className="h-10 w-10 sm:h-14 sm:w-14 rounded-md border border-gray-200 bg-white p-1 text-[8px] leading-tight text-gray-500 shadow-sm flex items-center justify-center">
                   QR
                 </div>
               )}
@@ -570,6 +588,12 @@ function MinimalPreview({
               Conclusão
             </div>
             <div style={{ color: "#1F2937" }}>{sample.data_conclusao}</div>
+          </div>
+          <div>
+            <div className="text-[8px] sm:text-[9px] tracking-widest uppercase text-gray-400">
+              Aproveitamento
+            </div>
+            <div style={{ color: "#1F2937" }}>100%</div>
           </div>
         </div>
 

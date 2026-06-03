@@ -24,7 +24,9 @@ export const LEGAL_BASIS_TEXT =
  * (sincronizado da plataforma) quando disponível; na ausência (0/null) assume
  * 100%, pois a emissão de um certificado de CONCLUSÃO pressupõe o término do curso.
  */
-function resolvePercent(progressPercent: number | null | undefined): number {
+export function resolveCompletionPercent(
+  progressPercent: number | null | undefined,
+): number {
   if (typeof progressPercent === "number" && progressPercent > 0) {
     return Math.min(100, Math.round(progressPercent))
   }
@@ -38,7 +40,7 @@ function resolvePercent(progressPercent: number | null | undefined): number {
  */
 export function certificateInfoPage(data: CertificateRenderData): ReactElement {
   const t = data.template
-  const pct = resolvePercent(data.progressPercent)
+  const pct = resolveCompletionPercent(data.progressPercent)
   const displayUrl = data.validationUrl.replace(/^https?:\/\//, "")
 
   const styles = StyleSheet.create({

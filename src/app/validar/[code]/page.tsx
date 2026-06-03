@@ -9,7 +9,7 @@ import {
   extractCertificatePath,
 } from "@/lib/certificates/storage"
 import { swallow } from "@/lib/errors"
-import { lowerCert } from "@/lib/certificates/text"
+import { upperCert } from "@/lib/certificates/text"
 
 function formatDate(d: Date): string {
   return new Date(d).toLocaleDateString("pt-BR", {
@@ -269,7 +269,7 @@ export default async function ValidateCertificatePage({ params }: Props) {
     )
   }
 
-  const unidade = lowerCert(cert.tenant?.name ?? PMB_TENANT_NAME)
+  const unidade = upperCert(cert.tenant?.name ?? PMB_TENANT_NAME)
   const isRevoked = cert.revokedAt !== null
   const logoSrc = cert.tenant?.logoUrl ?? null
 
@@ -404,7 +404,7 @@ export default async function ValidateCertificatePage({ params }: Props) {
                     : "text-[var(--color-pmb-green-900)]"
                 }`}
               >
-                {lowerCert(cert.studentName)}
+                {upperCert(cert.studentName)}
               </dd>
             </div>
 
@@ -417,7 +417,7 @@ export default async function ValidateCertificatePage({ params }: Props) {
                   isRevoked ? "text-gray-500" : "text-gray-900"
                 }`}
               >
-                {lowerCert(cert.courseName)}
+                {upperCert(cert.courseName)}
               </dd>
             </div>
 
@@ -431,7 +431,7 @@ export default async function ValidateCertificatePage({ params }: Props) {
                     isRevoked ? "text-gray-500" : "text-gray-900"
                   }`}
                 >
-                  {lowerCert(cert.cargaHoraria)}
+                  {upperCert(cert.cargaHoraria)}
                 </dd>
               </div>
             )}
@@ -445,7 +445,7 @@ export default async function ValidateCertificatePage({ params }: Props) {
                   isRevoked ? "text-gray-500" : "text-gray-900"
                 }`}
               >
-                {lowerCert(formatDate(cert.completionDate))}
+                {upperCert(formatDate(cert.completionDate))}
               </dd>
             </div>
 
@@ -454,7 +454,7 @@ export default async function ValidateCertificatePage({ params }: Props) {
                 Código de validação
               </dt>
               <dd className="mt-1 inline-flex max-w-full items-center rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 font-mono text-base font-semibold tracking-wider text-[var(--color-pmb-green-900)]">
-                <span className="truncate">{lowerCert(cert.code)}</span>
+                <span className="truncate">{upperCert(cert.code)}</span>
               </dd>
             </div>
           </dl>

@@ -3,7 +3,7 @@ import { notFound } from "next/navigation"
 import { prisma } from "@/lib/prisma"
 import { requireStudentSession } from "@/lib/auth/student-session"
 import { validationUrlFor } from "@/lib/certificates/urls"
-import { lowerCert } from "@/lib/certificates/text"
+import { lowerCert, upperCert } from "@/lib/certificates/text"
 
 function formatDate(d: Date): string {
   return new Date(d).toLocaleDateString("pt-BR", {
@@ -49,12 +49,12 @@ export default async function StudentCertificateDetailPage({ params }: Props) {
 
       <header className="space-y-2">
         <h1 className="font-display text-3xl text-[var(--color-pmb-green-900)]">
-          {lowerCert(cert.courseName)}
+          {upperCert(cert.courseName)}
         </h1>
         <p className="text-sm text-gray-600">
           Certificado emitido por{" "}
           <strong>
-            {lowerCert(cert.tenant?.name ?? "Profissionaliza Mais Brasil")}
+            {upperCert(cert.tenant?.name ?? "Profissionaliza Mais Brasil")}
           </strong>
         </p>
       </header>
@@ -82,7 +82,7 @@ export default async function StudentCertificateDetailPage({ params }: Props) {
               Nome do aluno
             </dt>
             <dd className="mt-1 text-sm font-semibold text-gray-900">
-              {lowerCert(cert.studentName)}
+              {upperCert(cert.studentName)}
             </dd>
           </div>
           {cert.studentCpf && (
@@ -91,7 +91,7 @@ export default async function StudentCertificateDetailPage({ params }: Props) {
                 CPF
               </dt>
               <dd className="mt-1 text-sm font-semibold text-gray-900">
-                {lowerCert(cert.studentCpf)}
+                {upperCert(cert.studentCpf)}
               </dd>
             </div>
           )}
@@ -100,7 +100,7 @@ export default async function StudentCertificateDetailPage({ params }: Props) {
               Curso
             </dt>
             <dd className="mt-1 text-sm font-semibold text-gray-900">
-              {lowerCert(cert.courseName)}
+              {upperCert(cert.courseName)}
             </dd>
           </div>
           {cert.cargaHoraria && (
@@ -109,7 +109,7 @@ export default async function StudentCertificateDetailPage({ params }: Props) {
                 Carga horária
               </dt>
               <dd className="mt-1 text-sm font-semibold text-gray-900">
-                {lowerCert(cert.cargaHoraria)}
+                {upperCert(cert.cargaHoraria)}
               </dd>
             </div>
           )}
@@ -118,7 +118,7 @@ export default async function StudentCertificateDetailPage({ params }: Props) {
               Data de conclusão
             </dt>
             <dd className="mt-1 text-sm font-semibold text-gray-900">
-              {lowerCert(formatDate(cert.completionDate))}
+              {upperCert(formatDate(cert.completionDate))}
             </dd>
           </div>
           <div>
@@ -126,7 +126,7 @@ export default async function StudentCertificateDetailPage({ params }: Props) {
               Código de validação
             </dt>
             <dd className="mt-1 font-mono text-sm font-semibold text-[var(--color-pmb-green-900)]">
-              {lowerCert(cert.code)}
+              {upperCert(cert.code)}
             </dd>
           </div>
         </dl>

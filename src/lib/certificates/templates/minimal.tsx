@@ -8,7 +8,7 @@ import {
   StyleSheet,
 } from "@react-pdf/renderer"
 import type { CertificateRenderData } from "./classic"
-import { certificateInfoPage } from "./info-page"
+import { certificateInfoPage, resolveCompletionPercent } from "./info-page"
 
 /**
  * Layout MINIMAL: muito espaco em branco, tipografia leve,
@@ -17,6 +17,7 @@ import { certificateInfoPage } from "./info-page"
 export function MinimalCertificate(data: CertificateRenderData) {
   const t = data.template
   const displayUrl = data.validationUrl.replace(/^https?:\/\//, "")
+  const pct = resolveCompletionPercent(data.progressPercent)
   const styles = StyleSheet.create({
     page: {
       padding: 0,
@@ -237,6 +238,10 @@ export function MinimalCertificate(data: CertificateRenderData) {
                 <Text style={styles.metaValue}>
                   {data.completionDateFormatted}
                 </Text>
+              </View>
+              <View style={styles.metaItem}>
+                <Text style={styles.metaLabel}>Aproveitamento</Text>
+                <Text style={styles.metaValue}>{pct}%</Text>
               </View>
             </View>
           </View>
