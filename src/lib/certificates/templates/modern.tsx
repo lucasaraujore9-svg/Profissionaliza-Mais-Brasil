@@ -8,6 +8,7 @@ import {
   StyleSheet,
 } from "@react-pdf/renderer"
 import type { CertificateRenderData } from "./classic"
+import { certificateInfoPage } from "./info-page"
 
 /**
  * Layout MODERN: barra lateral colorida solida com logo + barra superior
@@ -298,6 +299,7 @@ export function ModernCertificate(data: CertificateRenderData) {
           </View>
         </View>
       </Page>
+      {certificateInfoPage(data)}
     </Document>
   )
 }

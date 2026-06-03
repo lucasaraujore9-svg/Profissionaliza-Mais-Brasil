@@ -1,37 +1,31 @@
-import { Users, GraduationCap, BookOpen, DollarSign } from "lucide-react"
+import { Users, GraduationCap, BookOpen } from "lucide-react"
 import { prisma } from "@/lib/prisma"
 import { contextLogger } from "@/lib/logger"
 
+// Faturamento NÃO é exibido publicamente (dado financeiro sensível — LGPD/auditoria).
 interface PublicMetrics {
   resellers: number | null
   courses: number | null
   students: number | null
-  revenue: number | null
 }
 
 const PLACEHOLDER: PublicMetrics = {
   resellers: null,
   courses: null,
   students: null,
-  revenue: null,
 }
 
 async function loadMetrics(): Promise<PublicMetrics> {
   try {
-    const [resellers, courses, students, revenueAgg] = await Promise.all([
+    const [resellers, courses, students] = await Promise.all([
       prisma.tenant.count({ where: { status: "ACTIVE" } }),
       prisma.course.count({ where: { status: "ATIVO", hiddenMain: false } }),
       prisma.student.count(),
-      prisma.payment.aggregate({
-        _sum: { amount: true },
-        where: { mpStatus: "APPROVED" },
-      }),
     ])
     return {
       resellers,
       courses,
       students,
-      revenue: Number(revenueAgg._sum.amount ?? 0),
     }
   } catch (error) {
     contextLogger().error(
@@ -51,17 +45,6 @@ function formatCount(value: number | null): string {
   return `${value}+`
 }
 
-function formatRevenue(value: number | null): string {
-  if (value === null) return "—"
-  if (value >= 1_000_000) {
-    return `R$ ${(value / 1_000_000).toFixed(1).replace(".", ",")}M`
-  }
-  if (value >= 1000) {
-    return `R$ ${(value / 1000).toFixed(0)}K`
-  }
-  return `R$ ${value.toFixed(0)}`
-}
-
 export async function NumerosBento() {
   const metrics = await loadMetrics()
 
@@ -72,7 +55,7 @@ export async function NumerosBento() {
       value: formatCount(metrics.resellers),
       hint: "Empreendedores ativos",
       color: "bg-[var(--color-pmb-lime-50)] text-[var(--color-pmb-green)]",
-      span: "md:col-span-2",
+      span: "",
     },
     {
       icon: BookOpen,
@@ -89,14 +72,6 @@ export async function NumerosBento() {
       hint: "Estudando agora",
       color: "bg-green-50 text-green-600",
       span: "",
-    },
-    {
-      icon: DollarSign,
-      label: "Receita gerada",
-      value: formatRevenue(metrics.revenue),
-      hint: "Pelos revendedores",
-      color: "bg-orange-50 text-orange-600",
-      span: "md:col-span-2",
     },
   ]
 

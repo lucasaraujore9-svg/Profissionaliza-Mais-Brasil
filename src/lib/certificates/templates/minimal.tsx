@@ -8,6 +8,7 @@ import {
   StyleSheet,
 } from "@react-pdf/renderer"
 import type { CertificateRenderData } from "./classic"
+import { certificateInfoPage } from "./info-page"
 
 /**
  * Layout MINIMAL: muito espaco em branco, tipografia leve,
@@ -281,6 +282,7 @@ export function MinimalCertificate(data: CertificateRenderData) {
           </View>
         </View>
       </Page>
+      {certificateInfoPage(data)}
     </Document>
   )
 }
