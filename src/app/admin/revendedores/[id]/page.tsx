@@ -1,6 +1,7 @@
 import Link from "next/link"
 import { ArrowLeft } from "lucide-react"
 import { ResellerDetailClient } from "@/components/admin/reseller-detail-client"
+import { requireAdminSession } from "@/lib/auth/admin-session"
 
 export default async function ResellerDetailPage({
   params,
@@ -8,6 +9,8 @@ export default async function ResellerDetailPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
+  const session = await requireAdminSession()
+  const isSuperAdmin = session?.role === "SUPER_ADMIN"
 
   return (
     <div className="space-y-6">
@@ -19,7 +22,7 @@ export default async function ResellerDetailPage({
         Voltar para revendedores
       </Link>
 
-      <ResellerDetailClient tenantId={id} />
+      <ResellerDetailClient tenantId={id} isSuperAdmin={isSuperAdmin} />
     </div>
   )
 }

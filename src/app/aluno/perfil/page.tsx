@@ -3,6 +3,7 @@ import { requireStudentSession } from "@/lib/auth/student-session"
 import { StudentProfileForm } from "@/components/aluno/student-profile-form"
 import { StudentPasswordForm } from "@/components/aluno/student-password-form"
 import { PlatformPasswordForm } from "@/components/aluno/platform-password-form"
+import { DeleteAccountSection } from "@/components/aluno/delete-account-section"
 import { getStudentPlatformCredentials } from "@/lib/students/platform-credentials"
 
 export default async function StudentProfilePage() {
@@ -64,6 +65,8 @@ export default async function StudentProfilePage() {
       <StudentPasswordForm passwordSetAt={student.passwordSetAt?.toISOString() ?? null} />
 
       {platformCredentials && <PlatformPasswordForm />}
+
+      <DeleteAccountSection />
     </div>
   )
 }
