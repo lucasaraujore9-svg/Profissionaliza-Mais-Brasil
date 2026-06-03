@@ -8,8 +8,7 @@ import {
   type CertificatePlaceholders,
 } from "./placeholders"
 import {
-  readSnapshot,
-  refreshGroupBranding,
+  resolveCertificateTemplate,
   type ResolvedTemplate,
 } from "./template-resolver"
 import { renderCertificateByLayout } from "./templates"
@@ -131,10 +130,13 @@ export async function generateAndUploadPdf(
     throw new Error(`Certificate ${certificateId} nao encontrado`)
   }
 
-  // Snapshot preserva texto/cores/layout. O branding do grupo (logo + nome)
-  // sempre reflete o estado ATUAL do SystemSettings — assim trocar a logo
-  // no admin se propaga em re-emissoes sem precisar editar snapshots antigos.
-  const template = await refreshGroupBranding(readSnapshot(cert.templateSnapshot))
+  // Resolve o template ATUAL (layout + cores + textos + logo da unidade +
+  // branding do grupo) em vez do snapshot congelado na emissão. Assim a geração
+  // — e principalmente "Regenerar PDFs" — reaplica de fato o modelo vigente:
+  // trocar o layout/template no admin e regenerar atualiza os PDFs já emitidos.
+  // O snapshot (cert.templateSnapshot) continua gravado na emissão apenas como
+  // registro histórico/auditoria do que estava ativo naquele momento.
+  const template = await resolveCertificateTemplate(cert.tenantId)
   // Nome da unidade exibido no certificado (visto pelo aluno). Para a vitrine
   // PMB usa o nome público (sem o sufixo interno "(Vitrine)"). Unidades de
   // revendedores usam o próprio nome do tenant.

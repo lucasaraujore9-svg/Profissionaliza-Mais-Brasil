@@ -226,7 +226,10 @@ export function ModernCertificate(data: CertificateRenderData) {
 
   return (
     <Document>
-      <Page size="A4" orientation="landscape" style={styles.page}>
+      {/* wrap={false}: trava a frente em UMA página física. Sem isto, textos
+          longos (curso/nome/rodapé) transbordam e criam uma 3ª página entre a
+          frente e o verso (info-page). */}
+      <Page size="A4" orientation="landscape" style={styles.page} wrap={false}>
         {t.backgroundUrl ? (
           <Image src={t.backgroundUrl} style={styles.background} fixed />
         ) : null}

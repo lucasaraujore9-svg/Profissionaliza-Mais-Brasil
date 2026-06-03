@@ -184,7 +184,7 @@ export function certificateInfoPage(data: CertificateRenderData): ReactElement {
   })
 
   return (
-    <Page size="A4" orientation="landscape" style={styles.page}>
+    <Page size="A4" orientation="landscape" style={styles.page} wrap={false}>
       <View style={styles.border} />
 
       <View style={styles.main}>
