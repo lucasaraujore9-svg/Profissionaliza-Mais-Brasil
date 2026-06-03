@@ -197,10 +197,19 @@ export function ModernCertificate(data: CertificateRenderData) {
       color: "#9CA3AF",
       marginTop: 3,
     },
+    // Marca do grupo sobre pilula branca: o fundo decorativo cobre a pagina
+    // inteira (content transparente) e a logo do grupo brigava com as ondas.
     groupBrand: {
       marginTop: 8,
       flexDirection: "row",
       alignItems: "center",
+      alignSelf: "flex-start",
+      backgroundColor: "#FFFFFF",
+      paddingVertical: 3,
+      paddingHorizontal: 8,
+      borderRadius: 4,
+      borderWidth: 1,
+      borderColor: "#E5E7EB",
     },
     groupLogo: {
       maxHeight: 15,
@@ -246,6 +255,12 @@ export function ModernCertificate(data: CertificateRenderData) {
             <Text style={styles.studentName}>{data.studentName}</Text>
             <View style={styles.accentBar} />
 
+            {data.studentCpf ? (
+              <Text style={styles.courseInfo}>
+                <Text style={{ color: "#6B7280" }}>CPF: </Text>
+                {data.studentCpf}
+              </Text>
+            ) : null}
             <Text style={styles.courseInfo}>
               <Text style={{ color: "#6B7280" }}>Curso: </Text>
               {data.courseName}

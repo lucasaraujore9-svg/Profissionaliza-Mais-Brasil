@@ -44,7 +44,7 @@ export interface SampleData {
  * e do curso. Mantido como função para resolver a data no cliente (evita
  * mismatch de hidratação ao usar `new Date()` no módulo).
  */
-export function buildSampleData(unidade = "Sua Escola"): SampleData {
+export function buildSampleData(unidade = "Profissionaliza Mais Brasil"): SampleData {
   return {
     nome: "Maria da Silva",
     cpf: "123.456.789-00",
@@ -248,6 +248,7 @@ function ClassicPreview({
           >
             {sample.nome}
           </p>
+          <p className="text-[10px] sm:text-xs text-gray-700">CPF: {sample.cpf}</p>
           <p className="text-[10px] sm:text-xs text-gray-700">
             Curso: {sample.curso} · {sample.carga_horaria} · {sample.data_conclusao}
           </p>
@@ -413,6 +414,10 @@ function ModernPreview({
 
             <div className="mt-2 text-[9px] sm:text-[10px] text-gray-700 space-y-0.5">
               <div>
+                <span className="text-gray-500">CPF: </span>
+                {sample.cpf}
+              </div>
+              <div>
                 <span className="text-gray-500">Curso: </span>
                 {sample.curso}
               </div>
@@ -576,6 +581,12 @@ function MinimalPreview({
               Curso
             </div>
             <div style={{ color: "#1F2937" }}>{sample.curso}</div>
+          </div>
+          <div>
+            <div className="text-[8px] sm:text-[9px] tracking-widest uppercase text-gray-400">
+              CPF
+            </div>
+            <div style={{ color: "#1F2937" }}>{sample.cpf}</div>
           </div>
           <div>
             <div className="text-[8px] sm:text-[9px] tracking-widest uppercase text-gray-400">

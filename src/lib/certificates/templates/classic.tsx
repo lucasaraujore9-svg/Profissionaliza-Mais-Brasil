@@ -227,11 +227,20 @@ export function ClassicCertificate(data: CertificateRenderData) {
       height: 72,
       objectFit: "contain",
     },
+    // Marca do grupo sobre pilula branca centralizada: sem isto a logo do
+    // grupo briga com a decoracao do fundo na base do certificado.
     groupBrand: {
       marginTop: 10,
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "center",
+      alignSelf: "center",
+      backgroundColor: "#FFFFFF",
+      paddingVertical: 3,
+      paddingHorizontal: 10,
+      borderRadius: 4,
+      borderWidth: 1,
+      borderColor: "#E5E7EB",
     },
     groupLogo: {
       maxHeight: 15,
@@ -278,6 +287,9 @@ export function ClassicCertificate(data: CertificateRenderData) {
 
             <Text style={styles.studentName}>{data.studentName}</Text>
 
+            {data.studentCpf ? (
+              <Text style={styles.courseInfo}>CPF: {data.studentCpf}</Text>
+            ) : null}
             <Text style={styles.courseInfo}>
               Curso: {data.courseName}
               {data.cargaHoraria

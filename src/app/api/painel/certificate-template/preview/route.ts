@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { requireResellerSession } from "@/lib/auth/reseller-session"
+import { PMB_PUBLIC_NAME } from "@/lib/pmb-config"
 import { resolveCertificateTemplate } from "@/lib/certificates/template-resolver"
 import { renderCertificateBuffer } from "@/lib/certificates/generate-pdf"
 import { sampleCertificateFields } from "@/lib/certificates/sample"
@@ -43,7 +44,7 @@ export const GET = withRequestContext(
         ? { ...template, layout: layoutOverride }
         : template
 
-      const fields = sampleCertificateFields(tenant?.name ?? "Sua Escola")
+      const fields = sampleCertificateFields(tenant?.name ?? PMB_PUBLIC_NAME)
       const buffer = await renderCertificateBuffer(resolved, fields)
 
       return new NextResponse(buffer as unknown as BodyInit, {

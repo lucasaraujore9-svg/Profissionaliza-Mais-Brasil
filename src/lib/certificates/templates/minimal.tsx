@@ -99,10 +99,12 @@ export function MinimalCertificate(data: CertificateRenderData) {
     },
     metaRow: {
       flexDirection: "row",
+      flexWrap: "wrap",
     },
     metaItem: {
       maxWidth: 200,
       marginRight: 36,
+      marginBottom: 10,
     },
     metaLabel: {
       fontSize: 8,
@@ -181,10 +183,18 @@ export function MinimalCertificate(data: CertificateRenderData) {
       color: "#9CA3AF",
       marginTop: 2,
     },
+    // Marca do grupo sobre pilula branca para nao brigar com o fundo decorativo.
     groupBrand: {
       marginTop: 8,
       flexDirection: "row",
       alignItems: "center",
+      alignSelf: "flex-start",
+      backgroundColor: "#FFFFFF",
+      paddingVertical: 3,
+      paddingHorizontal: 8,
+      borderRadius: 4,
+      borderWidth: 1,
+      borderColor: "#E5E7EB",
     },
     groupLogo: {
       maxHeight: 15,
@@ -233,6 +243,12 @@ export function MinimalCertificate(data: CertificateRenderData) {
                 <Text style={styles.metaLabel}>Curso</Text>
                 <Text style={styles.metaValue}>{data.courseName}</Text>
               </View>
+              {data.studentCpf ? (
+                <View style={styles.metaItem}>
+                  <Text style={styles.metaLabel}>CPF</Text>
+                  <Text style={styles.metaValue}>{data.studentCpf}</Text>
+                </View>
+              ) : null}
               {data.cargaHoraria ? (
                 <View style={styles.metaItem}>
                   <Text style={styles.metaLabel}>Carga horária</Text>

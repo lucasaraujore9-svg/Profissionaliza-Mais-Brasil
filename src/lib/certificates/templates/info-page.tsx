@@ -194,10 +194,16 @@ export function certificateInfoPage(data: CertificateRenderData): ReactElement {
         {/* Dados acadêmicos */}
         <Text style={styles.sectionTitle}>DADOS ACADÊMICOS</Text>
         <View style={styles.grid}>
-          <View style={styles.fieldFull}>
+          <View style={data.studentCpf ? styles.field : styles.fieldFull}>
             <Text style={styles.fieldLabel}>Aluno(a)</Text>
             <Text style={styles.fieldValue}>{data.studentName}</Text>
           </View>
+          {data.studentCpf ? (
+            <View style={styles.field}>
+              <Text style={styles.fieldLabel}>CPF</Text>
+              <Text style={styles.fieldValue}>{data.studentCpf}</Text>
+            </View>
+          ) : null}
           <View style={styles.field}>
             <Text style={styles.fieldLabel}>Curso</Text>
             <Text style={styles.fieldValue}>{data.courseName}</Text>
