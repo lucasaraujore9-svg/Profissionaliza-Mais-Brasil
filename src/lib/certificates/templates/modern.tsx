@@ -8,6 +8,7 @@ import {
   StyleSheet,
 } from "@react-pdf/renderer"
 import type { CertificateRenderData } from "./classic"
+import { certificateInfoPage, resolveCompletionPercent } from "./info-page"
 
 /**
  * Layout MODERN: barra lateral colorida solida com logo + barra superior
@@ -16,6 +17,7 @@ import type { CertificateRenderData } from "./classic"
 export function ModernCertificate(data: CertificateRenderData) {
   const t = data.template
   const displayUrl = data.validationUrl.replace(/^https?:\/\//, "")
+  const pct = resolveCompletionPercent(data.progressPercent)
   const styles = StyleSheet.create({
     page: {
       padding: 0,
@@ -150,12 +152,21 @@ export function ModernCertificate(data: CertificateRenderData) {
       color: "#6B7280",
       marginTop: 1,
     },
+    // Cartao branco atras do QR/codigo: o fundo decorativo cobre a pagina
+    // inteira (content e transparente), entao sem este card o QR fica
+    // ilegivel sobre as ondas. Padding + borderRadius dao a moldura branca.
     qrBlock: {
       alignItems: "center",
+      backgroundColor: "#FFFFFF",
+      padding: 7,
+      borderRadius: 6,
+      borderWidth: 1,
+      borderColor: "#E5E7EB",
     },
     qrImage: {
       width: 60,
       height: 60,
+      backgroundColor: "#FFFFFF",
     },
     qrLabel: {
       fontSize: 7,
@@ -249,6 +260,10 @@ export function ModernCertificate(data: CertificateRenderData) {
               <Text style={{ color: "#6B7280" }}>Conclusão: </Text>
               {data.completionDateFormatted}
             </Text>
+            <Text style={styles.courseInfo}>
+              <Text style={{ color: "#6B7280" }}>Aproveitamento: </Text>
+              {pct}%
+            </Text>
           </View>
 
           <View style={styles.signatureRow}>
@@ -298,6 +313,7 @@ export function ModernCertificate(data: CertificateRenderData) {
           </View>
         </View>
       </Page>
+      {certificateInfoPage(data)}
     </Document>
   )
 }

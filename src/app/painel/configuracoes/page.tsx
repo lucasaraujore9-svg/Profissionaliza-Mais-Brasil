@@ -1,5 +1,6 @@
 import { PageHeader } from "@/components/painel/page-header"
 import { ConfigTabs } from "@/components/painel/config-tabs"
+import { DeleteAccountRequest } from "@/components/painel/delete-account-request"
 
 export default function PainelConfiguracoesPage() {
   return (
@@ -9,6 +10,7 @@ export default function PainelConfiguracoesPage() {
         description="Gerencie sua conta, pagamento e segurança."
       />
       <ConfigTabs />
+      <DeleteAccountRequest />
     </div>
   )
 }

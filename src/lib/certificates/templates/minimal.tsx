@@ -8,6 +8,7 @@ import {
   StyleSheet,
 } from "@react-pdf/renderer"
 import type { CertificateRenderData } from "./classic"
+import { certificateInfoPage, resolveCompletionPercent } from "./info-page"
 
 /**
  * Layout MINIMAL: muito espaco em branco, tipografia leve,
@@ -16,6 +17,7 @@ import type { CertificateRenderData } from "./classic"
 export function MinimalCertificate(data: CertificateRenderData) {
   const t = data.template
   const displayUrl = data.validationUrl.replace(/^https?:\/\//, "")
+  const pct = resolveCompletionPercent(data.progressPercent)
   const styles = StyleSheet.create({
     page: {
       padding: 0,
@@ -146,10 +148,16 @@ export function MinimalCertificate(data: CertificateRenderData) {
     },
     qrBlock: {
       alignItems: "center",
+      backgroundColor: "#FFFFFF",
+      padding: 7,
+      borderRadius: 6,
+      borderWidth: 1,
+      borderColor: "#E5E7EB",
     },
     qrImage: {
       width: 56,
       height: 56,
+      backgroundColor: "#FFFFFF",
     },
     code: {
       fontSize: 9,
@@ -237,6 +245,10 @@ export function MinimalCertificate(data: CertificateRenderData) {
                   {data.completionDateFormatted}
                 </Text>
               </View>
+              <View style={styles.metaItem}>
+                <Text style={styles.metaLabel}>Aproveitamento</Text>
+                <Text style={styles.metaValue}>{pct}%</Text>
+              </View>
             </View>
           </View>
 
@@ -281,6 +293,7 @@ export function MinimalCertificate(data: CertificateRenderData) {
           </View>
         </View>
       </Page>
+      {certificateInfoPage(data)}
     </Document>
   )
 }

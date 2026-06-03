@@ -62,6 +62,13 @@ export function StudentListWrapper() {
   const handleToggleBlock = useCallback(
     async (student: StudentListItem | { id: string; status: StudentStatus }) => {
       const isBlocked = student.status === "BLOQUEADO"
+      const nome = "nome" in student ? student.nome : "este aluno"
+      if (
+        !confirm(
+          `${isBlocked ? "Desbloquear" : "Bloquear"} o acesso de ${nome} às aulas?`,
+        )
+      )
+        return
       const endpoint = isBlocked ? "desbloquear" : "bloquear"
       setPendingId(student.id)
       try {

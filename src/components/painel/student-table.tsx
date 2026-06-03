@@ -140,6 +140,7 @@ export function StudentTable({
                         type="button"
                         onClick={() => onViewDetails(student.id)}
                         className="rounded-md p-1.5 text-gray-500 hover:bg-gray-100 hover:text-[var(--color-pmb-green)]"
+                        aria-label="Ver detalhes"
                         title="Ver detalhes"
                       >
                         <Eye className="h-4 w-4" />
@@ -151,6 +152,7 @@ export function StudentTable({
                         className={`rounded-md p-1.5 hover:bg-gray-100 disabled:opacity-50 ${
                           isBlocked ? "text-green-600" : "text-gray-500 hover:text-red-600"
                         }`}
+                        aria-label={isBlocked ? "Desbloquear aluno" : "Bloquear aluno"}
                         title={isBlocked ? "Desbloquear" : "Bloquear"}
                       >
                         {isBlocked ? <Unlock className="h-4 w-4" /> : <Ban className="h-4 w-4" />}

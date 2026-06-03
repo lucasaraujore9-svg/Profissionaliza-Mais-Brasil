@@ -91,19 +91,26 @@ export const PUT = withRequestContextParams<{ id: string }>(
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
-    const coursesResult = validateTecnicaCoursesInput(parsed.data.courses)
-    if (!coursesResult.ok) {
-      return NextResponse.json({ error: coursesResult.error }, { status: 400 })
+    // So toca em `tecnicaCourses` quando `courses` foi explicitamente enviado.
+    // Sem isto, salvar apenas enabled/url/label (ex.: alternar o toggle)
+    // zerava a lista de cursos — `validateTecnicaCoursesInput(undefined)`
+    // retorna `{ courses: [] }` — destruindo o fallback usado pela vitrine.
+    const data: Prisma.TenantUpdateInput = {
+      tecnicaEnabled: parsed.data.enabled,
+      tecnicaUrl: parsed.data.url ?? null,
+      tecnicaLabel: parsed.data.label?.trim() || null,
+    }
+    if (parsed.data.courses !== undefined) {
+      const coursesResult = validateTecnicaCoursesInput(parsed.data.courses)
+      if (!coursesResult.ok) {
+        return NextResponse.json({ error: coursesResult.error }, { status: 400 })
+      }
+      data.tecnicaCourses = coursesResult.courses as unknown as Prisma.InputJsonValue
     }
 
     const updated = await prisma.tenant.update({
       where: { id },
-      data: {
-        tecnicaEnabled: parsed.data.enabled,
-        tecnicaUrl: parsed.data.url ?? null,
-        tecnicaLabel: parsed.data.label?.trim() || null,
-        tecnicaCourses: coursesResult.courses as unknown as Prisma.InputJsonValue,
-      },
+      data,
       select: {
         id: true,
         tecnicaEnabled: true,

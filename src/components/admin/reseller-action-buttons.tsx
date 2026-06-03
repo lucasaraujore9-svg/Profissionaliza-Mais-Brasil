@@ -1,19 +1,22 @@
 "use client"
 
 import { useState } from "react"
-import { Pause, Play, Ban } from "lucide-react"
+import { Pause, Play, Ban, ShieldOff } from "lucide-react"
+import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import type { ResellerStatus } from "./reseller-table"
 
 interface ResellerActionButtonsProps {
   tenantId: string
   status: ResellerStatus
+  isSuperAdmin?: boolean
   onChanged?: () => void
 }
 
 export function ResellerActionButtons({
   tenantId,
   status,
+  isSuperAdmin = false,
   onChanged,
 }: ResellerActionButtonsProps) {
   const [loading, setLoading] = useState<string | null>(null)
@@ -62,6 +65,37 @@ export function ResellerActionButtons({
     }
   }
 
+  async function anonymize() {
+    const answer = window.prompt(
+      'Esta ação é irreversível e remove os dados pessoais (PII) do revendedor, desativando o login. Digite ANONIMIZAR para confirmar.',
+    )
+    if (answer !== "ANONIMIZAR") return
+    setLoading("ANONYMIZE")
+    setError(null)
+    try {
+      const res = await fetch(`/api/admin/revendedores/${tenantId}/anonimizar`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm: "ANONIMIZAR" }),
+      })
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        const message = body.error ?? "Falha ao anonimizar conta"
+        setError(message)
+        toast.error(message)
+        return
+      }
+      toast.success(body.data?.message ?? "Conta anonimizada com sucesso")
+      onChanged?.()
+    } catch {
+      const message = "Erro de rede ao anonimizar conta"
+      setError(message)
+      toast.error(message)
+    } finally {
+      setLoading(null)
+    }
+  }
+
   const isCancelled = status === "CANCELLED"
 
   return (
@@ -103,6 +137,24 @@ export function ResellerActionButtons({
           {loading === "CANCEL" ? "Cancelando..." : "Cancelar assinatura"}
         </Button>
       </div>
+
+      {isSuperAdmin && (
+        <div className="mt-4 border-t border-gray-100 pt-4">
+          <p className="text-xs text-gray-600">
+            Anonimização de dados pessoais (LGPD). Ação irreversível: remove a PII do
+            revendedor e desativa o login. Registros de negócio são preservados.
+          </p>
+          <Button
+            variant="outline"
+            className="mt-3 w-full border-rose-300 text-rose-700 hover:bg-rose-50"
+            disabled={isCancelled || loading !== null}
+            onClick={anonymize}
+          >
+            <ShieldOff className="mr-2 h-4 w-4" />
+            {loading === "ANONYMIZE" ? "Anonimizando..." : "Anonimizar conta (LGPD)"}
+          </Button>
+        </div>
+      )}
     </div>
   )
 }

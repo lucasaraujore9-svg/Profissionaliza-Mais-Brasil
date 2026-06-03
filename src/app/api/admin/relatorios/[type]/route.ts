@@ -30,6 +30,14 @@ export const GET = withRequestContextParams<{ type: string }>(
       { status: 403 },
     )
   }
+  // PMB_SALES so gera relatorios self-escopados ao contexto PMB. Os demais
+  // cobrem todos os tenants (dados de revendedores fora do escopo de PMB_SALES).
+  if (session.role === "PMB_SALES" && !def.pmbSalesAllowed) {
+    return NextResponse.json(
+      { error: "Sem permissão para este relatório" },
+      { status: 403 },
+    )
+  }
 
   const runner = getReportRunner(type)
   if (!runner) {

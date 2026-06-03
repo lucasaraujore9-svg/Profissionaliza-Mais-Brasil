@@ -74,6 +74,7 @@ export function AdminTecnicaSettingsForm({
           courses: courses.map((c, i) => ({
             name: c.name.trim(),
             url: c.url.trim(),
+            image: c.image?.trim() || "",
             order: i,
           })),
         }),

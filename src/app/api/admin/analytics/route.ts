@@ -82,6 +82,11 @@ export const GET = withRequestContext(
   if (!ctx) {
     return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
   }
+  // Analytics expoe MRR/churn/LTV e ranking do ecossistema (dados globais).
+  // A tela /admin/analytics e SUPER_ADMIN-only — alinha a API ao gate da UI.
+  if (ctx.role !== "SUPER_ADMIN") {
+    return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
+  }
 
   const url = new URL(request.url)
   const periodParam = (url.searchParams.get("period") ?? "30d") as Period

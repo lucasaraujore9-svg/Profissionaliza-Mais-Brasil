@@ -1,5 +1,10 @@
 import Link from "next/link"
-import { ArrowRight, ArrowUpRight, ShieldCheck } from "lucide-react"
+import {
+  ArrowRight,
+  BadgeCheck,
+  GraduationCap,
+  ShieldCheck,
+} from "lucide-react"
 import type { TecnicaCourse } from "@/lib/catalog/tecnica"
 import { tecnicaRedirectHref } from "@/lib/catalog/tecnica-redirect"
 
@@ -19,7 +24,9 @@ interface TecnicaSectionProps {
  *
  * NÃO mostramos duração nem numeração ordinal nos cards — a Escola Técnica
  * tem 40+ cursos com tempos diferentes, qualquer rótulo fixo seria
- * impreciso. Mantemos apenas o selo "MEC" como signo de credibilidade.
+ * impreciso. Cada card traz a imagem fixa do curso (padronizada pela PMB),
+ * o selo "MEC", o selo do conselho e o botão "Saiba mais" como signos de
+ * credibilidade. Quando o curso não tem imagem, usamos um fundo neutro.
  */
 export function TecnicaSection({
   label: _label,
@@ -99,23 +106,52 @@ export function TecnicaSection({
                     )}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="group relative flex h-full min-h-[120px] flex-col justify-between overflow-hidden rounded-2xl border border-white/10 bg-white/[0.04] p-4 backdrop-blur-sm transition hover:-translate-y-0.5 hover:border-[var(--color-pmb-gold,#F2B705)]/60 hover:bg-white/[0.08] sm:p-5"
+                    className="group relative flex h-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-white/[0.04] backdrop-blur-sm transition hover:-translate-y-0.5 hover:border-[var(--color-pmb-gold,#F2B705)]/60 hover:bg-white/[0.08]"
                   >
-                    {/* Topo: selo MEC discreto + arrow */}
-                    <div className="flex items-start justify-between">
-                      <span className="text-[10.5px] font-black uppercase tracking-widest text-[var(--color-pmb-lime,#C0D904)]/90">
+                    {/* Capa fixa do curso (padronizada PMB) + selos sobrepostos.
+                        Sem imagem cadastrada => fundo neutro com ícone. */}
+                    <div className="relative aspect-[16/10] w-full overflow-hidden bg-gradient-to-br from-[#024a14] to-[#013d10]">
+                      {course.image ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={course.image}
+                          alt={course.name}
+                          loading="lazy"
+                          className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
+                        />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center">
+                          <GraduationCap
+                            className="h-9 w-9 text-white/25"
+                            aria-hidden
+                          />
+                        </div>
+                      )}
+                      {/* Selo MEC */}
+                      <span className="absolute left-2 top-2 inline-flex items-center gap-1 rounded-full bg-[var(--color-pmb-gold,#F2B705)] px-2 py-0.5 text-[9.5px] font-black uppercase tracking-wider text-[#013d10] shadow">
+                        <ShieldCheck className="h-3 w-3" aria-hidden />
                         MEC
                       </span>
-                      <ArrowUpRight
-                        className="h-4 w-4 text-white/40 transition group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:text-[var(--color-pmb-gold,#F2B705)]"
-                        aria-hidden
-                      />
+                      {/* Selo do conselho (placeholder) */}
+                      <span className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-full bg-white/90 px-2 py-0.5 text-[9.5px] font-black uppercase tracking-wider text-[#013d10] shadow">
+                        <BadgeCheck className="h-3 w-3" aria-hidden />
+                        Conselho
+                      </span>
                     </div>
 
-                    {/* Nome do curso — protagonista do card */}
-                    <h3 className="mt-3 line-clamp-3 text-[15px] font-bold leading-snug text-white sm:text-[16px]">
-                      {course.name}
-                    </h3>
+                    {/* Corpo: nome + "Saiba mais" */}
+                    <div className="flex flex-1 flex-col justify-between gap-3 p-4">
+                      <h3 className="line-clamp-2 text-[15px] font-bold leading-snug text-white sm:text-[16px]">
+                        {course.name}
+                      </h3>
+                      <span className="inline-flex items-center gap-1.5 self-start rounded-full bg-white/10 px-3 py-1.5 text-[12px] font-black text-[var(--color-pmb-gold,#F2B705)] transition group-hover:bg-[var(--color-pmb-gold,#F2B705)] group-hover:text-[#013d10]">
+                        Saiba mais
+                        <ArrowRight
+                          className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5"
+                          aria-hidden
+                        />
+                      </span>
+                    </div>
                   </Link>
                 </li>
               ))}

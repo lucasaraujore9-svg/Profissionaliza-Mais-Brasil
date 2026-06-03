@@ -14,5 +14,6 @@ export function sampleCertificateFields(unidade: string): CertificateRenderField
     completionDate: new Date(),
     code: "EXEMPLO-12345",
     unidade,
+    progressPercent: 100,
   }
 }

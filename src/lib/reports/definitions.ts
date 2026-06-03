@@ -30,6 +30,12 @@ export interface ReportDef {
   description: string
   filename: string
   needsSuperAdmin?: boolean
+  /**
+   * PMB_SALES so pode gerar relatorios explicitamente marcados — os que
+   * self-escopam ao contexto PMB (tenant_id = null). Os demais cobrem TODOS os
+   * tenants e expoem dados de revendedores que nao sao do escopo de PMB_SALES.
+   */
+  pmbSalesAllowed?: boolean
 }
 
 /** Limite de segurança: nenhum relatório exporta mais que MAX_REPORT_ROWS linhas */
@@ -52,6 +58,7 @@ export const REPORT_DEFS: ReportDef[] = [
     description:
       "Apenas vendas feitas pela vitrine principal e pelo painel administrativo (tenant_id = null).",
     filename: "vendas-vitrine-pmb",
+    pmbSalesAllowed: true,
   },
   {
     id: "vendas-revendedores",
@@ -86,6 +93,7 @@ export const REPORT_DEFS: ReportDef[] = [
     description:
       "Alunos cadastrados via vitrine principal ou venda direta admin.",
     filename: "alunos-vitrine-pmb",
+    pmbSalesAllowed: true,
   },
   {
     id: "alunos-por-revendedor",
@@ -94,6 +102,11 @@ export const REPORT_DEFS: ReportDef[] = [
     description:
       "Total de alunos por revendedor (ativos / bloqueados / formados).",
     filename: "alunos-por-revendedor",
+    // Agregado ecossistemico (todos os tenants); o runner ignora filters.tenantId.
+    // Sem este gate, PMB_RESELLER_MGR (que so passa um tenantId proprio) ainda
+    // receberia a contagem de alunos de TODOS os revendedores. SUPER_ADMIN-only,
+    // consistente com revendedores-todos / revendedores-inadimplentes.
+    needsSuperAdmin: true,
   },
 
   // ── Revendedores ──

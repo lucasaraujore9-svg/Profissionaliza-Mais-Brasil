@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { requireAdminSession } from "@/lib/auth/admin-session"
+import {
+  adminCanAccessCertTenant,
+  certScopeDeniedResponse,
+} from "@/lib/certificates/admin-scope"
 import { generateAndUploadPdf } from "@/lib/certificates/generate-pdf"
 import { contextLogger } from "@/lib/logger"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
@@ -23,6 +27,11 @@ export const POST = withRequestContextParams<{ id: string }>(
     const cert = await prisma.certificate.findUnique({ where: { id } })
     if (!cert) {
       return NextResponse.json({ error: "Certificado não encontrado" }, { status: 404 })
+    }
+    // Escopo por papel: regenerar sobrescreve o PDF no Storage (mutacao). Sem
+    // isto, qualquer membro PMB regeneraria certificados de qualquer revendedor.
+    if (!(await adminCanAccessCertTenant(ctx.role, ctx.userId, cert.tenantId))) {
+      return certScopeDeniedResponse()
     }
     if (cert.revokedAt) {
       return NextResponse.json({ error: "Certificado revogado" }, { status: 410 })

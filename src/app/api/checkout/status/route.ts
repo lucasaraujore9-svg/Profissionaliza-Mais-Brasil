@@ -14,8 +14,11 @@ export const GET = withRequestContext(
     )
   }
 
-  const enrollment = await prisma.enrollment.findUnique({
-    where: { id: enrollmentId },
+  // Escopo PMB: este endpoint atende o checkout da vitrine principal
+  // (tenantId = null). Espelha o irmao /api/checkout/confirmacao/[id]/status e
+  // evita expor o status de matriculas de revendedores por id (IDOR).
+  const enrollment = await prisma.enrollment.findFirst({
+    where: { id: enrollmentId, tenantId: null },
     select: {
       id: true,
       status: true,

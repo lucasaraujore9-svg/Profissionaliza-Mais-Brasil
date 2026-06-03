@@ -2,7 +2,11 @@ import { HeroBanner } from "@/components/main/home/hero-banner"
 import { TecnicaSection } from "@/components/main/home/tecnica-section"
 import { DynamicHomeSections } from "@/components/main/home/dynamic-home-sections"
 import { getCurrentTenant } from "@/lib/tenant/current"
-import { tecnicaFromTenant } from "@/lib/catalog/tecnica"
+import {
+  tecnicaForTenant,
+  tecnicaFromTenant,
+  loadPmbTecnicaCourses,
+} from "@/lib/catalog/tecnica"
 import { prisma } from "@/lib/prisma"
 import { loadShowcase } from "@/lib/catalog/home"
 
@@ -25,7 +29,7 @@ export default async function LojaHomePage() {
     )
   }
 
-  const [showcase, bannerSlides] = await Promise.all([
+  const [showcase, bannerSlides, pmbTecnicaCourses] = await Promise.all([
     loadShowcase(tenant.id),
     prisma.bannerSlide.findMany({
       where: { tenantId: tenant.id, active: true },
@@ -37,9 +41,18 @@ export default async function LojaHomePage() {
         linkUrl: true,
       },
     }),
+    loadPmbTecnicaCourses(),
   ])
 
-  const tecnica = tecnicaFromTenant(tenant)
+  // Lista e imagens dos cursos técnicos são padronizadas pela PMB; a unidade
+  // só controla ativar/desativar, rótulo e a URL de destino. Se a PMB ainda
+  // não configurou a lista institucional, mantém a lista própria do tenant
+  // (evita regressão de quem já tinha cursos cadastrados).
+  const standardCourses =
+    pmbTecnicaCourses.length > 0
+      ? pmbTecnicaCourses
+      : tecnicaFromTenant(tenant).courses
+  const tecnica = tecnicaForTenant(tenant, standardCourses)
 
   return (
     <>

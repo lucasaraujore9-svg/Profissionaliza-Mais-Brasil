@@ -28,6 +28,14 @@ function tenantVisibilityFilter(tenantId: string) {
 export type SectionMode = "manual" | "random"
 export type SectionCount = 4 | 8
 
+/**
+ * "Mais vendidos da semana" é padronizada para exibir SEMPRE 4 cursos
+ * (regra de negócio — vitrine institucional). Diferente das seções de
+ * categoria, que seguem o padrão de 8. Forçado na validação e na renderização
+ * para que configs antigas (count=8) ou edições no painel não quebrem o padrão.
+ */
+export const BESTSELLERS_COUNT = 4 as const
+
 export interface BestsellersConfig {
   kind: "bestsellers"
   title: string
@@ -237,8 +245,10 @@ export function validateSectionPayload(
   const mode = c.mode === "manual" || c.mode === "random" ? c.mode : null
   if (!mode) return { ok: false, error: "Modo deve ser 'manual' ou 'random'" }
 
-  const count = c.count === 4 || c.count === 8 ? c.count : null
-  if (!count) return { ok: false, error: "Quantidade deve ser 4 ou 8" }
+  const rawCount = c.count === 4 || c.count === 8 ? c.count : null
+  if (!rawCount) return { ok: false, error: "Quantidade deve ser 4 ou 8" }
+  // Bestsellers é fixo em 4; categorias seguem 4 ou 8 conforme escolha.
+  const count: SectionCount = kind === "bestsellers" ? BESTSELLERS_COUNT : rawCount
 
   let courseIds: string[] = []
   if (Array.isArray(c.courseIds)) {
@@ -386,7 +396,8 @@ export async function resolveSectionCourses(
 ): Promise<{ courses: Course[]; meta: { categorySlug?: string } } | null> {
   const cfg = section.config
   if (cfg.kind !== "bestsellers" && cfg.kind !== "category_courses") return null
-  const count = cfg.count
+  // Bestsellers sempre 4, independentemente do que estiver salvo no config.
+  const count = cfg.kind === "bestsellers" ? BESTSELLERS_COUNT : cfg.count
 
   if (cfg.kind === "bestsellers") {
     let ids: string[]

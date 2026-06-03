@@ -321,6 +321,148 @@ async function main() {
     })
   }
 
+  // Chamados de demonstração (atendimento) — 9 registros cobrindo situações
+  // comuns do dia a dia, para treinamento e apresentação comercial. Idempotente
+  // via marcador no campo `source` ("seed:demo:*").
+  const existingDemoTickets = await prisma.contactMessage.findFirst({
+    where: { source: { startsWith: "seed:demo" } },
+    select: { id: true },
+  })
+  if (!existingDemoTickets) {
+    const day = 24 * 60 * 60 * 1000
+    const demoTickets = [
+      // --- PMB institucional (tenantId=null) ---
+      {
+        tenantId: null,
+        kind: "CONTACT" as const,
+        status: "OPEN" as const,
+        nome: "Mariana Alves",
+        email: "mariana.alves@gmail.com",
+        telefone: "+5511988887777",
+        assunto: "Dúvida sobre como me tornar uma unidade parceira",
+        mensagem:
+          "Olá! Tenho interesse em abrir uma unidade do Profissionaliza Mais Brasil na minha cidade. Como funciona o licenciamento e quais os valores?",
+        source: "seed:demo:/contato",
+        createdAt: new Date(now.getTime() - 1 * day),
+      },
+      {
+        tenantId: null,
+        kind: "CONTACT" as const,
+        status: "RESOLVED" as const,
+        nome: "Carlos Eduardo Lima",
+        email: "carlos.lima@hotmail.com",
+        telefone: "+5521977776666",
+        assunto: "Os certificados são reconhecidos?",
+        mensagem:
+          "Gostaria de saber se os certificados dos cursos têm validade nacional e se posso usar para comprovar horas complementares na faculdade.",
+        source: "seed:demo:/contato",
+        resolvedAt: new Date(now.getTime() - 2 * day),
+        resolvedByUserId: sales.id,
+        createdAt: new Date(now.getTime() - 4 * day),
+      },
+      {
+        tenantId: null,
+        kind: "STUDENT_SUPPORT" as const,
+        status: "OPEN" as const,
+        nome: "Patrícia Gomes",
+        email: "patricia.gomes@gmail.com",
+        telefone: "+5531966665555",
+        assunto: "Não consigo acessar a área do aluno",
+        mensagem:
+          "Comprei o curso de Excel Avançado ontem, recebi o e-mail de confirmação, mas quando tento entrar na plataforma diz que minha senha está incorreta. Podem ajudar?",
+        source: "seed:demo:aluno",
+        createdAt: new Date(now.getTime() - 6 * 60 * 60 * 1000),
+      },
+      {
+        tenantId: null,
+        kind: "STUDENT_SUPPORT" as const,
+        status: "RESOLVED" as const,
+        nome: "Rafael Souza",
+        email: "rafael.souza@outlook.com",
+        telefone: "+5511955554444",
+        assunto: "Emissão do certificado após conclusão",
+        mensagem:
+          "Terminei todas as aulas do curso de Marketing Digital e gostaria de saber como faço para emitir o meu certificado.",
+        source: "seed:demo:aluno",
+        resolvedAt: new Date(now.getTime() - 1 * day),
+        resolvedByUserId: superAdmin.id,
+        createdAt: new Date(now.getTime() - 3 * day),
+      },
+      // --- Unidade revenda1 (tenant1) ---
+      {
+        tenantId: tenant1.id,
+        kind: "CONTACT" as const,
+        status: "OPEN" as const,
+        nome: "Juliana Pereira",
+        email: "juliana.pereira@gmail.com",
+        telefone: "+5541944443333",
+        assunto: "Formas de pagamento disponíveis",
+        mensagem:
+          "Vi o curso de Design Gráfico na vitrine de vocês. Posso pagar no boleto parcelado? Em quantas vezes?",
+        source: "seed:demo:loja:revenda1",
+        createdAt: new Date(now.getTime() - 12 * 60 * 60 * 1000),
+      },
+      {
+        tenantId: tenant1.id,
+        kind: "STUDENT_SUPPORT" as const,
+        status: "OPEN" as const,
+        nome: "Bruno Carvalho",
+        email: "bruno.carvalho@gmail.com",
+        telefone: "+5551933332222",
+        assunto: "Vídeo aula não carrega",
+        mensagem:
+          "Estou tentando assistir a aula 12 do curso de Programação Web, mas o vídeo fica carregando e não inicia. Já tentei em outro navegador.",
+        source: "seed:demo:aluno",
+        createdAt: new Date(now.getTime() - 2 * day),
+      },
+      {
+        tenantId: tenant1.id,
+        kind: "STUDENT_SUPPORT" as const,
+        status: "RESOLVED" as const,
+        nome: "Fernanda Dias",
+        email: "fernanda.dias@gmail.com",
+        telefone: "+5511922221111",
+        assunto: "Atualização de dados cadastrais",
+        mensagem:
+          "Preciso corrigir meu nome no cadastro, pois saiu com um erro de digitação e isso vai aparecer no certificado.",
+        source: "seed:demo:aluno",
+        resolvedAt: new Date(now.getTime() - 2 * day),
+        resolvedByUserId: owner1.id,
+        createdAt: new Date(now.getTime() - 5 * day),
+      },
+      {
+        tenantId: tenant1.id,
+        kind: "CONTACT" as const,
+        status: "RESOLVED" as const,
+        nome: "Anderson Ribeiro",
+        email: "anderson.ribeiro@gmail.com",
+        telefone: "+5511911110000",
+        assunto: "Validação de certificado",
+        mensagem:
+          "Recebi um certificado de um aluno e gostaria de confirmar se ele é autêntico. Como funciona o QR Code de validação?",
+        source: "seed:demo:loja:revenda1",
+        resolvedAt: new Date(now.getTime() - 1 * day),
+        resolvedByUserId: owner1.id,
+        createdAt: new Date(now.getTime() - 3 * day),
+      },
+      {
+        tenantId: tenant1.id,
+        kind: "STUDENT_SUPPORT" as const,
+        status: "OPEN" as const,
+        nome: "Luciana Martins",
+        email: "luciana.martins@gmail.com",
+        telefone: "+5511900009999",
+        assunto: "Prazo de acesso ao curso",
+        mensagem:
+          "Por quanto tempo eu tenho acesso ao conteúdo do curso depois da matrícula? Tenho até quando para concluir?",
+        source: "seed:demo:aluno",
+        createdAt: new Date(now.getTime() - 8 * 60 * 60 * 1000),
+      },
+    ]
+    await prisma.contactMessage.createMany({ data: demoTickets })
+    console.log(`- ${demoTickets.length} chamados de demonstração (atendimento)`)
+  }
+
   void owner1
 
   console.log("Seed completo:")

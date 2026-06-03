@@ -105,6 +105,9 @@ export function CouponCard({
             </span>
             <button
               type="button"
+              role="switch"
+              aria-checked={isActive}
+              aria-label={`Cupom ${coupon.code}: ${isActive ? "ativo, clique para pausar" : "pausado, clique para ativar"}`}
               disabled={pending}
               onClick={() => onToggle(coupon)}
               className={`relative h-5 w-9 rounded-full transition-colors disabled:opacity-50 ${

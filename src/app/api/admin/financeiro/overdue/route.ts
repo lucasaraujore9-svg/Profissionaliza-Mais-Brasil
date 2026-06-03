@@ -10,6 +10,10 @@ export const GET = withRequestContext(
   if (!ctx) {
     return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
   }
+  // Inadimplencia de tenants e SUPER_ADMIN-only (tela /admin/financeiro).
+  if (ctx.role !== "SUPER_ADMIN") {
+    return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
+  }
 
   const now = new Date()
 

@@ -97,6 +97,17 @@ export function CourseEditDrawer({
     }
   }, [course, open])
 
+  useEffect(() => {
+    if (!open) return
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose()
+    }
+    window.addEventListener("keydown", handleKeyDown)
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown)
+    }
+  }, [open, onClose])
+
   if (!open || !course) return null
 
   const handleUploadCapa = async (file: File) => {
@@ -197,10 +208,18 @@ export function CourseEditDrawer({
         onClick={onClose}
         aria-hidden
       />
-      <aside className="relative ml-auto flex h-full w-full max-w-md flex-col overflow-y-auto bg-white shadow-xl">
+      <aside
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="course-edit-drawer-title"
+        className="relative ml-auto flex h-full w-full max-w-md flex-col overflow-y-auto bg-white shadow-xl"
+      >
         <header className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
           <div>
-            <h2 className="text-base font-semibold text-[var(--color-pmb-green-900)]">
+            <h2
+              id="course-edit-drawer-title"
+              className="text-base font-semibold text-[var(--color-pmb-green-900)]"
+            >
               Editar curso
             </h2>
             <p className="text-xs text-gray-500">{course.title}</p>
@@ -208,6 +227,7 @@ export function CourseEditDrawer({
           <button
             type="button"
             onClick={onClose}
+            aria-label="Fechar"
             className="rounded-md p-1.5 text-gray-500 hover:bg-gray-100"
           >
             <X className="h-4 w-4" />

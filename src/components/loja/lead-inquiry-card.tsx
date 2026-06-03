@@ -70,7 +70,11 @@ export function LeadInquiryCard({
 
   if (status === "success") {
     return (
-      <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+      <div
+        role="status"
+        aria-live="polite"
+        className="rounded-xl border border-emerald-200 bg-emerald-50 p-4"
+      >
         <div className="flex items-start gap-2.5">
           <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" />
           <div>
@@ -104,6 +108,7 @@ export function LeadInquiryCard({
           required
           minLength={2}
           maxLength={160}
+          aria-label="Nome completo"
           placeholder="Nome completo"
           value={nome}
           onChange={(e) => setNome(e.target.value)}
@@ -115,6 +120,7 @@ export function LeadInquiryCard({
           type="tel"
           required
           inputMode="numeric"
+          aria-label="WhatsApp com DDD"
           placeholder="WhatsApp com DDD"
           value={formatPhone(telefone)}
           onChange={(e) => setTelefone(e.target.value.replace(/\D/g, "").slice(0, 11))}
@@ -125,6 +131,7 @@ export function LeadInquiryCard({
         <input
           type="email"
           required
+          aria-label="E-mail"
           placeholder="E-mail"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
@@ -147,7 +154,7 @@ export function LeadInquiryCard({
         </label>
 
         {errorMsg && (
-          <p className="text-[11.5px] text-red-700">{errorMsg}</p>
+          <p role="alert" className="text-[11.5px] text-red-700">{errorMsg}</p>
         )}
 
         <button

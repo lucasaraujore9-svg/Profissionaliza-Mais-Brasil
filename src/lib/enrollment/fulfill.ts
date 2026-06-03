@@ -8,7 +8,16 @@ import {
 } from "@/lib/students/plataforma-actions"
 import { generatePasswordWithHash } from "@/lib/students/generate-password"
 import { createNotification } from "@/lib/notifications"
+import { addMonthsClamped } from "@/lib/dates"
 import { appUrl as resolveAppUrl, vitrineHost } from "@/lib/tenant/urls"
+
+/**
+ * Prazo padrão de permanência do aluno na plataforma (item 11 dos
+ * aperfeiçoamentos): 12 meses contados da liberação do acesso (primeira
+ * cobrança). Após esse período, o acesso é encerrado pelo cron
+ * `sweep-students-expired`.
+ */
+export const STUDENT_ACCESS_MONTHS = 12
 import type { PaymentGateway, PaymentType } from "@prisma/client"
 import { swallow } from "@/lib/errors"
 import { contextLogger } from "@/lib/logger"
@@ -222,6 +231,10 @@ async function fulfillEnrollmentLocked(
     enrollment.installmentsTotal !== null &&
     firstInstallmentPaid >= enrollment.installmentsTotal
 
+  // Liberação do acesso + prazo de permanência (12 meses) a partir de agora.
+  const accessStartedAt = new Date()
+  const accessExpiresAt = addMonthsClamped(accessStartedAt, STUDENT_ACCESS_MONTHS)
+
   // Transação para Payment + Enrollment.update — evita estado inconsistente
   // (Payment órfão com Enrollment.PENDING) se a 2ª query falhar.
   await prisma.$transaction([
@@ -251,7 +264,8 @@ async function fulfillEnrollmentLocked(
           event.gateway === "ASAAS"
             ? event.externalPaymentId
             : enrollment.asaasPaymentId,
-        startedAt: new Date(),
+        startedAt: accessStartedAt,
+        expiresAt: accessExpiresAt,
         installmentsPaid: firstInstallmentPaid,
       },
     }),
@@ -492,9 +506,15 @@ export async function fulfillScholarshipEnrollment(
 
   await provisionEnrollmentAccess(tenant, enrollment)
 
+  // Mesmo prazo de permanência (12 meses) das matrículas pagas.
+  const accessStartedAt = new Date()
   await prisma.enrollment.update({
     where: { id: enrollment.id },
-    data: { status: "ACTIVE", startedAt: new Date() },
+    data: {
+      status: "ACTIVE",
+      startedAt: accessStartedAt,
+      expiresAt: addMonthsClamped(accessStartedAt, STUDENT_ACCESS_MONTHS),
+    },
   })
 
   await createNotification({

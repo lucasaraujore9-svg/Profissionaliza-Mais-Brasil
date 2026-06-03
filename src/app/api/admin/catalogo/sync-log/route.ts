@@ -10,6 +10,10 @@ export const GET = withRequestContext(
   if (!ctx) {
     return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
   }
+  // Log do sync acompanha o sync (SUPER_ADMIN-only).
+  if (ctx.role !== "SUPER_ADMIN") {
+    return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
+  }
 
   const logs = await listSyncLogs()
   return NextResponse.json({ data: { logs } })

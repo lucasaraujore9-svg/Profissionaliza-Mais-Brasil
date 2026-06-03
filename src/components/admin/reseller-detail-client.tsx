@@ -57,9 +57,13 @@ interface DetailResponse {
 
 interface ResellerDetailClientProps {
   tenantId: string
+  isSuperAdmin?: boolean
 }
 
-export function ResellerDetailClient({ tenantId }: ResellerDetailClientProps) {
+export function ResellerDetailClient({
+  tenantId,
+  isSuperAdmin = false,
+}: ResellerDetailClientProps) {
   const [data, setData] = useState<DetailResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -168,6 +172,7 @@ export function ResellerDetailClient({ tenantId }: ResellerDetailClientProps) {
           <ResellerActionButtons
             tenantId={tenantId}
             status={data.reseller.status}
+            isSuperAdmin={isSuperAdmin}
             onChanged={load}
           />
           <ResellerSupportNotes
