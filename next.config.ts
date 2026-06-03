@@ -31,7 +31,11 @@ const SECURITY_HEADERS = [
       "style-src 'self' 'unsafe-inline'",
       "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://sdk.mercadopago.com https://www.mercadopago.com https://va.vercel-scripts.com",
       "connect-src 'self' https://api.mercadopago.com https://*.supabase.co https://*.upstash.io https://api.resend.com https://vitals.vercel-insights.com",
-      "frame-src https://www.mercadopago.com https://sdk.mercadopago.com",
+      // 'self' blob: permite o preview do PDF do certificado, embutido via
+      // <iframe src="blob:..."> no editor de template (admin/painel). Sem isto
+      // o navegador bloqueia o embed ("conteúdo bloqueado"). frame-ancestors
+      // 'none' + X-Frame-Options: DENY continuam protegendo contra clickjacking.
+      "frame-src 'self' blob: https://www.mercadopago.com https://sdk.mercadopago.com",
       "form-action 'self' https://www.mercadopago.com",
     ].join("; "),
   },
