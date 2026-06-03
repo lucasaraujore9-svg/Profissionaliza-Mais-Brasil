@@ -320,11 +320,27 @@ export const POST = withRequestContext(
   }
 
   try {
-    // Reutiliza customer Asaas existente — evita duplicatas em compras múltiplas
-    let customer: Awaited<ReturnType<typeof getAsaasCustomer>>
+    // Reutiliza customer Asaas existente — evita duplicatas em compras múltiplas.
+    // Mas o asaasCustomerId salvo pode pertencer a OUTRA conta Asaas: alunos
+    // criados em homologação (sandbox) guardam um cus_ que não existe na conta
+    // de produção. Nesse caso o Asaas responde 404 ao buscar o customer; antes
+    // esse 404 vazava como AsaasApiError e derrubava o checkout inteiro (a rota
+    // respondia 502 com a mensagem "HTTP 404"). Tratamos o 404 como "id obsoleto":
+    // recriamos o customer na conta atual e regravamos o id no aluno.
+    let customer: Awaited<ReturnType<typeof getAsaasCustomer>> | null = null
     if (student.asaasCustomerId) {
-      customer = await getAsaasCustomer(student.asaasCustomerId)
-    } else {
+      try {
+        customer = await getAsaasCustomer(student.asaasCustomerId)
+      } catch (err) {
+        if (err instanceof AsaasApiError && err.statusCode === 404) {
+          customer = null
+        } else {
+          throw err
+        }
+      }
+    }
+
+    if (!customer) {
       const result = await findOrCreateAsaasCustomer({
         name: student.nome,
         email: student.email,
