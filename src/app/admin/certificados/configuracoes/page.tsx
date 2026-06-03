@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { requireAdminSession } from "@/lib/auth/admin-session"
 import { PageHeader } from "@/components/painel/page-header"
 import { AdminCertificateSettingsForm } from "@/components/admin/admin-certificate-settings-form"
+import { RegenerateAllCertificates } from "@/components/admin/regenerate-all-certificates"
 import {
   CertificateTemplateEditor,
   type CertificateTemplateData,
@@ -84,6 +85,21 @@ export default async function AdminCertificadosConfiguracoesPage() {
           </p>
         </header>
         <AdminCertificateSettingsForm initial={settings} />
+      </section>
+
+      {/* Manutenção — regenerar PDFs já emitidos com o layout atual */}
+      <section className="space-y-3 pt-4">
+        <header>
+          <h2 className="text-base font-semibold text-[var(--color-pmb-green-900)]">
+            Manutenção
+          </h2>
+          <p className="text-sm text-gray-600">
+            Reaplica o layout atual (variáveis em maiúsculo, percentual de
+            conclusão na frente, QR legível e página 2 com fundamentação legal)
+            a todos os certificados já emitidos. Sobrescreve os PDFs no Storage.
+          </p>
+        </header>
+        <RegenerateAllCertificates />
       </section>
 
       {/* Seção 2 — Template padrão PMB */}
