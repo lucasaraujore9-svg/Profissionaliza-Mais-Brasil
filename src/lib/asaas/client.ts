@@ -29,12 +29,20 @@ export class AsaasApiError extends Error {
 }
 
 function getConfig() {
-  const apiUrl = process.env.ASAAS_API_URL
+  const rawUrl = process.env.ASAAS_API_URL
   const apiKey = process.env.ASAAS_API_KEY
-  if (!apiUrl || !apiKey) {
+  if (!rawUrl || !apiKey) {
     throw new Error("ASAAS_API_URL and ASAAS_API_KEY environment variables are required")
   }
-  return { apiUrl: apiUrl.replace(/\/$/, ""), apiKey }
+  let apiUrl = rawUrl.replace(/\/$/, "")
+  // A API do Asaas vive sob /v3 (prod: api.asaas.com/v3; sandbox:
+  // sandbox.asaas.com/api/v3). Se o ASAAS_API_URL for configurado sem o sufixo
+  // /v3 (ex.: "https://api.asaas.com"), TODA chamada cai em 404 e o checkout
+  // inteiro quebra. Normalizamos aqui para tolerar essa configuração incompleta.
+  if (!/\/v3$/.test(apiUrl)) {
+    apiUrl = `${apiUrl}/v3`
+  }
+  return { apiUrl, apiKey }
 }
 
 async function sleep(ms: number): Promise<void> {
