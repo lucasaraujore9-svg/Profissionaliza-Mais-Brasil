@@ -66,6 +66,22 @@ async function request<T>(
       if (!res.ok) {
         const errorData = (await res.json().catch(() => null)) as AsaasErrorResponse | null
         const msg = errorData?.errors?.[0]?.description ?? `HTTP ${res.status}`
+        // Diagnóstico: registra a chamada Asaas que falhou (método, path, status,
+        // base URL em runtime e corpo do erro). Sem isso os catches das rotas
+        // devolvem 502 sem deixar rastro da causa nos logs da Vercel. `apiUrl`
+        // é só o host base (sem token) — seguro logar; revela inclusive se o
+        // ambiente está apontando para sandbox vs produção.
+        contextLogger().error(
+          {
+            event: "asaas.client.http_error",
+            method,
+            path,
+            status: res.status,
+            baseUrl: apiUrl,
+            errors: errorData?.errors ?? null,
+          },
+          "Asaas API respondeu erro",
+        )
         throw new AsaasApiError(msg, res.status, errorData?.errors ?? [])
       }
 
