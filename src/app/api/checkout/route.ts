@@ -37,6 +37,7 @@ import { upsertLeadFromCheckout } from "@/lib/automation/leads"
 import { readVisitorId } from "@/lib/automation/tracking"
 import { isValidCpf, stripCpf } from "@/lib/validation/cpf"
 import { isValidPhone, normalizePhone } from "@/lib/validation/phone"
+import { asaasWebhookUrl } from "@/lib/tenant/urls"
 
 // Cartão: aceitamos número com espaços, validade MM/AA ou MM/AAAA, CCV 3-4 dígitos.
 const creditCardSchema = z.object({
@@ -520,7 +521,7 @@ export const POST = withRequestContext(
           description: `Mensalidade — ${course.nome}`,
           externalReference,
           maxPayments: monthlyMonths,
-          notificationUrl: appUrl ? `${appUrl}/api/webhooks/asaas` : undefined,
+          notificationUrl: asaasWebhookUrl(),
         })
 
         // Asaas gera as cobranças async; busca a 1a invoice em até 3 tentativas
@@ -628,7 +629,7 @@ export const POST = withRequestContext(
         dueDate: dueDateInDays(3),
         description: `Curso: ${course.nome}`,
         externalReference,
-        notificationUrl: appUrl ? `${appUrl}/api/webhooks/asaas` : undefined,
+        notificationUrl: asaasWebhookUrl(),
       })
 
       await prisma.enrollment.update({

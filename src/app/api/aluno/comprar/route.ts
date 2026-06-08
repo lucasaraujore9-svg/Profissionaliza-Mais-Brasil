@@ -16,7 +16,7 @@ import { getSystemSettings } from "@/lib/system-settings"
 import { tryConsumeCoupon, releaseCoupon } from "@/lib/coupons/consume"
 import { applyCouponDiscount } from "@/lib/coupons/discount"
 import { dueDateInDays } from "@/lib/checkout/due-date"
-import { mpWebhookUrl } from "@/lib/tenant/urls"
+import { mpWebhookUrl, asaasWebhookUrl } from "@/lib/tenant/urls"
 import { swallow } from "@/lib/errors"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 
@@ -368,7 +368,7 @@ export const POST = withRequestContext(
         description: `Mensalidade — ${course.nome}`,
         externalReference,
         maxPayments: monthlyMonths,
-        notificationUrl: appUrl ? `${appUrl}/api/webhooks/asaas` : undefined,
+        notificationUrl: asaasWebhookUrl(),
       })
 
       let firstInvoiceUrl: string | null = null
@@ -418,7 +418,7 @@ export const POST = withRequestContext(
       dueDate: dueDateInDays(3),
       description: `Curso: ${course.nome}`,
       externalReference,
-      notificationUrl: appUrl ? `${appUrl}/api/webhooks/asaas` : undefined,
+      notificationUrl: asaasWebhookUrl(),
     })
 
     await prisma.enrollment.update({

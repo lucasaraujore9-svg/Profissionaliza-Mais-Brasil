@@ -57,3 +57,9 @@ export function mpWebhookUrl(slug?: string | null): string {
   const base = `${webhookBaseUrl()}/api/webhooks/mercadopago`
   return slug ? `${base}?tenant=${slug}` : base
 }
+
+// URL de notificacao do Asaas (gateway da vitrine PMB e mensalidades dos
+// revendedores). Mesmo host canonico do MP — evita o 307 do apex.
+export function asaasWebhookUrl(): string {
+  return `${webhookBaseUrl()}/api/webhooks/asaas`
+}

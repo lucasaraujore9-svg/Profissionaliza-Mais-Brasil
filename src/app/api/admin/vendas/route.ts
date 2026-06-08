@@ -21,6 +21,7 @@ import { applyCouponDiscount } from "@/lib/coupons/discount"
 import { dueDateInDays } from "@/lib/checkout/due-date"
 import { swallow } from "@/lib/errors"
 import { withRequestContext } from "@/lib/observability/with-request-context"
+import { asaasWebhookUrl } from "@/lib/tenant/urls"
 
 const PMB_SALES_CAP = 50
 
@@ -504,7 +505,7 @@ export const POST = withRequestContext(
         description: `Mensalidade — ${course.nome}`,
         externalReference,
         maxPayments: monthlyMonths,
-        notificationUrl: appUrl ? `${appUrl}/api/webhooks/asaas` : undefined,
+        notificationUrl: asaasWebhookUrl(),
       })
 
       // Asaas gera as cobrancas async; busca a 1a invoice em ate 3 tentativas
@@ -557,7 +558,7 @@ export const POST = withRequestContext(
       dueDate: dueDateInDays(3),
       description: `Curso: ${course.nome}`,
       externalReference,
-      notificationUrl: appUrl ? `${appUrl}/api/webhooks/asaas` : undefined,
+      notificationUrl: asaasWebhookUrl(),
     })
 
     await prisma.enrollment.update({
