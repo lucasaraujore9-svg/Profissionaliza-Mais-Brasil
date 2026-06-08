@@ -74,9 +74,10 @@ const envSchema = z.object({
 
   // ── Webhooks ─────────────────────────────────────────────────────────────
   // ASAAS_WEBHOOK_TOKEN obrigatório em prod (webhook rejeita sem ele).
-  // MP_WEBHOOK_SECRET opcional: na ausência, processador MP em prod
-  // rejeita o webhook (linha 257 de mercadopago/process.ts). Não derruba
-  // a app — só impede fulfillment automático até a env ser configurada.
+  // MP_WEBHOOK_SECRET é a secret da conta MP DA PMB (vitrine própria,
+  // tenantId=null). Revendedores usam a secret por conta em Tenant.mpWebhookSecret
+  // (ver mercadopago/process.ts). Opcional: na ausência, só as vendas da vitrine
+  // PMB ficam sem fulfillment automático — não derruba a app.
   ASAAS_WEBHOOK_TOKEN: requiredInProd(z.string().min(16, "ASAAS_WEBHOOK_TOKEN curto demais (>=16)")),
   MP_WEBHOOK_SECRET: z.string().min(16, "MP_WEBHOOK_SECRET curto demais (>=16)").optional(),
 
@@ -189,7 +190,7 @@ export function assertEnv(): void {
       console.warn(JSON.stringify({
         level: "warn",
         event: "env.mp_webhook_secret_missing",
-        msg: "MP_WEBHOOK_SECRET ausente em produção — webhooks do Mercado Pago serão REJEITADOS. Configure no painel MP + Vercel.",
+        msg: "MP_WEBHOOK_SECRET ausente em produção — webhooks da vitrine PMB serão REJEITADOS (revendedores usam secret por conta). Configure no painel MP + Vercel.",
         time: new Date().toISOString(),
       }))
     }

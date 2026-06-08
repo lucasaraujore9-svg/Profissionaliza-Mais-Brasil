@@ -27,6 +27,8 @@ export interface ConfigData {
     billingMode: "AUTO" | "MANUAL"
     status: "PENDING" | "ACTIVE" | "SUSPENDED" | "CANCELLED"
     mpConnected: boolean
+    mpWebhookConfigured: boolean
+    mpWebhookUrl: string
     mpUserId: string | null
     monthlyAllowed: boolean
     monthlyEnabled: boolean

@@ -235,6 +235,10 @@ model Tenant {
   mpRefreshToken String? @map("mp_refresh_token")
   mpConnected    Boolean @default(false) @map("mp_connected")
   mpUserId       String? @map("mp_user_id") // ID do revendedor no MP
+  // Assinatura secreta do webhook MP DESTA conta (por revendedor). O MP gera
+  // uma secret por aplicacao/conta — como cada unidade usa a propria conta,
+  // cada uma tem a sua. Criptografada AES-256. A vitrine PMB usa MP_WEBHOOK_SECRET.
+  mpWebhookSecret String? @map("mp_webhook_secret")
 
   // Integracao com a plataforma de aulas
   plataformaVendedorId    String? @map("ea_vendedor_id") // ID do funcionario criado na plataforma

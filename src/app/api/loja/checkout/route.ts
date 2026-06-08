@@ -19,6 +19,7 @@ import { readVisitorId } from "@/lib/automation/tracking"
 import { isValidCpf, stripCpf } from "@/lib/validation/cpf"
 import { isValidPhone, normalizePhone } from "@/lib/validation/phone"
 import { effectivePaymentType } from "@/lib/tenant/monthly-policy"
+import { mpWebhookUrl } from "@/lib/tenant/urls"
 
 const bodySchema = z.object({
   courseId: z.string().min(1),
@@ -336,9 +337,8 @@ export const POST = withRequestContext(
         external_reference: externalReference,
         payer_email: student.email ?? data.email,
         back_url: `${storeUrl}/loja/confirmacao?enrollment_id=${enrollment.id}`,
-        notification_url: appUrl
-          ? `${appUrl}/api/webhooks/mercadopago?tenant=${tenantSlug}`
-          : undefined,
+        // Host canônico (www) — o apex faz 307 e o MP não segue o redirect.
+        notification_url: mpWebhookUrl(tenantSlug),
         auto_recurring: {
           frequency: 1,
           frequency_type: "months",
@@ -390,7 +390,8 @@ export const POST = withRequestContext(
       },
       auto_return: "approved",
       external_reference: externalReference,
-      notification_url: `${appUrl}/api/webhooks/mercadopago?tenant=${tenantSlug}`,
+      // Host canônico (www) — o apex faz 307 e o MP não segue o redirect.
+      notification_url: mpWebhookUrl(tenantSlug),
     })
 
     await prisma.enrollment.update({

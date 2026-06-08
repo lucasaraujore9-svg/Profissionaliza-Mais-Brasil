@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { CheckCircle2, LinkIcon, Loader2, Unplug } from "lucide-react"
+import { Check, CheckCircle2, Copy, LinkIcon, Loader2, Unplug } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -22,11 +22,26 @@ export function BillingSection({ data, onUpdate }: BillingSectionProps) {
   const [monthlyError, setMonthlyError] = useState<string | null>(null)
 
   const [connected, setConnected] = useState(data.tenant.mpConnected)
+  const [webhookConfigured, setWebhookConfigured] = useState(
+    data.tenant.mpWebhookConfigured,
+  )
   const [tokenInput, setTokenInput] = useState("")
+  const [secretInput, setSecretInput] = useState("")
   const [mpSaving, setMpSaving] = useState(false)
   const [mpError, setMpError] = useState<string | null>(null)
   const [mpSuccess, setMpSuccess] = useState<string | null>(null)
   const [showForm, setShowForm] = useState(false)
+  const [copied, setCopied] = useState(false)
+
+  async function copyWebhookUrl() {
+    try {
+      await navigator.clipboard.writeText(data.tenant.mpWebhookUrl)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      setMpError("Não foi possível copiar. Selecione e copie manualmente.")
+    }
+  }
 
   async function updateBillingMode(mode: "AUTO" | "MANUAL") {
     if (mode === billingMode) return
@@ -82,12 +97,20 @@ export function BillingSection({ data, onUpdate }: BillingSectionProps) {
       setMpError("Token inválido")
       return
     }
+    const secret = secretInput.trim()
+    if (secret && secret.length < 16) {
+      setMpError("Assinatura secreta inválida (muito curta)")
+      return
+    }
     setMpSaving(true)
     try {
       const response = await fetch("/api/painel/config/connect-mp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ accessToken: tokenInput.trim() }),
+        body: JSON.stringify({
+          accessToken: tokenInput.trim(),
+          ...(secret ? { webhookSecret: secret } : {}),
+        }),
       })
       const json = await response.json()
       if (!response.ok) {
@@ -95,10 +118,56 @@ export function BillingSection({ data, onUpdate }: BillingSectionProps) {
         return
       }
       setConnected(true)
+      setWebhookConfigured(Boolean(secret))
       setTokenInput("")
+      setSecretInput("")
       setShowForm(false)
-      setMpSuccess("Gateway de pagamento conectado com sucesso.")
-      onUpdate({ tenant: { ...data.tenant, mpConnected: true } })
+      setMpSuccess(
+        secret
+          ? "Gateway de pagamento conectado com sucesso."
+          : "Token conectado. Cadastre a assinatura secreta para liberar as vendas.",
+      )
+      onUpdate({
+        tenant: {
+          ...data.tenant,
+          mpConnected: true,
+          mpWebhookConfigured: Boolean(secret),
+        },
+      })
+    } catch {
+      setMpError("Erro de rede")
+    } finally {
+      setMpSaving(false)
+    }
+  }
+
+  // Atualiza apenas a assinatura secreta de quem já conectou o token.
+  async function saveSecret() {
+    setMpError(null)
+    setMpSuccess(null)
+    const secret = secretInput.trim()
+    if (secret.length < 16) {
+      setMpError("Assinatura secreta inválida (muito curta)")
+      return
+    }
+    setMpSaving(true)
+    try {
+      const response = await fetch("/api/painel/config/connect-mp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ webhookSecret: secret }),
+      })
+      const json = await response.json()
+      if (!response.ok) {
+        setMpError(json?.error ?? "Erro ao salvar")
+        return
+      }
+      setWebhookConfigured(true)
+      setSecretInput("")
+      setMpSuccess("Assinatura secreta cadastrada. Vendas liberadas.")
+      onUpdate({
+        tenant: { ...data.tenant, mpWebhookConfigured: true },
+      })
     } catch {
       setMpError("Erro de rede")
     } finally {
@@ -120,7 +189,10 @@ export function BillingSection({ data, onUpdate }: BillingSectionProps) {
         return
       }
       setConnected(false)
-      onUpdate({ tenant: { ...data.tenant, mpConnected: false } })
+      setWebhookConfigured(false)
+      onUpdate({
+        tenant: { ...data.tenant, mpConnected: false, mpWebhookConfigured: false },
+      })
     } catch {
       setMpError("Erro de rede")
     } finally {
@@ -264,10 +336,15 @@ export function BillingSection({ data, onUpdate }: BillingSectionProps) {
               <p className="mt-1 text-xs text-gray-600">
                 Integração responsável por receber pagamentos dos seus alunos.
               </p>
-              {connected ? (
+              {connected && webhookConfigured ? (
                 <span className="mt-2 inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-semibold text-green-700">
                   <span className="h-1.5 w-1.5 rounded-full bg-green-600" />
                   Conectado
+                </span>
+              ) : connected ? (
+                <span className="mt-2 inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+                  <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                  Conectado · falta assinatura
                 </span>
               ) : (
                 <span className="mt-2 inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold text-red-700">
@@ -302,6 +379,41 @@ export function BillingSection({ data, onUpdate }: BillingSectionProps) {
           )}
         </div>
 
+        <div className="mt-5 rounded-xl border border-gray-200 bg-gray-50/50 p-4">
+          <Label>URL de notificação (webhook)</Label>
+          <p className="mt-1 text-[11px] text-gray-500">
+            Cole esta URL no Mercado Pago →{" "}
+            <strong>Suas integrações</strong> → sua aplicação →{" "}
+            <strong>Webhooks</strong>. É ela que avisa nosso sistema quando um
+            pagamento é aprovado — e o que libera a <strong>Chave secreta</strong>{" "}
+            para você copiar.
+          </p>
+          <div className="mt-2 flex items-center gap-2">
+            <code className="flex-1 overflow-x-auto whitespace-nowrap rounded-lg border border-gray-200 bg-white px-3 py-2 font-mono text-[11px] text-gray-700">
+              {data.tenant.mpWebhookUrl}
+            </code>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={copyWebhookUrl}
+              className="shrink-0"
+            >
+              {copied ? (
+                <>
+                  <Check className="mr-1.5 h-3.5 w-3.5 text-green-600" />
+                  Copiado
+                </>
+              ) : (
+                <>
+                  <Copy className="mr-1.5 h-3.5 w-3.5" />
+                  Copiar
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
+
         {!connected && showForm && (
           <div className="mt-5 space-y-3 rounded-xl border border-gray-200 bg-gray-50/50 p-4">
             <div>
@@ -319,6 +431,23 @@ export function BillingSection({ data, onUpdate }: BillingSectionProps) {
                 criptografado antes de ser salvo.
               </p>
             </div>
+            <div>
+              <Label htmlFor="mp-secret">Assinatura secreta do webhook</Label>
+              <Input
+                id="mp-secret"
+                type="password"
+                className="mt-1.5 font-mono"
+                placeholder="ex.: a1b2c3..."
+                value={secretInput}
+                onChange={(e) => setSecretInput(e.target.value)}
+              />
+              <p className="mt-1 text-[11px] text-gray-500">
+                No painel do Mercado Pago → <strong>Suas integrações</strong> →
+                sua aplicação → <strong>Webhooks</strong>: configure a URL de
+                notificação e copie a <strong>Chave secreta</strong>. Sem ela, as
+                vendas não são confirmadas automaticamente.
+              </p>
+            </div>
             {mpError && <p className="text-xs text-red-600">{mpError}</p>}
             <div className="flex justify-end">
               <Button
@@ -333,6 +462,50 @@ export function BillingSection({ data, onUpdate }: BillingSectionProps) {
                   </>
                 ) : (
                   "Salvar token"
+                )}
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {connected && !webhookConfigured && (
+          <div className="mt-5 space-y-3 rounded-xl border border-amber-300 bg-amber-50 p-4">
+            <p className="text-xs font-semibold text-amber-800">
+              Falta a assinatura secreta do webhook
+            </p>
+            <p className="text-[11px] text-amber-700">
+              O token está conectado, mas sem a chave secreta o Mercado Pago não
+              consegue confirmar as vendas — alunos pagam e não são matriculados
+              automaticamente. Cadastre a chave para liberar.
+            </p>
+            <div>
+              <Label htmlFor="mp-secret-only">Assinatura secreta do webhook</Label>
+              <Input
+                id="mp-secret-only"
+                type="password"
+                className="mt-1.5 font-mono"
+                placeholder="ex.: a1b2c3..."
+                value={secretInput}
+                onChange={(e) => setSecretInput(e.target.value)}
+              />
+              <p className="mt-1 text-[11px] text-amber-700">
+                Mercado Pago → Suas integrações → sua aplicação → Webhooks →
+                Chave secreta.
+              </p>
+            </div>
+            <div className="flex justify-end">
+              <Button
+                onClick={saveSecret}
+                disabled={mpSaving}
+                className="bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)]"
+              >
+                {mpSaving ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Salvando...
+                  </>
+                ) : (
+                  "Salvar assinatura secreta"
                 )}
               </Button>
             </div>

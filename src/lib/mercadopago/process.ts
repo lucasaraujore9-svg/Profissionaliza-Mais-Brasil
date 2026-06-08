@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma"
+import { decrypt } from "@/lib/crypto"
 import { decryptTenantMpToken, getPayment, searchPayments } from "./client"
 import {
   getPayment as getAsaasPayment,
@@ -46,6 +47,9 @@ interface TenantContext {
   slug: string
   plataformaVendedorId: string | null
   mpAccessToken: string | null
+  // Secret de validação do webhook MP. Revendedor: criptografada (igual ao
+  // token). PMB: valor plain vindo da env MP_WEBHOOK_SECRET.
+  mpWebhookSecret: string | null
   primaryColor: string
   isPmbVitrine?: boolean
 }
@@ -59,6 +63,7 @@ async function buildPmbContext(): Promise<TenantContext | null> {
     slug: pmbPlataformaPolo(),
     plataformaVendedorId: pmbPlataformaVendedorId(),
     mpAccessToken: token,
+    mpWebhookSecret: process.env.MP_WEBHOOK_SECRET ?? null,
     primaryColor: "#00a862",
     isPmbVitrine: true,
   }
@@ -73,6 +78,7 @@ async function resolveTenantById(id: string): Promise<TenantContext | null> {
       slug: true,
       plataformaVendedorId: true,
       mpAccessToken: true,
+      mpWebhookSecret: true,
       primaryColor: true,
     },
   })
@@ -91,6 +97,7 @@ async function resolveTenantBySlug(slug: string): Promise<TenantContext | null> 
       slug: true,
       plataformaVendedorId: true,
       mpAccessToken: true,
+      mpWebhookSecret: true,
       primaryColor: true,
     },
   })
@@ -253,51 +260,14 @@ export async function processMpWebhook(args: ProcessArgs): Promise<void> {
       return
     }
 
-    // ── Passo 2: validar HMAC ANTES de tocar em qualquer tenant ────────────
-    // Usamos um secret global (MP_WEBHOOK_SECRET) porque o Mercado Pago não
-    // permite secret por tenant via API de Preference — todos os webhooks
-    // chegam aqui e provam autenticidade com o mesmo secret. Defesa em
-    // profundidade contra vazamento do secret:
-    //  - Passo 5 chama getPayment(tenant.mpAccessToken, paymentId): se o
-    //    paymentId não pertencer à conta MP do tenant resolvido, a API
-    //    devolve 404. Atacante que vaze o secret não consegue cross-tenant
-    //    sem também ter o access token do tenant.
-    //  - tenantSlug é sanitizado em /api/webhooks/mercadopago/route.ts
-    //    (regex /^[a-z0-9_-]{1,64}$/i) — não há log/SQL injection.
-    const secret = process.env.MP_WEBHOOK_SECRET
-    if (!secret) {
-      // Antes: dev sem secret seguia sem validar — qualquer ambiente não-prod
-      // (preview público, staging mal-configurado) virava bypass de HMAC.
-      // Agora: bypass exige flag explícita MP_WEBHOOK_DEV_BYPASS=1 e nunca
-      // em produção. Dev local: defina ambas no .env.local pra testes ngrok.
-      const explicitBypass =
-        process.env.MP_WEBHOOK_DEV_BYPASS === "1" &&
-        process.env.NODE_ENV !== "production"
-      if (!explicitBypass) {
-        await markLog(logId, false, "MP_WEBHOOK_SECRET ausente — request rejeitado")
-        return
-      }
-      contextLogger().warn(
-        { event: "mp.webhook.dev_bypass_active" },
-        "MP_WEBHOOK_DEV_BYPASS ativo — validação de HMAC pulada (apenas dev)",
-      )
-    } else {
-      const valid = validateMpWebhookSignature(
-        xSignature,
-        xRequestId,
-        dataId ?? paymentId,
-        secret,
-      )
-      if (!valid) {
-        await markLog(logId, false, "hmac invalid")
-        return
-      }
-    }
-
-    // ── Passo 3: resolver o tenant ──────────────────────────────────────────
-    // A notification_url inclui ?tenant=<slug> para vendas de revendedores,
-    // e não inclui para a vitrine PMB. Isso elimina a ambiguidade de qual
-    // conta MP pertence o pagamento.
+    // ── Passo 2: resolver o tenant ANTES do HMAC ───────────────────────────
+    // A secret de validação do webhook MP é POR CONTA: cada revendedor usa a
+    // própria conta MP, logo cada um tem a própria assinatura secreta. Por isso
+    // precisamos saber de qual tenant é a notificação antes de validar o HMAC.
+    // A notification_url inclui ?tenant=<slug> para vendas de revendedores, e
+    // não inclui para a vitrine PMB — isso elimina a ambiguidade de qual conta
+    // MP pertence o pagamento. tenantSlug é sanitizado em
+    // /api/webhooks/mercadopago/route.ts (regex /^[a-z0-9_-]{1,64}$/i).
     let tenant: TenantContext | null = null
 
     if (tenantSlug) {
@@ -329,6 +299,75 @@ export async function processMpWebhook(args: ProcessArgs): Promise<void> {
         href: "/admin/webhooks",
       }).catch(swallow("mp.process.notify"))
       return
+    }
+
+    // ── Passo 3: validar HMAC com a secret DESTE tenant ─────────────────────
+    // Revendedor: secret criptografada no banco (mpWebhookSecret). PMB: valor
+    // plain vindo de MP_WEBHOOK_SECRET (já resolvido em buildPmbContext).
+    // Defesa em profundidade: mesmo que a secret vaze, o Passo 5 chama
+    // getPayment com o access token do tenant — um paymentId que não pertença
+    // à conta MP daquele tenant devolve 404, bloqueando cross-tenant.
+    const secret = tenant.mpWebhookSecret
+      ? tenant.isPmbVitrine
+        ? tenant.mpWebhookSecret
+        : decrypt(tenant.mpWebhookSecret)
+      : null
+
+    if (!secret) {
+      // Sem secret configurada não há como provar autenticidade. Em dev, a flag
+      // MP_WEBHOOK_DEV_BYPASS=1 (nunca em produção) pula a validação p/ ngrok.
+      const explicitBypass =
+        process.env.MP_WEBHOOK_DEV_BYPASS === "1" &&
+        process.env.NODE_ENV !== "production"
+      if (!explicitBypass) {
+        const reason = tenant.isPmbVitrine
+          ? "MP_WEBHOOK_SECRET (PMB) ausente — request rejeitado"
+          : "tenant sem mpWebhookSecret — configure a assinatura secreta no painel"
+        await markLog(logId, false, reason)
+        contextLogger().error(
+          { event: "mp.process.secret_missing", tenantSlug, paymentId, tenantId: tenant.id },
+          "webhook MP sem secret de validação — fulfillment automático bloqueado",
+        )
+        // Não derruba a venda: o aluno pode reconciliar via "já paguei" e o
+        // admin via sync-payment. Avisa quem pode resolver (a unidade).
+        if (tenant.isPmbVitrine) {
+          await createNotification({
+            audience: "ROLE",
+            roleTarget: "SUPER_ADMIN",
+            level: "ERROR",
+            title: "MP_WEBHOOK_SECRET (PMB) ausente",
+            body: `paymentId=${paymentId} — configure MP_WEBHOOK_SECRET no Vercel. Venda pode ficar sem matrícula automática.`,
+            category: "webhook",
+            href: "/admin/webhooks",
+          }).catch(swallow("mp.process.notify"))
+        } else {
+          await createNotification({
+            audience: "TENANT",
+            tenantId: tenant.id,
+            level: "ERROR",
+            title: "Assinatura secreta do Mercado Pago ausente",
+            body: "Recebemos um pagamento mas a matrícula automática está bloqueada: cadastre a assinatura secreta do webhook em Configurações → Pagamentos.",
+            category: "payment",
+            href: "/painel/configuracoes",
+          }).catch(swallow("mp.process.notify"))
+        }
+        return
+      }
+      contextLogger().warn(
+        { event: "mp.webhook.dev_bypass_active" },
+        "MP_WEBHOOK_DEV_BYPASS ativo — validação de HMAC pulada (apenas dev)",
+      )
+    } else {
+      const valid = validateMpWebhookSignature(
+        xSignature,
+        xRequestId,
+        dataId ?? paymentId,
+        secret,
+      )
+      if (!valid) {
+        await markLog(logId, false, "hmac invalid")
+        return
+      }
     }
 
     // ── Passo 4: associar o log ao tenant ───────────────────────────────────

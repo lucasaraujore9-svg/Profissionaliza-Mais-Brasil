@@ -34,3 +34,26 @@ export function vitrineUrl(slug: string): string {
 export function cnameTarget(): string {
   return `cname.${vitrineDomain()}`
 }
+
+// Base canonica para webhooks de gateways (Mercado Pago).
+//
+// O apex (profissionalizamaisbrasil.com.br) responde 307 -> www e o Mercado
+// Pago NAO segue redirect ao entregar webhook — a notificacao se perde. Por
+// isso forcamos o host canonico `www.` quando o host configurado for exatamente
+// o apex. Nao mexe em previews (*.vercel.app), localhost ou hosts ja com www.
+export function webhookBaseUrl(): string {
+  const u = new URL(appUrl())
+  if (u.host === appDomain()) {
+    u.host = `www.${appDomain()}`
+  }
+  return u.origin
+}
+
+// URL de notificacao do Mercado Pago. `slug` define o tenant na query —
+// null/omitido = vitrine PMB (sem ?tenant). E exatamente o valor que enviamos
+// em `notification_url` ao criar a preference/preapproval, e o mesmo que a
+// unidade cola no painel MP (Webhooks) para gerar a chave secreta.
+export function mpWebhookUrl(slug?: string | null): string {
+  const base = `${webhookBaseUrl()}/api/webhooks/mercadopago`
+  return slug ? `${base}?tenant=${slug}` : base
+}

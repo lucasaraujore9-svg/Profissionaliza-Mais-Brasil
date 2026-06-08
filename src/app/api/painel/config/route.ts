@@ -3,6 +3,7 @@ import { z } from "zod"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { withRequestContext } from "@/lib/observability/with-request-context"
+import { mpWebhookUrl } from "@/lib/tenant/urls"
 
 const updateSchema = z.object({
   name: z.string().trim().min(3, "Nome muito curto").max(120),
@@ -43,6 +44,7 @@ export const GET = withRequestContext(
         status: true,
         mpConnected: true,
         mpUserId: true,
+        mpWebhookSecret: true,
         monthlyAllowed: true,
         monthlyEnabled: true,
         monthlyScope: true,
@@ -53,10 +55,17 @@ export const GET = withRequestContext(
       return NextResponse.json({ error: "Recurso não encontrado" }, { status: 404 })
     }
 
+    // Nunca expõe a secret em si — só se está configurada.
+    const { mpWebhookSecret, ...tenantSafe } = tenant
     return NextResponse.json({
       data: {
         user,
-        tenant,
+        tenant: {
+          ...tenantSafe,
+          mpWebhookConfigured: mpWebhookSecret !== null,
+          // URL exata que enviamos ao MP e que a unidade cola no painel MP.
+          mpWebhookUrl: mpWebhookUrl(tenant.slug),
+        },
       },
     })
   },
