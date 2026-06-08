@@ -9,6 +9,7 @@ import { normalizeSocialUrl, buildTenantSupportContacts } from "@/lib/branding"
 import { vitrineDomain } from "@/lib/tenant/urls"
 import { JsonLd } from "@/components/seo/json-ld"
 import { storeJsonLd, webSiteJsonLd } from "@/lib/seo/jsonld"
+import { VisitorTracker } from "@/components/loja/visitor-tracker"
 
 const PMB_GREEN_DEFAULT = "#025918"
 const PMB_GOLD_DEFAULT = "#F2B705"
@@ -136,6 +137,7 @@ export default async function LojaLayout({
 
   return (
     <div style={customStyle} className="contents">
+      {tenant?.automationEnabled ? <VisitorTracker /> : null}
       {tenant && origin ? (
         <JsonLd
           data={[

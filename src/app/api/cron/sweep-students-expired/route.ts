@@ -10,9 +10,12 @@ import { swallow } from "@/lib/errors"
 export const maxDuration = 300
 export const dynamic = "force-dynamic"
 
-// Dias antes do encerramento em que o aluno recebe o aviso. Como o cron roda
-// diariamente, disparar só nos dias exatos evita reenvio (dedup sem flag novo).
-const WARN_DAYS = [7, 1]
+// Funil de avisos do fim do prazo de 12 meses. Marcos em dias antes do
+// `expiresAt`: 60, 30, 15 e 2 dias (48h). O aviso "no dia da restrição" é
+// disparado pelo bloco de encerramento (quando o acesso é de fato cortado).
+// A dedup/catch-up usa `enrollment.accessWarnDaysSent` (não depende do cron
+// cair exatamente no dia certo — se um dia for pulado, o marco ainda dispara).
+const WARN_DAYS = [60, 30, 15, 2]
 const DAY_MS = 1000 * 60 * 60 * 24
 
 /** Monta a URL da área do aluno respeitando a vitrine da unidade. */
@@ -38,12 +41,17 @@ function formatDateBR(d: Date): string {
  *
  * - Encerra o acesso de matrículas cujo `expiresAt` já passou (12 meses desde a
  *   liberação): suspende a matrícula e bloqueia o aluno na plataforma parceira
- *   (apenas se não houver outra matrícula ainda dentro do prazo).
- * - Avisa por e-mail + notificação in-app quando faltam 7 ou 1 dia(s).
+ *   (apenas se não houver outra matrícula ainda dentro do prazo) e avisa o aluno
+ *   (e-mail + notificação in-app) de que o acesso foi encerrado — "no dia da
+ *   restrição".
+ * - Avisa por e-mail + notificação in-app nos marcos 60, 30, 15 e 2 dias (48h)
+ *   antes do fim.
  *
- * Idempotência: matrículas expiradas viram CANCELLED (saem do filtro); o
- * bloqueio é guardado por `student.status === ATIVO`; o aviso só dispara no dia
- * exato (daysLeft ∈ WARN_DAYS).
+ * Idempotência: matrículas expiradas viram CANCELLED (saem do filtro), então o
+ * aviso de encerramento sai uma única vez; o bloqueio é guardado por
+ * `student.status === ATIVO`; os avisos de proximidade são deduplicados por
+ * `enrollment.accessWarnDaysSent`, que também garante catch-up se o cron pular
+ * um dia.
  */
 async function processExpiredStudents() {
   const now = new Date()
@@ -66,6 +74,8 @@ async function processExpiredStudents() {
       student: {
         select: {
           id: true,
+          nome: true,
+          email: true,
           status: true,
           enrollments: {
             where: { status: { in: ["ACTIVE", "SUSPENDED", "COMPLETED"] } },
@@ -73,6 +83,7 @@ async function processExpiredStudents() {
           },
         },
       },
+      tenant: { select: { slug: true, name: true, customDomain: true } },
     },
   })
   result.expiredInspected = expired.length
@@ -106,6 +117,28 @@ async function processExpiredStudents() {
         category: "access",
         href: "/aluno/cursos",
       })
+
+      // Aviso "no dia da restrição": e-mail confirmando o encerramento. Sai uma
+      // única vez porque a matrícula já foi marcada como CANCELLED acima.
+      if (enrollment.student.email) {
+        await sendEmail({
+          to: enrollment.student.email,
+          subject: `Seu acesso a ${enrollment.course.nome} foi encerrado`,
+          template: {
+            type: "access-expiring",
+            props: {
+              studentName: enrollment.student.nome,
+              courseName: enrollment.course.nome,
+              expiresAtLabel: enrollment.expiresAt
+                ? formatDateBR(enrollment.expiresAt)
+                : formatDateBR(now),
+              daysLeft: 0,
+              studentPanelUrl: studentPanelUrl(enrollment.tenant),
+              storeName: enrollment.tenant?.name,
+            },
+          },
+        }).catch(swallow("sweep-students-expired:email-encerrado"))
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : "erro desconhecido"
       result.errors.push(`expira ${enrollment.id}: ${message}`)
@@ -131,7 +164,15 @@ async function processExpiredStudents() {
     const daysLeft = Math.ceil(
       (enrollment.expiresAt.getTime() - now.getTime()) / DAY_MS,
     )
-    if (!WARN_DAYS.includes(daysLeft)) continue
+
+    // Marcos já vencidos (daysLeft <= marco) e ainda não notificados. Dispara um
+    // único aviso refletindo os dias reais restantes e marca todos os marcos
+    // vencidos de uma vez — evita reenvio e cobre dias pulados (catch-up).
+    const alreadySent = enrollment.accessWarnDaysSent ?? []
+    const dueMilestones = WARN_DAYS.filter(
+      (d) => daysLeft <= d && !alreadySent.includes(d),
+    )
+    if (dueMilestones.length === 0) continue
 
     try {
       await createNotification({
@@ -161,6 +202,11 @@ async function processExpiredStudents() {
           },
         }).catch(swallow("sweep-students-expired:email"))
       }
+
+      await prisma.enrollment.update({
+        where: { id: enrollment.id },
+        data: { accessWarnDaysSent: { set: [...alreadySent, ...dueMilestones] } },
+      })
       result.warningsSent += 1
     } catch (error) {
       const message = error instanceof Error ? error.message : "erro desconhecido"

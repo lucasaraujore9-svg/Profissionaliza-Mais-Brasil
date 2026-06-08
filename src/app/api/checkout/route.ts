@@ -34,6 +34,7 @@ import { provisionStudentAccess } from "@/lib/students/access"
 import { contextLogger } from "@/lib/logger"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { upsertLeadFromCheckout } from "@/lib/automation/leads"
+import { readVisitorId } from "@/lib/automation/tracking"
 import { isValidCpf, stripCpf } from "@/lib/validation/cpf"
 import { isValidPhone, normalizePhone } from "@/lib/validation/phone"
 
@@ -382,6 +383,7 @@ export const POST = withRequestContext(
         telefone: data.fone,
         courseId: course.id,
         courseSnapshot: course.nome,
+        visitorId: readVisitorId(request),
       }).catch(swallow("pmb_checkout.lead_link"))
     }
 

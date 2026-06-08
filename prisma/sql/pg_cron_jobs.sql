@@ -53,7 +53,14 @@ select cron.schedule('pmb-sweep-abandoned-leads', '15 */2 * * *',
   $$ select app_internal.run_cron('/api/cron/sweep-abandoned-leads') $$);
 
 -- NOVO (item 11 — prazo de permanência de 12 meses): encerra o acesso de
--- matrículas expiradas, bloqueia o aluno na plataforma e avisa 7/1 dia(s) antes.
+-- matrículas expiradas, bloqueia o aluno na plataforma e roda o funil de avisos
+-- (60/30/15/2 dias antes + no dia da restrição). Rodar 1x/dia é o esperado: a
+-- dedup/catch-up é feita por enrollments.access_warn_days_sent, não pelo horário.
 -- 07:00 — mesmo horário do pmb-sweep-students-overdue.
 select cron.schedule('pmb-sweep-students-expired', '0 7 * * *',
   $$ select app_internal.run_cron('/api/cron/sweep-students-expired') $$);
+
+-- Limpeza de eventos de navegacao anonimos (VisitorEvent sem lead) > 90 dias.
+-- Eventos ja vinculados a um lead sao preservados. Semanal (domingo, 03:30).
+select cron.schedule('pmb-sweep-visitor-events', '30 3 * * 0',
+  $$ select app_internal.run_cron('/api/cron/sweep-visitor-events') $$);

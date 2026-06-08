@@ -43,6 +43,9 @@ export const GET = withRequestContext(
         status: true,
         mpConnected: true,
         mpUserId: true,
+        monthlyAllowed: true,
+        monthlyEnabled: true,
+        monthlyScope: true,
       },
     })
 

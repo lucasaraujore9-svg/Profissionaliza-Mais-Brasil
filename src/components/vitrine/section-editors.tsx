@@ -1,7 +1,18 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Dices, Hand, Info } from "lucide-react"
+import {
+  Dices,
+  ExternalLink,
+  GraduationCap,
+  Hand,
+  Info,
+  Loader2,
+  Lock,
+  Save,
+} from "lucide-react"
+import { toast } from "sonner"
+import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
@@ -10,6 +21,10 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import {
+  TecnicaCoursesEditor,
+  type TecnicaCourseDraft,
+} from "@/components/admin/tecnica-courses-editor"
 import { CoursePicker } from "./course-picker"
 import { cn } from "@/lib/utils"
 import type {
@@ -495,4 +510,256 @@ function labelOfVariant(v: InstitutionalConfig["variant"]) {
     default:
       return "Personalizado"
   }
+}
+
+// ---------------------------------------------------------------------------
+// TecnicaEditor — seção "Cursos Técnicos"
+//
+// Diferente das outras seções, o conteúdo (cursos/imagens/URL/rótulo) NÃO vive
+// no `config` do HomeSection: vive em SystemSettings.tecnica*, fonte única que
+// a tela /admin/configuracoes/unidade-tecnica também edita. Por isso este
+// editor é autossuficiente (busca e salva no endpoint próprio), sem usar o
+// fluxo de draft/Salvar genérico da lista de seções.
+//
+// - Admin (canEdit=true): edita os 8 cursos + URL base + rótulo.
+// - Unidade (canEdit=false): card informativo read-only (só reordena/liga-desliga
+//   pelo cabeçalho da seção).
+// ---------------------------------------------------------------------------
+
+const TECNICA_SECTION_COUNT = 8
+
+export function TecnicaEditor({ canEdit }: { canEdit: boolean }) {
+  if (!canEdit) {
+    return (
+      <div className="flex items-start gap-2 rounded-md border border-[var(--color-pmb-green)]/15 bg-[var(--color-pmb-green)]/5 px-3 py-2.5 text-sm text-[var(--color-pmb-green-900)]">
+        <Lock className="mt-0.5 h-4 w-4 shrink-0 text-[var(--color-pmb-green)]" aria-hidden />
+        <p>
+          A lista de cursos e as imagens da seção <b>Cursos Técnicos</b> são
+          padronizadas pela administração. O <b>link de destino</b> é o da sua
+          unidade (configurado pelo seu gestor). Aqui você só pode{" "}
+          <b>posicionar</b> e <b>ligar/desligar</b> a seção na sua vitrine, pelo
+          cabeçalho acima.
+        </p>
+      </div>
+    )
+  }
+  return <TecnicaAdminEditor />
+}
+
+function TecnicaAdminEditor() {
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  // `enabled` (flag de menu/categoria do site) é preservado: este editor só
+  // mexe no conteúdo. A exibição da seção na home é o toggle do cabeçalho.
+  const [enabled, setEnabled] = useState(false)
+  const [url, setUrl] = useState("")
+  const [label, setLabel] = useState("")
+  const [courses, setCourses] = useState<TecnicaCourseDraft[]>([])
+
+  useEffect(() => {
+    let alive = true
+    ;(async () => {
+      setLoading(true)
+      setLoadError(null)
+      try {
+        const res = await fetch("/api/admin/system-settings/tecnica", {
+          cache: "no-store",
+        })
+        if (!res.ok) throw new Error("Falha ao carregar os cursos técnicos")
+        const body = await res.json()
+        const d = body.data as {
+          tecnicaEnabled: boolean
+          tecnicaUrl: string | null
+          tecnicaLabel: string | null
+          tecnicaCourses: unknown
+        }
+        if (!alive) return
+        setEnabled(Boolean(d.tecnicaEnabled))
+        setUrl(d.tecnicaUrl ?? "")
+        setLabel(d.tecnicaLabel ?? "")
+        const list = Array.isArray(d.tecnicaCourses) ? d.tecnicaCourses : []
+        setCourses(
+          list.map((c) => {
+            const o = (c ?? {}) as Record<string, unknown>
+            return {
+              name: typeof o.name === "string" ? o.name : "",
+              url: typeof o.url === "string" ? o.url : "",
+              image: typeof o.image === "string" ? o.image : "",
+            }
+          }),
+        )
+      } catch (err) {
+        if (alive)
+          setLoadError(
+            err instanceof Error ? err.message : "Erro ao carregar",
+          )
+      } finally {
+        if (alive) setLoading(false)
+      }
+    })()
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  function save() {
+    const trimmedUrl = url.trim()
+    const filled = courses.filter((c) => c.name.trim())
+    if (filled.length !== 0 && filled.length !== TECNICA_SECTION_COUNT) {
+      toast.error(
+        `Cadastre exatamente ${TECNICA_SECTION_COUNT} cursos (ou nenhum). Você tem ${filled.length} preenchido(s).`,
+      )
+      return
+    }
+    if (filled.length > 0 && !trimmedUrl) {
+      toast.error("Informe a URL base da escola técnica.")
+      return
+    }
+    if (trimmedUrl) {
+      try {
+        new URL(trimmedUrl)
+      } catch {
+        toast.error("URL base inválida (use https://...)")
+        return
+      }
+    }
+    for (let i = 0; i < filled.length; i++) {
+      const c = filled[i]
+      if (c.url.trim()) {
+        try {
+          new URL(c.url.trim())
+        } catch {
+          toast.error(`Curso #${i + 1}: URL inválida`)
+          return
+        }
+      }
+    }
+
+    setSaving(true)
+    ;(async () => {
+      try {
+        const res = await fetch("/api/admin/system-settings/tecnica", {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            // Preserva o flag de menu/categoria — este editor só toca conteúdo.
+            enabled,
+            url: trimmedUrl || null,
+            label: label.trim() || null,
+            courses: filled.map((c, i) => ({
+              name: c.name.trim(),
+              url: c.url.trim(),
+              image: c.image?.trim() || "",
+              order: i,
+            })),
+          }),
+        })
+        const body = await res.json().catch(() => ({}))
+        if (!res.ok) {
+          toast.error(body.error ?? "Falha ao salvar")
+          return
+        }
+        toast.success("Cursos Técnicos salvos")
+      } catch {
+        toast.error("Erro ao salvar")
+      } finally {
+        setSaving(false)
+      }
+    })()
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center gap-2 py-8 text-sm text-zinc-400">
+        <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+        Carregando cursos técnicos…
+      </div>
+    )
+  }
+  if (loadError) {
+    return (
+      <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2.5 text-sm text-rose-800">
+        {loadError}
+      </p>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-start gap-2 rounded-md border border-[var(--color-pmb-green)]/15 bg-[var(--color-pmb-green)]/5 px-3 py-2.5 text-sm text-[var(--color-pmb-green-900)]">
+        <GraduationCap className="mt-0.5 h-4 w-4 shrink-0 text-[var(--color-pmb-green)]" aria-hidden />
+        <p>
+          Esta lista é <b>padronizada para toda a rede</b> — vale para o site
+          PMB e para todas as vitrines de revendedor. A seção exibe{" "}
+          <b>{TECNICA_SECTION_COUNT} cursos</b>. (Liga/desliga e ativação do
+          menu institucional ficam no cabeçalho e em{" "}
+          <i>Configurações → Unidade Técnica</i>.)
+        </p>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div>
+          <Label className="mb-1.5 block text-xs">URL base da escola técnica</Label>
+          <div className="flex items-center gap-2">
+            <Input
+              type="url"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              placeholder="https://escolatecnicadobrasil.com.br/"
+              disabled={saving}
+            />
+            {url.trim() && (
+              <a
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="shrink-0 rounded-md border border-gray-200 bg-white p-2 text-gray-500 hover:border-[var(--color-pmb-green)] hover:text-[var(--color-pmb-green)]"
+                title="Testar link"
+              >
+                <ExternalLink className="h-4 w-4" aria-hidden />
+              </a>
+            )}
+          </div>
+        </div>
+        <div>
+          <Label className="mb-1.5 block text-xs">Rótulo (opcional)</Label>
+          <Input
+            type="text"
+            value={label}
+            onChange={(e) => setLabel(e.target.value)}
+            placeholder="Cursos Técnicos"
+            maxLength={60}
+            disabled={saving}
+          />
+        </div>
+      </div>
+
+      <div className="rounded-lg border border-gray-200 bg-gray-50/40 p-4">
+        <TecnicaCoursesEditor
+          courses={courses}
+          onChange={setCourses}
+          fallbackUrl={url.trim() || null}
+          disabled={saving}
+        />
+      </div>
+
+      <div className="-mx-4 -mb-4 flex items-center justify-end border-t border-[rgba(2,89,24,0.08)] bg-white px-4 py-3">
+        <Button
+          type="button"
+          size="sm"
+          onClick={save}
+          disabled={saving}
+          className="bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)]"
+        >
+          {saving ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+          ) : (
+            <Save className="h-3.5 w-3.5" aria-hidden />
+          )}
+          {saving ? "Salvando..." : "Salvar cursos"}
+        </Button>
+      </div>
+    </div>
+  )
 }

@@ -1,6 +1,26 @@
 import { prisma } from "@/lib/prisma"
 import type { Prisma } from "@prisma/client"
 import { contextLogger } from "@/lib/logger"
+import { effectivePaymentType, type MonthlyPolicy } from "@/lib/tenant/monthly-policy"
+
+const MONTHLY_BLOCKED: MonthlyPolicy = {
+  monthlyAllowed: false,
+  monthlyEnabled: false,
+  monthlyScope: "DIRECT_ONLY",
+}
+
+/**
+ * Politica de parcelado/mensalidade da unidade. Na vitrine (compra self-service
+ * do lead), o MONTHLY so vale quando a unidade tem o parcelado ativo E o escopo
+ * inclui a vitrine. Quando ausente, assume bloqueado.
+ */
+async function loadMonthlyPolicy(tenantId: string): Promise<MonthlyPolicy> {
+  const t = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { monthlyAllowed: true, monthlyEnabled: true, monthlyScope: true },
+  })
+  return t ?? MONTHLY_BLOCKED
+}
 
 export interface TenantCourseListItem {
   id: string
@@ -54,7 +74,10 @@ type TenantCourseWithCourse = Prisma.TenantCourseGetPayload<{
  * exibido na vitrine, aplicando a hierarquia de override tenant > admin >
  * plataforma bruto. Centralizado para que listagem e catalogo sejam consistentes.
  */
-function mapTenantCourseItem(tc: TenantCourseWithCourse): TenantCourseListItem {
+function mapTenantCourseItem(
+  tc: TenantCourseWithCourse,
+  monthly: MonthlyPolicy,
+): TenantCourseListItem {
   // Parcelas efetivas configuradas pela unidade. Para MONTHLY este mesmo valor
   // representa a quantidade de mensalidades (o painel edita customParcelas como
   // "quantidade de mensalidades"); por isso monthlyMonths deve respeitá-lo, com
@@ -81,7 +104,7 @@ function mapTenantCourseItem(tc: TenantCourseWithCourse): TenantCourseListItem {
       tc.customCapaUrl ?? tc.course.capaOverride ?? tc.course.capaImageUrl,
     parcelas: effectiveParcelas,
     isFeatured: tc.isFeatured,
-    paymentType: tc.paymentType,
+    paymentType: effectivePaymentType(tc.paymentType, monthly, "vitrine"),
     monthlyMonths: effectiveParcelas ?? tc.course.monthlyMonthsMain,
   }
 }
@@ -110,7 +133,7 @@ export async function listTenantCourses(
   }
 
   try {
-    const [items, total] = await Promise.all([
+    const [items, total, monthly] = await Promise.all([
       prisma.tenantCourse.findMany({
         where,
         include: { course: true },
@@ -119,11 +142,12 @@ export async function listTenantCourses(
         skip: filters.offset ?? 0,
       }),
       prisma.tenantCourse.count({ where }),
+      loadMonthlyPolicy(filters.tenantId),
     ])
 
     return {
       total,
-      items: items.map(mapTenantCourseItem),
+      items: items.map((tc) => mapTenantCourseItem(tc, monthly)),
     }
   } catch (error) {
     contextLogger().error(
@@ -206,7 +230,7 @@ export async function listTenantCatalog(args: {
       },
     }
 
-    const [rows, total, categories] = await Promise.all([
+    const [rows, total, categories, monthly] = await Promise.all([
       prisma.tenantCourse.findMany({
         where,
         include: { course: true },
@@ -214,9 +238,14 @@ export async function listTenantCatalog(args: {
       }),
       prisma.tenantCourse.count({ where }),
       tenantCatalogCategories(tenantId),
+      loadMonthlyPolicy(tenantId),
     ])
 
-    return { items: rows.map(mapTenantCourseItem), total, categories }
+    return {
+      items: rows.map((tc) => mapTenantCourseItem(tc, monthly)),
+      total,
+      categories,
+    }
   } catch (error) {
     contextLogger().error(
       { err: error, event: "tenant.listCatalog_failed", tenantId },
@@ -256,6 +285,8 @@ export async function getTenantCourseBySlug(
 
     if (!tc) return null
 
+    const monthly = await loadMonthlyPolicy(tenantId)
+
     // Parcelas efetivas da unidade. Para MONTHLY, equivale à quantidade de
     // mensalidades (ver mapTenantCourseItem).
     const effectiveParcelas =
@@ -282,7 +313,7 @@ export async function getTenantCourseBySlug(
         tc.customCapaUrl ?? tc.course.capaOverride ?? tc.course.capaImageUrl,
       parcelas: effectiveParcelas,
       isFeatured: tc.isFeatured,
-      paymentType: tc.paymentType,
+      paymentType: effectivePaymentType(tc.paymentType, monthly, "vitrine"),
       monthlyMonths: effectiveParcelas ?? tc.course.monthlyMonthsMain,
       qtdAulas: tc.course.qtdAulas,
       parcelasSugeridas: effectiveParcelas,

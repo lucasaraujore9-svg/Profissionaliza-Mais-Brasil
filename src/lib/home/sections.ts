@@ -36,6 +36,14 @@ export type SectionCount = 4 | 8
  */
 export const BESTSELLERS_COUNT = 4 as const
 
+/**
+ * Mínimo de cursos ativos/visíveis que uma categoria precisa ter para que a
+ * seção "Cursos de {categoria}" (category_courses) possa ser ATIVADA na home.
+ * A seção é criada automaticamente ao criar a categoria, mas só liga quando a
+ * categoria atinge esse limiar. Vale para o sistema mãe e para as revendas.
+ */
+export const CATEGORY_SECTION_MIN_COURSES = 8 as const
+
 export interface BestsellersConfig {
   kind: "bestsellers"
   title: string
@@ -94,11 +102,22 @@ export interface InstitutionalConfig {
   items: InstitutionalItem[]
 }
 
+/**
+ * Seção "Cursos Técnicos". O conteúdo (cursos, imagens, URL, rótulo) vive em
+ * `SystemSettings.tecnica*` — fonte única, editada pelo admin (sistema mãe). A
+ * linha do HomeSection controla só posição + enabled, então a config é apenas
+ * um marcador. As unidades reordenam/ligam-desligam, mas não editam o conteúdo.
+ */
+export interface TecnicaSectionConfig {
+  kind: "tecnica"
+}
+
 export type AnySectionConfig =
   | BestsellersConfig
   | CategoryCoursesConfig
   | CategoriesGridConfig
   | InstitutionalConfig
+  | TecnicaSectionConfig
 
 export interface HomeSectionRecord<T extends AnySectionConfig = AnySectionConfig> {
   id: string
@@ -118,6 +137,7 @@ export const SECTION_KINDS = [
   "category_courses",
   "categories_grid",
   "institutional",
+  "tecnica",
 ] as const
 export type SectionKind = (typeof SECTION_KINDS)[number]
 
@@ -186,6 +206,13 @@ export function validateSectionPayload(
     return { ok: false, error: "config obrigatória" }
   }
   const c = rawConfig as Record<string, unknown>
+
+  // ---------- tecnica ----------
+  // Sem campos editáveis na config: o conteúdo (cursos/URL/rótulo) vive em
+  // SystemSettings.tecnica*. A config é apenas um marcador para o renderer.
+  if (kind === "tecnica") {
+    return { ok: true, kind, config: { kind: "tecnica" } }
+  }
 
   // ---------- categories_grid ----------
   if (kind === "categories_grid") {
@@ -612,7 +639,13 @@ export async function resolveCategoriesForSection(
 
 export async function ensureTenantHomeSections(tenantId: string): Promise<void> {
   const count = await prisma.homeSection.count({ where: { tenantId } })
-  if (count > 0) return
+  if (count > 0) {
+    // Tenant já tem seções próprias (clonadas antes da Técnica existir como
+    // HomeSection). Garante que a linha tecnica esteja presente para tenants
+    // antigos — caso contrário a seção não apareceria no painel nem na home.
+    await ensureTecnicaSection(tenantId)
+    return
+  }
   const pmbSections = await prisma.homeSection.findMany({
     where: { tenantId: null },
     orderBy: { position: "asc" },
@@ -626,5 +659,52 @@ export async function ensureTenantHomeSections(tenantId: string): Promise<void> 
       enabled: s.enabled,
       config: s.config as object,
     })),
+  })
+}
+
+/**
+ * Garante (idempotente) a existência da linha singleton kind="tecnica" para um
+ * escopo (PMB quando tenantId=null, ou um revendedor). Usado como backfill nos
+ * GET dos painéis e para escopos criados antes da Técnica virar HomeSection. A
+ * seção nasce no fim da lista, com `enabled` espelhando o flag tecnica_enabled
+ * correspondente (SystemSettings para PMB; Tenant para revendedor).
+ */
+export async function ensureTecnicaSection(
+  tenantId: string | null,
+): Promise<void> {
+  const existing = await prisma.homeSection.findFirst({
+    where: { tenantId, kind: "tecnica" },
+    select: { id: true },
+  })
+  if (existing) return
+
+  let enabled = false
+  if (tenantId) {
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { tecnicaEnabled: true },
+    })
+    enabled = tenant?.tecnicaEnabled ?? false
+  } else {
+    const settings = await prisma.systemSettings.findUnique({
+      where: { id: "default" },
+      select: { tecnicaEnabled: true },
+    })
+    enabled = settings?.tecnicaEnabled ?? false
+  }
+
+  const last = await prisma.homeSection.findFirst({
+    where: { tenantId },
+    orderBy: { position: "desc" },
+    select: { position: true },
+  })
+  await prisma.homeSection.create({
+    data: {
+      tenantId,
+      kind: "tecnica",
+      position: (last?.position ?? -1) + 1,
+      enabled,
+      config: { kind: "tecnica" },
+    },
   })
 }

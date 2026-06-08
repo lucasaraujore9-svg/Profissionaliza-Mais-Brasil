@@ -1,6 +1,7 @@
 import { requireSuperAdmin } from "@/lib/auth/guards"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { listSections, createSection } from "@/lib/home/api"
+import { ensureTecnicaSection } from "@/lib/home/sections"
 
 const SCOPE = { tenantId: null }
 
@@ -9,6 +10,8 @@ export const GET = withRequestContext(
   async () => {
     const guard = await requireSuperAdmin()
     if (!guard.ok) return guard.response
+    // Backfill: garante a seção Técnica para ambientes/escopos anteriores a ela.
+    await ensureTecnicaSection(null)
     return listSections(SCOPE)
   },
 )

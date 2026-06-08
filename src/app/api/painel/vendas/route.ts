@@ -17,6 +17,7 @@ import { upsertStudent, StudentEmailConflictError } from "@/lib/students/upsert"
 import { fulfillScholarshipEnrollment } from "@/lib/enrollment/fulfill"
 import { isValidCpf, stripCpf } from "@/lib/validation/cpf"
 import { isValidPhone, normalizePhone } from "@/lib/validation/phone"
+import { effectivePaymentType } from "@/lib/tenant/monthly-policy"
 
 const createSchema = z.object({
   // Dados do aluno (cria ou reaproveita por CPF/email)
@@ -122,6 +123,9 @@ export const POST = withRequestContext(
         status: true,
         mpAccessToken: true,
         plataformaVendedorId: true,
+        monthlyAllowed: true,
+        monthlyEnabled: true,
+        monthlyScope: true,
       },
     })
     if (!tenant) {
@@ -350,7 +354,14 @@ export const POST = withRequestContext(
       })
     }
 
-    const isMonthly = tenantCourse.paymentType === "MONTHLY"
+    // Tipo efetivo no canal de venda direta/manual. Se a unidade nao tem
+    // parcelado habilitado, o curso MONTHLY cai para ONE_TIME.
+    const effectiveType = effectivePaymentType(
+      tenantCourse.paymentType,
+      tenant,
+      "direct",
+    )
+    const isMonthly = effectiveType === "MONTHLY"
     const monthlyMonths = isMonthly
       ? tenantCourse.course.monthlyMonthsMain ?? 12
       : null
@@ -362,7 +373,7 @@ export const POST = withRequestContext(
         tenantCourseId: tenantCourse.id,
         courseId: tenantCourse.courseId,
         soldByUserId: userId,
-        paymentType: tenantCourse.paymentType,
+        paymentType: effectiveType,
         status: "PENDING",
         gateway: "MP",
         originalAmount: basePrice,

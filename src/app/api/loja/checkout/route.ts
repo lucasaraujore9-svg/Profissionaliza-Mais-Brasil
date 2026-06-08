@@ -15,8 +15,10 @@ import { swallow } from "@/lib/errors"
 import { contextLogger } from "@/lib/logger"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { upsertLeadFromCheckout } from "@/lib/automation/leads"
+import { readVisitorId } from "@/lib/automation/tracking"
 import { isValidCpf, stripCpf } from "@/lib/validation/cpf"
 import { isValidPhone, normalizePhone } from "@/lib/validation/phone"
+import { effectivePaymentType } from "@/lib/tenant/monthly-policy"
 
 const bodySchema = z.object({
   courseId: z.string().min(1),
@@ -110,6 +112,9 @@ export const POST = withRequestContext(
           mpAccessToken: true,
           plataformaVendedorId: true,
           automationEnabled: true,
+          monthlyAllowed: true,
+          monthlyEnabled: true,
+          monthlyScope: true,
         },
       }),
       prisma.tenantCourse.findFirst({
@@ -262,7 +267,14 @@ export const POST = withRequestContext(
       )
     }
 
-    const isMonthly = tenantCourse.paymentType === "MONTHLY"
+    // Tipo efetivo: se a unidade nao tem parcelado habilitado para a vitrine,
+    // o curso MONTHLY cai para ONE_TIME na compra self-service do lead.
+    const effectiveType = effectivePaymentType(
+      tenantCourse.paymentType,
+      tenant,
+      "vitrine",
+    )
+    const isMonthly = effectiveType === "MONTHLY"
     const monthlyMonths = isMonthly
       ? tenantCourse.course.monthlyMonthsMain ?? 12
       : null
@@ -273,7 +285,7 @@ export const POST = withRequestContext(
         studentId: student.id,
         tenantCourseId: tenantCourse.id,
         courseId: tenantCourse.courseId,
-        paymentType: tenantCourse.paymentType,
+        paymentType: effectiveType,
         status: "PENDING",
         gateway: "MP",
         originalAmount: basePrice,
@@ -295,6 +307,7 @@ export const POST = withRequestContext(
         telefone: data.fone,
         courseId: tenantCourse.courseId,
         courseSnapshot: tenantCourse.course.nome,
+        visitorId: readVisitorId(request),
       }).catch(swallow("loja_checkout.lead_link"))
     }
 

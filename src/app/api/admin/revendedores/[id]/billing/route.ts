@@ -91,6 +91,7 @@ export const PATCH = withRequestContextParams<{ id: string }>(
       asaasSubscriptionId: true,
       asaasPromoSubscriptionId: true,
       planValue: true,
+      status: true,
       owner: {
         select: { name: true, email: true, phone: true },
       },
@@ -311,6 +312,15 @@ export const PATCH = withRequestContextParams<{ id: string }>(
   if (clearSubscription) {
     updateData.asaasSubscriptionId = null
     updateData.asaasPromoSubscriptionId = null
+    // Revenda gratuita não tem cobrança no Asaas e, portanto, nunca recebe o
+    // webhook PAYMENT_RECEIVED que ativa o tenant. Se estava aguardando o
+    // primeiro pagamento (PENDING) ou suspensa por inadimplência (SUSPENDED),
+    // promove para ACTIVE — alinhado com a criação (status: isFree ? ACTIVE).
+    // Sem isso a loja gratuita fica presa e o checkout devolve TENANT_INACTIVE.
+    // CANCELLED é terminal e não é reativado aqui.
+    if (tenant.status === "PENDING" || tenant.status === "SUSPENDED") {
+      updateData.status = "ACTIVE"
+    }
   } else {
     if (newSubscriptionId) updateData.asaasSubscriptionId = newSubscriptionId
     if (newPromoSubscriptionId) updateData.asaasPromoSubscriptionId = newPromoSubscriptionId
@@ -326,6 +336,7 @@ export const PATCH = withRequestContextParams<{ id: string }>(
       asaasUpdated,
       subscriptionCreated: Boolean(newSubscriptionId),
       free: clearSubscription,
+      activated: updateData.status === "ACTIVE",
       promo: wantsPromo
         ? { months: parsed.data.promoMonths, value: parsed.data.promoValue }
         : null,

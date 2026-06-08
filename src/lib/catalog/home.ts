@@ -187,11 +187,13 @@ export function slugifyCategoria(nome: string): string {
     .replace(/^-+|-+$/g, "")
 }
 
-export async function loadCategorias(minCount = 3): Promise<CategoriaInfo[]> {
+export async function loadCategorias(minCount = 0): Promise<CategoriaInfo[]> {
   try {
-    // Fonte canonica: tabela Category curada pelo admin. So lista categorias
-    // ativas que possuam pelo menos `minCount` cursos visiveis na vitrine
-    // principal. Ordena por displayOrder primeiro, depois alfabetico.
+    // Fonte canonica: tabela Category curada pelo admin. Por padrao lista
+    // TODAS as categorias ativas no menu (sistema mae e revendas), inclusive
+    // as que ainda nao tem cursos. `minCount` opcional permite filtrar por um
+    // numero minimo de cursos visiveis quando o contexto exigir. Ordena por
+    // displayOrder primeiro, depois alfabetico.
     const categories = await prisma.category.findMany({
       where: { isActive: true },
       orderBy: [{ displayOrder: "asc" }, { name: "asc" }],

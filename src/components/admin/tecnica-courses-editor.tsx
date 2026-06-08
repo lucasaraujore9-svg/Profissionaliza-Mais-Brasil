@@ -24,7 +24,9 @@ interface TecnicaCoursesEditorProps {
   disabled?: boolean
 }
 
-const MAX_COURSES = 12
+// Padrão da seção: exatamente 8 cursos (ou nenhum). Espelha
+// TECNICA_SECTION_COUNT de src/lib/catalog/tecnica.ts.
+const MAX_COURSES = 8
 
 export function TecnicaCoursesEditor({
   courses,

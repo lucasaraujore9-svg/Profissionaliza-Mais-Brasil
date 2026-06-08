@@ -1,9 +1,11 @@
 import { cookies } from "next/headers"
 import { CourseRow } from "./course-row"
+import { TecnicaSection } from "./tecnica-section"
 import {
   CategoriesGridSection,
   InstitutionalSection,
 } from "./section-renderers"
+import { loadTecnicaSectionContent } from "@/lib/catalog/tecnica"
 import {
   loadHomeSections,
   resolveSectionCourses,
@@ -123,6 +125,14 @@ async function renderSection(
 
   if (cfg.kind === "institutional") {
     return <InstitutionalSection config={cfg as InstitutionalConfig} />
+  }
+
+  if (cfg.kind === "tecnica") {
+    // Lista/imagens padronizadas pela PMB; na vitrine de revendedor o link de
+    // destino e o rótulo são os da própria unidade (Tenant.tecnica*).
+    const { label, url, courses } = await loadTecnicaSectionContent(ctx.tenantId)
+    // TecnicaSection já retorna null quando não há cursos nem URL base.
+    return <TecnicaSection label={label} courses={courses} fallbackUrl={url} />
   }
 
   return null

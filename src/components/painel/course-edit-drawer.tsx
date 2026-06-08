@@ -24,6 +24,7 @@ interface CourseDetail {
   price: number
   parcelas: number | null
   paymentType: "ONE_TIME" | "MONTHLY"
+  monthlyAvailable: boolean
   isFeatured: boolean
   customDescription: string | null
   customCapaUrl: string | null
@@ -336,11 +337,12 @@ export function CourseEditDrawer({
                   <button
                     type="button"
                     onClick={() => setPaymentType("MONTHLY")}
+                    disabled={!detail?.monthlyAvailable}
                     className={`rounded-lg border px-3 py-2.5 text-left text-xs transition-colors ${
                       paymentType === "MONTHLY"
                         ? "border-[var(--color-pmb-green)] bg-[var(--color-pmb-lime-50)]"
                         : "border-gray-200 bg-white hover:border-gray-300"
-                    }`}
+                    } ${!detail?.monthlyAvailable ? "cursor-not-allowed opacity-50 hover:border-gray-200" : ""}`}
                   >
                     <div className="font-bold text-[var(--color-pmb-green-900)]">
                       Mensalidade
@@ -350,6 +352,13 @@ export function CourseEditDrawer({
                     </div>
                   </button>
                 </div>
+                {!detail?.monthlyAvailable && (
+                  <p className="mt-1.5 text-[11px] text-gray-500">
+                    Pagamento parcelado/mensalidade não está habilitado para sua
+                    unidade. Ative em Configurações → Pagamento (mediante liberação
+                    da PMB).
+                  </p>
+                )}
               </div>
 
               <div>

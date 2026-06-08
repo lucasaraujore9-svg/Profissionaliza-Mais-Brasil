@@ -43,8 +43,9 @@ export default function ReembolsoPage() {
 
           <h2>Após os 7 dias</h2>
           <p>
-            Passado o prazo, o acesso ao curso é vitalício e não há reembolso previsto — exceto em
-            casos excepcionais analisados individualmente por nossa equipe.
+            Passado o prazo, o acesso ao curso permanece liberado por 12 meses a partir da liberação
+            e não há reembolso previsto — exceto em casos excepcionais analisados individualmente por
+            nossa equipe.
           </p>
 
           <h2>Dúvidas?</h2>

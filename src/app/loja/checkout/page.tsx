@@ -5,6 +5,7 @@ import { PaymentInfo } from "@/components/loja/payment-info"
 import { getCurrentTenant } from "@/lib/tenant/current"
 import { applyCouponDiscount } from "@/lib/coupons/discount"
 import { prisma } from "@/lib/prisma"
+import { effectivePaymentType } from "@/lib/tenant/monthly-policy"
 
 interface CheckoutPageProps {
   searchParams: Promise<{
@@ -102,6 +103,13 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
           monthlyMonthsMain: true,
         },
       },
+      tenant: {
+        select: {
+          monthlyAllowed: true,
+          monthlyEnabled: true,
+          monthlyScope: true,
+        },
+      },
     },
   })
 
@@ -119,6 +127,13 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
   }
 
   const basePrice = Number(tenantCourse.price)
+  // Tipo efetivo na vitrine: se a unidade nao tem parcelado habilitado para a
+  // vitrine, MONTHLY cai para ONE_TIME (coerente com /api/loja/checkout).
+  const effectiveType = effectivePaymentType(
+    tenantCourse.paymentType,
+    tenantCourse.tenant,
+    "vitrine",
+  )
   // Parcelas efetivas da unidade (customParcelas tem prioridade). Para MONTHLY,
   // representa a quantidade de mensalidades. Espelha a hierarquia da vitrine.
   const effectiveParcelas =
@@ -171,7 +186,7 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
               finalPrice={finalPrice}
               couponCode={validatedCoupon?.code ?? null}
               parcelasSugeridas={effectiveParcelas}
-              paymentType={tenantCourse.paymentType}
+              paymentType={effectiveType}
               monthlyMonths={effectiveParcelas ?? tenantCourse.course.monthlyMonthsMain}
             />
           </aside>

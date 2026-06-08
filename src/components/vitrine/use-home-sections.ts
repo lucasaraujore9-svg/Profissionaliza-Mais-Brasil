@@ -13,6 +13,7 @@ export type SectionKind =
   | "category_courses"
   | "categories_grid"
   | "institutional"
+  | "tecnica"
 
 export type SectionMode = "manual" | "random"
 export type SectionCount = 4 | 8
@@ -74,11 +75,16 @@ export interface InstitutionalConfig {
   items: InstitutionalItem[]
 }
 
+export interface TecnicaConfig {
+  kind: "tecnica"
+}
+
 export type AnySectionConfig =
   | BestsellersConfig
   | CategoryCoursesConfig
   | CategoriesGridConfig
   | InstitutionalConfig
+  | TecnicaConfig
 
 export interface SectionRecord {
   id: string

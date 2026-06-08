@@ -26,6 +26,9 @@ export interface ConfigData {
     status: "PENDING" | "ACTIVE" | "SUSPENDED" | "CANCELLED"
     mpConnected: boolean
     mpUserId: string | null
+    monthlyAllowed: boolean
+    monthlyEnabled: boolean
+    monthlyScope: "DIRECT_ONLY" | "DIRECT_AND_VITRINE"
   }
 }
 

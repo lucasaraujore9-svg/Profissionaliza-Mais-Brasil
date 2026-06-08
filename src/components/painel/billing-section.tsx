@@ -17,6 +17,10 @@ export function BillingSection({ data, onUpdate }: BillingSectionProps) {
   const [billingSaving, setBillingSaving] = useState(false)
   const [billingError, setBillingError] = useState<string | null>(null)
 
+  const [monthlyEnabled, setMonthlyEnabled] = useState(data.tenant.monthlyEnabled)
+  const [monthlySaving, setMonthlySaving] = useState(false)
+  const [monthlyError, setMonthlyError] = useState<string | null>(null)
+
   const [connected, setConnected] = useState(data.tenant.mpConnected)
   const [tokenInput, setTokenInput] = useState("")
   const [mpSaving, setMpSaving] = useState(false)
@@ -45,6 +49,29 @@ export function BillingSection({ data, onUpdate }: BillingSectionProps) {
       setBillingError("Erro de rede")
     } finally {
       setBillingSaving(false)
+    }
+  }
+
+  async function toggleMonthly(next: boolean) {
+    setMonthlySaving(true)
+    setMonthlyError(null)
+    try {
+      const response = await fetch("/api/painel/config/mensalidade", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled: next }),
+      })
+      const json = await response.json().catch(() => null)
+      if (!response.ok) {
+        setMonthlyError(json?.error ?? "Erro ao salvar")
+        return
+      }
+      setMonthlyEnabled(next)
+      onUpdate({ tenant: { ...data.tenant, monthlyEnabled: next } })
+    } catch {
+      setMonthlyError("Erro de rede")
+    } finally {
+      setMonthlySaving(false)
     }
   }
 
@@ -161,6 +188,66 @@ export function BillingSection({ data, onUpdate }: BillingSectionProps) {
 
         {billingError && (
           <p className="mt-3 text-xs text-red-600">{billingError}</p>
+        )}
+      </div>
+
+      <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm lg:p-8">
+        <div className="flex items-start justify-between gap-3">
+          <h3 className="text-sm font-semibold text-[var(--color-pmb-green-900)]">
+            Pagamento parcelado (mensalidade)
+          </h3>
+          <span
+            className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+              data.tenant.monthlyAllowed
+                ? "bg-[var(--color-pmb-lime-50)] text-[var(--color-pmb-green-900)]"
+                : "bg-gray-100 text-gray-600"
+            }`}
+          >
+            {data.tenant.monthlyAllowed ? "Liberado" : "Indisponível"}
+          </span>
+        </div>
+        <p className="mt-1 text-xs text-gray-600">
+          Quando ativado, você pode marcar cursos como mensalidade em
+          Catálogo → Editar curso. O alcance do parcelado é definido pela PMB:{" "}
+          <strong className="text-[var(--color-pmb-green-900)]">
+            {data.tenant.monthlyScope === "DIRECT_AND_VITRINE"
+              ? "vendas diretas e vitrine"
+              : "apenas vendas diretas"}
+          </strong>
+          .
+        </p>
+
+        {data.tenant.monthlyAllowed ? (
+          <label className="mt-5 flex cursor-pointer items-start gap-3 rounded-lg border border-gray-200 bg-gray-50 p-3 transition hover:border-[var(--color-pmb-green)]">
+            <input
+              type="checkbox"
+              checked={monthlyEnabled}
+              disabled={monthlySaving}
+              onChange={(e) => toggleMonthly(e.target.checked)}
+              className="mt-0.5 h-4 w-4 rounded border-gray-300 text-[var(--color-pmb-green)] focus:ring-[var(--color-pmb-green)]"
+            />
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-[var(--color-pmb-green-900)]">
+                Habilitar pagamento parcelado nos meus cursos
+              </p>
+              <p className="text-xs text-gray-500">
+                Cursos já marcados como mensalidade voltam a ser cobrados à vista
+                se você desativar.
+              </p>
+            </div>
+            {monthlySaving && (
+              <Loader2 className="mt-0.5 h-4 w-4 animate-spin text-gray-400" />
+            )}
+          </label>
+        ) : (
+          <div className="mt-5 rounded-lg border border-dashed border-gray-300 bg-gray-50 p-3 text-xs text-gray-500">
+            O pagamento parcelado ainda não foi liberado para sua unidade. Fale
+            com seu gerente PMB para habilitar.
+          </div>
+        )}
+
+        {monthlyError && (
+          <p className="mt-3 text-xs text-red-600">{monthlyError}</p>
         )}
       </div>
 

@@ -12,9 +12,19 @@ interface HomeSectionsPanelProps {
   apiBase: string
   /** Mostrado no topo do card como dica em 1 linha. */
   hint?: string
+  /**
+   * Se o escopo pode editar o conteúdo da seção "Cursos Técnicos" (cursos,
+   * imagens, link, rótulo). `true` no admin (sistema mãe); `false` no painel
+   * do revendedor (que só reordena/liga-desliga). Default: false.
+   */
+  canEditTecnica?: boolean
 }
 
-export function HomeSectionsPanel({ apiBase, hint }: HomeSectionsPanelProps) {
+export function HomeSectionsPanel({
+  apiBase,
+  hint,
+  canEditTecnica = false,
+}: HomeSectionsPanelProps) {
   const {
     sections,
     options,
@@ -75,6 +85,7 @@ export function HomeSectionsPanel({ apiBase, hint }: HomeSectionsPanelProps) {
           <SectionList
             sections={sections}
             options={options}
+            canEditTecnica={canEditTecnica}
             onToggleEnabled={toggleEnabled}
             onMove={move}
             onReorder={reorder}

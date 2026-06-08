@@ -13,6 +13,8 @@ import {
   storeJsonLd,
   webSiteJsonLd,
 } from "@/lib/seo/jsonld"
+import { VisitorTracker } from "@/components/loja/visitor-tracker"
+import { isPmbAutomationEnabled } from "@/lib/automation/context"
 
 const PMB_GREEN_DEFAULT = "#025918"
 const PMB_GOLD_DEFAULT = "#F2B705"
@@ -62,9 +64,13 @@ export default async function MainLayout({
 
   // Sem tenant = site institucional PMB (comportamento original).
   if (!tenant) {
-    const tecnica = await loadPmbTecnicaConfig()
+    const [tecnica, pmbAutomationOn] = await Promise.all([
+      loadPmbTecnicaConfig(),
+      isPmbAutomationEnabled(),
+    ])
     return (
       <>
+        {pmbAutomationOn ? <VisitorTracker /> : null}
         <JsonLd
           data={[
             organizationJsonLd(),
@@ -114,6 +120,7 @@ export default async function MainLayout({
 
   return (
     <div style={customStyle} className="contents">
+      {tenant.automationEnabled ? <VisitorTracker /> : null}
       {origin ? (
         <JsonLd
           data={[

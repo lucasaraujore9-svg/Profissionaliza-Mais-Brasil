@@ -5,6 +5,7 @@ import {
   BookOpen,
   ChevronDown,
   ChevronUp,
+  GraduationCap,
   GripVertical,
   Layers,
   Loader2,
@@ -32,6 +33,7 @@ import {
   CategoriesGridEditor,
   CategoryCoursesEditor,
   InstitutionalEditor,
+  TecnicaEditor,
 } from "./section-editors"
 import type {
   AnySectionConfig,
@@ -45,6 +47,13 @@ import type {
 } from "./use-home-sections"
 import { cn } from "@/lib/utils"
 
+/**
+ * Mínimo de cursos na categoria para ATIVAR a seção de categoria na home.
+ * Espelha CATEGORY_SECTION_MIN_COURSES de src/lib/home/sections.ts (mantido
+ * aqui pra não puxar Prisma pro bundle client). O servidor é a fonte da verdade.
+ */
+const CATEGORY_SECTION_MIN_COURSES = 8
+
 // ---------------------------------------------------------------------------
 // Lista de sanfonas
 // ---------------------------------------------------------------------------
@@ -52,6 +61,8 @@ import { cn } from "@/lib/utils"
 interface SectionListProps {
   sections: SectionRecord[]
   options: SectionOptions
+  /** Se a seção "Cursos Técnicos" permite editar o conteúdo (admin/sistema mãe). */
+  canEditTecnica: boolean
   onToggleEnabled: (id: string, enabled: boolean) => void
   onMove: (id: string, delta: -1 | 1) => void
   onReorder: (nextOrder: string[]) => void
@@ -67,6 +78,7 @@ interface SectionListProps {
 export function SectionList({
   sections,
   options,
+  canEditTecnica,
   onToggleEnabled,
   onMove,
   onReorder,
@@ -126,7 +138,12 @@ export function SectionList({
         // base-ui devolve string | string[]; multiple => array
         const opened = Array.isArray(open) ? open : open ? [open] : []
         for (const id of opened) {
-          if (typeof id === "string") onStartEditing(id)
+          if (typeof id !== "string") continue
+          // Técnica não usa o fluxo de draft/config (conteúdo vive em
+          // SystemSettings, editor autossuficiente) — não cria draft.
+          const sec = sections.find((x) => x.id === id)
+          if (sec && sec.kind === "tecnica") continue
+          onStartEditing(id)
         }
       }}
     >
@@ -136,12 +153,19 @@ export function SectionList({
         const canMoveDown = index < sections.length - 1
         const isDragging = draggingId === s.id
         const isOver = overId === s.id && draggingId !== s.id
-        const categoryName =
+        const category =
           s.kind === "category_courses"
-            ? categoryById.get(
-                (s.config as CategoryCoursesConfig).categoryId,
-              )?.name
+            ? categoryById.get((s.config as CategoryCoursesConfig).categoryId)
             : undefined
+        const categoryName = category?.name
+        // Seção de categoria só pode ser ATIVADA quando a categoria atinge o
+        // mínimo de cursos. Já ativada, não trava (permite desativar). Gate
+        // espelhado no servidor (updateSection).
+        const categoryCourseCount = category?.courseCount ?? 0
+        const blockedByCount =
+          s.kind === "category_courses" &&
+          !s.enabled &&
+          categoryCourseCount < CATEGORY_SECTION_MIN_COURSES
         // Draft em edição. Se não existe, mostra config persistida (read-only
         // até abrir a sanfona, que dispara onStartEditing).
         const draft = drafts[s.id]
@@ -231,21 +255,26 @@ export function SectionList({
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation()
+                        if (blockedByCount) return
                         onToggleEnabled(s.id, !s.enabled)
                       }}
-                      className="shrink-0"
+                      className={cn("shrink-0", blockedByCount && "cursor-not-allowed")}
                       aria-label={
-                        s.enabled
-                          ? "Desativar esta seção na home"
-                          : "Ativar esta seção na home"
+                        blockedByCount
+                          ? `Categoria precisa de ${CATEGORY_SECTION_MIN_COURSES} cursos para ativar`
+                          : s.enabled
+                            ? "Desativar esta seção na home"
+                            : "Ativar esta seção na home"
                       }
                     >
-                      <Switch checked={s.enabled} />
+                      <Switch checked={s.enabled} disabled={blockedByCount} />
                     </TooltipTrigger>
                     <TooltipContent>
-                      {s.enabled
-                        ? "Clique para desativar — esta seção não vai mais aparecer na home"
-                        : "Clique para ativar — esta seção vai aparecer na home"}
+                      {blockedByCount
+                        ? `Esta categoria tem ${categoryCourseCount} curso(s). Adicione pelo menos ${CATEGORY_SECTION_MIN_COURSES} para ativar esta seção.`
+                        : s.enabled
+                          ? "Clique para desativar — esta seção não vai mais aparecer na home"
+                          : "Clique para ativar — esta seção vai aparecer na home"}
                     </TooltipContent>
                   </Tooltip>
                 )}
@@ -268,6 +297,12 @@ export function SectionList({
                       <p className="truncate text-[11.5px] text-zinc-500">
                         {summaryOfSection({ ...s, config: effectiveConfig })}
                       </p>
+                      {blockedByCount && (
+                        <p className="truncate text-[11px] font-medium text-amber-700">
+                          {categoryCourseCount}/{CATEGORY_SECTION_MIN_COURSES} cursos — adicione mais{" "}
+                          {CATEGORY_SECTION_MIN_COURSES - categoryCourseCount} para poder ativar
+                        </p>
+                      )}
                     </div>
                   </div>
                 </AccordionTrigger>
@@ -308,6 +343,11 @@ export function SectionList({
               </div>
             </AccordionHeader>
 
+            {s.kind === "tecnica" ? (
+              <AccordionContent>
+                <TecnicaEditor canEdit={canEditTecnica} />
+              </AccordionContent>
+            ) : (
             <AccordionContent>
               <div className="space-y-4">
                 <EditorForKind
@@ -349,6 +389,7 @@ export function SectionList({
                 </div>
               </div>
             </AccordionContent>
+            )}
           </AccordionItem>
         )
       })}
@@ -381,6 +422,11 @@ function SectionIcon({ kind }: { kind: SectionRecord["kind"] }) {
       icon: Megaphone,
       bg: "bg-violet-100",
       fg: "text-violet-600",
+    },
+    tecnica: {
+      icon: GraduationCap,
+      bg: "bg-[var(--color-pmb-gold,#F2B705)]/15",
+      fg: "text-[var(--color-pmb-green)]",
     },
   }
   const { icon: Icon, bg, fg } = map[kind]
@@ -419,6 +465,8 @@ function titleOfSection(
       const c = s.config as InstitutionalConfig
       return c.title || labelOfVariant(c.variant)
     }
+    case "tecnica":
+      return "Cursos Técnicos"
   }
 }
 
@@ -445,6 +493,8 @@ function summaryOfSection(s: SectionRecord): string {
       const c = s.config as InstitutionalConfig
       return `Bloco: ${labelOfVariant(c.variant)}`
     }
+    case "tecnica":
+      return "Lista padronizada pela administração · 8 cursos"
   }
 }
 
@@ -564,5 +614,8 @@ function EditorForKind({
       )
     case "institutional":
       return <InstitutionalEditor section={section} onPatch={onPatch} />
+    case "tecnica":
+      // Técnica é renderizada fora do EditorForKind (conteúdo autossuficiente).
+      return null
   }
 }

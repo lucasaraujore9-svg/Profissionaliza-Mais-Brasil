@@ -11,6 +11,7 @@ import { withRequestContext } from "@/lib/observability/with-request-context"
 import { contextLogger } from "@/lib/logger"
 import { queueLeadMessage } from "@/lib/automation/dispatch"
 import { resolveTenantFromRequest } from "@/lib/tenant/from-request"
+import { linkVisitorToLead, readVisitorId } from "@/lib/automation/tracking"
 
 const CONSENT_VERSION = "2026-05-v1"
 const DEDUP_WINDOW_MS = 24 * 60 * 60 * 1000
@@ -115,6 +116,21 @@ export const POST = withRequestContext(
     const ipAddress =
       request.headers.get("x-forwarded-for")?.split(",")[0].trim() ?? null
     const userAgent = request.headers.get("user-agent") ?? null
+    // Cookie do visitante anonimo — usado para herdar o historico de navegacao.
+    const visitorId = readVisitorId(request)
+
+    // Liga o cookie ao lead e herda todo o historico de navegacao anonimo
+    // (anterior a captura). Best-effort: nunca quebra o formulario.
+    const inheritVisitorHistory = async (leadId: string): Promise<void> => {
+      try {
+        await linkVisitorToLead({ visitorId, leadId, tenantId: tenant.id })
+      } catch (err) {
+        contextLogger().error(
+          { err, event: "loja.leads.visitor_link_failed", leadId },
+          "Falha ao herdar historico de navegacao para o lead",
+        )
+      }
+    }
 
     // Dedup: lead recente (24h) do mesmo tenant + email + curso => reaproveita
     // sem re-disparar WA. Evita spam acidental e mensagens duplicadas.
@@ -130,6 +146,9 @@ export const POST = withRequestContext(
     })
 
     if (existing) {
+      // Mesmo reaproveitando o lead, vinculamos o cookie atual e herdamos a
+      // navegacao acumulada desde o ultimo contato.
+      await inheritVisitorHistory(existing.id)
       return NextResponse.json(
         {
           data: { id: existing.id, deduped: true },
@@ -163,6 +182,8 @@ export const POST = withRequestContext(
       },
       select: { id: true },
     })
+
+    await inheritVisitorHistory(lead.id)
 
     // Disparo do WhatsApp e fire-and-forget. Falha aqui nao quebra o form.
     queueLeadMessage({

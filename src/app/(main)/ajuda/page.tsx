@@ -15,7 +15,7 @@ const FAQ = [
   },
   {
     p: "Por quanto tempo posso assistir às aulas?",
-    r: "Acesso ininterrupto enquanto o curso estiver disponível na plataforma — estude no seu ritmo, sem prazo determinado.",
+    r: "O acesso ao curso é de 12 meses, contados a partir da liberação após a confirmação do pagamento. Dentro desse período você estuda no seu ritmo, quantas vezes quiser. Avisamos por email e na sua área do aluno quando o prazo estiver chegando ao fim.",
   },
   {
     p: "Posso assistir pelo celular?",

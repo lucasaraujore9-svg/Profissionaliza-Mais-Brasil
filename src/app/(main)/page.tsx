@@ -1,15 +1,13 @@
 import { HeroBanner } from "@/components/main/home/hero-banner"
-import { TecnicaSection } from "@/components/main/home/tecnica-section"
 import { Testimonials } from "@/components/main/home/testimonials"
 import { DynamicHomeSections } from "@/components/main/home/dynamic-home-sections"
 import { prisma } from "@/lib/prisma"
 import { loadShowcase } from "@/lib/catalog/home"
-import { loadPmbTecnicaConfig } from "@/lib/catalog/tecnica"
 
 export const dynamic = "force-dynamic"
 
 export default async function LandingPage() {
-  const [showcase, bannerSlides, tecnica] = await Promise.all([
+  const [showcase, bannerSlides] = await Promise.all([
     loadShowcase(),
     prisma.bannerSlide.findMany({
       where: { tenantId: null, active: true },
@@ -21,21 +19,16 @@ export default async function LandingPage() {
         linkUrl: true,
       },
     }),
-    loadPmbTecnicaConfig(),
   ])
 
   return (
     <>
       <HeroBanner showcase={showcase} slides={bannerSlides} />
+      {/* A seção "Cursos Técnicos" agora é uma HomeSection (kind="tecnica")
+          renderizada dentro de DynamicHomeSections, na posição configurada na
+          aba "Seções da home". */}
       <DynamicHomeSections tenantId={null} />
       <Testimonials />
-      {tecnica.enabled && (
-        <TecnicaSection
-          label={tecnica.label}
-          courses={tecnica.courses}
-          fallbackUrl={tecnica.url}
-        />
-      )}
     </>
   )
 }

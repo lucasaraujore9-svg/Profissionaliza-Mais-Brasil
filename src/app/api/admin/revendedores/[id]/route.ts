@@ -299,6 +299,10 @@ export const GET = withRequestContextParams<{ id: string }>(
         automationEnabled: tenant.automationEnabled,
         waConnectedPhone: tenant.waConnectedPhone,
         waStatus: tenant.waStatus,
+        // Pagamento parcelado/mensalidade
+        monthlyAllowed: tenant.monthlyAllowed,
+        monthlyEnabled: tenant.monthlyEnabled,
+        monthlyScope: tenant.monthlyScope,
       },
       referrer: tenant.referrer
         ? {

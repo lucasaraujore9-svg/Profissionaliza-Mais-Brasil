@@ -1,10 +1,6 @@
 import { redirect } from "next/navigation"
 import { TecnicaRedirect } from "@/components/main/tecnica-redirect"
-import {
-  loadPmbTecnicaConfig,
-  tecnicaFromTenant,
-  type TecnicaConfig,
-} from "@/lib/catalog/tecnica"
+import { loadTecnicaSectionContent } from "@/lib/catalog/tecnica"
 import { getCurrentTenant } from "@/lib/tenant/current"
 import { isAllowedTecnicaUrl } from "@/lib/catalog/tecnica-redirect"
 
@@ -36,23 +32,19 @@ export default async function CursosTecnicosRedirectPage({
   searchParams,
 }: PageProps) {
   const { n, u } = await searchParams
+  if (!u) redirect("/")
 
-  // Resolve config: tenant primeiro (se request vem de vitrine),
-  // fallback para PMB.
-  let tecnica: TecnicaConfig
+  // Allow-list anti-open-redirect a partir da mesma fonte que renderiza a seção:
+  // PMB no domínio principal; link da própria unidade na vitrine do revendedor.
   const tenant = await getCurrentTenant()
-  if (tenant) {
-    tecnica = tecnicaFromTenant(tenant)
-  } else {
-    tecnica = await loadPmbTecnicaConfig()
-  }
+  const content = await loadTecnicaSectionContent(tenant?.id ?? null)
 
-  if (!tecnica.enabled || !tecnica.url || !u) {
-    redirect("/")
-  }
+  const allowed = [
+    ...(content.url ? [content.url] : []),
+    ...content.courses.map((c) => c.url),
+  ].filter((href): href is string => Boolean(href))
 
-  const allowed = [tecnica.url, ...tecnica.courses.map((c) => c.url)]
-  if (!isAllowedTecnicaUrl(u, allowed)) {
+  if (allowed.length === 0 || !isAllowedTecnicaUrl(u, allowed)) {
     redirect("/")
   }
 

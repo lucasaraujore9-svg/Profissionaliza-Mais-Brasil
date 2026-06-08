@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { contextLogger } from "@/lib/logger"
 import { queueLeadMessage } from "./dispatch"
+import { linkVisitorToLead } from "./tracking"
 import { StudentLeadStage } from "@prisma/client"
 
 const DEDUP_WINDOW_MS = 48 * 60 * 60 * 1000
@@ -14,6 +15,8 @@ interface UpsertLeadFromCheckoutArgs {
   telefone: string | null
   courseId: string
   courseSnapshot: string
+  // Cookie pmb_vid do visitante — herda o historico de navegacao para o lead.
+  visitorId?: string | null
 }
 
 /**
@@ -40,11 +43,9 @@ export async function upsertLeadFromCheckout(
     select: { id: true, stage: true, enrollmentId: true },
   })
 
-  if (existing) {
-    if (existing.enrollmentId && existing.enrollmentId !== args.enrollmentId) {
-      await createNewLead(args)
-      return
-    }
+  let leadId: string
+
+  if (existing && !(existing.enrollmentId && existing.enrollmentId !== args.enrollmentId)) {
     await prisma.$transaction([
       prisma.studentLead.update({
         where: { id: existing.id },
@@ -65,18 +66,32 @@ export async function upsertLeadFromCheckout(
         },
       }),
     ])
-    return
+    leadId = existing.id
+  } else {
+    leadId = await createNewLead(args)
   }
 
-  await createNewLead(args)
+  // Herda o historico de navegacao anonimo para o lead (best-effort).
+  try {
+    await linkVisitorToLead({
+      visitorId: args.visitorId,
+      leadId,
+      tenantId: args.tenantId,
+    })
+  } catch (err) {
+    contextLogger().error(
+      { err, event: "automation.leads.visitor_link_failed", leadId },
+      "Falha ao herdar historico de navegacao no checkout",
+    )
+  }
 }
 
-async function createNewLead(args: UpsertLeadFromCheckoutArgs): Promise<void> {
+async function createNewLead(args: UpsertLeadFromCheckoutArgs): Promise<string> {
   const telefone = args.telefone
     ? normalizeE164(args.telefone)
     : "+5500000000000"
 
-  await prisma.studentLead.create({
+  const lead = await prisma.studentLead.create({
     data: {
       tenantId: args.tenantId,
       nome: args.nome,
@@ -94,7 +109,9 @@ async function createNewLead(args: UpsertLeadFromCheckoutArgs): Promise<void> {
         },
       },
     },
+    select: { id: true },
   })
+  return lead.id
 }
 
 interface MarkLeadAsWonArgs {

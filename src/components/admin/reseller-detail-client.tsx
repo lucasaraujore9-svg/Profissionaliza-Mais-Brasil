@@ -27,6 +27,10 @@ import {
 } from "./reseller-referral-config"
 import { ResellerTecnicaConfig } from "./reseller-tecnica-config"
 import { ResellerAutomationConfig } from "./reseller-automation-config"
+import {
+  ResellerMonthlyConfig,
+  type MonthlyScope,
+} from "./reseller-monthly-config"
 
 interface DetailResponse {
   reseller: ResellerProfileData & {
@@ -51,6 +55,9 @@ interface DetailResponse {
     automationEnabled: boolean
     waConnectedPhone: string | null
     waStatus: string
+    monthlyAllowed: boolean
+    monthlyEnabled: boolean
+    monthlyScope: MonthlyScope
   }
   referrer: ReferrerSummary | null
   referralStats: ReferralStats
@@ -156,6 +163,13 @@ export function ResellerDetailClient({
             automationEnabled={data.reseller.automationEnabled}
             waConnectedPhone={data.reseller.waConnectedPhone}
             waStatus={data.reseller.waStatus}
+            onSaved={load}
+          />
+          <ResellerMonthlyConfig
+            tenantId={tenantId}
+            monthlyAllowed={data.reseller.monthlyAllowed}
+            monthlyEnabled={data.reseller.monthlyEnabled}
+            monthlyScope={data.reseller.monthlyScope}
             onSaved={load}
           />
         </div>

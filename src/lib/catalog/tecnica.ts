@@ -22,7 +22,13 @@ export interface TecnicaConfig {
 }
 
 const DEFAULT_LABEL = "Cursos Técnicos"
-const MAX_COURSES = 12
+/**
+ * Padrão da seção "Cursos Técnicos": exatamente 8 cursos (grid 4×2), igual às
+ * seções de categoria com count=8. A lista cadastrada deve ter 0 (seção só com
+ * CTA) ou exatamente 8 cursos — validado em `validateTecnicaCoursesInput`.
+ */
+export const TECNICA_SECTION_COUNT = 8
+const MAX_COURSES = TECNICA_SECTION_COUNT
 
 /**
  * Faz parse do JSON cru do Prisma para uma lista de TecnicaCourse normalizada
@@ -83,42 +89,6 @@ export function tecnicaFromTenant(
 }
 
 /**
- * Config da Unidade Técnica para a vitrine de um revendedor, com a lista de
- * cursos e imagens **padronizada pela PMB** (item 10 — aperfeiçoamentos).
- *
- * A unidade controla apenas: ativar/desativar, rótulo e a URL de destino
- * (link da escola técnica parceira). Os cursos exibidos e suas imagens vêm da
- * configuração institucional (`pmbCourses`) — assim a identidade visual fica
- * uniforme em toda a rede e a unidade não consegue alterar a lista/imagens.
- */
-export function tecnicaForTenant(
-  tenant: Pick<
-    CurrentTenant,
-    "tecnicaEnabled" | "tecnicaUrl" | "tecnicaLabel"
-  > | null,
-  pmbCourses: TecnicaCourse[],
-): TecnicaConfig {
-  if (!tenant) return { enabled: false, url: null, label: DEFAULT_LABEL, courses: [] }
-  const trimmedUrl = tenant.tecnicaUrl?.trim() ?? ""
-  const safe = tenant.tecnicaEnabled && trimmedUrl.length > 0
-  const finalUrl = safe ? trimmedUrl : null
-  return {
-    enabled: safe,
-    url: finalUrl,
-    label: tenant.tecnicaLabel?.trim() || DEFAULT_LABEL,
-    // Nome + imagem herdados da PMB; destino sempre a URL da unidade.
-    courses: safe
-      ? pmbCourses.slice(0, MAX_COURSES).map((c, i) => ({
-          name: c.name,
-          image: c.image,
-          url: finalUrl ?? "",
-          order: i,
-        }))
-      : [],
-  }
-}
-
-/**
  * Lista de cursos técnicos padronizada pela PMB, **independente** do flag
  * `tecnicaEnabled` da PMB — usada para herança nas vitrines dos revendedores
  * (item 10). Assim, mesmo que a PMB não exiba a seção na própria home, a lista
@@ -131,7 +101,7 @@ export async function loadPmbTecnicaCourses(): Promise<TecnicaCourse[]> {
       select: { tecnicaUrl: true, tecnicaCourses: true },
     })
     if (!settings) return []
-    // A URL é irrelevante nesta lista de herança: `tecnicaForTenant()` sempre
+    // A URL é irrelevante nesta lista de herança: `loadTecnicaSectionContent()`
     // sobrescreve o destino com a URL da própria unidade. Usamos um placeholder
     // não-vazio como fallback para que cursos institucionais cadastrados só com
     // nome+imagem (sem URL própria) NÃO sejam descartados por `parseTecnicaCourses`
@@ -140,6 +110,60 @@ export async function loadPmbTecnicaCourses(): Promise<TecnicaCourse[]> {
     return parseTecnicaCourses(settings.tecnicaCourses, settings.tecnicaUrl ?? "#")
   } catch {
     return []
+  }
+}
+
+/**
+ * Conteúdo da seção "Cursos Técnicos" para a home.
+ *
+ * - **PMB (tenantId null):** lista, imagens, rótulo e URL vêm da configuração
+ *   institucional (`SystemSettings.tecnica*`).
+ * - **Vitrine de revendedor (tenantId):** a **lista e as imagens** são
+ *   padronizadas pela PMB (`loadPmbTecnicaCourses`), mas o **link de destino e o
+ *   rótulo são do próprio revendedor** (`Tenant.tecnicaUrl/Label`, configurados
+ *   pelo admin por unidade). Cada card aponta para o link da unidade. Sem link
+ *   configurado, a seção não tem destino e é omitida.
+ *
+ * **Ignora** `tecnicaEnabled`: a exibição da seção na home é controlada pelo
+ * `enabled` do próprio `HomeSection` (kind="tecnica"), não pelo flag de
+ * menu/categoria. A unidade só reordena/liga-desliga a seção; não edita cursos.
+ */
+export async function loadTecnicaSectionContent(
+  tenantId: string | null,
+): Promise<{ label: string; url: string | null; courses: TecnicaCourse[] }> {
+  try {
+    if (!tenantId) {
+      const settings = await prisma.systemSettings.findUnique({
+        where: { id: "default" },
+        select: { tecnicaUrl: true, tecnicaLabel: true, tecnicaCourses: true },
+      })
+      const url = settings?.tecnicaUrl?.trim() || null
+      const label = settings?.tecnicaLabel?.trim() || DEFAULT_LABEL
+      // Placeholder "#" garante que cursos cadastrados só com nome+imagem (sem
+      // URL própria) não sejam descartados por `parseTecnicaCourses` quando não
+      // há URL base.
+      const courses = parseTecnicaCourses(settings?.tecnicaCourses, url ?? "#")
+      return { label, url, courses }
+    }
+
+    // Vitrine de revendedor: lista/imagens da PMB + link/rótulo da unidade.
+    const [tenant, pmbCourses] = await Promise.all([
+      prisma.tenant.findUnique({
+        where: { id: tenantId },
+        select: { tecnicaUrl: true, tecnicaLabel: true },
+      }),
+      loadPmbTecnicaCourses(),
+    ])
+    const url = tenant?.tecnicaUrl?.trim() || null
+    const label = tenant?.tecnicaLabel?.trim() || DEFAULT_LABEL
+    // Sem link da unidade não há para onde redirecionar — omite a seção.
+    if (!url) return { label, url: null, courses: [] }
+    const courses = pmbCourses
+      .slice(0, MAX_COURSES)
+      .map((c, i) => ({ name: c.name, image: c.image, url, order: i }))
+    return { label, url, courses }
+  } catch {
+    return { label: DEFAULT_LABEL, url: null, courses: [] }
   }
 }
 
@@ -177,8 +201,13 @@ export function validateTecnicaCoursesInput(
 ): { ok: true; courses: TecnicaCourse[] } | { ok: false; error: string } {
   if (raw == null) return { ok: true, courses: [] }
   if (!Array.isArray(raw)) return { ok: false, error: "courses deve ser uma lista" }
-  if (raw.length > MAX_COURSES) {
-    return { ok: false, error: `Máximo ${MAX_COURSES} cursos` }
+  // Padrão fixo: a seção exibe exatamente 8 cursos. Aceita lista vazia (seção
+  // só com CTA) ou exatamente 8 — nunca um número intermediário.
+  if (raw.length !== 0 && raw.length !== TECNICA_SECTION_COUNT) {
+    return {
+      ok: false,
+      error: `A seção Cursos Técnicos exige exatamente ${TECNICA_SECTION_COUNT} cursos (ou nenhum). Você enviou ${raw.length}.`,
+    }
   }
   const out: TecnicaCourse[] = []
   for (let i = 0; i < raw.length; i++) {

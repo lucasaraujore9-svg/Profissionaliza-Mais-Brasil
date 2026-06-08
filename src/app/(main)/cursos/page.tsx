@@ -14,7 +14,7 @@ export default async function CursosPage({
 
   const [{ cursos, total }, categorias] = await Promise.all([
     loadCatalogo({ q, categoriaSlug }),
-    loadCategorias(1),
+    loadCategorias(0),
   ])
 
   const categoriaAtiva = categorias.find((c) => c.slug === categoriaSlug)

@@ -81,6 +81,20 @@ export async function getPmbAutomationContext(): Promise<AutomationContext> {
 }
 
 /**
+ * Leitura leve do flag de automacao da vitrine PMB, sem o upsert de
+ * getPmbAutomationContext (pesado demais para gates de alto volume, como o
+ * tracking de page view ou o layout). Default = true, coerente com o default
+ * do schema (pmb_automation_enabled).
+ */
+export async function isPmbAutomationEnabled(): Promise<boolean> {
+  const settings = await prisma.systemSettings.findUnique({
+    where: { id: "default" },
+    select: { pmbAutomationEnabled: true },
+  })
+  return settings?.pmbAutomationEnabled ?? true
+}
+
+/**
  * Dado o tenantId (null = PMB), retorna o contexto unificado.
  */
 export async function resolveAutomationContext(

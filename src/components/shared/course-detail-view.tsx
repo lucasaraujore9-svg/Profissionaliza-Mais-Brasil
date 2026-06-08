@@ -72,7 +72,7 @@ const PARA_QUEM = [
 const FAQ = [
   {
     q: "Quanto tempo tenho para concluir o curso?",
-    a: "Você tem acesso vitalício. Pode estudar no seu ritmo, parar e voltar quando quiser, sem prazo de conclusão.",
+    a: "Você tem 12 meses de acesso a partir da liberação do curso. Pode estudar no seu ritmo, parar e voltar quando quiser dentro desse período.",
   },
   {
     q: "O certificado é reconhecido?",

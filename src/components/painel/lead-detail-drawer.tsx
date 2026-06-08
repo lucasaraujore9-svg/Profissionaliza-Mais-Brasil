@@ -13,6 +13,8 @@ import {
   Activity,
   MessageCircle,
   GraduationCap,
+  Footprints,
+  FileText,
 } from "lucide-react"
 import { STAGE_META, type StageKey } from "./lead-kanban-column"
 
@@ -32,6 +34,16 @@ interface CourseTimelineEntry {
   createdAt: string
 }
 
+interface NavigationEntry {
+  id: string
+  kind: "PAGE_VIEW" | "COURSE_VIEW"
+  path: string
+  title: string | null
+  courseName: string | null
+  referrer: string | null
+  createdAt: string
+}
+
 interface LeadDetail {
   id: string
   nome: string
@@ -47,6 +59,7 @@ interface LeadDetail {
   createdAt: string
   updatedAt: string
   courseTimeline: CourseTimelineEntry[]
+  navigation: NavigationEntry[]
   activities: LeadActivity[]
 }
 
@@ -90,25 +103,30 @@ export function LeadDetailDrawer({
   const [waSending, setWaSending] = useState(false)
   const [waError, setWaError] = useState<string | null>(null)
 
-  const load = useCallback(async () => {
-    if (!leadId) return
-    setLoading(true)
-    try {
-      const res = await fetch(`${apiBase}/${leadId}`, {
-        cache: "no-store",
-      })
-      const body = await res.json()
-      if (res.ok) {
-        setLead(body.data)
-      } else {
-        toast.error(body.error ?? "Falha ao carregar lead")
+  const load = useCallback(
+    async (opts?: { silent?: boolean }) => {
+      if (!leadId) return
+      // silent = atualizacao em background (polling): nao mostra spinner nem
+      // toast de rede, para nao piscar a UI nem incomodar o operador.
+      if (!opts?.silent) setLoading(true)
+      try {
+        const res = await fetch(`${apiBase}/${leadId}`, {
+          cache: "no-store",
+        })
+        const body = await res.json()
+        if (res.ok) {
+          setLead(body.data)
+        } else if (!opts?.silent) {
+          toast.error(body.error ?? "Falha ao carregar lead")
+        }
+      } catch {
+        if (!opts?.silent) toast.error("Erro de rede")
+      } finally {
+        if (!opts?.silent) setLoading(false)
       }
-    } catch {
-      toast.error("Erro de rede")
-    } finally {
-      setLoading(false)
-    }
-  }, [leadId, apiBase])
+    },
+    [leadId, apiBase],
+  )
 
   useEffect(() => {
     if (leadId) {
@@ -119,6 +137,18 @@ export function LeadDetailDrawer({
     }
     setWaMessage("")
     setWaError(null)
+  }, [leadId, load])
+
+  // Polling leve: enquanto o drawer esta aberto e a aba visivel, recarrega a
+  // cada 12s para que novos page views (e mudancas de stage) aparecam na
+  // timeline sem o operador precisar reabrir o lead.
+  useEffect(() => {
+    if (!leadId) return
+    const id = setInterval(() => {
+      if (typeof document !== "undefined" && document.hidden) return
+      void load({ silent: true })
+    }, 12_000)
+    return () => clearInterval(id)
   }, [leadId, load])
 
   async function sendWhatsApp() {
@@ -303,6 +333,52 @@ export function LeadDetailDrawer({
                         </p>
                         <p className="text-[10px] text-gray-400">
                           {new Date(c.createdAt).toLocaleString("pt-BR")}
+                        </p>
+                      </div>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            )}
+
+            {lead.navigation.length > 0 && (
+              <div className="mt-6">
+                <h4 className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                  <Footprints className="h-3.5 w-3.5" />
+                  Navegação no site
+                  <span className="ml-1 rounded-full bg-gray-100 px-1.5 py-0.5 text-[9px] font-bold text-gray-500">
+                    {lead.navigation.length}
+                  </span>
+                </h4>
+                <ol className="mt-2 space-y-0">
+                  {lead.navigation.map((n, i) => (
+                    <li key={n.id} className="relative flex gap-3 pb-3.5 last:pb-0">
+                      {i < lead.navigation.length - 1 && (
+                        <span
+                          aria-hidden
+                          className="absolute left-[7px] top-4 h-full w-px bg-gray-200"
+                        />
+                      )}
+                      <span
+                        aria-hidden
+                        className="mt-0.5 flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full bg-[var(--color-pmb-mist)] text-[var(--color-pmb-green-900)]"
+                      >
+                        {n.kind === "COURSE_VIEW" ? (
+                          <BookOpen className="h-2.5 w-2.5" />
+                        ) : (
+                          <FileText className="h-2.5 w-2.5" />
+                        )}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-[12.5px] font-semibold text-[var(--color-pmb-green-900)]">
+                          {n.courseName ?? n.title ?? n.path}
+                        </p>
+                        <p className="truncate text-[10.5px] text-gray-500">
+                          {n.kind === "COURSE_VIEW" ? "Visitou o curso · " : "Visitou · "}
+                          <span className="font-mono">{n.path}</span>
+                        </p>
+                        <p className="text-[10px] text-gray-400">
+                          {new Date(n.createdAt).toLocaleString("pt-BR")}
                         </p>
                       </div>
                     </li>

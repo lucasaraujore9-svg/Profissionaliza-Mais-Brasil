@@ -168,4 +168,7 @@ export const RATE_LIMITS = {
   lojaLeads: { name: "loja-leads", limit: 5, windowSec: 60 },
   lojaLeadsByEmail: { name: "loja-leads-email", limit: 3, windowSec: 3600 },
   waSend: { name: "wa-send", limit: 20, windowSec: 60 },
+  // Tracking de navegacao: generoso (page views sao frequentes) e failOpen
+  // para jamais bloquear a navegacao do visitante por causa do Upstash.
+  lojaTrack: { name: "loja-track", limit: 80, windowSec: 60, failOpen: true },
 } as const

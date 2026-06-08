@@ -61,6 +61,12 @@ enum PaymentType {
   MONTHLY // Assinatura mensal
 }
 
+// Escopo onde o pagamento parcelado/mensalidade da unidade vale.
+enum MonthlyScope {
+  DIRECT_ONLY // So venda direta/manual (revendedor cria a venda)
+  DIRECT_AND_VITRINE // Tambem a vitrine publica (compra self-service do lead)
+}
+
 enum CourseVisibility {
   ALL // disponivel para todos os tenants ativos
   ALLOWLIST // apenas os tenants em allowedTenantIds
@@ -280,6 +286,15 @@ model Tenant {
   // Horas apos checkout_started sem pagamento aprovado pra cair em ABANDONED.
   abandonedAfterHours Int       @default(24) @map("abandoned_after_hours")
 
+  // Pagamento parcelado/mensalidade (PaymentType.MONTHLY) por unidade.
+  // monthlyAllowed: capability liberada pelo Admin Master.
+  // monthlyEnabled: revendedor liga/desliga o uso (dentro do que foi liberado).
+  // monthlyScope: onde o parcelado vale (definido pelo Admin Master).
+  // Efetivo: monthlyAllowed && monthlyEnabled. Ver src/lib/tenant/monthly-policy.ts
+  monthlyAllowed Boolean      @default(false) @map("monthly_allowed")
+  monthlyEnabled Boolean      @default(false) @map("monthly_enabled")
+  monthlyScope   MonthlyScope @default(DIRECT_ONLY) @map("monthly_scope")
+
   // Relacoes
   tenantCourses                TenantCourse[]
   students                     Student[]
@@ -302,6 +317,7 @@ model Tenant {
   studentLeads                 StudentLead[]
   automationTemplates          AutomationMessageTemplate[]
   contactMessages              ContactMessage[]
+  visitorEvents                VisitorEvent[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -418,6 +434,7 @@ model Course {
   courseLessons CourseLesson[]
   certificates  Certificate[]
   studentLeads  StudentLead[]
+  visitorEvents VisitorEvent[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -627,6 +644,11 @@ model Enrollment {
   startedAt   DateTime? @map("started_at")
   expiresAt   DateTime? @map("expires_at")
   cancelledAt DateTime? @map("cancelled_at")
+
+  // Funil de avisos do fim do prazo de 12 meses: registra quais marcos (em dias
+  // antes do `expiresAt` — 60/30/15/2) ja foram notificados ao aluno. Garante
+  // dedup e catch-up no cron `sweep-students-expired` mesmo se um dia for pulado.
+  accessWarnDaysSent Int[] @default([]) @map("access_warn_days_sent")
 
   // Progresso sincronizado da plataforma parceira (cursosvinculados)
   // Match feito por NOME do curso (API nao retorna ID confiavel)
@@ -1347,7 +1369,7 @@ model BannerSlide {
 model HomeSection {
   id        String   @id @default(cuid())
   tenantId  String?  @map("tenant_id")
-  kind      String // "bestsellers" | "category_courses" | "categories_grid" | "institutional"
+  kind      String // "bestsellers" | "category_courses" | "categories_grid" | "institutional" | "tecnica"
   position  Int      @default(0)
   enabled   Boolean  @default(true)
   config    Json
@@ -1436,6 +1458,11 @@ model StudentLead {
   // Atribuicao manual a um consultor (TenantMember).
   ownerUserId String? @map("owner_user_id")
 
+  // Cookie do visitante anonimo (pmb_vid). Setado no momento da captura
+  // (form ou checkout) e usado para herdar todo o historico de navegacao
+  // (VisitorEvent) anterior e posterior a captura. Ver src/lib/automation/tracking.ts.
+  visitorId String? @map("visitor_id")
+
   // Posicao livre dentro da coluna (drag-and-drop manual / re-ordenacao).
   columnOrder Int @default(0) @map("column_order")
 
@@ -1445,7 +1472,8 @@ model StudentLead {
   consentAccepted Boolean @default(false) @map("consent_accepted")
   consentVersion  String? @map("consent_version")
 
-  activities StudentLeadActivity[]
+  activities    StudentLeadActivity[]
+  visitorEvents VisitorEvent[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -1455,6 +1483,7 @@ model StudentLead {
   @@index([tenantId, source])
   @@index([enrollmentId])
   @@index([courseId])
+  @@index([visitorId])
   @@map("student_leads")
 }
 
@@ -1477,6 +1506,56 @@ model StudentLeadActivity {
 
   @@index([leadId, createdAt])
   @@map("student_lead_activities")
+}
+
+enum VisitorEventKind {
+  PAGE_VIEW // Qualquer pagina da vitrine
+  COURSE_VIEW // Pagina de detalhe de um curso (courseId resolvido)
+}
+
+// Trilha de navegacao do visitante (anonima ate a captura). Cada page view na
+// vitrine gera um VisitorEvent identificado pelo cookie first-party pmb_vid
+// (visitorId). Enquanto o visitante nao deixa contato, leadId fica null. No
+// momento da captura (form na pagina do curso ou checkout) o sistema:
+//   1. seta StudentLead.visitorId = pmb_vid
+//   2. faz backfill: VisitorEvent.updateMany({ visitorId, leadId: null }) -> leadId
+// herdando TODO o historico anterior. Eventos posteriores ja nascem com leadId
+// preenchido (auto-atribuicao no endpoint de track), aparecendo na timeline do
+// lead automaticamente. Gated por automationEnabled / pmbAutomationEnabled.
+model VisitorEvent {
+  id String @id @default(cuid())
+
+  // null = vitrine PMB institucional (mesmo padrao de StudentLead).
+  tenantId String? @map("tenant_id")
+  tenant   Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  // Cookie anonimo do navegador. Indexado para o backfill e a auto-atribuicao.
+  visitorId String @map("visitor_id")
+
+  // Preenchido quando o visitante ja virou (ou vira) lead. onDelete: SetNull
+  // preserva o historico de navegacao mesmo se o lead for hard-deleted.
+  leadId String?      @map("lead_id")
+  lead   StudentLead? @relation(fields: [leadId], references: [id], onDelete: SetNull)
+
+  kind VisitorEventKind @default(PAGE_VIEW)
+
+  // Caminho sem query string (LGPD — evita capturar PII em params).
+  path  String
+  title String?
+
+  // Quando a pagina e de um curso, snapshot estavel para exibir na timeline.
+  courseId       String? @map("course_id")
+  course         Course? @relation(fields: [courseId], references: [id])
+  courseSnapshot String? @map("course_snapshot")
+
+  referrer String?
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([visitorId, createdAt])
+  @@index([leadId, createdAt])
+  @@index([tenantId, createdAt])
+  @@map("visitor_events")
 }
 
 model AutomationMessageTemplate {

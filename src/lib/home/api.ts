@@ -3,11 +3,32 @@ import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import {
   validateSectionPayload,
+  CATEGORY_SECTION_MIN_COURSES,
   type AnySectionConfig,
 } from "./sections"
 
 interface Scope {
   tenantId: string | null
+}
+
+/**
+ * Conta os cursos ativos e visíveis no catálogo vinculados a uma categoria.
+ * Base para o gate de ativação de seções category_courses (≥8 cursos). É uma
+ * propriedade da categoria no catálogo global — independe do tenant.
+ */
+async function countActiveCategoryCourses(categoryId: string): Promise<number> {
+  return prisma.course.count({
+    where: { categoryId, status: "ATIVO", hiddenMain: false },
+  })
+}
+
+/** Extrai o `categoryId` de uma config (nova ou persistida) de category_courses. */
+function readCategoryId(config: unknown): string | null {
+  if (config && typeof config === "object" && "categoryId" in config) {
+    const v = (config as Record<string, unknown>).categoryId
+    return typeof v === "string" && v.length > 0 ? v : null
+  }
+  return null
 }
 
 export async function listSections(scope: Scope) {
@@ -37,22 +58,24 @@ export async function createSection(scope: Scope, body: unknown) {
     return NextResponse.json({ error: validation.error }, { status: 400 })
   }
 
-  // Singletons: bestsellers e categories_grid só podem existir uma vez.
-  if (validation.kind === "bestsellers" || validation.kind === "categories_grid") {
+  // Singletons: bestsellers, categories_grid e tecnica só podem existir uma vez.
+  if (
+    validation.kind === "bestsellers" ||
+    validation.kind === "categories_grid" ||
+    validation.kind === "tecnica"
+  ) {
     const exists = await prisma.homeSection.findFirst({
       where: { tenantId: scope.tenantId, kind: validation.kind },
       select: { id: true },
     })
     if (exists) {
-      return NextResponse.json(
-        {
-          error:
-            validation.kind === "bestsellers"
-              ? "Já existe uma seção “Mais vendidos” — edite a existente"
-              : "Já existe um bloco de categorias — edite o existente",
-        },
-        { status: 409 },
-      )
+      const message =
+        validation.kind === "bestsellers"
+          ? "Já existe uma seção “Mais vendidos” — edite a existente"
+          : validation.kind === "tecnica"
+            ? "Já existe a seção “Cursos Técnicos” — edite a existente"
+            : "Já existe um bloco de categorias — edite o existente"
+      return NextResponse.json({ error: message }, { status: 409 })
     }
   }
 
@@ -82,6 +105,19 @@ export async function createSection(scope: Scope, body: unknown) {
           { status: 400 },
         )
       }
+    }
+    // Seção nasce ativada (enabled:true) — só permite se a categoria já tem o
+    // mínimo de cursos para aparecer na home. (O fan-out automático em
+    // /api/admin/catalogo/categorias cria a seção DESATIVADA por fora, então
+    // não passa por aqui.)
+    const activeCount = await countActiveCategoryCourses(cfg.categoryId)
+    if (activeCount < CATEGORY_SECTION_MIN_COURSES) {
+      return NextResponse.json(
+        {
+          error: `Esta categoria tem ${activeCount} curso(s). Adicione pelo menos ${CATEGORY_SECTION_MIN_COURSES} para ativar a seção na home.`,
+        },
+        { status: 400 },
+      )
     }
   }
 
@@ -148,14 +184,32 @@ export async function updateSection(
   }
 
   if (b.enabled !== undefined) {
+    if (typeof b.enabled !== "boolean") {
+      return NextResponse.json({ error: "enabled deve ser boolean" }, { status: 400 })
+    }
     if (slide.kind === "bestsellers" && b.enabled !== true) {
       return NextResponse.json(
         { error: "A seção “Mais vendidos” não pode ser desativada" },
         { status: 400 },
       )
     }
-    if (typeof b.enabled !== "boolean") {
-      return NextResponse.json({ error: "enabled deve ser boolean" }, { status: 400 })
+    // Gate: só permite ATIVAR uma seção de categoria quando a categoria já tem
+    // o mínimo de cursos. Desativar é sempre permitido. Usa o categoryId da
+    // config nova (se enviada na mesma chamada) ou da persistida.
+    if (b.enabled === true && slide.kind === "category_courses") {
+      const categoryId =
+        readCategoryId(updates.config) ?? readCategoryId(slide.config)
+      if (categoryId) {
+        const activeCount = await countActiveCategoryCourses(categoryId)
+        if (activeCount < CATEGORY_SECTION_MIN_COURSES) {
+          return NextResponse.json(
+            {
+              error: `Esta categoria tem ${activeCount} curso(s). Adicione pelo menos ${CATEGORY_SECTION_MIN_COURSES} para ativar a seção na home.`,
+            },
+            { status: 400 },
+          )
+        }
+      }
     }
     updates.enabled = b.enabled
   }
@@ -188,6 +242,12 @@ export async function deleteSection(scope: Scope, id: string): Promise<Response>
   if (slide.kind === "bestsellers") {
     return NextResponse.json(
       { error: "A seção “Mais vendidos” não pode ser removida" },
+      { status: 400 },
+    )
+  }
+  if (slide.kind === "tecnica") {
+    return NextResponse.json(
+      { error: "A seção “Cursos Técnicos” não pode ser removida — desative-a se não quiser exibi-la" },
       { status: 400 },
     )
   }

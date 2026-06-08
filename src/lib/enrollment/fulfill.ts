@@ -266,6 +266,9 @@ async function fulfillEnrollmentLocked(
             : enrollment.asaasPaymentId,
         startedAt: accessStartedAt,
         expiresAt: accessExpiresAt,
+        // Acesso (re)liberado: zera o funil de avisos do fim do prazo para que
+        // os marcos 60/30/15/2 sejam reenviados sobre o novo `expiresAt`.
+        accessWarnDaysSent: [],
         installmentsPaid: firstInstallmentPaid,
       },
     }),

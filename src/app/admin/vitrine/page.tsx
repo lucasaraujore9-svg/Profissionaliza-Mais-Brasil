@@ -39,6 +39,7 @@ export default async function AdminVitrinePage() {
             content: (
               <HomeSectionsPanel
                 apiBase="/api/admin/home-sections"
+                canEditTecnica
                 hint="A primeira seção (“Cursos mais vendidos da semana”) é fixa e sempre aparece. As outras você pode ligar, desligar, reordenar e personalizar."
               />
             ),

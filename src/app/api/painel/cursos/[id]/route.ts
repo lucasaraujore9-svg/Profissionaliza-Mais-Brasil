@@ -3,6 +3,15 @@ import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { requireResellerSession } from "@/lib/auth/reseller-session"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
+import { monthlyActive } from "@/lib/tenant/monthly-policy"
+
+async function tenantMonthlyActive(tenantId: string): Promise<boolean> {
+  const t = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { monthlyAllowed: true, monthlyEnabled: true, monthlyScope: true },
+  })
+  return t ? monthlyActive(t) : false
+}
 
 const updateSchema = z.object({
   price: z.number().positive("Preço deve ser maior que zero"),
@@ -46,11 +55,15 @@ export const GET = withRequestContextParams<{ id: string }>(
       return NextResponse.json({ error: "Curso não encontrado" }, { status: 404 })
     }
 
+    const monthlyAvailable = await tenantMonthlyActive(ctx.tenantId)
+
     return NextResponse.json({
       data: {
         id: tc.id,
         courseId: tc.courseId,
         title: tc.course.nome,
+        // Se false, o painel mantem o botao "Mensalidade" visivel porem travado.
+        monthlyAvailable,
         // Hierarquia: tenant > admin > plataforma bruto
         description:
           tc.customDescription ??
@@ -112,6 +125,21 @@ export const PUT = withRequestContextParams<{ id: string }>(
         {
           error: "Dados inválidos",
           fields: parsed.error.flatten().fieldErrors,
+        },
+        { status: 400 },
+      )
+    }
+
+    // Trava: so permite marcar MONTHLY se a unidade tem parcelado habilitado
+    // (admin liberou E revendedor ativou).
+    if (
+      parsed.data.paymentType === "MONTHLY" &&
+      !(await tenantMonthlyActive(ctx.tenantId))
+    ) {
+      return NextResponse.json(
+        {
+          error: "Mensalidade não está habilitada para esta unidade.",
+          code: "MONTHLY_NOT_ALLOWED",
         },
         { status: 400 },
       )
