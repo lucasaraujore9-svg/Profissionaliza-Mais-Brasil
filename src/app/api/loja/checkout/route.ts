@@ -19,7 +19,7 @@ import { readVisitorId } from "@/lib/automation/tracking"
 import { isValidCpf, stripCpf } from "@/lib/validation/cpf"
 import { isValidPhone, normalizePhone } from "@/lib/validation/phone"
 import { effectivePaymentType } from "@/lib/tenant/monthly-policy"
-import { mpWebhookUrl } from "@/lib/tenant/urls"
+import { mpWebhookUrl, vitrineUrl } from "@/lib/tenant/urls"
 
 const bodySchema = z.object({
   courseId: z.string().min(1),
@@ -59,10 +59,30 @@ export const POST = withRequestContext(
   const rl = await rateLimit(request, RATE_LIMITS.publicCheckout)
   if (!rl.ok) return rateLimitResponse(rl)
 
-  const tenantId = request.headers.get("x-tenant-id")
+  const tenantIdHeader = request.headers.get("x-tenant-id")
   const tenantSlug = request.headers.get("x-tenant-slug")
 
-  if (!tenantId) {
+  // O proxy só injeta x-tenant-id nos paths de vitrine (rewrite p/ /loja). Em
+  // /api/loja/* chega APENAS x-tenant-slug — então resolvemos o id pelo slug.
+  // Antes a rota exigia x-tenant-id e devolvia TENANT_MISSING em TODO checkout
+  // de revenda (o proxy nunca seta o id aqui), bloqueando 100% das vendas via
+  // vitrine. Espelha o resolveTenantFromRequest usado nas outras rotas /api/loja.
+  let tenantId: string
+  if (tenantIdHeader) {
+    tenantId = tenantIdHeader
+  } else if (tenantSlug) {
+    const resolved = await prisma.tenant.findUnique({
+      where: { slug: tenantSlug },
+      select: { id: true },
+    })
+    if (!resolved) {
+      return NextResponse.json(
+        { error: "Tenant inválido", code: "TENANT_INVALID" },
+        { status: 404 },
+      )
+    }
+    tenantId = resolved.id
+  } else {
     return NextResponse.json(
       { error: "Tenant não identificado", code: "TENANT_MISSING" },
       { status: 400 },
@@ -313,13 +333,17 @@ export const POST = withRequestContext(
     }
 
     const externalReference = `enr_${enrollment.id}`
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? ""
-    const host = request.headers.get("host") ?? ""
+    // O comprador está no host da PRÓPRIA vitrine (subdomínio {slug}.livrecursos
+    // OU domínio custom). Devolvemos o MP para esse mesmo host. Antes montávamos
+    // `{slug}.${NEXT_PUBLIC_APP_URL.host}` → caía em {slug}.profissionalizamais...
+    // (subdomínio reservado, inexistente) e o cliente via uma página 404 depois
+    // de pagar, parecendo falha. Fallback p/ o domínio de vitrine padrão.
+    const reqHost =
+      request.headers.get("x-forwarded-host") ?? request.headers.get("host")
     const protocol = request.headers.get("x-forwarded-proto") ?? "https"
-    const storeUrl =
-      tenantSlug && appUrl
-        ? `${protocol}://${tenantSlug}.${new URL(appUrl).host}`
-        : `${protocol}://${host}`
+    const storeUrl = reqHost
+      ? `${protocol}://${reqHost}`
+      : vitrineUrl(tenantSlug ?? tenant.slug)
 
     const accessToken = decryptTenantMpToken(tenant.mpAccessToken)
 

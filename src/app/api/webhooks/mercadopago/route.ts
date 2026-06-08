@@ -51,8 +51,15 @@ async function handle(request: Request) {
   // queries — bots apontados ao endpoint sao descartados cedo.
   const xSignature = request.headers.get("x-signature")
   const xRequestId = request.headers.get("x-request-id")
-  if (process.env.NODE_ENV === "production" && (!xSignature || !xRequestId)) {
-    log.warn({ event: "mp.webhook.missing_signature" }, "request sem x-signature/x-request-id rejeitado")
+  // Anti-flood: webhooks legítimos do MP sempre trazem x-request-id (e, quando a
+  // aplicação tem assinatura secreta configurada, também x-signature). Algumas
+  // aplicações MP não expõem a seção de Webhooks e entregam a notificação SEM
+  // x-signature — por isso exigimos apenas que AO MENOS UM dos dois esteja
+  // presente, em vez de ambos. A autenticidade é garantida adiante: HMAC quando
+  // há secret, e SEMPRE o getPayment com o token do tenant (id forjado → 404,
+  // nada é matriculado).
+  if (process.env.NODE_ENV === "production" && !xSignature && !xRequestId) {
+    log.warn({ event: "mp.webhook.missing_signature" }, "request sem x-signature e sem x-request-id rejeitado")
     return NextResponse.json({ error: "missing signature" }, { status: 401 })
   }
 

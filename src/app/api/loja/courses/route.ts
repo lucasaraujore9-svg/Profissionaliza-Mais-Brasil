@@ -3,6 +3,7 @@ import { z, ZodError } from "zod"
 import { prisma } from "@/lib/prisma"
 import { contextLogger } from "@/lib/logger"
 import { withRequestContext } from "@/lib/observability/with-request-context"
+import { resolveTenantFromRequest } from "@/lib/tenant/from-request"
 
 const querySchema = z.object({
   category: z.string().trim().optional(),
@@ -29,13 +30,15 @@ export interface LojaCourseDTO {
 export const GET = withRequestContext(
   { action: "loja.courses.list", route: "/api/loja/courses" },
   async (request: Request) => {
-  const tenantId = request.headers.get("x-tenant-id")
-  if (!tenantId) {
+  // /api/loja/* recebe do proxy apenas x-tenant-slug — resolvemos por id-ou-slug.
+  const tenant = await resolveTenantFromRequest(request)
+  if (!tenant) {
     return NextResponse.json(
       { error: "Tenant não identificado", code: "NO_TENANT" },
       { status: 400 },
     )
   }
+  const tenantId = tenant.id
 
   let parsed: z.infer<typeof querySchema>
   try {

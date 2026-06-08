@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { rateLimit, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
 import { contextLogger } from "@/lib/logger"
 import { withRequestContext } from "@/lib/observability/with-request-context"
+import { resolveTenantFromRequest } from "@/lib/tenant/from-request"
 
 const bodySchema = z.object({
   code: z.string().trim().min(1).max(64).transform((v) => v.toUpperCase()),
@@ -16,14 +17,17 @@ export const POST = withRequestContext(
   const rl = await rateLimit(request, RATE_LIMITS.publicCupom)
   if (!rl.ok) return rateLimitResponse(rl)
 
-  const tenantId = request.headers.get("x-tenant-id")
-
-  if (!tenantId) {
+  // /api/loja/* recebe do proxy apenas x-tenant-slug (o x-tenant-id só é
+  // injetado em paths de vitrine). Resolvemos por id-ou-slug — antes a rota
+  // exigia x-tenant-id e o cupom nunca validava na vitrine (sempre TENANT_MISSING).
+  const tenant = await resolveTenantFromRequest(request)
+  if (!tenant) {
     return NextResponse.json(
       { error: "Tenant não identificado", code: "TENANT_MISSING" },
       { status: 400 },
     )
   }
+  const tenantId = tenant.id
 
   let payload: unknown
   try {

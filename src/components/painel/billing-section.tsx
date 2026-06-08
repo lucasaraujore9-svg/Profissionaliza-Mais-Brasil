@@ -124,8 +124,8 @@ export function BillingSection({ data, onUpdate }: BillingSectionProps) {
       setShowForm(false)
       setMpSuccess(
         secret
-          ? "Gateway de pagamento conectado com sucesso."
-          : "Token conectado. Cadastre a assinatura secreta para liberar as vendas.",
+          ? "Gateway conectado com assinatura secreta (verificação reforçada)."
+          : "Gateway conectado — já dá para receber pagamentos. A assinatura secreta do webhook é opcional (camada extra de segurança).",
       )
       onUpdate({
         tenant: {
@@ -164,7 +164,7 @@ export function BillingSection({ data, onUpdate }: BillingSectionProps) {
       }
       setWebhookConfigured(true)
       setSecretInput("")
-      setMpSuccess("Assinatura secreta cadastrada. Vendas liberadas.")
+      setMpSuccess("Assinatura secreta cadastrada. Verificação reforçada ativada.")
       onUpdate({
         tenant: { ...data.tenant, mpWebhookConfigured: true },
       })
@@ -336,15 +336,10 @@ export function BillingSection({ data, onUpdate }: BillingSectionProps) {
               <p className="mt-1 text-xs text-gray-600">
                 Integração responsável por receber pagamentos dos seus alunos.
               </p>
-              {connected && webhookConfigured ? (
+              {connected ? (
                 <span className="mt-2 inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-semibold text-green-700">
                   <span className="h-1.5 w-1.5 rounded-full bg-green-600" />
-                  Conectado
-                </span>
-              ) : connected ? (
-                <span className="mt-2 inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
-                  <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-                  Conectado · falta assinatura
+                  {webhookConfigured ? "Conectado · verificação reforçada" : "Conectado"}
                 </span>
               ) : (
                 <span className="mt-2 inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold text-red-700">
@@ -384,9 +379,9 @@ export function BillingSection({ data, onUpdate }: BillingSectionProps) {
           <p className="mt-1 text-[11px] text-gray-500">
             Cole esta URL no Mercado Pago →{" "}
             <strong>Suas integrações</strong> → sua aplicação →{" "}
-            <strong>Webhooks</strong>. É ela que avisa nosso sistema quando um
-            pagamento é aprovado — e o que libera a <strong>Chave secreta</strong>{" "}
-            para você copiar.
+            <strong>Webhooks</strong> (se a sua aplicação tiver essa seção). Isso
+            também libera a <strong>Chave secreta</strong> — opcional, mas
+            recomendada. As vendas já funcionam só com o Access Token.
           </p>
           <div className="mt-2 flex items-center gap-2">
             <code className="flex-1 overflow-x-auto whitespace-nowrap rounded-lg border border-gray-200 bg-white px-3 py-2 font-mono text-[11px] text-gray-700">
@@ -432,20 +427,24 @@ export function BillingSection({ data, onUpdate }: BillingSectionProps) {
               </p>
             </div>
             <div>
-              <Label htmlFor="mp-secret">Assinatura secreta do webhook</Label>
+              <Label htmlFor="mp-secret">
+                Assinatura secreta do webhook{" "}
+                <span className="font-normal text-gray-400">(opcional)</span>
+              </Label>
               <Input
                 id="mp-secret"
                 type="password"
                 className="mt-1.5 font-mono"
-                placeholder="ex.: a1b2c3..."
+                placeholder="ex.: a1b2c3... (opcional)"
                 value={secretInput}
                 onChange={(e) => setSecretInput(e.target.value)}
               />
               <p className="mt-1 text-[11px] text-gray-500">
-                No painel do Mercado Pago → <strong>Suas integrações</strong> →
-                sua aplicação → <strong>Webhooks</strong>: configure a URL de
-                notificação e copie a <strong>Chave secreta</strong>. Sem ela, as
-                vendas não são confirmadas automaticamente.
+                Opcional. As vendas já são confirmadas automaticamente só com o
+                Access Token. Se a sua aplicação tiver a seção{" "}
+                <strong>Webhooks</strong>, configure a URL de notificação e copie
+                a <strong>Chave secreta</strong> para uma camada extra de
+                segurança.
               </p>
             </div>
             {mpError && <p className="text-xs text-red-600">{mpError}</p>}
@@ -469,26 +468,30 @@ export function BillingSection({ data, onUpdate }: BillingSectionProps) {
         )}
 
         {connected && !webhookConfigured && (
-          <div className="mt-5 space-y-3 rounded-xl border border-amber-300 bg-amber-50 p-4">
-            <p className="text-xs font-semibold text-amber-800">
-              Falta a assinatura secreta do webhook
+          <div className="mt-5 space-y-3 rounded-xl border border-gray-200 bg-gray-50/50 p-4">
+            <p className="text-xs font-semibold text-gray-700">
+              Assinatura secreta do webhook (opcional)
             </p>
-            <p className="text-[11px] text-amber-700">
-              O token está conectado, mas sem a chave secreta o Mercado Pago não
-              consegue confirmar as vendas — alunos pagam e não são matriculados
-              automaticamente. Cadastre a chave para liberar.
+            <p className="text-[11px] text-gray-600">
+              O token está conectado e as vendas já são confirmadas
+              automaticamente. Se quiser uma camada extra de segurança e a sua
+              aplicação MP tiver a seção <strong>Webhooks</strong>, cadastre a
+              chave secreta aqui.
             </p>
             <div>
-              <Label htmlFor="mp-secret-only">Assinatura secreta do webhook</Label>
+              <Label htmlFor="mp-secret-only">
+                Assinatura secreta do webhook{" "}
+                <span className="font-normal text-gray-400">(opcional)</span>
+              </Label>
               <Input
                 id="mp-secret-only"
                 type="password"
                 className="mt-1.5 font-mono"
-                placeholder="ex.: a1b2c3..."
+                placeholder="ex.: a1b2c3... (opcional)"
                 value={secretInput}
                 onChange={(e) => setSecretInput(e.target.value)}
               />
-              <p className="mt-1 text-[11px] text-amber-700">
+              <p className="mt-1 text-[11px] text-gray-500">
                 Mercado Pago → Suas integrações → sua aplicação → Webhooks →
                 Chave secreta.
               </p>

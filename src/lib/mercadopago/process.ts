@@ -313,51 +313,9 @@ export async function processMpWebhook(args: ProcessArgs): Promise<void> {
         : decrypt(tenant.mpWebhookSecret)
       : null
 
-    if (!secret) {
-      // Sem secret configurada não há como provar autenticidade. Em dev, a flag
-      // MP_WEBHOOK_DEV_BYPASS=1 (nunca em produção) pula a validação p/ ngrok.
-      const explicitBypass =
-        process.env.MP_WEBHOOK_DEV_BYPASS === "1" &&
-        process.env.NODE_ENV !== "production"
-      if (!explicitBypass) {
-        const reason = tenant.isPmbVitrine
-          ? "MP_WEBHOOK_SECRET (PMB) ausente — request rejeitado"
-          : "tenant sem mpWebhookSecret — configure a assinatura secreta no painel"
-        await markLog(logId, false, reason)
-        contextLogger().error(
-          { event: "mp.process.secret_missing", tenantSlug, paymentId, tenantId: tenant.id },
-          "webhook MP sem secret de validação — fulfillment automático bloqueado",
-        )
-        // Não derruba a venda: o aluno pode reconciliar via "já paguei" e o
-        // admin via sync-payment. Avisa quem pode resolver (a unidade).
-        if (tenant.isPmbVitrine) {
-          await createNotification({
-            audience: "ROLE",
-            roleTarget: "SUPER_ADMIN",
-            level: "ERROR",
-            title: "MP_WEBHOOK_SECRET (PMB) ausente",
-            body: `paymentId=${paymentId} — configure MP_WEBHOOK_SECRET no Vercel. Venda pode ficar sem matrícula automática.`,
-            category: "webhook",
-            href: "/admin/webhooks",
-          }).catch(swallow("mp.process.notify"))
-        } else {
-          await createNotification({
-            audience: "TENANT",
-            tenantId: tenant.id,
-            level: "ERROR",
-            title: "Assinatura secreta do Mercado Pago ausente",
-            body: "Recebemos um pagamento mas a matrícula automática está bloqueada: cadastre a assinatura secreta do webhook em Configurações → Pagamentos.",
-            category: "payment",
-            href: "/painel/configuracoes",
-          }).catch(swallow("mp.process.notify"))
-        }
-        return
-      }
-      contextLogger().warn(
-        { event: "mp.webhook.dev_bypass_active" },
-        "MP_WEBHOOK_DEV_BYPASS ativo — validação de HMAC pulada (apenas dev)",
-      )
-    } else {
+    if (secret) {
+      // A unidade cadastrou a assinatura secreta → validamos o HMAC (camada
+      // extra). Assinatura inválida = request descartado.
       const valid = validateMpWebhookSignature(
         xSignature,
         xRequestId,
@@ -368,6 +326,24 @@ export async function processMpWebhook(args: ProcessArgs): Promise<void> {
         await markLog(logId, false, "hmac invalid")
         return
       }
+    } else {
+      // Sem assinatura secreta. Muitas aplicações MP não expõem a seção de
+      // Webhooks (logo não há como o revendedor obter a secret). NÃO bloqueamos:
+      // a autenticidade é garantida no Passo 5 — getPayment usa o access token
+      // DESTE tenant; um paymentId que não pertença à conta MP dele retorna 404
+      // e nada é matriculado. É a validação que o próprio MP recomenda
+      // (reconsultar o recurso na API). O HMAC volta a valer automaticamente se
+      // a unidade cadastrar a assinatura secreta no futuro.
+      contextLogger().warn(
+        {
+          event: "mp.process.no_secret_api_fallback",
+          tenantSlug,
+          paymentId,
+          tenantId: tenant.id,
+          isPmb: tenant.isPmbVitrine ?? false,
+        },
+        "webhook MP sem assinatura secreta — validando via consulta à API do MP",
+      )
     }
 
     // ── Passo 4: associar o log ao tenant ───────────────────────────────────
