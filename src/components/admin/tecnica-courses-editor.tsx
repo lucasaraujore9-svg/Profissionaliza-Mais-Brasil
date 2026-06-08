@@ -1,6 +1,14 @@
 "use client"
 
-import { ChevronDown, ChevronUp, Plus, Trash2 } from "lucide-react"
+import { useState } from "react"
+import {
+  ChevronDown,
+  ChevronUp,
+  Loader2,
+  Plus,
+  Trash2,
+  Upload,
+} from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
@@ -34,9 +42,34 @@ export function TecnicaCoursesEditor({
   fallbackUrl,
   disabled,
 }: TecnicaCoursesEditorProps) {
+  const [uploadingIndex, setUploadingIndex] = useState<number | null>(null)
+  const [uploadError, setUploadError] = useState<string | null>(null)
+
   const update = (i: number, patch: Partial<TecnicaCourseDraft>) => {
     const next = courses.map((c, idx) => (idx === i ? { ...c, ...patch } : c))
     onChange(next)
+  }
+
+  const handleFile = async (i: number, file: File) => {
+    setUploadError(null)
+    setUploadingIndex(i)
+    try {
+      const form = new FormData()
+      form.set("file", file)
+      const res = await fetch("/api/admin/system-settings/tecnica/upload", {
+        method: "POST",
+        body: form,
+      })
+      const body = await res.json()
+      if (!res.ok) {
+        throw new Error(body?.error ?? "Falha ao enviar imagem")
+      }
+      update(i, { image: body.data.url as string })
+    } catch (e) {
+      setUploadError(e instanceof Error ? e.message : "Falha ao enviar imagem")
+    } finally {
+      setUploadingIndex(null)
+    }
   }
 
   const remove = (i: number) => {
@@ -123,14 +156,54 @@ export function TecnicaCoursesEditor({
                   </button>
                 </div>
               </div>
-              <Input
-                type="text"
-                value={c.image ?? ""}
-                disabled={disabled}
-                onChange={(e) => update(i, { image: e.target.value })}
-                placeholder="Imagem do curso — https://… ou /images/tecnica/arquivo.jpg (opcional)"
-                className="mt-2"
-              />
+              <div className="mt-2 flex items-center gap-2">
+                {c.image ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={c.image}
+                    alt=""
+                    className="h-10 w-10 shrink-0 rounded-md border border-gray-200 object-cover"
+                  />
+                ) : (
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-dashed border-gray-300 bg-gray-50 text-gray-400">
+                    <Upload className="h-4 w-4" />
+                  </div>
+                )}
+                <Input
+                  type="text"
+                  value={c.image ?? ""}
+                  disabled={disabled || uploadingIndex === i}
+                  onChange={(e) => update(i, { image: e.target.value })}
+                  placeholder="Imagem do curso — envie um arquivo ou cole uma URL (opcional)"
+                  className="flex-1"
+                />
+                <label
+                  className={`inline-flex h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-md border border-gray-200 px-3 text-xs font-medium text-gray-700 hover:bg-gray-50 ${
+                    disabled || uploadingIndex === i
+                      ? "pointer-events-none opacity-50"
+                      : ""
+                  }`}
+                  title="Enviar imagem"
+                >
+                  {uploadingIndex === i ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Upload className="h-3.5 w-3.5" />
+                  )}
+                  <span>Enviar</span>
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    className="hidden"
+                    disabled={disabled || uploadingIndex === i}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0]
+                      if (file) handleFile(i, file)
+                      e.target.value = ""
+                    }}
+                  />
+                </label>
+              </div>
             </li>
           ))}
         </ul>
@@ -146,8 +219,12 @@ export function TecnicaCoursesEditor({
         <Plus className="mr-1 h-4 w-4" />
         Adicionar curso
       </Button>
+      {uploadError ? (
+        <p className="text-[11px] text-rose-600">{uploadError}</p>
+      ) : null}
       <p className="text-[11px] text-gray-500">
-        URL vazia usa a URL base da escola técnica como destino.
+        URL vazia usa a URL base da escola técnica como destino. A imagem pode
+        ser enviada (PNG, JPG ou WEBP, até 5MB) ou informada por URL.
       </p>
     </div>
   )
