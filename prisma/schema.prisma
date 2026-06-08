@@ -211,6 +211,10 @@ model Tenant {
   billingMode BillingMode  @default(AUTO) @map("billing_mode")
   planValue   Decimal      @map("plan_value") @db.Decimal(10, 2) // Valor da mensalidade
 
+  // Pixels de rastreamento da vitrine (validados por src/lib/tracking/schema.ts).
+  // Disparam SOMENTE apos consentimento LGPD. Migration 20260608_tracking_pixels.
+  trackingPixels Json? @map("tracking_pixels")
+
   // Politica de cancelamento (flexivel, definida individualmente pelo admin)
   cancellationPolicy Json? @map("cancellation_policy")
   // Exemplo: { gracePeriodDays: 15, keepStudentsActive: true, notifyStudents: true }
@@ -1117,6 +1121,10 @@ model SystemSettings {
   pmbDirectSaleGateway PaymentGateway @default(MP) @map("pmb_direct_sale_gateway")
   pmbMpAccessTokenEnc  String?        @map("pmb_mp_access_token_enc") @db.Text
   lastCatalogSyncJson  String?        @map("last_catalog_sync_json") @db.Text
+
+  // Pixels de rastreamento da PMB: self (site/vitrine PMB) + global (todas as vitrines).
+  pixelsSelf   Json? @map("tracking_pixels_self")
+  pixelsGlobal Json? @map("tracking_pixels_global")
 
   // Indicacoes
   referralEnabled        Boolean @default(true) @map("referral_enabled")

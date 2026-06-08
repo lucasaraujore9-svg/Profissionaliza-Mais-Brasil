@@ -6,11 +6,13 @@ import { AccountForm } from "./account-form"
 import { BillingSection } from "./billing-section"
 import { SecurityForm } from "./security-form"
 import { PixForm } from "./pix-form"
+import { TrackingForm } from "./tracking-form"
 
 const tabs = [
   { id: "conta", label: "Conta" },
   { id: "pagamento", label: "Pagamento" },
   { id: "pix", label: "PIX (comissões)" },
+  { id: "rastreamento", label: "Rastreamento" },
   { id: "seguranca", label: "Segurança" },
 ] as const
 
@@ -112,6 +114,7 @@ export function ConfigTabs() {
           <BillingSection data={data} onUpdate={handleConfigUpdate} />
         )}
         {active === "pix" && <PixForm />}
+        {active === "rastreamento" && <TrackingForm />}
         {active === "seguranca" && <SecurityForm />}
       </div>
     </div>

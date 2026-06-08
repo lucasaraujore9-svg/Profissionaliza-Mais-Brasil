@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { Share2, ChevronRight, Building2, Zap } from "lucide-react"
+import { Share2, ChevronRight, Building2, Zap, LineChart } from "lucide-react"
 import { PageHeader } from "@/components/painel/page-header"
 import { AdminConfigClient } from "@/components/admin/admin-config-client"
 import { requireAdminSession } from "@/lib/auth/admin-session"
@@ -23,6 +23,12 @@ const SUB_SETTINGS = [
     label: "Unidade Técnica",
     description: "Link da escola técnica do site PMB institucional",
     icon: Building2,
+  },
+  {
+    href: "/admin/configuracoes/rastreamento",
+    label: "Rastreamento",
+    description: "Pixels (GA4, Ads, Meta, TikTok…) do site PMB e das vitrines",
+    icon: LineChart,
   },
 ]
 

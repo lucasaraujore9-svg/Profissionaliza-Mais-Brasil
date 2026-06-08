@@ -6,6 +6,8 @@ import { ConfirmationCard } from "@/components/loja/confirmation-card"
 import { NextSteps } from "@/components/loja/next-steps"
 import { StatusPoller } from "@/components/loja/status-poller"
 import { prisma } from "@/lib/prisma"
+import { resolvePmbSelfPixels } from "@/lib/tracking/resolve"
+import { TrackingPurchaseEvent } from "@/components/shared/tracking-purchase-event"
 
 interface ConfirmacaoPageProps {
   searchParams: Promise<{
@@ -139,6 +141,17 @@ export default async function ConfirmacaoPage({
   return (
     <section className="bg-[#FAFAFA] py-10 md:py-16">
       <StatusPoller enrollmentId={enrollment.id} initialStatus={enrollment.status} />
+      {isApproved && (
+        <TrackingPurchaseEvent
+          pixels={await resolvePmbSelfPixels()}
+          purchase={{
+            value: Number(enrollment.finalAmount),
+            currency: "BRL",
+            transactionId: buildOrderNumber(enrollment.id, enrollment.createdAt),
+            contentName: enrollment.course.nome,
+          }}
+        />
+      )}
       <div className="mx-auto max-w-3xl px-4 md:px-6">
         <div className="text-center">
           <SuccessIcon />

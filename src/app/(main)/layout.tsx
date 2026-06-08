@@ -14,6 +14,8 @@ import {
   webSiteJsonLd,
 } from "@/lib/seo/jsonld"
 import { VisitorTracker } from "@/components/loja/visitor-tracker"
+import { resolveVitrinePixels, resolvePmbSelfPixels } from "@/lib/tracking/resolve"
+import { TrackingPixels } from "@/components/shared/tracking-pixels"
 import { isPmbAutomationEnabled } from "@/lib/automation/context"
 
 const PMB_GREEN_DEFAULT = "#025918"
@@ -64,12 +66,14 @@ export default async function MainLayout({
 
   // Sem tenant = site institucional PMB (comportamento original).
   if (!tenant) {
-    const [tecnica, pmbAutomationOn] = await Promise.all([
+    const [tecnica, pmbAutomationOn, pmbPixels] = await Promise.all([
       loadPmbTecnicaConfig(),
       isPmbAutomationEnabled(),
+      resolvePmbSelfPixels(),
     ])
     return (
       <>
+        <TrackingPixels pixels={pmbPixels} />
         {pmbAutomationOn ? <VisitorTracker /> : null}
         <JsonLd
           data={[
@@ -117,9 +121,11 @@ export default async function MainLayout({
     : undefined
 
   const tecnica = tecnicaFromTenant(tenant)
+  const pixels = await resolveVitrinePixels(tenant.id)
 
   return (
     <div style={customStyle} className="contents">
+      <TrackingPixels pixels={pixels} />
       {tenant.automationEnabled ? <VisitorTracker /> : null}
       {origin ? (
         <JsonLd

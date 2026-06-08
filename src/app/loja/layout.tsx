@@ -3,6 +3,8 @@ import { NavbarMain } from "@/components/shared/layouts/navbar-main"
 import { FooterMain } from "@/components/shared/layouts/footer-main"
 import { loadCategorias } from "@/lib/catalog/home"
 import { getCurrentTenant } from "@/lib/tenant/current"
+import { resolveVitrinePixels, resolvePmbSelfPixels } from "@/lib/tracking/resolve"
+import { TrackingPixels } from "@/components/shared/tracking-pixels"
 import { tecnicaFromTenant } from "@/lib/catalog/tecnica"
 import { getRequestOrigin } from "@/lib/seo/host"
 import { normalizeSocialUrl, buildTenantSupportContacts } from "@/lib/branding"
@@ -98,6 +100,11 @@ export default async function LojaLayout({
     getRequestOrigin(),
   ])
 
+  // Pixels: vitrine do revendedor = global PMB + revenda; sem tenant = self PMB.
+  const pixels = tenant
+    ? await resolveVitrinePixels(tenant.id)
+    : await resolvePmbSelfPixels()
+
   const primary = tenant?.primaryColor ?? PMB_GREEN_DEFAULT
   const secondary = tenant?.secondaryColor ?? PMB_GOLD_DEFAULT
 
@@ -137,6 +144,7 @@ export default async function LojaLayout({
 
   return (
     <div style={customStyle} className="contents">
+      <TrackingPixels pixels={pixels} />
       {tenant?.automationEnabled ? <VisitorTracker /> : null}
       {tenant && origin ? (
         <JsonLd
