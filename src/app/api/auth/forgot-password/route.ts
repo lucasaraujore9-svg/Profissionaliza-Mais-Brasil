@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server"
+import { NextResponse, after } from "next/server"
 import { z, ZodError } from "zod"
 import { prisma } from "@/lib/prisma"
 import { sendEmail } from "@/lib/email/resend"
@@ -47,24 +47,30 @@ export const POST = withRequestContext(
   }
 
   // Always respond 200 to avoid email enumeration attacks.
-  // Resposta também é enviada SEM esperar o envio do email (fire-and-forget)
-  // para evitar timing attack: antes, a latência da resposta correlacionava
-  // com a existência do user no banco (lookup + envio de email era ~500ms;
-  // sem user a resposta voltava em ~50ms). Atacante poderia enumerar emails
-  // medindo latência. Agora o processamento corre em background e a
-  // resposta volta imediata em ambos os casos.
-  const response = NextResponse.json({
+  // Resposta é enviada SEM esperar o envio do email para evitar timing attack:
+  // antes, a latência da resposta correlacionava com a existência do user no
+  // banco (lookup + envio de email era ~500ms; sem user a resposta voltava em
+  // ~50ms). Atacante poderia enumerar emails medindo latência.
+  //
+  // Usamos `after()` (não fire-and-forget com `void`): em serverless/Fluid
+  // Compute a instância é congelada/encerrada assim que a resposta HTTP sai,
+  // o que matava a promise solta ANTES do SMTP terminar (~1-2s) — e o email
+  // nunca era despachado. `after()` mantém a função viva até o background
+  // concluir, preservando a resposta imediata (timing-attack continua coberto).
+  after(async () => {
+    try {
+      await processForgotPassword(data.email)
+    } catch (error) {
+      contextLogger().error(
+        { err: error, event: "auth.forgot_password.background_failed" },
+        "forgot-password background processing falhou",
+      )
+    }
+  })
+
+  return NextResponse.json({
     data: { message: "Se o email existir, um link de redefinição foi enviado." },
   })
-
-  void processForgotPassword(data.email).catch((error) => {
-    contextLogger().error(
-      { err: error, event: "auth.forgot_password.background_failed" },
-      "forgot-password background processing falhou",
-    )
-  })
-
-  return response
   },
 )
 
