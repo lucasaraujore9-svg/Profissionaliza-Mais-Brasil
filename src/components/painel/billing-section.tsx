@@ -25,6 +25,9 @@ export function BillingSection({ data, onUpdate }: BillingSectionProps) {
   const [webhookConfigured, setWebhookConfigured] = useState(
     data.tenant.mpWebhookConfigured,
   )
+  const [publicKeyConfigured, setPublicKeyConfigured] = useState(
+    data.tenant.mpPublicKeyConfigured,
+  )
   const [tokenInput, setTokenInput] = useState("")
   const [publicKeyInput, setPublicKeyInput] = useState("")
   const [secretInput, setSecretInput] = useState("")
@@ -126,6 +129,7 @@ export function BillingSection({ data, onUpdate }: BillingSectionProps) {
       }
       setConnected(true)
       setWebhookConfigured(Boolean(secret))
+      setPublicKeyConfigured(true)
       setTokenInput("")
       setPublicKeyInput("")
       setSecretInput("")
@@ -140,6 +144,7 @@ export function BillingSection({ data, onUpdate }: BillingSectionProps) {
           ...data.tenant,
           mpConnected: true,
           mpWebhookConfigured: Boolean(secret),
+          mpPublicKeyConfigured: true,
         },
       })
     } catch {
@@ -183,6 +188,41 @@ export function BillingSection({ data, onUpdate }: BillingSectionProps) {
     }
   }
 
+  // Atualiza apenas a public key de quem já conectou o token antes do checkout
+  // transparente existir (campo necessário para montar o formulário de cartão).
+  async function savePublicKey() {
+    setMpError(null)
+    setMpSuccess(null)
+    const publicKey = publicKeyInput.trim()
+    if (publicKey.length < 10) {
+      setMpError("Public Key inválida")
+      return
+    }
+    setMpSaving(true)
+    try {
+      const response = await fetch("/api/painel/config/connect-mp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ publicKey }),
+      })
+      const json = await response.json()
+      if (!response.ok) {
+        setMpError(json?.error ?? "Erro ao salvar")
+        return
+      }
+      setPublicKeyConfigured(true)
+      setPublicKeyInput("")
+      setMpSuccess("Public Key cadastrada. Checkout no site liberado.")
+      onUpdate({
+        tenant: { ...data.tenant, mpPublicKeyConfigured: true },
+      })
+    } catch {
+      setMpError("Erro de rede")
+    } finally {
+      setMpSaving(false)
+    }
+  }
+
   async function disconnectMp() {
     setMpSaving(true)
     setMpError(null)
@@ -198,8 +238,14 @@ export function BillingSection({ data, onUpdate }: BillingSectionProps) {
       }
       setConnected(false)
       setWebhookConfigured(false)
+      setPublicKeyConfigured(false)
       onUpdate({
-        tenant: { ...data.tenant, mpConnected: false, mpWebhookConfigured: false },
+        tenant: {
+          ...data.tenant,
+          mpConnected: false,
+          mpWebhookConfigured: false,
+          mpPublicKeyConfigured: false,
+        },
       })
     } catch {
       setMpError("Erro de rede")
@@ -530,6 +576,51 @@ export function BillingSection({ data, onUpdate }: BillingSectionProps) {
                   </>
                 ) : (
                   "Salvar assinatura secreta"
+                )}
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {connected && !publicKeyConfigured && (
+          <div className="mt-5 space-y-3 rounded-xl border border-amber-300 bg-amber-50 p-4">
+            <p className="text-xs font-semibold text-amber-800">
+              Falta a Public Key do Mercado Pago
+            </p>
+            <p className="text-[11px] text-amber-700">
+              O token está conectado, mas sem a Public Key o pagamento na sua loja
+              não funciona — é ela que monta o formulário de cartão para o aluno
+              pagar aqui no site, sem ser redirecionado. Cadastre para liberar as
+              vendas.
+            </p>
+            <div>
+              <Label htmlFor="mp-public-key-only">Public Key MP</Label>
+              <Input
+                id="mp-public-key-only"
+                type="text"
+                className="mt-1.5 font-mono"
+                placeholder="APP_USR-..."
+                value={publicKeyInput}
+                onChange={(e) => setPublicKeyInput(e.target.value)}
+              />
+              <p className="mt-1 text-[11px] text-amber-700">
+                Mercado Pago → Suas integrações → sua aplicação → Credenciais de
+                produção → <strong>Public Key</strong>.
+              </p>
+            </div>
+            <div className="flex justify-end">
+              <Button
+                onClick={savePublicKey}
+                disabled={mpSaving}
+                className="bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)]"
+              >
+                {mpSaving ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Salvando...
+                  </>
+                ) : (
+                  "Salvar Public Key"
                 )}
               </Button>
             </div>

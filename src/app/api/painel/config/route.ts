@@ -45,6 +45,7 @@ export const GET = withRequestContext(
         mpConnected: true,
         mpUserId: true,
         mpWebhookSecret: true,
+        mpPublicKey: true,
         monthlyAllowed: true,
         monthlyEnabled: true,
         monthlyScope: true,
@@ -55,14 +56,16 @@ export const GET = withRequestContext(
       return NextResponse.json({ error: "Recurso não encontrado" }, { status: 404 })
     }
 
-    // Nunca expõe a secret em si — só se está configurada.
-    const { mpWebhookSecret, ...tenantSafe } = tenant
+    // Nunca expõe a secret em si — só se está configurada. A public key não é
+    // secreta (vai pro client no checkout), mas a UI só precisa do booleano.
+    const { mpWebhookSecret, mpPublicKey, ...tenantSafe } = tenant
     return NextResponse.json({
       data: {
         user,
         tenant: {
           ...tenantSafe,
           mpWebhookConfigured: mpWebhookSecret !== null,
+          mpPublicKeyConfigured: mpPublicKey !== null,
           // URL exata que enviamos ao MP e que a unidade cola no painel MP.
           mpWebhookUrl: mpWebhookUrl(tenant.slug),
         },

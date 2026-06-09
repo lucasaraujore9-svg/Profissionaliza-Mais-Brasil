@@ -28,6 +28,7 @@ export interface ConfigData {
     status: "PENDING" | "ACTIVE" | "SUSPENDED" | "CANCELLED"
     mpConnected: boolean
     mpWebhookConfigured: boolean
+    mpPublicKeyConfigured: boolean
     mpWebhookUrl: string
     mpUserId: string | null
     monthlyAllowed: boolean

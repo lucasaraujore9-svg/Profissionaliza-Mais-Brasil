@@ -15,7 +15,12 @@ const bodySchema = z
       .min(10, "Token inválido")
       .max(400, "Token muito longo")
       .optional(),
-    publicKey: z.string().trim().max(400).optional(),
+    publicKey: z
+      .string()
+      .trim()
+      .min(10, "Public key inválida")
+      .max(400, "Public key muito longa")
+      .optional(),
     mpUserId: z.string().trim().max(100).optional(),
     // Assinatura secreta do webhook desta conta MP (painel MP → Webhooks →
     // "Chave secreta"). Sem ela o webhook de pagamento é rejeitado por HMAC.
@@ -26,8 +31,8 @@ const bodySchema = z
       .max(200, "Assinatura secreta muito longa")
       .optional(),
   })
-  .refine((d) => d.accessToken || d.webhookSecret, {
-    message: "Informe o token ou a assinatura secreta",
+  .refine((d) => d.accessToken || d.webhookSecret || d.publicKey, {
+    message: "Informe o token, a public key ou a assinatura secreta",
   })
 
 export const POST = withRequestContext(
@@ -96,21 +101,30 @@ export const POST = withRequestContext(
       where: { id: tenantId },
       data: {
         // Cada campo só é tocado quando o respectivo valor foi enviado, para
-        // permitir (a) conectar token, (b) atualizar só a secret depois.
+        // permitir (a) conectar token, (b) atualizar só a public key, ou
+        // (c) atualizar só a assinatura secreta depois.
         ...(encryptedToken
           ? {
               mpAccessToken: encryptedToken,
-              mpPublicKey: parsed.data.publicKey ?? null,
               mpUserId: parsed.data.mpUserId ?? null,
               mpConnected: true,
             }
+          : {}),
+        // Public key é independente do token: quem conectou antes do checkout
+        // transparente pode informá-la sozinha (necessária para montar o Brick).
+        ...(parsed.data.publicKey !== undefined
+          ? { mpPublicKey: parsed.data.publicKey }
           : {}),
         ...(encryptedSecret ? { mpWebhookSecret: encryptedSecret } : {}),
       },
     })
 
     return NextResponse.json({
-      data: { connected: true, webhookConfigured: encryptedSecret !== null },
+      data: {
+        connected: true,
+        webhookConfigured: encryptedSecret !== null,
+        publicKeyConfigured: parsed.data.publicKey !== undefined,
+      },
     })
   },
 )
