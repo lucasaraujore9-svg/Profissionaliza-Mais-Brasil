@@ -1,30 +1,37 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { decryptTenantMpToken } from "@/lib/mercadopago/client"
 import {
   processTransparentMpPayment,
   transparentFormDataSchema,
 } from "@/lib/mercadopago/transparent-process"
+import {
+  pmbMpAccessToken,
+  pmbPlataformaPolo,
+  pmbPlataformaVendedorId,
+  PMB_PUBLIC_NAME,
+} from "@/lib/pmb-config"
 import { rateLimit, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
 import { contextLogger } from "@/lib/logger"
 import { withRequestContext } from "@/lib/observability/with-request-context"
-import { mpWebhookUrl, vitrineUrl } from "@/lib/tenant/urls"
+import { mpWebhookUrl } from "@/lib/tenant/urls"
 
 const bodySchema = z.object({
   enrollmentId: z.string().min(1),
   formData: transparentFormDataSchema,
 })
 
+/**
+ * Process do Checkout Transparente do sistema mãe (vitrine PMB, tenantId=null)
+ * quando `pmbDirectSaleGateway = MP`. Espelha /api/loja/checkout/process, mas
+ * usa o token/contexto da conta MP da PMB. O webhook continua como rede de
+ * segurança (buildPmbContext, sem ?tenant= na notification_url).
+ */
 export const POST = withRequestContext(
-  { action: "loja.checkout.process", route: "/api/loja/checkout/process" },
+  { action: "pmb.checkout.mp.process", route: "/api/checkout/mp/process" },
   async (request: Request) => {
     const rl = await rateLimit(request, RATE_LIMITS.publicCheckout)
     if (!rl.ok) return rateLimitResponse(rl)
-
-    // Resolve o tenant pelo header injetado pelo proxy (mesmo padrão do init).
-    const tenantIdHeader = request.headers.get("x-tenant-id")
-    const tenantSlug = request.headers.get("x-tenant-slug")
 
     let payload: unknown
     try {
@@ -47,47 +54,25 @@ export const POST = withRequestContext(
     const { enrollmentId, formData } = parsed.data
 
     try {
-      const enrollment = await prisma.enrollment.findUnique({
-        where: { id: enrollmentId },
+      // Matrícula PMB = tenantId null. Anti-IDOR: nunca toca matrícula de revenda.
+      const enrollment = await prisma.enrollment.findFirst({
+        where: { id: enrollmentId, tenantId: null },
         select: {
           id: true,
           status: true,
-          tenantId: true,
           paymentType: true,
           finalAmount: true,
           installmentsTotal: true,
           externalReference: true,
           course: { select: { nome: true } },
           student: { select: { nome: true, email: true, cpf: true } },
-          tenant: {
-            select: {
-              id: true,
-              slug: true,
-              name: true,
-              status: true,
-              mpAccessToken: true,
-              plataformaVendedorId: true,
-            },
-          },
         },
       })
 
-      if (!enrollment || !enrollment.tenant) {
+      if (!enrollment) {
         return NextResponse.json(
           { error: "Matrícula não encontrada", code: "NOT_FOUND" },
           { status: 404 },
-        )
-      }
-
-      const headerMatches = tenantIdHeader
-        ? enrollment.tenantId === tenantIdHeader
-        : tenantSlug
-          ? enrollment.tenant.slug === tenantSlug
-          : false
-      if (!headerMatches) {
-        return NextResponse.json(
-          { error: "Matrícula inválida para esta loja", code: "TENANT_MISMATCH" },
-          { status: 403 },
         )
       }
 
@@ -101,20 +86,19 @@ export const POST = withRequestContext(
         )
       }
 
-      const tenant = enrollment.tenant
-      if (tenant.status !== "ACTIVE" || !tenant.mpAccessToken) {
+      const token = await pmbMpAccessToken()
+      if (!token) {
         return NextResponse.json(
-          { error: "Loja indisponível para pagamento", code: "TENANT_INACTIVE" },
-          { status: 403 },
+          { error: "Pagamento PMB ainda não configurado", code: "MP_NOT_CONFIGURED" },
+          { status: 503 },
         )
       }
 
+      const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/$/, "")
       const reqHost =
         request.headers.get("x-forwarded-host") ?? request.headers.get("host")
       const protocol = request.headers.get("x-forwarded-proto") ?? "https"
-      const storeUrl = reqHost
-        ? `${protocol}://${reqHost}`
-        : vitrineUrl(tenantSlug ?? tenant.slug)
+      const siteUrl = appUrl || (reqHost ? `${protocol}://${reqHost}` : "")
 
       const result = await processTransparentMpPayment(
         {
@@ -122,7 +106,8 @@ export const POST = withRequestContext(
           finalAmount: Number(enrollment.finalAmount),
           paymentType: enrollment.paymentType,
           installmentsTotal: enrollment.installmentsTotal,
-          externalReference: enrollment.externalReference ?? `enr_${enrollment.id}`,
+          externalReference:
+            enrollment.externalReference ?? `pmb_enr_${enrollment.id}`,
           courseNome: enrollment.course.nome,
           studentNome: enrollment.student.nome,
           studentEmail: enrollment.student.email,
@@ -130,16 +115,17 @@ export const POST = withRequestContext(
         },
         formData,
         {
-          accessToken: decryptTenantMpToken(tenant.mpAccessToken),
+          accessToken: token,
           fulfillTenant: {
-            id: tenant.id,
-            slug: tenant.slug,
-            name: tenant.name,
-            plataformaVendedorId: tenant.plataformaVendedorId,
-            isPmbVitrine: false,
+            id: "__pmb__",
+            slug: pmbPlataformaPolo(),
+            name: PMB_PUBLIC_NAME,
+            plataformaVendedorId: pmbPlataformaVendedorId(),
+            isPmbVitrine: true,
           },
-          notificationUrl: mpWebhookUrl(tenantSlug),
-          subscriptionBackUrl: `${storeUrl}/loja/confirmacao?enrollment_id=${enrollment.id}`,
+          // PMB: sem ?tenant= → o webhook resolve via buildPmbContext.
+          notificationUrl: mpWebhookUrl(),
+          subscriptionBackUrl: `${siteUrl}/checkout/confirmacao?enrollment_id=${enrollment.id}`,
         },
       )
 
@@ -157,8 +143,8 @@ export const POST = withRequestContext(
       })
     } catch (error) {
       contextLogger().error(
-        { err: error, event: "loja.checkout.process_failed", enrollmentId },
-        "process de pagamento transparente falhou",
+        { err: error, event: "pmb.checkout.mp.process_failed", enrollmentId },
+        "process MP transparente PMB falhou",
       )
       return NextResponse.json(
         { error: "Erro ao processar o pagamento", code: "INTERNAL_ERROR" },

@@ -31,6 +31,15 @@ export async function pmbMpAccessToken(): Promise<string | null> {
   return getPmbMpAccessTokenAsync()
 }
 
+/**
+ * Public key da conta MP da PMB — usada no browser pelo checkout transparente
+ * (montar o form de cartão / tokenizar). NÃO é segredo (vai para o client),
+ * então fica em env. Necessária quando `pmbDirectSaleGateway = MP`.
+ */
+export function pmbMpPublicKey(): string | null {
+  return process.env.PMB_MP_PUBLIC_KEY?.trim() || null
+}
+
 export function pmbPlataformaVendedorId(): string | null {
   return (
     process.env.PMB_PLATAFORMA_VENDEDOR_ID ||

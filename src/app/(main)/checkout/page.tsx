@@ -1,7 +1,10 @@
 import Link from "next/link"
 import { OrderSummary } from "@/components/loja/order-summary"
 import { PmbCheckoutForm } from "@/components/loja/pmb-checkout-form"
+import { MpCheckoutForm } from "@/components/loja/mp-checkout-form"
 import { prisma } from "@/lib/prisma"
+import { getSystemSettings } from "@/lib/system-settings"
+import { pmbMpPublicKey } from "@/lib/pmb-config"
 
 interface CheckoutPageProps {
   searchParams: Promise<{
@@ -141,6 +144,12 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
   const discountAmount = validatedCoupon?.discountAmount ?? 0
   const finalPrice = validatedCoupon?.finalPrice ?? basePrice
 
+  // Gateway do sistema mãe: MP (checkout transparente próprio) ou Asaas. Mesma
+  // tela; muda só o gateway por baixo.
+  const settings = await getSystemSettings()
+  const useMp = settings.pmbDirectSaleGateway === "MP"
+  const mpPublicKey = useMp ? pmbMpPublicKey() : null
+
   return (
     <section className="bg-[#FAFAFA] py-10 md:py-16">
       <div className="mx-auto max-w-6xl px-4 md:px-6">
@@ -160,10 +169,30 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_380px] lg:gap-8">
           <div className="space-y-6">
-            <PmbCheckoutForm
-              courseId={course.id}
-              couponCode={validatedCoupon?.code ?? null}
-            />
+            {useMp ? (
+              mpPublicKey ? (
+                <MpCheckoutForm
+                  publicKey={mpPublicKey}
+                  courseId={course.id}
+                  couponCode={validatedCoupon?.code ?? null}
+                  initPath="/api/checkout"
+                  processPath="/api/checkout/mp/process"
+                  statusPath="/api/checkout/status"
+                  confirmacaoPath="/checkout/confirmacao"
+                />
+              ) : (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-sm text-amber-800">
+                  O pagamento via Mercado Pago ainda não está configurado
+                  (falta a Public Key). Defina <code>PMB_MP_PUBLIC_KEY</code> ou
+                  use o gateway Asaas em Configurações.
+                </div>
+              )
+            ) : (
+              <PmbCheckoutForm
+                courseId={course.id}
+                couponCode={validatedCoupon?.code ?? null}
+              />
+            )}
           </div>
 
           <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start">

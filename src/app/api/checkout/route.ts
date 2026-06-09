@@ -2,10 +2,6 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import {
-  createPreference,
-  createPreapproval,
-} from "@/lib/mercadopago/client"
-import {
   findOrCreateAsaasCustomer,
   createPayment as createAsaasPayment,
   createSubscription as createAsaasSubscription,
@@ -26,6 +22,7 @@ import {
   pmbPlataformaPolo,
   pmbPlataformaVendedorId,
   pmbMpAccessToken,
+  pmbMpPublicKey,
 } from "@/lib/pmb-config"
 import { getSystemSettings } from "@/lib/system-settings"
 import { swallow } from "@/lib/errors"
@@ -143,7 +140,9 @@ export const POST = withRequestContext(
     // Pré-check do gateway escolhido — falha cedo se faltam credenciais.
     if (gateway === "MP") {
       const token = await pmbMpAccessToken()
-      if (!token) {
+      // Checkout transparente do MP precisa da public key (monta o form de
+      // cartão no browser), além do access token.
+      if (!token || !pmbMpPublicKey()) {
         return NextResponse.json(
           {
             error: "Pagamento PMB ainda não configurado",
@@ -389,101 +388,23 @@ export const POST = withRequestContext(
     }
 
     const externalReference = `pmb_enr_${enrollment.id}`
-    const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/$/, "")
-    const host = request.headers.get("host") ?? ""
-    const protocol = request.headers.get("x-forwarded-proto") ?? "https"
-    const siteUrl = appUrl || `${protocol}://${host}`
 
-    // ── MP (mantém fluxo de redirect) ─────────────────────────────────────
+    // ── MP (Checkout Transparente) ────────────────────────────────────────
+    // Não criamos preference aqui: apenas marcamos a external_reference e
+    // devolvemos os dados para o form montar o checkout (cartão/PIX/boleto) na
+    // própria tela. A cobrança acontece em POST /api/checkout/mp/process.
     if (gateway === "MP") {
-      const mpToken = (await pmbMpAccessToken())!
-
-      if (isMonthly && monthlyMonths) {
-        const startDate = new Date(Date.now() + 60_000).toISOString()
-        const endDate = new Date(
-          Date.now() +
-            monthlyMonths * 31 * 24 * 60 * 60 * 1000 +
-            3 * 24 * 60 * 60 * 1000,
-        ).toISOString()
-
-        const preapproval = await createPreapproval(mpToken, {
-          reason: `Mensalidade — ${course.nome}`,
-          external_reference: externalReference,
-          payer_email: student.email ?? data.email,
-          back_url: `${siteUrl}/checkout/confirmacao?enrollment_id=${enrollment.id}`,
-          notification_url: appUrl
-            ? `${appUrl}/api/webhooks/mercadopago`
-            : undefined,
-          auto_recurring: {
-            frequency: 1,
-            frequency_type: "months",
-            transaction_amount: finalAmount,
-            currency_id: "BRL",
-            start_date: startDate,
-            end_date: endDate,
-          },
-          status: "pending",
-        })
-
-        await prisma.enrollment.update({
-          where: { id: enrollment.id },
-          data: {
-            mpSubscriptionId: preapproval.id,
-            externalReference,
-          },
-        })
-
-        return NextResponse.json({
-          data: {
-            enrollmentId: enrollment.id,
-            gateway: "MP",
-            mode: "redirect",
-            initPoint: preapproval.init_point,
-          },
-        })
-      }
-
-      const preference = await createPreference(mpToken, {
-        items: [
-          {
-            id: course.id,
-            title: course.nome,
-            quantity: 1,
-            unit_price: finalAmount,
-            currency_id: "BRL",
-          },
-        ],
-        payer: {
-          name: student.nome,
-          email: student.email ?? data.email,
-          identification: { type: "CPF", number: data.cpf },
-        },
-        back_urls: {
-          success: `${siteUrl}/checkout/confirmacao?enrollment_id=${enrollment.id}`,
-          failure: `${siteUrl}/checkout?course_id=${course.id}&error=payment_failed`,
-          pending: `${siteUrl}/checkout/confirmacao?enrollment_id=${enrollment.id}`,
-        },
-        auto_return: "approved",
-        external_reference: externalReference,
-        notification_url: appUrl
-          ? `${appUrl}/api/webhooks/mercadopago`
-          : undefined,
-      })
-
       await prisma.enrollment.update({
         where: { id: enrollment.id },
-        data: {
-          mpPreferenceId: preference.id,
-          externalReference,
-        },
+        data: { externalReference },
       })
 
       return NextResponse.json({
         data: {
           enrollmentId: enrollment.id,
           gateway: "MP",
-          mode: "redirect",
-          initPoint: preference.init_point,
+          mode: "mp_transparent",
+          payerEmail: student.email ?? data.email,
         },
       })
     }
