@@ -1,6 +1,6 @@
 import Link from "next/link"
 import { OrderSummary } from "@/components/loja/order-summary"
-import { StudentForm } from "@/components/loja/student-form"
+import { MpCheckoutForm } from "@/components/loja/mp-checkout-form"
 import { PaymentInfo } from "@/components/loja/payment-info"
 import { getCurrentTenant } from "@/lib/tenant/current"
 import { applyCouponDiscount } from "@/lib/coupons/discount"
@@ -126,6 +126,13 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
     )
   }
 
+  // Public key do MP do revendedor — necessária para montar o checkout
+  // transparente no browser. getCurrentTenant não a traz, então buscamos aqui.
+  const tenantMp = await prisma.tenant.findUnique({
+    where: { id: tenant.id },
+    select: { mpPublicKey: true },
+  })
+
   const basePrice = Number(tenantCourse.price)
   // Tipo efetivo na vitrine: se a unidade nao tem parcelado habilitado para a
   // vitrine, MONTHLY cai para ONE_TIME (coerente com /api/loja/checkout).
@@ -166,10 +173,18 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_380px] lg:gap-8">
           <div className="space-y-6">
-            <StudentForm
-              courseId={tenantCourse.id}
-              couponCode={validatedCoupon?.code ?? null}
-            />
+            {tenantMp?.mpPublicKey ? (
+              <MpCheckoutForm
+                publicKey={tenantMp.mpPublicKey}
+                courseId={tenantCourse.id}
+                couponCode={validatedCoupon?.code ?? null}
+              />
+            ) : (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-sm text-amber-800">
+                Esta loja ainda não concluiu a configuração do pagamento. Tente
+                novamente em instantes ou fale com o suporte da loja.
+              </div>
+            )}
             <PaymentInfo />
           </div>
 

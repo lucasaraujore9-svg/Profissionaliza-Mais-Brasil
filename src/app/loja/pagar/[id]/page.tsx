@@ -1,7 +1,7 @@
 import { headers } from "next/headers"
 import Link from "next/link"
 import { prisma } from "@/lib/prisma"
-import { MpPaymentBrick } from "@/components/loja/mp-payment-brick"
+import { MpCheckoutForm } from "@/components/loja/mp-checkout-form"
 import { OrderSummary } from "@/components/loja/order-summary"
 
 export const dynamic = "force-dynamic"
@@ -58,7 +58,7 @@ export default async function PagarPage({ params }: PagarPageProps) {
       course: {
         select: { nome: true, cargaHoraria: true, categoriaLoja: true, categoriaInterna: true },
       },
-      student: { select: { email: true } },
+      student: { select: { email: true, nome: true } },
       tenant: { select: { status: true, mpPublicKey: true } },
       tenantCourse: {
         select: {
@@ -121,17 +121,12 @@ export default async function PagarPage({ params }: PagarPageProps) {
         </header>
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_380px] lg:gap-8">
-          <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm lg:p-8">
-            <MpPaymentBrick
+          <div>
+            <MpCheckoutForm
               publicKey={enrollment.tenant.mpPublicKey}
-              amount={Number(enrollment.finalAmount)}
-              payerEmail={payerEmail}
               enrollmentId={enrollment.id}
-              mode={isMonthly ? "subscription" : "one_time"}
-              maxInstallments={maxInstallments}
-              processUrl="/api/loja/checkout/process"
-              statusUrl="/api/loja/checkout/status"
-              successUrl={`/loja/confirmacao?enrollment_id=${enrollment.id}`}
+              defaultNome={enrollment.student.nome ?? undefined}
+              defaultEmail={payerEmail}
             />
           </div>
 
