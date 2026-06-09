@@ -90,7 +90,6 @@ export async function ensureStudentOnPlatform(
 
   const isPmb = student.tenant.slug === PMB_TENANT_SLUG
   const polo = isPmb ? pmbPlataformaPolo() : student.tenant.slug
-  const vendedor = isPmb ? pmbPlataformaVendedorId() : student.tenant.plataformaVendedorId
 
   const result = await criarAluno({
     nome: student.nome,
@@ -111,7 +110,10 @@ export async function ensureStudentOnPlatform(
     polo,
     status: "ativo",
     apostila: "liberar",
-    vendedor: vendedor ? Number.parseInt(vendedor, 10) || undefined : undefined,
+    // Por decisão de negócio, NUNCA enviamos vendedor ao EA — o campo fica
+    // sempre vazio na plataforma de aulas, para qualquer venda (revenda ou
+    // PMB). O `polo` é o que identifica a unidade do aluno.
+    vendedor: undefined,
     // Bolsista (bolsa de estudo): a plataforma espera "S"/"N". So enviamos
     // quando o aluno foi marcado como bolsista numa venda direta — o EA libera
     // o acesso sem vincular cobranca financeira na plataforma.
@@ -131,7 +133,9 @@ export async function ensureStudentOnPlatform(
       status: "ATIVO",
       apostila: "LIBERADA",
       polo,
-      vendedorId: vendedor ?? null,
+      // Não atribuímos vendedor (nem no EA, nem no nosso registro) — uniforme
+      // para todas as unidades.
+      vendedorId: null,
     },
   })
 
