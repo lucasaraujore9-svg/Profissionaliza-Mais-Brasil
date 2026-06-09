@@ -42,10 +42,59 @@ export interface MPPreference {
   items: MPPreferenceItem[]
 }
 
+/**
+ * Identificação do pagador. CPF/CNPJ é exigido pelo MP em pagamentos
+ * transparentes (cartão, PIX e boleto).
+ */
+export interface MPIdentification {
+  type: "CPF" | "CNPJ"
+  number: string
+}
+
+/**
+ * Parâmetros do POST /v1/payments — núcleo do Checkout Transparente.
+ *
+ * - Cartão: exige `token` (gerado client-side pelo SDK do MP), `installments`,
+ *   `payment_method_id` e `issuer_id`.
+ * - PIX: `payment_method_id: "pix"`, sem token. A resposta traz o QR em
+ *   `point_of_interaction.transaction_data`.
+ * - Boleto: `payment_method_id: "bolbradesco"` (ou similar), sem token. A
+ *   resposta traz a URL/linha digitável em `transaction_details`.
+ */
+export interface MPCreatePaymentParams {
+  transaction_amount: number
+  description?: string
+  /** Token do cartão tokenizado no browser. Ausente em PIX/boleto. */
+  token?: string
+  installments?: number
+  payment_method_id: string
+  issuer_id?: string
+  external_reference?: string
+  notification_url?: string
+  /** Data de expiração (ISO) — usado em PIX/boleto. */
+  date_of_expiration?: string
+  payer: {
+    email: string
+    first_name?: string
+    last_name?: string
+    identification?: MPIdentification
+    address?: {
+      zip_code?: string
+      street_name?: string
+      street_number?: string
+      neighborhood?: string
+      city?: string
+      federal_unit?: string
+    }
+  }
+  metadata?: Record<string, unknown>
+}
+
 export interface MPPayment {
   id: number
   date_created: string
   date_approved: string | null
+  date_of_expiration?: string | null
   status: "pending" | "approved" | "authorized" | "in_process" | "in_mediation" | "rejected" | "cancelled" | "refunded" | "charged_back"
   status_detail: string
   payment_method_id: string
@@ -59,6 +108,20 @@ export interface MPPayment {
     id: string
     email: string
     identification?: { type: string; number: string }
+  }
+  /** PIX: QR code (copia-e-cola + base64 da imagem) e ticket_url. */
+  point_of_interaction?: {
+    transaction_data?: {
+      qr_code?: string
+      qr_code_base64?: string
+      ticket_url?: string
+    }
+  }
+  /** Boleto: PDF/linha digitável. */
+  transaction_details?: {
+    external_resource_url?: string | null
+    digitable_line?: string | null
+    verification_code?: string | null
   }
   metadata: Record<string, unknown>
 }
@@ -88,6 +151,12 @@ export interface MPCreatePreapprovalParams {
   payer_email: string
   back_url: string
   notification_url?: string
+  /**
+   * Token do cartão (gerado no browser) para assinatura transparente. Quando
+   * presente, o MP cobra o cartão direto e o status nasce "authorized" sem
+   * redirect. Ausente = fluxo redirecionado (init_point).
+   */
+  card_token_id?: string
   auto_recurring: {
     frequency: number
     frequency_type: "days" | "months"

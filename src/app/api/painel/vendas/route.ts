@@ -3,11 +3,6 @@ import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { requireResellerSession } from "@/lib/auth/reseller-session"
 import { auth } from "@/lib/auth"
-import {
-  createPreference,
-  createPreapproval,
-  decryptTenantMpToken,
-} from "@/lib/mercadopago/client"
 import { tryConsumeCoupon, releaseCoupon } from "@/lib/coupons/consume"
 import { applyCouponDiscount } from "@/lib/coupons/discount"
 import { swallow } from "@/lib/errors"
@@ -18,6 +13,7 @@ import { fulfillScholarshipEnrollment } from "@/lib/enrollment/fulfill"
 import { isValidCpf, stripCpf } from "@/lib/validation/cpf"
 import { isValidPhone, normalizePhone } from "@/lib/validation/phone"
 import { effectivePaymentType } from "@/lib/tenant/monthly-policy"
+import { vitrineUrl } from "@/lib/tenant/urls"
 
 const createSchema = z.object({
   // Dados do aluno (cria ou reaproveita por CPF/email)
@@ -122,6 +118,8 @@ export const POST = withRequestContext(
         name: true,
         status: true,
         mpAccessToken: true,
+        mpPublicKey: true,
+        customDomain: true,
         plataformaVendedorId: true,
         monthlyAllowed: true,
         monthlyEnabled: true,
@@ -388,108 +386,39 @@ export const POST = withRequestContext(
     // Padronizado: `enr_<id>` (mesmo formato de /api/loja/checkout). O webhook
     // identifica o tenant pela query string `?tenant=<slug>` na notification_url.
     const externalReference = `enr_${enrollment.id}`
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? ""
     // Re-checagem para narrowing: o guard de mpAccessToken acima e condicional
-    // (bolsa pula), mas a bolsa ja retornou antes daqui — entao o token existe.
-    if (!tenant.mpAccessToken) {
+    // (bolsa pula). Checkout transparente também exige a public key.
+    if (!tenant.mpAccessToken || !tenant.mpPublicKey) {
       await prisma.enrollment.delete({ where: { id: enrollment.id } }).catch(swallow("painel.vendas.rollback"))
       if (couponId) await releaseCoupon(couponId).catch(swallow("painel.vendas.rollback"))
       return NextResponse.json(
-        { error: "Conecte o Mercado Pago em /painel/configuracoes" },
+        { error: "Conecte o Mercado Pago (token + public key) em /painel/configuracoes" },
         { status: 503 },
       )
     }
-    const accessToken = decryptTenantMpToken(tenant.mpAccessToken)
 
-    // Wrapper try/catch obrigatório: ver explicação na rota /api/aluno/comprar.
-    // Sem isso, falha de MP (5xx, timeout) deixa enrollment PENDING órfã +
-    // cupom com usedCount inflado pra sempre.
+    // Checkout Transparente: NÃO criamos preference no MP. O link enviado ao
+    // aluno aponta para a NOSSA página de pagamento na vitrine do revendedor
+    // (/loja/pagar/<id>), onde ele paga cartão/PIX/boleto sem sair do domínio
+    // da loja — nunca é redirecionado para o site do Mercado Pago.
     try {
-      if (isMonthly && monthlyMonths) {
-        const startDate = new Date(Date.now() + 60_000).toISOString()
-        const endDate = new Date(
-          Date.now() +
-            monthlyMonths * 31 * 24 * 60 * 60 * 1000 +
-            3 * 24 * 60 * 60 * 1000,
-        ).toISOString()
-
-        const preapproval = await createPreapproval(accessToken, {
-          reason: `Mensalidade — ${tenantCourse.course.nome}`,
-          external_reference: externalReference,
-          payer_email: student.email ?? data.email,
-          back_url: `${appUrl || `https://${process.env.NEXT_PUBLIC_APP_DOMAIN ?? "profissionalizamaisbrasil.com.br"}`}/painel/vendas?ok=${enrollment.id}`,
-          notification_url: appUrl
-            ? `${appUrl}/api/webhooks/mercadopago?tenant=${tenant.slug}`
-            : undefined,
-          auto_recurring: {
-            frequency: 1,
-            frequency_type: "months",
-            transaction_amount: finalAmount,
-            currency_id: "BRL",
-            start_date: startDate,
-            end_date: endDate,
-          },
-          status: "pending",
-        })
-
-        await prisma.enrollment.update({
-          where: { id: enrollment.id },
-          data: { mpSubscriptionId: preapproval.id, externalReference },
-        })
-
-        return NextResponse.json({
-          data: {
-            enrollmentId: enrollment.id,
-            mode: "subscription",
-            installmentsTotal: monthlyMonths,
-            initPoint: preapproval.init_point,
-            finalAmount,
-            discountAmount,
-            basePrice,
-            studentId: student.id,
-          },
-        })
-      }
-
-      const preference = await createPreference(accessToken, {
-        items: [
-          {
-            id: tenantCourse.course.id,
-            title: tenantCourse.course.nome,
-            quantity: 1,
-            unit_price: finalAmount,
-            currency_id: "BRL",
-          },
-        ],
-        payer: {
-          name: student.nome,
-          email: student.email ?? data.email,
-          identification: student.cpf
-            ? { type: "CPF", number: student.cpf }
-            : undefined,
-        },
-        back_urls: appUrl
-          ? {
-              success: `${appUrl}/painel/vendas?ok=${enrollment.id}`,
-              failure: `${appUrl}/painel/vendas?err=${enrollment.id}`,
-              pending: `${appUrl}/painel/vendas?pend=${enrollment.id}`,
-            }
-          : undefined,
-        auto_return: "approved",
-        external_reference: externalReference,
-        notification_url: appUrl ? `${appUrl}/api/webhooks/mercadopago?tenant=${tenant.slug}` : undefined,
-      })
-
       await prisma.enrollment.update({
         where: { id: enrollment.id },
-        data: { mpPreferenceId: preference.id, externalReference },
+        data: { externalReference },
       })
+
+      // Path público da vitrine é SEM /loja (o proxy reescreve /pagar → /loja/pagar).
+      const storeBase = tenant.customDomain
+        ? `https://${tenant.customDomain}`
+        : vitrineUrl(tenant.slug)
+      const paymentUrl = `${storeBase}/pagar/${enrollment.id}`
 
       return NextResponse.json({
         data: {
           enrollmentId: enrollment.id,
-          mode: "one_time",
-          initPoint: preference.init_point,
+          mode: isMonthly ? "subscription" : "one_time",
+          installmentsTotal: monthlyMonths,
+          paymentUrl,
           finalAmount,
           discountAmount,
           basePrice,

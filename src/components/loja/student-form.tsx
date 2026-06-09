@@ -6,11 +6,24 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { clientLogger } from "@/lib/logger-client"
+import { MpPaymentBrick } from "@/components/loja/mp-payment-brick"
 
 export interface StudentFormProps {
   courseId: string
   couponCode: string | null
   apiPath?: string
+  processPath?: string
+  statusPath?: string
+}
+
+/** Dados devolvidos pelo init para montar o Payment Brick (passo 2). */
+interface CheckoutInit {
+  enrollmentId: string
+  mode: "one_time" | "subscription"
+  amount: number
+  publicKey: string
+  payerEmail: string
+  maxInstallments?: number
 }
 
 interface FormState {
@@ -61,11 +74,16 @@ export function StudentForm({
   courseId,
   couponCode,
   apiPath = "/api/loja/checkout",
+  processPath = "/api/loja/checkout/process",
+  statusPath = "/api/loja/checkout/status",
 }: StudentFormProps) {
   const [form, setForm] = useState<FormState>(INITIAL)
   const [status, setStatus] = useState<SubmitStatus>("idle")
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
+  // Passo 2: dados do checkout para montar o Payment Brick. Enquanto null,
+  // mostramos o formulário de dados (passo 1).
+  const [checkout, setCheckout] = useState<CheckoutInit | null>(null)
 
   function setField<K extends keyof FormState>(key: K, value: string) {
     setForm((prev) => ({ ...prev, [key]: value }))
@@ -99,7 +117,7 @@ export function StudentForm({
 
       const payload = await res.json()
 
-      if (!res.ok || !payload.data?.initPoint) {
+      if (!res.ok || !payload.data?.publicKey) {
         if (payload.code === "VALIDATION_ERROR" && payload.details) {
           const mapped: FieldErrors = {}
           for (const [field, msgs] of Object.entries(payload.details)) {
@@ -118,7 +136,10 @@ export function StudentForm({
         return
       }
 
-      window.location.href = payload.data.initPoint
+      // Passo 2: monta o Payment Brick com os dados do init. O comprador
+      // permanece no site (checkout transparente).
+      setCheckout(payload.data as CheckoutInit)
+      setStatus("idle")
     } catch (err) {
       clientLogger.error({ err: String(err), event: "checkout_form.submit_failed", courseId, hasCoupon: !!couponCode }, "checkout form submit falhou")
       setErrorMsg("Erro de conexão. Tente novamente.")
@@ -127,6 +148,44 @@ export function StudentForm({
   }
 
   const submitting = status === "submitting"
+
+  // ── Passo 2: pagamento (Payment Brick — cartão, PIX e boleto) ──────────────
+  if (checkout) {
+    return (
+      <div className="space-y-6">
+        <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm lg:p-8">
+          <div className="flex items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--color-pmb-lime-50)] font-mono text-sm font-semibold text-[var(--color-pmb-green)]">
+              02
+            </div>
+            <h2 className="text-base font-semibold text-[var(--color-pmb-green-900)]">
+              Pagamento
+            </h2>
+          </div>
+          <div className="mt-6">
+            <MpPaymentBrick
+              publicKey={checkout.publicKey}
+              amount={checkout.amount}
+              payerEmail={checkout.payerEmail}
+              enrollmentId={checkout.enrollmentId}
+              mode={checkout.mode}
+              maxInstallments={checkout.maxInstallments}
+              processUrl={processPath}
+              statusUrl={statusPath}
+              successUrl={`/loja/confirmacao?enrollment_id=${checkout.enrollmentId}`}
+            />
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => setCheckout(null)}
+          className="text-sm text-gray-500 underline hover:text-gray-700"
+        >
+          ← Voltar e revisar meus dados
+        </button>
+      </div>
+    )
+  }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
@@ -253,10 +312,10 @@ export function StudentForm({
           className="w-full bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)]"
         >
           <Lock className="mr-2 h-4 w-4" />
-          {submitting ? "Redirecionando..." : "Finalizar Compra"}
+          {submitting ? "Aguarde..." : "Ir para o pagamento"}
         </Button>
         <p className="text-center text-xs text-gray-500">
-          Você será redirecionado para o ambiente seguro de pagamento.
+          Pagamento seguro processado aqui mesmo, sem sair do site.
         </p>
       </div>
     </form>

@@ -8,12 +8,12 @@ import {
 import { validateMpWebhookSignature } from "./webhook"
 import type { MPPayment } from "./types"
 import { pmbPlataformaPolo, pmbPlataformaVendedorId, pmbMpAccessToken } from "@/lib/pmb-config"
+import { fulfillFromMpPayment } from "./fulfillment"
 import { fulfillEnrollment } from "@/lib/enrollment/fulfill"
 import { unlinkCourseFromStudent } from "@/lib/students/plataforma-actions"
 import { createNotification } from "@/lib/notifications"
 import { swallow } from "@/lib/errors"
 import { contextLogger } from "@/lib/logger"
-import { markLeadAsWon } from "@/lib/automation/leads"
 
 interface ProcessArgs {
   logId: string
@@ -209,41 +209,8 @@ async function revokeEnrollmentFromMp(
   }
 }
 
-async function fulfillFromMp(
-  tenant: TenantContext,
-  enrollmentId: string,
-  payment: MPPayment,
-): Promise<void> {
-  await fulfillEnrollment(
-    {
-      id: tenant.id,
-      slug: tenant.slug,
-      name: tenant.name,
-      plataformaVendedorId: tenant.plataformaVendedorId,
-      isPmbVitrine: tenant.isPmbVitrine,
-    },
-    enrollmentId,
-    {
-      gateway: "MP",
-      externalPaymentId: String(payment.id),
-      amount: payment.transaction_amount,
-      paidAt: payment.date_approved
-        ? new Date(payment.date_approved)
-        : new Date(),
-      mpPaymentType: payment.payment_type_id,
-      mpStatusDetail: payment.status_detail,
-    },
-  )
-
-  // Modulo Automacao: move StudentLead vinculado para WON e dispara o
-  // template PURCHASE_CONFIRMED. Silencioso quando nao ha lead.
-  // PMB usa tenantId=null; revendedor usa tenant.id.
-  await markLeadAsWon({
-    enrollmentId,
-    tenantId: tenant.isPmbVitrine ? null : tenant.id,
-    amount: payment.transaction_amount,
-  }).catch(swallow("mp.process.lead_won"))
-}
+/** Alias local — delega ao módulo de fulfillment compartilhado. */
+const fulfillFromMp = fulfillFromMpPayment
 
 export async function processMpWebhook(args: ProcessArgs): Promise<void> {
   const { logId, paymentId, xSignature, xRequestId, dataId, tenantSlug } = args

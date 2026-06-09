@@ -3,6 +3,7 @@ import type {
   MPCreatePreferenceParams,
   MPPreference,
   MPPayment,
+  MPCreatePaymentParams,
   MPPreapproval,
   MPCreatePreapprovalParams,
   MPAuthorizedPayment,
@@ -47,6 +48,7 @@ async function request<T>(
   path: string,
   accessToken: string,
   body?: unknown,
+  extraHeaders?: Record<string, string>,
 ): Promise<T> {
   const url = `${MP_BASE_URL}${path}`
 
@@ -59,6 +61,7 @@ async function request<T>(
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${accessToken}`,
+          ...extraHeaders,
         },
         body: body ? JSON.stringify(body) : undefined,
         signal: AbortSignal.timeout(20_000),
@@ -108,7 +111,29 @@ export async function createPreference(
   return request<MPPreference>("POST", "/checkout/preferences", accessToken, params)
 }
 
-// ── Payments ──
+// ── Payments (Checkout Transparente) ──
+
+/**
+ * Cria um pagamento direto via POST /v1/payments — coração do Checkout
+ * Transparente. Aceita cartão (com `token` tokenizado no browser), PIX e
+ * boleto (`payment_method_id` sem token).
+ *
+ * `idempotencyKey` (header X-Idempotency-Key) protege contra cobrança dupla
+ * em retry de rede / clique duplo — o MP devolve o MESMO pagamento se a chave
+ * já foi usada. Use sempre um valor estável por tentativa de checkout (ex.:
+ * o id da enrollment).
+ *
+ * https://www.mercadopago.com.br/developers/pt/reference/payments/_payments/post
+ */
+export async function createPayment(
+  accessToken: string,
+  params: MPCreatePaymentParams,
+  idempotencyKey: string,
+): Promise<MPPayment> {
+  return request<MPPayment>("POST", "/v1/payments", accessToken, params, {
+    "X-Idempotency-Key": idempotencyKey,
+  })
+}
 
 export async function getPayment(
   accessToken: string,

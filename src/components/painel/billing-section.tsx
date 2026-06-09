@@ -26,6 +26,7 @@ export function BillingSection({ data, onUpdate }: BillingSectionProps) {
     data.tenant.mpWebhookConfigured,
   )
   const [tokenInput, setTokenInput] = useState("")
+  const [publicKeyInput, setPublicKeyInput] = useState("")
   const [secretInput, setSecretInput] = useState("")
   const [mpSaving, setMpSaving] = useState(false)
   const [mpError, setMpError] = useState<string | null>(null)
@@ -97,6 +98,11 @@ export function BillingSection({ data, onUpdate }: BillingSectionProps) {
       setMpError("Token inválido")
       return
     }
+    const publicKey = publicKeyInput.trim()
+    if (publicKey.length < 10) {
+      setMpError("Public Key inválida — necessária para o checkout no site")
+      return
+    }
     const secret = secretInput.trim()
     if (secret && secret.length < 16) {
       setMpError("Assinatura secreta inválida (muito curta)")
@@ -109,6 +115,7 @@ export function BillingSection({ data, onUpdate }: BillingSectionProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           accessToken: tokenInput.trim(),
+          publicKey,
           ...(secret ? { webhookSecret: secret } : {}),
         }),
       })
@@ -120,6 +127,7 @@ export function BillingSection({ data, onUpdate }: BillingSectionProps) {
       setConnected(true)
       setWebhookConfigured(Boolean(secret))
       setTokenInput("")
+      setPublicKeyInput("")
       setSecretInput("")
       setShowForm(false)
       setMpSuccess(
@@ -429,6 +437,22 @@ export function BillingSection({ data, onUpdate }: BillingSectionProps) {
               <p className="mt-1 text-[11px] text-gray-500">
                 Copie no painel de pagamentos → Credenciais → Produção. O token é
                 criptografado antes de ser salvo.
+              </p>
+            </div>
+            <div>
+              <Label htmlFor="mp-public-key">Public Key MP</Label>
+              <Input
+                id="mp-public-key"
+                type="text"
+                className="mt-1.5 font-mono"
+                placeholder="APP_USR-..."
+                value={publicKeyInput}
+                onChange={(e) => setPublicKeyInput(e.target.value)}
+              />
+              <p className="mt-1 text-[11px] text-gray-500">
+                Mesma tela de Credenciais → Produção, campo{" "}
+                <strong>Public Key</strong>. Ela monta o formulário de cartão na
+                sua loja (checkout no próprio site, sem redirecionar).
               </p>
             </div>
             <div>

@@ -1,11 +1,6 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import {
-  createPreference,
-  createPreapproval,
-  decryptTenantMpToken,
-} from "@/lib/mercadopago/client"
 import { upsertStudent, StudentEmailConflictError } from "@/lib/students/upsert"
 import { provisionStudentAccess } from "@/lib/students/access"
 import { tryConsumeCoupon, releaseCoupon } from "@/lib/coupons/consume"
@@ -19,7 +14,6 @@ import { readVisitorId } from "@/lib/automation/tracking"
 import { isValidCpf, stripCpf } from "@/lib/validation/cpf"
 import { isValidPhone, normalizePhone } from "@/lib/validation/phone"
 import { effectivePaymentType } from "@/lib/tenant/monthly-policy"
-import { mpWebhookUrl, vitrineUrl } from "@/lib/tenant/urls"
 
 const bodySchema = z.object({
   courseId: z.string().min(1),
@@ -131,6 +125,7 @@ export const POST = withRequestContext(
           name: true,
           status: true,
           mpAccessToken: true,
+          mpPublicKey: true,
           plataformaVendedorId: true,
           automationEnabled: true,
           monthlyAllowed: true,
@@ -147,6 +142,8 @@ export const POST = withRequestContext(
               slug: true,
               plataformaCourseId: true,
               monthlyMonthsMain: true,
+              parcelasSugeridas: true,
+              parcelasOverride: true,
             },
           },
         },
@@ -177,7 +174,9 @@ export const POST = withRequestContext(
       )
     }
 
-    if (!tenant.mpAccessToken) {
+    if (!tenant.mpAccessToken || !tenant.mpPublicKey) {
+      // Checkout transparente monta o formulário de cartão no browser com a
+      // public key da conta MP do revendedor — sem ela, não há como tokenizar.
       return NextResponse.json(
         {
           error: "Loja ainda não configurou o pagamento",
@@ -333,104 +332,35 @@ export const POST = withRequestContext(
     }
 
     const externalReference = `enr_${enrollment.id}`
-    // O comprador está no host da PRÓPRIA vitrine (subdomínio {slug}.livrecursos
-    // OU domínio custom). Devolvemos o MP para esse mesmo host. Antes montávamos
-    // `{slug}.${NEXT_PUBLIC_APP_URL.host}` → caía em {slug}.profissionalizamais...
-    // (subdomínio reservado, inexistente) e o cliente via uma página 404 depois
-    // de pagar, parecendo falha. Fallback p/ o domínio de vitrine padrão.
-    const reqHost =
-      request.headers.get("x-forwarded-host") ?? request.headers.get("host")
-    const protocol = request.headers.get("x-forwarded-proto") ?? "https"
-    const storeUrl = reqHost
-      ? `${protocol}://${reqHost}`
-      : vitrineUrl(tenantSlug ?? tenant.slug)
 
-    const accessToken = decryptTenantMpToken(tenant.mpAccessToken)
-
-    if (isMonthly && monthlyMonths) {
-      // Cursos mensais usam preapproval (subscription recorrente do MP).
-      const startDate = new Date(Date.now() + 60_000).toISOString()
-      const endDate = new Date(
-        Date.now() +
-          monthlyMonths * 31 * 24 * 60 * 60 * 1000 +
-          3 * 24 * 60 * 60 * 1000,
-      ).toISOString()
-
-      const preapproval = await createPreapproval(accessToken, {
-        reason: `Mensalidade — ${tenantCourse.course.nome}`,
-        external_reference: externalReference,
-        payer_email: student.email ?? data.email,
-        back_url: `${storeUrl}/loja/confirmacao?enrollment_id=${enrollment.id}`,
-        // Host canônico (www) — o apex faz 307 e o MP não segue o redirect.
-        notification_url: mpWebhookUrl(tenantSlug),
-        auto_recurring: {
-          frequency: 1,
-          frequency_type: "months",
-          transaction_amount: finalAmount,
-          currency_id: "BRL",
-          start_date: startDate,
-          end_date: endDate,
-        },
-        status: "pending",
-      })
-
-      await prisma.enrollment.update({
-        where: { id: enrollment.id },
-        data: {
-          mpSubscriptionId: preapproval.id,
-          externalReference,
-        },
-      })
-
-      return NextResponse.json({
-        data: {
-          enrollmentId: enrollment.id,
-          mode: "subscription",
-          installmentsTotal: monthlyMonths,
-          initPoint: preapproval.init_point,
-        },
-      })
-    }
-
-    const preference = await createPreference(accessToken, {
-      items: [
-        {
-          id: tenantCourse.id,
-          title: tenantCourse.course.nome,
-          quantity: 1,
-          unit_price: finalAmount,
-          currency_id: "BRL",
-        },
-      ],
-      payer: {
-        name: student.nome,
-        email: student.email ?? data.email,
-        identification: { type: "CPF", number: data.cpf },
-      },
-      back_urls: {
-        success: `${storeUrl}/loja/confirmacao?enrollment_id=${enrollment.id}`,
-        failure: `${storeUrl}/loja/checkout?course_id=${tenantCourse.id}&error=payment_failed`,
-        pending: `${storeUrl}/loja/confirmacao?enrollment_id=${enrollment.id}`,
-      },
-      auto_return: "approved",
-      external_reference: externalReference,
-      // Host canônico (www) — o apex faz 307 e o MP não segue o redirect.
-      notification_url: mpWebhookUrl(tenantSlug),
-    })
-
+    // Checkout Transparente: NÃO criamos preference/preapproval aqui. Apenas
+    // marcamos a external_reference (usada pelo webhook e pelo /process) e
+    // devolvemos ao browser os dados para montar o Payment Brick. A cobrança
+    // de fato acontece em POST /api/loja/checkout/process com o token do cartão
+    // (ou geração de PIX/boleto) tokenizado client-side.
     await prisma.enrollment.update({
       where: { id: enrollment.id },
-      data: {
-        mpPreferenceId: preference.id,
-        externalReference,
-      },
+      data: { externalReference },
     })
+
+    // Parcelas máximas oferecidas no cartão (one-time). Mensal = recorrência,
+    // sempre 1 parcela por cobrança.
+    const maxInstallments = isMonthly
+      ? 1
+      : tenantCourse.customParcelas ??
+        tenantCourse.course.parcelasOverride ??
+        tenantCourse.course.parcelasSugeridas ??
+        12
 
     return NextResponse.json({
       data: {
         enrollmentId: enrollment.id,
-        mode: "one_time",
-        initPoint: preference.init_point,
+        mode: isMonthly ? "subscription" : "one_time",
+        amount: finalAmount,
+        publicKey: tenant.mpPublicKey,
+        payerEmail: student.email ?? data.email,
+        maxInstallments,
+        installmentsTotal: monthlyMonths,
       },
     })
   } catch (error) {

@@ -52,7 +52,7 @@ const RESERVED_SUBDOMAINS = new Set([
 // Rotas que devem ser reescritas para /loja em subdomínios de tenant.
 // Tudo fora dessa lista (ex: /admin, /painel, /login, /sobre)
 // passa direto e usa as rotas do site principal.
-const VITRINE_PATH_PREFIXES = ["/curso", "/checkout", "/confirmacao", "/contato"]
+const VITRINE_PATH_PREFIXES = ["/curso", "/checkout", "/confirmacao", "/contato", "/pagar"]
 
 function isVitrinePath(pathname: string): boolean {
   if (pathname === "/") return true

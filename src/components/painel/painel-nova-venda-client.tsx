@@ -20,7 +20,8 @@ function formatBRL(n: number): string {
 
 interface CreatedVenda {
   enrollmentId: string
-  initPoint?: string
+  /** Link da NOSSA página de pagamento transparente (não é o site do MP). */
+  paymentUrl?: string
   basePrice?: number
   finalAmount: number
   discountAmount?: number
@@ -83,8 +84,8 @@ export function PainelNovaVendaClient({ courses }: { courses: CourseOption[] }) 
   }
 
   async function copyLink() {
-    if (!created?.initPoint) return
-    await navigator.clipboard.writeText(created.initPoint)
+    if (!created?.paymentUrl) return
+    await navigator.clipboard.writeText(created.paymentUrl)
     setCopied(true)
     setTimeout(() => setCopied(false), 1500)
   }
@@ -108,9 +109,9 @@ export function PainelNovaVendaClient({ courses }: { courses: CourseOption[] }) 
             Venda criada — link de pagamento gerado
           </h2>
           <p className="mt-2 text-sm">
-            Envie o link abaixo para o aluno finalizar o pagamento. A
-            matrícula é ativada automaticamente após o pagamento ser
-            confirmado pelo gateway de pagamento.
+            Envie o link abaixo para o aluno finalizar o pagamento na sua própria
+            loja (cartão, PIX ou boleto — sem sair do site). A matrícula é ativada
+            automaticamente após a confirmação do pagamento.
           </p>
 
           <div className="mt-4 grid gap-2 sm:grid-cols-3">
@@ -125,7 +126,7 @@ export function PainelNovaVendaClient({ courses }: { courses: CourseOption[] }) 
 
           <div className="mt-4 flex flex-wrap items-center gap-2">
             <a
-              href={created.initPoint}
+              href={created.paymentUrl}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-pmb-green)] px-4 py-2.5 text-xs font-bold text-white hover:bg-[var(--color-pmb-green-700)]"

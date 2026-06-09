@@ -34,8 +34,8 @@ export function PaymentInfo() {
       </div>
 
       <p className="mt-4 text-sm text-gray-600">
-        Após clicar em <strong className="font-semibold text-[var(--color-pmb-green-900)]">Finalizar compra</strong>,
-        você será levado para uma tela segura para escolher como pagar:
+        Após clicar em <strong className="font-semibold text-[var(--color-pmb-green-900)]">Ir para o pagamento</strong>,
+        você escolhe como pagar aqui mesmo, sem sair do site:
       </p>
 
       <ul className="mt-5 grid gap-3 sm:grid-cols-3">
