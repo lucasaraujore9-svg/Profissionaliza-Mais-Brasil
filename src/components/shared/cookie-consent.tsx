@@ -5,8 +5,6 @@ import Link from "next/link"
 import { Cookie } from "lucide-react"
 
 const STORAGE_KEY = "pmb_cookie_consent_v1"
-const ACCEPTED = "accepted"
-const REJECTED = "rejected"
 
 function readConsent(): string | null {
   if (typeof window === "undefined") return null
@@ -17,12 +15,12 @@ function readConsent(): string | null {
   }
 }
 
-function writeConsent(value: string) {
+function writeDismissed() {
   try {
-    window.localStorage.setItem(STORAGE_KEY, value)
-    // Cookie complementar para que o server possa ler em rotas futuras
-    // (analytics opt-in/out). 6 meses; revogavel limpando o localStorage.
-    document.cookie = `${STORAGE_KEY}=${value}; path=/; max-age=${60 * 60 * 24 * 180}; SameSite=Lax`
+    window.localStorage.setItem(STORAGE_KEY, "accepted")
+    // Cookie complementar para que o server possa ler em rotas futuras.
+    // 6 meses; revogavel limpando o localStorage.
+    document.cookie = `${STORAGE_KEY}=accepted; path=/; max-age=${60 * 60 * 24 * 180}; SameSite=Lax`
     // Notifica a propria aba (event "storage" so dispara em outras abas).
     window.dispatchEvent(new Event("pmb-consent-changed"))
   } catch {
@@ -39,6 +37,11 @@ function subscribe(callback: () => void): () => void {
   }
 }
 
+/**
+ * Aviso informativo de cookies. Os scripts de analytics/pixels carregam
+ * automaticamente no acesso — este banner apenas informa o uso. Qualquer valor
+ * já gravado (inclusive "rejected" legado) conta como "já viu o aviso".
+ */
 export function CookieConsent() {
   // useSyncExternalStore lê localStorage no mount sem setState-in-effect.
   // server snapshot = null (banner so aparece apos hydrate, evita mismatch).
@@ -48,16 +51,8 @@ export function CookieConsent() {
     () => null,
   )
 
-  if (decided === ACCEPTED || decided === REJECTED) {
+  if (decided !== null) {
     return null
-  }
-
-  function accept() {
-    writeConsent(ACCEPTED)
-  }
-
-  function reject() {
-    writeConsent(REJECTED)
   }
 
   return (
@@ -73,12 +68,12 @@ export function CookieConsent() {
           </span>
           <div>
             <p className="text-sm font-bold text-[var(--color-pmb-green-900)]">
-              A gente usa cookies
+              Este site usa cookies
             </p>
             <p className="mt-1 text-[13px] leading-relaxed text-gray-600">
-              Cookies essenciais mantêm o site funcionando. Cookies opcionais
-              (análise de uso) ajudam a melhorar a experiência. Você pode
-              aceitar ou rejeitar os opcionais a qualquer momento.{" "}
+              Usamos cookies e tecnologias de medição para manter o site
+              funcionando, analisar o uso e melhorar sua experiência. Ao
+              continuar navegando, você concorda com essa utilização.{" "}
               <Link
                 href="/privacidade"
                 className="font-semibold text-[var(--color-pmb-green)] underline"
@@ -89,20 +84,13 @@ export function CookieConsent() {
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 md:ml-auto md:flex-nowrap">
+        <div className="flex items-center md:ml-auto">
           <button
             type="button"
-            onClick={reject}
-            className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+            onClick={writeDismissed}
+            className="rounded-lg bg-[var(--color-pmb-green)] px-5 py-2 text-sm font-bold text-white hover:bg-[var(--color-pmb-green-700)]"
           >
-            Recusar opcionais
-          </button>
-          <button
-            type="button"
-            onClick={accept}
-            className="rounded-lg bg-[var(--color-pmb-green)] px-4 py-2 text-sm font-bold text-white hover:bg-[var(--color-pmb-green-700)]"
-          >
-            Aceitar todos
+            Entendi
           </button>
         </div>
       </div>

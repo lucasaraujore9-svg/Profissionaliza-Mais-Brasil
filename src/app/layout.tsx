@@ -128,8 +128,8 @@ export default function RootLayout({
         <CookieConsent />
         <ServiceWorkerRegister />
         <PwaInstallPrompt />
-        {/* Vercel Analytics + Speed Insights — carregam SOMENTE após
-            consentimento explícito (LGPD R15). Gerenciado por AnalyticsGate. */}
+        {/* Vercel Analytics + Speed Insights — carregam automaticamente;
+            o aviso de cookies é apenas informativo. */}
         <AnalyticsGate />
       </body>
     </html>

@@ -18,13 +18,14 @@ const SCOPES: { id: Scope; label: string; description: string }[] = [
   {
     id: "self",
     label: "Site PMB",
-    description: "Pixels do site institucional e da vitrine própria da PMB.",
+    description:
+      "Pixels do site institucional e da vitrine própria da PMB — também aplicados automaticamente em todas as vitrines de revenda.",
   },
   {
     id: "global",
     label: "Todas as vitrines",
     description:
-      "Pixels injetados em TODAS as vitrines dos revendedores (visão consolidada do ecossistema).",
+      "Pixels injetados apenas nas vitrines dos revendedores (visão consolidada do ecossistema, sem carregar no site PMB).",
   },
 ]
 
@@ -95,9 +96,11 @@ export function AdminTrackingSettingsForm({
       <p className="text-xs text-gray-500">{activeMeta.description}</p>
 
       <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-800">
-        Os pixels disparam apenas após o consentimento de cookies (LGPD). Se um
-        revendedor configurar o mesmo provedor na própria vitrine, o pixel da
-        revenda prevalece sobre o global.
+        Os pixels carregam automaticamente no acesso (o aviso de cookies é
+        apenas informativo). Os pixels do Site PMB também são injetados
+        silenciosamente em todas as vitrines de revenda. Se um revendedor
+        configurar o mesmo provedor na própria vitrine, o pixel da revenda
+        prevalece.
       </div>
 
       <TrackingPixelsFields

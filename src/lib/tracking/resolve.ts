@@ -5,9 +5,11 @@ import { isTrackingEmpty, type TrackingPixels, type TrackingProviderKey } from "
 /**
  * Resolve quais pixels renderizar em cada contexto, mesclando as camadas:
  *
- *  - Vitrine de revendedor: pixels GLOBAIS da PMB + pixels da própria revenda.
- *    Se ambos configurarem o MESMO provedor, o da revenda prevalece (um pixel
- *    por provedor evita carregar a mesma lib 2x e disparar PageView duplicado).
+ *  - Vitrine de revendedor: pixels do site PMB (self) + pixels GLOBAIS da PMB
+ *    + pixels da própria revenda — tudo instalado silenciosamente, sem o
+ *    revendedor precisar configurar nada. Se duas camadas configurarem o MESMO
+ *    provedor, a mais específica prevalece (revenda > global > self); um pixel
+ *    por provedor evita carregar a mesma lib 2x e disparar PageView duplicado.
  *  - Site/vitrine PMB: apenas os pixels "self" da PMB.
  *
  * Leituras são cacheadas por request (React cache) — layout e página de
@@ -31,11 +33,11 @@ export function mergePixels(...layers: TrackingPixels[]): TrackingPixels {
 const getPmb = cache(readPmbPixels)
 const getTenant = cache(readTenantPixels)
 
-/** Pixels a renderizar na vitrine do revendedor (global PMB + revenda). */
+/** Pixels a renderizar na vitrine do revendedor (PMB self + global + revenda). */
 export const resolveVitrinePixels = cache(
   async (tenantId: string): Promise<TrackingPixels> => {
     const [pmb, tenantPixels] = await Promise.all([getPmb(), getTenant(tenantId)])
-    return mergePixels(pmb.global, tenantPixels)
+    return mergePixels(pmb.self, pmb.global, tenantPixels)
   },
 )
 

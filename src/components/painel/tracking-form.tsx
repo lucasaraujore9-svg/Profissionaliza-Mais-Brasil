@@ -14,7 +14,7 @@ import type { TrackingPixels } from "@/lib/tracking/schema"
 
 /**
  * Aba "Rastreamento" do painel do revendedor. Configura os pixels da própria
- * vitrine. Os pixels disparam só após o consentimento de cookies do visitante.
+ * vitrine. Os pixels carregam automaticamente no acesso do visitante.
  */
 export function TrackingForm() {
   const [state, setState] = useState<TrackingFormState | null>(null)

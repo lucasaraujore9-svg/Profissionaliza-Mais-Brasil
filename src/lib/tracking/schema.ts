@@ -8,8 +8,8 @@ import { z } from "zod"
  * barreira) e sanitizados de novo na montagem do script (defesa em profundidade),
  * impedindo XSS persistente cross-tenant.
  *
- * Os pixels disparam SOMENTE após consentimento LGPD (pmb_cookie_consent_v1 =
- * "accepted"), seguindo o padrão de src/components/shared/analytics-gate.tsx.
+ * Os pixels carregam automaticamente no acesso — o aviso de cookies
+ * (CookieConsent) é apenas informativo, sem gate de consentimento.
  */
 
 const enabledFlag = z.boolean().default(true)
