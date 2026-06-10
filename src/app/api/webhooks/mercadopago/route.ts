@@ -80,6 +80,18 @@ async function handle(request: Request) {
 
   extendRequestContext({ topic })
 
+  // MP envia cada evento em DOIS formatos quando a conta tem o IPN legado
+  // habilitado: o webhook novo (body.type/action + data.id, assinado via
+  // x-signature com manifest id/request-id/ts) e o IPN antigo
+  // ({topic, resource}), cuja assinatura NÃO segue esse manifest e por isso
+  // sempre falhava a validação, deixando um rastro permanente de
+  // processed=false + "hmac invalid" no WebhookLog a cada pagamento.
+  // O evento real é processado pela notificação nova; o IPN é registrado
+  // abaixo e encerrado como duplicata ignorada.
+  const legacyTopic = (body as { topic?: unknown } | null)?.topic
+  const isLegacyIpn =
+    typeof legacyTopic === "string" && !body?.type && !body?.action
+
   let paymentId = extractPaymentIdFromNotification(body, queryDataId)
 
   // Topic "subscription_authorized_payment": data.id e o id do authorized
@@ -118,6 +130,24 @@ async function handle(request: Request) {
 
   extendRequestContext({ webhookLogId: dbLog.id, paymentId })
   log.info({ event: "mp.webhook.received", webhookLogId: dbLog.id, topic, paymentId }, "webhook MP recebido")
+
+  if (isLegacyIpn) {
+    await prisma.webhookLog
+      .update({
+        where: { id: dbLog.id },
+        data: {
+          processed: true,
+          processedAt: new Date(),
+          error: "ipn legado ignorado (duplicata do webhook assinado)",
+        },
+      })
+      .catch(swallow("mp.webhook.markLog"))
+    log.info(
+      { event: "mp.webhook.legacy_ipn_skipped", webhookLogId: dbLog.id, paymentId },
+      "notificação IPN legada ignorada — evento chega pelo webhook assinado",
+    )
+    return NextResponse.json({ received: true }, { status: 200 })
+  }
 
   if (!paymentId) {
     await prisma.webhookLog
