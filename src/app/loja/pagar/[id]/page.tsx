@@ -56,13 +56,21 @@ export default async function PagarPage({ params }: PagarPageProps) {
       discountAmount: true,
       installmentsTotal: true,
       course: {
-        select: { nome: true, cargaHoraria: true, categoriaLoja: true, categoriaInterna: true },
+        select: {
+          nome: true,
+          cargaHoraria: true,
+          categoriaLoja: true,
+          categoriaInterna: true,
+          capaOverride: true,
+          capaImageUrl: true,
+        },
       },
       student: { select: { email: true, nome: true } },
       tenant: { select: { status: true, mpPublicKey: true } },
       tenantCourse: {
         select: {
           customParcelas: true,
+          customCapaUrl: true,
           course: { select: { parcelasSugeridas: true, parcelasOverride: true } },
         },
       },
@@ -137,6 +145,11 @@ export default async function PagarPage({ params }: PagarPageProps) {
                 enrollment.course.categoriaLoja ?? enrollment.course.categoriaInterna
               }
               courseHours={enrollment.course.cargaHoraria}
+              courseImageUrl={
+                enrollment.tenantCourse?.customCapaUrl ??
+                enrollment.course.capaOverride ??
+                enrollment.course.capaImageUrl
+              }
               basePrice={Number(enrollment.originalAmount)}
               discountAmount={Number(enrollment.discountAmount)}
               finalPrice={Number(enrollment.finalAmount)}

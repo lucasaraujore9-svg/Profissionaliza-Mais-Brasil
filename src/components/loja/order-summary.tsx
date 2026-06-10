@@ -1,9 +1,12 @@
+import Image from "next/image"
 import { Tag, GraduationCap } from "lucide-react"
 
 export interface OrderSummaryProps {
   courseName: string
   courseCategory: string | null
   courseHours: string | null
+  /** Capa do curso já resolvida (override da vitrine → capa do curso). */
+  courseImageUrl?: string | null
   basePrice: number
   discountAmount: number
   finalPrice: number
@@ -27,6 +30,7 @@ export function OrderSummary({
   courseName,
   courseCategory,
   courseHours,
+  courseImageUrl,
   basePrice,
   discountAmount,
   finalPrice,
@@ -50,9 +54,21 @@ export function OrderSummary({
       <h2 className="text-base font-semibold text-[var(--color-pmb-green-900)]">Resumo do pedido</h2>
 
       <div className="mt-5 flex gap-4 border-b border-gray-100 pb-5">
-        <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[var(--color-pmb-lime-50)] to-[var(--color-pmb-mist)] text-[var(--color-pmb-green)] ring-1 ring-[rgba(2,89,24,0.08)]">
-          <GraduationCap className="h-8 w-8" aria-hidden />
-        </div>
+        {courseImageUrl ? (
+          <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-xl ring-1 ring-[rgba(2,89,24,0.08)]">
+            <Image
+              src={courseImageUrl}
+              alt={courseName}
+              fill
+              sizes="80px"
+              className="object-cover"
+            />
+          </div>
+        ) : (
+          <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[var(--color-pmb-lime-50)] to-[var(--color-pmb-mist)] text-[var(--color-pmb-green)] ring-1 ring-[rgba(2,89,24,0.08)]">
+            <GraduationCap className="h-8 w-8" aria-hidden />
+          </div>
+        )}
         <div className="flex-1">
           <div className="text-xs font-medium text-gray-500">
             {courseCategory ?? "Curso"}

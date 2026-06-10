@@ -100,6 +100,8 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
           parcelasSugeridas: true,
           parcelasOverride: true,
           monthlyMonthsMain: true,
+          capaOverride: true,
+          capaImageUrl: true,
         },
       },
       tenant: {
@@ -194,6 +196,11 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
                 tenantCourse.course.categoriaInterna
               }
               courseHours={tenantCourse.course.cargaHoraria}
+              courseImageUrl={
+                tenantCourse.customCapaUrl ??
+                tenantCourse.course.capaOverride ??
+                tenantCourse.course.capaImageUrl
+              }
               basePrice={basePrice}
               discountAmount={discountAmount}
               finalPrice={finalPrice}

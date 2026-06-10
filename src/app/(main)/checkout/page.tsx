@@ -89,6 +89,8 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
       precoOriginal: true,
       paymentTypeMain: true,
       monthlyMonthsMain: true,
+      capaOverride: true,
+      capaImageUrl: true,
     },
   })
 
@@ -200,6 +202,7 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
               courseName={course.nome}
               courseCategory={course.categoriaLoja ?? course.categoriaInterna}
               courseHours={course.cargaHoraria}
+              courseImageUrl={course.capaOverride ?? course.capaImageUrl}
               basePrice={basePrice}
               discountAmount={discountAmount}
               finalPrice={finalPrice}
