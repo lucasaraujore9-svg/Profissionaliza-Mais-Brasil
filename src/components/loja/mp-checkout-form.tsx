@@ -412,13 +412,30 @@ export function MpCheckoutForm({
 
   const submitting = status.kind === "submitting"
 
+  // Volta do PIX/boleto para o form — a matrícula pendente é reaproveitada
+  // pelo servidor, então o cliente pode trocar para cartão (ou outro método)
+  // sem ficar preso na tela do QR Code / boleto.
+  function backToForm() {
+    setStatus({ kind: "idle" })
+  }
+
   // ── Telas de resultado ──────────────────────────────────────────────────
   if (status.kind === "pix") {
-    return <PixResult qrCode={status.qrCode} qrCodeBase64={status.qrCodeBase64} />
+    return (
+      <PixResult
+        qrCode={status.qrCode}
+        qrCodeBase64={status.qrCodeBase64}
+        onChangeMethod={backToForm}
+      />
+    )
   }
   if (status.kind === "boleto") {
     return (
-      <BoletoResult url={status.url} digitableLine={status.digitableLine} />
+      <BoletoResult
+        url={status.url}
+        digitableLine={status.digitableLine}
+        onChangeMethod={backToForm}
+      />
     )
   }
   if (status.kind === "approved") {
@@ -642,7 +659,27 @@ function MethodButton({
   )
 }
 
-function PixResult({ qrCode, qrCodeBase64 }: { qrCode: string; qrCodeBase64: string }) {
+function ChangeMethodButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="mt-4 w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:border-gray-400 hover:bg-gray-50"
+    >
+      Escolher outra forma de pagamento
+    </button>
+  )
+}
+
+function PixResult({
+  qrCode,
+  qrCodeBase64,
+  onChangeMethod,
+}: {
+  qrCode: string
+  qrCodeBase64: string
+  onChangeMethod: () => void
+}) {
   const [copied, setCopied] = useState(false)
   async function copy() {
     try {
@@ -684,11 +721,20 @@ function PixResult({ qrCode, qrCodeBase64 }: { qrCode: string; qrCodeBase64: str
         <span className="mt-0.5 inline-block h-2 w-2 animate-pulse rounded-full bg-[var(--color-pmb-green)]" />
         <span>Aguardando confirmação do pagamento… Você será redirecionado automaticamente assim que recebermos a confirmação.</span>
       </div>
+      <ChangeMethodButton onClick={onChangeMethod} />
     </div>
   )
 }
 
-function BoletoResult({ url, digitableLine }: { url: string; digitableLine: string | null }) {
+function BoletoResult({
+  url,
+  digitableLine,
+  onChangeMethod,
+}: {
+  url: string
+  digitableLine: string | null
+  onChangeMethod: () => void
+}) {
   const [copied, setCopied] = useState(false)
   async function copy() {
     if (!digitableLine) return
@@ -728,6 +774,7 @@ function BoletoResult({ url, digitableLine }: { url: string; digitableLine: stri
         <span className="mt-0.5 inline-block h-2 w-2 animate-pulse rounded-full bg-[var(--color-pmb-green)]" />
         <span>Aguardando o pagamento. A compensação leva até 3 dias úteis. Você receberá um email quando a matrícula for ativada.</span>
       </div>
+      <ChangeMethodButton onClick={onChangeMethod} />
     </div>
   )
 }

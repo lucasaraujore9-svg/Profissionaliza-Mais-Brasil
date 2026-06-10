@@ -272,19 +272,69 @@ export const POST = withRequestContext(
         tenantId,
         status: { in: ["PENDING", "ACTIVE", "COMPLETED"] },
       },
-      select: { id: true, status: true },
+      select: {
+        id: true,
+        status: true,
+        couponId: true,
+        finalAmount: true,
+        paymentType: true,
+        installmentsTotal: true,
+      },
     })
-    if (existingEnrollment) {
+
+    if (existingEnrollment && existingEnrollment.status !== "PENDING") {
+      // Libera a reserva de cupom feita acima — sem isso o uso vazava no 409.
+      if (consumedCouponId) {
+        await releaseCoupon(consumedCouponId).catch(swallow("loja.checkout"))
+        consumedCouponId = null
+      }
       return NextResponse.json(
-        {
-          error:
-            existingEnrollment.status === "PENDING"
-              ? "Você já tem uma cobrança pendente para este curso"
-              : "Você já possui este curso",
-          code: "DUPLICATE_ENROLLMENT",
-        },
+        { error: "Você já possui este curso", code: "DUPLICATE_ENROLLMENT" },
         { status: 409 },
       )
+    }
+
+    if (existingEnrollment) {
+      // Matrícula PENDING existente (ex.: cartão recusado e página recarregada,
+      // PIX gerado e abandonado): REAPROVEITA em vez de bloquear com 409.
+      // Antes o aluno ficava permanentemente travado em DUPLICATE_ENROLLMENT,
+      // sem conseguir tentar outro cartão ou outro método de pagamento.
+      let reusedAmount = Number(existingEnrollment.finalAmount)
+      if (consumedCouponId && !existingEnrollment.couponId) {
+        // Cupom novo aplicado nesta tentativa — atualiza o preço da pendente.
+        await prisma.enrollment.update({
+          where: { id: existingEnrollment.id },
+          data: {
+            originalAmount: basePrice,
+            discountAmount,
+            finalAmount,
+            couponId,
+          },
+        })
+        reusedAmount = finalAmount
+      } else if (consumedCouponId) {
+        // A pendente já tem cupom — devolve a reserva para não consumir 2 usos.
+        await releaseCoupon(consumedCouponId).catch(swallow("loja.checkout"))
+        consumedCouponId = null
+      }
+
+      const isMonthlyReuse = existingEnrollment.paymentType === "MONTHLY"
+      return NextResponse.json({
+        data: {
+          enrollmentId: existingEnrollment.id,
+          mode: isMonthlyReuse ? "subscription" : "one_time",
+          amount: reusedAmount,
+          publicKey: tenant.mpPublicKey,
+          payerEmail: student.email ?? data.email,
+          maxInstallments: isMonthlyReuse
+            ? 1
+            : tenantCourse.customParcelas ??
+              tenantCourse.course.parcelasOverride ??
+              tenantCourse.course.parcelasSugeridas ??
+              12,
+          installmentsTotal: existingEnrollment.installmentsTotal,
+        },
+      })
     }
 
     // Tipo efetivo: se a unidade nao tem parcelado habilitado para a vitrine,
