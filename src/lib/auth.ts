@@ -8,10 +8,14 @@ import { authSecret } from "@/lib/env"
 import { rateLimitByKey, RATE_LIMITS } from "@/lib/ratelimit"
 import { swallow } from "@/lib/errors"
 import { contextLogger } from "@/lib/logger"
+import { isValidCpf, stripCpf } from "@/lib/validation/cpf"
 import "@/types"
 
+// O campo `email` aceita email OU CPF (aluno). A distinção é feita no
+// authorize: com "@" valida como email (User + Student); sem "@" e com CPF
+// válido, autentica só como Student (User não tem CPF).
 const loginSchema = z.object({
-  email: z.string().email(),
+  email: z.string().trim().min(3).max(160),
   password: z.string().min(6),
 })
 
@@ -84,6 +88,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const parsed = loginSchema.safeParse(credentials)
         if (!parsed.success) return null
 
+        // Identificador: email (contém "@") ou CPF do aluno (11 dígitos
+        // válidos). Qualquer outra coisa é rejeitada antes de tocar o banco.
+        const identifier = parsed.data.email
+        const isEmailLogin = identifier.includes("@")
+        const cpfDigits = stripCpf(identifier)
+        const isCpfLogin = !isEmailLogin && isValidCpf(cpfDigits)
+        if (isEmailLogin) {
+          if (!z.string().email().safeParse(identifier).success) return null
+        } else if (!isCpfLogin) {
+          return null
+        }
+
         // Rate-limit anti-brute-force: chave por IP + email lower-case.
         // Bucket único pra User e Student — bloqueia tentativas vs ambos.
         // Falha em modo aberto se o Redis não estiver configurado (dev).
@@ -91,24 +107,27 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           request?.headers?.get?.("x-forwarded-for")?.split(",")[0]?.trim() ??
           request?.headers?.get?.("x-real-ip") ??
           "anon"
-        const rlKey = `${ipHint}:${parsed.data.email}`
+        const rlKey = `${ipHint}:${isCpfLogin ? cpfDigits : identifier.toLowerCase()}`
         const rl = await rateLimitByKey(rlKey, RATE_LIMITS.authLogin)
         if (!rl.ok) {
           // NextAuth não tem 429 nativo no Credentials provider — retornar
           // null devolve "credentials inválido", o que é OK do ponto de
           // vista de UX e segurança (não revela rate-limit ao atacante).
           contextLogger().warn(
-            { event: "auth.rate_limit", email: parsed.data.email, ipHint },
+            { event: "auth.rate_limit", identifier, ipHint },
             "rate-limit de login",
           )
           return null
         }
 
-        // 1) Tenta como User (admin/equipe/revendedor)
-        const user = await prisma.user.findUnique({
-          where: { email: parsed.data.email },
-          include: { tenant: true },
-        })
+        // 1) Tenta como User (admin/equipe/revendedor) — só por email; User
+        // não tem CPF, então login por CPF pula direto para o aluno.
+        const user = isEmailLogin
+          ? await prisma.user.findUnique({
+              where: { email: identifier },
+              include: { tenant: true },
+            })
+          : null
 
         if (user) {
           const isValid = await compare(parsed.data.password, user.passwordHash)
@@ -176,7 +195,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         const student = await prisma.student.findFirst({
           where: {
-            email: parsed.data.email,
+            ...(isCpfLogin ? { cpf: cpfDigits } : { email: identifier }),
             tenantId: targetTenantId,
             passwordHash: { not: null },
           },

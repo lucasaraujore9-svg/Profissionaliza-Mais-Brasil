@@ -38,7 +38,7 @@ export function LoginForm() {
     if (!result || result.error) {
       setState({
         kind: "error",
-        message: "Email ou senha inválidos.",
+        message: "Email/CPF ou senha inválidos.",
       })
       return
     }
@@ -109,16 +109,16 @@ export function LoginForm() {
       )}
 
       <div>
-        <Label htmlFor="email">Email</Label>
+        <Label htmlFor="email">Email ou CPF</Label>
         <div className="relative mt-1.5">
           <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
           <Input
             id="email"
             name="email"
-            type="email"
-            placeholder="voce@empresa.com"
+            type="text"
+            placeholder="voce@empresa.com ou 000.000.000-00"
             className="pl-9"
-            autoComplete="email"
+            autoComplete="username"
             required
           />
         </div>
