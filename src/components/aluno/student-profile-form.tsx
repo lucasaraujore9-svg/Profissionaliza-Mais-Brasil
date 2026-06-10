@@ -54,13 +54,13 @@ export function StudentProfileForm({ initial }: { initial: ProfileData }) {
         Dados pessoais
       </h2>
       <p className="mt-1 text-xs text-gray-600">
-        Email e CPF são usados para vincular pagamentos e matrículas — não são
-        editáveis aqui.
+        O CPF é usado para vincular pagamentos e matrículas — não é editável
+        aqui. Se trocar o email, use o novo email (ou o CPF) no próximo login.
       </p>
 
       <div className="mt-5 grid gap-4 sm:grid-cols-2">
         <Field label="Nome completo" value={data.nome} onChange={(v) => set("nome", v)} />
-        <Field label="Email" value={data.email} readOnly />
+        <Field label="Email" value={data.email} onChange={(v) => set("email", v)} />
         <Field label="CPF" value={data.cpf} readOnly />
         <Field label="Telefone" value={data.fone} onChange={(v) => set("fone", v)} />
 

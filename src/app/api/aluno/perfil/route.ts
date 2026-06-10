@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
+import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { requireStudentSession } from "@/lib/auth/student-session"
 import { syncStudentProfileToEA } from "@/lib/students/plataforma-actions"
@@ -8,6 +9,7 @@ import { withRequestContext } from "@/lib/observability/with-request-context"
 
 const patchSchema = z.object({
   nome: z.string().trim().min(2).max(120),
+  email: z.string().trim().toLowerCase().email("Email inválido").max(160),
   fone: z.string().trim().max(40).optional().or(z.literal("")),
   cidade: z.string().trim().max(80).optional().or(z.literal("")),
   estado: z.string().trim().max(40).optional().or(z.literal("")),
@@ -46,19 +48,70 @@ export const PATCH = withRequestContext(
     )
   }
 
-  await prisma.student.update({
+  // Troca de email: o email é o identificador de login e tem unique por
+  // tenant (@@unique([tenantId, email])) — valida o conflito antes de salvar
+  // para devolver uma mensagem clara em vez de P2002/500.
+  const current = await prisma.student.findUnique({
     where: { id: session.studentId },
-    data: {
-      nome: parsed.data.nome,
-      fone: nullable(parsed.data.fone),
-      cidade: nullable(parsed.data.cidade),
-      estado: nullable(parsed.data.estado),
-      cep: nullable(parsed.data.cep),
-      rua: nullable(parsed.data.rua),
-      numero: nullable(parsed.data.numero),
-      bairro: nullable(parsed.data.bairro),
-    },
+    select: { tenantId: true, email: true },
   })
+  if (!current) {
+    return NextResponse.json({ error: "Aluno não encontrado" }, { status: 404 })
+  }
+
+  const emailChanged = parsed.data.email !== (current.email ?? "").toLowerCase()
+  if (emailChanged) {
+    const taken = await prisma.student.findFirst({
+      where: {
+        tenantId: current.tenantId,
+        email: parsed.data.email,
+        id: { not: session.studentId },
+      },
+      select: { id: true },
+    })
+    if (taken) {
+      return NextResponse.json(
+        {
+          error: "Este email já está em uso por outro aluno desta loja.",
+          code: "EMAIL_TAKEN",
+        },
+        { status: 409 },
+      )
+    }
+  }
+
+  try {
+    await prisma.student.update({
+      where: { id: session.studentId },
+      data: {
+        nome: parsed.data.nome,
+        email: parsed.data.email,
+        fone: nullable(parsed.data.fone),
+        cidade: nullable(parsed.data.cidade),
+        estado: nullable(parsed.data.estado),
+        cep: nullable(parsed.data.cep),
+        rua: nullable(parsed.data.rua),
+        numero: nullable(parsed.data.numero),
+        bairro: nullable(parsed.data.bairro),
+      },
+    })
+  } catch (err) {
+    // Corrida entre o check acima e o update (outro aluno salvou o mesmo
+    // email no meio) — devolve o mesmo 409 amigável.
+    if (
+      err instanceof Prisma.PrismaClientKnownRequestError &&
+      err.code === "P2002"
+    ) {
+      return NextResponse.json(
+        {
+          error: "Este email já está em uso por outro aluno desta loja.",
+          code: "EMAIL_TAKEN",
+        },
+        { status: 409 },
+      )
+    }
+    throw err
+  }
 
   // Propaga para a plataforma de aulas. Falha silenciosa: se a plataforma estiver
   // indisponivel, o salvamento local ja aconteceu — proxima edicao tenta
