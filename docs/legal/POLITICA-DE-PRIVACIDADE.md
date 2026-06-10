@@ -2,8 +2,8 @@
 
 **Profissionaliza Mais Brasil**
 
-> Atualizado pela última vez em: 29/05/2026
-> Versão: 1.2
+> Atualizado pela última vez em: 10/06/2026
+> Versão: 1.3
 
 ---
 
@@ -217,7 +217,7 @@ Em conformidade com o **art. 7º da LGPD**, realizamos o Tratamento de Dados Pes
 | Marketing direto (e-mail, SMS, push, WhatsApp) | **Consentimento** ou **Legítimo interesse**, conforme o canal | art. 7º, I ou IX |
 | Compartilhamento com autoridades em razão de ordem judicial | **Cumprimento de obrigação legal** | art. 7º, II |
 | Defesa em processo administrativo, judicial ou arbitral | **Exercício regular de direitos** | art. 7º, VI |
-| Cookies de analytics e performance | **Legítimo interesse**, mitigado por opt-out | art. 7º, IX |
+| Cookies, pixels de analytics e de marketing | **Legítimo interesse**, mitigado por opt-out no navegador e direito de oposição | art. 7º, IX |
 | Tratamento de dados de Unidade | **Execução de contrato** (Contrato da Unidade) | art. 7º, V |
 | Estudos e estatísticas anonimizadas | **Legítimo interesse**, com anonimização | art. 7º, IX e art. 12 |
 
@@ -420,7 +420,7 @@ O Titular também é corresponsável pela segurança ao manter senhas fortes, n�
 | Cadastro de Unidade (após encerramento) | **5 anos** | Defesa de direitos |
 | Tokens de integração de pagamento (cifrados) | Enquanto necessário ao serviço | Execução de contrato |
 | Comunicações de marketing (consentimento) | Até a revogação do consentimento | Consentimento |
-| Cookies e identificadores | Conforme Cláusula 12 | Consentimento ou Legítimo interesse |
+| Cookies e identificadores | Conforme Cláusula 12 | Legítimo interesse |
 
 **10.2.** Findo o prazo de retenção, os Dados Pessoais serão **eliminados** ou **anonimizados** de forma irreversível, salvo se houver necessidade de manutenção para:
 
@@ -472,20 +472,24 @@ d) Defesa de direitos do PMB, das Unidades e dos Titulares.
 |---|---|---|---|
 | **Estritamente necessários** | Manter sessão autenticada, segurança, idioma | Execução de contrato | Não passível de opt-out (essencial) |
 | **Funcionais** | Lembrar preferências (tema, idioma, carrinho) | Legítimo interesse | Configurações do navegador |
-| **Performance / Analytics** | Métricas de uso e desempenho, por meio de ferramentas de análise (com IP anonimizado) | Consentimento ou Legítimo interesse | Banner de cookies ou navegador |
-| **Marketing** | Remarketing, campanhas e pixels de conversão de redes sociais e plataformas de anúncios — quando ativados | Consentimento | Banner de cookies ou navegador |
+| **Performance / Analytics** | Métricas de uso e desempenho, por meio de ferramentas de análise (com IP anonimizado) | Legítimo interesse | Configurações do navegador ou extensões de bloqueio |
+| **Marketing** | Remarketing, campanhas e pixels de conversão de redes sociais e plataformas de anúncios — quando ativados | Legítimo interesse | Configurações do navegador, extensões de bloqueio ou opt-out das próprias plataformas |
 
 **12.3. Isolamento por domínio.** Os cookies de sessão são **isolados por domínio**, de forma que a autenticação no site institucional (área administrativa/aluno) **não se confunde** com a autenticação em uma Vitrine de Unidade.
 
-**12.4. Como gerenciar cookies.** O Usuário pode:
+**12.4. Aviso de cookies.** Na primeira visita, a Plataforma exibe um **aviso informativo** comunicando o uso de cookies e tecnologias de medição. Os cookies e pixels descritos nesta Cláusula são carregados **automaticamente a partir do acesso**, com fundamento no **legítimo interesse** (art. 7º, IX, da LGPD). Ao continuar navegando, o Usuário declara ciência desta Política.
+
+**12.5. Como gerenciar cookies.** O Usuário pode, a qualquer momento:
 
 a) Ajustar configurações do navegador para bloquear, excluir ou notificar a recepção de cookies (a desativação de cookies essenciais pode comprometer o funcionamento da Plataforma);
 
-b) Utilizar o **banner de cookies** disponibilizado na primeira visita (quando aplicável) para escolher categorias de cookies aceitos;
+b) Utilizar extensões de bloqueio de rastreadores ou os mecanismos de opt-out oferecidos pelas próprias plataformas de análise e publicidade (Google, Meta, TikTok, entre outras);
 
-c) Solicitar ao DPO informações detalhadas sobre cookies de terceiros em uso na Plataforma.
+c) Solicitar ao DPO informações detalhadas sobre cookies de terceiros em uso na Plataforma, ou manifestar **oposição ao tratamento** baseado em legítimo interesse (art. 18, § 2º, da LGPD).
 
-**12.5. Outras tecnologias.** Podemos utilizar **local storage**, **session storage**, **pixels de rastreamento** e **web beacons**, sempre respeitando os termos desta Política.
+**12.6. Vitrines de Unidades.** Nas Vitrines de Unidades parceiras (subdomínios e domínios personalizados), podem ser carregados, além dos pixels da própria Unidade, **pixels de medição do PMB**, na qualidade de controlador, para análise consolidada do ecossistema — sempre nos termos desta Cláusula.
+
+**12.7. Outras tecnologias.** Podemos utilizar **local storage**, **session storage**, **pixels de rastreamento** e **web beacons**, sempre respeitando os termos desta Política.
 
 ---
 
