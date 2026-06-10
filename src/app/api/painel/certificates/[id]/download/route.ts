@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { requireResellerSession } from "@/lib/auth/reseller-session"
-import { generateAndUploadPdf } from "@/lib/certificates/generate-pdf"
+import { ensureFreshCertificatePdf } from "@/lib/certificates/freshness"
 import {
   downloadCertificatePdf,
   extractCertificatePath,
@@ -36,20 +36,11 @@ export const GET = withRequestContextParams<{ id: string }>(
       return NextResponse.json({ error: "Certificado revogado" }, { status: 410 })
     }
 
-    let pdfUrl = cert.pdfUrl
+    // Regenera on-demand se nunca foi gerado ou se o template/branding mudou
+    // depois da geracao — trocar o modelo passa a refletir no download.
+    const pdfUrl = await ensureFreshCertificatePdf(cert)
     if (!pdfUrl) {
-      try {
-        pdfUrl = (await generateAndUploadPdf(cert.id)).pdfUrl
-      } catch (err) {
-        contextLogger().error(
-          { err, event: "painel.certificates.pdf_gen_failed", certificateId: cert.id },
-          "falha ao gerar PDF do certificado",
-        )
-        return NextResponse.json({ error: "Falha ao gerar PDF" }, { status: 500 })
-      }
-    }
-    if (!pdfUrl) {
-      return NextResponse.json({ error: "Certificado sem PDF" }, { status: 500 })
+      return NextResponse.json({ error: "Falha ao gerar PDF" }, { status: 500 })
     }
 
     const path = extractCertificatePath(pdfUrl)

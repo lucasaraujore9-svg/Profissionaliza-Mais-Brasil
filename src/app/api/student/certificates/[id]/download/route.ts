@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { requireStudentSession } from "@/lib/auth/student-session"
-import { generateAndUploadPdf } from "@/lib/certificates/generate-pdf"
+import { ensureFreshCertificatePdf } from "@/lib/certificates/freshness"
 import {
   downloadCertificatePdf,
   extractCertificatePath,
@@ -41,23 +41,9 @@ export const GET = withRequestContextParams<{ id: string }>(
     )
   }
 
-  // Garante PDF gerado (on-demand se ainda nao existir)
-  let pdfUrl = cert.pdfUrl
-  if (!pdfUrl) {
-    try {
-      const r = await generateAndUploadPdf(cert.id)
-      pdfUrl = r.pdfUrl
-    } catch (err) {
-      contextLogger().error(
-        { err, event: "student.certificates.pdf_gen_failed", certificateId: cert.id },
-        "falha ao gerar PDF do certificado",
-      )
-      return NextResponse.json(
-        { error: "Falha ao gerar PDF" },
-        { status: 500 },
-      )
-    }
-  }
+  // Garante PDF gerado e ATUALIZADO com o modelo vigente (regenera on-demand
+  // se nunca foi gerado ou se o template/branding mudou depois da geracao).
+  const pdfUrl = await ensureFreshCertificatePdf(cert)
 
   if (!pdfUrl) {
     return NextResponse.json(

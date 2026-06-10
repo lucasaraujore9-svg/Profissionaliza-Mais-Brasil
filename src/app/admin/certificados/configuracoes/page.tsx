@@ -94,9 +94,10 @@ export default async function AdminCertificadosConfiguracoesPage() {
             Manutenção
           </h2>
           <p className="text-sm text-gray-600">
-            Reaplica o layout atual (variáveis em maiúsculo, percentual de
-            conclusão na frente, QR legível e página 2 com fundamentação legal)
-            a todos os certificados já emitidos. Sobrescreve os PDFs no Storage.
+            Os PDFs já emitidos são atualizados automaticamente no próximo
+            download/validação quando o template muda. Use este botão para
+            forçar a reaplicação imediata do layout atual a todos os
+            certificados de uma vez. Sobrescreve os PDFs no Storage.
           </p>
         </header>
         <RegenerateAllCertificates />
