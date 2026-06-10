@@ -1,7 +1,6 @@
 import Link from "next/link"
 import { OrderSummary } from "@/components/loja/order-summary"
 import { MpCheckoutForm } from "@/components/loja/mp-checkout-form"
-import { PaymentInfo } from "@/components/loja/payment-info"
 import { getCurrentTenant } from "@/lib/tenant/current"
 import { applyCouponDiscount } from "@/lib/coupons/discount"
 import { prisma } from "@/lib/prisma"
@@ -185,7 +184,6 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
                 novamente em instantes ou fale com o suporte da loja.
               </div>
             )}
-            <PaymentInfo />
           </div>
 
           <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start">
