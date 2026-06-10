@@ -36,6 +36,12 @@ const bodySchema = z.object({
     .refine(isValidPhone, "Telefone inválido")
     .transform(normalizePhone),
   endereco: z.string().trim().max(300).optional(),
+  // Aceite obrigatório dos Termos de Uso e da Política de Privacidade — reforço
+  // server-side do gate do checkout (o form já bloqueia, mas garantimos aqui
+  // que nenhuma venda é concluída sem o aceite registrado).
+  acceptedTerms: z.literal(true, {
+    message: "É necessário aceitar os Termos de Uso e a Política de Privacidade",
+  }),
 })
 
 type ParsedBody = z.infer<typeof bodySchema>
