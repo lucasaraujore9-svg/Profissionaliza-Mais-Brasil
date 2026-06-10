@@ -18,6 +18,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
+import { TermsAcceptance } from "@/components/loja/terms-acceptance"
 import { clientLogger } from "@/lib/logger-client"
 import { getMpInstance } from "@/lib/mercadopago/browser-sdk"
 
@@ -151,6 +152,8 @@ export function MpCheckoutForm({
   const [method, setMethod] = useState<Method>("PIX")
   const [status, setStatus] = useState<Status>({ kind: "idle" })
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
+  const [acceptedTerms, setAcceptedTerms] = useState(false)
+  const [termsError, setTermsError] = useState(false)
   // enrollment ativo (criado no submit em createMode, ou recebido em payMode)
   const [activeEnrollmentId, setActiveEnrollmentId] = useState<string | null>(
     enrollmentId ?? null,
@@ -187,6 +190,7 @@ export function MpCheckoutForm({
         cpf: form.cpf,
         fone: form.telefone,
         endereco: form.endereco || undefined,
+        acceptedTerms: true,
       }),
     })
     const payload = await res.json()
@@ -318,6 +322,10 @@ export function MpCheckoutForm({
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     if (status.kind === "submitting") return
+    if (!acceptedTerms) {
+      setTermsError(true)
+      return
+    }
     setStatus({ kind: "submitting" })
     setFieldErrors({})
 
@@ -529,6 +537,15 @@ export function MpCheckoutForm({
       )}
 
       <div className="space-y-3">
+        <TermsAcceptance
+          checked={acceptedTerms}
+          onChange={(v) => {
+            setAcceptedTerms(v)
+            if (v) setTermsError(false)
+          }}
+          disabled={submitting}
+          error={termsError}
+        />
         <Button type="submit" size="lg" disabled={submitting} className="w-full bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)]">
           <Lock className="mr-2 h-4 w-4" />
           {submitting ? "Processando..." : "Finalizar Compra"}

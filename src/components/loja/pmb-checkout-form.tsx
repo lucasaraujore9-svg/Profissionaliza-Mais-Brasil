@@ -18,6 +18,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
+import { TermsAcceptance } from "@/components/loja/terms-acceptance"
 import { clientLogger } from "@/lib/logger-client"
 
 export interface PmbCheckoutFormProps {
@@ -116,6 +117,8 @@ export function PmbCheckoutForm({ courseId, couponCode }: PmbCheckoutFormProps) 
   const [method, setMethod] = useState<Method>("PIX")
   const [status, setStatus] = useState<Status>({ kind: "idle" })
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
+  const [acceptedTerms, setAcceptedTerms] = useState(false)
+  const [termsError, setTermsError] = useState(false)
 
   function setField<K extends keyof FormState>(key: K, value: string) {
     setForm((p) => ({ ...p, [key]: value }))
@@ -127,6 +130,10 @@ export function PmbCheckoutForm({ courseId, couponCode }: PmbCheckoutFormProps) 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     if (status.kind === "submitting") return
+    if (!acceptedTerms) {
+      setTermsError(true)
+      return
+    }
 
     setStatus({ kind: "submitting" })
     setFieldErrors({})
@@ -140,6 +147,7 @@ export function PmbCheckoutForm({ courseId, couponCode }: PmbCheckoutFormProps) 
       fone: form.telefone,
       endereco: form.endereco || undefined,
       paymentMethod: method,
+      acceptedTerms: true,
     }
 
     if (method === "CREDIT_CARD") {
@@ -548,6 +556,15 @@ export function PmbCheckoutForm({ courseId, couponCode }: PmbCheckoutFormProps) 
       )}
 
       <div className="space-y-3">
+        <TermsAcceptance
+          checked={acceptedTerms}
+          onChange={(v) => {
+            setAcceptedTerms(v)
+            if (v) setTermsError(false)
+          }}
+          disabled={submitting}
+          error={termsError}
+        />
         <Button
           type="submit"
           size="lg"
