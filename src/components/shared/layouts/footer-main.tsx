@@ -52,8 +52,8 @@ const INSTITUCIONAL_LINKS: NavLink[] = [
   { label: "Contato", href: "/contato" },
   { label: "Termos de uso", href: "/termos" },
   { label: "Política de privacidade", href: "/privacidade" },
-  { label: "Seja revendedor", href: "/seja-revendedor" },
-  { label: "Seja um Parceiro do Profissionaliza Mais Brasil", href: "/seja-revendedor" },
+  // "\n" vira quebra de linha no FooterColumn (whitespace-pre-line).
+  { label: "Seja um Parceiro do\nProfissionaliza Mais Brasil", href: "/seja-revendedor" },
 ]
 
 interface FooterMainProps {
@@ -67,7 +67,7 @@ interface FooterMainProps {
   /** Exibe a linha do CNPJ da PMB. A vitrine do revendedor passa `false`. */
   showCnpj?: boolean
   /**
-   * Sobrescreve o href do link "Seja revendedor" do bloco Institucional.
+   * Sobrescreve o href do link "Seja um Parceiro" do bloco Institucional.
    * A vitrine passa o link de indicacao do tenant (`.../seja-revendedor?ref=CODE`)
    * para que quem se cadastrar a partir daquela unidade gere comissao ao dono.
    */
@@ -283,11 +283,10 @@ function FooterColumn({ title, links }: FooterColumnProps) {
       </h3>
       <ul className="mt-4 space-y-2.5 text-[13.5px] text-white/80">
         {links.map((link) => (
-          // key composta: o bloco Institucional tem dois links para /seja-revendedor.
           <li key={`${link.href}-${link.label}`}>
             <Link
               href={link.href}
-              className="transition-colors hover:text-white hover:underline"
+              className="whitespace-pre-line transition-colors hover:text-white hover:underline"
             >
               {link.label}
             </Link>
