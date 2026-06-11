@@ -5,6 +5,7 @@ import { z } from "zod"
 import { compare } from "bcryptjs"
 import { PMB_TENANT_SLUG } from "@/lib/pmb-config"
 import { authSecret } from "@/lib/env"
+import { SESSION_COOKIE_NAME } from "@/lib/auth/cookies"
 import { rateLimitByKey, RATE_LIMITS } from "@/lib/ratelimit"
 import { swallow } from "@/lib/errors"
 import { contextLogger } from "@/lib/logger"
@@ -66,7 +67,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   // declarar evita regressões silenciosas e documenta o intent.
   cookies: {
     sessionToken: {
-      name: isProd ? "__Secure-authjs.session-token" : "authjs.session-token",
+      name: SESSION_COOKIE_NAME,
       options: {
         httpOnly: true,
         sameSite: "lax",

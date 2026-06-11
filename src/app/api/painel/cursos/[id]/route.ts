@@ -19,6 +19,7 @@ const updateSchema = z.object({
   customDescription: z.string().trim().max(2000).nullable().optional(),
   customCapaUrl: z.string().url().nullable().optional(),
   customParcelas: z.number().int().min(1).max(24).nullable().optional(),
+  isVisible: z.boolean().optional(),
   isFeatured: z.boolean().optional(),
   customOrder: z.number().int().min(0).optional(),
 })
@@ -157,6 +158,7 @@ export const PUT = withRequestContextParams<{ id: string }>(
         ...(parsed.data.customParcelas !== undefined && {
           customParcelas: parsed.data.customParcelas,
         }),
+        ...(parsed.data.isVisible !== undefined && { isVisible: parsed.data.isVisible }),
         ...(parsed.data.isFeatured !== undefined && { isFeatured: parsed.data.isFeatured }),
         ...(parsed.data.customOrder !== undefined && { customOrder: parsed.data.customOrder }),
       },
@@ -170,6 +172,7 @@ export const PUT = withRequestContextParams<{ id: string }>(
         customDescription: updated.customDescription,
         customCapaUrl: updated.customCapaUrl,
         customParcelas: updated.customParcelas,
+        isVisible: updated.isVisible,
         isFeatured: updated.isFeatured,
         customOrder: updated.customOrder,
       },

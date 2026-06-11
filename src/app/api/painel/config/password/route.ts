@@ -1,13 +1,12 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
-import { compare, hash } from "bcryptjs"
+import { hash } from "bcryptjs"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 
 const bodySchema = z
   .object({
-    currentPassword: z.string().min(1, "Informe a senha atual"),
     newPassword: z.string().min(8, "Nova senha precisa ter pelo menos 8 caracteres"),
     confirmPassword: z.string(),
   })
@@ -44,21 +43,10 @@ export const PUT = withRequestContext(
 
     const user = await prisma.user.findUnique({
       where: { id: session.user.id },
-      select: { passwordHash: true },
+      select: { id: true },
     })
     if (!user) {
       return NextResponse.json({ error: "Usuário não encontrado" }, { status: 404 })
-    }
-
-    const valid = await compare(parsed.data.currentPassword, user.passwordHash)
-    if (!valid) {
-      return NextResponse.json(
-        {
-          error: "Senha atual incorreta",
-          fields: { currentPassword: ["Senha atual incorreta"] },
-        },
-        { status: 400 },
-      )
     }
 
     const newHash = await hash(parsed.data.newPassword, 12)

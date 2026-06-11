@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { Eye, Ban, Unlock } from "lucide-react"
+import { Eye, Ban, Unlock, ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react"
 
 export type StudentStatus =
   | "ATIVO"
@@ -56,10 +56,24 @@ function initials(name: string): string {
     .toUpperCase()
 }
 
+export type SortKey = "nome" | "email" | "coursesCount" | "createdAt" | "status"
+export type SortOrder = "asc" | "desc"
+
+const columns: { key: SortKey; label: string; align?: "left" | "right" }[] = [
+  { key: "nome", label: "Nome" },
+  { key: "email", label: "Email" },
+  { key: "coursesCount", label: "Cursos" },
+  { key: "createdAt", label: "Matrícula" },
+  { key: "status", label: "Status" },
+]
+
 interface StudentTableProps {
   students: StudentListItem[]
   loading?: boolean
   pendingId?: string | null
+  sortKey: SortKey
+  sortOrder: SortOrder
+  onSort: (key: SortKey) => void
   onViewDetails: (studentId: string) => void
   onToggleBlock: (student: StudentListItem) => void
 }
@@ -68,6 +82,9 @@ export function StudentTable({
   students,
   loading,
   pendingId,
+  sortKey,
+  sortOrder,
+  onSort,
   onViewDetails,
   onToggleBlock,
 }: StudentTableProps) {
@@ -93,11 +110,35 @@ export function StudentTable({
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Nome</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Email</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Cursos</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Matrícula</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Status</th>
+              {columns.map((col) => {
+                const active = sortKey === col.key
+                return (
+                  <th
+                    key={col.key}
+                    className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => onSort(col.key)}
+                      className={`group inline-flex items-center gap-1 transition-colors hover:text-[var(--color-pmb-green-900)] ${
+                        active ? "text-[var(--color-pmb-green-900)]" : ""
+                      }`}
+                      title={`Ordenar por ${col.label}`}
+                    >
+                      {col.label}
+                      {active ? (
+                        sortOrder === "asc" ? (
+                          <ChevronUp className="h-3.5 w-3.5" />
+                        ) : (
+                          <ChevronDown className="h-3.5 w-3.5" />
+                        )
+                      ) : (
+                        <ChevronsUpDown className="h-3.5 w-3.5 text-gray-300 group-hover:text-gray-400" />
+                      )}
+                    </button>
+                  </th>
+                )
+              })}
               <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-600">Ações</th>
             </tr>
           </thead>

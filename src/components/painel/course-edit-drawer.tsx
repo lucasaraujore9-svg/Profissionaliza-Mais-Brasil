@@ -25,6 +25,7 @@ interface CourseDetail {
   parcelas: number | null
   paymentType: "ONE_TIME" | "MONTHLY"
   monthlyAvailable: boolean
+  isVisible: boolean
   isFeatured: boolean
   customDescription: string | null
   customCapaUrl: string | null
@@ -46,6 +47,7 @@ export function CourseEditDrawer({
   const [paymentType, setPaymentType] = useState<"ONE_TIME" | "MONTHLY">("ONE_TIME")
   const [description, setDescription] = useState("")
   const [parcelas, setParcelas] = useState("")
+  const [isVisible, setIsVisible] = useState(true)
   const [isFeatured, setIsFeatured] = useState(false)
   const [capaUrl, setCapaUrl] = useState<string | null>(null)
   const [hasCustomCapa, setHasCustomCapa] = useState(false)
@@ -83,6 +85,7 @@ export function CourseEditDrawer({
         setParcelas(
           data.customParcelas != null ? String(data.customParcelas) : "",
         )
+        setIsVisible(data.isVisible)
         setIsFeatured(data.isFeatured)
         setCapaUrl(data.customCapaUrl ?? data.defaultCapaUrl ?? null)
         setHasCustomCapa(data.customCapaUrl != null)
@@ -186,6 +189,7 @@ export function CourseEditDrawer({
           paymentType,
           customDescription: description.trim() || null,
           customParcelas: parcelasValue,
+          isVisible,
           isFeatured,
         }),
       })
@@ -462,6 +466,25 @@ export function CourseEditDrawer({
                   )
                 })()}
               </div>
+
+              <label className="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50/50 px-4 py-3">
+                <div>
+                  <div className="text-sm font-semibold text-[var(--color-pmb-green-900)]">
+                    Visível na vitrine
+                  </div>
+                  <div className="text-xs text-gray-500">
+                    {isVisible
+                      ? "O curso aparece na sua vitrine."
+                      : "Curso oculto — ninguém vê na sua vitrine."}
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={isVisible}
+                  onChange={(e) => setIsVisible(e.target.checked)}
+                  className="h-4 w-4 rounded border-gray-300 text-[var(--color-pmb-green)]"
+                />
+              </label>
 
               <label className="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50/50 px-4 py-3">
                 <div>

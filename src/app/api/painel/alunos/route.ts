@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import type { Prisma } from "@prisma/client"
 import { requireResellerSession } from "@/lib/auth/reseller-session"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 
@@ -14,8 +15,31 @@ export const GET = withRequestContext(
     const { searchParams } = new URL(request.url)
     const search = searchParams.get("q")?.trim()
     const statusFilter = searchParams.get("status")?.trim()
+    const enrollmentFilter = searchParams.get("enrollment")?.trim()
 
     const validStatus = ["ATIVO", "INATIVO", "BLOQUEADO", "DEVEDOR", "FORMADO", "INTERESSADO"]
+
+    // Filtro por situacao de matricula/pagamento. "Com curso"/"sem curso"
+    // usam matriculas ativas/concluidas (mesma definicao de coursesCount).
+    let enrollmentWhere: Prisma.StudentWhereInput = {}
+    switch (enrollmentFilter) {
+      case "com_curso":
+        enrollmentWhere = {
+          enrollments: { some: { status: { in: ["ACTIVE", "COMPLETED"] } } },
+        }
+        break
+      case "sem_curso":
+        enrollmentWhere = {
+          enrollments: { none: { status: { in: ["ACTIVE", "COMPLETED"] } } },
+        }
+        break
+      case "pagamento_pendente":
+        enrollmentWhere = { enrollments: { some: { status: "PENDING" } } }
+        break
+      case "curso_finalizado":
+        enrollmentWhere = { enrollments: { some: { status: "COMPLETED" } } }
+        break
+    }
 
     const [students, statsRaw] = await Promise.all([
       prisma.student.findMany({
@@ -37,6 +61,7 @@ export const GET = withRequestContext(
           ...(statusFilter && validStatus.includes(statusFilter)
             ? { status: statusFilter as "ATIVO" | "INATIVO" | "BLOQUEADO" | "DEVEDOR" | "FORMADO" | "INTERESSADO" }
             : {}),
+          ...enrollmentWhere,
         },
         include: {
           _count: {

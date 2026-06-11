@@ -51,6 +51,7 @@ const ALL_ITEMS: {
 
 interface SidebarPainelProps {
   tenantName?: string
+  tenantLogoUrl?: string
   userEmail?: string
   isOwner?: boolean
   automationEnabled?: boolean
@@ -58,6 +59,7 @@ interface SidebarPainelProps {
 
 export function SidebarPainel({
   tenantName,
+  tenantLogoUrl,
   userEmail,
   isOwner = true,
   automationEnabled = false,
@@ -75,13 +77,24 @@ export function SidebarPainel({
     <aside className="flex h-full w-60 flex-col bg-[var(--color-pmb-green-700)] text-white lg:flex">
       <div className="flex h-20 items-center gap-3 border-b border-white/10 px-6">
         <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white p-2 shadow-sm ring-1 ring-black/5">
-          <Image
-            src="/images/logo.png"
-            alt="PMB"
-            width={40}
-            height={40}
-            className="h-full w-full object-contain"
-          />
+          {tenantLogoUrl ? (
+            <Image
+              src={tenantLogoUrl}
+              alt={tenantName ?? "Logo da escola"}
+              width={40}
+              height={40}
+              className="h-full w-full object-contain"
+              unoptimized
+            />
+          ) : (
+            <Image
+              src="/images/logo.png"
+              alt="PMB"
+              width={40}
+              height={40}
+              className="h-full w-full object-contain"
+            />
+          )}
         </div>
         <div className="flex flex-col leading-tight min-w-0">
           <span className="font-display text-sm text-white truncate">

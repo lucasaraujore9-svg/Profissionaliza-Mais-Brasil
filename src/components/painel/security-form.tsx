@@ -9,7 +9,6 @@ import { Label } from "@/components/ui/label"
 type SubmitStatus = "idle" | "submitting" | "success" | "error"
 
 export function SecurityForm() {
-  const [current, setCurrent] = useState("")
   const [newPass, setNewPass] = useState("")
   const [confirm, setConfirm] = useState("")
   const [status, setStatus] = useState<SubmitStatus>("idle")
@@ -27,7 +26,6 @@ export function SecurityForm() {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          currentPassword: current,
           newPassword: newPass,
           confirmPassword: confirm,
         }),
@@ -49,7 +47,6 @@ export function SecurityForm() {
         return
       }
 
-      setCurrent("")
       setNewPass("")
       setConfirm("")
       setStatus("success")
@@ -70,23 +67,6 @@ export function SecurityForm() {
       </p>
 
       <div className="mt-6 space-y-4 max-w-md">
-        <div>
-          <Label htmlFor="sec-atual">Senha atual</Label>
-          <div className="relative mt-1.5">
-            <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-            <Input
-              id="sec-atual"
-              type="password"
-              placeholder="••••••••"
-              className="pl-9"
-              value={current}
-              onChange={(e) => setCurrent(e.target.value)}
-            />
-          </div>
-          {errors.currentPassword && (
-            <p className="mt-1 text-xs text-red-600">{errors.currentPassword}</p>
-          )}
-        </div>
         <div>
           <Label htmlFor="sec-nova">Nova senha</Label>
           <div className="relative mt-1.5">

@@ -11,6 +11,7 @@ export interface PainelLayoutShellProps {
   userName: string
   userEmail: string
   tenantName?: string | null
+  tenantLogoUrl?: string | null
   automationEnabled?: boolean
   memberRole?: MemberRole
   tourCompleted?: boolean
@@ -21,6 +22,7 @@ export function PainelLayoutShell({
   userName,
   userEmail,
   tenantName,
+  tenantLogoUrl,
   automationEnabled = false,
   memberRole = "owner",
   tourCompleted = false,
@@ -30,6 +32,7 @@ export function PainelLayoutShell({
       <div className="hidden h-full lg:block">
         <SidebarPainel
           tenantName={tenantName ?? undefined}
+          tenantLogoUrl={tenantLogoUrl ?? undefined}
           userEmail={userEmail}
           automationEnabled={automationEnabled}
         />
@@ -39,6 +42,7 @@ export function PainelLayoutShell({
           mobileNav={
             <SidebarPainel
               tenantName={tenantName ?? undefined}
+              tenantLogoUrl={tenantLogoUrl ?? undefined}
               userEmail={userEmail}
               automationEnabled={automationEnabled}
             />

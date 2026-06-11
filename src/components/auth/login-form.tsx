@@ -14,6 +14,18 @@ type SubmitState =
   | { kind: "submitting" }
   | { kind: "error"; message: string }
 
+const APP_DOMAIN =
+  process.env.NEXT_PUBLIC_APP_DOMAIN ?? "profissionalizamaisbrasil.com.br"
+
+// True quando o login esta acontecendo no dominio institucional PMB (apex ou
+// www) — e nao no subdominio/dominio-custom de uma unidade. So nesse caso a
+// revenda precisa do handoff cross-domain para cair no proprio dominio.
+function isOnPmbAppDomain(): boolean {
+  if (typeof window === "undefined") return false
+  const host = window.location.hostname
+  return host === APP_DOMAIN || host === `www.${APP_DOMAIN}`
+}
+
 export function LoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -68,13 +80,33 @@ export function LoginForm() {
       //   "/\\evil.com" ✗   — variante com backslash, vista em alguns browsers
       //   "http://x.com" ✗  — absoluta externa
       const redirectTo = searchParams.get("callbackUrl")
-      const isSafePath =
+      const safeCallback =
         !!redirectTo &&
         redirectTo.startsWith("/") &&
         !redirectTo.startsWith("//") &&
         !redirectTo.startsWith("/\\")
-      if (isSafePath) {
-        router.push(redirectTo)
+          ? redirectTo
+          : null
+
+      // Revendedor: se o login aconteceu no dominio PMB, redireciona para a
+      // URL da unidade JA AUTENTICADO (handoff cross-domain). Em PENDING/
+      // SUSPENDED vai para /inadimplente (cobranca fica no lado PMB).
+      if (role === "RESELLER") {
+        if (tenantStatus === "PENDING" || tenantStatus === "SUSPENDED") {
+          router.push(safeCallback ?? "/inadimplente")
+          return
+        }
+        const dest = safeCallback ?? "/painel"
+        if (isOnPmbAppDomain()) {
+          window.location.href = `/api/auth/handoff/start?next=${encodeURIComponent(dest)}`
+          return
+        }
+        router.push(dest)
+        return
+      }
+
+      if (safeCallback) {
+        router.push(safeCallback)
         return
       }
 
@@ -84,12 +116,6 @@ export function LoginForm() {
         role === "PMB_RESELLER_MGR"
       ) {
         router.push("/admin")
-      } else if (role === "RESELLER") {
-        if (tenantStatus === "PENDING" || tenantStatus === "SUSPENDED") {
-          router.push("/inadimplente")
-        } else {
-          router.push("/painel")
-        }
       } else if (role === "STUDENT") {
         router.push("/aluno")
       } else {

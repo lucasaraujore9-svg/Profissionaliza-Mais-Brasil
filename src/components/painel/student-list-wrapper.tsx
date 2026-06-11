@@ -1,12 +1,18 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { StudentStatsBar, type StudentStats } from "./student-stats-bar"
-import { StudentToolbar, type StudentFilter } from "./student-toolbar"
+import {
+  StudentToolbar,
+  type StudentFilter,
+  type EnrollmentFilter,
+} from "./student-toolbar"
 import {
   StudentTable,
   type StudentListItem,
   type StudentStatus,
+  type SortKey,
+  type SortOrder,
 } from "./student-table"
 import { StudentDetailDrawer } from "./student-detail-drawer"
 
@@ -20,12 +26,26 @@ const emptyStats: StudentStats = {
   INTERESSADO: 0,
 }
 
+// Ordem de exibicao dos status quando a coluna "Status" e usada para ordenar.
+const statusOrder: Record<StudentStatus, number> = {
+  ATIVO: 0,
+  FORMADO: 1,
+  INTERESSADO: 2,
+  DEVEDOR: 3,
+  INATIVO: 4,
+  BLOQUEADO: 5,
+}
+
 export function StudentListWrapper() {
   const [students, setStudents] = useState<StudentListItem[]>([])
   const [stats, setStats] = useState<StudentStats>(emptyStats)
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
   const [filter, setFilter] = useState<StudentFilter>("TODOS")
+  const [enrollmentFilter, setEnrollmentFilter] =
+    useState<EnrollmentFilter>("TODOS")
+  const [sortKey, setSortKey] = useState<SortKey>("createdAt")
+  const [sortOrder, setSortOrder] = useState<SortOrder>("desc")
   const [viewingId, setViewingId] = useState<string | null>(null)
   const [pendingId, setPendingId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -37,6 +57,7 @@ export function StudentListWrapper() {
       const params = new URLSearchParams()
       if (search.trim()) params.set("q", search.trim())
       if (filter !== "TODOS") params.set("status", filter)
+      if (enrollmentFilter !== "TODOS") params.set("enrollment", enrollmentFilter)
       const res = await fetch(`/api/painel/alunos?${params.toString()}`)
       const body = await res.json()
       if (!res.ok) {
@@ -50,7 +71,7 @@ export function StudentListWrapper() {
     } finally {
       setLoading(false)
     }
-  }, [search, filter])
+  }, [search, filter, enrollmentFilter])
 
   useEffect(() => {
     const timeout = setTimeout(() => {
@@ -58,6 +79,42 @@ export function StudentListWrapper() {
     }, 300)
     return () => clearTimeout(timeout)
   }, [load])
+
+  // Ordenacao client-side da pagina carregada — instantanea, sem refetch.
+  const sortedStudents = useMemo(() => {
+    const dir = sortOrder === "asc" ? 1 : -1
+    return [...students].sort((a, b) => {
+      switch (sortKey) {
+        case "nome":
+          return a.nome.localeCompare(b.nome, "pt-BR") * dir
+        case "email":
+          return (a.email ?? "").localeCompare(b.email ?? "", "pt-BR") * dir
+        case "coursesCount":
+          return (a.coursesCount - b.coursesCount) * dir
+        case "createdAt":
+          return (
+            (new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()) *
+            dir
+          )
+        case "status":
+          return (statusOrder[a.status] - statusOrder[b.status]) * dir
+        default:
+          return 0
+      }
+    })
+  }, [students, sortKey, sortOrder])
+
+  const handleSort = useCallback((key: SortKey) => {
+    setSortKey((prevKey) => {
+      if (prevKey === key) {
+        setSortOrder((prev) => (prev === "asc" ? "desc" : "asc"))
+        return prevKey
+      }
+      // Nova coluna: texto comeca asc; numero/data comeca desc (mais relevante).
+      setSortOrder(key === "nome" || key === "email" ? "asc" : "desc")
+      return key
+    })
+  }, [])
 
   const handleToggleBlock = useCallback(
     async (student: StudentListItem | { id: string; status: StudentStatus }) => {
@@ -99,6 +156,8 @@ export function StudentListWrapper() {
         onSearchChange={setSearch}
         filter={filter}
         onFilterChange={setFilter}
+        enrollmentFilter={enrollmentFilter}
+        onEnrollmentFilterChange={setEnrollmentFilter}
       />
       {error && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -106,9 +165,12 @@ export function StudentListWrapper() {
         </div>
       )}
       <StudentTable
-        students={students}
+        students={sortedStudents}
         loading={loading}
         pendingId={pendingId}
+        sortKey={sortKey}
+        sortOrder={sortOrder}
+        onSort={handleSort}
         onViewDetails={(id) => setViewingId(id)}
         onToggleBlock={handleToggleBlock}
       />
