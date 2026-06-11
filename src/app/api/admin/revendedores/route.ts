@@ -19,6 +19,8 @@ import { generateUniqueReferralCode } from "@/lib/referrals/code"
 import { resolveReferrerFromCookie } from "@/lib/referrals/capture"
 import { contextLogger } from "@/lib/logger"
 import { withRequestContext } from "@/lib/observability/with-request-context"
+import { ensureTenantCourses } from "@/lib/tenant/ensure-courses"
+import { ensureTenantHomeSections } from "@/lib/home/sections"
 
 export const GET = withRequestContext(
   { action: "admin.revendedores.list", route: "/api/admin/revendedores" },
@@ -357,6 +359,22 @@ export const POST = withRequestContext(
     },
     select: { id: true, slug: true, name: true, status: true },
   })
+
+  // Bootstrap da vitrine: espelha o catálogo global em TenantCourse e clona as
+  // seções da home do PMB. Sem isso, a vitrine nasce sem cursos (o hero e as
+  // seções consultam tenant_courses) — só era preenchida quando o revendedor
+  // abria /painel/cursos. Idempotente; falha aqui não impede a criação.
+  try {
+    await Promise.all([
+      ensureTenantCourses(tenant.id),
+      ensureTenantHomeSections(tenant.id),
+    ])
+  } catch (err) {
+    contextLogger().error(
+      { err, event: "admin.revendedores.bootstrap_vitrine_failed", tenantId: tenant.id },
+      "bootstrap da vitrine (cursos/seções) falhou na criação do revendedor",
+    )
+  }
 
   const user = await prisma.user.create({
     data: {

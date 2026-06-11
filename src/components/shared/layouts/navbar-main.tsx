@@ -75,6 +75,12 @@ export function NavbarMain({
               priority
               className="h-14 w-auto object-contain md:h-16"
             />
+          ) : tenantName ? (
+            // Revenda sem logo própria: exibe o nome da unidade em texto até que
+            // ela suba a logo — nunca cai na logo institucional da PMB.
+            <span className="inline-block max-w-[220px] truncate text-lg font-black leading-tight text-[var(--color-pmb-green)] md:max-w-[340px] md:text-2xl">
+              {tenantName}
+            </span>
           ) : (
             <Image
               src="/images/logo.png"
