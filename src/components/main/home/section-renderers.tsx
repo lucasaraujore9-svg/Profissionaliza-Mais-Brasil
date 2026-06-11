@@ -3,12 +3,14 @@ import {
   ArrowRight,
   Award,
   Banknote,
+  CalendarDays,
   ShieldCheck,
   Smartphone,
   MessageCircle,
   Clock,
   Infinity as InfinityIcon,
   Quote,
+  Users,
   type LucideIcon,
 } from "lucide-react"
 import type {
@@ -22,12 +24,14 @@ import type {
 const ICON_MAP: Record<string, LucideIcon> = {
   Award,
   Banknote,
+  CalendarDays,
   ShieldCheck,
   Smartphone,
   MessageCircle,
   Clock,
   Infinity: InfinityIcon,
   Quote,
+  Users,
 }
 
 function iconFor(name: string | null | undefined): LucideIcon | null {
@@ -199,7 +203,7 @@ function LearnAnywhereVariant({ config }: { config: InstitutionalConfig }) {
                   no bolso.
                 </h3>
                 <p className="mt-3 max-w-[260px] text-[14px] leading-relaxed text-white/80">
-                  Assista aulas no ônibus, na hora do almoço, antes de dormir.
+                  Estude pelo celular, nos seus horários livres, e avance na sua carreira sem complicação.
                 </p>
               </div>
 
@@ -355,9 +359,16 @@ function FinalCtaVariant({ config }: { config: InstitutionalConfig }) {
             {config.title}
           </h2>
           {config.body && (
-            <p className="mt-4 text-[15px] leading-relaxed text-white/80 md:text-[17px]">
-              {config.body}
-            </p>
+            // Suporta corpo multi-parágrafo: quebras de linha viram <p> separados.
+            <div className="mt-4 space-y-3 text-[15px] leading-relaxed text-white/80 md:text-[17px]">
+              {config.body
+                .split("\n")
+                .map((p) => p.trim())
+                .filter(Boolean)
+                .map((p, i) => (
+                  <p key={i}>{p}</p>
+                ))}
+            </div>
           )}
           <div className="mt-7 flex flex-col items-center justify-center gap-3 sm:flex-row">
             {config.buttonText && config.buttonHref && (

@@ -172,6 +172,7 @@ export default async function LojaLayout({
           const t = tecnicaFromTenant(tenant)
           return { enabled: t.enabled, label: t.label, url: t.url }
         })()}
+        courseHrefBase="/curso"
       />
       <main className="flex-1">{children}</main>
       <FooterMain

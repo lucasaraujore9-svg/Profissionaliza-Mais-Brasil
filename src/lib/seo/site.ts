@@ -14,7 +14,7 @@ export const SITE_NAME = "Profissionaliza Mais Brasil"
 export const SITE_SHORT_NAME = "PMB"
 
 export const SITE_DESCRIPTION =
-  "Cursos profissionalizantes online com certificado reconhecido nacionalmente. Estude pelo celular, pague no Pix e ganhe uma profissão no seu ritmo."
+  "Cursos profissionalizantes online com certificado válido em todo o Brasil. Aprenda no celular, no seu ritmo, e comece a atuar rapidamente no mercado."
 
 export const SITE_KEYWORDS = [
   "cursos profissionalizantes",

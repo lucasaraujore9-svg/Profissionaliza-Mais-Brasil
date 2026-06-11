@@ -46,8 +46,8 @@ export default function SobrePage() {
           <h2 className="text-[22px] font-black text-[var(--color-pmb-green)]">Nossa história</h2>
           <p className="mt-3 text-[14.5px] leading-relaxed text-[rgba(2,89,24,0.8)]">
             O Profissionaliza Mais Brasil nasceu com um objetivo claro: tornar a educação
-            profissionalizante acessível a quem quer aprender uma profissão e começar a faturar,
-            sem pagar fortuna por cursos que demoram anos.
+            profissionalizante acessível a quem quer aprender uma profissão e crescer
+            profissionalmente, sem pagar fortuna por cursos que demoram anos.
           </p>
           <p className="mt-3 text-[14.5px] leading-relaxed text-[rgba(2,89,24,0.8)]">
             Nos últimos anos, ajudamos milhares de brasileiros a iniciar novas carreiras — do

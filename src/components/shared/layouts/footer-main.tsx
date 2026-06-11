@@ -53,6 +53,7 @@ const INSTITUCIONAL_LINKS: NavLink[] = [
   { label: "Termos de uso", href: "/termos" },
   { label: "Política de privacidade", href: "/privacidade" },
   { label: "Seja revendedor", href: "/seja-revendedor" },
+  { label: "Seja um Parceiro do Profissionaliza Mais Brasil", href: "/seja-revendedor" },
 ]
 
 interface FooterMainProps {
@@ -85,7 +86,7 @@ interface FooterMainProps {
 }
 
 const PMB_DESCRIPTION =
-  "Cursos profissionalizantes online com certificado reconhecido. Aprenda uma profissão e comece a faturar sem sair de casa."
+  "Transforme conhecimento em oportunidade. Cursos profissionalizantes online com certificado válido em todo o Brasil para quem deseja crescer profissionalmente sem sair de casa."
 
 export function FooterMain({
   categorias = [],
@@ -282,7 +283,8 @@ function FooterColumn({ title, links }: FooterColumnProps) {
       </h3>
       <ul className="mt-4 space-y-2.5 text-[13.5px] text-white/80">
         {links.map((link) => (
-          <li key={link.href}>
+          // key composta: o bloco Institucional tem dois links para /seja-revendedor.
+          <li key={`${link.href}-${link.label}`}>
             <Link
               href={link.href}
               className="transition-colors hover:text-white hover:underline"

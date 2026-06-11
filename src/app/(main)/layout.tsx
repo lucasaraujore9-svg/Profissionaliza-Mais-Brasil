@@ -150,6 +150,7 @@ export default async function MainLayout({
         tenantLogoUrl={tenant.logoUrl ?? null}
         tenantName={tenant.name ?? null}
         tecnica={{ enabled: tecnica.enabled, label: tecnica.label, url: tecnica.url }}
+        courseHrefBase="/curso"
       />
       <main className="flex-1">{children}</main>
       <FooterMain

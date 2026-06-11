@@ -39,7 +39,7 @@ export default async function LojaHomePage() {
 
   return (
     <>
-      <HeroBanner showcase={showcase} slides={bannerSlides} />
+      <HeroBanner showcase={showcase} slides={bannerSlides} courseHrefBase="/curso" />
       {/* "Cursos Técnicos" entra como HomeSection (kind="tecnica") dentro de
           DynamicHomeSections — conteúdo/link padronizados pela PMB; a unidade
           só reordena e liga/desliga na aba "Seções da home". */}

@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react"
 import { Search, Menu, X, ChevronDown, User, Building2 } from "lucide-react"
 import type { CategoriaInfo } from "@/lib/catalog/home"
 import { tecnicaRedirectHref } from "@/lib/catalog/tecnica-redirect"
+import { SearchAutocomplete } from "@/components/shared/search-autocomplete"
 
 interface NavbarTecnicaConfig {
   enabled: boolean
@@ -18,6 +19,8 @@ interface NavbarMainProps {
   tenantLogoUrl?: string | null
   tenantName?: string | null
   tecnica?: NavbarTecnicaConfig
+  /** Base do link de detalhe nas sugestões da busca: "/cursos" (PMB) ou "/curso" (vitrine). */
+  courseHrefBase?: string
 }
 
 export function NavbarMain({
@@ -25,6 +28,7 @@ export function NavbarMain({
   tenantLogoUrl,
   tenantName,
   tecnica,
+  courseHrefBase = "/cursos",
 }: NavbarMainProps = {}) {
   // Sem fallback hardcoded: se nao houver categorias com cursos ativos, o
   // botao "Categorias" e a lista no mobile menu simplesmente nao aparecem.
@@ -177,15 +181,15 @@ export function NavbarMain({
             Buscar cursos
           </label>
           <Search
-            className="h-[18px] w-[18px] absolute left-4 top-1/2 -translate-y-1/2 text-[var(--color-pmb-green)]"
+            className="h-[18px] w-[18px] absolute left-4 top-1/2 -translate-y-1/2 z-10 text-[var(--color-pmb-green)]"
             aria-hidden
           />
-          <input
+          <SearchAutocomplete
             id="navbar-search"
-            name="q"
-            type="search"
             placeholder="O que você quer aprender hoje?"
-            className="w-full h-11 pl-11 pr-4 rounded-full border border-[rgba(2,89,24,0.18)] bg-white text-[14px] text-[var(--color-pmb-green)] placeholder:text-[rgba(2,89,24,0.55)] focus:outline-none focus:border-[var(--color-pmb-green)] focus:ring-2 focus:ring-[var(--color-pmb-lime)]/60 transition"
+            courseHrefBase={courseHrefBase}
+            wrapperClassName="relative w-full"
+            inputClassName="w-full h-11 pl-11 pr-4 rounded-full border border-[rgba(2,89,24,0.18)] bg-white text-[14px] text-[var(--color-pmb-green)] placeholder:text-[rgba(2,89,24,0.55)] focus:outline-none focus:border-[var(--color-pmb-green)] focus:ring-2 focus:ring-[var(--color-pmb-lime)]/60 transition"
           />
         </form>
 

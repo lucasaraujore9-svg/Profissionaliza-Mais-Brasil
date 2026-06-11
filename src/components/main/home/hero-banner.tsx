@@ -1,6 +1,7 @@
 import { Search } from "lucide-react"
 import { ShowcaseCards } from "./showcase-cards"
 import { HeroSlides, type HeroSlide } from "./hero-slides"
+import { SearchAutocomplete } from "@/components/shared/search-autocomplete"
 import type { ShowcaseCard } from "@/lib/catalog/home"
 
 interface HeroBannerProps {
@@ -11,11 +12,14 @@ interface HeroBannerProps {
    * 1 slide => banner unico, 2+ => carrossel. 0 slides => hero hardcoded padrao.
    */
   slides?: HeroSlide[]
+  /** Base do link de detalhe nas sugestões da busca: "/cursos" (PMB) ou "/curso" (vitrine). */
+  courseHrefBase?: string
 }
 
 export function HeroBanner({
   showcase,
   slides,
+  courseHrefBase = "/cursos",
 }: HeroBannerProps = {}) {
   // Hero "imagem-only": substitui completamente o headline + busca + badges.
   if (slides && slides.length > 0) {
@@ -39,8 +43,8 @@ export function HeroBanner({
           </h1>
 
           <p className="mt-4 text-[16px] md:text-[18px] leading-relaxed text-white/85">
-            Cursos online profissionalizantes com <strong className="font-bold text-white">certificado reconhecido</strong>.
-            Estude pelo celular, pague no Pix e comece hoje mesmo.
+            Cursos online profissionalizantes com <strong className="font-bold text-white">certificado</strong>.
+            Aprenda no celular, no seu ritmo, e comece a atuar rapidamente no mercado.
           </p>
 
           <form
@@ -54,12 +58,12 @@ export function HeroBanner({
             <div className="flex items-center pl-3 text-[var(--color-pmb-green)]">
               <Search className="h-5 w-5" aria-hidden />
             </div>
-            <input
+            <SearchAutocomplete
               id="hero-search"
-              name="q"
-              type="search"
               placeholder="Qual profissão você quer aprender?"
-              className="flex-1 bg-transparent px-3 py-3 text-[15px] text-[var(--color-pmb-green)] placeholder:text-[rgba(2,89,24,0.5)] focus:outline-none"
+              courseHrefBase={courseHrefBase}
+              wrapperClassName="relative flex-1"
+              inputClassName="w-full bg-transparent px-3 py-3 text-[15px] text-[var(--color-pmb-green)] placeholder:text-[rgba(2,89,24,0.5)] focus:outline-none"
             />
             <button
               type="submit"

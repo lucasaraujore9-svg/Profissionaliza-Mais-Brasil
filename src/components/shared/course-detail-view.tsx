@@ -3,11 +3,11 @@ import Link from "next/link"
 import {
   ArrowLeft,
   Award,
+  CalendarDays,
   CheckCircle2,
   Clock,
   GraduationCap,
   HelpCircle,
-  Infinity as InfinityIcon,
   Layers,
   PlayCircle,
   ShieldCheck,
@@ -457,8 +457,8 @@ export function CourseDetailView({
                     {cargaHoraria} de conteúdo
                   </li>
                   <li className="flex items-center gap-2.5">
-                    <InfinityIcon className="h-4 w-4 text-[var(--color-pmb-gold-600)]" aria-hidden />
-                    Acesso vitalício
+                    <CalendarDays className="h-4 w-4 text-[var(--color-pmb-gold-600)]" aria-hidden />
+                    Acesso por 12 meses
                   </li>
                   <li className="flex items-center gap-2.5">
                     <Smartphone className="h-4 w-4 text-[var(--color-pmb-gold-600)]" aria-hidden />

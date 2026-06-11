@@ -61,28 +61,33 @@ export function TecnicaRedirect({
 
         {/* Headline */}
         <h1 className="mt-3 text-[22px] font-black leading-tight text-[var(--color-pmb-green)] sm:text-[26px]">
-          Sua nova carreira começa aqui.
+          Sua nova profissão começa agora.
         </h1>
 
         {/* Body — copy revisada, mais aspiracional e clara */}
         <div className="mt-3 space-y-2.5 text-[14.5px] leading-relaxed text-[rgba(2,89,24,0.78)]">
           <p>
-            Estamos te conectando com a nossa{" "}
-            <b>Escola Técnica parceira</b> — referência nacional em formação
-            técnica.
+            Parabéns pela sua escolha! Estamos conectando você a uma das
+            maiores redes de ensino técnico do país, com milhares de alunos
+            formados e histórias de sucesso.
           </p>
           <p>
-            Em alguns segundos você vai poder conhecer{" "}
+            A <b>Escola Técnica do Brasil</b> oferece{" "}
             {courseName ? (
               <>
-                o curso de <b>{courseName}</b>
+                o curso de <b>{courseName}</b> e dezenas de outros cursos
+                técnicos
               </>
             ) : (
-              <>os cursos disponíveis</>
-            )}
-            , escolher quando começar e dar o próximo passo na sua carreira —
-            tudo com diploma reconhecido pelo MEC e mercado de trabalho real
-            esperando por você.
+              <>dezenas de cursos técnicos</>
+            )}{" "}
+            com diploma válido em todo o Brasil, formação prática a partir de
+            apenas 7 meses e preparação para as áreas que mais geram
+            oportunidades no mercado de trabalho.
+          </p>
+          <p className="font-bold text-[var(--color-pmb-green)]">
+            Mais rápido que uma graduação. Mais perto do mercado. Mais perto
+            dos seus objetivos.
           </p>
         </div>
 

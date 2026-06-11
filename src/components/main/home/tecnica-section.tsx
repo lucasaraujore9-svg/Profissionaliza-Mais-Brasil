@@ -63,17 +63,21 @@ export function TecnicaSection({
                   Reconhecido pelo MEC
                 </span>
                 <h2 className="mt-4 text-[28px] font-black leading-[1.05] tracking-tight text-white sm:text-[34px] md:text-[42px]">
-                  Sua{" "}
+                  Transforme seu futuro com um{" "}
                   <span className="bg-gradient-to-r from-[var(--color-pmb-gold,#F2B705)] to-[var(--color-pmb-lime,#C0D904)] bg-clip-text text-transparent">
-                    carreira técnica
-                  </span>
-                  <br />
-                  começa aqui.
+                    curso técnico
+                  </span>{" "}
+                  de qualidade.
                 </h2>
                 <p className="mt-3 text-[14px] leading-relaxed text-white/75 md:text-[15px]">
-                  Mais de 40 cursos técnicos pela nossa escola parceira — uma
-                  das maiores do país, com diploma do MEC e mercado real
-                  esperando por você.
+                  Escolha entre mais de 40 cursos técnicos com diploma válido
+                  em todo o Brasil e formação prática a partir de apenas 7
+                  meses.
+                </p>
+                <p className="mt-2 text-[14px] leading-relaxed text-white/75 md:text-[15px]">
+                  Prepare-se para as profissões que mais contratam, estude com
+                  uma das maiores escolas técnicas do país e dê o primeiro
+                  passo para uma nova oportunidade profissional.
                 </p>
               </div>
 
