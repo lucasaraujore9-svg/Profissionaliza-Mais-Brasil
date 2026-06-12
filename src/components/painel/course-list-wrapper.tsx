@@ -17,10 +17,12 @@ import {
   Search,
   Sparkles,
   Star,
+  Table2,
   X,
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { CourseEditDrawer } from "./course-edit-drawer"
+import { CourseBulkEdit } from "./course-bulk-edit"
 import type { CourseListItem } from "./course-list-table"
 
 type FilterValue = "Todos" | "Visíveis" | "Ocultos" | "Em destaque"
@@ -56,6 +58,7 @@ export function CourseListWrapper() {
   const [courses, setCourses] = useState<CourseListItem[] | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [bulkOpen, setBulkOpen] = useState(false)
   const [search, setSearch] = useState("")
   const [filter, setFilter] = useState<FilterValue>("Todos")
   const [payment, setPayment] = useState<PaymentFilter>("all")
@@ -243,15 +246,27 @@ export function CourseListWrapper() {
             )}
           </div>
 
-          {hasFilters && (
-            <button
-              type="button"
-              onClick={resetFilters}
-              className="self-start rounded-md px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100 hover:text-[var(--color-pmb-green-900)]"
-            >
-              Limpar filtros
-            </button>
-          )}
+          <div className="flex items-center gap-2 self-start">
+            {hasFilters && (
+              <button
+                type="button"
+                onClick={resetFilters}
+                className="rounded-md px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100 hover:text-[var(--color-pmb-green-900)]"
+              >
+                Limpar filtros
+              </button>
+            )}
+            {courses && courses.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setBulkOpen(true)}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-pmb-green)] px-3 py-1.5 text-xs font-semibold text-[var(--color-pmb-green)] hover:bg-[var(--color-pmb-lime-50)]"
+              >
+                <Table2 className="h-3.5 w-3.5" />
+                Edição em massa
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Filtro por modo de pagamento + ordenação */}
@@ -502,6 +517,15 @@ export function CourseListWrapper() {
         open={editingId !== null}
         onClose={() => setEditingId(null)}
         onSaved={handleSaved}
+      />
+
+      <CourseBulkEdit
+        open={bulkOpen}
+        onClose={() => setBulkOpen(false)}
+        onSaved={() => {
+          setBulkOpen(false)
+          void loadCourses()
+        }}
       />
     </>
   )

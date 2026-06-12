@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { Loader2, X, Upload, RotateCcw } from "lucide-react"
+import { Loader2, X, Upload, RotateCcw, Info } from "lucide-react"
 import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -465,6 +465,16 @@ export function CourseEditDrawer({
                     </div>
                   )
                 })()}
+                <p className="mt-2 flex items-start gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
+                  <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                  <span>
+                    {paymentType === "MONTHLY"
+                      ? "Apenas informativo — define quantas mensalidades aparecem na vitrine."
+                      : "Apenas informativo — define o texto “Nx sem juros” exibido na vitrine."}{" "}
+                    O parcelamento sem juros de fato precisa ser configurado por
+                    você na sua conta do <strong>Mercado Pago</strong>.
+                  </span>
+                </p>
               </div>
 
               <label className="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50/50 px-4 py-3">
