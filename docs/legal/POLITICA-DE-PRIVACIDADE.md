@@ -1,672 +1,216 @@
-# POLÍTICA DE PRIVACIDADE E SEGURANÇA DE DADOS
+# POLÍTICA DE PRIVACIDADE E SEGURANÇA DA INFORMAÇÃO
 
 **Profissionaliza Mais Brasil**
 
-> Atualizado pela última vez em: 10/06/2026
-> Versão: 1.3
+> Última atualização: 10/06/2026
 
 ---
 
-O **Profissionaliza Mais Brasil** ("PMB", "nós" ou "nosso") — unidade de negócios do **GRUPO BOLSA MAIS BRASIL**, pessoa jurídica de direito privado inscrita no CNPJ/MF sob o nº **66.553.170/0001-01**, com sede na Rua Tiradentes, nº 2564, sala 09 (301), Bairro Industrial, Contagem/MG, CEP 32.230-020 — tem como compromisso fundamental o respeito pela privacidade de seus visitantes, alunos, unidades e parceiros, bem como a proteção e a segurança dos dados pessoais coletados em razão da utilização da nossa plataforma.
+## 1. Identificação do controlador e da plataforma
 
-Como parte integrante dos **Termos de Uso** e do **Contrato da Unidade**, esta Política de Privacidade e Segurança de Dados ("Política") estabelece as regras sobre a obtenção, o uso, o armazenamento, o compartilhamento e a eliminação dos dados e informações coletadas, além do registro das atividades dos usuários.
+O **Profissionaliza Mais Brasil**, unidade de negócios do **GRUPO BOLSA MAIS BRASIL**, pessoa jurídica de direito privado inscrita no CNPJ/MF sob o nº 66.553.170/0001-01, com sede na Rua Tiradentes, nº 2564, sala 09 (304), Bairro Industrial, Contagem/MG, CEP 32.230-020 — tem como compromisso fundamental o respeito pela privacidade de seus visitantes, alunos, unidades e parceiros, bem como a proteção e a segurança dos dados pessoais coletados em razão da utilização da nossa plataforma.
+
+Como parte integrante dos Termos de Uso e do Contrato da Unidade, esta Política de Privacidade e Segurança de Dados ("Política") estabelece as regras sobre a obtenção, o uso, o armazenamento, o compartilhamento e a eliminação dos dados e informações coletadas, além do registro das atividades dos usuários.
+
+As expressões "Grupo Bolsa Mais Brasil", "Centro Nacional de Ensino a Distância" e "Profissionaliza Mais Brasil" poderão ser utilizadas como nomes comerciais, projetos, sinais distintivos ou plataformas vinculadas ao Controlador, não constituindo, por si, pessoas jurídicas autônomas.
+
+## 2. Abrangência da política
 
 Esta Política aplica-se a:
 
-(i) O site institucional [www.profissionalizamaisbrasil.com.br](https://www.profissionalizamaisbrasil.com.br);
+- i) ao site institucional www.profissionalizamaisbrasil.com.br;
+- ii) ao domínio de vitrines www.livrecursos.com.br e a todos os seus subdomínios `{unidade}.livrecursos.com.br`;
+- iii) a domínios personalizados de Parceiros Licenciados que apontem para a infraestrutura da plataforma;
+- iv) aos fluxos de matrícula automática na Plataforma de Ensino e demais integrações com meios de pagamento e sistemas de terceiros, na exata medida em que o Profissionaliza Mais Brasil intermedeia o tratamento desses dados.
 
-(ii) O domínio de vitrines [www.livrecursos.com.br](https://www.livrecursos.com.br) e todos os seus subdomínios `{unidade}.livrecursos.com.br`;
+A presente Política integra e deve ser interpretada em conjunto com os Termos de Uso e com os contratos firmados com Parceiros Licenciados, instrutores e demais usuários.
 
-(iii) Domínios personalizados de **Unidades parceiras** que apontem para a infraestrutura do PMB;
+## 3. Conceitos essenciais
 
-(iv) Os fluxos de matrícula automática na **Plataforma de Ensino** e demais integrações com gateways de pagamento e sistemas terceiros, **na exata medida em que o PMB intermedeia o tratamento desses dados**.
+Para os fins desta Política, aplicam-se as seguintes definições:
 
-A presente Política está em conformidade com a **Lei Geral de Proteção de Dados Pessoais (Lei nº 13.709/2018 — "LGPD")**, com o **Marco Civil da Internet (Lei nº 12.965/2014)**, com o **Decreto nº 8.771/2016** e com as melhores práticas internacionais de privacidade.
+**Dados Pessoais**: qualquer informação relacionada a pessoa natural identificada ou identificável (ex.: nome, CPF, e-mail, telefone, IP, dados de pagamento, dados de progresso pedagógico).
 
-**Ao acessar e usar a Plataforma, você concorda com esta Política e autoriza expressamente o PMB a coletar, processar e armazenar seus dados para os fins descritos aqui. Caso não concorde com qualquer item, por favor, não utilize nossos serviços.**
+**Dados Pessoais Sensíveis**: dados sobre origem racial ou étnica, convicção religiosa, opinião política, filiação sindical, dados referentes à saúde ou à vida sexual, dados genéticos ou biométricos. O Profissionaliza Mais Brasil não coleta dados sensíveis em seu fluxo padrão.
 
-É importante que esta Política seja lida atentamente para que você esteja ciente de **como** e **por que** estamos utilizando suas informações.
+**Tratamento**: toda operação realizada com dados pessoais, como coleta, recepção, classificação, utilização, acesso, reprodução, transmissão, distribuição, processamento, armazenamento, eliminação, avaliação, controle, modificação, comunicação, transferência ou extração.
 
----
+**Titular**: a pessoa natural a quem se referem os dados pessoais.
 
-## ÍNDICE
+**Controlador**: pessoa natural ou jurídica a quem competem as decisões referentes ao tratamento de dados pessoais.
 
-1. Definições
-2. Papéis das Partes no Tratamento de Dados (PMB, Unidade, Plataforma de Ensino)
-3. Dados que Coletamos
-4. Como Coletamos seus Dados
-5. Base Legal para o Tratamento
-6. Para que Utilizamos suas Informações
-7. Compartilhamento de Dados e Sub-operadores
-8. Transferência Internacional de Dados
-9. Medidas de Segurança
-10. Retenção e Eliminação de Dados
-11. Registro de Atividades (Logs)
-12. Cookies e Tecnologias de Rastreamento
-13. Seus Direitos como Titular (LGPD)
-14. Incidentes de Segurança
-15. Tratamento de Dados de Crianças e Adolescentes
-16. Encarregado de Proteção de Dados (DPO)
-17. Alterações desta Política
-18. Lei Aplicável e Foro
-19. Canais de Contato
+**Operador**: pessoa natural ou jurídica que realiza o tratamento de dados pessoais em nome do Controlador, seguindo suas instruções.
 
----
+**Suboperador**: terceiro contratado pelo Operador para auxiliar na execução do tratamento, sob as mesmas obrigações de confidencialidade e segurança.
 
-## 1. DEFINIÇÕES
+**Encarregado (DPO)**: pessoa indicada para atuar como canal de comunicação entre o Controlador, os titulares e a ANPD.
 
-Para os fins desta Política, devem ser consideradas as seguintes definições, no plural ou no singular:
-
-**Dados Pessoais**: qualquer informação relacionada a uma pessoa natural identificada ou identificável (ex.: nome, CPF, e-mail, telefone, IP, dados de pagamento, dados de progresso pedagógico).
-
-**Dados Pessoais Sensíveis**: dados sobre origem racial ou étnica, convicção religiosa, opinião política, filiação a sindicato ou organização religiosa/filosófica/política, dados referentes à saúde ou à vida sexual, dados genéticos ou biométricos (o PMB **não coleta** dados sensíveis em seu fluxo padrão).
-
-**LGPD**: Lei Geral de Proteção de Dados Pessoais (Lei nº 13.709/2018).
+**Consentimento**: manifestação livre, informada e inequívoca pela qual o titular concorda com o tratamento de seus dados para finalidade determinada.
 
 **ANPD**: Autoridade Nacional de Proteção de Dados.
 
-**Tratamento**: toda operação realizada com dados pessoais — coleta, recepção, classificação, utilização, acesso, reprodução, transmissão, distribuição, processamento, armazenamento, eliminação, avaliação, controle, modificação, comunicação, transferência, difusão ou extração.
+**Parceiro Licenciado**: pessoa física ou jurídica que, mediante contrato, comercializa cursos e/ou opera uma vitrine vinculada à infraestrutura do Profissionaliza Mais Brasil.
 
-**Titular**: pessoa natural a quem se referem os dados pessoais (você).
+**Plataforma de Ensino**: plataforma educacional terceira, responsável pela hospedagem e ministração dos cursos.
 
-**Controlador**: pessoa natural ou jurídica a quem competem as **decisões** referentes ao Tratamento de Dados Pessoais.
+**Vitrine**: loja virtual operada por um Parceiro Licenciado, acessível por subdomínio em livrecursos.com.br ou por domínio personalizado.
 
-**Operador**: pessoa natural ou jurídica que realiza o Tratamento de Dados Pessoais **em nome do Controlador**, seguindo suas instruções.
+**Lead**: pessoa que manifesta interesse comercial por meio de formulários, páginas de captura, integrações ou demais recursos de automação.
 
-**Encarregado (DPO)**: pessoa indicada como canal de comunicação entre o Controlador, os Titulares e a ANPD.
+**Plataforma**: o conjunto do site institucional, das vitrines, dos painéis administrativos e das integrações do Profissionaliza Mais Brasil.
 
-**Consentimento**: manifestação livre, informada e inequívoca pela qual o Titular concorda com o Tratamento de seus dados para uma finalidade determinada.
+## 4. Quais dados pessoais coletamos
 
-**PMB** ou **nós**: **Profissionaliza Mais Brasil**, unidade de negócios do **GRUPO BOLSA MAIS BRASIL**, pessoa jurídica de direito privado, inscrita no CNPJ/MF sob o nº **66.553.170/0001-01**, com sede na Rua Tiradentes, nº 2564, sala 09 (301), Bairro Industrial, Contagem/MG, CEP 32.230-020.
+Poderão ser coletados, entre outros:
 
-**Você** ou **Usuário**: qualquer pessoa física — Visitante, Aluno, Unidade, Consultor ou empregado de Unidade — que acesse ou interaja com a Plataforma.
+- Nome completo;
+- CPF;
+- Data de nascimento;
+- Endereço;
+- Telefone;
+- WhatsApp;
+- E-mail;
+- Dados de acesso à plataforma;
+- Histórico acadêmico;
+- Certificados emitidos;
+- Informações de pagamento;
+- Endereço IP e dados de navegação.
 
-**Unidade**: pessoa física ou jurídica parceira comercial que opera uma Vitrine na infraestrutura do PMB, conforme **Contrato da Unidade**.
+## 5. Dados de alunos, visitantes, parceiros e instrutores
 
-**Plataforma de Ensino**: plataforma educacional terceira, contratada pelo PMB, responsável pela hospedagem e ministração dos Cursos.
+Na operação da plataforma, o Profissionaliza Mais Brasil poderá atuar como controlador dos dados necessários à criação de contas, manutenção de acessos, emissão de certificados, segurança da plataforma, suporte técnico, cumprimento de obrigações legais e preservação de direitos.
 
-**Vitrine**: loja virtual operada por uma Unidade, acessível por subdomínio em `livrecursos.com.br` ou por domínio personalizado.
+O Parceiro Licenciado poderá atuar como controlador independente em relação aos dados coletados diretamente em sua operação comercial, especialmente para captação de alunos, definição de ofertas, comunicação comercial, atendimento, emissão de documentos fiscais, cobrança e relacionamento com seus clientes.
 
-**Plataforma**: o conjunto do Site Institucional, das Vitrines, painéis administrativos e integrações do PMB.
+Prestadores de serviços de tecnologia, hospedagem, meios de pagamento, automação, suporte, comunicação e infraestrutura poderão atuar como operadores ou suboperadores, conforme a natureza do serviço prestado.
 
----
+## 6. Finalidades e bases legais
 
-## 2. PAPÉIS DAS PARTES NO TRATAMENTO DE DADOS
-
-O ecossistema do Profissionaliza Mais Brasil envolve **múltiplos atores** com papéis distintos sob a LGPD. Compreender esses papéis é essencial:
-
-### 2.1. Quando você é VISITANTE do Site Institucional
-
-O **PMB é CONTROLADOR** dos seus dados de navegação, cookies, contatos via formulário institucional, newsletter e contato comercial.
-
-### 2.2. Quando você é ALUNO que comprou um Curso em VITRINE de Unidade
-
-- A **UNIDADE é a CONTROLADORA** dos seus dados de cadastro, compra, contato e relacionamento comercial referentes à venda realizada em sua Vitrine;
-- O **PMB é OPERADOR** desses dados, atuando **sob as instruções da Unidade** e nos limites necessários à execução do Contrato da Unidade, dos Termos de Uso e desta Política;
-- A **Plataforma de Ensino é OPERADORA** dos dados necessários à criação da matrícula e ao acesso ao Curso, e **CONTROLADORA** dos dados de progresso pedagógico, conclusão e emissão de certificado em sua plataforma.
-
-### 2.3. Quando você é ALUNO que comprou um Curso diretamente no Site Institucional PMB
-
-- O **PMB é CONTROLADOR** dos seus dados de cadastro, compra e relacionamento;
-- A **Plataforma de Ensino é OPERADORA** dos dados de matrícula e Controladora dos dados de progresso pedagógico.
-
-### 2.4. Quando você é UNIDADE ou CONSULTOR
-
-O **PMB é CONTROLADOR** dos seus dados de cadastro, contratuais, comerciais, fiscais, de uso da Plataforma e de relacionamento.
-
-### 2.5. Quando você é colaborador de UNIDADE (Consultor)
-
-A **UNIDADE é a CONTROLADORA** dos seus dados como colaborador. O PMB atua como Operador ao prover a credencial de acesso ao painel.
-
-### 2.6. Independência dos Operadores e Sub-operadores
-
-Os gateways de pagamento, os provedores de infraestrutura em nuvem, a Plataforma de Ensino e demais terceiros referidos na Cláusula 7 atuam como **Controladores independentes** ou **operadores**, conforme os contratos firmados, sendo cada um responsável pelo cumprimento da LGPD em seu escopo de atuação.
-
----
-
-## 3. DADOS QUE COLETAMOS
-
-### 3.1. Dados que você fornece diretamente
-
-**No Cadastro (Aluno):**
-
-- Nome completo
-- CPF
-- E-mail
-- Telefone (com WhatsApp, opcionalmente)
-- Senha (armazenada de forma cifrada e irreversível, nunca em texto puro)
-
-**No Cadastro (Unidade / Consultor):**
-
-- Razão social ou nome completo
-- CNPJ ou CPF
-- Inscrição estadual/municipal (quando aplicável)
-- Endereço completo
-- E-mail e telefone comerciais
-- Conta bancária e/ou dados de conta no gateway de pagamento (informações para configuração — armazenadas de forma cifrada quando aplicável)
-- Documento de identidade (RG ou CNH) e comprovante de residência, quando solicitado para validação KYC
-
-**No Checkout de Curso:**
-
-- Dados de cobrança (nome, CPF, e-mail, endereço)
-- **Dados de pagamento**: o PMB **NÃO armazena** dados de cartão, CVV ou credenciais bancárias. Esses dados são fornecidos diretamente ao gateway de pagamento e processados em ambiente certificado PCI-DSS
-
-**Em formulários de contato, suporte, newsletter e onboarding:**
-
-- Nome, e-mail, telefone, mensagem
-- Eventualmente, comprovantes ou documentos para validação
-
-### 3.2. Dados coletados automaticamente
-
-- **Endereço IP** e geolocalização aproximada (cidade/estado/país, via IP)
-- **Identificador de dispositivo**, sistema operacional, navegador, idioma, resolução de tela
-- **Páginas visitadas, tempo de permanência, cliques** e ações na Plataforma
-- **Referer** (página de origem) e parâmetros de campanha (UTM)
-- **Cookies, local storage e session storage** (Cláusula 12)
-- **Logs de autenticação** (data, hora, IP, navegador) — para fins de segurança
-- **Webhooks de pagamento** dos gateways, com dados da transação (sem dados sensíveis de cartão)
-- **Eventos de progresso pedagógico** retornados pela Plataforma de Ensino (acessos, percentual concluído)
-
-### 3.3. Dados recebidos de terceiros
-
-- Da **Plataforma de Ensino**: dados de matrícula, progresso, conclusão e certificação
-- Do **gateway de pagamento**: status de pagamento, identificador da transação, valor, método (sem CVV/PAN)
-- Do **provedor de cobrança de assinaturas**: status de cobrança da mensalidade da Unidade
-- De provedores de **antifraude** (quando aplicável)
-- De **redes sociais** (caso o Usuário opte por login social — recurso futuro)
-
-### 3.4. Dados que NÃO coletamos
-
-- Dados pessoais sensíveis (origem racial, convicção religiosa, dados de saúde, biometria, dados genéticos), salvo se voluntariamente fornecidos pelo Titular em formulário de suporte (caso em que serão tratados sob seu consentimento expresso e finalidade específica)
-- Dados completos de cartão de crédito (PAN, CVV, validade) — coletados e armazenados diretamente pelo gateway de pagamento
-- Comunicações privadas via WhatsApp ou e-mail, exceto quando enviadas voluntariamente ao suporte
-
----
-
-## 4. COMO COLETAMOS SEUS DADOS
-
-Coletamos os dados por meio de:
-
-a) **Formulários de cadastro e checkout** preenchidos voluntariamente por você;
-
-b) **Navegação na Plataforma**, por meio de cookies e tecnologias similares (Cláusula 12);
-
-c) **Comunicações com nossa equipe** (e-mail, chat, WhatsApp, telefone);
-
-d) **Integrações automáticas** com gateways de pagamento e com a Plataforma de Ensino;
-
-e) **Recebimento de webhooks** de eventos de pagamento, matrícula e progresso;
-
-f) **Cadastro de Consultor** pela respectiva Unidade responsável.
-
----
-
-## 5. BASE LEGAL PARA O TRATAMENTO DE DADOS PESSOAIS
-
-Em conformidade com o **art. 7º da LGPD**, realizamos o Tratamento de Dados Pessoais com fundamento nas seguintes bases legais:
-
-| Finalidade | Base Legal Principal | Fundamento |
+| Dados tratados | Finalidade | Base legal provável |
 |---|---|---|
-| Cadastro, login e gestão da conta | **Execução de contrato** | art. 7º, V |
-| Processamento do pagamento e matrícula automática | **Execução de contrato** | art. 7º, V |
-| Emissão de nota fiscal | **Cumprimento de obrigação legal** | art. 7º, II |
-| Bloqueio por inadimplência | **Execução de contrato** | art. 7º, V |
-| Suporte ao Usuário | **Execução de contrato** e **Legítimo interesse** | art. 7º, V e IX |
-| Prevenção a fraudes, antifraude e segurança | **Legítimo interesse** | art. 7º, IX |
-| Auditoria e logs de acesso | **Cumprimento de obrigação legal** (Marco Civil) | art. 7º, II |
-| Marketing direto (e-mail, SMS, push, WhatsApp) | **Consentimento** ou **Legítimo interesse**, conforme o canal | art. 7º, I ou IX |
-| Compartilhamento com autoridades em razão de ordem judicial | **Cumprimento de obrigação legal** | art. 7º, II |
-| Defesa em processo administrativo, judicial ou arbitral | **Exercício regular de direitos** | art. 7º, VI |
-| Cookies, pixels de analytics e de marketing | **Legítimo interesse**, mitigado por opt-out no navegador e direito de oposição | art. 7º, IX |
-| Tratamento de dados de Unidade | **Execução de contrato** (Contrato da Unidade) | art. 7º, V |
-| Estudos e estatísticas anonimizadas | **Legítimo interesse**, com anonimização | art. 7º, IX e art. 12 |
+| Nome, CPF, e-mail, telefone, WhatsApp | Cadastro, matrícula, identificação do aluno e suporte | Execução de contrato |
+| Dados de acesso, IP, logs e navegação | Segurança, prevenção a fraudes, auditoria e melhoria da plataforma | Legítimo interesse / prevenção à fraude |
+| Histórico acadêmico, cursos concluídos e certificados | Gestão acadêmica e emissão/validação de certificados | Execução de contrato / exercício regular de direitos |
+| Dados de pagamento | Processamento financeiro, conciliação e reembolsos | Execução de contrato / obrigação legal |
+| Dados para comunicações promocionais | Divulgação de cursos, campanhas e oportunidades | Consentimento ou legítimo interesse, conforme o caso |
+| Dados de parceiros licenciados | Gestão contratual, implantação da plataforma, pagamentos e suporte | Execução de contrato / obrigação legal |
 
-Quando o tratamento se basear no **Consentimento**, o Titular poderá **revogar a qualquer tempo**, sem prejuízo dos tratamentos anteriores realizados sob essa base.
+## 7. Leads, automações, CRM e WhatsApp
 
-Quando se basear no **Legítimo interesse**, o Titular tem o direito de **se opor**, conforme art. 18, § 2º, da LGPD, mediante solicitação ao DPO.
+Quando o usuário preencher formulários, páginas de captura, botões de contato, integrações de WhatsApp, landing pages ou demais recursos de automação vinculados ao Parceiro Licenciado, seus dados poderão ser disponibilizados ao respectivo parceiro para atendimento comercial, esclarecimento de dúvidas, envio de informações sobre cursos e continuidade do relacionamento iniciado pelo próprio usuário.
 
----
+O Parceiro Licenciado será responsável pelo uso lícito, adequado e transparente dos dados recebidos, não podendo utilizá-los para finalidades incompatíveis, abusivas, discriminatórias, ilícitas ou alheias à finalidade informada ao titular.
 
-## 6. PARA QUE UTILIZAMOS SUAS INFORMAÇÕES
+## 8. Compartilhamento com parceiros e fornecedores
 
-Os Dados Pessoais coletados poderão ser utilizados para as seguintes finalidades:
+Os dados poderão ser compartilhados quando necessário com:
 
-### 6.1. Operação da Plataforma e Execução do Contrato
+- Parceiros licenciados responsáveis pela comercialização dos cursos;
+- Instituições educacionais parceiras;
+- Plataformas de pagamento;
+- Empresas de tecnologia e hospedagem;
+- Prestadores de serviços contratados;
+- Autoridades públicas, quando exigido por lei.
 
-a) Permitir o cadastro, autenticação e acesso à sua conta;
+O compartilhamento ocorrerá apenas na medida necessária para execução das atividades da plataforma.
 
-b) Processar a aquisição de Cursos e efetivar a matrícula automática na Plataforma de Ensino;
+Em caso de encerramento da operação do Parceiro Licenciado, inadimplência, abandono da plataforma, rescisão contratual ou necessidade de preservação da continuidade dos cursos contratados pelos alunos, os dados estritamente necessários poderão ser tratados pelo Profissionaliza Mais Brasil para manutenção do acesso, migração de ambiente, suporte, comunicação ao aluno, emissão de certificados e preservação da prestação educacional.
 
-c) Processar pagamentos e cobranças por meio dos gateways de pagamento contratados;
+## 9. Plataformas de pagamento
 
-d) Permitir o acesso às aulas, materiais e certificados;
+Os pagamentos são processados por meios de pagamento contratados, em ambiente certificado PCI-DSS. O Profissionaliza Mais Brasil não armazena número de cartão (PAN), código de segurança (CVV) ou validade; recebe do meio de pagamento apenas dados da transação, como status, identificador, valor e método. O tratamento desses dados destina-se ao processamento financeiro, à conciliação, à prevenção a fraudes, a reembolsos e ao cumprimento de obrigações fiscais e contábeis.
 
-e) Aplicar a política de bloqueio por inadimplência configurada pela Unidade;
+## 10. Certificados e validação pública
 
-f) Permitir a operação da Vitrine da Unidade (gestão de alunos, cupons, financeiro);
+Para fins de validação de autenticidade, os certificados poderão conter QR Code, código único, assinatura eletrônica, selo digital ou tecnologia equivalente. A verificação pública do certificado poderá exibir dados mínimos necessários à confirmação de autenticidade, tais como nome do aluno, curso realizado, carga horária, data de emissão e código de validação, observados os princípios da necessidade e minimização de dados.
 
-g) Permitir o atendimento ao Aluno pela Unidade.
+## 11. Cookies e tecnologias semelhantes
 
-### 6.2. Comunicação
+A plataforma poderá utilizar cookies e tecnologias similares para:
 
-a) Enviar e-mails transacionais (confirmação de pagamento, credenciais de acesso, fatura, recuperação de senha, alteração da conta) — **base: execução de contrato; não passível de opt-out**;
+- a) permitir o funcionamento da plataforma e autenticação do usuário;
+- b) manter preferências de navegação;
+- c) medir audiência e desempenho;
+- d) aprimorar funcionalidades;
+- e) realizar campanhas de comunicação e mensuração de conversão, quando aplicável.
 
-b) Enviar comunicações de cobrança e cobrança amigável;
+Cookies estritamente necessários poderão ser utilizados independentemente de consentimento, por serem indispensáveis ao funcionamento da plataforma. Cookies analíticos, publicitários ou de terceiros poderão depender de consentimento ou mecanismo equivalente de gestão de preferências, quando exigido pela legislação aplicável.
 
-c) Enviar notificações sobre seu Curso, prazos e novidades pedagógicas;
+## 12. Comunicações transacionais e promocionais
 
-d) Enviar comunicações comerciais (newsletter, ofertas, promoções, novos cursos) — **base: consentimento ou legítimo interesse; com opt-out garantido**;
+As comunicações indispensáveis à execução dos serviços, tais como confirmação de matrícula, liberação de acesso, suporte, avisos de segurança, certificados, cobrança, reembolso e alterações relevantes da plataforma, poderão ser enviadas independentemente de consentimento específico, por decorrerem da relação contratual.
 
-e) Responder dúvidas, sugestões e reclamações.
+Comunicações promocionais, campanhas comerciais, ofertas de novos cursos e oportunidades educacionais poderão ser enviadas com fundamento no consentimento do titular ou no legítimo interesse do Controlador, quando juridicamente cabível, assegurado ao titular o direito de oposição e cancelamento a qualquer momento.
 
-### 6.3. Segurança, Antifraude e Prevenção
+## 13. Dados de crianças e adolescentes
 
-a) Detectar e prevenir fraudes, abusos, acessos indevidos e atividades ilícitas;
+A plataforma poderá ser utilizada por adolescentes, conforme a natureza do curso e a legislação aplicável. O tratamento de dados pessoais de crianças e adolescentes será realizado em seu melhor interesse, com transparência adequada aos responsáveis legais quando exigido.
 
-b) Investigar incidentes de segurança;
+Quando houver necessidade de consentimento específico de responsável legal, a plataforma poderá solicitar informações complementares para verificação da autorização, sem prejuízo da adoção de outros mecanismos juridicamente admitidos.
 
-c) Cumprir requisitos regulatórios de KYC (Know Your Customer) para Unidades;
+## 14. Segurança da informação
 
-d) Garantir o cumprimento dos Termos de Uso e do Contrato da Unidade.
+O PROFISSIONALIZA MAIS BRASIL adota medidas técnicas e administrativas razoáveis para proteção dos dados pessoais contra acessos não autorizados, destruição, perda, alteração, comunicação ou qualquer forma de tratamento inadequado ou ilícito.
 
-### 6.4. Cumprimento Legal e Defesa de Direitos
+Entre as medidas adotadas poderão estar:
 
-a) Cumprir obrigações fiscais, contábeis, regulatórias e legais (emissão de nota fiscal, escrituração, retenção tributária);
+- Controle de acesso;
+- Monitoramento de sistemas;
+- Criptografia quando aplicável;
+- Backups periódicos;
+- Ambientes protegidos por autenticação;
+- Auditorias e controles internos.
 
-b) Atender requisições de autoridades públicas (Receita Federal, Ministério Público, Procon, ANPD, Polícia Civil/Federal, Justiça);
+Embora sejam adotadas boas práticas de segurança, nenhum sistema é absolutamente inviolável.
 
-c) Defender direitos do PMB, das Unidades e dos Alunos em processos judiciais, administrativos ou arbitrais.
+As credenciais de acesso são pessoais e intransferíveis.
 
-### 6.5. Melhoria Contínua
+O usuário é responsável pela guarda de sua senha e deverá comunicar imediatamente qualquer suspeita de uso indevido.
 
-a) Aperfeiçoar a experiência de navegação e usabilidade da Plataforma;
+O compartilhamento de acesso é proibido e poderá resultar em suspensão ou cancelamento definitivo da conta.
 
-b) Realizar análises estatísticas, métricas, conversões e relatórios — sempre que possível, com **dados agregados e anonimizados**;
+## 15. Retenção e descarte de dados
 
-c) Conduzir pesquisas de satisfação e estudos de NPS;
+Os dados pessoais serão mantidos pelo período necessário ao cumprimento das finalidades previstas nesta Política, incluindo manutenção da conta, acesso aos cursos, emissão e validação de certificados, suporte, histórico acadêmico, cumprimento de obrigações fiscais, contábeis, regulatórias, prevenção a fraudes e exercício regular de direitos em processos administrativos, judiciais ou arbitrais.
 
-d) Desenvolver novas funcionalidades.
+Encerrada a finalidade que justificou o tratamento, os dados poderão ser eliminados, anonimizados ou mantidos de forma restrita quando houver fundamento legal para conservação.
 
-### 6.6. Limite das Finalidades
+## 16. Transferência internacional de dados
 
-Não utilizaremos seus dados para **finalidades incompatíveis** com as descritas nesta Política sem nova base legal ou novo consentimento.
+Alguns fornecedores de tecnologia, hospedagem, armazenamento em nuvem, comunicação, análise de dados, automação ou segurança poderão tratar dados pessoais em outros países. Nesses casos, o Controlador adotará mecanismos juridicamente adequados para transferência internacional de dados, observando a LGPD e a regulamentação aplicável.
 
----
+## 17. Direitos dos titulares
 
-## 7. COMPARTILHAMENTO DE DADOS E SUB-OPERADORES
+Nos termos da LGPD, o titular poderá solicitar:
 
-### 7.1. Princípio Geral
+- Confirmação da existência de tratamento;
+- Acesso aos dados;
+- Correção de dados incompletos ou desatualizados;
+- Anonimização, bloqueio ou eliminação quando cabível;
+- Portabilidade dos dados;
+- Revogação do consentimento;
+- Informações sobre compartilhamentos realizados.
 
-O PMB **não vende, aluga, cede ou troca** seus Dados Pessoais com terceiros para fins comerciais não relacionados à prestação do serviço.
+## 18. Encarregado e canal de privacidade
 
-Compartilhamos seus dados **apenas** nas hipóteses descritas abaixo, sempre observando os princípios da LGPD e mediante contratos com cláusulas de confidencialidade e segurança.
+Para assuntos relacionados à proteção de dados pessoais, exercício de direitos dos titulares, dúvidas sobre esta Política ou comunicações relativas à privacidade, o titular poderá contatar o Encarregado pelo Tratamento de Dados Pessoais pelo e-mail: privacidade@profissionalizamaisbrasil.com.br.
 
-### 7.2. Operadores e parceiros essenciais à prestação do serviço
+- **Encarregado**: Grupo Bolsa Mais Brasil.
+- **Canal de atendimento**: privacidade@profissionalizamaisbrasil.com.br.
+- **Prazo estimado de resposta**: 7 dias úteis, ressalvadas hipóteses de maior complexidade.
 
-Para operar a Plataforma, o PMB se apoia em prestadores especializados, que tratam dados pessoais **exclusivamente** conforme as instruções e finalidades aqui descritas, sob contrato com cláusulas de confidencialidade e segurança. As **categorias** de operadores são:
+## 19. Incidentes de segurança
 
-| Categoria de operador | Finalidade | Dados tratados | Localização |
-|---|---|---|---|
-| **Infraestrutura de hospedagem e entrega de conteúdo (CDN)** | Hospedar a Plataforma, entregar conteúdo e gerenciar domínios | Logs de requisição, IP | Brasil e exterior |
-| **Banco de dados e autenticação** | Armazenar e processar dados cadastrais e transacionais | Dados de cadastro, compra e uso | Brasil e exterior |
-| **Cache e proteção de tráfego** | Acelerar respostas e prevenir abusos | IP, identificadores técnicos | Brasil e exterior |
-| **Gateway de pagamento de Cursos** | Processar pagamentos das compras | Nome, CPF, e-mail, dados de pagamento | Brasil |
-| **Cobrança de assinaturas da Unidade** | Cobrar a mensalidade das Unidades | Nome, CPF/CNPJ, e-mail, telefone da Unidade | Brasil |
-| **Plataforma de Ensino** | Hospedar e ministrar os Cursos | Nome, CPF, e-mail, dados de acesso e progresso | Brasil |
-| **Envio de e-mails transacionais** | Enviar confirmações, credenciais e avisos | Nome, e-mail, conteúdo da mensagem | Brasil e exterior |
-| **Análise de uso e performance** (quando ativada) | Métricas de navegação e desempenho | IP anonimizado, eventos de navegação | Brasil e exterior |
+Em caso de incidente de segurança envolvendo dados pessoais que possa acarretar risco ou dano relevante aos titulares, o Controlador adotará as providências técnicas, administrativas e jurídicas cabíveis, incluindo avaliação de risco, contenção, mitigação, registro interno do incidente e, quando aplicável, comunicação à ANPD e aos titulares afetados nos prazos e condições previstos na regulamentação vigente.
 
-**7.2.1.** A **relação nominal e atualizada** dos operadores e sub-operadores efetivamente contratados está à disposição do Titular **mediante solicitação ao Encarregado (DPO)**, pelos canais da Cláusula 16, em atendimento ao art. 18, VII, da LGPD.
+## 20. Alterações da política
 
-### 7.3. Compartilhamento com Unidades
+Esta Política poderá ser atualizada a qualquer momento para adequação legal, operacional ou tecnológica.
 
-Quando o Aluno realiza compra em uma Vitrine, **os Dados Pessoais necessários à execução da venda são compartilhados com a Unidade titular da Vitrine** (que atua como Controlador desses dados, conforme Cláusula 2.2), incluindo nome, CPF, e-mail, telefone, dados da compra e progresso na Vitrine.
+A versão mais atualizada estará disponível na plataforma.
 
-O PMB **não compartilha dados de Alunos de uma Vitrine com Unidades de outras Vitrines**.
+## 21. Disposições finais
 
-### 7.4. Compartilhamento com a Plataforma de Ensino
+A proteção dos dados pessoais é um compromisso permanente do PROFISSIONALIZA MAIS BRASIL.
 
-Para a matrícula automática e a fruição do Curso, **os Dados Pessoais necessários à criação da conta na Plataforma de Ensino são automaticamente transmitidos** (nome, CPF, e-mail, telefone). A Plataforma de Ensino possui sua própria política de privacidade, à qual o Aluno deve dar atenção.
-
-### 7.5. Compartilhamento com Autoridades
-
-Poderemos compartilhar dados, mediante requisição formal e fundamentada, com:
-
-a) **Autoridades policiais, ministeriais e judiciais** em razão de ordem judicial ou requisição legalmente válida;
-
-b) **Autoridades administrativas** (ANPD, Procon, Receita Federal, Banco Central) quando exigido por lei;
-
-c) **Órgãos de proteção ao crédito** (SPC, SERASA), nas hipóteses contratuais aplicáveis (inadimplência de Unidade — conforme Contrato da Unidade).
-
-### 7.6. Compartilhamento em Operações Societárias
-
-Em caso de **fusão, cisão, incorporação, aquisição ou venda total/parcial dos ativos** do PMB, os Dados Pessoais poderão ser transferidos à sucessora, que ficará obrigada a manter as mesmas condições de privacidade aqui pactuadas, com aviso prévio aos Titulares quando exigido por lei.
-
-### 7.7. Compartilhamento para Defesa de Direitos
-
-Em situações de risco a direitos do PMB, das Unidades ou de terceiros, poderemos compartilhar dados com **advogados, peritos, autoridades** e demais profissionais envolvidos.
-
-### 7.8. Outras Hipóteses
-
-Em qualquer outra hipótese de compartilhamento não prevista acima, o Tratamento dependerá de **consentimento prévio, livre e informado** do Titular.
-
----
-
-## 8. TRANSFERÊNCIA INTERNACIONAL DE DADOS
-
-**8.1.** Alguns sub-operadores listados na Cláusula 7.2 possuem infraestrutura localizada **fora do território brasileiro** (em especial Estados Unidos e União Europeia).
-
-**8.2.** Quando ocorrer transferência internacional, ela será realizada com observância dos **arts. 33 a 36 da LGPD**, mediante:
-
-a) Existência de **país com nível de proteção adequado** reconhecido pela ANPD;
-
-b) **Cláusulas contratuais padrão** firmadas com o sub-operador, contendo garantias de proteção equivalentes às da LGPD;
-
-c) **Consentimento específico e destacado** do Titular, quando aplicável;
-
-d) **Necessidade para execução de contrato** ou **cumprimento de obrigação legal**.
-
-**8.3.** O Titular poderá solicitar informações detalhadas sobre as garantias contratuais aplicáveis a cada transferência por meio do canal do DPO (Cláusula 16).
-
----
-
-## 9. MEDIDAS DE SEGURANÇA
-
-O PMB adota medidas **técnicas, administrativas e organizacionais** razoáveis para proteger seus Dados Pessoais contra acessos não autorizados, situações acidentais ou ilícitas de destruição, perda, alteração, comunicação ou difusão.
-
-### 9.1. Medidas Técnicas
-
-- **Criptografia em trânsito**: todo o tráfego entre o seu navegador e a Plataforma é protegido por conexão segura (HTTPS), com certificados digitais válidos
-- **Criptografia em repouso**: dados sensíveis (como credenciais de integração e segredos de acesso) são armazenados de forma cifrada, com padrões robustos de mercado
-- **Senhas protegidas** por algoritmo de hash irreversível, nunca armazenadas em texto puro
-- **Isolamento entre lojas**: os dados de cada Vitrine são logicamente segregados, impedindo o acesso de uma Unidade aos dados de outra
-- **Sessões autenticadas** com expiração e renovação periódica de credenciais
-- **Limitação de tentativas de acesso** e mecanismos de proteção contra abuso e ataques automatizados
-- **Integrações autenticadas** com gateways de pagamento e demais parceiros, com verificação da origem das comunicações recebidas
-- **Registros de auditoria** das ações administrativas e dos eventos relevantes da Plataforma
-- **Backups periódicos** das bases de dados
-- **Monitoramento contínuo** de disponibilidade e detecção de anomalias
-
-### 9.2. Medidas Administrativas
-
-- **Controle de acesso baseado em papéis**, com concessão das permissões mínimas necessárias a cada função
-- **Política de senhas fortes** para acesso administrativo
-- **Acesso a dados pessoais restrito** à equipe do PMB com necessidade legítima de saber, sob obrigações de confidencialidade
-- **Treinamento periódico** da equipe em LGPD e segurança da informação
-- **Procedimentos para resposta a incidentes** (Cláusula 14)
-- **Avaliação contínua** de fornecedores e operadores
-
-### 9.3. Limitações
-
-O PMB envida seus melhores esforços, **porém nenhum sistema é absolutamente impenetrável**. O PMB **não pode garantir, em termos absolutos**, a inviolabilidade dos dados em face de eventos extraordinários, ataques cibernéticos de elevada sofisticação ou força maior.
-
-O Titular também é corresponsável pela segurança ao manter senhas fortes, não compartilhá-las, manter seus dispositivos atualizados e protegidos.
-
----
-
-## 10. RETENÇÃO E ELIMINAÇÃO DE DADOS
-
-**10.1.** Manteremos seus Dados Pessoais somente pelo tempo necessário às finalidades para as quais foram coletados, observando os seguintes prazos:
-
-| Categoria de Dados | Prazo de Retenção | Base |
-|---|---|---|
-| Cadastro de Aluno (conta ativa) | Enquanto a conta estiver ativa | Execução de contrato |
-| Cadastro de Aluno (inativo) | Até **5 anos** após a última interação | Defesa de direitos (CC, art. 206, §5º) |
-| Dados de compras e pagamentos | **5 anos** após a transação | Obrigação legal fiscal/contábil |
-| Notas fiscais eletrônicas | **5 anos** | Obrigação legal (LC 116/2003) |
-| Logs de acesso e navegação | **6 meses**, conforme art. 15 do Marco Civil | Obrigação legal |
-| Logs de aplicação (eventos do sistema) | **12 meses** | Legítimo interesse de segurança |
-| Cadastro de Unidade (contrato ativo) | Enquanto vigente o contrato | Execução de contrato |
-| Cadastro de Unidade (após encerramento) | **5 anos** | Defesa de direitos |
-| Tokens de integração de pagamento (cifrados) | Enquanto necessário ao serviço | Execução de contrato |
-| Comunicações de marketing (consentimento) | Até a revogação do consentimento | Consentimento |
-| Cookies e identificadores | Conforme Cláusula 12 | Legítimo interesse |
-
-**10.2.** Findo o prazo de retenção, os Dados Pessoais serão **eliminados** ou **anonimizados** de forma irreversível, salvo se houver necessidade de manutenção para:
-
-a) Cumprimento de obrigação legal ou regulatória;
-
-b) Estudo por órgão de pesquisa, com anonimização;
-
-c) Transferência a terceiros, observados os requisitos da LGPD;
-
-d) Uso exclusivo do controlador, vedado seu acesso por terceiros e desde que anonimizados.
-
-**10.3.** O Titular pode solicitar a eliminação antecipada de seus dados quando o Tratamento se basear em **consentimento** revogado, observando-se que **dados retidos por obrigação legal não serão eliminados** até o decurso do prazo legal.
-
----
-
-## 11. REGISTRO DE ATIVIDADES (LOGS)
-
-**11.1.** Em cumprimento ao **art. 15 do Marco Civil da Internet (Lei nº 12.965/2014)**, a Plataforma registra os logs de acesso dos Usuários, mantendo-os por, no mínimo, **6 (seis) meses**, podendo prorrogar tal prazo a pedido de autoridade pública competente.
-
-**11.2.** Os logs registram, entre outros:
-
-- Endereço **IP** de origem
-- **Data e hora** da requisição (com fuso horário)
-- **URL** acessada e método HTTP
-- **User-Agent** (navegador, sistema operacional, dispositivo)
-- **Referer** (origem da requisição), quando aplicável
-- **Session ID** ou identificador anonimizado, quando disponível
-- **Ações administrativas** (login, alteração de senha, compra, criação de cupom, etc.)
-
-**11.3.** Os logs são utilizados para:
-
-a) Investigação de fraudes, abusos e incidentes de segurança;
-
-b) Cumprimento de requisições legais e judiciais;
-
-c) Análises agregadas de desempenho e capacidade;
-
-d) Defesa de direitos do PMB, das Unidades e dos Titulares.
-
----
-
-## 12. COOKIES E TECNOLOGIAS DE RASTREAMENTO
-
-**12.1. O que são cookies.** Cookies são pequenos arquivos de texto armazenados pelo navegador do Usuário ao visitar a Plataforma. Permitem reconhecer o dispositivo em visitas futuras e personalizar a experiência.
-
-**12.2. Tipos de cookies utilizados:**
-
-| Categoria | Finalidade | Base Legal | Como desabilitar |
-|---|---|---|---|
-| **Estritamente necessários** | Manter sessão autenticada, segurança, idioma | Execução de contrato | Não passível de opt-out (essencial) |
-| **Funcionais** | Lembrar preferências (tema, idioma, carrinho) | Legítimo interesse | Configurações do navegador |
-| **Performance / Analytics** | Métricas de uso e desempenho, por meio de ferramentas de análise (com IP anonimizado) | Legítimo interesse | Configurações do navegador ou extensões de bloqueio |
-| **Marketing** | Remarketing, campanhas e pixels de conversão de redes sociais e plataformas de anúncios — quando ativados | Legítimo interesse | Configurações do navegador, extensões de bloqueio ou opt-out das próprias plataformas |
-
-**12.3. Isolamento por domínio.** Os cookies de sessão são **isolados por domínio**, de forma que a autenticação no site institucional (área administrativa/aluno) **não se confunde** com a autenticação em uma Vitrine de Unidade.
-
-**12.4. Aviso de cookies.** Na primeira visita, a Plataforma exibe um **aviso informativo** comunicando o uso de cookies e tecnologias de medição. Os cookies e pixels descritos nesta Cláusula são carregados **automaticamente a partir do acesso**, com fundamento no **legítimo interesse** (art. 7º, IX, da LGPD). Ao continuar navegando, o Usuário declara ciência desta Política.
-
-**12.5. Como gerenciar cookies.** O Usuário pode, a qualquer momento:
-
-a) Ajustar configurações do navegador para bloquear, excluir ou notificar a recepção de cookies (a desativação de cookies essenciais pode comprometer o funcionamento da Plataforma);
-
-b) Utilizar extensões de bloqueio de rastreadores ou os mecanismos de opt-out oferecidos pelas próprias plataformas de análise e publicidade (Google, Meta, TikTok, entre outras);
-
-c) Solicitar ao DPO informações detalhadas sobre cookies de terceiros em uso na Plataforma, ou manifestar **oposição ao tratamento** baseado em legítimo interesse (art. 18, § 2º, da LGPD).
-
-**12.6. Vitrines de Unidades.** Nas Vitrines de Unidades parceiras (subdomínios e domínios personalizados), podem ser carregados, além dos pixels da própria Unidade, **pixels de medição do PMB**, na qualidade de controlador, para análise consolidada do ecossistema — sempre nos termos desta Cláusula.
-
-**12.7. Outras tecnologias.** Podemos utilizar **local storage**, **session storage**, **pixels de rastreamento** e **web beacons**, sempre respeitando os termos desta Política.
-
----
-
-## 13. SEUS DIREITOS COMO TITULAR (ART. 18 DA LGPD)
-
-Você, na condição de Titular de Dados Pessoais, pode exercer, a qualquer momento, perante o PMB (ou perante a Unidade titular da Vitrine, conforme Cláusula 2), os seguintes direitos:
-
-### 13.1. Direitos Garantidos
-
-a) **Confirmação da existência de Tratamento** dos seus dados;
-
-b) **Acesso** aos seus dados pessoais;
-
-c) **Correção** de dados incompletos, inexatos ou desatualizados;
-
-d) **Anonimização, bloqueio ou eliminação** de dados desnecessários, excessivos ou tratados em desconformidade com a LGPD;
-
-e) **Portabilidade** dos dados a outro fornecedor de serviço ou produto, mediante requisição expressa, observados os segredos comercial e industrial;
-
-f) **Eliminação** dos dados tratados com base no consentimento, exceto nas hipóteses de retenção legal (art. 16 da LGPD);
-
-g) **Informação** sobre as entidades públicas e privadas com as quais o PMB compartilha seus dados;
-
-h) **Informação** sobre a possibilidade de não fornecer consentimento e sobre as consequências da negativa;
-
-i) **Revogação do consentimento**, a qualquer momento, mediante manifestação expressa, com efeito apenas prospectivo (não afeta tratamentos já realizados);
-
-j) **Oposição** ao Tratamento realizado com base em legítimo interesse, em caso de descumprimento da LGPD;
-
-k) **Revisão de decisões automatizadas** (atualmente, o PMB não realiza decisões totalmente automatizadas que produzam efeitos significativos ao Titular);
-
-l) **Petição perante a ANPD** contra o Controlador.
-
-### 13.2. Como exercer seus direitos
-
-Para exercer qualquer direito, envie comunicação escrita ao DPO do PMB pelo e-mail `profissionaliza@grupobolsamaisbrasil.com.br`, indicando como assunto **"Nome do usuário — Exercício de Direitos do Titular"**, e fornecendo:
-
-(i) Nome completo, CPF e e-mail (e, se aplicável, do representante legal);
-
-(ii) Direito que deseja exercer;
-
-(iii) Descrição detalhada do pedido;
-
-(iv) Documento que comprove sua identidade (RG, CNH ou outro);
-
-(v) Quando aplicável, documento que justifique o exercício do direito.
-
-### 13.3. Verificação de identidade
-
-Antes de atender o pedido, o PMB **verificará a identidade** do solicitante para evitar fraudes. Caso a verificação não seja possível, o PMB poderá recusar o atendimento, justificadamente.
-
-### 13.4. Prazo de resposta
-
-O PMB responderá ao pedido em até **15 (quinze) dias corridos** após o recebimento, conforme art. 19, §3º, da LGPD, prorrogáveis por igual período em casos justificados.
-
-### 13.5. Gratuidade
-
-O exercício dos direitos é **gratuito**.
-
-### 13.6. Limitações
-
-Os direitos não são absolutos e podem ser limitados quando:
-
-a) O Tratamento for necessário para **cumprimento de obrigação legal**;
-
-b) Os dados forem necessários para **defesa em processo** judicial, administrativo ou arbitral;
-
-c) Os dados estiverem em **prazo de retenção legal** (Cláusula 10);
-
-d) Conflitarem com **direitos e liberdades de terceiros**;
-
-e) Houver **interesse público** relevante.
-
-### 13.7. Reclamação à ANPD
-
-Caso entenda que seus direitos não foram adequadamente atendidos, você pode apresentar reclamação à **Autoridade Nacional de Proteção de Dados (ANPD)**:
-
-- Site: [www.gov.br/anpd](https://www.gov.br/anpd)
-
----
-
-## 14. INCIDENTES DE SEGURANÇA
-
-**14.1. Resposta a incidentes.** O PMB possui procedimentos internos para detecção, contenção, investigação e remediação de incidentes de segurança que possam acarretar risco ou dano aos Titulares.
-
-**14.2. Notificação à ANPD.** Conforme o **art. 48 da LGPD**, comunicaremos à **ANPD** e aos Titulares afetados, em **prazo razoável** (regulamentado pela ANPD), a ocorrência de incidente de segurança que possa acarretar **risco ou dano relevante** aos Titulares, contendo:
-
-a) Descrição da natureza dos dados afetados;
-
-b) Informações sobre os Titulares envolvidos;
-
-c) Medidas técnicas e de segurança utilizadas para proteção dos dados;
-
-d) Riscos relacionados ao incidente;
-
-e) Motivos da demora, quando a comunicação não tiver sido imediata;
-
-f) Medidas adotadas para reverter ou mitigar os efeitos.
-
-**14.3.** O PMB cooperará com as Unidades (na qualidade de Controladores das suas Vitrines) na resposta a incidentes envolvendo dados de Alunos das respectivas Vitrines, conforme Cláusula 13 do Contrato da Unidade.
-
----
-
-## 15. TRATAMENTO DE DADOS DE CRIANÇAS E ADOLESCENTES
-
-**15.1.** A Plataforma é destinada a pessoas **maiores de 18 anos** ou devidamente representadas/assistidas.
-
-**15.2.** Caso o PMB tome conhecimento de Tratamento inadvertido de dados de crianças ou adolescentes (menores de 18 anos) sem o consentimento específico e em destaque de pelo menos um dos pais ou responsável legal, conforme **art. 14 da LGPD**, adotará as medidas para eliminação imediata dos dados, salvo se a manutenção for necessária para a proteção do próprio Titular (art. 14, § 3º).
-
-**15.3.** Pais e responsáveis legais podem contatar o DPO a qualquer momento para solicitar a eliminação dos dados de menores.
-
----
-
-## 16. ENCARREGADO DE PROTEÇÃO DE DADOS (DPO)
-
-**16.1.** Em atenção ao **art. 41 da LGPD**, o PMB designa formalmente um Encarregado de Proteção de Dados (DPO), responsável por:
-
-a) Receber comunicações dos Titulares e prestar esclarecimentos;
-
-b) Receber comunicações da ANPD e adotar providências;
-
-c) Orientar funcionários e contratados sobre boas práticas de proteção de dados;
-
-d) Executar as demais atribuições do art. 41, § 2º, da LGPD.
-
-**16.2. Canal do DPO:**
-
-- **E-mail (canal único)**: `profissionaliza@grupobolsamaisbrasil.com.br` — indicar no assunto "DPO / LGPD"
-- **Endereço para correspondência**: Rua Tiradentes, nº 2564, sala 09 (301), Bairro Industrial, Contagem/MG, CEP 32.230-020 — A/C do Encarregado de Proteção de Dados
-
-**16.3.** A identidade do DPO em pessoa física e demais dados de contato estão disponíveis mediante solicitação.
-
----
-
-## 17. ALTERAÇÕES DESTA POLÍTICA
-
-**17.1.** Esta Política poderá ser atualizada periodicamente para refletir evolução legal, tecnológica ou operacional do PMB.
-
-**17.2.** Recomendamos consultar esta página com regularidade. A versão vigente sempre será identificável pelo campo **"Atualizado pela última vez em"** no topo deste documento.
-
-**17.3.** Em caso de **alterações relevantes** (mudança de finalidades, novas bases legais, novos sub-operadores significativos, alteração de retenção), o PMB notificará os Titulares com antecedência razoável por:
-
-a) Aviso destacado na Plataforma;
-
-b) E-mail aos endereços cadastrados;
-
-c) Quando exigido por lei, **renovação de consentimento**.
-
-**17.4.** Caso o Titular não concorde com as alterações, poderá:
-
-a) Solicitar a portabilidade dos dados a outro provedor;
-
-b) Solicitar a eliminação dos dados (observadas as hipóteses legais de retenção);
-
-c) Encerrar sua conta.
-
----
-
-## 18. LEI APLICÁVEL E FORO
-
-**18.1.** Esta Política é regida pelas leis da **República Federativa do Brasil**, em especial a **LGPD**, o **Marco Civil da Internet**, o **Decreto nº 8.771/2016** e o **Código de Defesa do Consumidor**.
-
-**18.2.** Fica eleito o **foro da Comarca de Contagem/MG** para dirimir controvérsias relativas a esta Política, com expressa renúncia a qualquer outro, por mais especial ou privilegiado que seja, ressalvado, em se tratando de relação de consumo, o foro do domicílio do consumidor.
-
----
-
-## 19. CANAIS DE CONTATO
-
-Para dúvidas, sugestões, reclamações ou exercício de direitos relativos a esta Política:
-
-- **E-mail (canal único — DPO/LGPD, contato geral, suporte ao Aluno e jurídico)**: `profissionaliza@grupobolsamaisbrasil.com.br`
-- **Endereço**: Rua Tiradentes, nº 2564, sala 09 (301), Bairro Industrial, Contagem/MG, CEP 32.230-020
-- **Telefone / WhatsApp**: 0800-441-4321 (segunda a sexta, das 8h às 20h)
-- **Chat ao Vivo**: disponível no Site Institucional, das 9h às 20h, segunda a sexta-feira
-
----
-
-> **DECLARAÇÃO DO USUÁRIO**
->
-> AO ACESSAR E UTILIZAR A PLATAFORMA PROFISSIONALIZA MAIS BRASIL, DECLARO TER LIDO E COMPREENDIDO ESTA POLÍTICA DE PRIVACIDADE E SEGURANÇA DE DADOS, BEM COMO MEUS DIREITOS COMO TITULAR DE DADOS PESSOAIS NOS TERMOS DA LGPD. COMPREENDO E ACEITO O TRATAMENTO DE MEUS DADOS NOS TERMOS AQUI DESCRITOS, NA EXTENSÃO NECESSÁRIA À EXECUÇÃO DO CONTRATO E À OBSERVÂNCIA DAS BASES LEGAIS APLICÁVEIS.
+Ao utilizar a plataforma, o usuário declara ter tido acesso a esta Política de Privacidade e Segurança da Informação, que apresenta informações sobre o tratamento de seus dados pessoais. Determinadas atividades de tratamento poderão decorrer da execução de contrato, cumprimento de obrigação legal, exercício regular de direitos, legítimo interesse, prevenção a fraudes ou consentimento, conforme a finalidade específica.

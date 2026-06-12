@@ -31,7 +31,7 @@ export default async function TermosPage() {
             ? `Termos e Condições de Uso — ${tenant.name}`
             : "Termos e Condições de Uso — Alunos e Visitantes"
         }
-        subtitulo="Versão 1.2 — Atualizado em 29 de maio de 2026. Leia atentamente antes de adquirir qualquer curso."
+        subtitulo="Versão 1.3 — Atualizado em 11 de junho de 2026. Leia atentamente antes de adquirir qualquer curso."
       />
       <PageBody>
         {tenant && <LegalTenantNotice tenantName={tenant.name} kind="termos" />}
