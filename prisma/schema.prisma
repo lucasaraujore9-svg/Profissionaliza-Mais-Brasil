@@ -1055,6 +1055,10 @@ model PushSubscription {
   id           String   @id @default(cuid())
   userId       String?  @map("user_id")
   studentId    String?  @map("student_id")
+  // tenantId é preenchido quando a assinatura nasce no contexto de uma vitrine
+  // de revendedor (visitante anônimo ou logado). Permite segmentar campanhas de
+  // push por unidade. NULL = site institucional PMB / contexto sem tenant.
+  tenantId     String?  @map("tenant_id")
   endpoint     String   @db.Text
   p256dh       String   @db.Text
   auth         String   @db.Text
@@ -1067,6 +1071,8 @@ model PushSubscription {
   @@unique([studentId, endpoint])
   @@index([userId])
   @@index([studentId])
+  @@index([tenantId])
+  @@index([endpoint])
   @@map("push_subscriptions")
 }
 

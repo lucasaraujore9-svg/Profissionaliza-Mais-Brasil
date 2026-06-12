@@ -13,6 +13,9 @@ type AudienceMode =
   | "student-tenant"
   | "student-all"
   | "student-one"
+  | "visitor-all"
+  | "visitor-pmb"
+  | "visitor-tenant"
 
 const AUDIENCE_LABEL: Record<AudienceMode, string> = {
   "tenant-all": "Todas as unidades (painel da revenda)",
@@ -21,6 +24,9 @@ const AUDIENCE_LABEL: Record<AudienceMode, string> = {
   "student-tenant": "Alunos de uma unidade específica",
   "student-all": "Todos os alunos do ecossistema",
   "student-one": "Um aluno específico",
+  "visitor-all": "Todos os visitantes do site (anônimos)",
+  "visitor-pmb": "Visitantes do site institucional PMB",
+  "visitor-tenant": "Visitantes de uma unidade específica",
 }
 
 const LEVELS: Array<{ value: Level; label: string }> = [
@@ -66,8 +72,12 @@ export function AdminBroadcastForm() {
     | null
   >(null)
 
-  const needsTenant = mode === "tenant-one" || mode === "student-tenant"
+  const needsTenant =
+    mode === "tenant-one" ||
+    mode === "student-tenant" ||
+    mode === "visitor-tenant"
   const needsStudent = mode === "student-one"
+  const isVisitor = mode.startsWith("visitor-")
 
   // busca de unidades
   useEffect(() => {
@@ -222,7 +232,21 @@ export function AdminBroadcastForm() {
             <option value="student-all">{AUDIENCE_LABEL["student-all"]}</option>
             <option value="student-one">{AUDIENCE_LABEL["student-one"]}</option>
           </optgroup>
+          <optgroup label="Visitantes do site (anônimos)">
+            <option value="visitor-all">{AUDIENCE_LABEL["visitor-all"]}</option>
+            <option value="visitor-pmb">{AUDIENCE_LABEL["visitor-pmb"]}</option>
+            <option value="visitor-tenant">
+              {AUDIENCE_LABEL["visitor-tenant"]}
+            </option>
+          </optgroup>
         </select>
+        {isVisitor && (
+          <p className="text-[11px] leading-relaxed text-amber-700">
+            Envio <strong>somente push</strong> (visitantes anônimos não têm
+            feed in-app). Só recebem quem ativou as notificações pelo banner do
+            site.
+          </p>
+        )}
       </fieldset>
 
       {needsTenant && (
@@ -444,6 +468,17 @@ function buildPayload(a: BuildArgs) {
         target: "STUDENT",
         scope: "ONE",
         studentId: a.studentId,
+      }
+    case "visitor-all":
+      return { ...common, target: "VISITOR", scope: "ALL" }
+    case "visitor-pmb":
+      return { ...common, target: "VISITOR", scope: "PMB" }
+    case "visitor-tenant":
+      return {
+        ...common,
+        target: "VISITOR",
+        scope: "TENANT",
+        tenantId: a.tenantId,
       }
   }
 }

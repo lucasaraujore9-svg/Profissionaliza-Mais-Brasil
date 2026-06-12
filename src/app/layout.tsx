@@ -4,6 +4,7 @@ import "./globals.css";
 import { ServiceWorkerRegister } from "@/components/pwa/sw-register";
 import { PwaInstallPrompt } from "@/components/pwa/install-prompt";
 import { CookieConsent } from "@/components/shared/cookie-consent";
+import { PushPrompt } from "@/components/shared/push-prompt";
 import { AnalyticsGate } from "@/components/shared/analytics-gate";
 import { Toaster } from "sonner";
 import { SITE_KEYWORDS, GEO } from "@/lib/seo/site";
@@ -126,6 +127,7 @@ export default function RootLayout({
         {children}
         <Toaster position="top-right" richColors closeButton />
         <CookieConsent />
+        <PushPrompt />
         <ServiceWorkerRegister />
         <PwaInstallPrompt />
         {/* Vercel Analytics + Speed Insights — carregam automaticamente;

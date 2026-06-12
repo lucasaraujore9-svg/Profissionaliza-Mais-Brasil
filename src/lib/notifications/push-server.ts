@@ -59,29 +59,10 @@ interface DispatchTarget {
   studentId?: string | null
 }
 
-/**
- * Envia 1 payload para todas as subscriptions de 1 alvo (user ou student).
- * Remove silenciosamente assinaturas 404/410 (Gone) e incrementa failureCount
- * em erros transientes — quando passa de 5, remove tambem.
- *
- * Nunca lanca — push e best-effort, igual a email.
- */
-export async function sendPushToTarget(
-  target: DispatchTarget,
-  payload: PushPayload,
-): Promise<void> {
-  if (!ensureVapid()) return
-  if (!target.userId && !target.studentId) return
+type SubRow = { id: string; endpoint: string; p256dh: string; auth: string }
 
-  const subs = await prisma.pushSubscription.findMany({
-    where: target.userId
-      ? { userId: target.userId }
-      : { studentId: target.studentId },
-    select: { id: true, endpoint: true, p256dh: true, auth: true },
-  })
-  if (subs.length === 0) return
-
-  const body = JSON.stringify({
+function serializePayload(payload: PushPayload): string {
+  return JSON.stringify({
     title: payload.title,
     body: payload.body ?? "",
     href: payload.href ?? "/",
@@ -90,7 +71,18 @@ export async function sendPushToTarget(
     tag: payload.tag ?? payload.category ?? "pmb-notif",
     notificationId: payload.notificationId ?? null,
   })
+}
 
+/**
+ * Dispara `body` (JSON já serializado) para uma lista de subscriptions.
+ * Remove silenciosamente assinaturas 404/410 (Gone) e incrementa failureCount
+ * em erros transientes — quando passa de 5, remove tambem.
+ * Nunca lanca — push e best-effort, igual a email.
+ */
+async function dispatchToSubscriptions(
+  subs: SubRow[],
+  body: string,
+): Promise<void> {
   await Promise.all(
     subs.map(async (sub) => {
       try {
@@ -141,6 +133,72 @@ export async function sendPushToTarget(
       }
     }),
   )
+}
+
+/**
+ * Envia 1 payload para todas as subscriptions de 1 alvo (user ou student).
+ * Nunca lanca — push e best-effort.
+ */
+export async function sendPushToTarget(
+  target: DispatchTarget,
+  payload: PushPayload,
+): Promise<void> {
+  if (!ensureVapid()) return
+  if (!target.userId && !target.studentId) return
+
+  const subs = await prisma.pushSubscription.findMany({
+    where: target.userId
+      ? { userId: target.userId }
+      : { studentId: target.studentId },
+    select: { id: true, endpoint: true, p256dh: true, auth: true },
+  })
+  if (subs.length === 0) return
+
+  await dispatchToSubscriptions(subs, serializePayload(payload))
+}
+
+/**
+ * Campanha de push para visitantes anônimos (sem login) que assinaram pelo
+ * banner do site. Filtra por unidade quando `tenantId` é informado; sem ele,
+ * atinge anônimos do site institucional PMB (tenant_id NULL).
+ *
+ * Use `scope: "all"` para atingir TODOS os anônimos, independente de unidade.
+ *
+ * Pagina por cursor para não carregar a tabela inteira na memória.
+ * Nunca lanca — push e best-effort.
+ */
+export async function sendPushToAnonymous(
+  opts: { tenantId?: string | null; scope?: "tenant" | "all" },
+  payload: PushPayload,
+): Promise<number> {
+  if (!ensureVapid()) return 0
+
+  const where =
+    opts.scope === "all"
+      ? { userId: null, studentId: null }
+      : { userId: null, studentId: null, tenantId: opts.tenantId ?? null }
+
+  const body = serializePayload(payload)
+  const BATCH = 500
+  let cursor: string | undefined
+  let sent = 0
+
+  while (true) {
+    const subs: SubRow[] = await prisma.pushSubscription.findMany({
+      where,
+      select: { id: true, endpoint: true, p256dh: true, auth: true },
+      orderBy: { id: "asc" },
+      take: BATCH,
+      ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
+    })
+    if (subs.length === 0) break
+    cursor = subs[subs.length - 1].id
+    await dispatchToSubscriptions(subs, body)
+    sent += subs.length
+    if (subs.length < BATCH) break
+  }
+
+  return sent
 }
 
 /**

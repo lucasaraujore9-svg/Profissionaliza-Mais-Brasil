@@ -3,6 +3,7 @@ import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { requireSuperAdmin } from "@/lib/auth/guards"
 import { createNotification } from "@/lib/notifications"
+import { sendPushToAnonymous } from "@/lib/notifications/push-server"
 import { getOrCreatePmbTenant } from "@/lib/pmb-tenant"
 import type { NotificationLevel } from "@prisma/client"
 import { withRequestContext } from "@/lib/observability/with-request-context"
@@ -41,7 +42,20 @@ const studentSchema = baseSchema.extend({
   studentId: z.string().optional(),
 })
 
-const schema = z.discriminatedUnion("target", [tenantSchema, studentSchema])
+// Visitantes anônimos (sem login) que ativaram push pelo banner do site.
+// É push-only — não existe feed in-app para anônimo.
+// ALL = todos · PMB = só quem visitou o site institucional PMB · TENANT = vitrine
+const visitorSchema = baseSchema.extend({
+  target: z.literal("VISITOR"),
+  scope: z.enum(["ALL", "PMB", "TENANT"]),
+  tenantId: z.string().optional(),
+})
+
+const schema = z.discriminatedUnion("target", [
+  tenantSchema,
+  studentSchema,
+  visitorSchema,
+])
 
 export const POST = withRequestContext(
   { action: "admin.notifications.broadcast", route: "/api/admin/notifications/broadcast" },
@@ -107,6 +121,42 @@ export const POST = withRequestContext(
       ),
     )
     return NextResponse.json({ data: { delivered: tenants.length } })
+  }
+
+  // VISITOR — push direto para visitantes anônimos (sem feed in-app)
+  if (input.target === "VISITOR") {
+    const pushPayload = {
+      title: baseFields.title,
+      body: baseFields.body ?? null,
+      href: baseFields.href ?? null,
+      level: baseFields.level,
+      category: "announcement",
+    }
+
+    if (input.scope === "TENANT") {
+      if (!input.tenantId) {
+        return NextResponse.json({ error: "tenantId obrigatório" }, { status: 400 })
+      }
+      const tenant = await prisma.tenant.findUnique({
+        where: { id: input.tenantId },
+        select: { id: true },
+      })
+      if (!tenant) {
+        return NextResponse.json({ error: "Unidade não encontrada" }, { status: 404 })
+      }
+      const sent = await sendPushToAnonymous({ tenantId: tenant.id }, pushPayload)
+      return NextResponse.json({ data: { delivered: sent } })
+    }
+
+    if (input.scope === "PMB") {
+      // visitantes do site institucional PMB têm tenant_id NULL
+      const sent = await sendPushToAnonymous({ tenantId: null }, pushPayload)
+      return NextResponse.json({ data: { delivered: sent } })
+    }
+
+    // ALL
+    const sent = await sendPushToAnonymous({ scope: "all" }, pushPayload)
+    return NextResponse.json({ data: { delivered: sent } })
   }
 
   // STUDENT
