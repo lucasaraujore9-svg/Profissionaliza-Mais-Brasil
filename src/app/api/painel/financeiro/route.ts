@@ -25,8 +25,22 @@ export const GET = withRequestContext(
     const dateFrom = from ? new Date(from) : startOfMonth
     const dateTo = to ? new Date(to + "T23:59:59") : now
 
-    const [monthApproved, pendingAgg, allTimeAgg, dailyRevenueRaw, weeklyRevenueRaw, payments] =
-      await Promise.all([
+    // Vendas pendentes (PIX/boleto aguardando, cartao em analise) existem como
+    // Enrollment PENDING mas ainda NAO geraram linha em Payment — esta so e criada
+    // na aprovacao. Sem isso, a lista de pagamentos (que vem de `payment`) nunca
+    // mostraria pendentes, embora o card "Pendente" e o dashboard as contem.
+    // Incluimos as pendentes apenas quando o filtro permite (Todos ou Pendente).
+    const includePending = !status || status === "PENDING"
+
+    const [
+      monthApproved,
+      pendingAgg,
+      allTimeAgg,
+      dailyRevenueRaw,
+      weeklyRevenueRaw,
+      payments,
+      pendingEnrollments,
+    ] = await Promise.all([
         prisma.payment.aggregate({
           where: {
             tenantId: ctx.tenantId,
@@ -111,6 +125,27 @@ export const GET = withRequestContext(
           orderBy: [{ paidAt: "desc" }, { createdAt: "desc" }],
           take: 200,
         }),
+        includePending
+          ? prisma.enrollment.findMany({
+              where: {
+                tenantId: ctx.tenantId,
+                status: "PENDING",
+                // So as que ainda nao tem pagamento — evita duplicar uma linha
+                // ja representada na tabela `payment`.
+                payments: { none: {} },
+                createdAt: { gte: dateFrom, lte: dateTo },
+                ...(paymentType
+                  ? { paymentType: paymentType as "ONE_TIME" | "MONTHLY" }
+                  : {}),
+              },
+              include: {
+                student: { select: { nome: true } },
+                course: { select: { nome: true } },
+              },
+              orderBy: { createdAt: "desc" },
+              take: 200,
+            })
+          : Promise.resolve([]),
       ])
 
     const monthRevenue = Number(monthApproved._sum.amount ?? 0)
@@ -137,6 +172,28 @@ export const GET = withRequestContext(
       value: Number(row.revenue),
     }))
 
+    const paymentRows = payments.map((p) => ({
+      id: p.id,
+      date: (p.paidAt ?? p.createdAt).toISOString(),
+      description: `${p.enrollment.student.nome} · ${p.enrollment.course.nome}`,
+      amount: Number(p.amount),
+      status: p.mpStatus as string,
+      type: p.type as string,
+    }))
+
+    const pendingRows = pendingEnrollments.map((e) => ({
+      id: `pending-${e.id}`,
+      date: e.createdAt.toISOString(),
+      description: `${e.student.nome} · ${e.course.nome}`,
+      amount: Number(e.finalAmount),
+      status: "PENDING",
+      type: e.paymentType as string,
+    }))
+
+    const allRows = [...paymentRows, ...pendingRows].sort((a, b) =>
+      a.date < b.date ? 1 : -1,
+    )
+
     return NextResponse.json({
       data: {
         metrics: {
@@ -149,14 +206,7 @@ export const GET = withRequestContext(
           week: weekChart,
           month: monthChart,
         },
-        payments: payments.map((p) => ({
-          id: p.id,
-          date: (p.paidAt ?? p.createdAt).toISOString(),
-          description: `${p.enrollment.student.nome} · ${p.enrollment.course.nome}`,
-          amount: Number(p.amount),
-          status: p.mpStatus,
-          type: p.type,
-        })),
+        payments: allRows,
       },
     })
   },
