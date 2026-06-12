@@ -1,12 +1,12 @@
 "use client"
 
 import { useEffect } from "react"
-import { signOut } from "next-auth/react"
+import { signOutToLogin } from "@/lib/auth/sign-out"
 import { Loader2 } from "lucide-react"
 
 export default function LogoutPage() {
   useEffect(() => {
-    signOut({ callbackUrl: "/login" })
+    void signOutToLogin()
   }, [])
 
   return (

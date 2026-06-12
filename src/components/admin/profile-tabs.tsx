@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { signOut } from "next-auth/react"
+import { signOutToLogin } from "@/lib/auth/sign-out"
 import { Loader2, LogOut } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -81,7 +81,7 @@ export function ProfileTabs() {
         </div>
         <Button
           variant="outline"
-          onClick={() => signOut({ callbackUrl: "/login" })}
+          onClick={() => void signOutToLogin()}
           className="border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700"
         >
           <LogOut className="mr-2 h-4 w-4" />

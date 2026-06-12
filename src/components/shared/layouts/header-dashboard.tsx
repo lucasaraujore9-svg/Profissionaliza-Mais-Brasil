@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { signOut } from "next-auth/react"
+import { signOutToLogin } from "@/lib/auth/sign-out"
 import { Menu, LogOut, UserCog, HelpCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
@@ -23,8 +23,7 @@ export function HeaderDashboard({
   onSignOut,
   showTourHelp = false,
 }: HeaderDashboardProps) {
-  const handleSignOut =
-    onSignOut ?? (() => signOut({ callbackUrl: "/login" }))
+  const handleSignOut = onSignOut ?? (() => void signOutToLogin())
 
   // Reabrir o tour é responsabilidade do OnboardingTour (que conhece o
   // roteiro por papel). Aqui só emitimos o evento — desacopla o header da
