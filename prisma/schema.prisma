@@ -293,6 +293,12 @@ model Tenant {
   waStatusUpdatedAt   DateTime? @map("wa_status_updated_at")
   // Horas apos checkout_started sem pagamento aprovado pra cair em ABANDONED.
   abandonedAfterHours Int       @default(24) @map("abandoned_after_hours")
+  // Distribuicao automatica de leads (rodizio/round-robin) entre os consultores
+  // ativos da Equipe. Quando ligado, cada lead novo nasce com ownerUserId
+  // apontando para o proximo consultor na fila. leadAssignCursor e o ponteiro
+  // do rodizio (incrementado a cada atribuicao). Ver src/lib/automation/assign.ts.
+  leadAutoAssign      Boolean   @default(false) @map("lead_auto_assign")
+  leadAssignCursor    Int       @default(0) @map("lead_assign_cursor")
 
   // Pagamento parcelado/mensalidade (PaymentType.MONTHLY) por unidade.
   // monthlyAllowed: capability liberada pelo Admin Master.

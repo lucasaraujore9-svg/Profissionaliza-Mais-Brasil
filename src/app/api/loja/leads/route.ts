@@ -12,6 +12,7 @@ import { contextLogger } from "@/lib/logger"
 import { queueLeadMessage } from "@/lib/automation/dispatch"
 import { resolveTenantFromRequest } from "@/lib/tenant/from-request"
 import { linkVisitorToLead, readVisitorId } from "@/lib/automation/tracking"
+import { pickNextLeadOwner } from "@/lib/automation/assign"
 
 const CONSENT_VERSION = "2026-05-v1"
 const DEDUP_WINDOW_MS = 24 * 60 * 60 * 1000
@@ -159,6 +160,9 @@ export const POST = withRequestContext(
       )
     }
 
+    // Rodizio: atribui o lead ao proximo consultor da fila (se ligado).
+    const ownerUserId = await pickNextLeadOwner(tenant.id)
+
     const lead = await prisma.studentLead.create({
       data: {
         tenantId: tenant.id,
@@ -169,6 +173,7 @@ export const POST = withRequestContext(
         courseSnapshot: course.nome,
         stage: "NEW",
         source: "FORM_COURSE",
+        ownerUserId,
         ipAddress,
         userAgent,
         consentAccepted: data.consent,
@@ -176,7 +181,7 @@ export const POST = withRequestContext(
         activities: {
           create: {
             kind: "LEAD_CREATED",
-            metadata: { source: "FORM_COURSE" },
+            metadata: { source: "FORM_COURSE", ownerUserId },
           },
         },
       },

@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma"
 import { contextLogger } from "@/lib/logger"
 import { queueLeadMessage } from "./dispatch"
 import { linkVisitorToLead } from "./tracking"
+import { pickNextLeadOwner } from "./assign"
 import { StudentLeadStage } from "@prisma/client"
 
 const DEDUP_WINDOW_MS = 48 * 60 * 60 * 1000
@@ -91,6 +92,11 @@ async function createNewLead(args: UpsertLeadFromCheckoutArgs): Promise<string> 
     ? normalizeE164(args.telefone)
     : "+5500000000000"
 
+  // Rodizio: atribui ao proximo consultor (so vitrine de revendedor; PMB = null).
+  const ownerUserId = args.tenantId
+    ? await pickNextLeadOwner(args.tenantId)
+    : null
+
   const lead = await prisma.studentLead.create({
     data: {
       tenantId: args.tenantId,
@@ -102,10 +108,15 @@ async function createNewLead(args: UpsertLeadFromCheckoutArgs): Promise<string> 
       enrollmentId: args.enrollmentId,
       stage: "CHECKOUT_STARTED",
       source: "CHECKOUT_ABANDON",
+      ownerUserId,
       activities: {
         create: {
           kind: "LEAD_CREATED",
-          metadata: { source: "CHECKOUT_ABANDON", enrollmentId: args.enrollmentId },
+          metadata: {
+            source: "CHECKOUT_ABANDON",
+            enrollmentId: args.enrollmentId,
+            ownerUserId,
+          },
         },
       },
     },

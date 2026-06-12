@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { requireResellerSession } from "@/lib/auth/reseller-session"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { reconcileLeadStages } from "@/lib/automation/leads"
+import { listLeadAssignees } from "@/lib/automation/assign"
 import { StudentLeadStage } from "@prisma/client"
 
 const ALL_STAGES: StudentLeadStage[] = [
@@ -64,10 +65,18 @@ export const GET = withRequestContext(
         paymentValue: true,
         columnOrder: true,
         createdAt: true,
+        ownerUserId: true,
       },
     })
 
-    const serialized = leads.map(serializeLead)
+    // Mapa userId → nome do consultor, para exibir o responsável no card.
+    const ownerNames = new Map(
+      (await listLeadAssignees(ctx.tenantId)).map((a) => [a.userId, a.name]),
+    )
+
+    const serialized = leads.map((l) =>
+      serializeLead(l, l.ownerUserId ? (ownerNames.get(l.ownerUserId) ?? null) : null),
+    )
     const board = emptyBoard()
     for (const lead of serialized) {
       board[lead.stage].push(lead)
@@ -89,18 +98,22 @@ function emptyBoard(): Record<StudentLeadStage, SerializedLead[]> {
   )
 }
 
-function serializeLead(lead: {
-  id: string
-  nome: string
-  email: string
-  telefone: string
-  courseSnapshot: string | null
-  stage: StudentLeadStage
-  source: string
-  paymentValue: { toString(): string } | null
-  columnOrder: number
-  createdAt: Date
-}) {
+function serializeLead(
+  lead: {
+    id: string
+    nome: string
+    email: string
+    telefone: string
+    courseSnapshot: string | null
+    stage: StudentLeadStage
+    source: string
+    paymentValue: { toString(): string } | null
+    columnOrder: number
+    createdAt: Date
+    ownerUserId: string | null
+  },
+  ownerName: string | null,
+) {
   return {
     id: lead.id,
     nome: lead.nome,
@@ -112,5 +125,7 @@ function serializeLead(lead: {
     paymentValue: lead.paymentValue ? Number(lead.paymentValue.toString()) : null,
     columnOrder: lead.columnOrder,
     createdAt: lead.createdAt.toISOString(),
+    ownerUserId: lead.ownerUserId,
+    ownerName,
   }
 }

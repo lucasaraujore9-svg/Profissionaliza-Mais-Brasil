@@ -17,6 +17,10 @@ export interface LeadCardData {
   paymentValue: number | null
   columnOrder: number
   createdAt: string
+  // Ausentes no board do admin PMB (sem consultores); presentes no painel da
+  // revenda — `null` significa lead sem responsável atribuído.
+  ownerUserId?: string | null
+  ownerName?: string | null
 }
 
 type BoardData = Record<StageKey, LeadCardData[]>

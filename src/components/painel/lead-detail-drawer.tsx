@@ -15,6 +15,7 @@ import {
   GraduationCap,
   Footprints,
   FileText,
+  UserRound,
 } from "lucide-react"
 import { STAGE_META, type StageKey } from "./lead-kanban-column"
 
@@ -52,6 +53,7 @@ interface LeadDetail {
   notes: string | null
   stage: StageKey
   source: string
+  ownerUserId: string | null
   paymentValue: number | null
   courseSnapshot: string | null
   course: { slug: string; nome: string } | null
@@ -102,6 +104,11 @@ export function LeadDetailDrawer({
   const [waMessage, setWaMessage] = useState("")
   const [waSending, setWaSending] = useState(false)
   const [waError, setWaError] = useState<string | null>(null)
+  const [assignees, setAssignees] = useState<{ userId: string; name: string; active: boolean }[]>([])
+  const [savingOwner, setSavingOwner] = useState(false)
+
+  // Seletor de responsável só existe no painel do revendedor (consultores).
+  const supportsOwner = apiBase === "/api/painel/leads"
 
   const load = useCallback(
     async (opts?: { silent?: boolean }) => {
@@ -150,6 +157,46 @@ export function LeadDetailDrawer({
     }, 12_000)
     return () => clearInterval(id)
   }, [leadId, load])
+
+  // Carrega os consultores elegíveis uma vez (para o seletor de responsável).
+  useEffect(() => {
+    if (!supportsOwner || !leadId) return
+    let cancelled = false
+    fetch("/api/painel/leads/distribuicao", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((body) => {
+        if (cancelled || !body?.data?.members) return
+        setAssignees(body.data.members)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [supportsOwner, leadId])
+
+  async function changeOwner(ownerUserId: string | null) {
+    if (!leadId) return
+    setSavingOwner(true)
+    try {
+      const res = await fetch(`${apiBase}/${leadId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ownerUserId }),
+      })
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        toast.error(body.error ?? "Falha ao alterar responsável")
+        return
+      }
+      toast.success(ownerUserId ? "Responsável atualizado" : "Responsável removido")
+      await load()
+      onChanged()
+    } catch {
+      toast.error("Erro de rede")
+    } finally {
+      setSavingOwner(false)
+    }
+  }
 
   async function sendWhatsApp() {
     if (!leadId || !waMessage.trim()) return
@@ -293,6 +340,34 @@ export function LeadDetailDrawer({
                 </div>
               )}
             </div>
+
+            {supportsOwner && (
+              <div className="mt-5">
+                <label className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                  <UserRound className="h-3.5 w-3.5" />
+                  Responsável
+                </label>
+                <select
+                  value={lead.ownerUserId ?? ""}
+                  disabled={savingOwner}
+                  onChange={(e) => changeOwner(e.target.value || null)}
+                  className="mt-1.5 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-[12.5px] focus:border-[var(--color-pmb-green)] focus:outline-none focus:ring-1 focus:ring-[var(--color-pmb-green)] disabled:opacity-50"
+                >
+                  <option value="">Sem responsável (fila da unidade)</option>
+                  {assignees.map((a) => (
+                    <option key={a.userId} value={a.userId} disabled={!a.active}>
+                      {a.name}
+                      {!a.active ? " (inativo)" : ""}
+                    </option>
+                  ))}
+                </select>
+                {assignees.length === 0 && (
+                  <p className="mt-1.5 text-[10.5px] text-gray-400">
+                    Cadastre consultores na Equipe para atribuir leads.
+                  </p>
+                )}
+              </div>
+            )}
 
             {lead.courseTimeline.length > 0 && (
               <div className="mt-6">

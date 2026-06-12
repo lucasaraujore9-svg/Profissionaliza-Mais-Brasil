@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { Mail, Phone, BookOpen, MoreVertical } from "lucide-react"
+import { Mail, Phone, BookOpen, MoreVertical, UserRound } from "lucide-react"
 import type { LeadCardData } from "./leads-kanban-board"
 
 export type StageKey =
@@ -173,6 +173,18 @@ function LeadCard({ lead, currentStage, onClick, onMove }: LeadCardProps) {
         {currentStage === "WON" && lead.paymentValue !== null && (
           <p className="text-[11px] font-bold text-emerald-700">
             R$ {lead.paymentValue.toFixed(2).replace(".", ",")}
+          </p>
+        )}
+        {lead.ownerUserId !== undefined && (
+          <p className="flex items-center gap-1 pt-0.5 text-[10.5px]">
+            <UserRound className="h-3 w-3 shrink-0 text-gray-400" />
+            {lead.ownerName ? (
+              <span className="truncate font-medium text-gray-600">
+                {lead.ownerName}
+              </span>
+            ) : (
+              <span className="italic text-gray-400">Sem responsável</span>
+            )}
           </p>
         )}
       </div>
