@@ -7,6 +7,7 @@ import {
   Layers,
   Repeat,
   Search,
+  Table2,
   X,
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
@@ -14,6 +15,7 @@ import { CatalogHeader, type CatalogLastSync } from "./catalog-header"
 import { CatalogCourseGrid, type CatalogCourse } from "./catalog-course-grid"
 import { CatalogSyncLog } from "./catalog-sync-log"
 import { CatalogEditDrawer } from "./catalog-edit-drawer"
+import { CourseBulkEdit } from "@/components/shared/course-bulk-edit"
 import type { SyncLogEntry } from "@/lib/catalog/sync-log"
 
 interface CatalogResponse {
@@ -74,6 +76,7 @@ export function AdminCatalogClient({ canEdit = false }: AdminCatalogClientProps)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [bulkOpen, setBulkOpen] = useState(false)
 
   const [search, setSearch] = useState("")
   const [payment, setPayment] = useState<PaymentFilter>("all")
@@ -231,15 +234,27 @@ export function AdminCatalogClient({ canEdit = false }: AdminCatalogClientProps)
             )}
           </div>
 
-          {hasFilters && (
-            <button
-              type="button"
-              onClick={resetFilters}
-              className="self-start rounded-md px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100 hover:text-[var(--color-pmb-green-900)]"
-            >
-              Limpar filtros
-            </button>
-          )}
+          <div className="flex items-center gap-2 self-start">
+            {hasFilters && (
+              <button
+                type="button"
+                onClick={resetFilters}
+                className="rounded-md px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100 hover:text-[var(--color-pmb-green-900)]"
+              >
+                Limpar filtros
+              </button>
+            )}
+            {canEdit && courses.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setBulkOpen(true)}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-pmb-green)] px-3 py-1.5 text-xs font-semibold text-[var(--color-pmb-green)] hover:bg-[var(--color-pmb-lime-50)]"
+              >
+                <Table2 className="h-3.5 w-3.5" />
+                Edição em massa
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="mt-3 flex flex-col gap-3 border-t border-gray-100 pt-3 xl:flex-row xl:items-end xl:justify-between">
@@ -313,6 +328,32 @@ export function AdminCatalogClient({ canEdit = false }: AdminCatalogClientProps)
         open={editingId !== null}
         onOpenChange={(v) => !v && setEditingId(null)}
         onSaved={load}
+      />
+
+      <CourseBulkEdit
+        open={bulkOpen}
+        onClose={() => setBulkOpen(false)}
+        endpoint="/api/admin/catalogo/bulk"
+        subtitle="Edite preço de vitrine, parcelas e descrição de vários cursos do catálogo de uma vez."
+        scopeNote={
+          <>
+            <strong className="font-semibold text-[var(--color-pmb-green-900)]">
+              Preço de vitrine
+            </strong>{" "}
+            é o valor exibido na vitrine principal da PMB.{" "}
+            <strong className="font-semibold text-[var(--color-pmb-green-900)]">
+              Parcelas
+            </strong>{" "}
+            e <strong className="font-semibold text-[var(--color-pmb-green-900)]">descrição</strong>{" "}
+            definem o padrão herdado pelos revendedores (cada um pode
+            personalizar na própria vitrine). Deixe vazio para usar o padrão do
+            catálogo.
+          </>
+        }
+        onSaved={() => {
+          setBulkOpen(false)
+          void load()
+        }}
       />
     </div>
   )
