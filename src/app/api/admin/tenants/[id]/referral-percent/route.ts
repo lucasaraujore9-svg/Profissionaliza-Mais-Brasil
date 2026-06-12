@@ -5,10 +5,18 @@ import { prisma } from "@/lib/prisma"
 import { requireAdminSession } from "@/lib/auth/admin-session"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 
-const bodySchema = z.object({
-  // Permite null para "voltar ao percentual padrao"
-  percent: z.number().min(0).max(100).nullable(),
-})
+const bodySchema = z
+  .object({
+    // Permite null para "voltar ao percentual padrao".
+    percent: z.number().min(0).max(100).nullable().optional(),
+    // Minimo de indicacoes ATIVAS para a unidade receber comissao de
+    // recorrencia. null = volta ao padrao global. 0 = sem minimo.
+    minReferrals: z.number().int().min(0).max(1000).nullable().optional(),
+  })
+  .refine(
+    (data) => data.percent !== undefined || data.minReferrals !== undefined,
+    { message: "Informe percent e/ou minReferrals" },
+  )
 
 export const PUT = withRequestContextParams<{ id: string }>(
   { action: "admin.tenants.referral_percent.update", route: "/api/admin/tenants/[id]/referral-percent" },
@@ -48,15 +56,21 @@ export const PUT = withRequestContextParams<{ id: string }>(
     return NextResponse.json({ error: "Tenant nao encontrado" }, { status: 404 })
   }
 
+  const data: Prisma.TenantUpdateInput = {}
+  if (parsed.data.percent !== undefined) {
+    data.referralPercent =
+      parsed.data.percent === null
+        ? null
+        : new Prisma.Decimal(parsed.data.percent)
+  }
+  if (parsed.data.minReferrals !== undefined) {
+    data.referralMinReferrals = parsed.data.minReferrals
+  }
+
   const updated = await prisma.tenant.update({
     where: { id },
-    data: {
-      referralPercent:
-        parsed.data.percent === null
-          ? null
-          : new Prisma.Decimal(parsed.data.percent),
-    },
-    select: { id: true, referralPercent: true },
+    data,
+    select: { id: true, referralPercent: true, referralMinReferrals: true },
   })
 
   return NextResponse.json({
@@ -64,6 +78,7 @@ export const PUT = withRequestContextParams<{ id: string }>(
       id: updated.id,
       referralPercent:
         updated.referralPercent != null ? Number(updated.referralPercent) : null,
+      referralMinReferrals: updated.referralMinReferrals ?? null,
     },
   })
   },

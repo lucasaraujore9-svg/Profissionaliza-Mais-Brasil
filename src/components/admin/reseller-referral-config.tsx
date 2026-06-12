@@ -23,7 +23,9 @@ import { Button } from "@/components/ui/button"
 export interface ReferralStats {
   defaultPercent: number
   payoutDay: number
+  defaultMinReferrals: number
   totalReferrals: number
+  activeReferrals: number
   totalCommissionGenerated: number
   totalCommissionReceived: number
   totalReferralsPaidToMe: number
@@ -39,6 +41,7 @@ interface ResellerReferralConfigProps {
   tenantId: string
   referralCode: string
   referralPercent: number | null
+  referralMinReferrals: number | null
   pixKey: string | null
   pixKeyType: string | null
   referrer: ReferrerSummary | null
@@ -123,6 +126,7 @@ export function ResellerReferralConfig({
   tenantId,
   referralCode,
   referralPercent,
+  referralMinReferrals,
   pixKey,
   pixKeyType,
   referrer,
@@ -132,6 +136,11 @@ export function ResellerReferralConfig({
   const [percentInput, setPercentInput] = useState<string>(
     referralPercent != null ? String(referralPercent) : "",
   )
+  const [minInput, setMinInput] = useState<string>(
+    referralMinReferrals != null ? String(referralMinReferrals) : "",
+  )
+  const [savingMin, setSavingMin] = useState(false)
+  const [resettingMin, setResettingMin] = useState(false)
   const [saving, setSaving] = useState(false)
   const [resetting, setResetting] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -144,6 +153,12 @@ export function ResellerReferralConfig({
   useEffect(() => {
     setPercentInput(referralPercent != null ? String(referralPercent) : "")
   }, [referralPercent])
+
+  useEffect(() => {
+    setMinInput(
+      referralMinReferrals != null ? String(referralMinReferrals) : "",
+    )
+  }, [referralMinReferrals])
 
   async function copyCode() {
     try {
@@ -217,6 +232,67 @@ export function ResellerReferralConfig({
     }
   }
 
+  async function saveMinReferrals() {
+    const raw = minInput.trim()
+    if (!raw) {
+      toast.error("Informe o mínimo ou use 'Usar padrão'")
+      return
+    }
+    const parsed = Number(raw)
+    if (!Number.isInteger(parsed) || parsed < 0 || parsed > 1000) {
+      toast.error("Mínimo inválido (número inteiro de 0 a 1000)")
+      return
+    }
+    setSavingMin(true)
+    try {
+      const res = await fetch(
+        `/api/admin/tenants/${tenantId}/referral-percent`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ minReferrals: parsed }),
+        },
+      )
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        toast.error(body.error ?? "Falha ao salvar mínimo")
+        return
+      }
+      toast.success("Mínimo de indicações atualizado")
+      onSaved?.()
+    } catch {
+      toast.error("Erro de rede ao salvar")
+    } finally {
+      setSavingMin(false)
+    }
+  }
+
+  async function resetMinToDefault() {
+    setResettingMin(true)
+    try {
+      const res = await fetch(
+        `/api/admin/tenants/${tenantId}/referral-percent`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ minReferrals: null }),
+        },
+      )
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        toast.error(body.error ?? "Falha ao redefinir")
+        return
+      }
+      setMinInput("")
+      toast.success(`Voltou ao padrão (${stats.defaultMinReferrals})`)
+      onSaved?.()
+    } catch {
+      toast.error("Erro de rede ao redefinir")
+    } finally {
+      setResettingMin(false)
+    }
+  }
+
   async function downloadDemonstrativo() {
     if (!demoMonth) {
       toast.error("Selecione um mês")
@@ -252,6 +328,12 @@ export function ResellerReferralConfig({
   const usingDefault = referralPercent == null
   const effectivePercent = usingDefault ? stats.defaultPercent : referralPercent
   const nextPayout = computeNextPayoutDate(stats.payoutDay)
+
+  const usingDefaultMin = referralMinReferrals == null
+  const effectiveMin = usingDefaultMin
+    ? stats.defaultMinReferrals
+    : referralMinReferrals
+  const meetsMin = effectiveMin <= 0 || stats.activeReferrals >= effectiveMin
 
   return (
     <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
@@ -373,6 +455,75 @@ export function ResellerReferralConfig({
               <RotateCcw className="h-3 w-3" />
               {resetting ? "Aguarde..." : "Usar padrão"}
             </button>
+          )}
+        </div>
+      </div>
+
+      {/* Editor de minimo de indicacoes */}
+      <div className="mt-5 space-y-2 border-t border-gray-100 pt-5">
+        <label className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+          Mínimo de indicações ativas (override)
+        </label>
+        <div className="flex items-center gap-2">
+          <input
+            type="number"
+            min={0}
+            max={1000}
+            step="1"
+            value={minInput}
+            onChange={(e) => setMinInput(e.target.value)}
+            placeholder={`Padrão: ${stats.defaultMinReferrals}`}
+            className="w-full flex-1 rounded-md border border-gray-300 bg-white px-3 py-2 font-mono text-sm focus:border-[var(--color-pmb-green)] focus:outline-none focus:ring-1 focus:ring-[var(--color-pmb-green)]"
+          />
+          <Button
+            size="sm"
+            type="button"
+            onClick={saveMinReferrals}
+            disabled={savingMin || resettingMin}
+            className="bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)]"
+          >
+            <Save className="mr-1.5 h-3.5 w-3.5" />
+            {savingMin ? "Salvando..." : "Salvar"}
+          </Button>
+        </div>
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-[11px] text-gray-500">
+            {usingDefaultMin
+              ? `Usando padrão global (${stats.defaultMinReferrals}).`
+              : `Override ativo. Padrão global é ${stats.defaultMinReferrals}.`}
+          </p>
+          {!usingDefaultMin && (
+            <button
+              type="button"
+              onClick={resetMinToDefault}
+              disabled={savingMin || resettingMin}
+              className="inline-flex items-center gap-1 text-[11px] font-medium text-gray-600 hover:text-[var(--color-pmb-green-900)] disabled:opacity-50"
+            >
+              <RotateCcw className="h-3 w-3" />
+              {resettingMin ? "Aguarde..." : "Usar padrão"}
+            </button>
+          )}
+        </div>
+        <div
+          className={`rounded-md px-3 py-2 text-[11px] ${
+            meetsMin
+              ? "bg-[var(--color-pmb-lime-50)] text-[var(--color-pmb-green-900)]"
+              : "bg-amber-50 text-amber-800"
+          }`}
+        >
+          {effectiveMin <= 0 ? (
+            <>Sem mínimo — recebe comissão desde a 1ª indicação.</>
+          ) : meetsMin ? (
+            <>
+              Elegível: {stats.activeReferrals} de {effectiveMin} indicações
+              ativas. Já recebe comissão de recorrência.
+            </>
+          ) : (
+            <>
+              {stats.activeReferrals} de {effectiveMin} indicações ativas. As
+              comissões ficam retidas e são geradas retroativamente ao atingir o
+              mínimo.
+            </>
           )}
         </div>
       </div>

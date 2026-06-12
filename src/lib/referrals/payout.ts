@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client"
 import type { ReferralPayout, ReferralPayoutMethod } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { createNotification } from "@/lib/notifications"
+import { backfillReferrerCommissions } from "@/lib/referrals/commission"
 
 const SETTINGS_ID = "default"
 
@@ -281,6 +282,19 @@ export async function processMonthlyPayouts(): Promise<{
   }
 
   const now = new Date()
+
+  // 0. Backfill retroativo: garante que indicadores que ja atingiram o minimo
+  // de indicacoes ATIVAS tenham as comissoes das mensalidades pagas no periodo
+  // "retido". Cobre ativacoes que nao passaram pelo webhook de comissao (ex.:
+  // indicada gratuita criada ja ATIVA, ou ativacao via sync/fallback). E
+  // idempotente — pula mensalidades que ja tem comissao.
+  const referrers = await prisma.tenant.findMany({
+    where: { referrals: { some: {} } },
+    select: { id: true },
+  })
+  for (const r of referrers) {
+    await backfillReferrerCommissions(r.id).catch(() => {})
+  }
 
   // 1. Promove PENDING → AVAILABLE para todas que ja venceram
   const eligible = await prisma.referralCommission.findMany({

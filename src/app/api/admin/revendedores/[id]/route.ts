@@ -76,13 +76,25 @@ export const GET = withRequestContextParams<{ id: string }>(
   //   por causa de tenants que ele indicou.
   // totalReferralsPaidToMe: somatorio do que ele tem disponivel + ja pago (AVAILABLE + PAID)
   //   — view util para o card de pagamento proximo.
-  const [systemSettings, referralsCount, generatedAgg, receivedPaidAgg, receivedAvailableAgg] =
+  const [
+    systemSettings,
+    referralsCount,
+    activeReferralsCount,
+    generatedAgg,
+    receivedPaidAgg,
+    receivedAvailableAgg,
+  ] =
     await Promise.all([
       prisma.systemSettings.findUnique({
         where: { id: "default" },
-        select: { defaultReferralPercent: true, referralPayoutDay: true },
+        select: {
+          defaultReferralPercent: true,
+          referralPayoutDay: true,
+          defaultReferralMinReferrals: true,
+        },
       }),
       prisma.tenant.count({ where: { referrerTenantId: id } }),
+      prisma.tenant.count({ where: { referrerTenantId: id, status: "ACTIVE" } }),
       prisma.referralCommission.aggregate({
         where: {
           referredTenantId: id,
@@ -110,11 +122,15 @@ export const GET = withRequestContextParams<{ id: string }>(
     systemSettings?.defaultReferralPercent ?? 5,
   )
   const referralPayoutDay = systemSettings?.referralPayoutDay ?? 20
+  const defaultReferralMinReferrals =
+    systemSettings?.defaultReferralMinReferrals ?? 3
 
   const referralStats = {
     defaultPercent: defaultReferralPercent,
     payoutDay: referralPayoutDay,
+    defaultMinReferrals: defaultReferralMinReferrals,
     totalReferrals: referralsCount,
+    activeReferrals: activeReferralsCount,
     totalCommissionGenerated: Number(generatedAgg._sum.amount ?? 0),
     totalCommissionReceived: Number(receivedPaidAgg._sum.amount ?? 0),
     totalReferralsPaidToMe: Number(receivedAvailableAgg._sum.amount ?? 0),
@@ -273,6 +289,7 @@ export const GET = withRequestContextParams<{ id: string }>(
         referralCode: tenant.referralCode,
         referralPercent:
           tenant.referralPercent != null ? Number(tenant.referralPercent) : null,
+        referralMinReferrals: tenant.referralMinReferrals ?? null,
         pixKey: tenant.pixKey,
         pixKeyType: tenant.pixKeyType,
         // Unidade Tecnica

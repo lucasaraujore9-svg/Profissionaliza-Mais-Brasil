@@ -55,6 +55,7 @@ export function FinanceiroMarkPaidDialog({
   const [paidAt, setPaidAt] = useState(todayISO())
   const [note, setNote] = useState("")
   const [transferId, setTransferId] = useState("")
+  const [amount, setAmount] = useState("")
   const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
@@ -62,10 +63,25 @@ export function FinanceiroMarkPaidDialog({
       setPaidAt(todayISO())
       setNote("")
       setTransferId("")
+      setAmount(typeof itemAmount === "number" ? itemAmount.toFixed(2) : "")
     }
-  }, [open])
+  }, [open, itemAmount])
 
   async function submit() {
+    let parsedAmount: number | undefined
+    if (target === "referral-payout") {
+      const raw = amount.trim().replace(",", ".")
+      if (!raw) {
+        toast.error("Informe o valor a pagar")
+        return
+      }
+      const n = Number(raw)
+      if (Number.isNaN(n) || n <= 0) {
+        toast.error("Valor inválido")
+        return
+      }
+      parsedAmount = Math.round(n * 100) / 100
+    }
     setSubmitting(true)
     try {
       const url =
@@ -80,6 +96,7 @@ export function FinanceiroMarkPaidDialog({
         body.paidAt = paidAt
       } else {
         body.asaasTransferId = transferId.trim() || undefined
+        body.amount = parsedAmount
       }
 
       const res = await fetch(url, {
@@ -133,20 +150,48 @@ export function FinanceiroMarkPaidDialog({
               </p>
             </div>
           ) : (
-            <div className="space-y-1.5">
-              <Label htmlFor="mp-transfer-id">
-                ID transfer Asaas (opcional)
-              </Label>
-              <Input
-                id="mp-transfer-id"
-                value={transferId}
-                onChange={(e) => setTransferId(e.target.value)}
-                placeholder="trf_xxxxx"
-              />
-              <p className="text-xs text-muted-foreground">
-                Para saques PIX via Asaas. Para MANUAL/DESCONTO, deixe em branco.
-              </p>
-            </div>
+            <>
+              <div className="space-y-1.5">
+                <Label htmlFor="mp-amount">Valor a pagar</Label>
+                <Input
+                  id="mp-amount"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  inputMode="decimal"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  placeholder="0,00"
+                />
+                <p className="text-xs text-muted-foreground">
+                  {typeof itemAmount === "number" &&
+                  Math.abs(Number(amount.replace(",", ".")) - itemAmount) >
+                    0.001 ? (
+                    <span className="text-amber-700">
+                      Ajuste manual: valor solicitado era{" "}
+                      {formatMoney(itemAmount)}.
+                    </span>
+                  ) : (
+                    <>Confirme ou ajuste o valor da recorrência antes de pagar.</>
+                  )}
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="mp-transfer-id">
+                  ID transfer Asaas (opcional)
+                </Label>
+                <Input
+                  id="mp-transfer-id"
+                  value={transferId}
+                  onChange={(e) => setTransferId(e.target.value)}
+                  placeholder="trf_xxxxx"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Para saques PIX via Asaas. Para MANUAL/DESCONTO, deixe em
+                  branco.
+                </p>
+              </div>
+            </>
           )}
 
           <div className="space-y-1.5">

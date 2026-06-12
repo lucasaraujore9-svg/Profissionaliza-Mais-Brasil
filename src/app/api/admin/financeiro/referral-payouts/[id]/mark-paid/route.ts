@@ -11,7 +11,17 @@ import { logAudit } from "@/lib/audit"
 const bodySchema = z.object({
   asaasTransferId: z.string().min(1).max(80).optional().nullable(),
   note: z.string().max(2000).optional().nullable(),
+  // Valor efetivamente pago. Permite ao financeiro confirmar ou ajustar o
+  // valor da recorrencia antes de dar ok. Ausente = mantem o valor atual.
+  amount: z.number().positive().max(1_000_000).optional(),
 })
+
+function formatBRL(value: number): string {
+  return new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  }).format(value)
+}
 
 function appendNote(
   existing: string | null,
@@ -57,7 +67,7 @@ export const POST = withRequestContextParams<{ id: string }>(
 
   const payout = await prisma.referralPayout.findUnique({
     where: { id },
-    select: { id: true, status: true, notes: true },
+    select: { id: true, status: true, notes: true, amount: true },
   })
   if (!payout) {
     return NextResponse.json(
@@ -69,12 +79,31 @@ export const POST = withRequestContextParams<{ id: string }>(
     return NextResponse.json({ error: "Saque já está pago" }, { status: 409 })
   }
 
+  const currentAmount = Number(payout.amount)
+  const newAmount = parsed.data.amount
+  const amountChanged =
+    typeof newAmount === "number" &&
+    Math.abs(newAmount - currentAmount) > 0.001
+
   const adminName = session.name ?? session.email ?? "Admin"
   const noteText = parsed.data.note?.trim()
-  const baseNote = `Marcado como pago manualmente.${noteText ? ` ${noteText}` : ""}`
+  const adjustmentNote = amountChanged
+    ? ` Valor ajustado de ${formatBRL(currentAmount)} para ${formatBRL(newAmount!)}.`
+    : ""
+  const baseNote = `Marcado como pago manualmente.${adjustmentNote}${noteText ? ` ${noteText}` : ""}`
   const nextNotes = appendNote(payout.notes, baseNote, adminName)
 
   try {
+    // Ajusta o valor do payout ANTES de marcar como pago, para que a
+    // notificacao ao revendedor e as comissoes liquidadas reflitam o valor
+    // efetivamente pago.
+    if (amountChanged) {
+      await prisma.referralPayout.update({
+        where: { id: payout.id },
+        data: { amount: new Prisma.Decimal(newAmount!) },
+      })
+    }
+
     const updated = await markPayoutPaid(
       payout.id,
       parsed.data.asaasTransferId?.trim() || null,
@@ -95,10 +124,11 @@ export const POST = withRequestContextParams<{ id: string }>(
       actorUserId: session.userId,
       actorRole: session.role,
       actorEmail: session.email,
-      payloadBefore: { status: payout.status },
+      payloadBefore: { status: payout.status, amount: currentAmount },
       payloadAfter: {
         status: updated.status,
         amount: Number(updated.amount),
+        amountAdjusted: amountChanged,
         asaasTransferId: parsed.data.asaasTransferId ?? null,
       },
     })

@@ -262,6 +262,10 @@ model Tenant {
   referrals        Tenant[] @relation("TenantReferrals")
   // Override individual do % de comissao (Decimal 0-100). Null = usa SystemSettings.defaultReferralPercent
   referralPercent  Decimal? @map("referral_percent") @db.Decimal(5, 2)
+  // Override individual do minimo de indicacoes ATIVAS para esta unidade
+  // comecar a receber comissao de recorrencia. Null = usa
+  // SystemSettings.defaultReferralMinReferrals (padrao 3). 0 = sem minimo.
+  referralMinReferrals Int? @map("referral_min_referrals")
 
   // Dados PIX para receber comissoes (PIX do indicador)
   pixKey     String? @map("pix_key")
@@ -1140,6 +1144,9 @@ model SystemSettings {
   referralEnabled        Boolean @default(true) @map("referral_enabled")
   defaultReferralPercent Decimal @default(5.00) @map("default_referral_percent") @db.Decimal(5, 2) // 5%
   referralMinPayout      Decimal @default(50.00) @map("referral_min_payout") @db.Decimal(10, 2) // R$50
+  // Minimo padrao de indicacoes ATIVAS para uma unidade comecar a receber
+  // comissao de recorrencia. Override por unidade em Tenant.referralMinReferrals.
+  defaultReferralMinReferrals Int @default(3) @map("default_referral_min_referrals")
   // Janela mensal: comissoes referentes a TenantPayments pagos no mes M
   // ficam AVAILABLE no dia X do mes M+1 (referralPayoutDay).
   referralPayoutDay      Int     @default(20) @map("referral_payout_day") // dia do mes do pagamento (1-28)
