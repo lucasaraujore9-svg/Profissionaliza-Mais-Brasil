@@ -3,6 +3,7 @@ import { z } from "zod"
 import {
   payWithCreditCard,
   createInstallmentWithCreditCard,
+  getInstallmentPayments,
   getPayment,
   getSubscription,
   updateSubscription,
@@ -173,14 +174,82 @@ export const POST = withRequestContextParams<{ paymentId: string }>(
       remoteIp: clientIp(request),
     })
 
-    // Charge capturado. Remove a cobrança original (PENDING) da assinatura —
-    // senão venceria e dispararia OVERDUE → suspensão indevida.
-    await deletePayment(paymentId).catch((err) =>
+    // POST /installments/ responde 200 ao CRIAR o parcelamento — isso não
+    // garante que o cartão foi capturado. A 1ª parcela pode ficar em
+    // AWAITING_RISK_ANALYSIS. Consultamos o status real antes de remover a
+    // cobrança original e ativar a revenda (o webhook não casa parcelamentos,
+    // que vêm sem subscription, então não há rede de segurança depois).
+    const firstCharge = await getInstallmentPayments(installment.id)
+      .then(
+        (list) =>
+          [...list.data].sort((a, b) => a.dueDate.localeCompare(b.dueDate))[0] ??
+          null,
+      )
+      .catch((err) => {
+        contextLogger().error(
+          { err, event: "cobranca.installment.fetch_status_failed", installmentId: installment.id },
+          "falha ao consultar status da 1ª parcela do parcelamento",
+        )
+        return null
+      })
+
+    const CAPTURED_STATUSES = new Set(["CONFIRMED", "RECEIVED", "RECEIVED_IN_CASH"])
+    const captured = firstCharge != null && CAPTURED_STATUSES.has(firstCharge.status)
+    const underReview = firstCharge?.status === "AWAITING_RISK_ANALYSIS"
+
+    // Nem capturado nem em análise de risco (status inesperado ou consulta
+    // falhou): NÃO removemos a cobrança original nem ativamos — não ativamos a
+    // revenda numa cobrança que ainda pode ser recusada. Alertamos o admin
+    // para conciliar o parcelamento criado.
+    if (!captured && !underReview) {
       contextLogger().error(
-        { err, event: "cobranca.installment.delete_original_failed", paymentId },
-        "falha ao remover cobrança original após parcelamento",
-      ),
-    )
+        { event: "cobranca.installment.not_captured", installmentId: installment.id, status: firstCharge?.status ?? "unknown", tenantId: tenant.id },
+        "parcelamento criado mas 1ª parcela não confirmada — ativação adiada",
+      )
+      await createNotification({
+        audience: "ROLE",
+        roleTarget: "SUPER_ADMIN",
+        level: "WARNING",
+        title: "Parcelamento de mensalidade não confirmado",
+        body: `Revenda ${tenant.name}: parcelamento ${installment.id} criado, mas a 1ª parcela está "${firstCharge?.status ?? "desconhecido"}". Verifique no Asaas — a cobrança original ${paymentId} NÃO foi removida e a revenda NÃO foi ativada.`,
+        href: "/admin/revendedores",
+      }).catch(swallow("cobranca.installment"))
+      return NextResponse.json({
+        data: {
+          id: installment.id,
+          status: firstCharge?.status ?? "PENDING",
+          value: payment.value,
+          pending: true,
+        },
+      })
+    }
+
+    // Capturado ou em análise de risco (valor já retido): em ambos os casos o
+    // parcelamento substitui a cobrança original da assinatura — removemos para
+    // não cobrar em duplicidade.
+    const originalDeleted = await deletePayment(paymentId)
+      .then(() => true)
+      .catch((err) => {
+        contextLogger().error(
+          { err, event: "cobranca.installment.delete_original_failed", paymentId },
+          "falha ao remover cobrança original após parcelamento",
+        )
+        return false
+      })
+
+    // Se a remoção falhou, a cobrança original segue e vai vencer → OVERDUE →
+    // suspensão indevida (a revenda já pagou via parcelamento). Alertamos o
+    // admin para remover manualmente no Asaas antes do vencimento.
+    if (!originalDeleted) {
+      await createNotification({
+        audience: "ROLE",
+        roleTarget: "SUPER_ADMIN",
+        level: "WARNING",
+        title: "Cobrança original não removida",
+        body: `Revenda ${tenant.name}: a 1ª mensalidade foi parcelada (${installment.id}), mas a cobrança original ${paymentId} não pôde ser removida automaticamente. Remova no Asaas para evitar suspensão por vencimento.`,
+        href: "/admin/revendedores",
+      }).catch(swallow("cobranca.installment"))
+    }
 
     // Garante que a assinatura só volte a cobrar no próximo mês.
     if (subscriptionId) {
@@ -199,23 +268,53 @@ export const POST = withRequestContextParams<{ paymentId: string }>(
       }
     }
 
-    // Ativa o tenant + registra a cobrança. O webhook não casa parcelamentos
-    // (vêm sem subscription), então a ativação acontece aqui, de forma
-    // síncrona — o cartão já foi capturado.
+    // Registra a cobrança. CONFIRMED só quando capturado de fato; em análise de
+    // risco fica PENDING até a confirmação.
     const tenantPaymentRow = await prisma.tenantPayment.upsert({
       where: { asaasPaymentId: installment.id },
-      update: { status: "CONFIRMED", paidAt: new Date() },
+      update: {
+        status: captured ? "CONFIRMED" : "PENDING",
+        paidAt: captured ? new Date() : null,
+      },
       create: {
         tenantId: tenant.id,
         asaasPaymentId: installment.id,
         amount: payment.value,
         billingType: "CREDIT_CARD",
-        status: "CONFIRMED",
+        status: captured ? "CONFIRMED" : "PENDING",
         dueDate: new Date(payment.dueDate),
-        paidAt: new Date(),
+        paidAt: captured ? new Date() : null,
       },
       select: { id: true },
     })
+
+    // Ativa o tenant SOMENTE com captura confirmada. O webhook não casa
+    // parcelamentos (vêm sem subscription), então a ativação é síncrona aqui.
+    if (!captured) {
+      // underReview: aguardamos a análise do Asaas. Como o webhook não reativa
+      // parcelamentos, alertamos o admin para ativar quando confirmar.
+      contextLogger().warn(
+        { event: "cobranca.installment.under_review", installmentId: installment.id, tenantId: tenant.id },
+        "parcelamento em análise de risco — revenda aguardando ativação",
+      )
+      await createNotification({
+        audience: "ROLE",
+        roleTarget: "SUPER_ADMIN",
+        level: "INFO",
+        title: "Parcelamento em análise de risco",
+        body: `Revenda ${tenant.name}: parcelamento ${installment.id} em análise pelo Asaas. Ative a revenda quando o pagamento for confirmado.`,
+        href: "/admin/revendedores",
+      }).catch(swallow("cobranca.installment"))
+
+      return NextResponse.json({
+        data: {
+          id: installment.id,
+          status: firstCharge?.status ?? "AWAITING_RISK_ANALYSIS",
+          value: payment.value,
+          pending: true,
+        },
+      })
+    }
 
     await prisma.tenant.update({
       where: { id: tenant.id },

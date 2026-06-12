@@ -324,6 +324,12 @@ function CardTab({
       const status = json.data?.status
       if (status === "RECEIVED" || status === "CONFIRMED") {
         onPaid()
+      } else if (json.data?.pending) {
+        // Cartão aceito mas em análise (ex.: AWAITING_RISK_ANALYSIS). NÃO peça
+        // para tentar de novo — geraria cobrança em duplicidade.
+        setError(
+          "Pagamento recebido e em análise pela operadora. Assim que for aprovado, sua conta será ativada automaticamente — não é necessário pagar novamente.",
+        )
       } else {
         setError("Pagamento não confirmado. Verifique os dados do cartão e tente novamente.")
       }

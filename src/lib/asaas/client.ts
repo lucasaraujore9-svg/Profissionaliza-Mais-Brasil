@@ -297,12 +297,27 @@ export async function payWithCreditCard(
  * Cria e cobra um parcelamento no cartão de crédito (POST /installments/).
  * Diferente de payWithCreditCard, este endpoint divide o valor em N parcelas
  * no cartão numa única chamada. Usado para parcelar a 1ª mensalidade do
- * revendedor. Uma resposta 200 significa cobrança autorizada/capturada.
+ * revendedor. ATENÇÃO: 200 significa que o parcelamento foi CRIADO, não que o
+ * cartão foi capturado — a 1ª parcela pode ficar em AWAITING_RISK_ANALYSIS.
+ * Confirme o status real via getInstallmentPayments antes de ativar a revenda.
  */
 export async function createInstallmentWithCreditCard(
   params: AsaasCreateInstallmentCardParams,
 ): Promise<AsaasInstallment> {
   return request<AsaasInstallment>("POST", "/installments/", params)
+}
+
+/**
+ * Lista as cobranças geradas por um parcelamento (GET /installments/{id}/payments).
+ * A resposta de createInstallmentWithCreditCard não traz o status da captura;
+ * para confirmar se o cartão foi de fato aprovado é preciso consultar a 1ª
+ * parcela aqui (status CONFIRMED/RECEIVED = capturado; AWAITING_RISK_ANALYSIS =
+ * em análise; PENDING/OVERDUE = não capturado).
+ */
+export async function getInstallmentPayments(
+  installmentId: string,
+): Promise<AsaasPaymentList> {
+  return request<AsaasPaymentList>("GET", `/installments/${installmentId}/payments`)
 }
 
 export async function listPayments(
