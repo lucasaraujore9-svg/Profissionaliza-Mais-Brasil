@@ -86,6 +86,39 @@ export interface AsaasSubscription {
   dateCreated: string
 }
 
+// ── Installment (parcelamento no cartão) ──
+// POST /installments/ cria E cobra um parcelamento no cartão de uma só vez.
+// Usado para parcelar a PRIMEIRA mensalidade do revendedor.
+export interface AsaasCreateInstallmentCardParams {
+  installmentCount: number
+  customer: string
+  /** Valor de CADA parcela. */
+  value: number
+  /** Valor total (Asaas reconcilia a última parcela com base nele). */
+  totalValue?: number
+  billingType: "CREDIT_CARD"
+  dueDate: string // YYYY-MM-DD — vencimento da 1ª parcela
+  description?: string
+  /** Vai para externalReference de cada cobrança gerada. */
+  paymentExternalReference?: string
+  creditCard: AsaasCreditCard
+  creditCardHolderInfo: AsaasCreditCardHolderInfo
+  /** IP do COMPRADOR (não do servidor). Obrigatório no Asaas. */
+  remoteIp: string
+}
+
+export interface AsaasInstallment {
+  id: string
+  value: number
+  installmentCount: number
+  /** Valor de cada parcela. */
+  paymentValue: number
+  billingType: string
+  description: string | null
+  transactionReceiptUrl: string | null
+  deleted: boolean
+}
+
 // ── Payment ──
 export interface AsaasPayment {
   id: string

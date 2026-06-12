@@ -3,6 +3,10 @@ import type { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { requirePmbTeam } from "@/lib/auth/guards"
 import { withRequestContext } from "@/lib/observability/with-request-context"
+import {
+  deriveStudentDisplayStatus,
+  countEnrollmentStatuses,
+} from "@/lib/students/display-status"
 
 export const GET = withRequestContext(
   { action: "admin.alunos.global.list", route: "/api/admin/alunos/global" },
@@ -47,11 +51,8 @@ export const GET = withRequestContext(
       plataformaAlunoId: true,
       createdAt: true,
       tenant: { select: { id: true, slug: true, name: true } },
-      _count: {
-        select: {
-          enrollments: { where: { status: { in: ["ACTIVE", "COMPLETED"] } } },
-        },
-      },
+      // Status das matriculas para derivar o status exibido (pago x pendente).
+      enrollments: { select: { status: true } },
     },
   })
 
@@ -63,24 +64,29 @@ export const GET = withRequestContext(
 
   return NextResponse.json({
     data: {
-      students: students.map((s) => ({
-        id: s.id,
-        nome: s.nome,
-        email: s.email,
-        fone: s.fone,
-        cpf: s.cpf,
-        status: s.status,
-        plataformaAlunoId: s.plataformaAlunoId,
-        createdAt: s.createdAt.toISOString(),
-        tenant: {
-          id: s.tenant.id,
-          slug: s.tenant.slug,
-          name:
-            s.tenant.slug === "__pmb__" ? "Vitrine principal PMB" : s.tenant.name,
-          isPmbDirect: s.tenant.slug === "__pmb__",
-        },
-        activeEnrollments: s._count.enrollments,
-      })),
+      students: students.map((s) => {
+        const counts = countEnrollmentStatuses(s.enrollments)
+        return {
+          id: s.id,
+          nome: s.nome,
+          email: s.email,
+          fone: s.fone,
+          cpf: s.cpf,
+          status: deriveStudentDisplayStatus(s.status, counts),
+          plataformaAlunoId: s.plataformaAlunoId,
+          createdAt: s.createdAt.toISOString(),
+          tenant: {
+            id: s.tenant.id,
+            slug: s.tenant.slug,
+            name:
+              s.tenant.slug === "__pmb__"
+                ? "Vitrine principal PMB"
+                : s.tenant.name,
+            isPmbDirect: s.tenant.slug === "__pmb__",
+          },
+          activeEnrollments: counts.paidEnrollments,
+        }
+      }),
       tenants: tenants.map((t) => ({
         id: t.id,
         slug: t.slug,

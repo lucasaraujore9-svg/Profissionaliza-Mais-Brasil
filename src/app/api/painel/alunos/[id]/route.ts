@@ -3,6 +3,10 @@ import { prisma } from "@/lib/prisma"
 import { requireResellerSession } from "@/lib/auth/reseller-session"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 import { applyStudentEdit, editSchema } from "@/lib/students/management"
+import {
+  deriveStudentDisplayStatus,
+  countEnrollmentStatuses,
+} from "@/lib/students/display-status"
 
 export const GET = withRequestContextParams<{ id: string }>(
   { action: "painel.alunos.get", route: "/api/painel/alunos/[id]" },
@@ -45,7 +49,10 @@ export const GET = withRequestContextParams<{ id: string }>(
         cpf: student.cpf,
         fone: student.fone,
         plataformaAlunoId: student.plataformaAlunoId,
-        status: student.status,
+        status: deriveStudentDisplayStatus(
+          student.status,
+          countEnrollmentStatuses(student.enrollments),
+        ),
         apostila: student.apostila,
         createdAt: student.createdAt.toISOString(),
         totalPaid,

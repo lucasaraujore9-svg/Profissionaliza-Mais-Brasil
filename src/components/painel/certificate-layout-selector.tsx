@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Check, Eye, Loader2 } from "lucide-react"
 import {
@@ -59,13 +59,56 @@ export function CertificateLayoutSelector({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
-  // Layout cujo PDF real está sendo exibido (null = nenhum). Mostrar o PDF é
-  // explícito (botão) para não renderizar PDF a cada troca de modelo.
-  const [pdfLayout, setPdfLayout] = useState<CertificateLayout | null>(null)
+  // PDF real exibido via object URL (blob:). Mostrar o PDF é explícito (botão)
+  // para não gerar PDF a cada troca de modelo. Buscamos o PDF por fetch (mesma
+  // origem, com cookies) e embutimos como blob — igual ao editor do admin —
+  // em vez de apontar o <iframe> direto para a rota da API. Isso evita que o
+  // iframe NAVEGUE para a rota protegida e seja redirecionado ao host canônico
+  // (www.profissionalizamaisbrasil.com.br), o que causava "conexão recusada".
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null)
+  const [pdfLoading, setPdfLoading] = useState(false)
+  const [pdfError, setPdfError] = useState<string | null>(null)
+
+  // Revoga o object URL anterior ao trocar/desmontar para não vazar memória.
+  useEffect(() => {
+    return () => {
+      if (pdfUrl) URL.revokeObjectURL(pdfUrl)
+    }
+  }, [pdfUrl])
 
   const dirty = selected !== savedLayout
 
   const sample = useMemo(() => buildSampleData(tenantName), [tenantName])
+
+  async function handleViewRealPdf() {
+    setPdfLoading(true)
+    setPdfError(null)
+    try {
+      const res = await fetch(
+        `/api/painel/certificate-template/preview?layout=${selected}`,
+        { credentials: "same-origin" },
+      )
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        setPdfError(
+          typeof body?.error === "string"
+            ? body.error
+            : "Falha ao gerar a prévia em PDF. Tente novamente.",
+        )
+        return
+      }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      setPdfUrl((prev) => {
+        if (prev) URL.revokeObjectURL(prev)
+        return url
+      })
+    } catch {
+      setPdfError("Erro de rede ao gerar a prévia em PDF. Tente novamente.")
+    } finally {
+      setPdfLoading(false)
+    }
+  }
 
   async function handleSave() {
     setSaving(true)
@@ -199,11 +242,16 @@ export function CertificateLayoutSelector({
           </div>
           <button
             type="button"
-            onClick={() => setPdfLayout(selected)}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-pmb-green)] px-3 py-1.5 text-xs font-semibold text-[var(--color-pmb-green)] transition-colors hover:bg-[var(--color-pmb-lime-50)]"
+            onClick={handleViewRealPdf}
+            disabled={pdfLoading}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-pmb-green)] px-3 py-1.5 text-xs font-semibold text-[var(--color-pmb-green)] transition-colors hover:bg-[var(--color-pmb-lime-50)] disabled:cursor-not-allowed disabled:opacity-50"
           >
-            <Eye className="h-3.5 w-3.5" />
-            Ver PDF real
+            {pdfLoading ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Eye className="h-3.5 w-3.5" />
+            )}
+            {pdfLoading ? "Gerando..." : "Ver PDF real"}
           </button>
         </div>
 
@@ -215,14 +263,20 @@ export function CertificateLayoutSelector({
             sample={sample}
           />
 
-          {pdfLayout && (
+          {pdfError && (
+            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-700">
+              {pdfError}
+            </div>
+          )}
+
+          {pdfUrl && (
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <h4 className="text-xs font-semibold text-[var(--color-pmb-green-900)]">
                   PDF real
                 </h4>
                 <a
-                  href={`/api/painel/certificate-template/preview?layout=${pdfLayout}`}
+                  href={pdfUrl}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-xs font-semibold text-[var(--color-pmb-green)] hover:underline"
@@ -231,8 +285,7 @@ export function CertificateLayoutSelector({
                 </a>
               </div>
               <iframe
-                key={pdfLayout}
-                src={`/api/painel/certificate-template/preview?layout=${pdfLayout}`}
+                src={pdfUrl}
                 title="Prévia em PDF do certificado"
                 className="aspect-[1.41/1] w-full rounded-xl border border-gray-200 bg-gray-50 shadow-sm"
               />

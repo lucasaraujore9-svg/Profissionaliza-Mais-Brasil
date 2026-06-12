@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma"
 import { sendEmail } from "@/lib/email/resend"
 import { generateResetToken } from "@/lib/auth/reset-token"
 import { contextLogger } from "@/lib/logger"
+import type { EmailBrand } from "@/lib/email/brand"
 
 const INVITE_EXPIRATION_DAYS = 7
 
@@ -29,6 +30,8 @@ export interface SendInviteParams {
   role: string
   context?: "pmb_team" | "reseller_consultant"
   tenantName?: string
+  /** Marca da unidade — em convites de revenda evita exibir a marca PMB. */
+  brand?: EmailBrand
 }
 
 export async function sendInvite(params: SendInviteParams): Promise<void> {
@@ -49,6 +52,7 @@ export async function sendInvite(params: SendInviteParams): Promise<void> {
           expirationDays: INVITE_EXPIRATION_DAYS,
           context: params.context,
           tenantName: params.tenantName,
+          brand: params.brand,
         },
       },
     })

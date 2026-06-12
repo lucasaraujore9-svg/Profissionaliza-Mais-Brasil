@@ -4,6 +4,10 @@ import { requirePmbSales, requirePmbTeam } from "@/lib/auth/guards"
 import { getOrCreatePmbTenant } from "@/lib/pmb-tenant"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 import { applyStudentEdit, editSchema } from "@/lib/students/management"
+import {
+  deriveStudentDisplayStatus,
+  countEnrollmentStatuses,
+} from "@/lib/students/display-status"
 
 export const GET = withRequestContextParams<{ id: string }>(
   { action: "admin.alunos.get", route: "/api/admin/alunos/[id]" },
@@ -76,7 +80,10 @@ export const GET = withRequestContextParams<{ id: string }>(
       email: student.email,
       cpf: student.cpf,
       fone: student.fone,
-      status: student.status,
+      status: deriveStudentDisplayStatus(
+        student.status,
+        countEnrollmentStatuses(student.enrollments),
+      ),
       apostila: student.apostila,
       plataformaAlunoId: student.plataformaAlunoId,
       asaasCustomerId: student.asaasCustomerId,

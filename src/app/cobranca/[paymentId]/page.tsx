@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation"
 import Image from "next/image"
 import { getPayment, AsaasApiError } from "@/lib/asaas/client"
+import { prisma } from "@/lib/prisma"
 import { CheckoutClient } from "./checkout-client"
 
 interface Props {
@@ -47,6 +48,24 @@ export default async function CobrancaPage({ params }: Props) {
     payment.status === "REFUNDED" || payment.status === "DELETED"
   const isPending =
     payment.status === "PENDING" || payment.status === "OVERDUE"
+
+  // Parcelamento da 1ª mensalidade: só é oferecido enquanto a revenda está
+  // PENDING (primeira mensalidade não paga). O teto vem do tenant.
+  let maxInstallments = 1
+  if (isPending && payment.subscription) {
+    const tenant = await prisma.tenant.findFirst({
+      where: {
+        OR: [
+          { asaasSubscriptionId: payment.subscription },
+          { asaasPromoSubscriptionId: payment.subscription },
+        ],
+      },
+      select: { status: true, firstPaymentMaxInstallments: true },
+    })
+    if (tenant && tenant.status === "PENDING") {
+      maxInstallments = Math.max(1, tenant.firstPaymentMaxInstallments)
+    }
+  }
 
   const statusInfo = STATUS_INFO[payment.status] ?? {
     label: payment.status,
@@ -155,6 +174,8 @@ export default async function CobrancaPage({ params }: Props) {
           <CheckoutClient
             paymentId={paymentId}
             billingType={payment.billingType}
+            amount={payment.value}
+            maxInstallments={maxInstallments}
           />
         )}
       </main>

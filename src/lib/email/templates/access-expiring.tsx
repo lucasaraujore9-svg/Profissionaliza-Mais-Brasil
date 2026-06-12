@@ -1,5 +1,6 @@
 import { Button, Hr, Section, Text } from "@react-email/components"
 import { EmailLayout, styles } from "./_layout"
+import type { EmailBrand } from "../brand"
 
 export interface AccessExpiringTemplateProps {
   studentName: string
@@ -10,8 +11,8 @@ export interface AccessExpiringTemplateProps {
   daysLeft: number
   /** URL da área do aluno. */
   studentPanelUrl: string
-  /** Nome da loja/revenda. Usado no cabeçalho/rodapé. */
-  storeName?: string
+  /** Marca da loja/revenda (cabeçalho, rodapé). Default: PMB. */
+  brand?: EmailBrand
 }
 
 /**
@@ -26,7 +27,7 @@ export function AccessExpiringTemplate({
   expiresAtLabel,
   daysLeft,
   studentPanelUrl,
-  storeName,
+  brand,
 }: AccessExpiringTemplateProps) {
   const firstName = studentName.split(" ")[0] || studentName
   const ended = daysLeft <= 0
@@ -38,8 +39,7 @@ export function AccessExpiringTemplate({
           ? `Seu acesso a ${courseName} foi encerrado`
           : `Seu acesso a ${courseName} encerra em ${daysLeft} dia(s)`
       }
-      brandName={storeName ?? "Profissionaliza Mais Brasil"}
-      brandTagline={storeName ? "via Profissionaliza Mais Brasil" : undefined}
+      brand={brand}
     >
       <Text style={styles.h1}>Olá, {firstName}!</Text>
 
@@ -99,7 +99,14 @@ AccessExpiringTemplate.PreviewProps = {
   expiresAtLabel: "15/06/2026",
   daysLeft: 7,
   studentPanelUrl: "https://cursos-pro-joao.livrecursos.com.br/aluno",
-  storeName: "Cursos Pro João",
+  brand: {
+    name: "Cursos Pro João",
+    logoUrl: null,
+    siteUrl: "https://cursos-pro-joao.livrecursos.com.br",
+    siteLabel: "cursos-pro-joao.livrecursos.com.br",
+    replyTo: null,
+    isPmb: false,
+  },
 } satisfies AccessExpiringTemplateProps
 
 export default AccessExpiringTemplate

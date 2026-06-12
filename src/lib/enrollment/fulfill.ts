@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto"
 import { prisma } from "@/lib/prisma"
 import { sendEmail } from "@/lib/email/mailer"
+import { PMB_EMAIL_BRAND, emailFromForBrand } from "@/lib/email/brand"
+import { loadTenantEmailBrand } from "@/lib/email/tenant-brand"
 import { enviarEmailCredenciais } from "@/lib/plataforma-cursos/client"
 import {
   ensureStudentOnPlatform,
@@ -9,7 +11,7 @@ import {
 import { generatePasswordWithHash } from "@/lib/students/generate-password"
 import { createNotification } from "@/lib/notifications"
 import { addMonthsClamped } from "@/lib/dates"
-import { appUrl as resolveAppUrl, vitrineHost } from "@/lib/tenant/urls"
+import { appUrl as resolveAppUrl } from "@/lib/tenant/urls"
 
 /**
  * Prazo padrão de permanência do aluno na plataforma (item 11 dos
@@ -411,30 +413,35 @@ async function provisionEnrollmentAccess(
     }
   }
 
+  // Marca da unidade para os emails ao aluno. Venda de revenda usa a identidade
+  // da loja (logo, nome, domínio, reply-to) — nunca os dados da PMB. Carregada
+  // uma única vez (só quando há email a enviar) e reusada nos dois envios abaixo.
+  const willSendStudentEmail =
+    !!enrollment.student.email && (!!panelPassword || created)
+  const emailBrand = !willSendStudentEmail
+    ? PMB_EMAIL_BRAND
+    : tenant.isPmbVitrine
+      ? PMB_EMAIL_BRAND
+      : await loadTenantEmailBrand(tenant.id)
+  const storeBase = (emailBrand.siteUrl ?? resolveAppUrl()).replace(/\/$/, "")
+  const emailFrom = emailFromForBrand(emailBrand)
+  const emailReplyTo = emailBrand.replyTo ?? undefined
+
   // Email de boas-vindas ao painel /aluno (com senha temporária).
   if (panelPassword && enrollment.student.email) {
-    const appUrl = resolveAppUrl().replace(/\/$/, "")
-    let loginUrl: string
-    let storeName: string
-    if (tenant.isPmbVitrine) {
-      loginUrl = `${appUrl}/login`
-      storeName = "Profissionaliza Mais Brasil"
-    } else {
-      // Loja do revendedor: link pro subdominio no dominio de vitrines.
-      loginUrl = `https://${vitrineHost(tenant.slug)}/login`
-      storeName = tenant.name ?? `Loja ${tenant.slug}`
-    }
     await sendEmail({
       to: enrollment.student.email,
-      subject: `Bem-vindo! Seu acesso ao painel ${storeName}`,
+      from: emailFrom,
+      replyTo: emailReplyTo,
+      subject: `Bem-vindo! Seu acesso ao painel ${emailBrand.name}`,
       template: {
         type: "student-welcome",
         props: {
           studentName: enrollment.student.nome,
           studentEmail: enrollment.student.email,
           temporaryPassword: panelPassword,
-          loginUrl,
-          storeName,
+          loginUrl: `${storeBase}/login`,
+          brand: emailBrand,
         },
       },
     }).catch((err) => {
@@ -448,28 +455,19 @@ async function provisionEnrollmentAccess(
   if (created && enrollment.student.email) {
     // Link sempre aponta para a área do aluno DENTRO do nosso sistema
     // (vitrine do revendedor ou app PMB). Mantém o white-label.
-    const appBase = resolveAppUrl().replace(/\/$/, "")
-    let studentPanelUrl: string
-    let storeName: string
-    if (tenant.isPmbVitrine) {
-      studentPanelUrl = `${appBase}/aluno`
-      storeName = "Profissionaliza Mais Brasil"
-    } else {
-      studentPanelUrl = `https://${vitrineHost(tenant.slug)}/aluno`
-      storeName = tenant.name ?? `Loja ${tenant.slug}`
-    }
-
     try {
       await sendEmail({
         to: enrollment.student.email,
+        from: emailFrom,
+        replyTo: emailReplyTo,
         subject: `Matrícula confirmada em ${enrollment.course.nome}`,
         template: {
           type: "enrollment",
           props: {
             studentName: enrollment.student.nome,
             courseName: enrollment.course.nome,
-            studentPanelUrl,
-            storeName,
+            studentPanelUrl: `${storeBase}/aluno`,
+            brand: emailBrand,
           },
         },
       })

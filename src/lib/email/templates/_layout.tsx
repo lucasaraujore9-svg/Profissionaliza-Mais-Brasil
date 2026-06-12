@@ -11,31 +11,23 @@ import {
   Text,
 } from "@react-email/components"
 import type { ReactNode } from "react"
-
-const FALLBACK_APP_URL = "https://profissionalizamaisbrasil.com.br"
-
-function appUrl(): string {
-  return process.env.NEXT_PUBLIC_APP_URL ?? FALLBACK_APP_URL
-}
-
-function logoUrl(): string {
-  return `${appUrl()}/images/logo.png`
-}
+import { PMB_EMAIL_BRAND, type EmailBrand } from "../brand"
 
 export interface EmailLayoutProps {
   preview: string
-  /** Marca/loja exibida no footer. Default: Profissionaliza Mais Brasil. */
-  brandName?: string
-  /** Quando o email é de uma loja específica, mostramos "via Profissionaliza Mais Brasil". */
-  brandTagline?: string
+  /**
+   * Identidade de marca do email. Default: Profissionaliza Mais Brasil. Em
+   * emails de uma revenda, passe a marca da unidade — nunca caímos em logo,
+   * nome ou domínio da PMB nesse caso.
+   */
+  brand?: EmailBrand
   /** Conteúdo principal do email (sections, parágrafos etc.). */
   children: ReactNode
 }
 
 export function EmailLayout({
   preview,
-  brandName = "Profissionaliza Mais Brasil",
-  brandTagline,
+  brand = PMB_EMAIL_BRAND,
   children,
 }: EmailLayoutProps) {
   return (
@@ -48,34 +40,37 @@ export function EmailLayout({
       <Body style={body}>
         <Container style={outer}>
           <Section style={headerSection}>
-            <Img
-              src={logoUrl()}
-              alt="Profissionaliza Mais Brasil"
-              width="160"
-              height="48"
-              style={logoStyle}
-            />
+            {brand.logoUrl ? (
+              <Img
+                src={brand.logoUrl}
+                alt={brand.name}
+                width="160"
+                height="48"
+                style={logoStyle}
+              />
+            ) : (
+              <Text style={wordmark}>{brand.name}</Text>
+            )}
           </Section>
 
           <Container style={card}>{children}</Container>
 
           <Section style={footerSection}>
             <Hr style={footerHr} />
-            <Text style={footerBrand}>
-              {brandName}
-              {brandTagline ? ` · ${brandTagline}` : ""}
-            </Text>
+            <Text style={footerBrand}>{brand.name}</Text>
             <Text style={footerLine}>
               Cursos profissionalizantes para quem quer crescer.
             </Text>
             <Text style={footerLine}>
               Dúvidas? Responda este email — a gente lê e responde por aqui.
             </Text>
-            <Text style={footerMeta}>
-              <Link href={appUrl()} style={footerLink}>
-                profissionalizamaisbrasil.com.br
-              </Link>
-            </Text>
+            {brand.siteUrl && brand.siteLabel ? (
+              <Text style={footerMeta}>
+                <Link href={brand.siteUrl} style={footerLink}>
+                  {brand.siteLabel}
+                </Link>
+              </Text>
+            ) : null}
           </Section>
         </Container>
       </Body>
@@ -266,6 +261,16 @@ const logoStyle = {
   display: "inline-block",
   height: "auto",
   maxWidth: "180px",
+}
+
+// Fallback textual quando a unidade não tem logo cadastrada — evita exibir a
+// logo da PMB numa vitrine de revenda.
+const wordmark = {
+  color: "#025918",
+  fontSize: "22px",
+  fontWeight: 800 as const,
+  letterSpacing: "-0.01em",
+  margin: 0,
 }
 
 const card = {

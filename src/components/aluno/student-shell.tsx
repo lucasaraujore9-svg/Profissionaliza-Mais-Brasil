@@ -63,13 +63,31 @@ function SidebarContent({
     <>
       <div className="flex h-20 items-center gap-3 border-b border-white/10 px-6">
         <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white p-2 shadow-sm ring-1 ring-black/5">
-          <Image
-            src={logoUrl ?? "/images/logo.png"}
-            alt={storeName ?? "Logo"}
-            width={40}
-            height={40}
-            className="h-full w-full object-contain"
-          />
+          {/* Logo da unidade se houver; revenda sem logo usa um ícone neutro
+              (nunca a logo PMB). Só o contexto PMB puro (sem storeName) exibe a
+              logo institucional. */}
+          {logoUrl ? (
+            <Image
+              src={logoUrl}
+              alt={storeName ?? "Logo"}
+              width={40}
+              height={40}
+              className="h-full w-full object-contain"
+            />
+          ) : storeName ? (
+            <GraduationCap
+              className="h-6 w-6"
+              style={{ color: "var(--shell-accent)" }}
+            />
+          ) : (
+            <Image
+              src="/images/logo.png"
+              alt="Profissionaliza Mais Brasil"
+              width={40}
+              height={40}
+              className="h-full w-full object-contain"
+            />
+          )}
         </div>
         <div className="flex flex-col leading-tight">
           <span className="font-display text-sm">{storeName ?? "Profissionaliza"}</span>

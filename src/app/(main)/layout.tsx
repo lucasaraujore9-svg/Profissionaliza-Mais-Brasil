@@ -1,4 +1,4 @@
-import type { Metadata } from "next"
+import type { Metadata, Viewport } from "next"
 import { NavbarMain } from "@/components/shared/layouts/navbar-main"
 import { FooterMain } from "@/components/shared/layouts/footer-main"
 import { loadCategorias } from "@/lib/catalog/home"
@@ -13,6 +13,7 @@ import {
   storeJsonLd,
   webSiteJsonLd,
 } from "@/lib/seo/jsonld"
+import { tenantVitrineMetadata, tenantVitrineViewport } from "@/lib/seo/tenant-metadata"
 import { VisitorTracker } from "@/components/loja/visitor-tracker"
 import { resolveVitrinePixels, resolvePmbSelfPixels } from "@/lib/tracking/resolve"
 import { TrackingPixels } from "@/components/shared/tracking-pixels"
@@ -31,21 +32,34 @@ function isCustomColor(value: string | null | undefined, fallback: string): bool
 // O `template` faz cada subpágina (que define só o título relativo, ex.
 // "Quem somos") sair como "Quem somos · {nome da unidade}".
 export async function generateMetadata(): Promise<Metadata> {
-  const tenant = await getCurrentTenant()
-  const name = tenant?.name ?? "Profissionaliza Mais Brasil"
-  const description = tenant
-    ? tenant.description ??
-      tenant.tagline ??
-      `Cursos profissionalizantes online com certificado na vitrine ${name}.`
-    : "Cursos profissionalizantes online com certificado reconhecido nacionalmente. Estude pelo celular, pague no Pix e ganhe uma profissão no seu ritmo."
+  const [tenant, origin] = await Promise.all([
+    getCurrentTenant(),
+    getRequestOrigin(),
+  ])
 
-  return {
-    title: { default: name, template: `%s · ${name}` },
-    description,
-    ...(tenant?.logoUrl
-      ? { icons: { icon: [{ url: tenant.logoUrl }], apple: [{ url: tenant.logoUrl }] } }
-      : {}),
+  // No domínio de um revendedor: identidade da unidade, sobrescrevendo todos
+  // os campos institucionais da PMB herdados do root (favicon, og, geo, autoria).
+  if (tenant) {
+    return tenantVitrineMetadata(tenant, origin)
   }
+
+  // Sem tenant = site institucional PMB: mantém título/descrição da marca e
+  // herda favicon/og/geo do root layout.
+  return {
+    title: {
+      default: "Profissionaliza Mais Brasil",
+      template: "%s · Profissionaliza Mais Brasil",
+    },
+    description:
+      "Cursos profissionalizantes online com certificado reconhecido nacionalmente. Estude pelo celular, pague no Pix e ganhe uma profissão no seu ritmo.",
+  }
+}
+
+// Cor do tema: primaryColor da unidade quando em domínio de revenda; sem tenant,
+// o verde institucional padrão (igual ao root).
+export async function generateViewport(): Promise<Viewport> {
+  const tenant = await getCurrentTenant()
+  return tenantVitrineViewport(tenant)
 }
 
 // O grupo (main) é servido tanto no domínio institucional da PMB quanto, em

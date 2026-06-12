@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { requireResellerOwner } from "@/lib/auth/guards"
 import { auth } from "@/lib/auth"
 import { sendInvite } from "@/lib/auth/invite"
+import { tenantEmailBrand } from "@/lib/email/brand"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 
 async function currentTenantId(): Promise<string | null> {
@@ -22,7 +23,18 @@ export const POST = withRequestContextParams<{ id: string }>(
 
     const member = await prisma.tenantMember.findUnique({
       where: { id },
-      include: { user: true, tenant: { select: { name: true } } },
+      include: {
+        user: true,
+        tenant: {
+          select: {
+            name: true,
+            slug: true,
+            logoUrl: true,
+            customDomain: true,
+            supportEmail: true,
+          },
+        },
+      },
     })
     if (!member || member.tenantId !== tenantId) {
       return NextResponse.json({ error: "Não encontrado" }, { status: 404 })
@@ -41,6 +53,7 @@ export const POST = withRequestContextParams<{ id: string }>(
       role: member.role,
       context: "reseller_consultant",
       tenantName: member.tenant.name,
+      brand: tenantEmailBrand(member.tenant),
     })
 
     return NextResponse.json({ data: { ok: true } })

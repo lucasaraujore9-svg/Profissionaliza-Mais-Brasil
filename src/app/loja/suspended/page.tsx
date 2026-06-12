@@ -6,14 +6,16 @@ import { prisma } from "@/lib/prisma"
 
 export const dynamic = "force-dynamic"
 
-async function getTenantLogo(slug: string | null): Promise<string | null> {
+async function getTenantBranding(
+  slug: string | null,
+): Promise<{ name: string; logoUrl: string | null } | null> {
   if (!slug) return null
   try {
     const tenant = await prisma.tenant.findUnique({
       where: { slug },
-      select: { logoUrl: true },
+      select: { name: true, logoUrl: true },
     })
-    return tenant?.logoUrl ?? null
+    return tenant ?? null
   } catch {
     return null
   }
@@ -22,28 +24,26 @@ async function getTenantLogo(slug: string | null): Promise<string | null> {
 export default async function LojaMaintenancePage() {
   const headersList = await headers()
   const slug = headersList.get("x-tenant-slug")
-  const logoUrl = await getTenantLogo(slug)
+  const tenant = await getTenantBranding(slug)
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-gray-50 px-4 text-center">
       <div className="max-w-md">
-        {logoUrl ? (
+        {/* Branding da unidade — logo se houver, senão o nome em texto. Nunca a
+            logo institucional da PMB (a vitrine é da revenda, não da PMB). */}
+        {tenant?.logoUrl ? (
           <Image
-            src={logoUrl}
-            alt="Logo"
+            src={tenant.logoUrl}
+            alt={tenant.name}
             width={160}
             height={48}
             className="mx-auto mb-8 h-12 w-auto object-contain"
           />
-        ) : (
-          <Image
-            src="/images/logo.png"
-            alt="Profissionaliza Mais Brasil"
-            width={180}
-            height={48}
-            className="mx-auto mb-8 h-12 w-auto object-contain"
-          />
-        )}
+        ) : tenant?.name ? (
+          <p className="mb-8 text-xl font-black text-[var(--color-pmb-green,#16a34a)]">
+            {tenant.name}
+          </p>
+        ) : null}
 
         <div className="mb-6 flex justify-center">
           <div className="flex h-16 w-16 items-center justify-center rounded-full bg-amber-100">

@@ -4,7 +4,12 @@ import { blockStudentInEA } from "@/lib/students/plataforma-actions"
 import { createNotification } from "@/lib/notifications"
 import { sendEmail } from "@/lib/email/mailer"
 import { isCronAuthorized } from "@/lib/auth/bearer"
-import { appUrl, vitrineUrl } from "@/lib/tenant/urls"
+import { appUrl } from "@/lib/tenant/urls"
+import {
+  emailBrandFromTenantRow,
+  emailFromForBrand,
+  type EmailBrand,
+} from "@/lib/email/brand"
 import { swallow } from "@/lib/errors"
 
 export const maxDuration = 300
@@ -18,15 +23,9 @@ export const dynamic = "force-dynamic"
 const WARN_DAYS = [60, 30, 15, 2]
 const DAY_MS = 1000 * 60 * 60 * 24
 
-/** Monta a URL da área do aluno respeitando a vitrine da unidade. */
-function studentPanelUrl(tenant: {
-  slug: string
-  customDomain: string | null
-} | null): string {
-  if (!tenant) return `${appUrl()}/aluno`
-  const base = tenant.customDomain
-    ? `https://${tenant.customDomain}`
-    : vitrineUrl(tenant.slug)
+/** Monta a URL da área do aluno respeitando a vitrine/marca da unidade. */
+function studentPanelUrl(brand: EmailBrand): string {
+  const base = (brand.siteUrl ?? appUrl()).replace(/\/$/, "")
   return `${base}/aluno`
 }
 
@@ -83,7 +82,15 @@ async function processExpiredStudents() {
           },
         },
       },
-      tenant: { select: { slug: true, name: true, customDomain: true } },
+      tenant: {
+        select: {
+          slug: true,
+          name: true,
+          customDomain: true,
+          logoUrl: true,
+          supportEmail: true,
+        },
+      },
     },
   })
   result.expiredInspected = expired.length
@@ -121,8 +128,11 @@ async function processExpiredStudents() {
       // Aviso "no dia da restrição": e-mail confirmando o encerramento. Sai uma
       // única vez porque a matrícula já foi marcada como CANCELLED acima.
       if (enrollment.student.email) {
+        const brand = emailBrandFromTenantRow(enrollment.tenant)
         await sendEmail({
           to: enrollment.student.email,
+          from: emailFromForBrand(brand),
+          replyTo: brand.replyTo ?? undefined,
           subject: `Seu acesso a ${enrollment.course.nome} foi encerrado`,
           template: {
             type: "access-expiring",
@@ -133,8 +143,8 @@ async function processExpiredStudents() {
                 ? formatDateBR(enrollment.expiresAt)
                 : formatDateBR(now),
               daysLeft: 0,
-              studentPanelUrl: studentPanelUrl(enrollment.tenant),
-              storeName: enrollment.tenant?.name,
+              studentPanelUrl: studentPanelUrl(brand),
+              brand,
             },
           },
         }).catch(swallow("sweep-students-expired:email-encerrado"))
@@ -155,7 +165,15 @@ async function processExpiredStudents() {
     include: {
       course: { select: { nome: true } },
       student: { select: { id: true, nome: true, email: true } },
-      tenant: { select: { slug: true, name: true, customDomain: true } },
+      tenant: {
+        select: {
+          slug: true,
+          name: true,
+          customDomain: true,
+          logoUrl: true,
+          supportEmail: true,
+        },
+      },
     },
   })
 
@@ -186,8 +204,11 @@ async function processExpiredStudents() {
       })
 
       if (enrollment.student.email) {
+        const brand = emailBrandFromTenantRow(enrollment.tenant)
         await sendEmail({
           to: enrollment.student.email,
+          from: emailFromForBrand(brand),
+          replyTo: brand.replyTo ?? undefined,
           subject: `Seu acesso a ${enrollment.course.nome} encerra em ${daysLeft} dia(s)`,
           template: {
             type: "access-expiring",
@@ -196,8 +217,8 @@ async function processExpiredStudents() {
               courseName: enrollment.course.nome,
               expiresAtLabel: formatDateBR(enrollment.expiresAt),
               daysLeft,
-              studentPanelUrl: studentPanelUrl(enrollment.tenant),
-              storeName: enrollment.tenant?.name,
+              studentPanelUrl: studentPanelUrl(brand),
+              brand,
             },
           },
         }).catch(swallow("sweep-students-expired:email"))

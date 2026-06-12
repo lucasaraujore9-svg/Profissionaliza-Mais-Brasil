@@ -5,6 +5,11 @@ import { requireStudentSession } from "@/lib/auth/student-session"
 import { createNotification } from "@/lib/notifications"
 import { PMB_TENANT_SLUG } from "@/lib/pmb-config"
 import { sendEmail, isEmailConfigured } from "@/lib/email/resend"
+import {
+  PMB_EMAIL_BRAND,
+  emailFromForBrand,
+  tenantEmailBrand,
+} from "@/lib/email/brand"
 import { appUrl } from "@/lib/tenant/urls"
 import { contextLogger } from "@/lib/logger"
 import { withRequestContext } from "@/lib/observability/with-request-context"
@@ -52,6 +57,9 @@ export const POST = withRequestContext(
           select: {
             slug: true,
             name: true,
+            logoUrl: true,
+            customDomain: true,
+            supportEmail: true,
             owner: { select: { email: true, name: true } },
           },
         },
@@ -119,9 +127,11 @@ export const POST = withRequestContext(
       : student.tenant?.owner?.email ?? null
 
     if (recipientEmail && isEmailConfigured() && student.email) {
-      const storeName = isPmb
-        ? "Profissionaliza Mais Brasil"
-        : student.tenant?.name ?? "Profissionaliza Mais Brasil"
+      // Marca da unidade — o dono vê a identidade da própria loja, não a da PMB.
+      const brand =
+        isPmb || !student.tenant
+          ? PMB_EMAIL_BRAND
+          : tenantEmailBrand(student.tenant)
       const studentPanelUrl = isPmb
         ? `${appUrl()}/admin/alunos/${student.id}`
         : `${appUrl()}/painel/alunos/${student.id}`
@@ -129,13 +139,14 @@ export const POST = withRequestContext(
       try {
         await sendEmail({
           to: recipientEmail,
+          from: emailFromForBrand(brand),
           // reply-to leva direto ao aluno — owner responde sem precisar entrar no painel
           replyTo: student.email,
           subject: `[Suporte] ${assunto} — ${student.nome}`,
           template: {
             type: "student-support",
             props: {
-              storeName,
+              brand,
               studentName: student.nome,
               studentEmail: student.email,
               studentPhone: student.fone ?? undefined,

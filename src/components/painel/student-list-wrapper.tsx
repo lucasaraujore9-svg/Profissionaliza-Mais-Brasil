@@ -19,6 +19,7 @@ import { StudentDetailDrawer } from "./student-detail-drawer"
 const emptyStats: StudentStats = {
   total: 0,
   ATIVO: 0,
+  PENDENTE: 0,
   INATIVO: 0,
   BLOQUEADO: 0,
   DEVEDOR: 0,
@@ -29,11 +30,12 @@ const emptyStats: StudentStats = {
 // Ordem de exibicao dos status quando a coluna "Status" e usada para ordenar.
 const statusOrder: Record<StudentStatus, number> = {
   ATIVO: 0,
-  FORMADO: 1,
-  INTERESSADO: 2,
-  DEVEDOR: 3,
-  INATIVO: 4,
-  BLOQUEADO: 5,
+  PENDENTE: 1,
+  FORMADO: 2,
+  INTERESSADO: 3,
+  DEVEDOR: 4,
+  INATIVO: 5,
+  BLOQUEADO: 6,
 }
 
 export function StudentListWrapper() {

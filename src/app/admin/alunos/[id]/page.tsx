@@ -17,7 +17,7 @@ function statusVariant(
 ): "default" | "outline" | "secondary" | "destructive" {
   if (status === "ATIVO") return "default"
   if (status === "BLOQUEADO") return "destructive"
-  if (status === "DEVEDOR") return "secondary"
+  if (status === "DEVEDOR" || status === "PENDENTE") return "secondary"
   return "outline"
 }
 

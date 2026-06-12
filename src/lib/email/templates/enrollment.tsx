@@ -1,28 +1,28 @@
 import { Button, Hr, Section, Text } from "@react-email/components"
 import { EmailLayout, styles } from "./_layout"
+import type { EmailBrand } from "../brand"
 
 export interface EnrollmentTemplateProps {
   studentName: string
   courseName: string
   /** URL do painel do aluno (sua área dentro do sistema da revenda/PMB). */
   studentPanelUrl: string
-  /** Nome da loja/revenda. Usado no rodapé. */
-  storeName?: string
+  /** Marca da loja/revenda (header, rodapé). Default: PMB. */
+  brand?: EmailBrand
 }
 
 export function EnrollmentTemplate({
   studentName,
   courseName,
   studentPanelUrl,
-  storeName,
+  brand,
 }: EnrollmentTemplateProps) {
   const firstName = studentName.split(" ")[0] || studentName
 
   return (
     <EmailLayout
       preview={`Matrícula confirmada em ${courseName}`}
-      brandName={storeName ?? "Profissionaliza Mais Brasil"}
-      brandTagline={storeName ? "via Profissionaliza Mais Brasil" : undefined}
+      brand={brand}
     >
       <Text style={styles.h1}>Tudo certo, {firstName}!</Text>
       <Text style={styles.paragraph}>
@@ -70,7 +70,14 @@ EnrollmentTemplate.PreviewProps = {
   studentName: "Beatriz Souza",
   courseName: "Auxiliar Administrativo",
   studentPanelUrl: "https://cursos-pro-joao.livrecursos.com.br/aluno",
-  storeName: "Cursos Pro João",
+  brand: {
+    name: "Cursos Pro João",
+    logoUrl: null,
+    siteUrl: "https://cursos-pro-joao.livrecursos.com.br",
+    siteLabel: "cursos-pro-joao.livrecursos.com.br",
+    replyTo: null,
+    isPmb: false,
+  },
 } satisfies EnrollmentTemplateProps
 
 export default EnrollmentTemplate

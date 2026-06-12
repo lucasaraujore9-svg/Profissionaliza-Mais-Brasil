@@ -11,6 +11,10 @@ import { getSystemSettings } from "@/lib/system-settings"
 import { contextLogger } from "@/lib/logger"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { isValidCpf, stripCpf } from "@/lib/validation/cpf"
+import {
+  deriveStudentDisplayStatus,
+  countEnrollmentStatuses,
+} from "@/lib/students/display-status"
 
 export const GET = withRequestContext(
   { action: "admin.alunos.list", route: "/api/admin/alunos" },
@@ -57,6 +61,7 @@ export const GET = withRequestContext(
       status: true,
       plataformaAlunoId: true,
       createdAt: true,
+      enrollments: { select: { status: true } },
     },
   })
 
@@ -67,7 +72,7 @@ export const GET = withRequestContext(
       email: s.email,
       fone: s.fone,
       cpf: s.cpf,
-      status: s.status,
+      status: deriveStudentDisplayStatus(s.status, countEnrollmentStatuses(s.enrollments)),
       plataformaAlunoId: s.plataformaAlunoId,
       createdAt: s.createdAt.toISOString(),
     })),

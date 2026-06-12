@@ -2,6 +2,10 @@ import { prisma } from "@/lib/prisma"
 import { decrypt } from "@/lib/crypto"
 import { contextLogger } from "@/lib/logger"
 import type { StudentData } from "@/components/shared/student-management/types"
+import {
+  deriveStudentDisplayStatus,
+  countEnrollmentStatuses,
+} from "@/lib/students/display-status"
 
 /**
  * Carrega o aluno completo + matriculas + pagamentos + notas + notificacoes
@@ -87,7 +91,12 @@ export async function loadStudentDetail(args: {
     bairro: student.bairro,
     numero: student.numero,
     nascimento: student.nascimento?.toISOString() ?? null,
-    status: student.status,
+    // Status exibido derivado das matriculas: aluno ATIVO sem pagamento
+    // confirmado (so matricula pendente) aparece como "PENDENTE".
+    status: deriveStudentDisplayStatus(
+      student.status,
+      countEnrollmentStatuses(student.enrollments),
+    ),
     apostila: student.apostila,
     plataformaAlunoId: student.plataformaAlunoId,
     plataformaSenha,

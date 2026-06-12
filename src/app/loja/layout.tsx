@@ -1,4 +1,4 @@
-import type { Metadata } from "next"
+import type { Metadata, Viewport } from "next"
 import { NavbarMain } from "@/components/shared/layouts/navbar-main"
 import { FooterMain } from "@/components/shared/layouts/footer-main"
 import { loadCategorias } from "@/lib/catalog/home"
@@ -11,82 +11,33 @@ import { normalizeSocialUrl, buildTenantSupportContacts } from "@/lib/branding"
 import { vitrineDomain } from "@/lib/tenant/urls"
 import { JsonLd } from "@/components/seo/json-ld"
 import { storeJsonLd, webSiteJsonLd } from "@/lib/seo/jsonld"
+import { tenantVitrineMetadata, tenantVitrineViewport } from "@/lib/seo/tenant-metadata"
 import { VisitorTracker } from "@/components/loja/visitor-tracker"
 
 const PMB_GREEN_DEFAULT = "#025918"
 const PMB_GOLD_DEFAULT = "#F2B705"
-
-// Ícones de fallback do sistema mãe (quando o revendedor não subiu logo).
-const FALLBACK_ICONS: Metadata["icons"] = {
-  icon: [
-    { url: "/icons/favicon-32.png", sizes: "32x32", type: "image/png" },
-    { url: "/icons/favicon-16.png", sizes: "16x16", type: "image/png" },
-  ],
-  apple: [{ url: "/icons/apple-touch-icon.png", sizes: "180x180" }],
-}
 
 function isCustomColor(value: string | null | undefined, fallback: string): boolean {
   if (!value) return false
   return value.toLowerCase() !== fallback.toLowerCase()
 }
 
-// Metadata por revenda: título, descrição, favicon (logo do tenant), canonical
-// e Open Graph apontando para o domínio da própria vitrine.
+// Metadata por revenda: título, descrição, favicon (logo do tenant), canonical,
+// Open Graph, autoria e sinais geográficos — todos da unidade, sobrescrevendo
+// a identidade institucional da PMB definida no root layout.
 export async function generateMetadata(): Promise<Metadata> {
   const [tenant, origin] = await Promise.all([
     getCurrentTenant(),
     getRequestOrigin(),
   ])
 
-  const name = tenant?.name ?? "Cursos Online"
-  const description =
-    tenant?.description ??
-    tenant?.tagline ??
-    `Cursos profissionalizantes online com certificado na vitrine ${name}.`
+  return tenantVitrineMetadata(tenant, origin)
+}
 
-  // Favicon = logo do revendedor, se houver. Senão, favicon do sistema mãe.
-  const icons: Metadata["icons"] = tenant?.logoUrl
-    ? { icon: [{ url: tenant.logoUrl }], apple: [{ url: tenant.logoUrl }] }
-    : FALLBACK_ICONS
-
-  const ogImage = tenant?.bannerUrl ?? tenant?.logoUrl ?? "/icons/icon-512.png"
-
-  return {
-    ...(origin ? { metadataBase: new URL(origin) } : {}),
-    title: {
-      default: name,
-      template: `%s · ${name}`,
-    },
-    description,
-    applicationName: name,
-    icons,
-    alternates: origin ? { canonical: "/" } : undefined,
-    robots: {
-      index: true,
-      follow: true,
-      googleBot: {
-        index: true,
-        follow: true,
-        "max-image-preview": "large",
-        "max-snippet": -1,
-      },
-    },
-    openGraph: {
-      type: "website",
-      siteName: name,
-      locale: "pt_BR",
-      ...(origin ? { url: origin } : {}),
-      title: name,
-      description,
-      images: [{ url: ogImage, alt: name }],
-    },
-    twitter: {
-      card: "summary_large_image",
-      title: name,
-      description,
-      images: [ogImage],
-    },
-  }
+// Cor do tema (barra do navegador / PWA) = primaryColor da unidade.
+export async function generateViewport(): Promise<Viewport> {
+  const tenant = await getCurrentTenant()
+  return tenantVitrineViewport(tenant)
 }
 
 export default async function LojaLayout({

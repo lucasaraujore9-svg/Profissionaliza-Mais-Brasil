@@ -21,6 +21,7 @@ import { contextLogger } from "@/lib/logger"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { ensureTenantCourses } from "@/lib/tenant/ensure-courses"
 import { ensureTenantHomeSections } from "@/lib/home/sections"
+import { forbiddenNameError } from "@/lib/tenant/forbidden-names"
 
 export const GET = withRequestContext(
   { action: "admin.revendedores.list", route: "/api/admin/revendedores" },
@@ -157,6 +158,9 @@ const createSchema = z.object({
   ownerPhone: z.string().min(8).max(20).optional(),
   // planValue 0 = revenda gratuita (sem cobranca no Asaas, nasce ACTIVE).
   planValue: z.number().min(0).max(99999),
+  // Teto de parcelas no cartao para a 1a mensalidade (1 = a vista). Asaas
+  // aceita ate 21x; limitamos a 12x por padrao de mercado.
+  firstPaymentMaxInstallments: z.number().int().min(1).max(12).default(1),
   // Promocao: as primeiras `promoMonths` mensalidades saem por `promoValue`.
   promoMonths: z.number().int().min(1).max(24).optional(),
   promoValue: z.number().min(0).max(99999).optional(),
@@ -215,6 +219,17 @@ export const POST = withRequestContext(
   if (RESERVED_SLUGS.has(data.slug)) {
     return NextResponse.json(
       { error: "Este subdomínio é reservado, escolha outro" },
+      { status: 400 },
+    )
+  }
+
+  // Marcas reservadas (contrato): nome da unidade e subdomínio não podem
+  // conter Bolsa Mais Brasil / Profissionaliza / Escola de Ensino a Distância
+  // / Livre Cursos (nem variações). Vale também na edição (painel/config).
+  const forbidden = forbiddenNameError(data.name) ?? forbiddenNameError(data.slug)
+  if (forbidden) {
+    return NextResponse.json(
+      { error: forbidden, fields: { name: [forbidden] } },
       { status: 400 },
     )
   }
@@ -351,6 +366,8 @@ export const POST = withRequestContext(
       asaasPromoSubscriptionId,
       promoValue: isPromo ? data.promoValue : null,
       promoMonths: isPromo ? data.promoMonths : null,
+      // Gratuita nunca parcela (não há cobrança). Paga guarda o teto escolhido.
+      firstPaymentMaxInstallments: isFree ? 1 : data.firstPaymentMaxInstallments,
       accountManagerId: data.accountManagerId ?? null,
       poloName: data.slug,
       referralCode,

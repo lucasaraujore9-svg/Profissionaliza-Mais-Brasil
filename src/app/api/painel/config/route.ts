@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { mpWebhookUrl } from "@/lib/tenant/urls"
+import { forbiddenNameError } from "@/lib/tenant/forbidden-names"
 
 const updateSchema = z.object({
   name: z.string().trim().min(3, "Nome muito curto").max(120),
@@ -96,6 +97,17 @@ export const PUT = withRequestContext(
           error: "Dados inválidos",
           fields: parsed.error.flatten().fieldErrors,
         },
+        { status: 400 },
+      )
+    }
+
+    // Marca reservada (contrato): a unidade não pode renomear-se usando
+    // Bolsa Mais Brasil / Profissionaliza / Escola de Ensino a Distância /
+    // Livre Cursos. Mesma regra da criação (admin).
+    const forbidden = forbiddenNameError(parsed.data.companyName)
+    if (forbidden) {
+      return NextResponse.json(
+        { error: forbidden, fields: { companyName: [forbidden] } },
         { status: 400 },
       )
     }

@@ -1,9 +1,50 @@
+import type { Metadata, Viewport } from "next"
 import { redirect } from "next/navigation"
 import { headers } from "next/headers"
 import { prisma } from "@/lib/prisma"
 import { requireStudentSession } from "@/lib/auth/student-session"
 import { StudentShell } from "@/components/aluno/student-shell"
 import { PMB_TENANT_SLUG } from "@/lib/pmb-config"
+import { getCurrentTenant } from "@/lib/tenant/current"
+import { getRequestOrigin } from "@/lib/seo/host"
+import {
+  tenantVitrineMetadata,
+  tenantVitrineViewport,
+} from "@/lib/seo/tenant-metadata"
+
+// Área privada (noindex). No domínio de uma revenda, favicon/título/PWA seguem a
+// identidade da unidade; sem tenant (domínio PMB), herda a identidade PMB do root.
+export async function generateMetadata(): Promise<Metadata> {
+  const [tenant, origin] = await Promise.all([
+    getCurrentTenant(),
+    getRequestOrigin(),
+  ])
+  const robots = { index: false, follow: false } as const
+
+  if (tenant) {
+    return {
+      ...tenantVitrineMetadata(tenant, origin),
+      title: {
+        default: `Área do aluno · ${tenant.name}`,
+        template: `%s · ${tenant.name}`,
+      },
+      robots,
+    }
+  }
+
+  return {
+    title: {
+      default: "Área do aluno · Profissionaliza Mais Brasil",
+      template: "%s · Profissionaliza Mais Brasil",
+    },
+    robots,
+  }
+}
+
+export async function generateViewport(): Promise<Viewport> {
+  const tenant = await getCurrentTenant()
+  return tenantVitrineViewport(tenant)
+}
 
 interface TenantBranding {
   id: string

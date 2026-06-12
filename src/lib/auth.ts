@@ -1,5 +1,6 @@
 import NextAuth from "next-auth"
 import Credentials from "next-auth/providers/credentials"
+import type { UserRole } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { z } from "zod"
 import { compare } from "bcryptjs"
@@ -52,6 +53,86 @@ async function resolveTenantIdFromRequest(
     select: { id: true },
   })
   return pmbTenant?.id ?? null
+}
+
+type UserSessionFields = {
+  id: string
+  email: string
+  name: string
+  role: UserRole
+  tenantId: string | null
+  studentId: null
+  mustChangePassword: boolean
+  tenantStatus: string | null
+  memberRole: "owner" | "consultant" | null
+}
+
+/**
+ * Monta os campos de sessão de um User interno/revendedor a partir do banco.
+ *
+ * Fonte única de verdade usada tanto no login (`authorize`) quanto na
+ * re-sincronização do JWT (callback `jwt`). Isso garante que promover/rebaixar
+ * papel (ex.: PMB_SALES → SUPER_ADMIN), desativar usuário ou trocar tenant
+ * reflita na sessão sem exigir novo login.
+ *
+ * Retorna `null` quando o acesso deve ser negado:
+ *   - usuário inexistente ou com status != ATIVO (desativado/convite pendente)
+ *   - RESELLER sem tenant ATIVO/PENDING — só quando `enforceResellerTenant`
+ *     (login). No refresh do JWT passamos `false`: não deslogamos uma revenda
+ *     por suspensão de cobrança (os guards de rota já tratam tenantStatus),
+ *     apenas mantemos os campos atualizados.
+ */
+async function loadUserSessionFields(
+  userId: string,
+  { enforceResellerTenant = true }: { enforceResellerTenant?: boolean } = {},
+): Promise<UserSessionFields | null> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: { tenant: true },
+  })
+  if (!user || user.status !== "ATIVO") return null
+
+  // Consultor convidado por revendedor: User com role=RESELLER mas SEM
+  // tenantId direto — o vínculo vive em TenantMember. Resolvemos a membership
+  // ativa para popular tenantId, senão requireResellerSession sempre rejeita.
+  let effectiveTenantId = user.tenantId
+  let effectiveTenantStatus = user.tenant?.status ?? null
+  let memberRole: "owner" | "consultant" | null = user.tenantId ? "owner" : null
+
+  if (!effectiveTenantId && user.role === "RESELLER") {
+    const membership = await prisma.tenantMember.findFirst({
+      where: { userId: user.id, status: "ATIVO" },
+      include: { tenant: { select: { id: true, status: true } } },
+      orderBy: { createdAt: "asc" },
+    })
+    if (membership?.tenant) {
+      effectiveTenantId = membership.tenant.id
+      effectiveTenantStatus = membership.tenant.status
+      memberRole = "consultant"
+    }
+  }
+
+  if (user.role === "RESELLER" && enforceResellerTenant) {
+    if (!effectiveTenantId) return null
+    if (
+      effectiveTenantStatus !== "ACTIVE" &&
+      effectiveTenantStatus !== "PENDING"
+    ) {
+      return null
+    }
+  }
+
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    role: user.role,
+    tenantId: effectiveTenantId,
+    studentId: null,
+    mustChangePassword: user.mustChangePassword,
+    tenantStatus: effectiveTenantStatus,
+    memberRole,
+  }
 }
 
 const isProd = process.env.NODE_ENV === "production"
@@ -126,7 +207,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const user = isEmailLogin
           ? await prisma.user.findUnique({
               where: { email: identifier },
-              include: { tenant: true },
+              select: { id: true, passwordHash: true, status: true },
             })
           : null
 
@@ -137,54 +218,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           // Bloqueia login de usuário INATIVO/PENDING_INVITE — só ATIVO.
           if (user.status !== "ATIVO") return null
 
-          // Consultor convidado por revendedor: o User e criado com
-          // role=RESELLER mas SEM tenantId direto — o vinculo vive em
-          // TenantMember. Buscamos a membership ativa para popular tenantId
-          // no JWT, caso contrario requireResellerSession sempre rejeita.
-          let effectiveTenantId = user.tenantId
-          let effectiveTenantStatus = user.tenant?.status ?? null
-          let memberRole: "owner" | "consultant" | null =
-            user.tenantId ? "owner" : null
-
-          if (!effectiveTenantId && user.role === "RESELLER") {
-            const membership = await prisma.tenantMember.findFirst({
-              where: { userId: user.id, status: "ATIVO" },
-              include: { tenant: { select: { id: true, status: true } } },
-              orderBy: { createdAt: "asc" },
-            })
-            if (membership?.tenant) {
-              effectiveTenantId = membership.tenant.id
-              effectiveTenantStatus = membership.tenant.status
-              memberRole = "consultant"
-            }
-          }
-
-          // RESELLER (owner ou consultor) só pode logar se o tenant estiver
-          // ACTIVE ou PENDING (PENDING = aguardando 1º pagamento mas pode
-          // configurar a loja). CANCELLED/SUSPENDED bloqueiam acesso.
+          // Campos de sessão (papel, tenant, memberRole) vêm da fonte única.
+          // Ela também aplica a regra de RESELLER precisar de tenant
+          // ACTIVE/PENDING — retorna null (bloqueia login) caso contrário.
           // Roles PMB (SUPER_ADMIN, PMB_SALES, PMB_RESELLER_MGR) não dependem
-          // de tenant — passam direto.
-          if (user.role === "RESELLER") {
-            if (!effectiveTenantId) return null
-            if (
-              effectiveTenantStatus !== "ACTIVE" &&
-              effectiveTenantStatus !== "PENDING"
-            ) {
-              return null
-            }
-          }
-
-          return {
-            id: user.id,
-            email: user.email,
-            name: user.name,
-            role: user.role,
-            tenantId: effectiveTenantId,
-            studentId: null,
-            mustChangePassword: user.mustChangePassword,
-            tenantStatus: effectiveTenantStatus,
-            memberRole,
-          }
+          // de tenant e passam direto.
+          return await loadUserSessionFields(user.id)
         }
 
         // 2) Login do aluno — escopado pelo tenant do subdomínio atual.
@@ -251,7 +290,41 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.mustChangePassword = user.mustChangePassword ?? false
         token.tenantStatus = user.tenantStatus ?? null
         token.memberRole = user.memberRole ?? null
+        token.refreshedAt = Date.now()
+        return token
       }
+
+      // Sessão já estabelecida (sem `user`): re-sincroniza papel/status/tenant
+      // do banco para que mudanças feitas por um admin (promover a SUPER_ADMIN,
+      // rebaixar, desativar, trocar tenant) tenham efeito sem novo login.
+      // Throttle de 60s evita uma query por request. Só Users internos/revenda
+      // passam aqui — Student não muda de papel.
+      if (token.sub && !token.studentId) {
+        const last =
+          typeof token.refreshedAt === "number" ? token.refreshedAt : 0
+        if (Date.now() - last > 60_000) {
+          try {
+            const fresh = await loadUserSessionFields(token.sub, {
+              enforceResellerTenant: false,
+            })
+            if (!fresh) {
+              // Usuário inexistente ou desativado: invalida a sessão.
+              // Auth.js v5 aceita retorno null no callback jwt.
+              return null
+            }
+            token.role = fresh.role
+            token.tenantId = fresh.tenantId
+            token.mustChangePassword = fresh.mustChangePassword
+            token.tenantStatus = fresh.tenantStatus
+            token.memberRole = fresh.memberRole
+            token.refreshedAt = Date.now()
+          } catch {
+            // Erro transitório no banco: mantém o token atual e tenta de novo
+            // no próximo ciclo — não desloga por falha de infraestrutura.
+          }
+        }
+      }
+
       return token
     },
     async session({ session, token }) {

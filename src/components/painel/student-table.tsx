@@ -5,6 +5,7 @@ import { Eye, Ban, Unlock, ChevronUp, ChevronDown, ChevronsUpDown } from "lucide
 
 export type StudentStatus =
   | "ATIVO"
+  | "PENDENTE"
   | "INATIVO"
   | "BLOQUEADO"
   | "DEVEDOR"
@@ -22,6 +23,7 @@ export interface StudentListItem {
 
 const statusLabels: Record<StudentStatus, string> = {
   ATIVO: "Ativo",
+  PENDENTE: "Pagamento pendente",
   INATIVO: "Inativo",
   BLOQUEADO: "Bloqueado",
   DEVEDOR: "Devedor",
@@ -31,6 +33,7 @@ const statusLabels: Record<StudentStatus, string> = {
 
 const statusColors: Record<StudentStatus, string> = {
   ATIVO: "bg-green-100 text-green-700",
+  PENDENTE: "bg-orange-100 text-orange-700",
   INATIVO: "bg-gray-100 text-gray-600",
   BLOQUEADO: "bg-red-100 text-red-700",
   DEVEDOR: "bg-amber-100 text-amber-700",

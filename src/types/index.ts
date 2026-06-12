@@ -43,6 +43,9 @@ declare module "next-auth/jwt" {
     mustChangePassword?: boolean
     tenantStatus?: string | null
     memberRole?: MemberRole
+    // Epoch ms da última re-sincronização do token com o banco (throttle no
+    // callback jwt). Ausente em tokens antigos → força refresh no 1º acesso.
+    refreshedAt?: number
   }
 }
 

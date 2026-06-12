@@ -229,6 +229,11 @@ model Tenant {
   promoValue               Decimal? @map("promo_value") @db.Decimal(10, 2) // Valor das primeiras mensalidades
   promoMonths              Int?     @map("promo_months") // Quantidade de mensalidades no valor promo
 
+  // Parcelamento da PRIMEIRA mensalidade no cartao de credito. O admin define
+  // o teto na criacao; a revenda escolhe de 1x ate este valor no checkout.
+  // 1 = a vista (sem parcelamento). So vale para a 1a mensalidade.
+  firstPaymentMaxInstallments Int @default(1) @map("first_payment_max_installments")
+
   // Integracao Mercado Pago (vendas dos cursos)
   mpAccessToken  String? @map("mp_access_token") // Criptografado AES-256
   mpPublicKey    String? @map("mp_public_key")

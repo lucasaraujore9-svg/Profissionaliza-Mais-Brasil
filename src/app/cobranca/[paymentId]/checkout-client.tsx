@@ -6,9 +6,16 @@ import type { AsaasBillingInfo } from "@/lib/asaas/types"
 interface Props {
   paymentId: string
   billingType: string
+  amount: number
+  /** Teto de parcelas no cartão para a 1ª mensalidade (1 = à vista). */
+  maxInstallments: number
 }
 
 type Tab = "PIX" | "BOLETO" | "CARTAO"
+
+function formatBRL(v: number): string {
+  return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
+}
 
 // ── PIX Tab ─────────────────────────────────────────────────────────────────
 
@@ -245,10 +252,15 @@ interface CardForm {
 function CardTab({
   paymentId,
   onPaid,
+  amount,
+  maxInstallments,
 }: {
   paymentId: string
   onPaid: () => void
+  amount: number
+  maxInstallments: number
 }) {
+  const [installmentCount, setInstallmentCount] = useState(1)
   const [form, setForm] = useState<CardForm>({
     holderName: "",
     number: "",
@@ -299,6 +311,7 @@ function CardTab({
             addressNumber: form.addressNumber,
             phone: form.phone,
           },
+          installmentCount,
         }),
       })
 
@@ -488,6 +501,32 @@ function CardTab({
         </div>
       </div>
 
+      {maxInstallments > 1 && (
+        <div>
+          <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
+            Parcelamento
+          </p>
+          <Field label="Parcelas">
+            <select
+              value={installmentCount}
+              onChange={(e) => setInstallmentCount(Number(e.target.value))}
+              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-[var(--color-pmb-green)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-pmb-green)] focus-visible:ring-offset-2"
+            >
+              {Array.from({ length: maxInstallments }, (_, i) => i + 1).map((n) => (
+                <option key={n} value={n}>
+                  {n === 1
+                    ? `À vista — ${formatBRL(amount)}`
+                    : `${n}x de ${formatBRL(Math.round((amount / n) * 100) / 100)}`}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <p className="mt-1 text-[11px] text-gray-400">
+            Parcelamento disponível apenas para a primeira mensalidade.
+          </p>
+        </div>
+      )}
+
       {error && (
         <div role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">
           {error}
@@ -560,7 +599,12 @@ function Spinner({ white = false }: { white?: boolean }) {
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export function CheckoutClient({ paymentId, billingType }: Props) {
+export function CheckoutClient({
+  paymentId,
+  billingType,
+  amount,
+  maxInstallments,
+}: Props) {
   const [tab, setTab] = useState<Tab>("PIX")
   const [billingInfo, setBillingInfo] = useState<AsaasBillingInfo | null>(null)
   const [billingLoading, setBillingLoading] = useState(true)
@@ -690,7 +734,12 @@ export function CheckoutClient({ paymentId, billingType }: Props) {
             )}
             {tab === "BOLETO" && <BoletoTab billingInfo={billingInfo} />}
             {tab === "CARTAO" && (
-              <CardTab paymentId={paymentId} onPaid={onPaid} />
+              <CardTab
+                paymentId={paymentId}
+                onPaid={onPaid}
+                amount={amount}
+                maxInstallments={maxInstallments}
+              />
             )}
           </>
         )}

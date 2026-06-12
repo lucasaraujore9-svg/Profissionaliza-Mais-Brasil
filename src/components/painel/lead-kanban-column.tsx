@@ -1,8 +1,11 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { Mail, Phone, BookOpen, MoreVertical, UserRound } from "lucide-react"
+import { Mail, Phone, BookOpen, MoreVertical, UserRound, GripVertical } from "lucide-react"
 import type { LeadCardData } from "./leads-kanban-board"
+
+// MIME type usado no dataTransfer do drag-and-drop nativo dos cards de lead.
+const DRAG_MIME = "application/x-pmb-lead"
 
 export type StageKey =
   | "NEW"
@@ -77,8 +80,33 @@ export function LeadKanbanColumn({
   onMove,
 }: LeadKanbanColumnProps) {
   const meta = STAGE_META[stage]
+  const [isOver, setIsOver] = useState(false)
+
+  function handleDragOver(e: React.DragEvent) {
+    // Só aceita o drop se o que está sendo arrastado é um lead nosso.
+    if (!e.dataTransfer.types.includes(DRAG_MIME)) return
+    e.preventDefault()
+    e.dataTransfer.dropEffect = "move"
+    if (!isOver) setIsOver(true)
+  }
+
+  function handleDrop(e: React.DragEvent) {
+    const id = e.dataTransfer.getData(DRAG_MIME)
+    setIsOver(false)
+    if (!id) return
+    e.preventDefault()
+    onMove(id, stage)
+  }
+
   return (
-    <div className={`flex w-72 flex-shrink-0 flex-col rounded-xl border ${meta.color}`}>
+    <div
+      onDragOver={handleDragOver}
+      onDragLeave={() => setIsOver(false)}
+      onDrop={handleDrop}
+      className={`flex w-72 flex-shrink-0 flex-col rounded-xl border transition ${meta.color} ${
+        isOver ? "border-[var(--color-pmb-green)] ring-2 ring-[var(--color-pmb-green)]/40" : ""
+      }`}
+    >
       <header className="flex items-center justify-between px-3 pb-2 pt-3">
         <div>
           <p className="text-[11px] font-bold uppercase tracking-wide text-gray-700">
@@ -122,6 +150,7 @@ interface LeadCardProps {
 
 function LeadCard({ lead, currentStage, onClick, onMove }: LeadCardProps) {
   const [open, setOpen] = useState(false)
+  const [dragging, setDragging] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -133,8 +162,21 @@ function LeadCard({ lead, currentStage, onClick, onMove }: LeadCardProps) {
     return () => document.removeEventListener("mousedown", onDocClick)
   }, [open])
 
+  function handleDragStart(e: React.DragEvent) {
+    e.dataTransfer.setData(DRAG_MIME, lead.id)
+    e.dataTransfer.effectAllowed = "move"
+    setDragging(true)
+  }
+
   return (
-    <div className="group relative cursor-pointer rounded-lg border border-gray-200 bg-white p-3 shadow-sm transition hover:border-[var(--color-pmb-green)] hover:shadow-md">
+    <div
+      draggable
+      onDragStart={handleDragStart}
+      onDragEnd={() => setDragging(false)}
+      className={`group relative cursor-grab rounded-lg border border-gray-200 bg-white p-3 shadow-sm transition hover:border-[var(--color-pmb-green)] hover:shadow-md active:cursor-grabbing ${
+        dragging ? "opacity-40" : ""
+      }`}
+    >
       <div
         onClick={onClick}
         className="space-y-1.5"
@@ -149,8 +191,9 @@ function LeadCard({ lead, currentStage, onClick, onMove }: LeadCardProps) {
         }}
       >
         <div className="flex items-start justify-between gap-2">
-          <h4 className="text-sm font-semibold text-[var(--color-pmb-green-900)] line-clamp-1">
-            {lead.nome}
+          <h4 className="flex items-center gap-1 text-sm font-semibold text-[var(--color-pmb-green-900)] line-clamp-1">
+            <GripVertical className="h-3.5 w-3.5 shrink-0 text-gray-300 opacity-0 transition group-hover:opacity-100" />
+            <span className="line-clamp-1">{lead.nome}</span>
           </h4>
           <span className="shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-gray-600">
             {sourceShort(lead.source)}

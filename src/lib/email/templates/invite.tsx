@@ -1,5 +1,6 @@
 import { Button, Section, Text } from "@react-email/components"
 import { EmailLayout, styles } from "./_layout"
+import type { EmailBrand } from "../brand"
 
 export interface InviteTemplateProps {
   userName: string
@@ -9,6 +10,11 @@ export interface InviteTemplateProps {
   expirationDays: number
   context?: "pmb_team" | "reseller_consultant"
   tenantName?: string
+  /**
+   * Identidade de marca do header/rodapé. Em convites de consultor passe a marca
+   * da unidade — sem isso o `EmailLayout` cai na marca institucional PMB.
+   */
+  brand?: EmailBrand
 }
 
 const roleLabel: Record<string, string> = {
@@ -27,6 +33,7 @@ export function InviteTemplate({
   expirationDays,
   context = "pmb_team",
   tenantName,
+  brand,
 }: InviteTemplateProps) {
   const label = roleLabel[role] ?? role
   const isReseller = context === "reseller_consultant" && tenantName
@@ -34,14 +41,10 @@ export function InviteTemplate({
     ? `Você foi convidado(a) para a equipe de ${tenantName}`
     : "Você foi convidado(a) para a equipe Profissionaliza Mais Brasil"
 
-  const brandName = isReseller ? tenantName! : "Profissionaliza Mais Brasil"
-  const brandTagline = isReseller ? "via Profissionaliza Mais Brasil" : undefined
-
   return (
     <EmailLayout
       preview={`${inviterName} te convidou para fazer parte da equipe`}
-      brandName={brandName}
-      brandTagline={brandTagline}
+      brand={brand}
     >
       <Text style={styles.h1}>{headline}</Text>
       <Text style={styles.paragraph}>Olá, {userName}.</Text>

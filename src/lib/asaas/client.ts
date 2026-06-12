@@ -10,6 +10,8 @@ import type {
   AsaasBillingInfo,
   AsaasPixQrCode,
   AsaasPayWithCreditCardParams,
+  AsaasCreateInstallmentCardParams,
+  AsaasInstallment,
   AsaasErrorResponse,
 } from "./types"
 import { contextLogger } from "@/lib/logger"
@@ -289,6 +291,18 @@ export async function payWithCreditCard(
   params: AsaasPayWithCreditCardParams,
 ): Promise<AsaasPayment> {
   return request<AsaasPayment>("POST", `/payments/${paymentId}/payWithCreditCard`, params)
+}
+
+/**
+ * Cria e cobra um parcelamento no cartão de crédito (POST /installments/).
+ * Diferente de payWithCreditCard, este endpoint divide o valor em N parcelas
+ * no cartão numa única chamada. Usado para parcelar a 1ª mensalidade do
+ * revendedor. Uma resposta 200 significa cobrança autorizada/capturada.
+ */
+export async function createInstallmentWithCreditCard(
+  params: AsaasCreateInstallmentCardParams,
+): Promise<AsaasInstallment> {
+  return request<AsaasInstallment>("POST", "/installments/", params)
 }
 
 export async function listPayments(

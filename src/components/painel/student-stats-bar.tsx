@@ -1,6 +1,7 @@
 export interface StudentStats {
   total: number
   ATIVO: number
+  PENDENTE: number
   INATIVO: number
   BLOQUEADO: number
   DEVEDOR: number
@@ -16,12 +17,13 @@ export function StudentStatsBar({ stats }: StudentStatsBarProps) {
   const items = [
     { label: "Total", value: stats.total, color: "text-[var(--color-pmb-green-900)]" },
     { label: "Ativos", value: stats.ATIVO, color: "text-green-600" },
+    { label: "Pendentes", value: stats.PENDENTE, color: "text-orange-600" },
     { label: "Bloqueados", value: stats.BLOQUEADO, color: "text-red-600" },
     { label: "Inativos", value: stats.INATIVO, color: "text-gray-500" },
   ]
 
   return (
-    <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+    <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
       {items.map((stat) => (
         <div
           key={stat.label}

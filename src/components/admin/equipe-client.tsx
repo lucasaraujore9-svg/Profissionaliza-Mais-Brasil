@@ -24,6 +24,12 @@ import {
 } from "@/components/ui/sheet"
 import { Badge } from "@/components/ui/badge"
 import { Plus, Mail } from "lucide-react"
+import {
+  ModeToggle,
+  PasswordField,
+  CredentialsResultPanel,
+  type CreateMode,
+} from "@/components/shared/account-credentials-fields"
 
 export interface EquipeItem {
   id: string
@@ -52,6 +58,12 @@ export function EquipeClient({ initialItems }: { initialItems: EquipeItem[] }) {
   const [open, setOpen] = useState(false)
   const [pending, startTransition] = useTransition()
 
+  const [mode, setMode] = useState<CreateMode>("invite")
+  const [password, setPassword] = useState("")
+  const [created, setCreated] = useState<
+    { email: string; password: string; emailSent: boolean } | null
+  >(null)
+
   const [form, setForm] = useState({
     name: "",
     email: "",
@@ -61,25 +73,55 @@ export function EquipeClient({ initialItems }: { initialItems: EquipeItem[] }) {
 
   const filtered = items.filter((i) => (filter === "ALL" ? true : i.role === filter))
 
+  function resetForm() {
+    setForm({ name: "", email: "", role: "PMB_SALES", phone: "" })
+    setMode("invite")
+    setPassword("")
+    setCreated(null)
+  }
+
+  function openSheet() {
+    resetForm()
+    setOpen(true)
+  }
+
   function submitInvite() {
     if (!form.name || !form.email) {
       toast.error("Preencha nome e email")
+      return
+    }
+    if (mode === "password" && password && password.length < 8) {
+      toast.error("A senha deve ter no mínimo 8 caracteres")
       return
     }
     startTransition(async () => {
       const res = await fetch("/api/admin/equipe", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify({
+          ...form,
+          mode,
+          password: mode === "password" && password ? password : undefined,
+        }),
       })
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))
-        toast.error(body.error ?? "Falha ao convidar")
+        toast.error(body.error ?? "Falha ao criar")
         return
       }
-      toast.success("Convite enviado")
-      setOpen(false)
-      setForm({ name: "", email: "", role: "PMB_SALES", phone: "" })
+      const body = await res.json().catch(() => ({}))
+      if (mode === "password") {
+        setCreated({
+          email: form.email,
+          password: body.tempPassword ?? password,
+          emailSent: body.emailSent ?? false,
+        })
+        toast.success("Usuário criado")
+      } else {
+        toast.success("Convite enviado")
+        setOpen(false)
+        resetForm()
+      }
       router.refresh()
     })
   }
@@ -96,11 +138,11 @@ export function EquipeClient({ initialItems }: { initialItems: EquipeItem[] }) {
           </p>
         </div>
         <Button
-          onClick={() => setOpen(true)}
+          onClick={openSheet}
           className="bg-[var(--color-pmb-green)] hover:bg-[var(--color-pmb-green-900)]"
         >
           <Plus className="h-4 w-4 mr-2" />
-          Convidar novo membro
+          Novo membro
         </Button>
       </div>
 
@@ -179,65 +221,103 @@ export function EquipeClient({ initialItems }: { initialItems: EquipeItem[] }) {
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetContent className="sm:max-w-md">
           <SheetHeader>
-            <SheetTitle>Convidar novo membro</SheetTitle>
+            <SheetTitle>{created ? "Membro criado" : "Novo membro"}</SheetTitle>
             <SheetDescription>
-              Um email será enviado com instruções para definir a senha.
+              {created
+                ? "Conta criada com senha. Repasse as credenciais abaixo."
+                : mode === "invite"
+                  ? "Um email será enviado com instruções para definir a senha."
+                  : "A conta será criada já com senha e as credenciais enviadas por email."}
             </SheetDescription>
           </SheetHeader>
-          <div className="space-y-4 p-4">
-            <div>
-              <Label>Nome</Label>
-              <Input
-                value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
-              />
-            </div>
-            <div>
-              <Label>Email</Label>
-              <Input
-                type="email"
-                value={form.email}
-                onChange={(e) => setForm({ ...form, email: e.target.value })}
-              />
-            </div>
-            <div>
-              <Label>Telefone (opcional)</Label>
-              <Input
-                value={form.phone}
-                onChange={(e) => setForm({ ...form, phone: e.target.value })}
-              />
-            </div>
-            <div>
-              <Label>Papel</Label>
-              <Select
-                value={form.role}
-                onValueChange={(v) => setForm({ ...form, role: v as (typeof ROLES)[number] })}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {ROLES.map((r) => (
-                    <SelectItem key={r} value={r}>
-                      {ROLE_LABEL[r]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <SheetFooter>
-            <Button variant="outline" onClick={() => setOpen(false)} disabled={pending}>
-              Cancelar
-            </Button>
-            <Button
-              onClick={submitInvite}
-              disabled={pending}
-              className="bg-[var(--color-pmb-green)] hover:bg-[var(--color-pmb-green-900)]"
-            >
-              {pending ? "Enviando…" : "Enviar convite"}
-            </Button>
-          </SheetFooter>
+
+          {created ? (
+            <>
+              <div className="p-4">
+                <CredentialsResultPanel
+                  email={created.email}
+                  password={created.password}
+                  emailSent={created.emailSent}
+                />
+              </div>
+              <SheetFooter>
+                <Button
+                  onClick={() => {
+                    setOpen(false)
+                    resetForm()
+                  }}
+                  className="bg-[var(--color-pmb-green)] hover:bg-[var(--color-pmb-green-900)]"
+                >
+                  Concluir
+                </Button>
+              </SheetFooter>
+            </>
+          ) : (
+            <>
+              <div className="space-y-4 p-4">
+                <div>
+                  <Label>Nome</Label>
+                  <Input
+                    value={form.name}
+                    onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label>Email</Label>
+                  <Input
+                    type="email"
+                    value={form.email}
+                    onChange={(e) => setForm({ ...form, email: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label>Telefone (opcional)</Label>
+                  <Input
+                    value={form.phone}
+                    onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label>Papel</Label>
+                  <Select
+                    value={form.role}
+                    onValueChange={(v) => setForm({ ...form, role: v as (typeof ROLES)[number] })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {ROLES.map((r) => (
+                        <SelectItem key={r} value={r}>
+                          {ROLE_LABEL[r]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <ModeToggle mode={mode} onChange={setMode} disabled={pending} />
+                {mode === "password" && (
+                  <PasswordField value={password} onChange={setPassword} disabled={pending} />
+                )}
+              </div>
+              <SheetFooter>
+                <Button variant="outline" onClick={() => setOpen(false)} disabled={pending}>
+                  Cancelar
+                </Button>
+                <Button
+                  onClick={submitInvite}
+                  disabled={pending}
+                  className="bg-[var(--color-pmb-green)] hover:bg-[var(--color-pmb-green-900)]"
+                >
+                  {pending
+                    ? "Salvando…"
+                    : mode === "invite"
+                      ? "Enviar convite"
+                      : "Criar com senha"}
+                </Button>
+              </SheetFooter>
+            </>
+          )}
         </SheetContent>
       </Sheet>
     </div>

@@ -4,6 +4,12 @@ import { prisma } from "@/lib/prisma"
 import { sendEmail } from "@/lib/email/resend"
 import { rateLimit, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
 import { generateResetToken } from "@/lib/auth/reset-token"
+import {
+  PMB_EMAIL_BRAND,
+  emailFromForBrand,
+  tenantEmailBrand,
+} from "@/lib/email/brand"
+import { PMB_TENANT_SLUG } from "@/lib/pmb-config"
 import { contextLogger } from "@/lib/logger"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 
@@ -108,7 +114,20 @@ async function processForgotPassword(email: string): Promise<void> {
   // Fallback: tenta como aluno
   const student = await prisma.student.findFirst({
     where: { email },
-    select: { id: true, nome: true, email: true },
+    select: {
+      id: true,
+      nome: true,
+      email: true,
+      tenant: {
+        select: {
+          slug: true,
+          name: true,
+          logoUrl: true,
+          customDomain: true,
+          supportEmail: true,
+        },
+      },
+    },
   })
   if (!student?.email) return
 
@@ -117,15 +136,28 @@ async function processForgotPassword(email: string): Promise<void> {
     data: { resetToken: tokenHash, resetTokenExpires: expires },
   })
 
+  // Aluno de revenda recebe o email com a marca da loja e o link no domínio
+  // dela — nunca com os dados da PMB.
+  const isPmbStudent =
+    !student.tenant || student.tenant.slug === PMB_TENANT_SLUG
+  const brand = isPmbStudent
+    ? PMB_EMAIL_BRAND
+    : tenantEmailBrand(student.tenant!)
+  const studentResetBase = (brand.siteUrl ?? appUrl).replace(/\/$/, "")
+  const studentResetUrl = `${studentResetBase}/reset-password?token=${token}`
+
   await sendEmail({
     to: student.email,
+    from: emailFromForBrand(brand),
+    replyTo: brand.replyTo ?? undefined,
     subject: "Definir senha de acesso à área do aluno",
     template: {
       type: "reset-password",
       props: {
         userName: student.nome,
-        resetUrl,
+        resetUrl: studentResetUrl,
         expirationMinutes: RESET_EXPIRATION_MINUTES,
+        brand,
       },
     },
   })

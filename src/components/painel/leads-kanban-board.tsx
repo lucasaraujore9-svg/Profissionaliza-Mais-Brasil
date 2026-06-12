@@ -79,6 +79,8 @@ export function LeadsKanbanBoard({
   const moveLead = useCallback(
     async (leadId: string, toStage: StageKey) => {
       const prev = board
+      // No-op se o lead já está na coluna de destino (ex.: drop na mesma coluna).
+      if (prev[toStage].some((l) => l.id === leadId)) return
       // optimistic update
       const next = emptyBoard()
       for (const s of STAGE_ORDER) {

@@ -39,6 +39,10 @@ import {
   AccessExpiringTemplate,
   type AccessExpiringTemplateProps,
 } from "./templates/access-expiring"
+import {
+  AccountCredentialsTemplate,
+  type AccountCredentialsTemplateProps,
+} from "./templates/account-credentials"
 import { sendSmtp, getDefaultFrom } from "./smtp"
 
 export class EmailError extends Error {
@@ -62,6 +66,10 @@ export type EmailTemplate =
   | { type: "student-welcome"; props: StudentWelcomeTemplateProps }
   | { type: "student-support"; props: StudentSupportTemplateProps }
   | { type: "access-expiring"; props: AccessExpiringTemplateProps }
+  | {
+      type: "account-credentials"
+      props: AccountCredentialsTemplateProps
+    }
 
 interface SendEmailParams {
   to: string | string[]
@@ -93,6 +101,8 @@ function renderTemplate(template: EmailTemplate): React.ReactElement {
       return StudentSupportTemplate(template.props)
     case "access-expiring":
       return AccessExpiringTemplate(template.props)
+    case "account-credentials":
+      return AccountCredentialsTemplate(template.props)
   }
 }
 

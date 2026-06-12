@@ -1,9 +1,10 @@
 import { Button, Section, Text } from "@react-email/components"
 import { EmailLayout, styles } from "./_layout"
+import { PMB_EMAIL_BRAND, type EmailBrand } from "../brand"
 
 export interface StudentSupportTemplateProps {
-  /** Nome da loja (ou "Profissionaliza Mais Brasil" pra vitrine PMB). */
-  storeName: string
+  /** Marca da loja (ou PMB na vitrine institucional). */
+  brand?: EmailBrand
   /** Nome do aluno que mandou a mensagem. */
   studentName: string
   /** Email do aluno (canal de resposta). */
@@ -25,7 +26,7 @@ export interface StudentSupportTemplateProps {
  * no caller).
  */
 export function StudentSupportTemplate({
-  storeName,
+  brand = PMB_EMAIL_BRAND,
   studentName,
   studentEmail,
   studentPhone,
@@ -33,10 +34,11 @@ export function StudentSupportTemplate({
   message,
   studentPanelUrl,
 }: StudentSupportTemplateProps) {
+  const storeName = brand.name
   return (
     <EmailLayout
       preview={`Pedido de suporte: ${subject}`}
-      brandName={storeName}
+      brand={brand}
     >
       <Text style={styles.h1}>Novo pedido de suporte</Text>
       <Text style={styles.paragraph}>
@@ -75,7 +77,14 @@ export function StudentSupportTemplate({
 }
 
 StudentSupportTemplate.PreviewProps = {
-  storeName: "Cursos Pro João",
+  brand: {
+    name: "Cursos Pro João",
+    logoUrl: null,
+    siteUrl: "https://cursos-pro-joao.livrecursos.com.br",
+    siteLabel: "cursos-pro-joao.livrecursos.com.br",
+    replyTo: null,
+    isPmb: false,
+  },
   studentName: "Pedro Henrique Oliveira",
   studentEmail: "pedro.henrique@email.com",
   studentPhone: "(11) 91234-5678",

@@ -16,6 +16,12 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet"
+import {
+  ModeToggle,
+  PasswordField,
+  CredentialsResultPanel,
+  type CreateMode,
+} from "@/components/shared/account-credentials-fields"
 
 export interface ConsultantItem {
   membershipId: string
@@ -39,11 +45,28 @@ export function EquipePainelClient({
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [pending, startTransition] = useTransition()
+  const [mode, setMode] = useState<CreateMode>("invite")
+  const [password, setPassword] = useState("")
+  const [created, setCreated] = useState<
+    { email: string; password: string; emailSent: boolean } | null
+  >(null)
   const [form, setForm] = useState({
     name: "",
     email: "",
     maxDiscount: "",
   })
+
+  function resetForm() {
+    setForm({ name: "", email: "", maxDiscount: "" })
+    setMode("invite")
+    setPassword("")
+    setCreated(null)
+  }
+
+  function openSheet() {
+    resetForm()
+    setOpen(true)
+  }
 
   function submit() {
     if (!form.name || !form.email) {
@@ -55,6 +78,10 @@ export function EquipePainelClient({
       toast.error("Cap de desconto deve ser 0-100")
       return
     }
+    if (mode === "password" && password && password.length < 8) {
+      toast.error("A senha deve ter no mínimo 8 caracteres")
+      return
+    }
     startTransition(async () => {
       const res = await fetch("/api/painel/equipe", {
         method: "POST",
@@ -63,16 +90,28 @@ export function EquipePainelClient({
           name: form.name,
           email: form.email,
           maxDiscount,
+          mode,
+          password: mode === "password" && password ? password : undefined,
         }),
       })
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))
-        toast.error(body.error ?? "Falha ao convidar")
+        toast.error(body.error ?? "Falha ao criar")
         return
       }
-      toast.success("Convite enviado")
-      setOpen(false)
-      setForm({ name: "", email: "", maxDiscount: "" })
+      const body = await res.json().catch(() => ({}))
+      if (mode === "password" && body.tempPassword) {
+        setCreated({
+          email: form.email,
+          password: body.tempPassword,
+          emailSent: body.emailSent ?? false,
+        })
+        toast.success("Consultor criado")
+      } else {
+        toast.success(mode === "password" ? "Consultor adicionado" : "Convite enviado")
+        setOpen(false)
+        resetForm()
+      }
       router.refresh()
     })
   }
@@ -130,10 +169,10 @@ export function EquipePainelClient({
           </p>
         </div>
         <Button
-          onClick={() => setOpen(true)}
+          onClick={openSheet}
           className="bg-[var(--color-pmb-green)] hover:bg-[var(--color-pmb-green-900)]"
         >
-          <Plus className="h-4 w-4 mr-2" /> Convidar consultor
+          <Plus className="h-4 w-4 mr-2" /> Novo consultor
         </Button>
       </div>
 
@@ -218,51 +257,89 @@ export function EquipePainelClient({
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetContent className="sm:max-w-md">
           <SheetHeader>
-            <SheetTitle>Convidar consultor</SheetTitle>
+            <SheetTitle>{created ? "Consultor criado" : "Novo consultor"}</SheetTitle>
             <SheetDescription>
-              Ele receberá um email para definir a senha e acessar o painel.
+              {created
+                ? "Conta criada com senha. Repasse as credenciais abaixo."
+                : mode === "invite"
+                  ? "Ele receberá um email para definir a senha e acessar o painel."
+                  : "A conta será criada já com senha e as credenciais enviadas por email."}
             </SheetDescription>
           </SheetHeader>
-          <div className="space-y-4 p-4">
-            <div>
-              <Label>Nome</Label>
-              <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-            </div>
-            <div>
-              <Label>Email</Label>
-              <Input
-                type="email"
-                value={form.email}
-                onChange={(e) => setForm({ ...form, email: e.target.value })}
-              />
-            </div>
-            <div>
-              <Label>Cap de desconto (% — opcional)</Label>
-              <Input
-                type="number"
-                min={0}
-                max={100}
-                value={form.maxDiscount}
-                onChange={(e) => setForm({ ...form, maxDiscount: e.target.value })}
-                placeholder="Ex: 20"
-              />
-              <p className="mt-1 text-xs text-muted-foreground">
-                Deixe vazio para não limitar desconto em cupons.
-              </p>
-            </div>
-          </div>
-          <SheetFooter>
-            <Button variant="outline" onClick={() => setOpen(false)} disabled={pending}>
-              Cancelar
-            </Button>
-            <Button
-              onClick={submit}
-              disabled={pending}
-              className="bg-[var(--color-pmb-green)] hover:bg-[var(--color-pmb-green-900)]"
-            >
-              {pending ? "Enviando…" : "Enviar convite"}
-            </Button>
-          </SheetFooter>
+
+          {created ? (
+            <>
+              <div className="p-4">
+                <CredentialsResultPanel
+                  email={created.email}
+                  password={created.password}
+                  emailSent={created.emailSent}
+                />
+              </div>
+              <SheetFooter>
+                <Button
+                  onClick={() => {
+                    setOpen(false)
+                    resetForm()
+                  }}
+                  className="bg-[var(--color-pmb-green)] hover:bg-[var(--color-pmb-green-900)]"
+                >
+                  Concluir
+                </Button>
+              </SheetFooter>
+            </>
+          ) : (
+            <>
+              <div className="space-y-4 p-4">
+                <div>
+                  <Label>Nome</Label>
+                  <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+                </div>
+                <div>
+                  <Label>Email</Label>
+                  <Input
+                    type="email"
+                    value={form.email}
+                    onChange={(e) => setForm({ ...form, email: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label>Cap de desconto (% — opcional)</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={form.maxDiscount}
+                    onChange={(e) => setForm({ ...form, maxDiscount: e.target.value })}
+                    placeholder="Ex: 20"
+                  />
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Deixe vazio para não limitar desconto em cupons.
+                  </p>
+                </div>
+                <ModeToggle mode={mode} onChange={setMode} disabled={pending} />
+                {mode === "password" && (
+                  <PasswordField value={password} onChange={setPassword} disabled={pending} />
+                )}
+              </div>
+              <SheetFooter>
+                <Button variant="outline" onClick={() => setOpen(false)} disabled={pending}>
+                  Cancelar
+                </Button>
+                <Button
+                  onClick={submit}
+                  disabled={pending}
+                  className="bg-[var(--color-pmb-green)] hover:bg-[var(--color-pmb-green-900)]"
+                >
+                  {pending
+                    ? "Salvando…"
+                    : mode === "invite"
+                      ? "Enviar convite"
+                      : "Criar com senha"}
+                </Button>
+              </SheetFooter>
+            </>
+          )}
         </SheetContent>
       </Sheet>
     </div>

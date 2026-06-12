@@ -5,7 +5,12 @@ import { generateTemporaryPassword } from "@/lib/students/generate-password"
 import { createNotification } from "@/lib/notifications"
 import { sendEmail, isEmailConfigured } from "@/lib/email/resend"
 import { contextLogger } from "@/lib/logger"
-import { vitrineUrl, appUrl } from "@/lib/tenant/urls"
+import { appUrl } from "@/lib/tenant/urls"
+import {
+  PMB_EMAIL_BRAND,
+  emailFromForBrand,
+  tenantEmailBrand,
+} from "@/lib/email/brand"
 import { PMB_TENANT_SLUG } from "@/lib/pmb-config"
 import type { NotificationLevel } from "@prisma/client"
 
@@ -135,7 +140,15 @@ export async function resetStudentPassword(
       id: true,
       nome: true,
       email: true,
-      tenant: { select: { slug: true, name: true } },
+      tenant: {
+        select: {
+          slug: true,
+          name: true,
+          logoUrl: true,
+          customDomain: true,
+          supportEmail: true,
+        },
+      },
     },
   })
   if (!student) return { error: "Aluno não encontrado" }
@@ -162,23 +175,24 @@ export async function resetStudentPassword(
   }
 
   const isPmb = student.tenant.slug === PMB_TENANT_SLUG
-  const loginUrl = isPmb
-    ? `${appUrl()}/login`
-    : `${vitrineUrl(student.tenant.slug)}/login`
-  const storeName = isPmb ? "Profissionaliza Mais Brasil" : student.tenant.name
+  // Marca da unidade — reset de aluno de revenda usa a identidade da loja.
+  const brand = isPmb ? PMB_EMAIL_BRAND : tenantEmailBrand(student.tenant)
+  const storeBase = (brand.siteUrl ?? appUrl()).replace(/\/$/, "")
 
   try {
     await sendEmail({
       to: student.email,
-      subject: `Sua nova senha temporária — ${storeName}`,
+      from: emailFromForBrand(brand),
+      replyTo: brand.replyTo ?? undefined,
+      subject: `Sua nova senha temporária — ${brand.name}`,
       template: {
         type: "student-welcome",
         props: {
           studentName: student.nome,
           studentEmail: student.email,
           temporaryPassword: plain,
-          loginUrl,
-          storeName,
+          loginUrl: `${storeBase}/login`,
+          brand,
         },
       },
     })

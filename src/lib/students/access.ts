@@ -1,7 +1,9 @@
 import { prisma } from "@/lib/prisma"
 import { sendEmail } from "@/lib/email/mailer"
 import { generatePasswordWithHash } from "@/lib/students/generate-password"
-import { appUrl as resolveAppUrl, vitrineHost } from "@/lib/tenant/urls"
+import { appUrl as resolveAppUrl } from "@/lib/tenant/urls"
+import { PMB_EMAIL_BRAND, emailFromForBrand } from "@/lib/email/brand"
+import { loadTenantEmailBrandBySlug } from "@/lib/email/tenant-brand"
 import { contextLogger } from "@/lib/logger"
 
 export interface ProvisionAccessTenant {
@@ -37,29 +39,25 @@ export async function provisionStudentAccess(
     data: { passwordHash: hash, passwordSetAt: new Date() },
   })
 
-  const appUrl = resolveAppUrl().replace(/\/$/, "")
-
-  let loginUrl: string
-  let storeName: string
-  if (tenant.isPmbVitrine) {
-    loginUrl = `${appUrl}/login`
-    storeName = "Profissionaliza Mais Brasil"
-  } else {
-    loginUrl = `https://${vitrineHost(tenant.slug)}/login`
-    storeName = tenant.name ?? `Loja ${tenant.slug}`
-  }
+  // Marca da unidade — venda de revenda usa a identidade da loja, nunca PMB.
+  const brand = tenant.isPmbVitrine
+    ? PMB_EMAIL_BRAND
+    : await loadTenantEmailBrandBySlug(tenant.slug)
+  const storeBase = (brand.siteUrl ?? resolveAppUrl()).replace(/\/$/, "")
 
   await sendEmail({
     to: student.email,
-    subject: `Bem-vindo! Seu acesso ao painel ${storeName}`,
+    from: emailFromForBrand(brand),
+    replyTo: brand.replyTo ?? undefined,
+    subject: `Bem-vindo! Seu acesso ao painel ${brand.name}`,
     template: {
       type: "student-welcome",
       props: {
         studentName: student.nome,
         studentEmail: student.email,
         temporaryPassword: plain,
-        loginUrl,
-        storeName,
+        loginUrl: `${storeBase}/login`,
+        brand,
       },
     },
   }).catch((err) => {

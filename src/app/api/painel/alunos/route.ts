@@ -3,6 +3,10 @@ import { prisma } from "@/lib/prisma"
 import type { Prisma } from "@prisma/client"
 import { requireResellerSession } from "@/lib/auth/reseller-session"
 import { withRequestContext } from "@/lib/observability/with-request-context"
+import {
+  deriveStudentDisplayStatus,
+  countEnrollmentStatuses,
+} from "@/lib/students/display-status"
 
 export const GET = withRequestContext(
   { action: "painel.alunos.list", route: "/api/painel/alunos" },
@@ -41,7 +45,7 @@ export const GET = withRequestContext(
         break
     }
 
-    const [students, statsRaw] = await Promise.all([
+    const [students, statsRaw, pendingCount] = await Promise.all([
       prisma.student.findMany({
         where: {
           tenantId: ctx.tenantId,
@@ -64,13 +68,8 @@ export const GET = withRequestContext(
           ...enrollmentWhere,
         },
         include: {
-          _count: {
-            select: {
-              enrollments: {
-                where: { status: { in: ["ACTIVE", "COMPLETED"] } },
-              },
-            },
-          },
+          // Status das matriculas para derivar o status exibido (pago x pendente).
+          enrollments: { select: { status: true } },
         },
         orderBy: { createdAt: "desc" },
         take: 200,
@@ -80,11 +79,22 @@ export const GET = withRequestContext(
         where: { tenantId: ctx.tenantId },
         _count: { _all: true },
       }),
+      // Alunos ainda ATIVO mas sem pagamento confirmado (so matricula pendente).
+      // Esse subconjunto e contado como "Pendente", nao "Ativo", nas stats.
+      prisma.student.count({
+        where: {
+          tenantId: ctx.tenantId,
+          status: "ATIVO",
+          enrollments: { none: { status: { in: ["ACTIVE", "COMPLETED"] } } },
+          AND: { enrollments: { some: { status: "PENDING" } } },
+        },
+      }),
     ])
 
     const stats = {
       total: statsRaw.reduce((sum, row) => sum + row._count._all, 0),
       ATIVO: 0,
+      PENDENTE: pendingCount,
       INATIVO: 0,
       BLOQUEADO: 0,
       DEVEDOR: 0,
@@ -94,20 +104,26 @@ export const GET = withRequestContext(
     for (const row of statsRaw) {
       stats[row.status] = row._count._all
     }
+    // "Ativos" reais = ATIVO no banco menos os que estao apenas com pagamento
+    // pendente (esses migram para o contador "Pendentes").
+    stats.ATIVO = Math.max(0, stats.ATIVO - pendingCount)
 
     return NextResponse.json({
       data: {
-        students: students.map((s) => ({
-          id: s.id,
-          nome: s.nome,
-          email: s.email,
-          cpf: s.cpf,
-          fone: s.fone,
-          status: s.status,
-          createdAt: s.createdAt.toISOString(),
-          coursesCount: s._count.enrollments,
-          plataformaAlunoId: s.plataformaAlunoId,
-        })),
+        students: students.map((s) => {
+          const counts = countEnrollmentStatuses(s.enrollments)
+          return {
+            id: s.id,
+            nome: s.nome,
+            email: s.email,
+            cpf: s.cpf,
+            fone: s.fone,
+            status: deriveStudentDisplayStatus(s.status, counts),
+            createdAt: s.createdAt.toISOString(),
+            coursesCount: counts.paidEnrollments,
+            plataformaAlunoId: s.plataformaAlunoId,
+          }
+        }),
         stats,
       },
     })

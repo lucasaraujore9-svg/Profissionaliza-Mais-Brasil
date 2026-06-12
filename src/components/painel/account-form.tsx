@@ -5,6 +5,7 @@ import { CheckCircle2, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { forbiddenNameError } from "@/lib/tenant/forbidden-names"
 import type { ConfigData } from "./config-tabs"
 
 interface AccountFormProps {
@@ -24,9 +25,18 @@ export function AccountForm({ data, onUpdate }: AccountFormProps) {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    setStatus("submitting")
     setErrors({})
     setErrorMessage(null)
+
+    // Marca reservada (contrato) — feedback imediato; o servidor revalida.
+    const nameError = forbiddenNameError(companyName)
+    if (nameError) {
+      setErrors({ companyName: nameError })
+      setStatus("error")
+      return
+    }
+
+    setStatus("submitting")
 
     try {
       const response = await fetch("/api/painel/config", {

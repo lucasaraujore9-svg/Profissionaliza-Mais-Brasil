@@ -22,6 +22,21 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { appDomain, vitrineDomain, vitrineUrl as buildVitrineUrl } from "@/lib/tenant/urls"
+import { forbiddenNameError } from "@/lib/tenant/forbidden-names"
+
+/**
+ * Sugestao de subdomínio a partir do nome da unidade: sem acento, minúsculo,
+ * só [a-z0-9] (ex.: "Escola do João" -> "escoladojoao"). O campo continua
+ * editável; isto apenas pré-preenche.
+ */
+function suggestSlug(name: string): string {
+  return name
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "")
+    .slice(0, 32)
+}
 
 interface NewResellerDialogProps {
   onCreated: () => void
@@ -76,6 +91,13 @@ export function NewResellerDialog({
   // Mensalidade controlada para alternar copy/promoção conforme o valor.
   const [planValueStr, setPlanValueStr] = useState("99.90")
   const [promoEnabled, setPromoEnabled] = useState(false)
+  // Nome + subdomínio controlados: o subdomínio é sugerido a partir do nome
+  // até o admin editá-lo manualmente (slugTouched).
+  const [name, setName] = useState(initialValues?.name ?? "")
+  const [slug, setSlug] = useState(suggestSlug(initialValues?.name ?? ""))
+  const [slugTouched, setSlugTouched] = useState(false)
+  // Máximo de parcelas no cartão para a PRIMEIRA mensalidade (1 = à vista).
+  const [maxInstallments, setMaxInstallments] = useState(1)
 
   const planValueNum = Number(planValueStr.replace(",", "."))
   const isFree = planValueStr.trim() !== "" && planValueNum === 0
@@ -86,6 +108,10 @@ export function NewResellerDialog({
     setSubmitting(false)
     setPlanValueStr("99.90")
     setPromoEnabled(false)
+    setName(initialValues?.name ?? "")
+    setSlug(suggestSlug(initialValues?.name ?? ""))
+    setSlugTouched(false)
+    setMaxInstallments(1)
   }
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -97,15 +123,28 @@ export function NewResellerDialog({
     const planValue = Number(
       String(formData.get("planValue") ?? "0").replace(",", "."),
     )
+    const cleanName = name.trim()
+    const cleanSlug = slug.trim().toLowerCase()
+
+    // Marca reservada (contrato) — feedback imediato; o servidor revalida.
+    const forbidden = forbiddenNameError(cleanName) ?? forbiddenNameError(cleanSlug)
+    if (forbidden) {
+      setError(forbidden)
+      setSubmitting(false)
+      return
+    }
+
     const usePromo = promoEnabled && planValue > 0
     const payload = {
-      name: String(formData.get("name") ?? "").trim(),
-      slug: String(formData.get("slug") ?? "").trim().toLowerCase(),
+      name: cleanName,
+      slug: cleanSlug,
       ownerName: String(formData.get("ownerName") ?? "").trim(),
       ownerEmail: String(formData.get("ownerEmail") ?? "").trim().toLowerCase(),
       ownerCpfCnpj: String(formData.get("ownerCpfCnpj") ?? "").replace(/\D/g, ""),
       ownerPhone: String(formData.get("ownerPhone") ?? "").trim(),
       planValue,
+      // Parcelamento da 1ª mensalidade só faz sentido em revenda paga.
+      firstPaymentMaxInstallments: planValue > 0 ? maxInstallments : 1,
       ...(usePromo
         ? {
             promoMonths: Number(formData.get("promoMonths") ?? 0),
@@ -206,7 +245,13 @@ export function NewResellerDialog({
                     name="name"
                     required
                     placeholder="Ex: Cursos da Maria"
-                    defaultValue={initialValues?.name ?? ""}
+                    value={name}
+                    onChange={(e) => {
+                      const next = e.target.value
+                      setName(next)
+                      // Sugere o subdomínio até o admin editá-lo manualmente.
+                      if (!slugTouched) setSlug(suggestSlug(next))
+                    }}
                     className="mt-1.5"
                   />
                 </div>
@@ -225,8 +270,16 @@ export function NewResellerDialog({
                     maxLength={32}
                     pattern="[a-z0-9](?:[a-z0-9-]{1,30}[a-z0-9])?"
                     placeholder="cursosdamaria"
+                    value={slug}
+                    onChange={(e) => {
+                      setSlugTouched(true)
+                      setSlug(e.target.value.toLowerCase())
+                    }}
                     className="mt-1.5 lowercase"
                   />
+                  <p className="mt-1 text-[11px] text-gray-500">
+                    Preenchido a partir do nome — você pode editar.
+                  </p>
                 </div>
                 <div>
                   <Label htmlFor="r-owner-name">Responsável</Label>
@@ -291,6 +344,36 @@ export function NewResellerDialog({
                     className="mt-1.5"
                   />
                 </div>
+
+                {/* Parcelamento da PRIMEIRA mensalidade no cartão de crédito.
+                    O revendedor escolhe, no checkout, de 1x até este limite. */}
+                {!isFree && (
+                  <div className="sm:col-span-2">
+                    <Label htmlFor="r-installments">
+                      Parcelamento da 1ª mensalidade no cartão{" "}
+                      <span className="font-normal text-gray-500">
+                        (limite que a revenda poderá escolher)
+                      </span>
+                    </Label>
+                    <select
+                      id="r-installments"
+                      value={maxInstallments}
+                      onChange={(e) => setMaxInstallments(Number(e.target.value))}
+                      className="mt-1.5 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-pmb-green)]"
+                    >
+                      <option value={1}>À vista (sem parcelamento)</option>
+                      {Array.from({ length: 11 }, (_, i) => i + 2).map((n) => (
+                        <option key={n} value={n}>
+                          Até {n}x
+                        </option>
+                      ))}
+                    </select>
+                    <p className="mt-1 text-[11px] text-gray-500">
+                      Vale só para a 1ª mensalidade e só no cartão. As mensalidades
+                      seguintes continuam mensais no valor cheio.
+                    </p>
+                  </div>
+                )}
 
                 {/* Promoção: as N primeiras mensalidades num valor reduzido */}
                 {!isFree && (

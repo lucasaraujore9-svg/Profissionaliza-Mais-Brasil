@@ -1,12 +1,14 @@
 import { Button, Section, Text } from "@react-email/components"
 import { EmailLayout, styles } from "./_layout"
+import { PMB_EMAIL_BRAND, type EmailBrand } from "../brand"
 
 export interface StudentWelcomeTemplateProps {
   studentName: string
   studentEmail: string
   temporaryPassword: string
   loginUrl: string
-  storeName: string
+  /** Marca da loja/revenda (header, rodapé, corpo). Default: PMB. */
+  brand?: EmailBrand
 }
 
 /**
@@ -19,15 +21,15 @@ export function StudentWelcomeTemplate({
   studentEmail,
   temporaryPassword,
   loginUrl,
-  storeName,
+  brand = PMB_EMAIL_BRAND,
 }: StudentWelcomeTemplateProps) {
   const firstName = studentName.split(" ")[0] || studentName
+  const storeName = brand.name
 
   return (
     <EmailLayout
       preview={`Sua conta em ${storeName} está pronta`}
-      brandName={storeName}
-      brandTagline="via Profissionaliza Mais Brasil"
+      brand={brand}
     >
       <Text style={styles.h1}>Bem-vindo(a), {firstName}!</Text>
       <Text style={styles.paragraph}>
@@ -82,7 +84,14 @@ StudentWelcomeTemplate.PreviewProps = {
   studentEmail: "pedro.henrique@email.com",
   temporaryPassword: "Pmb#Aluno2026",
   loginUrl: "https://cursos-pro-joao.livrecursos.com.br/aluno",
-  storeName: "Cursos Pro João",
+  brand: {
+    name: "Cursos Pro João",
+    logoUrl: null,
+    siteUrl: "https://cursos-pro-joao.livrecursos.com.br",
+    siteLabel: "cursos-pro-joao.livrecursos.com.br",
+    replyTo: null,
+    isPmb: false,
+  },
 } satisfies StudentWelcomeTemplateProps
 
 export default StudentWelcomeTemplate

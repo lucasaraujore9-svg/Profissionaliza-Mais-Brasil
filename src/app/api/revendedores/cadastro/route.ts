@@ -22,6 +22,7 @@ import { generateUniqueReferralCode } from "@/lib/referrals/code"
 import { resolveReferrerFromCookie } from "@/lib/referrals/capture"
 import { rateLimit, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
 import { withRequestContext } from "@/lib/observability/with-request-context"
+import { forbiddenNameError } from "@/lib/tenant/forbidden-names"
 
 const RESERVED_SLUGS = new Set([
   "www",
@@ -90,6 +91,22 @@ export const POST = withRequestContext(
   }
 
   const { pessoal, empresa, pagamento, password } = parsed.data
+
+  // Marca reservada (contrato): o nome da unidade (e o subdomínio derivado
+  // dele) não podem conter Bolsa Mais Brasil / Profissionaliza / Escola de
+  // Ensino a Distância / Livre Cursos.
+  const forbidden =
+    forbiddenNameError(empresa.fantasia) ?? forbiddenNameError(empresa.razaoSocial)
+  if (forbidden) {
+    return NextResponse.json(
+      {
+        error: forbidden,
+        code: "FORBIDDEN_NAME",
+        fields: { "empresa.fantasia": [forbidden] },
+      },
+      { status: 400 },
+    )
+  }
 
   const existing = await prisma.user.findUnique({
     where: { email: pessoal.email },
