@@ -43,10 +43,19 @@ export const GET = withRequestContext(
   }
 
   try {
+    // Resolve por custom domain SEM exigir `domainVerified`. A requisicao so
+    // chega aqui com Host = custom domain se a Vercel ja estiver entregando
+    // trafego para esse dominio — o que exige o dominio anexado ao projeto +
+    // DNS apontando + verificacao no nivel da plataforma. Ou seja, a chegada do
+    // Host ja prova a posse; a flag `domainVerified` no banco e apenas um
+    // indicador de UI (e dependia de um passo manual de "verificar" no painel).
+    // Exigir `domainVerified=true` aqui derrubava a resolucao de dominios que ja
+    // funcionavam (flag dessincronizada), fazendo o proxy cair no site PMB e
+    // servir a vitrine/pagamentos da marca master no lugar da revenda.
+    // O `@unique` em customDomain garante que dois tenants nao reivindiquem o
+    // mesmo dominio, entao resolver so por customDomain e seguro.
     const tenant = await prisma.tenant.findFirst({
-      where: slug
-        ? { slug }
-        : { customDomain: domain ?? undefined, domainVerified: true },
+      where: slug ? { slug } : { customDomain: domain ?? undefined },
       select: { id: true, slug: true, status: true },
     })
 

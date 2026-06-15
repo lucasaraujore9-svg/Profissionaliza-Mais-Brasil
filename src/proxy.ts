@@ -173,13 +173,24 @@ async function resolveTenantFromRedis(
   return null
 }
 
+type TenantRecord = { id: string; slug: string; status: string }
+
+// Discrimina "tenant nao existe" (404 definitivo) de "falha transitoria"
+// (secret ausente, rede, 5xx). O proxy usa essa distincao para, num custom
+// domain desconhecido, dar 404 SO quando temos certeza que o dominio nao
+// pertence a nenhuma revenda — e manter fail-open (servir normalmente) em
+// falhas transitorias, para nao derrubar uma vitrine valida por um soluco.
+type ResolveResult =
+  | { ok: true; tenant: TenantRecord }
+  | { ok: false; reason: "not_found" | "error" }
+
 async function resolveTenantFromDB(
   identifier: string,
   type: "slug" | "domain",
   origin: string
-): Promise<{ id: string; slug: string; status: string } | null> {
+): Promise<ResolveResult> {
   const internalSecret = process.env.INTERNAL_SECRET
-  if (!internalSecret) return null
+  if (!internalSecret) return { ok: false, reason: "error" }
 
   try {
     const res = await fetch(
@@ -188,10 +199,11 @@ async function resolveTenantFromDB(
         headers: { "x-internal-secret": internalSecret },
       }
     )
-    if (!res.ok) return null
-    return res.json()
+    if (res.status === 404) return { ok: false, reason: "not_found" }
+    if (!res.ok) return { ok: false, reason: "error" }
+    return { ok: true, tenant: (await res.json()) as TenantRecord }
   } catch {
-    return null
+    return { ok: false, reason: "error" }
   }
 }
 
@@ -236,6 +248,10 @@ export default async function proxy(request: NextRequest) {
   }
 
   let tenantSlug: string | null = null
+  // Vira true quando um host externo (custom domain) foi confirmado como NAO
+  // pertencente a nenhuma revenda. Nesse caso nao podemos servir o site PMB sob
+  // o dominio da revenda (vazaria vitrine/pagamentos da marca master).
+  let customDomainNotFound = false
 
   if (host.kind === "tenant" && host.subdomain) {
     tenantSlug = host.subdomain
@@ -243,17 +259,27 @@ export default async function proxy(request: NextRequest) {
 
   // Hostname desconhecido: tenta resolver como custom domain de tenant.
   if (host.kind === "unknown") {
-    const tenant = await resolveTenantFromDB(
-      stripPort(hostname),
-      "domain",
-      origin
-    )
-    if (tenant) {
-      tenantSlug = tenant.slug
+    const result = await resolveTenantFromDB(stripPort(hostname), "domain", origin)
+    if (result.ok) {
+      tenantSlug = result.tenant.slug
+    } else if (result.reason === "not_found") {
+      customDomainNotFound = true
     }
+    // reason === "error" (transitorio): segue o fluxo de fail-open abaixo.
   }
 
   if (!tenantSlug) {
+    // Custom domain externo apontado para nos, mas que nao corresponde a
+    // nenhuma revenda: retornamos 404 em vez de cair no site PMB. Servir o PMB
+    // aqui faria a vitrine (e os pagamentos) da marca master aparecerem sob o
+    // dominio da revenda — exatamente o bug que motivou esta correcao. Deploy
+    // URLs (*.vercel.app) e demais hosts internos continuam passando.
+    if (customDomainNotFound) {
+      return new NextResponse(
+        "Domínio não configurado. Verifique o apontamento de DNS desta loja.",
+        { status: 404, headers: { "content-type": "text/plain; charset=utf-8" } }
+      )
+    }
     return NextResponse.next({ request: { headers: sanitizedHeaders } })
   }
 
@@ -274,9 +300,9 @@ export default async function proxy(request: NextRequest) {
   // SUSPENDED (inadimplente) que ainda nao esta no cache venderia normalmente.
   let resolvedTenant = await resolveTenantFromRedis(tenantSlug)
   if (!resolvedTenant) {
-    const dbTenant = await resolveTenantFromDB(tenantSlug, "slug", origin)
-    if (dbTenant) {
-      resolvedTenant = { id: dbTenant.id, status: dbTenant.status }
+    const dbResult = await resolveTenantFromDB(tenantSlug, "slug", origin)
+    if (dbResult.ok) {
+      resolvedTenant = { id: dbResult.tenant.id, status: dbResult.tenant.status }
     }
   }
 

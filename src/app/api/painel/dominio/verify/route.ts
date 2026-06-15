@@ -33,8 +33,10 @@ export const POST = withRequestContext(
     try {
       const info = await getProjectDomain(tenant.customDomain)
 
-      // Persiste o status de verificação no DB para que o proxy possa resolver
-      // o tenant via custom domain (proxy só usa `domainVerified=true`).
+      // Persiste o status de verificação no DB como indicador de UI/relatório.
+      // OBS: a resolução de tenant por custom domain NÃO depende mais desta flag
+      // (ver src/app/api/internal/resolve-tenant). A chegada do Host já prova a
+      // posse, então o proxy resolve por customDomain mesmo com a flag false.
       await prisma.tenant
         .update({
           where: { id: ctx.tenantId },
