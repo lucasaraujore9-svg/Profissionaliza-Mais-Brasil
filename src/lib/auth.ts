@@ -213,19 +213,24 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             })
           : null
 
-        if (user) {
+        // O mesmo email pode pertencer a um User (admin/equipe/revendedor) E a
+        // um Student de alguma loja — ex.: a dona da revenda (SUPER_ADMIN) que
+        // também comprou um curso na própria vitrine. Por isso só retornamos
+        // aqui quando a senha do User confere, ele está ATIVO e é elegível;
+        // qualquer falha CAI para a tentativa de Student (escopada ao tenant)
+        // em vez de abortar o login. Sem esse fallthrough a conta User
+        // "sombreia" a de aluno e só o login por CPF funcionava.
+        if (user && user.status === "ATIVO") {
           const isValid = await compare(parsed.data.password, user.passwordHash)
-          if (!isValid) return null
-
-          // Bloqueia login de usuário INATIVO/PENDING_INVITE — só ATIVO.
-          if (user.status !== "ATIVO") return null
-
-          // Campos de sessão (papel, tenant, memberRole) vêm da fonte única.
-          // Ela também aplica a regra de RESELLER precisar de tenant
-          // ACTIVE/PENDING — retorna null (bloqueia login) caso contrário.
-          // Roles PMB (SUPER_ADMIN, PMB_SALES, PMB_RESELLER_MGR) não dependem
-          // de tenant e passam direto.
-          return await loadUserSessionFields(user.id)
+          if (isValid) {
+            // Campos de sessão (papel, tenant, memberRole) vêm da fonte única.
+            // Ela também aplica a regra de RESELLER precisar de tenant
+            // ACTIVE/PENDING — retorna null caso contrário; nesse caso ainda
+            // tentamos autenticar como aluno antes de desistir. Roles PMB
+            // (SUPER_ADMIN, PMB_SALES, PMB_RESELLER_MGR) não dependem de tenant.
+            const fields = await loadUserSessionFields(user.id)
+            if (fields) return fields
+          }
         }
 
         // 2) Login do aluno — escopado pelo tenant do subdomínio atual.
