@@ -21,6 +21,20 @@ const FORBIDDEN_TOKENS = [
   "livrecursos", // pega "livre cursos", "livre-cursos"
 ] as const
 
+/**
+ * Palavras genericas que CONTEM um token reservado como substring, mas que
+ * sao termos comuns do dominio e devem ser liberadas. Ex.: "profissionalizante"
+ * contem "profissionaliza" (a marca), mas e o adjetivo usado em "cursos
+ * profissionalizantes" — nao e a marca PMB. Sao removidas do texto normalizado
+ * ANTES da checagem de substring. Listar variantes mais longas primeiro para
+ * que a remocao nao deixe residuo (ex.: remover "profissionalizantes" antes de
+ * "profissionalizante"). Cada termo ja deve estar normalizado.
+ */
+const ALLOWED_TERMS = [
+  "profissionalizantes",
+  "profissionalizante",
+] as const
+
 export const FORBIDDEN_NAME_MESSAGE =
   "Este nome contém uma marca reservada (Bolsa Mais Brasil, Profissionaliza, " +
   "Escola de Ensino a Distância ou Livre Cursos) e não pode ser usado. Escolha outro."
@@ -37,10 +51,18 @@ export function normalizeForMatch(value: string): string {
 /**
  * `true` quando o texto contem algum nome reservado. Use no nome da unidade
  * e no subdominio, tanto na criacao quanto na edicao pelo revendedor.
+ *
+ * Termos genericos liberados (ALLOWED_TERMS) sao removidos antes da checagem,
+ * de modo que "cursos profissionalizantes" passa, mas "Profissionaliza Mais
+ * Brasil" continua bloqueado.
  */
 export function containsForbiddenName(value: string | null | undefined): boolean {
   if (!value) return false
-  const normalized = normalizeForMatch(value)
+  let normalized = normalizeForMatch(value)
+  if (!normalized) return false
+  for (const allowed of ALLOWED_TERMS) {
+    normalized = normalized.split(allowed).join("")
+  }
   if (!normalized) return false
   return FORBIDDEN_TOKENS.some((token) => normalized.includes(token))
 }
