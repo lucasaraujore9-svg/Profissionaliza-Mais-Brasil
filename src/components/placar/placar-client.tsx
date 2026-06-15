@@ -4,60 +4,11 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import type { PlacarSnapshot } from "@/lib/placar/snapshot"
 
 // ============================================================
-// Som de "caixa registradora / maquina de jogos" sintetizado via Web Audio.
-// Sem arquivo de audio: um "ka-ching" (sino duplo) + cascata de moedas.
-// Precisa de um gesto do usuario para destravar o AudioContext (regra dos
+// Som de celebracao de venda nova: fanfarra de trompetes (arquivo MP3).
+// Precisa de um gesto do usuario para destravar o autoplay (regra dos
 // navegadores) — por isso o botao "Ativar som".
 // ============================================================
-function playCashSound(ctx: AudioContext) {
-  const now = ctx.currentTime
-  const master = ctx.createGain()
-  master.gain.value = 0.9
-  master.connect(ctx.destination)
-
-  // "Ka" — clique seco da gaveta abrindo
-  const click = ctx.createOscillator()
-  const clickGain = ctx.createGain()
-  click.type = "square"
-  click.frequency.setValueAtTime(180, now)
-  clickGain.gain.setValueAtTime(0.0001, now)
-  clickGain.gain.exponentialRampToValueAtTime(0.4, now + 0.005)
-  clickGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.09)
-  click.connect(clickGain).connect(master)
-  click.start(now)
-  click.stop(now + 0.1)
-
-  // "Ching" — sino duplo brilhante (acorde de caixa registradora)
-  const bells = [1318.5, 1760, 2637]
-  bells.forEach((freq, i) => {
-    const osc = ctx.createOscillator()
-    const gain = ctx.createGain()
-    osc.type = "triangle"
-    osc.frequency.value = freq
-    const t = now + 0.06 + i * 0.012
-    gain.gain.setValueAtTime(0.0001, t)
-    gain.gain.exponentialRampToValueAtTime(0.35, t + 0.01)
-    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.9)
-    osc.connect(gain).connect(master)
-    osc.start(t)
-    osc.stop(t + 0.95)
-  })
-
-  // Cascata de moedas — blips agudos rapidos, tipo jackpot
-  for (let i = 0; i < 14; i++) {
-    const osc = ctx.createOscillator()
-    const gain = ctx.createGain()
-    osc.type = "square"
-    const t = now + 0.12 + i * 0.045
-    osc.frequency.value = 1800 + Math.random() * 1600
-    gain.gain.setValueAtTime(0.0001, t)
-    gain.gain.exponentialRampToValueAtTime(0.18, t + 0.006)
-    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.12)
-    osc.connect(gain).connect(master)
-    osc.start(t)
-    osc.stop(t + 0.13)
-  }
-}
+const SOUND_URL = "/sounds/venda-paga.mp3"
 
 // Count-up suave do numero grande quando o valor muda.
 function useCountUp(value: number, duration = 900) {
@@ -127,7 +78,7 @@ export function PlacarClient({
   const [live, setLive] = useState(false)
   const [soundOn, setSoundOn] = useState(false)
   const [celebration, setCelebration] = useState<Celebration | null>(null)
-  const audioRef = useRef<AudioContext | null>(null)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
   const celebTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const idRef = useRef(0)
 
@@ -136,35 +87,41 @@ export function PlacarClient({
   const ensureAudio = useCallback(() => {
     if (typeof window === "undefined") return null
     if (!audioRef.current) {
-      const Ctor =
-        window.AudioContext ||
-        (window as unknown as { webkitAudioContext: typeof AudioContext })
-          .webkitAudioContext
-      if (Ctor) audioRef.current = new Ctor()
-    }
-    if (audioRef.current?.state === "suspended") {
-      void audioRef.current.resume()
+      const a = new Audio(SOUND_URL)
+      a.preload = "auto"
+      a.volume = 0.9
+      audioRef.current = a
     }
     return audioRef.current
   }, [])
 
-  const enableSound = useCallback(() => {
-    const ctx = ensureAudio()
-    if (ctx) {
-      playCashSound(ctx) // toca uma vez para confirmar que esta funcionando
-      setSoundOn(true)
+  const playSound = useCallback(() => {
+    const a = ensureAudio()
+    if (!a) return
+    try {
+      a.currentTime = 0
+    } catch {
+      /* alguns browsers reclamam antes do load */
     }
+    void a.play().catch(() => {
+      /* autoplay bloqueado — sera destravado no proximo gesto do usuario */
+    })
   }, [ensureAudio])
+
+  const enableSound = useCallback(() => {
+    playSound() // toca uma vez para confirmar que esta funcionando
+    setSoundOn(true)
+  }, [playSound])
 
   const celebrate = useCallback(
     (name: string) => {
-      if (soundOn && audioRef.current) playCashSound(audioRef.current)
+      if (soundOn) playSound()
       idRef.current += 1
       setCelebration({ id: idRef.current, name })
       if (celebTimer.current) clearTimeout(celebTimer.current)
       celebTimer.current = setTimeout(() => setCelebration(null), 6500)
     },
-    [soundOn]
+    [soundOn, playSound]
   )
 
   // Conexao SSE com reconexao automatica do EventSource.
