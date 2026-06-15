@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { apexDomain, wwwDomain } from "@/lib/tenant/urls"
 import { isInternalAuthorized } from "@/lib/auth/bearer"
 import { rateLimit, rateLimitResponse } from "@/lib/ratelimit"
 import { contextLogger } from "@/lib/logger"
@@ -54,8 +55,15 @@ export const GET = withRequestContext(
     // servir a vitrine/pagamentos da marca master no lugar da revenda.
     // O `@unique` em customDomain garante que dois tenants nao reivindiquem o
     // mesmo dominio, entao resolver so por customDomain e seguro.
+    //
+    // Suporte a `www` e apex: o domain canonico e armazenado na forma apex, mas
+    // o visitante pode chegar pelo host com ou sem `www.`. Casamos contra as duas
+    // variantes (e o valor cru) para resolver ambas para o mesmo tenant.
+    const domainCandidates = domain
+      ? Array.from(new Set([domain, apexDomain(domain), wwwDomain(domain)]))
+      : []
     const tenant = await prisma.tenant.findFirst({
-      where: slug ? { slug } : { customDomain: domain ?? undefined },
+      where: slug ? { slug } : { customDomain: { in: domainCandidates } },
       select: { id: true, slug: true, status: true },
     })
 

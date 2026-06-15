@@ -14,7 +14,11 @@ import {
   appDomain as resolveAppDomain,
   cnameTarget as resolveCnameTarget,
   vitrineDomain as resolveVitrineDomain,
+  apexDomain,
+  wwwDomain,
+  customDomainVariants,
 } from "@/lib/tenant/urls"
+import { swallow } from "@/lib/errors"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 
 async function fetchTenantDomainInfo(tenantId: string) {
@@ -33,10 +37,15 @@ async function fetchTenantDomainInfo(tenantId: string) {
     null
 
   if (tenant.customDomain) {
+    // Checa AS DUAS variantes (apex + www) na Vercel. ACTIVE so quando ambas
+    // estao verificadas; juntamos os registros de verificacao pendentes.
+    const variants = customDomainVariants(tenant.customDomain)
     try {
-      const info = await getProjectDomain(tenant.customDomain)
-      status = info.verified ? "ACTIVE" : "PENDING"
-      verification = info.verification ?? null
+      const infos = await Promise.all(variants.map((d) => getProjectDomain(d)))
+      const allVerified = infos.every((i) => i.verified)
+      status = allVerified ? "ACTIVE" : "PENDING"
+      const pending = infos.flatMap((i) => (i.verified ? [] : i.verification ?? []))
+      verification = pending.length ? pending : null
     } catch {
       status = "ERROR"
     }
@@ -50,13 +59,11 @@ async function fetchTenantDomainInfo(tenantId: string) {
     customDomain: tenant.customDomain,
     status,
     vercelConfigured: isVercelConfigured(),
+    // Dois registros: apex (@) e www — ambos apontando para o alvo CNAME.
     dnsRecords: tenant.customDomain
       ? [
-          {
-            type: "CNAME",
-            name: tenant.customDomain.startsWith("www.") ? "www" : "@",
-            value: resolveCnameTarget(),
-          },
+          { type: "CNAME", name: "@", value: resolveCnameTarget() },
+          { type: "CNAME", name: "www", value: resolveCnameTarget() },
         ]
       : [],
     verification,
@@ -118,12 +125,15 @@ export const POST = withRequestContext(
       )
     }
 
-    const domain = parsed.data.domain
+    // Armazenamos sempre a forma apex (sem `www.`); registramos as DUAS
+    // variantes na Vercel para que tanto o apex quanto o www roteiem.
+    const apex = apexDomain(parsed.data.domain)
+    const [apexHost, wwwHost] = customDomainVariants(parsed.data.domain)
     const appDomain = resolveAppDomain()
     const vitrineDomain = resolveVitrineDomain()
     if (
-      (appDomain && domain.endsWith(`.${appDomain}`)) ||
-      (vitrineDomain && domain.endsWith(`.${vitrineDomain}`))
+      (appDomain && apex.endsWith(`.${appDomain}`)) ||
+      (vitrineDomain && apex.endsWith(`.${vitrineDomain}`))
     ) {
       return NextResponse.json(
         { error: "Use apenas domínio próprio, não um subdomínio da plataforma" },
@@ -131,8 +141,9 @@ export const POST = withRequestContext(
       )
     }
 
-    const existing = await prisma.tenant.findUnique({
-      where: { customDomain: domain },
+    // Conflito: qualquer variante (apex ou www) ja usada por outro revendedor.
+    const existing = await prisma.tenant.findFirst({
+      where: { customDomain: { in: [apexHost, wwwHost] } },
       select: { id: true },
     })
     if (existing && existing.id !== ctx.tenantId) {
@@ -150,8 +161,11 @@ export const POST = withRequestContext(
       return NextResponse.json({ error: "Tenant não encontrado" }, { status: 404 })
     }
 
+    // Apex e obrigatorio (falha = erro). www e best-effort: a unidade pode optar
+    // por nao criar o registro `www` no DNS. addProjectDomain e idempotente para
+    // dominios ja anexados ao projeto.
     try {
-      await addProjectDomain(domain)
+      await addProjectDomain(apexHost)
     } catch (error) {
       if (error instanceof VercelNotConfiguredError) {
         return NextResponse.json({ error: error.message }, { status: 503 })
@@ -162,10 +176,11 @@ export const POST = withRequestContext(
         { status: 502 },
       )
     }
+    await addProjectDomain(wwwHost).catch(swallow("painel.dominio.add.www"))
 
     await prisma.tenant.update({
       where: { id: tenant.id },
-      data: { customDomain: domain, domainVerified: false },
+      data: { customDomain: apex, domainVerified: false },
     })
 
     await invalidateTenant({
@@ -201,8 +216,9 @@ export const DELETE = withRequestContext(
       )
     }
 
+    // Remove AS DUAS variantes (apex + www) do projeto na Vercel.
     try {
-      await removeProjectDomain(tenant.customDomain)
+      await removeProjectDomain(apexDomain(tenant.customDomain))
     } catch (error) {
       if (error instanceof VercelNotConfiguredError) {
         return NextResponse.json({ error: error.message }, { status: 503 })
@@ -215,6 +231,9 @@ export const DELETE = withRequestContext(
         )
       }
     }
+    await removeProjectDomain(wwwDomain(tenant.customDomain)).catch(
+      swallow("painel.dominio.remove.www"),
+    )
 
     await prisma.tenant.update({
       where: { id: tenant.id },

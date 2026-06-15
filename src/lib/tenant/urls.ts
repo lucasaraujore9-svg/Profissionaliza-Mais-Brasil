@@ -35,6 +35,30 @@ export function cnameTarget(): string {
   return `cname.${vitrineDomain()}`
 }
 
+// ── Dominio custom: variantes apex/www ──────────────────────────────────────
+// Suportamos as DUAS variantes de um dominio proprio (com e sem `www.`). Para
+// isso armazenamos sempre a forma APEX (sem `www.`) como canonica em
+// Tenant.customDomain, registramos AS DUAS na Vercel (para ambas rotearem) e a
+// resolucao no proxy/resolve-tenant compara o host com o `www.` removido.
+
+// Remove o prefixo `www.` (forma apex/canonica). Ex: www.x.com → x.com
+export function apexDomain(domain: string): string {
+  const d = domain.trim().toLowerCase()
+  return d.startsWith("www.") ? d.slice(4) : d
+}
+
+// Forma com `www.`. Ex: x.com → www.x.com (idempotente: ja-com-www permanece)
+export function wwwDomain(domain: string): string {
+  return `www.${apexDomain(domain)}`
+}
+
+// As duas variantes [apex, www] que devem ser anexadas na Vercel ao cadastrar
+// um dominio proprio. Ex: cliente.com.br → ["cliente.com.br", "www.cliente.com.br"]
+export function customDomainVariants(domain: string): [string, string] {
+  const apex = apexDomain(domain)
+  return [apex, `www.${apex}`]
+}
+
 // Base canonica para webhooks de gateways (Mercado Pago).
 //
 // O apex (profissionalizamaisbrasil.com.br) responde 307 -> www e o Mercado
