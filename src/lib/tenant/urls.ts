@@ -18,6 +18,34 @@ export function appUrl(): string {
   return process.env.NEXT_PUBLIC_APP_URL ?? `https://${appDomain()}`
 }
 
+// Hosts sob os quais o checkout do SISTEMA MÃE (PMB) pode operar. As vendas de
+// uma revenda usam /api/loja/checkout com o gateway (MP/Asaas) da própria
+// unidade; o checkout PMB (/api/checkout, conta Asaas/MP da marca master) JAMAIS
+// pode rodar sob o domínio de uma revenda — subdomínio {slug}.livrecursos.com.br
+// ou domínio próprio. Se isso acontecer (ex.: proxy em fail-open por falha
+// transitória ao resolver o custom domain serve o site PMB sob o domínio da
+// unidade), a venda do revendedor cai no gateway da PMB. Esta allow-list é a
+// defesa em profundidade que fecha esse vazamento de receita.
+export function isPmbAppHost(host: string | null | undefined): boolean {
+  if (!host) return false
+  const h = host.split(":")[0].trim().toLowerCase()
+  if (!h) return false
+
+  const allowed = new Set(
+    [appDomain(), FALLBACK_APP_DOMAIN].flatMap((d) => {
+      const apex = apexDomain(d)
+      return [apex, `www.${apex}`]
+    }),
+  )
+  if (allowed.has(h)) return true
+
+  // Dev local e preview deploys (Vercel) — o checkout PMB precisa funcionar lá.
+  if (h === "localhost" || h.endsWith(".localhost")) return true
+  if (h.endsWith(".vercel.app")) return true
+
+  return false
+}
+
 // Host (sem protocolo) da vitrine de um tenant a partir do slug.
 // Ex: vitrineHost("joao") → "joao.livrecursos.com.br"
 export function vitrineHost(slug: string): string {

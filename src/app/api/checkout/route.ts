@@ -34,7 +34,7 @@ import { upsertLeadFromCheckout } from "@/lib/automation/leads"
 import { readVisitorId } from "@/lib/automation/tracking"
 import { isValidCpf, stripCpf } from "@/lib/validation/cpf"
 import { isValidPhone, normalizePhone } from "@/lib/validation/phone"
-import { asaasWebhookUrl } from "@/lib/tenant/urls"
+import { asaasWebhookUrl, isPmbAppHost } from "@/lib/tenant/urls"
 
 // Cartão: aceitamos número com espaços, validade MM/AA ou MM/AAAA, CCV 3-4 dígitos.
 const creditCardSchema = z.object({
@@ -103,6 +103,20 @@ function normalize(s: string): string {
 export const POST = withRequestContext(
   { action: "pmb.checkout.start", route: "/api/checkout" },
   async (request: Request) => {
+  // Guard de host (defesa em profundidade): este endpoint cobra na conta
+  // Asaas/MP da PMB (sistema mãe). Ele só pode ser acionado a partir do domínio
+  // PMB. Se a requisição chega sob o domínio de uma revenda — subdomínio ou
+  // domínio próprio, p.ex. quando o proxy entra em fail-open ao não resolver o
+  // custom domain por uma falha transitória — recusamos: a venda da unidade tem
+  // de passar por /api/loja/checkout, com o gateway da própria revenda. Sem isso
+  // o dinheiro da unidade cai no caixa da PMB.
+  if (!isPmbAppHost(request.headers.get("host"))) {
+    return NextResponse.json(
+      { error: "Checkout indisponível neste domínio", code: "WRONG_HOST" },
+      { status: 404 },
+    )
+  }
+
   // Rate-limit anti-flood: a vitrine PMB é pública e cria cobranças Asaas/MP.
   // Mesmo bucket de /api/loja/checkout — bots não conseguem gerar cobranças em massa.
   const rl = await rateLimit(request, RATE_LIMITS.publicCheckout)

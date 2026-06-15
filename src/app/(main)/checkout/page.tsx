@@ -1,10 +1,12 @@
 import Link from "next/link"
+import { headers } from "next/headers"
 import { OrderSummary } from "@/components/loja/order-summary"
 import { PmbCheckoutForm } from "@/components/loja/pmb-checkout-form"
 import { MpCheckoutForm } from "@/components/loja/mp-checkout-form"
 import { prisma } from "@/lib/prisma"
 import { getSystemSettings } from "@/lib/system-settings"
 import { pmbMpPublicKey } from "@/lib/pmb-config"
+import { isPmbAppHost } from "@/lib/tenant/urls"
 
 interface CheckoutPageProps {
   searchParams: Promise<{
@@ -50,6 +52,27 @@ async function resolveCoupon(
 }
 
 export default async function CheckoutPage({ searchParams }: CheckoutPageProps) {
+  // Este checkout cobra na conta da PMB (sistema mãe). Se a página estiver sendo
+  // servida sob o domínio de uma revenda — só ocorre se o proxy cair em
+  // fail-open ao não resolver o custom domain — NÃO mostramos o formulário: a
+  // compra do aluno da unidade deve passar pela vitrine (/loja/checkout) com o
+  // gateway da própria revenda. O guard server-side em /api/checkout já recusa a
+  // cobrança; aqui evitamos exibir um formulário enganoso.
+  const hostHeader = (await headers()).get("host")
+  if (!isPmbAppHost(hostHeader)) {
+    return (
+      <div className="mx-auto max-w-3xl px-4 py-24 text-center">
+        <h1 className="text-2xl font-bold text-[var(--color-pmb-green-900)]">
+          Checkout indisponível
+        </h1>
+        <p className="mt-3 text-sm text-gray-600">
+          Não foi possível carregar a loja desta página. Atualize em alguns
+          instantes para concluir sua compra com segurança.
+        </p>
+      </div>
+    )
+  }
+
   const { course_id, slug, coupon: couponParam, error } = await searchParams
 
   const identifier = course_id ?? slug

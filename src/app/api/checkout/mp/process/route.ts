@@ -14,7 +14,7 @@ import {
 import { rateLimit, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
 import { contextLogger } from "@/lib/logger"
 import { withRequestContext } from "@/lib/observability/with-request-context"
-import { mpWebhookUrl } from "@/lib/tenant/urls"
+import { mpWebhookUrl, isPmbAppHost } from "@/lib/tenant/urls"
 
 const bodySchema = z.object({
   enrollmentId: z.string().min(1),
@@ -30,6 +30,16 @@ const bodySchema = z.object({
 export const POST = withRequestContext(
   { action: "pmb.checkout.mp.process", route: "/api/checkout/mp/process" },
   async (request: Request) => {
+    // Guard de host: cobra na conta MP da PMB. Espelha /api/checkout — nunca
+    // pode rodar sob o domínio de uma revenda (senão a venda da unidade cai no
+    // gateway da PMB). Vendas de revenda usam /api/loja/checkout/process.
+    if (!isPmbAppHost(request.headers.get("host"))) {
+      return NextResponse.json(
+        { error: "Checkout indisponível neste domínio", code: "WRONG_HOST" },
+        { status: 404 },
+      )
+    }
+
     const rl = await rateLimit(request, RATE_LIMITS.publicCheckout)
     if (!rl.ok) return rateLimitResponse(rl)
 
