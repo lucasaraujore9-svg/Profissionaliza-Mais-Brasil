@@ -79,7 +79,7 @@ export function VitrineConfigForm({
         <div className="mt-5 grid gap-4 sm:grid-cols-2">
           <AssetUploader
             label="Logo"
-            hint="PNG, JPG ou WEBP (max 5MB)"
+            hint="PNG com fundo transparente • horizontal, ideal 480 × 160 px (mín. 200 × 200 px se quadrada) • máx 5MB"
             previewUrl={config.logoUrl}
             uploading={uploading === "logo"}
             inputRef={logoInputRef}
