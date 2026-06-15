@@ -104,7 +104,8 @@ export interface CategoryOption {
 export interface CourseOption {
   id: string
   name: string
-  categoryId: string | null
+  // Um curso pode pertencer a varias categorias.
+  categoryIds: string[]
   imageUrl: string | null
 }
 export interface SectionOptions {

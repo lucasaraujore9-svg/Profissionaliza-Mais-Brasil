@@ -110,13 +110,15 @@ export const DELETE = withRequestContextParams<{ id: string }>(
 
   const current = await prisma.category.findUnique({
     where: { id },
-    select: { id: true, _count: { select: { courses: true } } },
+    select: { id: true, _count: { select: { courseLinks: true } } },
   })
   if (!current) {
     return NextResponse.json({ error: "Categoria não encontrada" }, { status: 404 })
   }
 
-  // FK ON DELETE SET NULL → cursos passam a ficar `categoryId: null`.
+  // Cursos cuja categoria PRINCIPAL e esta ficam com `categoryId: null`
+  // (FK ON DELETE SET NULL). Os vinculos M2M (course_categories) sao removidos
+  // em cascata (onDelete: Cascade no schema).
   await prisma.category.delete({ where: { id } })
 
   // Espelha a criação automática feita em POST /categorias: ao apagar a
@@ -138,7 +140,7 @@ export const DELETE = withRequestContextParams<{ id: string }>(
   }
 
   return NextResponse.json({
-    data: { id, courseCountReleased: current._count.courses },
+    data: { id, courseCountReleased: current._count.courseLinks },
   })
   },
 )

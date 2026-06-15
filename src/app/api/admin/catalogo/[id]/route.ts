@@ -13,7 +13,12 @@ const patchSchema = z.object({
   capaOverride: z.string().url().nullable().optional(),
   parcelasOverride: z.number().int().min(1).max(24).nullable().optional(),
   categoriaLoja: z.string().nullable().optional(),
+  // Categoria principal (legado/compat). Continua aceito, mas `categoryIds`
+  // tem prioridade quando enviado.
   categoryId: z.string().cuid().nullable().optional(),
+  // Lista completa de categorias do curso (M2M). A primeira vira a principal.
+  // Sem limite de quantidade.
+  categoryIds: z.array(z.string().cuid()).optional(),
   status: z.enum(["ATIVO", "INATIVO"]).optional(),
   hiddenMain: z.boolean().optional(),
   paymentTypeMain: z.enum(["ONE_TIME", "MONTHLY"]).optional(),
@@ -44,6 +49,10 @@ export const GET = withRequestContextParams<{ id: string }>(
       categoriaLoja: true,
       categoryId: true,
       category: { select: { id: true, name: true, slug: true } },
+      categoryLinks: {
+        select: { category: { select: { id: true, name: true, slug: true } } },
+        orderBy: { category: { name: "asc" } },
+      },
       visibilityMode: true,
       allowedTenantIds: true,
       blockedTenantIds: true,
@@ -63,9 +72,14 @@ export const GET = withRequestContextParams<{ id: string }>(
   })
   if (!course) return NextResponse.json({ error: "Não encontrado" }, { status: 404 })
 
+  const { categoryLinks, ...rest } = course
+  const categories = categoryLinks.map((l) => l.category)
+
   return NextResponse.json({
     data: {
-      ...course,
+      ...rest,
+      categories,
+      categoryIds: categories.map((c) => c.id),
       precoOriginal: course.precoOriginal ? Number(course.precoOriginal) : null,
       precoPromocional: course.precoPromocional ? Number(course.precoPromocional) : null,
       precoVitrineMain: course.precoVitrineMain ? Number(course.precoVitrineMain) : null,
@@ -87,14 +101,52 @@ export const PATCH = withRequestContextParams<{ id: string }>(
     return NextResponse.json({ error: "Payload inválido", issues: parsed.error.issues }, { status: 400 })
   }
 
+  // Separa `categoryIds` (relacao M2M) dos campos escalares do Course.
+  const { categoryIds, ...data } = parsed.data
+
   // Se mudou para ONE_TIME, zera monthlyMonthsMain. Se MONTHLY sem meses,
   // garante um default razoavel.
-  const data = { ...parsed.data }
   if (data.paymentTypeMain === "ONE_TIME") {
     data.monthlyMonthsMain = null
   }
   if (data.paymentTypeMain === "MONTHLY" && data.monthlyMonthsMain === undefined) {
     data.monthlyMonthsMain = 12
+  }
+
+  // Normaliza a entrada de categorias: `categoryIds` (M2M) tem prioridade;
+  // se vier so o legado `categoryId`, deriva a lista a partir dele para manter
+  // join e categoria principal consistentes.
+  const incomingCategoryIds =
+    categoryIds !== undefined
+      ? categoryIds
+      : data.categoryId !== undefined
+        ? data.categoryId
+          ? [data.categoryId]
+          : []
+        : undefined
+
+  // Quando ha entrada de categorias, ela e a fonte de verdade do pertencimento:
+  // a primeira vira a categoria principal (categoryId) e o join e reescrito por
+  // completo. Sem limite de quantidade.
+  if (incomingCategoryIds !== undefined) {
+    const uniqueIds = [...new Set(incomingCategoryIds)]
+    if (uniqueIds.length > 0) {
+      // Garante que todos os ids existem (evita FK error silencioso).
+      const found = await prisma.category.count({ where: { id: { in: uniqueIds } } })
+      if (found !== uniqueIds.length) {
+        return NextResponse.json({ error: "Categoria inexistente" }, { status: 400 })
+      }
+    }
+    data.categoryId = uniqueIds[0] ?? null
+    await prisma.$transaction([
+      prisma.courseCategory.deleteMany({
+        where: { courseId: id, categoryId: { notIn: uniqueIds } },
+      }),
+      prisma.courseCategory.createMany({
+        data: uniqueIds.map((categoryId) => ({ courseId: id, categoryId })),
+        skipDuplicates: true,
+      }),
+    ])
   }
 
   const updated = await prisma.course.update({

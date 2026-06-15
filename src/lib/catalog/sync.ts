@@ -167,6 +167,7 @@ export async function syncCatalogFromEA(
         }
       }
 
+      let courseId: string
       if (existing) {
         await prisma.course.update({
           where: { nome: curso.nome },
@@ -178,9 +179,10 @@ export async function syncCatalogFromEA(
               : {}),
           },
         })
+        courseId = existing.id
         updated += 1
       } else {
-        await prisma.course.create({
+        const created = await prisma.course.create({
           data: {
             ...dataBase,
             slug: await ensureUniqueSlug(slug),
@@ -188,8 +190,23 @@ export async function syncCatalogFromEA(
               ? { plataformaCourseId: courseIdFromCapa }
               : {}),
           },
+          select: { id: true },
         })
+        courseId = created.id
         added += 1
+      }
+
+      // Garante que a categoria efetiva consta no join M2M, SEM remover as
+      // categorias adicionais atribuidas manualmente pelo admin. O join e a
+      // fonte de verdade para filtros/contagens.
+      if (effectiveCategoryId) {
+        await prisma.courseCategory.upsert({
+          where: {
+            courseId_categoryId: { courseId, categoryId: effectiveCategoryId },
+          },
+          create: { courseId, categoryId: effectiveCategoryId },
+          update: {},
+        })
       }
     }
 

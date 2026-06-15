@@ -147,7 +147,7 @@ export async function loadByCategoria(
       where: {
         status: "ATIVO",
         hiddenMain: false,
-        categoryId: category.id,
+        categoryLinks: { some: { categoryId: category.id } },
       },
       orderBy: { nome: "asc" },
       take,
@@ -202,8 +202,8 @@ export async function loadCategorias(minCount = 0): Promise<CategoriaInfo[]> {
         slug: true,
         _count: {
           select: {
-            courses: {
-              where: { status: "ATIVO", hiddenMain: false },
+            courseLinks: {
+              where: { course: { status: "ATIVO", hiddenMain: false } },
             },
           },
         },
@@ -211,11 +211,11 @@ export async function loadCategorias(minCount = 0): Promise<CategoriaInfo[]> {
     })
 
     return categories
-      .filter((c) => c._count.courses >= minCount)
+      .filter((c) => c._count.courseLinks >= minCount)
       .map((c) => ({
         nome: c.name,
         slug: c.slug,
-        count: c._count.courses,
+        count: c._count.courseLinks,
       }))
   } catch {
     return []
@@ -263,7 +263,7 @@ export async function loadCatalogo({
         select: { id: true, isActive: true },
       })
       if (!category || !category.isActive) return { cursos: [], total: 0 }
-      where.categoryId = category.id
+      where.categoryLinks = { some: { categoryId: category.id } }
     }
 
     const [rows, total] = await Promise.all([

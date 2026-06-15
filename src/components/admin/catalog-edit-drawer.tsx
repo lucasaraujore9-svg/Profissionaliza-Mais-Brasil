@@ -28,6 +28,10 @@ interface CourseDetail {
   categoriaLoja: string | null
   categoryId: string | null
   category: { id: string; name: string; slug: string } | null
+  // M2M: um curso pode estar em varias categorias. `categoryIds` e a fonte de
+  // verdade editada na UI (a primeira vira a principal no backend).
+  categoryIds: string[]
+  categories: { id: string; name: string; slug: string }[]
   status: string
   parcelasSugeridas: number | null
   parcelasOverride: number | null
@@ -125,7 +129,7 @@ export function CatalogEditDrawer({ courseId, open, onOpenChange, onSaved }: Cat
       capaOverride: detail.capaOverride,
       parcelasOverride: detail.parcelasOverride,
       categoriaLoja: detail.categoriaLoja,
-      categoryId: detail.categoryId,
+      categoryIds: detail.categoryIds,
       status: visibility === "none" ? "INATIVO" : "ATIVO",
       hiddenMain: visibility === "main_only_hidden",
       paymentTypeMain: detail.paymentTypeMain,
@@ -353,8 +357,8 @@ export function CatalogEditDrawer({ courseId, open, onOpenChange, onSaved }: Cat
 
             <div>
               <div className="flex items-center justify-between">
-                <label htmlFor="categoria-select" className="text-xs font-semibold text-gray-700">
-                  Categoria
+                <label className="text-xs font-semibold text-gray-700">
+                  Categorias
                 </label>
                 <button
                   type="button"
@@ -365,25 +369,15 @@ export function CatalogEditDrawer({ courseId, open, onOpenChange, onSaved }: Cat
                   Gerenciar categorias
                 </button>
               </div>
-              <select
-                id="categoria-select"
-                value={detail.categoryId ?? ""}
-                onChange={(e) =>
-                  setDetail({
-                    ...detail,
-                    categoryId: e.target.value === "" ? null : e.target.value,
-                  })
-                }
-                className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-[var(--color-pmb-green)] focus:outline-none"
-              >
-                <option value="">— Sem categoria —</option>
-                {categories.map((cat) => (
-                  <option key={cat.id} value={cat.id}>
-                    {cat.name}
-                    {!cat.isActive ? " (inativa)" : ""}
-                  </option>
-                ))}
-              </select>
+              <CategoryMultiPicker
+                categories={categories}
+                selected={detail.categoryIds}
+                onChange={(next) => setDetail({ ...detail, categoryIds: next })}
+              />
+              <p className="mt-1 text-[11px] text-gray-500">
+                O curso pode aparecer em várias categorias. A primeira marcada é
+                tratada como a principal.
+              </p>
               {detail.categoriaLoja && (
                 <p className="mt-1 text-[11px] text-gray-500">
                   Categoria original do sync:{" "}
@@ -640,6 +634,90 @@ export function CatalogEditDrawer({ courseId, open, onOpenChange, onSaved }: Cat
         }}
       />
     </Sheet>
+  )
+}
+
+interface CategoryMultiPickerProps {
+  categories: Category[]
+  /** Ordem importa: o primeiro id e a categoria principal. */
+  selected: string[]
+  onChange: (next: string[]) => void
+}
+
+function CategoryMultiPicker({
+  categories,
+  selected,
+  onChange,
+}: CategoryMultiPickerProps) {
+  const selectedSet = new Set(selected)
+
+  function toggle(id: string) {
+    if (selectedSet.has(id)) {
+      onChange(selected.filter((s) => s !== id))
+    } else {
+      // Anexa ao final: preserva qual foi marcada primeiro (= principal).
+      onChange([...selected, id])
+    }
+  }
+
+  return (
+    <div className="mt-1 rounded-lg border border-gray-200 bg-gray-50 p-2">
+      <div className="flex items-center justify-between px-1 pb-1">
+        <span className="text-[11px] font-bold uppercase tracking-wide text-gray-600">
+          {selected.length === 0
+            ? "Nenhuma categoria"
+            : `${selected.length} selecionada${selected.length > 1 ? "s" : ""}`}
+        </span>
+        {selected.length > 0 && (
+          <button
+            type="button"
+            onClick={() => onChange([])}
+            className="text-[11px] text-gray-500 hover:text-rose-600 hover:underline"
+          >
+            Limpar
+          </button>
+        )}
+      </div>
+      <div className="max-h-48 overflow-y-auto rounded-md border border-gray-200 bg-white">
+        {categories.length === 0 ? (
+          <p className="p-3 text-center text-[11px] text-gray-500">
+            Nenhuma categoria cadastrada
+          </p>
+        ) : (
+          <ul className="divide-y divide-gray-100">
+            {categories.map((cat) => {
+              const checked = selectedSet.has(cat.id)
+              const isPrimary = selected[0] === cat.id
+              return (
+                <li key={cat.id}>
+                  <label className="flex cursor-pointer items-center gap-2 px-2 py-1.5 text-sm hover:bg-gray-50">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggle(cat.id)}
+                      className="h-3.5 w-3.5 rounded border-gray-300"
+                    />
+                    <span className="flex-1 truncate text-[var(--color-pmb-green-900)]">
+                      {cat.name}
+                      {!cat.isActive ? (
+                        <span className="ml-1 text-[10px] text-gray-400">
+                          (inativa)
+                        </span>
+                      ) : null}
+                    </span>
+                    {isPrimary && (
+                      <span className="rounded bg-[var(--color-pmb-lime-50)] px-1.5 py-0.5 text-[10px] font-semibold uppercase text-[var(--color-pmb-green)]">
+                        principal
+                      </span>
+                    )}
+                  </label>
+                </li>
+              )
+            })}
+          </ul>
+        )}
+      </div>
+    </div>
   )
 }
 

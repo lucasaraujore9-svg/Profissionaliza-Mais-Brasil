@@ -411,12 +411,19 @@ model Course {
 
   // Categorias
   // categoriaLoja/categoriaInterna sao o "raw" vindo da plataforma parceira
-  // pelo sync — preservados para audit/match. A categoria EFETIVA usada nas
-  // vitrines, menus e filtros e Category via categoryId.
+  // pelo sync — preservados para audit/match.
+  //
+  // Um curso pode pertencer a VARIAS categorias (M2M via CourseCategory em
+  // `categoryLinks`). `categoryId` aponta para a categoria PRINCIPAL (a primeira
+  // selecionada / a vinda do sync) e e mantido apenas para exibicao quando uma
+  // unica categoria e necessaria e para compatibilidade. A fonte de verdade do
+  // pertencimento (filtros, menus, contagens) e SEMPRE o join `categoryLinks`,
+  // que tambem inclui a categoria principal.
   categoriaInterna String?   @map("categoria_interna")
   categoriaLoja    String?   @map("categoria_loja")
   categoryId       String?   @map("category_id")
   category         Category? @relation(fields: [categoryId], references: [id])
+  categoryLinks    CourseCategory[]
 
   // Visibilidade nas vitrines de revendas (independente de hiddenMain, que
   // controla so a vitrine principal PMB).
@@ -480,13 +487,32 @@ model Category {
   isActive     Boolean @default(true) @map("is_active")
   description  String? @db.Text
 
-  courses Course[]
+  // `courses` = cursos cuja categoria PRINCIPAL e esta (relacao via categoryId).
+  // `courseLinks` = TODOS os cursos vinculados (M2M), fonte de verdade para
+  // contagens e filtros de pertencimento.
+  courses     Course[]
+  courseLinks CourseCategory[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@index([isActive, displayOrder])
   @@map("categories")
+}
+
+/// Vinculo muitos-para-muitos entre Course e Category. Um curso pode aparecer
+/// em quantas categorias forem necessarias. Inclui a categoria principal
+/// (Course.categoryId), de modo que filtrar pelo join sempre encontra o curso.
+model CourseCategory {
+  courseId   String   @map("course_id")
+  categoryId String   @map("category_id")
+  course     Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@id([courseId, categoryId])
+  @@index([categoryId])
+  @@map("course_categories")
 }
 
 model CourseLesson {

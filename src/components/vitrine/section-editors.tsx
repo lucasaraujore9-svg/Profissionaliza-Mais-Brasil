@@ -323,8 +323,8 @@ export function CategoryCoursesEditor({
   onPatch: (patch: Partial<AnySectionConfig>) => void
 }) {
   const config = section.config as CategoryCoursesConfig
-  const filtered = options.courses.filter(
-    (c) => c.categoryId === config.categoryId,
+  const filtered = options.courses.filter((c) =>
+    c.categoryIds.includes(config.categoryId),
   )
   return (
     <CourseSelectionEditor

@@ -174,11 +174,13 @@ async function tenantCatalogCategories(
   const cats = await prisma.category.findMany({
     where: {
       isActive: true,
-      courses: {
+      courseLinks: {
         some: {
-          status: "ATIVO",
-          ...visibilityFilter(tenantId),
-          tenantCourses: { some: { tenantId, isVisible: true } },
+          course: {
+            status: "ATIVO",
+            ...visibilityFilter(tenantId),
+            tenantCourses: { some: { tenantId, isVisible: true } },
+          },
         },
       },
     },
@@ -225,7 +227,7 @@ export async function listTenantCatalog(args: {
       course: {
         status: "ATIVO",
         ...visibilityFilter(tenantId),
-        ...(categoryId ? { categoryId } : {}),
+        ...(categoryId ? { categoryLinks: { some: { categoryId } } } : {}),
         ...(search ? { nome: { contains: search, mode: "insensitive" } } : {}),
       },
     }

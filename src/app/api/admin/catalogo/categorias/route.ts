@@ -29,7 +29,7 @@ export const GET = withRequestContext(
       displayOrder: true,
       isActive: true,
       description: true,
-      _count: { select: { courses: true } },
+      _count: { select: { courseLinks: true } },
     },
   })
 
@@ -41,7 +41,7 @@ export const GET = withRequestContext(
       displayOrder: c.displayOrder,
       isActive: c.isActive,
       description: c.description,
-      courseCount: c._count.courses,
+      courseCount: c._count.courseLinks,
     })),
   })
   },

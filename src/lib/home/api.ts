@@ -18,7 +18,11 @@ interface Scope {
  */
 async function countActiveCategoryCourses(categoryId: string): Promise<number> {
   return prisma.course.count({
-    where: { categoryId, status: "ATIVO", hiddenMain: false },
+    where: {
+      categoryLinks: { some: { categoryId } },
+      status: "ATIVO",
+      hiddenMain: false,
+    },
   })
 }
 
@@ -97,7 +101,11 @@ export async function createSection(scope: Scope, body: unknown) {
     }
     if (cfg.mode === "random") {
       const courseCount = await prisma.course.count({
-        where: { categoryId: cfg.categoryId, status: "ATIVO", hiddenMain: false },
+        where: {
+          categoryLinks: { some: { categoryId: cfg.categoryId } },
+          status: "ATIVO",
+          hiddenMain: false,
+        },
       })
       if (courseCount < 4) {
         return NextResponse.json(
@@ -170,7 +178,11 @@ export async function updateSection(
       const cfg = validation.config as Extract<AnySectionConfig, { kind: "category_courses" }>
       if (cfg.mode === "random") {
         const courseCount = await prisma.course.count({
-          where: { categoryId: cfg.categoryId, status: "ATIVO", hiddenMain: false },
+          where: {
+            categoryLinks: { some: { categoryId: cfg.categoryId } },
+            status: "ATIVO",
+            hiddenMain: false,
+          },
         })
         if (courseCount < 4) {
           return NextResponse.json(

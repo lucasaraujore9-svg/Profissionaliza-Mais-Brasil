@@ -478,7 +478,9 @@ async function pickRandomCourseIds(args: {
         course: {
           status: "ATIVO",
           ...tenantVisibilityFilter(args.tenantId),
-          ...(args.categoryId ? { categoryId: args.categoryId } : {}),
+          ...(args.categoryId
+            ? { categoryLinks: { some: { categoryId: args.categoryId } } }
+            : {}),
         },
       },
       select: { courseId: true },
@@ -489,7 +491,9 @@ async function pickRandomCourseIds(args: {
       where: {
         status: "ATIVO",
         hiddenMain: false,
-        ...(args.categoryId ? { categoryId: args.categoryId } : {}),
+        ...(args.categoryId
+          ? { categoryLinks: { some: { categoryId: args.categoryId } } }
+          : {}),
       },
       select: { id: true },
     })

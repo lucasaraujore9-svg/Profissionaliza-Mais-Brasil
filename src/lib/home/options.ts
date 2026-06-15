@@ -20,8 +20,8 @@ export async function getHomeSectionsOptions() {
         displayOrder: true,
         _count: {
           select: {
-            courses: {
-              where: { status: "ATIVO", hiddenMain: false },
+            courseLinks: {
+              where: { course: { status: "ATIVO", hiddenMain: false } },
             },
           },
         },
@@ -33,7 +33,7 @@ export async function getHomeSectionsOptions() {
       select: {
         id: true,
         nome: true,
-        categoryId: true,
+        categoryLinks: { select: { categoryId: true } },
         capaImageUrl: true,
         capaOverride: true,
       },
@@ -47,12 +47,14 @@ export async function getHomeSectionsOptions() {
         name: c.name,
         slug: c.slug,
         displayOrder: c.displayOrder,
-        courseCount: c._count.courses,
+        courseCount: c._count.courseLinks,
       })),
       courses: courses.map((c) => ({
         id: c.id,
         name: c.nome,
-        categoryId: c.categoryId,
+        // Um curso pode estar em varias categorias — o picker filtra por
+        // inclusao (ver section-editors.tsx).
+        categoryIds: c.categoryLinks.map((l) => l.categoryId),
         imageUrl: c.capaOverride ?? c.capaImageUrl,
       })),
     },
