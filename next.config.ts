@@ -47,6 +47,15 @@ const nextConfig: NextConfig = {
   // empacota-los em paginas/rotas server.
   serverExternalPackages: ["@react-pdf/renderer", "qrcode"],
   images: {
+    // Otimizacao de imagem da Vercel DESLIGADA globalmente. A cota de
+    // Image Optimization da conta foi esgotada e o otimizador passou a
+    // responder 402 (OPTIMIZED_IMAGE_REQUEST_PAYMENT_REQUIRED) para TODA
+    // imagem servida via /_next/image — derrubando logos (Supabase), capas
+    // (playcurso) e banners. Servindo direto (unoptimized) nada depende da
+    // cota paga; o CSP img-src ja libera supabase.co e playcurso.com.
+    // Para reativar, habilite/contrate o recurso no painel da Vercel e
+    // entao remova este flag.
+    unoptimized: true,
     remotePatterns: [
       { protocol: "https", hostname: "*.supabase.co" },
       { protocol: "https", hostname: "playcurso.com" },
