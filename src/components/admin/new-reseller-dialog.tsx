@@ -173,7 +173,10 @@ export function NewResellerDialog({
         return
       }
       setCreated(body.data as CreatedResult)
-      onCreated()
+      // NÃO avisa o pai aqui: o callback dispara router.refresh(), que
+      // re-renderiza a lista/kanban com o lead já CONVERTED e desmonta este
+      // dialog — apagando a tela de sucesso antes do admin copiar o link de
+      // pagamento. O refresh é adiado para o fechamento (ver `close`).
     } catch {
       setError("Erro de rede ao criar revenda")
     } finally {
@@ -183,6 +186,10 @@ export function NewResellerDialog({
 
   const close = () => {
     setOpen(false)
+    // Avisa o pai só agora (refresh da lista/kanban). Se feito na criação, o
+    // refresh desmontaria este dialog e a tela de sucesso sumiria antes do
+    // admin copiar o link de pagamento.
+    if (created) onCreated()
     setTimeout(reset, 250)
   }
 
