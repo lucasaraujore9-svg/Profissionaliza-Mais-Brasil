@@ -204,9 +204,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         // 1) Tenta como User (admin/equipe/revendedor) — só por email; User
         // não tem CPF, então login por CPF pula direto para o aluno.
+        // Match case-insensitive: o email pode ter sido gravado com
+        // capitalização diferente da digitada (Postgres `=` é case-sensitive).
         const user = isEmailLogin
-          ? await prisma.user.findUnique({
-              where: { email: identifier },
+          ? await prisma.user.findFirst({
+              where: { email: { equals: identifier, mode: "insensitive" } },
               select: { id: true, passwordHash: true, status: true },
             })
           : null
@@ -233,9 +235,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const targetTenantId = await resolveTenantIdFromRequest(request)
         if (!targetTenantId) return null
 
+        // Match de email case-insensitive: alunos cadastrados com email em
+        // capitalização diferente da digitada não devem falhar o login (o CPF,
+        // sendo só dígitos, nunca teve esse problema — por isso só ele funcionava).
         const student = await prisma.student.findFirst({
           where: {
-            ...(isCpfLogin ? { cpf: cpfDigits } : { email: identifier }),
+            ...(isCpfLogin
+              ? { cpf: cpfDigits }
+              : { email: { equals: identifier, mode: "insensitive" } }),
             tenantId: targetTenantId,
             passwordHash: { not: null },
           },
