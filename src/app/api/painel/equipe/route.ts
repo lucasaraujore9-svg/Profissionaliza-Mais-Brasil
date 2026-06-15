@@ -59,7 +59,7 @@ export const GET = withRequestContext(
 
 const createSchema = z.object({
   name: z.string().min(2),
-  email: z.string().email(),
+  email: z.string().trim().toLowerCase().email(),
   maxDiscount: z.number().int().min(0).max(100).optional(),
   // "invite" (padrão): envia link para o consultor definir a senha.
   // "password": cria a conta já com senha e envia as credenciais por email.

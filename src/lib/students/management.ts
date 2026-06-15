@@ -16,7 +16,7 @@ import type { NotificationLevel } from "@prisma/client"
 
 export const editSchema = z.object({
   nome: z.string().trim().min(2).max(120),
-  email: z.string().trim().max(160).optional().or(z.literal("")),
+  email: z.string().trim().toLowerCase().max(160).optional().or(z.literal("")),
   fone: z.string().trim().max(40).optional().or(z.literal("")),
   fone2: z.string().trim().max(40).optional().or(z.literal("")),
   cpf: z.string().trim().max(20).optional().or(z.literal("")),

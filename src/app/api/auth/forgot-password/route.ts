@@ -81,7 +81,12 @@ export const POST = withRequestContext(
 )
 
 async function processForgotPassword(email: string): Promise<void> {
-  const user = await prisma.user.findUnique({ where: { email } })
+  // Match case-insensitive: o input já vem em minúsculas (schema), mas o email
+  // gravado pode ter capitalização diferente (Postgres `=` é case-sensitive),
+  // o que faria o reset falhar silenciosamente. Alinha com o login.
+  const user = await prisma.user.findFirst({
+    where: { email: { equals: email, mode: "insensitive" } },
+  })
 
   const { plain: token, hash: tokenHash } = generateResetToken()
   const expires = new Date(Date.now() + RESET_EXPIRATION_MINUTES * 60 * 1000)
@@ -111,9 +116,9 @@ async function processForgotPassword(email: string): Promise<void> {
     return
   }
 
-  // Fallback: tenta como aluno
+  // Fallback: tenta como aluno (mesmo match case-insensitive)
   const student = await prisma.student.findFirst({
-    where: { email },
+    where: { email: { equals: email, mode: "insensitive" } },
     select: {
       id: true,
       nome: true,

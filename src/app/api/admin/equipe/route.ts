@@ -56,7 +56,7 @@ export const GET = withRequestContext(
 const createSchema = z
   .object({
     name: z.string().min(2),
-    email: z.string().email(),
+    email: z.string().trim().toLowerCase().email(),
     role: z.enum(PMB_ROLES),
     phone: z.string().optional(),
     // "invite" (padrão): envia link para o usuário definir a senha.

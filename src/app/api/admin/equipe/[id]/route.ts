@@ -52,7 +52,7 @@ export const GET = withRequestContextParams<{ id: string }>(
 
 const patchSchema = z.object({
   name: z.string().min(2).optional(),
-  email: z.string().email().optional(),
+  email: z.string().trim().toLowerCase().email().optional(),
   role: z.enum(PMB_ROLES).optional(),
   status: z.enum(["ATIVO", "INATIVO"]).optional(),
   phone: z.string().nullable().optional(),
