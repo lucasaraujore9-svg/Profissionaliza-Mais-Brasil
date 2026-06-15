@@ -195,7 +195,14 @@ export async function createSubscription(
   params: AsaasCreateSubscriptionParams,
   apiKey?: string,
 ): Promise<AsaasSubscription> {
-  return request<AsaasSubscription>("POST", "/subscriptions", params, apiKey)
+  // Assinatura COM cartao inline usa um endpoint distinto do Asaas, com BARRA
+  // FINAL: POST /v3/subscriptions/ (SubscriptionSaveWithCreditCardRequestDTO,
+  // exige creditCard+creditCardHolderInfo+remoteIp). Sem cartao e o padrao
+  // POST /v3/subscriptions (sem barra). Postar o cartao no endpoint sem barra
+  // faz o Asaas ignorar os campos do cartao (assinatura sem cartao na fatura).
+  // Mesma convencao de createInstallmentWithCreditCard (-> "/installments/").
+  const path = params.creditCard ? "/subscriptions/" : "/subscriptions"
+  return request<AsaasSubscription>("POST", path, params, apiKey)
 }
 
 export async function getSubscription(
@@ -240,7 +247,13 @@ export async function createPayment(
   params: AsaasCreatePaymentParams,
   apiKey?: string,
 ): Promise<AsaasPayment> {
-  return request<AsaasPayment>("POST", "/payments", params, apiKey)
+  // Cobranca COM cartao inline (captura na criacao) usa o endpoint com BARRA
+  // FINAL: POST /v3/payments/ (PaymentSaveWithCreditCardRequestDTO, exige
+  // remoteIp). Sem cartao e o padrao POST /v3/payments (sem barra) — PIX/boleto
+  // e o fluxo do PMB (UNDEFINED). Explicitar o path evita depender de
+  // normalizacao de barra do Asaas e espelha a convencao do "/installments/".
+  const path = params.creditCard ? "/payments/" : "/payments"
+  return request<AsaasPayment>("POST", path, params, apiKey)
 }
 
 export async function getPayment(

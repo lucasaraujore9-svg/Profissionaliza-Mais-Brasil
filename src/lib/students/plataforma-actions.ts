@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma"
 import {
   criarAluno,
   editarAluno,
+  buscarAluno,
   vincularCurso,
   removerCurso,
   enviarEmailCredenciais,
@@ -52,6 +53,118 @@ function parseExternalId(value: string | null | undefined): number | null {
   if (!value) return null
   const n = Number.parseInt(value, 10)
   return Number.isFinite(n) ? n : null
+}
+
+function onlyDigits(value: string | null | undefined): string {
+  return value?.replace(/\D/g, "") ?? ""
+}
+
+function normEmail(value: string | null | undefined): string | null {
+  const v = value?.trim().toLowerCase()
+  return v && v.length > 0 ? v : null
+}
+
+interface ExistingPlatformLogin {
+  plataformaAlunoId: number
+  // Senha ja criptografada (AES-256-GCM), pronta para persistir. Null quando
+  // a origem nao expoe a senha (ex.: reuso de outro registro nosso sem senha).
+  encryptedSenha: string | null
+}
+
+/**
+ * Procura um usuario que a pessoa JA possua na plataforma de aulas (EA).
+ *
+ * Regra de negocio: cada pessoa (mesmo CPF/email) deve ter UM unico usuario na
+ * EA, reutilizado entre revendas. Sem isso, comprar numa segunda revenda
+ * tentaria recriar o aluno na EA (CPF/email duplicado) e a matricula falhava.
+ *
+ * Ordem de busca:
+ *   1. Outro Student nosso (qualquer tenant) com o mesmo CPF/email que ja foi
+ *      para a plataforma — deterministico, sem chamada externa. Reaproveita
+ *      ate a senha criptografada.
+ *   2. Consulta direta na EA (`usuarios/listar`) por CPF e depois por email —
+ *      cobre alunos que existem na plataforma mas ainda nao no nosso banco
+ *      (cadastros legados/manuais). Best-effort: erros sao tratados como
+ *      "nao encontrado" e o fluxo segue para criar um novo aluno.
+ *
+ * Retorna null quando e a primeira vez da pessoa na plataforma.
+ */
+async function findExistingPlatformLogin(student: {
+  id: string
+  cpf: string | null
+  email: string | null
+}): Promise<ExistingPlatformLogin | null> {
+  const cpfDigits = onlyDigits(student.cpf)
+  const email = normEmail(student.email)
+  if (!cpfDigits && !email) return null
+
+  // 1. Reuso a partir de outro registro nosso.
+  const orFilters: { cpf?: string; email?: string }[] = []
+  if (student.cpf) orFilters.push({ cpf: student.cpf })
+  if (student.email) orFilters.push({ email: student.email })
+
+  if (orFilters.length > 0) {
+    const candidates = await prisma.student.findMany({
+      where: { id: { not: student.id }, OR: orFilters },
+      select: {
+        plataformaAlunoId: true,
+        plataformaAlunoSenha: true,
+        cpf: true,
+        email: true,
+      },
+    })
+
+    const valid = candidates.flatMap((c) => {
+      const id = parseExternalId(c.plataformaAlunoId)
+      if (id === null || c.plataformaAlunoId.startsWith("pending")) return []
+      return [{ id, senha: c.plataformaAlunoSenha, cpf: c.cpf, email: c.email }]
+    })
+
+    // Prioridade 1: mesmo CPF (identidade forte).
+    let match = cpfDigits
+      ? valid.find((c) => onlyDigits(c.cpf) === cpfDigits)
+      : undefined
+    // Prioridade 2: mesmo email, desde que o CPF nao conflite (email de
+    // familia compartilhado entre alunos distintos nao deve casar).
+    if (!match && email) {
+      match = valid.find((c) => {
+        if (normEmail(c.email) !== email) return false
+        const cCpf = onlyDigits(c.cpf)
+        return !cCpf || !cpfDigits || cCpf === cpfDigits
+      })
+    }
+
+    if (match) {
+      return { plataformaAlunoId: match.id, encryptedSenha: match.senha }
+    }
+  }
+
+  // 2. Consulta direta na plataforma (best-effort).
+  for (const filter of [
+    cpfDigits ? { cpf: cpfDigits } : null,
+    email ? { email } : null,
+  ]) {
+    if (!filter) continue
+    try {
+      const aluno = await buscarAluno(filter)
+      const id = parseExternalId(aluno?.login)
+      if (id !== null) {
+        return {
+          plataformaAlunoId: id,
+          encryptedSenha: aluno.senha ? encrypt(String(aluno.senha)) : null,
+        }
+      }
+    } catch (err) {
+      // "Nao encontrado" na EA chega como erro de API — segue para o proximo
+      // filtro / criacao. Logado em debug para diagnostico.
+      contextLogger().debug(
+        { event: "plataforma.buscar_aluno_miss", studentId: student.id, filter: Object.keys(filter)[0] },
+        "buscarAluno nao retornou aluno existente",
+      )
+    }
+  }
+
+  return null
 }
 
 /**

@@ -148,9 +148,13 @@ export const POST = withRequestContext(
             { status: 400 },
           )
         }
-        // IP do comprador (Asaas exige no cartão). Primeiro IP do x-forwarded-for.
+        // IP do comprador (Asaas exige no cartão). Primeiro IP do x-forwarded-for;
+        // cai no x-real-ip se ausente — mesmo critério do clientIp() provado em
+        // /api/cobranca/[paymentId]/pay-card. O 0.0.0.0 final fica no client Asaas.
         const fwd =
-          request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null
+          request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+          request.headers.get("x-real-ip")?.trim() ||
+          null
 
         const asaasResult = await processTransparentAsaasPayment(
           {

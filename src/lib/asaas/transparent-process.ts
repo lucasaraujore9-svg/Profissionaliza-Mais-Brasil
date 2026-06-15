@@ -199,14 +199,17 @@ export async function processTransparentAsaasPayment(
           maxPayments: months,
           notificationUrl: ctx.notificationUrl,
           ...(cardPair ?? {}),
-          ...(ctx.remoteIp ? { remoteIp: ctx.remoteIp } : {}),
+          // Cartão no Asaas EXIGE remoteIp (IP do comprador). x-forwarded-for
+          // pode faltar fora da Vercel — cai no 0.0.0.0, igual ao clientIp() do
+          // fluxo provado de installments, em vez de omitir e tomar 400.
+          remoteIp: ctx.remoteIp ?? "0.0.0.0",
         },
         apiKey,
       )
 
-      // Captura o id/URL da 1ª cobrança gerada (para reconciliação/retorno).
+      // Captura a 1ª cobrança gerada (id/URL/status) para reconciliação/retorno.
       let firstInvoiceUrl: string | null = null
-      let firstPaymentId: string | null = null
+      let firstPayment: AsaasPayment | null = null
       for (let i = 0; i < 3; i++) {
         const list = await listAsaasPayments(
           { subscription: subscription.id, limit: 1, offset: 0 },
@@ -215,7 +218,7 @@ export async function processTransparentAsaasPayment(
         const first = list?.data?.[0]
         if (first) {
           firstInvoiceUrl = first.invoiceUrl
-          firstPaymentId = first.id
+          firstPayment = first
           break
         }
         await new Promise((r) => setTimeout(r, 500))
@@ -227,14 +230,20 @@ export async function processTransparentAsaasPayment(
           externalReference,
           asaasCustomerId: customerId,
           asaasSubscriptionId: subscription.id,
-          asaasPaymentId: firstPaymentId,
+          asaasPaymentId: firstPayment?.id ?? null,
           asaasInvoiceUrl: firstInvoiceUrl,
         },
       })
 
-      // A 1ª cobrança no cartão é capturada imediatamente; a matrícula é
-      // efetivada pelo webhook (PAYMENT_CONFIRMED) — mesmo modelo do MP mensal.
-      return { kind: "approved", status: "authorized" }
+      // SÓ declara aprovado quando a 1ª cobrança no cartão FOI capturada — senão
+      // o aluno veria "aprovado" sem cobrança real (o endpoint sem barra podia
+      // ignorar o cartão silenciosamente). Capturada → efetiva já (webhook é
+      // rede idempotente). Em análise/pendente → aguarda o webhook confirmar.
+      if (firstPayment && CONFIRMED_STATUSES.has(firstPayment.status)) {
+        await fulfillFromAsaasPayment(ctx.fulfillTenant, enrollment.id, firstPayment)
+        return { kind: "approved", status: firstPayment.status }
+      }
+      return { kind: "pending" }
     } catch (err) {
       return asaasErrorToResult(err)
     }
@@ -264,7 +273,9 @@ export async function processTransparentAsaasPayment(
         externalReference,
         notificationUrl: ctx.notificationUrl,
         ...(cardPair ?? {}),
-        ...(billingType === "CREDIT_CARD" && ctx.remoteIp ? { remoteIp: ctx.remoteIp } : {}),
+        // Cartão EXIGE remoteIp no Asaas; PIX/boleto não usam. Fallback 0.0.0.0
+        // quando x-forwarded-for falta (mesmo critério do clientIp() provado).
+        ...(billingType === "CREDIT_CARD" ? { remoteIp: ctx.remoteIp ?? "0.0.0.0" } : {}),
       },
       apiKey,
     )
