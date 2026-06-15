@@ -69,6 +69,23 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
     )
   }
 
+  // Defesa em profundidade: o proxy já reescreve vitrines não-ativas para
+  // /loja/suspended, e as APIs de checkout recusam a venda (TENANT_INACTIVE).
+  // Mesmo assim bloqueamos a renderização do formulário aqui — caso o aluno
+  // chegue por link direto com cache de tenant defasado.
+  if (tenant.status !== "ACTIVE") {
+    return (
+      <div className="mx-auto max-w-3xl px-4 py-24 text-center">
+        <h1 className="text-2xl font-bold text-[var(--color-pmb-green-900)]">
+          Loja indisponível
+        </h1>
+        <p className="mt-3 text-sm text-gray-600">
+          Esta loja não está disponível para compras no momento.
+        </p>
+      </div>
+    )
+  }
+
   if (!course_id) {
     return (
       <div className="mx-auto max-w-3xl px-4 py-24 text-center">

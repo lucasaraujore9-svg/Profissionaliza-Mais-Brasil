@@ -269,12 +269,26 @@ export default async function proxy(request: NextRequest) {
     })
   }
 
-  const cachedTenant = await resolveTenantFromRedis(tenantSlug)
-  if (cachedTenant && cachedTenant.status !== "ACTIVE") {
+  // Resolve o status do tenant. Preferimos o cache (Edge), mas em cache-miss
+  // caimos no banco — caso contrario uma vitrine PENDING (sem 1o pagamento) ou
+  // SUSPENDED (inadimplente) que ainda nao esta no cache venderia normalmente.
+  let resolvedTenant = await resolveTenantFromRedis(tenantSlug)
+  if (!resolvedTenant) {
+    const dbTenant = await resolveTenantFromDB(tenantSlug, "slug", origin)
+    if (dbTenant) {
+      resolvedTenant = { id: dbTenant.id, status: dbTenant.status }
+    }
+  }
+
+  // Qualquer estado != ACTIVE (PENDING, SUSPENDED, CANCELLED) bloqueia a venda.
+  // A pagina /loja/suspended diferencia a mensagem pelo status (e 404 p/ CANCELLED).
+  if (resolvedTenant && resolvedTenant.status !== "ACTIVE") {
     const url = request.nextUrl.clone()
     url.pathname = "/loja/suspended"
+    const blockedHeaders = new Headers(sanitizedHeaders)
+    blockedHeaders.set("x-tenant-slug", tenantSlug)
     return NextResponse.rewrite(url, {
-      request: { headers: sanitizedHeaders },
+      request: { headers: blockedHeaders },
     })
   }
 
@@ -283,8 +297,8 @@ export default async function proxy(request: NextRequest) {
 
   const requestHeaders = new Headers(sanitizedHeaders)
   requestHeaders.set("x-tenant-slug", tenantSlug)
-  if (cachedTenant) {
-    requestHeaders.set("x-tenant-id", cachedTenant.id)
+  if (resolvedTenant) {
+    requestHeaders.set("x-tenant-id", resolvedTenant.id)
   }
 
   return NextResponse.rewrite(url, {
