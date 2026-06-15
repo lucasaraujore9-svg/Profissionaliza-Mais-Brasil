@@ -1,5 +1,6 @@
 import Image from "next/image"
 import { Tag, GraduationCap } from "lucide-react"
+import { shouldUnoptimizeImage } from "@/lib/images"
 
 export interface OrderSummaryProps {
   courseName: string
@@ -62,6 +63,7 @@ export function OrderSummary({
               fill
               sizes="80px"
               className="object-cover"
+              unoptimized={shouldUnoptimizeImage(courseImageUrl)}
             />
           </div>
         ) : (

@@ -1,5 +1,6 @@
 import Image from "next/image"
 import Link from "next/link"
+import { shouldUnoptimizeImage } from "@/lib/images"
 import {
   ArrowLeft,
   Award,
@@ -139,6 +140,7 @@ export function CourseDetailView({
               priority
               sizes="100vw"
               className="absolute inset-0 object-cover opacity-25"
+              unoptimized={shouldUnoptimizeImage(course.imageUrl)}
             />
             <div
               aria-hidden
@@ -215,6 +217,7 @@ export function CourseDetailView({
                   priority
                   sizes="(min-width: 1024px) 40vw, 100vw"
                   className="object-cover"
+                  unoptimized={shouldUnoptimizeImage(course.imageUrl)}
                 />
               </div>
             )}
@@ -392,6 +395,7 @@ export function CourseDetailView({
                     fill
                     sizes="(min-width: 1024px) 360px, 100vw"
                     className="object-cover"
+                    unoptimized={shouldUnoptimizeImage(course.imageUrl)}
                   />
                 </div>
               )}

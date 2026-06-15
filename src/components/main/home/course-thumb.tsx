@@ -1,4 +1,5 @@
 import Image from "next/image"
+import { shouldUnoptimizeImage } from "@/lib/images"
 import {
   Scissors,
   Heart,
@@ -76,6 +77,7 @@ export function CourseThumb({
           fill
           sizes="(min-width: 1024px) 25vw, (min-width: 640px) 33vw, 50vw"
           className="object-cover"
+          unoptimized={shouldUnoptimizeImage(imageUrl)}
         />
         {hours && (
           <div className="absolute bottom-2 right-3 rounded-md bg-black/55 px-2 py-0.5 text-[10px] font-bold text-white backdrop-blur-sm">
