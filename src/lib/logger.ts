@@ -62,6 +62,8 @@ const REDACT_PATHS = [
   "*.mpAccessToken",
   "asaasApiKey",
   "*.asaasApiKey",
+  "asaasWebhookToken",
+  "*.asaasWebhookToken",
   "encryptionKey",
   "secret",
   "*.secret",

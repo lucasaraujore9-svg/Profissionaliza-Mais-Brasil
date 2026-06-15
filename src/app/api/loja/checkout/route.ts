@@ -137,6 +137,11 @@ export const POST = withRequestContext(
           monthlyAllowed: true,
           monthlyEnabled: true,
           monthlyScope: true,
+          // Gateway de vendas da unidade (MP padrão | ASAAS quando liberado+conectado).
+          salesGateway: true,
+          asaasGatewayEnabled: true,
+          asaasConnected: true,
+          asaasWebhookToken: true,
         },
       }),
       prisma.tenantCourse.findFirst({
@@ -180,7 +185,17 @@ export const POST = withRequestContext(
       )
     }
 
-    if (!tenant.mpAccessToken || !tenant.mpPublicKey) {
+    // Gateway efetivo da unidade: ASAAS só quando o Admin Master liberou, a
+    // unidade conectou a conta (api key + token do webhook) E marcou Asaas como
+    // ativo. Qualquer brecha cai no MP (padrão).
+    const useAsaas =
+      tenant.salesGateway === "ASAAS" &&
+      tenant.asaasGatewayEnabled &&
+      tenant.asaasConnected &&
+      !!tenant.asaasWebhookToken
+    const gateway: "MP" | "ASAAS" = useAsaas ? "ASAAS" : "MP"
+
+    if (!useAsaas && (!tenant.mpAccessToken || !tenant.mpPublicKey)) {
       // Checkout transparente monta o formulário de cartão no browser com a
       // public key da conta MP do revendedor — sem ela, não há como tokenizar.
       return NextResponse.json(
@@ -329,6 +344,7 @@ export const POST = withRequestContext(
         data: {
           enrollmentId: existingEnrollment.id,
           mode: isMonthlyReuse ? "subscription" : "one_time",
+          gateway,
           amount: reusedAmount,
           publicKey: tenant.mpPublicKey,
           payerEmail: student.email ?? data.email,
@@ -363,7 +379,7 @@ export const POST = withRequestContext(
         courseId: tenantCourse.courseId,
         paymentType: effectiveType,
         status: "PENDING",
-        gateway: "MP",
+        gateway,
         originalAmount: basePrice,
         discountAmount,
         finalAmount,
@@ -412,6 +428,7 @@ export const POST = withRequestContext(
       data: {
         enrollmentId: enrollment.id,
         mode: isMonthly ? "subscription" : "one_time",
+        gateway,
         amount: finalAmount,
         publicKey: tenant.mpPublicKey,
         payerEmail: student.email ?? data.email,

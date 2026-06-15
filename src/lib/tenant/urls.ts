@@ -58,8 +58,13 @@ export function mpWebhookUrl(slug?: string | null): string {
   return slug ? `${base}?tenant=${slug}` : base
 }
 
-// URL de notificacao do Asaas (gateway da vitrine PMB e mensalidades dos
-// revendedores). Mesmo host canonico do MP — evita o 307 do apex.
-export function asaasWebhookUrl(): string {
-  return `${webhookBaseUrl()}/api/webhooks/asaas`
+// URL de notificacao do Asaas. `slug` define o tenant na query (mesma estrategia
+// do MP): null/omitido = conta Asaas da PMB (mensalidades dos revendedores +
+// vitrine PMB, validada pela env ASAAS_WEBHOOK_TOKEN). Com slug = conta Asaas
+// PROPRIA da unidade `slug` (vendas dos cursos), validada pelo token por-tenant.
+// E exatamente a URL que a unidade cola no painel Asaas dela (Webhooks). Mesmo
+// host canonico do MP — evita o 307 do apex que dropa a entrega.
+export function asaasWebhookUrl(slug?: string | null): string {
+  const base = `${webhookBaseUrl()}/api/webhooks/asaas`
+  return slug ? `${base}?tenant=${slug}` : base
 }

@@ -320,6 +320,10 @@ export const GET = withRequestContextParams<{ id: string }>(
         monthlyAllowed: tenant.monthlyAllowed,
         monthlyEnabled: tenant.monthlyEnabled,
         monthlyScope: tenant.monthlyScope,
+        // Gateway Asaas da unidade (capability + estado de conexao)
+        asaasGatewayEnabled: tenant.asaasGatewayEnabled,
+        asaasConnected: tenant.asaasConnected,
+        salesGateway: tenant.salesGateway,
       },
       referrer: tenant.referrer
         ? {

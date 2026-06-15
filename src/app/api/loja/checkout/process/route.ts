@@ -6,14 +6,21 @@ import {
   processTransparentMpPayment,
   transparentFormDataSchema,
 } from "@/lib/mercadopago/transparent-process"
+import { decryptTenantAsaasKey } from "@/lib/asaas/client"
+import {
+  processTransparentAsaasPayment,
+  asaasFormDataSchema,
+} from "@/lib/asaas/transparent-process"
 import { rateLimit, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
 import { contextLogger } from "@/lib/logger"
 import { withRequestContext } from "@/lib/observability/with-request-context"
-import { mpWebhookUrl, vitrineUrl } from "@/lib/tenant/urls"
+import { mpWebhookUrl, asaasWebhookUrl, vitrineUrl } from "@/lib/tenant/urls"
 
+// O formData varia por gateway (MP tokeniza no browser; Asaas envia o cartão ao
+// servidor). Aceitamos os dois shapes e ramificamos pelo enrollment.gateway.
 const bodySchema = z.object({
   enrollmentId: z.string().min(1),
-  formData: transparentFormDataSchema,
+  formData: z.union([transparentFormDataSchema, asaasFormDataSchema]),
 })
 
 export const POST = withRequestContext(
@@ -53,12 +60,14 @@ export const POST = withRequestContext(
           id: true,
           status: true,
           tenantId: true,
+          gateway: true,
           paymentType: true,
           finalAmount: true,
           installmentsTotal: true,
           externalReference: true,
+          asaasCustomerId: true,
           course: { select: { nome: true } },
-          student: { select: { nome: true, email: true, cpf: true } },
+          student: { select: { nome: true, email: true, cpf: true, fone: true } },
           tenant: {
             select: {
               id: true,
@@ -67,6 +76,10 @@ export const POST = withRequestContext(
               status: true,
               mpAccessToken: true,
               plataformaVendedorId: true,
+              asaasApiKey: true,
+              asaasWebhookToken: true,
+              asaasGatewayEnabled: true,
+              asaasConnected: true,
             },
           },
         },
@@ -102,7 +115,7 @@ export const POST = withRequestContext(
       }
 
       const tenant = enrollment.tenant
-      if (tenant.status !== "ACTIVE" || !tenant.mpAccessToken) {
+      if (tenant.status !== "ACTIVE") {
         return NextResponse.json(
           { error: "Loja indisponível para pagamento", code: "TENANT_INACTIVE" },
           { status: 403 },
@@ -116,6 +129,86 @@ export const POST = withRequestContext(
         ? `${protocol}://${reqHost}`
         : vitrineUrl(tenantSlug ?? tenant.slug)
 
+      // ── Asaas: conta própria da unidade (cartão vai ao servidor) ────────────
+      if (enrollment.gateway === "ASAAS") {
+        if (
+          !tenant.asaasGatewayEnabled ||
+          !tenant.asaasConnected ||
+          !tenant.asaasApiKey
+        ) {
+          return NextResponse.json(
+            { error: "Loja indisponível para pagamento", code: "TENANT_INACTIVE" },
+            { status: 403 },
+          )
+        }
+        const asaasParsed = asaasFormDataSchema.safeParse(formData)
+        if (!asaasParsed.success) {
+          return NextResponse.json(
+            { error: "Dados de pagamento inválidos", code: "VALIDATION_ERROR" },
+            { status: 400 },
+          )
+        }
+        // IP do comprador (Asaas exige no cartão). Primeiro IP do x-forwarded-for.
+        const fwd =
+          request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null
+
+        const asaasResult = await processTransparentAsaasPayment(
+          {
+            id: enrollment.id,
+            finalAmount: Number(enrollment.finalAmount),
+            paymentType: enrollment.paymentType,
+            installmentsTotal: enrollment.installmentsTotal,
+            externalReference: enrollment.externalReference ?? `enr_${enrollment.id}`,
+            courseNome: enrollment.course.nome,
+            studentNome: enrollment.student.nome,
+            studentEmail: enrollment.student.email,
+            studentCpf: enrollment.student.cpf,
+            studentFone: enrollment.student.fone,
+            asaasCustomerId: enrollment.asaasCustomerId,
+          },
+          asaasParsed.data,
+          {
+            apiKey: decryptTenantAsaasKey(tenant.asaasApiKey),
+            fulfillTenant: {
+              id: tenant.id,
+              slug: tenant.slug,
+              name: tenant.name,
+              plataformaVendedorId: tenant.plataformaVendedorId,
+            },
+            notificationUrl: asaasWebhookUrl(tenant.slug),
+            remoteIp: fwd,
+          },
+        )
+
+        if (asaasResult.kind === "error") {
+          return NextResponse.json(
+            { error: asaasResult.error, code: asaasResult.code, statusDetail: asaasResult.statusDetail },
+            { status: asaasResult.httpStatus },
+          )
+        }
+        if (asaasResult.kind === "approved") {
+          return NextResponse.json({ data: { status: asaasResult.status } })
+        }
+        return NextResponse.json({
+          data: { status: "pending", pix: asaasResult.pix, boleto: asaasResult.boleto },
+        })
+      }
+
+      // ── Mercado Pago (padrão): cartão tokenizado no browser ─────────────────
+      if (!tenant.mpAccessToken) {
+        return NextResponse.json(
+          { error: "Loja indisponível para pagamento", code: "TENANT_INACTIVE" },
+          { status: 403 },
+        )
+      }
+      const mpParsed = transparentFormDataSchema.safeParse(formData)
+      if (!mpParsed.success) {
+        return NextResponse.json(
+          { error: "Dados de pagamento inválidos", code: "VALIDATION_ERROR" },
+          { status: 400 },
+        )
+      }
+
       const result = await processTransparentMpPayment(
         {
           id: enrollment.id,
@@ -128,7 +221,7 @@ export const POST = withRequestContext(
           studentEmail: enrollment.student.email,
           studentCpf: enrollment.student.cpf,
         },
-        formData,
+        mpParsed.data,
         {
           accessToken: decryptTenantMpToken(tenant.mpAccessToken),
           fulfillTenant: {

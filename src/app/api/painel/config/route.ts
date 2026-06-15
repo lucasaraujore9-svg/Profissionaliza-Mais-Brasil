@@ -3,7 +3,7 @@ import { z } from "zod"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { withRequestContext } from "@/lib/observability/with-request-context"
-import { mpWebhookUrl } from "@/lib/tenant/urls"
+import { mpWebhookUrl, asaasWebhookUrl } from "@/lib/tenant/urls"
 import { forbiddenNameError } from "@/lib/tenant/forbidden-names"
 
 const updateSchema = z.object({
@@ -50,6 +50,12 @@ export const GET = withRequestContext(
         monthlyAllowed: true,
         monthlyEnabled: true,
         monthlyScope: true,
+        // Asaas como gateway de vendas (so aparece no painel quando liberado).
+        // asaasConnected ja indica conexao; nao buscamos a api key (segredo) aqui.
+        asaasGatewayEnabled: true,
+        asaasConnected: true,
+        asaasWebhookToken: true,
+        salesGateway: true,
       },
     })
 
@@ -57,9 +63,14 @@ export const GET = withRequestContext(
       return NextResponse.json({ error: "Recurso não encontrado" }, { status: 404 })
     }
 
-    // Nunca expõe a secret em si — só se está configurada. A public key não é
+    // Nunca expõe segredos em si — só se estão configurados. A public key não é
     // secreta (vai pro client no checkout), mas a UI só precisa do booleano.
-    const { mpWebhookSecret, mpPublicKey, ...tenantSafe } = tenant
+    const {
+      mpWebhookSecret,
+      mpPublicKey,
+      asaasWebhookToken,
+      ...tenantSafe
+    } = tenant
     return NextResponse.json({
       data: {
         user,
@@ -69,6 +80,10 @@ export const GET = withRequestContext(
           mpPublicKeyConfigured: mpPublicKey !== null,
           // URL exata que enviamos ao MP e que a unidade cola no painel MP.
           mpWebhookUrl: mpWebhookUrl(tenant.slug),
+          // Asaas: só os booleanos + a URL de webhook por-tenant (a unidade cola
+          // no painel Asaas dela). A API key e o token nunca chegam ao client.
+          asaasWebhookConfigured: asaasWebhookToken !== null,
+          asaasWebhookUrl: asaasWebhookUrl(tenant.slug),
         },
       },
     })

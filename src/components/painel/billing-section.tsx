@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import type { ConfigData } from "./config-tabs"
+import { AsaasGatewaySection } from "./asaas-gateway-section"
 
 interface BillingSectionProps {
   data: ConfigData
@@ -634,6 +635,12 @@ export function BillingSection({ data, onUpdate }: BillingSectionProps) {
           <p className="mt-3 text-xs text-red-600">{mpError}</p>
         )}
       </div>
+
+      {/* Gateway Asaas — só aparece para unidades que o Admin Master liberou.
+          Quando não liberado, nada é renderizado (nem a seção, nem aviso). */}
+      {data.tenant.asaasGatewayEnabled && (
+        <AsaasGatewaySection data={data} onUpdate={onUpdate} />
+      )}
     </div>
   )
 }

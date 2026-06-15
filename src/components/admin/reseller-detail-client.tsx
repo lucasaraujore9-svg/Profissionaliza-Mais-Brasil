@@ -27,6 +27,7 @@ import {
 } from "./reseller-referral-config"
 import { ResellerTecnicaConfig } from "./reseller-tecnica-config"
 import { ResellerAutomationConfig } from "./reseller-automation-config"
+import { ResellerAsaasGatewayConfig } from "./reseller-asaas-gateway-config"
 import {
   ResellerMonthlyConfig,
   type MonthlyScope,
@@ -59,6 +60,9 @@ interface DetailResponse {
     monthlyAllowed: boolean
     monthlyEnabled: boolean
     monthlyScope: MonthlyScope
+    asaasGatewayEnabled: boolean
+    asaasConnected: boolean
+    salesGateway: "MP" | "ASAAS"
   }
   referrer: ReferrerSummary | null
   referralStats: ReferralStats
@@ -171,6 +175,13 @@ export function ResellerDetailClient({
             monthlyAllowed={data.reseller.monthlyAllowed}
             monthlyEnabled={data.reseller.monthlyEnabled}
             monthlyScope={data.reseller.monthlyScope}
+            onSaved={load}
+          />
+          <ResellerAsaasGatewayConfig
+            tenantId={tenantId}
+            asaasGatewayEnabled={data.reseller.asaasGatewayEnabled}
+            asaasConnected={data.reseller.asaasConnected}
+            salesGateway={data.reseller.salesGateway}
             onSaved={load}
           />
         </div>

@@ -15,6 +15,7 @@ import type {
   AsaasErrorResponse,
 } from "./types"
 import { contextLogger } from "@/lib/logger"
+import { decrypt } from "@/lib/crypto"
 
 const MAX_RETRIES = 3
 const INITIAL_BACKOFF_MS = 500
@@ -30,9 +31,13 @@ export class AsaasApiError extends Error {
   }
 }
 
-function getConfig() {
+function getConfig(apiKeyOverride?: string) {
   const rawUrl = process.env.ASAAS_API_URL
-  const apiKey = process.env.ASAAS_API_KEY
+  // apiKeyOverride: chave da conta Asaas de UMA unidade (revendedor recebendo
+  // dos alunos pela conta dele). Sem override = chave global da PMB (mensalidade
+  // dos revendedores + vitrine PMB). A base URL (prod vs sandbox) e a mesma para
+  // todas as contas — so a chave muda.
+  const apiKey = apiKeyOverride ?? process.env.ASAAS_API_KEY
   if (!rawUrl || !apiKey) {
     throw new Error("ASAAS_API_URL and ASAAS_API_KEY environment variables are required")
   }
@@ -55,8 +60,9 @@ async function request<T>(
   method: string,
   path: string,
   body?: unknown,
+  apiKeyOverride?: string,
 ): Promise<T> {
-  const { apiUrl, apiKey } = getConfig()
+  const { apiUrl, apiKey } = getConfig(apiKeyOverride)
   const url = `${apiUrl}${path}`
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
@@ -136,19 +142,21 @@ function sanitizePhone(value: string | undefined): string | undefined {
 
 export async function createCustomer(
   params: AsaasCreateCustomerParams,
+  apiKey?: string,
 ): Promise<AsaasCustomer> {
   return request<AsaasCustomer>("POST", "/customers", {
     ...params,
     cpfCnpj: sanitizeDoc(params.cpfCnpj),
     phone: sanitizePhone(params.phone),
     mobilePhone: sanitizePhone(params.mobilePhone),
-  })
+  }, apiKey)
 }
 
 export async function getCustomer(
   customerId: string,
+  apiKey?: string,
 ): Promise<AsaasCustomer> {
-  return request<AsaasCustomer>("GET", `/customers/${customerId}`)
+  return request<AsaasCustomer>("GET", `/customers/${customerId}`, undefined, apiKey)
 }
 
 export async function listCustomers(params?: {
@@ -157,7 +165,7 @@ export async function listCustomers(params?: {
   externalReference?: string
   offset?: number
   limit?: number
-}): Promise<AsaasCustomerList> {
+}, apiKey?: string): Promise<AsaasCustomerList> {
   const query = new URLSearchParams()
   if (params) {
     for (const [key, value] of Object.entries(params)) {
@@ -165,18 +173,19 @@ export async function listCustomers(params?: {
     }
   }
   const qs = query.toString()
-  return request<AsaasCustomerList>("GET", `/customers${qs ? `?${qs}` : ""}`)
+  return request<AsaasCustomerList>("GET", `/customers${qs ? `?${qs}` : ""}`, undefined, apiKey)
 }
 
 export async function findOrCreateAsaasCustomer(
   params: AsaasCreateCustomerParams,
+  apiKey?: string,
 ): Promise<{ customer: AsaasCustomer; created: boolean }> {
   const cpfCnpj = sanitizeDoc(params.cpfCnpj)
-  const existing = await listCustomers({ cpfCnpj, limit: 1 })
+  const existing = await listCustomers({ cpfCnpj, limit: 1 }, apiKey)
   if (existing.data.length > 0) {
     return { customer: existing.data[0], created: false }
   }
-  const customer = await createCustomer(params)
+  const customer = await createCustomer(params, apiKey)
   return { customer, created: true }
 }
 
@@ -184,8 +193,9 @@ export async function findOrCreateAsaasCustomer(
 
 export async function createSubscription(
   params: AsaasCreateSubscriptionParams,
+  apiKey?: string,
 ): Promise<AsaasSubscription> {
-  return request<AsaasSubscription>("POST", "/subscriptions", params)
+  return request<AsaasSubscription>("POST", "/subscriptions", params, apiKey)
 }
 
 export async function getSubscription(
@@ -228,14 +238,16 @@ export async function updateSubscription(
 
 export async function createPayment(
   params: AsaasCreatePaymentParams,
+  apiKey?: string,
 ): Promise<AsaasPayment> {
-  return request<AsaasPayment>("POST", "/payments", params)
+  return request<AsaasPayment>("POST", "/payments", params, apiKey)
 }
 
 export async function getPayment(
   paymentId: string,
+  apiKey?: string,
 ): Promise<AsaasPayment> {
-  return request<AsaasPayment>("GET", `/payments/${paymentId}`)
+  return request<AsaasPayment>("GET", `/payments/${paymentId}`, undefined, apiKey)
 }
 
 export async function deletePayment(
@@ -278,12 +290,12 @@ export async function updatePayment(
   return request<AsaasPayment>("PUT", `/payments/${paymentId}`, params)
 }
 
-export async function getBillingInfo(paymentId: string): Promise<AsaasBillingInfo> {
-  return request<AsaasBillingInfo>("GET", `/payments/${paymentId}/billingInfo`)
+export async function getBillingInfo(paymentId: string, apiKey?: string): Promise<AsaasBillingInfo> {
+  return request<AsaasBillingInfo>("GET", `/payments/${paymentId}/billingInfo`, undefined, apiKey)
 }
 
-export async function getPixQrCode(paymentId: string): Promise<AsaasPixQrCode> {
-  return request<AsaasPixQrCode>("GET", `/payments/${paymentId}/pixQrCode`)
+export async function getPixQrCode(paymentId: string, apiKey?: string): Promise<AsaasPixQrCode> {
+  return request<AsaasPixQrCode>("GET", `/payments/${paymentId}/pixQrCode`, undefined, apiKey)
 }
 
 export async function payWithCreditCard(
@@ -328,6 +340,7 @@ export async function listPayments(
     offset?: number
     limit?: number
   },
+  apiKey?: string,
 ): Promise<AsaasPaymentList> {
   const query = new URLSearchParams()
   if (params) {
@@ -336,5 +349,14 @@ export async function listPayments(
     }
   }
   const qs = query.toString()
-  return request<AsaasPaymentList>("GET", `/payments${qs ? `?${qs}` : ""}`)
+  return request<AsaasPaymentList>("GET", `/payments${qs ? `?${qs}` : ""}`, undefined, apiKey)
+}
+
+/**
+ * Descriptografa a API key Asaas de uma unidade (revendedor). Espelha
+ * `decryptTenantMpToken` do client do MP. Server-side only. NUNCA armazene a
+ * chave em claro: `decrypt()` lanca se o valor nao passou por `encrypt()`.
+ */
+export function decryptTenantAsaasKey(encrypted: string): string {
+  return decrypt(encrypted)
 }

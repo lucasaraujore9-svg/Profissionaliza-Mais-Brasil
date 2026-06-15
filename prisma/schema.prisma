@@ -245,6 +245,28 @@ model Tenant {
   // cada uma tem a sua. Criptografada AES-256. A vitrine PMB usa MP_WEBHOOK_SECRET.
   mpWebhookSecret String? @map("mp_webhook_secret")
 
+  // Integracao Asaas COMO GATEWAY DE VENDAS da unidade (vendas dos cursos aos
+  // alunos via conta Asaas PROPRIA do revendedor). NAO confundir com os campos
+  // asaas* acima (asaasCustomerId/asaasSubscriptionId) — aqueles sao a unidade
+  // pagando a mensalidade dela PARA a PMB; estes sao a unidade RECEBENDO dos
+  // alunos pela conta Asaas dela. Espelha o par mpAccessToken/mpWebhookSecret.
+  //
+  // asaasGatewayEnabled: capability liberada pelo Admin Master (default OFF). Sem
+  //   ela, a config do Asaas nem aparece no painel da unidade (so quem ativou ve).
+  // asaasApiKey: API key da conta Asaas da unidade (header access_token), AES-256.
+  // asaasWebhookToken: token de auth do webhook que a unidade configura no painel
+  //   Asaas dela e cola aqui — usado para validar os webhooks daquela conta. AES-256.
+  // asaasConnected: a unidade ja informou a API key (espelha mpConnected).
+  asaasGatewayEnabled Boolean @default(false) @map("asaas_gateway_enabled")
+  asaasApiKey         String? @map("asaas_api_key") // Criptografado AES-256
+  asaasWebhookToken   String? @map("asaas_webhook_token") // Criptografado AES-256
+  asaasConnected      Boolean @default(false) @map("asaas_connected")
+
+  // Gateway ATIVO da vitrine da unidade. Uma venda por vez vai por um gateway.
+  // MP (padrao) ou ASAAS (so escolhivel quando asaasGatewayEnabled + asaasConnected).
+  // Lido em /api/loja/checkout para definir Enrollment.gateway.
+  salesGateway PaymentGateway @default(MP) @map("sales_gateway")
+
   // Integracao com a plataforma de aulas
   plataformaVendedorId    String? @map("ea_vendedor_id") // ID do funcionario criado na plataforma
   plataformaVendedorLogin String? @map("ea_vendedor_login") // Login retornado pelo funcionarios/novo

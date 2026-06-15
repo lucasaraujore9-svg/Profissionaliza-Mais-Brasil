@@ -57,6 +57,12 @@ export interface AsaasCreatePaymentParams {
   description?: string
   externalReference?: string
   notificationUrl?: string
+  // Checkout transparente no cartao: quando billingType=CREDIT_CARD, o Asaas
+  // captura o cartao na mesma chamada (POST /payments). remoteIp e o IP do
+  // COMPRADOR (nao do servidor) — obrigatorio para analise de risco.
+  creditCard?: AsaasCreditCard
+  creditCardHolderInfo?: AsaasCreditCardHolderInfo
+  remoteIp?: string
 }
 
 // ── Subscription ──
@@ -71,6 +77,11 @@ export interface AsaasCreateSubscriptionParams {
   endDate?: string // YYYY-MM-DD — fim da subscription (Asaas para cobranças após)
   maxPayments?: number // número exato de cobranças; preferido sobre endDate
   notificationUrl?: string
+  // Assinatura no cartao (checkout transparente): tokeniza o cartao e cobra a
+  // 1a parcela na criacao. As demais sao recorrentes no mesmo cartao.
+  creditCard?: AsaasCreditCard
+  creditCardHolderInfo?: AsaasCreditCardHolderInfo
+  remoteIp?: string
 }
 
 export interface AsaasSubscription {

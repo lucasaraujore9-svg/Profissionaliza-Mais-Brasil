@@ -1,6 +1,7 @@
 import Link from "next/link"
 import { OrderSummary } from "@/components/loja/order-summary"
 import { MpCheckoutForm } from "@/components/loja/mp-checkout-form"
+import { AsaasCheckoutForm } from "@/components/loja/asaas-checkout-form"
 import { getCurrentTenant } from "@/lib/tenant/current"
 import { applyCouponDiscount } from "@/lib/coupons/discount"
 import { prisma } from "@/lib/prisma"
@@ -144,12 +145,28 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
     )
   }
 
-  // Public key do MP do revendedor — necessária para montar o checkout
-  // transparente no browser. getCurrentTenant não a traz, então buscamos aqui.
-  const tenantMp = await prisma.tenant.findUnique({
+  // Gateway de vendas da unidade + credenciais públicas necessárias para montar
+  // o checkout. getCurrentTenant não as traz, então buscamos aqui.
+  const tenantGateway = await prisma.tenant.findUnique({
     where: { id: tenant.id },
-    select: { mpPublicKey: true },
+    select: {
+      mpPublicKey: true,
+      salesGateway: true,
+      asaasGatewayEnabled: true,
+      asaasConnected: true,
+    },
   })
+
+  // Asaas só é o gateway ativo quando liberado pelo Admin Master, conectado pela
+  // unidade e marcado como ativo. Não buscamos o asaas_webhook_token (segredo)
+  // neste server component público: marcar salesGateway=ASAAS já exige api key +
+  // token (rota sales-gateway), e desconectar/revogar reverte para MP — então
+  // salesGateway==="ASAAS" implica o token presente. A trinca completa (com o
+  // token) é revalidada server-side em /api/loja/checkout antes de cobrar.
+  const useAsaas =
+    tenantGateway?.salesGateway === "ASAAS" &&
+    tenantGateway.asaasGatewayEnabled &&
+    tenantGateway.asaasConnected
 
   const basePrice = Number(tenantCourse.price)
   // Tipo efetivo na vitrine: se a unidade nao tem parcelado habilitado para a
@@ -191,9 +208,14 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_380px] lg:gap-8">
           <div className="space-y-6">
-            {tenantMp?.mpPublicKey ? (
+            {useAsaas ? (
+              <AsaasCheckoutForm
+                courseId={tenantCourse.id}
+                couponCode={validatedCoupon?.code ?? null}
+              />
+            ) : tenantGateway?.mpPublicKey ? (
               <MpCheckoutForm
-                publicKey={tenantMp.mpPublicKey}
+                publicKey={tenantGateway.mpPublicKey}
                 courseId={tenantCourse.id}
                 couponCode={validatedCoupon?.code ?? null}
               />

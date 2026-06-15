@@ -4,6 +4,7 @@ import { decryptTenantMpToken, getPayment, searchPayments } from "./client"
 import {
   getPayment as getAsaasPayment,
   listPayments as listAsaasPayments,
+  decryptTenantAsaasKey,
 } from "@/lib/asaas/client"
 import { validateMpWebhookSignature } from "./webhook"
 import type { MPPayment } from "./types"
@@ -431,20 +432,36 @@ export async function reconcilePendingEnrollment(
   }
 
   // ── Asaas ──────────────────────────────────────────────────────────────
-  // Key global; vendas via Asaas são da vitrine PMB (tenantId=null). Buscamos
-  // pelo paymentId direto ou pela 1ª cobrança da assinatura.
+  // A conta Asaas depende do DONO do gateway: vitrine PMB (tenantId=null) usa a
+  // chave global; venda de revenda usa a conta PRÓPRIA da unidade. Ids do Asaas
+  // sao por-conta — consultar a venda da revenda com a chave global devolve 404
+  // e mata este backstop. Buscamos pelo paymentId direto ou pela 1ª cobranca da
+  // assinatura (cobre o mensal da revenda, que so efetiva via webhook).
   if (enrollment.gateway === "ASAAS") {
-    const ctx =
-      enrollment.tenantId === null
-        ? {
-            id: "__pmb__",
-            slug: pmbPlataformaPolo(),
-            name: "Profissionaliza Mais Brasil",
-            plataformaVendedorId: pmbPlataformaVendedorId(),
-            isPmbVitrine: true as const,
-          }
-        : await resolveTenantById(enrollment.tenantId)
+    const isPmb = enrollment.tenantId === null
+    const ctx = isPmb
+      ? {
+          id: "__pmb__",
+          slug: pmbPlataformaPolo(),
+          name: "Profissionaliza Mais Brasil",
+          plataformaVendedorId: pmbPlataformaVendedorId(),
+          isPmbVitrine: true as const,
+        }
+      : await resolveTenantById(enrollment.tenantId!)
     if (!ctx) return { status: "unsupported" }
+
+    // Chave da conta Asaas a usar nas consultas: undefined = global PMB; para
+    // revenda, descriptografa a chave da unidade. Sem chave conectada não há
+    // como reconciliar — pede para aguardar (o webhook ainda pode chegar).
+    let asaasApiKey: string | undefined
+    if (!isPmb) {
+      const merchant = await prisma.tenant.findUnique({
+        where: { id: enrollment.tenantId! },
+        select: { asaasApiKey: true },
+      })
+      if (!merchant?.asaasApiKey) return { status: "pending" }
+      asaasApiKey = decryptTenantAsaasKey(merchant.asaasApiKey)
+    }
 
     let asaasPaymentId = enrollment.asaasPaymentId
     let asaasStatus: string | null = null
@@ -452,7 +469,7 @@ export async function reconcilePendingEnrollment(
     let asaasPaymentDate: string | null = null
 
     if (asaasPaymentId) {
-      const payment = await getAsaasPayment(asaasPaymentId)
+      const payment = await getAsaasPayment(asaasPaymentId, asaasApiKey)
       asaasStatus = payment.status
       asaasValue = payment.value
       asaasPaymentDate = payment.paymentDate ?? null
@@ -461,7 +478,7 @@ export async function reconcilePendingEnrollment(
         subscription: enrollment.asaasSubscriptionId,
         limit: 1,
         offset: 0,
-      })
+      }, asaasApiKey)
       const first = list.data?.[0]
       if (first) {
         asaasPaymentId = first.id
