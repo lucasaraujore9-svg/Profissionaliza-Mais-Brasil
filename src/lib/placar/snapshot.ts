@@ -9,6 +9,12 @@ import { TenantStatus } from "@prisma/client"
 // Tenant placeholder da vitrine PMB (vendas diretas) — nunca conta como revenda.
 const PMB_SLUG = "__pmb__"
 
+// Revendas que CONTAM para o placar: exclui a unidade PMB (propria) e revendas
+// gratuitas/cortesia. "Gratuita" == planValue 0 — nasce ACTIVE sem cobranca no
+// Asaas (e uma revenda paga convertida em gratis tambem fica com planValue 0),
+// entao `gt: 0` cobre os dois casos. Ver src/app/api/admin/revendedores.
+const COUNTABLE = { slug: { not: PMB_SLUG }, planValue: { gt: 0 } } as const
+
 // Meta de revendas ATIVAS do lancamento. Configuravel via env sem deploy.
 export const PLACAR_META = Number(process.env.PLACAR_META ?? 100)
 
@@ -57,19 +63,18 @@ export async function getActiveTenants(): Promise<
   { id: string; name: string }[]
 > {
   return prisma.tenant.findMany({
-    where: { status: TenantStatus.ACTIVE, slug: { not: PMB_SLUG } },
+    where: { ...COUNTABLE, status: TenantStatus.ACTIVE },
     select: { id: true, name: true },
   })
 }
 
 export async function getPlacarSnapshot(): Promise<PlacarSnapshot> {
-  const baseWhere = { slug: { not: PMB_SLUG } }
   const start = startOfTodayBR()
 
   const [grouped, paidToday, recentes] = await Promise.all([
     prisma.tenant.groupBy({
       by: ["status"],
-      where: baseWhere,
+      where: COUNTABLE,
       _count: { _all: true },
     }),
     // Revendas com pagamento efetivamente recebido hoje (vendas do dia).
@@ -82,7 +87,7 @@ export async function getPlacarSnapshot(): Promise<PlacarSnapshot> {
       distinct: ["tenantId"],
     }),
     prisma.tenant.findMany({
-      where: { status: TenantStatus.ACTIVE, slug: { not: PMB_SLUG } },
+      where: { ...COUNTABLE, status: TenantStatus.ACTIVE },
       select: { name: true },
       orderBy: { createdAt: "desc" },
       take: 12,
