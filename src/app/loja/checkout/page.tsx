@@ -2,10 +2,12 @@ import Link from "next/link"
 import { OrderSummary } from "@/components/loja/order-summary"
 import { MpCheckoutForm } from "@/components/loja/mp-checkout-form"
 import { AsaasCheckoutForm } from "@/components/loja/asaas-checkout-form"
+import { CheckoutInquiryForm } from "@/components/loja/checkout-inquiry-form"
 import { getCurrentTenant } from "@/lib/tenant/current"
 import { applyCouponDiscount } from "@/lib/coupons/discount"
 import { prisma } from "@/lib/prisma"
 import { effectivePaymentType } from "@/lib/tenant/monthly-policy"
+import { tenantCheckoutMode } from "@/lib/tenant/checkout-mode"
 
 interface CheckoutPageProps {
   searchParams: Promise<{
@@ -150,6 +152,7 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
   const tenantGateway = await prisma.tenant.findUnique({
     where: { id: tenant.id },
     select: {
+      mpAccessToken: true,
       mpPublicKey: true,
       salesGateway: true,
       asaasGatewayEnabled: true,
@@ -157,16 +160,19 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
     },
   })
 
-  // Asaas só é o gateway ativo quando liberado pelo Admin Master, conectado pela
-  // unidade e marcado como ativo. Não buscamos o asaas_webhook_token (segredo)
-  // neste server component público: marcar salesGateway=ASAAS já exige api key +
-  // token (rota sales-gateway), e desconectar/revogar reverte para MP — então
-  // salesGateway==="ASAAS" implica o token presente. A trinca completa (com o
-  // token) é revalidada server-side em /api/loja/checkout antes de cobrar.
-  const useAsaas =
-    tenantGateway?.salesGateway === "ASAAS" &&
-    tenantGateway.asaasGatewayEnabled &&
-    tenantGateway.asaasConnected
+  // Gateway efetivo da unidade via helper central (mesma regra do
+  // /api/loja/checkout). MP | ASAAS | NONE. Não buscamos o asaas_webhook_token
+  // (segredo) neste server component público: marcar salesGateway=ASAAS já exige
+  // api key + token (rota sales-gateway), e desconectar/revogar reverte para MP —
+  // então salesGateway==="ASAAS" implica o token presente. A checagem
+  // autoritativa (com o token) acontece em /api/loja/checkout antes de cobrar.
+  const checkoutMode = tenantCheckoutMode({
+    salesGateway: tenantGateway?.salesGateway,
+    asaasGatewayEnabled: tenantGateway?.asaasGatewayEnabled,
+    asaasConnected: tenantGateway?.asaasConnected,
+    mpAccessToken: tenantGateway?.mpAccessToken,
+    mpPublicKey: tenantGateway?.mpPublicKey,
+  })
 
   const basePrice = Number(tenantCourse.price)
   // Tipo efetivo na vitrine: se a unidade nao tem parcelado habilitado para a
@@ -194,10 +200,12 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
       <div className="mx-auto max-w-6xl px-4 md:px-6">
         <header className="mb-8">
           <h1 className="text-2xl font-bold tracking-tight text-[var(--color-pmb-green-900)] md:text-3xl">
-            Finalizar compra
+            {checkoutMode === "NONE" ? "Tenho interesse" : "Finalizar compra"}
           </h1>
           <p className="mt-1 text-sm text-gray-600">
-            Preencha seus dados e escolha a forma de pagamento.
+            {checkoutMode === "NONE"
+              ? "Deixe seus dados que a escola entra em contato para concluir sua matrícula."
+              : "Preencha seus dados e escolha a forma de pagamento."}
           </p>
           {error === "payment_failed" && (
             <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
@@ -208,22 +216,25 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_380px] lg:gap-8">
           <div className="space-y-6">
-            {useAsaas ? (
+            {checkoutMode === "ASAAS" ? (
               <AsaasCheckoutForm
                 courseId={tenantCourse.id}
                 couponCode={validatedCoupon?.code ?? null}
               />
-            ) : tenantGateway?.mpPublicKey ? (
+            ) : checkoutMode === "MP" && tenantGateway?.mpPublicKey ? (
               <MpCheckoutForm
                 publicKey={tenantGateway.mpPublicKey}
                 courseId={tenantCourse.id}
                 couponCode={validatedCoupon?.code ?? null}
               />
             ) : (
-              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-sm text-amber-800">
-                Esta loja ainda não concluiu a configuração do pagamento. Tente
-                novamente em instantes ou fale com o suporte da loja.
-              </div>
+              // Unidade sem gateway próprio configurado: NUNCA cai no checkout do
+              // sistema mãe. Captura o interesse (e-mail p/ a revenda + lead).
+              <CheckoutInquiryForm
+                courseId={tenantCourse.id}
+                courseName={tenantCourse.course.nome}
+                escolaName={tenant.name}
+              />
             )}
           </div>
 

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation"
 import { prisma } from "@/lib/prisma"
 import { getCurrentTenant } from "@/lib/tenant/current"
 import { getTenantCourseBySlug } from "@/lib/tenant/courses"
+import { tenantCheckoutMode } from "@/lib/tenant/checkout-mode"
 import {
   CourseDetailView,
   type CourseDetailData,
@@ -50,14 +51,6 @@ export async function generateMetadata({
   }
 }
 
-function whatsappLink(whatsapp: string, courseName: string): string {
-  const digits = whatsapp.replace(/\D/g, "")
-  const text = encodeURIComponent(
-    `Olá! Tenho interesse no curso "${courseName}".`,
-  )
-  return `https://wa.me/${digits}?text=${text}`
-}
-
 export default async function CoursePage({ params }: CoursePageProps) {
   const tenant = await getCurrentTenant()
   const { slug } = await params
@@ -79,14 +72,25 @@ export default async function CoursePage({ params }: CoursePageProps) {
   const course = await getTenantCourseBySlug(tenant.id, slug)
   if (!course) notFound()
 
-  // Sem MP configurado, o checkout não consegue gerar a preferência.
-  // Cai no fluxo de lead (WhatsApp do revendedor) com mensagem pré-preenchida.
+  // Gateway efetivo da unidade (MP | ASAAS | NONE) via helper central — antes
+  // checava só mpAccessToken, o que quebrava revendas que usam SÓ Asaas.
   const tenantPayment = await prisma.tenant.findUnique({
     where: { id: tenant.id },
-    select: { mpAccessToken: true, whatsapp: true },
+    select: {
+      mpAccessToken: true,
+      mpPublicKey: true,
+      salesGateway: true,
+      asaasGatewayEnabled: true,
+      asaasConnected: true,
+    },
   })
-  const canCheckout = Boolean(tenantPayment?.mpAccessToken)
-  const whatsapp = tenantPayment?.whatsapp ?? null
+  const checkoutMode = tenantCheckoutMode({
+    salesGateway: tenantPayment?.salesGateway,
+    asaasGatewayEnabled: tenantPayment?.asaasGatewayEnabled,
+    asaasConnected: tenantPayment?.asaasConnected,
+    mpAccessToken: tenantPayment?.mpAccessToken,
+    mpPublicKey: tenantPayment?.mpPublicKey,
+  })
 
   const data: CourseDetailData = {
     slug: course.slug,
@@ -104,12 +108,11 @@ export default async function CoursePage({ params }: CoursePageProps) {
     lessons: course.lessons,
   }
 
-  const ctaHref = canCheckout
-    ? `/checkout?course_id=${course.tenantCourseId}`
-    : whatsapp
-      ? whatsappLink(whatsapp, course.nome)
-      : "#"
-  const ctaLabel = canCheckout ? "Comprar agora" : "Quero me matricular"
+  // CTA sempre aponta para o checkout DA VITRINE. Quando a unidade não tem
+  // gateway próprio (NONE), a página de checkout exibe o formulário de contato
+  // (e-mail p/ a revenda + lead) — nunca o checkout do sistema mãe.
+  const ctaHref = `/checkout?course_id=${course.tenantCourseId}`
+  const ctaLabel = checkoutMode === "NONE" ? "Quero me matricular" : "Comprar agora"
 
   const inquirySlot = tenant.automationEnabled ? (
     <LeadInquiryCard

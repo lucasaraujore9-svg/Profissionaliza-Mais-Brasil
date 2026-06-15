@@ -14,6 +14,7 @@ import { readVisitorId } from "@/lib/automation/tracking"
 import { isValidCpf, stripCpf } from "@/lib/validation/cpf"
 import { isValidPhone, normalizePhone } from "@/lib/validation/phone"
 import { effectivePaymentType } from "@/lib/tenant/monthly-policy"
+import { tenantCheckoutMode } from "@/lib/tenant/checkout-mode"
 
 const bodySchema = z.object({
   courseId: z.string().min(1),
@@ -185,27 +186,42 @@ export const POST = withRequestContext(
       )
     }
 
-    // Gateway efetivo da unidade: ASAAS só quando o Admin Master liberou, a
-    // unidade conectou a conta (api key + token do webhook) E marcou Asaas como
-    // ativo. Qualquer brecha cai no MP (padrão).
-    const useAsaas =
-      tenant.salesGateway === "ASAAS" &&
-      tenant.asaasGatewayEnabled &&
-      tenant.asaasConnected &&
-      !!tenant.asaasWebhookToken
-    const gateway: "MP" | "ASAAS" = useAsaas ? "ASAAS" : "MP"
+    // Gateway efetivo da unidade via helper central (mesma regra das páginas
+    // de vitrine): MP | ASAAS | NONE. Toda venda usa SEMPRE o gateway da própria
+    // revenda — jamais o do sistema mãe.
+    const mode = tenantCheckoutMode({
+      salesGateway: tenant.salesGateway,
+      asaasGatewayEnabled: tenant.asaasGatewayEnabled,
+      asaasConnected: tenant.asaasConnected,
+      mpAccessToken: tenant.mpAccessToken,
+      mpPublicKey: tenant.mpPublicKey,
+    })
 
-    if (!useAsaas && (!tenant.mpAccessToken || !tenant.mpPublicKey)) {
-      // Checkout transparente monta o formulário de cartão no browser com a
-      // public key da conta MP do revendedor — sem ela, não há como tokenizar.
+    // Asaas precisa do token do webhook p/ validar o callback antes de cobrar.
+    // O helper usa o invariante salesGateway===ASAAS ⇒ token presente; aqui
+    // confirmamos de forma autoritativa.
+    if (mode === "ASAAS" && !tenant.asaasWebhookToken) {
+      return NextResponse.json(
+        { error: "Gateway Asaas incompleto", code: "ASAAS_NOT_CONFIGURED" },
+        { status: 503 },
+      )
+    }
+
+    // Sem gateway próprio: a vitrine exibe o formulário de contato (e-mail p/ a
+    // revenda + lead) em vez de cobrar. Não há cobrança possível aqui. 503
+    // (serviço indisponível por configuração) — mesma semântica do antigo
+    // MP_NOT_CONFIGURED.
+    if (mode === "NONE") {
       return NextResponse.json(
         {
           error: "Loja ainda não configurou o pagamento",
-          code: "MP_NOT_CONFIGURED",
+          code: "CHECKOUT_UNAVAILABLE",
         },
         { status: 503 },
       )
     }
+
+    const gateway: "MP" | "ASAAS" = mode
 
     const basePrice = Number(tenantCourse.price)
 

@@ -43,6 +43,10 @@ import {
   AccountCredentialsTemplate,
   type AccountCredentialsTemplateProps,
 } from "./templates/account-credentials"
+import {
+  ResellerLeadNotificationTemplate,
+  type ResellerLeadNotificationTemplateProps,
+} from "./templates/reseller-lead-notification"
 import { sendSmtp, getDefaultFrom } from "./smtp"
 
 export class EmailError extends Error {
@@ -69,6 +73,10 @@ export type EmailTemplate =
   | {
       type: "account-credentials"
       props: AccountCredentialsTemplateProps
+    }
+  | {
+      type: "reseller-lead-notification"
+      props: ResellerLeadNotificationTemplateProps
     }
 
 interface SendEmailParams {
@@ -103,6 +111,8 @@ function renderTemplate(template: EmailTemplate): React.ReactElement {
       return AccessExpiringTemplate(template.props)
     case "account-credentials":
       return AccountCredentialsTemplate(template.props)
+    case "reseller-lead-notification":
+      return ResellerLeadNotificationTemplate(template.props)
   }
 }
 
