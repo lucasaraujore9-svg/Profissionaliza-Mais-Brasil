@@ -109,18 +109,6 @@ const STAGES: FunnelStage[] = [
     color: "text-emerald-300",
     bar: "from-emerald-500 to-emerald-400",
   },
-  {
-    key: "suspensos",
-    label: "Suspensas (inadimplentes)",
-    color: "text-orange-300",
-    bar: "from-orange-600 to-orange-500",
-  },
-  {
-    key: "cancelados",
-    label: "Canceladas",
-    color: "text-rose-300",
-    bar: "from-rose-600 to-rose-500",
-  },
 ]
 
 interface Celebration {
@@ -204,7 +192,7 @@ export function PlacarClient({
   }, [celebrate])
 
   const f = snap.funnel
-  const maxFunnel = Math.max(f.aguardando, f.ativos, f.suspensos, f.cancelados, 1)
+  const maxFunnel = Math.max(...STAGES.map((s) => f[s.key]), 1)
   const restantes = Math.max(0, snap.meta - snap.ativos)
 
   return (
