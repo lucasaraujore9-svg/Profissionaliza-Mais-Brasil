@@ -46,9 +46,16 @@ if (process.env.SKIP_PENDING_MIGRATIONS === "1") {
   process.exit(0)
 }
 
-const DATABASE_URL = process.env.DATABASE_URL
+// Conexão DIRETA (não-pooled), espelhando prisma.config.ts. Migrations PRECISAM
+// de uma sessão real: sobre o pooler do Supabase (transaction mode) o `SET
+// statement_timeout` não persiste entre statements e o `pg_advisory_lock` de
+// sessão pode vazar (unlock cai em outro backend → lock órfão trava builds
+// seguintes até o statement_timeout, exatamente o erro que derrubava o deploy).
+const DATABASE_URL = process.env.DIRECT_URL ?? process.env.DATABASE_URL
 if (!DATABASE_URL) {
-  console.error("[apply-pending] DATABASE_URL não definida. Abortando.")
+  console.error(
+    "[apply-pending] Nem DIRECT_URL nem DATABASE_URL definidas. Abortando.",
+  )
   process.exit(1)
 }
 
@@ -154,6 +161,33 @@ async function applyMigration(client, file) {
   }
 }
 
+async function acquireMigrationLock(client) {
+  // Lock NÃO-bloqueante com retry limitado. O `pg_advisory_lock` bloqueante
+  // pendurava o build por minutos quando o lock estava contencioso/órfão,
+  // até o statement_timeout matar tudo. Aqui tentamos por até ~90s e, se não
+  // conseguirmos, falhamos com mensagem acionável (outro deploy aplicando) em
+  // vez de pendurar. Sobre a conexão direta o lock é liberado certo no unlock,
+  // então órfãos deixam de acontecer daqui pra frente.
+  const deadline = Date.now() + 90_000
+  for (let attempt = 1; ; attempt++) {
+    const r = await client.query(
+      "SELECT pg_try_advisory_lock($1) AS ok",
+      [MIGRATION_LOCK_ID],
+    )
+    if (r.rows[0].ok) return
+    if (Date.now() > deadline) {
+      throw new Error(
+        "não consegui adquirir o advisory lock de migrations em 90s " +
+          "(outro deploy aplicando ou lock órfão). Re-deploye em alguns minutos.",
+      )
+    }
+    console.log(
+      `[apply-pending] lock ocupado, novo retry em 3s (tentativa ${attempt})…`,
+    )
+    await new Promise((res) => setTimeout(res, 3000))
+  }
+}
+
 async function main() {
   const files = listMigrationFiles()
   if (files.length === 0) {
@@ -163,7 +197,18 @@ async function main() {
 
   const client = new Client({ connectionString: DATABASE_URL })
   await client.connect()
-  await client.query("SELECT pg_advisory_lock($1)", [MIGRATION_LOCK_ID])
+
+  // O runner de migrations roda FORA do teto de statement_timeout do app: aplicar
+  // schema pode legitimamente demorar mais que o limite de runtime. Sem isso, o
+  // banco cancela o statement e o build inteiro falha com "canceling statement
+  // due to statement timeout". `lock_timeout` faz o lock falhar rápido em vez de
+  // pendurar. (Funciona porque agora usamos a conexão DIRETA — sobre o pooler
+  // esses SET não persistiriam entre statements.)
+  await client.query("SET statement_timeout = 0")
+  await client.query("SET idle_in_transaction_session_timeout = 0")
+  await client.query("SET lock_timeout = '15s'")
+
+  await acquireMigrationLock(client)
   try {
     const isFreshTable = await ensureTracking(client)
 
