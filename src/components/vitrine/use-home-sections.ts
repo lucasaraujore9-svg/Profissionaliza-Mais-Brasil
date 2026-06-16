@@ -14,6 +14,11 @@ export type SectionKind =
   | "categories_grid"
   | "institutional"
   | "tecnica"
+  | "eja"
+  | "idiomas"
+
+/** Padrão da seção "Idiomas": exatamente 4 cursos. Espelha IDIOMAS_SECTION_COUNT do servidor. */
+export const IDIOMAS_SECTION_COUNT = 4
 
 export type SectionMode = "manual" | "random"
 export type SectionCount = 4 | 8
@@ -79,12 +84,25 @@ export interface TecnicaConfig {
   kind: "tecnica"
 }
 
+export interface EjaConfig {
+  kind: "eja"
+}
+
+export interface IdiomasConfig {
+  kind: "idiomas"
+  title: string
+  subtitle: string
+  courseIds: string[]
+}
+
 export type AnySectionConfig =
   | BestsellersConfig
   | CategoryCoursesConfig
   | CategoriesGridConfig
   | InstitutionalConfig
   | TecnicaConfig
+  | EjaConfig
+  | IdiomasConfig
 
 export interface SectionRecord {
   id: string

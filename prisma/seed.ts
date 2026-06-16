@@ -243,6 +243,47 @@ async function main() {
       precoVitrineMain: 147.0,
       destaqueHome: false,
     },
+    // Idiomas — 4 cursos para a seção fixa "Idiomas" da home.
+    {
+      nome: "Ingles para Iniciantes",
+      slug: "ingles-para-iniciantes",
+      categoriaLoja: "Idiomas",
+      qtdAulas: 50,
+      cargaHoraria: "120h",
+      precoOriginal: 247.0,
+      precoVitrineMain: 167.0,
+      destaqueHome: false,
+    },
+    {
+      nome: "Espanhol Completo",
+      slug: "espanhol-completo",
+      categoriaLoja: "Idiomas",
+      qtdAulas: 45,
+      cargaHoraria: "100h",
+      precoOriginal: 247.0,
+      precoVitrineMain: 167.0,
+      destaqueHome: false,
+    },
+    {
+      nome: "Frances Basico",
+      slug: "frances-basico",
+      categoriaLoja: "Idiomas",
+      qtdAulas: 40,
+      cargaHoraria: "90h",
+      precoOriginal: 247.0,
+      precoVitrineMain: 167.0,
+      destaqueHome: false,
+    },
+    {
+      nome: "Italiano do Zero",
+      slug: "italiano-do-zero",
+      categoriaLoja: "Idiomas",
+      qtdAulas: 38,
+      cargaHoraria: "85h",
+      precoOriginal: 247.0,
+      precoVitrineMain: 167.0,
+      destaqueHome: false,
+    },
   ]
 
   for (const c of cursos) {
@@ -255,6 +296,105 @@ async function main() {
       },
       create: { ...c, updatedAt: new Date() },
     })
+  }
+
+  // Seção "Idiomas" da home (PMB) — cria/atualiza com os 4 cursos de idiomas.
+  // Em produção a seção é criada pela migration; aqui garantimos o conteúdo para
+  // o ambiente local mesmo que a migration não tenha rodado.
+  const idiomaNomes = [
+    "Ingles para Iniciantes",
+    "Espanhol Completo",
+    "Frances Basico",
+    "Italiano do Zero",
+  ]
+  const idiomaCourses = await prisma.course.findMany({
+    where: { nome: { in: idiomaNomes } },
+    select: { id: true, nome: true },
+  })
+  const idiomaCourseIds = idiomaNomes
+    .map((n) => idiomaCourses.find((c) => c.nome === n)?.id)
+    .filter((id): id is string => Boolean(id))
+
+  const idiomasConfig = {
+    kind: "idiomas",
+    title: "Idiomas",
+    subtitle: "Aprenda um novo idioma e abra portas no mercado de trabalho",
+    courseIds: idiomaCourseIds,
+  }
+
+  const [existingIdiomas, existingEja] = await Promise.all([
+    prisma.homeSection.findFirst({
+      where: { tenantId: null, kind: "idiomas" },
+      select: { id: true },
+    }),
+    prisma.homeSection.findFirst({
+      where: { tenantId: null, kind: "eja" },
+      select: { id: true },
+    }),
+  ])
+
+  // Quando a migration já rodou, só atualiza o conteúdo de Idiomas (a posição
+  // já está correta). EJA fica como está (desativada até a PMB configurar).
+  if (existingIdiomas) {
+    await prisma.homeSection.update({
+      where: { id: existingIdiomas.id },
+      data: { config: idiomasConfig },
+    })
+  }
+
+  // Fallback local (migration não rodou): cria as linhas faltantes na ordem
+  // pedida — ... Administrativo → EJA → Idiomas → "Sua escola no bolso".
+  if (!existingIdiomas || !existingEja) {
+    const [admin, learn, last] = await Promise.all([
+      prisma.homeSection.findFirst({
+        where: { id: "pmb-cat-administrativo", tenantId: null },
+        select: { position: true },
+      }),
+      prisma.homeSection.findFirst({
+        where: { id: "pmb-learn-anywhere", tenantId: null },
+        select: { position: true },
+      }),
+      prisma.homeSection.findFirst({
+        where: { tenantId: null },
+        orderBy: { position: "desc" },
+        select: { position: true },
+      }),
+    ])
+    const anchor =
+      admin?.position ?? (learn ? learn.position - 1 : (last?.position ?? -1))
+    const toCreate = (existingEja ? 0 : 1) + (existingIdiomas ? 0 : 1)
+    // Abre espaço logo após a âncora.
+    await prisma.homeSection.updateMany({
+      where: { tenantId: null, position: { gt: anchor } },
+      data: { position: { increment: toCreate } },
+    })
+    let pos = anchor + 1
+    if (!existingEja) {
+      await prisma.homeSection.create({
+        data: {
+          id: "pmb-eja",
+          tenantId: null,
+          kind: "eja",
+          position: pos++,
+          enabled: false,
+          config: { kind: "eja" },
+          updatedAt: new Date(),
+        },
+      })
+    }
+    if (!existingIdiomas) {
+      await prisma.homeSection.create({
+        data: {
+          id: "pmb-idiomas",
+          tenantId: null,
+          kind: "idiomas",
+          position: pos++,
+          enabled: true,
+          config: idiomasConfig,
+          updatedAt: new Date(),
+        },
+      })
+    }
   }
 
   // Cupons — 1 SUPER_ADMIN (50%), 1 PMB_SALES (30%), 1 consultor (10%)
@@ -472,7 +612,8 @@ async function main() {
   console.log("- RESELLER owner1: revenda1@teste.com / teste123 (tenant=revenda1, gerente=gerente)")
   console.log("- RESELLER owner2: revenda2@teste.com / teste123 (tenant=revenda2, sem gerente)")
   console.log("- Consultor: consultor1@teste.com / teste123 (tenant1, maxDiscount=20%)")
-  console.log("- 5 cursos; 2 destacados na home")
+  console.log("- 9 cursos (4 de Idiomas); 2 destacados na home")
+  console.log("- Seções home: Idiomas (4 cursos) + EJA (banner, desativada)")
   console.log("- Cupons: SUPER50 (super_admin), VENDAS30 (pmb_sales), CONSULT10 (tenant1/consultor)")
 }
 

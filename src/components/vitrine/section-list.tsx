@@ -7,10 +7,12 @@ import {
   ChevronUp,
   GraduationCap,
   GripVertical,
+  Languages,
   Layers,
   Loader2,
   Lock,
   Megaphone,
+  Newspaper,
   Save,
   Sparkles,
 } from "lucide-react"
@@ -32,15 +34,20 @@ import {
   BestsellersEditor,
   CategoriesGridEditor,
   CategoryCoursesEditor,
+  EjaEditor,
+  IdiomasEditor,
+  IdiomasLockedNotice,
   InstitutionalEditor,
   TecnicaEditor,
 } from "./section-editors"
+import { IDIOMAS_SECTION_COUNT } from "./use-home-sections"
 import type {
   AnySectionConfig,
   BestsellersConfig,
   CategoriesGridConfig,
   CategoryCoursesConfig,
   CategoryOption,
+  IdiomasConfig,
   InstitutionalConfig,
   SectionOptions,
   SectionRecord,
@@ -139,10 +146,12 @@ export function SectionList({
         const opened = Array.isArray(open) ? open : open ? [open] : []
         for (const id of opened) {
           if (typeof id !== "string") continue
-          // Técnica não usa o fluxo de draft/config (conteúdo vive em
-          // SystemSettings, editor autossuficiente) — não cria draft.
+          // Técnica e EJA não usam o fluxo de draft/config (conteúdo vive em
+          // SystemSettings, editor autossuficiente). Idiomas só usa draft no
+          // admin (canEditTecnica); na unidade é bloqueado. — não cria draft.
           const sec = sections.find((x) => x.id === id)
-          if (sec && sec.kind === "tecnica") continue
+          if (sec && (sec.kind === "tecnica" || sec.kind === "eja")) continue
+          if (sec && sec.kind === "idiomas" && !canEditTecnica) continue
           onStartEditing(id)
         }
       }}
@@ -295,7 +304,7 @@ export function SectionList({
                         )}
                       </p>
                       <p className="truncate text-[11.5px] text-zinc-500">
-                        {summaryOfSection({ ...s, config: effectiveConfig })}
+                        {summaryOfSection({ ...s, config: effectiveConfig }, canEditTecnica)}
                       </p>
                       {blockedByCount && (
                         <p className="truncate text-[11px] font-medium text-amber-700">
@@ -346,6 +355,14 @@ export function SectionList({
             {s.kind === "tecnica" ? (
               <AccordionContent>
                 <TecnicaEditor canEdit={canEditTecnica} />
+              </AccordionContent>
+            ) : s.kind === "eja" ? (
+              <AccordionContent>
+                <EjaEditor canEdit={canEditTecnica} />
+              </AccordionContent>
+            ) : s.kind === "idiomas" && !canEditTecnica ? (
+              <AccordionContent>
+                <IdiomasLockedNotice />
               </AccordionContent>
             ) : (
             <AccordionContent>
@@ -428,6 +445,16 @@ function SectionIcon({ kind }: { kind: SectionRecord["kind"] }) {
       bg: "bg-[var(--color-pmb-gold,#F2B705)]/15",
       fg: "text-[var(--color-pmb-green)]",
     },
+    eja: {
+      icon: Newspaper,
+      bg: "bg-[var(--color-pmb-gold,#F2B705)]/15",
+      fg: "text-[var(--color-pmb-green)]",
+    },
+    idiomas: {
+      icon: Languages,
+      bg: "bg-sky-100",
+      fg: "text-sky-600",
+    },
   }
   const { icon: Icon, bg, fg } = map[kind]
   return (
@@ -467,10 +494,14 @@ function titleOfSection(
     }
     case "tecnica":
       return "Cursos Técnicos"
+    case "eja":
+      return "EJA"
+    case "idiomas":
+      return (s.config as IdiomasConfig).title || "Idiomas"
   }
 }
 
-function summaryOfSection(s: SectionRecord): string {
+function summaryOfSection(s: SectionRecord, canEditTecnica: boolean): string {
   if (!s.enabled) return "Desativada — não aparece na home"
   switch (s.kind) {
     case "bestsellers":
@@ -495,6 +526,21 @@ function summaryOfSection(s: SectionRecord): string {
     }
     case "tecnica":
       return "Lista padronizada pela administração · 8 cursos"
+    case "eja":
+      return "Banner com link · imagem padronizada pela administração"
+    case "idiomas": {
+      // Na unidade o conteúdo é herdado da PMB (a config própria fica vazia) —
+      // o contador "n/4" seria enganoso. Só o admin (canEditTecnica) edita e vê
+      // o progresso da seleção.
+      if (!canEditTecnica) {
+        return `Padronizada pela administração · ${IDIOMAS_SECTION_COUNT} cursos`
+      }
+      const c = s.config as IdiomasConfig
+      const n = c.courseIds.length
+      return n === IDIOMAS_SECTION_COUNT
+        ? `Padronizada pela administração · ${IDIOMAS_SECTION_COUNT} cursos`
+        : `${n}/${IDIOMAS_SECTION_COUNT} cursos selecionados`
+    }
   }
 }
 
@@ -536,6 +582,21 @@ function validateLocal(config: AnySectionConfig): LocalValidation {
       return {
         ok: false,
         error: `Você selecionou ${config.courseIds.length} cursos, mas o limite é ${config.count}`,
+      }
+    }
+  }
+  if (config.kind === "idiomas") {
+    if (config.courseIds.length !== IDIOMAS_SECTION_COUNT) {
+      const diff = IDIOMAS_SECTION_COUNT - config.courseIds.length
+      if (diff > 0) {
+        return {
+          ok: false,
+          error: `Selecione exatamente ${IDIOMAS_SECTION_COUNT} cursos de idiomas (faltam ${diff})`,
+        }
+      }
+      return {
+        ok: false,
+        error: `Selecione no máximo ${IDIOMAS_SECTION_COUNT} cursos`,
       }
     }
   }
@@ -615,7 +676,16 @@ function EditorForKind({
     case "institutional":
       return <InstitutionalEditor section={section} onPatch={onPatch} />
     case "tecnica":
-      // Técnica é renderizada fora do EditorForKind (conteúdo autossuficiente).
+    case "eja":
+      // Técnica/EJA são renderizadas fora do EditorForKind (autossuficientes).
       return null
+    case "idiomas":
+      return (
+        <IdiomasEditor
+          section={section}
+          options={{ courses: options.courses }}
+          onPatch={onPatch}
+        />
+      )
   }
 }

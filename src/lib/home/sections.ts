@@ -112,12 +112,39 @@ export interface TecnicaSectionConfig {
   kind: "tecnica"
 }
 
+/**
+ * Seção "EJA" — banner com link para a página personalizada de EJA. Espelha a
+ * Técnica: sem campos editáveis na config (apenas marcador de posição/enabled).
+ * O conteúdo (imagem do banner, link, rótulo) vive em `SystemSettings.eja*`
+ * (PMB) e `Tenant.eja*` (link por unidade). A imagem é padronizada pela PMB; o
+ * link é o da própria unidade. Sem link configurado, o banner é omitido.
+ */
+export interface EjaSectionConfig {
+  kind: "eja"
+}
+
+/**
+ * Padrão da seção "Idiomas": exatamente 4 cursos (1 linha). O conteúdo é
+ * padronizado pela PMB (igual à Técnica): a config dos `courseIds` vive na seção
+ * idiomas do PMB e as unidades só exibem/reordenam — nunca editam a lista.
+ */
+export const IDIOMAS_SECTION_COUNT = 4 as const
+
+export interface IdiomasSectionConfig {
+  kind: "idiomas"
+  title: string
+  subtitle: string
+  courseIds: string[]
+}
+
 export type AnySectionConfig =
   | BestsellersConfig
   | CategoryCoursesConfig
   | CategoriesGridConfig
   | InstitutionalConfig
   | TecnicaSectionConfig
+  | EjaSectionConfig
+  | IdiomasSectionConfig
 
 export interface HomeSectionRecord<T extends AnySectionConfig = AnySectionConfig> {
   id: string
@@ -138,6 +165,8 @@ export const SECTION_KINDS = [
   "categories_grid",
   "institutional",
   "tecnica",
+  "eja",
+  "idiomas",
 ] as const
 export type SectionKind = (typeof SECTION_KINDS)[number]
 
@@ -212,6 +241,37 @@ export function validateSectionPayload(
   // SystemSettings.tecnica*. A config é apenas um marcador para o renderer.
   if (kind === "tecnica") {
     return { ok: true, kind, config: { kind: "tecnica" } }
+  }
+
+  // ---------- eja ----------
+  // Igual à técnica: marcador. Conteúdo (banner/URL/rótulo) em SystemSettings.eja*
+  // (PMB) e Tenant.eja* (link por unidade).
+  if (kind === "eja") {
+    return { ok: true, kind, config: { kind: "eja" } }
+  }
+
+  // ---------- idiomas ----------
+  // Seção fixa de até 4 cursos, padronizada pela PMB. title/subtitle opcionais
+  // (default "Idiomas"); courseIds limitado a 4 (UI guia para exatamente 4).
+  if (kind === "idiomas") {
+    const title = strOrEmpty(c.title, 120) || "Idiomas"
+    const subtitle = strOrEmpty(c.subtitle, 200)
+    let courseIds: string[] = []
+    if (Array.isArray(c.courseIds)) {
+      courseIds = c.courseIds.filter((x): x is string => typeof x === "string")
+    }
+    // Dedup preservando ordem + cap em 4.
+    courseIds = Array.from(new Set(courseIds)).slice(0, IDIOMAS_SECTION_COUNT)
+    // Padrão fixo: 0 cursos (seção configurada mas oculta) ou exatamente 4.
+    // Espelha validateTecnicaCoursesInput — a invariante "exatamente N" vive no
+    // servidor, não só na UI.
+    if (courseIds.length !== 0 && courseIds.length !== IDIOMAS_SECTION_COUNT) {
+      return {
+        ok: false,
+        error: `A seção Idiomas exige exatamente ${IDIOMAS_SECTION_COUNT} cursos (ou nenhum). Você enviou ${courseIds.length}.`,
+      }
+    }
+    return { ok: true, kind, config: { kind: "idiomas", title, subtitle, courseIds } }
   }
 
   // ---------- categories_grid ----------
@@ -422,6 +482,22 @@ export async function resolveSectionCourses(
   },
 ): Promise<{ courses: Course[]; meta: { categorySlug?: string } } | null> {
   const cfg = section.config
+
+  // idiomas: lista fixa padronizada pela PMB. Para tenants, lê os courseIds da
+  // seção idiomas do PMB (fonte única, como a Técnica); na PMB usa a própria
+  // config. Os preços/capas saem de TenantCourse quando há tenant (fetchCoursesByIds).
+  if (cfg.kind === "idiomas") {
+    let ids = cfg.courseIds
+    if (tenantId) {
+      ids = await loadPmbIdiomasCourseIds()
+    }
+    ids = ids.slice(0, IDIOMAS_SECTION_COUNT)
+    if (ids.length === 0) return null
+    const courses = await fetchCoursesByIds(ids, tenantId)
+    if (courses.length === 0) return null
+    return { courses, meta: {} }
+  }
+
   if (cfg.kind !== "bestsellers" && cfg.kind !== "category_courses") return null
   // Bestsellers sempre 4, independentemente do que estiver salvo no config.
   const count = cfg.kind === "bestsellers" ? BESTSELLERS_COUNT : cfg.count
@@ -460,6 +536,24 @@ export async function resolveSectionCourses(
     select: { slug: true },
   })
   return { courses, meta: { categorySlug: category?.slug } }
+}
+
+/**
+ * Lê os `courseIds` da seção idiomas do PMB (tenantId=null) — fonte única do
+ * conteúdo de Idiomas para toda a rede. As vitrines de revendedor herdam estes
+ * cursos (com preço/capa próprios via TenantCourse), não a config clonada.
+ */
+async function loadPmbIdiomasCourseIds(): Promise<string[]> {
+  const row = await prisma.homeSection.findFirst({
+    where: { tenantId: null, kind: "idiomas" },
+    orderBy: { position: "asc" },
+    select: { config: true },
+  })
+  const cfg = row?.config as { courseIds?: unknown } | null
+  if (cfg && Array.isArray(cfg.courseIds)) {
+    return cfg.courseIds.filter((x): x is string => typeof x === "string")
+  }
+  return []
 }
 
 async function pickRandomCourseIds(args: {
@@ -644,10 +738,12 @@ export async function resolveCategoriesForSection(
 export async function ensureTenantHomeSections(tenantId: string): Promise<void> {
   const count = await prisma.homeSection.count({ where: { tenantId } })
   if (count > 0) {
-    // Tenant já tem seções próprias (clonadas antes da Técnica existir como
-    // HomeSection). Garante que a linha tecnica esteja presente para tenants
-    // antigos — caso contrário a seção não apareceria no painel nem na home.
+    // Tenant já tem seções próprias (clonadas antes destas seções existirem
+    // como HomeSection). Garante que as linhas singleton estejam presentes para
+    // tenants antigos — caso contrário não apareceriam no painel nem na home.
     await ensureTecnicaSection(tenantId)
+    await ensureEjaSection(tenantId)
+    await ensureIdiomasSection(tenantId)
     return
   }
   const pmbSections = await prisma.homeSection.findMany({
@@ -709,6 +805,81 @@ export async function ensureTecnicaSection(
       position: (last?.position ?? -1) + 1,
       enabled,
       config: { kind: "tecnica" },
+    },
+  })
+}
+
+/**
+ * Garante (idempotente) a linha singleton kind="eja" para um escopo. Espelha
+ * `ensureTecnicaSection`: nasce no fim, `enabled` espelhando o flag eja_enabled
+ * correspondente (SystemSettings para PMB; Tenant para revendedor).
+ */
+export async function ensureEjaSection(
+  tenantId: string | null,
+): Promise<void> {
+  const existing = await prisma.homeSection.findFirst({
+    where: { tenantId, kind: "eja" },
+    select: { id: true },
+  })
+  if (existing) return
+
+  let enabled = false
+  if (tenantId) {
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { ejaEnabled: true },
+    })
+    enabled = tenant?.ejaEnabled ?? false
+  } else {
+    const settings = await prisma.systemSettings.findUnique({
+      where: { id: "default" },
+      select: { ejaEnabled: true },
+    })
+    enabled = settings?.ejaEnabled ?? false
+  }
+
+  const last = await prisma.homeSection.findFirst({
+    where: { tenantId },
+    orderBy: { position: "desc" },
+    select: { position: true },
+  })
+  await prisma.homeSection.create({
+    data: {
+      tenantId,
+      kind: "eja",
+      position: (last?.position ?? -1) + 1,
+      enabled,
+      config: { kind: "eja" },
+    },
+  })
+}
+
+/**
+ * Garante (idempotente) a linha singleton kind="idiomas" para um escopo. Nasce
+ * no fim, ativada. Conteúdo (courseIds) é padronizado pela PMB; a linha do
+ * tenant é só posição + enabled e lê os cursos do PMB no render.
+ */
+export async function ensureIdiomasSection(
+  tenantId: string | null,
+): Promise<void> {
+  const existing = await prisma.homeSection.findFirst({
+    where: { tenantId, kind: "idiomas" },
+    select: { id: true },
+  })
+  if (existing) return
+
+  const last = await prisma.homeSection.findFirst({
+    where: { tenantId },
+    orderBy: { position: "desc" },
+    select: { position: true },
+  })
+  await prisma.homeSection.create({
+    data: {
+      tenantId,
+      kind: "idiomas",
+      position: (last?.position ?? -1) + 1,
+      enabled: true,
+      config: { kind: "idiomas", title: "Idiomas", subtitle: "", courseIds: [] },
     },
   })
 }

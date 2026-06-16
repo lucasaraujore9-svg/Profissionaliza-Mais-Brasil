@@ -342,6 +342,10 @@ export const GET = withRequestContextParams<{ id: string }>(
             .sort((a, b) => a.order - b.order)
             .map((c) => ({ name: c.name, url: c.url }))
         })(),
+        // EJA (banner com link por unidade)
+        ejaEnabled: tenant.ejaEnabled,
+        ejaUrl: tenant.ejaUrl,
+        ejaLabel: tenant.ejaLabel,
         // Automacao (WhatsApp + Leads CRM)
         automationEnabled: tenant.automationEnabled,
         waConnectedPhone: tenant.waConnectedPhone,

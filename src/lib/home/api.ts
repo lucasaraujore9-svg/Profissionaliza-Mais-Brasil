@@ -62,11 +62,14 @@ export async function createSection(scope: Scope, body: unknown) {
     return NextResponse.json({ error: validation.error }, { status: 400 })
   }
 
-  // Singletons: bestsellers, categories_grid e tecnica só podem existir uma vez.
+  // Singletons: bestsellers, categories_grid, tecnica, eja e idiomas só podem
+  // existir uma vez por escopo.
   if (
     validation.kind === "bestsellers" ||
     validation.kind === "categories_grid" ||
-    validation.kind === "tecnica"
+    validation.kind === "tecnica" ||
+    validation.kind === "eja" ||
+    validation.kind === "idiomas"
   ) {
     const exists = await prisma.homeSection.findFirst({
       where: { tenantId: scope.tenantId, kind: validation.kind },
@@ -78,7 +81,11 @@ export async function createSection(scope: Scope, body: unknown) {
           ? "Já existe uma seção “Mais vendidos” — edite a existente"
           : validation.kind === "tecnica"
             ? "Já existe a seção “Cursos Técnicos” — edite a existente"
-            : "Já existe um bloco de categorias — edite o existente"
+            : validation.kind === "eja"
+              ? "Já existe a seção “EJA” — edite a existente"
+              : validation.kind === "idiomas"
+                ? "Já existe a seção “Idiomas” — edite a existente"
+                : "Já existe um bloco de categorias — edite o existente"
       return NextResponse.json({ error: message }, { status: 409 })
     }
   }
@@ -169,7 +176,17 @@ export async function updateSection(
     position?: number
   } = {}
 
-  if (b.config !== undefined) {
+  // Conteúdo das seções padronizadas pela PMB (idiomas/tecnica/eja) NÃO é
+  // editável por revendedor: a vitrine herda o conteúdo da PMB no render; a
+  // unidade só altera position/enabled. Ignora qualquer `config` enviado em
+  // escopo de tenant para essas kinds — enforcement server-side do lock que o
+  // painel já mostra (caso contrário um PATCH manual sobrescreveria título/
+  // subtítulo da seção idiomas na vitrine da unidade).
+  const isPmbStandardizedKind =
+    slide.kind === "idiomas" || slide.kind === "tecnica" || slide.kind === "eja"
+  const ignoreTenantConfig = scope.tenantId !== null && isPmbStandardizedKind
+
+  if (b.config !== undefined && !ignoreTenantConfig) {
     const validation = validateSectionPayload(slide.kind, b.config)
     if (!validation.ok) {
       return NextResponse.json({ error: validation.error }, { status: 400 })
@@ -260,6 +277,18 @@ export async function deleteSection(scope: Scope, id: string): Promise<Response>
   if (slide.kind === "tecnica") {
     return NextResponse.json(
       { error: "A seção “Cursos Técnicos” não pode ser removida — desative-a se não quiser exibi-la" },
+      { status: 400 },
+    )
+  }
+  if (slide.kind === "eja") {
+    return NextResponse.json(
+      { error: "A seção “EJA” não pode ser removida — desative-a se não quiser exibi-la" },
+      { status: 400 },
+    )
+  }
+  if (slide.kind === "idiomas") {
+    return NextResponse.json(
+      { error: "A seção “Idiomas” não pode ser removida — desative-a se não quiser exibi-la" },
       { status: 400 },
     )
   }

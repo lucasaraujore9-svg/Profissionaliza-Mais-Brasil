@@ -35,6 +35,7 @@ import {
   type ReferrerSummary,
 } from "./reseller-referral-config"
 import { ResellerTecnicaConfig } from "./reseller-tecnica-config"
+import { ResellerEjaConfig } from "./reseller-eja-config"
 import { ResellerAutomationConfig } from "./reseller-automation-config"
 import { ResellerAsaasGatewayConfig } from "./reseller-asaas-gateway-config"
 import {
@@ -65,6 +66,9 @@ interface DetailResponse {
     tecnicaUrl: string | null
     tecnicaLabel: string | null
     tecnicaCourses: Array<{ name: string; url: string }>
+    ejaEnabled: boolean
+    ejaUrl: string | null
+    ejaLabel: string | null
     automationEnabled: boolean
     waConnectedPhone: string | null
     waStatus: string
@@ -238,6 +242,13 @@ export function ResellerDetailClient({
             tecnicaUrl={data.reseller.tecnicaUrl}
             tecnicaLabel={data.reseller.tecnicaLabel}
             tecnicaCourses={data.reseller.tecnicaCourses}
+            onSaved={load}
+          />
+          <ResellerEjaConfig
+            tenantId={tenantId}
+            ejaEnabled={data.reseller.ejaEnabled}
+            ejaUrl={data.reseller.ejaUrl}
+            ejaLabel={data.reseller.ejaLabel}
             onSaved={load}
           />
           <ResellerAutomationConfig

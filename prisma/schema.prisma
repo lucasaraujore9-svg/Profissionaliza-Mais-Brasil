@@ -329,6 +329,14 @@ model Tenant {
   // (cai no fallback de mostrar so o CTA com tecnicaUrl).
   tecnicaCourses Json?   @map("tecnica_courses")
 
+  // EJA — link externo para a pagina personalizada de EJA do revendedor.
+  // Exibido como banner na home (HomeSection kind="eja"). A imagem do banner e
+  // padronizada pela PMB (SystemSettings.ejaBannerImageUrl); aqui a unidade so
+  // define o link de destino e o rotulo proprios. Sem ejaUrl, o banner e omitido.
+  ejaEnabled Boolean @default(false) @map("eja_enabled")
+  ejaUrl     String? @map("eja_url")
+  ejaLabel   String? @map("eja_label") // null = "EJA"
+
   // Modulo Automacao — disparo de WhatsApp + CRM de leads. Quando habilitado
   // pelo admin, a vitrine exibe um card "Receba mais informacoes" na pagina
   // do curso e o painel ganha menus Automacao + Leads.
@@ -1285,6 +1293,15 @@ model SystemSettings {
   tecnicaLabel   String? @map("tecnica_label")
   tecnicaCourses Json?   @map("tecnica_courses")
 
+  // EJA do site PMB institucional + banner padronizado para TODA a rede.
+  // ejaBannerImageUrl e a imagem unica do banner (herdada por todas as vitrines);
+  // ejaUrl/ejaLabel sao o link/rotulo do proprio site PMB. As unidades herdam a
+  // imagem e definem o proprio link em Tenant.ejaUrl.
+  ejaEnabled        Boolean @default(false) @map("eja_enabled")
+  ejaUrl            String? @map("eja_url")
+  ejaLabel          String? @map("eja_label")
+  ejaBannerImageUrl String? @map("eja_banner_image_url")
+
   // Modulo Automacao do site PMB institucional. Espelha os campos
   // `automation*`/`wa*` do Tenant, mas para a vitrine PMB (sistema mae).
   // Default TRUE: no sistema mae o modulo vem sempre ligado; admin nao
@@ -1514,7 +1531,7 @@ model BannerSlide {
 model HomeSection {
   id        String   @id @default(cuid())
   tenantId  String?  @map("tenant_id")
-  kind      String // "bestsellers" | "category_courses" | "categories_grid" | "institutional" | "tecnica"
+  kind      String // "bestsellers" | "category_courses" | "categories_grid" | "institutional" | "tecnica" | "eja" | "idiomas"
   position  Int      @default(0)
   enabled   Boolean  @default(true)
   config    Json

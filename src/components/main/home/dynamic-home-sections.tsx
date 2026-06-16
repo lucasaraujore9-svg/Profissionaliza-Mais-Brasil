@@ -1,11 +1,13 @@
 import { cookies } from "next/headers"
 import { CourseRow } from "./course-row"
 import { TecnicaSection } from "./tecnica-section"
+import { EjaSection } from "./eja-section"
 import {
   CategoriesGridSection,
   InstitutionalSection,
 } from "./section-renderers"
 import { loadTecnicaSectionContent } from "@/lib/catalog/tecnica"
+import { loadEjaSectionContent } from "@/lib/catalog/eja"
 import {
   loadHomeSections,
   resolveSectionCourses,
@@ -89,7 +91,11 @@ async function renderSection(
 ): Promise<React.ReactNode | null> {
   const cfg = section.config
 
-  if (cfg.kind === "bestsellers" || cfg.kind === "category_courses") {
+  if (
+    cfg.kind === "bestsellers" ||
+    cfg.kind === "category_courses" ||
+    cfg.kind === "idiomas"
+  ) {
     const resolved = await resolveSectionCourses(section, ctx.tenantId, {
       bestsellersSnapshot: ctx.bestsellersSnapshot,
       onNewBestsellersSnapshot: ctx.onNewBestsellersSnapshot,
@@ -133,6 +139,15 @@ async function renderSection(
     const { label, url, courses } = await loadTecnicaSectionContent(ctx.tenantId)
     // TecnicaSection já retorna null quando não há cursos nem URL base.
     return <TecnicaSection label={label} courses={courses} fallbackUrl={url} />
+  }
+
+  if (cfg.kind === "eja") {
+    // Banner com imagem padronizada pela PMB; link/rótulo do escopo (PMB ou
+    // unidade). EjaSection retorna null quando não há link configurado.
+    const { label, url, bannerImageUrl } = await loadEjaSectionContent(
+      ctx.tenantId,
+    )
+    return <EjaSection label={label} url={url} bannerImageUrl={bannerImageUrl} />
   }
 
   return null

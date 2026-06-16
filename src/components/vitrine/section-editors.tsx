@@ -6,10 +6,13 @@ import {
   ExternalLink,
   GraduationCap,
   Hand,
+  ImagePlus,
   Info,
+  Languages,
   Loader2,
   Lock,
   Save,
+  Trash2,
 } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -27,6 +30,7 @@ import {
 } from "@/components/admin/tecnica-courses-editor"
 import { CoursePicker } from "./course-picker"
 import { cn } from "@/lib/utils"
+import { IDIOMAS_SECTION_COUNT } from "./use-home-sections"
 import type {
   AnySectionConfig,
   BestsellersConfig,
@@ -34,6 +38,7 @@ import type {
   CategoryCoursesConfig,
   CategoryOption,
   CourseOption,
+  IdiomasConfig,
   InstitutionalConfig,
   SectionCount,
   SectionMode,
@@ -758,6 +763,356 @@ function TecnicaAdminEditor() {
             <Save className="h-3.5 w-3.5" aria-hidden />
           )}
           {saving ? "Salvando..." : "Salvar cursos"}
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// IdiomasEditor — seção "Idiomas" (4 cursos fixos, padronizada pela PMB)
+//
+// Para o admin (sistema mãe): seletor de exatamente 4 cursos + título/subtítulo,
+// editado pelo fluxo de draft/Salvar genérico (config vive no HomeSection do PMB).
+// Para a unidade: conteúdo bloqueado (lock message renderizado pela section-list).
+// ---------------------------------------------------------------------------
+
+export function IdiomasEditor({
+  section,
+  options,
+  onPatch,
+}: {
+  section: SectionRecord
+  options: { courses: CourseOption[] }
+  onPatch: (patch: Partial<AnySectionConfig>) => void
+}) {
+  const config = section.config as IdiomasConfig
+  return (
+    <div className="space-y-4">
+      <div className="flex items-start gap-2 rounded-md border border-[var(--color-pmb-green)]/15 bg-[var(--color-pmb-green)]/5 px-3 py-2.5 text-sm text-[var(--color-pmb-green-900)]">
+        <Languages className="mt-0.5 h-4 w-4 shrink-0 text-[var(--color-pmb-green)]" aria-hidden />
+        <p>
+          Escolha exatamente <b>{IDIOMAS_SECTION_COUNT} cursos</b> de idiomas.
+          Esta seleção é <b>padronizada para toda a rede</b> — vale para o site
+          PMB e para todas as vitrines de revendedor.
+        </p>
+      </div>
+
+      <CoursePicker
+        selectedIds={config.courseIds}
+        required={IDIOMAS_SECTION_COUNT}
+        courses={options.courses}
+        onChange={(ids) =>
+          onPatch({
+            courseIds: ids.slice(0, IDIOMAS_SECTION_COUNT),
+          } as Partial<AnySectionConfig>)
+        }
+        hint="Mostrando cursos do catálogo completo"
+      />
+
+      <TitleSubtitleEditor
+        title={config.title}
+        subtitle={config.subtitle}
+        onTitleChange={(v) => onPatch({ title: v } as Partial<AnySectionConfig>)}
+        onSubtitleChange={(v) =>
+          onPatch({ subtitle: v } as Partial<AnySectionConfig>)
+        }
+        placeholderTitle="Idiomas"
+      />
+    </div>
+  )
+}
+
+/** Card read-only da seção Idiomas para a unidade (conteúdo padronizado pela PMB). */
+export function IdiomasLockedNotice() {
+  return (
+    <div className="flex items-start gap-2 rounded-md border border-[var(--color-pmb-green)]/15 bg-[var(--color-pmb-green)]/5 px-3 py-2.5 text-sm text-[var(--color-pmb-green-900)]">
+      <Lock className="mt-0.5 h-4 w-4 shrink-0 text-[var(--color-pmb-green)]" aria-hidden />
+      <p>
+        Os cursos da seção <b>Idiomas</b> são padronizados pela administração e
+        iguais em toda a rede. Aqui você só pode <b>posicionar</b> e{" "}
+        <b>ligar/desligar</b> a seção na sua vitrine, pelo cabeçalho acima.
+      </p>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// EjaEditor — seção "EJA" (banner com link)
+//
+// Igual à Técnica, o conteúdo NÃO vive no `config` do HomeSection: a imagem do
+// banner vive em SystemSettings.eja_banner_image_url (padronizada pela rede), e
+// o link/rótulo do site PMB em SystemSettings.eja_*. Editor autossuficiente.
+//
+// - Admin (canEdit=true): edita banner + URL do site PMB + rótulo.
+// - Unidade (canEdit=false): card informativo (o link da unidade é configurado
+//   pelo gestor em Revendedores → detalhe). Só reordena/liga-desliga aqui.
+// ---------------------------------------------------------------------------
+
+export function EjaEditor({ canEdit }: { canEdit: boolean }) {
+  if (!canEdit) {
+    return (
+      <div className="flex items-start gap-2 rounded-md border border-[var(--color-pmb-green)]/15 bg-[var(--color-pmb-green)]/5 px-3 py-2.5 text-sm text-[var(--color-pmb-green-900)]">
+        <Lock className="mt-0.5 h-4 w-4 shrink-0 text-[var(--color-pmb-green)]" aria-hidden />
+        <p>
+          A imagem do banner <b>EJA</b> é padronizada pela administração. O{" "}
+          <b>link de destino</b> é o da sua unidade (configurado pelo seu
+          gestor). Aqui você só pode <b>posicionar</b> e <b>ligar/desligar</b> a
+          seção na sua vitrine, pelo cabeçalho acima.
+        </p>
+      </div>
+    )
+  }
+  return <EjaAdminEditor />
+}
+
+function EjaAdminEditor() {
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [enabled, setEnabled] = useState(false)
+  const [url, setUrl] = useState("")
+  const [label, setLabel] = useState("")
+  const [bannerImageUrl, setBannerImageUrl] = useState<string | null>(null)
+
+  useEffect(() => {
+    let alive = true
+    ;(async () => {
+      setLoading(true)
+      setLoadError(null)
+      try {
+        const res = await fetch("/api/admin/system-settings/eja", {
+          cache: "no-store",
+        })
+        if (!res.ok) throw new Error("Falha ao carregar a seção EJA")
+        const body = await res.json()
+        const d = body.data as {
+          ejaEnabled: boolean
+          ejaUrl: string | null
+          ejaLabel: string | null
+          ejaBannerImageUrl: string | null
+        }
+        if (!alive) return
+        setEnabled(Boolean(d.ejaEnabled))
+        setUrl(d.ejaUrl ?? "")
+        setLabel(d.ejaLabel ?? "")
+        setBannerImageUrl(d.ejaBannerImageUrl ?? null)
+      } catch (err) {
+        if (alive)
+          setLoadError(err instanceof Error ? err.message : "Erro ao carregar")
+      } finally {
+        if (alive) setLoading(false)
+      }
+    })()
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  async function handleUpload(file: File) {
+    setUploading(true)
+    try {
+      const form = new FormData()
+      form.append("file", file)
+      const res = await fetch("/api/admin/system-settings/eja/upload", {
+        method: "POST",
+        body: form,
+      })
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        toast.error(body.error ?? "Falha ao enviar imagem")
+        return
+      }
+      setBannerImageUrl(body.data.url as string)
+      toast.success("Imagem enviada — clique em Salvar para confirmar")
+    } catch {
+      toast.error("Erro ao enviar imagem")
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  function save() {
+    const trimmedUrl = url.trim()
+    if (enabled && !trimmedUrl) {
+      toast.error("Informe a URL da página de EJA para habilitar.")
+      return
+    }
+    if (trimmedUrl) {
+      try {
+        new URL(trimmedUrl)
+      } catch {
+        toast.error("URL inválida (use https://...)")
+        return
+      }
+    }
+    setSaving(true)
+    ;(async () => {
+      try {
+        const res = await fetch("/api/admin/system-settings/eja", {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            enabled,
+            url: trimmedUrl || null,
+            label: label.trim() || null,
+            bannerImageUrl: bannerImageUrl || null,
+          }),
+        })
+        const body = await res.json().catch(() => ({}))
+        if (!res.ok) {
+          toast.error(body.error ?? "Falha ao salvar")
+          return
+        }
+        toast.success("Seção EJA salva")
+      } catch {
+        toast.error("Erro ao salvar")
+      } finally {
+        setSaving(false)
+      }
+    })()
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center gap-2 py-8 text-sm text-zinc-400">
+        <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+        Carregando seção EJA…
+      </div>
+    )
+  }
+  if (loadError) {
+    return (
+      <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2.5 text-sm text-rose-800">
+        {loadError}
+      </p>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-start gap-2 rounded-md border border-[var(--color-pmb-green)]/15 bg-[var(--color-pmb-green)]/5 px-3 py-2.5 text-sm text-[var(--color-pmb-green-900)]">
+        <GraduationCap className="mt-0.5 h-4 w-4 shrink-0 text-[var(--color-pmb-green)]" aria-hidden />
+        <p>
+          A imagem do banner é <b>padronizada para toda a rede</b> (site PMB e
+          vitrines). A URL abaixo é o destino do site PMB; cada unidade define o
+          próprio link em <i>Revendedores → detalhe</i>.
+        </p>
+      </div>
+
+      {/* Banner image */}
+      <div className="space-y-1.5">
+        <Label className="text-xs">Imagem do banner</Label>
+        <div className="flex items-center gap-3">
+          <div className="relative h-20 w-36 shrink-0 overflow-hidden rounded-lg border border-zinc-200 bg-zinc-50">
+            {bannerImageUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={bannerImageUrl}
+                alt="Banner EJA"
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center text-zinc-300">
+                <ImagePlus className="h-6 w-6" aria-hidden />
+              </div>
+            )}
+          </div>
+          <div className="flex flex-col gap-2">
+            <label
+              className={cn(
+                "inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-700 hover:border-[var(--color-pmb-green)] hover:text-[var(--color-pmb-green)]",
+                uploading && "pointer-events-none opacity-60",
+              )}
+            >
+              {uploading ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+              ) : (
+                <ImagePlus className="h-3.5 w-3.5" aria-hidden />
+              )}
+              {uploading ? "Enviando…" : "Enviar imagem"}
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                className="hidden"
+                disabled={uploading || saving}
+                onChange={(e) => {
+                  const f = e.target.files?.[0]
+                  if (f) void handleUpload(f)
+                  e.target.value = ""
+                }}
+              />
+            </label>
+            {bannerImageUrl && (
+              <button
+                type="button"
+                onClick={() => setBannerImageUrl(null)}
+                disabled={saving}
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-rose-600 hover:text-rose-700 disabled:opacity-50"
+              >
+                <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                Remover
+              </button>
+            )}
+          </div>
+        </div>
+        <p className="text-[11px] text-zinc-500">
+          PNG, JPG ou WEBP até 5MB. Recomendado 1600×500px.
+        </p>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div>
+          <Label className="mb-1.5 block text-xs">URL da página de EJA (site PMB)</Label>
+          <div className="flex items-center gap-2">
+            <Input
+              type="url"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              placeholder="https://..."
+              disabled={saving}
+            />
+            {url.trim() && (
+              <a
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="shrink-0 rounded-md border border-gray-200 bg-white p-2 text-gray-500 hover:border-[var(--color-pmb-green)] hover:text-[var(--color-pmb-green)]"
+                title="Testar link"
+              >
+                <ExternalLink className="h-4 w-4" aria-hidden />
+              </a>
+            )}
+          </div>
+        </div>
+        <div>
+          <Label className="mb-1.5 block text-xs">Rótulo (opcional)</Label>
+          <Input
+            type="text"
+            value={label}
+            onChange={(e) => setLabel(e.target.value)}
+            placeholder="EJA — Ensino para Jovens e Adultos"
+            maxLength={60}
+            disabled={saving}
+          />
+        </div>
+      </div>
+
+      <div className="-mx-4 -mb-4 flex items-center justify-end border-t border-[rgba(2,89,24,0.08)] bg-white px-4 py-3">
+        <Button
+          type="button"
+          size="sm"
+          onClick={save}
+          disabled={saving || uploading}
+          className="bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)]"
+        >
+          {saving ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+          ) : (
+            <Save className="h-3.5 w-3.5" aria-hidden />
+          )}
+          {saving ? "Salvando..." : "Salvar EJA"}
         </Button>
       </div>
     </div>
