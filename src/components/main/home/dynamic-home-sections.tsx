@@ -142,12 +142,18 @@ async function renderSection(
   }
 
   if (cfg.kind === "eja") {
-    // Banner com imagem padronizada pela PMB; link/rótulo do escopo (PMB ou
-    // unidade). EjaSection retorna null quando não há link configurado.
-    const { label, url, bannerImageUrl } = await loadEjaSectionContent(
-      ctx.tenantId,
+    // Banner (só imagem) padronizado pela PMB — desktop + mobile; link do escopo
+    // (PMB ou unidade). EjaSection retorna null sem link ou sem imagem.
+    const { label, url, bannerImageUrl, bannerImageUrlMobile } =
+      await loadEjaSectionContent(ctx.tenantId)
+    return (
+      <EjaSection
+        label={label}
+        url={url}
+        bannerImageUrl={bannerImageUrl}
+        bannerImageUrlMobile={bannerImageUrlMobile}
+      />
     )
-    return <EjaSection label={label} url={url} bannerImageUrl={bannerImageUrl} />
   }
 
   return null

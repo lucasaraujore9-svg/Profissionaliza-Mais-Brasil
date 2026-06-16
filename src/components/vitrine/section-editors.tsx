@@ -869,12 +869,17 @@ export function EjaEditor({ canEdit }: { canEdit: boolean }) {
 function EjaAdminEditor() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [uploading, setUploading] = useState(false)
+  const [uploadingTarget, setUploadingTarget] = useState<
+    "desktop" | "mobile" | null
+  >(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [enabled, setEnabled] = useState(false)
   const [url, setUrl] = useState("")
   const [label, setLabel] = useState("")
   const [bannerImageUrl, setBannerImageUrl] = useState<string | null>(null)
+  const [bannerImageUrlMobile, setBannerImageUrlMobile] = useState<
+    string | null
+  >(null)
 
   useEffect(() => {
     let alive = true
@@ -892,12 +897,14 @@ function EjaAdminEditor() {
           ejaUrl: string | null
           ejaLabel: string | null
           ejaBannerImageUrl: string | null
+          ejaBannerImageUrlMobile: string | null
         }
         if (!alive) return
         setEnabled(Boolean(d.ejaEnabled))
         setUrl(d.ejaUrl ?? "")
         setLabel(d.ejaLabel ?? "")
         setBannerImageUrl(d.ejaBannerImageUrl ?? null)
+        setBannerImageUrlMobile(d.ejaBannerImageUrlMobile ?? null)
       } catch (err) {
         if (alive)
           setLoadError(err instanceof Error ? err.message : "Erro ao carregar")
@@ -910,8 +917,8 @@ function EjaAdminEditor() {
     }
   }, [])
 
-  async function handleUpload(file: File) {
-    setUploading(true)
+  async function handleUpload(file: File, target: "desktop" | "mobile") {
+    setUploadingTarget(target)
     try {
       const form = new FormData()
       form.append("file", file)
@@ -924,12 +931,14 @@ function EjaAdminEditor() {
         toast.error(body.error ?? "Falha ao enviar imagem")
         return
       }
-      setBannerImageUrl(body.data.url as string)
+      const setter =
+        target === "mobile" ? setBannerImageUrlMobile : setBannerImageUrl
+      setter(body.data.url as string)
       toast.success("Imagem enviada — clique em Salvar para confirmar")
     } catch {
       toast.error("Erro ao enviar imagem")
     } finally {
-      setUploading(false)
+      setUploadingTarget(null)
     }
   }
 
@@ -958,6 +967,7 @@ function EjaAdminEditor() {
             url: trimmedUrl || null,
             label: label.trim() || null,
             bannerImageUrl: bannerImageUrl || null,
+            bannerImageUrlMobile: bannerImageUrlMobile || null,
           }),
         })
         const body = await res.json().catch(() => ({}))
@@ -995,72 +1005,103 @@ function EjaAdminEditor() {
       <div className="flex items-start gap-2 rounded-md border border-[var(--color-pmb-green)]/15 bg-[var(--color-pmb-green)]/5 px-3 py-2.5 text-sm text-[var(--color-pmb-green-900)]">
         <GraduationCap className="mt-0.5 h-4 w-4 shrink-0 text-[var(--color-pmb-green)]" aria-hidden />
         <p>
-          A imagem do banner é <b>padronizada para toda a rede</b> (site PMB e
-          vitrines). A URL abaixo é o destino do site PMB; cada unidade define o
-          próprio link em <i>Revendedores → detalhe</i>.
+          O banner é <b>somente a imagem</b> (sem textos ou efeitos por cima) e é{" "}
+          <b>padronizado para toda a rede</b> (site PMB e vitrines). A imagem é
+          exibida inteira, sem corte. A URL abaixo é o destino do site PMB; cada
+          unidade define o próprio link em <i>Revendedores → detalhe</i>.
         </p>
       </div>
 
-      {/* Banner image */}
-      <div className="space-y-1.5">
-        <Label className="text-xs">Imagem do banner</Label>
-        <div className="flex items-center gap-3">
-          <div className="relative h-20 w-36 shrink-0 overflow-hidden rounded-lg border border-zinc-200 bg-zinc-50">
-            {bannerImageUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={bannerImageUrl}
-                alt="Banner EJA"
-                className="h-full w-full object-cover"
-              />
-            ) : (
-              <div className="flex h-full w-full items-center justify-center text-zinc-300">
-                <ImagePlus className="h-6 w-6" aria-hidden />
-              </div>
-            )}
-          </div>
-          <div className="flex flex-col gap-2">
-            <label
-              className={cn(
-                "inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-700 hover:border-[var(--color-pmb-green)] hover:text-[var(--color-pmb-green)]",
-                uploading && "pointer-events-none opacity-60",
-              )}
-            >
-              {uploading ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
-              ) : (
-                <ImagePlus className="h-3.5 w-3.5" aria-hidden />
-              )}
-              {uploading ? "Enviando…" : "Enviar imagem"}
-              <input
-                type="file"
-                accept="image/png,image/jpeg,image/webp"
-                className="hidden"
-                disabled={uploading || saving}
-                onChange={(e) => {
-                  const f = e.target.files?.[0]
-                  if (f) void handleUpload(f)
-                  e.target.value = ""
-                }}
-              />
-            </label>
-            {bannerImageUrl && (
-              <button
-                type="button"
-                onClick={() => setBannerImageUrl(null)}
-                disabled={saving}
-                className="inline-flex items-center gap-1.5 text-xs font-semibold text-rose-600 hover:text-rose-700 disabled:opacity-50"
+      {/* Banners: desktop + mobile (imagem exibida inteira, sem corte). */}
+      <div className="grid gap-4 sm:grid-cols-2">
+        {[
+          {
+            target: "desktop" as const,
+            title: "Imagem desktop",
+            value: bannerImageUrl,
+            clear: () => setBannerImageUrl(null),
+            box: "aspect-[16/5]",
+            hint: "Proporção larga, ex.: 1920×600px",
+          },
+          {
+            target: "mobile" as const,
+            title: "Imagem mobile",
+            value: bannerImageUrlMobile,
+            clear: () => setBannerImageUrlMobile(null),
+            box: "aspect-square",
+            hint: "Proporção mais quadrada, ex.: 1080×1080px",
+          },
+        ].map((slot) => {
+          const isUploading = uploadingTarget === slot.target
+          return (
+            <div key={slot.target} className="space-y-1.5">
+              <Label className="text-xs">{slot.title}</Label>
+              <div
+                className={cn(
+                  "relative w-full overflow-hidden rounded-lg border border-zinc-200 bg-zinc-50",
+                  slot.box,
+                )}
               >
-                <Trash2 className="h-3.5 w-3.5" aria-hidden />
-                Remover
-              </button>
-            )}
-          </div>
-        </div>
-        <p className="text-[11px] text-zinc-500">
-          PNG, JPG ou WEBP até 5MB. Recomendado 1600×500px.
-        </p>
+                {slot.value ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={slot.value}
+                    alt={`Banner EJA ${slot.title}`}
+                    className="h-full w-full object-contain"
+                  />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center text-zinc-300">
+                    <ImagePlus className="h-7 w-7" aria-hidden />
+                  </div>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <label
+                  className={cn(
+                    "inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-700 hover:border-[var(--color-pmb-green)] hover:text-[var(--color-pmb-green)]",
+                    (isUploading || saving) && "pointer-events-none opacity-60",
+                  )}
+                >
+                  {isUploading ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                  ) : (
+                    <ImagePlus className="h-3.5 w-3.5" aria-hidden />
+                  )}
+                  {isUploading ? "Enviando…" : "Enviar"}
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    className="hidden"
+                    disabled={uploadingTarget !== null || saving}
+                    onChange={(e) => {
+                      const f = e.target.files?.[0]
+                      if (f) void handleUpload(f, slot.target)
+                      e.target.value = ""
+                    }}
+                  />
+                </label>
+                {slot.value && (
+                  <button
+                    type="button"
+                    onClick={slot.clear}
+                    disabled={saving}
+                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-rose-600 hover:text-rose-700 disabled:opacity-50"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                    Remover
+                  </button>
+                )}
+              </div>
+              <p className="text-[11px] text-zinc-500">{slot.hint}</p>
+            </div>
+          )
+        })}
       </div>
+      <p className="text-[11px] text-zinc-500">
+        PNG, JPG ou WEBP até 5MB. A imagem aparece inteira (sem corte) — use a
+        proporção que desejar. Se não enviar a versão mobile, o desktop é usado
+        em todas as telas.
+      </p>
 
       <div className="grid gap-3 sm:grid-cols-2">
         <div>
@@ -1104,7 +1145,7 @@ function EjaAdminEditor() {
           type="button"
           size="sm"
           onClick={save}
-          disabled={saving || uploading}
+          disabled={saving || uploadingTarget !== null}
           className="bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)]"
         >
           {saving ? (

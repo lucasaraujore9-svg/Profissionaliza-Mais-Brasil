@@ -1297,10 +1297,13 @@ model SystemSettings {
   // ejaBannerImageUrl e a imagem unica do banner (herdada por todas as vitrines);
   // ejaUrl/ejaLabel sao o link/rotulo do proprio site PMB. As unidades herdam a
   // imagem e definem o proprio link em Tenant.ejaUrl.
-  ejaEnabled        Boolean @default(false) @map("eja_enabled")
-  ejaUrl            String? @map("eja_url")
-  ejaLabel          String? @map("eja_label")
-  ejaBannerImageUrl String? @map("eja_banner_image_url")
+  ejaEnabled              Boolean @default(false) @map("eja_enabled")
+  ejaUrl                  String? @map("eja_url")
+  ejaLabel                String? @map("eja_label")
+  // Banner da seção EJA — só a imagem (sem texto/overlay). Duas versões
+  // padronizadas pela rede: desktop e mobile. Mobile cai no desktop se vazio.
+  ejaBannerImageUrl       String? @map("eja_banner_image_url")
+  ejaBannerImageUrlMobile String? @map("eja_banner_image_url_mobile")
 
   // Modulo Automacao do site PMB institucional. Espelha os campos
   // `automation*`/`wa*` do Tenant, mas para a vitrine PMB (sistema mae).

@@ -21,6 +21,7 @@ export interface EjaSectionContent {
   label: string
   url: string | null
   bannerImageUrl: string | null
+  bannerImageUrlMobile: string | null
 }
 
 export async function loadEjaSectionContent(
@@ -29,15 +30,22 @@ export async function loadEjaSectionContent(
   try {
     const settings = await prisma.systemSettings.findUnique({
       where: { id: "default" },
-      select: { ejaUrl: true, ejaLabel: true, ejaBannerImageUrl: true },
+      select: {
+        ejaUrl: true,
+        ejaLabel: true,
+        ejaBannerImageUrl: true,
+        ejaBannerImageUrlMobile: true,
+      },
     })
-    // Imagem do banner é sempre a padronizada pela PMB (herdada pela rede).
+    // Imagens do banner são sempre as padronizadas pela PMB (herdadas pela rede).
     const bannerImageUrl = settings?.ejaBannerImageUrl?.trim() || null
+    const bannerImageUrlMobile =
+      settings?.ejaBannerImageUrlMobile?.trim() || null
 
     if (!tenantId) {
       const url = settings?.ejaUrl?.trim() || null
       const label = settings?.ejaLabel?.trim() || EJA_DEFAULT_LABEL
-      return { label, url, bannerImageUrl }
+      return { label, url, bannerImageUrl, bannerImageUrlMobile }
     }
 
     // Vitrine de revendedor: imagem da PMB + link/rótulo da unidade.
@@ -47,9 +55,14 @@ export async function loadEjaSectionContent(
     })
     const url = tenant?.ejaUrl?.trim() || null
     const label = tenant?.ejaLabel?.trim() || EJA_DEFAULT_LABEL
-    return { label, url, bannerImageUrl }
+    return { label, url, bannerImageUrl, bannerImageUrlMobile }
   } catch {
-    return { label: EJA_DEFAULT_LABEL, url: null, bannerImageUrl: null }
+    return {
+      label: EJA_DEFAULT_LABEL,
+      url: null,
+      bannerImageUrl: null,
+      bannerImageUrlMobile: null,
+    }
   }
 }
 
@@ -58,6 +71,7 @@ export interface PmbEjaConfig {
   url: string | null
   label: string | null
   bannerImageUrl: string | null
+  bannerImageUrlMobile: string | null
 }
 
 /** Config completa do EJA do site PMB — usada pelo editor do admin. */
@@ -70,6 +84,7 @@ export async function loadPmbEjaConfig(): Promise<PmbEjaConfig> {
         ejaUrl: true,
         ejaLabel: true,
         ejaBannerImageUrl: true,
+        ejaBannerImageUrlMobile: true,
       },
     })
     return {
@@ -77,8 +92,15 @@ export async function loadPmbEjaConfig(): Promise<PmbEjaConfig> {
       url: settings?.ejaUrl ?? null,
       label: settings?.ejaLabel ?? null,
       bannerImageUrl: settings?.ejaBannerImageUrl ?? null,
+      bannerImageUrlMobile: settings?.ejaBannerImageUrlMobile ?? null,
     }
   } catch {
-    return { enabled: false, url: null, label: null, bannerImageUrl: null }
+    return {
+      enabled: false,
+      url: null,
+      label: null,
+      bannerImageUrl: null,
+      bannerImageUrlMobile: null,
+    }
   }
 }

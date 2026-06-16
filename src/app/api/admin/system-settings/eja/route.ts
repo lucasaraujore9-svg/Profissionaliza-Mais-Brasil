@@ -19,6 +19,13 @@ const bodySchema = z
       .regex(/^(https?:\/\/|\/)/i, "Imagem inválida (use https://… ou /caminho)")
       .nullable()
       .optional(),
+    bannerImageUrlMobile: z
+      .string()
+      .trim()
+      .max(500)
+      .regex(/^(https?:\/\/|\/)/i, "Imagem inválida (use https://… ou /caminho)")
+      .nullable()
+      .optional(),
   })
   .superRefine((data, ctx) => {
     if (data.enabled && !data.url) {
@@ -46,6 +53,7 @@ export const GET = withRequestContext(
         ejaUrl: true,
         ejaLabel: true,
         ejaBannerImageUrl: true,
+        ejaBannerImageUrlMobile: true,
       },
     })
 
@@ -55,6 +63,7 @@ export const GET = withRequestContext(
         ejaUrl: settings?.ejaUrl ?? null,
         ejaLabel: settings?.ejaLabel ?? null,
         ejaBannerImageUrl: settings?.ejaBannerImageUrl ?? null,
+        ejaBannerImageUrlMobile: settings?.ejaBannerImageUrlMobile ?? null,
       },
     })
   },
@@ -91,6 +100,7 @@ export const PUT = withRequestContext(
       ejaUrl: parsed.data.url ?? null,
       ejaLabel: parsed.data.label?.trim() || null,
       ejaBannerImageUrl: parsed.data.bannerImageUrl ?? null,
+      ejaBannerImageUrlMobile: parsed.data.bannerImageUrlMobile ?? null,
     }
 
     const updated = await prisma.systemSettings.upsert({
@@ -102,6 +112,7 @@ export const PUT = withRequestContext(
         ejaUrl: true,
         ejaLabel: true,
         ejaBannerImageUrl: true,
+        ejaBannerImageUrlMobile: true,
       },
     })
 
