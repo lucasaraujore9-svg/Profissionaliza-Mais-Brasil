@@ -369,10 +369,13 @@ export const POST = withRequestContext(
     : await resolveReferrerFromCookie()
 
   // Vendedor de revenda atribuído à unidade. Prioridade: dono do lead → quem
-  // converteu (se for vendedor de revenda) → escolha explícita do super/gerente.
+  // converteu (se for do comercial de revenda, assume a própria unidade para
+  // ela não sumir do escopo dele) → escolha explícita do super/gerente.
   const salesUserId =
     lead?.ownerUserId ??
-    (ctx.role === "PMB_REVENDA_SALES" ? ctx.userId : data.salesUserId ?? null)
+    (ctx.role === "PMB_REVENDA_SALES" || ctx.role === "PMB_SALES_MGR"
+      ? ctx.userId
+      : data.salesUserId ?? null)
 
   const tenant = await prisma.tenant.create({
     data: {

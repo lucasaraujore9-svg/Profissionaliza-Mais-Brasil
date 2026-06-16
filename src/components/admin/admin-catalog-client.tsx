@@ -96,12 +96,11 @@ export function AdminCatalogClient({ canEdit = false }: AdminCatalogClientProps)
         setError(cb.error ?? "Falha ao carregar catálogo")
         return
       }
-      if (!lr.ok) {
-        setError(lb.error ?? "Falha ao carregar histórico")
-        return
-      }
       setCatalog(cb.data as CatalogResponse)
-      setLogs((lb.data as SyncLogResponse).logs)
+      // O histórico de sincronização é exclusivo do SUPER_ADMIN (sync-log → 403
+      // para os demais). Falha aqui é não-fatal: papéis sem acesso veem o
+      // catálogo em modo leitura, apenas sem o histórico.
+      setLogs(lr.ok ? (lb.data as SyncLogResponse).logs : [])
     } catch {
       setError("Erro de rede ao carregar catálogo")
     } finally {

@@ -8,8 +8,13 @@ export const dynamic = "force-dynamic"
 export default async function AdminAlunosPage() {
   const session = await requireAdminSession()
   if (!session) redirect("/login?callbackUrl=/admin/alunos")
-  // requireAdminSession ja garante papel do time PMB. Os tres papeis (SUPER_ADMIN,
-  // PMB_SALES, PMB_RESELLER_MGR) podem visualizar a lista global de alunos.
+  // A lista de alunos (vitrine PMB B2C) é servida por /api/admin/alunos com
+  // requirePmbSales: só SUPER_ADMIN (todos) e PMB_SALES (suas vendas). Os papéis
+  // comerciais de revenda não têm escopo aqui — sem este guard a página abriria
+  // e a API retornaria 403 (tela quebrada).
+  if (session.role !== "SUPER_ADMIN" && session.role !== "PMB_SALES") {
+    redirect("/admin")
+  }
 
   return (
     <div className="space-y-6">

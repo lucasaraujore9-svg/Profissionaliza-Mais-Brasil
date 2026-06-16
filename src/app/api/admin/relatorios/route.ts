@@ -10,9 +10,19 @@ export const GET = withRequestContext(
   if (!session) {
     return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
   }
+  // Papéis modelados pelos runners. PMB_REVENDA_SALES/PMB_SALES_MGR não são
+  // escopados → lista vazia (a geração também os bloqueia em /[type]).
+  const REPORT_ROLES = ["SUPER_ADMIN", "PMB_SALES", "PMB_RESELLER_MGR"]
+  if (!REPORT_ROLES.includes(session.role)) {
+    return NextResponse.json({ data: { reports: [], role: session.role } })
+  }
 
   const reports = REPORT_DEFS.filter(
-    (r) => !r.needsSuperAdmin || session.role === "SUPER_ADMIN",
+    (r) =>
+      // needsSuperAdmin → só super
+      (!r.needsSuperAdmin || session.role === "SUPER_ADMIN") &&
+      // PMB_SALES só enxerga os relatórios B2C permitidos
+      (session.role !== "PMB_SALES" || r.pmbSalesAllowed),
   ).map((r) => ({
     id: r.id,
     group: r.group,

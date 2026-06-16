@@ -5,25 +5,35 @@ import { AdminFinanceClient } from "./admin-finance-client"
 import { FinanceiroTenantPayments } from "./financeiro-tenant-payments"
 import { FinanceiroReferralPayouts } from "./financeiro-referral-payouts"
 
-const TABS = [
-  { id: "overview", label: "Visão geral" },
-  { id: "tenant-payments", label: "Mensalidades a receber" },
-  { id: "referral-payouts", label: "Comissões a pagar" },
+const ALL_TABS = [
+  { id: "overview", label: "Visão geral", superOnly: true },
+  { id: "tenant-payments", label: "Mensalidades a receber", superOnly: true },
+  { id: "referral-payouts", label: "Comissões a pagar", superOnly: false },
 ] as const
 
-type TabId = (typeof TABS)[number]["id"]
+type TabId = (typeof ALL_TABS)[number]["id"]
 
 interface FinanceiroTabsProps {
   canMarkPaid: boolean
+  /**
+   * SUPER_ADMIN vê visão geral + mensalidades a receber (APIs super-only). Os
+   * demais papéis (PMB_SALES, PMB_RESELLER_MGR) só enxergam comissões a pagar,
+   * já escopadas na rota — sem isso as outras abas retornariam 403.
+   */
+  canSeeAll?: boolean
 }
 
-export function FinanceiroTabs({ canMarkPaid }: FinanceiroTabsProps) {
-  const [active, setActive] = useState<TabId>("overview")
+export function FinanceiroTabs({
+  canMarkPaid,
+  canSeeAll = true,
+}: FinanceiroTabsProps) {
+  const tabs = canSeeAll ? ALL_TABS : ALL_TABS.filter((t) => !t.superOnly)
+  const [active, setActive] = useState<TabId>(tabs[0].id)
 
   return (
     <div>
       <div className="flex flex-wrap gap-1 rounded-xl border border-gray-200 bg-white p-1 shadow-sm">
-        {TABS.map((tab) => (
+        {tabs.map((tab) => (
           <button
             key={tab.id}
             type="button"

@@ -48,12 +48,13 @@ export const GET = withRequestContextParams<{ id: string }>(
     )
   }
 
-  // PMB_RESELLER_MGR so pode acessar tenants atribuidos.
-  if (ctx.role === "PMB_RESELLER_MGR" && tenant.accountManagerId !== ctx.userId) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-  }
-  // PMB_SALES nao tem acesso a financeiro de revenda.
-  if (ctx.role === "PMB_SALES") {
+  // Comissões/financeiro de revenda: só SUPER_ADMIN e o gerente de suporte
+  // (account manager) da unidade. Allowlist positiva — sem ela, papéis comerciais
+  // (PMB_REVENDA_SALES/PMB_SALES_MGR) baixariam comissões de qualquer unidade.
+  const allowed =
+    ctx.role === "SUPER_ADMIN" ||
+    (ctx.role === "PMB_RESELLER_MGR" && tenant.accountManagerId === ctx.userId)
+  if (!allowed) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
 

@@ -67,10 +67,11 @@ export const GET = withRequestContextParams<{ id: string }>(
   // tenants atribuidos; PMB_SALES nao tem acesso a financeiro de revenda. Sem
   // isto, qualquer membro PMB baixaria o CSV de comissoes (valores/percentuais)
   // de qualquer revendedor por id.
-  if (session.role === "PMB_RESELLER_MGR" && tenant.accountManagerId !== session.userId) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-  }
-  if (session.role === "PMB_SALES") {
+  const allowed =
+    session.role === "SUPER_ADMIN" ||
+    (session.role === "PMB_RESELLER_MGR" &&
+      tenant.accountManagerId === session.userId)
+  if (!allowed) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
 

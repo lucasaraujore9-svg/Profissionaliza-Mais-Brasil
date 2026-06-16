@@ -19,8 +19,13 @@ import {
   AdminAlertsPanel,
   type DashboardAlert,
 } from "./admin-alerts-panel"
+import {
+  ScopedDashboard,
+  type ScopedDashboardData,
+} from "./scoped-dashboard"
 
-interface DashboardData {
+interface AdminDashboardData {
+  variant: "admin"
   period: RevenuePeriod
   metrics: AdminMetrics
   quickStats: AdminQuickStats
@@ -28,6 +33,11 @@ interface DashboardData {
   topResellers: TopResellerRow[]
   alerts: DashboardAlert[]
 }
+
+type DashboardData =
+  | AdminDashboardData
+  | ScopedDashboardData
+  | { variant: "empty" }
 
 export function AdminDashboardClient() {
   const [period, setPeriod] = useState<RevenuePeriod>("30d")
@@ -74,6 +84,19 @@ export function AdminDashboardClient() {
   }
 
   if (!data) return null
+
+  if (data.variant === "empty") {
+    return (
+      <div className="rounded-2xl border border-gray-200 bg-white p-10 text-center text-sm text-gray-500 shadow-sm">
+        Você não tem um painel de indicadores. Use o menu lateral para acessar
+        suas áreas.
+      </div>
+    )
+  }
+
+  if (data.variant !== "admin") {
+    return <ScopedDashboard data={data} />
+  }
 
   return (
     <div className="space-y-6">

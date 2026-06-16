@@ -18,6 +18,19 @@ export const GET = withRequestContextParams<{ type: string }>(
   if (!session) {
     return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
   }
+  // Allowlist de papéis modelados pelos runners (globais por natureza):
+  //   SUPER_ADMIN      -> tudo
+  //   PMB_SALES        -> só pmbSalesAllowed (B2C vitrine PMB)
+  //   PMB_RESELLER_MGR -> escopado por tenantId que ele gerencia (abaixo)
+  // PMB_REVENDA_SALES e PMB_SALES_MGR NÃO são escopados aqui — sem este gate
+  // exportariam dados de todo o ecossistema (fora do escopo deles).
+  const REPORT_ROLES = ["SUPER_ADMIN", "PMB_SALES", "PMB_RESELLER_MGR"]
+  if (!REPORT_ROLES.includes(session.role)) {
+    return NextResponse.json(
+      { error: "Sem permissão para gerar relatórios" },
+      { status: 403 },
+    )
+  }
 
   const { type } = await ctx.params
   const def = REPORT_DEFS.find((d) => d.id === type)

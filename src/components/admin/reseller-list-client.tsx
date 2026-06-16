@@ -184,8 +184,13 @@ export function ResellerListClient() {
             onFilterChange={setFilter}
           />
         </div>
+        {/* Quem pode cadastrar revenda: super, suporte (account manager) e o
+            comercial de revenda (gerente de vendas + vendedor de unidade). O
+            backend (POST /api/admin/revendedores) valida os mesmos papéis. */}
         {(data?.role === "SUPER_ADMIN" ||
-          data?.role === "PMB_RESELLER_MGR") && (
+          data?.role === "PMB_RESELLER_MGR" ||
+          data?.role === "PMB_SALES_MGR" ||
+          data?.role === "PMB_REVENDA_SALES") && (
           <NewResellerDialog onCreated={load} />
         )}
       </div>

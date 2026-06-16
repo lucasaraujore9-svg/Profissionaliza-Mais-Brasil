@@ -17,7 +17,7 @@ export default async function AdminFinancePage() {
         title="Financeiro"
         description="Acompanhe e gerencie cobranças, pagamentos e comissões da plataforma."
       />
-      <FinanceiroTabs canMarkPaid={canMarkPaid} />
+      <FinanceiroTabs canMarkPaid={canMarkPaid} canSeeAll={role === "SUPER_ADMIN"} />
     </div>
   )
 }
