@@ -477,6 +477,13 @@ model Course {
   descricao          String?  @db.Text // Campo "obs" da API
   qtdAulas           Int      @map("qtd_aulas") // Campo "aulas"
   cargaHoraria       String?  @map("carga_horaria")
+
+  // Matriz curricular (conteudo programatico). Lista de topicos exibida na
+  // pagina do curso e no verso do certificado. Conteudo global PMB (igual para
+  // TODAS as vitrines — mae, revendas ativas/pendentes e futuras), curado a
+  // partir dos PDFs oficiais de matriz. Vazio => curso sem matriz: a pagina e o
+  // verso do certificado seguem o layout atual (sem a secao).
+  matrizCurricular String[] @default([]) @map("matriz_curricular")
   precoOriginal      Decimal? @map("preco_original") @db.Decimal(10, 2) // Parseado do formato BR
   precoPromocional   Decimal? @map("preco_promocional") @db.Decimal(10, 2)
   parcelasSugeridas  Int?     @map("parcelas_sugeridas") // Campo "parcelas"

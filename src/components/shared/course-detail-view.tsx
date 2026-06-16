@@ -10,6 +10,7 @@ import {
   GraduationCap,
   HelpCircle,
   Layers,
+  ListChecks,
   PlayCircle,
   ShieldCheck,
   Smartphone,
@@ -31,6 +32,11 @@ export interface CourseDetailData {
   /** Quantidade total de mensalidades quando paymentType === "MONTHLY". */
   monthlyMonths?: number | null
   lessons: Array<{ id: string; nome: string; ordem: number }>
+  /**
+   * Matriz curricular oficial (conteúdo programático) — lista de tópicos.
+   * Quando vazia/ausente, a seção não é renderizada e a página segue como hoje.
+   */
+  matriz?: string[]
 }
 
 interface CourseDetailViewProps {
@@ -267,6 +273,40 @@ export function CourseDetailView({
                 ))}
               </ul>
             </div>
+
+            {/* Matriz Curricular — só renderiza quando o curso tem matriz oficial */}
+            {course.matriz && course.matriz.length > 0 && (
+              <div>
+                <div className="flex items-center justify-between">
+                  <h2 className="text-[22px] font-black text-[var(--color-pmb-green)] md:text-[26px]">
+                    Matriz curricular
+                  </h2>
+                  <span className="rounded-full bg-[var(--color-pmb-mist)] px-3 py-1 text-[12px] font-bold text-[var(--color-pmb-green)]">
+                    {course.matriz.length} tópicos
+                  </span>
+                </div>
+                <p className="mt-2 text-[13.5px] text-[rgba(2,89,24,0.7)]">
+                  Conteúdo programático completo do curso.
+                </p>
+                <ul className="mt-4 grid gap-x-8 gap-y-2.5 rounded-2xl border border-[rgba(2,89,24,0.08)] bg-white p-5 sm:grid-cols-2">
+                  {course.matriz.map((topico, idx) => (
+                    <li
+                      key={idx}
+                      className="flex items-start gap-2.5 text-[14px] leading-snug text-[rgba(2,89,24,0.85)]"
+                    >
+                      <ListChecks
+                        className="mt-0.5 h-4 w-4 shrink-0 text-[var(--color-pmb-gold-600)]"
+                        aria-hidden
+                      />
+                      <span>{topico}</span>
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-3 text-[11.5px] italic text-[rgba(2,89,24,0.55)]">
+                  *As informações podem sofrer alterações sem aviso prévio.
+                </p>
+              </div>
+            )}
 
             {/* Conteúdo do curso */}
             <div>
