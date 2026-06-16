@@ -1,9 +1,11 @@
-import { getJson, setJson, invalidateMany } from "./cache"
+import { getJson, setJson, invalidate, invalidateMany } from "./cache"
 import {
   TENANT_CACHE_TTL_SECONDS,
+  TENANT_REDIRECT_TTL_SECONDS,
   tenantBySlugKey,
   tenantByDomainKey,
   tenantByIdKey,
+  tenantRedirectKey,
 } from "./keys"
 
 export interface CachedTenant {
@@ -50,4 +52,22 @@ export async function invalidateTenant(
     keys.push(tenantByDomainKey(tenant.customDomain))
   }
   await invalidateMany(keys)
+}
+
+/**
+ * Grava o redirect de um subdominio antigo -> slug atual da unidade (apos um
+ * rename). TTL = janela de reserva (15 dias). O proxy/edge le essa chave para
+ * emitir 308 do subdominio antigo para o novo.
+ */
+export async function setSlugRedirect(
+  oldSlug: string,
+  newSlug: string,
+  ttlSeconds: number = TENANT_REDIRECT_TTL_SECONDS,
+): Promise<void> {
+  await setJson(tenantRedirectKey(oldSlug), newSlug, ttlSeconds)
+}
+
+/** Remove um redirect de subdominio (ex.: quando a unidade reivindica o slug de volta). */
+export async function invalidateSlugRedirect(oldSlug: string): Promise<void> {
+  await invalidate(tenantRedirectKey(oldSlug))
 }

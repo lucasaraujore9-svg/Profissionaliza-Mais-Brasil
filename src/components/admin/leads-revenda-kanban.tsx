@@ -8,11 +8,18 @@ import {
   Phone,
   MapPin,
   UserPlus,
+  UserCog,
   GripVertical,
   MoreVertical,
 } from "lucide-react"
 import { NewResellerDialog } from "@/components/admin/new-reseller-dialog"
 import type { RevendaLead, LeadStatus } from "./leads-revenda-list"
+
+export interface LeadAssigneeOption {
+  userId: string
+  name: string
+  active: boolean
+}
 
 // MIME usado no dataTransfer do drag-and-drop nativo dos cards de lead de
 // revenda. Distinto do board de StudentLead (Vitrine PMB) p/ não aceitar drop
@@ -66,10 +73,13 @@ export function LeadsRevendaKanban({
   leads,
   apiBase,
   canConvert = false,
+  assignees = [],
 }: {
   leads: RevendaLead[]
   apiBase: string
   canConvert?: boolean
+  /** Vendedores de revenda para reatribuição (vazio = sem permissão). */
+  assignees?: LeadAssigneeOption[]
 }) {
   const router = useRouter()
   const [board, setBoard] = useState<Board>(() => groupByStatus(leads))
@@ -90,7 +100,7 @@ export function LeadsRevendaKanban({
       )
       if (!moved) return
 
-      // optimistic update
+      // optimistic update: card movido vai para o topo da coluna destino
       const next = groupByStatus(
         STATUS_ORDER.flatMap((s) => prev[s]).map((l) =>
           l.id === leadId ? { ...l, status: toStatus } : l,
@@ -102,7 +112,7 @@ export function LeadsRevendaKanban({
         const res = await fetch(`${apiBase}/${leadId}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ status: toStatus }),
+          body: JSON.stringify({ status: toStatus, columnOrder: 0 }),
         })
         if (!res.ok) {
           const body = await res.json().catch(() => ({}))
@@ -120,6 +130,30 @@ export function LeadsRevendaKanban({
     [board, apiBase, router],
   )
 
+  const reassignLead = useCallback(
+    async (leadId: string, ownerUserId: string | null, ownerName: string | null) => {
+      try {
+        const res = await fetch(`${apiBase}/${leadId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ownerUserId }),
+        })
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}))
+          toast.error(body.error ?? "Falha ao atribuir lead.")
+          return
+        }
+        toast.success(
+          ownerName ? `Lead atribuído a ${ownerName}.` : "Dono removido do lead.",
+        )
+        router.refresh()
+      } catch {
+        toast.error("Erro de conexão. Tente de novo.")
+      }
+    },
+    [apiBase, router],
+  )
+
   return (
     <div className="-mx-2 overflow-x-auto pb-4">
       <div className="flex min-w-max gap-3 px-2">
@@ -131,6 +165,8 @@ export function LeadsRevendaKanban({
             onMove={moveLead}
             canConvert={canConvert}
             onConverted={() => router.refresh()}
+            assignees={assignees}
+            onReassign={reassignLead}
           />
         ))}
       </div>
@@ -144,6 +180,8 @@ interface ColumnProps {
   onMove: (id: string, toStatus: LeadStatus) => void
   canConvert: boolean
   onConverted: () => void
+  assignees: LeadAssigneeOption[]
+  onReassign: (id: string, ownerUserId: string | null, ownerName: string | null) => void
 }
 
 function KanbanColumn({
@@ -152,6 +190,8 @@ function KanbanColumn({
   onMove,
   canConvert,
   onConverted,
+  assignees,
+  onReassign,
 }: ColumnProps) {
   const meta = STATUS_META[status]
   const [isOver, setIsOver] = useState(false)
@@ -210,6 +250,8 @@ function KanbanColumn({
             onMove={onMove}
             canConvert={canConvert}
             onConverted={onConverted}
+            assignees={assignees}
+            onReassign={onReassign}
           />
         ))}
       </div>
@@ -223,6 +265,8 @@ interface CardProps {
   onMove: (id: string, toStatus: LeadStatus) => void
   canConvert: boolean
   onConverted: () => void
+  assignees: LeadAssigneeOption[]
+  onReassign: (id: string, ownerUserId: string | null, ownerName: string | null) => void
 }
 
 function KanbanCard({
@@ -231,6 +275,8 @@ function KanbanCard({
   onMove,
   canConvert,
   onConverted,
+  assignees,
+  onReassign,
 }: CardProps) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [dragging, setDragging] = useState(false)
@@ -311,6 +357,17 @@ function KanbanCard({
               Indicado por {lead.referrerName}
             </span>
           )}
+          {/* Vendedor de revenda dono do lead (rodízio ou atribuição manual). */}
+          <span
+            className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+              lead.ownerName
+                ? "bg-indigo-50 text-indigo-700"
+                : "bg-gray-100 text-gray-500"
+            }`}
+          >
+            <UserCog className="h-3 w-3" aria-hidden />
+            {lead.ownerName ?? "Sem dono"}
+          </span>
         </div>
       </div>
 
@@ -361,6 +418,43 @@ function KanbanCard({
                 {STATUS_META[s].label}
               </button>
             ))}
+
+            {assignees.length > 0 && (
+              <>
+                <p className="mt-1 border-t border-gray-100 px-2 pb-1 pt-1.5 text-[10px] font-semibold uppercase text-gray-400">
+                  Atribuir a
+                </p>
+                {assignees.map((a) => (
+                  <button
+                    key={a.userId}
+                    disabled={a.userId === lead.ownerUserId}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setMenuOpen(false)
+                      onReassign(lead.id, a.userId, a.name)
+                    }}
+                    className="block w-full rounded px-2 py-1.5 text-left text-[12px] text-gray-700 hover:bg-[var(--color-pmb-mist)] disabled:cursor-default disabled:font-semibold disabled:text-[var(--color-pmb-green)]"
+                  >
+                    {a.name}
+                    {!a.active && (
+                      <span className="ml-1 text-[10px] text-gray-400">(convite pendente)</span>
+                    )}
+                  </button>
+                ))}
+                {lead.ownerUserId && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setMenuOpen(false)
+                      onReassign(lead.id, null, null)
+                    }}
+                    className="block w-full rounded px-2 py-1.5 text-left text-[12px] text-red-600 hover:bg-red-50"
+                  >
+                    Remover dono
+                  </button>
+                )}
+              </>
+            )}
           </div>
         )}
       </div>

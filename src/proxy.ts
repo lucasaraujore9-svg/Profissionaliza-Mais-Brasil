@@ -173,6 +173,29 @@ async function resolveTenantFromRedis(
   return null
 }
 
+// Le o redirect de um subdominio antigo -> slug atual (gravado no rename, key
+// `tenant:redirect:{slug}` com TTL de 15 dias). Retorna o slug novo ou null.
+async function resolveRedirectFromRedis(slug: string): Promise<string | null> {
+  const url = process.env.UPSTASH_REDIS_REST_URL
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN
+  if (!url || !token) return null
+
+  try {
+    const res = await fetch(
+      `${url.replace(/\/$/, "")}/get/tenant:redirect:${encodeURIComponent(slug)}`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    )
+    const data = await res.json()
+    if (data.result) {
+      const parsed = JSON.parse(data.result)
+      return typeof parsed === "string" ? parsed : null
+    }
+  } catch {
+    // Redis indisponível, segue (fallback de DB cobre os caminhos de vitrine)
+  }
+  return null
+}
+
 type TenantRecord = { id: string; slug: string; status: string }
 
 // Discrimina "tenant nao existe" (404 definitivo) de "falha transitoria"
@@ -182,6 +205,7 @@ type TenantRecord = { id: string; slug: string; status: string }
 // falhas transitorias, para nao derrubar uma vitrine valida por um soluco.
 type ResolveResult =
   | { ok: true; tenant: TenantRecord }
+  | { ok: true; redirectSlug: string }
   | { ok: false; reason: "not_found" | "error" }
 
 async function resolveTenantFromDB(
@@ -201,7 +225,10 @@ async function resolveTenantFromDB(
     )
     if (res.status === 404) return { ok: false, reason: "not_found" }
     if (!res.ok) return { ok: false, reason: "error" }
-    return { ok: true, tenant: (await res.json()) as TenantRecord }
+    const json = (await res.json()) as TenantRecord & { redirectSlug?: string }
+    // Slug antigo (renomeado): o endpoint devolve o slug atual para redirect.
+    if (json.redirectSlug) return { ok: true, redirectSlug: json.redirectSlug }
+    return { ok: true, tenant: json }
   } catch {
     return { ok: false, reason: "error" }
   }
@@ -253,16 +280,31 @@ export default async function proxy(request: NextRequest) {
   // o dominio da revenda (vazaria vitrine/pagamentos da marca master).
   let customDomainNotFound = false
 
+  // Helper: 308 para o subdominio novo, preservando path + querystring.
+  function redirectToSlug(newSlug: string): NextResponse {
+    const url = request.nextUrl.clone()
+    url.hostname = host.apex ? `${newSlug}.${host.apex}` : url.hostname
+    return NextResponse.redirect(url, 308)
+  }
+
   if (host.kind === "tenant" && host.subdomain) {
     tenantSlug = host.subdomain
+
+    // Subdominio antigo (renomeado nos ultimos 15 dias): 308 para o slug atual
+    // da unidade. Fonte primaria = Redis (gravado no rename); o fallback de DB
+    // mais abaixo cobre os caminhos de vitrine caso a chave tenha sido evictada.
+    const redirectTo = await resolveRedirectFromRedis(tenantSlug)
+    if (redirectTo && redirectTo !== tenantSlug && host.apex) {
+      return redirectToSlug(redirectTo)
+    }
   }
 
   // Hostname desconhecido: tenta resolver como custom domain de tenant.
   if (host.kind === "unknown") {
     const result = await resolveTenantFromDB(stripPort(hostname), "domain", origin)
-    if (result.ok) {
+    if (result.ok && "tenant" in result) {
       tenantSlug = result.tenant.slug
-    } else if (result.reason === "not_found") {
+    } else if (!result.ok && result.reason === "not_found") {
       customDomainNotFound = true
     }
     // reason === "error" (transitorio): segue o fluxo de fail-open abaixo.
@@ -301,7 +343,12 @@ export default async function proxy(request: NextRequest) {
   let resolvedTenant = await resolveTenantFromRedis(tenantSlug)
   if (!resolvedTenant) {
     const dbResult = await resolveTenantFromDB(tenantSlug, "slug", origin)
-    if (dbResult.ok) {
+    if (dbResult.ok && "redirectSlug" in dbResult) {
+      // Slug antigo (Redis evictado): 308 para o slug atual via fonte de verdade.
+      if (dbResult.redirectSlug !== tenantSlug && host.apex) {
+        return redirectToSlug(dbResult.redirectSlug)
+      }
+    } else if (dbResult.ok && "tenant" in dbResult) {
       resolvedTenant = { id: dbResult.tenant.id, status: dbResult.tenant.status }
     }
   }

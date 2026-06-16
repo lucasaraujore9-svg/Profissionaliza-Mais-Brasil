@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { requireSuperAdmin } from "@/lib/auth/guards"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 
-const PMB_ROLES = ["SUPER_ADMIN", "PMB_SALES", "PMB_RESELLER_MGR"] as const
+const PMB_ROLES = ["SUPER_ADMIN", "PMB_SALES", "PMB_SALES_MGR", "PMB_REVENDA_SALES", "PMB_RESELLER_MGR"] as const
 
 export const GET = withRequestContextParams<{ id: string }>(
   { action: "admin.equipe.get", route: "/api/admin/equipe/[id]" },
@@ -26,6 +26,8 @@ export const GET = withRequestContextParams<{ id: string }>(
       lastActiveAt: true,
       passwordHash: true,
       createdAt: true,
+      salesManagerId: true,
+      salesManager: { select: { name: true } },
     },
   })
 
@@ -45,6 +47,8 @@ export const GET = withRequestContextParams<{ id: string }>(
       lastActiveAt: user.lastActiveAt?.toISOString() ?? null,
       pendingInvite: !user.passwordHash,
       createdAt: user.createdAt.toISOString(),
+      salesManagerId: user.salesManagerId,
+      salesManagerName: user.salesManager?.name ?? null,
     },
   })
   },
@@ -57,6 +61,9 @@ const patchSchema = z.object({
   status: z.enum(["ATIVO", "INATIVO"]).optional(),
   phone: z.string().nullable().optional(),
   image: z.string().url().nullable().optional(),
+  // Gerente de vendas do vendedor de revenda. Zerado se o papel não for
+  // PMB_REVENDA_SALES (validado abaixo).
+  salesManagerId: z.string().nullable().optional(),
 })
 
 export const PATCH = withRequestContextParams<{ id: string }>(
@@ -101,9 +108,30 @@ export const PATCH = withRequestContextParams<{ id: string }>(
     }
   }
 
+  // Normaliza o vínculo com gerente de vendas: só vendedor de revenda o tem.
+  const data = { ...parsed.data }
+  const effectiveRole = data.role ?? target.role
+  if (effectiveRole !== "PMB_REVENDA_SALES") {
+    // Papel não-comercial-de-revenda nunca mantém gerente atribuído.
+    if (data.role !== undefined || data.salesManagerId !== undefined) {
+      data.salesManagerId = null
+    }
+  } else if (data.salesManagerId) {
+    const mgr = await prisma.user.findUnique({
+      where: { id: data.salesManagerId },
+      select: { role: true, status: true },
+    })
+    if (!mgr || mgr.role !== "PMB_SALES_MGR" || mgr.status !== "ATIVO") {
+      return NextResponse.json(
+        { error: "Gerente de vendas inválido ou inativo" },
+        { status: 400 },
+      )
+    }
+  }
+
   const updated = await prisma.user.update({
     where: { id },
-    data: parsed.data,
+    data,
     select: { id: true, name: true, email: true, role: true, status: true },
   })
 

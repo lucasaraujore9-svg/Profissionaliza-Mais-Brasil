@@ -14,6 +14,7 @@ import { isValidCpf, stripCpf } from "@/lib/validation/cpf"
 import { isValidPhone, normalizePhone } from "@/lib/validation/phone"
 import { effectivePaymentType } from "@/lib/tenant/monthly-policy"
 import { vitrineUrl } from "@/lib/tenant/urls"
+import { tenantPolo } from "@/lib/tenant/slug"
 
 const createSchema = z.object({
   // Dados do aluno (cria ou reaproveita por CPF/email)
@@ -115,6 +116,7 @@ export const POST = withRequestContext(
       select: {
         id: true,
         slug: true,
+        poloName: true,
         name: true,
         status: true,
         mpAccessToken: true,
@@ -251,7 +253,7 @@ export const POST = withRequestContext(
         email: data.email,
         cpf: data.cpf,
         fone: data.fone,
-        polo: tenant.slug,
+        polo: tenantPolo(tenant),
         vendedorId: tenant.plataformaVendedorId,
         plataformaAlunoIdFallback: `pending_${Date.now()}`,
         initialStatus: "INTERESSADO",

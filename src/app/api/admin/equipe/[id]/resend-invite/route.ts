@@ -4,7 +4,7 @@ import { requireSuperAdmin } from "@/lib/auth/guards"
 import { sendInvite } from "@/lib/auth/invite"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 
-const PMB_ROLES = ["SUPER_ADMIN", "PMB_SALES", "PMB_RESELLER_MGR"] as const
+const PMB_ROLES = ["SUPER_ADMIN", "PMB_SALES", "PMB_SALES_MGR", "PMB_REVENDA_SALES", "PMB_RESELLER_MGR"] as const
 
 export const POST = withRequestContextParams<{ id: string }>(
   { action: "admin.equipe.resend_invite", route: "/api/admin/equipe/[id]/resend-invite" },

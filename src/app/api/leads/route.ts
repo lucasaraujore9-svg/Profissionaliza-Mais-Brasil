@@ -11,6 +11,7 @@ import {
   validateReferralCode,
   resolveReferrerFromCookie,
 } from "@/lib/referrals/capture"
+import { pickNextRevendaLeadOwner } from "@/lib/automation/assign"
 
 // Endpoint EXCLUSIVO de revenda (interessado em virar revendedor PMB).
 // Contato generico migrou para /api/contato (ContactMessage roteado por
@@ -96,6 +97,11 @@ export const POST = withRequestContext(
     referrerTenantId = await resolveReferrerFromCookie()
   }
 
+  // Distribuicao automatica (rodizio) entre vendedores de revenda, se ligada
+  // em SystemSettings. Retorna null quando desligada ou sem vendedor elegivel —
+  // nesse caso o lead nasce sem dono e o admin/gerente atribui manualmente.
+  const ownerUserId = await pickNextRevendaLeadOwner()
+
   try {
     const lead = await prisma.lead.create({
       data: {
@@ -108,6 +114,7 @@ export const POST = withRequestContext(
         source: data.source || null,
         notes: data.notes || null,
         referrerTenantId,
+        ownerUserId,
       },
     })
 

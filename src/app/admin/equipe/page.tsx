@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { requireAdminSession } from "@/lib/auth/admin-session"
 import { EquipeClient } from "@/components/admin/equipe-client"
 
-const PMB_ROLES = ["SUPER_ADMIN", "PMB_SALES", "PMB_RESELLER_MGR"] as const
+const PMB_ROLES = ["SUPER_ADMIN", "PMB_SALES", "PMB_SALES_MGR", "PMB_REVENDA_SALES", "PMB_RESELLER_MGR"] as const
 
 export const dynamic = "force-dynamic"
 
@@ -21,10 +21,18 @@ export default async function EquipePage() {
       role: true,
       status: true,
       phone: true,
+      salesManagerId: true,
+      salesManager: { select: { name: true } },
       lastActiveAt: true,
       passwordHash: true,
       createdAt: true,
     },
+    orderBy: { name: "asc" },
+  })
+
+  const salesManagers = await prisma.user.findMany({
+    where: { role: "PMB_SALES_MGR", status: "ATIVO" },
+    select: { id: true, name: true },
     orderBy: { name: "asc" },
   })
 
@@ -35,10 +43,12 @@ export default async function EquipePage() {
     role: u.role,
     status: u.status,
     phone: u.phone,
+    salesManagerId: u.salesManagerId,
+    salesManagerName: u.salesManager?.name ?? null,
     lastActiveAt: u.lastActiveAt?.toISOString() ?? null,
     pendingInvite: !u.passwordHash,
     createdAt: u.createdAt.toISOString(),
   }))
 
-  return <EquipeClient initialItems={items} />
+  return <EquipeClient initialItems={items} salesManagers={salesManagers} />
 }

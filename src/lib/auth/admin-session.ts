@@ -8,7 +8,13 @@ export interface AdminSession {
   email?: string
 }
 
-const PMB_TEAM: UserRole[] = ["SUPER_ADMIN", "PMB_SALES", "PMB_RESELLER_MGR"]
+const PMB_TEAM: UserRole[] = [
+  "SUPER_ADMIN",
+  "PMB_SALES",
+  "PMB_SALES_MGR",
+  "PMB_REVENDA_SALES",
+  "PMB_RESELLER_MGR",
+]
 
 /**
  * Aceita qualquer papel da equipe interna PMB.

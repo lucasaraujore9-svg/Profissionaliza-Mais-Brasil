@@ -16,8 +16,10 @@ datasource db {
 
 enum UserRole {
   SUPER_ADMIN // PMB owner — full access
-  PMB_SALES // Vendas diretas vitrine PMB, cupom ate 50%
-  PMB_RESELLER_MGR // Gerencia revendedores atribuidos
+  PMB_SALES // Vendedor de curso (vendas diretas vitrine PMB B2C, cupom ate 50%)
+  PMB_SALES_MGR // Gerente de vendas — chefia dos vendedores de revenda (ve o time)
+  PMB_REVENDA_SALES // Vendedor de revenda (B2B): trabalha leads e fecha unidades
+  PMB_RESELLER_MGR // Gerente de unidades / suporte (ve as unidades atribuidas)
   RESELLER // Dono ou consultor de tenant
   STUDENT // Aluno acessa /aluno com matriculas e pagamentos
 }
@@ -121,8 +123,20 @@ model User {
   // Memberships em tenants (para multiplos admins)
   tenantMemberships TenantMember[]
 
-  // Tenants gerenciados (PMB_RESELLER_MGR como account manager)
+  // Tenants gerenciados (PMB_RESELLER_MGR como account manager / suporte)
   managedTenants Tenant[] @relation("AccountManagerTenants")
+
+  // Unidades cuja venda (revenda) e atribuida a este usuario (PMB_REVENDA_SALES)
+  salesTenants Tenant[] @relation("SalesUserTenants")
+
+  // Hierarquia comercial: gerente de vendas (PMB_SALES_MGR) deste vendedor de
+  // revenda. salesTeam = vendedores subordinados a este gerente.
+  salesManagerId String? @map("sales_manager_id")
+  salesManager   User?   @relation("SalesTeam", fields: [salesManagerId], references: [id])
+  salesTeam      User[]  @relation("SalesTeam")
+
+  // Leads de revenda (B2B) atribuidos a este usuario (PMB_REVENDA_SALES)
+  ownedLeads Lead[] @relation("LeadOwner")
 
   // Cupons criados por este usuario (auditoria + cap por papel)
   createdCoupons Coupon[] @relation("CreatedCoupons")
@@ -157,6 +171,7 @@ model User {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@index([resetToken])
+  @@index([salesManagerId])
   @@map("users")
 }
 
@@ -275,9 +290,14 @@ model Tenant {
   // Dono do tenant (owner principal)
   owner User? @relation("TenantOwner")
 
-  // Gerente de conta PMB (PMB_RESELLER_MGR atribuido)
+  // Gerente de conta / suporte PMB (PMB_RESELLER_MGR atribuido)
   accountManagerId String? @map("account_manager_id")
   accountManager   User?   @relation("AccountManagerTenants", fields: [accountManagerId], references: [id])
+
+  // Vendedor de revenda (PMB_REVENDA_SALES) que fechou/atende comercialmente esta
+  // unidade. Setado na conversao do lead (ownerUserId -> salesUserId) ou manual.
+  salesUserId String? @map("sales_user_id")
+  salesUser   User?   @relation("SalesUserTenants", fields: [salesUserId], references: [id])
 
   // Membros do tenant (para multiplos admins/gerentes no futuro)
   members TenantMember[]
@@ -363,6 +383,7 @@ model Tenant {
   automationTemplates          AutomationMessageTemplate[]
   contactMessages              ContactMessage[]
   visitorEvents                VisitorEvent[]
+  slugRedirects                TenantSlugRedirect[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -371,9 +392,30 @@ model Tenant {
   @@index([customDomain])
   @@index([status])
   @@index([accountManagerId])
+  @@index([salesUserId])
   @@index([referrerTenantId])
   @@index([referralCode])
   @@map("tenants")
+}
+
+// Subdominios antigos de uma revenda apos um rename de slug. Enquanto a reserva
+// esta valida (expiresAt no futuro): (1) o subdominio antigo redireciona para o
+// slug atual da unidade no proxy/edge e (2) o slug fica indisponivel para outras
+// revendas (checado em isSlugAvailable). Passado expiresAt, a linha e ignorada
+// (e pode ser limpa por cron de higiene) e o slug volta a ficar livre.
+// Guardamos tenantId (nao o slug novo): o alvo do redirect e sempre o slug atual
+// da unidade, o que trata renames encadeados (A->B->C: A redireciona para C).
+model TenantSlugRedirect {
+  id        String   @id @default(cuid())
+  oldSlug   String   @unique @map("old_slug")
+  tenantId  String   @map("tenant_id")
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([tenantId])
+  @@index([expiresAt])
+  @@map("tenant_slug_redirects")
 }
 
 model TenantSupportNote {
@@ -984,14 +1026,25 @@ model Lead {
   referrerTenantId String? @map("referrer_tenant_id")
   referrer         Tenant? @relation("LeadReferrer", fields: [referrerTenantId], references: [id])
 
+  // Vendedor de revenda (PMB_REVENDA_SALES) dono deste lead. Atribuido por rodizio
+  // (SystemSettings.leadRevendaAutoAssign) ou manualmente pelo admin/gerente.
+  // Na conversao em unidade, vira o Tenant.salesUserId.
+  ownerUserId String? @map("owner_user_id")
+  owner       User?   @relation("LeadOwner", fields: [ownerUserId], references: [id])
+
+  // Ordem dentro da coluna do kanban (drag-and-drop reordena). Menor = topo.
+  columnOrder Int @default(0) @map("column_order")
+
   notes     String?  @db.Text
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@index([status])
+  @@index([status, columnOrder])
   @@index([email])
   @@index([createdAt])
   @@index([referrerTenantId])
+  @@index([ownerUserId])
   @@map("leads")
 }
 
@@ -1198,6 +1251,14 @@ model SystemSettings {
   // Pixels de rastreamento da PMB: self (site/vitrine PMB) + global (todas as vitrines).
   pixelsSelf   Json? @map("tracking_pixels_self")
   pixelsGlobal Json? @map("tracking_pixels_global")
+
+  // Distribuicao automatica dos leads de revenda (B2B) entre os vendedores de
+  // revenda ativos (PMB_REVENDA_SALES). Espelha leadAutoAssign/cursor do Tenant
+  // mas no nivel PMB (leads de /seja-revendedor nao tem tenant). Quando ligado,
+  // cada lead novo nasce com ownerUserId apontando para o proximo vendedor na
+  // fila. Desligado = atribuicao manual. Ver src/lib/automation/assign.ts.
+  leadRevendaAutoAssign   Boolean @default(false) @map("lead_revenda_auto_assign")
+  leadRevendaAssignCursor Int     @default(0) @map("lead_revenda_assign_cursor")
 
   // Indicacoes
   referralEnabled        Boolean @default(true) @map("referral_enabled")

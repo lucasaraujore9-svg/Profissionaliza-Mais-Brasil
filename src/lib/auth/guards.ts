@@ -8,7 +8,13 @@ export interface AuthedSession {
   tenantId: string | null
 }
 
-const PMB_TEAM: UserRole[] = ["SUPER_ADMIN", "PMB_SALES", "PMB_RESELLER_MGR"]
+const PMB_TEAM: UserRole[] = [
+  "SUPER_ADMIN",
+  "PMB_SALES",
+  "PMB_SALES_MGR",
+  "PMB_REVENDA_SALES",
+  "PMB_RESELLER_MGR",
+]
 
 async function currentSession(): Promise<AuthedSession | null> {
   const session = await auth()
@@ -59,6 +65,29 @@ export async function requirePmbResellerMgr(): Promise<
 > {
   const session = await currentSession()
   if (!session || (session.role !== "PMB_RESELLER_MGR" && session.role !== "SUPER_ADMIN")) {
+    return { ok: false, response: deny() }
+  }
+  return { ok: true, session }
+}
+
+// Equipe comercial que trabalha leads/unidades de revenda (B2B): gerente de
+// vendas + vendedor de revenda + super. NAO inclui PMB_SALES (vendedor de curso)
+// nem PMB_RESELLER_MGR (suporte) — esses tem seus proprios escopos.
+const REVENDA_TEAM: UserRole[] = ["SUPER_ADMIN", "PMB_SALES_MGR", "PMB_REVENDA_SALES"]
+
+export async function requireRevendaTeam(): Promise<
+  { ok: true; session: AuthedSession } | { ok: false; response: Response }
+> {
+  const session = await currentSession()
+  if (!session || !REVENDA_TEAM.includes(session.role)) return { ok: false, response: deny() }
+  return { ok: true, session }
+}
+
+export async function requirePmbSalesMgr(): Promise<
+  { ok: true; session: AuthedSession } | { ok: false; response: Response }
+> {
+  const session = await currentSession()
+  if (!session || (session.role !== "PMB_SALES_MGR" && session.role !== "SUPER_ADMIN")) {
     return { ok: false, response: deny() }
   }
   return { ok: true, session }

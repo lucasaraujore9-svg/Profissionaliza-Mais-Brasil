@@ -4,6 +4,8 @@ export function homeForRole(role?: UserRole | string | null): string {
   switch (role) {
     case "SUPER_ADMIN":
     case "PMB_SALES":
+    case "PMB_SALES_MGR":
+    case "PMB_REVENDA_SALES":
     case "PMB_RESELLER_MGR":
       return "/admin"
     case "RESELLER":

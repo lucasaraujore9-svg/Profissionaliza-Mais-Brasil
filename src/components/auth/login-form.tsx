@@ -113,6 +113,8 @@ export function LoginForm() {
       if (
         role === "SUPER_ADMIN" ||
         role === "PMB_SALES" ||
+        role === "PMB_SALES_MGR" ||
+        role === "PMB_REVENDA_SALES" ||
         role === "PMB_RESELLER_MGR"
       ) {
         router.push("/admin")

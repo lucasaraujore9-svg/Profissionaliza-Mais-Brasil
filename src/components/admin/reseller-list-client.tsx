@@ -30,7 +30,7 @@ interface ListResponse {
   data: {
     stats: ResellerStats
     resellers: ResellerRow[]
-    role: "SUPER_ADMIN" | "PMB_SALES" | "PMB_RESELLER_MGR"
+    role: "SUPER_ADMIN" | "PMB_SALES" | "PMB_SALES_MGR" | "PMB_REVENDA_SALES" | "PMB_RESELLER_MGR"
   }
 }
 

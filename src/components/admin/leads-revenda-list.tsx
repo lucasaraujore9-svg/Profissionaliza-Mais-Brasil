@@ -24,6 +24,9 @@ export interface RevendaLead {
   referrerName: string | null
   /** Tenant criado quando o lead foi convertido em revenda. */
   convertedTenantId: string | null
+  /** Vendedor de revenda dono deste lead (rodízio ou atribuição manual). */
+  ownerUserId: string | null
+  ownerName: string | null
 }
 
 const STATUS_OPTIONS: { value: LeadStatus; label: string }[] = [

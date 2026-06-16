@@ -9,6 +9,13 @@ import {
   type LeadStatus,
 } from "@/components/admin/leads-revenda-list"
 import { LeadsRevendaKanban } from "@/components/admin/leads-revenda-kanban"
+import {
+  canHandleRevendaLeads,
+  canConvertRevendaLeads,
+  leadScopeWhere,
+} from "@/lib/auth/scope"
+import { listRevendaLeadAssignees } from "@/lib/automation/assign"
+import { LeadRevendaDistributionToggle } from "@/components/admin/lead-revenda-distribution-toggle"
 
 export const dynamic = "force-dynamic"
 
@@ -27,9 +34,13 @@ export default async function AdminLeadsRevendaPage({
 }) {
   const session = await requireAdminSession()
   if (!session) redirect("/login?callbackUrl=/admin/leads-revenda")
-  if (session.role !== "SUPER_ADMIN" && session.role !== "PMB_SALES") {
+  if (!canHandleRevendaLeads(session.role)) {
     redirect("/admin")
   }
+
+  // Escopo de visibilidade: vendedor de revenda vê só os seus; gerente de vendas
+  // vê o time; super vê todos. `null` nunca ocorre aqui (guard acima garante).
+  const scope = (await leadScopeWhere(session)) ?? { id: "__none__" }
 
   const sp = await searchParams
   const view = sp.view === "kanban" ? "kanban" : "list"
@@ -41,10 +52,16 @@ export default async function AdminLeadsRevendaPage({
       : "ALL"
 
   const allRows = await prisma.lead.findMany({
-    where: status !== "ALL" ? { status } : {},
-    orderBy: { createdAt: "desc" },
+    where: { ...scope, ...(status !== "ALL" ? { status } : {}) },
+    orderBy:
+      view === "kanban"
+        ? [{ columnOrder: "asc" }, { createdAt: "desc" }]
+        : { createdAt: "desc" },
     take: view === "kanban" ? 300 : 100,
-    include: { referrer: { select: { name: true } } },
+    include: {
+      referrer: { select: { name: true } },
+      owner: { select: { id: true, name: true } },
+    },
   })
 
   // Esconde leads legados de origem contato — antes da separacao contato/revenda
@@ -71,9 +88,28 @@ export default async function AdminLeadsRevendaPage({
     createdAt: l.createdAt.toISOString(),
     referrerName: l.referrer?.name ?? null,
     convertedTenantId: l.tenantId,
+    ownerUserId: l.ownerUserId,
+    ownerName: l.owner?.name ?? null,
   }))
 
-  const canConvert = session.role === "SUPER_ADMIN"
+  const canConvert = canConvertRevendaLeads(session.role)
+  // Reatribuir dono e configurar o rodízio são ações de super/gerente de vendas.
+  const canConfig =
+    session.role === "SUPER_ADMIN" || session.role === "PMB_SALES_MGR"
+  const allAssignees = canConfig ? await listRevendaLeadAssignees() : []
+  const assignees = allAssignees.map((a) => ({
+    userId: a.userId,
+    name: a.name,
+    active: a.active,
+  }))
+  const eligibleCount = allAssignees.filter((a) => a.active).length
+
+  const settings = canConfig
+    ? await prisma.systemSettings.findUnique({
+        where: { id: "default" },
+        select: { leadRevendaAutoAssign: true },
+      })
+    : null
 
   return (
     <div className="space-y-6">
@@ -83,10 +119,18 @@ export default async function AdminLeadsRevendaPage({
           description="Interessados em abrir uma vitrine (formulário Seja Revendedor)."
         />
 
-        {/* Alterna entre a lista (com filtro de status) e o kanban (colunas
-            por status, arrastar para mover). Preserva o ?status ativo ao voltar
-            para a lista. */}
-        <div className="inline-flex shrink-0 rounded-full border border-gray-200 bg-white p-0.5">
+        <div className="flex flex-wrap items-center gap-3">
+          {canConfig && (
+            <LeadRevendaDistributionToggle
+              initialAutoAssign={settings?.leadRevendaAutoAssign ?? false}
+              eligibleCount={eligibleCount}
+            />
+          )}
+
+          {/* Alterna entre a lista (com filtro de status) e o kanban (colunas
+              por status, arrastar para mover). Preserva o ?status ativo ao voltar
+              para a lista. */}
+          <div className="inline-flex shrink-0 rounded-full border border-gray-200 bg-white p-0.5">
           <Link
             href={
               status !== "ALL"
@@ -111,6 +155,7 @@ export default async function AdminLeadsRevendaPage({
           >
             Kanban
           </Link>
+          </div>
         </div>
       </div>
 
@@ -150,6 +195,7 @@ export default async function AdminLeadsRevendaPage({
           leads={leads}
           apiBase="/api/admin/leads-revenda"
           canConvert={canConvert}
+          assignees={assignees}
         />
       )}
     </div>

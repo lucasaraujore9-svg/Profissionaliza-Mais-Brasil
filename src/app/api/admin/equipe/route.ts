@@ -7,12 +7,14 @@ import { sendInvite } from "@/lib/auth/invite"
 import { generateTempPassword, sendCredentialsEmail } from "@/lib/auth/credentials"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 
-const PMB_ROLES = ["SUPER_ADMIN", "PMB_SALES", "PMB_RESELLER_MGR"] as const
+const PMB_ROLES = ["SUPER_ADMIN", "PMB_SALES", "PMB_SALES_MGR", "PMB_REVENDA_SALES", "PMB_RESELLER_MGR"] as const
 
 const ROLE_LABEL: Record<string, string> = {
   SUPER_ADMIN: "Super Admin",
-  PMB_SALES: "Vendas PMB",
-  PMB_RESELLER_MGR: "Gerente de Revendedores",
+  PMB_SALES: "Vendedor de curso",
+  PMB_SALES_MGR: "Gerente de vendas",
+  PMB_REVENDA_SALES: "Vendedor de revenda",
+  PMB_RESELLER_MGR: "Gerente de unidades",
 }
 
 export const GET = withRequestContext(
@@ -33,6 +35,8 @@ export const GET = withRequestContext(
       lastActiveAt: true,
       passwordHash: true,
       createdAt: true,
+      salesManagerId: true,
+      salesManager: { select: { name: true } },
     },
     orderBy: { name: "asc" },
   })
@@ -48,6 +52,8 @@ export const GET = withRequestContext(
       lastActiveAt: u.lastActiveAt?.toISOString() ?? null,
       pendingInvite: !u.passwordHash,
       createdAt: u.createdAt.toISOString(),
+      salesManagerId: u.salesManagerId,
+      salesManagerName: u.salesManager?.name ?? null,
     })),
   })
   },
@@ -64,6 +70,9 @@ const createSchema = z
     mode: z.enum(["invite", "password"]).default("invite"),
     // Senha opcional no modo "password": vazio → gerada automaticamente.
     password: z.string().min(8).max(72).optional(),
+    // Gerente de vendas (PMB_SALES_MGR) deste vendedor de revenda. Só se aplica
+    // quando role === PMB_REVENDA_SALES; ignorado para os demais papéis.
+    salesManagerId: z.string().nullable().optional(),
   })
   .refine((d) => d.mode !== "password" || !d.password || d.password.length >= 8, {
     message: "A senha deve ter no mínimo 8 caracteres",
@@ -96,6 +105,22 @@ export const POST = withRequestContext(
     return NextResponse.json({ error: "Email já cadastrado" }, { status: 409 })
   }
 
+  // Vínculo com gerente de vendas só vale para vendedor de revenda.
+  const salesManagerId =
+    parsed.data.role === "PMB_REVENDA_SALES" ? parsed.data.salesManagerId ?? null : null
+  if (salesManagerId) {
+    const mgr = await prisma.user.findUnique({
+      where: { id: salesManagerId },
+      select: { role: true, status: true },
+    })
+    if (!mgr || mgr.role !== "PMB_SALES_MGR" || mgr.status !== "ATIVO") {
+      return NextResponse.json(
+        { error: "Gerente de vendas inválido ou inativo" },
+        { status: 400 },
+      )
+    }
+  }
+
   const usePassword = parsed.data.mode === "password"
   // No modo "password": gera (ou usa) a senha agora e exige troca no 1º acesso.
   // No modo "invite": passwordHash vazio marca convite pendente — hash gerado no set-password.
@@ -113,6 +138,7 @@ export const POST = withRequestContext(
       passwordHash,
       mustChangePassword: usePassword,
       status: "ATIVO",
+      salesManagerId,
     },
     select: { id: true, name: true, email: true, role: true },
   })

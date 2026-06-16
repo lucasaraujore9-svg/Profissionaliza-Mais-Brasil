@@ -19,8 +19,10 @@ export interface InviteTemplateProps {
 
 const roleLabel: Record<string, string> = {
   SUPER_ADMIN: "Super Administrador",
-  PMB_SALES: "Equipe de Vendas",
-  PMB_RESELLER_MGR: "Gerente de Revendedores",
+  PMB_SALES: "Vendedor de curso",
+  PMB_SALES_MGR: "Gerente de vendas",
+  PMB_REVENDA_SALES: "Vendedor de revenda",
+  PMB_RESELLER_MGR: "Gerente de unidades",
   consultant: "Consultor(a) de vendas",
   RESELLER: "Revendedor(a)",
 }

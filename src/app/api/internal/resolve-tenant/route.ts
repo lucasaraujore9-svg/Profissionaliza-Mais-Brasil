@@ -68,6 +68,18 @@ export const GET = withRequestContext(
     })
 
     if (!tenant) {
+      // Slug antigo de uma revenda renomeada: enquanto a reserva (15 dias) nao
+      // expira, devolvemos o slug ATUAL da unidade para o proxy emitir 308.
+      // (So vale para lookup por slug — custom domains nunca caem aqui.)
+      if (slug) {
+        const redirect = await prisma.tenantSlugRedirect.findFirst({
+          where: { oldSlug: slug, expiresAt: { gt: new Date() } },
+          select: { tenant: { select: { slug: true } } },
+        })
+        if (redirect) {
+          return NextResponse.json({ redirectSlug: redirect.tenant.slug })
+        }
+      }
       return NextResponse.json({ error: "not found" }, { status: 404 })
     }
 

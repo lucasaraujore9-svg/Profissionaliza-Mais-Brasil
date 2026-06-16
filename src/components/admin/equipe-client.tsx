@@ -38,20 +38,37 @@ export interface EquipeItem {
   role: string
   status: string
   phone: string | null
+  salesManagerId: string | null
+  salesManagerName: string | null
   lastActiveAt: string | null
   pendingInvite: boolean
   createdAt: string
 }
 
-const ROLE_LABEL: Record<string, string> = {
-  SUPER_ADMIN: "Super Admin",
-  PMB_SALES: "Vendas PMB",
-  PMB_RESELLER_MGR: "Gerente de Revendedores",
+export interface SalesManagerOption {
+  id: string
+  name: string
 }
 
-const ROLES = ["SUPER_ADMIN", "PMB_SALES", "PMB_RESELLER_MGR"] as const
+const NO_MANAGER = "__none__"
 
-export function EquipeClient({ initialItems }: { initialItems: EquipeItem[] }) {
+const ROLE_LABEL: Record<string, string> = {
+  SUPER_ADMIN: "Super Admin",
+  PMB_SALES: "Vendedor de curso",
+  PMB_SALES_MGR: "Gerente de vendas",
+  PMB_REVENDA_SALES: "Vendedor de revenda",
+  PMB_RESELLER_MGR: "Gerente de unidades",
+}
+
+const ROLES = ["SUPER_ADMIN", "PMB_SALES", "PMB_SALES_MGR", "PMB_REVENDA_SALES", "PMB_RESELLER_MGR"] as const
+
+export function EquipeClient({
+  initialItems,
+  salesManagers,
+}: {
+  initialItems: EquipeItem[]
+  salesManagers: SalesManagerOption[]
+}) {
   const router = useRouter()
   const [items] = useState(initialItems)
   const [filter, setFilter] = useState<string>("ALL")
@@ -69,12 +86,13 @@ export function EquipeClient({ initialItems }: { initialItems: EquipeItem[] }) {
     email: "",
     role: "PMB_SALES" as (typeof ROLES)[number],
     phone: "",
+    salesManagerId: NO_MANAGER,
   })
 
   const filtered = items.filter((i) => (filter === "ALL" ? true : i.role === filter))
 
   function resetForm() {
-    setForm({ name: "", email: "", role: "PMB_SALES", phone: "" })
+    setForm({ name: "", email: "", role: "PMB_SALES", phone: "", salesManagerId: NO_MANAGER })
     setMode("invite")
     setPassword("")
     setCreated(null)
@@ -100,6 +118,10 @@ export function EquipeClient({ initialItems }: { initialItems: EquipeItem[] }) {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           ...form,
+          salesManagerId:
+            form.role === "PMB_REVENDA_SALES" && form.salesManagerId !== NO_MANAGER
+              ? form.salesManagerId
+              : undefined,
           mode,
           password: mode === "password" && password ? password : undefined,
         }),
@@ -178,7 +200,14 @@ export function EquipeClient({ initialItems }: { initialItems: EquipeItem[] }) {
           <tbody>
             {filtered.map((u) => (
               <tr key={u.id} className="border-t">
-                <td className="px-4 py-3 font-medium">{u.name}</td>
+                <td className="px-4 py-3 font-medium">
+                  <div>{u.name}</div>
+                  {u.role === "PMB_REVENDA_SALES" && (
+                    <div className="text-xs font-normal text-muted-foreground">
+                      Gerente: {u.salesManagerName ?? "—"}
+                    </div>
+                  )}
+                </td>
                 <td className="px-4 py-3 text-muted-foreground">{u.email}</td>
                 <td className="px-4 py-3">{ROLE_LABEL[u.role] ?? u.role}</td>
                 <td className="px-4 py-3">
@@ -295,6 +324,29 @@ export function EquipeClient({ initialItems }: { initialItems: EquipeItem[] }) {
                     </SelectContent>
                   </Select>
                 </div>
+                {form.role === "PMB_REVENDA_SALES" && (
+                  <div>
+                    <Label>Gerente de vendas</Label>
+                    <Select
+                      value={form.salesManagerId}
+                      onValueChange={(v) =>
+                        setForm({ ...form, salesManagerId: v ?? NO_MANAGER })
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={NO_MANAGER}>— Sem gerente —</SelectItem>
+                        {salesManagers.map((m) => (
+                          <SelectItem key={m.id} value={m.id}>
+                            {m.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
                 <ModeToggle mode={mode} onChange={setMode} disabled={pending} />
                 {mode === "password" && (
                   <PasswordField value={password} onChange={setPassword} disabled={pending} />

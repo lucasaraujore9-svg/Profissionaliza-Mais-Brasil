@@ -72,8 +72,10 @@ export function ProfileAccountForm({ data, onUpdate }: Props) {
 
   const roleLabel: Record<string, string> = {
     SUPER_ADMIN: "Super Admin",
-    PMB_SALES: "Vendas PMB",
-    PMB_RESELLER_MGR: "Gestor de Revendedores",
+    PMB_SALES: "Vendedor de curso",
+    PMB_SALES_MGR: "Gerente de vendas",
+    PMB_REVENDA_SALES: "Vendedor de revenda",
+    PMB_RESELLER_MGR: "Gerente de unidades",
   }
 
   return (

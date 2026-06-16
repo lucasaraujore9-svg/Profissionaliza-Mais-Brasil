@@ -25,25 +25,38 @@ export interface EquipeMember {
   status: string
   phone: string | null
   image: string | null
+  salesManagerId: string | null
+  salesManagerName: string | null
   lastActiveAt: string | null
   pendingInvite: boolean
   createdAt: string
 }
 
-const ROLE_LABEL: Record<string, string> = {
-  SUPER_ADMIN: "Super Admin",
-  PMB_SALES: "Vendas PMB",
-  PMB_RESELLER_MGR: "Gerente de Revendedores",
+export interface SalesManagerOption {
+  id: string
+  name: string
 }
 
-const ROLES = ["SUPER_ADMIN", "PMB_SALES", "PMB_RESELLER_MGR"] as const
+const NO_MANAGER = "__none__"
+
+const ROLE_LABEL: Record<string, string> = {
+  SUPER_ADMIN: "Super Admin",
+  PMB_SALES: "Vendedor de curso",
+  PMB_SALES_MGR: "Gerente de vendas",
+  PMB_REVENDA_SALES: "Vendedor de revenda",
+  PMB_RESELLER_MGR: "Gerente de unidades",
+}
+
+const ROLES = ["SUPER_ADMIN", "PMB_SALES", "PMB_SALES_MGR", "PMB_REVENDA_SALES", "PMB_RESELLER_MGR"] as const
 
 export function EquipeDetailClient({
   member,
   isSelf,
+  salesManagers,
 }: {
   member: EquipeMember
   isSelf: boolean
+  salesManagers: SalesManagerOption[]
 }) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
@@ -53,6 +66,7 @@ export function EquipeDetailClient({
     phone: member.phone ?? "",
     role: member.role as (typeof ROLES)[number],
     status: member.status as "ATIVO" | "INATIVO",
+    salesManagerId: member.salesManagerId ?? NO_MANAGER,
   })
 
   function save() {
@@ -66,6 +80,10 @@ export function EquipeDetailClient({
           phone: form.phone || null,
           role: form.role,
           status: form.status,
+          salesManagerId:
+            form.role === "PMB_REVENDA_SALES" && form.salesManagerId !== NO_MANAGER
+              ? form.salesManagerId
+              : null,
         }),
       })
       if (!res.ok) {
@@ -209,6 +227,29 @@ export function EquipeDetailClient({
               </SelectContent>
             </Select>
           </div>
+          {form.role === "PMB_REVENDA_SALES" && (
+            <div>
+              <Label>Gerente de vendas</Label>
+              <Select
+                value={form.salesManagerId}
+                onValueChange={(v) =>
+                  setForm({ ...form, salesManagerId: v ?? NO_MANAGER })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NO_MANAGER}>— Sem gerente —</SelectItem>
+                  {salesManagers.map((m) => (
+                    <SelectItem key={m.id} value={m.id}>
+                      {m.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
         </div>
         <div className="flex justify-end">
           <Button

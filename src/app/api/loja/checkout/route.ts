@@ -15,6 +15,7 @@ import { isValidCpf, stripCpf } from "@/lib/validation/cpf"
 import { isValidPhone, normalizePhone } from "@/lib/validation/phone"
 import { effectivePaymentType } from "@/lib/tenant/monthly-policy"
 import { tenantCheckoutMode } from "@/lib/tenant/checkout-mode"
+import { tenantPolo } from "@/lib/tenant/slug"
 
 const bodySchema = z.object({
   courseId: z.string().min(1),
@@ -129,6 +130,7 @@ export const POST = withRequestContext(
         select: {
           id: true,
           slug: true,
+          poloName: true,
           name: true,
           status: true,
           mpAccessToken: true,
@@ -286,7 +288,7 @@ export const POST = withRequestContext(
       cpf: data.cpf,
       fone: data.fone,
       endereco: data.endereco,
-      polo: tenant.slug,
+      polo: tenantPolo(tenant),
       vendedorId: tenant.plataformaVendedorId,
       plataformaAlunoIdFallback: `pending_${Date.now()}`,
     })

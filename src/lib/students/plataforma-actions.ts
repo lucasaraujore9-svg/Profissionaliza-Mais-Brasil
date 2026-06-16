@@ -8,6 +8,7 @@ import {
   enviarEmailCredenciais,
 } from "@/lib/plataforma-cursos/client"
 import { pmbPlataformaPolo, pmbPlataformaVendedorId, PMB_TENANT_SLUG } from "@/lib/pmb-config"
+import { tenantPolo } from "@/lib/tenant/slug"
 import { encrypt } from "@/lib/crypto"
 import { contextLogger } from "@/lib/logger"
 
@@ -43,9 +44,9 @@ async function resolvePoloContextForStudent(
 
   const isPmb = student.tenant.slug === PMB_TENANT_SLUG
   // Vendedor é sempre o PMB (único vendedor na plataforma para toda a plataforma).
-  // O polo identifica a unidade do aluno (slug da revenda ou polo PMB).
+  // O polo identifica a unidade do aluno (poloName fixo da revenda ou polo PMB).
   return {
-    polo: isPmb ? pmbPlataformaPolo() : (student.tenant.poloName ?? student.tenant.slug),
+    polo: isPmb ? pmbPlataformaPolo() : tenantPolo(student.tenant),
     vendedor: pmbPlataformaVendedorId(),
   }
 }
@@ -180,7 +181,7 @@ export async function ensureStudentOnPlatform(
 ): Promise<{ plataformaAlunoId: number; created: boolean; plataformaSenha: string | null }> {
   const student = await prisma.student.findUnique({
     where: { id: studentId },
-    include: { tenant: { select: { slug: true, plataformaVendedorId: true } } },
+    include: { tenant: { select: { slug: true, poloName: true, plataformaVendedorId: true } } },
   })
   if (!student) throw new Error(`student ${studentId} nao encontrado`)
 
@@ -203,7 +204,7 @@ export async function ensureStudentOnPlatform(
   }
 
   const isPmb = student.tenant.slug === PMB_TENANT_SLUG
-  const polo = isPmb ? pmbPlataformaPolo() : student.tenant.slug
+  const polo = isPmb ? pmbPlataformaPolo() : tenantPolo(student.tenant)
 
   // Reuso entre revendas: se a pessoa (mesmo CPF/email) ja tem usuario na
   // plataforma — porque comprou em outra unidade — reaproveitamos o login dela

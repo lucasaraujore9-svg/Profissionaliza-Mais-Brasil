@@ -5,6 +5,7 @@ import { hash } from "bcryptjs"
 import { randomBytes } from "node:crypto"
 import { prisma } from "@/lib/prisma"
 import { requireAdminSession } from "@/lib/auth/admin-session"
+import { tenantScopeWhere } from "@/lib/auth/scope"
 import {
   AsaasApiError,
   createCustomer,
@@ -22,6 +23,7 @@ import { withRequestContext } from "@/lib/observability/with-request-context"
 import { ensureTenantCourses } from "@/lib/tenant/ensure-courses"
 import { ensureTenantHomeSections } from "@/lib/home/sections"
 import { forbiddenNameError } from "@/lib/tenant/forbidden-names"
+import { SLUG_REGEX, validateSlugFormat, isSlugAvailable } from "@/lib/tenant/slug"
 
 export const GET = withRequestContext(
   { action: "admin.revendedores.list", route: "/api/admin/revendedores" },
@@ -47,17 +49,30 @@ export const GET = withRequestContext(
     where.status = status as Prisma.TenantWhereInput["status"]
   }
 
-  // Escopo: PMB_RESELLER_MGR ve so seus. SUPER_ADMIN ve todos.
-  // PMB_SALES nao entra aqui (via sidebar ja filtrado), mas se chegar, nao devolve nada.
-  if (ctx.role === "PMB_RESELLER_MGR") {
-    where.accountManagerId = ctx.userId
-  } else if (ctx.role === "PMB_SALES") {
-    where.id = "__none__"
-  } else {
+  // Escopo de visibilidade por papel (src/lib/auth/scope.ts):
+  //   SUPER_ADMIN        -> todas;            PMB_RESELLER_MGR -> as que dá suporte
+  //   PMB_REVENDA_SALES  -> as que vendeu;    PMB_SALES_MGR    -> as do seu time
+  //   demais (ex: PMB_SALES = vendedor de curso) -> nenhuma (scope null)
+  const scope = await tenantScopeWhere(ctx)
+  if (!scope) {
+    return NextResponse.json({
+      data: {
+        stats: { total: 0, active: 0, pending: 0, suspended: 0, cancelled: 0 },
+        resellers: [],
+        role: ctx.role,
+      },
+    })
+  }
+  Object.assign(where, scope)
+
+  // Filtro manual por gerente de suporte: só faz sentido para quem vê todas.
+  if (ctx.role === "SUPER_ADMIN") {
     const managerFilter = searchParams.get("manager")?.trim()
     if (managerFilter === "unassigned") where.accountManagerId = null
     else if (managerFilter) where.accountManagerId = managerFilter
   }
+
+  const scopeOnly = Object.keys(scope).length ? scope : undefined
 
   const [tenants, stats] = await Promise.all([
     prisma.tenant.findMany({
@@ -72,6 +87,8 @@ export const GET = withRequestContext(
         owner: { select: { email: true } },
         accountManagerId: true,
         accountManager: { select: { id: true, name: true } },
+        salesUserId: true,
+        salesUser: { select: { id: true, name: true } },
         _count: { select: { students: true } },
       },
       orderBy: { createdAt: "desc" },
@@ -80,7 +97,7 @@ export const GET = withRequestContext(
     prisma.tenant.groupBy({
       by: ["status"],
       _count: { _all: true },
-      where: ctx.role === "PMB_RESELLER_MGR" ? { accountManagerId: ctx.userId } : undefined,
+      where: scopeOnly,
     }),
   ])
 
@@ -115,6 +132,8 @@ export const GET = withRequestContext(
         students: t._count.students,
         accountManagerId: t.accountManagerId,
         accountManagerName: t.accountManager?.name ?? null,
+        salesUserId: t.salesUserId,
+        salesUserName: t.salesUser?.name ?? null,
         createdAt: t.createdAt.toISOString(),
       })),
       role: ctx.role,
@@ -124,26 +143,8 @@ export const GET = withRequestContext(
 )
 
 // ─── POST: criar revenda ─────────────────────────────────────────────
-const SLUG_REGEX = /^[a-z0-9](?:[a-z0-9-]{1,30}[a-z0-9])?$/
-const RESERVED_SLUGS = new Set([
-  "www",
-  "app",
-  "api",
-  "admin",
-  "painel",
-  "loja",
-  "mail",
-  "smtp",
-  "ftp",
-  "cdn",
-  "assets",
-  "static",
-  "staging",
-  "dev",
-  "test",
-  "__pmb__",
-])
-
+// Regex/reservados/marcas e disponibilidade do slug vivem em @/lib/tenant/slug
+// (reusados na edicao do subdominio em .../[id]/slug).
 const createSchema = z.object({
   name: z.string().min(2).max(80),
   slug: z
@@ -165,6 +166,9 @@ const createSchema = z.object({
   promoMonths: z.number().int().min(1).max(24).optional(),
   promoValue: z.number().min(0).max(99999).optional(),
   accountManagerId: z.string().optional().nullable(),
+  // Vendedor de revenda atribuido a unidade. Em conversao de lead, herda o dono
+  // do lead; em criacao manual por super/gerente, pode vir explicito.
+  salesUserId: z.string().optional().nullable(),
   // Conversao de lead → revenda: id do Lead de origem. Quando presente, a
   // indicacao vem do referrerTenantId gravado no lead (nao do cookie do admin)
   // e o lead e marcado CONVERTED + ligado ao tenant criado.
@@ -194,9 +198,17 @@ export const POST = withRequestContext(
   if (!ctx) {
     return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
   }
-  if (ctx.role !== "SUPER_ADMIN" && ctx.role !== "PMB_RESELLER_MGR") {
+  // Quem pode criar/converter: super, gerente de suporte e o time comercial de
+  // revenda (gerente de vendas + vendedor de revenda, que convertem leads).
+  const CAN_CREATE = [
+    "SUPER_ADMIN",
+    "PMB_RESELLER_MGR",
+    "PMB_SALES_MGR",
+    "PMB_REVENDA_SALES",
+  ]
+  if (!CAN_CREATE.includes(ctx.role)) {
     return NextResponse.json(
-      { error: "Apenas SUPER_ADMIN e gerente de revendedores podem criar" },
+      { error: "Sem permissão para criar revenda" },
       { status: 403 },
     )
   }
@@ -216,17 +228,17 @@ export const POST = withRequestContext(
   }
   const data = parsed.data
 
-  if (RESERVED_SLUGS.has(data.slug)) {
-    return NextResponse.json(
-      { error: "Este subdomínio é reservado, escolha outro" },
-      { status: 400 },
-    )
+  // Formato do slug (regex/tamanho/reservados/marca). validateSlugFormat ja
+  // cobre os subdominios reservados e o nome de marca proibido no slug.
+  const slugError = validateSlugFormat(data.slug)
+  if (slugError) {
+    return NextResponse.json({ error: slugError }, { status: 400 })
   }
 
-  // Marcas reservadas (contrato): nome da unidade e subdomínio não podem
-  // conter Bolsa Mais Brasil / Profissionaliza / Escola de Ensino a Distância
-  // / Livre Cursos (nem variações). Vale também na edição (painel/config).
-  const forbidden = forbiddenNameError(data.name) ?? forbiddenNameError(data.slug)
+  // Marcas reservadas (contrato): o NOME da unidade tambem nao pode conter
+  // Bolsa Mais Brasil / Profissionaliza / Escola de Ensino a Distância / Livre
+  // Cursos (nem variacoes). Vale tambem na edicao (painel/config).
+  const forbidden = forbiddenNameError(data.name)
   if (forbidden) {
     return NextResponse.json(
       { error: forbidden, fields: { name: [forbidden] } },
@@ -234,20 +246,16 @@ export const POST = withRequestContext(
     )
   }
 
-  // Conflitos
-  const [existingSlug, existingEmail] = await Promise.all([
-    prisma.tenant.findFirst({ where: { slug: data.slug }, select: { id: true } }),
-    prisma.user.findUnique({
-      where: { email: data.ownerEmail },
-      select: { id: true },
-    }),
-  ])
-  if (existingSlug) {
-    return NextResponse.json(
-      { error: `Já existe uma revenda com o slug "${data.slug}"` },
-      { status: 409 },
-    )
+  // Disponibilidade: tenant existente OU slug reservado (rename nos ultimos 15d).
+  const availability = await isSlugAvailable(data.slug)
+  if (!availability.available) {
+    return NextResponse.json({ error: availability.reason }, { status: 409 })
   }
+
+  const existingEmail = await prisma.user.findUnique({
+    where: { email: data.ownerEmail },
+    select: { id: true },
+  })
   if (existingEmail) {
     return NextResponse.json(
       { error: `Já existe um usuário com o email ${data.ownerEmail}` },
@@ -341,16 +349,30 @@ export const POST = withRequestContext(
   // no proprio lead (capturado quando o interessado preencheu o formulario) —
   // o cookie pmb_referral aqui seria o do navegador do admin, nao do indicado.
   // Fora da conversao, mantemos o cookie como fonte.
-  let lead: { id: string; referrerTenantId: string | null } | null = null
+  let lead: { id: string; referrerTenantId: string | null; ownerUserId: string | null } | null =
+    null
   if (data.leadId) {
     lead = await prisma.lead.findUnique({
       where: { id: data.leadId },
-      select: { id: true, referrerTenantId: true },
+      select: { id: true, referrerTenantId: true, ownerUserId: true },
     })
+    // Vendedor de revenda só converte o que é dele.
+    if (lead && ctx.role === "PMB_REVENDA_SALES" && lead.ownerUserId !== ctx.userId) {
+      return NextResponse.json(
+        { error: "Este lead não está atribuído a você" },
+        { status: 403 },
+      )
+    }
   }
   const referrerTenantId = lead
     ? lead.referrerTenantId
     : await resolveReferrerFromCookie()
+
+  // Vendedor de revenda atribuído à unidade. Prioridade: dono do lead → quem
+  // converteu (se for vendedor de revenda) → escolha explícita do super/gerente.
+  const salesUserId =
+    lead?.ownerUserId ??
+    (ctx.role === "PMB_REVENDA_SALES" ? ctx.userId : data.salesUserId ?? null)
 
   const tenant = await prisma.tenant.create({
     data: {
@@ -369,6 +391,7 @@ export const POST = withRequestContext(
       // Gratuita nunca parcela (não há cobrança). Paga guarda o teto escolhido.
       firstPaymentMaxInstallments: isFree ? 1 : data.firstPaymentMaxInstallments,
       accountManagerId: data.accountManagerId ?? null,
+      salesUserId,
       poloName: data.slug,
       referralCode,
       referrerTenantId,

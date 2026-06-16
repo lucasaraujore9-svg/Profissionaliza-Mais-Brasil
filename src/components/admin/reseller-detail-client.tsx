@@ -1,6 +1,15 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
+import { toast } from "sonner"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { Button } from "@/components/ui/button"
 import { ResellerProfile, type ResellerProfileData } from "./reseller-profile"
 import {
   ResellerPaymentHistory,
@@ -32,6 +41,8 @@ import {
   ResellerMonthlyConfig,
   type MonthlyScope,
 } from "./reseller-monthly-config"
+import { ResellerSubdomainEdit } from "./reseller-subdomain-edit"
+import type { UserRole } from "@prisma/client"
 
 interface DetailResponse {
   reseller: ResellerProfileData & {
@@ -63,6 +74,7 @@ interface DetailResponse {
     asaasGatewayEnabled: boolean
     asaasConnected: boolean
     salesGateway: "MP" | "ASAAS"
+    accountManagerId: string | null
   }
   referrer: ReferrerSummary | null
   referralStats: ReferralStats
@@ -70,18 +82,69 @@ interface DetailResponse {
   students: ResellerStudentsBreakdown
 }
 
+interface SalesUserOption {
+  id: string
+  name: string
+}
+
 interface ResellerDetailClientProps {
   tenantId: string
   isSuperAdmin?: boolean
+  viewerId?: string | null
+  viewerRole?: UserRole | null
+  salesUserId?: string | null
+  salesUserName?: string | null
+  salesUsers?: SalesUserOption[]
 }
 
 export function ResellerDetailClient({
   tenantId,
   isSuperAdmin = false,
+  viewerId = null,
+  viewerRole = null,
+  salesUserId = null,
+  salesUserName = null,
+  salesUsers = [],
 }: ResellerDetailClientProps) {
   const [data, setData] = useState<DetailResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  // Vendedor de revenda (PMB_REVENDA_SALES) — espelha o gerente de suporte.
+  const [salesUserCurrentId, setSalesUserCurrentId] = useState<string | null>(
+    salesUserId,
+  )
+  const [salesUserCurrentName, setSalesUserCurrentName] = useState<
+    string | null
+  >(salesUserName)
+  const [salesValue, setSalesValue] = useState<string>(salesUserId ?? "")
+  const [savingSales, setSavingSales] = useState(false)
+
+  async function saveSales() {
+    setSavingSales(true)
+    try {
+      const res = await fetch(`/api/admin/revendedores/${tenantId}/sales`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ salesUserId: salesValue || null }),
+      })
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        toast.error(body.error ?? "Falha ao atribuir")
+        return
+      }
+      toast.success("Vendedor de revenda atualizado")
+      const updated = body.data as {
+        salesUserId: string | null
+        salesUser: { id: string; name: string } | null
+      }
+      setSalesUserCurrentId(updated.salesUserId)
+      setSalesUserCurrentName(updated.salesUser?.name ?? null)
+      setSalesValue(updated.salesUserId ?? "")
+    } finally {
+      setSavingSales(false)
+    }
+  }
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -123,6 +186,13 @@ export function ResellerDetailClient({
 
   if (!data) return null
 
+  // Edicao de subdominio: so equipe PMB. SUPER_ADMIN qualquer; gerente de
+  // revendedores apenas as unidades atribuidas a ele. A rota PATCH revalida.
+  const canEditSlug =
+    viewerRole === "SUPER_ADMIN" ||
+    (viewerRole === "PMB_RESELLER_MGR" &&
+      data.reseller.accountManagerId === viewerId)
+
   return (
     <div className="space-y-6">
       <ResellerProfile reseller={data.reseller} />
@@ -131,6 +201,13 @@ export function ResellerDetailClient({
 
       <div className="grid gap-6 xl:grid-cols-[2fr_1fr]">
         <div className="space-y-6">
+          {canEditSlug && (
+            <ResellerSubdomainEdit
+              tenantId={tenantId}
+              slug={data.reseller.slug}
+              onSaved={load}
+            />
+          )}
           <ResellerBillingEdit
             tenantId={tenantId}
             planValue={data.reseller.planValue}
@@ -186,6 +263,54 @@ export function ResellerDetailClient({
           />
         </div>
         <div className="space-y-6">
+          {isSuperAdmin && (
+            <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+              <h3 className="font-semibold text-[var(--color-pmb-green-900)]">
+                Vendedor de revenda
+              </h3>
+              <p className="mt-1 text-xs text-gray-500">
+                Vendedor responsável comercialmente por esta unidade.
+              </p>
+              <p className="mt-3 text-sm text-gray-700">
+                Atual:{" "}
+                <span className="font-semibold">
+                  {salesUserCurrentName ?? "Sem vendedor"}
+                </span>
+              </p>
+              <div className="mt-3 space-y-2">
+                <Select
+                  value={salesValue || "__none__"}
+                  onValueChange={(v) =>
+                    setSalesValue(v === "__none__" ? "" : (v ?? ""))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">— Sem vendedor —</SelectItem>
+                    {salesUsers.map((u) => (
+                      <SelectItem key={u.id} value={u.id}>
+                        {u.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <div className="flex justify-end">
+                  <Button
+                    size="sm"
+                    onClick={saveSales}
+                    disabled={
+                      savingSales || salesValue === (salesUserCurrentId ?? "")
+                    }
+                    className="bg-[var(--color-pmb-green)] hover:bg-[var(--color-pmb-green-900)]"
+                  >
+                    {savingSales ? "Salvando…" : "Salvar"}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
           <ResellerStudentCount students={data.students} />
           <ResellerReferralConfig
             tenantId={tenantId}
