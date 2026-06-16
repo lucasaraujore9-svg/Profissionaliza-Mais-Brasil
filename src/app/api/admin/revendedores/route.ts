@@ -22,6 +22,7 @@ import { contextLogger } from "@/lib/logger"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { ensureTenantCourses } from "@/lib/tenant/ensure-courses"
 import { ensureTenantHomeSections } from "@/lib/home/sections"
+import { DEFAULT_AUTOMATION_TEMPLATES } from "@/lib/automation/default-templates"
 import { forbiddenNameError } from "@/lib/tenant/forbidden-names"
 import { SLUG_REGEX, validateSlugFormat, isSlugAvailable } from "@/lib/tenant/slug"
 
@@ -165,6 +166,13 @@ const createSchema = z.object({
   // Promocao: as primeiras `promoMonths` mensalidades saem por `promoValue`.
   promoMonths: z.number().int().min(1).max(24).optional(),
   promoValue: z.number().min(0).max(99999).optional(),
+  // Opcionais ativados já na criação (espelham os PUT de .../[id]/{automacao,eja,tecnica}).
+  // Automação não precisa de link; EJA e Técnica exigem o link de destino.
+  automationEnabled: z.boolean().optional().default(false),
+  ejaEnabled: z.boolean().optional().default(false),
+  ejaUrl: z.string().trim().url("URL inválida").max(500).optional(),
+  tecnicaEnabled: z.boolean().optional().default(false),
+  tecnicaUrl: z.string().trim().url("URL inválida").max(500).optional(),
   accountManagerId: z.string().optional().nullable(),
   // Vendedor de revenda atribuido a unidade. Em conversao de lead, herda o dono
   // do lead; em criacao manual por super/gerente, pode vir explicito.
@@ -183,6 +191,14 @@ const createSchema = z.object({
   .refine((d) => d.promoMonths === undefined || d.planValue > 0, {
     message: "Promoção exige mensalidade cheia maior que zero",
     path: ["promoValue"],
+  })
+  .refine((d) => !d.ejaEnabled || Boolean(d.ejaUrl), {
+    message: "Informe o link da página de EJA para habilitá-la",
+    path: ["ejaUrl"],
+  })
+  .refine((d) => !d.tecnicaEnabled || Boolean(d.tecnicaUrl), {
+    message: "Informe o link da Unidade Técnica para habilitá-la",
+    path: ["tecnicaUrl"],
   })
 
 function isoDayPlus(days: number): string {
@@ -398,10 +414,38 @@ export const POST = withRequestContext(
       poloName: data.slug,
       referralCode,
       referrerTenantId,
+      // Opcionais ligados já na criação. EJA/Técnica guardam o link (o schema
+      // garante que veio quando o flag está ligado); automação não precisa de
+      // link — os templates default são criados logo abaixo.
+      automationEnabled: data.automationEnabled,
+      ejaEnabled: data.ejaEnabled,
+      ejaUrl: data.ejaEnabled ? (data.ejaUrl ?? null) : null,
+      tecnicaEnabled: data.tecnicaEnabled,
+      tecnicaUrl: data.tecnicaEnabled ? (data.tecnicaUrl ?? null) : null,
       updatedAt: new Date(),
     },
     select: { id: true, slug: true, name: true, status: true },
   })
+
+  // Automação ligada na criação: cria os templates default (espelha a primeira
+  // ativação em .../[id]/automacao). Tenant recém-criado nunca tem templates.
+  if (data.automationEnabled) {
+    try {
+      await prisma.automationMessageTemplate.createMany({
+        data: DEFAULT_AUTOMATION_TEMPLATES.map((t) => ({
+          tenantId: tenant.id,
+          key: t.key,
+          body: t.body,
+          enabled: true,
+        })),
+      })
+    } catch (err) {
+      contextLogger().error(
+        { err, event: "admin.revendedores.automation_templates_failed", tenantId: tenant.id },
+        "falha ao criar templates default de automação na criação do revendedor",
+      )
+    }
+  }
 
   // Bootstrap da vitrine: espelha o catálogo global em TenantCourse e clona as
   // seções da home do PMB. Sem isso, a vitrine nasce sem cursos (o hero e as

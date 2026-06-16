@@ -98,6 +98,11 @@ export function NewResellerDialog({
   const [slugTouched, setSlugTouched] = useState(false)
   // Máximo de parcelas no cartão para a PRIMEIRA mensalidade (1 = à vista).
   const [maxInstallments, setMaxInstallments] = useState(1)
+  // Opcionais ligados já na criação. Automação não precisa de link; EJA e
+  // Unidade Técnica revelam um campo de link (obrigatório quando marcados).
+  const [automationEnabled, setAutomationEnabled] = useState(false)
+  const [ejaEnabled, setEjaEnabled] = useState(false)
+  const [tecnicaEnabled, setTecnicaEnabled] = useState(false)
 
   const planValueNum = Number(planValueStr.replace(",", "."))
   const isFree = planValueStr.trim() !== "" && planValueNum === 0
@@ -112,6 +117,9 @@ export function NewResellerDialog({
     setSlug(suggestSlug(initialValues?.name ?? ""))
     setSlugTouched(false)
     setMaxInstallments(1)
+    setAutomationEnabled(false)
+    setEjaEnabled(false)
+    setTecnicaEnabled(false)
   }
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -130,6 +138,20 @@ export function NewResellerDialog({
     const forbidden = forbiddenNameError(cleanName) ?? forbiddenNameError(cleanSlug)
     if (forbidden) {
       setError(forbidden)
+      setSubmitting(false)
+      return
+    }
+
+    // Links dos opcionais (só enviados quando o respectivo flag está ligado).
+    const ejaUrl = String(formData.get("ejaUrl") ?? "").trim()
+    const tecnicaUrl = String(formData.get("tecnicaUrl") ?? "").trim()
+    if (ejaEnabled && !ejaUrl) {
+      setError("Informe o link da página de EJA para habilitá-la")
+      setSubmitting(false)
+      return
+    }
+    if (tecnicaEnabled && !tecnicaUrl) {
+      setError("Informe o link da Unidade Técnica para habilitá-la")
       setSubmitting(false)
       return
     }
@@ -153,6 +175,12 @@ export function NewResellerDialog({
             ),
           }
         : {}),
+      // Opcionais. Automação não tem link; EJA/Técnica enviam o link só quando ligados.
+      automationEnabled,
+      ejaEnabled,
+      ...(ejaEnabled ? { ejaUrl } : {}),
+      tecnicaEnabled,
+      ...(tecnicaEnabled ? { tecnicaUrl } : {}),
       ...(leadId ? { leadId } : {}),
     }
 
@@ -433,6 +461,85 @@ export function NewResellerDialog({
                     )}
                   </div>
                 )}
+
+                {/* Opcionais — ativados já na criação. Automação não precisa de
+                    link; EJA e Unidade Técnica revelam o campo do link de destino. */}
+                <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 sm:col-span-2">
+                  <p className="text-sm font-medium text-gray-800">
+                    Opcionais
+                  </p>
+                  <p className="mt-0.5 text-[11px] text-gray-500">
+                    Marque para já habilitar na criação. Você também pode ligar
+                    depois na página da revenda.
+                  </p>
+
+                  <div className="mt-3 space-y-3">
+                    {/* Automação — sem link */}
+                    <label className="flex items-center gap-2 text-sm text-gray-800">
+                      <input
+                        type="checkbox"
+                        checked={automationEnabled}
+                        onChange={(e) => setAutomationEnabled(e.target.checked)}
+                        className="h-4 w-4 rounded border-gray-300"
+                      />
+                      Automação (WhatsApp/CRM)
+                    </label>
+
+                    {/* EJA — link obrigatório quando marcado */}
+                    <div>
+                      <label className="flex items-center gap-2 text-sm text-gray-800">
+                        <input
+                          type="checkbox"
+                          checked={ejaEnabled}
+                          onChange={(e) => setEjaEnabled(e.target.checked)}
+                          className="h-4 w-4 rounded border-gray-300"
+                        />
+                        EJA
+                      </label>
+                      {ejaEnabled && (
+                        <div className="mt-2 pl-6">
+                          <Label htmlFor="r-eja-url">Link da página de EJA</Label>
+                          <Input
+                            id="r-eja-url"
+                            name="ejaUrl"
+                            type="url"
+                            required={ejaEnabled}
+                            placeholder="https://..."
+                            className="mt-1.5"
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Unidade Técnica — link obrigatório quando marcado */}
+                    <div>
+                      <label className="flex items-center gap-2 text-sm text-gray-800">
+                        <input
+                          type="checkbox"
+                          checked={tecnicaEnabled}
+                          onChange={(e) => setTecnicaEnabled(e.target.checked)}
+                          className="h-4 w-4 rounded border-gray-300"
+                        />
+                        Escola Técnica
+                      </label>
+                      {tecnicaEnabled && (
+                        <div className="mt-2 pl-6">
+                          <Label htmlFor="r-tecnica-url">
+                            Link da Escola Técnica
+                          </Label>
+                          <Input
+                            id="r-tecnica-url"
+                            name="tecnicaUrl"
+                            type="url"
+                            required={tecnicaEnabled}
+                            placeholder="https://..."
+                            className="mt-1.5"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
               </div>
 
               {error && (
