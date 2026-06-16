@@ -1020,8 +1020,8 @@ function EjaAdminEditor() {
             title: "Imagem desktop",
             value: bannerImageUrl,
             clear: () => setBannerImageUrl(null),
-            box: "aspect-[16/5]",
-            hint: "Proporção larga, ex.: 1920×600px",
+            box: "aspect-[2048/243]",
+            hint: "Recomendado 2048×243px (faixa larga)",
           },
           {
             target: "mobile" as const,
@@ -1029,7 +1029,7 @@ function EjaAdminEditor() {
             value: bannerImageUrlMobile,
             clear: () => setBannerImageUrlMobile(null),
             box: "aspect-square",
-            hint: "Proporção mais quadrada, ex.: 1080×1080px",
+            hint: "Recomendado 1080×1080px (quadrada)",
           },
         ].map((slot) => {
           const isUploading = uploadingTarget === slot.target
@@ -1098,9 +1098,9 @@ function EjaAdminEditor() {
         })}
       </div>
       <p className="text-[11px] text-zinc-500">
-        PNG, JPG ou WEBP até 5MB. A imagem aparece inteira (sem corte) — use a
-        proporção que desejar. Se não enviar a versão mobile, o desktop é usado
-        em todas as telas.
+        PNG, JPG ou WEBP até 5MB. A imagem aparece inteira (sem corte).
+        Recomendado: desktop <b>2048×243px</b>, mobile <b>1080×1080px</b>. Se não
+        enviar a versão mobile, o desktop é usado em todas as telas.
       </p>
 
       <div className="grid gap-3 sm:grid-cols-2">
