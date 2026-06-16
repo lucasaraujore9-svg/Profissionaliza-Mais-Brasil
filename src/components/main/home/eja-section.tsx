@@ -36,31 +36,34 @@ export function EjaSection({
 
   return (
     <section className="bg-white py-6 md:py-8">
-      {/* Full-bleed: sem padding lateral e limitado à largura natural da arte
-          (2048px), centralizado. Fica mais largo que a grade (max 1280px). */}
-      <Link
-        href={ejaRedirectHref(url)}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="mx-auto block w-full max-w-[2048px] overflow-hidden transition hover:opacity-95"
-      >
-        {/* Mobile (cai no desktop quando não há imagem mobile). */}
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={mobile ?? desktop}
-          alt={label}
-          loading="lazy"
-          className="block h-auto w-full md:hidden"
-        />
-        {/* Desktop. */}
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={desktop}
-          alt={label}
-          loading="lazy"
-          className="hidden h-auto w-full md:block"
-        />
-      </Link>
+      {/* Mais largo que a grade de cursos (max 1280px), mas com folga nas
+          laterais — não ocupa a tela toda: max 1600px + gutters, centralizado,
+          cantos arredondados. */}
+      <div className="mx-auto w-full max-w-[1600px] px-4 md:px-6">
+        <Link
+          href={ejaRedirectHref(url)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="block w-full overflow-hidden rounded-2xl transition hover:opacity-95"
+        >
+          {/* Mobile (cai no desktop quando não há imagem mobile). */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={mobile ?? desktop}
+            alt={label}
+            loading="lazy"
+            className="block h-auto w-full md:hidden"
+          />
+          {/* Desktop. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={desktop}
+            alt={label}
+            loading="lazy"
+            className="hidden h-auto w-full md:block"
+          />
+        </Link>
+      </div>
     </section>
   )
 }
