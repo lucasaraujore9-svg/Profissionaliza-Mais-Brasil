@@ -259,11 +259,44 @@ export const PATCH = withRequestContextParams<{ id: string }>(
               // webhook atualiza depois
             }
           } else if (parsed.data.nextDueDate !== undefined) {
-            // Só a data mudou — atualiza sem cancelar
-            await updateSubscription(tenant.asaasSubscriptionId, {
-              nextDueDate: parsed.data.nextDueDate,
-            })
-            asaasUpdated = true
+            // Só a data mudou — tenta atualizar sem cancelar.
+            try {
+              await updateSubscription(tenant.asaasSubscriptionId, {
+                nextDueDate: parsed.data.nextDueDate,
+              })
+              asaasUpdated = true
+            } catch (error) {
+              // Desync: o asaasSubscriptionId salvo pode apontar para uma
+              // assinatura que o Asaas já não deixa editar (cancelada/sem
+              // cobrança ativa → 404 ou "não pode ser atualizada"). Em vez de
+              // falhar, recria a assinatura regular com a nova data — mesma
+              // estratégia tolerante do ramo de mudança de valor acima.
+              const stale =
+                error instanceof AsaasApiError &&
+                (error.statusCode === 404 ||
+                  /não pode ser atualizada|cannot be updated/i.test(error.message))
+              if (!stale || !tenant.asaasCustomerId) throw error
+              await cancelIgnoring404(tenant.asaasSubscriptionId)
+              const subscription = await createSubscription({
+                customer: tenant.asaasCustomerId,
+                billingType: "UNDEFINED",
+                value: Number(tenant.planValue),
+                nextDueDate: parsed.data.nextDueDate,
+                cycle: "MONTHLY",
+                description: `Mensalidade Profissionaliza Mais Brasil — ${tenant.name}`,
+                externalReference: `tenant:${tenant.slug}`,
+              })
+              newSubscriptionId = subscription.id
+              asaasUpdated = true
+              try {
+                const payments = await listPayments({ subscription: subscription.id, limit: 1 })
+                const firstPayment = payments.data[0] ?? null
+                invoiceUrl = firstPayment?.invoiceUrl ?? null
+                firstPaymentId = firstPayment?.id ?? null
+              } catch {
+                // webhook atualiza depois
+              }
+            }
           }
         } else if (process.env.ASAAS_API_KEY) {
           // ── Sem subscription — criar customer (se precisar) + subscription ──
