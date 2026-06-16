@@ -16,6 +16,11 @@ export interface CertificateRenderData {
   studentCpf?: string | null
   courseName: string
   cargaHoraria?: string | null
+  /**
+   * Matriz curricular do curso (conteúdo programático). Exibida no verso
+   * (página 2). Vazia/ausente => o verso segue o layout atual, sem a seção.
+   */
+  matrizCurricular?: string[]
   completionDateFormatted: string
   code: string
   unidade: string

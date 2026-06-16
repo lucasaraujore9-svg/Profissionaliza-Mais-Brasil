@@ -42,6 +42,12 @@ export function certificateInfoPage(data: CertificateRenderData): ReactElement {
   const t = data.template
   const pct = resolveCompletionPercent(data.progressPercent)
   const displayUrl = data.validationUrl.replace(/^https?:\/\//, "")
+  // Matriz curricular: só renderiza quando o curso tem matriz oficial. Quando
+  // ausente, o verso segue exatamente o layout atual. Listas longas podem
+  // exceder a página — nesse caso liberamos a quebra (wrap) e a borda passa a
+  // ser `fixed` para repetir em todas as páginas.
+  const matriz = (data.matrizCurricular ?? []).filter((s) => s.trim().length > 0)
+  const hasMatriz = matriz.length > 0
 
   const styles = StyleSheet.create({
     page: {
@@ -155,6 +161,36 @@ export function certificateInfoPage(data: CertificateRenderData): ReactElement {
       color: "#4B5563",
       textAlign: "justify",
     },
+    // Matriz curricular (conteúdo programático) — lista em 3 colunas
+    matrizList: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      marginBottom: 12,
+    },
+    matrizItem: {
+      width: "33.33%",
+      flexDirection: "row",
+      paddingRight: 10,
+      marginBottom: 4,
+    },
+    matrizBullet: {
+      fontSize: 8,
+      color: t.secondaryColor,
+      marginRight: 4,
+      lineHeight: 1.4,
+    },
+    matrizText: {
+      flex: 1,
+      fontSize: 7.5,
+      lineHeight: 1.35,
+      color: "#374151",
+    },
+    matrizNote: {
+      fontSize: 7,
+      fontFamily: "Helvetica-Oblique",
+      color: "#9CA3AF",
+      marginBottom: 12,
+    },
     spacer: {
       flexGrow: 1,
     },
@@ -184,8 +220,13 @@ export function certificateInfoPage(data: CertificateRenderData): ReactElement {
   })
 
   return (
-    <Page size="A4" orientation="landscape" style={styles.page} wrap={false}>
-      <View style={styles.border} />
+    <Page
+      size="A4"
+      orientation="landscape"
+      style={styles.page}
+      wrap={hasMatriz}
+    >
+      <View style={styles.border} fixed={hasMatriz} />
 
       <View style={styles.main}>
         <Text style={styles.header}>INFORMAÇÕES DO CERTIFICADO</Text>
@@ -235,6 +276,24 @@ export function certificateInfoPage(data: CertificateRenderData): ReactElement {
             <View style={[styles.barFill, { width: `${pct}%` }]} />
           </View>
         </View>
+
+        {/* Matriz curricular — só quando o curso tem matriz oficial */}
+        {hasMatriz ? (
+          <>
+            <Text style={styles.sectionTitle}>MATRIZ CURRICULAR</Text>
+            <View style={styles.matrizList}>
+              {matriz.map((topico, idx) => (
+                <View key={idx} style={styles.matrizItem} wrap={false}>
+                  <Text style={styles.matrizBullet}>•</Text>
+                  <Text style={styles.matrizText}>{topico}</Text>
+                </View>
+              ))}
+            </View>
+            <Text style={styles.matrizNote}>
+              *As informações podem sofrer alterações sem aviso prévio.
+            </Text>
+          </>
+        ) : null}
 
         {/* Fundamentação legal */}
         <Text style={styles.sectionTitle}>{LEGAL_BASIS_TITLE}</Text>

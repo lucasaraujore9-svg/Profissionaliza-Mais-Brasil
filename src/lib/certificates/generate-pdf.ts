@@ -50,6 +50,11 @@ export interface CertificateRenderFields {
   studentCpf: string | null
   courseName: string
   cargaHoraria: string | null
+  /**
+   * Matriz curricular do curso (conteúdo programático). Exibida no verso.
+   * Vazia/ausente => o verso segue o layout atual, sem a seção.
+   */
+  matrizCurricular?: string[]
   completionDate: Date
   code: string
   /** Nome da unidade emissora exibido no certificado. */
@@ -97,6 +102,9 @@ export async function renderCertificateBuffer(
     studentCpf: fields.studentCpf ? upperCert(fields.studentCpf) : null,
     courseName: upperCert(fields.courseName),
     cargaHoraria: fields.cargaHoraria ? upperCert(fields.cargaHoraria) : null,
+    // Tópicos da matriz mantêm a capitalização original (são frases), ao
+    // contrário dos demais campos que vão em MAIÚSCULO.
+    matrizCurricular: fields.matrizCurricular ?? [],
     completionDateFormatted: upperCert(formatCompletionDate(fields.completionDate)),
     code: upperCert(fields.code),
     unidade: upperCert(fields.unidade),
@@ -124,6 +132,7 @@ export async function generateAndUploadPdf(
     include: {
       tenant: { select: { name: true, slug: true } },
       enrollment: { select: { progressPercent: true } },
+      course: { select: { matrizCurricular: true } },
     },
   })
   if (!cert) {
@@ -149,6 +158,7 @@ export async function generateAndUploadPdf(
     studentCpf: cert.studentCpf,
     courseName: cert.courseName,
     cargaHoraria: cert.cargaHoraria,
+    matrizCurricular: cert.course?.matrizCurricular ?? [],
     completionDate: cert.completionDate,
     code: cert.code,
     unidade,

@@ -15,5 +15,15 @@ export function sampleCertificateFields(unidade: string): CertificateRenderField
     code: "EXEMPLO-12345",
     unidade,
     progressPercent: 100,
+    matrizCurricular: [
+      "Introdução e fundamentos da profissão",
+      "Ferramentas e materiais essenciais",
+      "Técnicas práticas do dia a dia",
+      "Boas práticas e segurança",
+      "Atendimento e relacionamento com o cliente",
+      "Precificação e gestão do negócio",
+      "Marketing e captação de clientes",
+      "Projeto final e certificação",
+    ],
   }
 }

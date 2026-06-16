@@ -54,6 +54,7 @@ async function loadCurso(slug: string): Promise<LoadedCurso | null> {
         nome: l.nome,
         ordem: l.ordem,
       })),
+      matriz: c.matrizCurricular,
       hasPrice: price > 0,
     }
   } catch {

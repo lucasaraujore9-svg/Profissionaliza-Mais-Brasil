@@ -263,6 +263,8 @@ export interface TenantCourseDetail extends TenantCourseListItem {
   parcelasSugeridas: number | null
   plataformaCourseId: string | null
   lessons: Array<{ id: string; nome: string; ordem: number }>
+  /** Matriz curricular oficial (conteúdo global PMB). Vazia => curso sem matriz. */
+  matriz: string[]
 }
 
 export async function getTenantCourseBySlug(
@@ -325,6 +327,7 @@ export async function getTenantCourseBySlug(
         nome: l.nome,
         ordem: l.ordem,
       })),
+      matriz: tc.course.matrizCurricular,
     }
   } catch (error) {
     contextLogger().error(
