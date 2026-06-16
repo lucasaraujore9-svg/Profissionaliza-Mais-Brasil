@@ -1,4 +1,5 @@
 import Link from "next/link"
+import { ejaRedirectHref } from "@/lib/catalog/eja-redirect"
 
 interface EjaSectionProps {
   /** Usado como texto alternativo da imagem (acessibilidade). */
@@ -17,8 +18,10 @@ interface EjaSectionProps {
  * altura automática) para não cortar. Versões separadas para desktop e mobile
  * (padronizadas pela PMB); o link de destino é o do escopo (PMB ou unidade).
  *
- * Abre em nova guia. Como a URL é definida pelo admin/unidade (origem confiável),
- * o link aponta direto para o destino.
+ * É propositalmente MAIS LARGA que a grade de cursos (full-bleed, até 2048px),
+ * para destacar do restante da home. O clique abre, em nova guia, a tela
+ * intermediária `/eja/ir` (loading "EJA Mais Brasil") que valida e redireciona
+ * para o destino externo — mesma lógica da seção Cursos Técnicos.
  */
 export function EjaSection({
   label,
@@ -32,32 +35,32 @@ export function EjaSection({
   if (!url || !desktop) return null
 
   return (
-    <section className="bg-white">
-      <div className="mx-auto max-w-[1280px] px-4 py-6 md:px-6 md:py-8">
-        <Link
-          href={url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="block overflow-hidden rounded-2xl transition hover:opacity-95"
-        >
-          {/* Mobile (cai no desktop quando não há imagem mobile). */}
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={mobile ?? desktop}
-            alt={label}
-            loading="lazy"
-            className="block h-auto w-full md:hidden"
-          />
-          {/* Desktop. */}
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={desktop}
-            alt={label}
-            loading="lazy"
-            className="hidden h-auto w-full md:block"
-          />
-        </Link>
-      </div>
+    <section className="bg-white py-6 md:py-8">
+      {/* Full-bleed: sem padding lateral e limitado à largura natural da arte
+          (2048px), centralizado. Fica mais largo que a grade (max 1280px). */}
+      <Link
+        href={ejaRedirectHref(url)}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="mx-auto block w-full max-w-[2048px] overflow-hidden transition hover:opacity-95"
+      >
+        {/* Mobile (cai no desktop quando não há imagem mobile). */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={mobile ?? desktop}
+          alt={label}
+          loading="lazy"
+          className="block h-auto w-full md:hidden"
+        />
+        {/* Desktop. */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={desktop}
+          alt={label}
+          loading="lazy"
+          className="hidden h-auto w-full md:block"
+        />
+      </Link>
     </section>
   )
 }
