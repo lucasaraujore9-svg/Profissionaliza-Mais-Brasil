@@ -207,6 +207,10 @@ export interface AsaasCreditCardHolderInfo {
 export interface AsaasPayWithCreditCardParams {
   creditCard: AsaasCreditCard
   creditCardHolderInfo: AsaasCreditCardHolderInfo
+  // IP do COMPRADOR (nao do servidor). O Asaas usa na analise de risco da
+  // captura do cartao — sem ele a transacao pode ser recusada. Mesma exigencia
+  // de createPayment/createInstallment com cartao.
+  remoteIp?: string
 }
 
 // ── Webhook ──

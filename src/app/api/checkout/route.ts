@@ -30,6 +30,7 @@ import { upsertStudent, StudentEmailConflictError } from "@/lib/students/upsert"
 import { provisionStudentAccess } from "@/lib/students/access"
 import { contextLogger } from "@/lib/logger"
 import { withRequestContext } from "@/lib/observability/with-request-context"
+import { clientIp } from "@/lib/http/client-ip"
 import { upsertLeadFromCheckout } from "@/lib/automation/leads"
 import { readVisitorId } from "@/lib/automation/tracking"
 import { isValidCpf, stripCpf } from "@/lib/validation/cpf"
@@ -511,6 +512,8 @@ export const POST = withRequestContext(
               phone: (student.fone ?? data.fone).replace(/\D/g, ""),
               mobilePhone: (student.fone ?? data.fone).replace(/\D/g, ""),
             },
+            // IP do comprador — exigido pelo Asaas na análise de risco do cartão.
+            remoteIp: clientIp(request),
           })
           return NextResponse.json({
             data: {
@@ -596,6 +599,8 @@ export const POST = withRequestContext(
             phone: (student.fone ?? data.fone).replace(/\D/g, ""),
             mobilePhone: (student.fone ?? data.fone).replace(/\D/g, ""),
           },
+          // IP do comprador — exigido pelo Asaas na análise de risco do cartão.
+          remoteIp: clientIp(request),
         })
         return NextResponse.json({
           data: {

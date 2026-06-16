@@ -20,6 +20,7 @@ import { contextLogger } from "@/lib/logger"
 import { swallow } from "@/lib/errors"
 import { rateLimit, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
+import { clientIp } from "@/lib/http/client-ip"
 
 const bodySchema = z.object({
   creditCard: z.object({
@@ -42,12 +43,6 @@ const bodySchema = z.object({
   // Parcelamento da 1ª mensalidade no cartão. 1 (ou ausente) = à vista.
   installmentCount: z.number().int().min(1).max(21).optional(),
 })
-
-function clientIp(request: Request): string {
-  const xff = request.headers.get("x-forwarded-for")
-  if (xff) return xff.split(",")[0].trim()
-  return request.headers.get("x-real-ip") ?? "0.0.0.0"
-}
 
 export const POST = withRequestContextParams<{ paymentId: string }>(
   {
@@ -106,6 +101,9 @@ export const POST = withRequestContextParams<{ paymentId: string }>(
       const result = await payWithCreditCard(paymentId, {
         creditCard,
         creditCardHolderInfo,
+        // IP do comprador — o Asaas usa na análise de risco da captura do
+        // cartão. Sem ele a transação à vista pode ser recusada.
+        remoteIp: clientIp(request),
       })
       return NextResponse.json({
         data: { id: result.id, status: result.status, value: result.value },
