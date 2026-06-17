@@ -149,6 +149,11 @@ export async function createCustomer(
     cpfCnpj: sanitizeDoc(params.cpfCnpj),
     phone: sanitizePhone(params.phone),
     mobilePhone: sanitizePhone(params.mobilePhone),
+    // Desabilita as notificações nativas do Asaas (email/SMS de cobrança) para
+    // TODOS os clientes criados — tanto no sistema mãe (PMB) quanto nas contas
+    // Asaas das unidades. Forçado após o spread para que nenhum caller reative
+    // por engano. A comunicação de cobrança é responsabilidade da plataforma.
+    notificationDisabled: true,
   }, apiKey)
 }
 
