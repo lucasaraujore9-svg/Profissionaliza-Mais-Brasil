@@ -65,11 +65,15 @@ export function cnameTarget(): string {
 
 // IP do registro A que revendedores apontam no APEX (@) do dominio proprio.
 // CNAME no apex e proibido pela RFC do DNS e o Registro.br nao aceita nome
-// vazio/@ em CNAME — por isso o apex usa um registro A para o IP fixo da Vercel
-// (mesmo IP que os apex da PMB e da livrecursos usam; ver DOMINIOS-GUIDE.md).
+// vazio/@ em CNAME — por isso o apex usa um registro A para o IP fixo da Vercel.
 // O `www` continua via CNAME (cnameTarget), que e valido em subdominio.
+//
+// Default = 216.198.79.1, o IP apex recomendado atualmente pela Vercel (mesmo
+// que o `cname.livrecursos.com.br` resolve hoje). O IP legado 76.76.21.21
+// CONTINUA roteando para a Vercel, entao dominios ja apontados nele seguem
+// funcionando sem precisar mudar o DNS. Configuravel via VERCEL_APEX_IP.
 export function vercelApexIp(): string {
-  return process.env.VERCEL_APEX_IP ?? "76.76.21.21"
+  return process.env.VERCEL_APEX_IP ?? "216.198.79.1"
 }
 
 // ── Dominio custom: variantes apex/www ──────────────────────────────────────
