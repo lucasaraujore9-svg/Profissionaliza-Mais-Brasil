@@ -54,9 +54,12 @@ function initialPhases(initial: OverrideInitial): PhaseDraft[] {
 export function ResellerCommissionOverrideForm({
   tenantId,
   initial,
+  onSaved,
 }: {
   tenantId: string
   initial: OverrideInitial
+  /** Chamado após salvar (ex.: recarregar dados da tela). Sem isto, faz router.refresh(). */
+  onSaved?: () => void
 }) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
@@ -161,7 +164,8 @@ export function ResellerCommissionOverrideForm({
         return
       }
       toast.success("Regra de comissão do revendedor atualizada")
-      router.refresh()
+      if (onSaved) onSaved()
+      else router.refresh()
     })
   }
 

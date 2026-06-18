@@ -36,6 +36,10 @@ import {
   type ReferralStats,
   type ReferrerSummary,
 } from "./reseller-referral-config"
+import {
+  ResellerCommissionOverrideForm,
+  type OverrideInitial,
+} from "./reseller-commission-override-form"
 import { ResellerTecnicaConfig } from "./reseller-tecnica-config"
 import { ResellerEjaConfig } from "./reseller-eja-config"
 import { ResellerAutomationConfig } from "./reseller-automation-config"
@@ -63,6 +67,13 @@ interface DetailResponse {
     referralPercent: number | null
     referralMinReferrals: number | null
     referralTiers: unknown
+    commissionMode: OverrideInitial["commissionMode"]
+    commissionBracketBasis: OverrideInitial["commissionBracketBasis"]
+    commissionRateType: OverrideInitial["commissionRateType"]
+    commissionPayoutBase: OverrideInitial["commissionPayoutBase"]
+    commissionBrackets: unknown
+    commissionPlan: unknown
+    commissionOverrideSource: OverrideInitial["overrideSource"]
     activatedAt: string | null
     pixKey: string | null
     pixKeyType: string | null
@@ -334,6 +345,20 @@ export function ResellerDetailClient({
             pixKeyType={data.reseller.pixKeyType}
             referrer={data.referrer}
             stats={data.referralStats}
+            onSaved={load}
+          />
+          <ResellerCommissionOverrideForm
+            tenantId={tenantId}
+            initial={{
+              overrideSource: data.reseller.commissionOverrideSource,
+              commissionMode: data.reseller.commissionMode,
+              commissionBracketBasis: data.reseller.commissionBracketBasis,
+              commissionRateType: data.reseller.commissionRateType,
+              commissionPayoutBase: data.reseller.commissionPayoutBase,
+              commissionBrackets: data.reseller.commissionBrackets,
+              commissionPlan: data.reseller.commissionPlan,
+              referralPercent: data.reseller.referralPercent,
+            }}
             onSaved={load}
           />
         </TabsContent>

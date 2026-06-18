@@ -342,6 +342,15 @@ export const GET = withRequestContextParams<{ id: string }>(
         activatedAt: tenant.activatedAt?.toISOString() ?? null,
         pixKey: tenant.pixKey,
         pixKeyType: tenant.pixKeyType,
+        // Override do motor de comissao por faixas/multi-fase (regra propria da
+        // unidade quando ela e a INDICADORA). Null em cada campo => herda global.
+        commissionMode: tenant.commissionMode,
+        commissionBracketBasis: tenant.commissionBracketBasis,
+        commissionRateType: tenant.commissionRateType,
+        commissionPayoutBase: tenant.commissionPayoutBase,
+        commissionBrackets: tenant.commissionBrackets ?? null,
+        commissionPlan: tenant.commissionPlan ?? null,
+        commissionOverrideSource: tenant.commissionOverrideSource ?? null,
         // Unidade Tecnica
         tecnicaEnabled: tenant.tecnicaEnabled,
         tecnicaUrl: tenant.tecnicaUrl,
