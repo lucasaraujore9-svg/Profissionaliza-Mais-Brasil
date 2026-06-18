@@ -54,9 +54,13 @@ Quando um revendedor quer usar seu proprio dominio (ex: `cursosjoao.com.br`):
 
 **Passo 1 — Revendedor configura DNS no dominio dele:**
 ```
-cursosjoao.com.br   CNAME   cname.livrecursos.com.br
+cursosjoao.com.br       A       76.76.21.21
+www.cursosjoao.com.br   CNAME   cname.livrecursos.com.br
 ```
-(Esse CNAME interno aponta para a Vercel; o valor exato e retornado por `cnameTarget()` em `src/lib/tenant/urls.ts`.)
+O apex (`@`) usa um registro **A** porque CNAME no apex e proibido pela RFC do
+DNS e o **Registro.br nao aceita nome vazio/@ em CNAME**. O IP e retornado por
+`vercelApexIp()` (default `76.76.21.21`, o mesmo IP dos apex da PMB/livrecursos)
+e o `www` usa CNAME via `cnameTarget()` — ambos em `src/lib/tenant/urls.ts`.
 
 **Passo 2 — Nosso sistema adiciona o dominio no projeto Vercel via API:**
 ```typescript
@@ -361,9 +365,9 @@ PAINEL DO REVENDEDOR > CONFIGURACOES > DOMINIO
 │                                                   │
 │ Configure o DNS do seu dominio:                   │
 │ ┌──────────────────────────────────────────────┐  │
-│ │ Tipo: CNAME                                   │  │
-│ │ Nome: @ (ou cursosjoao.com.br)               │  │
-│ │ Valor: cname.livrecursos.com.br              │  │
+│ │ Tipo: A      Nome: @    Valor: 76.76.21.21    │  │
+│ │ Tipo: CNAME  Nome: www  Valor:               │  │
+│ │              cname.livrecursos.com.br         │  │
 │ └──────────────────────────────────────────────┘  │
 │                                                   │
 │ [🔄 Verificar DNS]  [❌ Remover dominio]          │

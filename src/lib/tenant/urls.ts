@@ -63,6 +63,15 @@ export function cnameTarget(): string {
   return `cname.${vitrineDomain()}`
 }
 
+// IP do registro A que revendedores apontam no APEX (@) do dominio proprio.
+// CNAME no apex e proibido pela RFC do DNS e o Registro.br nao aceita nome
+// vazio/@ em CNAME — por isso o apex usa um registro A para o IP fixo da Vercel
+// (mesmo IP que os apex da PMB e da livrecursos usam; ver DOMINIOS-GUIDE.md).
+// O `www` continua via CNAME (cnameTarget), que e valido em subdominio.
+export function vercelApexIp(): string {
+  return process.env.VERCEL_APEX_IP ?? "76.76.21.21"
+}
+
 // ── Dominio custom: variantes apex/www ──────────────────────────────────────
 // Suportamos as DUAS variantes de um dominio proprio (com e sem `www.`). Para
 // isso armazenamos sempre a forma APEX (sem `www.`) como canonica em

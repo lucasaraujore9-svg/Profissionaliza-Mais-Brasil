@@ -13,6 +13,7 @@ import { invalidateTenant } from "@/lib/redis/tenant-cache"
 import {
   appDomain as resolveAppDomain,
   cnameTarget as resolveCnameTarget,
+  vercelApexIp as resolveApexIp,
   vitrineDomain as resolveVitrineDomain,
   apexDomain,
   wwwDomain,
@@ -59,10 +60,13 @@ async function fetchTenantDomainInfo(tenantId: string) {
     customDomain: tenant.customDomain,
     status,
     vercelConfigured: isVercelConfigured(),
-    // Dois registros: apex (@) e www — ambos apontando para o alvo CNAME.
+    // Dois registros: apex (@) via A e www via CNAME. CNAME no apex e proibido
+    // pela RFC do DNS e o Registro.br nao aceita nome vazio/@ em CNAME — por
+    // isso o apex aponta para o IP da Vercel via registro A. O www segue CNAME
+    // (valido em subdominio).
     dnsRecords: tenant.customDomain
       ? [
-          { type: "CNAME", name: "@", value: resolveCnameTarget() },
+          { type: "A", name: "@", value: resolveApexIp() },
           { type: "CNAME", name: "www", value: resolveCnameTarget() },
         ]
       : [],
