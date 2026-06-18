@@ -140,6 +140,22 @@ async function fulfillEnrollmentLocked(
   })
   if (!enrollment) throw new Error(`enrollment ${enrollmentId} nao encontrado`)
 
+  // ── Defesa em profundidade central: Payment.tenantId === Enrollment.tenantId ──
+  // A fonte ÚNICA da verdade de atribuição é o Enrollment. O TenantContext vem do
+  // call-site (webhook MP/Asaas, reconcile, admin sync) — hoje todos resolvem a
+  // matrícula escopada ao tenant, mas se QUALQUER fluxo (atual ou futuro) passar
+  // um enrollmentId de um tenant diferente do contexto, recusamos aqui em vez de
+  // gravar receita cruzada (revenda↔revenda↔PMB). Converte uma regressão
+  // silenciosa numa falha auditável (no webhook, vira markLog(false) + alerta;
+  // nas rotas síncronas, erro ao operador). Erro NÃO é transitório → sem retry.
+  const expectedTenantId = tenant.isPmbVitrine ? null : tenant.id
+  if (enrollment.tenantId !== expectedTenantId) {
+    throw new Error(
+      `fulfill tenant mismatch: enrollment ${enrollmentId} pertence a ` +
+        `${enrollment.tenantId ?? "PMB"} mas o contexto é ${expectedTenantId ?? "PMB"}`,
+    )
+  }
+
   const idempotencyWhere =
     event.gateway === "MP"
       ? { mpPaymentId: event.externalPaymentId }
@@ -168,7 +184,7 @@ async function fulfillEnrollmentLocked(
     await prisma.$transaction([
       prisma.payment.create({
         data: {
-          tenantId: tenant.isPmbVitrine ? null : tenant.id,
+          tenantId: expectedTenantId,
           enrollmentId: enrollment.id,
           soldByUserId: enrollment.soldByUserId ?? null,
           amount: event.amount,

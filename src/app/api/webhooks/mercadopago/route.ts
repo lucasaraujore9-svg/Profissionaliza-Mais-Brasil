@@ -3,8 +3,6 @@ import { prisma } from "@/lib/prisma"
 import { extractPaymentIdFromNotification } from "@/lib/mercadopago/webhook"
 import { processMpWebhook } from "@/lib/mercadopago/process"
 import type { MPWebhookNotification } from "@/lib/mercadopago/types"
-import { getAuthorizedPayment } from "@/lib/mercadopago/client"
-import { pmbMpAccessToken } from "@/lib/pmb-config"
 import { swallow } from "@/lib/errors"
 import {
   runWithRequestContext,
@@ -92,30 +90,13 @@ async function handle(request: Request) {
   const isLegacyIpn =
     typeof legacyTopic === "string" && !body?.type && !body?.action
 
-  let paymentId = extractPaymentIdFromNotification(body, queryDataId)
-
-  // Topic "subscription_authorized_payment": data.id e o id do authorized
-  // payment, nao do payment direto. Buscamos o payment_id real via API MP
-  // e seguimos o fluxo padrao.
-  if (
-    !paymentId &&
-    (topic === "subscription_authorized_payment" ||
-      topic.includes("subscription_authorized_payment")) &&
-    queryDataId
-  ) {
-    try {
-      const token = await pmbMpAccessToken()
-      if (token) {
-        const ap = await getAuthorizedPayment(token, queryDataId)
-        if (ap.payment_id) paymentId = String(ap.payment_id)
-      }
-    } catch (err) {
-      log.warn(
-        { err, event: "mp.webhook.authorized_payment_lookup_failed", queryDataId },
-        "authorized_payment lookup falhou",
-      )
-    }
-  }
+  // Para subscription_authorized_payment, data.id é o id do AUTHORIZED PAYMENT
+  // (não do payment direto). A resolução do payment_id real é feita DENTRO de
+  // processMpWebhook, com o TOKEN DO TENANT correto (resolvido por ?tenant) —
+  // antes era tentada aqui SEMPRE com o token PMB e, pior, num branch inalcançável
+  // (extractPaymentIdFromNotification já devolve data.id como fallback). `topic`
+  // é repassado para o processador decidir.
+  const paymentId = extractPaymentIdFromNotification(body, queryDataId)
 
   const dbLog = await prisma.webhookLog.create({
     data: {
@@ -184,6 +165,7 @@ async function handle(request: Request) {
       xSignature,
       xRequestId,
       tenantSlug,
+      topic,
       dataId: queryDataId ?? String(paymentId),
     })
     log.info({ event: "mp.webhook.processed", webhookLogId: dbLog.id, paymentId }, "webhook MP processado")

@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { forbiddenNameError } from "@/lib/tenant/forbidden-names"
+import { pmbPlataformaPolo } from "@/lib/pmb-config"
 
 /**
  * Validacao e disponibilidade de subdominio (slug) de revenda.
@@ -32,6 +33,10 @@ export const RESERVED_SLUGS = new Set([
   "dev",
   "test",
   "__pmb__",
+  // "pmb" e o polo PMB são roteados para o CONTEXTO PMB no webhook MP
+  // (mercadopago/process.ts:resolveTenantBySlug) e no webhook Asaas — uma revenda
+  // com esse slug teria o fulfillment automático sequestrado para a PMB. Reservado.
+  "pmb",
 ])
 
 /**
@@ -48,6 +53,11 @@ export function validateSlugFormat(slug: string): string | null {
     return "Use apenas letras minúsculas, números e hífen"
   }
   if (RESERVED_SLUGS.has(value)) {
+    return "Este subdomínio é reservado, escolha outro"
+  }
+  // Cobre o caso em que PMB_PLATAFORMA_POLO foi configurado para um valor != "pmb":
+  // esse slug também roteia para o contexto PMB nos webhooks e não pode ser revenda.
+  if (value === pmbPlataformaPolo()) {
     return "Este subdomínio é reservado, escolha outro"
   }
   const forbidden = forbiddenNameError(value)

@@ -10,6 +10,7 @@ import {
 import {
   createCustomer,
   createSubscription,
+  cancelSubscription,
   listPayments,
   AsaasApiError,
 } from "@/lib/asaas/client"
@@ -23,24 +24,10 @@ import { resolveReferrerFromCookie } from "@/lib/referrals/capture"
 import { rateLimit, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { forbiddenNameError } from "@/lib/tenant/forbidden-names"
-
-const RESERVED_SLUGS = new Set([
-  "www",
-  "app",
-  "api",
-  "admin",
-  "painel",
-  "loja",
-  "mail",
-  "smtp",
-  "ftp",
-  "cdn",
-  "assets",
-  "static",
-  "staging",
-  "dev",
-  "test",
-])
+// Fonte ÚNICA de slugs reservados (inclui "pmb" e "__pmb__"). Antes havia uma
+// lista duplicada e DIVERGENTE aqui (sem "pmb"/"__pmb__"), permitindo o cadastro
+// de um slug que sequestra o roteamento de webhook para o contexto PMB.
+import { RESERVED_SLUGS } from "@/lib/tenant/slug"
 
 function formatDueDate(daysFromNow: number): string {
   const d = new Date()
@@ -171,8 +158,9 @@ export const POST = withRequestContext(
   const referralCode = await generateUniqueReferralCode(slug)
   const referrerTenantId = await resolveReferrerFromCookie()
 
+  let createdTenantId: string
   try {
-    await prisma.$transaction(async (tx) => {
+    createdTenantId = await prisma.$transaction(async (tx) => {
       const tenant = await tx.tenant.create({
         data: {
           name: empresa.fantasia,
@@ -196,18 +184,48 @@ export const POST = withRequestContext(
           tenantId: tenant.id,
         },
       })
+
+      return tenant.id
     })
   } catch (error) {
     contextLogger().error(
       { err: error, event: "revendedores.cadastro.db_tx_failed" },
       "cadastro de revendedor: transação no DB falhou",
     )
+    // COMPENSAÇÃO: a $transaction falhou DEPOIS de criar customer + subscription
+    // na conta Asaas global da PMB (cobrança real, vence em 3 dias). Sem isto, a
+    // assinatura ficava ÓRFÃ cobrando mensalmente sem nenhum Tenant correspondente
+    // (o webhook não acha tenant e o pagamento fica solto). Cancela a assinatura
+    // (best-effort) antes de responder; se a compensação falhar, loga os ids para
+    // reconciliação manual.
+    await cancelSubscription(asaasSubscription.id).catch((cancelErr) => {
+      contextLogger().error(
+        {
+          err: cancelErr,
+          event: "revendedores.cadastro.compensation_failed",
+          asaasSubscriptionId: asaasSubscription.id,
+          asaasCustomerId: asaasCustomer.id,
+        },
+        "FALHA ao cancelar assinatura Asaas órfã no rollback do cadastro — reconciliar manualmente",
+      )
+    })
+
+    // Colisão de unicidade (email/slug) entre o pré-check NÃO-atômico (linha ~111)
+    // e o commit da transação: devolve 409 claro em vez de 500 genérico.
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2002"
+    ) {
+      return NextResponse.json(
+        { error: "Já existe uma conta com este email", code: "EMAIL_TAKEN" },
+        { status: 409 },
+      )
+    }
+
     return NextResponse.json(
       {
         error: "Falha ao salvar cadastro. Entre em contato com o suporte.",
         code: "PERSIST_FAILED",
-        asaasCustomerId: asaasCustomer.id,
-        asaasSubscriptionId: asaasSubscription.id,
       },
       { status: 500 },
     )
@@ -219,7 +237,28 @@ export const POST = withRequestContext(
       subscription: asaasSubscription.id,
       limit: 1,
     })
-    paymentUrl = payments.data[0]?.invoiceUrl ?? null
+    const firstPayment = payments.data[0] ?? null
+    paymentUrl = firstPayment?.invoiceUrl ?? null
+
+    // H7-0: semeia o TenantPayment PENDING já no cadastro — fecha a janela em que
+    // isKnownAsaasPayment retorna false e /cobranca dá 404 até o webhook
+    // PAYMENT_CREATED chegar. O webhook faz upsert por asaasPaymentId (unique), sem
+    // duplicar. Best-effort.
+    if (firstPayment) {
+      await prisma.tenantPayment
+        .create({
+          data: {
+            tenantId: createdTenantId,
+            asaasPaymentId: firstPayment.id,
+            amount: PLANO_GROWTH_VALOR,
+            billingType: pagamento.billingType,
+            status: "PENDING",
+            dueDate: new Date(firstPayment.dueDate),
+            invoiceUrl: firstPayment.invoiceUrl ?? null,
+          },
+        })
+        .catch(() => null)
+    }
   } catch {
     paymentUrl = null
   }

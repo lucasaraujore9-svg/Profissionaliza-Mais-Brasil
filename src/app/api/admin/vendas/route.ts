@@ -21,7 +21,7 @@ import { applyCouponDiscount } from "@/lib/coupons/discount"
 import { dueDateInDays } from "@/lib/checkout/due-date"
 import { swallow } from "@/lib/errors"
 import { withRequestContext } from "@/lib/observability/with-request-context"
-import { asaasWebhookUrl } from "@/lib/tenant/urls"
+import { asaasWebhookUrl, mpWebhookUrl } from "@/lib/tenant/urls"
 
 const PMB_SALES_CAP = 50
 
@@ -382,7 +382,10 @@ export const POST = withRequestContext(
           external_reference: externalReference,
           payer_email: student.email,
           back_url: `${appUrl || `https://${process.env.NEXT_PUBLIC_APP_DOMAIN ?? "profissionalizamaisbrasil.com.br"}`}/admin/vendas?ok=${enrollment.id}`,
-          notification_url: appUrl ? `${appUrl}/api/webhooks/mercadopago` : undefined,
+          // mpWebhookUrl() (sem ?tenant = PMB) NUNCA é undefined e usa o host
+          // canônico www — evita o webhook perdido por env vazia OU pelo apex que
+          // responde 307→www (que o MP não segue). Substitui a construção manual.
+          notification_url: mpWebhookUrl(),
           auto_recurring: {
             frequency: 1,
             frequency_type: "months",

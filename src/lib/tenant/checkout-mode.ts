@@ -32,11 +32,16 @@ export interface CheckoutModeInput {
  *   3. Senão, NONE → cai no formulário de contato.
  */
 export function tenantCheckoutMode(t: CheckoutModeInput): CheckoutMode {
-  const asaasReady =
-    t.salesGateway === "ASAAS" &&
-    t.asaasGatewayEnabled === true &&
-    t.asaasConnected === true
-  if (asaasReady) return "ASAAS"
+  // Quando a unidade ESCOLHEU Asaas como gateway de vendas, ele é o único válido:
+  // se não estiver pronto (capability do Admin Master desligada OU conta
+  // desconectada), retornamos NONE — a vitrine mostra o formulário de contato em
+  // vez de cair SILENCIOSAMENTE no MP. O fallback antigo (salesGateway===ASAAS mas
+  // não-pronto → MP) cobrava numa conta MP antiga que a unidade considerava
+  // desativada, contrariando a REGRA DE OURO acima.
+  if (t.salesGateway === "ASAAS") {
+    const asaasReady = t.asaasGatewayEnabled === true && t.asaasConnected === true
+    return asaasReady ? "ASAAS" : "NONE"
+  }
   if (t.mpAccessToken && t.mpPublicKey) return "MP"
   return "NONE"
 }

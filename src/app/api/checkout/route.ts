@@ -454,20 +454,50 @@ export const POST = withRequestContext(
 
       // ──── MONTHLY ────
       if (isMonthly && monthlyMonths) {
+        // Cartão: cria a assinatura JÁ COM o cartão inline. O client roteia para
+        // o endpoint /subscriptions/ (com barra) que tokeniza o cartão e cobra a
+        // 1ª parcela na criação — VINCULANDO o cartão à assinatura inteira, de
+        // modo que as mensalidades seguintes também são cobradas. (Antes a
+        // assinatura nascia sem cartão e só a 1ª parcela era capturada à parte
+        // via payWithCreditCard, deixando as recorrências sem meio de cobrança.)
+        // Espelha o fluxo de revenda em asaas/transparent-process.ts.
+        const monthlyCardPair =
+          billingType === "CREDIT_CARD" && data.creditCard && data.creditCardHolder
+            ? {
+                creditCard: data.creditCard,
+                creditCardHolderInfo: {
+                  name: student.nome,
+                  email: student.email ?? data.email,
+                  cpfCnpj: data.cpf,
+                  postalCode: data.creditCardHolder.postalCode,
+                  addressNumber: data.creditCardHolder.addressNumber,
+                  addressComplement: data.creditCardHolder.addressComplement,
+                  phone: (student.fone ?? data.fone).replace(/\D/g, ""),
+                  mobilePhone: (student.fone ?? data.fone).replace(/\D/g, ""),
+                },
+                // IP do COMPRADOR — exigido pelo Asaas na análise de risco.
+                remoteIp: clientIp(request),
+              }
+            : null
+
         const subscription = await createAsaasSubscription({
           customer: customer.id,
           billingType,
           value: finalAmount,
-          nextDueDate: dueDateInDays(3),
+          // Cartão captura na hora (vence hoje); PIX/boleto vencem em 3 dias.
+          nextDueDate: dueDateInDays(billingType === "CREDIT_CARD" ? 0 : 3),
           cycle: "MONTHLY",
           description: `Mensalidade — ${course.nome}`,
           externalReference,
           maxPayments: monthlyMonths,
           notificationUrl: asaasWebhookUrl(),
+          ...(monthlyCardPair ?? {}),
         })
 
         // Asaas gera as cobranças async; busca a 1a invoice em até 3 tentativas
-        let firstPayment: { id: string; invoiceUrl: string; bankSlipUrl: string | null } | null = null
+        let firstPayment:
+          | { id: string; invoiceUrl: string; bankSlipUrl: string | null; status: string }
+          | null = null
         for (let i = 0; i < 3; i++) {
           const list = await listAsaasPayments({
             subscription: subscription.id,
@@ -480,6 +510,7 @@ export const POST = withRequestContext(
               id: first.id,
               invoiceUrl: first.invoiceUrl,
               bankSlipUrl: first.bankSlipUrl,
+              status: first.status,
             }
             break
           }
@@ -497,31 +528,20 @@ export const POST = withRequestContext(
           },
         })
 
-        // Cartão de crédito recorrente: cobra a 1ª parcela transparente
-        // (gera creditCardToken que o Asaas associa à subscription).
-        if (billingType === "CREDIT_CARD" && firstPayment && data.creditCard && data.creditCardHolder) {
-          const result = await payWithCreditCard(firstPayment.id, {
-            creditCard: data.creditCard,
-            creditCardHolderInfo: {
-              name: student.nome,
-              email: student.email ?? data.email,
-              cpfCnpj: data.cpf,
-              postalCode: data.creditCardHolder.postalCode,
-              addressNumber: data.creditCardHolder.addressNumber,
-              addressComplement: data.creditCardHolder.addressComplement,
-              phone: (student.fone ?? data.fone).replace(/\D/g, ""),
-              mobilePhone: (student.fone ?? data.fone).replace(/\D/g, ""),
-            },
-            // IP do comprador — exigido pelo Asaas na análise de risco do cartão.
-            remoteIp: clientIp(request),
-          })
+        // Cartão: a assinatura já foi criada COM o cartão inline (acima), então a
+        // 1ª cobrança é capturada na criação e o cartão fica vinculado às
+        // mensalidades seguintes. Devolve o status real da 1ª cobrança; a página
+        // de confirmação lê o estado efetivado pelo webhook (processPmbDirectSale).
+        // Sem 1ª invoice ainda (timing assíncrono do Asaas) → PENDING: o cartão JÁ
+        // está vinculado, então NÃO há mais fallback "redirect" cego para cartão.
+        if (billingType === "CREDIT_CARD") {
           return NextResponse.json({
             data: {
               enrollmentId: enrollment.id,
               gateway: "ASAAS",
               mode: "credit_card_result",
-              status: result.status, // CONFIRMED | RECEIVED | etc.
-              paymentId: result.id,
+              status: firstPayment?.status ?? "PENDING",
+              paymentId: firstPayment?.id ?? null,
             },
           })
         }

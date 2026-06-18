@@ -170,6 +170,30 @@ async function findExistingPlatformLogin(student: {
 }
 
 /**
+ * O login da plataforma parceira é ÚNICO por pessoa (mesmo CPF/email),
+ * compartilhado entre revendas, e status/apostila são por-LOGIN (não por curso).
+ * Antes de reativar o login na compra de uma unidade, checamos se a MESMA pessoa
+ * está BLOQUEADA por inadimplência em OUTRA unidade — se estiver, reativar
+ * reabriria indevidamente os cursos suspensos daquela outra unidade
+ * (vazamento de estado de acesso cross-tenant).
+ */
+async function isPersonBlockedInAnotherTenant(student: {
+  id: string
+  cpf: string | null
+  email: string | null
+}): Promise<boolean> {
+  const orFilters: { cpf?: string; email?: string }[] = []
+  if (student.cpf) orFilters.push({ cpf: student.cpf })
+  if (student.email) orFilters.push({ email: student.email })
+  if (orFilters.length === 0) return false
+  const blocked = await prisma.student.findFirst({
+    where: { id: { not: student.id }, OR: orFilters, status: "BLOQUEADO" },
+    select: { id: true },
+  })
+  return Boolean(blocked)
+}
+
+/**
  * Garante que o aluno existe na plataforma. Se ja tem plataforma_aluno_id valido, retorna
  * imediatamente. Caso contrario chama criarAluno e persiste plataforma_aluno_id +
  * ea_aluno_senha + status ATIVO + apostila LIBERADA + polo + vendedor.
@@ -217,11 +241,33 @@ export async function ensureStudentOnPlatform(
     email: student.email,
   })
   if (reused) {
-    await editarAluno({
-      id_aluno: reused.plataformaAlunoId,
-      status: "ativo",
-      apostila: "liberar",
+    // Só reativamos o ESTADO GLOBAL do login (status/apostila) se a pessoa NÃO
+    // estiver bloqueada por inadimplência em outra unidade — caso contrário a
+    // compra aqui reabriria os cursos suspensos de lá (vazamento cross-tenant de
+    // acesso). O vínculo do curso recém-comprado é feito pelo caller
+    // (linkCourseToStudent) independentemente do status; o desbloqueio global só
+    // ocorre quando a pendência que originou o bloqueio for resolvida.
+    const blockedElsewhere = await isPersonBlockedInAnotherTenant({
+      id: student.id,
+      cpf: student.cpf,
+      email: student.email,
     })
+    if (!blockedElsewhere) {
+      await editarAluno({
+        id_aluno: reused.plataformaAlunoId,
+        status: "ativo",
+        apostila: "liberar",
+      })
+    } else {
+      contextLogger().warn(
+        {
+          event: "plataforma.reuse_blocked_login",
+          studentId: student.id,
+          plataformaAlunoId: reused.plataformaAlunoId,
+        },
+        "login compartilhado bloqueado por inadimplência em outra unidade — curso vinculado SEM reativar o acesso global",
+      )
+    }
     await prisma.student.update({
       where: { id: student.id },
       data: {
@@ -231,8 +277,9 @@ export async function ensureStudentOnPlatform(
         ...(reused.encryptedSenha
           ? { plataformaAlunoSenha: reused.encryptedSenha }
           : {}),
-        status: "ATIVO",
-        apostila: "LIBERADA",
+        // Só promove a ATIVO/LIBERADA se a pessoa não está bloqueada em outra
+        // unidade — espelha o que foi (ou não) aplicado na plataforma acima.
+        ...(blockedElsewhere ? {} : { status: "ATIVO", apostila: "LIBERADA" }),
         polo,
         vendedorId: null,
       },

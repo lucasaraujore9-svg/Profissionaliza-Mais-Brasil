@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { decrypt } from "@/lib/crypto"
-import { decryptTenantMpToken, getPayment, searchPayments } from "./client"
+import { decryptTenantMpToken, getPayment, getAuthorizedPayment, searchPayments } from "./client"
 import {
   getPayment as getAsaasPayment,
   listPayments as listAsaasPayments,
@@ -14,6 +14,7 @@ import { fulfillEnrollment } from "@/lib/enrollment/fulfill"
 import { unlinkCourseFromStudent } from "@/lib/students/plataforma-actions"
 import { createNotification } from "@/lib/notifications"
 import { swallow } from "@/lib/errors"
+import { isTransientWebhookError } from "@/lib/webhooks/transient"
 import { contextLogger } from "@/lib/logger"
 
 interface ProcessArgs {
@@ -23,6 +24,8 @@ interface ProcessArgs {
   xRequestId: string | null
   dataId: string | null
   tenantSlug: string | null
+  /** type/action/topic da notificação — usado p/ subscription_authorized_payment. */
+  topic: string
 }
 
 async function markLog(
@@ -214,7 +217,7 @@ async function revokeEnrollmentFromMp(
 const fulfillFromMp = fulfillFromMpPayment
 
 export async function processMpWebhook(args: ProcessArgs): Promise<void> {
-  const { logId, paymentId, xSignature, xRequestId, dataId, tenantSlug } = args
+  const { logId, paymentId, xSignature, xRequestId, dataId, tenantSlug, topic } = args
 
   try {
     // ── Passo 1: idempotência ──────────────────────────────────────────────
@@ -350,7 +353,26 @@ export async function processMpWebhook(args: ProcessArgs): Promise<void> {
       ? tenant.mpAccessToken
       : decryptTenantMpToken(tenant.mpAccessToken)
 
-    const payment = await getPayment(accessToken, paymentId)
+    // subscription_authorized_payment: o dataId é o id do AUTHORIZED PAYMENT (sub-
+    // recurso da preapproval), NÃO de um payment. Resolve o payment_id real com o
+    // TOKEN DESTE tenant — antes a rota tentava com o token PMB (e num branch
+    // inalcançável), então getPayment tomava 404 e a cobrança recorrente (assinatura
+    // MP da revenda/PMB) nunca efetivava via webhook. A idempotência final é por
+    // mpPaymentId no fulfill + advisory lock, então reentregas são seguras.
+    let effectivePaymentId = paymentId
+    if (
+      topic === "subscription_authorized_payment" ||
+      topic.includes("subscription_authorized_payment")
+    ) {
+      const ap = await getAuthorizedPayment(accessToken, dataId ?? paymentId)
+      if (!ap.payment_id) {
+        await markLog(logId, true, `authorized_payment ${dataId ?? paymentId} ainda sem payment_id`)
+        return
+      }
+      effectivePaymentId = String(ap.payment_id)
+    }
+
+    const payment = await getPayment(accessToken, effectivePaymentId)
 
     // ── Passo 5: resolver o enrollmentId pelo external_reference ────────────
     const enrollmentId = await resolveEnrollmentId(tenant, payment)
@@ -386,6 +408,15 @@ export async function processMpWebhook(args: ProcessArgs): Promise<void> {
       "webhook MP processing failed",
     )
     await markLog(logId, false, message)
+    // Erros transitórios (MP 5xx/rede, deadlock/timeout de DB, plataforma 5xx)
+    // são RELANÇADOS para a rota responder 500 e o MP REENTREGAR — o fulfillment
+    // é idempotente (mpPaymentId + advisory lock). Sem isto, uma falha passageira
+    // deixava a venda PENDING sem retry automático (aluno pagava e não era
+    // matriculado até reconciliação manual). Erros terminais continuam engolidos:
+    // já há early-return para hmac inválido / tenant não resolvido / secret
+    // ausente / enrollment não encontrado, e 4xx de negócio não se beneficiam de
+    // retry — ficam visíveis no WebhookLog (processed=false) + reconcile.
+    if (isTransientWebhookError(error)) throw error
   }
 }
 

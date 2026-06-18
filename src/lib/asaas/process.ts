@@ -1,4 +1,6 @@
 import { prisma } from "@/lib/prisma"
+import { getPayment as getAsaasPayment, AsaasApiError } from "./client"
+import { isTransientWebhookError } from "@/lib/webhooks/transient"
 import { sendEmail } from "@/lib/email/resend"
 import { blockTenantStudents, unblockTenantStudents } from "@/lib/auto-block"
 import { fulfillEnrollment } from "@/lib/enrollment/fulfill"
@@ -232,10 +234,28 @@ export async function processAsaasWebhook(
       return
     }
 
-    const { payment } = payload
+    let payment = payload.payment
     if (!payment) {
       await markLog(logId, true, `evento ${event} sem payment`)
       return
+    }
+
+    // Defesa em profundidade (espelha reseller-process.ts e o webhook MP): NÃO
+    // confiar no corpo do webhook. Re-busca o pagamento autoritativo na conta
+    // Asaas GLOBAL da PMB (sem apiKeyOverride). Se o id não existir lá (404), o
+    // corpo é forjado/alheio → ignora. Reatribui `payment` para que TODO o
+    // processamento abaixo (upsert de TenantPayment, ativação, comissão, venda
+    // direta PMB) reflita value/status/dueDate REAIS, não o que veio no corpo.
+    // Antes, a única barreira era o token estático global — insuficiente se ele
+    // vazasse (ativação/comissão forjadas sem pagamento real).
+    try {
+      payment = await getAsaasPayment(payment.id)
+    } catch (err) {
+      if (err instanceof AsaasApiError && err.statusCode === 404) {
+        await markLog(logId, true, `pagamento ${payment.id} não existe na conta global PMB — ignorado`)
+        return
+      }
+      throw err
     }
 
     const subscriptionId = payment.subscription
@@ -605,5 +625,10 @@ export async function processAsaasWebhook(
       "webhook Asaas processing failed",
     )
     await markLog(logId, false, message)
+    // Erros transitórios (Asaas 5xx/rede, deadlock/timeout de DB) são RELANÇADOS
+    // para a rota responder 500 e o Asaas REENTREGAR — o processamento é
+    // idempotente (asaasPaymentId no upsert + advisory lock no fulfill). Mesma
+    // política do webhook MP e do branch de revenda (que relança tudo).
+    if (isTransientWebhookError(error)) throw error
   }
 }

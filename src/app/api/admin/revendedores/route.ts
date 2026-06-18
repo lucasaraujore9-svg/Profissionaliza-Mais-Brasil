@@ -427,6 +427,27 @@ export const POST = withRequestContext(
     select: { id: true, slug: true, name: true, status: true },
   })
 
+  // H7-0: semeia o TenantPayment PENDING da 1ª mensalidade já no onboarding
+  // (quando o id da 1ª cobrança já foi capturado). Fecha a janela em que
+  // isKnownAsaasPayment retorna false e a página /cobranca dá 404 até o webhook
+  // PAYMENT_CREATED chegar. O webhook faz upsert por asaasPaymentId (unique) — não
+  // duplica. Best-effort: uma falha aqui não invalida o cadastro já concluído.
+  if (firstPaymentId) {
+    await prisma.tenantPayment
+      .create({
+        data: {
+          tenantId: tenant.id,
+          asaasPaymentId: firstPaymentId,
+          amount: isPromo ? data.promoValue! : data.planValue,
+          billingType: "UNDEFINED",
+          status: "PENDING",
+          dueDate: new Date(isoDayPlus(3)),
+          invoiceUrl,
+        },
+      })
+      .catch(() => null)
+  }
+
   // Automação ligada na criação: cria os templates default (espelha a primeira
   // ativação em .../[id]/automacao). Tenant recém-criado nunca tem templates.
   if (data.automationEnabled) {

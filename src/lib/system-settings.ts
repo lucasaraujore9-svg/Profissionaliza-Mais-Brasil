@@ -88,9 +88,19 @@ export async function getPmbMpAccessTokenAsync(): Promise<string | null> {
     try {
       return decrypt(row.pmbMpAccessTokenEnc)
     } catch (err) {
+      // FAIL-CLOSED: o token ESTÁ configurado no banco mas a descriptografia
+      // falhou (ENCRYPTION_KEY trocada/dessincronizada, ciphertext corrompido).
+      // NÃO cair para o env silenciosamente — isso poderia cobrar a venda PMB numa
+      // conta MP legada/de teste sem nenhum erro visível (só um log). Falhamos como
+      // o caminho por-tenant (decryptTenantMpToken, que não tem try/catch): o
+      // checkout trata como credencial indisponível (aborta) em vez de cobrar na
+      // conta errada. O env só é fallback quando o token NUNCA foi configurado.
       contextLogger().error(
         { err, event: "system-settings.decrypt_failed", field: "pmbMpAccessToken" },
-        "falha ao decifrar pmbMpAccessToken — usando fallback de env",
+        "falha ao decifrar pmbMpAccessToken configurado — fail-closed (verifique ENCRYPTION_KEY)",
+      )
+      throw new Error(
+        "pmbMpAccessToken configurado no banco mas não pôde ser descriptografado — verifique ENCRYPTION_KEY",
       )
     }
   }
