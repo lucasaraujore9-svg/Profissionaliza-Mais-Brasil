@@ -28,7 +28,11 @@ function formatMoney(n: number): string {
 export default async function AdminSaquesPage() {
   const session = await requireAdminSession()
   if (!session) redirect("/login?callbackUrl=/admin/indicacoes/saques")
-  if (session.role !== "SUPER_ADMIN" && session.role !== "PMB_RESELLER_MGR") {
+  if (
+    session.role !== "SUPER_ADMIN" &&
+    session.role !== "PMB_RESELLER_MGR" &&
+    session.role !== "PMB_FINANCEIRO"
+  ) {
     redirect("/admin")
   }
 
@@ -45,6 +49,7 @@ export default async function AdminSaquesPage() {
       requestedAt: true,
       processedAt: true,
       paidAt: true,
+      proofUrl: true,
       referrer: { select: { id: true, name: true, slug: true } },
       commissions: { select: { id: true } },
     },
@@ -63,7 +68,7 @@ export default async function AdminSaquesPage() {
       </Link>
       <PageHeader
         title="Pagamentos de indicação"
-        description="Comissões geradas automaticamente no dia configurado. Processe o PIX e marque como pago."
+        description="Lista de comissões liberadas para pagamento manual. Pague, marque como pago e anexe o comprovante (obrigatório)."
       />
 
       <Card className="overflow-hidden">
@@ -129,7 +134,16 @@ export default async function AdminSaquesPage() {
                   </TableCell>
                   <TableCell className="text-right">
                     {p.status === "REQUESTED" || p.status === "PROCESSING" ? (
-                      <AdminPayoutRowActions payoutId={p.id} />
+                      <AdminPayoutRowActions payoutId={p.id} proofUrl={p.proofUrl} />
+                    ) : p.proofUrl ? (
+                      <a
+                        href={p.proofUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs font-medium text-[var(--color-pmb-green-900)] underline-offset-4 hover:underline"
+                      >
+                        Comprovante
+                      </a>
                     ) : (
                       <span className="text-xs text-gray-400">—</span>
                     )}

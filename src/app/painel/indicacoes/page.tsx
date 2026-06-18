@@ -110,7 +110,7 @@ export default async function PainelIndicacoesPage() {
     year: "numeric",
   })
 
-  const [summary, referrals] = await Promise.all([
+  const [summary, referrals, payouts] = await Promise.all([
     summaryForTenant(tenant.id),
     prisma.tenant.findMany({
       where: { referrerTenantId: tenant.id },
@@ -126,6 +126,20 @@ export default async function PainelIndicacoesPage() {
         },
       },
       orderBy: { createdAt: "desc" },
+    }),
+    // Pagamentos de comissão a esta unidade — exibimos os comprovantes anexados
+    // pelo Financeiro para consulta da revenda.
+    prisma.referralPayout.findMany({
+      where: { referrerTenantId: tenant.id, status: "PAID" },
+      select: {
+        id: true,
+        amount: true,
+        paidAt: true,
+        proofUrl: true,
+        proofUploadedAt: true,
+      },
+      orderBy: { paidAt: "desc" },
+      take: 36,
     }),
   ])
 
@@ -164,7 +178,7 @@ export default async function PainelIndicacoesPage() {
         <SummaryTile
           label="A receber"
           value={formatMoney(summary.available)}
-          hint={`Pagamento dia ${payoutDay}`}
+          hint={`Liberado dia ${payoutDay}; pago após conferência`}
           highlight
         />
         <SummaryTile label="Total pago" value={formatMoney(summary.paid)} />
@@ -174,15 +188,18 @@ export default async function PainelIndicacoesPage() {
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <p className="text-sm font-semibold text-[var(--color-pmb-green-900)]">
-              Pagamento automático
+              Pagamento das comissões
             </p>
             <p className="mt-1 text-sm text-gray-700">
-              Você não precisa solicitar saque. As comissões são pagas
-              automaticamente todo dia {payoutDay} do mês seguinte ao pagamento
-              do indicado.
+              Você não precisa solicitar saque. As comissões liberadas são pagas
+              <strong> manualmente pela nossa equipe financeira</strong> após
+              conferência. O comprovante de cada pagamento fica disponível aqui
+              para você consultar.
             </p>
             <p className="mt-2 text-xs text-gray-600">
-              Próximo pagamento: <strong>{nextPayoutLabel}</strong>
+              As comissões ficam disponíveis a partir do dia {payoutDay} do mês
+              seguinte ao pagamento do indicado. Próxima liberação:{" "}
+              <strong>{nextPayoutLabel}</strong>
             </p>
           </div>
           {!tenant.pixKey ? (
@@ -236,6 +253,51 @@ export default async function PainelIndicacoesPage() {
           </form>
         </div>
       </Card>
+
+      {payouts.length > 0 && (
+        <div className="space-y-3">
+          <h2 className="text-base font-semibold text-[var(--color-pmb-green-900)]">
+            Pagamentos recebidos
+          </h2>
+          <Card className="overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Pago em</TableHead>
+                  <TableHead className="text-right">Valor</TableHead>
+                  <TableHead>Comprovante</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {payouts.map((p) => (
+                  <TableRow key={p.id}>
+                    <TableCell>
+                      {p.paidAt ? p.paidAt.toLocaleDateString("pt-BR") : "—"}
+                    </TableCell>
+                    <TableCell className="text-right font-mono">
+                      {formatMoney(Number(p.amount))}
+                    </TableCell>
+                    <TableCell>
+                      {p.proofUrl ? (
+                        <a
+                          href={p.proofUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-sm font-medium text-[var(--color-pmb-green-900)] underline-offset-4 hover:underline"
+                        >
+                          Ver comprovante
+                        </a>
+                      ) : (
+                        <span className="text-sm text-gray-400">—</span>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </Card>
+        </div>
+      )}
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-base font-semibold text-[var(--color-pmb-green-900)]">

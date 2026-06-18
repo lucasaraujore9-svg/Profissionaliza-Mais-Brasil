@@ -4,6 +4,7 @@ import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { requireAdminSession } from "@/lib/auth/admin-session"
 import { invalidateTenant } from "@/lib/redis/tenant-cache"
+import { setEjaSectionEnabled } from "@/lib/home/sections"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 
 // Link da página de EJA de um revendedor. A imagem do banner é padronizada pela
@@ -101,6 +102,11 @@ export const PUT = withRequestContextParams<{ id: string }>(
         ejaLabel: true,
       },
     })
+
+    // Fonte de verdade da renderização é o HomeSection.enabled — não o
+    // Tenant.ejaEnabled. Sincroniza para que ligar/desligar aqui surta efeito
+    // na vitrine da unidade (ver setEjaSectionEnabled).
+    await setEjaSectionEnabled(updated.id, updated.ejaEnabled)
 
     await invalidateTenant({
       id: tenant.id,

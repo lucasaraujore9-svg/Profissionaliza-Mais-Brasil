@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { requireSuperAdmin } from "@/lib/auth/guards"
+import { setEjaSectionEnabled } from "@/lib/home/sections"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 
 // Conteúdo da seção "EJA" do site PMB + banner padronizado para a rede.
@@ -115,6 +116,10 @@ export const PUT = withRequestContext(
         ejaBannerImageUrlMobile: true,
       },
     })
+
+    // Sincroniza a linha HomeSection(kind=eja) do PMB (tenantId=null) — fonte de
+    // verdade da renderização na home institucional (ver setEjaSectionEnabled).
+    await setEjaSectionEnabled(null, updated.ejaEnabled)
 
     return NextResponse.json({ data: updated })
   },

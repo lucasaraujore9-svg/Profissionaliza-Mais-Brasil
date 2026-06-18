@@ -7,7 +7,7 @@ import { sendInvite } from "@/lib/auth/invite"
 import { generateTempPassword, sendCredentialsEmail } from "@/lib/auth/credentials"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 
-const PMB_ROLES = ["SUPER_ADMIN", "PMB_SALES", "PMB_SALES_MGR", "PMB_REVENDA_SALES", "PMB_RESELLER_MGR"] as const
+const PMB_ROLES = ["SUPER_ADMIN", "PMB_SALES", "PMB_SALES_MGR", "PMB_REVENDA_SALES", "PMB_RESELLER_MGR", "PMB_FINANCEIRO"] as const
 
 const ROLE_LABEL: Record<string, string> = {
   SUPER_ADMIN: "Super Admin",
@@ -15,6 +15,7 @@ const ROLE_LABEL: Record<string, string> = {
   PMB_SALES_MGR: "Gerente de vendas",
   PMB_REVENDA_SALES: "Vendedor de revenda",
   PMB_RESELLER_MGR: "Gerente de unidades",
+  PMB_FINANCEIRO: "Financeiro",
 }
 
 export const GET = withRequestContext(

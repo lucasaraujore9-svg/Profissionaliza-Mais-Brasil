@@ -320,6 +320,8 @@ export const GET = withRequestContextParams<{ id: string }>(
         referralPercent:
           tenant.referralPercent != null ? Number(tenant.referralPercent) : null,
         referralMinReferrals: tenant.referralMinReferrals ?? null,
+        referralTiers: tenant.referralTiers ?? null,
+        activatedAt: tenant.activatedAt?.toISOString() ?? null,
         pixKey: tenant.pixKey,
         pixKeyType: tenant.pixKeyType,
         // Unidade Tecnica

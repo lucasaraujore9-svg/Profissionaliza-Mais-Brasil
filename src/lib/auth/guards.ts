@@ -14,7 +14,22 @@ const PMB_TEAM: UserRole[] = [
   "PMB_SALES_MGR",
   "PMB_REVENDA_SALES",
   "PMB_RESELLER_MGR",
+  "PMB_FINANCEIRO",
 ]
+
+/** Financeiro dedicado (ou super). Use em rotas de gestão financeira. */
+export async function requirePmbFinanceiro(): Promise<
+  { ok: true; session: AuthedSession } | { ok: false; response: Response }
+> {
+  const session = await currentSession()
+  if (
+    !session ||
+    (session.role !== "PMB_FINANCEIRO" && session.role !== "SUPER_ADMIN")
+  ) {
+    return { ok: false, response: deny() }
+  }
+  return { ok: true, session }
+}
 
 async function currentSession(): Promise<AuthedSession | null> {
   const session = await auth()

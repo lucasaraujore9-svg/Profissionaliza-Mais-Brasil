@@ -25,7 +25,11 @@ function formatMoney(n: number): string {
 export default async function AdminIndicacoesPage() {
   const session = await requireAdminSession()
   if (!session) redirect("/login?callbackUrl=/admin/indicacoes")
-  if (session.role !== "SUPER_ADMIN" && session.role !== "PMB_RESELLER_MGR") {
+  if (
+    session.role !== "SUPER_ADMIN" &&
+    session.role !== "PMB_RESELLER_MGR" &&
+    session.role !== "PMB_FINANCEIRO"
+  ) {
     redirect("/admin")
   }
 

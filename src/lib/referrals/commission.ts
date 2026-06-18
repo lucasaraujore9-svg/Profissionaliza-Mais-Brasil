@@ -3,6 +3,7 @@ import type { ReferralCommission } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { createNotification } from "@/lib/notifications"
 import { contextLogger } from "@/lib/logger"
+import { parseReferralTiers, resolveTierPercent } from "@/lib/referrals/tiers"
 
 const SETTINGS_ID = "default"
 const DEFAULT_PERCENT = 5
@@ -76,6 +77,11 @@ interface ReferredForCommission {
   id: string
   name: string
   referralPercent: Prisma.Decimal | null
+  // Escala de comissao por tempo de vida desta unidade (quando configurada).
+  referralTiers: Prisma.JsonValue | null
+  // Base para contar os meses da escala (fallback createdAt).
+  activatedAt: Date | null
+  createdAt: Date
 }
 interface ReferrerForCommission {
   id: string
@@ -118,10 +124,21 @@ async function createCommissionRow(
     }
   }
 
+  // Percentual efetivo: a escala por tempo de vida da unidade indicada tem
+  // prioridade; sem escala, cai no override individual e depois no padrao
+  // global. A escala conta meses de calendario desde a ativacao da unidade
+  // (activatedAt; fallback createdAt) ate a data do pagamento.
+  const tierPercent = resolveTierPercent(
+    parseReferralTiers(referred.referralTiers),
+    referred.activatedAt ?? referred.createdAt,
+    tp.paidAt,
+  )
   const percent =
-    referred.referralPercent != null
-      ? Number(referred.referralPercent)
-      : settings.defaultPercent
+    tierPercent != null
+      ? tierPercent
+      : referred.referralPercent != null
+        ? Number(referred.referralPercent)
+        : settings.defaultPercent
 
   if (!percent || percent <= 0) return null
 
@@ -205,7 +222,14 @@ export async function backfillReferrerCommissions(
 
   const referredTenants = await prisma.tenant.findMany({
     where: { referrerTenantId },
-    select: { id: true, name: true, referralPercent: true },
+    select: {
+      id: true,
+      name: true,
+      referralPercent: true,
+      referralTiers: true,
+      activatedAt: true,
+      createdAt: true,
+    },
   })
   if (referredTenants.length === 0) return 0
 
@@ -285,6 +309,9 @@ export async function createCommissionForTenantPayment(
       name: true,
       referrerTenantId: true,
       referralPercent: true,
+      referralTiers: true,
+      activatedAt: true,
+      createdAt: true,
     },
   })
   if (!referred?.referrerTenantId) return null

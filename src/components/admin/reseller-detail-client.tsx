@@ -60,6 +60,8 @@ interface DetailResponse {
     referralCode: string
     referralPercent: number | null
     referralMinReferrals: number | null
+    referralTiers: unknown
+    activatedAt: string | null
     pixKey: string | null
     pixKeyType: string | null
     tecnicaEnabled: boolean
@@ -328,6 +330,8 @@ export function ResellerDetailClient({
             referralCode={data.reseller.referralCode}
             referralPercent={data.reseller.referralPercent}
             referralMinReferrals={data.reseller.referralMinReferrals}
+            referralTiers={data.reseller.referralTiers}
+            activatedAt={data.reseller.activatedAt}
             pixKey={data.reseller.pixKey}
             pixKeyType={data.reseller.pixKeyType}
             referrer={data.referrer}

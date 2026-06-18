@@ -16,16 +16,44 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 
-export function AdminPayoutRowActions({ payoutId }: { payoutId: string }) {
+export function AdminPayoutRowActions({
+  payoutId,
+  proofUrl,
+}: {
+  payoutId: string
+  /** Comprovante já anexado a este saque (quando ausente, exige anexar p/ aprovar). */
+  proofUrl?: string | null
+}) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
   const [approveOpen, setApproveOpen] = useState(false)
   const [failOpen, setFailOpen] = useState(false)
   const [transferId, setTransferId] = useState("")
+  const [proofFile, setProofFile] = useState<File | null>(null)
   const [reason, setReason] = useState("")
 
   function approve() {
+    // Comprovante obrigatório: arquivo novo OU já anexado.
+    if (!proofFile && !proofUrl) {
+      toast.error("Anexe o comprovante de pagamento para confirmar.")
+      return
+    }
     startTransition(async () => {
+      // 1) Sobe o comprovante antes de aprovar (backstop server-side exige proofUrl).
+      if (proofFile) {
+        const fd = new FormData()
+        fd.append("file", proofFile)
+        const upRes = await fetch(
+          `/api/admin/financeiro/referral-payouts/${payoutId}/proof`,
+          { method: "POST", body: fd },
+        )
+        const upBody = await upRes.json().catch(() => ({}))
+        if (!upRes.ok) {
+          toast.error(upBody.error ?? "Falha ao enviar comprovante")
+          return
+        }
+      }
+
       const res = await fetch(
         `/api/admin/referrals/payouts/${payoutId}/approve`,
         {
@@ -44,6 +72,7 @@ export function AdminPayoutRowActions({ payoutId }: { payoutId: string }) {
       toast.success("Saque marcado como pago")
       setApproveOpen(false)
       setTransferId("")
+      setProofFile(null)
       router.refresh()
     })
   }
@@ -97,13 +126,33 @@ export function AdminPayoutRowActions({ payoutId }: { payoutId: string }) {
               transfer; para desconto na mensalidade, deixe em branco.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-2">
-            <Label>ID do transfer Asaas (opcional)</Label>
-            <Input
-              value={transferId}
-              onChange={(e) => setTransferId(e.target.value)}
-              placeholder="trf_xxxxx"
-            />
+          <div className="space-y-3">
+            <div className="space-y-2">
+              <Label>
+                Comprovante de pagamento{" "}
+                <span className="text-rose-600">*</span>
+              </Label>
+              <Input
+                type="file"
+                accept="application/pdf,image/png,image/jpeg,image/webp"
+                onChange={(e) => setProofFile(e.target.files?.[0] ?? null)}
+              />
+              <p className="text-xs text-muted-foreground">
+                {proofFile
+                  ? `Selecionado: ${proofFile.name}`
+                  : proofUrl
+                    ? "Já há comprovante anexado. Envie outro para substituir, ou confirme para manter."
+                    : "Obrigatório. Fica disponível para a revenda consultar."}
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label>ID do transfer Asaas (opcional)</Label>
+              <Input
+                value={transferId}
+                onChange={(e) => setTransferId(e.target.value)}
+                placeholder="trf_xxxxx"
+              />
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setApproveOpen(false)}>

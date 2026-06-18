@@ -44,7 +44,11 @@ export default async function AdminComissoesPage({
 }) {
   const session = await requireAdminSession()
   if (!session) redirect("/login?callbackUrl=/admin/indicacoes/comissoes")
-  if (session.role !== "SUPER_ADMIN" && session.role !== "PMB_RESELLER_MGR") {
+  if (
+    session.role !== "SUPER_ADMIN" &&
+    session.role !== "PMB_RESELLER_MGR" &&
+    session.role !== "PMB_FINANCEIRO"
+  ) {
     redirect("/admin")
   }
 

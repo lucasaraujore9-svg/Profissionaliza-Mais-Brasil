@@ -3,6 +3,7 @@ import { z } from "zod"
 import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { requireAdminSession } from "@/lib/auth/admin-session"
+import { canMarkPaid } from "@/lib/auth/roles"
 import { markPayoutPaid } from "@/lib/referrals/payout"
 import { contextLogger } from "@/lib/logger"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
@@ -42,7 +43,7 @@ export const POST = withRequestContextParams<{ id: string }>(
   if (!session) {
     return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
   }
-  if (session.role !== "SUPER_ADMIN") {
+  if (!canMarkPaid(session.role)) {
     return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
   }
 
@@ -67,7 +68,7 @@ export const POST = withRequestContextParams<{ id: string }>(
 
   const payout = await prisma.referralPayout.findUnique({
     where: { id },
-    select: { id: true, status: true, notes: true, amount: true },
+    select: { id: true, status: true, notes: true, amount: true, proofUrl: true },
   })
   if (!payout) {
     return NextResponse.json(
@@ -77,6 +78,16 @@ export const POST = withRequestContextParams<{ id: string }>(
   }
   if (payout.status === "PAID") {
     return NextResponse.json({ error: "Saque já está pago" }, { status: 409 })
+  }
+  // Comprovante obrigatório para marcar como pago (anexe antes via upload).
+  if (!payout.proofUrl) {
+    return NextResponse.json(
+      {
+        error:
+          "Anexe o comprovante de pagamento antes de marcar o saque como pago.",
+      },
+      { status: 400 },
+    )
   }
 
   const currentAmount = Number(payout.amount)

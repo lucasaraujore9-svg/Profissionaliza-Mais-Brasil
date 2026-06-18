@@ -58,9 +58,10 @@ const ROLE_LABEL: Record<string, string> = {
   PMB_SALES_MGR: "Gerente de vendas",
   PMB_REVENDA_SALES: "Vendedor de revenda",
   PMB_RESELLER_MGR: "Gerente de unidades",
+  PMB_FINANCEIRO: "Financeiro",
 }
 
-const ROLES = ["SUPER_ADMIN", "PMB_SALES", "PMB_SALES_MGR", "PMB_REVENDA_SALES", "PMB_RESELLER_MGR"] as const
+const ROLES = ["SUPER_ADMIN", "PMB_SALES", "PMB_SALES_MGR", "PMB_REVENDA_SALES", "PMB_RESELLER_MGR", "PMB_FINANCEIRO"] as const
 
 export function EquipeClient({
   initialItems,

@@ -37,7 +37,8 @@ export class ReferralPayoutError extends Error {
       | "NO_BALANCE"
       | "BELOW_MIN"
       | "INVALID_PIX"
-      | "ALREADY_PENDING",
+      | "ALREADY_PENDING"
+      | "PROOF_REQUIRED",
   ) {
     super(message)
     this.name = "ReferralPayoutError"
@@ -175,9 +176,22 @@ export async function markPayoutPaid(
         asaasTransferId: true,
         processedAt: true,
         referrerTenantId: true,
+        proofUrl: true,
       },
     })
     if (!existing) throw new Error(`Payout ${payoutId} nao encontrado`)
+
+    // Comprovante obrigatorio: nao se marca um saque como pago sem o comprovante
+    // anexado (a revenda precisa conseguir consultar). Backstop server-side —
+    // vale para QUALQUER caller (financeiro mark-paid e approve dos saques). So
+    // bloqueia quando ainda nao esta pago; se ja estava PAID, o CAS abaixo cai em
+    // count=0 e a operacao e um no-op idempotente.
+    if (existing.status !== "PAID" && !existing.proofUrl) {
+      throw new ReferralPayoutError(
+        "Comprovante obrigatorio: anexe o comprovante de pagamento antes de marcar o saque como pago.",
+        "PROOF_REQUIRED",
+      )
+    }
 
     const casUpdate = await tx.referralPayout.updateMany({
       where: { id: payoutId, status: { not: "PAID" } },
@@ -262,12 +276,15 @@ export async function failPayout(
 /**
  * Executado pelo cron mensal (dia X).
  *
- * Fluxo AUTOMATICO (revendedor nao solicita saque):
+ * MONTA a lista de pagamentos (revendedor nao solicita saque), mas NAO paga
+ * nada sozinho — o pagamento e MANUAL:
  *   1. Promove ReferralCommission PENDING → AVAILABLE quando availableAt <= now().
- *   2. Para cada referrer com saldo AVAILABLE (mesmo abaixo do minimo), cria
- *      automaticamente um ReferralPayout em status REQUESTED, vinculando as
- *      comissoes. Admin processa o PIX e marca como PAID via /admin/indicacoes/saques.
- *   3. Notifica admin (precisa processar) e revendedor (saiu da casinha).
+ *   2. Para cada referrer com saldo AVAILABLE (mesmo abaixo do minimo), cria um
+ *      ReferralPayout em status REQUESTED, vinculando as comissoes — e a lista
+ *      de "a pagar" do financeiro. O financeiro paga por fora, marca como PAID e
+ *      anexa o comprovante (obrigatorio) via /admin/indicacoes/saques ou
+ *      /admin/financeiro. Marcar como pago NUNCA acontece automaticamente.
+ *   3. Notifica equipe financeira (precisa pagar) e revendedor (em processamento).
  *
  * Idempotente: comissoes ja vinculadas a um payout (payoutId != null) sao puladas.
  */
@@ -400,7 +417,7 @@ export async function processMonthlyPayouts(): Promise<{
           pixKeyType: tenant?.pixKeyType ?? null,
           requestedAt: now,
           notes:
-            "Gerado automaticamente pelo cron mensal (pagamento dia X do mes seguinte).",
+            "Lista gerada pelo cron mensal. Pagamento MANUAL: pague, marque como pago e anexe o comprovante.",
         },
       })
 
@@ -422,27 +439,30 @@ export async function processMonthlyPayouts(): Promise<{
     const { tenant, hasPix } = txResult
     payoutsCreated += 1
 
-    // Notifica revendedor
+    // Notifica revendedor — pagamento é MANUAL (feito pelo financeiro após
+    // conferência). Não prometemos pagamento automático.
     await createNotification({
       audience: "TENANT",
       tenantId,
-      level: "SUCCESS",
-      title: "Comissao de indicacao processada",
-      body: `R$ ${total.toFixed(2).replace(".", ",")} em pagamento. Voce recebera no PIX cadastrado.`,
+      level: "INFO",
+      title: "Comissao de indicacao em processamento",
+      body: `R$ ${total.toFixed(2).replace(".", ",")} liberado. O pagamento e feito manualmente pela equipe financeira apos conferencia; o comprovante ficara disponivel aqui.`,
       category: "referral",
       href: "/painel/indicacoes",
     })
 
-    // Notifica admin
-    await createNotification({
-      audience: "ROLE",
-      roleTarget: "SUPER_ADMIN",
-      level: "WARNING",
-      title: `Comissao a pagar: ${tenant?.name ?? tenantId}`,
-      body: `R$ ${total.toFixed(2).replace(".", ",")} ${hasPix ? "via PIX" : "(sem PIX cadastrado, pagar manual)"}. Processar em /admin/indicacoes/saques.`,
-      category: "referral",
-      href: "/admin/indicacoes/saques",
-    })
+    // Notifica equipe financeira (financeiro + super) — eles pagam manualmente.
+    for (const roleTarget of ["SUPER_ADMIN", "PMB_FINANCEIRO"] as const) {
+      await createNotification({
+        audience: "ROLE",
+        roleTarget,
+        level: "WARNING",
+        title: `Comissao a pagar: ${tenant?.name ?? tenantId}`,
+        body: `R$ ${total.toFixed(2).replace(".", ",")} ${hasPix ? "via PIX" : "(sem PIX cadastrado, pagar manual)"}. Pague, marque como pago e anexe o comprovante em /admin/indicacoes/saques.`,
+        category: "referral",
+        href: "/admin/indicacoes/saques",
+      })
+    }
     notifiedTenants += 1
   }
 

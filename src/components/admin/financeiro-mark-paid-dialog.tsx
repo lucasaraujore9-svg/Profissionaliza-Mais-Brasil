@@ -25,6 +25,8 @@ interface FinanceiroMarkPaidDialogProps {
   itemId: string
   itemLabel?: string
   itemAmount?: number
+  /** Comprovante já anexado (só para referral-payout). Quando ausente, exige anexar. */
+  existingProofUrl?: string | null
   onDone?: () => void
 }
 
@@ -50,19 +52,25 @@ export function FinanceiroMarkPaidDialog({
   itemId,
   itemLabel,
   itemAmount,
+  existingProofUrl,
   onDone,
 }: FinanceiroMarkPaidDialogProps) {
   const [paidAt, setPaidAt] = useState(todayISO())
   const [note, setNote] = useState("")
   const [transferId, setTransferId] = useState("")
   const [amount, setAmount] = useState("")
+  const [proofFile, setProofFile] = useState<File | null>(null)
   const [submitting, setSubmitting] = useState(false)
+
+  // Comprovante é obrigatório para saques de comissão (referral-payout).
+  const requiresProof = target === "referral-payout"
 
   useEffect(() => {
     if (open) {
       setPaidAt(todayISO())
       setNote("")
       setTransferId("")
+      setProofFile(null)
       setAmount(typeof itemAmount === "number" ? itemAmount.toFixed(2) : "")
     }
   }, [open, itemAmount])
@@ -82,8 +90,32 @@ export function FinanceiroMarkPaidDialog({
       }
       parsedAmount = Math.round(n * 100) / 100
     }
+
+    // Comprovante obrigatório: precisa ter um arquivo novo OU já existir anexado.
+    if (requiresProof && !proofFile && !existingProofUrl) {
+      toast.error("Anexe o comprovante de pagamento para confirmar.")
+      return
+    }
+
     setSubmitting(true)
     try {
+      // 1) Sobe o comprovante (se um arquivo foi escolhido) ANTES de marcar pago,
+      // para que o backstop server-side (proofUrl obrigatório) seja satisfeito.
+      if (requiresProof && proofFile) {
+        const fd = new FormData()
+        fd.append("file", proofFile)
+        const upRes = await fetch(
+          `/api/admin/financeiro/referral-payouts/${itemId}/proof`,
+          { method: "POST", body: fd },
+        )
+        const upData = await upRes.json().catch(() => ({}))
+        if (!upRes.ok) {
+          toast.error(upData.error ?? "Falha ao enviar comprovante")
+          return
+        }
+      }
+
+      // 2) Marca como pago.
       const url =
         target === "tenant-payment"
           ? `/api/admin/financeiro/tenant-payments/${itemId}/mark-paid`
@@ -192,6 +224,28 @@ export function FinanceiroMarkPaidDialog({
                 </p>
               </div>
             </>
+          )}
+
+          {requiresProof && (
+            <div className="space-y-1.5">
+              <Label htmlFor="mp-proof">
+                Comprovante de pagamento{" "}
+                <span className="text-rose-600">*</span>
+              </Label>
+              <Input
+                id="mp-proof"
+                type="file"
+                accept="application/pdf,image/png,image/jpeg,image/webp"
+                onChange={(e) => setProofFile(e.target.files?.[0] ?? null)}
+              />
+              <p className="text-xs text-muted-foreground">
+                {proofFile
+                  ? `Selecionado: ${proofFile.name}`
+                  : existingProofUrl
+                    ? "Já há um comprovante anexado. Envie outro para substituir, ou confirme para manter."
+                    : "Obrigatório (PDF, PNG, JPG ou WEBP). Fica disponível para a revenda consultar."}
+              </p>
+            </div>
           )}
 
           <div className="space-y-1.5">

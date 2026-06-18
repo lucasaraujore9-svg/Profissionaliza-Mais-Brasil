@@ -28,7 +28,7 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
-type Role = "SUPER_ADMIN" | "PMB_SALES" | "PMB_SALES_MGR" | "PMB_REVENDA_SALES" | "PMB_RESELLER_MGR"
+type Role = "SUPER_ADMIN" | "PMB_SALES" | "PMB_SALES_MGR" | "PMB_REVENDA_SALES" | "PMB_RESELLER_MGR" | "PMB_FINANCEIRO"
 
 const ALL_ITEMS: {
   href: string
@@ -36,7 +36,7 @@ const ALL_ITEMS: {
   icon: typeof LayoutDashboard
   roles: Role[]
 }[] = [
-  { href: "/admin", label: "Dashboard", icon: LayoutDashboard, roles: ["SUPER_ADMIN", "PMB_SALES", "PMB_SALES_MGR", "PMB_REVENDA_SALES", "PMB_RESELLER_MGR"] },
+  { href: "/admin", label: "Dashboard", icon: LayoutDashboard, roles: ["SUPER_ADMIN", "PMB_SALES", "PMB_SALES_MGR", "PMB_REVENDA_SALES", "PMB_RESELLER_MGR", "PMB_FINANCEIRO"] },
   // Unidades: visíveis para suporte (account manager) e para o comercial de
   // revenda (gerente de vendas + vendedor de revenda). Cada papel só enxerga
   // as unidades atribuídas a ele (escopo aplicado na rota/queries).
@@ -50,8 +50,8 @@ const ALL_ITEMS: {
   { href: "/admin/vendas", label: "Vendas diretas", icon: ShoppingCart, roles: ["SUPER_ADMIN", "PMB_SALES"] },
   // Financeiro: super (visão geral + mensalidades) e, só para "Comissões a
   // pagar" (escopado), vendedor de curso e gerente de suporte.
-  { href: "/admin/financeiro", label: "Financeiro", icon: DollarSign, roles: ["SUPER_ADMIN", "PMB_SALES", "PMB_RESELLER_MGR"] },
-  { href: "/admin/indicacoes", label: "Indicações", icon: Share2, roles: ["SUPER_ADMIN", "PMB_RESELLER_MGR"] },
+  { href: "/admin/financeiro", label: "Financeiro", icon: DollarSign, roles: ["SUPER_ADMIN", "PMB_FINANCEIRO", "PMB_SALES", "PMB_RESELLER_MGR"] },
+  { href: "/admin/indicacoes", label: "Indicações", icon: Share2, roles: ["SUPER_ADMIN", "PMB_FINANCEIRO", "PMB_RESELLER_MGR"] },
   { href: "/admin/certificados", label: "Certificados", icon: Award, roles: ["SUPER_ADMIN"] },
   { href: "/admin/catalogo", label: "Catálogo", icon: BookOpen, roles: ["SUPER_ADMIN", "PMB_SALES", "PMB_SALES_MGR", "PMB_REVENDA_SALES", "PMB_RESELLER_MGR"] },
   { href: "/admin/vitrine", label: "Vitrine", icon: Palette, roles: ["SUPER_ADMIN"] },
@@ -63,7 +63,7 @@ const ALL_ITEMS: {
   { href: "/admin/comunicacao", label: "Comunicação", icon: MessageSquare, roles: ["SUPER_ADMIN"] },
   { href: "/admin/automacao", label: "Automação", icon: Zap, roles: ["SUPER_ADMIN"] },
   { href: "/admin/configuracoes", label: "Configurações", icon: Settings, roles: ["SUPER_ADMIN"] },
-  { href: "/admin/meu-perfil", label: "Meu perfil", icon: UserCircle, roles: ["SUPER_ADMIN", "PMB_SALES", "PMB_SALES_MGR", "PMB_REVENDA_SALES", "PMB_RESELLER_MGR"] },
+  { href: "/admin/meu-perfil", label: "Meu perfil", icon: UserCircle, roles: ["SUPER_ADMIN", "PMB_SALES", "PMB_SALES_MGR", "PMB_REVENDA_SALES", "PMB_RESELLER_MGR", "PMB_FINANCEIRO"] },
 ]
 
 function initialsOf(name?: string): string {

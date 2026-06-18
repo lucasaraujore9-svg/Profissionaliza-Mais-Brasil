@@ -91,6 +91,8 @@ export const GET = withRequestContext(
       requestedAt: true,
       processedAt: true,
       paidAt: true,
+      proofUrl: true,
+      proofUploadedAt: true,
       referrer: { select: { id: true, name: true, slug: true } },
       markedPaidBy: { select: { id: true, name: true, email: true } },
       _count: { select: { commissions: true } },
@@ -128,6 +130,8 @@ export const GET = withRequestContext(
       requestedAt: p.requestedAt.toISOString(),
       processedAt: p.processedAt?.toISOString() ?? null,
       paidAt: p.paidAt?.toISOString() ?? null,
+      proofUrl: p.proofUrl,
+      proofUploadedAt: p.proofUploadedAt?.toISOString() ?? null,
       commissionCount: p._count.commissions,
       commissions: p.commissions.map((c) => ({
         id: c.id,

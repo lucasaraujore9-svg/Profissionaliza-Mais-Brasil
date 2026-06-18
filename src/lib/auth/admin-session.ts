@@ -14,6 +14,7 @@ const PMB_TEAM: UserRole[] = [
   "PMB_SALES_MGR",
   "PMB_REVENDA_SALES",
   "PMB_RESELLER_MGR",
+  "PMB_FINANCEIRO",
 ]
 
 /**

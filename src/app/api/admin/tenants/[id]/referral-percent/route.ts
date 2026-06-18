@@ -3,7 +3,15 @@ import { z } from "zod"
 import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { requireAdminSession } from "@/lib/auth/admin-session"
+import { canManageCommissions } from "@/lib/auth/roles"
+import { sortTiers } from "@/lib/referrals/tiers"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
+
+const tierSchema = z.object({
+  // null = "deste mes em diante" (sem teto). >=1 caso contrario.
+  untilMonth: z.number().int().min(1).max(600).nullable(),
+  percent: z.number().min(0).max(100),
+})
 
 const bodySchema = z
   .object({
@@ -12,10 +20,16 @@ const bodySchema = z
     // Minimo de indicacoes ATIVAS para a unidade receber comissao de
     // recorrencia. null = volta ao padrao global. 0 = sem minimo.
     minReferrals: z.number().int().min(0).max(1000).nullable().optional(),
+    // Escala de comissao desta unidade (quando indicada). [] ou null limpam a
+    // escala (volta ao percentual fixo). Max 12 faixas.
+    tiers: z.array(tierSchema).max(12).nullable().optional(),
   })
   .refine(
-    (data) => data.percent !== undefined || data.minReferrals !== undefined,
-    { message: "Informe percent e/ou minReferrals" },
+    (data) =>
+      data.percent !== undefined ||
+      data.minReferrals !== undefined ||
+      data.tiers !== undefined,
+    { message: "Informe percent, minReferrals e/ou tiers" },
   )
 
 export const PUT = withRequestContextParams<{ id: string }>(
@@ -25,7 +39,7 @@ export const PUT = withRequestContextParams<{ id: string }>(
   if (!session) {
     return NextResponse.json({ error: "Nao autenticado" }, { status: 401 })
   }
-  if (session.role !== "SUPER_ADMIN") {
+  if (!canManageCommissions(session.role)) {
     return NextResponse.json({ error: "Sem permissao" }, { status: 403 })
   }
 
@@ -66,11 +80,23 @@ export const PUT = withRequestContextParams<{ id: string }>(
   if (parsed.data.minReferrals !== undefined) {
     data.referralMinReferrals = parsed.data.minReferrals
   }
+  if (parsed.data.tiers !== undefined) {
+    // null ou [] => limpa a escala. Caso contrario, persiste normalizado/ordenado.
+    data.referralTiers =
+      parsed.data.tiers && parsed.data.tiers.length > 0
+        ? (sortTiers(parsed.data.tiers) as unknown as Prisma.InputJsonValue)
+        : Prisma.DbNull
+  }
 
   const updated = await prisma.tenant.update({
     where: { id },
     data,
-    select: { id: true, referralPercent: true, referralMinReferrals: true },
+    select: {
+      id: true,
+      referralPercent: true,
+      referralMinReferrals: true,
+      referralTiers: true,
+    },
   })
 
   return NextResponse.json({
@@ -79,6 +105,7 @@ export const PUT = withRequestContextParams<{ id: string }>(
       referralPercent:
         updated.referralPercent != null ? Number(updated.referralPercent) : null,
       referralMinReferrals: updated.referralMinReferrals ?? null,
+      referralTiers: updated.referralTiers ?? null,
     },
   })
   },

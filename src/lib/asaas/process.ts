@@ -273,6 +273,7 @@ export async function processAsaasWebhook(
         customDomain: true,
         billingMode: true,
         status: true,
+        activatedAt: true,
         owner: { select: { email: true, name: true } },
       },
     })
@@ -318,7 +319,12 @@ export async function processAsaasWebhook(
 
         await prisma.tenant.update({
           where: { id: tenant.id },
-          data: { status: "ACTIVE" },
+          data: {
+            status: "ACTIVE",
+            // Marca a 1a ativacao (base p/ escalonamento de comissao). So na
+            // primeira vez — reativacoes pos-suspensao nao reiniciam a escala.
+            ...(tenant.activatedAt ? {} : { activatedAt: paidAt ?? new Date() }),
+          },
         })
 
         await invalidateTenant({ id: tenant.id, slug: tenant.slug, customDomain: tenant.customDomain }).catch(swallow("asaas.process"))

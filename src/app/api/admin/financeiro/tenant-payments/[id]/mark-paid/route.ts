@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { requireAdminSession } from "@/lib/auth/admin-session"
+import { canMarkPaid } from "@/lib/auth/roles"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 
 const bodySchema = z.object({
@@ -28,7 +29,7 @@ export const POST = withRequestContextParams<{ id: string }>(
   if (!session) {
     return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
   }
-  if (session.role !== "SUPER_ADMIN") {
+  if (!canMarkPaid(session.role)) {
     return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
   }
 

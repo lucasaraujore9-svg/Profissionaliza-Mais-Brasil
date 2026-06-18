@@ -20,6 +20,7 @@ enum UserRole {
   PMB_SALES_MGR // Gerente de vendas — chefia dos vendedores de revenda (ve o time)
   PMB_REVENDA_SALES // Vendedor de revenda (B2B): trabalha leads e fecha unidades
   PMB_RESELLER_MGR // Gerente de unidades / suporte (ve as unidades atribuidas)
+  PMB_FINANCEIRO // Financeiro — ajusta comissoes, marca pagamentos e anexa comprovante
   RESELLER // Dono ou consultor de tenant
   STUDENT // Aluno acessa /aluno com matriculas e pagamentos
 }
@@ -154,6 +155,8 @@ model User {
   // TenantPayments / ReferralPayouts marcados manualmente como pagos por este admin
   markedTenantPayments  TenantPayment[]  @relation("MarkedTenantPayments")
   markedReferralPayouts ReferralPayout[] @relation("MarkedReferralPayouts")
+  // Saques cujo comprovante de pagamento foi anexado por este usuario (Financeiro)
+  uploadedReferralProofs ReferralPayout[] @relation("UploadedReferralProofs")
 
   // Reset password
   resetToken        String?   @unique @map("reset_token")
@@ -313,6 +316,16 @@ model Tenant {
   // comecar a receber comissao de recorrencia. Null = usa
   // SystemSettings.defaultReferralMinReferrals (padrao 3). 0 = sem minimo.
   referralMinReferrals Int? @map("referral_min_referrals")
+  // Regras escalonadas de comissao DESTA unidade (quando ela e a INDICADA).
+  // O percentual da comissao varia conforme os meses de calendario desde a
+  // ativacao desta unidade (activatedAt). Formato JSON ordenado:
+  //   [{ "untilMonth": 6, "percent": 50 }, { "untilMonth": null, "percent": 20 }]
+  // -> meses 1..6 = 50%; do 7o em diante = 20% (untilMonth null = "em diante").
+  // null/empty => sem escalonamento (cai no referralPercent / padrao global).
+  referralTiers    Json?    @map("referral_tiers")
+  // Data de ativacao da unidade (1a vez que entrou em ACTIVE / 1a mensalidade
+  // paga). Base para contar os meses do escalonamento. Null => usa createdAt.
+  activatedAt      DateTime? @map("activated_at")
 
   // Dados PIX para receber comissoes (PIX do indicador)
   pixKey     String? @map("pix_key")
@@ -1395,6 +1408,13 @@ model ReferralPayout {
   // Gestao financeira manual (admin marca/anota)
   markedPaidById String? @map("marked_paid_by_id")
   markedPaidBy   User?   @relation("MarkedReferralPayouts", fields: [markedPaidById], references: [id])
+
+  // Comprovante de pagamento do saque — anexado pelo Financeiro, visivel para a
+  // revenda em /painel/indicacoes. Arquivo no Supabase Storage (URL publica).
+  proofUrl          String?   @map("proof_url") @db.Text
+  proofUploadedAt   DateTime? @map("proof_uploaded_at")
+  proofUploadedById String?   @map("proof_uploaded_by_id")
+  proofUploadedBy   User?     @relation("UploadedReferralProofs", fields: [proofUploadedById], references: [id])
 
   // Se method = DESCONTO_MENSALIDADE, a TenantPayment alvo
   appliedToTenantPayment TenantPayment? @relation("AppliedToTenantPayment")

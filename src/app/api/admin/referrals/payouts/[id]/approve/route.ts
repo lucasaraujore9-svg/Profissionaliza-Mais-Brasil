@@ -40,13 +40,23 @@ export const POST = withRequestContextParams<{ id: string }>(
 
   const payout = await prisma.referralPayout.findUnique({
     where: { id },
-    select: { id: true, status: true, method: true, referrerTenantId: true, amount: true },
+    select: { id: true, status: true, method: true, referrerTenantId: true, amount: true, proofUrl: true },
   })
   if (!payout) {
     return NextResponse.json({ error: "Saque nao encontrado" }, { status: 404 })
   }
   if (payout.status === "PAID") {
     return NextResponse.json({ error: "Saque ja pago" }, { status: 409 })
+  }
+  // Comprovante obrigatorio para marcar como pago.
+  if (!payout.proofUrl) {
+    return NextResponse.json(
+      {
+        error:
+          "Anexe o comprovante de pagamento antes de marcar o saque como pago.",
+      },
+      { status: 400 },
+    )
   }
 
   // PMB_RESELLER_MGR só pode aprovar payouts de tenants atribuídos a ele.

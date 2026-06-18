@@ -55,6 +55,8 @@ interface ReferralPayoutRow {
   requestedAt: string
   processedAt: string | null
   paidAt: string | null
+  proofUrl: string | null
+  proofUploadedAt: string | null
   commissionCount: number
   commissions: ReferralCommissionRow[]
   markedPaidBy: { id: string; name: string } | null
@@ -140,6 +142,7 @@ export function FinanceiroReferralPayouts({
   const [failOpen, setFailOpen] = useState(false)
   const [actionRow, setActionRow] = useState<ReferralPayoutRow | null>(null)
   const [detailRow, setDetailRow] = useState<ReferralPayoutRow | null>(null)
+  const [uploadingProof, setUploadingProof] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -169,6 +172,42 @@ export function FinanceiroReferralPayouts({
   useEffect(() => {
     load()
   }, [load])
+
+  const uploadProof = useCallback(
+    async (payoutId: string, file: File) => {
+      setUploadingProof(true)
+      try {
+        const fd = new FormData()
+        fd.append("file", file)
+        const res = await fetch(
+          `/api/admin/financeiro/referral-payouts/${payoutId}/proof`,
+          { method: "POST", body: fd },
+        )
+        const body = await res.json().catch(() => ({}))
+        if (!res.ok) {
+          setError(body.error ?? "Falha ao enviar comprovante")
+          return
+        }
+        // Atualiza a linha aberta no detalhe e recarrega a lista.
+        setDetailRow((prev) =>
+          prev && prev.id === payoutId
+            ? {
+                ...prev,
+                proofUrl: body.data?.proofUrl ?? prev.proofUrl,
+                proofUploadedAt:
+                  body.data?.proofUploadedAt ?? prev.proofUploadedAt,
+              }
+            : prev,
+        )
+        await load()
+      } catch {
+        setError("Erro de rede ao enviar comprovante")
+      } finally {
+        setUploadingProof(false)
+      }
+    },
+    [load],
+  )
 
   const exportHref = useMemo(() => {
     const params = new URLSearchParams()
@@ -457,6 +496,7 @@ export function FinanceiroReferralPayouts({
           itemId={actionRow.id}
           itemLabel={actionRow.referrerName}
           itemAmount={actionRow.amount}
+          existingProofUrl={actionRow.proofUrl}
           onDone={load}
         />
       )}
@@ -569,6 +609,56 @@ export function FinanceiroReferralPayouts({
                     <strong>{detailRow.markedPaidBy.name}</strong>
                   </div>
                 )}
+
+                {/* Comprovante de pagamento — visível para a revenda. */}
+                <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
+                  <div className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+                    Comprovante de pagamento
+                  </div>
+                  {detailRow.proofUrl ? (
+                    <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs">
+                      <a
+                        href={detailRow.proofUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 font-medium text-[var(--color-pmb-green-900)] hover:underline"
+                      >
+                        <FileText className="size-3.5" />
+                        Ver comprovante
+                      </a>
+                      <span className="text-gray-500">
+                        enviado em {formatDateTime(detailRow.proofUploadedAt)}
+                      </span>
+                    </div>
+                  ) : (
+                    <p className="mt-1 text-xs text-gray-500">
+                      Nenhum comprovante anexado.
+                    </p>
+                  )}
+                  {canMarkPaid && (
+                    <label className="mt-2 inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-input bg-background px-3 py-1.5 text-xs font-medium shadow-xs transition-colors hover:bg-accent">
+                      {uploadingProof ? (
+                        <Loader2 className="size-3.5 animate-spin" />
+                      ) : (
+                        <Download className="size-3.5 rotate-180" />
+                      )}
+                      {detailRow.proofUrl
+                        ? "Substituir comprovante"
+                        : "Anexar comprovante"}
+                      <input
+                        type="file"
+                        accept="application/pdf,image/png,image/jpeg,image/webp"
+                        className="hidden"
+                        disabled={uploadingProof}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0]
+                          if (file) void uploadProof(detailRow.id, file)
+                          e.target.value = ""
+                        }}
+                      />
+                    </label>
+                  )}
+                </div>
 
                 <div>
                   <div className="flex items-baseline justify-between">

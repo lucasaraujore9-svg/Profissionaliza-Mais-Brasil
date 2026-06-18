@@ -23,7 +23,7 @@ export default async function AdminLayout({
 
   return (
     <AdminLayoutShell
-      role={session.role as "SUPER_ADMIN" | "PMB_SALES" | "PMB_SALES_MGR" | "PMB_REVENDA_SALES" | "PMB_RESELLER_MGR"}
+      role={session.role as "SUPER_ADMIN" | "PMB_SALES" | "PMB_SALES_MGR" | "PMB_REVENDA_SALES" | "PMB_RESELLER_MGR" | "PMB_FINANCEIRO"}
       userName={session.name ?? "Admin"}
       userEmail={session.email ?? ""}
     >

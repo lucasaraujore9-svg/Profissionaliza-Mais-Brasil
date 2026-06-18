@@ -855,6 +855,26 @@ export async function ensureEjaSection(
 }
 
 /**
+ * Sincroniza o flag de exibição da seção EJA na home com o estado configurado
+ * (admin/painel). Garante que a linha singleton kind="eja" exista e seta seu
+ * `enabled` — a fonte de verdade da renderização é o `HomeSection.enabled`
+ * (ver `dynamic-home-sections`), NÃO o `Tenant.ejaEnabled`. Sem isto, ligar o
+ * EJA no admin (que grava só `Tenant.ejaEnabled/ejaUrl`) não surtia efeito em
+ * unidades cuja linha já existia com enabled=false (criada pela migration ou
+ * por clone do PMB). Idempotente.
+ */
+export async function setEjaSectionEnabled(
+  tenantId: string | null,
+  enabled: boolean,
+): Promise<void> {
+  await ensureEjaSection(tenantId)
+  await prisma.homeSection.updateMany({
+    where: { tenantId, kind: "eja" },
+    data: { enabled },
+  })
+}
+
+/**
  * Garante (idempotente) a linha singleton kind="idiomas" para um escopo. Nasce
  * no fim, ativada. Conteúdo (courseIds) é padronizado pela PMB; a linha do
  * tenant é só posição + enabled e lê os cursos do PMB no render.

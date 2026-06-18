@@ -37,16 +37,46 @@ export interface ReferrerSummary {
   slug: string
 }
 
+interface TierRow {
+  untilMonth: number | null
+  percent: number
+}
+
 interface ResellerReferralConfigProps {
   tenantId: string
   referralCode: string
   referralPercent: number | null
   referralMinReferrals: number | null
+  /** Escala de comissão desta unidade (quando indicada). null/[] = sem escala. */
+  referralTiers: unknown
+  /** Data de ativação (base p/ contar os meses da escala). ISO ou null. */
+  activatedAt: string | null
   pixKey: string | null
   pixKeyType: string | null
   referrer: ReferrerSummary | null
   stats: ReferralStats
   onSaved?: () => void
+}
+
+/** Normaliza o JSON salvo numa lista de faixas para o editor. */
+function parseTierRows(value: unknown): TierRow[] {
+  if (!Array.isArray(value)) return []
+  const rows: TierRow[] = []
+  for (const raw of value) {
+    if (!raw || typeof raw !== "object") continue
+    const obj = raw as Record<string, unknown>
+    const percent = Number(obj.percent)
+    if (!Number.isFinite(percent)) continue
+    const until =
+      obj.untilMonth === null || obj.untilMonth === undefined
+        ? null
+        : Number(obj.untilMonth)
+    rows.push({
+      untilMonth: until != null && Number.isFinite(until) ? until : null,
+      percent,
+    })
+  }
+  return rows
 }
 
 function formatBRL(value: number): string {
@@ -127,6 +157,8 @@ export function ResellerReferralConfig({
   referralCode,
   referralPercent,
   referralMinReferrals,
+  referralTiers,
+  activatedAt,
   pixKey,
   pixKeyType,
   referrer,
@@ -136,6 +168,13 @@ export function ResellerReferralConfig({
   const [percentInput, setPercentInput] = useState<string>(
     referralPercent != null ? String(referralPercent) : "",
   )
+  const [tierRows, setTierRows] = useState<TierRow[]>(() =>
+    parseTierRows(referralTiers),
+  )
+  const [savingTiers, setSavingTiers] = useState(false)
+  useEffect(() => {
+    setTierRows(parseTierRows(referralTiers))
+  }, [referralTiers])
   const [minInput, setMinInput] = useState<string>(
     referralMinReferrals != null ? String(referralMinReferrals) : "",
   )
@@ -229,6 +268,60 @@ export function ResellerReferralConfig({
       toast.error("Erro de rede ao redefinir")
     } finally {
       setResetting(false)
+    }
+  }
+
+  function addTierRow() {
+    setTierRows((rows) => [...rows, { untilMonth: null, percent: 0 }])
+  }
+  function removeTierRow(index: number) {
+    setTierRows((rows) => rows.filter((_, i) => i !== index))
+  }
+  function updateTierRow(index: number, patch: Partial<TierRow>) {
+    setTierRows((rows) =>
+      rows.map((r, i) => (i === index ? { ...r, ...patch } : r)),
+    )
+  }
+
+  async function saveTiers() {
+    // Validação: percentuais 0–100; untilMonth >=1 ou vazio (=null). No máximo
+    // uma faixa "em diante" (null), que deve ser a última.
+    for (const r of tierRows) {
+      if (!Number.isFinite(r.percent) || r.percent < 0 || r.percent > 100) {
+        toast.error("Percentual de faixa inválido (0 a 100)")
+        return
+      }
+      if (r.untilMonth != null && (!Number.isInteger(r.untilMonth) || r.untilMonth < 1)) {
+        toast.error("Mês limite inválido (inteiro ≥ 1 ou vazio para 'em diante')")
+        return
+      }
+    }
+    const openTiers = tierRows.filter((r) => r.untilMonth == null)
+    if (openTiers.length > 1) {
+      toast.error("Só pode haver uma faixa 'em diante' (sem mês limite)")
+      return
+    }
+    setSavingTiers(true)
+    try {
+      const res = await fetch(`/api/admin/tenants/${tenantId}/referral-percent`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        // [] limpa a escala (volta ao percentual fixo).
+        body: JSON.stringify({ tiers: tierRows }),
+      })
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        toast.error(body.error ?? "Falha ao salvar escala")
+        return
+      }
+      toast.success(
+        tierRows.length > 0 ? "Escala de comissão salva" : "Escala removida",
+      )
+      onSaved?.()
+    } catch {
+      toast.error("Erro de rede ao salvar escala")
+    } finally {
+      setSavingTiers(false)
     }
   }
 
@@ -457,6 +550,101 @@ export function ResellerReferralConfig({
             </button>
           )}
         </div>
+      </div>
+
+      {/* Editor de escala (tiers) por tempo de vida da unidade */}
+      <div className="mt-5 space-y-2 border-t border-gray-100 pt-5">
+        <label className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+          Escala de comissão por tempo (override)
+        </label>
+        <p className="text-[11px] text-gray-500">
+          Varia o percentual conforme os meses desde a ativação desta unidade.
+          Ex.: até o mês 6 = 50%, depois (em diante) = 20%. Deixe o mês limite
+          vazio para “em diante”. Sem faixas, usa o percentual fixo acima.
+          {activatedAt && (
+            <>
+              {" "}
+              Ativada em{" "}
+              {formatDateBR(new Date(activatedAt))}.
+            </>
+          )}
+        </p>
+
+        {tierRows.length > 0 && (
+          <div className="space-y-2">
+            {tierRows.map((row, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <div className="flex items-center gap-1">
+                  <span className="text-[11px] text-gray-500">até o mês</span>
+                  <input
+                    type="number"
+                    min={1}
+                    step="1"
+                    value={row.untilMonth ?? ""}
+                    placeholder="∞"
+                    onChange={(e) =>
+                      updateTierRow(i, {
+                        untilMonth:
+                          e.target.value.trim() === ""
+                            ? null
+                            : Number(e.target.value),
+                      })
+                    }
+                    className="w-20 rounded-md border border-gray-300 bg-white px-2 py-1.5 font-mono text-sm focus:border-[var(--color-pmb-green)] focus:outline-none focus:ring-1 focus:ring-[var(--color-pmb-green)]"
+                  />
+                </div>
+                <div className="relative flex-1">
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    step="0.1"
+                    value={row.percent}
+                    onChange={(e) =>
+                      updateTierRow(i, { percent: Number(e.target.value) })
+                    }
+                    className="w-full rounded-md border border-gray-300 bg-white px-3 py-1.5 pr-8 font-mono text-sm focus:border-[var(--color-pmb-green)] focus:outline-none focus:ring-1 focus:ring-[var(--color-pmb-green)]"
+                  />
+                  <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs text-gray-400">
+                    %
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => removeTierRow(i)}
+                  className="rounded-md px-2 py-1 text-[11px] font-medium text-red-600 hover:bg-red-50"
+                >
+                  Remover
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={addTierRow}
+            className="inline-flex items-center gap-1 text-[11px] font-medium text-[var(--color-pmb-green-900)] hover:underline"
+          >
+            + Adicionar faixa
+          </button>
+          <Button
+            size="sm"
+            type="button"
+            onClick={saveTiers}
+            disabled={savingTiers}
+            className="ml-auto bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)]"
+          >
+            <Save className="mr-1.5 h-3.5 w-3.5" />
+            {savingTiers ? "Salvando..." : "Salvar escala"}
+          </Button>
+        </div>
+        <p className="text-[11px] text-gray-500">
+          {tierRows.length > 0
+            ? "A escala tem prioridade sobre o percentual fixo."
+            : "Sem escala configurada — usa o percentual fixo acima."}
+        </p>
       </div>
 
       {/* Editor de minimo de indicacoes */}
