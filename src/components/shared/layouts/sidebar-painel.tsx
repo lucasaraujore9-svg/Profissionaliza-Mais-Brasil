@@ -21,6 +21,7 @@ import {
   Inbox,
   LifeBuoy,
   Lock,
+  Video,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -32,6 +33,7 @@ const ALL_ITEMS: {
   automationOnly?: boolean
 }[] = [
   { href: "/painel", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/painel/treinamentos", label: "Treinamentos", icon: Video },
   { href: "/painel/cursos", label: "Catálogo", icon: GraduationCap },
   { href: "/painel/alunos", label: "Alunos", icon: Users },
   { href: "/painel/atendimento", label: "Atendimento", icon: LifeBuoy, ownerOnly: true },

@@ -158,6 +158,9 @@ model User {
   // Saques cujo comprovante de pagamento foi anexado por este usuario (Financeiro)
   uploadedReferralProofs ReferralPayout[] @relation("UploadedReferralProofs")
 
+  // Progresso assistido nos treinamentos (Universidade PMB)
+  trainingProgress TrainingProgress[]
+
   // Reset password
   resetToken        String?   @unique @map("reset_token")
   resetTokenExpires DateTime? @map("reset_token_expires")
@@ -1798,4 +1801,64 @@ model AuditLog {
   @@index([action, createdAt])
   @@index([createdAt])
   @@map("audit_logs")
+}
+
+// ============================================================
+// TREINAMENTOS — "Universidade PMB"
+// Conteudo global (sem tenantId) criado pelo SUPER_ADMIN. Modulos agrupam
+// videos (treinamentos) hospedados no YouTube. As unidades (RESELLER, dono +
+// consultores) consultam pelo painel e marcam aulas como assistidas
+// (TrainingProgress). Apenas modulos/videos `published` aparecem no painel.
+// ============================================================
+
+model TrainingModule {
+  id          String  @id @default(cuid())
+  title       String
+  description String? @db.Text
+  coverUrl    String? @map("cover_url")
+  position    Int     @default(0)
+  published   Boolean @default(false)
+
+  videos    TrainingVideo[]
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([position])
+  @@map("training_modules")
+}
+
+model TrainingVideo {
+  id            String  @id @default(cuid())
+  moduleId      String  @map("module_id")
+  title         String
+  description   String? @db.Text
+  // ID de 11 chars do YouTube (extraido da URL colada pelo admin).
+  youtubeId     String  @map("youtube_id")
+  // Duracao opcional digitada pelo admin (ex: "12:34") — exibida na lista.
+  durationLabel String? @map("duration_label")
+  position      Int     @default(0)
+  published     Boolean @default(true)
+
+  module   TrainingModule     @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  progress TrainingProgress[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([moduleId, position])
+  @@map("training_videos")
+}
+
+model TrainingProgress {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  videoId     String   @map("video_id")
+  completedAt DateTime @default(now()) @map("completed_at")
+
+  user  User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  video TrainingVideo @relation(fields: [videoId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, videoId])
+  @@index([userId])
+  @@map("training_progress")
 }
