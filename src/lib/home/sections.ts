@@ -765,9 +765,10 @@ export async function ensureTenantHomeSections(tenantId: string): Promise<void> 
 /**
  * Garante (idempotente) a existência da linha singleton kind="tecnica" para um
  * escopo (PMB quando tenantId=null, ou um revendedor). Usado como backfill nos
- * GET dos painéis e para escopos criados antes da Técnica virar HomeSection. A
- * seção nasce no fim da lista, com `enabled` espelhando o flag tecnica_enabled
- * correspondente (SystemSettings para PMB; Tenant para revendedor).
+ * GET dos painéis e para escopos criados antes da Técnica virar HomeSection.
+ * Posiciona no slot canônico: imediatamente antes de "Depoimentos"
+ * (institutional/testimonials); sem âncora, cai no fim. `enabled` espelha o flag
+ * tecnica_enabled correspondente (SystemSettings para PMB; Tenant para revendedor).
  */
 export async function ensureTecnicaSection(
   tenantId: string | null,
@@ -793,26 +794,197 @@ export async function ensureTecnicaSection(
     enabled = settings?.tecnicaEnabled ?? false
   }
 
+  const position =
+    (await testimonialsPosition(tenantId)) ?? (await lastPosition(tenantId)) + 1
+  await createSectionAt(tenantId, position, {
+    kind: "tecnica",
+    enabled,
+    config: { kind: "tecnica" },
+  })
+}
+
+/**
+ * Insere (idempotente do lado do chamador) uma linha singleton em `position`,
+ * abrindo espaço — incrementa a `position` de todas as seções do escopo que
+ * estejam em `position` ou depois. Transacional para que a renumeração e o
+ * insert não corram entre si.
+ */
+async function createSectionAt(
+  tenantId: string | null,
+  position: number,
+  data: { kind: SectionKind; enabled: boolean; config: object },
+): Promise<void> {
+  await prisma.$transaction([
+    prisma.homeSection.updateMany({
+      where: { tenantId, position: { gte: position } },
+      data: { position: { increment: 1 } },
+    }),
+    prisma.homeSection.create({
+      data: { tenantId, position, ...data },
+    }),
+  ])
+}
+
+/**
+ * Resolve a posição da âncora canônica "Sua escola no bolso"
+ * (institutional/learn_anywhere) de um escopo — EJA e Idiomas nascem
+ * imediatamente antes dela (ordem pedida: ... Administrativo → EJA → Idiomas →
+ * Sua escola no bolso → ...). Retorna `null` quando a âncora não existe.
+ */
+async function learnAnywherePosition(
+  tenantId: string | null,
+): Promise<number | null> {
+  const rows = await prisma.homeSection.findMany({
+    where: { tenantId, kind: "institutional" },
+    orderBy: { position: "asc" },
+    select: { position: true, config: true },
+  })
+  const anchor = rows.find(
+    (r) => (r.config as { variant?: string } | null)?.variant === "learn_anywhere",
+  )
+  return anchor?.position ?? null
+}
+
+async function lastPosition(tenantId: string | null): Promise<number> {
   const last = await prisma.homeSection.findFirst({
     where: { tenantId },
     orderBy: { position: "desc" },
     select: { position: true },
   })
-  await prisma.homeSection.create({
-    data: {
-      tenantId,
-      kind: "tecnica",
-      position: (last?.position ?? -1) + 1,
-      enabled,
-      config: { kind: "tecnica" },
-    },
-  })
+  return last?.position ?? -1
 }
 
 /**
- * Garante (idempotente) a linha singleton kind="eja" para um escopo. Espelha
- * `ensureTecnicaSection`: nasce no fim, `enabled` espelhando o flag eja_enabled
- * correspondente (SystemSettings para PMB; Tenant para revendedor).
+ * Resolve a posição da âncora "Depoimentos" (institutional/testimonials) — a
+ * Técnica nasce imediatamente antes dela na ordem canônica (... final_cta →
+ * Técnica → Depoimentos). Retorna `null` quando a âncora não existe.
+ */
+async function testimonialsPosition(
+  tenantId: string | null,
+): Promise<number | null> {
+  const rows = await prisma.homeSection.findMany({
+    where: { tenantId, kind: "institutional" },
+    orderBy: { position: "asc" },
+    select: { position: true, config: true },
+  })
+  const anchor = rows.find(
+    (r) => (r.config as { variant?: string } | null)?.variant === "testimonials",
+  )
+  return anchor?.position ?? null
+}
+
+// ---------------------------------------------------------------------------
+// Ordem canônica da home (espelha a migration 20260620_eja_idiomas_reposition)
+// ---------------------------------------------------------------------------
+
+/** ids estáveis das 3 seções de categoria que entram na ordem canônica. */
+const CANONICAL_CATEGORY_PMB_IDS = {
+  informatica: "pmb-cat-informatica",
+  administrativo: "pmb-cat-administrativo",
+  diversas: "pmb-cat-diversas",
+} as const
+
+interface CanonicalCategoryIds {
+  inf: string | null
+  adm: string | null
+  div: string | null
+}
+
+async function canonicalCategoryIds(): Promise<CanonicalCategoryIds> {
+  const rows = await prisma.homeSection.findMany({
+    where: { id: { in: Object.values(CANONICAL_CATEGORY_PMB_IDS) } },
+    select: { id: true, config: true },
+  })
+  const categoryId = (id: string) => {
+    const r = rows.find((x) => x.id === id)
+    return (r?.config as { categoryId?: string } | null)?.categoryId ?? null
+  }
+  return {
+    inf: categoryId(CANONICAL_CATEGORY_PMB_IDS.informatica),
+    adm: categoryId(CANONICAL_CATEGORY_PMB_IDS.administrativo),
+    div: categoryId(CANONICAL_CATEGORY_PMB_IDS.diversas),
+  }
+}
+
+/**
+ * "Faixa" canônica de uma seção (menor = mais acima na home). Reproduz a ordem
+ * pedida: Benefícios → Mais vendidos → Informática → Qual profissão →
+ * Administrativo → EJA → Idiomas → Sua escola no bolso → Diversas → Sua nova
+ * profissão → Técnica → Depoimentos. Seções fora da ordem (ex.: categorias
+ * extras) caem na faixa 1000 e mantêm a ordem relativa entre si.
+ */
+function canonicalRank(
+  section: { kind: string; config: unknown },
+  cats: CanonicalCategoryIds,
+): number {
+  const cfg = (section.config ?? {}) as { variant?: string; categoryId?: string }
+  switch (section.kind) {
+    case "institutional":
+      if (cfg.variant === "trust_bar") return 0
+      if (cfg.variant === "learn_anywhere") return 7
+      if (cfg.variant === "final_cta") return 9
+      if (cfg.variant === "testimonials") return 11
+      return 1000
+    case "bestsellers":
+      return 1
+    case "category_courses":
+      if (cats.inf && cfg.categoryId === cats.inf) return 2
+      if (cats.adm && cfg.categoryId === cats.adm) return 4
+      if (cats.div && cfg.categoryId === cats.div) return 8
+      return 1000
+    case "categories_grid":
+      return 3
+    case "eja":
+      return 5
+    case "idiomas":
+      return 6
+    case "tecnica":
+      return 10
+    default:
+      return 1000
+  }
+}
+
+/**
+ * Renumera um escopo para a ordem canônica (estável: empates preservam a ordem
+ * relativa atual). Usado como fonte única em código (seed/admin); o estado de
+ * prod já é normalizado pela migration. Idempotente.
+ */
+export async function reorderScopeToCanonical(
+  tenantId: string | null,
+): Promise<void> {
+  const cats = await canonicalCategoryIds()
+  const sections = await prisma.homeSection.findMany({
+    where: { tenantId },
+    orderBy: [{ position: "asc" }, { createdAt: "asc" }],
+    select: { id: true, kind: true, config: true, position: true },
+  })
+  const sorted = sections
+    .map((s, i) => ({ s, i }))
+    .sort((a, b) => {
+      const diff = canonicalRank(a.s, cats) - canonicalRank(b.s, cats)
+      return diff !== 0 ? diff : a.i - b.i
+    })
+    .map((x) => x.s)
+  const updates = sorted
+    .map((s, idx) => ({ id: s.id, pos: idx, oldPos: s.position }))
+    .filter((u) => u.oldPos !== u.pos)
+  if (updates.length === 0) return
+  await prisma.$transaction(
+    updates.map((u) =>
+      prisma.homeSection.update({
+        where: { id: u.id },
+        data: { position: u.pos },
+      }),
+    ),
+  )
+}
+
+/**
+ * Garante (idempotente) a linha singleton kind="eja" para um escopo. Posiciona
+ * no slot canônico: imediatamente ANTES de "Idiomas" (se existir) ou da âncora
+ * "Sua escola no bolso"; sem âncora, cai no fim. `enabled` espelha o flag
+ * eja_enabled correspondente (SystemSettings para PMB; Tenant para revendedor).
  */
 export async function ensureEjaSection(
   tenantId: string | null,
@@ -838,19 +1010,20 @@ export async function ensureEjaSection(
     enabled = settings?.ejaEnabled ?? false
   }
 
-  const last = await prisma.homeSection.findFirst({
-    where: { tenantId },
-    orderBy: { position: "desc" },
+  // EJA fica logo antes de Idiomas (se já existir) — garante EJA→Idiomas
+  // independente da ordem de criação. Senão, antes da âncora; senão, no fim.
+  const idiomas = await prisma.homeSection.findFirst({
+    where: { tenantId, kind: "idiomas" },
     select: { position: true },
   })
-  await prisma.homeSection.create({
-    data: {
-      tenantId,
-      kind: "eja",
-      position: (last?.position ?? -1) + 1,
-      enabled,
-      config: { kind: "eja" },
-    },
+  const position =
+    idiomas?.position ??
+    (await learnAnywherePosition(tenantId)) ??
+    (await lastPosition(tenantId)) + 1
+  await createSectionAt(tenantId, position, {
+    kind: "eja",
+    enabled,
+    config: { kind: "eja" },
   })
 }
 
@@ -875,8 +1048,10 @@ export async function setEjaSectionEnabled(
 }
 
 /**
- * Garante (idempotente) a linha singleton kind="idiomas" para um escopo. Nasce
- * no fim, ativada. Conteúdo (courseIds) é padronizado pela PMB; a linha do
+ * Garante (idempotente) a linha singleton kind="idiomas" para um escopo.
+ * Posiciona no slot canônico: imediatamente antes da âncora "Sua escola no
+ * bolso" (logo após EJA); sem âncora, logo após o EJA se existir; senão, no
+ * fim. Nasce ativada. Conteúdo (courseIds) é padronizado pela PMB; a linha do
  * tenant é só posição + enabled e lê os cursos do PMB no render.
  */
 export async function ensureIdiomasSection(
@@ -888,18 +1063,21 @@ export async function ensureIdiomasSection(
   })
   if (existing) return
 
-  const last = await prisma.homeSection.findFirst({
-    where: { tenantId },
-    orderBy: { position: "desc" },
-    select: { position: true },
-  })
-  await prisma.homeSection.create({
-    data: {
-      tenantId,
-      kind: "idiomas",
-      position: (last?.position ?? -1) + 1,
-      enabled: true,
-      config: { kind: "idiomas", title: "Idiomas", subtitle: "", courseIds: [] },
-    },
+  const anchor = await learnAnywherePosition(tenantId)
+  let position: number
+  if (anchor != null) {
+    position = anchor
+  } else {
+    const eja = await prisma.homeSection.findFirst({
+      where: { tenantId, kind: "eja" },
+      select: { position: true },
+    })
+    position =
+      eja != null ? eja.position + 1 : (await lastPosition(tenantId)) + 1
+  }
+  await createSectionAt(tenantId, position, {
+    kind: "idiomas",
+    enabled: true,
+    config: { kind: "idiomas", title: "Idiomas", subtitle: "", courseIds: [] },
   })
 }

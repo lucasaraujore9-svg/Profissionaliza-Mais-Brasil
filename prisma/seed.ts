@@ -13,6 +13,78 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL })
 const adapter = new PrismaPg(pool)
 const prisma = new PrismaClient({ adapter })
 
+/**
+ * Renumera as seções da home do PMB (tenant_id IS NULL) para a ordem canônica.
+ * Inline (sem importar app code, que usa outro client + alias) — espelha
+ * `reorderScopeToCanonical` de src/lib/home/sections.ts e a migration
+ * 20260620_eja_idiomas_reposition. Idempotente.
+ */
+async function reorderPmbHomeCanonical() {
+  const catRows = await prisma.homeSection.findMany({
+    where: {
+      id: { in: ["pmb-cat-informatica", "pmb-cat-administrativo", "pmb-cat-diversas"] },
+    },
+    select: { id: true, config: true },
+  })
+  const catId = (id: string) =>
+    (catRows.find((r) => r.id === id)?.config as { categoryId?: string } | null)
+      ?.categoryId ?? null
+  const cats = {
+    inf: catId("pmb-cat-informatica"),
+    adm: catId("pmb-cat-administrativo"),
+    div: catId("pmb-cat-diversas"),
+  }
+  const rank = (kind: string, config: unknown): number => {
+    const cfg = (config ?? {}) as { variant?: string; categoryId?: string }
+    switch (kind) {
+      case "institutional":
+        if (cfg.variant === "trust_bar") return 0
+        if (cfg.variant === "learn_anywhere") return 7
+        if (cfg.variant === "final_cta") return 9
+        if (cfg.variant === "testimonials") return 11
+        return 1000
+      case "bestsellers":
+        return 1
+      case "category_courses":
+        if (cats.inf && cfg.categoryId === cats.inf) return 2
+        if (cats.adm && cfg.categoryId === cats.adm) return 4
+        if (cats.div && cfg.categoryId === cats.div) return 8
+        return 1000
+      case "categories_grid":
+        return 3
+      case "eja":
+        return 5
+      case "idiomas":
+        return 6
+      case "tecnica":
+        return 10
+      default:
+        return 1000
+    }
+  }
+  const sections = await prisma.homeSection.findMany({
+    where: { tenantId: null },
+    orderBy: [{ position: "asc" }, { createdAt: "asc" }],
+    select: { id: true, kind: true, config: true, position: true },
+  })
+  const sorted = sections
+    .map((s, i) => ({ s, i }))
+    .sort((a, b) => {
+      const diff = rank(a.s.kind, a.s.config) - rank(b.s.kind, b.s.config)
+      return diff !== 0 ? diff : a.i - b.i
+    })
+    .map((x) => x.s)
+  const updates = sorted
+    .map((s, idx) => ({ id: s.id, pos: idx, oldPos: s.position }))
+    .filter((u) => u.oldPos !== u.pos)
+  for (const u of updates) {
+    await prisma.homeSection.update({
+      where: { id: u.id },
+      data: { position: u.pos },
+    })
+  }
+}
+
 async function main() {
   const adminPwd = await bcrypt.hash("super123", 10)
   const salesPwd = await bcrypt.hash("vendas123", 10)
@@ -396,6 +468,14 @@ async function main() {
       })
     }
   }
+
+  // Normaliza a ordem das seções do PMB para a ordem canônica (espelha a
+  // migration 20260620_eja_idiomas_reposition). Em prod a migration faz isso;
+  // aqui garante que um banco local recém-semeado já nasça na ordem pedida:
+  //   Benefícios → Mais vendidos → Informática → Qual profissão →
+  //   Administrativo → EJA → Idiomas → Sua escola no bolso → Diversas →
+  //   Sua nova profissão → Técnica → Depoimentos.
+  await reorderPmbHomeCanonical()
 
   // Cupons — 1 SUPER_ADMIN (50%), 1 PMB_SALES (30%), 1 consultor (10%)
   const now = new Date()
