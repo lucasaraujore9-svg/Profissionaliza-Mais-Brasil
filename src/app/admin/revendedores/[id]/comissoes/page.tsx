@@ -7,6 +7,7 @@ import {
   ResellerCommissionsTabs,
   type CommissionRow,
 } from "@/components/admin/reseller-commissions-tabs"
+import { ResellerCommissionOverrideForm } from "@/components/admin/reseller-commission-override-form"
 
 export const dynamic = "force-dynamic"
 
@@ -28,6 +29,14 @@ export default async function ResellerCommissionsPage({
       name: true,
       slug: true,
       referrerTenantId: true,
+      referralPercent: true,
+      commissionMode: true,
+      commissionBracketBasis: true,
+      commissionRateType: true,
+      commissionPayoutBase: true,
+      commissionBrackets: true,
+      commissionPlan: true,
+      commissionOverrideSource: true,
     },
   })
   if (!tenant) notFound()
@@ -129,6 +138,21 @@ export default async function ResellerCommissionsPage({
       <PageHeader
         title={`Comissões - ${tenant.name}`}
         description={`Detalhamento de comissões recebidas e geradas por ${tenant.slug}.`}
+      />
+      <ResellerCommissionOverrideForm
+        tenantId={id}
+        initial={{
+          overrideSource:
+            (tenant.commissionOverrideSource as "MANUAL" | "FROZEN" | null) ?? null,
+          commissionMode: tenant.commissionMode,
+          commissionBracketBasis: tenant.commissionBracketBasis,
+          commissionRateType: tenant.commissionRateType,
+          commissionPayoutBase: tenant.commissionPayoutBase,
+          commissionBrackets: tenant.commissionBrackets,
+          commissionPlan: tenant.commissionPlan,
+          referralPercent:
+            tenant.referralPercent != null ? Number(tenant.referralPercent) : null,
+        }}
       />
       <ResellerCommissionsTabs
         tenantId={id}

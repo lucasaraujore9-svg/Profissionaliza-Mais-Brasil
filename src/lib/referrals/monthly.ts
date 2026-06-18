@@ -14,14 +14,16 @@
  * A liquidacao (transferencia manual + comprovante para dar baixa) e a mesma do
  * motor legado: ReferralMonthlyCommission entra no ReferralPayout em ./payout.ts.
  */
-import { Prisma } from "@prisma/client"
+import { Prisma, type CommissionRateType } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { createNotification } from "@/lib/notifications"
 import { computeAvailableAt } from "@/lib/referrals/commission"
 import {
-  resolveCommissionRule,
   resolveBracket,
-  type CommissionRule,
+  resolveEffectivePhases,
+  resolvePhase,
+  monthsInProgram,
+  type CommissionPhase,
   type GlobalCommissionConfig,
 } from "@/lib/referrals/rules"
 
@@ -38,6 +40,12 @@ interface MonthlyLine {
   mensalidade: number
   /** Contribuicao desta unidade para a comissao do mes. */
   amount: number
+  /** Tipo de valor da fase ATIVA desta unidade no mes (FIXED/PERCENT). */
+  rateType?: CommissionRateType
+  /** Valor da faixa aplicada: R$ por unidade (FIXED) ou % (PERCENT). */
+  rate?: number
+  /** Indice (0-based) da fase ativa desta unidade no plano. */
+  phaseIndex?: number
 }
 
 function monthRange(period: string): { start: Date; end: Date } | null {
@@ -49,6 +57,11 @@ function monthRange(period: string): { start: Date; end: Date } | null {
   const start = new Date(Date.UTC(year, month - 1, 1, 0, 0, 0, 0))
   const end = new Date(Date.UTC(year, month, 1, 0, 0, 0, 0)) // exclusivo
   return { start, end }
+}
+
+/** Indice absoluto de mes (ano*12+mes) para comparar competencias por mes. */
+function monthAnchor(d: Date): number {
+  return d.getUTCFullYear() * 12 + d.getUTCMonth()
 }
 
 /** Period "AAAA-MM" do mes anterior ao `ref`. */
@@ -108,18 +121,20 @@ export async function computeMonthlyCommissions(period: string): Promise<{
       commissionRateType: true,
       commissionPayoutBase: true,
       commissionBrackets: true,
+      commissionPlan: true,
     },
   })
   if (!settings?.referralEnabled) {
     return { processed: 0, created: 0, updated: 0, skipped: 0 }
   }
 
-  const global: GlobalCommissionConfig = {
+  const global: GlobalCommissionConfig & { commissionPlan: unknown } = {
     commissionMode: settings.commissionMode,
     commissionBracketBasis: settings.commissionBracketBasis,
     commissionRateType: settings.commissionRateType,
     commissionPayoutBase: settings.commissionPayoutBase,
     commissionBrackets: settings.commissionBrackets,
+    commissionPlan: settings.commissionPlan,
   }
   const payoutDay = settings.referralPayoutDay ?? DEFAULT_PAYOUT_DAY
   const availableAt = computeAvailableAt(range.start, payoutDay)
@@ -129,11 +144,14 @@ export async function computeMonthlyCommissions(period: string): Promise<{
     select: {
       id: true,
       name: true,
+      createdAt: true,
       commissionMode: true,
       commissionBracketBasis: true,
       commissionRateType: true,
       commissionPayoutBase: true,
       commissionBrackets: true,
+      commissionPlan: true,
+      commissionPlanStartedAt: true,
     },
   })
 
@@ -143,13 +161,24 @@ export async function computeMonthlyCommissions(period: string): Promise<{
   let skipped = 0
 
   for (const referrer of referrers) {
-    const rule = resolveCommissionRule(referrer, global)
-    if (rule.mode !== "MONTHLY_TIERED") continue // motor legado cuida desses
+    // Modo (legado vs por faixas) e uma escolha de topo (override -> global).
+    const mode = referrer.commissionMode ?? global.commissionMode
+    if (mode !== "MONTHLY_TIERED") continue // motor legado cuida desses
+
+    // Resolve o PLANO de fases efetivo (override -> global -> faixa singular).
+    // A fase ativa NAO e escolhida aqui: cada unidade indicada tem o seu proprio
+    // relogio (idade da unidade), entao a selecao de fase acontece por unidade
+    // dentro de computeForReferrer.
+    const phases = resolveEffectivePhases(referrer, global)
+    if (phases.length === 0) {
+      skipped++
+      continue // sem plano nem faixas configuradas — nada a apurar
+    }
     processed++
     const outcome = await computeForReferrer(
       referrer.id,
       referrer.name,
-      rule,
+      phases,
       period,
       range,
       availableAt,
@@ -165,7 +194,7 @@ export async function computeMonthlyCommissions(period: string): Promise<{
 async function computeForReferrer(
   referrerTenantId: string,
   referrerName: string,
-  rule: CommissionRule,
+  phases: CommissionPhase[],
   period: string,
   range: { start: Date; end: Date },
   availableAt: Date,
@@ -186,87 +215,110 @@ async function computeForReferrer(
     return "skipped"
   }
 
-  // 1) Contagem que determina a faixa.
-  const bracketCount =
-    rule.bracketBasis === "NEW_REFERRALS_MONTH"
-      ? await prisma.tenant.count({
-          where: {
-            referrerTenantId,
-            status: "ACTIVE",
-            createdAt: { gte: range.start, lt: range.end },
-          },
-        })
-      : await prisma.tenant.count({
-          where: { referrerTenantId, status: "ACTIVE" },
-        })
+  // Contagens no nivel do INDICADOR — usadas para escolher a faixa DENTRO da fase
+  // de cada unidade (a faixa por volume continua sendo agregada do indicador,
+  // mesmo que cada unidade esteja numa fase diferente do tempo).
+  const [newThisMonthCount, activeTotalCount] = await Promise.all([
+    prisma.tenant.count({
+      where: {
+        referrerTenantId,
+        status: "ACTIVE",
+        createdAt: { gte: range.start, lt: range.end },
+      },
+    }),
+    prisma.tenant.count({ where: { referrerTenantId, status: "ACTIVE" } }),
+  ])
 
-  const bracket = resolveBracket(rule.brackets, bracketCount)
-  if (!bracket) {
-    // Sem faixas configuradas — nada a pagar.
-    return removeIfExists(existing?.id)
+  // Universo de unidades candidatas: ativas com plano pago (cortesia planValue=0
+  // nunca gera pagamento). A inclusao final depende do payoutBase da FASE ATIVA
+  // de cada unidade (avaliado no loop). createdAt/activatedAt/commissionPlanStartedAt
+  // definem o relogio PROPRIO de cada unidade.
+  const units = await prisma.tenant.findMany({
+    where: { referrerTenantId, status: "ACTIVE", planValue: { gt: 0 } },
+    select: {
+      id: true,
+      name: true,
+      planValue: true,
+      createdAt: true,
+      activatedAt: true,
+      commissionPlanStartedAt: true,
+    },
+  })
+  if (units.length === 0) return removeIfExists(existing?.id)
+
+  // Mensalidades recebidas no mes por unidade (so usadas por fases PERCENT).
+  // Mesmo anti-duplicidade do motor legado: ignora pagamentos ja cobertos por
+  // uma ReferralCommission legada nao-cancelada.
+  const paidByTenant = new Map<string, Prisma.Decimal>()
+  {
+    const ids = units.map((u) => u.id)
+    const grouped = await prisma.tenantPayment.groupBy({
+      by: ["tenantId"],
+      where: {
+        tenantId: { in: ids },
+        status: { in: RECEIVED_STATUSES },
+        paidAt: { gte: range.start, lt: range.end },
+        OR: [
+          { referralCommission: { is: null } },
+          { referralCommission: { status: "CANCELLED" } },
+        ],
+      },
+      _sum: { amount: true },
+    })
+    for (const g of grouped) {
+      paidByTenant.set(g.tenantId, new Prisma.Decimal(g._sum.amount ?? 0))
+    }
   }
 
-  // 2) Unidades da base de pagamento (cortesia planValue=0 nao gera pagamento).
-  const baseUnits = await prisma.tenant.findMany({
-    where:
-      rule.payoutBase === "REFERRED_THIS_MONTH"
-        ? {
-            referrerTenantId,
-            status: "ACTIVE",
-            planValue: { gt: 0 },
-            createdAt: { gte: range.start, lt: range.end },
-          }
-        : { referrerTenantId, status: "ACTIVE", planValue: { gt: 0 } },
-    select: { id: true, name: true, planValue: true },
-  })
-
-  // 3) Calculo do valor.
-  const rate = new Prisma.Decimal(bracket.value)
   let amount = new Prisma.Decimal(0)
   let baseSum = new Prisma.Decimal(0)
   const lines: MonthlyLine[] = []
 
-  if (rule.rateType === "FIXED") {
-    // R$ por cada unidade ativa da base (independe de pagamento no mes).
-    amount = rate.mul(baseUnits.length)
-    for (const u of baseUnits) {
+  for (const u of units) {
+    const referredThisMonth =
+      u.createdAt >= range.start && u.createdAt < range.end
+    // Relogio PROPRIO da unidade: idade em meses desde a ativacao DELA
+    // (commissionPlanStartedAt > activatedAt > createdAt). A fase do plano e
+    // escolhida por essa idade — unidades em meses diferentes podem estar em
+    // fases diferentes no mesmo fechamento.
+    const anchor = u.commissionPlanStartedAt ?? u.activatedAt ?? u.createdAt
+    // Catch-up de um mes passado (recentClosedPeriods): a unidade ativa HOJE
+    // pode ter entrado no programa DEPOIS do mes apurado. Nesse caso ela nao
+    // existia na competencia — nao entra (evita inflar mes retroativo). O clamp
+    // em monthsInProgram so cobre a fase; aqui excluimos a unidade de vez.
+    if (monthAnchor(anchor) > monthAnchor(range.start)) continue
+    const ageMonths = monthsInProgram(anchor, range.start)
+    const active = resolvePhase(phases, ageMonths)
+    if (!active) continue
+    const phase = active.phase
+
+    // payoutBase da fase: REFERRED_THIS_MONTH so inclui a unidade no mes em que
+    // ela entrou; ALL_ACTIVE inclui sempre.
+    if (phase.payoutBase === "REFERRED_THIS_MONTH" && !referredThisMonth) continue
+
+    // Faixa escolhida pela contagem do indicador, conforme a base da fase.
+    const count =
+      phase.bracketBasis === "NEW_REFERRALS_MONTH"
+        ? newThisMonthCount
+        : activeTotalCount
+    const bracket = resolveBracket(phase.brackets, count)
+    if (!bracket) continue
+    const rate = new Prisma.Decimal(bracket.value)
+
+    if (phase.rateType === "FIXED") {
+      // R$ por unidade ativa (independe de pagamento no mes).
+      amount = amount.add(rate)
       lines.push({
         tenantId: u.id,
         name: u.name,
         mensalidade: Number(u.planValue),
         amount: bracket.value,
+        rateType: "FIXED",
+        rate: bracket.value,
+        phaseIndex: active.index,
       })
-    }
-  } else {
-    // PERCENT: % sobre a mensalidade efetivamente recebida no mes de cada unidade.
-    const baseIds = baseUnits.map((u) => u.id)
-    const paidByTenant = new Map<string, Prisma.Decimal>()
-    if (baseIds.length > 0) {
-      const grouped = await prisma.tenantPayment.groupBy({
-        by: ["tenantId"],
-        where: {
-          tenantId: { in: baseIds },
-          status: { in: RECEIVED_STATUSES },
-          paidAt: { gte: range.start, lt: range.end },
-          // Anti-duplicidade na transicao de motor: NAO conta mensalidades que ja
-          // geraram uma ReferralCommission legada nao-cancelada — senao um
-          // indicador migrado de PER_PAYMENT_PERCENT para MONTHLY_TIERED com
-          // comissoes legadas ainda PENDING/AVAILABLE/PAID receberia o mesmo
-          // pagamento duas vezes (uma por motor). A comissao legada paga esses;
-          // o motor por faixas cobre apenas o que nao tem comissao legada viva.
-          OR: [
-            { referralCommission: { is: null } },
-            { referralCommission: { status: "CANCELLED" } },
-          ],
-        },
-        _sum: { amount: true },
-      })
-      for (const g of grouped) {
-        paidByTenant.set(g.tenantId, new Prisma.Decimal(g._sum.amount ?? 0))
-      }
-    }
-    const byId = new Map(baseUnits.map((u) => [u.id, u]))
-    for (const u of baseUnits) {
+    } else {
+      // PERCENT: % sobre a mensalidade efetivamente recebida no mes da unidade.
       const mensalidade = paidByTenant.get(u.id) ?? new Prisma.Decimal(0)
       if (mensalidade.lte(0)) continue // unidade nao pagou no mes
       const line = mensalidade.mul(rate).div(100).toDecimalPlaces(2)
@@ -274,9 +326,12 @@ async function computeForReferrer(
       amount = amount.add(line)
       lines.push({
         tenantId: u.id,
-        name: byId.get(u.id)?.name ?? u.name,
+        name: u.name,
         mensalidade: Number(mensalidade),
         amount: Number(line),
+        rateType: "PERCENT",
+        rate: bracket.value,
+        phaseIndex: active.index,
       })
     }
   }
@@ -286,15 +341,30 @@ async function computeForReferrer(
     return removeIfExists(existing?.id)
   }
 
+  // Campos de topo REPRESENTATIVOS para as telas de resumo (painel/financeiro).
+  // Quando UMA so fase contribuiu no mes (caso comum + 100% dos planos de fase
+  // unica), gravamos os campos fieis daquela fase, com bracketCount/rate/basis/
+  // payoutBase corretos. Quando fases diferentes contribuiram (plano misto), nao
+  // ha um valor unico: rate=0 sinaliza "misto" para as telas, que entao usam a
+  // quebra fiel por unidade em linesSnapshot. unitCount/baseSum/amount sempre reais.
+  const contributingPhaseIdx = new Set(lines.map((l) => l.phaseIndex))
+  const single =
+    contributingPhaseIdx.size === 1
+      ? phases[[...contributingPhaseIdx][0] as number]
+      : null
+  const rep = single ?? phases[0]
+  const repCount =
+    rep.bracketBasis === "NEW_REFERRALS_MONTH" ? newThisMonthCount : activeTotalCount
   const unitCount = lines.length
   const data = {
-    mode: rule.mode,
-    bracketBasis: rule.bracketBasis,
-    rateType: rule.rateType,
-    payoutBase: rule.payoutBase,
-    bracketIndex: bracket.index,
-    bracketCount,
-    rate,
+    mode: "MONTHLY_TIERED" as const,
+    bracketBasis: rep.bracketBasis,
+    rateType: single ? single.rateType : (lines[0]?.rateType ?? rep.rateType),
+    payoutBase: rep.payoutBase,
+    bracketIndex: 0,
+    bracketCount: repCount,
+    // Fase unica => rate real (uniforme); misto => 0 (sinaliza às telas).
+    rate: single ? new Prisma.Decimal(lines[0]?.rate ?? 0) : new Prisma.Decimal(0),
     unitCount,
     baseSum,
     amount,
@@ -386,16 +456,24 @@ export async function flagMonthlyCommissionForRefund(
       amount: true,
       rateType: true,
       cancelReason: true,
+      linesSnapshot: true,
       referrer: { select: { name: true } },
     },
   })
   if (!monthly) return
-  // FIXED: o valor e rate x nº de unidades ATIVAS, nao depende da mensalidade
-  // estornada (so PERCENT soma pagamentos recebidos). Estornar 1 mensalidade nao
-  // reduz a comissao FIXA do mes — o proximo fechamento ja reflete a unidade que
-  // por ventura saia. Marcar clawback aqui bloquearia o indicador inteiro por um
-  // valor que nunca veio daquele pagamento. So PERCENT entra em clawback.
-  if (monthly.rateType === "FIXED") return
+  // So a fração PERCENT depende da mensalidade estornada (FIXED = rate x nº de
+  // unidades ativas, independe de pagamento). Num plano multi-fase a mesma
+  // competencia pode misturar fases FIXED e PERCENT, entao a decisao olha a
+  // LINHA da unidade especifica em linesSnapshot — nao o rateType representativo
+  // do topo. Se a unidade contribuiu como FIXED (ou nao tem linha), estornar a
+  // mensalidade dela nao reduz a comissao: nao ha clawback.
+  const refundedLine = Array.isArray(monthly.linesSnapshot)
+    ? (monthly.linesSnapshot as Array<{ tenantId?: string; rateType?: string }>).find(
+        (l) => l?.tenantId === tp.tenantId,
+      )
+    : undefined
+  const lineRateType = refundedLine?.rateType ?? monthly.rateType
+  if (lineRateType === "FIXED") return
   if (monthly.status === "PENDING") return // recompute do proximo fechamento resolve
   if (monthly.cancelReason?.startsWith("[CLAWBACK_PENDING]")) return // ja marcada
 

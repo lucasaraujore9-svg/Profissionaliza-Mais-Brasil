@@ -109,6 +109,151 @@ export function resolveCommissionRule(
   }
 }
 
+// ===========================================================================
+// Plano de comissao MULTI-FASE (MONTHLY_TIERED).
+//
+// Um plano e uma lista ordenada de FASES. Cada fase vale por um intervalo de
+// meses contados desde a entrada do indicador no programa
+// (Tenant.commissionPlanStartedAt ?? createdAt). A fase ativa num mes de
+// apuracao define a regra (rateType/bracketBasis/payoutBase/brackets) daquele
+// mes. A ultima fase pode ter `durationMonths: null` ("em diante").
+//
+// Ex.: [{3m, FIXED, ...}, {null, PERCENT, ...}] => meses 0..2 valor fixo;
+//      do 4o mes (indice 3) em diante, percentual.
+// ===========================================================================
+
+/** Uma fase do plano: a regra de faixas + por quantos meses ela vale. */
+export interface CommissionPhase {
+  /**
+   * Duracao da fase em meses. `null` => fase final, vale "em diante". Apenas a
+   * ultima fase pode ser null.
+   */
+  durationMonths: number | null
+  rateType: CommissionRateType
+  bracketBasis: CommissionBracketBasis
+  payoutBase: CommissionPayoutBase
+  brackets: CommissionBracket[]
+}
+
+const RATE_TYPES: CommissionRateType[] = ["FIXED", "PERCENT"]
+const BRACKET_BASES: CommissionBracketBasis[] = ["NEW_REFERRALS_MONTH", "ACTIVE_UNITS"]
+const PAYOUT_BASES: CommissionPayoutBase[] = ["ALL_ACTIVE", "REFERRED_THIS_MONTH"]
+
+/**
+ * Normaliza/valida um JSON num plano (lista de fases). Aceita tanto o objeto
+ * `{ phases: [...] }` quanto um array cru de fases. Descarta fases invalidas
+ * (sem faixas validas, enums fora do dominio). Garante que so a ULTIMA fase
+ * tenha `durationMonths: null` — fases null intermediarias viram a final
+ * (truncando o resto). Retorna [] se nada sobrar (=> sem plano multi-fase).
+ */
+export function parsePlan(value: unknown): CommissionPhase[] {
+  const rawArr = Array.isArray(value)
+    ? value
+    : value && typeof value === "object" && Array.isArray((value as Record<string, unknown>).phases)
+      ? ((value as Record<string, unknown>).phases as unknown[])
+      : null
+  if (!rawArr) return []
+
+  const out: CommissionPhase[] = []
+  for (const raw of rawArr) {
+    if (!raw || typeof raw !== "object") continue
+    const obj = raw as Record<string, unknown>
+    const brackets = parseBrackets(obj.brackets)
+    if (brackets.length === 0) continue // fase sem faixa nao paga nada — descarta
+
+    const rateType = RATE_TYPES.includes(obj.rateType as CommissionRateType)
+      ? (obj.rateType as CommissionRateType)
+      : "FIXED"
+    const bracketBasis = BRACKET_BASES.includes(obj.bracketBasis as CommissionBracketBasis)
+      ? (obj.bracketBasis as CommissionBracketBasis)
+      : "NEW_REFERRALS_MONTH"
+    const payoutBase = PAYOUT_BASES.includes(obj.payoutBase as CommissionPayoutBase)
+      ? (obj.payoutBase as CommissionPayoutBase)
+      : "ALL_ACTIVE"
+
+    let durationMonths: number | null
+    if (obj.durationMonths === null || obj.durationMonths === undefined || obj.durationMonths === "") {
+      durationMonths = null
+    } else {
+      const n = Number(obj.durationMonths)
+      if (!Number.isFinite(n) || n < 1) continue
+      durationMonths = Math.floor(n)
+    }
+    out.push({ durationMonths, rateType, bracketBasis, payoutBase, brackets })
+  }
+
+  // So a ultima fase pode ser "em diante". Se uma fase intermediaria veio null,
+  // ela vira a final e o resto e descartado (plano malformado defensivamente).
+  const firstOpen = out.findIndex((p) => p.durationMonths === null)
+  const trimmed = firstOpen === -1 ? out : out.slice(0, firstOpen + 1)
+  // Demais fases null (que nao a final) ja foram cortadas; nada mais a fazer.
+  return trimmed
+}
+
+/**
+ * Meses decorridos (inteiros, >= 0) entre a ancora do plano e o mes de
+ * apuracao. Conta meses de CALENDARIO: a unidade que entrou em jan e apurada
+ * em jan => 0; fev => 1; etc. `periodStart` deve ser o 1o dia (UTC) do mes.
+ */
+export function monthsInProgram(anchor: Date, periodStart: Date): number {
+  const a = anchor.getUTCFullYear() * 12 + anchor.getUTCMonth()
+  const p = periodStart.getUTCFullYear() * 12 + periodStart.getUTCMonth()
+  return Math.max(0, p - a)
+}
+
+/**
+ * Seleciona a fase ativa para `monthsElapsed` meses de programa. Caminha as
+ * fases somando as duracoes; a 1a fase cujo intervalo cobre `monthsElapsed`
+ * vence. A fase final (durationMonths null) cobre o resto. `null` se vazio.
+ */
+export function resolvePhase(
+  phases: CommissionPhase[],
+  monthsElapsed: number,
+): { index: number; phase: CommissionPhase } | null {
+  if (phases.length === 0) return null
+  let acc = 0
+  for (let i = 0; i < phases.length; i++) {
+    const d = phases[i].durationMonths
+    if (d === null) return { index: i, phase: phases[i] }
+    if (monthsElapsed < acc + d) return { index: i, phase: phases[i] }
+    acc += d
+  }
+  // Alem de todas as fases finitas e sem fase "em diante": usa a ultima.
+  return { index: phases.length - 1, phase: phases[phases.length - 1] }
+}
+
+/**
+ * Resolve o plano de fases EFETIVO de um indicador, na ordem de prioridade:
+ *   1. plano proprio do override (Tenant.commissionPlan), se tiver fases;
+ *   2. plano padrao global (SystemSettings.commissionPlan), se tiver fases;
+ *   3. fallback: sintetiza um plano de fase unica (durationMonths null) a partir
+ *      da regra singular efetiva (override -> global), preservando 100% do
+ *      comportamento legado de quem nunca configurou plano multi-fase.
+ * Retorna [] apenas quando nem o plano nem as faixas singulares existem.
+ */
+export function resolveEffectivePhases(
+  override: (TenantCommissionOverride & { commissionPlan?: unknown }) | null,
+  global: GlobalCommissionConfig & { commissionPlan?: unknown },
+): CommissionPhase[] {
+  const overridePlan = override ? parsePlan(override.commissionPlan) : []
+  if (overridePlan.length > 0) return overridePlan
+  const globalPlan = parsePlan(global.commissionPlan)
+  if (globalPlan.length > 0) return globalPlan
+
+  // Fallback de fase unica a partir das faixas singulares.
+  const rule = resolveCommissionRule(override, global)
+  if (rule.brackets.length === 0) return []
+  return [
+    {
+      durationMonths: null,
+      rateType: rule.rateType,
+      bracketBasis: rule.bracketBasis,
+      payoutBase: rule.payoutBase,
+      brackets: rule.brackets,
+    },
+  ]
+}
+
 /**
  * Seleciona a faixa aplicavel para uma contagem. Retorna o indice (0-based, na
  * lista ordenada) e o valor. `null` se nao ha faixas configuradas.

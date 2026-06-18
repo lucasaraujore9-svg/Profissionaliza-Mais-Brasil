@@ -28,6 +28,7 @@ export default async function AdminReferralSettingsPage() {
       commissionRateType: true,
       commissionPayoutBase: true,
       commissionBrackets: true,
+      commissionPlan: true,
     },
   })
 
@@ -57,6 +58,7 @@ export default async function AdminReferralSettingsPage() {
           commissionRateType: settings.commissionRateType,
           commissionPayoutBase: settings.commissionPayoutBase,
           commissionBrackets: parseBrackets(settings.commissionBrackets),
+          commissionPlan: settings.commissionPlan,
         }}
       />
     </div>

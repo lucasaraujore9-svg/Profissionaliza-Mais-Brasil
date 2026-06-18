@@ -756,18 +756,26 @@ export function FinanceiroReferralPayouts({
                               {formatMoney(m.amount)}
                             </span>
                           </div>
-                          <div className="mt-1 text-gray-600">
-                            Faixa: {m.bracketCount}{" "}
-                            {BASIS_LABEL[m.bracketBasis] ?? m.bracketBasis} →{" "}
-                            {m.rateType === "PERCENT"
-                              ? `${m.rate.toFixed(2)}%`
-                              : formatMoney(m.rate)}{" "}
-                            por unidade
-                          </div>
+                          {m.rate > 0 ? (
+                            <div className="mt-1 text-gray-600">
+                              Faixa: {m.bracketCount}{" "}
+                              {BASIS_LABEL[m.bracketBasis] ?? m.bracketBasis} →{" "}
+                              {m.rateType === "PERCENT"
+                                ? `${m.rate.toFixed(2)}%`
+                                : formatMoney(m.rate)}{" "}
+                              por unidade
+                            </div>
+                          ) : (
+                            <div className="mt-1 text-gray-600">
+                              Plano em fases — valores variam por unidade
+                            </div>
+                          )}
                           <div className="text-gray-600">
                             Base: {m.unitCount} unidade
-                            {m.unitCount === 1 ? "" : "s"} (
-                            {PAYOUT_BASE_LABEL[m.payoutBase] ?? m.payoutBase})
+                            {m.unitCount === 1 ? "" : "s"}
+                            {m.rate > 0
+                              ? ` (${PAYOUT_BASE_LABEL[m.payoutBase] ?? m.payoutBase})`
+                              : ""}
                             {m.rateType === "PERCENT" && m.baseSum > 0
                               ? ` · mensalidades ${formatMoney(m.baseSum)}`
                               : ""}

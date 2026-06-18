@@ -343,6 +343,27 @@ model Tenant {
   commissionPayoutBase   CommissionPayoutBase?   @map("commission_payout_base")
   // Faixas ordenadas (override): [{ "upTo": 10, "value": 100 }, { "upTo": null, "value": 200 }]
   commissionBrackets     Json?                   @map("commission_brackets")
+  // Plano de comissao MULTI-FASE deste indicador (override). Quando preenchido,
+  // tem prioridade sobre os campos commission* singulares acima (que viram
+  // fallback). Cada fase vale por um intervalo de meses contados desde a entrada
+  // do indicador no programa (commissionPlanStartedAt ?? createdAt). Formato:
+  //   { "phases": [
+  //       { "durationMonths": 3, "rateType": "FIXED", "bracketBasis": "ACTIVE_UNITS",
+  //         "payoutBase": "ALL_ACTIVE", "brackets": [{ "upTo": 10, "value": 100 }, { "upTo": null, "value": 200 }] },
+  //       { "durationMonths": null, "rateType": "PERCENT", ... }   // null = fase final "em diante"
+  //   ] }
+  // null/empty => sem plano multi-fase (cai nos campos singulares -> global).
+  commissionPlan         Json?                   @map("commission_plan")
+  // Ancora do relogio de fases DESTA unidade quando ela e a INDICADA: cada
+  // unidade tem o seu proprio relogio (a fase ativa depende da idade DELA, nao
+  // do indicador). Define o 1o mes do plano para esta unidade. Null => usa
+  // activatedAt ?? createdAt.
+  commissionPlanStartedAt DateTime?              @map("commission_plan_started_at")
+  // Origem do override de comissao: "MANUAL" (admin editou na tela do revendedor)
+  // ou "FROZEN" (congelado automaticamente ao salvar a regra global com escopo
+  // "apenas novas revendas"). Null => sem override (herda o global). FROZEN e
+  // limpo quando o admin salva a global com escopo "todas"; MANUAL e preservado.
+  commissionOverrideSource String?               @map("commission_override_source")
 
   // Unidade Tecnica — link externo para escola tecnica do revendedor.
   // Quando habilitado pelo admin, exibe categoria/menu/secao "Cursos Tecnicos"
@@ -1345,6 +1366,11 @@ model SystemSettings {
   // Faixas ordenadas: [{ "upTo": 10, "value": 100 }, { "upTo": 30, "value": 150 }, { "upTo": null, "value": 200 }]
   // value = R$ por unidade (FIXED) ou % da mensalidade (PERCENT); upTo null = faixa final sem teto.
   commissionBrackets     Json?                  @map("commission_brackets")
+  // Plano de comissao MULTI-FASE padrao da rede (global). Mesma forma do
+  // Tenant.commissionPlan. Quando preenchido, e o "plano padrao": indicadores
+  // sem plano/override proprio seguem estas fases. Vazio => cai nos campos
+  // commission* singulares acima. Ver src/lib/referrals/rules.ts.
+  commissionPlan         Json?                  @map("commission_plan")
 
   // Certificados
   certificateMinPercent Int     @default(80) @map("certificate_min_percent") // % minimo na plataforma p/ auto-emissao

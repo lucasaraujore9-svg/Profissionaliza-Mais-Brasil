@@ -112,6 +112,36 @@ const bracketBasisNoun: Record<string, string> = {
   ACTIVE_UNITS: "unidades ativas",
 }
 
+/**
+ * Descreve a faixa/valor de uma comissão mensal. Usa a quebra por unidade
+ * (linesSnapshot) — que carrega o rate aplicado por unidade — para detectar
+ * plano multi-fase MISTO. Faz fallback para o rate de topo nas linhas geradas
+ * pelo motor antigo (fase única, rate de topo preenchido).
+ */
+function describeFaixa(m: {
+  rateType: string
+  rate: unknown
+  linesSnapshot: unknown
+}): string {
+  const lines = Array.isArray(m.linesSnapshot)
+    ? (m.linesSnapshot as Array<{ rateType?: string; rate?: number }>)
+    : []
+  const withRate = lines.filter((l) => l && typeof l.rate === "number")
+  if (withRate.length > 0) {
+    const distinct = new Set(withRate.map((l) => `${l.rateType ?? "?"}:${l.rate}`))
+    if (distinct.size > 1) return "Plano em fases (misto)"
+    const l = withRate[0]
+    return l.rateType === "PERCENT"
+      ? `${Number(l.rate).toFixed(2)}%/unid.`
+      : `${formatMoney(Number(l.rate))}/unid.`
+  }
+  const rate = Number(m.rate)
+  if (!rate) return "—"
+  return m.rateType === "PERCENT"
+    ? `${rate.toFixed(2)}%/unid.`
+    : `${formatMoney(rate)}/unid.`
+}
+
 export default async function PainelIndicacoesPage() {
   const session = await auth()
   const user = session?.user as
@@ -195,6 +225,7 @@ export default async function PainelIndicacoesPage() {
         unitCount: true,
         amount: true,
         status: true,
+        linesSnapshot: true,
       },
       orderBy: { period: "desc" },
       take: 12,
@@ -388,12 +419,11 @@ export default async function PainelIndicacoesPage() {
                       {formatPeriod(m.period)}
                     </TableCell>
                     <TableCell className="text-gray-600">
-                      {m.bracketCount}{" "}
-                      {bracketBasisNoun[m.bracketBasis] ?? "indicações"} →{" "}
-                      {m.rateType === "PERCENT"
-                        ? `${Number(m.rate).toFixed(2)}%`
-                        : formatMoney(Number(m.rate))}
-                      /unid.
+                      <div>{describeFaixa(m)}</div>
+                      <div className="text-xs text-gray-400">
+                        {m.bracketCount}{" "}
+                        {bracketBasisNoun[m.bracketBasis] ?? "indicações"}
+                      </div>
                     </TableCell>
                     <TableCell className="text-right">{m.unitCount}</TableCell>
                     <TableCell className="text-right font-mono font-semibold">
