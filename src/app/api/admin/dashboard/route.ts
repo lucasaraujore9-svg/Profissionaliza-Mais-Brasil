@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import type { LeadStatus } from "@prisma/client"
+import type { LeadStatus, TenantStatus } from "@prisma/client"
 import { requireAdminSession } from "@/lib/auth/admin-session"
 import {
   tenantScopeWhere,
@@ -109,9 +109,7 @@ async function buildAdminDashboard(
 
   const [
     activeResellers,
-    pendingResellers,
-    suspendedResellers,
-    cancelledResellers,
+    payingResellers,
     totalStudents,
     totalStudentsPrev,
     currentRevenueAgg,
@@ -123,9 +121,15 @@ async function buildAdminDashboard(
     processed7dAgg,
   ] = await Promise.all([
     prisma.tenant.count({ where: { status: "ACTIVE" } }),
-    prisma.tenant.count({ where: { status: "PENDING" } }),
-    prisma.tenant.count({ where: { status: "SUSPENDED" } }),
-    prisma.tenant.count({ where: { status: "CANCELLED" } }),
+    // Revendas pagantes (planValue > 0) que poderiam estar inadimplentes —
+    // base correta da taxa de inadimplência. Cortesias (planValue=0) nunca
+    // geram cobrança e não devem diluir a taxa.
+    prisma.tenant.count({
+      where: {
+        status: { in: ["ACTIVE", "PENDING", "SUSPENDED"] },
+        planValue: { gt: 0 },
+      },
+    }),
     prisma.student.count(),
     prisma.student.count({ where: { createdAt: { lt: periodStart } } }),
     prisma.payment.aggregate({
@@ -142,10 +146,16 @@ async function buildAdminDashboard(
         paidAt: { gte: previousStart, lt: periodStart },
       },
     }),
+    // Revendas PAGANTES distintas com mensalidade vencida — numerador no mesmo
+    // "eixo" do denominador (tenants), senão a taxa estoura 100% quando uma
+    // unidade acumula várias faturas OVERDUE.
     prisma.tenantPayment
-      .count({
-        where: { status: "OVERDUE" },
+      .findMany({
+        where: { status: "OVERDUE", tenant: { planValue: { gt: 0 } } },
+        distinct: ["tenantId"],
+        select: { tenantId: true },
       })
+      .then((rows) => rows.length)
       .catch(() => 0),
     prisma.course.count({ where: { status: "ATIVO" } }),
     prisma.tenant.count({
@@ -163,10 +173,8 @@ async function buildAdminDashboard(
     }),
   ])
 
-  const totalResellers =
-    activeResellers + pendingResellers + suspendedResellers + cancelledResellers
   const overdueRate =
-    totalResellers > 0 ? (overdueTenantPayments / totalResellers) * 100 : 0
+    payingResellers > 0 ? (overdueTenantPayments / payingResellers) * 100 : 0
 
   const currentRevenue = Number(currentRevenueAgg._sum?.amount ?? 0)
   const previousRevenue = Number(previousRevenueAgg._sum?.amount ?? 0)
@@ -181,44 +189,11 @@ async function buildAdminDashboard(
   const studentsChangePct =
     totalStudentsPrev > 0 ? (studentsChange / totalStudentsPrev) * 100 : 0
 
-  const [chart, topResellersRaw, alerts] = await Promise.all([
+  const [chart, topResellers, alerts] = await Promise.all([
     buildRevenueChart(period, periodStart, now),
-    prisma.tenant.findMany({
-      where: { status: { in: ["ACTIVE", "PENDING", "SUSPENDED"] } },
-      select: {
-        id: true,
-        name: true,
-        slug: true,
-        status: true,
-        planValue: true,
-        _count: { select: { students: true } },
-        payments: {
-          where: {
-            mpStatus: "APPROVED",
-            paidAt: { gte: periodStart, lte: now },
-          },
-          select: { amount: true },
-        },
-      },
-      take: 50,
-    }),
+    buildTopResellers(periodStart, now),
     buildAlerts(),
   ])
-
-  const topResellers = topResellersRaw
-    .map((t) => {
-      const mrr = t.payments.reduce((sum, p) => sum + Number(p.amount), 0)
-      return {
-        id: t.id,
-        name: t.name,
-        slug: t.slug,
-        status: t.status,
-        mrr,
-        students: t._count.students,
-      }
-    })
-    .sort((a, b) => b.mrr - a.mrr)
-    .slice(0, 10)
 
   return {
     variant: "admin" as const,
@@ -474,6 +449,75 @@ function sevenDaysAgo(ref: Date): Date {
   const d = new Date(ref)
   d.setDate(d.getDate() - 7)
   return d
+}
+
+interface TopReseller {
+  id: string
+  name: string
+  slug: string
+  status: TenantStatus
+  /** Volume de vendas (GMV) da revenda no período. */
+  mrr: number
+  students: number
+}
+
+/**
+ * Top 10 revendas por volume de vendas (GMV) no período.
+ *
+ * Antes: buscava 50 tenants em ordem arbitrária e fatiava 10 — podia omitir a
+ * revenda de maior faturamento se ela não estivesse entre os 50 primeiros.
+ * Agora agrega em SQL sobre TODAS as revendas e pega o top 10 real.
+ */
+async function buildTopResellers(
+  periodStart: Date,
+  now: Date,
+): Promise<TopReseller[]> {
+  const grouped = await prisma.payment.groupBy({
+    by: ["tenantId"],
+    where: {
+      tenantId: { not: null },
+      mpStatus: "APPROVED",
+      paidAt: { gte: periodStart, lte: now },
+      // Só unidades operantes (exclui CANCELLED) — mantém o escopo do código
+      // anterior, agregando no SQL para não truncar o top-10.
+      tenant: { status: { in: ["ACTIVE", "PENDING", "SUSPENDED"] } },
+    },
+    _sum: { amount: true },
+    orderBy: { _sum: { amount: "desc" } },
+    take: 10,
+  })
+
+  const ids = grouped
+    .map((g) => g.tenantId)
+    .filter((id): id is string => id !== null)
+  if (ids.length === 0) return []
+
+  const tenants = await prisma.tenant.findMany({
+    where: { id: { in: ids } },
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+      status: true,
+      _count: { select: { students: true } },
+    },
+  })
+  const byId = new Map(tenants.map((t) => [t.id, t]))
+
+  return grouped
+    .map((g) => {
+      const t = g.tenantId ? byId.get(g.tenantId) : undefined
+      if (!t) return null
+      return {
+        id: t.id,
+        name: t.name,
+        slug: t.slug,
+        status: t.status,
+        mrr: Number(g._sum.amount ?? 0),
+        students: t._count.students,
+      }
+    })
+    .filter((x): x is TopReseller => x !== null)
 }
 
 async function buildRevenueChart(

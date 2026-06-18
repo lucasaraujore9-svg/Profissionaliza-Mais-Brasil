@@ -334,6 +334,16 @@ model Tenant {
   pixKey     String? @map("pix_key")
   pixKeyType String? @map("pix_key_type") // CPF, CNPJ, EMAIL, PHONE, EVP
 
+  // Override do motor de comissao por faixas para ESTE indicador. Null em cada
+  // campo => herda o padrao global de SystemSettings.commission*. Ver
+  // src/lib/referrals/rules.ts (resolucao override -> global).
+  commissionMode         CommissionMode?         @map("commission_mode")
+  commissionBracketBasis CommissionBracketBasis? @map("commission_bracket_basis")
+  commissionRateType     CommissionRateType?     @map("commission_rate_type")
+  commissionPayoutBase   CommissionPayoutBase?   @map("commission_payout_base")
+  // Faixas ordenadas (override): [{ "upTo": 10, "value": 100 }, { "upTo": null, "value": 200 }]
+  commissionBrackets     Json?                   @map("commission_brackets")
+
   // Unidade Tecnica — link externo para escola tecnica do revendedor.
   // Quando habilitado pelo admin, exibe categoria/menu/secao "Cursos Tecnicos"
   // na vitrine; o clique abre uma tela de loading que redireciona para tecnicaUrl.
@@ -397,6 +407,7 @@ model Tenant {
   supportNotes                 TenantSupportNote[]
   referralCommissionsReceived  ReferralCommission[]         @relation("ReferrerCommissions")
   referralCommissionsGenerated ReferralCommission[]         @relation("ReferredCommissions")
+  referralMonthlyCommissions   ReferralMonthlyCommission[]  @relation("ReferrerMonthlyCommissions")
   referralPayouts              ReferralPayout[]
   certificates                 Certificate[]
   certificateTemplate          CertificateTemplate?
@@ -1018,6 +1029,27 @@ enum ReferralPayoutStatus {
   CANCELLED
 }
 
+// Motor de comissao por faixas (configuravel) — coexiste com o motor legado.
+enum CommissionMode {
+  PER_PAYMENT_PERCENT // Legado: % da mensalidade, por pagamento recebido
+  MONTHLY_TIERED // Por faixas: valor/percentual por faixa, no fechamento mensal
+}
+
+enum CommissionBracketBasis {
+  NEW_REFERRALS_MONTH // Faixa pelo nº de novas revendas indicadas no mes
+  ACTIVE_UNITS // Faixa pelo nº de unidades ativas do indicador
+}
+
+enum CommissionRateType {
+  FIXED // Valor fixo (R$) por unidade da base de pagamento
+  PERCENT // Percentual da mensalidade de cada unidade da base de pagamento
+}
+
+enum CommissionPayoutBase {
+  ALL_ACTIVE // Valor/percentual incide sobre TODAS as unidades ativas
+  REFERRED_THIS_MONTH // Incide apenas sobre as unidades indicadas naquele mes
+}
+
 // ============================================================
 // CERTIFICADOS
 // ============================================================
@@ -1300,7 +1332,19 @@ model SystemSettings {
   defaultReferralMinReferrals Int @default(3) @map("default_referral_min_referrals")
   // Janela mensal: comissoes referentes a TenantPayments pagos no mes M
   // ficam AVAILABLE no dia X do mes M+1 (referralPayoutDay).
-  referralPayoutDay      Int     @default(20) @map("referral_payout_day") // dia do mes do pagamento (1-28)
+  referralPayoutDay      Int     @default(20) @map("referral_payout_day") // dia do mes do pagamento (1-20; cron libera no dia 20)
+
+  // Motor de comissao por faixas (padrao global). PER_PAYMENT_PERCENT preserva o
+  // comportamento legado (escala por tempo + referralPercent + defaultReferralPercent).
+  // MONTHLY_TIERED calcula no fechamento do mes pelas faixas abaixo. Override por
+  // unidade em Tenant.commission*. Ver src/lib/referrals/rules.ts.
+  commissionMode         CommissionMode         @default(PER_PAYMENT_PERCENT) @map("commission_mode")
+  commissionBracketBasis CommissionBracketBasis @default(NEW_REFERRALS_MONTH) @map("commission_bracket_basis")
+  commissionRateType     CommissionRateType     @default(FIXED) @map("commission_rate_type")
+  commissionPayoutBase   CommissionPayoutBase   @default(ALL_ACTIVE) @map("commission_payout_base")
+  // Faixas ordenadas: [{ "upTo": 10, "value": 100 }, { "upTo": 30, "value": 150 }, { "upTo": null, "value": 200 }]
+  // value = R$ por unidade (FIXED) ou % da mensalidade (PERCENT); upTo null = faixa final sem teto.
+  commissionBrackets     Json?                  @map("commission_brackets")
 
   // Certificados
   certificateMinPercent Int     @default(80) @map("certificate_min_percent") // % minimo na plataforma p/ auto-emissao
@@ -1422,8 +1466,10 @@ model ReferralPayout {
   // Se method = DESCONTO_MENSALIDADE, a TenantPayment alvo
   appliedToTenantPayment TenantPayment? @relation("AppliedToTenantPayment")
 
-  // Comissoes liquidadas por este payout
+  // Comissoes liquidadas por este payout (motor legado por pagamento)
   commissions ReferralCommission[]
+  // Comissoes mensais por faixas liquidadas por este payout (motor MONTHLY_TIERED)
+  monthlyCommissions ReferralMonthlyCommission[]
 
   requestedAt DateTime  @default(now()) @map("requested_at")
   processedAt DateTime? @map("processed_at")
@@ -1435,6 +1481,56 @@ model ReferralPayout {
   @@index([referrerTenantId, status])
   @@index([status, requestedAt])
   @@map("referral_payouts")
+}
+
+// ============================================================
+// INDICACOES — COMISSAO MENSAL POR FAIXAS (motor MONTHLY_TIERED)
+// ============================================================
+
+// Comissao agregada de UM mes para UM indicador, calculada pelo motor por faixas
+// no fechamento. Separada de ReferralCommission (que e por mensalidade
+// individual) porque aqui o valor incide sobre a carteira, nao sobre 1 pagamento.
+// Idempotente por (referrerTenantId, period). Liquidada via ReferralPayout, igual
+// ao motor legado (transferencia manual + comprovante para dar baixa).
+model ReferralMonthlyCommission {
+  id               String @id @default(cuid())
+  referrerTenantId String @map("referrer_tenant_id")
+  referrer         Tenant @relation("ReferrerMonthlyCommissions", fields: [referrerTenantId], references: [id], onDelete: Cascade)
+
+  // Mes de competencia no formato "AAAA-MM".
+  period String @map("period")
+
+  // Snapshot da regra aplicada (auditavel; edicoes futuras nao mudam o passado).
+  mode         CommissionMode         @map("mode")
+  bracketBasis CommissionBracketBasis @map("bracket_basis")
+  rateType     CommissionRateType     @map("rate_type")
+  payoutBase   CommissionPayoutBase   @map("payout_base")
+
+  bracketIndex Int     @map("bracket_index") // indice (0-based) da faixa atingida
+  bracketCount Int     @map("bracket_count") // contagem que determinou a faixa
+  rate         Decimal @db.Decimal(10, 2) // R$ por unidade (FIXED) ou % (PERCENT)
+  unitCount    Int     @map("unit_count") // nº de unidades da base de pagamento
+  baseSum      Decimal @map("base_sum") @db.Decimal(10, 2) // soma das mensalidades (PERCENT) ou 0 (FIXED)
+  amount       Decimal @db.Decimal(10, 2) // valor final da comissao do mes
+  linesSnapshot Json?  @map("lines_snapshot") // quebra por unidade p/ demonstrativo
+
+  status      ReferralCommissionStatus @default(PENDING)
+  availableAt DateTime  @map("available_at")
+  paidAt      DateTime? @map("paid_at")
+  cancelledAt DateTime? @map("cancelled_at")
+  cancelReason String?  @map("cancel_reason")
+
+  payoutId String?         @map("payout_id")
+  payout   ReferralPayout? @relation(fields: [payoutId], references: [id])
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([referrerTenantId, period])
+  @@index([referrerTenantId, status])
+  @@index([status, availableAt])
+  @@index([payoutId])
+  @@map("referral_monthly_commissions")
 }
 
 // ============================================================

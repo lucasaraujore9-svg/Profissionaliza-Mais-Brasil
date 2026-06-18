@@ -38,7 +38,8 @@ export class ReferralPayoutError extends Error {
       | "BELOW_MIN"
       | "INVALID_PIX"
       | "ALREADY_PENDING"
-      | "PROOF_REQUIRED",
+      | "PROOF_REQUIRED"
+      | "CLAWBACK_PENDING",
   ) {
     super(message)
     this.name = "ReferralPayoutError"
@@ -90,18 +91,57 @@ export async function requestPayout(
     )
   }
 
-  // Calcula saldo AVAILABLE
-  const available = await prisma.referralCommission.findMany({
-    where: {
-      referrerTenantId: input.referrerTenantId,
-      status: "AVAILABLE",
-    },
-    select: { id: true, amount: true },
-  })
-  if (available.length === 0) {
+  // Gate de clawback (espelha o bloqueio do cron em processMonthlyPayouts): se ha
+  // comissao marcada [CLAWBACK_PENDING] (estorno apos liberado/pago) em qualquer
+  // motor, nao deixa sacar ate o financeiro resolver — senao o saque manual
+  // burlaria o bloqueio e pagaria um valor que deveria ser revertido.
+  const [legacyClawback, monthlyClawback] = await Promise.all([
+    prisma.referralCommission.findFirst({
+      where: {
+        referrerTenantId: input.referrerTenantId,
+        status: "PAID",
+        cancelReason: { startsWith: "[CLAWBACK_PENDING]" },
+      },
+      select: { id: true },
+    }),
+    prisma.referralMonthlyCommission.findFirst({
+      where: {
+        referrerTenantId: input.referrerTenantId,
+        cancelReason: { startsWith: "[CLAWBACK_PENDING]" },
+      },
+      select: { id: true },
+    }),
+  ])
+  if (legacyClawback || monthlyClawback) {
+    throw new ReferralPayoutError(
+      "Ha uma comissao em revisao por estorno. Os saques ficam bloqueados ate o financeiro resolver.",
+      "CLAWBACK_PENDING",
+    )
+  }
+
+  // Calcula saldo AVAILABLE dos dois motores (por pagamento + por faixas).
+  const [available, availableMonthly] = await Promise.all([
+    prisma.referralCommission.findMany({
+      where: {
+        referrerTenantId: input.referrerTenantId,
+        status: "AVAILABLE",
+        payoutId: null,
+      },
+      select: { id: true, amount: true },
+    }),
+    prisma.referralMonthlyCommission.findMany({
+      where: {
+        referrerTenantId: input.referrerTenantId,
+        status: "AVAILABLE",
+        payoutId: null,
+      },
+      select: { id: true, amount: true },
+    }),
+  ])
+  if (available.length === 0 && availableMonthly.length === 0) {
     throw new ReferralPayoutError("Sem comissoes disponiveis", "NO_BALANCE")
   }
-  const totalAmount = available.reduce(
+  const totalAmount = [...available, ...availableMonthly].reduce(
     (acc, c) => acc.add(c.amount),
     new Prisma.Decimal(0),
   )
@@ -113,22 +153,51 @@ export async function requestPayout(
     )
   }
 
-  const payout = await prisma.referralPayout.create({
-    data: {
-      referrerTenantId: input.referrerTenantId,
-      amount: totalAmount,
-      method: input.method,
-      status: "REQUESTED",
-      pixKey: input.method === "ASAAS_PIX" ? input.pixKey ?? null : null,
-      pixKeyType: input.method === "ASAAS_PIX" ? input.pixKeyType ?? null : null,
-      requestedAt: new Date(),
-    },
-  })
-
-  // Vincula as comissoes a este payout (sem trocar status — ele troca quando paid)
-  await prisma.referralCommission.updateMany({
-    where: { id: { in: available.map((c) => c.id) } },
-    data: { payoutId: payout.id },
+  // Cria o payout e vincula as comissoes numa transacao com CAS. Se qualquer
+  // comissao ja tiver sido vinculada (outra solicitacao/cron concorrente), o
+  // vinculo fica menor que o esperado e abortamos — senao o amount (=totalAmount)
+  // ficaria inflado em relacao ao que foi efetivamente vinculado (over-pay).
+  const payout = await prisma.$transaction(async (tx) => {
+    const created = await tx.referralPayout.create({
+      data: {
+        referrerTenantId: input.referrerTenantId,
+        amount: totalAmount,
+        method: input.method,
+        status: "REQUESTED",
+        pixKey: input.method === "ASAAS_PIX" ? input.pixKey ?? null : null,
+        pixKeyType:
+          input.method === "ASAAS_PIX" ? input.pixKeyType ?? null : null,
+        requestedAt: new Date(),
+      },
+    })
+    const [linked, linkedMonthly] = await Promise.all([
+      tx.referralCommission.updateMany({
+        where: {
+          id: { in: available.map((c) => c.id) },
+          payoutId: null,
+          status: "AVAILABLE",
+        },
+        data: { payoutId: created.id },
+      }),
+      tx.referralMonthlyCommission.updateMany({
+        where: {
+          id: { in: availableMonthly.map((c) => c.id) },
+          payoutId: null,
+          status: "AVAILABLE",
+        },
+        data: { payoutId: created.id },
+      }),
+    ])
+    if (
+      linked.count !== available.length ||
+      linkedMonthly.count !== availableMonthly.length
+    ) {
+      throw new ReferralPayoutError(
+        "O saldo mudou durante a solicitacao. Tente novamente.",
+        "ALREADY_PENDING",
+      )
+    }
+    return created
   })
 
   // Notifica admins
@@ -213,6 +282,11 @@ export async function markPayoutPaid(
       where: { payoutId },
       data: { status: "PAID", paidAt: now },
     })
+    // Comissoes mensais por faixas liquidadas pelo mesmo payout.
+    await tx.referralMonthlyCommission.updateMany({
+      where: { payoutId },
+      data: { status: "PAID", paidAt: now },
+    })
 
     const reread = await tx.referralPayout.findUniqueOrThrow({ where: { id: payoutId } })
     return { freshlyPaid: true, payout: reread, referrerTenantId: existing.referrerTenantId, amount: existing.amount }
@@ -245,19 +319,27 @@ export async function failPayout(
   })
   if (!payout) throw new Error(`Payout ${payoutId} nao encontrado`)
 
-  const updated = await prisma.referralPayout.update({
-    where: { id: payoutId },
-    data: {
-      status: "FAILED",
-      failureReason: reason,
-      processedAt: new Date(),
-    },
-  })
-
-  // Desvincula comissoes (continuam AVAILABLE)
-  await prisma.referralCommission.updateMany({
-    where: { payoutId },
-    data: { payoutId: null },
+  // Marca FAILED e desvincula os dois motores numa unica transacao — senao uma
+  // falha parcial deixaria comissoes presas em payoutId=<falhado>, nunca mais
+  // recolhidas (cron e requestPayout exigem payoutId: null).
+  const updated = await prisma.$transaction(async (tx) => {
+    const u = await tx.referralPayout.update({
+      where: { id: payoutId },
+      data: {
+        status: "FAILED",
+        failureReason: reason,
+        processedAt: new Date(),
+      },
+    })
+    await tx.referralCommission.updateMany({
+      where: { payoutId },
+      data: { payoutId: null },
+    })
+    await tx.referralMonthlyCommission.updateMany({
+      where: { payoutId },
+      data: { payoutId: null },
+    })
+    return u
   })
 
   await createNotification({
@@ -329,37 +411,64 @@ export async function processMonthlyPayouts(): Promise<{
     })
   }
 
+  // 1b. Promove tambem as comissoes mensais por faixas (motor MONTHLY_TIERED).
+  const eligibleMonthly = await prisma.referralMonthlyCommission.findMany({
+    where: { status: "PENDING", availableAt: { lte: now } },
+    select: { id: true },
+  })
+  if (eligibleMonthly.length > 0) {
+    await prisma.referralMonthlyCommission.updateMany({
+      where: { id: { in: eligibleMonthly.map((c) => c.id) } },
+      data: { status: "AVAILABLE" },
+    })
+  }
+
   // 2. Cria payouts automaticos para todos os referrers com saldo AVAILABLE
   // (independente do minimo — pagamento e mensal sem solicitacao).
   // Inclui comissoes que ja estavam AVAILABLE de meses anteriores e ainda nao
   // tinham payout (raro, mas pode ocorrer se houve falha no cron passado).
-  const availableUnattached = await prisma.referralCommission.findMany({
-    where: {
-      status: "AVAILABLE",
-      payoutId: null,
-    },
-    select: { id: true, referrerTenantId: true, amount: true },
-  })
+  // Agrega os DOIS motores (por pagamento + por faixas) no mesmo payout.
+  const [availableUnattached, monthlyUnattached] = await Promise.all([
+    prisma.referralCommission.findMany({
+      where: { status: "AVAILABLE", payoutId: null },
+      select: { id: true, referrerTenantId: true, amount: true },
+    }),
+    prisma.referralMonthlyCommission.findMany({
+      where: { status: "AVAILABLE", payoutId: null },
+      select: { id: true, referrerTenantId: true, amount: true },
+    }),
+  ])
 
-  // Agrupa por referrer
+  // Agrupa por referrer (ids separados por motor para vincular cada tabela)
   const byReferrer = new Map<
     string,
-    { total: Prisma.Decimal; ids: string[] }
+    { total: Prisma.Decimal; ids: string[]; monthlyIds: string[] }
   >()
   for (const c of availableUnattached) {
     const cur = byReferrer.get(c.referrerTenantId) ?? {
       total: new Prisma.Decimal(0),
       ids: [],
+      monthlyIds: [],
     }
     cur.total = cur.total.add(c.amount)
     cur.ids.push(c.id)
+    byReferrer.set(c.referrerTenantId, cur)
+  }
+  for (const c of monthlyUnattached) {
+    const cur = byReferrer.get(c.referrerTenantId) ?? {
+      total: new Prisma.Decimal(0),
+      ids: [],
+      monthlyIds: [],
+    }
+    cur.total = cur.total.add(c.amount)
+    cur.monthlyIds.push(c.id)
     byReferrer.set(c.referrerTenantId, cur)
   }
 
   let payoutsCreated = 0
   let notifiedTenants = 0
 
-  for (const [tenantId, { total, ids }] of byReferrer.entries()) {
+  for (const [tenantId, { total, ids, monthlyIds }] of byReferrer.entries()) {
     // BLOQUEIO POR CLAWBACK: se houver alguma comissão PAID marcada como
     // CLAWBACK_PENDING para este referrer, NÃO criamos payout automático
     // até admin resolver. O cancelReason começa com [CLAWBACK_PENDING] —
@@ -372,7 +481,18 @@ export async function processMonthlyPayouts(): Promise<{
       },
       select: { id: true, amount: true },
     })
-    if (clawbackPending) {
+    // Mesmo bloqueio para o motor por faixas (refund de mensalidade marca a
+    // comissão mensal AVAILABLE/PAID com [CLAWBACK_PENDING]).
+    const clawbackMonthly = clawbackPending
+      ? null
+      : await prisma.referralMonthlyCommission.findFirst({
+          where: {
+            referrerTenantId: tenantId,
+            cancelReason: { startsWith: "[CLAWBACK_PENDING]" },
+          },
+          select: { id: true },
+        })
+    if (clawbackPending || clawbackMonthly) {
       await createNotification({
         audience: "ROLE",
         roleTarget: "SUPER_ADMIN",
@@ -422,16 +542,38 @@ export async function processMonthlyPayouts(): Promise<{
       })
 
       // CAS: só vincula comissões que ainda estão sem payout. Se outro processo
-      // pegou as mesmas comissões enquanto montávamos o payout, este updateMany
-      // devolve count=0 e jogamos fora o payout (throw aborta a transação).
-      const linked = await tx.referralCommission.updateMany({
-        where: { id: { in: ids }, payoutId: null, status: "AVAILABLE" },
-        data: { payoutId: payout.id },
-      })
-      if (linked.count === 0) {
+      // pegou as mesmas comissões enquanto montávamos o payout, estes updateMany
+      // devolvem count=0 e jogamos fora o payout (throw aborta a transação).
+      // Vincula os dois motores (por pagamento + por faixas) ao mesmo payout.
+      const [linked, linkedMonthly] = await Promise.all([
+        tx.referralCommission.updateMany({
+          where: { id: { in: ids }, payoutId: null, status: "AVAILABLE" },
+          data: { payoutId: payout.id },
+        }),
+        tx.referralMonthlyCommission.updateMany({
+          where: { id: { in: monthlyIds }, payoutId: null, status: "AVAILABLE" },
+          data: { payoutId: payout.id },
+        }),
+      ])
+      // Exige vinculo TOTAL: o payout foi criado com amount=total (soma de
+      // todos os ids). Se uma execucao concorrente ja pegou parte das
+      // comissoes, vincularia menos que o esperado e o amount ficaria inflado
+      // (over-pay). Abortamos e o referrer entra na proxima execucao limpa.
+      if (
+        linked.count !== ids.length ||
+        linkedMonthly.count !== monthlyIds.length
+      ) {
         throw new Error("payout_race_detected")
       }
       return { tenant, payout, hasPix }
+    }).catch((err) => {
+      // Race com execucao concorrente (vinculo parcial/total tomado por outra
+      // run). Pula este referrer — ele entra limpo na proxima execucao — sem
+      // abortar o cron inteiro.
+      if (err instanceof Error && err.message === "payout_race_detected") {
+        return null
+      }
+      throw err
     })
 
     if (!txResult) continue
@@ -467,7 +609,7 @@ export async function processMonthlyPayouts(): Promise<{
   }
 
   return {
-    released: eligible.length,
+    released: eligible.length + eligibleMonthly.length,
     payoutsCreated,
     notifiedTenants,
   }

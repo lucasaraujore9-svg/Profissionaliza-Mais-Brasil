@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { createNotification } from "@/lib/notifications"
 import { contextLogger } from "@/lib/logger"
 import { parseReferralTiers, resolveTierPercent } from "@/lib/referrals/tiers"
+import { resolveCommissionRule } from "@/lib/referrals/rules"
 
 const SETTINGS_ID = "default"
 const DEFAULT_PERCENT = 5
@@ -43,6 +44,11 @@ async function readReferralSettings() {
       referralPayoutDay: true,
       referralMinPayout: true,
       defaultReferralMinReferrals: true,
+      commissionMode: true,
+      commissionBracketBasis: true,
+      commissionRateType: true,
+      commissionPayoutBase: true,
+      commissionBrackets: true,
     },
   })
   return {
@@ -52,7 +58,38 @@ async function readReferralSettings() {
     minPayout: Number(row?.referralMinPayout ?? 50),
     defaultMinReferrals:
       row?.defaultReferralMinReferrals ?? DEFAULT_MIN_REFERRALS,
+    // Config global do motor por faixas — usada para decidir se ESTE indicador
+    // opera por pagamento (legado) ou por fechamento mensal (MONTHLY_TIERED).
+    commissionGlobal: row
+      ? {
+          commissionMode: row.commissionMode,
+          commissionBracketBasis: row.commissionBracketBasis,
+          commissionRateType: row.commissionRateType,
+          commissionPayoutBase: row.commissionPayoutBase,
+          commissionBrackets: row.commissionBrackets,
+        }
+      : null,
   }
+}
+
+/**
+ * True se o indicador opera no motor MONTHLY_TIERED (faixas). Nesse caso as
+ * comissoes NAO sao criadas por pagamento — o fechamento mensal
+ * (src/lib/referrals/monthly.ts) apura tudo. Resolve override (Tenant) sobre o
+ * padrao global (SystemSettings).
+ */
+function referrerUsesMonthlyEngine(
+  referrer: {
+    commissionMode: import("@prisma/client").CommissionMode | null
+    commissionBracketBasis: import("@prisma/client").CommissionBracketBasis | null
+    commissionRateType: import("@prisma/client").CommissionRateType | null
+    commissionPayoutBase: import("@prisma/client").CommissionPayoutBase | null
+    commissionBrackets: Prisma.JsonValue | null
+  },
+  settings: ReferralSettings,
+): boolean {
+  if (!settings.commissionGlobal) return false
+  return resolveCommissionRule(referrer, settings.commissionGlobal).mode === "MONTHLY_TIERED"
 }
 
 type ReferralSettings = Awaited<ReturnType<typeof readReferralSettings>>
@@ -210,9 +247,18 @@ export async function backfillReferrerCommissions(
       id: true,
       referralMinReferrals: true,
       owner: { select: { email: true } },
+      commissionMode: true,
+      commissionBracketBasis: true,
+      commissionRateType: true,
+      commissionPayoutBase: true,
+      commissionBrackets: true,
     },
   })
   if (!referrer) return 0
+
+  // Modo por faixas: o fechamento mensal (monthly.ts) cuida; nao retrocria
+  // comissoes por pagamento para esse indicador.
+  if (referrerUsesMonthlyEngine(referrer, settings)) return 0
 
   const minReferrals = referrer.referralMinReferrals ?? settings.defaultMinReferrals
   if (minReferrals > 0) {
@@ -323,9 +369,18 @@ export async function createCommissionForTenantPayment(
       id: true,
       referralMinReferrals: true,
       owner: { select: { email: true } },
+      commissionMode: true,
+      commissionBracketBasis: true,
+      commissionRateType: true,
+      commissionPayoutBase: true,
+      commissionBrackets: true,
     },
   })
   if (!referrer) return null
+
+  // Modo por faixas: comissao apurada no fechamento mensal (monthly.ts), nunca
+  // por pagamento individual. Nao cria ReferralCommission para esse indicador.
+  if (referrerUsesMonthlyEngine(referrer, settings)) return null
 
   // GATE: a unidade indicadora so recebe comissao de recorrencia depois de
   // atingir o minimo de indicacoes ATIVAS (override por unidade ou padrao
@@ -451,7 +506,10 @@ export interface ReferralSummary {
   available: number
   paid: number
   cancelled: number
+  /** Total de unidades indicadas (qualquer status). */
   totalReferrals: number
+  /** Unidades indicadas ATIVAS — é esta a métrica exibida como "indicados ativos". */
+  activeReferrals: number
   totalGenerated: number
 }
 
@@ -459,14 +517,36 @@ export interface ReferralSummary {
  * Retorna totais por tenant (referrer): pendente / disponivel / pago / cancelado.
  */
 export async function summaryForTenant(referrerTenantId: string): Promise<ReferralSummary> {
-  const [grouped, referralsCount, totalGenerated] = await Promise.all([
+  // Soma os DOIS motores: por pagamento (ReferralCommission) + por faixas
+  // (ReferralMonthlyCommission). Os tiles do painel refletem o total real.
+  const [
+    grouped,
+    monthlyGrouped,
+    referralsCount,
+    activeReferralsCount,
+    totalGenerated,
+    monthlyTotalGenerated,
+  ] = await Promise.all([
     prisma.referralCommission.groupBy({
       by: ["status"],
       where: { referrerTenantId },
       _sum: { amount: true },
     }),
+    prisma.referralMonthlyCommission.groupBy({
+      by: ["status"],
+      where: { referrerTenantId },
+      _sum: { amount: true },
+    }),
     prisma.tenant.count({ where: { referrerTenantId } }),
+    prisma.tenant.count({ where: { referrerTenantId, status: "ACTIVE" } }),
     prisma.referralCommission.aggregate({
+      where: {
+        referrerTenantId,
+        status: { in: ["PENDING", "AVAILABLE", "PAID"] },
+      },
+      _sum: { amount: true },
+    }),
+    prisma.referralMonthlyCommission.aggregate({
       where: {
         referrerTenantId,
         status: { in: ["PENDING", "AVAILABLE", "PAID"] },
@@ -482,7 +562,10 @@ export async function summaryForTenant(referrerTenantId: string): Promise<Referr
     CANCELLED: 0,
   }
   for (const g of grouped) {
-    totals[g.status] = Number(g._sum.amount ?? 0)
+    totals[g.status] += Number(g._sum.amount ?? 0)
+  }
+  for (const g of monthlyGrouped) {
+    totals[g.status] += Number(g._sum.amount ?? 0)
   }
 
   return {
@@ -491,6 +574,9 @@ export async function summaryForTenant(referrerTenantId: string): Promise<Referr
     paid: totals.PAID,
     cancelled: totals.CANCELLED,
     totalReferrals: referralsCount,
-    totalGenerated: Number(totalGenerated._sum.amount ?? 0),
+    activeReferrals: activeReferralsCount,
+    totalGenerated:
+      Number(totalGenerated._sum.amount ?? 0) +
+      Number(monthlyTotalGenerated._sum.amount ?? 0),
   }
 }

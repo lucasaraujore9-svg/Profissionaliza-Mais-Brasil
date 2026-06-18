@@ -6,6 +6,7 @@ import { requireAdminSession } from "@/lib/auth/admin-session"
 import { PageHeader } from "@/components/painel/page-header"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { ClawbackResolver } from "@/components/admin/clawback-resolver"
 import {
   Table,
   TableBody,
@@ -96,6 +97,38 @@ export default async function AdminComissoesPage({
     take: 500,
   })
 
+  // Clawbacks pendentes (estorno apos comissao liberada/paga) dos dois motores.
+  // So SUPER_ADMIN e PMB_FINANCEIRO podem resolver (endpoint gated igual).
+  const canResolve =
+    session.role === "SUPER_ADMIN" || session.role === "PMB_FINANCEIRO"
+  const [legacyClawbacks, monthlyClawbacks] = await Promise.all([
+    prisma.referralCommission.findMany({
+      where: { cancelReason: { startsWith: "[CLAWBACK_PENDING]" } },
+      select: {
+        id: true,
+        amount: true,
+        cancelReason: true,
+        referrer: { select: { name: true } },
+        referred: { select: { name: true } },
+      },
+      orderBy: { cancelledAt: "desc" },
+      take: 100,
+    }),
+    prisma.referralMonthlyCommission.findMany({
+      where: { cancelReason: { startsWith: "[CLAWBACK_PENDING]" } },
+      select: {
+        id: true,
+        amount: true,
+        period: true,
+        cancelReason: true,
+        referrer: { select: { name: true } },
+      },
+      orderBy: { cancelledAt: "desc" },
+      take: 100,
+    }),
+  ])
+  const clawbackCount = legacyClawbacks.length + monthlyClawbacks.length
+
   return (
     <div className="space-y-6">
       <Link
@@ -118,6 +151,72 @@ export default async function AdminComissoesPage({
           Exportar CSV
         </a>
       </div>
+
+      {clawbackCount > 0 ? (
+        <Card className="overflow-hidden border-red-200">
+          <div className="border-b border-red-100 bg-red-50 px-4 py-3">
+            <h2 className="text-sm font-semibold text-red-800">
+              Clawbacks pendentes ({clawbackCount})
+            </h2>
+            <p className="text-xs text-red-700">
+              Mensalidades estornadas após a comissão já estar liberada/paga. Os
+              payouts automáticos do indicador ficam bloqueados até resolver
+              {canResolve ? "." : " (apenas SUPER_ADMIN/Financeiro resolvem)."}
+            </p>
+          </div>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Indicador</TableHead>
+                <TableHead>Origem</TableHead>
+                <TableHead className="text-right">Valor</TableHead>
+                <TableHead>Motivo</TableHead>
+                {canResolve ? <TableHead className="text-right">Ações</TableHead> : null}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {legacyClawbacks.map((c) => (
+                <TableRow key={`legacy-${c.id}`}>
+                  <TableCell className="font-medium">{c.referrer.name}</TableCell>
+                  <TableCell className="text-xs text-gray-600">
+                    Por pagamento · {c.referred.name}
+                  </TableCell>
+                  <TableCell className="text-right font-mono">
+                    {formatMoney(Number(c.amount))}
+                  </TableCell>
+                  <TableCell className="text-xs text-gray-600">
+                    {c.cancelReason}
+                  </TableCell>
+                  {canResolve ? (
+                    <TableCell className="text-right">
+                      <ClawbackResolver ledger="LEGACY" id={c.id} />
+                    </TableCell>
+                  ) : null}
+                </TableRow>
+              ))}
+              {monthlyClawbacks.map((c) => (
+                <TableRow key={`monthly-${c.id}`}>
+                  <TableCell className="font-medium">{c.referrer.name}</TableCell>
+                  <TableCell className="text-xs text-gray-600">
+                    Por faixas · {c.period}
+                  </TableCell>
+                  <TableCell className="text-right font-mono">
+                    {formatMoney(Number(c.amount))}
+                  </TableCell>
+                  <TableCell className="text-xs text-gray-600">
+                    {c.cancelReason}
+                  </TableCell>
+                  {canResolve ? (
+                    <TableCell className="text-right">
+                      <ClawbackResolver ledger="MONTHLY" id={c.id} />
+                    </TableCell>
+                  ) : null}
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </Card>
+      ) : null}
 
       <form className="flex flex-wrap items-center gap-3 text-sm" method="get">
         <label className="flex items-center gap-2">

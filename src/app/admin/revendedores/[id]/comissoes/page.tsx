@@ -1,9 +1,8 @@
 import { notFound, redirect } from "next/navigation"
-import Link from "next/link"
-import { ArrowLeft } from "lucide-react"
 import { prisma } from "@/lib/prisma"
 import { requireAdminSession } from "@/lib/auth/admin-session"
 import { PageHeader } from "@/components/painel/page-header"
+import { ResellerBackLink } from "@/components/admin/reseller-back-link"
 import {
   ResellerCommissionsTabs,
   type CommissionRow,
@@ -123,16 +122,13 @@ export default async function ResellerCommissionsPage({
 
   return (
     <div className="space-y-6">
-      <Link
+      <ResellerBackLink
         href={`/admin/revendedores/${id}`}
-        className="inline-flex items-center gap-2 text-xs font-semibold text-gray-600 hover:text-[var(--color-pmb-green-900)]"
-      >
-        <ArrowLeft className="h-3.5 w-3.5" />
-        Voltar para revendedor
-      </Link>
+        label="Voltar para revendedor"
+      />
       <PageHeader
-        title={`Comissoes - ${tenant.name}`}
-        description={`Detalhamento de comissoes recebidas e geradas por ${tenant.slug}.`}
+        title={`Comissões - ${tenant.name}`}
+        description={`Detalhamento de comissões recebidas e geradas por ${tenant.slug}.`}
       />
       <ResellerCommissionsTabs
         tenantId={id}

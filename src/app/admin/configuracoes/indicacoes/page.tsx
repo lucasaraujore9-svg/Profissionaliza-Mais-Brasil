@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { requireAdminSession } from "@/lib/auth/admin-session"
 import { PageHeader } from "@/components/painel/page-header"
 import { AdminReferralSettingsForm } from "@/components/admin/admin-referral-settings-form"
+import { parseBrackets } from "@/lib/referrals/rules"
 
 export const dynamic = "force-dynamic"
 
@@ -22,6 +23,11 @@ export default async function AdminReferralSettingsPage() {
       defaultReferralPercent: true,
       referralMinPayout: true,
       referralPayoutDay: true,
+      commissionMode: true,
+      commissionBracketBasis: true,
+      commissionRateType: true,
+      commissionPayoutBase: true,
+      commissionBrackets: true,
     },
   })
 
@@ -46,6 +52,11 @@ export default async function AdminReferralSettingsPage() {
           defaultReferralPercent: Number(settings.defaultReferralPercent),
           referralMinPayout: Number(settings.referralMinPayout),
           referralPayoutDay: settings.referralPayoutDay,
+          commissionMode: settings.commissionMode,
+          commissionBracketBasis: settings.commissionBracketBasis,
+          commissionRateType: settings.commissionRateType,
+          commissionPayoutBase: settings.commissionPayoutBase,
+          commissionBrackets: parseBrackets(settings.commissionBrackets),
         }}
       />
     </div>

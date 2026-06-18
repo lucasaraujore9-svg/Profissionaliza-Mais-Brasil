@@ -62,11 +62,16 @@ export const GET = withRequestContext(
     if (filter.gte || filter.lte) where.requestedAt = filter
   }
 
-  // Escopo por papel (espelha approve/fail e a pagina /admin/indicacoes):
-  // PMB_SALES nao acessa financeiro de indicacao; PMB_RESELLER_MGR so enxerga
-  // saques de tenants atribuidos a ele (PIX/valores sao PII financeira).
-  // SUPER_ADMIN ve todos.
-  if (session.role === "PMB_SALES") {
+  // Escopo por papel (espelha a pagina /admin/indicacoes/saques): allowlist
+  // explicita — só SUPER_ADMIN, PMB_FINANCEIRO e PMB_RESELLER_MGR veem saques.
+  // PIX/valores/transferId são PII financeira; um deny-list (só 403 PMB_SALES)
+  // vazava tudo para PMB_SALES_MGR e PMB_REVENDA_SALES, que caíam no fallback
+  // sem filtro. PMB_RESELLER_MGR continua restrito aos tenants que gerencia.
+  if (
+    session.role !== "SUPER_ADMIN" &&
+    session.role !== "PMB_FINANCEIRO" &&
+    session.role !== "PMB_RESELLER_MGR"
+  ) {
     return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
   }
   if (session.role === "PMB_RESELLER_MGR") {
@@ -95,7 +100,7 @@ export const GET = withRequestContext(
       proofUploadedAt: true,
       referrer: { select: { id: true, name: true, slug: true } },
       markedPaidBy: { select: { id: true, name: true, email: true } },
-      _count: { select: { commissions: true } },
+      _count: { select: { commissions: true, monthlyCommissions: true } },
       commissions: {
         select: {
           id: true,
@@ -107,6 +112,24 @@ export const GET = withRequestContext(
         },
         take: 50,
         orderBy: { createdAt: "desc" },
+      },
+      // Comissoes do motor por faixas (MONTHLY_TIERED) liquidadas neste payout.
+      monthlyCommissions: {
+        select: {
+          id: true,
+          period: true,
+          rateType: true,
+          bracketBasis: true,
+          payoutBase: true,
+          bracketCount: true,
+          rate: true,
+          unitCount: true,
+          baseSum: true,
+          amount: true,
+          status: true,
+        },
+        take: 24,
+        orderBy: { period: "desc" },
       },
     },
     orderBy: { requestedAt: "desc" },
@@ -133,6 +156,7 @@ export const GET = withRequestContext(
       proofUrl: p.proofUrl,
       proofUploadedAt: p.proofUploadedAt?.toISOString() ?? null,
       commissionCount: p._count.commissions,
+      monthlyCommissionCount: p._count.monthlyCommissions,
       commissions: p.commissions.map((c) => ({
         id: c.id,
         amount: Number(c.amount),
@@ -142,6 +166,19 @@ export const GET = withRequestContext(
         referredId: c.referred.id,
         referredName: c.referred.name,
         referredSlug: c.referred.slug,
+      })),
+      monthlyCommissions: p.monthlyCommissions.map((m) => ({
+        id: m.id,
+        period: m.period,
+        rateType: m.rateType,
+        bracketBasis: m.bracketBasis,
+        payoutBase: m.payoutBase,
+        bracketCount: m.bracketCount,
+        rate: Number(m.rate),
+        unitCount: m.unitCount,
+        baseSum: Number(m.baseSum),
+        amount: Number(m.amount),
+        status: m.status,
       })),
       markedPaidBy: p.markedPaidBy
         ? {

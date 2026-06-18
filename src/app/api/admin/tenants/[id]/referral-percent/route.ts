@@ -5,12 +5,18 @@ import { prisma } from "@/lib/prisma"
 import { requireAdminSession } from "@/lib/auth/admin-session"
 import { canManageCommissions } from "@/lib/auth/roles"
 import { sortTiers } from "@/lib/referrals/tiers"
+import { sortBrackets } from "@/lib/referrals/rules"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 
 const tierSchema = z.object({
   // null = "deste mes em diante" (sem teto). >=1 caso contrario.
   untilMonth: z.number().int().min(1).max(600).nullable(),
   percent: z.number().min(0).max(100),
+})
+
+const bracketSchema = z.object({
+  upTo: z.number().int().min(1).nullable(),
+  value: z.number().min(0),
 })
 
 const bodySchema = z
@@ -23,13 +29,43 @@ const bodySchema = z
     // Escala de comissao desta unidade (quando indicada). [] ou null limpam a
     // escala (volta ao percentual fixo). Max 12 faixas.
     tiers: z.array(tierSchema).max(12).nullable().optional(),
+    // Override do motor por faixas para ESTA unidade (null em cada campo =>
+    // herda o padrao global de SystemSettings).
+    commissionMode: z
+      .enum(["PER_PAYMENT_PERCENT", "MONTHLY_TIERED"])
+      .nullable()
+      .optional(),
+    commissionBracketBasis: z
+      .enum(["NEW_REFERRALS_MONTH", "ACTIVE_UNITS"])
+      .nullable()
+      .optional(),
+    commissionRateType: z.enum(["FIXED", "PERCENT"]).nullable().optional(),
+    commissionPayoutBase: z
+      .enum(["ALL_ACTIVE", "REFERRED_THIS_MONTH"])
+      .nullable()
+      .optional(),
+    commissionBrackets: z.array(bracketSchema).max(20).nullable().optional(),
   })
   .refine(
     (data) =>
       data.percent !== undefined ||
       data.minReferrals !== undefined ||
-      data.tiers !== undefined,
-    { message: "Informe percent, minReferrals e/ou tiers" },
+      data.tiers !== undefined ||
+      data.commissionMode !== undefined ||
+      data.commissionBracketBasis !== undefined ||
+      data.commissionRateType !== undefined ||
+      data.commissionPayoutBase !== undefined ||
+      data.commissionBrackets !== undefined,
+    { message: "Informe ao menos um campo para atualizar" },
+  )
+  .refine(
+    (data) =>
+      !data.commissionBrackets ||
+      data.commissionBrackets.filter((b) => b.upTo === null).length <= 1,
+    {
+      message: "Apenas uma faixa pode ser 'sem teto' (upTo null)",
+      path: ["commissionBrackets"],
+    },
   )
 
 export const PUT = withRequestContextParams<{ id: string }>(
@@ -87,6 +123,25 @@ export const PUT = withRequestContextParams<{ id: string }>(
         ? (sortTiers(parsed.data.tiers) as unknown as Prisma.InputJsonValue)
         : Prisma.DbNull
   }
+  // Override do motor por faixas (null => herda o global).
+  if (parsed.data.commissionMode !== undefined) {
+    data.commissionMode = parsed.data.commissionMode
+  }
+  if (parsed.data.commissionBracketBasis !== undefined) {
+    data.commissionBracketBasis = parsed.data.commissionBracketBasis
+  }
+  if (parsed.data.commissionRateType !== undefined) {
+    data.commissionRateType = parsed.data.commissionRateType
+  }
+  if (parsed.data.commissionPayoutBase !== undefined) {
+    data.commissionPayoutBase = parsed.data.commissionPayoutBase
+  }
+  if (parsed.data.commissionBrackets !== undefined) {
+    data.commissionBrackets =
+      parsed.data.commissionBrackets && parsed.data.commissionBrackets.length > 0
+        ? (sortBrackets(parsed.data.commissionBrackets) as unknown as Prisma.InputJsonValue)
+        : Prisma.DbNull
+  }
 
   const updated = await prisma.tenant.update({
     where: { id },
@@ -96,6 +151,11 @@ export const PUT = withRequestContextParams<{ id: string }>(
       referralPercent: true,
       referralMinReferrals: true,
       referralTiers: true,
+      commissionMode: true,
+      commissionBracketBasis: true,
+      commissionRateType: true,
+      commissionPayoutBase: true,
+      commissionBrackets: true,
     },
   })
 
@@ -106,6 +166,11 @@ export const PUT = withRequestContextParams<{ id: string }>(
         updated.referralPercent != null ? Number(updated.referralPercent) : null,
       referralMinReferrals: updated.referralMinReferrals ?? null,
       referralTiers: updated.referralTiers ?? null,
+      commissionMode: updated.commissionMode,
+      commissionBracketBasis: updated.commissionBracketBasis,
+      commissionRateType: updated.commissionRateType,
+      commissionPayoutBase: updated.commissionPayoutBase,
+      commissionBrackets: updated.commissionBrackets,
     },
   })
   },

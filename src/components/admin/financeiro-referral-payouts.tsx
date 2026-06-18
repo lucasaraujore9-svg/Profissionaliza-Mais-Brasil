@@ -7,14 +7,30 @@ import {
   CheckCircle2,
   Download,
   FileText,
+  Inbox,
   Loader2,
+  MoreHorizontal,
   RefreshCw,
   Search,
   StickyNote,
+  Upload,
 } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import {
   Sheet,
   SheetContent,
@@ -22,6 +38,15 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet"
+import { cn } from "@/lib/utils"
+import { EmptyState } from "@/components/shared/empty-state"
+import { FinanceStatusBadge } from "./finance-status"
+import {
+  formatDate,
+  formatDateTime,
+  formatMoney,
+  notePreview,
+} from "@/lib/admin/finance-format"
 import { FinanceiroMarkPaidDialog } from "./financeiro-mark-paid-dialog"
 import {
   FinanceiroFailPayoutDialog,
@@ -37,6 +62,20 @@ interface ReferralCommissionRow {
   referredId: string
   referredName: string
   referredSlug: string
+}
+
+interface ReferralMonthlyCommissionRow {
+  id: string
+  period: string
+  rateType: "FIXED" | "PERCENT"
+  bracketBasis: "NEW_REFERRALS_MONTH" | "ACTIVE_UNITS"
+  payoutBase: "ALL_ACTIVE" | "REFERRED_THIS_MONTH"
+  bracketCount: number
+  rate: number
+  unitCount: number
+  baseSum: number
+  amount: number
+  status: string
 }
 
 interface ReferralPayoutRow {
@@ -59,7 +98,22 @@ interface ReferralPayoutRow {
   proofUploadedAt: string | null
   commissionCount: number
   commissions: ReferralCommissionRow[]
+  monthlyCommissionCount: number
+  monthlyCommissions: ReferralMonthlyCommissionRow[]
   markedPaidBy: { id: string; name: string } | null
+}
+
+const BASIS_LABEL: Record<string, string> = {
+  NEW_REFERRALS_MONTH: "indicações no mês",
+  ACTIVE_UNITS: "unidades ativas",
+}
+const PAYOUT_BASE_LABEL: Record<string, string> = {
+  ALL_ACTIVE: "todas ativas",
+  REFERRED_THIS_MONTH: "indicadas no mês",
+}
+function formatPeriod(period: string): string {
+  const m = /^(\d{4})-(\d{2})$/.exec(period)
+  return m ? `${m[2]}/${m[1]}` : period
 }
 
 const STATUS_OPTIONS: { value: string; label: string }[] = [
@@ -72,53 +126,10 @@ const STATUS_OPTIONS: { value: string; label: string }[] = [
   { value: "CANCELLED", label: "Cancelados" },
 ]
 
-const STATUS_STYLES: Record<string, string> = {
-  REQUESTED: "bg-amber-100 text-amber-700",
-  PROCESSING: "bg-blue-100 text-blue-700",
-  PAID: "bg-emerald-100 text-emerald-700",
-  FAILED: "bg-rose-100 text-rose-700",
-  CANCELLED: "bg-gray-200 text-gray-600",
-}
-const STATUS_LABEL: Record<string, string> = {
-  REQUESTED: "solicitado",
-  PROCESSING: "processando",
-  PAID: "pago",
-  FAILED: "recusado",
-  CANCELLED: "cancelado",
-}
 const METHOD_LABEL: Record<string, string> = {
   ASAAS_PIX: "PIX (Asaas)",
   DESCONTO_MENSALIDADE: "Desconto",
   MANUAL: "Manual",
-}
-
-function formatMoney(v: number): string {
-  return new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  }).format(v)
-}
-function formatDate(iso: string | null): string {
-  if (!iso) return "—"
-  try {
-    return new Date(iso).toLocaleDateString("pt-BR")
-  } catch {
-    return iso
-  }
-}
-function formatDateTime(iso: string | null): string {
-  if (!iso) return "—"
-  try {
-    return new Date(iso).toLocaleString("pt-BR")
-  } catch {
-    return iso
-  }
-}
-function notePreview(notes: string | null): string {
-  if (!notes) return ""
-  const lines = notes.split("\n").filter((l) => l.trim().length > 0)
-  const last = lines[lines.length - 1] ?? ""
-  return last.length > 60 ? last.slice(0, 57) + "..." : last
 }
 
 interface FinanceiroReferralPayoutsProps {
@@ -233,34 +244,17 @@ export function FinanceiroReferralPayouts({
   return (
     <div className="space-y-4">
       <div className="grid gap-3 sm:grid-cols-3">
-        <div className="rounded-2xl border border-amber-200 bg-amber-50/60 p-4">
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-700">
-            A pagar
-          </p>
-          <p className="mt-1 font-mono text-xl font-bold text-amber-900">
-            {formatMoney(totals.pending)}
-          </p>
-        </div>
-        <div className="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-4">
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-700">
-            Pagos (filtro atual)
-          </p>
-          <p className="mt-1 font-mono text-xl font-bold text-emerald-900">
-            {formatMoney(totals.paid)}
-          </p>
-        </div>
-        <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-600">
-            Total no filtro
-          </p>
-          <p className="mt-1 font-mono text-xl font-bold text-gray-800">
-            {rows.length}
-          </p>
-        </div>
+        <KpiCard tone="gold" label="A pagar" value={formatMoney(totals.pending)} />
+        <KpiCard
+          tone="green"
+          label="Pagos (filtro atual)"
+          value={formatMoney(totals.paid)}
+        />
+        <KpiCard tone="neutral" label="Total no filtro" value={String(rows.length)} />
       </div>
 
       <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
-        <div className="grid gap-3 lg:grid-cols-[1fr_auto_auto_auto_auto]">
+        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-[1fr_auto_auto_auto_auto]">
           <div className="space-y-1">
             <Label htmlFor="rp-search">Buscar indicador</Label>
             <div className="relative">
@@ -276,18 +270,18 @@ export function FinanceiroReferralPayouts({
           </div>
           <div className="space-y-1">
             <Label htmlFor="rp-status">Status</Label>
-            <select
-              id="rp-status"
-              value={status}
-              onChange={(e) => setStatus(e.target.value)}
-              className="h-9 w-full rounded-lg border border-input bg-transparent px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-            >
-              {STATUS_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
+            <Select value={status} onValueChange={(v) => setStatus(v ?? "all")}>
+              <SelectTrigger id="rp-status" className="h-9 w-full lg:w-56">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {STATUS_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div className="space-y-1">
             <Label htmlFor="rp-from">De</Label>
@@ -319,7 +313,10 @@ export function FinanceiroReferralPayouts({
             </Button>
             <a
               href={exportHref}
-              className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-md border border-input bg-background px-4 py-2 text-sm font-medium shadow-xs transition-colors hover:bg-accent hover:text-accent-foreground lg:w-auto"
+              className={cn(
+                buttonVariants({ variant: "outline", size: "lg" }),
+                "w-full lg:w-auto",
+              )}
             >
               <Download className="size-3.5" />
               Exportar CSV
@@ -351,13 +348,18 @@ export function FinanceiroReferralPayouts({
             Carregando...
           </div>
         ) : rows.length === 0 ? (
-          <div className="px-6 py-10 text-center text-xs text-gray-500">
-            Nenhum saque encontrado com os filtros aplicados.
+          <div className="p-4">
+            <EmptyState
+              icon={Inbox}
+              title="Nenhum saque encontrado"
+              description="Ajuste os filtros para ver outros saques de indicação."
+              className="border-none"
+            />
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[960px] text-sm">
-              <thead>
+              <thead className="sticky top-0 z-10">
                 <tr className="border-b border-gray-200 bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
                   <th className="px-6 py-3 font-medium">Indicador</th>
                   <th className="px-6 py-3 font-medium">Valor</th>
@@ -373,6 +375,7 @@ export function FinanceiroReferralPayouts({
                 {rows.map((r) => {
                   const isOpen =
                     r.status === "REQUESTED" || r.status === "PROCESSING"
+                  const showActions = isOpen && canMarkPaid
                   return (
                     <tr
                       key={r.id}
@@ -403,14 +406,7 @@ export function FinanceiroReferralPayouts({
                         )}
                       </td>
                       <td className="px-6 py-3">
-                        <span
-                          className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                            STATUS_STYLES[r.status] ??
-                            "bg-gray-100 text-gray-700"
-                          }`}
-                        >
-                          {STATUS_LABEL[r.status] ?? r.status.toLowerCase()}
-                        </span>
+                        <FinanceStatusBadge status={r.status} />
                       </td>
                       <td className="px-6 py-3 font-mono text-xs text-gray-600">
                         {formatDate(r.requestedAt)}
@@ -426,11 +422,10 @@ export function FinanceiroReferralPayouts({
                         )}
                       </td>
                       <td className="px-6 py-3">
-                        <div className="flex flex-wrap justify-end gap-1">
-                          {isOpen && canMarkPaid && (
+                        <div className="flex items-center justify-end gap-1">
+                          {showActions ? (
                             <Button
                               size="sm"
-                              variant="outline"
                               onClick={() => {
                                 setActionRow(r)
                                 setMarkPaidOpen(true)
@@ -439,41 +434,62 @@ export function FinanceiroReferralPayouts({
                               <CheckCircle2 className="size-3.5" />
                               Marcar pago
                             </Button>
-                          )}
-                          {isOpen && canMarkPaid && (
+                          ) : (
                             <Button
                               size="sm"
-                              variant="outline"
-                              onClick={() => {
-                                setActionRow(r)
-                                setFailOpen(true)
-                              }}
+                              variant="ghost"
+                              onClick={() => setDetailRow(r)}
                             >
-                              <Ban className="size-3.5" />
-                              Recusar
+                              <FileText className="size-3.5" />
+                              Detalhes
                             </Button>
                           )}
-                          {canMarkPaid && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => {
-                                setActionRow(r)
-                                setNoteOpen(true)
-                              }}
+                          <DropdownMenu>
+                            <DropdownMenuTrigger
+                              render={
+                                <Button
+                                  size="icon-sm"
+                                  variant="ghost"
+                                  aria-label="Mais ações"
+                                />
+                              }
                             >
-                              <StickyNote className="size-3.5" />
-                              Obs.
-                            </Button>
-                          )}
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => setDetailRow(r)}
-                          >
-                            <FileText className="size-3.5" />
-                            Detalhes
-                          </Button>
+                              <MoreHorizontal className="size-4" />
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              {showActions && (
+                                <DropdownMenuItem
+                                  onClick={() => setDetailRow(r)}
+                                >
+                                  <FileText className="size-3.5" />
+                                  Detalhes
+                                </DropdownMenuItem>
+                              )}
+                              {showActions && (
+                                <DropdownMenuItem
+                                  variant="destructive"
+                                  onClick={() => {
+                                    setActionRow(r)
+                                    setFailOpen(true)
+                                  }}
+                                >
+                                  <Ban className="size-3.5" />
+                                  Recusar
+                                </DropdownMenuItem>
+                              )}
+                              {canMarkPaid && (
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setActionRow(r)
+                                    setNoteOpen(true)
+                                  }}
+                                >
+                                  <StickyNote className="size-3.5" />
+                                  Observação
+                                </DropdownMenuItem>
+                              )}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         </div>
                       </td>
                     </tr>
@@ -555,8 +571,8 @@ export function FinanceiroReferralPayouts({
                     <div className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">
                       Status
                     </div>
-                    <div className="mt-0.5">
-                      {STATUS_LABEL[detailRow.status] ?? detailRow.status}
+                    <div className="mt-1">
+                      <FinanceStatusBadge status={detailRow.status} />
                     </div>
                   </div>
                   <div>
@@ -604,7 +620,7 @@ export function FinanceiroReferralPayouts({
                 </div>
 
                 {detailRow.markedPaidBy && (
-                  <div className="rounded-md bg-blue-50 px-3 py-2 text-xs text-blue-800">
+                  <div className="rounded-md bg-[var(--color-pmb-cyan-50)] px-3 py-2 text-xs text-[var(--color-pmb-cyan-700)]">
                     Marcado como pago por{" "}
                     <strong>{detailRow.markedPaidBy.name}</strong>
                   </div>
@@ -636,11 +652,16 @@ export function FinanceiroReferralPayouts({
                     </p>
                   )}
                   {canMarkPaid && (
-                    <label className="mt-2 inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-input bg-background px-3 py-1.5 text-xs font-medium shadow-xs transition-colors hover:bg-accent">
+                    <label
+                      className={cn(
+                        buttonVariants({ variant: "outline", size: "sm" }),
+                        "mt-2 cursor-pointer",
+                      )}
+                    >
                       {uploadingProof ? (
                         <Loader2 className="size-3.5 animate-spin" />
                       ) : (
-                        <Download className="size-3.5 rotate-180" />
+                        <Upload className="size-3.5" />
                       )}
                       {detailRow.proofUrl
                         ? "Substituir comprovante"
@@ -660,10 +681,12 @@ export function FinanceiroReferralPayouts({
                   )}
                 </div>
 
+                {(detailRow.commissions.length > 0 ||
+                  detailRow.monthlyCommissions.length === 0) && (
                 <div>
                   <div className="flex items-baseline justify-between">
                     <div className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">
-                      Comissões vinculadas
+                      Comissões por pagamento
                     </div>
                     <div className="text-[11px] text-gray-500">
                       {detailRow.commissionCount}{" "}
@@ -703,9 +726,7 @@ export function FinanceiroReferralPayouts({
                                 {formatMoney(c.amount)}
                               </td>
                               <td className="px-3 py-1.5">
-                                <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-semibold text-gray-700">
-                                  {c.status}
-                                </span>
+                                <FinanceStatusBadge status={c.status} />
                               </td>
                             </tr>
                           ))}
@@ -714,6 +735,48 @@ export function FinanceiroReferralPayouts({
                     </div>
                   )}
                 </div>
+                )}
+
+                {detailRow.monthlyCommissions.length > 0 && (
+                  <div>
+                    <div className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+                      Comissões por faixas (mensal)
+                    </div>
+                    <div className="mt-1.5 space-y-2">
+                      {detailRow.monthlyCommissions.map((m) => (
+                        <div
+                          key={m.id}
+                          className="rounded-md border border-gray-200 bg-gray-50 p-3 text-xs"
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="font-semibold text-[var(--color-pmb-green-900)]">
+                              {formatPeriod(m.period)}
+                            </span>
+                            <span className="font-mono font-semibold text-[var(--color-pmb-green-900)]">
+                              {formatMoney(m.amount)}
+                            </span>
+                          </div>
+                          <div className="mt-1 text-gray-600">
+                            Faixa: {m.bracketCount}{" "}
+                            {BASIS_LABEL[m.bracketBasis] ?? m.bracketBasis} →{" "}
+                            {m.rateType === "PERCENT"
+                              ? `${m.rate.toFixed(2)}%`
+                              : formatMoney(m.rate)}{" "}
+                            por unidade
+                          </div>
+                          <div className="text-gray-600">
+                            Base: {m.unitCount} unidade
+                            {m.unitCount === 1 ? "" : "s"} (
+                            {PAYOUT_BASE_LABEL[m.payoutBase] ?? m.payoutBase})
+                            {m.rateType === "PERCENT" && m.baseSum > 0
+                              ? ` · mensalidades ${formatMoney(m.baseSum)}`
+                              : ""}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 <div>
                   <div className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">
@@ -730,6 +793,49 @@ export function FinanceiroReferralPayouts({
           )}
         </SheetContent>
       </Sheet>
+    </div>
+  )
+}
+
+const KPI_TONE: Record<
+  "gold" | "green" | "neutral",
+  { card: string; label: string; value: string }
+> = {
+  gold: {
+    card: "border-[var(--color-pmb-gold)]/30 bg-[var(--color-pmb-gold)]/10",
+    label: "text-[var(--color-pmb-gold-600)]",
+    value: "text-[var(--color-pmb-gold-600)]",
+  },
+  green: {
+    card: "border-[var(--color-pmb-green)]/20 bg-[var(--color-pmb-lime-50)]",
+    label: "text-[var(--color-pmb-green-700)]",
+    value: "text-[var(--color-pmb-green-900)]",
+  },
+  neutral: {
+    card: "border-gray-200 bg-gray-50",
+    label: "text-gray-600",
+    value: "text-gray-800",
+  },
+}
+
+function KpiCard({
+  tone,
+  label,
+  value,
+}: {
+  tone: "gold" | "green" | "neutral"
+  label: string
+  value: string
+}) {
+  const t = KPI_TONE[tone]
+  return (
+    <div className={`rounded-2xl border p-4 ${t.card}`}>
+      <p
+        className={`text-[10px] font-semibold uppercase tracking-wide ${t.label}`}
+      >
+        {label}
+      </p>
+      <p className={`mt-1 font-mono text-xl font-bold ${t.value}`}>{value}</p>
     </div>
   )
 }

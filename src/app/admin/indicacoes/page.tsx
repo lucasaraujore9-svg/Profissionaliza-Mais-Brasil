@@ -33,7 +33,7 @@ export default async function AdminIndicacoesPage() {
     redirect("/admin")
   }
 
-  const [referrers, totals] = await Promise.all([
+  const [referrers, totals, monthlyTotals] = await Promise.all([
     prisma.tenant.findMany({
       where: {
         referrals: { some: {} },
@@ -42,14 +42,25 @@ export default async function AdminIndicacoesPage() {
         id: true,
         name: true,
         slug: true,
-        _count: { select: { referrals: true } },
+        // Status de cada indicada — para separar "ativos" do total (antes o
+        // _count somava qualquer status, mas era exibido como indicados).
+        referrals: { select: { status: true } },
         referralCommissionsReceived: {
+          select: { amount: true, status: true },
+        },
+        // Motor por faixas (MONTHLY_TIERED) — sem isto, indicadores no modo
+        // mensal apareciam zerados aqui (o painel já soma os dois).
+        referralMonthlyCommissions: {
           select: { amount: true, status: true },
         },
       },
       orderBy: { name: "asc" },
     }),
     prisma.referralCommission.groupBy({
+      by: ["status"],
+      _sum: { amount: true },
+    }),
+    prisma.referralMonthlyCommission.groupBy({
       by: ["status"],
       _sum: { amount: true },
     }),
@@ -62,7 +73,10 @@ export default async function AdminIndicacoesPage() {
     CANCELLED: 0,
   }
   for (const t of totals) {
-    totalsMap[t.status] = Number(t._sum.amount ?? 0)
+    totalsMap[t.status] += Number(t._sum.amount ?? 0)
+  }
+  for (const t of monthlyTotals) {
+    totalsMap[t.status] += Number(t._sum.amount ?? 0)
   }
 
   const items = referrers
@@ -77,11 +91,18 @@ export default async function AdminIndicacoesPage() {
           totals[c.status] += Number(c.amount)
         }
       }
+      for (const c of r.referralMonthlyCommissions) {
+        if (c.status === "PENDING" || c.status === "AVAILABLE" || c.status === "PAID") {
+          totals[c.status] += Number(c.amount)
+        }
+      }
       return {
         id: r.id,
         name: r.name,
         slug: r.slug,
-        referralsCount: r._count.referrals,
+        referralsCount: r.referrals.length,
+        activeReferralsCount: r.referrals.filter((x) => x.status === "ACTIVE")
+          .length,
         ...totals,
       }
     })
@@ -123,7 +144,7 @@ export default async function AdminIndicacoesPage() {
             <TableRow>
               <TableHead>Indicador</TableHead>
               <TableHead>Slug</TableHead>
-              <TableHead className="text-right">Qtd indicados</TableHead>
+              <TableHead className="text-right">Indicados ativos</TableHead>
               <TableHead className="text-right">Pendente</TableHead>
               <TableHead className="text-right">Disponível</TableHead>
               <TableHead className="text-right">Pago</TableHead>
@@ -148,7 +169,12 @@ export default async function AdminIndicacoesPage() {
                     </Link>
                   </TableCell>
                   <TableCell className="text-gray-500">{r.slug}</TableCell>
-                  <TableCell className="text-right">{r.referralsCount}</TableCell>
+                  <TableCell className="text-right">
+                    {r.activeReferralsCount}
+                    {r.referralsCount > r.activeReferralsCount ? (
+                      <span className="text-gray-400"> / {r.referralsCount}</span>
+                    ) : null}
+                  </TableCell>
                   <TableCell className="text-right font-mono">
                     {formatMoney(r.PENDING)}
                   </TableCell>

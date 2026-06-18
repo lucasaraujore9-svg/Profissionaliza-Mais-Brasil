@@ -6,8 +6,8 @@ import { PageHeader } from "@/components/painel/page-header"
 import { ensureReferralCode } from "@/lib/referrals/code"
 import { summaryForTenant } from "@/lib/referrals/commission"
 import { vitrineDomain } from "@/lib/tenant/urls"
+import { Users } from "lucide-react"
 import { Card } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 import {
   Table,
   TableBody,
@@ -16,7 +16,23 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { StatusBadge, type BadgeTone } from "@/components/shared/status-badge"
+import { EmptyState } from "@/components/shared/empty-state"
 import { ReferralLinkCopy } from "@/components/painel/referral-link-copy"
+
+const referralStatusTone: Record<string, BadgeTone> = {
+  ACTIVE: "success",
+  PENDING: "warning",
+  SUSPENDED: "danger",
+  CANCELLED: "neutral",
+}
+
+const commissionStatusTone: Record<string, BadgeTone> = {
+  PAID: "success",
+  AVAILABLE: "accent",
+  PENDING: "warning",
+  CANCELLED: "neutral",
+}
 
 export const dynamic = "force-dynamic"
 
@@ -71,6 +87,31 @@ function statusLabel(status: string): string {
   }
 }
 
+function commissionStatusLabel(status: string): string {
+  switch (status) {
+    case "PENDING":
+      return "Aguardando liberação"
+    case "AVAILABLE":
+      return "A receber"
+    case "PAID":
+      return "Pago"
+    case "CANCELLED":
+      return "Cancelado"
+    default:
+      return status
+  }
+}
+
+function formatPeriod(period: string): string {
+  const m = /^(\d{4})-(\d{2})$/.exec(period)
+  return m ? `${m[2]}/${m[1]}` : period
+}
+
+const bracketBasisNoun: Record<string, string> = {
+  NEW_REFERRALS_MONTH: "indicações no mês",
+  ACTIVE_UNITS: "unidades ativas",
+}
+
 export default async function PainelIndicacoesPage() {
   const session = await auth()
   const user = session?.user as
@@ -110,7 +151,7 @@ export default async function PainelIndicacoesPage() {
     year: "numeric",
   })
 
-  const [summary, referrals, payouts] = await Promise.all([
+  const [summary, referrals, payouts, monthlyCommissions] = await Promise.all([
     summaryForTenant(tenant.id),
     prisma.tenant.findMany({
       where: { referrerTenantId: tenant.id },
@@ -140,6 +181,23 @@ export default async function PainelIndicacoesPage() {
       },
       orderBy: { paidAt: "desc" },
       take: 36,
+    }),
+    // Comissoes do motor por faixas (mensal), quando esta unidade opera nesse modo.
+    prisma.referralMonthlyCommission.findMany({
+      where: { referrerTenantId: tenant.id },
+      select: {
+        id: true,
+        period: true,
+        rateType: true,
+        bracketCount: true,
+        bracketBasis: true,
+        rate: true,
+        unitCount: true,
+        amount: true,
+        status: true,
+      },
+      orderBy: { period: "desc" },
+      take: 12,
     }),
   ])
 
@@ -173,7 +231,15 @@ export default async function PainelIndicacoesPage() {
       </Card>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <SummaryTile label="Indicados ativos" value={String(summary.totalReferrals)} />
+        <SummaryTile
+          label="Indicados ativos"
+          value={String(summary.activeReferrals)}
+          hint={
+            summary.totalReferrals > summary.activeReferrals
+              ? `${summary.totalReferrals} no total`
+              : undefined
+          }
+        />
         <SummaryTile label="Pendente" value={formatMoney(summary.pending)} hint="Aguarda data de liberação" />
         <SummaryTile
           label="A receber"
@@ -261,11 +327,11 @@ export default async function PainelIndicacoesPage() {
           </h2>
           <Card className="overflow-hidden">
             <Table>
-              <TableHeader>
+              <TableHeader className="bg-[var(--color-pmb-green-900)]/10">
                 <TableRow>
-                  <TableHead>Pago em</TableHead>
-                  <TableHead className="text-right">Valor</TableHead>
-                  <TableHead>Comprovante</TableHead>
+                  <TableHead className="text-[var(--color-pmb-green-900)]">Pago em</TableHead>
+                  <TableHead className="text-right text-[var(--color-pmb-green-900)]">Valor</TableHead>
+                  <TableHead className="text-[var(--color-pmb-green-900)]">Comprovante</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -299,6 +365,55 @@ export default async function PainelIndicacoesPage() {
         </div>
       )}
 
+      {monthlyCommissions.length > 0 && (
+        <div className="space-y-3">
+          <h2 className="text-base font-semibold text-[var(--color-pmb-green-900)]">
+            Comissões por faixas (mensal)
+          </h2>
+          <Card className="overflow-hidden">
+            <Table>
+              <TableHeader className="bg-[var(--color-pmb-green-900)]/10">
+                <TableRow>
+                  <TableHead className="text-[var(--color-pmb-green-900)]">Mês</TableHead>
+                  <TableHead className="text-[var(--color-pmb-green-900)]">Faixa</TableHead>
+                  <TableHead className="text-right text-[var(--color-pmb-green-900)]">Unidades</TableHead>
+                  <TableHead className="text-right text-[var(--color-pmb-green-900)]">Valor</TableHead>
+                  <TableHead className="text-[var(--color-pmb-green-900)]">Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {monthlyCommissions.map((m) => (
+                  <TableRow key={m.id}>
+                    <TableCell className="font-medium">
+                      {formatPeriod(m.period)}
+                    </TableCell>
+                    <TableCell className="text-gray-600">
+                      {m.bracketCount}{" "}
+                      {bracketBasisNoun[m.bracketBasis] ?? "indicações"} →{" "}
+                      {m.rateType === "PERCENT"
+                        ? `${Number(m.rate).toFixed(2)}%`
+                        : formatMoney(Number(m.rate))}
+                      /unid.
+                    </TableCell>
+                    <TableCell className="text-right">{m.unitCount}</TableCell>
+                    <TableCell className="text-right font-mono font-semibold">
+                      {formatMoney(Number(m.amount))}
+                    </TableCell>
+                    <TableCell>
+                      <StatusBadge
+                        tone={commissionStatusTone[m.status] ?? "neutral"}
+                      >
+                        {commissionStatusLabel(m.status)}
+                      </StatusBadge>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </Card>
+        </div>
+      )}
+
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-base font-semibold text-[var(--color-pmb-green-900)]">
           Seus indicados ({referrals.length})
@@ -306,19 +421,21 @@ export default async function PainelIndicacoesPage() {
       </div>
 
       {referrals.length === 0 ? (
-        <Card className="p-8 text-center text-sm text-gray-500">
-          Você ainda não tem indicados. Compartilhe seu link acima.
-        </Card>
+        <EmptyState
+          icon={Users}
+          title="Você ainda não tem indicados"
+          description="Compartilhe seu link de indicação acima para começar a ganhar comissões recorrentes."
+        />
       ) : (
         <Card className="overflow-hidden">
           <Table>
-            <TableHeader>
+            <TableHeader className="bg-[var(--color-pmb-green-900)]/10">
               <TableRow>
-                <TableHead>Revendedor</TableHead>
-                <TableHead>Slug</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Indicado em</TableHead>
-                <TableHead className="text-right">Total gerado</TableHead>
+                <TableHead className="text-[var(--color-pmb-green-900)]">Revendedor</TableHead>
+                <TableHead className="text-[var(--color-pmb-green-900)]">Slug</TableHead>
+                <TableHead className="text-[var(--color-pmb-green-900)]">Status</TableHead>
+                <TableHead className="text-[var(--color-pmb-green-900)]">Indicado em</TableHead>
+                <TableHead className="text-right text-[var(--color-pmb-green-900)]">Total gerado</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -332,9 +449,9 @@ export default async function PainelIndicacoesPage() {
                     <TableCell className="font-medium">{r.name}</TableCell>
                     <TableCell className="text-gray-500">{r.slug}</TableCell>
                     <TableCell>
-                      <Badge variant={r.status === "ACTIVE" ? "default" : "secondary"}>
+                      <StatusBadge tone={referralStatusTone[r.status] ?? "neutral"}>
                         {statusLabel(r.status)}
-                      </Badge>
+                      </StatusBadge>
                     </TableCell>
                     <TableCell>
                       {r.createdAt.toLocaleDateString("pt-BR")}

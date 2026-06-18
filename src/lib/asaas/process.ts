@@ -11,6 +11,7 @@ import {
   createCommissionForTenantPayment,
   cancelCommissionForTenantPayment,
 } from "@/lib/referrals/commission"
+import { flagMonthlyCommissionForRefund } from "@/lib/referrals/monthly"
 import type { AsaasWebhookPayload } from "./types"
 import { swallow } from "@/lib/errors"
 import { contextLogger } from "@/lib/logger"
@@ -506,6 +507,17 @@ export async function processAsaasWebhook(
             contextLogger().error(
               { err, event: "asaas.refund.cancel_commission_failed", tenantPaymentId: tenantPaymentRow.id },
               "cancelCommissionForTenantPayment falhou",
+            )
+          })
+          // Motor por faixas (MONTHLY_TIERED): a comissão mensal não está
+          // atrelada a um tenantPaymentId, então tratamos o clawback à parte.
+          await flagMonthlyCommissionForRefund(
+            tenantPaymentRow.id,
+            "refund",
+          ).catch((err) => {
+            contextLogger().error(
+              { err, event: "asaas.refund.flag_monthly_failed", tenantPaymentId: tenantPaymentRow.id },
+              "flagMonthlyCommissionForRefund falhou",
             )
           })
         } else {

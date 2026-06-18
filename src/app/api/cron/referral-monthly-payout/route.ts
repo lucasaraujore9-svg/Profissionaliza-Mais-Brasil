@@ -1,10 +1,18 @@
 import { NextResponse } from "next/server"
 import { processMonthlyPayouts } from "@/lib/referrals/payout"
+import {
+  computeMonthlyCommissions,
+  recentClosedPeriods,
+} from "@/lib/referrals/monthly"
 import { isCronAuthorized } from "@/lib/auth/bearer"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { contextLogger } from "@/lib/logger"
 
 export const maxDuration = 300
+
+// Janela de catch-up: fecha os ultimos N meses (idempotente). Cobre o caso de o
+// cron ter ficado fora do ar por um ou mais meses sem perder competencias.
+const CATCHUP_MONTHS = 3
 
 export const POST = withRequestContext(
   { action: "cron.referral_monthly_payout", route: "/api/cron/referral-monthly-payout" },
@@ -17,9 +25,27 @@ export const POST = withRequestContext(
     log.info({ event: "cron.referral_payout.start" }, "iniciando payout mensal de comissões")
 
     try {
+      // 1) Fecha os últimos meses no motor por faixas (MONTHLY_TIERED): apura uma
+      // comissão por indicador por período. Idempotente + catch-up: se o cron
+      // pulou um mês, o período perdido ainda é fechado neste run (do mais antigo
+      // ao mais novo, para que processMonthlyPayouts já promova/some todos).
+      const periods = recentClosedPeriods(new Date(), CATCHUP_MONTHS)
+      const computes: Array<{ period: string } & Awaited<
+        ReturnType<typeof computeMonthlyCommissions>
+      >> = []
+      for (const period of periods) {
+        const compute = await computeMonthlyCommissions(period)
+        computes.push({ period, ...compute })
+      }
+      log.info(
+        { event: "cron.referral_payout.computed", periods, computes },
+        "comissões mensais por faixas apuradas",
+      )
+
+      // 2) Promove PENDING→AVAILABLE (legado + faixas) e monta a lista de saques.
       const result = await processMonthlyPayouts()
       log.info({ event: "cron.referral_payout.done", ...result }, "payout mensal concluído")
-      return NextResponse.json({ data: result })
+      return NextResponse.json({ data: { periods, computes, ...result } })
     } catch (error) {
       log.error(
         { err: error, event: "cron.referral_payout.failed" },

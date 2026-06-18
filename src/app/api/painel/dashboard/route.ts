@@ -100,7 +100,12 @@ export const GET = withRequestContext(
       enrollmentsApproved,
       chartRows,
       recentSales,
+      paidPaymentsCount,
     ] = await Promise.all([
+      // Receita: mpStatus="APPROVED" captura pagamentos aprovados de AMBOS os
+      // gateways (MP e Asaas) — em fulfillEnrollment os dois gravam
+      // mpStatus=APPROVED ao aprovar. NÃO filtrar por gateway aqui, senão a
+      // receita das revendas no Asaas some.
       prisma.payment.aggregate({
         _sum: { amount: true },
         where: {
@@ -157,8 +162,15 @@ export const GET = withRequestContext(
         cfg.start,
         cfg.end,
       ),
+      // Vendas recentes: apenas matrículas que viraram venda de fato
+      // (ACTIVE/COMPLETED) dentro do período selecionado — antes mostrava
+      // qualquer matrícula (inclui PENDING/CANCELLED) e ignorava o período.
       prisma.enrollment.findMany({
-        where: { tenantId: ctx.tenantId },
+        where: {
+          tenantId: ctx.tenantId,
+          status: { in: ["ACTIVE", "COMPLETED"] },
+          createdAt: { gte: cfg.start, lte: cfg.end },
+        },
         orderBy: { createdAt: "desc" },
         take: 10,
         select: {
@@ -168,6 +180,15 @@ export const GET = withRequestContext(
           createdAt: true,
           student: { select: { nome: true } },
           course: { select: { nome: true } },
+        },
+      }),
+      // Nº de pagamentos aprovados no período — base correta do ticket médio
+      // (mesma coorte da receita, que é por paidAt).
+      prisma.payment.count({
+        where: {
+          tenantId: ctx.tenantId,
+          mpStatus: "APPROVED",
+          paidAt: { gte: cfg.start, lte: cfg.end },
         },
       }),
     ])
@@ -181,8 +202,8 @@ export const GET = withRequestContext(
       ? (enrollmentsApproved / enrollmentsTotal) * 100
       : null
 
-    const ticketAverage = enrollmentsApproved > 0
-      ? revenue / enrollmentsApproved
+    const ticketAverage = paidPaymentsCount > 0
+      ? revenue / paidPaymentsCount
       : 0
 
     const chart = buildChartSeries(cfg, chartRows)

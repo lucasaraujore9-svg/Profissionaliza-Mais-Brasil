@@ -113,6 +113,8 @@ export const GET = withRequestContextParams<{ id: string }>(
     generatedAgg,
     receivedPaidAgg,
     receivedAvailableAgg,
+    monthlyReceivedPaidAgg,
+    monthlyReceivedAvailableAgg,
   ] =
     await Promise.all([
       prisma.systemSettings.findUnique({
@@ -146,6 +148,18 @@ export const GET = withRequestContextParams<{ id: string }>(
         },
         _sum: { amount: true },
       }),
+      // Motor por faixas (MONTHLY_TIERED) — keyed por referrer, somado aos
+      // totais "recebido" para a unidade não aparecer zerada no modo mensal.
+      // (totalCommissionGenerated não é somável aqui: o ledger mensal não tem
+      // referredTenantId para atribuir a contribuição de UMA indicada.)
+      prisma.referralMonthlyCommission.aggregate({
+        where: { referrerTenantId: id, status: "PAID" },
+        _sum: { amount: true },
+      }),
+      prisma.referralMonthlyCommission.aggregate({
+        where: { referrerTenantId: id, status: { in: ["AVAILABLE", "PAID"] } },
+        _sum: { amount: true },
+      }),
     ])
 
   const defaultReferralPercent = Number(
@@ -162,8 +176,12 @@ export const GET = withRequestContextParams<{ id: string }>(
     totalReferrals: referralsCount,
     activeReferrals: activeReferralsCount,
     totalCommissionGenerated: Number(generatedAgg._sum.amount ?? 0),
-    totalCommissionReceived: Number(receivedPaidAgg._sum.amount ?? 0),
-    totalReferralsPaidToMe: Number(receivedAvailableAgg._sum.amount ?? 0),
+    totalCommissionReceived:
+      Number(receivedPaidAgg._sum.amount ?? 0) +
+      Number(monthlyReceivedPaidAgg._sum.amount ?? 0),
+    totalReferralsPaidToMe:
+      Number(receivedAvailableAgg._sum.amount ?? 0) +
+      Number(monthlyReceivedAvailableAgg._sum.amount ?? 0),
   }
 
   // Busca dados atualizados do Asaas: subscription + pagamentos.

@@ -7,7 +7,7 @@ import type {
   ReferralPayoutStatus,
 } from "@prisma/client"
 import { Card } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
+import { StatusBadge, type BadgeTone } from "@/components/shared/status-badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Select,
@@ -95,21 +95,11 @@ function formatMonthYear(iso: string): string {
   return `${mm}/${d.getFullYear()}`
 }
 
-function statusVariant(
-  status: ReferralCommissionStatus,
-): "default" | "secondary" | "destructive" | "outline" {
-  switch (status) {
-    case "PAID":
-      return "default"
-    case "AVAILABLE":
-      return "default"
-    case "PENDING":
-      return "secondary"
-    case "CANCELLED":
-      return "destructive"
-    default:
-      return "outline"
-  }
+const STATUS_TONE: Record<ReferralCommissionStatus, BadgeTone> = {
+  PAID: "success",
+  AVAILABLE: "accent",
+  PENDING: "warning",
+  CANCELLED: "neutral",
 }
 
 interface SummaryTiles {
@@ -326,9 +316,9 @@ function CommissionsTable({
                     {formatMoney(c.amount)}
                   </TableCell>
                   <TableCell>
-                    <Badge variant={statusVariant(c.status)}>
+                    <StatusBadge tone={STATUS_TONE[c.status]}>
                       {STATUS_LABEL[c.status]}
-                    </Badge>
+                    </StatusBadge>
                     {c.status === "CANCELLED" && c.cancelReason && (
                       <div className="mt-1 text-[10px] text-gray-500">
                         {c.cancelReason}

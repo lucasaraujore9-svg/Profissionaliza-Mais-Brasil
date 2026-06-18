@@ -24,15 +24,17 @@ export const GET = withRequestContext(
     paidPrev30Agg,
     payments,
   ] = await Promise.all([
+    // Apenas revendas PAGANTES (planValue > 0). Cortesias/grátis e a PMB
+    // (planValue 0) não geram receita e não devem entrar em MRR/ARR/churn/LTV.
     prisma.tenant.findMany({
-      where: { status: "ACTIVE" },
+      where: { status: "ACTIVE", planValue: { gt: 0 } },
       select: { planValue: true },
     }),
-    prisma.tenant.count({ where: { status: "CANCELLED" } }),
-    prisma.tenant.count(),
+    prisma.tenant.count({ where: { status: "CANCELLED", planValue: { gt: 0 } } }),
+    prisma.tenant.count({ where: { planValue: { gt: 0 } } }),
     prisma.tenant.aggregate({
       _sum: { planValue: true },
-      where: { status: "ACTIVE" },
+      where: { status: "ACTIVE", planValue: { gt: 0 } },
     }),
     prisma.tenantPayment.aggregate({
       _sum: { amount: true },
