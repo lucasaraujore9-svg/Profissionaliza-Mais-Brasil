@@ -4,24 +4,10 @@ import { redirect } from "next/navigation"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { PageHeader } from "@/components/painel/page-header"
+import { EmptyState } from "@/components/shared/empty-state"
+import { SaleStatusBadge } from "@/components/painel/sale-status"
 
 export const dynamic = "force-dynamic"
-
-const STATUS_LABEL: Record<string, string> = {
-  PENDING: "Aguardando pagamento",
-  ACTIVE: "Pago — matrícula ativa",
-  SUSPENDED: "Suspenso",
-  CANCELLED: "Cancelado",
-  COMPLETED: "Concluído",
-}
-
-const STATUS_COLOR: Record<string, string> = {
-  PENDING: "bg-amber-50 text-amber-700 border-amber-200",
-  ACTIVE: "bg-emerald-50 text-emerald-700 border-emerald-200",
-  SUSPENDED: "bg-rose-50 text-rose-700 border-rose-200",
-  CANCELLED: "bg-gray-100 text-gray-600 border-gray-200",
-  COMPLETED: "bg-cyan-50 text-cyan-700 border-cyan-200",
-}
 
 function fmtBRL(n: number): string {
   return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
@@ -51,33 +37,37 @@ export default async function PainelVendasPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between gap-4">
-        <PageHeader
-          title="Vendas diretas"
-          description="Vendas em que você gerou o link de pagamento manualmente. Vendas pela vitrine pública aparecem em Financeiro."
-        />
-        <Link
-          href="/painel/vendas/nova"
-          className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-pmb-green)] px-4 py-2 text-xs font-bold text-white hover:bg-[var(--color-pmb-green-700)]"
-        >
-          <Plus className="h-3.5 w-3.5" />
-          Nova venda
-        </Link>
-      </div>
+      <PageHeader
+        title="Vendas diretas"
+        description="Vendas em que você gerou o link de pagamento manualmente. Vendas pela vitrine pública aparecem em Financeiro."
+        actions={
+          <Link
+            href="/painel/vendas/nova"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-pmb-green)] px-4 py-2 text-xs font-bold text-white hover:bg-[var(--color-pmb-green-700)]"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Nova venda
+          </Link>
+        }
+      />
 
-      <div className="rounded-2xl border border-gray-200 bg-white shadow-sm">
-        {enrollments.length === 0 ? (
-          <div className="flex flex-col items-center justify-center gap-2 p-10 text-center text-sm text-gray-500">
-            <ShoppingCart className="h-6 w-6 text-gray-400" />
-            <p>Nenhuma venda direta ainda.</p>
+      {enrollments.length === 0 ? (
+        <EmptyState
+          icon={ShoppingCart}
+          title="Nenhuma venda direta ainda"
+          description="Gere um link de pagamento manual para um aluno e ele aparecerá aqui."
+          action={
             <Link
               href="/painel/vendas/nova"
-              className="mt-1 text-xs font-bold text-[var(--color-pmb-green)] hover:underline"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-pmb-green)] px-4 py-2 text-xs font-bold text-white hover:bg-[var(--color-pmb-green-700)]"
             >
+              <Plus className="h-3.5 w-3.5" />
               Gerar primeira venda
             </Link>
-          </div>
-        ) : (
+          }
+        />
+      ) : (
+        <div className="rounded-2xl border border-gray-200 bg-white shadow-sm">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -91,64 +81,54 @@ export default async function PainelVendasPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {enrollments.map((e) => {
-                  const statusKey = e.status as keyof typeof STATUS_LABEL
-                  return (
-                    <tr key={e.id} className="hover:bg-gray-50/50">
-                      <td className="px-4 py-3">
-                        <div className="font-semibold text-[var(--color-pmb-green-900)]">
-                          {e.student.nome}
+                {enrollments.map((e) => (
+                  <tr key={e.id} className="hover:bg-gray-50/50">
+                    <td className="px-4 py-3">
+                      <div className="font-semibold text-[var(--color-pmb-green-900)]">
+                        {e.student.nome}
+                      </div>
+                      <div className="text-[11px] text-gray-500">
+                        {e.student.email ?? "—"}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-xs">
+                      {e.course.nome}
+                      {e.coupon && (
+                        <div className="text-[10px] text-[var(--color-pmb-green-700)]">
+                          cupom {e.coupon.code}
                         </div>
-                        <div className="text-[11px] text-gray-500">
-                          {e.student.email ?? "—"}
+                      )}
+                    </td>
+                    <td className="px-4 py-3 font-mono text-xs">
+                      {fmtBRL(Number(e.finalAmount))}
+                      {Number(e.discountAmount) > 0 && (
+                        <div className="text-[10px] text-gray-500 line-through">
+                          {fmtBRL(Number(e.originalAmount))}
                         </div>
-                      </td>
-                      <td className="px-4 py-3 text-xs">
-                        {e.course.nome}
-                        {e.coupon && (
-                          <div className="text-[10px] text-emerald-700">
-                            cupom {e.coupon.code}
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 font-mono text-xs">
-                        {fmtBRL(Number(e.finalAmount))}
-                        {Number(e.discountAmount) > 0 && (
-                          <div className="text-[10px] text-gray-500 line-through">
-                            {fmtBRL(Number(e.originalAmount))}
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span
-                          className={`inline-block rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase ${
-                            STATUS_COLOR[statusKey] ??
-                            "bg-gray-100 text-gray-600 border-gray-200"
-                          }`}
-                        >
-                          {STATUS_LABEL[statusKey] ?? statusKey}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-xs text-gray-600">
-                        {e.soldByUser?.name ?? "—"}
-                      </td>
-                      <td className="px-4 py-3 text-xs text-gray-500">
-                        {e.createdAt.toLocaleString("pt-BR", {
-                          day: "2-digit",
-                          month: "2-digit",
-                          year: "numeric",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                      </td>
-                    </tr>
-                  )
-                })}
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <SaleStatusBadge status={e.status} />
+                    </td>
+                    <td className="px-4 py-3 text-xs text-gray-600">
+                      {e.soldByUser?.name ?? "—"}
+                    </td>
+                    <td className="px-4 py-3 text-xs text-gray-500">
+                      {e.createdAt.toLocaleString("pt-BR", {
+                        day: "2-digit",
+                        month: "2-digit",
+                        year: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -4,6 +4,15 @@ import { useEffect, useState } from "react"
 import { Globe, Save, Loader2, AlertTriangle } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import { ResellerCard } from "./reseller-card"
 
 const VITRINE_DOMAIN = process.env.NEXT_PUBLIC_VITRINE_DOMAIN ?? "livrecursos.com.br"
 
@@ -25,6 +34,7 @@ export function ResellerSubdomainEdit({
 }: ResellerSubdomainEditProps) {
   const [value, setValue] = useState(slug)
   const [saving, setSaving] = useState(false)
+  const [confirmOpen, setConfirmOpen] = useState(false)
 
   useEffect(() => {
     setValue(slug)
@@ -35,14 +45,6 @@ export function ResellerSubdomainEdit({
 
   async function save() {
     if (!changed) return
-    const confirmed = window.confirm(
-      `Trocar o subdomínio de "${slug}" para "${next}"?\n\n` +
-        `O endereço antigo (${slug}.${VITRINE_DOMAIN}) vai redirecionar para o ` +
-        `novo por 15 dias e ficará reservado (indisponível para outras revendas) ` +
-        `nesse período.`,
-    )
-    if (!confirmed) return
-
     setSaving(true)
     try {
       const res = await fetch(`/api/admin/revendedores/${tenantId}/slug`, {
@@ -56,6 +58,7 @@ export function ResellerSubdomainEdit({
         return
       }
       toast.success("Subdomínio alterado")
+      setConfirmOpen(false)
       onSaved?.()
     } catch {
       toast.error("Erro de rede ao salvar")
@@ -65,14 +68,7 @@ export function ResellerSubdomainEdit({
   }
 
   return (
-    <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-      <div className="flex items-center gap-2">
-        <Globe className="h-4 w-4 text-[var(--color-pmb-green)]" />
-        <h3 className="text-sm font-semibold text-[var(--color-pmb-green-900)]">
-          Subdomínio da vitrine
-        </h3>
-      </div>
-
+    <ResellerCard title="Subdomínio da vitrine" icon={Globe}>
       <p className="mt-1 text-xs text-gray-500">
         Endereço atual:{" "}
         <span className="font-medium text-gray-700">
@@ -80,7 +76,7 @@ export function ResellerSubdomainEdit({
         </span>
       </p>
 
-      <div className="mt-4 flex items-stretch overflow-hidden rounded-lg border border-gray-300 focus-within:border-[var(--color-pmb-green)]">
+      <div className="mt-4 flex items-stretch overflow-hidden rounded-lg border border-gray-300 focus-within:border-[var(--color-pmb-green)] focus-within:ring-1 focus-within:ring-[var(--color-pmb-green)]">
         <input
           value={value}
           onChange={(e) => setValue(e.target.value)}
@@ -95,7 +91,7 @@ export function ResellerSubdomainEdit({
         </span>
       </div>
 
-      <div className="mt-3 flex items-start gap-2 rounded-lg bg-amber-50 p-3 text-xs text-amber-800">
+      <div className="mt-3 flex items-start gap-2 rounded-lg bg-[var(--color-pmb-gold-50)] p-3 text-xs text-[var(--color-pmb-gold-600)]">
         <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
         <span>
           Ao salvar, o endereço antigo passa a redirecionar para o novo por 15
@@ -105,7 +101,11 @@ export function ResellerSubdomainEdit({
       </div>
 
       <div className="mt-4 flex justify-end">
-        <Button onClick={save} disabled={saving || !changed} size="sm">
+        <Button
+          onClick={() => setConfirmOpen(true)}
+          disabled={saving || !changed}
+          size="sm"
+        >
           {saving ? (
             <Loader2 className="h-4 w-4 animate-spin" />
           ) : (
@@ -114,6 +114,38 @@ export function ResellerSubdomainEdit({
           Salvar subdomínio
         </Button>
       </div>
-    </div>
+
+      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Trocar subdomínio?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Trocar o subdomínio de{" "}
+              <span className="font-mono font-semibold">{slug}</span> para{" "}
+              <span className="font-mono font-semibold">{next}</span>? O endereço
+              antigo ({slug}.{VITRINE_DOMAIN}) vai redirecionar para o novo por
+              15 dias e ficará reservado (indisponível para outras revendas)
+              nesse período.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setConfirmOpen(false)}
+              disabled={saving}
+            >
+              Voltar
+            </Button>
+            <Button
+              onClick={save}
+              disabled={saving}
+              className="bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)]"
+            >
+              {saving ? "Salvando..." : "Trocar subdomínio"}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </ResellerCard>
   )
 }

@@ -1,5 +1,7 @@
 import { Mail, Calendar, Globe, Link as LinkIcon } from "lucide-react"
 import type { ResellerStatus } from "./reseller-table"
+import { ResellerStatusBadge } from "./reseller-status"
+import { ResellerImpersonateButton } from "./reseller-impersonate-button"
 
 export interface ResellerProfileData {
   id: string
@@ -15,20 +17,6 @@ export interface ResellerProfileData {
 
 interface ResellerProfileProps {
   reseller: ResellerProfileData
-}
-
-const STATUS_STYLES: Record<ResellerStatus, string> = {
-  ACTIVE: "bg-emerald-100 text-emerald-700",
-  PENDING: "bg-amber-100 text-amber-700",
-  SUSPENDED: "bg-rose-100 text-rose-700",
-  CANCELLED: "bg-gray-200 text-gray-600",
-}
-
-const STATUS_LABEL: Record<ResellerStatus, string> = {
-  ACTIVE: "ativo",
-  PENDING: "pendente",
-  SUSPENDED: "suspenso",
-  CANCELLED: "cancelado",
 }
 
 function initials(name: string): string {
@@ -60,16 +48,15 @@ export function ResellerProfile({ reseller }: ResellerProfileProps) {
           {initials(reseller.name) || "R"}
         </div>
         <div className="flex-1 space-y-4">
-          <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <h2 className="text-xl font-bold text-[var(--color-pmb-green-900)]">{reseller.name}</h2>
-              <span
-                className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${STATUS_STYLES[reseller.status]}`}
-              >
-                {STATUS_LABEL[reseller.status]}
-              </span>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-xl font-bold text-[var(--color-pmb-green-900)]">{reseller.name}</h2>
+                <ResellerStatusBadge status={reseller.status} />
+              </div>
+              <p className="mt-1 font-mono text-xs text-gray-500">ID: {reseller.id}</p>
             </div>
-            <p className="mt-1 font-mono text-xs text-gray-500">ID: {reseller.id}</p>
+            <ResellerImpersonateButton tenantId={reseller.id} />
           </div>
 
           <div className="grid gap-3 text-xs text-gray-600 sm:grid-cols-2">
@@ -91,7 +78,8 @@ export function ResellerProfile({ reseller }: ResellerProfileProps) {
             )}
             <p className="flex items-center gap-2 sm:col-span-2">
               <Calendar className="h-4 w-4 text-gray-400" />
-              Cadastrado em {formatDate(reseller.createdAt)} — mensalidade {formatMoney(reseller.planValue)}
+              Cadastrado em {formatDate(reseller.createdAt)} — mensalidade{" "}
+              <span className="font-mono">{formatMoney(reseller.planValue)}</span>
             </p>
           </div>
         </div>

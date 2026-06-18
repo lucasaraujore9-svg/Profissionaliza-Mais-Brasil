@@ -64,15 +64,23 @@ export function RevenueChart({ data, periodLabel }: RevenueChartProps) {
           >
             <defs>
               <linearGradient id="areaFill" x1="0" x2="0" y1="0" y2="1">
-                <stop offset="0%" stopColor="#3B82F6" stopOpacity="0.3" />
-                <stop offset="100%" stopColor="#3B82F6" stopOpacity="0" />
+                <stop
+                  offset="0%"
+                  stopColor="var(--color-pmb-green)"
+                  stopOpacity="0.25"
+                />
+                <stop
+                  offset="100%"
+                  stopColor="var(--color-pmb-green)"
+                  stopOpacity="0"
+                />
               </linearGradient>
             </defs>
             <path d={areaPath} fill="url(#areaFill)" />
             <polyline
               points={points}
               fill="none"
-              stroke="#3B82F6"
+              stroke="var(--color-pmb-green)"
               strokeWidth="0.6"
               strokeLinecap="round"
               strokeLinejoin="round"

@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import type { CourseListItem } from "./course-list-table"
+import type { CourseListItem } from "./course-types"
 
 interface CourseEditDrawerProps {
   course: CourseListItem | null
@@ -465,7 +465,7 @@ export function CourseEditDrawer({
                     </div>
                   )
                 })()}
-                <p className="mt-2 flex items-start gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
+                <p className="mt-2 flex items-start gap-1.5 rounded-lg border border-[var(--color-pmb-gold)]/30 bg-[var(--color-pmb-gold-50)] px-3 py-2 text-[11px] text-[var(--color-pmb-gold-600)]">
                   <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                   <span>
                     {paymentType === "MONTHLY"

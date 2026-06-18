@@ -2,19 +2,27 @@
 
 import { useState } from "react"
 import { Trash2, AlertTriangle } from "lucide-react"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
 export function DeleteAccountRequest() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
+  const [confirmOpen, setConfirmOpen] = useState(false)
 
   async function handleRequest() {
     setError(null)
     setSuccess(null)
-    const ok = window.confirm(
-      "Tem certeza? Vamos iniciar a exclusão dos seus dados pessoais (LGPD).",
-    )
-    if (!ok) return
+    setConfirmOpen(false)
 
     setBusy(true)
     try {
@@ -63,12 +71,37 @@ export function DeleteAccountRequest() {
         <div className="mt-5">
           <button
             type="button"
-            onClick={handleRequest}
+            onClick={() => setConfirmOpen(true)}
             disabled={busy}
             className="rounded-lg border border-red-300 bg-white px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50"
           >
             {busy ? "Solicitando..." : "Solicitar exclusão da conta"}
           </button>
+
+          <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Excluir minha conta</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Vamos iniciar a exclusão dos seus dados pessoais (LGPD). Seus
+                  dados serão anonimizados e o acesso encerrado. Esta ação não
+                  pode ser desfeita.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={busy}>Cancelar</AlertDialogCancel>
+                <AlertDialogAction
+                  disabled={busy}
+                  onClick={(e) => {
+                    e.preventDefault()
+                    handleRequest()
+                  }}
+                >
+                  Solicitar exclusão
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
 
           {error && (
             <p

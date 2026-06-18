@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import {
+  Bell,
   CheckCheck,
   CircleAlert,
   CircleCheck,
@@ -11,9 +12,12 @@ import {
   Loader2,
   RefreshCcw,
   Search,
-  Settings,
 } from "lucide-react"
 import { NotificationPreferencesPanel } from "./notification-preferences"
+import { PageHeader } from "@/components/painel/page-header"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { TableRowsSkeleton } from "@/components/shared/loading-skeletons"
+import { EmptyState } from "@/components/shared/empty-state"
 
 interface Notification {
   id: string
@@ -137,50 +141,48 @@ export function NotificationsPage() {
 
   return (
     <div className="space-y-6">
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="font-display text-3xl text-[var(--color-pmb-green-900)]">
-            Notificações
-          </h1>
-          <p className="mt-1 text-sm text-gray-600">
-            {items.length} no total · {unreadCount} não lida
-            {unreadCount === 1 ? "" : "s"}
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={() => setTab(tab === "feed" ? "preferences" : "feed")}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50"
-          >
-            <Settings className="h-3.5 w-3.5" />
-            {tab === "feed" ? "Preferências" : "Feed"}
-          </button>
-          <button
-            type="button"
-            onClick={load}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50"
-          >
-            <RefreshCcw className="h-3.5 w-3.5" />
-            Recarregar
-          </button>
-          {unreadCount > 0 && (
+      <PageHeader
+        title="Notificações"
+        description={`${items.length} no total · ${unreadCount} não lida${unreadCount === 1 ? "" : "s"}`}
+        actions={
+          <>
             <button
               type="button"
-              onClick={markAll}
-              disabled={marking}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-pmb-green)] px-3 py-2 text-xs font-semibold text-white hover:bg-[var(--color-pmb-green-700)] disabled:opacity-50"
+              onClick={load}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50"
             >
-              {marking ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <CheckCheck className="h-3.5 w-3.5" />
-              )}
-              Marcar todas
+              <RefreshCcw className="h-3.5 w-3.5" />
+              Recarregar
             </button>
-          )}
-        </div>
-      </header>
+            {unreadCount > 0 && (
+              <button
+                type="button"
+                onClick={markAll}
+                disabled={marking}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-pmb-green)] px-3 py-2 text-xs font-semibold text-white hover:bg-[var(--color-pmb-green-700)] disabled:opacity-50"
+              >
+                {marking ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <CheckCheck className="h-3.5 w-3.5" />
+                )}
+                Marcar todas
+              </button>
+            )}
+          </>
+        }
+      />
+
+      <Tabs value={tab} onValueChange={(v) => typeof v === "string" && setTab(v as Tab)}>
+        <TabsList className="bg-[var(--color-pmb-mist,#f7faf7)]">
+          <TabsTrigger value="feed" className="data-active:bg-white data-active:text-[var(--color-pmb-green,#025918)]">
+            Feed
+          </TabsTrigger>
+          <TabsTrigger value="preferences" className="data-active:bg-white data-active:text-[var(--color-pmb-green,#025918)]">
+            Preferências
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
 
       {tab === "preferences" ? (
         <NotificationPreferencesPanel />
@@ -232,18 +234,22 @@ export function NotificationsPage() {
 
       <div className="rounded-2xl border border-gray-200 bg-white shadow-sm">
         {loading ? (
-          <div className="px-6 py-16 text-center text-sm text-gray-500">
-            Carregando...
-          </div>
+          <TableRowsSkeleton rows={5} cols={2} />
         ) : error ? (
           <div className="px-6 py-10 text-center text-sm text-red-700">
             {error}
           </div>
         ) : filtered.length === 0 ? (
-          <div className="px-6 py-16 text-center text-sm text-gray-500">
-            Nenhuma notificação{" "}
-            {filter === "unread" ? "não lida" : ""} encontrada.
-          </div>
+          <EmptyState
+            icon={Bell}
+            title={
+              filter === "unread"
+                ? "Nenhuma notificação não lida"
+                : "Nenhuma notificação"
+            }
+            description="Quando algo importante acontecer, você verá aqui."
+            className="border-0"
+          />
         ) : (
           <ul className="divide-y divide-gray-100">
             {filtered.map((n) => {

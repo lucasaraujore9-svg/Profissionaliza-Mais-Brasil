@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { AdminFinanceClient } from "./admin-finance-client"
 import { FinanceiroTenantPayments } from "./financeiro-tenant-payments"
 import { FinanceiroReferralPayouts } from "./financeiro-referral-payouts"
@@ -31,33 +32,32 @@ export function FinanceiroTabs({
   const [active, setActive] = useState<TabId>(tabs[0].id)
 
   return (
-    <div>
-      <div className="flex flex-wrap gap-1 rounded-xl border border-gray-200 bg-white p-1 shadow-sm">
+    <Tabs
+      value={active}
+      onValueChange={(v) => setActive(v as TabId)}
+      className="gap-6"
+    >
+      <TabsList className="bg-white ring-1 ring-gray-200 shadow-sm">
         {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            onClick={() => setActive(tab.id)}
-            className={`flex-1 rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${
-              active === tab.id
-                ? "bg-[var(--color-pmb-green)] text-white shadow-sm"
-                : "text-gray-600 hover:text-[var(--color-pmb-green-900)]"
-            }`}
-          >
+          <TabsTrigger key={tab.id} value={tab.id}>
             {tab.label}
-          </button>
+          </TabsTrigger>
         ))}
-      </div>
+      </TabsList>
 
-      <div className="mt-6">
-        {active === "overview" && <AdminFinanceClient />}
-        {active === "tenant-payments" && (
+      {canSeeAll && (
+        <TabsContent value="overview">
+          <AdminFinanceClient />
+        </TabsContent>
+      )}
+      {canSeeAll && (
+        <TabsContent value="tenant-payments">
           <FinanceiroTenantPayments canMarkPaid={canMarkPaid} />
-        )}
-        {active === "referral-payouts" && (
-          <FinanceiroReferralPayouts canMarkPaid={canMarkPaid} />
-        )}
-      </div>
-    </div>
+        </TabsContent>
+      )}
+      <TabsContent value="referral-payouts">
+        <FinanceiroReferralPayouts canMarkPaid={canMarkPaid} />
+      </TabsContent>
+    </Tabs>
   )
 }

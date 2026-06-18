@@ -6,7 +6,9 @@ import {
   CheckCircle2,
   ExternalLink,
   FileText,
+  Inbox,
   Loader2,
+  MoreHorizontal,
   RefreshCw,
   Search,
   StickyNote,
@@ -15,12 +17,33 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import {
   Sheet,
   SheetContent,
   SheetDescription,
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet"
+import { EmptyState } from "@/components/shared/empty-state"
+import { FinanceOriginBadge, FinanceStatusBadge } from "./finance-status"
+import {
+  formatDate,
+  formatDateTime,
+  formatMoney,
+  notePreview,
+} from "@/lib/admin/finance-format"
 import { FinanceiroMarkPaidDialog } from "./financeiro-mark-paid-dialog"
 import { FinanceiroNotesDialog } from "./financeiro-notes-dialog"
 
@@ -49,50 +72,6 @@ const STATUS_OPTIONS: { value: string; label: string }[] = [
   { value: "recebidos", label: "Recebidos" },
   { value: "marcados", label: "Marcados manualmente" },
 ]
-
-const STATUS_STYLES: Record<string, string> = {
-  RECEIVED: "bg-emerald-100 text-emerald-700",
-  CONFIRMED: "bg-emerald-100 text-emerald-700",
-  PENDING: "bg-amber-100 text-amber-700",
-  OVERDUE: "bg-rose-100 text-rose-700",
-  REFUNDED: "bg-gray-200 text-gray-600",
-}
-const STATUS_LABEL: Record<string, string> = {
-  RECEIVED: "pago",
-  CONFIRMED: "confirmado",
-  PENDING: "pendente",
-  OVERDUE: "vencido",
-  REFUNDED: "estornado",
-}
-
-function formatMoney(v: number): string {
-  return new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  }).format(v)
-}
-function formatDate(iso: string | null): string {
-  if (!iso) return "—"
-  try {
-    return new Date(iso).toLocaleDateString("pt-BR")
-  } catch {
-    return iso
-  }
-}
-function formatDateTime(iso: string | null): string {
-  if (!iso) return "—"
-  try {
-    return new Date(iso).toLocaleString("pt-BR")
-  } catch {
-    return iso
-  }
-}
-function notePreview(notes: string | null): string {
-  if (!notes) return ""
-  const lines = notes.split("\n").filter((l) => l.trim().length > 0)
-  const last = lines[lines.length - 1] ?? ""
-  return last.length > 60 ? last.slice(0, 57) + "..." : last
-}
 
 interface FinanceiroTenantPaymentsProps {
   canMarkPaid: boolean
@@ -160,34 +139,17 @@ export function FinanceiroTenantPayments({
   return (
     <div className="space-y-4">
       <div className="grid gap-3 sm:grid-cols-3">
-        <div className="rounded-2xl border border-amber-200 bg-amber-50/60 p-4">
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-700">
-            Pendentes
-          </p>
-          <p className="mt-1 font-mono text-xl font-bold text-amber-900">
-            {formatMoney(totals.pending)}
-          </p>
-        </div>
-        <div className="rounded-2xl border border-rose-200 bg-rose-50/60 p-4">
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-rose-700">
-            Vencidos
-          </p>
-          <p className="mt-1 font-mono text-xl font-bold text-rose-900">
-            {formatMoney(totals.overdue)}
-          </p>
-        </div>
-        <div className="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-4">
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-700">
-            Recebidos (filtro atual)
-          </p>
-          <p className="mt-1 font-mono text-xl font-bold text-emerald-900">
-            {formatMoney(totals.received)}
-          </p>
-        </div>
+        <KpiCard tone="gold" label="Pendentes" value={formatMoney(totals.pending)} />
+        <KpiCard tone="danger" label="Vencidos" value={formatMoney(totals.overdue)} />
+        <KpiCard
+          tone="green"
+          label="Recebidos (filtro atual)"
+          value={formatMoney(totals.received)}
+        />
       </div>
 
       <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
-        <div className="grid gap-3 lg:grid-cols-[1fr_auto_auto_auto_auto]">
+        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-[1fr_auto_auto_auto_auto]">
           <div className="space-y-1">
             <Label htmlFor="tp-search">Buscar revendedor</Label>
             <div className="relative">
@@ -203,18 +165,18 @@ export function FinanceiroTenantPayments({
           </div>
           <div className="space-y-1">
             <Label htmlFor="tp-status">Status</Label>
-            <select
-              id="tp-status"
-              value={status}
-              onChange={(e) => setStatus(e.target.value)}
-              className="h-9 w-full rounded-lg border border-input bg-transparent px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-            >
-              {STATUS_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
+            <Select value={status} onValueChange={(v) => setStatus(v ?? "all")}>
+              <SelectTrigger id="tp-status" className="h-9 w-full lg:w-48">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {STATUS_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div className="space-y-1">
             <Label htmlFor="tp-from">De</Label>
@@ -271,13 +233,18 @@ export function FinanceiroTenantPayments({
             Carregando...
           </div>
         ) : rows.length === 0 ? (
-          <div className="px-6 py-10 text-center text-xs text-gray-500">
-            Nenhuma mensalidade encontrada com os filtros aplicados.
+          <div className="p-4">
+            <EmptyState
+              icon={Inbox}
+              title="Nenhuma mensalidade encontrada"
+              description="Ajuste os filtros para ver outras cobranças."
+              className="border-none"
+            />
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[860px] text-sm">
-              <thead>
+              <thead className="sticky top-0 z-10">
                 <tr className="border-b border-gray-200 bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
                   <th className="px-6 py-3 font-medium">Revendedor</th>
                   <th className="px-6 py-3 font-medium">Valor</th>
@@ -293,6 +260,7 @@ export function FinanceiroTenantPayments({
                   const statusKey = r.status.toUpperCase()
                   const isPaid =
                     statusKey === "RECEIVED" || statusKey === "CONFIRMED"
+                  const showMarkPaid = !isPaid && canMarkPaid
                   return (
                     <tr
                       key={r.id}
@@ -316,25 +284,10 @@ export function FinanceiroTenantPayments({
                         {formatDate(r.dueDate)}
                       </td>
                       <td className="px-6 py-3">
-                        <span
-                          className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                            STATUS_STYLES[statusKey] ??
-                            "bg-gray-100 text-gray-700"
-                          }`}
-                        >
-                          {STATUS_LABEL[statusKey] ?? r.status.toLowerCase()}
-                        </span>
+                        <FinanceStatusBadge status={r.status} />
                       </td>
                       <td className="px-6 py-3">
-                        <span
-                          className={`rounded-md px-2 py-0.5 text-[10px] font-semibold ${
-                            r.origin === "MANUAL"
-                              ? "bg-blue-50 text-blue-700"
-                              : "bg-gray-100 text-gray-600"
-                          }`}
-                        >
-                          {r.origin === "MANUAL" ? "Manual" : "Asaas"}
-                        </span>
+                        <FinanceOriginBadge origin={r.origin} />
                       </td>
                       <td className="px-6 py-3 text-xs text-gray-600">
                         {notePreview(r.notes) || (
@@ -342,11 +295,10 @@ export function FinanceiroTenantPayments({
                         )}
                       </td>
                       <td className="px-6 py-3">
-                        <div className="flex justify-end gap-1">
-                          {!isPaid && canMarkPaid && (
+                        <div className="flex items-center justify-end gap-1">
+                          {showMarkPaid ? (
                             <Button
                               size="sm"
-                              variant="outline"
                               onClick={() => {
                                 setActionRow(r)
                                 setMarkPaidOpen(true)
@@ -355,28 +307,50 @@ export function FinanceiroTenantPayments({
                               <CheckCircle2 className="size-3.5" />
                               Marcar pago
                             </Button>
-                          )}
-                          {canMarkPaid && (
+                          ) : (
                             <Button
                               size="sm"
-                              variant="outline"
-                              onClick={() => {
-                                setActionRow(r)
-                                setNoteOpen(true)
-                              }}
+                              variant="ghost"
+                              onClick={() => setDetailRow(r)}
                             >
-                              <StickyNote className="size-3.5" />
-                              Obs.
+                              <FileText className="size-3.5" />
+                              Detalhes
                             </Button>
                           )}
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => setDetailRow(r)}
-                          >
-                            <FileText className="size-3.5" />
-                            Detalhes
-                          </Button>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger
+                              render={
+                                <Button
+                                  size="icon-sm"
+                                  variant="ghost"
+                                  aria-label="Mais ações"
+                                />
+                              }
+                            >
+                              <MoreHorizontal className="size-4" />
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              {showMarkPaid && (
+                                <DropdownMenuItem
+                                  onClick={() => setDetailRow(r)}
+                                >
+                                  <FileText className="size-3.5" />
+                                  Detalhes
+                                </DropdownMenuItem>
+                              )}
+                              {canMarkPaid && (
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setActionRow(r)
+                                    setNoteOpen(true)
+                                  }}
+                                >
+                                  <StickyNote className="size-3.5" />
+                                  Observação
+                                </DropdownMenuItem>
+                              )}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         </div>
                       </td>
                     </tr>
@@ -454,9 +428,8 @@ export function FinanceiroTenantPayments({
                     <div className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">
                       Status
                     </div>
-                    <div className="mt-0.5">
-                      {STATUS_LABEL[detailRow.status.toUpperCase()] ??
-                        detailRow.status}
+                    <div className="mt-1">
+                      <FinanceStatusBadge status={detailRow.status} />
                     </div>
                   </div>
                   <div>
@@ -482,7 +455,7 @@ export function FinanceiroTenantPayments({
                 </div>
 
                 {detailRow.markedPaidBy && (
-                  <div className="rounded-md bg-blue-50 px-3 py-2 text-xs text-blue-800">
+                  <div className="rounded-md bg-[var(--color-pmb-cyan-50)] px-3 py-2 text-xs text-[var(--color-pmb-cyan-700)]">
                     Marcado como pago por{" "}
                     <strong>{detailRow.markedPaidBy.name}</strong>
                   </div>
@@ -515,6 +488,49 @@ export function FinanceiroTenantPayments({
           )}
         </SheetContent>
       </Sheet>
+    </div>
+  )
+}
+
+const KPI_TONE: Record<
+  "gold" | "green" | "danger",
+  { card: string; label: string; value: string }
+> = {
+  gold: {
+    card: "border-[var(--color-pmb-gold)]/30 bg-[var(--color-pmb-gold)]/10",
+    label: "text-[var(--color-pmb-gold-600)]",
+    value: "text-[var(--color-pmb-gold-600)]",
+  },
+  green: {
+    card: "border-[var(--color-pmb-green)]/20 bg-[var(--color-pmb-lime-50)]",
+    label: "text-[var(--color-pmb-green-700)]",
+    value: "text-[var(--color-pmb-green-900)]",
+  },
+  danger: {
+    card: "border-rose-200 bg-rose-50/70",
+    label: "text-rose-700",
+    value: "text-rose-700",
+  },
+}
+
+function KpiCard({
+  tone,
+  label,
+  value,
+}: {
+  tone: "gold" | "green" | "danger"
+  label: string
+  value: string
+}) {
+  const t = KPI_TONE[tone]
+  return (
+    <div className={`rounded-2xl border p-4 ${t.card}`}>
+      <p
+        className={`text-[10px] font-semibold uppercase tracking-wide ${t.label}`}
+      >
+        {label}
+      </p>
+      <p className={`mt-1 font-mono text-xl font-bold ${t.value}`}>{value}</p>
     </div>
   )
 }

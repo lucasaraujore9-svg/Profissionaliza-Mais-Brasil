@@ -3,22 +3,14 @@ import Link from "next/link"
 import { ChevronLeft } from "lucide-react"
 import { requireResellerSession } from "@/lib/auth/reseller-session"
 import { loadStudentDetail } from "@/lib/students/load-detail"
-import { Badge } from "@/components/ui/badge"
+import { PageHeader } from "@/components/painel/page-header"
+import { StudentStatusBadge } from "@/components/painel/student-status"
 import { StudentManagement } from "@/components/shared/student-management"
 
 export const dynamic = "force-dynamic"
 
 interface PageProps {
   params: Promise<{ id: string }>
-}
-
-function statusVariant(
-  status: string,
-): "default" | "outline" | "secondary" | "destructive" {
-  if (status === "ATIVO") return "default"
-  if (status === "BLOQUEADO") return "destructive"
-  if (status === "DEVEDOR" || status === "PENDENTE") return "secondary"
-  return "outline"
 }
 
 export default async function PainelStudentDetailPage({ params }: PageProps) {
@@ -43,21 +35,11 @@ export default async function PainelStudentDetailPage({ params }: PageProps) {
         Voltar para alunos
       </Link>
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-display text-[var(--color-pmb-green-900)] md:text-3xl">
-              {student.nome}
-            </h1>
-            <Badge variant={statusVariant(student.status)}>
-              {student.status}
-            </Badge>
-          </div>
-          <p className="mt-1 text-sm text-gray-600">
-            {student.email ?? "Sem email"}
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        title={student.nome}
+        description={student.email ?? "Sem email"}
+        actions={<StudentStatusBadge status={student.status} />}
+      />
 
       <StudentManagement
         student={student}

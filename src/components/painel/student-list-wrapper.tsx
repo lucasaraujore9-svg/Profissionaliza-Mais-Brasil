@@ -1,6 +1,17 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
+import { toast } from "sonner"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { StudentStatsBar, type StudentStats } from "./student-stats-bar"
 import {
   StudentToolbar,
@@ -51,6 +62,12 @@ export function StudentListWrapper() {
   const [viewingId, setViewingId] = useState<string | null>(null)
   const [pendingId, setPendingId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // Alvo da confirmacao de bloqueio/desbloqueio (substitui o confirm() nativo).
+  const [blockTarget, setBlockTarget] = useState<{
+    id: string
+    status: StudentStatus
+    nome: string
+  } | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -118,16 +135,11 @@ export function StudentListWrapper() {
     })
   }, [])
 
-  const handleToggleBlock = useCallback(
-    async (student: StudentListItem | { id: string; status: StudentStatus }) => {
+  // Executa o bloqueio/desbloqueio de fato. Mesma chamada de API e refetch de
+  // antes — apenas o confirm()/alert() foram trocados por dialog + toast.
+  const performToggleBlock = useCallback(
+    async (student: { id: string; status: StudentStatus }) => {
       const isBlocked = student.status === "BLOQUEADO"
-      const nome = "nome" in student ? student.nome : "este aluno"
-      if (
-        !confirm(
-          `${isBlocked ? "Desbloquear" : "Bloquear"} o acesso de ${nome} às aulas?`,
-        )
-      )
-        return
       const endpoint = isBlocked ? "desbloquear" : "bloquear"
       setPendingId(student.id)
       try {
@@ -137,18 +149,28 @@ export function StudentListWrapper() {
         )
         const body = await res.json()
         if (!res.ok) {
-          alert(body.error ?? "Falha ao atualizar aluno")
+          toast.error(body.error ?? "Falha ao atualizar aluno")
           return
         }
+        toast.success(
+          isBlocked ? "Aluno desbloqueado." : "Aluno bloqueado.",
+        )
         await load()
       } catch {
-        alert("Erro de rede ao atualizar aluno")
+        toast.error("Erro de rede ao atualizar aluno")
       } finally {
         setPendingId(null)
       }
     },
     [load],
   )
+
+  // Chamado pela tabela: abre o dialog de confirmacao (substitui o confirm()).
+  const handleToggleBlock = useCallback((student: StudentListItem) => {
+    setBlockTarget({ id: student.id, status: student.status, nome: student.nome })
+  }, [])
+
+  const blockTargetIsBlocked = blockTarget?.status === "BLOQUEADO"
 
   return (
     <div className="space-y-6">
@@ -180,8 +202,43 @@ export function StudentListWrapper() {
         open={viewingId !== null}
         studentId={viewingId}
         onClose={() => setViewingId(null)}
-        onToggleBlock={(id, status) => handleToggleBlock({ id, status })}
+        onToggleBlock={(id, status) => performToggleBlock({ id, status })}
       />
+
+      <AlertDialog
+        open={blockTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setBlockTarget(null)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {blockTargetIsBlocked ? "Desbloquear aluno" : "Bloquear aluno"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {blockTargetIsBlocked
+                ? `Liberar o acesso de ${blockTarget?.nome} às aulas?`
+                : `Bloquear o acesso de ${blockTarget?.nome} às aulas? O aluno deixará de conseguir assistir aos cursos.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={pendingId !== null}>
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (blockTarget) {
+                  void performToggleBlock(blockTarget)
+                  setBlockTarget(null)
+                }
+              }}
+            >
+              {blockTargetIsBlocked ? "Desbloquear" : "Bloquear"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

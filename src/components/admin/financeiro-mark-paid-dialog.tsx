@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Loader2 } from "lucide-react"
+import { Loader2, Paperclip, Upload } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import {
@@ -15,6 +15,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { cn } from "@/lib/utils"
 
 export type FinanceiroTarget = "tenant-payment" | "referral-payout"
 
@@ -61,9 +62,22 @@ export function FinanceiroMarkPaidDialog({
   const [amount, setAmount] = useState("")
   const [proofFile, setProofFile] = useState<File | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  // Marca o primeiro submit inválido para acionar aria-invalid nos campos.
+  const [showErrors, setShowErrors] = useState(false)
 
   // Comprovante é obrigatório para saques de comissão (referral-payout).
   const requiresProof = target === "referral-payout"
+
+  // Validações derivadas (para feedback inline além do toast).
+  const amountInvalid =
+    target === "referral-payout" &&
+    (() => {
+      const raw = amount.trim().replace(",", ".")
+      if (!raw) return true
+      const n = Number(raw)
+      return Number.isNaN(n) || n <= 0
+    })()
+  const proofInvalid = requiresProof && !proofFile && !existingProofUrl
 
   useEffect(() => {
     if (open) {
@@ -71,6 +85,7 @@ export function FinanceiroMarkPaidDialog({
       setNote("")
       setTransferId("")
       setProofFile(null)
+      setShowErrors(false)
       setAmount(typeof itemAmount === "number" ? itemAmount.toFixed(2) : "")
     }
   }, [open, itemAmount])
@@ -80,11 +95,13 @@ export function FinanceiroMarkPaidDialog({
     if (target === "referral-payout") {
       const raw = amount.trim().replace(",", ".")
       if (!raw) {
+        setShowErrors(true)
         toast.error("Informe o valor a pagar")
         return
       }
       const n = Number(raw)
       if (Number.isNaN(n) || n <= 0) {
+        setShowErrors(true)
         toast.error("Valor inválido")
         return
       }
@@ -93,6 +110,7 @@ export function FinanceiroMarkPaidDialog({
 
     // Comprovante obrigatório: precisa ter um arquivo novo OU já existir anexado.
     if (requiresProof && !proofFile && !existingProofUrl) {
+      setShowErrors(true)
       toast.error("Anexe o comprovante de pagamento para confirmar.")
       return
     }
@@ -194,19 +212,24 @@ export function FinanceiroMarkPaidDialog({
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
                   placeholder="0,00"
+                  aria-invalid={showErrors && amountInvalid}
                 />
-                <p className="text-xs text-muted-foreground">
-                  {typeof itemAmount === "number" &&
+                {showErrors && amountInvalid ? (
+                  <p className="text-xs font-medium text-destructive">
+                    Informe um valor maior que zero.
+                  </p>
+                ) : typeof itemAmount === "number" &&
                   Math.abs(Number(amount.replace(",", ".")) - itemAmount) >
                     0.001 ? (
-                    <span className="text-amber-700">
-                      Ajuste manual: valor solicitado era{" "}
-                      {formatMoney(itemAmount)}.
-                    </span>
-                  ) : (
-                    <>Confirme ou ajuste o valor da recorrência antes de pagar.</>
-                  )}
-                </p>
+                  <p className="rounded-md bg-[var(--color-pmb-gold)]/10 px-2 py-1 text-xs font-medium text-[var(--color-pmb-gold-600)]">
+                    Ajuste manual: valor solicitado era{" "}
+                    {formatMoney(itemAmount)}.
+                  </p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    Confirme ou ajuste o valor da recorrência antes de pagar.
+                  </p>
+                )}
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="mp-transfer-id">
@@ -230,21 +253,55 @@ export function FinanceiroMarkPaidDialog({
             <div className="space-y-1.5">
               <Label htmlFor="mp-proof">
                 Comprovante de pagamento{" "}
-                <span className="text-rose-600">*</span>
+                <span className="text-destructive">*</span>
               </Label>
-              <Input
-                id="mp-proof"
-                type="file"
-                accept="application/pdf,image/png,image/jpeg,image/webp"
-                onChange={(e) => setProofFile(e.target.files?.[0] ?? null)}
-              />
-              <p className="text-xs text-muted-foreground">
-                {proofFile
-                  ? `Selecionado: ${proofFile.name}`
-                  : existingProofUrl
+              <label
+                htmlFor="mp-proof"
+                aria-invalid={showErrors && proofInvalid}
+                className={cn(
+                  "flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-lg border border-dashed bg-muted/30 px-4 py-5 text-center transition-colors hover:bg-muted/50",
+                  proofFile
+                    ? "border-[var(--color-pmb-green)]/40 bg-[var(--color-pmb-lime-50)]"
+                    : "border-input",
+                  showErrors &&
+                    proofInvalid &&
+                    "border-destructive/60 bg-destructive/5",
+                )}
+              >
+                {proofFile ? (
+                  <Paperclip className="size-5 text-[var(--color-pmb-green)]" />
+                ) : (
+                  <Upload className="size-5 text-muted-foreground" />
+                )}
+                <span className="text-xs font-medium text-foreground">
+                  {proofFile
+                    ? proofFile.name
+                    : existingProofUrl
+                      ? "Substituir comprovante (opcional)"
+                      : "Clique para anexar o comprovante"}
+                </span>
+                <span className="text-[11px] text-muted-foreground">
+                  PDF, PNG, JPG ou WEBP
+                </span>
+                <Input
+                  id="mp-proof"
+                  type="file"
+                  accept="application/pdf,image/png,image/jpeg,image/webp"
+                  className="sr-only"
+                  onChange={(e) => setProofFile(e.target.files?.[0] ?? null)}
+                />
+              </label>
+              {showErrors && proofInvalid ? (
+                <p className="text-xs font-medium text-destructive">
+                  Anexe o comprovante para confirmar o pagamento.
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  {existingProofUrl
                     ? "Já há um comprovante anexado. Envie outro para substituir, ou confirme para manter."
-                    : "Obrigatório (PDF, PNG, JPG ou WEBP). Fica disponível para a revenda consultar."}
-              </p>
+                    : "Obrigatório. Fica disponível para a revenda consultar."}
+                </p>
+              )}
             </div>
           )}
 

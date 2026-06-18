@@ -13,6 +13,16 @@ import {
   QrCode,
   KeyRound,
 } from "lucide-react"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
 type WaStatus =
   | "DISCONNECTED"
@@ -56,6 +66,7 @@ export function WhatsAppConnectionPanel({
   const [method, setMethod] = useState<Method>("qr")
   const [pairPhone, setPairPhone] = useState("")
   const [pairCode, setPairCode] = useState<string | null>(null)
+  const [disconnectOpen, setDisconnectOpen] = useState(false)
 
   const pollingRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -161,7 +172,7 @@ export function WhatsAppConnectionPanel({
   }
 
   async function disconnect() {
-    if (!confirm("Desconectar o WhatsApp? Os disparos automáticos vão parar.")) return
+    setDisconnectOpen(false)
     setBusy(true)
     try {
       const res = await fetch(`${apiBase}/whatsapp/disconnect`, {
@@ -205,6 +216,8 @@ export function WhatsAppConnectionPanel({
         <div className="mt-4 flex items-center gap-3 rounded-lg border border-gray-200 bg-gray-50 p-4">
           {isConnected ? (
             <CheckCircle2 className="h-6 w-6 text-emerald-600" />
+          ) : status === "CONNECTING" || status === "SCAN_QR_CODE" ? (
+            <Loader2 className="h-6 w-6 animate-spin text-[var(--color-pmb-green)]" />
           ) : (
             <XCircle className="h-6 w-6 text-gray-400" />
           )}
@@ -231,29 +244,29 @@ export function WhatsAppConnectionPanel({
               <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
                 Como conectar
               </p>
-              <div className="mt-2 inline-flex rounded-lg border border-gray-300 bg-white p-0.5">
+              <div className="mt-2 inline-flex rounded-xl border border-gray-300 bg-white p-1">
                 <button
                   type="button"
                   onClick={() => switchMethod("qr")}
-                  className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
+                  className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${
                     method === "qr"
-                      ? "bg-[var(--color-pmb-green)] text-white"
+                      ? "bg-[var(--color-pmb-green)] text-white shadow-sm"
                       : "text-gray-600 hover:bg-gray-50"
                   }`}
                 >
-                  <QrCode className="h-3.5 w-3.5" />
+                  <QrCode className="h-4 w-4" />
                   QR Code
                 </button>
                 <button
                   type="button"
                   onClick={() => switchMethod("code")}
-                  className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
+                  className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${
                     method === "code"
-                      ? "bg-[var(--color-pmb-green)] text-white"
+                      ? "bg-[var(--color-pmb-green)] text-white shadow-sm"
                       : "text-gray-600 hover:bg-gray-50"
                   }`}
                 >
-                  <KeyRound className="h-3.5 w-3.5" />
+                  <KeyRound className="h-4 w-4" />
                   Código
                 </button>
               </div>
@@ -321,7 +334,7 @@ export function WhatsAppConnectionPanel({
         {(isConnected || status === "FAILED") && (
           <div className="mt-6">
             <button
-              onClick={disconnect}
+              onClick={() => setDisconnectOpen(true)}
               disabled={busy}
               className="inline-flex items-center gap-1.5 rounded-md border border-red-300 px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50"
             >
@@ -408,6 +421,30 @@ export function WhatsAppConnectionPanel({
           </p>
         )}
       </div>
+
+      <AlertDialog open={disconnectOpen} onOpenChange={setDisconnectOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Desconectar o WhatsApp</AlertDialogTitle>
+            <AlertDialogDescription>
+              Os disparos automáticos de mensagens vão parar até você conectar um
+              número novamente.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={busy}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={busy}
+              onClick={(e) => {
+                e.preventDefault()
+                disconnect()
+              }}
+            >
+              Desconectar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

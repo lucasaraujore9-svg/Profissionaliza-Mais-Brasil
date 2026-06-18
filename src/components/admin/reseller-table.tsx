@@ -1,5 +1,7 @@
 import Link from "next/link"
-import { Eye } from "lucide-react"
+import { ChevronRight, Store } from "lucide-react"
+import { EmptyState } from "@/components/shared/empty-state"
+import { ResellerStatusBadge } from "./reseller-status"
 
 export type ResellerStatus = "ACTIVE" | "PENDING" | "SUSPENDED" | "CANCELLED"
 
@@ -22,20 +24,6 @@ interface ResellerTableProps {
   onAssign?: (tenantId: string) => void
 }
 
-const STATUS_STYLES: Record<ResellerStatus, string> = {
-  ACTIVE: "bg-emerald-100 text-emerald-700",
-  PENDING: "bg-amber-100 text-amber-700",
-  SUSPENDED: "bg-rose-100 text-rose-700",
-  CANCELLED: "bg-gray-200 text-gray-600",
-}
-
-const STATUS_LABEL: Record<ResellerStatus, string> = {
-  ACTIVE: "ativo",
-  PENDING: "pendente",
-  SUSPENDED: "suspenso",
-  CANCELLED: "cancelado",
-}
-
 function formatMoney(v: number): string {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
 }
@@ -43,21 +31,24 @@ function formatMoney(v: number): string {
 export function ResellerTable({ rows, showManager = false, onAssign }: ResellerTableProps) {
   if (rows.length === 0) {
     return (
-      <div className="rounded-2xl border border-dashed border-gray-300 bg-white p-10 text-center text-sm text-gray-500">
-        Nenhum revendedor encontrado com os filtros atuais.
-      </div>
+      <EmptyState
+        icon={Store}
+        title="Nenhum revendedor encontrado"
+        description="Ajuste os filtros ou cadastre uma nova revenda."
+      />
     )
   }
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[760px] text-sm">
+    <>
+      {/* Tabela — md+ */}
+      <div className="hidden overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm md:block">
+        <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-200 bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
               <th className="px-6 py-3 font-medium">Revendedor</th>
-              <th className="px-6 py-3 font-medium">MRR</th>
-              <th className="px-6 py-3 font-medium">Alunos</th>
+              <th className="px-6 py-3 text-right font-medium">MRR</th>
+              <th className="px-6 py-3 text-right font-medium">Alunos</th>
               <th className="px-6 py-3 font-medium">Status</th>
               {showManager && <th className="px-6 py-3 font-medium">Gerente</th>}
               <th className="px-6 py-3 text-right font-medium">Ações</th>
@@ -65,23 +56,24 @@ export function ResellerTable({ rows, showManager = false, onAssign }: ResellerT
           </thead>
           <tbody>
             {rows.map((r) => (
-              <tr key={r.id} className="border-b border-gray-100 last:border-b-0 hover:bg-gray-50">
+              <tr
+                key={r.id}
+                className="group border-b border-gray-100 last:border-b-0 hover:bg-[var(--color-pmb-lime-50)]"
+              >
                 <td className="px-6 py-3">
-                  <p className="font-semibold text-[var(--color-pmb-green-900)]">{r.name}</p>
-                  <p className="mt-0.5 text-xs text-gray-500">{r.email ?? r.slug}</p>
+                  <Link href={`/admin/revendedores/${r.id}`} className="block">
+                    <p className="font-semibold text-[var(--color-pmb-green-900)]">{r.name}</p>
+                    <p className="mt-0.5 text-xs text-gray-500">{r.email ?? r.slug}</p>
+                  </Link>
                 </td>
-                <td className="px-6 py-3 font-mono font-semibold text-[var(--color-pmb-green-900)]">
+                <td className="px-6 py-3 text-right font-mono font-semibold text-[var(--color-pmb-green-900)]">
                   {formatMoney(r.mrr)}
                 </td>
-                <td className="px-6 py-3 font-mono text-gray-700">
+                <td className="px-6 py-3 text-right font-mono text-gray-700">
                   {r.students.toLocaleString("pt-BR")}
                 </td>
                 <td className="px-6 py-3">
-                  <span
-                    className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${STATUS_STYLES[r.status]}`}
-                  >
-                    {STATUS_LABEL[r.status]}
-                  </span>
+                  <ResellerStatusBadge status={r.status} />
                 </td>
                 {showManager && (
                   <td className="px-6 py-3 text-xs">
@@ -98,17 +90,17 @@ export function ResellerTable({ rows, showManager = false, onAssign }: ResellerT
                       <button
                         type="button"
                         onClick={() => onAssign(r.id)}
-                        className="rounded-md px-2 py-1 text-xs font-medium text-[var(--color-pmb-green)] hover:bg-[var(--color-pmb-lime-50)]"
+                        className="rounded-md px-2 py-1 text-xs font-medium text-[var(--color-pmb-green)] hover:bg-[var(--color-pmb-lime-100)]"
                       >
                         Atribuir
                       </button>
                     )}
                     <Link
                       href={`/admin/revendedores/${r.id}`}
-                      className="inline-flex h-8 w-8 items-center justify-center rounded-md text-gray-500 hover:bg-[var(--color-pmb-lime-50)] hover:text-[var(--color-pmb-green)]"
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-md text-gray-400 group-hover:text-[var(--color-pmb-green)]"
                       aria-label="Ver"
                     >
-                      <Eye className="h-4 w-4" />
+                      <ChevronRight className="h-4 w-4" />
                     </Link>
                   </div>
                 </td>
@@ -117,6 +109,61 @@ export function ResellerTable({ rows, showManager = false, onAssign }: ResellerT
           </tbody>
         </table>
       </div>
-    </div>
+
+      {/* Cards — mobile (< md) */}
+      <div className="space-y-3 md:hidden">
+        {rows.map((r) => (
+          <div
+            key={r.id}
+            className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm"
+          >
+            <Link
+              href={`/admin/revendedores/${r.id}`}
+              className="flex items-start justify-between gap-3"
+            >
+              <div className="min-w-0">
+                <p className="truncate font-semibold text-[var(--color-pmb-green-900)]">
+                  {r.name}
+                </p>
+                <p className="mt-0.5 truncate text-xs text-gray-500">
+                  {r.email ?? r.slug}
+                </p>
+              </div>
+              <ResellerStatusBadge status={r.status} />
+            </Link>
+            <div className="mt-3 flex items-center justify-between text-xs text-gray-600">
+              <span>
+                MRR{" "}
+                <span className="font-mono font-semibold text-[var(--color-pmb-green-900)]">
+                  {formatMoney(r.mrr)}
+                </span>
+              </span>
+              <span>
+                Alunos{" "}
+                <span className="font-mono text-gray-700">
+                  {r.students.toLocaleString("pt-BR")}
+                </span>
+              </span>
+            </div>
+            {showManager && (
+              <div className="mt-3 flex items-center justify-between border-t border-gray-100 pt-3 text-xs">
+                <span className="text-gray-500">
+                  {r.accountManagerName ?? "sem gerente"}
+                </span>
+                {onAssign && (
+                  <button
+                    type="button"
+                    onClick={() => onAssign(r.id)}
+                    className="rounded-md px-2 py-1 font-medium text-[var(--color-pmb-green)] hover:bg-[var(--color-pmb-lime-100)]"
+                  >
+                    Atribuir
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </>
   )
 }

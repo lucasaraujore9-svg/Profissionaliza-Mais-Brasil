@@ -13,17 +13,33 @@ interface StudentStatsBarProps {
   stats: StudentStats
 }
 
+// Cores alinhadas aos tons do sistema de design PMB (status-badge):
+// success=verde, warning=ouro, danger=vermelho, accent=lima, info=ciano, neutral=cinza.
+const TONE_TEXT = {
+  total: "text-[var(--color-pmb-green-900)]",
+  success: "text-[var(--color-pmb-green-700)]",
+  warning: "text-[var(--color-pmb-gold-600)]",
+  danger: "text-rose-700",
+  accent: "text-[var(--color-pmb-green-700)]",
+  info: "text-[var(--color-pmb-cyan-700)]",
+  neutral: "text-gray-500",
+} as const
+
 export function StudentStatsBar({ stats }: StudentStatsBarProps) {
+  // Expoe TODOS os status que a tabela pode exibir — sem exibicao-sem-filtro.
   const items = [
-    { label: "Total", value: stats.total, color: "text-[var(--color-pmb-green-900)]" },
-    { label: "Ativos", value: stats.ATIVO, color: "text-green-600" },
-    { label: "Pendentes", value: stats.PENDENTE, color: "text-orange-600" },
-    { label: "Bloqueados", value: stats.BLOQUEADO, color: "text-red-600" },
-    { label: "Inativos", value: stats.INATIVO, color: "text-gray-500" },
+    { label: "Total", value: stats.total, color: TONE_TEXT.total },
+    { label: "Ativos", value: stats.ATIVO, color: TONE_TEXT.success },
+    { label: "Pendentes", value: stats.PENDENTE, color: TONE_TEXT.warning },
+    { label: "Devedores", value: stats.DEVEDOR, color: TONE_TEXT.warning },
+    { label: "Bloqueados", value: stats.BLOQUEADO, color: TONE_TEXT.danger },
+    { label: "Formados", value: stats.FORMADO, color: TONE_TEXT.accent },
+    { label: "Interessados", value: stats.INTERESSADO, color: TONE_TEXT.info },
+    { label: "Inativos", value: stats.INATIVO, color: TONE_TEXT.neutral },
   ]
 
   return (
-    <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
+    <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 lg:grid-cols-8">
       {items.map((stat) => (
         <div
           key={stat.label}

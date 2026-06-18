@@ -21,9 +21,9 @@ export function CopyableText({ text }: { text: string }) {
 
   return (
     <div className="space-y-2">
-      <pre className="whitespace-pre-wrap rounded-md border border-gray-200 bg-gray-50 p-3 text-xs text-gray-700">
+      <p className="whitespace-pre-wrap rounded-md border border-gray-200 bg-gray-50 p-3 font-sans text-xs leading-relaxed text-gray-700">
         {text}
-      </pre>
+      </p>
       <Button
         size="sm"
         variant="outline"

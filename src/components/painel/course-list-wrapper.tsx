@@ -2,6 +2,7 @@
 
 import Image from "next/image"
 import { useCallback, useEffect, useMemo, useState } from "react"
+import { toast } from "sonner"
 import {
   ArrowUpDown,
   BookOpen,
@@ -23,7 +24,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { CourseEditDrawer } from "./course-edit-drawer"
 import { CourseBulkEdit } from "./course-bulk-edit"
-import type { CourseListItem } from "./course-list-table"
+import type { CourseListItem } from "./course-types"
 
 type FilterValue = "Todos" | "Visíveis" | "Ocultos" | "Em destaque"
 type PaymentFilter = "all" | "ONE_TIME" | "MONTHLY"
@@ -63,6 +64,8 @@ export function CourseListWrapper() {
   const [filter, setFilter] = useState<FilterValue>("Todos")
   const [payment, setPayment] = useState<PaymentFilter>("all")
   const [sort, setSort] = useState<SortValue>("ordem")
+  const [togglingId, setTogglingId] = useState<string | null>(null)
+  const [tipDismissed, setTipDismissed] = useState(false)
 
   const loadCourses = useCallback(async () => {
     setLoadError(null)
@@ -80,7 +83,6 @@ export function CourseListWrapper() {
   }, [])
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadCourses()
   }, [loadCourses])
 
@@ -154,13 +156,26 @@ export function CourseListWrapper() {
     )
     if (optimistic) setCourses(optimistic)
 
-    const response = await fetch(`/api/painel/cursos/${id}/visibility`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ isVisible: next }),
-    })
-    if (!response.ok) {
+    setTogglingId(id)
+    try {
+      const response = await fetch(`/api/painel/cursos/${id}/visibility`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isVisible: next }),
+      })
+      if (!response.ok) {
+        toast.error(
+          next
+            ? "Não foi possível mostrar o curso. Tente novamente."
+            : "Não foi possível ocultar o curso. Tente novamente.",
+        )
+        void loadCourses()
+      }
+    } catch {
+      toast.error("Erro de rede ao atualizar a visibilidade.")
       void loadCourses()
+    } finally {
+      setTogglingId(null)
     }
   }
 
@@ -317,14 +332,24 @@ export function CourseListWrapper() {
           </label>
         </div>
 
-        <div className="mt-3 flex items-start gap-2 rounded-lg border border-[rgba(2,89,24,0.08)] bg-[var(--color-pmb-mist)]/40 p-3 text-xs text-[rgba(2,89,24,0.7)]">
-          <HelpCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--color-pmb-green)]" />
-          <p>
-            <strong className="font-semibold text-[var(--color-pmb-green-900)]">Dica:</strong>{" "}
-            Use o ícone do olho para mostrar ou ocultar um curso na sua vitrine.
-            Edite preço, descrição e capa para personalizar cada curso para seus alunos.
-          </p>
-        </div>
+        {!tipDismissed && (
+          <div className="mt-3 flex items-start gap-2 rounded-lg border border-[rgba(2,89,24,0.08)] bg-[var(--color-pmb-mist)]/40 p-3 text-xs text-[rgba(2,89,24,0.7)]">
+            <HelpCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--color-pmb-green)]" />
+            <p className="flex-1">
+              <strong className="font-semibold text-[var(--color-pmb-green-900)]">Dica:</strong>{" "}
+              Use o ícone do olho para mostrar ou ocultar um curso na sua vitrine.
+              Edite preço, descrição e capa para personalizar cada curso para seus alunos.
+            </p>
+            <button
+              type="button"
+              onClick={() => setTipDismissed(true)}
+              aria-label="Dispensar dica"
+              className="-mt-0.5 -mr-0.5 rounded-md p-1 text-[var(--color-pmb-green)]/60 hover:bg-[var(--color-pmb-lime-50)] hover:text-[var(--color-pmb-green-900)]"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
       </div>
 
       {loadError ? (
@@ -427,17 +452,20 @@ export function CourseListWrapper() {
                           )}
                           <button
                             type="button"
+                            disabled={togglingId === c.id}
                             onClick={() =>
                               handleToggleVisibility(c.id, !c.isVisible)
                             }
-                            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-gray-500 hover:bg-gray-100 hover:text-[var(--color-pmb-green-900)]"
+                            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-gray-500 hover:bg-gray-100 hover:text-[var(--color-pmb-green-900)] disabled:cursor-not-allowed disabled:opacity-60"
                             title={
                               c.isVisible
                                 ? "Ocultar da vitrine"
                                 : "Mostrar na vitrine"
                             }
                           >
-                            {c.isVisible ? (
+                            {togglingId === c.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : c.isVisible ? (
                               <Eye className="h-4 w-4" />
                             ) : (
                               <EyeOff className="h-4 w-4" />
@@ -586,16 +614,16 @@ const TONE_STYLES: Record<StatTone, { icon: string; activeBorder: string }> = {
     activeBorder: "border-[var(--color-pmb-green)]",
   },
   success: {
-    icon: "bg-emerald-50 text-emerald-600",
-    activeBorder: "border-emerald-500",
+    icon: "bg-[var(--color-pmb-green)]/10 text-[var(--color-pmb-green-700)]",
+    activeBorder: "border-[var(--color-pmb-green)]",
   },
   muted: {
     icon: "bg-gray-100 text-gray-500",
     activeBorder: "border-gray-400",
   },
   warning: {
-    icon: "bg-amber-50 text-amber-600",
-    activeBorder: "border-amber-500",
+    icon: "bg-[var(--color-pmb-gold)]/15 text-[var(--color-pmb-gold-600)]",
+    activeBorder: "border-[var(--color-pmb-gold)]",
   },
 }
 

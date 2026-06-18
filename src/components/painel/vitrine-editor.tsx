@@ -9,6 +9,7 @@ import {
   type VitrineAssetKind,
 } from "./vitrine-config-form"
 import { VitrinePreview } from "./vitrine-preview"
+import { BlockSkeleton } from "@/components/shared/loading-skeletons"
 import { clientLogger } from "@/lib/logger-client"
 
 const defaultConfig: VitrineConfig = {
@@ -16,8 +17,8 @@ const defaultConfig: VitrineConfig = {
   tagline: null,
   description: null,
   logoUrl: null,
-  primaryColor: "#2563eb",
-  secondaryColor: "#1e40af",
+  primaryColor: "#025918", // --color-pmb-green
+  secondaryColor: "#014712", // --color-pmb-green-700
   whatsapp: null,
   instagram: null,
   facebook: null,
@@ -167,8 +168,15 @@ export function VitrineEditor() {
 
   if (loading) {
     return (
-      <div className="rounded-2xl border border-gray-200 bg-white p-10 text-center text-sm text-gray-500 shadow-sm">
-        Carregando configuração...
+      <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
+        <div className="space-y-6">
+          <BlockSkeleton className="h-40" />
+          <BlockSkeleton className="h-32" />
+          <BlockSkeleton className="h-48" />
+        </div>
+        <div className="hidden lg:block">
+          <BlockSkeleton className="h-96" />
+        </div>
       </div>
     )
   }

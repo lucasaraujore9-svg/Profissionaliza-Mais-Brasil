@@ -2,6 +2,17 @@
 
 import { useState } from "react"
 import { ExternalLink, Trash2, Pencil, Check, X } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import { ResellerCard } from "./reseller-card"
+import { ResellerStatusBadge } from "./reseller-status"
 
 export interface ResellerPayment {
   id: string
@@ -21,30 +32,15 @@ interface ResellerPaymentHistoryProps {
   onRefresh?: () => void
 }
 
-const STATUS_STYLES: Record<string, string> = {
-  RECEIVED:  "bg-emerald-100 text-emerald-700",
-  CONFIRMED: "bg-emerald-100 text-emerald-700",
-  PENDING:   "bg-amber-100 text-amber-700",
-  OVERDUE:   "bg-rose-100 text-rose-700",
-  REFUNDED:  "bg-purple-100 text-purple-700",
-  DELETED:   "bg-gray-100 text-gray-400",
-}
-
-const STATUS_LABEL: Record<string, string> = {
-  RECEIVED:  "pago",
-  CONFIRMED: "confirmado",
-  PENDING:   "pendente",
-  OVERDUE:   "vencido",
-  REFUNDED:  "estornado",
-  DELETED:   "cancelado",
-}
-
 const METHOD_LABEL: Record<string, string> = {
   PIX:          "PIX",
   BOLETO:       "Boleto",
   CREDIT_CARD:  "Cartão",
   UNDEFINED:    "—",
 }
+
+const INPUT_CLS =
+  "rounded border border-gray-300 px-2 py-1 text-xs focus:border-[var(--color-pmb-green)] focus:outline-none focus:ring-1 focus:ring-[var(--color-pmb-green)]"
 
 function formatDate(iso: string): string {
   try {
@@ -75,12 +71,12 @@ export function ResellerPaymentHistory({
 }: ResellerPaymentHistoryProps) {
   const [cancelling, setCancelling]   = useState<string | null>(null)
   const [cancelError, setCancelError] = useState<string | null>(null)
+  const [cancelTarget, setCancelTarget] = useState<string | null>(null)
   const [editing, setEditing]         = useState<EditState | null>(null)
   const [saving, setSaving]           = useState(false)
   const [saveError, setSaveError]     = useState<string | null>(null)
 
   async function handleCancel(paymentId: string) {
-    if (!confirm("Cancelar esta cobrança? Esta ação não pode ser desfeita.")) return
     setCancelling(paymentId)
     setCancelError(null)
     try {
@@ -93,6 +89,7 @@ export function ResellerPaymentHistory({
         setCancelError(body.error ?? "Falha ao cancelar cobrança")
         return
       }
+      setCancelTarget(null)
       onRefresh?.()
     } catch {
       setCancelError("Erro de rede ao cancelar cobrança")
@@ -148,14 +145,11 @@ export function ResellerPaymentHistory({
   }
 
   return (
-    <div className="rounded-2xl border border-gray-200 bg-white shadow-sm">
-      <div className="border-b border-gray-200 px-6 py-4">
-        <h3 className="text-sm font-semibold text-[var(--color-pmb-green-900)]">
-          Histórico de pagamentos
-        </h3>
-        <p className="mt-0.5 text-xs text-gray-600">Faturas da assinatura.</p>
-      </div>
-
+    <ResellerCard
+      flush
+      title="Histórico de pagamentos"
+      description="Faturas da assinatura."
+    >
       {(cancelError || saveError) && (
         <div className="mx-6 mt-4 rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">
           {cancelError ?? saveError}
@@ -201,7 +195,7 @@ export function ResellerPaymentHistory({
                           onChange={(e) =>
                             setEditing({ ...editing, dueDate: e.target.value })
                           }
-                          className="w-36 rounded border border-gray-300 px-2 py-1 text-xs focus:border-[var(--color-pmb-green)] focus:outline-none"
+                          className={`w-36 ${INPUT_CLS}`}
                         />
                       ) : (
                         <span className="font-mono text-xs text-gray-700">
@@ -221,7 +215,7 @@ export function ResellerPaymentHistory({
                           onChange={(e) =>
                             setEditing({ ...editing, value: e.target.value })
                           }
-                          className="w-24 rounded border border-gray-300 px-2 py-1 font-mono text-xs focus:border-[var(--color-pmb-green)] focus:outline-none"
+                          className={`w-24 font-mono ${INPUT_CLS}`}
                         />
                       ) : (
                         <span className="font-mono font-semibold text-[var(--color-pmb-green-900)]">
@@ -237,13 +231,7 @@ export function ResellerPaymentHistory({
 
                     {/* Status */}
                     <td className="px-6 py-3">
-                      <span
-                        className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                          STATUS_STYLES[statusKey] ?? "bg-gray-100 text-gray-700"
-                        }`}
-                      >
-                        {STATUS_LABEL[statusKey] ?? p.status.toLowerCase()}
-                      </span>
+                      <ResellerStatusBadge status={p.status} />
                     </td>
 
                     {/* Link */}
@@ -255,7 +243,7 @@ export function ResellerPaymentHistory({
                           rel="noopener noreferrer"
                           className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-semibold transition-colors ${
                             isPending
-                              ? "bg-amber-50 text-amber-700 hover:bg-amber-100"
+                              ? "bg-[var(--color-pmb-gold-50)] text-[var(--color-pmb-gold-600)] hover:bg-[var(--color-pmb-gold)]/15"
                               : "bg-gray-50 text-gray-500 hover:bg-gray-100"
                           }`}
                         >
@@ -271,50 +259,56 @@ export function ResellerPaymentHistory({
                     <td className="px-6 py-3">
                       {isEditing ? (
                         <div className="flex items-center gap-1">
-                          <button
+                          <Button
                             type="button"
+                            size="xs"
                             onClick={saveEdit}
                             disabled={saving}
                             title="Salvar"
-                            className="inline-flex items-center gap-1 rounded-md bg-[var(--color-pmb-green)] px-2 py-1 text-[10px] font-semibold text-white transition-colors hover:bg-[var(--color-pmb-green-700)] disabled:opacity-50"
+                            className="bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)]"
                           >
                             <Check className="h-3 w-3" />
                             {saving ? "..." : "Salvar"}
-                          </button>
-                          <button
+                          </Button>
+                          <Button
                             type="button"
+                            size="xs"
+                            variant="outline"
                             onClick={cancelEdit}
                             disabled={saving}
                             title="Cancelar"
-                            className="inline-flex items-center rounded-md bg-gray-100 px-2 py-1 text-[10px] font-semibold text-gray-600 hover:bg-gray-200 disabled:opacity-50"
                           >
                             <X className="h-3 w-3" />
-                          </button>
+                          </Button>
                         </div>
                       ) : (
                         <div className="flex items-center gap-1">
                           {isPending && !isEditing && (
-                            <button
+                            <Button
                               type="button"
+                              size="xs"
+                              variant="ghost"
                               onClick={() => startEdit(p)}
                               title="Editar vencimento/valor"
-                              className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-semibold text-gray-500 transition-colors hover:bg-gray-100"
+                              className="text-gray-500"
                             >
                               <Pencil className="h-3 w-3" />
                               Editar
-                            </button>
+                            </Button>
                           )}
                           {isPending && (
-                            <button
+                            <Button
                               type="button"
-                              onClick={() => handleCancel(p.asaasPaymentId)}
+                              size="xs"
+                              variant="ghost"
+                              onClick={() => setCancelTarget(p.asaasPaymentId)}
                               disabled={isCancelling}
                               title="Cancelar cobrança"
-                              className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-semibold text-red-600 transition-colors hover:bg-red-50 disabled:opacity-50"
+                              className="text-rose-600 hover:bg-rose-50"
                             >
                               <Trash2 className="h-3 w-3" />
                               {isCancelling ? "..." : "Cancelar"}
-                            </button>
+                            </Button>
                           )}
                         </div>
                       )}
@@ -326,6 +320,37 @@ export function ResellerPaymentHistory({
           </table>
         </div>
       )}
-    </div>
+
+      {/* Confirmacao: cancelar cobranca */}
+      <AlertDialog
+        open={cancelTarget != null}
+        onOpenChange={(o) => !o && setCancelTarget(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cancelar esta cobrança?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setCancelTarget(null)}
+              disabled={cancelling != null}
+            >
+              Voltar
+            </Button>
+            <Button
+              className="border-rose-200 bg-rose-600 text-white hover:bg-rose-700"
+              onClick={() => cancelTarget && handleCancel(cancelTarget)}
+              disabled={cancelling != null}
+            >
+              {cancelling != null ? "Cancelando..." : "Cancelar cobrança"}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </ResellerCard>
   )
 }

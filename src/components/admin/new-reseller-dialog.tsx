@@ -21,6 +21,13 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { appDomain, vitrineDomain, vitrineUrl as buildVitrineUrl } from "@/lib/tenant/urls"
 import { forbiddenNameError } from "@/lib/tenant/forbidden-names"
 
@@ -244,7 +251,7 @@ export function NewResellerDialog({
       )}
 
       <Dialog open={open} onOpenChange={(o) => (o ? setOpen(true) : close())}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
           {!created ? (
             <form onSubmit={handleSubmit} className="space-y-4">
               <DialogHeader>
@@ -272,7 +279,11 @@ export function NewResellerDialog({
                 </DialogDescription>
               </DialogHeader>
 
-              <div className="grid gap-3 sm:grid-cols-2">
+              <fieldset className="space-y-3 rounded-xl border border-gray-200 p-4">
+                <legend className="px-1.5 text-xs font-semibold uppercase tracking-wide text-[var(--color-pmb-green-900)]">
+                  Dados da unidade
+                </legend>
+                <div className="grid gap-3 sm:grid-cols-2">
                 <div className="sm:col-span-2">
                   <Label htmlFor="r-name">Nome da revenda</Label>
                   <Input
@@ -360,6 +371,14 @@ export function NewResellerDialog({
                     defaultValue={initialValues?.ownerPhone ?? ""}
                   />
                 </div>
+                </div>
+              </fieldset>
+
+              <fieldset className="space-y-3 rounded-xl border border-gray-200 p-4">
+                <legend className="px-1.5 text-xs font-semibold uppercase tracking-wide text-[var(--color-pmb-green-900)]">
+                  Plano e cobrança
+                </legend>
+                <div className="grid gap-3 sm:grid-cols-2">
                 <div className="sm:col-span-2">
                   <Label htmlFor="r-plan">
                     Mensalidade (R$){" "}
@@ -390,19 +409,22 @@ export function NewResellerDialog({
                         (limite que a revenda poderá escolher)
                       </span>
                     </Label>
-                    <select
-                      id="r-installments"
-                      value={maxInstallments}
-                      onChange={(e) => setMaxInstallments(Number(e.target.value))}
-                      className="mt-1.5 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-pmb-green)]"
+                    <Select
+                      value={String(maxInstallments)}
+                      onValueChange={(v) => setMaxInstallments(Number(v))}
                     >
-                      <option value={1}>À vista (sem parcelamento)</option>
-                      {Array.from({ length: 11 }, (_, i) => i + 2).map((n) => (
-                        <option key={n} value={n}>
-                          Até {n}x
-                        </option>
-                      ))}
-                    </select>
+                      <SelectTrigger id="r-installments" className="mt-1.5 w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="1">À vista (sem parcelamento)</SelectItem>
+                        {Array.from({ length: 11 }, (_, i) => i + 2).map((n) => (
+                          <SelectItem key={n} value={String(n)}>
+                            Até {n}x
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                     <p className="mt-1 text-[11px] text-gray-500">
                       Vale só para a 1ª mensalidade e só no cartão. As mensalidades
                       seguintes continuam mensais no valor cheio.
@@ -462,18 +484,21 @@ export function NewResellerDialog({
                   </div>
                 )}
 
-                {/* Opcionais — ativados já na criação. Automação não precisa de
-                    link; EJA e Unidade Técnica revelam o campo do link de destino. */}
-                <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 sm:col-span-2">
-                  <p className="text-sm font-medium text-gray-800">
-                    Opcionais
-                  </p>
-                  <p className="mt-0.5 text-[11px] text-gray-500">
-                    Marque para já habilitar na criação. Você também pode ligar
-                    depois na página da revenda.
-                  </p>
+                </div>
+              </fieldset>
 
-                  <div className="mt-3 space-y-3">
+              {/* Opcionais — ativados já na criação. Automação não precisa de
+                  link; EJA e Unidade Técnica revelam o campo do link de destino. */}
+              <fieldset className="rounded-xl border border-gray-200 p-4">
+                <legend className="px-1.5 text-xs font-semibold uppercase tracking-wide text-[var(--color-pmb-green-900)]">
+                  Opcionais
+                </legend>
+                <p className="text-[11px] text-gray-500">
+                  Marque para já habilitar na criação. Você também pode ligar
+                  depois na página da revenda.
+                </p>
+
+                <div className="mt-3 space-y-3">
                     {/* Automação — sem link */}
                     <label className="flex items-center gap-2 text-sm text-gray-800">
                       <input
@@ -539,8 +564,7 @@ export function NewResellerDialog({
                       )}
                     </div>
                   </div>
-                </div>
-              </div>
+              </fieldset>
 
               {error && (
                 <div className="rounded-md border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">

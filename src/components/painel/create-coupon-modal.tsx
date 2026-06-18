@@ -8,11 +8,18 @@ import {
   Sparkles,
   Tag,
   Users,
-  X,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 
 interface CreateCouponModalProps {
   open: boolean
@@ -50,8 +57,6 @@ export function CreateCouponModal({
   const [generating, setGenerating] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-
-  if (!open) return null
 
   function resetForm() {
     setCode("")
@@ -135,37 +140,21 @@ export function CreateCouponModal({
       : `${formatBRL(numericValue)} OFF`
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div
-        className="absolute inset-0 bg-black/40"
-        onClick={onClose}
-        aria-hidden
-      />
-      <div className="relative max-h-[90vh] w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl flex flex-col">
-        {/* Header */}
-        <header className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
-          <div className="flex items-center gap-3">
-            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--color-pmb-lime-50)] text-[var(--color-pmb-green)]">
-              <Tag className="h-4 w-4" />
-            </span>
-            <div>
-              <h2 className="text-base font-semibold text-[var(--color-pmb-green-900)]">
-                Criar novo cupom
-              </h2>
-              <p className="text-xs text-gray-500">
-                Ofereça desconto para atrair novos alunos.
-              </p>
-            </div>
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="flex max-h-[90vh] flex-col gap-0 p-0 sm:max-w-2xl">
+        <DialogHeader className="flex-row items-center gap-3 border-b border-gray-200 px-6 py-4">
+          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--color-pmb-lime-50)] text-[var(--color-pmb-green)]">
+            <Tag className="h-4 w-4" />
+          </span>
+          <div>
+            <DialogTitle className="text-base font-semibold text-[var(--color-pmb-green-900)]">
+              Criar novo cupom
+            </DialogTitle>
+            <DialogDescription className="text-xs text-gray-500">
+              Ofereça desconto para atrair novos alunos.
+            </DialogDescription>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Fechar"
-            className="rounded-md p-1.5 text-gray-500 hover:bg-gray-100"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </header>
+        </DialogHeader>
 
         {/* Body com scroll quando necessário */}
         <div className="space-y-6 overflow-y-auto px-6 py-6">
@@ -190,7 +179,7 @@ export function CreateCouponModal({
                   </p>
                 </div>
               </div>
-              <span className="rounded-full bg-[var(--color-pmb-gold)] px-3 py-1 text-sm font-bold text-[var(--color-pmb-green-900)]">
+              <span className="rounded-full bg-[var(--color-pmb-gold)] px-3 py-1 font-mono text-sm font-bold text-[var(--color-pmb-green-900)]">
                 {hasValidPreview ? previewDiscount : "—"}
               </span>
             </div>
@@ -375,8 +364,7 @@ export function CreateCouponModal({
           )}
         </div>
 
-        {/* Footer */}
-        <footer className="flex gap-3 border-t border-gray-200 px-6 py-4">
+        <DialogFooter className="mx-0 mb-0 flex gap-3 border-t border-gray-200 bg-transparent px-6 py-4 sm:justify-stretch">
           <Button
             type="button"
             variant="outline"
@@ -394,8 +382,8 @@ export function CreateCouponModal({
           >
             {submitting ? "Criando..." : "Criar cupom"}
           </Button>
-        </footer>
-      </div>
-    </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }

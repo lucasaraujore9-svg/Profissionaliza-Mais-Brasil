@@ -1,19 +1,30 @@
 "use client"
 
 import { useState } from "react"
-import { Plus, CheckCircle2, Trash2, RefreshCw } from "lucide-react"
+import { Plus, Trash2, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { StatusBadge, type BadgeTone } from "@/components/shared/status-badge"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { DnsInstructions, type DnsRecord } from "./dns-instructions"
 
 export type DomainStatus = "NONE" | "PENDING" | "ACTIVE" | "ERROR"
 
-const statusStyles: Record<DomainStatus, string> = {
-  NONE: "bg-gray-100 text-gray-600",
-  PENDING: "bg-yellow-100 text-yellow-700",
-  ACTIVE: "bg-green-100 text-green-700",
-  ERROR: "bg-red-100 text-red-700",
+const statusTone: Record<DomainStatus, BadgeTone> = {
+  NONE: "neutral",
+  PENDING: "warning",
+  ACTIVE: "success",
+  ERROR: "danger",
 }
 
 const statusLabel: Record<DomainStatus, string> = {
@@ -135,12 +146,10 @@ export function CustomDomainForm({
               <div className="font-mono text-sm font-semibold text-[var(--color-pmb-green-900)]">
                 {customDomain}
               </div>
-              <div className="mt-1 flex items-center gap-2">
-                <span
-                  className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${statusStyles[status]}`}
-                >
+              <div className="mt-1.5 flex items-center gap-2">
+                <StatusBadge tone={statusTone[status]}>
                   {statusLabel[status]}
-                </span>
+                </StatusBadge>
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -157,7 +166,7 @@ export function CustomDomainForm({
                 size="sm"
                 variant="outline"
                 className="border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700"
-                onClick={() => setShowRemoveConfirm((v) => !v)}
+                onClick={() => setShowRemoveConfirm(true)}
               >
                 <Trash2 className="mr-2 h-3.5 w-3.5" />
                 Remover
@@ -165,36 +174,30 @@ export function CustomDomainForm({
             </div>
           </div>
 
-          {showRemoveConfirm && (
-            <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-900">
-              <strong className="block">
-                Tem certeza que quer remover este domínio?
-              </strong>
-              <span>
-                A vitrine ficará indisponível neste endereço até que um novo
-                domínio seja conectado.
-              </span>
-              <div className="mt-3 flex gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setShowRemoveConfirm(false)}
+          <AlertDialog open={showRemoveConfirm} onOpenChange={setShowRemoveConfirm}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Remover domínio personalizado</AlertDialogTitle>
+                <AlertDialogDescription>
+                  A vitrine ficará indisponível neste endereço até que um novo
+                  domínio seja conectado. O subdomínio oficial continua
+                  funcionando.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={removing}>Cancelar</AlertDialogCancel>
+                <AlertDialogAction
                   disabled={removing}
+                  onClick={(e) => {
+                    e.preventDefault()
+                    handleRemove()
+                  }}
                 >
-                  Cancelar
-                </Button>
-                <Button
-                  size="sm"
-                  className="bg-red-600 text-white hover:bg-red-700"
-                  onClick={handleRemove}
-                  disabled={removing}
-                >
-                  <CheckCircle2 className="mr-2 h-3.5 w-3.5" />
                   {removing ? "Removendo..." : "Confirmar remoção"}
-                </Button>
-              </div>
-            </div>
-          )}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
       )}
 

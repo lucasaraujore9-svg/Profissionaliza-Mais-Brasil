@@ -24,6 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
+import { StatCardsSkeleton, TableRowsSkeleton } from "@/components/shared/loading-skeletons"
 import { NewResellerDialog } from "./new-reseller-dialog"
 
 interface ListResponse {
@@ -139,8 +140,8 @@ export function ResellerListClient() {
   const content = useMemo(() => {
     if (loading && !data) {
       return (
-        <div className="rounded-2xl border border-gray-200 bg-white p-10 text-center text-sm text-gray-500 shadow-sm">
-          Carregando revendedores...
+        <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+          <TableRowsSkeleton rows={6} cols={5} />
         </div>
       )
     }
@@ -164,17 +165,11 @@ export function ResellerListClient() {
 
   return (
     <div className="space-y-6">
-      <ResellerStatsBar
-        stats={
-          data?.stats ?? {
-            total: 0,
-            active: 0,
-            pending: 0,
-            suspended: 0,
-            cancelled: 0,
-          }
-        }
-      />
+      {data ? (
+        <ResellerStatsBar stats={data.stats} />
+      ) : (
+        <StatCardsSkeleton count={4} />
+      )}
       <div className="flex flex-col items-stretch justify-between gap-3 sm:flex-row sm:items-center">
         <div className="flex-1">
           <ResellerListToolbar

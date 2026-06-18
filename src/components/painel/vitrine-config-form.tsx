@@ -6,6 +6,16 @@ import Image from "next/image"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
 export interface VitrineConfig {
   name: string
@@ -39,6 +49,7 @@ export function VitrineConfigForm({
   uploading,
 }: VitrineConfigFormProps) {
   const [uploadError, setUploadError] = useState<string | null>(null)
+  const [removeOpen, setRemoveOpen] = useState(false)
   const logoInputRef = useRef<HTMLInputElement | null>(null)
 
   const update = <K extends keyof VitrineConfig>(
@@ -58,11 +69,11 @@ export function VitrineConfigForm({
     }
   }
 
-  async function handleRemove(kind: VitrineAssetKind) {
+  async function confirmRemove() {
     setUploadError(null)
-    if (!confirm("Remover o logo?")) return
+    setRemoveOpen(false)
     try {
-      await onRemove(kind)
+      await onRemove("logo")
     } catch (err) {
       setUploadError(err instanceof Error ? err.message : "Erro ao remover")
     }
@@ -84,7 +95,7 @@ export function VitrineConfigForm({
             uploading={uploading === "logo"}
             inputRef={logoInputRef}
             onChoose={(file) => handleFile("logo", file)}
-            onRemove={() => handleRemove("logo")}
+            onRemove={() => setRemoveOpen(true)}
           />
         </div>
 
@@ -229,6 +240,29 @@ export function VitrineConfigForm({
           Profissionaliza Mais Brasil não aparecem na sua vitrine.
         </p>
       </section>
+
+      <AlertDialog open={removeOpen} onOpenChange={setRemoveOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remover o logo</AlertDialogTitle>
+            <AlertDialogDescription>
+              A vitrine voltará a exibir o nome da loja sem logo até você enviar
+              uma nova imagem.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault()
+                confirmRemove()
+              }}
+            >
+              Remover
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

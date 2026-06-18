@@ -19,7 +19,12 @@
   --color-pmb-cyan-50: #E6F7FC;
   --color-pmb-lime: #C0D904;
   --color-pmb-lime-50: #F4FAD4;
+  --color-pmb-lime-100: #E8F5C2;
+  --color-pmb-lime-200: #D6E89A;
+  --color-pmb-gold-50: #FEF6DC;
+  --color-pmb-cyan-700: #066F87;
   --color-pmb-terracotta: #8C3A27;
+  --color-pmb-terracotta-50: #F6E9E5;
   --color-pmb-canvas: #FFFFFF;
   --color-pmb-mist: #F4F4EE;
   --color-sidebar-ring: var(--sidebar-ring);

@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { toast } from "sonner"
 import { Check, Mail, MessageSquare, Phone, UserRound } from "lucide-react"
+import { StatusBadge } from "@/components/shared/status-badge"
+import { EmptyState } from "@/components/shared/empty-state"
 
 export interface AtendimentoMessage {
   id: string
@@ -71,16 +73,11 @@ export function AtendimentoInbox({ messages, apiBase, alunoBase }: Props) {
 
   if (messages.length === 0) {
     return (
-      <div className="rounded-2xl border border-dashed border-gray-300 bg-white p-10 text-center">
-        <MessageSquare className="mx-auto h-10 w-10 text-gray-300" aria-hidden />
-        <h2 className="mt-3 text-base font-semibold text-[var(--color-pmb-green-900)]">
-          Nenhuma mensagem por aqui
-        </h2>
-        <p className="mt-1 text-sm text-gray-600">
-          As mensagens enviadas pelo formulário de contato e pelo suporte dos
-          alunos aparecem nesta caixa.
-        </p>
-      </div>
+      <EmptyState
+        icon={MessageSquare}
+        title="Nenhuma mensagem por aqui"
+        description="As mensagens enviadas pelo formulário de contato e pelo suporte dos alunos aparecem nesta caixa."
+      />
     )
   }
 
@@ -96,9 +93,9 @@ export function AtendimentoInbox({ messages, apiBase, alunoBase }: Props) {
               {KIND_LABEL[m.kind]}
             </span>
             {m.status === "RESOLVED" && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">
+              <StatusBadge tone="success" dot={false}>
                 <Check className="h-3 w-3" /> Resolvido
-              </span>
+              </StatusBadge>
             )}
             <span className="ml-auto text-xs text-gray-500">
               {formatDate(m.createdAt)}

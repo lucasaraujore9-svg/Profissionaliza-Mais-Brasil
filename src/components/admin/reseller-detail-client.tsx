@@ -9,7 +9,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
+import { BlockSkeleton } from "@/components/shared/loading-skeletons"
+import { ResellerCard } from "./reseller-card"
 import { ResellerProfile, type ResellerProfileData } from "./reseller-profile"
 import {
   ResellerPaymentHistory,
@@ -26,7 +29,6 @@ import {
   type ResellerStudentsBreakdown,
 } from "./reseller-student-count"
 import { ResellerSupportNotes } from "./reseller-support-notes"
-import { ResellerImpersonateButton } from "./reseller-impersonate-button"
 import { ResellerBillingEdit } from "./reseller-billing-edit"
 import { ResellerPasswordEdit } from "./reseller-password-edit"
 import {
@@ -176,8 +178,10 @@ export function ResellerDetailClient({
 
   if (loading && !data) {
     return (
-      <div className="rounded-2xl border border-gray-200 bg-white p-10 text-center text-sm text-gray-500 shadow-sm">
-        Carregando revendedor...
+      <div className="space-y-6">
+        <BlockSkeleton className="h-32" />
+        <BlockSkeleton className="h-9 max-w-md" />
+        <BlockSkeleton className="h-64" />
       </div>
     )
   }
@@ -203,17 +207,45 @@ export function ResellerDetailClient({
     <div className="space-y-6">
       <ResellerProfile reseller={data.reseller} />
 
-      <ResellerImpersonateButton tenantId={tenantId} />
+      <Tabs defaultValue="overview" className="gap-6">
+        <TabsList variant="line" className="flex-wrap">
+          <TabsTrigger value="overview">Visão geral</TabsTrigger>
+          <TabsTrigger value="billing">Cobrança</TabsTrigger>
+          <TabsTrigger value="vitrine">Vitrine &amp; extras</TabsTrigger>
+          <TabsTrigger value="referral">Indicação</TabsTrigger>
+          <TabsTrigger value="advanced">Avançado</TabsTrigger>
+        </TabsList>
 
-      <div className="grid gap-6 xl:grid-cols-[2fr_1fr]">
-        <div className="space-y-6">
-          {canEditSlug && (
-            <ResellerSubdomainEdit
-              tenantId={tenantId}
-              slug={data.reseller.slug}
-              onSaved={load}
-            />
-          )}
+        {/* Visão geral */}
+        <TabsContent value="overview" className="space-y-6">
+          <div className="grid gap-6 xl:grid-cols-[2fr_1fr]">
+            <div className="space-y-6">
+              <ResellerStudentCount students={data.students} />
+              <ResellerBillingEdit
+                tenantId={tenantId}
+                planValue={data.reseller.planValue}
+                asaasCustomerId={data.reseller.asaasCustomerId}
+                asaasNextDueDate={data.reseller.asaasNextDueDate}
+                asaasSubscriptionId={data.reseller.asaasSubscriptionId}
+                asaasSubscriptionStatus={data.reseller.asaasSubscriptionStatus}
+                asaasSubscriptionValue={data.reseller.asaasSubscriptionValue}
+                asaasPromoSubscriptionId={data.reseller.asaasPromoSubscriptionId}
+                promoValue={data.reseller.promoValue}
+                promoMonths={data.reseller.promoMonths}
+                onSaved={load}
+              />
+            </div>
+            <div className="space-y-6">
+              <ResellerSupportNotes
+                tenantId={tenantId}
+                whatsapp={(data.reseller as { whatsapp?: string | null }).whatsapp ?? null}
+              />
+            </div>
+          </div>
+        </TabsContent>
+
+        {/* Cobrança */}
+        <TabsContent value="billing" className="space-y-6">
           <ResellerBillingEdit
             tenantId={tenantId}
             planValue={data.reseller.planValue}
@@ -238,52 +270,81 @@ export function ResellerDetailClient({
             cancellationPolicy={data.reseller.cancellationPolicy}
             onSaved={load}
           />
-          <ResellerTecnicaConfig
+        </TabsContent>
+
+        {/* Vitrine & extras */}
+        <TabsContent value="vitrine" className="space-y-6">
+          <div className="grid gap-6 xl:grid-cols-2">
+            {canEditSlug && (
+              <ResellerSubdomainEdit
+                tenantId={tenantId}
+                slug={data.reseller.slug}
+                onSaved={load}
+              />
+            )}
+            <ResellerTecnicaConfig
+              tenantId={tenantId}
+              tecnicaEnabled={data.reseller.tecnicaEnabled}
+              tecnicaUrl={data.reseller.tecnicaUrl}
+              tecnicaLabel={data.reseller.tecnicaLabel}
+              tecnicaCourses={data.reseller.tecnicaCourses}
+              onSaved={load}
+            />
+            <ResellerEjaConfig
+              tenantId={tenantId}
+              ejaEnabled={data.reseller.ejaEnabled}
+              ejaUrl={data.reseller.ejaUrl}
+              ejaLabel={data.reseller.ejaLabel}
+              onSaved={load}
+            />
+            <ResellerAutomationConfig
+              tenantId={tenantId}
+              automationEnabled={data.reseller.automationEnabled}
+              waConnectedPhone={data.reseller.waConnectedPhone}
+              waStatus={data.reseller.waStatus}
+              onSaved={load}
+            />
+            <ResellerMonthlyConfig
+              tenantId={tenantId}
+              monthlyAllowed={data.reseller.monthlyAllowed}
+              monthlyEnabled={data.reseller.monthlyEnabled}
+              monthlyScope={data.reseller.monthlyScope}
+              onSaved={load}
+            />
+            <ResellerAsaasGatewayConfig
+              tenantId={tenantId}
+              asaasGatewayEnabled={data.reseller.asaasGatewayEnabled}
+              asaasConnected={data.reseller.asaasConnected}
+              salesGateway={data.reseller.salesGateway}
+              onSaved={load}
+            />
+          </div>
+        </TabsContent>
+
+        {/* Indicação */}
+        <TabsContent value="referral" className="space-y-6">
+          <ResellerReferralConfig
             tenantId={tenantId}
-            tecnicaEnabled={data.reseller.tecnicaEnabled}
-            tecnicaUrl={data.reseller.tecnicaUrl}
-            tecnicaLabel={data.reseller.tecnicaLabel}
-            tecnicaCourses={data.reseller.tecnicaCourses}
+            referralCode={data.reseller.referralCode}
+            referralPercent={data.reseller.referralPercent}
+            referralMinReferrals={data.reseller.referralMinReferrals}
+            referralTiers={data.reseller.referralTiers}
+            activatedAt={data.reseller.activatedAt}
+            pixKey={data.reseller.pixKey}
+            pixKeyType={data.reseller.pixKeyType}
+            referrer={data.referrer}
+            stats={data.referralStats}
             onSaved={load}
           />
-          <ResellerEjaConfig
-            tenantId={tenantId}
-            ejaEnabled={data.reseller.ejaEnabled}
-            ejaUrl={data.reseller.ejaUrl}
-            ejaLabel={data.reseller.ejaLabel}
-            onSaved={load}
-          />
-          <ResellerAutomationConfig
-            tenantId={tenantId}
-            automationEnabled={data.reseller.automationEnabled}
-            waConnectedPhone={data.reseller.waConnectedPhone}
-            waStatus={data.reseller.waStatus}
-            onSaved={load}
-          />
-          <ResellerMonthlyConfig
-            tenantId={tenantId}
-            monthlyAllowed={data.reseller.monthlyAllowed}
-            monthlyEnabled={data.reseller.monthlyEnabled}
-            monthlyScope={data.reseller.monthlyScope}
-            onSaved={load}
-          />
-          <ResellerAsaasGatewayConfig
-            tenantId={tenantId}
-            asaasGatewayEnabled={data.reseller.asaasGatewayEnabled}
-            asaasConnected={data.reseller.asaasConnected}
-            salesGateway={data.reseller.salesGateway}
-            onSaved={load}
-          />
-        </div>
-        <div className="space-y-6">
+        </TabsContent>
+
+        {/* Avançado */}
+        <TabsContent value="advanced" className="space-y-6">
           {isSuperAdmin && (
-            <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-              <h3 className="font-semibold text-[var(--color-pmb-green-900)]">
-                Vendedor de revenda
-              </h3>
-              <p className="mt-1 text-xs text-gray-500">
-                Vendedor responsável comercialmente por esta unidade.
-              </p>
+            <ResellerCard
+              title="Vendedor de revenda"
+              description="Vendedor responsável comercialmente por esta unidade."
+            >
               <p className="mt-3 text-sm text-gray-700">
                 Atual:{" "}
                 <span className="font-semibold">
@@ -316,28 +377,14 @@ export function ResellerDetailClient({
                     disabled={
                       savingSales || salesValue === (salesUserCurrentId ?? "")
                     }
-                    className="bg-[var(--color-pmb-green)] hover:bg-[var(--color-pmb-green-900)]"
+                    className="bg-[var(--color-pmb-green)] hover:bg-[var(--color-pmb-green-700)]"
                   >
                     {savingSales ? "Salvando…" : "Salvar"}
                   </Button>
                 </div>
               </div>
-            </div>
+            </ResellerCard>
           )}
-          <ResellerStudentCount students={data.students} />
-          <ResellerReferralConfig
-            tenantId={tenantId}
-            referralCode={data.reseller.referralCode}
-            referralPercent={data.reseller.referralPercent}
-            referralMinReferrals={data.reseller.referralMinReferrals}
-            referralTiers={data.reseller.referralTiers}
-            activatedAt={data.reseller.activatedAt}
-            pixKey={data.reseller.pixKey}
-            pixKeyType={data.reseller.pixKeyType}
-            referrer={data.referrer}
-            stats={data.referralStats}
-            onSaved={load}
-          />
           <ResellerPasswordEdit
             tenantId={tenantId}
             ownerEmail={data.reseller.email}
@@ -348,12 +395,8 @@ export function ResellerDetailClient({
             isSuperAdmin={isSuperAdmin}
             onChanged={load}
           />
-          <ResellerSupportNotes
-            tenantId={tenantId}
-            whatsapp={(data.reseller as { whatsapp?: string | null }).whatsapp ?? null}
-          />
-        </div>
-      </div>
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }

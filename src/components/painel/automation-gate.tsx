@@ -62,15 +62,25 @@ export function AutomationGate({ enabled, children }: AutomationGateProps) {
       <div
         aria-hidden
         inert
-        className="pointer-events-none select-none blur-[3px] opacity-40"
+        className="pointer-events-none select-none blur-[4px] opacity-30"
       >
         {children}
       </div>
 
+      {/* Selo "Bloqueado" sobreposto ao conteúdo desfocado. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute right-4 top-4 z-20"
+      >
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--color-pmb-green)]/30 bg-white px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-[var(--color-pmb-green-900)] shadow-sm">
+          <Lock className="h-3 w-3" /> Bloqueado
+        </span>
+      </div>
+
       {/* Camada de bloqueio + pop-up comercial. */}
-      <div className="absolute inset-0 z-30 overflow-y-auto bg-[var(--color-pmb-mist)]/50 backdrop-blur-[2px]">
+      <div className="absolute inset-0 z-30 overflow-y-auto bg-[var(--color-pmb-green-900)]/30 backdrop-blur-[3px]">
         <div className="flex min-h-full items-start justify-center px-4 py-6 sm:items-center">
-          <div className="w-full max-w-lg overflow-hidden rounded-3xl border border-[var(--color-pmb-green)]/15 bg-white shadow-2xl">
+          <div className="w-full max-w-lg overflow-hidden rounded-3xl border-2 border-[var(--color-pmb-green)] bg-white shadow-2xl">
           <div className="bg-gradient-to-br from-[var(--color-pmb-green)] to-[var(--color-pmb-green-700)] px-6 py-5 text-white">
             <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider">
               <Lock className="h-3 w-3" /> Recurso Premium
@@ -115,8 +125,9 @@ export function AutomationGate({ enabled, children }: AutomationGateProps) {
 
           <div className="border-t border-gray-100 px-6 py-5">
             <p className="text-center text-[12px] text-gray-500">
-              A ativação é feita pela equipe Profissionaliza Mais Brasil. Fale
-              com seu gerente de conta:
+              A ativação é feita pela equipe Profissionaliza Mais Brasil — você
+              não consegue ligar esse recurso sozinho. Peça ao seu gerente de
+              conta:
             </p>
             <a
               href={contactHref}
@@ -128,21 +139,26 @@ export function AutomationGate({ enabled, children }: AutomationGateProps) {
               Quero ativar a Automação
             </a>
 
-            <div className="mt-3 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-[12px] text-gray-600">
-              {support.phoneLabel && (
+            <div className="mt-4 rounded-xl border border-gray-100 bg-[var(--color-pmb-mist)]/50 px-4 py-3">
+              <p className="text-center text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                Fale com seu gerente
+              </p>
+              <div className="mt-2 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-[12px] text-gray-700">
+                {support.phoneLabel && (
+                  <span className="inline-flex items-center gap-1.5">
+                    {support.isWhatsapp ? (
+                      <MessageCircle className="h-3.5 w-3.5 text-[var(--color-pmb-green)]" />
+                    ) : (
+                      <Phone className="h-3.5 w-3.5 text-[var(--color-pmb-green)]" />
+                    )}
+                    {support.phoneLabel}
+                  </span>
+                )}
                 <span className="inline-flex items-center gap-1.5">
-                  {support.isWhatsapp ? (
-                    <MessageCircle className="h-3.5 w-3.5 text-[var(--color-pmb-green)]" />
-                  ) : (
-                    <Phone className="h-3.5 w-3.5 text-[var(--color-pmb-green)]" />
-                  )}
-                  {support.phoneLabel}
+                  <Mail className="h-3.5 w-3.5 text-[var(--color-pmb-green)]" />
+                  {support.email}
                 </span>
-              )}
-              <span className="inline-flex items-center gap-1.5">
-                <Mail className="h-3.5 w-3.5 text-[var(--color-pmb-green)]" />
-                {support.email}
-              </span>
+              </div>
             </div>
 
             <Link

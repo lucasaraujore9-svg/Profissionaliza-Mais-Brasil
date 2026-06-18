@@ -1,16 +1,13 @@
 "use client"
 
 import Link from "next/link"
-import { Eye, Ban, Unlock, ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react"
+import { Eye, Ban, Unlock, ChevronUp, ChevronDown, ChevronsUpDown, Users } from "lucide-react"
+import { EmptyState } from "@/components/shared/empty-state"
+import { TableRowsSkeleton } from "@/components/shared/loading-skeletons"
+import { StudentStatusBadge, type StudentStatusKey } from "./student-status"
 
-export type StudentStatus =
-  | "ATIVO"
-  | "PENDENTE"
-  | "INATIVO"
-  | "BLOQUEADO"
-  | "DEVEDOR"
-  | "FORMADO"
-  | "INTERESSADO"
+// Status canonicos do aluno — fonte unica de verdade em ./student-status.
+export type StudentStatus = StudentStatusKey
 
 export interface StudentListItem {
   id: string
@@ -19,26 +16,6 @@ export interface StudentListItem {
   status: StudentStatus
   coursesCount: number
   createdAt: string
-}
-
-const statusLabels: Record<StudentStatus, string> = {
-  ATIVO: "Ativo",
-  PENDENTE: "Pagamento pendente",
-  INATIVO: "Inativo",
-  BLOQUEADO: "Bloqueado",
-  DEVEDOR: "Devedor",
-  FORMADO: "Formado",
-  INTERESSADO: "Interessado",
-}
-
-const statusColors: Record<StudentStatus, string> = {
-  ATIVO: "bg-green-100 text-green-700",
-  PENDENTE: "bg-orange-100 text-orange-700",
-  INATIVO: "bg-gray-100 text-gray-600",
-  BLOQUEADO: "bg-red-100 text-red-700",
-  DEVEDOR: "bg-amber-100 text-amber-700",
-  FORMADO: "bg-[var(--color-pmb-lime-50)] text-[var(--color-pmb-green-700)]",
-  INTERESSADO: "bg-violet-100 text-violet-700",
 }
 
 function formatDate(iso: string): string {
@@ -93,17 +70,19 @@ export function StudentTable({
 }: StudentTableProps) {
   if (loading) {
     return (
-      <div className="rounded-2xl border border-gray-200 bg-white p-10 text-center text-sm text-gray-500 shadow-sm">
-        Carregando alunos...
+      <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+        <TableRowsSkeleton rows={6} cols={6} />
       </div>
     )
   }
 
   if (students.length === 0) {
     return (
-      <div className="rounded-2xl border border-dashed border-gray-300 bg-white p-10 text-center text-sm text-gray-500">
-        Nenhum aluno encontrado.
-      </div>
+      <EmptyState
+        icon={Users}
+        title="Nenhum aluno encontrado"
+        description="Ajuste os filtros ou aguarde a primeira matrícula pela sua vitrine."
+      />
     )
   }
 
@@ -172,11 +151,7 @@ export function StudentTable({
                     {formatDate(student.createdAt)}
                   </td>
                   <td className="px-4 py-3">
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${statusColors[student.status]}`}
-                    >
-                      {statusLabels[student.status]}
-                    </span>
+                    <StudentStatusBadge status={student.status} />
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-1">

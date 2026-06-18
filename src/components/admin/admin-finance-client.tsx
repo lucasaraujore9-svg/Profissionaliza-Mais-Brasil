@@ -2,6 +2,10 @@
 
 import { useEffect, useState } from "react"
 import {
+  StatCardsSkeleton,
+  TableRowsSkeleton,
+} from "@/components/shared/loading-skeletons"
+import {
   AdminFinanceSummary,
   type AdminFinanceSummaryData,
 } from "./admin-finance-summary"
@@ -61,14 +65,20 @@ export function AdminFinanceClient() {
 
   if (loading && !finance) {
     return (
-      <div className="rounded-2xl border border-gray-200 bg-white p-10 text-center text-sm text-gray-500 shadow-sm">
-        Carregando dados financeiros...
+      <div className="space-y-6">
+        <StatCardsSkeleton />
+        <div className="rounded-2xl border border-gray-200 bg-white shadow-sm">
+          <TableRowsSkeleton rows={5} cols={3} />
+        </div>
+        <div className="rounded-2xl border border-gray-200 bg-white shadow-sm">
+          <TableRowsSkeleton rows={5} cols={4} />
+        </div>
       </div>
     )
   }
   if (error) {
     return (
-      <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-sm text-red-700">
+      <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
         {error}
       </div>
     )

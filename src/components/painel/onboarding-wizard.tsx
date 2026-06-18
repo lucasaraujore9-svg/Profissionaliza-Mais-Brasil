@@ -138,7 +138,9 @@ export function OnboardingWizard() {
                     {isDone ? <Check className="h-4 w-4" /> : <Icon className="h-4 w-4" />}
                   </div>
                   <span
-                    className={`hidden text-[10px] font-medium md:block ${
+                    className={`text-[10px] font-medium md:block ${
+                      isActive ? "block" : "hidden"
+                    } ${
                       isActive ? "text-[var(--color-pmb-green-900)]" : "text-gray-500"
                     }`}
                   >
@@ -230,6 +232,7 @@ export function OnboardingWizard() {
         </span>
         {current < steps.length ? (
           <Button
+            size={current === steps.length - 1 ? "lg" : "default"}
             className="bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)]"
             disabled={saving}
             onClick={handleNext}
@@ -241,8 +244,8 @@ export function OnboardingWizard() {
               </>
             ) : current === steps.length - 1 ? (
               <>
+                <Check className="mr-2 h-4 w-4" />
                 Finalizar
-                <ArrowRight className="ml-2 h-4 w-4" />
               </>
             ) : (
               <>

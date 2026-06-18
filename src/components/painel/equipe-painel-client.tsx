@@ -3,11 +3,10 @@
 import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
-import { Plus, Mail, UserX, UserCheck, Trash2 } from "lucide-react"
+import { Plus, Mail, UserX, UserCheck, Trash2, Users } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Badge } from "@/components/ui/badge"
 import {
   Sheet,
   SheetContent,
@@ -16,6 +15,19 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import { PageHeader } from "@/components/painel/page-header"
+import { StatusBadge } from "@/components/shared/status-badge"
+import { EmptyState } from "@/components/shared/empty-state"
 import {
   ModeToggle,
   PasswordField,
@@ -50,6 +62,7 @@ export function EquipePainelClient({
   const [created, setCreated] = useState<
     { email: string; password: string; emailSent: boolean } | null
   >(null)
+  const [toRemove, setToRemove] = useState<ConsultantItem | null>(null)
   const [form, setForm] = useState({
     name: "",
     email: "",
@@ -146,113 +159,147 @@ export function EquipePainelClient({
   }
 
   function remove(item: ConsultantItem) {
-    if (!confirm(`Remover ${item.name} da equipe?`)) return
     startTransition(async () => {
       const res = await fetch(`/api/painel/equipe/${item.membershipId}`, { method: "DELETE" })
       if (!res.ok) {
         toast.error("Falha ao remover")
         return
       }
+      setToRemove(null)
       router.refresh()
     })
   }
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-display text-[var(--color-pmb-green-900)]">
-            Equipe de {tenantName}
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Consultores que ajudam a vender cursos na sua vitrine
-          </p>
-        </div>
-        <Button
-          onClick={openSheet}
-          className="bg-[var(--color-pmb-green)] hover:bg-[var(--color-pmb-green-900)]"
-        >
-          <Plus className="h-4 w-4 mr-2" /> Novo consultor
-        </Button>
-      </div>
+      <PageHeader
+        title={`Equipe de ${tenantName}`}
+        description="Consultores que ajudam a vender cursos na sua vitrine"
+        actions={
+          <Button
+            onClick={openSheet}
+            className="bg-[var(--color-pmb-green)] hover:bg-[var(--color-pmb-green-900)]"
+          >
+            <Plus className="h-4 w-4 mr-2" /> Novo consultor
+          </Button>
+        }
+      />
 
-      <div className="overflow-hidden rounded-xl border bg-white">
-        <table className="w-full text-sm">
-          <thead className="bg-[var(--color-pmb-mist)] text-left">
-            <tr>
-              <th className="px-4 py-3 font-semibold">Nome</th>
-              <th className="px-4 py-3 font-semibold">Email</th>
-              <th className="px-4 py-3 font-semibold">Cap desconto</th>
-              <th className="px-4 py-3 font-semibold">Status</th>
-              <th className="px-4 py-3" />
-            </tr>
-          </thead>
-          <tbody>
-            {initialItems.map((c) => (
-              <tr key={c.membershipId} className="border-t">
-                <td className="px-4 py-3 font-medium">{c.name}</td>
-                <td className="px-4 py-3 text-muted-foreground">{c.email}</td>
-                <td className="px-4 py-3">
-                  {c.maxDiscount !== null ? `${c.maxDiscount}%` : "—"}
-                </td>
-                <td className="px-4 py-3">
-                  {c.pendingInvite ? (
-                    <Badge variant="secondary" className="gap-1">
-                      <Mail className="h-3 w-3" /> convite pendente
-                    </Badge>
-                  ) : c.status === "ATIVO" ? (
-                    <Badge className="bg-emerald-100 text-emerald-900">Ativo</Badge>
-                  ) : (
-                    <Badge variant="outline">Inativo</Badge>
-                  )}
-                </td>
-                <td className="px-4 py-3 text-right space-x-1">
-                  {c.pendingInvite && (
+      {initialItems.length === 0 ? (
+        <EmptyState
+          icon={Users}
+          title="Nenhum consultor cadastrado"
+          description="Convide consultores para ajudar a vender cursos na sua vitrine."
+          action={
+            <Button
+              onClick={openSheet}
+              className="bg-[var(--color-pmb-green)] hover:bg-[var(--color-pmb-green-900)]"
+            >
+              <Plus className="h-4 w-4 mr-2" /> Novo consultor
+            </Button>
+          }
+        />
+      ) : (
+        <div className="overflow-x-auto rounded-xl border bg-white">
+          <table className="w-full text-sm">
+            <thead className="bg-[var(--color-pmb-green-900)]/10 text-left">
+              <tr>
+                <th className="px-4 py-3 font-semibold text-[var(--color-pmb-green-900)]">Nome</th>
+                <th className="px-4 py-3 font-semibold text-[var(--color-pmb-green-900)]">Email</th>
+                <th className="px-4 py-3 font-semibold text-[var(--color-pmb-green-900)]">Cap desconto</th>
+                <th className="px-4 py-3 font-semibold text-[var(--color-pmb-green-900)]">Status</th>
+                <th className="px-4 py-3" />
+              </tr>
+            </thead>
+            <tbody>
+              {initialItems.map((c) => (
+                <tr
+                  key={c.membershipId}
+                  className="border-t transition-colors hover:bg-[var(--color-pmb-lime-50)]/50"
+                >
+                  <td className="px-4 py-3 font-medium">{c.name}</td>
+                  <td className="px-4 py-3 text-muted-foreground">{c.email}</td>
+                  <td className="px-4 py-3 font-mono">
+                    {c.maxDiscount !== null ? `${c.maxDiscount}%` : "—"}
+                  </td>
+                  <td className="px-4 py-3">
+                    {c.pendingInvite ? (
+                      <StatusBadge tone="warning">Convite pendente</StatusBadge>
+                    ) : c.status === "ATIVO" ? (
+                      <StatusBadge tone="success">Ativo</StatusBadge>
+                    ) : (
+                      <StatusBadge tone="neutral">Inativo</StatusBadge>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-right space-x-1">
+                    {c.pendingInvite && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => resend(c)}
+                        disabled={pending}
+                        title="Reenviar convite"
+                      >
+                        <Mail className="h-4 w-4" />
+                      </Button>
+                    )}
                     <Button
                       size="sm"
                       variant="ghost"
-                      onClick={() => resend(c)}
+                      onClick={() => toggle(c)}
                       disabled={pending}
-                      title="Reenviar convite"
+                      title={c.status === "ATIVO" ? "Suspender" : "Reativar"}
                     >
-                      <Mail className="h-4 w-4" />
+                      {c.status === "ATIVO" ? (
+                        <UserX className="h-4 w-4" />
+                      ) : (
+                        <UserCheck className="h-4 w-4" />
+                      )}
                     </Button>
-                  )}
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => toggle(c)}
-                    disabled={pending}
-                    title={c.status === "ATIVO" ? "Suspender" : "Reativar"}
-                  >
-                    {c.status === "ATIVO" ? (
-                      <UserX className="h-4 w-4" />
-                    ) : (
-                      <UserCheck className="h-4 w-4" />
-                    )}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => remove(c)}
-                    disabled={pending}
-                    title="Remover"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </td>
-              </tr>
-            ))}
-            {initialItems.length === 0 && (
-              <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">
-                  Nenhum consultor cadastrado
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setToRemove(c)}
+                      disabled={pending}
+                      title="Remover"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <AlertDialog
+        open={toRemove !== null}
+        onOpenChange={(o) => !o && setToRemove(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remover consultor</AlertDialogTitle>
+            <AlertDialogDescription>
+              {toRemove
+                ? `Remover ${toRemove.name} da equipe? Esta ação não pode ser desfeita.`
+                : ""}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={pending}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={pending}
+              onClick={(e) => {
+                e.preventDefault()
+                if (toRemove) remove(toRemove)
+              }}
+            >
+              Remover
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetContent className="sm:max-w-md">

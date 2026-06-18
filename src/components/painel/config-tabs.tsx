@@ -1,7 +1,9 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Loader2 } from "lucide-react"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { AccountForm } from "./account-form"
 import { BillingSection } from "./billing-section"
 import { SecurityForm } from "./security-form"
@@ -45,9 +47,21 @@ export interface ConfigData {
 }
 
 export function ConfigTabs() {
-  const [active, setActive] = useState<TabId>("conta")
+  const router = useRouter()
+  const params = useSearchParams()
+  const urlTab = params.get("tab") as TabId | null
+  const active: TabId = tabs.some((t) => t.id === urlTab) ? (urlTab as TabId) : "conta"
   const [data, setData] = useState<ConfigData | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
+
+  const setActive = useCallback(
+    (id: TabId) => {
+      const next = new URLSearchParams(params)
+      next.set("tab", id)
+      router.replace(`?${next.toString()}`, { scroll: false })
+    },
+    [params, router],
+  )
 
   useEffect(() => {
     let cancelled = false
@@ -99,22 +113,22 @@ export function ConfigTabs() {
 
   return (
     <div>
-      <div className="flex gap-1 rounded-xl border border-gray-200 bg-white p-1 shadow-sm">
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            onClick={() => setActive(tab.id)}
-            className={`flex-1 rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${
-              active === tab.id
-                ? "bg-[var(--color-pmb-green)] text-white shadow-sm"
-                : "text-gray-600 hover:text-[var(--color-pmb-green-900)]"
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
+      <Tabs
+        value={active}
+        onValueChange={(v) => typeof v === "string" && setActive(v as TabId)}
+      >
+        <TabsList className="flex w-full flex-wrap justify-start gap-1 bg-[var(--color-pmb-mist,#f7faf7)] p-1">
+          {tabs.map((tab) => (
+            <TabsTrigger
+              key={tab.id}
+              value={tab.id}
+              className="data-active:bg-white data-active:text-[var(--color-pmb-green,#025918)] data-active:shadow-sm"
+            >
+              {tab.label}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
 
       <div className="mt-6">
         {active === "conta" && (

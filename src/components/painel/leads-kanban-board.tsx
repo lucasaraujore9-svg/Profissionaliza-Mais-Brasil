@@ -2,9 +2,11 @@
 
 import { useCallback, useEffect, useState } from "react"
 import { toast } from "sonner"
-import { Loader2 } from "lucide-react"
+import { Users } from "lucide-react"
 import { LeadKanbanColumn, STAGE_META, type StageKey } from "./lead-kanban-column"
 import { LeadDetailDrawer } from "./lead-detail-drawer"
+import { BlockSkeleton } from "@/components/shared/loading-skeletons"
+import { EmptyState } from "@/components/shared/empty-state"
 
 export interface LeadCardData {
   id: string
@@ -115,18 +117,33 @@ export function LeadsKanbanBoard({
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center rounded-2xl border border-gray-200 bg-white py-16 text-sm text-gray-500">
-        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-        Carregando leads…
+      <div className="-mx-2 overflow-x-auto pb-4">
+        <div className="flex min-w-max gap-3 px-2">
+          {STAGE_ORDER.map((stage) => (
+            <BlockSkeleton key={stage} className="h-72 w-72 flex-shrink-0" />
+          ))}
+        </div>
       </div>
     )
   }
 
   if (error) {
     return (
-      <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-sm text-red-700">
+      <div className="rounded-2xl border border-rose-200 bg-rose-50 p-6 text-sm text-rose-700">
         {error}
       </div>
+    )
+  }
+
+  const totalLeads = STAGE_ORDER.reduce((acc, s) => acc + board[s].length, 0)
+
+  if (totalLeads === 0) {
+    return (
+      <EmptyState
+        icon={Users}
+        title="Nenhum lead por aqui ainda"
+        description="Leads gerados pela vitrine, formulários de curso e checkouts abandonados aparecem neste quadro."
+      />
     )
   }
 

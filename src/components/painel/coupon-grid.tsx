@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { ArrowRight, CheckCircle2, Plus, Tag, TrendingUp } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { PageHeader } from "@/components/painel/page-header"
+import { EmptyState } from "@/components/shared/empty-state"
 import { CouponCard, type CouponListItem } from "./coupon-card"
 import {
   CouponUsageTable,
@@ -110,7 +112,21 @@ export function CouponGrid() {
 
   return (
     <div className="space-y-6">
-      {/* Header com botão principal + estatísticas */}
+      <PageHeader
+        title="Cupons"
+        description="Crie códigos promocionais e acompanhe quem está usando."
+        actions={
+          <Button
+            className="bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)]"
+            onClick={() => setModalOpen(true)}
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            Novo cupom
+          </Button>
+        }
+      />
+
+      {/* Estatísticas */}
       {coupons.length > 0 && (
         <div className="grid gap-3 sm:grid-cols-3">
           <SummaryStat
@@ -137,23 +153,6 @@ export function CouponGrid() {
         </div>
       )}
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <p className="text-sm text-gray-600">
-            {coupons.length === 0
-              ? "Crie cupons para oferecer desconto e atrair novos alunos."
-              : `${coupons.length} ${coupons.length === 1 ? "cupom cadastrado" : "cupons cadastrados"}`}
-          </p>
-        </div>
-        <Button
-          className="bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)]"
-          onClick={() => setModalOpen(true)}
-        >
-          <Plus className="mr-2 h-4 w-4" />
-          Novo cupom
-        </Button>
-      </div>
-
       {error && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {error}
@@ -165,28 +164,22 @@ export function CouponGrid() {
           Carregando cupons...
         </div>
       ) : coupons.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-[rgba(2,89,24,0.18)] bg-white p-10 text-center shadow-sm">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--color-pmb-lime-50)] text-[var(--color-pmb-green)]">
-            <Tag className="h-6 w-6" />
-          </div>
-          <h3 className="mt-4 text-lg font-semibold text-[var(--color-pmb-green-900)]">
-            Crie seu primeiro cupom
-          </h3>
-          <p className="mx-auto mt-2 max-w-md text-sm text-gray-600">
-            Cupons ajudam você a atrair novos alunos com descontos. Defina um
-            código, valor e período de validade — e pronto, seu aluno aplica
-            no checkout.
-          </p>
-          <button
-            type="button"
-            onClick={() => setModalOpen(true)}
-            className="mt-6 inline-flex items-center gap-2 rounded-lg bg-[var(--color-pmb-green)] px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[var(--color-pmb-green-700)]"
-          >
-            <Plus className="h-4 w-4" />
-            Criar cupom agora
-            <ArrowRight className="h-4 w-4" />
-          </button>
-        </div>
+        <EmptyState
+          icon={Tag}
+          title="Crie seu primeiro cupom"
+          description="Cupons ajudam você a atrair novos alunos com descontos. Defina um código, valor e período de validade — e pronto, seu aluno aplica no checkout."
+          action={
+            <button
+              type="button"
+              onClick={() => setModalOpen(true)}
+              className="inline-flex items-center gap-2 rounded-lg bg-[var(--color-pmb-green)] px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[var(--color-pmb-green-700)]"
+            >
+              <Plus className="h-4 w-4" />
+              Criar cupom agora
+              <ArrowRight className="h-4 w-4" />
+            </button>
+          }
+        />
       ) : (
         <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {coupons.map((coupon) => (
@@ -233,8 +226,8 @@ type StatTone = "primary" | "success" | "accent"
 
 const STAT_TONES: Record<StatTone, string> = {
   primary: "bg-[var(--color-pmb-lime-50)] text-[var(--color-pmb-green)]",
-  success: "bg-emerald-50 text-emerald-600",
-  accent: "bg-amber-50 text-amber-600",
+  success: "bg-[var(--color-pmb-green)]/10 text-[var(--color-pmb-green-700)]",
+  accent: "bg-[var(--color-pmb-gold-50)] text-[var(--color-pmb-gold-600)]",
 }
 
 function SummaryStat({
@@ -260,7 +253,7 @@ function SummaryStat({
           {label}
         </p>
       </div>
-      <p className="mt-3 text-2xl font-bold text-[var(--color-pmb-green-900)]">
+      <p className="mt-3 font-mono text-2xl font-bold text-[var(--color-pmb-green-900)]">
         {value}
       </p>
       <p className="mt-0.5 text-xs text-gray-500">{hint}</p>

@@ -1,5 +1,5 @@
-import Link from "next/link"
-import { ArrowLeft } from "lucide-react"
+import { PageHeader } from "@/components/painel/page-header"
+import { ResellerBackLink } from "@/components/admin/reseller-back-link"
 import { ResellerDetailClient } from "@/components/admin/reseller-detail-client"
 import { requireAdminSession } from "@/lib/auth/admin-session"
 import { prisma } from "@/lib/prisma"
@@ -20,6 +20,8 @@ export default async function ResellerDetailPage({
     prisma.tenant.findUnique({
       where: { id },
       select: {
+        name: true,
+        slug: true,
         salesUserId: true,
         salesUser: { select: { name: true } },
       },
@@ -35,13 +37,25 @@ export default async function ResellerDetailPage({
 
   return (
     <div className="space-y-6">
-      <Link
+      <ResellerBackLink
         href="/admin/revendedores"
-        className="inline-flex items-center gap-2 text-xs font-semibold text-gray-600 hover:text-[var(--color-pmb-green-900)]"
-      >
-        <ArrowLeft className="h-3.5 w-3.5" />
-        Voltar para revendedores
-      </Link>
+        label="Voltar para revendedores"
+      />
+
+      <PageHeader
+        title={tenant?.name ?? "Revendedor"}
+        description={
+          tenant?.slug ? `Gestão da unidade ${tenant.slug}.` : undefined
+        }
+        actions={
+          <a
+            href={`/admin/revendedores/${id}/comissoes`}
+            className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 transition-colors hover:border-[var(--color-pmb-green)] hover:text-[var(--color-pmb-green-700)]"
+          >
+            Comissões
+          </a>
+        }
+      />
 
       <ResellerDetailClient
         tenantId={id}

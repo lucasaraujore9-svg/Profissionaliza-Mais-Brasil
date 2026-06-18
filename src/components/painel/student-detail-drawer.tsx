@@ -13,6 +13,8 @@ import {
   ArrowRight,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { StudentStatusBadge } from "./student-status"
+import { SaleStatusBadge } from "./sale-status"
 import type { StudentStatus } from "./student-table"
 
 interface EnrollmentDetail {
@@ -41,26 +43,6 @@ interface StudentDetailDrawerProps {
   studentId: string | null
   onClose: () => void
   onToggleBlock: (id: string, currentStatus: StudentStatus) => Promise<void>
-}
-
-const statusLabels: Record<StudentStatus, string> = {
-  ATIVO: "Ativo",
-  PENDENTE: "Pagamento pendente",
-  INATIVO: "Inativo",
-  BLOQUEADO: "Bloqueado",
-  DEVEDOR: "Devedor",
-  FORMADO: "Formado",
-  INTERESSADO: "Interessado",
-}
-
-const statusColors: Record<StudentStatus, string> = {
-  ATIVO: "bg-green-100 text-green-700",
-  PENDENTE: "bg-orange-100 text-orange-700",
-  INATIVO: "bg-gray-100 text-gray-600",
-  BLOQUEADO: "bg-red-100 text-red-700",
-  DEVEDOR: "bg-amber-100 text-amber-700",
-  FORMADO: "bg-[var(--color-pmb-lime-50)] text-[var(--color-pmb-green-700)]",
-  INTERESSADO: "bg-violet-100 text-violet-700",
 }
 
 function initials(name: string): string {
@@ -258,11 +240,9 @@ export function StudentDetailDrawer({
                       {student.cpf}
                     </div>
                   )}
-                  <span
-                    className={`mt-2 inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${statusColors[student.status]}`}
-                  >
-                    {statusLabels[student.status]}
-                  </span>
+                  <div className="mt-2">
+                    <StudentStatusBadge status={student.status} />
+                  </div>
                 </div>
               </div>
 
@@ -316,9 +296,7 @@ export function StudentDetailDrawer({
                         </div>
                         <div className="mt-2 flex items-center justify-between text-[10px] text-gray-500">
                           <span>Matriculado em {formatDate(course.createdAt)}</span>
-                          <span className="rounded-full bg-gray-100 px-2 py-0.5 font-semibold text-gray-600">
-                            {course.status}
-                          </span>
+                          <SaleStatusBadge status={course.status} />
                         </div>
                       </li>
                     ))}

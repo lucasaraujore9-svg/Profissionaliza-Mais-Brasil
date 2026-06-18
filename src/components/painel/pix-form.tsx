@@ -3,6 +3,15 @@
 import { useEffect, useState } from "react"
 import { Loader2, KeyRound } from "lucide-react"
 import { toast } from "sonner"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 
 const PIX_TYPES = [
   { value: "CPF", label: "CPF" },
@@ -125,36 +134,39 @@ export function PixForm() {
           <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">
             Tipo
           </span>
-          <select
+          <Select
             value={state.pixKeyType ?? ""}
-            onChange={(e) =>
+            onValueChange={(v) =>
               setState((s) => ({
                 ...s,
-                pixKeyType: (e.target.value || null) as PixType | null,
+                pixKeyType: ((typeof v === "string" ? v : "") || null) as PixType | null,
               }))
             }
-            className="mt-1.5 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-[var(--color-pmb-green)]"
           >
-            <option value="">Selecione…</option>
-            {PIX_TYPES.map((t) => (
-              <option key={t.value} value={t.value}>
-                {t.label}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger className="mt-1.5 w-full" aria-label="Tipo da chave PIX">
+              <SelectValue placeholder="Selecione…" />
+            </SelectTrigger>
+            <SelectContent>
+              {PIX_TYPES.map((t) => (
+                <SelectItem key={t.value} value={t.value}>
+                  {t.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </label>
 
         <label className="block">
           <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">
             Chave
           </span>
-          <input
+          <Input
             value={state.pixKey ?? ""}
             onChange={(e) =>
               setState((s) => ({ ...s, pixKey: e.target.value }))
             }
             placeholder="Digite a chave correspondente ao tipo escolhido"
-            className="mt-1.5 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-[var(--color-pmb-green)]"
+            className="mt-1.5"
           />
           {fieldError && (
             <p className="mt-1 text-xs text-red-600">{fieldError}</p>
@@ -163,21 +175,21 @@ export function PixForm() {
       </div>
 
       <div className="flex items-center justify-end gap-2">
-        <button
+        <Button
           type="button"
+          variant="outline"
           onClick={onClear}
           disabled={saving || (!state.pixKey && !state.pixKeyType)}
-          className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-600 disabled:opacity-50"
         >
           Limpar
-        </button>
-        <button
+        </Button>
+        <Button
           type="submit"
           disabled={saving}
-          className="rounded-lg bg-[var(--color-pmb-green)] px-4 py-2 text-sm font-bold text-white disabled:opacity-60"
+          className="bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)]"
         >
           {saving ? "Salvando…" : "Salvar chave PIX"}
-        </button>
+        </Button>
       </div>
     </form>
   )

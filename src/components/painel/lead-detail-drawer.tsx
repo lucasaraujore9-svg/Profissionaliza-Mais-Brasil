@@ -18,6 +18,7 @@ import {
   UserRound,
 } from "lucide-react"
 import { STAGE_META, type StageKey } from "./lead-kanban-column"
+import { LeadStageBadge } from "./lead-stage"
 
 interface LeadActivity {
   id: string
@@ -320,13 +321,10 @@ export function LeadDetailDrawer({
                 </p>
               )}
               <div className="flex items-center gap-2 pt-2">
-                <span
-                  className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                    STAGE_META[lead.stage].badge
-                  }`}
-                >
-                  {STAGE_META[lead.stage].label}
-                </span>
+                <LeadStageBadge
+                  stage={lead.stage}
+                  label={STAGE_META[lead.stage].label}
+                />
                 <span className="text-[11px] text-gray-500">
                   Criado em {new Date(lead.createdAt).toLocaleString("pt-BR")}
                 </span>
@@ -335,7 +333,9 @@ export function LeadDetailDrawer({
                 <div className="mt-3 rounded-lg border border-gray-200 bg-gray-50 p-3 text-[12px]">
                   <p className="text-gray-700">
                     <strong>Matrícula:</strong> {lead.enrollment.status} ·{" "}
-                    R$ {lead.enrollment.finalAmount.toFixed(2).replace(".", ",")}
+                    <span className="font-mono">
+                      R$ {lead.enrollment.finalAmount.toFixed(2).replace(".", ",")}
+                    </span>
                   </p>
                 </div>
               )}
@@ -400,7 +400,7 @@ export function LeadDetailDrawer({
                         <p className="text-[11px] text-gray-600">
                           {OUTCOME_LABEL[c.stage]}
                           {c.stage === "WON" && c.paymentValue !== null && (
-                            <span className="font-semibold text-emerald-700">
+                            <span className="font-mono font-semibold text-[var(--color-pmb-green-700)]">
                               {" "}
                               · R$ {c.paymentValue.toFixed(2).replace(".", ",")}
                             </span>
@@ -510,7 +510,7 @@ export function LeadDetailDrawer({
                 className="mt-1.5 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-[12.5px] focus:border-[var(--color-pmb-green)] focus:outline-none focus:ring-1 focus:ring-[var(--color-pmb-green)]"
               />
               {waError && (
-                <p className="mt-1.5 rounded-md bg-red-50 px-2.5 py-1.5 text-[11.5px] font-medium text-red-700">
+                <p className="mt-1.5 rounded-md bg-rose-50 px-2.5 py-1.5 text-[11.5px] font-medium text-rose-700">
                   {waError}
                 </p>
               )}
@@ -562,12 +562,12 @@ export function LeadDetailDrawer({
           <footer className="flex items-center justify-between border-t border-gray-200 px-5 py-3">
             <button
               onClick={discard}
-              className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12px] font-semibold text-red-600 hover:bg-red-50"
+              className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12px] font-semibold text-rose-600 hover:bg-rose-50"
             >
               <Trash2 className="h-3.5 w-3.5" />
               Descartar lead
             </button>
-            <span className="text-[10px] text-gray-400">ID: {lead.id}</span>
+            <span className="font-mono text-[10px] text-gray-400">ID: {lead.id}</span>
           </footer>
         )}
       </aside>

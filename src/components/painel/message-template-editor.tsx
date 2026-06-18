@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react"
 import { toast } from "sonner"
-import { Loader2, Save, Info } from "lucide-react"
+import { Loader2, Save, Info, CheckCircle2 } from "lucide-react"
+import { Switch } from "@/components/ui/switch"
+import { Label } from "@/components/ui/label"
 
 type TemplateKey =
   | "FORM_SUBMITTED"
@@ -69,6 +71,7 @@ export function MessageTemplateEditor({
   const [templates, setTemplates] = useState<Template[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [savedOk, setSavedOk] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -94,6 +97,7 @@ export function MessageTemplateEditor({
   }, [load])
 
   function update(key: TemplateKey, patch: Partial<Template>) {
+    setSavedOk(false)
     setTemplates((prev) =>
       prev.map((t) => (t.key === key ? { ...t, ...patch } : t)),
     )
@@ -101,6 +105,7 @@ export function MessageTemplateEditor({
 
   async function save() {
     setSaving(true)
+    setSavedOk(false)
     try {
       const res = await fetch(`${apiBase}/templates`, {
         method: "PUT",
@@ -119,6 +124,7 @@ export function MessageTemplateEditor({
         return
       }
       toast.success("Templates atualizados")
+      setSavedOk(true)
     } catch {
       toast.error("Erro de rede")
     } finally {
@@ -141,7 +147,7 @@ export function MessageTemplateEditor({
 
   return (
     <div className="space-y-4">
-      <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-xs text-blue-900">
+      <div className="rounded-xl border border-[var(--color-pmb-cyan)]/25 bg-[var(--color-pmb-cyan-50)] p-4 text-xs text-[var(--color-pmb-cyan-700)]">
         <p className="flex items-center gap-1.5 font-semibold">
           <Info className="h-3.5 w-3.5" />
           Variáveis disponíveis
@@ -149,10 +155,10 @@ export function MessageTemplateEditor({
         <ul className="mt-2 grid gap-1 sm:grid-cols-2">
           {VARIABLES.map((v) => (
             <li key={v.token}>
-              <code className="rounded bg-white px-1.5 py-0.5 text-[11px] font-mono text-blue-800 ring-1 ring-blue-200">
+              <code className="rounded bg-white px-1.5 py-0.5 text-[11px] font-mono text-[var(--color-pmb-cyan-700)] ring-1 ring-[var(--color-pmb-cyan)]/25">
                 {v.token}
               </code>{" "}
-              <span className="text-blue-800">— {v.desc}</span>
+              <span>— {v.desc}</span>
             </li>
           ))}
         </ul>
@@ -167,23 +173,27 @@ export function MessageTemplateEditor({
           >
             <div className="flex items-start justify-between gap-4">
               <div>
-                <h3 className="text-sm font-bold text-[var(--color-pmb-green-900)]">
-                  {meta.label}
-                </h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-bold text-[var(--color-pmb-green-900)]">
+                    {meta.label}
+                  </h3>
+                  <span className="rounded-full bg-[var(--color-pmb-mist)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+                    {meta.trigger}
+                  </span>
+                </div>
                 <p className="mt-0.5 text-xs text-gray-600">{meta.description}</p>
-                <p className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400">
-                  Disparado por: {meta.trigger}
-                </p>
               </div>
-              <label className="flex shrink-0 items-center gap-2 text-xs font-semibold text-gray-700">
-                <input
-                  type="checkbox"
+              <Label
+                htmlFor={`tpl-${t.key}`}
+                className="flex shrink-0 cursor-pointer items-center gap-2 text-xs font-semibold text-gray-700"
+              >
+                <Switch
+                  id={`tpl-${t.key}`}
                   checked={t.enabled}
-                  onChange={(e) => update(t.key, { enabled: e.target.checked })}
-                  className="h-4 w-4 rounded border-gray-300 text-[var(--color-pmb-green)] focus:ring-[var(--color-pmb-green)]"
+                  onCheckedChange={(v) => update(t.key, { enabled: v })}
                 />
-                Ativo
-              </label>
+                {t.enabled ? "Ativo" : "Inativo"}
+              </Label>
             </div>
 
             <textarea
@@ -193,12 +203,23 @@ export function MessageTemplateEditor({
               maxLength={2000}
               className="mt-3 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:border-[var(--color-pmb-green)] focus:outline-none focus:ring-1 focus:ring-[var(--color-pmb-green)]"
             />
-            <p className="mt-1 text-[11px] text-gray-400">
-              {t.body.length} / 2000 caracteres
+            <p
+              className={`mt-1 text-right text-[11px] ${
+                t.body.length > 1900 ? "font-semibold text-amber-600" : "text-gray-400"
+              }`}
+            >
+              {t.body.length.toLocaleString("pt-BR")} / 2.000 caracteres
             </p>
           </div>
         )
       })}
+
+      {savedOk && (
+        <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">
+          <CheckCircle2 className="h-4 w-4" />
+          Templates salvos. As próximas mensagens já usam os novos textos.
+        </div>
+      )}
 
       <div className="flex justify-end">
         <button

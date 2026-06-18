@@ -1,9 +1,67 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState } from "react"
-import { AlertTriangle, Loader2, Search, ShieldCheck } from "lucide-react"
+import { AlertTriangle, Check, Loader2, Search, ShieldCheck } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { cn } from "@/lib/utils"
+
+const STEPPER = [
+  { n: 1, label: "Aluno" },
+  { n: 2, label: "Matrícula" },
+  { n: 3, label: "Confirmar" },
+] as const
+
+function IssueStepper({ current }: { current: 1 | 2 | 3 }) {
+  return (
+    <ol className="flex items-center gap-2" aria-label="Etapas da emissão">
+      {STEPPER.map((s, i) => {
+        const isDone = s.n < current
+        const isActive = s.n === current
+        return (
+          <li key={s.n} className="flex flex-1 items-center gap-2">
+            <div
+              aria-current={isActive ? "step" : undefined}
+              className="flex items-center gap-2"
+            >
+              <span
+                className={cn(
+                  "flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 font-mono text-xs font-semibold transition-colors",
+                  isDone
+                    ? "border-[var(--color-pmb-green)] bg-[var(--color-pmb-green)] text-white"
+                    : isActive
+                      ? "border-[var(--color-pmb-green)] bg-white text-[var(--color-pmb-green)] shadow-sm"
+                      : "border-gray-200 bg-white text-gray-400",
+                )}
+              >
+                {isDone ? <Check className="h-3.5 w-3.5" /> : s.n}
+              </span>
+              <span
+                className={cn(
+                  "text-xs font-semibold",
+                  isActive
+                    ? "text-[var(--color-pmb-green-900)]"
+                    : "text-gray-500",
+                )}
+              >
+                {s.label}
+              </span>
+            </div>
+            {i < STEPPER.length - 1 && (
+              <span
+                className={cn(
+                  "h-0.5 flex-1 rounded-full",
+                  isDone ? "bg-[var(--color-pmb-green)]" : "bg-gray-200",
+                )}
+                aria-hidden="true"
+              />
+            )}
+          </li>
+        )
+      })}
+    </ol>
+  )
+}
 
 interface StudentOption {
   id: string
@@ -221,8 +279,18 @@ export function CertificateIssueForm({
     )
   }
 
+  const currentStep: 1 | 2 | 3 = selectedEnrollment
+    ? 3
+    : selectedStudent
+      ? 2
+      : 1
+
   return (
     <div className="space-y-6">
+      <div className="rounded-2xl border border-gray-200 bg-white px-6 py-4 shadow-sm">
+        <IssueStepper current={currentStep} />
+      </div>
+
       <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
         <h3 className="text-sm font-semibold text-[var(--color-pmb-green-900)]">
           1. Escolha o aluno

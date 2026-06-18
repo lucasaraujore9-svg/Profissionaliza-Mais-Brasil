@@ -1,4 +1,7 @@
+import { Receipt } from "lucide-react"
 import { formatCurrency } from "@/lib/utils"
+import { EmptyState } from "@/components/shared/empty-state"
+import { SaleStatusBadge } from "./sale-status"
 
 export interface RecentSale {
   id: string
@@ -11,22 +14,6 @@ export interface RecentSale {
 
 interface RecentSalesProps {
   sales: RecentSale[]
-}
-
-const statusLabels: Record<RecentSale["status"], string> = {
-  PENDING: "Pendente",
-  ACTIVE: "Aprovado",
-  SUSPENDED: "Suspenso",
-  CANCELLED: "Cancelado",
-  COMPLETED: "Concluído",
-}
-
-const statusColors: Record<RecentSale["status"], string> = {
-  PENDING: "bg-yellow-100 text-yellow-700",
-  ACTIVE: "bg-green-100 text-green-700",
-  SUSPENDED: "bg-orange-100 text-orange-700",
-  CANCELLED: "bg-red-100 text-red-700",
-  COMPLETED: "bg-[var(--color-pmb-lime-50)] text-[var(--color-pmb-green-700)]",
 }
 
 function relativeTime(iso: string): string {
@@ -50,7 +37,7 @@ export function RecentSales({ sales }: RecentSalesProps) {
           Vendas recentes
         </h3>
         <a
-          href="/painel/financeiro"
+          href="/painel/vendas"
           className="text-xs font-semibold text-[var(--color-pmb-green)] hover:text-[var(--color-pmb-green-700)]"
         >
           Ver todas →
@@ -58,7 +45,12 @@ export function RecentSales({ sales }: RecentSalesProps) {
       </div>
 
       {sales.length === 0 ? (
-        <p className="mt-6 text-sm text-gray-500">Nenhuma venda registrada ainda.</p>
+        <EmptyState
+          className="mt-4"
+          icon={Receipt}
+          title="Nenhuma venda registrada ainda"
+          description="As vendas mais recentes da sua vitrine vão aparecer aqui."
+        />
       ) : (
         <ul className="mt-4 divide-y divide-gray-100">
           {sales.map((sale) => (
@@ -88,11 +80,7 @@ export function RecentSales({ sales }: RecentSalesProps) {
                 <span className="font-mono text-sm font-semibold text-[var(--color-pmb-green-900)]">
                   {formatCurrency(sale.amount)}
                 </span>
-                <span
-                  className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${statusColors[sale.status]}`}
-                >
-                  {statusLabels[sale.status]}
-                </span>
+                <SaleStatusBadge status={sale.status} />
               </div>
             </li>
           ))}

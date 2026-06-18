@@ -2,8 +2,26 @@
 
 import { Search } from "lucide-react"
 import { Input } from "@/components/ui/input"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 
-export type StudentFilter = "TODOS" | "ATIVO" | "BLOQUEADO" | "INATIVO"
+// Expoe os status filtraveis pela coluna Student.status. "Pagamento pendente"
+// e um status DERIVADO (nao persistido), entao e filtrado pelo seletor de
+// curso/pagamento ao lado (enrollment = "pagamento_pendente"), nao aqui — assim
+// nenhum chip vira no-op nem ha exibicao-sem-filtro.
+export type StudentFilter =
+  | "TODOS"
+  | "ATIVO"
+  | "DEVEDOR"
+  | "BLOQUEADO"
+  | "FORMADO"
+  | "INTERESSADO"
+  | "INATIVO"
 
 export type EnrollmentFilter =
   | "TODOS"
@@ -15,7 +33,10 @@ export type EnrollmentFilter =
 const filters: { key: StudentFilter; label: string }[] = [
   { key: "TODOS", label: "Todos" },
   { key: "ATIVO", label: "Ativos" },
+  { key: "DEVEDOR", label: "Devedores" },
   { key: "BLOQUEADO", label: "Bloqueados" },
+  { key: "FORMADO", label: "Formados" },
+  { key: "INTERESSADO", label: "Interessados" },
   { key: "INATIVO", label: "Inativos" },
 ]
 
@@ -75,19 +96,23 @@ export function StudentToolbar({
           ))}
         </div>
 
-        <select
+        <Select
           value={enrollmentFilter}
-          onChange={(e) =>
-            onEnrollmentFilterChange(e.target.value as EnrollmentFilter)
+          onValueChange={(value) =>
+            onEnrollmentFilterChange(value as EnrollmentFilter)
           }
-          className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-700 shadow-sm focus:border-[var(--color-pmb-green)] focus:outline-none focus:ring-1 focus:ring-[var(--color-pmb-green)]"
         >
-          {enrollmentFilters.map((item) => (
-            <option key={item.key} value={item.key}>
-              {item.label}
-            </option>
-          ))}
-        </select>
+          <SelectTrigger className="h-auto w-[200px] text-xs font-semibold text-gray-700">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {enrollmentFilters.map((item) => (
+              <SelectItem key={item.key} value={item.key} className="text-xs">
+                {item.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
     </div>
   )

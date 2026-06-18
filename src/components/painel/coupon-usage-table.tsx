@@ -1,3 +1,7 @@
+import { Receipt } from "lucide-react"
+import { EmptyState } from "@/components/shared/empty-state"
+import { TableRowsSkeleton } from "@/components/shared/loading-skeletons"
+
 export interface CouponUsageItem {
   id: string
   studentName: string
@@ -28,18 +32,16 @@ function formatDate(iso: string): string {
 
 export function CouponUsageTable({ usages, loading }: CouponUsageTableProps) {
   if (loading) {
-    return (
-      <div className="py-6 text-center text-xs text-gray-500">
-        Carregando histórico...
-      </div>
-    )
+    return <TableRowsSkeleton rows={4} cols={4} />
   }
 
   if (usages.length === 0) {
     return (
-      <div className="py-6 text-center text-xs text-gray-500">
-        Nenhum uso registrado para este cupom.
-      </div>
+      <EmptyState
+        icon={Receipt}
+        title="Nenhum uso registrado"
+        description="Quando alunos aplicarem este cupom no checkout, os usos aparecerão aqui."
+      />
     )
   }
 
@@ -59,7 +61,7 @@ export function CouponUsageTable({ usages, loading }: CouponUsageTableProps) {
             <tr key={u.id}>
               <td className="px-4 py-2 text-sm text-[var(--color-pmb-green-900)]">{u.studentName}</td>
               <td className="px-4 py-2 text-sm text-gray-600">{u.courseName}</td>
-              <td className="px-4 py-2 font-mono text-sm font-semibold text-green-600">
+              <td className="px-4 py-2 font-mono text-sm font-semibold text-[var(--color-pmb-green-700)]">
                 -{formatCurrency(u.discountAmount)}
               </td>
               <td className="px-4 py-2 text-sm text-gray-600">{formatDate(u.createdAt)}</td>

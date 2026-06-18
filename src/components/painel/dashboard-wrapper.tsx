@@ -1,7 +1,13 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
-import { Loader2 } from "lucide-react"
+import { LayoutDashboard } from "lucide-react"
+import { PageHeader } from "@/components/painel/page-header"
+import { EmptyState } from "@/components/shared/empty-state"
+import {
+  StatCardsSkeleton,
+  BlockSkeleton,
+} from "@/components/shared/loading-skeletons"
 import { MetricCards, type DashboardMetrics } from "./metric-cards"
 import { RevenueChart, type RevenueChartPoint } from "./revenue-chart"
 import { RecentSales, type RecentSale } from "./recent-sales"
@@ -33,7 +39,41 @@ const PERIOD_DESCRIPTIONS: Record<DashboardPeriod, string> = {
   "12m": "nos últimos 12 meses",
 }
 
-export function DashboardWrapper() {
+interface DashboardWrapperProps {
+  firstName: string
+}
+
+function PeriodSelector({
+  period,
+  onChange,
+  disabled,
+}: {
+  period: DashboardPeriod
+  onChange: (p: DashboardPeriod) => void
+  disabled?: boolean
+}) {
+  return (
+    <div className="inline-flex flex-wrap gap-1 rounded-lg bg-gray-100 p-1">
+      {PERIOD_OPTIONS.map((opt) => (
+        <button
+          key={opt.value}
+          type="button"
+          disabled={disabled}
+          onClick={() => onChange(opt.value)}
+          className={`rounded-md px-3 py-1 text-xs font-semibold transition-colors disabled:opacity-50 ${
+            period === opt.value
+              ? "bg-white text-[var(--color-pmb-green)] shadow-sm"
+              : "text-gray-600 hover:text-[var(--color-pmb-green-700)]"
+          }`}
+        >
+          {opt.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+export function DashboardWrapper({ firstName }: DashboardWrapperProps) {
   const [period, setPeriod] = useState<DashboardPeriod>("30d")
   const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -60,47 +100,65 @@ export function DashboardWrapper() {
     load(period)
   }, [period, load])
 
+  // Primeiro acesso / sem nenhuma atividade no período: evitamos exibir
+  // "R$ 0" e gráficos vazios como se fossem dado de verdade.
+  const isFirstRun =
+    !!data &&
+    data.metrics.revenue === 0 &&
+    data.metrics.students === 0 &&
+    data.metrics.enrollmentsTotal === 0 &&
+    data.recentSales.length === 0
+
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
-        <div>
-          <h2 className="text-sm font-semibold text-[var(--color-pmb-green-900)]">
-            Período de análise
-          </h2>
-          <p className="text-xs text-gray-500">
-            Mostrando dados {PERIOD_DESCRIPTIONS[period]}.
-          </p>
-        </div>
-        <div className="inline-flex flex-wrap gap-1 rounded-lg bg-gray-100 p-1">
-          {PERIOD_OPTIONS.map((opt) => (
-            <button
-              key={opt.value}
-              type="button"
-              onClick={() => setPeriod(opt.value)}
-              className={`rounded-md px-3 py-1 text-xs font-semibold transition-colors ${
-                period === opt.value
-                  ? "bg-white text-[var(--color-pmb-green)] shadow-sm"
-                  : "text-gray-600 hover:text-[var(--color-pmb-green-700)]"
-              }`}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
-      </div>
+      <PageHeader
+        title={`Bem-vindo, ${firstName}`}
+        description={
+          data
+            ? `Acompanhe receita, alunos e conversão ${PERIOD_DESCRIPTIONS[period]}.`
+            : "Acompanhe receita, alunos e conversão no período escolhido."
+        }
+        actions={
+          <PeriodSelector
+            period={period}
+            onChange={setPeriod}
+            disabled={loading && !data}
+          />
+        }
+      />
 
       {error ? (
         <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-sm text-red-700">
           {error}
         </div>
       ) : !data ? (
-        <div className="flex items-center justify-center rounded-2xl border border-gray-200 bg-white p-10 text-sm text-gray-500">
-          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          Carregando dashboard...
+        // Carregando pela primeira vez: skeletons preservam o layout sem flash
+        // de "R$ 0".
+        <div className="space-y-6">
+          <StatCardsSkeleton count={4} />
+          <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
+            <BlockSkeleton className="h-72" />
+            <BlockSkeleton className="h-72" />
+          </div>
+          <BlockSkeleton className="h-64" />
+        </div>
+      ) : isFirstRun ? (
+        <div className="space-y-6">
+          <EmptyState
+            icon={LayoutDashboard}
+            title="Ainda não há atividade neste período"
+            description="Quando suas primeiras vendas começarem a entrar, receita, alunos e conversão aparecerão aqui. Comece configurando sua vitrine e criando cupons."
+          />
+          <QuickActions />
         </div>
       ) : (
-        <div className={`space-y-6 transition-opacity ${loading ? "opacity-60" : ""}`}>
-          <MetricCards metrics={data.metrics} periodLabel={PERIOD_DESCRIPTIONS[period]} />
+        <div
+          className={`space-y-6 transition-opacity ${loading ? "opacity-60" : ""}`}
+        >
+          <MetricCards
+            metrics={data.metrics}
+            periodLabel={PERIOD_DESCRIPTIONS[period]}
+          />
 
           <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
             <RevenueChart

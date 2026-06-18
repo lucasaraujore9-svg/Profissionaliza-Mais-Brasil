@@ -1,6 +1,7 @@
 "use client"
 
 import { Tag, Calendar, Users } from "lucide-react"
+import { StatusBadge } from "@/components/shared/status-badge"
 
 export interface CouponListItem {
   id: string
@@ -67,14 +68,21 @@ export function CouponCard({
             : "bg-gray-100 text-gray-500"
         }`}
       >
-        <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider opacity-80">
-          <Tag className="h-3 w-3" />
-          Cupom
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider opacity-80">
+            <Tag className="h-3 w-3" />
+            Cupom
+          </div>
+          <StatusBadge tone={isActive ? "success" : "neutral"} dot>
+            {isActive ? "Ativo" : "Pausado"}
+          </StatusBadge>
         </div>
         <div className="mt-2 font-mono text-2xl font-bold tracking-wide">
           {coupon.code}
         </div>
-        <div className="mt-1 text-xs opacity-90">{formatDiscount(coupon)}</div>
+        <div className="mt-1 font-mono text-xs opacity-90">
+          {formatDiscount(coupon)}
+        </div>
         <div className="absolute -left-3 top-1/2 h-6 w-6 -translate-y-1/2 rounded-full bg-white" />
         <div className="absolute -right-3 top-1/2 h-6 w-6 -translate-y-1/2 rounded-full bg-white" />
       </div>
@@ -87,7 +95,7 @@ export function CouponCard({
           </span>
           <span className="flex items-center gap-1">
             <Users className="h-3 w-3" />
-            {formatUsage(coupon)}
+            <span className="font-mono">{formatUsage(coupon)}</span>
           </span>
         </div>
 

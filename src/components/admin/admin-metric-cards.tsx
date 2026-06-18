@@ -57,7 +57,7 @@ export function AdminMetricCards({ metrics }: AdminMetricCardsProps) {
     {
       label: "Inadimplência",
       value: `${metrics.overdueRate.toFixed(1)}%`,
-      change: `${metrics.overdueCount} em atraso`,
+      change: `${metrics.overdueCount} unidade(s) em atraso`,
       positive: metrics.overdueRate <= 5,
       icon: AlertTriangle,
       accent: "bg-rose-50 text-rose-600",

@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { PageHeader } from "@/components/painel/page-header"
 import { DashboardWrapper } from "@/components/painel/dashboard-wrapper"
 
 export default async function PainelDashboardPage() {
@@ -19,12 +18,7 @@ export default async function PainelDashboardPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title={`Bem-vindo, ${firstName}`}
-        description="Acompanhe receita, alunos e conversão no período escolhido."
-      />
-
-      <DashboardWrapper />
+      <DashboardWrapper firstName={firstName} />
     </div>
   )
 }

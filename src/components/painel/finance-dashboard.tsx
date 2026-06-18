@@ -1,8 +1,9 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
-import { Download } from "lucide-react"
+import { Download, AlertTriangle, RotateCcw } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { PageHeader } from "@/components/painel/page-header"
 import {
   FinanceSummaryCards,
   type FinanceMetrics,
@@ -48,6 +49,9 @@ export function FinanceDashboard() {
   const [status, setStatus] = useState<FinanceStatusFilter>("TODOS")
   const [type, setType] = useState<FinanceTypeFilter>("TODOS")
 
+  // Primeira carga: ainda nao temos dados reais — evita o flash de "R$ 0".
+  const isInitial = loading && metrics === emptyMetrics
+
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
@@ -86,26 +90,42 @@ export function FinanceDashboard() {
     if (from) params.set("from", from)
     if (to) params.set("to", to)
     if (status !== "TODOS") params.set("status", status)
+    if (type !== "TODOS") params.set("type", type)
     const url = `/api/painel/financeiro/export-csv?${params.toString()}`
     window.location.href = url
   }
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-end">
-        <Button variant="outline" onClick={handleExport}>
-          <Download className="mr-2 h-4 w-4" />
-          Exportar CSV
-        </Button>
-      </div>
+      <PageHeader
+        title="Financeiro"
+        description="Acompanhe suas receitas, pagamentos e exporte relatórios."
+        actions={
+          <Button variant="outline" onClick={handleExport}>
+            <Download className="mr-2 h-4 w-4" />
+            Exportar CSV
+          </Button>
+        }
+      />
 
       {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {error}
+        <div className="flex flex-col gap-3 rounded-lg border border-[var(--color-pmb-terracotta)]/30 bg-[var(--color-pmb-terracotta-50)] px-4 py-3 text-sm text-[var(--color-pmb-terracotta)] sm:flex-row sm:items-center sm:justify-between">
+          <span className="flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden="true" />
+            {error}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => load()}
+            className="border-[var(--color-pmb-terracotta)]/40 text-[var(--color-pmb-terracotta)] hover:bg-[var(--color-pmb-terracotta)]/10"
+          >
+            <RotateCcw className="mr-2 h-3.5 w-3.5" />
+            Tentar novamente
+          </Button>
         </div>
       )}
 
-      <FinanceSummaryCards metrics={metrics} />
       <FinanceFilterBar
         from={from}
         to={to}
@@ -116,7 +136,8 @@ export function FinanceDashboard() {
         type={type}
         onTypeChange={setType}
       />
-      <FinanceBarChart week={week} month={month} />
+      <FinanceSummaryCards metrics={metrics} loading={isInitial} />
+      <FinanceBarChart week={week} month={month} loading={isInitial} />
       <FinancePaymentTable payments={payments} loading={loading} />
     </div>
   )
