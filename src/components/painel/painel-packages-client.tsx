@@ -15,6 +15,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog"
+import { CoverImageUpload } from "@/components/shared/cover-image-upload"
 
 interface PmbPackage {
   id: string
@@ -513,12 +514,11 @@ function OwnPackageDialog({
             </div>
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="pkg-cover">URL da capa (opcional)</Label>
-            <Input
-              id="pkg-cover"
-              value={coverImageUrl}
-              onChange={(e) => setCoverImageUrl(e.target.value)}
-              placeholder="https://..."
+            <Label>Capa do pacote (opcional)</Label>
+            <CoverImageUpload
+              value={coverImageUrl || null}
+              onChange={(url) => setCoverImageUrl(url ?? "")}
+              endpoint="/api/painel/pacotes/capa"
               disabled={saving}
             />
           </div>

@@ -16,6 +16,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { CoverImageUpload } from "@/components/shared/cover-image-upload"
 
 interface PackageRow {
   id: string
@@ -294,28 +295,27 @@ export function AdminPackagesClient() {
               />
             </div>
 
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label htmlFor="pkg-price">Preço (R$)</Label>
-                <Input
-                  id="pkg-price"
-                  inputMode="decimal"
-                  value={form.price}
-                  onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))}
-                  placeholder="199,90"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="pkg-cover">Capa (URL, opcional)</Label>
-                <Input
-                  id="pkg-cover"
-                  value={form.coverImageUrl}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, coverImageUrl: e.target.value }))
-                  }
-                  placeholder="https://…"
-                />
-              </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="pkg-price">Preço (R$)</Label>
+              <Input
+                id="pkg-price"
+                inputMode="decimal"
+                value={form.price}
+                onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))}
+                placeholder="199,90"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Capa do pacote (opcional)</Label>
+              <CoverImageUpload
+                value={form.coverImageUrl || null}
+                onChange={(url) =>
+                  setForm((f) => ({ ...f, coverImageUrl: url ?? "" }))
+                }
+                endpoint="/api/admin/pacotes/capa"
+                disabled={saving}
+              />
             </div>
 
             <div className="space-y-1.5">
