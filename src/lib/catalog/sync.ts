@@ -138,8 +138,11 @@ export async function syncCatalogFromEA(
         syncedAt: new Date(),
       }
 
+      // Match por (provider=EA, nome): o unique de `nome` agora e composto por
+      // fornecedora. O sync EA so toca em cursos EA — cursos LMS de mesmo nome
+      // ficam noutra linha e nao colidem.
       const existing = await prisma.course.findUnique({
-        where: { nome: curso.nome },
+        where: { provider_nome: { provider: "EA", nome: curso.nome } },
         select: { id: true, plataformaCourseId: true, categoryId: true },
       })
 
@@ -170,7 +173,7 @@ export async function syncCatalogFromEA(
       let courseId: string
       if (existing) {
         await prisma.course.update({
-          where: { nome: curso.nome },
+          where: { provider_nome: { provider: "EA", nome: curso.nome } },
           data: {
             ...dataBase,
             categoryId: effectiveCategoryId,
@@ -185,7 +188,7 @@ export async function syncCatalogFromEA(
         const created = await prisma.course.create({
           data: {
             ...dataBase,
-            slug: await ensureUniqueSlug(slug),
+            slug: await ensureUniqueCourseSlug(slug),
             ...(canSetEaCourseId
               ? { plataformaCourseId: courseIdFromCapa }
               : {}),
@@ -247,13 +250,19 @@ export async function syncCatalogFromEA(
   }
 }
 
-async function ensureUniqueSlug(base: string): Promise<string> {
-  let slug = base
+/**
+ * Garante um slug unico GLOBAL para Course (a coluna `slug` e `@unique` e
+ * compartilhada por todas as fornecedoras). Sufixa numericamente em caso de
+ * colisao. Compartilhado entre o sync EA e o sync LMS.
+ */
+export async function ensureUniqueCourseSlug(base: string): Promise<string> {
+  const root = base || "curso"
+  let slug = root
   let suffix = 1
   while (
     await prisma.course.findUnique({ where: { slug }, select: { id: true } })
   ) {
-    slug = `${base}-${suffix++}`
+    slug = `${root}-${suffix++}`
     if (suffix > 50) break
   }
   return slug

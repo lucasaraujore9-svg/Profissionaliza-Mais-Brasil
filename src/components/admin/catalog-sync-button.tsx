@@ -1,18 +1,23 @@
 "use client"
 
 import { useState } from "react"
-import { RefreshCw, CheckCircle2 } from "lucide-react"
+import { RefreshCw, CheckCircle2, AlertTriangle } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import type { SyncResult } from "@/lib/catalog/sync"
+import type { MultiSyncResult } from "@/lib/catalog/sync-all"
 
 interface CatalogSyncButtonProps {
   onDone?: () => void
 }
 
+const PROVIDER_LABEL: Record<string, string> = {
+  EA: "Escola Avançada",
+  LMS: "LMS",
+}
+
 export function CatalogSyncButton({ onDone }: CatalogSyncButtonProps) {
   const [syncing, setSyncing] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [result, setResult] = useState<SyncResult | null>(null)
+  const [result, setResult] = useState<MultiSyncResult | null>(null)
 
   const handle = async () => {
     setSyncing(true)
@@ -25,7 +30,7 @@ export function CatalogSyncButton({ onDone }: CatalogSyncButtonProps) {
         setError(body.error ?? "Falha ao sincronizar")
         return
       }
-      setResult(body.data as SyncResult)
+      setResult(body.data as MultiSyncResult)
       onDone?.()
     } catch {
       setError("Erro de rede ao sincronizar")
@@ -45,10 +50,27 @@ export function CatalogSyncButton({ onDone }: CatalogSyncButtonProps) {
         {syncing ? "Sincronizando..." : "Sincronizar catálogo"}
       </Button>
       {result && (
-        <span className="flex items-center gap-1 text-xs font-medium text-emerald-600">
-          <CheckCircle2 className="h-3.5 w-3.5" />
-          +{result.added} adicionados · ~{result.updated} atualizados · {result.totalInEa} no catálogo
-        </span>
+        <div className="flex flex-col items-end gap-0.5 text-xs">
+          <span className="flex items-center gap-1 font-medium text-emerald-600">
+            <CheckCircle2 className="h-3.5 w-3.5" />+{result.added} adicionados · ~
+            {result.updated} atualizados · {result.totalInEa} no catálogo
+          </span>
+          {/* Quebra por plataforma (só as que rodaram com sucesso). */}
+          {result.byProvider
+            .filter((p) => p.ok)
+            .map((p) => (
+              <span key={p.provider} className="text-gray-500">
+                {PROVIDER_LABEL[p.provider] ?? p.provider}: +{p.added} · ~{p.updated}
+              </span>
+            ))}
+          {/* Falha parcial: uma plataforma falhou mas a outra sincronizou. */}
+          {result.errors.map((e) => (
+            <span key={e.provider} className="flex items-center gap-1 text-amber-600">
+              <AlertTriangle className="h-3.5 w-3.5" />
+              {PROVIDER_LABEL[e.provider] ?? e.provider} falhou: {e.message}
+            </span>
+          ))}
+        </div>
       )}
       {error && <span className="text-xs text-rose-600">{error}</span>}
     </div>

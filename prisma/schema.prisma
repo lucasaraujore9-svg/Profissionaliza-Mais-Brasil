@@ -515,15 +515,32 @@ model StudentNote {
 // CURSOS (sincronizados da plataforma de aulas)
 // ============================================================
 
+// Fornecedora de origem do curso. EA = Escola Avancada (integracao legada
+// form-data PHP em src/lib/plataforma-cursos). LMS = nova fornecedora propria
+// (lms.bmbr.com.br, API REST JSON em src/lib/lms). A fornecedora define o canal
+// de provisionamento, acesso e sincronizacao de progresso — a vitrine/checkout
+// sao agnosticos de provider. Cursos existentes nascem EA (default).
+enum CourseProvider {
+  EA
+  LMS
+}
+
 model Course {
   id String @id @default(cuid())
+
+  // Fornecedora de origem (ver enum CourseProvider)
+  provider CourseProvider @default(EA)
 
   // Dados da plataforma de aulas
   // ATENCAO: a API cursos/listar NAO retorna ID do curso!
   // plataformaCourseId pode ser: (1) descoberto via testes, (2) inferido da ordem, ou (3) null
-  // O campo "nome" e usado como chave alternativa de match no sync
-  plataformaCourseId String? @unique @map("ea_course_id") // ID na plataforma (pode ser null se API nao retornar)
-  nome               String  @unique // Nome e a chave de match primaria no sync
+  // O campo "nome" e usado como chave alternativa de match no sync (escopo EA)
+  plataformaCourseId String? @unique @map("ea_course_id") // ID na plataforma EA (pode ser null se API nao retornar)
+  // Identidade no LMS (so preenchidos quando provider=LMS). lmsCourseId (UUID) e
+  // a chave de match ESTAVEL do sync LMS (substitui o match-por-nome fragil da EA).
+  lmsCourseId        String? @unique @map("lms_course_id")
+  lmsSlug            String? @map("lms_slug")
+  nome               String // Match no sync via @@unique([provider, nome]) — ver abaixo
   descricao          String? @db.Text // Campo "obs" da API
   qtdAulas           Int     @map("qtd_aulas") // Campo "aulas"
   cargaHoraria       String? @map("carga_horaria")
@@ -599,6 +616,11 @@ model Course {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
+  // Nome e unico POR FORNECEDORA: um curso EA e um curso LMS podem ter o mesmo
+  // titulo sem colidir. O sync casa por (provider, nome) — sync EA usa
+  // provider=EA, sync LMS usa provider=LMS (mas a chave real do LMS e lmsCourseId).
+  @@unique([provider, nome])
+  @@index([provider])
   @@index([status])
   @@index([categoriaLoja])
   @@index([categoryId])
@@ -816,6 +838,10 @@ model Student {
   polo                 String // = tenant.slug (enviado a plataforma)
   vendedorId           String? @map("vendedor_id") // = tenant.plataformaVendedorId
 
+  // Id do aluno no LMS (so auditoria — operamos por Student.id como externalId).
+  // Preenchido quando POST /api/v1/enrollments retorna studentId.
+  lmsStudentId String? @map("lms_student_id")
+
   // Status na plataforma
   status   StudentStatus  @default(ATIVO)
   apostila ApostilaStatus @default(LIBERADA)
@@ -929,6 +955,10 @@ model Enrollment {
   lastLessonAt     DateTime? @map("last_lesson_at")
   progressSyncedAt DateTime? @map("progress_synced_at")
 
+  // Matricula no LMS (provider=LMS). Retornado por POST /api/v1/enrollments,
+  // usado para revogar acesso (POST /enrollments/:id/revoke). null em cursos EA.
+  lmsEnrollmentId String? @map("lms_enrollment_id")
+
   // Relacoes
   payments     Payment[]
   certificates Certificate[]
@@ -946,6 +976,7 @@ model Enrollment {
   @@index([asaasPaymentId])
   @@index([progressStatus])
   @@index([coursePackageId])
+  @@index([lmsEnrollmentId])
   // Composite: dashboards do painel filtram constantemente por
   // (tenantId + status) — dezenas de queries por load.
   @@index([tenantId, status])
@@ -1435,6 +1466,13 @@ model SystemSettings {
   pmbDirectSaleGateway PaymentGateway @default(MP) @map("pmb_direct_sale_gateway")
   pmbMpAccessTokenEnc  String?        @map("pmb_mp_access_token_enc") @db.Text
   lastCatalogSyncJson  String?        @map("last_catalog_sync_json") @db.Text
+
+  // Cursor incremental do delta sync do LMS (GET /api/v1/day-update?since=).
+  // Guardamos o `generatedAt` da ultima resposta processada com sucesso e o
+  // enviamos como `since` na proxima execucao. null => proximo run faz export
+  // completo (1a carga).
+  lmsDayUpdateCursor   String?   @map("lms_day_update_cursor")
+  lmsDayUpdateSyncedAt DateTime? @map("lms_day_update_synced_at")
 
   // Pixels de rastreamento da PMB: self (site/vitrine PMB) + global (todas as vitrines).
   pixelsSelf   Json? @map("tracking_pixels_self")

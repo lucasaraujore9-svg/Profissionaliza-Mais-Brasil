@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server"
 import { requireAdminSession } from "@/lib/auth/admin-session"
-import { syncCatalogFromEA } from "@/lib/catalog/sync"
+import { syncAllCatalogs } from "@/lib/catalog/sync-all"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 
-// Sync com 120+ cursos pode passar dos 10s default da Vercel.
-export const maxDuration = 60
+// Sync de 120+ cursos em DUAS plataformas (EA + LMS) pode passar dos 10s default.
+export const maxDuration = 120
 
 export const POST = withRequestContext(
   { action: "admin.catalogo.sync", route: "/api/admin/catalogo/sync" },
@@ -20,15 +20,21 @@ export const POST = withRequestContext(
     return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
   }
 
-  try {
-    const result = await syncCatalogFromEA("manual")
-    return NextResponse.json({ data: result })
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Erro desconhecido"
+  // Sincroniza TODAS as fornecedoras (EA + LMS), tolerando falha parcial.
+  const result = await syncAllCatalogs("manual")
+
+  // Falha TOTAL (nenhuma plataforma rodou) → 502. Sucesso/parcial → 200 com
+  // `errors` no corpo (o front mostra os contadores + o aviso da que falhou).
+  if (result.byProvider.length > 0 && result.byProvider.every((p) => !p.ok)) {
     return NextResponse.json(
-      { error: `Falha ao sincronizar catálogo: ${message}` },
+      {
+        error: `Falha ao sincronizar catálogo: ${result.errors.map((e) => `${e.provider}: ${e.message}`).join(" · ")}`,
+        data: result,
+      },
       { status: 502 },
     )
   }
+
+  return NextResponse.json({ data: result })
   },
 )

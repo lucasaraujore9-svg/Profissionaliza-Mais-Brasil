@@ -1,10 +1,18 @@
 import Image from "next/image"
-import { BookOpen, Users, Pencil, Sparkles, Repeat } from "lucide-react"
+import { BookOpen, Users, Pencil, Sparkles, Repeat, EyeOff, Server } from "lucide-react"
+
+export type CourseProvider = "EA" | "LMS"
+
+export const PROVIDER_LABEL: Record<CourseProvider, string> = {
+  EA: "Escola Avançada",
+  LMS: "LMS",
+}
 
 export interface CatalogCourse {
   id: string
   nome: string
   slug: string
+  provider?: CourseProvider
   qtdAulas: number
   cargaHoraria: string | null
   precoOriginal: number | null
@@ -12,6 +20,7 @@ export interface CatalogCourse {
   categoriaLoja: string | null
   destaque: boolean
   status: string
+  hiddenMain?: boolean
   capaImageUrl: string | null
   syncedAt: string
   updatedAt?: string
@@ -107,6 +116,20 @@ export function CatalogCourseGrid({ courses, canEdit = false, onEdit, totalCount
                     {c.resellers} revendedor{c.resellers === 1 ? "" : "es"} vendendo
                   </p>
                   <div className="mt-3 flex flex-wrap items-center gap-2">
+                    {c.provider ? (
+                      <span
+                        className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-semibold text-gray-600"
+                        title={`Fornecedora: ${PROVIDER_LABEL[c.provider]}`}
+                      >
+                        <Server className="h-3 w-3" />
+                        {PROVIDER_LABEL[c.provider]}
+                      </span>
+                    ) : null}
+                    {c.hiddenMain ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+                        <EyeOff className="h-3 w-3" /> Oculto na vitrine
+                      </span>
+                    ) : null}
                     {c.paymentTypeMain === "MONTHLY" ? (
                       <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-700">
                         <Repeat className="h-3 w-3" />

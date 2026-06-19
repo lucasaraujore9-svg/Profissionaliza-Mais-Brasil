@@ -360,7 +360,7 @@ async function main() {
 
   for (const c of cursos) {
     await prisma.course.upsert({
-      where: { nome: c.nome },
+      where: { provider_nome: { provider: "EA", nome: c.nome } },
       update: {
         precoVitrineMain: c.precoVitrineMain,
         destaqueHome: c.destaqueHome,

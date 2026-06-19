@@ -82,6 +82,7 @@ export default async function StudentCoursesPage() {
           capaImageUrl: true,
           capaOverride: true,
           categoriaLoja: true,
+          provider: true,
         },
       },
       certificates: {
@@ -239,8 +240,18 @@ export default async function StudentCoursesPage() {
                   )}
 
                   <div className="mt-5 flex flex-1 flex-col justify-end gap-3">
-                    {/* CTA PRIMÁRIO destacado para a ação mais importante */}
-                    {isActive && plataformaLoginUrl && (
+                    {/* CTA PRIMÁRIO destacado para a ação mais importante.
+                        Curso LMS: SSO de uso único pelo nosso backend (sem
+                        login/senha). Curso EA: link da plataforma legada. */}
+                    {isActive && e.course.provider === "LMS" ? (
+                      <a
+                        href={`/api/aluno/curso/${e.id}/acessar`}
+                        className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--color-pmb-green)] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[var(--color-pmb-green-700)]"
+                      >
+                        Acessar curso
+                        <ExternalLink className="h-4 w-4" />
+                      </a>
+                    ) : isActive && plataformaLoginUrl ? (
                       <a
                         href={plataformaLoginUrl}
                         target="_blank"
@@ -250,7 +261,7 @@ export default async function StudentCoursesPage() {
                         Acessar aulas
                         <ExternalLink className="h-4 w-4" />
                       </a>
-                    )}
+                    ) : null}
                     {isPending && (
                       <Link
                         href="/aluno/pagamentos"

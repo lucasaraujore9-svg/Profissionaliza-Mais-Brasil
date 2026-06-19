@@ -11,6 +11,7 @@ import { pmbPlataformaPolo, pmbPlataformaVendedorId, PMB_TENANT_SLUG } from "@/l
 import { tenantPolo } from "@/lib/tenant/slug"
 import { encrypt } from "@/lib/crypto"
 import { contextLogger } from "@/lib/logger"
+import { setLmsStudentAccess, revokeLmsEnrollment } from "@/lib/lms"
 
 /**
  * Camada UNICA de integracao com a plataforma de aulas (plataforma).
@@ -438,24 +439,39 @@ export async function linkCourseToStudent(
 }
 
 /**
- * Desvincula um curso do aluno na plataforma.
+ * Desvincula um curso do aluno na plataforma. Roteia por fornecedora:
+ *  - LMS: revoga a matricula (POST /enrollments/:id/revoke, por enrollmentId) — idempotente.
+ *  - EA:  remove o curso do aluno (removerCurso).
  */
 export async function unlinkCourseFromStudent(
   studentId: string,
   courseId: string,
 ): Promise<void> {
-  const [student, course] = await Promise.all([
-    prisma.student.findUnique({
-      where: { id: studentId },
-      select: { plataformaAlunoId: true },
-    }),
-    prisma.course.findUnique({
-      where: { id: courseId },
-      select: { plataformaCourseId: true },
-    }),
-  ])
-  if (!student) throw new Error(`student ${studentId} nao encontrado`)
+  const course = await prisma.course.findUnique({
+    where: { id: courseId },
+    select: { provider: true, plataformaCourseId: true },
+  })
   if (!course) throw new Error(`course ${courseId} nao encontrado`)
+
+  // ── LMS: revoga por enrollmentId (acesso e por-matricula no LMS) ──
+  if (course.provider === "LMS") {
+    const enrollment = await prisma.enrollment.findFirst({
+      where: { studentId, courseId, lmsEnrollmentId: { not: null } },
+      select: { lmsEnrollmentId: true },
+      orderBy: { createdAt: "desc" },
+    })
+    if (enrollment?.lmsEnrollmentId) {
+      await revokeLmsEnrollment(enrollment.lmsEnrollmentId)
+    }
+    return
+  }
+
+  // ── EA: remove o curso do aluno ──
+  const student = await prisma.student.findUnique({
+    where: { id: studentId },
+    select: { plataformaAlunoId: true },
+  })
+  if (!student) throw new Error(`student ${studentId} nao encontrado`)
 
   const plataformaAlunoId = parseExternalId(student.plataformaAlunoId)
   const courseIdNum = parseExternalId(course.plataformaCourseId)
@@ -474,20 +490,48 @@ export async function unlinkCourseFromStudent(
 export async function blockStudentInEA(studentId: string): Promise<void> {
   const student = await prisma.student.findUnique({
     where: { id: studentId },
-    select: { id: true, plataformaAlunoId: true },
+    select: {
+      id: true,
+      plataformaAlunoId: true,
+      enrollments: {
+        where: { lmsEnrollmentId: { not: null } },
+        select: { id: true },
+        take: 1,
+      },
+    },
   })
   if (!student) throw new Error(`student ${studentId} nao encontrado`)
 
   const platformId = parseExternalId(student.plataformaAlunoId)
-  if (platformId === null) {
+  const hasLms = student.enrollments.length > 0
+
+  // Aluno sem nenhum canal (nem EA nem LMS): nao ha o que propagar.
+  if (platformId === null && !hasLms) {
     throw new Error("aluno sem plataforma_aluno_id (ainda nao foi para a plataforma)")
   }
 
-  await editarAluno({
-    id_aluno: platformId,
-    status: "bloqueado",
-    apostila: "bloquear",
-  })
+  // EA: bloqueio por-login. LMS: bloqueio por-student (best-effort + log — os
+  // crons de sweep reaplicam; o bloqueio do LMS e idempotente).
+  if (platformId !== null) {
+    await editarAluno({ id_aluno: platformId, status: "bloqueado", apostila: "bloquear" })
+  }
+  if (hasLms) {
+    // NAO engolir a falha: se virasse só log, o status local ja seria BLOQUEADO
+    // abaixo e os sweeps (blockTenantStudents / sweep-students-overdue pulam quem
+    // ja esta BLOQUEADO) nunca re-tentariam — o aluno manteria acesso ao LMS
+    // apesar de bloqueado (vazamento de acesso pago). Propagar mantem o status
+    // local inalterado e deixa o proximo run re-tentar (re-bloquear na EA e
+    // idempotente).
+    try {
+      await setLmsStudentAccess(student.id, "blocked")
+    } catch (err) {
+      contextLogger().error(
+        { err, event: "students.lms_block_failed", studentId },
+        "bloqueio do aluno no LMS falhou",
+      )
+      throw err
+    }
+  }
 
   await prisma.student.update({
     where: { id: student.id },
@@ -546,20 +590,42 @@ export async function syncStudentProfileToEA(studentId: string): Promise<void> {
 export async function unblockStudentInEA(studentId: string): Promise<void> {
   const student = await prisma.student.findUnique({
     where: { id: studentId },
-    select: { id: true, plataformaAlunoId: true },
+    select: {
+      id: true,
+      plataformaAlunoId: true,
+      enrollments: {
+        where: { lmsEnrollmentId: { not: null } },
+        select: { id: true },
+        take: 1,
+      },
+    },
   })
   if (!student) throw new Error(`student ${studentId} nao encontrado`)
 
   const platformId = parseExternalId(student.plataformaAlunoId)
-  if (platformId === null) {
+  const hasLms = student.enrollments.length > 0
+
+  if (platformId === null && !hasLms) {
     throw new Error("aluno sem plataforma_aluno_id (ainda nao foi para a plataforma)")
   }
 
-  await editarAluno({
-    id_aluno: platformId,
-    status: "ativo",
-    apostila: "liberar",
-  })
+  if (platformId !== null) {
+    await editarAluno({ id_aluno: platformId, status: "ativo", apostila: "liberar" })
+  }
+  if (hasLms) {
+    // Simetrico ao bloqueio: propaga a falha para o status local nao ser marcado
+    // ATIVO antes do LMS confirmar — senao a reativacao do LMS ficaria pendente
+    // sem retry e o aluno (que pagou) seguiria sem acesso ao LMS.
+    try {
+      await setLmsStudentAccess(student.id, "active")
+    } catch (err) {
+      contextLogger().error(
+        { err, event: "students.lms_unblock_failed", studentId },
+        "reativacao do aluno no LMS falhou",
+      )
+      throw err
+    }
+  }
 
   await prisma.student.update({
     where: { id: student.id },

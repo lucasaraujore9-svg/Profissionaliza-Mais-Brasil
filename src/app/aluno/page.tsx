@@ -37,7 +37,14 @@ export default async function StudentDashboardPage() {
     prisma.enrollment.findMany({
       where: { studentId: session.studentId },
       include: {
-        course: { select: { nome: true, capaImageUrl: true, capaOverride: true } },
+        course: {
+          select: {
+            nome: true,
+            capaImageUrl: true,
+            capaOverride: true,
+            provider: true,
+          },
+        },
       },
       orderBy: { createdAt: "desc" },
     }),
@@ -62,6 +69,14 @@ export default async function StudentDashboardPage() {
   // URL da plataforma de aulas (env EA_STUDENT_LOGIN_URL com fallback playcurso).
   const plataformaLoginUrl = getStudentPlatformLoginUrl()
 
+  // Link "continuar estudando": curso LMS abre via SSO do nosso backend; curso
+  // EA abre o login da plataforma legada.
+  const continueHref = continueEnrollment
+    ? continueEnrollment.course.provider === "LMS"
+      ? `/api/aluno/curso/${continueEnrollment.id}/acessar`
+      : plataformaLoginUrl
+    : null
+
   const firstName = session.name?.split(" ")[0] ?? "aluno"
 
   return (
@@ -78,9 +93,9 @@ export default async function StudentDashboardPage() {
       </header>
 
       {/* Banner de "Continuar estudando" — primeiro destaque visual quando há curso ativo */}
-      {continueEnrollment && plataformaLoginUrl && (
+      {continueEnrollment && continueHref && (
         <a
-          href={plataformaLoginUrl}
+          href={continueHref}
           target="_blank"
           rel="noopener noreferrer"
           className="group flex flex-col gap-4 overflow-hidden rounded-2xl border border-[var(--color-pmb-green)]/20 bg-gradient-to-br from-[var(--color-pmb-green)] to-[var(--color-pmb-green-900)] p-6 text-white shadow-sm transition-all hover:shadow-md sm:flex-row sm:items-center sm:justify-between"

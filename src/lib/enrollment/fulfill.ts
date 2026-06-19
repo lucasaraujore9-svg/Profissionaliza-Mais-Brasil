@@ -8,6 +8,7 @@ import {
   ensureStudentOnPlatform,
   linkCourseToStudent,
 } from "@/lib/students/plataforma-actions"
+import { createLmsEnrollment, type LmsEnrollmentResponse } from "@/lib/lms"
 import { generatePasswordWithHash } from "@/lib/students/generate-password"
 import { createNotification } from "@/lib/notifications"
 import { addMonthsClamped } from "@/lib/dates"
@@ -20,7 +21,7 @@ import { appUrl as resolveAppUrl } from "@/lib/tenant/urls"
  * `sweep-students-expired`.
  */
 export const STUDENT_ACCESS_MONTHS = 12
-import type { PaymentGateway, PaymentType } from "@prisma/client"
+import type { PaymentGateway, PaymentType, CourseProvider } from "@prisma/client"
 import { swallow } from "@/lib/errors"
 import { contextLogger } from "@/lib/logger"
 
@@ -133,9 +134,12 @@ async function fulfillEnrollmentLocked(
           email: true,
           nome: true,
           passwordHash: true,
+          lmsStudentId: true,
         },
       },
-      course: { select: { id: true, nome: true } },
+      course: {
+        select: { id: true, nome: true, provider: true, lmsCourseId: true },
+      },
       coursePackage: { select: { id: true, name: true } },
     },
   })
@@ -242,7 +246,8 @@ async function fulfillEnrollmentLocked(
 
   // Primeira cobranca: provisiona acesso do aluno (plataforma de aulas + emails).
   // Reutilizado pela concessao de bolsa (fulfillScholarshipEnrollment).
-  await provisionEnrollmentAccess(tenant, enrollment)
+  // Idempotency-Key do LMS = id do pagamento (estavel entre re-entregas do webhook).
+  await provisionEnrollmentAccess(tenant, enrollment, event.externalPaymentId)
 
   // Primeira cobranca cobre a 1a parcela quando MONTHLY
   const firstInstallmentPaid = enrollment.installmentsTotal !== null ? 1 : 0
@@ -370,7 +375,7 @@ async function provisionPackageSiblings(
     coursePackageId: string | null
     gateway: PaymentGateway
     soldByUserId: string | null
-    student: { id: string; nome: string }
+    student: { id: string; nome: string; email: string | null }
   },
   startedAt: Date,
   expiresAt: Date,
@@ -381,15 +386,27 @@ async function provisionPackageSiblings(
   const items = await prisma.coursePackageItem.findMany({
     where: { packageId: enrollment.coursePackageId },
     orderBy: { order: "asc" },
-    include: { course: { select: { id: true, nome: true, status: true } } },
+    include: {
+      course: {
+        select: { id: true, nome: true, status: true, provider: true, lmsCourseId: true },
+      },
+    },
   })
 
   for (const item of items) {
     if (item.course.id === enrollment.courseId) continue // primário já liberado
     if (item.course.status !== "ATIVO") continue
 
+    let lmsEnrollmentId: string | null = null
     try {
-      await linkCourseToStudent(enrollment.student.id, item.course.id)
+      // Idempotency-Key estavel por (matricula primaria, curso) para o LMS.
+      const provisioned = await provisionCourseForStudent(
+        tenant,
+        enrollment.student,
+        item.course,
+        `pkg:${enrollment.id}:${item.course.id}`,
+      )
+      lmsEnrollmentId = provisioned.lmsEnrollmentId
     } catch (err) {
       contextLogger().error(
         {
@@ -442,6 +459,7 @@ async function provisionPackageSiblings(
         finalAmount: 0,
         startedAt,
         expiresAt,
+        lmsEnrollmentId,
       },
     })
   }
@@ -455,74 +473,43 @@ interface EnrollmentForProvision {
     email: string | null
     nome: string
     passwordHash: string | null
+    lmsStudentId: string | null
   }
-  course: { id: string; nome: string }
+  course: {
+    id: string
+    nome: string
+    provider: CourseProvider
+    lmsCourseId: string | null
+  }
 }
 
 /**
- * Garante o aluno na plataforma de aulas, vincula o curso e dispara os emails
- * de credenciais/boas-vindas/matricula. NAO mexe em Payment nem em status da
+ * Provisiona o acesso do aluno ao curso na fornecedora correta e dispara os
+ * emails de boas-vindas/matricula. NAO mexe em Payment nem em status da
  * matricula — isso fica a cargo do chamador (pagamento vs bolsa).
  *
- * Erros de plataforma (ex: curso sem plataforma_course_id) NAO ficam
- * invisiveis: notificamos SUPER_ADMIN antes de relancar — no fluxo de webhook
- * o MP reentrega; no fluxo de bolsa a rota responde erro ao operador.
+ * O canal depende de `course.provider`:
+ *   - EA  → ensureStudentOnPlatform + linkCourseToStudent (+ email de credenciais)
+ *   - LMS → POST /api/v1/enrollments (o LMS provisiona no parceiro por baixo)
+ *
+ * `idempotencyKey` (id do pagamento ou da matricula) e enviado ao LMS como
+ * Idempotency-Key, garantindo que re-entregas do webhook nao re-provisionem.
+ *
+ * Erros de plataforma NAO ficam invisiveis: notificamos SUPER_ADMIN antes de
+ * relancar — no webhook o gateway reentrega; na bolsa a rota responde ao operador.
  */
 async function provisionEnrollmentAccess(
   tenant: TenantContext,
   enrollment: EnrollmentForProvision,
+  idempotencyKey: string,
 ): Promise<void> {
-  let plataformaAlunoId: number
-  let created: boolean
-  try {
-    const ensured = await ensureStudentOnPlatform(enrollment.student.id)
-    plataformaAlunoId = ensured.plataformaAlunoId
-    created = ensured.created
-    await linkCourseToStudent(enrollment.student.id, enrollment.course.id)
-  } catch (err) {
-    contextLogger().error(
-      {
-        err,
-        event: "fulfill.platform_link_failed",
-        enrollmentId: enrollment.id,
-        studentId: enrollment.student.id,
-        courseId: enrollment.course.id,
-      },
-      "matricula na plataforma de aulas falhou — alertando admin",
-    )
-    await createNotification({
-      audience: "ROLE",
-      roleTarget: "SUPER_ADMIN",
-      level: "ERROR",
-      title: "Matricula na plataforma falhou",
-      body: `Aluno ${enrollment.student.nome} / ${enrollment.course.nome}: a plataforma de aulas rejeitou a integracao. Erro: ${err instanceof Error ? err.message : "desconhecido"}`,
-      category: "fulfillment",
-      href: `/admin/alunos/${enrollment.student.id}`,
-    }).catch(swallow("fulfill.notify_admin"))
-    throw err
-  }
-
-  // Email de credenciais da plataforma somente quando criamos o aluno agora
-  // (evita spam em recompras / re-matriculas).
-  if (created) {
-    try {
-      await enviarEmailCredenciais(plataformaAlunoId)
-    } catch (err) {
-      contextLogger().error(
-        { err, event: "fulfill.plataforma_email_failed", plataformaAlunoId, studentId: enrollment.student.id },
-        "envioemail da plataforma falhou para aluno",
-      )
-      await createNotification({
-        audience: "ROLE",
-        roleTarget: "SUPER_ADMIN",
-        level: "WARNING",
-        title: "Email de credenciais da plataforma falhou",
-        body: `Aluno ${enrollment.student.nome} foi matriculado mas o email com login/senha da plataforma nao foi enviado. Reenvie manualmente.`,
-        category: "fulfillment",
-        href: `/admin/alunos/${enrollment.student.id}`,
-      }).catch(swallow("fulfill.notify_credentials"))
-    }
-  }
+  // `created` controla os emails de "primeira vez" (credenciais/matricula):
+  // EA => aluno recem-criado na plataforma; LMS => primeiro contato do aluno
+  // com o LMS (lmsStudentId ainda nulo).
+  const created =
+    enrollment.course.provider === "LMS"
+      ? await provisionLmsAccess(tenant, enrollment, idempotencyKey)
+      : await provisionEaAccess(enrollment)
 
   // Gera credenciais do painel /aluno quando o aluno ainda não tem senha.
   // Vale tanto na 1ª compra (created=true) quanto em alunos antigos que nunca
@@ -612,6 +599,239 @@ async function provisionEnrollmentAccess(
 }
 
 /**
+ * Provisiona o curso EA: garante o aluno na plataforma, vincula o curso e (se
+ * o aluno foi criado agora) envia o email de credenciais. Retorna `created`.
+ */
+async function provisionEaAccess(
+  enrollment: EnrollmentForProvision,
+): Promise<boolean> {
+  let plataformaAlunoId: number
+  let created: boolean
+  try {
+    const ensured = await ensureStudentOnPlatform(enrollment.student.id)
+    plataformaAlunoId = ensured.plataformaAlunoId
+    created = ensured.created
+    await linkCourseToStudent(enrollment.student.id, enrollment.course.id)
+  } catch (err) {
+    contextLogger().error(
+      {
+        err,
+        event: "fulfill.platform_link_failed",
+        enrollmentId: enrollment.id,
+        studentId: enrollment.student.id,
+        courseId: enrollment.course.id,
+      },
+      "matricula na plataforma de aulas falhou — alertando admin",
+    )
+    await createNotification({
+      audience: "ROLE",
+      roleTarget: "SUPER_ADMIN",
+      level: "ERROR",
+      title: "Matricula na plataforma falhou",
+      body: `Aluno ${enrollment.student.nome} / ${enrollment.course.nome}: a plataforma de aulas rejeitou a integracao. Erro: ${err instanceof Error ? err.message : "desconhecido"}`,
+      category: "fulfillment",
+      href: `/admin/alunos/${enrollment.student.id}`,
+    }).catch(swallow("fulfill.notify_admin"))
+    throw err
+  }
+
+  // Email de credenciais da plataforma somente quando criamos o aluno agora
+  // (evita spam em recompras / re-matriculas).
+  if (created) {
+    try {
+      await enviarEmailCredenciais(plataformaAlunoId)
+    } catch (err) {
+      contextLogger().error(
+        { err, event: "fulfill.plataforma_email_failed", plataformaAlunoId, studentId: enrollment.student.id },
+        "envioemail da plataforma falhou para aluno",
+      )
+      await createNotification({
+        audience: "ROLE",
+        roleTarget: "SUPER_ADMIN",
+        level: "WARNING",
+        title: "Email de credenciais da plataforma falhou",
+        body: `Aluno ${enrollment.student.nome} foi matriculado mas o email com login/senha da plataforma nao foi enviado. Reenvie manualmente.`,
+        category: "fulfillment",
+        href: `/admin/alunos/${enrollment.student.id}`,
+      }).catch(swallow("fulfill.notify_credentials"))
+    }
+  }
+
+  return created
+}
+
+/**
+ * Provisiona o curso LMS: POST /api/v1/enrollments (o LMS provisiona no parceiro
+ * por baixo). Idempotente via Idempotency-Key. Persiste lmsEnrollmentId na
+ * matricula (e lmsStudentId no aluno, se retornado). Retorna `created` (true se
+ * era o primeiro contato do aluno com o LMS).
+ *
+ * Falha parcial (201 + provisioning.ok=false): alerta SUPER_ADMIN e SEGUE — o
+ * espelho local foi criado e um retry posterior reprovisiona (idempotente). NAO
+ * relanca (evita reentrega/duplicacao do webhook). Falha de rede/HTTP: relanca.
+ */
+async function provisionLmsAccess(
+  tenant: TenantContext,
+  enrollment: EnrollmentForProvision,
+  idempotencyKey: string,
+): Promise<boolean> {
+  if (!enrollment.course.lmsCourseId) {
+    await notifyLmsProvisionError(
+      enrollment,
+      `Curso "${enrollment.course.nome}" sem lmsCourseId — rode o sync do catálogo LMS antes de vender.`,
+    )
+    throw new Error(`curso LMS ${enrollment.course.id} sem lmsCourseId`)
+  }
+  if (!enrollment.student.email) {
+    await notifyLmsProvisionError(
+      enrollment,
+      `Aluno ${enrollment.student.nome} sem email — o LMS exige email para matricular.`,
+    )
+    throw new Error(`aluno ${enrollment.student.id} sem email (LMS)`)
+  }
+
+  const wasNew = !enrollment.student.lmsStudentId
+  const tenantExternalId = tenant.isPmbVitrine ? undefined : tenant.id
+
+  let res: LmsEnrollmentResponse
+  try {
+    res = await createLmsEnrollment(
+      {
+        studentExternalId: enrollment.student.id,
+        student: { name: enrollment.student.nome, email: enrollment.student.email },
+        courseId: enrollment.course.lmsCourseId,
+        tenantExternalId,
+      },
+      idempotencyKey,
+    )
+  } catch (err) {
+    contextLogger().error(
+      {
+        err,
+        event: "fulfill.lms_enrollment_failed",
+        enrollmentId: enrollment.id,
+        studentId: enrollment.student.id,
+        courseId: enrollment.course.id,
+      },
+      "matricula no LMS falhou — alertando admin",
+    )
+    await notifyLmsProvisionError(
+      enrollment,
+      `O LMS rejeitou a matrícula. Erro: ${err instanceof Error ? err.message : "desconhecido"}`,
+    )
+    throw err
+  }
+
+  await prisma.$transaction([
+    prisma.enrollment.update({
+      where: { id: enrollment.id },
+      data: { lmsEnrollmentId: res.enrollmentId },
+    }),
+    ...(res.studentId
+      ? [
+          prisma.student.update({
+            where: { id: enrollment.student.id },
+            data: { lmsStudentId: res.studentId },
+          }),
+        ]
+      : []),
+  ])
+
+  // Falha parcial no parceiro por baixo (LMS aceitou, EA falhou): alerta e segue.
+  if (!res.provisioning?.ok) {
+    contextLogger().warn(
+      {
+        event: "fulfill.lms_partner_provision_failed",
+        enrollmentId: enrollment.id,
+        studentId: enrollment.student.id,
+        lmsEnrollmentId: res.enrollmentId,
+        provisioning: res.provisioning,
+      },
+      "LMS aceitou a matrícula mas o parceiro por baixo falhou — alertando admin",
+    )
+    await createNotification({
+      audience: "ROLE",
+      roleTarget: "SUPER_ADMIN",
+      level: "WARNING",
+      title: "Provisionamento parcial no LMS",
+      body: `Aluno ${enrollment.student.nome} / ${enrollment.course.nome}: o LMS registrou a matrícula mas o parceiro por baixo falhou (${res.provisioning?.message ?? "sem detalhe"}). Um novo sync/retry reprovisiona automaticamente.`,
+      category: "fulfillment",
+      href: `/admin/alunos/${enrollment.student.id}`,
+    }).catch(swallow("fulfill.notify_lms_partial"))
+  }
+
+  return wasNew
+}
+
+async function notifyLmsProvisionError(
+  enrollment: EnrollmentForProvision,
+  message: string,
+): Promise<void> {
+  await createNotification({
+    audience: "ROLE",
+    roleTarget: "SUPER_ADMIN",
+    level: "ERROR",
+    title: "Matrícula no LMS falhou",
+    body: `${message} (matrícula ${enrollment.id})`,
+    category: "fulfillment",
+    href: `/admin/alunos/${enrollment.student.id}`,
+  }).catch(swallow("fulfill.notify_lms_error"))
+}
+
+/**
+ * Provisiona UM curso para um aluno na fornecedora correta — usado para os
+ * cursos satelite de um pacote (cada item roteia independentemente, suportando
+ * pacotes com cursos de AMBAS as fornecedoras). Retorna o lmsEnrollmentId
+ * quando provider=LMS (para gravar na matricula satelite), null para EA.
+ *
+ * EA: garante o aluno (idempotente) + vincula o curso. LMS: POST /enrollments.
+ */
+async function provisionCourseForStudent(
+  tenant: TenantContext,
+  student: { id: string; nome: string; email: string | null },
+  course: { id: string; nome: string; provider: CourseProvider; lmsCourseId: string | null },
+  idempotencyKey: string,
+): Promise<{ lmsEnrollmentId: string | null }> {
+  if (course.provider === "LMS") {
+    if (!course.lmsCourseId) throw new Error(`curso LMS ${course.id} sem lmsCourseId`)
+    if (!student.email) throw new Error(`aluno ${student.id} sem email (LMS)`)
+    const res = await createLmsEnrollment(
+      {
+        studentExternalId: student.id,
+        student: { name: student.nome, email: student.email },
+        courseId: course.lmsCourseId,
+        tenantExternalId: tenant.isPmbVitrine ? undefined : tenant.id,
+      },
+      idempotencyKey,
+    )
+    // Falha parcial (201 + provisioning.ok=false): o espelho local foi criado,
+    // mas o parceiro por baixo falhou. Mesma politica do curso primario (alerta
+    // e segue), porem aqui via log — o caller (provisionPackageSiblings) ja
+    // alerta o SUPER_ADMIN apenas quando ha throw.
+    if (!res.provisioning?.ok) {
+      contextLogger().warn(
+        {
+          event: "fulfill.lms_sibling_partial",
+          studentId: student.id,
+          courseId: course.id,
+          lmsEnrollmentId: res.enrollmentId,
+          provisioning: res.provisioning,
+        },
+        "curso de pacote LMS: parceiro por baixo falhou (sera reprovisionado por retry/sync)",
+      )
+    }
+    return { lmsEnrollmentId: res.enrollmentId }
+  }
+
+  // EA: ensure (idempotente — no-op se o aluno ja existe) + vincula o curso.
+  // O ensure cobre o caso de pacote misto cujo curso primario era LMS (e portanto
+  // o aluno ainda nao existia na EA).
+  await ensureStudentOnPlatform(student.id)
+  await linkCourseToStudent(student.id, course.id)
+  return { lmsEnrollmentId: null }
+}
+
+/**
  * Concede bolsa de estudo: cria o aluno na plataforma (com bolsista=S, via flag
  * no Student), vincula o curso e dispara os emails — SEM cobranca em gateway e
  * SEM registro de Payment. Marca a matricula como ACTIVE imediatamente.
@@ -628,15 +848,18 @@ export async function fulfillScholarshipEnrollment(
     where: { id: enrollmentId },
     include: {
       student: {
-        select: { id: true, email: true, nome: true, passwordHash: true },
+        select: { id: true, email: true, nome: true, passwordHash: true, lmsStudentId: true },
       },
-      course: { select: { id: true, nome: true } },
+      course: {
+        select: { id: true, nome: true, provider: true, lmsCourseId: true },
+      },
     },
   })
   if (!enrollment) throw new Error(`enrollment ${enrollmentId} nao encontrado`)
   if (enrollment.startedAt) return // ja provisionada
 
-  await provisionEnrollmentAccess(tenant, enrollment)
+  // Bolsa nao tem pagamento — Idempotency-Key do LMS = id da matricula.
+  await provisionEnrollmentAccess(tenant, enrollment, enrollment.id)
 
   // Mesmo prazo de permanência (12 meses) das matrículas pagas.
   const accessStartedAt = new Date()

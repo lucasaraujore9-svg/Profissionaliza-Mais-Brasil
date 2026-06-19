@@ -4,9 +4,11 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import {
   ArrowUpDown,
   CreditCard,
+  GraduationCap,
   Layers,
   Repeat,
   Search,
+  Server,
   Table2,
   X,
 } from "lucide-react"
@@ -15,6 +17,7 @@ import { CatalogHeader, type CatalogLastSync } from "./catalog-header"
 import { CatalogCourseGrid, type CatalogCourse } from "./catalog-course-grid"
 import { CatalogSyncLog } from "./catalog-sync-log"
 import { CatalogEditDrawer } from "./catalog-edit-drawer"
+import { ProviderBulkActions } from "./provider-bulk-actions"
 import { CourseBulkEdit } from "@/components/shared/course-bulk-edit"
 import type { SyncLogEntry } from "@/lib/catalog/sync-log"
 
@@ -33,6 +36,7 @@ interface AdminCatalogClientProps {
 }
 
 type PaymentFilter = "all" | "ONE_TIME" | "MONTHLY"
+type ProviderFilter = "all" | "EA" | "LMS"
 type StatusFilter = "all" | "ATIVO" | "INATIVO"
 type CuradoriaFilter = "all" | "featured" | "override"
 type SortValue =
@@ -77,9 +81,11 @@ export function AdminCatalogClient({ canEdit = false }: AdminCatalogClientProps)
   const [error, setError] = useState<string | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [bulkOpen, setBulkOpen] = useState(false)
+  const [providerBulkOpen, setProviderBulkOpen] = useState(false)
 
   const [search, setSearch] = useState("")
   const [payment, setPayment] = useState<PaymentFilter>("all")
+  const [provider, setProvider] = useState<ProviderFilter>("all")
   const [status, setStatus] = useState<StatusFilter>("all")
   const [curadoria, setCuradoria] = useState<CuradoriaFilter>("all")
   const [sort, setSort] = useState<SortValue>("name-asc")
@@ -119,6 +125,8 @@ export function AdminCatalogClient({ canEdit = false }: AdminCatalogClientProps)
       total: courses.length,
       oneTime: courses.filter((c) => c.paymentTypeMain !== "MONTHLY").length,
       monthly: courses.filter((c) => c.paymentTypeMain === "MONTHLY").length,
+      ea: courses.filter((c) => c.provider === "EA").length,
+      lms: courses.filter((c) => c.provider === "LMS").length,
     }),
     [courses],
   )
@@ -128,6 +136,7 @@ export function AdminCatalogClient({ canEdit = false }: AdminCatalogClientProps)
     const list = courses.filter((c) => {
       if (payment === "ONE_TIME" && c.paymentTypeMain === "MONTHLY") return false
       if (payment === "MONTHLY" && c.paymentTypeMain !== "MONTHLY") return false
+      if (provider !== "all" && c.provider !== provider) return false
       if (status !== "all" && c.status !== status) return false
       if (curadoria === "featured" && !c.destaqueHome) return false
       if (curadoria === "override" && !c.hasOverride && c.precoVitrineMain == null)
@@ -168,11 +177,12 @@ export function AdminCatalogClient({ canEdit = false }: AdminCatalogClientProps)
         break
     }
     return sorted
-  }, [courses, search, payment, status, curadoria, sort])
+  }, [courses, search, payment, provider, status, curadoria, sort])
 
   const hasFilters =
     search.trim().length > 0 ||
     payment !== "all" ||
+    provider !== "all" ||
     status !== "all" ||
     curadoria !== "all" ||
     sort !== "name-asc"
@@ -180,6 +190,7 @@ export function AdminCatalogClient({ canEdit = false }: AdminCatalogClientProps)
   const resetFilters = () => {
     setSearch("")
     setPayment("all")
+    setProvider("all")
     setStatus("all")
     setCuradoria("all")
     setSort("name-asc")
@@ -244,45 +255,86 @@ export function AdminCatalogClient({ canEdit = false }: AdminCatalogClientProps)
               </button>
             )}
             {canEdit && courses.length > 0 && (
-              <button
-                type="button"
-                onClick={() => setBulkOpen(true)}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-pmb-green)] px-3 py-1.5 text-xs font-semibold text-[var(--color-pmb-green)] hover:bg-[var(--color-pmb-lime-50)]"
-              >
-                <Table2 className="h-3.5 w-3.5" />
-                Edição em massa
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={() => setProviderBulkOpen(true)}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+                >
+                  <Server className="h-3.5 w-3.5" />
+                  Exibir/ocultar por plataforma
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBulkOpen(true)}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-pmb-green)] px-3 py-1.5 text-xs font-semibold text-[var(--color-pmb-green)] hover:bg-[var(--color-pmb-lime-50)]"
+                >
+                  <Table2 className="h-3.5 w-3.5" />
+                  Edição em massa
+                </button>
+              </>
             )}
           </div>
         </div>
 
         <div className="mt-3 flex flex-col gap-3 border-t border-gray-100 pt-3 xl:flex-row xl:items-end xl:justify-between">
-          <div>
-            <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-gray-400">
-              Modo de pagamento
-            </span>
-            <div className="inline-flex flex-wrap gap-1 rounded-lg bg-gray-100 p-1">
-              <SegmentButton
-                active={payment === "all"}
-                onClick={() => setPayment("all")}
-                icon={Layers}
-                label="Todos"
-                count={counts.total}
-              />
-              <SegmentButton
-                active={payment === "ONE_TIME"}
-                onClick={() => setPayment("ONE_TIME")}
-                icon={CreditCard}
-                label="Pagamento único"
-                count={counts.oneTime}
-              />
-              <SegmentButton
-                active={payment === "MONTHLY"}
-                onClick={() => setPayment("MONTHLY")}
-                icon={Repeat}
-                label="Mensalidade"
-                count={counts.monthly}
-              />
+          <div className="flex flex-col gap-3 sm:flex-row sm:gap-6">
+            <div>
+              <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+                Modo de pagamento
+              </span>
+              <div className="inline-flex flex-wrap gap-1 rounded-lg bg-gray-100 p-1">
+                <SegmentButton
+                  active={payment === "all"}
+                  onClick={() => setPayment("all")}
+                  icon={Layers}
+                  label="Todos"
+                  count={counts.total}
+                />
+                <SegmentButton
+                  active={payment === "ONE_TIME"}
+                  onClick={() => setPayment("ONE_TIME")}
+                  icon={CreditCard}
+                  label="Pagamento único"
+                  count={counts.oneTime}
+                />
+                <SegmentButton
+                  active={payment === "MONTHLY"}
+                  onClick={() => setPayment("MONTHLY")}
+                  icon={Repeat}
+                  label="Mensalidade"
+                  count={counts.monthly}
+                />
+              </div>
+            </div>
+
+            <div>
+              <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+                Plataforma
+              </span>
+              <div className="inline-flex flex-wrap gap-1 rounded-lg bg-gray-100 p-1">
+                <SegmentButton
+                  active={provider === "all"}
+                  onClick={() => setProvider("all")}
+                  icon={Layers}
+                  label="Todas"
+                  count={counts.total}
+                />
+                <SegmentButton
+                  active={provider === "EA"}
+                  onClick={() => setProvider("EA")}
+                  icon={GraduationCap}
+                  label="Escola Avançada"
+                  count={counts.ea}
+                />
+                <SegmentButton
+                  active={provider === "LMS"}
+                  onClick={() => setProvider("LMS")}
+                  icon={Server}
+                  label="LMS"
+                  count={counts.lms}
+                />
+              </div>
             </div>
           </div>
 
@@ -351,6 +403,16 @@ export function AdminCatalogClient({ canEdit = false }: AdminCatalogClientProps)
         }
         onSaved={() => {
           setBulkOpen(false)
+          void load()
+        }}
+      />
+
+      <ProviderBulkActions
+        open={providerBulkOpen}
+        onOpenChange={setProviderBulkOpen}
+        counts={{ EA: counts.ea, LMS: counts.lms }}
+        onApplied={() => {
+          setProviderBulkOpen(false)
           void load()
         }}
       />

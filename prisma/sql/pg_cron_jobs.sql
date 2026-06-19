@@ -64,3 +64,15 @@ select cron.schedule('pmb-sweep-students-expired', '0 7 * * *',
 -- Eventos ja vinculados a um lead sao preservados. Semanal (domingo, 03:30).
 select cron.schedule('pmb-sweep-visitor-events', '30 3 * * 0',
   $$ select app_internal.run_cron('/api/cron/sweep-visitor-events') $$);
+
+-- ── Nova fornecedora LMS (lms.bmbr.com.br) ──────────────────────────────────
+-- Sincronização do catálogo do LMS (diário 06:30 UTC = 03:30 BRT — 30min após
+-- o sync EA para não competir). Match por lmsCourseId, só toca cursos provider=LMS.
+select cron.schedule('pmb-sync-cursos-lms', '30 6 * * *',
+  $$ select app_internal.run_cron('/api/cron/sync-cursos-lms') $$);
+
+-- Delta diário do LMS (day-update): progresso das matrículas LMS + detecção de
+-- conclusão (emite certificado). É o canal que substitui o webhook — roda de
+-- hora em hora (minuto 45). Cursor incremental em system_settings.
+select cron.schedule('pmb-sync-day-update-lms', '45 * * * *',
+  $$ select app_internal.run_cron('/api/cron/sync-day-update-lms') $$);
