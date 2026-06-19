@@ -61,6 +61,8 @@ export const GET = withRequestContextParams<{ id: string }>(
       accountManager: { select: { id: true, name: true } },
       referrer: { select: { id: true, name: true, slug: true } },
       tenantPayments: {
+        // DELETED = cobrança cancelada/removida no Asaas; não deve aparecer.
+        where: { status: { not: "DELETED" } },
         orderBy: { dueDate: "desc" },
         take: 24,
       },
@@ -242,10 +244,45 @@ export const GET = withRequestContextParams<{ id: string }>(
         bankSlipUrl: p.bankSlipUrl ?? null,
       }))
 
-      // Complementa com registros do banco que não apareceram no Asaas
-      // (pagamentos de subscriptions antigas apagadas no Asaas).
       const asaasIds = new Set(fromAsaas.map((p) => p.asaasPaymentId))
-      const fromDb = payments.filter((p) => !asaasIds.has(p.asaasPaymentId))
+
+      // Reconciliação: cobranças PENDING/OVERDUE no banco que NÃO aparecem na
+      // conta Asaas (e a lista veio completa, sem paginação) já foram
+      // canceladas/removidas lá — tipicamente assinaturas recriadas por mudança
+      // de valor/vencimento, ou cancelamento manual que não sincronizou o banco.
+      // Marca-as DELETED para não reaparecerem como duplicatas no painel. Só
+      // mexe quando temos a visão completa (`!hasMore`) e nunca em cobranças
+      // pagas/estornadas (essas são preservadas mesmo fora da janela).
+      // DELETING entra aqui como fallback do webhook PAYMENT_DELETED: se a
+      // cobrança já sumiu do Asaas, confirma o cancelamento (→ DELETED) mesmo
+      // que o webhook não tenha chegado.
+      const stale = !asaasPayments.hasMore
+        ? payments.filter(
+            (p) =>
+              !asaasIds.has(p.asaasPaymentId) &&
+              (p.status === "PENDING" ||
+                p.status === "OVERDUE" ||
+                p.status === "DELETING"),
+          )
+        : []
+      if (stale.length > 0) {
+        await prisma.tenantPayment
+          .updateMany({
+            where: {
+              tenantId: id,
+              asaasPaymentId: { in: stale.map((p) => p.asaasPaymentId) },
+            },
+            data: { status: "DELETED" },
+          })
+          .catch(swallow("admin.revendedores"))
+      }
+
+      // Complementa com registros do banco que não apareceram no Asaas e que
+      // NÃO são órfãos pendentes (ex.: pagos antigos fora da janela de 24).
+      const staleIds = new Set(stale.map((p) => p.asaasPaymentId))
+      const fromDb = payments.filter(
+        (p) => !asaasIds.has(p.asaasPaymentId) && !staleIds.has(p.asaasPaymentId),
+      )
 
       payments = [...fromAsaas, ...fromDb].sort((a, b) => {
         // dueDate pode vir de DB (Date) ou do Asaas API (string). Coerção segura

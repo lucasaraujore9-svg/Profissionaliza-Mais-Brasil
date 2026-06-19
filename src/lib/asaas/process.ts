@@ -123,6 +123,55 @@ async function handleSubscriptionCancellation(
   await markLog(logId, true, `${event} processado`)
 }
 
+/**
+ * Confirma o cancelamento de uma cobrança (mensalidade) via webhook
+ * PAYMENT_DELETED. Valida que a cobrança REALMENTE sumiu do Asaas (404) antes
+ * de marcar DELETED — um evento que ainda resolve 200 é espúrio e é ignorado.
+ * Fecha o ciclo iniciado pelo botão "Cancelar" do painel (que deixa a linha
+ * em DELETING). asaasPaymentId é único, então o updateMany casa no máximo 1.
+ */
+async function handlePaymentDeleted(
+  logId: string,
+  payload: AsaasWebhookPayload,
+): Promise<void> {
+  const paymentId = payload.payment?.id
+  if (!paymentId) {
+    await markLog(logId, true, "PAYMENT_DELETED sem payment.id")
+    return
+  }
+
+  // Validação: cobrança deletada responde 404. Se ainda existir (200), o
+  // evento não corresponde a um cancelamento efetivo → ignora.
+  try {
+    await getAsaasPayment(paymentId)
+    await markLog(logId, true, `PAYMENT_DELETED mas ${paymentId} ainda existe no Asaas — ignorado`)
+    return
+  } catch (err) {
+    if (!(err instanceof AsaasApiError && err.statusCode === 404)) throw err
+    // 404 confirmado → segue para marcar DELETED.
+  }
+
+  const existing = await prisma.tenantPayment.findUnique({
+    where: { asaasPaymentId: paymentId },
+    select: { id: true, tenantId: true },
+  })
+  if (!existing) {
+    await markLog(logId, true, `PAYMENT_DELETED: ${paymentId} sem TenantPayment correspondente`)
+    return
+  }
+
+  await prisma.tenantPayment.update({
+    where: { asaasPaymentId: paymentId },
+    data: { status: "DELETED" },
+  })
+
+  await prisma.webhookLog
+    .update({ where: { id: logId }, data: { tenantId: existing.tenantId } })
+    .catch(swallow("asaas.process"))
+
+  await markLog(logId, true, `PAYMENT_DELETED confirmado para ${paymentId}`)
+}
+
 async function markLog(
   logId: string,
   success: boolean,
@@ -232,6 +281,15 @@ export async function processAsaasWebhook(
 
     if (event === "SUBSCRIPTION_CREATED" || event === "SUBSCRIPTION_UPDATED") {
       await markLog(logId, true, `assinatura ${event.toLowerCase()} — no-op`)
+      return
+    }
+
+    // Confirmação de cancelamento de cobrança. Tratado ANTES do re-fetch geral:
+    // uma cobrança deletada responde 404, então o getAsaasPayment abaixo
+    // abortaria com "não existe → ignorado" e nunca marcaria o banco. Aqui o
+    // 404 é justamente a PROVA de que a cobrança sumiu (DELETING → DELETED).
+    if (event === "PAYMENT_DELETED") {
+      await handlePaymentDeleted(logId, payload)
       return
     }
 
@@ -613,15 +671,8 @@ export async function processAsaasWebhook(
         break
       }
 
-      case "PAYMENT_DELETED": {
-        await prisma.tenantPayment
-          .updateMany({
-            where: { asaasPaymentId: payment.id, tenantId: tenant.id },
-            data: { status: "DELETED" },
-          })
-          .catch(swallow("asaas.process"))
-        break
-      }
+      // PAYMENT_DELETED é tratado cedo em handlePaymentDeleted (a cobrança
+      // deletada responde 404 e nunca chega aqui após o re-fetch).
 
       case "PAYMENT_CREATED":
       case "PAYMENT_UPDATED":

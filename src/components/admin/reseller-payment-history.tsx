@@ -1,7 +1,7 @@
 "use client"
 
-import { useState } from "react"
-import { ExternalLink, Trash2, Pencil, Check, X } from "lucide-react"
+import { useEffect, useState } from "react"
+import { ExternalLink, Trash2, Pencil, Check, X, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   AlertDialog,
@@ -75,6 +75,45 @@ export function ResellerPaymentHistory({
   const [editing, setEditing]         = useState<EditState | null>(null)
   const [saving, setSaving]           = useState(false)
   const [saveError, setSaveError]     = useState<string | null>(null)
+  // Cobranças aguardando confirmação do cancelamento (webhook PAYMENT_DELETED).
+  // Enquanto o id estiver aqui, a linha mostra "Apagando cobrança…".
+  const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set())
+
+  // Confirma o cancelamento: quando a cobrança some da lista (virou DELETED e
+  // foi excluída do GET) ou o servidor já a marcou DELETED, tira de "apagando".
+  useEffect(() => {
+    setDeletingIds((prev) => {
+      const present = new Set(payments.map((p) => p.asaasPaymentId))
+      const serverDeleting = payments
+        .filter((p) => p.status.toUpperCase() === "DELETING")
+        .map((p) => p.asaasPaymentId)
+      const next = new Set<string>()
+      // Otimistas que ainda aparecem na lista = cancelamento não confirmado.
+      // Some da lista (virou DELETED, excluído do GET) = confirmado → cai fora.
+      for (const id of prev) if (present.has(id)) next.add(id)
+      // DELETING vindos do servidor (ex.: outro admin cancelou) também entram.
+      for (const id of serverDeleting) next.add(id)
+      const unchanged =
+        next.size === prev.size && [...next].every((id) => prev.has(id))
+      return unchanged ? prev : next
+    })
+  }, [payments])
+
+  // Enquanto houver cobrança "apagando", repesca o detalhe até confirmar.
+  useEffect(() => {
+    if (deletingIds.size === 0 || !onRefresh) return
+    let attempts = 0
+    const MAX = 12 // ~36s
+    const timer = setInterval(() => {
+      attempts += 1
+      onRefresh()
+      if (attempts >= MAX) {
+        clearInterval(timer)
+        setDeletingIds(new Set()) // desiste de aguardar; mostra estado do servidor
+      }
+    }, 3000)
+    return () => clearInterval(timer)
+  }, [deletingIds, onRefresh])
 
   async function handleCancel(paymentId: string) {
     setCancelling(paymentId)
@@ -89,6 +128,9 @@ export function ResellerPaymentHistory({
         setCancelError(body.error ?? "Falha ao cancelar cobrança")
         return
       }
+      // Sucesso do comando: entra em "Apagando cobrança…" até o webhook
+      // PAYMENT_DELETED confirmar (a reconciliação do GET é o fallback).
+      setDeletingIds((prev) => new Set(prev).add(paymentId))
       setCancelTarget(null)
       onRefresh?.()
     } catch {
@@ -177,9 +219,11 @@ export function ResellerPaymentHistory({
               {payments.map((p) => {
                 const statusKey    = p.status.toUpperCase()
                 const methodKey    = (p.billingType ?? "UNDEFINED").toUpperCase()
-                const isPending    = statusKey === "PENDING" || statusKey === "OVERDUE"
+                const isDeleting   = deletingIds.has(p.asaasPaymentId) || statusKey === "DELETING"
+                const isPending    = (statusKey === "PENDING" || statusKey === "OVERDUE") && !isDeleting
                 const isEditing    = editing?.paymentId === p.asaasPaymentId
                 const isCancelling = cancelling === p.asaasPaymentId
+                const displayStatus = isDeleting ? "DELETING" : p.status
                 const paymentLink  = isPending
                   ? `/cobranca/${p.asaasPaymentId}`
                   : (p.invoiceUrl ?? p.bankSlipUrl)
@@ -231,7 +275,12 @@ export function ResellerPaymentHistory({
 
                     {/* Status */}
                     <td className="px-6 py-3">
-                      <ResellerStatusBadge status={p.status} />
+                      <span className="inline-flex items-center gap-1.5">
+                        <ResellerStatusBadge status={displayStatus} />
+                        {isDeleting && (
+                          <Loader2 className="h-3 w-3 animate-spin text-amber-500" />
+                        )}
+                      </span>
                     </td>
 
                     {/* Link */}

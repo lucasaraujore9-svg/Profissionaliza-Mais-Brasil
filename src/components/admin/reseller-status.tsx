@@ -21,6 +21,7 @@ const TONE_MAP: Record<string, BadgeTone> = {
   OVERDUE: "danger",
   REFUNDED: "info",
   DELETED: "neutral",
+  DELETING: "warning",
 }
 
 const LABEL_MAP: Record<string, string> = {
@@ -33,6 +34,7 @@ const LABEL_MAP: Record<string, string> = {
   OVERDUE: "vencido",
   REFUNDED: "estornado",
   DELETED: "cancelado",
+  DELETING: "apagando…",
 }
 
 interface ResellerStatusBadgeProps {

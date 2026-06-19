@@ -98,18 +98,32 @@ export const DELETE = withRequestContextParams<{ id: string; paymentId: string }
   const guard = await requireSuperAdmin()
   if (!guard.ok) return guard.response
 
-  const { paymentId } = await ctx.params
+  const { id: tenantId, paymentId } = await ctx.params
 
   try {
     await deletePayment(paymentId)
-    return NextResponse.json({ data: { ok: true } })
   } catch (error) {
-    if (error instanceof AsaasApiError && error.statusCode === 404) {
-      return NextResponse.json({ error: "Cobrança não encontrada no Asaas" }, { status: 404 })
+    // 404 = a cobrança já não existe no Asaas (cancelada por fora, ou
+    // assinatura recriada). Não é erro: seguimos para sincronizar o banco e
+    // tirar o registro órfão do painel. Demais erros impedem a sincronização.
+    if (!(error instanceof AsaasApiError && error.statusCode === 404)) {
+      const message =
+        error instanceof AsaasApiError ? error.message : "Falha ao cancelar cobrança no Asaas"
+      return NextResponse.json({ error: message }, { status: 502 })
     }
-    const message =
-      error instanceof AsaasApiError ? error.message : "Falha ao cancelar cobrança no Asaas"
-    return NextResponse.json({ error: message }, { status: 502 })
   }
+
+  // Estado intermediário: a cobrança foi mandada apagar no Asaas, mas a
+  // confirmação real vem pelo webhook PAYMENT_DELETED (que valida o 404 da
+  // cobrança e marca DELETED). Até lá o painel mostra "Apagando cobrança…".
+  // A reconciliação do GET do detalhe é o fallback caso o webhook não chegue.
+  await prisma.tenantPayment
+    .updateMany({
+      where: { asaasPaymentId: paymentId, tenantId },
+      data: { status: "DELETING" },
+    })
+    .catch(swallow("admin.revendedores.payments"))
+
+  return NextResponse.json({ data: { ok: true } })
   },
 )

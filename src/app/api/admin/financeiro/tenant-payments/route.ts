@@ -46,6 +46,12 @@ export const GET = withRequestContext(
     where.status = status.toUpperCase()
   }
 
+  // Cobranças DELETED (canceladas/removidas no Asaas) ficam fora por padrão —
+  // só aparecem se explicitamente filtradas. Evita poluir a visão "all".
+  if (where.status === undefined) {
+    where.status = { not: "DELETED" }
+  }
+
   if (onlyManual) {
     where.markedPaidAt = { not: null }
   }
