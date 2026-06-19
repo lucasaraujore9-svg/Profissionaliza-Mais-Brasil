@@ -42,6 +42,10 @@ export const GET = withRequestContext(
     where.status = { in: ["RECEIVED", "CONFIRMED"] }
   } else if (status === "marcados") {
     where.markedPaidAt = { not: null }
+  } else if (status === "canceladas") {
+    // Cobranças canceladas/removidas no Asaas. DELETING = cancelamento em
+    // andamento (aguardando confirmação do webhook PAYMENT_DELETED).
+    where.status = { in: ["DELETED", "DELETING"] }
   } else if (status && status !== "all" && ALLOWED_STATUS.has(status.toUpperCase())) {
     where.status = status.toUpperCase()
   }

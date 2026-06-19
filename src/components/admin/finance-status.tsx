@@ -22,6 +22,8 @@ const TONE_BY_STATUS: Record<string, BadgeTone> = {
   PENDING: "warning",
   OVERDUE: "danger",
   REFUNDED: "danger",
+  DELETED: "neutral",
+  DELETING: "warning",
   // Saques de comissão (ReferralPayout)
   REQUESTED: "warning",
   PROCESSING: "info",
@@ -43,6 +45,8 @@ const LABEL_BY_STATUS: Record<string, string> = {
   PAID: "pago",
   FAILED: "recusado",
   CANCELLED: "cancelado",
+  DELETED: "cancelada",
+  DELETING: "apagando…",
   AVAILABLE: "disponível",
 }
 

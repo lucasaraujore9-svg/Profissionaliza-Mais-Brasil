@@ -71,6 +71,7 @@ const STATUS_OPTIONS: { value: string; label: string }[] = [
   { value: "vencidos", label: "Vencidos" },
   { value: "recebidos", label: "Recebidos" },
   { value: "marcados", label: "Marcados manualmente" },
+  { value: "canceladas", label: "Canceladas" },
 ]
 
 interface FinanceiroTenantPaymentsProps {
@@ -260,7 +261,10 @@ export function FinanceiroTenantPayments({
                   const statusKey = r.status.toUpperCase()
                   const isPaid =
                     statusKey === "RECEIVED" || statusKey === "CONFIRMED"
-                  const showMarkPaid = !isPaid && canMarkPaid
+                  // Cobrança cancelada/sendo apagada não pode ser "marcada paga".
+                  const isCancelled =
+                    statusKey === "DELETED" || statusKey === "DELETING"
+                  const showMarkPaid = !isPaid && !isCancelled && canMarkPaid
                   return (
                     <tr
                       key={r.id}
