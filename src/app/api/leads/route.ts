@@ -7,6 +7,9 @@ import { rateLimit, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
 import { contextLogger } from "@/lib/logger"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { isValidPhone } from "@/lib/validation/phone"
+import { isValidCpf, stripCpf } from "@/lib/validation/cpf"
+import { validateSlugFormat } from "@/lib/tenant/slug"
+import { slugify } from "@/lib/utils"
 import {
   validateReferralCode,
   resolveReferrerFromCookie,
@@ -32,6 +35,11 @@ const leadSchema = z
     state: z.string().trim().max(4).optional(),
     source: z.string().trim().max(120).optional(),
     notes: z.string().trim().max(2000).optional(),
+    // Captacao completa (form /lp-revenda2): CPF do interessado e o subdominio
+    // (slug) desejado para a vitrine. Opcionais — o form /seja-revendedor
+    // classico nao os envia.
+    cpf: z.string().trim().max(20).optional(),
+    slug: z.string().trim().max(32).optional(),
     // Codigo de indicacao informado no formulario (opcional). Tem prioridade
     // sobre o cookie pmb_referral.
     ref: z.string().trim().max(60).optional(),
@@ -47,6 +55,14 @@ const leadSchema = z
     },
     { message: "Telefone inválido. Use (11) 99999-9999", path: ["phone"] },
   )
+  .refine((v) => !v.cpf || isValidCpf(v.cpf), {
+    message: "CPF inválido",
+    path: ["cpf"],
+  })
+  .refine((v) => !v.slug || validateSlugFormat(v.slug) === null, {
+    message: "Subdomínio inválido. Use letras minúsculas, números e hífen (3-32 caracteres)",
+    path: ["slug"],
+  })
 
 export const POST = withRequestContext(
   { action: "leads.create", route: "/api/leads" },
@@ -83,6 +99,9 @@ export const POST = withRequestContext(
 
   const companyName = (data.companyName ?? data.name ?? data.nome ?? "").trim()
   const phone = (data.phone ?? data.telefone ?? "").trim()
+  // CPF guardado so com digitos; slug normalizado (minusculas/hifen).
+  const cpf = data.cpf ? stripCpf(data.cpf) : null
+  const slug = data.slug ? slugify(data.slug) : null
 
   // Atribuicao de indicacao: o codigo digitado no formulario (?ref) tem
   // prioridade; sem ele, cai no cookie pmb_referral capturado quando o
@@ -112,6 +131,8 @@ export const POST = withRequestContext(
         city: data.city || null,
         state: data.state || null,
         source: data.source || null,
+        cpf,
+        slug,
         notes: data.notes || null,
         referrerTenantId,
         ownerUserId,
@@ -143,6 +164,7 @@ export const POST = withRequestContext(
     const summaryParts = [data.email]
     if (phone) summaryParts.push(phone)
     if (data.plan) summaryParts.push(`Plano: ${data.plan}`)
+    if (slug) summaryParts.push(`Subdomínio: ${slug}`)
     const locale = [data.city, data.state].filter(Boolean).join("/")
     if (locale) summaryParts.push(locale)
     const summary = summaryParts.join(" · ")

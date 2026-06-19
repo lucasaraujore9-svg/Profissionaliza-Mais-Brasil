@@ -83,6 +83,8 @@ export default async function AdminLeadsRevendaPage({
     city: l.city,
     state: l.state,
     source: l.source,
+    cpf: l.cpf,
+    slug: l.slug,
     status: l.status,
     notes: l.notes,
     createdAt: l.createdAt.toISOString(),

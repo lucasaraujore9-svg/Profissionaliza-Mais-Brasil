@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
-import { Building2, Mail, MapPin, Phone, UserPlus } from "lucide-react"
+import { Building2, Globe, IdCard, Mail, MapPin, Phone, UserPlus } from "lucide-react"
 import { NewResellerDialog } from "@/components/admin/new-reseller-dialog"
 
 export type LeadStatus = "NEW" | "CONTACTED" | "CONVERTED" | "LOST"
@@ -17,6 +17,10 @@ export interface RevendaLead {
   city: string | null
   state: string | null
   source: string | null
+  /** CPF do interessado (só dígitos) — capturado no form /lp-revenda2. */
+  cpf: string | null
+  /** Subdomínio desejado para a vitrine — capturado no form /lp-revenda2. */
+  slug: string | null
   status: LeadStatus
   notes: string | null
   createdAt: string
@@ -35,6 +39,12 @@ const STATUS_OPTIONS: { value: LeadStatus; label: string }[] = [
   { value: "CONVERTED", label: "Convertido" },
   { value: "LOST", label: "Perdido" },
 ]
+
+function formatCpf(value: string): string {
+  const d = value.replace(/\D/g, "")
+  if (d.length !== 11) return value
+  return d.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4")
+}
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleString("pt-BR", {
@@ -125,11 +135,22 @@ export function LeadsRevendaList({
                     {[l.city, l.state].filter(Boolean).join("/")}
                   </span>
                 )}
+                {l.cpf && (
+                  <span className="inline-flex items-center gap-1">
+                    <IdCard className="h-3.5 w-3.5" /> {formatCpf(l.cpf)}
+                  </span>
+                )}
               </div>
               <div className="mt-2 flex flex-wrap gap-2 text-[11px]">
                 {l.plan && (
                   <span className="rounded-full bg-[var(--color-pmb-lime-50)] px-2 py-0.5 font-semibold text-[var(--color-pmb-green)]">
                     {l.plan}
+                  </span>
+                )}
+                {l.slug && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-sky-50 px-2 py-0.5 font-semibold text-sky-700">
+                    <Globe className="h-3 w-3" aria-hidden />
+                    {l.slug}.livrecursos.com.br
                   </span>
                 )}
                 {l.source && (
