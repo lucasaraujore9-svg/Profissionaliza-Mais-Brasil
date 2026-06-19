@@ -77,7 +77,14 @@ export function PainelPackagesClient() {
   }, [])
 
   useEffect(() => {
-    void load()
+    // Carrega os pacotes na montagem. Falso-positivo da regra
+    // react-hooks/set-state-in-effect: o React Compiler nao consegue provar que
+    // o setState do `load` so ocorre pos-await e acusa render em cascata — o
+    // MESMO padrao fetch-on-mount com callback compartilhado passa sem erro em
+    // admin-catalog-client. `load` e reutilizado no refresh pos-edicao (abaixo),
+    // entao a logica nao pode ser inlined no efeito.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    load()
   }, [load])
 
   if (loadError) {
