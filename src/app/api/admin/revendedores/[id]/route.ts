@@ -10,39 +10,11 @@ import {
 } from "@/lib/asaas/client"
 import { swallow } from "@/lib/errors"
 import { contextLogger } from "@/lib/logger"
-import { salesTeamIds } from "@/lib/auth/scope"
+import { canAccessTenantScope } from "@/lib/auth/scope"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 
-/**
- * Garante que o ator pode acessar esta unidade (mesmo escopo de tenantScopeWhere,
- * porém sobre um tenant já carregado). Retorna true se autorizado.
- *   SUPER_ADMIN       -> qualquer unidade
- *   PMB_RESELLER_MGR  -> unidades onde é account manager
- *   PMB_REVENDA_SALES -> unidades onde é o vendedor (salesUserId)
- *   PMB_SALES_MGR     -> unidades do seu time de vendas
- *   PMB_SALES / demais -> nunca
- */
-async function canAccessTenant(
-  ctx: { userId: string; role: string },
-  tenant: { accountManagerId: string | null; salesUserId: string | null } | null,
-): Promise<boolean> {
-  if (!tenant) return false
-  switch (ctx.role) {
-    case "SUPER_ADMIN":
-      return true
-    case "PMB_RESELLER_MGR":
-      return tenant.accountManagerId === ctx.userId
-    case "PMB_REVENDA_SALES":
-      return tenant.salesUserId === ctx.userId
-    case "PMB_SALES_MGR": {
-      if (!tenant.salesUserId) return false
-      const team = await salesTeamIds(ctx.userId)
-      return team.includes(tenant.salesUserId)
-    }
-    default:
-      return false
-  }
-}
+// Escopo de acesso a uma unidade já carregada: ver canAccessTenantScope em
+// @/lib/auth/scope (mesma regra de tenantScopeWhere).
 
 export const GET = withRequestContextParams<{ id: string }>(
   { action: "admin.revendedores.get", route: "/api/admin/revendedores/[id]" },
@@ -70,7 +42,7 @@ export const GET = withRequestContextParams<{ id: string }>(
     },
   })
 
-  if (!(await canAccessTenant(ctx, tenant))) {
+  if (!(await canAccessTenantScope(ctx, tenant))) {
     // 403 mesmo quando o tenant não existe — não revela a existência fora do escopo.
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }

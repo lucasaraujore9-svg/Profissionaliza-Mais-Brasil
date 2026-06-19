@@ -2,7 +2,8 @@ import { NextResponse } from "next/server"
 import type { Prisma } from "@prisma/client"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { requireSuperAdmin } from "@/lib/auth/guards"
+import { requireAdminSession } from "@/lib/auth/admin-session"
+import { canAccessTenantScope } from "@/lib/auth/scope"
 import {
   findOrCreateAsaasCustomer,
   createSubscription,
@@ -54,8 +55,10 @@ function isoDayPlus(days: number): string {
 export const PATCH = withRequestContextParams<{ id: string }>(
   { action: "admin.revendedores.billing.update", route: "/api/admin/revendedores/[id]/billing" },
   async (request: Request, ctx) => {
-  const guard = await requireSuperAdmin()
-  if (!guard.ok) return guard.response
+  const session = await requireAdminSession()
+  if (!session) {
+    return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
+  }
 
   const { id } = await ctx.params
 
@@ -92,6 +95,8 @@ export const PATCH = withRequestContextParams<{ id: string }>(
       asaasPromoSubscriptionId: true,
       planValue: true,
       status: true,
+      accountManagerId: true,
+      salesUserId: true,
       owner: {
         select: { name: true, email: true, phone: true },
       },
@@ -102,6 +107,11 @@ export const PATCH = withRequestContextParams<{ id: string }>(
       { error: "Revendedor não encontrado" },
       { status: 404 },
     )
+  }
+  // Escopo: super vê tudo; gerente de suporte, vendedor de revenda e gerente de
+  // vendas editam apenas as próprias unidades (mesma regra de tenantScopeWhere).
+  if (!(await canAccessTenantScope(session, tenant))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
   if (tenant.slug === "__pmb__") {
     return NextResponse.json(

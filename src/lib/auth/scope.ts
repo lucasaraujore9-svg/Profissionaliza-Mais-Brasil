@@ -53,6 +53,37 @@ export async function tenantScopeWhere(
   }
 }
 
+/**
+ * Mesma regra de `tenantScopeWhere`, porem aplicada a um tenant ja carregado
+ * (quando a rota precisa do registro antes de autorizar). `true` = autorizado.
+ *   SUPER_ADMIN       -> qualquer unidade
+ *   PMB_RESELLER_MGR  -> unidades onde e account manager (accountManagerId)
+ *   PMB_REVENDA_SALES -> unidades onde e o vendedor (salesUserId)
+ *   PMB_SALES_MGR     -> unidades do seu time de vendas
+ *   demais (PMB_SALES, PMB_FINANCEIRO, ...) -> nunca
+ */
+export async function canAccessTenantScope(
+  actor: ScopeActor,
+  tenant: { accountManagerId: string | null; salesUserId: string | null } | null,
+): Promise<boolean> {
+  if (!tenant) return false
+  switch (actor.role) {
+    case "SUPER_ADMIN":
+      return true
+    case "PMB_RESELLER_MGR":
+      return tenant.accountManagerId === actor.userId
+    case "PMB_REVENDA_SALES":
+      return tenant.salesUserId === actor.userId
+    case "PMB_SALES_MGR": {
+      if (!tenant.salesUserId) return false
+      const team = await salesTeamIds(actor.userId)
+      return team.includes(tenant.salesUserId)
+    }
+    default:
+      return false
+  }
+}
+
 /** `where` de Lead (revenda/B2B) visivel para o ator. `null` = sem acesso. */
 export async function leadScopeWhere(
   actor: ScopeActor,
