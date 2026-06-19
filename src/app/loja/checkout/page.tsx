@@ -8,10 +8,12 @@ import { applyCouponDiscount } from "@/lib/coupons/discount"
 import { prisma } from "@/lib/prisma"
 import { effectivePaymentType } from "@/lib/tenant/monthly-policy"
 import { tenantCheckoutMode } from "@/lib/tenant/checkout-mode"
+import { getPackageForCheckout } from "@/lib/packages/vitrine"
 
 interface CheckoutPageProps {
   searchParams: Promise<{
     course_id?: string
+    package_id?: string
     coupon?: string
     error?: string
   }>
@@ -57,7 +59,7 @@ async function resolveCoupon(
 
 export default async function CheckoutPage({ searchParams }: CheckoutPageProps) {
   const tenant = await getCurrentTenant()
-  const { course_id, coupon: couponParam, error } = await searchParams
+  const { course_id, package_id, coupon: couponParam, error } = await searchParams
 
   if (!tenant) {
     return (
@@ -86,6 +88,102 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
           Esta loja não está disponível para compras no momento.
         </p>
       </div>
+    )
+  }
+
+  // ── Checkout de PACOTE ────────────────────────────────────────────────────
+  if (package_id) {
+    const pkg = await getPackageForCheckout(tenant.id, package_id)
+    if (!pkg) {
+      return (
+        <div className="mx-auto max-w-3xl px-4 py-24 text-center">
+          <h1 className="text-2xl font-bold text-[var(--color-pmb-green-900)]">
+            Pacote indisponível
+          </h1>
+          <p className="mt-3 text-sm text-gray-600">
+            Este pacote não está mais disponível nesta loja.
+          </p>
+        </div>
+      )
+    }
+
+    const tenantGateway = await prisma.tenant.findUnique({
+      where: { id: tenant.id },
+      select: {
+        mpAccessToken: true,
+        mpPublicKey: true,
+        salesGateway: true,
+        asaasGatewayEnabled: true,
+        asaasConnected: true,
+      },
+    })
+    const checkoutMode = tenantCheckoutMode({
+      salesGateway: tenantGateway?.salesGateway,
+      asaasGatewayEnabled: tenantGateway?.asaasGatewayEnabled,
+      asaasConnected: tenantGateway?.asaasConnected,
+      mpAccessToken: tenantGateway?.mpAccessToken,
+      mpPublicKey: tenantGateway?.mpPublicKey,
+    })
+
+    const validatedCoupon = couponParam
+      ? await resolveCoupon(tenant.id, couponParam, pkg.price)
+      : null
+    const discountAmount = validatedCoupon?.discountAmount ?? 0
+    const finalPrice = validatedCoupon?.finalPrice ?? pkg.price
+
+    return (
+      <section className="bg-[#FAFAFA] py-10 md:py-16">
+        <div className="mx-auto max-w-6xl px-4 md:px-6">
+          <header className="mb-8">
+            <h1 className="text-2xl font-bold tracking-tight text-[var(--color-pmb-green-900)] md:text-3xl">
+              {checkoutMode === "NONE" ? "Tenho interesse" : "Finalizar compra"}
+            </h1>
+            <p className="mt-1 text-sm text-gray-600">
+              Preencha seus dados e escolha a forma de pagamento.
+            </p>
+          </header>
+
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_380px] lg:gap-8">
+            <div className="space-y-6">
+              {checkoutMode === "ASAAS" ? (
+                <AsaasCheckoutForm
+                  packageId={pkg.id}
+                  couponCode={validatedCoupon?.code ?? null}
+                  initPath="/api/loja/checkout/package"
+                />
+              ) : checkoutMode === "MP" && tenantGateway?.mpPublicKey ? (
+                <MpCheckoutForm
+                  publicKey={tenantGateway.mpPublicKey}
+                  packageId={pkg.id}
+                  couponCode={validatedCoupon?.code ?? null}
+                  initPath="/api/loja/checkout/package"
+                />
+              ) : (
+                <CheckoutInquiryForm
+                  courseId={pkg.courses[0]?.id ?? ""}
+                  courseName={`Pacote: ${pkg.name}`}
+                  escolaName={tenant.name}
+                />
+              )}
+            </div>
+
+            <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start">
+              <OrderSummary
+                courseName={pkg.name}
+                courseCategory={`Pacote • ${pkg.courses.length} ${pkg.courses.length === 1 ? "curso" : "cursos"}`}
+                courseHours={null}
+                courseImageUrl={null}
+                basePrice={pkg.price}
+                discountAmount={discountAmount}
+                finalPrice={finalPrice}
+                couponCode={validatedCoupon?.code ?? null}
+                parcelasSugeridas={null}
+                paymentType="ONE_TIME"
+              />
+            </aside>
+          </div>
+        </div>
+      </section>
     )
   }
 

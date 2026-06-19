@@ -2,6 +2,8 @@ import { cookies } from "next/headers"
 import { CourseRow } from "./course-row"
 import { TecnicaSection } from "./tecnica-section"
 import { EjaSection } from "./eja-section"
+import { PackagesRow } from "@/components/loja/packages-row"
+import { resolveVitrinePackages } from "@/lib/packages/vitrine"
 import {
   CategoriesGridSection,
   InstitutionalSection,
@@ -118,6 +120,20 @@ async function renderSection(
         // Na vitrine do revendedor (tenantId) os cards apontam para o detalhe
         // da loja (`/curso/:slug`), nao para o detalhe global da PMB.
         hrefBase={ctx.tenantId ? "/curso" : "/cursos"}
+      />
+    )
+  }
+
+  if (cfg.kind === "packages") {
+    const packages = await resolveVitrinePackages(ctx.tenantId)
+    if (packages.length === 0) return null
+    return (
+      <PackagesRow
+        titulo={cfg.title}
+        subtitulo={cfg.subtitle || undefined}
+        packages={packages}
+        // Vitrine de revenda: detalhe em /pacote/:slug; PMB: /pacotes/:slug.
+        hrefBase={ctx.tenantId ? "/pacote" : "/pacotes"}
       />
     )
   }

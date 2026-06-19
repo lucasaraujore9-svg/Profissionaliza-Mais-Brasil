@@ -153,8 +153,8 @@ model User {
   studentNotes StudentNote[] @relation("StudentNotes")
 
   // TenantPayments / ReferralPayouts marcados manualmente como pagos por este admin
-  markedTenantPayments  TenantPayment[]  @relation("MarkedTenantPayments")
-  markedReferralPayouts ReferralPayout[] @relation("MarkedReferralPayouts")
+  markedTenantPayments   TenantPayment[]  @relation("MarkedTenantPayments")
+  markedReferralPayouts  ReferralPayout[] @relation("MarkedReferralPayouts")
   // Saques cujo comprovante de pagamento foi anexado por este usuario (Financeiro)
   uploadedReferralProofs ReferralPayout[] @relation("UploadedReferralProofs")
 
@@ -256,11 +256,11 @@ model Tenant {
   firstPaymentMaxInstallments Int @default(1) @map("first_payment_max_installments")
 
   // Integracao Mercado Pago (vendas dos cursos)
-  mpAccessToken  String? @map("mp_access_token") // Criptografado AES-256
-  mpPublicKey    String? @map("mp_public_key")
-  mpRefreshToken String? @map("mp_refresh_token")
-  mpConnected    Boolean @default(false) @map("mp_connected")
-  mpUserId       String? @map("mp_user_id") // ID do revendedor no MP
+  mpAccessToken   String? @map("mp_access_token") // Criptografado AES-256
+  mpPublicKey     String? @map("mp_public_key")
+  mpRefreshToken  String? @map("mp_refresh_token")
+  mpConnected     Boolean @default(false) @map("mp_connected")
+  mpUserId        String? @map("mp_user_id") // ID do revendedor no MP
   // Assinatura secreta do webhook MP DESTA conta (por revendedor). O MP gera
   // uma secret por aplicacao/conta — como cada unidade usa a propria conta,
   // cada uma tem a sua. Criptografada AES-256. A vitrine PMB usa MP_WEBHOOK_SECRET.
@@ -309,26 +309,26 @@ model Tenant {
   members TenantMember[]
 
   // Indicacao (1-nivel)
-  referralCode     String   @unique @map("referral_code")
-  referrerTenantId String?  @map("referrer_tenant_id")
-  referrer         Tenant?  @relation("TenantReferrals", fields: [referrerTenantId], references: [id])
-  referrals        Tenant[] @relation("TenantReferrals")
+  referralCode         String    @unique @map("referral_code")
+  referrerTenantId     String?   @map("referrer_tenant_id")
+  referrer             Tenant?   @relation("TenantReferrals", fields: [referrerTenantId], references: [id])
+  referrals            Tenant[]  @relation("TenantReferrals")
   // Override individual do % de comissao (Decimal 0-100). Null = usa SystemSettings.defaultReferralPercent
-  referralPercent  Decimal? @map("referral_percent") @db.Decimal(5, 2)
+  referralPercent      Decimal?  @map("referral_percent") @db.Decimal(5, 2)
   // Override individual do minimo de indicacoes ATIVAS para esta unidade
   // comecar a receber comissao de recorrencia. Null = usa
   // SystemSettings.defaultReferralMinReferrals (padrao 3). 0 = sem minimo.
-  referralMinReferrals Int? @map("referral_min_referrals")
+  referralMinReferrals Int?      @map("referral_min_referrals")
   // Regras escalonadas de comissao DESTA unidade (quando ela e a INDICADA).
   // O percentual da comissao varia conforme os meses de calendario desde a
   // ativacao desta unidade (activatedAt). Formato JSON ordenado:
   //   [{ "untilMonth": 6, "percent": 50 }, { "untilMonth": null, "percent": 20 }]
   // -> meses 1..6 = 50%; do 7o em diante = 20% (untilMonth null = "em diante").
   // null/empty => sem escalonamento (cai no referralPercent / padrao global).
-  referralTiers    Json?    @map("referral_tiers")
+  referralTiers        Json?     @map("referral_tiers")
   // Data de ativacao da unidade (1a vez que entrou em ACTIVE / 1a mensalidade
   // paga). Base para contar os meses do escalonamento. Null => usa createdAt.
-  activatedAt      DateTime? @map("activated_at")
+  activatedAt          DateTime? @map("activated_at")
 
   // Dados PIX para receber comissoes (PIX do indicador)
   pixKey     String? @map("pix_key")
@@ -337,12 +337,12 @@ model Tenant {
   // Override do motor de comissao por faixas para ESTE indicador. Null em cada
   // campo => herda o padrao global de SystemSettings.commission*. Ver
   // src/lib/referrals/rules.ts (resolucao override -> global).
-  commissionMode         CommissionMode?         @map("commission_mode")
-  commissionBracketBasis CommissionBracketBasis? @map("commission_bracket_basis")
-  commissionRateType     CommissionRateType?     @map("commission_rate_type")
-  commissionPayoutBase   CommissionPayoutBase?   @map("commission_payout_base")
+  commissionMode           CommissionMode?         @map("commission_mode")
+  commissionBracketBasis   CommissionBracketBasis? @map("commission_bracket_basis")
+  commissionRateType       CommissionRateType?     @map("commission_rate_type")
+  commissionPayoutBase     CommissionPayoutBase?   @map("commission_payout_base")
   // Faixas ordenadas (override): [{ "upTo": 10, "value": 100 }, { "upTo": null, "value": 200 }]
-  commissionBrackets     Json?                   @map("commission_brackets")
+  commissionBrackets       Json?                   @map("commission_brackets")
   // Plano de comissao MULTI-FASE deste indicador (override). Quando preenchido,
   // tem prioridade sobre os campos commission* singulares acima (que viram
   // fallback). Cada fase vale por um intervalo de meses contados desde a entrada
@@ -353,17 +353,17 @@ model Tenant {
   //       { "durationMonths": null, "rateType": "PERCENT", ... }   // null = fase final "em diante"
   //   ] }
   // null/empty => sem plano multi-fase (cai nos campos singulares -> global).
-  commissionPlan         Json?                   @map("commission_plan")
+  commissionPlan           Json?                   @map("commission_plan")
   // Ancora do relogio de fases DESTA unidade quando ela e a INDICADA: cada
   // unidade tem o seu proprio relogio (a fase ativa depende da idade DELA, nao
   // do indicador). Define o 1o mes do plano para esta unidade. Null => usa
   // activatedAt ?? createdAt.
-  commissionPlanStartedAt DateTime?              @map("commission_plan_started_at")
+  commissionPlanStartedAt  DateTime?               @map("commission_plan_started_at")
   // Origem do override de comissao: "MANUAL" (admin editou na tela do revendedor)
   // ou "FROZEN" (congelado automaticamente ao salvar a regra global com escopo
   // "apenas novas revendas"). Null => sem override (herda o global). FROZEN e
   // limpo quando o admin salva a global com escopo "todas"; MANUAL e preservado.
-  commissionOverrideSource String?               @map("commission_override_source")
+  commissionOverrideSource String?                 @map("commission_override_source")
 
   // Unidade Tecnica — link externo para escola tecnica do revendedor.
   // Quando habilitado pelo admin, exibe categoria/menu/secao "Cursos Tecnicos"
@@ -417,6 +417,8 @@ model Tenant {
 
   // Relacoes
   tenantCourses                TenantCourse[]
+  coursePackages               CoursePackage[]
+  tenantPackages               TenantPackage[]
   students                     Student[]
   enrollments                  Enrollment[]
   payments                     Payment[]
@@ -520,21 +522,21 @@ model Course {
   // ATENCAO: a API cursos/listar NAO retorna ID do curso!
   // plataformaCourseId pode ser: (1) descoberto via testes, (2) inferido da ordem, ou (3) null
   // O campo "nome" e usado como chave alternativa de match no sync
-  plataformaCourseId String?  @unique @map("ea_course_id") // ID na plataforma (pode ser null se API nao retornar)
-  nome               String   @unique // Nome e a chave de match primaria no sync
-  descricao          String?  @db.Text // Campo "obs" da API
-  qtdAulas           Int      @map("qtd_aulas") // Campo "aulas"
-  cargaHoraria       String?  @map("carga_horaria")
+  plataformaCourseId String? @unique @map("ea_course_id") // ID na plataforma (pode ser null se API nao retornar)
+  nome               String  @unique // Nome e a chave de match primaria no sync
+  descricao          String? @db.Text // Campo "obs" da API
+  qtdAulas           Int     @map("qtd_aulas") // Campo "aulas"
+  cargaHoraria       String? @map("carga_horaria")
 
   // Matriz curricular (conteudo programatico). Lista de topicos exibida na
   // pagina do curso e no verso do certificado. Conteudo global PMB (igual para
   // TODAS as vitrines — mae, revendas ativas/pendentes e futuras), curado a
   // partir dos PDFs oficiais de matriz. Vazio => curso sem matriz: a pagina e o
   // verso do certificado seguem o layout atual (sem a secao).
-  matrizCurricular String[] @default([]) @map("matriz_curricular")
-  precoOriginal      Decimal? @map("preco_original") @db.Decimal(10, 2) // Parseado do formato BR
-  precoPromocional   Decimal? @map("preco_promocional") @db.Decimal(10, 2)
-  parcelasSugeridas  Int?     @map("parcelas_sugeridas") // Campo "parcelas"
+  matrizCurricular  String[] @default([]) @map("matriz_curricular")
+  precoOriginal     Decimal? @map("preco_original") @db.Decimal(10, 2) // Parseado do formato BR
+  precoPromocional  Decimal? @map("preco_promocional") @db.Decimal(10, 2)
+  parcelasSugeridas Int?     @map("parcelas_sugeridas") // Campo "parcelas"
 
   // Categorias
   // categoriaLoja/categoriaInterna sao o "raw" vindo da plataforma parceira
@@ -546,10 +548,10 @@ model Course {
   // unica categoria e necessaria e para compatibilidade. A fonte de verdade do
   // pertencimento (filtros, menus, contagens) e SEMPRE o join `categoryLinks`,
   // que tambem inclui a categoria principal.
-  categoriaInterna String?   @map("categoria_interna")
-  categoriaLoja    String?   @map("categoria_loja")
-  categoryId       String?   @map("category_id")
-  category         Category? @relation(fields: [categoryId], references: [id])
+  categoriaInterna String?          @map("categoria_interna")
+  categoriaLoja    String?          @map("categoria_loja")
+  categoryId       String?          @map("category_id")
+  category         Category?        @relation(fields: [categoryId], references: [id])
   categoryLinks    CourseCategory[]
 
   // Visibilidade nas vitrines de revendas (independente de hiddenMain, que
@@ -592,6 +594,7 @@ model Course {
   certificates  Certificate[]
   studentLeads  StudentLead[]
   visitorEvents VisitorEvent[]
+  packageItems  CoursePackageItem[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -687,6 +690,89 @@ model TenantCourse {
   @@unique([tenantId, courseId])
   @@index([tenantId, isVisible])
   @@map("tenant_courses")
+}
+
+// ============================================================
+// PACOTES DE CURSOS
+// ============================================================
+// Um pacote agrupa varios cursos vendidos por um preco unico. Comprar o pacote
+// libera TODOS os cursos para o aluno (ver fulfill: matricula primaria + satelites).
+//
+// Pacotes da PMB (tenantId=null) sao distribuidos AUTOMATICAMENTE a todas as
+// vitrines de revenda (atuais e futuras) — segue o padrao de fallback de
+// Course/HomeSection/Coupon. A revenda nao edita os cursos do pacote PMB, mas
+// pode (via TenantPackage) definir o proprio preco, ocultar/excluir da propria
+// vitrine e destacar. Pacotes proprios da revenda tem tenantId setado.
+
+model CoursePackage {
+  id       String  @id @default(cuid())
+  tenantId String? @map("tenant_id") // null = pacote da PMB (auto-distribuido)
+  tenant   Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  name          String
+  slug          String
+  description   String? @db.Text
+  coverImageUrl String? @map("cover_image_url")
+  // Preco sugerido (pacote PMB) / preco proprio (pacote da revenda). A revenda
+  // pode sobrescrever o preco de um pacote PMB via TenantPackage.price.
+  price         Decimal @db.Decimal(10, 2)
+  featured      Boolean @default(false)
+  position      Int     @default(0)
+  enabled       Boolean @default(true)
+
+  // Auditoria (sem FK — apenas registro do criador)
+  createdByUserId String?   @map("created_by_user_id")
+  createdByRole   UserRole? @map("created_by_role")
+
+  items          CoursePackageItem[]
+  tenantPackages TenantPackage[]
+  enrollments    Enrollment[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([tenantId, slug])
+  @@index([tenantId, enabled])
+  @@map("course_packages")
+}
+
+model CoursePackageItem {
+  id        String        @id @default(cuid())
+  packageId String        @map("package_id")
+  package   CoursePackage @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  courseId  String        @map("course_id")
+  course    Course        @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  order     Int           @default(0)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([packageId, courseId])
+  @@index([courseId])
+  @@map("course_package_items")
+}
+
+// Override por revenda de um pacote (PMB ou proprio). Ausencia da linha => usa
+// os defaults do CoursePackage (preco sugerido, visivel). isVisible=false =>
+// "excluido da minha vitrine" (a revenda removeu o pacote PMB da propria loja).
+model TenantPackage {
+  id        String        @id @default(cuid())
+  tenantId  String        @map("tenant_id")
+  tenant    Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  packageId String        @map("package_id")
+  package   CoursePackage @relation(fields: [packageId], references: [id], onDelete: Cascade)
+
+  price          Decimal? @db.Decimal(10, 2) // null = usa CoursePackage.price
+  isVisible      Boolean  @default(true)
+  isFeatured     Boolean  @default(false) @map("is_featured")
+  customOrder    Int      @default(0) @map("custom_order")
+  customCoverUrl String?  @map("custom_cover_url")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([tenantId, packageId])
+  @@index([tenantId, isVisible])
+  @@map("tenant_packages")
 }
 
 // ============================================================
@@ -786,6 +872,16 @@ model Enrollment {
   courseId     String  @map("course_id")
   course       Course  @relation(fields: [courseId], references: [id])
 
+  // Pacotes de cursos. Quando a compra e de um PACOTE, criamos UMA matricula
+  // PRIMARIA (packagePrimary=true) que carrega o Payment do valor cheio do
+  // pacote + N matriculas SATELITE (packagePrimary=false, finalAmount=0) — uma
+  // por curso restante do pacote — criadas no fulfill, dando acesso a cada curso
+  // sem contar receita em duplicidade. coursePackageId aponta ao pacote comprado.
+  // Em compras de curso avulso, ambos ficam null/false (fluxo inalterado).
+  coursePackageId String?        @map("course_package_id")
+  coursePackage   CoursePackage? @relation(fields: [coursePackageId], references: [id], onDelete: SetNull)
+  packagePrimary  Boolean        @default(false) @map("package_primary")
+
   // Pagamento
   paymentType    PaymentType      @map("payment_type")
   status         EnrollmentStatus @default(PENDING)
@@ -849,6 +945,7 @@ model Enrollment {
   @@index([externalReference])
   @@index([asaasPaymentId])
   @@index([progressStatus])
+  @@index([coursePackageId])
   // Composite: dashboards do painel filtram constantemente por
   // (tenantId + status) — dezenas de queries por load.
   @@index([tenantId, status])
@@ -1100,6 +1197,13 @@ model Lead {
   state  String? @db.VarChar(4)
   source String? // origem do lead (ex: "/seja-revendedor")
 
+  // Captacao completa (form /lp-revenda2): CPF do interessado e o subdominio
+  // (slug) que ele deseja para a vitrine. Sao apenas a INTENCAO capturada no
+  // lead — a unicidade/reserva do slug e validada na conversao em unidade.
+  // Ambos opcionais (o form /seja-revendedor classico nao os envia).
+  cpf  String?
+  slug String?
+
   // Quando converter em revendedor, liga ao tenant criado
   tenantId String? @map("tenant_id")
   tenant   Tenant? @relation("LeadConvertedTenant", fields: [tenantId], references: [id])
@@ -1151,7 +1255,7 @@ enum ContactMessageStatus {
 }
 
 model ContactMessage {
-  id String @id @default(cuid())
+  id       String  @id @default(cuid())
   // null = PMB institucional · senao a unidade (tenant) dona da relacao
   tenantId String? @map("tenant_id")
   tenant   Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -1345,15 +1449,15 @@ model SystemSettings {
   leadRevendaAssignCursor Int     @default(0) @map("lead_revenda_assign_cursor")
 
   // Indicacoes
-  referralEnabled        Boolean @default(true) @map("referral_enabled")
-  defaultReferralPercent Decimal @default(5.00) @map("default_referral_percent") @db.Decimal(5, 2) // 5%
-  referralMinPayout      Decimal @default(50.00) @map("referral_min_payout") @db.Decimal(10, 2) // R$50
+  referralEnabled             Boolean @default(true) @map("referral_enabled")
+  defaultReferralPercent      Decimal @default(5.00) @map("default_referral_percent") @db.Decimal(5, 2) // 5%
+  referralMinPayout           Decimal @default(50.00) @map("referral_min_payout") @db.Decimal(10, 2) // R$50
   // Minimo padrao de indicacoes ATIVAS para uma unidade comecar a receber
   // comissao de recorrencia. Override por unidade em Tenant.referralMinReferrals.
-  defaultReferralMinReferrals Int @default(3) @map("default_referral_min_referrals")
+  defaultReferralMinReferrals Int     @default(3) @map("default_referral_min_referrals")
   // Janela mensal: comissoes referentes a TenantPayments pagos no mes M
   // ficam AVAILABLE no dia X do mes M+1 (referralPayoutDay).
-  referralPayoutDay      Int     @default(20) @map("referral_payout_day") // dia do mes do pagamento (1-20; cron libera no dia 20)
+  referralPayoutDay           Int     @default(20) @map("referral_payout_day") // dia do mes do pagamento (1-20; cron libera no dia 20)
 
   // Motor de comissao por faixas (padrao global). PER_PAYMENT_PERCENT preserva o
   // comportamento legado (escala por tempo + referralPercent + defaultReferralPercent).
@@ -1493,7 +1597,7 @@ model ReferralPayout {
   appliedToTenantPayment TenantPayment? @relation("AppliedToTenantPayment")
 
   // Comissoes liquidadas por este payout (motor legado por pagamento)
-  commissions ReferralCommission[]
+  commissions        ReferralCommission[]
   // Comissoes mensais por faixas liquidadas por este payout (motor MONTHLY_TIERED)
   monthlyCommissions ReferralMonthlyCommission[]
 
@@ -1532,19 +1636,19 @@ model ReferralMonthlyCommission {
   rateType     CommissionRateType     @map("rate_type")
   payoutBase   CommissionPayoutBase   @map("payout_base")
 
-  bracketIndex Int     @map("bracket_index") // indice (0-based) da faixa atingida
-  bracketCount Int     @map("bracket_count") // contagem que determinou a faixa
-  rate         Decimal @db.Decimal(10, 2) // R$ por unidade (FIXED) ou % (PERCENT)
-  unitCount    Int     @map("unit_count") // nº de unidades da base de pagamento
-  baseSum      Decimal @map("base_sum") @db.Decimal(10, 2) // soma das mensalidades (PERCENT) ou 0 (FIXED)
-  amount       Decimal @db.Decimal(10, 2) // valor final da comissao do mes
-  linesSnapshot Json?  @map("lines_snapshot") // quebra por unidade p/ demonstrativo
+  bracketIndex  Int     @map("bracket_index") // indice (0-based) da faixa atingida
+  bracketCount  Int     @map("bracket_count") // contagem que determinou a faixa
+  rate          Decimal @db.Decimal(10, 2) // R$ por unidade (FIXED) ou % (PERCENT)
+  unitCount     Int     @map("unit_count") // nº de unidades da base de pagamento
+  baseSum       Decimal @map("base_sum") @db.Decimal(10, 2) // soma das mensalidades (PERCENT) ou 0 (FIXED)
+  amount        Decimal @db.Decimal(10, 2) // valor final da comissao do mes
+  linesSnapshot Json?   @map("lines_snapshot") // quebra por unidade p/ demonstrativo
 
-  status      ReferralCommissionStatus @default(PENDING)
-  availableAt DateTime  @map("available_at")
-  paidAt      DateTime? @map("paid_at")
-  cancelledAt DateTime? @map("cancelled_at")
-  cancelReason String?  @map("cancel_reason")
+  status       ReferralCommissionStatus @default(PENDING)
+  availableAt  DateTime                 @map("available_at")
+  paidAt       DateTime?                @map("paid_at")
+  cancelledAt  DateTime?                @map("cancelled_at")
+  cancelReason String?                  @map("cancel_reason")
 
   payoutId String?         @map("payout_id")
   payout   ReferralPayout? @relation(fields: [payoutId], references: [id])
@@ -1942,8 +2046,8 @@ model TrainingModule {
   published   Boolean @default(false)
 
   videos    TrainingVideo[]
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  createdAt DateTime        @default(now()) @map("created_at")
+  updatedAt DateTime        @updatedAt @map("updated_at")
 
   @@index([position])
   @@map("training_modules")

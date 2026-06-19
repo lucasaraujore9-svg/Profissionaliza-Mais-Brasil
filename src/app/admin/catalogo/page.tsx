@@ -1,5 +1,5 @@
 import { PageHeader } from "@/components/painel/page-header"
-import { AdminCatalogClient } from "@/components/admin/admin-catalog-client"
+import { AdminCatalogTabs } from "@/components/admin/admin-catalog-tabs"
 import { requireAdminSession } from "@/lib/auth/admin-session"
 
 export default async function AdminCatalogPage() {
@@ -10,9 +10,9 @@ export default async function AdminCatalogPage() {
     <div className="space-y-6">
       <PageHeader
         title="Catálogo"
-        description="Sincronize o catálogo central de cursos e gerencie a curadoria agregada."
+        description="Sincronize o catálogo central de cursos, monte pacotes e gerencie a curadoria agregada."
       />
-      <AdminCatalogClient canEdit={canEdit} />
+      <AdminCatalogTabs canEdit={canEdit} />
     </div>
   )
 }

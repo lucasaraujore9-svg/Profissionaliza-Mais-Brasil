@@ -29,7 +29,9 @@ import { clientLogger } from "@/lib/logger-client"
  * /api/loja/checkout, então o /process roteia para o fluxo Asaas.
  */
 export interface AsaasCheckoutFormProps {
-  courseId: string
+  courseId?: string
+  /** Compra de PACOTE: enviado em vez de courseId ao initPath. */
+  packageId?: string
   couponCode?: string | null
   initPath?: string
   processPath?: string
@@ -93,6 +95,7 @@ function formatCep(v: string): string {
 
 export function AsaasCheckoutForm({
   courseId,
+  packageId,
   couponCode,
   initPath = "/api/loja/checkout",
   processPath = "/api/loja/checkout/process",
@@ -133,7 +136,7 @@ export function AsaasCheckoutForm({
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        courseId,
+        ...(packageId ? { packageId } : { courseId }),
         couponCode: couponCode ?? undefined,
         nome: form.nome,
         email: form.email,

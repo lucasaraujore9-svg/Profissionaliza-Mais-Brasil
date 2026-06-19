@@ -136,6 +136,7 @@ async function fulfillEnrollmentLocked(
         },
       },
       course: { select: { id: true, nome: true } },
+      coursePackage: { select: { id: true, name: true } },
     },
   })
   if (!enrollment) throw new Error(`enrollment ${enrollmentId} nao encontrado`)
@@ -253,6 +254,20 @@ async function fulfillEnrollmentLocked(
   const accessStartedAt = new Date()
   const accessExpiresAt = addMonthsClamped(accessStartedAt, STUDENT_ACCESS_MONTHS)
 
+  // Pacote de cursos: a matrícula primária já liberou o 1º curso acima. Agora
+  // liberamos os demais cursos do pacote (link na plataforma + matrícula
+  // satélite ACTIVE, finalAmount 0 — sem Payment, sem dupla receita). Antes do
+  // Payment para herdar a retry-safety do webhook. Best-effort por curso:
+  // uma falha alerta o admin mas não bloqueia a ativação do pacote inteiro.
+  if (enrollment.coursePackageId) {
+    await provisionPackageSiblings(
+      tenant,
+      enrollment,
+      accessStartedAt,
+      accessExpiresAt,
+    )
+  }
+
   // Transação para Payment + Enrollment.update — evita estado inconsistente
   // (Payment órfão com Enrollment.PENDING) se a 2ª query falhar.
   await prisma.$transaction([
@@ -292,15 +307,22 @@ async function fulfillEnrollmentLocked(
     }),
   ])
 
+  // Nome do item comprado: pacote (quando houver) ou o curso avulso.
+  const purchaseName = enrollment.coursePackage
+    ? `pacote ${enrollment.coursePackage.name}`
+    : enrollment.course.nome
+
   // Notificacoes in-app
   await createNotification({
     audience: "STUDENT",
     studentId: enrollment.student.id,
     level: "SUCCESS",
-    title: `Matrícula confirmada em ${enrollment.course.nome}`,
-    body: enrollment.installmentsTotal
-      ? `Primeira de ${enrollment.installmentsTotal} mensalidades paga.`
-      : "Acesse a área de aulas para começar agora.",
+    title: `Matrícula confirmada — ${purchaseName}`,
+    body: enrollment.coursePackage
+      ? "Todos os cursos do pacote foram liberados. Acesse a área de aulas."
+      : enrollment.installmentsTotal
+        ? `Primeira de ${enrollment.installmentsTotal} mensalidades paga.`
+        : "Acesse a área de aulas para começar agora.",
     category: "enrollment",
     href: "/aluno/cursos",
   })
@@ -310,7 +332,7 @@ async function fulfillEnrollmentLocked(
       audience: "TENANT",
       tenantId: tenant.id,
       level: "SUCCESS",
-      title: `Nova venda — ${enrollment.course.nome}`,
+      title: `Nova venda — ${purchaseName}`,
       body: `${enrollment.student.nome} comprou por R$ ${event.amount
         .toFixed(2)
         .replace(".", ",")}.`,
@@ -322,12 +344,105 @@ async function fulfillEnrollmentLocked(
       audience: "ROLE",
       roleTarget: "SUPER_ADMIN",
       level: "SUCCESS",
-      title: `Venda direta — ${enrollment.course.nome}`,
+      title: `Venda direta — ${purchaseName}`,
       body: `${enrollment.student.nome} (vitrine PMB) — R$ ${event.amount
         .toFixed(2)
         .replace(".", ",")}.`,
       category: "sale",
       href: "/admin/vendas",
+    })
+  }
+}
+
+/**
+ * Libera os cursos restantes de um pacote para o aluno: vincula cada curso na
+ * plataforma de aulas e cria a matrícula satélite ACTIVE (finalAmount 0, sem
+ * Payment). O 1º curso (matrícula primária) já foi provisionado pelo chamador.
+ *
+ * Best-effort por curso: uma falha de vínculo alerta o SUPER_ADMIN e segue para
+ * os demais — não rethrow, para não bloquear a ativação do pacote já pago.
+ */
+async function provisionPackageSiblings(
+  tenant: TenantContext,
+  enrollment: {
+    id: string
+    courseId: string
+    coursePackageId: string | null
+    gateway: PaymentGateway
+    soldByUserId: string | null
+    student: { id: string; nome: string }
+  },
+  startedAt: Date,
+  expiresAt: Date,
+): Promise<void> {
+  if (!enrollment.coursePackageId) return
+  const expectedTenantId = tenant.isPmbVitrine ? null : tenant.id
+
+  const items = await prisma.coursePackageItem.findMany({
+    where: { packageId: enrollment.coursePackageId },
+    orderBy: { order: "asc" },
+    include: { course: { select: { id: true, nome: true, status: true } } },
+  })
+
+  for (const item of items) {
+    if (item.course.id === enrollment.courseId) continue // primário já liberado
+    if (item.course.status !== "ATIVO") continue
+
+    try {
+      await linkCourseToStudent(enrollment.student.id, item.course.id)
+    } catch (err) {
+      contextLogger().error(
+        {
+          err,
+          event: "fulfill.package_sibling_link_failed",
+          enrollmentId: enrollment.id,
+          studentId: enrollment.student.id,
+          courseId: item.course.id,
+          packageId: enrollment.coursePackageId,
+        },
+        "vínculo de curso do pacote falhou — alertando admin",
+      )
+      await createNotification({
+        audience: "ROLE",
+        roleTarget: "SUPER_ADMIN",
+        level: "ERROR",
+        title: "Curso de pacote não liberado",
+        body: `Aluno ${enrollment.student.nome}: o curso "${item.course.nome}" do pacote não pôde ser vinculado na plataforma. Libere manualmente.`,
+        category: "fulfillment",
+        href: `/admin/alunos/${enrollment.student.id}`,
+      }).catch(swallow("fulfill.notify_package_sibling"))
+      continue
+    }
+
+    // Cria a matrícula satélite só se o aluno ainda não tiver acesso ao curso.
+    const existing = await prisma.enrollment.findFirst({
+      where: {
+        studentId: enrollment.student.id,
+        courseId: item.course.id,
+        tenantId: expectedTenantId,
+        status: { in: ["PENDING", "ACTIVE", "COMPLETED"] },
+      },
+      select: { id: true },
+    })
+    if (existing) continue
+
+    await prisma.enrollment.create({
+      data: {
+        tenantId: expectedTenantId,
+        studentId: enrollment.student.id,
+        courseId: item.course.id,
+        coursePackageId: enrollment.coursePackageId,
+        packagePrimary: false,
+        soldByUserId: enrollment.soldByUserId ?? null,
+        paymentType: "ONE_TIME",
+        status: "ACTIVE",
+        gateway: enrollment.gateway,
+        originalAmount: 0,
+        discountAmount: 0,
+        finalAmount: 0,
+        startedAt,
+        expiresAt,
+      },
     })
   }
 }

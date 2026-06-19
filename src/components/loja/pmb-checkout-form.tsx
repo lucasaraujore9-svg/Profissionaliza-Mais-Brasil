@@ -22,8 +22,11 @@ import { TermsAcceptance } from "@/components/loja/terms-acceptance"
 import { clientLogger } from "@/lib/logger-client"
 
 export interface PmbCheckoutFormProps {
-  courseId: string
+  courseId?: string
+  /** Compra de PACOTE: enviado em vez de courseId ao initPath. */
+  packageId?: string
   couponCode: string | null
+  initPath?: string
 }
 
 type Method = "PIX" | "BOLETO" | "CREDIT_CARD"
@@ -112,7 +115,12 @@ function formatCep(v: string): string {
   return `${d.slice(0, 5)}-${d.slice(5)}`
 }
 
-export function PmbCheckoutForm({ courseId, couponCode }: PmbCheckoutFormProps) {
+export function PmbCheckoutForm({
+  courseId,
+  packageId,
+  couponCode,
+  initPath = "/api/checkout",
+}: PmbCheckoutFormProps) {
   const [form, setForm] = useState<FormState>(INITIAL)
   const [method, setMethod] = useState<Method>("PIX")
   const [status, setStatus] = useState<Status>({ kind: "idle" })
@@ -139,7 +147,7 @@ export function PmbCheckoutForm({ courseId, couponCode }: PmbCheckoutFormProps) 
     setFieldErrors({})
 
     const body: Record<string, unknown> = {
-      courseId,
+      ...(packageId ? { packageId } : { courseId }),
       couponCode: couponCode ?? undefined,
       nome: form.nome,
       email: form.email,
@@ -166,7 +174,7 @@ export function PmbCheckoutForm({ courseId, couponCode }: PmbCheckoutFormProps) 
     }
 
     try {
-      const res = await fetch("/api/checkout", {
+      const res = await fetch(initPath, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),

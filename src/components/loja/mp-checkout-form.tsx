@@ -38,6 +38,8 @@ export interface MpCheckoutFormProps {
   publicKey: string
   // Vitrine
   courseId?: string
+  /** Compra de PACOTE: enviado em vez de courseId ao initPath. */
+  packageId?: string
   couponCode?: string | null
   initPath?: string
   // Link de pagamento (matrícula já existe)
@@ -120,6 +122,7 @@ function formatExpiry(v: string): string {
 export function MpCheckoutForm({
   publicKey,
   courseId,
+  packageId,
   couponCode,
   initPath = "/api/loja/checkout",
   enrollmentId,
@@ -183,7 +186,7 @@ export function MpCheckoutForm({
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        courseId,
+        ...(packageId ? { packageId } : { courseId }),
         couponCode: couponCode ?? undefined,
         nome: form.nome,
         email: form.email,

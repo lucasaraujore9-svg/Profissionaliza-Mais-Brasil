@@ -137,6 +137,20 @@ export interface IdiomasSectionConfig {
   courseIds: string[]
 }
 
+/**
+ * Seção "Pacotes de cursos" — exibe uma linha de cards de pacote. O conteúdo
+ * (quais pacotes, preço) é resolvido em runtime pela vitrine: pacotes da PMB
+ * (auto-distribuídos) + pacotes próprios da unidade, descontando os que a
+ * unidade ocultou (TenantPackage.isVisible=false). A config carrega só
+ * título/subtítulo — não há lista fixa de ids (igual à Técnica/EJA, o conteúdo
+ * é derivado). Ver src/lib/packages/vitrine.ts.
+ */
+export interface PackagesSectionConfig {
+  kind: "packages"
+  title: string
+  subtitle: string
+}
+
 export type AnySectionConfig =
   | BestsellersConfig
   | CategoryCoursesConfig
@@ -145,6 +159,7 @@ export type AnySectionConfig =
   | TecnicaSectionConfig
   | EjaSectionConfig
   | IdiomasSectionConfig
+  | PackagesSectionConfig
 
 export interface HomeSectionRecord<T extends AnySectionConfig = AnySectionConfig> {
   id: string
@@ -167,6 +182,7 @@ export const SECTION_KINDS = [
   "tecnica",
   "eja",
   "idiomas",
+  "packages",
 ] as const
 export type SectionKind = (typeof SECTION_KINDS)[number]
 
@@ -272,6 +288,15 @@ export function validateSectionPayload(
       }
     }
     return { ok: true, kind, config: { kind: "idiomas", title, subtitle, courseIds } }
+  }
+
+  // ---------- packages ----------
+  // Marcador com título/subtítulo editáveis; o conteúdo (pacotes) é derivado
+  // em runtime (PMB + próprios da unidade, menos os ocultos).
+  if (kind === "packages") {
+    const title = strOrEmpty(c.title, 120) || "Pacotes de cursos"
+    const subtitle = strOrEmpty(c.subtitle, 200)
+    return { ok: true, kind, config: { kind: "packages", title, subtitle } }
   }
 
   // ---------- categories_grid ----------
@@ -744,6 +769,7 @@ export async function ensureTenantHomeSections(tenantId: string): Promise<void> 
     await ensureTecnicaSection(tenantId)
     await ensureEjaSection(tenantId)
     await ensureIdiomasSection(tenantId)
+    await ensurePackagesSection(tenantId)
     return
   }
   const pmbSections = await prisma.homeSection.findMany({
@@ -800,6 +826,36 @@ export async function ensureTecnicaSection(
     kind: "tecnica",
     enabled,
     config: { kind: "tecnica" },
+  })
+}
+
+/**
+ * Garante (idempotente) a linha singleton kind="packages" para um escopo (PMB
+ * quando tenantId=null, ou uma revenda). Posiciona logo após "Mais vendidos"
+ * (bestsellers) quando existe; senão no fim. Habilitada por padrão — a seção só
+ * renderiza de fato quando há pacotes disponíveis (ver resolveVitrinePackages).
+ */
+export async function ensurePackagesSection(
+  tenantId: string | null,
+): Promise<void> {
+  const existing = await prisma.homeSection.findFirst({
+    where: { tenantId, kind: "packages" },
+    select: { id: true },
+  })
+  if (existing) return
+
+  const bestsellers = await prisma.homeSection.findFirst({
+    where: { tenantId, kind: "bestsellers" },
+    select: { position: true },
+  })
+  const position =
+    bestsellers != null
+      ? bestsellers.position + 1
+      : (await lastPosition(tenantId)) + 1
+  await createSectionAt(tenantId, position, {
+    kind: "packages",
+    enabled: true,
+    config: { kind: "packages", title: "Pacotes de cursos", subtitle: "Leve vários cursos por um valor único" },
   })
 }
 
@@ -927,6 +983,8 @@ function canonicalRank(
       return 1000
     case "bestsellers":
       return 1
+    case "packages":
+      return 1.5
     case "category_courses":
       if (cats.inf && cfg.categoryId === cats.inf) return 2
       if (cats.adm && cfg.categoryId === cats.adm) return 4
