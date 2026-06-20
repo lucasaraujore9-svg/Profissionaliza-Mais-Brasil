@@ -34,17 +34,3 @@ export function swallow(
     return undefined
   }
 }
-
-/**
- * Versão mais explícita para cleanup que normalmente nunca falha mas, se
- * falhar, queremos saber. Igual a `swallow` mas com tag diferente no log
- * pra facilitar filtros em produção.
- */
-export function swallowCleanup(
-  context: string,
-): (error: unknown) => undefined {
-  return (error: unknown) => {
-    contextLogger().warn({ err: error, cleanup: context }, "cleanup failed")
-    return undefined
-  }
-}

@@ -187,6 +187,7 @@ export function OnboardingWizard() {
               <Link
                 href={stepDetails.href}
                 target="_blank"
+                rel="noopener noreferrer"
                 className="mt-5 inline-flex items-center gap-2 rounded-lg bg-[var(--color-pmb-green)] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[var(--color-pmb-green-700)]"
               >
                 {stepDetails.hrefLabel}
