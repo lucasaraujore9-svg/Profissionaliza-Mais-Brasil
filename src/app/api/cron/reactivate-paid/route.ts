@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { unblockTenantStudents } from "@/lib/auto-block"
 import { unblockStudentInEA } from "@/lib/students/plataforma-actions"
 import { canReactivateUnderTenant } from "@/lib/students/reactivation-guard"
+import { invalidateTenantCache } from "@/lib/tenant/cache-invalidation"
 import { createNotification } from "@/lib/notifications"
 import { isCronAuthorized } from "@/lib/auth/bearer"
 import { PMB_TENANT_SLUG } from "@/lib/pmb-config"
@@ -54,6 +55,8 @@ async function processReactivations() {
         where: { id: tenant.id },
         data: { status: "ACTIVE" },
       })
+      // PERF-001: invalida o cache p/ a vitrine voltar a vender na hora.
+      await invalidateTenantCache(tenant.id)
       result.tenantsReactivated += 1
       const unblock = await unblockTenantStudents(tenant.id)
       result.studentsUnblocked += unblock.affectedStudents
