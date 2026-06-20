@@ -108,6 +108,16 @@ async function ensureTracking(client) {
   return r.rows[0].n === 0
 }
 
+async function coreSchemaExists(client) {
+  // `tenants` é criada pela migration inicial. Se existe, o schema central já
+  // foi provisionado (banco EXISTENTE). to_regclass devolve NULL se não existir,
+  // sem lançar erro. Distingue "banco existente sem tracking" de "banco vazio".
+  const r = await client.query(
+    "SELECT to_regclass('public.tenants') IS NOT NULL AS exists",
+  )
+  return Boolean(r.rows[0]?.exists)
+}
+
 async function bootstrap(client, files) {
   // Banco já existia antes deste script existir. Marcamos todas as migrations
   // atuais como "já aplicadas" sem rodá-las (assumindo o schema do prod está
@@ -213,14 +223,26 @@ async function main() {
     const isFreshTable = await ensureTracking(client)
 
     if (isFreshTable) {
-      // Primeira execução do script em um banco que provavelmente já tem o
-      // schema. Bootstrapa marcando tudo como aplicado pra evitar quebrar
-      // migrations antigas não-idempotentes.
-      await bootstrap(client, files)
+      // OPS-001: a tabela de tracking nasce vazia em DOIS cenários distintos —
+      // não dá pra assumir que o schema existe.
+      //  (a) banco EXISTENTE sem tracking → o schema já está sincronizado:
+      //      bootstrapa marcando tudo como aplicado, sem rodar (evita quebrar
+      //      migrations antigas não-idempotentes).
+      //  (b) banco NOVO/vazio (ex.: Postgres self-hosted na migração p/ VPS) →
+      //      marcar sem rodar subiria a app contra um schema vazio. Aqui é
+      //      OBRIGATÓRIO aplicar todas as migrations em ordem.
+      if (await coreSchemaExists(client)) {
+        await bootstrap(client, files)
+        console.log(
+          "[apply-pending] schema existente + tracking vazio → marcado como aplicado (bootstrap).",
+        )
+        return
+      }
       console.log(
-        "[apply-pending] bootstrap completo. Próximas migrations vão rodar normalmente.",
+        "[apply-pending] banco vazio (schema ausente) → aplicando TODAS as migrations em ordem.",
       )
-      return
+      // Não retorna: cai no loop abaixo, que aplica tudo (tracking vazio →
+      // alreadyApplied = false para cada arquivo).
     }
 
     let applied = 0
