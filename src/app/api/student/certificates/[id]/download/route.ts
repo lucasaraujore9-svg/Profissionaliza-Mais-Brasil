@@ -52,31 +52,38 @@ export const GET = withRequestContextParams<{ id: string }>(
     )
   }
 
-  // Stream do PDF (evita expor a URL publica e forca download)
+  // Bucket `certificates` é PRIVADO (R1): servimos o PDF SEMPRE via stream
+  // service-role e nunca redirecionamos para a URL pública (que agora retorna
+  // 400 e exporia o caminho do objeto com PII — nome + CPF).
   const path = extractCertificatePath(pdfUrl)
-  if (path) {
-    try {
-      const buffer = await downloadCertificatePdf(path)
-      // Defesa em profundidade: cert.code é gerado internamente, mas
-      // sanitizar evita CRLF injection caso o gerador mude no futuro.
-      const safeCode = String(cert.code).replace(/[^A-Za-z0-9_-]/g, "")
-      return new NextResponse(buffer as unknown as BodyInit, {
-        status: 200,
-        headers: {
-          "Content-Type": "application/pdf",
-          "Content-Disposition": `attachment; filename="certificado-${safeCode}.pdf"`,
-          "Cache-Control": "private, no-store",
-        },
-      })
-    } catch (err) {
-      contextLogger().error(
-        { err, event: "student.certificates.download_bucket_failed", certificateId: cert.id, path },
-        "falha ao baixar PDF do bucket — fallback pra URL pública",
-      )
-      // fallback: redireciona para a URL publica
-    }
+  if (!path) {
+    return NextResponse.json(
+      { error: "Certificado sem PDF disponivel" },
+      { status: 500 },
+    )
   }
-
-  return NextResponse.redirect(pdfUrl, { status: 302 })
+  try {
+    const buffer = await downloadCertificatePdf(path)
+    // Defesa em profundidade: cert.code é gerado internamente, mas
+    // sanitizar evita CRLF injection caso o gerador mude no futuro.
+    const safeCode = String(cert.code).replace(/[^A-Za-z0-9_-]/g, "")
+    return new NextResponse(buffer as unknown as BodyInit, {
+      status: 200,
+      headers: {
+        "Content-Type": "application/pdf",
+        "Content-Disposition": `attachment; filename="certificado-${safeCode}.pdf"`,
+        "Cache-Control": "private, no-store",
+      },
+    })
+  } catch (err) {
+    contextLogger().error(
+      { err, event: "student.certificates.download_bucket_failed", certificateId: cert.id, path },
+      "falha ao baixar PDF do bucket privado",
+    )
+    return NextResponse.json(
+      { error: "Falha ao recuperar o PDF. Tente novamente." },
+      { status: 502 },
+    )
+  }
   },
 )

@@ -279,14 +279,15 @@ export default async function ValidateCertificatePage({ params }: Props) {
   // tornar o bucket privado (issue 100/R1). Fallback para a URL armazenada.
   // O PDF é regenerado on-demand se o template/branding mudou depois da última
   // geração (no máximo uma regeneração por mudança; a página é rate-limited).
-  let pdfDownloadUrl: string | null = cert.pdfUrl
+  // Bucket `certificates` é PRIVADO (R1): o download é servido SOMENTE via
+  // signed URL de curta duração (300s). Nunca expomos cert.pdfUrl (URL pública
+  // permanente — agora 400). Se a assinatura falhar, o botão de download some.
+  let pdfDownloadUrl: string | null = null
   if (!isRevoked) {
     const freshUrl = await ensureFreshCertificatePdf(cert).catch(
       swallow("validar.pdf_refresh"),
     )
-    const effectiveUrl = freshUrl ?? cert.pdfUrl
-    pdfDownloadUrl = effectiveUrl
-    const path = extractCertificatePath(effectiveUrl)
+    const path = extractCertificatePath(freshUrl ?? cert.pdfUrl)
     if (path) {
       const signed = await createSignedCertificateUrl(path, 300).catch(
         swallow("validar.sign_url"),
