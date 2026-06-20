@@ -3,9 +3,9 @@
  * Node que não existem no browser e estoura o bundle em ~80kb.
  *
  * Saída: JSON via console.* — quando o user reportar bug, o time pega o
- * print do DevTools e tem o evento estruturado. Em produção, pode ser
- * encaminhado a um endpoint /api/internal/log via beacon (não implementado
- * aqui — basta plugar depois).
+ * print do DevTools e tem o evento estruturado. Em produção, erros (level
+ * "error") também são encaminhados via beacon a /api/observability/client-log
+ * (ver função `ship`), de onde chegam ao log estruturado do servidor.
  *
  * Use em components React, error boundaries, hooks. NUNCA em src/lib/*
  * server (use src/lib/logger.ts).
@@ -57,6 +57,35 @@ function sanitize(value: unknown, depth = 0): unknown {
   return out
 }
 
+// OBS-001: encaminha erros do client para o servidor (Vercel Runtime Logs) via
+// beacon. É o que torna verdadeira a mensagem "já fomos notificados" das error
+// boundaries. Best-effort, só em produção e só para `error` (evita ruído/loop).
+function ship(level: Level, payload: LogPayload): void {
+  if (!isProduction || level !== "error" || typeof window === "undefined") return
+  try {
+    const body = JSON.stringify({
+      level,
+      msg: payload.msg,
+      url: window.location?.href,
+      digest: typeof payload.digest === "string" ? payload.digest : undefined,
+      context: payload,
+    })
+    const endpoint = "/api/observability/client-log"
+    if (typeof navigator !== "undefined" && typeof navigator.sendBeacon === "function") {
+      const blob = new Blob([body], { type: "application/json" })
+      if (navigator.sendBeacon(endpoint, blob)) return
+    }
+    void fetch(endpoint, {
+      method: "POST",
+      body,
+      headers: { "Content-Type": "application/json" },
+      keepalive: true,
+    }).catch(() => {})
+  } catch {
+    // best-effort
+  }
+}
+
 function emit(level: Level, ctx: Record<string, unknown>, msg: string): void {
   const payload: LogPayload = {
     level,
@@ -70,6 +99,7 @@ function emit(level: Level, ctx: Record<string, unknown>, msg: string): void {
   } else {
     console[level === "debug" ? "log" : level](`[${level}] ${msg}`, payload)
   }
+  ship(level, payload)
 }
 
 export const clientLogger = {
