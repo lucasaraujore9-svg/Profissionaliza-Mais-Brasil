@@ -26,7 +26,7 @@ const SECURITY_HEADERS = [
       "base-uri 'self'",
       "frame-ancestors 'none'",
       "object-src 'none'",
-      "img-src 'self' data: blob: https://*.supabase.co https://playcurso.com",
+      "img-src 'self' data: blob: https://*.supabase.co https://playcurso.com https://s3.bmbr.com.br",
       "font-src 'self' data:",
       "style-src 'self' 'unsafe-inline'",
       "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://sdk.mercadopago.com https://www.mercadopago.com https://va.vercel-scripts.com",
@@ -52,13 +52,15 @@ const nextConfig: NextConfig = {
     // responder 402 (OPTIMIZED_IMAGE_REQUEST_PAYMENT_REQUIRED) para TODA
     // imagem servida via /_next/image — derrubando logos (Supabase), capas
     // (playcurso) e banners. Servindo direto (unoptimized) nada depende da
-    // cota paga; o CSP img-src ja libera supabase.co e playcurso.com.
+    // cota paga; o CSP img-src ja libera supabase.co, playcurso.com e
+    // s3.bmbr.com.br (capas dos cursos da fornecedora LMS).
     // Para reativar, habilite/contrate o recurso no painel da Vercel e
     // entao remova este flag.
     unoptimized: true,
     remotePatterns: [
       { protocol: "https", hostname: "*.supabase.co" },
       { protocol: "https", hostname: "playcurso.com" },
+      { protocol: "https", hostname: "s3.bmbr.com.br" },
     ],
   },
   async headers() {
