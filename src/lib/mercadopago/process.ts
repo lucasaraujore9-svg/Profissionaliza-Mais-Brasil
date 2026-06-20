@@ -267,7 +267,7 @@ export async function processMpWebhook(args: ProcessArgs): Promise<void> {
         title: "Webhook MP sem tenant",
         body: `paymentId=${paymentId} slug=${tenantSlug ?? "(pmb)"} — pagamento aprovado pode estar sem matricula. Verifique WebhookLog ${logId}.`,
         category: "webhook",
-        href: "/admin/webhooks",
+        href: "/admin/configuracoes",
       }).catch(swallow("mp.process.notify"))
       return
     }
@@ -309,7 +309,7 @@ export async function processMpWebhook(args: ProcessArgs): Promise<void> {
             title: "MP_WEBHOOK_SECRET (PMB) ausente",
             body: `paymentId=${paymentId} — configure MP_WEBHOOK_SECRET no Vercel. Venda pode ficar sem matrícula automática.`,
             category: "webhook",
-            href: "/admin/webhooks",
+            href: "/admin/configuracoes",
           }).catch(swallow("mp.process.notify"))
         } else {
           await createNotification({
