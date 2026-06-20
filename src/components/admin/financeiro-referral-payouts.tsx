@@ -634,7 +634,7 @@ export function FinanceiroReferralPayouts({
                   {detailRow.proofUrl ? (
                     <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs">
                       <a
-                        href={detailRow.proofUrl}
+                        href={`/api/admin/financeiro/referral-payouts/${detailRow.id}/proof/download`}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="inline-flex items-center gap-1 font-medium text-[var(--color-pmb-green-900)] hover:underline"

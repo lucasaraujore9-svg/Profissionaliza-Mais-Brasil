@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { requireAdminSession } from "@/lib/auth/admin-session"
 import { canMarkPaid } from "@/lib/auth/roles"
-import { uploadVitrineAsset } from "@/lib/supabase/storage"
+import { uploadPayoutProof } from "@/lib/storage/payout-proof"
 import { isValidImageMagic } from "@/lib/storage/validate-image"
 import { rateLimit, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
@@ -47,8 +47,9 @@ function isPdf(buffer: ArrayBuffer): boolean {
 }
 
 // Anexa o comprovante de pagamento de um saque de comissão. Visível para a
-// revenda em /painel/indicacoes. Bucket público sob `comprovantes/` com caminho
-// aleatório (não enumerável). Permissão: Financeiro / SUPER_ADMIN.
+// revenda em /painel/indicacoes via rota AUTENTICADA de download. Bucket PRIVADO
+// `payout-proofs` (DB-001) — proofUrl guarda o PATH do objeto, nunca uma URL
+// pública. Permissão: Financeiro / SUPER_ADMIN.
 export const POST = withRequestContextParams<{ id: string }>(
   {
     action: "admin.financeiro.referral_payouts.proof_upload",
@@ -116,12 +117,14 @@ export const POST = withRequestContextParams<{ id: string }>(
         )
       }
 
-      const result = await uploadVitrineAsset(path, buffer, file.type)
+      await uploadPayoutProof(path, buffer, file.type)
 
       const updated = await prisma.referralPayout.update({
         where: { id: payout.id },
         data: {
-          proofUrl: result.publicUrl,
+          // PATH no bucket privado (não URL pública). A leitura é via rota
+          // autenticada /api/.../proof/download (admin) e /api/painel/indicacoes/proof/[payoutId] (revenda).
+          proofUrl: path,
           proofUploadedAt: new Date(),
           proofUploadedById: session.userId,
         },

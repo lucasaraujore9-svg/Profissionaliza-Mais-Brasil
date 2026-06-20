@@ -377,7 +377,7 @@ export default async function PainelIndicacoesPage() {
                     <TableCell>
                       {p.proofUrl ? (
                         <a
-                          href={p.proofUrl}
+                          href={`/api/painel/indicacoes/proof/${p.id}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-sm font-medium text-[var(--color-pmb-green-900)] underline-offset-4 hover:underline"
