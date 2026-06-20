@@ -18,10 +18,16 @@ export const GET = withRequestContext(
   async (request: Request) => {
   // Rate-limit defense-in-depth: mesmo que o secret seja conhecido, bot
   // não consegue varrer slugs/domains do banco em massa.
+  // failOpen: resolucao de tenant e infra CRITICA do proxy (custom domain ->
+  // revenda). Um outage do Upstash (ex.: cota mensal estourada) NAO pode
+  // bloquear este endpoint — senao o proxy cai em fail-open e serve a PMB sob o
+  // dominio da revenda (personalizacao "sumida"). O x-internal-secret ja protege
+  // contra chamadas externas; o rate-limit aqui e so defesa-em-profundidade.
   const rl = await rateLimit(request, {
     name: "internal-resolve",
     limit: 60,
     windowSec: 60,
+    failOpen: true,
   })
   if (!rl.ok) return rateLimitResponse(rl)
 

@@ -1,5 +1,6 @@
 import { Redis } from "@upstash/redis"
 import { Ratelimit } from "@upstash/ratelimit"
+import { contextLogger } from "@/lib/logger"
 
 const url = process.env.UPSTASH_REDIS_REST_URL
 const token = process.env.UPSTASH_REDIS_REST_TOKEN
@@ -75,14 +76,7 @@ export async function rateLimit(
 
   const ip = ipFrom(request)
   const key = `${config.name}:${ip}`
-  const r = await limiter.limit(key)
-
-  return {
-    ok: r.success,
-    remaining: r.remaining,
-    limit: r.limit,
-    retryAfterSec: Math.max(0, Math.ceil((r.reset - Date.now()) / 1000)),
-  }
+  return runLimit(limiter, key, config)
 }
 
 /**
@@ -107,13 +101,45 @@ export async function rateLimitByKey(
   }
 
   const key = `${config.name}:${identifier}`
-  const r = await limiter.limit(key)
+  return runLimit(limiter, key, config)
+}
 
-  return {
-    ok: r.success,
-    remaining: r.remaining,
-    limit: r.limit,
-    retryAfterSec: Math.max(0, Math.ceil((r.reset - Date.now()) / 1000)),
+/**
+ * Executa `limiter.limit` tratando FALHA do comando Redis (não só Redis
+ * ausente). Quando o Upstash erra — tipicamente cota mensal estourada (`ERR max
+ * requests limit exceeded`) — `limiter.limit` REJEITA. Sem este catch, a
+ * exceção subia e derrubava a rota chamadora com 500. Em especial, isso fazia o
+ * `/api/internal/resolve-tenant` responder 500 → o proxy caia em fail-open e
+ * servia a PMB sob o domínio da revenda (personalização "sumida").
+ *
+ * Na falha aplicamos a MESMA política do Redis-ausente: failOpen libera; demais
+ * negam em prod (graceful 429 em vez de 500).
+ */
+async function runLimit(
+  limiter: Ratelimit,
+  key: string,
+  config: LimiterConfig,
+): Promise<RateLimitResult> {
+  try {
+    const r = await limiter.limit(key)
+    return {
+      ok: r.success,
+      remaining: r.remaining,
+      limit: r.limit,
+      retryAfterSec: Math.max(0, Math.ceil((r.reset - Date.now()) / 1000)),
+    }
+  } catch (err) {
+    contextLogger().error(
+      { err, event: "ratelimit.redis_command_failed", bucket: config.name },
+      "rate limiter: comando Redis falhou — aplicando política de fallback",
+    )
+    const allow = config.failOpen ? true : !isProd
+    return {
+      ok: allow,
+      remaining: 0,
+      limit: config.limit,
+      retryAfterSec: allow ? 0 : 60,
+    }
   }
 }
 
