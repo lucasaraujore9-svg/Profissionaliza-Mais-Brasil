@@ -205,3 +205,257 @@ PORTÃO: ✅ VERDE
 
 RESULT tsc=0 lint=0 test=0 build=0
 PORTÃO: ✅ VERDE
+================ PORTÃO 2026-06-20 17:51:40 P1-PERF-001-tenant-cache ================
+--- typecheck (tsc --noEmit) ---
+--- lint (eslint) ---
+/Users/lucasaraujo/Documents/Projetos Git/Profissionaliza-Mais-Brasil/src/lib/students/plataforma-actions.ts
+  160:14  warning  'err' is defined but never used. Allowed unused caught errors must match /^_/u  @typescript-eslint/no-unused-vars
+
+✖ 2 problems (0 errors, 2 warnings)
+  0 errors and 1 warning potentially fixable with the `--fix` option.
+
+--- test (vitest run) ---
+
+ Test Files  15 passed (15)
+      Tests  101 passed (101)
+   Start at  17:51:53
+   Duration  572ms (transform 236ms, setup 0ms, collect 590ms, tests 38ms, environment 1ms, prepare 669ms)
+
+--- build (next build, SKIP migrations, dummy DB) ---
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+
+RESULT tsc=0 lint=0 test=0 build=0
+PORTÃO: ✅ VERDE
+================ PORTÃO 2026-06-20 17:56:30 P1-DB-002-fk-indexes ================
+--- typecheck (tsc --noEmit) ---
+--- lint (eslint) ---
+/Users/lucasaraujo/Documents/Projetos Git/Profissionaliza-Mais-Brasil/src/lib/students/plataforma-actions.ts
+  160:14  warning  'err' is defined but never used. Allowed unused caught errors must match /^_/u  @typescript-eslint/no-unused-vars
+
+✖ 2 problems (0 errors, 2 warnings)
+  0 errors and 1 warning potentially fixable with the `--fix` option.
+
+--- test (vitest run) ---
+
+ Test Files  15 passed (15)
+      Tests  101 passed (101)
+   Start at  17:56:42
+   Duration  543ms (transform 234ms, setup 0ms, collect 621ms, tests 40ms, environment 1ms, prepare 611ms)
+
+--- build (next build, SKIP migrations, dummy DB) ---
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+
+RESULT tsc=0 lint=0 test=0 build=0
+PORTÃO: ✅ VERDE
+================ PORTÃO 2026-06-20 17:58:21 P1-SAAS-001-complete ================
+--- typecheck (tsc --noEmit) ---
+--- lint (eslint) ---
+/Users/lucasaraujo/Documents/Projetos Git/Profissionaliza-Mais-Brasil/src/lib/students/plataforma-actions.ts
+  160:14  warning  'err' is defined but never used. Allowed unused caught errors must match /^_/u  @typescript-eslint/no-unused-vars
+
+✖ 2 problems (0 errors, 2 warnings)
+  0 errors and 1 warning potentially fixable with the `--fix` option.
+
+--- test (vitest run) ---
+
+ Test Files  15 passed (15)
+      Tests  101 passed (101)
+   Start at  17:58:34
+   Duration  614ms (transform 310ms, setup 0ms, collect 725ms, tests 43ms, environment 1ms, prepare 636ms)
+
+--- build (next build, SKIP migrations, dummy DB) ---
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+
+RESULT tsc=0 lint=0 test=0 build=0
+PORTÃO: ✅ VERDE
+================ PORTÃO 2026-06-20 18:00:01 P1-LGPD-003-erasure-cert ================
+--- typecheck (tsc --noEmit) ---
+--- lint (eslint) ---
+/Users/lucasaraujo/Documents/Projetos Git/Profissionaliza-Mais-Brasil/src/lib/students/plataforma-actions.ts
+  160:14  warning  'err' is defined but never used. Allowed unused caught errors must match /^_/u  @typescript-eslint/no-unused-vars
+
+✖ 2 problems (0 errors, 2 warnings)
+  0 errors and 1 warning potentially fixable with the `--fix` option.
+
+--- test (vitest run) ---
+
+ Test Files  15 passed (15)
+      Tests  101 passed (101)
+   Start at  18:00:13
+   Duration  636ms (transform 228ms, setup 0ms, collect 582ms, tests 46ms, environment 1ms, prepare 762ms)
+
+--- build (next build, SKIP migrations, dummy DB) ---
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+
+RESULT tsc=0 lint=0 test=0 build=0
+PORTÃO: ✅ VERDE
+================ PORTÃO 2026-06-20 18:02:22 P1-OBS-001-client-error-beacon ================
+--- typecheck (tsc --noEmit) ---
+src/lib/logger-client.ts(75,9): error TS2774: This condition will always return true since this function is always defined. Did you mean to call it instead?
+--- lint (eslint) ---
+/Users/lucasaraujo/Documents/Projetos Git/Profissionaliza-Mais-Brasil/src/lib/students/plataforma-actions.ts
+  160:14  warning  'err' is defined but never used. Allowed unused caught errors must match /^_/u  @typescript-eslint/no-unused-vars
+
+✖ 2 problems (0 errors, 2 warnings)
+  0 errors and 1 warning potentially fixable with the `--fix` option.
+
+--- test (vitest run) ---
+
+ Test Files  15 passed (15)
+      Tests  101 passed (101)
+   Start at  18:02:35
+   Duration  639ms (transform 221ms, setup 0ms, collect 612ms, tests 38ms, environment 1ms, prepare 652ms)
+
+--- build (next build, SKIP migrations, dummy DB) ---
+  [90m76 |[0m       [36mconst[0m blob = [36mnew[0m [33mBlob[0m([body], { [36mtype[0m: [32m"application/json"[0m })
+  [90m77 |[0m       [36mif[0m (navigator.sendBeacon(endpoint, blob)) [36mreturn[0m
+  [90m78 |[0m     }
+Next.js build worker exited with code: 1 and signal: null
+RESULT tsc=2 lint=0 test=0 build=1
+PORTÃO: ❌ VERMELHO
+================ PORTÃO 2026-06-20 18:03:29 P1-OBS-001-v2 ================
+--- typecheck (tsc --noEmit) ---
+--- lint (eslint) ---
+/Users/lucasaraujo/Documents/Projetos Git/Profissionaliza-Mais-Brasil/src/lib/students/plataforma-actions.ts
+  160:14  warning  'err' is defined but never used. Allowed unused caught errors must match /^_/u  @typescript-eslint/no-unused-vars
+
+✖ 2 problems (0 errors, 2 warnings)
+  0 errors and 1 warning potentially fixable with the `--fix` option.
+
+--- test (vitest run) ---
+
+ Test Files  15 passed (15)
+      Tests  101 passed (101)
+   Start at  18:03:40
+   Duration  603ms (transform 269ms, setup 0ms, collect 665ms, tests 38ms, environment 1ms, prepare 727ms)
+
+--- build (next build, SKIP migrations, dummy DB) ---
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+
+RESULT tsc=0 lint=0 test=0 build=0
+PORTÃO: ✅ VERDE
+================ PORTÃO 2026-06-20 18:08:43 P0-DB-001-proof-private-bucket ================
+--- typecheck (tsc --noEmit) ---
+--- lint (eslint) ---
+/Users/lucasaraujo/Documents/Projetos Git/Profissionaliza-Mais-Brasil/src/lib/students/plataforma-actions.ts
+  160:14  warning  'err' is defined but never used. Allowed unused caught errors must match /^_/u  @typescript-eslint/no-unused-vars
+
+✖ 2 problems (0 errors, 2 warnings)
+  0 errors and 1 warning potentially fixable with the `--fix` option.
+
+--- test (vitest run) ---
+
+ Test Files  15 passed (15)
+      Tests  101 passed (101)
+   Start at  18:08:56
+   Duration  571ms (transform 235ms, setup 0ms, collect 591ms, tests 43ms, environment 1ms, prepare 628ms)
+
+--- build (next build, SKIP migrations, dummy DB) ---
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+
+RESULT tsc=0 lint=0 test=0 build=0
+PORTÃO: ✅ VERDE
+================ PORTÃO 2026-06-20 18:13:13 P2-batch-1 ================
+--- typecheck (tsc --noEmit) ---
+--- lint (eslint) ---
+/Users/lucasaraujo/Documents/Projetos Git/Profissionaliza-Mais-Brasil/src/lib/students/plataforma-actions.ts
+  160:14  warning  'err' is defined but never used. Allowed unused caught errors must match /^_/u  @typescript-eslint/no-unused-vars
+
+✖ 2 problems (0 errors, 2 warnings)
+  0 errors and 1 warning potentially fixable with the `--fix` option.
+
+--- test (vitest run) ---
+
+ Test Files  18 passed (18)
+      Tests  112 passed (112)
+   Start at  18:13:24
+   Duration  650ms (transform 309ms, setup 0ms, collect 828ms, tests 50ms, environment 1ms, prepare 774ms)
+
+--- build (next build, SKIP migrations, dummy DB) ---
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+
+RESULT tsc=0 lint=0 test=0 build=0
+PORTÃO: ✅ VERDE
+================ PORTÃO 2026-06-20 18:15:30 P2-COD-001-DB-005 ================
+--- typecheck (tsc --noEmit) ---
+--- lint (eslint) ---
+/Users/lucasaraujo/Documents/Projetos Git/Profissionaliza-Mais-Brasil/src/lib/students/plataforma-actions.ts
+  160:14  warning  'err' is defined but never used. Allowed unused caught errors must match /^_/u  @typescript-eslint/no-unused-vars
+
+✖ 2 problems (0 errors, 2 warnings)
+  0 errors and 1 warning potentially fixable with the `--fix` option.
+
+--- test (vitest run) ---
+
+ Test Files  19 passed (19)
+      Tests  116 passed (116)
+   Start at  18:15:44
+   Duration  756ms (transform 337ms, setup 0ms, collect 885ms, tests 50ms, environment 1ms, prepare 864ms)
+
+--- build (next build, SKIP migrations, dummy DB) ---
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+
+RESULT tsc=0 lint=0 test=0 build=0
+PORTÃO: ✅ VERDE
+================ PORTÃO 2026-06-20 18:17:50 P3-cleanup-batch ================
+--- typecheck (tsc --noEmit) ---
+--- lint (eslint) ---
+/Users/lucasaraujo/Documents/Projetos Git/Profissionaliza-Mais-Brasil/src/lib/students/plataforma-actions.ts
+  160:14  warning  'err' is defined but never used. Allowed unused caught errors must match /^_/u  @typescript-eslint/no-unused-vars
+
+✖ 2 problems (0 errors, 2 warnings)
+  0 errors and 1 warning potentially fixable with the `--fix` option.
+
+--- test (vitest run) ---
+
+ Test Files  19 passed (19)
+      Tests  116 passed (116)
+   Start at  18:18:03
+   Duration  733ms (transform 266ms, setup 0ms, collect 794ms, tests 49ms, environment 1ms, prepare 784ms)
+
+--- build (next build, SKIP migrations, dummy DB) ---
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+
+RESULT tsc=0 lint=0 test=0 build=0
+PORTÃO: ✅ VERDE
+================ PORTÃO 2026-06-20 18:20:51 FASE-4-FINAL-RODADA-2 ================
+--- typecheck (tsc --noEmit) ---
+--- lint (eslint) ---
+/Users/lucasaraujo/Documents/Projetos Git/Profissionaliza-Mais-Brasil/src/lib/students/plataforma-actions.ts
+  160:14  warning  'err' is defined but never used. Allowed unused caught errors must match /^_/u  @typescript-eslint/no-unused-vars
+
+✖ 2 problems (0 errors, 2 warnings)
+  0 errors and 1 warning potentially fixable with the `--fix` option.
+
+--- test (vitest run) ---
+
+ Test Files  19 passed (19)
+      Tests  116 passed (116)
+   Start at  18:21:02
+   Duration  759ms (transform 402ms, setup 0ms, collect 910ms, tests 50ms, environment 1ms, prepare 859ms)
+
+--- build (next build, SKIP migrations, dummy DB) ---
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+
+RESULT tsc=0 lint=0 test=0 build=0
+PORTÃO: ✅ VERDE
