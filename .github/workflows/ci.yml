@@ -13,7 +13,7 @@ concurrency:
 
 jobs:
   validate:
-    name: Lint + Typecheck + Audit
+    name: Lint + Typecheck + Test + Build
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -41,6 +41,16 @@ jobs:
 
       - name: Unit tests
         run: npm test
+
+      # QA-003/COD-002: build no CI pega rota/página quebrada e erro de RSC que
+      # tsc não pega. SKIP_PENDING_MIGRATIONS evita tocar o banco (não há DB no
+      # CI); DATABASE_URL dummy satisfaz a validação de env.ts na coleta de
+      # page-data (páginas são force-dynamic → não conectam no build).
+      - name: Build
+        env:
+          SKIP_PENDING_MIGRATIONS: "1"
+          DATABASE_URL: "postgresql://gate:gate@localhost:5432/gate"
+        run: npm run build
 
       # audit não bloqueia: o build pode passar mesmo com vulns conhecidas
       # (xlsx HIGH é risco aceito, documentado em docs/SECURITY.md).
