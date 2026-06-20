@@ -3,6 +3,7 @@ import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { requireStudentSession } from "@/lib/auth/student-session"
 import { blockStudentInEA } from "@/lib/students/plataforma-actions"
+import { extractCertificatePath, deleteCertificatePdf } from "@/lib/certificates/storage"
 import { rateLimit, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
 import { logAudit } from "@/lib/audit"
 import { swallow } from "@/lib/errors"
@@ -84,6 +85,30 @@ export const DELETE = withRequestContext(
         status: "INATIVO",
       },
     })
+
+    // LGPD-003: propaga a anonimização para as CÓPIAS de PII nos certificados
+    // (nome+CPF ficam embutidos no registro e no PDF). Mantém o registro do
+    // certificado (validade/auditoria), mas remove a PII e apaga o PDF do bucket
+    // privado. Se o PDF for re-gerado depois, sai com "Conta removida"/sem CPF.
+    const certs = await prisma.certificate.findMany({
+      where: { studentId: student.id, pdfUrl: { not: null } },
+      select: { pdfUrl: true },
+    })
+    await prisma.certificate.updateMany({
+      where: { studentId: student.id },
+      data: {
+        studentName: "Conta removida",
+        studentCpf: null,
+        pdfUrl: null,
+        pdfGeneratedAt: null,
+      },
+    })
+    for (const c of certs) {
+      const path = extractCertificatePath(c.pdfUrl)
+      if (path) {
+        await deleteCertificatePdf(path).catch(swallow("aluno.conta.cert_pdf_delete"))
+      }
+    }
 
     await logAudit({
       action: "student.account.anonymize",
