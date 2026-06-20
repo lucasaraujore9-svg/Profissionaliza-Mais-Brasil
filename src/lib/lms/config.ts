@@ -5,9 +5,11 @@
  * Diferente da EA (form-data PHP em src/lib/plataforma-cursos), o LMS e ele
  * proprio uma camada que provisiona nos parceiros por baixo (PMB -> LMS -> EA).
  */
+import { env } from "@/lib/env"
+
 export function getLmsConfig(): { url: string; apiKey: string } {
-  const url = process.env.LMS_API_URL
-  const apiKey = process.env.LMS_API_KEY
+  const url = env.LMS_API_URL
+  const apiKey = env.LMS_API_KEY
   if (!url || !apiKey) {
     throw new Error("LMS_API_URL and LMS_API_KEY environment variables are required")
   }
@@ -16,5 +18,5 @@ export function getLmsConfig(): { url: string; apiKey: string } {
 
 /** True se as credenciais do LMS estao configuradas (sem lancar). */
 export function isLmsConfigured(): boolean {
-  return Boolean(process.env.LMS_API_URL && process.env.LMS_API_KEY)
+  return Boolean(env.LMS_API_URL && env.LMS_API_KEY)
 }

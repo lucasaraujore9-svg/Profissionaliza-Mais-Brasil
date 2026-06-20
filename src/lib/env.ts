@@ -97,6 +97,12 @@ const envSchema = z.object({
   ASAAS_API_URL: requiredInProd(z.string().url()),
   ASAAS_API_KEY: requiredInProd(z.string().min(1)),
 
+  // LMS (2ª fornecedora — lms.bmbr.com.br). Opcionais: a feature pode estar
+  // desligada. Quando ligada, faltar a chave quebraria o provisionamento em
+  // runtime — assertEnv() emite warning não-fatal em prod (COD-001).
+  LMS_API_URL: z.string().url().optional(),
+  LMS_API_KEY: z.string().optional(),
+
   // Vercel (gerencia DNS de custom domains dos revendedores)
   VERCEL_TOKEN: z.string().optional(),
   VERCEL_PROJECT_ID: z.string().optional(),
@@ -198,6 +204,15 @@ export function assertEnv(): void {
       throw new Error(
         "[env] AUTH_SECRET (ou NEXTAUTH_SECRET) é obrigatório em produção. Gere com: openssl rand -hex 32",
       )
+    }
+    if (!cached.LMS_API_URL || !cached.LMS_API_KEY) {
+      // eslint-disable-next-line no-console
+      console.warn(JSON.stringify({
+        level: "warn",
+        event: "env.lms_missing",
+        msg: "LMS_API_URL/LMS_API_KEY ausentes em produção — provisionamento/sync de cursos LMS falhará em runtime. Configure se a fornecedora LMS estiver ativa.",
+        time: new Date().toISOString(),
+      }))
     }
   }
 }
