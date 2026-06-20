@@ -487,6 +487,7 @@ model TenantSupportNote {
   author User   @relation("SupportNotes", fields: [authorId], references: [id])
 
   @@index([tenantId, createdAt])
+  @@index([authorId], map: "tenant_support_notes_author_id_idx")
   @@map("tenant_support_notes")
 }
 
@@ -508,6 +509,7 @@ model StudentNote {
   createdAt DateTime @default(now()) @map("created_at")
 
   @@index([studentId, createdAt])
+  @@index([authorId], map: "student_notes_author_id_idx")
   @@map("student_notes")
 }
 
@@ -981,6 +983,8 @@ model Enrollment {
   // (tenantId + status) — dezenas de queries por load.
   @@index([tenantId, status])
   @@index([studentId, status])
+  @@index([couponId], map: "enrollments_coupon_id_idx")
+  @@index([tenantCourseId], map: "enrollments_tenant_course_id_idx")
   @@map("enrollments")
 }
 
@@ -1027,6 +1031,7 @@ model Payment {
   // de data dentro do tenant — sem index composto, full scan por tenant.
   @@index([tenantId, createdAt])
   @@index([tenantId, paidAt])
+  @@index([couponId], map: "payments_coupon_id_idx")
   @@map("payments")
 }
 
@@ -1064,6 +1069,7 @@ model Coupon {
 
   @@unique([tenantId, code])
   @@index([tenantId, isActive])
+  @@index([createdByUserId], map: "coupons_created_by_user_id_idx")
   @@map("coupons")
 }
 
@@ -1648,6 +1654,7 @@ model ReferralPayout {
 
   @@index([referrerTenantId, status])
   @@index([status, requestedAt])
+  @@index([proofUploadedById], map: "referral_payouts_proof_uploaded_by_id_idx")
   @@map("referral_payouts")
 }
 
@@ -1798,6 +1805,7 @@ model Certificate {
   @@index([tenantId, courseId])
   @@index([code])
   @@index([revokedAt])
+  @@index([courseId], map: "certificates_course_id_idx")
   @@map("certificates")
 }
 
@@ -2014,6 +2022,7 @@ model VisitorEvent {
   @@index([visitorId, createdAt])
   @@index([leadId, createdAt])
   @@index([tenantId, createdAt])
+  @@index([courseId], map: "visitor_events_course_id_idx")
   @@map("visitor_events")
 }
 
@@ -2124,5 +2133,6 @@ model TrainingProgress {
 
   @@unique([userId, videoId])
   @@index([userId])
+  @@index([videoId], map: "training_progress_video_id_idx")
   @@map("training_progress")
 }
