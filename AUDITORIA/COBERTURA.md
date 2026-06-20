@@ -21,7 +21,7 @@ Rastreio item-a-item. Base: `INVENTARIO.md`. Detalhe: `achados/*.md`. Snapshot: 
 | **QA-004** (teste motor de comissão) | P1 | ✅ | `558954b` (19 casos) |
 | **SAAS-001** (audit trail billing/permissão/lifecycle) | P1 | ✅ **Completo** | `d66b521` (billing+papel) + `eb8e60d` (cancel+create) |
 | **DB-002** (FKs sem índice) | P1 | ✅ | `a06f67e` — 10 índices (migration aplica no deploy) |
-| **PERF-001** (cache de tenant morto) | P1 | ✅ | `b4eb43a` + teste de contrato de chave; invalidação completada |
+| **PERF-001** (cache de tenant morto) | P1 | ✅ | `b4eb43a` + teste de contrato de chave; invalidação completada. (Cache do caminho por SLUG ativo; resolução custom-domain→slug ainda vai ao DB — follow-up menor: ler `tenant:domain:` no proxy.) |
 | **LGPD-003** (erasure não propaga p/ cert) | P1 | ✅ | `843d916` |
 | **OBS-001** (sem error-tracking; claim falso) | P1 | ✅ | `743cd55` — beacon `/api/observability/client-log` |
 | **OPS-006** (cron reconcile não agendado) | P1 | ✅ **Versionado** | `4263e24` — SQL no fonte. *Aplicar no Supabase = manual sua.* |
