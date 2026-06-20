@@ -444,7 +444,10 @@ export const POST = withRequestContext(
           : undefined,
         auto_return: "approved",
         external_reference: externalReference,
-        notification_url: appUrl ? `${appUrl}/api/webhooks/mercadopago` : undefined,
+        // API-001: usa o helper canônico (host www, nunca undefined). A concat
+        // manual perdia o webhook quando appUrl era vazio ou o apex (307→www
+        // que o MP não segue) → venda paga sem matrícula automática.
+        notification_url: mpWebhookUrl(),
       })
 
       await prisma.enrollment.update({
