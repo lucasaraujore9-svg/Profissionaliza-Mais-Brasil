@@ -3,6 +3,7 @@ import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { requireSuperAdmin } from "@/lib/auth/guards"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
+import { logAudit } from "@/lib/audit"
 
 const PMB_ROLES = ["SUPER_ADMIN", "PMB_SALES", "PMB_SALES_MGR", "PMB_REVENDA_SALES", "PMB_RESELLER_MGR"] as const
 
@@ -135,6 +136,17 @@ export const PATCH = withRequestContextParams<{ id: string }>(
     select: { id: true, name: true, email: true, role: true, status: true },
   })
 
+  // SAAS-001: trilha de auditoria de alteração de papel/status (permissão).
+  await logAudit({
+    action: "user.role_update",
+    resource: "User",
+    resourceId: id,
+    actorUserId: guard.session.userId,
+    actorRole: guard.session.role,
+    payloadBefore: { role: target.role },
+    payloadAfter: { role: updated.role, status: updated.status },
+  })
+
   return NextResponse.json({ data: updated })
   },
 )
@@ -165,6 +177,18 @@ export const DELETE = withRequestContextParams<{ id: string }>(
   }
 
   await prisma.user.update({ where: { id }, data: { status: "INATIVO" } })
+
+  // SAAS-001: trilha de auditoria de desativação de membro da equipe.
+  await logAudit({
+    action: "user.deactivate",
+    resource: "User",
+    resourceId: id,
+    actorUserId: guard.session.userId,
+    actorRole: guard.session.role,
+    payloadBefore: { role: target.role, status: target.status },
+    payloadAfter: { status: "INATIVO" },
+  })
+
   return NextResponse.json({ data: { id, status: "INATIVO" } })
   },
 )
