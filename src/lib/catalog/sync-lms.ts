@@ -73,6 +73,11 @@ export async function syncCatalogFromLMS(
         await prisma.course.create({
           data: {
             ...dataBase,
+            // Nasce OCULTO da vitrine PMB: o LMS nao fornece preco e a regra do
+            // negocio e "curso sem valor nao pode ser exibido". O admin libera
+            // depois de definir o preco (a vitrine ainda aplica o gate de preco
+            // em runtime, entao isto e o default amigavel — nao a unica defesa).
+            hiddenMain: true,
             slug: await ensureUniqueCourseSlug(slugify(curso.slug || curso.title)),
           },
         })

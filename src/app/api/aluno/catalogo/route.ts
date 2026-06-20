@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { requireStudentSession } from "@/lib/auth/student-session"
 import { withRequestContext } from "@/lib/observability/with-request-context"
+import { COURSE_HAS_PRICE } from "@/lib/catalog/visibility"
 
 export const GET = withRequestContext(
   { action: "aluno.catalogo.list", route: "/api/aluno/catalogo" },
@@ -13,7 +14,7 @@ export const GET = withRequestContext(
 
   const [courses, ownedEnrollments] = await Promise.all([
     prisma.course.findMany({
-      where: { status: "ATIVO", hiddenMain: false },
+      where: { status: "ATIVO", hiddenMain: false, AND: [COURSE_HAS_PRICE] },
       orderBy: [{ destaqueHome: "desc" }, { ordemHome: "asc" }, { nome: "asc" }],
       select: {
         id: true,

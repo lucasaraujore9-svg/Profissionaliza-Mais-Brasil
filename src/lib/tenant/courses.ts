@@ -115,6 +115,8 @@ export async function listTenantCourses(
   const where: Prisma.TenantCourseWhereInput = {
     tenantId: filters.tenantId,
     isVisible: true,
+    // Regra: curso sem valor nao aparece (preco da revenda = TenantCourse.price).
+    price: { gt: 0 },
     course: {
       status: "ATIVO",
       ...visibilityFilter(filters.tenantId),
@@ -179,7 +181,7 @@ async function tenantCatalogCategories(
           course: {
             status: "ATIVO",
             ...visibilityFilter(tenantId),
-            tenantCourses: { some: { tenantId, isVisible: true } },
+            tenantCourses: { some: { tenantId, isVisible: true, price: { gt: 0 } } },
           },
         },
       },
@@ -224,6 +226,8 @@ export async function listTenantCatalog(args: {
     const where: Prisma.TenantCourseWhereInput = {
       tenantId,
       isVisible: true,
+      // Regra: curso sem valor nao aparece (preco da revenda = TenantCourse.price).
+      price: { gt: 0 },
       course: {
         status: "ATIVO",
         ...visibilityFilter(tenantId),
@@ -276,6 +280,8 @@ export async function getTenantCourseBySlug(
       where: {
         tenantId,
         isVisible: true,
+        // Regra: curso sem valor nao e exibido — detalhe tambem 404 (page chama notFound).
+        price: { gt: 0 },
         course: { status: "ATIVO", slug, ...visibilityFilter(tenantId) },
       },
       include: {

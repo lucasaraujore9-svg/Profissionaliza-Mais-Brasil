@@ -1,12 +1,14 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { withRequestContext } from "@/lib/observability/with-request-context"
+import { COURSE_HAS_PRICE } from "@/lib/catalog/visibility"
 
 export const GET = withRequestContext(
   { action: "home.showcase", route: "/api/home/showcase" },
   async (_request: Request) => {
   const courses = await prisma.course.findMany({
-    where: { destaqueHome: true, status: "ATIVO" },
+    // hiddenMain:false estava faltando (ocultos vazavam) + regra de preco>0.
+    where: { destaqueHome: true, status: "ATIVO", hiddenMain: false, AND: [COURSE_HAS_PRICE] },
     orderBy: [{ ordemHome: "asc" }, { nome: "asc" }],
     select: {
       id: true,

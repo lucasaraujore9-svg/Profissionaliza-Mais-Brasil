@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import type { Course } from "@/components/main/home/course-card"
+import { COURSE_HAS_PRICE } from "@/lib/catalog/visibility"
 
 /**
  * Filtro de visibilidade granular do catalogo para um tenant (espelha
@@ -654,6 +655,7 @@ async function fetchCoursesByIds(
       id: { in: ids },
       status: "ATIVO",
       hiddenMain: false,
+      AND: [COURSE_HAS_PRICE],
     },
     select: courseSelect,
   })
@@ -672,6 +674,7 @@ async function fetchTenantCoursesByIds(
     where: {
       tenantId,
       isVisible: true,
+      price: { gt: 0 },
       courseId: { in: ids },
       course: { status: "ATIVO", ...tenantVisibilityFilter(tenantId) },
     },

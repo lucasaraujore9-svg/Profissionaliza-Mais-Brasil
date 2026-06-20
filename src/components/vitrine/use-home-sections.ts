@@ -16,6 +16,7 @@ export type SectionKind =
   | "tecnica"
   | "eja"
   | "idiomas"
+  | "packages"
 
 /** Padrão da seção "Idiomas": exatamente 4 cursos. Espelha IDIOMAS_SECTION_COUNT do servidor. */
 export const IDIOMAS_SECTION_COUNT = 4
@@ -95,6 +96,17 @@ export interface IdiomasConfig {
   courseIds: string[]
 }
 
+/**
+ * Seção "Pacotes de cursos". O conteúdo (quais pacotes) é derivado em runtime
+ * pela vitrine (PMB + próprios da unidade, menos os ocultos) — a config carrega
+ * só título/subtítulo editáveis. Espelha PackagesSectionConfig do servidor.
+ */
+export interface PackagesConfig {
+  kind: "packages"
+  title: string
+  subtitle: string
+}
+
 export type AnySectionConfig =
   | BestsellersConfig
   | CategoryCoursesConfig
@@ -103,6 +115,7 @@ export type AnySectionConfig =
   | TecnicaConfig
   | EjaConfig
   | IdiomasConfig
+  | PackagesConfig
 
 export interface SectionRecord {
   id: string

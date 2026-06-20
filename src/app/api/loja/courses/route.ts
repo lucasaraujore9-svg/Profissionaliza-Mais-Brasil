@@ -63,6 +63,7 @@ export const GET = withRequestContext(
       where: {
         tenantId,
         isVisible: true,
+        price: { gt: 0 },
         course: {
           status: "ATIVO",
           ...(parsed.category && parsed.category !== "todos"
@@ -83,6 +84,7 @@ export const GET = withRequestContext(
       where: {
         tenantId,
         isVisible: true,
+        price: { gt: 0 },
         course: {
           status: "ATIVO",
           ...(parsed.category && parsed.category !== "todos"

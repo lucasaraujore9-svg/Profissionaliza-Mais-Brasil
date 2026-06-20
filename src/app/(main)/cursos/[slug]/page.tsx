@@ -31,6 +31,10 @@ async function loadCurso(slug: string): Promise<LoadedCurso | null> {
       Number(c.precoPromocional ?? 0) ||
       Number(c.precoOriginal ?? 0)
 
+    // Regra de negocio: curso sem valor nao pode ser exibido — 404 inclusive no
+    // detalhe (mesmo por link direto). Antes exibia a pagina com CTA "/contato".
+    if (price <= 0) return null
+
     const originalPrice =
       c.precoOriginal && Number(c.precoOriginal) > price
         ? Number(c.precoOriginal)

@@ -13,6 +13,7 @@ import {
   Lock,
   Megaphone,
   Newspaper,
+  Package,
   Save,
   Sparkles,
 } from "lucide-react"
@@ -38,6 +39,7 @@ import {
   IdiomasEditor,
   IdiomasLockedNotice,
   InstitutionalEditor,
+  PackagesEditor,
   TecnicaEditor,
 } from "./section-editors"
 import { IDIOMAS_SECTION_COUNT } from "./use-home-sections"
@@ -49,6 +51,7 @@ import type {
   CategoryOption,
   IdiomasConfig,
   InstitutionalConfig,
+  PackagesConfig,
   SectionOptions,
   SectionRecord,
 } from "./use-home-sections"
@@ -455,6 +458,11 @@ function SectionIcon({ kind }: { kind: SectionRecord["kind"] }) {
       bg: "bg-sky-100",
       fg: "text-sky-600",
     },
+    packages: {
+      icon: Package,
+      bg: "bg-emerald-100",
+      fg: "text-emerald-600",
+    },
   }
   const { icon: Icon, bg, fg } = map[kind]
   return (
@@ -498,6 +506,8 @@ function titleOfSection(
       return "EJA"
     case "idiomas":
       return (s.config as IdiomasConfig).title || "Idiomas"
+    case "packages":
+      return (s.config as PackagesConfig).title || "Pacotes de cursos"
   }
 }
 
@@ -541,6 +551,8 @@ function summaryOfSection(s: SectionRecord, canEditTecnica: boolean): string {
         ? `Padronizada pela administração · ${IDIOMAS_SECTION_COUNT} cursos`
         : `${n}/${IDIOMAS_SECTION_COUNT} cursos selecionados`
     }
+    case "packages":
+      return "Pacotes montados automaticamente · rede + próprios da unidade"
   }
 }
 
@@ -687,5 +699,7 @@ function EditorForKind({
           onPatch={onPatch}
         />
       )
+    case "packages":
+      return <PackagesEditor section={section} onPatch={onPatch} />
   }
 }

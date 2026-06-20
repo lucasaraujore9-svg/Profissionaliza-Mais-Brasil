@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import type { Course } from "@/components/main/home/course-card"
+import { COURSE_HAS_PRICE } from "./visibility"
 
 interface RawCourse {
   slug: string
@@ -94,7 +95,7 @@ function normalize(c: DbRow): RawCourse {
 export async function loadCurated(take = 8): Promise<Course[]> {
   try {
     const featured = await prisma.course.findMany({
-      where: { destaque: true, status: "ATIVO", hiddenMain: false },
+      where: { destaque: true, status: "ATIVO", hiddenMain: false, AND: [COURSE_HAS_PRICE] },
       orderBy: { nome: "asc" },
       take,
       select: SELECT,
@@ -111,6 +112,7 @@ export async function loadCurated(take = 8): Promise<Course[]> {
         status: "ATIVO",
         hiddenMain: false,
         destaque: false,
+        AND: [COURSE_HAS_PRICE],
       },
       orderBy: { nome: "asc" },
       take: take - featured.length,
@@ -148,6 +150,7 @@ export async function loadByCategoria(
         status: "ATIVO",
         hiddenMain: false,
         categoryLinks: { some: { categoryId: category.id } },
+        AND: [COURSE_HAS_PRICE],
       },
       orderBy: { nome: "asc" },
       take,
@@ -203,7 +206,9 @@ export async function loadCategorias(minCount = 0): Promise<CategoriaInfo[]> {
         _count: {
           select: {
             courseLinks: {
-              where: { course: { status: "ATIVO", hiddenMain: false } },
+              where: {
+                course: { status: "ATIVO", hiddenMain: false, AND: [COURSE_HAS_PRICE] },
+              },
             },
           },
         },
@@ -247,6 +252,8 @@ export async function loadCatalogo({
     const where: Record<string, unknown> = {
       status: "ATIVO",
       hiddenMain: false,
+      // Regra: curso sem valor nao aparece. AND para nao colidir com o OR da busca.
+      AND: [COURSE_HAS_PRICE],
     }
 
     if (q && q.trim()) {
@@ -322,6 +329,7 @@ export async function loadShowcase(tenantId?: string): Promise<ShowcaseCard[]> {
         hiddenMain: false,
         destaque: true,
         capaImageUrl: { not: null },
+        AND: [COURSE_HAS_PRICE],
       },
       orderBy: { nome: "asc" },
       take: 6,
@@ -334,6 +342,7 @@ export async function loadShowcase(tenantId?: string): Promise<ShowcaseCard[]> {
           status: "ATIVO",
           hiddenMain: false,
           capaImageUrl: { not: null },
+          AND: [COURSE_HAS_PRICE],
         },
         orderBy: { nome: "asc" },
         take: 3 - rows.length,
@@ -369,6 +378,8 @@ async function loadTenantShowcase(tenantId: string): Promise<ShowcaseCard[]> {
       where: {
         tenantId,
         isVisible: true,
+        // Regra: curso sem valor nao aparece — na revenda o preco e tc.price.
+        price: { gt: 0 },
         course: { status: "ATIVO", capaImageUrl: { not: null }, ...visibility },
       },
       orderBy: [{ isFeatured: "desc" }, { customOrder: "asc" }],

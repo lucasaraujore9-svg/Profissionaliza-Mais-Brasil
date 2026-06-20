@@ -40,6 +40,7 @@ import type {
   CourseOption,
   IdiomasConfig,
   InstitutionalConfig,
+  PackagesConfig,
   SectionCount,
   SectionMode,
   SectionRecord,
@@ -409,6 +410,42 @@ export function CategoriesGridEditor({
           onPatch({ subtitle: v } as Partial<AnySectionConfig>)
         }
         placeholderTitle="Qual profissão você quer aprender?"
+      />
+    </div>
+  )
+}
+
+export function PackagesEditor({
+  section,
+  onPatch,
+}: {
+  section: SectionRecord
+  onPatch: (patch: Partial<AnySectionConfig>) => void
+}) {
+  const config = section.config as PackagesConfig
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-start gap-2 rounded-md border border-[var(--color-pmb-green)]/15 bg-[var(--color-pmb-green)]/5 px-3 py-2.5 text-sm text-[var(--color-pmb-green-900)]">
+        <Info className="mt-0.5 h-4 w-4 shrink-0 text-[var(--color-pmb-green)]" aria-hidden />
+        <p>
+          Os pacotes exibidos aqui são montados automaticamente: os pacotes da
+          rede mais os pacotes próprios da sua unidade. A seção só aparece na
+          home quando há pacotes disponíveis. Você pode personalizar o título e
+          a descrição abaixo.
+        </p>
+      </div>
+
+      <TitleSubtitleEditor
+        title={config.title}
+        subtitle={config.subtitle}
+        onTitleChange={(v) =>
+          onPatch({ title: v } as Partial<AnySectionConfig>)
+        }
+        onSubtitleChange={(v) =>
+          onPatch({ subtitle: v } as Partial<AnySectionConfig>)
+        }
+        placeholderTitle="Pacotes de cursos"
       />
     </div>
   )
