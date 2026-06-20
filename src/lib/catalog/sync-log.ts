@@ -1,5 +1,6 @@
 import { redis } from "@/lib/redis"
 import { prisma } from "@/lib/prisma"
+import { contextLogger } from "@/lib/logger"
 
 const KEY = "catalog:sync-log"
 const MAX_ENTRIES = 30
@@ -18,10 +19,21 @@ export interface SyncLogEntry {
 }
 
 export async function pushSyncLog(entry: SyncLogEntry): Promise<void> {
-  // Redis: histórico completo (opcional)
+  // Redis: histórico completo (opcional). NAO pode derrubar o sync — o log e
+  // secundario e o trabalho do sync ja foi commitado quando chegamos aqui.
+  // Sem isto, uma falha de Redis (ex.: cota mensal estourada no Upstash) fazia
+  // o sync inteiro responder 502 mesmo tendo gravado tudo. Degrada para o
+  // fallback de banco abaixo.
   if (redis) {
-    await redis.lpush(KEY, JSON.stringify(entry))
-    await redis.ltrim(KEY, 0, MAX_ENTRIES - 1)
+    try {
+      await redis.lpush(KEY, JSON.stringify(entry))
+      await redis.ltrim(KEY, 0, MAX_ENTRIES - 1)
+    } catch (err) {
+      contextLogger().warn(
+        { event: "catalog.sync_log.redis_failed", err: String(err) },
+        "pushSyncLog: Redis indisponivel — usando fallback de banco",
+      )
+    }
   }
   // DB: persiste sempre o último sync bem-sucedido (fallback sem Redis)
   if (entry.status === "SUCCESS") {
