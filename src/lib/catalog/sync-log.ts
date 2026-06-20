@@ -35,7 +35,14 @@ export async function pushSyncLog(entry: SyncLogEntry): Promise<void> {
 
 export async function listSyncLogs(): Promise<SyncLogEntry[]> {
   if (!redis) return []
-  const raw = await redis.lrange(KEY, 0, MAX_ENTRIES - 1)
+  let raw: unknown[]
+  try {
+    raw = await redis.lrange(KEY, 0, MAX_ENTRIES - 1)
+  } catch {
+    // Redis indisponivel (timeout/auth) — degrada para vazio em vez de
+    // propagar o erro e derrubar quem consome (ex.: listagem do catalogo).
+    return []
+  }
   const out: SyncLogEntry[] = []
   for (const item of raw) {
     try {
@@ -50,11 +57,16 @@ export async function listSyncLogs(): Promise<SyncLogEntry[]> {
 }
 
 export async function getLastSuccessfulSync(): Promise<SyncLogEntry | null> {
-  // 1. Tenta Redis (histórico completo)
+  // 1. Tenta Redis (histórico completo) — falha de cache nunca pode derrubar
+  // o consumidor; cai pro fallback de DB abaixo.
   if (redis) {
-    const logs = await listSyncLogs()
-    const fromRedis = logs.find((l) => l.status === "SUCCESS") ?? null
-    if (fromRedis) return fromRedis
+    try {
+      const logs = await listSyncLogs()
+      const fromRedis = logs.find((l) => l.status === "SUCCESS") ?? null
+      if (fromRedis) return fromRedis
+    } catch {
+      // segue para o fallback de DB
+    }
   }
   // 2. Fallback: DB (sempre disponível)
   try {

@@ -182,3 +182,54 @@ export function checkBannerDimensions(
   }
   return { ok: true, expected, got }
 }
+
+/**
+ * Especificacao da capa de pacote. Diferente do banner (dimensao exata), aqui
+ * exigimos apenas a PROPORCAO 16:9 (a mesma do card da vitrine), com uma
+ * largura minima para evitar capas borradas. Tolerancia relativa no ratio
+ * absorve arredondamentos (ex.: 1280x720, 1600x900, 1920x1080 sao aceitos).
+ */
+export const PACKAGE_COVER_SPEC = {
+  aspectRatio: 16 / 9,
+  aspectLabel: "16:9",
+  recommended: { width: 1280, height: 720 },
+  minWidth: 640,
+  ratioTolerance: 0.04,
+} as const
+
+export function checkPackageCoverDimensions(
+  buffer: ArrayBuffer | Buffer,
+  mime: string,
+): DimensionCheck {
+  const expected = PACKAGE_COVER_SPEC.recommended
+  const got = readImageDimensions(buffer, mime)
+  if (!got) {
+    return {
+      ok: false,
+      expected,
+      got: null,
+      message: "Nao foi possivel ler as dimensoes da imagem",
+    }
+  }
+  if (got.width < PACKAGE_COVER_SPEC.minWidth) {
+    return {
+      ok: false,
+      expected,
+      got,
+      message: `Imagem muito pequena. Use no mínimo ${PACKAGE_COVER_SPEC.minWidth}px de largura (recomendado ${expected.width}x${expected.height}px).`,
+    }
+  }
+  const ratio = got.width / got.height
+  const target = PACKAGE_COVER_SPEC.aspectRatio
+  const within =
+    Math.abs(ratio - target) / target <= PACKAGE_COVER_SPEC.ratioTolerance
+  if (!within) {
+    return {
+      ok: false,
+      expected,
+      got,
+      message: `A capa precisa ter proporção ${PACKAGE_COVER_SPEC.aspectLabel} (ex.: ${expected.width}x${expected.height}px). Recebida ${got.width}x${got.height}px.`,
+    }
+  }
+  return { ok: true, expected, got }
+}

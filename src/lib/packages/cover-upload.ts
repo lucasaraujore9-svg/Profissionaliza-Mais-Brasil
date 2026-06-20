@@ -5,6 +5,7 @@ import {
   uploadVitrineAsset,
 } from "@/lib/supabase/storage"
 import { isValidImageMagic } from "@/lib/storage/validate-image"
+import { checkPackageCoverDimensions } from "@/lib/storage/image-dims"
 
 const MAX_BYTES = 5 * 1024 * 1024 // 5MB
 const ALLOWED_TYPES = new Set([
@@ -70,6 +71,15 @@ export async function handlePackageCoverUpload(
   if (!isValidImageMagic(buffer, file.type)) {
     return NextResponse.json(
       { error: "Conteúdo do arquivo não corresponde ao formato declarado" },
+      { status: 400 },
+    )
+  }
+
+  // Capa precisa respeitar a proporcao 16:9 (mesma do card da vitrine).
+  const dimCheck = checkPackageCoverDimensions(buffer, file.type)
+  if (!dimCheck.ok) {
+    return NextResponse.json(
+      { error: dimCheck.message ?? "Dimensões da imagem inválidas" },
       { status: 400 },
     )
   }

@@ -527,6 +527,10 @@ function OwnPackageDialog({
               onChange={(url) => setCoverImageUrl(url ?? "")}
               endpoint="/api/painel/pacotes/capa"
               disabled={saving}
+              aspectRatio={16 / 9}
+              aspectLabel="16:9"
+              minWidth={640}
+              hint="PNG, JPG ou WEBP — proporção 16:9 (ex.: 1280x720px) — até 5MB"
             />
           </div>
 

@@ -18,16 +18,50 @@ const MAX_BYTES = 5 * 1024 * 1024 // 5MB
  * Passa a URL atual como `previousUrl` para o endpoint limpar o asset anterior
  * quando o usuario troca a capa na mesma sessao de edicao.
  */
+/** Le largura/altura do arquivo no browser (sem subir nada ainda). */
+function readClientDimensions(
+  file: File,
+): Promise<{ width: number; height: number } | null> {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file)
+    const img = new window.Image()
+    img.onload = () => {
+      URL.revokeObjectURL(url)
+      resolve({ width: img.naturalWidth, height: img.naturalHeight })
+    }
+    img.onerror = () => {
+      URL.revokeObjectURL(url)
+      resolve(null)
+    }
+    img.src = url
+  })
+}
+
 export function CoverImageUpload({
   value,
   onChange,
   endpoint,
   disabled,
+  aspectRatio,
+  aspectLabel,
+  minWidth,
+  aspectTolerance = 0.04,
+  hint,
 }: {
   value: string | null
   onChange: (url: string | null) => void
   endpoint: string
   disabled?: boolean
+  /** Quando definido, exige esta proporcao (ex.: 16/9) na imagem. */
+  aspectRatio?: number
+  /** Rotulo da proporcao para mensagens (ex.: "16:9"). */
+  aspectLabel?: string
+  /** Largura minima em px. */
+  minWidth?: number
+  /** Tolerancia relativa no aspect ratio (default 4%). */
+  aspectTolerance?: number
+  /** Texto auxiliar exibido na caixa de upload. */
+  hint?: string
 }) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState(false)
@@ -40,6 +74,26 @@ export function CoverImageUpload({
     if (file.size > MAX_BYTES) {
       toast.error("Arquivo maior que 5MB.")
       return
+    }
+    if (aspectRatio) {
+      const dims = await readClientDimensions(file)
+      if (!dims) {
+        toast.error("Não foi possível ler a imagem.")
+        return
+      }
+      if (minWidth && dims.width < minWidth) {
+        toast.error(
+          `Imagem muito pequena. Use no mínimo ${minWidth}px de largura.`,
+        )
+        return
+      }
+      const ratio = dims.width / dims.height
+      if (Math.abs(ratio - aspectRatio) / aspectRatio > aspectTolerance) {
+        toast.error(
+          `A capa precisa ter proporção ${aspectLabel ?? `${aspectRatio.toFixed(2)}:1`}. Recebida ${dims.width}x${dims.height}px.`,
+        )
+        return
+      }
     }
     setUploading(true)
     try {
@@ -72,12 +126,15 @@ export function CoverImageUpload({
       />
 
       {value ? (
-        <div className="relative overflow-hidden rounded-lg border border-gray-200">
+        <div
+          className="relative overflow-hidden rounded-lg border border-gray-200"
+          style={aspectRatio ? { aspectRatio: String(aspectRatio) } : undefined}
+        >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={value}
             alt="Capa do pacote"
-            className="h-32 w-full object-cover"
+            className={aspectRatio ? "h-full w-full object-cover" : "h-32 w-full object-cover"}
           />
           <button
             type="button"
@@ -109,7 +166,8 @@ export function CoverImageUpload({
           type="button"
           onClick={() => inputRef.current?.click()}
           disabled={disabled || uploading}
-          className="flex h-32 w-full flex-col items-center justify-center gap-1.5 rounded-lg border border-dashed border-gray-300 text-sm text-muted-foreground transition hover:border-gray-400 hover:bg-gray-50 disabled:opacity-60"
+          style={aspectRatio ? { aspectRatio: String(aspectRatio) } : undefined}
+          className={`flex w-full flex-col items-center justify-center gap-1.5 rounded-lg border border-dashed border-gray-300 text-sm text-muted-foreground transition hover:border-gray-400 hover:bg-gray-50 disabled:opacity-60${aspectRatio ? "" : " h-32"}`}
         >
           {uploading ? (
             <Loader2 className="h-5 w-5 animate-spin" />
@@ -118,7 +176,7 @@ export function CoverImageUpload({
           )}
           {uploading ? "Enviando…" : "Subir capa"}
           <span className="text-[11px] text-gray-400">
-            PNG, JPG ou WEBP — até 5MB
+            {hint ?? "PNG, JPG ou WEBP — até 5MB"}
           </span>
         </button>
       )}
