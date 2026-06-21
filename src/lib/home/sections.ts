@@ -1,3 +1,4 @@
+import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import type { Course } from "@/components/main/home/course-card"
 import { COURSE_HAS_PRICE } from "@/lib/catalog/visibility"
@@ -201,6 +202,47 @@ const MAX_ITEMS = 16
 export function isSectionKind(value: unknown): value is SectionKind {
   return typeof value === "string" && (SECTION_KINDS as readonly string[]).includes(value)
 }
+
+// ---------------------------------------------------------------------------
+// Schemas Zod dos ENVELOPES de request (API-003)
+//
+// A validação granular por `kind` continua em `validateSectionPayload` (tem
+// regras de negócio: contagem de cursos, singletons, mínimos por categoria).
+// Estes schemas gateiam o FORMATO do request no boundary (kind ∈ enum, config
+// é objeto, campos de update no tipo certo, order = array de strings) de forma
+// declarativa — alinhando home-sections ao padrão Zod do resto da API.
+// ---------------------------------------------------------------------------
+
+export const sectionKindSchema = z.enum(SECTION_KINDS)
+
+/** POST /home-sections — cria uma seção. config validada a fundo depois. */
+export const createSectionSchema = z.object({
+  kind: sectionKindSchema,
+  config: z.record(z.string(), z.unknown()),
+})
+export type CreateSectionInput = z.infer<typeof createSectionSchema>
+
+/** PATCH /home-sections/[id] — campos parciais. Pelo menos um deve vir. */
+export const updateSectionSchema = z
+  .object({
+    config: z.record(z.string(), z.unknown()).optional(),
+    enabled: z.boolean().optional(),
+    position: z.number().finite().min(0).optional(),
+  })
+  .refine(
+    (b) =>
+      b.config !== undefined ||
+      b.enabled !== undefined ||
+      b.position !== undefined,
+    { message: "Nenhum campo para atualizar" },
+  )
+export type UpdateSectionInput = z.infer<typeof updateSectionSchema>
+
+/** PUT /home-sections/reorder — nova ordem por ids. */
+export const reorderSectionsSchema = z.object({
+  order: z.array(z.string()),
+})
+export type ReorderSectionsInput = z.infer<typeof reorderSectionsSchema>
 
 interface ValidationOk {
   ok: true
