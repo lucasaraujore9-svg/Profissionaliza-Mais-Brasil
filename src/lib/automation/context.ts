@@ -104,6 +104,25 @@ export async function resolveAutomationContext(
   return getTenantAutomationContext(tenantId)
 }
 
+/**
+ * Gate de entitlement do módulo Automação (plano PRO) no SERVIDOR (SAAS-003).
+ *
+ * Leitura leve de `Tenant.automationEnabled` — espelha o guard de
+ * `whatsapp/connect`/`pair`/`status`, mas reutilizável nas rotas que escrevem
+ * config/templates. A UI já esconde o módulo, mas a API não pode confiar só no
+ * client: um RESELLER do plano básico não deve persistir config/templates de
+ * uma feature que não contratou. Retorna `true` se o tenant tem o módulo.
+ */
+export async function isTenantAutomationEnabled(
+  tenantId: string,
+): Promise<boolean> {
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { automationEnabled: true },
+  })
+  return tenant?.automationEnabled ?? false
+}
+
 function vitrineHostBase(): string {
   return process.env.NEXT_PUBLIC_VITRINE_DOMAIN ?? "livrecursos.com.br"
 }

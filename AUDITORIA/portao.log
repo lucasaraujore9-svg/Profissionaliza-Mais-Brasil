@@ -477,3 +477,11 @@ PORTÃO: ✅ VERDE (build delegado ao CI)
     de envelope em lib (sem mudança de runtime de rota); tsc cobre tipos.
 RESULT tsc=0 lint=0 test=0 build=CI
 PORTÃO: ✅ VERDE (build delegado ao CI)
+================ PORTÃO 2026-06-20 (rodada 3) SAAS-003-gate-automacao-server ================
+--- typecheck (tsc --noEmit) --- OK (0 erros)
+--- lint (eslint) --- 0 errors, 2 warnings pré-existentes
+--- test (vitest run) --- 20 files / 133 tests passed
+--- build (next build) --- NÃO EXECUTÁVEL NESTE SANDBOX (delegado ao CI). Mudança = guard 403 em
+    2 rotas (config/templates PUT) + helper isTenantAutomationEnabled; tsc cobre tipos.
+RESULT tsc=0 lint=0 test=0 build=CI
+PORTÃO: ✅ VERDE (build delegado ao CI)
