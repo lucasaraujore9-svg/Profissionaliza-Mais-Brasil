@@ -1,43 +1,37 @@
 "use client"
 
-import { useEffect, useRef, useState, type CSSProperties } from "react"
-import { createPortal } from "react-dom"
+import { useEffect, useRef, useState } from "react"
 import { RotateCcw, Volume2, VolumeX } from "lucide-react"
 
 // Player de VSL da pagina pre-live (pos-cadastro de revendedor).
 //
-// Comportamento pedido:
-//  - AUTOPLAY tentando COM som. Navegadores bloqueiam autoplay com audio sem
-//    interacao previa; nesse caso caimos para mudo e o MESMO botao vira
-//    "ativar som". Com o som ligado, o botao muta.
+// Comportamento:
+//  - ABERTURA IMEDIATA: o <video> e renderizado ja no HTML inicial (sem portal,
+//    sem gate de estado), com `autoplay muted preload="auto"`. Assim o navegador
+//    comeca a baixar e a tocar (mudo) assim que a pagina abre, antes mesmo de
+//    terminar de carregar. Logo depois tentamos LIGAR o som; se o navegador
+//    bloquear (autoplay com audio exige gesto), seguimos mudos e o botao dourado
+//    vira "Ativar som".
 //  - UNICO controle e o botao de mudo/desmudo — sem controles nativos.
-//  - MINI-PLAYER sempre visivel: quando o quadro original sai da viewport, o
-//    video vira um mini-player FIXO no canto inferior direito da TELA e fica la
-//    enquanto a pagina esta rolada. Volta ao quadro inline quando ele reaparece.
+//  - MINI-PLAYER fixo na tela: quando o quadro sai da viewport, o frame vira
+//    `position: fixed` no canto inferior direito. Funciona sem portal porque
+//    nenhum ancestral tem `transform`/`filter` (o que ancoraria o fixed na
+//    secao em vez da viewport).
 //  - Ao TERMINAR, "Assistir novamente" — usavel tambem no mini-player.
-//
-// IMPLEMENTACAO: o quadro do video e renderizado via PORTAL no <body>. Isso e
-// essencial porque a pagina usa animacoes GSAP (data-reveal) que aplicam
-// `transform` em ancestrais — e um ancestral com transform faz `position: fixed`
-// se ancorar nele (na secao), nao na viewport. No body, o `fixed` cola na tela
-// de verdade. Quando inline, o quadro fica `fixed` sobre o retangulo do holder
-// (seguindo o scroll) — assim o mesmo <video> nunca remonta e a reproducao nao
-// reinicia. O holder reserva o espaco (9:16) e exibe o glow/anel/placeholder.
 export function PreLiveVideo({ src }: { src: string }) {
   const holderRef = useRef<HTMLDivElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
-  const [muted, setMuted] = useState(false)
+  const [muted, setMuted] = useState(true)
   const [docked, setDocked] = useState(false)
   const [ended, setEnded] = useState(false)
-  // `rect` so e setado no client (no effect de medicao), entao serve de gate do
-  // portal: null no SSR (nao renderiza portal), preenchido apos o mount.
-  const [rect, setRect] = useState<DOMRect | null>(null)
 
-  // Autoplay: tenta com som; se o navegador bloquear, cai para mudo.
+  // Garante o play imediato (mudo) e tenta ligar o som em seguida.
   useEffect(() => {
     const v = videoRef.current
     if (!v) return
-    const start = async () => {
+    v.muted = true
+    void v.play().catch(() => {})
+    const tryUnmute = async () => {
       try {
         v.muted = false
         v.volume = 1
@@ -46,55 +40,22 @@ export function PreLiveVideo({ src }: { src: string }) {
       } catch {
         v.muted = true
         setMuted(true)
-        try {
-          await v.play()
-        } catch {
-          /* sem autoplay: usuario inicia pelo botao de som */
-        }
+        void v.play().catch(() => {})
       }
     }
-    void start()
-    const onLoad = () => {
-      if (v.paused && !v.ended) void v.play().catch(() => {})
-    }
-    window.addEventListener("load", onLoad)
-    return () => window.removeEventListener("load", onLoad)
+    void tryUnmute()
   }, [])
 
-  // Segue o retangulo do holder (para posicionar o quadro inline) e detecta
-  // quando ele sai da viewport (para flutuar no canto).
+  // Dock/undock conforme o quadro entra/sai da viewport (mini-player persistente).
   useEffect(() => {
     const holder = holderRef.current
-    if (!holder) return
-
-    let raf = 0
-    const measure = () => setRect(holder.getBoundingClientRect())
-    const onScrollResize = () => {
-      cancelAnimationFrame(raf)
-      raf = requestAnimationFrame(measure)
-    }
-    measure()
-    window.addEventListener("scroll", onScrollResize, { passive: true })
-    window.addEventListener("resize", onScrollResize)
-    const ro = new ResizeObserver(measure)
-    ro.observe(holder)
-
-    let obs: IntersectionObserver | undefined
-    if (typeof IntersectionObserver !== "undefined") {
-      obs = new IntersectionObserver(
-        ([entry]) => setDocked(!entry.isIntersecting),
-        { threshold: 0.4 },
-      )
-      obs.observe(holder)
-    }
-
-    return () => {
-      window.removeEventListener("scroll", onScrollResize)
-      window.removeEventListener("resize", onScrollResize)
-      ro.disconnect()
-      obs?.disconnect()
-      cancelAnimationFrame(raf)
-    }
+    if (!holder || typeof IntersectionObserver === "undefined") return
+    const obs = new IntersectionObserver(
+      ([entry]) => setDocked(!entry.isIntersecting),
+      { threshold: 0.4 },
+    )
+    obs.observe(holder)
+    return () => obs.disconnect()
   }, [])
 
   function toggleMute() {
@@ -114,30 +75,9 @@ export function PreLiveVideo({ src }: { src: string }) {
     void v.play().catch(() => {})
   }
 
-  // Posicionamento do quadro flutuante (sempre `fixed`, ancorado no body).
-  const frameStyle: CSSProperties = docked
-    ? {
-        position: "fixed",
-        right: "1rem",
-        bottom: "1rem",
-        width: "clamp(120px, 38vw, 180px)",
-        aspectRatio: "9 / 16",
-        zIndex: 50,
-      }
-    : rect
-      ? {
-          position: "fixed",
-          top: rect.top,
-          left: rect.left,
-          width: rect.width,
-          height: rect.height,
-          zIndex: 20,
-        }
-      : { position: "fixed", opacity: 0, pointerEvents: "none" }
-
-  const frame = (
-    <div style={frameStyle}>
-      {/* Decoracoes (glow + anel + chips) apenas no estado inline */}
+  return (
+    <div ref={holderRef} className="relative aspect-[9/16] w-full">
+      {/* Decoracoes do quadro inline (ocultas quando flutuando) */}
       {!docked && (
         <>
           <div
@@ -172,18 +112,29 @@ export function PreLiveVideo({ src }: { src: string }) {
         </>
       )}
 
-      {/* Quadro do video propriamente dito */}
+      {/* Placeholder no espaco inline enquanto o video esta no mini-player */}
+      {docked && (
+        <div className="absolute inset-0 grid place-items-center rounded-[1.7rem] border border-dashed border-white/15 bg-white/[0.02] px-4 text-center text-xs text-white/45">
+          <span className="inline-flex items-center gap-2">
+            <Volume2 className="h-4 w-4 text-[var(--color-pmb-lime)]" />
+            Reproduzindo no canto da tela
+          </span>
+        </div>
+      )}
+
+      {/* Quadro do video (inline ou flutuante no canto) */}
       <div
-        className={`absolute inset-0 overflow-hidden bg-black ${
+        className={
           docked
-            ? "rounded-2xl shadow-2xl ring-1 ring-white/20"
-            : "rounded-[1.7rem] ring-1 ring-white/10"
-        }`}
+            ? "fixed bottom-4 right-4 z-50 aspect-[9/16] w-[140px] overflow-hidden rounded-2xl bg-black shadow-2xl ring-1 ring-white/20 transition-shadow sm:w-[180px]"
+            : "absolute inset-0 overflow-hidden rounded-[1.7rem] bg-black ring-1 ring-white/10"
+        }
       >
         <video
           ref={videoRef}
           src={src}
           autoPlay
+          muted={muted}
           playsInline
           preload="auto"
           onEnded={() => setEnded(true)}
@@ -235,22 +186,6 @@ export function PreLiveVideo({ src }: { src: string }) {
           </div>
         )}
       </div>
-    </div>
-  )
-
-  return (
-    <div ref={holderRef} className="relative aspect-[9/16] w-full">
-      {/* Placeholder no espaco inline enquanto o video esta no mini-player */}
-      {docked && (
-        <div className="absolute inset-0 grid place-items-center rounded-[1.7rem] border border-dashed border-white/15 bg-white/[0.02] px-4 text-center text-xs text-white/45">
-          <span className="inline-flex items-center gap-2">
-            <Volume2 className="h-4 w-4 text-[var(--color-pmb-lime)]" />
-            Reproduzindo no canto da tela
-          </span>
-        </div>
-      )}
-
-      {rect && createPortal(frame, document.body)}
     </div>
   )
 }
