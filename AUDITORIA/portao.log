@@ -511,3 +511,30 @@ PORTÃO: ✅ VERDE (build delegado ao CI)
     (build do CI roda com SKIP_PENDING_MIGRATIONS=1, então não toca o banco). Sem mudança de TS.
 RESULT tsc=0 lint=0 test=0 build=CI
 PORTÃO: ✅ VERDE (build delegado ao CI; migration aplicada só no deploy)
+
+================ PORTÃO 2026-06-20 (rodada 4 — hardening pós-revisão adversarial) SAAS-005-followup-clawback-frozen-no-chokepoint ================
+--- typecheck (tsc --noEmit) --- OK (0 erros)
+--- lint (eslint) --- 0 errors, 2 warnings pré-existentes (render-cert-samples.tsx, plataforma-actions.ts)
+--- test (vitest run) --- 23 files / 152 tests passed (+4: payout.test.ts novo)
+--- build (next build) --- NÃO EXECUTADO NESTE SANDBOX. Build é responsabilidade do CI/host para
+    este commit. Mudança = guard de clawback dentro da transação de markPayoutPaid (conta comissões
+    vinculadas ao payout com cancelReason começando com CLAWBACK_MARKER_PREFIX, antes do CAS, só
+    quando status != PAID; lança ReferralPayoutError code CLAWBACK_FROZEN). tsc cobre tipos; teste de
+    regressão payout.test.ts comprova: FALHA sem o fix (vaza), PASSA com o fix.
+RESULT tsc=0 lint=0 test=0 build=CI
+PORTÃO: ✅ VERDE (build delegado ao CI/host)
+
+================ PORTÃO 2026-06-20 (rodada 4 — hardening pós-revisão adversarial) DB-004-followup-migration-order-course-packages ================
+--- typecheck (tsc --noEmit) --- OK (0 erros)
+--- lint (eslint) --- 0 errors, 2 warnings pré-existentes
+--- test (vitest run) --- 23 files / 152 tests passed
+--- build (next build) --- NÃO EXECUTADO NESTE SANDBOX. Build é responsabilidade do CI/host para
+    este commit. Mudança = APENAS SQL de migration (sem TS). Sem DATABASE_URL local → migration NÃO
+    rodada contra DB nenhum. Removido o bloco course_packages_pmb_slug_key de 20260620 (a tabela só
+    existe a partir de 20260623_course_packages → em base vazia o erro era undefined_table 42P01,
+    não capturado pelo handler de unique_violation, abortando o deploy). Recriado em nova migration
+    20260624_course_packages_pmb_null_unique (ordena DEPOIS de 20260623), idempotente + guarda
+    to_regclass NOT NULL + DO/EXCEPTION unique_violation. Header de 20260620 corrigido (afirmação
+    enganosa de re-run removida; migration aplicada NUNCA re-roda). Migration 20260623 NÃO tocada.
+RESULT tsc=0 lint=0 test=0 build=CI
+PORTÃO: ✅ VERDE (build delegado ao CI/host; migration aplicada só no deploy)

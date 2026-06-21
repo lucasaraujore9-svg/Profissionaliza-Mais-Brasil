@@ -1,11 +1,11 @@
 # Cobertura & Status das Correções — Profissionaliza Mais Brasil
-_Atualizado: 2026-06-20 (rodada 3) · Branch: `fix/auditoria-p0-p1-2026-06-20` · Portão Zero-Erro: ✅ verde (148 testes; `next build` delegado ao CI — comando indisponível no sandbox de execução)_
+_Atualizado: 2026-06-20 (rodada 4 — hardening pós-revisão adversarial) · Branch: `fix/auditoria-p0-p1-2026-06-20` · Portão Zero-Erro: ✅ verde (152 testes; `next build` delegado ao CI/host — comando indisponível no sandbox de execução)_
 
 Rastreio item-a-item. Base: `INVENTARIO.md`. Detalhe: `achados/*.md`. Snapshot: `RELATORIO.md`. Execuções do portão: `portao.log`.
 
 ## 1. Cobertura do inventário (sem amostragem)
 
-124/124 telas · 280/281 route handlers (1 = `llms.txt`, N/A) · 322/322 componentes · 43/43 models · 68/68 migrations (rodada 3: +1 `20260620_pmb_null_unique_indexes`, DB-004) · 13/13 crons · 2/2 webhooks. `next build` compila 100% das rotas. Detalhe por domínio nas seções `## Cobertura` de cada `achados/*.md`.
+124/124 telas · 280/281 route handlers (1 = `llms.txt`, N/A) · 322/322 componentes · 43/43 models · 69/69 migrations (rodada 3: +1 `20260620_pmb_null_unique_indexes`, DB-004; rodada 4: +1 `20260624_course_packages_pmb_null_unique`, DB-004 follow-up) · 13/13 crons · 2/2 webhooks. `next build` compila 100% das rotas. Detalhe por domínio nas seções `## Cobertura` de cada `achados/*.md`.
 
 ## 2. Correções aplicadas (✅ = corrigido + Portão verde + commit)
 
@@ -35,12 +35,14 @@ Rastreio item-a-item. Base: `INVENTARIO.md`. Detalhe: `achados/*.md`. Snapshot: 
 | **SAAS-003** (gate Automação no servidor) | P2 | ✅ **rodada 3** | `c815aad` (403 em config/templates PUT) |
 | **SAAS-004** (price>0 no checkout da vitrine) | P2 | ✅ **rodada 3** | `7a1b884` + teste (6 casos) |
 | **SAAS-005** (clawback/freeze em refund parcial) | P2 | ✅ **rodada 3** | `b9d7d43` + teste (9 casos) |
+| **SAAS-005 follow-up** (payout liquidava comissão congelada) | P2 | ✅ **rodada 4** | `725ad86` — `markPayoutPaid` bloqueia o payout inteiro (code `CLAWBACK_FROZEN`) antes do CAS se houver comissão vinculada com marcador de clawback; cobre approve+mark-paid num só ponto. `payout.test.ts` (4 casos): falha sem o fix, passa com. |
 | **DB-004** (unique parcial p/ `tenant_id` NULL) | P2 | ✅ **rodada 3** | `948adc0` — migration aditiva/idempotente (aplica no deploy) |
+| **DB-004 follow-up** (migration quebrava bootstrap de DB vazio) | P2 | ✅ **rodada 4** | `b575eaa` — índice de `course_packages` (tabela só existe em `20260623`) movido de `20260620` para nova `20260624_course_packages_pmb_null_unique` (ordena depois), com guarda `to_regclass`. Em base vazia o erro era `undefined_table` (42P01), não capturado → ROLLBACK + exit 1. |
 | **COD-005** (exports mortos) | P3 | ✅ | `06680fc` |
 | **FE-002** (componente órfão) | P3 | ✅ | `06680fc` |
 | **FE-004** (rel=noopener) | P3 | ✅ | `06680fc` |
 
-**Total fechado:** 3 P0 (2 causas-raiz) · 11 P1 · 11 P2 · 3 P3. **Testes: 44 → 116 → 148.** (Rodada 3: +6 P2 — SEG-003, API-003, SAAS-003/004/005, DB-004; +32 testes.)
+**Total fechado:** 3 P0 (2 causas-raiz) · 11 P1 · 11 P2 · 3 P3. **Testes: 44 → 116 → 148 → 152.** (Rodada 3: +6 P2 — SEG-003, API-003, SAAS-003/004/005, DB-004; +32 testes. Rodada 4 — hardening pós-revisão adversarial: 2 follow-ups que os testes da rodada 3 não pegaram — SAAS-005 (`725ad86`) e DB-004 (`b575eaa`); +4 testes.)
 
 ## 3. Verificações finais (E2E / dados alterados)
 
@@ -49,7 +51,9 @@ Rastreio item-a-item. Base: `INVENTARIO.md`. Detalhe: `achados/*.md`. Snapshot: 
 - ✅ **Certificados**: download (admin/painel/aluno) por stream service-role; `/validar` por signed URL 300s — todos funcionam com bucket privado.
 - ✅ **Cache de tenant**: chave do proxy = chave do cache (teste trava o contrato); venda segue gateada FRESH no checkout (`TENANT_INACTIVE`) → cache de 60s não vende suspenso.
 - ✅ Sem regressões: `swallowCleanup`/`shouldSendEmail`/`/admin/webhooks`/`href={proofUrl}` → 0 referências.
-- ✅ Portão Zero-Erro final: tsc=0 · lint=0 · test=0 (116) · build=0.
+- ✅ Portão Zero-Erro final (rodada 4): tsc=0 · lint=0 (2 warnings pré-existentes) · test=0 (152). `next build` delegado ao CI/host nos 2 commits da rodada 4 (`725ad86`, `b575eaa`) — comando indisponível no sandbox.
+- ✅ **SAAS-005 follow-up (regressão)**: `payout.test.ts` reproduz o vazamento — comissão vinculada a payout REQUESTED + marcada `[CLAWBACK_PENDING]` → `markPayoutPaid` LANÇA `CLAWBACK_FROZEN` e NÃO marca como PAID. Verificado: o teste FALHA sem o fix e PASSA com ele.
+- ✅ **DB-004 follow-up (ordenação)**: `ls prisma/migrations` confirma `20260624_course_packages_pmb_null_unique` > `20260623_course_packages` (lexicográfica). `20260623` não tocada (hash/tracking preservados). Migration não rodada contra DB (sem DATABASE_URL local); aplica no deploy. Escape do clawback (`/api/admin/referrals/clawback/resolve`) já existe — admin destrava sem novo código.
 
 ## 4. Itens ABERTOS — triados (recipe em `achados/*.md`)
 
