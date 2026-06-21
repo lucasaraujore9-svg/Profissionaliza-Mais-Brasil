@@ -25,32 +25,61 @@ export function PreLiveVideo({ src }: { src: string }) {
   const [docked, setDocked] = useState(false)
   const [ended, setEnded] = useState(false)
 
-  // Play imediato (mudo). So tentamos LIGAR o som em telas de ponteiro fino
-  // (desktop): no celular, tentar desmutar dispara o bloqueio de autoplay e o
-  // video nao chega a tocar. No touch fica mudo (e toca) e o botao "Ativar som"
-  // liga o audio no primeiro toque.
+  // Abertura com som. No DESKTOP tentamos autoplay COM audio direto (muitos
+  // navegadores permitem com engajamento previo). Se o navegador bloquear — e no
+  // MOBILE sempre bloqueia — tocamos MUDO na hora (start instantaneo, sem o
+  // atraso de uma tentativa bloqueada) e LIGAMOS o som no primeiro gesto do
+  // usuario (toque, rolagem, clique ou tecla). O botao de mute segue disponivel.
   useEffect(() => {
     const v = videoRef.current
     if (!v) return
-    v.muted = true
-    void v.play().catch(() => {})
+
+    let removeGesture = () => {}
+    const armUnmuteOnGesture = () => {
+      const unmute = (e: Event) => {
+        // Deixa o proprio botao de mute cuidar do toque nele (evita conflito).
+        const t = e.target as Element | null
+        if (t?.closest?.("[data-pl-mute]")) return
+        v.muted = false
+        v.volume = 1
+        setMuted(false)
+        void v.play().catch(() => {})
+        removeGesture()
+      }
+      const evs = ["pointerdown", "touchstart", "keydown"] as const
+      evs.forEach((ev) =>
+        window.addEventListener(ev, unmute, { capture: true, passive: true }),
+      )
+      removeGesture = () =>
+        evs.forEach((ev) =>
+          window.removeEventListener(ev, unmute, { capture: true }),
+        )
+    }
+
     const coarse =
       typeof window !== "undefined" &&
       window.matchMedia("(pointer: coarse)").matches
-    if (coarse) return
-    const tryUnmute = async () => {
-      try {
-        v.muted = false
-        v.volume = 1
-        await v.play()
-        setMuted(false)
-      } catch {
-        v.muted = true
-        setMuted(true)
-        void v.play().catch(() => {})
+
+    const start = async () => {
+      if (!coarse) {
+        try {
+          v.muted = false
+          v.volume = 1
+          await v.play()
+          setMuted(false)
+          return
+        } catch {
+          /* bloqueado: cai para mudo + gesto abaixo */
+        }
       }
+      v.muted = true
+      setMuted(true)
+      void v.play().catch(() => {})
+      armUnmuteOnGesture()
     }
-    void tryUnmute()
+    void start()
+
+    return () => removeGesture()
   }, [])
 
   // Dock/undock por posicao de scroll, com histerese (evita o jitter do
@@ -167,6 +196,7 @@ export function PreLiveVideo({ src }: { src: string }) {
           muted={muted}
           playsInline
           preload="auto"
+          poster="/images/prelive-poster.jpg"
           onEnded={() => setEnded(true)}
           onVolumeChange={(e) => setMuted(e.currentTarget.muted)}
           className="h-full w-full object-cover"
@@ -176,6 +206,7 @@ export function PreLiveVideo({ src }: { src: string }) {
         {!ended && (
           <button
             type="button"
+            data-pl-mute
             onClick={toggleMute}
             aria-label={muted ? "Ativar som do vídeo" : "Silenciar vídeo"}
             className={`absolute bottom-2 left-2 z-20 flex h-9 w-9 items-center justify-center rounded-full ring-1 backdrop-blur-sm transition ${
