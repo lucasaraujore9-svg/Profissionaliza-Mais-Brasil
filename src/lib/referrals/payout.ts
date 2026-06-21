@@ -3,6 +3,7 @@ import type { ReferralPayout, ReferralPayoutMethod } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { createNotification } from "@/lib/notifications"
 import { backfillReferrerCommissions } from "@/lib/referrals/commission"
+import { CLAWBACK_MARKER_PREFIX } from "@/lib/referrals/clawback"
 
 const SETTINGS_ID = "default"
 
@@ -39,7 +40,8 @@ export class ReferralPayoutError extends Error {
       | "INVALID_PIX"
       | "ALREADY_PENDING"
       | "PROOF_REQUIRED"
-      | "CLAWBACK_PENDING",
+      | "CLAWBACK_PENDING"
+      | "CLAWBACK_FROZEN",
   ) {
     super(message)
     this.name = "ReferralPayoutError"
@@ -262,6 +264,44 @@ export async function markPayoutPaid(
         "Comprovante obrigatorio: anexe o comprovante de pagamento antes de marcar o saque como pago.",
         "PROOF_REQUIRED",
       )
+    }
+
+    // GATE DE CLAWBACK NO CHOKEPOINT (SAAS-005 follow-up): freezeCommissionForPartialRefund
+    // (commission.ts) congela uma comissao marcando o cancelReason com
+    // CLAWBACK_MARKER_PREFIX, mas PRESERVA o status (AVAILABLE) e NAO a desvincula
+    // do payout. Sem este guard, markPayoutPaid liquidaria a comissao congelada
+    // junto com o resto do payout (cujo amount foi calculado ANTES do freeze) —
+    // pagando um valor que inclui uma comissao sob revisao de estorno.
+    //
+    // Bloqueamos o PAYOUT INTEIRO (nao pulamos so a linha congelada): pular a
+    // comissao no updateMany deixaria o payout PAID por um amount que ainda
+    // incluia a congelada → double-pay no futuro. Como tanto o approve quanto o
+    // mark-paid passam por aqui, este unico ponto cobre ambas as rotas.
+    //
+    // So checamos quando o payout ainda nao esta PAID — assim re-chamadas
+    // idempotentes de um payout ja pago nao quebram. O escape para destravar e a
+    // rota /admin/indicacoes/comissoes (resolve do clawback), que desmarca/recalcula.
+    if (existing.status !== "PAID") {
+      const [frozenLegacy, frozenMonthly] = await Promise.all([
+        tx.referralCommission.count({
+          where: {
+            payoutId,
+            cancelReason: { startsWith: CLAWBACK_MARKER_PREFIX },
+          },
+        }),
+        tx.referralMonthlyCommission.count({
+          where: {
+            payoutId,
+            cancelReason: { startsWith: CLAWBACK_MARKER_PREFIX },
+          },
+        }),
+      ])
+      if (frozenLegacy > 0 || frozenMonthly > 0) {
+        throw new ReferralPayoutError(
+          "Saque bloqueado: contém comissão sob revisão de clawback (refund parcial). Resolva em /admin/indicacoes/comissoes antes de pagar.",
+          "CLAWBACK_FROZEN",
+        )
+      }
     }
 
     const casUpdate = await tx.referralPayout.updateMany({
