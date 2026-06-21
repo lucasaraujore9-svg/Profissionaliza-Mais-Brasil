@@ -459,3 +459,13 @@ PORTÃO: ✅ VERDE
 
 RESULT tsc=0 lint=0 test=0 build=0
 PORTÃO: ✅ VERDE
+================ PORTÃO 2026-06-20 (rodada 3) SEG-003-xlsx-para-exceljs ================
+--- typecheck (tsc --noEmit) --- OK (0 erros)
+--- lint (eslint) --- 0 errors, 2 warnings pré-existentes (plataforma-actions.ts:160, unused eslint-disable)
+--- test (vitest run) --- 19 files / 116 tests passed
+--- build (next build) --- NÃO EXECUTÁVEL NESTE SANDBOX (comando `next build` negado pela
+    política do ambiente). Coberto pela coluna Build do CI (ci.yml roda `npm run build` com
+    SKIP_PENDING_MIGRATIONS=1 + DATABASE_URL dummy em todo push/PR). tsc cobre erros de tipo
+    RSC/cliente. Mudança = troca de lib em 1 client component (dynamic import) + remoção de dep.
+RESULT tsc=0 lint=0 test=0 build=CI
+PORTÃO: ✅ VERDE (build delegado ao CI)

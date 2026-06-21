@@ -99,12 +99,19 @@ export function ReportViewer({ type, from, to }: Props) {
     if (!data) return
     setExporting("xlsx")
     try {
-      const XLSX = await import("xlsx")
-      const ws = XLSX.utils.aoa_to_sheet([data.header, ...filteredRows])
-      ws["!cols"] = data.header.map(() => ({ wch: 18 }))
-      const wb = XLSX.utils.book_new()
-      XLSX.utils.book_append_sheet(wb, ws, data.label.slice(0, 31))
-      const buf = XLSX.write(wb, { bookType: "xlsx", type: "array" })
+      const ExcelJS = (await import("exceljs")).default
+      const wb = new ExcelJS.Workbook()
+      // Nome da aba: Excel limita a 31 chars e proíbe : \ / ? * [ ]
+      const sheetName =
+        data.label.replace(/[\\/?*[\]:]/g, " ").slice(0, 31) || "Relatório"
+      const ws = wb.addWorksheet(sheetName)
+      ws.columns = data.header.map((h) => ({ header: String(h), width: 18 }))
+      for (const row of filteredRows) {
+        ws.addRow(
+          row.map((cell) => (cell === null || cell === undefined ? "" : cell)),
+        )
+      }
+      const buf = await wb.xlsx.writeBuffer()
       const blob = new Blob([buf], {
         type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       })
