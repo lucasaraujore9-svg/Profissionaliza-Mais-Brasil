@@ -493,3 +493,11 @@ PORTÃO: ✅ VERDE (build delegado ao CI)
     guard isSellablePrice em loja/checkout; helper puro testado; tsc cobre tipos.
 RESULT tsc=0 lint=0 test=0 build=CI
 PORTÃO: ✅ VERDE (build delegado ao CI)
+================ PORTÃO 2026-06-20 (rodada 3) SAAS-005-clawback-refund-parcial ================
+--- typecheck (tsc --noEmit) --- OK (0 erros)
+--- lint (eslint) --- 0 errors, 2 warnings pré-existentes
+--- test (vitest run) --- 22 files / 148 tests passed (+9: clawback.test.ts)
+--- build (next build) --- NÃO EXECUTÁVEL NESTE SANDBOX (delegado ao CI). Mudança = freeze de
+    comissão no refund parcial + gate de saque ampliado p/ qualquer status + logAudit; tsc cobre tipos.
+RESULT tsc=0 lint=0 test=0 build=CI
+PORTÃO: ✅ VERDE (build delegado ao CI)

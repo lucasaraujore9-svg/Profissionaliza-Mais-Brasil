@@ -10,8 +10,10 @@ import { invalidateTenant } from "@/lib/redis/tenant-cache"
 import {
   createCommissionForTenantPayment,
   cancelCommissionForTenantPayment,
+  freezeCommissionForPartialRefund,
 } from "@/lib/referrals/commission"
 import { flagMonthlyCommissionForRefund } from "@/lib/referrals/monthly"
+import { logAudit } from "@/lib/audit"
 import type { AsaasWebhookPayload } from "./types"
 import { swallow } from "@/lib/errors"
 import { contextLogger } from "@/lib/logger"
@@ -579,14 +581,52 @@ export async function processAsaasWebhook(
             )
           })
         } else {
-          // Refund parcial: notifica admin para tratar manualmente. Não
-          // cancela automaticamente (evita over-clawback em refund pequeno).
+          // Refund PARCIAL (SAAS-005): NÃO cancela/reverte a comissão (evita
+          // over-clawback num estorno pequeno — o valor proporcional é decisão
+          // do admin), mas CONGELA o saque marcando [CLAWBACK_PENDING], que os
+          // gates de saque (requestPayout + processMonthlyPayouts) honram para
+          // BLOQUEAR novos payouts do indicador até a revisão manual. Sem isto,
+          // o indicador poderia sacar a comissão integral sobre uma mensalidade
+          // parcialmente estornada.
+          await freezeCommissionForPartialRefund(
+            tenantPaymentRow.id,
+            "refund_parcial",
+          ).catch((err) => {
+            contextLogger().error(
+              { err, event: "asaas.partial_refund.freeze_commission_failed", tenantPaymentId: tenantPaymentRow.id },
+              "freezeCommissionForPartialRefund falhou",
+            )
+          })
+          // Motor por faixas (MONTHLY_TIERED): congela a comissão mensal
+          // AVAILABLE/PAID da competência (mesmo marcador) — bloqueio idêntico.
+          await flagMonthlyCommissionForRefund(
+            tenantPaymentRow.id,
+            "refund_parcial",
+          ).catch((err) => {
+            contextLogger().error(
+              { err, event: "asaas.partial_refund.flag_monthly_failed", tenantPaymentId: tenantPaymentRow.id },
+              "flagMonthlyCommissionForRefund (parcial) falhou",
+            )
+          })
+          await logAudit({
+            action: "referral.partial_refund.freeze",
+            resource: "TenantPayment",
+            resourceId: tenantPaymentRow.id,
+            actorRole: "SYSTEM",
+            actorEmail: "asaas-webhook",
+            tenantId: tenant.id,
+            payloadAfter: {
+              asaasPaymentId: payment.id,
+              status: payment.status,
+              note: "comissão congelada; saques do indicador bloqueados até revisão manual",
+            },
+          })
           await createNotification({
             audience: "ROLE",
             roleTarget: "SUPER_ADMIN",
             level: "WARNING",
             title: `Refund parcial em ${tenant.name}`,
-            body: `Pagamento ${payment.id} estornado parcialmente. Comissão de indicação NÃO foi ajustada automaticamente — revise manualmente em /admin/indicacoes/comissoes.`,
+            body: `Pagamento ${payment.id} estornado parcialmente. A comissão de indicação foi CONGELADA (saques bloqueados) — revise e ajuste manualmente em /admin/indicacoes/comissoes.`,
             category: "referral",
             href: `/admin/indicacoes/comissoes`,
           }).catch(() => {})

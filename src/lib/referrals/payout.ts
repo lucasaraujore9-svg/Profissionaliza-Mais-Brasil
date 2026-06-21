@@ -92,14 +92,16 @@ export async function requestPayout(
   }
 
   // Gate de clawback (espelha o bloqueio do cron em processMonthlyPayouts): se ha
-  // comissao marcada [CLAWBACK_PENDING] (estorno apos liberado/pago) em qualquer
-  // motor, nao deixa sacar ate o financeiro resolver — senao o saque manual
-  // burlaria o bloqueio e pagaria um valor que deveria ser revertido.
+  // comissao marcada [CLAWBACK_PENDING] em qualquer motor, nao deixa sacar ate o
+  // financeiro resolver — senao o saque manual burlaria o bloqueio e pagaria um
+  // valor que deveria ser revertido. O marcador cobre tanto o refund TOTAL de
+  // comissao PAID quanto o FREEZE de refund PARCIAL (SAAS-005), que pode marcar
+  // uma comissao PENDING/AVAILABLE ainda nao paga — por isso NAO restringimos
+  // mais por `status: "PAID"`: qualquer linha com o marcador bloqueia.
   const [legacyClawback, monthlyClawback] = await Promise.all([
     prisma.referralCommission.findFirst({
       where: {
         referrerTenantId: input.referrerTenantId,
-        status: "PAID",
         cancelReason: { startsWith: "[CLAWBACK_PENDING]" },
       },
       select: { id: true },
@@ -469,14 +471,16 @@ export async function processMonthlyPayouts(): Promise<{
   let notifiedTenants = 0
 
   for (const [tenantId, { total, ids, monthlyIds }] of byReferrer.entries()) {
-    // BLOQUEIO POR CLAWBACK: se houver alguma comissão PAID marcada como
+    // BLOQUEIO POR CLAWBACK: se houver alguma comissão marcada como
     // CLAWBACK_PENDING para este referrer, NÃO criamos payout automático
     // até admin resolver. O cancelReason começa com [CLAWBACK_PENDING] —
-    // ver cancelCommissionForTenantPayment em commission.ts.
+    // ver cancelCommissionForTenantPayment (refund total de PAID) e
+    // freezeCommissionForPartialRefund (refund parcial, SAAS-005) em
+    // commission.ts. Cobre qualquer status: o marcador só é setado
+    // deliberadamente em clawback/freeze.
     const clawbackPending = await prisma.referralCommission.findFirst({
       where: {
         referrerTenantId: tenantId,
-        status: "PAID",
         cancelReason: { startsWith: "[CLAWBACK_PENDING]" },
       },
       select: { id: true, amount: true },
