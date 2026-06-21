@@ -485,3 +485,11 @@ PORTÃO: ✅ VERDE (build delegado ao CI)
     2 rotas (config/templates PUT) + helper isTenantAutomationEnabled; tsc cobre tipos.
 RESULT tsc=0 lint=0 test=0 build=CI
 PORTÃO: ✅ VERDE (build delegado ao CI)
+================ PORTÃO 2026-06-20 (rodada 3) SAAS-004-price-gt-0-checkout-vitrine ================
+--- typecheck (tsc --noEmit) --- OK (0 erros)
+--- lint (eslint) --- 0 errors, 2 warnings pré-existentes
+--- test (vitest run) --- 21 files / 139 tests passed (+6: price-guard.test.ts)
+--- build (next build) --- NÃO EXECUTÁVEL NESTE SANDBOX (delegado ao CI). Mudança = where price>0 +
+    guard isSellablePrice em loja/checkout; helper puro testado; tsc cobre tipos.
+RESULT tsc=0 lint=0 test=0 build=CI
+PORTÃO: ✅ VERDE (build delegado ao CI)
