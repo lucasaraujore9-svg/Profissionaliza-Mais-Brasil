@@ -76,3 +76,9 @@ select cron.schedule('pmb-sync-cursos-lms', '30 6 * * *',
 -- hora em hora (minuto 45). Cursor incremental em system_settings.
 select cron.schedule('pmb-sync-day-update-lms', '45 * * * *',
   $$ select app_internal.run_cron('/api/cron/sync-day-update-lms') $$);
+
+-- Reconciliação de mensalidades (TenantPayment) contra o Asaas (diário 08:00 UTC).
+-- O handler /api/cron/reconcile-tenant-payments existia mas NUNCA esteve agendado
+-- (OPS-006) — a reconciliação automática de cobranças nunca rodava. Idempotente.
+select cron.schedule('pmb-reconcile-tenant-payments', '0 8 * * *',
+  $$ select app_internal.run_cron('/api/cron/reconcile-tenant-payments') $$);

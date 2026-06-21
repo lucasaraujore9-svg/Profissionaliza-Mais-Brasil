@@ -4,8 +4,16 @@ import { prisma } from "@/lib/prisma"
 import {
   validateSectionPayload,
   CATEGORY_SECTION_MIN_COURSES,
+  createSectionSchema,
+  updateSectionSchema,
+  reorderSectionsSchema,
   type AnySectionConfig,
 } from "./sections"
+
+/** Primeira mensagem de erro de um ZodError, achatada para o envelope `{ error }`. */
+function firstZodError(error: import("zod").ZodError): string {
+  return error.issues[0]?.message ?? "Payload inválido"
+}
 
 interface Scope {
   tenantId: string | null
@@ -53,10 +61,15 @@ export async function listSections(scope: Scope) {
 }
 
 export async function createSection(scope: Scope, body: unknown) {
-  if (!body || typeof body !== "object") {
-    return NextResponse.json({ error: "Payload inválido" }, { status: 400 })
+  const envelope = createSectionSchema.safeParse(body)
+  if (!envelope.success) {
+    return NextResponse.json(
+      { error: firstZodError(envelope.error) },
+      { status: 400 },
+    )
   }
-  const { kind, config } = body as Record<string, unknown>
+  const { kind, config } = envelope.data
+  // Validação granular por kind (regras de negócio: contagem, singletons, etc.)
   const validation = validateSectionPayload(kind, config)
   if (!validation.ok) {
     return NextResponse.json({ error: validation.error }, { status: 400 })
@@ -166,10 +179,14 @@ export async function updateSection(
   if (!slide) {
     return NextResponse.json({ error: "Seção não encontrada" }, { status: 404 })
   }
-  if (!body || typeof body !== "object") {
-    return NextResponse.json({ error: "Payload inválido" }, { status: 400 })
+  const envelope = updateSectionSchema.safeParse(body)
+  if (!envelope.success) {
+    return NextResponse.json(
+      { error: firstZodError(envelope.error) },
+      { status: 400 },
+    )
   }
-  const b = body as Record<string, unknown>
+  const b = envelope.data
   const updates: {
     config?: Prisma.InputJsonValue
     enabled?: boolean
@@ -213,9 +230,6 @@ export async function updateSection(
   }
 
   if (b.enabled !== undefined) {
-    if (typeof b.enabled !== "boolean") {
-      return NextResponse.json({ error: "enabled deve ser boolean" }, { status: 400 })
-    }
     if (slide.kind === "bestsellers" && b.enabled !== true) {
       return NextResponse.json(
         { error: "A seção “Mais vendidos” não pode ser desativada" },
@@ -244,9 +258,7 @@ export async function updateSection(
   }
 
   if (b.position !== undefined) {
-    if (typeof b.position !== "number" || !Number.isFinite(b.position) || b.position < 0) {
-      return NextResponse.json({ error: "position inválida" }, { status: 400 })
-    }
+    // schema já garante number finito >= 0; só normaliza para inteiro.
     updates.position = Math.floor(b.position)
   }
 
@@ -298,14 +310,14 @@ export async function deleteSection(scope: Scope, id: string): Promise<Response>
 }
 
 export async function reorderSections(scope: Scope, body: unknown): Promise<Response> {
-  if (!body || typeof body !== "object") {
-    return NextResponse.json({ error: "Payload inválido" }, { status: 400 })
+  const envelope = reorderSectionsSchema.safeParse(body)
+  if (!envelope.success) {
+    return NextResponse.json(
+      { error: "order deve ser array de IDs" },
+      { status: 400 },
+    )
   }
-  const { order } = body as Record<string, unknown>
-  if (!Array.isArray(order) || !order.every((x) => typeof x === "string")) {
-    return NextResponse.json({ error: "order deve ser array de IDs" }, { status: 400 })
-  }
-  const ids = order as string[]
+  const ids = envelope.data.order
   const sections = await prisma.homeSection.findMany({
     where: { tenantId: scope.tenantId, id: { in: ids } },
     select: { id: true, kind: true },

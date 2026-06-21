@@ -4,6 +4,8 @@ import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { requireAdminSession } from "@/lib/auth/admin-session"
 import { canAccessTenantScope } from "@/lib/auth/scope"
+import { logAudit } from "@/lib/audit"
+import { invalidateTenantCache } from "@/lib/tenant/cache-invalidation"
 import {
   findOrCreateAsaasCustomer,
   createSubscription,
@@ -372,6 +374,28 @@ export const PATCH = withRequestContextParams<{ id: string }>(
   if (promoValueUpdate !== undefined) updateData.promoValue = promoValueUpdate
   if (promoMonthsUpdate !== undefined) updateData.promoMonths = promoMonthsUpdate
   await prisma.tenant.update({ where: { id }, data: updateData })
+
+  // PERF-001: se ativou a revenda (free), invalida o cache p/ a vitrine vender já.
+  if (updateData.status === "ACTIVE") {
+    await invalidateTenantCache(id)
+  }
+
+  // SAAS-001: trilha de auditoria de alteração de billing (mensalidade/plano).
+  await logAudit({
+    action: "tenant.billing_update",
+    resource: "Tenant",
+    resourceId: id,
+    actorUserId: session.userId,
+    actorRole: session.role,
+    actorEmail: session.email,
+    tenantId: id,
+    payloadBefore: { planValue: Number(tenant.planValue), status: tenant.status },
+    payloadAfter: {
+      planValue: parsed.data.planValue ?? Number(tenant.planValue),
+      status: updateData.status ?? tenant.status,
+      free: clearSubscription,
+    },
+  })
 
   return NextResponse.json({
     data: {

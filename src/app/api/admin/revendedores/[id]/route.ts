@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { requireAdminSession } from "@/lib/auth/admin-session"
 import { invalidateTenant } from "@/lib/redis/tenant-cache"
+import { logAudit } from "@/lib/audit"
 import {
   cancelSubscription,
   getSubscription,
@@ -467,6 +468,19 @@ export const DELETE = withRequestContextParams<{ id: string }>(
   })
 
   await invalidateTenant(tenant)
+
+  // SAAS-001: trilha de auditoria de cancelamento de revenda (ação destrutiva).
+  await logAudit({
+    action: "tenant.cancel",
+    resource: "Tenant",
+    resourceId: id,
+    actorUserId: ctx.userId,
+    actorRole: ctx.role,
+    actorEmail: ctx.email,
+    tenantId: id,
+    payloadBefore: { slug: tenant.slug, hadAsaasSubscription: Boolean(tenant.asaasSubscriptionId) },
+    payloadAfter: { status: "CANCELLED" },
+  })
 
   return NextResponse.json({ data: { ok: true } })
   },

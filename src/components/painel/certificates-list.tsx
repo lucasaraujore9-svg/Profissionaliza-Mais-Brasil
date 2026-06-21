@@ -21,7 +21,7 @@ export interface CertificateRow {
   studentName: string
   courseName: string
   completionDate: string
-  pdfUrl: string | null
+  hasPdf?: boolean
   revokedAt: string | null
   revokedReason: string | null
   source: "AUTO" | "MANUAL_ADMIN" | "MANUAL_RESELLER"

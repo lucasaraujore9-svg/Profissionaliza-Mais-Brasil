@@ -150,13 +150,6 @@ async function isChannelEnabled(
   return channel === "in_app" ? pref.inApp : pref.email
 }
 
-export async function shouldSendEmail(
-  category: string | undefined,
-  target: { userId?: string; studentId?: string },
-): Promise<boolean> {
-  return isChannelEnabled("email", category, target)
-}
-
 /**
  * Cria a(s) notificacao(oes) e dispara push (best-effort). Para audiencias de
  * alvo unico (USER/STUDENT) retorna `{ id }` da linha criada; para fan-out

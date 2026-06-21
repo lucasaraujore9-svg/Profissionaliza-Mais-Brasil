@@ -137,7 +137,7 @@ export default async function AdminSaquesPage() {
                       <AdminPayoutRowActions payoutId={p.id} proofUrl={p.proofUrl} />
                     ) : p.proofUrl ? (
                       <a
-                        href={p.proofUrl}
+                        href={`/api/admin/financeiro/referral-payouts/${p.id}/proof/download`}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-xs font-medium text-[var(--color-pmb-green-900)] underline-offset-4 hover:underline"

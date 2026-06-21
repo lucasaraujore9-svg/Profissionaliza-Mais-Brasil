@@ -275,11 +275,12 @@ Antes de aprovar um PR que toca em qualquer um dos seguintes, verifique:
 - **Prisma 7 beta** (saiu maio 2026). Monitorar issues.
 - **Sem pre-commit hook** rodando `npm run lint`. Setup com husky +
   lint-staged. ~30 min.
-- **`xlsx` HIGH no `npm audit`** (Prototype Pollution + ReDoS, sem patch).
-  **Risco aceito**: usamos apenas `XLSX.utils.aoa_to_sheet`/`XLSX.write`
-  para gerar XLSX — nunca parseamos arquivos externos. Ambos os CVEs
-  requerem `XLSX.read` de input hostil. Reavaliar se algum dia adicionar
-  upload de XLSX.
+- **`xlsx` HIGH no `npm audit`** (Prototype Pollution + ReDoS, sem patch)
+  — **RESOLVIDO (SEG-003, 2026-06-20)**: substituído por `exceljs` (mantido
+  e patchável no npm). A exportação de relatório (`report-viewer.tsx`) usa
+  `ExcelJS.Workbook` apenas para **escrita** de XLSX — nunca parseamos
+  arquivos externos. Se algum dia adicionar import/upload de XLSX,
+  reavaliar a superfície de parsing.
 - **`mercadopago` / `svix` / `resend` MED por uuid<11.** Atualizar requer
   `mercadopago@0.5.0` (breaking). Esperar release sem breaking.
 

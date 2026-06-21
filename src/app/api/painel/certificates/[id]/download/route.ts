@@ -43,26 +43,32 @@ export const GET = withRequestContextParams<{ id: string }>(
       return NextResponse.json({ error: "Falha ao gerar PDF" }, { status: 500 })
     }
 
+    // Bucket `certificates` é PRIVADO (R1): stream SEMPRE via service-role.
+    // Nunca redireciona para a URL pública (agora 400 + exporia PII no path).
     const path = extractCertificatePath(pdfUrl)
-    if (path) {
-      try {
-        const buffer = await downloadCertificatePdf(path)
-        const safeCode = String(cert.code).replace(/[^A-Za-z0-9_-]/g, "")
-        return new NextResponse(buffer as unknown as BodyInit, {
-          status: 200,
-          headers: {
-            "Content-Type": "application/pdf",
-            "Content-Disposition": `${inline ? "inline" : "attachment"}; filename="certificado-${safeCode}.pdf"`,
-            "Cache-Control": "private, no-store",
-          },
-        })
-      } catch (err) {
-        contextLogger().error(
-          { err, event: "painel.certificates.download_bucket_failed", certificateId: cert.id, path },
-          "falha ao baixar PDF do bucket — fallback pra URL armazenada",
-        )
-      }
+    if (!path) {
+      return NextResponse.json({ error: "Falha ao gerar PDF" }, { status: 500 })
     }
-    return NextResponse.redirect(pdfUrl, { status: 302 })
+    try {
+      const buffer = await downloadCertificatePdf(path)
+      const safeCode = String(cert.code).replace(/[^A-Za-z0-9_-]/g, "")
+      return new NextResponse(buffer as unknown as BodyInit, {
+        status: 200,
+        headers: {
+          "Content-Type": "application/pdf",
+          "Content-Disposition": `${inline ? "inline" : "attachment"}; filename="certificado-${safeCode}.pdf"`,
+          "Cache-Control": "private, no-store",
+        },
+      })
+    } catch (err) {
+      contextLogger().error(
+        { err, event: "painel.certificates.download_bucket_failed", certificateId: cert.id, path },
+        "falha ao baixar PDF do bucket privado",
+      )
+      return NextResponse.json(
+        { error: "Falha ao recuperar o PDF. Tente novamente." },
+        { status: 502 },
+      )
+    }
   },
 )

@@ -80,7 +80,7 @@ export const GET = withRequestContext(
       studentName: true,
       courseName: true,
       completionDate: true,
-      pdfUrl: true,
+      pdfUrl: true, // só para derivar hasPdf — NÃO é exposto ao client (URL pública/PII)
       revokedAt: true,
       revokedReason: true,
       source: true,
@@ -99,7 +99,7 @@ export const GET = withRequestContext(
       studentName: c.studentName,
       courseName: c.courseName,
       completionDate: c.completionDate.toISOString(),
-      pdfUrl: c.pdfUrl,
+      hasPdf: Boolean(c.pdfUrl),
       revokedAt: c.revokedAt?.toISOString() ?? null,
       revokedReason: c.revokedReason,
       source: c.source,

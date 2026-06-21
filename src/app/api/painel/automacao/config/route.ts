@@ -3,6 +3,7 @@ import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { requireResellerSession } from "@/lib/auth/reseller-session"
 import { withRequestContext } from "@/lib/observability/with-request-context"
+import { isTenantAutomationEnabled } from "@/lib/automation/context"
 
 export const GET = withRequestContext(
   {
@@ -46,6 +47,17 @@ export const PUT = withRequestContext(
     const ctx = await requireResellerSession()
     if (!ctx) {
       return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
+    }
+
+    // SAAS-003: gate de entitlement no servidor (não confiar só na UI).
+    if (!(await isTenantAutomationEnabled(ctx.tenantId))) {
+      return NextResponse.json(
+        {
+          error: "Recurso disponível apenas no plano com Automação",
+          code: "AUTOMATION_DISABLED",
+        },
+        { status: 403 },
+      )
     }
 
     let payload: unknown

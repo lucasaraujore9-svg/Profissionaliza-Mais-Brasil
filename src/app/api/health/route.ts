@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { redis } from "@/lib/redis"
+import { contextLogger } from "@/lib/logger"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 
 export const dynamic = "force-dynamic"
@@ -35,11 +36,17 @@ export const GET = withRequestContext(
     await prisma.$queryRaw`SELECT 1`
     checks.database = true
   } catch (err) {
+    // API-002: NÃO expor err.message do Postgres em endpoint público (vaza
+    // detalhe de infra). Loga o erro real no servidor; ao cliente, genérico.
+    contextLogger().error(
+      { err, event: "health.db_check_failed" },
+      "health check: banco indisponível",
+    )
     return NextResponse.json(
       {
         status: "unhealthy",
         checks,
-        error: err instanceof Error ? err.message : "db error",
+        error: "database unavailable",
         latencyMs: Date.now() - start,
       },
       { status: 503 },

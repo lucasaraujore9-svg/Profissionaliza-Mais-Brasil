@@ -160,9 +160,14 @@ async function resolveTenantFromRedis(
   if (!url || !token) return null
 
   try {
-    const res = await fetch(`${url}/get/tenant:${slug}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    // Chave alinhada a `tenantBySlugKey` (src/lib/redis/keys.ts) — o cache
+    // (setTenant no resolve-tenant) grava em `tenant:slug:{slug}`. Antes o proxy
+    // lia `tenant:{slug}` (ninguém grava) → 100% cache-miss (PERF-001). O contrato
+    // do formato da chave é travado por teste em src/lib/redis/keys.test.ts.
+    const res = await fetch(
+      `${url.replace(/\/$/, "")}/get/tenant:slug:${encodeURIComponent(slug)}`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    )
     const data = await res.json()
     if (data.result) {
       return JSON.parse(data.result)

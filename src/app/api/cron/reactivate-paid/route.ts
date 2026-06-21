@@ -2,6 +2,8 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { unblockTenantStudents } from "@/lib/auto-block"
 import { unblockStudentInEA } from "@/lib/students/plataforma-actions"
+import { canReactivateUnderTenant } from "@/lib/students/reactivation-guard"
+import { invalidateTenantCache } from "@/lib/tenant/cache-invalidation"
 import { createNotification } from "@/lib/notifications"
 import { isCronAuthorized } from "@/lib/auth/bearer"
 import { PMB_TENANT_SLUG } from "@/lib/pmb-config"
@@ -53,6 +55,8 @@ async function processReactivations() {
         where: { id: tenant.id },
         data: { status: "ACTIVE" },
       })
+      // PERF-001: invalida o cache p/ a vitrine voltar a vender na hora.
+      await invalidateTenantCache(tenant.id)
       result.tenantsReactivated += 1
       const unblock = await unblockTenantStudents(tenant.id)
       result.studentsUnblocked += unblock.affectedStudents
@@ -86,12 +90,19 @@ async function processReactivations() {
     select: {
       id: true,
       studentId: true,
-      student: { select: { status: true } },
+      student: { select: { status: true, tenant: { select: { status: true } } } },
     },
   })
 
   for (const enrollment of enrollments) {
     try {
+      // SAAS-002: não reativa aluno de tenant não-ACTIVE (revenda suspensa por
+      // inadimplência bloqueia todos os alunos; o pagamento de um curso avulso
+      // não fura esse bloqueio). A reativação acontece pelo branch de tenant
+      // acima quando a revenda volta a ACTIVE.
+      if (!canReactivateUnderTenant(enrollment.student.tenant?.status)) {
+        continue
+      }
       await prisma.enrollment.update({
         where: { id: enrollment.id },
         data: { status: "ACTIVE" },

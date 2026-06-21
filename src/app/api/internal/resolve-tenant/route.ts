@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { apexDomain, wwwDomain } from "@/lib/tenant/urls"
 import { isInternalAuthorized } from "@/lib/auth/bearer"
+import { setTenant } from "@/lib/redis/tenant-cache"
 import { rateLimit, rateLimitResponse } from "@/lib/ratelimit"
 import { contextLogger } from "@/lib/logger"
 import { withRequestContext } from "@/lib/observability/with-request-context"
@@ -70,7 +71,7 @@ export const GET = withRequestContext(
       : []
     const tenant = await prisma.tenant.findFirst({
       where: slug ? { slug } : { customDomain: { in: domainCandidates } },
-      select: { id: true, slug: true, status: true },
+      select: { id: true, slug: true, status: true, customDomain: true },
     })
 
     if (!tenant) {
@@ -88,6 +89,21 @@ export const GET = withRequestContext(
       }
       return NextResponse.json({ error: "not found" }, { status: 404 })
     }
+
+    // Popula o cache de tenant (PERF-001): o proxy lê `tenant:slug:{slug}` /
+    // `tenant:domain:{domain}` a cada request de vitrine. TTL curto (60s) como
+    // rede de segurança contra staleness de status; as transições de status
+    // (suspend/activate/cancel) chamam invalidateTenant para refletir na hora.
+    // Best-effort: setTenant é fail-open (não derruba a resolução se o Redis cair).
+    await setTenant(
+      {
+        id: tenant.id,
+        slug: tenant.slug,
+        status: tenant.status,
+        customDomain: tenant.customDomain,
+      },
+      60,
+    )
 
     return NextResponse.json(tenant)
   } catch (error) {

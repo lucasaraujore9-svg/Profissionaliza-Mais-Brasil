@@ -16,6 +16,7 @@ import { isValidPhone, normalizePhone } from "@/lib/validation/phone"
 import { effectivePaymentType } from "@/lib/tenant/monthly-policy"
 import { tenantCheckoutMode } from "@/lib/tenant/checkout-mode"
 import { tenantPolo } from "@/lib/tenant/slug"
+import { isSellablePrice } from "@/lib/checkout/price-guard"
 
 const bodySchema = z.object({
   courseId: z.string().min(1),
@@ -148,7 +149,11 @@ export const POST = withRequestContext(
         },
       }),
       prisma.tenantCourse.findFirst({
-        where: { id: data.courseId, tenantId, isVisible: true },
+        // SAAS-004: a invariante "curso sem valor não vende" (price > 0) vale
+        // também no caminho de receita, não só nas listagens/detalhe da vitrine.
+        // Um TenantCourse com isVisible=true mas price=0 (estado inconsistente
+        // do admin, nunca exibido na vitrine) não pode gerar enrollment R$0.
+        where: { id: data.courseId, tenantId, isVisible: true, price: { gt: 0 } },
         include: {
           course: {
             select: {
@@ -226,6 +231,17 @@ export const POST = withRequestContext(
     const gateway: "MP" | "ASAAS" = mode
 
     const basePrice = Number(tenantCourse.price)
+
+    // SAAS-004: trava explícita do preço positivo no caminho de receita.
+    // Redundante com o `price: { gt: 0 }` da query (que já devolve 404), mas
+    // protege contra qualquer conversão de Decimal não-positiva e documenta a
+    // invariante no ponto onde o valor é cobrado.
+    if (!isSellablePrice(basePrice)) {
+      return NextResponse.json(
+        { error: "Curso sem valor para venda", code: "COURSE_NO_PRICE" },
+        { status: 400 },
+      )
+    }
 
     let discountAmount = 0
     let couponId: string | null = null

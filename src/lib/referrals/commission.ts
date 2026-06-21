@@ -5,6 +5,7 @@ import { createNotification } from "@/lib/notifications"
 import { contextLogger } from "@/lib/logger"
 import { parseReferralTiers, resolveTierPercent } from "@/lib/referrals/tiers"
 import { resolveCommissionRule } from "@/lib/referrals/rules"
+import { CLAWBACK_MARKER_PREFIX, isClawbackMarked } from "@/lib/referrals/clawback"
 
 const SETTINGS_ID = "default"
 const DEFAULT_PERCENT = 5
@@ -497,6 +498,75 @@ export async function cancelCommissionForTenantPayment(
     category: "referral",
     href: "/painel/indicacoes",
   })
+
+  return updated
+}
+
+/**
+ * SAAS-005 — refund PARCIAL de uma mensalidade.
+ *
+ * Diferente do refund total (cancelCommissionForTenantPayment), aqui NÃO
+ * cancelamos nem revertemos a comissão (evita over-clawback num estorno
+ * pequeno — ex.: R$10 numa fatura de R$200): a decisão do valor proporcional é
+ * do admin. Mas FREEZAMOS o saque: marcamos a comissão (qualquer status ativo:
+ * PENDING/AVAILABLE/PAID) com `[CLAWBACK_PENDING]`, que os gates de saque
+ * (requestPayout + processMonthlyPayouts) honram para BLOQUEAR novos payouts do
+ * indicador até o financeiro resolver. Sem isto, o indicador poderia sacar a
+ * comissão integral sobre uma mensalidade parcialmente estornada.
+ *
+ * Idempotente: não re-marca uma linha já marcada. No-op se a comissão não
+ * existe ou já está CANCELLED.
+ */
+export async function freezeCommissionForPartialRefund(
+  tenantPaymentId: string,
+  reason: string,
+): Promise<ReferralCommission | null> {
+  const commission = await prisma.referralCommission.findUnique({
+    where: { tenantPaymentId },
+    include: {
+      referrer: { select: { id: true, name: true } },
+      referred: { select: { id: true, name: true } },
+    },
+  })
+  if (!commission) return null
+  if (commission.status === "CANCELLED") return commission
+  if (isClawbackMarked(commission.cancelReason)) {
+    return commission // já congelada
+  }
+
+  const valorFmt = Number(commission.amount).toFixed(2).replace(".", ",")
+  const marker = `${CLAWBACK_MARKER_PREFIX} refund parcial — comissão R$ ${valorFmt} sob revisão — motivo: ${reason}`
+  const updated = await prisma.referralCommission.update({
+    where: { id: commission.id },
+    data: {
+      // status preservado (não cancela/reverte) — só congela o saque.
+      cancelReason: marker,
+      cancelledAt: new Date(),
+    },
+  })
+
+  contextLogger().error(
+    {
+      event: "audit.referrals.partial_refund_freeze",
+      commissionId: commission.id,
+      referrerTenantId: commission.referrerTenantId,
+      referredTenantId: commission.referredTenantId,
+      amount: Number(commission.amount),
+      status: commission.status,
+      reason,
+    },
+    "refund parcial congelou comissão de indicação — saques bloqueados até revisão manual",
+  )
+
+  await createNotification({
+    audience: "ROLE",
+    roleTarget: "SUPER_ADMIN",
+    level: "WARNING",
+    title: `⚠️ Refund parcial: revise a comissão de ${commission.referrer.name}`,
+    body: `A mensalidade de ${commission.referred.name} foi estornada parcialmente. A comissão ${commission.id} (R$ ${valorFmt}, ${commission.status}) ficou CONGELADA e os saques do indicador estão BLOQUEADOS até o ajuste manual. Resolva em /admin/indicacoes/comissoes.`,
+    category: "referral",
+    href: "/admin/indicacoes/comissoes",
+  }).catch(() => {})
 
   return updated
 }

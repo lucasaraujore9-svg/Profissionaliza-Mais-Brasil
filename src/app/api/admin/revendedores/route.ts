@@ -5,6 +5,7 @@ import { hash } from "bcryptjs"
 import { randomBytes } from "node:crypto"
 import { prisma } from "@/lib/prisma"
 import { requireAdminSession } from "@/lib/auth/admin-session"
+import { logAudit } from "@/lib/audit"
 import { tenantScopeWhere } from "@/lib/auth/scope"
 import {
   AsaasApiError,
@@ -425,6 +426,23 @@ export const POST = withRequestContext(
       updatedAt: new Date(),
     },
     select: { id: true, slug: true, name: true, status: true },
+  })
+
+  // SAAS-001: trilha de auditoria de criação de revenda (lifecycle de tenant).
+  await logAudit({
+    action: "tenant.create",
+    resource: "Tenant",
+    resourceId: tenant.id,
+    actorUserId: ctx.userId,
+    actorRole: ctx.role,
+    actorEmail: ctx.email,
+    tenantId: tenant.id,
+    payloadAfter: {
+      slug: tenant.slug,
+      name: tenant.name,
+      status: tenant.status,
+      planValue: data.planValue,
+    },
   })
 
   // H7-0: semeia o TenantPayment PENDING da 1ª mensalidade já no onboarding

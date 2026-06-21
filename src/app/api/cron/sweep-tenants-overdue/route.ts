@@ -4,6 +4,7 @@ import { blockTenantStudents } from "@/lib/auto-block"
 import { sendEmail } from "@/lib/email/resend"
 import { createNotification } from "@/lib/notifications"
 import { isCronAuthorized } from "@/lib/auth/bearer"
+import { invalidateTenantCache } from "@/lib/tenant/cache-invalidation"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { contextLogger } from "@/lib/logger"
 import { PMB_TENANT_SLUG } from "@/lib/pmb-config"
@@ -84,6 +85,8 @@ async function processOverdueTenants() {
         where: { id: tenant.id },
         data: { status: "SUSPENDED" },
       })
+      // PERF-001: invalida o cache p/ a vitrine refletir o bloqueio na hora.
+      await invalidateTenantCache(tenant.id)
       result.suspended += 1
       log.warn(
         { event: "sweep_tenants.suspended", tenantId: tenant.id, ageDays, billingMode: tenant.billingMode },
