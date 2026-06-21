@@ -501,3 +501,13 @@ PORTÃO: ✅ VERDE (build delegado ao CI)
     comissão no refund parcial + gate de saque ampliado p/ qualquer status + logAudit; tsc cobre tipos.
 RESULT tsc=0 lint=0 test=0 build=CI
 PORTÃO: ✅ VERDE (build delegado ao CI)
+================ PORTÃO 2026-06-20 (rodada 3) DB-004-unique-parcial-tenant-null ================
+--- typecheck (tsc --noEmit) --- OK (0 erros)
+--- lint (eslint) --- 0 errors, 2 warnings pré-existentes
+--- test (vitest run) --- 22 files / 148 tests passed
+--- build (next build) --- NÃO EXECUTÁVEL NESTE SANDBOX (delegado ao CI). Mudança = APENAS SQL de
+    migration aditiva/idempotente (4 índices parciais WHERE tenant_id IS NULL). NÃO rodada contra
+    DB nenhum (sem DATABASE_URL local). O runner apply-pending-migrations.mjs aplica no deploy
+    (build do CI roda com SKIP_PENDING_MIGRATIONS=1, então não toca o banco). Sem mudança de TS.
+RESULT tsc=0 lint=0 test=0 build=CI
+PORTÃO: ✅ VERDE (build delegado ao CI; migration aplicada só no deploy)
