@@ -25,12 +25,19 @@ export function PreLiveVideo({ src }: { src: string }) {
   const [docked, setDocked] = useState(false)
   const [ended, setEnded] = useState(false)
 
-  // Garante o play imediato (mudo) e tenta ligar o som em seguida.
+  // Play imediato (mudo). So tentamos LIGAR o som em telas de ponteiro fino
+  // (desktop): no celular, tentar desmutar dispara o bloqueio de autoplay e o
+  // video nao chega a tocar. No touch fica mudo (e toca) e o botao "Ativar som"
+  // liga o audio no primeiro toque.
   useEffect(() => {
     const v = videoRef.current
     if (!v) return
     v.muted = true
     void v.play().catch(() => {})
+    const coarse =
+      typeof window !== "undefined" &&
+      window.matchMedia("(pointer: coarse)").matches
+    if (coarse) return
     const tryUnmute = async () => {
       try {
         v.muted = false
@@ -46,16 +53,39 @@ export function PreLiveVideo({ src }: { src: string }) {
     void tryUnmute()
   }, [])
 
-  // Dock/undock conforme o quadro entra/sai da viewport (mini-player persistente).
+  // Dock/undock por posicao de scroll, com histerese (evita o jitter do
+  // IntersectionObserver num video alto). No MOBILE vira mini-player ja na
+  // primeira rolagem; no desktop, quando o video sai da viewport. O placeholder
+  // segura o espaco do quadro, entao nao ha pulo de layout.
   useEffect(() => {
     const holder = holderRef.current
-    if (!holder || typeof IntersectionObserver === "undefined") return
-    const obs = new IntersectionObserver(
-      ([entry]) => setDocked(!entry.isIntersecting),
-      { threshold: 0.4 },
-    )
-    obs.observe(holder)
-    return () => obs.disconnect()
+    if (!holder) return
+    let raf = 0
+    const evaluate = () => {
+      raf = 0
+      const mobile = window.innerWidth < 1024
+      if (mobile) {
+        const y = window.scrollY
+        setDocked((prev) => (prev ? y > 8 : y > 24))
+      } else {
+        const r = holder.getBoundingClientRect()
+        const vh = window.innerHeight
+        setDocked((prev) =>
+          prev ? r.bottom < vh * 0.8 : r.bottom < vh * 0.4,
+        )
+      }
+    }
+    const onScroll = () => {
+      if (!raf) raf = requestAnimationFrame(evaluate)
+    }
+    evaluate()
+    window.addEventListener("scroll", onScroll, { passive: true })
+    window.addEventListener("resize", onScroll)
+    return () => {
+      window.removeEventListener("scroll", onScroll)
+      window.removeEventListener("resize", onScroll)
+      if (raf) cancelAnimationFrame(raf)
+    }
   }, [])
 
   function toggleMute() {
