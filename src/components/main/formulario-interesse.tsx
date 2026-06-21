@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, type FormEvent } from "react"
+import { useRouter } from "next/navigation"
 import { ArrowRight, CheckCircle2, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -29,6 +30,7 @@ export function FormularioInteresse({
 }: {
   initialRef?: string
 }) {
+  const router = useRouter()
   const [state, setState] = useState<SubmitState>({ kind: "idle" })
   const [errors, setErrors] = useState<FormErrors>({})
 
@@ -74,7 +76,11 @@ export function FormularioInteresse({
       }
 
       form.reset()
+      // Lead capturado: leva o interessado para a pagina pre-live (video +
+      // proximos passos). Mantemos o estado "success" para o caso raro de a
+      // navegacao demorar/falhar — assim o usuario ainda ve a confirmacao.
       setState({ kind: "success" })
+      router.push("/seja-revendedor/pre-live")
     } catch {
       setState({
         kind: "error",

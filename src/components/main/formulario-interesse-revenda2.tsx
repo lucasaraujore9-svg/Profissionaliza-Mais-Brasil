@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, type FormEvent, type ChangeEvent } from "react"
+import { useRouter } from "next/navigation"
 import { ArrowRight, CheckCircle2, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -62,6 +63,7 @@ export function FormularioInteresseRevenda2({
 }: {
   initialRef?: string
 }) {
+  const router = useRouter()
   const [state, setState] = useState<SubmitState>({ kind: "idle" })
   const [errors, setErrors] = useState<FormErrors>({})
   const [cpf, setCpf] = useState("")
@@ -146,7 +148,11 @@ export function FormularioInteresseRevenda2({
       setSlug("")
       setSlugTouched(false)
       setPlano(PLANOS[0].value)
+      // Lead capturado: leva o interessado para a pagina pre-live (video +
+      // proximos passos). Mantemos "success" como fallback caso a navegacao
+      // demore/falhe.
       setState({ kind: "success" })
+      router.push("/seja-revendedor/pre-live")
     } catch {
       setState({
         kind: "error",

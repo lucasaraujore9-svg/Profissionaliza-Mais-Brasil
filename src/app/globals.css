@@ -2,7 +2,34 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
+/*
+ * Tira a documentacao (markdown) da deteccao automatica de classes do Tailwind.
+ * Os relatorios em docs/ e audit/ contem trechos de codigo ilustrativos (ex.:
+ * `border-[var(…)]`) que o scanner do Tailwind v4 capturava como classe e
+ * gerava CSS invalido (`border-color: var(…)`) — quebrando TODAS as paginas no
+ * dev (Turbopack trata como erro fatal de parse). Classes reais so vivem em
+ * src/, nunca em .md, entao excluir markdown e seguro e duravel.
+ */
+@source not "../../**/*.md";
+
 @custom-variant dark (&:is(.dark *));
+
+/*
+ * Anel de luz girando da pagina pre-live. Anima o ANGULO do conic-gradient
+ * (via @property) em vez de rotacionar o elemento com transform: rotate — um
+ * retangulo alto (9:16) girando alarga a caixa para ~550px e estourava o
+ * viewport mobile (overflow horizontal). Animar o gradiente nao mexe no layout.
+ */
+@property --pl-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+@keyframes pl-spin {
+  to {
+    --pl-angle: 360deg;
+  }
+}
 
 @theme inline {
   --color-background: var(--background);
