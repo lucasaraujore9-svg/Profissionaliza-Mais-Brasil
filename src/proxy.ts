@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { isVitrinePath } from "@/lib/tenant/vitrine-paths"
 
 // ============================================================
 // Arquitetura de dominios (multi-tenant)
@@ -49,22 +50,6 @@ const RESERVED_SUBDOMAINS = new Set([
   "test",
 ])
 
-// Rotas que devem ser reescritas para /loja em subdomínios de tenant.
-// Tudo fora dessa lista (ex: /admin, /painel, /login, /sobre)
-// passa direto e usa as rotas do site principal.
-const VITRINE_PATH_PREFIXES = ["/curso", "/checkout", "/confirmacao", "/contato", "/pagar"]
-
-function isVitrinePath(pathname: string): boolean {
-  if (pathname === "/") return true
-  // "/cursos" (catalogo "todos os cursos") é servido pela vitrine (/loja/cursos),
-  // com cabeçalho/rodapé e catálogo/preços da unidade. O detalhe continua em
-  // "/curso/:slug" (singular, já coberto por VITRINE_PATH_PREFIXES); por isso
-  // casamos "/cursos" exato e NÃO o prefixo "/cursos/" (evita 404 em /loja/cursos/x).
-  if (pathname === "/cursos") return true
-  return VITRINE_PATH_PREFIXES.some(
-    (p) => pathname === p || pathname.startsWith(`${p}/`)
-  )
-}
 
 // Paths servidos DIRETO no apex da vitrine (livrecursos.com.br / www), sem
 // rewrite para /livrecursos: paginas de captacao de revendedor + APIs publicas
