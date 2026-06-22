@@ -3,6 +3,13 @@
 import { useEffect, useMemo, useState } from "react"
 import { Info, Loader2, Wand2, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import {
+  buildBulkItems,
+  draftFromRow,
+  formatPrice,
+  parsePrice,
+  type RowDraft,
+} from "@/lib/courses/bulk-edit"
 
 interface BulkRow {
   id: string
@@ -15,13 +22,6 @@ interface BulkRow {
   defaultDescription: string | null
 }
 
-/** Estado editável de cada linha (strings para os inputs). */
-interface RowDraft {
-  price: string
-  parcelas: string
-  description: string
-}
-
 interface CourseBulkEditProps {
   open: boolean
   onClose: () => void
@@ -32,26 +32,6 @@ interface CourseBulkEditProps {
   subtitle?: string
   /** Texto do aviso sobre parcelas / escopo das alterações. */
   scopeNote?: React.ReactNode
-}
-
-function formatPrice(value: number): string {
-  return value.toLocaleString("pt-BR", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })
-}
-
-/** Converte o texto do input (formato BR) para número. NaN se inválido. */
-function parsePrice(input: string): number {
-  return parseFloat(input.replace(/\./g, "").replace(",", "."))
-}
-
-function draftFromRow(row: BulkRow): RowDraft {
-  return {
-    price: formatPrice(row.price),
-    parcelas: row.customParcelas != null ? String(row.customParcelas) : "",
-    description: row.customDescription ?? "",
-  }
 }
 
 export function CourseBulkEdit({
@@ -159,44 +139,13 @@ export function CourseBulkEdit({
     setSaving(true)
     setError(null)
 
-    const items: {
-      id: string
-      price?: number
-      customParcelas?: number | null
-      customDescription?: string | null
-    }[] = []
-
-    for (const row of rows) {
-      if (!changedIds.has(row.id)) continue
-      const d = drafts[row.id]
-
-      const numericPrice = parsePrice(d.price)
-      if (Number.isNaN(numericPrice) || numericPrice <= 0) {
-        setError(`Preço inválido em "${row.title}"`)
-        setSaving(false)
-        return
-      }
-
-      let parcelasValue: number | null = null
-      if (d.parcelas.trim()) {
-        const n = parseInt(d.parcelas, 10)
-        if (Number.isNaN(n) || n < 1 || n > 24) {
-          setError(
-            `Parcelas em "${row.title}": use um número entre 1 e 24 (ou vazio)`,
-          )
-          setSaving(false)
-          return
-        }
-        parcelasValue = n
-      }
-
-      items.push({
-        id: row.id,
-        price: numericPrice,
-        customParcelas: parcelasValue,
-        customDescription: d.description.trim() || null,
-      })
+    const built = buildBulkItems(rows, drafts, changedIds)
+    if (!built.ok) {
+      setError(built.error)
+      setSaving(false)
+      return
     }
+    const items = built.items
 
     try {
       const res = await fetch(endpoint, {
