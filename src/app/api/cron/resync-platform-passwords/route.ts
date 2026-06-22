@@ -99,6 +99,15 @@ async function resync(opts: {
     const current = decode(s.plataformaAlunoSenha)
     if (current === real) {
       tally.unchanged++
+      if (opts.reveal) {
+        details.push({
+          eaId: s.plataformaAlunoId,
+          nome: s.nome,
+          status: "unchanged",
+          old: current ?? undefined,
+          new: real,
+        })
+      }
       return
     }
 
