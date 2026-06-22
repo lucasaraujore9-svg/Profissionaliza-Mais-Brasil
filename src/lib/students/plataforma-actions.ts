@@ -195,6 +195,36 @@ async function isPersonBlockedInAnotherTenant(student: {
 }
 
 /**
+ * Resolve a senha autoritativa do aluno na plataforma de aulas relendo de
+ * `usuarios/listar` (fonte da verdade), porque a resposta de `usuarios/novo`
+ * nem sempre traz a senha real de login.
+ *
+ * Nunca lanca: se o listar falhar (rede/API) ou nao trouxer senha, devolve a
+ * `fallbackSenha` (a do cadastro) — melhor um retrato possivelmente defasado do
+ * que quebrar a matricula em andamento.
+ */
+export async function resolveAuthoritativePlatformPassword(
+  plataformaAlunoId: number,
+  fallbackSenha: string,
+): Promise<string> {
+  try {
+    const aluno = await buscarAluno({ id: plataformaAlunoId })
+    const senha = aluno?.senha != null ? String(aluno.senha).trim() : ""
+    if (senha) return senha
+    contextLogger().warn(
+      { event: "plataforma.listar_senha_vazia", plataformaAlunoId },
+      "usuarios/listar nao retornou senha — usando a senha do cadastro como fallback",
+    )
+  } catch (err) {
+    contextLogger().warn(
+      { err, event: "plataforma.listar_senha_failed", plataformaAlunoId },
+      "falha ao reler senha autoritativa da plataforma — usando a senha do cadastro como fallback",
+    )
+  }
+  return fallbackSenha
+}
+
+/**
  * Garante que o aluno existe na plataforma. Se ja tem plataforma_aluno_id valido, retorna
  * imediatamente. Caso contrario chama criarAluno e persiste plataforma_aluno_id +
  * ea_aluno_senha + status ATIVO + apostila LIBERADA + polo + vendedor.
@@ -320,7 +350,16 @@ export async function ensureStudentOnPlatform(
   })
 
   const platformLogin = String(result.login)
-  const plataformaSenha = String(result.senha)
+  const novoSenha = String(result.senha)
+
+  // A resposta do `usuarios/novo` nem sempre traz a senha REAL de login (a EA
+  // pode gerar/usar uma senha diferente da devolvida no cadastro). A fonte da
+  // verdade é `usuarios/listar`, então relemos de lá para guardar/exibir o valor
+  // correto — com fallback seguro para a senha do cadastro se o listar falhar.
+  const plataformaSenha = await resolveAuthoritativePlatformPassword(
+    Number.parseInt(platformLogin, 10),
+    novoSenha,
+  )
 
   await prisma.student.update({
     where: { id: student.id },
