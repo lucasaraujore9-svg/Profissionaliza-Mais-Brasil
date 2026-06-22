@@ -23,8 +23,10 @@ export const dynamic = "force-dynamic"
  * Query params:
  *   ids=4373,4374   limita a alunos específicos (ea_aluno_id)
  *   write=1         grava (default: dry-run, não altera nada)
- *   reveal=1        inclui as senhas em texto plano no retorno (verificação)
  *   limit=1000      teto de alunos varridos quando ids não é passado
+ *
+ * O retorno nunca inclui senha em texto plano — só contagens e identificação
+ * (ea_aluno_id + nome + status) dos alunos cujo snapshot diverge da EA.
  */
 function parseExternalId(value: string | null): number | null {
   if (!value || value.startsWith("pending")) return null
@@ -45,14 +47,11 @@ interface Outcome {
   eaId: string
   nome: string
   status: "updated" | "unchanged" | "skipped" | "failed"
-  old?: string
-  new?: string
 }
 
 async function resync(opts: {
   ids: string[]
   write: boolean
-  reveal: boolean
   limit: number
 }) {
   const students = await prisma.student.findMany({
@@ -99,15 +98,6 @@ async function resync(opts: {
     const current = decode(s.plataformaAlunoSenha)
     if (current === real) {
       tally.unchanged++
-      if (opts.reveal) {
-        details.push({
-          eaId: s.plataformaAlunoId,
-          nome: s.nome,
-          status: "unchanged",
-          old: current ?? undefined,
-          new: real,
-        })
-      }
       return
     }
 
@@ -118,12 +108,9 @@ async function resync(opts: {
       })
     }
     tally.updated++
-    details.push({
-      eaId: s.plataformaAlunoId,
-      nome: s.nome,
-      status: "updated",
-      ...(opts.reveal ? { old: current ?? undefined, new: real } : {}),
-    })
+    // Nunca expomos a senha em texto plano no retorno (fica em
+    // net._http_response, inspecionável) — só identificação + status.
+    details.push({ eaId: s.plataformaAlunoId, nome: s.nome, status: "updated" })
   }
 
   for (let i = 0; i < students.length; i += CONCURRENCY) {
@@ -147,10 +134,9 @@ export async function POST(request: Request) {
     .map((s) => s.trim())
     .filter(Boolean)
   const write = url.searchParams.get("write") === "1"
-  const reveal = url.searchParams.get("reveal") === "1"
   const limit = Math.min(Number(url.searchParams.get("limit") ?? 1000) || 1000, 5000)
 
-  const result = await resync({ ids, write, reveal, limit })
+  const result = await resync({ ids, write, limit })
   return NextResponse.json({ data: result })
 }
 
