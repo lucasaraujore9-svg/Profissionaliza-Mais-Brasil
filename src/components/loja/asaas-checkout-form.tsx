@@ -64,6 +64,7 @@ type Status =
   | { kind: "boleto"; url: string; digitableLine: string | null }
   | { kind: "approved" }
   | { kind: "declined"; message: string }
+  | { kind: "needs_login"; message: string; loginUrl: string }
 
 type FieldErrors = Partial<Record<keyof FormState, string>>
 
@@ -157,6 +158,17 @@ export function AsaasCheckoutForm({
         }
         setFieldErrors(mapped)
         setStatus({ kind: "error", message: "Revise os campos destacados." })
+      } else if (payload.code === "CPF_ALREADY_REGISTERED") {
+        // CPF já tem cadastro com acesso: pede login em vez de criar nova
+        // compra como convidado.
+        setStatus({
+          kind: "needs_login",
+          message:
+            payload.error ??
+            "Este CPF já possui cadastro. Faça login para concluir a compra.",
+          loginUrl:
+            typeof payload.loginUrl === "string" ? payload.loginUrl : "/login",
+        })
       } else {
         setStatus({
           kind: "error",
@@ -386,6 +398,30 @@ export function AsaasCheckoutForm({
             <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
             <span>{status.message}</span>
           </div>
+        </div>
+      )}
+
+      {status.kind === "needs_login" && (
+        <div className="space-y-3">
+          <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>{status.message}</span>
+          </div>
+          <Button
+            type="button"
+            onClick={() => {
+              // Volta para esta página após o login (login aceita CPF ou email
+              // e tem "Esqueci minha senha").
+              const callback = encodeURIComponent(
+                window.location.pathname + window.location.search,
+              )
+              window.location.href = `${status.loginUrl}?callbackUrl=${callback}`
+            }}
+            className="w-full bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)]"
+          >
+            <Lock className="mr-2 h-4 w-4" />
+            Fazer login para continuar
+          </Button>
         </div>
       )}
 

@@ -1,6 +1,7 @@
 "use client"
 
-import { CheckCircle2, Clock, XCircle } from "lucide-react"
+import { useState } from "react"
+import { Check, CheckCircle2, Clock, Copy, ExternalLink, XCircle } from "lucide-react"
 import type { StudentData } from "./types"
 
 function brl(value: number): string {
@@ -59,6 +60,52 @@ function statusIcon(status: string) {
   return XCircle
 }
 
+/**
+ * Botão para copiar/abrir o link de checkout de uma cobrança pendente, para que
+ * admin (sistema mãe) ou revenda reenviem ao aluno (venda direta aguardando
+ * pagamento ou carrinho abandonado).
+ */
+function CheckoutLink({ url }: { url: string }) {
+  const [copied, setCopied] = useState(false)
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(url)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      setCopied(false)
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <button
+        type="button"
+        onClick={copy}
+        title={url}
+        className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium ring-1 transition ${
+          copied
+            ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
+            : "bg-white text-[var(--color-pmb-green-900)] ring-gray-200 hover:bg-gray-50"
+        }`}
+      >
+        {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+        {copied ? "Copiado" : "Copiar link"}
+      </button>
+      <a
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        title="Abrir checkout"
+        className="inline-flex items-center rounded-md bg-white px-1.5 py-1 text-gray-500 ring-1 ring-gray-200 transition hover:bg-gray-50 hover:text-[var(--color-pmb-green-900)]"
+      >
+        <ExternalLink className="h-3 w-3" />
+      </a>
+    </div>
+  )
+}
+
 export function FinancialTab({ student }: { student: StudentData }) {
   return (
     <div className="space-y-6">
@@ -84,6 +131,7 @@ export function FinancialTab({ student }: { student: StudentData }) {
                   <th className="px-4 py-2 font-semibold">Valor</th>
                   <th className="px-4 py-2 font-semibold">Status</th>
                   <th className="px-4 py-2 font-semibold">Início</th>
+                  <th className="px-4 py-2 font-semibold">Checkout</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -119,6 +167,13 @@ export function FinancialTab({ student }: { student: StudentData }) {
                       </td>
                       <td className="px-4 py-3 text-xs text-gray-600">
                         {formatDate(e.startedAt ?? e.createdAt)}
+                      </td>
+                      <td className="px-4 py-3">
+                        {e.checkoutUrl ? (
+                          <CheckoutLink url={e.checkoutUrl} />
+                        ) : (
+                          <span className="text-xs text-gray-400">—</span>
+                        )}
                       </td>
                     </tr>
                   )

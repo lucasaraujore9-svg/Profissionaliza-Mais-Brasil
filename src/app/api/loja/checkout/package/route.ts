@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { upsertStudent, StudentEmailConflictError } from "@/lib/students/upsert"
+import { cpfHasRegisteredLogin } from "@/lib/students/cpf-already-registered"
 import { provisionStudentAccess } from "@/lib/students/access"
 import { tryConsumeCoupon, releaseCoupon } from "@/lib/coupons/consume"
 import { applyCouponDiscount } from "@/lib/coupons/discount"
@@ -167,6 +168,21 @@ export const POST = withRequestContext(
 
       const basePrice = pkg.price
       const primaryCourse = pkg.courses[0]
+
+      // Gate de CPF — mesma regra do checkout avulso: CPF com login já definido
+      // nesta loja não compra como convidado; precisa logar (recompra
+      // autenticada usa /api/aluno/comprar). Antes do consumo de cupom para não
+      // reservar um uso à toa. Ver cpf-already-registered.ts.
+      if (await cpfHasRegisteredLogin(tenantId, data.cpf)) {
+        return NextResponse.json(
+          {
+            error: "Este CPF já possui cadastro. Faça login para concluir a compra.",
+            code: "CPF_ALREADY_REGISTERED",
+            loginUrl: "/login",
+          },
+          { status: 409 },
+        )
+      }
 
       let discountAmount = 0
       let couponId: string | null = null

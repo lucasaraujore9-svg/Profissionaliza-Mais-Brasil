@@ -1,7 +1,6 @@
 import Link from "next/link"
 import { OrderSummary } from "@/components/loja/order-summary"
-import { MpCheckoutForm } from "@/components/loja/mp-checkout-form"
-import { AsaasCheckoutForm } from "@/components/loja/asaas-checkout-form"
+import { CheckoutPanel } from "@/components/loja/checkout-panel"
 import { CheckoutInquiryForm } from "@/components/loja/checkout-inquiry-form"
 import { getCurrentTenant } from "@/lib/tenant/current"
 import { applyCouponDiscount } from "@/lib/coupons/discount"
@@ -130,6 +129,13 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
       : null
     const discountAmount = validatedCoupon?.discountAmount ?? 0
     const finalPrice = validatedCoupon?.finalPrice ?? pkg.price
+    const pkgMpPublicKey = tenantGateway?.mpPublicKey ?? null
+    const pkgPanelForm =
+      checkoutMode === "ASAAS"
+        ? ({ kind: "asaas", initPath: "/api/loja/checkout/package" } as const)
+        : checkoutMode === "MP" && pkgMpPublicKey
+          ? ({ kind: "mp", publicKey: pkgMpPublicKey, initPath: "/api/loja/checkout/package" } as const)
+          : null
 
     return (
       <section className="bg-[#FAFAFA] py-10 md:py-16">
@@ -143,45 +149,49 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
             </p>
           </header>
 
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_380px] lg:gap-8">
-            <div className="space-y-6">
-              {checkoutMode === "ASAAS" ? (
-                <AsaasCheckoutForm
-                  packageId={pkg.id}
-                  couponCode={validatedCoupon?.code ?? null}
-                  initPath="/api/loja/checkout/package"
-                />
-              ) : checkoutMode === "MP" && tenantGateway?.mpPublicKey ? (
-                <MpCheckoutForm
-                  publicKey={tenantGateway.mpPublicKey}
-                  packageId={pkg.id}
-                  couponCode={validatedCoupon?.code ?? null}
-                  initPath="/api/loja/checkout/package"
-                />
-              ) : (
+          {pkgPanelForm ? (
+            <CheckoutPanel
+              target={{ packageId: pkg.id }}
+              couponScope={{ kind: "tenant", tenantId: tenant.id }}
+              basePrice={pkg.price}
+              initialCoupon={validatedCoupon}
+              form={pkgPanelForm}
+              summary={{
+                courseName: pkg.name,
+                courseCategory: `Pacote • ${pkg.courses.length} ${pkg.courses.length === 1 ? "curso" : "cursos"}`,
+                courseHours: null,
+                courseImageUrl: null,
+                basePrice: pkg.price,
+                parcelasSugeridas: null,
+                paymentType: "ONE_TIME",
+              }}
+            />
+          ) : (
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_380px] lg:gap-8">
+              <div className="space-y-6">
                 <CheckoutInquiryForm
                   courseId={pkg.courses[0]?.id ?? ""}
                   courseName={`Pacote: ${pkg.name}`}
                   escolaName={tenant.name}
                 />
-              )}
-            </div>
+              </div>
 
-            <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start">
-              <OrderSummary
-                courseName={pkg.name}
-                courseCategory={`Pacote • ${pkg.courses.length} ${pkg.courses.length === 1 ? "curso" : "cursos"}`}
-                courseHours={null}
-                courseImageUrl={null}
-                basePrice={pkg.price}
-                discountAmount={discountAmount}
-                finalPrice={finalPrice}
-                couponCode={validatedCoupon?.code ?? null}
-                parcelasSugeridas={null}
-                paymentType="ONE_TIME"
-              />
-            </aside>
-          </div>
+              <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start">
+                <OrderSummary
+                  courseName={pkg.name}
+                  courseCategory={`Pacote • ${pkg.courses.length} ${pkg.courses.length === 1 ? "curso" : "cursos"}`}
+                  courseHours={null}
+                  courseImageUrl={null}
+                  basePrice={pkg.price}
+                  discountAmount={discountAmount}
+                  finalPrice={finalPrice}
+                  couponCode={validatedCoupon?.code ?? null}
+                  parcelasSugeridas={null}
+                  paymentType="ONE_TIME"
+                />
+              </aside>
+            </div>
+          )}
         </div>
       </section>
     )
@@ -292,6 +302,13 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
 
   const discountAmount = validatedCoupon?.discountAmount ?? 0
   const finalPrice = validatedCoupon?.finalPrice ?? basePrice
+  const courseMpPublicKey = tenantGateway?.mpPublicKey ?? null
+  const coursePanelForm =
+    checkoutMode === "ASAAS"
+      ? ({ kind: "asaas" } as const)
+      : checkoutMode === "MP" && courseMpPublicKey
+        ? ({ kind: "mp", publicKey: courseMpPublicKey } as const)
+        : null
 
   return (
     <section className="bg-[#FAFAFA] py-10 md:py-16">
@@ -312,53 +329,66 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
           )}
         </header>
 
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_380px] lg:gap-8">
-          <div className="space-y-6">
-            {checkoutMode === "ASAAS" ? (
-              <AsaasCheckoutForm
-                courseId={tenantCourse.id}
-                couponCode={validatedCoupon?.code ?? null}
-              />
-            ) : checkoutMode === "MP" && tenantGateway?.mpPublicKey ? (
-              <MpCheckoutForm
-                publicKey={tenantGateway.mpPublicKey}
-                courseId={tenantCourse.id}
-                couponCode={validatedCoupon?.code ?? null}
-              />
-            ) : (
-              // Unidade sem gateway próprio configurado: NUNCA cai no checkout do
-              // sistema mãe. Captura o interesse (e-mail p/ a revenda + lead).
+        {coursePanelForm ? (
+          <CheckoutPanel
+            target={{ courseId: tenantCourse.id }}
+            couponScope={{ kind: "tenant", tenantId: tenant.id }}
+            basePrice={basePrice}
+            initialCoupon={validatedCoupon}
+            form={coursePanelForm}
+            summary={{
+              courseName: tenantCourse.course.nome,
+              courseCategory:
+                tenantCourse.course.categoriaLoja ??
+                tenantCourse.course.categoriaInterna,
+              courseHours: tenantCourse.course.cargaHoraria,
+              courseImageUrl:
+                tenantCourse.customCapaUrl ??
+                tenantCourse.course.capaOverride ??
+                tenantCourse.course.capaImageUrl,
+              basePrice,
+              parcelasSugeridas: effectiveParcelas,
+              paymentType: effectiveType,
+              monthlyMonths:
+                effectiveParcelas ?? tenantCourse.course.monthlyMonthsMain,
+            }}
+          />
+        ) : (
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_380px] lg:gap-8">
+            <div className="space-y-6">
+              {/* Unidade sem gateway próprio configurado: NUNCA cai no checkout do
+                  sistema mãe. Captura o interesse (e-mail p/ a revenda + lead). */}
               <CheckoutInquiryForm
                 courseId={tenantCourse.id}
                 courseName={tenantCourse.course.nome}
                 escolaName={tenant.name}
               />
-            )}
-          </div>
+            </div>
 
-          <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start">
-            <OrderSummary
-              courseName={tenantCourse.course.nome}
-              courseCategory={
-                tenantCourse.course.categoriaLoja ??
-                tenantCourse.course.categoriaInterna
-              }
-              courseHours={tenantCourse.course.cargaHoraria}
-              courseImageUrl={
-                tenantCourse.customCapaUrl ??
-                tenantCourse.course.capaOverride ??
-                tenantCourse.course.capaImageUrl
-              }
-              basePrice={basePrice}
-              discountAmount={discountAmount}
-              finalPrice={finalPrice}
-              couponCode={validatedCoupon?.code ?? null}
-              parcelasSugeridas={effectiveParcelas}
-              paymentType={effectiveType}
-              monthlyMonths={effectiveParcelas ?? tenantCourse.course.monthlyMonthsMain}
-            />
-          </aside>
-        </div>
+            <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start">
+              <OrderSummary
+                courseName={tenantCourse.course.nome}
+                courseCategory={
+                  tenantCourse.course.categoriaLoja ??
+                  tenantCourse.course.categoriaInterna
+                }
+                courseHours={tenantCourse.course.cargaHoraria}
+                courseImageUrl={
+                  tenantCourse.customCapaUrl ??
+                  tenantCourse.course.capaOverride ??
+                  tenantCourse.course.capaImageUrl
+                }
+                basePrice={basePrice}
+                discountAmount={discountAmount}
+                finalPrice={finalPrice}
+                couponCode={validatedCoupon?.code ?? null}
+                parcelasSugeridas={effectiveParcelas}
+                paymentType={effectiveType}
+                monthlyMonths={effectiveParcelas ?? tenantCourse.course.monthlyMonthsMain}
+              />
+            </aside>
+          </div>
+        )}
       </div>
     </section>
   )

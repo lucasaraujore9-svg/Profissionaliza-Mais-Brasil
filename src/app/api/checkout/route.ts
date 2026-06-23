@@ -27,6 +27,7 @@ import {
 import { getSystemSettings } from "@/lib/system-settings"
 import { swallow } from "@/lib/errors"
 import { upsertStudent, StudentEmailConflictError } from "@/lib/students/upsert"
+import { cpfHasRegisteredLogin } from "@/lib/students/cpf-already-registered"
 import { provisionStudentAccess } from "@/lib/students/access"
 import { contextLogger } from "@/lib/logger"
 import { withRequestContext } from "@/lib/observability/with-request-context"
@@ -241,6 +242,22 @@ export const POST = withRequestContext(
     }
 
     const pmbTenant = await getOrCreatePmbTenant()
+
+    // Gate de CPF: se este CPF já tem aluno com acesso ao painel /aluno nesta
+    // vitrine, o checkout como convidado é bloqueado — o aluno deve logar para
+    // concluir (a recompra autenticada passa por /api/aluno/comprar). Não conta
+    // aluno sem senha (checkout abandonado antes do pagamento), senão recompras
+    // de quem nunca pagou ficariam presas. Ver cpf-already-registered.ts.
+    if (await cpfHasRegisteredLogin(pmbTenant.id, data.cpf)) {
+      return NextResponse.json(
+        {
+          error: "Este CPF já possui cadastro. Faça login para concluir a compra.",
+          code: "CPF_ALREADY_REGISTERED",
+          loginUrl: "/login",
+        },
+        { status: 409 },
+      )
+    }
 
     const student = await upsertStudent({
       tenantId: pmbTenant.id,

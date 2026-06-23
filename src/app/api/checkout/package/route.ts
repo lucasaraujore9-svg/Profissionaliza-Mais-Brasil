@@ -23,6 +23,7 @@ import {
 import { getSystemSettings } from "@/lib/system-settings"
 import { swallow } from "@/lib/errors"
 import { upsertStudent, StudentEmailConflictError } from "@/lib/students/upsert"
+import { cpfHasRegisteredLogin } from "@/lib/students/cpf-already-registered"
 import { provisionStudentAccess } from "@/lib/students/access"
 import { contextLogger } from "@/lib/logger"
 import { withRequestContext } from "@/lib/observability/with-request-context"
@@ -168,6 +169,20 @@ export const POST = withRequestContext(
       const basePrice = pkg.price
       const primaryCourse = pkg.courses[0]
       const pmbTenant = await getOrCreatePmbTenant()
+
+      // Gate de CPF — mesma regra do checkout avulso: CPF com login já definido
+      // nesta vitrine não compra como convidado; precisa logar. Ver
+      // cpf-already-registered.ts.
+      if (await cpfHasRegisteredLogin(pmbTenant.id, data.cpf)) {
+        return NextResponse.json(
+          {
+            error: "Este CPF já possui cadastro. Faça login para concluir a compra.",
+            code: "CPF_ALREADY_REGISTERED",
+            loginUrl: "/login",
+          },
+          { status: 409 },
+        )
+      }
 
       const student = await upsertStudent({
         tenantId: pmbTenant.id,

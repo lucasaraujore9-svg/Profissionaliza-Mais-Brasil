@@ -6,6 +6,7 @@ import {
   deriveStudentDisplayStatus,
   countEnrollmentStatuses,
 } from "@/lib/students/display-status"
+import { buildEnrollmentCheckoutUrl } from "@/lib/students/checkout-link"
 
 /**
  * Carrega o aluno completo + matriculas + pagamentos + notas + notificacoes
@@ -24,7 +25,7 @@ export async function loadStudentDetail(args: {
   const student = await prisma.student.findFirst({
     where,
     include: {
-      tenant: { select: { name: true, slug: true } },
+      tenant: { select: { name: true, slug: true, customDomain: true } },
       enrollments: {
         orderBy: { createdAt: "desc" },
         include: {
@@ -117,6 +118,16 @@ export async function loadStudentDetail(args: {
       installmentsTotal: e.installmentsTotal,
       installmentsPaid: e.installmentsPaid,
       asaasInvoiceUrl: e.asaasInvoiceUrl,
+      // Link para admin/revenda recuperarem o checkout de uma cobranca pendente
+      // (venda direta aguardando pagamento ou carrinho abandonado).
+      checkoutUrl: buildEnrollmentCheckoutUrl({
+        status: e.status,
+        enrollmentId: e.id,
+        gateway: e.gateway,
+        asaasInvoiceUrl: e.asaasInvoiceUrl,
+        tenantSlug: student.tenant.slug,
+        tenantCustomDomain: student.tenant.customDomain,
+      }),
       startedAt: e.startedAt?.toISOString() ?? null,
       createdAt: e.createdAt.toISOString(),
     })),

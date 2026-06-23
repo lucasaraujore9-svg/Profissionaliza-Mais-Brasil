@@ -1,9 +1,9 @@
 import Link from "next/link"
 import { headers } from "next/headers"
 import { OrderSummary } from "@/components/loja/order-summary"
-import { PmbCheckoutForm } from "@/components/loja/pmb-checkout-form"
-import { MpCheckoutForm } from "@/components/loja/mp-checkout-form"
+import { CheckoutPanel } from "@/components/loja/checkout-panel"
 import { prisma } from "@/lib/prisma"
+import { applyCouponDiscount } from "@/lib/coupons/discount"
 import { getSystemSettings } from "@/lib/system-settings"
 import { pmbMpPublicKey } from "@/lib/pmb-config"
 import { isPmbAppHost } from "@/lib/tenant/urls"
@@ -40,16 +40,18 @@ async function resolveCoupon(
   if (!coupon) return null
   if (coupon.maxUses !== null && coupon.usedCount >= coupon.maxUses) return null
 
-  const raw =
-    coupon.discountType === "PERCENTAGE"
-      ? (basePrice * Number(coupon.discountValue)) / 100
-      : Number(coupon.discountValue)
-  const discountAmount = Math.min(raw, basePrice)
+  // Mesmo helper (Prisma.Decimal + half-even) usado na cobrança e no preview
+  // ao vivo (previewCheckoutCoupon) — evita drift de arredondamento.
+  const { discountAmount, finalAmount } = applyCouponDiscount({
+    basePrice,
+    discountType: coupon.discountType,
+    discountValue: coupon.discountValue,
+  })
 
   return {
     code: coupon.code,
-    discountAmount: Number(discountAmount.toFixed(2)),
-    finalPrice: Number((basePrice - discountAmount).toFixed(2)),
+    discountAmount,
+    finalPrice: finalAmount,
   }
 }
 
@@ -108,6 +110,18 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
     const settings = await getSystemSettings()
     const useMp = settings.pmbDirectSaleGateway === "MP"
     const mpPublicKey = useMp ? pmbMpPublicKey() : null
+    const pkgPanelForm = useMp
+      ? mpPublicKey
+        ? ({
+            kind: "mp",
+            publicKey: mpPublicKey,
+            initPath: "/api/checkout/package",
+            processPath: "/api/checkout/mp/process",
+            statusPath: "/api/checkout/status",
+            confirmacaoPath: "/checkout/confirmacao",
+          } as const)
+        : null
+      : ({ kind: "pmb", initPath: "/api/checkout/package" } as const)
 
     return (
       <section className="bg-[#FAFAFA] py-10 md:py-16">
@@ -121,48 +135,47 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
             </p>
           </header>
 
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_380px] lg:gap-8">
-            <div className="space-y-6">
-              {useMp ? (
-                mpPublicKey ? (
-                  <MpCheckoutForm
-                    publicKey={mpPublicKey}
-                    packageId={pkg.id}
-                    couponCode={validatedCoupon?.code ?? null}
-                    initPath="/api/checkout/package"
-                    processPath="/api/checkout/mp/process"
-                    statusPath="/api/checkout/status"
-                    confirmacaoPath="/checkout/confirmacao"
-                  />
-                ) : (
-                  <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-sm text-amber-800">
-                    O pagamento via Mercado Pago ainda não está configurado.
-                  </div>
-                )
-              ) : (
-                <PmbCheckoutForm
-                  packageId={pkg.id}
-                  couponCode={validatedCoupon?.code ?? null}
-                  initPath="/api/checkout/package"
-                />
-              )}
-            </div>
+          {pkgPanelForm ? (
+            <CheckoutPanel
+              target={{ packageId: pkg.id }}
+              couponScope={{ kind: "pmb" }}
+              basePrice={pkg.price}
+              initialCoupon={validatedCoupon}
+              form={pkgPanelForm}
+              summary={{
+                courseName: pkg.name,
+                courseCategory: `Pacote • ${pkg.courses.length} ${pkg.courses.length === 1 ? "curso" : "cursos"}`,
+                courseHours: null,
+                courseImageUrl: null,
+                basePrice: pkg.price,
+                parcelasSugeridas: null,
+                paymentType: "ONE_TIME",
+              }}
+            />
+          ) : (
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_380px] lg:gap-8">
+              <div className="space-y-6">
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-sm text-amber-800">
+                  O pagamento via Mercado Pago ainda não está configurado.
+                </div>
+              </div>
 
-            <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start">
-              <OrderSummary
-                courseName={pkg.name}
-                courseCategory={`Pacote • ${pkg.courses.length} ${pkg.courses.length === 1 ? "curso" : "cursos"}`}
-                courseHours={null}
-                courseImageUrl={null}
-                basePrice={pkg.price}
-                discountAmount={discountAmount}
-                finalPrice={finalPrice}
-                couponCode={validatedCoupon?.code ?? null}
-                parcelasSugeridas={null}
-                paymentType="ONE_TIME"
-              />
-            </aside>
-          </div>
+              <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start">
+                <OrderSummary
+                  courseName={pkg.name}
+                  courseCategory={`Pacote • ${pkg.courses.length} ${pkg.courses.length === 1 ? "curso" : "cursos"}`}
+                  courseHours={null}
+                  courseImageUrl={null}
+                  basePrice={pkg.price}
+                  discountAmount={discountAmount}
+                  finalPrice={finalPrice}
+                  couponCode={validatedCoupon?.code ?? null}
+                  parcelasSugeridas={null}
+                  paymentType="ONE_TIME"
+                />
+              </aside>
+            </div>
+          )}
         </div>
       </section>
     )
@@ -267,6 +280,18 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
   const settings = await getSystemSettings()
   const useMp = settings.pmbDirectSaleGateway === "MP"
   const mpPublicKey = useMp ? pmbMpPublicKey() : null
+  const coursePanelForm = useMp
+    ? mpPublicKey
+      ? ({
+          kind: "mp",
+          publicKey: mpPublicKey,
+          initPath: "/api/checkout",
+          processPath: "/api/checkout/mp/process",
+          statusPath: "/api/checkout/status",
+          confirmacaoPath: "/checkout/confirmacao",
+        } as const)
+      : null
+    : ({ kind: "pmb" } as const)
 
   return (
     <section className="bg-[#FAFAFA] py-10 md:py-16">
@@ -285,50 +310,51 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
           )}
         </header>
 
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_380px] lg:gap-8">
-          <div className="space-y-6">
-            {useMp ? (
-              mpPublicKey ? (
-                <MpCheckoutForm
-                  publicKey={mpPublicKey}
-                  courseId={course.id}
-                  couponCode={validatedCoupon?.code ?? null}
-                  initPath="/api/checkout"
-                  processPath="/api/checkout/mp/process"
-                  statusPath="/api/checkout/status"
-                  confirmacaoPath="/checkout/confirmacao"
-                />
-              ) : (
-                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-sm text-amber-800">
-                  O pagamento via Mercado Pago ainda não está configurado
-                  (falta a Public Key). Defina <code>PMB_MP_PUBLIC_KEY</code> ou
-                  use o gateway Asaas em Configurações.
-                </div>
-              )
-            ) : (
-              <PmbCheckoutForm
-                courseId={course.id}
-                couponCode={validatedCoupon?.code ?? null}
-              />
-            )}
-          </div>
+        {coursePanelForm ? (
+          <CheckoutPanel
+            target={{ courseId: course.id }}
+            couponScope={{ kind: "pmb" }}
+            basePrice={basePrice}
+            initialCoupon={validatedCoupon}
+            form={coursePanelForm}
+            summary={{
+              courseName: course.nome,
+              courseCategory: course.categoriaLoja ?? course.categoriaInterna,
+              courseHours: course.cargaHoraria,
+              courseImageUrl: course.capaOverride ?? course.capaImageUrl,
+              basePrice,
+              parcelasSugeridas: course.parcelasSugeridas,
+              paymentType: course.paymentTypeMain,
+              monthlyMonths: course.monthlyMonthsMain,
+            }}
+          />
+        ) : (
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_380px] lg:gap-8">
+            <div className="space-y-6">
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-sm text-amber-800">
+                O pagamento via Mercado Pago ainda não está configurado
+                (falta a Public Key). Defina <code>PMB_MP_PUBLIC_KEY</code> ou
+                use o gateway Asaas em Configurações.
+              </div>
+            </div>
 
-          <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start">
-            <OrderSummary
-              courseName={course.nome}
-              courseCategory={course.categoriaLoja ?? course.categoriaInterna}
-              courseHours={course.cargaHoraria}
-              courseImageUrl={course.capaOverride ?? course.capaImageUrl}
-              basePrice={basePrice}
-              discountAmount={discountAmount}
-              finalPrice={finalPrice}
-              couponCode={validatedCoupon?.code ?? null}
-              parcelasSugeridas={course.parcelasSugeridas}
-              paymentType={course.paymentTypeMain}
-              monthlyMonths={course.monthlyMonthsMain}
-            />
-          </aside>
-        </div>
+            <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start">
+              <OrderSummary
+                courseName={course.nome}
+                courseCategory={course.categoriaLoja ?? course.categoriaInterna}
+                courseHours={course.cargaHoraria}
+                courseImageUrl={course.capaOverride ?? course.capaImageUrl}
+                basePrice={basePrice}
+                discountAmount={discountAmount}
+                finalPrice={finalPrice}
+                couponCode={validatedCoupon?.code ?? null}
+                parcelasSugeridas={course.parcelasSugeridas}
+                paymentType={course.paymentTypeMain}
+                monthlyMonths={course.monthlyMonthsMain}
+              />
+            </aside>
+          </div>
+        )}
       </div>
     </section>
   )

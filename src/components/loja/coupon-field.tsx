@@ -13,14 +13,31 @@ export interface AppliedCoupon {
   discountValue: number
 }
 
+export type CouponValidateResult =
+  | { ok: true; coupon: AppliedCoupon }
+  | { ok: false; error: string }
+
 interface CouponFieldProps {
-  courseId: string
+  /** Necessário apenas no fluxo padrão (página do curso) que valida via API. */
+  courseId?: string
   applied: AppliedCoupon | null
   onApply: (coupon: AppliedCoupon) => void
   onRemove: () => void
+  /**
+   * Override de validação. Quando fornecido (ex.: no checkout, onde o escopo
+   * pode ser pacote ou PMB), é usado no lugar do fetch para /api/loja/cupom/validar
+   * — que só cobre vitrine + curso.
+   */
+  onValidate?: (code: string) => Promise<CouponValidateResult>
 }
 
-export function CouponField({ courseId, applied, onApply, onRemove }: CouponFieldProps) {
+export function CouponField({
+  courseId,
+  applied,
+  onApply,
+  onRemove,
+  onValidate,
+}: CouponFieldProps) {
   const [code, setCode] = useState("")
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -31,6 +48,17 @@ export function CouponField({ courseId, applied, onApply, onRemove }: CouponFiel
     setError(null)
 
     try {
+      if (onValidate) {
+        const result = await onValidate(code.trim())
+        if (!result.ok) {
+          setError(result.error)
+          return
+        }
+        onApply(result.coupon)
+        setCode("")
+        return
+      }
+
       const res = await fetch("/api/loja/cupom/validar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
