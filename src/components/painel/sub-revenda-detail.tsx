@@ -29,6 +29,7 @@ export interface SubRevendaDetailData {
 
 export interface SubRevendaPayment {
   id: string
+  asaasPaymentId: string
   amount: number
   status: string
   billingType: string | null
@@ -168,13 +169,19 @@ export function SubRevendaDetail({ data }: { data: SubRevendaDetailData }) {
                   <th className="px-4 py-3 font-medium">Valor</th>
                   <th className="px-4 py-3 font-medium">Status</th>
                   <th className="px-4 py-3 font-medium">Pago em</th>
-                  <th className="px-4 py-3 font-medium text-right">Fatura</th>
+                  <th className="px-4 py-3 font-medium text-right">Pagamento</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {data.payments.map((p) => {
                   const ps = PAYMENT_STATUS[p.status] ?? PAYMENT_STATUS.PENDING
-                  const link = p.invoiceUrl ?? p.bankSlipUrl
+                  // Mesma regra do sistema mãe: cobrança em aberto abre o CHECKOUT
+                  // interno (/cobranca/{id}) — onde o pagador escolhe PIX/boleto/
+                  // cartão — e não o boleto cru do Asaas. Já paga abre a fatura.
+                  const isPending = p.status === "PENDING" || p.status === "OVERDUE"
+                  const link = isPending
+                    ? `/cobranca/${p.asaasPaymentId}`
+                    : p.invoiceUrl ?? p.bankSlipUrl
                   return (
                     <tr key={p.id} className="hover:bg-gray-50/60">
                       <td className="px-4 py-3 text-gray-600">{fmtDate(p.dueDate)}</td>
@@ -195,7 +202,8 @@ export function SubRevendaDetail({ data }: { data: SubRevendaDetailData }) {
                             rel="noopener noreferrer"
                             className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--color-pmb-green)] hover:underline"
                           >
-                            Abrir <ExternalLink className="h-3.5 w-3.5" />
+                            {isPending ? "Abrir checkout" : "Ver fatura"}
+                            <ExternalLink className="h-3.5 w-3.5" />
                           </Link>
                         ) : (
                           <span className="text-xs text-gray-400">—</span>

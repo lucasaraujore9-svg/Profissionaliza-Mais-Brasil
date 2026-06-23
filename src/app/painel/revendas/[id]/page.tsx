@@ -56,6 +56,7 @@ export default async function SubRevendaDetailPage({
       tenantPayments: {
         select: {
           id: true,
+          asaasPaymentId: true,
           amount: true,
           status: true,
           billingType: true,
@@ -87,6 +88,7 @@ export default async function SubRevendaDetailPage({
     hasAsaasSubscription: Boolean(sub.asaasSubscriptionId),
     payments: sub.tenantPayments.map((p) => ({
       id: p.id,
+      asaasPaymentId: p.asaasPaymentId,
       amount: Number(p.amount),
       status: p.status,
       billingType: p.billingType,
