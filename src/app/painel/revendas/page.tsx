@@ -1,10 +1,9 @@
 import Link from "next/link"
 import { redirect } from "next/navigation"
-import { Plus, Store, CheckCircle2, Clock, TrendingUp, Share2 } from "lucide-react"
+import { Plus, Store, CheckCircle2, Clock, TrendingUp, Share2, ChevronRight } from "lucide-react"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { PageHeader } from "@/components/painel/page-header"
-import { ImpersonateButton } from "@/components/shared/impersonate-button"
 
 export const metadata = {
   title: "Revendas | Painel",
@@ -131,7 +130,7 @@ export default async function PainelRevendasPage() {
                 <th className="px-4 py-3 font-medium">Mensalidade</th>
                 <th className="px-4 py-3 font-medium">Alunos</th>
                 <th className="px-4 py-3 font-medium">Criada em</th>
-                <th className="px-4 py-3 font-medium text-right">Suporte</th>
+                <th className="px-4 py-3 font-medium text-right">Detalhes</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -140,7 +139,12 @@ export default async function PainelRevendasPage() {
                 return (
                   <tr key={s.id} className="hover:bg-gray-50/60">
                     <td className="px-4 py-3">
-                      <div className="font-semibold text-[var(--color-pmb-green-900)]">{s.name}</div>
+                      <Link
+                        href={`/painel/revendas/${s.id}`}
+                        className="font-semibold text-[var(--color-pmb-green-900)] hover:underline"
+                      >
+                        {s.name}
+                      </Link>
                       <div className="text-xs text-gray-500">{s.slug}</div>
                     </td>
                     <td className="px-4 py-3">
@@ -156,11 +160,12 @@ export default async function PainelRevendasPage() {
                       {s.createdAt.toLocaleDateString("pt-BR")}
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <ImpersonateButton
-                        endpoint={`/api/painel/revendas/${s.id}/impersonate`}
-                        label="Acessar painel"
-                        fallbackRedirect="/painel"
-                      />
+                      <Link
+                        href={`/painel/revendas/${s.id}`}
+                        className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--color-pmb-green)] hover:underline"
+                      >
+                        Ver detalhes <ChevronRight className="h-3.5 w-3.5" />
+                      </Link>
                     </td>
                   </tr>
                 )
