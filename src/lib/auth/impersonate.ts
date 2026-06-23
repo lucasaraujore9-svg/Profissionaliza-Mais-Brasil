@@ -24,6 +24,8 @@ export interface SessionTokenPayload {
   sub: string
   role: UserRole
   tenantId: string | null
+  /** Necessário para impersonar ALUNO (role STUDENT): popula session.user.studentId. */
+  studentId?: string | null
   email?: string | null
   name?: string | null
 }

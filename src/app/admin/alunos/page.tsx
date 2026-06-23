@@ -22,7 +22,7 @@ export default async function AdminAlunosPage() {
         title="Alunos"
         description="Visão consolidada de todos os alunos — vitrine principal PMB e revendedores."
       />
-      <GlobalStudentsClient />
+      <GlobalStudentsClient canImpersonate={session.role === "SUPER_ADMIN"} />
     </div>
   )
 }

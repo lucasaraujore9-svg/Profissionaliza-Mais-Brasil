@@ -5,6 +5,7 @@ import Link from "next/link"
 import { Input } from "@/components/ui/input"
 import { Loader2 } from "lucide-react"
 import { vitrineHost } from "@/lib/tenant/urls"
+import { ImpersonateButton } from "@/components/shared/impersonate-button"
 
 interface TenantOption {
   id: string
@@ -39,7 +40,11 @@ const STATUS_COLORS: Record<string, string> = {
   INTERESSADO: "bg-sky-50 text-sky-700 border-sky-200",
 }
 
-export function GlobalStudentsClient() {
+export function GlobalStudentsClient({
+  canImpersonate = false,
+}: {
+  canImpersonate?: boolean
+}) {
   const [q, setQ] = useState("")
   const [tenantFilter, setTenantFilter] = useState<string>("all")
   const [data, setData] = useState<GlobalResponse["data"] | null>(null)
@@ -152,6 +157,7 @@ export function GlobalStudentsClient() {
                   <th className="px-4 py-2.5">Cursos ativos</th>
                   <th className="px-4 py-2.5">Status</th>
                   <th className="px-4 py-2.5">Cadastrado</th>
+                  {canImpersonate && <th className="px-4 py-2.5 text-right">Ações</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -214,6 +220,15 @@ export function GlobalStudentsClient() {
                       <td className="px-4 py-3 text-xs text-gray-500">
                         {new Date(s.createdAt).toLocaleDateString("pt-BR")}
                       </td>
+                      {canImpersonate && (
+                        <td className="px-4 py-3 text-right">
+                          <ImpersonateButton
+                            endpoint={`/api/admin/alunos/${s.id}/impersonate`}
+                            label="Acessar como"
+                            fallbackRedirect="/aluno"
+                          />
+                        </td>
+                      )}
                     </tr>
                   )
                 })}

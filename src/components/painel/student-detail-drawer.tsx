@@ -13,6 +13,7 @@ import {
   ArrowRight,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { ImpersonateButton } from "@/components/shared/impersonate-button"
 import { StudentStatusBadge } from "./student-status"
 import { SaleStatusBadge } from "./sale-status"
 import type { StudentStatus } from "./student-table"
@@ -343,7 +344,12 @@ export function StudentDetailDrawer({
         </div>
 
         {student && (
-          <footer className="border-t border-gray-200 px-6 py-4">
+          <footer className="space-y-3 border-t border-gray-200 px-6 py-4">
+            <ImpersonateButton
+              endpoint={`/api/painel/alunos/${student.id}/impersonate`}
+              label="Acessar como aluno"
+              fallbackRedirect="/aluno"
+            />
             <Button
               type="button"
               variant="outline"

@@ -1,15 +1,7 @@
 import { NextResponse } from "next/server"
-import { cookies } from "next/headers"
 import { requireAdminSession } from "@/lib/auth/admin-session"
 import { prisma } from "@/lib/prisma"
-import {
-  buildSessionToken,
-  cookieSecure,
-  encodeImpersonationFlag,
-  IMPERSONATION_BACKUP_COOKIE,
-  IMPERSONATION_FLAG_COOKIE,
-  sessionCookieName,
-} from "@/lib/auth/impersonate"
+import { startImpersonation } from "@/lib/auth/start-impersonation"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 import { contextLogger } from "@/lib/logger"
 import { logAudit } from "@/lib/audit"
@@ -22,25 +14,28 @@ export const POST = withRequestContextParams<{ id: string }>(
     return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
   }
 
-  // Impersonação é privilégio crítico — só SUPER_ADMIN pode assumir identidade de
-  // revendedor. PMB_SALES e PMB_RESELLER_MGR ficam fora pra não conseguirem trocar
-  // o token MP / alterar preços / acessar o financeiro do tenant.
-  if (admin.role !== "SUPER_ADMIN") {
-    contextLogger().warn(
-      { event: "impersonate.denied", actorId: admin.userId, actorRole: admin.role },
-      "tentativa de impersonate por papel não-SUPER_ADMIN",
-    )
-    return NextResponse.json({ error: "Permissão negada" }, { status: 403 })
-  }
-
   const { id: tenantId } = await params
 
   const tenant = await prisma.tenant.findUnique({
     where: { id: tenantId },
-    select: { id: true, name: true, slug: true },
+    select: { id: true, name: true, slug: true, accountManagerId: true },
   })
   if (!tenant) {
     return NextResponse.json({ error: "Revendedor não encontrado" }, { status: 404 })
+  }
+
+  // Quem pode impersonar uma revenda: SUPER_ADMIN (qualquer) ou o gerente de
+  // contas (PMB_RESELLER_MGR) DA revenda atribuída a ele. Os demais papéis ficam
+  // de fora para não trocarem o token MP / preços / financeiro do tenant.
+  const allowed =
+    admin.role === "SUPER_ADMIN" ||
+    (admin.role === "PMB_RESELLER_MGR" && tenant.accountManagerId === admin.userId)
+  if (!allowed) {
+    contextLogger().warn(
+      { event: "impersonate.denied", actorId: admin.userId, actorRole: admin.role, tenantId },
+      "tentativa de impersonate de revenda sem permissão",
+    )
+    return NextResponse.json({ error: "Permissão negada" }, { status: 403 })
   }
 
   // Owner do tenant: usuário com role RESELLER e tenantId igual.
@@ -56,55 +51,16 @@ export const POST = withRequestContextParams<{ id: string }>(
     )
   }
 
-  const targetToken = await buildSessionToken({
-    sub: owner.id,
-    role: owner.role,
-    tenantId: owner.tenantId,
-    email: owner.email,
-    name: owner.name,
-  })
-
-  const cookieStore = await cookies()
-  const cookieName = sessionCookieName()
-  const secure = cookieSecure()
-
-  // Backup do JWT atual do admin (existir, é o cookie de sessão dele)
-  const currentSession = cookieStore.get(cookieName)
-  if (currentSession?.value) {
-    cookieStore.set({
-      name: IMPERSONATION_BACKUP_COOKIE,
-      value: currentSession.value,
-      httpOnly: true,
-      secure,
-      sameSite: "lax",
-      path: "/",
-      maxAge: 60 * 60 * 8, // 8 horas
-    })
-  }
-
-  cookieStore.set({
-    name: cookieName,
-    value: targetToken,
-    httpOnly: true,
-    secure,
-    sameSite: "lax",
-    path: "/",
-  })
-
-  cookieStore.set({
-    name: IMPERSONATION_FLAG_COOKIE,
-    value: encodeImpersonationFlag({
-      adminUserId: admin.userId,
-      adminName: admin.name ?? admin.email ?? "Admin",
-      targetUserId: owner.id,
-      targetName: owner.name ?? owner.email ?? tenant.name,
-      startedAt: Date.now(),
-    }),
-    httpOnly: false, // visível ao client para banner
-    secure,
-    sameSite: "lax",
-    path: "/",
-    maxAge: 60 * 60 * 8,
+  await startImpersonation({
+    target: {
+      sub: owner.id,
+      role: owner.role,
+      tenantId: owner.tenantId,
+      email: owner.email,
+      name: owner.name,
+    },
+    actor: { userId: admin.userId, name: admin.name, email: admin.email },
+    targetLabel: owner.name ?? owner.email ?? tenant.name,
   })
 
   await logAudit({

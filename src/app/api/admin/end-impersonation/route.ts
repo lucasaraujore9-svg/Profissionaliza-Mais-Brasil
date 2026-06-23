@@ -10,6 +10,7 @@ import {
 } from "@/lib/auth/impersonate"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { contextLogger } from "@/lib/logger"
+import { homeForRole } from "@/lib/auth/home-for-role"
 
 export const POST = withRequestContext(
   { action: "admin.end_impersonation", route: "/api/admin/end-impersonation" },
@@ -37,6 +38,9 @@ export const POST = withRequestContext(
   const backup = cookieStore.get(IMPERSONATION_BACKUP_COOKIE)
   const cookieName = sessionCookieName()
   const secure = cookieSecure()
+  // Destino pós-restauração, conforme o papel do ator (admin → /admin,
+  // revendedor-vendedor/owner → /painel). Sem backup → /login.
+  let restoreRedirect = "/login"
 
   // Defesa em profundidade: o backup precisa decodificar como JWT NextAuth
   // válido E pertencer ao adminUserId registrado no flag. Isso protege contra
@@ -68,6 +72,7 @@ export const POST = withRequestContext(
       sameSite: "lax",
       path: "/",
     })
+    restoreRedirect = homeForRole(decoded.role)
   } else {
     // Sem backup → derruba sessão e redireciona para login.
     cookieStore.delete(cookieName)
@@ -82,7 +87,7 @@ export const POST = withRequestContext(
   )
 
   return NextResponse.json({
-    data: { redirect: backup?.value ? "/admin/revendedores" : "/login" },
+    data: { redirect: restoreRedirect },
   })
   },
 )

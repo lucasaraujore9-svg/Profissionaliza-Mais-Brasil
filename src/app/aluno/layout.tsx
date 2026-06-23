@@ -1,9 +1,14 @@
 import type { Metadata, Viewport } from "next"
 import { redirect } from "next/navigation"
-import { headers } from "next/headers"
+import { headers, cookies } from "next/headers"
 import { prisma } from "@/lib/prisma"
 import { requireStudentSession } from "@/lib/auth/student-session"
 import { StudentShell } from "@/components/aluno/student-shell"
+import { ImpersonationBanner } from "@/components/admin/impersonation-banner"
+import {
+  decodeImpersonationFlag,
+  IMPERSONATION_FLAG_COOKIE,
+} from "@/lib/auth/impersonate"
 import { PMB_TENANT_SLUG } from "@/lib/pmb-config"
 import { getCurrentTenant } from "@/lib/tenant/current"
 import { getRequestOrigin } from "@/lib/seo/host"
@@ -96,9 +101,17 @@ export default async function AlunoLayout({
     redirect("/login")
   }
 
+  const cookieStore = await cookies()
+  const impersonation = decodeImpersonationFlag(
+    cookieStore.get(IMPERSONATION_FLAG_COOKIE)?.value,
+  )
+
   const tenant = await resolveActiveTenant()
   // Cross-tenant guard: o aluno só vê o painel da loja onde ele tem conta.
-  if (tenant && session.tenantId && session.tenantId !== tenant.id) {
+  // PULADO durante impersonação — o admin/revendedor está vendo o aluno de
+  // propósito, possivelmente sob outro domínio (ex.: admin no domínio PMB
+  // acessando um aluno de uma revenda). O flag é assinado (HMAC), não forjável.
+  if (!impersonation && tenant && session.tenantId && session.tenantId !== tenant.id) {
     redirect("/logout?next=/login")
   }
 
@@ -115,8 +128,16 @@ export default async function AlunoLayout({
     : {}
 
   return (
-    <StudentShell session={session} {...branding}>
-      {children}
-    </StudentShell>
+    <>
+      {impersonation && (
+        <ImpersonationBanner
+          adminName={impersonation.adminName}
+          targetName={impersonation.targetName}
+        />
+      )}
+      <StudentShell session={session} {...branding}>
+        {children}
+      </StudentShell>
+    </>
   )
 }
