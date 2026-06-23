@@ -6,6 +6,105 @@ import type {
 } from "@prisma/client"
 import { sendPushToTarget, sendPushToUsers } from "@/lib/notifications/push-server"
 import { contextLogger } from "@/lib/logger"
+import { sendEmail } from "@/lib/email/mailer"
+import {
+  PMB_EMAIL_BRAND,
+  emailFromForBrand,
+  type EmailBrand,
+} from "@/lib/email/brand"
+import { loadTenantEmailBrand } from "@/lib/email/tenant-brand"
+import { appUrl } from "@/lib/tenant/urls"
+import { afterResponse } from "@/lib/after-response"
+
+/**
+ * Categorias cujas notificações também viram EMAIL (ponte notificação→email).
+ * Curadoria deliberada: só eventos transacionais de alto valor — para não
+ * transformar cada aviso in-app em email (firehose). Demais categorias seguem
+ * só in-app + push. O envio ainda respeita a preferência individual de email
+ * (`NotificationPreference.email`) e os kill-switches de categoria já aplicados
+ * antes de chegar aqui.
+ */
+const EMAIL_BRIDGE_CATEGORIES = new Set<string>([
+  "payment",
+  "enrollment",
+  "sale",
+  "certificate",
+  "referral",
+  "tenant-billing",
+  "fulfillment",
+])
+
+type EmailRecipient =
+  | { kind: "user"; userId: string }
+  | { kind: "student"; studentId: string }
+
+/**
+ * Espelha por email uma notificação in-app, para os destinatários cuja
+ * preferência de email está ligada. Best-effort e em background (`afterResponse`):
+ * nunca bloqueia nem derruba a criação da notificação. Usa o template genérico
+ * `notification` com a marca da unidade (revenda nunca exibe marca PMB).
+ */
+async function dispatchNotificationEmails(
+  meta: { title: string; body?: string | null; href?: string | null; category?: string },
+  recipients: EmailRecipient[],
+): Promise<void> {
+  if (!meta.category || !EMAIL_BRIDGE_CATEGORIES.has(meta.category)) return
+  if (recipients.length === 0) return
+
+  for (const r of recipients) {
+    try {
+      const target = r.kind === "user" ? { userId: r.userId } : { studentId: r.studentId }
+      if (!(await isChannelEnabled("email", meta.category, target))) continue
+
+      let to: string | null = null
+      let brandTenantId: string | null = null
+      if (r.kind === "user") {
+        const u = await prisma.user.findUnique({
+          where: { id: r.userId },
+          select: { email: true, tenantId: true },
+        })
+        if (!u?.email) continue
+        to = u.email
+        brandTenantId = u.tenantId
+      } else {
+        const s = await prisma.student.findUnique({
+          where: { id: r.studentId },
+          select: { email: true, tenantId: true },
+        })
+        if (!s?.email) continue
+        to = s.email
+        brandTenantId = s.tenantId
+      }
+
+      const brand: EmailBrand = brandTenantId
+        ? await loadTenantEmailBrand(brandTenantId)
+        : PMB_EMAIL_BRAND
+      const base = (brand.siteUrl ?? appUrl()).replace(/\/$/, "")
+      const ctaUrl = meta.href
+        ? meta.href.startsWith("http")
+          ? meta.href
+          : `${base}${meta.href}`
+        : null
+
+      await sendEmail({
+        to,
+        from: emailFromForBrand(brand),
+        replyTo: brand.replyTo ?? undefined,
+        tenantId: brand.isPmb ? null : brandTenantId,
+        subject: meta.title,
+        template: {
+          type: "notification",
+          props: { title: meta.title, body: meta.body ?? null, ctaUrl, brand },
+        },
+      })
+    } catch (err) {
+      contextLogger().error(
+        { err, event: "notifications.email_bridge_failed", category: meta.category },
+        "ponte notificação→email falhou",
+      )
+    }
+  }
+}
 
 export type NotificationConfigTarget = "TENANT" | "STUDENT" | "ADMIN"
 
@@ -100,6 +199,13 @@ interface BaseInput {
   body?: string
   category?: string
   href?: string
+  /**
+   * Desliga a ponte notificação→email para ESTA notificação. Use quando o call
+   * site já dispara um email transacional dedicado para o mesmo evento (ex.:
+   * matrícula confirmada, cobrança da revenda) — evita o aluno/dono receber o
+   * email dedicado E o genérico da ponte. Não afeta a notificação in-app/push.
+   */
+  suppressEmail?: boolean
 }
 
 interface UserInput extends BaseInput {
@@ -192,6 +298,21 @@ export async function createNotification(
       for (const m of members) userIds.add(m.userId)
 
       if (userIds.size === 0) return null
+
+      // Ponte email sobre o conjunto candidato COMPLETO, ANTES do filtro in-app
+      // e do early-return abaixo: o canal email é independente do in-app (um
+      // destinatário pode ter in-app desligado e email ligado). O helper aplica
+      // a preferência de email por destinatário. Se ficasse após o filtro, um
+      // fan-out em que todos têm in-app off engoliria os emails silenciosamente.
+      if (!input.suppressEmail) {
+        afterResponse(() =>
+          dispatchNotificationEmails(
+            { title: input.title, body: input.body, href: input.href, category: input.category },
+            [...userIds].map((userId) => ({ kind: "user", userId })),
+          ),
+        )
+      }
+
       // Filtra cada userId pelas suas preferencias in-app
       const enabled = await Promise.all(
         [...userIds].map(async (userId) =>
@@ -233,6 +354,20 @@ export async function createNotification(
         select: { id: true },
       })
       if (users.length === 0) return null
+
+      // Ponte email sobre o conjunto candidato COMPLETO, ANTES do filtro in-app
+      // e do early-return abaixo (mesma razão do branch TENANT): email é
+      // independente do in-app; o helper aplica a preferência de email por
+      // destinatário.
+      if (!input.suppressEmail) {
+        afterResponse(() =>
+          dispatchNotificationEmails(
+            { title: input.title, body: input.body, href: input.href, category: input.category },
+            users.map((u) => ({ kind: "user", userId: u.id })),
+          ),
+        )
+      }
+
       const enabled = await Promise.all(
         users.map(async (u) =>
           (await isChannelEnabled("in_app", input.category, { userId: u.id }))
@@ -277,6 +412,21 @@ export async function createNotification(
       !(await isStudentCategoryEnabled(input.category, input.studentId))
     ) {
       return null
+    }
+    // Ponte email — independente do canal in-app (um destinatário pode preferir
+    // só email). Já passou pelos gates de categoria acima; o helper aplica a
+    // preferência de email. Disparada antes do gate in-app de propósito.
+    if (!input.suppressEmail) {
+      afterResponse(() =>
+        dispatchNotificationEmails(
+          { title: input.title, body: input.body, href: input.href, category: input.category },
+          [
+            input.audience === "USER"
+              ? { kind: "user", userId: input.userId }
+              : { kind: "student", studentId: input.studentId },
+          ],
+        ),
+      )
     }
     if (!(await isChannelEnabled("in_app", input.category, target))) {
       return null

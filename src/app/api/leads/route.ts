@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server"
+import { NextResponse, after } from "next/server"
 import { z, ZodError } from "zod"
 import { prisma } from "@/lib/prisma"
 import { sendEmail, EmailError } from "@/lib/email/resend"
@@ -139,24 +139,32 @@ export const POST = withRequestContext(
       },
     })
 
-    // Fire-and-forget email; never break the request if Resend falha
-    sendEmail({
-      to: data.email,
-      subject: "Recebemos seu interesse!",
-      template: {
-        type: "lead-confirmation",
-        props: { companyName },
-      },
-    }).catch((err: unknown) => {
-      contextLogger().error(
-        {
-          err,
-          event: "leads.confirmation_email_failed",
-          leadEmail: data.email,
-          emailErrorType: err instanceof EmailError ? "EmailError" : "Unexpected",
-        },
-        "envio de email de confirmação do lead falhou",
-      )
+    // Email de confirmação em background via `after()` — NÃO `void`/fire-and-forget:
+    // em serverless a instância é congelada após o `return`, o que matava a
+    // promise solta ANTES do SMTP terminar e o email nunca saía (mesmo padrão e
+    // motivo de `auth/forgot-password`). `after()` mantém a função viva até o
+    // background concluir. Best-effort: falha é logada, nunca quebra a resposta.
+    after(async () => {
+      try {
+        await sendEmail({
+          to: data.email,
+          subject: "Recebemos seu interesse!",
+          template: {
+            type: "lead-confirmation",
+            props: { companyName },
+          },
+        })
+      } catch (err: unknown) {
+        contextLogger().error(
+          {
+            err,
+            event: "leads.confirmation_email_failed",
+            leadEmail: data.email,
+            emailErrorType: err instanceof EmailError ? "EmailError" : "Unexpected",
+          },
+          "envio de email de confirmação do lead falhou",
+        )
+      }
     })
 
     // Notifica equipe interna sobre novo lead — equipe de vendas tipicamente

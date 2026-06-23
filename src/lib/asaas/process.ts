@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma"
 import { getPayment as getAsaasPayment, AsaasApiError } from "./client"
 import { isTransientWebhookError } from "@/lib/webhooks/transient"
 import { sendEmail } from "@/lib/email/resend"
+import { afterResponse } from "@/lib/after-response"
 import { blockTenantStudents, unblockTenantStudents } from "@/lib/auto-block"
 import { fulfillEnrollment } from "@/lib/enrollment/fulfill"
 import { pmbPlataformaPolo, pmbPlataformaVendedorId } from "@/lib/pmb-config"
@@ -421,26 +422,35 @@ export async function processAsaasWebhook(
         }
 
         if (tenant.owner?.email) {
-          await sendEmail({
-            to: tenant.owner.email,
-            subject: "Pagamento da mensalidade confirmado",
-            template: {
-              type: "payment",
-              props: {
-                customerName: tenant.owner.name ?? tenant.name,
-                amount: formatMoney(payment.value),
-                paymentDate: formatDate(payment.paymentDate),
-                description:
-                  "Recebemos sua mensalidade do Profissionaliza Mais Brasil — obrigado! Sua vitrine segue ativa.",
-                receiptUrl: payment.transactionReceiptUrl ?? undefined,
-                variant: "confirmed",
-              },
-            },
-          }).catch((err) => {
-            contextLogger().error(
-              { err, event: "asaas.payment.email_failed", tenantId: tenant.id },
-              "falha ao enviar email de confirmação de pagamento",
-            )
+          const ownerEmail = tenant.owner.email
+          const ownerName = tenant.owner.name ?? tenant.name
+          // Em background (após o 200 do webhook) para não somar latência de SMTP
+          // ao tempo de resposta do gateway. Best-effort — falha só é logada.
+          afterResponse(async () => {
+            try {
+              await sendEmail({
+                to: ownerEmail,
+                tenantId: tenant.id,
+                subject: "Pagamento da mensalidade confirmado",
+                template: {
+                  type: "payment",
+                  props: {
+                    customerName: ownerName,
+                    amount: formatMoney(payment.value),
+                    paymentDate: formatDate(payment.paymentDate),
+                    description:
+                      "Recebemos sua mensalidade do Profissionaliza Mais Brasil — obrigado! Sua vitrine segue ativa.",
+                    receiptUrl: payment.transactionReceiptUrl ?? undefined,
+                    variant: "confirmed",
+                  },
+                },
+              })
+            } catch (err) {
+              contextLogger().error(
+                { err, event: "asaas.payment.email_failed", tenantId: tenant.id },
+                "falha ao enviar email de confirmação de pagamento",
+              )
+            }
           })
         }
 
@@ -454,6 +464,8 @@ export async function processAsaasWebhook(
           body: `Pagamento de ${formatMoney(payment.value)} confirmado.`,
           category: "tenant-billing",
           href: "/painel/financeiro",
+          // Email de confirmação dedicado já enviado acima — não duplicar.
+          suppressEmail: true,
         })
 
         // Cria comissao de indicacao (1-nivel) se o tenant possui referrer
@@ -487,32 +499,39 @@ export async function processAsaasWebhook(
         }
 
         if (tenant.owner?.email) {
+          const ownerEmail = tenant.owner.email
+          const ownerName = tenant.owner.name ?? tenant.name
           const subject =
             tenant.billingMode === "AUTO"
               ? "Sua mensalidade venceu — alunos bloqueados"
               : "Sua mensalidade venceu"
-          await sendEmail({
-            to: tenant.owner.email,
-            subject,
-            template: {
-              type: "payment",
-              props: {
-                customerName: tenant.owner.name ?? tenant.name,
-                amount: formatMoney(payment.value),
-                paymentDate: formatDate(payment.dueDate),
-                description:
-                  tenant.billingMode === "AUTO"
-                    ? "Sua mensalidade venceu. Para evitar perda de receita, seus alunos foram bloqueados temporariamente até a regularização."
-                    : "Sua mensalidade venceu. Regularize agora para manter a vitrine ativa e evitar o bloqueio dos seus alunos.",
-                receiptUrl: payment.invoiceUrl ?? undefined,
-                variant: "overdue",
-              },
-            },
-          }).catch((err) => {
-            contextLogger().error(
-              { err, event: "asaas.overdue.email_failed", tenantId: tenant.id },
-              "falha ao enviar email de overdue",
-            )
+          afterResponse(async () => {
+            try {
+              await sendEmail({
+                to: ownerEmail,
+                tenantId: tenant.id,
+                subject,
+                template: {
+                  type: "payment",
+                  props: {
+                    customerName: ownerName,
+                    amount: formatMoney(payment.value),
+                    paymentDate: formatDate(payment.dueDate),
+                    description:
+                      tenant.billingMode === "AUTO"
+                        ? "Sua mensalidade venceu. Para evitar perda de receita, seus alunos foram bloqueados temporariamente até a regularização."
+                        : "Sua mensalidade venceu. Regularize agora para manter a vitrine ativa e evitar o bloqueio dos seus alunos.",
+                    receiptUrl: payment.invoiceUrl ?? undefined,
+                    variant: "overdue",
+                  },
+                },
+              })
+            } catch (err) {
+              contextLogger().error(
+                { err, event: "asaas.overdue.email_failed", tenantId: tenant.id },
+                "falha ao enviar email de overdue",
+              )
+            }
           })
         }
 
@@ -527,6 +546,8 @@ export async function processAsaasWebhook(
               : `Vencimento ${formatDate(payment.dueDate)}. Regularize para evitar bloqueio dos alunos.`,
           category: "tenant-billing",
           href: payment.invoiceUrl ?? "/painel/financeiro",
+          // Email de atraso dedicado já enviado acima — não duplicar.
+          suppressEmail: true,
         })
 
         await createNotification({
@@ -682,30 +703,39 @@ export async function processAsaasWebhook(
           body: `O pagamento de ${formatMoney(payment.value)} foi estornado.${!otherConfirmed ? " Sua conta foi suspensa. Regularize para reativar." : ""}`,
           category: "tenant-billing",
           href: "/painel/financeiro",
+          // Email de estorno dedicado já enviado abaixo — não duplicar.
+          suppressEmail: true,
         })
 
         if (tenant.owner?.email) {
-          await sendEmail({
-            to: tenant.owner.email,
-            subject: "Pagamento estornado",
-            template: {
-              type: "payment",
-              props: {
-                customerName: tenant.owner.name ?? tenant.name,
-                amount: formatMoney(payment.value),
-                paymentDate: formatDate(payment.paymentDate),
-                description: !otherConfirmed
-                  ? "Identificamos o estorno deste pagamento e sua conta foi suspensa. Para reativar a vitrine, faça uma nova cobrança."
-                  : "Identificamos um estorno. Sua conta permanece ativa porque há outros pagamentos confirmados no período.",
-                receiptUrl: payment.invoiceUrl ?? undefined,
-                variant: "refunded",
-              },
-            },
-          }).catch((err) => {
-            contextLogger().error(
-              { err, event: "asaas.refund.email_failed", tenantId: tenant.id },
-              "falha ao enviar email de estorno",
-            )
+          const ownerEmail = tenant.owner.email
+          const ownerName = tenant.owner.name ?? tenant.name
+          afterResponse(async () => {
+            try {
+              await sendEmail({
+                to: ownerEmail,
+                tenantId: tenant.id,
+                subject: "Pagamento estornado",
+                template: {
+                  type: "payment",
+                  props: {
+                    customerName: ownerName,
+                    amount: formatMoney(payment.value),
+                    paymentDate: formatDate(payment.paymentDate),
+                    description: !otherConfirmed
+                      ? "Identificamos o estorno deste pagamento e sua conta foi suspensa. Para reativar a vitrine, faça uma nova cobrança."
+                      : "Identificamos um estorno. Sua conta permanece ativa porque há outros pagamentos confirmados no período.",
+                    receiptUrl: payment.invoiceUrl ?? undefined,
+                    variant: "refunded",
+                  },
+                },
+              })
+            } catch (err) {
+              contextLogger().error(
+                { err, event: "asaas.refund.email_failed", tenantId: tenant.id },
+                "falha ao enviar email de estorno",
+              )
+            }
           })
         }
         break

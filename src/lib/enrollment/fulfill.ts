@@ -13,6 +13,7 @@ import { generatePasswordWithHash } from "@/lib/students/generate-password"
 import { createNotification } from "@/lib/notifications"
 import { addMonthsClamped } from "@/lib/dates"
 import { appUrl as resolveAppUrl } from "@/lib/tenant/urls"
+import { afterResponse } from "@/lib/after-response"
 
 /**
  * Prazo padrão de permanência do aluno na plataforma (item 11 dos
@@ -330,6 +331,9 @@ async function fulfillEnrollmentLocked(
         : "Acesse a área de aulas para começar agora.",
     category: "enrollment",
     href: "/aluno/cursos",
+    // O email de matrícula dedicado (template `enrollment`) já é enviado em
+    // provisionEnrollmentAccess — não duplicar via ponte notificação→email.
+    suppressEmail: true,
   })
 
   if (!tenant.isPmbVitrine) {
@@ -534,8 +538,10 @@ async function provisionEnrollmentAccess(
   // Marca da unidade para os emails ao aluno. Venda de revenda usa a identidade
   // da loja (logo, nome, domínio, reply-to) — nunca os dados da PMB. Carregada
   // uma única vez (só quando há email a enviar) e reusada nos dois envios abaixo.
-  const willSendStudentEmail =
-    !!enrollment.student.email && (!!panelPassword || created)
+  // Sempre que houver email enviamos pelo menos o e-mail de curso (matrícula
+  // nova ou "novo curso liberado" em recompra) — então a marca da unidade
+  // precisa ser carregada sempre que houver email.
+  const willSendStudentEmail = !!enrollment.student.email
   const emailBrand = !willSendStudentEmail
     ? PMB_EMAIL_BRAND
     : tenant.isPmbVitrine
@@ -545,56 +551,74 @@ async function provisionEnrollmentAccess(
   const emailFrom = emailFromForBrand(emailBrand)
   const emailReplyTo = emailBrand.replyTo ?? undefined
 
-  // Email de boas-vindas ao painel /aluno (com senha temporária).
-  if (panelPassword && enrollment.student.email) {
-    await sendEmail({
-      to: enrollment.student.email,
-      from: emailFrom,
-      replyTo: emailReplyTo,
-      subject: `Bem-vindo! Seu acesso ao painel ${emailBrand.name}`,
-      template: {
-        type: "student-welcome",
-        props: {
-          studentName: enrollment.student.nome,
-          studentEmail: enrollment.student.email,
-          temporaryPassword: panelPassword,
-          loginUrl: `${storeBase}/login`,
-          brand: emailBrand,
-        },
-      },
-    }).catch((err) => {
-      contextLogger().error(
-        { err, event: "fulfill.student_welcome_email_failed", studentId: enrollment.student.id },
-        "student-welcome email falhou",
-      )
-    })
-  }
+  // Emails ao aluno em background (após a resposta): não bloqueiam o webhook de
+  // pagamento (que já respondeu 200) nem são cortados pelo congelamento da
+  // instância serverless. Best-effort — cada envio trata o próprio erro.
+  const studentEmail = enrollment.student.email
+  const emailTenantId = tenant.isPmbVitrine ? null : tenant.id
+  if (studentEmail) {
+    afterResponse(async () => {
+      // Email de boas-vindas ao painel /aluno (com senha temporária).
+      if (panelPassword) {
+        try {
+          await sendEmail({
+            to: studentEmail,
+            from: emailFrom,
+            replyTo: emailReplyTo,
+            tenantId: emailTenantId,
+            subject: `Bem-vindo! Seu acesso ao painel ${emailBrand.name}`,
+            template: {
+              type: "student-welcome",
+              props: {
+                studentName: enrollment.student.nome,
+                studentEmail,
+                temporaryPassword: panelPassword,
+                loginUrl: `${storeBase}/login`,
+                brand: emailBrand,
+              },
+            },
+          })
+        } catch (err) {
+          contextLogger().error(
+            { err, event: "fulfill.student_welcome_email_failed", studentId: enrollment.student.id },
+            "student-welcome email falhou",
+          )
+        }
+      }
 
-  if (created && enrollment.student.email) {
-    // Link sempre aponta para a área do aluno DENTRO do nosso sistema
-    // (vitrine do revendedor ou app PMB). Mantém o white-label.
-    try {
-      await sendEmail({
-        to: enrollment.student.email,
-        from: emailFrom,
-        replyTo: emailReplyTo,
-        subject: `Matrícula confirmada em ${enrollment.course.nome}`,
-        template: {
-          type: "enrollment",
-          props: {
-            studentName: enrollment.student.nome,
-            courseName: enrollment.course.nome,
-            studentPanelUrl: `${storeBase}/aluno`,
-            brand: emailBrand,
+      // Envia em TODA primeira cobrança da matrícula (este bloco só roda na 1ª
+      // cobrança de cada matrícula — parcelas seguintes caem em outro ramo). Assim
+      // o ALUNO ANTIGO que compra um curso NOVO também é avisado. `created` (1º
+      // contato com a plataforma de aulas) só varia a copy/assunto.
+      // Link sempre aponta para a área do aluno DENTRO do nosso sistema
+      // (vitrine do revendedor ou app PMB). Mantém o white-label.
+      try {
+        await sendEmail({
+          to: studentEmail,
+          from: emailFrom,
+          replyTo: emailReplyTo,
+          tenantId: emailTenantId,
+          subject: created
+            ? `Matrícula confirmada em ${enrollment.course.nome}`
+            : `Novo curso liberado: ${enrollment.course.nome}`,
+          template: {
+            type: "enrollment",
+            props: {
+              studentName: enrollment.student.nome,
+              courseName: enrollment.course.nome,
+              studentPanelUrl: `${storeBase}/aluno`,
+              isNewStudent: created,
+              brand: emailBrand,
+            },
           },
-        },
-      })
-    } catch (err) {
-      contextLogger().error(
-        { err, event: "fulfill.enrollment_email_failed", enrollmentId: enrollment.id, studentId: enrollment.student.id },
-        "enrollment email falhou",
-      )
-    }
+        })
+      } catch (err) {
+        contextLogger().error(
+          { err, event: "fulfill.enrollment_email_failed", enrollmentId: enrollment.id, studentId: enrollment.student.id },
+          "enrollment email falhou",
+        )
+      }
+    })
   }
 }
 
@@ -880,6 +904,8 @@ export async function fulfillScholarshipEnrollment(
     body: "Acesse a área de aulas para começar agora — sem nenhuma cobrança.",
     category: "enrollment",
     href: "/aluno/cursos",
+    // Email de matrícula dedicado já enviado em provisionEnrollmentAccess.
+    suppressEmail: true,
   })
 
   if (!tenant.isPmbVitrine) {

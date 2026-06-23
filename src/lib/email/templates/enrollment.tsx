@@ -7,6 +7,11 @@ export interface EnrollmentTemplateProps {
   courseName: string
   /** URL do painel do aluno (sua área dentro do sistema da revenda/PMB). */
   studentPanelUrl: string
+  /**
+   * true  = aluno novo (1ª compra) → "matrícula confirmada".
+   * false = aluno antigo comprando um curso novo → "novo curso liberado".
+   */
+  isNewStudent?: boolean
   /** Marca da loja/revenda (header, rodapé). Default: PMB. */
   brand?: EmailBrand
 }
@@ -15,19 +20,41 @@ export function EnrollmentTemplate({
   studentName,
   courseName,
   studentPanelUrl,
+  isNewStudent = true,
   brand,
 }: EnrollmentTemplateProps) {
   const firstName = studentName.split(" ")[0] || studentName
 
   return (
     <EmailLayout
-      preview={`Matrícula confirmada em ${courseName}`}
+      preview={
+        isNewStudent
+          ? `Matrícula confirmada em ${courseName}`
+          : `Novo curso liberado: ${courseName}`
+      }
       brand={brand}
     >
-      <Text style={styles.h1}>Tudo certo, {firstName}!</Text>
+      <Text style={styles.h1}>
+        {isNewStudent ? `Tudo certo, ${firstName}!` : `Novo curso liberado, ${firstName}!`}
+      </Text>
       <Text style={styles.paragraph}>
-        Sua matrícula no curso <strong>{courseName}</strong> foi confirmada.
-        Agora é só acessar sua área do aluno e começar.
+        {isNewStudent ? (
+          <>
+            Sua matrícula no curso <strong>{courseName}</strong> foi confirmada e
+            já está disponível na sua <strong>área do aluno</strong>.
+          </>
+        ) : (
+          <>
+            Você acaba de adquirir o curso <strong>{courseName}</strong> e ele já
+            está liberado na sua <strong>área do aluno</strong>, junto dos seus
+            outros cursos.
+          </>
+        )}
+      </Text>
+      <Text style={styles.paragraph}>
+        A área do aluno é a sua <strong>plataforma acadêmica</strong>: o ponto
+        central de onde você abre as aulas, acompanha o progresso e baixa seus
+        certificados.
       </Text>
 
       <Section style={styles.buttonRow}>
@@ -46,15 +73,17 @@ export function EnrollmentTemplate({
       <Hr style={styles.hr} />
 
       <Section>
-        <Text style={styles.h2}>O que fazer agora</Text>
+        <Text style={styles.h2}>Como acessar suas aulas</Text>
         <Text style={styles.step}>
-          1. Acesse sua área do aluno com o email e senha que você já cadastrou.
+          1. Entre na sua área do aluno com o seu e-mail e senha.
         </Text>
         <Text style={styles.step}>
-          2. Clique em <strong>{courseName}</strong> para abrir a área de aulas.
+          2. Abra <strong>{courseName}</strong> e clique em{" "}
+          <strong>acessar a plataforma de aulas</strong>.
         </Text>
         <Text style={styles.step}>
-          3. Assista, faça as atividades e acompanhe seu progresso por lá.
+          3. É na plataforma de aulas que ficam os vídeos e atividades — seu
+          progresso volta para a área do aluno.
         </Text>
       </Section>
 
@@ -70,6 +99,7 @@ EnrollmentTemplate.PreviewProps = {
   studentName: "Beatriz Souza",
   courseName: "Auxiliar Administrativo",
   studentPanelUrl: "https://cursos-pro-joao.livrecursos.com.br/aluno",
+  isNewStudent: true,
   brand: {
     name: "Cursos Pro João",
     logoUrl: null,

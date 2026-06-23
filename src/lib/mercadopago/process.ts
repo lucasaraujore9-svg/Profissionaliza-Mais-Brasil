@@ -13,6 +13,10 @@ import { fulfillFromMpPayment } from "./fulfillment"
 import { fulfillEnrollment } from "@/lib/enrollment/fulfill"
 import { unlinkCourseFromStudent } from "@/lib/students/plataforma-actions"
 import { createNotification } from "@/lib/notifications"
+import {
+  notifyStudentPaymentPending,
+  notifyStudentPaymentRejected,
+} from "./student-payment-emails"
 import { swallow } from "@/lib/errors"
 import { isTransientWebhookError } from "@/lib/webhooks/transient"
 import { contextLogger } from "@/lib/logger"
@@ -399,7 +403,21 @@ export async function processMpWebhook(args: ProcessArgs): Promise<void> {
       return
     }
 
-    // Outros status (pending, in_process, authorized, etc.) são apenas registrados.
+    if (payment.status === "rejected") {
+      // Recusa (cartão recusado etc.): avisa o aluno para tentar de novo.
+      notifyStudentPaymentRejected(tenant, enrollmentId, payment)
+      await markLog(logId, true, `rejected: aviso enviado`)
+      return
+    }
+
+    if (payment.status === "pending" || payment.status === "in_process") {
+      // Aguardando boleto/Pix: envia instruções de conclusão (idempotente).
+      notifyStudentPaymentPending(tenant, enrollmentId, payment)
+      await markLog(logId, true, `pending: status=${payment.status}`)
+      return
+    }
+
+    // Outros status (authorized, in_mediation, etc.) são apenas registrados.
     await markLog(logId, true, `status=${payment.status} ignorado`)
   } catch (error) {
     const message = error instanceof Error ? error.message : "erro desconhecido"

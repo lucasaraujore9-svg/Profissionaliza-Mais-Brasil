@@ -33,14 +33,18 @@ export function StudentWelcomeTemplate({
     >
       <Text style={styles.h1}>Bem-vindo(a), {firstName}!</Text>
       <Text style={styles.paragraph}>
-        Sua compra em <strong>{storeName}</strong> foi registrada. Sua área do
-        aluno já está pronta — é dali que você acessa as aulas e acompanha
-        tudo da sua jornada.
+        Sua compra em <strong>{storeName}</strong> foi registrada e sua{" "}
+        <strong>área do aluno</strong> já está pronta. Ela é a sua{" "}
+        <strong>plataforma acadêmica</strong>: o ponto central de onde você
+        acessa a plataforma de aulas, acompanha as matrículas e baixa seus
+        certificados.
       </Text>
 
       <Section>
         <Text style={styles.h2}>O que você encontra na sua área</Text>
-        <Text style={styles.step}>· Acesso direto às aulas dos seus cursos</Text>
+        <Text style={styles.step}>
+          · Acesso à plataforma de aulas (com login e senha ou acesso direto)
+        </Text>
         <Text style={styles.step}>· Status das matrículas e progresso</Text>
         <Text style={styles.step}>· Faturas, recibos e segundas vias</Text>
         <Text style={styles.step}>· Certificados quando você concluir um curso</Text>

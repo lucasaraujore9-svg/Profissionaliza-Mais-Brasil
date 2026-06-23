@@ -73,6 +73,21 @@ export function getTransporter(): Transporter {
       user: cfg.user,
       pass: cfg.password,
     },
+    // Timeouts explícitos: sem eles, uma conexão pendurada à Hostinger (porta
+    // bloqueada, DNS lento, servidor sem resposta) trava ~muito tempo e falha
+    // de forma invisível — em serverless a função pode ser congelada antes de
+    // o socket dar erro. Limites curtos transformam o problema num EmailError
+    // rápido e auditável (logado + gravado em EmailLog).
+    connectionTimeout: 10_000,
+    greetingTimeout: 10_000,
+    socketTimeout: 20_000,
+    // Pool com 1 conexão: reaproveita o socket entre envios no mesmo container
+    // (Fluid Compute reusa a instância) sem abrir N conexões concorrentes que a
+    // Hostinger recusaria. maxMessages recicla o socket periodicamente para não
+    // reutilizar uma conexão stale por tempo indefinido.
+    pool: true,
+    maxConnections: 1,
+    maxMessages: 50,
   })
   return transporter
 }

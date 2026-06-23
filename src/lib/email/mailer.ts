@@ -1,9 +1,5 @@
 import { render } from "@react-email/components"
 import {
-  WelcomeTemplate,
-  type WelcomeTemplateProps,
-} from "./templates/welcome"
-import {
   ResetPasswordTemplate,
   type ResetPasswordTemplateProps,
 } from "./templates/reset-password"
@@ -47,6 +43,18 @@ import {
   ResellerLeadNotificationTemplate,
   type ResellerLeadNotificationTemplateProps,
 } from "./templates/reseller-lead-notification"
+import {
+  NotificationTemplate,
+  type NotificationTemplateProps,
+} from "./templates/notification"
+import {
+  PaymentPendingTemplate,
+  type PaymentPendingTemplateProps,
+} from "./templates/payment-pending"
+import {
+  PaymentRejectedTemplate,
+  type PaymentRejectedTemplateProps,
+} from "./templates/payment-rejected"
 import { sendSmtp, getDefaultFrom } from "./smtp"
 
 export class EmailError extends Error {
@@ -57,7 +65,6 @@ export class EmailError extends Error {
 }
 
 export type EmailTemplate =
-  | { type: "welcome"; props: WelcomeTemplateProps }
   | { type: "reset-password"; props: ResetPasswordTemplateProps }
   | { type: "enrollment"; props: EnrollmentTemplateProps }
   | { type: "payment"; props: PaymentTemplateProps }
@@ -78,6 +85,9 @@ export type EmailTemplate =
       type: "reseller-lead-notification"
       props: ResellerLeadNotificationTemplateProps
     }
+  | { type: "notification"; props: NotificationTemplateProps }
+  | { type: "payment-pending"; props: PaymentPendingTemplateProps }
+  | { type: "payment-rejected"; props: PaymentRejectedTemplateProps }
 
 interface SendEmailParams {
   to: string | string[]
@@ -85,12 +95,53 @@ interface SendEmailParams {
   template: EmailTemplate
   from?: string
   replyTo?: string
+  /**
+   * Unidade que originou o envio — gravado em `EmailLog` para diagnóstico por
+   * revenda. Opcional: envios institucionais (PMB) e legados passam `undefined`.
+   */
+  tenantId?: string | null
+}
+
+/**
+ * Registra a tentativa de envio em `EmailLog` (best-effort). NUNCA lança: uma
+ * falha de log não pode derrubar o envio nem mascarar o erro real do provedor.
+ * Prisma é importado dinamicamente para manter o mailer leve e utilizável em
+ * previews de template (`email dev`), que não tocam o banco.
+ */
+async function logEmailAttempt(entry: {
+  status: "SENT" | "FAILED"
+  to: string | string[]
+  subject: string
+  template: string
+  provider: string
+  tenantId?: string | null
+  error?: unknown
+}): Promise<void> {
+  try {
+    const { prisma } = await import("@/lib/prisma")
+    await prisma.emailLog.create({
+      data: {
+        to: Array.isArray(entry.to) ? entry.to.join(", ") : entry.to,
+        subject: entry.subject,
+        template: entry.template,
+        status: entry.status,
+        provider: entry.provider,
+        error:
+          entry.error instanceof Error
+            ? entry.error.message
+            : entry.error
+              ? String(entry.error)
+              : null,
+        tenantId: entry.tenantId ?? null,
+      },
+    })
+  } catch {
+    // Log do log falhou — ignora de propósito (best-effort).
+  }
 }
 
 function renderTemplate(template: EmailTemplate): React.ReactElement {
   switch (template.type) {
-    case "welcome":
-      return WelcomeTemplate(template.props)
     case "reset-password":
       return ResetPasswordTemplate(template.props)
     case "enrollment":
@@ -113,6 +164,12 @@ function renderTemplate(template: EmailTemplate): React.ReactElement {
       return AccountCredentialsTemplate(template.props)
     case "reseller-lead-notification":
       return ResellerLeadNotificationTemplate(template.props)
+    case "notification":
+      return NotificationTemplate(template.props)
+    case "payment-pending":
+      return PaymentPendingTemplate(template.props)
+    case "payment-rejected":
+      return PaymentRejectedTemplate(template.props)
   }
 }
 
@@ -167,45 +224,74 @@ export async function sendEmail({
   template,
   from,
   replyTo,
+  tenantId,
 }: SendEmailParams): Promise<{ id: string }> {
   const element = renderTemplate(template)
   const html = await render(element)
 
-  const provider = pickProvider()
+  // `provider` começa "unknown" para que mesmo a falha de pickProvider() (nenhum
+  // provedor configurado — a causa raiz do apagão de email em produção) seja
+  // gravada em EmailLog, e não só lançada às cegas.
+  let provider = "unknown"
+  try {
+    provider = pickProvider()
 
-  if (provider === "smtp") {
-    try {
-      const { messageId } = await sendSmtp({
+    let id: string
+    if (provider === "smtp") {
+      try {
+        const { messageId } = await sendSmtp({
+          to,
+          subject,
+          html,
+          from: from ?? getDefaultFrom(),
+          replyTo,
+        })
+        id = messageId
+      } catch (err) {
+        throw new EmailError("Falha ao enviar email via SMTP", err)
+      }
+    } else {
+      // Resend (fallback)
+      const { Resend } = await import("resend")
+      const client = new Resend(process.env.RESEND_API_KEY!)
+      const result = await client.emails.send({
+        from:
+          from ??
+          process.env.SMTP_FROM ??
+          "Profissionaliza Mais Brasil <nao-responda@profissionalizamaisbrasil.com.br>",
         to,
         subject,
         html,
-        from: from ?? getDefaultFrom(),
         replyTo,
       })
-      return { id: messageId }
-    } catch (err) {
-      throw new EmailError("Falha ao enviar email via SMTP", err)
+      if (result.error) {
+        throw new EmailError(`Resend error: ${result.error.message}`, result.error)
+      }
+      if (!result.data?.id) {
+        throw new EmailError("Resend did not return an email ID")
+      }
+      id = result.data.id
     }
-  }
 
-  // Resend (fallback)
-  const { Resend } = await import("resend")
-  const client = new Resend(process.env.RESEND_API_KEY!)
-  const result = await client.emails.send({
-    from:
-      from ??
-      process.env.SMTP_FROM ??
-      "Profissionaliza Mais Brasil <nao-responda@profissionalizamaisbrasil.com.br>",
-    to,
-    subject,
-    html,
-    replyTo,
-  })
-  if (result.error) {
-    throw new EmailError(`Resend error: ${result.error.message}`, result.error)
+    await logEmailAttempt({
+      status: "SENT",
+      to,
+      subject,
+      template: template.type,
+      provider,
+      tenantId,
+    })
+    return { id }
+  } catch (err) {
+    await logEmailAttempt({
+      status: "FAILED",
+      to,
+      subject,
+      template: template.type,
+      provider,
+      tenantId,
+      error: err,
+    })
+    throw err
   }
-  if (!result.data?.id) {
-    throw new EmailError("Resend did not return an email ID")
-  }
-  return { id: result.data.id }
 }
