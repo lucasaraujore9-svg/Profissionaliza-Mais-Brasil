@@ -28,10 +28,13 @@ export function TrainingPlayer({
   moduleTitle,
   moduleDescription,
   videos: initialVideos,
+  progressPath = "/api/painel/treinamentos/progress",
 }: {
   moduleTitle: string
   moduleDescription: string | null
   videos: PlayerVideo[]
+  /** Endpoint de progresso. Revenda usa /api/painel/...; equipe PMB usa /api/admin/treinamentos/progress. */
+  progressPath?: string
 }) {
   const [videos, setVideos] = useState(initialVideos)
   // Começa na primeira aula não concluída (continuar de onde parou).
@@ -48,7 +51,7 @@ export function TrainingPlayer({
     // Optimistic.
     setVideos((prev) => prev.map((v) => (v.id === videoId ? { ...v, completed } : v)))
     try {
-      const res = await fetch("/api/painel/treinamentos/progress", {
+      const res = await fetch(progressPath, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ videoId, completed }),

@@ -13,7 +13,14 @@ export interface TrainingModuleCard {
   completedVideos: number
 }
 
-export function TrainingsGrid({ modules }: { modules: TrainingModuleCard[] }) {
+export function TrainingsGrid({
+  modules,
+  basePath = "/painel/treinamentos",
+}: {
+  modules: TrainingModuleCard[]
+  /** Prefixo dos links de módulo. Revenda usa /painel/...; equipe PMB usa /admin/treinamentos/assistir. */
+  basePath?: string
+}) {
   if (modules.length === 0) {
     return (
       <div className="rounded-xl border border-dashed border-gray-200 px-6 py-20 text-center">
@@ -37,7 +44,7 @@ export function TrainingsGrid({ modules }: { modules: TrainingModuleCard[] }) {
         return (
           <Link
             key={m.id}
-            href={`/painel/treinamentos/${m.id}`}
+            href={`${basePath}/${m.id}`}
             className="group flex flex-col overflow-hidden rounded-xl border border-gray-200 bg-white transition-shadow hover:shadow-md"
           >
             <div className="relative aspect-video w-full overflow-hidden bg-gray-100">

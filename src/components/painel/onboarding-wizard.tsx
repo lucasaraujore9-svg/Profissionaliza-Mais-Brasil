@@ -109,7 +109,9 @@ export function OnboardingWizard() {
   }
 
   function handleGoToPanel() {
-    router.push("/painel")
+    // Ao concluir o tutorial inicial, leva o usuário direto aos treinamentos
+    // (vídeos de como usar a plataforma) em vez do dashboard cru.
+    router.push("/painel/treinamentos")
     router.refresh()
   }
 

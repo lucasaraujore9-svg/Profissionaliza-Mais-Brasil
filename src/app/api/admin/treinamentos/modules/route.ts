@@ -64,7 +64,10 @@ export const POST = withRequestContext(
         title: data.title,
         description: data.description ?? null,
         coverUrl: data.coverUrl ?? null,
-        published: data.published ?? false,
+        // Nasce PUBLICADO por padrão — o conteúdo de treinamento é global e
+        // deve aparecer para todas as unidades assim que criado. O admin ainda
+        // pode despublicar pontualmente pelo toggle de gestão.
+        published: data.published ?? true,
         position: (last?.position ?? -1) + 1,
       },
       include: { videos: true, _count: { select: { videos: true } } },
