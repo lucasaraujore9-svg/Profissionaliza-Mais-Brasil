@@ -13,6 +13,7 @@ export interface PainelLayoutShellProps {
   tenantName?: string | null
   tenantLogoUrl?: string | null
   automationEnabled?: boolean
+  canSellResellers?: boolean
   memberRole?: MemberRole
   tourCompleted?: boolean
 }
@@ -24,6 +25,7 @@ export function PainelLayoutShell({
   tenantName,
   tenantLogoUrl,
   automationEnabled = false,
+  canSellResellers = false,
   memberRole = "owner",
   tourCompleted = false,
 }: PainelLayoutShellProps) {
@@ -35,6 +37,7 @@ export function PainelLayoutShell({
           tenantLogoUrl={tenantLogoUrl ?? undefined}
           userEmail={userEmail}
           automationEnabled={automationEnabled}
+          canSellResellers={canSellResellers}
         />
       </div>
       <div className="flex flex-1 flex-col overflow-hidden">
@@ -45,6 +48,7 @@ export function PainelLayoutShell({
               tenantLogoUrl={tenantLogoUrl ?? undefined}
               userEmail={userEmail}
               automationEnabled={automationEnabled}
+              canSellResellers={canSellResellers}
             />
           }
           userName={userName}

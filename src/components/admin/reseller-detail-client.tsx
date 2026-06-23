@@ -43,6 +43,7 @@ import {
 import { ResellerTecnicaConfig } from "./reseller-tecnica-config"
 import { ResellerEjaConfig } from "./reseller-eja-config"
 import { ResellerAutomationConfig } from "./reseller-automation-config"
+import { ResellerCanSellConfig } from "./reseller-can-sell-config"
 import { ResellerAsaasGatewayConfig } from "./reseller-asaas-gateway-config"
 import {
   ResellerMonthlyConfig,
@@ -85,6 +86,7 @@ interface DetailResponse {
     ejaUrl: string | null
     ejaLabel: string | null
     automationEnabled: boolean
+    canSellResellers: boolean
     waConnectedPhone: string | null
     waStatus: string
     monthlyAllowed: boolean
@@ -313,6 +315,11 @@ export function ResellerDetailClient({
               automationEnabled={data.reseller.automationEnabled}
               waConnectedPhone={data.reseller.waConnectedPhone}
               waStatus={data.reseller.waStatus}
+              onSaved={load}
+            />
+            <ResellerCanSellConfig
+              tenantId={tenantId}
+              canSellResellers={data.reseller.canSellResellers}
               onSaved={load}
             />
             <ResellerMonthlyConfig

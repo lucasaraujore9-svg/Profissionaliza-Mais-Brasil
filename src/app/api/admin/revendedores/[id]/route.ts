@@ -387,6 +387,8 @@ export const GET = withRequestContextParams<{ id: string }>(
         ejaLabel: tenant.ejaLabel,
         // Automacao (WhatsApp + Leads CRM)
         automationEnabled: tenant.automationEnabled,
+        // Modulo "Revender revendas"
+        canSellResellers: tenant.canSellResellers,
         waConnectedPhone: tenant.waConnectedPhone,
         waStatus: tenant.waStatus,
         // Pagamento parcelado/mensalidade

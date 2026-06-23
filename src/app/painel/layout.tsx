@@ -37,7 +37,7 @@ export default async function PainelLayout({
     cookies(),
     prisma.tenant.findUnique({
       where: { id: session.user.tenantId },
-      select: { name: true, logoUrl: true, automationEnabled: true },
+      select: { name: true, logoUrl: true, automationEnabled: true, canSellResellers: true },
     }),
     prisma.user.findUnique({
       where: { id: session.user.id as string },
@@ -63,6 +63,7 @@ export default async function PainelLayout({
         tenantName={tenant?.name ?? null}
         tenantLogoUrl={tenant?.logoUrl ?? null}
         automationEnabled={tenant?.automationEnabled ?? false}
+        canSellResellers={tenant?.canSellResellers ?? false}
         memberRole={session.user.memberRole ?? "owner"}
         tourCompleted={!!currentUser?.onboardingTourCompletedAt}
       >

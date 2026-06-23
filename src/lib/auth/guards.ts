@@ -129,6 +129,36 @@ export async function requireResellerOwner(
   return { ok: true, session }
 }
 
+/**
+ * Revendedor-vendedor: owner DIRETO de uma unidade cujo módulo "revender
+ * revendas" (`canSellResellers`) está habilitado pelo admin. Usado nas rotas de
+ * /painel/revendas (criar/gerir sub-revendas). Consultor não passa (owner-only,
+ * mesma razão de requireResellerOwner). Retorna o tenantId da unidade vendedora.
+ */
+export async function requireResellerSeller(): Promise<
+  { ok: true; session: AuthedSession; tenantId: string } | { ok: false; response: Response }
+> {
+  const session = await currentSession()
+  if (!session || session.role !== "RESELLER" || !session.tenantId) {
+    return { ok: false, response: deny() }
+  }
+  const tenantId = session.tenantId
+  const [owner, tenant] = await Promise.all([
+    prisma.user.findFirst({ where: { id: session.userId, tenantId }, select: { id: true } }),
+    prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { canSellResellers: true, status: true },
+    }),
+  ])
+  // Status ACTIVE obrigatorio: vender sub-revendas gera cobranca nova no Asaas da
+  // PMB e concede impersonacao — uma unidade inadimplente (SUSPENDED) ou ainda
+  // sem 1o pagamento (PENDING) nao pode exercer esse privilegio mesmo com a flag.
+  if (!owner || !tenant?.canSellResellers || tenant.status !== "ACTIVE") {
+    return { ok: false, response: deny() }
+  }
+  return { ok: true, session, tenantId }
+}
+
 export async function requireResellerMember(
   tenantId: string,
 ): Promise<{ ok: true; session: AuthedSession; memberRole: string } | { ok: false; response: Response }> {

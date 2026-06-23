@@ -1,31 +1,14 @@
 import { NextResponse } from "next/server"
 import type { Prisma } from "@prisma/client"
 import { z } from "zod"
-import { hash } from "bcryptjs"
-import { randomBytes } from "node:crypto"
 import { prisma } from "@/lib/prisma"
 import { requireAdminSession } from "@/lib/auth/admin-session"
-import { logAudit } from "@/lib/audit"
 import { tenantScopeWhere } from "@/lib/auth/scope"
-import {
-  AsaasApiError,
-  createCustomer,
-  createSubscription,
-  listPayments,
-} from "@/lib/asaas/client"
-import { createPromoBilling } from "@/lib/asaas/promo"
-import { sendEmail, isEmailConfigured } from "@/lib/email/resend"
-import { createNotification } from "@/lib/notifications"
-import { appUrl, vitrineUrl as buildVitrineUrl } from "@/lib/tenant/urls"
-import { generateUniqueReferralCode } from "@/lib/referrals/code"
 import { resolveReferrerFromCookie } from "@/lib/referrals/capture"
 import { contextLogger } from "@/lib/logger"
 import { withRequestContext } from "@/lib/observability/with-request-context"
-import { ensureTenantCourses } from "@/lib/tenant/ensure-courses"
-import { ensureTenantHomeSections } from "@/lib/home/sections"
-import { DEFAULT_AUTOMATION_TEMPLATES } from "@/lib/automation/default-templates"
-import { forbiddenNameError } from "@/lib/tenant/forbidden-names"
-import { SLUG_REGEX, validateSlugFormat, isSlugAvailable } from "@/lib/tenant/slug"
+import { SLUG_REGEX } from "@/lib/tenant/slug"
+import { createReseller } from "@/lib/resellers/create"
 
 export const GET = withRequestContext(
   { action: "admin.revendedores.list", route: "/api/admin/revendedores" },
@@ -202,12 +185,6 @@ const createSchema = z.object({
     path: ["tecnicaUrl"],
   })
 
-function isoDayPlus(days: number): string {
-  const d = new Date()
-  d.setDate(d.getDate() + days)
-  return d.toISOString().slice(0, 10)
-}
-
 export const POST = withRequestContext(
   { action: "admin.revendedores.create", route: "/api/admin/revendedores" },
   async (request: Request) => {
@@ -245,127 +222,10 @@ export const POST = withRequestContext(
   }
   const data = parsed.data
 
-  // Formato do slug (regex/tamanho/reservados/marca). validateSlugFormat ja
-  // cobre os subdominios reservados e o nome de marca proibido no slug.
-  const slugError = validateSlugFormat(data.slug)
-  if (slugError) {
-    return NextResponse.json({ error: slugError }, { status: 400 })
-  }
-
-  // Marcas reservadas (contrato): o NOME da unidade tambem nao pode conter
-  // Bolsa Mais Brasil / Profissionaliza / Escola de Ensino a Distância / Livre
-  // Cursos (nem variacoes). Vale tambem na edicao (painel/config).
-  const forbidden = forbiddenNameError(data.name)
-  if (forbidden) {
-    return NextResponse.json(
-      { error: forbidden, fields: { name: [forbidden] } },
-      { status: 400 },
-    )
-  }
-
-  // Disponibilidade: tenant existente OU slug reservado (rename nos ultimos 15d).
-  const availability = await isSlugAvailable(data.slug)
-  if (!availability.available) {
-    return NextResponse.json({ error: availability.reason }, { status: 409 })
-  }
-
-  const existingEmail = await prisma.user.findUnique({
-    where: { email: data.ownerEmail },
-    select: { id: true },
-  })
-  if (existingEmail) {
-    return NextResponse.json(
-      { error: `Já existe um usuário com o email ${data.ownerEmail}` },
-      { status: 409 },
-    )
-  }
-
-  // Senha temporária — admin deve enviar manualmente; pode disparar
-  // /forgot-password depois.
-  const tempPassword = randomBytes(9).toString("base64url")
-  const passwordHash = await hash(tempPassword, 12)
-
-  // Tenta criar customer + subscription no Asaas. Se ASAAS_API_KEY não
-  // estiver configurada, segue sem (admin pode anexar manual depois).
-  // Revenda gratuita: mensalidade 0 → nasce ATIVA, sem cobranca no Asaas.
-  // O admin pode ligar a cobranca depois pela tela de billing.
-  const isFree = data.planValue === 0
-  const isPromo =
-    !isFree && data.promoMonths !== undefined && data.promoValue !== undefined
-
-  let asaasCustomerId: string | null = null
-  let asaasSubscriptionId: string | null = null
-  let asaasPromoSubscriptionId: string | null = null
-  let invoiceUrl: string | null = null
-  let firstPaymentId: string | null = null
-  let asaasError: string | null = null
-
-  if (!isFree && process.env.ASAAS_API_KEY) {
-    try {
-      const customer = await createCustomer({
-        name: data.ownerName,
-        email: data.ownerEmail,
-        cpfCnpj: data.ownerCpfCnpj,
-        mobilePhone: data.ownerPhone,
-        externalReference: `tenant:${data.slug}`,
-      })
-      asaasCustomerId = customer.id
-
-      if (isPromo) {
-        const result = await createPromoBilling({
-          customerId: customer.id,
-          slug: data.slug,
-          name: data.name,
-          planValue: data.planValue,
-          promoValue: data.promoValue!,
-          promoMonths: data.promoMonths!,
-          baseDueDate: isoDayPlus(3),
-        })
-        asaasSubscriptionId = result.regularSubscriptionId
-        asaasPromoSubscriptionId = result.promoSubscriptionId
-        invoiceUrl = result.invoiceUrl
-        firstPaymentId = result.firstPaymentId
-      } else {
-        const subscription = await createSubscription({
-          customer: customer.id,
-          billingType: "UNDEFINED",
-          value: data.planValue,
-          nextDueDate: isoDayPlus(3),
-          cycle: "MONTHLY",
-          description: `Mensalidade Profissionaliza Mais Brasil — ${data.name}`,
-          externalReference: `tenant:${data.slug}`,
-        })
-        asaasSubscriptionId = subscription.id
-
-        // Buscar primeiro payment criado pela subscription para pegar invoiceUrl
-        try {
-          const payments = await listPayments({
-            subscription: subscription.id,
-            limit: 1,
-          })
-          const firstPayment = payments.data[0] ?? null
-          invoiceUrl = firstPayment?.invoiceUrl ?? null
-          firstPaymentId = firstPayment?.id ?? null
-        } catch {
-          // sem invoiceUrl ainda — webhook vai atualizar depois
-        }
-      }
-    } catch (error) {
-      asaasError =
-        error instanceof AsaasApiError
-          ? error.message
-          : error instanceof Error
-            ? error.message
-            : "Erro Asaas"
-    }
-  }
-
-  const referralCode = await generateUniqueReferralCode(data.slug)
-
-  // Atribuicao da indicacao: numa conversao de lead, usamos o referrer gravado
-  // no proprio lead (capturado quando o interessado preencheu o formulario) —
-  // o cookie pmb_referral aqui seria o do navegador do admin, nao do indicado.
-  // Fora da conversao, mantemos o cookie como fonte.
+  // Atribuição da indicação + vendedor atribuído: numa conversão de lead usamos
+  // o referrer gravado no próprio lead (capturado no formulário do interessado),
+  // não o cookie do navegador do admin. Essa resolução fica no route porque
+  // depende do contexto do admin/lead; a criação em si vai para createReseller.
   let lead: { id: string; referrerTenantId: string | null; ownerUserId: string | null } | null =
     null
   if (data.leadId) {
@@ -394,135 +254,43 @@ export const POST = withRequestContext(
       ? ctx.userId
       : data.salesUserId ?? null)
 
-  const tenant = await prisma.tenant.create({
-    data: {
-      name: data.name,
-      slug: data.slug,
-      // Gratuita ja nasce ATIVA (nao ha pagamento a aguardar). Caso contrario,
-      // aguarda o primeiro pagamento (webhook PAYMENT_RECEIVED ativa).
-      status: isFree ? "ACTIVE" : "PENDING",
-      billingMode: "AUTO",
-      planValue: data.planValue,
-      asaasCustomerId,
-      asaasSubscriptionId,
-      asaasPromoSubscriptionId,
-      promoValue: isPromo ? data.promoValue : null,
-      promoMonths: isPromo ? data.promoMonths : null,
-      // Gratuita nunca parcela (não há cobrança). Paga guarda o teto escolhido.
-      firstPaymentMaxInstallments: isFree ? 1 : data.firstPaymentMaxInstallments,
-      accountManagerId: data.accountManagerId ?? null,
-      salesUserId,
-      poloName: data.slug,
-      referralCode,
-      referrerTenantId,
-      // Opcionais ligados já na criação. EJA/Técnica guardam o link (o schema
-      // garante que veio quando o flag está ligado); automação não precisa de
-      // link — os templates default são criados logo abaixo.
-      automationEnabled: data.automationEnabled,
-      ejaEnabled: data.ejaEnabled,
-      ejaUrl: data.ejaEnabled ? (data.ejaUrl ?? null) : null,
-      tecnicaEnabled: data.tecnicaEnabled,
-      tecnicaUrl: data.tecnicaEnabled ? (data.tecnicaUrl ?? null) : null,
-      updatedAt: new Date(),
-    },
-    select: { id: true, slug: true, name: true, status: true },
+  const result = await createReseller({
+    name: data.name,
+    slug: data.slug,
+    ownerName: data.ownerName,
+    ownerEmail: data.ownerEmail,
+    ownerCpfCnpj: data.ownerCpfCnpj,
+    ownerPhone: data.ownerPhone,
+    planValue: data.planValue,
+    firstPaymentMaxInstallments: data.firstPaymentMaxInstallments,
+    promoMonths: data.promoMonths,
+    promoValue: data.promoValue,
+    automationEnabled: data.automationEnabled,
+    ejaEnabled: data.ejaEnabled,
+    ejaUrl: data.ejaUrl ?? null,
+    tecnicaEnabled: data.tecnicaEnabled,
+    tecnicaUrl: data.tecnicaUrl ?? null,
+    accountManagerId: data.accountManagerId ?? null,
+    salesUserId,
+    referrerTenantId,
+    actor: { userId: ctx.userId, role: ctx.role, email: ctx.email },
   })
 
-  // SAAS-001: trilha de auditoria de criação de revenda (lifecycle de tenant).
-  await logAudit({
-    action: "tenant.create",
-    resource: "Tenant",
-    resourceId: tenant.id,
-    actorUserId: ctx.userId,
-    actorRole: ctx.role,
-    actorEmail: ctx.email,
-    tenantId: tenant.id,
-    payloadAfter: {
-      slug: tenant.slug,
-      name: tenant.name,
-      status: tenant.status,
-      planValue: data.planValue,
-    },
-  })
-
-  // H7-0: semeia o TenantPayment PENDING da 1ª mensalidade já no onboarding
-  // (quando o id da 1ª cobrança já foi capturado). Fecha a janela em que
-  // isKnownAsaasPayment retorna false e a página /cobranca dá 404 até o webhook
-  // PAYMENT_CREATED chegar. O webhook faz upsert por asaasPaymentId (unique) — não
-  // duplica. Best-effort: uma falha aqui não invalida o cadastro já concluído.
-  if (firstPaymentId) {
-    await prisma.tenantPayment
-      .create({
-        data: {
-          tenantId: tenant.id,
-          asaasPaymentId: firstPaymentId,
-          amount: isPromo ? data.promoValue! : data.planValue,
-          billingType: "UNDEFINED",
-          status: "PENDING",
-          dueDate: new Date(isoDayPlus(3)),
-          invoiceUrl,
-        },
-      })
-      .catch(() => null)
-  }
-
-  // Automação ligada na criação: cria os templates default (espelha a primeira
-  // ativação em .../[id]/automacao). Tenant recém-criado nunca tem templates.
-  if (data.automationEnabled) {
-    try {
-      await prisma.automationMessageTemplate.createMany({
-        data: DEFAULT_AUTOMATION_TEMPLATES.map((t) => ({
-          tenantId: tenant.id,
-          key: t.key,
-          body: t.body,
-          enabled: true,
-        })),
-      })
-    } catch (err) {
-      contextLogger().error(
-        { err, event: "admin.revendedores.automation_templates_failed", tenantId: tenant.id },
-        "falha ao criar templates default de automação na criação do revendedor",
-      )
-    }
-  }
-
-  // Bootstrap da vitrine: espelha o catálogo global em TenantCourse e clona as
-  // seções da home do PMB. Sem isso, a vitrine nasce sem cursos (o hero e as
-  // seções consultam tenant_courses) — só era preenchida quando o revendedor
-  // abria /painel/cursos. Idempotente; falha aqui não impede a criação.
-  try {
-    await Promise.all([
-      ensureTenantCourses(tenant.id),
-      ensureTenantHomeSections(tenant.id),
-    ])
-  } catch (err) {
-    contextLogger().error(
-      { err, event: "admin.revendedores.bootstrap_vitrine_failed", tenantId: tenant.id },
-      "bootstrap da vitrine (cursos/seções) falhou na criação do revendedor",
+  if (!result.ok) {
+    return NextResponse.json(
+      result.fields
+        ? { error: result.error, fields: result.fields }
+        : { error: result.error },
+      { status: result.status },
     )
   }
 
-  const user = await prisma.user.create({
-    data: {
-      email: data.ownerEmail,
-      name: data.ownerName,
-      role: "RESELLER",
-      status: "ATIVO",
-      tenantId: tenant.id,
-      passwordHash,
-      phone: data.ownerPhone ?? null,
-      mustChangePassword: true,
-      updatedAt: new Date(),
-    },
-    select: { id: true, email: true },
-  })
-
-  // Conversao de lead: marca como convertido e liga ao tenant criado.
+  // Conversão de lead → revenda: marca como convertido e liga ao tenant criado.
   if (lead) {
     await prisma.lead
       .update({
         where: { id: lead.id },
-        data: { status: "CONVERTED", tenantId: tenant.id },
+        data: { status: "CONVERTED", tenantId: result.tenant.id },
       })
       .catch((err: unknown) => {
         contextLogger().error(
@@ -532,89 +300,14 @@ export const POST = withRequestContext(
       })
   }
 
-  // Dispara email de onboarding com credenciais e link de pagamento.
-  // Falha silenciosa se nenhum provedor estiver configurado — não quebra a criação.
-  const baseUrl = appUrl()
-  const vitrineUrl = buildVitrineUrl(data.slug)
-  let emailSent = false
-  let emailError: string | null = null
-  try {
-    await sendEmail({
-      to: data.ownerEmail,
-      subject: invoiceUrl
-        ? `Sua revenda ${data.name} foi criada — finalize o pagamento`
-        : `Sua revenda ${data.name} foi criada`,
-      template: {
-        type: "reseller-onboarding",
-        props: {
-          ownerName: data.ownerName,
-          resellerName: data.name,
-          loginEmail: data.ownerEmail,
-          tempPassword,
-          loginUrl: `${baseUrl}/login`,
-          vitrineUrl,
-          paymentUrl: invoiceUrl,
-          planValue: data.planValue,
-        },
-      },
-    })
-    emailSent = true
-  } catch (err) {
-    emailError = err instanceof Error ? err.message : "Erro ao enviar email"
-    contextLogger().error(
-      { err, event: "admin.revendedores.onboarding_email_failed" },
-      "onboarding email do revendedor falhou",
-    )
-  }
-
-  // Notifica gerentes de revendedor + super admin sobre novo revendedor
-  await createNotification({
-    audience: "ROLE",
-    roleTarget: "SUPER_ADMIN",
-    level: "INFO",
-    title: `Novo revendedor: ${data.name}`,
-    body: invoiceUrl
-      ? "Aguardando primeiro pagamento."
-      : "Cadastro concluído.",
-    category: "tenant",
-    href: `/admin/revendedores/${tenant.id}`,
-  })
-  if (data.accountManagerId) {
-    await createNotification({
-      audience: "USER",
-      userId: data.accountManagerId,
-      level: "INFO",
-      title: `Você foi atribuído ao revendedor ${data.name}`,
-      body: `Slug: ${data.slug} · Plano R$ ${data.planValue.toFixed(2).replace(".", ",")}`,
-      category: "tenant",
-      href: `/admin/revendedores/${tenant.id}`,
-    })
-  }
-
   return NextResponse.json({
     data: {
-      tenant,
-      owner: { id: user.id, email: user.email },
-      // Só retorna a senha em claro quando o e-mail de onboarding NÃO foi enviado
-      // (fallback para o admin repassar). Com e-mail entregue, o revendedor já
-      // recebeu as credenciais — evita expor a senha no corpo da resposta (R10).
-      tempPassword: emailSent ? null : tempPassword,
-      vitrineUrl,
-      asaas: {
-        configured: Boolean(process.env.ASAAS_API_KEY),
-        customerId: asaasCustomerId,
-        subscriptionId: asaasSubscriptionId,
-        promoSubscriptionId: asaasPromoSubscriptionId,
-        free: isFree,
-        invoiceUrl,
-        firstPaymentId,
-        error: asaasError,
-      },
-      email: {
-        configured: isEmailConfigured(),
-        sent: emailSent,
-        error: emailError,
-      },
+      tenant: result.tenant,
+      owner: result.owner,
+      tempPassword: result.tempPassword,
+      vitrineUrl: result.vitrineUrl,
+      asaas: result.asaas,
+      email: result.email,
     },
   })
   },

@@ -22,6 +22,7 @@ import {
   LifeBuoy,
   Lock,
   Video,
+  Store,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -31,6 +32,8 @@ const ALL_ITEMS: {
   icon: typeof LayoutDashboard
   ownerOnly?: boolean
   automationOnly?: boolean
+  /** Só aparece quando o módulo "revender revendas" está habilitado na unidade. */
+  resellerSellerOnly?: boolean
 }[] = [
   { href: "/painel", label: "Dashboard", icon: LayoutDashboard },
   { href: "/painel/treinamentos", label: "Treinamentos", icon: Video },
@@ -39,6 +42,7 @@ const ALL_ITEMS: {
   { href: "/painel/atendimento", label: "Atendimento", icon: LifeBuoy, ownerOnly: true },
   { href: "/painel/leads", label: "Leads", icon: Inbox, ownerOnly: true, automationOnly: true },
   { href: "/painel/vendas", label: "Vendas diretas", icon: ShoppingCart },
+  { href: "/painel/revendas", label: "Revendas", icon: Store, ownerOnly: true, resellerSellerOnly: true },
   { href: "/painel/cupons", label: "Cupons", icon: Tag },
   { href: "/painel/financeiro", label: "Financeiro", icon: CreditCard },
   { href: "/painel/indicacoes", label: "Indicações", icon: Share2, ownerOnly: true },
@@ -57,6 +61,7 @@ interface SidebarPainelProps {
   userEmail?: string
   isOwner?: boolean
   automationEnabled?: boolean
+  canSellResellers?: boolean
 }
 
 export function SidebarPainel({
@@ -65,13 +70,16 @@ export function SidebarPainel({
   userEmail,
   isOwner = true,
   automationEnabled = false,
+  canSellResellers = false,
 }: SidebarPainelProps) {
   const pathname = usePathname()
   // Itens de automação continuam VISÍVEIS mesmo sem o módulo ativo — ao clicar,
   // a página mostra o paywall (fundo desfocado + pop-up comercial). Só ocultamos
-  // por papel (ownerOnly).
+  // por papel (ownerOnly). "Revendas" depende do módulo canSellResellers (o
+  // acesso é reforçado server-side por requireResellerSeller).
   const navItems = ALL_ITEMS.filter((item) => {
     if (item.ownerOnly && !isOwner) return false
+    if (item.resellerSellerOnly && !canSellResellers) return false
     return true
   })
 
