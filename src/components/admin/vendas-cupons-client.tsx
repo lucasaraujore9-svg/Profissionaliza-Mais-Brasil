@@ -151,7 +151,8 @@ export function VendasCuponsClient({ role }: { role: string }) {
       </div>
 
       <div className="overflow-hidden rounded-xl border bg-white">
-        <table className="w-full text-sm">
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[760px] text-sm">
           <thead className="bg-[var(--color-pmb-mist)] text-left">
             <tr>
               <th className="px-4 py-3 font-semibold">Código</th>
@@ -210,6 +211,7 @@ export function VendasCuponsClient({ role }: { role: string }) {
             )}
           </tbody>
         </table>
+        </div>
       </div>
 
       <Sheet open={open} onOpenChange={setOpen}>

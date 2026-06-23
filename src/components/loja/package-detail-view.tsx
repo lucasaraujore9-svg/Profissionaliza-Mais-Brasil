@@ -40,7 +40,11 @@ export function PackageDetailView({
         <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px] lg:gap-8">
           <div className="space-y-6">
             <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
-              <div className="relative aspect-[16/7] w-full bg-gradient-to-br from-[var(--color-pmb-lime-50)] to-[var(--color-pmb-mist)]">
+              <div className="relative aspect-[16/7] w-full overflow-hidden bg-gradient-to-br from-[var(--color-pmb-lime-50)] to-[var(--color-pmb-mist)]">
+                {/* Spacer em fluxo garante a altura 16:7 da capa em engines
+                    antigos (iOS Safari ≤14) onde aspect-ratio colapsa sem
+                    conteudo em fluxo. */}
+                <div aria-hidden className="pt-[43.75%]" />
                 {pkg.coverImageUrl ? (
                   <Image
                     src={pkg.coverImageUrl}
@@ -51,7 +55,7 @@ export function PackageDetailView({
                     unoptimized={shouldUnoptimizeImage(pkg.coverImageUrl)}
                   />
                 ) : (
-                  <div className="flex h-full w-full items-center justify-center text-[var(--color-pmb-green)]">
+                  <div className="absolute inset-0 flex items-center justify-center text-[var(--color-pmb-green)]">
                     <Layers className="h-14 w-14" aria-hidden />
                   </div>
                 )}

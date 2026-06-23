@@ -59,6 +59,10 @@ function PackageCard({ pkg, hrefBase }: { pkg: VitrinePackageCard; hrefBase: str
       className="group flex flex-col overflow-hidden rounded-2xl border border-[rgba(2,89,24,0.10)] bg-white shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
     >
       <div className="relative aspect-[16/9] w-full overflow-hidden bg-gradient-to-br from-[var(--color-pmb-lime-50)] to-[var(--color-pmb-mist)]">
+        {/* Spacer em fluxo reserva a altura 16:9 a partir da largura mesmo em
+            engines antigos (iOS Safari ≤14) onde aspect-ratio colapsa para 0
+            quando todo o conteudo e position:absolute. */}
+        <div aria-hidden className="pt-[56.25%]" />
         {pkg.coverImageUrl ? (
           <Image
             src={pkg.coverImageUrl}
@@ -69,7 +73,7 @@ function PackageCard({ pkg, hrefBase }: { pkg: VitrinePackageCard; hrefBase: str
             unoptimized={shouldUnoptimizeImage(pkg.coverImageUrl)}
           />
         ) : (
-          <div className="flex h-full w-full items-center justify-center text-[var(--color-pmb-green)]">
+          <div className="absolute inset-0 flex items-center justify-center text-[var(--color-pmb-green)]">
             <Layers className="h-10 w-10" aria-hidden />
           </div>
         )}

@@ -104,7 +104,8 @@ export default async function VendasDashboardPage() {
         <div className="border-b px-4 py-3">
           <h2 className="font-display text-lg">Últimas vendas</h2>
         </div>
-        <table className="w-full text-sm">
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[760px] text-sm">
           <thead className="bg-[var(--color-pmb-mist)] text-left">
             <tr>
               <th className="px-4 py-3 font-semibold">Aluno</th>
@@ -157,6 +158,7 @@ export default async function VendasDashboardPage() {
             )}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   )

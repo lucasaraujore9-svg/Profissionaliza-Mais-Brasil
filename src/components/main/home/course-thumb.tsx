@@ -71,6 +71,11 @@ export function CourseThumb({
   if (imageUrl) {
     return (
       <div className="relative aspect-[16/10] w-full overflow-hidden bg-[var(--color-pmb-mist)]">
+        {/* Spacer em fluxo: reserva a altura 16:10 a partir da largura mesmo em
+            navegadores antigos (iOS Safari ≤14) onde `aspect-ratio` colapsa para
+            0 quando o único filho e position:absolute (o <Image fill>). Sem ele,
+            os cards empilhavam/sobrepunham no mobile. */}
+        <div aria-hidden className="pt-[62.5%]" />
         <Image
           src={imageUrl}
           alt={titulo ?? categoria}
@@ -93,6 +98,9 @@ export function CourseThumb({
       className="relative aspect-[16/10] w-full overflow-hidden"
       style={{ background: ACCENT_BG[accent] }}
     >
+      {/* Ver nota no branch com imagem: garante a altura 16:10 em engines
+          antigos onde aspect-ratio colapsa sem filho em fluxo. */}
+      <div aria-hidden className="pt-[62.5%]" />
       <svg
         className="absolute inset-0 h-full w-full opacity-[0.18]"
         aria-hidden

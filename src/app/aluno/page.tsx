@@ -88,7 +88,7 @@ export default async function StudentDashboardPage() {
         <p className="mt-1 text-sm text-gray-600">
           {hasNoEnrollments
             ? "Vamos começar? Escolha um curso e comece a estudar hoje mesmo."
-            : "Acompanhe seus cursos, pagamentos e continue de onde parou."}
+            : "Esta é a sua plataforma acadêmica: acompanhe cursos, pagamentos e certificados aqui — e acesse a plataforma de aulas para assistir aos vídeos."}
         </p>
       </header>
 

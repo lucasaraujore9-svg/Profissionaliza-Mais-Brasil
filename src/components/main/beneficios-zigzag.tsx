@@ -62,6 +62,9 @@ export function BeneficiosZigZag() {
               <div
                 className={`relative aspect-[4/3] overflow-hidden rounded-2xl bg-gradient-to-br ${b.gradient} shadow-xl`}
               >
+                {/* Spacer em fluxo garante a altura 4:3 em engines antigos (iOS
+                    Safari ≤14) onde aspect-ratio colapsa sem conteudo em fluxo. */}
+                <div aria-hidden className="pt-[75%]" />
                 <div className="absolute inset-0 flex items-center justify-center">
                   <b.icon className="h-24 w-24 text-white/90" strokeWidth={1.5} />
                 </div>

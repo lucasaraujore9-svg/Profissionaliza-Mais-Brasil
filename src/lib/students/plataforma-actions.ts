@@ -157,7 +157,7 @@ async function findExistingPlatformLogin(student: {
           encryptedSenha: aluno.senha ? encrypt(String(aluno.senha)) : null,
         }
       }
-    } catch (err) {
+    } catch {
       // "Nao encontrado" na EA chega como erro de API — segue para o proximo
       // filtro / criacao. Logado em debug para diagnostico.
       contextLogger().debug(
@@ -470,11 +470,65 @@ export async function linkCourseToStudent(
     throw new Error(`plataforma_course_id ${course.plataformaCourseId} invalido`)
   }
 
-  const { plataformaAlunoId } = await ensureStudentOnPlatform(studentId)
+  const { plataformaAlunoId, created } = await ensureStudentOnPlatform(studentId)
 
   await vincularCurso({ aluno: plataformaAlunoId, idcurso: courseIdNum })
 
+  // Invariante: todo aluno com curso vinculado deve estar ATIVO na plataforma.
+  // `ensureStudentOnPlatform` garante status="ativo" ao CRIAR o login, mas faz
+  // short-circuit quando o aluno JA existe (early return) — entao um login
+  // legado/manual em "interessado" (ou inativo) ganharia o curso sem ser
+  // promovido a ativo. Reafirmamos o acesso quando o login nao foi criado agora.
+  if (!created) {
+    await ensureStudentActiveOnPlatform(studentId, plataformaAlunoId)
+  }
+
   return { plataformaAlunoId, plataformaCourseId: courseIdNum }
+}
+
+/**
+ * Garante que o aluno esta ATIVO/LIBERADO na plataforma de aulas — invariante de
+ * "todo aluno com curso vinculado deve estar ativo". Chamado ao vincular curso a
+ * um login que ja existia (o `criarAluno` ja nasce ativo, entao esse caminho so
+ * corrige logins legados/manuais ou com status defasado, ex.: "interessado").
+ *
+ * Espelha a guarda de isolamento cross-tenant de `ensureStudentOnPlatform`: NAO
+ * reativa quando a MESMA pessoa esta bloqueada por inadimplencia em OUTRA unidade
+ * (status/apostila sao por-login compartilhado; reativar reabriria os cursos
+ * suspensos da outra unidade — vazamento de acesso cross-tenant). O bloqueio por
+ * inadimplencia/expiracao do PROPRIO aluno e reaplicado pelos crons de sweep.
+ */
+export async function ensureStudentActiveOnPlatform(
+  studentId: string,
+  plataformaAlunoId: number,
+): Promise<void> {
+  const student = await prisma.student.findUnique({
+    where: { id: studentId },
+    select: { id: true, cpf: true, email: true, status: true, apostila: true },
+  })
+  if (!student) return
+
+  if (await isPersonBlockedInAnotherTenant(student)) {
+    contextLogger().warn(
+      {
+        event: "plataforma.skip_activate_blocked_login",
+        studentId,
+        plataformaAlunoId,
+      },
+      "curso vinculado SEM reativar o acesso — pessoa bloqueada por inadimplencia em outra unidade",
+    )
+    return
+  }
+
+  // Idempotente: a EA aceita reenviar o mesmo status. So tocamos o banco quando
+  // o status local ainda nao reflete ATIVO/LIBERADA.
+  await editarAluno({ id_aluno: plataformaAlunoId, status: "ativo", apostila: "liberar" })
+  if (student.status !== "ATIVO" || student.apostila !== "LIBERADA") {
+    await prisma.student.update({
+      where: { id: student.id },
+      data: { status: "ATIVO", apostila: "LIBERADA" },
+    })
+  }
 }
 
 /**

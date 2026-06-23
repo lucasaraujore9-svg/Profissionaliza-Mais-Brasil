@@ -70,6 +70,13 @@ export function PlatformCredentialsCard({ login, senha, loginUrl }: Props) {
         </div>
       </div>
 
+      <p className="mt-4 text-sm leading-relaxed text-white/85">
+        Use o usuário e a senha abaixo para entrar na <strong>plataforma de
+        aulas</strong> — é lá que ficam os vídeos e as atividades dos seus
+        cursos. Esta área continua sendo a sua central para matrículas,
+        faturas e certificados.
+      </p>
+
       <div className="mt-5 grid gap-3 sm:grid-cols-2">
         {/* Usuário */}
         <div className="rounded-xl bg-white/10 p-3">

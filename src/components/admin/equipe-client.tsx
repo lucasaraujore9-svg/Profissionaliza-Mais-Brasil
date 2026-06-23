@@ -169,10 +169,10 @@ export function EquipeClient({
         </Button>
       </div>
 
-      <div className="flex items-center gap-3">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
         <Label className="text-xs uppercase text-muted-foreground">Filtrar papel</Label>
         <Select value={filter} onValueChange={(v) => setFilter(v ?? "ALL")}>
-          <SelectTrigger className="w-[220px]">
+          <SelectTrigger className="w-full sm:w-[220px]">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -187,7 +187,8 @@ export function EquipeClient({
       </div>
 
       <div className="overflow-hidden rounded-xl border bg-white">
-        <table className="w-full text-sm">
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[760px] text-sm">
           <thead className="bg-[var(--color-pmb-mist)] text-left">
             <tr>
               <th className="px-4 py-3 font-semibold">Nome</th>
@@ -246,6 +247,7 @@ export function EquipeClient({
             )}
           </tbody>
         </table>
+        </div>
       </div>
 
       <Sheet open={open} onOpenChange={setOpen}>

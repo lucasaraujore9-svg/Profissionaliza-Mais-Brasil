@@ -428,7 +428,11 @@ export function CourseDetailView({
           <aside className="lg:sticky lg:top-24 lg:self-start">
             <div className="overflow-hidden rounded-2xl border border-[rgba(2,89,24,0.1)] bg-white shadow-[0_20px_40px_-20px_rgba(2,89,24,0.25)]">
               {course.imageUrl && (
-                <div className="relative aspect-video w-full bg-[var(--color-pmb-mist)] lg:hidden">
+                <div className="relative aspect-video w-full overflow-hidden bg-[var(--color-pmb-mist)] lg:hidden">
+                  {/* Spacer em fluxo garante a altura 16:9 em engines antigos
+                      (iOS Safari ≤14) onde aspect-ratio colapsa sem conteudo em
+                      fluxo (o <Image fill> e position:absolute). */}
+                  <div aria-hidden className="pt-[56.25%]" />
                   <Image
                     src={course.imageUrl}
                     alt={course.nome}

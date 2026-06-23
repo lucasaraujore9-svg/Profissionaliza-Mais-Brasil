@@ -102,7 +102,7 @@ export function StudentToolbar({
             onEnrollmentFilterChange(value as EnrollmentFilter)
           }
         >
-          <SelectTrigger className="h-auto w-[200px] text-xs font-semibold text-gray-700">
+          <SelectTrigger className="h-auto w-full text-xs font-semibold text-gray-700 sm:w-[200px]">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>

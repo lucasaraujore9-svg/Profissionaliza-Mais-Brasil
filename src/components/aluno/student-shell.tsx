@@ -216,7 +216,7 @@ export function StudentShell({
             onClick={() => setMobileOpen(false)}
           />
           <aside
-            className="fixed inset-y-0 left-0 z-50 flex w-72 flex-col text-white shadow-xl lg:hidden"
+            className="fixed inset-y-0 left-0 z-50 flex w-72 max-w-[85vw] flex-col text-white shadow-xl lg:hidden"
             style={{ backgroundColor: "var(--shell-primary)" }}
           >
             <button

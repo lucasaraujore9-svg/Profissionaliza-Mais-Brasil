@@ -99,9 +99,12 @@ export function HeroMockup() {
                 key={curso.nome}
                 className="overflow-hidden rounded-lg ring-1 ring-gray-200"
               >
-                <div
-                  className={`aspect-[4/3] bg-gradient-to-br ${curso.gradient}`}
-                />
+                <div className={`bg-gradient-to-br ${curso.gradient}`}>
+                  {/* pt-% no lugar de so aspect-ratio: garante a altura em
+                      engines antigos (iOS Safari ≤14) onde aspect-ratio colapsa
+                      sem conteudo em fluxo. */}
+                  <div aria-hidden className="pt-[75%]" />
+                </div>
                 <div className="p-2">
                   <p className="text-[8px] font-medium uppercase tracking-wide text-gray-400">
                     {curso.categoria}

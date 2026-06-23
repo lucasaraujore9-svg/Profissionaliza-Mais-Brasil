@@ -273,7 +273,8 @@ export function StudentManagementClient({ student: initialStudent, role }: Props
           </div>
         ) : (
           <div className="overflow-hidden rounded-xl border bg-white">
-            <table className="w-full text-sm">
+            <div className="overflow-x-auto">
+            <table className="w-full min-w-[760px] text-sm">
               <thead className="bg-[var(--color-pmb-mist)] text-left">
                 <tr>
                   <th className="px-4 py-3 font-semibold">Curso</th>
@@ -348,6 +349,7 @@ export function StudentManagementClient({ student: initialStudent, role }: Props
                 })}
               </tbody>
             </table>
+            </div>
           </div>
         )}
       </div>

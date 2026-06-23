@@ -115,16 +115,20 @@ export function TecnicaSection({
                     {/* Capa fixa do curso (padronizada PMB) + selos sobrepostos.
                         Sem imagem cadastrada => fundo neutro com ícone. */}
                     <div className="relative aspect-[16/10] w-full overflow-hidden bg-gradient-to-br from-[#024a14] to-[#013d10]">
+                      {/* Spacer em fluxo reserva a altura 16:10 a partir da
+                          largura mesmo em engines antigos (iOS Safari ≤14) onde
+                          aspect-ratio colapsa para 0 sem conteudo em fluxo. */}
+                      <div aria-hidden className="pt-[62.5%]" />
                       {course.image ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
                           src={course.image}
                           alt={course.name}
                           loading="lazy"
-                          className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
+                          className="absolute inset-0 h-full w-full object-cover transition duration-300 group-hover:scale-105"
                         />
                       ) : (
-                        <div className="flex h-full w-full items-center justify-center">
+                        <div className="absolute inset-0 flex items-center justify-center">
                           <GraduationCap
                             className="h-9 w-9 text-white/25"
                             aria-hidden
