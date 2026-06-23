@@ -37,15 +37,30 @@ const FIELD_LABEL: Record<string, string> = {
   planValue: "Mensalidade",
 }
 
-export function NovaRevendaForm() {
+export interface NovaRevendaInitial {
+  name?: string
+  slug?: string
+  ownerName?: string
+  ownerEmail?: string
+  ownerCpfCnpj?: string
+  ownerPhone?: string
+  /** Lead de revenda sendo convertido — marca CONVERTED ao criar com sucesso. */
+  leadId?: string
+}
+
+export function NovaRevendaForm({ initial }: { initial?: NovaRevendaInitial } = {}) {
   const router = useRouter()
-  const [name, setName] = useState("")
-  const [slug, setSlug] = useState("")
-  const [slugTouched, setSlugTouched] = useState(false)
-  const [ownerName, setOwnerName] = useState("")
-  const [ownerEmail, setOwnerEmail] = useState("")
-  const [ownerCpfCnpj, setOwnerCpfCnpj] = useState("")
-  const [ownerPhone, setOwnerPhone] = useState("")
+  const [name, setName] = useState(initial?.name ?? "")
+  const [slug, setSlug] = useState(
+    initial?.slug ?? (initial?.name ? slugify(initial.name) : ""),
+  )
+  // Quando vem pré-preenchido (conversão de lead), o slug já nasce "tocado" para
+  // não ser sobrescrito ao editar o nome.
+  const [slugTouched, setSlugTouched] = useState(Boolean(initial?.slug || initial?.name))
+  const [ownerName, setOwnerName] = useState(initial?.ownerName ?? "")
+  const [ownerEmail, setOwnerEmail] = useState(initial?.ownerEmail ?? "")
+  const [ownerCpfCnpj, setOwnerCpfCnpj] = useState(initial?.ownerCpfCnpj ?? "")
+  const [ownerPhone, setOwnerPhone] = useState(initial?.ownerPhone ?? "")
   const [planValue, setPlanValue] = useState("")
   const [installments, setInstallments] = useState("1")
 
@@ -79,6 +94,7 @@ export function NovaRevendaForm() {
           ownerPhone: ownerPhone.trim() || undefined,
           planValue: Number(planValue) || 0,
           firstPaymentMaxInstallments: Number(installments) || 1,
+          leadId: initial?.leadId,
         }),
       })
       const payload = await res.json()

@@ -26,7 +26,7 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
-const ALL_ITEMS: {
+interface NavItem {
   href: string
   label: string
   icon: typeof LayoutDashboard
@@ -34,7 +34,11 @@ const ALL_ITEMS: {
   automationOnly?: boolean
   /** Só aparece quando o módulo "revender revendas" está habilitado na unidade. */
   resellerSellerOnly?: boolean
-}[] = [
+  /** Sub-itens exibidos (indentados) quando a seção está ativa. */
+  children?: { href: string; label: string }[]
+}
+
+const ALL_ITEMS: NavItem[] = [
   { href: "/painel", label: "Dashboard", icon: LayoutDashboard },
   { href: "/painel/treinamentos", label: "Treinamentos", icon: Video },
   { href: "/painel/cursos", label: "Catálogo", icon: GraduationCap },
@@ -42,7 +46,17 @@ const ALL_ITEMS: {
   { href: "/painel/atendimento", label: "Atendimento", icon: LifeBuoy, ownerOnly: true },
   { href: "/painel/leads", label: "Leads", icon: Inbox, ownerOnly: true, automationOnly: true },
   { href: "/painel/vendas", label: "Vendas diretas", icon: ShoppingCart },
-  { href: "/painel/revendas", label: "Revendas", icon: Store, ownerOnly: true, resellerSellerOnly: true },
+  {
+    href: "/painel/revendas",
+    label: "Revendedor",
+    icon: Store,
+    ownerOnly: true,
+    resellerSellerOnly: true,
+    children: [
+      { href: "/painel/revendas/nova", label: "Criar revenda" },
+      { href: "/painel/revendas/leads", label: "Leads revendas" },
+    ],
+  },
   { href: "/painel/cupons", label: "Cupons", icon: Tag },
   { href: "/painel/financeiro", label: "Financeiro", icon: CreditCard },
   { href: "/painel/indicacoes", label: "Indicações", icon: Share2, ownerOnly: true },
@@ -120,34 +134,60 @@ export function SidebarPainel({
         {navItems.map((item) => {
           // Casa em fronteira de segmento (href + "/") para nao acender itens
           // cujo href e prefixo de string de outro.
-          const isActive =
+          const sectionActive =
             pathname === item.href ||
             (item.href !== "/painel" && pathname.startsWith(item.href + "/"))
+          // Itens com filhos só destacam o pai no href EXATO (o dashboard da
+          // seção); dentro de um filho, a seção expande e o destaque vai ao filho.
+          const isActive = item.children ? pathname === item.href : sectionActive
           const locked = !!item.automationOnly && !automationEnabled
           return (
-            <Link
-              key={item.href}
-              href={item.href}
-              data-tour={`nav:${item.href}`}
-              className={cn(
-                "flex items-center gap-3 rounded-lg px-4 py-2.5 text-sm font-medium transition-colors",
-                isActive
-                  ? "bg-[var(--color-pmb-lime)] text-[var(--color-pmb-green-900)] font-semibold"
-                  : "text-white/85 hover:bg-white/10 hover:text-white",
+            <div key={item.href}>
+              <Link
+                href={item.href}
+                data-tour={`nav:${item.href}`}
+                className={cn(
+                  "flex items-center gap-3 rounded-lg px-4 py-2.5 text-sm font-medium transition-colors",
+                  isActive
+                    ? "bg-[var(--color-pmb-lime)] text-[var(--color-pmb-green-900)] font-semibold"
+                    : "text-white/85 hover:bg-white/10 hover:text-white",
+                )}
+              >
+                <item.icon className="h-5 w-5" />
+                <span className="flex-1">{item.label}</span>
+                {locked && (
+                  <Lock
+                    className={cn(
+                      "h-3.5 w-3.5",
+                      isActive ? "text-[var(--color-pmb-green-900)]/50" : "text-white/45",
+                    )}
+                    aria-label="Recurso premium"
+                  />
+                )}
+              </Link>
+              {item.children && sectionActive && (
+                <div className="mt-1 space-y-1 pl-6">
+                  {item.children.map((child) => {
+                    const childActive =
+                      pathname === child.href || pathname.startsWith(child.href + "/")
+                    return (
+                      <Link
+                        key={child.href}
+                        href={child.href}
+                        className={cn(
+                          "block rounded-lg px-4 py-2 text-sm transition-colors",
+                          childActive
+                            ? "bg-[var(--color-pmb-lime)] text-[var(--color-pmb-green-900)] font-semibold"
+                            : "text-white/75 hover:bg-white/10 hover:text-white",
+                        )}
+                      >
+                        {child.label}
+                      </Link>
+                    )
+                  })}
+                </div>
               )}
-            >
-              <item.icon className="h-5 w-5" />
-              <span className="flex-1">{item.label}</span>
-              {locked && (
-                <Lock
-                  className={cn(
-                    "h-3.5 w-3.5",
-                    isActive ? "text-[var(--color-pmb-green-900)]/50" : "text-white/45",
-                  )}
-                  aria-label="Recurso premium"
-                />
-              )}
-            </Link>
+            </div>
           )
         })}
       </nav>

@@ -4,13 +4,20 @@ import { ChevronLeft } from "lucide-react"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { PageHeader } from "@/components/painel/page-header"
-import { NovaRevendaForm } from "@/components/painel/nova-revenda-form"
+import {
+  NovaRevendaForm,
+  type NovaRevendaInitial,
+} from "@/components/painel/nova-revenda-form"
 
 export const metadata = {
   title: "Nova revenda | Painel",
 }
 
-export default async function NovaRevendaPage() {
+export default async function NovaRevendaPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ leadId?: string }>
+}) {
   const session = await auth()
   if (!session?.user || session.user.role !== "RESELLER" || !session.user.tenantId) {
     redirect("/login?callbackUrl=/painel/revendas/nova")
@@ -27,6 +34,29 @@ export default async function NovaRevendaPage() {
   ])
   if (!owner || !tenant?.canSellResellers || tenant.status !== "ACTIVE") redirect("/painel")
 
+  // Conversão de lead: pré-preenche o form com os dados do interessado. SÓ um
+  // lead atribuído ao código deste vendedor (referrerTenantId) e ainda não
+  // convertido é carregado — sem isso o form abre em branco.
+  const { leadId } = await searchParams
+  let initial: NovaRevendaInitial | undefined
+  if (leadId) {
+    const lead = await prisma.lead.findFirst({
+      where: { id: leadId, referrerTenantId: tenantId, tenantId: null },
+      select: { id: true, companyName: true, email: true, phone: true, cpf: true, slug: true },
+    })
+    if (lead) {
+      initial = {
+        name: lead.companyName,
+        ownerName: lead.companyName,
+        ownerEmail: lead.email,
+        ownerPhone: lead.phone || undefined,
+        ownerCpfCnpj: lead.cpf || undefined,
+        slug: lead.slug || undefined,
+        leadId: lead.id,
+      }
+    }
+  }
+
   return (
     <div className="space-y-6">
       <Link
@@ -39,7 +69,7 @@ export default async function NovaRevendaPage() {
         title="Nova revenda"
         description="Cadastre uma nova revenda atrelada a você. A cobrança da mensalidade é feita pela PMB."
       />
-      <NovaRevendaForm />
+      <NovaRevendaForm initial={initial} />
     </div>
   )
 }

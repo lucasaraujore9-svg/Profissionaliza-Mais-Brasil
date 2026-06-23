@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { Building2, Globe, IdCard, Mail, MapPin, Phone, UserPlus } from "lucide-react"
@@ -60,11 +61,18 @@ export function LeadsRevendaList({
   leads,
   apiBase,
   canConvert = false,
+  convertHrefBase,
 }: {
   leads: RevendaLead[]
   apiBase: string
-  /** Só SUPER_ADMIN pode criar revenda — controla o botão "Converter". */
+  /** Só quem pode criar revenda — controla o botão "Converter". */
   canConvert?: boolean
+  /**
+   * Quando definido, "Converter" vira um link para o form pré-preenchido
+   * (`${convertHrefBase}?leadId=…`) — fluxo do painel do revendedor-vendedor.
+   * Sem ele (admin), usa o diálogo NewResellerDialog.
+   */
+  convertHrefBase?: string
 }) {
   const router = useRouter()
   const [saving, setSaving] = useState<string | null>(null)
@@ -194,6 +202,13 @@ export function LeadsRevendaList({
                   <span className="text-[11px] font-semibold text-gray-400">
                     Convertido em revenda
                   </span>
+                ) : convertHrefBase ? (
+                  <Link
+                    href={`${convertHrefBase}?leadId=${l.id}`}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-pmb-green)] px-3 py-1.5 text-xs font-semibold text-[var(--color-pmb-green)] transition-colors hover:bg-[var(--color-pmb-lime-50)]"
+                  >
+                    <UserPlus className="h-3.5 w-3.5" /> Converter em revenda
+                  </Link>
                 ) : (
                   <NewResellerDialog
                     onCreated={() => router.refresh()}

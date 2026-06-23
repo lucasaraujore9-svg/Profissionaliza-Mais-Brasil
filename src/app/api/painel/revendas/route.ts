@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
+import { prisma } from "@/lib/prisma"
 import { requireResellerSeller } from "@/lib/auth/guards"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { SLUG_REGEX } from "@/lib/tenant/slug"
@@ -24,6 +25,8 @@ const createSchema = z.object({
   // Mensalidade que a PMB cobrará da nova revenda (preço do plano PMB).
   planValue: z.number().min(0).max(99999),
   firstPaymentMaxInstallments: z.number().int().min(1).max(12).default(1),
+  // Lead de revenda sendo convertido (opcional) — marcado CONVERTED ao criar.
+  leadId: z.string().min(1).optional(),
 })
 
 export const POST = withRequestContext(
@@ -73,6 +76,18 @@ export const POST = withRequestContext(
           : { error: result.error },
         { status: result.status },
       )
+    }
+
+    // Conversão de lead: marca CONVERTED e liga ao tenant criado. Escopado por
+    // referrerTenantId — o vendedor só converte leads atribuídos ao código dele.
+    // Best-effort: a revenda já foi criada, não derruba a resposta se falhar.
+    if (data.leadId) {
+      await prisma.lead
+        .updateMany({
+          where: { id: data.leadId, referrerTenantId: sellerTenantId },
+          data: { status: "CONVERTED", tenantId: result.tenant.id },
+        })
+        .catch(() => null)
     }
 
     return NextResponse.json({
