@@ -3,10 +3,12 @@
 import { useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { AlertCircle, CheckCircle2, ExternalLink, Loader2 } from "lucide-react"
+import { AlertCircle, CheckCircle2, ExternalLink, Loader2, Zap } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { cn } from "@/lib/utils"
+import { RESELLER_PLANS } from "@/lib/resellers/plans"
 
 interface CreateResult {
   tenant: { id: string; slug: string; name: string; status: string }
@@ -61,7 +63,8 @@ export function NovaRevendaForm({ initial }: { initial?: NovaRevendaInitial } = 
   const [ownerEmail, setOwnerEmail] = useState(initial?.ownerEmail ?? "")
   const [ownerCpfCnpj, setOwnerCpfCnpj] = useState(initial?.ownerCpfCnpj ?? "")
   const [ownerPhone, setOwnerPhone] = useState(initial?.ownerPhone ?? "")
-  const [planValue, setPlanValue] = useState("")
+  // Plano da sub-revenda: só 209 (base) ou 239 (PRO, com Automação). Nunca grátis.
+  const [planValue, setPlanValue] = useState<number>(RESELLER_PLANS[0].value)
   const [installments, setInstallments] = useState("1")
 
   const [submitting, setSubmitting] = useState(false)
@@ -92,7 +95,7 @@ export function NovaRevendaForm({ initial }: { initial?: NovaRevendaInitial } = 
           ownerEmail,
           ownerCpfCnpj: ownerCpfCnpj.replace(/\D/g, ""),
           ownerPhone: ownerPhone.trim() || undefined,
-          planValue: Number(planValue) || 0,
+          planValue,
           firstPaymentMaxInstallments: Number(installments) || 1,
           leadId: initial?.leadId,
         }),
@@ -236,35 +239,58 @@ export function NovaRevendaForm({ initial }: { initial?: NovaRevendaInitial } = 
         <Field id="ownerPhone" label="Telefone (opcional)" value={ownerPhone} onChange={setOwnerPhone} error={fieldErrors.ownerPhone} disabled={submitting} />
       </div>
 
-      <div className="grid gap-5 md:grid-cols-2">
-        <Field
-          id="planValue"
-          label="Mensalidade (R$)"
-          type="number"
-          value={planValue}
-          onChange={setPlanValue}
-          error={fieldErrors.planValue}
-          disabled={submitting}
-          required
-          mono
-          hint="Valor que a PMB cobrará da nova revenda. 0 = cortesia."
-        />
-        <div className="space-y-2">
-          <Label htmlFor="installments">Parcelas da 1ª mensalidade (cartão)</Label>
-          <select
-            id="installments"
-            value={installments}
-            onChange={(e) => setInstallments(e.target.value)}
-            disabled={submitting}
-            className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
-          >
-            {Array.from({ length: 12 }, (_, i) => i + 1).map((n) => (
-              <option key={n} value={n}>
-                {n === 1 ? "À vista" : `${n}x`}
-              </option>
-            ))}
-          </select>
+      <div className="space-y-2">
+        <Label>Plano da revenda</Label>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {RESELLER_PLANS.map((p) => (
+            <button
+              type="button"
+              key={p.value}
+              onClick={() => setPlanValue(p.value)}
+              disabled={submitting}
+              aria-pressed={planValue === p.value}
+              className={cn(
+                "rounded-xl border p-4 text-left transition-colors disabled:opacity-60",
+                planValue === p.value
+                  ? "border-[var(--color-pmb-green)] bg-[var(--color-pmb-lime-50)] ring-1 ring-[var(--color-pmb-green)]"
+                  : "border-gray-200 hover:border-gray-300",
+              )}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-semibold text-[var(--color-pmb-green-900)]">
+                  {p.label}
+                </span>
+                <span className="font-mono text-sm font-bold text-[var(--color-pmb-green)]">
+                  R$ {p.value}/mês
+                </span>
+              </div>
+              <p className="mt-1 flex items-center gap-1 text-xs text-gray-500">
+                {p.automation && <Zap className="h-3.5 w-3.5 text-[var(--color-pmb-green)]" />}
+                {p.blurb}
+              </p>
+            </button>
+          ))}
         </div>
+        {fieldErrors.planValue && (
+          <p className="text-xs text-red-600">{fieldErrors.planValue}</p>
+        )}
+      </div>
+
+      <div className="space-y-2 sm:max-w-xs">
+        <Label htmlFor="installments">Parcelas da 1ª mensalidade (cartão)</Label>
+        <select
+          id="installments"
+          value={installments}
+          onChange={(e) => setInstallments(e.target.value)}
+          disabled={submitting}
+          className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
+        >
+          {Array.from({ length: 12 }, (_, i) => i + 1).map((n) => (
+            <option key={n} value={n}>
+              {n === 1 ? "À vista" : `${n}x`}
+            </option>
+          ))}
+        </select>
       </div>
 
       {error && (
