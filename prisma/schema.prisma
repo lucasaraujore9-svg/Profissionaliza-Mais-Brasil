@@ -388,6 +388,11 @@ model Tenant {
   // pelo admin, a vitrine exibe um card "Receba mais informacoes" na pagina
   // do curso e o painel ganha menus Automacao + Leads.
   automationEnabled   Boolean   @default(false) @map("automation_enabled")
+  // Modulo "Revender revendas": quando habilitado pelo admin, esta unidade ganha
+  // o menu de venda de revendas (/painel/revendas). As revendas que ela cria sao
+  // cobradas no Asaas da PMB (sistema mae) e atreladas a ela via referrerTenantId
+  // — ela vira uma especie de admin/suporte dessas sub-revendas.
+  canSellResellers    Boolean   @default(false) @map("can_sell_resellers")
   // Nome unico da sessao no engine de WhatsApp (gerado como cuid na 1a conexao).
   waSessionName       String?   @unique @map("wa_session_name")
   // Telefone E.164 conectado (snapshot apos QR scan). Unique = um numero
@@ -1426,6 +1431,29 @@ model NotificationPreference {
   @@map("notification_preferences")
 }
 
+// Trilha de auditoria de TODO envio de email (sucesso e falha). Antes disso, as
+// falhas iam só para o stdout (Pino) e o dono não tinha como saber o que não foi
+// entregue nem reenviar. Gravado best-effort por `sendEmail` — nunca derruba o
+// envio. `status` = SENT | FAILED; `provider` = smtp | resend; `error` guarda a
+// mensagem quando FAILED. `tenantId` quando o envio nasce no contexto de uma
+// unidade (para diagnóstico por revenda).
+model EmailLog {
+  id        String   @id @default(cuid())
+  to        String   @db.Text
+  subject   String   @db.Text
+  template  String
+  status    String // SENT | FAILED
+  provider  String // smtp | resend
+  error     String?  @db.Text
+  tenantId  String?  @map("tenant_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([status, createdAt])
+  @@index([to])
+  @@index([tenantId])
+  @@map("email_logs")
+}
+
 // Kill-switch global por (target, categoria) das notificacoes automaticas.
 // Quando enabled=false, `createNotification` ignora aquela combinacao sem
 // criar registro nem enviar push. NotificationPreference por usuario
@@ -2090,7 +2118,9 @@ model TrainingModule {
   description String? @db.Text
   coverUrl    String? @map("cover_url")
   position    Int     @default(0)
-  published   Boolean @default(false)
+  // Default true: módulo nasce visível para as unidades (vídeo já nasce
+  // published=true). Migration 20260625 publica os módulos legados.
+  published   Boolean @default(true)
 
   videos    TrainingVideo[]
   createdAt DateTime        @default(now()) @map("created_at")
