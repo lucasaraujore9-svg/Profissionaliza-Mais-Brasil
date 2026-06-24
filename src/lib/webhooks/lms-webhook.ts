@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from "node:crypto"
+import { createHash, createHmac, timingSafeEqual } from "node:crypto"
 
 /**
  * Validação dos webhooks de ENTRADA do LMS (LMS -> PMB, POST /api/webhooks/lms).
@@ -66,4 +66,25 @@ export function validateLmsWebhookSignature(
   } catch {
     return false
   }
+}
+
+/**
+ * Chave de idempotência da entrega. Usa o `X-PMB-Event-Id` quando presente
+ * (estável entre retries, conforme o contrato). Quando ausente — o contrato
+ * exige o header, mas o receiver NÃO confia nisso (API-006) — deriva uma chave
+ * DETERMINÍSTICA do conteúdo (`"<eventType>.<rawBody>"`), de modo que uma
+ * re-entrega idêntica sem header também deduplique (evita, p.ex., ticket de
+ * suporte duplicado), sem nunca rejeitar a entrega.
+ */
+export function lmsDedupKey(
+  eventId: string | null | undefined,
+  eventType: string,
+  rawBody: string,
+): string {
+  const trimmed = eventId?.trim()
+  if (trimmed) return trimmed
+  const hash = createHash("sha256")
+    .update(`${eventType}.${rawBody}`)
+    .digest("hex")
+  return `sha256:${hash}`
 }

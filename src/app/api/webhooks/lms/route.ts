@@ -4,7 +4,10 @@ import { prisma } from "@/lib/prisma"
 import { env } from "@/lib/env"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { contextLogger } from "@/lib/logger"
-import { validateLmsWebhookSignature } from "@/lib/webhooks/lms-webhook"
+import {
+  validateLmsWebhookSignature,
+  lmsDedupKey,
+} from "@/lib/webhooks/lms-webhook"
 import {
   processLmsWebhookEvent,
   isLmsWebhookEvent,
@@ -19,8 +22,9 @@ export const dynamic = "force-dynamic"
  *   | student.question.created
  *
  * Segurança: HMAC-SHA256 sobre `"<timestamp>.<rawBody>"` com PMB_WEBHOOK_SECRET.
- * Idempotência: X-PMB-Event-Id (unique em webhook_logs). Re-entrega cujo evento
- * já foi PROCESSADO com sucesso → 200 duplicate; ainda não processado → reprocessa.
+ * Idempotência: X-PMB-Event-Id (unique em webhook_logs) ou, na ausência do
+ * header, um hash determinístico do conteúdo (lmsDedupKey/API-006). Re-entrega
+ * cujo evento já foi PROCESSADO com sucesso → 200 duplicate; ainda não → reprocessa.
  * Processa síncrono: 200 = feito, 500 = falha transitória (o LMS re-tenta).
  */
 
@@ -80,21 +84,20 @@ export const POST = withRequestContext(
       return NextResponse.json({ error: "JSON inválido." }, { status: 400 })
     }
 
-    // 4) Idempotência + log. Se já houver log com este event-id JÁ processado,
-    //    devolve duplicate; senão (novo ou reprocessável) segue.
-    let logId: string
-    if (eventId) {
-      const existing = await prisma.webhookLog.findUnique({
-        where: { externalEventId: eventId },
-        select: { id: true, processed: true },
-      })
-      if (existing?.processed) {
-        return NextResponse.json({ received: true, duplicate: true })
-      }
-      logId = existing?.id ?? (await createLog(eventType, payload, request, eventId))
-    } else {
-      logId = await createLog(eventType, payload, request, null)
+    // 4) Idempotência + log. Chave estável do X-PMB-Event-Id quando presente;
+    //    senão, hash determinístico do conteúdo (API-006) — re-entrega idêntica
+    //    sem header também deduplica. Se já houver log JÁ processado com esta
+    //    chave, devolve duplicate; senão (novo ou reprocessável) segue.
+    const dedupKey = lmsDedupKey(eventId, eventType, rawBody)
+    const existing = await prisma.webhookLog.findUnique({
+      where: { externalEventId: dedupKey },
+      select: { id: true, processed: true },
+    })
+    if (existing?.processed) {
+      return NextResponse.json({ received: true, duplicate: true })
     }
+    const logId =
+      existing?.id ?? (await createLog(eventType, payload, request, dedupKey))
 
     // 5) Processa síncrono. ok → 200; falha de negócio (não encontrado) → 200
     //    marcando o motivo (retry não ajuda); exceção transitória → 500 (retry).
