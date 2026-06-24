@@ -44,19 +44,24 @@ export async function DynamicHomeSections({
     current: null,
   }
 
-  // Pré-processa cada seção, gerando o nó React correspondente.
-  const nodes: { id: string; node: React.ReactNode }[] = []
-
-  for (const section of enabled) {
-    const node = await renderSection(section, {
-      tenantId,
-      bestsellersSnapshot: initialSnapshot,
-      onNewBestsellersSnapshot: (snap) => {
-        snapshotHolder.current = snap
-      },
-    })
-    if (node) nodes.push({ id: section.id, node })
-  }
+  // Pré-processa as seções EM PARALELO (PERF-002): cada renderSection faz I/O
+  // independente (queries de catálogo/categorias). O fan-out serial anterior
+  // (for...of await) somava as latências na home — a página de maior tráfego.
+  // Promise.all preserva a ordem do array, então a ordem visual é mantida.
+  const rendered = await Promise.all(
+    enabled.map((section) =>
+      renderSection(section, {
+        tenantId,
+        bestsellersSnapshot: initialSnapshot,
+        onNewBestsellersSnapshot: (snap) => {
+          snapshotHolder.current = snap
+        },
+      }).then((node) => ({ id: section.id, node })),
+    ),
+  )
+  const nodes = rendered.filter(
+    (r): r is { id: string; node: React.ReactNode } => Boolean(r.node),
+  )
 
   // Persiste snapshot novo (best-effort).
   if (snapshotHolder.current) {
