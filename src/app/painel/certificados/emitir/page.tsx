@@ -1,9 +1,18 @@
+import { prisma } from "@/lib/prisma"
 import { PageHeader } from "@/components/painel/page-header"
 import { CertificateIssueForm } from "@/components/painel/certificate-issue-form"
+import { DEFAULT_CERTIFICATE_MIN_PERCENT } from "@/lib/certificates/eligibility"
 
 export const dynamic = "force-dynamic"
 
-export default function PainelCertificadosEmitirPage() {
+export default async function PainelCertificadosEmitirPage() {
+  const settings = await prisma.systemSettings.findUnique({
+    where: { id: "default" },
+    select: { certificateMinPercent: true },
+  })
+  const minPercent =
+    settings?.certificateMinPercent ?? DEFAULT_CERTIFICATE_MIN_PERCENT
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -17,6 +26,7 @@ export default function PainelCertificadosEmitirPage() {
         issueEndpoint="/api/painel/certificates/issue"
         successHref="/painel/certificados/emitidos"
         canForce={false}
+        minPercent={minPercent}
       />
     </div>
   )

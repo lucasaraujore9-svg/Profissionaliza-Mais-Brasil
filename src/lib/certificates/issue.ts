@@ -8,6 +8,7 @@ import {
   type ResolvedTemplate,
 } from "./template-resolver"
 import { generateAndUploadPdf } from "./generate-pdf"
+import { isEnrollmentConcludedForCertificate } from "./eligibility"
 import { contextLogger } from "@/lib/logger"
 
 const SETTINGS_ID = "default"
@@ -143,9 +144,13 @@ export async function issueCertificateIfEligible(
 /**
  * Emissao manual (admin/revendedor). Wrapper com source MANUAL_*.
  *
- * Exige que o curso esteja concluido (Enrollment.status === COMPLETED), a
- * menos que `force=true`. O `force` so e concedido ao SUPER_ADMIN pela camada
- * de API — demais papeis recebem a mensagem de bloqueio.
+ * Exige que o curso esteja concluido — considerando tanto
+ * `Enrollment.status === COMPLETED` quanto o progresso sincronizado da
+ * plataforma de aulas (progressStatus = CONCLUIDO, ou progressPercent >=
+ * certificateMinPercent). Isso evita travar a emissao de alunos 100%
+ * concluidos cujo `status` ainda nao foi promovido para COMPLETED. O `force`
+ * (so concedido ao SUPER_ADMIN pela camada de API) ignora a checagem por
+ * completo; demais papeis recebem a mensagem de bloqueio.
  */
 export async function issueCertificateManual(params: {
   enrollmentId: string
@@ -156,12 +161,18 @@ export async function issueCertificateManual(params: {
   if (!params.force) {
     const enrollment = await prisma.enrollment.findUnique({
       where: { id: params.enrollmentId },
-      select: { status: true },
+      select: { status: true, progressStatus: true, progressPercent: true },
     })
     if (!enrollment) {
       throw new Error(`Enrollment ${params.enrollmentId} nao encontrado`)
     }
-    if (enrollment.status !== "COMPLETED") {
+    const settings = await ensureSystemSettings()
+    if (
+      !isEnrollmentConcludedForCertificate(
+        enrollment,
+        settings.certificateMinPercent,
+      )
+    ) {
       throw new Error(
         "O aluno ainda não concluiu o curso, por isso não é possível emitir o certificado.",
       )

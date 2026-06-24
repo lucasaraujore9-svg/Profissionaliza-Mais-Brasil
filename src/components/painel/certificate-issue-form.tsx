@@ -5,6 +5,10 @@ import { AlertTriangle, Check, Loader2, Search, ShieldCheck } from "lucide-react
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
+import {
+  DEFAULT_CERTIFICATE_MIN_PERCENT,
+  isEnrollmentConcludedForCertificate,
+} from "@/lib/certificates/eligibility"
 
 const STEPPER = [
   { n: 1, label: "Aluno" },
@@ -96,6 +100,12 @@ interface Props {
    * bloqueio. A regra tambem e aplicada no servidor.
    */
   canForce?: boolean
+  /**
+   * Percentual minimo de progresso para considerar o curso concluido
+   * (espelha SystemSettings.certificateMinPercent). Usado apenas para a
+   * decisao de exibicao/bloqueio na UI — o servidor reaplica a regra.
+   */
+  minPercent?: number
   successHref?: string
 }
 
@@ -105,6 +115,7 @@ export function CertificateIssueForm({
   issueEndpoint,
   showTenantContext,
   canForce = false,
+  minPercent = DEFAULT_CERTIFICATE_MIN_PERCENT,
   successHref,
 }: Props) {
   const [q, setQ] = useState("")
@@ -285,6 +296,12 @@ export function CertificateIssueForm({
       ? 2
       : 1
 
+  // Conclusao considera o progresso real (status COMPLETED, progressStatus
+  // CONCLUIDO ou progressPercent >= minimo) — nao apenas o status da matricula.
+  const selectedConcluded = selectedEnrollment
+    ? isEnrollmentConcludedForCertificate(selectedEnrollment, minPercent)
+    : false
+
   return (
     <div className="space-y-6">
       <div className="rounded-2xl border border-gray-200 bg-white px-6 py-4 shadow-sm">
@@ -395,7 +412,10 @@ export function CertificateIssueForm({
             <ul className="mt-4 space-y-2">
               {enrollments.map((e) => {
                 const isSelected = selectedEnrollment?.id === e.id
-                const completed = e.status === "COMPLETED"
+                const completed = isEnrollmentConcludedForCertificate(
+                  e,
+                  minPercent,
+                )
                 return (
                   <li key={e.id}>
                     <button
@@ -450,7 +470,7 @@ export function CertificateIssueForm({
             3. Confirmar emissão
           </h3>
 
-          {selectedEnrollment.status !== "COMPLETED" && canForce && (
+          {!selectedConcluded && canForce && (
             <div className="mt-4 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
               <div className="flex-1">
@@ -480,7 +500,7 @@ export function CertificateIssueForm({
             </div>
           )}
 
-          {selectedEnrollment.status !== "COMPLETED" && !canForce && (
+          {!selectedConcluded && !canForce && (
             <div className="mt-4 flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4">
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-700" />
               <div className="flex-1">
@@ -502,15 +522,12 @@ export function CertificateIssueForm({
             </p>
           )}
 
-          {!(selectedEnrollment.status !== "COMPLETED" && !canForce) && (
+          {!(!selectedConcluded && !canForce) && (
             <div className="mt-5 flex justify-end">
               <button
                 type="button"
                 onClick={submit}
-                disabled={
-                  submitting ||
-                  (selectedEnrollment.status !== "COMPLETED" && !force)
-                }
+                disabled={submitting || (!selectedConcluded && !force)}
                 className="inline-flex items-center gap-2 rounded-lg bg-[var(--color-pmb-green)] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[var(--color-pmb-green-700)] disabled:opacity-50"
               >
                 {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
