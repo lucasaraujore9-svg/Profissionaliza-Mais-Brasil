@@ -72,7 +72,7 @@ _Data: 2026-06-24 · Referência: .claude/skills/auditoria-saas/references/10-co
 
 ### [LGPD-010] Allowlist de redação do logger não cobre e-mail/telefone/senha (PII pode vazar em log futuro)
 - **Severidade:** P3
-- **Status:** Aberto
+- **Status:** Em correção
 - **Local:** `src/lib/logger.ts:45-103` (`REDACT_PATHS`) — cobre `password`/`token`/`cpf`/`cnpj`/`rg`/cartão/crypto, mas **não** `email`/`telefone`/`fone`/`fone2`/`senha`/`plataformaAlunoSenha`/`lmsSenha`/`nome`
 - **Evidência:** `grep` no `REDACT_PATHS` confirma ausência de `email`, `telefone`/`fone`, `senha` (campos em português usados nos models — `password`/`passwordHash` são cobertos, mas `Student.plataformaAlunoSenha`/`Enrollment.lmsSenha` e os campos `*.senha` não). Hoje **nenhuma chamada de log passa esses campos inline** (varredura `grep "email:|telefone:|senha:" ... | grep logger` → vazio), então não é vazamento confirmado — é gap de defesa em profundidade. A rubrica item 3 nomeia explicitamente "Telefone/CPF/e-mail em log = P1"; CPF está coberto, mas e-mail/telefone não, e qualquer log futuro que espalhe um objeto `Student`/payload de webhook (Asaas/MP carregam `email`/`phone`) vazaria.
 - **Impacto:** Baixo hoje (sem leak ativo); médio se um log de payload completo for adicionado. Senha cifrada em campo `senha`/`lmsSenha` logada por engano vazaria o ciphertext (e `iv`/`ciphertext` já são redactados, mas o nome do campo `senha` não).

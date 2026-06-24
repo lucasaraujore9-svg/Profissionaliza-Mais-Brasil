@@ -42,7 +42,7 @@ const isTest = process.env.NODE_ENV === "test"
  * Importante: adicione NOVOS campos sensíveis aqui ao introduzir features.
  * Não confie em "ninguém vai logar isso" — defesa em profundidade.
  */
-const REDACT_PATHS = [
+export const REDACT_PATHS = [
   // Credenciais
   "password",
   "*.password",
@@ -51,6 +51,15 @@ const REDACT_PATHS = [
   "currentPassword",
   "passwordHash",
   "*.passwordHash",
+  // Senhas em português (campos dos models: Student.plataformaAlunoSenha,
+  // Enrollment.lmsSenha, payloads *.senha)
+  "senha",
+  "*.senha",
+  "*.*.senha",
+  "lmsSenha",
+  "*.lmsSenha",
+  "plataformaAlunoSenha",
+  "*.plataformaAlunoSenha",
 
   // Tokens
   "token",
@@ -87,6 +96,18 @@ const REDACT_PATHS = [
   "*.cnpj",
   "rg",
   "*.rg",
+  // Contato (LGPD: telefone/e-mail em log = P1)
+  "email",
+  "*.email",
+  "*.*.email",
+  "telefone",
+  "*.telefone",
+  "fone",
+  "*.fone",
+  "fone2",
+  "*.fone2",
+  "phone",
+  "*.phone",
 
   // Cartão/financeiro
   "cardNumber",

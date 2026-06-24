@@ -615,3 +615,121 @@ exit=0
 ○  (Static)   prerendered as static content
 ƒ  (Dynamic)  server-rendered on demand
 
+
+=== PORTÃO · FE-005 (acesso LMS → redirect amigável) · 08:29:44 ===
+
+> profissionaliza-mais-brasil@0.1.0 typecheck
+> tsc --noEmit
+
+
+=== PORTÃO · COD-006 (catches silenciosos → swallow) · 08:34:55 ===
+
+> profissionaliza-mais-brasil@0.1.0 typecheck
+> tsc --noEmit
+
+### build COD-006 exit=0 08:35:51
+
+############################################################
+# PORTAO LGPD-010 — 2026-06-24 08:39:54
+############################################################
+--- typecheck ---
+
+> profissionaliza-mais-brasil@0.1.0 typecheck
+> tsc --noEmit
+
+### typecheck LGPD-010 exit=0 08:39:57
+--- lint ---
+
+> profissionaliza-mais-brasil@0.1.0 lint
+> eslint
+
+
+/Users/lucasaraujo/Documents/Projetos Git/Profissionaliza-Mais-Brasil/scripts/render-cert-samples.tsx
+  1:1  warning  Unused eslint-disable directive (no problems were reported)
+
+✖ 1 problem (0 errors, 1 warning)
+  0 errors and 1 warning potentially fixable with the `--fix` option.
+
+### lint LGPD-010 exit= 08:40:18
+--- test ---
+
+> profissionaliza-mais-brasil@0.1.0 test
+> vitest run
+
+(node:88491) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+
+ RUN  v3.2.4 /Users/lucasaraujo/Documents/Projetos Git/Profissionaliza-Mais-Brasil
+
+ ✓ src/lib/errors.test.ts (2 tests) 4ms
+ ✓ src/lib/courses/bulk-edit.test.ts (8 tests) 14ms
+ ✓ src/lib/logger.test.ts (5 tests) 3ms
+ ✓ src/lib/coupons/preview.test.ts (9 tests) 19ms
+ ✓ src/lib/referrals/payout.test.ts (4 tests) 13ms
+ ✓ src/lib/webhooks/lms-webhook.test.ts (6 tests) 21ms
+ ✓ src/lib/asaas/webhook.test.ts (10 tests) 5ms
+ ✓ src/lib/referrals/tiers.test.ts (15 tests) 4ms
+ ✓ src/lib/email/templates/payment-pending.test.ts (2 tests) 34ms
+ ✓ src/lib/dates.test.ts (5 tests) 3ms
+ ✓ src/lib/email/templates/enrollment.test.ts (3 tests) 39ms
+ ✓ src/lib/email/templates/notification.test.ts (2 tests) 40ms
+ ✓ src/lib/email/templates/payment-rejected.test.ts (2 tests) 38ms
+ ✓ src/lib/certificates/freshness.test.ts (11 tests) 5ms
+ ✓ src/lib/referrals/clawback.test.ts (9 tests) 10ms
+ ✓ src/lib/checkout/price-guard.test.ts (6 tests) 3ms
+ ✓ src/lib/students/cpf-already-registered.test.ts (3 tests) 5ms
+ ✓ src/lib/checkout/due-date.test.ts (3 tests) 3ms
+ ✓ src/lib/mercadopago/webhook.test.ts (7 tests) 4ms
+ ❯ src/lib/certificates/admin-scope.test.ts (5 tests | 1 failed) 30603ms
+   × adminCanAccessCertTenant — escopo de certificado por papel (regressao R24/IDOR) > SUPER_ADMIN acessa qualquer certificado (PMB ou de revendedor) sem tocar no banco 30601ms
+     → Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+   ✓ adminCanAccessCertTenant — escopo de certificado por papel (regressao R24/IDOR) > PMB_SALES so acessa certificados PMB (tenantId = null); nunca de revendedor 0ms
+   ✓ adminCanAccessCertTenant — escopo de certificado por papel (regressao R24/IDOR) > PMB_RESELLER_MGR nunca acessa certificado PMB (null) 0ms
+   ✓ adminCanAccessCertTenant — escopo de certificado por papel (regressao R24/IDOR) > PMB_RESELLER_MGR acessa apenas tenants sob sua gestao (accountManagerId) 0ms
+   ✓ adminCanAccessCertTenant — escopo de certificado por papel (regressao R24/IDOR) > RESELLER (papel sem acesso ao admin de certificados) e negado 0ms
+ ✓ src/lib/pmb-tenant.test.ts (4 tests) 6ms
+ ✓ src/lib/auth/roles.test.ts (2 tests) 4ms
+ ✓ src/lib/tenant/forbidden-names.test.ts (4 tests) 5ms
+ ✓ src/lib/auth/guards.test.ts (7 tests) 8ms
+ ✓ src/lib/tenant/urls.test.ts (3 tests) 15ms
+ ✓ src/lib/auth/scope.test.ts (18 tests) 7ms
+ ✓ src/lib/home/sections.schema.test.ts (17 tests) 49ms
+ ✓ src/lib/crypto.test.ts (3 tests) 5ms
+ ✓ src/lib/validation/cpf.test.ts (5 tests) 3ms
+ ✓ src/lib/coupons/discount.test.ts (5 tests) 13ms
+ ✓ src/lib/students/resolve-platform-password.test.ts (5 tests) 4ms
+ ✓ src/lib/students/ensure-student-active.test.ts (4 tests) 7ms
+ ✓ src/lib/students/reactivation-guard.test.ts (4 tests) 5ms
+ ✓ src/lib/redis/keys.test.ts (3 tests) 3ms
+ ✓ src/lib/resellers/plans.test.ts (3 tests) 5ms
+ ✓ src/lib/students/checkout-link.test.ts (7 tests) 3ms
+ ✓ src/lib/certificates/storage.test.ts (6 tests) 4ms
+ ✓ src/lib/tenant/vitrine-paths.test.ts (5 tests) 3ms
+ ✓ src/lib/tenant/slug.test.ts (5 tests) 3ms
+ ✓ src/lib/referrals/commission.test.ts (4 tests) 1ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/lib/certificates/admin-scope.test.ts > adminCanAccessCertTenant — escopo de certificado por papel (regressao R24/IDOR) > SUPER_ADMIN acessa qualquer certificado (PMB ou de revendedor) sem tocar no banco
+Error: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ src/lib/certificates/admin-scope.test.ts:14:3
+     12|   beforeEach(() => tenantFindUnique.mockReset())
+     13| 
+     14|   it("SUPER_ADMIN acessa qualquer certificado (PMB ou de revendedor) s…
+       |   ^
+     15|     expect(await adminCanAccessCertTenant("SUPER_ADMIN", "u1", null)).…
+     16|     expect(await adminCanAccessCertTenant("SUPER_ADMIN", "u1", "tenant…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 39 passed (40)
+      Tests  1 failed | 230 passed (231)
+   Start at  08:44:49
+   Duration  33.65s (transform 31.79s, setup 0ms, collect 96.78s, tests 31.02s, environment 7ms, prepare 3.34s)
+
+### test LGPD-010 exit=1 08:45:23
+
+=== PORTÃO · LGPD-010 (redação email/telefone/senha) · 09:10:03 · build exit acima ===
