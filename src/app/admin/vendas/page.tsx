@@ -4,6 +4,9 @@ import { requireAdminSession } from "@/lib/auth/admin-session"
 import { prisma } from "@/lib/prisma"
 import { Plus, Tag, Users } from "lucide-react"
 import { SyncPaymentButton } from "@/components/admin/sync-payment-button"
+import { CheckoutLink } from "@/components/shared/checkout-link"
+import { buildEnrollmentCheckoutUrl } from "@/lib/students/checkout-link"
+import { PMB_TENANT_SLUG } from "@/lib/pmb-config"
 
 export const dynamic = "force-dynamic"
 
@@ -112,6 +115,7 @@ export default async function VendasDashboardPage() {
               <th className="px-4 py-3 font-semibold">Curso</th>
               <th className="px-4 py-3 font-semibold">Valor</th>
               <th className="px-4 py-3 font-semibold">Status</th>
+              <th className="px-4 py-3 font-semibold">Link de pagamento</th>
               {session.role === "SUPER_ADMIN" && (
                 <th className="px-4 py-3 font-semibold">Vendedor</th>
               )}
@@ -136,6 +140,25 @@ export default async function VendasDashboardPage() {
                     <StatusBadge status={e.status} />
                   )}
                 </td>
+                <td className="px-4 py-3">
+                  {(() => {
+                    // PMB usa Asaas (gateway ASAAS): o link util e o asaasInvoiceUrl.
+                    // tenantSlug = PMB_TENANT_SLUG desliga o ramo /pagar (so MP de revenda).
+                    const link = buildEnrollmentCheckoutUrl({
+                      status: e.status,
+                      enrollmentId: e.id,
+                      gateway: e.gateway,
+                      asaasInvoiceUrl: e.asaasInvoiceUrl,
+                      tenantSlug: PMB_TENANT_SLUG,
+                      tenantCustomDomain: null,
+                    })
+                    return link ? (
+                      <CheckoutLink url={link} />
+                    ) : (
+                      <span className="text-xs text-muted-foreground">—</span>
+                    )
+                  })()}
+                </td>
                 {session.role === "SUPER_ADMIN" && (
                   <td className="px-4 py-3 text-muted-foreground">
                     {e.soldByUser?.name ?? "—"}
@@ -149,7 +172,7 @@ export default async function VendasDashboardPage() {
             {recentEnrollments.length === 0 && (
               <tr>
                 <td
-                  colSpan={session.role === "SUPER_ADMIN" ? 6 : 5}
+                  colSpan={session.role === "SUPER_ADMIN" ? 7 : 6}
                   className="px-4 py-8 text-center text-muted-foreground"
                 >
                   Nenhuma venda registrada ainda

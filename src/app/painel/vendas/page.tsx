@@ -6,6 +6,8 @@ import { prisma } from "@/lib/prisma"
 import { PageHeader } from "@/components/painel/page-header"
 import { EmptyState } from "@/components/shared/empty-state"
 import { SaleStatusBadge } from "@/components/painel/sale-status"
+import { CheckoutLink } from "@/components/shared/checkout-link"
+import { buildEnrollmentCheckoutUrl } from "@/lib/students/checkout-link"
 
 export const dynamic = "force-dynamic"
 
@@ -20,20 +22,26 @@ export default async function PainelVendasPage() {
     | undefined
   if (!user?.tenantId) redirect("/login?callbackUrl=/painel/vendas")
 
-  const enrollments = await prisma.enrollment.findMany({
-    where: {
-      tenantId: user.tenantId,
-      soldByUserId: { not: null },
-    },
-    orderBy: { createdAt: "desc" },
-    take: 100,
-    include: {
-      student: { select: { nome: true, email: true } },
-      course: { select: { nome: true } },
-      coupon: { select: { code: true } },
-      soldByUser: { select: { name: true } },
-    },
-  })
+  const [tenant, enrollments] = await Promise.all([
+    prisma.tenant.findUnique({
+      where: { id: user.tenantId },
+      select: { slug: true, customDomain: true },
+    }),
+    prisma.enrollment.findMany({
+      where: {
+        tenantId: user.tenantId,
+        soldByUserId: { not: null },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 100,
+      include: {
+        student: { select: { nome: true, email: true } },
+        course: { select: { nome: true } },
+        coupon: { select: { code: true } },
+        soldByUser: { select: { name: true } },
+      },
+    }),
+  ])
 
   return (
     <div className="space-y-6">
@@ -76,6 +84,7 @@ export default async function PainelVendasPage() {
                   <th className="px-4 py-2.5">Curso</th>
                   <th className="px-4 py-2.5">Valor</th>
                   <th className="px-4 py-2.5">Status</th>
+                  <th className="px-4 py-2.5">Link de pagamento</th>
                   <th className="px-4 py-2.5">Vendido por</th>
                   <th className="px-4 py-2.5">Data</th>
                 </tr>
@@ -109,6 +118,23 @@ export default async function PainelVendasPage() {
                     </td>
                     <td className="px-4 py-3">
                       <SaleStatusBadge status={e.status} />
+                    </td>
+                    <td className="px-4 py-3">
+                      {(() => {
+                        const link = buildEnrollmentCheckoutUrl({
+                          status: e.status,
+                          enrollmentId: e.id,
+                          gateway: e.gateway,
+                          asaasInvoiceUrl: e.asaasInvoiceUrl,
+                          tenantSlug: tenant?.slug ?? "",
+                          tenantCustomDomain: tenant?.customDomain ?? null,
+                        })
+                        return link ? (
+                          <CheckoutLink url={link} />
+                        ) : (
+                          <span className="text-xs text-gray-400">—</span>
+                        )
+                      })()}
                     </td>
                     <td className="px-4 py-3 text-xs text-gray-600">
                       {e.soldByUser?.name ?? "—"}
