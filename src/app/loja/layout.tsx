@@ -6,7 +6,7 @@ import { getCurrentTenant } from "@/lib/tenant/current"
 import { resolveVitrinePixels, resolvePmbSelfPixels } from "@/lib/tracking/resolve"
 import { TrackingPixels } from "@/components/shared/tracking-pixels"
 import { tecnicaFromTenant } from "@/lib/catalog/tecnica"
-import { getRequestOrigin } from "@/lib/seo/host"
+import { getRequestOrigin, classifyRequestHost } from "@/lib/seo/host"
 import { normalizeSocialUrl, buildTenantSupportContacts } from "@/lib/branding"
 import { vitrineDomain } from "@/lib/tenant/urls"
 import { JsonLd } from "@/components/seo/json-ld"
@@ -45,11 +45,17 @@ export default async function LojaLayout({
 }: {
   children: React.ReactNode
 }) {
-  const [categorias, tenant, origin] = await Promise.all([
+  const [categorias, tenant, origin, host] = await Promise.all([
     loadCategorias(),
     getCurrentTenant(),
     getRequestOrigin(),
+    classifyRequestHost(),
   ])
+
+  // Domínio próprio do revendedor (host não bate em PMB nem em
+  // livrecursos.com.br) → kind "unknown". Nesse contexto ocultamos o link
+  // "Seja um Parceiro" do rodapé; no subdomínio livrecursos.com.br ele fica.
+  const isCustomDomain = host.kind === "unknown"
 
   // Pixels: vitrine do revendedor = global PMB + revenda; sem tenant = self PMB.
   const pixels = tenant
@@ -135,6 +141,7 @@ export default async function LojaLayout({
           youtube: null,
         }}
         sejaRevendedorHref={sejaRevendedorHref}
+        hideSejaRevendedor={isCustomDomain}
         brand={
           tenant
             ? {

@@ -73,6 +73,14 @@ interface FooterMainProps {
    */
   sejaRevendedorHref?: string
   /**
+   * Oculta por completo o link "Seja um Parceiro do Profissionaliza Mais
+   * Brasil" do bloco Institucional. A vitrine passa `true` quando servida em
+   * domínio próprio do revendedor — nesse contexto não faz sentido divulgar a
+   * captação de novos parceiros da PMB. No subdomínio `livrecursos.com.br` o
+   * link permanece.
+   */
+  hideSejaRevendedor?: boolean
+  /**
    * Identidade exibida no rodape. Omitido = marca PMB (logo + nome
    * institucional). A vitrine do revendedor passa os dados do tenant:
    * `logoUrl: null` exibe o nome da unidade em texto (nunca a logo da PMB).
@@ -93,6 +101,7 @@ export function FooterMain({
   social: socialOverride,
   showCnpj = true,
   sejaRevendedorHref,
+  hideSejaRevendedor = false,
   brand,
   support: supportOverride,
 }: FooterMainProps) {
@@ -110,11 +119,13 @@ export function FooterMain({
     href: `/cursos?categoria=${cat.slug}`,
   }))
   const showCategoriasColumn = categoriaLinks.length > 0
-  const institucionalLinks: NavLink[] = sejaRevendedorHref
-    ? INSTITUCIONAL_LINKS.map((l) =>
-        l.href === "/seja-revendedor" ? { ...l, href: sejaRevendedorHref } : l,
-      )
-    : INSTITUCIONAL_LINKS
+  const institucionalLinks: NavLink[] = INSTITUCIONAL_LINKS.filter(
+    (l) => !(hideSejaRevendedor && l.href === "/seja-revendedor"),
+  ).map((l) =>
+    sejaRevendedorHref && l.href === "/seja-revendedor"
+      ? { ...l, href: sejaRevendedorHref }
+      : l,
+  )
 
   return (
     <footer className="bg-[var(--color-pmb-green)] text-white">
