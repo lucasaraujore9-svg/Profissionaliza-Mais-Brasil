@@ -1,6 +1,9 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState } from "react"
+import Link from "next/link"
+import { Maximize, Minimize, X } from "lucide-react"
+import { cn } from "@/lib/utils"
 import type { PlacarSnapshot } from "@/lib/placar/snapshot"
 
 // ============================================================
@@ -77,6 +80,8 @@ export function PlacarClient({
   celebrationTitle = "NOVA REVENDA ATIVADA!",
   logoUrl = "/images/logo.png",
   showMeta = true,
+  variant = "page",
+  exitHref,
 }: {
   initial: PlacarSnapshot
   testMode?: boolean
@@ -96,16 +101,40 @@ export function PlacarClient({
    * Default true (placar de lançamento). false = só o número de ativas.
    */
   showMeta?: boolean
+  /**
+   * "page" = página inteira (placar público). "panel" = overlay dentro do
+   * painel que cobre o conteúdo + cabeçalho, mantendo só o menu lateral (w-60).
+   */
+  variant?: "page" | "panel"
+  /** Link de saída (botão ✕) — útil no modo panel para sair do overlay. */
+  exitHref?: string
 }) {
   const [snap, setSnap] = useState<PlacarSnapshot>(initial)
   const [live, setLive] = useState(false)
   const [soundOn, setSoundOn] = useState(false)
   const [celebration, setCelebration] = useState<Celebration | null>(null)
+  const [isFullscreen, setIsFullscreen] = useState(false)
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const celebTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const rootRef = useRef<HTMLDivElement>(null)
   const idRef = useRef(0)
 
   const ativosDisplay = useCountUp(snap.ativos)
+
+  // Tela cheia (Fullscreen API): ocupa a tela TODA, escondendo até a sidebar.
+  useEffect(() => {
+    const onChange = () => setIsFullscreen(!!document.fullscreenElement)
+    document.addEventListener("fullscreenchange", onChange)
+    return () => document.removeEventListener("fullscreenchange", onChange)
+  }, [])
+
+  const toggleFullscreen = useCallback(() => {
+    if (document.fullscreenElement) {
+      void document.exitFullscreen().catch(() => {})
+    } else {
+      void rootRef.current?.requestFullscreen().catch(() => {})
+    }
+  }, [])
 
   const ensureAudio = useCallback(() => {
     if (typeof window === "undefined") return null
@@ -176,7 +205,20 @@ export function PlacarClient({
   const restantes = Math.max(0, snap.meta - snap.ativos)
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[radial-gradient(ellipse_at_top,_#0b2e22_0%,_#09090b_55%)] px-4 py-6 text-white sm:px-8 sm:py-10">
+    <div
+      ref={rootRef}
+      className={cn(
+        "bg-[radial-gradient(ellipse_at_top,_#0b2e22_0%,_#09090b_55%)] px-4 py-6 text-white sm:px-8 sm:py-10",
+        variant === "panel"
+          ? // Overlay dentro do painel: cobre conteúdo + cabeçalho, mantendo só
+            // a sidebar (w-60). Em tela cheia, cobre tudo (left-0).
+            cn(
+              "fixed inset-0 z-40 overflow-y-auto",
+              !isFullscreen && "lg:left-60",
+            )
+          : "relative min-h-screen overflow-hidden",
+      )}
+    >
       <style>{coinRainCss}</style>
 
       {/* Cabecalho */}
@@ -215,6 +257,26 @@ export function PlacarClient({
             >
               🔊 Ativar som
             </button>
+          )}
+          <button
+            onClick={toggleFullscreen}
+            className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-4 py-1.5 text-xs font-semibold ring-1 ring-white/20 transition hover:bg-white/20"
+          >
+            {isFullscreen ? (
+              <Minimize className="h-3.5 w-3.5" />
+            ) : (
+              <Maximize className="h-3.5 w-3.5" />
+            )}
+            {isFullscreen ? "Sair da tela cheia" : "Tela cheia"}
+          </button>
+          {exitHref && !isFullscreen && (
+            <Link
+              href={exitHref}
+              className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-4 py-1.5 text-xs font-semibold ring-1 ring-white/20 transition hover:bg-white/20"
+            >
+              <X className="h-3.5 w-3.5" />
+              Sair
+            </Link>
           )}
           {testMode && (
             <button

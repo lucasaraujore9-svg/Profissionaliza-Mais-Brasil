@@ -34,6 +34,8 @@ export default async function PainelPlacarPage() {
       celebrationTitle="NOVA REVENDA INDICADA ATIVADA!"
       logoUrl={null}
       showMeta={false}
+      variant="panel"
+      exitHref="/painel/revendas"
     />
   )
 }
