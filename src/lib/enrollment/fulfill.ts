@@ -10,6 +10,8 @@ import {
 } from "@/lib/students/plataforma-actions"
 import { createLmsEnrollment, type LmsEnrollmentResponse } from "@/lib/lms"
 import { encrypt } from "@/lib/crypto"
+import { getStudentPlatformLoginUrl } from "@/lib/students/platform-credentials"
+import type { EnrollmentSchoolAccess } from "@/lib/email/templates/enrollment"
 import { generatePasswordWithHash } from "@/lib/students/generate-password"
 import { createNotification } from "@/lib/notifications"
 import { addMonthsClamped } from "@/lib/dates"
@@ -515,11 +517,15 @@ async function provisionEnrollmentAccess(
 ): Promise<void> {
   // `created` controla os emails de "primeira vez" (credenciais/matricula):
   // EA => aluno recem-criado na plataforma; LMS => primeiro contato do aluno
-  // com o LMS (lmsStudentId ainda nulo).
-  const created =
+  // com o LMS (lmsStudentId ainda nulo). `school` carrega as credenciais da
+  // plataforma de aulas (EA ou LMS) para o email de matricula — em memoria,
+  // texto puro, nunca logado nem persistido em claro.
+  const provisioned =
     enrollment.course.provider === "LMS"
       ? await provisionLmsAccess(tenant, enrollment, idempotencyKey)
       : await provisionEaAccess(enrollment)
+  const created = provisioned.created
+  const school = provisioned.school
 
   // Gera credenciais do painel /aluno quando o aluno ainda não tem senha.
   // Vale tanto na 1ª compra (created=true) quanto em alunos antigos que nunca
@@ -611,9 +617,13 @@ async function provisionEnrollmentAccess(
             type: "enrollment",
             props: {
               studentName: enrollment.student.nome,
+              studentEmail,
               courseName: enrollment.course.nome,
               studentPanelUrl: `${storeBase}/aluno`,
               isNewStudent: created,
+              // Credenciais da plataforma de aulas (EA ou LMS) — quando ausentes,
+              // o template orienta o acesso pela area do aluno.
+              school,
               brand: emailBrand,
             },
           },
@@ -630,17 +640,22 @@ async function provisionEnrollmentAccess(
 
 /**
  * Provisiona o curso EA: garante o aluno na plataforma, vincula o curso e (se
- * o aluno foi criado agora) envia o email de credenciais. Retorna `created`.
+ * o aluno foi criado agora) envia o email de credenciais. Retorna `created` e
+ * as credenciais da plataforma de aulas (`school`) para o email de matricula —
+ * a senha em texto puro só vem na 1ª criação (`plataformaSenha`); em recompra
+ * fica null (o aluno usa a que já recebeu).
  */
 async function provisionEaAccess(
   enrollment: EnrollmentForProvision,
-): Promise<boolean> {
+): Promise<{ created: boolean; school: EnrollmentSchoolAccess | null }> {
   let plataformaAlunoId: number
   let created: boolean
+  let plataformaSenha: string | null
   try {
     const ensured = await ensureStudentOnPlatform(enrollment.student.id)
     plataformaAlunoId = ensured.plataformaAlunoId
     created = ensured.created
+    plataformaSenha = ensured.plataformaSenha
     await linkCourseToStudent(enrollment.student.id, enrollment.course.id)
   } catch (err) {
     contextLogger().error(
@@ -687,7 +702,16 @@ async function provisionEaAccess(
     }
   }
 
-  return created
+  // Credenciais da plataforma de aulas EA para o email de matricula. O login
+  // (ea_aluno_id) sempre existe; a senha em texto puro só na 1ª criação — em
+  // recompra `plataformaSenha` é null e o template orienta usar a já recebida.
+  const school: EnrollmentSchoolAccess = {
+    login: String(plataformaAlunoId),
+    password: plataformaSenha,
+    loginUrl: getStudentPlatformLoginUrl(),
+  }
+
+  return { created, school }
 }
 
 /**
@@ -704,7 +728,7 @@ async function provisionLmsAccess(
   tenant: TenantContext,
   enrollment: EnrollmentForProvision,
   idempotencyKey: string,
-): Promise<boolean> {
+): Promise<{ created: boolean; school: EnrollmentSchoolAccess | null }> {
   if (!enrollment.course.lmsCourseId) {
     await notifyLmsProvisionError(
       enrollment,
@@ -765,6 +789,18 @@ async function provisionLmsAccess(
       }
     : {}
 
+  // Credenciais da plataforma de aulas LMS (parceiro por baixo) para o email de
+  // matricula — texto puro em memoria, nunca logado/persistido em claro. Sem
+  // partnerAccess (ex.: playback local/SSO), o template orienta acesso via area
+  // do aluno. portalUrl vazio vira null (cai no caminho "acesse pela area").
+  const school: EnrollmentSchoolAccess | null = res.partnerAccess
+    ? {
+        login: res.partnerAccess.login,
+        password: res.partnerAccess.password,
+        loginUrl: res.partnerAccess.portalUrl || null,
+      }
+    : null
+
   await prisma.$transaction([
     prisma.enrollment.update({
       where: { id: enrollment.id },
@@ -808,7 +844,7 @@ async function provisionLmsAccess(
     }).catch(swallow("fulfill.notify_lms_partial"))
   }
 
-  return wasNew
+  return { created: wasNew, school }
 }
 
 async function notifyLmsProvisionError(
