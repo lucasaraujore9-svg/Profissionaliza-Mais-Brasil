@@ -118,3 +118,79 @@ export async function getPlacarSnapshot(): Promise<PlacarSnapshot> {
     generatedAt: new Date().toISOString(),
   }
 }
+
+// ── Placar de INDICAÇÕES (revendedor de revenda) ───────────────────────────
+// Mesmo motor do placar de lançamento, porém escopado às revendas que ESTE
+// revendedor indicou (Tenant.referrerTenantId = id dele). Sempre passe o
+// tenantId da SESSÃO — o isolamento entre revendedores depende disso. A "meta"
+// aqui é o total de revendas indicadas (denominador "ativas / indicadas").
+
+/**
+ * IDs + nomes das revendas indicadas por `referrerTenantId` que estão ATIVAS.
+ * Usado pelo stream SSE do painel para detectar novas ativações (som).
+ */
+export async function getReferralActiveTenants(
+  referrerTenantId: string,
+): Promise<{ id: string; name: string }[]> {
+  return prisma.tenant.findMany({
+    where: { ...COUNTABLE, referrerTenantId, status: TenantStatus.ACTIVE },
+    select: { id: true, name: true },
+  })
+}
+
+export async function getReferralPlacarSnapshot(
+  referrerTenantId: string,
+): Promise<PlacarSnapshot> {
+  const start = startOfTodayBR()
+  const where = { ...COUNTABLE, referrerTenantId }
+
+  const [grouped, paidToday, recentes] = await Promise.all([
+    prisma.tenant.groupBy({
+      by: ["status"],
+      where,
+      _count: { _all: true },
+    }),
+    // Indicadas com pagamento recebido hoje (ativações/recebimentos do dia).
+    prisma.tenantPayment.findMany({
+      where: {
+        status: { in: ["RECEIVED", "CONFIRMED"] },
+        paidAt: { gte: start },
+        tenant: { referrerTenantId },
+      },
+      select: { tenantId: true },
+      distinct: ["tenantId"],
+    }),
+    prisma.tenant.findMany({
+      where: { ...where, status: TenantStatus.ACTIVE },
+      select: { name: true },
+      orderBy: { createdAt: "desc" },
+      take: 12,
+    }),
+  ])
+
+  const countOf = (s: TenantStatus) =>
+    grouped.find((g) => g.status === s)?._count._all ?? 0
+
+  const funnel = {
+    aguardando: countOf(TenantStatus.PENDING),
+    ativos: countOf(TenantStatus.ACTIVE),
+    suspensos: countOf(TenantStatus.SUSPENDED),
+    cancelados: countOf(TenantStatus.CANCELLED),
+  }
+
+  // Meta = total de indicadas (denominador). Sem indicadas ainda → 0/0 = 0%.
+  const total =
+    funnel.aguardando + funnel.ativos + funnel.suspensos + funnel.cancelados
+  const ativos = funnel.ativos
+  const progresso = total > 0 ? Math.round((ativos / total) * 100) : 0
+
+  return {
+    meta: total,
+    ativos,
+    progresso,
+    funnel,
+    novasHoje: paidToday.length,
+    recentes: recentes.map((r) => ({ name: r.name })),
+    generatedAt: new Date().toISOString(),
+  }
+}

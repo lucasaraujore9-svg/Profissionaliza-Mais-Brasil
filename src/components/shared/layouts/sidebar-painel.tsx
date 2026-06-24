@@ -23,6 +23,7 @@ import {
   Lock,
   Video,
   Store,
+  Trophy,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -56,6 +57,15 @@ const ALL_ITEMS: NavItem[] = [
       { href: "/painel/revendas/nova", label: "Criar revenda" },
       { href: "/painel/revendas/leads", label: "Leads revendas" },
     ],
+  },
+  // Placar de indicações: scoreboard das revendas que ele indicou (mesmo módulo
+  // de revender revendas). Item próprio para acender/destacar corretamente.
+  {
+    href: "/painel/placar",
+    label: "Placar",
+    icon: Trophy,
+    ownerOnly: true,
+    resellerSellerOnly: true,
   },
   { href: "/painel/cupons", label: "Cupons", icon: Tag },
   { href: "/painel/financeiro", label: "Financeiro", icon: CreditCard },

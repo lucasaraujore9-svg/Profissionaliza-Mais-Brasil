@@ -70,9 +70,26 @@ interface Celebration {
 export function PlacarClient({
   initial,
   testMode = false,
+  streamUrl = "/api/placar/stream",
+  title = "Placar de Lançamento",
+  subtitle,
+  mainLabel = "Revendas ativas",
+  celebrationTitle = "NOVA REVENDA ATIVADA!",
+  logoUrl = "/images/logo.png",
 }: {
   initial: PlacarSnapshot
   testMode?: boolean
+  /** Endpoint SSE. Default: placar público de lançamento. */
+  streamUrl?: string
+  title?: string
+  /** Linha sob o título. Default: "Meta: {meta} revendas ativas". */
+  subtitle?: string
+  /** Rótulo do número principal. */
+  mainLabel?: string
+  /** Texto do pop-up de celebração de nova ativação. */
+  celebrationTitle?: string
+  /** Logo do cabeçalho; null oculta (ex.: dentro do painel, com sidebar própria). */
+  logoUrl?: string | null
 }) {
   const [snap, setSnap] = useState<PlacarSnapshot>(initial)
   const [live, setLive] = useState(false)
@@ -126,7 +143,7 @@ export function PlacarClient({
 
   // Conexao SSE com reconexao automatica do EventSource.
   useEffect(() => {
-    const es = new EventSource("/api/placar/stream")
+    const es = new EventSource(streamUrl)
     es.addEventListener("open", () => setLive(true))
     es.addEventListener("snapshot", (e) => {
       try {
@@ -146,7 +163,7 @@ export function PlacarClient({
     })
     es.addEventListener("error", () => setLive(false))
     return () => es.close()
-  }, [celebrate])
+  }, [celebrate, streamUrl])
 
   const f = snap.funnel
   const maxFunnel = Math.max(...STAGES.map((s) => f[s.key]), 1)
@@ -159,18 +176,20 @@ export function PlacarClient({
       {/* Cabecalho */}
       <header className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src="/images/logo.png"
-            alt="Profissionaliza Mais Brasil"
-            className="h-10 w-auto sm:h-12"
-          />
+          {logoUrl && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={logoUrl}
+              alt="Profissionaliza Mais Brasil"
+              className="h-10 w-auto sm:h-12"
+            />
+          )}
           <div>
             <h1 className="font-heading text-lg leading-tight font-bold sm:text-2xl">
-              Placar de Lançamento
+              {title}
             </h1>
             <p className="text-xs text-emerald-300/80 sm:text-sm">
-              Meta: {snap.meta} revendas ativas
+              {subtitle ?? `Meta: ${snap.meta} revendas ativas`}
             </p>
           </div>
         </div>
@@ -209,7 +228,7 @@ export function PlacarClient({
       <section className="mx-auto mt-8 max-w-6xl sm:mt-12">
         <div className="text-center">
           <p className="text-sm font-medium tracking-widest text-emerald-300/80 uppercase sm:text-base">
-            Revendas ativas
+            {mainLabel}
           </p>
           <div className="mt-1 flex items-end justify-center gap-3 sm:gap-5">
             <span className="font-heading text-[5.5rem] leading-none font-black tabular-nums text-emerald-300 drop-shadow-[0_0_35px_rgba(16,185,129,0.45)] sm:text-[10rem]">
@@ -335,7 +354,7 @@ export function PlacarClient({
           <div className="animate-[placarPop_0.5s_cubic-bezier(0.18,1.4,0.4,1)] rounded-3xl bg-emerald-500 px-10 py-8 text-center shadow-[0_0_80px_rgba(16,185,129,0.7)]">
             <p className="text-6xl">💰</p>
             <p className="font-heading mt-2 text-2xl font-black text-emerald-950 sm:text-4xl">
-              NOVA REVENDA ATIVADA!
+              {celebrationTitle}
             </p>
             <p className="mt-1 text-lg font-semibold text-emerald-900 sm:text-2xl">
               {celebration.name}
