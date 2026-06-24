@@ -26,7 +26,9 @@ const SECURITY_HEADERS = [
       "base-uri 'self'",
       "frame-ancestors 'none'",
       "object-src 'none'",
-      "img-src 'self' data: blob: https://*.supabase.co https://playcurso.com https://s3.bmbr.com.br",
+      // img.youtube.com / i.ytimg.com: thumbnails (capa) dos modulos de
+      // Treinamento, que usam o frame do YouTube. Sem isto a CSP bloqueia a capa.
+      "img-src 'self' data: blob: https://*.supabase.co https://playcurso.com https://s3.bmbr.com.br https://img.youtube.com https://i.ytimg.com",
       "font-src 'self' data:",
       "style-src 'self' 'unsafe-inline'",
       "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://sdk.mercadopago.com https://www.mercadopago.com https://va.vercel-scripts.com",
@@ -35,7 +37,10 @@ const SECURITY_HEADERS = [
       // <iframe src="blob:..."> no editor de template (admin/painel). Sem isto
       // o navegador bloqueia o embed ("conteúdo bloqueado"). frame-ancestors
       // 'none' + X-Frame-Options: DENY continuam protegendo contra clickjacking.
-      "frame-src 'self' blob: https://www.mercadopago.com https://sdk.mercadopago.com",
+      // youtube-nocookie.com / youtube.com: player embutido (iframe) dos videos
+      // de Treinamento (youtubeEmbedUrl usa youtube-nocookie). Sem isto o video
+      // nao carrega ("conteudo bloqueado").
+      "frame-src 'self' blob: https://www.mercadopago.com https://sdk.mercadopago.com https://www.youtube-nocookie.com https://www.youtube.com",
       "form-action 'self' https://www.mercadopago.com",
     ].join("; "),
   },
@@ -61,6 +66,9 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "*.supabase.co" },
       { protocol: "https", hostname: "playcurso.com" },
       { protocol: "https", hostname: "s3.bmbr.com.br" },
+      // Thumbnails dos modulos de Treinamento (capa via frame do YouTube).
+      { protocol: "https", hostname: "img.youtube.com" },
+      { protocol: "https", hostname: "i.ytimg.com" },
     ],
   },
   async headers() {
