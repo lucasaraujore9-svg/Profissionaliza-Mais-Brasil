@@ -57,9 +57,27 @@ const PROGRESS_STATUS_LABEL: Record<string, string> = {
   AGUARDANDO: "Aguardando início",
 }
 
-export default async function StudentCoursesPage() {
+// Mensagens amigáveis para a falha de acesso ao curso LMS (FE-005). A rota
+// /api/aluno/curso/[id]/acessar redireciona para cá com ?erro=<code> quando não
+// consegue abrir o curso, em vez de responder JSON cru.
+const ACCESS_ERROR_MESSAGE: Record<string, string> = {
+  indisponivel: "Este curso não está disponível para acesso no momento.",
+  parceiro:
+    "O acesso ao parceiro está indisponível agora. Fale com o suporte se persistir.",
+  falha:
+    "Não foi possível abrir o curso agora. Tente novamente em instantes.",
+}
+
+export default async function StudentCoursesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ erro?: string }>
+}) {
   const session = await requireStudentSession()
   if (!session) return null
+
+  const { erro } = await searchParams
+  const accessError = erro ? ACCESS_ERROR_MESSAGE[erro] : undefined
 
   // Best-effort: sincroniza progresso (não bloqueia a página em caso de erro)
   try {
@@ -117,6 +135,16 @@ export default async function StudentCoursesPage() {
           quando concluir o curso.
         </p>
       </header>
+
+      {accessError && (
+        <div
+          role="alert"
+          className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800"
+        >
+          <XCircle className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
+          <span>{accessError}</span>
+        </div>
+      )}
 
       {enrollments.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-[rgba(2,89,24,0.18)] bg-white p-10 text-center shadow-sm">

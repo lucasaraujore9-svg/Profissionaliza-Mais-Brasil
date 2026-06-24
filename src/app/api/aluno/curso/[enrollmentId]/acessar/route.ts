@@ -25,6 +25,12 @@ export async function GET(
 
   const { enrollmentId } = await params
 
+  // Esta rota é alvo de navegação direta (<a href>), não de fetch — então os
+  // ramos de erro REDIRECIONAM para a área do aluno com um aviso amigável em
+  // vez de responder JSON cru (que apareceria como "tela quebrada"). FE-005.
+  const errorRedirect = (code: string) =>
+    NextResponse.redirect(new URL(`/aluno/cursos?erro=${code}`, request.url))
+
   const enrollment = await prisma.enrollment.findFirst({
     where: {
       id: enrollmentId,
@@ -41,10 +47,7 @@ export async function GET(
   })
 
   if (!enrollment || enrollment.course.provider !== "LMS") {
-    return NextResponse.json(
-      { error: "Curso não disponível para acesso." },
-      { status: 404 },
-    )
+    return errorRedirect("indisponivel")
   }
 
   // Curso de parceiro (redirect): assiste no portal do parceiro com as
@@ -54,10 +57,7 @@ export async function GET(
     if (enrollment.lmsPortalUrl) {
       return NextResponse.redirect(enrollment.lmsPortalUrl)
     }
-    return NextResponse.json(
-      { error: "Acesso ao parceiro indisponível no momento — fale com o suporte." },
-      { status: 409 },
-    )
+    return errorRedirect("parceiro")
   }
 
   try {
@@ -72,9 +72,6 @@ export async function GET(
       { err, event: "aluno.lms_sso.failed", enrollmentId, studentId: session.studentId },
       "geracao de token SSO do LMS falhou",
     )
-    return NextResponse.json(
-      { error: "Não foi possível abrir o curso agora. Tente novamente em instantes." },
-      { status: 502 },
-    )
+    return errorRedirect("falha")
   }
 }
