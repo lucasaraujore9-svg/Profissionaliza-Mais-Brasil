@@ -33,6 +33,7 @@ export default async function PainelPlacarPage() {
       mainLabel="Revendas indicadas ativas"
       celebrationTitle="NOVA REVENDA INDICADA ATIVADA!"
       logoUrl={null}
+      showMeta={false}
     />
   )
 }

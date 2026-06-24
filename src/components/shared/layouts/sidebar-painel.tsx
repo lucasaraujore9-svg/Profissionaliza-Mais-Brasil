@@ -23,7 +23,6 @@ import {
   Lock,
   Video,
   Store,
-  Trophy,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -56,16 +55,9 @@ const ALL_ITEMS: NavItem[] = [
     children: [
       { href: "/painel/revendas/nova", label: "Criar revenda" },
       { href: "/painel/revendas/leads", label: "Leads revendas" },
+      // Placar de indicações: scoreboard das revendas que ele indicou.
+      { href: "/painel/placar", label: "Placar" },
     ],
-  },
-  // Placar de indicações: scoreboard das revendas que ele indicou (mesmo módulo
-  // de revender revendas). Item próprio para acender/destacar corretamente.
-  {
-    href: "/painel/placar",
-    label: "Placar",
-    icon: Trophy,
-    ownerOnly: true,
-    resellerSellerOnly: true,
   },
   { href: "/painel/cupons", label: "Cupons", icon: Tag },
   { href: "/painel/financeiro", label: "Financeiro", icon: CreditCard },
@@ -143,10 +135,17 @@ export function SidebarPainel({
       <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
         {navItems.map((item) => {
           // Casa em fronteira de segmento (href + "/") para nao acender itens
-          // cujo href e prefixo de string de outro.
+          // cujo href e prefixo de string de outro. Tambem mantem a secao aberta
+          // quando estamos num FILHO cujo href esta fora do prefixo do pai (ex.:
+          // /painel/placar dentro da secao /painel/revendas).
+          const onChild =
+            item.children?.some(
+              (c) => pathname === c.href || pathname.startsWith(c.href + "/"),
+            ) ?? false
           const sectionActive =
             pathname === item.href ||
-            (item.href !== "/painel" && pathname.startsWith(item.href + "/"))
+            (item.href !== "/painel" && pathname.startsWith(item.href + "/")) ||
+            onChild
           // Itens com filhos só destacam o pai no href EXATO (o dashboard da
           // seção); dentro de um filho, a seção expande e o destaque vai ao filho.
           const isActive = item.children ? pathname === item.href : sectionActive

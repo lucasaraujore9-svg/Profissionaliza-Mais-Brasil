@@ -76,6 +76,7 @@ export function PlacarClient({
   mainLabel = "Revendas ativas",
   celebrationTitle = "NOVA REVENDA ATIVADA!",
   logoUrl = "/images/logo.png",
+  showMeta = true,
 }: {
   initial: PlacarSnapshot
   testMode?: boolean
@@ -90,6 +91,11 @@ export function PlacarClient({
   celebrationTitle?: string
   /** Logo do cabeçalho; null oculta (ex.: dentro do painel, com sidebar própria). */
   logoUrl?: string | null
+  /**
+   * Mostra a meta: denominador "/ {meta}", barra de progresso e "faltam X".
+   * Default true (placar de lançamento). false = só o número de ativas.
+   */
+  showMeta?: boolean
 }) {
   const [snap, setSnap] = useState<PlacarSnapshot>(initial)
   const [live, setLive] = useState(false)
@@ -234,33 +240,39 @@ export function PlacarClient({
             <span className="font-heading text-[5.5rem] leading-none font-black tabular-nums text-emerald-300 drop-shadow-[0_0_35px_rgba(16,185,129,0.45)] sm:text-[10rem]">
               {ativosDisplay}
             </span>
-            <span className="mb-3 font-heading text-3xl font-bold text-white/40 sm:mb-7 sm:text-5xl">
-              / {snap.meta}
-            </span>
-          </div>
-          <p className="mt-2 text-sm text-white/60 sm:text-base">
-            {restantes > 0 ? (
-              <>
-                Faltam{" "}
-                <strong className="text-white">{restantes}</strong> para a meta
-              </>
-            ) : (
-              <strong className="text-emerald-300">🎉 Meta batida!</strong>
+            {showMeta && (
+              <span className="mb-3 font-heading text-3xl font-bold text-white/40 sm:mb-7 sm:text-5xl">
+                / {snap.meta}
+              </span>
             )}
-          </p>
+          </div>
+          {showMeta && (
+            <p className="mt-2 text-sm text-white/60 sm:text-base">
+              {restantes > 0 ? (
+                <>
+                  Faltam{" "}
+                  <strong className="text-white">{restantes}</strong> para a meta
+                </>
+              ) : (
+                <strong className="text-emerald-300">🎉 Meta batida!</strong>
+              )}
+            </p>
+          )}
         </div>
 
-        {/* Barra de progresso */}
-        <div className="mx-auto mt-6 max-w-3xl">
-          <div className="h-5 w-full overflow-hidden rounded-full bg-white/10 ring-1 ring-white/10">
-            <div
-              className="flex h-full items-center justify-end rounded-full bg-gradient-to-r from-emerald-500 to-emerald-300 pr-2 text-[10px] font-bold text-emerald-950 transition-[width] duration-700 ease-out"
-              style={{ width: `${Math.max(snap.progresso, 4)}%` }}
-            >
-              {snap.progresso}%
+        {/* Barra de progresso — só quando há meta */}
+        {showMeta && (
+          <div className="mx-auto mt-6 max-w-3xl">
+            <div className="h-5 w-full overflow-hidden rounded-full bg-white/10 ring-1 ring-white/10">
+              <div
+                className="flex h-full items-center justify-end rounded-full bg-gradient-to-r from-emerald-500 to-emerald-300 pr-2 text-[10px] font-bold text-emerald-950 transition-[width] duration-700 ease-out"
+                style={{ width: `${Math.max(snap.progresso, 4)}%` }}
+              >
+                {snap.progresso}%
+              </div>
             </div>
           </div>
-        </div>
+        )}
       </section>
 
       {/* Funil */}
