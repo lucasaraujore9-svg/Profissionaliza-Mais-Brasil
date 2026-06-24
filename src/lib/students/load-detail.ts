@@ -71,6 +71,40 @@ export async function loadStudentDetail(args: {
     }
   }
 
+  // Credenciais do LMS por curso (proprio do LMS ou parceiro). Guardadas por
+  // matricula porque origin/playback variam por curso. Senha CIFRADA — decifrada
+  // aqui, degradando a `null` se corrompida (mesma politica do plataformaSenha).
+  // Lidas das matriculas ja escopadas pelo `student` (isolamento por tenant).
+  const lmsCredentials = student.enrollments
+    .filter((e) => e.lmsLogin)
+    .map((e) => {
+      let senha: string | null = null
+      if (e.lmsSenha) {
+        try {
+          senha = decrypt(e.lmsSenha)
+        } catch (err) {
+          contextLogger().warn(
+            {
+              err,
+              event: "student.load_detail.lms_decrypt_failed",
+              studentId: student.id,
+              enrollmentId: e.id,
+            },
+            "falha ao descriptografar senha do LMS — exibindo só o login",
+          )
+        }
+      }
+      return {
+        enrollmentId: e.id,
+        courseName: e.course.nome,
+        origin: e.lmsOrigin,
+        playback: e.lmsPlayback,
+        login: e.lmsLogin as string,
+        senha,
+        portalUrl: e.lmsPortalUrl,
+      }
+    })
+
   const totalPaid = payments.reduce(
     (sum, p) =>
       sum +
@@ -154,5 +188,6 @@ export async function loadStudentDetail(args: {
       createdAt: n.createdAt.toISOString(),
       readAt: n.readAt?.toISOString() ?? null,
     })),
+    lmsCredentials,
   }
 }

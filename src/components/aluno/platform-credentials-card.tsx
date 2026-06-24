@@ -17,6 +17,11 @@ interface Props {
   senha: string | null
   /** URL da tela de login da plataforma de aulas. */
   loginUrl: string | null
+  /**
+   * Nome do curso. Quando informado (credencial do LMS por curso), vira o título
+   * do card. Sem ele (credencial global da EA) usa o título genérico.
+   */
+  courseName?: string
 }
 
 function CopyButton({ value, label }: { value: string; label: string }) {
@@ -53,7 +58,12 @@ function CopyButton({ value, label }: { value: string; label: string }) {
  * pagamento. Mostra usuário + senha inicial (mascarada, com revelar/copiar) e
  * o botão que leva direto à tela de login da plataforma.
  */
-export function PlatformCredentialsCard({ login, senha, loginUrl }: Props) {
+export function PlatformCredentialsCard({
+  login,
+  senha,
+  loginUrl,
+  courseName,
+}: Props) {
   const [show, setShow] = useState(false)
 
   return (
@@ -66,7 +76,9 @@ export function PlatformCredentialsCard({ login, senha, loginUrl }: Props) {
           <p className="text-[11px] font-bold uppercase tracking-wider text-[var(--color-pmb-lime)]">
             Acesso à plataforma de aulas
           </p>
-          <h2 className="text-lg font-semibold">Seu usuário e senha</h2>
+          <h2 className="text-lg font-semibold">
+            {courseName ?? "Seu usuário e senha"}
+          </h2>
         </div>
       </div>
 

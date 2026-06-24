@@ -5,11 +5,14 @@ import { createLmsSsoToken } from "@/lib/lms"
 import { contextLogger } from "@/lib/logger"
 
 /**
- * Gera um link SSO de uso unico no LMS e redireciona o aluno para o player.
+ * Abre o curso do LMS para o aluno. Ramifica por `lmsPlayback`:
+ *  - "redirect" (curso de parceiro): redireciona ao portal do parceiro
+ *    (lmsPortalUrl); o aluno loga com as credenciais exibidas na area do aluno.
+ *  - "local"/null (curso proprio do LMS): gera link SSO de uso unico (TTL ~5min,
+ *    sob demanda no clique) e redireciona ao player. `null` cobre matriculas
+ *    anteriores a migration de credenciais (tratadas como local/SSO).
  *
- * So vale para cursos provider=LMS de matriculas ACTIVE/COMPLETED do proprio
- * aluno (o LMS exige o aluno matriculado antes). O token tem TTL ~5min e e
- * gerado SOB DEMANDA no clique — nunca pre-gerado/cacheado.
+ * So vale para cursos provider=LMS de matriculas ACTIVE/COMPLETED do proprio aluno.
  */
 export async function GET(
   request: Request,
@@ -30,6 +33,8 @@ export async function GET(
     },
     select: {
       tenantId: true,
+      lmsPlayback: true,
+      lmsPortalUrl: true,
       student: { select: { id: true } },
       course: { select: { provider: true } },
     },
@@ -39,6 +44,19 @@ export async function GET(
     return NextResponse.json(
       { error: "Curso não disponível para acesso." },
       { status: 404 },
+    )
+  }
+
+  // Curso de parceiro (redirect): assiste no portal do parceiro com as
+  // credenciais exibidas na area do aluno — nao geramos SSO do LMS. portalUrl
+  // vem do banco (nunca do client).
+  if (enrollment.lmsPlayback === "redirect") {
+    if (enrollment.lmsPortalUrl) {
+      return NextResponse.redirect(enrollment.lmsPortalUrl)
+    }
+    return NextResponse.json(
+      { error: "Acesso ao parceiro indisponível no momento — fale com o suporte." },
+      { status: 409 },
     )
   }
 

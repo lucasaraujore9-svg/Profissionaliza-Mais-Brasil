@@ -966,6 +966,16 @@ model Enrollment {
   // usado para revogar acesso (POST /enrollments/:id/revoke). null em cursos EA.
   lmsEnrollmentId String? @map("lms_enrollment_id")
 
+  // Acesso a plataforma de destino do LMS (curso proprio do LMS ou parceiro).
+  // Vem em `partnerAccess` no 201 de POST /api/v1/enrollments. Guardado por
+  // matricula porque origin/playback variam por curso. lmsSenha CIFRADA
+  // (AES-256-GCM, mesmo padrao de plataformaAlunoSenha). null em cursos EA.
+  lmsOrigin    String? @map("lms_origin") // "own" | chave do parceiro
+  lmsPlayback  String? @map("lms_playback") // "local" | "redirect"
+  lmsLogin     String? @map("lms_login")
+  lmsSenha     String? @map("lms_senha") // criptografada
+  lmsPortalUrl String? @map("lms_portal_url") @db.Text
+
   // Relacoes
   payments     Payment[]
   certificates Certificate[]

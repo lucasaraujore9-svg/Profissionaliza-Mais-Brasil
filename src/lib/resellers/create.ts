@@ -19,6 +19,7 @@ import { ensureTenantHomeSections } from "@/lib/home/sections"
 import { DEFAULT_AUTOMATION_TEMPLATES } from "@/lib/automation/default-templates"
 import { forbiddenNameError } from "@/lib/tenant/forbidden-names"
 import { validateSlugFormat, isSlugAvailable } from "@/lib/tenant/slug"
+import { syncTenantBrandingToLms } from "@/lib/lms"
 
 /**
  * Criação de revenda (tenant) — núcleo compartilhado entre:
@@ -289,6 +290,15 @@ export async function createReseller(
       "bootstrap da vitrine (cursos/seções) falhou na criação do revendedor",
     )
   }
+
+  // Registra o branding da revenda no LMS (white-label). Best-effort e no-op sem
+  // LMS/__pmb__. Logo ainda não existe na criação — o upload da logo re-sincroniza.
+  await syncTenantBrandingToLms({
+    id: tenant.id,
+    slug: tenant.slug,
+    name: tenant.name,
+    logoUrl: null,
+  })
 
   const user = await prisma.user.create({
     data: {

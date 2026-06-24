@@ -10,6 +10,7 @@ import {
 import { isValidImageMagic } from "@/lib/storage/validate-image"
 import { rateLimit, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
 import { withRequestContext } from "@/lib/observability/with-request-context"
+import { syncTenantBrandingToLms } from "@/lib/lms"
 
 const MAX_BYTES = 5 * 1024 * 1024 // 5MB
 // SVGs sao bloqueados deliberadamente: podem carregar <script>/<foreignObject>
@@ -84,6 +85,7 @@ export const POST = withRequestContext(
       select: {
         id: true,
         slug: true,
+        name: true,
         customDomain: true,
         logoUrl: true,
         bannerUrl: true,
@@ -138,6 +140,16 @@ export const POST = withRequestContext(
       }
     }
 
+    // Nova logo → re-sincroniza o branding no LMS (best-effort, no-op sem LMS).
+    if (kind === "logo") {
+      await syncTenantBrandingToLms({
+        id: tenant.id,
+        slug: tenant.slug,
+        name: tenant.name,
+        logoUrl: uploadedUrl,
+      })
+    }
+
     return NextResponse.json({
       data: {
         kind,
@@ -169,6 +181,7 @@ export const DELETE = withRequestContext(
       select: {
         id: true,
         slug: true,
+        name: true,
         customDomain: true,
         logoUrl: true,
         bannerUrl: true,
@@ -198,6 +211,16 @@ export const DELETE = withRequestContext(
       } catch {
         // Arquivo já não existe — ignora
       }
+    }
+
+    // Logo removida → reverte a marca no LMS para o fallback (logoUrl: null).
+    if (kind === "logo") {
+      await syncTenantBrandingToLms({
+        id: tenant.id,
+        slug: tenant.slug,
+        name: tenant.name,
+        logoUrl: null,
+      })
     }
 
     return NextResponse.json({ data: { kind, url: null } })

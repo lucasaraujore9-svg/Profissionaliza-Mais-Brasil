@@ -9,6 +9,7 @@ import {
   linkCourseToStudent,
 } from "@/lib/students/plataforma-actions"
 import { createLmsEnrollment, type LmsEnrollmentResponse } from "@/lib/lms"
+import { encrypt } from "@/lib/crypto"
 import { generatePasswordWithHash } from "@/lib/students/generate-password"
 import { createNotification } from "@/lib/notifications"
 import { addMonthsClamped } from "@/lib/dates"
@@ -401,16 +402,15 @@ async function provisionPackageSiblings(
     if (item.course.id === enrollment.courseId) continue // primário já liberado
     if (item.course.status !== "ATIVO") continue
 
-    let lmsEnrollmentId: string | null = null
+    let provisioned: Awaited<ReturnType<typeof provisionCourseForStudent>> | null = null
     try {
       // Idempotency-Key estavel por (matricula primaria, curso) para o LMS.
-      const provisioned = await provisionCourseForStudent(
+      provisioned = await provisionCourseForStudent(
         tenant,
         enrollment.student,
         item.course,
         `pkg:${enrollment.id}:${item.course.id}`,
       )
-      lmsEnrollmentId = provisioned.lmsEnrollmentId
     } catch (err) {
       contextLogger().error(
         {
@@ -434,6 +434,7 @@ async function provisionPackageSiblings(
       }).catch(swallow("fulfill.notify_package_sibling"))
       continue
     }
+    if (!provisioned) continue // inalcançável (o catch faz continue) — satisfaz o TS
 
     // Cria a matrícula satélite só se o aluno ainda não tiver acesso ao curso.
     const existing = await prisma.enrollment.findFirst({
@@ -463,7 +464,12 @@ async function provisionPackageSiblings(
         finalAmount: 0,
         startedAt,
         expiresAt,
-        lmsEnrollmentId,
+        lmsEnrollmentId: provisioned.lmsEnrollmentId,
+        lmsOrigin: provisioned.lmsOrigin,
+        lmsPlayback: provisioned.lmsPlayback,
+        lmsLogin: provisioned.lmsLogin,
+        lmsSenha: provisioned.lmsSenha,
+        lmsPortalUrl: provisioned.lmsPortalUrl,
       },
     })
   }
@@ -746,10 +752,28 @@ async function provisionLmsAccess(
     throw err
   }
 
+  // Credencial de acesso a plataforma de destino (curso proprio do LMS ou
+  // parceiro). Vem so na 1a provisao bem-sucedida; em re-entrega idempotente o
+  // LMS reemite o mesmo partnerAccess. Senha CIFRADA em repouso, nunca logada.
+  // origin/playback sempre persistidos (a area do aluno ramifica SSO vs redirect
+  // por playback).
+  const lmsAccess = res.partnerAccess
+    ? {
+        lmsLogin: res.partnerAccess.login,
+        lmsSenha: encrypt(res.partnerAccess.password),
+        lmsPortalUrl: res.partnerAccess.portalUrl,
+      }
+    : {}
+
   await prisma.$transaction([
     prisma.enrollment.update({
       where: { id: enrollment.id },
-      data: { lmsEnrollmentId: res.enrollmentId },
+      data: {
+        lmsEnrollmentId: res.enrollmentId,
+        lmsOrigin: res.origin,
+        lmsPlayback: res.playback,
+        ...lmsAccess,
+      },
     }),
     ...(res.studentId
       ? [
@@ -815,7 +839,14 @@ async function provisionCourseForStudent(
   student: { id: string; nome: string; email: string | null },
   course: { id: string; nome: string; provider: CourseProvider; lmsCourseId: string | null },
   idempotencyKey: string,
-): Promise<{ lmsEnrollmentId: string | null }> {
+): Promise<{
+  lmsEnrollmentId: string | null
+  lmsOrigin: string | null
+  lmsPlayback: string | null
+  lmsLogin: string | null
+  lmsSenha: string | null
+  lmsPortalUrl: string | null
+}> {
   if (course.provider === "LMS") {
     if (!course.lmsCourseId) throw new Error(`curso LMS ${course.id} sem lmsCourseId`)
     if (!student.email) throw new Error(`aluno ${student.id} sem email (LMS)`)
@@ -844,7 +875,14 @@ async function provisionCourseForStudent(
         "curso de pacote LMS: parceiro por baixo falhou (sera reprovisionado por retry/sync)",
       )
     }
-    return { lmsEnrollmentId: res.enrollmentId }
+    return {
+      lmsEnrollmentId: res.enrollmentId,
+      lmsOrigin: res.origin,
+      lmsPlayback: res.playback,
+      lmsLogin: res.partnerAccess?.login ?? null,
+      lmsSenha: res.partnerAccess ? encrypt(res.partnerAccess.password) : null,
+      lmsPortalUrl: res.partnerAccess?.portalUrl ?? null,
+    }
   }
 
   // EA: ensure (idempotente — no-op se o aluno ja existe) + vincula o curso.
@@ -852,7 +890,14 @@ async function provisionCourseForStudent(
   // o aluno ainda nao existia na EA).
   await ensureStudentOnPlatform(student.id)
   await linkCourseToStudent(student.id, course.id)
-  return { lmsEnrollmentId: null }
+  return {
+    lmsEnrollmentId: null,
+    lmsOrigin: null,
+    lmsPlayback: null,
+    lmsLogin: null,
+    lmsSenha: null,
+    lmsPortalUrl: null,
+  }
 }
 
 /**

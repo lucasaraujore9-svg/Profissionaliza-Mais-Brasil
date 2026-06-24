@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { requireResellerSession } from "@/lib/auth/reseller-session"
 import { invalidateTenant } from "@/lib/redis/tenant-cache"
 import { withRequestContext } from "@/lib/observability/with-request-context"
+import { syncTenantBrandingToLms } from "@/lib/lms"
 
 interface VitrineDto {
   name: string
@@ -120,6 +121,17 @@ export const PUT = withRequestContext(
     })
 
     const data = await readTenant(tenant.id)
+
+    // Re-sincroniza o branding (nome/logo) com o LMS. Best-effort, no-op sem LMS.
+    if (data) {
+      await syncTenantBrandingToLms({
+        id: tenant.id,
+        slug: tenant.slug,
+        name: data.name,
+        logoUrl: data.logoUrl,
+      })
+    }
+
     return NextResponse.json({ data })
   },
 )

@@ -5,6 +5,7 @@ import {
   getStudentPlatformCredentials,
   getStudentPlatformLoginUrl,
 } from "@/lib/students/platform-credentials"
+import { getLmsEnrollmentCredentials } from "@/lib/students/lms-credentials"
 import { PlatformCredentialsCard } from "@/components/aluno/platform-credentials-card"
 import { PaymentCheckButton } from "@/components/aluno/payment-check-button"
 import {
@@ -33,29 +34,33 @@ export default async function StudentDashboardPage() {
   const session = await requireStudentSession()
   if (!session) return null
 
-  const [enrollments, payments, platformCredentials] = await Promise.all([
-    prisma.enrollment.findMany({
-      where: { studentId: session.studentId },
-      include: {
-        course: {
-          select: {
-            nome: true,
-            capaImageUrl: true,
-            capaOverride: true,
-            provider: true,
+  const [enrollments, payments, platformCredentials, lmsCredentials] =
+    await Promise.all([
+      prisma.enrollment.findMany({
+        where: { studentId: session.studentId },
+        include: {
+          course: {
+            select: {
+              nome: true,
+              capaImageUrl: true,
+              capaOverride: true,
+              provider: true,
+            },
           },
         },
-      },
-      orderBy: { createdAt: "desc" },
-    }),
-    prisma.payment.findMany({
-      where: { enrollment: { studentId: session.studentId } },
-      orderBy: { paidAt: "desc" },
-      take: 5,
-      include: { enrollment: { include: { course: { select: { nome: true } } } } },
-    }),
-    getStudentPlatformCredentials(session.studentId),
-  ])
+        orderBy: { createdAt: "desc" },
+      }),
+      prisma.payment.findMany({
+        where: { enrollment: { studentId: session.studentId } },
+        orderBy: { paidAt: "desc" },
+        take: 5,
+        include: { enrollment: { include: { course: { select: { nome: true } } } } },
+      }),
+      getStudentPlatformCredentials(session.studentId),
+      // Credenciais do LMS por curso (proprio do LMS ou parceiro). Ja filtra por
+      // matricula paga e so retorna quando ha credencial gravada.
+      getLmsEnrollmentCredentials(session.studentId),
+    ])
 
   const activeEnrollments = enrollments.filter(
     (e) => e.status === "ACTIVE" || e.status === "COMPLETED",
@@ -134,6 +139,18 @@ export default async function StudentDashboardPage() {
           loginUrl={plataformaLoginUrl}
         />
       )}
+
+      {/* Credenciais do LMS, uma por curso (próprio do LMS ou parceiro). A lista
+          já vem filtrada por matrícula paga e só com credencial gravada. */}
+      {lmsCredentials.map((c) => (
+        <PlatformCredentialsCard
+          key={c.enrollmentId}
+          courseName={c.courseNome}
+          login={c.login}
+          senha={c.senha}
+          loginUrl={c.portalUrl}
+        />
+      ))}
 
       {/* Empty state quando aluno ainda não tem cursos */}
       {hasNoEnrollments && (

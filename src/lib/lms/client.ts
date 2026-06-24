@@ -10,6 +10,7 @@ import type {
   LmsSsoTokenRequest,
   LmsSsoTokenResponse,
   LmsDayUpdateResponse,
+  LmsTenantBrandingRequest,
 } from "./types"
 import { contextLogger } from "@/lib/logger"
 
@@ -33,7 +34,7 @@ interface LmsRequestOptions {
  * erro de negocio sao lancados de imediato.
  */
 async function lmsRequest<T>(
-  method: "GET" | "POST" | "PATCH",
+  method: "GET" | "POST" | "PATCH" | "PUT",
   path: string,
   opts: LmsRequestOptions = {},
 ): Promise<T> {
@@ -188,6 +189,27 @@ export async function createLmsSsoToken(
   body: LmsSsoTokenRequest,
 ): Promise<LmsSsoTokenResponse> {
   return lmsRequest<LmsSsoTokenResponse>("POST", "/sso/token", { body })
+}
+
+// ══════════════════════════════════════════════
+// BRANDING (white-label por revenda)
+// ══════════════════════════════════════════════
+
+/**
+ * Registra/atualiza o branding da revenda no LMS (PUT /tenants/:id). `:id` e o
+ * tenantExternalId = Tenant.id (mesma chave enviada nas matriculas/SSO). Sem
+ * isto, o aluno da revenda ve a marca PMB (fallback). NAO chamar para a vitrine
+ * PMB (`__pmb__`). Os callers devem proteger com isLmsConfigured().
+ */
+export async function putLmsTenantBranding(
+  tenantExternalId: string,
+  body: LmsTenantBrandingRequest,
+): Promise<void> {
+  await lmsRequest<{ data: unknown }>(
+    "PUT",
+    `/tenants/${encodeURIComponent(tenantExternalId)}`,
+    { body },
+  )
 }
 
 // ══════════════════════════════════════════════

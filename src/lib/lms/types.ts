@@ -52,6 +52,17 @@ export interface LmsEnrollmentRequest {
   tenantExternalId?: string
 }
 
+/**
+ * Acesso a plataforma de destino (curso proprio do LMS ou parceiro). A senha
+ * vem em CLARO no payload M2M autenticado; o PMB persiste CIFRADA. Presente so
+ * para curso de parceiro (playback "redirect") e curso proprio do LMS.
+ */
+export interface LmsPartnerAccess {
+  login: string
+  password: string
+  portalUrl: string
+}
+
 export interface LmsEnrollmentResponse {
   enrollmentId: string
   studentId: string
@@ -59,6 +70,14 @@ export interface LmsEnrollmentResponse {
   origin: string // "own" | chave do parceiro (ex: "escola-avancada")
   playback: string // "local" | "redirect"
   provisioning: { target?: string; ok: boolean; message?: string }
+  partnerAccess?: LmsPartnerAccess | null
+}
+
+/** Branding white-label da revenda (PUT /api/v1/tenants/:id). */
+export interface LmsTenantBrandingRequest {
+  brandName?: string
+  logoUrl?: string | null
+  certificateBaseUrl?: string
 }
 
 // ── Acesso / aluno ────────────────────────────────────────
@@ -77,6 +96,7 @@ export interface LmsStudentCourse {
   status: string // "in_progress" | "completed" | ...
   completedAt?: string | null
   lastActivityAt?: string | null
+  access?: LmsPartnerAccess | null // credencial por curso (re-busca/reparo)
 }
 
 export interface LmsStudentProfile {

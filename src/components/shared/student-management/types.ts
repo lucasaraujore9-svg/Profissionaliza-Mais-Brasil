@@ -40,6 +40,25 @@ export interface StudentNoteItem {
   authorId: string
 }
 
+/**
+ * Credencial de acesso a plataforma do LMS por curso (curso proprio do LMS ou
+ * parceiro). Espelha plataformaSenha (EA), mas e POR MATRICULA — origin/playback
+ * variam por curso.
+ */
+export interface StudentLmsCredentialItem {
+  enrollmentId: string
+  courseName: string
+  /** "own" (curso proprio do LMS) | chave do parceiro. */
+  origin: string | null
+  /** "local" (SSO no player do LMS) | "redirect" (assiste no parceiro). */
+  playback: string | null
+  login: string
+  /** Senha descriptografada; `null` quando ausente/corrompida (só o login). */
+  senha: string | null
+  /** URL do portal do parceiro (cursos redirect). */
+  portalUrl: string | null
+}
+
 export interface StudentNotificationItem {
   id: string
   title: string
@@ -84,6 +103,8 @@ export interface StudentData {
   payments: StudentPaymentItem[]
   notes: StudentNoteItem[]
   notifications: StudentNotificationItem[]
+  /** Credenciais do LMS por curso (próprio do LMS ou parceiro). */
+  lmsCredentials: StudentLmsCredentialItem[]
 }
 
 /** Define qual API root + permissoes o componente usa. */
