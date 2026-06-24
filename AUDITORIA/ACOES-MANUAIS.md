@@ -6,9 +6,18 @@ _2026-06-24 · itens que a auditoria/correção NÃO aplica sozinha: infra, segr
 
 ---
 
-## 1. 🔴 P0 — Virar o bucket `certificates` para PRIVADO (DB-001 / LGPD-001)
+## 1. ✅ P0 — Bucket `certificates` PRIVADO (DB-001 / LGPD-001) — RESOLVIDO E VERIFICADO EM PROD (2026-06-24)
 
-**Por quê:** o bucket guarda PDF de certificado com **CPF + nome** (PII). Enquanto for público, um GET anônimo na URL do objeto retorna o PDF sem autenticação (incidente reportável à ANPD).
+> **VERIFICADO em produção em 2026-06-24:** o bucket `certificates` está `public=false`.
+> Testes ao vivo (via Supabase, projeto `jpwskehhnplmmtgyyxmf`):
+> - GET anônimo na URL pública do PDF → **HTTP 400** (vazamento de CPF FECHADO; em 2026-06-20 era 200).
+> - Download service-role (rota do aluno/admin) → **HTTP 200** (download do app OK).
+> - Signed URL (`/validar`) → **sign 200 + GET 200** (validação pública OK).
+> Nenhuma alteração foi necessária (já estava privado); nada quebrou. O R1 "Bloqueado" da
+> `audit/MATRIZ_DE_RISCOS.md` está **stale** — o achado pode ser fechado.
+> O commit `11bf3c0` (pdfUrl→path) é defesa em profundidade adicional + prontidão p/ MinIO.
+
+**Contexto (por quê importava):** o bucket guarda PDF de certificado com **CPF + nome** (PII). Se fosse público, um GET anônimo na URL do objeto retornaria o PDF sem autenticação (incidente reportável à ANPD). Hoje está privado e comprovado.
 
 **Já está seguro no código** (commit `11bf3c0` + estado atual): TODOS os read-paths servem o PDF via **service-role/stream** ou **signed URL de curta duração** — nunca a URL pública. O `pdfUrl` no banco passou a guardar só o *path* (não a URL pública). Então **virar o bucket privado NÃO quebra download** (aluno, admin, painel, /validar).
 

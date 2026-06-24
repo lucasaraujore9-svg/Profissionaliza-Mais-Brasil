@@ -29,7 +29,7 @@ seguranca 294/294 · banco 44/44 · codigo 294/294 · performance 62/62 · obser
 
 | ID | Sev | Estado | Commit / Nota |
 |---|---|---|---|
-| DB-001 = LGPD-001 | P0 | **Código Corrigido** · contenção manual pendente | `11bf3c0` (pdfUrl→path, signed URLs). Flip do bucket → você (ACOES-MANUAIS §1) |
+| DB-001 = LGPD-001 | P0 | **RESOLVIDO + verificado em prod (2026-06-24)** | Bucket já `public=false`; URL pública→HTTP 400, download/sign→200. + `11bf3c0` (pdfUrl→path, defesa em profundidade). R1 da matriz está stale |
 | PERF-002 | P1 | **Corrigido** | `d5d7a0a` (home sections em paralelo) |
 | COD-006 | P2 | **Corrigido** | `65f8ec6` (swallow no fluxo financeiro) |
 | FE-005 | P2 | **Corrigido** | `1bd1995` (redirect amigável no acesso LMS) |

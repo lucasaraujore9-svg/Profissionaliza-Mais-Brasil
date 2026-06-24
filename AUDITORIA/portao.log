@@ -759,3 +759,10 @@ Run `npm audit` for details.
 ### build:
 ✓ Compiled successfully in 9.7s
 === VEREDITO FINAL: typecheck 0 · lint 0 erros/1 warn · test verde · build OK ===
+
+=== TESTE EM PROD · bucket certificates (DB-001/LGPD-001) · 2026-06-24 10:28:01 ===
+bucket public=false (já privado)
+TEST1 URL pública anônima: HTTP 400 (vazamento FECHADO)
+TEST2 download service-role (rota aluno/admin): HTTP 200
+TEST3 signed URL (/validar): sign 200 + GET 200
+VEREDITO: P0 contido e verificado em prod — sem erros.
