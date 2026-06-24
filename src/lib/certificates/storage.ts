@@ -131,12 +131,28 @@ export async function downloadCertificatePdf(path: string): Promise<Buffer> {
   return Buffer.from(ab)
 }
 
-export function extractCertificatePath(publicUrl: string | null | undefined): string | null {
-  if (!publicUrl) return null
-  const marker = `/storage/v1/object/public/${BUCKET}/`
-  const idx = publicUrl.indexOf(marker)
-  if (idx < 0) return null
-  return publicUrl.slice(idx + marker.length)
+/**
+ * Deriva o PATH do objeto no bucket a partir do valor persistido em
+ * `Certificate.pdfUrl`. Aceita 3 formas, para compatibilidade total:
+ *  - PATH puro `"{tenant}/{certId}.pdf"` — forma ATUAL (o que passamos a gravar:
+ *    nunca mais persistimos URL pública com PII no banco — DB-001/LGPD-001);
+ *  - URL pública legada `".../object/public/certificates/{path}"` — linhas antigas;
+ *  - signed URL `".../object/sign/certificates/{path}?token=..."` — defensivo.
+ * URL http(s) de forma desconhecida => null (não dá pra derivar o path com segurança).
+ */
+export function extractCertificatePath(stored: string | null | undefined): string | null {
+  if (!stored) return null
+  for (const marker of [
+    `/storage/v1/object/public/${BUCKET}/`,
+    `/storage/v1/object/sign/${BUCKET}/`,
+  ]) {
+    const idx = stored.indexOf(marker)
+    if (idx >= 0) return stored.slice(idx + marker.length).split("?")[0] || null
+  }
+  // URL de outra origem/scheme — não inferimos o path.
+  if (/^https?:\/\//i.test(stored)) return null
+  // Forma atual: path puro relativo ao bucket (remove barras iniciais acidentais).
+  return stored.replace(/^\/+/, "") || null
 }
 
 export async function deleteCertificatePdf(path: string): Promise<void> {

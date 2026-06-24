@@ -122,7 +122,15 @@ export async function renderCertificateBuffer(
 
 /**
  * Gera o PDF do certificado, sobe no Supabase Storage e atualiza
- * Certificate.pdfUrl + pdfGeneratedAt. Idempotente — re-rodar sobrescreve.
+ * `Certificate.pdfUrl` + `pdfGeneratedAt`. Idempotente — re-rodar sobrescreve.
+ *
+ * `pdfUrl` guarda o **path do objeto no bucket** (`"{tenant}/{certId}.pdf"`), NÃO
+ * a URL pública: o bucket `certificates` contém PDF com CPF+nome (PII) e todo
+ * read-path serve via signed URL/stream service-role. Persistir o path evita
+ * gravar uma URL pública permanente no banco (DB-001/LGPD-001) e mantém o valor
+ * portável para a migração Storage→MinIO (OPS-005). O nome do retorno segue
+ * `pdfUrl` por compatibilidade — os chamadores derivam o path com
+ * `extractCertificatePath`, que aceita o path puro e a URL pública legada.
  */
 export async function generateAndUploadPdf(
   certificateId: string,
@@ -167,12 +175,13 @@ export async function generateAndUploadPdf(
   const path = pdfPathFor(cert.tenantId, cert.id)
   const upload = await uploadCertificatePdf(path, buffer)
 
+  // Persiste o PATH do objeto (não a URL pública com PII) — ver docstring.
   await prisma.certificate.update({
     where: { id: cert.id },
-    data: { pdfUrl: upload.publicUrl, pdfGeneratedAt: new Date() },
+    data: { pdfUrl: upload.path, pdfGeneratedAt: new Date() },
   })
 
-  return { pdfUrl: upload.publicUrl }
+  return { pdfUrl: upload.path }
 }
 
 export { pdfPathFor, validationUrlFor }
