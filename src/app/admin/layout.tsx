@@ -1,6 +1,12 @@
 import type { Metadata } from "next"
+import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
 import { requireAdminSession } from "@/lib/auth/admin-session"
+import { ImpersonationBanner } from "@/components/admin/impersonation-banner"
+import {
+  decodeImpersonationFlag,
+  IMPERSONATION_FLAG_COOKIE,
+} from "@/lib/auth/impersonate"
 import { AdminLayoutShell } from "./layout-shell"
 
 export const metadata: Metadata = {
@@ -21,13 +27,28 @@ export default async function AdminLayout({
   // produção. Re-introduzir só após garantir que (a) contas ativas não tenham
   // a flag legada e (b) o JWT seja revalidado pós-troca (evita loop). Ver R22.
 
+  // Banner de impersonação: SUPER_ADMIN entrando como um membro interno da
+  // equipe (PMB) vê o admin com o papel do alvo — o banner dá o botão "voltar".
+  const cookieStore = await cookies()
+  const flag = decodeImpersonationFlag(
+    cookieStore.get(IMPERSONATION_FLAG_COOKIE)?.value,
+  )
+
   return (
-    <AdminLayoutShell
-      role={session.role as "SUPER_ADMIN" | "PMB_SALES" | "PMB_SALES_MGR" | "PMB_REVENDA_SALES" | "PMB_RESELLER_MGR" | "PMB_FINANCEIRO"}
-      userName={session.name ?? "Admin"}
-      userEmail={session.email ?? ""}
-    >
-      {children}
-    </AdminLayoutShell>
+    <>
+      {flag && (
+        <ImpersonationBanner
+          adminName={flag.adminName}
+          targetName={flag.targetName}
+        />
+      )}
+      <AdminLayoutShell
+        role={session.role as "SUPER_ADMIN" | "PMB_SALES" | "PMB_SALES_MGR" | "PMB_REVENDA_SALES" | "PMB_RESELLER_MGR" | "PMB_FINANCEIRO"}
+        userName={session.name ?? "Admin"}
+        userEmail={session.email ?? ""}
+      >
+        {children}
+      </AdminLayoutShell>
+    </>
   )
 }

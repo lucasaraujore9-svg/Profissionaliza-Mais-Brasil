@@ -16,6 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
+import { EquipeImpersonateButton } from "./equipe-impersonate-button"
 
 export interface EquipeMember {
   id: string
@@ -164,6 +165,14 @@ export function EquipeDetailClient({
               <Mail className="h-4 w-4 mr-2" /> Reenviar convite
             </Button>
           )}
+          {/* Impersonação interna: só membro ativo, já onboardado, que não seja
+              você nem outro super (o backend reforça os mesmos limites). */}
+          {!isSelf &&
+            member.role !== "SUPER_ADMIN" &&
+            !member.pendingInvite &&
+            form.status === "ATIVO" && (
+              <EquipeImpersonateButton userId={member.id} userName={member.name} />
+            )}
           {!isSelf && (
             <Button
               variant="outline"
