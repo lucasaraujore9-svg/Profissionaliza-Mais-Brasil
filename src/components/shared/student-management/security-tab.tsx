@@ -284,6 +284,7 @@ function LmsCredentialRow({ cred }: { cred: StudentLmsCredentialItem }) {
                   onClick={() => setReveal((v) => !v)}
                   className="text-gray-400 hover:text-gray-600"
                   title={reveal ? "Ocultar" : "Mostrar"}
+                  aria-label={reveal ? "Ocultar senha" : "Mostrar senha"}
                 >
                   {reveal ? (
                     <EyeOff className="h-4 w-4" />
@@ -296,6 +297,7 @@ function LmsCredentialRow({ cred }: { cred: StudentLmsCredentialItem }) {
                   onClick={() => copy(cred.senha as string)}
                   className="text-gray-400 hover:text-gray-600"
                   title="Copiar senha"
+                  aria-label="Copiar senha"
                 >
                   {copied ? (
                     <Check className="h-4 w-4 text-emerald-600" />
@@ -480,6 +482,7 @@ function PlatformAccessSection({
                       onClick={() => setReveal((v) => !v)}
                       className="text-gray-400 hover:text-gray-600"
                       title={reveal ? "Ocultar" : "Mostrar"}
+                      aria-label={reveal ? "Ocultar senha" : "Mostrar senha"}
                     >
                       {reveal ? (
                         <EyeOff className="h-4 w-4" />
@@ -492,6 +495,7 @@ function PlatformAccessSection({
                       onClick={() => copyPassword(currentPassword)}
                       className="text-gray-400 hover:text-gray-600"
                       title="Copiar senha"
+                      aria-label="Copiar senha"
                     >
                       {copied ? (
                         <Check className="h-4 w-4 text-emerald-600" />
