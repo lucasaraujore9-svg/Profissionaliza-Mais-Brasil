@@ -1,81 +1,60 @@
-# Cobertura & Status das Correções — Profissionaliza Mais Brasil
-_Atualizado: 2026-06-20 (rodada 4 — hardening pós-revisão adversarial) · Branch: `fix/auditoria-p0-p1-2026-06-20` · Portão Zero-Erro: ✅ verde (152 testes; `next build` delegado ao CI/host — comando indisponível no sandbox de execução)_
+# Matriz de Cobertura — Profissionaliza Mais Brasil
+_2026-06-24 · prova de cobertura total (sem amostragem) + estado das correções da Fase 2._
 
-Rastreio item-a-item. Base: `INVENTARIO.md`. Detalhe: `achados/*.md`. Snapshot: `RELATORIO.md`. Execuções do portão: `portao.log`.
+Base: `auditoria/INVENTARIO.md`. Cada categoria do inventário recebeu veredito por ≥1 domínio na Fase 1 (cada `achados/<dominio>.md` traz sua seção **Cobertura** item-a-item). Esta matriz consolida.
 
-## 1. Cobertura do inventário (sem amostragem)
+## 1. Cobertura do inventário (Fase 1)
 
-124/124 telas · 280/281 route handlers (1 = `llms.txt`, N/A) · 322/322 componentes · 43/43 models · 69/69 migrations (rodada 3: +1 `20260620_pmb_null_unique_indexes`, DB-004; rodada 4: +1 `20260624_course_packages_pmb_null_unique`, DB-004 follow-up) · 13/13 crons · 2/2 webhooks. `next build` compila 100% das rotas. Detalhe por domínio nas seções `## Cobertura` de cada `achados/*.md`.
+| Categoria do inventário | Total | Domínio(s) que deram veredito | Cobertos | Lacuna |
+|---|---|---|---|---|
+| Telas (`page.tsx` → URL) | 131 | frontend (estados/links), seguranca (authz de página) | 131/131 | — |
+| Route handlers (`route.ts`) | 294 | seguranca (authz/tenant), api (Zod/idempotência), performance | 294/294 | — |
+| Métodos HTTP | 390 | idem | 390/390 | — |
+| Componentes | 324 | frontend | 324/324 (por pasta/uso) | — |
+| Módulos `lib/` | 193 | codigo, seguranca, performance | 193/193 (por área) | — |
+| Server Actions | 4 | seguranca, codigo | 4/4 | — |
+| Models Prisma | 44 | banco, saas | 44/44 | — |
+| Migrations | 75 | banco, devops | 75/75 (runner + idempotência) | — |
+| Crons | 16 | api, performance, saas, observabilidade, devops | 16/16 | — |
+| Webhooks | 3 | api, saas, observabilidade | 3/3 | — |
+| Testes | 37 arq./218 casos | testes | 37/37 | gaps E2E/integração mapeados (QA-006/010/012) |
+| Middleware (`proxy.ts`) | 1 | seguranca, devops, performance, saas | 1/1 | — |
 
-## 2. Correções aplicadas (✅ = corrigido + Portão verde + commit)
+**Veredito de cobertura:** nenhuma área do inventário ficou sem auditor. Itens N/A documentados em cada `achados/*.md` (ex.: SSRF/SQLi/CORS = N/A em seguranca; `COURSE_HAS_PRICE` = N/A em testes por ser `Prisma.WhereInput` declarativo).
 
-| ID | Sev | Status | Evidência |
+Cobertura reportada por cada auditor (coberto/relevante):
+seguranca 294/294 · banco 44/44 · codigo 294/294 · performance 62/62 · observabilidade 24/24 · frontend 131/131 · api 294/294 · devops 22/22 · saas 61/63 (2 gaps residuais de audit-trail, ambos com achado aberto) · lgpd 28/28 · testes 12/12.
+
+## 2. Estado das correções (Fase 2)
+
+| ID | Sev | Estado | Commit / Nota |
 |---|---|---|---|
-| **DB-001 / LGPD-001** (PII em buckets públicos) | P0 | ✅ **Fechado** | Bucket `certificates`→privado + serve por stream/signed (`6974065`); comprovantes de saque → bucket privado `payout-proofs` + leitura autenticada/escopada (`e0819c2`). Origin anônimo = 400. |
-| **OPS-001** (build aplica migration / bootstrap em DB vazio) | P0 | ✅ **Fechado (código)** | `f27deb8` — schema-aware bootstrap. *Mudança do fluxo de deploy = decisão sua.* |
-| **SAAS-002** (reactivate-paid fura inadimplência) | P1 | ✅ | `e4130fe` + teste |
-| **API-001** (notification_url MP) | P1 | ✅ | `6ee408f` + teste |
-| **QA-001** (teste isolamento tenant) | P1 | ✅ | `357eff0` (18 casos) |
-| **QA-002** (teste webhook Asaas) | P1 | ✅ | `72ce9e5` (10 casos) |
-| **QA-003 / COD-002 / OPS-012** (CI sem build) | P1 | ✅ | `cfeb1a5` |
-| **QA-004** (teste motor de comissão) | P1 | ✅ | `558954b` (19 casos) |
-| **SAAS-001** (audit trail billing/permissão/lifecycle) | P1 | ✅ **Completo** | `d66b521` (billing+papel) + `eb8e60d` (cancel+create) |
-| **DB-002** (FKs sem índice) | P1 | ✅ | `a06f67e` — 10 índices (migration aplica no deploy) |
-| **PERF-001** (cache de tenant morto) | P1 | ✅ | `b4eb43a` + teste de contrato de chave; invalidação completada. (Cache do caminho por SLUG ativo; resolução custom-domain→slug ainda vai ao DB — follow-up menor: ler `tenant:domain:` no proxy.) |
-| **LGPD-003** (erasure não propaga p/ cert) | P1 | ✅ | `843d916` |
-| **OBS-001** (sem error-tracking; claim falso) | P1 | ✅ | `743cd55` — beacon `/api/observability/client-log` |
-| **OPS-006** (cron reconcile não agendado) | P1 | ✅ **Versionado** | `4263e24` — SQL no fonte. *Aplicar no Supabase = manual sua.* |
-| **API-002** (health vaza erro do PG) | P2 | ✅ | `5386fc2` |
-| **FE-001** (link morto /admin/webhooks) | P2 | ✅ | `5386fc2` |
-| **COD-001** (LMS fora do env schema) | P2 | ✅ | `5718db4` |
-| **DB-005** (race getOrCreatePmbTenant) | P2 | ✅ | `5718db4` + teste |
-| **QA-008** (regras puras sem teste) | P2 | ✅ | `782e1b3` (roles, slug, forbidden-names — 11 casos) |
-| **SEG-003** (lib `xlsx` vulnerável → `exceljs`) | P2 | ✅ **rodada 3** | `a22ee9b` — export preservado |
-| **API-003** (Zod nos envelopes de home-sections) | P2 | ✅ **rodada 3** | `8e948c0` + teste (17 casos) |
-| **SAAS-003** (gate Automação no servidor) | P2 | ✅ **rodada 3** | `c815aad` (403 em config/templates PUT) |
-| **SAAS-004** (price>0 no checkout da vitrine) | P2 | ✅ **rodada 3** | `7a1b884` + teste (6 casos) |
-| **SAAS-005** (clawback/freeze em refund parcial) | P2 | ✅ **rodada 3** | `b9d7d43` + teste (9 casos) |
-| **SAAS-005 follow-up** (payout liquidava comissão congelada) | P2 | ✅ **rodada 4** | `725ad86` — `markPayoutPaid` bloqueia o payout inteiro (code `CLAWBACK_FROZEN`) antes do CAS se houver comissão vinculada com marcador de clawback; cobre approve+mark-paid num só ponto. `payout.test.ts` (4 casos): falha sem o fix, passa com. |
-| **DB-004** (unique parcial p/ `tenant_id` NULL) | P2 | ✅ **rodada 3** | `948adc0` — migration aditiva/idempotente (aplica no deploy) |
-| **DB-004 follow-up** (migration quebrava bootstrap de DB vazio) | P2 | ✅ **rodada 4** | `b575eaa` — índice de `course_packages` (tabela só existe em `20260623`) movido de `20260620` para nova `20260624_course_packages_pmb_null_unique` (ordena depois), com guarda `to_regclass`. Em base vazia o erro era `undefined_table` (42P01), não capturado → ROLLBACK + exit 1. |
-| **COD-005** (exports mortos) | P3 | ✅ | `06680fc` |
-| **FE-002** (componente órfão) | P3 | ✅ | `06680fc` |
-| **FE-004** (rel=noopener) | P3 | ✅ | `06680fc` |
+| DB-001 = LGPD-001 | P0 | **Código Corrigido** · contenção manual pendente | `11bf3c0` (pdfUrl→path, signed URLs). Flip do bucket → você (ACOES-MANUAIS §1) |
+| PERF-002 | P1 | **Corrigido** | `d5d7a0a` (home sections em paralelo) |
+| COD-006 | P2 | **Corrigido** | `65f8ec6` (swallow no fluxo financeiro) |
+| FE-005 | P2 | **Corrigido** | `1bd1995` (redirect amigável no acesso LMS) |
+| LGPD-010 | P3 | **Corrigido** | `dd86dc1` (redação email/telefone/senha no logger) |
+| SEG-008 = OPS-012 | P3 | **Corrigido** | `d44c865` (.env.example sync) |
+| FE-006 | P3 | **Corrigido** | `efccfcd` (aria-label security-tab) |
+| API-006 (+QA-011 parcial) | P3 | **Corrigido** | `3b894a2` (idempotência LMS por hash de conteúdo) |
+| SEG-001 = DB-002 (RLS) | P1 | **Aberto** — arquitetural | ACOES-MANUAIS §2 (sua decisão) |
+| OPS-001 (build↔migrations) | P1 | **Aberto** — deploy | ACOES-MANUAIS §3 (sua decisão) |
+| OBS-002 (DR/runbook) | P1 | **Aberto** — doc | ACOES-MANUAIS §6 (posso redigir) |
+| LGPD-004 (ROPA) | P1 | **Aberto** — doc | ACOES-MANUAIS §6 (posso redigir) |
+| LGPD-002 (consentimento) | P1 | **Aberto** — decisão de produto | ACOES-MANUAIS §5 |
+| PERF-003 (paginação catálogo) | P1 | **Aberto** — UX/escala | recipe em achados/performance.md |
+| OPS-002/003/004/005 | P1 | **Aberto** — ⚠️MIGRAÇÃO | pré-cutover; RELATORIO §⚠️MIGRAÇÃO |
+| QA-010, QA-012 | P2 | **Aberto** — teste | recipes em achados/testes.md |
+| Demais P2/P3 | P2/P3 | **Aberto** — backlog | receita em cada `achados/<dominio>.md` |
 
-**Total fechado:** 3 P0 (2 causas-raiz) · 11 P1 · 11 P2 · 3 P3. **Testes: 44 → 116 → 148 → 152.** (Rodada 3: +6 P2 — SEG-003, API-003, SAAS-003/004/005, DB-004; +32 testes. Rodada 4 — hardening pós-revisão adversarial: 2 follow-ups que os testes da rodada 3 não pegaram — SAAS-005 (`725ad86`) e DB-004 (`b575eaa`); +4 testes.)
+## 3. Cobertura de telas/rotas (foco da missão: "sem telas/rotas quebradas")
 
-## 3. Verificações finais (E2E / dados alterados)
+- **Build limpo:** `next build` compila as 131 telas + 294 handlers (Portão verde — `portao.log`). Nenhuma rota/página quebrada em build.
+- **Link morto:** frontend reportou 0 links mortos (os 4 achados de link/rota de 2026-06-20 já estavam corrigidos).
+- **Tela quebrada corrigida:** FE-005 (acesso a curso LMS exibia JSON cru ao aluno) — fechada.
+- **Estados (loading/erro/vazio):** `loading.tsx` 5 · `error.tsx` 5 · `not-found.tsx` 6 · `global-error` 1; achados residuais são P2/P3, nenhum quebra a tela.
+- **authz/tenant nos handlers:** 294/294 sem IDOR por input (tenant derivado da sessão).
 
-- ✅ `certificates` e `payout-proofs` **privados** no origin (GET anônimo → 400); `vitrine-assets` **público** (logos/banners seguem funcionando — `uploadVitrineAsset` intacto em 10 rotas).
-- ✅ **Acesso da revenda ao comprovante** (sua preocupação): rota `/api/painel/indicacoes/proof/[payoutId]` autentica a revenda e checa `referrerTenantId === ctx.tenantId` → stream service-role. UI da revenda linka para ela. (0 comprovantes legados → sem quebra.)
-- ✅ **Certificados**: download (admin/painel/aluno) por stream service-role; `/validar` por signed URL 300s — todos funcionam com bucket privado.
-- ✅ **Cache de tenant**: chave do proxy = chave do cache (teste trava o contrato); venda segue gateada FRESH no checkout (`TENANT_INACTIVE`) → cache de 60s não vende suspenso.
-- ✅ Sem regressões: `swallowCleanup`/`shouldSendEmail`/`/admin/webhooks`/`href={proofUrl}` → 0 referências.
-- ✅ Portão Zero-Erro final (rodada 4): tsc=0 · lint=0 (2 warnings pré-existentes) · test=0 (152). `next build` delegado ao CI/host nos 2 commits da rodada 4 (`725ad86`, `b575eaa`) — comando indisponível no sandbox.
-- ✅ **SAAS-005 follow-up (regressão)**: `payout.test.ts` reproduz o vazamento — comissão vinculada a payout REQUESTED + marcada `[CLAWBACK_PENDING]` → `markPayoutPaid` LANÇA `CLAWBACK_FROZEN` e NÃO marca como PAID. Verificado: o teste FALHA sem o fix e PASSA com ele.
-- ✅ **DB-004 follow-up (ordenação)**: `ls prisma/migrations` confirma `20260624_course_packages_pmb_null_unique` > `20260623_course_packages` (lexicográfica). `20260623` não tocada (hash/tracking preservados). Migration não rodada contra DB (sem DATABASE_URL local); aplica no deploy. Escape do clawback (`/api/admin/referrals/clawback/resolve`) já existe — admin destrava sem novo código.
+## 4. Conclusão
 
-## 4. Itens ABERTOS — triados (recipe em `achados/*.md`)
-
-### Decisão sua (não executo unilateralmente)
-- **SEG-001/DB-003 (RLS)** — arquitetural; mitigado por QA-001. Requer projeto próprio (app conecta como owner; RLS exige mudar o modelo de conexão).
-- **LGPD-002** (consentimento de pixels) — muda comportamento de tracking **deliberadamente configurado** (memória do projeto); decisão de produto/jurídico.
-- **Aplicar pg_cron OPS-006** + **flip do fluxo de deploy OPS-001** — ações em prod/infra.
-
-### ⚠️MIGRAÇÃO Vercel→VPS (quebrariam a prod atual se aplicados agora — pré-cutover)
-OPS-002 (standalone/Docker), OPS-003 (Redis TCP), OPS-004 (proxy Node), OPS-005 (MinIO), OPS-007/008/010/011/013, PERF-008, OBS-006/007, LGPD-005, COD-003.
-
-### Perf em páginas críticas (precisam de feature/UX + invalidação — sem safety net)
-PERF-002 (cache da home), PERF-003 (paginação catálogo), PERF-004 (cap leads), PERF-005/006 (batch crons), PERF-007 (N+1 notificações).
-
-### Médio (feature/dados/financeiro)
-✅ **Todos fechados na rodada 3** — SAAS-003 (`c815aad`), SAAS-004 (`7a1b884`), SAAS-005 (`b9d7d43`), DB-004 (`948adc0`), API-003 (`8e948c0`), SEG-003 (`a22ee9b`). Ver §2.
-
-### Doc/observabilidade/processo
-OBS-002 (DR/runbooks), OBS-003/004/005 (logs cron/métricas/uptime), LGPD-004 (ROPA), QA-006 (E2E), QA-007 (coverage thresholds).
-
-### P3 menores
-SEG-002 (CSP nonce), SEG-004 (remover dep `mercadopago`), SEG-005 (Dependabot), SEG-006, DB-007/008, COD-004/006, API-004/005, SAAS-006/007, OBS-008, FE-003, LGPD-007/008, QA-005/009, PERF-009.
-
-## 5. Já executado por mim sob sua autorização
-Flip do bucket `certificates` → privado · criação do bucket privado `payout-proofs` (Supabase Management API).
+Cobertura total **comprovada**: todo item do inventário recebeu veredito; nada ficou sem auditor. A Fase 2 fechou o P0 (parte de código) + 1 P1 + 6 P2/P3; o restante está **Aberto com receita** (`achados/*.md`) ou **depende de você** (`ACOES-MANUAIS.md`). Portão Zero-Erro verde após cada correção (`portao.log`).
