@@ -2,21 +2,14 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import {
-  findOrCreateAsaasCustomer,
-  createPayment as createAsaasPayment,
-  createSubscription as createAsaasSubscription,
-  listPayments as listAsaasPayments,
   deletePayment as deleteAsaasPayment,
   cancelSubscription as cancelAsaasSubscription,
-  getPixQrCode,
-  getBillingInfo,
-  payWithCreditCard,
   AsaasApiError,
 } from "@/lib/asaas/client"
+import { issuePmbAsaasCharge } from "@/lib/checkout/issue-pmb-asaas-charge"
 import { getOrCreatePmbTenant } from "@/lib/pmb-tenant"
 import { tryConsumeCoupon, releaseCoupon } from "@/lib/coupons/consume"
 import { applyCouponDiscount } from "@/lib/coupons/discount"
-import { dueDateInDays } from "@/lib/checkout/due-date"
 import { rateLimit, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
 import {
   pmbPlataformaPolo,
@@ -36,7 +29,7 @@ import { upsertLeadFromCheckout } from "@/lib/automation/leads"
 import { readVisitorId } from "@/lib/automation/tracking"
 import { isValidCpf, stripCpf } from "@/lib/validation/cpf"
 import { isValidPhone, normalizePhone } from "@/lib/validation/phone"
-import { asaasWebhookUrl, isPmbAppHost } from "@/lib/tenant/urls"
+import { isPmbAppHost } from "@/lib/tenant/urls"
 
 // Cartão: aceitamos número com espaços, validade MM/AA ou MM/AAAA, CCV 3-4 dígitos.
 const creditCardSchema = z.object({
@@ -454,238 +447,31 @@ export const POST = withRequestContext(
       data.paymentMethod ?? "UNDEFINED"
 
     try {
-      const { customer } = await findOrCreateAsaasCustomer({
-        name: student.nome,
-        email: student.email ?? data.email,
-        cpfCnpj: data.cpf,
-        mobilePhone: student.fone ?? data.fone,
-        externalReference: `pmb_student_${student.id}`,
-      })
-
-      if (!student.asaasCustomerId) {
-        await prisma.student.update({
-          where: { id: student.id },
-          data: { asaasCustomerId: customer.id },
-        })
-      }
-
-      // ──── MONTHLY ────
-      if (isMonthly && monthlyMonths) {
-        // Cartão: cria a assinatura JÁ COM o cartão inline. O client roteia para
-        // o endpoint /subscriptions/ (com barra) que tokeniza o cartão e cobra a
-        // 1ª parcela na criação — VINCULANDO o cartão à assinatura inteira, de
-        // modo que as mensalidades seguintes também são cobradas. (Antes a
-        // assinatura nascia sem cartão e só a 1ª parcela era capturada à parte
-        // via payWithCreditCard, deixando as recorrências sem meio de cobrança.)
-        // Espelha o fluxo de revenda em asaas/transparent-process.ts.
-        const monthlyCardPair =
-          billingType === "CREDIT_CARD" && data.creditCard && data.creditCardHolder
-            ? {
-                creditCard: data.creditCard,
-                creditCardHolderInfo: {
-                  name: student.nome,
-                  email: student.email ?? data.email,
-                  cpfCnpj: data.cpf,
-                  postalCode: data.creditCardHolder.postalCode,
-                  addressNumber: data.creditCardHolder.addressNumber,
-                  addressComplement: data.creditCardHolder.addressComplement,
-                  phone: (student.fone ?? data.fone).replace(/\D/g, ""),
-                  mobilePhone: (student.fone ?? data.fone).replace(/\D/g, ""),
-                },
-                // IP do COMPRADOR — exigido pelo Asaas na análise de risco.
-                remoteIp: clientIp(request),
-              }
-            : null
-
-        const subscription = await createAsaasSubscription({
-          customer: customer.id,
-          billingType,
-          value: finalAmount,
-          // Cartão captura na hora (vence hoje); PIX/boleto vencem em 3 dias.
-          nextDueDate: dueDateInDays(billingType === "CREDIT_CARD" ? 0 : 3),
-          cycle: "MONTHLY",
-          description: `Mensalidade — ${course.nome}`,
-          externalReference,
-          maxPayments: monthlyMonths,
-          notificationUrl: asaasWebhookUrl(),
-          ...(monthlyCardPair ?? {}),
-        })
-
-        // Asaas gera as cobranças async; busca a 1a invoice em até 3 tentativas
-        let firstPayment:
-          | { id: string; invoiceUrl: string; bankSlipUrl: string | null; status: string }
-          | null = null
-        for (let i = 0; i < 3; i++) {
-          const list = await listAsaasPayments({
-            subscription: subscription.id,
-            limit: 1,
-            offset: 0,
-          }).catch(() => null)
-          const first = list?.data?.[0]
-          if (first) {
-            firstPayment = {
-              id: first.id,
-              invoiceUrl: first.invoiceUrl,
-              bankSlipUrl: first.bankSlipUrl,
-              status: first.status,
-            }
-            break
-          }
-          await new Promise((r) => setTimeout(r, 500))
-        }
-
-        await prisma.enrollment.update({
-          where: { id: enrollment.id },
-          data: {
-            externalReference,
-            asaasCustomerId: customer.id,
-            asaasSubscriptionId: subscription.id,
-            asaasPaymentId: firstPayment?.id ?? null,
-            asaasInvoiceUrl: firstPayment?.invoiceUrl ?? null,
-          },
-        })
-
-        // Cartão: a assinatura já foi criada COM o cartão inline (acima), então a
-        // 1ª cobrança é capturada na criação e o cartão fica vinculado às
-        // mensalidades seguintes. Devolve o status real da 1ª cobrança; a página
-        // de confirmação lê o estado efetivado pelo webhook (processPmbDirectSale).
-        // Sem 1ª invoice ainda (timing assíncrono do Asaas) → PENDING: o cartão JÁ
-        // está vinculado, então NÃO há mais fallback "redirect" cego para cartão.
-        if (billingType === "CREDIT_CARD") {
-          return NextResponse.json({
-            data: {
-              enrollmentId: enrollment.id,
-              gateway: "ASAAS",
-              mode: "credit_card_result",
-              status: firstPayment?.status ?? "PENDING",
-              paymentId: firstPayment?.id ?? null,
-            },
-          })
-        }
-
-        if (billingType === "PIX" && firstPayment) {
-          const qr = await getPixQrCode(firstPayment.id).catch(() => null)
-          return NextResponse.json({
-            data: {
-              enrollmentId: enrollment.id,
-              gateway: "ASAAS",
-              mode: "pix",
-              paymentId: firstPayment.id,
-              pix: qr,
-            },
-          })
-        }
-
-        if (billingType === "BOLETO" && firstPayment) {
-          const billing = await getBillingInfo(firstPayment.id).catch(() => null)
-          return NextResponse.json({
-            data: {
-              enrollmentId: enrollment.id,
-              gateway: "ASAAS",
-              mode: "boleto",
-              paymentId: firstPayment.id,
-              bankSlipUrl: firstPayment.bankSlipUrl ?? billing?.bankSlip?.bankSlipUrl ?? null,
-              identificationField: billing?.bankSlip?.identificationField ?? null,
-              barCode: billing?.bankSlip?.barCode ?? null,
-            },
-          })
-        }
-
-        // Fallback: link de checkout Asaas (UNDEFINED ou sem 1ª invoice)
-        return NextResponse.json({
-          data: {
-            enrollmentId: enrollment.id,
-            gateway: "ASAAS",
-            mode: "redirect",
-            initPoint: firstPayment?.invoiceUrl ?? null,
-          },
-        })
-      }
-
-      // ──── ONE_TIME ────
-      const payment = await createAsaasPayment({
-        customer: customer.id,
-        billingType,
-        value: finalAmount,
-        dueDate: dueDateInDays(3),
-        description: `Curso: ${course.nome}`,
+      // Cobrança Asaas (cliente + payment/subscription + persistência dos
+      // campos asaas na matrícula). Lógica extraída para reuso pela tela /pagar.
+      const result = await issuePmbAsaasCharge({
+        enrollmentId: enrollment.id,
         externalReference,
-        notificationUrl: asaasWebhookUrl(),
-      })
-
-      await prisma.enrollment.update({
-        where: { id: enrollment.id },
-        data: {
-          externalReference,
-          asaasCustomerId: customer.id,
-          asaasPaymentId: payment.id,
-          asaasInvoiceUrl: payment.invoiceUrl,
+        student: {
+          id: student.id,
+          nome: student.nome,
+          email: student.email ?? data.email,
+          cpf: data.cpf,
+          fone: student.fone ?? data.fone,
+          asaasCustomerId: student.asaasCustomerId,
         },
+        courseNome: course.nome,
+        finalAmount,
+        isMonthly,
+        monthlyMonths,
+        billingType,
+        creditCard: data.creditCard,
+        creditCardHolder: data.creditCardHolder,
+        remoteIp: clientIp(request),
       })
 
-      if (billingType === "CREDIT_CARD" && data.creditCard && data.creditCardHolder) {
-        const result = await payWithCreditCard(payment.id, {
-          creditCard: data.creditCard,
-          creditCardHolderInfo: {
-            name: student.nome,
-            email: student.email ?? data.email,
-            cpfCnpj: data.cpf,
-            postalCode: data.creditCardHolder.postalCode,
-            addressNumber: data.creditCardHolder.addressNumber,
-            addressComplement: data.creditCardHolder.addressComplement,
-            phone: (student.fone ?? data.fone).replace(/\D/g, ""),
-            mobilePhone: (student.fone ?? data.fone).replace(/\D/g, ""),
-          },
-          // IP do comprador — exigido pelo Asaas na análise de risco do cartão.
-          remoteIp: clientIp(request),
-        })
-        return NextResponse.json({
-          data: {
-            enrollmentId: enrollment.id,
-            gateway: "ASAAS",
-            mode: "credit_card_result",
-            status: result.status,
-            paymentId: result.id,
-          },
-        })
-      }
-
-      if (billingType === "PIX") {
-        const qr = await getPixQrCode(payment.id).catch(() => null)
-        return NextResponse.json({
-          data: {
-            enrollmentId: enrollment.id,
-            gateway: "ASAAS",
-            mode: "pix",
-            paymentId: payment.id,
-            pix: qr,
-          },
-        })
-      }
-
-      if (billingType === "BOLETO") {
-        const billing = await getBillingInfo(payment.id).catch(() => null)
-        return NextResponse.json({
-          data: {
-            enrollmentId: enrollment.id,
-            gateway: "ASAAS",
-            mode: "boleto",
-            paymentId: payment.id,
-            bankSlipUrl: payment.bankSlipUrl ?? billing?.bankSlip?.bankSlipUrl ?? null,
-            identificationField: billing?.bankSlip?.identificationField ?? null,
-            barCode: billing?.bankSlip?.barCode ?? null,
-          },
-        })
-      }
-
-      // billingType === "UNDEFINED" → link checkout Asaas
       return NextResponse.json({
-        data: {
-          enrollmentId: enrollment.id,
-          gateway: "ASAAS",
-          mode: "redirect",
-          initPoint: payment.invoiceUrl,
-        },
+        data: { enrollmentId: enrollment.id, gateway: "ASAAS", ...result },
       })
     } catch (error) {
       await prisma.enrollment

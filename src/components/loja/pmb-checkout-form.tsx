@@ -27,6 +27,12 @@ export interface PmbCheckoutFormProps {
   packageId?: string
   couponCode: string | null
   initPath?: string
+  /**
+   * Retomada de cobrança (tela /pagar): pré-preenche os dados do aluno já
+   * conhecidos da matrícula. O endpoint de retomada usa o aluno do banco como
+   * fonte da verdade — estes campos servem só para exibir/validar no cliente.
+   */
+  prefill?: { nome: string; email: string; cpf: string; telefone: string }
 }
 
 type Method = "PIX" | "BOLETO" | "CREDIT_CARD"
@@ -122,8 +128,19 @@ export function PmbCheckoutForm({
   packageId,
   couponCode,
   initPath = "/api/checkout",
+  prefill,
 }: PmbCheckoutFormProps) {
-  const [form, setForm] = useState<FormState>(INITIAL)
+  const [form, setForm] = useState<FormState>(() =>
+    prefill
+      ? {
+          ...INITIAL,
+          nome: prefill.nome,
+          email: prefill.email,
+          cpf: formatCpf(prefill.cpf),
+          telefone: formatPhone(prefill.telefone),
+        }
+      : INITIAL,
+  )
   const [method, setMethod] = useState<Method>("PIX")
   const [status, setStatus] = useState<Status>({ kind: "idle" })
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})

@@ -44,9 +44,22 @@ describe("buildEnrollmentCheckoutUrl", () => {
     ).toBe("https://cursosjoao.com.br/pagar/enr_123")
   })
 
-  it("retorna null para PMB sem fatura Asaas ainda (nao usa /pagar)", () => {
-    // Sistema mae nunca cai na pagina /pagar (que e so do MP transparente das
-    // revendas). Sem asaasInvoiceUrl, fica sem link ate a fatura existir.
+  it("sistema mae (PMB) Asaas: usa a tela /pagar propria (nao a fatura crua)", () => {
+    // Mesmo com asaasInvoiceUrl ja persistida, preferimos a tela de checkout da
+    // marca PMB (dominio app) que retoma a cobranca — (main)/pagar/[id].
+    const url = buildEnrollmentCheckoutUrl({
+      ...base,
+      tenantSlug: "__pmb__",
+      gateway: "ASAAS",
+      asaasInvoiceUrl: "https://asaas.com/i/pmb",
+    })
+    expect(url).toMatch(/\/pagar\/enr_123$/)
+    expect(url).not.toBe("https://asaas.com/i/pmb")
+  })
+
+  it("retorna null para PMB MP sem init_point (nao usa /pagar de revenda)", () => {
+    // PMB via MP: a /pagar de revenda e MP-tenant-scoped; o init_point do PMB nao
+    // e persistido. Sem asaasInvoiceUrl, fica sem link na lista.
     expect(
       buildEnrollmentCheckoutUrl({ ...base, tenantSlug: "__pmb__" }),
     ).toBeNull()

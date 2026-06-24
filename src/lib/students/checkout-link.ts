@@ -1,4 +1,4 @@
-import { vitrineUrl } from "@/lib/tenant/urls"
+import { appUrl, vitrineUrl } from "@/lib/tenant/urls"
 import { PMB_TENANT_SLUG } from "@/lib/pmb-config"
 
 export interface CheckoutLinkInput {
@@ -39,6 +39,16 @@ export interface CheckoutLinkInput {
 export function buildEnrollmentCheckoutUrl(input: CheckoutLinkInput): string | null {
   if (input.status !== "PENDING") return null
 
+  // Sistema mae (PMB) via Asaas: tela de checkout PROPRIA da marca, no dominio
+  // app, que retoma a cobranca pendente — em vez de mandar o aluno para a pagina
+  // crua do Asaas (override que vence ate o asaasInvoiceUrl ja persistido).
+  // Servida por (main)/pagar/[id] + POST /api/checkout/enrollment/[id].
+  if (input.tenantSlug === PMB_TENANT_SLUG && input.gateway === "ASAAS") {
+    return `${appUrl()}/pagar/${input.enrollmentId}`
+  }
+
+  // Demais casos: a fatura Asaas ja persistida e o link de pagamento (cobre a
+  // revenda Asaas — excecao sem tela transparente propria).
   if (input.asaasInvoiceUrl) return input.asaasInvoiceUrl
 
   // Revenda via MP (gateway transparente): a cobranca pendente sempre tem pagina
