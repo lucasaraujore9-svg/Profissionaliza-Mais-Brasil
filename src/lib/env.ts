@@ -80,6 +80,10 @@ const envSchema = z.object({
   // PMB ficam sem fulfillment automático — não derruba a app.
   ASAAS_WEBHOOK_TOKEN: requiredInProd(z.string().min(16, "ASAAS_WEBHOOK_TOKEN curto demais (>=16)")),
   MP_WEBHOOK_SECRET: z.string().min(16, "MP_WEBHOOK_SECRET curto demais (>=16)").optional(),
+  // Segredo compartilhado com o LMS para validar os webhooks de ENTRADA
+  // (LMS -> PMB, POST /api/webhooks/lms). Opcional: sem ele o receiver responde
+  // 503 e o LMS segue no modelo de polling (day-update). HMAC-SHA256.
+  PMB_WEBHOOK_SECRET: z.string().min(16, "PMB_WEBHOOK_SECRET curto demais (>=16)").optional(),
 
   // ── Cron / interno ───────────────────────────────────────────────────────
   CRON_SECRET: requiredInProd(z.string().min(32, "CRON_SECRET deve ter >=32 chars (openssl rand -hex 32)")),

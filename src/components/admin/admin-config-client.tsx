@@ -18,9 +18,13 @@ interface ConfigResponse {
 
 interface AdminConfigClientProps {
   canEditGateway: boolean
+  pmbWebhookSecret: string | null
 }
 
-export function AdminConfigClient({ canEditGateway }: AdminConfigClientProps) {
+export function AdminConfigClient({
+  canEditGateway,
+  pmbWebhookSecret,
+}: AdminConfigClientProps) {
   const [config, setConfig] = useState<ConfigResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -67,6 +71,7 @@ export function AdminConfigClient({ canEditGateway }: AdminConfigClientProps) {
       webhooks={config.webhooks}
       system={config.system}
       canEditGateway={canEditGateway}
+      pmbWebhookSecret={pmbWebhookSecret}
     />
   )
 }

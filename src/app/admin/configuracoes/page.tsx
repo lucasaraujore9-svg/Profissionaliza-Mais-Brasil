@@ -3,6 +3,7 @@ import { Share2, ChevronRight, Building2, Zap, LineChart } from "lucide-react"
 import { PageHeader } from "@/components/painel/page-header"
 import { AdminConfigClient } from "@/components/admin/admin-config-client"
 import { requireAdminSession } from "@/lib/auth/admin-session"
+import { env } from "@/lib/env"
 
 // Configurações de Certificados agora vivem dentro de /admin/certificados/configuracoes.
 const SUB_SETTINGS = [
@@ -35,6 +36,13 @@ const SUB_SETTINGS = [
 export default async function AdminConfigPage() {
   const ctx = await requireAdminSession()
   const canEditGateway = ctx?.role === "SUPER_ADMIN"
+
+  // Segredo do webhook do LMS exibido na aba API — só para SUPER_ADMIN (precisa
+  // dele para configurar o lado do LMS). Lido server-side; null se não for
+  // SUPER_ADMIN ou se a env ainda não foi setada no deploy atual.
+  const pmbWebhookSecret = canEditGateway
+    ? env.PMB_WEBHOOK_SECRET ?? null
+    : null
 
   return (
     <div className="space-y-6">
@@ -69,7 +77,10 @@ export default async function AdminConfigPage() {
         </section>
       )}
 
-      <AdminConfigClient canEditGateway={canEditGateway} />
+      <AdminConfigClient
+        canEditGateway={canEditGateway}
+        pmbWebhookSecret={pmbWebhookSecret}
+      />
     </div>
   )
 }

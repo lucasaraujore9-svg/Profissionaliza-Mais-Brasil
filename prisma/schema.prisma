@@ -94,6 +94,7 @@ enum DiscountType {
 enum WebhookSource {
   ASAAS
   MERCADO_PAGO
+  LMS
 }
 
 enum PaymentGateway {
@@ -1149,6 +1150,10 @@ model WebhookLog {
   eventType String        @map("event_type") // PAYMENT_RECEIVED, payment.updated, etc.
   payload   Json // Payload completo recebido
   headers   Json? // Headers relevantes (para debug)
+
+  // Idempotencia de webhooks de ENTRADA (LMS): X-PMB-Event-Id estavel entre
+  // retries. Unique parcial (NULLs nao colidem) — webhooks MP/Asaas ficam null.
+  externalEventId String? @unique @map("external_event_id")
 
   // Processamento
   processed   Boolean   @default(false)

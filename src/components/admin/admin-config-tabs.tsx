@@ -9,6 +9,7 @@ import {
 import { WebhookConfig, type WebhookConfigData } from "./webhook-config"
 import { SystemInfo, type SystemInfoData } from "./system-info"
 import { PmbMpTokenConfig } from "./pmb-mp-token-config"
+import { ApiDocsTab } from "./api-docs-tab"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 
@@ -16,6 +17,7 @@ const TABS = [
   { id: "geral", label: "Geral" },
   { id: "integracoes", label: "Integrações" },
   { id: "webhooks", label: "Webhooks" },
+  { id: "api", label: "API" },
   { id: "sobre", label: "Sobre" },
 ] as const
 
@@ -223,6 +225,7 @@ interface AdminConfigTabsProps {
   webhooks: WebhookConfigData
   system: SystemInfoData
   canEditGateway: boolean
+  pmbWebhookSecret: string | null
 }
 
 export function AdminConfigTabs({
@@ -231,6 +234,7 @@ export function AdminConfigTabs({
   webhooks,
   system,
   canEditGateway,
+  pmbWebhookSecret,
 }: AdminConfigTabsProps) {
   const [active, setActive] = useState<TabId>("geral")
 
@@ -273,6 +277,7 @@ export function AdminConfigTabs({
           </div>
         )}
         {active === "webhooks" && <WebhookConfig config={webhooks} />}
+        {active === "api" && <ApiDocsTab pmbWebhookSecret={pmbWebhookSecret} />}
         {active === "sobre" && <SystemInfo info={system} />}
       </div>
     </div>
