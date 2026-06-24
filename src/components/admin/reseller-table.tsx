@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { ChevronRight, Store } from "lucide-react"
+import { ChevronRight, Share2, Store } from "lucide-react"
 import { EmptyState } from "@/components/shared/empty-state"
 import { ResellerStatusBadge } from "./reseller-status"
 
@@ -10,6 +10,10 @@ export interface ResellerRow {
   name: string
   slug: string
   email: string | null
+  /** Nome do admin/dono da revenda (User.tenantId @unique). */
+  ownerName?: string | null
+  /** Nome da revenda que indicou esta (indicacao 1-nivel), se houver. */
+  referrerName?: string | null
   mrr: number
   students: number
   status: ResellerStatus
@@ -64,6 +68,12 @@ export function ResellerTable({ rows, showManager = false, onAssign }: ResellerT
                   <Link href={`/admin/revendedores/${r.id}`} className="block">
                     <p className="font-semibold text-[var(--color-pmb-green-900)]">{r.name}</p>
                     <p className="mt-0.5 text-xs text-gray-500">{r.email ?? r.slug}</p>
+                    {r.referrerName && (
+                      <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-[var(--color-pmb-lime-100)] px-2 py-0.5 text-[10px] font-semibold text-[var(--color-pmb-green-900)]">
+                        <Share2 className="h-2.5 w-2.5" />
+                        Indicada por {r.referrerName}
+                      </span>
+                    )}
                   </Link>
                 </td>
                 <td className="px-6 py-3 text-right font-mono font-semibold text-[var(--color-pmb-green-900)]">
@@ -128,6 +138,12 @@ export function ResellerTable({ rows, showManager = false, onAssign }: ResellerT
                 <p className="mt-0.5 truncate text-xs text-gray-500">
                   {r.email ?? r.slug}
                 </p>
+                {r.referrerName && (
+                  <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-[var(--color-pmb-lime-100)] px-2 py-0.5 text-[10px] font-semibold text-[var(--color-pmb-green-900)]">
+                    <Share2 className="h-2.5 w-2.5" />
+                    Indicada por {r.referrerName}
+                  </span>
+                )}
               </div>
               <ResellerStatusBadge status={r.status} />
             </Link>

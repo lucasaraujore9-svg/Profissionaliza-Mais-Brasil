@@ -32,7 +32,7 @@ export function ResellerListToolbar({
         <Input
           value={query}
           onChange={(e) => onQueryChange(e.target.value)}
-          placeholder="Buscar por nome, slug ou e-mail"
+          placeholder="Buscar por nome, slug, e-mail ou admin"
           className="pl-9"
         />
       </div>

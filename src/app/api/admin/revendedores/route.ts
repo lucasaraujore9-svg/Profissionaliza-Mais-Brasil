@@ -28,6 +28,8 @@ export const GET = withRequestContext(
       { name: { contains: q, mode: "insensitive" } },
       { slug: { contains: q, mode: "insensitive" } },
       { owner: { email: { contains: q, mode: "insensitive" } } },
+      // Busca tambem pelo nome do admin/dono da revenda (User.tenantId @unique).
+      { owner: { name: { contains: q, mode: "insensitive" } } },
     ]
   }
   if (status && ["ACTIVE", "PENDING", "SUSPENDED", "CANCELLED"].includes(status)) {
@@ -69,7 +71,10 @@ export const GET = withRequestContext(
         status: true,
         planValue: true,
         createdAt: true,
-        owner: { select: { email: true } },
+        owner: { select: { email: true, name: true } },
+        // Indicacao 1-nivel: nome da revenda que indicou esta (badge na lista).
+        referrerTenantId: true,
+        referrer: { select: { name: true } },
         accountManagerId: true,
         accountManager: { select: { id: true, name: true } },
         salesUserId: true,
@@ -113,6 +118,8 @@ export const GET = withRequestContext(
         slug: t.slug,
         status: t.status,
         email: t.owner?.email ?? null,
+        ownerName: t.owner?.name ?? null,
+        referrerName: t.referrer?.name ?? null,
         mrr: Number(t.planValue),
         students: t._count.students,
         accountManagerId: t.accountManagerId,
