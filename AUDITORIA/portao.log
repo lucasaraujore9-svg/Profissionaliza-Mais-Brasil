@@ -1,540 +1,617 @@
-================ PORTÃO 2026-06-20 14:33:38 P0a-cert-public-url ================
---- typecheck (tsc --noEmit) ---
---- lint (eslint) ---
-/Users/lucasaraujo/Documents/Projetos Git/Profissionaliza-Mais-Brasil/src/lib/students/plataforma-actions.ts
-  160:14  warning  'err' is defined but never used. Allowed unused caught errors must match /^_/u  @typescript-eslint/no-unused-vars
+==========================================
+PORTÃO ZERO-ERRO — BASELINE (pré-Fase 2)
+Data: 2026-06-24 08:20:45  ·  Node v26.0.0  ·  npm 11.12.1
+==========================================
+### typecheck (tsc --noEmit)
 
-✖ 2 problems (0 errors, 2 warnings)
+> profissionaliza-mais-brasil@0.1.0 typecheck
+> tsc --noEmit
+
+exit=0
+### lint
+
+> profissionaliza-mais-brasil@0.1.0 lint
+> eslint
+
+
+/Users/lucasaraujo/Documents/Projetos Git/Profissionaliza-Mais-Brasil/scripts/render-cert-samples.tsx
+  1:1  warning  Unused eslint-disable directive (no problems were reported)
+
+✖ 1 problem (0 errors, 1 warning)
   0 errors and 1 warning potentially fixable with the `--fix` option.
 
---- test (vitest run) ---
+exit=0
+### test (vitest run)
 
- Test Files  8 passed (8)
-      Tests  44 passed (44)
-   Start at  14:33:55
-   Duration  268ms (transform 179ms, setup 0ms, collect 272ms, tests 17ms, environment 1ms, prepare 380ms)
+> profissionaliza-mais-brasil@0.1.0 test
+> vitest run
 
---- build (next build, SKIP migrations, dummy DB) ---
+(node:82948) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+
+ RUN  v3.2.4 /Users/lucasaraujo/Documents/Projetos Git/Profissionaliza-Mais-Brasil
+
+ ✓ src/lib/referrals/tiers.test.ts (15 tests) 3ms
+ ✓ src/lib/students/ensure-student-active.test.ts (4 tests) 4ms
+ ✓ src/lib/courses/bulk-edit.test.ts (8 tests) 23ms
+ ✓ src/lib/coupons/preview.test.ts (9 tests) 15ms
+ ✓ src/lib/referrals/payout.test.ts (4 tests) 6ms
+ ✓ src/lib/auth/guards.test.ts (7 tests) 3ms
+ ✓ src/lib/resellers/plans.test.ts (3 tests) 2ms
+ ✓ src/lib/crypto.test.ts (3 tests) 4ms
+ ✓ src/lib/students/cpf-already-registered.test.ts (3 tests) 4ms
+ ✓ src/lib/email/templates/notification.test.ts (2 tests) 22ms
+ ✓ src/lib/email/templates/payment-pending.test.ts (2 tests) 24ms
+ ✓ src/lib/email/templates/payment-rejected.test.ts (2 tests) 27ms
+ ✓ src/lib/email/templates/enrollment.test.ts (3 tests) 22ms
+ ✓ src/lib/redis/keys.test.ts (3 tests) 1ms
+ ✓ src/lib/auth/roles.test.ts (2 tests) 1ms
+ ✓ src/lib/auth/scope.test.ts (18 tests) 3ms
+ ✓ src/lib/pmb-tenant.test.ts (4 tests) 2ms
+ ✓ src/lib/mercadopago/webhook.test.ts (7 tests) 3ms
+ ✓ src/lib/webhooks/lms-webhook.test.ts (6 tests) 3ms
+ ✓ src/lib/certificates/admin-scope.test.ts (5 tests) 5ms
+ ✓ src/lib/asaas/webhook.test.ts (10 tests) 6ms
+ ✓ src/lib/checkout/due-date.test.ts (3 tests) 3ms
+ ✓ src/lib/home/sections.schema.test.ts (17 tests) 4ms
+ ✓ src/lib/certificates/freshness.test.ts (11 tests) 4ms
+ ✓ src/lib/tenant/urls.test.ts (3 tests) 2ms
+ ✓ src/lib/validation/cpf.test.ts (5 tests) 1ms
+ ✓ src/lib/referrals/clawback.test.ts (9 tests) 1ms
+ ✓ src/lib/tenant/vitrine-paths.test.ts (5 tests) 1ms
+ ✓ src/lib/dates.test.ts (5 tests) 1ms
+ ✓ src/lib/coupons/discount.test.ts (5 tests) 3ms
+ ✓ src/lib/students/checkout-link.test.ts (7 tests) 2ms
+ ✓ src/lib/students/resolve-platform-password.test.ts (5 tests) 3ms
+ ✓ src/lib/tenant/forbidden-names.test.ts (4 tests) 2ms
+ ✓ src/lib/checkout/price-guard.test.ts (6 tests) 3ms
+ ✓ src/lib/students/reactivation-guard.test.ts (4 tests) 1ms
+ ✓ src/lib/tenant/slug.test.ts (5 tests) 2ms
+ ✓ src/lib/referrals/commission.test.ts (4 tests) 1ms
+
+ Test Files  37 passed (37)
+      Tests  218 passed (218)
+   Start at  08:20:58
+   Duration  1.54s (transform 598ms, setup 0ms, collect 2.84s, tests 219ms, environment 3ms, prepare 1.74s)
+
+exit=0
+### build (next build, SKIP_PENDING_MIGRATIONS=1)
+
+> profissionaliza-mais-brasil@0.1.0 build
+> npm run db:apply-pending && next build
+
+
+> profissionaliza-mais-brasil@0.1.0 db:apply-pending
+> node scripts/apply-pending-migrations.mjs
+
+[apply-pending] SKIP_PENDING_MIGRATIONS=1 — pulando.
+▲ Next.js 16.2.6 (Turbopack)
+- Environments: .env.local
+
+  Creating an optimized production build ...
+(node:83110) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✓ Compiled successfully in 6.7s
+  Running TypeScript ...
+  Finished TypeScript in 8.2s ...
+  Collecting page data using 9 workers ...
+  Generating static pages using 9 workers (0/229) ...
+  Generating static pages using 9 workers (57/229) 
+  Generating static pages using 9 workers (114/229) 
+  Generating static pages using 9 workers (171/229) 
+{"level":50,"time":"2026-06-24T11:21:28.277Z","env":"production","service":"pmb-app","err":{"type":"PrismaClientKnownRequestError","message":"\nInvalid `prisma.course.count()` invocation:\n\n\n","stack":"PrismaClientKnownRequestError: \nInvalid `prisma.course.count()` invocation:\n\n\n\n    at Gr.handleRequestError (/Users/lucasaraujo/Documents/Projetos Git/Profissionaliza-Mais-Brasil/node_modules/@prisma/client/runtime/client.js:65:8286)\n    at Gr.handleAndLogRequestError (/Users/lucasaraujo/Documents/Projetos Git/Profissionaliza-Mais-Brasil/node_modules/@prisma/client/runtime/client.js:65:7581)\n    at Gr.request (/Users/lucasaraujo/Documents/Projetos Git/Profissionaliza-Mais-Brasil/node_modules/@prisma/client/runtime/client.js:65:7288)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at async a (/Users/lucasaraujo/Documents/Projetos Git/Profissionaliza-Mais-Brasil/node_modules/@prisma/client/runtime/client.js:75:6730)\n    at async k (/Users/lucasaraujo/Documents/Projetos Git/Profissionaliza-Mais-Brasil/.next/server/chunks/ssr/src_components_0lwl.ey._.js:1:4109)\n    at async l (/Users/lucasaraujo/Documents/Projetos Git/Profissionaliza-Mais-Brasil/.next/server/chunks/ssr/src_components_0lwl.ey._.js:1:4329)"},"event":"hero_cta.curso_count_failed","msg":"HeroCTA curso count falhou"}
+✓ Generating static pages using 9 workers (229/229) in 343ms
+  Finalizing page optimization ...
+
+Route (app)
+┌ ƒ /
+├ ○ /_not-found
+├ ƒ /admin
+├ ƒ /admin/alunos
+├ ƒ /admin/alunos/[id]
+├ ƒ /admin/analytics
+├ ƒ /admin/atendimento
+├ ƒ /admin/automacao
+├ ƒ /admin/automacao/conexao
+├ ƒ /admin/automacao/mensagens
+├ ƒ /admin/banner
+├ ƒ /admin/catalogo
+├ ƒ /admin/certificados
+├ ƒ /admin/certificados/configuracoes
+├ ƒ /admin/certificados/emitir
+├ ƒ /admin/certificados/template-padrao
+├ ƒ /admin/comunicacao
+├ ƒ /admin/configuracoes
+├ ƒ /admin/configuracoes/automacao
+├ ƒ /admin/configuracoes/certificados
+├ ƒ /admin/configuracoes/indicacoes
+├ ƒ /admin/configuracoes/rastreamento
+├ ƒ /admin/configuracoes/unidade-tecnica
+├ ƒ /admin/equipe
+├ ƒ /admin/equipe/[id]
+├ ƒ /admin/financeiro
+├ ƒ /admin/indicacoes
+├ ƒ /admin/indicacoes/comissoes
+├ ƒ /admin/indicacoes/saques
+├ ƒ /admin/leads
+├ ƒ /admin/leads-revenda
+├ ƒ /admin/meu-perfil
+├ ƒ /admin/notificacoes
+├ ƒ /admin/relatorios
+├ ƒ /admin/relatorios/[type]
+├ ƒ /admin/revendedores
+├ ƒ /admin/revendedores/[id]
+├ ƒ /admin/revendedores/[id]/comissoes
+├ ƒ /admin/treinamentos
+├ ƒ /admin/treinamentos/assistir
+├ ƒ /admin/treinamentos/assistir/[moduleId]
+├ ƒ /admin/vendas
+├ ƒ /admin/vendas/alunos
+├ ƒ /admin/vendas/alunos/[id]
+├ ƒ /admin/vendas/cupons
+├ ƒ /admin/vendas/nova
+├ ƒ /admin/vitrine
+├ ƒ /ajuda
+├ ○ /alterar-senha-inicial
+├ ƒ /aluno
+├ ƒ /aluno/certificados
+├ ƒ /aluno/certificados/[id]
+├ ƒ /aluno/comprar
+├ ƒ /aluno/cursos
+├ ƒ /aluno/notificacoes
+├ ƒ /aluno/pagamentos
+├ ƒ /aluno/perfil
+├ ƒ /aluno/suporte
+├ ƒ /api/admin/alunos
+├ ƒ /api/admin/alunos/[id]
+├ ƒ /api/admin/alunos/[id]/bloquear
+├ ƒ /api/admin/alunos/[id]/cursos
+├ ƒ /api/admin/alunos/[id]/desbloquear
+├ ƒ /api/admin/alunos/[id]/enrollments/[enrollmentId]/cancelar
+├ ƒ /api/admin/alunos/[id]/impersonate
+├ ƒ /api/admin/alunos/[id]/notes
+├ ƒ /api/admin/alunos/[id]/notify
+├ ƒ /api/admin/alunos/[id]/plataforma-senha
+├ ƒ /api/admin/alunos/[id]/reenviar-email
+├ ƒ /api/admin/alunos/[id]/reset-password
+├ ƒ /api/admin/alunos/global
+├ ƒ /api/admin/analytics
+├ ƒ /api/admin/atendimento/[id]
+├ ƒ /api/admin/automacao/config
+├ ƒ /api/admin/automacao/templates
+├ ƒ /api/admin/automacao/whatsapp/connect
+├ ƒ /api/admin/automacao/whatsapp/disconnect
+├ ƒ /api/admin/automacao/whatsapp/pair
+├ ƒ /api/admin/automacao/whatsapp/status
+├ ƒ /api/admin/banner
+├ ƒ /api/admin/banner/[id]
+├ ƒ /api/admin/banner/upload
+├ ƒ /api/admin/catalogo
+├ ƒ /api/admin/catalogo/[id]
+├ ƒ /api/admin/catalogo/bulk
+├ ƒ /api/admin/catalogo/bulk-provider-visibility
+├ ƒ /api/admin/catalogo/categorias
+├ ƒ /api/admin/catalogo/categorias/[id]
+├ ƒ /api/admin/catalogo/sync
+├ ƒ /api/admin/catalogo/sync-log
+├ ƒ /api/admin/catalogo/tenants-lookup
+├ ƒ /api/admin/certificate-template
+├ ƒ /api/admin/certificate-template/preview
+├ ƒ /api/admin/certificate-template/upload
+├ ƒ /api/admin/certificates
+├ ƒ /api/admin/certificates/[id]/download
+├ ƒ /api/admin/certificates/[id]/regenerate
+├ ƒ /api/admin/certificates/[id]/revoke
+├ ƒ /api/admin/certificates/enrollments
+├ ƒ /api/admin/certificates/issue
+├ ƒ /api/admin/certificates/regenerate-all
+├ ƒ /api/admin/config
+├ ƒ /api/admin/config/test-asaas
+├ ƒ /api/admin/config/test-mp
+├ ƒ /api/admin/config/test-plataforma
+├ ƒ /api/admin/cupons
+├ ƒ /api/admin/cupons/[id]/toggle
+├ ƒ /api/admin/cupons/validate
+├ ƒ /api/admin/dashboard
+├ ƒ /api/admin/end-impersonation
+├ ƒ /api/admin/equipe
+├ ƒ /api/admin/equipe/[id]
+├ ƒ /api/admin/equipe/[id]/resend-invite
+├ ƒ /api/admin/financeiro
+├ ƒ /api/admin/financeiro/overdue
+├ ƒ /api/admin/financeiro/referral-payouts
+├ ƒ /api/admin/financeiro/referral-payouts/[id]/fail
+├ ƒ /api/admin/financeiro/referral-payouts/[id]/mark-paid
+├ ƒ /api/admin/financeiro/referral-payouts/[id]/note
+├ ƒ /api/admin/financeiro/referral-payouts/[id]/proof
+├ ƒ /api/admin/financeiro/referral-payouts/[id]/proof/download
+├ ƒ /api/admin/financeiro/tenant-payments
+├ ƒ /api/admin/financeiro/tenant-payments/[id]/mark-paid
+├ ƒ /api/admin/financeiro/tenant-payments/[id]/note
+├ ƒ /api/admin/home-sections
+├ ƒ /api/admin/home-sections/[id]
+├ ƒ /api/admin/home-sections/options
+├ ƒ /api/admin/home-sections/reorder
+├ ƒ /api/admin/leads
+├ ƒ /api/admin/leads-revenda/[id]
+├ ƒ /api/admin/leads-revenda/distribuicao
+├ ƒ /api/admin/leads/[id]
+├ ƒ /api/admin/leads/[id]/activities
+├ ƒ /api/admin/leads/[id]/stage
+├ ƒ /api/admin/leads/[id]/whatsapp
+├ ƒ /api/admin/me
+├ ƒ /api/admin/me/password
+├ ƒ /api/admin/notifications/auto-config
+├ ƒ /api/admin/notifications/broadcast
+├ ƒ /api/admin/pacotes
+├ ƒ /api/admin/pacotes/[id]
+├ ƒ /api/admin/pacotes/capa
+├ ƒ /api/admin/pacotes/courses-lookup
+├ ƒ /api/admin/referrals/clawback/resolve
+├ ƒ /api/admin/referrals/commissions/export
+├ ƒ /api/admin/referrals/payouts/[id]/approve
+├ ƒ /api/admin/referrals/payouts/[id]/fail
+├ ƒ /api/admin/referrals/payouts/export
+├ ƒ /api/admin/relatorios
+├ ƒ /api/admin/relatorios/[type]
+├ ƒ /api/admin/revendedores
+├ ƒ /api/admin/revendedores/[id]
+├ ƒ /api/admin/revendedores/[id]/anonimizar
+├ ƒ /api/admin/revendedores/[id]/billing
+├ ƒ /api/admin/revendedores/[id]/comissoes/demonstrativo
+├ ƒ /api/admin/revendedores/[id]/comissoes/export
+├ ƒ /api/admin/revendedores/[id]/impersonate
+├ ƒ /api/admin/revendedores/[id]/manager
+├ ƒ /api/admin/revendedores/[id]/notes
+├ ƒ /api/admin/revendedores/[id]/password
+├ ƒ /api/admin/revendedores/[id]/payments/[paymentId]
+├ ƒ /api/admin/revendedores/[id]/policy
+├ ƒ /api/admin/revendedores/[id]/sales
+├ ƒ /api/admin/revendedores/[id]/slug
+├ ƒ /api/admin/revendedores/[id]/status
+├ ƒ /api/admin/system-settings/certificates
+├ ƒ /api/admin/system-settings/eja
+├ ƒ /api/admin/system-settings/eja/upload
+├ ƒ /api/admin/system-settings/group-logo/upload
+├ ƒ /api/admin/system-settings/referrals
+├ ƒ /api/admin/system-settings/tecnica
+├ ƒ /api/admin/system-settings/tecnica/upload
+├ ƒ /api/admin/system-settings/tracking
+├ ƒ /api/admin/tenants/[id]/asaas-gateway
+├ ƒ /api/admin/tenants/[id]/automacao
+├ ƒ /api/admin/tenants/[id]/can-sell-resellers
+├ ƒ /api/admin/tenants/[id]/eja
+├ ƒ /api/admin/tenants/[id]/mensalidade
+├ ƒ /api/admin/tenants/[id]/referral-percent
+├ ƒ /api/admin/tenants/[id]/tecnica
+├ ƒ /api/admin/treinamentos/modules
+├ ƒ /api/admin/treinamentos/modules/[id]
+├ ƒ /api/admin/treinamentos/progress
+├ ƒ /api/admin/treinamentos/reorder
+├ ƒ /api/admin/treinamentos/videos
+├ ƒ /api/admin/treinamentos/videos/[id]
+├ ƒ /api/admin/vendas
+├ ƒ /api/admin/vendas/[id]/sync-payment
+├ ƒ /api/aluno/catalogo
+├ ƒ /api/aluno/comprar
+├ ƒ /api/aluno/conta
+├ ƒ /api/aluno/curso/[enrollmentId]/acessar
+├ ƒ /api/aluno/pagamentos/verificar
+├ ƒ /api/aluno/perfil
+├ ƒ /api/aluno/senha
+├ ƒ /api/aluno/senha-plataforma
+├ ƒ /api/aluno/suporte
+├ ƒ /api/auth/[...nextauth]
+├ ƒ /api/auth/alterar-senha-inicial
+├ ƒ /api/auth/forgot-password
+├ ƒ /api/auth/handoff
+├ ƒ /api/auth/handoff/start
+├ ƒ /api/auth/reset-password
+├ ƒ /api/catalogo/sugestoes
+├ ƒ /api/checkout
+├ ƒ /api/checkout/confirmacao/[id]/status
+├ ƒ /api/checkout/mp/process
+├ ƒ /api/checkout/package
+├ ƒ /api/checkout/status
+├ ƒ /api/cobranca/[paymentId]
+├ ƒ /api/cobranca/[paymentId]/billing-info
+├ ƒ /api/cobranca/[paymentId]/pay-card
+├ ƒ /api/contato
+├ ƒ /api/cron/cleanup-webhook-logs
+├ ƒ /api/cron/reactivate-paid
+├ ƒ /api/cron/reconcile-tenant-payments
+├ ƒ /api/cron/referral-monthly-payout
+├ ƒ /api/cron/resync-lms-credentials
+├ ƒ /api/cron/resync-platform-passwords
+├ ƒ /api/cron/sweep-abandoned-leads
+├ ƒ /api/cron/sweep-students-expired
+├ ƒ /api/cron/sweep-students-overdue
+├ ƒ /api/cron/sweep-tenants-overdue
+├ ƒ /api/cron/sweep-visitor-events
+├ ƒ /api/cron/sync-cursos
+├ ƒ /api/cron/sync-cursos-lms
+├ ƒ /api/cron/sync-day-update-lms
+├ ƒ /api/cron/sync-lms-branding
+├ ƒ /api/cron/sync-progresso
+├ ƒ /api/health
+├ ƒ /api/home/showcase
+├ ƒ /api/internal/resolve-tenant
+├ ƒ /api/leads
+├ ƒ /api/loja/checkout
+├ ƒ /api/loja/checkout-inquiry
+├ ƒ /api/loja/checkout/package
+├ ƒ /api/loja/checkout/process
+├ ƒ /api/loja/checkout/status
+├ ƒ /api/loja/confirmacao/[id]
+├ ƒ /api/loja/courses
+├ ƒ /api/loja/cupom/validar
+├ ƒ /api/loja/cursos/[slug]
+├ ƒ /api/loja/leads
+├ ƒ /api/loja/track
+├ ƒ /api/metrics/public
+├ ƒ /api/notifications
+├ ƒ /api/notifications/[id]/read
+├ ƒ /api/notifications/preferences
+├ ƒ /api/notifications/read-all
+├ ƒ /api/observability/client-log
+├ ƒ /api/painel/alunos
+├ ƒ /api/painel/alunos/[id]
+├ ƒ /api/painel/alunos/[id]/bloquear
+├ ƒ /api/painel/alunos/[id]/desbloquear
+├ ƒ /api/painel/alunos/[id]/impersonate
+├ ƒ /api/painel/alunos/[id]/mensagem
+├ ƒ /api/painel/alunos/[id]/notes
+├ ƒ /api/painel/alunos/[id]/notify
+├ ƒ /api/painel/alunos/[id]/plataforma-senha
+├ ƒ /api/painel/alunos/[id]/reenviar-email
+├ ƒ /api/painel/alunos/[id]/reset-password
+├ ƒ /api/painel/atendimento/[id]
+├ ƒ /api/painel/automacao/config
+├ ƒ /api/painel/automacao/templates
+├ ƒ /api/painel/automacao/whatsapp/connect
+├ ƒ /api/painel/automacao/whatsapp/disconnect
+├ ƒ /api/painel/automacao/whatsapp/pair
+├ ƒ /api/painel/automacao/whatsapp/status
+├ ƒ /api/painel/banner
+├ ƒ /api/painel/banner/[id]
+├ ƒ /api/painel/banner/upload
+├ ƒ /api/painel/certificate-template
+├ ƒ /api/painel/certificate-template/preview
+├ ƒ /api/painel/certificate-template/upload
+├ ƒ /api/painel/certificates
+├ ƒ /api/painel/certificates/[id]/download
+├ ƒ /api/painel/certificates/[id]/regenerate
+├ ƒ /api/painel/certificates/[id]/revoke
+├ ƒ /api/painel/certificates/enrollments
+├ ƒ /api/painel/certificates/issue
+├ ƒ /api/painel/comunicacao/alunos
+├ ƒ /api/painel/comunicacao/auto-config
+├ ƒ /api/painel/comunicacao/broadcast
+├ ƒ /api/painel/config
+├ ƒ /api/painel/config/billing-mode
+├ ƒ /api/painel/config/connect-asaas
+├ ƒ /api/painel/config/connect-mp
+├ ƒ /api/painel/config/excluir-conta
+├ ƒ /api/painel/config/mensalidade
+├ ƒ /api/painel/config/password
+├ ƒ /api/painel/config/pix
+├ ƒ /api/painel/config/sales-gateway
+├ ƒ /api/painel/cupons
+├ ƒ /api/painel/cupons/[id]/toggle
+├ ƒ /api/painel/cupons/[id]/usage
+├ ƒ /api/painel/cupons/generate-code
+├ ƒ /api/painel/cursos
+├ ƒ /api/painel/cursos/[id]
+├ ƒ /api/painel/cursos/[id]/capa
+├ ƒ /api/painel/cursos/[id]/visibility
+├ ƒ /api/painel/cursos/bulk
+├ ƒ /api/painel/dashboard
+├ ƒ /api/painel/dominio
+├ ƒ /api/painel/dominio/verify
+├ ƒ /api/painel/equipe
+├ ƒ /api/painel/equipe/[id]
+├ ƒ /api/painel/equipe/[id]/resend-invite
+├ ƒ /api/painel/financeiro
+├ ƒ /api/painel/financeiro/export-csv
+├ ƒ /api/painel/home-sections
+├ ƒ /api/painel/home-sections/[id]
+├ ƒ /api/painel/home-sections/options
+├ ƒ /api/painel/home-sections/reorder
+├ ƒ /api/painel/indicacoes/demonstrativo
+├ ƒ /api/painel/indicacoes/proof/[payoutId]
+├ ƒ /api/painel/leads
+├ ƒ /api/painel/leads/[id]
+├ ƒ /api/painel/leads/[id]/activities
+├ ƒ /api/painel/leads/[id]/stage
+├ ƒ /api/painel/leads/[id]/whatsapp
+├ ƒ /api/painel/leads/distribuicao
+├ ƒ /api/painel/onboarding
+├ ƒ /api/painel/onboarding-tour
+├ ƒ /api/painel/pacotes
+├ ƒ /api/painel/pacotes/[id]
+├ ƒ /api/painel/pacotes/capa
+├ ƒ /api/painel/pacotes/courses-lookup
+├ ƒ /api/painel/pacotes/pmb/[packageId]
+├ ƒ /api/painel/referrals/request-payout
+├ ƒ /api/painel/revendas
+├ ƒ /api/painel/revendas/leads/[id]
+├ ƒ /api/painel/tracking
+├ ƒ /api/painel/treinamentos/progress
+├ ƒ /api/painel/vendas
+├ ƒ /api/painel/vitrine
+├ ƒ /api/painel/vitrine/upload
+├ ƒ /api/placar/stream
+├ ƒ /api/pmb/leads
+├ ƒ /api/public/capture-ref
+├ ƒ /api/public/validate-ref
+├ ƒ /api/push/devices
+├ ƒ /api/push/devices/[id]
+├ ƒ /api/push/public-key
+├ ƒ /api/push/subscribe
+├ ƒ /api/revendedores/cadastro
+├ ƒ /api/student/certificates/[id]/download
+├ ƒ /api/student/certificates/issue
+├ ƒ /api/vitrine/manifest
+├ ƒ /api/webhooks/asaas
+├ ƒ /api/webhooks/lms
+├ ƒ /api/webhooks/mercadopago
+├ ƒ /categoria/[slug]
+├ ƒ /certificado
+├ ƒ /checkout
+├ ƒ /checkout/confirmacao
+├ ƒ /cobranca/[paymentId]
+├ ƒ /como-funciona
+├ ƒ /contato
+├ ƒ /contrato-de-revenda
+├ ƒ /cursos
+├ ƒ /cursos-tecnicos/ir
+├ ƒ /cursos/[slug]
+├ ƒ /eja/ir
+├ ƒ /forgot-password
+├ ƒ /inadimplente
+├ ○ /livrecursos
+├ ƒ /llms.txt
+├ ƒ /login
+├ ○ /logout
+├ ƒ /loja
+├ ƒ /loja/checkout
+├ ƒ /loja/confirmacao
+├ ƒ /loja/contato
+├ ƒ /loja/curso/[slug]
+├ ƒ /loja/cursos
+├ ƒ /loja/pacote/[slug]
+├ ƒ /loja/pagar/[id]
+├ ƒ /loja/suspended
+├ ƒ /lp-revenda2
+├ ○ /offline
+├ ƒ /pacotes/[slug]
+├ ƒ /painel
+├ ƒ /painel/alunos
+├ ƒ /painel/alunos/[id]
+├ ƒ /painel/atendimento
+├ ƒ /painel/automacao
+├ ƒ /painel/automacao/conexao
+├ ƒ /painel/automacao/mensagens
+├ ƒ /painel/certificados
+├ ƒ /painel/certificados/emitidos
+├ ƒ /painel/certificados/emitir
+├ ƒ /painel/certificados/template
+├ ƒ /painel/comunicacao
+├ ƒ /painel/configuracoes
+├ ƒ /painel/cupons
+├ ƒ /painel/cursos
+├ ƒ /painel/dominio
+├ ƒ /painel/equipe
+├ ƒ /painel/financeiro
+├ ƒ /painel/indicacoes
+├ ƒ /painel/indicacoes/materiais
+├ ƒ /painel/indicacoes/sacar
+├ ƒ /painel/leads
+├ ƒ /painel/leads/configuracao
+├ ƒ /painel/notificacoes
+├ ƒ /painel/onboarding
+├ ƒ /painel/revendas
+├ ƒ /painel/revendas/[id]
+├ ƒ /painel/revendas/leads
+├ ƒ /painel/revendas/nova
+├ ƒ /painel/treinamentos
+├ ƒ /painel/treinamentos/[moduleId]
+├ ƒ /painel/vendas
+├ ƒ /painel/vendas/nova
+├ ƒ /painel/vitrine
+├ ƒ /placar
+├ ƒ /privacidade
+├ ƒ /reembolso
+├ ƒ /reset-password
+├ ƒ /robots.txt
+├ ƒ /seja-revendedor
+├ ○ /seja-revendedor/checkout
+├ ○ /seja-revendedor/pre-live
+├ ƒ /sitemap.xml
+├ ƒ /sobre
+├ ƒ /termos
+├ ○ /validar
+└ ƒ /validar/[code]
+
+
+ƒ Proxy (Middleware)
 
 ○  (Static)   prerendered as static content
 ƒ  (Dynamic)  server-rendered on demand
 
-RESULT tsc=0 lint=0 test=0 build=0
-PORTÃO: ✅ VERDE
-================ PORTÃO 2026-06-20 14:36:57 P1-SAAS-002-reactivate-tenant-guard ================
---- typecheck (tsc --noEmit) ---
---- lint (eslint) ---
-/Users/lucasaraujo/Documents/Projetos Git/Profissionaliza-Mais-Brasil/src/lib/students/plataforma-actions.ts
-  160:14  warning  'err' is defined but never used. Allowed unused caught errors must match /^_/u  @typescript-eslint/no-unused-vars
+exit=0
 
-✖ 2 problems (0 errors, 2 warnings)
+=== PORTÃO · DB-001/LGPD-001 (pdfUrl→path) · 08:25:07 ===
+
+> profissionaliza-mais-brasil@0.1.0 typecheck
+> tsc --noEmit
+
+
+> profissionaliza-mais-brasil@0.1.0 lint
+> eslint
+
+
+/Users/lucasaraujo/Documents/Projetos Git/Profissionaliza-Mais-Brasil/scripts/render-cert-samples.tsx
+  1:1  warning  Unused eslint-disable directive (no problems were reported)
+
+✖ 1 problem (0 errors, 1 warning)
   0 errors and 1 warning potentially fixable with the `--fix` option.
 
---- test (vitest run) ---
 
- Test Files  9 passed (9)
-      Tests  48 passed (48)
-   Start at  14:37:09
-   Duration  271ms (transform 173ms, setup 0ms, collect 307ms, tests 19ms, environment 1ms, prepare 439ms)
+> profissionaliza-mais-brasil@0.1.0 test
+> vitest run
 
---- build (next build, SKIP migrations, dummy DB) ---
+
+ RUN  v3.2.4 /Users/lucasaraujo/Documents/Projetos Git/Profissionaliza-Mais-Brasil
+
+(node:83843) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ src/lib/courses/bulk-edit.test.ts (8 tests) 20ms
+ ✓ src/lib/coupons/preview.test.ts (9 tests) 14ms
+ ✓ src/lib/asaas/webhook.test.ts (10 tests) 3ms
+ ✓ src/lib/referrals/payout.test.ts (4 tests) 6ms
+ ✓ src/lib/home/sections.schema.test.ts (17 tests) 6ms
+ ✓ src/lib/crypto.test.ts (3 tests) 2ms
+ ✓ src/lib/students/ensure-student-active.test.ts (4 tests) 4ms
+ ✓ src/lib/email/templates/notification.test.ts (2 tests) 22ms
+ ✓ src/lib/email/templates/payment-rejected.test.ts (2 tests) 22ms
+ ✓ src/lib/email/templates/payment-pending.test.ts (2 tests) 24ms
+ ✓ src/lib/email/templates/enrollment.test.ts (3 tests) 26ms
+ ✓ src/lib/webhooks/lms-webhook.test.ts (6 tests) 1ms
+ ✓ src/lib/students/cpf-already-registered.test.ts (3 tests) 3ms
+ ✓ src/lib/coupons/discount.test.ts (5 tests) 3ms
+ ✓ src/lib/referrals/tiers.test.ts (15 tests) 3ms
+ ✓ src/lib/checkout/due-date.test.ts (3 tests) 7ms
+ ✓ src/lib/students/resolve-platform-password.test.ts (5 tests) 1ms
+ ✓ src/lib/mercadopago/webhook.test.ts (7 tests) 2ms
+ ✓ src/lib/checkout/price-guard.test.ts (6 tests) 3ms
+ ✓ src/lib/auth/guards.test.ts (7 tests) 6ms
+ ✓ src/lib/auth/scope.test.ts (18 tests) 3ms
+ ✓ src/lib/resellers/plans.test.ts (3 tests) 2ms
+ ✓ src/lib/pmb-tenant.test.ts (4 tests) 2ms
+ ✓ src/lib/certificates/freshness.test.ts (11 tests) 3ms
+ ✓ src/lib/tenant/urls.test.ts (3 tests) 2ms
+ ✓ src/lib/tenant/forbidden-names.test.ts (4 tests) 1ms
+ ✓ src/lib/certificates/storage.test.ts (6 tests) 2ms
+ ✓ src/lib/dates.test.ts (5 tests) 8ms
+ ✓ src/lib/students/checkout-link.test.ts (7 tests) 2ms
+ ✓ src/lib/referrals/clawback.test.ts (9 tests) 2ms
+ ✓ src/lib/tenant/slug.test.ts (5 tests) 1ms
+ ✓ src/lib/certificates/admin-scope.test.ts (5 tests) 2ms
+ ✓ src/lib/validation/cpf.test.ts (5 tests) 4ms
+ ✓ src/lib/auth/roles.test.ts (2 tests) 3ms
+ ✓ src/lib/tenant/vitrine-paths.test.ts (5 tests) 2ms
+ ✓ src/lib/students/reactivation-guard.test.ts (4 tests) 1ms
+ ✓ src/lib/redis/keys.test.ts (3 tests) 1ms
+ ✓ src/lib/referrals/commission.test.ts (4 tests) 1ms
+
+ Test Files  38 passed (38)
+      Tests  224 passed (224)
+   Start at  08:25:29
+   Duration  1.58s (transform 517ms, setup 0ms, collect 2.74s, tests 223ms, environment 3ms, prepare 1.64s)
+
+### build 08:25:49
 
 ○  (Static)   prerendered as static content
 ƒ  (Dynamic)  server-rendered on demand
 
-RESULT tsc=0 lint=0 test=0 build=0
-PORTÃO: ✅ VERDE
-================ PORTÃO 2026-06-20 14:38:57 P1-API-001-mp-notification-url ================
---- typecheck (tsc --noEmit) ---
---- lint (eslint) ---
-/Users/lucasaraujo/Documents/Projetos Git/Profissionaliza-Mais-Brasil/src/lib/students/plataforma-actions.ts
-  160:14  warning  'err' is defined but never used. Allowed unused caught errors must match /^_/u  @typescript-eslint/no-unused-vars
-
-✖ 2 problems (0 errors, 2 warnings)
-  0 errors and 1 warning potentially fixable with the `--fix` option.
-
---- test (vitest run) ---
-
- Test Files  1 failed | 9 passed (10)
-      Tests  1 failed | 50 passed (51)
-   Start at  14:39:09
-   Duration  418ms (transform 200ms, setup 0ms, collect 347ms, tests 23ms, environment 1ms, prepare 444ms)
-
---- build (next build, SKIP migrations, dummy DB) ---
-
-○  (Static)   prerendered as static content
-ƒ  (Dynamic)  server-rendered on demand
-
-RESULT tsc=0 lint=0 test=1 build=0
-PORTÃO: ❌ VERMELHO
-================ PORTÃO 2026-06-20 14:40:13 P1-API-001-mp-notification-url-v2 ================
---- typecheck (tsc --noEmit) ---
---- lint (eslint) ---
-/Users/lucasaraujo/Documents/Projetos Git/Profissionaliza-Mais-Brasil/src/lib/students/plataforma-actions.ts
-  160:14  warning  'err' is defined but never used. Allowed unused caught errors must match /^_/u  @typescript-eslint/no-unused-vars
-
-✖ 2 problems (0 errors, 2 warnings)
-  0 errors and 1 warning potentially fixable with the `--fix` option.
-
---- test (vitest run) ---
-
- Test Files  10 passed (10)
-      Tests  51 passed (51)
-   Start at  14:40:24
-   Duration  464ms (transform 207ms, setup 0ms, collect 334ms, tests 26ms, environment 1ms, prepare 426ms)
-
---- build (next build, SKIP migrations, dummy DB) ---
-
-○  (Static)   prerendered as static content
-ƒ  (Dynamic)  server-rendered on demand
-
-RESULT tsc=0 lint=0 test=0 build=0
-PORTÃO: ✅ VERDE
-================ PORTÃO 2026-06-20 14:42:45 P0-OPS-001-bootstrap-schema-aware ================
---- typecheck (tsc --noEmit) ---
---- lint (eslint) ---
-/Users/lucasaraujo/Documents/Projetos Git/Profissionaliza-Mais-Brasil/src/lib/students/plataforma-actions.ts
-  160:14  warning  'err' is defined but never used. Allowed unused caught errors must match /^_/u  @typescript-eslint/no-unused-vars
-
-✖ 2 problems (0 errors, 2 warnings)
-  0 errors and 1 warning potentially fixable with the `--fix` option.
-
---- test (vitest run) ---
-
- Test Files  10 passed (10)
-      Tests  51 passed (51)
-   Start at  14:42:57
-   Duration  522ms (transform 172ms, setup 0ms, collect 378ms, tests 43ms, environment 2ms, prepare 495ms)
-
---- build (next build, SKIP migrations, dummy DB) ---
-
-○  (Static)   prerendered as static content
-ƒ  (Dynamic)  server-rendered on demand
-
-RESULT tsc=0 lint=0 test=0 build=0
-PORTÃO: ✅ VERDE
-================ PORTÃO 2026-06-20 14:45:05 P1-QA-001-tenant-isolation-test ================
---- typecheck (tsc --noEmit) ---
---- lint (eslint) ---
-/Users/lucasaraujo/Documents/Projetos Git/Profissionaliza-Mais-Brasil/src/lib/students/plataforma-actions.ts
-  160:14  warning  'err' is defined but never used. Allowed unused caught errors must match /^_/u  @typescript-eslint/no-unused-vars
-
-✖ 2 problems (0 errors, 2 warnings)
-  0 errors and 1 warning potentially fixable with the `--fix` option.
-
---- test (vitest run) ---
-
- Test Files  11 passed (11)
-      Tests  69 passed (69)
-   Start at  14:45:17
-   Duration  497ms (transform 250ms, setup 0ms, collect 433ms, tests 25ms, environment 1ms, prepare 445ms)
-
---- build (next build, SKIP migrations, dummy DB) ---
-
-○  (Static)   prerendered as static content
-ƒ  (Dynamic)  server-rendered on demand
-
-RESULT tsc=0 lint=0 test=0 build=0
-PORTÃO: ✅ VERDE
-================ PORTÃO 2026-06-20 14:49:41 P1-QA-004-commission-tests ================
---- typecheck (tsc --noEmit) ---
---- lint (eslint) ---
-/Users/lucasaraujo/Documents/Projetos Git/Profissionaliza-Mais-Brasil/src/lib/students/plataforma-actions.ts
-  160:14  warning  'err' is defined but never used. Allowed unused caught errors must match /^_/u  @typescript-eslint/no-unused-vars
-
-✖ 2 problems (0 errors, 2 warnings)
-  0 errors and 1 warning potentially fixable with the `--fix` option.
-
---- test (vitest run) ---
-
- Test Files  14 passed (14)
-      Tests  98 passed (98)
-   Start at  14:49:53
-   Duration  632ms (transform 252ms, setup 0ms, collect 675ms, tests 36ms, environment 1ms, prepare 621ms)
-
---- build (next build, SKIP migrations, dummy DB) ---
-
-○  (Static)   prerendered as static content
-ƒ  (Dynamic)  server-rendered on demand
-
-RESULT tsc=0 lint=0 test=0 build=0
-PORTÃO: ✅ VERDE
-================ PORTÃO 2026-06-20 14:54:25 P1-SAAS-001-audit-trail-billing-perms ================
---- typecheck (tsc --noEmit) ---
---- lint (eslint) ---
-/Users/lucasaraujo/Documents/Projetos Git/Profissionaliza-Mais-Brasil/src/lib/students/plataforma-actions.ts
-  160:14  warning  'err' is defined but never used. Allowed unused caught errors must match /^_/u  @typescript-eslint/no-unused-vars
-
-✖ 2 problems (0 errors, 2 warnings)
-  0 errors and 1 warning potentially fixable with the `--fix` option.
-
---- test (vitest run) ---
-
- Test Files  14 passed (14)
-      Tests  98 passed (98)
-   Start at  14:54:38
-   Duration  647ms (transform 221ms, setup 0ms, collect 576ms, tests 42ms, environment 1ms, prepare 780ms)
-
---- build (next build, SKIP migrations, dummy DB) ---
-
-○  (Static)   prerendered as static content
-ƒ  (Dynamic)  server-rendered on demand
-
-RESULT tsc=0 lint=0 test=0 build=0
-PORTÃO: ✅ VERDE
-================ PORTÃO 2026-06-20 14:56:47 FASE-4-FINAL ================
---- typecheck (tsc --noEmit) ---
---- lint (eslint) ---
-/Users/lucasaraujo/Documents/Projetos Git/Profissionaliza-Mais-Brasil/src/lib/students/plataforma-actions.ts
-  160:14  warning  'err' is defined but never used. Allowed unused caught errors must match /^_/u  @typescript-eslint/no-unused-vars
-
-✖ 2 problems (0 errors, 2 warnings)
-  0 errors and 1 warning potentially fixable with the `--fix` option.
-
---- test (vitest run) ---
-
- Test Files  14 passed (14)
-      Tests  98 passed (98)
-   Start at  14:56:59
-   Duration  595ms (transform 218ms, setup 0ms, collect 593ms, tests 34ms, environment 1ms, prepare 587ms)
-
---- build (next build, SKIP migrations, dummy DB) ---
-
-○  (Static)   prerendered as static content
-ƒ  (Dynamic)  server-rendered on demand
-
-RESULT tsc=0 lint=0 test=0 build=0
-PORTÃO: ✅ VERDE
-================ PORTÃO 2026-06-20 17:51:40 P1-PERF-001-tenant-cache ================
---- typecheck (tsc --noEmit) ---
---- lint (eslint) ---
-/Users/lucasaraujo/Documents/Projetos Git/Profissionaliza-Mais-Brasil/src/lib/students/plataforma-actions.ts
-  160:14  warning  'err' is defined but never used. Allowed unused caught errors must match /^_/u  @typescript-eslint/no-unused-vars
-
-✖ 2 problems (0 errors, 2 warnings)
-  0 errors and 1 warning potentially fixable with the `--fix` option.
-
---- test (vitest run) ---
-
- Test Files  15 passed (15)
-      Tests  101 passed (101)
-   Start at  17:51:53
-   Duration  572ms (transform 236ms, setup 0ms, collect 590ms, tests 38ms, environment 1ms, prepare 669ms)
-
---- build (next build, SKIP migrations, dummy DB) ---
-
-○  (Static)   prerendered as static content
-ƒ  (Dynamic)  server-rendered on demand
-
-RESULT tsc=0 lint=0 test=0 build=0
-PORTÃO: ✅ VERDE
-================ PORTÃO 2026-06-20 17:56:30 P1-DB-002-fk-indexes ================
---- typecheck (tsc --noEmit) ---
---- lint (eslint) ---
-/Users/lucasaraujo/Documents/Projetos Git/Profissionaliza-Mais-Brasil/src/lib/students/plataforma-actions.ts
-  160:14  warning  'err' is defined but never used. Allowed unused caught errors must match /^_/u  @typescript-eslint/no-unused-vars
-
-✖ 2 problems (0 errors, 2 warnings)
-  0 errors and 1 warning potentially fixable with the `--fix` option.
-
---- test (vitest run) ---
-
- Test Files  15 passed (15)
-      Tests  101 passed (101)
-   Start at  17:56:42
-   Duration  543ms (transform 234ms, setup 0ms, collect 621ms, tests 40ms, environment 1ms, prepare 611ms)
-
---- build (next build, SKIP migrations, dummy DB) ---
-
-○  (Static)   prerendered as static content
-ƒ  (Dynamic)  server-rendered on demand
-
-RESULT tsc=0 lint=0 test=0 build=0
-PORTÃO: ✅ VERDE
-================ PORTÃO 2026-06-20 17:58:21 P1-SAAS-001-complete ================
---- typecheck (tsc --noEmit) ---
---- lint (eslint) ---
-/Users/lucasaraujo/Documents/Projetos Git/Profissionaliza-Mais-Brasil/src/lib/students/plataforma-actions.ts
-  160:14  warning  'err' is defined but never used. Allowed unused caught errors must match /^_/u  @typescript-eslint/no-unused-vars
-
-✖ 2 problems (0 errors, 2 warnings)
-  0 errors and 1 warning potentially fixable with the `--fix` option.
-
---- test (vitest run) ---
-
- Test Files  15 passed (15)
-      Tests  101 passed (101)
-   Start at  17:58:34
-   Duration  614ms (transform 310ms, setup 0ms, collect 725ms, tests 43ms, environment 1ms, prepare 636ms)
-
---- build (next build, SKIP migrations, dummy DB) ---
-
-○  (Static)   prerendered as static content
-ƒ  (Dynamic)  server-rendered on demand
-
-RESULT tsc=0 lint=0 test=0 build=0
-PORTÃO: ✅ VERDE
-================ PORTÃO 2026-06-20 18:00:01 P1-LGPD-003-erasure-cert ================
---- typecheck (tsc --noEmit) ---
---- lint (eslint) ---
-/Users/lucasaraujo/Documents/Projetos Git/Profissionaliza-Mais-Brasil/src/lib/students/plataforma-actions.ts
-  160:14  warning  'err' is defined but never used. Allowed unused caught errors must match /^_/u  @typescript-eslint/no-unused-vars
-
-✖ 2 problems (0 errors, 2 warnings)
-  0 errors and 1 warning potentially fixable with the `--fix` option.
-
---- test (vitest run) ---
-
- Test Files  15 passed (15)
-      Tests  101 passed (101)
-   Start at  18:00:13
-   Duration  636ms (transform 228ms, setup 0ms, collect 582ms, tests 46ms, environment 1ms, prepare 762ms)
-
---- build (next build, SKIP migrations, dummy DB) ---
-
-○  (Static)   prerendered as static content
-ƒ  (Dynamic)  server-rendered on demand
-
-RESULT tsc=0 lint=0 test=0 build=0
-PORTÃO: ✅ VERDE
-================ PORTÃO 2026-06-20 18:02:22 P1-OBS-001-client-error-beacon ================
---- typecheck (tsc --noEmit) ---
-src/lib/logger-client.ts(75,9): error TS2774: This condition will always return true since this function is always defined. Did you mean to call it instead?
---- lint (eslint) ---
-/Users/lucasaraujo/Documents/Projetos Git/Profissionaliza-Mais-Brasil/src/lib/students/plataforma-actions.ts
-  160:14  warning  'err' is defined but never used. Allowed unused caught errors must match /^_/u  @typescript-eslint/no-unused-vars
-
-✖ 2 problems (0 errors, 2 warnings)
-  0 errors and 1 warning potentially fixable with the `--fix` option.
-
---- test (vitest run) ---
-
- Test Files  15 passed (15)
-      Tests  101 passed (101)
-   Start at  18:02:35
-   Duration  639ms (transform 221ms, setup 0ms, collect 612ms, tests 38ms, environment 1ms, prepare 652ms)
-
---- build (next build, SKIP migrations, dummy DB) ---
-  [90m76 |[0m       [36mconst[0m blob = [36mnew[0m [33mBlob[0m([body], { [36mtype[0m: [32m"application/json"[0m })
-  [90m77 |[0m       [36mif[0m (navigator.sendBeacon(endpoint, blob)) [36mreturn[0m
-  [90m78 |[0m     }
-Next.js build worker exited with code: 1 and signal: null
-RESULT tsc=2 lint=0 test=0 build=1
-PORTÃO: ❌ VERMELHO
-================ PORTÃO 2026-06-20 18:03:29 P1-OBS-001-v2 ================
---- typecheck (tsc --noEmit) ---
---- lint (eslint) ---
-/Users/lucasaraujo/Documents/Projetos Git/Profissionaliza-Mais-Brasil/src/lib/students/plataforma-actions.ts
-  160:14  warning  'err' is defined but never used. Allowed unused caught errors must match /^_/u  @typescript-eslint/no-unused-vars
-
-✖ 2 problems (0 errors, 2 warnings)
-  0 errors and 1 warning potentially fixable with the `--fix` option.
-
---- test (vitest run) ---
-
- Test Files  15 passed (15)
-      Tests  101 passed (101)
-   Start at  18:03:40
-   Duration  603ms (transform 269ms, setup 0ms, collect 665ms, tests 38ms, environment 1ms, prepare 727ms)
-
---- build (next build, SKIP migrations, dummy DB) ---
-
-○  (Static)   prerendered as static content
-ƒ  (Dynamic)  server-rendered on demand
-
-RESULT tsc=0 lint=0 test=0 build=0
-PORTÃO: ✅ VERDE
-================ PORTÃO 2026-06-20 18:08:43 P0-DB-001-proof-private-bucket ================
---- typecheck (tsc --noEmit) ---
---- lint (eslint) ---
-/Users/lucasaraujo/Documents/Projetos Git/Profissionaliza-Mais-Brasil/src/lib/students/plataforma-actions.ts
-  160:14  warning  'err' is defined but never used. Allowed unused caught errors must match /^_/u  @typescript-eslint/no-unused-vars
-
-✖ 2 problems (0 errors, 2 warnings)
-  0 errors and 1 warning potentially fixable with the `--fix` option.
-
---- test (vitest run) ---
-
- Test Files  15 passed (15)
-      Tests  101 passed (101)
-   Start at  18:08:56
-   Duration  571ms (transform 235ms, setup 0ms, collect 591ms, tests 43ms, environment 1ms, prepare 628ms)
-
---- build (next build, SKIP migrations, dummy DB) ---
-
-○  (Static)   prerendered as static content
-ƒ  (Dynamic)  server-rendered on demand
-
-RESULT tsc=0 lint=0 test=0 build=0
-PORTÃO: ✅ VERDE
-================ PORTÃO 2026-06-20 18:13:13 P2-batch-1 ================
---- typecheck (tsc --noEmit) ---
---- lint (eslint) ---
-/Users/lucasaraujo/Documents/Projetos Git/Profissionaliza-Mais-Brasil/src/lib/students/plataforma-actions.ts
-  160:14  warning  'err' is defined but never used. Allowed unused caught errors must match /^_/u  @typescript-eslint/no-unused-vars
-
-✖ 2 problems (0 errors, 2 warnings)
-  0 errors and 1 warning potentially fixable with the `--fix` option.
-
---- test (vitest run) ---
-
- Test Files  18 passed (18)
-      Tests  112 passed (112)
-   Start at  18:13:24
-   Duration  650ms (transform 309ms, setup 0ms, collect 828ms, tests 50ms, environment 1ms, prepare 774ms)
-
---- build (next build, SKIP migrations, dummy DB) ---
-
-○  (Static)   prerendered as static content
-ƒ  (Dynamic)  server-rendered on demand
-
-RESULT tsc=0 lint=0 test=0 build=0
-PORTÃO: ✅ VERDE
-================ PORTÃO 2026-06-20 18:15:30 P2-COD-001-DB-005 ================
---- typecheck (tsc --noEmit) ---
---- lint (eslint) ---
-/Users/lucasaraujo/Documents/Projetos Git/Profissionaliza-Mais-Brasil/src/lib/students/plataforma-actions.ts
-  160:14  warning  'err' is defined but never used. Allowed unused caught errors must match /^_/u  @typescript-eslint/no-unused-vars
-
-✖ 2 problems (0 errors, 2 warnings)
-  0 errors and 1 warning potentially fixable with the `--fix` option.
-
---- test (vitest run) ---
-
- Test Files  19 passed (19)
-      Tests  116 passed (116)
-   Start at  18:15:44
-   Duration  756ms (transform 337ms, setup 0ms, collect 885ms, tests 50ms, environment 1ms, prepare 864ms)
-
---- build (next build, SKIP migrations, dummy DB) ---
-
-○  (Static)   prerendered as static content
-ƒ  (Dynamic)  server-rendered on demand
-
-RESULT tsc=0 lint=0 test=0 build=0
-PORTÃO: ✅ VERDE
-================ PORTÃO 2026-06-20 18:17:50 P3-cleanup-batch ================
---- typecheck (tsc --noEmit) ---
---- lint (eslint) ---
-/Users/lucasaraujo/Documents/Projetos Git/Profissionaliza-Mais-Brasil/src/lib/students/plataforma-actions.ts
-  160:14  warning  'err' is defined but never used. Allowed unused caught errors must match /^_/u  @typescript-eslint/no-unused-vars
-
-✖ 2 problems (0 errors, 2 warnings)
-  0 errors and 1 warning potentially fixable with the `--fix` option.
-
---- test (vitest run) ---
-
- Test Files  19 passed (19)
-      Tests  116 passed (116)
-   Start at  18:18:03
-   Duration  733ms (transform 266ms, setup 0ms, collect 794ms, tests 49ms, environment 1ms, prepare 784ms)
-
---- build (next build, SKIP migrations, dummy DB) ---
-
-○  (Static)   prerendered as static content
-ƒ  (Dynamic)  server-rendered on demand
-
-RESULT tsc=0 lint=0 test=0 build=0
-PORTÃO: ✅ VERDE
-================ PORTÃO 2026-06-20 18:20:51 FASE-4-FINAL-RODADA-2 ================
---- typecheck (tsc --noEmit) ---
---- lint (eslint) ---
-/Users/lucasaraujo/Documents/Projetos Git/Profissionaliza-Mais-Brasil/src/lib/students/plataforma-actions.ts
-  160:14  warning  'err' is defined but never used. Allowed unused caught errors must match /^_/u  @typescript-eslint/no-unused-vars
-
-✖ 2 problems (0 errors, 2 warnings)
-  0 errors and 1 warning potentially fixable with the `--fix` option.
-
---- test (vitest run) ---
-
- Test Files  19 passed (19)
-      Tests  116 passed (116)
-   Start at  18:21:02
-   Duration  759ms (transform 402ms, setup 0ms, collect 910ms, tests 50ms, environment 1ms, prepare 859ms)
-
---- build (next build, SKIP migrations, dummy DB) ---
-
-○  (Static)   prerendered as static content
-ƒ  (Dynamic)  server-rendered on demand
-
-RESULT tsc=0 lint=0 test=0 build=0
-PORTÃO: ✅ VERDE
-================ PORTÃO 2026-06-20 (rodada 3) SEG-003-xlsx-para-exceljs ================
---- typecheck (tsc --noEmit) --- OK (0 erros)
---- lint (eslint) --- 0 errors, 2 warnings pré-existentes (plataforma-actions.ts:160, unused eslint-disable)
---- test (vitest run) --- 19 files / 116 tests passed
---- build (next build) --- NÃO EXECUTÁVEL NESTE SANDBOX (comando `next build` negado pela
-    política do ambiente). Coberto pela coluna Build do CI (ci.yml roda `npm run build` com
-    SKIP_PENDING_MIGRATIONS=1 + DATABASE_URL dummy em todo push/PR). tsc cobre erros de tipo
-    RSC/cliente. Mudança = troca de lib em 1 client component (dynamic import) + remoção de dep.
-RESULT tsc=0 lint=0 test=0 build=CI
-PORTÃO: ✅ VERDE (build delegado ao CI)
-================ PORTÃO 2026-06-20 (rodada 3) API-003-zod-home-sections ================
---- typecheck (tsc --noEmit) --- OK (0 erros)
---- lint (eslint) --- 0 errors, 2 warnings pré-existentes
---- test (vitest run) --- 20 files / 133 tests passed (+17: sections.schema.test.ts)
---- build (next build) --- NÃO EXECUTÁVEL NESTE SANDBOX (delegado ao CI). Mudança = schemas Zod
-    de envelope em lib (sem mudança de runtime de rota); tsc cobre tipos.
-RESULT tsc=0 lint=0 test=0 build=CI
-PORTÃO: ✅ VERDE (build delegado ao CI)
-================ PORTÃO 2026-06-20 (rodada 3) SAAS-003-gate-automacao-server ================
---- typecheck (tsc --noEmit) --- OK (0 erros)
---- lint (eslint) --- 0 errors, 2 warnings pré-existentes
---- test (vitest run) --- 20 files / 133 tests passed
---- build (next build) --- NÃO EXECUTÁVEL NESTE SANDBOX (delegado ao CI). Mudança = guard 403 em
-    2 rotas (config/templates PUT) + helper isTenantAutomationEnabled; tsc cobre tipos.
-RESULT tsc=0 lint=0 test=0 build=CI
-PORTÃO: ✅ VERDE (build delegado ao CI)
-================ PORTÃO 2026-06-20 (rodada 3) SAAS-004-price-gt-0-checkout-vitrine ================
---- typecheck (tsc --noEmit) --- OK (0 erros)
---- lint (eslint) --- 0 errors, 2 warnings pré-existentes
---- test (vitest run) --- 21 files / 139 tests passed (+6: price-guard.test.ts)
---- build (next build) --- NÃO EXECUTÁVEL NESTE SANDBOX (delegado ao CI). Mudança = where price>0 +
-    guard isSellablePrice em loja/checkout; helper puro testado; tsc cobre tipos.
-RESULT tsc=0 lint=0 test=0 build=CI
-PORTÃO: ✅ VERDE (build delegado ao CI)
-================ PORTÃO 2026-06-20 (rodada 3) SAAS-005-clawback-refund-parcial ================
---- typecheck (tsc --noEmit) --- OK (0 erros)
---- lint (eslint) --- 0 errors, 2 warnings pré-existentes
---- test (vitest run) --- 22 files / 148 tests passed (+9: clawback.test.ts)
---- build (next build) --- NÃO EXECUTÁVEL NESTE SANDBOX (delegado ao CI). Mudança = freeze de
-    comissão no refund parcial + gate de saque ampliado p/ qualquer status + logAudit; tsc cobre tipos.
-RESULT tsc=0 lint=0 test=0 build=CI
-PORTÃO: ✅ VERDE (build delegado ao CI)
-================ PORTÃO 2026-06-20 (rodada 3) DB-004-unique-parcial-tenant-null ================
---- typecheck (tsc --noEmit) --- OK (0 erros)
---- lint (eslint) --- 0 errors, 2 warnings pré-existentes
---- test (vitest run) --- 22 files / 148 tests passed
---- build (next build) --- NÃO EXECUTÁVEL NESTE SANDBOX (delegado ao CI). Mudança = APENAS SQL de
-    migration aditiva/idempotente (4 índices parciais WHERE tenant_id IS NULL). NÃO rodada contra
-    DB nenhum (sem DATABASE_URL local). O runner apply-pending-migrations.mjs aplica no deploy
-    (build do CI roda com SKIP_PENDING_MIGRATIONS=1, então não toca o banco). Sem mudança de TS.
-RESULT tsc=0 lint=0 test=0 build=CI
-PORTÃO: ✅ VERDE (build delegado ao CI; migration aplicada só no deploy)
-
-================ PORTÃO 2026-06-20 (rodada 4 — hardening pós-revisão adversarial) SAAS-005-followup-clawback-frozen-no-chokepoint ================
---- typecheck (tsc --noEmit) --- OK (0 erros)
---- lint (eslint) --- 0 errors, 2 warnings pré-existentes (render-cert-samples.tsx, plataforma-actions.ts)
---- test (vitest run) --- 23 files / 152 tests passed (+4: payout.test.ts novo)
---- build (next build) --- NÃO EXECUTADO NESTE SANDBOX. Build é responsabilidade do CI/host para
-    este commit. Mudança = guard de clawback dentro da transação de markPayoutPaid (conta comissões
-    vinculadas ao payout com cancelReason começando com CLAWBACK_MARKER_PREFIX, antes do CAS, só
-    quando status != PAID; lança ReferralPayoutError code CLAWBACK_FROZEN). tsc cobre tipos; teste de
-    regressão payout.test.ts comprova: FALHA sem o fix (vaza), PASSA com o fix.
-RESULT tsc=0 lint=0 test=0 build=CI
-PORTÃO: ✅ VERDE (build delegado ao CI/host)
-
-================ PORTÃO 2026-06-20 (rodada 4 — hardening pós-revisão adversarial) DB-004-followup-migration-order-course-packages ================
---- typecheck (tsc --noEmit) --- OK (0 erros)
---- lint (eslint) --- 0 errors, 2 warnings pré-existentes
---- test (vitest run) --- 23 files / 152 tests passed
---- build (next build) --- NÃO EXECUTADO NESTE SANDBOX. Build é responsabilidade do CI/host para
-    este commit. Mudança = APENAS SQL de migration (sem TS). Sem DATABASE_URL local → migration NÃO
-    rodada contra DB nenhum. Removido o bloco course_packages_pmb_slug_key de 20260620 (a tabela só
-    existe a partir de 20260623_course_packages → em base vazia o erro era undefined_table 42P01,
-    não capturado pelo handler de unique_violation, abortando o deploy). Recriado em nova migration
-    20260624_course_packages_pmb_null_unique (ordena DEPOIS de 20260623), idempotente + guarda
-    to_regclass NOT NULL + DO/EXCEPTION unique_violation. Header de 20260620 corrigido (afirmação
-    enganosa de re-run removida; migration aplicada NUNCA re-roda). Migration 20260623 NÃO tocada.
-RESULT tsc=0 lint=0 test=0 build=CI
-PORTÃO: ✅ VERDE (build delegado ao CI/host; migration aplicada só no deploy)
