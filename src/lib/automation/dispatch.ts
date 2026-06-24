@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { contextLogger } from "@/lib/logger"
+import { swallow } from "@/lib/errors"
 import { AutomationTemplateKey } from "@prisma/client"
 import { renderTemplate } from "./templates"
 import { sendTextMessage, WhatsAppNumberNotFoundError } from "./wa-client"
@@ -220,7 +221,7 @@ export async function sendManualWhatsAppToLead(
             metadata: { manual: true, reason: "no_whatsapp" },
           },
         })
-        .catch(() => {})
+        .catch(swallow("automation.dispatch.activity_no_whatsapp"))
       return {
         ok: false,
         code: "no_whatsapp",
@@ -240,7 +241,7 @@ export async function sendManualWhatsAppToLead(
           metadata: { manual: true, reason: "engine_error" },
         },
       })
-      .catch(() => {})
+      .catch(swallow("automation.dispatch.activity_engine_error"))
     return {
       ok: false,
       code: "engine_error",

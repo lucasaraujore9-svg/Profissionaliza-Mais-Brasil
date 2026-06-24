@@ -3,6 +3,7 @@ import type { ReferralCommission } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { createNotification } from "@/lib/notifications"
 import { contextLogger } from "@/lib/logger"
+import { swallow } from "@/lib/errors"
 import { parseReferralTiers, resolveTierPercent } from "@/lib/referrals/tiers"
 import { resolveCommissionRule } from "@/lib/referrals/rules"
 import { CLAWBACK_MARKER_PREFIX, isClawbackMarked } from "@/lib/referrals/clawback"
@@ -566,7 +567,7 @@ export async function freezeCommissionForPartialRefund(
     body: `A mensalidade de ${commission.referred.name} foi estornada parcialmente. A comissão ${commission.id} (R$ ${valorFmt}, ${commission.status}) ficou CONGELADA e os saques do indicador estão BLOQUEADOS até o ajuste manual. Resolva em /admin/indicacoes/comissoes.`,
     category: "referral",
     href: "/admin/indicacoes/comissoes",
-  }).catch(() => {})
+  }).catch(swallow("referral.commission.partial_refund_notify"))
 
   return updated
 }

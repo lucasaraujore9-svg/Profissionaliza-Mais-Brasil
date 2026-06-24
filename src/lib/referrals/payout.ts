@@ -3,6 +3,7 @@ import type { ReferralPayout, ReferralPayoutMethod } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { createNotification } from "@/lib/notifications"
 import { backfillReferrerCommissions } from "@/lib/referrals/commission"
+import { swallow } from "@/lib/errors"
 import { CLAWBACK_MARKER_PREFIX } from "@/lib/referrals/clawback"
 
 const SETTINGS_ID = "default"
@@ -434,7 +435,9 @@ export async function processMonthlyPayouts(): Promise<{
     select: { id: true },
   })
   for (const r of referrers) {
-    await backfillReferrerCommissions(r.id).catch(() => {})
+    await backfillReferrerCommissions(r.id).catch(
+      swallow("referral.payout.backfill"),
+    )
   }
 
   // 1. Promove PENDING → AVAILABLE para todas que ja venceram
@@ -545,7 +548,7 @@ export async function processMonthlyPayouts(): Promise<{
         body: `Indicador ${tenantId}: R$ ${total.toFixed(2).replace(".", ",")} aguardando — resolva o clawback primeiro em /admin/indicacoes/comissoes.`,
         category: "referral",
         href: "/admin/indicacoes/comissoes",
-      }).catch(() => {})
+      }).catch(swallow("referral.payout.clawback_skip_notify"))
       continue
     }
 

@@ -18,6 +18,7 @@ import { Prisma, type CommissionRateType } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { createNotification } from "@/lib/notifications"
 import { computeAvailableAt } from "@/lib/referrals/commission"
+import { swallow } from "@/lib/errors"
 import {
   resolveBracket,
   resolveEffectivePhases,
@@ -394,7 +395,7 @@ async function computeForReferrer(
       .replace(".", ",")} (${unitCount} unidade${unitCount === 1 ? "" : "s"}). Liberacao em ${availableAt.toLocaleDateString("pt-BR")}.`,
     category: "referral",
     href: "/painel/indicacoes",
-  }).catch(() => {})
+  }).catch(swallow("referral.monthly.commission_notify"))
 
   return "created"
 }
@@ -494,5 +495,5 @@ export async function flagMonthlyCommissionForRefund(
     body: `A mensalidade de ${referred.name} (competência ${period}) foi estornada, mas a comissão por faixas já estava ${monthly.status === "PAID" ? "paga" : "liberada"} (R$ ${valorFmt}). Os próximos payouts automáticos do indicador ficam BLOQUEADOS até resolver em /admin/indicacoes/comissoes.`,
     category: "referral",
     href: "/admin/indicacoes/comissoes",
-  }).catch(() => {})
+  }).catch(swallow("referral.monthly.clawback_notify"))
 }

@@ -650,7 +650,7 @@ export async function processAsaasWebhook(
             body: `Pagamento ${payment.id} estornado parcialmente. A comissão de indicação foi CONGELADA (saques bloqueados) — revise e ajuste manualmente em /admin/indicacoes/comissoes.`,
             category: "referral",
             href: `/admin/indicacoes/comissoes`,
-          }).catch(() => {})
+          }).catch(swallow("asaas.partial_refund_freeze_notify"))
         }
 
         // Verifica se ainda há algum pagamento RECEIVED/CONFIRMED para este tenant.
