@@ -1,12 +1,16 @@
 /**
  * Parcelamento no cartao do Checkout Transparente (vendas de cursos aos alunos).
  *
- * O teto de parcelas oferecido e SEMPRE 12x. O que cada unidade configura
- * (Tenant.interestFreeInstallments / SystemSettings.pmbInterestFreeInstallments)
- * e ate quantas parcelas ela ANUNCIA como "sem juros". A verdade do valor de
- * cada parcela vem do Mercado Pago (`payer_costs` do endpoint getInstallments),
- * que reflete o financiamento configurado na conta MP — por isso somos "fieis"
- * ao MP: o que o aluno ve e exatamente o que sera cobrado.
+ * Modelo do produto: o aluno SEMPRE pode dividir em ate 12x. O que cada unidade
+ * configura (Tenant.interestFreeInstallments / SystemSettings.pmbInterestFreeInstallments)
+ * e ate quantas dessas parcelas sao SEM JUROS (a loja absorve o juros ate ali).
+ * Acima desse limite, o aluno paga o juros do cartao (emissor).
+ *
+ * Por isso sempre oferecemos 1..12. Quando o MP devolve os `payer_costs` reais
+ * (getInstallments por BIN+valor), usamos os valores dele — fonte da verdade do
+ * que sera cobrado. Quando o MP nao devolve uma quantidade (ou a consulta ainda
+ * nao rodou), sintetizamos: sem juros = valor/n; com juros = valor/n + juros do
+ * cartao (o valor exato aparece na fatura/MP).
  */
 
 /** Teto absoluto de parcelas no cartao, independente de config. */
@@ -30,8 +34,10 @@ export interface InstallmentOption {
   installmentAmount: number
   /** Valor total (== amount quando sem juros). */
   totalAmount: number
-  /** true quando o MP confirma juros 0 para esta quantidade. */
+  /** true quando nao ha juros para o aluno nesta quantidade. */
   interestFree: boolean
+  /** true quando o valor veio do MP (preciso); false = sintetizado. */
+  fromMp: boolean
   /** Rotulo pronto para exibir (BRL). */
   label: string
 }
@@ -44,35 +50,81 @@ function formatBRL(value: number): string {
 }
 
 /**
- * Normaliza os `payer_costs` do MP em opcoes exibiveis, respeitando o teto de
- * 12x. O parametro `interestFreeInstallments` e o "anuncio" comercial da unidade:
- * usamos a verdade do MP para o valor, mas so rotulamos como "sem juros" o que o
- * MP confirma como juros 0 — nunca prometemos sem juros quando o MP cobra juros.
+ * Monta SEMPRE 1..ceiling (<= 12) opcoes de parcelamento. Funde os `payer_costs`
+ * reais do MP (quando presentes) com a sintese da loja:
+ *  - n <= interestFreeInstallments  -> sem juros (valor/n), salvo se o MP indicar
+ *    juros para essa quantidade (entao usamos a verdade do MP).
+ *  - n  > interestFreeInstallments  -> com juros do cartao (valor do MP quando
+ *    houver; senao valor/n + aviso de juros).
  */
 export function buildInstallmentOptions(
   payerCosts: MpPayerCost[],
-  opts: { maxInstallments?: number },
+  opts: {
+    amount: number
+    maxInstallments?: number
+    interestFreeInstallments?: number
+  },
 ): InstallmentOption[] {
-  const ceiling = Math.min(opts.maxInstallments ?? MAX_CARD_INSTALLMENTS, MAX_CARD_INSTALLMENTS)
+  const ceiling = Math.min(
+    Math.max(1, opts.maxInstallments ?? MAX_CARD_INSTALLMENTS),
+    MAX_CARD_INSTALLMENTS,
+  )
+  const free = Math.max(1, opts.interestFreeInstallments ?? 1)
+  const amount = opts.amount
 
-  return payerCosts
-    .filter((c) => c.installments >= 1 && c.installments <= ceiling)
-    .sort((a, b) => a.installments - b.installments)
-    .map((c) => {
-      const interestFree = c.installment_rate === 0
-      const n = c.installments
-      const label =
-        n === 1
-          ? `À vista — ${formatBRL(c.total_amount)}`
-          : interestFree
-            ? `${n}x de ${formatBRL(c.installment_amount)} sem juros`
-            : `${n}x de ${formatBRL(c.installment_amount)} (total ${formatBRL(c.total_amount)})`
-      return {
+  const mpByN = new Map<number, MpPayerCost>()
+  for (const c of payerCosts) {
+    if (c.installments >= 1 && c.installments <= ceiling) {
+      mpByN.set(c.installments, c)
+    }
+  }
+
+  const options: InstallmentOption[] = []
+  for (let n = 1; n <= ceiling; n++) {
+    const mp = mpByN.get(n)
+
+    if (n === 1) {
+      const total = mp?.total_amount ?? amount
+      options.push({
+        installments: 1,
+        installmentAmount: total,
+        totalAmount: total,
+        interestFree: true,
+        fromMp: Boolean(mp),
+        label: `À vista — ${formatBRL(total)}`,
+      })
+      continue
+    }
+
+    if (mp) {
+      const interestFree = mp.installment_rate === 0
+      options.push({
         installments: n,
-        installmentAmount: c.installment_amount,
-        totalAmount: c.total_amount,
+        installmentAmount: mp.installment_amount,
+        totalAmount: mp.total_amount,
         interestFree,
-        label,
-      }
+        fromMp: true,
+        label: interestFree
+          ? `${n}x de ${formatBRL(mp.installment_amount)} sem juros`
+          : `${n}x de ${formatBRL(mp.installment_amount)} (total ${formatBRL(mp.total_amount)})`,
+      })
+      continue
+    }
+
+    // Sem dado do MP para esta quantidade: sintetiza pela politica da loja.
+    const perInstallment = amount / n
+    const interestFree = n <= free
+    options.push({
+      installments: n,
+      installmentAmount: perInstallment,
+      totalAmount: amount,
+      interestFree,
+      fromMp: false,
+      label: interestFree
+        ? `${n}x de ${formatBRL(perInstallment)} sem juros`
+        : `${n}x de ${formatBRL(perInstallment)} + juros do cartão`,
     })
+  }
+
+  return options
 }

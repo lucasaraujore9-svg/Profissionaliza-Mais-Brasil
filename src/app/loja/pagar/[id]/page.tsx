@@ -3,6 +3,7 @@ import Link from "next/link"
 import { prisma } from "@/lib/prisma"
 import { MpCheckoutForm } from "@/components/loja/mp-checkout-form"
 import { OrderSummary } from "@/components/loja/order-summary"
+import { MAX_CARD_INSTALLMENTS } from "@/lib/mercadopago/installments"
 
 export const dynamic = "force-dynamic"
 
@@ -114,13 +115,10 @@ export default async function PagarPage({ params }: PagarPageProps) {
     return <Aviso titulo="Cadastro incompleto" texto="Falta o e-mail do aluno nesta cobrança. Contate a loja." />
   }
 
+  // No cartão o aluno sempre pode dividir em até 12x (mensal = recorrência, 1x).
+  // O nº de parcelas SEM juros vem de tenant.interestFreeInstallments.
   const isMonthly = enrollment.paymentType === "MONTHLY"
-  const maxInstallments = isMonthly
-    ? 1
-    : enrollment.tenantCourse?.customParcelas ??
-      enrollment.tenantCourse?.course.parcelasOverride ??
-      enrollment.tenantCourse?.course.parcelasSugeridas ??
-      12
+  const maxInstallments = isMonthly ? 1 : MAX_CARD_INSTALLMENTS
 
   return (
     <section className="bg-[#FAFAFA] py-10 md:py-16">

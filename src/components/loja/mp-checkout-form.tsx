@@ -202,19 +202,28 @@ export function MpCheckoutForm({
   // BIN do cartão (6 primeiros dígitos) — define as parcelas/juros reais no MP.
   const cardBin = form.ccNumber.replace(/\D/g, "").slice(0, 8)
 
-  // Busca as opções de parcelamento reais no MP a partir do BIN + valor. O MP
-  // devolve os payer_costs (valor de cada parcela, com/sem juros) conforme o
-  // financiamento configurado na conta da loja — a fonte da verdade do valor.
+  // Parcelamento: o aluno sempre pode dividir em até 12x. Mostramos 1..12 de
+  // imediato (síntese pela política da loja: sem juros até o limite, com juros
+  // acima) e, quando o BIN está disponível, refinamos com os payer_costs reais
+  // do MP (valores exatos com/sem juros conforme o financiamento da conta).
   useEffect(() => {
-    if (method !== "CREDIT_CARD") return
-    if (!amount || amount <= 0 || installmentCeiling <= 1) {
+    if (method !== "CREDIT_CARD" || !amount || amount <= 0 || installmentCeiling <= 1) {
       setInstallmentOptions([])
       return
     }
-    if (cardBin.length < 6) {
-      setInstallmentOptions([])
-      return
-    }
+
+    // 1) Síntese imediata (sem depender do MP) — garante o seletor populado.
+    setInstallmentOptions(
+      buildInstallmentOptions([], {
+        amount,
+        maxInstallments: installmentCeiling,
+        interestFreeInstallments,
+      }),
+    )
+
+    if (cardBin.length < 6) return
+
+    // 2) Refino com os valores reais do MP a partir do BIN.
     let cancelled = false
     setLoadingInstallments(true)
     const handle = setTimeout(async () => {
@@ -228,15 +237,16 @@ export function MpCheckoutForm({
         if (cancelled) return
         const payerCosts = results[0]?.payer_costs ?? []
         const options = buildInstallmentOptions(payerCosts, {
+          amount,
           maxInstallments: installmentCeiling,
+          interestFreeInstallments,
         })
         setInstallmentOptions(options)
-        // Garante que a seleção continua válida após troca de cartão/valor.
         setInstallments((prev) =>
           options.some((o) => o.installments === prev) ? prev : 1,
         )
       } catch {
-        if (!cancelled) setInstallmentOptions([])
+        // Mantém a síntese já exibida — o aluno continua podendo parcelar.
       } finally {
         if (!cancelled) setLoadingInstallments(false)
       }
@@ -245,7 +255,7 @@ export function MpCheckoutForm({
       cancelled = true
       clearTimeout(handle)
     }
-  }, [method, amount, cardBin, installmentCeiling, publicKey])
+  }, [method, amount, cardBin, installmentCeiling, interestFreeInstallments, publicKey])
 
   function setField<K extends keyof FormState>(key: K, value: string) {
     setForm((p) => ({ ...p, [key]: value }))
@@ -594,38 +604,32 @@ export function MpCheckoutForm({
               <FieldText id="ccCcv" label="CCV" placeholder="123" mono inputMode="numeric" value={form.ccCcv} onChange={(v) => setField("ccCcv", v.replace(/\D/g, "").slice(0, 4))} error={fieldErrors.ccCcv} disabled={submitting} required />
             </div>
 
-            {installmentCeiling > 1 && amount && amount > 0 ? (
+            {installmentCeiling > 1 && amount && amount > 0 && installmentOptions.length > 0 ? (
               <div>
                 <Label htmlFor="cc-installments">Parcelamento</Label>
+                <select
+                  id="cc-installments"
+                  value={installments}
+                  onChange={(e) => setInstallments(Number(e.target.value))}
+                  disabled={submitting}
+                  className="mt-1.5 w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-800 focus:border-[var(--color-pmb-green)] focus:outline-none focus:ring-1 focus:ring-[var(--color-pmb-green)] disabled:opacity-60"
+                >
+                  {installmentOptions.map((opt) => (
+                    <option key={opt.installments} value={opt.installments}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
                 {loadingInstallments ? (
-                  <p className="mt-1.5 text-xs text-gray-500">
-                    Calculando parcelas…
-                  </p>
-                ) : installmentOptions.length > 0 ? (
-                  <select
-                    id="cc-installments"
-                    value={installments}
-                    onChange={(e) => setInstallments(Number(e.target.value))}
-                    disabled={submitting}
-                    className="mt-1.5 w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-800 focus:border-[var(--color-pmb-green)] focus:outline-none focus:ring-1 focus:ring-[var(--color-pmb-green)] disabled:opacity-60"
-                  >
-                    {installmentOptions.map((opt) => (
-                      <option key={opt.installments} value={opt.installments}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <p className="mt-1.5 text-xs text-gray-500">
-                    Digite o número do cartão para ver as opções de parcelamento.
-                  </p>
-                )}
-                {interestFreeInstallments > 1 && (
                   <p className="mt-1 text-[11px] text-gray-400">
-                    Esta loja oferece em até {interestFreeInstallments}x sem juros.
-                    Os valores acima são os confirmados pela bandeira do seu cartão.
+                    Atualizando os valores com a bandeira do seu cartão…
                   </p>
-                )}
+                ) : interestFreeInstallments > 1 ? (
+                  <p className="mt-1 text-[11px] text-gray-400">
+                    Em até {interestFreeInstallments}x sem juros. Acima disso, o
+                    parcelamento tem juros do seu cartão.
+                  </p>
+                ) : null}
               </div>
             ) : null}
           </div>
