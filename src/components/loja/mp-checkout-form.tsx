@@ -51,6 +51,8 @@ export interface MpCheckoutFormProps {
   maxInstallments?: number
   /** Até quantas parcelas a loja anuncia como sem juros (informativo). */
   interestFreeInstallments?: number
+  /** Endpoint que devolve os payer_costs reais do MP (por BIN+valor). */
+  installmentsPath?: string
   // Vitrine
   courseId?: string
   /** Compra de PACOTE: enviado em vez de courseId ao initPath. */
@@ -140,6 +142,7 @@ export function MpCheckoutForm({
   amount,
   maxInstallments = MAX_CARD_INSTALLMENTS,
   interestFreeInstallments = 1,
+  installmentsPath = "/api/loja/checkout/installments",
   courseId,
   packageId,
   couponCode,
@@ -223,19 +226,21 @@ export function MpCheckoutForm({
 
     if (cardBin.length < 6) return
 
-    // 2) Refino com os valores reais do MP a partir do BIN.
+    // 2) Refino com os valores reais do MP (consulta server-side com o token da
+    //    unidade) a partir do BIN. Substitui a síntese pelos payer_costs reais.
     let cancelled = false
     setLoadingInstallments(true)
     const handle = setTimeout(async () => {
       try {
-        const mp = await getMpInstance(publicKey)
-        const results = await mp.getInstallments({
-          amount: String(amount),
-          bin: cardBin.slice(0, 6),
-          paymentTypeId: "credit_card",
+        const res = await fetch(installmentsPath, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ amount, bin: cardBin.slice(0, 6) }),
         })
-        if (cancelled) return
-        const payerCosts = results[0]?.payer_costs ?? []
+        const payload = await res.json().catch(() => null)
+        if (cancelled || !res.ok) return
+        const payerCosts = payload?.data?.payerCosts ?? []
+        if (payerCosts.length === 0) return // mantém a síntese já exibida
         const options = buildInstallmentOptions(payerCosts, {
           amount,
           maxInstallments: installmentCeiling,
@@ -255,7 +260,14 @@ export function MpCheckoutForm({
       cancelled = true
       clearTimeout(handle)
     }
-  }, [method, amount, cardBin, installmentCeiling, interestFreeInstallments, publicKey])
+  }, [
+    method,
+    amount,
+    cardBin,
+    installmentCeiling,
+    interestFreeInstallments,
+    installmentsPath,
+  ])
 
   function setField<K extends keyof FormState>(key: K, value: string) {
     setForm((p) => ({ ...p, [key]: value }))

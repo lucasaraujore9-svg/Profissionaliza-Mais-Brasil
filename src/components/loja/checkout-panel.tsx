@@ -26,6 +26,8 @@ type FormConfig =
       maxInstallments?: number
       /** Parcelas sem juros anunciadas pela loja (informativo). */
       interestFreeInstallments?: number
+      /** Endpoint dos payer_costs reais (revenda vs PMB). */
+      installmentsPath?: string
       initPath?: string
       processPath?: string
       statusPath?: string
@@ -100,6 +102,7 @@ export function CheckoutPanel({
             amount={finalPrice}
             maxInstallments={form.maxInstallments}
             interestFreeInstallments={form.interestFreeInstallments}
+            installmentsPath={form.installmentsPath}
             courseId={courseId}
             packageId={packageId}
             couponCode={couponCode}

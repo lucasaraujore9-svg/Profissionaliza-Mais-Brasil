@@ -142,6 +142,44 @@ export async function getPayment(
   return request<MPPayment>("GET", `/v1/payments/${paymentId}`, accessToken)
 }
 
+/** Um payer_cost do endpoint /v1/payment_methods/installments. */
+export interface MPInstallmentPayerCost {
+  installments: number
+  installment_rate: number
+  installment_amount: number
+  total_amount: number
+  recommended_message?: string
+}
+
+interface MPInstallmentsMethod {
+  payment_method_id: string
+  payment_type_id: string
+  payer_costs: MPInstallmentPayerCost[]
+}
+
+/**
+ * Consulta as parcelas reais do cartão no MP (fonte da verdade do que será
+ * cobrado): valor de cada parcela, com/sem juros, conforme a conta da unidade.
+ * Filtra por `credit_card` e devolve os payer_costs do BIN/valor informados.
+ */
+export async function getCardInstallments(
+  accessToken: string,
+  params: { amount: number; bin: string },
+): Promise<MPInstallmentPayerCost[]> {
+  const qs = new URLSearchParams({
+    amount: String(params.amount),
+    bin: params.bin,
+    payment_type_id: "credit_card",
+  })
+  const methods = await request<MPInstallmentsMethod[]>(
+    "GET",
+    `/v1/payment_methods/installments?${qs.toString()}`,
+    accessToken,
+  )
+  const credit = methods.find((m) => m.payment_type_id === "credit_card") ?? methods[0]
+  return credit?.payer_costs ?? []
+}
+
 // ── Preapproval (Subscription) ──
 
 export async function getPreapproval(

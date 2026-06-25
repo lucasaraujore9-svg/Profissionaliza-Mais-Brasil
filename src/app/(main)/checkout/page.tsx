@@ -122,6 +122,7 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
             confirmacaoPath: "/checkout/confirmacao",
             maxInstallments: MAX_CARD_INSTALLMENTS,
             interestFreeInstallments: settings.pmbInterestFreeInstallments,
+            installmentsPath: "/api/checkout/installments",
           } as const)
         : null
       : ({ kind: "pmb", initPath: "/api/checkout/package" } as const)
@@ -296,6 +297,7 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
           maxInstallments:
             course.paymentTypeMain === "MONTHLY" ? 1 : MAX_CARD_INSTALLMENTS,
           interestFreeInstallments: settings.pmbInterestFreeInstallments,
+          installmentsPath: "/api/checkout/installments",
         } as const)
       : null
     : ({ kind: "pmb" } as const)
