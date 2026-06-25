@@ -166,17 +166,20 @@ export async function getCardInstallments(
   accessToken: string,
   params: { amount: number; bin: string },
 ): Promise<MPInstallmentPayerCost[]> {
+  // O endpoint aceita amount + bin (e opcionalmente payment_method_id/issuer).
+  // NAO existe filtro payment_type_id na query — a separacao vem na resposta
+  // (um objeto por metodo). Filtramos credit_card depois.
   const qs = new URLSearchParams({
     amount: String(params.amount),
     bin: params.bin,
-    payment_type_id: "credit_card",
   })
   const methods = await request<MPInstallmentsMethod[]>(
     "GET",
     `/v1/payment_methods/installments?${qs.toString()}`,
     accessToken,
   )
-  const credit = methods.find((m) => m.payment_type_id === "credit_card") ?? methods[0]
+  const credit =
+    methods.find((m) => m.payment_type_id === "credit_card") ?? methods[0]
   return credit?.payer_costs ?? []
 }
 

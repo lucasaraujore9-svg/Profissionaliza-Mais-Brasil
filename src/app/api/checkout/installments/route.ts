@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
-import { getCardInstallments } from "@/lib/mercadopago/client"
+import { getCardInstallments, MPApiError } from "@/lib/mercadopago/client"
 import { getPmbMpAccessTokenAsync } from "@/lib/system-settings"
 import { contextLogger } from "@/lib/logger"
 import { withRequestContext } from "@/lib/observability/with-request-context"
@@ -32,18 +32,24 @@ export const POST = withRequestContext(
 
     try {
       const token = await getPmbMpAccessTokenAsync()
-      if (!token) return NextResponse.json({ data: { payerCosts: [] } })
+      if (!token) {
+        return NextResponse.json({ data: { payerCosts: [], reason: "no_token" } })
+      }
       const payerCosts = await getCardInstallments(token, {
         amount: parsed.data.amount,
         bin: parsed.data.bin.slice(0, 6),
       })
-      return NextResponse.json({ data: { payerCosts } })
+      return NextResponse.json({
+        data: { payerCosts, reason: payerCosts.length ? "ok" : "empty" },
+      })
     } catch (error) {
       contextLogger().warn(
         { err: String(error), event: "checkout.installments.failed" },
         "falha ao consultar parcelas no MP (PMB) — checkout cai na síntese",
       )
-      return NextResponse.json({ data: { payerCosts: [] } })
+      const reason =
+        error instanceof MPApiError ? `mp_error:${error.statusCode}` : "error"
+      return NextResponse.json({ data: { payerCosts: [], reason } })
     }
   },
 )

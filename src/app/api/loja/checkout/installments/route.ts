@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { decryptTenantMpToken, getCardInstallments } from "@/lib/mercadopago/client"
+import {
+  decryptTenantMpToken,
+  getCardInstallments,
+  MPApiError,
+} from "@/lib/mercadopago/client"
 import { contextLogger } from "@/lib/logger"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 
@@ -45,7 +49,7 @@ export const POST = withRequestContext(
       select: { mpAccessToken: true },
     })
     if (!tenant?.mpAccessToken) {
-      return NextResponse.json({ data: { payerCosts: [] } })
+      return NextResponse.json({ data: { payerCosts: [], reason: "no_token" } })
     }
 
     try {
@@ -53,13 +57,17 @@ export const POST = withRequestContext(
         decryptTenantMpToken(tenant.mpAccessToken),
         { amount: parsed.data.amount, bin: parsed.data.bin.slice(0, 6) },
       )
-      return NextResponse.json({ data: { payerCosts } })
+      return NextResponse.json({
+        data: { payerCosts, reason: payerCosts.length ? "ok" : "empty" },
+      })
     } catch (error) {
       contextLogger().warn(
         { err: String(error), event: "loja.checkout.installments.failed" },
         "falha ao consultar parcelas no MP — checkout cai na síntese",
       )
-      return NextResponse.json({ data: { payerCosts: [] } })
+      const reason =
+        error instanceof MPApiError ? `mp_error:${error.statusCode}` : "error"
+      return NextResponse.json({ data: { payerCosts: [], reason } })
     }
   },
 )
