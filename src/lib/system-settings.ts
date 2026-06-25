@@ -8,8 +8,16 @@ const SETTINGS_ID = "default"
 export interface SystemSettings {
   pmbDirectSaleGateway: PaymentGateway
   pmbMpAccessTokenEnc: string | null
+  pmbInterestFreeInstallments: number
   updatedAt: Date
 }
+
+const SETTINGS_SELECT = {
+  pmbDirectSaleGateway: true,
+  pmbMpAccessTokenEnc: true,
+  pmbInterestFreeInstallments: true,
+  updatedAt: true,
+} as const
 
 // Cache in-memory de TTL curto: getSystemSettings é lido no hot-path do checkout
 // e fazia um upsert (escrita) a cada chamada. TTL curto + invalidação nas escritas
@@ -30,11 +38,7 @@ export async function getSystemSettings(): Promise<SystemSettings> {
     where: { id: SETTINGS_ID },
     update: {},
     create: { id: SETTINGS_ID },
-    select: {
-      pmbDirectSaleGateway: true,
-      pmbMpAccessTokenEnc: true,
-      updatedAt: true,
-    },
+    select: SETTINGS_SELECT,
   })
   settingsCache = { value: row, expires: Date.now() + SETTINGS_CACHE_TTL_MS }
   return row
@@ -47,11 +51,7 @@ export async function updatePmbDirectSaleGateway(
     where: { id: SETTINGS_ID },
     update: { pmbDirectSaleGateway: gateway },
     create: { id: SETTINGS_ID, pmbDirectSaleGateway: gateway },
-    select: {
-      pmbDirectSaleGateway: true,
-      pmbMpAccessTokenEnc: true,
-      updatedAt: true,
-    },
+    select: SETTINGS_SELECT,
   })
   invalidateSystemSettingsCache()
   return row
@@ -65,11 +65,21 @@ export async function updatePmbMpAccessToken(
     where: { id: SETTINGS_ID },
     update: { pmbMpAccessTokenEnc: enc },
     create: { id: SETTINGS_ID, pmbMpAccessTokenEnc: enc },
-    select: {
-      pmbDirectSaleGateway: true,
-      pmbMpAccessTokenEnc: true,
-      updatedAt: true,
-    },
+    select: SETTINGS_SELECT,
+  })
+  invalidateSystemSettingsCache()
+  return row
+}
+
+export async function updatePmbInterestFreeInstallments(
+  value: number,
+): Promise<SystemSettings> {
+  const clamped = Math.min(Math.max(1, Math.trunc(value)), 12)
+  const row = await prisma.systemSettings.upsert({
+    where: { id: SETTINGS_ID },
+    update: { pmbInterestFreeInstallments: clamped },
+    create: { id: SETTINGS_ID, pmbInterestFreeInstallments: clamped },
+    select: SETTINGS_SELECT,
   })
   invalidateSystemSettingsCache()
   return row

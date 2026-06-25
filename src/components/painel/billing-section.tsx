@@ -22,6 +22,13 @@ export function BillingSection({ data, onUpdate }: BillingSectionProps) {
   const [monthlySaving, setMonthlySaving] = useState(false)
   const [monthlyError, setMonthlyError] = useState<string | null>(null)
 
+  const [interestFree, setInterestFree] = useState(
+    data.tenant.interestFreeInstallments,
+  )
+  const [interestFreeSaving, setInterestFreeSaving] = useState(false)
+  const [interestFreeError, setInterestFreeError] = useState<string | null>(null)
+  const [interestFreeSaved, setInterestFreeSaved] = useState(false)
+
   const [connected, setConnected] = useState(data.tenant.mpConnected)
   const [webhookConfigured, setWebhookConfigured] = useState(
     data.tenant.mpWebhookConfigured,
@@ -92,6 +99,34 @@ export function BillingSection({ data, onUpdate }: BillingSectionProps) {
       setMonthlyError("Erro de rede")
     } finally {
       setMonthlySaving(false)
+    }
+  }
+
+  async function saveInterestFree(next: number) {
+    setInterestFreeSaving(true)
+    setInterestFreeError(null)
+    setInterestFreeSaved(false)
+    try {
+      const response = await fetch("/api/painel/config/parcelamento", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ interestFreeInstallments: next }),
+      })
+      const json = await response.json().catch(() => null)
+      if (!response.ok) {
+        setInterestFreeError(json?.error ?? "Erro ao salvar")
+        return
+      }
+      setInterestFree(next)
+      setInterestFreeSaved(true)
+      setTimeout(() => setInterestFreeSaved(false), 2000)
+      onUpdate({
+        tenant: { ...data.tenant, interestFreeInstallments: next },
+      })
+    } catch {
+      setInterestFreeError("Erro de rede")
+    } finally {
+      setInterestFreeSaving(false)
     }
   }
 
@@ -376,6 +411,62 @@ export function BillingSection({ data, onUpdate }: BillingSectionProps) {
         {monthlyError && (
           <p className="mt-3 text-xs text-red-600">{monthlyError}</p>
         )}
+      </div>
+
+      <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm lg:p-8">
+        <h3 className="text-sm font-semibold text-[var(--color-pmb-green-900)]">
+          Parcelamento no cartão (sem juros)
+        </h3>
+        <p className="mt-1 text-xs text-gray-600">
+          O aluno pode parcelar a compra no cartão em até{" "}
+          <strong className="text-[var(--color-pmb-green-900)]">12x</strong>.
+          Escolha em quantas dessas parcelas você assume o juros (parcelas{" "}
+          <strong>sem juros</strong> para o aluno). Acima disso, o aluno paga o
+          juros do cartão.
+        </p>
+
+        <div className="mt-5 max-w-xs">
+          <Label htmlFor="interest-free">Parcelas sem juros</Label>
+          <select
+            id="interest-free"
+            value={interestFree}
+            disabled={interestFreeSaving}
+            onChange={(e) => saveInterestFree(Number(e.target.value))}
+            className="mt-1.5 w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-800 focus:border-[var(--color-pmb-green)] focus:outline-none focus:ring-1 focus:ring-[var(--color-pmb-green)] disabled:opacity-60"
+          >
+            {Array.from({ length: 12 }, (_, i) => i + 1).map((n) => (
+              <option key={n} value={n}>
+                {n === 1 ? "Apenas à vista (sem parcelas sem juros)" : `Até ${n}x sem juros`}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="mt-3 flex items-center gap-2 text-xs">
+          {interestFreeSaving && (
+            <span className="flex items-center text-gray-500">
+              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+              Salvando…
+            </span>
+          )}
+          {interestFreeSaved && !interestFreeSaving && (
+            <span className="flex items-center text-green-700">
+              <Check className="mr-1.5 h-3.5 w-3.5" />
+              Salvo
+            </span>
+          )}
+          {interestFreeError && (
+            <span className="text-red-600">{interestFreeError}</span>
+          )}
+        </div>
+
+        <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-[11px] text-amber-800">
+          <strong>Importante:</strong> para o sem juros valer de fato, ative o
+          parcelamento sem juros correspondente na sua conta do Mercado Pago. O
+          valor exibido ao aluno no checkout é sempre o confirmado pelo Mercado
+          Pago — se a conta não tiver o sem juros configurado, o aluno verá os
+          juros do cartão mesmo dentro do limite escolhido aqui.
+        </div>
       </div>
 
       <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm lg:p-8">

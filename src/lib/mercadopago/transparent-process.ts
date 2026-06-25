@@ -2,6 +2,7 @@ import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { createPayment, createPreapproval } from "./client"
 import { fulfillFromMpPayment, type MpFulfillTenant } from "./fulfillment"
+import { MAX_CARD_INSTALLMENTS } from "./installments"
 import type { MPCreatePaymentParams } from "./types"
 
 /**
@@ -184,7 +185,12 @@ export async function processTransparentMpPayment(
   }
   if (formData.token) {
     params.token = formData.token
-    params.installments = formData.installments ?? 1
+    // Cap defensivo: o teto de parcelas e sempre 12x, independente do que o
+    // browser enviar (o valor real/juros e validado pelo MP no createPayment).
+    params.installments = Math.min(
+      Math.max(1, formData.installments ?? 1),
+      MAX_CARD_INSTALLMENTS,
+    )
     if (formData.issuer_id !== undefined) {
       params.issuer_id = String(formData.issuer_id)
     }

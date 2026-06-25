@@ -256,6 +256,14 @@ model Tenant {
   // 1 = a vista (sem parcelamento). So vale para a 1a mensalidade.
   firstPaymentMaxInstallments Int @default(1) @map("first_payment_max_installments")
 
+  // Parcelamento SEM JUROS das VENDAS DE CURSOS aos alunos (Mercado Pago). O teto
+  // de parcelas oferecido e sempre 12x (MAX_CARD_INSTALLMENTS); este campo define
+  // ate quantas parcelas a unidade anuncia como "sem juros" (1 = so a vista sem
+  // juros; acima disso, o aluno paga o juros do emissor). A verdade do valor vem
+  // do MP (payer_costs) — depende do financiamento configurado na conta MP da
+  // unidade; este campo e o "contrato comercial" exibido no checkout.
+  interestFreeInstallments Int @default(1) @map("interest_free_installments")
+
   // Integracao Mercado Pago (vendas dos cursos)
   mpAccessToken   String? @map("mp_access_token") // Criptografado AES-256
   mpPublicKey     String? @map("mp_public_key")
@@ -1514,6 +1522,9 @@ model SystemSettings {
   id                   String         @id @default("default")
   pmbDirectSaleGateway PaymentGateway @default(MP) @map("pmb_direct_sale_gateway")
   pmbMpAccessTokenEnc  String?        @map("pmb_mp_access_token_enc") @db.Text
+  // Parcelamento sem juros das vendas diretas da PMB (vitrine PMB, conta MP da
+  // PMB). Espelha Tenant.interestFreeInstallments mas para a PMB. Teto 12x.
+  pmbInterestFreeInstallments Int @default(1) @map("pmb_interest_free_installments")
   lastCatalogSyncJson  String?        @map("last_catalog_sync_json") @db.Text
 
   // Cursor incremental do delta sync do LMS (GET /api/v1/day-update?since=).

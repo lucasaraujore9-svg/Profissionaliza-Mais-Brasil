@@ -21,6 +21,11 @@ import { Button } from "@/components/ui/button"
 import { TermsAcceptance } from "@/components/loja/terms-acceptance"
 import { clientLogger } from "@/lib/logger-client"
 import { getMpInstance } from "@/lib/mercadopago/browser-sdk"
+import {
+  MAX_CARD_INSTALLMENTS,
+  buildInstallmentOptions,
+  type InstallmentOption,
+} from "@/lib/mercadopago/installments"
 
 /**
  * Checkout transparente do Mercado Pago com o MESMO layout da tela do sistema
@@ -36,6 +41,16 @@ import { getMpInstance } from "@/lib/mercadopago/browser-sdk"
  */
 export interface MpCheckoutFormProps {
   publicKey: string
+  /**
+   * Valor a cobrar (final, com cupom). Usado para consultar as parcelas reais
+   * no MP e montar o seletor de parcelamento do cartão. Quando omitido ou <= 0,
+   * o seletor não aparece e a cobrança sai à vista (1x).
+   */
+  amount?: number
+  /** Teto de parcelas oferecido (mensal = 1; à vista = 1). Default 12. */
+  maxInstallments?: number
+  /** Até quantas parcelas a loja anuncia como sem juros (informativo). */
+  interestFreeInstallments?: number
   // Vitrine
   courseId?: string
   /** Compra de PACOTE: enviado em vez de courseId ao initPath. */
@@ -122,6 +137,9 @@ function formatExpiry(v: string): string {
 
 export function MpCheckoutForm({
   publicKey,
+  amount,
+  maxInstallments = MAX_CARD_INSTALLMENTS,
+  interestFreeInstallments = 1,
   courseId,
   packageId,
   couponCode,
@@ -133,6 +151,11 @@ export function MpCheckoutForm({
   statusPath = "/api/loja/checkout/status",
   confirmacaoPath = "/loja/confirmacao",
 }: MpCheckoutFormProps) {
+  // Teto efetivo: nunca acima de 12x; mensal/à vista chega como 1.
+  const installmentCeiling = Math.min(
+    Math.max(1, maxInstallments),
+    MAX_CARD_INSTALLMENTS,
+  )
   function successUrlFor(id: string): string {
     return `${confirmacaoPath}?enrollment_id=${encodeURIComponent(id)}`
   }
@@ -154,6 +177,12 @@ export function MpCheckoutForm({
     blUf: "",
   })
   const [method, setMethod] = useState<Method>("PIX")
+  // Parcelamento do cartão: opções vindas do MP (payer_costs reais) + escolha.
+  const [installments, setInstallments] = useState(1)
+  const [installmentOptions, setInstallmentOptions] = useState<
+    InstallmentOption[]
+  >([])
+  const [loadingInstallments, setLoadingInstallments] = useState(false)
   const [status, setStatus] = useState<Status>({ kind: "idle" })
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
   const [acceptedTerms, setAcceptedTerms] = useState(false)
@@ -169,6 +198,54 @@ export function MpCheckoutForm({
       // silencioso — se falhar, o submit do cartão reporta o erro
     })
   }, [publicKey])
+
+  // BIN do cartão (6 primeiros dígitos) — define as parcelas/juros reais no MP.
+  const cardBin = form.ccNumber.replace(/\D/g, "").slice(0, 8)
+
+  // Busca as opções de parcelamento reais no MP a partir do BIN + valor. O MP
+  // devolve os payer_costs (valor de cada parcela, com/sem juros) conforme o
+  // financiamento configurado na conta da loja — a fonte da verdade do valor.
+  useEffect(() => {
+    if (method !== "CREDIT_CARD") return
+    if (!amount || amount <= 0 || installmentCeiling <= 1) {
+      setInstallmentOptions([])
+      return
+    }
+    if (cardBin.length < 6) {
+      setInstallmentOptions([])
+      return
+    }
+    let cancelled = false
+    setLoadingInstallments(true)
+    const handle = setTimeout(async () => {
+      try {
+        const mp = await getMpInstance(publicKey)
+        const results = await mp.getInstallments({
+          amount: String(amount),
+          bin: cardBin.slice(0, 6),
+          paymentTypeId: "credit_card",
+        })
+        if (cancelled) return
+        const payerCosts = results[0]?.payer_costs ?? []
+        const options = buildInstallmentOptions(payerCosts, {
+          maxInstallments: installmentCeiling,
+        })
+        setInstallmentOptions(options)
+        // Garante que a seleção continua válida após troca de cartão/valor.
+        setInstallments((prev) =>
+          options.some((o) => o.installments === prev) ? prev : 1,
+        )
+      } catch {
+        if (!cancelled) setInstallmentOptions([])
+      } finally {
+        if (!cancelled) setLoadingInstallments(false)
+      }
+    }, 350)
+    return () => {
+      cancelled = true
+      clearTimeout(handle)
+    }
+  }, [method, amount, cardBin, installmentCeiling, publicKey])
 
   function setField<K extends keyof FormState>(key: K, value: string) {
     setForm((p) => ({ ...p, [key]: value }))
@@ -325,10 +402,18 @@ export function MpCheckoutForm({
       return null
     }
 
+    // Parcelas: a escolha do aluno, limitada ao teto (12x) e ao que o MP ofertou
+    // para este cartão. Sem opções carregadas (BIN curto / valor ausente) = 1x.
+    const chosenInstallments =
+      installmentOptions.some((o) => o.installments === installments) &&
+      installments <= installmentCeiling
+        ? installments
+        : 1
+
     return {
       token,
       payment_method_id: paymentMethodId,
-      installments: 1,
+      installments: chosenInstallments,
       ...(issuerId ? { issuer_id: issuerId } : {}),
       payer: basePayer,
     }
@@ -508,6 +593,41 @@ export function MpCheckoutForm({
               <FieldText id="ccExpiry" label="Validade (MM/AA)" placeholder="12/28" mono inputMode="numeric" value={form.ccExpiry} onChange={(v) => setField("ccExpiry", formatExpiry(v))} error={fieldErrors.ccExpiry} disabled={submitting} required />
               <FieldText id="ccCcv" label="CCV" placeholder="123" mono inputMode="numeric" value={form.ccCcv} onChange={(v) => setField("ccCcv", v.replace(/\D/g, "").slice(0, 4))} error={fieldErrors.ccCcv} disabled={submitting} required />
             </div>
+
+            {installmentCeiling > 1 && amount && amount > 0 ? (
+              <div>
+                <Label htmlFor="cc-installments">Parcelamento</Label>
+                {loadingInstallments ? (
+                  <p className="mt-1.5 text-xs text-gray-500">
+                    Calculando parcelas…
+                  </p>
+                ) : installmentOptions.length > 0 ? (
+                  <select
+                    id="cc-installments"
+                    value={installments}
+                    onChange={(e) => setInstallments(Number(e.target.value))}
+                    disabled={submitting}
+                    className="mt-1.5 w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-800 focus:border-[var(--color-pmb-green)] focus:outline-none focus:ring-1 focus:ring-[var(--color-pmb-green)] disabled:opacity-60"
+                  >
+                    {installmentOptions.map((opt) => (
+                      <option key={opt.installments} value={opt.installments}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <p className="mt-1.5 text-xs text-gray-500">
+                    Digite o número do cartão para ver as opções de parcelamento.
+                  </p>
+                )}
+                {interestFreeInstallments > 1 && (
+                  <p className="mt-1 text-[11px] text-gray-400">
+                    Esta loja oferece em até {interestFreeInstallments}x sem juros.
+                    Os valores acima são os confirmados pela bandeira do seu cartão.
+                  </p>
+                )}
+              </div>
+            ) : null}
           </div>
         )}
 

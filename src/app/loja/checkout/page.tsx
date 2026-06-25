@@ -8,6 +8,7 @@ import { prisma } from "@/lib/prisma"
 import { effectivePaymentType } from "@/lib/tenant/monthly-policy"
 import { tenantCheckoutMode } from "@/lib/tenant/checkout-mode"
 import { getPackageForCheckout } from "@/lib/packages/vitrine"
+import { MAX_CARD_INSTALLMENTS } from "@/lib/mercadopago/installments"
 
 interface CheckoutPageProps {
   searchParams: Promise<{
@@ -114,6 +115,7 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
         salesGateway: true,
         asaasGatewayEnabled: true,
         asaasConnected: true,
+        interestFreeInstallments: true,
       },
     })
     const checkoutMode = tenantCheckoutMode({
@@ -134,7 +136,13 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
       checkoutMode === "ASAAS"
         ? ({ kind: "asaas", initPath: "/api/loja/checkout/package" } as const)
         : checkoutMode === "MP" && pkgMpPublicKey
-          ? ({ kind: "mp", publicKey: pkgMpPublicKey, initPath: "/api/loja/checkout/package" } as const)
+          ? ({
+              kind: "mp",
+              publicKey: pkgMpPublicKey,
+              initPath: "/api/loja/checkout/package",
+              maxInstallments: MAX_CARD_INSTALLMENTS,
+              interestFreeInstallments: tenantGateway?.interestFreeInstallments ?? 1,
+            } as const)
           : null
 
     return (
@@ -265,6 +273,7 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
       salesGateway: true,
       asaasGatewayEnabled: true,
       asaasConnected: true,
+      interestFreeInstallments: true,
     },
   })
 
@@ -307,7 +316,13 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
     checkoutMode === "ASAAS"
       ? ({ kind: "asaas" } as const)
       : checkoutMode === "MP" && courseMpPublicKey
-        ? ({ kind: "mp", publicKey: courseMpPublicKey } as const)
+        ? ({
+            kind: "mp",
+            publicKey: courseMpPublicKey,
+            // Mensal = recorrência (1 cobrança/mês); à vista parcela até 12x.
+            maxInstallments: effectiveType === "MONTHLY" ? 1 : MAX_CARD_INSTALLMENTS,
+            interestFreeInstallments: tenantGateway?.interestFreeInstallments ?? 1,
+          } as const)
         : null
 
   return (

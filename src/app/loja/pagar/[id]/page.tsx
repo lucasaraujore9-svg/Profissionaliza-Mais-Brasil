@@ -66,7 +66,13 @@ export default async function PagarPage({ params }: PagarPageProps) {
         },
       },
       student: { select: { email: true, nome: true } },
-      tenant: { select: { status: true, mpPublicKey: true } },
+      tenant: {
+        select: {
+          status: true,
+          mpPublicKey: true,
+          interestFreeInstallments: true,
+        },
+      },
       tenantCourse: {
         select: {
           customParcelas: true,
@@ -132,6 +138,11 @@ export default async function PagarPage({ params }: PagarPageProps) {
           <div>
             <MpCheckoutForm
               publicKey={enrollment.tenant.mpPublicKey}
+              amount={Number(enrollment.finalAmount)}
+              maxInstallments={maxInstallments}
+              interestFreeInstallments={
+                enrollment.tenant.interestFreeInstallments
+              }
               enrollmentId={enrollment.id}
               defaultNome={enrollment.student.nome ?? undefined}
               defaultEmail={payerEmail}

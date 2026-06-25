@@ -6,8 +6,10 @@ import {
   getSystemSettings,
   updatePmbDirectSaleGateway,
   updatePmbMpAccessToken,
+  updatePmbInterestFreeInstallments,
   getPmbMpAccessTokenAsync,
 } from "@/lib/system-settings"
+import { MAX_CARD_INSTALLMENTS } from "@/lib/mercadopago/installments"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 
 export const GET = withRequestContext(
@@ -37,6 +39,7 @@ export const GET = withRequestContext(
         appDomain: process.env.NEXT_PUBLIC_APP_DOMAIN ?? "",
         supportEmail: "atendimento@profissionalizamaisbrasil.com.br",
         pmbDirectSaleGateway: settings.pmbDirectSaleGateway,
+        pmbInterestFreeInstallments: settings.pmbInterestFreeInstallments,
       },
       integrations: {
         ea: {
@@ -69,6 +72,12 @@ export const GET = withRequestContext(
 const patchSchema = z.object({
   pmbDirectSaleGateway: z.enum(["MP", "ASAAS"]).optional(),
   pmbMpAccessToken: z.string().trim().min(1).max(500).nullable().optional(),
+  pmbInterestFreeInstallments: z
+    .number()
+    .int()
+    .min(1)
+    .max(MAX_CARD_INSTALLMENTS)
+    .optional(),
 })
 
 export const PATCH = withRequestContext(
@@ -120,6 +129,19 @@ export const PATCH = withRequestContext(
 
   if (parsed.data.pmbMpAccessToken !== undefined) {
     await updatePmbMpAccessToken(parsed.data.pmbMpAccessToken)
+  }
+
+  if (parsed.data.pmbInterestFreeInstallments !== undefined) {
+    const updated = await updatePmbInterestFreeInstallments(
+      parsed.data.pmbInterestFreeInstallments,
+    )
+    if (!parsed.data.pmbDirectSaleGateway) {
+      return NextResponse.json({
+        data: {
+          pmbInterestFreeInstallments: updated.pmbInterestFreeInstallments,
+        },
+      })
+    }
   }
 
   if (parsed.data.pmbDirectSaleGateway) {

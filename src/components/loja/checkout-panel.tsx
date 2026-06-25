@@ -22,6 +22,10 @@ type FormConfig =
   | {
       kind: "mp"
       publicKey: string
+      /** Teto de parcelas oferecido no cartão (1 = à vista/mensal). Default 12. */
+      maxInstallments?: number
+      /** Parcelas sem juros anunciadas pela loja (informativo). */
+      interestFreeInstallments?: number
       initPath?: string
       processPath?: string
       statusPath?: string
@@ -93,6 +97,9 @@ export function CheckoutPanel({
         {form.kind === "mp" && (
           <MpCheckoutForm
             publicKey={form.publicKey}
+            amount={finalPrice}
+            maxInstallments={form.maxInstallments}
+            interestFreeInstallments={form.interestFreeInstallments}
             courseId={courseId}
             packageId={packageId}
             couponCode={couponCode}

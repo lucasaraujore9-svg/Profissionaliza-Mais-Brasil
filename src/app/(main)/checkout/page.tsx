@@ -8,6 +8,7 @@ import { getSystemSettings } from "@/lib/system-settings"
 import { pmbMpPublicKey } from "@/lib/pmb-config"
 import { isPmbAppHost } from "@/lib/tenant/urls"
 import { getPackageForCheckout } from "@/lib/packages/vitrine"
+import { MAX_CARD_INSTALLMENTS } from "@/lib/mercadopago/installments"
 
 interface CheckoutPageProps {
   searchParams: Promise<{
@@ -119,6 +120,8 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
             processPath: "/api/checkout/mp/process",
             statusPath: "/api/checkout/status",
             confirmacaoPath: "/checkout/confirmacao",
+            maxInstallments: MAX_CARD_INSTALLMENTS,
+            interestFreeInstallments: settings.pmbInterestFreeInstallments,
           } as const)
         : null
       : ({ kind: "pmb", initPath: "/api/checkout/package" } as const)
@@ -289,6 +292,10 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
           processPath: "/api/checkout/mp/process",
           statusPath: "/api/checkout/status",
           confirmacaoPath: "/checkout/confirmacao",
+          // Mensal = recorrência (1 cobrança/mês); à vista parcela até 12x.
+          maxInstallments:
+            course.paymentTypeMain === "MONTHLY" ? 1 : MAX_CARD_INSTALLMENTS,
+          interestFreeInstallments: settings.pmbInterestFreeInstallments,
         } as const)
       : null
     : ({ kind: "pmb" } as const)

@@ -30,6 +30,7 @@ export interface GeneralConfigData {
   appDomain: string
   supportEmail: string
   pmbDirectSaleGateway: PaymentGatewayId
+  pmbInterestFreeInstallments: number
 }
 
 interface GeneralTabProps {
@@ -52,6 +53,38 @@ function GeneralTab({
   const [error, setError] = useState<string | null>(null)
   const [ok, setOk] = useState(false)
   const dirty = gateway !== general.pmbDirectSaleGateway
+
+  const [interestFree, setInterestFree] = useState(
+    general.pmbInterestFreeInstallments,
+  )
+  const [ifSaving, setIfSaving] = useState(false)
+  const [ifError, setIfError] = useState<string | null>(null)
+  const [ifOk, setIfOk] = useState(false)
+
+  async function saveInterestFree(next: number) {
+    setInterestFree(next)
+    setIfSaving(true)
+    setIfError(null)
+    setIfOk(false)
+    try {
+      const res = await fetch("/api/admin/config", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pmbInterestFreeInstallments: next }),
+      })
+      const body = await res.json()
+      if (!res.ok) {
+        setIfError(body.error ?? "Falha ao salvar")
+        return
+      }
+      setIfOk(true)
+      setTimeout(() => setIfOk(false), 2000)
+    } catch {
+      setIfError("Erro de rede ao salvar")
+    } finally {
+      setIfSaving(false)
+    }
+  }
 
   async function save() {
     setSaving(true)
@@ -214,6 +247,53 @@ function GeneralTab({
             </button>
           )}
         </div>
+      </div>
+
+      <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm lg:p-8">
+        <h3 className="text-sm font-semibold text-[var(--color-pmb-green-900)]">
+          Vendas diretas — parcelamento sem juros
+        </h3>
+        <p className="mt-1 text-xs text-gray-600">
+          Nas vendas diretas da PMB (vitrine PMB), o aluno parcela no cartão em
+          até <strong>12x</strong>. Defina em quantas dessas parcelas a PMB
+          assume o juros (sem juros para o aluno). O valor exibido no checkout é
+          sempre o confirmado pelo Mercado Pago.
+        </p>
+
+        <div className="mt-5 max-w-xs">
+          <Label htmlFor="pmb-interest-free">Parcelas sem juros</Label>
+          <select
+            id="pmb-interest-free"
+            value={interestFree}
+            disabled={!canEditGateway || ifSaving}
+            onChange={(e) => saveInterestFree(Number(e.target.value))}
+            className="mt-1.5 w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-800 focus:border-[var(--color-pmb-green)] focus:outline-none focus:ring-1 focus:ring-[var(--color-pmb-green)] disabled:opacity-60"
+          >
+            {Array.from({ length: 12 }, (_, i) => i + 1).map((n) => (
+              <option key={n} value={n}>
+                {n === 1
+                  ? "Apenas à vista (sem parcelas sem juros)"
+                  : `Até ${n}x sem juros`}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {ifError && (
+          <p className="mt-3 rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">
+            {ifError}
+          </p>
+        )}
+        {ifOk && (
+          <p className="mt-3 rounded-md bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
+            Parcelamento atualizado.
+          </p>
+        )}
+        {!canEditGateway && (
+          <p className="mt-3 text-[11px] text-gray-500">
+            Somente SUPER_ADMIN pode alterar este parâmetro.
+          </p>
+        )}
       </div>
     </div>
   )

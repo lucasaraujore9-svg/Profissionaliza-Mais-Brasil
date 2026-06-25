@@ -27,9 +27,29 @@ export interface MpPaymentMethod {
   issuer?: { id?: number | string }
 }
 
+/** Uma opcao de parcelamento devolvida pelo `getInstallments` do SDK. */
+export interface MpSdkPayerCost {
+  installments: number
+  installment_rate: number
+  installment_amount: number
+  total_amount: number
+  recommended_message?: string
+}
+
+export interface MpInstallmentsResult {
+  payment_method_id: string
+  payment_type_id: string
+  payer_costs: MpSdkPayerCost[]
+}
+
 export interface MercadoPagoInstance {
   createCardToken(data: MpCardTokenData): Promise<{ id: string }>
   getPaymentMethods(params: { bin: string }): Promise<{ results: MpPaymentMethod[] }>
+  getInstallments(params: {
+    amount: string
+    bin: string
+    paymentTypeId?: string
+  }): Promise<MpInstallmentsResult[]>
 }
 
 interface MercadoPagoCtor {
