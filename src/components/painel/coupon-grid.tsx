@@ -117,6 +117,7 @@ export function CouponGrid() {
         description="Crie códigos promocionais e acompanhe quem está usando."
         actions={
           <Button
+            data-tour="cupons:novo"
             className="bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)]"
             onClick={() => setModalOpen(true)}
           >
@@ -128,7 +129,7 @@ export function CouponGrid() {
 
       {/* Estatísticas */}
       {coupons.length > 0 && (
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div data-tour="cupons:resumo" className="grid gap-3 sm:grid-cols-3">
           <SummaryStat
             label="Cupons ativos"
             value={`${stats.active}`}
@@ -181,7 +182,10 @@ export function CouponGrid() {
           }
         />
       ) : (
-        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <div
+          data-tour="cupons:lista"
+          className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+        >
           {coupons.map((coupon) => (
             <CouponCard
               key={coupon.id}

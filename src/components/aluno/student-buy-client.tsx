@@ -115,7 +115,7 @@ export function StudentBuyClient() {
   return (
     <div className="space-y-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        <div className="relative flex-1">
+        <div className="relative flex-1" data-tour="aluno-comprar:busca">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
           <input
             type="text"
@@ -151,7 +151,10 @@ export function StudentBuyClient() {
           Nenhum curso encontrado.
         </p>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div
+          className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
+          data-tour="aluno-comprar:catalogo"
+        >
           {filtered.map((c) => {
             const owned = c.ownedStatus !== null
             const isMonthly = c.paymentType === "MONTHLY"
@@ -227,6 +230,7 @@ export function StudentBuyClient() {
                         type="button"
                         onClick={() => buy(c.id)}
                         disabled={buying === c.id}
+                        data-tour="aluno-comprar:comprar"
                         className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--color-pmb-green)] px-3 py-2 text-xs font-semibold text-white hover:bg-[var(--color-pmb-green-700)] disabled:opacity-50"
                       >
                         {buying === c.id ? (

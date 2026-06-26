@@ -13,7 +13,10 @@ export function PainelCatalogTabs() {
   return (
     <div>
       <Tabs value={active} onValueChange={(v) => typeof v === "string" && setActive(v as TabId)}>
-        <TabsList className="flex w-full flex-wrap justify-start gap-1 bg-[var(--color-pmb-mist,#f7faf7)] p-1">
+        <TabsList
+          data-tour="cursos:tabs"
+          className="flex w-full flex-wrap justify-start gap-1 bg-[var(--color-pmb-mist,#f7faf7)] p-1"
+        >
           <TabsTrigger
             value="cursos"
             className="data-active:bg-white data-active:text-[var(--color-pmb-green,#025918)] data-active:shadow-sm"

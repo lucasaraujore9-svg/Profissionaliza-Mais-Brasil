@@ -94,7 +94,7 @@ export default async function StudentPaymentsPage() {
         </p>
       </header>
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div data-tour="aluno-pagamentos:resumo" className="grid gap-4 sm:grid-cols-2">
         <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
           <div className="flex items-center gap-3">
             <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
@@ -127,7 +127,10 @@ export default async function StudentPaymentsPage() {
       </div>
 
       {/* Cobranças em aberto */}
-      <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+      <section
+        data-tour="aluno-pagamentos:pendentes"
+        className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm"
+      >
         <div className="flex items-center gap-2">
           <Clock className="h-4 w-4 text-amber-600" />
           <h2 className="text-sm font-semibold text-[var(--color-pmb-green-900)]">
@@ -176,7 +179,10 @@ export default async function StudentPaymentsPage() {
       </section>
 
       {/* Histórico — tabela em desktop, cards em mobile */}
-      <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+      <section
+        data-tour="aluno-pagamentos:lista"
+        className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm"
+      >
         <div className="flex items-center gap-2">
           <FileText className="h-4 w-4 text-[var(--color-pmb-green)]" />
           <h2 className="text-sm font-semibold text-[var(--color-pmb-green-900)]">

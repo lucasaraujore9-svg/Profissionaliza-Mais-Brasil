@@ -254,14 +254,17 @@ export default async function PainelIndicacoesPage() {
         }
       />
 
-      <Card className="p-6">
+      <Card data-tour="indicacoes:link" className="p-6">
         <h2 className="text-sm font-semibold text-gray-700 mb-3">
           Seu link de indicação
         </h2>
         <ReferralLinkCopy link={referralLink} code={referralCode} />
       </Card>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div
+        data-tour="indicacoes:saldo"
+        className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"
+      >
         <SummaryTile
           label="Indicados ativos"
           value={String(summary.activeReferrals)}
@@ -281,7 +284,10 @@ export default async function PainelIndicacoesPage() {
         <SummaryTile label="Total pago" value={formatMoney(summary.paid)} />
       </div>
 
-      <Card className="border-[var(--color-pmb-green-900)]/20 bg-[var(--color-pmb-green-900)]/5 p-5">
+      <Card
+        data-tour="indicacoes:pagamento"
+        className="border-[var(--color-pmb-green-900)]/20 bg-[var(--color-pmb-green-900)]/5 p-5"
+      >
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <p className="text-sm font-semibold text-[var(--color-pmb-green-900)]">
@@ -322,6 +328,7 @@ export default async function PainelIndicacoesPage() {
             Recibo das comissões pagas no mês selecionado.
           </p>
           <form
+            data-tour="indicacoes:demonstrativo"
             method="get"
             action="/api/painel/indicacoes/demonstrativo"
             className="mt-3 flex flex-wrap items-center gap-2"
@@ -444,7 +451,10 @@ export default async function PainelIndicacoesPage() {
         </div>
       )}
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div
+        data-tour="indicacoes:indicados"
+        className="flex flex-wrap items-center justify-between gap-3"
+      >
         <h2 className="text-base font-semibold text-[var(--color-pmb-green-900)]">
           Seus indicados ({referrals.length})
         </h2>

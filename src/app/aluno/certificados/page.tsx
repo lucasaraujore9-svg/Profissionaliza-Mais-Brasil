@@ -49,7 +49,10 @@ export default async function StudentCertificatesPage() {
               <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500">
                 Disponíveis ({ativos.length})
               </h2>
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <div
+                className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3"
+                data-tour="aluno-certificados:lista"
+              >
                 {ativos.map((c) => (
                   <article
                     key={c.id}
@@ -69,7 +72,10 @@ export default async function StudentCertificatesPage() {
                       </span>
                     </div>
 
-                    <div className="mt-4 rounded-md bg-gray-50 px-3 py-2 text-[11px]">
+                    <div
+                      className="mt-4 rounded-md bg-gray-50 px-3 py-2 text-[11px]"
+                      data-tour="aluno-certificados:codigo"
+                    >
                       <span className="text-gray-500">Código: </span>
                       <span className="font-mono font-semibold text-[var(--color-pmb-green-900)]">
                         {upperCert(c.code)}
@@ -85,6 +91,7 @@ export default async function StudentCertificatesPage() {
                       </Link>
                       <a
                         href={`/api/student/certificates/${c.id}/download`}
+                        data-tour="aluno-certificados:baixar"
                         className="rounded-md border border-gray-200 px-3 py-1.5 font-semibold text-gray-700 hover:bg-gray-50"
                       >
                         Baixar PDF

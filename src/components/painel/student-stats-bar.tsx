@@ -39,7 +39,10 @@ export function StudentStatsBar({ stats }: StudentStatsBarProps) {
   ]
 
   return (
-    <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 lg:grid-cols-8">
+    <div
+      data-tour="alunos:stats"
+      className="grid grid-cols-2 gap-4 sm:grid-cols-4 lg:grid-cols-8"
+    >
       {items.map((stat) => (
         <div
           key={stat.label}

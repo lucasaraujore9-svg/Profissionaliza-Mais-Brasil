@@ -101,6 +101,12 @@ export default async function AlunoLayout({
     redirect("/login")
   }
 
+  const studentRow = await prisma.student.findUnique({
+    where: { id: session.studentId },
+    select: { dismissedTours: true },
+  })
+  const dismissedTours = studentRow?.dismissedTours ?? []
+
   const cookieStore = await cookies()
   const impersonation = decodeImpersonationFlag(
     cookieStore.get(IMPERSONATION_FLAG_COOKIE)?.value,
@@ -135,7 +141,11 @@ export default async function AlunoLayout({
           targetName={impersonation.targetName}
         />
       )}
-      <StudentShell session={session} {...branding}>
+      <StudentShell
+        session={session}
+        dismissedTours={dismissedTours}
+        {...branding}
+      >
         {children}
       </StudentShell>
     </>

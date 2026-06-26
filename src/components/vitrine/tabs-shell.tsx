@@ -58,11 +58,15 @@ export function VitrineTabsShell({
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Tabs value={active} onValueChange={handleChange} className="flex-1 min-w-[260px]">
-          <TabsList className="flex w-full flex-wrap justify-start gap-1 bg-[var(--color-pmb-mist,#f7faf7)] p-1">
+          <TabsList
+            data-tour="vitrine:tabs"
+            className="flex w-full flex-wrap justify-start gap-1 bg-[var(--color-pmb-mist,#f7faf7)] p-1"
+          >
             {tabs.map((t) => (
               <TabsTrigger
                 key={t.value}
                 value={t.value}
+                data-tour={`vitrine:tab:${t.value}`}
                 className="data-active:bg-white data-active:text-[var(--color-pmb-green,#025918)] data-active:shadow-sm"
               >
                 {t.label}
@@ -76,6 +80,7 @@ export function VitrineTabsShell({
             href={previewUrl}
             target="_blank"
             rel="noreferrer"
+            data-tour="vitrine:preview"
             className="inline-flex items-center gap-1.5 rounded-md border border-[var(--color-pmb-green,#025918)]/30 bg-white px-3 py-1.5 text-sm font-medium text-[var(--color-pmb-green,#025918)] transition hover:bg-[var(--color-pmb-mist,#f7faf7)]"
           >
             <ExternalLink className="h-3.5 w-3.5" aria-hidden />

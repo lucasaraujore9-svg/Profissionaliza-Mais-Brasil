@@ -25,9 +25,9 @@ export function HeaderDashboard({
 }: HeaderDashboardProps) {
   const handleSignOut = onSignOut ?? (() => void signOutToLogin())
 
-  // Reabrir o tour é responsabilidade do OnboardingTour (que conhece o
-  // roteiro por papel). Aqui só emitimos o evento — desacopla o header da
-  // lib de tour e evita carregar o driver.js neste componente.
+  // Reabrir o tour é responsabilidade do TourRunner (que conhece o roteiro da
+  // rota atual). Aqui só emitimos o evento — desacopla o header da lib de tour
+  // e evita carregar o driver.js neste componente.
   const handleReplayTour = () =>
     window.dispatchEvent(new CustomEvent("pmb:replay-tour"))
 

@@ -41,9 +41,18 @@ export default async function PainelLayout({
     }),
     prisma.user.findUnique({
       where: { id: session.user.id as string },
-      select: { onboardingTourCompletedAt: true },
+      select: { onboardingTourCompletedAt: true, dismissedTours: true },
     }),
   ])
+
+  // Tours já dispensados. Compat: a flag legada onboardingTourCompletedAt
+  // cobria só o tour de visão geral — se preenchida, semeia "painel.overview".
+  const dismissedTours = Array.from(
+    new Set([
+      ...(currentUser?.dismissedTours ?? []),
+      ...(currentUser?.onboardingTourCompletedAt ? ["painel.overview"] : []),
+    ]),
+  )
 
   const flag = decodeImpersonationFlag(
     cookieStore.get(IMPERSONATION_FLAG_COOKIE)?.value,
@@ -65,7 +74,7 @@ export default async function PainelLayout({
         automationEnabled={tenant?.automationEnabled ?? false}
         canSellResellers={tenant?.canSellResellers ?? false}
         memberRole={session.user.memberRole ?? "owner"}
-        tourCompleted={!!currentUser?.onboardingTourCompletedAt}
+        dismissedTours={dismissedTours}
       >
         {children}
       </PainelLayoutShell>

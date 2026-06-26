@@ -101,7 +101,11 @@ export function FinanceDashboard() {
         title="Financeiro"
         description="Acompanhe suas receitas, pagamentos e exporte relatórios."
         actions={
-          <Button variant="outline" onClick={handleExport}>
+          <Button
+            data-tour="financeiro:exportar"
+            variant="outline"
+            onClick={handleExport}
+          >
             <Download className="mr-2 h-4 w-4" />
             Exportar CSV
           </Button>
@@ -126,19 +130,25 @@ export function FinanceDashboard() {
         </div>
       )}
 
-      <FinanceFilterBar
-        from={from}
-        to={to}
-        onFromChange={setFrom}
-        onToChange={setTo}
-        status={status}
-        onStatusChange={setStatus}
-        type={type}
-        onTypeChange={setType}
-      />
-      <FinanceSummaryCards metrics={metrics} loading={isInitial} />
+      <div data-tour="financeiro:periodo">
+        <FinanceFilterBar
+          from={from}
+          to={to}
+          onFromChange={setFrom}
+          onToChange={setTo}
+          status={status}
+          onStatusChange={setStatus}
+          type={type}
+          onTypeChange={setType}
+        />
+      </div>
+      <div data-tour="financeiro:resumo">
+        <FinanceSummaryCards metrics={metrics} loading={isInitial} />
+      </div>
       <FinanceBarChart week={week} month={month} loading={isInitial} />
-      <FinancePaymentTable payments={payments} loading={loading} />
+      <div data-tour="financeiro:transacoes">
+        <FinancePaymentTable payments={payments} loading={loading} />
+      </div>
     </div>
   )
 }

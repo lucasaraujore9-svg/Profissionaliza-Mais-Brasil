@@ -65,7 +65,7 @@ export default async function StudentSupportPage() {
       </header>
 
       {/* Canais rapidos */}
-      <section className="grid gap-3 sm:grid-cols-2">
+      <section data-tour="aluno-suporte:canais" className="grid gap-3 sm:grid-cols-2">
         {channels.whatsapp && (
           <a
             href={`https://wa.me/${channels.whatsapp}`}
@@ -107,7 +107,10 @@ export default async function StudentSupportPage() {
       </section>
 
       {/* Form de mensagem interna */}
-      <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+      <section
+        data-tour="aluno-suporte:novo"
+        className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm"
+      >
         <div className="flex items-center gap-2">
           <HelpCircle className="h-4 w-4 text-[var(--color-pmb-green)]" />
           <h2 className="text-sm font-semibold text-[var(--color-pmb-green-900)]">
@@ -124,7 +127,10 @@ export default async function StudentSupportPage() {
       </section>
 
       {/* FAQ leve */}
-      <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+      <section
+        data-tour="aluno-suporte:faq"
+        className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm"
+      >
         <h2 className="text-sm font-semibold text-[var(--color-pmb-green-900)]">
           Perguntas frequentes
         </h2>

@@ -188,16 +188,18 @@ export function StudentListWrapper() {
           {error}
         </div>
       )}
-      <StudentTable
-        students={sortedStudents}
-        loading={loading}
-        pendingId={pendingId}
-        sortKey={sortKey}
-        sortOrder={sortOrder}
-        onSort={handleSort}
-        onViewDetails={(id) => setViewingId(id)}
-        onToggleBlock={handleToggleBlock}
-      />
+      <div data-tour="alunos:lista">
+        <StudentTable
+          students={sortedStudents}
+          loading={loading}
+          pendingId={pendingId}
+          sortKey={sortKey}
+          sortOrder={sortOrder}
+          onSort={handleSort}
+          onViewDetails={(id) => setViewingId(id)}
+          onToggleBlock={handleToggleBlock}
+        />
+      </div>
       <StudentDetailDrawer
         open={viewingId !== null}
         studentId={viewingId}

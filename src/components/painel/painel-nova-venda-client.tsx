@@ -197,7 +197,10 @@ export function PainelNovaVendaClient({ courses }: { courses: CourseOption[] }) 
 
   return (
     <form onSubmit={submit} className="space-y-6">
-      <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+      <div
+        data-tour="vendas-nova:aluno"
+        className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm"
+      >
         <h3 className="text-sm font-bold text-[var(--color-pmb-green-900)]">
           Dados do aluno
         </h3>
@@ -285,7 +288,7 @@ export function PainelNovaVendaClient({ courses }: { courses: CourseOption[] }) 
           Curso e pagamento
         </h3>
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <div className="sm:col-span-2">
+          <div data-tour="vendas-nova:curso" className="sm:col-span-2">
             <Label htmlFor="v-curso">Curso da sua vitrine</Label>
             <Select
               value={form.tenantCourseId}
@@ -322,7 +325,7 @@ export function PainelNovaVendaClient({ courses }: { courses: CourseOption[] }) 
               </p>
             )}
           </div>
-          <div>
+          <div data-tour="vendas-nova:cupom">
             <Label htmlFor="v-cupom">Cupom (opcional)</Label>
             <Input
               id="v-cupom"
@@ -351,7 +354,10 @@ export function PainelNovaVendaClient({ courses }: { courses: CourseOption[] }) 
           </div>
         </div>
 
-        <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3">
+        <label
+          data-tour="vendas-nova:bolsista"
+          className="mt-4 flex cursor-pointer items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3"
+        >
           <input
             type="checkbox"
             checked={form.bolsista}
@@ -436,6 +442,7 @@ export function PainelNovaVendaClient({ courses }: { courses: CourseOption[] }) 
         <Button
           type="submit"
           disabled={submitting}
+          data-tour="vendas-nova:submit"
           className="bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)]"
         >
           {submitting ? (

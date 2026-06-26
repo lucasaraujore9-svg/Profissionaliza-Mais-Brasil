@@ -32,6 +32,7 @@ export default async function PainelCertificadosPage() {
         actions={
           <Link
             href="/painel/certificados/emitir"
+            data-tour="certificados:emitir"
             className="inline-flex items-center gap-2 rounded-lg bg-[var(--color-pmb-green)] px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[var(--color-pmb-green-700)]"
           >
             <Plus className="h-4 w-4" />
@@ -40,7 +41,7 @@ export default async function PainelCertificadosPage() {
         }
       />
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div data-tour="certificados:resumo" className="grid gap-4 sm:grid-cols-3">
         <SummaryCard
           icon={<Award className="h-5 w-5" />}
           label="Emitidos"
@@ -67,12 +68,14 @@ export default async function PainelCertificadosPage() {
 
       <div className="grid gap-4 lg:grid-cols-2">
         <NavCard
+          dataTour="certificados:modelo"
           href="/painel/certificados/template"
           icon={<Palette className="h-5 w-5" />}
           title="Escolher layout"
           description="Selecione entre os layouts pré-prontos. A logo do certificado é puxada automaticamente da sua escola."
         />
         <NavCard
+          dataTour="certificados:emitidos"
           href="/painel/certificados/emitidos"
           icon={<FileText className="h-5 w-5" />}
           title="Certificados emitidos"
@@ -122,15 +125,18 @@ function NavCard({
   icon,
   title,
   description,
+  dataTour,
 }: {
   href: string
   icon: React.ReactNode
   title: string
   description: string
+  dataTour?: string
 }) {
   return (
     <Link
       href={href}
+      data-tour={dataTour}
       className="group flex items-start gap-4 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm transition-all hover:border-[var(--color-pmb-green)] hover:shadow-md"
     >
       <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--color-pmb-lime-50)] text-[var(--color-pmb-green-900)] transition-colors group-hover:bg-[var(--color-pmb-green)] group-hover:text-white">

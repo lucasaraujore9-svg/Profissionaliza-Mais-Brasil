@@ -47,22 +47,26 @@ export default async function StudentProfilePage() {
         </p>
       </header>
 
-      <StudentProfileForm
-        initial={{
-          nome: student.nome,
-          email: student.email ?? "",
-          fone: student.fone ?? "",
-          cpf: student.cpf ?? "",
-          cidade: student.cidade ?? "",
-          estado: student.estado ?? "",
-          cep: student.cep ?? "",
-          rua: student.rua ?? "",
-          numero: student.numero ?? "",
-          bairro: student.bairro ?? "",
-        }}
-      />
+      <div data-tour="aluno-perfil:dados">
+        <StudentProfileForm
+          initial={{
+            nome: student.nome,
+            email: student.email ?? "",
+            fone: student.fone ?? "",
+            cpf: student.cpf ?? "",
+            cidade: student.cidade ?? "",
+            estado: student.estado ?? "",
+            cep: student.cep ?? "",
+            rua: student.rua ?? "",
+            numero: student.numero ?? "",
+            bairro: student.bairro ?? "",
+          }}
+        />
+      </div>
 
-      <StudentPasswordForm passwordSetAt={student.passwordSetAt?.toISOString() ?? null} />
+      <div data-tour="aluno-perfil:senha">
+        <StudentPasswordForm passwordSetAt={student.passwordSetAt?.toISOString() ?? null} />
+      </div>
 
       {platformCredentials && <PlatformPasswordForm />}
 

@@ -201,7 +201,10 @@ export function CourseListWrapper() {
     <>
       {/* Cards de estatísticas clicáveis (também funcionam como filtros) */}
       {courses && courses.length > 0 && (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div
+          data-tour="cursos:stats"
+          className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"
+        >
           <StatCard
             label="Total de cursos"
             value={stats.total}
@@ -238,7 +241,10 @@ export function CourseListWrapper() {
       )}
 
       {/* Toolbar de busca + dica */}
-      <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+      <div
+        data-tour="cursos:busca"
+        className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm"
+      >
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div className="relative w-full md:max-w-md">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
@@ -275,6 +281,7 @@ export function CourseListWrapper() {
               <button
                 type="button"
                 onClick={() => setBulkOpen(true)}
+                data-tour="cursos:bulk"
                 className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-pmb-green)] px-3 py-1.5 text-xs font-semibold text-[var(--color-pmb-green)] hover:bg-[var(--color-pmb-lime-50)]"
               >
                 <Table2 className="h-3.5 w-3.5" />
@@ -375,7 +382,10 @@ export function CourseListWrapper() {
           </p>
         </div>
       ) : (
-        <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+        <div
+          data-tour="cursos:lista"
+          className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm"
+        >
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h3 className="text-sm font-semibold text-[var(--color-pmb-green-900)]">
               {filtered.length}{" "}

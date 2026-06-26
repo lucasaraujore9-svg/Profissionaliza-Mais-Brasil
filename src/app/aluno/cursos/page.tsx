@@ -167,7 +167,7 @@ export default async function StudentCoursesPage({
           </Link>
         </div>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-4 sm:grid-cols-2" data-tour="aluno-cursos:lista">
           {enrollments.map((e) => {
             const capa = e.course.capaOverride ?? e.course.capaImageUrl ?? null
             const descricao =
@@ -231,7 +231,7 @@ export default async function StudentCoursesPage({
 
                   {/* Progresso (só pra cursos ativos/concluídos) */}
                   {isActive && (
-                    <div className="mt-4">
+                    <div className="mt-4" data-tour="aluno-cursos:progresso">
                       <div className="flex items-center justify-between text-xs text-gray-600">
                         <span>
                           Progresso{progressLabel ? ` · ${progressLabel}` : ""}
@@ -267,7 +267,10 @@ export default async function StudentCoursesPage({
                     </div>
                   )}
 
-                  <div className="mt-5 flex flex-1 flex-col justify-end gap-3">
+                  <div
+                    className="mt-5 flex flex-1 flex-col justify-end gap-3"
+                    data-tour="aluno-cursos:acessar"
+                  >
                     {/* CTA PRIMÁRIO destacado para a ação mais importante.
                         Curso LMS: SSO de uso único pelo nosso backend (sem
                         login/senha). Curso EA: link da plataforma legada. */}

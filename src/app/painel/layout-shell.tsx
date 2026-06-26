@@ -2,7 +2,7 @@
 
 import { SidebarPainel } from "@/components/shared/layouts/sidebar-painel"
 import { HeaderDashboard } from "@/components/shared/layouts/header-dashboard"
-import { OnboardingTour } from "@/components/painel/onboarding-tour"
+import { TourRunner } from "@/components/shared/tour/tour-runner"
 
 type MemberRole = "owner" | "consultant" | null
 
@@ -15,7 +15,8 @@ export interface PainelLayoutShellProps {
   automationEnabled?: boolean
   canSellResellers?: boolean
   memberRole?: MemberRole
-  tourCompleted?: boolean
+  /** Ids de tours guiados já dispensados por este usuário. */
+  dismissedTours?: string[]
 }
 
 export function PainelLayoutShell({
@@ -27,7 +28,7 @@ export function PainelLayoutShell({
   automationEnabled = false,
   canSellResellers = false,
   memberRole = "owner",
-  tourCompleted = false,
+  dismissedTours = [],
 }: PainelLayoutShellProps) {
   return (
     <div className="flex h-screen overflow-hidden">
@@ -59,7 +60,11 @@ export function PainelLayoutShell({
           {children}
         </main>
       </div>
-      <OnboardingTour memberRole={memberRole} completed={tourCompleted} />
+      <TourRunner
+        area="painel"
+        memberRole={memberRole}
+        dismissed={dismissedTours}
+      />
     </div>
   )
 }

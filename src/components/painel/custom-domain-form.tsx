@@ -99,7 +99,10 @@ export function CustomDomainForm({
   }
 
   return (
-    <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+    <div
+      data-tour="dominio:custom"
+      className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm"
+    >
       <h3 className="text-sm font-semibold text-[var(--color-pmb-green-900)]">
         Domínio personalizado
       </h3>

@@ -51,6 +51,7 @@ export default async function PainelVendasPage() {
         actions={
           <Link
             href="/painel/vendas/nova"
+            data-tour="vendas:nova"
             className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-pmb-green)] px-4 py-2 text-xs font-bold text-white hover:bg-[var(--color-pmb-green-700)]"
           >
             <Plus className="h-3.5 w-3.5" />
@@ -75,7 +76,10 @@ export default async function PainelVendasPage() {
           }
         />
       ) : (
-        <div className="rounded-2xl border border-gray-200 bg-white shadow-sm">
+        <div
+          data-tour="vendas:lista"
+          className="rounded-2xl border border-gray-200 bg-white shadow-sm"
+        >
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -83,8 +87,8 @@ export default async function PainelVendasPage() {
                   <th className="px-4 py-2.5">Aluno</th>
                   <th className="px-4 py-2.5">Curso</th>
                   <th className="px-4 py-2.5">Valor</th>
-                  <th className="px-4 py-2.5">Status</th>
-                  <th className="px-4 py-2.5">Link de pagamento</th>
+                  <th data-tour="vendas:status" className="px-4 py-2.5">Status</th>
+                  <th data-tour="vendas:link" className="px-4 py-2.5">Link de pagamento</th>
                   <th className="px-4 py-2.5">Vendido por</th>
                   <th className="px-4 py-2.5">Data</th>
                 </tr>

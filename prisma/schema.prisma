@@ -172,7 +172,14 @@ model User {
   // Tutorial guiado de primeiro acesso (painel revendedor/consultor).
   // NULL = ainda não concluiu; data = concluiu/pulou. Roteiro escolhido
   // por TenantMember.role (owner vs consultant) em runtime.
+  // LEGADO: cobria só o tour de visão geral (sidebar). Mantido para
+  // compatibilidade — se preenchido, semeia "painel.overview" em dismissedTours.
   onboardingTourCompletedAt DateTime? @map("onboarding_tour_completed_at")
+
+  // Tours guiados (driver.js) já vistos/dispensados por este usuário. Cada
+  // página/função tem um tour com id estável (ex.: "painel.cursos"); o id entra
+  // aqui quando o tour é fechado, para não auto-reabrir. Ver src/lib/tours/.
+  dismissedTours String[] @default([]) @map("dismissed_tours")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -873,6 +880,10 @@ model Student {
   resetToken        String?   @unique @map("reset_token")
   resetTokenExpires DateTime? @map("reset_token_expires")
   lastLoginAt       DateTime? @map("last_login_at")
+
+  // Tours guiados (driver.js) da área do aluno já vistos/dispensados. Mesmo
+  // mecanismo do User.dismissedTours, mas para a sessão de aluno. Ver src/lib/tours/.
+  dismissedTours String[] @default([]) @map("dismissed_tours")
 
   // Relacoes
   enrollments     Enrollment[]

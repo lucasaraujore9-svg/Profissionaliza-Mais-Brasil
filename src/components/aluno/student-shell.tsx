@@ -19,6 +19,7 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { NotificationBell } from "@/components/shared/notification-bell"
+import { TourRunner } from "@/components/shared/tour/tour-runner"
 
 interface SessionShape {
   studentId: string
@@ -110,6 +111,7 @@ function SidebarContent({
               key={item.href}
               href={item.href}
               onClick={onNavigate}
+              data-tour={`nav:${item.href}`}
               className={cn(
                 "flex items-center gap-3 rounded-lg px-4 py-3 text-sm font-medium transition-colors",
                 isActive
@@ -168,6 +170,8 @@ interface StudentShellProps {
   storeName?: string
   /** Logo da loja. Cai pra logo PMB padrão se ausente. */
   logoUrl?: string
+  /** Ids de tours guiados já dispensados por este aluno. */
+  dismissedTours?: string[]
 }
 
 export function StudentShell({
@@ -177,6 +181,7 @@ export function StudentShell({
   brandAccent,
   storeName,
   logoUrl,
+  dismissedTours = [],
 }: StudentShellProps) {
   const pathname = usePathname()
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -248,10 +253,26 @@ export function StudentShell({
           >
             <Menu className="h-5 w-5" />
           </button>
-          <NotificationBell />
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() =>
+                window.dispatchEvent(new CustomEvent("pmb:replay-tour"))
+              }
+              data-tour="tour-help"
+              aria-label="Refazer tutorial"
+              title="Refazer tutorial"
+              className="hidden h-8 w-8 items-center justify-center rounded-lg text-gray-600 hover:bg-gray-100 lg:inline-flex"
+            >
+              <HelpCircle className="h-5 w-5" />
+            </button>
+            <NotificationBell />
+          </div>
         </header>
         <div className="mx-auto max-w-5xl p-4 sm:p-6 lg:p-10">{children}</div>
       </main>
+
+      <TourRunner area="aluno" dismissed={dismissedTours} />
     </div>
   )
 }
