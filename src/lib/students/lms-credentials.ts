@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma"
 import { decrypt } from "@/lib/crypto"
 import { contextLogger } from "@/lib/logger"
 import { normalizeLmsPublicUrl } from "@/lib/lms/urls"
+import { getLmsStudent, isLmsConfigured } from "@/lib/lms"
 
 export interface LmsEnrollmentCredentials {
   enrollmentId: string
@@ -40,7 +41,7 @@ export async function getLmsEnrollmentCredentials(
     where: {
       studentId,
       status: { in: ["ACTIVE", "COMPLETED"] },
-      lmsLogin: { not: null },
+      course: { provider: "LMS" },
     },
     select: {
       id: true,
@@ -50,12 +51,12 @@ export async function getLmsEnrollmentCredentials(
       lmsLogin: true,
       lmsSenha: true,
       lmsPortalUrl: true,
-      course: { select: { nome: true } },
+      course: { select: { nome: true, lmsCourseId: true } },
     },
     orderBy: { createdAt: "desc" },
   })
 
-  return enrollments.map((e) => {
+  const credentials = enrollments.map((e) => {
     let senha: string | null = null
     if (e.lmsSenha) {
       try {
@@ -78,11 +79,47 @@ export async function getLmsEnrollmentCredentials(
       enrollmentId: e.id,
       courseId: e.courseId,
       courseNome: e.course.nome,
+      lmsCourseId: e.course.lmsCourseId,
       origin: e.lmsOrigin,
       playback: e.lmsPlayback,
-      login: e.lmsLogin as string, // garantido pelo filtro lmsLogin != null
+      login: e.lmsLogin,
       senha,
       portalUrl: normalizeLmsPublicUrl(e.lmsPortalUrl),
     }
   })
+
+  if (
+    credentials.some((c) => !c.login || !c.senha) &&
+    isLmsConfigured()
+  ) {
+    try {
+      const profile = await getLmsStudent(studentId)
+      const accessByCourse = new Map(
+        profile.courses
+          .filter((course) => course.access)
+          .map((course) => [course.courseId, course.access!]),
+      )
+
+      for (const c of credentials) {
+        const access = c.lmsCourseId ? accessByCourse.get(c.lmsCourseId) : undefined
+        if (!access) continue
+
+        c.login = c.login || access.login
+        c.senha = c.senha || access.password
+        c.portalUrl = c.portalUrl || normalizeLmsPublicUrl(access.portalUrl)
+      }
+    } catch (err) {
+      contextLogger().warn(
+        { err, event: "aluno.lms_credentials.live_fetch_failed", studentId },
+        "falha ao reler credenciais do LMS — exibindo apenas credenciais locais",
+      )
+    }
+  }
+
+  return credentials
+    .filter((c) => c.login)
+    .map(({ lmsCourseId: _lmsCourseId, ...c }) => ({
+      ...c,
+      login: c.login as string,
+    }))
 }

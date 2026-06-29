@@ -16,6 +16,8 @@ import {
   ExternalLink,
   GraduationCap,
   HelpCircle,
+  MonitorPlay,
+  ShieldCheck,
   ShoppingBag,
 } from "lucide-react"
 
@@ -69,6 +71,7 @@ export default async function StudentDashboardPage() {
   const pendingEnrollments = enrollments.filter((e) => e.status === "PENDING")
   const totalPaid = payments.reduce((sum, p) => sum + Number(p.amount), 0)
   const hasNoEnrollments = enrollments.length === 0
+  const hasPlatformAccess = Boolean(platformCredentials) || lmsCredentials.length > 0
   const continueEnrollment = activeEnrollments[0] ?? null
 
   // URL da plataforma de aulas (env EA_STUDENT_LOGIN_URL com fallback playcurso).
@@ -131,26 +134,103 @@ export default async function StudentDashboardPage() {
         </a>
       )}
 
-      {/* Credenciais da plataforma de aulas — só aparece com matrícula paga */}
-      {platformCredentials && (
-        <PlatformCredentialsCard
-          login={platformCredentials.login}
-          senha={platformCredentials.senha}
-          loginUrl={plataformaLoginUrl}
-        />
-      )}
+      {hasPlatformAccess && (
+        <section className="space-y-4">
+          <div>
+            <h2 className="text-lg font-semibold text-[var(--color-pmb-green-900)]">
+              Suas 2 plataformas
+            </h2>
+            <p className="mt-1 text-sm text-gray-600">
+              A área do aluno organiza sua vida acadêmica; as aulas ficam na
+              plataforma indicada em cada curso.
+            </p>
+          </div>
 
-      {/* Credenciais do LMS, uma por curso (próprio do LMS ou parceiro). A lista
-          já vem filtrada por matrícula paga e só com credencial gravada. */}
-      {lmsCredentials.map((c) => (
-        <PlatformCredentialsCard
-          key={c.enrollmentId}
-          courseName={c.courseNome}
-          login={c.login}
-          senha={c.senha}
-          loginUrl={c.portalUrl}
-        />
-      ))}
+          <div className="grid gap-4 lg:grid-cols-2">
+            <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+              <div className="flex items-center gap-3">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--color-pmb-lime-50)] text-[var(--color-pmb-green)]">
+                  <ShieldCheck className="h-5 w-5" />
+                </span>
+                <div>
+                  <p className="text-[11px] font-bold uppercase tracking-wide text-gray-500">
+                    Plataforma 1
+                  </p>
+                  <h3 className="font-semibold text-[var(--color-pmb-green-900)]">
+                    Área do aluno PMB
+                  </h3>
+                </div>
+              </div>
+              <p className="mt-3 text-sm text-gray-600">
+                Matrículas, pagamentos, progresso, suporte e certificados ficam
+                nesta área.
+              </p>
+              <Link
+                href="/aluno/cursos"
+                className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-[var(--color-pmb-green)] hover:underline"
+              >
+                Ver meus cursos
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+            </div>
+
+            <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+              <div className="flex items-center gap-3">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-700">
+                  <MonitorPlay className="h-5 w-5" />
+                </span>
+                <div>
+                  <p className="text-[11px] font-bold uppercase tracking-wide text-gray-500">
+                    Plataforma 2
+                  </p>
+                  <h3 className="font-semibold text-[var(--color-pmb-green-900)]">
+                    Plataforma de aulas
+                  </h3>
+                </div>
+              </div>
+              <p className="mt-3 text-sm text-gray-600">
+                Cada curso informa abaixo se usa Escola Avançada, LMS próprio
+                ou portal parceiro, com usuário e senha correspondentes.
+              </p>
+            </div>
+          </div>
+
+          <div className="grid gap-4 xl:grid-cols-2">
+            {platformCredentials && (
+              <PlatformCredentialsCard
+                platformName="Escola Avançada"
+                providerLabel="Aulas EA"
+                description="Use estas credenciais para entrar nos cursos atendidos pela Escola Avançada."
+                actionLabel="Acessar EA"
+                login={platformCredentials.login}
+                senha={platformCredentials.senha}
+                loginUrl={plataformaLoginUrl}
+              />
+            )}
+
+            {lmsCredentials.map((c) => {
+              const isOwnLms = c.origin === "own" || c.playback === "local"
+              return (
+                <PlatformCredentialsCard
+                  key={c.enrollmentId}
+                  platformName={isOwnLms ? "LMS próprio" : "Portal parceiro"}
+                  providerLabel={isOwnLms ? "Aulas LMS próprio" : "Aulas LMS parceiro"}
+                  courseName={c.courseNome}
+                  description={
+                    isOwnLms
+                      ? "Use estas credenciais para entrar no LMS próprio. O botão também libera o acesso por SSO."
+                      : "Use estas credenciais no portal parceiro indicado para este curso."
+                  }
+                  actionLabel={isOwnLms ? "Acessar LMS" : "Acessar portal"}
+                  login={c.login}
+                  senha={c.senha}
+                  loginUrl={c.portalUrl ?? `/api/aluno/curso/${c.enrollmentId}/acessar`}
+                />
+              )
+            })}
+          </div>
+        </section>
+      )}
 
       {/* Empty state quando aluno ainda não tem cursos */}
       {hasNoEnrollments && (
