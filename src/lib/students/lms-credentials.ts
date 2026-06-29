@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { decrypt } from "@/lib/crypto"
 import { contextLogger } from "@/lib/logger"
+import { normalizeLmsPublicUrl } from "@/lib/lms/urls"
 
 export interface LmsEnrollmentCredentials {
   enrollmentId: string
@@ -81,7 +82,7 @@ export async function getLmsEnrollmentCredentials(
       playback: e.lmsPlayback,
       login: e.lmsLogin as string, // garantido pelo filtro lmsLogin != null
       senha,
-      portalUrl: e.lmsPortalUrl,
+      portalUrl: normalizeLmsPublicUrl(e.lmsPortalUrl),
     }
   })
 }

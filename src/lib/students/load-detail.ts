@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { decrypt } from "@/lib/crypto"
 import { contextLogger } from "@/lib/logger"
+import { normalizeLmsPublicUrl } from "@/lib/lms/urls"
 import type { StudentData } from "@/components/shared/student-management/types"
 import {
   deriveStudentDisplayStatus,
@@ -101,7 +102,7 @@ export async function loadStudentDetail(args: {
         playback: e.lmsPlayback,
         login: e.lmsLogin as string,
         senha,
-        portalUrl: e.lmsPortalUrl,
+        portalUrl: normalizeLmsPublicUrl(e.lmsPortalUrl),
       }
     })
 

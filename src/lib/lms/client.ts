@@ -13,6 +13,7 @@ import type {
   LmsTenantBrandingRequest,
 } from "./types"
 import { contextLogger } from "@/lib/logger"
+import { normalizeLmsPublicUrl } from "./urls"
 
 const MAX_RETRIES = 3
 const INITIAL_BACKOFF_MS = 500
@@ -147,7 +148,15 @@ export async function createLmsEnrollment(
     "/enrollments",
     { body, idempotencyKey },
   )
-  return res.data
+  return {
+    ...res.data,
+    partnerAccess: res.data.partnerAccess
+      ? {
+          ...res.data.partnerAccess,
+          portalUrl: normalizeLmsPublicUrl(res.data.partnerAccess.portalUrl) ?? "",
+        }
+      : res.data.partnerAccess,
+  }
 }
 
 /** Revoga o acesso a UM curso (idempotente no LMS). */
@@ -178,7 +187,18 @@ export async function getLmsStudent(studentRef: string): Promise<LmsStudentProfi
     "GET",
     `/students/${encodeURIComponent(studentRef)}`,
   )
-  return res.data
+  return {
+    ...res.data,
+    courses: res.data.courses.map((course) => ({
+      ...course,
+      access: course.access
+        ? {
+            ...course.access,
+            portalUrl: normalizeLmsPublicUrl(course.access.portalUrl) ?? "",
+          }
+        : course.access,
+    })),
+  }
 }
 
 /**
@@ -188,7 +208,8 @@ export async function getLmsStudent(studentRef: string): Promise<LmsStudentProfi
 export async function createLmsSsoToken(
   body: LmsSsoTokenRequest,
 ): Promise<LmsSsoTokenResponse> {
-  return lmsRequest<LmsSsoTokenResponse>("POST", "/sso/token", { body })
+  const res = await lmsRequest<LmsSsoTokenResponse>("POST", "/sso/token", { body })
+  return { ...res, url: normalizeLmsPublicUrl(res.url) ?? res.url }
 }
 
 // ══════════════════════════════════════════════

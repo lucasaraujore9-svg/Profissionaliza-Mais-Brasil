@@ -38,6 +38,13 @@ function requiredInProd<T extends z.ZodTypeAny>(schema: T) {
   return isProd ? schema : schema.optional()
 }
 
+const optionalUrl = () =>
+  z
+    .string()
+    .optional()
+    .transform((v) => (v && v.length > 0 ? v : undefined))
+    .pipe(z.string().url().optional())
+
 const envSchema = z.object({
   // ── App / domains ────────────────────────────────────────────────────────
   NEXT_PUBLIC_APP_URL: z.string().url().default("https://profissionalizamaisbrasil.com.br"),
@@ -104,7 +111,7 @@ const envSchema = z.object({
   // LMS (2ª fornecedora — lms.bmbr.com.br). Opcionais: a feature pode estar
   // desligada. Quando ligada, faltar a chave quebraria o provisionamento em
   // runtime — assertEnv() emite warning não-fatal em prod (COD-001).
-  LMS_API_URL: z.string().url().optional(),
+  LMS_API_URL: optionalUrl(),
   LMS_API_KEY: z.string().optional(),
 
   // Vercel (gerencia DNS de custom domains dos revendedores)
@@ -209,12 +216,12 @@ export function assertEnv(): void {
         "[env] AUTH_SECRET (ou NEXTAUTH_SECRET) é obrigatório em produção. Gere com: openssl rand -hex 32",
       )
     }
-    if (!cached.LMS_API_URL || !cached.LMS_API_KEY) {
+    if (!cached.LMS_API_KEY) {
       // eslint-disable-next-line no-console
       console.warn(JSON.stringify({
         level: "warn",
         event: "env.lms_missing",
-        msg: "LMS_API_URL/LMS_API_KEY ausentes em produção — provisionamento/sync de cursos LMS falhará em runtime. Configure se a fornecedora LMS estiver ativa.",
+        msg: "LMS_API_KEY ausente em produção — provisionamento/sync/SSO de cursos LMS falhará em runtime. Configure se a fornecedora LMS estiver ativa.",
         time: new Date().toISOString(),
       }))
     }

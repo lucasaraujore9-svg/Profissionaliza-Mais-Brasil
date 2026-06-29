@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { requireStudentSession } from "@/lib/auth/student-session"
-import { createLmsSsoToken } from "@/lib/lms"
+import { createLmsSsoToken, normalizeLmsPublicUrl } from "@/lib/lms"
 import { contextLogger } from "@/lib/logger"
 
 /**
@@ -54,8 +54,9 @@ export async function GET(
   // credenciais exibidas na area do aluno — nao geramos SSO do LMS. portalUrl
   // vem do banco (nunca do client).
   if (enrollment.lmsPlayback === "redirect") {
-    if (enrollment.lmsPortalUrl) {
-      return NextResponse.redirect(enrollment.lmsPortalUrl)
+    const portalUrl = normalizeLmsPublicUrl(enrollment.lmsPortalUrl)
+    if (portalUrl) {
+      return NextResponse.redirect(portalUrl)
     }
     return errorRedirect("parceiro")
   }

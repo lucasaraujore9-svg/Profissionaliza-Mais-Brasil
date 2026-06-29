@@ -6,17 +6,18 @@
  * proprio uma camada que provisiona nos parceiros por baixo (PMB -> LMS -> EA).
  */
 import { env } from "@/lib/env"
+import { lmsPublicBaseUrl } from "./urls"
 
 export function getLmsConfig(): { url: string; apiKey: string } {
-  const url = env.LMS_API_URL
+  const url = lmsPublicBaseUrl()
   const apiKey = env.LMS_API_KEY
-  if (!url || !apiKey) {
-    throw new Error("LMS_API_URL and LMS_API_KEY environment variables are required")
+  if (!apiKey) {
+    throw new Error("LMS_API_KEY environment variable is required")
   }
   return { url: url.replace(/\/$/, ""), apiKey }
 }
 
 /** True se as credenciais do LMS estao configuradas (sem lancar). */
 export function isLmsConfigured(): boolean {
-  return Boolean(env.LMS_API_URL && env.LMS_API_KEY)
+  return Boolean(env.LMS_API_KEY)
 }
