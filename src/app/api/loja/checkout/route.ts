@@ -154,7 +154,15 @@ export const POST = withRequestContext(
         // também no caminho de receita, não só nas listagens/detalhe da vitrine.
         // Um TenantCourse com isVisible=true mas price=0 (estado inconsistente
         // do admin, nunca exibido na vitrine) não pode gerar enrollment R$0.
-        where: { id: data.courseId, tenantId, isVisible: true, price: { gt: 0 } },
+        where: {
+          id: data.courseId,
+          tenantId,
+          isVisible: true,
+          price: { gt: 0 },
+          // Curso desativado/removido na origem (EA/LMS) fica status="INATIVO":
+          // some das vitrines e tambem nao pode ser comprado via POST direto.
+          course: { status: "ATIVO" },
+        },
         include: {
           course: {
             select: {

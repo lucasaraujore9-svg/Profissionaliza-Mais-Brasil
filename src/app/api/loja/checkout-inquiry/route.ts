@@ -110,7 +110,13 @@ export const POST = withRequestContext(
     // Resolve o curso de interesse (TenantCourse → Course) para o snapshot do
     // lead e o nome no e-mail. O lead referencia o Course global por estabilidade.
     const tenantCourse = await prisma.tenantCourse.findFirst({
-      where: { id: data.courseId, tenantId: tenant.id },
+      // So gera lead para curso exibivel: visivel na loja E ATIVO na origem.
+      where: {
+        id: data.courseId,
+        tenantId: tenant.id,
+        isVisible: true,
+        course: { status: "ATIVO" },
+      },
       select: { courseId: true, course: { select: { nome: true } } },
     })
     if (!tenantCourse) {

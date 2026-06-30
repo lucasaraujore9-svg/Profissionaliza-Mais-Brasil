@@ -55,7 +55,8 @@ export const POST = withRequestContext(
 
   try {
     const tenantCourse = await prisma.tenantCourse.findFirst({
-      where: { id: courseId, tenantId, isVisible: true },
+      // course.status="ATIVO": curso desativado na origem (EA/LMS) nao valida cupom.
+      where: { id: courseId, tenantId, isVisible: true, course: { status: "ATIVO" } },
       select: { id: true, price: true },
     })
 

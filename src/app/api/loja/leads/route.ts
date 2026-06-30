@@ -101,8 +101,10 @@ export const POST = withRequestContext(
       )
     }
 
-    const course = await prisma.course.findUnique({
-      where: { slug: data.courseSlug },
+    // findFirst (nao findUnique) para poder filtrar por status: curso desativado
+    // na origem (EA/LMS) nao gera lead.
+    const course = await prisma.course.findFirst({
+      where: { slug: data.courseSlug, status: "ATIVO" },
       select: { id: true, nome: true },
     })
 
