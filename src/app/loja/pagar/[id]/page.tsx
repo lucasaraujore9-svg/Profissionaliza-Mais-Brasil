@@ -3,7 +3,10 @@ import Link from "next/link"
 import { prisma } from "@/lib/prisma"
 import { MpCheckoutForm } from "@/components/loja/mp-checkout-form"
 import { OrderSummary } from "@/components/loja/order-summary"
-import { MAX_CARD_INSTALLMENTS } from "@/lib/mercadopago/installments"
+import {
+  MAX_CARD_INSTALLMENTS,
+  displayInterestFreeInstallments,
+} from "@/lib/mercadopago/installments"
 
 export const dynamic = "force-dynamic"
 
@@ -163,7 +166,13 @@ export default async function PagarPage({ params }: PagarPageProps) {
               discountAmount={Number(enrollment.discountAmount)}
               finalPrice={Number(enrollment.finalAmount)}
               couponCode={null}
-              parcelasSugeridas={maxInstallments}
+              parcelasSugeridas={
+                isMonthly
+                  ? null
+                  : displayInterestFreeInstallments(
+                      enrollment.tenant.interestFreeInstallments,
+                    )
+              }
               paymentType={isMonthly ? "MONTHLY" : "ONE_TIME"}
               monthlyMonths={enrollment.installmentsTotal ?? maxInstallments}
             />

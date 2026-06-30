@@ -4,6 +4,8 @@ import { prisma } from "@/lib/prisma"
 import { isPmbAppHost } from "@/lib/tenant/urls"
 import { OrderSummary } from "@/components/loja/order-summary"
 import { PmbCheckoutForm } from "@/components/loja/pmb-checkout-form"
+import { getSystemSettings } from "@/lib/system-settings"
+import { displayInterestFreeInstallments } from "@/lib/mercadopago/installments"
 
 export const dynamic = "force-dynamic"
 
@@ -94,6 +96,7 @@ export default async function PagarPmbPage({ params }: PagarPmbPageProps) {
   }
 
   const isMonthly = enrollment.paymentType === "MONTHLY"
+  const settings = await getSystemSettings()
 
   return (
     <section className="bg-[#FAFAFA] py-10 md:py-16">
@@ -133,7 +136,13 @@ export default async function PagarPmbPage({ params }: PagarPmbPageProps) {
               discountAmount={Number(enrollment.discountAmount)}
               finalPrice={Number(enrollment.finalAmount)}
               couponCode={null}
-              parcelasSugeridas={enrollment.course.parcelasSugeridas}
+              parcelasSugeridas={
+                isMonthly
+                  ? null
+                  : displayInterestFreeInstallments(
+                      settings.pmbInterestFreeInstallments,
+                    )
+              }
               paymentType={isMonthly ? "MONTHLY" : "ONE_TIME"}
               monthlyMonths={enrollment.installmentsTotal ?? undefined}
             />

@@ -8,7 +8,10 @@ import { prisma } from "@/lib/prisma"
 import { effectivePaymentType } from "@/lib/tenant/monthly-policy"
 import { tenantCheckoutMode } from "@/lib/tenant/checkout-mode"
 import { getPackageForCheckout } from "@/lib/packages/vitrine"
-import { MAX_CARD_INSTALLMENTS } from "@/lib/mercadopago/installments"
+import {
+  MAX_CARD_INSTALLMENTS,
+  displayInterestFreeInstallments,
+} from "@/lib/mercadopago/installments"
 
 interface CheckoutPageProps {
   searchParams: Promise<{
@@ -225,7 +228,8 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
   }
 
   const tenantCourse = await prisma.tenantCourse.findFirst({
-    where: { id: course_id, tenantId: tenant.id, isVisible: true },
+    // course.status="ATIVO": curso desativado/removido na origem nao renderiza checkout.
+    where: { id: course_id, tenantId: tenant.id, isVisible: true, course: { status: "ATIVO" } },
     include: {
       course: {
         select: {
@@ -299,12 +303,16 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
     tenantCourse.tenant,
     "vitrine",
   )
-  // Parcelas efetivas da unidade (customParcelas tem prioridade). Para MONTHLY,
-  // representa a quantidade de mensalidades. Espelha a hierarquia da vitrine.
+  // Quantidade de mensalidades da unidade (customParcelas tem prioridade) — só
+  // usada quando MONTHLY. Em pagamento único o "Nx sem juros" vem do nº global.
   const effectiveParcelas =
     tenantCourse.customParcelas ??
     tenantCourse.course.parcelasOverride ??
     tenantCourse.course.parcelasSugeridas
+  // Pagamento único: nº GLOBAL de parcelas sem juros da unidade (fonte do resumo).
+  const oneTimeParcelas = displayInterestFreeInstallments(
+    tenantGateway?.interestFreeInstallments ?? 1,
+  )
   const validatedCoupon = couponParam
     ? await resolveCoupon(tenant.id, couponParam, basePrice)
     : null
@@ -362,7 +370,8 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
                 tenantCourse.course.capaOverride ??
                 tenantCourse.course.capaImageUrl,
               basePrice,
-              parcelasSugeridas: effectiveParcelas,
+              parcelasSugeridas:
+                effectiveType === "MONTHLY" ? effectiveParcelas : oneTimeParcelas,
               paymentType: effectiveType,
               monthlyMonths:
                 effectiveParcelas ?? tenantCourse.course.monthlyMonthsMain,
@@ -397,7 +406,9 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
                 discountAmount={discountAmount}
                 finalPrice={finalPrice}
                 couponCode={validatedCoupon?.code ?? null}
-                parcelasSugeridas={effectiveParcelas}
+                parcelasSugeridas={
+                  effectiveType === "MONTHLY" ? effectiveParcelas : oneTimeParcelas
+                }
                 paymentType={effectiveType}
                 monthlyMonths={effectiveParcelas ?? tenantCourse.course.monthlyMonthsMain}
               />

@@ -16,6 +16,32 @@
 /** Teto absoluto de parcelas no cartao, independente de config. */
 export const MAX_CARD_INSTALLMENTS = 12
 
+/**
+ * Nº de parcelas SEM JUROS a EXIBIR para uma compra à vista (ONE_TIME),
+ * derivado do limite global da unidade — `Tenant.interestFreeInstallments`
+ * (revenda) ou `SystemSettings.pmbInterestFreeInstallments` (PMB). É a fonte
+ * ÚNICA da verdade do texto "Nx sem juros" no catálogo, na página do curso e no
+ * resumo do pedido (mantém tudo coerente com o seletor do checkout).
+ *
+ * Retorna `null` quando não há parcelamento sem juros para anunciar (1 = só à
+ * vista) ou o valor é inválido. Nunca passa do teto de 12x.
+ */
+export function displayInterestFreeInstallments(
+  interestFree: number | null | undefined,
+): number | null {
+  const n = Math.trunc(interestFree ?? 0)
+  if (!Number.isFinite(n) || n < 2) return null
+  return Math.min(n, MAX_CARD_INSTALLMENTS)
+}
+
+/** Rótulo "Nx sem juros" (ou `null` quando não há parcela sem juros a anunciar). */
+export function interestFreeLabel(
+  interestFree: number | null | undefined,
+): string | null {
+  const n = displayInterestFreeInstallments(interestFree)
+  return n ? `${n}x sem juros` : null
+}
+
 /** Uma opcao de parcelamento devolvida pelo MP (`payer_costs[]`). */
 export interface MpPayerCost {
   installments: number

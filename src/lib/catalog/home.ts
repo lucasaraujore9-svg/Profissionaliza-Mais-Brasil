@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/prisma"
 import type { Course } from "@/components/main/home/course-card"
 import { COURSE_HAS_PRICE } from "./visibility"
+import { interestFreeLabel } from "@/lib/mercadopago/installments"
+import { getSystemSettings } from "@/lib/system-settings"
 
 interface RawCourse {
   slug: string
@@ -30,15 +32,20 @@ function pickPrice(c: Pick<RawCourse, "precoVitrineMain" | "precoPromocional" | 
   )
 }
 
-function toCourse(c: RawCourse, idx: number, selo?: Course["selo"]): Course {
-  const parcelas = c.parcelasOverride ?? c.parcelasSugeridas
+function toCourse(
+  c: RawCourse,
+  idx: number,
+  selo?: Course["selo"],
+  /** Nº global de parcelas sem juros da PMB (SystemSettings). Fonte do "Nx sem juros". */
+  interestFree?: number | null,
+): Course {
   return {
     slug: c.slug,
     categoria: c.categoriaLoja ?? "Curso profissionalizante",
     titulo: c.nome,
     horas: c.cargaHoraria ? `${c.cargaHoraria}h` : `${c.qtdAulas} aulas`,
     preco: formatPrice(pickPrice(c)),
-    parcelas: parcelas ? `${parcelas}x sem juros` : "12x sem juros",
+    parcelas: interestFreeLabel(interestFree) ?? "",
     selo: selo ?? null,
     accent: idx % 2 === 0 ? "gold" : "green",
     imageUrl: c.capaOverride ?? c.capaImageUrl,
@@ -94,16 +101,20 @@ function normalize(c: DbRow): RawCourse {
 
 export async function loadCurated(take = 8): Promise<Course[]> {
   try {
-    const featured = await prisma.course.findMany({
-      where: { destaque: true, status: "ATIVO", hiddenMain: false, AND: [COURSE_HAS_PRICE] },
-      orderBy: { nome: "asc" },
-      take,
-      select: SELECT,
-    })
+    const [featured, settings] = await Promise.all([
+      prisma.course.findMany({
+        where: { destaque: true, status: "ATIVO", hiddenMain: false, AND: [COURSE_HAS_PRICE] },
+        orderBy: { nome: "asc" },
+        take,
+        select: SELECT,
+      }),
+      getSystemSettings(),
+    ])
+    const ifree = settings.pmbInterestFreeInstallments
 
     if (featured.length >= take) {
       return featured.map((c, idx) =>
-        toCourse(normalize(c), idx, idx === 0 ? "mais-vendido" : null),
+        toCourse(normalize(c), idx, idx === 0 ? "mais-vendido" : null, ifree),
       )
     }
 
@@ -120,7 +131,7 @@ export async function loadCurated(take = 8): Promise<Course[]> {
     })
 
     return [...featured, ...fill].map((c, idx) =>
-      toCourse(normalize(c), idx, idx === 0 ? "mais-vendido" : null),
+      toCourse(normalize(c), idx, idx === 0 ? "mais-vendido" : null, ifree),
     )
   } catch {
     return []
@@ -145,18 +156,23 @@ export async function loadByCategoria(
     })
     if (!category) return []
 
-    const rows = await prisma.course.findMany({
-      where: {
-        status: "ATIVO",
-        hiddenMain: false,
-        categoryLinks: { some: { categoryId: category.id } },
-        AND: [COURSE_HAS_PRICE],
-      },
-      orderBy: { nome: "asc" },
-      take,
-      select: SELECT,
-    })
-    return rows.map((c, idx) => toCourse(normalize(c), idx))
+    const [rows, settings] = await Promise.all([
+      prisma.course.findMany({
+        where: {
+          status: "ATIVO",
+          hiddenMain: false,
+          categoryLinks: { some: { categoryId: category.id } },
+          AND: [COURSE_HAS_PRICE],
+        },
+        orderBy: { nome: "asc" },
+        take,
+        select: SELECT,
+      }),
+      getSystemSettings(),
+    ])
+    return rows.map((c, idx) =>
+      toCourse(normalize(c), idx, undefined, settings.pmbInterestFreeInstallments),
+    )
   } catch {
     return []
   }
@@ -273,7 +289,7 @@ export async function loadCatalogo({
       where.categoryLinks = { some: { categoryId: category.id } }
     }
 
-    const [rows, total] = await Promise.all([
+    const [rows, total, settings] = await Promise.all([
       prisma.course.findMany({
         where,
         orderBy: [{ destaqueHome: "desc" }, { destaque: "desc" }, { nome: "asc" }],
@@ -281,10 +297,13 @@ export async function loadCatalogo({
         select: SELECT,
       }),
       prisma.course.count({ where }),
+      getSystemSettings(),
     ])
 
     return {
-      cursos: rows.map((c, idx) => toCourse(normalize(c), idx)),
+      cursos: rows.map((c, idx) =>
+        toCourse(normalize(c), idx, undefined, settings.pmbInterestFreeInstallments),
+      ),
       total,
     }
   } catch {

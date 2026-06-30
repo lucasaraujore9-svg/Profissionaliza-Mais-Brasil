@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { requireResellerSession } from "@/lib/auth/reseller-session"
 import { ensureTenantCourses } from "@/lib/tenant/ensure-courses"
 import { withRequestContext } from "@/lib/observability/with-request-context"
+import { displayInterestFreeInstallments } from "@/lib/mercadopago/installments"
 
 export const GET = withRequestContext(
   { action: "painel.cursos.list", route: "/api/painel/cursos" },
@@ -15,6 +16,14 @@ export const GET = withRequestContext(
     // Idempotente: garante que o tenant tenha um TenantCourse pra cada
     // curso ATIVO do catálogo global (cria apenas o que falta).
     await ensureTenantCourses(ctx.tenantId)
+
+    // Nº global de parcelas sem juros da unidade — fonte do "Nx sem juros" de
+    // pagamento único (espelha a vitrine; ver mapTenantCourseItem).
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: ctx.tenantId },
+      select: { interestFreeInstallments: true },
+    })
+    const interestFree = tenant?.interestFreeInstallments ?? 1
 
     const tenantCourses = await prisma.tenantCourse.findMany({
       where: { tenantId: ctx.tenantId },
@@ -53,10 +62,14 @@ export const GET = withRequestContext(
         qtdAulas: tc.course.qtdAulas,
         cargaHoraria: tc.course.cargaHoraria,
         price: Number(tc.price),
+        // ONE_TIME: "Nx sem juros" vem do nº global da unidade (espelha a
+        // vitrine). MONTHLY: o número exibido é a quantidade de mensalidades.
         parcelas:
-          tc.customParcelas ??
-          tc.course.parcelasOverride ??
-          tc.course.parcelasSugeridas,
+          tc.paymentType === "MONTHLY"
+            ? tc.customParcelas ??
+              tc.course.parcelasOverride ??
+              tc.course.parcelasSugeridas
+            : displayInterestFreeInstallments(interestFree),
         paymentType: tc.paymentType,
         isVisible: tc.isVisible,
         isFeatured: tc.isFeatured,

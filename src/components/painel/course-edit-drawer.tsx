@@ -188,7 +188,10 @@ export function CourseEditDrawer({
           price: numericPrice,
           paymentType,
           customDescription: description.trim() || null,
-          customParcelas: parcelasValue,
+          // ONE_TIME não usa parcelas por curso (o "Nx sem juros" vem do nº
+          // global da unidade e o cartão vai até 12x). Limpa o valor para não
+          // deixar um teto antigo/herdado preso e invisível no checkout.
+          customParcelas: paymentType === "MONTHLY" ? parcelasValue : null,
           isVisible,
           isFeatured,
         }),
@@ -381,7 +384,11 @@ export function CourseEditDrawer({
                 />
               </div>
 
-              <div>
+              {/* Pagamento único usa o nº GLOBAL de parcelas sem juros da unidade
+                  (Configurações → Pagamento). Só a mensalidade define a
+                  quantidade por curso aqui. */}
+              {paymentType === "MONTHLY" && (
+                <div>
                 <Label htmlFor="edit-parcelas">
                   {paymentType === "MONTHLY"
                     ? "Quantidade de mensalidades"
@@ -475,7 +482,8 @@ export function CourseEditDrawer({
                     você na sua conta do <strong>Mercado Pago</strong>.
                   </span>
                 </p>
-              </div>
+                </div>
+              )}
 
               <label className="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50/50 px-4 py-3">
                 <div>

@@ -124,7 +124,9 @@ export function CourseDetailView({
     : `${course.qtdAulas} aulas`
   const isMonthly = course.paymentType === "MONTHLY"
   const monthlyMonths = isMonthly ? course.monthlyMonths ?? 12 : null
-  const parcelas = course.parcelas ?? 12
+  // Pagamento único: nº GLOBAL de parcelas sem juros da unidade. Quando ausente
+  // (1 = só à vista), cai para 1 e a linha "ou Nx sem juros" não é exibida.
+  const parcelas = course.parcelas ?? 1
   const valorParcela = course.price > 0 ? course.price / parcelas : 0
   const desconto =
     course.originalPrice && course.originalPrice > course.price

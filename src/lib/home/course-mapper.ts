@@ -1,4 +1,5 @@
 import type { Course } from "@/components/main/home/course-card"
+import { interestFreeLabel } from "@/lib/mercadopago/installments"
 
 /**
  * Mappeia rows do Prisma para o shape `Course` consumido pelos cards da home.
@@ -90,15 +91,16 @@ export function toCourse(
   c: RawCourse,
   idx: number,
   selo: Course["selo"] | null,
+  /** Nº global de parcelas sem juros da PMB (SystemSettings). Fonte do "Nx sem juros". */
+  interestFree?: number | null,
 ): Course {
-  const parcelas = c.parcelasOverride ?? c.parcelasSugeridas
   return {
     slug: c.slug,
     categoria: c.categoriaLoja ?? "Curso profissionalizante",
     titulo: c.nome,
     horas: c.cargaHoraria ? `${c.cargaHoraria}h` : `${c.qtdAulas} aulas`,
     preco: formatPrice(pickPrice(c)),
-    parcelas: parcelas ? `${parcelas}x sem juros` : "12x sem juros",
+    parcelas: interestFreeLabel(interestFree) ?? "",
     selo: selo ?? null,
     accent: idx % 2 === 0 ? "gold" : "green",
     imageUrl: c.capaOverride ?? c.capaImageUrl,

@@ -2,28 +2,45 @@ import { prisma } from "@/lib/prisma"
 import type { Prisma } from "@prisma/client"
 import { contextLogger } from "@/lib/logger"
 import { effectivePaymentType, type MonthlyPolicy } from "@/lib/tenant/monthly-policy"
+import { displayInterestFreeInstallments } from "@/lib/mercadopago/installments"
 
-const MONTHLY_BLOCKED: MonthlyPolicy = {
+/**
+ * Politica de exibicao da unidade: parcelado/mensalidade + nº GLOBAL de parcelas
+ * sem juros (Tenant.interestFreeInstallments) que governa o texto "Nx sem juros"
+ * de pagamento unico em toda a vitrine.
+ */
+type TenantDisplayPolicy = MonthlyPolicy & { interestFreeInstallments: number }
+
+const DISPLAY_POLICY_BLOCKED: TenantDisplayPolicy = {
   monthlyAllowed: false,
   monthlyEnabled: false,
   monthlyScope: "DIRECT_ONLY",
+  interestFreeInstallments: 1,
 }
 
 /**
  * Politica de parcelado/mensalidade da unidade. Na vitrine (compra self-service
  * do lead), o MONTHLY so vale quando a unidade tem o parcelado ativo E o escopo
- * inclui a vitrine. Quando ausente, assume bloqueado.
+ * inclui a vitrine. Quando ausente, assume bloqueado. Carrega tambem o nº global
+ * de parcelas sem juros da unidade (fonte unica do "Nx sem juros" exibido).
  */
-async function loadMonthlyPolicy(tenantId: string): Promise<MonthlyPolicy> {
+async function loadMonthlyPolicy(tenantId: string): Promise<TenantDisplayPolicy> {
   const t = await prisma.tenant.findUnique({
     where: { id: tenantId },
-    select: { monthlyAllowed: true, monthlyEnabled: true, monthlyScope: true },
+    select: {
+      monthlyAllowed: true,
+      monthlyEnabled: true,
+      monthlyScope: true,
+      interestFreeInstallments: true,
+    },
   })
-  return t ?? MONTHLY_BLOCKED
+  return t ?? DISPLAY_POLICY_BLOCKED
 }
 
 export interface TenantCourseListItem {
   id: string
+  /** Id do Course global (chave de match em Enrollment.courseId). */
+  courseId: string
   slug: string
   nome: string
   descricao: string | null
@@ -76,18 +93,20 @@ type TenantCourseWithCourse = Prisma.TenantCourseGetPayload<{
  */
 function mapTenantCourseItem(
   tc: TenantCourseWithCourse,
-  monthly: MonthlyPolicy,
+  policy: TenantDisplayPolicy,
 ): TenantCourseListItem {
-  // Parcelas efetivas configuradas pela unidade. Para MONTHLY este mesmo valor
-  // representa a quantidade de mensalidades (o painel edita customParcelas como
-  // "quantidade de mensalidades"); por isso monthlyMonths deve respeitá-lo, com
-  // fallback no override admin global apenas quando a unidade não definiu nada.
+  // Quantidade de mensalidades (MONTHLY) configurada pela unidade. Para MONTHLY o
+  // painel edita customParcelas como "quantidade de mensalidades"; por isso
+  // monthlyMonths o respeita, com fallback no override admin/global.
   const effectiveParcelas =
     tc.customParcelas ??
     tc.course.parcelasOverride ??
     tc.course.parcelasSugeridas
+  const paymentType = effectivePaymentType(tc.paymentType, policy, "vitrine")
+  const monthlyMonths = effectiveParcelas ?? tc.course.monthlyMonthsMain
   return {
     id: tc.id,
+    courseId: tc.courseId,
     slug: tc.course.slug,
     nome: tc.course.nome,
     descricao:
@@ -102,10 +121,15 @@ function mapTenantCourseItem(
       : null,
     imageUrl:
       tc.customCapaUrl ?? tc.course.capaOverride ?? tc.course.capaImageUrl,
-    parcelas: effectiveParcelas,
+    // Pagamento único: "Nx sem juros" vem do nº GLOBAL da unidade (não por curso).
+    // Mensalidade: o número exibido é a quantidade de mensalidades.
+    parcelas:
+      paymentType === "MONTHLY"
+        ? monthlyMonths
+        : displayInterestFreeInstallments(policy.interestFreeInstallments),
     isFeatured: tc.isFeatured,
-    paymentType: effectivePaymentType(tc.paymentType, monthly, "vitrine"),
-    monthlyMonths: effectiveParcelas ?? tc.course.monthlyMonthsMain,
+    paymentType,
+    monthlyMonths,
   }
 }
 
@@ -297,15 +321,22 @@ export async function getTenantCourseBySlug(
 
     const monthly = await loadMonthlyPolicy(tenantId)
 
-    // Parcelas efetivas da unidade. Para MONTHLY, equivale à quantidade de
-    // mensalidades (ver mapTenantCourseItem).
+    // Quantidade de mensalidades (MONTHLY). Em pagamento único o "Nx sem juros"
+    // vem do nº global da unidade — ver mapTenantCourseItem.
     const effectiveParcelas =
       tc.customParcelas ??
       tc.course.parcelasOverride ??
       tc.course.parcelasSugeridas
+    const paymentType = effectivePaymentType(tc.paymentType, monthly, "vitrine")
+    const monthlyMonths = effectiveParcelas ?? tc.course.monthlyMonthsMain
+    const displayParcelas =
+      paymentType === "MONTHLY"
+        ? monthlyMonths
+        : displayInterestFreeInstallments(monthly.interestFreeInstallments)
 
     return {
       id: tc.id,
+      courseId: tc.courseId,
       tenantCourseId: tc.id,
       slug: tc.course.slug,
       nome: tc.course.nome,
@@ -321,12 +352,12 @@ export async function getTenantCourseBySlug(
         : null,
       imageUrl:
         tc.customCapaUrl ?? tc.course.capaOverride ?? tc.course.capaImageUrl,
-      parcelas: effectiveParcelas,
+      parcelas: displayParcelas,
       isFeatured: tc.isFeatured,
-      paymentType: effectivePaymentType(tc.paymentType, monthly, "vitrine"),
-      monthlyMonths: effectiveParcelas ?? tc.course.monthlyMonthsMain,
+      paymentType,
+      monthlyMonths,
       qtdAulas: tc.course.qtdAulas,
-      parcelasSugeridas: effectiveParcelas,
+      parcelasSugeridas: displayParcelas,
       plataformaCourseId: tc.course.plataformaCourseId,
       lessons: tc.course.courseLessons.map((l) => ({
         id: l.id,

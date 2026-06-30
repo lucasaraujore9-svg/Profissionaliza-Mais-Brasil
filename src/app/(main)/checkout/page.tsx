@@ -8,7 +8,10 @@ import { getSystemSettings } from "@/lib/system-settings"
 import { pmbMpPublicKey } from "@/lib/pmb-config"
 import { isPmbAppHost } from "@/lib/tenant/urls"
 import { getPackageForCheckout } from "@/lib/packages/vitrine"
-import { MAX_CARD_INSTALLMENTS } from "@/lib/mercadopago/installments"
+import {
+  MAX_CARD_INSTALLMENTS,
+  displayInterestFreeInstallments,
+} from "@/lib/mercadopago/installments"
 
 interface CheckoutPageProps {
   searchParams: Promise<{
@@ -332,7 +335,12 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
               courseHours: course.cargaHoraria,
               courseImageUrl: course.capaOverride ?? course.capaImageUrl,
               basePrice,
-              parcelasSugeridas: course.parcelasSugeridas,
+              parcelasSugeridas:
+                course.paymentTypeMain === "MONTHLY"
+                  ? course.monthlyMonthsMain
+                  : displayInterestFreeInstallments(
+                      settings.pmbInterestFreeInstallments,
+                    ),
               paymentType: course.paymentTypeMain,
               monthlyMonths: course.monthlyMonthsMain,
             }}
@@ -357,7 +365,13 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
                 discountAmount={discountAmount}
                 finalPrice={finalPrice}
                 couponCode={validatedCoupon?.code ?? null}
-                parcelasSugeridas={course.parcelasSugeridas}
+                parcelasSugeridas={
+                  course.paymentTypeMain === "MONTHLY"
+                    ? course.monthlyMonthsMain
+                    : displayInterestFreeInstallments(
+                        settings.pmbInterestFreeInstallments,
+                      )
+                }
                 paymentType={course.paymentTypeMain}
                 monthlyMonths={course.monthlyMonthsMain}
               />

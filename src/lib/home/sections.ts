@@ -2,6 +2,7 @@ import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import type { Course } from "@/components/main/home/course-card"
 import { COURSE_HAS_PRICE } from "@/lib/catalog/visibility"
+import { interestFreeLabel } from "@/lib/mercadopago/installments"
 
 /**
  * Filtro de visibilidade granular do catalogo para um tenant (espelha
@@ -692,56 +693,71 @@ async function fetchCoursesByIds(
   if (ids.length === 0) return []
   if (tenantId) return fetchTenantCoursesByIds(ids, tenantId)
   const { courseSelect, normalizeCourseRow, toCourse } = await import("./course-mapper")
-  const rows = await prisma.course.findMany({
-    where: {
-      id: { in: ids },
-      status: "ATIVO",
-      hiddenMain: false,
-      AND: [COURSE_HAS_PRICE],
-    },
-    select: courseSelect,
-  })
+  const { getSystemSettings } = await import("@/lib/system-settings")
+  const [rows, settings] = await Promise.all([
+    prisma.course.findMany({
+      where: {
+        id: { in: ids },
+        status: "ATIVO",
+        hiddenMain: false,
+        AND: [COURSE_HAS_PRICE],
+      },
+      select: courseSelect,
+    }),
+    getSystemSettings(),
+  ])
   const byId = new Map(rows.map((r) => [r.id, r]))
   const ordered = ids
     .map((id) => byId.get(id))
     .filter((r): r is NonNullable<typeof r> => r != null)
-  return ordered.map((r, idx) => toCourse(normalizeCourseRow(r), idx, null))
+  return ordered.map((r, idx) =>
+    toCourse(
+      normalizeCourseRow(r),
+      idx,
+      null,
+      settings.pmbInterestFreeInstallments,
+    ),
+  )
 }
 
 async function fetchTenantCoursesByIds(
   ids: string[],
   tenantId: string,
 ): Promise<Course[]> {
-  const rows = await prisma.tenantCourse.findMany({
-    where: {
-      tenantId,
-      isVisible: true,
-      price: { gt: 0 },
-      courseId: { in: ids },
-      course: { status: "ATIVO", ...tenantVisibilityFilter(tenantId) },
-    },
-    select: {
-      courseId: true,
-      price: true,
-      paymentType: true,
-      customCapaUrl: true,
-      customParcelas: true,
-      course: {
-        select: {
-          slug: true,
-          nome: true,
-          categoriaLoja: true,
-          qtdAulas: true,
-          cargaHoraria: true,
-          capaImageUrl: true,
-          capaOverride: true,
-          parcelasSugeridas: true,
-          parcelasOverride: true,
-          monthlyMonthsMain: true,
+  const [rows, tenant] = await Promise.all([
+    prisma.tenantCourse.findMany({
+      where: {
+        tenantId,
+        isVisible: true,
+        price: { gt: 0 },
+        courseId: { in: ids },
+        course: { status: "ATIVO", ...tenantVisibilityFilter(tenantId) },
+      },
+      select: {
+        courseId: true,
+        price: true,
+        paymentType: true,
+        customCapaUrl: true,
+        course: {
+          select: {
+            slug: true,
+            nome: true,
+            categoriaLoja: true,
+            qtdAulas: true,
+            cargaHoraria: true,
+            capaImageUrl: true,
+            capaOverride: true,
+            monthlyMonthsMain: true,
+          },
         },
       },
-    },
-  })
+    }),
+    prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { interestFreeInstallments: true },
+    }),
+  ])
+  const interestFree = tenant?.interestFreeInstallments ?? 1
   const byId = new Map(rows.map((r) => [r.courseId, r]))
   const ordered = ids
     .map((id) => byId.get(id))
@@ -749,8 +765,6 @@ async function fetchTenantCoursesByIds(
   return ordered.map((tc, idx) => {
     const c = tc.course
     const isMonthly = tc.paymentType === "MONTHLY"
-    const parcelas =
-      tc.customParcelas ?? c.parcelasOverride ?? c.parcelasSugeridas
     const monthlyMonths = c.monthlyMonthsMain
     return {
       slug: c.slug,
@@ -758,13 +772,12 @@ async function fetchTenantCoursesByIds(
       titulo: c.nome,
       horas: c.cargaHoraria ? `${c.cargaHoraria}h` : `${c.qtdAulas} aulas`,
       preco: formatTenantPrice(Number(tc.price)),
+      // Pagamento único: "Nx sem juros" vem do nº GLOBAL da unidade.
       parcelas: isMonthly
         ? monthlyMonths
           ? `${monthlyMonths} mensalidades`
           : "mensalidade"
-        : parcelas
-          ? `${parcelas}x sem juros`
-          : "12x sem juros",
+        : interestFreeLabel(interestFree) ?? "",
       paymentType: tc.paymentType,
       selo: null,
       accent: idx % 2 === 0 ? "gold" : "green",

@@ -9,6 +9,8 @@ import { LeadInquiryCard } from "@/components/loja/lead-inquiry-card"
 import { JsonLd } from "@/components/seo/json-ld"
 import { courseJsonLd, breadcrumbJsonLd } from "@/lib/seo/jsonld"
 import { SITE_NAME, siteUrl } from "@/lib/seo/site"
+import { getSystemSettings } from "@/lib/system-settings"
+import { displayInterestFreeInstallments } from "@/lib/mercadopago/installments"
 
 type LoadedCurso = CourseDetailData & {
   id: string
@@ -40,6 +42,9 @@ async function loadCurso(slug: string): Promise<LoadedCurso | null> {
         ? Number(c.precoOriginal)
         : null
 
+    // Pagamento único: "Nx sem juros" vem do nº GLOBAL da PMB (não por curso).
+    const settings = await getSystemSettings()
+
     return {
       id: c.id,
       slug: c.slug,
@@ -52,7 +57,9 @@ async function loadCurso(slug: string): Promise<LoadedCurso | null> {
       imageUrl: c.capaOverride ?? c.capaImageUrl,
       price,
       originalPrice,
-      parcelas: c.parcelasOverride ?? c.parcelasSugeridas,
+      parcelas: displayInterestFreeInstallments(
+        settings.pmbInterestFreeInstallments,
+      ),
       lessons: c.courseLessons.map((l) => ({
         id: l.id,
         nome: l.nome,
