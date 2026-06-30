@@ -51,7 +51,9 @@ const ASAAS_PAID = new Set(["RECEIVED", "CONFIRMED", "RECEIVED_IN_CASH"])
  * Auth: CRON_SECRET (Bearer). Dispare via app_internal.run_cron (Management API)
  * ou Vercel cron — roda no runtime de produção, onde ASAAS_API_KEY existe.
  */
-export async function GET(request: Request) {
+// Disparado pelo `app_internal.run_cron` (net.http_post) como os demais crons, e
+// também acionável por GET manual. Ambos os métodos compartilham o handler.
+async function handle(request: Request) {
   if (!isCronAuthorized(request)) {
     return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
   }
@@ -229,3 +231,6 @@ export async function GET(request: Request) {
     errors,
   })
 }
+
+export const GET = handle
+export const POST = handle
