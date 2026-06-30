@@ -37,6 +37,10 @@ export interface AsaasCheckoutFormProps {
   processPath?: string
   statusPath?: string
   confirmacaoPath?: string
+  // Link/recompra (payMode): matrícula já existe → pula o init e cobra direto.
+  enrollmentId?: string
+  defaultNome?: string
+  defaultEmail?: string
 }
 
 type Method = "PIX" | "BOLETO" | "CREDIT_CARD"
@@ -102,13 +106,16 @@ export function AsaasCheckoutForm({
   processPath = "/api/loja/checkout/process",
   statusPath = "/api/loja/checkout/status",
   confirmacaoPath = "/loja/confirmacao",
+  enrollmentId,
+  defaultNome,
+  defaultEmail,
 }: AsaasCheckoutFormProps) {
   function successUrlFor(id: string): string {
     return `${confirmacaoPath}?enrollment_id=${encodeURIComponent(id)}`
   }
   const [form, setForm] = useState<FormState>({
-    nome: "",
-    email: "",
+    nome: defaultNome ?? "",
+    email: defaultEmail ?? "",
     telefone: "",
     cpf: "",
     endereco: "",
@@ -124,7 +131,11 @@ export function AsaasCheckoutForm({
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
   const [acceptedTerms, setAcceptedTerms] = useState(false)
   const [termsError, setTermsError] = useState(false)
-  const [activeEnrollmentId, setActiveEnrollmentId] = useState<string | null>(null)
+  // payMode: a matrícula já existe (recebida via prop) → ensureEnrollment a
+  // devolve direto e o init é pulado.
+  const [activeEnrollmentId, setActiveEnrollmentId] = useState<string | null>(
+    enrollmentId ?? null,
+  )
 
   function setField<K extends keyof FormState>(key: K, value: string) {
     setForm((p) => ({ ...p, [key]: value }))

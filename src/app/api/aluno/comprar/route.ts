@@ -19,11 +19,266 @@ import { dueDateInDays } from "@/lib/checkout/due-date"
 import { mpWebhookUrl, asaasWebhookUrl } from "@/lib/tenant/urls"
 import { swallow } from "@/lib/errors"
 import { withRequestContext } from "@/lib/observability/with-request-context"
+import { PMB_TENANT_SLUG } from "@/lib/pmb-config"
+import { tenantCheckoutMode } from "@/lib/tenant/checkout-mode"
+import { effectivePaymentType } from "@/lib/tenant/monthly-policy"
+import { isSellablePrice } from "@/lib/checkout/price-guard"
+import { contextLogger } from "@/lib/logger"
 
 const createSchema = z.object({
   courseId: z.string().min(1),
   couponCode: z.string().trim().max(64).optional(),
 })
+
+interface ResellerTenant {
+  id: string
+  slug: string
+  name: string
+  status: string
+  mpAccessToken: string | null
+  mpPublicKey: string | null
+  plataformaVendedorId: string | null
+  salesGateway: string | null
+  asaasGatewayEnabled: boolean
+  asaasConnected: boolean
+  asaasWebhookToken: string | null
+  monthlyAllowed: boolean
+  monthlyEnabled: boolean
+  monthlyScope: "DIRECT_ONLY" | "DIRECT_AND_VITRINE"
+}
+
+/**
+ * Init de recompra para aluno de REVENDA. Espelha o caminho tenant-scoped de
+ * /api/loja/checkout (preço da unidade = TenantCourse.price, gateway da própria
+ * conta, cupons do tenant, matrícula escopada), mas autenticado: sem campos de
+ * convidado e sem gate de CPF. NÃO cobra aqui — apenas cria a matrícula PENDING
+ * e devolve os dados para o Payment Brick (cobrança em /api/aluno/comprar/process).
+ */
+async function handleResellerInit(
+  tenantId: string,
+  studentId: string,
+  tenant: ResellerTenant,
+  data: { courseId: string; couponCode?: string },
+): Promise<NextResponse> {
+  let consumedCouponId: string | null = null
+  let createdEnrollmentId: string | null = null
+
+  try {
+    if (tenant.status !== "ACTIVE") {
+      return NextResponse.json(
+        { error: "Esta loja não está aceitando vendas no momento", code: "TENANT_INACTIVE" },
+        { status: 403 },
+      )
+    }
+
+    const mode = tenantCheckoutMode({
+      salesGateway: tenant.salesGateway,
+      asaasGatewayEnabled: tenant.asaasGatewayEnabled,
+      asaasConnected: tenant.asaasConnected,
+      mpAccessToken: tenant.mpAccessToken,
+      mpPublicKey: tenant.mpPublicKey,
+    })
+    if (mode === "ASAAS" && !tenant.asaasWebhookToken) {
+      return NextResponse.json(
+        { error: "Gateway Asaas incompleto", code: "ASAAS_NOT_CONFIGURED" },
+        { status: 503 },
+      )
+    }
+    if (mode === "NONE") {
+      return NextResponse.json(
+        { error: "Loja ainda não configurou o pagamento", code: "CHECKOUT_UNAVAILABLE" },
+        { status: 503 },
+      )
+    }
+    const gateway: "MP" | "ASAAS" = mode
+
+    const [student, tenantCourse] = await Promise.all([
+      prisma.student.findUnique({
+        where: { id: studentId },
+        select: { id: true, email: true, cpf: true },
+      }),
+      prisma.tenantCourse.findFirst({
+        where: {
+          tenantId,
+          courseId: data.courseId,
+          isVisible: true,
+          price: { gt: 0 },
+          course: { status: "ATIVO" },
+        },
+        include: {
+          course: {
+            select: {
+              nome: true,
+              monthlyMonthsMain: true,
+              parcelasSugeridas: true,
+              parcelasOverride: true,
+            },
+          },
+        },
+      }),
+    ])
+
+    if (!student) {
+      return NextResponse.json({ error: "Aluno não encontrado" }, { status: 404 })
+    }
+    if (!student.email) {
+      return NextResponse.json(
+        { error: "Cadastre seu email no perfil antes de comprar" },
+        { status: 400 },
+      )
+    }
+    // Asaas exige CPF do pagador e o Payment Brick (payMode) não reenvia o CPF
+    // digitado — sem CPF no cadastro a cobrança trava no /pagar. Bloqueia cedo
+    // com mensagem clara (nenhum cupom foi consumido até aqui).
+    if (gateway === "ASAAS" && !student.cpf) {
+      return NextResponse.json(
+        {
+          error: "Cadastre seu CPF no perfil antes de comprar nesta loja",
+          code: "STUDENT_CPF_REQUIRED",
+        },
+        { status: 400 },
+      )
+    }
+    if (!tenantCourse) {
+      return NextResponse.json(
+        { error: "Curso não encontrado", code: "COURSE_NOT_FOUND" },
+        { status: 404 },
+      )
+    }
+
+    const basePrice = Number(tenantCourse.price)
+    if (!isSellablePrice(basePrice)) {
+      return NextResponse.json(
+        { error: "Curso sem valor para venda", code: "COURSE_NO_PRICE" },
+        { status: 400 },
+      )
+    }
+
+    let discountAmount = 0
+    let couponId: string | null = null
+    let finalAmountFromCoupon: number | null = null
+    if (data.couponCode) {
+      const code = data.couponCode.toUpperCase()
+      const now = new Date()
+      const coupon = await prisma.coupon.findFirst({
+        where: {
+          tenantId,
+          code,
+          isActive: true,
+          validFrom: { lte: now },
+          validUntil: { gte: now },
+        },
+      })
+      if (!coupon) {
+        return NextResponse.json({ error: "Cupom inválido", code: "COUPON_INVALID" }, { status: 400 })
+      }
+      if (coupon.maxUses !== null && coupon.usedCount >= coupon.maxUses) {
+        return NextResponse.json({ error: "Cupom esgotado", code: "COUPON_EXHAUSTED" }, { status: 400 })
+      }
+      const calc = applyCouponDiscount({
+        basePrice,
+        discountType: coupon.discountType,
+        discountValue: coupon.discountValue,
+      })
+      discountAmount = calc.discountAmount
+      finalAmountFromCoupon = calc.finalAmount
+      const reserved = await tryConsumeCoupon(coupon.id)
+      if (!reserved) {
+        return NextResponse.json({ error: "Cupom esgotado", code: "COUPON_EXHAUSTED" }, { status: 400 })
+      }
+      couponId = coupon.id
+      consumedCouponId = coupon.id
+    }
+
+    const finalAmount = finalAmountFromCoupon ?? basePrice
+
+    const effectiveType = effectivePaymentType(tenantCourse.paymentType, tenant, "vitrine")
+    const isMonthly = effectiveType === "MONTHLY"
+    const monthlyMonths = isMonthly ? tenantCourse.course.monthlyMonthsMain ?? 12 : null
+
+    // Bloqueio/reaproveitamento de matrícula existente (mesma regra da loja):
+    // ACTIVE/COMPLETED → 409; PENDING → reaproveita (permite trocar cartão/método).
+    const existing = await prisma.enrollment.findFirst({
+      where: {
+        studentId: student.id,
+        courseId: tenantCourse.courseId,
+        tenantId,
+        status: { in: ["PENDING", "ACTIVE", "COMPLETED"] },
+      },
+      select: { id: true, status: true, couponId: true },
+    })
+
+    if (existing && existing.status !== "PENDING") {
+      if (consumedCouponId) {
+        await releaseCoupon(consumedCouponId).catch(swallow("aluno.comprar.reseller"))
+        consumedCouponId = null
+      }
+      return NextResponse.json(
+        { error: "Você já possui este curso", code: "DUPLICATE_ENROLLMENT" },
+        { status: 409 },
+      )
+    }
+
+    if (existing) {
+      if (consumedCouponId && !existing.couponId) {
+        await prisma.enrollment.update({
+          where: { id: existing.id },
+          data: { originalAmount: basePrice, discountAmount, finalAmount, couponId },
+        })
+      } else if (consumedCouponId) {
+        await releaseCoupon(consumedCouponId).catch(swallow("aluno.comprar.reseller"))
+        consumedCouponId = null
+      }
+      // O cliente (student-buy-client) usa só enrollmentId; a tela /pagar
+      // re-lê preço/gateway/parcelas do banco. Não devolvemos campos derivados
+      // (e potencialmente defasados no reaproveitamento) que ninguém consome.
+      return NextResponse.json({ data: { enrollmentId: existing.id } })
+    }
+
+    const enrollment = await prisma.enrollment.create({
+      data: {
+        tenantId,
+        studentId: student.id,
+        tenantCourseId: tenantCourse.id,
+        courseId: tenantCourse.courseId,
+        paymentType: effectiveType,
+        status: "PENDING",
+        gateway,
+        originalAmount: basePrice,
+        discountAmount,
+        finalAmount,
+        couponId,
+        installmentsTotal: monthlyMonths,
+      },
+      select: { id: true },
+    })
+    createdEnrollmentId = enrollment.id
+
+    await prisma.enrollment.update({
+      where: { id: enrollment.id },
+      data: { externalReference: `enr_${enrollment.id}` },
+    })
+
+    return NextResponse.json({ data: { enrollmentId: enrollment.id } })
+  } catch (error) {
+    contextLogger().error(
+      { err: error, event: "aluno.comprar.reseller_init_failed", tenantId },
+      "init de recompra (revenda) falhou",
+    )
+    if (createdEnrollmentId) {
+      await prisma.enrollment
+        .delete({ where: { id: createdEnrollmentId } })
+        .catch(swallow("aluno.comprar.reseller.rollback"))
+    }
+    if (consumedCouponId) {
+      await releaseCoupon(consumedCouponId).catch(swallow("aluno.comprar.reseller.rollback"))
+    }
+    return NextResponse.json(
+      { error: "Erro ao iniciar compra", code: "INTERNAL_ERROR" },
+      { status: 500 },
+    )
+  }
+}
 
 
 export const POST = withRequestContext(
@@ -47,6 +302,37 @@ export const POST = withRequestContext(
       { error: "Dados inválidos", fields: parsed.error.flatten().fieldErrors },
       { status: 400 },
     )
+  }
+
+  // Detecção PMB vs revenda. Aluno de revenda recompra na CONTA DA PRÓPRIA
+  // unidade (preço/gateway/cupom/matrícula escopados ao tenant), com Payment
+  // Brick (pagamento no próprio site). Aluno PMB (placeholder `__pmb__` ou JWT
+  // legado sem tenantId) segue o fluxo de venda direta PMB (redirect) abaixo.
+  const sessionTenant = session.tenantId
+    ? await prisma.tenant.findUnique({
+        where: { id: session.tenantId },
+        select: {
+          id: true,
+          slug: true,
+          name: true,
+          status: true,
+          mpAccessToken: true,
+          mpPublicKey: true,
+          plataformaVendedorId: true,
+          salesGateway: true,
+          asaasGatewayEnabled: true,
+          asaasConnected: true,
+          asaasWebhookToken: true,
+          monthlyAllowed: true,
+          monthlyEnabled: true,
+          monthlyScope: true,
+        },
+      })
+    : null
+  const isPmb = !session.tenantId || sessionTenant?.slug === PMB_TENANT_SLUG
+
+  if (!isPmb && sessionTenant && session.tenantId) {
+    return handleResellerInit(session.tenantId, session.studentId, sessionTenant, parsed.data)
   }
 
   const settings = await getSystemSettings()

@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
+import { useRouter } from "next/navigation"
 import { Loader2, Search, ShoppingBag, CheckCircle2 } from "lucide-react"
 
 interface CatalogCourse {
@@ -22,6 +23,7 @@ function brl(value: number): string {
 }
 
 export function StudentBuyClient() {
+  const router = useRouter()
   const [courses, setCourses] = useState<CatalogCourse[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -83,12 +85,21 @@ export function StudentBuyClient() {
         setFeedback(body.error ?? "Falha ao iniciar compra")
         return
       }
+      // PMB (venda direta): a resposta traz initPoint → redirect ao gateway.
+      // Checar PRIMEIRO porque a resposta PMB também inclui enrollmentId.
       const initPoint = body.data?.initPoint
       if (initPoint) {
         window.location.href = initPoint
-      } else {
-        setFeedback("Cobrança gerada, mas o link de pagamento não veio.")
+        return
       }
+      // Revenda: matrícula PENDING criada (sem initPoint) → paga no próprio
+      // site via Payment Brick.
+      const enrollmentId = body.data?.enrollmentId
+      if (enrollmentId) {
+        router.push(`/aluno/comprar/pagar/${enrollmentId}`)
+        return
+      }
+      setFeedback("Cobrança gerada, mas o link de pagamento não veio.")
     } catch {
       setFeedback("Erro de rede ao iniciar compra")
     } finally {
