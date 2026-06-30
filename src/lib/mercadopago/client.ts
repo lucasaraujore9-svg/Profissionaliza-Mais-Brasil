@@ -102,6 +102,31 @@ async function request<T>(
   throw new MPApiError("Unexpected retry exhaustion", 0)
 }
 
+// ── Account (validação de conexão) ──
+
+/** Subconjunto da resposta de GET /users/me usado para validar a conexão. */
+export interface MPAccountInfo {
+  id: number
+  nickname?: string
+  email?: string
+  /** Marketplace/país da conta. Brasil = "MLB". */
+  site_id?: string
+}
+
+/**
+ * Consulta a conta dona do access token (GET /users/me). É o "ping" usado ao
+ * conectar o gateway: se o token for inválido/sem permissão, o MP responde
+ * 401/403 e o erro vira MPApiError. Também revela `id` (usado como mpUserId) e
+ * `site_id` (país — precisa ser "MLB" para cobrar em BRL).
+ *
+ * https://www.mercadopago.com.br/developers/pt/reference/users/_users_me/get
+ */
+export async function getAccountInfo(
+  accessToken: string,
+): Promise<MPAccountInfo> {
+  return request<MPAccountInfo>("GET", "/users/me", accessToken)
+}
+
 // ── Preferences (Checkout) ──
 
 export async function createPreference(

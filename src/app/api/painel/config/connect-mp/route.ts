@@ -4,6 +4,9 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { encrypt } from "@/lib/crypto"
 import { withRequestContext } from "@/lib/observability/with-request-context"
+import { getAccountInfo, MPApiError } from "@/lib/mercadopago/client"
+import type { MPAccountInfo } from "@/lib/mercadopago/client"
+import { contextLogger } from "@/lib/logger"
 
 const bodySchema = z
   .object({
@@ -81,6 +84,59 @@ export const POST = withRequestContext(
       }
     }
 
+    // Validação ao conectar: faz um ping em GET /users/me com o token enviado.
+    // Token inválido/sem permissão → MP responde 401/403 e não gravamos nada.
+    // Também garante que a conta é do Brasil (site_id MLB) — token de outro país
+    // aceitaria o save mas falharia silenciosamente nas vendas em BRL.
+    let account: MPAccountInfo | null = null
+    if (parsed.data.accessToken) {
+      try {
+        account = await getAccountInfo(parsed.data.accessToken)
+      } catch (error) {
+        // Só 401/403 = token inválido/sem permissão. 429 (rate limit), 408,
+        // outros 4xx, 5xx e timeout (statusCode 0) são transitórios → não
+        // rejeita o token válido do revendedor; cai no 502 abaixo (tente de novo).
+        if (
+          error instanceof MPApiError &&
+          (error.statusCode === 401 || error.statusCode === 403)
+        ) {
+          return NextResponse.json(
+            {
+              error:
+                "Token do Mercado Pago inválido ou sem permissão. Verifique se copiou o Access Token de produção correto.",
+              code: "MP_TOKEN_INVALID",
+            },
+            { status: 400 },
+          )
+        }
+        // 5xx / timeout / rede: não dá para afirmar que o token é inválido —
+        // não gravamos e pedimos para tentar de novo.
+        contextLogger().error(
+          { event: "mp.connect.validate_failed", tenantId },
+          "Falha ao validar token MP (erro transitório)",
+        )
+        return NextResponse.json(
+          {
+            error:
+              "Não foi possível validar a conexão com o Mercado Pago agora. Tente novamente em instantes.",
+            code: "MP_VALIDATION_UNAVAILABLE",
+          },
+          { status: 502 },
+        )
+      }
+
+      if (account.site_id && account.site_id !== "MLB") {
+        return NextResponse.json(
+          {
+            error:
+              "Esta conta do Mercado Pago não é do Brasil. Use uma conta brasileira (BRL) para receber os pagamentos.",
+            code: "MP_ACCOUNT_NOT_BR",
+          },
+          { status: 400 },
+        )
+      }
+    }
+
     let encryptedToken: string | null = null
     let encryptedSecret: string | null = null
     try {
@@ -106,7 +162,9 @@ export const POST = withRequestContext(
         ...(encryptedToken
           ? {
               mpAccessToken: encryptedToken,
-              mpUserId: parsed.data.mpUserId ?? null,
+              // Preenchido pelo /users/me validado; fallback para o valor do
+              // client só por segurança (não deve ocorrer).
+              mpUserId: account ? String(account.id) : parsed.data.mpUserId ?? null,
               mpConnected: true,
             }
           : {}),
