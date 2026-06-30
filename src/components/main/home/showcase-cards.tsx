@@ -1,10 +1,14 @@
 import { CourseThumb } from "./course-thumb"
 import { Award } from "lucide-react"
 import type { ShowcaseCard } from "@/lib/catalog/home"
+import { displayInterestFreeInstallments } from "@/lib/mercadopago/installments"
 
 function CardPreview({ card }: { card: ShowcaseCard }) {
-  const { categoria, titulo, preco, imageUrl, selo, accent, paymentType } = card
+  const { categoria, titulo, preco, imageUrl, selo, accent, paymentType, interestFree } =
+    card
   const isMonthly = paymentType === "MONTHLY"
+  // Nº de parcelas sem juros da unidade/PMB (não mais fixo em 12x).
+  const freeN = displayInterestFreeInstallments(interestFree)
   return (
     <div className="w-[300px] rounded-xl bg-white text-[var(--color-pmb-green)] shadow-[0_20px_40px_-18px_rgba(0,0,0,0.55)] overflow-hidden">
       <div className="relative">
@@ -44,7 +48,11 @@ function CardPreview({ card }: { card: ShowcaseCard }) {
           </span>
         </div>
         <p className="text-[11px] text-[rgba(2,89,24,0.65)]">
-          {isMonthly ? "mensalidade recorrente" : "ou 12x no cartão sem juros"}
+          {isMonthly
+            ? "mensalidade recorrente"
+            : freeN
+              ? `ou ${freeN}x no cartão sem juros`
+              : "à vista ou parcelado no cartão"}
         </p>
       </div>
     </div>

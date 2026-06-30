@@ -253,6 +253,8 @@ export interface ShowcaseCard {
   accent: "gold" | "cyan" | "lime"
   /** MONTHLY exibe o preco como mensalidade recorrente (sufixo "/mês"). */
   paymentType?: "ONE_TIME" | "MONTHLY"
+  /** Nº global de parcelas sem juros da unidade/PMB — fonte do "Nx sem juros". */
+  interestFree?: number | null
 }
 
 export async function loadCatalogo({
@@ -370,6 +372,7 @@ export async function loadShowcase(tenantId?: string): Promise<ShowcaseCard[]> {
       rows.push(...fill)
     }
 
+    const settings = await getSystemSettings()
     const accents: ShowcaseCard["accent"][] = ["gold", "cyan", "lime"]
     const selos: ShowcaseCard["selo"][] = ["mais-vendido", "mais-vendido", "novo"]
 
@@ -383,6 +386,7 @@ export async function loadShowcase(tenantId?: string): Promise<ShowcaseCard[]> {
         imageUrl: n.capaImageUrl,
         selo: selos[idx],
         accent: accents[idx],
+        interestFree: settings.pmbInterestFreeInstallments,
       }
     })
   } catch {
@@ -410,6 +414,12 @@ async function loadTenantShowcase(tenantId: string): Promise<ShowcaseCard[]> {
       },
     })
 
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { interestFreeInstallments: true },
+    })
+    const interestFree = tenant?.interestFreeInstallments ?? 1
+
     const accents: ShowcaseCard["accent"][] = ["gold", "cyan", "lime"]
     const selos: ShowcaseCard["selo"][] = ["mais-vendido", "mais-vendido", "novo"]
 
@@ -422,6 +432,7 @@ async function loadTenantShowcase(tenantId: string): Promise<ShowcaseCard[]> {
       selo: selos[idx] ?? "novo",
       accent: accents[idx] ?? "gold",
       paymentType: tc.paymentType,
+      interestFree,
     }))
   } catch {
     return []

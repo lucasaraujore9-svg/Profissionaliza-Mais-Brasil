@@ -105,10 +105,17 @@ export function CategoriesGridSection({
 // institutional renderers
 // ---------------------------------------------------------------------------
 
-export function InstitutionalSection({ config }: { config: InstitutionalConfig }) {
+export function InstitutionalSection({
+  config,
+  semJurosText,
+}: {
+  config: InstitutionalConfig
+  /** Substitui o token {{semJuros}} no trust-bar (parcelas sem juros da unidade). */
+  semJurosText?: string
+}) {
   switch (config.variant) {
     case "trust_bar":
-      return <TrustBarVariant config={config} />
+      return <TrustBarVariant config={config} semJurosText={semJurosText} />
     case "learn_anywhere":
       return <LearnAnywhereVariant config={config} />
     case "testimonials":
@@ -123,7 +130,13 @@ export function InstitutionalSection({ config }: { config: InstitutionalConfig }
   }
 }
 
-function TrustBarVariant({ config }: { config: InstitutionalConfig }) {
+function TrustBarVariant({
+  config,
+  semJurosText,
+}: {
+  config: InstitutionalConfig
+  semJurosText?: string
+}) {
   if (config.items.length === 0) return null
   return (
     <section
@@ -133,7 +146,7 @@ function TrustBarVariant({ config }: { config: InstitutionalConfig }) {
       <div className="mx-auto max-w-[1280px] px-4 md:px-6">
         <ul className="grid grid-cols-2 gap-x-4 gap-y-5 py-6 md:grid-cols-3 md:py-7 lg:grid-cols-5 lg:gap-x-6">
           {config.items.map((it, i) => (
-            <TrustItem key={i} item={it} />
+            <TrustItem key={i} item={it} semJurosText={semJurosText} />
           ))}
         </ul>
       </div>
@@ -141,7 +154,16 @@ function TrustBarVariant({ config }: { config: InstitutionalConfig }) {
   )
 }
 
-function TrustItem({ item }: { item: InstitutionalItem }) {
+function TrustItem({
+  item,
+  semJurosText,
+}: {
+  item: InstitutionalItem
+  semJurosText?: string
+}) {
+  // Token {{semJuros}} no título/corpo vira o nº de parcelas sem juros da unidade.
+  const sub = (t: string) =>
+    semJurosText ? t.replaceAll("{{semJuros}}", semJurosText) : t
   return (
     <li className="flex items-center gap-3">
       <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[var(--color-pmb-lime-50)]">
@@ -152,9 +174,9 @@ function TrustItem({ item }: { item: InstitutionalItem }) {
         )}
       </span>
       <div className="leading-tight">
-        <p className="text-[13px] font-bold text-[var(--color-pmb-green)]">{item.title}</p>
+        <p className="text-[13px] font-bold text-[var(--color-pmb-green)]">{sub(item.title)}</p>
         {item.body && (
-          <p className="text-[12px] text-[rgba(2,89,24,0.6)]">{item.body}</p>
+          <p className="text-[12px] text-[rgba(2,89,24,0.6)]">{sub(item.body)}</p>
         )}
       </div>
     </li>

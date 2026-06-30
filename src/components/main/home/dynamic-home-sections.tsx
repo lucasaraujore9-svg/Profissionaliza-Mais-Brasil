@@ -22,6 +22,9 @@ import {
   type CategoriesGridConfig,
   type InstitutionalConfig,
 } from "@/lib/home/sections"
+import { prisma } from "@/lib/prisma"
+import { getSystemSettings } from "@/lib/system-settings"
+import { interestFreePhrase } from "@/lib/mercadopago/installments"
 
 interface DynamicHomeSectionsProps {
   tenantId: string | null
@@ -30,8 +33,15 @@ interface DynamicHomeSectionsProps {
 export async function DynamicHomeSections({
   tenantId,
 }: DynamicHomeSectionsProps) {
-  const sections = await loadHomeSections(tenantId)
+  const [sections, interestFree] = await Promise.all([
+    loadHomeSections(tenantId),
+    resolveInterestFree(tenantId),
+  ])
   const enabled = sections.filter((s) => s.enabled)
+  // Texto dinâmico do selo de parcelamento do trust-bar (substitui o token
+  // {{semJuros}}) conforme o nº de parcelas sem juros da unidade (revenda) ou da
+  // PMB — mesma fonte de verdade do checkout.
+  const semJurosText = interestFreePhrase(interestFree)
 
   const cookieStore = await cookies()
   const initialSnapshot = parseBestsellersCookie(
@@ -52,6 +62,7 @@ export async function DynamicHomeSections({
     enabled.map((section) =>
       renderSection(section, {
         tenantId,
+        semJurosText,
         bestsellersSnapshot: initialSnapshot,
         onNewBestsellersSnapshot: (snap) => {
           snapshotHolder.current = snap
@@ -92,6 +103,7 @@ async function renderSection(
   section: HomeSectionRecord,
   ctx: {
     tenantId: string | null
+    semJurosText: string
     bestsellersSnapshot: BestsellersSnapshot | null
     onNewBestsellersSnapshot: (snap: BestsellersSnapshot) => void
   },
@@ -151,7 +163,12 @@ async function renderSection(
   }
 
   if (cfg.kind === "institutional") {
-    return <InstitutionalSection config={cfg as InstitutionalConfig} />
+    return (
+      <InstitutionalSection
+        config={cfg as InstitutionalConfig}
+        semJurosText={ctx.semJurosText}
+      />
+    )
   }
 
   if (cfg.kind === "tecnica") {
@@ -178,4 +195,19 @@ async function renderSection(
   }
 
   return null
+}
+
+/**
+ * Nº de parcelas sem juros vigente na superfície: da unidade (revenda) ou da PMB
+ * (home institucional). Default 1 (= sem parcelamento sem juros) quando ausente.
+ */
+async function resolveInterestFree(tenantId: string | null): Promise<number> {
+  if (!tenantId) {
+    return (await getSystemSettings()).pmbInterestFreeInstallments
+  }
+  const t = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { interestFreeInstallments: true },
+  })
+  return t?.interestFreeInstallments ?? 1
 }

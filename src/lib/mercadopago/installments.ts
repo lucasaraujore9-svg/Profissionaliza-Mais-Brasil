@@ -42,6 +42,19 @@ export function interestFreeLabel(
   return n ? `${n}x sem juros` : null
 }
 
+/**
+ * Frase para selos/trust-bar e cards da home: "Até Nx sem juros" quando a
+ * unidade oferece parcela sem juros (>=2); senão "Parcelado no cartão" (sem
+ * alegar sem juros). Fonte única: `Tenant.interestFreeInstallments` (revenda) ou
+ * `SystemSettings.pmbInterestFreeInstallments` (PMB) — espelha o checkout.
+ */
+export function interestFreePhrase(
+  interestFree: number | null | undefined,
+): string {
+  const n = displayInterestFreeInstallments(interestFree)
+  return n ? `Até ${n}x sem juros` : "Parcelado no cartão"
+}
+
 /** Uma opcao de parcelamento devolvida pelo MP (`payer_costs[]`). */
 export interface MpPayerCost {
   installments: number

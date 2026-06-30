@@ -3,6 +3,7 @@ import {
   MAX_CARD_INSTALLMENTS,
   displayInterestFreeInstallments,
   interestFreeLabel,
+  interestFreePhrase,
 } from "./installments"
 
 describe("displayInterestFreeInstallments", () => {
@@ -33,5 +34,20 @@ describe("interestFreeLabel", () => {
   it("retorna null quando só há à vista", () => {
     expect(interestFreeLabel(1)).toBeNull()
     expect(interestFreeLabel(null)).toBeNull()
+  })
+})
+
+describe("interestFreePhrase", () => {
+  it("usa o número configurado pela unidade (>=2)", () => {
+    expect(interestFreePhrase(6)).toBe("Até 6x sem juros")
+    expect(interestFreePhrase(12)).toBe("Até 12x sem juros")
+    expect(interestFreePhrase(24)).toBe(`Até ${MAX_CARD_INSTALLMENTS}x sem juros`)
+  })
+
+  it("sem parcela sem juros (1/0/nulo) não alega sem juros", () => {
+    expect(interestFreePhrase(1)).toBe("Parcelado no cartão")
+    expect(interestFreePhrase(0)).toBe("Parcelado no cartão")
+    expect(interestFreePhrase(null)).toBe("Parcelado no cartão")
+    expect(interestFreePhrase(undefined)).toBe("Parcelado no cartão")
   })
 })
