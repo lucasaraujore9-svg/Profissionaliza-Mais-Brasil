@@ -232,6 +232,8 @@ model Tenant {
   whatsapp       String? // Whatsapp para contato
   instagram      String?
   facebook       String?
+  youtube        String?
+  tiktok         String?
   supportEmail   String? @map("support_email") // E-mail de atendimento exibido no rodape da vitrine
   supportHours   String? @map("support_hours") // Horario de atendimento exibido no rodape da vitrine
 

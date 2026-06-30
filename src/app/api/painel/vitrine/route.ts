@@ -17,6 +17,8 @@ interface VitrineDto {
   whatsapp: string | null
   instagram: string | null
   facebook: string | null
+  youtube: string | null
+  tiktok: string | null
   supportEmail: string | null
   supportHours: string | null
 }
@@ -35,6 +37,8 @@ async function readTenant(tenantId: string): Promise<VitrineDto | null> {
       whatsapp: true,
       instagram: true,
       facebook: true,
+      youtube: true,
+      tiktok: true,
       supportEmail: true,
       supportHours: true,
     },
@@ -72,6 +76,8 @@ const updateSchema = z.object({
   whatsapp: z.string().trim().max(40).nullable().optional(),
   instagram: z.string().trim().max(120).nullable().optional(),
   facebook: z.string().trim().max(120).nullable().optional(),
+  youtube: z.string().trim().max(120).nullable().optional(),
+  tiktok: z.string().trim().max(120).nullable().optional(),
   supportEmail: z.string().trim().email("E-mail inválido").max(160).nullable().optional(),
   supportHours: z.string().trim().max(120).nullable().optional(),
   logoUrl: z.string().url().nullable().optional(),

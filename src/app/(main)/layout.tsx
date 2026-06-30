@@ -126,7 +126,9 @@ export default async function MainLayout({
 
   const instagramUrl = normalizeSocialUrl(tenant.instagram, "instagram")
   const facebookUrl = normalizeSocialUrl(tenant.facebook, "facebook")
-  const sameAs = [instagramUrl, facebookUrl].filter(
+  const youtubeUrl = normalizeSocialUrl(tenant.youtube, "youtube")
+  const tiktokUrl = normalizeSocialUrl(tenant.tiktok, "tiktok")
+  const sameAs = [instagramUrl, facebookUrl, youtubeUrl, tiktokUrl].filter(
     (v): v is string => Boolean(v),
   )
 
@@ -173,7 +175,8 @@ export default async function MainLayout({
         social={{
           instagram: instagramUrl,
           facebook: facebookUrl,
-          youtube: null,
+          youtube: youtubeUrl,
+          tiktok: tiktokUrl,
         }}
         sejaRevendedorHref={sejaRevendedorHref}
         brand={{

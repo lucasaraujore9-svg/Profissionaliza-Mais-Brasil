@@ -152,30 +152,45 @@ export function getSocialLinks(): SocialLinks {
 /**
  * Normaliza um valor de rede social para uma URL absoluta clicavel.
  *
- * Os campos `instagram`/`facebook` do tenant aceitam texto livre na
- * personalizacao da vitrine — o revendedor costuma digitar so o `@usuario`
- * ou `usuario`. Sem normalizar, `<a href="usuario">` resolveria relativo ao
- * dominio da vitrine (link quebrado). Aceita: URL completa, dominio sem
- * protocolo (`instagram.com/x`) ou handle (`@x` / `x`). Retorna null se vazio.
+ * Os campos `instagram`/`facebook`/`youtube`/`tiktok` do tenant aceitam texto
+ * livre na personalizacao da vitrine — o revendedor costuma digitar so o
+ * `@usuario` ou `usuario`. Sem normalizar, `<a href="usuario">` resolveria
+ * relativo ao dominio da vitrine (link quebrado). Aceita: URL completa, dominio
+ * sem protocolo (`instagram.com/x`) ou handle (`@x` / `x`). Retorna null se
+ * vazio.
  */
 export function normalizeSocialUrl(
   value: string | null | undefined,
-  platform: "instagram" | "facebook",
+  platform: "instagram" | "facebook" | "youtube" | "tiktok",
 ): string | null {
   const v = value?.trim()
   if (!v) return null
   // Ja e URL absoluta.
   if (/^https?:\/\//i.test(v)) return v
-  // Dominio sem protocolo (ex: "instagram.com/fulano", "www.facebook.com/x").
-  if (/^(?:www\.)?(?:instagram\.com|facebook\.com|fb\.com)\//i.test(v)) {
+  // Dominio sem protocolo (ex: "instagram.com/fulano", "youtube.com/@x").
+  if (
+    /^(?:www\.)?(?:instagram\.com|facebook\.com|fb\.com|youtube\.com|youtu\.be|tiktok\.com)\//i.test(
+      v,
+    )
+  ) {
     return `https://${v.replace(/^www\./i, "")}`
   }
   // Handle solto: remove @ e barras das pontas.
   const handle = v.replace(/^@/, "").replace(/^\/+|\/+$/g, "")
   if (!handle) return null
-  const base =
-    platform === "instagram"
-      ? "https://www.instagram.com/"
-      : "https://www.facebook.com/"
-  return `${base}${handle}`
+  switch (platform) {
+    case "instagram":
+      return `https://www.instagram.com/${handle}`
+    case "facebook":
+      return `https://www.facebook.com/${handle}`
+    case "youtube":
+      // Handle moderno (sem barra) usa @ (youtube.com/@nome). Caminho legado
+      // (channel/UC..., c/Nome, user/Nome) vai sem @ para não quebrar o link.
+      return handle.includes("/")
+        ? `https://www.youtube.com/${handle}`
+        : `https://www.youtube.com/@${handle}`
+    case "tiktok":
+      // Perfis do TikTok sempre usam @ no caminho (tiktok.com/@nome).
+      return `https://www.tiktok.com/@${handle}`
+  }
 }

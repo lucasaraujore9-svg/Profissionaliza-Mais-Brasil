@@ -28,6 +28,13 @@ function IconYoutube(props: React.SVGProps<SVGSVGElement>) {
     </svg>
   )
 }
+function IconTiktok(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M9 12a4 4 0 1 0 4 4V4a5 5 0 0 0 5 5" />
+    </svg>
+  )
+}
 import { getSocialLinks, getSupportContacts, type SupportContacts } from "@/lib/branding"
 import type { CategoriaInfo } from "@/lib/catalog/home"
 
@@ -63,7 +70,12 @@ interface FooterMainProps {
    * perfis preenchidos na personalização da vitrine (tenant) em vez dos
    * perfis oficiais da PMB.
    */
-  social?: { instagram?: string | null; facebook?: string | null; youtube?: string | null }
+  social?: {
+    instagram?: string | null
+    facebook?: string | null
+    youtube?: string | null
+    tiktok?: string | null
+  }
   /** Exibe a linha do CNPJ da PMB. A vitrine do revendedor passa `false`. */
   showCnpj?: boolean
   /**
@@ -215,7 +227,10 @@ export function FooterMain({
               )}
             </ul>
 
-            {(social.instagram || social.facebook || social.youtube) && (
+            {(social.instagram ||
+              social.facebook ||
+              social.youtube ||
+              social.tiktok) && (
               <div className="mt-5 flex items-center gap-2">
                 {social.instagram && (
                   <a
@@ -248,6 +263,17 @@ export function FooterMain({
                     className="grid h-9 w-9 place-items-center rounded-full bg-white/10 transition-colors hover:bg-white/20"
                   >
                     <IconYoutube className="h-4 w-4" aria-hidden />
+                  </a>
+                )}
+                {social.tiktok && (
+                  <a
+                    href={social.tiktok}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label="TikTok"
+                    className="grid h-9 w-9 place-items-center rounded-full bg-white/10 transition-colors hover:bg-white/20"
+                  >
+                    <IconTiktok className="h-4 w-4" aria-hidden />
                   </a>
                 )}
               </div>

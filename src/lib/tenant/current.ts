@@ -17,6 +17,8 @@ export interface CurrentTenant {
   whatsapp: string | null
   instagram: string | null
   facebook: string | null
+  youtube: string | null
+  tiktok: string | null
   supportEmail: string | null
   supportHours: string | null
   referralCode: string | null
@@ -57,6 +59,8 @@ export const getCurrentTenant = cache(
           whatsapp: true,
           instagram: true,
           facebook: true,
+          youtube: true,
+          tiktok: true,
           supportEmail: true,
           supportHours: true,
           referralCode: true,

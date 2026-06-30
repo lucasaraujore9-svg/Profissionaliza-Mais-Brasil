@@ -27,6 +27,8 @@ export interface VitrineConfig {
   whatsapp: string | null
   instagram: string | null
   facebook: string | null
+  youtube: string | null
+  tiktok: string | null
   supportEmail: string | null
   supportHours: string | null
 }
@@ -207,6 +209,26 @@ export function VitrineConfigForm({
               value={config.facebook ?? ""}
               onChange={(e) => update("facebook", e.target.value || null)}
               placeholder="sualoja"
+              className="mt-1.5"
+            />
+          </div>
+          <div>
+            <Label htmlFor="v-yt">YouTube</Label>
+            <Input
+              id="v-yt"
+              value={config.youtube ?? ""}
+              onChange={(e) => update("youtube", e.target.value || null)}
+              placeholder="@sualoja"
+              className="mt-1.5"
+            />
+          </div>
+          <div>
+            <Label htmlFor="v-tt">TikTok</Label>
+            <Input
+              id="v-tt"
+              value={config.tiktok ?? ""}
+              onChange={(e) => update("tiktok", e.target.value || null)}
+              placeholder="@sualoja"
               className="mt-1.5"
             />
           </div>

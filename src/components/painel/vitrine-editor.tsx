@@ -22,6 +22,8 @@ const defaultConfig: VitrineConfig = {
   whatsapp: null,
   instagram: null,
   facebook: null,
+  youtube: null,
+  tiktok: null,
   supportEmail: null,
   supportHours: null,
 }
@@ -144,6 +146,8 @@ export function VitrineEditor() {
           whatsapp: config.whatsapp,
           instagram: config.instagram,
           facebook: config.facebook,
+          youtube: config.youtube,
+          tiktok: config.tiktok,
           supportEmail: config.supportEmail,
           supportHours: config.supportHours,
         }),
