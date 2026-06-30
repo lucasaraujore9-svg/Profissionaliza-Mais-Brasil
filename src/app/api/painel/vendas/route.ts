@@ -5,6 +5,7 @@ import { requireResellerSession } from "@/lib/auth/reseller-session"
 import { auth } from "@/lib/auth"
 import { tryConsumeCoupon, releaseCoupon } from "@/lib/coupons/consume"
 import { applyCouponDiscount } from "@/lib/coupons/discount"
+import { assertCouponMatchesEnrollment } from "@/lib/checkout/assert-tenant-gateway"
 import { swallow } from "@/lib/errors"
 import { contextLogger } from "@/lib/logger"
 import { withRequestContext } from "@/lib/observability/with-request-context"
@@ -210,6 +211,12 @@ export const POST = withRequestContext(
       if (coupon.maxUses !== null && coupon.usedCount >= coupon.maxUses) {
         return NextResponse.json({ error: "Cupom esgotado" }, { status: 400 })
       }
+      // Cupom e matrícula pertencem à mesma unidade (ambos tenant.id).
+      assertCouponMatchesEnrollment({
+        couponTenantId: coupon.tenantId,
+        enrollmentTenantId: tenant.id,
+        context: "painel.vendas.coupon",
+      })
       // Cálculo via helper centralizado (Prisma.Decimal).
       const calc = applyCouponDiscount({
         basePrice,

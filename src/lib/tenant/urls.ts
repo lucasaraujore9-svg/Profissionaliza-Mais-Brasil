@@ -40,8 +40,15 @@ export function isPmbAppHost(host: string | null | undefined): boolean {
   if (allowed.has(h)) return true
 
   // Dev local e preview deploys (Vercel) — o checkout PMB precisa funcionar lá.
-  if (h === "localhost" || h.endsWith(".localhost")) return true
-  if (h.endsWith(".vercel.app")) return true
+  // Em PRODUÇÃO, porém, esses hosts genéricos NUNCA são checkout PMB: um host de
+  // preview (*.vercel.app) ou localhost não carrega contexto de tenant resolvido,
+  // então tratá-lo como PMB deixaria a conta-mãe (Asaas/MP da marca) cobrar uma
+  // venda sem unidade. Liberamos apenas FORA de produção (VERCEL_ENV != production;
+  // em preview o valor é "preview", em prod é "production", local fica undefined).
+  if (process.env.VERCEL_ENV !== "production") {
+    if (h === "localhost" || h.endsWith(".localhost")) return true
+    if (h.endsWith(".vercel.app")) return true
+  }
 
   return false
 }

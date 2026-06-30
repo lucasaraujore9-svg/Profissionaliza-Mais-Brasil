@@ -7,6 +7,7 @@ import {
   createCustomer,
   createSubscription,
   listPayments,
+  motherAsaasKey,
 } from "@/lib/asaas/client"
 import { createPromoBilling } from "@/lib/asaas/promo"
 import { sendEmail, isEmailConfigured } from "@/lib/email/resend"
@@ -172,7 +173,7 @@ export async function createReseller(
           cycle: "MONTHLY",
           description: `Mensalidade Profissionaliza Mais Brasil — ${input.name}`,
           externalReference: `tenant:${input.slug}`,
-        })
+        }, motherAsaasKey())
         asaasSubscriptionId = subscription.id
 
         try {

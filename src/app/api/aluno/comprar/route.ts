@@ -10,8 +10,14 @@ import {
   createPayment as createAsaasPayment,
   createSubscription as createAsaasSubscription,
   listPayments as listAsaasPayments,
+  motherAsaasKey,
   AsaasApiError,
 } from "@/lib/asaas/client"
+import {
+  assertPmbCharge,
+  assertCouponMatchesEnrollment,
+  isPmbTenantSlug,
+} from "@/lib/checkout/assert-tenant-gateway"
 import { getSystemSettings } from "@/lib/system-settings"
 import { tryConsumeCoupon, releaseCoupon } from "@/lib/coupons/consume"
 import { applyCouponDiscount } from "@/lib/coupons/discount"
@@ -19,7 +25,6 @@ import { dueDateInDays } from "@/lib/checkout/due-date"
 import { mpWebhookUrl, asaasWebhookUrl } from "@/lib/tenant/urls"
 import { swallow } from "@/lib/errors"
 import { withRequestContext } from "@/lib/observability/with-request-context"
-import { PMB_TENANT_SLUG } from "@/lib/pmb-config"
 import { tenantCheckoutMode } from "@/lib/tenant/checkout-mode"
 import { effectivePaymentType } from "@/lib/tenant/monthly-policy"
 import { isSellablePrice } from "@/lib/checkout/price-guard"
@@ -175,6 +180,13 @@ async function handleResellerInit(
       if (coupon.maxUses !== null && coupon.usedCount >= coupon.maxUses) {
         return NextResponse.json({ error: "Cupom esgotado", code: "COUPON_EXHAUSTED" }, { status: 400 })
       }
+      // Cupom e matrícula pertencem à mesma unidade (ambos `tenantId`). Bloqueia
+      // cupom PMB (tenantId=null) aplicado a uma venda de revenda.
+      assertCouponMatchesEnrollment({
+        couponTenantId: coupon.tenantId,
+        enrollmentTenantId: tenantId,
+        context: "aluno.comprar.reseller.coupon",
+      })
       const calc = applyCouponDiscount({
         basePrice,
         discountType: coupon.discountType,
@@ -304,13 +316,25 @@ export const POST = withRequestContext(
     )
   }
 
-  // Detecção PMB vs revenda. Aluno de revenda recompra na CONTA DA PRÓPRIA
-  // unidade (preço/gateway/cupom/matrícula escopados ao tenant), com Payment
-  // Brick (pagamento no próprio site). Aluno PMB (placeholder `__pmb__` ou JWT
-  // legado sem tenantId) segue o fluxo de venda direta PMB (redirect) abaixo.
-  const sessionTenant = session.tenantId
-    ? await prisma.tenant.findUnique({
-        where: { id: session.tenantId },
+  // Detecção PMB vs revenda por IDENTIFICAÇÃO POSITIVA do tenant AUTORITATIVO do
+  // aluno (Student.tenantId no banco) — NUNCA pelo claim do JWT. Antes a decisão
+  // usava o sinal NEGATIVO `!session.tenantId`: um aluno de revenda cujo token
+  // chegasse sem tenantId colapsava no ramo PMB e a venda caía na conta Asaas da
+  // PMB (vazamento de receita — caso Polo Betim et al.). `Student.tenantId` é NOT
+  // NULL; o aluno PMB aponta para o placeholder `__pmb__`. Aluno de revenda SEMPRE
+  // recompra na conta da própria unidade (preço/gateway/cupom/matrícula escopados).
+  const studentRecord = await prisma.student.findUnique({
+    where: { id: session.studentId },
+    select: {
+      id: true,
+      // Dados do comprador usados no ramo PMB abaixo — selecionados já aqui para
+      // não repetir um segundo student.findUnique da MESMA linha por checkout.
+      nome: true,
+      email: true,
+      cpf: true,
+      fone: true,
+      asaasCustomerId: true,
+      tenant: {
         select: {
           id: true,
           slug: true,
@@ -327,47 +351,53 @@ export const POST = withRequestContext(
           monthlyEnabled: true,
           monthlyScope: true,
         },
-      })
-    : null
-  const isPmb = !session.tenantId || sessionTenant?.slug === PMB_TENANT_SLUG
-
-  if (!isPmb && sessionTenant && session.tenantId) {
-    return handleResellerInit(session.tenantId, session.studentId, sessionTenant, parsed.data)
+      },
+    },
+  })
+  const studentTenant = studentRecord?.tenant ?? null
+  if (!studentRecord || !studentTenant) {
+    // Student.tenantId é NOT NULL; ausência aqui = aluno inexistente.
+    return NextResponse.json({ error: "Aluno não encontrado" }, { status: 404 })
   }
+
+  if (!isPmbTenantSlug(studentTenant.slug)) {
+    return handleResellerInit(
+      studentTenant.id,
+      session.studentId,
+      studentTenant,
+      parsed.data,
+    )
+  }
+
+  // Defesa em profundidade: daqui em diante é a venda direta PMB (conta Asaas/MP
+  // do sistema mãe). Confirma que o aluno é realmente PMB (placeholder __pmb__) —
+  // uma venda de revenda jamais pode cobrar na conta-mãe.
+  assertPmbCharge({
+    enrollmentTenantId: null,
+    studentTenantSlug: studentTenant.slug,
+    context: "aluno.comprar.pmb",
+  })
 
   const settings = await getSystemSettings()
   const gateway = settings.pmbDirectSaleGateway
 
-  const [student, course] = await Promise.all([
-    prisma.student.findUnique({
-      where: { id: session.studentId },
-      select: {
-        id: true,
-        nome: true,
-        email: true,
-        cpf: true,
-        fone: true,
-        asaasCustomerId: true,
-      },
-    }),
-    prisma.course.findUnique({
-      where: { id: parsed.data.courseId },
-      select: {
-        id: true,
-        nome: true,
-        status: true,
-        precoVitrineMain: true,
-        precoPromocional: true,
-        precoOriginal: true,
-        paymentTypeMain: true,
-        monthlyMonthsMain: true,
-      },
-    }),
-  ])
+  // `studentRecord` (já lido acima para o roteamento) traz os dados do comprador;
+  // reaproveita em vez de reconsultar a mesma linha.
+  const student = studentRecord
+  const course = await prisma.course.findUnique({
+    where: { id: parsed.data.courseId },
+    select: {
+      id: true,
+      nome: true,
+      status: true,
+      precoVitrineMain: true,
+      precoPromocional: true,
+      precoOriginal: true,
+      paymentTypeMain: true,
+      monthlyMonthsMain: true,
+    },
+  })
 
-  if (!student) {
-    return NextResponse.json({ error: "Aluno não encontrado" }, { status: 404 })
-  }
   if (!student.email) {
     return NextResponse.json(
       { error: "Cadastre seu email no perfil antes de comprar" },
@@ -433,6 +463,13 @@ export const POST = withRequestContext(
     if (coupon.maxUses !== null && coupon.usedCount >= coupon.maxUses) {
       return NextResponse.json({ error: "Cupom esgotado" }, { status: 400 })
     }
+    // Cupom PMB tem tenantId=null, como a matrícula PMB. Bloqueia cupom de
+    // revenda (tenantId != null) aplicado a uma venda PMB.
+    assertCouponMatchesEnrollment({
+      couponTenantId: coupon.tenantId,
+      enrollmentTenantId: null,
+      context: "aluno.comprar.pmb.coupon",
+    })
     // Cálculo via helper centralizado com Prisma.Decimal — evita drift de
     // arredondamento entre rotas e elimina float em arithmetic financeira.
     const result = applyCouponDiscount({
@@ -655,7 +692,7 @@ export const POST = withRequestContext(
         externalReference,
         maxPayments: monthlyMonths,
         notificationUrl: asaasWebhookUrl(),
-      })
+      }, motherAsaasKey())
 
       let firstInvoiceUrl: string | null = null
       let firstPaymentId: string | null = null
@@ -705,7 +742,7 @@ export const POST = withRequestContext(
       description: `Curso: ${course.nome}`,
       externalReference,
       notificationUrl: asaasWebhookUrl(),
-    })
+    }, motherAsaasKey())
 
     await prisma.enrollment.update({
       where: { id: enrollment.id },

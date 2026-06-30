@@ -8,6 +8,7 @@ import {
   getSubscription,
   updateSubscription,
   deletePayment,
+  motherAsaasKey,
   AsaasApiError,
 } from "@/lib/asaas/client"
 import { addMonths } from "@/lib/asaas/promo"
@@ -104,7 +105,7 @@ export const POST = withRequestContextParams<{ paymentId: string }>(
         // IP do comprador — o Asaas usa na análise de risco da captura do
         // cartão. Sem ele a transação à vista pode ser recusada.
         remoteIp: clientIp(request),
-      })
+      }, motherAsaasKey())
       return NextResponse.json({
         data: { id: result.id, status: result.status, value: result.value },
       })

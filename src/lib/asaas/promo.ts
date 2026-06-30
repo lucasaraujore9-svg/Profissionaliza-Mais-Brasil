@@ -1,4 +1,4 @@
-import { createSubscription, listPayments } from "./client"
+import { createSubscription, listPayments, motherAsaasKey } from "./client"
 
 /**
  * Soma `months` meses a uma data `YYYY-MM-DD`, ancorando no fim do mes quando o
@@ -61,7 +61,7 @@ export async function createPromoBilling(
     maxPayments: promoMonths,
     description: `Mensalidade promocional Profissionaliza Mais Brasil — ${name}`,
     externalReference: `tenant:${slug}`,
-  })
+  }, motherAsaasKey())
 
   const regular = await createSubscription({
     customer: customerId,
@@ -71,7 +71,7 @@ export async function createPromoBilling(
     cycle: "MONTHLY",
     description: `Mensalidade Profissionaliza Mais Brasil — ${name}`,
     externalReference: `tenant:${slug}`,
-  })
+  }, motherAsaasKey())
 
   let firstPaymentId: string | null = null
   let invoiceUrl: string | null = null

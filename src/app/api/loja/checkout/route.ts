@@ -6,6 +6,7 @@ import { cpfHasRegisteredLogin } from "@/lib/students/cpf-already-registered"
 import { provisionStudentAccess } from "@/lib/students/access"
 import { tryConsumeCoupon, releaseCoupon } from "@/lib/coupons/consume"
 import { applyCouponDiscount } from "@/lib/coupons/discount"
+import { assertCouponMatchesEnrollment } from "@/lib/checkout/assert-tenant-gateway"
 import { rateLimit, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
 import { swallow } from "@/lib/errors"
 import { contextLogger } from "@/lib/logger"
@@ -295,6 +296,14 @@ export const POST = withRequestContext(
           { status: 400 },
         )
       }
+
+      // Cupom e matrícula pertencem à mesma unidade. Bloqueia cupom PMB
+      // (tenantId=null) aplicado a uma venda de revenda.
+      assertCouponMatchesEnrollment({
+        couponTenantId: coupon.tenantId,
+        enrollmentTenantId: tenantId,
+        context: "loja.checkout.coupon",
+      })
 
       // Cálculo via helper centralizado (Prisma.Decimal) — alinha com
       // /api/aluno/comprar e /api/painel/vendas. Antes cada rota fazia

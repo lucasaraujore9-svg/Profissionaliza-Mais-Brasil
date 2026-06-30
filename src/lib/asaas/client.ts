@@ -52,6 +52,23 @@ function getConfig(apiKeyOverride?: string) {
   return { apiUrl, apiKey }
 }
 
+/**
+ * Chave Asaas da CONTA-MÃE (PMB). Selecionar a conta-mãe passa a ser uma decisão
+ * EXPLÍCITA e auditável — nunca um fallback silencioso. As funções que movem
+ * dinheiro de VENDA (createPayment/createSubscription/payWithCreditCard) exigem
+ * `apiKey` justamente para forçar o caller a escolher entre a conta da revenda
+ * (`decryptTenantAsaasKey(tenant.asaasApiKey)`) e a conta-mãe (`motherAsaasKey()`).
+ * Antes, omitir a chave caía no `?? process.env.ASAAS_API_KEY` e qualquer venda
+ * esquecida ia parar no caixa da PMB.
+ */
+export function motherAsaasKey(): string {
+  const key = process.env.ASAAS_API_KEY
+  if (!key) {
+    throw new Error("ASAAS_API_KEY ausente — conta-mãe (PMB) não configurada")
+  }
+  return key
+}
+
 async function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
@@ -198,7 +215,7 @@ export async function findOrCreateAsaasCustomer(
 
 export async function createSubscription(
   params: AsaasCreateSubscriptionParams,
-  apiKey?: string,
+  apiKey: string,
 ): Promise<AsaasSubscription> {
   // Assinatura COM cartao inline usa um endpoint distinto do Asaas, com BARRA
   // FINAL: POST /v3/subscriptions/ (SubscriptionSaveWithCreditCardRequestDTO,
@@ -266,7 +283,7 @@ export async function updateSubscription(
 
 export async function createPayment(
   params: AsaasCreatePaymentParams,
-  apiKey?: string,
+  apiKey: string,
 ): Promise<AsaasPayment> {
   // Cobranca COM cartao inline (captura na criacao) usa o endpoint com BARRA
   // FINAL: POST /v3/payments/ (PaymentSaveWithCreditCardRequestDTO, exige
@@ -335,8 +352,9 @@ export async function getPixQrCode(paymentId: string, apiKey?: string): Promise<
 export async function payWithCreditCard(
   paymentId: string,
   params: AsaasPayWithCreditCardParams,
+  apiKey: string,
 ): Promise<AsaasPayment> {
-  return request<AsaasPayment>("POST", `/payments/${paymentId}/payWithCreditCard`, params)
+  return request<AsaasPayment>("POST", `/payments/${paymentId}/payWithCreditCard`, params, apiKey)
 }
 
 /**

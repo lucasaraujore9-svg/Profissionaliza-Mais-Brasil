@@ -6,6 +6,7 @@ import { cpfHasRegisteredLogin } from "@/lib/students/cpf-already-registered"
 import { provisionStudentAccess } from "@/lib/students/access"
 import { tryConsumeCoupon, releaseCoupon } from "@/lib/coupons/consume"
 import { applyCouponDiscount } from "@/lib/coupons/discount"
+import { assertCouponMatchesEnrollment } from "@/lib/checkout/assert-tenant-gateway"
 import { rateLimit, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
 import { swallow } from "@/lib/errors"
 import { contextLogger } from "@/lib/logger"
@@ -210,6 +211,11 @@ export const POST = withRequestContext(
             { status: 400 },
           )
         }
+        assertCouponMatchesEnrollment({
+          couponTenantId: coupon.tenantId,
+          enrollmentTenantId: tenantId,
+          context: "loja.checkout.package.coupon",
+        })
         const calc = applyCouponDiscount({
           basePrice,
           discountType: coupon.discountType,

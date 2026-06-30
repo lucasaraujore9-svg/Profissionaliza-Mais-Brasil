@@ -7,6 +7,7 @@ import {
   AsaasApiError,
 } from "@/lib/asaas/client"
 import { issuePmbAsaasCharge } from "@/lib/checkout/issue-pmb-asaas-charge"
+import { assertCouponMatchesEnrollment } from "@/lib/checkout/assert-tenant-gateway"
 import { getOrCreatePmbTenant } from "@/lib/pmb-tenant"
 import { tryConsumeCoupon, releaseCoupon } from "@/lib/coupons/consume"
 import { applyCouponDiscount } from "@/lib/coupons/discount"
@@ -356,6 +357,14 @@ export const POST = withRequestContext(
           { status: 400 },
         )
       }
+
+      // Venda PMB: cupom e matrícula têm tenantId=null. Bloqueia cupom de
+      // revenda (tenantId != null) aplicado a uma venda do sistema mãe.
+      assertCouponMatchesEnrollment({
+        couponTenantId: coupon.tenantId,
+        enrollmentTenantId: null,
+        context: "pmb.checkout.coupon",
+      })
 
       // Cálculo unificado em Prisma.Decimal (mesmo helper das outras rotas) —
       // evita divergência de centavos entre o valor cobrado e os relatórios.

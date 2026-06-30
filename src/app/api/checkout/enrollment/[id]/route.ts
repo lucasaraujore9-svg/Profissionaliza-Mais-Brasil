@@ -7,6 +7,7 @@ import {
   AsaasApiError,
 } from "@/lib/asaas/client"
 import { issuePmbAsaasCharge } from "@/lib/checkout/issue-pmb-asaas-charge"
+import { TenantGatewayIsolationError } from "@/lib/checkout/assert-tenant-gateway"
 import { rateLimit, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
 import { isPmbAppHost } from "@/lib/tenant/urls"
 import { clientIp } from "@/lib/http/client-ip"
@@ -212,6 +213,26 @@ export const POST = withRequestContextParams<{ id: string }>(
         data: { enrollmentId: enrollment.id, gateway: "ASAAS", ...result },
       })
     } catch (error) {
+      if (error instanceof TenantGatewayIsolationError) {
+        // Matrícula "colapsada": tenantId=null (vitrine PMB) mas o aluno pertence
+        // a uma revenda real. O guard recusa cobrá-la na conta-mãe — comportamento
+        // CORRETO (evita vazamento de receita). Não é erro do Asaas: devolvemos uma
+        // mensagem acionável (refazer pela loja da unidade) em vez de um 502 opaco
+        // que prenderia o aluno num loop de retry. A cron fix-gateway-collapse
+        // remove a matrícula órfã para a recompra fluir pela conta da revenda.
+        contextLogger().warn(
+          { event: "pmb_checkout.resume_tenant_mismatch", enrollmentId: enrollment.id },
+          "retomada PMB bloqueada: matrícula pertence a uma revenda",
+        )
+        return NextResponse.json(
+          {
+            error:
+              "Esta cobrança pertence a uma unidade e não pode ser paga por aqui. Refaça a compra pela loja da sua unidade ou entre em contato com o suporte.",
+            code: "TENANT_MISMATCH",
+          },
+          { status: 409 },
+        )
+      }
       // NÃO apagamos a matrícula (diferente do checkout público): ela é uma venda
       // direta legítima e o aluno pode tentar de novo. Só reportamos o erro.
       contextLogger().error(

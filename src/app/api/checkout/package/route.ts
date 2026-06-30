@@ -7,9 +7,11 @@ import {
   getPixQrCode,
   getBillingInfo,
   payWithCreditCard,
+  motherAsaasKey,
   AsaasApiError,
 } from "@/lib/asaas/client"
 import { getOrCreatePmbTenant } from "@/lib/pmb-tenant"
+import { assertCouponMatchesEnrollment } from "@/lib/checkout/assert-tenant-gateway"
 import { tryConsumeCoupon, releaseCoupon } from "@/lib/coupons/consume"
 import { applyCouponDiscount } from "@/lib/coupons/discount"
 import { dueDateInDays } from "@/lib/checkout/due-date"
@@ -259,6 +261,13 @@ export const POST = withRequestContext(
             { status: 400 },
           )
         }
+        // Venda PMB: cupom e matrícula têm tenantId=null. Bloqueia cupom de
+        // revenda (tenantId != null) aplicado a um pacote do sistema mãe.
+        assertCouponMatchesEnrollment({
+          couponTenantId: coupon.tenantId,
+          enrollmentTenantId: null,
+          context: "pmb.checkout.package.coupon",
+        })
         const applied = applyCouponDiscount({
           basePrice,
           discountType: coupon.discountType,
@@ -344,7 +353,7 @@ export const POST = withRequestContext(
           description: `Pacote: ${pkg.name}`,
           externalReference,
           notificationUrl: asaasWebhookUrl(),
-        })
+        }, motherAsaasKey())
 
         await prisma.enrollment.update({
           where: { id: enrollment.id },
@@ -370,7 +379,7 @@ export const POST = withRequestContext(
               mobilePhone: (student.fone ?? data.fone).replace(/\D/g, ""),
             },
             remoteIp: clientIp(request),
-          })
+          }, motherAsaasKey())
           return NextResponse.json({
             data: {
               enrollmentId: enrollment.id,

@@ -10,6 +10,7 @@ import {
   createPayment as createAsaasPayment,
   createSubscription as createAsaasSubscription,
   listPayments as listAsaasPayments,
+  motherAsaasKey,
   AsaasApiError,
 } from "@/lib/asaas/client"
 import { getSystemSettings } from "@/lib/system-settings"
@@ -18,6 +19,7 @@ import { provisionStudentAccess } from "@/lib/students/access"
 import { fulfillScholarshipEnrollment } from "@/lib/enrollment/fulfill"
 import { tryConsumeCoupon, releaseCoupon } from "@/lib/coupons/consume"
 import { applyCouponDiscount } from "@/lib/coupons/discount"
+import { assertCouponMatchesEnrollment } from "@/lib/checkout/assert-tenant-gateway"
 import { dueDateInDays } from "@/lib/checkout/due-date"
 import { swallow } from "@/lib/errors"
 import { withRequestContext } from "@/lib/observability/with-request-context"
@@ -297,6 +299,13 @@ export const POST = withRequestContext(
       return NextResponse.json({ error: "Cupom esgotado" }, { status: 400 })
     }
 
+    // Venda PMB: cupom e matrícula têm tenantId=null. Bloqueia cupom de revenda.
+    assertCouponMatchesEnrollment({
+      couponTenantId: coupon.tenantId,
+      enrollmentTenantId: null,
+      context: "admin.vendas.coupon",
+    })
+
     // Cálculo unificado em Prisma.Decimal (mesmo helper das demais rotas) —
     // evita divergência de centavos entre o valor cobrado e os relatórios.
     const applied = applyCouponDiscount({
@@ -512,7 +521,7 @@ export const POST = withRequestContext(
         externalReference,
         maxPayments: monthlyMonths,
         notificationUrl: asaasWebhookUrl(),
-      })
+      }, motherAsaasKey())
 
       // Asaas gera as cobrancas async; busca a 1a invoice em ate 3 tentativas
       let firstInvoiceUrl: string | null = null
@@ -565,7 +574,7 @@ export const POST = withRequestContext(
       description: `Curso: ${course.nome}`,
       externalReference,
       notificationUrl: asaasWebhookUrl(),
-    })
+    }, motherAsaasKey())
 
     await prisma.enrollment.update({
       where: { id: enrollment.id },

@@ -7,9 +7,11 @@ import {
   getPixQrCode,
   getBillingInfo,
   payWithCreditCard,
+  motherAsaasKey,
 } from "@/lib/asaas/client"
 import { dueDateInDays } from "@/lib/checkout/due-date"
 import { asaasWebhookUrl } from "@/lib/tenant/urls"
+import { assertPmbCharge, TenantGatewayIsolationError } from "@/lib/checkout/assert-tenant-gateway"
 
 /**
  * Cobrança Asaas do sistema-mãe (PMB) para UMA matrícula. Extraído de
@@ -94,6 +96,33 @@ export async function issuePmbAsaasCharge(
     remoteIp,
   } = input
 
+  // Defesa em profundidade no hop do dinheiro: esta função SEMPRE cobra na
+  // conta-mãe (PMB). Confirma, autoritativamente no banco, que a matrícula é PMB
+  // (tenantId=null) e o aluno pertence ao placeholder __pmb__. Uma matrícula de
+  // revenda que chegue aqui (ex.: regressão de roteamento) LANÇA em vez de cair
+  // no caixa da PMB. `student.tenantId` é NOT NULL, então `student.tenant` existe.
+  const guard = await prisma.enrollment.findUnique({
+    where: { id: enrollmentId },
+    select: { tenantId: true, student: { select: { tenant: { select: { slug: true } } } } },
+  })
+  if (!guard) {
+    // Matrícula inexistente (id stale/errado, ou removida em corrida — ex.: pela
+    // cron fix-gateway-collapse). NÃO cobrar: um lookup nulo colapsaria para
+    // (null, null) e PASSARIA o assert como se fosse PMB, gerando uma cobrança
+    // órfã e não rastreável na conta-mãe. Falha fechada é a postura correta no
+    // hop do dinheiro.
+    throw new TenantGatewayIsolationError(
+      "Matrícula não encontrada para cobrança PMB",
+    )
+  }
+  assertPmbCharge({
+    enrollmentTenantId: guard.tenantId,
+    studentTenantSlug: guard.student?.tenant?.slug ?? null,
+    context: "issuePmbAsaasCharge",
+  })
+
+  const motherKey = motherAsaasKey()
+
   const phoneDigits = student.fone.replace(/\D/g, "")
 
   const { customer } = await findOrCreateAsaasCustomer({
@@ -146,7 +175,7 @@ export async function issuePmbAsaasCharge(
       maxPayments: monthlyMonths,
       notificationUrl: asaasWebhookUrl(),
       ...(monthlyCardPair ?? {}),
-    })
+    }, motherKey)
 
     // Asaas gera as cobranças async; busca a 1ª invoice em até 3 tentativas.
     let firstPayment:
@@ -219,7 +248,7 @@ export async function issuePmbAsaasCharge(
     description: `Curso: ${courseNome}`,
     externalReference,
     notificationUrl: asaasWebhookUrl(),
-  })
+  }, motherKey)
 
   await prisma.enrollment.update({
     where: { id: enrollmentId },
@@ -236,7 +265,7 @@ export async function issuePmbAsaasCharge(
       creditCard,
       creditCardHolderInfo: holderInfo,
       remoteIp,
-    })
+    }, motherKey)
     return {
       mode: "credit_card_result",
       status: result.status,

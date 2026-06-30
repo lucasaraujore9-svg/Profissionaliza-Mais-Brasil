@@ -13,6 +13,7 @@ import {
   getSubscription,
   listPayments,
   updateSubscription,
+  motherAsaasKey,
   AsaasApiError,
 } from "@/lib/asaas/client"
 import { createPromoBilling } from "@/lib/asaas/promo"
@@ -259,7 +260,7 @@ export const PATCH = withRequestContextParams<{ id: string }>(
               cycle: "MONTHLY",
               description: `Mensalidade Profissionaliza Mais Brasil — ${tenant.name}`,
               externalReference: `tenant:${tenant.slug}`,
-            })
+            }, motherAsaasKey())
             newSubscriptionId = subscription.id
             asaasUpdated = true
             try {
@@ -297,7 +298,7 @@ export const PATCH = withRequestContextParams<{ id: string }>(
                 cycle: "MONTHLY",
                 description: `Mensalidade Profissionaliza Mais Brasil — ${tenant.name}`,
                 externalReference: `tenant:${tenant.slug}`,
-              })
+              }, motherAsaasKey())
               newSubscriptionId = subscription.id
               asaasUpdated = true
               try {
@@ -323,7 +324,7 @@ export const PATCH = withRequestContextParams<{ id: string }>(
             cycle: "MONTHLY",
             description: `Mensalidade Profissionaliza Mais Brasil — ${tenant.name}`,
             externalReference: `tenant:${tenant.slug}`,
-          })
+          }, motherAsaasKey())
           newSubscriptionId = subscription.id
           asaasUpdated = true
           try {

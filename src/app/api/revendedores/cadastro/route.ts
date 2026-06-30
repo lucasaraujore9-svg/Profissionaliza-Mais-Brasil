@@ -12,6 +12,7 @@ import {
   createSubscription,
   cancelSubscription,
   listPayments,
+  motherAsaasKey,
   AsaasApiError,
 } from "@/lib/asaas/client"
 import { contextLogger } from "@/lib/logger"
@@ -143,7 +144,7 @@ export const POST = withRequestContext(
       cycle: "MONTHLY",
       description: PLANO_GROWTH_DESCRICAO,
       externalReference: `tenant_pending_${slug}`,
-    })
+    }, motherAsaasKey())
   } catch (error) {
     const message =
       error instanceof AsaasApiError
