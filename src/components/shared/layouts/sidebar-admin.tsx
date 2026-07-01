@@ -25,8 +25,8 @@ import {
   LifeBuoy,
   Building2,
   Video,
-  PanelLeftClose,
-  PanelLeftOpen,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -104,49 +104,47 @@ export function SidebarAdmin({
   return (
     <aside
       className={cn(
-        "flex h-full flex-col bg-[var(--color-pmb-green)] text-white transition-[width] duration-200",
+        "relative flex h-full flex-col bg-[var(--color-pmb-green)] text-white transition-[width] duration-200",
         collapsed ? "w-16" : "w-60",
       )}
     >
+      {onToggleCollapse && (
+        <button
+          type="button"
+          onClick={onToggleCollapse}
+          aria-label={collapsed ? "Expandir menu" : "Recolher menu"}
+          title={collapsed ? "Expandir menu" : "Recolher menu"}
+          className="absolute right-0 top-7 z-50 flex h-6 w-6 -translate-y-1/2 translate-x-1/2 items-center justify-center rounded-full border border-black/10 bg-white text-[var(--color-pmb-green)] shadow-md transition-colors hover:bg-[var(--color-pmb-lime-50)]"
+        >
+          {collapsed ? (
+            <ChevronRight className="h-4 w-4" />
+          ) : (
+            <ChevronLeft className="h-4 w-4" />
+          )}
+        </button>
+      )}
       <div
         className={cn(
           "flex h-20 items-center border-b border-white/10",
-          collapsed ? "justify-center px-2" : "gap-2 px-4",
+          collapsed ? "justify-center px-2" : "gap-3 px-4",
         )}
       >
-        {onToggleCollapse && (
-          <button
-            type="button"
-            onClick={onToggleCollapse}
-            aria-label={collapsed ? "Expandir menu" : "Recolher menu"}
-            title={collapsed ? "Expandir menu" : "Recolher menu"}
-            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-white/80 transition-colors hover:bg-white/10 hover:text-white"
-          >
-            {collapsed ? (
-              <PanelLeftOpen className="h-5 w-5" />
-            ) : (
-              <PanelLeftClose className="h-5 w-5" />
-            )}
-          </button>
-        )}
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white p-2 shadow-sm ring-1 ring-black/5">
+          <Image
+            src="/images/logo.png"
+            alt="PMB"
+            width={40}
+            height={40}
+            className="h-full w-full object-contain"
+          />
+        </div>
         {!collapsed && (
-          <>
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white p-2 shadow-sm ring-1 ring-black/5">
-              <Image
-                src="/images/logo.png"
-                alt="PMB"
-                width={40}
-                height={40}
-                className="h-full w-full object-contain"
-              />
-            </div>
-            <div className="flex min-w-0 flex-col leading-tight">
-              <span className="truncate font-display text-sm text-white">Profissionaliza</span>
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-pmb-lime)]">
-                Admin Master
-              </span>
-            </div>
-          </>
+          <div className="flex min-w-0 flex-col leading-tight">
+            <span className="truncate font-display text-sm text-white">Profissionaliza</span>
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-pmb-lime)]">
+              Admin Master
+            </span>
+          </div>
         )}
       </div>
 
