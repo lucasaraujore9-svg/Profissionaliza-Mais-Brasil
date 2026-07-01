@@ -1,7 +1,8 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
-import { Download, AlertTriangle, RotateCcw } from "lucide-react"
+import Link from "next/link"
+import { Download, AlertTriangle, RotateCcw, BarChart3 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { PageHeader } from "@/components/painel/page-header"
 import {
@@ -101,14 +102,23 @@ export function FinanceDashboard() {
         title="Financeiro"
         description="Acompanhe suas receitas, pagamentos e exporte relatórios."
         actions={
-          <Button
-            data-tour="financeiro:exportar"
-            variant="outline"
-            onClick={handleExport}
-          >
-            <Download className="mr-2 h-4 w-4" />
-            Exportar CSV
-          </Button>
+          <div className="flex items-center gap-2">
+            <Link
+              href="/painel/relatorios/financeiro"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-[var(--color-pmb-green)] transition-colors hover:bg-gray-50"
+            >
+              <BarChart3 className="h-3.5 w-3.5" />
+              Ver análise completa
+            </Link>
+            <Button
+              data-tour="financeiro:exportar"
+              variant="outline"
+              onClick={handleExport}
+            >
+              <Download className="mr-2 h-4 w-4" />
+              Exportar CSV
+            </Button>
+          </div>
         }
       />
 

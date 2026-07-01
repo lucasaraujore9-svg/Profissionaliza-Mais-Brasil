@@ -23,6 +23,7 @@ import {
   Lock,
   Video,
   Store,
+  BarChart3,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -61,6 +62,8 @@ const ALL_ITEMS: NavItem[] = [
   },
   { href: "/painel/cupons", label: "Cupons", icon: Tag },
   { href: "/painel/financeiro", label: "Financeiro", icon: CreditCard },
+  // Hub de BI da unidade (tenant-scoped). Abas owner-only são gated server-side.
+  { href: "/painel/relatorios", label: "Relatórios", icon: BarChart3 },
   { href: "/painel/indicacoes", label: "Indicações", icon: Share2, ownerOnly: true },
   { href: "/painel/certificados", label: "Certificados", icon: Award, ownerOnly: true },
   { href: "/painel/equipe", label: "Equipe", icon: UserCog, ownerOnly: true },
