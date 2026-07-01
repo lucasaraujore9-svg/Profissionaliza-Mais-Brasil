@@ -8,6 +8,7 @@ import {
   IMPERSONATION_FLAG_COOKIE,
 } from "@/lib/auth/impersonate"
 import { AdminLayoutShell } from "./layout-shell"
+import { SIDEBAR_COLLAPSED_COOKIE } from "@/components/shared/layouts/use-sidebar-collapsed"
 
 export const metadata: Metadata = {
   title: "Admin | Profissionaliza Mais Brasil",
@@ -33,6 +34,8 @@ export default async function AdminLayout({
   const flag = decodeImpersonationFlag(
     cookieStore.get(IMPERSONATION_FLAG_COOKIE)?.value,
   )
+  const sidebarCollapsed =
+    cookieStore.get(SIDEBAR_COLLAPSED_COOKIE)?.value === "1"
 
   return (
     <>
@@ -46,6 +49,7 @@ export default async function AdminLayout({
         role={session.role as "SUPER_ADMIN" | "PMB_SALES" | "PMB_SALES_MGR" | "PMB_REVENDA_SALES" | "PMB_RESELLER_MGR" | "PMB_FINANCEIRO"}
         userName={session.name ?? "Admin"}
         userEmail={session.email ?? ""}
+        defaultCollapsed={sidebarCollapsed}
       >
         {children}
       </AdminLayoutShell>

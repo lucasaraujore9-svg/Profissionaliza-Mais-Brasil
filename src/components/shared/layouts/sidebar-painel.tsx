@@ -24,6 +24,8 @@ import {
   Video,
   Store,
   BarChart3,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -81,6 +83,11 @@ interface SidebarPainelProps {
   isOwner?: boolean
   automationEnabled?: boolean
   canSellResellers?: boolean
+  /** Menu recolhido (só ícones). Aplicado só na instância desktop. */
+  collapsed?: boolean
+  /** Handler do botão de recolher/expandir. Ausente = não renderiza o botão
+   * (usado na instância mobile, que é sempre um drawer expandido). */
+  onToggleCollapse?: () => void
 }
 
 export function SidebarPainel({
@@ -90,6 +97,8 @@ export function SidebarPainel({
   isOwner = true,
   automationEnabled = false,
   canSellResellers = false,
+  collapsed = false,
+  onToggleCollapse,
 }: SidebarPainelProps) {
   const pathname = usePathname()
   // Itens de automação continuam VISÍVEIS mesmo sem o módulo ativo — ao clicar,
@@ -103,39 +112,68 @@ export function SidebarPainel({
   })
 
   return (
-    <aside className="flex h-full w-60 flex-col bg-[var(--color-pmb-green-700)] text-white lg:flex">
-      <div className="flex h-20 items-center gap-3 border-b border-white/10 px-6">
-        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white p-2 shadow-sm ring-1 ring-black/5">
-          {tenantLogoUrl ? (
-            <Image
-              src={tenantLogoUrl}
-              alt={tenantName ?? "Logo da escola"}
-              width={40}
-              height={40}
-              className="h-full w-full object-contain"
-              unoptimized
-            />
-          ) : (
-            <Image
-              src="/images/logo.png"
-              alt="PMB"
-              width={40}
-              height={40}
-              className="h-full w-full object-contain"
-            />
-          )}
-        </div>
-        <div className="flex flex-col leading-tight min-w-0">
-          <span className="font-display text-sm text-white truncate">
-            {tenantName ?? "Meu Painel"}
-          </span>
-          <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-pmb-lime)]">
-            Revendedor
-          </span>
-        </div>
+    <aside
+      className={cn(
+        "flex h-full flex-col bg-[var(--color-pmb-green-700)] text-white transition-[width] duration-200 lg:flex",
+        collapsed ? "w-16" : "w-60",
+      )}
+    >
+      <div
+        className={cn(
+          "flex h-20 items-center border-b border-white/10",
+          collapsed ? "justify-center px-2" : "gap-2 px-4",
+        )}
+      >
+        {onToggleCollapse && (
+          <button
+            type="button"
+            onClick={onToggleCollapse}
+            aria-label={collapsed ? "Expandir menu" : "Recolher menu"}
+            title={collapsed ? "Expandir menu" : "Recolher menu"}
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-white/80 transition-colors hover:bg-white/10 hover:text-white"
+          >
+            {collapsed ? (
+              <PanelLeftOpen className="h-5 w-5" />
+            ) : (
+              <PanelLeftClose className="h-5 w-5" />
+            )}
+          </button>
+        )}
+        {!collapsed && (
+          <>
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white p-2 shadow-sm ring-1 ring-black/5">
+              {tenantLogoUrl ? (
+                <Image
+                  src={tenantLogoUrl}
+                  alt={tenantName ?? "Logo da escola"}
+                  width={40}
+                  height={40}
+                  className="h-full w-full object-contain"
+                  unoptimized
+                />
+              ) : (
+                <Image
+                  src="/images/logo.png"
+                  alt="PMB"
+                  width={40}
+                  height={40}
+                  className="h-full w-full object-contain"
+                />
+              )}
+            </div>
+            <div className="flex min-w-0 flex-col leading-tight">
+              <span className="truncate font-display text-sm text-white">
+                {tenantName ?? "Meu Painel"}
+              </span>
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-pmb-lime)]">
+                Revendedor
+              </span>
+            </div>
+          </>
+        )}
       </div>
 
-      <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
+      <nav className="flex-1 space-y-1 overflow-y-auto px-2 py-4">
         {navItems.map((item) => {
           // Casa em fronteira de segmento (href + "/") para nao acender itens
           // cujo href e prefixo de string de outro. Tambem mantem a secao aberta
@@ -158,16 +196,18 @@ export function SidebarPainel({
               <Link
                 href={item.href}
                 data-tour={`nav:${item.href}`}
+                title={collapsed ? item.label : undefined}
                 className={cn(
-                  "flex items-center gap-3 rounded-lg px-4 py-2.5 text-sm font-medium transition-colors",
+                  "flex items-center rounded-lg py-2.5 text-sm font-medium transition-colors",
+                  collapsed ? "justify-center px-2" : "gap-3 px-4",
                   isActive
                     ? "bg-[var(--color-pmb-lime)] text-[var(--color-pmb-green-900)] font-semibold"
                     : "text-white/85 hover:bg-white/10 hover:text-white",
                 )}
               >
-                <item.icon className="h-5 w-5" />
-                <span className="flex-1">{item.label}</span>
-                {locked && (
+                <item.icon className="h-5 w-5 shrink-0" />
+                {!collapsed && <span className="flex-1">{item.label}</span>}
+                {!collapsed && locked && (
                   <Lock
                     className={cn(
                       "h-3.5 w-3.5",
@@ -177,7 +217,7 @@ export function SidebarPainel({
                   />
                 )}
               </Link>
-              {item.children && sectionActive && (
+              {!collapsed && item.children && sectionActive && (
                 <div className="mt-1 space-y-1 pl-6">
                   {item.children.map((child) => {
                     const childActive =
@@ -204,14 +244,16 @@ export function SidebarPainel({
         })}
       </nav>
 
-      <div className="border-t border-white/10 px-6 py-4 text-xs">
-        <div className="font-semibold text-white truncate">
-          {tenantName ?? "Escola"}
+      {!collapsed && (
+        <div className="border-t border-white/10 px-6 py-4 text-xs">
+          <div className="truncate font-semibold text-white">
+            {tenantName ?? "Escola"}
+          </div>
+          <div className="truncate text-white/65">
+            {userEmail ?? "revendedor@empresa.com"}
+          </div>
         </div>
-        <div className="truncate text-white/65">
-          {userEmail ?? "revendedor@empresa.com"}
-        </div>
-      </div>
+      )}
     </aside>
   )
 }

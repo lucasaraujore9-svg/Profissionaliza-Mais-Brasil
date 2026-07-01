@@ -2,6 +2,7 @@
 
 import { SidebarAdmin } from "@/components/shared/layouts/sidebar-admin"
 import { HeaderDashboard } from "@/components/shared/layouts/header-dashboard"
+import { useSidebarCollapsed } from "@/components/shared/layouts/use-sidebar-collapsed"
 
 type Role = "SUPER_ADMIN" | "PMB_SALES" | "PMB_SALES_MGR" | "PMB_REVENDA_SALES" | "PMB_RESELLER_MGR" | "PMB_FINANCEIRO"
 
@@ -10,16 +11,25 @@ export function AdminLayoutShell({
   role,
   userName,
   userEmail,
+  defaultCollapsed = false,
 }: {
   children: React.ReactNode
   role: Role
   userName: string
   userEmail: string
+  defaultCollapsed?: boolean
 }) {
+  const { collapsed, toggle } = useSidebarCollapsed(defaultCollapsed)
   return (
     <div className="flex h-screen overflow-hidden bg-[var(--color-pmb-mist)]">
       <div className="hidden h-full lg:block">
-        <SidebarAdmin role={role} userName={userName} userEmail={userEmail} />
+        <SidebarAdmin
+          role={role}
+          userName={userName}
+          userEmail={userEmail}
+          collapsed={collapsed}
+          onToggleCollapse={toggle}
+        />
       </div>
       <div className="flex flex-1 flex-col overflow-hidden">
         <HeaderDashboard

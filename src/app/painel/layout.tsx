@@ -4,6 +4,7 @@ import { cookies } from "next/headers"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { PainelLayoutShell } from "./layout-shell"
+import { SIDEBAR_COLLAPSED_COOKIE } from "@/components/shared/layouts/use-sidebar-collapsed"
 import { ImpersonationBanner } from "@/components/admin/impersonation-banner"
 import {
   decodeImpersonationFlag,
@@ -57,6 +58,8 @@ export default async function PainelLayout({
   const flag = decodeImpersonationFlag(
     cookieStore.get(IMPERSONATION_FLAG_COOKIE)?.value,
   )
+  const sidebarCollapsed =
+    cookieStore.get(SIDEBAR_COLLAPSED_COOKIE)?.value === "1"
 
   return (
     <>
@@ -75,6 +78,7 @@ export default async function PainelLayout({
         canSellResellers={tenant?.canSellResellers ?? false}
         memberRole={session.user.memberRole ?? "owner"}
         dismissedTours={dismissedTours}
+        defaultCollapsed={sidebarCollapsed}
       >
         {children}
       </PainelLayoutShell>

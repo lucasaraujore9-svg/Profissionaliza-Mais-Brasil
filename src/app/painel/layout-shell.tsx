@@ -3,6 +3,7 @@
 import { SidebarPainel } from "@/components/shared/layouts/sidebar-painel"
 import { HeaderDashboard } from "@/components/shared/layouts/header-dashboard"
 import { TourRunner } from "@/components/shared/tour/tour-runner"
+import { useSidebarCollapsed } from "@/components/shared/layouts/use-sidebar-collapsed"
 
 type MemberRole = "owner" | "consultant" | null
 
@@ -17,6 +18,7 @@ export interface PainelLayoutShellProps {
   memberRole?: MemberRole
   /** Ids de tours guiados já dispensados por este usuário. */
   dismissedTours?: string[]
+  defaultCollapsed?: boolean
 }
 
 export function PainelLayoutShell({
@@ -29,7 +31,9 @@ export function PainelLayoutShell({
   canSellResellers = false,
   memberRole = "owner",
   dismissedTours = [],
+  defaultCollapsed = false,
 }: PainelLayoutShellProps) {
+  const { collapsed, toggle } = useSidebarCollapsed(defaultCollapsed)
   return (
     <div className="flex h-screen overflow-hidden">
       <div className="hidden h-full lg:block">
@@ -39,6 +43,8 @@ export function PainelLayoutShell({
           userEmail={userEmail}
           automationEnabled={automationEnabled}
           canSellResellers={canSellResellers}
+          collapsed={collapsed}
+          onToggleCollapse={toggle}
         />
       </div>
       <div className="flex flex-1 flex-col overflow-hidden">
