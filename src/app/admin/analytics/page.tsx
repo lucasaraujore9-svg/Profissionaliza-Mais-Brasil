@@ -1,14 +1,7 @@
-import { PageHeader } from "@/components/painel/page-header"
-import { AdminAnalyticsClient } from "@/components/admin/admin-analytics-client"
+import { redirect } from "next/navigation"
 
+// O antigo /admin/analytics foi absorvido pelo hub de BI "Relatórios".
+// Mantido como redirect para preservar links/bookmarks.
 export default function AdminAnalyticsPage() {
-  return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Analytics"
-        description="Indicadores globais, KPIs e ranking dos revendedores."
-      />
-      <AdminAnalyticsClient />
-    </div>
-  )
+  redirect("/admin/relatorios/visao-geral")
 }

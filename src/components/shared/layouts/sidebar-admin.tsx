@@ -15,7 +15,6 @@ import {
   ShoppingCart,
   UserCircle,
   GraduationCap,
-  FileText,
   LogOut,
   Award,
   Share2,
@@ -56,10 +55,10 @@ const ALL_ITEMS: {
   { href: "/admin/certificados", label: "Certificados", icon: Award, roles: ["SUPER_ADMIN"] },
   { href: "/admin/catalogo", label: "Catálogo", icon: BookOpen, roles: ["SUPER_ADMIN", "PMB_SALES", "PMB_SALES_MGR", "PMB_REVENDA_SALES", "PMB_RESELLER_MGR"] },
   { href: "/admin/vitrine", label: "Vitrine", icon: Palette, roles: ["SUPER_ADMIN"] },
-  { href: "/admin/analytics", label: "Analytics", icon: BarChart3, roles: ["SUPER_ADMIN"] },
-  // Relatórios: papéis modelados pelos runners (os comerciais de revenda não
-  // são escopados, por isso ficam de fora — ver /api/admin/relatorios).
-  { href: "/admin/relatorios", label: "Relatórios", icon: FileText, roles: ["SUPER_ADMIN", "PMB_SALES", "PMB_RESELLER_MGR"] },
+  // Hub de BI "Relatórios" (absorveu o antigo Analytics + Relatórios). Cada
+  // papel só vê as abas permitidas (ver src/lib/reports/tabs.ts); a visibilidade
+  // fina por aba é reforçada server-side no dispatcher e no [tab]/page.tsx.
+  { href: "/admin/relatorios", label: "Relatórios", icon: BarChart3, roles: ["SUPER_ADMIN", "PMB_FINANCEIRO", "PMB_SALES", "PMB_SALES_MGR", "PMB_REVENDA_SALES", "PMB_RESELLER_MGR"] },
   { href: "/admin/equipe", label: "Equipe", icon: UserCog, roles: ["SUPER_ADMIN"] },
   { href: "/admin/comunicacao", label: "Comunicação", icon: MessageSquare, roles: ["SUPER_ADMIN"] },
   { href: "/admin/treinamentos", label: "Treinamentos", icon: Video, roles: ["SUPER_ADMIN"] },

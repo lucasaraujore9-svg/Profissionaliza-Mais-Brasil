@@ -70,7 +70,9 @@ export function ReportsClient() {
     if (from) params.set("from", from)
     if (to) params.set("to", to)
     const qs = params.toString()
-    router.push(`/admin/relatorios/${id}${qs ? `?${qs}` : ""}`)
+    // Viewer realocado para `exportar/[type]` (o segmento `[tab]` do hub de BI
+    // usa `/admin/relatorios/[tab]`).
+    router.push(`/admin/relatorios/exportar/${id}${qs ? `?${qs}` : ""}`)
   }
 
   if (loading) {
