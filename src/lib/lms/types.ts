@@ -12,6 +12,18 @@ export interface LmsCategory {
   name: string
 }
 
+/**
+ * Item da matriz curricular (grade) do curso. No PMB a matriz e uma lista de
+ * topicos (string[]) — mapeamos cada item para o seu `title`, ordenado por `order`.
+ */
+export interface LmsCurriculumItem {
+  id: string // UUID
+  title: string
+  workloadHours: number | null
+  ementa: string | null
+  order: number
+}
+
 export interface LmsCourse {
   id: string // UUID
   slug: string
@@ -23,6 +35,10 @@ export interface LmsCourse {
   suggestedPriceCents: number | null
   // Categorias da vitrine (N-N, ordenadas por name). Pode vir [].
   categories: LmsCategory[]
+  // Matriz curricular (grade). Opcional para tolerar respostas antigas sem o
+  // campo — quando ausente, o sync NAO mexe na matriz existente. `[]` = sem matriz.
+  curriculum?: LmsCurriculumItem[]
+  totalWorkloadHours?: number | null
   version: number
   publishedAt: string
   moduleCount: number
@@ -141,6 +157,8 @@ export interface LmsDayCourse {
   workload: string | null
   suggestedPriceCents: number | null
   categories: LmsCategory[]
+  curriculum?: LmsCurriculumItem[]
+  totalWorkloadHours?: number | null
   version: number
   status: string // "published" | ...
   visible: boolean

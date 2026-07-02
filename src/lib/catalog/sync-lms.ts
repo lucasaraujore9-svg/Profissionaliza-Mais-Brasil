@@ -1,5 +1,11 @@
 import { prisma } from "@/lib/prisma"
-import { listLmsCourses, getLmsCourse, type LmsModule, type LmsCategory } from "@/lib/lms"
+import {
+  listLmsCourses,
+  getLmsCourse,
+  type LmsModule,
+  type LmsCategory,
+  type LmsCurriculumItem,
+} from "@/lib/lms"
 import { slugify } from "@/lib/utils"
 import { contextLogger } from "@/lib/logger"
 import { pushSyncLog, type SyncLogEntry } from "./sync-log"
@@ -9,6 +15,23 @@ import { ensureUniqueCourseSlug, type SyncResult } from "./sync"
 
 // Cache por UUID da categoria LMS (chave estavel) -> Category.id do PMB.
 const lmsCategoryCache = new Map<string, string>()
+
+/**
+ * Converte a matriz curricular (grade) do LMS na lista de topicos do PMB
+ * (`Course.matrizCurricular: string[]`). Ordena por `order` e usa o `title` de
+ * cada item como topico, descartando vazios. Retorna `null` quando o LMS NAO
+ * enviou o campo (resposta antiga) — nesse caso o sync nao mexe na matriz atual.
+ * `[]` (enviado vazio) => matriz limpa de proposito.
+ */
+export function mapCurriculumToMatriz(
+  curriculum: LmsCurriculumItem[] | undefined,
+): string[] | null {
+  if (!Array.isArray(curriculum)) return null
+  return [...curriculum]
+    .sort((a, b) => a.order - b.order)
+    .map((c) => (c.title ?? "").trim())
+    .filter((s) => s.length > 0)
+}
 
 /**
  * Garante que existe uma Category no PMB para a categoria recebida do LMS e
@@ -51,10 +74,12 @@ async function ensureLmsCategory(cat: LmsCategory): Promise<string | null> {
  * Diferencas em relacao ao syncCatalogFromEA:
  *  - Match por `lmsCourseId` (UUID estavel), nao por nome.
  *  - Cada linha nasce/permanece provider=LMS; o sync NUNCA toca em cursos EA.
- *  - Preco SUGERIDO (suggestedPriceCents) e categorias (N-N) vem do LMS: o preco
- *    entra em `precoOriginal` (preco-base) e as categorias no join M2M. O override
+ *  - Preco SUGERIDO (suggestedPriceCents), categorias (N-N) e matriz curricular
+ *    (curriculum) vem do LMS: o preco entra em `precoOriginal` (preco-base), as
+ *    categorias no join M2M e a matriz em `matrizCurricular` (topicos). O override
  *    do admin (`precoVitrineMain`) e o remapeamento manual de categoria principal
- *    sao PRESERVADOS — o sync so preenche o preco-base e ADICIONA categorias.
+ *    sao PRESERVADOS — o sync so preenche o preco-base e ADICIONA categorias. A
+ *    matriz e re-sincronizada (LMS e dono do conteudo); campo ausente => nao mexe.
  *  - Curso NOVO importado COM valor E categoria nasce ATIVO na vitrine mae
  *    (hiddenMain=false) e em todas as revendas (visibilityMode=ALL default +
  *    status=ATIVO + gate de preco satisfeito). Sem valor OU sem categoria nasce
@@ -114,7 +139,12 @@ export async function syncCatalogFromLMS(
       }
       const firstCategoryId = resolvedCategoryIds[0] ?? null
 
-      // Campos sincronizaveis. Preco sugerido e categoria agora vem do LMS;
+      // Matriz curricular (grade) vinda do LMS -> topicos do PMB. Curso LMS tem o
+      // LMS como dono do conteudo, entao a matriz e re-sincronizada (como descricao/
+      // aulas). `null` = campo ausente na resposta => nao mexe na matriz atual.
+      const matrizCurricular = mapCurriculumToMatriz(curso.curriculum)
+
+      // Campos sincronizaveis. Preco sugerido, categoria e matriz agora vem do LMS;
       // visibilidade (hiddenMain/visibilityMode) segue curadoria do admin.
       const dataBase = {
         provider: "LMS" as const,
@@ -125,6 +155,7 @@ export async function syncCatalogFromLMS(
         qtdAulas: curso.lessonCount ?? 0,
         cargaHoraria: curso.workload || null,
         precoOriginal,
+        ...(matrizCurricular !== null ? { matrizCurricular } : {}),
         status: "ATIVO",
         ...(coverImage ? { capaImageUrl: coverImage } : {}),
         syncedAt: new Date(),
