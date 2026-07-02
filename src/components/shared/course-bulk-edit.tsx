@@ -154,7 +154,8 @@ export function CourseBulkEdit({
       })
       if (!res.ok) {
         const json = await res.json().catch(() => null)
-        setError(json?.error ?? "Erro ao salvar")
+        const base = json?.error ?? "Erro ao salvar"
+        setError(json?.detail ? `${base} (${json.detail})` : base)
         return
       }
       onSaved()

@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { requireResellerSession } from "@/lib/auth/reseller-session"
 import { ensureTenantCourses } from "@/lib/tenant/ensure-courses"
 import { withRequestContext } from "@/lib/observability/with-request-context"
+import { contextLogger } from "@/lib/logger"
 
 /* ------------------------------------------------------------------ */
 /* GET — dados enxutos para a edição em massa (planilha)               */
@@ -127,13 +128,30 @@ export const PUT = withRequestContext(
           }),
         ),
       )
-    } catch {
-      // Lote é tudo-ou-nada: se qualquer linha falhar (ex.: curso removido
-      // concorrentemente), nada é gravado. Devolve erro claro em vez de 500.
+    } catch (err) {
+      // Lote é tudo-ou-nada: se qualquer linha falhar, nada é gravado.
+      // Loga o erro real (Vercel Runtime Logs) para diagnóstico e devolve um
+      // detalhe curto no corpo — endpoint autenticado por unidade.
+      const detail = err instanceof Error ? err.message : String(err)
+      const code =
+        typeof err === "object" && err && "code" in err
+          ? String((err as { code?: unknown }).code)
+          : undefined
+      contextLogger().error(
+        {
+          err,
+          event: "painel.cursos.bulk.tx_error",
+          tenantId: ctx.tenantId,
+          count: parsed.data.items.length,
+        },
+        "falha ao salvar edição em massa de cursos da revenda",
+      )
       return NextResponse.json(
         {
           error:
             "Não foi possível salvar as alterações. Recarregue a página e tente novamente.",
+          detail,
+          code,
         },
         { status: 409 },
       )
