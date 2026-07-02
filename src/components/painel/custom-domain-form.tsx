@@ -154,6 +154,26 @@ export function CustomDomainForm({
                   {statusLabel[status]}
                 </StatusBadge>
               </div>
+              {status === "PENDING" && (
+                <p className="mt-2 max-w-md text-xs text-amber-700">
+                  Configure os 2 registros DNS abaixo no seu provedor de domínio.
+                  Enquanto não estiverem apontados, a vitrine continua no
+                  subdomínio oficial. Depois de configurar, clique em{" "}
+                  <strong>Verificar</strong> — o domínio é aplicado assim que os
+                  dois registros forem confirmados.
+                </p>
+              )}
+              {status === "ACTIVE" && (
+                <p className="mt-2 max-w-md text-xs text-green-700">
+                  Domínio aplicado — sua vitrine já responde neste endereço.
+                </p>
+              )}
+              {status === "ERROR" && (
+                <p className="mt-2 max-w-md text-xs text-red-700">
+                  Não foi possível checar o apontamento agora. Tente novamente em
+                  instantes com o botão <strong>Verificar</strong>.
+                </p>
+              )}
             </div>
             <div className="flex items-center gap-2">
               <Button

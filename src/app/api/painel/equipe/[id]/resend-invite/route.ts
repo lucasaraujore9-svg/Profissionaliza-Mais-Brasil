@@ -31,6 +31,7 @@ export const POST = withRequestContextParams<{ id: string }>(
             slug: true,
             logoUrl: true,
             customDomain: true,
+            domainVerified: true,
             supportEmail: true,
           },
         },

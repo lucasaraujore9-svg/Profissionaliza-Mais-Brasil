@@ -5,7 +5,7 @@ import { VitrineEditor } from "@/components/painel/vitrine-editor"
 import { BannerSlidesManager } from "@/components/shared/banner-slides-manager"
 import { VitrineTabsShell } from "@/components/vitrine/tabs-shell"
 import { HomeSectionsPanel } from "@/components/vitrine/home-sections-panel"
-import { vitrineUrl } from "@/lib/tenant/urls"
+import { activeCustomDomain, vitrineUrl } from "@/lib/tenant/urls"
 
 export default async function PainelVitrinePage() {
   // Best-effort: link de preview da vitrine do revendedor logado.
@@ -15,10 +15,11 @@ export default async function PainelVitrinePage() {
     if (session) {
       const tenant = await prisma.tenant.findUnique({
         where: { id: session.tenantId },
-        select: { slug: true, customDomain: true },
+        select: { slug: true, customDomain: true, domainVerified: true },
       })
-      if (tenant?.customDomain) {
-        previewUrl = `https://${tenant.customDomain}`
+      const appliedDomain = tenant ? activeCustomDomain(tenant) : null
+      if (appliedDomain) {
+        previewUrl = `https://${appliedDomain}`
       } else if (tenant?.slug) {
         previewUrl = vitrineUrl(tenant.slug)
       }

@@ -131,3 +131,26 @@ export async function verifyProjectDomain(
     { method: "POST" },
   )
 }
+
+export interface VercelDomainConfig {
+  // `misconfigured: false` significa que os registros DNS do dominio ja apontam
+  // corretamente para a Vercel (A no apex / CNAME no www). E o sinal fiel de
+  // "registro apontado" que usamos para aplicar o dominio proprio — separado do
+  // `verified` (posse), que pode estar true antes do DNS resolver.
+  misconfigured: boolean
+  // Quem configurou o dominio ("dns-01" / "http" / null). So informativo.
+  configuredBy?: string | null
+}
+
+// Estado de configuracao DNS do dominio (nivel conta/time, nao projeto).
+// GET /v6/domains/{domain}/config → { misconfigured, ... }
+export async function getDomainConfig(
+  domain: string,
+): Promise<VercelDomainConfig> {
+  // Endpoint de conta/time (nao usa projectId), mas exige token valido.
+  getConfig()
+  return vercelFetch<VercelDomainConfig>(
+    `/v6/domains/${encodeURIComponent(domain)}/config`,
+    { method: "GET" },
+  )
+}

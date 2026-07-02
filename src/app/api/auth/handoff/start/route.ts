@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
 
   const tenant = await prisma.tenant.findUnique({
     where: { id: user.tenantId },
-    select: { slug: true, customDomain: true },
+    select: { slug: true, customDomain: true, domainVerified: true },
   })
   if (!tenant) {
     return NextResponse.redirect(new URL(next, req.url))

@@ -74,7 +74,9 @@ export function VitrineEditor() {
         if (!res.ok) return
         const body = await res.json()
         const info = body.data
-        if (info?.customDomain) {
+        // Só usa o domínio próprio no preview quando ele está aplicado (DNS
+        // apontado + verificado); pendente cai no subdomínio oficial.
+        if (info?.applied && info?.customDomain) {
           setPreviewHost(info.customDomain)
         } else if (info?.subdomainFull) {
           setPreviewHost(info.subdomainFull)

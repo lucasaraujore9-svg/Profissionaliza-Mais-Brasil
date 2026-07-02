@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { requireResellerSession } from "@/lib/auth/reseller-session"
-import { verifyProjectDomain, getProjectDomain } from "@/lib/vercel/client"
+import { verifyProjectDomain } from "@/lib/vercel/client"
+import { resolveCustomDomainStatus } from "@/lib/vercel/domain-status"
+import { customDomainVariants } from "@/lib/tenant/urls"
+import { invalidateTenant } from "@/lib/redis/tenant-cache"
 import { swallow } from "@/lib/errors"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 
@@ -15,7 +18,7 @@ export const POST = withRequestContext(
 
     const tenant = await prisma.tenant.findUnique({
       where: { id: ctx.tenantId },
-      select: { customDomain: true },
+      select: { id: true, slug: true, customDomain: true },
     })
     if (!tenant?.customDomain) {
       return NextResponse.json(
@@ -24,30 +27,40 @@ export const POST = withRequestContext(
       )
     }
 
-    try {
-      await verifyProjectDomain(tenant.customDomain)
-    } catch {
-      // fallthrough para checar status
-    }
+    // Dispara a verificação de posse nas DUAS variantes (apex + www). Best-effort:
+    // se a Vercel ainda não conseguir verificar, seguimos para a checagem de
+    // estado real abaixo, que é quem decide se o domínio pode ser aplicado.
+    const variants = customDomainVariants(tenant.customDomain)
+    await Promise.all(
+      variants.map((d) =>
+        verifyProjectDomain(d).catch(swallow("painel.dominio.verify.trigger")),
+      ),
+    )
 
     try {
-      const info = await getProjectDomain(tenant.customDomain)
+      // Fonte da verdade: os 2 registros precisam estar apontados (DNS) E
+      // verificados (posse) para o domínio ser aplicado (domainVerified=true).
+      const resolved = await resolveCustomDomainStatus(tenant.customDomain)
 
-      // Persiste o status de verificação no DB como indicador de UI/relatório.
-      // OBS: a resolução de tenant por custom domain NÃO depende mais desta flag
-      // (ver src/app/api/internal/resolve-tenant). A chegada do Host já prova a
-      // posse, então o proxy resolve por customDomain mesmo com a flag false.
       await prisma.tenant
         .update({
-          where: { id: ctx.tenantId },
-          data: { domainVerified: info.verified },
+          where: { id: tenant.id },
+          data: { domainVerified: resolved.pointed },
         })
+        .then(() =>
+          invalidateTenant({
+            id: tenant.id,
+            slug: tenant.slug,
+            customDomain: tenant.customDomain,
+          }),
+        )
         .catch(swallow("painel.dominio.verify"))
 
       return NextResponse.json({
         data: {
-          verified: info.verified,
-          verification: info.verification ?? null,
+          verified: resolved.pointed,
+          status: resolved.status,
+          verification: resolved.verification,
         },
       })
     } catch (error) {

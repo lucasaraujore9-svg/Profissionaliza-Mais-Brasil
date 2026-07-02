@@ -146,6 +146,7 @@ export async function resetStudentPassword(
           name: true,
           logoUrl: true,
           customDomain: true,
+          domainVerified: true,
           supportEmail: true,
         },
       },

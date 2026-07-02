@@ -1,5 +1,10 @@
 import { describe, it, expect, afterEach } from "vitest"
-import { mpWebhookUrl, asaasWebhookUrl, webhookBaseUrl } from "./urls"
+import {
+  mpWebhookUrl,
+  asaasWebhookUrl,
+  webhookBaseUrl,
+  activeCustomDomain,
+} from "./urls"
 
 const ORIG_URL = process.env.NEXT_PUBLIC_APP_URL
 const ORIG_DOMAIN = process.env.NEXT_PUBLIC_APP_DOMAIN
@@ -38,5 +43,36 @@ describe("webhook URLs (API-001)", () => {
     expect(asaasWebhookUrl("loja1")).toBe(
       "https://www.profissionalizamaisbrasil.com.br/api/webhooks/asaas?tenant=loja1",
     )
+  })
+})
+
+describe("activeCustomDomain (gate de aplicação do domínio próprio)", () => {
+  it("retorna null quando não há domínio próprio", () => {
+    expect(activeCustomDomain({ customDomain: null })).toBeNull()
+    expect(activeCustomDomain({ customDomain: "   " })).toBeNull()
+    expect(activeCustomDomain({})).toBeNull()
+  })
+
+  it("retorna null enquanto o domínio está PENDENTE (não verificado)", () => {
+    expect(
+      activeCustomDomain({ customDomain: "cliente.com.br", domainVerified: false }),
+    ).toBeNull()
+    // Sem a flag = trata como pendente (fallback seguro para o subdomínio).
+    expect(activeCustomDomain({ customDomain: "cliente.com.br" })).toBeNull()
+    expect(
+      activeCustomDomain({ customDomain: "cliente.com.br", domainVerified: null }),
+    ).toBeNull()
+  })
+
+  it("aplica o domínio (retorna o host) só quando verificado/apontado", () => {
+    expect(
+      activeCustomDomain({ customDomain: "cliente.com.br", domainVerified: true }),
+    ).toBe("cliente.com.br")
+  })
+
+  it("normaliza espaços em volta do domínio aplicado", () => {
+    expect(
+      activeCustomDomain({ customDomain: "  cliente.com.br  ", domainVerified: true }),
+    ).toBe("cliente.com.br")
   })
 })

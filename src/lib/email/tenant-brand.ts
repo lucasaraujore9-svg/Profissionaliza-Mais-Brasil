@@ -24,6 +24,7 @@ export async function loadTenantEmailBrand(
       name: true,
       logoUrl: true,
       customDomain: true,
+      domainVerified: true,
       supportEmail: true,
     },
   })
@@ -42,6 +43,7 @@ export async function loadTenantEmailBrandBySlug(
       name: true,
       logoUrl: true,
       customDomain: true,
+      domainVerified: true,
       supportEmail: true,
     },
   })

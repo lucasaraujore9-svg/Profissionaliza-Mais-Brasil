@@ -22,7 +22,7 @@ import { encode } from "next-auth/jwt"
 import { prisma } from "@/lib/prisma"
 import { redis } from "@/lib/redis"
 import { authSecret } from "@/lib/env"
-import { vitrineHost } from "@/lib/tenant/urls"
+import { activeCustomDomain, vitrineHost } from "@/lib/tenant/urls"
 import {
   SESSION_COOKIE_NAME,
   SESSION_MAX_AGE,
@@ -43,14 +43,16 @@ export interface ResellerSessionClaims {
   memberRole: "owner" | "consultant" | null
 }
 
-// Origem (https://host) do dominio da unidade. Usa o dominio custom quando
-// configurado; caso contrario o subdominio em livrecursos.com.br.
+// Origem (https://host) do dominio da unidade. Usa o dominio custom apenas
+// quando ele ja esta APLICADO (DNS apontado + verificado); caso contrario o
+// subdominio em livrecursos.com.br. Redirecionar o SSO para um dominio proprio
+// ainda pendente levaria a revenda a um endereco que nao resolve.
 export function tenantTargetOrigin(tenant: {
   slug: string
   customDomain?: string | null
+  domainVerified?: boolean | null
 }): string {
-  const custom = tenant.customDomain?.trim()
-  const host = custom && custom.length > 0 ? custom : vitrineHost(tenant.slug)
+  const host = activeCustomDomain(tenant) ?? vitrineHost(tenant.slug)
   return `https://${host}`
 }
 

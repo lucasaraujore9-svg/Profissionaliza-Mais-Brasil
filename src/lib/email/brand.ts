@@ -9,7 +9,13 @@
 // templates React Email e precisa rodar no preview (`email dev`). O carregamento
 // a partir do banco fica em `./tenant-brand` (importa Prisma, só no servidor).
 
-import { appDomain, appUrl, vitrineHost, vitrineUrl } from "@/lib/tenant/urls"
+import {
+  activeCustomDomain,
+  appDomain,
+  appUrl,
+  vitrineHost,
+  vitrineUrl,
+} from "@/lib/tenant/urls"
 
 export interface EmailBrand {
   /** Nome exibido no header (wordmark) e no rodapé. */
@@ -44,15 +50,19 @@ export interface TenantBrandRow {
   name?: string | null
   logoUrl?: string | null
   customDomain?: string | null
+  // O dominio proprio so entra nos links do email quando ja verificado
+  // (apontado). Sem esta flag (ou false), o email usa o subdominio oficial.
+  domainVerified?: boolean | null
   supportEmail?: string | null
 }
 
 /** Monta a identidade de marca de uma unidade (revenda) para emails. */
 export function tenantEmailBrand(tenant: TenantBrandRow): EmailBrand {
-  const siteUrl = tenant.customDomain
-    ? `https://${tenant.customDomain}`
-    : vitrineUrl(tenant.slug)
-  const siteLabel = tenant.customDomain ?? vitrineHost(tenant.slug)
+  // Usa o dominio proprio APENAS quando aplicado (DNS apontado + verificado);
+  // enquanto pendente, os links do email apontam para o subdominio oficial.
+  const domain = activeCustomDomain(tenant)
+  const siteUrl = domain ? `https://${domain}` : vitrineUrl(tenant.slug)
+  const siteLabel = domain ?? vitrineHost(tenant.slug)
   return {
     name: tenant.name?.trim() || `Loja ${tenant.slug}`,
     logoUrl: tenant.logoUrl?.trim() || null,

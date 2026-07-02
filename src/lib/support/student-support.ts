@@ -31,6 +31,7 @@ export const SUPPORT_STUDENT_SELECT = {
       name: true,
       logoUrl: true,
       customDomain: true,
+      domainVerified: true,
       supportEmail: true,
       owner: { select: { email: true, name: true } },
     },
@@ -48,6 +49,7 @@ export interface SupportStudent {
     name: string
     logoUrl: string | null
     customDomain: string | null
+    domainVerified: boolean | null
     supportEmail: string | null
     owner: { email: string | null; name: string | null } | null
   } | null

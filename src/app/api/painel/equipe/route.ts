@@ -99,6 +99,7 @@ export const POST = withRequestContext(
         slug: true,
         logoUrl: true,
         customDomain: true,
+        domainVerified: true,
         supportEmail: true,
       },
     })

@@ -4,11 +4,11 @@ import { prisma } from "@/lib/prisma"
 import { requireResellerSession } from "@/lib/auth/reseller-session"
 import {
   addProjectDomain,
-  getProjectDomain,
   removeProjectDomain,
   isVercelConfigured,
   VercelNotConfiguredError,
 } from "@/lib/vercel/client"
+import { resolveCustomDomainStatus } from "@/lib/vercel/domain-status"
 import { invalidateTenant } from "@/lib/redis/tenant-cache"
 import {
   appDomain as resolveAppDomain,
@@ -29,6 +29,7 @@ async function fetchTenantDomainInfo(tenantId: string) {
       id: true,
       slug: true,
       customDomain: true,
+      domainVerified: true,
     },
   })
   if (!tenant) return null
@@ -36,17 +37,39 @@ async function fetchTenantDomainInfo(tenantId: string) {
   let status: "NONE" | "PENDING" | "ACTIVE" | "ERROR" = "NONE"
   let verification: Array<{ type: string; domain: string; value: string; reason: string }> | null =
     null
+  // O dominio so e "aplicado" quando a Vercel confirma os 2 registros apontados.
+  // Reflete o estado persistido por padrao; a checagem live abaixo reconcilia.
+  let applied = tenant.domainVerified
 
   if (tenant.customDomain) {
-    // Checa AS DUAS variantes (apex + www) na Vercel. ACTIVE so quando ambas
-    // estao verificadas; juntamos os registros de verificacao pendentes.
-    const variants = customDomainVariants(tenant.customDomain)
+    // Checa AS DUAS variantes (apex + www): apontadas (DNS) E verificadas
+    // (posse). ACTIVE somente quando ambas estao prontas.
     try {
-      const infos = await Promise.all(variants.map((d) => getProjectDomain(d)))
-      const allVerified = infos.every((i) => i.verified)
-      status = allVerified ? "ACTIVE" : "PENDING"
-      const pending = infos.flatMap((i) => (i.verified ? [] : i.verification ?? []))
-      verification = pending.length ? pending : null
+      const resolved = await resolveCustomDomainStatus(tenant.customDomain)
+      status = resolved.status
+      verification = resolved.verification
+      applied = resolved.pointed
+
+      // Auto-heal: sincroniza a flag persistida com o estado real da Vercel nas
+      // DUAS direcoes. Assim o dominio "se aplica" sozinho quando o revendedor
+      // termina o DNS (sem depender do botao Verificar) e "despublica" se os
+      // registros deixarem de apontar. So persistimos apos leitura bem-sucedida
+      // da Vercel — um erro transitorio cai no catch e NAO mexe na flag.
+      if (resolved.pointed !== tenant.domainVerified) {
+        await prisma.tenant
+          .update({
+            where: { id: tenant.id },
+            data: { domainVerified: resolved.pointed },
+          })
+          .then(() =>
+            invalidateTenant({
+              id: tenant.id,
+              slug: tenant.slug,
+              customDomain: tenant.customDomain,
+            }),
+          )
+          .catch(swallow("painel.dominio.get.autoheal"))
+      }
     } catch {
       status = "ERROR"
     }
@@ -58,6 +81,9 @@ async function fetchTenantDomainInfo(tenantId: string) {
     vitrineDomain,
     subdomainFull: `${tenant.slug}.${vitrineDomain}`,
     customDomain: tenant.customDomain,
+    // `applied` = dominio proprio efetivamente em uso (URLs publicas). Enquanto
+    // false, a vitrine continua no subdominio oficial.
+    applied,
     status,
     vercelConfigured: isVercelConfigured(),
     // Dois registros: apex (@) via A e www via CNAME. CNAME no apex e proibido

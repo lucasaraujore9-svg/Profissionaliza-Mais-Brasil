@@ -129,6 +129,7 @@ async function processForgotPassword(email: string): Promise<void> {
           name: true,
           logoUrl: true,
           customDomain: true,
+          domainVerified: true,
           supportEmail: true,
         },
       },

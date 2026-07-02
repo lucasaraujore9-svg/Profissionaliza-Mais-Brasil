@@ -14,7 +14,7 @@ import { fulfillScholarshipEnrollment } from "@/lib/enrollment/fulfill"
 import { isValidCpf, stripCpf } from "@/lib/validation/cpf"
 import { isValidPhone, normalizePhone } from "@/lib/validation/phone"
 import { effectivePaymentType } from "@/lib/tenant/monthly-policy"
-import { vitrineUrl } from "@/lib/tenant/urls"
+import { activeCustomDomain, vitrineUrl } from "@/lib/tenant/urls"
 import { tenantPolo } from "@/lib/tenant/slug"
 
 const createSchema = z.object({
@@ -123,6 +123,7 @@ export const POST = withRequestContext(
         mpAccessToken: true,
         mpPublicKey: true,
         customDomain: true,
+        domainVerified: true,
         plataformaVendedorId: true,
         monthlyAllowed: true,
         monthlyEnabled: true,
@@ -417,8 +418,11 @@ export const POST = withRequestContext(
       })
 
       // Path público da vitrine é SEM /loja (o proxy reescreve /pagar → /loja/pagar).
-      const storeBase = tenant.customDomain
-        ? `https://${tenant.customDomain}`
+      // Usa o domínio próprio só quando aplicado (DNS apontado + verificado);
+      // enquanto pendente, o link de pagamento vai pelo subdomínio oficial.
+      const appliedDomain = activeCustomDomain(tenant)
+      const storeBase = appliedDomain
+        ? `https://${appliedDomain}`
         : vitrineUrl(tenant.slug)
       const paymentUrl = `${storeBase}/pagar/${enrollment.id}`
 

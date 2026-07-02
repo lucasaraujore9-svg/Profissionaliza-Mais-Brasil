@@ -107,6 +107,26 @@ export function customDomainVariants(domain: string): [string, string] {
   return [apex, `www.${apex}`]
 }
 
+// Dominio proprio "APLICADO" — retorna o customDomain SOMENTE quando ja foi
+// verificado (Tenant.domainVerified === true), isto e, os DOIS registros DNS
+// (A no apex + CNAME no www) ja estao apontados e a Vercel confirmou a posse.
+// Enquanto pendente, retorna null para que o sistema use o subdominio oficial
+// ({slug}.livrecursos.com.br) em TODA URL publica gerada (emails da unidade,
+// SSO cross-domain, links da vitrine, preview no painel). Assim nunca
+// distribuimos links para um dominio que ainda nao resolve.
+//
+// IMPORTANTE: isto NAO altera a resolucao de tenant no proxy — essa continua
+// keyando so por customDomain (a chegada do Host ja prova o apontamento). Este
+// gate cobre apenas a GERACAO de URLs de saida.
+export function activeCustomDomain(tenant: {
+  customDomain?: string | null
+  domainVerified?: boolean | null
+}): string | null {
+  const domain = tenant.customDomain?.trim()
+  if (!domain) return null
+  return tenant.domainVerified ? domain : null
+}
+
 // Base canonica para webhooks de gateways (Mercado Pago).
 //
 // O apex (profissionalizamaisbrasil.com.br) responde 307 -> www e o Mercado
