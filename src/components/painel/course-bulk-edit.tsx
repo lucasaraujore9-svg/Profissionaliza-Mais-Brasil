@@ -18,16 +18,20 @@ export function CourseBulkEdit(props: CourseBulkEditProps) {
     <SharedCourseBulkEdit
       {...props}
       endpoint="/api/painel/cursos/bulk"
-      subtitle="Edite preço, parcelas e descrição de vários cursos de uma vez. Alterações afetam apenas a sua vitrine."
+      subtitle="Edite preço e descrição de vários cursos de uma vez. Alterações afetam apenas a sua vitrine."
       scopeNote={
         <>
+          O{" "}
           <strong className="font-semibold text-[var(--color-pmb-green-900)]">
-            Parcelas sem juros
+            parcelamento sem juros
           </strong>{" "}
-          é apenas informativo — controla o texto exibido na vitrine. O
-          parcelamento sem juros de fato precisa ser configurado por você na sua
-          conta do <strong>Mercado Pago</strong>. Deixe vazio para usar o padrão
-          do catálogo.
+          não é definido por curso — é um número único da sua unidade,
+          configurado em{" "}
+          <strong className="font-semibold text-[var(--color-pmb-green-900)]">
+            Configurações → Pagamento
+          </strong>
+          , e vale para toda a vitrine. O parcelamento sem juros de fato precisa
+          ser habilitado por você na sua conta do <strong>Mercado Pago</strong>.
         </>
       }
     />

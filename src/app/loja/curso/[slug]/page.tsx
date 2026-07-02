@@ -12,6 +12,7 @@ import { LeadInquiryCard } from "@/components/loja/lead-inquiry-card"
 import { getRequestOrigin } from "@/lib/seo/host"
 import { JsonLd } from "@/components/seo/json-ld"
 import { courseJsonLd, breadcrumbJsonLd } from "@/lib/seo/jsonld"
+import { displayInterestFreeInstallments } from "@/lib/mercadopago/installments"
 
 interface CoursePageProps {
   params: Promise<{ slug: string }>
@@ -82,6 +83,7 @@ export default async function CoursePage({ params }: CoursePageProps) {
       salesGateway: true,
       asaasGatewayEnabled: true,
       asaasConnected: true,
+      interestFreeInstallments: true,
     },
   })
   const checkoutMode = tenantCheckoutMode({
@@ -102,7 +104,11 @@ export default async function CoursePage({ params }: CoursePageProps) {
     imageUrl: course.imageUrl,
     price: course.price,
     originalPrice: course.originalPrice,
-    parcelas: course.parcelasSugeridas,
+    // Pagamento único: "Nx sem juros" vem do nº GLOBAL da unidade
+    // (Configurações → Pagamento), não de um valor por curso.
+    parcelas: displayInterestFreeInstallments(
+      tenantPayment?.interestFreeInstallments ?? 1,
+    ),
     paymentType: course.paymentType,
     monthlyMonths: course.monthlyMonths,
     lessons: course.lessons,

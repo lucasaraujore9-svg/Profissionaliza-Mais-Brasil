@@ -110,22 +110,34 @@ export const PUT = withRequestContext(
       )
     }
 
-    await prisma.$transaction(
-      parsed.data.items.map((it) =>
-        prisma.tenantCourse.update({
-          where: { id: it.id },
-          data: {
-            ...(it.price !== undefined && { price: it.price }),
-            ...(it.customParcelas !== undefined && {
-              customParcelas: it.customParcelas,
-            }),
-            ...(it.customDescription !== undefined && {
-              customDescription: it.customDescription,
-            }),
-          },
-        }),
-      ),
-    )
+    try {
+      await prisma.$transaction(
+        parsed.data.items.map((it) =>
+          prisma.tenantCourse.update({
+            where: { id: it.id },
+            data: {
+              ...(it.price !== undefined && { price: it.price }),
+              ...(it.customParcelas !== undefined && {
+                customParcelas: it.customParcelas,
+              }),
+              ...(it.customDescription !== undefined && {
+                customDescription: it.customDescription,
+              }),
+            },
+          }),
+        ),
+      )
+    } catch {
+      // Lote é tudo-ou-nada: se qualquer linha falhar (ex.: curso removido
+      // concorrentemente), nada é gravado. Devolve erro claro em vez de 500.
+      return NextResponse.json(
+        {
+          error:
+            "Não foi possível salvar as alterações. Recarregue a página e tente novamente.",
+        },
+        { status: 409 },
+      )
+    }
 
     return NextResponse.json({ data: { updated: parsed.data.items.length } })
   },

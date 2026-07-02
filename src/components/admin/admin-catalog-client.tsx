@@ -385,20 +385,21 @@ export function AdminCatalogClient({ canEdit = false }: AdminCatalogClientProps)
         open={bulkOpen}
         onClose={() => setBulkOpen(false)}
         endpoint="/api/admin/catalogo/bulk"
-        subtitle="Edite preço de vitrine, parcelas e descrição de vários cursos do catálogo de uma vez."
+        subtitle="Edite preço de vitrine e descrição de vários cursos do catálogo de uma vez."
         scopeNote={
           <>
             <strong className="font-semibold text-[var(--color-pmb-green-900)]">
               Preço de vitrine
             </strong>{" "}
-            é o valor exibido na vitrine principal da PMB.{" "}
+            é o valor exibido na vitrine principal da PMB. O{" "}
             <strong className="font-semibold text-[var(--color-pmb-green-900)]">
-              Parcelas
+              parcelamento sem juros
             </strong>{" "}
-            e <strong className="font-semibold text-[var(--color-pmb-green-900)]">descrição</strong>{" "}
-            definem o padrão herdado pelos revendedores (cada um pode
-            personalizar na própria vitrine). Deixe vazio para usar o padrão do
-            catálogo.
+            é um número único, definido em{" "}
+            <strong className="font-semibold text-[var(--color-pmb-green-900)]">
+              Configurações → Pagamento
+            </strong>
+            , e vale para todo o catálogo.
           </>
         }
         onSaved={() => {
