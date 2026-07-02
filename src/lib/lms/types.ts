@@ -5,12 +5,24 @@
 
 // ── Catalogo ──────────────────────────────────────────────
 
+/** Categoria da vitrine (N-N). `slug` e a chave estavel; `name` e a exibicao. */
+export interface LmsCategory {
+  id: string // UUID
+  slug: string
+  name: string
+}
+
 export interface LmsCourse {
   id: string // UUID
   slug: string
   title: string
   description: string | null
   workload: string | null // ex: "12 horas"
+  // Valor sugerido/de referencia em CENTAVOS (ex: 19700 = R$ 197,00). null = sem
+  // sugestao. E so referencia — cobranca/comissao/financeiro seguem 100% no PMB.
+  suggestedPriceCents: number | null
+  // Categorias da vitrine (N-N, ordenadas por name). Pode vir [].
+  categories: LmsCategory[]
   version: number
   publishedAt: string
   moduleCount: number
@@ -127,6 +139,8 @@ export interface LmsDayCourse {
   title: string
   description: string | null
   workload: string | null
+  suggestedPriceCents: number | null
+  categories: LmsCategory[]
   version: number
   status: string // "published" | ...
   visible: boolean
