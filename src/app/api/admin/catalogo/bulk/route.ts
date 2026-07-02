@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { requireAdminSession } from "@/lib/auth/admin-session"
 import { requireSuperAdmin } from "@/lib/auth/guards"
 import { withRequestContext } from "@/lib/observability/with-request-context"
+import { contextLogger } from "@/lib/logger"
 
 /* ------------------------------------------------------------------ */
 /* GET — dados enxutos para a edição em massa (planilha) do catálogo   */
@@ -107,9 +108,14 @@ export const PUT = withRequestContext(
       )
     }
 
-    await prisma.$transaction(
-      parsed.data.items.map((it) =>
-        prisma.course.update({
+    // Updates SEQUENCIAIS (não em `$transaction` de lote) — o `$transaction([...])`
+    // sobre o `@prisma/adapter-pg` + pooler do Supabase derrubava o lote inteiro.
+    // Cada curso é gravado isoladamente; falhas são reportadas sem abortar o resto.
+    let updated = 0
+    const failed: { id: string; error: string }[] = []
+    for (const it of parsed.data.items) {
+      try {
+        await prisma.course.update({
           where: { id: it.id },
           data: {
             ...(it.price !== undefined && { precoVitrineMain: it.price }),
@@ -120,10 +126,28 @@ export const PUT = withRequestContext(
               descricaoOverride: it.customDescription,
             }),
           },
-        }),
-      ),
-    )
+        })
+        updated++
+      } catch (err) {
+        const detail = err instanceof Error ? err.message : String(err)
+        failed.push({ id: it.id, error: detail })
+        contextLogger().error(
+          { err, event: "admin.catalogo.bulk.row_error", id: it.id },
+          "falha ao salvar curso na edição em massa do catálogo",
+        )
+      }
+    }
 
-    return NextResponse.json({ data: { updated: parsed.data.items.length } })
+    if (updated === 0 && failed.length > 0) {
+      return NextResponse.json(
+        {
+          error: "Não foi possível salvar as alterações. Tente novamente.",
+          detail: failed[0].error,
+        },
+        { status: 409 },
+      )
+    }
+
+    return NextResponse.json({ data: { updated, failed } })
   },
 )

@@ -152,10 +152,20 @@ export function CourseBulkEdit({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ items }),
       })
+      const json = await res.json().catch(() => null)
       if (!res.ok) {
-        const json = await res.json().catch(() => null)
         const base = json?.error ?? "Erro ao salvar"
         setError(json?.detail ? `${base} (${json.detail})` : base)
+        return
+      }
+      // Sucesso parcial: alguns cursos falharam. Mantém o modal aberto e avisa.
+      const failed = json?.data?.failed as
+        | { id: string; error: string }[]
+        | undefined
+      if (failed && failed.length > 0) {
+        setError(
+          `${failed.length} curso(s) não foram salvos: ${failed[0].error}`,
+        )
         return
       }
       onSaved()

@@ -111,52 +111,49 @@ export const PUT = withRequestContext(
       )
     }
 
-    try {
-      await prisma.$transaction(
-        parsed.data.items.map((it) =>
-          prisma.tenantCourse.update({
-            where: { id: it.id },
-            data: {
-              ...(it.price !== undefined && { price: it.price }),
-              ...(it.customParcelas !== undefined && {
-                customParcelas: it.customParcelas,
-              }),
-              ...(it.customDescription !== undefined && {
-                customDescription: it.customDescription,
-              }),
-            },
-          }),
-        ),
-      )
-    } catch (err) {
-      // Lote é tudo-ou-nada: se qualquer linha falhar, nada é gravado.
-      // Loga o erro real (Vercel Runtime Logs) para diagnóstico e devolve um
-      // detalhe curto no corpo — endpoint autenticado por unidade.
-      const detail = err instanceof Error ? err.message : String(err)
-      const code =
-        typeof err === "object" && err && "code" in err
-          ? String((err as { code?: unknown }).code)
-          : undefined
-      contextLogger().error(
-        {
-          err,
-          event: "painel.cursos.bulk.tx_error",
-          tenantId: ctx.tenantId,
-          count: parsed.data.items.length,
-        },
-        "falha ao salvar edição em massa de cursos da revenda",
-      )
+    // Updates SEQUENCIAIS (não em `$transaction` de lote). O `$transaction([...])`
+    // sobre o `@prisma/adapter-pg` + pooler do Supabase falhava e derrubava todo
+    // o lote; o update individual (mesma operação da edição de 1 curso) funciona.
+    // Trocamos atomicidade por robustez: cada linha é gravada isoladamente e as
+    // que falharem são reportadas sem abortar as demais.
+    let updated = 0
+    const failed: { id: string; error: string }[] = []
+    for (const it of parsed.data.items) {
+      try {
+        await prisma.tenantCourse.update({
+          where: { id: it.id },
+          data: {
+            ...(it.price !== undefined && { price: it.price }),
+            ...(it.customParcelas !== undefined && {
+              customParcelas: it.customParcelas,
+            }),
+            ...(it.customDescription !== undefined && {
+              customDescription: it.customDescription,
+            }),
+          },
+        })
+        updated++
+      } catch (err) {
+        const detail = err instanceof Error ? err.message : String(err)
+        failed.push({ id: it.id, error: detail })
+        contextLogger().error(
+          { err, event: "painel.cursos.bulk.row_error", tenantId: ctx.tenantId, id: it.id },
+          "falha ao salvar curso na edição em massa da revenda",
+        )
+      }
+    }
+
+    // Nada gravou: devolve erro com o detalhe da 1ª falha (endpoint autenticado).
+    if (updated === 0 && failed.length > 0) {
       return NextResponse.json(
         {
-          error:
-            "Não foi possível salvar as alterações. Recarregue a página e tente novamente.",
-          detail,
-          code,
+          error: "Não foi possível salvar as alterações. Tente novamente.",
+          detail: failed[0].error,
         },
         { status: 409 },
       )
     }
 
-    return NextResponse.json({ data: { updated: parsed.data.items.length } })
+    return NextResponse.json({ data: { updated, failed } })
   },
 )
