@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest"
 import { createHmac } from "node:crypto"
 import { validateLmsWebhookSignature, lmsDedupKey } from "./lms-webhook"
+import { isLmsWebhookEvent, LMS_WEBHOOK_EVENTS } from "./lms-process"
 
 const SECRET = "test-secret-1234567890"
 const BODY = '{"studentExternalId":"stu_1","courseId":"c1"}'
@@ -54,6 +55,30 @@ describe("validateLmsWebhookSignature", () => {
     expect(validateLmsWebhookSignature(null, BODY, sign(ts, BODY), SECRET)).toBe(false)
     expect(validateLmsWebhookSignature(ts, BODY, null, SECRET)).toBe(false)
     expect(validateLmsWebhookSignature(ts, BODY, "sha256=zzz", SECRET)).toBe(false)
+  })
+})
+
+describe("isLmsWebhookEvent (eventos suportados)", () => {
+  it("aceita course.updated (gatilho de tempo real para edição de curso)", () => {
+    expect(isLmsWebhookEvent("course.updated")).toBe(true)
+    expect(LMS_WEBHOOK_EVENTS).toContain("course.updated")
+  })
+
+  it("aceita os demais eventos de catálogo/progresso/suporte", () => {
+    for (const t of [
+      "course.completed",
+      "course.published",
+      "course.unpublished",
+      "lesson.completed",
+      "student.question.created",
+    ]) {
+      expect(isLmsWebhookEvent(t)).toBe(true)
+    }
+  })
+
+  it("rejeita evento desconhecido ou ausente", () => {
+    expect(isLmsWebhookEvent("course.deleted")).toBe(false)
+    expect(isLmsWebhookEvent(null)).toBe(false)
   })
 })
 

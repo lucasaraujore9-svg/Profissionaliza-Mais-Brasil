@@ -19,6 +19,9 @@ export const LMS_WEBHOOK_EVENTS = [
   "course.completed",
   "course.published",
   "course.unpublished",
+  // Edicao de um curso JA publicado (preco, categoria, matriz, conteudo). Sem
+  // este evento, uma edicao sem (re)publicar so entraria no PMB no sync diario.
+  "course.updated",
   "lesson.completed",
   "student.question.created",
 ] as const
@@ -50,8 +53,9 @@ const lessonCompletedSchema = z.object({
   lastActivityAt: z.string().optional(),
 })
 
-// course.published / course.unpublished: o sync de catálogo é completo (busca
-// capa/detalhe), então não exigimos campos — aceitamos o payload como veio.
+// course.published / course.unpublished / course.updated: o sync de catálogo é
+// completo (re-puxa a lista + detalhe do LMS, então já traz preço/categoria/
+// matriz atualizados), então não exigimos campos — aceitamos o payload como veio.
 const catalogSchema = z.object({}).passthrough()
 
 const supportSchema = z.object({
@@ -146,7 +150,8 @@ export async function processLmsWebhookEvent(
     }
 
     case "course.published":
-    case "course.unpublished": {
+    case "course.unpublished":
+    case "course.updated": {
       catalogSchema.parse(payload)
       await syncCatalogFromLMS("cron")
       return { ok: true, message: `catálogo sincronizado (${eventType})` }

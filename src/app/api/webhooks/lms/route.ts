@@ -18,8 +18,12 @@ export const dynamic = "force-dynamic"
 
 /**
  * Webhook receiver de ENTRADA do LMS (LMS -> PMB). Eventos suportados:
- *   course.completed | course.published | course.unpublished | lesson.completed
- *   | student.question.created
+ *   course.completed | course.published | course.unpublished | course.updated
+ *   | lesson.completed | student.question.created
+ *
+ * course.updated e o gatilho de tempo real para EDICOES de curso ja publicado
+ * (preco, categoria, matriz, conteudo): dispara um syncCatalogFromLMS completo,
+ * o mesmo do cron diario e do botao do admin.
  *
  * Segurança: HMAC-SHA256 sobre `"<timestamp>.<rawBody>"` com PMB_WEBHOOK_SECRET.
  * Idempotência: X-PMB-Event-Id (unique em webhook_logs) ou, na ausência do

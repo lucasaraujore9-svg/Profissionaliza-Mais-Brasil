@@ -24,6 +24,7 @@ const EVENTS: EventRow[] = [
   { type: "lesson.completed", desc: "Aluno concluiu uma aula → atualiza o progresso da matrícula." },
   { type: "course.published", desc: "Curso publicado no LMS → re-sincroniza o catálogo (entra na vitrine)." },
   { type: "course.unpublished", desc: "Curso despublicado → re-sincroniza o catálogo (sai da vitrine)." },
+  { type: "course.updated", desc: "Curso já publicado foi editado (preço, categoria, matriz, conteúdo) → re-sincroniza o catálogo em tempo real." },
   { type: "student.question.created", desc: "Aluno abriu suporte no LMS → cai na caixa de atendimento da revenda dona (ou do PMB)." },
 ]
 
@@ -87,9 +88,11 @@ const LMS_AGENT_MD = [
   '    { "studentExternalId": "stu_123", "courseId": "<lms-course-uuid>", "percent": 80, "completedAt": null, "lastActivityAt": "2026-06-28T18:00:00Z" }',
   "PMB atualiza o progresso da matrícula (percent/última atividade).",
   "",
-  "### course.published / course.unpublished",
+  "### course.published / course.unpublished / course.updated",
   '    { "courseId": "<lms-course-uuid>", "slug": "eletricista-residencial" }',
-  "Campos opcionais. PMB re-sincroniza o catálogo (entra/sai da vitrine).",
+  "Campos opcionais. PMB re-sincroniza o catálogo completo (preço, categoria e",
+  "matriz curricular entram junto). Use course.updated ao editar um curso já",
+  "publicado para refletir a mudança em tempo real, sem esperar o sync diário.",
   "",
   "### student.question.created  (SUPORTE)",
   '    { "studentExternalId": "stu_123", "title": "Dúvida na aula 4", "body": "texto do aluno", "context": "Eletricista - Aula 4" }',
