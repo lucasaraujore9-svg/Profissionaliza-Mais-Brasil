@@ -143,7 +143,13 @@ export async function syncCatalogFromEA(
       // ficam noutra linha e nao colidem.
       const existing = await prisma.course.findUnique({
         where: { provider_nome: { provider: "EA", nome: curso.nome } },
-        select: { id: true, plataformaCourseId: true, categoryId: true },
+        select: {
+          id: true,
+          plataformaCourseId: true,
+          categoryId: true,
+          status: true,
+          categoriaLoja: true,
+        },
       })
 
       // Em update, so substitui categoryId se o curso ainda nao tem um vinculo
@@ -177,6 +183,12 @@ export async function syncCatalogFromEA(
           data: {
             ...dataBase,
             categoryId: effectiveCategoryId,
+            // Curadoria do admin NAO e revertida pelo sync (mesma regra do
+            // categoryId acima): `status` (ativo/inativo) e `categoriaLoja` sao
+            // editaveis em /admin/catalogo e ficavam voltando ao valor do feed a
+            // cada sync diario. So o CREATE define esses campos a partir do feed.
+            status: existing.status,
+            categoriaLoja: existing.categoriaLoja,
             ...(canSetEaCourseId
               ? { plataformaCourseId: courseIdFromCapa }
               : {}),

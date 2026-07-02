@@ -163,7 +163,7 @@ export async function syncCatalogFromLMS(
 
       const existing = await prisma.course.findUnique({
         where: { lmsCourseId: curso.id },
-        select: { id: true, categoryId: true },
+        select: { id: true, categoryId: true, status: true },
       })
 
       // Em update, so define a principal se o curso ainda nao tem uma — preserva
@@ -189,7 +189,10 @@ export async function syncCatalogFromLMS(
       if (existing) {
         await prisma.course.update({
           where: { lmsCourseId: curso.id },
-          data: { ...dataBase, categoryId: effectiveCategoryId },
+          // `status` preservado no update: `dataBase` fixa "ATIVO", o que revertia
+          // a curadoria do admin (ex: curso marcado INATIVO em /admin/catalogo
+          // voltava a ATIVO no sync diario). So o CREATE nasce ATIVO.
+          data: { ...dataBase, categoryId: effectiveCategoryId, status: existing.status },
         })
         courseId = existing.id
         updated += 1
