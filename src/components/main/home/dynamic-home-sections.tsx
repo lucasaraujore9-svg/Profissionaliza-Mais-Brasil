@@ -25,6 +25,7 @@ import {
 import { prisma } from "@/lib/prisma"
 import { getSystemSettings } from "@/lib/system-settings"
 import { interestFreePhrase } from "@/lib/mercadopago/installments"
+import { getSupportContacts, buildTenantSupportContacts } from "@/lib/branding"
 
 interface DynamicHomeSectionsProps {
   tenantId: string | null
@@ -33,9 +34,10 @@ interface DynamicHomeSectionsProps {
 export async function DynamicHomeSections({
   tenantId,
 }: DynamicHomeSectionsProps) {
-  const [sections, interestFree] = await Promise.all([
+  const [sections, interestFree, supportHoursText] = await Promise.all([
     loadHomeSections(tenantId),
     resolveInterestFree(tenantId),
+    resolveSupportHours(tenantId),
   ])
   const enabled = sections.filter((s) => s.enabled)
   // Texto dinâmico do selo de parcelamento do trust-bar (substitui o token
@@ -63,6 +65,7 @@ export async function DynamicHomeSections({
       renderSection(section, {
         tenantId,
         semJurosText,
+        supportHoursText,
         bestsellersSnapshot: initialSnapshot,
         onNewBestsellersSnapshot: (snap) => {
           snapshotHolder.current = snap
@@ -104,6 +107,7 @@ async function renderSection(
   ctx: {
     tenantId: string | null
     semJurosText: string
+    supportHoursText: string | null
     bestsellersSnapshot: BestsellersSnapshot | null
     onNewBestsellersSnapshot: (snap: BestsellersSnapshot) => void
   },
@@ -167,6 +171,7 @@ async function renderSection(
       <InstitutionalSection
         config={cfg as InstitutionalConfig}
         semJurosText={ctx.semJurosText}
+        supportHoursText={ctx.supportHoursText}
       />
     )
   }
@@ -210,4 +215,24 @@ async function resolveInterestFree(tenantId: string | null): Promise<number> {
     select: { interestFreeInstallments: true },
   })
   return t?.interestFreeInstallments ?? 1
+}
+
+/**
+ * Horário de atendimento exibido no selo "Suporte no WhatsApp" do trust-bar
+ * (substitui o token {{horarioAtendimento}}). Reusa os helpers do rodapé para
+ * manter barra de benefícios e rodapé sempre coerentes:
+ *  - unidade (revenda): usa `Tenant.supportHours` — `null` quando não configurado
+ *    (a linha some, igual ao rodapé);
+ *  - home PMB (sem tenant): fallback do próprio rodapé PMB (`getSupportContacts`).
+ */
+async function resolveSupportHours(
+  tenantId: string | null,
+): Promise<string | null> {
+  if (!tenantId) return getSupportContacts().hours
+  const t = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { supportHours: true },
+  })
+  return buildTenantSupportContacts({ supportHours: t?.supportHours ?? null })
+    .hours
 }

@@ -235,7 +235,7 @@ model Tenant {
   youtube        String?
   tiktok         String?
   supportEmail   String? @map("support_email") // E-mail de atendimento exibido no rodape da vitrine
-  supportHours   String? @map("support_hours") // Horario de atendimento exibido no rodape da vitrine
+  supportHours   String? @map("support_hours") // Horario de atendimento exibido no rodape e na barra de beneficios da vitrine
 
   // Status e config
   status      TenantStatus @default(PENDING)

@@ -18,6 +18,7 @@ import type {
   InstitutionalConfig,
   InstitutionalItem,
 } from "@/lib/home/sections"
+import { substituteTrustTokens } from "@/lib/home/trust-tokens"
 
 // Mapa de ícones lucide permitidos. Adicionamos os mais usados nos blocos
 // institucionais. Nome desconhecido => sem ícone.
@@ -108,14 +109,23 @@ export function CategoriesGridSection({
 export function InstitutionalSection({
   config,
   semJurosText,
+  supportHoursText,
 }: {
   config: InstitutionalConfig
   /** Substitui o token {{semJuros}} no trust-bar (parcelas sem juros da unidade). */
   semJurosText?: string
+  /** Substitui o token {{horarioAtendimento}} no trust-bar (horário da unidade). */
+  supportHoursText?: string | null
 }) {
   switch (config.variant) {
     case "trust_bar":
-      return <TrustBarVariant config={config} semJurosText={semJurosText} />
+      return (
+        <TrustBarVariant
+          config={config}
+          semJurosText={semJurosText}
+          supportHoursText={supportHoursText}
+        />
+      )
     case "learn_anywhere":
       return <LearnAnywhereVariant config={config} />
     case "testimonials":
@@ -133,9 +143,11 @@ export function InstitutionalSection({
 function TrustBarVariant({
   config,
   semJurosText,
+  supportHoursText,
 }: {
   config: InstitutionalConfig
   semJurosText?: string
+  supportHoursText?: string | null
 }) {
   if (config.items.length === 0) return null
   return (
@@ -146,7 +158,12 @@ function TrustBarVariant({
       <div className="mx-auto max-w-[1280px] px-4 md:px-6">
         <ul className="grid grid-cols-2 gap-x-4 gap-y-5 py-6 md:grid-cols-3 md:py-7 lg:grid-cols-5 lg:gap-x-6">
           {config.items.map((it, i) => (
-            <TrustItem key={i} item={it} semJurosText={semJurosText} />
+            <TrustItem
+              key={i}
+              item={it}
+              semJurosText={semJurosText}
+              supportHoursText={supportHoursText}
+            />
           ))}
         </ul>
       </div>
@@ -157,13 +174,18 @@ function TrustBarVariant({
 function TrustItem({
   item,
   semJurosText,
+  supportHoursText,
 }: {
   item: InstitutionalItem
   semJurosText?: string
+  supportHoursText?: string | null
 }) {
-  // Token {{semJuros}} no título/corpo vira o nº de parcelas sem juros da unidade.
+  // Tokens dinâmicos no título/corpo: {{semJuros}} = nº de parcelas sem juros da
+  // unidade; {{horarioAtendimento}} = Horário de atendimento da unidade (vazio
+  // quando não configurado → a linha some, igual ao rodapé).
   const sub = (t: string) =>
-    semJurosText ? t.replaceAll("{{semJuros}}", semJurosText) : t
+    substituteTrustTokens(t, { semJurosText, supportHoursText })
+  const body = sub(item.body)
   return (
     <li className="flex items-center gap-3">
       <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[var(--color-pmb-lime-50)]">
@@ -175,8 +197,8 @@ function TrustItem({
       </span>
       <div className="leading-tight">
         <p className="text-[13px] font-bold text-[var(--color-pmb-green)]">{sub(item.title)}</p>
-        {item.body && (
-          <p className="text-[12px] text-[rgba(2,89,24,0.6)]">{sub(item.body)}</p>
+        {body && (
+          <p className="text-[12px] text-[rgba(2,89,24,0.6)]">{body}</p>
         )}
       </div>
     </li>

@@ -258,8 +258,9 @@ export function VitrineConfigForm({
           </div>
         </div>
         <p className="mt-3 text-[11px] text-gray-500">
-          Deixe em branco para esconder a linha no rodapé. Os dados da
-          Profissionaliza Mais Brasil não aparecem na sua vitrine.
+          Deixe em branco para esconder a linha no rodapé. O horário de
+          atendimento também aparece na barra de benefícios da vitrine. Os dados
+          da Profissionaliza Mais Brasil não aparecem na sua vitrine.
         </p>
       </section>
 
