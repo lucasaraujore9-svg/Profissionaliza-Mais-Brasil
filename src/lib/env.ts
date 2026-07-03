@@ -119,6 +119,13 @@ const envSchema = z.object({
   VERCEL_PROJECT_ID: z.string().optional(),
   VERCEL_TEAM_ID: z.string().optional(),
 
+  // Engine de WhatsApp (WAHA-compatible — automação de leads, só de SAÍDA).
+  // Opcionais: a automação pode estar desligada. Quando ligada, faltar a
+  // config faz o disparo lançar em runtime (a UI já sinaliza "não configurado").
+  // ⚠️MIGRAÇÃO: na VPS/Swarm aponta para um serviço interno.
+  WA_GATEWAY_URL: optionalUrl(),
+  WA_GATEWAY_API_KEY: z.string().optional(),
+
   // Supabase
   SUPABASE_URL: z.string().url().optional(),
   SUPABASE_ANON_KEY: z.string().optional(),

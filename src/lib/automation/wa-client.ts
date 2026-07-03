@@ -1,4 +1,5 @@
 import { contextLogger } from "@/lib/logger"
+import { env } from "@/lib/env"
 
 // Client HTTP do engine de WhatsApp. Nomenclatura neutra — engine
 // externo configurado via env (WA_GATEWAY_URL / WA_GATEWAY_API_KEY).
@@ -18,10 +19,18 @@ export interface SessionStatus {
 }
 
 const TIMEOUT_MS = 15_000
+// Retry só no ENVIO (sendTextMessage): um 5xx/timeout transitório do engine não
+// pode perder o disparo de automação em definitivo. Espelha lib/lms/client.ts.
+const SEND_MAX_RETRIES = 2 // 3 tentativas no total
+const SEND_BACKOFF_MS = 500
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
 
 function gatewayConfig(): { url: string; apiKey: string } | null {
-  const url = process.env.WA_GATEWAY_URL
-  const apiKey = process.env.WA_GATEWAY_API_KEY
+  const url = env.WA_GATEWAY_URL
+  const apiKey = env.WA_GATEWAY_API_KEY
   if (!url || !apiKey) return null
   return { url: url.replace(/\/$/, ""), apiKey }
 }
@@ -391,15 +400,44 @@ export async function sendTextMessage(
     )
   }
 
-  // (2) dispara a mensagem usando o id resolvido
-  const res = await gatewayFetch(`/api/sendText`, {
-    method: "POST",
-    body: JSON.stringify({
-      session: args.sessionName,
-      chatId,
-      text: args.body,
-    }),
-  })
+  // (2) dispara a mensagem usando o id resolvido, com retry em falha
+  // TRANSITÓRIA (5xx / rede / timeout). 4xx (requisição/sessão inválida) e
+  // WhatsAppNumberNotFoundError NÃO são retentados.
+  let res: Response | null = null
+  let lastErr: unknown = null
+  for (let attempt = 0; attempt <= SEND_MAX_RETRIES; attempt++) {
+    try {
+      res = await gatewayFetch(`/api/sendText`, {
+        method: "POST",
+        body: JSON.stringify({
+          session: args.sessionName,
+          chatId,
+          text: args.body,
+        }),
+      })
+      if (res.ok) break
+      // 4xx: erro terminal (não adianta retentar) — sai e trata abaixo.
+      if (res.status < 500) break
+      lastErr = new Error(`Engine 5xx (${res.status})`)
+    } catch (err) {
+      // Rede/timeout (abort): transitório — retenta.
+      lastErr = err
+      res = null
+    }
+    if (attempt < SEND_MAX_RETRIES) {
+      await sleep(SEND_BACKOFF_MS * Math.pow(2, attempt))
+    }
+  }
+
+  if (!res) {
+    contextLogger().warn(
+      { err: lastErr, event: "wa.send_retry_exhausted", sessionName: args.sessionName },
+      "Falha ao enviar mensagem WhatsApp após retries (transitório)",
+    )
+    throw new Error(
+      `Falha ao enviar após ${SEND_MAX_RETRIES + 1} tentativas: ${String(lastErr)}`,
+    )
+  }
 
   if (!res.ok) {
     const txt = await res.text().catch(() => "")

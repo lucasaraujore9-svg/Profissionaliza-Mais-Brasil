@@ -28,7 +28,8 @@ O domínio segue **maduro e endurecido**. Os 3 webhooks têm verificação de as
 
 ### [API-007] Webhook LMS: `course.updated` vira um 3º gatilho de re-sync COMPLETO do catálogo por evento (amplificação piorada)
 - **Severidade:** P3
-- **Status:** Aberto
+- **Status:** Aberto — deferido (será resolvido junto com PERF-010, rodada performance)
+- **Nota (2026-07-03):** NÃO corrigido nesta rodada de API para evitar conflito. A receita primária (sync incremental — sincronizar só o curso do evento por `lmsCourseId`/`lmsSlug` em vez de `syncCatalogFromLMS("cron")` completo) é a **mesma** de PERF-010 do domínio performance, que será corrigido na próxima rodada por outro corretor. Deixado Aberto para ser resolvido lá, num único commit coeso (evita duas correções sobre `src/lib/webhooks/lms-process.ts` + `src/lib/catalog/sync-lms.ts`).
 - **Local:** `src/lib/webhooks/lms-process.ts:152-158` · `src/lib/catalog/sync-lms.ts:93-247`
 - **Evidência:**
   ```ts
@@ -77,12 +78,13 @@ O domínio segue **maduro e endurecido**. Os 3 webhooks têm verificação de as
 
 ### [API-008] wa-client (engine WhatsApp/WAHA) lê process.env direto e não tem retry/backoff no envio
 - **Severidade:** P3
-- **Status:** Aberto
+- **Status:** Corrigido (2026-07-03)
 - **Local:** `src/lib/automation/wa-client.ts:23-24,35,378+`
 - **Evidência:** (1) Config via `process.env.WA_GATEWAY_URL`/`WA_GATEWAY_API_KEY` direto (linhas 23-24), contrariando a regra do projeto (`src/lib/env.ts`) — e `WA_GATEWAY_*` **não** está no schema de `env.ts` (`grep` = zero; sem fail-fast no boot). (2) `gatewayFetch` tem timeout 15s (AbortController) e degradação graciosa (stop/logout/delete toleram falha), mas `sendTextMessage` (linha 378+) e `startSession` **não** têm retry/backoff: um 5xx transitório do engine no envio falha a mensagem em definitivo (sem reentrega). Inalterado desde 2026-06-24.
 - **Impacto:** Baixo. Integração só de SAÍDA (não há webhook inbound do WAHA — `grep` zero). Um blip do engine perde aquele disparo de automação (lead não recebe a mensagem). ⚠️MIGRAÇÃO: na VPS Swarm `WA_GATEWAY_URL` aponta para serviço interno — adicionar ao schema de `env.ts` pega config divergente cedo (lição do 401 por chave divergente da referência). Nota: o **Vercel client** (`src/lib/vercel/client.ts:12-28`) segue o mesmo padrão de `process.env` direto (timeout 15s, sem retry — decisão documentada); menor prioridade, mesma recomendação.
 - **Correção:** (1) Adicionar `WA_GATEWAY_URL`/`WA_GATEWAY_API_KEY` (e, no mesmo esforço, `VERCEL_TOKEN`/`VERCEL_PROJECT_ID`/`VERCEL_TEAM_ID`) ao schema de `src/lib/env.ts` (opcionais; warning em prod se a automação/domínio estiver ligada e faltar). (2) Envolver `sendTextMessage` (e opcionalmente `startSession`) em retry com backoff exponencial (2-3 tentativas, só em 5xx/rede/timeout — não em 4xx nem `WhatsAppNumberNotFoundError`), espelhando `lib/lms/client.ts`/`lib/asaas/client.ts`.
 - **Verificação:** `grep "process.env.WA_GATEWAY" src` retorna zero; teste unitário de `sendTextMessage` com mock devolvendo 503 na 1ª e 200 na 2ª → 1 mensagem entregue.
+- **Correção aplicada (2026-07-03):** (1) `WA_GATEWAY_URL`/`WA_GATEWAY_API_KEY` adicionados ao schema de `src/lib/env.ts` (opcionais, `optionalUrl()`; `VERCEL_*` já estava no schema — nada a fazer lá); `gatewayConfig()` passou a ler via `env.*` (não `process.env`). (2) `sendTextMessage` agora retenta o POST `/api/sendText` em falha **transitória** (5xx / rede / timeout): até 3 tentativas com backoff exponencial (500/1000ms), espelhando `lib/lms/client.ts`; 4xx é terminal (não retenta) e `WhatsAppNumberNotFoundError` é lançado antes do envio. `startSession` deixado como está (idempotente + botão de re-tentar na UI). Teste `src/lib/automation/wa-client.test.ts` (5xx→200 entrega; rede→200 entrega; 4xx não retenta; número sem WhatsApp não dispara POST). `grep "process.env.WA_GATEWAY" src` → vazio. Portão verde: typecheck/lint(0 erro)/build(exit 0)/test(365 passed). ⚠️MIGRAÇÃO: `WA_GATEWAY_*` agora fail-fast no schema; na VPS/Swarm aponta para serviço interno.
 
 ## Cobertura
 
