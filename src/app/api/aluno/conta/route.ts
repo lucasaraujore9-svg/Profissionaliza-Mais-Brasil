@@ -3,6 +3,7 @@ import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { requireStudentSession } from "@/lib/auth/student-session"
 import { blockStudentInEA } from "@/lib/students/plataforma-actions"
+import { propagateStudentErasure, type ErasurePropagationResult } from "@/lib/lgpd/erasure-propagation"
 import { extractCertificatePath, deleteCertificatePdf } from "@/lib/certificates/storage"
 import { rateLimit, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
 import { logAudit } from "@/lib/audit"
@@ -53,6 +54,17 @@ export const DELETE = withRequestContext(
 
     // Revoga acesso na plataforma parceira (best-effort — não bloqueia a exclusão).
     await blockStudentInEA(student.id).catch(swallow("aluno.conta.block_ea"))
+
+    // LGPD-013: propaga a exclusão aos subprocessadores onde há API (LMS: revoga
+    // as matrículas) e registra pendências manuais (EA/LMS sem API de exclusão de
+    // PII) + retenção legal (Asaas/MP). Best-effort — nunca lança.
+    let propagation: ErasurePropagationResult | null = null
+    try {
+      propagation = await propagateStudentErasure(student.id)
+    } catch {
+      // propagateStudentErasure é best-effort por contrato; guard extra por segurança.
+      propagation = null
+    }
 
     // Anonimiza PII preservando os registros (Enrollment/Payment/Certificate)
     // para integridade contábil/legal. Limpa credenciais para impedir login.
@@ -117,7 +129,7 @@ export const DELETE = withRequestContext(
       actorStudentId: student.id,
       actorRole: "STUDENT",
       tenantId: student.tenantId,
-      payloadAfter: { anonymizedAs: anon, previousStatus: student.status },
+      payloadAfter: { anonymizedAs: anon, previousStatus: student.status, propagation },
     }).catch(swallow("aluno.conta.audit"))
 
     contextLogger().info(

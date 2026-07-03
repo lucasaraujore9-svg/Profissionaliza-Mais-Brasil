@@ -18,6 +18,12 @@ export interface AnonymizeActor {
  * contábil/legal; o cancelamento do tenant é uma ação SEPARADA
  * (`DELETE /api/admin/revendedores/[id]`).
  *
+ * LGPD-013: os dados do revendedor no **Asaas** (customer/subscription com
+ * CPF/e-mail) NÃO são apagados aqui — há base de retenção legal fiscal/contábil
+ * (art. 16, I da LGPD) enquanto houver cobranças/obrigações pendentes. Essa
+ * retenção é documentada no ROPA (`docs/legal/ROPA.md`) e a supressão residual,
+ * quando cabível, segue o DPA do subprocessador (`docs/legal/SUBPROCESSADORES.md`).
+ *
  * Idempotente: re-executar apenas reaplica a anonimização ao mesmo owner.
  */
 export async function anonymizeResellerOwner(
