@@ -325,10 +325,12 @@ export async function reorderSections(scope: Scope, body: unknown): Promise<Resp
   if (sections.length !== ids.length) {
     return NextResponse.json({ error: "IDs inválidos" }, { status: 400 })
   }
-  const updates = ids.map((id, idx) =>
-    prisma.homeSection.update({ where: { id }, data: { position: idx } }),
-  )
-  await prisma.$transaction(updates)
+  // DB-004: updates SEQUENCIAIS (nao prisma.$transaction([...map])). O array
+  // dinamico de updates sobre adapter-pg + pooler do Supabase derruba o lote
+  // inteiro em prod ("nao salva", vide 019a253). position nao e unique.
+  for (const [idx, id] of ids.entries()) {
+    await prisma.homeSection.update({ where: { id }, data: { position: idx } })
+  }
   await normalizePositions(scope)
   return NextResponse.json({ data: { ok: true } })
 }
@@ -359,9 +361,9 @@ async function normalizePositions(scope: Scope) {
       sections.splice(idxFirstCategoryCourses, 0, best)
     }
   }
-  await prisma.$transaction(
-    sections.map((s, i) =>
-      prisma.homeSection.update({ where: { id: s.id }, data: { position: i } }),
-    ),
-  )
+  // DB-004: updates SEQUENCIAIS (nao prisma.$transaction([...map])) — mesmo
+  // motivo de reorderSections. Percorre em ordem de position final.
+  for (let i = 0; i < sections.length; i++) {
+    await prisma.homeSection.update({ where: { id: sections[i].id }, data: { position: i } })
+  }
 }
