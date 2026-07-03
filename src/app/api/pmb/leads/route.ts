@@ -10,8 +10,8 @@ import {
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { contextLogger } from "@/lib/logger"
 import { queueLeadMessage } from "@/lib/automation/dispatch"
+import { CONSENT_VERSION } from "@/lib/legal/version"
 
-const CONSENT_VERSION = "2026-05-v1"
 const DEDUP_WINDOW_MS = 24 * 60 * 60 * 1000
 
 const bodySchema = z.object({

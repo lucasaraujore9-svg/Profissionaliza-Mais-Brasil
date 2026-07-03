@@ -5,6 +5,7 @@ import remarkGfm from "remark-gfm"
 import { PageHero, PageBody, Prose } from "@/components/main/static/page-hero"
 import { LegalTenantNotice } from "@/components/main/static/legal-tenant-notice"
 import { getCurrentTenant } from "@/lib/tenant/current"
+import { LEGAL_VERSION, TERMS_UPDATED_AT } from "@/lib/legal/version"
 
 export const metadata = {
   title: "Termos de Uso",
@@ -31,7 +32,7 @@ export default async function TermosPage() {
             ? `Termos e Condições de Uso — ${tenant.name}`
             : "Termos e Condições de Uso — Alunos e Visitantes"
         }
-        subtitulo="Versão 1.3 — Atualizado em 11 de junho de 2026. Leia atentamente antes de adquirir qualquer curso."
+        subtitulo={`Versão ${LEGAL_VERSION} — Atualizado em ${TERMS_UPDATED_AT}. Leia atentamente antes de adquirir qualquer curso.`}
       />
       <PageBody>
         {tenant && <LegalTenantNotice tenantName={tenant.name} kind="termos" />}

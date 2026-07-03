@@ -13,8 +13,8 @@ import { queueLeadMessage } from "@/lib/automation/dispatch"
 import { resolveTenantFromRequest } from "@/lib/tenant/from-request"
 import { linkVisitorToLead, readVisitorId } from "@/lib/automation/tracking"
 import { pickNextLeadOwner } from "@/lib/automation/assign"
+import { CONSENT_VERSION } from "@/lib/legal/version"
 
-const CONSENT_VERSION = "2026-05-v1"
 const DEDUP_WINDOW_MS = 24 * 60 * 60 * 1000
 
 const bodySchema = z.object({

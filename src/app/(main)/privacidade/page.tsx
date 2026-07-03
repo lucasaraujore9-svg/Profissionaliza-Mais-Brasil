@@ -5,6 +5,7 @@ import remarkGfm from "remark-gfm"
 import { PageHero, PageBody, Prose } from "@/components/main/static/page-hero"
 import { LegalTenantNotice } from "@/components/main/static/legal-tenant-notice"
 import { getCurrentTenant } from "@/lib/tenant/current"
+import { LEGAL_VERSION, PRIVACY_UPDATED_AT } from "@/lib/legal/version"
 
 export const metadata = {
   title: "Política de Privacidade",
@@ -31,7 +32,7 @@ export default async function PrivacidadePage() {
             ? `Política de Privacidade — ${tenant.name}`
             : "Política de Privacidade e Segurança de Dados"
         }
-        subtitulo="Versão 1.3 — Atualizada em 10 de junho de 2026. Em conformidade com a LGPD, o Marco Civil da Internet e o CDC."
+        subtitulo={`Versão ${LEGAL_VERSION} — Atualizada em ${PRIVACY_UPDATED_AT}. Em conformidade com a LGPD, o Marco Civil da Internet e o CDC.`}
       />
       <PageBody>
         {tenant && (

@@ -11,8 +11,8 @@ import { sendEmail } from "@/lib/email/mailer"
 import { loadTenantEmailBrand } from "@/lib/email/tenant-brand"
 import { emailFromForBrand } from "@/lib/email/brand"
 import { createNotification } from "@/lib/notifications"
+import { CONSENT_VERSION } from "@/lib/legal/version"
 
-const CONSENT_VERSION = "2026-06-v1"
 const DEDUP_WINDOW_MS = 24 * 60 * 60 * 1000
 
 /**
