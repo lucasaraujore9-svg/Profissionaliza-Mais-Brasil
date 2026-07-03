@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { TenantStatus } from "@prisma/client"
+import { getJson, setJson } from "@/lib/redis/cache"
 
 // Placar publico de lancamento. Tudo aqui e AGREGADO — nunca expomos dados
 // individuais sensiveis (Asaas ids, tokens, valores em R$). O nome da revenda
@@ -117,6 +118,57 @@ export async function getPlacarSnapshot(): Promise<PlacarSnapshot> {
     recentes: recentes.map((r) => ({ name: r.name })),
     generatedAt: new Date().toISOString(),
   }
+}
+
+// ── PERF-011: cache compartilhado do snapshot para o SSE ────────────────────
+// Os streams SSE recomputavam o snapshot (3 queries agregadas) + o set de ativas
+// POR CONEXÃO a cada tick (5s) — carga no Postgres = N_conexões × ~4 queries/5s.
+// O snapshot de lançamento é GLOBAL (idêntico p/ todos os espectadores); o do
+// painel é por `referrerTenantId`. Cache Redis com TTL = TICK (5s): a 1ª conexão
+// do tick computa e as demais leem do cache → ~4 queries/5s por chave, não por
+// conexão. Fail-open (dcd03fd): getJson→null / setJson swallow ⇒ cai no DB.
+const PLACAR_TTL_SECONDS = 5
+
+export async function getPlacarSnapshotCached(): Promise<PlacarSnapshot> {
+  const key = "placar:snapshot"
+  const cached = await getJson<PlacarSnapshot>(key)
+  if (cached) return cached
+  const fresh = await getPlacarSnapshot()
+  await setJson(key, fresh, PLACAR_TTL_SECONDS)
+  return fresh
+}
+
+export async function getActiveTenantsCached(): Promise<
+  { id: string; name: string }[]
+> {
+  const key = "placar:active"
+  const cached = await getJson<{ id: string; name: string }[]>(key)
+  if (cached) return cached
+  const fresh = await getActiveTenants()
+  await setJson(key, fresh, PLACAR_TTL_SECONDS)
+  return fresh
+}
+
+export async function getReferralPlacarSnapshotCached(
+  referrerTenantId: string,
+): Promise<PlacarSnapshot> {
+  const key = `placar:ref:snapshot:${referrerTenantId}`
+  const cached = await getJson<PlacarSnapshot>(key)
+  if (cached) return cached
+  const fresh = await getReferralPlacarSnapshot(referrerTenantId)
+  await setJson(key, fresh, PLACAR_TTL_SECONDS)
+  return fresh
+}
+
+export async function getReferralActiveTenantsCached(
+  referrerTenantId: string,
+): Promise<{ id: string; name: string }[]> {
+  const key = `placar:ref:active:${referrerTenantId}`
+  const cached = await getJson<{ id: string; name: string }[]>(key)
+  if (cached) return cached
+  const fresh = await getReferralActiveTenants(referrerTenantId)
+  await setJson(key, fresh, PLACAR_TTL_SECONDS)
+  return fresh
 }
 
 // ── Placar de INDICAÇÕES (revendedor de revenda) ───────────────────────────

@@ -1,4 +1,7 @@
-import { getPlacarSnapshot, getActiveTenants } from "@/lib/placar/snapshot"
+import {
+  getPlacarSnapshotCached as getPlacarSnapshot,
+  getActiveTenantsCached as getActiveTenants,
+} from "@/lib/placar/snapshot"
 
 // Stream SSE publico do placar de lancamento. Mantemos os dados no servidor
 // (so empurramos agregados + evento "venda nova") — diferente de assinar o

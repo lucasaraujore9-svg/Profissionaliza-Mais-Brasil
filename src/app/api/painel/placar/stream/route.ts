@@ -1,8 +1,8 @@
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import {
-  getReferralPlacarSnapshot,
-  getReferralActiveTenants,
+  getReferralPlacarSnapshotCached as getReferralPlacarSnapshot,
+  getReferralActiveTenantsCached as getReferralActiveTenants,
 } from "@/lib/placar/snapshot"
 
 // Stream SSE do placar de INDICAÇÕES, escopado ao revendedor logado: só conta
