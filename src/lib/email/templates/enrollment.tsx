@@ -7,8 +7,10 @@ export interface EnrollmentSchoolAccess {
   /** Usuário/login na plataforma de aulas (EA: ea_aluno_id; LMS: login do parceiro). */
   login: string
   /**
-   * Senha inicial em texto puro — só populada quando temos o valor (1ª criação).
-   * null = usar a senha recebida à parte (e-mail da plataforma) ou a já em uso.
+   * LGPD-012: a senha inicial NÃO é mais renderizada no e-mail (canal inseguro).
+   * O aluno vê a senha na área do aluno (card "acesso à plataforma de aulas").
+   * Campo mantido por compatibilidade com os chamadores; ignorado no template.
+   * @deprecated não usar — a senha não trafega por e-mail.
    */
   password?: string | null
   /** URL de login da plataforma (EA) ou portal do parceiro (LMS). null = acessar via área do aluno. */
@@ -115,17 +117,14 @@ export function EnrollmentTemplate({
           <>
             <Text style={styles.detailRow}>Usuário:</Text>
             <Text style={styles.credentialValueMono}>{school.login}</Text>
-            {school.password ? (
-              <>
-                <Text style={styles.detailRow}>Senha:</Text>
-                <Text style={styles.credentialValueMono}>{school.password}</Text>
-              </>
-            ) : (
-              <Text style={styles.credentialHint}>
-                Senha: a que você recebeu por e-mail da plataforma de aulas (ou a
-                que você já usa).
-              </Text>
-            )}
+            {/* LGPD-012: a senha inicial NÃO viaja por e-mail (canal não é
+                fim-a-fim seguro). Ela fica disponível na área do aluno, no card
+                "acesso à plataforma de aulas" (com mostrar/copiar). */}
+            <Text style={styles.credentialHint}>
+              Sua senha inicial fica na sua área do aluno, no card{" "}
+              <strong>acesso à plataforma de aulas</strong> (é só mostrar e
+              copiar). Por segurança, não enviamos a senha por e-mail.
+            </Text>
             {school.loginUrl ? (
               <Section style={styles.buttonRow}>
                 <Button style={styles.accentButton} href={school.loginUrl}>

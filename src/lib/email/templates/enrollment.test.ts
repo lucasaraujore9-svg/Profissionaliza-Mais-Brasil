@@ -38,7 +38,7 @@ describe("EnrollmentTemplate", () => {
     expect(html).toContain("maria@email.com")
   })
 
-  it("com credenciais da escola: exibe usuário, senha e o link de acesso", async () => {
+  it("com credenciais da escola: exibe usuário e link, mas NUNCA a senha (LGPD-012)", async () => {
     const html = await render(
       EnrollmentTemplate({
         ...baseProps,
@@ -50,7 +50,10 @@ describe("EnrollmentTemplate", () => {
       }),
     )
     expect(html).toContain("98765")
-    expect(html).toContain("abc12345")
+    // LGPD-012: a senha inicial não trafega mais no e-mail.
+    expect(html).not.toContain("abc12345")
+    // Orienta o aluno a obter a senha na área do aluno.
+    expect(html).toContain("área do aluno")
     expect(html).toContain("Acessar a plataforma de aulas")
     expect(html).toContain("https://playcurso.com/login.php")
   })
@@ -62,15 +65,16 @@ describe("EnrollmentTemplate", () => {
     expect(html).not.toContain("Usuário:")
   })
 
-  it("login sem senha (recompra EA): mostra o usuário e orienta usar a senha já recebida", async () => {
+  it("login com senha conhecida: mostra o usuário e NÃO imprime a senha (LGPD-012)", async () => {
     const html = await render(
       EnrollmentTemplate({
         ...baseProps,
-        school: { login: "55501", password: null, loginUrl: null },
+        school: { login: "55501", password: "segredo123", loginUrl: null },
       }),
     )
     expect(html).toContain("55501")
-    // Caminho sem senha: orienta usar a senha já recebida, sem inventar valor.
-    expect(html).toContain("que você já usa")
+    // A senha nunca aparece no corpo, mesmo quando o provisionamento a conhece.
+    expect(html).not.toContain("segredo123")
+    expect(html).toContain("área do aluno")
   })
 })
