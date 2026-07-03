@@ -14,6 +14,11 @@ const ALL_STAGES: StudentLeadStage[] = [
   "LOST",
 ]
 
+// PERF-004: teto por coluna do kanban. Sem isto o board carregava TODOS os leads
+// (WON/LOST acumulam sem fim) e serializava tudo em memória a cada abertura. As
+// colunas mais recentes por stage cabem folgado; o drag-and-drop opera sobre elas.
+const PER_STAGE_LIMIT = 200
+
 export const GET = withRequestContext(
   { action: "admin.leads.list", route: "/api/admin/leads" },
   async (request: Request) => {
@@ -48,32 +53,37 @@ export const GET = withRequestContext(
       courseId = c.id
     }
 
-    const leads = await prisma.studentLead.findMany({
-      where: {
-        tenantId: null, // PMB
-        ...(courseId ? { courseId } : {}),
-        ...(source ? { source: source as never } : {}),
-      },
-      orderBy: [{ stage: "asc" }, { columnOrder: "asc" }, { createdAt: "desc" }],
-      select: {
-        id: true,
-        nome: true,
-        email: true,
-        telefone: true,
-        courseSnapshot: true,
-        stage: true,
-        source: true,
-        paymentValue: true,
-        columnOrder: true,
-        createdAt: true,
-      },
-    })
-
-    const serialized = leads.map(serializeLead)
-    const board = emptyBoard()
-    for (const lead of serialized) {
-      board[lead.stage].push(lead)
+    const baseWhere = {
+      tenantId: null, // PMB
+      ...(courseId ? { courseId } : {}),
+      ...(source ? { source: source as never } : {}),
     }
+
+    // Uma query CAPADA por coluna (em paralelo) — teto de memória e payload por
+    // stage, preservando a ordenação intra-coluna do drag-and-drop.
+    const board = emptyBoard()
+    await Promise.all(
+      ALL_STAGES.map(async (stage) => {
+        const leads = await prisma.studentLead.findMany({
+          where: { ...baseWhere, stage },
+          orderBy: [{ columnOrder: "asc" }, { createdAt: "desc" }],
+          take: PER_STAGE_LIMIT,
+          select: {
+            id: true,
+            nome: true,
+            email: true,
+            telefone: true,
+            courseSnapshot: true,
+            stage: true,
+            source: true,
+            paymentValue: true,
+            columnOrder: true,
+            createdAt: true,
+          },
+        })
+        board[stage] = leads.map(serializeLead)
+      }),
+    )
 
     return NextResponse.json({ data: board })
   },

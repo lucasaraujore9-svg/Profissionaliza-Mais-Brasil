@@ -15,6 +15,9 @@ const ALL_STAGES: StudentLeadStage[] = [
   "LOST",
 ]
 
+// PERF-004: teto por coluna do kanban (WON/LOST acumulam sem fim). Ver admin/leads.
+const PER_STAGE_LIMIT = 200
+
 export const GET = withRequestContext(
   { action: "painel.leads.list", route: "/api/painel/leads" },
   async (request: Request) => {
@@ -47,40 +50,46 @@ export const GET = withRequestContext(
       courseId = c.id
     }
 
-    const leads = await prisma.studentLead.findMany({
-      where: {
-        tenantId: ctx.tenantId,
-        ...(courseId ? { courseId } : {}),
-        ...(source ? { source: source as never } : {}),
-      },
-      orderBy: [{ stage: "asc" }, { columnOrder: "asc" }, { createdAt: "desc" }],
-      select: {
-        id: true,
-        nome: true,
-        email: true,
-        telefone: true,
-        courseSnapshot: true,
-        stage: true,
-        source: true,
-        paymentValue: true,
-        columnOrder: true,
-        createdAt: true,
-        ownerUserId: true,
-      },
-    })
+    const baseWhere = {
+      tenantId: ctx.tenantId,
+      ...(courseId ? { courseId } : {}),
+      ...(source ? { source: source as never } : {}),
+    }
+
+    // Uma query CAPADA por coluna (em paralelo) + o mapa de responsáveis (1 query).
+    const [assignees, ...perStage] = await Promise.all([
+      listLeadAssignees(ctx.tenantId),
+      ...ALL_STAGES.map((stage) =>
+        prisma.studentLead.findMany({
+          where: { ...baseWhere, stage },
+          orderBy: [{ columnOrder: "asc" }, { createdAt: "desc" }],
+          take: PER_STAGE_LIMIT,
+          select: {
+            id: true,
+            nome: true,
+            email: true,
+            telefone: true,
+            courseSnapshot: true,
+            stage: true,
+            source: true,
+            paymentValue: true,
+            columnOrder: true,
+            createdAt: true,
+            ownerUserId: true,
+          },
+        }),
+      ),
+    ])
 
     // Mapa userId → nome do consultor, para exibir o responsável no card.
-    const ownerNames = new Map(
-      (await listLeadAssignees(ctx.tenantId)).map((a) => [a.userId, a.name]),
-    )
+    const ownerNames = new Map(assignees.map((a) => [a.userId, a.name]))
 
-    const serialized = leads.map((l) =>
-      serializeLead(l, l.ownerUserId ? (ownerNames.get(l.ownerUserId) ?? null) : null),
-    )
     const board = emptyBoard()
-    for (const lead of serialized) {
-      board[lead.stage].push(lead)
-    }
+    ALL_STAGES.forEach((stage, i) => {
+      board[stage] = perStage[i].map((l) =>
+        serializeLead(l, l.ownerUserId ? (ownerNames.get(l.ownerUserId) ?? null) : null),
+      )
+    })
 
     return NextResponse.json({ data: board })
   },
