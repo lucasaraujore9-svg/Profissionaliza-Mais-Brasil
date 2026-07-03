@@ -3,6 +3,7 @@ import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { requireResellerSession } from "@/lib/auth/reseller-session"
 import { withRequestContext } from "@/lib/observability/with-request-context"
+import { logAudit } from "@/lib/audit"
 
 export const GET = withRequestContext(
   { action: "painel.cupons.list", route: "/api/painel/cupons" },
@@ -136,6 +137,22 @@ export const POST = withRequestContext(
         isActive: true,
         createdByUserId: ctx.userId,
         createdByRole: "RESELLER",
+      },
+    })
+
+    // SAAS-001: trilha de auditoria da criação de cupom do revendedor.
+    await logAudit({
+      action: "coupon.create",
+      resource: "Coupon",
+      resourceId: coupon.id,
+      actorUserId: ctx.userId,
+      actorRole: "RESELLER",
+      tenantId: ctx.tenantId,
+      payloadAfter: {
+        code: coupon.code,
+        discountType: coupon.discountType,
+        discountValue: Number(coupon.discountValue),
+        maxUses: coupon.maxUses,
       },
     })
 

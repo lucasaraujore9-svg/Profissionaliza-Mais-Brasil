@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { requirePmbSales } from "@/lib/auth/guards"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
+import { logAudit } from "@/lib/audit"
 
 export const PATCH = withRequestContextParams<{ id: string }>(
   { action: "admin.cupons.toggle", route: "/api/admin/cupons/[id]/toggle" },
@@ -29,6 +30,17 @@ export const PATCH = withRequestContextParams<{ id: string }>(
     where: { id },
     data: { isActive: !coupon.isActive },
     select: { id: true, isActive: true },
+  })
+
+  // SAAS-001: trilha de auditoria do toggle de cupom global PMB.
+  await logAudit({
+    action: "coupon.toggle",
+    resource: "Coupon",
+    resourceId: id,
+    actorUserId: guard.session.userId,
+    actorRole: guard.session.role,
+    payloadBefore: { isActive: coupon.isActive },
+    payloadAfter: { isActive: updated.isActive },
   })
 
   return NextResponse.json({ data: updated })

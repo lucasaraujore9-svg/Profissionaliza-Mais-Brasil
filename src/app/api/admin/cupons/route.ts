@@ -3,6 +3,7 @@ import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { requirePmbSales } from "@/lib/auth/guards"
 import { withRequestContext } from "@/lib/observability/with-request-context"
+import { logAudit } from "@/lib/audit"
 
 const PMB_SALES_CAP = 50
 
@@ -129,6 +130,21 @@ export const POST = withRequestContext(
       isActive: true,
       createdByUserId: guard.session.userId,
       createdByRole: guard.session.role,
+    },
+  })
+
+  // SAAS-001: trilha de auditoria da criação de cupom global PMB.
+  await logAudit({
+    action: "coupon.create",
+    resource: "Coupon",
+    resourceId: coupon.id,
+    actorUserId: guard.session.userId,
+    actorRole: guard.session.role,
+    payloadAfter: {
+      code: coupon.code,
+      discountType: coupon.discountType,
+      discountValue: Number(coupon.discountValue),
+      maxUses: coupon.maxUses,
     },
   })
 
