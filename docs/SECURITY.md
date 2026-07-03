@@ -283,6 +283,19 @@ Antes de aprovar um PR que toca em qualquer um dos seguintes, verifique:
   reavaliar a superfície de parsing.
 - **`mercadopago` / `svix` / `resend` MED por uuid<11.** Atualizar requer
   `mercadopago@0.5.0` (breaking). Esperar release sem breaking.
+- **`nodemailer@7.0.13` HIGH (SEG-007, risco ACEITO até haver patch)** —
+  dois advisories: GHSA-vvjj-xcjg-gr5g (CRLF no `name`/EHLO) e
+  GHSA-c7w3-x93f-qmm8 (`envelope.size`). Não há release corrigido publicado
+  (o mais recente é o 7.0.13; o fix upstream exige ≥9.0.1, ainda inexistente),
+  então **não há bump possível hoje**. Exploitabilidade atual **baixíssima**:
+  o transport em `src/lib/email/smtp.ts` é montado só com `host`/`port`/
+  `secure`/`auth.{user,pass}` vindos de env `SMTP_*`, **nunca** seta a opção
+  `name` e `sendSmtp()` passa apenas `from`/`to`/`subject`/`html`/`replyTo`
+  (sem `envelope`) — nenhum input de usuário/tenant alcança os vetores dos
+  advisories. **Watch item:** bumpar assim que sair `nodemailer` ≥9.0.1 e
+  reconfirmar `npm audit --omit=dev`. **Invariante a preservar:** se um dia
+  o SMTP passar a ser por revenda, `host`/`name`/`envelope` do transport
+  **não** podem derivar de dados de tenant sem sanitização de CRLF.
 
 ### Notas de auditoria (falsos positivos descartados)
 - **Cron GET handlers** — apareceu em auditoria como "bypass". Falso
