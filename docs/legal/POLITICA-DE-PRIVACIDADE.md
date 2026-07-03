@@ -181,6 +181,8 @@ Encerrada a finalidade que justificou o tratamento, os dados poderão ser elimin
 
 Alguns fornecedores de tecnologia, hospedagem, armazenamento em nuvem, comunicação, análise de dados, automação ou segurança poderão tratar dados pessoais em outros países. Nesses casos, o Controlador adotará mecanismos juridicamente adequados para transferência internacional de dados, observando a LGPD e a regulamentação aplicável.
 
+**Residência dos dados.** Atualmente, o banco de dados principal e o armazenamento de arquivos da plataforma são operados na infraestrutura de nuvem da **Supabase**, e a aplicação é hospedada na **Vercel**. A relação nominal dos operadores e a região efetiva de processamento constam do documento interno de Subprocessadores (seção 8), disponibilizado ao titular mediante solicitação. Quando o processamento ocorrer fora do território nacional, aplicam-se as salvaguardas de transferência internacional previstas nesta seção.
+
 ## 17. Direitos dos titulares
 
 Nos termos da LGPD, o titular poderá solicitar:
