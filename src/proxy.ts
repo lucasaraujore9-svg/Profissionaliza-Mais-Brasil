@@ -84,25 +84,28 @@ const VITRINE_APEX_PASSTHROUGH = [
   "/api",
 ]
 
-function isApexPassthrough(pathname: string): boolean {
+// Exportadas para unit-test (QA-016): funções puras e determinísticas de
+// classificação de host — a barreira que impede um subdomínio reservado virar
+// tenant e um host errado resolver a vitrine errada. Não têm efeito colateral.
+export function isApexPassthrough(pathname: string): boolean {
   return VITRINE_APEX_PASSTHROUGH.some(
     (p) => pathname === p || pathname.startsWith(`${p}/`)
   )
 }
 
-function stripPort(hostname: string): string {
+export function stripPort(hostname: string): string {
   return hostname.split(":")[0]
 }
 
-type HostKind = "app" | "vitrine_apex" | "tenant" | "unknown"
+export type HostKind = "app" | "vitrine_apex" | "tenant" | "unknown"
 
-interface HostInfo {
+export interface HostInfo {
   kind: HostKind
   apex: string | null
   subdomain: string | null
 }
 
-function matchApex(hostname: string, apex: string): HostInfo | null {
+export function matchApex(hostname: string, apex: string): HostInfo | null {
   if (hostname === apex || hostname === `www.${apex}`) {
     return { kind: "app", apex, subdomain: null }
   }
@@ -113,7 +116,7 @@ function matchApex(hostname: string, apex: string): HostInfo | null {
   return null
 }
 
-function classifyHost(hostname: string): HostInfo {
+export function classifyHost(hostname: string): HostInfo {
   // 1) App domain (site PMB) — subdominios aqui sao sempre reservados,
   //    NUNCA tenants. Isso isola o site institucional/admin de vitrines.
   for (const apex of APP_DOMAINS) {
