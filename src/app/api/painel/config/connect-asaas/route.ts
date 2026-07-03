@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { encrypt } from "@/lib/crypto"
 import { withRequestContext } from "@/lib/observability/with-request-context"
+import { logAudit } from "@/lib/audit"
 
 // Conexao da conta Asaas PROPRIA da unidade (gateway de vendas). Espelha
 // /api/painel/config/connect-mp: a unidade cola a API key da conta Asaas dela
@@ -115,6 +116,22 @@ export const POST = withRequestContext(
       },
     })
 
+    // SAAS-001: trilha de auditoria da conexão do gateway Asaas. NUNCA registrar
+    // API key/token no payload — só quais campos foram tocados.
+    await logAudit({
+      action: "tenant.gateway.connect",
+      resource: "Tenant",
+      resourceId: tenantId,
+      actorUserId: session.user.id as string,
+      actorRole: "RESELLER",
+      tenantId,
+      payloadAfter: {
+        gateway: "ASAAS",
+        apiKeyUpdated: Boolean(encryptedKey),
+        webhookConfigured: encryptedToken !== null,
+      },
+    })
+
     return NextResponse.json({
       data: {
         connected: encryptedKey !== null || Boolean(tenant.asaasApiKey),
@@ -148,6 +165,17 @@ export const DELETE = withRequestContext(
         asaasConnected: false,
         salesGateway: "MP",
       },
+    })
+
+    // SAAS-001: trilha de auditoria da desconexão do gateway Asaas.
+    await logAudit({
+      action: "tenant.gateway.disconnect",
+      resource: "Tenant",
+      resourceId: tenantId,
+      actorUserId: session.user.id as string,
+      actorRole: "RESELLER",
+      tenantId,
+      payloadAfter: { gateway: "ASAAS", salesGateway: "MP" },
     })
 
     return NextResponse.json({ data: { connected: false, salesGateway: "MP" } })

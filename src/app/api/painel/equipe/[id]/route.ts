@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { requireResellerOwner } from "@/lib/auth/guards"
 import { auth } from "@/lib/auth"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
+import { logAudit } from "@/lib/audit"
 
 async function currentTenantId(): Promise<string | null> {
   const session = await auth()
@@ -47,6 +48,19 @@ export const PATCH = withRequestContextParams<{ id: string }>(
       data: parsed.data,
     })
 
+    // SAAS-001: trilha de auditoria da alteração de cap de desconto/status do
+    // consultor — autoridade comercial da unidade.
+    await logAudit({
+      action: "tenant_member.update",
+      resource: "TenantMember",
+      resourceId: id,
+      actorUserId: guard.session.userId,
+      actorRole: guard.session.role,
+      tenantId,
+      payloadBefore: { maxDiscount: member.maxDiscount, status: member.status },
+      payloadAfter: parsed.data,
+    })
+
     return NextResponse.json({ data: updated })
   },
 )
@@ -66,6 +80,19 @@ export const DELETE = withRequestContextParams<{ id: string }>(
     }
 
     await prisma.tenantMember.update({ where: { id }, data: { status: "INATIVO" } })
+
+    // SAAS-001: trilha de auditoria da desativação de membro da equipe da unidade.
+    await logAudit({
+      action: "tenant_member.deactivate",
+      resource: "TenantMember",
+      resourceId: id,
+      actorUserId: guard.session.userId,
+      actorRole: guard.session.role,
+      tenantId,
+      payloadBefore: { status: member.status },
+      payloadAfter: { status: "INATIVO" },
+    })
+
     return NextResponse.json({ data: { id, status: "INATIVO" } })
   },
 )

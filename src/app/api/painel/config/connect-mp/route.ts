@@ -7,6 +7,7 @@ import { withRequestContext } from "@/lib/observability/with-request-context"
 import { getAccountInfo, MPApiError } from "@/lib/mercadopago/client"
 import type { MPAccountInfo } from "@/lib/mercadopago/client"
 import { contextLogger } from "@/lib/logger"
+import { logAudit } from "@/lib/audit"
 
 const bodySchema = z
   .object({
@@ -177,6 +178,23 @@ export const POST = withRequestContext(
       },
     })
 
+    // SAAS-001: trilha de auditoria da conexão do gateway MP. NUNCA registrar
+    // token/public key/secret no payload — só quais campos foram tocados.
+    await logAudit({
+      action: "tenant.gateway.connect",
+      resource: "Tenant",
+      resourceId: tenantId,
+      actorUserId: session.user.id as string,
+      actorRole: "RESELLER",
+      tenantId,
+      payloadAfter: {
+        gateway: "MP",
+        tokenUpdated: Boolean(encryptedToken),
+        webhookConfigured: encryptedSecret !== null,
+        publicKeyConfigured: parsed.data.publicKey !== undefined,
+      },
+    })
+
     return NextResponse.json({
       data: {
         connected: true,
@@ -199,8 +217,9 @@ export const DELETE = withRequestContext(
       return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
     }
 
+    const tenantId = session.user.tenantId as string
     await prisma.tenant.update({
-      where: { id: session.user.tenantId as string },
+      where: { id: tenantId },
       data: {
         mpAccessToken: null,
         mpPublicKey: null,
@@ -209,6 +228,17 @@ export const DELETE = withRequestContext(
         mpConnected: false,
         mpWebhookSecret: null,
       },
+    })
+
+    // SAAS-001: trilha de auditoria da desconexão do gateway MP.
+    await logAudit({
+      action: "tenant.gateway.disconnect",
+      resource: "Tenant",
+      resourceId: tenantId,
+      actorUserId: session.user.id as string,
+      actorRole: "RESELLER",
+      tenantId,
+      payloadAfter: { gateway: "MP" },
     })
 
     return NextResponse.json({ data: { connected: false } })
