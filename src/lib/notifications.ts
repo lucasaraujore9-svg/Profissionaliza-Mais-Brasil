@@ -257,6 +257,29 @@ async function isChannelEnabled(
 }
 
 /**
+ * PERF-007: versão BATCHED de `isChannelEnabled` para o canal in_app num fan-out.
+ * Em vez de 1 `findFirst` por usuário (N round-trips ao pool), faz UMA `findMany`
+ * de todas as preferências da categoria para o conjunto de usuários e resolve as
+ * flags em memória (default `true` quando ausente — mesma semântica do singular).
+ * `category` ausente => todos habilitados (sem gate por preferência).
+ */
+export async function filterUserIdsByInAppPreference(
+  userIds: string[],
+  category: string | undefined,
+): Promise<string[]> {
+  if (userIds.length === 0) return []
+  if (!category) return userIds
+  const prefs = await prisma.notificationPreference.findMany({
+    where: { userId: { in: userIds }, category },
+    select: { userId: true, inApp: true },
+  })
+  const disabled = new Set(
+    prefs.filter((p) => p.inApp === false && p.userId != null).map((p) => p.userId as string),
+  )
+  return userIds.filter((id) => !disabled.has(id))
+}
+
+/**
  * Cria a(s) notificacao(oes) e dispara push (best-effort). Para audiencias de
  * alvo unico (USER/STUDENT) retorna `{ id }` da linha criada; para fan-out
  * (TENANT/ROLE) ou quando nada e criado (categoria desligada/preferencia off)
@@ -313,15 +336,11 @@ export async function createNotification(
         )
       }
 
-      // Filtra cada userId pelas suas preferencias in-app
-      const enabled = await Promise.all(
-        [...userIds].map(async (userId) =>
-          (await isChannelEnabled("in_app", input.category, { userId }))
-            ? userId
-            : null,
-        ),
+      // Filtra pelas preferencias in-app dos usuarios numa UNICA query (PERF-007).
+      const filteredUserIds = await filterUserIdsByInAppPreference(
+        [...userIds],
+        input.category,
       )
-      const filteredUserIds = enabled.filter((u): u is string => u !== null)
       if (filteredUserIds.length === 0) return null
 
       await prisma.notification.createMany({
@@ -368,14 +387,10 @@ export async function createNotification(
         )
       }
 
-      const enabled = await Promise.all(
-        users.map(async (u) =>
-          (await isChannelEnabled("in_app", input.category, { userId: u.id }))
-            ? u.id
-            : null,
-        ),
+      const filteredUserIds = await filterUserIdsByInAppPreference(
+        users.map((u) => u.id),
+        input.category,
       )
-      const filteredUserIds = enabled.filter((u): u is string => u !== null)
       if (filteredUserIds.length === 0) return null
 
       await prisma.notification.createMany({

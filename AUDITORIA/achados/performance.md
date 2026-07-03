@@ -117,7 +117,8 @@ _Data: 2026-07-03 · Referência: `.claude/skills/auditoria-saas/references/04-p
 
 ### [PERF-007] N+1 no fan-out de notificações por usuário (broadcast ROLE/TENANT)
 - **Severidade:** P2
-- **Status:** Aberto
+- **Status:** Corrigido (2026-07-03)
+- **Verificação:** Novo helper `filterUserIdsByInAppPreference(userIds, category)` em `src/lib/notifications.ts` faz UMA `notificationPreference.findMany({ where: { userId: { in }, category } })` e resolve as flags em memória (default `true` quando ausente; exclui só `inApp=false`), substituindo os dois `Promise.all([...].map(isChannelEnabled))` (1 `findFirst`/usuário) dos branches TENANT e ROLE. Semântica preservada. Teste `src/lib/notifications-preference-batch.test.ts` (3): 1 query + default-true para ausente + `inApp:false` excluído; sem category/lista vazia não toca o banco. Portão verde: typecheck 0 · lint 0 erros (1 warn pré-existente) · build exit 0 · test 387 passed. Commit: <PENDENTE>.
 - **Local:** `src/lib/notifications.ts:318-319` (branch TENANT) e `:372-373` (branch ROLE) — ambos `Promise.all([...].map(async (userId) => isChannelEnabled(...)))` · `isChannelEnabled` (`:238`) faz `notificationPreference.findFirst` 1×/usuário
 - **Evidência:** no fan-out TENANT (`notifications.ts:318`) e ROLE (`:372`), após montar `userIds`, roda `Promise.all([...userIds].map(async (userId) => (await isChannelEnabled("in_app", category, { userId })) ? userId : null))` — uma query `findFirst` por usuário (em paralelo, mas N round-trips ao pool).
 - **Impacto:** broadcast a N usuários dispara N queries de preferência; pressão no pool do Supabase em broadcasts grandes; piora linear com o crescimento da equipe/destinatários.
