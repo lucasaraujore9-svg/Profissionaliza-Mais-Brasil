@@ -1,7 +1,10 @@
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { issueCertificateIfEligible } from "@/lib/certificates/issue"
-import { syncCatalogFromLMS } from "@/lib/catalog/sync-lms"
+import {
+  syncSingleLmsCourse,
+  deactivateLmsCourse,
+} from "@/lib/catalog/sync-lms"
 import {
   createStudentSupportTicket,
   SUPPORT_STUDENT_SELECT,
@@ -21,6 +24,7 @@ export const LMS_WEBHOOK_EVENTS = [
   "course.unpublished",
   // Edicao de um curso JA publicado (preco, categoria, matriz, conteudo). Sem
   // este evento, uma edicao sem (re)publicar so entraria no PMB no sync diario.
+  // Sincroniza SO o curso do evento (incremental), nao o catalogo inteiro.
   "course.updated",
   "lesson.completed",
   "student.question.created",
@@ -53,10 +57,20 @@ const lessonCompletedSchema = z.object({
   lastActivityAt: z.string().optional(),
 })
 
-// course.published / course.unpublished / course.updated: o sync de catálogo é
-// completo (re-puxa a lista + detalhe do LMS, então já traz preço/categoria/
-// matriz atualizados), então não exigimos campos — aceitamos o payload como veio.
-const catalogSchema = z.object({}).passthrough()
+// course.published / course.updated: o payload traz `{ courseId, slug }` (contrato
+// docs/api/lms-webhook-catalogo.md §9.4). Sincronizamos SO esse curso pelo detalhe
+// `/courses/:slug` (sync incremental — PERF-010/API-007), em vez de re-puxar o
+// catálogo inteiro por evento. `slug` é a chave do pull; `courseId` fica opcional.
+const catalogUpsertSchema = z
+  .object({ slug: z.string().min(1), courseId: z.string().optional() })
+  .passthrough()
+
+// course.unpublished: precisamos do `courseId` (= Course.lmsCourseId) para marcar
+// o curso como INATIVO. O detalhe do LMS retornaria 404 (curso despublicado), então
+// não dá para resolver por slug — usamos o id estável, espelhando o day-update.
+const catalogUnpublishSchema = z
+  .object({ courseId: z.string().min(1), slug: z.string().optional() })
+  .passthrough()
 
 const supportSchema = z.object({
   studentExternalId: z.string().min(1),
@@ -150,11 +164,30 @@ export async function processLmsWebhookEvent(
     }
 
     case "course.published":
-    case "course.unpublished":
     case "course.updated": {
-      catalogSchema.parse(payload)
-      await syncCatalogFromLMS("cron")
-      return { ok: true, message: `catálogo sincronizado (${eventType})` }
+      // Sync incremental: só o curso do evento (pull do detalhe por slug).
+      const p = catalogUpsertSchema.parse(payload)
+      const res = await syncSingleLmsCourse(p.slug)
+      if (res === null) {
+        return {
+          ok: true,
+          message: `curso não publicado no LMS, nada a sincronizar (${eventType}: ${p.slug})`,
+        }
+      }
+      return {
+        ok: true,
+        message: `curso sincronizado (${eventType}: ${p.slug}, ${res.created ? "novo" : "atualizado"})`,
+      }
+    }
+
+    case "course.unpublished": {
+      // Despublicação incremental: marca só o curso do evento como INATIVO.
+      const p = catalogUnpublishSchema.parse(payload)
+      const count = await deactivateLmsCourse(p.courseId)
+      return {
+        ok: true,
+        message: `curso despublicado (${p.courseId}, ${count} linha(s) afetada(s))`,
+      }
     }
 
     case "student.question.created": {

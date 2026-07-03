@@ -29,8 +29,9 @@ O domínio segue **maduro e endurecido**. Os 3 webhooks têm verificação de as
 
 ### [API-007] Webhook LMS: `course.updated` vira um 3º gatilho de re-sync COMPLETO do catálogo por evento (amplificação piorada)
 - **Severidade:** P3
-- **Status:** Aberto — deferido (será resolvido junto com PERF-010, rodada performance)
-- **Nota (2026-07-03):** NÃO corrigido nesta rodada de API para evitar conflito. A receita primária (sync incremental — sincronizar só o curso do evento por `lmsCourseId`/`lmsSlug` em vez de `syncCatalogFromLMS("cron")` completo) é a **mesma** de PERF-010 do domínio performance, que será corrigido na próxima rodada por outro corretor. Deixado Aberto para ser resolvido lá, num único commit coeso (evita duas correções sobre `src/lib/webhooks/lms-process.ts` + `src/lib/catalog/sync-lms.ts`).
+- **Status:** Corrigido (2026-07-03) — resolvido junto com PERF-010 (rodada performance), num único commit coeso.
+- **Correção aplicada:** Sync incremental por evento (ver PERF-010 em `auditoria/achados/performance.md` para o detalhe). `processLmsWebhookEvent` (`src/lib/webhooks/lms-process.ts`) não chama mais `syncCatalogFromLMS("cron")` para os eventos de catálogo: `course.published`/`course.updated` sincronizam só o curso do evento via `syncSingleLmsCourse(slug)` (1 pull do detalhe + 1 upsert) e `course.unpublished` marca só aquele curso INATIVO via `deactivateLmsCourse(courseId)`. Elimina a amplificação O(N²) do webhook por-edição. Testes em `src/lib/webhooks/lms-catalog-webhook.test.ts` confirmam que o `grep` do `syncCatalogFromLMS` completo não aparece mais no caminho de webhook e que N eventos `course.updated` não escalam `listLmsCourses`. Commit: <PENDENTE — mesmo de PERF-010>.
+- **Nota (2026-07-03):** Deferido originalmente na rodada de API para evitar conflito; resolvido na rodada de performance conforme planejado.
 - **Local:** `src/lib/webhooks/lms-process.ts:152-158` · `src/lib/catalog/sync-lms.ts:93-247`
 - **Evidência:**
   ```ts

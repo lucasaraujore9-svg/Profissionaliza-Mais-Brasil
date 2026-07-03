@@ -2,10 +2,12 @@ import { prisma } from "@/lib/prisma"
 import {
   listLmsCourses,
   getLmsCourse,
+  type LmsCourse,
   type LmsModule,
   type LmsCategory,
   type LmsCurriculumItem,
 } from "@/lib/lms"
+import { LmsApiError } from "@/lib/lms/errors"
 import { slugify } from "@/lib/utils"
 import { contextLogger } from "@/lib/logger"
 import { pushSyncLog, type SyncLogEntry } from "./sync-log"
@@ -119,131 +121,9 @@ export async function syncCatalogFromLMS(
         )
       }
 
-      // Preco SUGERIDO (centavos -> reais). E so referencia/preco-base: entra em
-      // `precoOriginal`, o mesmo campo que o sync EA alimenta. O override do admin
-      // vive em `precoVitrineMain` e NUNCA e tocado pelo sync, entao re-sincronizar
-      // o preco sugerido nao apaga a curadoria. suggestedPriceCents ausente/0 => null.
-      const precoOriginal =
-        curso.suggestedPriceCents != null && curso.suggestedPriceCents > 0
-          ? curso.suggestedPriceCents / 100
-          : null
-
-      // Categorias (N-N). Resolve cada uma para uma Category do PMB (cria se
-      // preciso). Dedup preservando ordem — a primeira e a candidata a principal.
-      const resolvedCategoryIds: string[] = []
-      for (const cat of curso.categories ?? []) {
-        const catId = await ensureLmsCategory(cat)
-        if (catId && !resolvedCategoryIds.includes(catId)) {
-          resolvedCategoryIds.push(catId)
-        }
-      }
-      const firstCategoryId = resolvedCategoryIds[0] ?? null
-
-      // Matriz curricular (grade) vinda do LMS -> topicos do PMB. Curso LMS tem o
-      // LMS como dono do conteudo, entao a matriz e re-sincronizada (como descricao/
-      // aulas). `null` = campo ausente na resposta => nao mexe na matriz atual.
-      const matrizCurricular = mapCurriculumToMatriz(curso.curriculum)
-
-      // Campos sincronizaveis. Preco sugerido, categoria e matriz agora vem do LMS;
-      // visibilidade (hiddenMain/visibilityMode) segue curadoria do admin.
-      const dataBase = {
-        provider: "LMS" as const,
-        lmsCourseId: curso.id,
-        lmsSlug: curso.slug,
-        nome: curso.title,
-        descricao: curso.description || null,
-        qtdAulas: curso.lessonCount ?? 0,
-        cargaHoraria: curso.workload || null,
-        precoOriginal,
-        ...(matrizCurricular !== null ? { matrizCurricular } : {}),
-        status: "ATIVO",
-        ...(coverImage ? { capaImageUrl: coverImage } : {}),
-        syncedAt: new Date(),
-      }
-
-      const existing = await prisma.course.findUnique({
-        where: { lmsCourseId: curso.id },
-        select: { id: true, categoryId: true, status: true },
-      })
-
-      // Em update, so define a principal se o curso ainda nao tem uma — preserva
-      // remapeamentos manuais do admin (mesma regra do sync EA).
-      const effectiveCategoryId = existing?.categoryId ?? firstCategoryId
-
-      // Curso importado COM valor E categoria nasce ATIVO em todo lugar:
-      //  - vitrine mae PMB: hiddenMain=false (visivel);
-      //  - todas as revendas: visibilityMode=ALL (default) + status=ATIVO liberam
-      //    o curso, e a propagacao explicita abaixo (ensureCourseForResellers) cria
-      //    o TenantCourse de cada revenda com preco/isVisible — sem isso a vitrine
-      //    publica so o mostraria depois que o painel da revenda sincronizasse.
-      // Sem valor OU sem categoria: nasce oculto na mae ate o admin completar os
-      // dados (o gate de preco em runtime ainda protege as vitrines de qualquer
-      // forma). So vale no CREATE — em update nao mexemos em hiddenMain (curadoria
-      // do admin, que pode ter ocultado de proposito).
-      const nasceAtivo =
-        precoOriginal != null &&
-        precoOriginal > 0 &&
-        resolvedCategoryIds.length > 0
-
-      let courseId: string
-      if (existing) {
-        await prisma.course.update({
-          where: { lmsCourseId: curso.id },
-          // `status` preservado no update: `dataBase` fixa "ATIVO", o que revertia
-          // a curadoria do admin (ex: curso marcado INATIVO em /admin/catalogo
-          // voltava a ATIVO no sync diario). So o CREATE nasce ATIVO.
-          data: { ...dataBase, categoryId: effectiveCategoryId, status: existing.status },
-        })
-        courseId = existing.id
-        updated += 1
-      } else {
-        const created = await prisma.course.create({
-          data: {
-            ...dataBase,
-            categoryId: effectiveCategoryId,
-            hiddenMain: !nasceAtivo,
-            slug: await ensureUniqueCourseSlug(slugify(curso.slug || curso.title)),
-          },
-          select: { id: true },
-        })
-        courseId = created.id
-        added += 1
-      }
-
-      // Garante que as categorias do LMS constam no join M2M, SEM remover as
-      // adicionais atribuidas manualmente pelo admin. O join e a fonte de verdade
-      // para filtros/contagens (aditivo, igual ao sync EA).
-      for (const categoryId of resolvedCategoryIds) {
-        await prisma.courseCategory.upsert({
-          where: { courseId_categoryId: { courseId, categoryId } },
-          create: { courseId, categoryId },
-          update: {},
-        })
-      }
-
-      // Curso NOVO que nasceu ativo (valor + categoria): propaga para todas as
-      // revendas agora — a vitrine publica delas nao roda ensureTenantCourses
-      // sozinha, entao sem isto so apareceria depois que o painel da revenda
-      // sincronizasse. Best-effort: falha aqui nao aborta o sync do catalogo.
-      if (!existing && nasceAtivo) {
-        await ensureCourseForResellers(courseId).catch((err) => {
-          contextLogger().warn(
-            { event: "lms.sync.propagate_failed", slug: curso.slug, err: String(err) },
-            "propagacao do curso LMS para revendas falhou",
-          )
-        })
-      }
-
-      // Sincroniza as aulas (CourseLesson) a partir do detalhe do LMS para
-      // refletir edicoes de aulas. So quando o detalhe foi obtido (modules != null).
-      if (modules) {
-        await syncCourseLessons(courseId, modules).catch((err) => {
-          contextLogger().warn(
-            { event: "lms.sync.lessons_failed", slug: curso.slug, err: String(err) },
-            "lms lesson sync failed",
-          )
-        })
-      }
+      const { created } = await upsertLmsCourse(curso, coverImage, modules)
+      if (created) added += 1
+      else updated += 1
     }
 
     const durationMs = Date.now() - start
@@ -281,6 +161,197 @@ export async function syncCatalogFromLMS(
     })
     throw error
   }
+}
+
+/**
+ * Upsert de UM curso LMS -> Course (o corpo do loop de `syncCatalogFromLMS`,
+ * extraido para ser reusado pelo sync incremental por-evento — PERF-010/API-007).
+ *
+ * Preserva TODAS as invariantes de curadoria: em UPDATE mantem `status` e
+ * `hiddenMain`/categoria principal do admin (o LMS so alimenta preco-base,
+ * matriz, conteudo e aulas); em CREATE o curso nasce ATIVO em todo lugar so se
+ * tiver preco>0 E categoria, senao nasce oculto na mae (`hiddenMain=true`).
+ * Retorna `{ created }` para o caller contabilizar added/updated.
+ */
+async function upsertLmsCourse(
+  curso: LmsCourse,
+  coverImage: string | null,
+  modules: LmsModule[] | null,
+): Promise<{ created: boolean }> {
+  // Preco SUGERIDO (centavos -> reais). E so referencia/preco-base: entra em
+  // `precoOriginal`, o mesmo campo que o sync EA alimenta. O override do admin
+  // vive em `precoVitrineMain` e NUNCA e tocado pelo sync, entao re-sincronizar
+  // o preco sugerido nao apaga a curadoria. suggestedPriceCents ausente/0 => null.
+  const precoOriginal =
+    curso.suggestedPriceCents != null && curso.suggestedPriceCents > 0
+      ? curso.suggestedPriceCents / 100
+      : null
+
+  // Categorias (N-N). Resolve cada uma para uma Category do PMB (cria se
+  // preciso). Dedup preservando ordem — a primeira e a candidata a principal.
+  const resolvedCategoryIds: string[] = []
+  for (const cat of curso.categories ?? []) {
+    const catId = await ensureLmsCategory(cat)
+    if (catId && !resolvedCategoryIds.includes(catId)) {
+      resolvedCategoryIds.push(catId)
+    }
+  }
+  const firstCategoryId = resolvedCategoryIds[0] ?? null
+
+  // Matriz curricular (grade) vinda do LMS -> topicos do PMB. Curso LMS tem o
+  // LMS como dono do conteudo, entao a matriz e re-sincronizada (como descricao/
+  // aulas). `null` = campo ausente na resposta => nao mexe na matriz atual.
+  const matrizCurricular = mapCurriculumToMatriz(curso.curriculum)
+
+  // Campos sincronizaveis. Preco sugerido, categoria e matriz agora vem do LMS;
+  // visibilidade (hiddenMain/visibilityMode) segue curadoria do admin.
+  const dataBase = {
+    provider: "LMS" as const,
+    lmsCourseId: curso.id,
+    lmsSlug: curso.slug,
+    nome: curso.title,
+    descricao: curso.description || null,
+    qtdAulas: curso.lessonCount ?? 0,
+    cargaHoraria: curso.workload || null,
+    precoOriginal,
+    ...(matrizCurricular !== null ? { matrizCurricular } : {}),
+    status: "ATIVO",
+    ...(coverImage ? { capaImageUrl: coverImage } : {}),
+    syncedAt: new Date(),
+  }
+
+  const existing = await prisma.course.findUnique({
+    where: { lmsCourseId: curso.id },
+    select: { id: true, categoryId: true, status: true },
+  })
+
+  // Em update, so define a principal se o curso ainda nao tem uma — preserva
+  // remapeamentos manuais do admin (mesma regra do sync EA).
+  const effectiveCategoryId = existing?.categoryId ?? firstCategoryId
+
+  // Curso importado COM valor E categoria nasce ATIVO em todo lugar:
+  //  - vitrine mae PMB: hiddenMain=false (visivel);
+  //  - todas as revendas: visibilityMode=ALL (default) + status=ATIVO liberam
+  //    o curso, e a propagacao explicita abaixo (ensureCourseForResellers) cria
+  //    o TenantCourse de cada revenda com preco/isVisible — sem isso a vitrine
+  //    publica so o mostraria depois que o painel da revenda sincronizasse.
+  // Sem valor OU sem categoria: nasce oculto na mae ate o admin completar os
+  // dados (o gate de preco em runtime ainda protege as vitrines de qualquer
+  // forma). So vale no CREATE — em update nao mexemos em hiddenMain (curadoria
+  // do admin, que pode ter ocultado de proposito).
+  const nasceAtivo =
+    precoOriginal != null &&
+    precoOriginal > 0 &&
+    resolvedCategoryIds.length > 0
+
+  let courseId: string
+  if (existing) {
+    await prisma.course.update({
+      where: { lmsCourseId: curso.id },
+      // `status` preservado no update: `dataBase` fixa "ATIVO", o que revertia
+      // a curadoria do admin (ex: curso marcado INATIVO em /admin/catalogo
+      // voltava a ATIVO no sync diario). So o CREATE nasce ATIVO.
+      data: { ...dataBase, categoryId: effectiveCategoryId, status: existing.status },
+    })
+    courseId = existing.id
+  } else {
+    const created = await prisma.course.create({
+      data: {
+        ...dataBase,
+        categoryId: effectiveCategoryId,
+        hiddenMain: !nasceAtivo,
+        slug: await ensureUniqueCourseSlug(slugify(curso.slug || curso.title)),
+      },
+      select: { id: true },
+    })
+    courseId = created.id
+  }
+
+  // Garante que as categorias do LMS constam no join M2M, SEM remover as
+  // adicionais atribuidas manualmente pelo admin. O join e a fonte de verdade
+  // para filtros/contagens (aditivo, igual ao sync EA).
+  for (const categoryId of resolvedCategoryIds) {
+    await prisma.courseCategory.upsert({
+      where: { courseId_categoryId: { courseId, categoryId } },
+      create: { courseId, categoryId },
+      update: {},
+    })
+  }
+
+  // Curso NOVO que nasceu ativo (valor + categoria): propaga para todas as
+  // revendas agora — a vitrine publica delas nao roda ensureTenantCourses
+  // sozinha, entao sem isto so apareceria depois que o painel da revenda
+  // sincronizasse. Best-effort: falha aqui nao aborta o sync do catalogo.
+  if (!existing && nasceAtivo) {
+    await ensureCourseForResellers(courseId).catch((err) => {
+      contextLogger().warn(
+        { event: "lms.sync.propagate_failed", slug: curso.slug, err: String(err) },
+        "propagacao do curso LMS para revendas falhou",
+      )
+    })
+  }
+
+  // Sincroniza as aulas (CourseLesson) a partir do detalhe do LMS para
+  // refletir edicoes de aulas. So quando o detalhe foi obtido (modules != null).
+  if (modules) {
+    await syncCourseLessons(courseId, modules).catch((err) => {
+      contextLogger().warn(
+        { event: "lms.sync.lessons_failed", slug: curso.slug, err: String(err) },
+        "lms lesson sync failed",
+      )
+    })
+  }
+
+  return { created: !existing }
+}
+
+/**
+ * Sync INCREMENTAL de UM curso LMS (PERF-010/API-007) — acionado pelo webhook
+ * `course.published`/`course.updated`. O payload do webhook so traz `{ courseId,
+ * slug }`; os dados chegam pelo pull do detalhe `/courses/:slug` (que ja carrega
+ * preco/categoria/matriz/capa/aulas). Assim uma edicao de UM curso no LMS custa
+ * 1 chamada de detalhe + 1 upsert, em vez de re-sincronizar o catalogo inteiro.
+ *
+ * Retorna `{ created }` ou `null` quando o curso nao existe/nao esta publicado
+ * no LMS (404 no detalhe) — nesse caso nao ha o que sincronizar (o caller
+ * responde ok sem erro; a (des)publicacao real vem por `course.unpublished`).
+ */
+export async function syncSingleLmsCourse(
+  slug: string,
+): Promise<{ created: boolean } | null> {
+  let detail
+  try {
+    detail = await getLmsCourse(slug)
+  } catch (err) {
+    // 404 = curso nao publicado/inexistente no LMS: nada a sincronizar aqui.
+    if (err instanceof LmsApiError && err.statusCode === 404) {
+      contextLogger().warn(
+        { event: "lms.sync.single_not_found", slug },
+        "curso LMS nao encontrado no detalhe (provavelmente nao publicado)",
+      )
+      return null
+    }
+    throw err
+  }
+
+  if (!detail.title) return null
+
+  return upsertLmsCourse(detail, detail.coverImage || null, detail.modules ?? [])
+}
+
+/**
+ * Despublicacao INCREMENTAL de UM curso LMS (PERF-010/API-007) — acionado pelo
+ * webhook `course.unpublished`. Espelha o consumidor de `day-update` (que ja
+ * reflete (des)publicacao via `updateMany` por `lmsCourseId`): marca o curso
+ * como INATIVO para sair da vitrine. O LMS e a fonte de verdade da publicacao.
+ * Retorna quantas linhas foram afetadas (0 se o curso ainda nao existe no PMB).
+ */
+export async function deactivateLmsCourse(lmsCourseId: string): Promise<number> {
+  const res = await prisma.course.updateMany({
+    where: { lmsCourseId },
+    data: { status: "INATIVO", syncedAt: new Date() },
+  })
+  return res.count
 }
 
 /**
