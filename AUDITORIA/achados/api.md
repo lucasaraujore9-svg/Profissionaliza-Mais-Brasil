@@ -67,12 +67,13 @@ O domínio segue **maduro e endurecido**. Os 3 webhooks têm verificação de as
 
 ### [API-005] Envelope de erro flat (`{ error, code }`) diverge do formato sugerido pela referência (`{ error: { code, message } }`)
 - **Severidade:** P3
-- **Status:** Aberto (candidato a Aceito — risco assumido)
+- **Status:** Corrigido (2026-07-03)
 - **Local:** Convenção global — ex.: `src/app/api/checkout/status/route.ts`, `src/app/api/loja/checkout/status/route.ts`, e centenas de outros handlers.
 - **Evidência:** O projeto padroniza `{ data: ... }` no sucesso e `{ error: "mensagem", code?: "CODE" }` (flat) no erro. A referência sugere `{ error: { code, message } }` aninhado + documentação OpenAPI. Inalterado.
 - **Impacto:** Nenhum funcional — convenção consistente internamente e sem consumidor externo (API privada; "Ausência de OpenAPI = P2/P3"). P3 de consistência/documentação.
 - **Correção:** Decisão de produto: (a) manter a convenção flat e documentá-la em `docs/api/conventions.md` (recomendado), ou (b) migrar para envelope aninhado se surgir consumidor externo.
 - **Verificação:** N/A (decisão de padronização/documentação).
+- **Correção aplicada (2026-07-03):** Opção (a). Criado `docs/api/conventions.md` documentando o envelope flat `{ error, code }` como convenção canônica (com a decisão explícita de NÃO migrar para o aninhado — API privada, consistente em centenas de handlers), além de sucesso `{ data }`/`{ ok }`, validação Zod, AuthZ, rate-limit e idempotência. Sem mudança de comportamento (doc-only). Portão verde: typecheck/lint(0 erro)/build(exit 0)/test(361 passed).
 
 ### [API-008] wa-client (engine WhatsApp/WAHA) lê process.env direto e não tem retry/backoff no envio
 - **Severidade:** P3
