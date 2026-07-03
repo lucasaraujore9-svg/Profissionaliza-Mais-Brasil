@@ -5,6 +5,10 @@ import { requireResellerSession } from "@/lib/auth/reseller-session"
 import { ensureTenantCourses } from "@/lib/tenant/ensure-courses"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { contextLogger } from "@/lib/logger"
+import { runInChunks } from "@/lib/concurrency"
+
+// PERF-013: nº de updates individuais concorrentes por lote.
+const BULK_CONCURRENCY = 10
 
 /* ------------------------------------------------------------------ */
 /* GET — dados enxutos para a edição em massa (planilha)               */
@@ -111,37 +115,41 @@ export const PUT = withRequestContext(
       )
     }
 
-    // Updates SEQUENCIAIS (não em `$transaction` de lote). O `$transaction([...])`
-    // sobre o `@prisma/adapter-pg` + pooler do Supabase falhava e derrubava todo
-    // o lote; o update individual (mesma operação da edição de 1 curso) funciona.
-    // Trocamos atomicidade por robustez: cada linha é gravada isoladamente e as
-    // que falharem são reportadas sem abortar as demais.
+    // Updates INDIVIDUAIS com concorrência limitada (PERF-013) — NÃO em
+    // `$transaction([...])` de lote (que sobre o `@prisma/adapter-pg` + pooler do
+    // Supabase falhava e derrubava todo o lote). O update individual é a mesma
+    // operação da edição de 1 curso; a concorrência corta o wall-time do lote sem
+    // estourar o pool. Cada linha é gravada isoladamente e falhas são reportadas
+    // sem abortar as demais.
     let updated = 0
     const failed: { id: string; error: string }[] = []
-    for (const it of parsed.data.items) {
-      try {
-        await prisma.tenantCourse.update({
-          where: { id: it.id },
-          data: {
-            ...(it.price !== undefined && { price: it.price }),
-            ...(it.customParcelas !== undefined && {
-              customParcelas: it.customParcelas,
-            }),
-            ...(it.customDescription !== undefined && {
-              customDescription: it.customDescription,
-            }),
-          },
-        })
+    const results = await runInChunks(parsed.data.items, BULK_CONCURRENCY, (it) =>
+      prisma.tenantCourse.update({
+        where: { id: it.id },
+        data: {
+          ...(it.price !== undefined && { price: it.price }),
+          ...(it.customParcelas !== undefined && {
+            customParcelas: it.customParcelas,
+          }),
+          ...(it.customDescription !== undefined && {
+            customDescription: it.customDescription,
+          }),
+        },
+      }),
+    )
+    results.forEach((r, idx) => {
+      if (r.status === "fulfilled") {
         updated++
-      } catch (err) {
-        const detail = err instanceof Error ? err.message : String(err)
-        failed.push({ id: it.id, error: detail })
-        contextLogger().error(
-          { err, event: "painel.cursos.bulk.row_error", tenantId: ctx.tenantId, id: it.id },
-          "falha ao salvar curso na edição em massa da revenda",
-        )
+        return
       }
-    }
+      const it = parsed.data.items[idx]
+      const detail = r.reason instanceof Error ? r.reason.message : String(r.reason)
+      failed.push({ id: it.id, error: detail })
+      contextLogger().error(
+        { err: r.reason, event: "painel.cursos.bulk.row_error", tenantId: ctx.tenantId, id: it.id },
+        "falha ao salvar curso na edição em massa da revenda",
+      )
+    })
 
     // Nada gravou: devolve erro com o detalhe da 1ª falha (endpoint autenticado).
     if (updated === 0 && failed.length > 0) {

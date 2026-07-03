@@ -5,6 +5,11 @@ import { requireAdminSession } from "@/lib/auth/admin-session"
 import { requireSuperAdmin } from "@/lib/auth/guards"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { contextLogger } from "@/lib/logger"
+import { runInChunks } from "@/lib/concurrency"
+
+// PERF-013: nº de updates individuais concorrentes por lote (corta o wall-time
+// de lotes grandes sem estourar o pool do Supabase).
+const BULK_CONCURRENCY = 10
 
 /* ------------------------------------------------------------------ */
 /* GET — dados enxutos para a edição em massa (planilha) do catálogo   */
@@ -108,35 +113,40 @@ export const PUT = withRequestContext(
       )
     }
 
-    // Updates SEQUENCIAIS (não em `$transaction` de lote) — o `$transaction([...])`
-    // sobre o `@prisma/adapter-pg` + pooler do Supabase derrubava o lote inteiro.
-    // Cada curso é gravado isoladamente; falhas são reportadas sem abortar o resto.
+    // Updates INDIVIDUAIS com concorrência limitada (PERF-013) — NÃO em
+    // `$transaction([...])` de lote (que sobre o `@prisma/adapter-pg` + pooler do
+    // Supabase derrubava o lote inteiro). Cada curso é gravado isoladamente;
+    // falhas são reportadas por linha sem abortar o resto. A concorrência corta o
+    // wall-time de um lote grande (até 500 itens) sem estourar o pool.
     let updated = 0
     const failed: { id: string; error: string }[] = []
-    for (const it of parsed.data.items) {
-      try {
-        await prisma.course.update({
-          where: { id: it.id },
-          data: {
-            ...(it.price !== undefined && { precoVitrineMain: it.price }),
-            ...(it.customParcelas !== undefined && {
-              parcelasOverride: it.customParcelas,
-            }),
-            ...(it.customDescription !== undefined && {
-              descricaoOverride: it.customDescription,
-            }),
-          },
-        })
+    const results = await runInChunks(parsed.data.items, BULK_CONCURRENCY, (it) =>
+      prisma.course.update({
+        where: { id: it.id },
+        data: {
+          ...(it.price !== undefined && { precoVitrineMain: it.price }),
+          ...(it.customParcelas !== undefined && {
+            parcelasOverride: it.customParcelas,
+          }),
+          ...(it.customDescription !== undefined && {
+            descricaoOverride: it.customDescription,
+          }),
+        },
+      }),
+    )
+    results.forEach((r, idx) => {
+      if (r.status === "fulfilled") {
         updated++
-      } catch (err) {
-        const detail = err instanceof Error ? err.message : String(err)
-        failed.push({ id: it.id, error: detail })
-        contextLogger().error(
-          { err, event: "admin.catalogo.bulk.row_error", id: it.id },
-          "falha ao salvar curso na edição em massa do catálogo",
-        )
+        return
       }
-    }
+      const it = parsed.data.items[idx]
+      const detail = r.reason instanceof Error ? r.reason.message : String(r.reason)
+      failed.push({ id: it.id, error: detail })
+      contextLogger().error(
+        { err: r.reason, event: "admin.catalogo.bulk.row_error", id: it.id },
+        "falha ao salvar curso na edição em massa do catálogo",
+      )
+    })
 
     if (updated === 0 && failed.length > 0) {
       return NextResponse.json(
