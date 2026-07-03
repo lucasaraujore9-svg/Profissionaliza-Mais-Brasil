@@ -892,3 +892,7 @@ Anotado no achado; deixado Aberto para resolução conjunta. Sem mudança de có
 === 2026-07-03 · Corretor API · API-008 (P3) ===
 Correção: WA_GATEWAY_* no schema de env.ts + gatewayConfig via env + retry no envio wa-client
 - typecheck: OK · lint: OK (0 erro) · build (SKIP): OK (exit 0) · test: OK (365 passed)
+
+=== 2026-07-03 · Corretor API · API-010 (P3) ===
+Correção: X-Idempotency-Key obrigatório em createPreapproval/createPreference + 5 call-sites (externalReference)
+- typecheck: OK · lint: OK (0 erro) · build (SKIP): OK (exit 0) · test: OK (367 passed)

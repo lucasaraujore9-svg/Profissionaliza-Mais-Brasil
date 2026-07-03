@@ -404,7 +404,7 @@ export const POST = withRequestContext(
             end_date: endDate,
           },
           status: "pending",
-        })
+        }, externalReference)
 
         await prisma.enrollment.update({
           where: { id: enrollment.id },
@@ -457,7 +457,7 @@ export const POST = withRequestContext(
         // manual perdia o webhook quando appUrl era vazio ou o apex (307→www
         // que o MP não segue) → venda paga sem matrícula automática.
         notification_url: mpWebhookUrl(),
-      })
+      }, externalReference)
 
       await prisma.enrollment.update({
         where: { id: enrollment.id },

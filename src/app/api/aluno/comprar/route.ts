@@ -555,7 +555,7 @@ export const POST = withRequestContext(
             end_date: endDate,
           },
           status: "pending",
-        })
+        }, externalReference)
 
         await prisma.enrollment.update({
           where: { id: enrollment.id },
@@ -605,7 +605,7 @@ export const POST = withRequestContext(
         external_reference: externalReference,
         // Vitrine PMB (sem slug) — host canônico www, o apex faz 307.
         notification_url: mpWebhookUrl(),
-      })
+      }, externalReference)
 
       await prisma.enrollment.update({
         where: { id: enrollment.id },

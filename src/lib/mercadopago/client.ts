@@ -129,11 +129,19 @@ export async function getAccountInfo(
 
 // ── Preferences (Checkout) ──
 
+/**
+ * `idempotencyKey` (header X-Idempotency-Key) evita criar 2 preferências no
+ * retry de rede/5xx (o MP devolve a MESMA preferência para a mesma chave). Use
+ * um valor estável por tentativa de checkout (ex.: o external_reference).
+ */
 export async function createPreference(
   accessToken: string,
   params: MPCreatePreferenceParams,
+  idempotencyKey: string,
 ): Promise<MPPreference> {
-  return request<MPPreference>("POST", "/checkout/preferences", accessToken, params)
+  return request<MPPreference>("POST", "/checkout/preferences", accessToken, params, {
+    "X-Idempotency-Key": idempotencyKey,
+  })
 }
 
 // ── Payments (Checkout Transparente) ──
@@ -217,11 +225,21 @@ export async function getPreapproval(
   return request<MPPreapproval>("GET", `/preapproval/${preapprovalId}`, accessToken)
 }
 
+/**
+ * Cria uma assinatura recorrente (preapproval). `idempotencyKey`
+ * (X-Idempotency-Key) é CRÍTICO: sem ele, se o MP cria a assinatura e a
+ * resposta se perde (5xx/timeout), o retry gera uma 2ª assinatura autorizada
+ * cobrando em dobro. Com a chave, o retry devolve a MESMA assinatura. Use um
+ * valor estável por tentativa de checkout (ex.: o external_reference).
+ */
 export async function createPreapproval(
   accessToken: string,
   params: MPCreatePreapprovalParams,
+  idempotencyKey: string,
 ): Promise<MPPreapproval> {
-  return request<MPPreapproval>("POST", "/preapproval", accessToken, params)
+  return request<MPPreapproval>("POST", "/preapproval", accessToken, params, {
+    "X-Idempotency-Key": idempotencyKey,
+  })
 }
 
 export async function getAuthorizedPayment(

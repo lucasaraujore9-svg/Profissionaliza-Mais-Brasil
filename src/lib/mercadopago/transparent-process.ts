@@ -147,7 +147,7 @@ export async function processTransparentMpPayment(
         end_date: endDate,
       },
       status: "authorized",
-    })
+    }, externalReference)
 
     await prisma.enrollment.update({
       where: { id: enrollment.id },
