@@ -57,12 +57,13 @@ O domínio segue **maduro e endurecido**. Os 3 webhooks têm verificação de as
 
 ### [API-004] onboarding-tour aceita corpo silenciosamente com default em vez de validar
 - **Severidade:** P3
-- **Status:** Aberto (candidato a Aceito — risco assumido)
+- **Status:** Corrigido (2026-07-03)
 - **Local:** `src/app/api/painel/onboarding-tour/route.ts:24-32`
 - **Evidência:** `let dontShowAgain = true; try { const body = ...; if (typeof body?.dontShowAgain === "boolean") dontShowAgain = body.dontShowAgain } catch { /* mantém true */ }`. Corpo ausente/inválido não é rejeitado — assume `true`. Inalterado desde 2026-06-24.
 - **Impacto:** Cosmético. Preferência de UI do próprio usuário autenticado; aceitar o default é tolerável, apenas inconsistente com o padrão "valida e 400".
 - **Correção:** Opcional — `z.object({ dontShowAgain: z.boolean() })` + 400 em corpo malformado, ou documentar o default como intencional. Efeito inócuo → pode ser **Aceito**.
 - **Verificação:** N/A (decisão de padronização).
+- **Correção aplicada (2026-07-03):** Aplicada a opção (a). `bodySchema = z.object({ dontShowAgain: z.boolean() })` com `safeParse`; corpo ausente/JSON inválido → 400 `JSON inválido`; corpo sem `dontShowAgain` booleano → 400 `Dados inválidos`. Seguro porque o endpoint **não tem mais caller no client** (a dispensa de tour migrou para `/api/tours/dismiss` + `dismissedTours`); `onboarding-tour` é legado. Teste `src/app/api/painel/onboarding-tour/route.test.ts` (401 sem sessão; 400 malformado/sem campo; grava data em true; null em false). Portão verde: typecheck/lint(0 erro)/build(exit 0)/test(361 passed).
 
 ### [API-005] Envelope de erro flat (`{ error, code }`) diverge do formato sugerido pela referência (`{ error: { code, message } }`)
 - **Severidade:** P3

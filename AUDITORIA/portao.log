@@ -874,3 +874,9 @@ Correção: rate-limit nos endpoints públicos de parcelas MP (bucket installmen
 - lint (eslint): OK (0 erro, 1 warning pré-existente em scripts/render-cert-samples.tsx)
 - build (SKIP_PENDING_MIGRATIONS=1, DATABASE_URL throwaway): OK (exit 0, 235/235 páginas)
 - test (vitest run): OK (59 files, 356 passed)
+
+=== 2026-07-03 · Corretor API · API-004 (P3) ===
+Correção: onboarding-tour valida corpo com Zod (400 em ausente/malformado)
+- typecheck: OK (0 erro) · lint: OK (0 erro, 1 warning pré-existente)
+- build (SKIP + DATABASE_URL throwaway): OK (exit 0)
+- test: OK (361 passed)

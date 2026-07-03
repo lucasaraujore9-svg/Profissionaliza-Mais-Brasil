@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { requireResellerSession } from "@/lib/auth/reseller-session"
 import { withRequestContext } from "@/lib/observability/with-request-context"
@@ -11,8 +12,11 @@ import { withRequestContext } from "@/lib/observability/with-request-context"
  * - `true`  → grava a data (não auto-exibe mais nos próximos acessos).
  * - `false` → limpa a data (o tour volta a aparecer a cada acesso).
  *
- * Sem body válido, assume `true` por compatibilidade. Idempotente.
+ * Corpo ausente/malformado → 400 (padrão do projeto: valida no servidor).
+ * Idempotente.
  */
+const bodySchema = z.object({ dontShowAgain: z.boolean() })
+
 export const POST = withRequestContext(
   { action: "painel.onboarding_tour.preference", route: "/api/painel/onboarding-tour" },
   async (req: Request) => {
@@ -21,19 +25,23 @@ export const POST = withRequestContext(
       return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
     }
 
-    let dontShowAgain = true
+    let payload: unknown
     try {
-      const body = (await req.json()) as { dontShowAgain?: unknown }
-      if (typeof body?.dontShowAgain === "boolean") {
-        dontShowAgain = body.dontShowAgain
-      }
+      payload = await req.json()
     } catch {
-      // Sem corpo JSON → mantém o padrão (true).
+      return NextResponse.json({ error: "JSON inválido" }, { status: 400 })
+    }
+
+    const parsed = bodySchema.safeParse(payload)
+    if (!parsed.success) {
+      return NextResponse.json({ error: "Dados inválidos" }, { status: 400 })
     }
 
     await prisma.user.update({
       where: { id: ctx.userId },
-      data: { onboardingTourCompletedAt: dontShowAgain ? new Date() : null },
+      data: {
+        onboardingTourCompletedAt: parsed.data.dontShowAgain ? new Date() : null,
+      },
     })
 
     return NextResponse.json({ ok: true })
