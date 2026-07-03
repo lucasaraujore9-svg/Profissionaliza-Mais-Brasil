@@ -23,6 +23,14 @@ export const dynamic = "force-dynamic"
 const WARN_DAYS = [60, 30, 15, 2]
 const DAY_MS = 1000 * 60 * 60 * 24
 
+// PERF-005: teto de itens processados por execução (cada item faz IO externo
+// serial — bloqueio EA/LMS + e-mail). Sem cap, um backlog grande estoura os 300s
+// SEM garantia de progresso parcial. Ambos os loops são idempotentes (expirada
+// vira CANCELLED e sai do filtro; avisos deduplicados por accessWarnDaysSent),
+// então o restante é processado na próxima execução do cron. Os mais antigos/
+// mais próximos do fim vão primeiro (orderBy expiresAt asc).
+const SWEEP_BATCH = 500
+
 /** Monta a URL da área do aluno respeitando a vitrine/marca da unidade. */
 function studentPanelUrl(brand: EmailBrand): string {
   const base = (brand.siteUrl ?? appUrl()).replace(/\/$/, "")
@@ -68,6 +76,8 @@ async function processExpiredStudents() {
       status: { in: ["ACTIVE", "SUSPENDED"] },
       expiresAt: { not: null, lte: now },
     },
+    orderBy: { expiresAt: "asc" },
+    take: SWEEP_BATCH,
     include: {
       course: { select: { nome: true } },
       student: {
@@ -163,6 +173,8 @@ async function processExpiredStudents() {
       status: { in: ["ACTIVE", "SUSPENDED", "COMPLETED"] },
       expiresAt: { not: null, gt: now, lte: horizon },
     },
+    orderBy: { expiresAt: "asc" },
+    take: SWEEP_BATCH,
     include: {
       course: { select: { nome: true } },
       student: { select: { id: true, nome: true, email: true } },

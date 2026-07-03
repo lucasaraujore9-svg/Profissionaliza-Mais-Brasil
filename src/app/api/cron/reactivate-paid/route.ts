@@ -11,6 +11,13 @@ import { PMB_TENANT_SLUG } from "@/lib/pmb-config"
 export const maxDuration = 300
 export const dynamic = "force-dynamic"
 
+// PERF-005: teto por execução. A ação (status → ACTIVE) REMOVE a linha do filtro
+// `status: SUSPENDED`, então o cap tem progresso garantido: o restante entra na
+// próxima execução. No loop de enrollments filtramos `tenant.status = ACTIVE`
+// (mesmo gate do canReactivateUnderTenant) p/ não puxar linhas não-acionáveis
+// que ficariam no filtro e starvariam a cauda.
+const REACTIVATE_BATCH = 500
+
 /**
  * Sweep para reativar tenants e alunos que voltaram a pagar mas o webhook
  * pode ter falhado. Garante consistencia.
@@ -46,6 +53,8 @@ async function processReactivations() {
         none: { status: "OVERDUE" },
       },
     },
+    orderBy: { id: "asc" },
+    take: REACTIVATE_BATCH,
     select: { id: true, billingMode: true },
   })
 
@@ -80,6 +89,10 @@ async function processReactivations() {
   const enrollments = await prisma.enrollment.findMany({
     where: {
       status: "SUSPENDED",
+      // Só reativáveis: tenant ACTIVE (mesmo gate do canReactivateUnderTenant).
+      // Empurrar isto para a query evita puxar linhas que seriam puladas no loop
+      // e ficariam no filtro, starvando a cauda sob o `take`.
+      student: { tenant: { status: "ACTIVE" } },
       payments: {
         some: {
           mpStatus: "APPROVED",
@@ -87,6 +100,8 @@ async function processReactivations() {
         },
       },
     },
+    orderBy: { id: "asc" },
+    take: REACTIVATE_BATCH,
     select: {
       id: true,
       studentId: true,

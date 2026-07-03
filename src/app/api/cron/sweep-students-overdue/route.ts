@@ -4,11 +4,22 @@ import { blockStudentInEA } from "@/lib/students/plataforma-actions"
 import { createNotification } from "@/lib/notifications"
 import { isCronAuthorized } from "@/lib/auth/bearer"
 import { addMonthsClamped } from "@/lib/dates"
+import { get as redisGet, set as redisSet, invalidate as redisDel } from "@/lib/redis/cache"
 
 export const maxDuration = 300
 export const dynamic = "force-dynamic"
 
 const STUDENT_GRACE_DAYS = 5
+
+// PERF-005: cada candidato faz IO externo serial (bloqueio EA/LMS + notificação).
+// Suspender NÃO remove a linha do filtro (a where inclui SUSPENDED), então um take
+// simples starvaria a cauda. Usamos cursor keyset por `id` no Redis: cada execução
+// varre um lote e avança o cursor; ao chegar ao fim, zera para recomeçar — assim
+// TODOS os candidatos são cobertos ao longo de poucas execuções (bloqueio/aviso
+// são idempotentes por status/wasActive, então re-varrer é inócuo). Fail-open:
+// Redis off => cursor null => começa do início.
+const OVERDUE_BATCH = 500
+const CURSOR_KEY = "cron:sweep-students-overdue:cursor"
 
 /**
  * Sweep diario para alunos individuais inadimplentes.
@@ -37,6 +48,8 @@ async function processOverdueStudents() {
     errors: [] as string[],
   }
 
+  const cursor = (await redisGet(CURSOR_KEY)) || undefined
+
   const candidates = await prisma.enrollment.findMany({
     where: {
       // Inclui SUSPENDED: o webhook Asaas/MP marca SUSPENDED no OVERDUE mas NÃO
@@ -49,7 +62,10 @@ async function processOverdueStudents() {
         { asaasSubscriptionId: { not: null } },
         { mpSubscriptionId: { not: null } },
       ],
+      ...(cursor ? { id: { gt: cursor } } : {}),
     },
+    orderBy: { id: "asc" },
+    take: OVERDUE_BATCH,
     include: {
       student: {
         select: {
@@ -136,6 +152,14 @@ async function processOverdueStudents() {
       const message = error instanceof Error ? error.message : "erro desconhecido"
       result.errors.push(`enrollment ${enrollment.id}: ${message}`)
     }
+  }
+
+  // Avança/zera o cursor keyset (best-effort). Lote cheio => continua; lote
+  // parcial (fim da lista) => zera para recomeçar do início na próxima execução.
+  if (candidates.length === OVERDUE_BATCH) {
+    await redisSet(CURSOR_KEY, candidates[candidates.length - 1].id, 7 * 24 * 60 * 60)
+  } else {
+    await redisDel(CURSOR_KEY)
   }
 
   return result
