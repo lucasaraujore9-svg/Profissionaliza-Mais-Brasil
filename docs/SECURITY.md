@@ -273,6 +273,16 @@ Antes de aprovar um PR que toca em qualquer um dos seguintes, verifique:
 
 ### LOW
 - **Prisma 7 beta** (saiu maio 2026). Monitorar issues.
+- **`hono` HIGH (transitiva via `prisma`, risco ACEITO — SEG-005)** — o CLI
+  `prisma` (agora `devDependency`, layout recomendado pela Prisma) puxa
+  `@prisma/dev` → `hono`/`@hono/node-server`. `@prisma/client` declara
+  `prisma` como **optional peerDependency**, então enquanto o CLI estiver
+  instalado (necessário para `prisma generate`/migrations no build) o
+  `npm audit --omit=dev` continua listando o `hono` HIGH — não é removível
+  movendo o pacote. **Não chega ao runtime**: o `hono` só existe dentro do
+  dev-server do Prisma (`@prisma/dev`), nunca é importado pela app, e um
+  install de produção puro (`npm ci --omit=dev`) sequer o instala. Radar:
+  Dependabot semanal (`.github/dependabot.yml`) abre PR quando sair patch.
 - **Sem pre-commit hook** rodando `npm run lint`. Setup com husky +
   lint-staged. ~30 min.
 - **`xlsx` HIGH no `npm audit`** (Prototype Pollution + ReDoS, sem patch)

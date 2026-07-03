@@ -1,0 +1,39 @@
+# Dependabot — visibilidade ativa de vulnerabilidades e updates (SEG-005).
+# Antes não havia radar automático: as vulns de libs (auth/crypto/email/Next)
+# só apareciam no `npm audit` manual da PR. Aqui geramos PRs semanais agrupados.
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 10
+    # Agrupa para reduzir ruído: um PR para dev-deps, um para as demais de
+    # produção (patch/minor). Majors ficam individuais para revisão cuidadosa.
+    groups:
+      dev-dependencies:
+        dependency-type: "development"
+        update-types:
+          - "minor"
+          - "patch"
+      production-minor-patch:
+        dependency-type: "production"
+        update-types:
+          - "minor"
+          - "patch"
+    labels:
+      - "dependencies"
+    commit-message:
+      prefix: "chore(deps)"
+      prefix-development: "chore(deps-dev)"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    labels:
+      - "dependencies"
+    commit-message:
+      prefix: "chore(ci)"

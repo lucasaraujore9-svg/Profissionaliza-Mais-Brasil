@@ -52,9 +52,13 @@ jobs:
           DATABASE_URL: "postgresql://gate:gate@localhost:5432/gate"
         run: npm run build
 
-      # audit não bloqueia: o build pode passar mesmo com vulns conhecidas
-      # (xlsx HIGH é risco aceito, documentado em docs/SECURITY.md).
-      # Útil só para visibilidade na PR.
+      # audit NÃO bloqueia de propósito: hoje a única HIGH de prod é o
+      # nodemailer (SEG-007), risco aceito e SEM patch upstream disponível —
+      # um gate bloqueante ficaria vermelho permanentemente. Mantido
+      # informativo (visibilidade na PR) + Dependabot semanal (.github/
+      # dependabot.yml) como radar ativo. Reavaliar quando nodemailer >=9.0.1
+      # sair: aí dá para bloquear HIGH/CRITICAL NOVAS com allowlist. Vulns
+      # aceitas documentadas em docs/SECURITY.md §5.
       - name: npm audit (informativo)
         continue-on-error: true
         run: npm audit --omit=dev --audit-level=high
