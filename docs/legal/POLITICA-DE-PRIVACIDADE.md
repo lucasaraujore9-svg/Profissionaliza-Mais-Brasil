@@ -114,6 +114,8 @@ Os dados poderão ser compartilhados quando necessário com:
 
 O compartilhamento ocorrerá apenas na medida necessária para execução das atividades da plataforma.
 
+A lista nominal dos operadores e suboperadores (subprocessadores) que tratam dados pessoais em nome do Controlador — com finalidade, categorias de dados e país de processamento — é mantida no documento interno de Subprocessadores, disponibilizado ao titular mediante solicitação ao canal de privacidade (seção 18).
+
 Em caso de encerramento da operação do Parceiro Licenciado, inadimplência, abandono da plataforma, rescisão contratual ou necessidade de preservação da continuidade dos cursos contratados pelos alunos, os dados estritamente necessários poderão ser tratados pelo Profissionaliza Mais Brasil para manutenção do acesso, migração de ambiente, suporte, comunicação ao aluno, emissão de certificados e preservação da prestação educacional.
 
 ## 9. Plataformas de pagamento
