@@ -4,6 +4,7 @@ import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { requireAdminSession } from "@/lib/auth/admin-session"
 import { canManageCommissions } from "@/lib/auth/roles"
+import { logAudit } from "@/lib/audit"
 import { sortTiers } from "@/lib/referrals/tiers"
 import { sortBrackets } from "@/lib/referrals/rules"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
@@ -134,7 +135,13 @@ export const PUT = withRequestContextParams<{ id: string }>(
 
   const tenant = await prisma.tenant.findUnique({
     where: { id },
-    select: { id: true },
+    select: {
+      id: true,
+      referralPercent: true,
+      referralMinReferrals: true,
+      commissionMode: true,
+      commissionOverrideSource: true,
+    },
   })
   if (!tenant) {
     return NextResponse.json({ error: "Tenant nao encontrado" }, { status: 404 })
@@ -239,6 +246,31 @@ export const PUT = withRequestContextParams<{ id: string }>(
       commissionPlan: true,
       commissionPlanStartedAt: true,
       commissionOverrideSource: true,
+    },
+  })
+
+  // SAAS-001: trilha de auditoria da mudança de % / motor de comissão da unidade.
+  await logAudit({
+    action: "tenant.referral_percent.update",
+    resource: "Tenant",
+    resourceId: id,
+    actorUserId: session.userId,
+    actorRole: session.role,
+    tenantId: id,
+    payloadBefore: {
+      referralPercent:
+        tenant.referralPercent != null ? Number(tenant.referralPercent) : null,
+      referralMinReferrals: tenant.referralMinReferrals ?? null,
+      commissionMode: tenant.commissionMode,
+      commissionOverrideSource: tenant.commissionOverrideSource,
+    },
+    payloadAfter: {
+      referralPercent:
+        updated.referralPercent != null ? Number(updated.referralPercent) : null,
+      referralMinReferrals: updated.referralMinReferrals ?? null,
+      commissionMode: updated.commissionMode,
+      commissionOverrideSource: updated.commissionOverrideSource,
+      clearCommissionOverride: parsed.data.clearCommissionOverride ?? false,
     },
   })
 

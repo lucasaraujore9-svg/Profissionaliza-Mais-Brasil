@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { requireAdminSession } from "@/lib/auth/admin-session"
 import { generateTemporaryPassword } from "@/lib/students/generate-password"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
+import { logAudit } from "@/lib/audit"
 
 // Aceita ou uma senha digitada pelo admin, ou a flag `generate` para o sistema
 // criar uma aleatória. Por questão de segurança, a senha NUNCA é "visualizada"
@@ -87,6 +88,18 @@ export const PATCH = withRequestContextParams<{ id: string }>(
       where: { id: tenant.owner.id },
       // Não força troca no próximo login — o admin definiu uma senha conhecida.
       data: { passwordHash, mustChangePassword: false },
+    })
+
+    // SAAS-001: trilha de auditoria do reset de senha do revendedor.
+    // NUNCA registrar a senha em texto puro no payload de auditoria.
+    await logAudit({
+      action: "reseller.password.reset",
+      resource: "User",
+      resourceId: tenant.owner.id,
+      actorUserId: ctx.userId,
+      actorRole: ctx.role,
+      tenantId: tenant.id,
+      payloadAfter: { generated: Boolean(parsed.data.generate), ownerEmail: tenant.owner.email },
     })
 
     return NextResponse.json({

@@ -3,6 +3,7 @@ import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { requireSuperAdmin } from "@/lib/auth/guards"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
+import { logAudit } from "@/lib/audit"
 
 const schema = z.object({
   salesUserId: z.string().nullable(),
@@ -42,6 +43,11 @@ export const PATCH = withRequestContextParams<{ id: string }>(
       }
     }
 
+    const before = await prisma.tenant.findUnique({
+      where: { id },
+      select: { salesUserId: true },
+    })
+
     const updated = await prisma.tenant.update({
       where: { id },
       data: { salesUserId: parsed.data.salesUserId },
@@ -50,6 +56,18 @@ export const PATCH = withRequestContextParams<{ id: string }>(
         salesUserId: true,
         salesUser: { select: { id: true, name: true } },
       },
+    })
+
+    // SAAS-001: trilha de auditoria do vínculo de vendedor de revenda à unidade.
+    await logAudit({
+      action: "tenant.sales.update",
+      resource: "Tenant",
+      resourceId: id,
+      actorUserId: guard.session.userId,
+      actorRole: guard.session.role,
+      tenantId: id,
+      payloadBefore: { salesUserId: before?.salesUserId ?? null },
+      payloadAfter: { salesUserId: updated.salesUserId },
     })
 
     return NextResponse.json({ data: updated })

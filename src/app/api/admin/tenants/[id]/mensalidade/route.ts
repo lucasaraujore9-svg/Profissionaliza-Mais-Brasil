@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { requireAdminSession } from "@/lib/auth/admin-session"
 import { invalidateTenant } from "@/lib/redis/tenant-cache"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
+import { logAudit } from "@/lib/audit"
 
 const bodySchema = z.object({
   monthlyAllowed: z.boolean(),
@@ -53,6 +54,8 @@ export const PUT = withRequestContextParams<{ id: string }>(
         slug: true,
         customDomain: true,
         accountManagerId: true,
+        monthlyAllowed: true,
+        monthlyScope: true,
       },
     })
     if (!tenant) {
@@ -87,6 +90,24 @@ export const PUT = withRequestContextParams<{ id: string }>(
       id: tenant.id,
       slug: tenant.slug,
       customDomain: tenant.customDomain,
+    })
+
+    // SAAS-001: trilha de auditoria da mudança de capability de parcelamento.
+    await logAudit({
+      action: "tenant.monthly.update",
+      resource: "Tenant",
+      resourceId: id,
+      actorUserId: session.userId,
+      actorRole: session.role,
+      tenantId: id,
+      payloadBefore: {
+        monthlyAllowed: tenant.monthlyAllowed,
+        monthlyScope: tenant.monthlyScope,
+      },
+      payloadAfter: {
+        monthlyAllowed: parsed.data.monthlyAllowed,
+        monthlyScope: parsed.data.monthlyScope,
+      },
     })
 
     return NextResponse.json({ data: updated })
