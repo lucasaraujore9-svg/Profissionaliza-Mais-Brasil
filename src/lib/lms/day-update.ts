@@ -57,6 +57,11 @@ export async function syncLmsDayUpdate(): Promise<LmsDayUpdateResult> {
   }
 
   // ── Alunos: progresso + conclusao.
+  // DB-006: em vez de um findFirst por (aluno x curso) do delta (N×M queries),
+  // resolvemos os alunos, pre-carregamos TODAS as matriculas LMS elegiveis desses
+  // alunos numa unica findMany e indexamos por (studentId, lmsCourseId). O loop
+  // de aplicacao vira lookup em Map — mesma semantica, sem o N+1 de leitura.
+  const resolved: { s: LmsDayStudent; studentId: string }[] = []
   for (const s of res.data.students) {
     const student = await resolveStudent(s)
     if (!student) {
@@ -66,21 +71,21 @@ export async function syncLmsDayUpdate(): Promise<LmsDayUpdateResult> {
       )
       continue
     }
+    resolved.push({ s, studentId: student.id })
+  }
 
+  const enrollmentByKey = await loadLmsEnrollmentsByKey(
+    [...new Set(resolved.map((r) => r.studentId))],
+  )
+
+  for (const { s, studentId } of resolved) {
     for (const sc of s.courses) {
-      const enrollment = await prisma.enrollment.findFirst({
-        where: {
-          studentId: student.id,
-          course: { lmsCourseId: sc.courseId },
-          status: { in: ["ACTIVE", "COMPLETED", "SUSPENDED"] },
-        },
-        select: { id: true },
-      })
-      if (!enrollment) continue
+      const enrollmentId = enrollmentByKey.get(enrollmentKey(studentId, sc.courseId))
+      if (!enrollmentId) continue
 
       const completed = sc.status === "completed"
       await prisma.enrollment.update({
-        where: { id: enrollment.id },
+        where: { id: enrollmentId },
         data: {
           progressPercent: clampPercent(sc.percent),
           progressStatus: completed
@@ -97,11 +102,11 @@ export async function syncLmsDayUpdate(): Promise<LmsDayUpdateResult> {
       // Conclusao => emite o certificado do PMB (dedup interna por enrollment).
       if (completed && settings.certificateAutoIssue) {
         try {
-          await issueCertificateIfEligible(enrollment.id, "AUTO")
+          await issueCertificateIfEligible(enrollmentId, "AUTO")
           certificatesIssued += 1
         } catch (err) {
           log.error(
-            { err, event: "lms.day_update.certificate_failed", enrollmentId: enrollment.id },
+            { err, event: "lms.day_update.certificate_failed", enrollmentId },
             "emissao de certificado (conclusao LMS) falhou",
           )
         }
@@ -121,6 +126,38 @@ export async function syncLmsDayUpdate(): Promise<LmsDayUpdateResult> {
   )
 
   return { coursesUpdated, progressUpdated, certificatesIssued, generatedAt: res.generatedAt }
+}
+
+function enrollmentKey(studentId: string, lmsCourseId: string): string {
+  return `${studentId}::${lmsCourseId}`
+}
+
+/**
+ * DB-006: carrega em lote as matriculas LMS elegiveis dos alunos resolvidos e as
+ * indexa por (studentId, lmsCourseId). Substitui o findFirst por (aluno x curso)
+ * do loop antigo. Mantem a primeira ocorrencia por chave — equivalente ao
+ * findFirst sem orderBy do codigo original quando ha matriculas duplicadas.
+ */
+async function loadLmsEnrollmentsByKey(
+  studentIds: string[],
+): Promise<Map<string, string>> {
+  const map = new Map<string, string>()
+  if (studentIds.length === 0) return map
+  const enrollments = await prisma.enrollment.findMany({
+    where: {
+      studentId: { in: studentIds },
+      status: { in: ["ACTIVE", "COMPLETED", "SUSPENDED"] },
+      course: { lmsCourseId: { not: null } },
+    },
+    select: { id: true, studentId: true, course: { select: { lmsCourseId: true } } },
+  })
+  for (const e of enrollments) {
+    const lmsCourseId = e.course?.lmsCourseId
+    if (!lmsCourseId) continue
+    const key = enrollmentKey(e.studentId, lmsCourseId)
+    if (!map.has(key)) map.set(key, e.id)
+  }
+  return map
 }
 
 /**
