@@ -2,6 +2,7 @@ import {
   getPlacarSnapshotCached as getPlacarSnapshot,
   getActiveTenantsCached as getActiveTenants,
 } from "@/lib/placar/snapshot"
+import { contextLogger } from "@/lib/logger"
 
 // Stream SSE publico do placar de lancamento. Mantemos os dados no servidor
 // (so empurramos agregados + evento "venda nova") — diferente de assinar o
@@ -59,7 +60,12 @@ export async function GET() {
         ])
         activeIds = new Set(active.map((t) => t.id))
         send("snapshot", snap)
-      } catch {
+      } catch (err) {
+        // OBS-010: antes era catch mudo — a stream degradava sem rastro.
+        contextLogger().warn(
+          { err, event: "placar.stream.init_failed", scope: "public" },
+          "placar stream: snapshot inicial falhou",
+        )
         send("error", { message: "init_failed" })
         finish()
         return
@@ -82,8 +88,13 @@ export async function GET() {
             }
           }
           activeIds = new Set(active.map((t) => t.id))
-        } catch {
-          // tick falhou (banco momentaneamente indisponivel) — ignora e segue
+        } catch (err) {
+          // Degrada graciosamente (o EventSource reconecta), mas deixa rastro —
+          // se a falha for persistente o placar "trava" sem isto (OBS-010).
+          contextLogger().warn(
+            { err, event: "placar.stream.tick_failed", scope: "public", tick: ticks },
+            "placar stream: tick falhou",
+          )
         }
 
         if (ticks >= MAX_TICKS) finish()

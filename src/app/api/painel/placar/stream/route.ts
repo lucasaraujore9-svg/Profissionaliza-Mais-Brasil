@@ -4,6 +4,7 @@ import {
   getReferralPlacarSnapshotCached as getReferralPlacarSnapshot,
   getReferralActiveTenantsCached as getReferralActiveTenants,
 } from "@/lib/placar/snapshot"
+import { contextLogger } from "@/lib/logger"
 
 // Stream SSE do placar de INDICAÇÕES, escopado ao revendedor logado: só conta
 // as revendas que ELE indicou (Tenant.referrerTenantId = tenantId da sessão).
@@ -70,7 +71,12 @@ export async function GET() {
         ])
         activeIds = new Set(active.map((t) => t.id))
         send("snapshot", snap)
-      } catch {
+      } catch (err) {
+        // OBS-010: antes era catch mudo — a stream degradava sem rastro.
+        contextLogger().warn(
+          { err, event: "placar.stream.init_failed", scope: "painel", tenantId },
+          "placar stream (painel): snapshot inicial falhou",
+        )
         send("error", { message: "init_failed" })
         finish()
         return
@@ -93,8 +99,13 @@ export async function GET() {
             }
           }
           activeIds = new Set(active.map((t) => t.id))
-        } catch {
-          // tick falhou (banco momentaneamente indisponível) — ignora e segue
+        } catch (err) {
+          // Degrada graciosamente (o EventSource reconecta), mas deixa rastro —
+          // se a falha for persistente o placar "trava" sem isto (OBS-010).
+          contextLogger().warn(
+            { err, event: "placar.stream.tick_failed", scope: "painel", tenantId, tick: ticks },
+            "placar stream (painel): tick falhou",
+          )
         }
 
         if (ticks >= MAX_TICKS) finish()
