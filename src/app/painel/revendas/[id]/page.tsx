@@ -54,6 +54,11 @@ export default async function SubRevendaDetailPage({
       owner: { select: { name: true, email: true, phone: true } },
       _count: { select: { students: true } },
       tenantPayments: {
+        // SAAS-009: NÃO seleciona invoiceUrl/bankSlipUrl. Esses links do Asaas
+        // permitem visualizar/pagar a fatura da mensalidade que a sub-revenda
+        // paga à PMB — e o indicador não é o pagador dessa cobrança (só ganha
+        // comissão de indicação). Política "acompanha, mas não paga": expõe só o
+        // resumo informativo (valor/status/vencimento/pagamento).
         select: {
           id: true,
           asaasPaymentId: true,
@@ -62,8 +67,6 @@ export default async function SubRevendaDetailPage({
           billingType: true,
           dueDate: true,
           paidAt: true,
-          invoiceUrl: true,
-          bankSlipUrl: true,
         },
         orderBy: { dueDate: "desc" },
         take: 60,
@@ -94,8 +97,6 @@ export default async function SubRevendaDetailPage({
       billingType: p.billingType,
       dueDate: p.dueDate.toISOString(),
       paidAt: p.paidAt ? p.paidAt.toISOString() : null,
-      invoiceUrl: p.invoiceUrl,
-      bankSlipUrl: p.bankSlipUrl,
     })),
   }
 

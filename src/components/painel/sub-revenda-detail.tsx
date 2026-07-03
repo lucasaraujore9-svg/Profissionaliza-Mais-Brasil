@@ -35,8 +35,8 @@ export interface SubRevendaPayment {
   billingType: string | null
   dueDate: string
   paidAt: string | null
-  invoiceUrl: string | null
-  bankSlipUrl: string | null
+  // SAAS-009: invoiceUrl/bankSlipUrl removidos — o indicador não é o pagador da
+  // mensalidade da sub-revenda para a PMB; não deve receber o link da fatura.
 }
 
 const TENANT_STATUS: Record<string, { label: string; cls: string }> = {
@@ -175,13 +175,12 @@ export function SubRevendaDetail({ data }: { data: SubRevendaDetailData }) {
               <tbody className="divide-y divide-gray-100">
                 {data.payments.map((p) => {
                   const ps = PAYMENT_STATUS[p.status] ?? PAYMENT_STATUS.PENDING
-                  // Mesma regra do sistema mãe: cobrança em aberto abre o CHECKOUT
-                  // interno (/cobranca/{id}) — onde o pagador escolhe PIX/boleto/
-                  // cartão — e não o boleto cru do Asaas. Já paga abre a fatura.
+                  // Cobrança em aberto abre o CHECKOUT interno (/cobranca/{id}) —
+                  // onde o pagador escolhe PIX/boleto/cartão. Já paga NÃO expõe a
+                  // fatura do Asaas ao indicador (SAAS-009): ele acompanha o
+                  // status, mas não é o pagador dessa mensalidade PMB.
                   const isPending = p.status === "PENDING" || p.status === "OVERDUE"
-                  const link = isPending
-                    ? `/cobranca/${p.asaasPaymentId}`
-                    : p.invoiceUrl ?? p.bankSlipUrl
+                  const link = isPending ? `/cobranca/${p.asaasPaymentId}` : null
                   return (
                     <tr key={p.id} className="hover:bg-gray-50/60">
                       <td className="px-4 py-3 text-gray-600">{fmtDate(p.dueDate)}</td>
