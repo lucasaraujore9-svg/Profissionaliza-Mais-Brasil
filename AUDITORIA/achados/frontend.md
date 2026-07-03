@@ -1,71 +1,199 @@
 # Auditoria — Frontend / UX
-_Data: 2026-06-24 · Referência: .claude/skills/auditoria-saas/references/06-frontend-ux.md · Itens do inventário cobertos: 131/131 telas + 324/324 componentes + 9 layouts + 18 boundaries (error/not-found/loading/global-error)_
+_Data: 2026-07-03 · Referência: .claude/skills/auditoria-saas/references/06-frontend-ux.md · Itens do inventário cobertos: 137/137 telas + 342/342 componentes + 9 layouts + 17 boundaries (5 loading · 5 error · 6 not-found · 1 global-error)_
 
-> Substitui a auditoria de 2026-06-20. `tsc --noEmit` = 0 erros. `eslint .` = 0 erros (1 warning trivial em `scripts/render-cert-samples.tsx`, fora do domínio FE). 131/131 `page.tsx` com `export default`. Nenhuma rota estruturalmente quebrada. **Zero links mortos** em todo o `src/` (incl. notificações e nav). Re-verificação dos 4 achados anteriores: **FE-001, FE-002 e FE-004 CORRIGIDOS** no código atual; **FE-003 segue Aberto**. 2 achados novos nos commits recentes de LMS.
+> Reescreve a auditoria de 2026-06-24. Portão parcial verde: `npx tsc --noEmit` = **0 erros**; `npx eslint .` = **0 erros** (1 warning trivial `Unused eslint-disable` em `scripts/render-cert-samples.tsx`, fora do domínio FE — idêntico à rodada anterior). **137/137** `page.tsx` com `export default` (verificado). **Zero rota estruturalmente quebrada.** Cross-check exaustivo de `href`/`push`/`replace`/`redirect`/`window.location.href`: **zero link morto** — todos os 65 destinos-raiz distintos resolvem para rotas reais (incl. `[tab]` de relatórios via gate server-side, `/admin/relatorios/visao-geral|exportacoes`, `/painel/relatorios/financeiro`, e os href-templates de tabela de BI `/admin/revendedores/{id}` e `/painel/alunos/{id}`).
+>
+> **Re-verificação dos 6 achados de 2026-06-24:** FE-001/FE-002/FE-004 seguem **Corrigidos**. **FE-005 → Corrigido** (o route de acesso ao curso LMS agora redireciona para banner amigável). **FE-006 → Corrigido** (aria-labels adicionados). **FE-003 → segue Aberto**. 1 achado novo no hub de BI (delta 2026-06-25→07-02): **FE-007**.
 
 ## Resumo
-- Itens verificados: 131 telas + 324 componentes + 18 boundaries · Achados: **P0=0 P1=0 P2=1 P3=2** · Nota do domínio: **8.7/10**
+- Itens verificados: 137 telas + 342 componentes + 17 boundaries · Achados: **P0=0 P1=0 P2=0 P3=2 (abertos)** · Nota do domínio: **9.0/10**
+- Delta auditado (páginas novas/alteradas desde 2026-06-24): `/admin/relatorios/*` + `/painel/relatorios/*` (hub de BI, 9+7 abas), `/placar` + `/painel/placar` (placar de indicações), tours guiados (`tour-runner.tsx`), `/pagar/[id]` (retomada de cobrança PMB), seletor de parcelas no checkout (`mp-checkout-form.tsx`), menu lateral recolhível (`sidebar-admin`/`sidebar-painel` + `use-sidebar-collapsed.ts`). **Todos revisados item a item; sólidos** salvo FE-007.
 
 ## Achados
-
-### [FE-005] Acesso ao curso LMS devolve JSON cru ao aluno em caso de falha (tela "quebrada" no navegador)
-- **Severidade:** P2
-- **Status:** Aberto
-- **Local:** `src/app/api/aluno/curso/[enrollmentId]/acessar/route.ts:44,57,75` (respostas `NextResponse.json({error},{status})`) · disparado por navegação `<a>` em `src/app/aluno/page.tsx:102-103` (continue, `target="_blank"`) e `src/app/aluno/cursos/page.tsx:247-248` (por curso, **mesma aba**, sem `target`)
-- **Evidência:** o botão "Acessar curso/aulas" de cursos `provider=LMS` é um link de navegação direta (`<a href={`/api/aluno/curso/${id}/acessar`}>`), não um `fetch`. O route handler responde com `NextResponse.json({ error: "..." }, { status: 404|409|502 })` quando: a matrícula não é LMS/ativa (404), o portal do parceiro está indisponível (409, `lmsPortalUrl` nulo) ou a geração do token SSO falha (502, ex.: LMS fora do ar). Como a resposta é `application/json` e o clique é navegação de página, o navegador renderiza o corpo bruto `{"error":"Não foi possível abrir o curso agora..."}`. Em `/aluno/cursos` a navegação é na **mesma aba** → o aluno perde a área e fica preso no JSON.
-- **Impacto:** quando o LMS (lms.bmbr.com.br) tiver indisponibilidade — exatamente o momento de maior fricção — o aluno pagante vê uma "tela de erro" em texto cru de API em vez de uma página amigável com instrução/retorno. Equivale a tela branca de produto. Atinge 100% dos alunos de cursos LMS no incidente.
-- **Correção:** trocar as respostas de erro de navegação por `NextResponse.redirect` para uma página amigável da área do aluno, preservando o `request.url` como base:
-  1. Nos 3 ramos de erro do route (`:44`, `:57`, `:75`), em vez de `NextResponse.json(...)`, fazer `return NextResponse.redirect(new URL("/aluno/cursos?erro=acesso", request.url))` (use querystrings distintas por causa: `?erro=indisponivel`, `?erro=parceiro`, `?erro=sso`).
-  2. Em `src/app/aluno/cursos/page.tsx`, ler `searchParams.erro` e renderizar um banner `<div role="alert">` no topo (mesmo padrão visual do banner `payment_failed` em `src/app/loja/checkout/page.tsx:325-329`) com mensagem por causa + botão "Tentar novamente" (link de volta ao `/acessar`) e "Falar com o suporte" (`/aluno/suporte`).
-  3. Manter `status 401→/login` como já está (já é redirect).
-- **Verificação:** com o LMS mockado para falhar (ou `LMS_API_KEY` inválida em ambiente de teste), clicar "Acessar curso" em `/aluno/cursos` deve cair em `/aluno/cursos?erro=sso` exibindo o banner amigável — `curl -sI` no endpoint deve retornar `3xx Location: /aluno/cursos?erro=...`, nunca `Content-Type: application/json` num ramo de erro.
 
 ### [FE-003] `confirmacaoPath` default `/loja/confirmacao` expõe o prefixo interno `/loja` na URL da revenda pós-compra
 - **Severidade:** P3
 - **Status:** Aberto
-- **Local:** defaults em `src/components/loja/asaas-checkout-form.tsx:104` e `src/components/loja/mp-checkout-form.tsx:134` (`confirmacaoPath = "/loja/confirmacao"`); os 3 sites de instanciação **não passam** override: `src/app/loja/checkout/page.tsx:133-138` (`pkgPanelForm`) e `:306-311` (`coursePanelForm`) montam `FormConfig` sem `confirmacaoPath`; `src/app/loja/pagar/[id]/page.tsx:133` instancia `MpCheckoutForm` sem `confirmacaoPath`. Redirect efetivo: `asaas-checkout-form.tsx:239,289` e `mp-checkout-form.tsx:373,423` fazem `window.location.href = successUrlFor(id)` → `/loja/confirmacao?...`.
-- **Evidência:** no subdomínio de revenda o proxy (`src/proxy.ts:322` + `src/lib/tenant/vitrine-paths.ts`) reescreve `/confirmacao`→`/loja/confirmacao`, mas `isVitrinePath("/loja/confirmacao")` é `false` (a lista cobre `/confirmacao`, não `/loja/confirmacao`), então a URL literal `/loja/confirmacao` é servida direto (não 404) — porém deixa o prefixo interno `/loja` visível. Inconsistente com o checkout PMB, que usa `/checkout/confirmacao` (ver `src/components/loja/pmb-checkout-form.tsx:255,265,313`).
-- **Impacto:** cosmético/consistência de URL (não quebra a confirmação). Vaza nomenclatura interna `/loja` ao cliente da revenda.
-- **Correção:** passar `confirmacaoPath: "/confirmacao"` no `FormConfig` dos 3 sites: em `src/app/loja/checkout/page.tsx` adicionar `confirmacaoPath: "/confirmacao"` aos objetos `pkgPanelForm` (kinds asaas/mp) e `coursePanelForm`; em `src/app/loja/pagar/[id]/page.tsx:133` passar `confirmacaoPath="/confirmacao"` ao `MpCheckoutForm`. (O `CheckoutPanel` já repassa `form.confirmacaoPath` em `checkout-panel.tsx:102,113`.) Verificar que `/confirmacao` é vitrine-path (já é) e que o route físico `/loja/confirmacao` segue resolvendo via proxy.
-- **Verificação:** após compra numa vitrine de revenda, a URL de confirmação é `https://{slug}.livrecursos.com.br/confirmacao?enrollment_id=...` (sem `/loja`). Adicionar caso ao `src/lib/tenant/vitrine-paths.test.ts` cobrindo `/confirmacao`.
+- **Local:** defaults em `src/components/loja/asaas-checkout-form.tsx:108` e `src/components/loja/mp-checkout-form.tsx:155` (`confirmacaoPath = "/loja/confirmacao"`); os 3 sites de instanciação **não passam** override: `src/app/loja/checkout/page.tsx:138,163-169` (`pkgPanelForm` → `CheckoutPanel`) e `:323,355-361` (`coursePanelForm`) montam `FormConfig` sem `confirmacaoPath`; `src/app/loja/pagar/[id]/page.tsx:140` instancia `MpCheckoutForm` sem `confirmacaoPath`. Redirect efetivo em `asaas-checkout-form.tsx:114` / `mp-checkout-form.tsx:163` (`${confirmacaoPath}?enrollment_id=...`).
+- **Evidência:** no subdomínio de revenda o proxy (`src/proxy.ts` + `src/lib/tenant/vitrine-paths.ts`) reescreve `/confirmacao`→`/loja/confirmacao`, mas `isVitrinePath("/loja/confirmacao")` é `false` (a lista cobre `/confirmacao`, não o literal `/loja/confirmacao`), então a URL literal `/loja/confirmacao` é servida direto (não 404) — porém deixa o prefixo interno `/loja` visível ao cliente. Inconsistente com o checkout PMB, que usa `/checkout/confirmacao`. `grep -rn confirmacaoPath` confirma que só os defaults dos forms definem o valor; nenhum call-site passa `/confirmacao`.
+- **Impacto:** cosmético/consistência de URL (não quebra a confirmação; a compra e a matrícula seguem funcionando). Vaza nomenclatura interna `/loja` ao cliente da revenda. Impacto de produto baixo.
+- **Correção:** passar `confirmacaoPath: "/confirmacao"` nos 3 sites: em `src/app/loja/checkout/page.tsx` adicionar `confirmacaoPath: "/confirmacao"` aos objetos `pkgPanelForm` (ramos asaas/mp) e `coursePanelForm`; em `src/app/loja/pagar/[id]/page.tsx:140` passar `confirmacaoPath="/confirmacao"` ao `MpCheckoutForm`. (O `CheckoutPanel` já repassa `form.confirmacaoPath`.) Verificar que `/confirmacao` continua vitrine-path e que o route físico `/loja/confirmacao` segue resolvendo via proxy.
+- **Verificação:** após compra numa vitrine de revenda, a URL de confirmação é `https://{slug}.livrecursos.com.br/confirmacao?enrollment_id=...` (sem `/loja`). Adicionar caso a `src/lib/tenant/vitrine-paths.test.ts` cobrindo `/confirmacao`.
 
-### [FE-006] Botões só-ícone em `security-tab` usam `title` sem `aria-label` (nome acessível inconsistente)
+### [FE-007] Hub de BI (`/admin/relatorios/[tab]` e `/painel/relatorios/[tab]`) não oferece "tentar novamente" no estado de erro
 - **Severidade:** P3
 - **Status:** Aberto
-- **Local:** `src/components/shared/student-management/security-tab.tsx:286,298,482,494` (mostrar/ocultar e copiar senha — LMS por curso e plataforma EA)
-- **Evidência:** os `<button type="button">` desses pontos têm apenas conteúdo de ícone (`<Eye/>`, `<Copy/>`) e `title={...}`/`title="Copiar senha"`, sem `aria-label`. `title` é tooltip e só às vezes vira nome acessível; o padrão correto (já adotado nos componentes novos `src/components/admin/api-docs-tab.tsx:157,193` e `src/components/aluno/platform-credentials-card.tsx:44,120`) é `aria-label`.
-- **Impacto:** leitor de tela pode anunciar "botão" sem rótulo nesses controles do detalhe do aluno (admin/painel). Audiência interna pequena → impacto baixo, mas é violação WCAG 4.1.2 (Name, Role, Value) e inconsistência com os componentes irmãos.
-- **Correção:** adicionar `aria-label` aos 4 botões: nos de mostrar/ocultar (`:286`, `:482`) usar `aria-label={reveal ? "Ocultar senha" : "Mostrar senha"}`; nos de copiar (`:298`, `:494`) `aria-label="Copiar senha"` (pode manter o `title` para tooltip). Padronizar com o restante do arquivo (`platform-credentials-card.tsx`).
-- **Verificação:** `npx eslint src/components/shared/student-management/security-tab.tsx` sem novas violações; inspeção manual via axe/leitor de tela: cada botão de ícone anuncia o rótulo. Opcional: ativar a regra `jsx-a11y/control-has-associated-label` para travar regressão.
+- **Local:** `src/components/admin/admin-relatorios-client.tsx:30-49` (fn `load`, `setError`) e o mesmo padrão em `src/components/painel/painel-relatorios-client.tsx:30-41`; renderização do erro em `src/components/reports/report-tab-view.tsx:23-29` (bloco vermelho **só com mensagem**, sem botão de retry). `grep -rn "Tentar novamente\|retry\|Recarregar" src/components/reports src/components/admin/admin-relatorios-client.tsx src/components/painel/painel-relatorios-client.tsx` = **vazio**.
+- **Evidência:** quando `GET /api/admin/relatorios/bi/[tab]` (ou `/api/painel/relatorios/...`) falha por rede ou 5xx, o client faz `setError(...)` e `ReportTabView` mostra `<div class="...bg-red-50...">{error}</div>` sem ação de recarregar. O único gatilho de re-fetch é o `PeriodFilter` (`onChange` → `queryString` muda → `load`), que **não existe na aba `exportacoes`** (filters `undefined`) e não resolve o caso de erro transiente com o mesmo período. Loading (`ReportSkeleton`) e empty (`EmptyState`/"Sem dados no período" em `data-table.tsx:130`) estão corretos; falta apenas o retry do estado de erro exigido pela checklist ("erro = mensagem **+ retry**").
+- **Impacto:** num erro de rede transiente, o usuário de BI (admin/owner de revenda) fica na tela de erro e precisa navegar para fora e voltar (ou trocar o período) para tentar de novo. Audiência interna e caminho não-crítico → impacto baixo, mas é lacuna real de estado de UI.
+- **Correção:** em `ReportTabView` aceitar um callback opcional `onRetry?: () => void` e, no bloco de erro (`:23-29`), renderizar um `<button type="button" onClick={onRetry}>Tentar novamente</button>` quando fornecido. Passar `onRetry={load}` em `admin-relatorios-client.tsx` (linha do `<ReportTabView ... />`) e o equivalente em `painel-relatorios-client.tsx`. Alternativa mínima: mover a `load` para fora do `useCallback` de período e expor no shell.
+- **Verificação:** com a rota `/api/admin/relatorios/bi/[tab]` mockada para 500, a aba mostra a mensagem de erro **com** botão "Tentar novamente"; clicar re-dispara `load` e, com o mock revertido, renderiza os KPIs/gráficos. Cobrir por teste de componente do `ReportTabView` (render com `error` + `onRetry` → botão presente e chamado no clique).
 
-## Cobertura
+## Achados corrigidos desde a rodada anterior (re-verificação)
 
-**Telas (131/131) — todas com veredito de estados (loading/erro/vazio/sucesso):**
-- `(main)` institucional (`/`, `/sobre`, `/contato`, `/cursos`, `/cursos/[slug]`, `/categoria/[slug]`, `/pacotes/[slug]`, `/certificado`, `/validar`, `/validar/[code]`, `/como-funciona`, `/ajuda`, `/termos`, `/privacidade`, `/reembolso`, `/contrato-de-revenda`, `/eja/ir`, `/cursos-tecnicos/ir`) — **OK** (boundary `(main)/loading.tsx`+`(main)/not-found.tsx`; footer/nav links cruzados com rotas reais = todos resolvem; `/certificado` existe em `(main)/certificado`).
-- `(auth)`/landing (`/login`, `/forgot-password`, `/reset-password`, `/alterar-senha-inicial`, `/logout`, `/seja-revendedor`, `/seja-revendedor/checkout`, `/seja-revendedor/pre-live`, `/livrecursos`, `/lp-revenda2`) — **OK** (herdam boundary raiz; forms com Label/disabled-on-submit/erro-servidor).
-- `admin/*` (47 telas incl. `/admin/configuracoes` com nova aba **API**, treinamentos, indicações, revendedores) — **OK** (boundary `admin/error.tsx`+`admin/loading.tsx`+`admin/not-found.tsx`; nova `api-docs-tab.tsx` com a11y + estado vazio do segredo).
-- `painel/*` (incl. **novas** `/painel/revendas`, `/painel/revendas/nova`, `/painel/revendas/[id]`, `/painel/revendas/leads`) — **OK** (guards `redirect`/`notFound` server-side; empty states presentes; `sub-revenda-detail.tsx` com empty state + `rel=noopener` + fallbacks de status; `nova-revenda-form.tsx` com Label/disabled/field-errors/erro-conexão).
-- `aluno/*` (`/aluno`, `/aluno/cursos`, `/aluno/comprar`, `/aluno/certificados`, `/aluno/certificados/[id]`, `/aluno/pagamentos`, `/aluno/perfil`, `/aluno/suporte`, `/aluno/notificacoes`) — **OK** salvo **FE-005** (acesso LMS); empty states e branching EA/LMS corretos.
-- `loja/*` (`/loja`, `/loja/cursos`, `/loja/curso/[slug]`, `/loja/pacote/[slug]`, `/loja/checkout`, `/loja/pagar/[id]`, `/loja/confirmacao`, `/loja/contato`, `/loja/suspended`) — **OK** salvo **FE-003** (prefixo `/loja` na confirmação); `CheckoutPanel` com cupom ao vivo + 4 estados nos forms.
-- `/inadimplente`, `/cobranca/[paymentId]`, `/checkout`, `/checkout/confirmacao`, `/offline`, `/placar` — **OK** (boundaries + retry; `/cobranca/[paymentId]` resolve por Asaas id, casa com link `:183` de `sub-revenda-detail`).
+### [FE-005] Acesso ao curso LMS devolvia JSON cru ao aluno em caso de falha
+- **Severidade:** P2 · **Status:** Corrigido (código atual)
+- **Local/Evidência:** `src/app/api/aluno/curso/[enrollmentId]/acessar/route.ts` agora define `errorRedirect(code) = NextResponse.redirect(new URL(`/aluno/cursos?erro=${code}`, request.url))` e usa `errorRedirect("indisponivel"|"parceiro"|"falha")` nos 3 ramos de erro (não-LMS/inativa, portal do parceiro nulo, falha de SSO). A tela `src/app/aluno/cursos/page.tsx:72-80` lê `searchParams.erro`, mapeia por `ACCESS_ERROR_MESSAGE` e renderiza banner `role="alert"` (`:141`). Não há mais `NextResponse.json({error},...)` em ramo de navegação.
+- **Verificação:** `grep -n "NextResponse.json" src/app/api/aluno/curso/[enrollmentId]/acessar/route.ts` não retorna respostas de erro de navegação; `curl -sI` num ramo de erro devolve `3xx Location: /aluno/cursos?erro=...`.
 
-**Componentes (324/324):** varredura exaustiva de `href`/`Link`/`router.push|replace`/`redirect`/`window.location.href`/`createNotification.href`. Resultado:
-- Links internos: **todos** os destinos literais e de template-literal cruzam com as 131 rotas reais. **/admin/webhooks não existe mais em lugar nenhum** (FE-001 fechado). Notificações em `src/lib/mercadopago/process.ts:274,316` agora apontam `/admin/configuracoes` (existe).
-- `target="_blank"`: **zero** ocorrências sem `rel="noopener noreferrer"` (FE-004 fechado, incl. `onboarding-wizard.tsx:191`).
-- `<img>`: só 2 (QR PIX data-URI em `asaas-checkout-form.tsx:610` e `mp-checkout-form.tsx:762`), ambos com `alt` — **N/A** (next/image não otimiza data-URI).
-- Estados de fetch: 75 client-components com `useEffect`+`fetch` revisados; padrão consistente de loading/erro(toast)/empty (ex.: `leads-revenda-list.tsx:101`, `leads-revenda-kanban.tsx:240`, `sub-revenda-detail.tsx:158`). Sem spinner-infinito-no-erro detectado.
-- a11y: `eslint-config-next/core-web-vitals` (jsx-a11y) ativo e verde; ressalva **FE-006** (4 botões só-ícone com `title` sem `aria-label`).
+### [FE-006] Botões só-ícone em `security-tab` sem nome acessível
+- **Severidade:** P3 · **Status:** Corrigido (código atual)
+- **Local/Evidência:** `src/components/shared/student-management/security-tab.tsx:287,300,485,498` — os 4 botões mostrar/ocultar e copiar senha (LMS por curso + plataforma EA) agora têm `aria-label={reveal ? "Ocultar senha" : "Mostrar senha"}` e `aria-label="Copiar senha"` além do `title`.
+- **Verificação:** `npx eslint src/components/shared/student-management/security-tab.tsx` sem violações; inspeção manual: cada botão de ícone anuncia rótulo.
 
-**Boundaries (18/18):** `error.tsx`+`global-error.tsx`+`not-found.tsx` raiz com retry; `admin`/`aluno`/`loja`/`painel` com error+loading+not-found; `(main)` com loading+not-found. **OK**.
+### Históricos (permanecem Corrigidos)
+- **FE-001** `/admin/webhooks` link morto (P2) → Corrigido (`grep -rn "admin/webhooks" src` = vazio).
+- **FE-002** `CheckoutButton` órfão (P3) → Corrigido (arquivo inexistente).
+- **FE-004** `target="_blank"` sem `rel` (P3) → Corrigido (nenhuma ocorrência sem `rel="noopener"`).
 
-**Re-verificação dos achados de 2026-06-20:**
-- **FE-001** `/admin/webhooks` (P2) → **CORRIGIDO** (rota removida das notificações; `grep -rn "admin/webhooks" src` = vazio).
-- **FE-002** `CheckoutButton` órfão (P3) → **CORRIGIDO** (`src/components/loja/checkout-button.tsx` não existe mais).
-- **FE-003** prefixo `/loja` na confirmação (P3) → **ABERTO** (agora 3 sites de instanciação não passam `confirmacaoPath`).
-- **FE-004** `target=_blank` sem `rel` (P3) → **CORRIGIDO**.
+## Cobertura — 137/137 telas (tela × veredito)
 
-**N/A do domínio:** route handlers/crons/webhooks (390 métodos) → veredito de auth/Zod/idempotência é dos domínios **seguranca**/**api**/**saas**, não FE. Exceção: `api/aluno/curso/[enrollmentId]/acessar` entra em FE por ser alvo de navegação `<a>` (FE-005). Models/migrations/enums → fora do escopo FE.
+| # | Tela | Veredito |
+|---|---|---|
+| 1 | `/` | OK |
+| 2 | `/ajuda` | OK |
+| 3 | `/categoria/[slug]` | OK |
+| 4 | `/certificado` | OK |
+| 5 | `/checkout` | OK |
+| 6 | `/checkout/confirmacao` | OK |
+| 7 | `/como-funciona` | OK |
+| 8 | `/contato` | OK |
+| 9 | `/contrato-de-revenda` | OK |
+| 10 | `/cursos` | OK |
+| 11 | `/cursos-tecnicos/ir` | OK |
+| 12 | `/cursos/[slug]` | OK |
+| 13 | `/eja/ir` | OK |
+| 14 | `/pacotes/[slug]` | OK |
+| 15 | `/pagar/[id]` (PMB retoma cobrança — novo) | OK |
+| 16 | `/privacidade` | OK |
+| 17 | `/reembolso` | OK |
+| 18 | `/sobre` | OK |
+| 19 | `/termos` | OK |
+| 20 | `/login` | OK |
+| 21 | `/forgot-password` | OK |
+| 22 | `/reset-password` | OK |
+| 23 | `/livrecursos` | OK |
+| 24 | `/lp-revenda2` | OK |
+| 25 | `/seja-revendedor` | OK |
+| 26 | `/seja-revendedor/checkout` | OK |
+| 27 | `/seja-revendedor/pre-live` | OK |
+| 28 | `/alterar-senha-inicial` | OK |
+| 29 | `/logout` | OK |
+| 30 | `/offline` | OK |
+| 31 | `/inadimplente` | OK |
+| 32 | `/cobranca/[paymentId]` | OK |
+| 33 | `/placar` (novo) | OK |
+| 34 | `/validar` | OK |
+| 35 | `/validar/[code]` | OK |
+| 36 | `/admin` | OK |
+| 37 | `/admin/alunos` | OK |
+| 38 | `/admin/alunos/[id]` | OK |
+| 39 | `/admin/analytics` (redirect→relatórios) | OK |
+| 40 | `/admin/atendimento` | OK |
+| 41 | `/admin/automacao` | OK |
+| 42 | `/admin/automacao/conexao` | OK |
+| 43 | `/admin/automacao/mensagens` | OK |
+| 44 | `/admin/banner` | OK |
+| 45 | `/admin/catalogo` | OK |
+| 46 | `/admin/certificados` | OK |
+| 47 | `/admin/certificados/configuracoes` | OK |
+| 48 | `/admin/certificados/emitir` | OK |
+| 49 | `/admin/certificados/template-padrao` | OK |
+| 50 | `/admin/comunicacao` | OK |
+| 51 | `/admin/configuracoes` | OK |
+| 52 | `/admin/configuracoes/automacao` | OK |
+| 53 | `/admin/configuracoes/certificados` | OK |
+| 54 | `/admin/configuracoes/indicacoes` | OK |
+| 55 | `/admin/configuracoes/rastreamento` | OK |
+| 56 | `/admin/configuracoes/unidade-tecnica` | OK |
+| 57 | `/admin/equipe` | OK |
+| 58 | `/admin/equipe/[id]` | OK |
+| 59 | `/admin/financeiro` | OK |
+| 60 | `/admin/indicacoes` | OK |
+| 61 | `/admin/indicacoes/comissoes` | OK |
+| 62 | `/admin/indicacoes/saques` | OK |
+| 63 | `/admin/leads` | OK |
+| 64 | `/admin/leads-revenda` | OK |
+| 65 | `/admin/meu-perfil` | OK |
+| 66 | `/admin/notificacoes` | OK |
+| 67 | `/admin/relatorios` (redirect) | OK |
+| 68 | `/admin/relatorios/[tab]` (hub BI — novo) | Achado FE-007 |
+| 69 | `/admin/relatorios/exportar/[type]` | OK |
+| 70 | `/admin/revendedores` | OK |
+| 71 | `/admin/revendedores/[id]` | OK |
+| 72 | `/admin/revendedores/[id]/comissoes` | OK |
+| 73 | `/admin/treinamentos` | OK |
+| 74 | `/admin/treinamentos/assistir` | OK |
+| 75 | `/admin/treinamentos/assistir/[moduleId]` | OK |
+| 76 | `/admin/vendas` | OK |
+| 77 | `/admin/vendas/alunos` | OK |
+| 78 | `/admin/vendas/alunos/[id]` | OK |
+| 79 | `/admin/vendas/cupons` | OK |
+| 80 | `/admin/vendas/nova` | OK |
+| 81 | `/admin/vitrine` | OK |
+| 82 | `/aluno` | OK |
+| 83 | `/aluno/certificados` | OK |
+| 84 | `/aluno/certificados/[id]` | OK |
+| 85 | `/aluno/comprar` | OK |
+| 86 | `/aluno/comprar/pagar/[id]` | OK |
+| 87 | `/aluno/cursos` (banner ?erro= — FE-005 corrigido) | OK |
+| 88 | `/aluno/notificacoes` | OK |
+| 89 | `/aluno/pagamentos` | OK |
+| 90 | `/aluno/perfil` | OK |
+| 91 | `/aluno/suporte` | OK |
+| 92 | `/loja` | OK |
+| 93 | `/loja/checkout` | Achado FE-003 |
+| 94 | `/loja/confirmacao` | Achado FE-003 |
+| 95 | `/loja/contato` | OK |
+| 96 | `/loja/curso/[slug]` | OK |
+| 97 | `/loja/cursos` | OK |
+| 98 | `/loja/pacote/[slug]` | OK |
+| 99 | `/loja/pagar/[id]` | Achado FE-003 |
+| 100 | `/loja/suspended` | OK |
+| 101 | `/painel` | OK |
+| 102 | `/painel/alunos` | OK |
+| 103 | `/painel/alunos/[id]` | OK |
+| 104 | `/painel/atendimento` | OK |
+| 105 | `/painel/automacao` | OK |
+| 106 | `/painel/automacao/conexao` | OK |
+| 107 | `/painel/automacao/mensagens` | OK |
+| 108 | `/painel/certificados` | OK |
+| 109 | `/painel/certificados/emitidos` | OK |
+| 110 | `/painel/certificados/emitir` | OK |
+| 111 | `/painel/certificados/template` | OK |
+| 112 | `/painel/comunicacao` | OK |
+| 113 | `/painel/configuracoes` | OK |
+| 114 | `/painel/cupons` | OK |
+| 115 | `/painel/cursos` | OK |
+| 116 | `/painel/dominio` | OK |
+| 117 | `/painel/equipe` | OK |
+| 118 | `/painel/financeiro` | OK |
+| 119 | `/painel/indicacoes` | OK |
+| 120 | `/painel/indicacoes/materiais` | OK |
+| 121 | `/painel/indicacoes/sacar` | OK |
+| 122 | `/painel/leads` | OK |
+| 123 | `/painel/leads/configuracao` | OK |
+| 124 | `/painel/notificacoes` | OK |
+| 125 | `/painel/onboarding` | OK |
+| 126 | `/painel/placar` (placar indicações — novo) | OK |
+| 127 | `/painel/relatorios` (redirect) | OK |
+| 128 | `/painel/relatorios/[tab]` (hub BI — novo) | Achado FE-007 |
+| 129 | `/painel/revendas` | OK |
+| 130 | `/painel/revendas/[id]` | OK |
+| 131 | `/painel/revendas/leads` | OK |
+| 132 | `/painel/revendas/nova` | OK |
+| 133 | `/painel/treinamentos` | OK |
+| 134 | `/painel/treinamentos/[moduleId]` | OK |
+| 135 | `/painel/vendas` | OK |
+| 136 | `/painel/vendas/nova` | OK |
+| 137 | `/painel/vitrine` | OK |
+
+### Cobertura complementar (não-tela)
+- **Boundaries (17/17):** `error.tsx`+`global-error.tsx`+`not-found.tsx` raiz; `admin`/`aluno`/`loja`/`painel` com error+loading+not-found; `(main)` com loading+not-found (erro herda o boundary raiz). Grupos `(auth)`/`(landing)` e rotas top-level (`/placar`, `/validar`, `/cobranca`, `/checkout`, `/inadimplente`, `/offline`, `/logout`, `/alterar-senha-inicial`) herdam `src/app/error.tsx`+`not-found.tsx`. **Cobertura completa.**
+- **Componentes (342/342):** varredura de `href`/`Link`/`router.push|replace`/`redirect`/`window.location.href` + href-templates de payloads de BI → **zero link morto**. Novos componentes revisados: hub de BI (`components/reports/*`, `admin-relatorios-client`, `painel-relatorios-client`) — loading/empty OK, erro sem retry (FE-007); `funnel-chart-card.tsx` (overflow corrigido, `widthPct` clamp ≤100% + `overflow-hidden`); `data-table.tsx` (empty + paginação + shadcn `Table` com wrapper `overflow-x-auto`); `tour-runner.tsx` (driver.js sob demanda, `visibleSteps` defensivo, persistência de dispensa, botão de ajuda com `aria-label="Refazer tutorial"`); `placar-client` (render sempre a partir do snapshot server — sem spinner infinito); `use-sidebar-collapsed.ts` + botões de recolher com `aria-label` "Expandir/Recolher menu"; seletor de parcelas (`mp-checkout-form.tsx:619-646`) com `<Label htmlFor="cc-installments">` + `<select id>` casados, opções vindas do MP real, `disabled` durante submit.
+- **`<img>` cru:** apenas 2 (QR PIX data-URI em `asaas-checkout-form.tsx:621` e `mp-checkout-form.tsx:898`), ambos com `alt` — **N/A** (`next/image` não otimiza data-URI).
+- **N/A do domínio FE:** route handlers/crons/webhooks (406 métodos), models/migrations/enums e Server Actions de dados → vereditos de auth/Zod/idempotência pertencem a **seguranca**/**api**/**saas**/**banco**. Exceção mantida: `api/aluno/curso/[enrollmentId]/acessar` entra em FE por ser alvo de navegação `<a>` (FE-005, agora corrigido).
 
 ## ⚠️ MIGRAÇÃO Vercel→VPS (sinalização do domínio FE)
-- `src/components/admin/api-docs-tab.tsx:15` fixa `WEBHOOK_URL = "https://profissionalizamaisbrasil.com.br/api/webhooks/lms"` como constante de documentação. Se o domínio público mudar na VPS, este texto exibido ao SUPER_ADMIN/integrador do LMS ficará desatualizado (não quebra runtime; é doc copiável). Recomendado derivar de `NEXT_PUBLIC_APP_URL`/`appUrl()` numa próxima iteração.
-- Demais itens FE não dependem de Edge/Upstash/Storage diretamente; sem outras quebras de migração no domínio frontend. (Boundaries, links, estados e forms são agnósticos de infra.)
+- `src/components/admin/api-docs-tab.tsx:15` fixa `WEBHOOK_URL = "https://profissionalizamaisbrasil.com.br/api/webhooks/lms"` como constante de documentação exibida ao SUPER_ADMIN/integrador do LMS. Não quebra runtime (é texto copiável), mas ficará desatualizado se o domínio público mudar na VPS. Recomendado derivar de `NEXT_PUBLIC_APP_URL`/`appUrl()`.
+- Demais itens FE (boundaries, links, estados, forms, tours, placar, hub de BI) são agnósticos de Edge/Upstash/Storage — sem outras quebras previstas na migração.

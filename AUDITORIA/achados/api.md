@@ -1,152 +1,148 @@
 # Auditoria — API e Integrações
-_Data: 2026-06-24 · Referência: .claude/skills/auditoria-saas/references/07-api-integracoes.md · Itens do inventário cobertos: 294/294 route handlers (390 métodos) + 5 clients de integração (Asaas, MP, LMS, EA/plataforma-cursos, WAHA/wa-client) + transient + 16 crons + 3 webhooks (Asaas, MP, LMS)_
+_Data: 2026-07-03 · Referência: .claude/skills/auditoria-saas/references/07-api-integracoes.md · Itens do inventário cobertos: 309/309 route handlers (406 métodos) + 5 clients de integração (Asaas, MP, LMS, EA/plataforma-cursos, WAHA/wa-client) + Vercel client + transient + 17 crons + 3 webhooks (Asaas, MP, LMS)_
 
 ## Resumo
-- Itens verificados: 294 route handlers, 5 integration clients + transient, 16 crons, 3 webhooks, helpers de URL/auth/env.
-- Achados: P0=0 · P1=0 · P2=0 · P3=3 · Nota do domínio: 9.3/10
-- **Re-verificação dos achados de 2026-06-20:** API-001 (P1) **CORRIGIDO**, API-002 (P2) **CORRIGIDO**, API-003 (P2) **CORRIGIDO** (já registrado como tal). API-004 e API-005 (P3) permanecem abertos por decisão (inócuos). Nenhum P0/P1/P2 em aberto.
-- **Novos achados (3 P3):** API-006 (LMS webhook não exige X-PMB-Event-Id → entrega sem header não é idempotente), API-007 (course.published dispara re-sync completo do catálogo inline por evento — amplificação, HMAC-gated), API-008 (wa-client lê process.env direto + sem retry/backoff no dispatch).
+- Itens verificados: 309 route handlers, 5 integration clients + Vercel client + transient, 17 crons, 3 webhooks, helpers de URL/auth/env.
+- Achados: **P0=0 · P1=0 · P2=1 · P3=5** · Nota do domínio: **9.0/10**
+- **Re-verificação dos achados de 2026-06-24:** API-004 (P3) **Aberto** (inalterado), API-005 (P3) **Aberto** (inalterado), **API-006 (P3) CORRIGIDO** (o receiver agora deriva chave de idempotência determinística via `lmsDedupKey` quando o header falta), API-007 (P3) **Aberto e PIOR** (o novo evento `course.updated` virou um 3º gatilho de re-sync completo por evento), API-008 (P3) **Aberto** (inalterado).
+- **Novos achados:** **API-009 (P2)** — os endpoints públicos de parcelas (`loja/checkout/installments`, `checkout/installments`) não têm rate limiting apesar de cada request disparar uma chamada externa ao MP com o token da unidade/PMB (abuso / enumeração de BIN / exaustão de rate-limit do MP). **API-010 (P3)** — `createPreapproval`/`createPreference` retentam em 5xx/timeout sem `X-Idempotency-Key` (janela estreita de assinatura duplicada).
 
-O domínio está **maduro e endurecido**. Os dois achados de risco real do ciclo anterior (API-001 webhook MP perdido no apex; API-002 vazamento de erro de DB no /health) foram fechados. Os 3 webhooks têm verificação de assinatura (Asaas token timing-safe; MP HMAC SHA256 + anti-replay; LMS HMAC SHA256 + anti-replay), idempotência forte (advisory lock + dedupe por payment id; externalEventId @unique no LMS), os clients externos com timeout+retry+backoff (Asaas 20s, MP 20s, LMS 25s, EA 25s; WAHA 15s timeout sem retry), todos os 16 crons protegidos por CRON_SECRET timing-safe e idempotentes, secrets fora do client/repo, credenciais de plataforma (EA + LMS partnerAccess) cifradas em repouso e nunca logadas.
+O domínio segue **maduro e endurecido**. Os 3 webhooks têm verificação de assinatura (Asaas token timing-safe; MP HMAC SHA256 + anti-replay; LMS HMAC SHA256 + anti-replay), idempotência forte (advisory lock + dedupe por payment id no MP/Asaas; `externalEventId` @unique no LMS agora com fallback determinístico), clients externos com timeout+retry+backoff, 17 crons protegidos por CRON_SECRET timing-safe e idempotentes, secrets fora do client/repo, credenciais de plataforma (EA + LMS) cifradas em repouso e nunca logadas. O delta de ~45 commits (course.updated, matriz curricular via LMS, importa valor/categoria, curadoria preservada no sync, parcelamento via getInstallments, validação de conexão MP, recompra Payment Brick, /pagar, domain-status) foi auditado item a item. O único achado de risco real do ciclo é o **API-009** (rate-limit ausente nos endpoints de parcelas).
 
 ## Achados
 
-### [API-004] onboarding-tour aceita corpo silenciosamente com default em vez de validar
-- **Severidade:** P3
+### [API-009] Endpoints públicos de parcelas (MP) sem rate limiting — abuso da API do MP / enumeração de BIN
+- **Severidade:** P2
 - **Status:** Aberto
-- **Local:** `src/app/api/painel/onboarding-tour/route.ts:24-33`
-- **Evidência:** `let dontShowAgain = true; try { const body = await req.json(); if (typeof body?.dontShowAgain === "boolean") dontShowAgain = body.dontShowAgain } catch { /* mantém true */ }`. Body inválido ou ausente não é rejeitado — assume `true`.
-- **Impacto:** Cosmético/baixo. É uma preferência de UI do próprio usuário autenticado; aceitar default é tolerável. Apenas inconsistente com o padrão "valida e 400" do resto da API.
-- **Correção:** Opcional — validar com `z.object({ dontShowAgain: z.boolean() })` e responder 400 em corpo malformado, ou documentar explicitamente que o default é intencional. Como o efeito é inócuo, pode ser **Aceito (risco assumido)**.
-- **Verificação:** N/A (decisão de padronização).
-
-### [API-005] Envelope de erro flat (`{ error, code }`) diverge do formato sugerido pela referência (`{ error: { code, message } }`)
-- **Severidade:** P3
-- **Status:** Aberto
-- **Local:** Convenção global — ex.: `src/app/api/loja/checkout/status/route.ts`, `src/app/api/checkout/status/route.ts`, e centenas de outros.
-- **Evidência:** O projeto padroniza respostas em `{ data: ... }` para sucesso e `{ error: "mensagem", code?: "CODE" }` (flat) para erro. A referência sugere `{ error: { code, message } }` aninhado e documentação OpenAPI.
-- **Impacto:** Nenhum funcional — a convenção é consistente internamente e nenhum terceiro consome essa API (é app-interno; não há consumidor externo como JR Multas/Nexa). Ausência de OpenAPI é aceitável para API privada (referência: "Ausência = P2/P3"). Fica como P3 de consistência/documentação.
-- **Correção:** Decisão de produto: (a) manter a convenção flat e documentá-la num `docs/api/conventions.md`, ou (b) padronizar para o envelope aninhado se algum consumidor externo surgir. Recomendado (a).
-- **Verificação:** N/A (decisão de padronização/documentação).
-
-### [API-006] Webhook do LMS não exige X-PMB-Event-Id — entrega sem header não é idempotente (ticket/efeito duplicado em retry)
-- **Severidade:** P3
-- **Status:** Aberto
-- **Local:** `src/app/api/webhooks/lms/route.ts:54,85-97`
-- **Evidência:** A idempotência depende do header `X-PMB-Event-Id` (gravado em `webhook_logs.external_event_id`, que é `@unique`). Mas o receiver trata o header como OPCIONAL:
+- **Local:** `src/app/api/checkout/installments/route.ts:18-55` (PMB, 100% público) · `src/app/api/loja/checkout/installments/route.ts:24-73` (vitrine, gated só por header do proxy) · secundário `src/app/api/aluno/comprar/installments/route.ts:24-70` (session-gated)
+- **Evidência:** Nenhum dos dois endpoints públicos chama `rateLimit(...)`. Cada POST válido dispara `getCardInstallments(token, { amount, bin })` → **uma chamada externa ao Mercado Pago** (`GET /v1/payment_methods/installments`) usando o access token real da unidade (ou o token PMB em `checkout/installments`, obtido via `getPmbMpAccessTokenAsync()`), com `AbortSignal.timeout(20_000)` por tentativa e até 3 retries. Os endpoints-irmãos do mesmo fluxo de checkout **têm** rate-limit (`RATE_LIMITS.publicCheckout` = 10/60s em `loja/checkout/process`, `checkout/mp/process`, `aluno/comprar/process`; `RATE_LIMITS.publicCupom`, `RATE_LIMITS.cobrancaPayCard`, etc. em `src/lib/ratelimit.ts:180-199`). O `bodySchema` valida `amount` e `bin` (`/^\d{6,8}$/`), mas não limita frequência.
+- **Impacto:** Um cliente não autenticado pode marretar esses endpoints. Cada request = 1 chamada externa ao MP com o token da conta → (a) **exaustão do rate-limit da conta MP** da unidade/PMB (o MP passa a devolver 429 e as consultas de parcela dos clientes reais degradam — cai na síntese 1..12, então o checkout não quebra, mas perde a informação de juros reais); (b) **enumeração de BIN** (varrer BINs revela bandeira/emissor e faixas de parcelamento por conta); (c) **amplificação de recursos** — cada request segura uma conexão serverless por até 20s (timeout) + lookup no banco. Não há mudança de estado financeiro nem vazamento de segredo, e há degradação graciosa — por isso P2, não P1.
+- **Correção:** Aplicar rate-limit no início dos três handlers, espelhando o padrão dos endpoints-irmãos. Ex.: adicionar em `src/lib/ratelimit.ts` `installments: { name: "installments", limit: 20, windowSec: 60 }` e, no topo de cada handler (após `withRequestContext`, antes do parse):
   ```ts
-  // linha 86-97
-  if (eventId) {
-    const existing = await prisma.webhookLog.findUnique({ where: { externalEventId: eventId }, ... })
-    if (existing?.processed) return NextResponse.json({ received: true, duplicate: true })
-    logId = existing?.id ?? (await createLog(eventType, payload, request, eventId))
-  } else {
-    logId = await createLog(eventType, payload, request, null)   // <- sem dedupe
-  }
+  const rl = await rateLimit(request, RATE_LIMITS.installments)
+  if (!rl.ok) return rateLimitResponse(rl)
   ```
-  Quando o LMS entrega SEM o header (ou com header vazio), cada re-entrega cai no `else` e é processada de novo. Para `student.question.created` (`lib/webhooks/lms-process.ts:155-177` → `createStudentSupportTicket`), isso cria um `ContactMessage` NOVO a cada retry — ticket de suporte duplicado. Para `course.completed` a emissão de certificado tem dedup interna (seguro) e o catálogo é idempotente (overwrite), então só o suporte e o progresso sofrem efeito visível.
-- **Impacto:** Baixo. Depende de o LMS deixar de mandar o `X-PMB-Event-Id` numa re-entrega — comportamento que o contrato proíbe, mas que o receiver não força. Resultado: tickets de suporte duplicados na caixa de atendimento da revenda/PMB se o LMS retransmitir um `student.question.created` sem id estável.
-- **Correção:** Em `src/app/api/webhooks/lms/route.ts`, após validar a assinatura e o tipo (linha ~73), exigir o header: se `!eventId`, retornar `NextResponse.json({ error: "X-PMB-Event-Id obrigatório" }, { status: 400 })` ANTES de criar o log/processar. Atualizar o doc da aba API (`/admin/configuracoes`) e o MD copiável para deixar o header como obrigatório no contrato. Alternativa mais robusta: derivar um event-id determinístico de `hash(eventType + rawBody)` quando o header faltar, e usá-lo como `externalEventId` para manter o dedupe.
-- **Verificação:** Enviar duas entregas idênticas SEM `X-PMB-Event-Id` (HMAC válido) para `/api/webhooks/lms` com `event-type: student.question.created` — após o fix, a 2ª deve retornar 400 (ou ser deduplicada) e `ContactMessage` deve existir só 1x. Teste unitário no estilo de `src/lib/webhooks/lms-webhook.test.ts`.
+  (import `{ rateLimit, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"`). Para `loja/checkout/installments`, chavear preferencialmente por `x-tenant-id`/IP; para `checkout/installments` (PMB) e `aluno/comprar/installments`, por IP/sessão. Manter `failOpen` como os demais checkout limiters (não usam failOpen → falha do Redis bloqueia; considerar `failOpen: true` para não derrubar o cálculo de parcela num outage do Redis — cruza `project_redis_outage_tenant_resilience`).
+- **Verificação:** Disparar >20 POSTs em 60s para `/api/checkout/installments` (BIN válido) e confirmar 429 a partir do 21º. Teste unitário no estilo de `src/lib/ratelimit` mockando o store; e `grep -L "rateLimit(" src/app/api/**/installments/route.ts` deve retornar vazio após o fix.
 
-### [API-007] course.published/unpublished do webhook LMS dispara re-sync COMPLETO do catálogo inline por evento (amplificação)
+### [API-007] Webhook LMS: `course.updated` vira um 3º gatilho de re-sync COMPLETO do catálogo por evento (amplificação piorada)
 - **Severidade:** P3
 - **Status:** Aberto
-- **Local:** `src/lib/webhooks/lms-process.ts:148-153` · `src/lib/catalog/sync-lms.ts:21+`
+- **Local:** `src/lib/webhooks/lms-process.ts:152-158` · `src/lib/catalog/sync-lms.ts:93-247`
 - **Evidência:**
   ```ts
-  // lms-process.ts:148-153
+  // lms-process.ts:152-158
   case "course.published":
-  case "course.unpublished": {
+  case "course.unpublished":
+  case "course.updated": {
     catalogSchema.parse(payload)
     await syncCatalogFromLMS("cron")   // <- sync de TODO o catálogo, não só do curso do evento
     return { ok: true, message: `catálogo sincronizado (${eventType})` }
   }
   ```
-  `syncCatalogFromLMS` faz `listLmsCourses()` + 1 chamada de detalhe (`getLmsCourse`) por curso (`sync-lms.ts` comentário "1 call extra por curso"). O receiver processa síncrono com `maxDuration=300` (`route.ts:13`). Cada evento de (des)publicação re-sincroniza o catálogo inteiro, não apenas o curso publicado.
-- **Impacto:** Ineficiência/amplificação. Um lote de publicações no LMS (ex.: importação em massa) gera N webhooks, cada um varrendo todo o catálogo (N×M chamadas externas). Não é vetor de DoS externo porque exige HMAC válido (só o LMS legítimo dispara), mas pode estourar tempo/limites em picos e atrasar o ack ao LMS. O comentário em `day-update.ts:23` ainda diz "o webhook LMS->PMB está desligado", inconsistente com o receiver agora ativo — não é bug, mas indica que o caminho não foi reavaliado para custo.
-- **Correção:** Em `processLmsWebhookEvent` (case published/unpublished), em vez de `syncCatalogFromLMS` completo, atualizar só o curso do evento por `lmsCourseId`/`lmsSlug` (espelhar o `updateMany` por `lmsCourseId` que o `day-update.ts:52-56` já faz para (des)publicação) ou debouncing (agendar um sync via flag e deixar o cron `sync-cursos-lms` consolidar). Atualizar o comentário de `day-update.ts:23` para refletir que o webhook está ativo.
-- **Verificação:** `grep` confirma que o case published/unpublished não chama mais `syncCatalogFromLMS` por evento; teste: simular 5 webhooks `course.published` e medir que o nº de chamadas a `listLmsCourses` não escala linearmente.
+  Antes (2026-06-24) só `published`/`unpublished` disparavam o re-sync completo. O commit `d2d3343` adicionou `course.updated`, que o LMS emite a **cada edição** de curso já publicado (preço, categoria, matriz, conteúdo — `LMS_WEBHOOK_EVENTS` em `lms-process.ts:18-27`). `syncCatalogFromLMS` faz `listLmsCourses()` + **1 `getLmsCourse(slug)` por curso** (`sync-lms.ts:99,111-113`) + propagação `ensureCourseForResellers` + `syncCourseLessons` por curso. O receiver processa **síncrono** com `maxDuration=300` (`route.ts:16`).
+- **Impacto:** Ineficiência/amplificação, agora num caminho **muito mais frequente** (toda edição vs. só troca de estado de publicação). Uma edição em massa no LMS (N cursos) gera N webhooks, cada um varrendo o catálogo inteiro (≈N chamadas de detalhe cada → O(N²) chamadas ao LMS), podendo estourar o tempo do ack e fazer o LMS **re-tentar** (auto-amplificação). Sem impacto de segurança (HMAC-gated) nem de integridade (sync é idempotente e a curadoria do admin é preservada — ver Cobertura). O comentário em `day-update.ts` sobre "webhook desligado" pode estar desatualizado.
+- **Correção:** Em `processLmsWebhookEvent` (case `updated`/`published`/`unpublished`), atualizar **só o curso do evento** por `lmsCourseId`/`lmsSlug` (espelhar o `updateMany` por `lmsCourseId` do `day-update.ts`), ou debouncing: marcar um flag e deixar o cron `sync-cursos-lms` consolidar. Se o payload de `course.updated` trouxer o id/slug do curso, tornar `catalogSchema` estrito para esse evento e sincronizar apenas aquele curso (nova função `syncSingleLmsCourse(slug)`).
+- **Verificação:** `grep` confirma que o case não chama mais `syncCatalogFromLMS` completo para `course.updated`; simular 5 webhooks `course.updated` e medir que `listLmsCourses` não escala linearmente com o nº de eventos.
+
+### [API-010] `createPreapproval`/`createPreference` retentam sem `X-Idempotency-Key` (janela estreita de assinatura/preferência duplicada)
+- **Severidade:** P3
+- **Status:** Aberto
+- **Local:** `src/lib/mercadopago/client.ts:132-137` (`createPreference`), `220-225` (`createPreapproval`), `46-103` (loop de retry) · callsites: `src/lib/mercadopago/transparent-process.ts:134` (assinatura MONTHLY), `src/app/api/admin/vendas/route.ts:389,430`, `src/app/api/aluno/comprar/route.ts:542,580`
+- **Evidência:** O `request()` genérico retenta em 5xx/rede/timeout (statusCode 0) até 3 vezes (`client.ts:81-99`). `createPayment` passa `X-Idempotency-Key` (`client.ts:153-161`) — protegido. Mas `createPreapproval` (assinatura recorrente) e `createPreference` **não** passam header de idempotência. Se o MP **cria** a preapproval e a resposta se perde (5xx/timeout), o retry gera uma **2ª assinatura autorizada**; só o último `preapproval.id` é gravado em `Enrollment.mpSubscriptionId` (`transparent-process.ts:152-154`), deixando a duplicata órfã porém **cobrando mensalmente**. Para `createPreference` o efeito é inócuo (link de checkout extra). `refundPayment` (MP) também retenta sem idempotência, mas **não tem callsites** (`grep` = só a definição) — sem impacto.
+- **Impacto:** Baixo e de janela estreita (só quando o MP commita a assinatura e depois falha a resposta com 5xx/timeout, num fluxo MONTHLY que é minoritário). Consequência: revendedor/aluno com **assinatura duplicada** cobrando em dobro. A referência exige "Idempotência nas chamadas que mutam (não enviar 2x no retry)".
+- **Correção:** Adicionar parâmetro `idempotencyKey` a `createPreapproval`/`createPreference` (como em `createPayment`) e passar `X-Idempotency-Key` estável por tentativa de checkout (ex.: `enrollment.id` para a assinatura; `external_reference` para a preference). O endpoint MP de preapproval aceita o header. Alternativa mínima: não retentar `createPreapproval` em 5xx (a criação de assinatura não deve ser retentada cegamente).
+- **Verificação:** Teste unitário de `createPreapproval` com mock que responde 502 na 1ª tentativa e 200 na 2ª, garantindo que ambas carregam o mesmo `X-Idempotency-Key`; confirmar que só 1 assinatura é criada no MP (mock conta chamadas com key distinta).
+
+### [API-004] onboarding-tour aceita corpo silenciosamente com default em vez de validar
+- **Severidade:** P3
+- **Status:** Aberto (candidato a Aceito — risco assumido)
+- **Local:** `src/app/api/painel/onboarding-tour/route.ts:24-32`
+- **Evidência:** `let dontShowAgain = true; try { const body = ...; if (typeof body?.dontShowAgain === "boolean") dontShowAgain = body.dontShowAgain } catch { /* mantém true */ }`. Corpo ausente/inválido não é rejeitado — assume `true`. Inalterado desde 2026-06-24.
+- **Impacto:** Cosmético. Preferência de UI do próprio usuário autenticado; aceitar o default é tolerável, apenas inconsistente com o padrão "valida e 400".
+- **Correção:** Opcional — `z.object({ dontShowAgain: z.boolean() })` + 400 em corpo malformado, ou documentar o default como intencional. Efeito inócuo → pode ser **Aceito**.
+- **Verificação:** N/A (decisão de padronização).
+
+### [API-005] Envelope de erro flat (`{ error, code }`) diverge do formato sugerido pela referência (`{ error: { code, message } }`)
+- **Severidade:** P3
+- **Status:** Aberto (candidato a Aceito — risco assumido)
+- **Local:** Convenção global — ex.: `src/app/api/checkout/status/route.ts`, `src/app/api/loja/checkout/status/route.ts`, e centenas de outros handlers.
+- **Evidência:** O projeto padroniza `{ data: ... }` no sucesso e `{ error: "mensagem", code?: "CODE" }` (flat) no erro. A referência sugere `{ error: { code, message } }` aninhado + documentação OpenAPI. Inalterado.
+- **Impacto:** Nenhum funcional — convenção consistente internamente e sem consumidor externo (API privada; "Ausência de OpenAPI = P2/P3"). P3 de consistência/documentação.
+- **Correção:** Decisão de produto: (a) manter a convenção flat e documentá-la em `docs/api/conventions.md` (recomendado), ou (b) migrar para envelope aninhado se surgir consumidor externo.
+- **Verificação:** N/A (decisão de padronização/documentação).
 
 ### [API-008] wa-client (engine WhatsApp/WAHA) lê process.env direto e não tem retry/backoff no envio
 - **Severidade:** P3
 - **Status:** Aberto
-- **Local:** `src/lib/automation/wa-client.ts:22-27,29-56,378-417`
-- **Evidência:** (1) Config lida via `process.env.WA_GATEWAY_URL`/`WA_GATEWAY_API_KEY` direto (linhas 23-24), contrariando a regra do projeto em `src/lib/env.ts` ("NÃO leia process.env.X diretamente em código novo — sempre via env.ts"); `WA_GATEWAY_*` nem está no schema de `env.ts` (não há fail-fast/validação no boot). (2) `gatewayFetch` tem timeout (15s, AbortController) e degradação graciosa (stop/logout/delete toleram falha), mas `sendTextMessage` (linha 395-407) e `startSession` NÃO têm retry/backoff: um 5xx transitório do engine na hora do envio falha a mensagem em definitivo (o caller marca como falha de envio; sem reentrega).
-- **Impacto:** Baixo. A integração é só de SAÍDA (não há webhook de entrada do WAHA — confirmado por grep: nenhum handler inbound). O QR/connect é interativo (usuário re-tenta na tela). O dispatch de automação é fire-and-forget; um blip transitório do engine perde aquele disparo de WhatsApp (lead não recebe a mensagem automática). A referência pede "Retry com backoff exponencial em falha transitória" e "Validação de config no boot das integrações" — ambos parcialmente não atendidos para o WAHA. ⚠️MIGRAÇÃO: o engine WAHA roda fora da Vercel; na VPS Swarm, `WA_GATEWAY_URL` apontará para o serviço interno — adicionar ao schema de env.ts ajuda a pegar config divergente cedo (lição do 401 por chave divergente citada na referência).
-- **Correção:** (1) Adicionar `WA_GATEWAY_URL`/`WA_GATEWAY_API_KEY` ao schema de `src/lib/env.ts` (opcionais; warning em prod via `assertEnv` se a automação estiver ligada e faltar) e ler via `env`. (2) Envolver `sendTextMessage` (e opcionalmente `startSession`) num retry com backoff exponencial (2-3 tentativas, só em 5xx/rede/timeout — não em 4xx nem em `WhatsAppNumberNotFoundError`), espelhando o padrão de `lib/lms/client.ts` e `lib/asaas/client.ts`.
-- **Verificação:** `grep "process.env.WA_GATEWAY" src` retorna zero (passou a usar env.ts); teste unitário de `sendTextMessage` com mock de engine devolvendo 503 na 1ª e 200 na 2ª, esperando 1 mensagem entregue.
+- **Local:** `src/lib/automation/wa-client.ts:23-24,35,378+`
+- **Evidência:** (1) Config via `process.env.WA_GATEWAY_URL`/`WA_GATEWAY_API_KEY` direto (linhas 23-24), contrariando a regra do projeto (`src/lib/env.ts`) — e `WA_GATEWAY_*` **não** está no schema de `env.ts` (`grep` = zero; sem fail-fast no boot). (2) `gatewayFetch` tem timeout 15s (AbortController) e degradação graciosa (stop/logout/delete toleram falha), mas `sendTextMessage` (linha 378+) e `startSession` **não** têm retry/backoff: um 5xx transitório do engine no envio falha a mensagem em definitivo (sem reentrega). Inalterado desde 2026-06-24.
+- **Impacto:** Baixo. Integração só de SAÍDA (não há webhook inbound do WAHA — `grep` zero). Um blip do engine perde aquele disparo de automação (lead não recebe a mensagem). ⚠️MIGRAÇÃO: na VPS Swarm `WA_GATEWAY_URL` aponta para serviço interno — adicionar ao schema de `env.ts` pega config divergente cedo (lição do 401 por chave divergente da referência). Nota: o **Vercel client** (`src/lib/vercel/client.ts:12-28`) segue o mesmo padrão de `process.env` direto (timeout 15s, sem retry — decisão documentada); menor prioridade, mesma recomendação.
+- **Correção:** (1) Adicionar `WA_GATEWAY_URL`/`WA_GATEWAY_API_KEY` (e, no mesmo esforço, `VERCEL_TOKEN`/`VERCEL_PROJECT_ID`/`VERCEL_TEAM_ID`) ao schema de `src/lib/env.ts` (opcionais; warning em prod se a automação/domínio estiver ligada e faltar). (2) Envolver `sendTextMessage` (e opcionalmente `startSession`) em retry com backoff exponencial (2-3 tentativas, só em 5xx/rede/timeout — não em 4xx nem `WhatsAppNumberNotFoundError`), espelhando `lib/lms/client.ts`/`lib/asaas/client.ts`.
+- **Verificação:** `grep "process.env.WA_GATEWAY" src` retorna zero; teste unitário de `sendTextMessage` com mock devolvendo 503 na 1ª e 200 na 2ª → 1 mensagem entregue.
 
 ## Cobertura
 
-Áreas de route handlers e integrações revisadas (294/294 handlers + clients + crons + webhooks):
+Route handlers e integrações revisados (309/309 handlers + 5 clients + Vercel client + 17 crons + 3 webhooks). Delta de ~45 commits desde 2026-06-24 auditado item a item.
 
-### Webhooks (3/3) — OK (1 P3 no LMS)
-- `api/webhooks/asaas/route.ts` — **OK**. Token timing-safe (`tokensMatch`/`timingSafeEqual`), branch PMB (env `ASAAS_WEBHOOK_TOKEN` via `validateAsaasWebhook`) vs revenda (`asaasWebhookToken` por-tenant, descriptografado), Zod via `parseAsaasWebhookPayload`, slug sanitizado `[a-z0-9_-]{1,64}`, WebhookLog com token redatado (4+4 chars), 200 rápido / 500 para retry, processador idempotente por `asaasPaymentId`. `runtime=nodejs`, `maxDuration=60`.
-- `api/webhooks/mercadopago/route.ts` + `lib/mercadopago/process.ts` + `lib/mercadopago/webhook.ts` — **OK**. HMAC SHA256 (manifest `id;request-id;ts`) + anti-replay, early-reject sem x-signature/x-request-id em prod, idempotência em 3 camadas (dedupe `mpPaymentId` → resolve tenant → HMAC por-conta → `getPayment` com token do tenant 404 cross-tenant → advisory lock no fulfill), IPN legado deduplicado, secret PMB plain vs revenda criptografada, dev-bypass DUPLO-gated (`MP_WEBHOOK_DEV_BYPASS===1` **e** `NODE_ENV!==production`), x-signature redatado no log.
-- `api/webhooks/lms/route.ts` + `lib/webhooks/lms-webhook.ts` + `lib/webhooks/lms-process.ts` — **OK / Achado API-006, API-007**. HMAC SHA256 sobre `"<ts>.<rawBody>"` com `PMB_WEBHOOK_SECRET`, anti-replay 10min, assinatura validada ANTES de qualquer efeito/log, idempotência por `externalEventId` (@unique) com tratamento de corrida P2002, 503 quando secret ausente, 200/500/400 corretos. **API-006**: idempotência não é forçada quando o header `X-PMB-Event-Id` falta. **API-007**: published/unpublished re-sincroniza o catálogo inteiro inline.
+### Webhooks (3/3) — OK
+- `api/webhooks/asaas/route.ts` — **OK**. Token timing-safe (`tokensMatch`/`timingSafeEqual`), branch PMB (`ASAAS_WEBHOOK_TOKEN`) vs revenda (`asaasWebhookToken` por-tenant descriptografado), Zod via `parseAsaasWebhookPayload`, slug sanitizado, WebhookLog com token redatado, 200 rápido / 500 para retry, processador idempotente por `asaasPaymentId`. `runtime=nodejs`, `maxDuration=60`.
+- `api/webhooks/mercadopago/route.ts` + `lib/mercadopago/{process,webhook}.ts` — **OK**. HMAC SHA256 (manifest `id;request-id;ts`) + anti-replay, early-reject sem x-signature/x-request-id em prod, idempotência em camadas (dedupe `mpPaymentId` → resolve tenant → HMAC por-conta → `getPayment` 404 cross-tenant → advisory lock no fulfill), secret PMB plain vs revenda cifrada, dev-bypass duplo-gated.
+- `api/webhooks/lms/route.ts` + `lib/webhooks/{lms-webhook,lms-process}.ts` — **OK / API-007**. HMAC SHA256 sobre `"<ts>.<rawBody>"` com `PMB_WEBHOOK_SECRET`, anti-replay 10min, assinatura validada ANTES de qualquer efeito/log, 503 sem secret. **API-006 CORRIGIDO**: idempotência agora usa `lmsDedupKey(eventId, eventType, rawBody)` (`lms-webhook.ts:79-90`) — quando o header `X-PMB-Event-Id` falta, deriva `sha256:<hash(eventType.rawBody)>` como `externalEventId` (@unique), então re-entrega idêntica sem header **deduplica** (não cria mais ticket de suporte duplicado). **API-007**: `course.published`/`unpublished`/`updated` re-sincronizam o catálogo inteiro inline (agora com `updated` como 3º gatilho por-edição).
 
-### Crons (16/16) — OK
-Todos com `isCronAuthorized` (CRON_SECRET timing-safe via `lib/auth/bearer`, rejeita se env ausente) + `maxDuration` + idempotência documentada. GET delega a POST (auth preservada): cleanup-webhook-logs, reactivate-paid, reconcile-tenant-payments, referral-monthly-payout (catch-up, idempotente), **resync-lms-credentials** (NOVO — relê GET /students/:id, regrava lmsLogin/Senha cifrada/PortalUrl, dry-run por padrão, nunca expõe senha plana), **resync-platform-passwords** (relê EA, regrava ea_aluno_senha cifrada, dry-run, nunca expõe senha), **sync-lms-branding** (NOVO — backfill PUT /tenants/:id, dry-run, best-effort), sweep-abandoned-leads, sweep-students-expired, sweep-students-overdue, sweep-tenants-overdue, sweep-visitor-events, sync-cursos (EA), sync-cursos-lms (match por `lmsCourseId`), sync-day-update-lms (delta + cursor), sync-progresso. **OK**. (Obs P3 menor: sync-cursos-lms e sync-day-update-lms vazam `err.message` no corpo do 502, mas são CRON_SECRET-protegidos — não público.)
+### Crons (17/17) — OK
+Todos com `isCronAuthorized` (CRON_SECRET timing-safe via `lib/auth/bearer`, rejeita se env ausente) + `maxDuration` + idempotência. GET delega a POST preservando auth. **Novo desde a última auditoria:** `fix-gateway-collapse` (`route.ts:57` `isCronAuthorized`; GET/POST = mesmo `handle`; disparo via `run_cron`) — **OK**. Demais: cleanup-webhook-logs, reactivate-paid, reconcile-tenant-payments, referral-monthly-payout, resync-lms-credentials (dry-run, senha nunca em claro), resync-platform-passwords (dry-run), sync-lms-branding (dry-run), sweep-abandoned-leads, sweep-students-expired, sweep-students-overdue, sweep-tenants-overdue, sweep-visitor-events, sync-cursos (EA), sync-cursos-lms, sync-day-update-lms (delta+cursor), sync-progresso. **OK**.
 
-### Clients de integração (5/5 + transient) — OK
-- `lib/asaas/client.ts` — timeout 20s/tentativa (`AbortSignal.timeout`), retry 3 + backoff exp, não-retry 4xx, normaliza `/v3`, log de erro sem token. **OK**.
-- `lib/mercadopago/client.ts` — timeout 20s, retry 3 + backoff, `X-Idempotency-Key` em `createPayment`, token por-tenant descriptografado. **OK**.
-- `lib/lms/client.ts` — timeout 25s, retry 3 + backoff, `Idempotency-Key` em enrollment, Bearer `LMS_API_KEY`, 4xx não-retry, novo `putLmsTenantBranding` (PUT /tenants/:id). **OK**.
-- `lib/plataforma-cursos/client.ts` (EA, form-data!) — timeout 25s, retry 3 + backoff, DELETE via headers, erro de API (`data.erro`) não-retry. **OK**.
-- `lib/automation/wa-client.ts` (engine WhatsApp/WAHA, SAÍDA) — timeout 15s (AbortController), degradação graciosa, start idempotente. **Achado API-008** (process.env direto + sem retry no envio). Nenhum webhook de ENTRADA do WAHA (grep zero) — N/A para verificação de assinatura inbound.
-- `lib/webhooks/transient.ts` — classificação transitório vs terminal por tipo de erro (MP/Asaas 5xx|0, EA 5xx|sem-status, Prisma P2034/P1001/P1002/P1008/P1017). **OK**.
+### Clients de integração (5/5 + Vercel + transient) — OK
+- `lib/asaas/client.ts` — timeout 20s/tentativa, retry 3 + backoff exp, não-retry 4xx, `createPayment` mutante (revisar idempotência do Asaas em par com API-010, mas Asaas usa `externalReference`+dedupe no fulfill). **OK**.
+- `lib/mercadopago/client.ts` — timeout 20s, retry 3 + backoff, `X-Idempotency-Key` em `createPayment`, token por-tenant descriptografado; **novos**: `getAccountInfo` (`GET /users/me`, valida conexão) e `getCardInstallments` (`GET /v1/payment_methods/installments`, parcelas reais). **OK** quanto a resiliência; **API-010** para `createPreapproval`/`createPreference` (retry sem idempotência). `refundPayment` sem callsites (dead code).
+- `lib/lms/client.ts` — timeout 25s, retry 3 + backoff, `Idempotency-Key` em enrollment, Bearer `LMS_API_KEY`, 4xx não-retry. Novos campos de catálogo (`suggestedPriceCents`, `categories`, `curriculum`) tipados. **OK**.
+- `lib/plataforma-cursos/client.ts` (EA, form-data!) — timeout 25s, retry 3 + backoff, DELETE via headers, erro de API não-retry. **OK**.
+- `lib/vercel/client.ts` — timeout 15s, **sem retry** (decisão documentada; usuário re-tenta manualmente). `getProjectDomain`/`getDomainConfig`/`verifyProjectDomain`/`addProjectDomain`/`removeProjectDomain` usados por `resolveCustomDomainStatus` (aplica domínio só com apex+www verificados E `misconfigured=false`). Lê `process.env.VERCEL_*` direto (nota em API-008). **OK**.
+- `lib/automation/wa-client.ts` (WAHA, SAÍDA) — timeout 15s, degradação graciosa. **API-008** (process.env direto + sem retry no envio). Sem webhook inbound (N/A assinatura).
+- `lib/webhooks/transient.ts` — classificação transitório vs terminal (MP/Asaas 5xx|0, EA 5xx|sem-status, Prisma P2034/P1001/P1002/P1008/P1017). **OK**.
+
+### Catálogo LMS — sync + curadoria (delta 7be5d7e / 45d8af6 / 9b7fcc4) — OK
+- `lib/catalog/sync-lms.ts` — **OK**. **Curadoria preservada (45d8af6):** no update, `status: existing.status` (`sync-lms.ts:195`) impede o sync de reverter INATIVO→ATIVO; `hiddenMain`/`visibilityMode` só definidos no CREATE (`:204`); `categoryId` só definido se ainda não houver principal (`:171`); `precoVitrineMain` (override do admin) nunca é tocado — o sync alimenta só `precoOriginal` (preço-base). **Importa valor+categoria+ativa na rede (7be5d7e):** curso novo com `precoOriginal>0` E ≥1 categoria nasce `hiddenMain=false` e propaga via `ensureCourseForResellers` (best-effort, `:228-235`). **Matriz curricular (9b7fcc4):** `mapCurriculumToMatriz` re-sincroniza `matrizCurricular`; `null` (campo ausente) = não mexe (`:145,158`). `ensureLmsCategory` idempotente por slug/nome. `syncCourseLessons` usa `$transaction([deleteMany, createMany])` (array-form) — mesmo padrão de `fulfill.ts`/`process.ts` que funcionam em prod; **não é achado** (o array-form não é universalmente quebrado; a falha do bulk-edit 019a253 teve causa específica). **OK**.
+
+### Conexão de gateway (delta 236eef0) — OK
+`painel/config/connect-mp` — **OK**. Valida o token com `getAccountInfo` (ping `GET /users/me`) antes de gravar: 401/403 → 400 `MP_TOKEN_INVALID` (não grava); 5xx/timeout/429 → 502 `MP_VALIDATION_UNAVAILABLE` (não afirma inválido, não grava); `site_id !== "MLB"` → 400 `MP_ACCOUNT_NOT_BR`. Token e webhookSecret cifrados (`encrypt`). Auth RESELLER + `tenantId`, Zod com refine.
+
+### Recompra Payment Brick / /pagar (delta 81a54ab / 264b113) — OK
+`aluno/comprar/process` — **OK**. Rate-limit `publicCheckout`, `requireStudentSession`, Zod, **anti-IDOR** (`enrollment.studentId === session.studentId`, `:91`), guard de estado (ACTIVE/COMPLETED → idempotente; só PENDING paga), `tenant.status==="ACTIVE"`, ramifica ASAAS (conta da unidade) vs MP, `notification_url` via `mpWebhookUrl()`/`asaasWebhookUrl()`. `aluno/comprar/installments` — session-gated, degradação graciosa (API-009 secundário). `aluno/comprar/status` — poller escopado. Página `/aluno/comprar/pagar/[id]` force-dynamic.
+
+### Parcelamento MP (delta 89c8e50 / 4b25a5e / 39da6a7 / e6bb029) — OK / API-009
+`checkout/installments` (PMB), `loja/checkout/installments` (vitrine), `aluno/comprar/installments` (recompra) — Zod (`amount` positivo ≤1M, `bin` `\d{6,8}`), degradação graciosa (falha → payerCosts vazio → síntese 1..12), `installments` capado em `MAX_CARD_INSTALLMENTS` no server (`transparent-process.ts:190-193`, ignora o que o browser mandar). **API-009**: faltam rate-limit nos endpoints públicos.
+
+### Domínio próprio (delta a42ccb8) — OK
+`painel/dominio/verify` — **OK**. `requireResellerSession`, dispara `verifyProjectDomain` nas 2 variantes (best-effort), decide por `resolveCustomDomainStatus` (`domain-status.ts`: `pointed = verified && misconfigured===false` nas DUAS variantes), grava `domainVerified` + `invalidateTenant`, 502 se a Vercel falhar (não altera flag). `painel/dominio` (set/remove) coberto. Aplica domínio só após os 2 registros DNS apontarem.
 
 ### Provisionamento de matrícula (fulfill.ts) — OK
-`lib/enrollment/fulfill.ts` — advisory lock por `(gateway, externalPaymentId)`, dedupe `mp/asaasPaymentId`, guard `Payment.tenantId === Enrollment.tenantId` (anti-receita-cruzada), branch EA (`ensureStudentOnPlatform`+`linkCourseToStudent`) vs LMS (`createLmsEnrollment` com Idempotency-Key=payment id), **credenciais de plataforma por matrícula** (`res.partnerAccess` → `lmsLogin`/`lmsSenha=encrypt(...)` cifrada/`lmsPortalUrl`, senha NUNCA logada — linhas 757-764, 882-884), pacotes mistos via `provisionCourseForStudent`, falha parcial LMS alerta+segue. **OK**.
+`lib/enrollment/fulfill.ts` — advisory lock por `(gateway, externalPaymentId)`, dedupe `mp/asaasPaymentId`, guard `Payment.tenantId === Enrollment.tenantId` (anti-receita-cruzada), branch EA vs LMS (`createLmsEnrollment` com Idempotency-Key=payment id), credenciais de plataforma cifradas (`lmsSenha=encrypt(...)`, nunca logadas), pacotes mistos, falha parcial LMS alerta+segue. Usa `$transaction([...])` array-form (funciona em prod — pagamentos efetivam). **OK**.
 
-### Branding white-label LMS — OK
-`lib/lms/branding.ts:syncTenantBrandingToLms` — best-effort, no-op se LMS não configurado ou tenant `__pmb__`, NUNCA lança (não derruba criar/editar revenda). Disparado de `lib/resellers/create.ts:296`, `painel/vitrine/route.ts:127`, `painel/vitrine/upload/route.ts:145,218` + backfill via cron. **OK**.
+### SSO LMS / suporte / branding — OK
+`aluno/curso/[enrollmentId]/acessar` (escopo por `studentId`+status+`provider===LMS`, SSO uso-único TTL 5min); `lib/support/student-support.ts` (ContactMessage roteado por tenant, best-effort); `lib/lms/branding.ts` (best-effort, no-op se LMS off ou tenant `__pmb__`, nunca lança). **OK**.
 
-### SSO LMS / acesso ao curso — OK
-`aluno/curso/[enrollmentId]/acessar/route.ts` — `requireStudentSession`, escopo por `studentId` + status ACTIVE/COMPLETED + `provider===LMS`, ramifica `lmsPlayback` redirect (portalUrl do banco, server-controlled) vs SSO (`createLmsSsoToken` uso-único TTL ~5min sob demanda no clique). **OK**.
+### Checkout / pagamentos (Zod + rate-limit) — OK / API-009
+`loja/checkout` (+process/package/status/installments/checkout-inquiry), `checkout` (+mp/process/package/status/installments/confirmacao/[id]/status/enrollment/[id]), `aluno/comprar` (+process/status/installments), `aluno/pagamentos/verificar`, `cobranca/[paymentId]` (+billing-info/pay-card), `loja/cupom/validar`. Status endpoints escopam por `tenantId` (anti-IDOR); `notification_url` via helpers em todos os call-sites. Endpoints de **process/pay-card/cupom/verificar têm rate-limit**; os de **installments não** (API-009).
 
-### Suporte roteado por tenant (LMS) — OK (cruza API-006)
-`lib/support/student-support.ts:createStudentSupportTicket` — `ContactMessage` kind STUDENT_SUPPORT roteado por tenant (PMB→SUPER_ADMIN/email PMB; revenda→TENANT/email do dono), best-effort (persist/notif/email não lançam), sem PII em log. Único ponto não-idempotente é a falta de enforcement do event-id no receiver (**API-006**).
-
-### Endpoints de teste de integração (config) — OK
-`admin/config/test-mp` (conta tenants com token, não chama MP), `test-asaas`, `test-plataforma` — `requireAdminSession`, sem SSRF (não recebem URL do client), sem vazamento de segredo. **OK**.
-
-### Checkout / pagamentos (Zod + rate-limit) — OK
-`loja/checkout` (+process/package/status/checkout-inquiry), `checkout` (+mp/process/package/status/confirmacao/[id]/status), `aluno/comprar`, `aluno/pagamentos/verificar`, `cobranca/[paymentId]` (+billing-info/pay-card), `loja/cupom/validar`. Status endpoints escopam por `tenantId` (anti-IDOR), `notification_url`/`notificationUrl` via `mpWebhookUrl()`/`asaasWebhookUrl()` em TODOS os call-sites (grep de concat manual = zero — API-001 fechado). **OK**.
-
-### admin/vendas (ex-API-001) — OK (CORRIGIDO)
-`src/app/api/admin/vendas/route.ts` — ambos os branches MP (preapproval linha 388 + preference linha 450) usam `mpWebhookUrl()`; Asaas usa `asaasWebhookUrl()` (514, 567). `back_urls`/`back_url` ainda usam `appUrl` concat (linhas 384, 438) — aceitável (browser segue 307→www; não é entrega POST). Bolsa de estudo (fulfill síncrono sem gateway) com rollback de enrollment em falha. Cap de cupom corrigido (efetivo, cobre FIXED). **OK**.
+### admin/vendas — OK
+`src/app/api/admin/vendas/route.ts` — branches MP (preapproval `:389` + preference `:430`) usam `mpWebhookUrl()`; Asaas usa `asaasWebhookUrl()`. `createPreapproval`/`createPreference` sem idempotência no retry (API-010). Bolsa de estudo com rollback. Cap de cupom efetivo. `admin/vendas/[id]/sync-payment` guard admin. **OK**.
 
 ### Endpoints públicos (Zod + rate-limit) — OK
-`contato`, `leads`, `pmb/leads`, `loja/leads`, `loja/track`, `public/capture-ref`, `public/validate-ref`, `revendedores/cadastro`, `catalogo/sugestoes`, `placar/stream` (SSE, agregação server-side), `metrics/public`, `metrics` (`home/showcase`), `observability/client-log` (rate-limit failOpen + Zod + max 500/200 chars + redação PII no logger), `push/public-key`. **OK**.
+`contato`, `leads`, `pmb/leads` (via loja), `loja/leads` (rate-limit `lojaLeads`+`lojaLeadsByEmail`), `loja/track` (`lojaTrack` failOpen), `public/capture-ref`, `public/validate-ref`, `catalogo/sugestoes`, `metrics/public` (ISR), `home/showcase`, `observability/client-log` (rate-limit failOpen + Zod + redação PII), `push/public-key`. **OK**.
 
 ### Auth / internal (Zod/token) — OK
-`auth/[...nextauth]`, `auth/forgot-password`, `auth/reset-password`, `auth/alterar-senha-inicial`, `auth/handoff` + `handoff/start` (token uso-único, anti-open-redirect), `internal/resolve-tenant` (`isInternalAuthorized` + rate-limit). **OK**.
+`auth/[...nextauth]`, `auth/forgot-password` (`authForgot`), `auth/reset-password` (`authReset`), `auth/alterar-senha-inicial`, `auth/handoff` + `handoff/start` (token uso-único, anti-open-redirect), `internal/resolve-tenant` (`isInternalAuthorized` + rate-limit). **OK**.
 
-### Uploads (MIME+magic+tamanho+dim) — OK
-`admin|painel/banner/upload`, `admin|painel/certificate-template/upload`, `admin|painel/pacotes/capa`, `painel/cursos/[id]/capa`, `painel/vitrine/upload`, `admin/system-settings/{eja,tecnica,group-logo}/upload`, `admin/financeiro/referral-payouts/[id]/proof`. Validam tipo + `isValidImageMagic` + bytes + dimensões + rate-limit. **OK**. ⚠️MIGRAÇÃO: Supabase Storage → MinIO.
-
-### Automação WhatsApp (admin + painel) — OK (1 P3)
-`admin|painel/automacao/whatsapp/{connect,disconnect,pair,status}`, `.../config`, `.../templates`, `lib/automation/{dispatch,leads,wa-client}`. Guard de sessão+role/tenant, gate `pmbAutomationEnabled`/automação por tenant, sessionName randomizado, recuperação de estado FAILED. **Achado API-008** (config + retry no client). **OK** quanto a authZ.
-
-### Push (Web Push / VAPID) — OK
-`push/devices` (GET), `push/devices/[id]` (DELETE), `push/public-key` (GET, expõe só VAPID_PUBLIC_KEY — público por design), `push/subscribe` (POST/DELETE — `auth()` + Zod `subscribeSchema`/`deleteSchema`). **OK**.
-
-### Sub-revendas (commits recentes) — OK
-`admin/tenants/[id]/can-sell-resellers` (PUT, `requireAdminSession` SUPER_ADMIN + Zod boolean), `painel/revendas` (POST, `requireResellerSeller` + Zod + escopo `sellerTenantId`), `painel/revendas/leads/[id]` (PATCH, guard + Zod). Gate de plano (209/239) server-side. **OK**.
-
-### Admin (130) e Painel (86) handlers — OK
-Varredura exaustiva por categoria de mutação (alunos, atendimento, automação, banner, catálogo, certificados, comissões/indicações, config, cupons, equipe, financeiro, home-sections, leads, notificações, pacotes, referrals, relatórios, revendedores, sub-revendas, system-settings, tenants, treinamentos, vendas, vitrine): todos os POST/PUT/PATCH/DELETE que leem body usam `safeParse`/`.parse` Zod (inline ou via lib helper, incl. home-sections agora com schema Zod) + guard de sessão+role/tenant. **OK**.
-
-### Handlers GET com prisma write — OK (verificado)
-Escritas dentro de GET são apenas `upsert`/`create` idempotentes de provisionamento de linha-default (`systemSettings` id="default" lazy-init em automacao/config, day-update, certificate auto-issue flag). **Nenhuma mutação de estado de negócio via GET.** **OK**.
+### Uploads / Automação / Push / Sub-revendas / Admin(130)+Painel(86) — OK
+Uploads (MIME+magic+bytes+dimensões+rate-limit; ⚠️MIGRAÇÃO Storage→MinIO). Automação WhatsApp (guard+gate+sessionName randomizado; **API-008** no client). Push (VAPID; `auth()`+Zod). Sub-revendas (gate de plano server-side). Varredura exaustiva de POST/PUT/PATCH/DELETE dos handlers admin/painel: todos com Zod (`safeParse`/`.parse`) + guard de sessão+role/tenant. Bulk de cursos migrado para updates sequenciais (019a253) — falhas parciais reportadas em `failed[]`. Handlers GET com prisma write = apenas upsert/create idempotente de linha-default. **OK**.
 
 ### ⚠️MIGRAÇÃO (Vercel→VPS/Swarm)
-- **apex vs www / 307:** RESOLVIDO em todos os call-sites de webhook por `lib/tenant/urls.ts:webhookBaseUrl()` (força `www.` quando host == apex) — grep de concat manual = zero (API-001 fechado). Na VPS+Traefik, garantir regra de redirect apex→www OU `NEXT_PUBLIC_APP_URL` no host canônico que recebe POST sem redirect.
-- **Edge runtime:** Nenhum route handler em `src/app/api/**` usa `runtime="edge"` (todos `nodejs`). Bom para o Swarm. `src/proxy.ts` (middleware, Edge) é fora do escopo deste domínio.
-- **@upstash/redis (REST não fala TCP):** `lib/redis` é usado por rate-limit e cache de tenant; no Swarm trocar por `ioredis`/`redis` TCP ou SRH. `/api/health` faz `redis.ping()` informativo (não derruba). Webhooks/crons não dependem de Redis para correção.
-- **WAHA gateway (API-008):** engine roda fora da Vercel; `WA_GATEWAY_URL` apontará para serviço interno no Swarm. Adicionar ao schema de env.ts (hoje `process.env` direto) reduz risco de config divergente (lição WAHA da referência).
-- **Segredos por env:** `MP_WEBHOOK_SECRET`, `ASAAS_WEBHOOK_TOKEN`, `PMB_WEBHOOK_SECRET`, `CRON_SECRET`, `INTERNAL_SECRET`, `EA_API_*`, `LMS_API_*`, `WA_GATEWAY_*` em `.env.example`. Helpers (`isCronAuthorized`, `validateAsaasWebhook`, `validateLmsWebhookSignature`) fail-closed quando env ausente — provisionar TODOS via Docker Swarm secrets antes do cutover, senão webhooks/crons retornam 401/503/500. `MP_WEBHOOK_DEV_BYPASS` NUNCA deve ser setado em prod (gate duplo já protege, mas não incluir nos secrets de prod).
-- **Crons:** hoje agendados via Supabase pg_cron (`app_internal.run_cron`). Na VPS, reagendar os 16 jobs (cron do SO / scheduler do Swarm) batendo nas rotas com `Authorization: Bearer $CRON_SECRET`. Os crons "write=1" (resync-lms-credentials, resync-platform-passwords, sync-lms-branding) são dry-run por padrão — agendar com `?write=1` quando reativar.
-- **Webhook do LMS (PMB_WEBHOOK_URL):** o LMS precisa apontar `PMB_WEBHOOK_URL` para o host canônico (www) e compartilhar `PMB_WEBHOOK_SECRET`; na VPS, garantir TLS + host correto (assinatura é sobre rawBody, não sobre URL — só o roteamento muda).
+- **apex vs www / 307:** call-sites de webhook usam `lib/tenant/urls.ts` (força `www.`). Na VPS+Traefik, garantir redirect apex→www OU host canônico recebendo POST sem redirect.
+- **Edge runtime:** nenhum route handler em `src/app/api/**` usa `runtime="edge"` (todos `nodejs`). `src/proxy.ts` é Edge (fora do escopo API).
+- **@upstash/redis (REST≠TCP):** `lib/redis` (rate-limit + cache de tenant) — no Swarm trocar por `ioredis`/`redis` TCP ou SRH. **API-009** aumenta a dependência de rate-limit — garantir Redis TCP disponível antes do cutover (ou `failOpen` nos limiters de installments).
+- **WAHA / Vercel clients (API-008):** engines/API fora da Vercel; `WA_GATEWAY_URL` e `VERCEL_*` via `process.env` direto — adicionar ao schema de `env.ts` pega config divergente cedo.
+- **Segredos por env:** `MP_WEBHOOK_SECRET`, `ASAAS_WEBHOOK_TOKEN`, `PMB_WEBHOOK_SECRET`, `CRON_SECRET`, `INTERNAL_SECRET`, `EA_API_*`, `LMS_API_*`, `WA_GATEWAY_*`, `VERCEL_*` — provisionar TODOS via Docker Swarm secrets; helpers fail-closed retornam 401/503/500 se ausentes. `MP_WEBHOOK_DEV_BYPASS` nunca em prod.
+- **Crons:** hoje via Supabase pg_cron (`app_internal.run_cron`). Na VPS, reagendar os 17 jobs batendo nas rotas com `Authorization: Bearer $CRON_SECRET`; os dry-run (`resync-*`, `sync-lms-branding`) com `?write=1` quando reativar.
+- **Webhook LMS:** o LMS precisa apontar `PMB_WEBHOOK_URL` para o host canônico (www) e compartilhar `PMB_WEBHOOK_SECRET` (assinatura é sobre rawBody, só o roteamento muda).

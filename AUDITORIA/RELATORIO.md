@@ -1,121 +1,80 @@
 # Relatório de Auditoria — Profissionaliza Mais Brasil
-_Data: 2026-06-24 · Auditoria somente-leitura, cobertura total (sem amostragem) · 11 domínios · Opus 4.8_
+_Data: 2026-07-03 · Auditoria somente-leitura, cobertura total (sem amostragem) · 11 domínios · Fable 5 (subagentes auditor)_
 
-Base de cobertura: `auditoria/INVENTARIO.md` — **131 telas · 294 route handlers (390 métodos) · 324 componentes · 193 módulos lib · 44 models · 33 enums · 75 migrations · 16 crons · 3 webhooks · 37 testes/218 casos**.
-Detalhe por domínio: `auditoria/achados/<dominio>.md`. Esta rodada **re-verificou** cada achado de 2026-06-20 contra o código atual e auditou os commits recentes (webhook LMS, credenciais por matrícula, branding white-label, sub-revendas).
+Base de cobertura: `auditoria/INVENTARIO.md` (2026-07-03) — **137 telas · 309 route handlers (406 métodos) · 342 componentes · 251 módulos lib (720 exports) · 44 models · 33 enums · 81 migrations · 17 crons · 3 webhooks · 53 arquivos de teste/328 casos**.
+Esta rodada **re-verificou cada achado de 2026-06-24** contra o código atual e auditou o delta de ~45 commits/237 arquivos (+13k linhas): BI hub de relatórios, blindagem de gateway (8541afd), parcelamento MP, placar de indicações, tours guiados, `/pagar`, recompra Payment Brick, sync LMS de catálogo/matriz curricular, domínio próprio gateado por DNS, menu recolhível, impersonação de equipe interna.
+
+Detalhe por domínio: `auditoria/achados/<dominio>.md`.
 
 ---
 
 ## Sumário executivo
 
-O sistema **melhorou de forma relevante desde 2026-06-20**. O Portão Zero-Erro segue verde (`tsc` 0, `eslint` 0/1, **218 testes**), a suíte de testes saltou de 8 arquivos/44 casos para **37/218**, o CI agora roda **Lint+Typecheck+Test+Build** bloqueando merge, e **~20 achados anteriores foram fechados** — entre eles: `xlsx` HIGH (→ `exceljs`), webhook MP perdido no apex (→ `mpWebhookUrl()`), `/health` vazando erro do DB, erasure do aluno propagando para o CPF do certificado, fallback de URL pública de certificado removido, 4 furos de lifecycle SaaS (reactivate-paid, automação, price>0, refund/payout), e o P0 anterior do bootstrap de migrations (→ `coreSchemaExists`). **Os 4 commits recentes (LMS/sub-revendas) foram auditados em detalhe e NÃO introduziram brechas** — HMAC timing-safe + anti-replay + idempotência no webhook LMS, AES-256-GCM nas credenciais por matrícula, authz escopada por `referrerTenantId` nas sub-revendas.
+O sistema segue **saudável e melhorando**: Portão Zero-Erro verde (`tsc` 0 erros, `eslint` 0 erros, **53 arquivos/328 testes** verdes, CI bloqueante), a blindagem do P0 histórico de colapso de gateway foi re-auditada em profundidade **sem regressão**, e ~7 achados da rodada anterior foram fechados (redação de PII no logger, path interno do certificado, dedup do webhook LMS, JSON cru no acesso LMS, aria-labels, `.env.example`, xlsx). O delta de 45 commits **não introduziu nenhum P0 novo**.
 
-Os riscos remanescentes concentram-se em **4 frentes**:
-
-1. **🔴 P0 — Exposição de PII (1 causa-raiz, mitigada mas não fechada).** `DB-001 = LGPD-001`: o bucket `certificates` do Supabase guarda PDF com **CPF+nome** e o código **ainda persiste/gera URL pública** (`/object/public/`) em `Certificate.pdfUrl`. **Mitigações já presentes:** read-paths usam signed URL/stream, path usa `cuid` não-enumerável, comprovantes de saque já migraram para bucket privado. **O que falta:** (a) parar de gerar/persistir URL pública + backfill (código — eu faço); (b) **virar o bucket para privado no Supabase** (ação manual sua). Enquanto o bucket estiver público, GET anônimo vaza CPF.
-
-2. **🟠 P1 — Negócio/UX e LGPD corrigíveis agora (código).** `PERF-002` (home/vitrine `force-dynamic`, **zero** `unstable_cache`/`revalidateTag` em todo `src/`, fan-out serial de seções → TTFB/LCP ruins na página de maior tráfego); `PERF-003` (catálogo público `/cursos` e `/loja/cursos` **sem paginação** e com `include` completo); `LGPD-002` (pixels/Analytics **carregam antes do consentimento**; banner só "Entendi", sem recusar — propaga para todas as vitrines).
-
-3. **🟠 P1 — Arquitetural / processo (decisão sua).** `SEG-001 = DB-002` (**sem RLS** — isolamento 100% em código; sem rede de segurança no banco — arquitetural); `OPS-001` (`npm run build` **aplica migrations na prod** — acoplamento build↔schema-prod, rebaixado de P0); `OBS-002` (sem DR/RTO/RPO/runbooks); `LGPD-004` (sem ROPA / lista de subprocessadores).
-
-4. **🟡 ⚠️MIGRAÇÃO Vercel→VPS (não "agora", pré-cutover).** `OPS-002/003/004/005`: sem `output:'standalone'`/Dockerfile; `@upstash/redis` (REST) **não fala Redis TCP**; `proxy.ts` assume Edge-runtime; Supabase Storage→MinIO (reescrever URLs persistidas). Prontidão VPS ainda baixa, mas **não bloqueia a produção atual**.
-
-**Veredito:** nenhum vazamento cross-tenant ativo, nenhum billing/checkout quebrado, Portão verde. **1 causa-raiz P0 real** (CPF em bucket público — parte código eu fecho, parte flip do bucket é sua) + um conjunto de P1 de performance/LGPD corrigíveis agora e P1 arquiteturais/migração que exigem sua decisão.
-
----
+Restam **1 P0 e 18 P1 abertos**. O P0 é o já conhecido **R1: certificados com CPF em bucket Supabase público** (o código já não persiste URL pública, mas o toggle do bucket + backfill dependem de ação manual no console). Os P1 novos de maior risco do delta são: **SEG-009** (BI hub do admin expõe receita/MRR/GMV de todo o ecossistema a papéis de escopo limitado), **DB-001** (agregações do BI sem índice → seq scan nas 3 maiores tabelas), **PERF-010** (webhook LMS `course.updated` dispara sync completo síncrono por edição) e **DB-004** (padrão `$transaction([...])` dinâmico — o mesmo que já falhou em prod — vivo em 3 rotas de reordenação). Seis dos P1 de devops são de **prontidão de migração Vercel→VPS** (⚠️MIGRAÇÃO), não bugs em produção hoje.
 
 ## Nota por domínio
 
-| Domínio | Nota | P0 | P1 | P2 | P3 | Destaque |
+| Domínio | Nota /10 | P0 | P1 | P2 | P3 | Tendência vs 2026-06-24 |
 |---|---|---|---|---|---|---|
-| seguranca | 8.5 | 0 | 1 | 3 | 3 | Postura madura; commits LMS corretos; falta RLS como rede |
-| banco | 7.5 | **1** | 1 | 2 | 4 | 4 achados antigos fechados; bucket c/ PII (P0) + sem RLS |
-| codigo | 8.7 | 0 | 0 | 3 | 2 | Gate verde, zero `any`; env espalhado + catches silenciosos |
-| performance | 6.0 | 0 | 2 | 7 | 3 | Zero cache de dados; home/catálogo sem cache/paginação |
-| observabilidade | 6.8 | 0 | 1 | 5 | 3 | Logging exemplar; sem error-tracker/DR; PII bruta em WebhookLog |
-| frontend | 8.7 | 0 | 0 | 1 | 2 | 3/4 antigos corrigidos; LMS access devolve JSON cru (P2) |
-| api | 9.3 | 0 | 0 | 0 | 3 | Webhooks/idempotência sólidos; 2 riscos antigos fechados |
-| devops | 6.0 | 0 | 5 | 4 | 2 | P0 fechado, CI c/ build; 5 P1 são ⚠️MIGRAÇÃO |
-| saas | 8.5 | 0 | 0 | 2 | 3 | Núcleo financeiro forte; 4 lifecycle fixes; audit trail parcial |
-| lgpd | 5.0 | **1** | 2 | 2 | 3 | CPF em bucket público (P0); consentimento; ROPA |
-| testes | 7.0 | 0 | 0 | 5 | 1 | Saltou 3→7: 218 testes, CI c/ build; falta E2E + 3 gaps LMS |
-| **TOTAL** | — | **2** | **12** | **34** | **29** | — |
+| api | 9.0 | 0 | 0 | 1 | 5 | ↑ (API-006 fechado) |
+| frontend | 9.0 | 0 | 0 | 0 | 2 | ↑ (FE-005/006 fechados) |
+| codigo | 8.8 | 0 | 0 | 1 (+1 aceito) | 4 | ↑ |
+| saas | 8.5 | 0 | 0 | 2 | 4 | = (gateway blindado confirmado) |
+| seguranca | 8.0 | 0 | 2 | 2 | 3 | ↓ (novo SEG-009 no BI hub) |
+| testes | 7.5 | 0 | 0 | 11 | 2 | ↑ (+110 casos; gaps mapeados) |
+| banco | 7.0 | 0 | 4 | 2 | 4 | ↓ (DB-001/DB-004 novos) |
+| observabilidade | 6.8 | 0 | 1 | 5 | 4 | = (nada corrigido; delta nasceu instrumentado) |
+| devops | 6.0 | 0 | 6 | 5 | 1 | = (OPS-012 fechado; migração parada) |
+| performance | 6.0 | 0 | 3 | 6 | 4 | ↓ (PERF-010 escalado) |
+| lgpd | 5.0 | 1 | 2 | 5 | 2 | ↑ (3 fechados; P0 pendente de ação manual) |
+| **Total (abertos)** | — | **1** | **18** | **40** | **35** | **94 achados** |
 
-> **P0 reais = 2 IDs (`DB-001` e `LGPD-001`) = 1 causa-raiz** (bucket público com PII). `SEG-001` e `DB-002` também são o mesmo achado (sem RLS).
+> Sobreposições deliberadas (mesmo problema visto por 2 lentes): LGPD-001 ≡ DB-002 (bucket de certificados); SEG-001 ≡ DB-003 (ausência de RLS como rede de segurança).
 
----
+## Backlog priorizado (P0 + P1, risco × esforço)
 
-## Backlog priorizado — P0 e P1 (por risco × esforço)
-
-### 🔴 P0 — antes de qualquer outra coisa
-
-| # | ID(s) | Problema | Parte código (eu) | Parte manual (você) |
-|---|---|---|---|---|
-| 1 | **DB-001 = LGPD-001** | Bucket `certificates` com CPF; `pdfUrl` pública persistida | Parar de gerar/persistir `/object/public/` em `pdfUrl`; garantir signed URL em todo read-path; backfill dos `pdfUrl` existentes; teste | **Virar o bucket `certificates` → privado no Supabase** (descrevo o passo) |
-
-### 🟠 P1 — corrigíveis agora (código, com Portão)
-
-| # | ID | Domínio | Problema | Esforço |
-|---|---|---|---|---|
-| 2 | **PERF-003** | perf | Catálogo público `/cursos` e `/loja/cursos` sem paginação + `include` completo | Médio (+teste) |
-| 3 | **PERF-002** | perf | Home/vitrine `force-dynamic` sem cache de dados + fan-out serial de seções | Médio (+teste) |
-| 4 | **LGPD-002** | lgpd | Pixels/Analytics carregam antes do consentimento; banner sem "recusar" | Médio (+teste) |
-
-### 🟠 P1 — decisão sua (arquitetural / processo)
-
-| # | ID | Domínio | Problema | Natureza |
-|---|---|---|---|---|
-| 5 | **SEG-001 = DB-002** | seg/banco | Sem RLS — isolamento 100% em código | Arquitetural → **descrever** (mitigação = tenant sempre derivado da sessão, já em vigor) |
-| 6 | **OPS-001** | devops | `build` aplica migrations na prod (acoplamento) | Posso **endurecer** o runner; mudar o fluxo de deploy = **decisão sua** |
-| 7 | **OBS-002** | observ. | Sem DR/RTO/RPO/runbooks | Doc/processo (posso escrever o runbook) |
-| 8 | **LGPD-004** | lgpd | Sem ROPA / lista de subprocessadores | Doc (posso escrever; precisa sua validação de DPAs) |
-
-### 🟡 P1 — ⚠️MIGRAÇÃO Vercel→VPS (não "agora", pré-cutover)
-
-| # | ID | Problema |
-|---|---|---|
-| 9 | **OPS-002** | Sem `output:'standalone'` / Dockerfile / .dockerignore / compose / .nvmrc |
-| 10 | **OPS-003** | `@upstash/redis` (REST) não fala Redis TCP (proxy + ratelimit) |
-| 11 | **OPS-004** | `proxy.ts` assume Edge-runtime — revalidar p/ Node no Swarm |
-| 12 | **OPS-005** | Supabase Storage REST → MinIO (reescrever URLs persistidas) |
-
----
-
-## ⚠️MIGRAÇÃO Vercel→VPS — checklist consolidado (não bloqueia produção atual)
-
-1. **Redis REST→TCP:** `@upstash/redis` + `@upstash/ratelimit` + fetch REST cru em `proxy.ts` → `ioredis`/`redis` ou SRH. Cache de tenant e rate-limit quebram sem isso. (OPS-003)
-2. **`output:'standalone'`** ausente + faltam Dockerfile multi-stage, `.dockerignore`, stack Swarm, Traefik labels, `.nvmrc`/`engines`. (OPS-002/010)
-3. **Proxy Edge** (`src/proxy.ts`) vira Node middleware no Swarm — rever premissas (Redis REST, hop interno). (OPS-004)
-4. **Supabase Storage→MinIO/S3:** recriar buckets, migrar objetos, **reescrever URLs persistidas** no banco, ajustar CSP (`s3.bmbr.com.br` falta em `connect-src`). Converge com o fix P0 do bucket privado. (OPS-005)
-5. **Domínios custom/SSL** via `lib/vercel/client.ts` → Traefik + Let's Encrypt (impacto de negócio em revendas com domínio próprio). Otimizador de imagem (`images.unoptimized`) inexistente fora da Vercel. (OPS-006/PERF-008)
-6. **Postgres self-hosted:** Supavisor→pgBouncer (transaction mode, revisar `max`, prepared statements), manter `DIRECT_URL`, **backup pg_dump+WAL com restore testado**. (OPS-008)
-7. **Crons pg_cron/pg_net** (extensões Supabase) → scheduler próprio (16 jobs). (OPS-009)
-8. **Secrets via Docker Swarm** (`/run/secrets`, suporte `*_FILE` em `env.ts`); migrar 59 leituras de `process.env` diretas. (OPS-007/COD-003)
-9. **Observabilidade:** Vercel Log Drains/Analytics somem → Loki/Promtail + GlitchTip + Prometheus/Grafana antes do corte. (OBS-006)
-10. **LGPD:** residência de dados/subprocessadores mudam → atualizar Política + ROPA antes do cutover. (LGPD-005)
-
----
+| # | ID | Sev | Domínio | Título | Esforço | Observação |
+|---|---|---|---|---|---|---|
+| 1 | LGPD-001 / DB-002 | **P0** | lgpd·banco | Certificados com CPF em bucket Supabase público | Médio | ⚠️ exige **ação manual sua** (toggle do bucket no console) + backfill de linhas legadas; código de path interno já deployado |
+| 2 | SEG-009 | P1 | seguranca | BI hub do admin expõe dados de todo o ecossistema a papéis limitados (`PMB_SALES`, `PMB_RESELLER_MGR`…) | Baixo | Corrigível em código: aplicar o mesmo gate do export CSV nos módulos `src/lib/reports/bi/*` |
+| 3 | DB-001 | P1 | banco | Agregações do BI sem índice (`createdAt`/`paid_at`) → seq scan em Student/Enrollment/Payment | Baixo | Migration aditiva + `@@index` no schema |
+| 4 | PERF-010 | P1 | performance | Webhook LMS `course.updated` dispara sync COMPLETO síncrono a cada edição | Baixo/Médio | Sync incremental do curso do evento (payload já traz os dados) |
+| 5 | DB-004 | P1 | banco | `$transaction([...map])` dinâmico (padrão que já falhou em prod) em 3 rotas de reordenação | Baixo | Mesmo fix do 019a253: updates sequenciais |
+| 6 | PERF-003 | P1 | performance | Catálogo público sem paginação + `include: {course: true}` | Médio | Paginação/limite + select enxuto |
+| 7 | PERF-002 | P1 | performance | Home pública/vitrine `force-dynamic` sem cache de dados cross-request | Médio | Cache Redis/unstable_cache com TTL curto |
+| 8 | API-009* | P2 | api | Endpoints públicos de parcelas MP sem rate limiting (abuso do token da unidade) | Baixo | *P2, mas promovido ao topo por ser vetor público de abuso e fix pequeno |
+| 9 | OBS-002 | P1 | observabilidade | DR sem RTO/RPO, sem runbooks, sem drill de restore | Médio | Documentação operacional (`docs/operacoes/`) |
+| 10 | LGPD-002 | P1 | lgpd | Pixels carregam sem consentimento; banner sem recusa | Médio | ⚠️ contraria decisão registrada do dono — **precisa da sua palavra** antes de mudar comportamento |
+| 11 | LGPD-004 | P1 | lgpd | Sem lista nominal de subprocessadores/ROPA | Baixo | Documento legal |
+| 12 | OPS-001 | P1 | devops | `npm run build` aplica migrations na prod durante o build | Médio | Desacoplar (job de migração separado) — muda mecanismo de deploy, validar com você |
+| 13 | OPS-013 | P1 | devops | Crons dependem de pg_cron aplicado à mão, sem prova de ativo em prod | Baixo | Verificação manual + monitor |
+| 14 | SEG-001 / DB-003 | P1 | seguranca·banco | Sem RLS como rede de segurança (isolamento 100% em código) | Alto | Decisão registrada; recomendação: junto com a migração VPS |
+| 15 | OPS-002 | P1 | devops | ⚠️MIGRAÇÃO sem `output:'standalone'`/Dockerfile/compose | Médio | Pré-requisito da VPS; inócuo hoje |
+| 16 | OPS-003 | P1 | devops | ⚠️MIGRAÇÃO `@upstash/redis` REST não fala Redis TCP | Médio | Pré-requisito da VPS |
+| 17 | OPS-004 | P1 | devops | ⚠️MIGRAÇÃO `proxy.ts` assume Edge runtime | Médio | Pré-requisito da VPS |
+| 18 | OPS-005 | P1 | devops | ⚠️MIGRAÇÃO storage acoplado à Supabase Storage REST | Médio | Pré-requisito da VPS (MinIO/R2) |
 
 ## Cobertura
 
-Todos os itens do `INVENTARIO.md` receberam veredito por ≥1 domínio (cada `achados/*.md` traz a seção Cobertura):
-- **294 route handlers** → seguranca (authz/tenant: 294/294), api (Zod/idempotência), performance (listagens). Sem IDOR por input.
-- **131 telas + 324 componentes** → frontend (131/131; 3/4 achados antigos corrigidos; FE-005 novo).
-- **193 lib** → codigo, performance, seguranca.
-- **44 models / 75 migrations** → banco (índices/RLS/runner), saas (lifecycle).
-- **16 crons / 3 webhooks** → api + performance + saas + devops + observabilidade.
-- **37 testes/218 casos** → testes (verdes; lacunas E2E + 3 gaps LMS mapeados).
-- Itens N/A documentados em cada `achados/*.md`. **Sem lacuna de cobertura.**
+- **frontend**: 137/137 telas com veredito individual (tabela em `achados/frontend.md`) + 342/342 componentes + 17 boundaries. Zero link morto, zero rota estruturalmente quebrada.
+- **banco**: 44/44 models, 33/33 enums, 81/81 migrations, runner, seed, 4 libs de storage.
+- **seguranca/api**: 309 route handlers cobertos (auth/authz/tenant-scoping/validação); 3 webhooks (assinatura+idempotência); 17 crons (CRON_SECRET); clients EA/Asaas/MP/LMS/Vercel (timeout/retry).
+- **codigo**: 251 módulos lib / 720 exports; ciclos (madge), exports mortos, envs fora do schema Zod.
+- **observabilidade**: 292/309 handlers com logger estruturado; crons/webhooks/SSE auditados.
+- **testes**: mapa do que tem/não tem teste por área crítica (fluxos de dinheiro, webhooks, guards, proxy, crons).
+- Lacuna de cobertura: nenhuma identificada — todos os itens do inventário foram cobertos por ≥1 domínio.
 
----
+## Próximos passos (Fase 2 — correção)
 
-## Próximos passos (Fase 2) — proposta de ordem
+Ordem recomendada de `/corrigir` (P0→P1, segurança e banco primeiro):
+1. `/corrigir seguranca P1` — SEG-009 (BI hub × papéis) — baixo esforço, alto risco.
+2. `/corrigir banco P1` — DB-001 (índices) + DB-004 (reorder sequencial). DB-002/LGPD-001: parte código + **ação manual sua no Supabase**.
+3. `/corrigir api P2` — API-009 (rate limit nas parcelas MP).
+4. `/corrigir performance P1` — PERF-010, depois PERF-002/003.
+5. `/corrigir observabilidade P1` + docs (OBS-002, LGPD-004).
+6. P1 ⚠️MIGRAÇÃO (OPS-001..005, 013): trilha separada de prontidão de migração — decisão sua sobre quando.
+7. P2/P3 domínio a domínio na sequência.
 
-Começando por **segurança/banco** (regra da missão), atômico e com Portão Zero-Erro por achado:
-
-1. **P0 #1 (DB-001/LGPD-001)** — parte de código (parar URL pública + signed URL + backfill + teste). **Descrevo a você** o flip do bucket Supabase (parte manual).
-2. **P1 corrigíveis agora:** PERF-003 → PERF-002 → LGPD-002 (cada um com teste).
-3. **P2/P3 de maior valor por domínio:** FE-005 (JSON cru no acesso LMS), COD-006 (catches silenciosos no fluxo financeiro), QA-010/011/012 (testes do webhook LMS), LGPD-009 (retenção de leads/contatos), API-006 (idempotência por header), DB-006 (retenção `email_logs`), OBS-008/009.
-4. **Itens que exijo seu OK** (não executo sem confirmação): flip de bucket (P0 manual), RLS (arquitetural), mudança de fluxo de deploy (OPS-001), setar/rotacionar segredos no Vercel, qualquer migration destrutiva, itens ⚠️MIGRAÇÃO.
-
-> Cada correção segue **Portão Zero-Erro** (install→typecheck→lint→build→test) e commit atômico; vermelho → reverte e deixa `Aberto`.
+Itens que **exigem sua decisão/ação manual** (regra: nada destrutivo sem perguntar): toggle do bucket `certificates` no console Supabase + backfill (LGPD-001); mudança do comportamento dos pixels/consentimento (LGPD-002 — contraria decisão registrada sua); desacoplar migrations do build (OPS-001 — muda mecanismo de deploy); verificação dos jobs pg_cron em prod (OPS-013).

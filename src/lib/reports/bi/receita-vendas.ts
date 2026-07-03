@@ -22,10 +22,27 @@ function parseSegment(sp: URLSearchParams): Segment {
   return s === "pmb" || s === "revenda" ? s : "todos"
 }
 
+/**
+ * Resolve o segmento efetivo respeitando o escopo do papel (SEG-009).
+ * PMB_SALES (vendedor de curso B2C) é forçado à vitrine PMB (`tenantId = null`)
+ * independentemente do `segment` pedido na query — nunca vê receita de
+ * revendedores. Os demais papéis desta aba (SUPER_ADMIN, PMB_FINANCEIRO) têm
+ * visão de todo o ecossistema e escolhem o segmento livremente.
+ */
+export function resolveSegment(
+  role: string,
+  sp: URLSearchParams,
+): { segment: Segment; scopedToPmb: boolean } {
+  const scopedToPmb = role === "PMB_SALES"
+  return { segment: scopedToPmb ? "pmb" : parseSegment(sp), scopedToPmb }
+}
+
 export const receitaVendasModule: BiModule = {
   async run(ctx: BiContext) {
-    const { period, sp } = ctx
-    const segment = parseSegment(sp)
+    const { period, sp, session } = ctx
+    // PMB_SALES só enxerga a vitrine PMB — nunca receita de revendedores; o
+    // split PMB×Revendedores é omitido para não revelar o total das revendas.
+    const { segment, scopedToPmb } = resolveSegment(session.role, sp)
 
     const paymentWhere: Prisma.PaymentWhereInput = {
       mpStatus: "APPROVED",
@@ -164,7 +181,12 @@ export const receitaVendasModule: BiModule = {
           value: Number(g._sum.amount ?? 0),
         })),
       },
-      {
+    ]
+
+    // Split de origem só para papéis com visão de todo o ecossistema —
+    // revela o total das revendas, fora do escopo de PMB_SALES.
+    if (!scopedToPmb) {
+      series.push({
         id: "split",
         kind: "donut",
         title: "PMB × Revendedores",
@@ -175,8 +197,8 @@ export const receitaVendasModule: BiModule = {
           { x: "Vitrine PMB", value: pmbTotal },
           { x: "Revendedores", value: revendaTotal },
         ],
-      },
-    ]
+      })
+    }
 
     const tables: ReportTable[] = [
       {

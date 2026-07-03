@@ -26,13 +26,18 @@ const ALL: UserRole[] = [
 
 export const REPORT_TABS: ReportTabMeta[] = [
   {
+    // Resumo executivo do ecossistema (MRR de todas as revendas, top revendas
+    // por GMV, funil global). Sem recorte por papel viável → restrito aos papéis
+    // com visão de todo o ecossistema. Espelha o least-privilege do export CSV.
     slug: "visao-geral",
     label: "Visão geral",
     icon: "bar-chart-3",
-    roles: ALL,
+    roles: ["SUPER_ADMIN", "PMB_FINANCEIRO"],
     defaultFor: ["SUPER_ADMIN"],
   },
   {
+    // PMB_SALES (vendedor de curso B2C) é forçado ao segmento PMB no módulo
+    // (receita-vendas.ts) — nunca vê receita de revendedores.
     slug: "receita-vendas",
     label: "Receita & vendas",
     icon: "trending-up",
@@ -40,10 +45,13 @@ export const REPORT_TABS: ReportTabMeta[] = [
     defaultFor: ["PMB_SALES"],
   },
   {
+    // Ecossistêmico (base total de alunos + alunos por revendedor). Sem variante
+    // PMB-escopada limpa → SUPER_ADMIN apenas. PMB_SALES obtém a visão PMB via
+    // export CSV `alunos-vitrine-pmb`.
     slug: "alunos-matriculas",
     label: "Alunos & matrículas",
     icon: "graduation-cap",
-    roles: ["SUPER_ADMIN", "PMB_SALES"],
+    roles: ["SUPER_ADMIN"],
   },
   {
     slug: "rede-revendedores",
@@ -66,10 +74,12 @@ export const REPORT_TABS: ReportTabMeta[] = [
     roles: ["SUPER_ADMIN", "PMB_FINANCEIRO", "PMB_RESELLER_MGR"],
   },
   {
+    // Ecossistêmico (cursos/cupons de todos os tenants). Sem variante
+    // PMB-escopada limpa → SUPER_ADMIN apenas.
     slug: "cursos-cupons",
     label: "Cursos & cupons",
     icon: "book-open",
-    roles: ["SUPER_ADMIN", "PMB_SALES"],
+    roles: ["SUPER_ADMIN"],
   },
   {
     slug: "leads-conversao",

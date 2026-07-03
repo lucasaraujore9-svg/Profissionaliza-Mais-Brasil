@@ -1,108 +1,159 @@
 # Auditoria — Testes / QA
-_Data: 2026-06-24 · Referência: .claude/skills/auditoria-saas/references/11-testes-qa.md · Itens do inventário cobertos: 12/12 relevantes_
+_Data: 2026-07-03 · Referência: .claude/skills/auditoria-saas/references/11-testes-qa.md · Itens do inventário cobertos: 20/20 relevantes_
 
 ## Resumo
-- Itens verificados: 12 · Achados: **P0=0 P1=0 P2=5 P3=1** · Nota do domínio: **7/10**
-- `npx vitest run` → **PASSOU**: 37 arquivos, **218 testes verdes** (~1.6s, determinísticos, sem flakiness).
-- `npx tsc --noEmit` → **0 erros**. `npm run lint` → **0 errors, 1 warning** não-bloqueante.
-- **Evolução desde 2026-06-20:** suíte saltou de 8 arquivos/44 testes para 37/218. **4 dos 9 achados anteriores foram CORRIGIDOS** (QA-001 isolamento de tenant, QA-002 webhook Asaas, QA-003 build no CI, QA-004 motor de comissão/clawback). O domínio deixou de ter risco P1.
-- O CI (`ci.yml`) agora roda **Lint + Typecheck + Test + Build** e bloqueia merge — Portão Zero-Erro institucionalizado. Resta a lacuna de integração/E2E e de cobertura de algumas funções puras novas (commits LMS).
+- Itens verificados: 20 · Achados: **P0=0 P1=0 P2=11 P3=2** · Nota do domínio: **7.5/10**
+- `npx vitest run` → **PASSOU**: **53 arquivos, 328 testes verdes** (~4s; sem flakiness; nenhum `.only`/`.skip`/`.todo`).
+- `npx tsc --noEmit` → **0 erros**. CI (`.github/workflows/ci.yml`) roda **Lint + Typecheck + Test + Build** e bloqueia merge (Portão Zero-Erro institucionalizado).
+- **Delta desde 2026-06-24 (37 arq/218 → 53 arq/328, +16 arq/+110 casos):** os 4 achados P1 antigos seguem **CORRIGIDOS** (QA-001 isolamento, QA-002 webhook Asaas, QA-003 build no CI, QA-004 comissão/clawback). Novos testes de alta qualidade chegaram para **gateway isolation** (`assert-tenant-gateway`, `mother-key` — regressão do incidente Polo Betim), **domain-status** (2 registros DNS), **parcelamento** (labels/teto), **cupons** (arredondamento half-even), **matriz LMS** (`mapCurriculumToMatriz`), **reports** (helpers: bucket/format/period/tabs/definitions). Nenhum achado antigo aberto foi endereçado.
+- **Persistem as lacunas de maior valor:** zero integração-contra-banco e zero E2E; e o **caminho de dinheiro pós-webhook** (processamento MP/Asaas → `fulfill.ts` → provisionamento/matrícula) continua **sem nenhum teste**. Vários módulos críticos novos (curadoria de catálogo, proxy/resolução de tenant, tenant-scoping das agregações de BI, auto-block) entraram **sem teste**.
 
 ---
 
 ## Achados
 
-### [QA-010] Dispatcher do webhook LMS (`processLmsWebhookEvent`) sem teste — só a assinatura é testada
+### [QA-013] Caminho de dinheiro pós-webhook (MP/Asaas → fulfillment/matrícula) sem nenhum teste — só a assinatura é testada
 - **Severidade:** P2
 - **Status:** Aberto
+- **Local:** `src/lib/mercadopago/process.ts` (processamento do pagamento aprovado + branch `isPmbVitrine`), `src/lib/enrollment/fulfill.ts` (matrícula primária + satélites + `provisionLmsAccess`/`provisionCourseForStudent`), `src/lib/asaas/fulfillment.ts`, `src/lib/mercadopago/fulfillment.ts`. Nenhum arquivo `*.test.ts` correspondente existe (`find src -name 'fulfill*.test.ts'` = vazio; `mercadopago/process.test.ts` inexistente).
+- **Evidência:** os testes de webhook cobrem **apenas validação de entrada**: `mercadopago/webhook.test.ts` testa `validateMpWebhookSignature` (HMAC + anti-replay, 7 casos) e `asaas/webhook.test.ts` testa `validateAsaasWebhook`/`parseAsaasWebhookPayload` (token + Zod, 10 casos). A lógica que **move dinheiro e provisiona acesso** — dedup por `WebhookLog`, criação de `Enrollment`/`Payment`, cálculo de satélites com `finalAmount:0` em pacotes, chamada de provisionamento EA vs LMS por `Course.provider`, tratamento de `provisioning.ok=false` (alerta SUPER_ADMIN e segue) — não tem teste. A referência classifica "evento duplicado é deduplicado (idempotência)" e checkout/billing como itens de maior peso (`11-testes-qa.md:9-10,16`).
+- **Impacto:** uma regressão no dedup do `WebhookLog` reprocessaria uma re-entrega do MP/Asaas (dupla matrícula, duplo e-mail — MEMORY "dup-email em re-entrega MP" já é ponto aberto); um erro no roteamento EA/LMS ou no cálculo de satélites de pacote só aparece em produção, após o cliente ter pago. É o coração comercial do produto rodando sem rede de segurança.
+- **Correção:** criar `src/lib/enrollment/fulfill.test.ts` e `src/lib/mercadopago/process.test.ts`. Mockar `@/lib/prisma`, `@/lib/lms/client`, `@/lib/plataforma-cursos/*`, `@/lib/notifications`, `@/lib/email/resend`. Casos mínimos: (a) pagamento aprovado cria 1 matrícula primária carregando o `Payment` + satélites com `finalAmount:0`; (b) `Course.provider="LMS"` chama `provisionLmsAccess` com Idempotency-Key = id do pagamento e NÃO chama o provisionamento EA; `provider="EA"` faz o inverso; (c) `provisioning.ok=false` dispara `createNotification` para SUPER_ADMIN e **não** lança; (d) branch `isPmbVitrine` usa `pmbContext` sintético e token plain, sem escrever `WebhookLog.tenantId`; (e) reentrada com o mesmo `WebhookLog` já processado → no-op (idempotência). Idealmente promover parte disso a um harness de integração Prisma (ver QA-006).
+- **Verificação:** `npx vitest run src/lib/enrollment/fulfill.test.ts src/lib/mercadopago/process.test.ts`
+
+### [QA-014] Tenant-scoping das agregações de BI (`aggregations.ts` / contexto do painel) sem teste — isolamento P0 do relatório
+- **Severidade:** P2
+- **Status:** Aberto
+- **Local:** `src/lib/reports/aggregations.ts:27` (`tenantCondition`), `:42/:68/:93/:117` (funções `*ByBucket`/`approvedRevenueTotal` com `$queryRawUnsafe`), `src/lib/reports/painel/context.ts:10` (`PainelBiContext.tenantId` — "ANCORADOURO de isolamento multi-tenant (P0)"). Nenhum teste em `src/lib/reports/*.test.ts` importa `aggregations`/`payload`/`prisma` (`grep -ln` = vazio).
+- **Evidência:** os 6 testes de reports adicionados no commit `9cefc8d` cobrem só helpers puros: `bucket.test.ts`, `format.test.ts`, `period.test.ts`, `tabs.test.ts`, `painel-definitions.test.ts`, `painel/tabs.test.ts` (formatação, gating de abas por papel, definição de período). A camada que efetivamente filtra por tenant — `tenantCondition` montando `AND tenant_id = $N` no SQL cru e o `where.tenantId` do `approvedRevenueTotal` — não tem teste. MEMORY "Hubs de BI 'Relatórios'" marca o `/painel/relatorios` como **tenant-scoped P0**. A referência trata o teste de isolamento de tenant como "ouro" (`11-testes-qa.md:13-14`).
+- **Impacto:** se `tenantCondition` regredir (ex.: cair o filtro quando `tenantId` é passado, ou `segment="revenda"` deixar de excluir PMB), o painel de uma revenda passa a somar receita/alunos de outros tenants — vazamento financeiro cross-tenant no relatório, exatamente o risco P0 do produto.
+- **Correção:** criar `src/lib/reports/aggregations.test.ts`. Mockar `@/lib/prisma` (`$queryRawUnsafe` como `vi.fn().mockResolvedValue([])` e `payment.aggregate`) e **inspecionar os argumentos passados**: (a) `approvedRevenueByBucket({tenantId:"t_x"})` → SQL contém `AND tenant_id = $4` e `args` inclui `"t_x"`; (b) `segment:"pmb"` sem tenantId → SQL contém `AND tenant_id IS NULL`; (c) `segment:"revenda"` → `AND tenant_id IS NOT NULL`; (d) sem tenantId nem segment → sem cláusula de tenant (visão admin "todos"); (e) `safeBucket` rejeita bucket fora da whitelist; (f) `approvedRevenueTotal` monta o `where.tenantId` correto em cada combinação.
+- **Verificação:** `npx vitest run src/lib/reports/aggregations.test.ts`
+
+### [QA-015] Curadoria do catálogo não-revertida pelo sync (fix 45d8af6) sem teste de regressão
+- **Severidade:** P2
+- **Status:** Aberto
+- **Local:** `src/lib/catalog/sync.ts:185-188` (UPDATE preserva `status`/`categoriaLoja` do `existing`), `src/lib/catalog/sync-lms.ts:93` (`syncCatalogFromLMS` — não força `status:"ATIVO"` no UPDATE). `sync-lms.test.ts` cobre **apenas** `mapCurriculumToMatriz` (4 casos), não as funções `syncCatalogFromEA`/`syncCatalogFromLMS`.
+- **Evidência:** o commit `45d8af6` ("sync nao reverte curadoria do admin") corrigiu um bug **que rodou em produção**: o sync diário reescrevia `status` e `categoriaLoja` (EA) e forçava `status:"ATIVO"` (LMS) a cada rodada, revertendo a curadoria do admin "no dia seguinte". A correção passou a preservar esses campos no UPDATE (só o CREATE os define). Não há nenhum teste exercitando esse ramo de UPDATE — a única cobertura nova foi o helper de matriz. Regra do CLAUDE.md: "toda mudança de comportamento ganha teste".
+- **Impacto:** sem regressão travada, uma refatoração futura do `dataBase`/UPDATE reintroduz a reversão silenciosa — curso que o admin desativou volta a `ATIVO` e volta a aparecer na vitrine, ou `categoriaLoja` curada é sobrescrita pelo feed. Só se percebe em produção, um dia depois do próximo sync.
+- **Correção:** criar `src/lib/catalog/sync.test.ts` e/ou estender `sync-lms.test.ts`. Mockar `@/lib/prisma` e o client de feed. Casos: (a) curso EA **existente** com `status:"INATIVO"`/`categoriaLoja:"X"` no banco e feed trazendo `status:"ATIVO"`/outra categoria → `course.update` chamado com `status:"INATIVO"` e `categoriaLoja:"X"` preservados; (b) curso EA **novo** → CREATE define `status`/`categoriaLoja` a partir do feed; (c) curso LMS existente marcado `INATIVO` → UPDATE **não** força `ATIVO`; (d) override de preço (`precoVitrineMain`) intocado no UPDATE.
+- **Verificação:** `npx vitest run src/lib/catalog/sync.test.ts`
+
+### [QA-016] Classificação de host / resolução de tenant do proxy (`src/proxy.ts`) sem teste — coração multi-tenant
+- **Severidade:** P2
+- **Status:** Aberto
+- **Local:** `src/proxy.ts:85` (`matchApex`), `:96` (`classifyHost`), `:73` (`stripPort`), `:67` (`isApexPassthrough`), `:139` (`resolveTenantFromRedis`), `:201` (`resolveTenantFromDB`). Nenhum `src/proxy.test.ts` (não existe teste de proxy no repo).
+- **Evidência:** o proxy é descrito no CLAUDE.md como "MIDDLEWARE MULTI-TENANT (CRITICO)": decide se um host é PMB institucional, vitrine `{slug}.livrecursos.com.br`, subdomínio **reservado** (www/app/api/…) ou domínio custom (lookup por `customDomain`). A lista de reservados e a classificação apex vs subdomínio são a barreira que impede um subdomínio reservado virar tenant e um host errado resolver o tenant errado. `classifyHost`/`matchApex`/`stripPort`/`isApexPassthrough` são funções **puras e determinísticas** (parse de string), triviais de unit-testar — e não têm teste algum. A referência pede explicitamente cobertura de "proxy/resolução de tenant".
+- **Impacto:** uma regressão na classificação (ex.: `www` ou `app` deixando de ser tratado como reservado, ou `stripPort` falhando com porta) faz um host reservado resolver como tenant ou uma vitrine servir o conteúdo errado — porta de entrada para vazamento cross-tenant. MEMORY "Resiliência a outage do Redis" já registra que o proxy `fail-open` vazou marca PMB nas revendas; isso reforça que o caminho merece regressão travada.
+- **Correção:** exportar `classifyHost`/`matchApex`/`stripPort`/`isApexPassthrough` (ou movê-las para `src/lib/tenant/host.ts`) e criar `src/lib/tenant/host.test.ts`. Casos: apex PMB e `www` → institucional; `app`/`api`/`admin`/… (lista de reservados) em `livrecursos.com.br` → reservado (nunca tenant); `polobetim.livrecursos.com.br` → tenant slug `polobetim`; host com `:3000` → `stripPort` remove a porta; domínio custom desconhecido → cai no lookup de banco. Para `resolveTenantFromRedis`/`resolveTenantFromDB`, mockar Redis/Supabase e cobrir cache-hit, cache-miss→DB fallback e falha de comando Redis (fail-open).
+- **Verificação:** `npx vitest run src/lib/tenant/host.test.ts`
+
+### [QA-017] Bloqueio/desbloqueio de alunos por inadimplência (`auto-block.ts`) sem teste
+- **Severidade:** P2
+- **Status:** Aberto
+- **Local:** `src/lib/auto-block.ts:36` (`blockTenantStudents`), `:89` (`unblockTenantStudents`). Sem `src/lib/auto-block.test.ts`.
+- **Evidência:** `auto-block.ts` (132 linhas) é o motor do fluxo "Bloqueio por Inadimplência" do CLAUDE.md (webhook Asaas OVERDUE → suspende tenant → bloqueia alunos na plataforma parceira). Escopa por `tenantId` e chama a API da plataforma (`status:"bloqueado"`/`"ativo"`). Não tem nenhum teste — nem do escopo por tenant, nem do `BlockResult`, nem do ramo EA vs LMS.
+- **Impacto:** regressão pode bloquear/desbloquear alunos do tenant errado (impacto direto no acesso pago do aluno) ou contabilizar mal o `BlockResult`, mascarando falhas de bloqueio. Um tenant inadimplente cujos alunos não são efetivamente bloqueados é prejuízo direto.
+- **Correção:** criar `src/lib/auto-block.test.ts`. Mockar `@/lib/prisma` (buscar alunos do tenant) e os clients de plataforma (EA/LMS). Casos: (a) `blockTenantStudents("t_x")` só toca alunos com `tenantId="t_x"` e chama o provider correto por `Course.provider`; (b) `BlockResult` conta sucessos/falhas corretamente; (c) falha parcial na API não interrompe o restante do lote; (d) `unblockTenantStudents` reativa simetricamente.
+- **Verificação:** `npx vitest run src/lib/auto-block.test.ts`
+
+### [QA-010] Dispatcher do webhook LMS (`processLmsWebhookEvent`) sem teste — só a assinatura é testada
+- **Severidade:** P2
+- **Status:** Aberto (re-verificado 2026-07-03 — inalterado)
 - **Local:** `src/lib/webhooks/lms-process.ts:98` (`processLmsWebhookEvent`), `:28` (`isLmsWebhookEvent`), `:66` (`clampPercent`); rota `src/app/api/webhooks/lms/route.ts:39`
-- **Evidência:** o commit recente `2f2f708` adicionou o receiver LMS→PMB. Existe `src/lib/webhooks/lms-webhook.test.ts` (6 testes) cobrindo **apenas** `validateLmsWebhookSignature`. O dispatcher `processLmsWebhookEvent` — que faz parse Zod por evento, atualiza progresso (`progressPercent`/`progressStatus`), emite certificado (`issueCertificateIfEligible`, `lms-process.ts:120`), dispara `syncCatalogFromLMS` e roteia suporte — **não tem nenhum teste**. `clampPercent` (`:66`) é função pura de borda (`Number.isFinite`, clamp 0–100, `Math.round`) sem cobertura. A referência exige "evento duplicado é deduplicado (idempotência)" e "payload inválido retorna 400/422, não 500" (`11-testes-qa.md:16-17`).
-- **Impacto:** regressão silenciosa em `clampPercent` grava progresso inválido; mudança no schema de evento ou no critério de match aluno↔matrícula (`findLmsEnrollment`, `:72`) deixa de emitir certificado / de rotear suporte sem nada para pegar antes do deploy.
-- **Correção:** criar `src/lib/webhooks/lms-process.test.ts`. Mockar `@/lib/prisma`, `@/lib/certificates/issue`, `@/lib/catalog/sync-lms` e `@/lib/support/student-support` via `vi.mock`. Casos: (a) `isLmsWebhookEvent` true só para os 5 eventos de `LMS_WEBHOOK_EVENTS` e false para `null`/desconhecido; (b) `clampPercent` em `NaN`→0, `-5`→0, `150`→100, `33.6`→34; (c) `course.completed` com matrícula encontrada → `enrollment.update` com `progressPercent:100`/`progressStatus:"CONCLUIDO"` e chama `issueCertificateIfEligible` quando `certificateAutoIssue` true e NÃO chama quando false; (d) matrícula não encontrada → `{ok:false}` sem update; (e) `lesson.completed` sem `completedAt` → `progressStatus:"EM_ANDAMENTO"`; (f) `student.question.created` com aluno → `createStudentSupportTicket`; sem aluno → `{ok:false}`; (g) payload inválido por evento (`courseCompletedSchema`) → `parse` lança ZodError (o route converte para 400).
+- **Evidência:** re-verificado — `src/lib/webhooks/lms-process.test.ts` continua **inexistente**. `lms-webhook.test.ts` (12 testes, cresceu de 6) cobre **apenas** `validateLmsWebhookSignature` (HMAC + anti-replay). O dispatcher que faz parse Zod por evento, atualiza `progressPercent`/`progressStatus`, emite certificado (`issueCertificateIfEligible`), dispara `syncCatalogFromLMS` e roteia suporte segue sem teste; `clampPercent` (função pura de borda) idem. A referência exige idempotência e "payload inválido → 400/422, não 500" (`11-testes-qa.md:16-17`).
+- **Impacto:** regressão silenciosa em `clampPercent` grava progresso inválido; mudança no schema de evento ou no match aluno↔matrícula deixa de emitir certificado / de rotear suporte sem nada para pegar antes do deploy.
+- **Correção:** criar `src/lib/webhooks/lms-process.test.ts`. Mockar `@/lib/prisma`, `@/lib/certificates/issue`, `@/lib/catalog/sync-lms`, `@/lib/support/student-support`. Casos: (a) `isLmsWebhookEvent` só true para os eventos de `LMS_WEBHOOK_EVENTS`; (b) `clampPercent`: `NaN`→0, `-5`→0, `150`→100, `33.6`→34; (c) `course.completed` com matrícula → `enrollment.update` `progressPercent:100`/`progressStatus:"CONCLUIDO"` e chama `issueCertificateIfEligible` só quando `certificateAutoIssue` true; (d) matrícula ausente → `{ok:false}` sem update; (e) `lesson.completed` sem `completedAt` → `EM_ANDAMENTO`; (f) `student.question.created` com aluno → `createStudentSupportTicket`; (g) payload inválido → ZodError (route converte para 400).
 - **Verificação:** `npx vitest run src/lib/webhooks/lms-process.test.ts`
 
 ### [QA-011] Idempotência do receiver de webhook LMS (dedup por `X-PMB-Event-Id` + corrida P2002) sem teste
 - **Severidade:** P2
-- **Status:** Aberto
-- **Local:** `src/app/api/webhooks/lms/route.ts:86-97` (dedup por `externalEventId`), `:134-168` (`createLog`, recuperação de corrida P2002)
-- **Evidência:** o route implementa idempotência: evento já `processed` → `200 {duplicate:true}` (`:91-93`); log não-processado → reprocessa; corrida de duas entregas do mesmo `event-id` é resolvida re-buscando o vencedor após `P2002` (`:155-165`). Nenhum teste exercita esse fluxo — não há harness de route handler nem teste de integração. A referência classifica "evento duplicado é deduplicado" como item-chave de webhook (`11-testes-qa.md:16`). Os webhooks Asaas e MP têm teste de validação; o de idempotência de LOG do LMS não tem.
-- **Impacto:** uma re-entrega do LMS poderia reprocessar (re-emitir certificado, re-sincronizar catálogo) se a lógica de dedup regredir; a corrida P2002 mal tratada lançaria 500 em vez de convergir para o log vencedor.
-- **Correção:** extrair a lógica de idempotência testável ou adicionar teste de unidade ao `createLog`/branch de dedup mockando `prisma.webhookLog`. Mínimo viável: criar `src/app/api/webhooks/lms/route.test.ts` que importa o `POST`, mocka `@/lib/prisma`, `@/lib/env` (`PMB_WEBHOOK_SECRET` setado) e `@/lib/webhooks/lms-process`. Casos: assinatura inválida→401; `PMB_WEBHOOK_SECRET` ausente→503; evento não suportado→400; JSON inválido→400; `webhookLog.findUnique` com `processed:true`→200 `{duplicate:true}` (não chama `processLmsWebhookEvent`); novo→cria log, processa, marca `processed:true`; `createLog` recebendo `P2002` (`PrismaClientKnownRequestError` code `P2002`) → re-busca e retorna o id vencedor sem lançar.
+- **Status:** Aberto (re-verificado 2026-07-03 — inalterado; nenhum teste de route handler existe no repo)
+- **Local:** `src/app/api/webhooks/lms/route.ts:86-97` (dedup por `externalEventId`), `:134-168` (`createLog` + recuperação de corrida P2002)
+- **Evidência:** re-verificado — `find src/app -name '*.test.ts'` = vazio (nenhum route handler tem teste). O route implementa dedup (evento `processed` → `200 {duplicate:true}`) e recuperação de corrida P2002, nada exercitado. Referência: "evento duplicado é deduplicado" é item-chave de webhook (`11-testes-qa.md:16`).
+- **Impacto:** uma re-entrega do LMS poderia re-emitir certificado / re-sincronizar catálogo se o dedup regredir; corrida P2002 mal tratada lança 500 em vez de convergir para o log vencedor.
+- **Correção:** criar `src/app/api/webhooks/lms/route.test.ts` importando o `POST`; mockar `@/lib/prisma`, `@/lib/env` (`PMB_WEBHOOK_SECRET` setado) e `@/lib/webhooks/lms-process`. Casos: assinatura inválida→401; secret ausente→503; evento não suportado→400; JSON inválido→400; `findUnique` com `processed:true`→200 `{duplicate:true}` (não chama o dispatcher); novo→cria log, processa, marca `processed:true`; `P2002` no `createLog` → re-busca e retorna o id vencedor sem lançar.
 - **Verificação:** `npx vitest run src/app/api/webhooks/lms/route.test.ts`
 
 ### [QA-012] Roteamento de suporte por tenant (`createStudentSupportTicket`) sem teste — decisão de isolamento
 - **Severidade:** P2
-- **Status:** Aberto
+- **Status:** Aberto (re-verificado 2026-07-03 — inalterado)
 - **Local:** `src/lib/support/student-support.ts:68` (`createStudentSupportTicket`), `:76` (`isPmb`), `:85` (`tenantId: isPmb ? null : student.tenantId`)
-- **Evidência:** commit `2f2f708` introduziu o roteamento de suporte do aluno por unidade. A decisão `isPmb = student.tenant?.slug === PMB_TENANT_SLUG` (`:76`) define se o `ContactMessage` nasce com `tenantId: null` (caixa PMB) ou `tenantId` da revenda (`:85`), e roteia a notificação para `ROLE:SUPER_ADMIN` vs `TENANT` e o e-mail para `PMB_SUPPORT_EMAIL` vs o dono da unidade. É uma fronteira de isolamento de tenant (chamado de aluno de revenda nunca pode cair na caixa PMB e vice-versa) e **não tem teste**.
-- **Impacto:** se `isPmb` regride (ex.: comparação de slug muda), o chamado de uma revenda vaza para a caixa do SUPER_ADMIN/PMB ou um chamado PMB cai indevidamente numa revenda — vazamento de PII de aluno entre caixas de tenants distintos.
-- **Correção:** criar `src/lib/support/student-support.test.ts`. Mockar `@/lib/prisma` (`contactMessage.create`), `@/lib/notifications` (`createNotification`), `@/lib/email/resend` (`sendEmail`, `isEmailConfigured`). Casos: (a) aluno com `tenant.slug === "__pmb__"` → `contactMessage.create` com `tenantId:null`, `createNotification` com `audience:"ROLE", roleTarget:"SUPER_ADMIN"`, destinatário e-mail = `PMB_SUPPORT_EMAIL`; (b) aluno de revenda → `tenantId` da revenda, `audience:"TENANT"` com o `tenantId`, e-mail = `owner.email`; (c) falha em `contactMessage.create` não lança (best-effort — segue para notificação); (d) `isEmailConfigured()` false → não chama `sendEmail`.
+- **Evidência:** re-verificado — `student-support.test.ts` continua inexistente. A decisão `isPmb = student.tenant?.slug === PMB_TENANT_SLUG` define se o `ContactMessage` nasce `tenantId:null` (caixa PMB) ou com o `tenantId` da revenda, e roteia notificação/e-mail (`ROLE:SUPER_ADMIN`/`PMB_SUPPORT_EMAIL` vs `TENANT`/dono da unidade). É fronteira de isolamento de tenant sem teste.
+- **Impacto:** se `isPmb` regride, chamado de aluno de revenda vaza para a caixa PMB (ou vice-versa) — vazamento de PII entre caixas de tenants distintos.
+- **Correção:** criar `src/lib/support/student-support.test.ts`. Mockar `@/lib/prisma`, `@/lib/notifications`, `@/lib/email/resend`. Casos: (a) aluno com `tenant.slug === "__pmb__"` → `create` com `tenantId:null`, notificação `ROLE/SUPER_ADMIN`, e-mail `PMB_SUPPORT_EMAIL`; (b) aluno de revenda → `tenantId` da revenda, notificação `TENANT`, e-mail do owner; (c) falha em `create` não lança (best-effort); (d) `isEmailConfigured()` false → não chama `sendEmail`.
 - **Verificação:** `npx vitest run src/lib/support/student-support.test.ts`
 
-### [QA-005] Resiliência do rate-limit / Redis sem teste (regressão de fail-open + anti-spoof de IP)
+### [QA-005] Resiliência do rate-limit / Redis sem teste (fail-open + anti-spoof de IP)
 - **Severidade:** P2
-- **Status:** Aberto
-- **Local:** `src/lib/ratelimit.ts` (`runLimit` fail-open/closed; `ipFrom` parsing XFF anti-spoof); não existe `src/lib/ratelimit.test.ts`
-- **Evidência:** re-verificado em 2026-06-24 — ainda **sem teste** (`ls src/lib/ratelimit.test.ts` → ausente). A correção `dcd03fd` (MEMORY: "Resiliência a outage do Redis") mudou o controle de fluxo para capturar falha de **comando** Redis (não só `if(!redis)`) e manter fail-open no login. Sem teste de regressão, o comportamento fail-open e o parsing anti-spoof de `X-Forwarded-For` podem regredir silenciosamente.
-- **Impacto:** regressão pode reintroduzir fail-closed (login devolve 500 quando a cota Upstash estoura) ou aceitar IP forjado no XFF, derrotando o rate limit.
-- **Correção:** criar `src/lib/ratelimit.test.ts`. Mockar o limiter com `vi.fn()` que **rejeita** (simula falha de comando Redis) e confirmar que `runLimit` resolve fail-open (permite a requisição) e loga; um segundo caso com `redis` ausente também fail-open. Para `ipFrom`: confirmar que um `X-Forwarded-For` com cadeia (`"1.2.3.4, 9.9.9.9"`) usa o IP confiável correto e ignora valores forjados conforme a política implementada.
+- **Status:** Aberto (re-verificado 2026-07-03 — inalterado)
+- **Local:** `src/lib/ratelimit.ts` (`runLimit` fail-open/closed; `ipFrom` parse XFF anti-spoof); sem `src/lib/ratelimit.test.ts`
+- **Evidência:** re-verificado — `ls src/lib/ratelimit.test.ts` ausente. A correção `dcd03fd` (MEMORY "Resiliência a outage do Redis") passou a capturar falha de **comando** Redis (não só `if(!redis)`) e manter fail-open no login. Sem teste, o fail-open e o parse anti-spoof de XFF podem regredir.
+- **Impacto:** regressão pode reintroduzir fail-closed (login 500 quando a cota Upstash estoura) ou aceitar IP forjado no XFF, derrotando o rate limit.
+- **Correção:** criar `src/lib/ratelimit.test.ts`. Mockar o limiter com `vi.fn()` que **rejeita** (falha de comando) e confirmar que `runLimit` resolve fail-open e loga; segundo caso com `redis` ausente também fail-open. Para `ipFrom`: cadeia `"1.2.3.4, 9.9.9.9"` usa o IP confiável correto e ignora forjados.
 - **Verificação:** `npx vitest run src/lib/ratelimit.test.ts`
+
+### [QA-008] Funções puras de negócio ainda sem teste (`monthly-policy`, `display-status`)
+- **Severidade:** P2
+- **Status:** Aberto (re-verificado 2026-07-03 — inalterado)
+- **Local:** `src/lib/tenant/monthly-policy.ts:22` (`monthlyActive`), `:27` (`monthlyAllowedOn`), `:37` (`effectivePaymentType`); `src/lib/students/display-status.ts:12` (`isPaidEnrollment`), `:30` (`deriveStudentDisplayStatus`), `:41` (`countEnrollmentStatuses`)
+- **Evidência:** re-verificado — nenhum dos dois ganhou teste (`display-status.test.ts`/`monthly-policy.test.ts` inexistentes). MEMORY "Status do aluno é derivado": `Student.status` é manual e o exibido vem de `deriveStudentDisplayStatus` — regra de negócio pura, sem teste.
+- **Impacto:** a regra de status exibido ("PENDENTE" só com matrícula PENDING) e a política de tipo de pagamento mensal por canal regridem sem aviso, induzindo o operador a erro sobre o estado real do aluno/cobrança.
+- **Correção:** criar `src/lib/students/display-status.test.ts` (`isPaidEnrollment` por `EnrollmentStatus`; `deriveStudentDisplayStatus` → "PENDENTE" só com PENDING; `countEnrollmentStatuses` agrega) e `src/lib/tenant/monthly-policy.test.ts` (`monthlyActive`, `monthlyAllowedOn` por canal, `effectivePaymentType` em cada combinação).
+- **Verificação:** `npx vitest run src/lib/students/display-status.test.ts src/lib/tenant/monthly-policy.test.ts`
 
 ### [QA-006] Zero testes de integração contra banco e zero E2E
 - **Severidade:** P2
-- **Status:** Aberto
-- **Local:** `package.json` (sem `@playwright/test`); nenhum harness Prisma de integração (todos os `*.test.ts` mockam `@/lib/prisma`)
-- **Evidência:** re-verificado — `grep playwright package.json` = nada; não há `playwright.config.*`. Nenhum teste conecta em banco real (todos usam `vi.mock("@/lib/prisma")`). Fluxos login→checkout→fulfillment (EA + LMS) nunca são exercidos ponta-a-ponta. A referência pede E2E em login/checkout/billing (`11-testes-qa.md:9-10`) e integração contra banco de teste (`:8`).
-- **Impacto:** quebras de fluxo end-to-end (ex.: checkout MP → `fulfill.ts` → provisionamento LMS/EA) só aparecem em produção; não há rede de segurança para regressões de integração entre camadas.
-- **Correção:** (médio prazo) adicionar `@playwright/test` + `playwright.config.ts` com 1 smoke E2E de checkout/login contra o staging; e/ou um harness de integração Prisma contra um Supabase branch/Postgres de teste exercitando `fulfill.ts` (matrícula primária + satélites + provisionamento). Rodar o E2E em job separado do CI (não bloqueante no início).
-- **Verificação:** `npx playwright test` (smoke) roda verde no staging; job de integração roda no CI.
+- **Status:** Aberto (re-verificado 2026-07-03 — inalterado)
+- **Local:** `package.json` (sem `@playwright/test`, sem `playwright.config.*`); todos os `*.test.ts` mockam `@/lib/prisma` (nenhum banco real)
+- **Evidência:** re-verificado — `grep playwright package.json` = nada. Nenhum teste conecta em banco. Fluxos login→checkout→fulfillment (EA + LMS) nunca são exercidos ponta-a-ponta. A referência pede E2E em login/checkout/billing (`11-testes-qa.md:9-10`) e integração contra banco de teste (`:8`).
+- **Impacto:** quebras end-to-end (checkout MP → `fulfill.ts` → provisionamento) só aparecem em produção; sem rede de segurança para regressões de integração entre camadas. Reforça QA-013/QA-014 (que hoje só dão para cobrir com mocks).
+- **Correção:** (médio prazo) adicionar `@playwright/test` + `playwright.config.ts` com 1 smoke E2E de login/checkout contra o staging; e/ou harness de integração Prisma contra um Supabase branch exercitando `fulfill.ts` (matrícula primária + satélites + provisionamento) e o tenant-scoping real das agregações de BI. Rodar em job de CI separado (não bloqueante no início).
+- **Verificação:** `npx playwright test` (smoke) verde no staging; job de integração no CI.
 
 ### [QA-007] Sem thresholds de cobertura nos módulos críticos
 - **Severidade:** P3
-- **Status:** Aberto
+- **Status:** Aberto (re-verificado 2026-07-03 — inalterado)
 - **Local:** `vitest.config.ts` (sem bloco `coverage`)
-- **Evidência:** re-verificado — `grep coverage vitest.config.ts package.json` = nada. Apesar de a suíte ter crescido muito, nada impede a cobertura de `auth`/`tenant`/`billing`/`referrals` cair em PRs futuros. A referência pede thresholds nos módulos críticos (`11-testes-qa.md:22`). Rebaixado de P2 para P3 vs 2026-06-20 porque a cobertura efetiva desses módulos hoje é alta (scope, roles, guards, referrals, asaas, mp, checkout, coupons já testados).
+- **Evidência:** re-verificado — sem `coverage` em `vitest.config.ts`/`package.json`. Apesar do crescimento da suíte, nada impede a cobertura de `auth`/`tenant`/`billing`/`referrals`/`webhooks` cair em PRs futuros. Referência: thresholds nos módulos críticos (`11-testes-qa.md:22`). Mantido P3 porque a cobertura efetiva desses módulos é hoje alta.
 - **Impacto:** erosão silenciosa de cobertura ao longo do tempo.
-- **Correção:** em `vitest.config.ts`, adicionar `test.coverage` com `provider:"v8"` e `thresholds` por glob para `src/lib/{auth,tenant,referrals,asaas,mercadopago,checkout,coupons,webhooks}/**` (ex.: lines/functions ≥ 70). Adicionar script `"test:coverage": "vitest run --coverage"` e instalar `@vitest/coverage-v8` como devDependency.
-- **Verificação:** `npx vitest run --coverage` falha quando a cobertura cai abaixo do threshold.
-
-### [QA-008] Funções puras de negócio ainda sem teste (escopo reduzido)
-- **Severidade:** P2
-- **Status:** Aberto
-- **Local:** `src/lib/tenant/monthly-policy.ts:27` (`monthlyAllowedOn`), `:37` (`effectivePaymentType`); `src/lib/students/display-status.ts:30` (`deriveStudentDisplayStatus`), `:12` (`isPaidEnrollment`), `:41` (`countEnrollmentStatuses`)
-- **Evidência:** re-verificado — parte do QA-008 original foi **corrigida** (`tenant/slug.test.ts`, `tenant/forbidden-names.test.ts`, `auth/roles.test.ts`, `checkout/price-guard.test.ts` para `isSellablePrice` existem). Restam sem teste: `monthly-policy` (política de tipo de pagamento por canal) e `display-status` (status derivado do aluno — MEMORY "Status do aluno é derivado": `Student.status` é manual, o exibido vem de `deriveStudentDisplayStatus`). `catalog/visibility.ts` é uma constante `Prisma.CourseWhereInput` declarativa (não há comportamento a unit-testar — **N/A**; o gate de runtime exigiria integração).
-- **Impacto:** regra de status exibido ("PENDENTE" só quando matrícula PENDING) e política de pagamento mensal por canal regridem sem aviso, induzindo o operador a erro sobre o estado real do aluno/cobrança.
-- **Correção:** criar `src/lib/students/display-status.test.ts` (`isPaidEnrollment` para cada `EnrollmentStatus`; `deriveStudentDisplayStatus` → "PENDENTE" só com matrícula PENDING e "ATIVO" caso contrário; `countEnrollmentStatuses` agrega corretamente) e `src/lib/tenant/monthly-policy.test.ts` (`monthlyActive`, `monthlyAllowedOn` por canal, `effectivePaymentType` em cada combinação de política).
-- **Verificação:** `npx vitest run src/lib/students/display-status.test.ts src/lib/tenant/monthly-policy.test.ts`
+- **Correção:** em `vitest.config.ts`, adicionar `test.coverage` (`provider:"v8"`) com `thresholds` por glob para `src/lib/{auth,tenant,referrals,asaas,mercadopago,checkout,coupons,webhooks,reports,catalog}/**` (ex.: lines/functions ≥ 70). Script `"test:coverage": "vitest run --coverage"` + devDep `@vitest/coverage-v8`.
+- **Verificação:** `npx vitest run --coverage` falha ao cair abaixo do threshold.
 
 ### [QA-009] `vitest.config` inclui só `.test.ts` (não `.tsx`); sem separação unit/integration
 - **Severidade:** P3
-- **Status:** Aberto
-- **Local:** `vitest.config.ts:7` (`include: ["src/**/*.test.ts"]`)
-- **Evidência:** re-verificado — o glob ainda exclui `*.test.tsx`. Hoje **não há** nenhum `.test.tsx` no repo (`find src -name '*.test.tsx'` = vazio), então não há teste sendo silenciosamente ignorado **agora**; é uma armadilha de DX para quando alguém adicionar teste de componente.
-- **Impacto:** DX — um futuro teste de componente `.test.tsx` não rodaria e passaria despercebido (falsa sensação de verde).
-- **Correção:** trocar o `include` por `["src/**/*.test.{ts,tsx}"]`. Opcionalmente separar `projects` unit (environment node) e component (environment jsdom). Se adotar jsdom, instalar `jsdom` como devDependency.
+- **Status:** Aberto (re-verificado 2026-07-03 — inalterado)
+- **Local:** `vitest.config.ts` (`include: ["src/**/*.test.ts"]`)
+- **Evidência:** re-verificado — o glob ainda exclui `*.test.tsx`. Hoje não há `.test.tsx` no repo, então nada é ignorado silenciosamente **agora**; é armadilha de DX para o primeiro teste de componente.
+- **Impacto:** DX — um futuro `*.test.tsx` não rodaria e passaria despercebido (falso verde).
+- **Correção:** trocar o `include` por `["src/**/*.test.{ts,tsx}"]`; opcionalmente separar `projects` unit (node) e component (jsdom, instalar `jsdom`).
 - **Verificação:** `npx vitest run` reconhece e executa um `*.test.tsx` de fumaça.
 
 ---
 
 ## Cobertura
-Itens do inventário relevantes ao domínio de Testes/QA (12) e veredito:
+Itens do inventário relevantes ao domínio de Testes/QA (20) e veredito:
 
-1. **Suíte unit existente (37 arquivos / 218 testes):** OK — todos passam, determinísticos (~1.6s), sem flakiness. `vi.mock("@/lib/prisma")` em toda parte (sem DB real).
+1. **Suíte unit (53 arq / 328 testes):** OK — todos passam (~4s), determinísticos, sem `.only`/`.skip`/`.todo`. `vi.mock("@/lib/prisma")` em toda parte (sem DB real).
 2. **`vitest.config.ts`:** OK com ressalva — QA-009 (glob só `.test.ts`); QA-007 (sem coverage).
-3. **CI (`.github/workflows/ci.yml`):** OK — roda Lint + Typecheck + Test + **Build** (com `SKIP_PENDING_MIGRATIONS=1` e `DATABASE_URL` dummy). Bloqueia merge. **QA-003 CORRIGIDO.**
-4. **Teste de isolamento de tenant (`auth/scope.ts`):** OK — `scope.test.ts` (18 testes). **QA-001 CORRIGIDO.**
-5. **AuthZ por papel (`auth/roles.ts`, `auth/guards.ts`):** OK — `roles.test.ts` + `guards.test.ts`.
-6. **Webhook Asaas (validação de assinatura):** OK — `asaas/webhook.test.ts` (10 testes). **QA-002 CORRIGIDO.**
-7. **Webhook Mercado Pago:** OK — `mercadopago/webhook.test.ts` presente.
-8. **Webhook LMS — assinatura HMAC:** OK — `lms-webhook.test.ts` (6 testes, anti-replay incluído).
-9. **Webhook LMS — dispatcher + idempotência + roteamento de suporte:** **Achado** — QA-010, QA-011, QA-012 (NOVOS, commits LMS).
-10. **Motor de comissão/clawback (`referrals/*`):** OK — `tiers/clawback/commission/payout.test.ts` (32 testes). **QA-004 CORRIGIDO.**
-11. **Resiliência Redis/rate-limit (`ratelimit.ts`):** **Achado** — QA-005 (ainda sem teste).
-12. **Integração contra banco + E2E (login/checkout/billing):** **Achado** — QA-006 (ausentes).
+3. **CI (`.github/workflows/ci.yml`):** OK — Lint + Typecheck + Test + **Build**, bloqueia merge. **QA-003 CORRIGIDO.**
+4. **Isolamento de tenant no data layer (`auth/scope.ts`):** OK — `scope.test.ts`. **QA-001 CORRIGIDO.**
+5. **Gateway isolation revenda→PMB (`checkout/assert-tenant-gateway`, `asaas/mother-key`):** OK — 11 casos incl. regressão Polo Betim (bloqueia aluno/matrícula/cupom de revenda na conta-mãe).
+6. **AuthZ por papel (`auth/roles`, `auth/guards`):** OK — `roles.test.ts` + `guards.test.ts`.
+7. **Webhook Asaas — assinatura + payload:** OK — `asaas/webhook.test.ts`. **QA-002 CORRIGIDO.**
+8. **Webhook MP — assinatura HMAC + anti-replay:** OK — `mercadopago/webhook.test.ts` (7 casos).
+9. **Webhook LMS — assinatura HMAC + anti-replay:** OK — `lms-webhook.test.ts` (12 casos).
+10. **Processamento MP/Asaas + fulfillment/matrícula (dinheiro):** **Achado** — QA-013 (sem teste).
+11. **Dispatcher + idempotência do webhook LMS + roteamento de suporte:** **Achado** — QA-010, QA-011, QA-012.
+12. **Motor de comissão/clawback (`referrals/*`):** OK — `tiers/clawback/commission/payout.test.ts`. **QA-004 CORRIGIDO.**
+13. **Parcelamento no cartão (`mercadopago/installments`):** OK (parcial) — labels/teto/`displayInterestFreeInstallments` testados; valor por parcela vem do MP (fiel à API, sem math local) → N/A p/ unit.
+14. **Cupons (`coupons/discount`, `coupons/preview`):** OK — desconto %/fixo, clamp, arredondamento half-even (99.99×33%→66.99), 100%.
+15. **Domain-status (`vercel/domain-status`):** OK — 4 casos (ACTIVE só com apex+www; PENDING parcial; falha propaga).
+16. **Sync catálogo LMS/EA — curadoria não-revertida (fix 45d8af6):** **Achado** — QA-015 (só `mapCurriculumToMatriz` testado; UPDATE de `status`/`categoriaLoja` sem teste).
+17. **BI reports — helpers (bucket/format/period/tabs/definitions/painel):** OK. **BI reports — tenant-scoping das agregações (`aggregations.ts`/painel context):** **Achado** — QA-014.
+18. **Proxy / resolução de tenant (`src/proxy.ts`):** **Achado** — QA-016 (host classification + reservados + custom-domain sem teste).
+19. **Auto-block por inadimplência (`auto-block.ts`):** **Achado** — QA-017.
+20. **Rate-limit / resiliência Redis (`ratelimit.ts`):** **Achado** — QA-005. **Integração-DB + E2E:** **Achado** — QA-006.
 
-Funções puras de negócio: `slug`, `forbidden-names`, `roles`, `price-guard/isSellablePrice`, `coupons`, `cpf`, `dates`, `crypto` → OK (testados). `monthly-policy`, `display-status` → **Achado** QA-008. `catalog/visibility.COURSE_HAS_PRICE` → **N/A** (constante `Prisma.WhereInput` declarativa, sem comportamento unitário).
-
-Sub-revenda (plano 209/239 — commit `30918bb`): OK — `resellers/plans.test.ts` cobre o gate, e o gate está wired no API com Zod `.refine(isAllowedResellerPlan)` (`api/painel/revendas/route.ts:30`).
-Credenciais LMS por matrícula (commit `8c71f74`): a cifra AES-256-GCM já é coberta por `crypto.test.ts`; `getLmsEnrollmentCredentials` é wrapper Prisma fino que filtra por `studentId` da sessão — N/A para unit (cobertura real = integração, QA-006).
+Funções puras já cobertas: `slug`, `forbidden-names`, `roles`, `price-guard/isSellablePrice`, `coupons`, `cpf`, `dates`, `crypto`, `certificates/freshness`, `home/sections.schema`, `home/trust-tokens`, `lms/urls`, `redis/keys`, `errors`, `logger`, `resellers/plans`, `students/{checkout-link,cpf-already-registered,ensure-student-active,reactivation-guard,resolve-platform-password}`, `courses/bulk-edit`, `checkout/{due-date,price-guard}`, `email/templates/*`, `reports/{bucket,format,period,tabs,painel-definitions,painel/tabs}`, `pmb-tenant`, `tenant/{urls,vitrine-paths}` → OK.
+Ainda sem teste (funções puras): `monthly-policy`, `display-status` → **Achado** QA-008. `catalog/visibility.COURSE_HAS_PRICE` → **N/A** (constante `Prisma.WhereInput` declarativa; gate de runtime exigiria integração — QA-006).
