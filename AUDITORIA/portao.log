@@ -1017,3 +1017,48 @@ Notas de execução:
   4) test (vitest run) .............. OK (83 arquivos, 430 testes)
 VEREDITO: VERDE.
 ========================================================================
+
+========================================================================
+RODADA: SaaS/Produto (domínio `saas`) — correção P2→P3 — 2026-07-03
+========================================================================
+Corrigidos (ID → commit):
+  SAAS-001 (P2, audit trail em rotas secundárias) → 4 commits atômicos:
+    bad0a22 (admin de tenant: status/mensalidade/referral-percent/sales/
+            manager/password)
+    cba66e1 (cupons: admin create/toggle + painel create)
+    ed416a4 (equipe da unidade maxDiscount/deactivate + gateways MP/Asaas
+            connect/disconnect — sem credencial no payload)
+    184abc6 (exports: financeiro + comissões/saques + comissões por revenda)
+  SAAS-006 (P2, audit_logs append-only) ....... 145bdd8  (trigger BEFORE
+            UPDATE OR DELETE → RAISE EXCEPTION; NÃO REVOKE; migration
+            idempotente 20260703_audit_logs_immutable)
+  SAAS-010 (P3, gate status=ATIVO em painel/vendas) . 5aadb1e
+  SAAS-008 (P3, webhook LMS conclusão sem retry) .... 19698a5  (retryable +
+            janela 30min; idempotência preservada; cron como rede de segurança)
+  SAAS-009 (P3, sub-revenda expõe invoiceUrl/bankSlipUrl) . 081638a
+
+Aberto (não forçado — deixado com nota no achado):
+  SAAS-007 (P3, proxy fail-open em falha transitória Redis+DB):
+    a correção fail-closed (503) da receita CONFLITA com o teste OBS-007
+    (src/proxy.test.ts, commit f8322e9) que enshrina o fail-OPEN para o MESMO
+    cenário (Redis+DB fora → indistinguíveis no proxy) e com a diretriz desta
+    tarefa de "preservar fail-open". Mudança implementada, provada quebrar
+    OBS-007, e REVERTIDA (git checkout -- src/proxy.ts). Requer decisão do dono:
+    (a) manter fail-open (risco residual P3, checkout já revalida status), ou
+    (b) mover o gate de status para o downstream /loja preservando fail-open no
+    Edge. Um hard-503 no Edge não é compatível com o requisito de fail-open.
+
+Ação manual pendente do dono:
+  - SAAS-006: a migration é auto-aplicada no próximo deploy (apply-pending-
+    migrations.mjs). Verificação DB-level pós-deploy: UPDATE/DELETE em
+    audit_logs devem falhar; INSERT continua OK.
+  - SAAS-007: decisão de produto/resiliência (ver acima).
+
+Última execução do Portão Zero-Erro (tree pós-081638a + docs):
+  1) typecheck (tsc --noEmit) ....... OK (0 erros)
+  2) lint (eslint) .................. OK (0 erros; 1 warning pré-existente
+     em scripts/render-cert-samples.tsx, arquivo não tocado)
+  3) build (SKIP_PENDING_MIGRATIONS=1 + DB throwaway) . OK (Compiled successfully)
+  4) test (vitest run) .............. OK (90 arquivos, 456 testes)
+VEREDITO: VERDE.
+========================================================================
