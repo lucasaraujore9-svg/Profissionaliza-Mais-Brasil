@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { requireResellerSession } from "@/lib/auth/reseller-session"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { MAX_EXPORT_ROWS, truncationNotice } from "@/lib/reports/export-limit"
+import { logAudit } from "@/lib/audit"
 
 // Caracteres que iniciam fórmula em Excel/Sheets (CSV injection).
 const CSV_FORMULA_TRIGGERS = /^[=+\-@\t\r]/
@@ -86,6 +87,16 @@ export const GET = withRequestContext(
       .map((row) => row.map(escapeCsv).join(","))
       .join("\n")
     if (payments.length === MAX_EXPORT_ROWS) csv += `\n${truncationNotice()}`
+
+    // SAAS-001: trilha de auditoria da exportação de dados financeiros.
+    await logAudit({
+      action: "data.export",
+      resource: "financeiro",
+      actorUserId: ctx.userId,
+      actorRole: "RESELLER",
+      tenantId: ctx.tenantId,
+      payloadAfter: { rows: payments.length, filters: { from, to, status } },
+    })
 
     const filename = `financeiro-${new Date().toISOString().slice(0, 10)}.csv`
     const safeAscii = filename.replace(/[\r\n"\\;]/g, "_")

@@ -10,6 +10,7 @@ import {
 } from "@/lib/csv"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { MAX_EXPORT_ROWS, truncationNotice } from "@/lib/reports/export-limit"
+import { logAudit } from "@/lib/audit"
 
 export const dynamic = "force-dynamic"
 
@@ -155,6 +156,18 @@ export const GET = withRequestContext(
   let csv = arrayToCsv(rows, HEADERS)
   if (commissions.length === MAX_EXPORT_ROWS) csv += `\n${truncationNotice()}`
   const filename = csvFilename("comissoes")
+
+  // SAAS-001: trilha de auditoria da exportação de comissões de indicação.
+  await logAudit({
+    action: "data.export",
+    resource: "commissions",
+    actorUserId: session.userId,
+    actorRole: session.role,
+    payloadAfter: {
+      rows: commissions.length,
+      filters: { status, referrerId, referredId, from, to, days: daysParam },
+    },
+  })
 
   return new NextResponse(csv, {
     status: 200,

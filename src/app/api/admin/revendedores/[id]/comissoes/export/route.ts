@@ -8,6 +8,7 @@ import {
   type CsvHeader,
 } from "@/lib/csv"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
+import { logAudit } from "@/lib/audit"
 
 export const dynamic = "force-dynamic"
 
@@ -118,6 +119,17 @@ export const GET = withRequestContextParams<{ id: string }>(
 
   const csv = arrayToCsv(rows, HEADERS)
   const filename = csvFilename(`comissoes-${tenant.slug}`)
+
+  // SAAS-001: trilha de auditoria da exportação de comissões de uma unidade.
+  await logAudit({
+    action: "data.export",
+    resource: "commissions",
+    resourceId: id,
+    actorUserId: session.userId,
+    actorRole: session.role,
+    tenantId: id,
+    payloadAfter: { rows: commissions.length, slug: tenant.slug },
+  })
 
   return new NextResponse(csv, {
     status: 200,
