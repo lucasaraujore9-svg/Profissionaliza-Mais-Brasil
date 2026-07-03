@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { extractPaymentIdFromNotification } from "@/lib/mercadopago/webhook"
 import { processMpWebhook } from "@/lib/mercadopago/process"
 import type { MPWebhookNotification } from "@/lib/mercadopago/types"
+import { redactWebhookPayload } from "@/lib/webhooks/redact-payload"
 import { swallow } from "@/lib/errors"
 import {
   runWithRequestContext,
@@ -102,7 +103,8 @@ async function handle(request: Request) {
     data: {
       source: "MERCADO_PAGO",
       eventType: topic,
-      payload: (body ?? {}) as never,
+      // OBS-008/LGPD-014: redige eventuais campos de PII antes de persistir.
+      payload: redactWebhookPayload(body ?? {}) as never,
       headers: pickHeaders(request) as never,
       processed: false,
     },

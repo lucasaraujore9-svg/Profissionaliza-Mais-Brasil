@@ -12,6 +12,7 @@ import {
   processLmsWebhookEvent,
   isLmsWebhookEvent,
 } from "@/lib/webhooks/lms-process"
+import { redactWebhookPayload } from "@/lib/webhooks/redact-payload"
 
 export const maxDuration = 300
 export const dynamic = "force-dynamic"
@@ -150,7 +151,9 @@ async function createLog(
       data: {
         source: "LMS",
         eventType,
-        payload: payload as Prisma.InputJsonValue,
+        // OBS-008/LGPD-014: `student.question.created` traz texto livre do aluno
+        // (até 4000 chars) — redige antes de persistir para não deixar PII em claro.
+        payload: redactWebhookPayload(payload) as Prisma.InputJsonValue,
         headers: pickHeaders(request) as Prisma.InputJsonValue,
         externalEventId,
         processed: false,

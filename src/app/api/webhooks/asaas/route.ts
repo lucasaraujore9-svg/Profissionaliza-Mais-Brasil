@@ -7,6 +7,7 @@ import {
 } from "@/lib/asaas/webhook"
 import { processAsaasWebhook } from "@/lib/asaas/process"
 import { processResellerAsaasWebhook } from "@/lib/asaas/reseller-process"
+import { redactWebhookPayload } from "@/lib/webhooks/redact-payload"
 import { decrypt } from "@/lib/crypto"
 import {
   runWithRequestContext,
@@ -127,7 +128,9 @@ async function handleReseller(request: Request, slug: string) {
       source: "ASAAS",
       tenantId: tenant.id,
       eventType: payload.event,
-      payload: body as never,
+      // OBS-008/LGPD-014: redige CPF/e-mail/telefone do customer antes de
+      // persistir (mantém ids/status/valores para troubleshooting).
+      payload: redactWebhookPayload(body) as never,
       headers: pickHeaders(request) as never,
       processed: false,
     },
@@ -206,7 +209,8 @@ async function handle(request: Request) {
     data: {
       source: "ASAAS",
       eventType: payload.event,
-      payload: body as never,
+      // OBS-008/LGPD-014: redige CPF/e-mail/telefone do customer antes de persistir.
+      payload: redactWebhookPayload(body) as never,
       headers: pickHeaders(request) as never,
       processed: false,
     },
