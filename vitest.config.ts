@@ -4,7 +4,9 @@ import { fileURLToPath } from "node:url"
 export default defineConfig({
   test: {
     environment: "node",
-    include: ["src/**/*.test.ts"],
+    // QA-009: inclui .test.tsx além de .test.ts para que o primeiro teste de
+    // componente não seja silenciosamente ignorado (falso verde).
+    include: ["src/**/*.test.{ts,tsx}"],
   },
   resolve: {
     alias: {
