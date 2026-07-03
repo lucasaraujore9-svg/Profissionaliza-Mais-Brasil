@@ -922,3 +922,33 @@ PERF-003 Corrigido ...... commit d04cc54 (paginacao server-side ?page=N
 Última rodada do Portão (tree = d04cc54):
   typecheck 0 · lint 0 erros (1 warn pré-existente) · build exit 0 ·
   test 384 passed. build: SKIP_PENDING_MIGRATIONS=1 + DATABASE_URL throwaway.
+
+========================================================================
+2026-07-03 · Domínio performance · Rodada P1→P3 (encerramento)
+------------------------------------------------------------------------
+Corrigidos (ID → commit):
+  PERF-010 (P1) + API-007 (P3) ...... 3a02a48
+  PERF-002 (P1) ..................... 57a1da8
+  PERF-003 (P1) ..................... d04cc54
+  PERF-007 (P2) ..................... 008d87c
+  PERF-004 (P2) ..................... afc004b
+  PERF-001 (P2) ..................... c97c7ff
+  PERF-005 (P2) ..................... ce9b199
+  PERF-006 (P2) ..................... 06fb9e4
+  PERF-011 (P2) ..................... 22b224c
+  PERF-012 (P3) ..................... 1e18005
+  PERF-013 (P3) ..................... 181b2a2
+Aceitos (sem código; ação/decisão do usuário):
+  PERF-008 (P3) — cota Image Optimization Vercel (infra/manual).
+  PERF-009 (P3) — bundle-analyzer é webpack (incompatível c/ Turbopack);
+                  output:'standalone' é migração VPS.
+
+Última execução do Portão Zero-Erro (tree pós-181b2a2 + docs):
+  1) typecheck (tsc --noEmit) ....... OK (0 erros)
+  2) lint (eslint) .................. OK (0 erros; 1 warning pré-existente
+     em scripts/render-cert-samples.tsx, arquivo não tocado)
+  3) build (SKIP_PENDING_MIGRATIONS=1 + DATABASE_URL/DIRECT_URL throwaway,
+     mesmo padrão do ci.yml) ........ OK (Compiled successfully)
+  4) test (vitest run) .............. OK (73 arquivos, 406 testes)
+VEREDITO: VERDE. Domínio performance sem achados Corrigíveis pendentes.
+========================================================================
