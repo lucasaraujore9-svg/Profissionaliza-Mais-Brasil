@@ -33,6 +33,26 @@ const VITRINE_DOMAINS = Array.from(
   )
 )
 
+// OBS-007: logging Edge-safe. O proxy roda no Edge runtime e NÃO pode importar
+// Pino (`src/lib/logger.ts` usa APIs Node). Emitimos JSON estruturado via
+// console.* — mesmo padrão de `src/lib/redis.ts`. NUNCA inclui PII: só host,
+// slug, decisão/evento. Serve para diagnosticar roteamento multi-tenant (ex.: o
+// incidente de fail-open do Redis que vazou a marca PMB nas vitrines).
+function edgeLog(
+  level: "warn" | "error",
+  event: string,
+  fields: Record<string, unknown>,
+): void {
+  const line = JSON.stringify({
+    level,
+    event,
+    time: new Date().toISOString(),
+    ...fields,
+  })
+  if (level === "error") console.error(line)
+  else console.warn(line)
+}
+
 const RESERVED_SUBDOMAINS = new Set([
   "www",
   "app",
@@ -137,7 +157,8 @@ function classifyHost(hostname: string): HostInfo {
 }
 
 async function resolveTenantFromRedis(
-  slug: string
+  slug: string,
+  host: string,
 ): Promise<{ id: string; status: string } | null> {
   const url = process.env.UPSTASH_REDIS_REST_URL
   const token = process.env.UPSTASH_REDIS_REST_TOKEN
@@ -158,14 +179,20 @@ async function resolveTenantFromRedis(
       return JSON.parse(data.result)
     }
   } catch {
-    // Redis indisponível, segue
+    // Redis indisponível: fail-open (o fallback de DB abaixo assume). Antes era
+    // um catch mudo — sem rastro do incidente que fez o proxy servir a marca PMB
+    // sob a vitrine da revenda. Log Edge-safe, sem PII.
+    edgeLog("warn", "proxy.tenant.failopen", { host, slug, source: "redis" })
   }
   return null
 }
 
 // Le o redirect de um subdominio antigo -> slug atual (gravado no rename, key
 // `tenant:redirect:{slug}` com TTL de 15 dias). Retorna o slug novo ou null.
-async function resolveRedirectFromRedis(slug: string): Promise<string | null> {
+async function resolveRedirectFromRedis(
+  slug: string,
+  host: string,
+): Promise<string | null> {
   const url = process.env.UPSTASH_REDIS_REST_URL
   const token = process.env.UPSTASH_REDIS_REST_TOKEN
   if (!url || !token) return null
@@ -181,7 +208,8 @@ async function resolveRedirectFromRedis(slug: string): Promise<string | null> {
       return typeof parsed === "string" ? parsed : null
     }
   } catch {
-    // Redis indisponível, segue (fallback de DB cobre os caminhos de vitrine)
+    // Redis indisponível, segue (fallback de DB cobre os caminhos de vitrine).
+    edgeLog("warn", "proxy.redirect.redis_failed", { host, slug, source: "redis" })
   }
   return null
 }
@@ -220,6 +248,9 @@ async function resolveTenantFromDB(
     if (json.redirectSlug) return { ok: true, redirectSlug: json.redirectSlug }
     return { ok: true, tenant: json }
   } catch {
+    // Fallback de DB (resolve-tenant) indisponível: fail-open. Antes mudo — sem
+    // rastro quando o roteamento multi-tenant degradava.
+    edgeLog("error", "proxy.tenant.db_failopen", { identifier, type, source: "db" })
     return { ok: false, reason: "error" }
   }
 }
@@ -283,7 +314,7 @@ export default async function proxy(request: NextRequest) {
     // Subdominio antigo (renomeado nos ultimos 15 dias): 308 para o slug atual
     // da unidade. Fonte primaria = Redis (gravado no rename); o fallback de DB
     // mais abaixo cobre os caminhos de vitrine caso a chave tenha sido evictada.
-    const redirectTo = await resolveRedirectFromRedis(tenantSlug)
+    const redirectTo = await resolveRedirectFromRedis(tenantSlug, hostname)
     if (redirectTo && redirectTo !== tenantSlug && host.apex) {
       return redirectToSlug(redirectTo)
     }
@@ -307,6 +338,7 @@ export default async function proxy(request: NextRequest) {
     // dominio da revenda — exatamente o bug que motivou esta correcao. Deploy
     // URLs (*.vercel.app) e demais hosts internos continuam passando.
     if (customDomainNotFound) {
+      edgeLog("warn", "proxy.custom_domain.not_found", { host: stripPort(hostname) })
       return new NextResponse(
         "Domínio não configurado. Verifique o apontamento de DNS desta loja.",
         { status: 404, headers: { "content-type": "text/plain; charset=utf-8" } }
@@ -330,7 +362,7 @@ export default async function proxy(request: NextRequest) {
   // Resolve o status do tenant. Preferimos o cache (Edge), mas em cache-miss
   // caimos no banco — caso contrario uma vitrine PENDING (sem 1o pagamento) ou
   // SUSPENDED (inadimplente) que ainda nao esta no cache venderia normalmente.
-  let resolvedTenant = await resolveTenantFromRedis(tenantSlug)
+  let resolvedTenant = await resolveTenantFromRedis(tenantSlug, hostname)
   if (!resolvedTenant) {
     const dbResult = await resolveTenantFromDB(tenantSlug, "slug", origin)
     if (dbResult.ok && "redirectSlug" in dbResult) {
