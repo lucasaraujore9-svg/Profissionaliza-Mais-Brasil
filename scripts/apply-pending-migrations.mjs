@@ -24,6 +24,17 @@
  *     pra constraints; ALTER TABLE ... ADD COLUMN IF NOT EXISTS).
  *   - Pronto. O script descobre sozinho no próximo build.
  *
+ * DB-007 — statements não-transacionais:
+ *   - Por padrão cada arquivo roda dentro de UMA transação (BEGIN/COMMIT).
+ *   - `CREATE INDEX CONCURRENTLY` / `DROP INDEX CONCURRENTLY` NÃO podem rodar
+ *     em transação. O runner DETECTA a palavra CONCURRENTLY (via
+ *     `needsAutocommit`) e desvia o arquivo para execução em AUTOCOMMIT,
+ *     statement a statement (sem BEGIN/COMMIT). Como não há rollback nesse
+ *     caminho, esses arquivos DEVEM ser idempotentes (a regra geral aqui).
+ *   - `ALTER TYPE ... ADD VALUE`: o valor novo NÃO pode ser USADO no mesmo
+ *     arquivo (Postgres: "unsafe use of new value"). Convenção: isole o
+ *     `ADD VALUE` numa migration própria, ANTES da que usa o valor.
+ *
  * Bypass:
  *   `SKIP_PENDING_MIGRATIONS=1 npm run build` pula tudo (útil em local
  *   quando você só quer compilar o front).
@@ -34,6 +45,7 @@ import { createHash } from "node:crypto"
 import { join, resolve } from "node:path"
 import process from "node:process"
 import pg from "pg"
+import { splitSqlStatements, needsAutocommit } from "./sql-split.mjs"
 
 const { Client } = pg
 
@@ -150,25 +162,54 @@ async function alreadyApplied(client, filename, hash) {
   return true
 }
 
+async function recordApplied(client, file) {
+  await client.query(
+    `INSERT INTO "${TRACKING_TABLE}" (filename, hash) VALUES ($1, $2)
+     ON CONFLICT (filename) DO UPDATE SET hash = EXCLUDED.hash`,
+    [file.name, sha256(file.content)],
+  )
+}
+
 async function applyMigration(client, file) {
+  // DB-007: migrations com statements que o Postgres PROÍBE em transação
+  // (hoje: CREATE INDEX CONCURRENTLY) rodam em AUTOCOMMIT, statement a
+  // statement — sem BEGIN/COMMIT. Como não há rollback, esses arquivos DEVEM
+  // ser idempotentes (IF NOT EXISTS), a regra geral do runner.
+  if (needsAutocommit(file.content)) {
+    return applyMigrationAutocommit(client, file)
+  }
+
   console.log(`[apply-pending] aplicando ${file.name}…`)
   // Cada migration roda em transação própria. Se uma migration tiver DDLs
   // que o Postgres não permite em transação (ex: CREATE INDEX CONCURRENTLY),
-  // o autor precisa documentar e o script vai dar erro claro.
+  // ela é detectada acima e desviada para o caminho autocommit.
   await client.query("BEGIN")
   try {
     await client.query(file.content)
-    await client.query(
-      `INSERT INTO "${TRACKING_TABLE}" (filename, hash) VALUES ($1, $2)
-       ON CONFLICT (filename) DO UPDATE SET hash = EXCLUDED.hash`,
-      [file.name, sha256(file.content)],
-    )
+    await recordApplied(client, file)
     await client.query("COMMIT")
     console.log(`[apply-pending]   ✓ ${file.name}`)
   } catch (err) {
     await client.query("ROLLBACK").catch(() => undefined)
     throw new Error(`Falha em ${file.name}: ${err.message}`)
   }
+}
+
+async function applyMigrationAutocommit(client, file) {
+  console.log(`[apply-pending] aplicando ${file.name} (autocommit — non-transactional DDL)…`)
+  const statements = splitSqlStatements(file.content)
+  for (const [idx, stmt] of statements.entries()) {
+    try {
+      await client.query(stmt)
+    } catch (err) {
+      throw new Error(
+        `Falha em ${file.name} (statement ${idx + 1}/${statements.length}, autocommit — ` +
+          `sem rollback; garanta que a migration é idempotente): ${err.message}`,
+      )
+    }
+  }
+  await recordApplied(client, file)
+  console.log(`[apply-pending]   ✓ ${file.name} (${statements.length} statements)`)
 }
 
 async function acquireMigrationLock(client) {
