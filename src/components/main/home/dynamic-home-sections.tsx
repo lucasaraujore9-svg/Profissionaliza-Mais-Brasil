@@ -11,7 +11,6 @@ import {
 import { loadTecnicaSectionContent } from "@/lib/catalog/tecnica"
 import { loadEjaSectionContent } from "@/lib/catalog/eja"
 import {
-  loadHomeSections,
   resolveSectionCourses,
   resolveCategoriesForSection,
   parseBestsellersCookie,
@@ -22,6 +21,7 @@ import {
   type CategoriesGridConfig,
   type InstitutionalConfig,
 } from "@/lib/home/sections"
+import { loadHomeSectionsCached } from "@/lib/home/cache"
 import { prisma } from "@/lib/prisma"
 import { getSystemSettings } from "@/lib/system-settings"
 import { interestFreePhrase } from "@/lib/mercadopago/installments"
@@ -35,7 +35,7 @@ export async function DynamicHomeSections({
   tenantId,
 }: DynamicHomeSectionsProps) {
   const [sections, interestFree, supportHoursText] = await Promise.all([
-    loadHomeSections(tenantId),
+    loadHomeSectionsCached(tenantId),
     resolveInterestFree(tenantId),
     resolveSupportHours(tenantId),
   ])

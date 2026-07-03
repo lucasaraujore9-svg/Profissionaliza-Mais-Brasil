@@ -2,7 +2,7 @@ import { HeroBanner } from "@/components/main/home/hero-banner"
 import { DynamicHomeSections } from "@/components/main/home/dynamic-home-sections"
 import { getCurrentTenant } from "@/lib/tenant/current"
 import { prisma } from "@/lib/prisma"
-import { loadShowcase } from "@/lib/catalog/home"
+import { loadShowcaseCached } from "@/lib/home/cache"
 
 export const dynamic = "force-dynamic"
 
@@ -24,7 +24,7 @@ export default async function LojaHomePage() {
   }
 
   const [showcase, bannerSlides] = await Promise.all([
-    loadShowcase(tenant.id),
+    loadShowcaseCached(tenant.id),
     prisma.bannerSlide.findMany({
       where: { tenantId: tenant.id, active: true },
       orderBy: [{ order: "asc" }, { createdAt: "asc" }],

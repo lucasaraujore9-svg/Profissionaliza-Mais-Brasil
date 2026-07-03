@@ -9,6 +9,7 @@ import {
   reorderSectionsSchema,
   type AnySectionConfig,
 } from "./sections"
+import { invalidateHomeCache } from "./cache"
 
 /** Primeira mensagem de erro de um ZodError, achatada para o envelope `{ error }`. */
 function firstZodError(error: import("zod").ZodError): string {
@@ -165,6 +166,7 @@ export async function createSection(scope: Scope, body: unknown) {
       config: validation.config as unknown as Prisma.InputJsonValue,
     },
   })
+  await invalidateHomeCache(scope.tenantId)
   return NextResponse.json({ data: created }, { status: 201 })
 }
 
@@ -268,6 +270,7 @@ export async function updateSection(
   })
 
   await normalizePositions(scope)
+  await invalidateHomeCache(scope.tenantId)
 
   return NextResponse.json({ data: updated })
 }
@@ -306,6 +309,7 @@ export async function deleteSection(scope: Scope, id: string): Promise<Response>
   }
   await prisma.homeSection.delete({ where: { id } })
   await normalizePositions(scope)
+  await invalidateHomeCache(scope.tenantId)
   return NextResponse.json({ data: { ok: true } })
 }
 
@@ -332,6 +336,7 @@ export async function reorderSections(scope: Scope, body: unknown): Promise<Resp
     await prisma.homeSection.update({ where: { id }, data: { position: idx } })
   }
   await normalizePositions(scope)
+  await invalidateHomeCache(scope.tenantId)
   return NextResponse.json({ data: { ok: true } })
 }
 
