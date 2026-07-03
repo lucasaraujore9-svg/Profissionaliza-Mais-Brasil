@@ -12,6 +12,13 @@ export const maxDuration = 300
 // Lote para nao estourar o pool do Supabase nem o Storage em paralelo.
 const BATCH = 4
 
+// PERF-006: teto de certificados por request + cursor keyset (?afterId=<certId>)
+// para retomar. Sem isto, milhares de PDFs num único request estouram os 300s e
+// uma falha/timeout perde TODO o progresso (cada PDF é idempotente por
+// sobrescrita, mas não havia ponto de retomada). O client itera até nextAfterId
+// = null. Ordena por `id` asc (chave estável do cursor).
+const PAGE_SIZE = 200
+
 /**
  * Regenera o PDF de TODOS os certificados ja emitidos (pdfUrl != null e nao
  * revogados), aplicando o estado atual de templates/branding — variaveis em
@@ -38,10 +45,17 @@ export const POST = withRequestContext(
     }
 
     const log = contextLogger()
+    const url = new URL(request.url)
+    const afterId = url.searchParams.get("afterId") || undefined
     const certs = await prisma.certificate.findMany({
-      where: { pdfUrl: { not: null }, revokedAt: null },
+      where: {
+        pdfUrl: { not: null },
+        revokedAt: null,
+        ...(afterId ? { id: { gt: afterId } } : {}),
+      },
       select: { id: true },
-      orderBy: { createdAt: "asc" },
+      orderBy: { id: "asc" },
+      take: PAGE_SIZE,
     })
 
     let ok = 0
@@ -64,21 +78,27 @@ export const POST = withRequestContext(
       })
     }
 
+    // Cursor de retomada: página cheia => há mais; página parcial => acabou.
+    const nextAfterId =
+      certs.length === PAGE_SIZE ? certs[certs.length - 1].id : null
+
     log.info(
       {
         event: "certificates.regenerate_all",
-        total: certs.length,
+        count: certs.length,
         ok,
         failures: failures.length,
+        hasMore: nextAfterId != null,
       },
-      "regeneração em lote de certificados concluída",
+      "regeneração em lote de certificados — página concluída",
     )
 
     return NextResponse.json({
-      total: certs.length,
+      count: certs.length,
       regenerated: ok,
       failed: failures.length,
       failures,
+      nextAfterId,
     })
   },
 )

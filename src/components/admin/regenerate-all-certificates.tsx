@@ -9,6 +9,39 @@ interface Result {
   failed: number
 }
 
+interface PageResponse {
+  count: number
+  regenerated: number
+  failed: number
+  nextAfterId: string | null
+}
+
+// PERF-006: cada request regenera no máximo PAGE_SIZE (200) certificados e
+// devolve `nextAfterId`. O botão itera as páginas até `nextAfterId = null`,
+// acumulando os totais — a UX de "regenerar todos" continua num clique só, mas
+// cada request é limitado (não estoura o timeout do servidor).
+async function regenerateAllPages(): Promise<Result> {
+  let afterId: string | null = null
+  const totals: Result = { total: 0, regenerated: 0, failed: 0 }
+  // Guarda-limite defensivo contra loop infinito (200 * 500 = 100k certificados).
+  for (let guard = 0; guard < 500; guard++) {
+    const qs = afterId ? `?afterId=${encodeURIComponent(afterId)}` : ""
+    const res = await fetch(`/api/admin/certificates/regenerate-all${qs}`, {
+      method: "POST",
+    })
+    const data = (await res.json()) as PageResponse & { error?: string }
+    if (!res.ok) {
+      throw new Error(data?.error ?? "Falha ao regenerar")
+    }
+    totals.total += data.count
+    totals.regenerated += data.regenerated
+    totals.failed += data.failed
+    if (!data.nextAfterId) break
+    afterId = data.nextAfterId
+  }
+  return totals
+}
+
 /**
  * Botão SUPER_ADMIN para regenerar em lote os PDFs de todos os certificados já
  * emitidos, aplicando o layout atual (variáveis em maiúsculo, % de conclusão na
@@ -26,14 +59,7 @@ export function RegenerateAllCertificates() {
     setError(null)
     setResult(null)
     try {
-      const res = await fetch("/api/admin/certificates/regenerate-all", {
-        method: "POST",
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        throw new Error(data?.error ?? "Falha ao regenerar")
-      }
-      setResult(data as Result)
+      setResult(await regenerateAllPages())
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro inesperado")
     } finally {
