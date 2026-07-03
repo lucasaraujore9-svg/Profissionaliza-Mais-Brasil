@@ -9,6 +9,7 @@ import {
   type CsvHeader,
 } from "@/lib/csv"
 import { withRequestContext } from "@/lib/observability/with-request-context"
+import { MAX_EXPORT_ROWS, truncationNotice } from "@/lib/reports/export-limit"
 
 export const dynamic = "force-dynamic"
 
@@ -132,6 +133,7 @@ export const GET = withRequestContext(
       markedPaidBy: { select: { name: true, email: true } },
     },
     orderBy: { requestedAt: "desc" },
+    take: MAX_EXPORT_ROWS,
   })
 
   const rows: PayoutCsvRow[] = payouts.map((p) => ({
@@ -150,7 +152,8 @@ export const GET = withRequestContext(
     notes: p.notes ?? "",
   }))
 
-  const csv = arrayToCsv(rows, HEADERS)
+  let csv = arrayToCsv(rows, HEADERS)
+  if (payouts.length === MAX_EXPORT_ROWS) csv += `\n${truncationNotice()}`
   const filename = csvFilename("saques-indicacao")
 
   return new NextResponse(csv, {
