@@ -2,6 +2,7 @@ import Link from "next/link"
 import { Search } from "lucide-react"
 import { CourseCard, type Course } from "@/components/main/home/course-card"
 import { SearchAutocomplete } from "@/components/shared/search-autocomplete"
+import { CatalogPager } from "@/components/shared/catalog-pager"
 import { getCurrentTenant } from "@/lib/tenant/current"
 import {
   listTenantCatalog,
@@ -9,6 +10,9 @@ import {
 } from "@/lib/tenant/courses"
 
 export const dynamic = "force-dynamic"
+
+// PERF-003: catálogo da vitrine paginado server-side (select enxuto + take/skip).
+const PAGE_SIZE = 24
 
 function formatPrice(value: number): string {
   if (!value || value <= 0) return "Consulte"
@@ -47,7 +51,7 @@ function toCourse(item: TenantCourseListItem, idx: number): Course {
 export default async function LojaCursosPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; categoria?: string }>
+  searchParams: Promise<{ q?: string; categoria?: string; page?: string }>
 }) {
   const tenant = await getCurrentTenant()
 
@@ -68,22 +72,26 @@ export default async function LojaCursosPage({
   const sp = await searchParams
   const q = sp.q?.trim() || ""
   const categoriaSlug = sp.categoria?.trim() || ""
+  const page = Math.max(1, Number.parseInt(sp.page ?? "1", 10) || 1)
 
   const { items, total, categories } = await listTenantCatalog({
     tenantId: tenant.id,
     categorySlug: categoriaSlug,
     search: q,
+    take: PAGE_SIZE,
+    skip: (page - 1) * PAGE_SIZE,
   })
 
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
   const categoriaAtiva = categories.find((c) => c.slug === categoriaSlug)
   const tituloAtivo = categoriaAtiva ? categoriaAtiva.nome : "Todos os cursos"
   const cursos = items.map(toCourse)
 
   // Busca sem resultados: em vez de deixar a página vazia ("fica vago"),
-  // mostramos o catálogo completo da unidade logo abaixo da mensagem.
+  // mostramos a 1ª página do catálogo completo da unidade abaixo da mensagem.
   const semResultados = cursos.length === 0 && Boolean(q || categoriaSlug)
   const todosOsCursos = semResultados
-    ? (await listTenantCatalog({ tenantId: tenant.id })).items.map(toCourse)
+    ? (await listTenantCatalog({ tenantId: tenant.id, take: PAGE_SIZE })).items.map(toCourse)
     : []
 
   return (
@@ -205,6 +213,13 @@ export default async function LojaCursosPage({
                 </li>
               ))}
             </ul>
+            <CatalogPager
+              basePath="/cursos"
+              page={page}
+              totalPages={totalPages}
+              q={q || undefined}
+              categoria={categoriaSlug || undefined}
+            />
           </>
         )}
       </section>

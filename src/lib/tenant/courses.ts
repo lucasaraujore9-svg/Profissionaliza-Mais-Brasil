@@ -82,8 +82,30 @@ function visibilityFilter(tenantId: string): Prisma.CourseWhereInput {
   }
 }
 
+/**
+ * Colunas de `Course` efetivamente lidas por `mapTenantCourseItem` (card da
+ * vitrine). PERF-003: substitui `include: { course: true }` (que trafegava TODA
+ * a linha `Course`, incluindo descricao longa/matriz/campos internos) por um
+ * `select` enxuto — só o que o card renderiza.
+ */
+const CARD_COURSE_SELECT = {
+  slug: true,
+  nome: true,
+  descricao: true,
+  descricaoOverride: true,
+  categoriaLoja: true,
+  categoriaInterna: true,
+  cargaHoraria: true,
+  precoOriginal: true,
+  capaOverride: true,
+  capaImageUrl: true,
+  parcelasOverride: true,
+  parcelasSugeridas: true,
+  monthlyMonthsMain: true,
+} satisfies Prisma.CourseSelect
+
 type TenantCourseWithCourse = Prisma.TenantCourseGetPayload<{
-  include: { course: true }
+  include: { course: { select: typeof CARD_COURSE_SELECT } }
 }>
 
 /**
@@ -162,7 +184,7 @@ export async function listTenantCourses(
     const [items, total, monthly] = await Promise.all([
       prisma.tenantCourse.findMany({
         where,
-        include: { course: true },
+        include: { course: { select: CARD_COURSE_SELECT } },
         orderBy: [{ isFeatured: "desc" }, { customOrder: "asc" }],
         take: filters.limit ?? 20,
         skip: filters.offset ?? 0,
@@ -227,12 +249,15 @@ export async function listTenantCatalog(args: {
   tenantId: string
   categorySlug?: string
   search?: string
+  /** PERF-003: paginacao server-side (default: sem teto para compat, mas a page passa `take`). */
+  take?: number
+  skip?: number
 }): Promise<{
   items: TenantCourseListItem[]
   total: number
   categories: TenantCatalogCategory[]
 }> {
-  const { tenantId, categorySlug, search } = args
+  const { tenantId, categorySlug, search, take, skip } = args
   try {
     let categoryId: string | undefined
     if (categorySlug && categorySlug !== "todos") {
@@ -263,8 +288,10 @@ export async function listTenantCatalog(args: {
     const [rows, total, categories, monthly] = await Promise.all([
       prisma.tenantCourse.findMany({
         where,
-        include: { course: true },
+        include: { course: { select: CARD_COURSE_SELECT } },
         orderBy: [{ isFeatured: "desc" }, { customOrder: "asc" }, { course: { nome: "asc" } }],
+        ...(take != null ? { take } : {}),
+        ...(skip != null ? { skip } : {}),
       }),
       prisma.tenantCourse.count({ where }),
       tenantCatalogCategories(tenantId),

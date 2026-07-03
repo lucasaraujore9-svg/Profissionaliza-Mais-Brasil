@@ -261,10 +261,13 @@ export async function loadCatalogo({
   q,
   categoriaSlug,
   take,
+  skip,
 }: {
   q?: string
   categoriaSlug?: string
   take?: number
+  /** PERF-003: paginacao server-side (offset). Combina com `take`. */
+  skip?: number
 }): Promise<{ cursos: Course[]; total: number }> {
   try {
     const where: Record<string, unknown> = {
@@ -296,6 +299,7 @@ export async function loadCatalogo({
         where,
         orderBy: [{ destaqueHome: "desc" }, { destaque: "desc" }, { nome: "asc" }],
         ...(take ? { take } : {}),
+        ...(skip ? { skip } : {}),
         select: SELECT,
       }),
       prisma.course.count({ where }),

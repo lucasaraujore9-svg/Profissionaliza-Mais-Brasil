@@ -2,27 +2,34 @@ import Link from "next/link"
 import { Search } from "lucide-react"
 import { CourseCard } from "@/components/main/home/course-card"
 import { SearchAutocomplete } from "@/components/shared/search-autocomplete"
+import { CatalogPager } from "@/components/shared/catalog-pager"
 import { loadCatalogo, loadCategorias } from "@/lib/catalog/home"
+
+// PERF-003: catálogo paginado server-side (evita carregar 112+ cursos por load).
+const PAGE_SIZE = 24
 
 export default async function CursosPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; categoria?: string }>
+  searchParams: Promise<{ q?: string; categoria?: string; page?: string }>
 }) {
   const sp = await searchParams
   const q = sp.q?.trim() || ""
   const categoriaSlug = sp.categoria?.trim() || ""
+  const page = Math.max(1, Number.parseInt(sp.page ?? "1", 10) || 1)
 
   const [{ cursos, total }, categorias] = await Promise.all([
-    loadCatalogo({ q, categoriaSlug }),
+    loadCatalogo({ q, categoriaSlug, take: PAGE_SIZE, skip: (page - 1) * PAGE_SIZE }),
     loadCategorias(0),
   ])
 
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
+
   // Busca sem resultados: em vez de deixar a página vazia ("fica vago"),
-  // mostramos o catálogo completo logo abaixo da mensagem.
+  // mostramos a 1ª página do catálogo completo logo abaixo da mensagem.
   const semResultados = cursos.length === 0 && Boolean(q || categoriaSlug)
   const { cursos: todosOsCursos } = semResultados
-    ? await loadCatalogo({})
+    ? await loadCatalogo({ take: PAGE_SIZE })
     : { cursos: [] }
 
   const categoriaAtiva = categorias.find((c) => c.slug === categoriaSlug)
@@ -132,6 +139,13 @@ export default async function CursosPage({
                 </li>
               ))}
             </ul>
+            <CatalogPager
+              basePath="/cursos"
+              page={page}
+              totalPages={totalPages}
+              q={q || undefined}
+              categoria={categoriaSlug || undefined}
+            />
           </>
         )}
       </section>
