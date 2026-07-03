@@ -902,6 +902,10 @@ model Student {
   @@index([plataformaAlunoId])
   @@index([tenantId, status])
   @@index([resetToken])
+  // DB-001: BI hub conta alunos novos por bucket de created_at (platform-wide,
+  // sem tenant líder) e agrupa por estado — sem estes, seq scan da maior tabela.
+  @@index([createdAt])
+  @@index([estado])
   @@map("students")
 }
 
@@ -1022,6 +1026,11 @@ model Enrollment {
   @@index([studentId, status])
   @@index([couponId], map: "enrollments_coupon_id_idx")
   @@index([tenantCourseId], map: "enrollments_tenant_course_id_idx")
+  // DB-001: BI hub conta matrículas por bucket de created_at (platform-wide) e
+  // por status ao longo do tempo — sem tenant líder o composto [tenantId,...]
+  // não serve.
+  @@index([createdAt])
+  @@index([status, createdAt])
   @@map("enrollments")
 }
 
@@ -1069,6 +1078,10 @@ model Payment {
   @@index([tenantId, createdAt])
   @@index([tenantId, paidAt])
   @@index([couponId], map: "payments_coupon_id_idx")
+  // DB-001: approvedRevenueByBucket (BI platform-wide) filtra
+  // mp_status='APPROVED' + paid_at range sem tenant líder — este composto casa
+  // exatamente o WHERE.
+  @@index([mpStatus, paidAt])
   @@map("payments")
 }
 
@@ -1669,6 +1682,8 @@ model ReferralCommission {
   @@index([referredTenantId])
   @@index([status, availableAt])
   @@index([payoutId])
+  // DB-001: BI indicacoes-comissoes agrega por range de created_at.
+  @@index([createdAt])
   @@map("referral_commissions")
 }
 
@@ -1772,6 +1787,8 @@ model ReferralMonthlyCommission {
   @@index([referrerTenantId, status])
   @@index([status, availableAt])
   @@index([payoutId])
+  // DB-001: BI indicacoes-comissoes agrega por range de created_at.
+  @@index([createdAt])
   @@map("referral_monthly_commissions")
 }
 
