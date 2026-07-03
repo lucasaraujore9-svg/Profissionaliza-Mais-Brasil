@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma"
 import { blockStudentInEA } from "@/lib/students/plataforma-actions"
 import { createNotification } from "@/lib/notifications"
 import { isCronAuthorized } from "@/lib/auth/bearer"
+import { withRequestContext } from "@/lib/observability/with-request-context"
+import { contextLogger } from "@/lib/logger"
 import { addMonthsClamped } from "@/lib/dates"
 import { get as redisGet, set as redisSet, invalidate as redisDel } from "@/lib/redis/cache"
 
@@ -165,13 +167,49 @@ async function processOverdueStudents() {
   return result
 }
 
-export async function POST(request: Request) {
-  if (!isCronAuthorized(request)) {
-    return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
-  }
-  const result = await processOverdueStudents()
-  return NextResponse.json({ data: result })
-}
+export const POST = withRequestContext(
+  { action: "cron.sweep_students_overdue", route: "/api/cron/sweep-students-overdue" },
+  async (request: Request) => {
+    if (!isCronAuthorized(request)) {
+      return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+    }
+    const log = contextLogger()
+    const result = await processOverdueStudents()
+
+    log.info(
+      {
+        event: "cron.sweep_students_overdue.done",
+        inspected: result.inspected,
+        enrollmentsSuspended: result.enrollmentsSuspended,
+        studentsBlocked: result.studentsBlocked,
+        errorCount: result.errors.length,
+      },
+      "cron sweep-students-overdue concluído",
+    )
+
+    if (result.errors.length > 0) {
+      log.error(
+        {
+          event: "cron.sweep_students_overdue.partial",
+          errorCount: result.errors.length,
+          sampleErrors: result.errors.slice(0, 5),
+        },
+        "cron sweep-students-overdue: suspensões/bloqueios falharam parcialmente",
+      )
+      await createNotification({
+        audience: "ROLE",
+        roleTarget: "SUPER_ADMIN",
+        level: "ERROR",
+        title: "Cron sweep-students-overdue: falhas parciais",
+        body: `${result.errors.length} operação(ões) falharam. Inadimplentes podem seguir com acesso.`,
+        category: "cron",
+        href: "/admin/alunos",
+      }).catch(() => undefined)
+    }
+
+    return NextResponse.json({ data: result })
+  },
+)
 
 export async function GET(request: Request) {
   return POST(request)

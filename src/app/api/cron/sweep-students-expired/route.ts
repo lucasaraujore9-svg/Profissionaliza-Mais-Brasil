@@ -4,6 +4,8 @@ import { blockStudentInEA } from "@/lib/students/plataforma-actions"
 import { createNotification } from "@/lib/notifications"
 import { sendEmail } from "@/lib/email/mailer"
 import { isCronAuthorized } from "@/lib/auth/bearer"
+import { withRequestContext } from "@/lib/observability/with-request-context"
+import { contextLogger } from "@/lib/logger"
 import { appUrl } from "@/lib/tenant/urls"
 import {
   emailBrandFromTenantRow,
@@ -252,13 +254,50 @@ async function processExpiredStudents() {
   return result
 }
 
-export async function POST(request: Request) {
-  if (!isCronAuthorized(request)) {
-    return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
-  }
-  const result = await processExpiredStudents()
-  return NextResponse.json({ data: result })
-}
+export const POST = withRequestContext(
+  { action: "cron.sweep_students_expired", route: "/api/cron/sweep-students-expired" },
+  async (request: Request) => {
+    if (!isCronAuthorized(request)) {
+      return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+    }
+    const log = contextLogger()
+    const result = await processExpiredStudents()
+
+    log.info(
+      {
+        event: "cron.sweep_students_expired.done",
+        expiredInspected: result.expiredInspected,
+        enrollmentsExpired: result.enrollmentsExpired,
+        studentsBlocked: result.studentsBlocked,
+        warningsSent: result.warningsSent,
+        errorCount: result.errors.length,
+      },
+      "cron sweep-students-expired concluído",
+    )
+
+    if (result.errors.length > 0) {
+      log.error(
+        {
+          event: "cron.sweep_students_expired.partial",
+          errorCount: result.errors.length,
+          sampleErrors: result.errors.slice(0, 5),
+        },
+        "cron sweep-students-expired: encerramentos/avisos falharam parcialmente",
+      )
+      await createNotification({
+        audience: "ROLE",
+        roleTarget: "SUPER_ADMIN",
+        level: "ERROR",
+        title: "Cron sweep-students-expired: falhas parciais",
+        body: `${result.errors.length} operação(ões) falharam ao encerrar acesso/avisar alunos.`,
+        category: "cron",
+        href: "/admin/alunos",
+      }).catch(() => undefined)
+    }
+
+    return NextResponse.json({ data: result })
+  },
+)
 
 export async function GET(request: Request) {
   return POST(request)

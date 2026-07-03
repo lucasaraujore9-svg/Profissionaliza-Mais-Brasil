@@ -6,6 +6,8 @@ import { canReactivateUnderTenant } from "@/lib/students/reactivation-guard"
 import { invalidateTenantCache } from "@/lib/tenant/cache-invalidation"
 import { createNotification } from "@/lib/notifications"
 import { isCronAuthorized } from "@/lib/auth/bearer"
+import { withRequestContext } from "@/lib/observability/with-request-context"
+import { contextLogger } from "@/lib/logger"
 import { PMB_TENANT_SLUG } from "@/lib/pmb-config"
 
 export const maxDuration = 300
@@ -147,13 +149,49 @@ async function processReactivations() {
   return result
 }
 
-export async function POST(request: Request) {
-  if (!isCronAuthorized(request)) {
-    return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
-  }
-  const result = await processReactivations()
-  return NextResponse.json({ data: result })
-}
+export const POST = withRequestContext(
+  { action: "cron.reactivate_paid", route: "/api/cron/reactivate-paid" },
+  async (request: Request) => {
+    if (!isCronAuthorized(request)) {
+      return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+    }
+    const log = contextLogger()
+    const result = await processReactivations()
+
+    log.info(
+      {
+        event: "cron.reactivate_paid.done",
+        tenantsReactivated: result.tenantsReactivated,
+        enrollmentsReactivated: result.enrollmentsReactivated,
+        studentsUnblocked: result.studentsUnblocked,
+        errorCount: result.errors.length,
+      },
+      "cron reactivate-paid concluído",
+    )
+
+    if (result.errors.length > 0) {
+      log.error(
+        {
+          event: "cron.reactivate_paid.partial",
+          errorCount: result.errors.length,
+          sampleErrors: result.errors.slice(0, 5),
+        },
+        "cron reactivate-paid: reativações falharam parcialmente",
+      )
+      await createNotification({
+        audience: "ROLE",
+        roleTarget: "SUPER_ADMIN",
+        level: "ERROR",
+        title: "Cron reactivate-paid: falhas parciais",
+        body: `${result.errors.length} reativação(ões) falharam. Alunos pagos podem seguir bloqueados.`,
+        category: "cron",
+        href: "/admin/revendedores",
+      }).catch(() => undefined)
+    }
+
+    return NextResponse.json({ data: result })
+  },
+)
 
 export async function GET(request: Request) {
   return POST(request)
