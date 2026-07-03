@@ -796,3 +796,38 @@ Não corrigidos nesta rodada:
   - SEG-002/004/005/006/007 (P2/P3) — fora do foco autorizado desta rodada
     (mission focada em SEG-009 P1); permanecem Abertos.
 ========================================================================
+
+========================================================================
+2026-07-03 · Domínio seguranca · Rodada P2→P3 (continuação) · vários commits
+------------------------------------------------------------------------
+Achados processados após SEG-009:
+  SEG-007 (P2) Aceito/documentado ....... commit 8b3aa6d
+  SEG-004 (P3) Corrigido ................. commit 85461b0
+  SEG-005 (P3) Corrigido (parcial) ...... commit e8f8124
+  SEG-006 (P3) Parcial (runbook) ........ commit 991ad4f
+  SEG-002 (P2) Aberto (deferido, ver nota)
+  SEG-001 (P1) Aberto (adiado p/ VPS)
+
+Última execução do Portão Zero-Erro (após SEG-006, tree = 991ad4f):
+  1) typecheck (tsc --noEmit) ............ OK (0 erros)
+  2) lint (eslint) ....................... OK (0 erros; 1 warning
+     pré-existente em scripts/render-cert-samples.tsx, não tocado)
+  3) build (SKIP_PENDING_MIGRATIONS=1 next build, DATABASE_URL throwaway
+     — mesmo padrão do ci.yml) .......... OK
+  4) test (vitest run) ................... OK (54 arquivos, 337 testes)
+
+Notas técnicas desta rodada:
+  - SEG-004: npm rm mercadopago (dep não-usada) → audit prod 14→13 vulns.
+  - SEG-005: prisma movido p/ devDependencies (layout Prisma). NÃO remove
+    o hono HIGH do audit --omit=dev porque @prisma/client declara `prisma`
+    como optional peerDependency; hono nunca chega ao runtime. Dependabot
+    adicionado. Audit segue informativo (nodemailer HIGH sem patch tornaria
+    um gate bloqueante vermelho permanente).
+  - SEG-006: docs/runbooks/rotacao-de-chaves.md; confirmação de env em prod
+    e rotação de ENCRYPTION_KEY (com re-cifragem) = ação manual do usuário.
+  - SEG-002: migração p/ CSP nonce não é validável pelo Portão (risco de
+    quebrar checkout MP/iframe cert/YouTube/pixels em runtime) → deferida.
+
+VEREDITO: VERDE. Domínio seguranca sem achados Corrigíveis pendentes;
+restam SEG-001 (decisão do dono) e SEG-002 (mudança dedicada c/ QA).
+========================================================================
