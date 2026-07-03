@@ -32,7 +32,9 @@ export function CheckoutInquiryForm({
   const [email, setEmail] = useState("")
   const [telefone, setTelefone] = useState("")
   const [mensagem, setMensagem] = useState("")
-  const [consent, setConsent] = useState(true)
+  // LGPD-007: opt-in ativo — consentimento nasce DESMARCADO; submit bloqueado
+  // até o titular marcar (manifestação livre).
+  const [consent, setConsent] = useState(false)
   const [status, setStatus] = useState<
     "idle" | "submitting" | "success" | "error"
   >("idle")

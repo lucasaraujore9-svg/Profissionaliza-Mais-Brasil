@@ -29,7 +29,9 @@ export function LeadInquiryCard({
   const [nome, setNome] = useState("")
   const [email, setEmail] = useState("")
   const [telefone, setTelefone] = useState("")
-  const [consent, setConsent] = useState(true)
+  // LGPD-007: opt-in ativo — o consentimento nasce DESMARCADO (manifestação
+  // livre); o submit segue bloqueado até o titular marcar.
+  const [consent, setConsent] = useState(false)
   const [status, setStatus] = useState<"idle" | "submitting" | "success" | "error">(
     "idle",
   )
