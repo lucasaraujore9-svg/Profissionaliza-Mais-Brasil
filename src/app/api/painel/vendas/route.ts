@@ -154,13 +154,30 @@ export const POST = withRequestContext(
       where: { id: data.tenantCourseId, tenantId: tenant.id, isVisible: true },
       include: {
         course: {
-          select: { id: true, nome: true, slug: true, monthlyMonthsMain: true },
+          select: {
+            id: true,
+            nome: true,
+            slug: true,
+            monthlyMonthsMain: true,
+            status: true,
+          },
         },
       },
     })
     if (!tenantCourse) {
       return NextResponse.json(
         { error: "Curso não encontrado na sua vitrine" },
+        { status: 404 },
+      )
+    }
+    // SAAS-010: mesmo gate de ec832d0 aplicado à venda manual do painel. Um
+    // curso desativado/removido na origem (EA/LMS → status="INATIVO") não pode
+    // ser vendido nem via POST direto, mesmo que o revendedor tenha mantido
+    // TenantCourse.isVisible=true (a visibilidade é flag independente). Evita
+    // gerar matrícula cujo provisionamento na plataforma parceira falharia.
+    if (tenantCourse.course.status !== "ATIVO") {
+      return NextResponse.json(
+        { error: "Curso indisponível" },
         { status: 404 },
       )
     }
