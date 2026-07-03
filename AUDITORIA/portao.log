@@ -867,3 +867,10 @@ build exit=0
    Duration  2.24s (transform 949ms, setup 0ms, collect 4.79s, tests 339ms, environment 6ms, prepare 2.57s)
 
 ### RESULTADO: VERDE — typecheck 0 erros · lint 0 erros (1 warning pré-existente) · build exit=0 · 354/354 testes
+
+=== 2026-07-03 · Corretor API · API-009 (P2) ===
+Correção: rate-limit nos endpoints públicos de parcelas MP (bucket installments 20/60s failOpen)
+- typecheck (tsc --noEmit): OK (0 erro)
+- lint (eslint): OK (0 erro, 1 warning pré-existente em scripts/render-cert-samples.tsx)
+- build (SKIP_PENDING_MIGRATIONS=1, DATABASE_URL throwaway): OK (exit 0, 235/235 páginas)
+- test (vitest run): OK (59 files, 356 passed)

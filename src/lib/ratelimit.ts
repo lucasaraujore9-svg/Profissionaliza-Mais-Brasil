@@ -184,6 +184,12 @@ export const RATE_LIMITS = {
   authReset: { name: "auth-reset", limit: 6, windowSec: 60, failOpen: true },
   leads: { name: "leads", limit: 6, windowSec: 60 },
   publicCheckout: { name: "loja-checkout", limit: 10, windowSec: 60 },
+  // Consulta de parcelas do cartão (MP): endpoints públicos que disparam 1
+  // chamada externa ao MP por request. Rate-limit protege contra abuso/
+  // enumeração de BIN/exaustão da cota MP. failOpen: o cálculo de parcela é
+  // apenas enriquecimento de UX (degrada para a síntese 1..12) — uma queda do
+  // Upstash não pode piorar a experiência de checkout do cliente real.
+  installments: { name: "installments", limit: 20, windowSec: 60, failOpen: true },
   publicCupom: { name: "loja-cupom", limit: 20, windowSec: 60 },
   revendedorCadastro: { name: "rev-cadastro", limit: 5, windowSec: 600 },
   cobrancaPayCard: { name: "cobranca-paycard", limit: 5, windowSec: 60 },

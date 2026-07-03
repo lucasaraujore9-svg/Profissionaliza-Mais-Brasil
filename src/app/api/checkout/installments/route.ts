@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 import { getCardInstallments, MPApiError } from "@/lib/mercadopago/client"
 import { getPmbMpAccessTokenAsync } from "@/lib/system-settings"
+import { rateLimit, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
 import { contextLogger } from "@/lib/logger"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 
@@ -18,6 +19,9 @@ const bodySchema = z.object({
 export const POST = withRequestContext(
   { action: "checkout.installments", route: "/api/checkout/installments" },
   async (request: Request) => {
+    const rl = await rateLimit(request, RATE_LIMITS.installments)
+    if (!rl.ok) return rateLimitResponse(rl)
+
     let payload: unknown
     try {
       payload = await request.json()

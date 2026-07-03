@@ -6,6 +6,7 @@ import {
   getCardInstallments,
   MPApiError,
 } from "@/lib/mercadopago/client"
+import { rateLimit, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
 import { contextLogger } from "@/lib/logger"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 
@@ -24,6 +25,9 @@ const bodySchema = z.object({
 export const POST = withRequestContext(
   { action: "loja.checkout.installments", route: "/api/loja/checkout/installments" },
   async (request: Request) => {
+    const rl = await rateLimit(request, RATE_LIMITS.installments)
+    if (!rl.ok) return rateLimitResponse(rl)
+
     const tenantIdHeader = request.headers.get("x-tenant-id")
     const tenantSlug = request.headers.get("x-tenant-slug")
     if (!tenantIdHeader && !tenantSlug) {
