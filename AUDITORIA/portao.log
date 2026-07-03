@@ -1062,3 +1062,14 @@ Ação manual pendente do dono:
   4) test (vitest run) .............. OK (90 arquivos, 456 testes)
 VEREDITO: VERDE.
 ========================================================================
+
+[2026-07-03] QA-013 fulfill.test.ts + process.test.ts — typecheck OK · lint OK (0 erros) · build OK (SKIP_PENDING_MIGRATIONS=1) · test 92 arq/471 verdes
+[2026-07-03] QA-014 aggregations.test.ts — typecheck OK · lint OK (0 erros) · build OK (SKIP_PENDING_MIGRATIONS=1) · test 93 arq/482 verdes
+[2026-07-03] QA-015 sync.test.ts (EA+LMS curadoria) — typecheck OK · lint OK (0 erros) · build OK (SKIP_PENDING_MIGRATIONS=1) · test 94 arq/486 verdes
+[2026-07-03] QA-016 proxy-host.test.ts (+ exports em proxy.ts) — typecheck OK · lint OK (0 erros) · build OK (SKIP_PENDING_MIGRATIONS=1) · test 95 arq/515 verdes
+[2026-07-03] QA-017 auto-block.test.ts — typecheck OK · lint OK (0 erros) · build OK (SKIP_PENDING_MIGRATIONS=1) · test 96 arq/519 verdes
+[2026-07-03] QA-008 monthly-policy.test.ts + display-status.test.ts — typecheck OK · lint OK (0 erros) · build OK (SKIP_PENDING_MIGRATIONS=1) · test 98 arq/534 verdes
+[2026-07-03] QA-005 ratelimit.test.ts + QA-012 student-support.test.ts — typecheck OK · lint OK (0 erros) · build OK (SKIP_PENDING_MIGRATIONS=1) · test 100 arq/544 verdes
+[2026-07-03] QA-010 lms-process.test.ts + QA-011 route-idempotency.test.ts — typecheck OK · lint OK (0 erros) · build OK (SKIP_PENDING_MIGRATIONS=1) · test 102 arq/566 verdes
+[2026-07-03] QA-009 vitest include .tsx + smoke — typecheck OK · lint OK (0 erros) · build OK (SKIP_PENDING_MIGRATIONS=1) · test 103 arq/567 verdes
+[2026-07-03] FINAL rodada Testes (QA-005/008/009/010/011/012/013/014/015/016/017) — typecheck 0 erro · lint 0 erro · build OK (SKIP_PENDING_MIGRATIONS=1) · test 103 arq/567 verdes · QA-006/QA-007 permanecem Abertos (infra nova)
