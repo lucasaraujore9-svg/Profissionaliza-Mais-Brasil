@@ -281,8 +281,11 @@ Antes de aprovar um PR que toca em qualquer um dos seguintes, verifique:
   `ExcelJS.Workbook` apenas para **escrita** de XLSX — nunca parseamos
   arquivos externos. Se algum dia adicionar import/upload de XLSX,
   reavaliar a superfície de parsing.
-- **`mercadopago` / `svix` / `resend` MED por uuid<11.** Atualizar requer
-  `mercadopago@0.5.0` (breaking). Esperar release sem breaking.
+- **`mercadopago` (npm SDK) REMOVIDO (SEG-004, 2026-07-03)** — era dep
+  direta não-usada (a integração MP usa o cliente próprio
+  `src/lib/mercadopago/client.ts` via `fetch`) e arrastava `uuid<11.1.1`
+  (GHSA-w5hq-g745-h8pq). `npm rm mercadopago` reduziu o audit de prod de 14
+  para 13 vulns. `svix`/`resend` ainda MED por uuid<11 — sem breaking bump.
 - **`nodemailer@7.0.13` HIGH (SEG-007, risco ACEITO até haver patch)** —
   dois advisories: GHSA-vvjj-xcjg-gr5g (CRLF no `name`/EHLO) e
   GHSA-c7w3-x93f-qmm8 (`envelope.size`). Não há release corrigido publicado
