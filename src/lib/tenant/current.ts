@@ -2,6 +2,7 @@ import { cache } from "react"
 import { headers } from "next/headers"
 import { prisma } from "@/lib/prisma"
 import { contextLogger } from "@/lib/logger"
+import { getTenantBranding, setTenantBranding } from "@/lib/redis/tenant-cache"
 
 export interface CurrentTenant {
   id: string
@@ -40,6 +41,15 @@ export const getCurrentTenant = cache(
 
     if (!tenantId && !tenantSlug) return null
 
+    // PERF-001: quando o proxy injeta o id (caso comum), tenta o branding
+    // cacheado no Redis antes de bater no Postgres. Cache por id — o resolve por
+    // slug (raro, id ausente) segue direto no banco. Fail-open: um outage do
+    // Redis (getTenantBranding => null) apenas cai no findFirst.
+    if (tenantId) {
+      const cached = await getTenantBranding<CurrentTenant>(tenantId)
+      if (cached) return cached
+    }
+
     try {
       const tenant = await prisma.tenant.findFirst({
         where: tenantId
@@ -74,6 +84,12 @@ export const getCurrentTenant = cache(
           automationEnabled: true,
         },
       })
+
+      // Popula o cache de branding (best-effort). Chaveia pelo id REAL do tenant
+      // — cobre inclusive o caminho resolvido por slug.
+      if (tenant) {
+        await setTenantBranding(tenant.id, tenant)
+      }
 
       return tenant
     } catch (error) {

@@ -16,6 +16,13 @@ export function tenantByIdKey(id: string): string {
   return `tenant:id:${id}`
 }
 
+// PERF-001: payload COMPLETO de branding do tenant (logo/cores/tagline/redes/
+// suporte/tecnica/eja/automacao) usado pelo layout da vitrine. Separado de
+// tenant:id:* (que carrega so id/slug/status/customDomain p/ o proxy).
+export function tenantBrandingKey(id: string): string {
+  return `tenant:branding:${id}`
+}
+
 // Redirect de subdominio antigo -> slug atual, apos um rename. Valor = slug novo.
 // TTL = janela de reserva (15 dias). Lido tambem no proxy/edge (src/proxy.ts).
 export function tenantRedirectKey(oldSlug: string): string {

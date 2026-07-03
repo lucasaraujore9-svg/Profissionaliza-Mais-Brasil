@@ -5,6 +5,7 @@ import {
   tenantBySlugKey,
   tenantByDomainKey,
   tenantByIdKey,
+  tenantBrandingKey,
   tenantRedirectKey,
 } from "./keys"
 
@@ -47,11 +48,31 @@ export async function invalidateTenant(
   const keys = [
     tenantBySlugKey(tenant.slug),
     tenantByIdKey(tenant.id),
+    // PERF-001: limpa tambem o branding cacheado (todo caller de invalidateTenant
+    // — vitrine/banner/dominio/billing/status/eja/tecnica/automacao — ja passa por
+    // aqui, entao a edicao reflete no proximo request).
+    tenantBrandingKey(tenant.id),
   ]
   if (tenant.customDomain) {
     keys.push(tenantByDomainKey(tenant.customDomain))
   }
   await invalidateMany(keys)
+}
+
+// ── PERF-001: cache do payload de branding usado pelo layout da vitrine ──────
+
+/** Lê o branding cacheado do tenant por id (`null` em miss ou Redis off). */
+export async function getTenantBranding<T>(id: string): Promise<T | null> {
+  return getJson<T>(tenantBrandingKey(id))
+}
+
+/** Grava o branding do tenant (TTL 300s). Best-effort (fail-open no helper). */
+export async function setTenantBranding<T>(
+  id: string,
+  value: T,
+  ttlSeconds: number = TENANT_CACHE_TTL_SECONDS,
+): Promise<void> {
+  await setJson(tenantBrandingKey(id), value, ttlSeconds)
 }
 
 /**
