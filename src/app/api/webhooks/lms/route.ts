@@ -17,6 +17,13 @@ import { redactWebhookPayload } from "@/lib/webhooks/redact-payload"
 export const maxDuration = 300
 export const dynamic = "force-dynamic"
 
+// SAAS-008: janela de reentrega para falhas retryable (corrida conclusão↔
+// fulfillment). Dentro dela, matrícula-não-encontrada devolve 500 (LMS re-tenta
+// e, quando a matrícula existir, a re-entrega emite o certificado). Passada a
+// janela, marca terminal (200) e delega ao cron `sync-day-update-lms` como rede
+// de segurança — evita reentrega infinita de um evento genuinamente órfão.
+const RETRY_WINDOW_MS = 30 * 60 * 1000
+
 /**
  * Webhook receiver de ENTRADA do LMS (LMS -> PMB). Eventos suportados:
  *   course.completed | course.published | course.unpublished | course.updated
@@ -97,18 +104,47 @@ export const POST = withRequestContext(
     const dedupKey = lmsDedupKey(eventId, eventType, rawBody)
     const existing = await prisma.webhookLog.findUnique({
       where: { externalEventId: dedupKey },
-      select: { id: true, processed: true },
+      select: { id: true, processed: true, createdAt: true },
     })
     if (existing?.processed) {
       return NextResponse.json({ received: true, duplicate: true })
     }
     const logId =
       existing?.id ?? (await createLog(eventType, payload, request, dedupKey))
+    // createdAt do log: o existente (reentrega) ou ~agora (recém-criado). Base da
+    // janela de retry para falhas retryable (SAAS-008).
+    const logCreatedAt = existing?.createdAt ?? new Date()
 
-    // 5) Processa síncrono. ok → 200; falha de negócio (não encontrado) → 200
-    //    marcando o motivo (retry não ajuda); exceção transitória → 500 (retry).
+    // 5) Processa síncrono. ok → 200; falha de negócio TERMINAL → 200 marcando o
+    //    motivo (retry não ajuda); falha RETRYABLE dentro da janela → 500 (LMS
+    //    re-tenta); retryable com janela expirada → 200 terminal (cron cobre);
+    //    exceção transitória → 500 (retry).
     try {
       const result = await processLmsWebhookEvent(eventType, payload)
+
+      // SAAS-008: falha retryable dentro da janela → NÃO marca processado e
+      // devolve 500 para o LMS reentregar (idempotência preservada: o dedupKey
+      // faz a re-entrega reprocessar; quando a matrícula existir, emite o
+      // certificado e marca terminal).
+      const withinRetryWindow =
+        Date.now() - logCreatedAt.getTime() < RETRY_WINDOW_MS
+      if (!result.ok && result.retryable && withinRetryWindow) {
+        await prisma.webhookLog
+          .update({
+            where: { id: logId },
+            data: { processed: false, error: result.message },
+          })
+          .catch(() => undefined)
+        contextLogger().warn(
+          { event: "webhooks.lms.retry_pending", eventType, logId, reason: result.message },
+          "webhook do LMS ainda não processável (corrida) — LMS deve re-tentar",
+        )
+        return NextResponse.json(
+          { error: "Ainda não processável — re-tente.", retry: true },
+          { status: 500 },
+        )
+      }
+
       await prisma.webhookLog.update({
         where: { id: logId },
         data: {

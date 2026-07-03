@@ -39,6 +39,12 @@ export function isLmsWebhookEvent(t: string | null): t is LmsWebhookEvent {
 export interface LmsWebhookResult {
   ok: boolean
   message: string
+  // SAAS-008: distingue falha de negócio TERMINAL (retry não ajuda — ex.: aluno
+  // inexistente no suporte) de falha TRANSITÓRIA/ainda-não-pronta (ex.:
+  // `course.completed` chega antes do fulfillment do PMB criar a matrícula, numa
+  // corrida). `retryable=true` faz a rota devolver 500 dentro da janela de
+  // reentrega, para o LMS re-tentar e o certificado não se perder.
+  retryable?: boolean
 }
 
 // ── Schemas por evento ──────────────────────────────────────────────────────
@@ -121,7 +127,11 @@ export async function processLmsWebhookEvent(
     case "course.completed": {
       const p = courseCompletedSchema.parse(payload)
       const enr = await findLmsEnrollment(p.studentExternalId, p.courseId)
-      if (!enr) return { ok: false, message: "matrícula LMS não encontrada" }
+      // SAAS-008: matrícula ausente pode ser corrida (conclusão antes do
+      // fulfillment). Sinaliza retryable → a rota reentrega dentro da janela em
+      // vez de descartar a conclusão (e o certificado) como terminal.
+      if (!enr)
+        return { ok: false, retryable: true, message: "matrícula LMS não encontrada" }
 
       // Reflete a conclusão no progresso ANTES de emitir (igual ao day-update),
       // para a emissão passar no critério de % mínimo.
@@ -144,7 +154,9 @@ export async function processLmsWebhookEvent(
     case "lesson.completed": {
       const p = lessonCompletedSchema.parse(payload)
       const enr = await findLmsEnrollment(p.studentExternalId, p.courseId)
-      if (!enr) return { ok: false, message: "matrícula LMS não encontrada" }
+      // SAAS-008: mesma corrida do course.completed — retryable dentro da janela.
+      if (!enr)
+        return { ok: false, retryable: true, message: "matrícula LMS não encontrada" }
 
       const completed = Boolean(p.completedAt)
       await prisma.enrollment.update({
