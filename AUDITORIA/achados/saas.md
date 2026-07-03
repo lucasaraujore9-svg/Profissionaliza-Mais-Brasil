@@ -14,7 +14,7 @@ _Data: 2026-07-03 · Referência: .claude/skills/auditoria-saas/references/09-sa
 
 ### [SAAS-001] Audit trail ausente em operações sensíveis secundárias (consultor/maxDiscount, status manual do tenant, cupons, conexão de gateway, exportações, comissão/mensalidade)
 - **Severidade:** P2
-- **Status:** Aberto (re-confirmado 2026-07-03 — `grep -c logAudit` retorna 0 nas 15 rotas abaixo)
+- **Status:** Corrigido (2026-07-03 — 4 commits atômicos: bad0a22 admin de tenant, cba66e1 cupons, ed416a4 equipe+gateways, 184abc6 exports)
 - **Local:**
   - `src/app/api/painel/equipe/[id]/route.ts` (PATCH muda `maxDiscount` — cap de desconto do consultor, uma autoridade comercial — e DELETE desativa membro; sem `logAudit`)
   - `src/app/api/admin/revendedores/[id]/status/route.ts` (PATCH transição manual de lifecycle ACTIVE/SUSPENDED/PENDING/CANCELLED do tenant; sem `logAudit`)
@@ -32,10 +32,11 @@ _Data: 2026-07-03 · Referência: .claude/skills/auditoria-saas/references/09-sa
   - exports: `action:"data.export"`, `resource:"<commissions|payouts|financeiro>"`, `payloadAfter:{rows:<n>, filters:<safe>}`.
   - cupons/mensalidade/referral-percent/sales/manager/password: `action` análogo (`coupon.create`, `coupon.toggle`, `tenant.monthly.update`, `tenant.referral_percent.update`, `tenant.sales.update`, `tenant.manager.update`, `reseller.password.reset`).
 - **Verificação:** Exercitar cada rota e conferir `SELECT action, resource, resource_id, actor_user_id FROM audit_logs ORDER BY created_at DESC LIMIT 20`. Teste unitário que mocka `logAudit` e afirma a chamada com o `action` esperado por rota.
+- **Verificação (realizada 2026-07-03):** 4 novos test files provam o `action`/`resource` por rota, mockando `logAudit` (`src/app/api/admin/audit-saas001.test.ts` 6 casos, `.../admin/cupons/audit-saas001.test.ts` 3, `.../painel/audit-saas001.test.ts` 6, `.../admin/referrals/audit-saas001-export.test.ts` 4). Os testes de gateway/senha afirmam explicitamente que credencial/senha NÃO aparece no payload. Actions aplicados: `tenant.status.update`, `tenant.monthly.update`, `tenant.referral_percent.update`, `tenant.sales.update`, `tenant.manager.update`, `reseller.password.reset`, `coupon.create`, `coupon.toggle`, `tenant_member.update`, `tenant_member.deactivate`, `tenant.gateway.connect`/`disconnect`, `data.export`. Portão Zero-Erro verde nos 4 commits (449 testes).
 
 ### [SAAS-006] AuditLog não tem imutabilidade garantida em nível de banco (append-only)
 - **Severidade:** P2
-- **Status:** Aberto (re-confirmado 2026-07-03 — nenhuma migration com trigger/REVOKE em `audit_logs`)
+- **Status:** Corrigido (2026-07-03 — migration `prisma/migrations/20260703_audit_logs_immutable` com trigger append-only; defesa por TRIGGER, não REVOKE)
 - **Local:** `prisma/migrations/20260528_audit_logs/migration.sql` (só cria a tabela + índices; sem REVOKE/trigger) · `prisma/schema.prisma` (model AuditLog) · `src/lib/audit.ts` (só faz `create`)
 - **Evidência:** A referência (item 4) pede tabela de auditoria **imutável** (sem update/delete via app; append-only; acesso restrito). `grep -l "BEFORE UPDATE|BEFORE DELETE|append-only|REVOKE"` sobre as migrations que mencionam `audit_logs` **não retorna nada** (verificado 2026-07-03). O projeto não usa RLS (isolamento em código) e não há trigger/grant impedindo `UPDATE`/`DELETE` em `audit_logs`. O wrapper `logAudit` só faz `prisma.auditLog.create` (correto), mas qualquer código futuro com acesso ao client `prisma` (ou a `service_role` no Supabase) pode reescrever/apagar a trilha. Com a cobertura de auditoria crescendo (billing, cancelamento, papéis, impersonate), o valor probatório da tabela cresce.
 - **Impacto:** Trilha forense pode ser adulterada por código futuro ou acesso direto ao banco — enfraquece exatamente o que a auditoria deveria garantir. Um ator com acesso ao banco pode billing-update + apagar o registro de auditoria correspondente sem deixar rastro.
@@ -49,6 +50,7 @@ _Data: 2026-07-03 · Referência: .claude/skills/auditoria-saas/references/09-sa
   ```
   ⚠️MIGRAÇÃO: o trigger é portável e roda igual no Postgres self-hosted do Swarm. Se quiser também REVOKE por role, documentar o role usado pela `DATABASE_URL` (Supavisor → pgBouncer na VPS).
 - **Verificação:** `UPDATE audit_logs SET action='x' WHERE id=...` e `DELETE FROM audit_logs ...` com o role da app devem falhar; `INSERT` continua funcionando. Rodar `logAudit` em qualquer rota auditada e confirmar persistência.
+- **Verificação (2026-07-03):** Migration idempotente criada (trigger `audit_logs_no_mutation` BEFORE UPDATE OR DELETE → `RAISE EXCEPTION` com ERRCODE `insufficient_privilege`; função `audit_logs_immutable()` via CREATE OR REPLACE; DROP TRIGGER IF EXISTS antes do CREATE). Defesa escolhida = **trigger**, não REVOKE (mexer nos grants do role do runtime poderia quebrar o app — fora do escopo). Confirmado por grep que NENHUM código faz UPDATE/DELETE em `auditLog`/`audit_logs` (só `create` via `logAudit`) → o trigger não quebra nenhum caminho existente. Portão Zero-Erro verde (SKIP_PENDING no build; sem DB local para shadow-lint). A aplicação real do trigger ocorre no próximo deploy (auto via `apply-pending-migrations.mjs`); verificação DB-level (UPDATE/DELETE falham, INSERT ok) fica **pendente de execução pós-deploy** pelo dono.
 
 ### [SAAS-010] Venda direta do revendedor (`painel/vendas`) não aplica o gate `status=ATIVO` — inconsistente com ec832d0
 - **Severidade:** P3
