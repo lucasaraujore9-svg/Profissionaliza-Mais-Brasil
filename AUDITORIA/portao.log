@@ -952,3 +952,32 @@ Aceitos (sem código; ação/decisão do usuário):
   4) test (vitest run) .............. OK (73 arquivos, 406 testes)
 VEREDITO: VERDE. Domínio performance sem achados Corrigíveis pendentes.
 ========================================================================
+
+========================================================================
+DOMÍNIO OBSERVABILIDADE — rodada corretiva 2026-07-03
+========================================================================
+Corrigidos (commit):
+  OBS-002 (P1) ...................... 5e4fa5c  (docs DR-RUNBOOKS)
+  OBS-003 (P2) ...................... fb4718e  (5 crons instrumentados)
+  OBS-007 (P3) ...................... f8322e9  (proxy edge log)
+  OBS-008 (P3) + LGPD-014 (P2) ...... 9f571fa  (redação PII WebhookLog)
+  OBS-009 (P3) ...................... 2981f9d  (beacon fail-closed + trusted)
+  OBS-010 (P3) ...................... ac97a82  (SSE placar logs)
+Parcial / Aberto (requer decisão/ação do dono):
+  OBS-001 (P2) — onRequestError interno adicionado (ca0e21d);
+                 error-tracker dedicado (Sentry/GlitchTip) = dono.
+  OBS-004 (P2) — métricas/tracing: dependência + backend externo = dono.
+  OBS-005 (P2) — monitor de uptime: doc entregue (MONITORAMENTO.md);
+                 ativação do serviço externo = dono.
+  OBS-006 (P2) — stack de logs VPS: doc entregue (LOGS-CENTRALIZACAO.md);
+                 implementação = ⚠️MIGRAÇÃO + dono.
+
+Última execução do Portão Zero-Erro (tree pós-OBS-010 + docs):
+  1) typecheck (tsc --noEmit) ....... OK (0 erros)
+  2) lint (eslint) .................. OK (0 erros; 1 warning pré-existente
+     em scripts/render-cert-samples.tsx, arquivo não tocado)
+  3) build (SKIP_PENDING_MIGRATIONS=1 + DATABASE_URL/DIRECT_URL throwaway,
+     mesmo padrão do ci.yml) ........ OK (Compiled successfully)
+  4) test (vitest run) .............. OK (79 arquivos, 419 testes)
+VEREDITO: VERDE.
+========================================================================
