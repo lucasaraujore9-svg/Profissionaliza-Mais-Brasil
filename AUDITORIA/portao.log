@@ -910,3 +910,15 @@ PERF-010 (P1) + API-007 (P3) Corrigidos ....... commit 3a02a48
   Portão: typecheck 0 · lint 0 erros (1 warn pré-existente) ·
   build exit 0 (SKIP_PENDING_MIGRATIONS=1 + DATABASE_URL throwaway) ·
   test 373 passed.
+
+------------------------------------------------------------------------
+2026-07-03 · performance · PERF-002 (P1) + PERF-003 (P1)
+PERF-002 Corrigido ...... commit 57a1da8 (cache de dados home/vitrine:
+  src/lib/home/cache.ts, chaves home:sections/showcase:{tenant|pmb} TTL 60s,
+  invalidacao nos 4 writes de secao; teste cache.test.ts). Portão verde.
+PERF-003 Corrigido ...... commit d04cc54 (paginacao server-side ?page=N
+  PAGE_SIZE=24 em /cursos + /loja/cursos + CatalogPager + select enxuto;
+  teste loadCatalogo-pagination.test.ts). Portão verde.
+Última rodada do Portão (tree = d04cc54):
+  typecheck 0 · lint 0 erros (1 warn pré-existente) · build exit 0 ·
+  test 384 passed. build: SKIP_PENDING_MIGRATIONS=1 + DATABASE_URL throwaway.
