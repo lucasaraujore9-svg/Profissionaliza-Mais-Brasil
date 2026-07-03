@@ -151,6 +151,14 @@ se faltar `AUTH_SECRET`, `MP_WEBHOOK_SECRET`, `ASAAS_WEBHOOK_TOKEN`,
 `CRON_SECRET`, `INTERNAL_SECRET`, `ENCRYPTION_KEY` ou credenciais EA/Asaas.
 Em dev só emite warnings.
 
+**Rotação de chaves/segredos:** ver o runbook
+`docs/runbooks/rotacao-de-chaves.md` (SEG-006). Cobre o raio de impacto de
+cada segredo, o checklist de confirmação dos envs de prod, e — crucial — o
+procedimento de 2 chaves para rotacionar `ENCRYPTION_KEY` com migração de
+re-cifragem de TODOS os campos cifrados (`Tenant.mpAccessToken/mpWebhookSecret/
+asaasApiKey/asaasWebhookToken`, `SystemSettings.pmbMpAccessTokenEnc`,
+`Enrollment.lmsSenha`, `Student.plataformaAlunoSenha`).
+
 Para Edge Runtime (`src/proxy.ts`), o schema Zod **não** pode ser importado
 (Edge não suporta o Proxy lazy). Lá usa-se `process.env.X` direto — risco
 mitigado porque só há 3 envs em uso (UPSTASH_*, INTERNAL_SECRET) e o proxy
