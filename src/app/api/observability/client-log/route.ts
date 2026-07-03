@@ -23,11 +23,15 @@ const schema = z.object({
 export const POST = withRequestContext(
   { action: "observability.client_log", route: "/api/observability/client-log" },
   async (request: Request) => {
+    // OBS-009: fail-CLOSED neste endpoint público anônimo. Perder um beacon de
+    // erro do client durante uma queda do Upstash é tolerável; o oposto
+    // (fail-open) deixaria o volume de logs ilimitado sob outage de Redis —
+    // vetor de ruído/custo. Em dev (sem Redis) `rateLimit` continua liberando.
     const rl = await rateLimit(request, {
       name: "client-log",
       limit: 30,
       windowSec: 60,
-      failOpen: true,
+      failOpen: false,
     })
     if (!rl.ok) return rateLimitResponse(rl)
 
@@ -45,8 +49,20 @@ export const POST = withRequestContext(
     const { level, msg, url, digest, context } = parsed.data
     // O logger do servidor redige chaves sensíveis (defesa em profundidade — o
     // client também já sanitiza antes de enviar).
+    //
+    // OBS-009: marca a origem como beacon anônimo NÃO confiável (`source`/
+    // `trusted:false`), para que alertas/triagem operacionais possam filtrar
+    // ruído forjado — o endpoint é público e o `msg`/`context` vêm do cliente.
     contextLogger()[level](
-      { event: "client.error", clientMsg: msg, clientUrl: url, digest, clientContext: context },
+      {
+        event: "client.error",
+        source: "client-beacon",
+        trusted: false,
+        clientMsg: msg,
+        clientUrl: url,
+        digest,
+        clientContext: context,
+      },
       `client ${level}: ${msg}`,
     )
     return NextResponse.json({ ok: true })
