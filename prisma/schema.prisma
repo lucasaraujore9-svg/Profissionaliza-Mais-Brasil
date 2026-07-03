@@ -1031,6 +1031,9 @@ model Enrollment {
   // não serve.
   @@index([createdAt])
   @@index([status, createdAt])
+  // DB-010: índice já existe no banco desde 20260414_expand_roles — declarado
+  // aqui só para eliminar o drift schema↔banco (sem migration).
+  @@index([soldByUserId], map: "enrollments_sold_by_user_id_idx")
   @@map("enrollments")
 }
 
@@ -1082,6 +1085,9 @@ model Payment {
   // mp_status='APPROVED' + paid_at range sem tenant líder — este composto casa
   // exatamente o WHERE.
   @@index([mpStatus, paidAt])
+  // DB-010: índice já existe no banco desde 20260414_expand_roles — declarado
+  // aqui só para eliminar o drift schema↔banco (sem migration).
+  @@index([soldByUserId], map: "payments_sold_by_user_id_idx")
   @@map("payments")
 }
 
@@ -1168,6 +1174,9 @@ model TenantPayment {
   // queries tipo "todos OVERDUE deste tenant em X mês".
   @@index([tenantId, status, dueDate])
   @@index([tenantId, createdAt])
+  // DB-010: índice já existe no banco desde 20260522_financial_manual_management
+  // — declarado aqui só para eliminar o drift schema↔banco (sem migration).
+  @@index([markedPaidById], map: "tenant_payments_marked_paid_by_idx")
   @@map("tenant_payments")
 }
 
@@ -1737,6 +1746,9 @@ model ReferralPayout {
   @@index([referrerTenantId, status])
   @@index([status, requestedAt])
   @@index([proofUploadedById], map: "referral_payouts_proof_uploaded_by_id_idx")
+  // DB-010: índice já existe no banco desde 20260522_financial_manual_management
+  // — declarado aqui só para eliminar o drift schema↔banco (sem migration).
+  @@index([markedPaidById], map: "referral_payouts_marked_paid_by_idx")
   @@map("referral_payouts")
 }
 
