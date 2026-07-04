@@ -1111,3 +1111,14 @@ VEREDITO: VERDE.
 Avaliado: nada seguro/aditivo aplicável no Vercel hoje (output:standalone,
 CSP, @upstash/redis TCP, @vercel/analytics quebrariam prod). Mantido Aberto
 como trilha de migração VPS. Sem alteração de código → portão não re-executado.
+
+## 2026-07-03 — Portão Zero-Erro CONSOLIDADO (pós rodada codigo P2→P3)
+| Etapa | Comando | Resultado |
+|---|---|---|
+| Typecheck | `npm run typecheck` | PASSOU — exit 0, zero erro de tipo |
+| Lint | `npm run lint` | PASSOU — 0 erros (1 warning pré-existente: scripts/render-cert-samples.tsx) |
+| Ciclos | `npx madge --circular --extensions ts,tsx src/` | 0 ("No circular dependency found!") |
+| Testes | `npm test` | PASSOU — 103 arquivos / 567 testes verdes |
+| Build | `SKIP_PENDING_MIGRATIONS=1 DATABASE_URL=dummy npm run build` | PASSOU — build concluiu |
+
+Corrigidos: COD-003, COD-004, COD-005, COD-006. Abertos: COD-007 (Aceito), COD-008 (trilha migração VPS).
