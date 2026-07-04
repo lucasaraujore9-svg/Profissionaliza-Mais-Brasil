@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { isCronAuthorized } from "@/lib/auth/bearer"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { contextLogger } from "@/lib/logger"
+import { env } from "@/lib/env"
 
 export const maxDuration = 60
 export const dynamic = "force-dynamic"
@@ -27,9 +28,9 @@ export const dynamic = "force-dynamic"
 // Só remove registros TERMINAIS/não convertidos (Lead sem tenant vinculado;
 // StudentLead ABANDONED/LOST; ContactMessage RESOLVED) — nunca toca pipeline
 // ativo, conversões ou chamados abertos.
-const LEAD_RETENTION_DAYS = Number(process.env.LEAD_RETENTION_DAYS ?? 548) // ~18 meses
-const STUDENT_LEAD_RETENTION_DAYS = Number(process.env.STUDENT_LEAD_RETENTION_DAYS ?? 365)
-const CONTACT_MESSAGE_RETENTION_DAYS = Number(process.env.CONTACT_MESSAGE_RETENTION_DAYS ?? 365)
+const LEAD_RETENTION_DAYS = env.LEAD_RETENTION_DAYS ?? 548 // ~18 meses
+const STUDENT_LEAD_RETENTION_DAYS = env.STUDENT_LEAD_RETENTION_DAYS ?? 365
+const CONTACT_MESSAGE_RETENTION_DAYS = env.CONTACT_MESSAGE_RETENTION_DAYS ?? 365
 
 function cutoffFor(days: number): Date {
   const d = new Date()

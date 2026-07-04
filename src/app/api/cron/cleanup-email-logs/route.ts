@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { isCronAuthorized } from "@/lib/auth/bearer"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { contextLogger } from "@/lib/logger"
+import { env } from "@/lib/env"
 
 export const maxDuration = 60
 export const dynamic = "force-dynamic"
@@ -21,7 +22,7 @@ export const dynamic = "force-dynamic"
 //     $$ select app_internal.run_cron('/api/cron/cleanup-email-logs') $$
 //   );
 // Enquanto o job não for criado, nenhuma linha é apagada.
-const RETENTION_DAYS = Number(process.env.EMAIL_LOG_RETENTION_DAYS ?? 90)
+const RETENTION_DAYS = env.EMAIL_LOG_RETENTION_DAYS ?? 90
 
 /**
  * Purga registros antigos de EmailLog (retenção `RETENTION_DAYS`). Espelha o

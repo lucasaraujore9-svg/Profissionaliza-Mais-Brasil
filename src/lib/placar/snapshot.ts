@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { TenantStatus } from "@prisma/client"
 import { getJson, setJson } from "@/lib/redis/cache"
+import { env } from "@/lib/env"
 
 // Placar publico de lancamento. Tudo aqui e AGREGADO — nunca expomos dados
 // individuais sensiveis (Asaas ids, tokens, valores em R$). O nome da revenda
@@ -17,7 +18,7 @@ const PMB_SLUG = "__pmb__"
 const COUNTABLE = { slug: { not: PMB_SLUG }, planValue: { gt: 0 } } as const
 
 // Meta de revendas ATIVAS do lancamento. Configuravel via env sem deploy.
-export const PLACAR_META = Number(process.env.PLACAR_META ?? 100)
+export const PLACAR_META = env.PLACAR_META ?? 100
 
 export interface PlacarSnapshot {
   meta: number

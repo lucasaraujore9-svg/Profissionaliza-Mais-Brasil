@@ -9,9 +9,10 @@ import {
 } from "@/lib/email/brand"
 import { appUrl } from "@/lib/tenant/urls"
 import { contextLogger } from "@/lib/logger"
+import { env } from "@/lib/env"
 
 const PMB_SUPPORT_EMAIL =
-  process.env.PMB_SUPPORT_EMAIL?.trim() ||
+  env.PMB_SUPPORT_EMAIL ??
   "atendimento@profissionalizamaisbrasil.com.br"
 
 /**

@@ -45,6 +45,25 @@ const optionalUrl = () =>
     .transform((v) => (v && v.length > 0 ? v : undefined))
     .pipe(z.string().url().optional())
 
+// Inteiro positivo opcional, tolerante a "" (Vercel às vezes injeta string
+// vazia em vez de unset). Empty/whitespace → undefined (usa o default do
+// consumidor). Valor presente inválido (não-numérico/≤0) falha no boot — o
+// consumidor sempre esperava um número.
+const optionalInt = () =>
+  z
+    .string()
+    .optional()
+    .transform((v) => (v && v.trim().length > 0 ? Number(v.trim()) : undefined))
+    .pipe(z.number().int().positive().optional())
+
+// E-mail opcional, tolerante a "" (empty/whitespace → undefined).
+const optionalEmail = () =>
+  z
+    .string()
+    .optional()
+    .transform((v) => (v && v.trim().length > 0 ? v.trim() : undefined))
+    .pipe(z.string().email().optional())
+
 const envSchema = z.object({
   // ── App / domains ────────────────────────────────────────────────────────
   NEXT_PUBLIC_APP_URL: z.string().url().default("https://profissionalizamaisbrasil.com.br"),
@@ -148,10 +167,26 @@ const envSchema = z.object({
 
   // PMB (vitrine principal — tenantId=null)
   PMB_MP_ACCESS_TOKEN: z.string().optional(),
+  // Public key da conta MP da PMB — vai para o browser (checkout transparente).
+  // Não é segredo. Necessária quando pmbDirectSaleGateway = MP.
+  PMB_MP_PUBLIC_KEY: z.string().optional(),
   PMB_PLATAFORMA_VENDEDOR_ID: z.string().optional(),
   PMB_PLATAFORMA_POLO: z.string().optional(),
   PMB_EA_VENDEDOR_ID: z.string().optional(),
   PMB_EA_POLO: z.string().optional(),
+  // E-mail de suporte ao aluno da vitrine PMB (fallback quando o tenant não
+  // define o seu). Opcional — sem isso usa o endereço padrão hardcoded.
+  PMB_SUPPORT_EMAIL: optionalEmail(),
+
+  // Placar público de lançamento — meta de revendas ativas. Opcional (default 100).
+  PLACAR_META: optionalInt(),
+
+  // Retenção de PII (dias) — crons de expurgo LGPD. Opcionais (defaults no
+  // consumidor). Ver /api/cron/sweep-stale-pii e /api/cron/cleanup-email-logs.
+  LEAD_RETENTION_DAYS: optionalInt(),
+  STUDENT_LEAD_RETENTION_DAYS: optionalInt(),
+  CONTACT_MESSAGE_RETENTION_DAYS: optionalInt(),
+  EMAIL_LOG_RETENTION_DAYS: optionalInt(),
 
   // Observabilidade (opcional — preferimos Vercel Log Drain configurado
   // no dashboard; estas envs ligam um fan-out HTTP direto pra Axiom).

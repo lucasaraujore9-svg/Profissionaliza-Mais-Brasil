@@ -1,4 +1,5 @@
 import { getPmbMpAccessTokenAsync } from "@/lib/system-settings"
+import { env } from "@/lib/env"
 
 /**
  * Configuracao PMB (vitrine principal — tenantId=null).
@@ -37,19 +38,19 @@ export async function pmbMpAccessToken(): Promise<string | null> {
  * então fica em env. Necessária quando `pmbDirectSaleGateway = MP`.
  */
 export function pmbMpPublicKey(): string | null {
-  return process.env.PMB_MP_PUBLIC_KEY?.trim() || null
+  return env.PMB_MP_PUBLIC_KEY?.trim() || null
 }
 
 export function pmbPlataformaVendedorId(): string | null {
   return (
-    process.env.PMB_PLATAFORMA_VENDEDOR_ID ||
-    process.env.PMB_EA_VENDEDOR_ID
+    env.PMB_PLATAFORMA_VENDEDOR_ID ||
+    env.PMB_EA_VENDEDOR_ID
   )?.trim() || null
 }
 
 export function pmbPlataformaPolo(): string {
   return (
-    process.env.PMB_PLATAFORMA_POLO ||
-    process.env.PMB_EA_POLO
+    env.PMB_PLATAFORMA_POLO ||
+    env.PMB_EA_POLO
   )?.trim() || "pmb"
 }
