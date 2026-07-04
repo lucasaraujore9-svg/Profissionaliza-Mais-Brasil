@@ -35,3 +35,26 @@ export function isVitrinePath(pathname: string): boolean {
     (p) => pathname === p || pathname.startsWith(`${p}/`),
   )
 }
+
+/**
+ * Resolve o caminho público de uma rota da vitrine a partir do contexto do host,
+ * detectado pelo `pathname` atual do browser. É a contraparte client-side do
+ * rewrite do proxy: a MESMA vitrine é servida em dois contextos com prefixos
+ * diferentes na URL.
+ *
+ * - **Host de vitrine** ({slug}.livrecursos.com.br / domínio custom): o proxy
+ *   reescreve `/x` → `/loja/x` de forma transparente, então o browser mostra a
+ *   URL SEM `/loja` (ex.: `/checkout`). A rota-alvo deve ficar SEM o prefixo
+ *   (`/confirmacao`) para não vazar a nomenclatura interna `/loja`.
+ * - **Host PMB** (profissionalizamaisbrasil.com.br): a vitrine é servida DIRETO
+ *   em `/loja/*` (sem rewrite), então o browser mostra `/loja/checkout` e a
+ *   rota-alvo precisa do prefixo `/loja` (`/loja/confirmacao`), senão daria 404.
+ *
+ * @param currentPathname `window.location.pathname` no momento da navegação.
+ * @param vitrinePath rota da vitrine SEM o prefixo `/loja` (ex.: `/confirmacao`).
+ */
+export function storePath(currentPathname: string, vitrinePath: string): string {
+  const underLoja =
+    currentPathname === "/loja" || currentPathname.startsWith("/loja/")
+  return underLoja ? `/loja${vitrinePath}` : vitrinePath
+}

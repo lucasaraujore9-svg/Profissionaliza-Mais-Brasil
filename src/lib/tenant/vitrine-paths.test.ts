@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { isVitrinePath } from "./vitrine-paths"
+import { isVitrinePath, storePath } from "./vitrine-paths"
 
 describe("isVitrinePath", () => {
   it("trata raiz e catálogo da vitrine", () => {
@@ -36,5 +36,31 @@ describe("isVitrinePath", () => {
     expect(isVitrinePath("/painel/cursos")).toBe(false)
     expect(isVitrinePath("/login")).toBe(false)
     expect(isVitrinePath("/sobre")).toBe(false)
+  })
+})
+
+describe("storePath", () => {
+  it("FE-003: host de vitrine (URL sem /loja) → alvo SEM prefixo /loja", () => {
+    // No subdomínio de revenda o browser mostra /checkout (rewrite do proxy é
+    // transparente); a confirmação não pode vazar o prefixo interno /loja.
+    expect(storePath("/checkout", "/confirmacao")).toBe("/confirmacao")
+    expect(storePath("/pagar/abc", "/confirmacao")).toBe("/confirmacao")
+    expect(storePath("/", "/confirmacao")).toBe("/confirmacao")
+  })
+
+  it("FE-003: host PMB (URL sob /loja) → alvo COM prefixo /loja", () => {
+    // No host PMB a vitrine é servida direto em /loja/* (sem rewrite); a
+    // confirmação precisa do prefixo /loja senão daria 404.
+    expect(storePath("/loja/checkout", "/confirmacao")).toBe(
+      "/loja/confirmacao",
+    )
+    expect(storePath("/loja/pagar/abc", "/confirmacao")).toBe(
+      "/loja/confirmacao",
+    )
+    expect(storePath("/loja", "/confirmacao")).toBe("/loja/confirmacao")
+  })
+
+  it("não confunde prefixo /loja com rota que apenas começa com essas letras", () => {
+    expect(storePath("/lojas-parceiras", "/confirmacao")).toBe("/confirmacao")
   })
 })

@@ -20,6 +20,7 @@ import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { TermsAcceptance } from "@/components/loja/terms-acceptance"
 import { clientLogger } from "@/lib/logger-client"
+import { storePath } from "@/lib/tenant/vitrine-paths"
 
 /**
  * Checkout transparente da conta Asaas PRÓPRIA da unidade. Mesmo layout do
@@ -105,13 +106,19 @@ export function AsaasCheckoutForm({
   initPath = "/api/loja/checkout",
   processPath = "/api/loja/checkout/process",
   statusPath = "/api/loja/checkout/status",
-  confirmacaoPath = "/loja/confirmacao",
+  // Sem override, a confirmação é resolvida por host em runtime (storePath):
+  // `/confirmacao` no host da vitrine, `/loja/confirmacao` no host PMB — nunca
+  // vaza o prefixo interno `/loja` no subdomínio da revenda. Overrides literais
+  // (ex.: `/aluno/pagamentos`) são honrados como estão.
+  confirmacaoPath,
   enrollmentId,
   defaultNome,
   defaultEmail,
 }: AsaasCheckoutFormProps) {
   function successUrlFor(id: string): string {
-    return `${confirmacaoPath}?enrollment_id=${encodeURIComponent(id)}`
+    const base =
+      confirmacaoPath ?? storePath(window.location.pathname, "/confirmacao")
+    return `${base}?enrollment_id=${encodeURIComponent(id)}`
   }
   const [form, setForm] = useState<FormState>({
     nome: defaultNome ?? "",
