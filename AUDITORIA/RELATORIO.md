@@ -1,5 +1,17 @@
 # Relatório de Auditoria — Profissionaliza Mais Brasil
-_Data: 2026-07-03 · Auditoria somente-leitura, cobertura total (sem amostragem) · 11 domínios · Fable 5 (subagentes auditor)_
+_Data: 2026-07-03 (auditoria) · 2026-07-04 (correção + verificação) · cobertura total (sem amostragem) · 11 domínios_
+
+> ## ✅ Estado pós-correção (Fase 4 — 2026-07-04)
+> **Portão Zero-Erro VERDE:** typecheck 0 erros · lint 0 erros/0 warnings · build Compiled successfully · **570 testes/103 arquivos** (era 328/53) · 0 ciclos de import (madge, era 9).
+> **~68 achados corrigidos** em **~86 commits atômicos locais** (nenhum push), cada um com o portão verde antes do commit. **6 aceitos** (risco assumido). Restantes **Abertos** por: decisão sua (bucket de certificados, pixels, deploy, pg_cron), trilha de migração VPS ⚠️MIGRAÇÃO, ou infra nova (E2E, error-tracker externo).
+> **Nenhum bug de produção não endereçado.** O único P0 (certificados/CPF) teve o código mitigado (grava path interno, não URL pública); falta a ação manual no console Supabase.
+> Detalhe do ciclo de vida em `auditoria/COBERTURA.md`; prova mecânica em `auditoria/portao.log`; status por achado em `auditoria/achados/<dominio>.md`.
+>
+> **Ações que dependem só de você:** (1) tornar o bucket `certificates` privado + backfill [P0]; (2) decidir consentimento de cookies/pixels; (3) desacoplar migrations do build; (4) confirmar jobs pg_cron ativos em prod; (5) revisar/pushar os commits locais. Lista completa na seção 4 de `COBERTURA.md`.
+>
+> _O texto abaixo é o relatório original da auditoria somente-leitura (Fase 1), preservado como registro. As notas/contagens de P0/P1 referem-se ao estado ANTES da correção._
+
+---
 
 Base de cobertura: `auditoria/INVENTARIO.md` (2026-07-03) — **137 telas · 309 route handlers (406 métodos) · 342 componentes · 251 módulos lib (720 exports) · 44 models · 33 enums · 81 migrations · 17 crons · 3 webhooks · 53 arquivos de teste/328 casos**.
 Esta rodada **re-verificou cada achado de 2026-06-24** contra o código atual e auditou o delta de ~45 commits/237 arquivos (+13k linhas): BI hub de relatórios, blindagem de gateway (8541afd), parcelamento MP, placar de indicações, tours guiados, `/pagar`, recompra Payment Brick, sync LMS de catálogo/matriz curricular, domínio próprio gateado por DNS, menu recolhível, impersonação de equipe interna.

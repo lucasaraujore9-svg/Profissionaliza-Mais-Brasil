@@ -74,7 +74,7 @@ _Data: 2026-07-03 · Referência: .claude/skills/auditoria-saas/references/09-sa
 
 ### [SAAS-008] Webhook LMS `course.completed`/`lesson.completed` para matrícula não provisionada é marcado como processado (sem retry) — possível certificado perdido em corrida
 - **Severidade:** P3
-- **Status:** Aberto (re-confirmado 2026-07-03)
+- **Status:** Corrigido (2026-07-03 — commit 19698a5: handler sinaliza `retryable=true`, rota devolve 500 p/ re-entrega do LMS dentro de janela de 30min; passada a janela, terminal 200 + cron `sync-day-update-lms` como rede de segurança; idempotência via dedupKey; teste em `route.test.ts`)
 - **Local:** `src/lib/webhooks/lms-process.ts:110,133` (`findLmsEnrollment` → `{ ok:false, message:"matrícula LMS não encontrada" }`) · `src/app/api/webhooks/lms/route.ts:106-118` (marca `processed:true` mesmo quando `result.ok === false`, respondendo 200)
 - **Evidência:** Quando o evento chega para um `studentExternalId`+`courseId` sem matrícula LMS (status ACTIVE/COMPLETED/SUSPENDED), o handler retorna `{ ok:false }`. A rota faz `prisma.webhookLog.update({ data:{ processed:true, error: result.message } })` e responde **200** — o LMS NÃO re-tenta (documentado em `route.ts:106-107`). Se a conclusão for emitida antes do fulfillment do PMB criar a matrícula (race), o `course.completed` é descartado e o certificado **não** é emitido por `issueCertificateIfEligible`.
 - **Impacto:** Baixo na prática (conclusão quase sempre vem depois do provisionamento), mas é perda silenciosa: aluno conclui no LMS, o PMB descarta o webhook como "não encontrado" e o certificado automático nunca é emitido nem re-tentado. O cron `sync-day-update-lms` cobre progresso por delta e tende a recuperar, mas o evento pontual de conclusão fica perdido.

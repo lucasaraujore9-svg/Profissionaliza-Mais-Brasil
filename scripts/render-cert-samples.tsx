@@ -1,4 +1,3 @@
-/* eslint-disable */
 // Script de inspeção visual dos 3 modelos de certificado.
 // Renderiza CLASSIC / MODERN / MINIMAL com dados fictícios e salva PDFs em /tmp/cert-samples.
 import { renderToFile, Font } from "@react-pdf/renderer"

@@ -1129,3 +1129,16 @@ Corrigidos: COD-003, COD-004, COD-005, COD-006. Abertos: COD-007 (Aceito), COD-0
   Corrigidos: OPS-010 (porção segura/aditiva: .nvmrc + CI node-version-file).
   Abertos — decisão do dono: OPS-001 (mecanismo de deploy inalterado), OPS-013 (verificação manual no Supabase).
   Abertos — trilha de migração VPS (doc em docs/migracao/VERCEL-PARA-VPS.md): OPS-002, OPS-003, OPS-004, OPS-005, OPS-006, OPS-007, OPS-008, OPS-009, OPS-011.
+
+========================================================================
+[2026-07-04] VERIFICAÇÃO FINAL (Fase 4) — estado consolidado dos 11 domínios
+------------------------------------------------------------------------
+  typecheck (tsc --noEmit) .......... 0 erros        [exit 0]
+  lint (eslint) ..................... 0 erros, 0 warnings  [exit 0]  (removido eslint-disable obsoleto)
+  build (next build, SKIP_PENDING_MIGRATIONS=1 + DATABASE_URL throwaway)
+                                      Compiled successfully in 8.0s
+  test (vitest run) ................. 103 arquivos / 570 casos PASS
+  madge --circular .................. 0 ciclos
+------------------------------------------------------------------------
+  VEREDITO: ✅ VERDE
+========================================================================

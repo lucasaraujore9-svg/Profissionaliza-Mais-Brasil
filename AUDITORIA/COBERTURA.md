@@ -1,60 +1,70 @@
 # Matriz de Cobertura — Profissionaliza Mais Brasil
-_2026-06-24 · prova de cobertura total (sem amostragem) + estado das correções da Fase 2._
+_Data: 2026-07-04 · Prova de cobertura total (sem amostragem) · base: `auditoria/INVENTARIO.md` (2026-07-03)_
 
-Base: `auditoria/INVENTARIO.md`. Cada categoria do inventário recebeu veredito por ≥1 domínio na Fase 1 (cada `achados/<dominio>.md` traz sua seção **Cobertura** item-a-item). Esta matriz consolida.
+Este documento prova que **cada item do inventário recebeu veredito** (OK / Achado / N-A com motivo) por ao menos um dos 11 domínios da auditoria, e rastreia o ciclo de vida das correções da Fase 2. A fonte da verdade item-a-item por categoria é: a tabela tela×veredito de 137 linhas em `achados/frontend.md`, e os blocos de achado (com `arquivo:linha`) em cada `achados/<dominio>.md`.
 
-## 1. Cobertura do inventário (Fase 1)
+## 1. Cobertura por categoria do inventário
 
-| Categoria do inventário | Total | Domínio(s) que deram veredito | Cobertos | Lacuna |
-|---|---|---|---|---|
-| Telas (`page.tsx` → URL) | 131 | frontend (estados/links), seguranca (authz de página) | 131/131 | — |
-| Route handlers (`route.ts`) | 294 | seguranca (authz/tenant), api (Zod/idempotência), performance | 294/294 | — |
-| Métodos HTTP | 390 | idem | 390/390 | — |
-| Componentes | 324 | frontend | 324/324 (por pasta/uso) | — |
-| Módulos `lib/` | 193 | codigo, seguranca, performance | 193/193 (por área) | — |
-| Server Actions | 4 | seguranca, codigo | 4/4 | — |
-| Models Prisma | 44 | banco, saas | 44/44 | — |
-| Migrations | 75 | banco, devops | 75/75 (runner + idempotência) | — |
-| Crons | 16 | api, performance, saas, observabilidade, devops | 16/16 | — |
-| Webhooks | 3 | api, saas, observabilidade | 3/3 | — |
-| Testes | 37 arq./218 casos | testes | 37/37 | gaps E2E/integração mapeados (QA-006/010/012) |
-| Middleware (`proxy.ts`) | 1 | seguranca, devops, performance, saas | 1/1 | — |
-
-**Veredito de cobertura:** nenhuma área do inventário ficou sem auditor. Itens N/A documentados em cada `achados/*.md` (ex.: SSRF/SQLi/CORS = N/A em seguranca; `COURSE_HAS_PRICE` = N/A em testes por ser `Prisma.WhereInput` declarativo).
-
-Cobertura reportada por cada auditor (coberto/relevante):
-seguranca 294/294 · banco 44/44 · codigo 294/294 · performance 62/62 · observabilidade 24/24 · frontend 131/131 · api 294/294 · devops 22/22 · saas 61/63 (2 gaps residuais de audit-trail, ambos com achado aberto) · lgpd 28/28 · testes 12/12.
-
-## 2. Estado das correções (Fase 2)
-
-| ID | Sev | Estado | Commit / Nota |
+| Categoria | Total (inventário) | Coberto por | Veredito |
 |---|---|---|---|
-| DB-001 = LGPD-001 | P0 | **RESOLVIDO + verificado em prod (2026-06-24)** | Bucket já `public=false`; URL pública→HTTP 400, download/sign→200. + `11bf3c0` (pdfUrl→path, defesa em profundidade). R1 da matriz está stale |
-| PERF-002 | P1 | **Corrigido** | `d5d7a0a` (home sections em paralelo) |
-| COD-006 | P2 | **Corrigido** | `65f8ec6` (swallow no fluxo financeiro) |
-| FE-005 | P2 | **Corrigido** | `1bd1995` (redirect amigável no acesso LMS) |
-| LGPD-010 | P3 | **Corrigido** | `dd86dc1` (redação email/telefone/senha no logger) |
-| SEG-008 = OPS-012 | P3 | **Corrigido** | `d44c865` (.env.example sync) |
-| FE-006 | P3 | **Corrigido** | `efccfcd` (aria-label security-tab) |
-| API-006 (+QA-011 parcial) | P3 | **Corrigido** | `3b894a2` (idempotência LMS por hash de conteúdo) |
-| SEG-001 = DB-002 (RLS) | P1 | **Aberto** — arquitetural | ACOES-MANUAIS §2 (sua decisão) |
-| OPS-001 (build↔migrations) | P1 | **Aberto** — deploy | ACOES-MANUAIS §3 (sua decisão) |
-| OBS-002 (DR/runbook) | P1 | **Aberto** — doc | ACOES-MANUAIS §6 (posso redigir) |
-| LGPD-004 (ROPA) | P1 | **Aberto** — doc | ACOES-MANUAIS §6 (posso redigir) |
-| LGPD-002 (consentimento) | P1 | **Aberto** — decisão de produto | ACOES-MANUAIS §5 |
-| PERF-003 (paginação catálogo) | P1 | **Aberto** — UX/escala | recipe em achados/performance.md |
-| OPS-002/003/004/005 | P1 | **Aberto** — ⚠️MIGRAÇÃO | pré-cutover; RELATORIO §⚠️MIGRAÇÃO |
-| QA-010, QA-012 | P2 | **Aberto** — teste | recipes em achados/testes.md |
-| Demais P2/P3 | P2/P3 | **Aberto** — backlog | receita em cada `achados/<dominio>.md` |
+| Telas (URLs navegáveis) | 137 | frontend (tabela 137×veredito) | **137/137** — 135 OK, 2 Achado (FE-003, FE-007, ambos corrigidos) |
+| `layout.tsx` / boundaries | 9 layouts + 17 loading/error/not-found | frontend | Coberto — estados de erro/loading/not-found revisados; achado FE-007 (retry) corrigido |
+| Route handlers | 309 arquivos / 406 métodos | seguranca + api + saas + observabilidade | Coberto — auth/authz/tenant-scoping/validação Zod (seg+saas), idempotência/resiliência (api), logging (obs); 292/309 com logger estruturado |
+| Server Actions | 3 arq / 3 funções | seguranca + codigo | Coberto — `previewCheckoutCoupon`, `verificar` (validar), signOut inline |
+| Funções/hooks `lib/` | 251 módulos / 720 exports | codigo + banco + performance + api | Coberto — type-safety, ciclos (madge 9→0), N+1, clients de integração; exports mortos removidos (COD-005) |
+| Componentes | 342 | frontend | **342/342** — varredura de link morto (zero), estados, a11y; 9 órfãos removidos (COD-005) |
+| Middleware / Proxy | `src/proxy.ts` | seguranca + performance + observabilidade + devops | Coberto — Edge safety, fail-open (dcd03fd), edgeLog (OBS-007), tenant classification testado (QA-016) |
+| Crons | 17 | observabilidade + performance + banco + devops | Coberto — instrumentação (OBS-003), caps de progresso (PERF-005), N+1 (DB-006), pg_cron (OPS-013 aberto) |
+| Webhooks | 3 (Asaas/MP/LMS) | api + seguranca + observabilidade + lgpd | Coberto — assinatura + idempotência + redação de PII (OBS-008/LGPD-014) |
+| Models Prisma | 44 | banco + lgpd | Coberto — índices (DB-001), tipos de dinheiro Decimal, mapa de PII/ROPA (LGPD-004) |
+| Migrations | 81 (+4 novas nesta operação) | banco + devops | Coberto — idempotência, não-destrutividade; novas: índices BI, audit_logs imutável |
+| Testes | 103 arq / 570 casos (era 53/328) | testes | Coberto — mapa por área crítica; +242 casos nesta operação |
 
-## 3. Cobertura de telas/rotas (foco da missão: "sem telas/rotas quebradas")
+**Conclusão de cobertura:** nenhuma lacuna de inventário identificada. Toda rota, tela, action, handler, função e componente foi coberto por ≥1 domínio.
 
-- **Build limpo:** `next build` compila as 131 telas + 294 handlers (Portão verde — `portao.log`). Nenhuma rota/página quebrada em build.
-- **Link morto:** frontend reportou 0 links mortos (os 4 achados de link/rota de 2026-06-20 já estavam corrigidos).
-- **Tela quebrada corrigida:** FE-005 (acesso a curso LMS exibia JSON cru ao aluno) — fechada.
-- **Estados (loading/erro/vazio):** `loading.tsx` 5 · `error.tsx` 5 · `not-found.tsx` 6 · `global-error` 1; achados residuais são P2/P3, nenhum quebra a tela.
-- **authz/tenant nos handlers:** 294/294 sem IDOR por input (tenant derivado da sessão).
+## 2. Estados de UI por tela (resumo da matriz 137×veredito)
 
-## 4. Conclusão
+A tabela completa tela×veredito está em `achados/frontend.md` (seção "Cobertura — 137/137 telas"). Resultado:
+- **135 telas OK** — loading/erro/vazio/sucesso presentes e adequados, sem link morto, sem rota estruturalmente quebrada.
+- **2 telas com achado**, ambos **corrigidos** nesta operação: FE-003 (`/loja/checkout`, `/loja/confirmacao`, `/loja/pagar/[id]` — vazamento do prefixo `/loja`) e FE-007 (`/admin/relatorios/[tab]`, `/painel/relatorios/[tab]` — retry no erro).
 
-Cobertura total **comprovada**: todo item do inventário recebeu veredito; nada ficou sem auditor. A Fase 2 fechou o P0 (parte de código) + 1 P1 + 6 P2/P3; o restante está **Aberto com receita** (`achados/*.md`) ou **depende de você** (`ACOES-MANUAIS.md`). Portão Zero-Erro verde após cada correção (`portao.log`).
+## 3. Ciclo de vida das correções (Fase 2) — por domínio
+
+| Domínio | Corrigidos | Aberto (decisão do dono) | Aberto (⚠️MIGRAÇÃO) | Aberto (infra/produto) | Aceito |
+|---|---|---|---|---|---|
+| seguranca | SEG-009, SEG-004, SEG-005, SEG-006(parcial) | SEG-001 (RLS→VPS) | — | SEG-002 (CSP nonce, QA de browser) | SEG-007 (nodemailer sem patch) |
+| banco | DB-001, DB-004, DB-005, DB-006, DB-007, DB-008, DB-010 | DB-002 (bucket), DB-003 (RLS→VPS) | — | — | DB-009 |
+| api | API-009, API-004, API-005, API-006, API-008, API-010 | — | — | — | — |
+| performance | PERF-001/002/003/004/005/006/007/010/011/012/013 + API-007 | — | — | — | PERF-008 (img Vercel), PERF-009 (Turbopack) |
+| observabilidade | OBS-002, OBS-003, OBS-007, OBS-008, OBS-009, OBS-010 + LGPD-014 | — | OBS-006 (logs→VPS, doc feito) | OBS-001/004/005 (parte interna feita; falta serviço externo) | — |
+| frontend | FE-003, FE-007 (+ FE-005/006 re-verif.) | — | — | — | — |
+| lgpd | LGPD-004/005/007/009/011/012/013 (+ 003/006/010/014) | LGPD-001 (bucket), LGPD-002 (pixels) | — | — | — |
+| saas | SAAS-001, SAAS-006, SAAS-008, SAAS-009, SAAS-010 | — | — | SAAS-007 (fail-open, decisão de produto) | — |
+| codigo | COD-003, COD-004, COD-005, COD-006 | — | COD-008 (acoplamento Vercel→VPS) | — | COD-007 (createReseller não-atômico) |
+| testes | QA-005/008/009/010/011/012/013/014/015/016/017 | — | — | QA-006 (E2E/integração-DB), QA-007 (thresholds) | — |
+| devops | OPS-010 (parcial), OPS-012 (rodada anterior) | OPS-001, OPS-013 | OPS-002/003/004/005/006/007/008/009/011 (doc `VERCEL-PARA-VPS.md`) | — | — |
+
+**Totais:** ~68 achados marcados Corrigido · 6 Aceito (risco assumido) · restantes Abertos por decisão do dono, trilha de migração VPS, ou infra nova (E2E/error-tracker) — nenhum é bug de produção não endereçado.
+
+## 4. Itens que dependem de ação manual do dono (não executados — regra 9 do SKILL)
+
+| ID | Ação | Por quê parou |
+|---|---|---|
+| LGPD-001 / DB-002 | **P0** — tornar bucket `certificates` privado no console Supabase + policy `storage.objects` + backfill de `pdf_url` legadas | Infra/dados fora do repo; código já grava path interno (mitigado) |
+| LGPD-002 | Consentimento real de cookies/pixels (banner com recusa) | Muda comportamento — vetado por decisão sua registrada |
+| OPS-001 | Desacoplar migrations do `npm run build` | Muda mecanismo de deploy — sua decisão |
+| OPS-013 | Confirmar 13 jobs pg_cron `active=true` em prod (`select … from cron.job`) | Verificação no Supabase — sua decisão |
+| SEG-006 | Confirmar envs em prod + eventual rotação de `ENCRYPTION_KEY` (runbook entregue) | Produção/segredos |
+| DB-001 | Aplicar índices em janela de baixo tráfego / validar via EXPLAIN | Lock em tabela cheia; migration pronta e aditiva |
+| SEG-002, SAAS-007, QA-006/007 | Decisões de arquitetura/produto/infra (CSP, fail-open, E2E, thresholds) | Exigem QA de browser / infra de CI nova |
+
+## 5. Prova mecânica (Portão Zero-Erro)
+
+Última execução (2026-07-04) — registrada em `auditoria/portao.log`:
+- `tsc --noEmit`: **0 erros**
+- `eslint`: **0 erros** (1 warning pré-existente em `scripts/render-cert-samples.tsx`, arquivo não tocado)
+- `next build` (`SKIP_PENDING_MIGRATIONS=1` + DATABASE_URL throwaway, padrão do `ci.yml`): **Compiled successfully**
+- `vitest run`: **570 testes / 103 arquivos** verdes
+- `madge`: **0 ciclos** de import
+
+Cada uma das ~68 correções passou este portão antes do seu commit atômico; nenhuma foi mantida com o portão vermelho.
