@@ -7,6 +7,7 @@ tours guiados, menu recolhível, edição em massa sequencial).
 
 ## Resumo
 - Itens verificados: 909 (handlers+componentes+libs) · Achados: **P0=0 · P1=0 · P2=1 · P3=4** (+1 P2 Aceito) · **Nota do domínio: 8.8/10**
+- **Rodada de correção 2026-07-03:** COD-003 (P2), COD-004/COD-005/COD-006 (P3) **Corrigidos** (portão verde). Abertos: COD-007 (P2, Aceito — risco assumido pelo dono) e COD-008 (P3, trilha de migração VPS — nada seguro/aditivo hoje).
 
 ## Portão Zero-Erro (medido nesta rodada)
 | Etapa | Comando | Resultado |
@@ -32,7 +33,7 @@ Saúde estrutural (evidência): **zero** `:any`/`as any`/`@ts-ignore`/`@ts-expec
 | COD-005 (exports mortos) | **CORRIGIDO** (2026-07-03) | 9 arquivos órfãos + 12 exports mortos removidos; portão verde. |
 | COD-006 (`.catch(()=>{})` financeiro) | **CORRIGIDO** (2026-07-03) | 2 sites restantes migrados p/ `swallow()`; grep vazio. |
 | COD-007 (createReseller não-atômico) | **ABERTO — Aceito** | inalterado (`create.ts` sem `$transaction` envolvendo tenant+user). |
-| COD-008 (acoplamento Vercel / sem standalone) | **ABERTO** | inalterado ⚠️MIGRAÇÃO. |
+| COD-008 (acoplamento Vercel / sem standalone) | **ABERTO — trilha migração VPS** | revisado 2026-07-03: nada seguro/aditivo hoje ⚠️MIGRAÇÃO. |
 
 ---
 
@@ -95,7 +96,8 @@ Saúde estrutural (evidência): **zero** `:any`/`as any`/`@ts-ignore`/`@ts-expec
 
 ### [COD-008] Config acoplada à Vercel; sem `output:'standalone'`; `@upstash/redis` REST ⚠️MIGRAÇÃO
 - **Severidade:** P3
-- **Status:** Aberto
+- **Status:** Aberto — trilha de migração VPS (2026-07-03: revisado, nada seguro/aditivo hoje)
+- **Nota (2026-07-03):** avaliado na rodada de correção. Todos os itens são exclusivos da migração Vercel→VPS e aplicá-los AGORA quebraria produção: `output:"standalone"` altera o build (a Vercel gerencia o empacotamento e recomenda NÃO setar); reescrever a CSP removeria domínios Vercel/Upstash ainda ativos; trocar `@upstash/redis` (REST) por `ioredis`/`redis` (TCP) sem o Redis TCP provisionado derrubaria cache+rate-limit; `@vercel/analytics`/`speed-insights` estão em uso em prod. Sem passo puramente aditivo disponível — permanece Aberto como pacote da migração (executar junto com o corte de infra).
 - **Local:** `next.config.ts` (sem `output:"standalone"`; `images.unoptimized:true` :64; CSP `connect-src ... https://*.upstash.io https://vitals.vercel-insights.com` :35; `script-src ... https://va.vercel-scripts.com` :34) · `@upstash/redis` REST em `src/lib/redis.ts` + `src/lib/ratelimit.ts` · `@vercel/analytics`+`@vercel/speed-insights` no `package.json`.
 - **Evidência:** grep confirma ausência de `output`/`standalone`, `unoptimized:true`, e os 3 domínios Vercel/Upstash na CSP; `@upstash/redis` importado em 2 consumidores. Na VPS (Docker Swarm) o Redis vira TCP — o cliente REST `@upstash/redis` **não** fala TCP; sem `output:"standalone"` o Dockerfile não produz o bundle mínimo; `*.vercel-insights`/`va.vercel-scripts` ficam mortos.
 - **Impacto:** nenhum em produção Vercel hoje; é o pacote de migração. Sem o flag o container fica gordo/quebrado; a CSP precisa ser reescrita para os domínios self-hosted (MinIO `s3.bmbr.com.br` já está em `img-src`).

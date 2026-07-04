@@ -1106,3 +1106,8 @@ VEREDITO: VERDE.
 | Lint | `npm run lint` | PASSOU — 0 erros |
 | Testes | `npm test` | PASSOU — 567 testes |
 | Build | `SKIP_PENDING_MIGRATIONS=1 DATABASE_URL=dummy npm run build` | PASSOU |
+
+## 2026-07-03 — COD-008 revisado (docs-only, sem mudança de código)
+Avaliado: nada seguro/aditivo aplicável no Vercel hoje (output:standalone,
+CSP, @upstash/redis TCP, @vercel/analytics quebrariam prod). Mantido Aberto
+como trilha de migração VPS. Sem alteração de código → portão não re-executado.
