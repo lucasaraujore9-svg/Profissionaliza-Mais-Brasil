@@ -65,18 +65,9 @@ function monthAnchor(d: Date): number {
   return d.getUTCFullYear() * 12 + d.getUTCMonth()
 }
 
-/** Period "AAAA-MM" do mes anterior ao `ref`. */
-export function previousPeriod(ref: Date): string {
-  const d = new Date(Date.UTC(ref.getUTCFullYear(), ref.getUTCMonth(), 1))
-  d.setUTCMonth(d.getUTCMonth() - 1)
-  const y = d.getUTCFullYear()
-  const mm = String(d.getUTCMonth() + 1).padStart(2, "0")
-  return `${y}-${mm}`
-}
-
 /**
  * Os `count` meses fechados mais recentes em "AAAA-MM", do mais antigo ao mais
- * novo (o ultimo e o mes anterior a `ref`, == previousPeriod(ref)).
+ * novo (o ultimo e o mes anterior a `ref`).
  *
  * Usado pelo cron para apurar COM CATCH-UP: ao contrario do motor legado (que se
  * auto-cura via backfillReferrerCommissions varrendo todas as mensalidades sem

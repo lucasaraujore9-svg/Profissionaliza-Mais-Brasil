@@ -1081,3 +1081,11 @@ VEREDITO: VERDE.
 | Lint | `npm run lint` | PASSOU — 0 erros (1 warning pré-existente em scripts/render-cert-samples.tsx) |
 | Testes | `npm test` | PASSOU — 103 arquivos / 567 testes verdes |
 | Build | `SKIP_PENDING_MIGRATIONS=1 DATABASE_URL=dummy npm run build` | PASSOU — build concluiu |
+
+## 2026-07-03 — Correção COD-005 (exports mortos)
+| Etapa | Comando | Resultado |
+|---|---|---|
+| Typecheck | `npm run typecheck` | PASSOU — exit 0 |
+| Lint | `npm run lint` | PASSOU — 0 erros (1 warning pré-existente) |
+| Testes | `npm test` | PASSOU — 103 arquivos / 567 testes |
+| Build | `SKIP_PENDING_MIGRATIONS=1 DATABASE_URL=dummy npm run build` | PASSOU |

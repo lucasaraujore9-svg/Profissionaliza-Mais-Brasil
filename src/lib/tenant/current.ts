@@ -101,11 +101,3 @@ export const getCurrentTenant = cache(
     }
   },
 )
-
-export async function requireCurrentTenant(): Promise<CurrentTenant> {
-  const tenant = await getCurrentTenant()
-  if (!tenant) {
-    throw new Error("Tenant not found in request context")
-  }
-  return tenant
-}

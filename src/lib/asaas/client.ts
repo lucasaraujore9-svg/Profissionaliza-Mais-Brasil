@@ -233,22 +233,6 @@ export async function getSubscription(
   return request<AsaasSubscription>("GET", `/subscriptions/${subscriptionId}`)
 }
 
-export async function listSubscriptions(
-  params?: { customer?: string; status?: string; offset?: number; limit?: number },
-): Promise<{ data: AsaasSubscription[]; hasMore: boolean; totalCount: number }> {
-  const query = new URLSearchParams()
-  if (params) {
-    for (const [key, value] of Object.entries(params)) {
-      if (value !== undefined) query.set(key, String(value))
-    }
-  }
-  const qs = query.toString()
-  return request<{ data: AsaasSubscription[]; hasMore: boolean; totalCount: number }>(
-    "GET",
-    `/subscriptions${qs ? `?${qs}` : ""}`,
-  )
-}
-
 export async function cancelSubscription(
   subscriptionId: string,
 ): Promise<{ deleted: boolean; id: string }> {

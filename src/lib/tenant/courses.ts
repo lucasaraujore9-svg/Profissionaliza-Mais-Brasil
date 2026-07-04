@@ -402,30 +402,3 @@ export async function getTenantCourseBySlug(
   }
 }
 
-export async function listTenantCategories(tenantId: string): Promise<string[]> {
-  try {
-    const result = await prisma.tenantCourse.findMany({
-      where: {
-        tenantId,
-        isVisible: true,
-        course: { status: "ATIVO", ...visibilityFilter(tenantId) },
-      },
-      select: {
-        course: { select: { categoriaLoja: true, categoriaInterna: true } },
-      },
-    })
-
-    const set = new Set<string>()
-    for (const tc of result) {
-      const cat = tc.course.categoriaLoja ?? tc.course.categoriaInterna
-      if (cat) set.add(cat)
-    }
-    return Array.from(set).sort((a, b) => a.localeCompare(b, "pt-BR"))
-  } catch (error) {
-    contextLogger().error(
-      { err: error, event: "tenant.listCategories_failed", tenantId },
-      "listTenantCategories falhou",
-    )
-    return []
-  }
-}

@@ -29,7 +29,7 @@ Saúde estrutural (evidência): **zero** `:any`/`as any`/`@ts-ignore`/`@ts-expec
 | COD-002 (CI sem build) | **CORRIGIDO** (mantém) | step Build no `ci.yml`. |
 | COD-003 (process.env espalhado) | **CORRIGIDO** (2026-07-03) | 8 envs migrados p/ `envSchema` + `env.*`: PMB_MP_PUBLIC_KEY, PMB_SUPPORT_EMAIL, PLACAR_META, 4× *_RETENTION_DAYS (+ WA_* já feitos). Framework/Edge (NEXT_RUNTIME/PHASE, VERCEL_ENV/APEX_IP, NEXT_PUBLIC_*) mantidos como process.env por design. Setup de teste `src/test/setup-env.ts` para env de import-time. |
 | COD-004 (ciclos de módulo) | **ABERTO — PIOROU** | madge: 8 → **9** ciclos. |
-| COD-005 (exports mortos) | **RE-ABERTO** | Cluster novo de ~20 exports mortos (7 componentes `loja/`, 4 guards, 2 forms, helpers). |
+| COD-005 (exports mortos) | **CORRIGIDO** (2026-07-03) | 9 arquivos órfãos + 12 exports mortos removidos; portão verde. |
 | COD-006 (`.catch(()=>{})` financeiro) | **QUASE FECHADO** | referrals/asaas/dispatch migraram p/ `swallow()`; restam **2** sites best-effort de baixo impacto. |
 | COD-007 (createReseller não-atômico) | **ABERTO — Aceito** | inalterado (`create.ts` sem `$transaction` envolvendo tenant+user). |
 | COD-008 (acoplamento Vercel / sem standalone) | **ABERTO** | inalterado ⚠️MIGRAÇÃO. |
@@ -52,7 +52,8 @@ Saúde estrutural (evidência): **zero** `:any`/`as any`/`@ts-ignore`/`@ts-expec
 
 ### [COD-005] ~20 exports mortos (código morto) — 7 componentes `loja/`, 4 guards, 2 forms, helpers
 - **Severidade:** P3
-- **Status:** Aberto (re-aberto; a rodada de 2026-06-24 fechou só 2 exports, o cluster atual é maior)
+- **Status:** Corrigido (2026-07-03)
+- **Verificação (2026-07-03):** removidos 9 arquivos órfãos (7 `loja/` + `course-list-toolbar.tsx` + `referral-payout-form.tsx`) e 12 exports mortos (4 guards em `auth/guards.ts` + REVENDA_TEAM; `loadCurated`/`loadByCategoria`; `loadPmbEjaConfig`+`PmbEjaConfig`; `requireCurrentTenant`; `canResellerCheckout`; `listTenantCategories`; `deletePayoutProof`; `previousPeriod`; `getPreapproval`; `listSubscriptions`). Cada símbolo confirmado sem importadores por grep de import-path e nome antes da remoção; sem barrel/`import()` dinâmico. Portão verde: typecheck 0 · lint 0 · 567 testes · build OK.
 - **Local (zero importadores, confirmado por grep de import-path):**
   - Componentes `loja/` órfãos: `src/components/loja/breadcrumb.tsx` (`Breadcrumb`), `category-pills.tsx` (`CategoryPills`), `course-description.tsx` (`CourseDescription`), `course-stats.tsx` (`CourseStats`), `hero-banner.tsx` (`HeroBanner` — o usado é `components/main/home/hero-banner.tsx`), `lesson-accordion.tsx` (`LessonAccordion`), `price-display.tsx` (`PriceDisplay`).
   - Guards nunca chamados: `src/lib/auth/guards.ts` → `requirePmbFinanceiro` (:21), `requireRevendaTeam` (:93), `requirePmbSalesMgr` (:101), `requireResellerMember` (:162).

@@ -17,20 +17,6 @@ const PMB_TEAM: UserRole[] = [
   "PMB_FINANCEIRO",
 ]
 
-/** Financeiro dedicado (ou super). Use em rotas de gestão financeira. */
-export async function requirePmbFinanceiro(): Promise<
-  { ok: true; session: AuthedSession } | { ok: false; response: Response }
-> {
-  const session = await currentSession()
-  if (
-    !session ||
-    (session.role !== "PMB_FINANCEIRO" && session.role !== "SUPER_ADMIN")
-  ) {
-    return { ok: false, response: deny() }
-  }
-  return { ok: true, session }
-}
-
 async function currentSession(): Promise<AuthedSession | null> {
   const session = await auth()
   const user = session?.user as { id?: string; role?: UserRole; tenantId?: string | null } | undefined
@@ -85,29 +71,6 @@ export async function requirePmbResellerMgr(): Promise<
   return { ok: true, session }
 }
 
-// Equipe comercial que trabalha leads/unidades de revenda (B2B): gerente de
-// vendas + vendedor de revenda + super. NAO inclui PMB_SALES (vendedor de curso)
-// nem PMB_RESELLER_MGR (suporte) — esses tem seus proprios escopos.
-const REVENDA_TEAM: UserRole[] = ["SUPER_ADMIN", "PMB_SALES_MGR", "PMB_REVENDA_SALES"]
-
-export async function requireRevendaTeam(): Promise<
-  { ok: true; session: AuthedSession } | { ok: false; response: Response }
-> {
-  const session = await currentSession()
-  if (!session || !REVENDA_TEAM.includes(session.role)) return { ok: false, response: deny() }
-  return { ok: true, session }
-}
-
-export async function requirePmbSalesMgr(): Promise<
-  { ok: true; session: AuthedSession } | { ok: false; response: Response }
-> {
-  const session = await currentSession()
-  if (!session || (session.role !== "PMB_SALES_MGR" && session.role !== "SUPER_ADMIN")) {
-    return { ok: false, response: deny() }
-  }
-  return { ok: true, session }
-}
-
 export async function requireResellerOwner(
   tenantId: string,
 ): Promise<{ ok: true; session: AuthedSession } | { ok: false; response: Response }> {
@@ -157,22 +120,4 @@ export async function requireResellerSeller(): Promise<
     return { ok: false, response: deny() }
   }
   return { ok: true, session, tenantId }
-}
-
-export async function requireResellerMember(
-  tenantId: string,
-): Promise<{ ok: true; session: AuthedSession; memberRole: string } | { ok: false; response: Response }> {
-  const session = await currentSession()
-  if (!session || session.role !== "RESELLER") return { ok: false, response: deny() }
-
-  if (session.tenantId === tenantId) {
-    return { ok: true, session, memberRole: "owner" }
-  }
-
-  const membership = await prisma.tenantMember.findUnique({
-    where: { tenantId_userId: { tenantId, userId: session.userId } },
-    select: { role: true, status: true },
-  })
-  if (!membership || membership.status !== "ATIVO") return { ok: false, response: deny() }
-  return { ok: true, session, memberRole: membership.role }
 }

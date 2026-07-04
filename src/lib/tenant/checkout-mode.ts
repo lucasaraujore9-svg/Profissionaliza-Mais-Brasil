@@ -45,8 +45,3 @@ export function tenantCheckoutMode(t: CheckoutModeInput): CheckoutMode {
   if (t.mpAccessToken && t.mpPublicKey) return "MP"
   return "NONE"
 }
-
-/** Conveniência: a unidade tem QUALQUER gateway próprio configurado? */
-export function canResellerCheckout(t: CheckoutModeInput): boolean {
-  return tenantCheckoutMode(t) !== "NONE"
-}

@@ -218,13 +218,6 @@ export async function getCardInstallments(
 
 // ── Preapproval (Subscription) ──
 
-export async function getPreapproval(
-  accessToken: string,
-  preapprovalId: string,
-): Promise<MPPreapproval> {
-  return request<MPPreapproval>("GET", `/preapproval/${preapprovalId}`, accessToken)
-}
-
 /**
  * Cria uma assinatura recorrente (preapproval). `idempotencyKey`
  * (X-Idempotency-Key) é CRÍTICO: sem ele, se o MP cria a assinatura e a

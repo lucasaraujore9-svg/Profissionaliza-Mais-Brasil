@@ -68,14 +68,3 @@ export async function downloadPayoutProof(
   const ab = await response.arrayBuffer()
   return { buffer: Buffer.from(ab), contentType }
 }
-
-export async function deletePayoutProof(path: string): Promise<void> {
-  const { url, serviceRoleKey } = getConfig()
-  const response = await fetch(`${url}/storage/v1/object/${BUCKET}/${path}`, {
-    method: "DELETE",
-    headers: authHeaders(serviceRoleKey),
-  })
-  if (!response.ok && response.status !== 404) {
-    throw new Error(await extractError(response, "Falha ao remover comprovante"))
-  }
-}
