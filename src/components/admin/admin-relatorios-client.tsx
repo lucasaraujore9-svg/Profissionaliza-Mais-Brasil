@@ -71,7 +71,12 @@ export function AdminRelatoriosClient({
       {isExport ? (
         <ReportsClient />
       ) : (
-        <ReportTabView payload={payload} loading={loading} error={error} />
+        <ReportTabView
+          payload={payload}
+          loading={loading}
+          error={error}
+          onRetry={load}
+        />
       )}
     </ReportShell>
   )

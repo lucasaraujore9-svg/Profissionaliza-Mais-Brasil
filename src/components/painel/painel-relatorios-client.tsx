@@ -67,7 +67,12 @@ export function PainelRelatoriosClient({
       {isExport ? (
         <PainelExportacoes queryString={queryString} />
       ) : (
-        <ReportTabView payload={payload} loading={loading} error={error} />
+        <ReportTabView
+          payload={payload}
+          loading={loading}
+          error={error}
+          onRetry={load}
+        />
       )}
     </ReportShell>
   )
