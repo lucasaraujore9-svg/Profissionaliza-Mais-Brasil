@@ -1097,3 +1097,12 @@ VEREDITO: VERDE.
 | Lint | `npm run lint` | PASSOU — 0 erros |
 | Testes | `npm test` | PASSOU — 567 testes |
 | Build | `SKIP_PENDING_MIGRATIONS=1 DATABASE_URL=dummy npm run build` | PASSOU |
+
+## 2026-07-03 — Correção COD-004 (ciclos de import)
+| Etapa | Comando | Resultado |
+|---|---|---|
+| Madge | `npx madge --circular` | 9 → 0 ("No circular dependency found!") |
+| Typecheck | `npm run typecheck` | PASSOU — exit 0 |
+| Lint | `npm run lint` | PASSOU — 0 erros |
+| Testes | `npm test` | PASSOU — 567 testes |
+| Build | `SKIP_PENDING_MIGRATIONS=1 DATABASE_URL=dummy npm run build` | PASSOU |

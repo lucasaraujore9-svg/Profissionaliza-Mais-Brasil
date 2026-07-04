@@ -17,7 +17,7 @@ import {
   FileText,
   UserRound,
 } from "lucide-react"
-import { STAGE_META, type StageKey } from "./lead-kanban-column"
+import { STAGE_META, type StageKey } from "./lead-kanban.shared"
 import { LeadStageBadge } from "./lead-stage"
 
 interface LeadActivity {

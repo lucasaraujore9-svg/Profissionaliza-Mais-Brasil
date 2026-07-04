@@ -2,63 +2,10 @@
 
 import { useEffect, useRef, useState } from "react"
 import { Mail, Phone, BookOpen, MoreVertical, UserRound, GripVertical } from "lucide-react"
-import type { LeadCardData } from "./leads-kanban-board"
+import { STAGE_META, type StageKey, type LeadCardData } from "./lead-kanban.shared"
 
 // MIME type usado no dataTransfer do drag-and-drop nativo dos cards de lead.
 const DRAG_MIME = "application/x-pmb-lead"
-
-export type StageKey =
-  | "NEW"
-  | "CONTACTED"
-  | "CHECKOUT_STARTED"
-  | "ABANDONED"
-  | "WON"
-  | "LOST"
-
-// Tom de cada coluna derivado do sistema de design PMB (status-badge):
-// classe de fundo/borda da coluna (`color`) + chip de contagem (`badge`).
-// Sem cores cruas (blue/violet/orange/emerald) — tudo via tokens PMB.
-export const STAGE_META: Record<
-  StageKey,
-  { label: string; description: string; color: string; badge: string }
-> = {
-  NEW: {
-    label: "Novos",
-    description: "Formulário preenchido na vitrine",
-    color: "bg-[var(--color-pmb-cyan-50)] border-[var(--color-pmb-cyan)]/25",
-    badge: "bg-[var(--color-pmb-cyan-50)] text-[var(--color-pmb-cyan-700)]",
-  },
-  CONTACTED: {
-    label: "Em contato",
-    description: "Consultor já conversou",
-    color: "bg-[var(--color-pmb-gold-50)] border-[var(--color-pmb-gold)]/30",
-    badge: "bg-[var(--color-pmb-gold)]/15 text-[var(--color-pmb-gold-600)]",
-  },
-  CHECKOUT_STARTED: {
-    label: "Checkout iniciado",
-    description: "Aluno está finalizando compra",
-    color: "bg-[var(--color-pmb-lime-50)] border-[var(--color-pmb-green)]/20",
-    badge: "bg-[var(--color-pmb-lime-50)] text-[var(--color-pmb-green-900)]",
-  },
-  ABANDONED: {
-    label: "Abandonados",
-    description: "Carrinho não finalizado",
-    color: "bg-rose-50 border-rose-200",
-    badge: "bg-rose-50 text-rose-700",
-  },
-  WON: {
-    label: "Concluídos",
-    description: "Pagamento aprovado",
-    color: "bg-[var(--color-pmb-green)]/5 border-[var(--color-pmb-green)]/25",
-    badge: "bg-[var(--color-pmb-green)]/10 text-[var(--color-pmb-green-700)]",
-  },
-  LOST: {
-    label: "Perdidos",
-    description: "Descartados pelo consultor",
-    color: "bg-gray-50 border-gray-200",
-    badge: "bg-gray-100 text-gray-700",
-  },
-}
 
 const STAGES: StageKey[] = [
   "NEW",

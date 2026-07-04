@@ -9,6 +9,7 @@ import { BillingSection } from "./billing-section"
 import { SecurityForm } from "./security-form"
 import { PixForm } from "./pix-form"
 import { TrackingForm } from "./tracking-form"
+import type { ConfigData } from "./config-tabs.types"
 
 const tabs = [
   { id: "conta", label: "Conta" },
@@ -19,33 +20,6 @@ const tabs = [
 ] as const
 
 type TabId = (typeof tabs)[number]["id"]
-
-export interface ConfigData {
-  user: { id: string; name: string; email: string }
-  tenant: {
-    id: string
-    name: string
-    slug: string
-    billingMode: "AUTO" | "MANUAL"
-    status: "PENDING" | "ACTIVE" | "SUSPENDED" | "CANCELLED"
-    mpConnected: boolean
-    mpWebhookConfigured: boolean
-    mpPublicKeyConfigured: boolean
-    mpWebhookUrl: string
-    mpUserId: string | null
-    monthlyAllowed: boolean
-    monthlyEnabled: boolean
-    monthlyScope: "DIRECT_ONLY" | "DIRECT_AND_VITRINE"
-    interestFreeInstallments: number
-    // Asaas como gateway de vendas da unidade. asaasGatewayEnabled vem do Admin
-    // Master; quando false, a seção Asaas nem é renderizada no painel.
-    asaasGatewayEnabled: boolean
-    asaasConnected: boolean
-    asaasWebhookConfigured: boolean
-    asaasWebhookUrl: string
-    salesGateway: "MP" | "ASAAS"
-  }
-}
 
 export function ConfigTabs() {
   const router = useRouter()

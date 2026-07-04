@@ -17,27 +17,11 @@ import {
   pagamentoSchema,
   cadastroRevendedorSchema,
 } from "@/lib/schemas/revendedor-cadastro"
-
-type BillingType = "CREDIT_CARD" | "PIX" | "BOLETO"
-
-export interface PessoalForm {
-  nome: string
-  email: string
-  telefone: string
-  cpf: string
-  password: string
-}
-
-export interface EmpresaForm {
-  razaoSocial: string
-  fantasia: string
-  cnpj: string
-  cidade: string
-}
-
-export interface PagamentoForm {
-  billingType: BillingType
-}
+import type {
+  PessoalForm,
+  EmpresaForm,
+  PagamentoForm,
+} from "./checkout-wizard.types"
 
 interface SubmitResult {
   slug: string

@@ -28,7 +28,7 @@ Saúde estrutural (evidência): **zero** `:any`/`as any`/`@ts-ignore`/`@ts-expec
 | COD-001 (LMS env fora do schema) | **CORRIGIDO** (mantém) | `LMS_API_URL`/`LMS_API_KEY` no `envSchema`. |
 | COD-002 (CI sem build) | **CORRIGIDO** (mantém) | step Build no `ci.yml`. |
 | COD-003 (process.env espalhado) | **CORRIGIDO** (2026-07-03) | 8 envs migrados p/ `envSchema` + `env.*`: PMB_MP_PUBLIC_KEY, PMB_SUPPORT_EMAIL, PLACAR_META, 4× *_RETENTION_DAYS (+ WA_* já feitos). Framework/Edge (NEXT_RUNTIME/PHASE, VERCEL_ENV/APEX_IP, NEXT_PUBLIC_*) mantidos como process.env por design. Setup de teste `src/test/setup-env.ts` para env de import-time. |
-| COD-004 (ciclos de módulo) | **ABERTO — PIOROU** | madge: 8 → **9** ciclos. |
+| COD-004 (ciclos de módulo) | **CORRIGIDO** (2026-07-03) | madge: 9 → **0**; tipos extraídos p/ módulos folha. |
 | COD-005 (exports mortos) | **CORRIGIDO** (2026-07-03) | 9 arquivos órfãos + 12 exports mortos removidos; portão verde. |
 | COD-006 (`.catch(()=>{})` financeiro) | **CORRIGIDO** (2026-07-03) | 2 sites restantes migrados p/ `swallow()`; grep vazio. |
 | COD-007 (createReseller não-atômico) | **ABERTO — Aceito** | inalterado (`create.ts` sem `$transaction` envolvendo tenant+user). |
@@ -85,7 +85,8 @@ Saúde estrutural (evidência): **zero** `:any`/`as any`/`@ts-ignore`/`@ts-expec
 
 ### [COD-004] 9 dependências circulares no grafo de módulos (8 type-only, 1 mista)
 - **Severidade:** P3
-- **Status:** Aberto (piorou: 8 → 9)
+- **Status:** Corrigido (2026-07-03)
+- **Verificação (2026-07-03):** `npx madge --circular --extensions ts,tsx src/` → **"No circular dependency found!"** (9 → 0). Tipos/valores compartilhados extraídos para módulos folha: `lead-kanban.shared.ts` (STAGE_META + StageKey + LeadCardData), `certificates/templates/render-data.ts` (CertificateRenderData), `checkout-wizard.types.ts` (PessoalForm/EmpresaForm/PagamentoForm/BillingType), `config-tabs.types.ts` (ConfigData). Filhos passam a importar do módulo folha em vez do pai. Portão verde: typecheck 0 · lint 0 · 567 testes · build OK.
 - **Local:** `npx madge --circular --extensions ts,tsx src/`: (1-3) `checkout-wizard.tsx ↔ {checkout-form-empresa, checkout-form-pessoal, checkout-payment-preview}`; (4) `account-form.tsx ↔ config-tabs.tsx`; (5-6) `config-tabs → billing-section → asaas-gateway-section` / `→ billing-section`; (7-8) `lead-detail-drawer → lead-kanban-column → leads-kanban-board` (**mista** — valor `STAGE_META`); (9 **novo**) `lib/certificates/templates/classic.tsx ↔ info-page.tsx`.
 - **Evidência:** madge processou 1137 arquivos → "9 circular dependencies". 8 são type-only (apagados na compilação); o ciclo dos leads mistura valor (`STAGE_META`) → único com risco teórico de TDZ.
 - **Impacto:** nenhum erro hoje; risco organizacional + o ciclo com `STAGE_META` pode dar `undefined` em hot-reload/tree-shaking agressivo.

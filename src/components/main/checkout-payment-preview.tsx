@@ -1,7 +1,7 @@
 "use client"
 
 import { CreditCard, QrCode, CalendarCheck } from "lucide-react"
-import type { PagamentoForm } from "./checkout-wizard"
+import type { PagamentoForm } from "./checkout-wizard.types"
 
 type BillingType = PagamentoForm["billingType"]
 

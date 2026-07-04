@@ -1,7 +1,7 @@
 /* eslint-disable jsx-a11y/alt-text -- @react-pdf/renderer Image não suporta alt prop */
 import type { ReactElement } from "react"
 import { Page, View, Text, Image, StyleSheet } from "@react-pdf/renderer"
-import type { CertificateRenderData } from "./classic"
+import type { CertificateRenderData } from "./render-data"
 
 /**
  * Base legal dos certificados de cursos livres. Exibida no verso (página 2) de

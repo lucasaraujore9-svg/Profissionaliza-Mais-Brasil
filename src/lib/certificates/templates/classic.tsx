@@ -7,49 +7,10 @@ import {
   Image,
   StyleSheet,
 } from "@react-pdf/renderer"
-import type { ResolvedTemplate } from "../template-resolver"
 import { certificateInfoPage, resolveCompletionPercent } from "./info-page"
+import type { CertificateRenderData } from "./render-data"
 
-export interface CertificateRenderData {
-  template: ResolvedTemplate
-  studentName: string
-  studentCpf?: string | null
-  courseName: string
-  cargaHoraria?: string | null
-  /**
-   * Matriz curricular do curso (conteúdo programático). Exibida no verso
-   * (página 2). Vazia/ausente => o verso segue o layout atual, sem a seção.
-   */
-  matrizCurricular?: string[]
-  completionDateFormatted: string
-  code: string
-  unidade: string
-  /**
-   * Percentual de conclusão do curso (0-100) sincronizado da plataforma.
-   * Exibido no verso (página 2). `null` => assume 100% (certificado de conclusão).
-   */
-  progressPercent: number | null
-  validationUrl: string
-  qrCodeDataUrl: string | null
-  /**
-   * Texto do corpo ja com placeholders substituidos.
-   */
-  bodyResolved: string
-  /**
-   * Texto do rodape ja com placeholders substituidos (ou null).
-   */
-  footerResolved: string | null
-  /**
-   * Logo do Grupo Bolsa Mais Brasil — selo "powered by" em rodape.
-   * Null = renderiza apenas o texto do `groupName`.
-   */
-  groupLogoUrl: string | null
-  /**
-   * Nome do grupo exibido junto ao selo de plataforma.
-   * Default: "Grupo Bolsa Mais Brasil".
-   */
-  groupName: string
-}
+export type { CertificateRenderData } from "./render-data"
 
 /**
  * Layout CLASSIC: borda dupla dourada/escura, titulo grande centralizado,

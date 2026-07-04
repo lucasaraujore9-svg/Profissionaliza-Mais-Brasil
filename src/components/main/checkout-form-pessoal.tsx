@@ -3,7 +3,7 @@
 import { User, Mail, Phone, FileText, Lock } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import type { PessoalForm } from "./checkout-wizard"
+import type { PessoalForm } from "./checkout-wizard.types"
 
 function formatCpf(raw: string): string {
   const digits = raw.replace(/\D/g, "").slice(0, 11)

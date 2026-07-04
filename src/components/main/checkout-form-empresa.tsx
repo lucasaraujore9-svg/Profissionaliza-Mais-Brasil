@@ -3,7 +3,7 @@
 import { Building2, Briefcase, FileText, MapPin } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import type { EmpresaForm } from "./checkout-wizard"
+import type { EmpresaForm } from "./checkout-wizard.types"
 
 function formatCnpj(raw: string): string {
   const digits = raw.replace(/\D/g, "").slice(0, 14)

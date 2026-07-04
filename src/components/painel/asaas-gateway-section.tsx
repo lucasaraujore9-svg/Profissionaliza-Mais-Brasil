@@ -5,7 +5,7 @@ import { Check, CheckCircle2, Copy, LinkIcon, Loader2, Unplug } from "lucide-rea
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import type { ConfigData } from "./config-tabs"
+import type { ConfigData } from "./config-tabs.types"
 
 /**
  * Conexao da conta Asaas PROPRIA da unidade (gateway de vendas) — espelha o

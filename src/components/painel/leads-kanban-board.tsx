@@ -3,27 +3,11 @@
 import { useCallback, useEffect, useState } from "react"
 import { toast } from "sonner"
 import { Users } from "lucide-react"
-import { LeadKanbanColumn, STAGE_META, type StageKey } from "./lead-kanban-column"
+import { LeadKanbanColumn } from "./lead-kanban-column"
 import { LeadDetailDrawer } from "./lead-detail-drawer"
+import { STAGE_META, type StageKey, type LeadCardData } from "./lead-kanban.shared"
 import { BlockSkeleton } from "@/components/shared/loading-skeletons"
 import { EmptyState } from "@/components/shared/empty-state"
-
-export interface LeadCardData {
-  id: string
-  nome: string
-  email: string
-  telefone: string
-  courseSnapshot: string | null
-  stage: StageKey
-  source: string
-  paymentValue: number | null
-  columnOrder: number
-  createdAt: string
-  // Ausentes no board do admin PMB (sem consultores); presentes no painel da
-  // revenda — `null` significa lead sem responsável atribuído.
-  ownerUserId?: string | null
-  ownerName?: string | null
-}
 
 type BoardData = Record<StageKey, LeadCardData[]>
 
