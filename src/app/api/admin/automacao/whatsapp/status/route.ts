@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { requireAdminSession } from "@/lib/auth/admin-session"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { getSessionStatus, stopSession } from "@/lib/automation/wa-client"
+import { swallow } from "@/lib/errors"
 
 export const GET = withRequestContext(
   {
@@ -69,7 +70,9 @@ export const GET = withRequestContext(
           err instanceof Prisma.PrismaClientKnownRequestError &&
           err.code === "P2002"
         ) {
-          await stopSession(settings.pmbWaSessionName).catch(() => {})
+          await stopSession(settings.pmbWaSessionName).catch(
+            swallow("automacao.whatsapp.stop_session"),
+          )
           await prisma.systemSettings.update({
             where: { id: "default" },
             data: {

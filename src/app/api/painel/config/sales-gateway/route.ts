@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { invalidateTenant } from "@/lib/redis/tenant-cache"
 import { withRequestContext } from "@/lib/observability/with-request-context"
+import { swallow } from "@/lib/errors"
 
 // Define o gateway ATIVO da vitrine da unidade (MP padrao | ASAAS). Uma venda
 // por vez vai por um gateway — o /api/loja/checkout le tenant.salesGateway.
@@ -97,7 +98,7 @@ export const PATCH = withRequestContext(
       id: tenantId,
       slug: tenant.slug,
       customDomain: tenant.customDomain,
-    }).catch(() => {})
+    }).catch(swallow("painel.sales_gateway.invalidate"))
 
     return NextResponse.json({ data: { salesGateway: parsed.data.gateway } })
   },

@@ -30,7 +30,7 @@ Saúde estrutural (evidência): **zero** `:any`/`as any`/`@ts-ignore`/`@ts-expec
 | COD-003 (process.env espalhado) | **CORRIGIDO** (2026-07-03) | 8 envs migrados p/ `envSchema` + `env.*`: PMB_MP_PUBLIC_KEY, PMB_SUPPORT_EMAIL, PLACAR_META, 4× *_RETENTION_DAYS (+ WA_* já feitos). Framework/Edge (NEXT_RUNTIME/PHASE, VERCEL_ENV/APEX_IP, NEXT_PUBLIC_*) mantidos como process.env por design. Setup de teste `src/test/setup-env.ts` para env de import-time. |
 | COD-004 (ciclos de módulo) | **ABERTO — PIOROU** | madge: 8 → **9** ciclos. |
 | COD-005 (exports mortos) | **CORRIGIDO** (2026-07-03) | 9 arquivos órfãos + 12 exports mortos removidos; portão verde. |
-| COD-006 (`.catch(()=>{})` financeiro) | **QUASE FECHADO** | referrals/asaas/dispatch migraram p/ `swallow()`; restam **2** sites best-effort de baixo impacto. |
+| COD-006 (`.catch(()=>{})` financeiro) | **CORRIGIDO** (2026-07-03) | 2 sites restantes migrados p/ `swallow()`; grep vazio. |
 | COD-007 (createReseller não-atômico) | **ABERTO — Aceito** | inalterado (`create.ts` sem `$transaction` envolvendo tenant+user). |
 | COD-008 (acoplamento Vercel / sem standalone) | **ABERTO** | inalterado ⚠️MIGRAÇÃO. |
 
@@ -66,7 +66,8 @@ Saúde estrutural (evidência): **zero** `:any`/`as any`/`@ts-ignore`/`@ts-expec
 
 ### [COD-006] 2 `.catch(() => {})` best-effort residuais (cache-invalidation + stop-session)
 - **Severidade:** P3
-- **Status:** Aberto (rebaixado de P2 — os 9 sites financeiros/audit de 2026-06-24 já migraram para `swallow()`)
+- **Status:** Corrigido (2026-07-03)
+- **Verificação (2026-07-03):** `sales-gateway/route.ts` usa `swallow("painel.sales_gateway.invalidate")` e `automacao/whatsapp/status/route.ts` usa `swallow("automacao.whatsapp.stop_session")`. `grep .catch(()=>{})` nos dois diretórios → vazio. Mudança é log-then-swallow (resposta HTTP idêntica, só observabilidade; espelha os 9 sites já migrados, sem novo teste). Portão verde: typecheck 0 · lint 0 · 567 testes · build OK.
 - **Local:** `src/app/api/painel/config/sales-gateway/route.ts:100` (`invalidateTenant(...).catch(() => {})` após trocar `salesGateway`) · `src/app/api/admin/automacao/whatsapp/status/route.ts:72` (`stopSession(...).catch(() => {})` no ramo de recuperação P2002).
 - **Evidência:** grep `\.catch\(\(\) *=> *\{\}\)` em `src/lib/{referrals,asaas,automation}` → **vazio** (todos usam `.catch(swallow("<contexto>"))`, 115 sites). Os demais `.catch(() => {})` restantes são client-side DOM/telemetria legítimos (`placar-client.tsx`, `pre-live-video.tsx` — `play()`/`fullscreen`; `logger-client.ts`; `lead-detail-drawer.tsx` fetch de UI; `after-response.ts` — documentado e `fn` trata os próprios erros). Sobram só os 2 acima: invalidar cache de tenant falhando em silêncio pode servir gateway/dado stale; `stopSession` best-effort perde o log de por que a sessão WA não parou.
 - **Impacto:** baixo — cache stale de curta duração (TTL 5min) e ruído de debug em falha de stop de sessão WhatsApp. Sem toque em dinheiro.
