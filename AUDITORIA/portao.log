@@ -1124,3 +1124,8 @@ como trilha de migração VPS. Sem alteração de código → portão não re-ex
 Corrigidos: COD-003, COD-004, COD-005, COD-006. Abertos: COD-007 (Aceito), COD-008 (trilha migração VPS).
 
 [2026-07-04] Rodada Frontend (FE-003 33ea858 + FE-007 7f4d032) — typecheck 0 erro · lint 0 erro · build Compiled successfully (SKIP_PENDING_MIGRATIONS=1 + DATABASE_URL throwaway) · test 103 arq/570 verdes · VEREDITO: VERDE
+
+[2026-07-04] Rodada DevOps (OPS-010 5f18a44 + doc migração 3c901fc) — typecheck 0 erro · lint 0 erro (1 warning pré-existente em scripts/render-cert-samples.tsx) · build "Compiled successfully in 8.5s" (SKIP_PENDING_MIGRATIONS=1 + DATABASE_URL/DIRECT_URL fake; erro Prisma course.count no prerender é best-effort esperado, não é falha) · test 103 arq/570 casos verdes · VEREDITO: VERDE
+  Corrigidos: OPS-010 (porção segura/aditiva: .nvmrc + CI node-version-file).
+  Abertos — decisão do dono: OPS-001 (mecanismo de deploy inalterado), OPS-013 (verificação manual no Supabase).
+  Abertos — trilha de migração VPS (doc em docs/migracao/VERCEL-PARA-VPS.md): OPS-002, OPS-003, OPS-004, OPS-005, OPS-006, OPS-007, OPS-008, OPS-009, OPS-011.
