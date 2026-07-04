@@ -35,6 +35,7 @@ _Data: 2026-07-03 · Referência: .claude/skills/auditoria-saas/references/08-de
 ### [OPS-001] `npm run build` aplica migrations na PROD durante o build (acoplamento build↔schema-prod)
 - **Severidade:** P1
 - **Status:** Aberto
+- **Nota (2026-07-03):** Aberto — decisão do dono: mecanismo de deploy não será alterado nesta rodada.
 - **Local:** package.json:7 (`"build": "npm run db:apply-pending && next build"`) · package.json:8 (`db:apply-pending`) · scripts/apply-pending-migrations.mjs:54 (`DIRECT_URL ?? DATABASE_URL`)
 - **Evidência:** O script `build` continua executando `node scripts/apply-pending-migrations.mjs` ANTES
   de `next build` (package.json:7). O runner abre conexão DIRETA ao Postgres (mjs:54, `DIRECT_URL ??
@@ -64,6 +65,7 @@ _Data: 2026-07-03 · Referência: .claude/skills/auditoria-saas/references/08-de
 ### [OPS-002] ⚠️MIGRAÇÃO — `next.config.ts` sem `output: 'standalone'`; nenhum Dockerfile/.dockerignore/compose/stack
 - **Severidade:** P1
 - **Status:** Aberto
+- **Nota (2026-07-03):** trilha de migração VPS — planejamento consolidado em `docs/migracao/VERCEL-PARA-VPS.md` (§OPS-002). Não aplicar no runtime da Vercel.
 - **Local:** next.config.ts:49-106 (nextConfig sem `output`) · raiz do repo (ausência de Dockerfile/.dockerignore/docker-compose/docker-stack/.nvmrc — confirmado por `find` + `git ls-files`)
 - **Evidência:** `grep -n "output\|standalone" next.config.ts` → nenhum resultado (config tem
   `serverExternalPackages`, `images`, `headers` — nada de `output`). `find` e `git ls-files` por
@@ -84,6 +86,7 @@ _Data: 2026-07-03 · Referência: .claude/skills/auditoria-saas/references/08-de
 ### [OPS-003] ⚠️MIGRAÇÃO — Redis via `@upstash/redis` (REST) não fala TCP; trocar por `ioredis`/`redis` ou SRH
 - **Severidade:** P1
 - **Status:** Aberto
+- **Nota (2026-07-03):** trilha de migração VPS — planejamento consolidado em `docs/migracao/VERCEL-PARA-VPS.md` (§OPS-003). Não aplicar no runtime da Vercel.
 - **Local:** src/lib/redis.ts:1,21 · src/lib/ratelimit.ts:1-2 · src/lib/redis/cache.ts:9-10 · src/proxy.ts:142-155,169-176 (fetch REST direto) · package.json:29-30 (`@upstash/ratelimit`, `@upstash/redis`)
 - **Evidência:** `grep -rn "@upstash/" src` → 3 usos vivos: `redis.ts` (`new Redis({url,token})`),
   `ratelimit.ts` (`Redis` + `Ratelimit`) e `redis/cache.ts`. Além disso o proxy NÃO usa o SDK: faz
@@ -106,6 +109,7 @@ _Data: 2026-07-03 · Referência: .claude/skills/auditoria-saas/references/08-de
 ### [OPS-004] ⚠️MIGRAÇÃO — `proxy.ts` assume premissas de Edge-runtime; revalidar para Node no self-host
 - **Severidade:** P1
 - **Status:** Aberto
+- **Nota (2026-07-03):** trilha de migração VPS — planejamento consolidado em `docs/migracao/VERCEL-PARA-VPS.md` (§OPS-004). Não aplicar no runtime da Vercel.
 - **Local:** src/proxy.ts (fetch REST :152,174; hop interno :210-211) · src/lib/redis.ts:9 (comentário "esse módulo roda no middleware") · src/instrumentation.ts (`NEXT_RUNTIME !== "nodejs"` guard)
 - **Evidência:** O middleware do Next roda no Edge na Vercel — por isso o proxy usa `fetch` REST ao
   Upstash (proxy.ts:152,174) e resolve tenant via hop HTTP a `/api/internal/resolve-tenant`
@@ -125,6 +129,7 @@ _Data: 2026-07-03 · Referência: .claude/skills/auditoria-saas/references/08-de
 ### [OPS-005] ⚠️MIGRAÇÃO — Storage acoplado à Supabase Storage REST; migrar para MinIO/R2 (S3)
 - **Severidade:** P1
 - **Status:** Aberto
+- **Nota (2026-07-03):** trilha de migração VPS — planejamento consolidado em `docs/migracao/VERCEL-PARA-VPS.md` (§OPS-005). Não aplicar no runtime da Vercel.
 - **Local:** src/lib/supabase/storage.ts (bucket `vitrine-assets`) · src/lib/certificates/storage.ts (bucket `certificates`, signed URLs) · src/lib/storage/payout-proof.ts:11,39,60,74 (bucket privado, `SUPABASE_SERVICE_ROLE_KEY`) · src/lib/packages/cover-upload.ts
 - **Evidência:** Toda I/O de arquivos usa a REST API do Supabase Storage com `SUPABASE_SERVICE_ROLE_KEY`
   e paths hardcoded `${url}/storage/v1/object/{public|sign}/${BUCKET}/...`. **Terceiro módulo confirmado
@@ -146,6 +151,7 @@ _Data: 2026-07-03 · Referência: .claude/skills/auditoria-saas/references/08-de
 ### [OPS-006] ⚠️MIGRAÇÃO — Dependências e API Vercel-específicas (`@vercel/analytics`/`speed-insights` + domínios custom)
 - **Severidade:** P2
 - **Status:** Aberto
+- **Nota (2026-07-03):** trilha de migração VPS — planejamento consolidado em `docs/migracao/VERCEL-PARA-VPS.md` (§OPS-006). Remover deps Vercel/reimplementar domínios só no cutover; hoje coletam de verdade na Vercel.
 - **Local:** src/components/shared/analytics-gate.tsx:3-4 · package.json:31-32 · src/lib/vercel/client.ts:1-133 (Vercel Project Domains API + `getDomainConfig` v6) · src/lib/tenant/urls.ts:83 (`vercelApexIp()` default `216.198.79.1`) · /api/painel/dominio (consumidor)
 - **Evidência:** `grep -rn "@vercel/" src` → `Analytics` + `SpeedInsights` em analytics-gate.tsx (no-op
   fora da Vercel — peso morto). `vercel/client.ts` faz TODA a anexação de domínio custom via Vercel
@@ -171,6 +177,7 @@ _Data: 2026-07-03 · Referência: .claude/skills/auditoria-saas/references/08-de
 ### [OPS-007] ⚠️MIGRAÇÃO — Sem Docker Swarm/Compose secrets; app lê segredos de alto poder de env
 - **Severidade:** P2
 - **Status:** Aberto
+- **Nota (2026-07-03):** trilha de migração VPS — planejamento consolidado em `docs/migracao/VERCEL-PARA-VPS.md` (§OPS-007). Suporte `*_FILE` em `env.ts` é aditivo mas inerte sem orquestrador; entra no cutover.
 - **Local:** scripts/apply-pending-migrations.mjs:54 · src/lib/supabase/storage.ts:5 + certificates/storage.ts:5 + storage/payout-proof.ts:11 (`SUPABASE_SERVICE_ROLE_KEY`) · src/lib/env.ts (ENCRYPTION_KEY/CRON_SECRET/INTERNAL_SECRET) · .env.example
 - **Evidência:** A app depende de segredos de alto poder em env: `SUPABASE_SERVICE_ROLE_KEY` (poder total
   no storage/DB), `ENCRYPTION_KEY`, `CRON_SECRET`, `INTERNAL_SECRET`, `ASAAS_API_KEY`, `MP_WEBHOOK_SECRET`,
@@ -188,6 +195,7 @@ _Data: 2026-07-03 · Referência: .claude/skills/auditoria-saas/references/08-de
 ### [OPS-008] ⚠️MIGRAÇÃO — Pooling Supavisor → pgBouncer; backups não testados
 - **Severidade:** P2
 - **Status:** Aberto
+- **Nota (2026-07-03):** trilha de migração VPS — planejamento consolidado em `docs/migracao/VERCEL-PARA-VPS.md` (§OPS-008). Requer provisionar pgBouncer + backups; não aplicar no runtime da Vercel.
 - **Local:** src/lib/prisma.ts:15-20 (Pool `pg` sobre `DATABASE_URL`, `max` = `DATABASE_POOL_MAX ?? 10`) · scripts/apply-pending-migrations.mjs:54 (migrations via `DIRECT_URL`) · .env.example
 - **Evidência:** Runtime usa `DATABASE_URL` (pooled Supavisor) com `Pool` do `pg` (prisma.ts:15-20,
   `max` default 10, `idleTimeout` 30s, `connectionTimeout` 5s); migrations usam a conexão DIRETA
@@ -207,6 +215,7 @@ _Data: 2026-07-03 · Referência: .claude/skills/auditoria-saas/references/08-de
 ### [OPS-009] ⚠️MIGRAÇÃO — Crons via Supabase pg_cron (`pg_net`→endpoint HTTP); precisam de scheduler próprio na VPS
 - **Severidade:** P2
 - **Status:** Aberto
+- **Nota (2026-07-03):** trilha de migração VPS — planejamento consolidado em `docs/migracao/VERCEL-PARA-VPS.md` (§OPS-009). Requer scheduler novo na VPS; não aplicar no runtime da Vercel.
 - **Local:** prisma/sql/pg_cron_jobs.sql:1-85 (13 jobs via `app_internal.run_cron` → `net.http_post`) · src/app/api/cron/** (17 handlers) · vercel.json:2 (`"crons": []`)
 - **Evidência:** O scheduler canônico é o Supabase pg_cron disparando `app_internal.run_cron(path)` que faz
   `net.http_post` (pg_net) para `/api/cron/*` com `Authorization: Bearer CRON_SECRET`
@@ -244,6 +253,7 @@ _Data: 2026-07-03 · Referência: .claude/skills/auditoria-saas/references/08-de
 ### [OPS-011] Sem ambiente de staging/homologação e sem plano de cutover (ADR-002 ausente)
 - **Severidade:** P3
 - **Status:** Aberto
+- **Nota (2026-07-03):** trilha de migração VPS — checklist de cutover documentado em `docs/migracao/VERCEL-PARA-VPS.md` (§OPS-011). Staging fiel + ADR-002 formal seguem pendentes de infra (provisionamento).
 - **Local:** vercel.json (só `crons:[]`) · .github/workflows/ci.yml (sem deploy de staging) · docs/architecture/ (só `ADR-001-arquitetura-multiproduto.md`; sem ADR-002 — confirmado por `ls`)
 - **Evidência:** `ls docs/architecture/` mostra apenas `ADR-001`; **não existe ADR-002**. Não há referência
   a homologação fiel em vercel.json/ci.yml/next.config.ts; não existe Dockerfile/compose/stack (OPS-002)
@@ -279,6 +289,7 @@ _Data: 2026-07-03 · Referência: .claude/skills/auditoria-saas/references/08-de
 ### [OPS-013] Crons dependem de pg_cron aplicado À MÃO — sem prova de que estão ativos em produção
 - **Severidade:** P1
 - **Status:** Aberto (verificação manual)
+- **Nota (2026-07-03):** Aberto — requer verificação manual do dono no Supabase.
 - **Local:** prisma/sql/pg_cron_jobs.sql:11-21 (cabeçalho: "NÃO é rodado automaticamente pelo deploy — execução manual") · vercel.json:2 (`"crons": []`) · src/app/api/cron/** (13 handlers periódicos)
 - **Evidência:** O único agendador dos 13 jobs periódicos é o Supabase pg_cron, e o próprio arquivo declara
   que **NÃO é aplicado pelo deploy** — precisa ser colado no SQL Editor manualmente (pg_cron_jobs.sql:11).
