@@ -238,7 +238,15 @@ _Data: 2026-07-03 · Referência: .claude/skills/auditoria-saas/references/08-de
 
 ### [OPS-010] Versão do Node não pinada (sem `engines`/`packageManager`/`.nvmrc`); CI fixa em 20, prod/imagem indefinidos
 - **Severidade:** P2
-- **Status:** Aberto
+- **Status:** Corrigido (parcial — porção segura/aditiva)
+- **Nota (2026-07-03):** Corrigido a porção segura/aditiva: criado `.nvmrc` (`20`) como fonte de verdade
+  de versão para dev local e imagem Docker futura, e o CI passou a ler `node-version-file: .nvmrc`
+  (`.github/workflows/ci.yml:25`) em vez de `node-version: 20` hardcoded — mesmo Node 20, agora com fonte
+  única. **`engines.node` deliberadamente NÃO adicionado** ao `package.json`: a Vercel usa `engines.node`
+  para selecionar a versão de runtime e, sem confirmação da versão atual do projeto na Vercel, defini-la
+  poderia alterar o runtime de produção (não seria seguro/aditivo). A pinagem da base do container
+  (OPS-002) referenciará este `.nvmrc`. **Verificação:** `cat .nvmrc` → `20`; `.github/workflows/ci.yml`
+  usa `node-version-file: .nvmrc`. Portão Zero-Erro verde (typecheck/lint/test/build).
 - **Local:** package.json (sem `engines`/`packageManager` — `grep` confirma) · ausência de `.nvmrc` (confirmado por `find`) · .github/workflows/ci.yml:25 (`node-version: 20`)
 - **Evidência:** `grep "engines\|packageManager" package.json` → nada; `.nvmrc` inexistente. CI roda em
   Node 20 (ci.yml:25), mas nada garante paridade com o runtime da Vercel nem com a imagem base do futuro
