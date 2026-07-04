@@ -1122,3 +1122,5 @@ como trilha de migração VPS. Sem alteração de código → portão não re-ex
 | Build | `SKIP_PENDING_MIGRATIONS=1 DATABASE_URL=dummy npm run build` | PASSOU — build concluiu |
 
 Corrigidos: COD-003, COD-004, COD-005, COD-006. Abertos: COD-007 (Aceito), COD-008 (trilha migração VPS).
+
+[2026-07-04] Rodada Frontend (FE-003 33ea858 + FE-007 7f4d032) — typecheck 0 erro · lint 0 erro · build Compiled successfully (SKIP_PENDING_MIGRATIONS=1 + DATABASE_URL throwaway) · test 103 arq/570 verdes · VEREDITO: VERDE
