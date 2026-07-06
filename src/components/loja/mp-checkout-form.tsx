@@ -26,6 +26,10 @@ import {
   buildInstallmentOptions,
   type InstallmentOption,
 } from "@/lib/mercadopago/installments"
+import {
+  availableStoreMethods,
+  defaultStoreMethod,
+} from "@/lib/mercadopago/store-methods"
 import { storePath } from "@/lib/tenant/vitrine-paths"
 
 /**
@@ -187,6 +191,9 @@ export function MpCheckoutForm({
     blUf: "",
   })
   const [method, setMethod] = useState<Method>("PIX")
+  // Métodos que a CONTA MP da unidade realmente aceita. null = ainda não sabido
+  // (ou consulta falhou) → mostra os 3, preservando o comportamento anterior.
+  const [availableMethods, setAvailableMethods] = useState<Method[] | null>(null)
   // Parcelamento do cartão: opções vindas do MP (payer_costs reais) + escolha.
   const [installments, setInstallments] = useState(1)
   const [installmentOptions, setInstallmentOptions] = useState<
@@ -207,6 +214,36 @@ export function MpCheckoutForm({
     getMpInstance(publicKey).catch(() => {
       // silencioso — se falhar, o submit do cartão reporta o erro
     })
+  }, [publicKey])
+
+  // Descobre quais métodos a CONTA MP da unidade aceita (mesma consulta que o
+  // browser faz no checkout). Contas SEM chave PIX não trazem "pix" — ofertá-lo
+  // fazia o POST /v1/payments falhar ("erro ao gerar pagamento"). Ao resolver,
+  // esconde os métodos indisponíveis e troca a seleção se ela ficou inválida.
+  // Falha de rede / adblock → mantém os 3 (o SDK de tokenização também usa o MP).
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      try {
+        const res = await fetch(
+          `https://api.mercadopago.com/v1/payment_methods?public_key=${encodeURIComponent(publicKey)}`,
+        )
+        if (!res.ok) return
+        const data: unknown = await res.json()
+        if (cancelled || !Array.isArray(data)) return
+        const available = availableStoreMethods(data)
+        if (available.length === 0) return // não zera o checkout — cai no fallback
+        setAvailableMethods(available)
+        setMethod((prev) =>
+          available.includes(prev) ? prev : defaultStoreMethod(available),
+        )
+      } catch {
+        // mantém os 3 métodos
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
   }, [publicKey])
 
   // BIN do cartão (6 primeiros dígitos) — define as parcelas/juros reais no MP.
@@ -609,9 +646,15 @@ export function MpCheckoutForm({
       <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm lg:p-8">
         <SectionHeader n="02" title="Forma de pagamento" />
         <div className="mt-6 space-y-3">
-          <MethodButton active={method === "PIX"} onClick={() => setMethod("PIX")} icon={QrCode} label="PIX" hint="Aprovação imediata" />
-          <MethodButton active={method === "CREDIT_CARD"} onClick={() => setMethod("CREDIT_CARD")} icon={CreditCard} label="Cartão de Crédito" hint="Aprovação na hora" />
-          <MethodButton active={method === "BOLETO"} onClick={() => setMethod("BOLETO")} icon={Receipt} label="Boleto Bancário" hint="Compensa em até 3 dias úteis" />
+          {(!availableMethods || availableMethods.includes("PIX")) && (
+            <MethodButton active={method === "PIX"} onClick={() => setMethod("PIX")} icon={QrCode} label="PIX" hint="Aprovação imediata" />
+          )}
+          {(!availableMethods || availableMethods.includes("CREDIT_CARD")) && (
+            <MethodButton active={method === "CREDIT_CARD"} onClick={() => setMethod("CREDIT_CARD")} icon={CreditCard} label="Cartão de Crédito" hint="Aprovação na hora" />
+          )}
+          {(!availableMethods || availableMethods.includes("BOLETO")) && (
+            <MethodButton active={method === "BOLETO"} onClick={() => setMethod("BOLETO")} icon={Receipt} label="Boleto Bancário" hint="Compensa em até 3 dias úteis" />
+          )}
         </div>
 
         {method === "CREDIT_CARD" && (
