@@ -4,9 +4,9 @@ import { requireStudentSession } from "@/lib/auth/student-session"
 import { syncStudentProgress } from "@/lib/students/progress"
 import { getStudentPlatformLoginUrl } from "@/lib/students/platform-credentials"
 import { EmitCertificateButton } from "@/components/aluno/emit-certificate-button"
+import { PayPendingButton } from "@/components/aluno/pay-pending-button"
 import { contextLogger } from "@/lib/logger"
 import {
-  ArrowRight,
   Award,
   BookOpen,
   CheckCircle2,
@@ -109,6 +109,8 @@ export default async function StudentCoursesPage({
         take: 1,
         select: { id: true, code: true, pdfUrl: true },
       },
+      // Payability da loja p/ decidir o destino do botao "Pagar agora".
+      tenant: { select: { status: true, mpPublicKey: true } },
     },
     orderBy: { createdAt: "desc" },
   })
@@ -294,13 +296,11 @@ export default async function StudentCoursesPage({
                       </a>
                     ) : null}
                     {isPending && (
-                      <Link
-                        href="/aluno/pagamentos"
+                      <PayPendingButton
+                        enrollment={e}
+                        fallbackHref="/aluno/pagamentos"
                         className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-amber-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-amber-600"
-                      >
-                        Pagar agora
-                        <ArrowRight className="h-4 w-4" />
-                      </Link>
+                      />
                     )}
 
                     {/* CTA secundário (certificado) */}

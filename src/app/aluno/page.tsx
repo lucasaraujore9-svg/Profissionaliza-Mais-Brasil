@@ -8,6 +8,7 @@ import {
 import { getLmsEnrollmentCredentials } from "@/lib/students/lms-credentials"
 import { PlatformCredentialsCard } from "@/components/aluno/platform-credentials-card"
 import { PaymentCheckButton } from "@/components/aluno/payment-check-button"
+import { PayPendingButton } from "@/components/aluno/pay-pending-button"
 import {
   AlertCircle,
   ArrowRight,
@@ -49,6 +50,8 @@ export default async function StudentDashboardPage() {
               provider: true,
             },
           },
+          // Payability da loja p/ decidir o destino do botao "Pagar agora".
+          tenant: { select: { status: true, mpPublicKey: true } },
         },
         orderBy: { createdAt: "desc" },
       }),
@@ -315,38 +318,25 @@ export default async function StudentDashboardPage() {
             </div>
           </div>
           <ul className="mt-4 space-y-2">
-            {pendingEnrollments.map((e) => {
-              const link = e.asaasInvoiceUrl ?? null
-              return (
-                <li
-                  key={e.id}
-                  className="flex flex-col gap-3 rounded-lg bg-white px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between"
-                >
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-[var(--color-pmb-green-900)]">
-                      {e.course.nome}
-                    </p>
-                    <p className="text-xs text-gray-500">
-                      Valor: <span className="font-mono">{brl(Number(e.finalAmount))}</span>
-                    </p>
-                  </div>
-                  <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:justify-end">
-                    {link && (
-                      <a
-                        href={link}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-[var(--color-pmb-green)] px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[var(--color-pmb-green-700)]"
-                      >
-                        Pagar agora
-                        <ArrowRight className="h-4 w-4" />
-                      </a>
-                    )}
-                    <PaymentCheckButton enrollmentId={e.id} />
-                  </div>
-                </li>
-              )
-            })}
+            {pendingEnrollments.map((e) => (
+              <li
+                key={e.id}
+                className="flex flex-col gap-3 rounded-lg bg-white px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-[var(--color-pmb-green-900)]">
+                    {e.course.nome}
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    Valor: <span className="font-mono">{brl(Number(e.finalAmount))}</span>
+                  </p>
+                </div>
+                <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:justify-end">
+                  <PayPendingButton enrollment={e} />
+                  <PaymentCheckButton enrollmentId={e.id} />
+                </div>
+              </li>
+            ))}
           </ul>
         </section>
       )}

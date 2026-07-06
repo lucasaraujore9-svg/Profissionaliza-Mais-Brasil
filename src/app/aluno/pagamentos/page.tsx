@@ -2,6 +2,7 @@ import { CheckCircle2, Clock, CreditCard, FileText, XCircle } from "lucide-react
 import { prisma } from "@/lib/prisma"
 import { requireStudentSession } from "@/lib/auth/student-session"
 import { PaymentCheckButton } from "@/components/aluno/payment-check-button"
+import { PayPendingButton } from "@/components/aluno/pay-pending-button"
 
 function brl(value: number): string {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
@@ -68,7 +69,11 @@ export default async function StudentPaymentsPage() {
   const [enrollments, payments] = await Promise.all([
     prisma.enrollment.findMany({
       where: { studentId: session.studentId },
-      include: { course: { select: { nome: true } } },
+      include: {
+        course: { select: { nome: true } },
+        // Payability da loja p/ decidir o destino do botao "Pagar agora".
+        tenant: { select: { status: true, mpPublicKey: true } },
+      },
       orderBy: { createdAt: "desc" },
     }),
     prisma.payment.findMany({
@@ -160,16 +165,7 @@ export default async function StudentPaymentsPage() {
                   </p>
                 </div>
                 <div className="flex flex-col items-stretch gap-2 sm:items-end">
-                  {e.asaasInvoiceUrl && (
-                    <a
-                      href={e.asaasInvoiceUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-[var(--color-pmb-green)] px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[var(--color-pmb-green-700)] sm:w-auto"
-                    >
-                      Pagar agora
-                    </a>
-                  )}
+                  <PayPendingButton enrollment={e} />
                   <PaymentCheckButton enrollmentId={e.id} />
                 </div>
               </li>
