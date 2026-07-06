@@ -13,6 +13,7 @@ import { JsonLd } from "@/components/seo/json-ld"
 import { storeJsonLd, webSiteJsonLd } from "@/lib/seo/jsonld"
 import { tenantVitrineMetadata, tenantVitrineViewport } from "@/lib/seo/tenant-metadata"
 import { VisitorTracker } from "@/components/loja/visitor-tracker"
+import { WhatsappFloat } from "@/components/loja/whatsapp-float"
 
 const PMB_GREEN_DEFAULT = "#025918"
 const PMB_GOLD_DEFAULT = "#F2B705"
@@ -164,6 +165,13 @@ export default async function LojaLayout({
             : undefined
         }
       />
+      {tenant?.whatsappFloatEnabled ? (
+        <WhatsappFloat
+          whatsapp={tenant.whatsapp}
+          side={tenant.whatsappFloatSide}
+          message={tenant.whatsappFloatMessage}
+        />
+      ) : null}
     </div>
   )
 }

@@ -6,6 +6,7 @@ import Image from "next/image"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { Switch } from "@/components/ui/switch"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -25,6 +26,9 @@ export interface VitrineConfig {
   primaryColor: string
   secondaryColor: string
   whatsapp: string | null
+  whatsappFloatEnabled: boolean
+  whatsappFloatSide: "right" | "left"
+  whatsappFloatMessage: string | null
   instagram: string | null
   facebook: string | null
   youtube: string | null
@@ -264,6 +268,72 @@ export function VitrineConfigForm({
         </p>
       </section>
 
+      <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h3 className="text-sm font-semibold text-[var(--color-pmb-green-900)]">
+              Botão flutuante de WhatsApp
+            </h3>
+            <p className="mt-1 text-xs text-gray-600">
+              Exibe um botão fixo na vitrine que abre uma conversa no WhatsApp
+              com o número informado acima.
+            </p>
+          </div>
+          <Switch
+            checked={config.whatsappFloatEnabled}
+            onCheckedChange={(v) => update("whatsappFloatEnabled", v)}
+            aria-label="Ativar botão flutuante de WhatsApp"
+          />
+        </div>
+
+        {config.whatsappFloatEnabled && (
+          <div className="mt-5 space-y-4">
+            {!config.whatsapp?.trim() && (
+              <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                Preencha o campo <strong>WhatsApp</strong> acima para o botão
+                aparecer na vitrine. Vale celular, telefone fixo ou 0800 — desde
+                que o número tenha WhatsApp Business ativo.
+              </div>
+            )}
+
+            <div>
+              <Label>Posição do botão</Label>
+              <div className="mt-1.5 grid grid-cols-2 gap-2">
+                <SideOption
+                  label="Inferior esquerdo"
+                  active={config.whatsappFloatSide === "left"}
+                  onClick={() => update("whatsappFloatSide", "left")}
+                />
+                <SideOption
+                  label="Inferior direito"
+                  active={config.whatsappFloatSide === "right"}
+                  onClick={() => update("whatsappFloatSide", "right")}
+                />
+              </div>
+            </div>
+
+            <div>
+              <Label htmlFor="v-wa-msg">Mensagem pré-preenchida</Label>
+              <Textarea
+                id="v-wa-msg"
+                rows={2}
+                maxLength={300}
+                value={config.whatsappFloatMessage ?? ""}
+                onChange={(e) =>
+                  update("whatsappFloatMessage", e.target.value || null)
+                }
+                placeholder="Olá! Vi sua loja e gostaria de saber mais sobre os cursos."
+                className="mt-1.5"
+              />
+              <p className="mt-1 text-[11px] text-gray-500">
+                Aparece já digitada na conversa quando o visitante toca no botão.
+                Deixe em branco para abrir o WhatsApp sem mensagem.
+              </p>
+            </div>
+          </div>
+        )}
+      </section>
+
       <AlertDialog open={removeOpen} onOpenChange={setRemoveOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -364,6 +434,29 @@ function AssetUploader({
         </p>
       )}
     </div>
+  )
+}
+
+interface SideOptionProps {
+  label: string
+  active: boolean
+  onClick: () => void
+}
+
+function SideOption({ label, active, onClick }: SideOptionProps) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={`flex items-center justify-center rounded-lg border px-3 py-2 text-xs font-medium transition-colors ${
+        active
+          ? "border-[var(--color-pmb-green)] bg-[var(--color-pmb-lime-50)]/60 text-[var(--color-pmb-green-900)]"
+          : "border-gray-200 bg-white text-gray-600 hover:border-gray-300"
+      }`}
+    >
+      {label}
+    </button>
   )
 }
 

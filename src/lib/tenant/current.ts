@@ -16,6 +16,9 @@ export interface CurrentTenant {
   tagline: string | null
   description: string | null
   whatsapp: string | null
+  whatsappFloatEnabled: boolean
+  whatsappFloatSide: string
+  whatsappFloatMessage: string | null
   instagram: string | null
   facebook: string | null
   youtube: string | null
@@ -67,6 +70,9 @@ export const getCurrentTenant = cache(
           tagline: true,
           description: true,
           whatsapp: true,
+          whatsappFloatEnabled: true,
+          whatsappFloatSide: true,
+          whatsappFloatMessage: true,
           instagram: true,
           facebook: true,
           youtube: true,

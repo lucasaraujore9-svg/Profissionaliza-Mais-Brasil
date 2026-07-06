@@ -230,6 +230,16 @@ model Tenant {
   tagline        String? // Frase curta da vitrine
   description    String? // Descricao longa
   whatsapp       String? // Whatsapp para contato
+
+  // Botao flutuante de WhatsApp na vitrine (opcional). Quando habilitado, exibe
+  // um FAB fixo (canto inferior direito/esquerdo) que abre o wa.me do numero
+  // `whatsapp` acima ja com a mensagem pre-configurada. So aparece se `whatsapp`
+  // for um numero com DDD valido — celular, fixo OU 0800, todos geram link (o
+  // WhatsApp Business aceita linha fixa e toll-free). Ver `whatsappIntlNumber`.
+  whatsappFloatEnabled Boolean @default(false) @map("whatsapp_float_enabled")
+  whatsappFloatSide    String  @default("right") @map("whatsapp_float_side") // "right" | "left"
+  whatsappFloatMessage String? @map("whatsapp_float_message") // Mensagem pre-preenchida (?text=)
+
   instagram      String?
   facebook       String?
   youtube        String?

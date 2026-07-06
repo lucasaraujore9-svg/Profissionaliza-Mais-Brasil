@@ -92,8 +92,12 @@ function buildSupportContacts(input: {
     }
   }
 
-  // Celular: gera link wa.me com DDI 55 quando necessario.
-  const intlDigits = digits.startsWith("55") ? digits : `55${digits}`
+  // Celular: gera link wa.me com DDI 55 quando necessario. Reusa
+  // `whatsappIntlNumber` (mesma normalizacao do FAB da vitrine) para os dois
+  // botoes de WhatsApp da loja concordarem — inclusive em DDD 55 (RS), onde a
+  // heuristica antiga `startsWith("55")` tratava o DDD como DDI e quebrava o link.
+  const intlDigits =
+    whatsappIntlNumber(digits) ?? (digits.startsWith("55") ? digits : `55${digits}`)
   return {
     phoneLabel: formatBrCelular(digits),
     phoneUrl: `https://wa.me/${intlDigits}`,
@@ -126,6 +130,61 @@ export function buildTenantSupportContacts(tenant: {
     email: tenant.supportEmail,
     hours: tenant.supportHours,
   })
+}
+
+/**
+ * Converte um numero livre para o formato internacional que o `wa.me` espera
+ * (so digitos, com DDI). Diferente do rodape (`buildSupportContacts`, que trata
+ * 0800/fixo como telefone `tel:`), aqui NAO ha essa distincao: o WhatsApp
+ * Business aceita linha fixa e 0800, entao geramos o link para qualquer numero
+ * valido. Regras (a 1a que casar vence):
+ *   - Prefixo de discagem internacional "00" (ex.: 00 1 555… nos EUA): o que
+ *     segue ja e internacional (DDI + assinante) — remove so o "00".
+ *   - Ja internacional (DDI 55 + DDD + numero, >= 12 digitos): usa como esta.
+ *   - Tronco nacional "0" (0800, ou DDD discado com 0): remove os zeros iniciais
+ *     e acrescenta o DDI 55.
+ *   - Numero nacional COM DDD (fixo 10 / celular 11 digitos): acrescenta o DDI 55.
+ * Exige DDD: um numero curto demais (sem DDD, < 10 digitos nacionais) nao gera
+ * link — retorna `null` e o FAB some, em vez de emitir um `wa.me` quebrado.
+ * Alinha-se ao piso de 10 digitos do rodape (`normalizeDigits`).
+ */
+export function whatsappIntlNumber(
+  raw: string | null | undefined,
+): string | null {
+  const digits = (raw ?? "").replace(/\D/g, "")
+  // Discagem internacional "00" + DDI + numero: mantem so a parte internacional.
+  if (digits.startsWith("00")) {
+    const intl = digits.slice(2)
+    return intl.length >= 10 ? intl : null
+  }
+  // Ja internacional com DDI 55 (2 + DDD 2 + 8/9 do assinante = 12/13 digitos).
+  if (digits.startsWith("55") && digits.length >= 12) return digits
+  // Tronco nacional "0" (0800 ou DDD discado com 0): remove zeros, vira DDI 55.
+  if (digits.startsWith("0")) {
+    const national = digits.replace(/^0+/, "")
+    return national.length >= 10 ? `55${national}` : null
+  }
+  // Nacional com DDD (fixo 10 / celular 11): acrescenta o DDI 55.
+  if (digits.length >= 10 && digits.length <= 11) return `55${digits}`
+  // Sem DDD (curto demais) ou comprimento improvavel: nao ha wa.me valido.
+  return null
+}
+
+/**
+ * Link `wa.me` para o botao flutuante de WhatsApp da vitrine, opcionalmente com
+ * mensagem pre-preenchida (`?text=`). Retorna `null` quando nao ha numero
+ * utilizavel. Ver `whatsappIntlNumber` para as regras de normalizacao.
+ */
+export function buildWhatsappLink(
+  raw: string | null | undefined,
+  message?: string | null,
+): string | null {
+  const intl = whatsappIntlNumber(raw)
+  if (!intl) return null
+  const text = message?.trim()
+  return text
+    ? `https://wa.me/${intl}?text=${encodeURIComponent(text)}`
+    : `https://wa.me/${intl}`
 }
 
 export interface SocialLinks {

@@ -15,6 +15,9 @@ interface VitrineDto {
   primaryColor: string
   secondaryColor: string
   whatsapp: string | null
+  whatsappFloatEnabled: boolean
+  whatsappFloatSide: string
+  whatsappFloatMessage: string | null
   instagram: string | null
   facebook: string | null
   youtube: string | null
@@ -35,6 +38,9 @@ async function readTenant(tenantId: string): Promise<VitrineDto | null> {
       primaryColor: true,
       secondaryColor: true,
       whatsapp: true,
+      whatsappFloatEnabled: true,
+      whatsappFloatSide: true,
+      whatsappFloatMessage: true,
       instagram: true,
       facebook: true,
       youtube: true,
@@ -74,6 +80,9 @@ const updateSchema = z.object({
   primaryColor: hexColor.optional(),
   secondaryColor: hexColor.optional(),
   whatsapp: z.string().trim().max(40).nullable().optional(),
+  whatsappFloatEnabled: z.boolean().optional(),
+  whatsappFloatSide: z.enum(["right", "left"]).optional(),
+  whatsappFloatMessage: z.string().trim().max(300).nullable().optional(),
   instagram: z.string().trim().max(120).nullable().optional(),
   facebook: z.string().trim().max(120).nullable().optional(),
   youtube: z.string().trim().max(120).nullable().optional(),

@@ -20,6 +20,9 @@ const defaultConfig: VitrineConfig = {
   primaryColor: "#025918", // --color-pmb-green
   secondaryColor: "#014712", // --color-pmb-green-700
   whatsapp: null,
+  whatsappFloatEnabled: false,
+  whatsappFloatSide: "right",
+  whatsappFloatMessage: null,
   instagram: null,
   facebook: null,
   youtube: null,
@@ -146,6 +149,9 @@ export function VitrineEditor() {
           primaryColor: config.primaryColor,
           secondaryColor: config.secondaryColor,
           whatsapp: config.whatsapp,
+          whatsappFloatEnabled: config.whatsappFloatEnabled,
+          whatsappFloatSide: config.whatsappFloatSide,
+          whatsappFloatMessage: config.whatsappFloatMessage,
           instagram: config.instagram,
           facebook: config.facebook,
           youtube: config.youtube,
