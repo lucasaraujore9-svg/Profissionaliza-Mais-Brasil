@@ -16,6 +16,11 @@ import { isValidPhone, normalizePhone } from "@/lib/validation/phone"
 import { effectivePaymentType } from "@/lib/tenant/monthly-policy"
 import { activeCustomDomain, vitrineUrl } from "@/lib/tenant/urls"
 import { tenantPolo } from "@/lib/tenant/slug"
+import { createBoletoInstallmentPlan } from "@/lib/installments/plan"
+import {
+  MIN_BOLETO_INSTALLMENTS,
+  MAX_BOLETO_INSTALLMENTS,
+} from "@/lib/installments/schedule"
 
 const createSchema = z.object({
   // Dados do aluno (cria ou reaproveita por CPF/email)
@@ -37,6 +42,27 @@ const createSchema = z.object({
   couponCode: z.string().trim().max(64).optional(),
   // Bolsa de estudo: matricula sem cobranca no Mercado Pago.
   bolsista: z.boolean().optional(),
+  // Venda parcelada no boleto (carnê): a revenda define nº de parcelas + valor
+  // de cada parcela + 1º vencimento. Só válido quando a unidade tem a capability.
+  boletoInstallment: z
+    .object({
+      count: z.number().int().min(MIN_BOLETO_INSTALLMENTS).max(MAX_BOLETO_INSTALLMENTS),
+      installmentValue: z.number().positive(),
+      firstDueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data inválida"),
+    })
+    .optional(),
+  // Endereço do aluno — exigido pelo Mercado Pago para emitir boleto. Só
+  // necessário no carnê com gateway MP; salvo no aluno para o cron reemitir.
+  endereco: z
+    .object({
+      cep: z.string().trim().min(8).max(9),
+      rua: z.string().trim().min(2).max(160),
+      numero: z.string().trim().min(1).max(20),
+      bairro: z.string().trim().min(2).max(120),
+      cidade: z.string().trim().min(2).max(120),
+      estado: z.string().trim().length(2),
+    })
+    .optional(),
 })
 
 export const GET = withRequestContext(
@@ -128,6 +154,12 @@ export const POST = withRequestContext(
         monthlyAllowed: true,
         monthlyEnabled: true,
         monthlyScope: true,
+        salesGateway: true,
+        asaasConnected: true,
+        asaasApiKey: true,
+        boletoInstallmentAllowed: true,
+        boletoInstallmentEnabled: true,
+        boletoInstallmentMaxCount: true,
       },
     })
     if (!tenant) {
@@ -142,8 +174,32 @@ export const POST = withRequestContext(
         { status: 403 },
       )
     }
-    // Bolsa nao usa gateway — so exigimos Mercado Pago em vendas com cobranca.
-    if (!isBolsista && !tenant.mpAccessToken) {
+
+    // Carnê (parcelado no boleto): exige a capability ativa e usa o gateway de
+    // venda da unidade (Asaas gera o carnê nativo; MP emite N boletos avulsos).
+    const isInstallment = !isBolsista && !!data.boletoInstallment
+    if (isInstallment) {
+      if (!tenant.boletoInstallmentAllowed || !tenant.boletoInstallmentEnabled) {
+        return NextResponse.json(
+          { error: "Venda parcelada no boleto não está habilitada para sua unidade." },
+          { status: 403 },
+        )
+      }
+      if (tenant.salesGateway === "ASAAS") {
+        if (!tenant.asaasConnected || !tenant.asaasApiKey) {
+          return NextResponse.json(
+            { error: "Conecte o Asaas em /painel/configuracoes para gerar carnês." },
+            { status: 503 },
+          )
+        }
+      } else if (!tenant.mpAccessToken) {
+        return NextResponse.json(
+          { error: "Conecte o Mercado Pago em /painel/configuracoes" },
+          { status: 503 },
+        )
+      }
+    } else if (!isBolsista && !tenant.mpAccessToken) {
+      // Venda normal (link transparente) — sempre pelo Mercado Pago.
       return NextResponse.json(
         { error: "Conecte o Mercado Pago em /painel/configuracoes" },
         { status: 503 },
@@ -207,7 +263,8 @@ export const POST = withRequestContext(
     let discountAmount = 0
     let couponId: string | null = null
     let finalAmountFromCoupon: number | null = null
-    if (!isBolsista && data.couponCode) {
+    // Cupom não se aplica a carnê (valor definido manualmente pela revenda).
+    if (!isBolsista && !isInstallment && data.couponCode) {
       const code = data.couponCode.toUpperCase()
       const now = new Date()
       // Cupom só do próprio tenant — cupons PMB (tenantId=null) não vazam
@@ -377,6 +434,114 @@ export const POST = withRequestContext(
           studentId: student.id,
         },
       })
+    }
+
+    // ── Carnê (venda parcelada no boleto) ─────────────────────────────────────
+    // Cria a matrícula BOLETO_INSTALLMENT (installmentsTotal = nº de parcelas) e
+    // dispara a geração do plano: Asaas gera o carnê nativo; MP emite a 1ª parcela
+    // agora e o cron emite as demais ~7 dias antes de cada vencimento.
+    if (isInstallment && data.boletoInstallment) {
+      const { count, installmentValue, firstDueDate } = data.boletoInstallment
+      const maxAllowed = Math.min(
+        MAX_BOLETO_INSTALLMENTS,
+        tenant.boletoInstallmentMaxCount,
+      )
+      if (count > maxAllowed) {
+        return NextResponse.json(
+          { error: `Máximo de ${maxAllowed}x para sua unidade.` },
+          { status: 400 },
+        )
+      }
+      const firstDue = new Date(`${firstDueDate}T12:00:00Z`)
+      const todayStart = new Date()
+      todayStart.setUTCHours(0, 0, 0, 0)
+      if (
+        Number.isNaN(firstDue.getTime()) ||
+        firstDue.getTime() < todayStart.getTime()
+      ) {
+        return NextResponse.json(
+          { error: "O 1º vencimento deve ser hoje ou uma data futura." },
+          { status: 400 },
+        )
+      }
+      // MP exige endereço do pagador no boleto.
+      if (tenant.salesGateway === "MP" && !data.endereco) {
+        return NextResponse.json(
+          { error: "Informe o endereço do aluno para gerar o boleto (Mercado Pago)." },
+          { status: 400 },
+        )
+      }
+      // Persiste o endereço no aluno (o cron reemite os boletos MP com ele).
+      if (data.endereco) {
+        await prisma.student
+          .update({
+            where: { id: student.id },
+            data: {
+              cep: data.endereco.cep,
+              rua: data.endereco.rua,
+              numero: data.endereco.numero,
+              bairro: data.endereco.bairro,
+              cidade: data.endereco.cidade,
+              estado: data.endereco.estado,
+            },
+          })
+          .catch(swallow("painel.vendas.carne.address"))
+      }
+
+      const total = Math.round(count * installmentValue * 100) / 100
+      const enrollment = await prisma.enrollment.create({
+        data: {
+          tenantId: tenant.id,
+          studentId: student.id,
+          tenantCourseId: tenantCourse.id,
+          courseId: tenantCourse.courseId,
+          soldByUserId: userId,
+          paymentType: "BOLETO_INSTALLMENT",
+          status: "PENDING",
+          gateway: tenant.salesGateway,
+          originalAmount: total,
+          discountAmount: 0,
+          finalAmount: total,
+          couponId: null,
+          installmentsTotal: count,
+        },
+        select: { id: true },
+      })
+
+      try {
+        const plan = await createBoletoInstallmentPlan({
+          enrollmentId: enrollment.id,
+          count,
+          installmentValue,
+          firstDueDate: firstDue,
+        })
+        return NextResponse.json({
+          data: {
+            enrollmentId: enrollment.id,
+            studentId: student.id,
+            finalAmount: total,
+            installment: {
+              count,
+              installmentValue,
+              total,
+              firstBoletoUrl: plan.firstBoletoUrl,
+            },
+          },
+        })
+      } catch (err) {
+        await prisma.enrollment
+          .delete({ where: { id: enrollment.id } })
+          .catch(swallow("painel.vendas.carne.rollback"))
+        contextLogger().error(
+          { err, event: "painel.vendas.carne_failed", studentId: student.id },
+          "geracao do carne falhou",
+        )
+        const msg = err instanceof Error ? err.message : "Falha ao gerar o carnê."
+        return NextResponse.json(
+          { error: `Falha ao gerar o carnê: ${msg}` },
+          { status: 502 },
+        )
+      }
     }
 
     // Tipo efetivo no canal de venda direta/manual. Se a unidade nao tem

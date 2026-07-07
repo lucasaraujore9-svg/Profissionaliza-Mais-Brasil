@@ -176,6 +176,11 @@ async function fulfillEnrollmentLocked(
   })
   if (alreadyPaid) return
 
+  // Termo da cobrança recorrente na copy: carnê fala "parcela"; mensal, "mensalidade".
+  const isCarne = enrollment.paymentType === "BOLETO_INSTALLMENT"
+  const parcelaWord = isCarne ? "Parcela" : "Mensalidade"
+  const parcelasWord = isCarne ? "parcelas" : "mensalidades"
+
   // Cobranca subsequente de uma subscription: aluno ja foi matriculado, so
   // registramos o pagamento, incrementamos a contagem e fechamos o ciclo na ultima.
   const isSubsequentInstallment =
@@ -224,9 +229,9 @@ async function fulfillEnrollmentLocked(
       level: "SUCCESS",
       title: reachedTotal
         ? `Curso ${enrollment.course.nome} totalmente pago`
-        : `Mensalidade ${newPaidCount}/${enrollment.installmentsTotal} confirmada`,
+        : `${parcelaWord} ${newPaidCount}/${enrollment.installmentsTotal} confirmada`,
       body: reachedTotal
-        ? "Parabéns! Você completou todas as mensalidades."
+        ? `Parabéns! Você completou todas as ${parcelasWord}.`
         : `Pagamento de R$ ${event.amount.toFixed(2).replace(".", ",")} confirmado.`,
       category: "payment",
       href: "/aluno/pagamentos",
@@ -238,7 +243,7 @@ async function fulfillEnrollmentLocked(
         audience: "TENANT",
         tenantId: tenant.id,
         level: "SUCCESS",
-        title: `Mensalidade recebida — ${enrollment.student.nome}`,
+        title: `${parcelaWord} recebida — ${enrollment.student.nome}`,
         body: `R$ ${event.amount.toFixed(2).replace(".", ",")} (${newPaidCount}/${enrollment.installmentsTotal})`,
         category: "payment",
         href: "/painel/financeiro",
@@ -330,7 +335,7 @@ async function fulfillEnrollmentLocked(
     body: enrollment.coursePackage
       ? "Todos os cursos do pacote foram liberados. Acesse a área de aulas."
       : enrollment.installmentsTotal
-        ? `Primeira de ${enrollment.installmentsTotal} mensalidades paga.`
+        ? `Primeira de ${enrollment.installmentsTotal} ${parcelasWord} paga.`
         : "Acesse a área de aulas para começar agora.",
     category: "enrollment",
     href: "/aluno/cursos",

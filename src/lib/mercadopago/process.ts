@@ -11,6 +11,7 @@ import type { MPPayment } from "./types"
 import { pmbPlataformaPolo, pmbPlataformaVendedorId, pmbMpAccessToken } from "@/lib/pmb-config"
 import { fulfillFromMpPayment } from "./fulfillment"
 import { fulfillEnrollment } from "@/lib/enrollment/fulfill"
+import { settleBoletoInstallment } from "@/lib/installments/settle"
 import { unlinkCourseFromStudent } from "@/lib/students/plataforma-actions"
 import { createNotification } from "@/lib/notifications"
 import {
@@ -217,6 +218,60 @@ async function revokeEnrollmentFromMp(
   }
 }
 
+/**
+ * Parcela de carnê (venda parcelada no boleto): external_reference = parc_<id>.
+ * Cada boleto do carnê é um pagamento MP independente; roteamos pela linha da
+ * parcela (BoletoInstallment) em vez da matrícula. A 1ª parcela paga provisiona
+ * o acesso; as demais só registram — tudo via settleBoletoInstallment (idempotente).
+ */
+async function handleInstallmentMpPayment(
+  tenant: TenantContext,
+  payment: MPPayment,
+  logId: string,
+): Promise<void> {
+  const installmentId = (payment.external_reference ?? "").slice("parc_".length)
+  const installment = await prisma.boletoInstallment.findUnique({
+    where: { id: installmentId },
+  })
+  if (!installment) {
+    await markLog(logId, true, `parcela ${installmentId} nao encontrada`)
+    return
+  }
+
+  // Anti cross-tenant: a parcela pertence à conta MP deste webhook.
+  const expectedTenantId = tenant.isPmbVitrine ? null : tenant.id
+  if (installment.tenantId !== expectedTenantId) {
+    await markLog(logId, false, `parcela ${installmentId} de outro tenant`)
+    return
+  }
+
+  if (payment.status !== "approved") {
+    // pending (boleto emitido), rejected, in_process: só registra. O acesso e a
+    // contagem só mudam quando a parcela é efetivamente paga (approved).
+    await markLog(logId, true, `parcela ${installment.number} status=${payment.status}`)
+    return
+  }
+
+  await settleBoletoInstallment({
+    installment,
+    tenant: {
+      id: tenant.id,
+      slug: tenant.slug,
+      plataformaVendedorId: tenant.plataformaVendedorId,
+      isPmbVitrine: tenant.isPmbVitrine,
+      name: tenant.name,
+    },
+    event: {
+      gateway: "MP",
+      externalPaymentId: String(payment.id),
+      amount: payment.transaction_amount,
+      paidAt: payment.date_approved ? new Date(payment.date_approved) : new Date(),
+      mpPaymentType: payment.payment_type_id,
+    },
+  })
+  await markLog(logId, true, `parcela ${installment.number} paga`)
+}
+
 /** Alias local — delega ao módulo de fulfillment compartilhado. */
 const fulfillFromMp = fulfillFromMpPayment
 
@@ -377,6 +432,12 @@ export async function processMpWebhook(args: ProcessArgs): Promise<void> {
     }
 
     const payment = await getPayment(accessToken, effectivePaymentId)
+
+    // ── Parcela de carnê (parc_<id>): roteia pela linha da parcela ──────────
+    if (payment.external_reference?.startsWith("parc_")) {
+      await handleInstallmentMpPayment(tenant, payment, logId)
+      return
+    }
 
     // ── Passo 5: resolver o enrollmentId pelo external_reference ────────────
     const enrollmentId = await resolveEnrollmentId(tenant, payment)

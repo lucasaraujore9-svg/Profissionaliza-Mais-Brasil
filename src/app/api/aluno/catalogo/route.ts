@@ -4,6 +4,7 @@ import { requireStudentSession } from "@/lib/auth/student-session"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { COURSE_HAS_PRICE } from "@/lib/catalog/visibility"
 import { listTenantCourses } from "@/lib/tenant/courses"
+import { coursePaymentType } from "@/lib/tenant/monthly-policy"
 import { PMB_TENANT_SLUG } from "@/lib/pmb-config"
 import { getSystemSettings } from "@/lib/system-settings"
 import { displayInterestFreeInstallments } from "@/lib/mercadopago/installments"
@@ -125,7 +126,7 @@ export const GET = withRequestContext(
             c.paymentTypeMain === "MONTHLY"
               ? null
               : displayInterestFreeInstallments(pmbInterestFree),
-          paymentType: c.paymentTypeMain,
+          paymentType: coursePaymentType(c.paymentTypeMain),
           monthlyMonths: c.monthlyMonthsMain,
           ownedStatus: ownedMap.get(c.id) ?? null,
         }

@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { contextLogger } from "@/lib/logger"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { resolveTenantFromRequest } from "@/lib/tenant/from-request"
+import { coursePaymentType } from "@/lib/tenant/monthly-policy"
 
 const querySchema = z.object({
   category: z.string().trim().optional(),
@@ -110,7 +111,7 @@ export const GET = withRequestContext(
         : null,
       imageUrl: tc.course.capaImageUrl,
       isFeatured: tc.isFeatured,
-      paymentType: tc.paymentType,
+      paymentType: coursePaymentType(tc.paymentType),
       monthlyMonths: tc.course.monthlyMonthsMain,
     }))
 

@@ -130,6 +130,26 @@ export interface AsaasInstallment {
   deleted: boolean
 }
 
+// ── Installment no BOLETO (carnê) ──
+// POST /installments cria um parcelamento em boleto: o Asaas gera todas as N
+// cobranças de uma vez, com vencimentos mensais a partir de `dueDate`. Usado
+// na venda direta parcelada no boleto (carnê da revenda). Diferente do cartão,
+// não captura nada na criação — cada boleto é pago pelo aluno no seu vencimento.
+export interface AsaasCreateInstallmentBoletoParams {
+  installmentCount: number
+  customer: string
+  /** Valor de CADA parcela. */
+  value: number
+  /** Valor total (N × value) — o Asaas reconcilia a última parcela por ele. */
+  totalValue?: number
+  billingType: "BOLETO"
+  dueDate: string // YYYY-MM-DD — vencimento da 1ª parcela; as demais mensais
+  description?: string
+  /** Vai para externalReference de cada cobrança gerada (traço/roteamento). */
+  paymentExternalReference?: string
+  notificationUrl?: string
+}
+
 // ── Payment ──
 export interface AsaasPayment {
   id: string

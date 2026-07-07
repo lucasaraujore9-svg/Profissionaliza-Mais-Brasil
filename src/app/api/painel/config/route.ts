@@ -50,6 +50,8 @@ export const GET = withRequestContext(
         monthlyAllowed: true,
         monthlyEnabled: true,
         monthlyScope: true,
+        boletoInstallmentAllowed: true,
+        boletoInstallmentEnabled: true,
         interestFreeInstallments: true,
         // Asaas como gateway de vendas (so aparece no painel quando liberado).
         // asaasConnected ja indica conexao; nao buscamos a api key (segredo) aqui.

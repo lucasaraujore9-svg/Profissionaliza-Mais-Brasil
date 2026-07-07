@@ -3,6 +3,7 @@ import { requireAdminSession } from "@/lib/auth/admin-session"
 import { prisma } from "@/lib/prisma"
 import { getSystemSettings } from "@/lib/system-settings"
 import { NovaVendaClient } from "@/components/admin/nova-venda-client"
+import { coursePaymentType } from "@/lib/tenant/monthly-policy"
 
 export const dynamic = "force-dynamic"
 
@@ -39,7 +40,7 @@ export default async function NovaVendaPage() {
           id: c.id,
           nome: c.nome,
           preco: Number(c.precoVitrineMain ?? c.precoPromocional ?? c.precoOriginal ?? 0),
-          paymentType: c.paymentTypeMain,
+          paymentType: coursePaymentType(c.paymentTypeMain),
           monthlyMonths: c.monthlyMonthsMain ?? null,
         }))}
       />

@@ -11,6 +11,7 @@ import type {
   AsaasPixQrCode,
   AsaasPayWithCreditCardParams,
   AsaasCreateInstallmentCardParams,
+  AsaasCreateInstallmentBoletoParams,
   AsaasInstallment,
   AsaasErrorResponse,
 } from "./types"
@@ -356,16 +357,36 @@ export async function createInstallmentWithCreditCard(
 }
 
 /**
+ * Cria um parcelamento em BOLETO (carnê): o Asaas gera todas as N cobranças de
+ * uma vez, com vencimentos mensais a partir de `dueDate`. Endpoint SEM barra
+ * final (POST /installments) — a barra final é a convenção de captura no cartão
+ * (createInstallmentWithCreditCard). `apiKey` é a conta Asaas da unidade.
+ */
+export async function createInstallmentWithBoleto(
+  params: AsaasCreateInstallmentBoletoParams,
+  apiKey: string,
+): Promise<AsaasInstallment> {
+  return request<AsaasInstallment>("POST", "/installments", params, apiKey)
+}
+
+/**
  * Lista as cobranças geradas por um parcelamento (GET /installments/{id}/payments).
- * A resposta de createInstallmentWithCreditCard não traz o status da captura;
- * para confirmar se o cartão foi de fato aprovado é preciso consultar a 1ª
- * parcela aqui (status CONFIRMED/RECEIVED = capturado; AWAITING_RISK_ANALYSIS =
- * em análise; PENDING/OVERDUE = não capturado).
+ * A resposta de createInstallment* não traz as cobranças individuais; para o
+ * carnê boleto consultamos aqui cada parcela (id, dueDate, invoiceUrl, value).
+ * No cartão serve p/ confirmar a captura da 1ª (CONFIRMED/RECEIVED = capturado;
+ * AWAITING_RISK_ANALYSIS = em análise; PENDING/OVERDUE = não capturado).
+ * `apiKey`: conta da unidade (revenda); omitido = conta-mãe PMB.
  */
 export async function getInstallmentPayments(
   installmentId: string,
+  apiKey?: string,
 ): Promise<AsaasPaymentList> {
-  return request<AsaasPaymentList>("GET", `/installments/${installmentId}/payments`)
+  return request<AsaasPaymentList>(
+    "GET",
+    `/installments/${installmentId}/payments`,
+    undefined,
+    apiKey,
+  )
 }
 
 export async function listPayments(

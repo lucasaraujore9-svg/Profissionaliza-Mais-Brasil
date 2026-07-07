@@ -82,3 +82,12 @@ select cron.schedule('pmb-sync-day-update-lms', '45 * * * *',
 -- (OPS-006) — a reconciliação automática de cobranças nunca rodava. Idempotente.
 select cron.schedule('pmb-reconcile-tenant-payments', '0 8 * * *',
   $$ select app_internal.run_cron('/api/cron/reconcile-tenant-payments') $$);
+
+-- ── Carnê (venda parcelada no boleto) ───────────────────────────────────────
+-- Emite os boletos MP cujo vencimento entrou na janela de 7 dias (o MP não tem
+-- carnê nativo — cada boleto é emitido perto do vencimento) e marca parcelas
+-- vencidas como OVERDUE, bloqueando o aluno na plataforma. O Asaas gera o carnê
+-- nativo na venda; a parte de inadimplência vale para os dois gateways.
+-- Diário 07:30 UTC (04:30 BRT), logo após os demais sweeps. Idempotente.
+select cron.schedule('pmb-sweep-boleto-installments', '30 7 * * *',
+  $$ select app_internal.run_cron('/api/cron/sweep-boleto-installments') $$);

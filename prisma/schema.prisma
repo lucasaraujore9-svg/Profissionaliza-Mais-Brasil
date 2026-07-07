@@ -62,6 +62,17 @@ enum EnrollmentStatus {
 enum PaymentType {
   ONE_TIME // Pagamento unico
   MONTHLY // Assinatura mensal
+  BOLETO_INSTALLMENT // Carne: N boletos com vencimentos mensais (venda direta da revenda)
+}
+
+// Status de cada parcela (boleto) de um carne de venda direta. Ver
+// src/lib/installments/ e o model BoletoInstallment.
+enum BoletoInstallmentStatus {
+  SCHEDULED // Agendada — boleto ainda nao emitido (MP: emite ~7 dias antes do vencimento)
+  GENERATED // Boleto emitido e disponivel para o aluno
+  PAID // Parcela paga (webhook confirmou)
+  OVERDUE // Vencida sem pagamento
+  CANCELLED // Parcela cancelada (ex.: matricula cancelada)
 }
 
 // Escopo onde o pagamento parcelado/mensalidade da unidade vale.
@@ -447,6 +458,16 @@ model Tenant {
   monthlyAllowed Boolean      @default(false) @map("monthly_allowed")
   monthlyEnabled Boolean      @default(false) @map("monthly_enabled")
   monthlyScope   MonthlyScope @default(DIRECT_ONLY) @map("monthly_scope")
+
+  // Venda parcelada no boleto (carne) na venda direta. Mesmo padrao de dois
+  // niveis do monthly*: capability liberada pelo Admin Master + toggle da revenda.
+  // Efetivo = boletoInstallmentAllowed && boletoInstallmentEnabled. Funciona nos
+  // dois gateways: Asaas gera o carne nativo; MP emite N boletos avulsos (1/mes).
+  // Ver src/lib/installments/ e src/lib/tenant/boleto-installment-policy.ts.
+  boletoInstallmentAllowed  Boolean @default(false) @map("boleto_installment_allowed")
+  boletoInstallmentEnabled  Boolean @default(false) @map("boleto_installment_enabled")
+  // Teto de parcelas que a revenda pode oferecer (definido pelo Admin Master).
+  boletoInstallmentMaxCount Int     @default(12) @map("boleto_installment_max_count")
 
   // Relacoes
   tenantCourses                TenantCourse[]
@@ -971,6 +992,7 @@ model Enrollment {
   asaasCustomerId     String? @map("asaas_customer_id")
   asaasPaymentId      String? @map("asaas_payment_id") // 1a cobranca (one-time) ou 1a parcela da subscription
   asaasSubscriptionId String? @map("asaas_subscription_id") // Subscription Asaas para cursos MONTHLY
+  asaasInstallmentId  String? @map("asaas_installment_id") // id do carne (parcelamento boleto) no Asaas
   asaasInvoiceUrl     String? @map("asaas_invoice_url") @db.Text
 
   // Controle de mensalidades (cursos MONTHLY)
@@ -1013,9 +1035,10 @@ model Enrollment {
   lmsPortalUrl String? @map("lms_portal_url") @db.Text
 
   // Relacoes
-  payments     Payment[]
-  certificates Certificate[]
-  studentLead  StudentLead?
+  payments           Payment[]
+  certificates       Certificate[]
+  studentLead        StudentLead?
+  boletoInstallments BoletoInstallment[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -1099,6 +1122,46 @@ model Payment {
   // aqui só para eliminar o drift schema↔banco (sem migration).
   @@index([soldByUserId], map: "payments_sold_by_user_id_idx")
   @@map("payments")
+}
+
+// Uma parcela (boleto) de um carne de venda direta (PaymentType.BOLETO_INSTALLMENT).
+// A venda gera N linhas — uma por mes. No Asaas o carne e nativo (todas emitidas
+// na criacao); no MP cada boleto e emitido pelo cron ~7 dias antes do vencimento
+// (a 1a e emitida na hora da venda). O aluno so ve a parcela quando ela esta
+// disponivel (1a sempre; demais na janela de 7 dias). Ver src/lib/installments/.
+model BoletoInstallment {
+  id           String     @id @default(cuid())
+  enrollmentId String     @map("enrollment_id")
+  enrollment   Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  // Espelha enrollment.tenantId (null = vitrine PMB). Coluna escalar (sem FK) so
+  // para escopar as varreduras do cron por unidade sem join.
+  tenantId     String?    @map("tenant_id")
+
+  number  Int // 1..N (ordem da parcela)
+  amount  Decimal                 @db.Decimal(10, 2) // valor da parcela
+  dueDate DateTime                @map("due_date") // vencimento
+  status  BoletoInstallmentStatus @default(SCHEDULED)
+  gateway PaymentGateway // MP | ASAAS (herdado do salesGateway da unidade na venda)
+
+  // Boleto emitido
+  invoiceUrl    String?   @map("invoice_url") @db.Text // link do boleto (Asaas invoiceUrl / MP external_resource_url)
+  digitableLine String?   @map("digitable_line") // linha digitavel / codigo de barras
+  generatedAt   DateTime? @map("generated_at") // quando o boleto foi emitido
+
+  // Ids no gateway (um pagamento por parcela)
+  mpPaymentId    String? @unique @map("mp_payment_id")
+  asaasPaymentId String? @unique @map("asaas_payment_id")
+
+  paidAt DateTime? @map("paid_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([enrollmentId, number])
+  @@index([enrollmentId])
+  @@index([status, dueDate])
+  @@index([tenantId])
+  @@map("boleto_installments")
 }
 
 // ============================================================

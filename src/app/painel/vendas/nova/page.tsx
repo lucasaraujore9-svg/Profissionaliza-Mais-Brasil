@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { PageHeader } from "@/components/painel/page-header"
 import { PainelNovaVendaClient } from "@/components/painel/painel-nova-venda-client"
 import { ensureTenantCourses } from "@/lib/tenant/ensure-courses"
+import { coursePaymentType } from "@/lib/tenant/monthly-policy"
 
 export const dynamic = "force-dynamic"
 
@@ -17,13 +18,24 @@ export default async function PainelNovaVendaPage() {
 
   await ensureTenantCourses(user.tenantId)
 
-  const tenantCourses = await prisma.tenantCourse.findMany({
-    where: { tenantId: user.tenantId, isVisible: true },
-    orderBy: [{ isFeatured: "desc" }, { customOrder: "asc" }],
-    include: {
-      course: { select: { nome: true, status: true } },
-    },
-  })
+  const [tenant, tenantCourses] = await Promise.all([
+    prisma.tenant.findUnique({
+      where: { id: user.tenantId },
+      select: {
+        salesGateway: true,
+        boletoInstallmentAllowed: true,
+        boletoInstallmentEnabled: true,
+        boletoInstallmentMaxCount: true,
+      },
+    }),
+    prisma.tenantCourse.findMany({
+      where: { tenantId: user.tenantId, isVisible: true },
+      orderBy: [{ isFeatured: "desc" }, { customOrder: "asc" }],
+      include: {
+        course: { select: { nome: true, status: true } },
+      },
+    }),
+  ])
 
   const courses = tenantCourses
     .filter((tc) => tc.course.status === "ATIVO")
@@ -31,8 +43,17 @@ export default async function PainelNovaVendaPage() {
       id: tc.id,
       nome: tc.course.nome,
       price: Number(tc.price),
-      paymentType: tc.paymentType,
+      paymentType: coursePaymentType(tc.paymentType),
     }))
+
+  // Carnê (parcelado no boleto) só quando o Admin liberou E a unidade ativou.
+  const installmentConfig =
+    tenant?.boletoInstallmentAllowed && tenant?.boletoInstallmentEnabled
+      ? {
+          maxCount: tenant.boletoInstallmentMaxCount,
+          gateway: tenant.salesGateway,
+        }
+      : null
 
   return (
     <div className="space-y-6">
@@ -40,7 +61,7 @@ export default async function PainelNovaVendaPage() {
         title="Nova venda direta"
         description="Cadastre o aluno, escolha o curso e gere o link de pagamento."
       />
-      <PainelNovaVendaClient courses={courses} />
+      <PainelNovaVendaClient courses={courses} installmentConfig={installmentConfig} />
     </div>
   )
 }

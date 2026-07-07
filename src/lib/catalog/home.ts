@@ -3,6 +3,7 @@ import type { Course } from "@/components/main/home/course-card"
 import { COURSE_HAS_PRICE } from "./visibility"
 import { interestFreeLabel } from "@/lib/mercadopago/installments"
 import { getSystemSettings } from "@/lib/system-settings"
+import { coursePaymentType } from "@/lib/tenant/monthly-policy"
 
 interface RawCourse {
   slug: string
@@ -356,7 +357,7 @@ async function loadTenantShowcase(tenantId: string): Promise<ShowcaseCard[]> {
       imageUrl: tc.customCapaUrl ?? tc.course.capaOverride ?? tc.course.capaImageUrl,
       selo: selos[idx] ?? "novo",
       accent: accents[idx] ?? "gold",
-      paymentType: tc.paymentType,
+      paymentType: coursePaymentType(tc.paymentType),
       interestFree,
     }))
   } catch {

@@ -21,8 +21,23 @@ interface CourseOption {
   paymentType: "ONE_TIME" | "MONTHLY"
 }
 
+/** Capability de venda parcelada no boleto (só presente quando ativa). */
+interface InstallmentConfig {
+  /** Teto de parcelas que a unidade pode oferecer. */
+  maxCount: number
+  /** Gateway de venda da unidade — MP exige endereço do aluno no boleto. */
+  gateway: "MP" | "ASAAS"
+}
+
 function formatBRL(n: number): string {
   return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
+}
+
+/** Data de hoje + N dias em YYYY-MM-DD (para default e mínimo do input date). */
+function isoDatePlusDays(days: number): string {
+  const d = new Date()
+  d.setDate(d.getDate() + days)
+  return d.toISOString().slice(0, 10)
 }
 
 interface CreatedVenda {
@@ -33,9 +48,22 @@ interface CreatedVenda {
   finalAmount: number
   discountAmount?: number
   scholarship?: boolean
+  /** Presente quando a venda é um carnê (parcelado no boleto). */
+  installment?: {
+    count: number
+    installmentValue: number
+    total: number
+    firstBoletoUrl: string | null
+  }
 }
 
-export function PainelNovaVendaClient({ courses }: { courses: CourseOption[] }) {
+export function PainelNovaVendaClient({
+  courses,
+  installmentConfig,
+}: {
+  courses: CourseOption[]
+  installmentConfig: InstallmentConfig | null
+}) {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
@@ -52,7 +80,30 @@ export function PainelNovaVendaClient({ courses }: { courses: CourseOption[] }) 
     bolsista: false,
   })
 
+  // Modo de pagamento: "normal" (link comum) vs "installment" (carnê no boleto).
+  const [paymentMode, setPaymentMode] = useState<"normal" | "installment">("normal")
+  const [inst, setInst] = useState({
+    count: 2,
+    value: "",
+    firstDueDate: isoDatePlusDays(7),
+  })
+  const [addr, setAddr] = useState({
+    cep: "",
+    rua: "",
+    numero: "",
+    bairro: "",
+    cidade: "",
+    estado: "",
+  })
+
   const selectedCourse = courses.find((c) => c.id === form.tenantCourseId) ?? null
+
+  const installmentAvailable = !!installmentConfig && !form.bolsista
+  const isInstallment = installmentAvailable && paymentMode === "installment"
+  const needsAddress = isInstallment && installmentConfig?.gateway === "MP"
+  const installmentValueNum = Number(inst.value.replace(",", ".")) || 0
+  const installmentTotal =
+    Math.round(installmentValueNum * inst.count * 100) / 100
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -70,8 +121,29 @@ export function PainelNovaVendaClient({ courses }: { courses: CourseOption[] }) 
           cpf: form.cpf.replace(/\D/g, ""),
           fone: form.fone.replace(/\D/g, ""),
           tenantCourseId: form.tenantCourseId,
-          couponCode: form.bolsista ? undefined : form.couponCode.trim() || undefined,
+          // Cupom não se aplica a bolsa nem a carnê (valor definido manualmente).
+          couponCode:
+            form.bolsista || isInstallment
+              ? undefined
+              : form.couponCode.trim() || undefined,
           bolsista: form.bolsista || undefined,
+          boletoInstallment: isInstallment
+            ? {
+                count: inst.count,
+                installmentValue: installmentValueNum,
+                firstDueDate: inst.firstDueDate,
+              }
+            : undefined,
+          endereco: needsAddress
+            ? {
+                cep: addr.cep.replace(/\D/g, ""),
+                rua: addr.rua.trim(),
+                numero: addr.numero.trim(),
+                bairro: addr.bairro.trim(),
+                cidade: addr.cidade.trim(),
+                estado: addr.estado.trim().toUpperCase(),
+              }
+            : undefined,
         }),
       })
       const body = await res.json()
@@ -100,8 +172,9 @@ export function PainelNovaVendaClient({ courses }: { courses: CourseOption[] }) 
   }
 
   async function copyLink() {
-    if (!created?.paymentUrl) return
-    await navigator.clipboard.writeText(created.paymentUrl)
+    const link = created?.installment?.firstBoletoUrl ?? created?.paymentUrl
+    if (!link) return
+    await navigator.clipboard.writeText(link)
     setCopied(true)
     setTimeout(() => setCopied(false), 1500)
   }
@@ -111,55 +184,105 @@ export function PainelNovaVendaClient({ courses }: { courses: CourseOption[] }) 
       <div className="space-y-5">
         {created.scholarship ? (
           <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-amber-900">
-            <h2 className="text-base font-bold">
-              Bolsa de estudo concedida
-            </h2>
+            <h2 className="text-base font-bold">Bolsa de estudo concedida</h2>
             <p className="mt-2 text-sm">
-              O aluno foi matriculado na plataforma de aulas <strong>sem cobrança</strong>.
-              As credenciais de acesso foram enviadas para o e-mail informado.
+              O aluno foi matriculado na plataforma de aulas{" "}
+              <strong>sem cobrança</strong>. As credenciais de acesso foram
+              enviadas para o e-mail informado.
             </p>
           </div>
+        ) : created.installment ? (
+          <div className="rounded-2xl border border-[var(--color-pmb-green)]/20 bg-[var(--color-pmb-green)]/5 p-6 text-[var(--color-pmb-green-900)]">
+            <h2 className="text-base font-bold">
+              Carnê gerado — {created.installment.count}x de{" "}
+              {formatBRL(created.installment.installmentValue)}
+            </h2>
+            <p className="mt-2 text-sm">
+              O aluno acessa cada boleto na área dele. A{" "}
+              <strong>1ª parcela</strong> já está disponível; as próximas ficam
+              disponíveis <strong>7 dias antes de cada vencimento</strong>. O
+              acesso ao curso é liberado quando a 1ª parcela for paga.
+            </p>
+
+            <div className="mt-4 grid gap-2 sm:grid-cols-3">
+              <Mini
+                label="Parcelas"
+                value={`${created.installment.count}x`}
+              />
+              <Mini
+                label="Cada parcela"
+                value={formatBRL(created.installment.installmentValue)}
+              />
+              <Mini
+                label="Total"
+                value={formatBRL(created.installment.total)}
+                accent
+              />
+            </div>
+
+            {created.installment.firstBoletoUrl && (
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                <a
+                  href={created.installment.firstBoletoUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-pmb-green)] px-4 py-2.5 text-xs font-bold text-white hover:bg-[var(--color-pmb-green-700)]"
+                >
+                  Abrir 1º boleto
+                  <ExternalLink className="h-3.5 w-3.5" />
+                </a>
+                <button
+                  type="button"
+                  onClick={copyLink}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-pmb-green)]/30 bg-white px-4 py-2.5 text-xs font-bold text-[var(--color-pmb-green-700)] hover:bg-[var(--color-pmb-green)]/5"
+                >
+                  <Copy className="h-3.5 w-3.5" />
+                  {copied ? "Link copiado" : "Copiar link do boleto"}
+                </button>
+              </div>
+            )}
+          </div>
         ) : (
-        <div className="rounded-2xl border border-[var(--color-pmb-green)]/20 bg-[var(--color-pmb-green)]/5 p-6 text-[var(--color-pmb-green-900)]">
-          <h2 className="text-base font-bold">
-            Venda criada — link de pagamento gerado
-          </h2>
-          <p className="mt-2 text-sm">
-            Envie o link abaixo para o aluno finalizar o pagamento na sua própria
-            loja (cartão, PIX ou boleto — sem sair do site). A matrícula é ativada
-            automaticamente após a confirmação do pagamento.
-          </p>
+          <div className="rounded-2xl border border-[var(--color-pmb-green)]/20 bg-[var(--color-pmb-green)]/5 p-6 text-[var(--color-pmb-green-900)]">
+            <h2 className="text-base font-bold">
+              Venda criada — link de pagamento gerado
+            </h2>
+            <p className="mt-2 text-sm">
+              Envie o link abaixo para o aluno finalizar o pagamento na sua
+              própria loja (cartão, PIX ou boleto — sem sair do site). A
+              matrícula é ativada automaticamente após a confirmação do
+              pagamento.
+            </p>
 
-          <div className="mt-4 grid gap-2 sm:grid-cols-3">
-            <Mini label="Original" value={formatBRL(created.basePrice ?? 0)} />
-            <Mini label="Desconto" value={formatBRL(created.discountAmount ?? 0)} />
-            <Mini
-              label="Final"
-              value={formatBRL(created.finalAmount)}
-              accent
-            />
-          </div>
+            <div className="mt-4 grid gap-2 sm:grid-cols-3">
+              <Mini label="Original" value={formatBRL(created.basePrice ?? 0)} />
+              <Mini
+                label="Desconto"
+                value={formatBRL(created.discountAmount ?? 0)}
+              />
+              <Mini label="Final" value={formatBRL(created.finalAmount)} accent />
+            </div>
 
-          <div className="mt-4 flex flex-wrap items-center gap-2">
-            <a
-              href={created.paymentUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-pmb-green)] px-4 py-2.5 text-xs font-bold text-white hover:bg-[var(--color-pmb-green-700)]"
-            >
-              Abrir link de pagamento
-              <ExternalLink className="h-3.5 w-3.5" />
-            </a>
-            <button
-              type="button"
-              onClick={copyLink}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-pmb-green)]/30 bg-white px-4 py-2.5 text-xs font-bold text-[var(--color-pmb-green-700)] hover:bg-[var(--color-pmb-green)]/5"
-            >
-              <Copy className="h-3.5 w-3.5" />
-              {copied ? "Link copiado" : "Copiar link"}
-            </button>
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <a
+                href={created.paymentUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-pmb-green)] px-4 py-2.5 text-xs font-bold text-white hover:bg-[var(--color-pmb-green-700)]"
+              >
+                Abrir link de pagamento
+                <ExternalLink className="h-3.5 w-3.5" />
+              </a>
+              <button
+                type="button"
+                onClick={copyLink}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-pmb-green)]/30 bg-white px-4 py-2.5 text-xs font-bold text-[var(--color-pmb-green-700)] hover:bg-[var(--color-pmb-green)]/5"
+              >
+                <Copy className="h-3.5 w-3.5" />
+                {copied ? "Link copiado" : "Copiar link"}
+              </button>
+            </div>
           </div>
-        </div>
         )}
 
         <div className="flex gap-3">
@@ -177,6 +300,16 @@ export function PainelNovaVendaClient({ courses }: { courses: CourseOption[] }) 
                 couponCode: "",
                 bolsista: false,
               }))
+              setPaymentMode("normal")
+              setInst({ count: 2, value: "", firstDueDate: isoDatePlusDays(7) })
+              setAddr({
+                cep: "",
+                rua: "",
+                numero: "",
+                bairro: "",
+                cidade: "",
+                estado: "",
+              })
             }}
           >
             Nova venda
@@ -317,42 +450,225 @@ export function PainelNovaVendaClient({ courses }: { courses: CourseOption[] }) 
                 {fieldErrors.tenantCourseId}
               </p>
             )}
-            {selectedCourse && (
+            {selectedCourse && !isInstallment && (
               <p className="mt-1.5 text-xs text-gray-500">
-                Tipo: {selectedCourse.paymentType === "MONTHLY"
+                Tipo:{" "}
+                {selectedCourse.paymentType === "MONTHLY"
                   ? "Mensalidade recorrente"
                   : "Pagamento único"}
               </p>
             )}
           </div>
-          <div data-tour="vendas-nova:cupom">
-            <Label htmlFor="v-cupom">Cupom (opcional)</Label>
-            <Input
-              id="v-cupom"
-              value={form.couponCode}
-              onChange={(e) =>
-                setForm({ ...form, couponCode: e.target.value.toUpperCase() })
-              }
-              disabled={form.bolsista}
-              aria-invalid={!!fieldErrors.couponCode}
-              aria-describedby={
-                fieldErrors.couponCode ? "v-cupom-error" : undefined
-              }
-              className="mt-1.5"
-              placeholder="Ex: BLACKFRIDAY"
-            />
-            {fieldErrors.couponCode && (
-              <p id="v-cupom-error" className="mt-1 text-xs text-rose-600">
-                {fieldErrors.couponCode}
-              </p>
-            )}
-            {form.bolsista && (
-              <p className="mt-1.5 text-xs text-gray-400">
-                Indisponível para bolsistas — a matrícula é gratuita.
-              </p>
-            )}
-          </div>
+          {!isInstallment && (
+            <div data-tour="vendas-nova:cupom">
+              <Label htmlFor="v-cupom">Cupom (opcional)</Label>
+              <Input
+                id="v-cupom"
+                value={form.couponCode}
+                onChange={(e) =>
+                  setForm({ ...form, couponCode: e.target.value.toUpperCase() })
+                }
+                disabled={form.bolsista}
+                aria-invalid={!!fieldErrors.couponCode}
+                aria-describedby={
+                  fieldErrors.couponCode ? "v-cupom-error" : undefined
+                }
+                className="mt-1.5"
+                placeholder="Ex: BLACKFRIDAY"
+              />
+              {fieldErrors.couponCode && (
+                <p id="v-cupom-error" className="mt-1 text-xs text-rose-600">
+                  {fieldErrors.couponCode}
+                </p>
+              )}
+              {form.bolsista && (
+                <p className="mt-1.5 text-xs text-gray-400">
+                  Indisponível para bolsistas — a matrícula é gratuita.
+                </p>
+              )}
+            </div>
+          )}
         </div>
+
+        {/* Modo de pagamento (só quando a unidade tem carnê liberado) */}
+        {installmentAvailable && (
+          <div className="mt-4">
+            <span className="text-xs font-semibold text-gray-600">
+              Forma de pagamento
+            </span>
+            <div className="mt-1.5 inline-flex rounded-lg border border-gray-200 p-0.5">
+              <button
+                type="button"
+                onClick={() => setPaymentMode("normal")}
+                className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${
+                  paymentMode === "normal"
+                    ? "bg-[var(--color-pmb-green)] text-white"
+                    : "text-gray-600 hover:bg-gray-50"
+                }`}
+              >
+                Link de pagamento
+              </button>
+              <button
+                type="button"
+                onClick={() => setPaymentMode("installment")}
+                className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${
+                  paymentMode === "installment"
+                    ? "bg-[var(--color-pmb-green)] text-white"
+                    : "text-gray-600 hover:bg-gray-50"
+                }`}
+              >
+                Parcelado no boleto (carnê)
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Campos do carnê */}
+        {isInstallment && installmentConfig && (
+          <div className="mt-4 grid gap-3 rounded-xl border border-[var(--color-pmb-green)]/20 bg-[var(--color-pmb-green)]/5 p-4 sm:grid-cols-3">
+            <div>
+              <Label htmlFor="v-parcelas">Nº de parcelas</Label>
+              <Select
+                value={String(inst.count)}
+                onValueChange={(v) =>
+                  setInst({ ...inst, count: Number(v) || 2 })
+                }
+              >
+                <SelectTrigger id="v-parcelas" className="mt-1.5 h-10 w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Array.from(
+                    { length: Math.max(0, installmentConfig.maxCount - 1) },
+                    (_, i) => i + 2,
+                  ).map((n) => (
+                    <SelectItem key={n} value={String(n)}>
+                      {n}x
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {fieldErrors["boletoInstallment.count"] && (
+                <p className="mt-1 text-xs text-rose-600">
+                  {fieldErrors["boletoInstallment.count"]}
+                </p>
+              )}
+            </div>
+            <div>
+              <Label htmlFor="v-parcela-valor">Valor de cada parcela</Label>
+              <Input
+                id="v-parcela-valor"
+                inputMode="decimal"
+                value={inst.value}
+                onChange={(e) => setInst({ ...inst, value: e.target.value })}
+                placeholder="Ex: 89,90"
+                className="mt-1.5"
+                required
+              />
+              {fieldErrors["boletoInstallment.installmentValue"] && (
+                <p className="mt-1 text-xs text-rose-600">
+                  {fieldErrors["boletoInstallment.installmentValue"]}
+                </p>
+              )}
+            </div>
+            <div>
+              <Label htmlFor="v-parcela-venc">1º vencimento</Label>
+              <Input
+                id="v-parcela-venc"
+                type="date"
+                value={inst.firstDueDate}
+                min={isoDatePlusDays(1)}
+                onChange={(e) =>
+                  setInst({ ...inst, firstDueDate: e.target.value })
+                }
+                className="mt-1.5"
+                required
+              />
+              {fieldErrors["boletoInstallment.firstDueDate"] && (
+                <p className="mt-1 text-xs text-rose-600">
+                  {fieldErrors["boletoInstallment.firstDueDate"]}
+                </p>
+              )}
+            </div>
+            <p className="sm:col-span-3 text-xs text-gray-600">
+              A 1ª parcela fica disponível na hora; as próximas, 7 dias antes de
+              cada vencimento, na área do aluno. O acesso é liberado quando a 1ª
+              parcela for paga.
+            </p>
+          </div>
+        )}
+
+        {/* Endereço do aluno — exigido pelo Mercado Pago para emitir o boleto */}
+        {needsAddress && (
+          <div className="mt-4">
+            <h4 className="text-xs font-bold text-[var(--color-pmb-green-900)]">
+              Endereço do aluno (para o boleto)
+            </h4>
+            <div className="mt-2 grid gap-3 sm:grid-cols-6">
+              <div className="sm:col-span-2">
+                <Label htmlFor="v-cep">CEP</Label>
+                <Input
+                  id="v-cep"
+                  value={addr.cep}
+                  onChange={(e) => setAddr({ ...addr, cep: e.target.value })}
+                  className="mt-1.5"
+                  required
+                />
+              </div>
+              <div className="sm:col-span-3">
+                <Label htmlFor="v-rua">Logradouro</Label>
+                <Input
+                  id="v-rua"
+                  value={addr.rua}
+                  onChange={(e) => setAddr({ ...addr, rua: e.target.value })}
+                  className="mt-1.5"
+                  required
+                />
+              </div>
+              <div className="sm:col-span-1">
+                <Label htmlFor="v-numero">Número</Label>
+                <Input
+                  id="v-numero"
+                  value={addr.numero}
+                  onChange={(e) => setAddr({ ...addr, numero: e.target.value })}
+                  className="mt-1.5"
+                  required
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <Label htmlFor="v-bairro">Bairro</Label>
+                <Input
+                  id="v-bairro"
+                  value={addr.bairro}
+                  onChange={(e) => setAddr({ ...addr, bairro: e.target.value })}
+                  className="mt-1.5"
+                  required
+                />
+              </div>
+              <div className="sm:col-span-3">
+                <Label htmlFor="v-cidade">Cidade</Label>
+                <Input
+                  id="v-cidade"
+                  value={addr.cidade}
+                  onChange={(e) => setAddr({ ...addr, cidade: e.target.value })}
+                  className="mt-1.5"
+                  required
+                />
+              </div>
+              <div className="sm:col-span-1">
+                <Label htmlFor="v-uf">UF</Label>
+                <Input
+                  id="v-uf"
+                  value={addr.estado}
+                  maxLength={2}
+                  onChange={(e) => setAddr({ ...addr, estado: e.target.value })}
+                  className="mt-1.5"
+                  required
+                />
+              </div>
+            </div>
+          </div>
+        )}
 
         <label
           data-tour="vendas-nova:bolsista"
@@ -361,14 +677,20 @@ export function PainelNovaVendaClient({ courses }: { courses: CourseOption[] }) 
           <input
             type="checkbox"
             checked={form.bolsista}
-            onChange={(e) => setForm({ ...form, bolsista: e.target.checked })}
+            onChange={(e) => {
+              const checked = e.target.checked
+              setForm({ ...form, bolsista: checked })
+              if (checked) setPaymentMode("normal")
+            }}
             className="mt-0.5 h-4 w-4 accent-amber-600"
           />
           <span className="text-sm">
-            <span className="font-semibold text-amber-900">Bolsista (bolsa de estudo)</span>
+            <span className="font-semibold text-amber-900">
+              Bolsista (bolsa de estudo)
+            </span>
             <span className="mt-0.5 block text-xs text-amber-700">
-              Matricula o aluno na plataforma de aulas <strong>sem gerar cobrança</strong> no
-              Mercado Pago. Nenhum link de pagamento é criado.
+              Matricula o aluno na plataforma de aulas{" "}
+              <strong>sem gerar cobrança</strong>. Nenhum link/boleto é criado.
             </span>
           </span>
         </label>
@@ -379,43 +701,62 @@ export function PainelNovaVendaClient({ courses }: { courses: CourseOption[] }) 
           <h3 className="text-sm font-bold text-[var(--color-pmb-green-900)]">
             Resumo do pedido
           </h3>
-          <dl className="mt-3 space-y-2 text-sm">
-            <div className="flex items-center justify-between">
-              <dt className="text-gray-600">Valor original</dt>
-              <dd className="font-mono text-gray-900">
-                {formatBRL(selectedCourse.price)}
-                {selectedCourse.paymentType === "MONTHLY" ? "/mês" : ""}
-              </dd>
-            </div>
-            <div className="flex items-center justify-between">
-              <dt className="text-gray-600">
-                {form.bolsista ? "Bolsa de estudo" : "Cupom"}
-              </dt>
-              <dd className="font-mono text-gray-900">
-                {form.bolsista
-                  ? `- ${formatBRL(selectedCourse.price)}`
-                  : form.couponCode.trim()
-                    ? "a confirmar"
-                    : "—"}
-              </dd>
-            </div>
-            <div className="flex items-center justify-between border-t border-gray-100 pt-2">
-              <dt className="font-semibold text-[var(--color-pmb-green-900)]">
-                Total a pagar
-              </dt>
-              <dd className="font-mono text-base font-bold text-[var(--color-pmb-green-700)]">
-                {form.bolsista
-                  ? formatBRL(0)
-                  : form.couponCode.trim()
-                    ? `até ${formatBRL(selectedCourse.price)}`
-                    : formatBRL(selectedCourse.price)}
-                {!form.bolsista && selectedCourse.paymentType === "MONTHLY"
-                  ? "/mês"
-                  : ""}
-              </dd>
-            </div>
-          </dl>
-          {!form.bolsista && form.couponCode.trim() && (
+          {isInstallment ? (
+            <dl className="mt-3 space-y-2 text-sm">
+              <div className="flex items-center justify-between">
+                <dt className="text-gray-600">Parcelas</dt>
+                <dd className="font-mono text-gray-900">
+                  {inst.count}x de {formatBRL(installmentValueNum)}
+                </dd>
+              </div>
+              <div className="flex items-center justify-between border-t border-gray-100 pt-2">
+                <dt className="font-semibold text-[var(--color-pmb-green-900)]">
+                  Total do carnê
+                </dt>
+                <dd className="font-mono text-base font-bold text-[var(--color-pmb-green-700)]">
+                  {formatBRL(installmentTotal)}
+                </dd>
+              </div>
+            </dl>
+          ) : (
+            <dl className="mt-3 space-y-2 text-sm">
+              <div className="flex items-center justify-between">
+                <dt className="text-gray-600">Valor original</dt>
+                <dd className="font-mono text-gray-900">
+                  {formatBRL(selectedCourse.price)}
+                  {selectedCourse.paymentType === "MONTHLY" ? "/mês" : ""}
+                </dd>
+              </div>
+              <div className="flex items-center justify-between">
+                <dt className="text-gray-600">
+                  {form.bolsista ? "Bolsa de estudo" : "Cupom"}
+                </dt>
+                <dd className="font-mono text-gray-900">
+                  {form.bolsista
+                    ? `- ${formatBRL(selectedCourse.price)}`
+                    : form.couponCode.trim()
+                      ? "a confirmar"
+                      : "—"}
+                </dd>
+              </div>
+              <div className="flex items-center justify-between border-t border-gray-100 pt-2">
+                <dt className="font-semibold text-[var(--color-pmb-green-900)]">
+                  Total a pagar
+                </dt>
+                <dd className="font-mono text-base font-bold text-[var(--color-pmb-green-700)]">
+                  {form.bolsista
+                    ? formatBRL(0)
+                    : form.couponCode.trim()
+                      ? `até ${formatBRL(selectedCourse.price)}`
+                      : formatBRL(selectedCourse.price)}
+                  {!form.bolsista && selectedCourse.paymentType === "MONTHLY"
+                    ? "/mês"
+                    : ""}
+                </dd>
+              </div>
+            </dl>
+          )}
+          {!form.bolsista && !isInstallment && form.couponCode.trim() && (
             <p className="mt-2 text-xs text-gray-500">
               O desconto do cupom é validado ao gerar o link de pagamento.
             </p>
@@ -448,10 +789,16 @@ export function PainelNovaVendaClient({ courses }: { courses: CourseOption[] }) 
           {submitting ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              {form.bolsista ? "Concedendo bolsa..." : "Gerando link..."}
+              {form.bolsista
+                ? "Concedendo bolsa..."
+                : isInstallment
+                  ? "Gerando carnê..."
+                  : "Gerando link..."}
             </>
           ) : form.bolsista ? (
             "Conceder bolsa de estudo"
+          ) : isInstallment ? (
+            "Gerar carnê no boleto"
           ) : (
             "Gerar link de pagamento"
           )}

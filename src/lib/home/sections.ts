@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma"
 import type { Course } from "@/components/main/home/course-card"
 import { COURSE_HAS_PRICE } from "@/lib/catalog/visibility"
 import { interestFreeLabel } from "@/lib/mercadopago/installments"
+import { coursePaymentType } from "@/lib/tenant/monthly-policy"
 
 /**
  * Filtro de visibilidade granular do catalogo para um tenant (espelha
@@ -778,7 +779,7 @@ async function fetchTenantCoursesByIds(
           ? `${monthlyMonths} mensalidades`
           : "mensalidade"
         : interestFreeLabel(interestFree) ?? "",
-      paymentType: tc.paymentType,
+      paymentType: coursePaymentType(tc.paymentType),
       selo: null,
       accent: idx % 2 === 0 ? "gold" : "green",
       imageUrl: tc.customCapaUrl ?? c.capaOverride ?? c.capaImageUrl,

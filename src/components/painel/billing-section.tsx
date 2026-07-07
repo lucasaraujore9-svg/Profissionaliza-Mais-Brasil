@@ -22,6 +22,12 @@ export function BillingSection({ data, onUpdate }: BillingSectionProps) {
   const [monthlySaving, setMonthlySaving] = useState(false)
   const [monthlyError, setMonthlyError] = useState<string | null>(null)
 
+  const [boletoEnabled, setBoletoEnabled] = useState(
+    data.tenant.boletoInstallmentEnabled,
+  )
+  const [boletoSaving, setBoletoSaving] = useState(false)
+  const [boletoError, setBoletoError] = useState<string | null>(null)
+
   const [interestFree, setInterestFree] = useState(
     data.tenant.interestFreeInstallments,
   )
@@ -99,6 +105,29 @@ export function BillingSection({ data, onUpdate }: BillingSectionProps) {
       setMonthlyError("Erro de rede")
     } finally {
       setMonthlySaving(false)
+    }
+  }
+
+  async function toggleBoletoInstallment(next: boolean) {
+    setBoletoSaving(true)
+    setBoletoError(null)
+    try {
+      const response = await fetch("/api/painel/config/boleto-installment", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled: next }),
+      })
+      const json = await response.json().catch(() => null)
+      if (!response.ok) {
+        setBoletoError(json?.error ?? "Erro ao salvar")
+        return
+      }
+      setBoletoEnabled(next)
+      onUpdate({ tenant: { ...data.tenant, boletoInstallmentEnabled: next } })
+    } catch {
+      setBoletoError("Erro de rede")
+    } finally {
+      setBoletoSaving(false)
     }
   }
 
@@ -410,6 +439,63 @@ export function BillingSection({ data, onUpdate }: BillingSectionProps) {
 
         {monthlyError && (
           <p className="mt-3 text-xs text-red-600">{monthlyError}</p>
+        )}
+      </div>
+
+      <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm lg:p-8">
+        <div className="flex items-start justify-between gap-3">
+          <h3 className="text-sm font-semibold text-[var(--color-pmb-green-900)]">
+            Venda parcelada no boleto (carnê)
+          </h3>
+          <span
+            className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+              data.tenant.boletoInstallmentAllowed
+                ? "bg-[var(--color-pmb-lime-50)] text-[var(--color-pmb-green-900)]"
+                : "bg-gray-100 text-gray-600"
+            }`}
+          >
+            {data.tenant.boletoInstallmentAllowed ? "Liberado" : "Indisponível"}
+          </span>
+        </div>
+        <p className="mt-1 text-xs text-gray-600">
+          Quando ativado, na venda direta você pode gerar um carnê de boletos: o
+          aluno escolhe o curso e você define o nº de parcelas e o valor de cada
+          uma. {data.tenant.salesGateway === "ASAAS"
+            ? "O Asaas gera todos os boletos de uma vez."
+            : "Um boleto é emitido por mês (Mercado Pago)."}
+        </p>
+
+        {data.tenant.boletoInstallmentAllowed ? (
+          <label className="mt-5 flex cursor-pointer items-start gap-3 rounded-lg border border-gray-200 bg-gray-50 p-3 transition hover:border-[var(--color-pmb-green)]">
+            <input
+              type="checkbox"
+              checked={boletoEnabled}
+              disabled={boletoSaving}
+              onChange={(e) => toggleBoletoInstallment(e.target.checked)}
+              className="mt-0.5 h-4 w-4 rounded border-gray-300 text-[var(--color-pmb-green)] focus:ring-[var(--color-pmb-green)]"
+            />
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-[var(--color-pmb-green-900)]">
+                Habilitar carnê no boleto na venda direta
+              </p>
+              <p className="text-xs text-gray-500">
+                A 1ª parcela libera o acesso do aluno; boleto vencido sem
+                pagamento suspende o acesso até a quitação.
+              </p>
+            </div>
+            {boletoSaving && (
+              <Loader2 className="mt-0.5 h-4 w-4 animate-spin text-gray-400" />
+            )}
+          </label>
+        ) : (
+          <div className="mt-5 rounded-lg border border-dashed border-gray-300 bg-gray-50 p-3 text-xs text-gray-500">
+            A venda parcelada no boleto ainda não foi liberada para sua unidade.
+            Fale com seu gerente PMB para habilitar.
+          </div>
+        )}
+
+        {boletoError && (
+          <p className="mt-3 text-xs text-red-600">{boletoError}</p>
         )}
       </div>
 

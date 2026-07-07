@@ -3,6 +3,11 @@ import { prisma } from "@/lib/prisma"
 import { requireStudentSession } from "@/lib/auth/student-session"
 import { PaymentCheckButton } from "@/components/aluno/payment-check-button"
 import { PayPendingButton } from "@/components/aluno/pay-pending-button"
+import {
+  InstallmentsSection,
+  type InstallmentCarne,
+} from "@/components/aluno/installments-section"
+import { isWithinRevealWindow, INSTALLMENT_REVEAL_WINDOW_DAYS } from "@/lib/installments/schedule"
 
 function brl(value: number): string {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
@@ -66,7 +71,7 @@ export default async function StudentPaymentsPage() {
   const session = await requireStudentSession()
   if (!session) return null
 
-  const [enrollments, payments] = await Promise.all([
+  const [enrollments, payments, installmentRows] = await Promise.all([
     prisma.enrollment.findMany({
       where: { studentId: session.studentId },
       include: {
@@ -83,10 +88,57 @@ export default async function StudentPaymentsPage() {
       },
       orderBy: { paidAt: "desc" },
     }),
+    prisma.boletoInstallment.findMany({
+      where: {
+        enrollment: { studentId: session.studentId },
+        status: { not: "CANCELLED" },
+      },
+      include: { enrollment: { include: { course: { select: { nome: true } } } } },
+      orderBy: [{ enrollmentId: "asc" }, { number: "asc" }],
+    }),
   ])
 
   const totalPaid = payments.reduce((sum, p) => sum + Number(p.amount), 0)
-  const pending = enrollments.filter((e) => e.status === "PENDING")
+  // Carnê tem sua própria seção (boletos por parcela) — fora da lista genérica.
+  const pending = enrollments.filter(
+    (e) => e.status === "PENDING" && e.paymentType !== "BOLETO_INSTALLMENT",
+  )
+
+  // View model do carnê: agrupa parcelas por matrícula e resolve a disponibilidade
+  // (1ª sempre; demais 7 dias antes do vencimento).
+  const now = new Date()
+  const carnesMap = new Map<string, InstallmentCarne>()
+  for (const row of installmentRows) {
+    let carne = carnesMap.get(row.enrollmentId)
+    if (!carne) {
+      carne = {
+        enrollmentId: row.enrollmentId,
+        courseName: row.enrollment.course.nome,
+        parcelas: [],
+      }
+      carnesMap.set(row.enrollmentId, carne)
+    }
+    const inWindow = isWithinRevealWindow({ number: row.number, dueDate: row.dueDate }, now)
+    const available =
+      row.status !== "PAID" && row.status !== "CANCELLED" && inWindow
+    let availableFromISO: string | null = null
+    if (!inWindow) {
+      const from = new Date(row.dueDate)
+      from.setUTCDate(from.getUTCDate() - INSTALLMENT_REVEAL_WINDOW_DAYS)
+      availableFromISO = from.toISOString()
+    }
+    carne.parcelas.push({
+      number: row.number,
+      amount: Number(row.amount),
+      dueDateISO: row.dueDate.toISOString(),
+      status: row.status,
+      available,
+      availableFromISO,
+      invoiceUrl: row.invoiceUrl,
+      digitableLine: row.digitableLine,
+    })
+  }
+  const carnes = [...carnesMap.values()]
 
   return (
     <div className="space-y-6">
@@ -173,6 +225,9 @@ export default async function StudentPaymentsPage() {
           </ul>
         )}
       </section>
+
+      {/* Carnê (venda parcelada no boleto) — boletos por parcela */}
+      <InstallmentsSection carnes={carnes} />
 
       {/* Histórico — tabela em desktop, cards em mobile */}
       <section

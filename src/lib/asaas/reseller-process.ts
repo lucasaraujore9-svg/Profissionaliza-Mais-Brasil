@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { getPayment, AsaasApiError } from "./client"
 import { fulfillFromAsaasPayment, type AsaasFulfillTenant } from "./fulfillment"
+import { settleBoletoInstallment } from "@/lib/installments/settle"
 import { createNotification } from "@/lib/notifications"
 import { swallow } from "@/lib/errors"
 import { contextLogger } from "@/lib/logger"
@@ -61,6 +62,39 @@ export async function processResellerAsaasWebhook(
         return
       }
       throw err
+    }
+
+    // ── Parcela de carnê (venda parcelada no boleto) ──────────────────────
+    // Cada boleto do carnê é um pagamento próprio; casamos pela linha da parcela
+    // (asaasPaymentId), escopada ao tenant. A 1ª paga provisiona o acesso; as
+    // demais só registram — via settleBoletoInstallment (idempotente).
+    const installment = await prisma.boletoInstallment.findFirst({
+      where: { asaasPaymentId: payment.id, tenantId: tenant.id },
+    })
+    if (installment) {
+      if (event === "PAYMENT_RECEIVED" || event === "PAYMENT_CONFIRMED") {
+        await settleBoletoInstallment({
+          installment,
+          tenant: {
+            id: tenant.id,
+            slug: tenant.slug,
+            name: tenant.name,
+            plataformaVendedorId: tenant.plataformaVendedorId,
+            isPmbVitrine: false,
+          },
+          event: {
+            gateway: "ASAAS",
+            externalPaymentId: payment.id,
+            amount: payment.value,
+            paidAt: payment.paymentDate ? new Date(payment.paymentDate) : new Date(),
+          },
+        })
+        await markLog(logId, true, `parcela ${installment.number} paga`)
+        return
+      }
+      // OVERDUE/refund/etc.: o cron cuida do bloqueio por atraso; aqui só registra.
+      await markLog(logId, true, `parcela ${installment.number} evento ${event}`)
+      return
     }
 
     // Resolve a matrícula SEMPRE escopada ao tenant (anti cross-tenant):

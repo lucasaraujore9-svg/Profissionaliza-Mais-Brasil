@@ -8,6 +8,7 @@ import { getSystemSettings } from "@/lib/system-settings"
 import { pmbMpPublicKey } from "@/lib/pmb-config"
 import { isPmbAppHost } from "@/lib/tenant/urls"
 import { getPackageForCheckout } from "@/lib/packages/vitrine"
+import { coursePaymentType } from "@/lib/tenant/monthly-policy"
 import {
   MAX_CARD_INSTALLMENTS,
   displayInterestFreeInstallments,
@@ -341,7 +342,7 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
                   : displayInterestFreeInstallments(
                       settings.pmbInterestFreeInstallments,
                     ),
-              paymentType: course.paymentTypeMain,
+              paymentType: coursePaymentType(course.paymentTypeMain),
               monthlyMonths: course.monthlyMonthsMain,
             }}
           />
@@ -372,7 +373,7 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
                         settings.pmbInterestFreeInstallments,
                       )
                 }
-                paymentType={course.paymentTypeMain}
+                paymentType={coursePaymentType(course.paymentTypeMain)}
                 monthlyMonths={course.monthlyMonthsMain}
               />
             </aside>

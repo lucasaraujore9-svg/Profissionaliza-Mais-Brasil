@@ -10,7 +10,22 @@
  * o MONTHLY e honrado; quando nao for, o curso cai para ONE_TIME naquele canal.
  */
 
+import type { PaymentType } from "@prisma/client"
+
 export type MonthlyChannel = "vitrine" | "direct"
+
+/**
+ * Tipo de pagamento do CURSO. O enum PaymentType do Prisma tambem tem
+ * BOLETO_INSTALLMENT, mas esse valor e uma escolha da VENDA (carne), nunca um
+ * atributo do curso — cursos sao sempre ONE_TIME ou MONTHLY. Este alias mantem
+ * essa invariante explicita no dominio.
+ */
+export type CoursePaymentType = "ONE_TIME" | "MONTHLY"
+
+/** Normaliza o paymentType lido do curso para o par 2-valores do dominio. */
+export function coursePaymentType(pt: PaymentType): CoursePaymentType {
+  return pt === "MONTHLY" ? "MONTHLY" : "ONE_TIME"
+}
 
 export type MonthlyPolicy = {
   monthlyAllowed: boolean
@@ -35,12 +50,13 @@ export function monthlyAllowedOn(t: MonthlyPolicy, channel: MonthlyChannel): boo
  * parcelado nao e permitido naquele canal, cai para ONE_TIME.
  */
 export function effectivePaymentType(
-  paymentType: "ONE_TIME" | "MONTHLY",
+  paymentType: PaymentType,
   t: MonthlyPolicy,
   channel: MonthlyChannel,
-): "ONE_TIME" | "MONTHLY" {
-  if (paymentType === "MONTHLY" && !monthlyAllowedOn(t, channel)) {
+): CoursePaymentType {
+  const base = coursePaymentType(paymentType)
+  if (base === "MONTHLY" && !monthlyAllowedOn(t, channel)) {
     return "ONE_TIME"
   }
-  return paymentType
+  return base
 }
