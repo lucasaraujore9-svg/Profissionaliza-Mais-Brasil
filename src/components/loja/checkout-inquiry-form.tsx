@@ -4,8 +4,12 @@ import { useState } from "react"
 import { Loader2, CheckCircle2, MessageCircle } from "lucide-react"
 
 interface CheckoutInquiryFormProps {
-  // ID do TenantCourse (curso que o aluno tentou comprar).
-  courseId: string
+  // ID do TenantCourse (curso que o aluno tentou comprar). Ausente quando o
+  // interesse é por um pacote — nesse caso `packageId` é enviado no lugar.
+  courseId?: string
+  // ID do CoursePackage quando o interesse é por um pacote. A API resolve o
+  // curso primário do pacote para o snapshot do lead.
+  packageId?: string
   courseName: string
   escolaName: string
 }
@@ -25,6 +29,7 @@ function formatPhone(value: string): string {
  */
 export function CheckoutInquiryForm({
   courseId,
+  packageId,
   courseName,
   escolaName,
 }: CheckoutInquiryFormProps) {
@@ -50,7 +55,8 @@ export function CheckoutInquiryForm({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          courseId,
+          // Pacote envia packageId; curso individual envia courseId.
+          ...(packageId ? { packageId } : { courseId }),
           nome: nome.trim(),
           email: email.trim().toLowerCase(),
           telefone: telefone.replace(/\D/g, ""),

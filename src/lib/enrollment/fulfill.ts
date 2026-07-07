@@ -963,6 +963,7 @@ export async function fulfillScholarshipEnrollment(
       course: {
         select: { id: true, nome: true, provider: true, lmsCourseId: true },
       },
+      coursePackage: { select: { name: true } },
     },
   })
   if (!enrollment) throw new Error(`enrollment ${enrollmentId} nao encontrado`)
@@ -973,20 +974,39 @@ export async function fulfillScholarshipEnrollment(
 
   // Mesmo prazo de permanência (12 meses) das matrículas pagas.
   const accessStartedAt = new Date()
+  const accessExpiresAt = addMonthsClamped(accessStartedAt, STUDENT_ACCESS_MONTHS)
+
+  // Bolsa de PACOTE: a matrícula primária liberou o 1º curso acima; agora
+  // liberamos os demais cursos do pacote (satélites ACTIVE, finalAmount 0, sem
+  // Payment) — mesma rotina best-effort do fluxo pago.
+  if (enrollment.coursePackageId) {
+    await provisionPackageSiblings(
+      tenant,
+      enrollment,
+      accessStartedAt,
+      accessExpiresAt,
+    )
+  }
+
   await prisma.enrollment.update({
     where: { id: enrollment.id },
     data: {
       status: "ACTIVE",
       startedAt: accessStartedAt,
-      expiresAt: addMonthsClamped(accessStartedAt, STUDENT_ACCESS_MONTHS),
+      expiresAt: accessExpiresAt,
     },
   })
+
+  // Nome exibido nas notificações: pacote mostra o nome do pacote.
+  const purchaseName = enrollment.coursePackage
+    ? `pacote ${enrollment.coursePackage.name}`
+    : enrollment.course.nome
 
   await createNotification({
     audience: "STUDENT",
     studentId: enrollment.student.id,
     level: "SUCCESS",
-    title: `Bolsa de estudo concedida — ${enrollment.course.nome}`,
+    title: `Bolsa de estudo concedida — ${purchaseName}`,
     body: "Acesse a área de aulas para começar agora — sem nenhuma cobrança.",
     category: "enrollment",
     href: "/aluno/cursos",
@@ -999,7 +1019,7 @@ export async function fulfillScholarshipEnrollment(
       audience: "TENANT",
       tenantId: tenant.id,
       level: "SUCCESS",
-      title: `Bolsa concedida — ${enrollment.course.nome}`,
+      title: `Bolsa concedida — ${purchaseName}`,
       body: `${enrollment.student.nome} recebeu bolsa de estudo (sem cobrança).`,
       category: "sale",
       href: "/painel/vendas",
@@ -1009,7 +1029,7 @@ export async function fulfillScholarshipEnrollment(
       audience: "ROLE",
       roleTarget: "SUPER_ADMIN",
       level: "SUCCESS",
-      title: `Bolsa de estudo — ${enrollment.course.nome}`,
+      title: `Bolsa de estudo — ${purchaseName}`,
       body: `${enrollment.student.nome} (vitrine PMB) recebeu bolsa de estudo (sem cobrança).`,
       category: "sale",
       href: "/admin/vendas",

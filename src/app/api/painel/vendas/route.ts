@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
+import type { PaymentType } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { requireResellerSession } from "@/lib/auth/reseller-session"
 import { auth } from "@/lib/auth"
@@ -21,6 +22,7 @@ import {
   MIN_BOLETO_INSTALLMENTS,
   MAX_BOLETO_INSTALLMENTS,
 } from "@/lib/installments/schedule"
+import { getPackageForCheckout } from "@/lib/packages/vitrine"
 
 const createSchema = z.object({
   // Dados do aluno (cria ou reaproveita por CPF/email)
@@ -37,8 +39,10 @@ const createSchema = z.object({
     .refine(isValidPhone, "Telefone inválido")
     .transform(normalizePhone),
 
-  // Curso a vender (TenantCourse do próprio tenant)
-  tenantCourseId: z.string().min(1),
+  // Alvo da venda: curso (TenantCourse do próprio tenant) OU pacote
+  // (CoursePackage). Exatamente um dos dois — validado no .refine abaixo.
+  tenantCourseId: z.string().min(1).optional(),
+  packageId: z.string().min(1).optional(),
   couponCode: z.string().trim().max(64).optional(),
   // Bolsa de estudo: matricula sem cobranca no Mercado Pago.
   bolsista: z.boolean().optional(),
@@ -64,6 +68,11 @@ const createSchema = z.object({
     })
     .optional(),
 })
+  // XOR: a venda é de um curso OU de um pacote, nunca ambos/nenhum.
+  .refine((v) => !!v.tenantCourseId !== !!v.packageId, {
+    message: "Informe tenantCourseId ou packageId",
+    path: ["tenantCourseId"],
+  })
 
 export const GET = withRequestContext(
   { action: "painel.vendas.list", route: "/api/painel/vendas" },
@@ -204,42 +213,80 @@ export const POST = withRequestContext(
       )
     }
 
-    const tenantCourse = await prisma.tenantCourse.findFirst({
-      where: { id: data.tenantCourseId, tenantId: tenant.id, isVisible: true },
-      include: {
-        course: {
-          select: {
-            id: true,
-            nome: true,
-            slug: true,
-            monthlyMonthsMain: true,
-            status: true,
+    // Resolve o alvo da venda em variáveis unificadas (curso ou pacote). O
+    // pacote cria a matrícula PRIMÁRIA (packagePrimary=true, tenantCourseId=null,
+    // courseId=curso primário); os satélites nascem no fulfill/settle. Pacote é
+    // sempre pagamento único.
+    const isPackage = !!data.packageId
+    let basePrice: number
+    let enrollmentCourseId: string
+    let enrollmentTenantCourseId: string | null
+    let enrollmentCoursePackageId: string | null
+    let rawPaymentType: PaymentType
+    let monthlyMonthsMain: number | null
+
+    if (isPackage) {
+      const pkg = await getPackageForCheckout(tenant.id, data.packageId!)
+      if (!pkg) {
+        return NextResponse.json(
+          { error: "Pacote não encontrado na sua vitrine" },
+          { status: 404 },
+        )
+      }
+      basePrice = pkg.price
+      enrollmentCourseId = pkg.courses[0].id
+      enrollmentTenantCourseId = null
+      enrollmentCoursePackageId = pkg.id
+      rawPaymentType = "ONE_TIME"
+      monthlyMonthsMain = null
+    } else {
+      const tenantCourse = await prisma.tenantCourse.findFirst({
+        where: { id: data.tenantCourseId, tenantId: tenant.id, isVisible: true },
+        include: {
+          course: {
+            select: {
+              id: true,
+              nome: true,
+              slug: true,
+              monthlyMonthsMain: true,
+              status: true,
+            },
           },
         },
-      },
-    })
-    if (!tenantCourse) {
-      return NextResponse.json(
-        { error: "Curso não encontrado na sua vitrine" },
-        { status: 404 },
-      )
+      })
+      if (!tenantCourse) {
+        return NextResponse.json(
+          { error: "Curso não encontrado na sua vitrine" },
+          { status: 404 },
+        )
+      }
+      // SAAS-010: mesmo gate de ec832d0 aplicado à venda manual do painel. Um
+      // curso desativado/removido na origem (EA/LMS → status="INATIVO") não pode
+      // ser vendido nem via POST direto, mesmo que o revendedor tenha mantido
+      // TenantCourse.isVisible=true (a visibilidade é flag independente). Evita
+      // gerar matrícula cujo provisionamento na plataforma parceira falharia.
+      if (tenantCourse.course.status !== "ATIVO") {
+        return NextResponse.json(
+          { error: "Curso indisponível" },
+          { status: 404 },
+        )
+      }
+      basePrice = Number(tenantCourse.price)
+      if (basePrice <= 0) {
+        return NextResponse.json(
+          { error: "Curso sem preço configurado" },
+          { status: 400 },
+        )
+      }
+      enrollmentCourseId = tenantCourse.courseId
+      enrollmentTenantCourseId = tenantCourse.id
+      enrollmentCoursePackageId = null
+      rawPaymentType = tenantCourse.paymentType
+      monthlyMonthsMain = tenantCourse.course.monthlyMonthsMain
     }
-    // SAAS-010: mesmo gate de ec832d0 aplicado à venda manual do painel. Um
-    // curso desativado/removido na origem (EA/LMS → status="INATIVO") não pode
-    // ser vendido nem via POST direto, mesmo que o revendedor tenha mantido
-    // TenantCourse.isVisible=true (a visibilidade é flag independente). Evita
-    // gerar matrícula cujo provisionamento na plataforma parceira falharia.
-    if (tenantCourse.course.status !== "ATIVO") {
-      return NextResponse.json(
-        { error: "Curso indisponível" },
-        { status: 404 },
-      )
-    }
-
-    const basePrice = Number(tenantCourse.price)
     if (basePrice <= 0) {
       return NextResponse.json(
-        { error: "Curso sem preço configurado" },
+        { error: "Preço não configurado" },
         { status: 400 },
       )
     }
@@ -348,10 +395,14 @@ export const POST = withRequestContext(
       throw err
     }
 
+    // Duplicidade: pacote compara pela matrícula primária do pacote; curso, pelo
+    // Course. Espelha o gate do checkout de pacote (checkout/package/route.ts).
     const existingEnrollment = await prisma.enrollment.findFirst({
       where: {
         studentId: student.id,
-        courseId: tenantCourse.courseId,
+        ...(isPackage
+          ? { coursePackageId: enrollmentCoursePackageId!, packagePrimary: true }
+          : { courseId: enrollmentCourseId }),
         tenantId: tenant.id,
         status: { in: ["PENDING", "ACTIVE", "COMPLETED"] },
       },
@@ -359,12 +410,13 @@ export const POST = withRequestContext(
     })
     if (existingEnrollment) {
       if (couponId) await releaseCoupon(couponId).catch(swallow("painel.vendas"))
+      const alvo = isPackage ? "pacote" : "curso"
       return NextResponse.json(
         {
           error:
             existingEnrollment.status === "PENDING"
-              ? "Este aluno já tem uma cobrança pendente para este curso"
-              : "Este aluno já possui este curso ativo",
+              ? `Este aluno já tem uma cobrança pendente para este ${alvo}`
+              : `Este aluno já possui este ${alvo} ativo`,
         },
         { status: 409 },
       )
@@ -384,10 +436,12 @@ export const POST = withRequestContext(
         data: {
           tenantId: tenant.id,
           studentId: student.id,
-          tenantCourseId: tenantCourse.id,
-          courseId: tenantCourse.courseId,
+          tenantCourseId: enrollmentTenantCourseId,
+          courseId: enrollmentCourseId,
+          coursePackageId: enrollmentCoursePackageId,
+          packagePrimary: isPackage,
           soldByUserId: userId,
-          paymentType: tenantCourse.paymentType,
+          paymentType: rawPaymentType,
           status: "PENDING",
           gateway: "MP",
           originalAmount: basePrice,
@@ -487,8 +541,10 @@ export const POST = withRequestContext(
         data: {
           tenantId: tenant.id,
           studentId: student.id,
-          tenantCourseId: tenantCourse.id,
-          courseId: tenantCourse.courseId,
+          tenantCourseId: enrollmentTenantCourseId,
+          courseId: enrollmentCourseId,
+          coursePackageId: enrollmentCoursePackageId,
+          packagePrimary: isPackage,
           soldByUserId: userId,
           paymentType: "BOLETO_INSTALLMENT",
           status: "PENDING",
@@ -539,23 +595,20 @@ export const POST = withRequestContext(
     }
 
     // Tipo efetivo no canal de venda direta/manual. Se a unidade nao tem
-    // parcelado habilitado, o curso MONTHLY cai para ONE_TIME.
-    const effectiveType = effectivePaymentType(
-      tenantCourse.paymentType,
-      tenant,
-      "direct",
-    )
+    // parcelado habilitado, o curso MONTHLY cai para ONE_TIME. Pacote é sempre
+    // pagamento único (rawPaymentType já vem "ONE_TIME").
+    const effectiveType = effectivePaymentType(rawPaymentType, tenant, "direct")
     const isMonthly = effectiveType === "MONTHLY"
-    const monthlyMonths = isMonthly
-      ? tenantCourse.course.monthlyMonthsMain ?? 12
-      : null
+    const monthlyMonths = isMonthly ? monthlyMonthsMain ?? 12 : null
 
     const enrollment = await prisma.enrollment.create({
       data: {
         tenantId: tenant.id,
         studentId: student.id,
-        tenantCourseId: tenantCourse.id,
-        courseId: tenantCourse.courseId,
+        tenantCourseId: enrollmentTenantCourseId,
+        courseId: enrollmentCourseId,
+        coursePackageId: enrollmentCoursePackageId,
+        packagePrimary: isPackage,
         soldByUserId: userId,
         paymentType: effectiveType,
         status: "PENDING",

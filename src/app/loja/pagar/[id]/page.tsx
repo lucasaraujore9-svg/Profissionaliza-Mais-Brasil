@@ -59,6 +59,8 @@ export default async function PagarPage({ params }: PagarPageProps) {
       originalAmount: true,
       discountAmount: true,
       installmentsTotal: true,
+      coursePackageId: true,
+      coursePackage: { select: { name: true } },
       course: {
         select: {
           nome: true,
@@ -123,6 +125,15 @@ export default async function PagarPage({ params }: PagarPageProps) {
   const isMonthly = enrollment.paymentType === "MONTHLY"
   const maxInstallments = isMonthly ? 1 : MAX_CARD_INSTALLMENTS
 
+  // Venda de pacote: o resumo mostra o nome do pacote, não o do curso primário.
+  const isPackage = !!enrollment.coursePackageId
+  const summaryName = isPackage
+    ? enrollment.coursePackage?.name ?? "Pacote de cursos"
+    : enrollment.course.nome
+  const summaryCategory = isPackage
+    ? "Pacote"
+    : enrollment.course.categoriaLoja ?? enrollment.course.categoriaInterna
+
   return (
     <section className="bg-[#FAFAFA] py-10 md:py-16">
       <div className="mx-auto max-w-6xl px-4 md:px-6">
@@ -152,11 +163,9 @@ export default async function PagarPage({ params }: PagarPageProps) {
 
           <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start">
             <OrderSummary
-              courseName={enrollment.course.nome}
-              courseCategory={
-                enrollment.course.categoriaLoja ?? enrollment.course.categoriaInterna
-              }
-              courseHours={enrollment.course.cargaHoraria}
+              courseName={summaryName}
+              courseCategory={summaryCategory}
+              courseHours={isPackage ? null : enrollment.course.cargaHoraria}
               courseImageUrl={
                 enrollment.tenantCourse?.customCapaUrl ??
                 enrollment.course.capaOverride ??

@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { getSystemSettings } from "@/lib/system-settings"
 import { NovaVendaClient } from "@/components/admin/nova-venda-client"
 import { coursePaymentType } from "@/lib/tenant/monthly-policy"
+import { resolveVitrinePackages } from "@/lib/packages/vitrine"
 
 export const dynamic = "force-dynamic"
 
@@ -14,7 +15,7 @@ export default async function NovaVendaPage() {
     redirect("/admin")
   }
 
-  const [courses, settings] = await Promise.all([
+  const [courses, vitrinePackages, settings] = await Promise.all([
     prisma.course.findMany({
       where: { status: "ATIVO" },
       orderBy: { nome: "asc" },
@@ -28,6 +29,8 @@ export default async function NovaVendaPage() {
         monthlyMonthsMain: true,
       },
     }),
+    // Pacotes PMB (tenantId=null) vendáveis na venda direta do PMB.
+    resolveVitrinePackages(null),
     getSystemSettings(),
   ])
 
@@ -42,6 +45,12 @@ export default async function NovaVendaPage() {
           preco: Number(c.precoVitrineMain ?? c.precoPromocional ?? c.precoOriginal ?? 0),
           paymentType: coursePaymentType(c.paymentTypeMain),
           monthlyMonths: c.monthlyMonthsMain ?? null,
+        }))}
+        packages={vitrinePackages.map((p) => ({
+          id: p.id,
+          name: p.name,
+          price: p.price,
+          courseCount: p.courseCount,
         }))}
       />
     </div>

@@ -181,7 +181,7 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_380px] lg:gap-8">
               <div className="space-y-6">
                 <CheckoutInquiryForm
-                  courseId={pkg.courses[0]?.id ?? ""}
+                  packageId={pkg.id}
                   courseName={`Pacote: ${pkg.name}`}
                   escolaName={tenant.name}
                 />

@@ -12,6 +12,7 @@ import { loadTenantEmailBrand } from "@/lib/email/tenant-brand"
 import { emailFromForBrand } from "@/lib/email/brand"
 import { createNotification } from "@/lib/notifications"
 import { CONSENT_VERSION } from "@/lib/legal/version"
+import { getPackageForCheckout } from "@/lib/packages/vitrine"
 
 const DEDUP_WINDOW_MS = 24 * 60 * 60 * 1000
 
@@ -28,23 +29,32 @@ const DEDUP_WINDOW_MS = 24 * 60 * 60 * 1000
  * Esta rota NUNCA cobra nada e NUNCA usa o gateway da PMB.
  */
 
-const bodySchema = z.object({
-  // ID do TenantCourse (curso que o interessado tentou comprar na vitrine).
-  courseId: z.string().trim().min(1).max(200),
-  nome: z.string().trim().min(2).max(160),
-  email: z.string().email().toLowerCase().trim(),
-  // Mesmo padrão do /api/loja/leads: normaliza para dígitos antes de validar,
-  // garantindo que `data.telefone` já chega só com números no normalizeE164.
-  telefone: z
-    .string()
-    .trim()
-    .transform((v) => v.replace(/\D/g, ""))
-    .refine((v) => v.length >= 10 && v.length <= 15, "Telefone inválido"),
-  mensagem: z.string().trim().max(1000).optional(),
-  consent: z
-    .boolean()
-    .refine((v) => v === true, "É necessário aceitar os termos"),
-})
+const bodySchema = z
+  .object({
+    // ID do TenantCourse (curso que o interessado tentou comprar na vitrine).
+    courseId: z.string().trim().min(1).max(200).optional(),
+    // ID do CoursePackage quando o interesse é por um pacote. Exatamente um dos
+    // dois (courseId | packageId) deve estar presente.
+    packageId: z.string().trim().min(1).max(200).optional(),
+    nome: z.string().trim().min(2).max(160),
+    email: z.string().email().toLowerCase().trim(),
+    // Mesmo padrão do /api/loja/leads: normaliza para dígitos antes de validar,
+    // garantindo que `data.telefone` já chega só com números no normalizeE164.
+    telefone: z
+      .string()
+      .trim()
+      .transform((v) => v.replace(/\D/g, ""))
+      .refine((v) => v.length >= 10 && v.length <= 15, "Telefone inválido"),
+    mensagem: z.string().trim().max(1000).optional(),
+    consent: z
+      .boolean()
+      .refine((v) => v === true, "É necessário aceitar os termos"),
+  })
+  // XOR: interesse é por um curso OU por um pacote, nunca ambos/nenhum.
+  .refine((v) => !!v.courseId !== !!v.packageId, {
+    message: "Informe courseId ou packageId",
+    path: ["courseId"],
+  })
 
 function normalizeE164(raw: string): string {
   const digits = raw.replace(/\D/g, "")
@@ -107,25 +117,42 @@ export const POST = withRequestContext(
     )
     if (!emailRl.ok) return rateLimitResponse(emailRl)
 
-    // Resolve o curso de interesse (TenantCourse → Course) para o snapshot do
-    // lead e o nome no e-mail. O lead referencia o Course global por estabilidade.
-    const tenantCourse = await prisma.tenantCourse.findFirst({
-      // So gera lead para curso exibivel: visivel na loja E ATIVO na origem.
-      where: {
-        id: data.courseId,
-        tenantId: tenant.id,
-        isVisible: true,
-        course: { status: "ATIVO" },
-      },
-      select: { courseId: true, course: { select: { nome: true } } },
-    })
-    if (!tenantCourse) {
-      return NextResponse.json(
-        { error: "Curso não encontrado", code: "COURSE_NOT_FOUND" },
-        { status: 404 },
-      )
+    // Resolve o alvo de interesse (curso ou pacote) para o snapshot do lead e o
+    // nome no e-mail. O lead referencia o Course global por estabilidade — para
+    // pacote, usamos o curso primário do pacote (mesmo padrão do checkout de
+    // pacote em /api/loja/checkout/package).
+    let leadCourseId: string
+    let courseName: string
+    if (data.packageId) {
+      const pkg = await getPackageForCheckout(tenant.id, data.packageId)
+      if (!pkg) {
+        return NextResponse.json(
+          { error: "Pacote não encontrado", code: "PACKAGE_NOT_FOUND" },
+          { status: 404 },
+        )
+      }
+      leadCourseId = pkg.courses[0].id
+      courseName = `Pacote: ${pkg.name}`
+    } else {
+      const tenantCourse = await prisma.tenantCourse.findFirst({
+        // So gera lead para curso exibivel: visivel na loja E ATIVO na origem.
+        where: {
+          id: data.courseId,
+          tenantId: tenant.id,
+          isVisible: true,
+          course: { status: "ATIVO" },
+        },
+        select: { courseId: true, course: { select: { nome: true } } },
+      })
+      if (!tenantCourse) {
+        return NextResponse.json(
+          { error: "Curso não encontrado", code: "COURSE_NOT_FOUND" },
+          { status: 404 },
+        )
+      }
+      leadCourseId = tenantCourse.courseId
+      courseName = tenantCourse.course.nome
     }
-    const courseName = tenantCourse.course.nome
     const telefoneE164 = normalizeE164(data.telefone)
     const visitorId = readVisitorId(request)
 
@@ -134,7 +161,7 @@ export const POST = withRequestContext(
       where: {
         tenantId: tenant.id,
         email: data.email,
-        courseId: tenantCourse.courseId,
+        courseId: leadCourseId,
         createdAt: { gte: new Date(Date.now() - DEDUP_WINDOW_MS) },
       },
       select: { id: true },
@@ -153,7 +180,7 @@ export const POST = withRequestContext(
           nome: data.nome,
           email: data.email,
           telefone: telefoneE164,
-          courseId: tenantCourse.courseId,
+          courseId: leadCourseId,
           courseSnapshot: courseName,
           notes: data.mensagem || null,
           stage: "NEW",

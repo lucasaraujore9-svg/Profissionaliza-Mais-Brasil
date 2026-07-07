@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
+import type { PaymentType } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { requirePmbSales } from "@/lib/auth/guards"
 import { getOrCreatePmbTenant } from "@/lib/pmb-tenant"
@@ -24,6 +25,7 @@ import { dueDateInDays } from "@/lib/checkout/due-date"
 import { swallow } from "@/lib/errors"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { asaasWebhookUrl, mpWebhookUrl } from "@/lib/tenant/urls"
+import { getPackageForCheckout } from "@/lib/packages/vitrine"
 
 const PMB_SALES_CAP = 50
 
@@ -73,13 +75,20 @@ export const GET = withRequestContext(
   },
 )
 
-const createSchema = z.object({
-  studentId: z.string().min(1),
-  courseId: z.string().min(1),
-  couponCode: z.string().trim().max(64).optional(),
-  // Bolsa de estudo: cria o aluno na plataforma sem gerar cobranca no gateway.
-  bolsista: z.boolean().optional(),
-})
+const createSchema = z
+  .object({
+    studentId: z.string().min(1),
+    // Alvo da venda: curso OU pacote (CoursePackage PMB). Exatamente um.
+    courseId: z.string().min(1).optional(),
+    packageId: z.string().min(1).optional(),
+    couponCode: z.string().trim().max(64).optional(),
+    // Bolsa de estudo: cria o aluno na plataforma sem gerar cobranca no gateway.
+    bolsista: z.boolean().optional(),
+  })
+  .refine((v) => !!v.courseId !== !!v.packageId, {
+    message: "Informe courseId ou packageId",
+    path: ["courseId"],
+  })
 
 export const POST = withRequestContext(
   { action: "admin.vendas.create", route: "/api/admin/vendas" },
@@ -128,19 +137,52 @@ export const POST = withRequestContext(
 
   const pmbTenant = await getOrCreatePmbTenant()
 
-  const [student, course] = await Promise.all([
-    prisma.student.findFirst({
-      where: { id: parsed.data.studentId, tenantId: pmbTenant.id },
-      select: {
-        id: true,
-        nome: true,
-        email: true,
-        cpf: true,
-        fone: true,
-        asaasCustomerId: true,
-      },
-    }),
-    prisma.course.findUnique({
+  const student = await prisma.student.findFirst({
+    where: { id: parsed.data.studentId, tenantId: pmbTenant.id },
+    select: {
+      id: true,
+      nome: true,
+      email: true,
+      cpf: true,
+      fone: true,
+      asaasCustomerId: true,
+    },
+  })
+
+  if (!student) {
+    return NextResponse.json({ error: "Aluno não encontrado" }, { status: 404 })
+  }
+  if (!student.email) {
+    return NextResponse.json(
+      { error: "Aluno sem email cadastrado" },
+      { status: 400 },
+    )
+  }
+
+  // Resolve o alvo da venda em variáveis unificadas (curso ou pacote PMB). O
+  // pacote cria a matrícula PRIMÁRIA (packagePrimary=true, courseId=curso
+  // primário); os satélites nascem no fulfill. Pacote é sempre pagamento único.
+  const isPackage = !!parsed.data.packageId
+  let basePrice: number
+  let enrollmentCourseId: string
+  let enrollmentCoursePackageId: string | null
+  let purchaseName: string
+  let rawPaymentType: PaymentType
+  let monthlyMonthsMain: number | null
+
+  if (isPackage) {
+    const pkg = await getPackageForCheckout(null, parsed.data.packageId!)
+    if (!pkg) {
+      return NextResponse.json({ error: "Pacote não disponível" }, { status: 404 })
+    }
+    basePrice = pkg.price
+    enrollmentCourseId = pkg.courses[0].id
+    enrollmentCoursePackageId = pkg.id
+    purchaseName = `Pacote: ${pkg.name}`
+    rawPaymentType = "ONE_TIME"
+    monthlyMonthsMain = null
+  } else {
+    const course = await prisma.course.findUnique({
       where: { id: parsed.data.courseId },
       select: {
         id: true,
@@ -152,17 +194,24 @@ export const POST = withRequestContext(
         paymentTypeMain: true,
         monthlyMonthsMain: true,
       },
-    }),
-  ])
-
-  if (!student) {
-    return NextResponse.json({ error: "Aluno não encontrado" }, { status: 404 })
-  }
-  if (!student.email) {
-    return NextResponse.json(
-      { error: "Aluno sem email cadastrado" },
-      { status: 400 },
+    })
+    if (!course || course.status !== "ATIVO") {
+      return NextResponse.json({ error: "Curso não disponível" }, { status: 404 })
+    }
+    basePrice = Number(
+      course.precoVitrineMain ?? course.precoPromocional ?? course.precoOriginal ?? 0,
     )
+    if (basePrice <= 0) {
+      return NextResponse.json(
+        { error: "Curso sem preço da vitrine PMB" },
+        { status: 400 },
+      )
+    }
+    enrollmentCourseId = course.id
+    enrollmentCoursePackageId = null
+    purchaseName = course.nome
+    rawPaymentType = course.paymentTypeMain
+    monthlyMonthsMain = course.monthlyMonthsMain
   }
 
   // Na bolsa o fulfillScholarshipEnrollment cuida da senha do painel + email de
@@ -179,37 +228,27 @@ export const POST = withRequestContext(
     })
   }
 
-  if (!course || course.status !== "ATIVO") {
-    return NextResponse.json({ error: "Curso não disponível" }, { status: 404 })
-  }
-
+  // Duplicidade: pacote compara pela matrícula primária; curso, pelo Course.
   const existingEnrollment = await prisma.enrollment.findFirst({
     where: {
       studentId: student.id,
-      courseId: course.id,
+      ...(isPackage
+        ? { coursePackageId: enrollmentCoursePackageId!, packagePrimary: true }
+        : { courseId: enrollmentCourseId }),
       status: { in: ["PENDING", "ACTIVE", "COMPLETED"] },
     },
     select: { id: true, status: true },
   })
   if (existingEnrollment) {
+    const alvo = isPackage ? "pacote" : "curso"
     return NextResponse.json(
       {
         error:
           existingEnrollment.status === "PENDING"
-            ? "Este aluno já tem uma cobrança pendente para este curso"
-            : "Este aluno já possui este curso ativo",
+            ? `Este aluno já tem uma cobrança pendente para este ${alvo}`
+            : `Este aluno já possui este ${alvo} ativo`,
       },
       { status: 409 },
-    )
-  }
-
-  const basePrice = Number(
-    course.precoVitrineMain ?? course.precoPromocional ?? course.precoOriginal ?? 0,
-  )
-  if (basePrice <= 0) {
-    return NextResponse.json(
-      { error: "Curso sem preço da vitrine PMB" },
-      { status: 400 },
     )
   }
 
@@ -229,9 +268,11 @@ export const POST = withRequestContext(
         tenantId: null,
         studentId: student.id,
         tenantCourseId: null,
-        courseId: course.id,
+        courseId: enrollmentCourseId,
+        coursePackageId: enrollmentCoursePackageId,
+        packagePrimary: isPackage,
         soldByUserId: guard.session.userId,
-        paymentType: course.paymentTypeMain,
+        paymentType: rawPaymentType,
         status: "PENDING",
         gateway,
         originalAmount: basePrice,
@@ -259,7 +300,7 @@ export const POST = withRequestContext(
         .delete({ where: { id: enrollment.id } })
         .catch(swallow("admin.vendas.bolsa.rollback"))
       contextLogger().error(
-        { err, event: "admin.vendas.bolsa_failed", studentId: student.id, courseId: course.id },
+        { err, event: "admin.vendas.bolsa_failed", studentId: student.id, courseId: enrollmentCourseId },
         "concessao de bolsa falhou",
       )
       return NextResponse.json(
@@ -335,8 +376,9 @@ export const POST = withRequestContext(
     couponId = coupon.id
   }
 
-  const isMonthly = course.paymentTypeMain === "MONTHLY"
-  const monthlyMonths = isMonthly ? course.monthlyMonthsMain ?? 12 : null
+  // Pacote é sempre pagamento único (rawPaymentType já vem "ONE_TIME").
+  const isMonthly = rawPaymentType === "MONTHLY"
+  const monthlyMonths = isMonthly ? monthlyMonthsMain ?? 12 : null
 
   // MP+MONTHLY agora suportado via preapproval (subscription)
 
@@ -345,9 +387,11 @@ export const POST = withRequestContext(
       tenantId: null,
       studentId: student.id,
       tenantCourseId: null,
-      courseId: course.id,
+      courseId: enrollmentCourseId,
+      coursePackageId: enrollmentCoursePackageId,
+      packagePrimary: isPackage,
       soldByUserId: guard.session.userId,
-      paymentType: course.paymentTypeMain,
+      paymentType: rawPaymentType,
       status: "PENDING",
       gateway,
       originalAmount: basePrice,
@@ -387,7 +431,7 @@ export const POST = withRequestContext(
         ).toISOString()
 
         const preapproval = await createPreapproval(mpToken, {
-          reason: `Mensalidade — ${course.nome}`,
+          reason: `Mensalidade — ${purchaseName}`,
           external_reference: externalReference,
           payer_email: student.email,
           back_url: `${appUrl || `https://${process.env.NEXT_PUBLIC_APP_DOMAIN ?? "profissionalizamaisbrasil.com.br"}`}/admin/vendas?ok=${enrollment.id}`,
@@ -430,8 +474,8 @@ export const POST = withRequestContext(
       const preference = await createPreference(mpToken, {
         items: [
           {
-            id: course.id,
-            title: course.nome,
+            id: enrollmentCourseId,
+            title: purchaseName,
             quantity: 1,
             unit_price: finalAmount,
             currency_id: "BRL",
@@ -517,7 +561,7 @@ export const POST = withRequestContext(
         value: finalAmount,
         nextDueDate: dueDateInDays(3),
         cycle: "MONTHLY",
-        description: `Mensalidade — ${course.nome}`,
+        description: `Mensalidade — ${purchaseName}`,
         externalReference,
         maxPayments: monthlyMonths,
         notificationUrl: asaasWebhookUrl(),
@@ -571,7 +615,7 @@ export const POST = withRequestContext(
       billingType: "UNDEFINED",
       value: finalAmount,
       dueDate: dueDateInDays(3),
-      description: `Curso: ${course.nome}`,
+      description: isPackage ? purchaseName : `Curso: ${purchaseName}`,
       externalReference,
       notificationUrl: asaasWebhookUrl(),
     }, motherAsaasKey())

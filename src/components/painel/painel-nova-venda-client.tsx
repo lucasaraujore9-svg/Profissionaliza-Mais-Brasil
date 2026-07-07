@@ -9,7 +9,9 @@ import { Label } from "@/components/ui/label"
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
@@ -19,6 +21,28 @@ interface CourseOption {
   nome: string
   price: number
   paymentType: "ONE_TIME" | "MONTHLY"
+}
+
+interface PackageOption {
+  id: string
+  name: string
+  price: number
+  courseCount: number
+}
+
+/**
+ * Opção unificada do seletor de venda direta. O `value` codifica o tipo
+ * (`c:` = curso, `p:` = pacote) para que curso e pacote coexistam num único
+ * `<Select>` sem colisão de ids. Pacote é sempre pagamento único (ONE_TIME).
+ */
+type SaleOption = {
+  value: string
+  kind: "course" | "package"
+  id: string
+  label: string
+  price: number
+  paymentType: "ONE_TIME" | "MONTHLY"
+  courseCount?: number
 }
 
 /** Capability de venda parcelada no boleto (só presente quando ativa). */
@@ -59,9 +83,11 @@ interface CreatedVenda {
 
 export function PainelNovaVendaClient({
   courses,
+  packages,
   installmentConfig,
 }: {
   courses: CourseOption[]
+  packages: PackageOption[]
   installmentConfig: InstallmentConfig | null
 }) {
   const [submitting, setSubmitting] = useState(false)
@@ -70,12 +96,32 @@ export function PainelNovaVendaClient({
   const [created, setCreated] = useState<CreatedVenda | null>(null)
   const [copied, setCopied] = useState(false)
 
+  // Opções unificadas: cursos primeiro, depois pacotes. O value codifica o tipo.
+  const courseOptions: SaleOption[] = courses.map((c) => ({
+    value: `c:${c.id}`,
+    kind: "course",
+    id: c.id,
+    label: `${c.nome} — ${formatBRL(c.price)}${c.paymentType === "MONTHLY" ? "/mês" : ""}`,
+    price: c.price,
+    paymentType: c.paymentType,
+  }))
+  const packageOptions: SaleOption[] = packages.map((p) => ({
+    value: `p:${p.id}`,
+    kind: "package",
+    id: p.id,
+    label: `Pacote: ${p.name} — ${formatBRL(p.price)}`,
+    price: p.price,
+    paymentType: "ONE_TIME",
+    courseCount: p.courseCount,
+  }))
+
   const [form, setForm] = useState({
     nome: "",
     email: "",
     cpf: "",
     fone: "",
-    tenantCourseId: "",
+    // Value codificado da opção selecionada (`c:<id>` ou `p:<id>`).
+    selection: "",
     couponCode: "",
     bolsista: false,
   })
@@ -96,7 +142,11 @@ export function PainelNovaVendaClient({
     estado: "",
   })
 
-  const selectedCourse = courses.find((c) => c.id === form.tenantCourseId) ?? null
+  const selected =
+    [...courseOptions, ...packageOptions].find(
+      (o) => o.value === form.selection,
+    ) ?? null
+  const isPackage = selected?.kind === "package"
 
   const installmentAvailable = !!installmentConfig && !form.bolsista
   const isInstallment = installmentAvailable && paymentMode === "installment"
@@ -120,7 +170,10 @@ export function PainelNovaVendaClient({
           email: form.email.trim(),
           cpf: form.cpf.replace(/\D/g, ""),
           fone: form.fone.replace(/\D/g, ""),
-          tenantCourseId: form.tenantCourseId,
+          // Curso individual envia tenantCourseId; pacote envia packageId.
+          ...(isPackage
+            ? { packageId: selected?.id }
+            : { tenantCourseId: selected?.id ?? "" }),
           // Cupom não se aplica a bolsa nem a carnê (valor definido manualmente).
           couponCode:
             form.bolsista || isInstallment
@@ -422,40 +475,61 @@ export function PainelNovaVendaClient({
         </h3>
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           <div data-tour="vendas-nova:curso" className="sm:col-span-2">
-            <Label htmlFor="v-curso">Curso da sua vitrine</Label>
+            <Label htmlFor="v-curso">Curso ou pacote da sua vitrine</Label>
             <Select
-              value={form.tenantCourseId}
-              onValueChange={(v) =>
-                setForm({ ...form, tenantCourseId: v ?? "" })
-              }
+              value={form.selection}
+              onValueChange={(v) => setForm({ ...form, selection: v ?? "" })}
             >
               <SelectTrigger
                 id="v-curso"
                 className="mt-1.5 h-10 w-full"
-                aria-invalid={!!fieldErrors.tenantCourseId}
+                aria-invalid={
+                  !!fieldErrors.tenantCourseId || !!fieldErrors.packageId
+                }
               >
-                <SelectValue placeholder="Selecione um curso…" />
+                {/* Função-filho: o Base UI resolve o rótulo a partir do value
+                    codificado — sem isso o gatilho mostraria o id cru. */}
+                <SelectValue placeholder="Selecione um curso ou pacote…">
+                  {(value) =>
+                    [...courseOptions, ...packageOptions].find(
+                      (o) => o.value === value,
+                    )?.label ?? "Selecione um curso ou pacote…"
+                  }
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
-                {courses.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
-                    {c.nome} — {formatBRL(c.price)}
-                    {c.paymentType === "MONTHLY" ? "/mês" : ""}
-                  </SelectItem>
-                ))}
+                {courseOptions.length > 0 && (
+                  <SelectGroup>
+                    <SelectLabel>Cursos</SelectLabel>
+                    {courseOptions.map((o) => (
+                      <SelectItem key={o.value} value={o.value}>
+                        {o.label}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                )}
+                {packageOptions.length > 0 && (
+                  <SelectGroup>
+                    <SelectLabel>Pacotes</SelectLabel>
+                    {packageOptions.map((o) => (
+                      <SelectItem key={o.value} value={o.value}>
+                        {o.label}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                )}
               </SelectContent>
             </Select>
-            {fieldErrors.tenantCourseId && (
+            {(fieldErrors.tenantCourseId || fieldErrors.packageId) && (
               <p className="mt-1 text-xs text-rose-600">
-                {fieldErrors.tenantCourseId}
+                {fieldErrors.tenantCourseId ?? fieldErrors.packageId}
               </p>
             )}
-            {selectedCourse && !isInstallment && (
+            {selected && !isInstallment && (
               <p className="mt-1.5 text-xs text-gray-500">
-                Tipo:{" "}
-                {selectedCourse.paymentType === "MONTHLY"
-                  ? "Mensalidade recorrente"
-                  : "Pagamento único"}
+                {isPackage
+                  ? `Pacote • ${selected.courseCount} ${selected.courseCount === 1 ? "curso" : "cursos"} • Pagamento único`
+                  : `Tipo: ${selected.paymentType === "MONTHLY" ? "Mensalidade recorrente" : "Pagamento único"}`}
               </p>
             )}
           </div>
@@ -696,7 +770,7 @@ export function PainelNovaVendaClient({
         </label>
       </div>
 
-      {selectedCourse && (
+      {selected && (
         <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
           <h3 className="text-sm font-bold text-[var(--color-pmb-green-900)]">
             Resumo do pedido
@@ -723,8 +797,8 @@ export function PainelNovaVendaClient({
               <div className="flex items-center justify-between">
                 <dt className="text-gray-600">Valor original</dt>
                 <dd className="font-mono text-gray-900">
-                  {formatBRL(selectedCourse.price)}
-                  {selectedCourse.paymentType === "MONTHLY" ? "/mês" : ""}
+                  {formatBRL(selected.price)}
+                  {selected.paymentType === "MONTHLY" ? "/mês" : ""}
                 </dd>
               </div>
               <div className="flex items-center justify-between">
@@ -733,7 +807,7 @@ export function PainelNovaVendaClient({
                 </dt>
                 <dd className="font-mono text-gray-900">
                   {form.bolsista
-                    ? `- ${formatBRL(selectedCourse.price)}`
+                    ? `- ${formatBRL(selected.price)}`
                     : form.couponCode.trim()
                       ? "a confirmar"
                       : "—"}
@@ -747,9 +821,9 @@ export function PainelNovaVendaClient({
                   {form.bolsista
                     ? formatBRL(0)
                     : form.couponCode.trim()
-                      ? `até ${formatBRL(selectedCourse.price)}`
-                      : formatBRL(selectedCourse.price)}
-                  {!form.bolsista && selectedCourse.paymentType === "MONTHLY"
+                      ? `até ${formatBRL(selected.price)}`
+                      : formatBRL(selected.price)}
+                  {!form.bolsista && selected.paymentType === "MONTHLY"
                     ? "/mês"
                     : ""}
                 </dd>

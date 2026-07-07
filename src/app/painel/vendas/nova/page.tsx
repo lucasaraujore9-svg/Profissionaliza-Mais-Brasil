@@ -6,6 +6,7 @@ import { PainelNovaVendaClient } from "@/components/painel/painel-nova-venda-cli
 import { ensureTenantCourses } from "@/lib/tenant/ensure-courses"
 import { coursePaymentType, monthlyActive } from "@/lib/tenant/monthly-policy"
 import { MAX_BOLETO_INSTALLMENTS } from "@/lib/installments/schedule"
+import { resolveVitrinePackages } from "@/lib/packages/vitrine"
 
 export const dynamic = "force-dynamic"
 
@@ -19,7 +20,7 @@ export default async function PainelNovaVendaPage() {
 
   await ensureTenantCourses(user.tenantId)
 
-  const [tenant, tenantCourses] = await Promise.all([
+  const [tenant, tenantCourses, vitrinePackages] = await Promise.all([
     prisma.tenant.findUnique({
       where: { id: user.tenantId },
       select: {
@@ -36,6 +37,8 @@ export default async function PainelNovaVendaPage() {
         course: { select: { nome: true, status: true } },
       },
     }),
+    // Pacotes vendáveis nesta vitrine (PMB distribuídos + próprios da unidade).
+    resolveVitrinePackages(user.tenantId),
   ])
 
   const courses = tenantCourses
@@ -46,6 +49,13 @@ export default async function PainelNovaVendaPage() {
       price: Number(tc.price),
       paymentType: coursePaymentType(tc.paymentType),
     }))
+
+  const packages = vitrinePackages.map((p) => ({
+    id: p.id,
+    name: p.name,
+    price: p.price,
+    courseCount: p.courseCount,
+  }))
 
   // Carnê (parcelado no boleto) usa a MESMA capability de mensalidade: quando o
   // pagamento parcelado está ativo (admin liberou + unidade ativou), o carnê
@@ -61,7 +71,11 @@ export default async function PainelNovaVendaPage() {
         title="Nova venda direta"
         description="Cadastre o aluno, escolha o curso e gere o link de pagamento."
       />
-      <PainelNovaVendaClient courses={courses} installmentConfig={installmentConfig} />
+      <PainelNovaVendaClient
+        courses={courses}
+        packages={packages}
+        installmentConfig={installmentConfig}
+      />
     </div>
   )
 }
