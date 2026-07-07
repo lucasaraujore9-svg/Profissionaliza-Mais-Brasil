@@ -455,19 +455,13 @@ model Tenant {
   // monthlyEnabled: revendedor liga/desliga o uso (dentro do que foi liberado).
   // monthlyScope: onde o parcelado vale (definido pelo Admin Master).
   // Efetivo: monthlyAllowed && monthlyEnabled. Ver src/lib/tenant/monthly-policy.ts
+  // Pagamento parcelado (mensalidade) — capability liberada pelo Admin Master +
+  // toggle da revenda + escopo (venda direta / +vitrine). ALEM da mensalidade no
+  // cartao, esta mesma capability habilita a venda parcelada no BOLETO (carne) na
+  // venda direta — nao ha campo separado. Ver src/lib/installments/.
   monthlyAllowed Boolean      @default(false) @map("monthly_allowed")
   monthlyEnabled Boolean      @default(false) @map("monthly_enabled")
   monthlyScope   MonthlyScope @default(DIRECT_ONLY) @map("monthly_scope")
-
-  // Venda parcelada no boleto (carne) na venda direta. Mesmo padrao de dois
-  // niveis do monthly*: capability liberada pelo Admin Master + toggle da revenda.
-  // Efetivo = boletoInstallmentAllowed && boletoInstallmentEnabled. Funciona nos
-  // dois gateways: Asaas gera o carne nativo; MP emite N boletos avulsos (1/mes).
-  // Ver src/lib/installments/ e src/lib/tenant/boleto-installment-policy.ts.
-  boletoInstallmentAllowed  Boolean @default(false) @map("boleto_installment_allowed")
-  boletoInstallmentEnabled  Boolean @default(false) @map("boleto_installment_enabled")
-  // Teto de parcelas que a revenda pode oferecer (definido pelo Admin Master).
-  boletoInstallmentMaxCount Int     @default(12) @map("boleto_installment_max_count")
 
   // Relacoes
   tenantCourses                TenantCourse[]

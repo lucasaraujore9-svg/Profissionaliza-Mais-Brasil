@@ -10,7 +10,7 @@ export const INSTALLMENT_REVEAL_WINDOW_DAYS = 7
 /** payment_method_id de boleto default no Mercado Pago (payment_type_id `ticket`). */
 export const MP_BOLETO_METHOD_ID = "bolbradesco"
 
-/** Teto absoluto de parcelas (o cap por unidade — boletoInstallmentMaxCount — é ≤ este). */
+/** Teto de parcelas do carnê na venda direta. */
 export const MAX_BOLETO_INSTALLMENTS = 24
 
 /** Mínimo de parcelas para caracterizar um parcelamento. */

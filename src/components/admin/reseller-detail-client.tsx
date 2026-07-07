@@ -49,7 +49,6 @@ import {
   ResellerMonthlyConfig,
   type MonthlyScope,
 } from "./reseller-monthly-config"
-import { ResellerBoletoInstallmentConfig } from "./reseller-boleto-installment-config"
 import { ResellerSubdomainEdit } from "./reseller-subdomain-edit"
 import type { UserRole } from "@prisma/client"
 
@@ -93,9 +92,6 @@ interface DetailResponse {
     monthlyAllowed: boolean
     monthlyEnabled: boolean
     monthlyScope: MonthlyScope
-    boletoInstallmentAllowed: boolean
-    boletoInstallmentEnabled: boolean
-    boletoInstallmentMaxCount: number
     asaasGatewayEnabled: boolean
     asaasConnected: boolean
     salesGateway: "MP" | "ASAAS"
@@ -331,13 +327,6 @@ export function ResellerDetailClient({
               monthlyAllowed={data.reseller.monthlyAllowed}
               monthlyEnabled={data.reseller.monthlyEnabled}
               monthlyScope={data.reseller.monthlyScope}
-              onSaved={load}
-            />
-            <ResellerBoletoInstallmentConfig
-              tenantId={tenantId}
-              boletoInstallmentAllowed={data.reseller.boletoInstallmentAllowed}
-              boletoInstallmentEnabled={data.reseller.boletoInstallmentEnabled}
-              boletoInstallmentMaxCount={data.reseller.boletoInstallmentMaxCount}
               onSaved={load}
             />
             <ResellerAsaasGatewayConfig

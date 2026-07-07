@@ -4,7 +4,8 @@ import { prisma } from "@/lib/prisma"
 import { PageHeader } from "@/components/painel/page-header"
 import { PainelNovaVendaClient } from "@/components/painel/painel-nova-venda-client"
 import { ensureTenantCourses } from "@/lib/tenant/ensure-courses"
-import { coursePaymentType } from "@/lib/tenant/monthly-policy"
+import { coursePaymentType, monthlyActive } from "@/lib/tenant/monthly-policy"
+import { MAX_BOLETO_INSTALLMENTS } from "@/lib/installments/schedule"
 
 export const dynamic = "force-dynamic"
 
@@ -23,9 +24,9 @@ export default async function PainelNovaVendaPage() {
       where: { id: user.tenantId },
       select: {
         salesGateway: true,
-        boletoInstallmentAllowed: true,
-        boletoInstallmentEnabled: true,
-        boletoInstallmentMaxCount: true,
+        monthlyAllowed: true,
+        monthlyEnabled: true,
+        monthlyScope: true,
       },
     }),
     prisma.tenantCourse.findMany({
@@ -46,13 +47,12 @@ export default async function PainelNovaVendaPage() {
       paymentType: coursePaymentType(tc.paymentType),
     }))
 
-  // Carnê (parcelado no boleto) só quando o Admin liberou E a unidade ativou.
+  // Carnê (parcelado no boleto) usa a MESMA capability de mensalidade: quando o
+  // pagamento parcelado está ativo (admin liberou + unidade ativou), o carnê
+  // fica disponível na venda direta. Sem campo/toggle próprio.
   const installmentConfig =
-    tenant?.boletoInstallmentAllowed && tenant?.boletoInstallmentEnabled
-      ? {
-          maxCount: tenant.boletoInstallmentMaxCount,
-          gateway: tenant.salesGateway,
-        }
+    tenant && monthlyActive(tenant)
+      ? { maxCount: MAX_BOLETO_INSTALLMENTS, gateway: tenant.salesGateway }
       : null
 
   return (

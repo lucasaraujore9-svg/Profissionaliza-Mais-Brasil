@@ -19,8 +19,6 @@ export interface ConfigData {
     monthlyAllowed: boolean
     monthlyEnabled: boolean
     monthlyScope: "DIRECT_ONLY" | "DIRECT_AND_VITRINE"
-    boletoInstallmentAllowed: boolean
-    boletoInstallmentEnabled: boolean
     interestFreeInstallments: number
     // Asaas como gateway de vendas da unidade. asaasGatewayEnabled vem do Admin
     // Master; quando false, a seção Asaas nem é renderizada no painel.

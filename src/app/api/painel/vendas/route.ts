@@ -13,7 +13,7 @@ import { upsertStudent, StudentEmailConflictError } from "@/lib/students/upsert"
 import { fulfillScholarshipEnrollment } from "@/lib/enrollment/fulfill"
 import { isValidCpf, stripCpf } from "@/lib/validation/cpf"
 import { isValidPhone, normalizePhone } from "@/lib/validation/phone"
-import { effectivePaymentType } from "@/lib/tenant/monthly-policy"
+import { effectivePaymentType, monthlyActive } from "@/lib/tenant/monthly-policy"
 import { activeCustomDomain, vitrineUrl } from "@/lib/tenant/urls"
 import { tenantPolo } from "@/lib/tenant/slug"
 import { createBoletoInstallmentPlan } from "@/lib/installments/plan"
@@ -157,9 +157,6 @@ export const POST = withRequestContext(
         salesGateway: true,
         asaasConnected: true,
         asaasApiKey: true,
-        boletoInstallmentAllowed: true,
-        boletoInstallmentEnabled: true,
-        boletoInstallmentMaxCount: true,
       },
     })
     if (!tenant) {
@@ -179,9 +176,10 @@ export const POST = withRequestContext(
     // venda da unidade (Asaas gera o carnê nativo; MP emite N boletos avulsos).
     const isInstallment = !isBolsista && !!data.boletoInstallment
     if (isInstallment) {
-      if (!tenant.boletoInstallmentAllowed || !tenant.boletoInstallmentEnabled) {
+      // Carnê usa a MESMA capability de "Pagamento parcelado (mensalidade)".
+      if (!monthlyActive(tenant)) {
         return NextResponse.json(
-          { error: "Venda parcelada no boleto não está habilitada para sua unidade." },
+          { error: "Pagamento parcelado não está habilitado para sua unidade." },
           { status: 403 },
         )
       }
@@ -442,13 +440,9 @@ export const POST = withRequestContext(
     // agora e o cron emite as demais ~7 dias antes de cada vencimento.
     if (isInstallment && data.boletoInstallment) {
       const { count, installmentValue, firstDueDate } = data.boletoInstallment
-      const maxAllowed = Math.min(
-        MAX_BOLETO_INSTALLMENTS,
-        tenant.boletoInstallmentMaxCount,
-      )
-      if (count > maxAllowed) {
+      if (count > MAX_BOLETO_INSTALLMENTS) {
         return NextResponse.json(
-          { error: `Máximo de ${maxAllowed}x para sua unidade.` },
+          { error: `Máximo de ${MAX_BOLETO_INSTALLMENTS}x.` },
           { status: 400 },
         )
       }

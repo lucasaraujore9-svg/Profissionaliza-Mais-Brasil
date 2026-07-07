@@ -391,14 +391,10 @@ export const GET = withRequestContextParams<{ id: string }>(
         canSellResellers: tenant.canSellResellers,
         waConnectedPhone: tenant.waConnectedPhone,
         waStatus: tenant.waStatus,
-        // Pagamento parcelado/mensalidade
+        // Pagamento parcelado/mensalidade (habilita tb. o carnê no boleto)
         monthlyAllowed: tenant.monthlyAllowed,
         monthlyEnabled: tenant.monthlyEnabled,
         monthlyScope: tenant.monthlyScope,
-        // Venda parcelada no boleto (carnê)
-        boletoInstallmentAllowed: tenant.boletoInstallmentAllowed,
-        boletoInstallmentEnabled: tenant.boletoInstallmentEnabled,
-        boletoInstallmentMaxCount: tenant.boletoInstallmentMaxCount,
         // Gateway Asaas da unidade (capability + estado de conexao)
         asaasGatewayEnabled: tenant.asaasGatewayEnabled,
         asaasConnected: tenant.asaasConnected,
