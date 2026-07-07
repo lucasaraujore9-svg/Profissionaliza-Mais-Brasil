@@ -25,16 +25,21 @@ export default async function LojaHomePage() {
 
   const [showcase, bannerSlides] = await Promise.all([
     loadShowcaseCached(tenant.id),
-    prisma.bannerSlide.findMany({
-      where: { tenantId: tenant.id, active: true },
-      orderBy: [{ order: "asc" }, { createdAt: "asc" }],
-      select: {
-        id: true,
-        desktopUrl: true,
-        mobileUrl: true,
-        linkUrl: true,
-      },
-    }),
+    // Resiliência: uma falha transitória do Postgres ao ler os slides do banner
+    // não pode derrubar a vitrine — degrada para "sem banner", e o HeroBanner
+    // cai no hero padrão da unidade (nunca tela preta).
+    prisma.bannerSlide
+      .findMany({
+        where: { tenantId: tenant.id, active: true },
+        orderBy: [{ order: "asc" }, { createdAt: "asc" }],
+        select: {
+          id: true,
+          desktopUrl: true,
+          mobileUrl: true,
+          linkUrl: true,
+        },
+      })
+      .catch(() => []),
   ])
 
   return (

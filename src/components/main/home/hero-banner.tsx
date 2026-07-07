@@ -21,12 +21,11 @@ export function HeroBanner({
   slides,
   courseHrefBase = "/cursos",
 }: HeroBannerProps = {}) {
-  // Hero "imagem-only": substitui completamente o headline + busca + badges.
-  if (slides && slides.length > 0) {
-    return <HeroSlides slides={slides} />
-  }
-
-  return (
+  // Hero padrão da unidade (headline + busca + cards com os cursos/preços da
+  // própria revenda). É o estado quando NÃO há banner de imagem configurado — e
+  // TAMBÉM o fallback quando o banner existe mas suas imagens não carregam (ex.:
+  // Storage 402/indisponível), para a vitrine nunca ficar com a tela preta.
+  const defaultHero = (
     <section className="relative overflow-hidden bg-[var(--color-pmb-green)] text-white">
       <div
         aria-hidden
@@ -107,4 +106,12 @@ export function HeroBanner({
       </div>
     </section>
   )
+
+  // Hero "imagem-only": substitui o hero padrão quando há ≥1 slide ativo. Se
+  // TODAS as imagens do banner falharem ao carregar, o HeroSlides renderiza o
+  // `fallback` (defaultHero) em vez de um bloco preto.
+  if (slides && slides.length > 0) {
+    return <HeroSlides slides={slides} fallback={defaultHero} />
+  }
+  return defaultHero
 }

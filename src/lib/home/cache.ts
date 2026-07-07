@@ -2,6 +2,7 @@ import "server-only"
 import { getJson, setJson, invalidateMany } from "@/lib/redis/cache"
 import { loadHomeSections, type HomeSectionRecord } from "./sections"
 import { loadShowcase, type ShowcaseCard } from "@/lib/catalog/home"
+import { logger } from "@/lib/logger"
 
 /**
  * Cache de DADOS cross-request da home/vitrine (PERF-002).
@@ -43,12 +44,26 @@ export async function loadHomeSectionsCached(
   tenantId: string | null,
 ): Promise<HomeSectionRecord[]> {
   const key = homeSectionsKey(tenantId)
-  const cached = await getJson<HomeSectionRecord[]>(key)
-  if (cached) return cached
-  const fresh = await loadHomeSections(tenantId)
-  // Só grava conjunto não-vazio (evita fixar um estado transitório vazio).
-  if (fresh.length > 0) await setJson(key, fresh, HOME_CACHE_TTL_SECONDS)
-  return fresh
+  try {
+    const cached = await getJson<HomeSectionRecord[]>(key)
+    if (cached) return cached
+    const fresh = await loadHomeSections(tenantId)
+    // Só grava conjunto não-vazio (evita fixar um estado transitório vazio).
+    if (fresh.length > 0) await setJson(key, fresh, HOME_CACHE_TTL_SECONDS)
+    return fresh
+  } catch (err) {
+    // Resiliência (RENDER-only): uma falha transitória do Postgres ao ler as
+    // seções NÃO pode derrubar a vitrine inteira (error boundary "Não
+    // conseguimos carregar a loja"). Degrada para vazio — a home renderiza só o
+    // hero + rodapé — e o TTL/nova visita se recupera sozinho. Só o caminho de
+    // render passa por aqui; as APIs de admin/painel usam loadHomeSections
+    // direto (onde o erro deve propagar).
+    logger.warn(
+      { err: String(err), tenantId, event: "home.sections_cache_failed" },
+      "loadHomeSectionsCached falhou; degradando para vazio",
+    )
+    return []
+  }
 }
 
 /** Showcase (cards do hero) do escopo, com cache Redis (TTL 60s). */

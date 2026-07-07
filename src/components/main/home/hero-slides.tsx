@@ -29,6 +29,25 @@ interface HeroSlidesProps {
   slides: HeroSlide[]
   /** Intervalo do auto-rotate em ms. 0 = desativa. */
   intervalMs?: number
+  /**
+   * Conteúdo exibido quando NENHUMA imagem do banner consegue carregar (ex.:
+   * Storage indisponível/402). Sem ele, um banner com imagens quebradas deixaria
+   * um bloco preto na tela. O caller (`HeroBanner`) passa o hero padrão da
+   * unidade — com os cursos/preços da própria revenda — como fallback.
+   */
+  fallback?: React.ReactNode
+}
+
+/**
+ * `true` quando TODAS as imagens do banner falharam ao carregar. Usado para cair
+ * no hero padrão em vez de exibir um bloco preto (banner sem imagem utilizável).
+ * Pura de propósito — a decisão é unit-testável sem DOM.
+ */
+export function allBannersFailed(
+  failed: ReadonlySet<number>,
+  total: number,
+): boolean {
+  return total > 0 && failed.size >= total
 }
 
 /**
@@ -41,9 +60,16 @@ interface HeroSlidesProps {
  * container assume a altura natural da imagem e o crossfade acontece por opacity
  * sem recortar nada.
  */
-export function HeroSlides({ slides, intervalMs = 6000 }: HeroSlidesProps) {
+export function HeroSlides({
+  slides,
+  intervalMs = 6000,
+  fallback = null,
+}: HeroSlidesProps) {
   const [index, setIndex] = useState(0)
   const [paused, setPaused] = useState(false)
+  // Índices dos slides cuja imagem falhou ao carregar (onError). Quando todos
+  // falham, cai no `fallback` (hero padrão) — nunca deixa a tela preta.
+  const [failed, setFailed] = useState<ReadonlySet<number>>(() => new Set())
   const total = slides.length
 
   // Respeita prefers-reduced-motion: desativa auto-rotação se o usuário preferir.
@@ -58,13 +84,25 @@ export function HeroSlides({ slides, intervalMs = 6000 }: HeroSlidesProps) {
     return () => window.clearInterval(id)
   }, [total, intervalMs, autoRotate])
 
-  if (total === 0) return null
+  if (total === 0) return <>{fallback}</>
+
+  // Todas as imagens quebraram (ex.: Storage 402/indisponível): em vez de um
+  // bloco preto, renderiza o hero padrão da unidade.
+  if (allBannersFailed(failed, total)) return <>{fallback}</>
+
+  const markFailed = (i: number) =>
+    setFailed((prev) => {
+      if (prev.has(i)) return prev
+      const next = new Set(prev)
+      next.add(i)
+      return next
+    })
 
   return (
     <section
       aria-label="Banner principal"
       aria-roledescription="carousel"
-      className="relative w-full overflow-hidden bg-black"
+      className="relative w-full overflow-hidden bg-[var(--color-pmb-green)]"
     >
       {/* Slides empilhados na mesma célula: o container assume a altura natural
           da imagem (full width, sem corte). Mobile (<768px) usa a imagem 1:1. */}
@@ -80,6 +118,7 @@ export function HeroSlides({ slides, intervalMs = 6000 }: HeroSlidesProps) {
                 className="block h-auto w-full"
                 loading={i === 0 ? "eager" : "lazy"}
                 draggable={false}
+                onError={() => markFailed(i)}
               />
             </picture>
           )

@@ -26,6 +26,7 @@ import { prisma } from "@/lib/prisma"
 import { getSystemSettings } from "@/lib/system-settings"
 import { interestFreePhrase } from "@/lib/mercadopago/installments"
 import { getSupportContacts, buildTenantSupportContacts } from "@/lib/branding"
+import { logger } from "@/lib/logger"
 
 interface DynamicHomeSectionsProps {
   tenantId: string | null
@@ -70,7 +71,24 @@ export async function DynamicHomeSections({
         onNewBestsellersSnapshot: (snap) => {
           snapshotHolder.current = snap
         },
-      }).then((node) => ({ id: section.id, node })),
+      })
+        .then((node) => ({ id: section.id, node }))
+        // Resiliência: uma seção que falha (ex.: query transitória do Postgres)
+        // é apenas OMITIDA — não pode rejeitar o Promise.all e derrubar a
+        // vitrine inteira. As demais seções seguem renderizando normalmente.
+        .catch((err) => {
+          logger.warn(
+            {
+              err: String(err),
+              tenantId,
+              sectionId: section.id,
+              kind: section.kind,
+              event: "home.section_render_failed",
+            },
+            "seção da home falhou ao renderizar; omitindo",
+          )
+          return { id: section.id, node: null as React.ReactNode }
+        }),
     ),
   )
   const nodes = rendered.filter(
@@ -207,14 +225,20 @@ async function renderSection(
  * (home institucional). Default 1 (= sem parcelamento sem juros) quando ausente.
  */
 async function resolveInterestFree(tenantId: string | null): Promise<number> {
-  if (!tenantId) {
-    return (await getSystemSettings()).pmbInterestFreeInstallments
+  // Resiliência: falha transitória aqui vira o default (1 = sem parcelamento sem
+  // juros) — o selo de parcelamento não pode derrubar a home inteira.
+  try {
+    if (!tenantId) {
+      return (await getSystemSettings()).pmbInterestFreeInstallments
+    }
+    const t = await prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { interestFreeInstallments: true },
+    })
+    return t?.interestFreeInstallments ?? 1
+  } catch {
+    return 1
   }
-  const t = await prisma.tenant.findUnique({
-    where: { id: tenantId },
-    select: { interestFreeInstallments: true },
-  })
-  return t?.interestFreeInstallments ?? 1
 }
 
 /**
@@ -228,11 +252,17 @@ async function resolveInterestFree(tenantId: string | null): Promise<number> {
 async function resolveSupportHours(
   tenantId: string | null,
 ): Promise<string | null> {
-  if (!tenantId) return getSupportContacts().hours
-  const t = await prisma.tenant.findUnique({
-    where: { id: tenantId },
-    select: { supportHours: true },
-  })
-  return buildTenantSupportContacts({ supportHours: t?.supportHours ?? null })
-    .hours
+  // Resiliência: falha transitória vira `null` (a linha some, igual a quando não
+  // há horário configurado) — não pode derrubar a home.
+  try {
+    if (!tenantId) return getSupportContacts().hours
+    const t = await prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { supportHours: true },
+    })
+    return buildTenantSupportContacts({ supportHours: t?.supportHours ?? null })
+      .hours
+  } catch {
+    return null
+  }
 }

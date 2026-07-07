@@ -9,16 +9,20 @@ export const dynamic = "force-dynamic"
 export default async function LandingPage() {
   const [showcase, bannerSlides] = await Promise.all([
     loadShowcaseCached(null),
-    prisma.bannerSlide.findMany({
-      where: { tenantId: null, active: true },
-      orderBy: [{ order: "asc" }, { createdAt: "asc" }],
-      select: {
-        id: true,
-        desktopUrl: true,
-        mobileUrl: true,
-        linkUrl: true,
-      },
-    }),
+    // Resiliência: falha transitória do Postgres ao ler o banner não pode
+    // derrubar a home — degrada para "sem banner" e cai no hero padrão.
+    prisma.bannerSlide
+      .findMany({
+        where: { tenantId: null, active: true },
+        orderBy: [{ order: "asc" }, { createdAt: "asc" }],
+        select: {
+          id: true,
+          desktopUrl: true,
+          mobileUrl: true,
+          linkUrl: true,
+        },
+      })
+      .catch(() => []),
   ])
 
   return (
