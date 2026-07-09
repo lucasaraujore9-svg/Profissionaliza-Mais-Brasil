@@ -357,7 +357,7 @@ export function CourseDetailView({
             {/* Certificado */}
             <div className="overflow-hidden rounded-2xl border border-[rgba(2,89,24,0.1)] bg-gradient-to-br from-[var(--color-pmb-green)] to-[var(--color-pmb-green-900)] p-6 text-white md:p-8">
               <div className="flex items-start gap-4">
-                <span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-white/15 backdrop-blur">
+                <span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-white/20">
                   <GraduationCap className="h-6 w-6 text-[var(--color-pmb-gold)]" aria-hidden />
                 </span>
                 <div>

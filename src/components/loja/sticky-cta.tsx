@@ -8,8 +8,11 @@ interface StickyCTAProps {
 }
 
 export function StickyCTA({ href, preco, parcelas }: StickyCTAProps) {
+  // bg opaco sem backdrop-blur: um `position: fixed` com `backdrop-filter`
+  // reamostra a pagina inteira a cada frame de scroll e e um gatilho forte de
+  // trilhas de repaint no Android. bg-white solido fica visualmente igual.
   return (
-    <div className="fixed inset-x-0 bottom-0 z-40 border-t border-gray-200 bg-white/95 px-4 py-3 shadow-lg backdrop-blur lg:hidden">
+    <div className="fixed inset-x-0 bottom-0 z-40 border-t border-gray-200 bg-white px-4 py-3 shadow-lg lg:hidden">
       <div className="flex items-center justify-between gap-3">
         <div>
           <div className="font-mono text-lg font-bold text-[var(--color-pmb-green-900)]">{preco}</div>

@@ -228,7 +228,7 @@ function LearnAnywhereVariant({ config }: { config: InstitutionalConfig }) {
 
             <div className="relative flex h-full flex-col justify-between gap-6 p-8">
               <div className="flex items-center gap-2 text-white/85">
-                <span className="grid h-9 w-9 place-items-center rounded-xl bg-white/15 backdrop-blur">
+                <span className="grid h-9 w-9 place-items-center rounded-xl bg-white/20">
                   <Smartphone
                     className="h-4 w-4 text-white"
                     strokeWidth={2.5}
@@ -251,7 +251,7 @@ function LearnAnywhereVariant({ config }: { config: InstitutionalConfig }) {
                 </p>
               </div>
 
-              <div className="flex items-center gap-3 rounded-2xl bg-white/10 p-3 backdrop-blur">
+              <div className="flex items-center gap-3 rounded-2xl bg-white/15 p-3">
                 <div className="h-12 w-12 shrink-0 rounded-xl bg-[var(--color-pmb-gold)]" />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-[13px] font-bold text-white">

@@ -110,7 +110,11 @@ export function TecnicaSection({
                     )}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="group relative flex h-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-white/[0.04] backdrop-blur-sm transition hover:-translate-y-0.5 hover:border-[var(--color-pmb-gold,#F2B705)]/60 hover:bg-white/[0.08]"
+                    // Sem backdrop-blur: `backdrop-filter` numa area grande (o card
+                    // inteiro) sobre a secao que rola dispara trilhas de repaint no
+                    // scroll do Android. O tint solido bg-white/[0.06] mantem o
+                    // efeito "vidro" sobre o gradiente escuro sem o gatilho.
+                    className="group relative flex h-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-white/[0.06] transition hover:-translate-y-0.5 hover:border-[var(--color-pmb-gold,#F2B705)]/60 hover:bg-white/[0.1]"
                   >
                     {/* Capa fixa do curso (padronizada PMB) + selos sobrepostos.
                         Sem imagem cadastrada => fundo neutro com ícone. */}

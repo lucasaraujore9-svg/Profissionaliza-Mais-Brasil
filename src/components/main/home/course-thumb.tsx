@@ -85,7 +85,12 @@ export function CourseThumb({
           unoptimized={shouldUnoptimizeImage(imageUrl)}
         />
         {hours && (
-          <div className="absolute bottom-2 right-3 rounded-md bg-black/55 px-2 py-0.5 text-[10px] font-bold text-white backdrop-blur-sm">
+          // NAO usar backdrop-blur aqui: `backdrop-filter` num badge sobre a
+          // thumbnail dispara o bug de repaint no scroll do Android Chrome/WebView
+          // — a regiao do filtro reamostra o fundo e "carimba" copias defasadas do
+          // texto vizinho (titulo/preco), gerando os fantasmas empilhados no mobile.
+          // Fundo solido (bg-black/60) da a mesma legibilidade sem o gatilho.
+          <div className="absolute bottom-2 right-3 rounded-md bg-black/60 px-2 py-0.5 text-[10px] font-bold text-white">
             {hours}
           </div>
         )}
@@ -144,8 +149,11 @@ export function CourseThumb({
       </div>
 
       {hours && (
+        // Sem backdrop-blur (ver nota no branch com imagem). Sobre o gradiente
+        // colorido o texto branco precisa de um pouco mais de contraste que o
+        // /20 anterior — bg-black/40 compensa a ausencia do blur.
         <div
-          className="absolute bottom-2 right-3 rounded-md bg-black/20 px-2 py-0.5 text-[10px] font-bold text-white backdrop-blur-sm"
+          className="absolute bottom-2 right-3 rounded-md bg-black/40 px-2 py-0.5 text-[10px] font-bold text-white"
         >
           {hours}
         </div>
