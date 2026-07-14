@@ -61,3 +61,70 @@ describe("proxy — logging Edge-safe de fail-open (OBS-007)", () => {
     expect(errorEvents).toContain("proxy.tenant.db_failopen")
   })
 })
+
+// Incidente vanguardacursos (2026-07): custom domain anexado na Vercel mas SEM
+// certificado emitido. O self-fetch de resolução usava o origin do request
+// (https://{customDomain}) → handshake TLS falhava → fail-open → o site PMB
+// inteiro era servido sob o domínio da revenda. O contrato agora: na Vercel o
+// fetch de resolução vai SEMPRE para o host canônico www.{appDomain} (cert
+// sempre válido), nunca para o custom domain do visitante.
+describe("proxy — custom domain resolve via origem canônica (não o próprio host)", () => {
+  beforeEach(() => {
+    process.env.VERCEL = "1"
+    process.env.INTERNAL_SECRET = "secret"
+    delete process.env.UPSTASH_REDIS_REST_URL
+    delete process.env.UPSTASH_REDIS_REST_TOKEN
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+    process.env = { ...ORIGINAL_ENV }
+  })
+
+  it("resolve o tenant pelo host canônico e reescreve a vitrine para /loja", async () => {
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL) =>
+      new Response(
+        JSON.stringify({ id: "t1", slug: "vanguardacursos", status: "ACTIVE" }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    )
+    vi.stubGlobal("fetch", fetchMock)
+
+    const res = await proxy(
+      new NextRequest("https://vanguardacursos.com.br/", {
+        headers: { host: "vanguardacursos.com.br" },
+      }),
+    )
+
+    // Nenhuma chamada de resolução pode ter como origem o custom domain do
+    // visitante (é exatamente o host cujo TLS pode não existir ainda).
+    const urls = fetchMock.mock.calls.map((c) => String(c[0]))
+    expect(urls.length).toBeGreaterThan(0)
+    for (const url of urls) {
+      expect(url).toMatch(
+        /^https:\/\/www\.profissionalizamaisbrasil\.com\.br\/api\/internal\/resolve-tenant\?/,
+      )
+    }
+
+    expect(res.headers.get("x-middleware-rewrite")).toContain("/loja")
+    expect(res.headers.get("x-middleware-request-x-tenant-slug")).toBe(
+      "vanguardacursos",
+    )
+  })
+
+  it("*.vercel.app é host interno do app: nem lookup de custom domain, nem 404", async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal("fetch", fetchMock)
+
+    const res = await proxy(
+      new NextRequest("https://profissionaliza-mais-brasil.vercel.app/", {
+        headers: { host: "profissionaliza-mais-brasil.vercel.app" },
+      }),
+    )
+
+    expect(res.status).toBe(200)
+    expect(res.headers.get("x-middleware-rewrite")).toBeNull()
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+})

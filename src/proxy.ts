@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { isVitrinePath } from "@/lib/tenant/vitrine-paths"
+import { apexDomain, appDomain } from "@/lib/tenant/urls"
 
 // ============================================================
 // Arquitetura de dominios (multi-tenant)
@@ -117,6 +118,15 @@ export function matchApex(hostname: string, apex: string): HostInfo | null {
 }
 
 export function classifyHost(hostname: string): HostInfo {
+  // 0) Deploy URLs da Vercel (alias do projeto + previews) sao hosts internos
+  //    do app PMB, nunca tenants nem custom domains. Sem este carve-out eles
+  //    caem no lookup de custom domain: o alias estavel tomava o 404 de
+  //    "dominio nao configurado" e previews so renderizavam por acidente do
+  //    fail-open (o fetch de resolucao batia no muro SSO da Vercel).
+  if (stripPort(hostname).endsWith(".vercel.app")) {
+    return { kind: "app", apex: stripPort(hostname), subdomain: null }
+  }
+
   // 1) App domain (site PMB) — subdominios aqui sao sempre reservados,
   //    NUNCA tenants. Isso isola o site institucional/admin de vitrines.
   for (const apex of APP_DOMAINS) {
@@ -229,6 +239,20 @@ type ResolveResult =
   | { ok: true; redirectSlug: string }
   | { ok: false; reason: "not_found" | "error" }
 
+// Origem do self-fetch de resolucao (/api/internal/resolve-tenant). Na Vercel
+// NUNCA usamos o origin do request: quando o host e um custom domain cujo
+// certificado TLS ainda nao foi emitido, o fetch https para o proprio dominio
+// falha no handshake → catch → fail-open → o site PMB inteiro e servido sob o
+// dominio da revenda (incidente vanguardacursos, 2026-07). O host canonico
+// www.{appDomain} sempre tem cert valido e serve /api/internal/* direto (o
+// apex responde 307 → www, por isso forcamos o www — mesma razao do
+// webhookBaseUrl em lib/tenant/urls). Fora da Vercel (dev local/testes), o
+// origin do request (localhost) continua sendo o correto.
+function internalResolveOrigin(requestOrigin: string): string {
+  if (!process.env.VERCEL) return requestOrigin
+  return `https://www.${apexDomain(appDomain())}`
+}
+
 async function resolveTenantFromDB(
   identifier: string,
   type: "slug" | "domain",
@@ -239,7 +263,7 @@ async function resolveTenantFromDB(
 
   try {
     const res = await fetch(
-      `${origin}/api/internal/resolve-tenant?${type}=${encodeURIComponent(identifier)}`,
+      `${internalResolveOrigin(origin)}/api/internal/resolve-tenant?${type}=${encodeURIComponent(identifier)}`,
       {
         headers: { "x-internal-secret": internalSecret },
       }

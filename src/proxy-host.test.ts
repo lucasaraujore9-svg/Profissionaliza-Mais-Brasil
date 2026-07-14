@@ -84,6 +84,20 @@ describe("classifyHost — dev local e domínio custom", () => {
   })
 })
 
+describe("classifyHost — deploy URLs da Vercel", () => {
+  it("alias do projeto (*.vercel.app) → app, nunca custom domain", () => {
+    expect(classifyHost("profissionaliza-mais-brasil.vercel.app")).toMatchObject({
+      kind: "app",
+      subdomain: null,
+    })
+  })
+  it("preview deployment (*.vercel.app) → app", () => {
+    expect(
+      classifyHost("profissionaliza-mais-brasil-git-feat-x-lucas.vercel.app"),
+    ).toMatchObject({ kind: "app" })
+  })
+})
+
 describe("matchApex", () => {
   it("apex exato → app sem subdomínio", () => {
     expect(matchApex("exemplo.com", "exemplo.com")).toMatchObject({ kind: "app", subdomain: null })
