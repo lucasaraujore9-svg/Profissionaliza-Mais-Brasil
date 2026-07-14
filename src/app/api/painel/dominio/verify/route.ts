@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { requireResellerSession } from "@/lib/auth/reseller-session"
 import { verifyProjectDomain } from "@/lib/vercel/client"
 import { resolveCustomDomainStatus } from "@/lib/vercel/domain-status"
+import { ensureCustomDomainCert } from "@/lib/vercel/ensure-cert"
 import { customDomainVariants } from "@/lib/tenant/urls"
 import { invalidateTenant } from "@/lib/redis/tenant-cache"
 import { swallow } from "@/lib/errors"
@@ -41,6 +42,17 @@ export const POST = withRequestContext(
       // Fonte da verdade: os 2 registros precisam estar apontados (DNS) E
       // verificados (posse) para o domínio ser aplicado (domainVerified=true).
       const resolved = await resolveCustomDomainStatus(tenant.customDomain)
+
+      // DNS apontado ≠ https funcionando: se o domínio foi anexado antes do
+      // apontamento, a Vercel pode nunca emitir o cert (incidente
+      // vanguardacursos). O clique em "verificar" é o momento em que o DNS
+      // acabou de ficar ok — garante a emissão aqui, best-effort (o cron
+      // ensure-domain-certs cobre o resto).
+      if (resolved.pointed) {
+        await ensureCustomDomainCert(tenant.customDomain).catch(
+          swallow("painel.dominio.verify.cert"),
+        )
+      }
 
       await prisma.tenant
         .update({

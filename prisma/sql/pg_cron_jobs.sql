@@ -91,3 +91,11 @@ select cron.schedule('pmb-reconcile-tenant-payments', '0 8 * * *',
 -- Diário 07:30 UTC (04:30 BRT), logo após os demais sweeps. Idempotente.
 select cron.schedule('pmb-sweep-boleto-installments', '30 7 * * *',
   $$ select app_internal.run_cron('/api/cron/sweep-boleto-installments') $$);
+
+-- ── Certificados TLS de dominios proprios ───────────────────────────────────
+-- A Vercel so emite o cert sozinha quando o DNS ja aponta no momento do anexo;
+-- revendedor que aponta DEPOIS pode ficar sem cert para sempre (incidente
+-- vanguardacursos: https morto, navegador caia no http). Reconciliacao diaria:
+-- emite o cert de quem apontou e ainda nao tem. Idempotente. 09:00 UTC.
+select cron.schedule('pmb-ensure-domain-certs', '0 9 * * *',
+  $$ select app_internal.run_cron('/api/cron/ensure-domain-certs') $$);

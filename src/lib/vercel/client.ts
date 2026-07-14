@@ -154,3 +154,39 @@ export async function getDomainConfig(
     { method: "GET" },
   )
 }
+
+export interface VercelCert {
+  uid: string
+  cns: string[]
+  expiresAt?: number
+  autoRenew?: boolean
+}
+
+// Certificados TLS que cobrem um host (nivel conta/time). A busca por
+// `?domain=` casa qualquer cert cujos CNs incluam o host — um cert multi-SAN
+// (apex + www) aparece na consulta das duas variantes.
+// GET /v4/certs?domain={host} → { certs: [...] }
+export async function listCertsForDomain(
+  domain: string,
+): Promise<VercelCert[]> {
+  getConfig()
+  const res = await vercelFetch<{ certs?: VercelCert[] }>(
+    `/v4/certs?domain=${encodeURIComponent(domain)}`,
+    { method: "GET" },
+  )
+  return res.certs ?? []
+}
+
+// Emissao explicita de certificado (Let's Encrypt via http-01) para os CNs
+// dados. A Vercel emite sozinha ao anexar o dominio SE o DNS ja aponta; quando
+// o revendedor aponta DEPOIS do anexo, a emissao pode nunca acontecer
+// (incidente vanguardacursos: 25 dias anexado sem cert → https morto e o
+// navegador caia no http). Este POST cobre exatamente esse caso.
+// POST /v7/certs {cns} → cert emitido (com autoRenew).
+export async function issueCert(cns: string[]): Promise<VercelCert> {
+  getConfig()
+  return vercelFetch<VercelCert>("/v7/certs", {
+    method: "POST",
+    body: JSON.stringify({ cns }),
+  })
+}
