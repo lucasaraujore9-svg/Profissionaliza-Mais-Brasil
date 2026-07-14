@@ -99,23 +99,32 @@ export function Testimonials() {
         </div>
       </div>
 
-      {/* Carrossel infinito: mascara nas laterais + track animada.
-          Mobile: ~1 card visivel; sm: ~2; md: ~3; lg+: 4 simultaneos. */}
+      {/* Carrossel infinito: fade nas laterais + track animada.
+          Mobile: ~1 card visivel; sm: ~2; md: ~3; lg+: 4 simultaneos.
+          NAO usar mask-image aqui: uma mascara no ancestral impede o track
+          animado de rodar 100% no compositor e forca re-rasterizacao continua
+          da faixa inteira a cada frame — em GPUs Android com invalidacao
+          bugada isso "carimba" copias fantasmas do conteudo da pagina durante
+          o scroll (mesma familia do bug do backdrop-filter nos badges). O fade
+          lateral vira overlay de gradiente, visualmente identico. */}
       <div
         className="relative w-full"
         style={
           {
-            // Mascara suave nas bordas para destacar que o conteudo continua.
-            maskImage:
-              "linear-gradient(90deg, transparent 0, #000 80px, #000 calc(100% - 80px), transparent 100%)",
-            WebkitMaskImage:
-              "linear-gradient(90deg, transparent 0, #000 80px, #000 calc(100% - 80px), transparent 100%)",
             // Duracao proporcional ao numero de itens (mais itens = roda mais
             // devagar pra cada card ficar tempo legivel em tela)
             "--pmb-marquee-duration": "55s",
           } as React.CSSProperties
         }
       >
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-y-0 left-0 z-10 w-20 bg-gradient-to-r from-[var(--color-pmb-mist)] to-transparent"
+        />
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-y-0 right-0 z-10 w-20 bg-gradient-to-l from-[var(--color-pmb-mist)] to-transparent"
+        />
         <ul
           className="animate-pmb-marquee flex w-max gap-5 pb-10"
           aria-label="Depoimentos de alunos"

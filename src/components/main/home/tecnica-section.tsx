@@ -43,15 +43,17 @@ export function TecnicaSection({
     <section className="bg-white">
       <div className="mx-auto max-w-[1280px] px-4 py-10 md:px-6 md:py-14">
         <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#013d10] via-[var(--color-pmb-green,#025918)] to-[#013d10] p-6 shadow-[0_30px_60px_-30px_rgba(2,89,24,0.5)] sm:p-8 md:p-12">
-          {/* Glow decorativo dourado (canto direito superior) */}
+          {/* Glows decorativos via radial-gradient, sem `filter: blur`:
+              blur num elemento grande re-rasteriza a area a cada scroll em
+              GPUs Android bugadas (mesma familia dos fantasmas do
+              backdrop-filter). O gradiente pinta o mesmo halo suave. */}
           <div
             aria-hidden
-            className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-[var(--color-pmb-gold,#F2B705)] opacity-25 blur-3xl"
+            className="pointer-events-none absolute -right-40 -top-40 h-[26rem] w-[26rem] opacity-25 [background:radial-gradient(closest-side,var(--color-pmb-gold,#F2B705),transparent)]"
           />
-          {/* Glow decorativo lime (canto esquerdo inferior) */}
           <div
             aria-hidden
-            className="pointer-events-none absolute -left-20 -bottom-24 h-72 w-72 rounded-full bg-[var(--color-pmb-lime,#C0D904)] opacity-20 blur-3xl"
+            className="pointer-events-none absolute -left-36 -bottom-40 h-[26rem] w-[26rem] opacity-20 [background:radial-gradient(closest-side,var(--color-pmb-lime,#C0D904),transparent)]"
           />
 
           <div className="relative">

@@ -43,7 +43,9 @@ export const metadata = {
 function PageShell({ children }: { children: React.ReactNode }) {
   return (
     <main className="min-h-screen bg-[var(--color-pmb-mist)]">
-      <header className="border-b border-black/5 bg-white/70 backdrop-blur">
+      {/* Sem backdrop-blur: gatilho de fantasmas de repaint no Android
+          (mesma classe do bug dos badges da vitrine). Fundo solido equivale. */}
+      <header className="border-b border-black/5 bg-white">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
           <Link href="/" className="flex items-center gap-3">
             <Image
@@ -207,7 +209,7 @@ export default async function ValidateCertificatePage({ params }: Props) {
       <PageShell>
         <section className="overflow-hidden rounded-3xl border border-rose-200/70 bg-white shadow-sm">
           <div className="flex items-center gap-4 bg-gradient-to-r from-rose-500 to-rose-600 px-6 py-5 text-white sm:px-8">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white/15 backdrop-blur">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white/20">
               <SearchIcon className="h-6 w-6" />
             </div>
             <div>
@@ -313,7 +315,7 @@ export default async function ValidateCertificatePage({ params }: Props) {
               : "bg-gradient-to-r from-[var(--color-pmb-green)] to-[var(--color-pmb-green-700)]"
           }`}
         >
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white/15 backdrop-blur">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white/20">
             {isRevoked ? (
               <XIcon className="h-6 w-6" />
             ) : (
