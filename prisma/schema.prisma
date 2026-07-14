@@ -125,6 +125,10 @@ model User {
   role          UserRole  @default(RESELLER)
   status        String    @default("ATIVO") // ATIVO / INATIVO / PENDING_INVITE
   phone         String?
+  // CPF do titular (11 digitos, sem mascara) — identificador ALTERNATIVO de
+  // login (o primario segue sendo email). Unique para o login por CPF ser
+  // deterministico; nullable porque contas antigas nao coletavam o dado.
+  cpf           String?   @unique
   emailVerified DateTime? @map("email_verified")
   image         String?
   lastActiveAt  DateTime? @map("last_active_at")

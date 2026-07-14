@@ -1,16 +1,10 @@
 import { NextResponse } from "next/server"
-import { z } from "zod"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { mpWebhookUrl, asaasWebhookUrl } from "@/lib/tenant/urls"
 import { forbiddenNameError } from "@/lib/tenant/forbidden-names"
-
-const updateSchema = z.object({
-  name: z.string().trim().min(3, "Nome muito curto").max(120),
-  email: z.string().trim().toLowerCase().email("Email inválido").max(160),
-  companyName: z.string().trim().min(2).max(160),
-})
+import { painelConfigUpdateSchema } from "@/lib/schemas/painel-config"
 
 async function requireResellerSession() {
   const session = await auth()
@@ -33,7 +27,7 @@ export const GET = withRequestContext(
 
     const user = await prisma.user.findUnique({
       where: { id: ctx.userId },
-      select: { id: true, name: true, email: true },
+      select: { id: true, name: true, email: true, cpf: true },
     })
     const tenant = await prisma.tenant.findUnique({
       where: { id: ctx.tenantId },
@@ -106,7 +100,7 @@ export const PUT = withRequestContext(
       return NextResponse.json({ error: "JSON inválido" }, { status: 400 })
     }
 
-    const parsed = updateSchema.safeParse(payload)
+    const parsed = painelConfigUpdateSchema.safeParse(payload)
     if (!parsed.success) {
       return NextResponse.json(
         {
@@ -139,10 +133,33 @@ export const PUT = withRequestContext(
       )
     }
 
+    // CPF é unique (login determinístico): se já pertence a OUTRA conta,
+    // devolve conflito claro em vez de estourar P2002 no update.
+    if (parsed.data.cpf) {
+      const cpfTaken = await prisma.user.findFirst({
+        where: { cpf: parsed.data.cpf, NOT: { id: ctx.userId } },
+        select: { id: true },
+      })
+      if (cpfTaken) {
+        return NextResponse.json(
+          {
+            error: "CPF já está em uso em outra conta",
+            code: "CPF_TAKEN",
+            fields: { cpf: ["CPF já está em uso em outra conta"] },
+          },
+          { status: 409 },
+        )
+      }
+    }
+
     await prisma.$transaction([
       prisma.user.update({
         where: { id: ctx.userId },
-        data: { name: parsed.data.name, email: parsed.data.email },
+        data: {
+          name: parsed.data.name,
+          email: parsed.data.email,
+          cpf: parsed.data.cpf,
+        },
       }),
       prisma.tenant.update({
         where: { id: ctx.tenantId },

@@ -18,6 +18,7 @@ type SubmitStatus = "idle" | "submitting" | "success" | "error"
 export function AccountForm({ data, onUpdate }: AccountFormProps) {
   const [name, setName] = useState(data.user.name)
   const [email, setEmail] = useState(data.user.email)
+  const [cpf, setCpf] = useState(data.user.cpf ?? "")
   const [companyName, setCompanyName] = useState(data.tenant.name)
   const [status, setStatus] = useState<SubmitStatus>("idle")
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -42,7 +43,7 @@ export function AccountForm({ data, onUpdate }: AccountFormProps) {
       const response = await fetch("/api/painel/config", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, companyName }),
+        body: JSON.stringify({ name, email, companyName, cpf }),
       })
       const json = await response.json()
 
@@ -62,7 +63,7 @@ export function AccountForm({ data, onUpdate }: AccountFormProps) {
       }
 
       onUpdate({
-        user: { ...data.user, name, email },
+        user: { ...data.user, name, email, cpf: cpf.replace(/\D/g, "") || null },
         tenant: { ...data.tenant, name: companyName },
       })
       setStatus("success")
@@ -106,6 +107,23 @@ export function AccountForm({ data, onUpdate }: AccountFormProps) {
           />
           {errors.email && (
             <p className="mt-1 text-xs text-red-600">{errors.email}</p>
+          )}
+        </div>
+        <div>
+          <Label htmlFor="cfg-cpf">CPF</Label>
+          <Input
+            id="cfg-cpf"
+            inputMode="numeric"
+            placeholder="000.000.000-00"
+            value={cpf}
+            onChange={(e) => setCpf(e.target.value)}
+            className="mt-1.5"
+          />
+          <p className="mt-1 text-xs text-gray-500">
+            Com o CPF cadastrado você também pode usá-lo para entrar na conta.
+          </p>
+          {errors.cpf && (
+            <p className="mt-1 text-xs text-red-600">{errors.cpf}</p>
           )}
         </div>
         <div className="md:col-span-2">

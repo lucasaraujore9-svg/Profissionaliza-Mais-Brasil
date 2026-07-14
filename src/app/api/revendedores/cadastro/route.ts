@@ -114,6 +114,24 @@ export const POST = withRequestContext(
   const cnpjDigits = stripDigits(empresa.cnpj)
   const phoneDigits = stripDigits(pessoal.telefone)
 
+  // CPF do responsável vira identificador alternativo de login (User.cpf,
+  // unique). Antes era coletado e DESCARTADO — o dono tentava logar com CPF e
+  // falhava. Se o CPF já pertence a outra conta (ex.: mesma pessoa abrindo uma
+  // segunda unidade com outro email), o cadastro segue SEM o cpf — bloquear a
+  // criação por isso derrubaria um caso legítimo; o login dessa conta fica por
+  // email.
+  const cpfDigits = stripDigits(pessoal.cpf)
+  const cpfTaken = await prisma.user.findUnique({
+    where: { cpf: cpfDigits },
+    select: { id: true },
+  })
+  if (cpfTaken) {
+    contextLogger().warn(
+      { event: "revendedores.cadastro.cpf_taken", slug },
+      "CPF do responsável já pertence a outra conta — cadastro segue sem cpf",
+    )
+  }
+
   let asaasCustomer: Awaited<ReturnType<typeof createCustomer>>
   try {
     asaasCustomer = await createCustomer({
@@ -183,6 +201,7 @@ export const POST = withRequestContext(
           passwordHash,
           role: "RESELLER",
           tenantId: tenant.id,
+          cpf: cpfTaken ? null : cpfDigits,
         },
       })
 

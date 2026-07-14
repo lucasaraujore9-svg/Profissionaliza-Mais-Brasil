@@ -4,7 +4,8 @@
 // (que importava ConfigData de volta do pai) — COD-004.
 
 export interface ConfigData {
-  user: { id: string; name: string; email: string }
+  // cpf: 11 dígitos sem máscara (identificador alternativo de login) ou null.
+  user: { id: string; name: string; email: string; cpf: string | null }
   tenant: {
     id: string
     name: string
