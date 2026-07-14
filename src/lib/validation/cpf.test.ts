@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { isValidCpf, stripCpf } from "./cpf"
+import { cpfFromDocument, isValidCpf, stripCpf } from "./cpf"
 
 describe("stripCpf", () => {
   it("remove máscara, mantém só dígitos", () => {
@@ -26,5 +26,24 @@ describe("isValidCpf", () => {
   it("rejeita tamanho inválido", () => {
     expect(isValidCpf("123")).toBe(false)
     expect(isValidCpf("")).toBe(false)
+  })
+})
+
+// Criação de revenda: ownerCpfCnpj (documento de cobrança) só vira User.cpf
+// (identificador de login) quando é um CPF válido — CNPJ fica só no Asaas.
+describe("cpfFromDocument", () => {
+  it("CPF válido (com ou sem máscara) → 11 dígitos normalizados", () => {
+    expect(cpfFromDocument("529.982.247-25")).toBe("52998224725")
+    expect(cpfFromDocument("52998224725")).toBe("52998224725")
+  })
+
+  it("CNPJ → null (nunca vira identificador de login)", () => {
+    expect(cpfFromDocument("12.345.678/0001-95")).toBeNull()
+    expect(cpfFromDocument("12345678000195")).toBeNull()
+  })
+
+  it("CPF inválido ou vazio → null", () => {
+    expect(cpfFromDocument("123.456.789-00")).toBeNull()
+    expect(cpfFromDocument("")).toBeNull()
   })
 })

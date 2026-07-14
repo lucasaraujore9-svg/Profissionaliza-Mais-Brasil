@@ -16,6 +16,17 @@ export function stripCpf(value: string): string {
   return value.replace(/\D/g, "")
 }
 
+/**
+ * Extrai o CPF (11 dígitos, sem máscara) de um documento de cobrança que pode
+ * ser CPF OU CNPJ (ex.: `ownerCpfCnpj` na criação de revenda). Retorna null
+ * quando o valor não é um CPF válido — um CNPJ nunca vira identificador de
+ * login (o authorize só consulta User.cpf com CPF validado).
+ */
+export function cpfFromDocument(value: string): string | null {
+  const digits = stripCpf(value)
+  return isValidCpf(digits) ? digits : null
+}
+
 export function isValidCpf(value: string): boolean {
   const cpf = stripCpf(value)
   if (cpf.length !== 11) return false

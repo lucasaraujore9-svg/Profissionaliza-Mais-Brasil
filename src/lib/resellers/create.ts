@@ -21,6 +21,7 @@ import { DEFAULT_AUTOMATION_TEMPLATES } from "@/lib/automation/default-templates
 import { forbiddenNameError } from "@/lib/tenant/forbidden-names"
 import { validateSlugFormat, isSlugAvailable } from "@/lib/tenant/slug"
 import { syncTenantBrandingToLms } from "@/lib/lms"
+import { cpfFromDocument } from "@/lib/validation/cpf"
 
 /**
  * Criação de revenda (tenant) — núcleo compartilhado entre:
@@ -301,6 +302,25 @@ export async function createReseller(
     logoUrl: null,
   })
 
+  // O documento informado na criação (ownerCpfCnpj) vira identificador
+  // alternativo de login quando é um CPF válido — CNPJ fica só na cobrança
+  // (Asaas). Se o CPF já pertence a outra conta (mesma pessoa com 2 unidades),
+  // o dono novo fica sem cpf (login por email) em vez de bloquear a criação.
+  let ownerCpf = cpfFromDocument(input.ownerCpfCnpj)
+  if (ownerCpf) {
+    const cpfTaken = await prisma.user.findUnique({
+      where: { cpf: ownerCpf },
+      select: { id: true },
+    })
+    if (cpfTaken) {
+      contextLogger().warn(
+        { event: "resellers.create.cpf_taken", slug: input.slug },
+        "CPF do dono já pertence a outra conta — criação segue sem cpf",
+      )
+      ownerCpf = null
+    }
+  }
+
   const user = await prisma.user.create({
     data: {
       email: input.ownerEmail,
@@ -309,6 +329,7 @@ export async function createReseller(
       status: "ATIVO",
       tenantId: tenant.id,
       passwordHash,
+      cpf: ownerCpf,
       phone: input.ownerPhone ?? null,
       mustChangePassword: true,
       updatedAt: new Date(),
