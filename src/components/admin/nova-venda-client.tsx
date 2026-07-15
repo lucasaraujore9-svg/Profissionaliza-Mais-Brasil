@@ -347,7 +347,7 @@ export function NovaVendaClient({
           ) : (
             <>
               Gateway: <strong>{gateway === "ASAAS" ? "Asaas" : "Mercado Pago"}</strong>
-              {" · "}Cap de desconto: <strong>{cap}%</strong>
+              {" · "}Desconto manual: até <strong>{cap}%</strong>
             </>
           )}
         </p>
@@ -595,7 +595,9 @@ export function NovaVendaClient({
               )}
             </div>
 
-            {/* Cupom — só curso (a validação usa courseId) */}
+            {/* Cupom — só curso (a validação usa courseId). Aplicar cupom é
+                livre (qualquer cupom ativo, mesmo acima do cap — quem criou já
+                foi validado); o cap vale só para o desconto manual acima. */}
             {!isPkg && (
               <div className="space-y-2 border-t pt-4">
                 <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">
@@ -628,7 +630,10 @@ export function NovaVendaClient({
                 Selecione um {isPkg ? "pacote" : "curso"} antes de aplicar desconto
               </p>
             )}
-            <p className="text-xs text-gray-400">Seu cap de desconto: {cap}%</p>
+            <p className="text-xs text-gray-400">
+              Desconto manual: até {cap}%. Cupons ativos podem ser aplicados
+              independentemente do seu cap.
+            </p>
           </div>
         )}
       </Section>

@@ -377,7 +377,8 @@ export function EquipeClient({
                       onChange={(e) => setForm({ ...form, maxDiscount: e.target.value })}
                     />
                     <p className="mt-1 text-xs text-muted-foreground">
-                      Teto de desconto nas vendas diretas (manual e cupom). Vazio = 50%.
+                      Teto do desconto manual e da criação de cupons próprios.
+                      Não limita aplicar cupons existentes. Vazio = 50%.
                     </p>
                   </div>
                 )}

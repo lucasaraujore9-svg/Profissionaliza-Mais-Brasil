@@ -376,23 +376,16 @@ export const POST = withRequestContext(
 
     // Cálculo unificado em Prisma.Decimal (mesmo helper das demais rotas) —
     // evita divergência de centavos entre o valor cobrado e os relatórios.
+    //
+    // SEM checagem de cap aqui: o cap do vendedor vale para GERAR desconto
+    // (manual acima / criação de cupom em /api/admin/cupons) — aplicar um
+    // cupom existente é livre, pois quem o criou já foi validado contra o
+    // próprio cap (admin cria sem limite, de propósito).
     const applied = applyCouponDiscount({
       basePrice,
       discountType: coupon.discountType,
       discountValue: coupon.discountValue,
     })
-
-    // Cap aplicado sobre o desconto EFETIVO (cobre PERCENTAGE e FIXED).
-    // Antes o cap só checava PERCENTAGE, então um cupom FIXED zerava o preço
-    // e burlava o limite do PMB_SALES.
-    const cap = await effectiveSalesCap(guard.session)
-    const effectivePct = (applied.discountAmount / basePrice) * 100
-    if (effectivePct > cap + 0.01) {
-      return NextResponse.json(
-        { error: `Cupom excede seu cap (${cap}%)` },
-        { status: 403 },
-      )
-    }
 
     discountAmount = applied.discountAmount
     finalAmount = applied.finalAmount

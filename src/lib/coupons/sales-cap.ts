@@ -6,8 +6,10 @@ export const PMB_SALES_DEFAULT_CAP = 50
 
 /**
  * Resolve o cap efetivo (%) de desconto de um usuario nas vendas diretas da
- * vitrine PMB. Regra unica usada na criacao de cupom, no preview e na
- * aplicacao do cupom na venda:
+ * vitrine PMB. O cap vale para GERAR desconto — criacao de cupom proprio
+ * (/api/admin/cupons) e desconto manual na venda (/api/admin/vendas). NAO
+ * limita a APLICACAO de cupom existente: qualquer cupom ativo pode ser usado
+ * por qualquer vendedor (quem o criou ja foi validado contra o proprio cap).
  *   - papel que nao e PMB_SALES (SUPER_ADMIN) => 100 (sem cap)
  *   - PMB_SALES sem override => PMB_SALES_DEFAULT_CAP (50)
  *   - PMB_SALES com User.maxDiscount => o valor, clampado em [0, 100]
