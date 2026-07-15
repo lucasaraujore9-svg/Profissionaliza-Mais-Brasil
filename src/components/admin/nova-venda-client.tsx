@@ -90,17 +90,18 @@ function validateEmail(email: string): boolean {
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export function NovaVendaClient({
-  role,
+  cap,
   gateway,
   courses,
   packages,
 }: {
-  role: string
+  // Cap individual (%) resolvido no servidor (User.maxDiscount; padrão 50 para
+  // PMB_SALES, 100 para SUPER_ADMIN). Ver src/lib/coupons/sales-cap.ts.
+  cap: number
   gateway: "MP" | "ASAAS"
   courses: CourseOption[]
   packages: PackageOption[]
 }) {
-  const cap = role === "PMB_SALES" ? 50 : 100
 
   // Lista unificada: cursos primeiro, depois pacotes (prefixados "Pacote:").
   const items: SaleItem[] = [
@@ -139,11 +140,13 @@ export function NovaVendaClient({
   const [selectedItem, setSelectedItem] = useState<SaleItem | null>(null)
   const isPkg = selectedItem?.kind === "package"
 
-  // Step 3 — Coupon
+  // Step 3 — Desconto (cupom OU manual, nunca os dois)
   const [couponCode, setCouponCode] = useState("")
   const [couponResult, setCouponResult] = useState<CouponResult | null>(null)
   const [couponError, setCouponError] = useState<string | null>(null)
   const [validatingCoupon, setValidatingCoupon] = useState(false)
+  // Desconto manual (%) digitado na hora, limitado ao cap do vendedor.
+  const [manualPct, setManualPct] = useState("")
 
   // Bolsa de estudo (sem cobrança)
   const [bolsista, setBolsista] = useState(false)
@@ -176,11 +179,12 @@ export function NovaVendaClient({
     }, 300)
   }, [query])
 
-  // Reset coupon when course changes
+  // Reset coupon/manual discount when course changes
   useEffect(() => {
     setCouponResult(null)
     setCouponError(null)
     setCouponCode("")
+    setManualPct("")
   }, [selectedItem])
 
   // Reset link when student or course changes
@@ -188,13 +192,14 @@ export function NovaVendaClient({
     setLinkResult(null)
   }, [selectedStudent, selectedItem])
 
-  // Ao ativar a bolsa, zera o cupom (não há valor a descontar) e o link.
+  // Ao ativar a bolsa, zera cupom/desconto manual (não há valor a descontar) e o link.
   useEffect(() => {
     setLinkResult(null)
     if (bolsista) {
       setCouponResult(null)
       setCouponCode("")
       setCouponError(null)
+      setManualPct("")
     }
   }, [bolsista])
 
@@ -262,12 +267,24 @@ export function NovaVendaClient({
         return
       }
       setCouponResult(body.data)
+      // Cupom aplicado substitui o desconto manual (nunca os dois).
+      setManualPct("")
     } catch {
       setCouponError("Erro de rede ao validar cupom")
     } finally {
       setValidatingCoupon(false)
     }
   }
+
+  // Desconto manual derivado do input (aceita vírgula BR). Válido quando está
+  // entre 0 (exclusivo) e o cap do vendedor; acima do cap o form bloqueia.
+  const manualPctNumber = manualPct.trim() === "" ? 0 : Number(manualPct.replace(",", "."))
+  const manualValid =
+    Number.isFinite(manualPctNumber) && manualPctNumber > 0 && manualPctNumber <= cap
+  const manualDiscountAmount =
+    manualValid && selectedItem
+      ? Number(((selectedItem.preco * manualPctNumber) / 100).toFixed(2))
+      : 0
 
   async function generateLink() {
     if (!selectedStudent || !selectedItem) return
@@ -283,6 +300,8 @@ export function NovaVendaClient({
             ? { packageId: selectedItem.id }
             : { courseId: selectedItem.id }),
           couponCode: bolsista || !couponResult ? undefined : couponCode.trim(),
+          manualDiscountPercent:
+            bolsista || couponResult || !manualValid ? undefined : manualPctNumber,
           bolsista: bolsista || undefined,
         }),
       })
@@ -312,7 +331,9 @@ export function NovaVendaClient({
     ? 0
     : couponResult
       ? couponResult.finalAmount
-      : selectedItem?.preco ?? 0
+      : manualValid && selectedItem
+        ? Math.max(0, Number((selectedItem.preco - manualDiscountAmount).toFixed(2)))
+        : selectedItem?.preco ?? 0
 
   // ─── Render ───────────────────────────────────────────────────────────────
 
@@ -515,14 +536,16 @@ export function NovaVendaClient({
         )}
       </Section>
 
-      {/* ── 3. Cupom ─────────────────────────────────────────────────────── */}
-      {/* Cupom só para curso: a validação (preview) usa courseId. */}
-      {!bolsista && !isPkg && (
-      <Section title="3. Cupom (opcional)" done={!!couponResult}>
+      {/* ── 3. Desconto ──────────────────────────────────────────────────── */}
+      {/* Desconto manual (%) na hora, limitado ao cap do vendedor, OU cupom.
+          Cupom só para curso: a validação (preview) usa courseId. */}
+      {!bolsista && (
+      <Section title="3. Desconto (opcional)" done={!!couponResult || manualValid}>
         {couponResult ? (
           <div className="flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 p-4">
             <div>
               <p className="font-semibold text-emerald-700">
+                Cupom {couponCode}:{" "}
                 {couponResult.discountType === "PERCENTAGE"
                   ? `${couponResult.discountValue}% de desconto`
                   : `${fmt(couponResult.discountValue)} de desconto`}
@@ -536,30 +559,76 @@ export function NovaVendaClient({
             </Button>
           </div>
         ) : (
-          <div className="space-y-2">
-            <div className="flex gap-2">
-              <Input
-                placeholder="CODIGO"
-                value={couponCode}
-                onChange={(e) => { setCouponCode(e.target.value.toUpperCase()); setCouponError(null) }}
-                disabled={!selectedItem}
-                className="font-mono uppercase"
-              />
-              <Button
-                onClick={validateCoupon}
-                disabled={validatingCoupon || !couponCode.trim() || !selectedItem}
-                variant="outline"
-              >
-                {validatingCoupon ? "Validando…" : "Aplicar"}
-              </Button>
+          <div className="space-y-4">
+            {/* Desconto manual na hora */}
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">
+                Desconto na hora
+              </p>
+              <div className="flex items-center gap-2">
+                <Input
+                  type="number"
+                  inputMode="decimal"
+                  min={0}
+                  max={cap}
+                  step="0.5"
+                  placeholder="0"
+                  value={manualPct}
+                  onChange={(e) => setManualPct(e.target.value)}
+                  disabled={!selectedItem}
+                  className="w-28"
+                />
+                <span className="text-sm text-gray-500">% — até {cap}%</span>
+              </div>
+              {manualPct.trim() !== "" && !manualValid && (
+                <p className="text-xs font-medium text-red-600">
+                  {Number.isFinite(manualPctNumber) && manualPctNumber > cap
+                    ? `Acima do seu cap de ${cap}%`
+                    : "Percentual inválido"}
+                </p>
+              )}
+              {manualValid && selectedItem && (
+                <p className="text-xs text-emerald-600">
+                  − {fmt(manualDiscountAmount)} · de {fmt(selectedItem.preco)} por{" "}
+                  <strong>{fmt(finalPrice)}</strong>
+                </p>
+              )}
             </div>
+
+            {/* Cupom — só curso (a validação usa courseId) */}
+            {!isPkg && (
+              <div className="space-y-2 border-t pt-4">
+                <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">
+                  Ou cupom
+                </p>
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="CODIGO"
+                    value={couponCode}
+                    onChange={(e) => { setCouponCode(e.target.value.toUpperCase()); setCouponError(null) }}
+                    disabled={!selectedItem}
+                    className="font-mono uppercase"
+                  />
+                  <Button
+                    onClick={validateCoupon}
+                    disabled={validatingCoupon || !couponCode.trim() || !selectedItem}
+                    variant="outline"
+                  >
+                    {validatingCoupon ? "Validando…" : "Aplicar"}
+                  </Button>
+                </div>
+                {couponError && (
+                  <p className="text-xs font-medium text-red-600">{couponError}</p>
+                )}
+              </div>
+            )}
+
             {!selectedItem && (
-              <p className="text-xs text-gray-400">Selecione um curso antes de aplicar o cupom</p>
+              <p className="text-xs text-gray-400">
+                Selecione um {isPkg ? "pacote" : "curso"} antes de aplicar desconto
+              </p>
             )}
-            {couponError && (
-              <p className="text-xs font-medium text-red-600">{couponError}</p>
-            )}
-            <p className="text-xs text-gray-400">Cap de desconto para seu papel: {cap}%</p>
+            <p className="text-xs text-gray-400">Seu cap de desconto: {cap}%</p>
           </div>
         )}
       </Section>
@@ -575,9 +644,11 @@ export function NovaVendaClient({
               <Row label={bolsista ? "Valor" : "Preço base"} value={fmt(selectedItem.preco)} />
               {bolsista ? (
                 <Row label="Bolsa de estudo" value={`− ${fmt(selectedItem.preco)}`} className="text-amber-600" />
-              ) : (
-                couponResult && <Row label="Desconto" value={`− ${fmt(couponResult.discountAmount)}`} className="text-emerald-600" />
-              )}
+              ) : couponResult ? (
+                <Row label="Desconto (cupom)" value={`− ${fmt(couponResult.discountAmount)}`} className="text-emerald-600" />
+              ) : manualValid ? (
+                <Row label={`Desconto (${manualPctNumber}%)`} value={`− ${fmt(manualDiscountAmount)}`} className="text-emerald-600" />
+              ) : null}
               <Row label="Total" value={fmt(finalPrice)} bold />
               <Row label={bolsista ? "Cobrança" : "Gateway"} value={bolsista ? "Nenhuma (bolsa)" : gateway === "ASAAS" ? "Asaas" : "Mercado Pago"} />
             </div>
@@ -610,6 +681,7 @@ export function NovaVendaClient({
                     setSelectedItem(null)
                     setCouponResult(null)
                     setCouponCode("")
+                    setManualPct("")
                     setLinkResult(null)
                     setBolsista(false)
                     setNewStudent({ nome: "", email: "", cpf: "", fone: "" })
@@ -647,6 +719,7 @@ export function NovaVendaClient({
                     setSelectedItem(null)
                     setCouponResult(null)
                     setCouponCode("")
+                    setManualPct("")
                     setLinkResult(null)
                     setNewStudent({ nome: "", email: "", cpf: "", fone: "" })
                   }}

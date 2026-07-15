@@ -88,12 +88,14 @@ export function EquipeClient({
     role: "PMB_SALES" as (typeof ROLES)[number],
     phone: "",
     salesManagerId: NO_MANAGER,
+    // Cap individual de desconto (%) — só PMB_SALES. "" = padrão da role (50).
+    maxDiscount: "",
   })
 
   const filtered = items.filter((i) => (filter === "ALL" ? true : i.role === filter))
 
   function resetForm() {
-    setForm({ name: "", email: "", role: "PMB_SALES", phone: "", salesManagerId: NO_MANAGER })
+    setForm({ name: "", email: "", role: "PMB_SALES", phone: "", salesManagerId: NO_MANAGER, maxDiscount: "" })
     setMode("invite")
     setPassword("")
     setCreated(null)
@@ -113,6 +115,17 @@ export function EquipeClient({
       toast.error("A senha deve ter no mínimo 8 caracteres")
       return
     }
+    const maxDiscountNumber =
+      form.role === "PMB_SALES" && form.maxDiscount.trim() !== ""
+        ? Number(form.maxDiscount)
+        : undefined
+    if (
+      maxDiscountNumber !== undefined &&
+      (!Number.isInteger(maxDiscountNumber) || maxDiscountNumber < 0 || maxDiscountNumber > 100)
+    ) {
+      toast.error("Cap de desconto deve ser um inteiro entre 0 e 100")
+      return
+    }
     startTransition(async () => {
       const res = await fetch("/api/admin/equipe", {
         method: "POST",
@@ -123,6 +136,7 @@ export function EquipeClient({
             form.role === "PMB_REVENDA_SALES" && form.salesManagerId !== NO_MANAGER
               ? form.salesManagerId
               : undefined,
+          maxDiscount: maxDiscountNumber,
           mode,
           password: mode === "password" && password ? password : undefined,
         }),
@@ -348,6 +362,23 @@ export function EquipeClient({
                         ))}
                       </SelectContent>
                     </Select>
+                  </div>
+                )}
+                {form.role === "PMB_SALES" && (
+                  <div>
+                    <Label>Cap de desconto (%)</Label>
+                    <Input
+                      type="number"
+                      inputMode="numeric"
+                      min={0}
+                      max={100}
+                      placeholder="50 (padrão)"
+                      value={form.maxDiscount}
+                      onChange={(e) => setForm({ ...form, maxDiscount: e.target.value })}
+                    />
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Teto de desconto nas vendas diretas (manual e cupom). Vazio = 50%.
+                    </p>
                   </div>
                 )}
                 <ModeToggle mode={mode} onChange={setMode} disabled={pending} />

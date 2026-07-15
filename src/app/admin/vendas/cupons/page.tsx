@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation"
 import { requireAdminSession } from "@/lib/auth/admin-session"
 import { VendasCuponsClient } from "@/components/admin/vendas-cupons-client"
+import { effectiveSalesCap } from "@/lib/coupons/sales-cap"
 
 export const dynamic = "force-dynamic"
 
@@ -11,9 +12,11 @@ export default async function VendasCuponsPage() {
     redirect("/admin")
   }
 
+  const cap = await effectiveSalesCap(session)
+
   return (
     <div className="p-8">
-      <VendasCuponsClient role={session.role} />
+      <VendasCuponsClient cap={cap} />
     </div>
   )
 }

@@ -5,6 +5,7 @@ import { getSystemSettings } from "@/lib/system-settings"
 import { NovaVendaClient } from "@/components/admin/nova-venda-client"
 import { coursePaymentType } from "@/lib/tenant/monthly-policy"
 import { resolveVitrinePackages } from "@/lib/packages/vitrine"
+import { effectiveSalesCap } from "@/lib/coupons/sales-cap"
 
 export const dynamic = "force-dynamic"
 
@@ -15,7 +16,7 @@ export default async function NovaVendaPage() {
     redirect("/admin")
   }
 
-  const [courses, vitrinePackages, settings] = await Promise.all([
+  const [courses, vitrinePackages, settings, cap] = await Promise.all([
     prisma.course.findMany({
       where: { status: "ATIVO" },
       orderBy: { nome: "asc" },
@@ -32,12 +33,14 @@ export default async function NovaVendaPage() {
     // Pacotes PMB (tenantId=null) vendáveis na venda direta do PMB.
     resolveVitrinePackages(null),
     getSystemSettings(),
+    // Cap individual de desconto do vendedor (User.maxDiscount; padrão 50).
+    effectiveSalesCap(session),
   ])
 
   return (
     <div className="p-8">
       <NovaVendaClient
-        role={session.role}
+        cap={cap}
         gateway={settings.pmbDirectSaleGateway}
         courses={courses.map((c) => ({
           id: c.id,

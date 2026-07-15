@@ -28,6 +28,7 @@ export interface EquipeMember {
   image: string | null
   salesManagerId: string | null
   salesManagerName: string | null
+  maxDiscount: number | null
   lastActiveAt: string | null
   pendingInvite: boolean
   createdAt: string
@@ -68,9 +69,22 @@ export function EquipeDetailClient({
     role: member.role as (typeof ROLES)[number],
     status: member.status as "ATIVO" | "INATIVO",
     salesManagerId: member.salesManagerId ?? NO_MANAGER,
+    // Cap individual de desconto (%) — só PMB_SALES. "" = padrão da role (50).
+    maxDiscount: member.maxDiscount == null ? "" : String(member.maxDiscount),
   })
 
   function save() {
+    const maxDiscountNumber =
+      form.role === "PMB_SALES" && form.maxDiscount.trim() !== ""
+        ? Number(form.maxDiscount)
+        : null
+    if (
+      maxDiscountNumber !== null &&
+      (!Number.isInteger(maxDiscountNumber) || maxDiscountNumber < 0 || maxDiscountNumber > 100)
+    ) {
+      toast.error("Cap de desconto deve ser um inteiro entre 0 e 100")
+      return
+    }
     startTransition(async () => {
       const res = await fetch(`/api/admin/equipe/${member.id}`, {
         method: "PATCH",
@@ -85,6 +99,7 @@ export function EquipeDetailClient({
             form.role === "PMB_REVENDA_SALES" && form.salesManagerId !== NO_MANAGER
               ? form.salesManagerId
               : null,
+          maxDiscount: maxDiscountNumber,
         }),
       })
       if (!res.ok) {
@@ -257,6 +272,24 @@ export function EquipeDetailClient({
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+          )}
+          {form.role === "PMB_SALES" && (
+            <div>
+              <Label>Cap de desconto (%)</Label>
+              <Input
+                type="number"
+                inputMode="numeric"
+                min={0}
+                max={100}
+                placeholder="50 (padrão)"
+                value={form.maxDiscount}
+                onChange={(e) => setForm({ ...form, maxDiscount: e.target.value })}
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                Teto de desconto do vendedor nas vendas diretas (manual e cupom).
+                Vazio = padrão de 50%.
+              </p>
             </div>
           )}
         </div>

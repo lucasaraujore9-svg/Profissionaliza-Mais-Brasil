@@ -35,8 +35,9 @@ interface CouponItem {
   createdByName: string | null
 }
 
-export function VendasCuponsClient({ role }: { role: string }) {
-  const cap = role === "PMB_SALES" ? 50 : 100
+// Cap individual (%) resolvido no servidor (User.maxDiscount; padrão 50 para
+// PMB_SALES, 100 para SUPER_ADMIN). Ver src/lib/coupons/sales-cap.ts.
+export function VendasCuponsClient({ cap }: { cap: number }) {
   const [items, setItems] = useState<CouponItem[]>([])
   const [loading, setLoading] = useState(true)
   const [open, setOpen] = useState(false)

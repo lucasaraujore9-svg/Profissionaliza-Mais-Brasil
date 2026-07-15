@@ -20,14 +20,13 @@ import { provisionStudentAccess } from "@/lib/students/access"
 import { fulfillScholarshipEnrollment } from "@/lib/enrollment/fulfill"
 import { tryConsumeCoupon, releaseCoupon } from "@/lib/coupons/consume"
 import { applyCouponDiscount } from "@/lib/coupons/discount"
+import { effectiveSalesCap } from "@/lib/coupons/sales-cap"
 import { assertCouponMatchesEnrollment } from "@/lib/checkout/assert-tenant-gateway"
 import { dueDateInDays } from "@/lib/checkout/due-date"
 import { swallow } from "@/lib/errors"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { asaasWebhookUrl, mpWebhookUrl } from "@/lib/tenant/urls"
 import { getPackageForCheckout } from "@/lib/packages/vitrine"
-
-const PMB_SALES_CAP = 50
 
 export const GET = withRequestContext(
   { action: "admin.vendas.list", route: "/api/admin/vendas" },
@@ -82,12 +81,19 @@ const createSchema = z
     courseId: z.string().min(1).optional(),
     packageId: z.string().min(1).optional(),
     couponCode: z.string().trim().max(64).optional(),
+    // Desconto manual (%) dado pelo vendedor na hora da venda, sem cupom.
+    // Limitado ao cap individual do usuario (User.maxDiscount; padrao 50).
+    manualDiscountPercent: z.number().positive().max(100).optional(),
     // Bolsa de estudo: cria o aluno na plataforma sem gerar cobranca no gateway.
     bolsista: z.boolean().optional(),
   })
   .refine((v) => !!v.courseId !== !!v.packageId, {
     message: "Informe courseId ou packageId",
     path: ["courseId"],
+  })
+  .refine((v) => !(v.couponCode && v.manualDiscountPercent), {
+    message: "Use cupom OU desconto manual, não os dois",
+    path: ["manualDiscountPercent"],
   })
 
 export const POST = withRequestContext(
@@ -321,6 +327,27 @@ export const POST = withRequestContext(
   let discountAmount = 0
   let finalAmount = basePrice
   let couponId: string | null = null
+
+  // ── Desconto manual (sem cupom) ─────────────────────────────────────────
+  // O vendedor digita o percentual na hora; o teto e o cap individual dele
+  // (User.maxDiscount; padrao 50 para PMB_SALES, 100 para SUPER_ADMIN).
+  if (parsed.data.manualDiscountPercent) {
+    const cap = await effectiveSalesCap(guard.session)
+    if (parsed.data.manualDiscountPercent > cap + 0.01) {
+      return NextResponse.json(
+        { error: `Desconto excede seu cap (${cap}%)` },
+        { status: 403 },
+      )
+    }
+    const applied = applyCouponDiscount({
+      basePrice,
+      discountType: "PERCENTAGE",
+      discountValue: parsed.data.manualDiscountPercent,
+    })
+    discountAmount = applied.discountAmount
+    finalAmount = applied.finalAmount
+  }
+
   if (parsed.data.couponCode) {
     const code = parsed.data.couponCode.toUpperCase()
     const now = new Date()
@@ -357,8 +384,8 @@ export const POST = withRequestContext(
 
     // Cap aplicado sobre o desconto EFETIVO (cobre PERCENTAGE e FIXED).
     // Antes o cap só checava PERCENTAGE, então um cupom FIXED zerava o preço
-    // e burlava o limite de 50% do PMB_SALES.
-    const cap = guard.session.role === "PMB_SALES" ? PMB_SALES_CAP : 100
+    // e burlava o limite do PMB_SALES.
+    const cap = await effectiveSalesCap(guard.session)
     const effectivePct = (applied.discountAmount / basePrice) * 100
     if (effectivePct > cap + 0.01) {
       return NextResponse.json(

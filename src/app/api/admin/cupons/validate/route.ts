@@ -3,8 +3,7 @@ import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { requirePmbSales } from "@/lib/auth/guards"
 import { withRequestContext } from "@/lib/observability/with-request-context"
-
-const PMB_SALES_CAP = 50
+import { effectiveSalesCap } from "@/lib/coupons/sales-cap"
 
 const schema = z.object({
   code: z.string().trim().min(1).max(64),
@@ -60,20 +59,23 @@ export const POST = withRequestContext(
     return NextResponse.json({ error: "Cupom esgotado" }, { status: 400 })
   }
 
-  const cap = guard.session.role === "PMB_SALES" ? PMB_SALES_CAP : 100
-  if (coupon.discountType === "PERCENTAGE" && Number(coupon.discountValue) > cap) {
-    return NextResponse.json(
-      { error: `Cupom excede seu limite de desconto (${cap}%)` },
-      { status: 403 },
-    )
-  }
-
   const raw =
     coupon.discountType === "PERCENTAGE"
       ? (basePrice * Number(coupon.discountValue)) / 100
       : Number(coupon.discountValue)
   const discountAmount = Math.min(raw, basePrice)
   const finalAmount = Number((basePrice - discountAmount).toFixed(2))
+
+  // Mesma regra da rota de venda: cap sobre o desconto EFETIVO (cobre
+  // PERCENTAGE e FIXED) — preview e cobrança nunca divergem.
+  const cap = await effectiveSalesCap(guard.session)
+  const effectivePct = (discountAmount / basePrice) * 100
+  if (effectivePct > cap + 0.01) {
+    return NextResponse.json(
+      { error: `Cupom excede seu limite de desconto (${cap}%)` },
+      { status: 403 },
+    )
+  }
 
   return NextResponse.json({
     data: {

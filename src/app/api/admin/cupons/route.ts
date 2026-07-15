@@ -4,8 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { requirePmbSales } from "@/lib/auth/guards"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { logAudit } from "@/lib/audit"
-
-const PMB_SALES_CAP = 50
+import { effectiveSalesCap } from "@/lib/coupons/sales-cap"
 
 export const GET = withRequestContext(
   { action: "admin.cupons.list", route: "/api/admin/cupons" },
@@ -89,17 +88,18 @@ export const POST = withRequestContext(
   }
 
   if (guard.session.role === "PMB_SALES") {
+    const cap = await effectiveSalesCap(guard.session)
     if (parsed.data.discountType === "FIXED") {
       return NextResponse.json(
         {
-          error: `PMB_SALES só pode criar cupons percentuais (cap ${PMB_SALES_CAP}%)`,
+          error: `PMB_SALES só pode criar cupons percentuais (cap ${cap}%)`,
         },
         { status: 403 },
       )
     }
-    if (parsed.data.discountValue > PMB_SALES_CAP) {
+    if (parsed.data.discountValue > cap) {
       return NextResponse.json(
-        { error: `Seu cap de desconto é ${PMB_SALES_CAP}%` },
+        { error: `Seu cap de desconto é ${cap}%` },
         { status: 403 },
       )
     }

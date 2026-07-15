@@ -133,6 +133,11 @@ model User {
   image         String?
   lastActiveAt  DateTime? @map("last_active_at")
 
+  // Cap individual de desconto (%) do vendedor PMB_SALES nas vendas diretas da
+  // vitrine PMB (criacao e aplicacao de cupom). null = padrao da role (50).
+  // Definido pelo SUPER_ADMIN em /admin/equipe. Ver src/lib/coupons/sales-cap.ts
+  maxDiscount Int? @map("max_discount")
+
   // Relacao: se for RESELLER, qual tenant e dono
   tenantId String? @unique @map("tenant_id")
   tenant   Tenant? @relation("TenantOwner", fields: [tenantId], references: [id])

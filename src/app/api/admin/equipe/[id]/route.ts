@@ -29,6 +29,7 @@ export const GET = withRequestContextParams<{ id: string }>(
       createdAt: true,
       salesManagerId: true,
       salesManager: { select: { name: true } },
+      maxDiscount: true,
     },
   })
 
@@ -50,6 +51,7 @@ export const GET = withRequestContextParams<{ id: string }>(
       createdAt: user.createdAt.toISOString(),
       salesManagerId: user.salesManagerId,
       salesManagerName: user.salesManager?.name ?? null,
+      maxDiscount: user.maxDiscount,
     },
   })
   },
@@ -65,6 +67,9 @@ const patchSchema = z.object({
   // Gerente de vendas do vendedor de revenda. Zerado se o papel não for
   // PMB_REVENDA_SALES (validado abaixo).
   salesManagerId: z.string().nullable().optional(),
+  // Cap individual de desconto (%) nas vendas diretas. Zerado se o papel não
+  // for PMB_SALES (normalizado abaixo). null = padrão da role (50).
+  maxDiscount: z.number().int().min(0).max(100).nullable().optional(),
 })
 
 export const PATCH = withRequestContextParams<{ id: string }>(
@@ -112,6 +117,12 @@ export const PATCH = withRequestContextParams<{ id: string }>(
   // Normaliza o vínculo com gerente de vendas: só vendedor de revenda o tem.
   const data = { ...parsed.data }
   const effectiveRole = data.role ?? target.role
+
+  // Cap individual de desconto: só vendedor de curso (PMB_SALES) o tem.
+  if (effectiveRole !== "PMB_SALES" && (data.role !== undefined || data.maxDiscount !== undefined)) {
+    data.maxDiscount = null
+  }
+
   if (effectiveRole !== "PMB_REVENDA_SALES") {
     // Papel não-comercial-de-revenda nunca mantém gerente atribuído.
     if (data.role !== undefined || data.salesManagerId !== undefined) {
@@ -133,10 +144,10 @@ export const PATCH = withRequestContextParams<{ id: string }>(
   const updated = await prisma.user.update({
     where: { id },
     data,
-    select: { id: true, name: true, email: true, role: true, status: true },
+    select: { id: true, name: true, email: true, role: true, status: true, maxDiscount: true },
   })
 
-  // SAAS-001: trilha de auditoria de alteração de papel/status (permissão).
+  // SAAS-001: trilha de auditoria de alteração de papel/status/cap (permissão).
   await logAudit({
     action: "user.role_update",
     resource: "User",
@@ -144,7 +155,7 @@ export const PATCH = withRequestContextParams<{ id: string }>(
     actorUserId: guard.session.userId,
     actorRole: guard.session.role,
     payloadBefore: { role: target.role },
-    payloadAfter: { role: updated.role, status: updated.status },
+    payloadAfter: { role: updated.role, status: updated.status, maxDiscount: updated.maxDiscount },
   })
 
   return NextResponse.json({ data: updated })

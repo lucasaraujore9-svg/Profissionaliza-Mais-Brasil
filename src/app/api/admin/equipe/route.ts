@@ -74,6 +74,9 @@ const createSchema = z
     // Gerente de vendas (PMB_SALES_MGR) deste vendedor de revenda. Só se aplica
     // quando role === PMB_REVENDA_SALES; ignorado para os demais papéis.
     salesManagerId: z.string().nullable().optional(),
+    // Cap individual de desconto (%) nas vendas diretas. Só se aplica quando
+    // role === PMB_SALES; null/ausente = padrão da role (50).
+    maxDiscount: z.number().int().min(0).max(100).nullable().optional(),
   })
   .refine((d) => d.mode !== "password" || !d.password || d.password.length >= 8, {
     message: "A senha deve ter no mínimo 8 caracteres",
@@ -109,6 +112,10 @@ export const POST = withRequestContext(
   // Vínculo com gerente de vendas só vale para vendedor de revenda.
   const salesManagerId =
     parsed.data.role === "PMB_REVENDA_SALES" ? parsed.data.salesManagerId ?? null : null
+
+  // Cap individual de desconto só vale para vendedor de curso.
+  const maxDiscount =
+    parsed.data.role === "PMB_SALES" ? parsed.data.maxDiscount ?? null : null
   if (salesManagerId) {
     const mgr = await prisma.user.findUnique({
       where: { id: salesManagerId },
@@ -140,6 +147,7 @@ export const POST = withRequestContext(
       mustChangePassword: usePassword,
       status: "ATIVO",
       salesManagerId,
+      maxDiscount,
     },
     select: { id: true, name: true, email: true, role: true },
   })
