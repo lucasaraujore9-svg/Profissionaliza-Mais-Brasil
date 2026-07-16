@@ -12,7 +12,15 @@
 // Este modulo so roda no client (usa document/canvas) — importar apenas de
 // componentes "use client".
 
-import { contrastTextColor, formatPriceBRL, type LogoCorner, type TenantBrand } from "./types"
+import {
+  anchorsFor,
+  contrastTextColor,
+  formatPriceBRL,
+  mirrorBoxLeft,
+  textOnWhite,
+  type LogoCorner,
+  type TenantBrand,
+} from "./types"
 
 export interface ComposeParams {
   artUrl: string
@@ -109,24 +117,54 @@ export async function composeArt(
   // 1. Arte base preenchendo o canvas (dimensoes vem do banco = naturais).
   ctx.drawImage(artImg, 0, 0, artWidth, artHeight)
 
-  // 2. Logo no topo, no canto configurado da arte (contain).
+  // O template das artes ja traz caixas BRANCAS arredondadas reservadas para o
+  // logo (topo) e para os contatos (rodape) — desenhamos DENTRO delas, nas
+  // posicoes medidas das artes de referencia (ART_ANCHORS por variante).
+  const anchors = anchorsFor(artWidth, artHeight)
+  const logoBoxRel =
+    logoCorner === "top-left" ? mirrorBoxLeft(anchors.logoBox) : anchors.logoBox
+  const logoBox = {
+    x: logoBoxRel.x * artWidth,
+    y: logoBoxRel.y * artHeight,
+    w: logoBoxRel.w * artWidth,
+    h: logoBoxRel.h * artHeight,
+  }
+  const footerBox = {
+    x: anchors.footerBox.x * artWidth,
+    y: anchors.footerBox.y * artHeight,
+    w: anchors.footerBox.w * artWidth,
+    h: anchors.footerBox.h * artHeight,
+  }
+  const inkColor = textOnWhite(tenant.primaryColor)
+
+  // 2. Logo dentro da caixa reservada do topo (contain + padding interno).
+  //    Sem logo: nome da unidade centrado na caixa, na cor da marca.
+  const logoPad = logoBox.h * 0.16
   if (logoImg) {
-    const maxW = artWidth * 0.18
-    const maxH = artHeight * 0.1
+    const maxW = logoBox.w - logoPad * 2
+    const maxH = logoBox.h - logoPad * 2
     const scale = Math.min(maxW / logoImg.naturalWidth, maxH / logoImg.naturalHeight)
     const w = logoImg.naturalWidth * scale
     const h = logoImg.naturalHeight * scale
-    const margin = artWidth * 0.03
-    const x = logoCorner === "top-left" ? margin : artWidth - margin - w
-    ctx.drawImage(logoImg, x, margin, w, h)
+    ctx.drawImage(logoImg, logoBox.x + (logoBox.w - w) / 2, logoBox.y + (logoBox.h - h) / 2, w, h)
+  } else {
+    const maxW = logoBox.w - logoPad * 2
+    let nameSize = Math.round(logoBox.h * 0.34)
+    ctx.textAlign = "center"
+    ctx.textBaseline = "middle"
+    ctx.fillStyle = inkColor
+    const fitsName = (size: number) => {
+      ctx.font = `700 ${size}px ${family}`
+      return ctx.measureText(tenant.name).width <= maxW
+    }
+    const minName = Math.round(logoBox.h * 0.2)
+    while (nameSize > minName && !fitsName(nameSize)) nameSize -= 1
+    ctx.font = `700 ${nameSize}px ${family}`
+    ctx.fillText(tenant.name, logoBox.x + logoBox.w / 2, logoBox.y + logoBox.h / 2, maxW)
   }
 
-  // 3. Rodape padrao: faixa com site / whatsapp / rede social.
-  const footerH = Math.round(clamp(artHeight * 0.12, 64, 220))
-  const footerY = artHeight - footerH
-  ctx.fillStyle = tenant.primaryColor
-  ctx.fillRect(0, footerY, artWidth, footerH)
-
+  // 3. Contatos dentro da caixa branca do rodape: site / whatsapp / rede
+  //    social em texto na cor da unidade (ou azul-marinho se a cor for clara).
   const items = [
     tenant.siteHost,
     tenant.whatsapp ? `WhatsApp ${tenant.whatsapp}` : null,
@@ -134,13 +172,12 @@ export async function composeArt(
   ].filter((v): v is string => !!v)
 
   if (items.length > 0) {
-    const textColor = contrastTextColor(tenant.primaryColor)
-    const padding = footerH * 0.22
-    const maxTextWidth = artWidth - padding * 2
-    const baseFontSize = Math.round(clamp(artWidth * 0.026, 13, 40))
-    const separator = "  •  "
+    const padX = footerBox.w * 0.04
+    const maxTextWidth = footerBox.w - padX * 2
+    const baseFontSize = Math.round(clamp(footerBox.h * 0.3, 14, 46))
+    const separator = "   •   "
 
-    ctx.fillStyle = textColor
+    ctx.fillStyle = inkColor
     ctx.textAlign = "center"
     ctx.textBaseline = "middle"
 
@@ -151,14 +188,15 @@ export async function composeArt(
 
     const singleLine = items.join(separator)
     let fontSize = baseFontSize
-    const minFontSize = Math.round(baseFontSize * 0.6)
+    const minFontSize = Math.round(baseFontSize * 0.55)
     while (fontSize > minFontSize && !fits(singleLine, fontSize)) {
       fontSize -= 1
     }
 
+    const cx = footerBox.x + footerBox.w / 2
     if (fits(singleLine, fontSize) || items.length === 1) {
       ctx.font = `600 ${fontSize}px ${family}`
-      ctx.fillText(singleLine, artWidth / 2, footerY + footerH / 2, maxTextWidth)
+      ctx.fillText(singleLine, cx, footerBox.y + footerBox.h / 2, maxTextWidth)
     } else {
       // Nomes longos: quebra em 2 linhas (site na 1a, contato+social na 2a).
       const line1 = items[0]
@@ -167,13 +205,14 @@ export async function composeArt(
       while (size2 > minFontSize && (!fits(line1, size2) || !fits(line2, size2))) {
         size2 -= 1
       }
+      ctx.font = `700 ${size2}px ${family}`
+      ctx.fillText(line1, cx, footerBox.y + footerBox.h * 0.34, maxTextWidth)
       ctx.font = `600 ${size2}px ${family}`
-      ctx.fillText(line1, artWidth / 2, footerY + footerH * 0.32, maxTextWidth)
-      ctx.fillText(line2, artWidth / 2, footerY + footerH * 0.68, maxTextWidth)
+      ctx.fillText(line2, cx, footerBox.y + footerBox.h * 0.68, maxTextWidth)
     }
   }
 
-  // 4. Badge de preco (pill) ancorado acima do rodape, a direita.
+  // 4. Badge de preco (pill) ancorado acima da caixa do rodape, a direita.
   if (priceCents != null) {
     const label = formatPriceBRL(priceCents)
     const fontSize = Math.round(clamp(artWidth * 0.045, 18, 64))
@@ -183,9 +222,9 @@ export async function composeArt(
     const padY = fontSize * 0.45
     const pillW = textWidth + padX * 2
     const pillH = fontSize + padY * 2
-    const margin = artWidth * 0.04
-    const x = artWidth - margin - pillW
-    const y = footerY - margin - pillH
+    const margin = artWidth * 0.03
+    const x = footerBox.x + footerBox.w - pillW
+    const y = footerBox.y - margin - pillH
 
     const bg = tenant.secondaryColor || "#1e40af"
     ctx.fillStyle = bg

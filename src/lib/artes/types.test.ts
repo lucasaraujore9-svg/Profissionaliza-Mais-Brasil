@@ -1,10 +1,47 @@
 import { describe, expect, it } from "vitest"
 import {
+  ART_ANCHORS,
+  anchorsFor,
   contrastTextColor,
   formatPriceBRL,
+  mirrorBoxLeft,
   normalizeSocialHandle,
   slugifyFilename,
+  textOnWhite,
 } from "./types"
+
+describe("anchorsFor", () => {
+  it("seleciona âncoras de feed para 1080x1350 e 1080x1080", () => {
+    expect(anchorsFor(1080, 1350)).toBe(ART_ANCHORS.feed)
+    expect(anchorsFor(1080, 1080)).toBe(ART_ANCHORS.feed)
+  })
+
+  it("seleciona âncoras de story para 1080x1920", () => {
+    expect(anchorsFor(1080, 1920)).toBe(ART_ANCHORS.story)
+  })
+})
+
+describe("mirrorBoxLeft", () => {
+  it("espelha a caixa mantendo a margem da borda", () => {
+    const mirrored = mirrorBoxLeft({ x: 0.7, y: 0.03, w: 0.28, h: 0.11 })
+    expect(mirrored.x).toBeCloseTo(0.02)
+    expect(mirrored.w).toBe(0.28)
+    expect(mirrored.y).toBe(0.03)
+  })
+})
+
+describe("textOnWhite", () => {
+  it("mantém cor escura da unidade", () => {
+    expect(textOnWhite("#1e40af")).toBe("#1e40af")
+    expect(textOnWhite("#111")).toBe("#111111")
+  })
+
+  it("cor clara ou inválida cai no azul-marinho neutro", () => {
+    expect(textOnWhite("#f5d90a")).toBe("#1e293b")
+    expect(textOnWhite("#fff")).toBe("#1e293b")
+    expect(textOnWhite("azul")).toBe("#1e293b")
+  })
+})
 
 describe("normalizeSocialHandle", () => {
   it("normaliza URL completa do Instagram", () => {

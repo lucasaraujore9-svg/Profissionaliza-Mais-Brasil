@@ -71,6 +71,62 @@ export function normalizeSocialHandle(raw: string | null | undefined): string | 
   return `@${handle}`
 }
 
+// Caixas RESERVADAS no template das artes (medidas das artes de referencia
+// 2026-07-16): retangulos brancos arredondados ja desenhados na arte onde o
+// sistema encaixa o logo (topo) e os contatos (rodape). Valores relativos
+// (fracao da largura/altura). O template de stories tem rodape mais alto.
+export interface TemplateBox {
+  x: number
+  y: number
+  w: number
+  h: number
+}
+
+export interface ArtAnchors {
+  logoBox: TemplateBox // posicao para logoCorner = "top-right" (espelhar p/ left)
+  footerBox: TemplateBox
+}
+
+export const ART_ANCHORS: Record<ArtVariantKind, ArtAnchors> = {
+  feed: {
+    logoBox: { x: 0.695, y: 0.028, w: 0.279, h: 0.111 },
+    footerBox: { x: 0.031, y: 0.919, w: 0.938, h: 0.075 },
+  },
+  story: {
+    logoBox: { x: 0.669, y: 0.027, w: 0.293, h: 0.086 },
+    footerBox: { x: 0.047, y: 0.84, w: 0.904, h: 0.151 },
+  },
+}
+
+// Mesma fronteira usada na validacao de upload (checkArtVariantDimensions).
+export function anchorsFor(width: number, height: number): ArtAnchors {
+  return height / width >= 1.4 ? ART_ANCHORS.story : ART_ANCHORS.feed
+}
+
+// Espelha a caixa do logo para o canto superior ESQUERDO (margens simetricas).
+export function mirrorBoxLeft(box: TemplateBox): TemplateBox {
+  return { ...box, x: 1 - (box.x + box.w) }
+}
+
+// Cor de texto legivel SOBRE BRANCO (caixas do template): usa a cor da unidade
+// quando ela e escura o bastante; senao cai num azul-marinho neutro.
+export function textOnWhite(hex: string): string {
+  const value = hex.trim().replace(/^#/, "")
+  const expand = /^[0-9a-f]{3}$/i.test(value)
+    ? value.split("").map((c) => c + c).join("")
+    : value
+  if (!/^[0-9a-f]{6}$/i.test(expand)) return "#1e293b"
+  const r = parseInt(expand.slice(0, 2), 16)
+  const g = parseInt(expand.slice(2, 4), 16)
+  const b = parseInt(expand.slice(4, 6), 16)
+  const lin = (c: number) => {
+    const s = c / 255
+    return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4)
+  }
+  const luminance = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b)
+  return luminance < 0.45 ? `#${expand.toLowerCase()}` : "#1e293b"
+}
+
 // Cor de texto legivel sobre um fundo hex (#rgb ou #rrggbb) via luminancia
 // relativa. Fundo claro -> texto escuro; fundo escuro/invalido -> branco.
 export function contrastTextColor(hex: string): string {
