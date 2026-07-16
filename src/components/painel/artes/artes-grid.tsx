@@ -106,21 +106,25 @@ export function ArtesGrid({ arts, brand }: { arts: ArtItem[]; brand: TenantBrand
               >
                 <div className="relative aspect-square bg-gray-100">
                   <Image
-                    src={art.url}
+                    src={art.feed.url}
                     alt={art.title}
                     fill
                     sizes="(max-width: 640px) 50vw, 25vw"
                     className="object-contain"
                     unoptimized
                   />
-                  {art.hasPrice && (
-                    <Badge
-                      variant="outline"
-                      className="absolute right-2 top-2 gap-1 bg-white/90 text-emerald-700"
-                    >
-                      <BadgeDollarSign className="h-3 w-3" /> Com valor
-                    </Badge>
-                  )}
+                  <div className="absolute right-2 top-2 flex flex-col items-end gap-1">
+                    {art.hasPrice && (
+                      <Badge variant="outline" className="gap-1 bg-white/90 text-emerald-700">
+                        <BadgeDollarSign className="h-3 w-3" /> Com valor
+                      </Badge>
+                    )}
+                    {art.story && (
+                      <Badge variant="outline" className="bg-white/90 text-violet-700">
+                        Feed + Stories
+                      </Badge>
+                    )}
+                  </div>
                 </div>
                 <div className="p-3">
                   <p className="truncate text-sm font-semibold text-gray-900" title={art.title}>

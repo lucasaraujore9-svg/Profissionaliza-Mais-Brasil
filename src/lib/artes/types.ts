@@ -4,13 +4,32 @@
 
 export type LogoCorner = "top-left" | "top-right"
 
+// Uma variante de formato da arte (feed = quadrada/4:5, story = 9:16).
+export interface ArtVariant {
+  url: string // URL publica do arquivo base no bucket vitrine-assets
+  width: number
+  height: number
+}
+
+export type ArtVariantKind = "feed" | "story"
+
+export const VARIANT_LABEL: Record<ArtVariantKind, string> = {
+  feed: "Feed",
+  story: "Stories",
+}
+
+// Sufixo no nome do arquivo baixado (feed/stories).
+export const VARIANT_FILE_SUFFIX: Record<ArtVariantKind, string> = {
+  feed: "feed",
+  story: "stories",
+}
+
 export interface ArtItem {
   id: string
   title: string
   category: string | null
-  url: string // URL publica do arquivo base no bucket vitrine-assets
-  width: number
-  height: number
+  feed: ArtVariant
+  story: ArtVariant | null
   hasPrice: boolean
   logoCorner: LogoCorner
 }

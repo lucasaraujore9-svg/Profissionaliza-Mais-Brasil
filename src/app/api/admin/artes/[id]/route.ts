@@ -3,8 +3,9 @@ import { z } from "zod"
 import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { requireArtesManager } from "@/lib/auth/guards"
-import { deleteVitrineAsset, publicUrlFor } from "@/lib/supabase/storage"
+import { deleteVitrineAsset } from "@/lib/supabase/storage"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
+import { withArtUrls } from "@/lib/artes/admin-upload"
 
 const updateSchema = z
   .object({
@@ -16,8 +17,8 @@ const updateSchema = z
   })
   .refine((d) => Object.keys(d).length > 0, { message: "Nada para atualizar" })
 
-// PATCH /api/admin/artes/[id] — edita metadados / publica. Sem troca de
-// arquivo: para trocar a imagem, exclui e sobe de novo (1 arte = 1 arquivo).
+// PATCH /api/admin/artes/[id] — edita metadados / publica. Troca de arquivo
+// das variantes: POST /api/admin/artes/[id]/file.
 export const PATCH = withRequestContextParams<{ id: string }>(
   { action: "admin.artes.update", route: "/api/admin/artes/[id]" },
   async (request: Request, { params }) => {
@@ -53,9 +54,7 @@ export const PATCH = withRequestContextParams<{ id: string }>(
           ...(data.published !== undefined ? { published: data.published } : {}),
         },
       })
-      return NextResponse.json({
-        data: { art: { ...updated, publicUrl: publicUrlFor(updated.filePath) } },
-      })
+      return NextResponse.json({ data: { art: withArtUrls(updated) } })
     } catch (err) {
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2025") {
         return NextResponse.json({ error: "Arte não encontrada" }, { status: 404 })
@@ -65,7 +64,8 @@ export const PATCH = withRequestContextParams<{ id: string }>(
   },
 )
 
-// DELETE /api/admin/artes/[id] — remove do banco e apaga o arquivo do bucket.
+// DELETE /api/admin/artes/[id] — remove do banco e apaga os arquivos (feed e
+// stories) do bucket.
 export const DELETE = withRequestContextParams<{ id: string }>(
   { action: "admin.artes.delete", route: "/api/admin/artes/[id]" },
   async (_request: Request, { params }) => {
@@ -74,13 +74,13 @@ export const DELETE = withRequestContextParams<{ id: string }>(
 
     const { id } = await params
 
-    let filePath: string
+    let paths: (string | null)[]
     try {
       const deleted = await prisma.marketingArt.delete({
         where: { id },
-        select: { filePath: true },
+        select: { filePath: true, storyFilePath: true },
       })
-      filePath = deleted.filePath
+      paths = [deleted.filePath, deleted.storyFilePath]
     } catch (err) {
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2025") {
         return NextResponse.json({ error: "Arte não encontrada" }, { status: 404 })
@@ -89,10 +89,13 @@ export const DELETE = withRequestContextParams<{ id: string }>(
     }
 
     // DB primeiro, storage depois: orfao no bucket nao quebra o fluxo.
-    try {
-      await deleteVitrineAsset(filePath)
-    } catch {
-      // best-effort
+    for (const path of paths) {
+      if (!path) continue
+      try {
+        await deleteVitrineAsset(path)
+      } catch {
+        // best-effort
+      }
     }
 
     return NextResponse.json({ data: { ok: true } })

@@ -2321,10 +2321,16 @@ model MarketingArt {
   title    String
   // Categoria livre (string simples) — filtro no painel via DISTINCT.
   category String?
-  // Path no bucket vitrine-assets (ex: "artes/<uuid>.png"), nunca URL completa.
+  // Variante FEED (quadrada/4:5) — path no bucket vitrine-assets
+  // (ex: "artes/<uuid>.png"), nunca URL completa.
   filePath String  @map("file_path")
   width    Int
   height   Int
+  // Variante STORIES (9:16, vertical) — opcional; quando presente a revenda
+  // escolhe baixar feed, stories ou as duas.
+  storyFilePath String? @map("story_file_path")
+  storyWidth    Int?    @map("story_width")
+  storyHeight   Int?    @map("story_height")
   // Arte de curso "com valor": a revenda digita o preco na hora de baixar.
   hasPrice Boolean @default(false) @map("has_price")
   // Canto do topo onde o logo da revenda e carimbado: "top-left" | "top-right"

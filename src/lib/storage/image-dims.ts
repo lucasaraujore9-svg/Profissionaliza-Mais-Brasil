@@ -278,3 +278,35 @@ export function checkArtDimensions(
   }
   return { ok: true, expected, got }
 }
+
+export type ArtVariantKind = "feed" | "story"
+
+// Fronteira de proporcao entre feed e stories: stories e 9:16 (h/w ~ 1.78) e
+// feed vai de paisagem ate 4:5 (h/w 1.25). O corte em 1.4 pega o erro classico
+// de subir o arquivo na variante errada, com folga dos dois lados.
+const STORY_MIN_RATIO = 1.4
+
+export function checkArtVariantDimensions(
+  buffer: ArrayBuffer | Buffer,
+  mime: string,
+  kind: ArtVariantKind,
+): DimensionCheck {
+  const base = checkArtDimensions(buffer, mime)
+  if (!base.ok || !base.got) return base
+  const ratio = base.got.height / base.got.width
+  if (kind === "story" && ratio < STORY_MIN_RATIO) {
+    return {
+      ...base,
+      ok: false,
+      message: `O arquivo de STORIES precisa ser vertical (9:16, ex.: 1080x1920px). Recebida ${base.got.width}x${base.got.height}px — parece a versão de feed.`,
+    }
+  }
+  if (kind === "feed" && ratio >= STORY_MIN_RATIO) {
+    return {
+      ...base,
+      ok: false,
+      message: `O arquivo de FEED não pode ser vertical de stories. Recebida ${base.got.width}x${base.got.height}px — parece a versão de stories.`,
+    }
+  }
+  return base
+}

@@ -1,7 +1,7 @@
 "use client"
 
 import Image from "next/image"
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
 import {
   Plus,
@@ -55,6 +55,10 @@ interface MarketingArt {
   publicUrl: string
   width: number
   height: number
+  storyFilePath: string | null
+  storyPublicUrl: string | null
+  storyWidth: number | null
+  storyHeight: number | null
   hasPrice: boolean
   logoCorner: "top-left" | "top-right"
   published: boolean
@@ -231,6 +235,12 @@ export function ArtesAdminClient() {
                     <BadgeDollarSign className="h-3 w-3" /> Com valor
                   </Badge>
                 )}
+                <Badge
+                  variant="outline"
+                  className={art.storyFilePath ? "text-violet-700" : "text-gray-500"}
+                >
+                  {art.storyFilePath ? "Feed + Stories" : "Só feed"}
+                </Badge>
               </div>
               <p className="text-xs text-gray-400">
                 {art.width}x{art.height}px · {CORNER_LABEL[art.logoCorner]}
@@ -350,52 +360,39 @@ function UploadDialog({
   onClose: () => void
   onDone: () => void
 }) {
-  const [files, setFiles] = useState<File[]>([])
+  const [feedFile, setFeedFile] = useState<File | null>(null)
+  const [storyFile, setStoryFile] = useState<File | null>(null)
+  const [title, setTitle] = useState("")
   const [category, setCategory] = useState("")
   const [hasPrice, setHasPrice] = useState(false)
   const [logoCorner, setLogoCorner] = useState<"top-left" | "top-right">("top-right")
   const [sending, setSending] = useState(false)
-  const [progress, setProgress] = useState(0)
-  const inputRef = useRef<HTMLInputElement>(null)
 
   async function send() {
-    if (files.length === 0) {
-      toast.error("Selecione ao menos um arquivo")
+    if (!feedFile) {
+      toast.error("Selecione o arquivo da versão de feed")
       return
     }
+    const finalTitle =
+      title.trim() || feedFile.name.replace(/\.[^.]+$/, "").slice(0, 120) || "Arte"
     setSending(true)
-    setProgress(0)
-    // POSTs SEQUENCIAIS (1 por arquivo): erro num arquivo nao aborta o lote —
-    // coletamos as falhas e reportamos no final.
-    const failures: string[] = []
-    let sent = 0
-    for (const file of files) {
+    try {
       const form = new FormData()
-      form.set("file", file)
-      form.set("title", file.name.replace(/\.[^.]+$/, "").slice(0, 120) || "Arte")
+      form.set("feedFile", feedFile)
+      if (storyFile) form.set("storyFile", storyFile)
+      form.set("title", finalTitle)
       if (category.trim()) form.set("category", category.trim())
       form.set("hasPrice", String(hasPrice))
       form.set("logoCorner", logoCorner)
-      try {
-        const res = await fetch("/api/admin/artes", { method: "POST", body: form })
-        const json = await res.json().catch(() => ({}))
-        if (!res.ok) throw new Error(json?.error ?? "Erro no upload")
-        sent += 1
-      } catch (e) {
-        failures.push(`${file.name}: ${e instanceof Error ? e.message : "erro"}`)
-      }
-      setProgress(sent + failures.length)
-    }
-    setSending(false)
-    if (failures.length > 0) {
-      toast.error(
-        `${failures.length} arquivo(s) falharam:\n${failures.slice(0, 3).join("\n")}${failures.length > 3 ? "\n…" : ""}`,
-        { duration: 10000 },
-      )
-    }
-    if (sent > 0) {
-      toast.success(`${sent} arte(s) enviada(s)`)
+      const res = await fetch("/api/admin/artes", { method: "POST", body: form })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json?.error ?? "Erro no upload")
+      toast.success("Arte enviada")
       onDone()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Falha no upload", { duration: 8000 })
+    } finally {
+      setSending(false)
     }
   }
 
@@ -403,27 +400,46 @@ function UploadDialog({
     <Dialog open onOpenChange={(o) => !o && !sending && onClose()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Enviar artes</DialogTitle>
+          <DialogTitle>Nova arte</DialogTitle>
           <DialogDescription>
-            PNG, JPG ou WEBP até 10MB, mínimo 600x600px e máximo 4096px de lado. Categoria e
-            opções abaixo aplicam-se a todos os arquivos do lote.
+            Cada arte tem a versão de FEED (quadrada ou 4:5) e a de STORIES (9:16, ex.
+            1080x1920px). PNG, JPG ou WEBP até 10MB, mínimo 600px, máximo 4096px de lado.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
           <div className="space-y-1.5">
-            <Label htmlFor="a-files">Arquivos</Label>
+            <Label htmlFor="a-feed">Arquivo — Feed</Label>
             <Input
-              id="a-files"
-              ref={inputRef}
+              id="a-feed"
               type="file"
               accept="image/png,image/jpeg,image/webp"
-              multiple
               disabled={sending}
-              onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
+              onChange={(e) => setFeedFile(e.target.files?.[0] ?? null)}
             />
-            {files.length > 0 && (
-              <p className="text-xs text-gray-500">{files.length} arquivo(s) selecionado(s)</p>
-            )}
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="a-story">Arquivo — Stories (opcional)</Label>
+            <Input
+              id="a-story"
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              disabled={sending}
+              onChange={(e) => setStoryFile(e.target.files?.[0] ?? null)}
+            />
+            <p className="text-xs text-gray-500">
+              Sem o arquivo de stories, a unidade só verá a versão de feed. Dá para anexar
+              depois pela edição.
+            </p>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="a-title">Título (opcional — usa o nome do arquivo)</Label>
+            <Input
+              id="a-title"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              maxLength={120}
+              disabled={sending}
+            />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="a-cat">Categoria (opcional)</Label>
@@ -467,19 +483,14 @@ function UploadDialog({
             </div>
             <Switch checked={hasPrice} onCheckedChange={setHasPrice} disabled={sending} />
           </div>
-          {sending && (
-            <p className="text-sm text-gray-600">
-              Enviando… {progress}/{files.length}
-            </p>
-          )}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={sending}>
             Cancelar
           </Button>
-          <Button onClick={send} disabled={sending || files.length === 0}>
+          <Button onClick={send} disabled={sending || !feedFile}>
             {sending && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
-            Enviar {files.length > 0 ? `(${files.length})` : ""}
+            Enviar
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -504,7 +515,18 @@ function EditDialog({
   const [category, setCategory] = useState(art.category ?? "")
   const [hasPrice, setHasPrice] = useState(art.hasPrice)
   const [logoCorner, setLogoCorner] = useState<"top-left" | "top-right">(art.logoCorner)
+  const [feedFile, setFeedFile] = useState<File | null>(null)
+  const [storyFile, setStoryFile] = useState<File | null>(null)
   const [saving, setSaving] = useState(false)
+
+  async function replaceVariant(kind: "feed" | "story", file: File) {
+    const form = new FormData()
+    form.set("kind", kind)
+    form.set("file", file)
+    const res = await fetch(`/api/admin/artes/${art.id}/file`, { method: "POST", body: form })
+    const json = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(json?.error ?? "Erro ao trocar arquivo")
+  }
 
   async function save() {
     if (title.trim().length < 2) {
@@ -522,10 +544,12 @@ function EditDialog({
           logoCorner,
         }),
       })
+      if (feedFile) await replaceVariant("feed", feedFile)
+      if (storyFile) await replaceVariant("story", storyFile)
       toast.success("Arte atualizada")
       onSaved()
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Falha ao salvar")
+      toast.error(e instanceof Error ? e.message : "Falha ao salvar", { duration: 8000 })
     } finally {
       setSaving(false)
     }
@@ -537,13 +561,40 @@ function EditDialog({
         <DialogHeader>
           <DialogTitle>Editar arte</DialogTitle>
           <DialogDescription>
-            Para trocar a imagem, exclua esta arte e envie o novo arquivo.
+            Edite os dados ou troque os arquivos das versões de feed e stories.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
           <div className="space-y-1.5">
             <Label htmlFor="e-title">Título</Label>
             <Input id="e-title" value={title} onChange={(e) => setTitle(e.target.value)} />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="e-feed">Trocar arquivo do feed (opcional)</Label>
+            <Input
+              id="e-feed"
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              disabled={saving}
+              onChange={(e) => setFeedFile(e.target.files?.[0] ?? null)}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="e-story">
+              {art.storyFilePath ? "Trocar arquivo de stories (opcional)" : "Adicionar versão de stories"}
+            </Label>
+            <Input
+              id="e-story"
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              disabled={saving}
+              onChange={(e) => setStoryFile(e.target.files?.[0] ?? null)}
+            />
+            {!art.storyFilePath && (
+              <p className="text-xs text-gray-500">
+                Esta arte ainda não tem a versão de stories (9:16).
+              </p>
+            )}
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="e-cat">Categoria (opcional)</Label>

@@ -29,6 +29,9 @@ export default async function PainelArtesPage() {
         filePath: true,
         width: true,
         height: true,
+        storyFilePath: true,
+        storyWidth: true,
+        storyHeight: true,
         hasPrice: true,
         logoCorner: true,
       },
@@ -58,9 +61,15 @@ export default async function PainelArtesPage() {
     id: art.id,
     title: art.title,
     category: art.category,
-    url: publicUrlFor(art.filePath),
-    width: art.width,
-    height: art.height,
+    feed: { url: publicUrlFor(art.filePath), width: art.width, height: art.height },
+    story:
+      art.storyFilePath && art.storyWidth && art.storyHeight
+        ? {
+            url: publicUrlFor(art.storyFilePath),
+            width: art.storyWidth,
+            height: art.storyHeight,
+          }
+        : null,
     hasPrice: art.hasPrice,
     logoCorner: art.logoCorner === "top-left" ? "top-left" : "top-right",
   }))

@@ -3,35 +3,10 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { requireArtesManager } from "@/lib/auth/guards"
-import { uploadVitrineAsset, deleteVitrineAsset, publicUrlFor } from "@/lib/supabase/storage"
-import { isValidImageMagic } from "@/lib/storage/validate-image"
-import { checkArtDimensions } from "@/lib/storage/image-dims"
+import { uploadVitrineAsset, deleteVitrineAsset } from "@/lib/supabase/storage"
 import { rateLimit, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
 import { withRequestContext } from "@/lib/observability/with-request-context"
-
-// Artes sao posts/stories em PNG que passam facil de 5MB — teto proprio de 10MB
-// (o maxSide de 4096px em checkArtDimensions segura o peso real).
-const MAX_BYTES = 10 * 1024 * 1024
-const ALLOWED_TYPES = new Set([
-  "image/png",
-  "image/jpeg",
-  "image/jpg",
-  "image/webp",
-])
-
-function extensionFor(mime: string): string {
-  switch (mime) {
-    case "image/png":
-      return "png"
-    case "image/jpeg":
-    case "image/jpg":
-      return "jpg"
-    case "image/webp":
-      return "webp"
-    default:
-      return "bin"
-  }
-}
+import { artExtensionFor, validateArtFile, withArtUrls } from "@/lib/artes/admin-upload"
 
 // GET /api/admin/artes — lista todas (publicadas ou nao) na ordem de gestao.
 export const GET = withRequestContext(
@@ -44,11 +19,7 @@ export const GET = withRequestContext(
       orderBy: { position: "asc" },
     })
 
-    return NextResponse.json({
-      data: {
-        arts: arts.map((art) => ({ ...art, publicUrl: publicUrlFor(art.filePath) })),
-      },
-    })
+    return NextResponse.json({ data: { arts: arts.map(withArtUrls) } })
   },
 )
 
@@ -59,8 +30,8 @@ const createFieldsSchema = z.object({
   logoCorner: z.enum(["top-left", "top-right"]).default("top-right"),
 })
 
-// POST /api/admin/artes — multipart: upload do arquivo + create num passo so
-// (evita asset orfao de fluxo em 2 requests). Molde: admin/banner/upload.
+// POST /api/admin/artes — multipart: cria a arte com a variante FEED
+// (obrigatoria) e opcionalmente a variante STORIES no mesmo passo.
 export const POST = withRequestContext(
   { action: "admin.artes.create", route: "/api/admin/artes" },
   async (request: Request) => {
@@ -77,10 +48,12 @@ export const POST = withRequestContext(
       return NextResponse.json({ error: "Formato inválido" }, { status: 400 })
     }
 
-    const file = form.get("file")
-    if (!(file instanceof File)) {
-      return NextResponse.json({ error: "Arquivo obrigatório" }, { status: 400 })
+    const feedFile = form.get("feedFile")
+    if (!(feedFile instanceof File)) {
+      return NextResponse.json({ error: "Arquivo de feed obrigatório" }, { status: 400 })
     }
+    const storyRaw = form.get("storyFile")
+    const storyFile = storyRaw instanceof File && storyRaw.size > 0 ? storyRaw : null
 
     const parsed = createFieldsSchema.safeParse({
       title: form.get("title") ?? "",
@@ -96,44 +69,32 @@ export const POST = withRequestContext(
     }
     const fields = parsed.data
 
-    if (!ALLOWED_TYPES.has(file.type)) {
-      return NextResponse.json(
-        { error: "Formato não suportado (use PNG, JPG ou WEBP)" },
-        { status: 400 },
-      )
-    }
-    if (file.size > MAX_BYTES) {
-      return NextResponse.json(
-        { error: "Arquivo maior que 10MB" },
-        { status: 400 },
-      )
-    }
+    const feed = await validateArtFile(feedFile, "feed")
+    if (!feed.ok) return feed.response
+    const story = storyFile ? await validateArtFile(storyFile, "story") : null
+    if (story && !story.ok) return story.response
 
-    const buffer = await file.arrayBuffer()
-    if (!isValidImageMagic(buffer, file.type)) {
-      return NextResponse.json(
-        { error: "Conteúdo do arquivo não corresponde ao formato declarado" },
-        { status: 400 },
-      )
-    }
+    const feedPath = `artes/${randomUUID()}.${artExtensionFor(feedFile.type)}`
+    const storyPath =
+      storyFile && story?.ok ? `artes/${randomUUID()}-story.${artExtensionFor(storyFile.type)}` : null
 
-    const dimCheck = checkArtDimensions(buffer, file.type)
-    if (!dimCheck.ok || !dimCheck.got) {
-      return NextResponse.json(
-        {
-          error: dimCheck.message ?? "Dimensões inválidas",
-          expected: dimCheck.expected,
-          got: dimCheck.got,
-        },
-        { status: 400 },
-      )
-    }
-
-    const path = `artes/${randomUUID()}.${extensionFor(file.type)}`
-
+    const uploaded: string[] = []
     try {
-      await uploadVitrineAsset(path, buffer, file.type)
+      await uploadVitrineAsset(feedPath, feed.buffer, feedFile.type)
+      uploaded.push(feedPath)
+      if (storyFile && storyPath && story?.ok) {
+        await uploadVitrineAsset(storyPath, story.buffer, storyFile.type)
+        uploaded.push(storyPath)
+      }
     } catch (error) {
+      // Upload parcial: limpa o que subiu para nao deixar orfao.
+      for (const p of uploaded) {
+        try {
+          await deleteVitrineAsset(p)
+        } catch {
+          // best-effort
+        }
+      }
       const message = error instanceof Error ? error.message : "Erro no upload"
       return NextResponse.json(
         { error: `Falha ao enviar arquivo: ${message}` },
@@ -151,25 +112,27 @@ export const POST = withRequestContext(
         data: {
           title: fields.title,
           category: fields.category || null,
-          filePath: path,
-          width: dimCheck.got.width,
-          height: dimCheck.got.height,
+          filePath: feedPath,
+          width: feed.width,
+          height: feed.height,
+          storyFilePath: storyPath,
+          storyWidth: story?.ok ? story.width : null,
+          storyHeight: story?.ok ? story.height : null,
           hasPrice: fields.hasPrice === "true",
           logoCorner: fields.logoCorner,
           position: (last?.position ?? -1) + 1,
         },
       })
 
-      return NextResponse.json(
-        { data: { art: { ...created, publicUrl: publicUrlFor(created.filePath) } } },
-        { status: 201 },
-      )
+      return NextResponse.json({ data: { art: withArtUrls(created) } }, { status: 201 })
     } catch (error) {
-      // Create falhou apos o upload: best-effort para nao deixar orfao no bucket.
-      try {
-        await deleteVitrineAsset(path)
-      } catch {
-        // orfao no storage nao quebra o fluxo
+      // Create falhou apos o upload: best-effort para nao deixar orfaos.
+      for (const p of uploaded) {
+        try {
+          await deleteVitrineAsset(p)
+        } catch {
+          // orfao no storage nao quebra o fluxo
+        }
       }
       throw error
     }
