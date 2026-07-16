@@ -5,7 +5,7 @@ import { requireArtesManager } from "@/lib/auth/guards"
 import { deleteVitrineAsset } from "@/lib/supabase/storage"
 import { rateLimit, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
 import { withRequestContext } from "@/lib/observability/with-request-context"
-import { validateUploadedArtObject, withArtUrls } from "@/lib/artes/admin-upload"
+import { ART_PATH_RE, validateUploadedArtObject, withArtUrls } from "@/lib/artes/admin-upload"
 
 // GET /api/admin/artes — lista todas (publicadas ou nao) na ordem de gestao.
 export const GET = withRequestContext(
@@ -22,8 +22,10 @@ export const GET = withRequestContext(
   },
 )
 
+// title min(1): o titulo padrao vem do nome do arquivo ("1.png" -> "1") — um
+// caractere e valido.
 const createSchema = z.object({
-  title: z.string().trim().min(2).max(120),
+  title: z.string().trim().min(1).max(120),
   category: z.string().trim().max(60).optional().nullable(),
   hasPrice: z.boolean().default(false),
   logoCorner: z.enum(["top-left", "top-right"]).default("top-right"),
@@ -53,6 +55,19 @@ export const POST = withRequestContext(
 
     const parsed = createSchema.safeParse(payload)
     if (!parsed.success) {
+      // Os arquivos JA estao no bucket (upload direto): limpa para nao deixar
+      // orfaos quando o registro e rejeitado.
+      const raw = payload as Record<string, unknown>
+      for (const key of ["feedPath", "storyPath"] as const) {
+        const p = raw?.[key]
+        if (typeof p === "string" && ART_PATH_RE.test(p)) {
+          try {
+            await deleteVitrineAsset(p)
+          } catch {
+            // best-effort
+          }
+        }
+      }
       return NextResponse.json(
         { error: "Dados inválidos", fields: parsed.error.flatten().fieldErrors },
         { status: 400 },

@@ -9,7 +9,7 @@ import { withArtUrls } from "@/lib/artes/admin-upload"
 
 const updateSchema = z
   .object({
-    title: z.string().trim().min(2).max(120).optional(),
+    title: z.string().trim().min(1).max(120).optional(),
     category: z.string().trim().max(60).nullable().optional(),
     hasPrice: z.boolean().optional(),
     logoCorner: z.enum(["top-left", "top-right"]).optional(),

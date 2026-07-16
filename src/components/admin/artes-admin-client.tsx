@@ -564,8 +564,8 @@ function EditDialog({
   }
 
   async function save() {
-    if (title.trim().length < 2) {
-      toast.error("Informe um título com ao menos 2 caracteres")
+    if (title.trim().length < 1) {
+      toast.error("Informe um título")
       return
     }
     setSaving(true)
