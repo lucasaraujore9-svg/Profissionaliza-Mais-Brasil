@@ -38,6 +38,24 @@ describe("artLayoutSchema", () => {
     ).toBe(false)
   })
 
+  it("aceita footerColor hex e rejeita formato inválido", () => {
+    expect(
+      artLayoutSchema.safeParse({
+        feed: { ...valid.feed, footerColor: "#a3e635" },
+      }).success,
+    ).toBe(true)
+    expect(
+      artLayoutSchema.safeParse({
+        feed: { ...valid.feed, footerColor: "verde" },
+      }).success,
+    ).toBe(false)
+    expect(
+      artLayoutSchema.safeParse({
+        feed: { ...valid.feed, footerColor: "#fff" },
+      }).success,
+    ).toBe(false)
+  })
+
   it("faz strip de chaves desconhecidas", () => {
     const parsed = artLayoutSchema.parse({
       feed: { ...valid.feed, extra: "x" },

@@ -217,6 +217,7 @@ export async function composeArt(
     logo: clampLogoPlacement(params.layout.logo),
     ...(params.layout.price ? { price: clampPricePlacement(params.layout.price) } : {}),
     footerBg: params.layout.footerBg,
+    ...(params.layout.footerColor ? { footerColor: params.layout.footerColor } : {}),
   }
 
   const [family, artImg, logoImg] = await Promise.all([
@@ -259,7 +260,10 @@ export async function composeArt(
     drawRoundRect(ctx, footerRect.x, footerRect.y, footerRect.w, footerRect.h, footerRect.h * 0.22)
     ctx.fill()
   }
-  const footerInk = layout.footerBg ? textOnWhite(tenant.primaryColor) : "#ffffff"
+  // Cor custom do designer/revenda vence; senao a automatica. A sombra de
+  // legibilidade acompanha a ausencia de fundo, independente da cor.
+  const footerInk =
+    layout.footerColor ?? (layout.footerBg ? textOnWhite(tenant.primaryColor) : "#ffffff")
   const footerShadow = !layout.footerBg
   const footerCx = footerRect.x + footerRect.w / 2
   const maxLineW = footerRect.w * 0.92

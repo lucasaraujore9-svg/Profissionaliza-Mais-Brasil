@@ -53,6 +53,9 @@ export interface VariantLayout {
   logo: LogoPlacement
   price?: PricePlacement // presente quando a arte tem hasPrice
   footerBg: boolean // fundo branco do rodape (posicao do rodape e FIXA)
+  // Cor do texto/icones do rodape (hex #rrggbb). Ausente = automatica:
+  // textOnWhite(primaryColor) com fundo, branco com sombra sem fundo.
+  footerColor?: string
 }
 
 export interface ArtLayout {
@@ -267,6 +270,7 @@ export function resolveVariantLayout(art: ArtItem, kind: ArtVariantKind): Varian
       ? { price: clampPricePlacement(saved.price ?? fallback.price!) }
       : {}),
     footerBg: saved.footerBg,
+    ...(saved.footerColor ? { footerColor: saved.footerColor } : {}),
   }
 }
 

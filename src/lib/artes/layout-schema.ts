@@ -24,6 +24,11 @@ export const variantLayoutSchema = z.object({
   logo: logoPlacementSchema,
   price: pricePlacementSchema.optional(),
   footerBg: z.boolean(),
+  // Hex #rrggbb; ausente = cor automatica.
+  footerColor: z
+    .string()
+    .regex(/^#[0-9a-fA-F]{6}$/)
+    .optional(),
 })
 
 export const artLayoutSchema = z.object({

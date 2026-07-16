@@ -350,6 +350,40 @@ export function ArtLayoutEditor({
           />
         </label>
       </div>
+
+      <div className="flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2">
+        <span className="text-sm text-gray-800">Cor do texto do rodapé</span>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              const next = { ...latestValue.current }
+              delete next.footerColor
+              onChange(next)
+            }}
+            className={cn(
+              "rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors",
+              !value.footerColor
+                ? "border-[var(--color-pmb-green)] bg-[var(--color-pmb-green)]/10 text-[var(--color-pmb-green)]"
+                : "border-gray-200 text-gray-600 hover:border-gray-300",
+            )}
+          >
+            Automática
+          </button>
+          <input
+            type="color"
+            aria-label="Cor do texto do rodapé"
+            value={value.footerColor ?? "#ffffff"}
+            onChange={(e) =>
+              onChange({ ...latestValue.current, footerColor: e.target.value })
+            }
+            className={cn(
+              "h-7 w-9 cursor-pointer rounded border bg-transparent p-0.5",
+              value.footerColor ? "border-[var(--color-pmb-green)]" : "border-gray-200",
+            )}
+          />
+        </div>
+      </div>
     </div>
   )
 }
