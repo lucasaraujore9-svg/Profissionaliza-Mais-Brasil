@@ -1,8 +1,8 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useState } from "react"
 import { toast } from "sonner"
-import { Download, Loader2, RefreshCw } from "lucide-react"
+import { Download, Loader2 } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -15,9 +15,16 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
-import type { ArtItem, ArtVariant, ArtVariantKind, TenantBrand } from "@/lib/artes/types"
+import type {
+  ArtItem,
+  ArtVariant,
+  ArtVariantKind,
+  TenantBrand,
+  VariantLayout,
+} from "@/lib/artes/types"
 import {
   formatPriceBRL,
+  resolveVariantLayout,
   slugifyFilename,
   VARIANT_FILE_SUFFIX,
   VARIANT_LABEL,
@@ -29,6 +36,7 @@ import {
   isCanvasSecurityError,
   outputFormatFor,
 } from "@/lib/artes/compose"
+import { ArtLayoutEditor, type EditorState } from "@/components/shared/art-layout-editor"
 
 // Input de valor em reais: guarda centavos e exibe "199,90" enquanto digita.
 export function PriceInput({
@@ -76,10 +84,10 @@ export function PriceInput({
 
 // Compoe uma variante num canvas descartavel e devolve o blob final.
 export async function composeVariantBlob(
-  art: ArtItem,
   variant: ArtVariant,
   brand: TenantBrand,
   priceCents: number | null,
+  layout: VariantLayout,
 ): Promise<{ blob: Blob; ext: string }> {
   const canvas = document.createElement("canvas")
   try {
@@ -87,9 +95,9 @@ export async function composeVariantBlob(
       artUrl: variant.url,
       artWidth: variant.width,
       artHeight: variant.height,
-      logoCorner: art.logoCorner,
       tenant: brand,
-      priceCents: art.hasPrice ? priceCents : null,
+      priceCents,
+      layout,
     })
     const format = outputFormatFor(variant.url)
     const blob = await canvasToBlob(canvas, format.mime, format.quality)
@@ -110,8 +118,6 @@ export function variantFilename(
   return `${slugifyFilename(art.title)}-${tenantSlug}-${VARIANT_FILE_SUFFIX[kind]}.${ext}`
 }
 
-type ComposeState = "loading" | "ready" | "error"
-
 export function ArteDownloadDialog({
   art,
   brand,
@@ -121,48 +127,27 @@ export function ArteDownloadDialog({
   brand: TenantBrand
   onClose: () => void
 }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null)
   const [previewKind, setPreviewKind] = useState<ArtVariantKind>("feed")
   const [downloadBoth, setDownloadBoth] = useState(!!art.story)
   const [priceCents, setPriceCents] = useState<number | null>(null)
-  const [state, setState] = useState<ComposeState>("loading")
+  const [editorState, setEditorState] = useState<EditorState>("loading")
   const [downloading, setDownloading] = useState(false)
-  const [retryKey, setRetryKey] = useState(0)
+  // Ajustes da revenda (posicao/tamanho/fundos) — vivem so nesta sessao do
+  // dialog, inicializados do layout salvo pelo designer.
+  const [layouts, setLayouts] = useState<Record<ArtVariantKind, VariantLayout>>(() => ({
+    feed: resolveVariantLayout(art, "feed"),
+    story: resolveVariantLayout(art, "story"),
+  }))
 
   const previewVariant = previewKind === "story" && art.story ? art.story : art.feed
-
-  // Recompoe o preview quando abre/retry, troca de versao ou muda o preco.
-  useEffect(() => {
-    const canvas = canvasRef.current
-    if (!canvas) return
-    let cancelled = false
-    setState("loading")
-    const timer = setTimeout(async () => {
-      try {
-        await composeArt(canvas, {
-          artUrl: previewVariant.url,
-          artWidth: previewVariant.width,
-          artHeight: previewVariant.height,
-          logoCorner: art.logoCorner,
-          tenant: brand,
-          priceCents: art.hasPrice ? priceCents : null,
-        })
-        if (!cancelled) setState("ready")
-      } catch (err) {
-        console.error("[artes] falha ao compor preview:", err)
-        if (!cancelled) setState("error")
-      }
-    }, 300)
-    return () => {
-      cancelled = true
-      clearTimeout(timer)
-    }
-  }, [art, brand, priceCents, previewVariant, retryKey])
-
   const needsPrice = art.hasPrice && priceCents == null
 
+  function variantFor(kind: ArtVariantKind): ArtVariant {
+    return kind === "story" && art.story ? art.story : art.feed
+  }
+
   async function handleDownload() {
-    if (state !== "ready") return
+    if (editorState !== "ready") return
     setDownloading(true)
     try {
       const kinds: ArtVariantKind[] =
@@ -170,15 +155,23 @@ export function ArteDownloadDialog({
 
       if (kinds.length === 1) {
         const kind = kinds[0]
-        const variant = kind === "story" && art.story ? art.story : art.feed
-        const { blob, ext } = await composeVariantBlob(art, variant, brand, priceCents)
+        const { blob, ext } = await composeVariantBlob(
+          variantFor(kind),
+          brand,
+          art.hasPrice ? priceCents : null,
+          layouts[kind],
+        )
         downloadBlob(blob, variantFilename(art, kind, brand.slug, ext))
       } else {
         const { default: JSZip } = await import("jszip")
         const zip = new JSZip()
         for (const kind of kinds) {
-          const variant = kind === "story" && art.story ? art.story : art.feed
-          const { blob, ext } = await composeVariantBlob(art, variant, brand, priceCents)
+          const { blob, ext } = await composeVariantBlob(
+            variantFor(kind),
+            brand,
+            art.hasPrice ? priceCents : null,
+            layouts[kind],
+          )
           zip.file(variantFilename(art, kind, brand.slug, ext), blob)
         }
         const zipBlob = await zip.generateAsync({ type: "blob" })
@@ -208,8 +201,8 @@ export function ArteDownloadDialog({
         <DialogHeader>
           <DialogTitle>{art.title}</DialogTitle>
           <DialogDescription>
-            Prévia já personalizada com os dados da sua unidade — o arquivo baixado é
-            exatamente o que você vê.
+            Prévia já personalizada com os dados da sua unidade — ajuste posição, tamanho e
+            fundos como preferir; o arquivo baixado é exatamente o que você vê.
           </DialogDescription>
         </DialogHeader>
 
@@ -234,32 +227,17 @@ export function ArteDownloadDialog({
             </div>
           )}
 
-          <div className="relative overflow-hidden rounded-lg border border-gray-200 bg-gray-50">
-            {/* O canvas fica no tamanho REAL da arte; o CSS escala o preview.
-                Stories (9:16) fica estreito para caber no dialog sem rolagem. */}
-            <canvas
-              ref={canvasRef}
-              className={cn(
-                "block h-auto w-full",
-                previewKind === "story" && art.story && "mx-auto max-w-[280px]",
-              )}
-            />
-            {state === "loading" && (
-              <div className="absolute inset-0 flex items-center justify-center bg-white/70">
-                <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
-              </div>
-            )}
-            {state === "error" && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-white/90 px-6 text-center">
-                <p className="text-sm text-gray-700">
-                  Não foi possível montar a prévia. Verifique sua conexão e tente de novo.
-                </p>
-                <Button variant="outline" size="sm" onClick={() => setRetryKey((k) => k + 1)}>
-                  <RefreshCw className="mr-1.5 h-4 w-4" /> Tentar novamente
-                </Button>
-              </div>
-            )}
-          </div>
+          <ArtLayoutEditor
+            artUrl={previewVariant.url}
+            artWidth={previewVariant.width}
+            artHeight={previewVariant.height}
+            brand={brand}
+            hasPrice={art.hasPrice}
+            samplePriceCents={priceCents ?? 19990}
+            value={layouts[previewKind]}
+            onChange={(next) => setLayouts((prev) => ({ ...prev, [previewKind]: next }))}
+            onStateChange={setEditorState}
+          />
 
           {art.story && (
             <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-gray-200 px-3 py-2.5">
@@ -282,7 +260,7 @@ export function ArteDownloadDialog({
               <p className="text-xs text-gray-500">
                 {priceCents != null
                   ? `Será carimbado como ${formatPriceBRL(priceCents)}.`
-                  : "Digite o valor para liberar o download."}
+                  : "Digite o valor para liberar o download (a prévia mostra R$ 199,90 de exemplo)."}
               </p>
             </div>
           )}
@@ -294,7 +272,7 @@ export function ArteDownloadDialog({
           </Button>
           <Button
             onClick={handleDownload}
-            disabled={state !== "ready" || needsPrice || downloading}
+            disabled={editorState !== "ready" || needsPrice || downloading}
           >
             {downloading ? (
               <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />

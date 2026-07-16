@@ -1,7 +1,12 @@
 // Composicao CLIENT-SIDE das artes de divulgacao: desenha a arte base + logo
-// da unidade no topo + rodape padrao (site/whatsapp/rede social) + badge de
-// preco opcional num <canvas>. O MESMO canvas serve de preview (escalado por
-// CSS) e de arquivo final (toBlob) — o que a revenda ve e o que ela baixa.
+// da unidade + rodape de contatos (icones) + selo de preco opcional num
+// <canvas>. O MESMO desenho serve de preview (escalado por CSS) e de arquivo
+// final (toBlob) — o que a revenda ve e o que ela baixa.
+//
+// v3: logo e preco sao POSICIONAVEIS (VariantLayout definido pelo designer no
+// upload e ajustavel pela revenda no download); os fundos brancos do logo e do
+// rodape sao desenhados pelo sistema (toggles separados). A funcao devolve a
+// geometria desenhada em pixels para o editor de arraste fazer hit-test.
 //
 // ADR: composicao no browser em vez de server-side (sharp/satori). Artes e
 // logos estao em *.supabase.co (CORS `*`, CSP img-src permite), entao o canvas
@@ -13,26 +18,50 @@
 // componentes "use client".
 
 import {
-  anchorsFor,
+  ART_ANCHORS,
+  clampLogoPlacement,
+  clampPricePlacement,
   contrastTextColor,
+  footerGroups,
   formatPriceBRL,
-  mirrorBoxLeft,
   textOnWhite,
-  type LogoCorner,
   type TenantBrand,
+  type VariantLayout,
 } from "./types"
+import { drawIcon, iconFor } from "./icons"
 
 export interface ComposeParams {
   artUrl: string
   artWidth: number
   artHeight: number
-  logoCorner: LogoCorner
   tenant: TenantBrand
-  // Preco em centavos — so carimba o badge quando != null.
+  // Preco em centavos — so carimba o selo quando != null.
   priceCents?: number | null
+  // Layout resolvido pelo caller (default do designer ou ajuste da revenda).
+  layout: VariantLayout
+}
+
+export interface PixelRect {
+  x: number
+  y: number
+  w: number
+  h: number
+}
+
+export interface ComposedGeometry {
+  // Retangulo do PLACEMENT do logo (caixa de contain — estavel p/ hit-test).
+  logoRect: PixelRect
+  // Retangulo real do pill de preco desenhado (null sem preco).
+  priceRect: PixelRect | null
+  footerRect: PixelRect
 }
 
 const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v))
+
+// Cache de imagens decodificadas — essencial para recompor a ~60fps durante o
+// arraste do editor sem re-decodar (URLs sao imutaveis: paths UUID no bucket e
+// objectURLs por sessao).
+const imageCache = new Map<string, Promise<HTMLImageElement>>()
 
 // Carrega uma imagem com CORS habilitado para uso em canvas.
 //
@@ -40,14 +69,27 @@ const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(mi
 // SEM crossorigin — o cache HTTP pode devolver essa resposta sem os headers
 // CORS e taintar o canvas (bug classico do Chrome/Safari). A query exclusiva
 // do modo CORS garante uma entrada de cache separada.
+//
+// blob:/data: (preview local do editor do admin antes do upload): sem query
+// (quebraria a resolucao do blob) e sem crossOrigin — same-origin nao tainta.
 function loadImage(url: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
+  const cached = imageCache.get(url)
+  if (cached) return cached
+  const promise = new Promise<HTMLImageElement>((resolve, reject) => {
     const img = new Image()
-    img.crossOrigin = "anonymous"
+    const isLocal = /^(blob|data):/.test(url)
+    if (!isLocal) {
+      img.crossOrigin = "anonymous"
+    }
     img.onload = () => resolve(img)
-    img.onerror = () => reject(new Error(`Falha ao carregar imagem: ${url}`))
-    img.src = url + (url.includes("?") ? "&" : "?") + "xcors=1"
+    img.onerror = () => {
+      imageCache.delete(url)
+      reject(new Error(`Falha ao carregar imagem: ${url}`))
+    }
+    img.src = isLocal ? url : url + (url.includes("?") ? "&" : "?") + "xcors=1"
   })
+  imageCache.set(url, promise)
+  return promise
 }
 
 // Resolve a familia de fonte real do app para uso no canvas. O next/font
@@ -61,7 +103,7 @@ async function ensureFonts(): Promise<string> {
     const first = computed.split(",")[0]?.trim().replace(/^["']|["']$/g, "")
     if (first) {
       family = `"${first}", sans-serif`
-      // Carga defensiva do peso usado no rodape/badge.
+      // Carga defensiva do peso usado no rodape/selo.
       await document.fonts.load(`600 32px ${family}`).catch(() => undefined)
     }
   } catch {
@@ -88,11 +130,94 @@ function drawRoundRect(
   ctx.closePath()
 }
 
+// Sombra de legibilidade para texto/icone SEM fundo branco, sobre a arte.
+function setInkShadow(ctx: CanvasRenderingContext2D, fontSize: number, on: boolean) {
+  if (on) {
+    ctx.shadowColor = "rgba(0,0,0,0.55)"
+    ctx.shadowBlur = fontSize * 0.35
+    ctx.shadowOffsetY = fontSize * 0.06
+  } else {
+    ctx.shadowColor = "transparent"
+    ctx.shadowBlur = 0
+    ctx.shadowOffsetY = 0
+  }
+}
+
+interface MeasuredGroup {
+  icon: ReturnType<typeof iconFor>
+  text: string
+  textW: number
+}
+
+// Desenha uma linha de grupos [icone + texto] centrada em (cx, centerY).
+// Reduz a fonte ate caber em maxW (piso 55%). Retorna o fontSize usado.
+function drawGroupsLine(
+  ctx: CanvasRenderingContext2D,
+  family: string,
+  groups: { icon: ReturnType<typeof iconFor>; text: string }[],
+  weight: number,
+  baseFontSize: number,
+  cx: number,
+  centerY: number,
+  maxW: number,
+  ink: string,
+  shadow: boolean,
+): void {
+  if (groups.length === 0) return
+  const minFontSize = Math.round(baseFontSize * 0.55)
+  let fontSize = baseFontSize
+  let measured: MeasuredGroup[] = []
+  let totalW = 0
+
+  const measure = (size: number) => {
+    ctx.font = `${weight} ${size}px ${family}`
+    const iconSize = size * 1.15
+    const gapIconText = size * 0.35
+    const gapGroups = size * 1.4
+    measured = groups.map((g) => ({
+      ...g,
+      textW: ctx.measureText(g.text).width,
+    }))
+    totalW =
+      measured.reduce((acc, g) => acc + iconSize + gapIconText + g.textW, 0) +
+      gapGroups * (groups.length - 1)
+    return { iconSize, gapIconText, gapGroups }
+  }
+
+  let dims = measure(fontSize)
+  while (fontSize > minFontSize && totalW > maxW) {
+    fontSize -= 1
+    dims = measure(fontSize)
+  }
+
+  ctx.fillStyle = ink
+  ctx.textAlign = "left"
+  ctx.textBaseline = "middle"
+  setInkShadow(ctx, fontSize, shadow)
+
+  let x = cx - totalW / 2
+  for (const g of measured) {
+    drawIcon(ctx, g.icon, x, centerY - dims.iconSize / 2, dims.iconSize, ink)
+    // drawIcon faz save/restore — o shadow do texto precisa ser re-aplicado ao
+    // proprio fillText (shadow e estado do ctx, preservado fora do save).
+    ctx.font = `${weight} ${fontSize}px ${family}`
+    ctx.fillStyle = ink
+    ctx.fillText(g.text, x + dims.iconSize + dims.gapIconText, centerY)
+    x += dims.iconSize + dims.gapIconText + g.textW + dims.gapGroups
+  }
+  setInkShadow(ctx, fontSize, false)
+}
+
 export async function composeArt(
   canvas: HTMLCanvasElement,
   params: ComposeParams,
-): Promise<void> {
-  const { artUrl, artWidth, artHeight, logoCorner, tenant, priceCents } = params
+): Promise<ComposedGeometry> {
+  const { artUrl, artWidth, artHeight, tenant, priceCents } = params
+  const layout: VariantLayout = {
+    logo: clampLogoPlacement(params.layout.logo),
+    ...(params.layout.price ? { price: clampPricePlacement(params.layout.price) } : {}),
+    footerBg: params.layout.footerBg,
+  }
 
   const [family, artImg, logoImg] = await Promise.all([
     ensureFonts(),
@@ -117,114 +242,102 @@ export async function composeArt(
   // 1. Arte base preenchendo o canvas (dimensoes vem do banco = naturais).
   ctx.drawImage(artImg, 0, 0, artWidth, artHeight)
 
-  // O template das artes ja traz caixas BRANCAS arredondadas reservadas para o
-  // logo (topo) e para os contatos (rodape) — desenhamos DENTRO delas, nas
-  // posicoes medidas das artes de referencia (ART_ANCHORS por variante).
-  const anchors = anchorsFor(artWidth, artHeight)
-  const logoBoxRel =
-    logoCorner === "top-left" ? mirrorBoxLeft(anchors.logoBox) : anchors.logoBox
-  const logoBox = {
-    x: logoBoxRel.x * artWidth,
-    y: logoBoxRel.y * artHeight,
-    w: logoBoxRel.w * artWidth,
-    h: logoBoxRel.h * artHeight,
+  // 2. Rodape (posicao FIXA nas ancoras da variante; fica ATRAS de logo/preco
+  //    se sobrepostos — os elementos moveis sempre por cima).
+  const kind = artHeight / artWidth >= 1.4 ? "story" : "feed"
+  const fb = ART_ANCHORS[kind].footerBox
+  const footerRect: PixelRect = {
+    x: fb.x * artWidth,
+    y: fb.y * artHeight,
+    w: fb.w * artWidth,
+    h: fb.h * artHeight,
   }
-  const footerBox = {
-    x: anchors.footerBox.x * artWidth,
-    y: anchors.footerBox.y * artHeight,
-    w: anchors.footerBox.w * artWidth,
-    h: anchors.footerBox.h * artHeight,
-  }
-  const inkColor = textOnWhite(tenant.primaryColor)
 
-  // 2. Logo dentro da caixa reservada do topo (contain + padding interno).
-  //    Sem logo: nome da unidade centrado na caixa, na cor da marca.
-  const logoPad = logoBox.h * 0.16
+  const groups = footerGroups(tenant).map((g) => ({ icon: iconFor(g.icon), text: g.text }))
+  if (layout.footerBg) {
+    ctx.fillStyle = "#ffffff"
+    drawRoundRect(ctx, footerRect.x, footerRect.y, footerRect.w, footerRect.h, footerRect.h * 0.22)
+    ctx.fill()
+  }
+  const footerInk = layout.footerBg ? textOnWhite(tenant.primaryColor) : "#ffffff"
+  const footerShadow = !layout.footerBg
+  const footerCx = footerRect.x + footerRect.w / 2
+  const maxLineW = footerRect.w * 0.92
+
+  if (kind === "story") {
+    // Empilhado: site em destaque na 1a linha; contato + rede na 2a.
+    const line2 = groups.slice(1)
+    const font1 = Math.round(clamp(footerRect.h * 0.3, 18, 60))
+    if (line2.length === 0) {
+      drawGroupsLine(ctx, family, groups.slice(0, 1), 800, font1, footerCx, footerRect.y + footerRect.h * 0.5, maxLineW, footerInk, footerShadow)
+    } else {
+      drawGroupsLine(ctx, family, groups.slice(0, 1), 800, font1, footerCx, footerRect.y + footerRect.h * 0.38, maxLineW, footerInk, footerShadow)
+      drawGroupsLine(ctx, family, line2, 600, Math.round(font1 * 0.62), footerCx, footerRect.y + footerRect.h * 0.7, maxLineW, footerInk, footerShadow)
+    }
+  } else {
+    // Feed: 1 linha com todos os grupos.
+    const base = Math.round(clamp(footerRect.h * 0.32, 14, 44))
+    drawGroupsLine(ctx, family, groups, 600, base, footerCx, footerRect.y + footerRect.h / 2, maxLineW, footerInk, footerShadow)
+  }
+
+  // 3. Logo no placement (caixa de contain arrastavel/redimensionavel).
+  const logoRect: PixelRect = {
+    x: (layout.logo.cx - layout.logo.w / 2) * artWidth,
+    y: (layout.logo.cy - layout.logo.h / 2) * artHeight,
+    w: layout.logo.w * artWidth,
+    h: layout.logo.h * artHeight,
+  }
   if (logoImg) {
-    const maxW = logoBox.w - logoPad * 2
-    const maxH = logoBox.h - logoPad * 2
-    const scale = Math.min(maxW / logoImg.naturalWidth, maxH / logoImg.naturalHeight)
+    const scale = Math.min(logoRect.w / logoImg.naturalWidth, logoRect.h / logoImg.naturalHeight)
     const w = logoImg.naturalWidth * scale
     const h = logoImg.naturalHeight * scale
-    ctx.drawImage(logoImg, logoBox.x + (logoBox.w - w) / 2, logoBox.y + (logoBox.h - h) / 2, w, h)
+    const x = logoRect.x + (logoRect.w - w) / 2
+    const y = logoRect.y + (logoRect.h - h) / 2
+    if (layout.logo.bg) {
+      const pad = Math.max(w, h) * 0.12
+      ctx.fillStyle = "#ffffff"
+      drawRoundRect(ctx, x - pad, y - pad, w + pad * 2, h + pad * 2, pad)
+      ctx.fill()
+    }
+    ctx.drawImage(logoImg, x, y, w, h)
   } else {
-    const maxW = logoBox.w - logoPad * 2
-    let nameSize = Math.round(logoBox.h * 0.34)
+    // Sem logo: nome da unidade dentro da caixa.
+    if (layout.logo.bg) {
+      ctx.fillStyle = "#ffffff"
+      drawRoundRect(ctx, logoRect.x, logoRect.y, logoRect.w, logoRect.h, logoRect.h * 0.18)
+      ctx.fill()
+    }
+    const ink = layout.logo.bg ? textOnWhite(tenant.primaryColor) : "#ffffff"
+    const maxW = logoRect.w * 0.9
+    let nameSize = Math.round(logoRect.h * 0.34)
+    const minName = Math.max(10, Math.round(logoRect.h * 0.16))
     ctx.textAlign = "center"
     ctx.textBaseline = "middle"
-    ctx.fillStyle = inkColor
     const fitsName = (size: number) => {
       ctx.font = `700 ${size}px ${family}`
       return ctx.measureText(tenant.name).width <= maxW
     }
-    const minName = Math.round(logoBox.h * 0.2)
     while (nameSize > minName && !fitsName(nameSize)) nameSize -= 1
     ctx.font = `700 ${nameSize}px ${family}`
-    ctx.fillText(tenant.name, logoBox.x + logoBox.w / 2, logoBox.y + logoBox.h / 2, maxW)
+    ctx.fillStyle = ink
+    setInkShadow(ctx, nameSize, !layout.logo.bg)
+    ctx.fillText(tenant.name, logoRect.x + logoRect.w / 2, logoRect.y + logoRect.h / 2, maxW)
+    setInkShadow(ctx, nameSize, false)
   }
 
-  // 3. Contatos dentro da caixa branca do rodape: site / whatsapp / rede
-  //    social em texto na cor da unidade (ou azul-marinho se a cor for clara).
-  const items = [
-    tenant.siteHost,
-    tenant.whatsapp ? `WhatsApp ${tenant.whatsapp}` : null,
-    tenant.social,
-  ].filter((v): v is string => !!v)
-
-  if (items.length > 0) {
-    const padX = footerBox.w * 0.04
-    const maxTextWidth = footerBox.w - padX * 2
-    const baseFontSize = Math.round(clamp(footerBox.h * 0.3, 14, 46))
-    const separator = "   •   "
-
-    ctx.fillStyle = inkColor
-    ctx.textAlign = "center"
-    ctx.textBaseline = "middle"
-
-    const fits = (text: string, size: number) => {
-      ctx.font = `600 ${size}px ${family}`
-      return ctx.measureText(text).width <= maxTextWidth
-    }
-
-    const singleLine = items.join(separator)
-    let fontSize = baseFontSize
-    const minFontSize = Math.round(baseFontSize * 0.55)
-    while (fontSize > minFontSize && !fits(singleLine, fontSize)) {
-      fontSize -= 1
-    }
-
-    const cx = footerBox.x + footerBox.w / 2
-    if (fits(singleLine, fontSize) || items.length === 1) {
-      ctx.font = `600 ${fontSize}px ${family}`
-      ctx.fillText(singleLine, cx, footerBox.y + footerBox.h / 2, maxTextWidth)
-    } else {
-      // Nomes longos: quebra em 2 linhas (site na 1a, contato+social na 2a).
-      const line1 = items[0]
-      const line2 = items.slice(1).join(separator)
-      let size2 = baseFontSize
-      while (size2 > minFontSize && (!fits(line1, size2) || !fits(line2, size2))) {
-        size2 -= 1
-      }
-      ctx.font = `700 ${size2}px ${family}`
-      ctx.fillText(line1, cx, footerBox.y + footerBox.h * 0.34, maxTextWidth)
-      ctx.font = `600 ${size2}px ${family}`
-      ctx.fillText(line2, cx, footerBox.y + footerBox.h * 0.68, maxTextWidth)
-    }
-  }
-
-  // 4. Badge de preco (pill) ancorado acima da caixa do rodape, a direita.
-  if (priceCents != null) {
+  // 4. Selo de preco no placement (pill com fundo proprio na cor secundaria).
+  let priceRect: PixelRect | null = null
+  if (priceCents != null && layout.price) {
     const label = formatPriceBRL(priceCents)
-    const fontSize = Math.round(clamp(artWidth * 0.045, 18, 64))
+    const fontSize = Math.round(clamp(artWidth * 0.045, 18, 64) * layout.price.scale)
     ctx.font = `800 ${fontSize}px ${family}`
     const textWidth = ctx.measureText(label).width
     const padX = fontSize * 0.7
     const padY = fontSize * 0.45
     const pillW = textWidth + padX * 2
     const pillH = fontSize + padY * 2
-    const margin = artWidth * 0.03
-    const x = footerBox.x + footerBox.w - pillW
-    const y = footerBox.y - margin - pillH
+    const x = clamp(layout.price.cx * artWidth - pillW / 2, 0, artWidth - pillW)
+    const y = clamp(layout.price.cy * artHeight - pillH / 2, 0, artHeight - pillH)
 
     const bg = tenant.secondaryColor || "#1e40af"
     ctx.fillStyle = bg
@@ -235,7 +348,10 @@ export async function composeArt(
     ctx.textAlign = "center"
     ctx.textBaseline = "middle"
     ctx.fillText(label, x + pillW / 2, y + pillH / 2)
+    priceRect = { x, y, w: pillW, h: pillH }
   }
+
+  return { logoRect, priceRect, footerRect }
 }
 
 // toBlob com fallback toDataURL (Safari antigo) e erro claro quando o canvas

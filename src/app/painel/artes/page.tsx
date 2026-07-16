@@ -3,7 +3,13 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { publicUrlFor } from "@/lib/supabase/storage"
 import { activeCustomDomain, vitrineHost } from "@/lib/tenant/urls"
-import { normalizeSocialHandle, type ArtItem, type TenantBrand } from "@/lib/artes/types"
+import {
+  normalizeSocialHandle,
+  type ArtItem,
+  type SocialKind,
+  type TenantBrand,
+} from "@/lib/artes/types"
+import { parseArtLayout } from "@/lib/artes/layout-schema"
 import { PageHeader } from "@/components/painel/page-header"
 import { ArtesGrid } from "@/components/painel/artes/artes-grid"
 
@@ -34,6 +40,7 @@ export default async function PainelArtesPage() {
         storyHeight: true,
         hasPrice: true,
         logoCorner: true,
+        layout: true,
       },
     }),
     prisma.tenant.findUnique({
@@ -72,14 +79,24 @@ export default async function PainelArtesPage() {
         : null,
     hasPrice: art.hasPrice,
     logoCorner: art.logoCorner === "top-left" ? "top-left" : "top-right",
+    layout: parseArtLayout(art.layout),
   }))
 
-  // Primeira rede social disponivel vira o item do rodape.
-  const social =
-    normalizeSocialHandle(tenant.instagram) ??
-    normalizeSocialHandle(tenant.facebook) ??
-    normalizeSocialHandle(tenant.youtube) ??
-    normalizeSocialHandle(tenant.tiktok)
+  // Primeira rede social disponivel vira o item do rodape (kind -> icone).
+  const socialSources: Array<[SocialKind, string | null]> = [
+    ["instagram", tenant.instagram],
+    ["facebook", tenant.facebook],
+    ["youtube", tenant.youtube],
+    ["tiktok", tenant.tiktok],
+  ]
+  let social: TenantBrand["social"] = null
+  for (const [kind, raw] of socialSources) {
+    const handle = normalizeSocialHandle(raw)
+    if (handle) {
+      social = { kind, handle }
+      break
+    }
+  }
 
   const brand: TenantBrand = {
     name: tenant.name,

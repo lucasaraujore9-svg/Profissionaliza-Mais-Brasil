@@ -2335,7 +2335,12 @@ model MarketingArt {
   hasPrice Boolean @default(false) @map("has_price")
   // Canto do topo onde o logo da revenda e carimbado: "top-left" | "top-right"
   // (string simples validada por Zod, mesmo padrao de Tenant.whatsappFloatSide).
+  // LEGADO: usado so para derivar o layout default quando `layout` e null.
   logoCorner String @default("top-right") @map("logo_corner")
+  // Posicoes/tamanhos definidos pelo designer por variante (ArtLayout em
+  // src/lib/artes/types.ts): logo e preco arrastaveis + fundos brancos
+  // opcionais. Null = defaults derivados de ART_ANCHORS + logoCorner.
+  layout Json?
   published  Boolean @default(true)
   position   Int     @default(0)
 

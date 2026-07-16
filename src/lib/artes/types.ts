@@ -24,6 +24,42 @@ export const VARIANT_FILE_SUFFIX: Record<ArtVariantKind, string> = {
   story: "stories",
 }
 
+export type SocialKind = "instagram" | "facebook" | "youtube" | "tiktok"
+
+// ---------------------------------------------------------------------------
+// Layout posicionavel por arte/variante (definido pelo designer no upload;
+// a revenda pode ajustar no download — ajustes nao persistem).
+// Ancoras no CENTRO (cx/cy relativos 0..1): arrastar/redimensionar mantem o
+// elemento estavel e o espelhamento do legado vira so trocar cx por 1-cx.
+// ---------------------------------------------------------------------------
+
+export interface LogoPlacement {
+  cx: number // 0..1 (fracao da largura da arte)
+  cy: number // 0..1 (fracao da altura)
+  w: number // largura relativa da CAIXA de contain do logo
+  h: number // altura relativa da caixa (slider escala w/h uniformemente)
+  bg: boolean // quadrado branco atras do logo
+}
+
+export interface PricePlacement {
+  cx: number
+  cy: number
+  // Multiplicador sobre o tamanho-base do pill (a largura real depende do
+  // texto digitado pela revenda, que o designer nao conhece).
+  scale: number
+}
+
+export interface VariantLayout {
+  logo: LogoPlacement
+  price?: PricePlacement // presente quando a arte tem hasPrice
+  footerBg: boolean // fundo branco do rodape (posicao do rodape e FIXA)
+}
+
+export interface ArtLayout {
+  feed: VariantLayout
+  story?: VariantLayout
+}
+
 export interface ArtItem {
   id: string
   title: string
@@ -32,6 +68,7 @@ export interface ArtItem {
   story: ArtVariant | null
   hasPrice: boolean
   logoCorner: LogoCorner
+  layout: ArtLayout | null
 }
 
 export interface TenantBrand {
@@ -43,8 +80,8 @@ export interface TenantBrand {
   // Host canonico da vitrine: dominio proprio verificado ou subdominio oficial.
   siteHost: string
   whatsapp: string | null
-  // Primeira rede social disponivel, normalizada para "@handle" (ou null).
-  social: string | null
+  // Primeira rede social disponivel: kind escolhe o icone do rodape.
+  social: { kind: SocialKind; handle: string } | null
 }
 
 // Normaliza um valor de rede social (URL colada, @handle ou handle puro) para
@@ -150,6 +187,100 @@ export function contrastTextColor(hex: string): string {
   }
   const luminance = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b)
   return luminance > 0.5 ? "#111827" : "#ffffff"
+}
+
+// ---------------------------------------------------------------------------
+// Defaults e resolucao de layout
+// ---------------------------------------------------------------------------
+
+// Mantem o placement dentro do canvas: o logo nao pode vazar (centro limitado
+// pela meia-caixa); o preco so precisa do centro dentro da area util.
+export function clampLogoPlacement(p: LogoPlacement): LogoPlacement {
+  const clamp = (v: number, min: number, max: number) =>
+    Math.min(max, Math.max(min, v))
+  const w = clamp(p.w, 0.04, 0.9)
+  const h = clamp(p.h, 0.02, 0.9)
+  return {
+    ...p,
+    w,
+    h,
+    cx: clamp(p.cx, w / 2, 1 - w / 2),
+    cy: clamp(p.cy, h / 2, 1 - h / 2),
+  }
+}
+
+export function clampPricePlacement(p: PricePlacement): PricePlacement {
+  const clamp = (v: number, min: number, max: number) =>
+    Math.min(max, Math.max(min, v))
+  return {
+    ...p,
+    scale: clamp(p.scale, 0.5, 2.5),
+    cx: clamp(p.cx, 0.03, 0.97),
+    cy: clamp(p.cy, 0.03, 0.97),
+  }
+}
+
+// Layout default por variante — deriva das ancoras do template legado, entao
+// artes antigas (layout null) rendem exatamente como antes. Fundos:
+// - logo.bg=false: artes legadas ja TEM a caixa branca pintada no arquivo; o
+//   bg do sistema (colado no logo contido) criaria dupla borda.
+// - footerBg=true: com bg desligado o rodape usa texto branco com sombra, que
+//   sobre a caixa branca PINTADA das artes legadas ficaria ilegivel; o
+//   roundRect do sistema cai exatamente sobre a caixa pintada (inocuo) e a
+//   tinta continua textOnWhite(primaryColor).
+export function defaultVariantLayout(
+  kind: ArtVariantKind,
+  logoCorner: LogoCorner,
+  hasPrice: boolean,
+): VariantLayout {
+  const anchors = ART_ANCHORS[kind]
+  const box = logoCorner === "top-left" ? mirrorBoxLeft(anchors.logoBox) : anchors.logoBox
+  return {
+    logo: {
+      cx: box.x + box.w / 2,
+      cy: box.y + box.h / 2,
+      w: box.w,
+      h: box.h,
+      bg: false,
+    },
+    ...(hasPrice
+      ? {
+          price:
+            kind === "feed"
+              ? { cx: 0.8, cy: 0.855, scale: 1 }
+              : { cx: 0.78, cy: 0.775, scale: 1 },
+        }
+      : {}),
+    footerBg: true,
+  }
+}
+
+// Layout efetivo de uma variante: o salvo pelo designer (com clamp defensivo e
+// price garantido quando hasPrice) ou o default legado.
+export function resolveVariantLayout(art: ArtItem, kind: ArtVariantKind): VariantLayout {
+  const saved = art.layout?.[kind]
+  const fallback = defaultVariantLayout(kind, art.logoCorner, art.hasPrice)
+  if (!saved) return fallback
+  return {
+    logo: clampLogoPlacement(saved.logo),
+    ...(art.hasPrice
+      ? { price: clampPricePlacement(saved.price ?? fallback.price!) }
+      : {}),
+    footerBg: saved.footerBg,
+  }
+}
+
+// Grupos do rodape na ordem site -> whatsapp -> rede (omite ausentes).
+export interface FooterGroup {
+  icon: "globe" | "whatsapp" | SocialKind
+  text: string
+}
+
+export function footerGroups(tenant: TenantBrand): FooterGroup[] {
+  const groups: FooterGroup[] = [{ icon: "globe", text: tenant.siteHost }]
+  if (tenant.whatsapp) groups.push({ icon: "whatsapp", text: tenant.whatsapp })
+  if (tenant.social) groups.push({ icon: tenant.social.kind, text: tenant.social.handle })
+  return groups
 }
 
 // Formata centavos como moeda BRL (ex: 19990 -> "R$ 199,90").

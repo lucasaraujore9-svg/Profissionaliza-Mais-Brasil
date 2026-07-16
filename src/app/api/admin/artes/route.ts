@@ -6,6 +6,7 @@ import { deleteVitrineAsset } from "@/lib/supabase/storage"
 import { rateLimit, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { ART_PATH_RE, validateUploadedArtObject, withArtUrls } from "@/lib/artes/admin-upload"
+import { artLayoutSchema } from "@/lib/artes/layout-schema"
 
 // GET /api/admin/artes — lista todas (publicadas ou nao) na ordem de gestao.
 export const GET = withRequestContext(
@@ -31,6 +32,8 @@ const createSchema = z.object({
   logoCorner: z.enum(["top-left", "top-right"]).default("top-right"),
   feedPath: z.string().min(1),
   storyPath: z.string().min(1).optional().nullable(),
+  // Posicoes de logo/preco + fundos definidos pelo designer no editor.
+  layout: artLayoutSchema.optional().nullable(),
 })
 
 // POST /api/admin/artes — JSON: registra uma arte cujos arquivos ja foram
@@ -119,6 +122,7 @@ export const POST = withRequestContext(
           storyHeight: story?.height ?? null,
           hasPrice: data.hasPrice,
           logoCorner: data.logoCorner,
+          ...(data.layout ? { layout: data.layout } : {}),
           position: (last?.position ?? -1) + 1,
         },
       })

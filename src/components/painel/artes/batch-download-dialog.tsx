@@ -15,6 +15,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import type { ArtItem, TenantBrand } from "@/lib/artes/types"
+import { resolveVariantLayout } from "@/lib/artes/types"
 import { downloadBlob, isCanvasSecurityError } from "@/lib/artes/compose"
 import { PriceInput, composeVariantBlob, variantFilename } from "./arte-download-dialog"
 
@@ -58,7 +59,13 @@ export function BatchDownloadDialog({
         if (includeStory && art.story) jobs.push("story")
         for (const kind of jobs) {
           const variant = kind === "story" && art.story ? art.story : art.feed
-          const { blob, ext } = await composeVariantBlob(art, variant, brand, price)
+          // Lote usa o layout padrao salvo pelo designer (sem editor por arte).
+          const { blob, ext } = await composeVariantBlob(
+            variant,
+            brand,
+            price,
+            resolveVariantLayout(art, kind),
+          )
           let name = variantFilename(art, kind, brand.slug, ext)
           // Titulos repetidos no lote nao podem sobrescrever entradas do zip.
           if (usedNames.has(name)) {

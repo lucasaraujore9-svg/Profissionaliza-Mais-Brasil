@@ -6,6 +6,7 @@ import { requireArtesManager } from "@/lib/auth/guards"
 import { deleteVitrineAsset } from "@/lib/supabase/storage"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 import { withArtUrls } from "@/lib/artes/admin-upload"
+import { artLayoutSchema } from "@/lib/artes/layout-schema"
 
 const updateSchema = z
   .object({
@@ -14,6 +15,8 @@ const updateSchema = z
     hasPrice: z.boolean().optional(),
     logoCorner: z.enum(["top-left", "top-right"]).optional(),
     published: z.boolean().optional(),
+    // null = voltar aos defaults derivados (limpa o layout salvo).
+    layout: artLayoutSchema.nullable().optional(),
   })
   .refine((d) => Object.keys(d).length > 0, { message: "Nada para atualizar" })
 
@@ -52,6 +55,7 @@ export const PATCH = withRequestContextParams<{ id: string }>(
           ...(data.hasPrice !== undefined ? { hasPrice: data.hasPrice } : {}),
           ...(data.logoCorner !== undefined ? { logoCorner: data.logoCorner } : {}),
           ...(data.published !== undefined ? { published: data.published } : {}),
+          ...(data.layout !== undefined ? { layout: data.layout ?? Prisma.DbNull } : {}),
         },
       })
       return NextResponse.json({ data: { art: withArtUrls(updated) } })

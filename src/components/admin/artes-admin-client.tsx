@@ -15,6 +15,8 @@ import {
   Loader2,
   Tag,
   BadgeDollarSign,
+  Move,
+  ArrowLeft,
 } from "lucide-react"
 import {
   Dialog,
@@ -46,6 +48,15 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { ArtLayoutEditor, sampleBrand } from "@/components/shared/art-layout-editor"
+import {
+  defaultVariantLayout,
+  VARIANT_LABEL,
+  type ArtLayout,
+  type ArtVariantKind,
+  type LogoCorner,
+} from "@/lib/artes/types"
 
 interface MarketingArt {
   id: string
@@ -61,8 +72,28 @@ interface MarketingArt {
   storyHeight: number | null
   hasPrice: boolean
   logoCorner: "top-left" | "top-right"
+  layout: ArtLayout | null
   published: boolean
   position: number
+}
+
+// Mede um arquivo local (antes do upload) e devolve objectURL + dimensoes
+// para o editor de posicoes.
+async function measureLocalFile(
+  file: File,
+): Promise<{ url: string; width: number; height: number }> {
+  const url = URL.createObjectURL(file)
+  return new Promise((resolve, reject) => {
+    // window.Image: o import de next/image sombreia o construtor global aqui.
+    const img = new window.Image()
+    img.onload = () =>
+      resolve({ url, width: img.naturalWidth, height: img.naturalHeight })
+    img.onerror = () => {
+      URL.revokeObjectURL(url)
+      reject(new Error(`Não foi possível ler ${file.name}`))
+    }
+    img.src = url
+  })
 }
 
 async function api(url: string, init?: RequestInit) {
@@ -119,6 +150,7 @@ export function ArtesAdminClient() {
   const [loading, setLoading] = useState(true)
   const [uploadOpen, setUploadOpen] = useState(false)
   const [editing, setEditing] = useState<MarketingArt | null>(null)
+  const [positioning, setPositioning] = useState<MarketingArt | null>(null)
   const [confirm, setConfirm] = useState<MarketingArt | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
 
@@ -311,6 +343,14 @@ export function ArtesAdminClient() {
                   <Button
                     variant="ghost"
                     size="sm"
+                    onClick={() => setPositioning(art)}
+                    title="Posições (logo/preço)"
+                  >
+                    <Move className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
                     onClick={() => setEditing(art)}
                     title="Editar"
                   >
@@ -354,6 +394,17 @@ export function ArtesAdminClient() {
         />
       )}
 
+      {positioning && (
+        <LayoutDialog
+          art={positioning}
+          onClose={() => setPositioning(null)}
+          onSaved={() => {
+            setPositioning(null)
+            void load()
+          }}
+        />
+      )}
+
       <AlertDialog open={!!confirm} onOpenChange={(o) => !o && setConfirm(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -392,19 +443,58 @@ function UploadDialog({
   onClose: () => void
   onDone: () => void
 }) {
+  const [step, setStep] = useState<1 | 2>(1)
   const [feedFile, setFeedFile] = useState<File | null>(null)
   const [storyFile, setStoryFile] = useState<File | null>(null)
+  const [feedPreview, setFeedPreview] = useState<{ url: string; width: number; height: number } | null>(null)
+  const [storyPreview, setStoryPreview] = useState<{ url: string; width: number; height: number } | null>(null)
+  const [layout, setLayout] = useState<ArtLayout | null>(null)
   const [title, setTitle] = useState("")
   const [category, setCategory] = useState("")
   const [hasPrice, setHasPrice] = useState(false)
   const [logoCorner, setLogoCorner] = useState<"top-left" | "top-right">("top-right")
   const [sending, setSending] = useState(false)
 
-  async function send() {
+  // objectURLs vivem ate o fechamento do dialog.
+  useEffect(() => {
+    return () => {
+      if (feedPreview) URL.revokeObjectURL(feedPreview.url)
+      if (storyPreview) URL.revokeObjectURL(storyPreview.url)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  async function goToPositions() {
     if (!feedFile) {
       toast.error("Selecione o arquivo da versão de feed")
       return
     }
+    try {
+      // Previews locais (antes do upload) para o editor de posicoes.
+      const feed = feedPreview ?? (await measureLocalFile(feedFile))
+      setFeedPreview(feed)
+      let story = storyPreview
+      if (storyFile && !story) {
+        story = await measureLocalFile(storyFile)
+        setStoryPreview(story)
+      }
+      setLayout(
+        (prev) =>
+          prev ?? {
+            feed: defaultVariantLayout("feed", logoCorner, hasPrice),
+            ...(storyFile
+              ? { story: defaultVariantLayout("story", logoCorner, hasPrice) }
+              : {}),
+          },
+      )
+      setStep(2)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Falha ao ler os arquivos")
+    }
+  }
+
+  async function send() {
+    if (!feedFile || !layout) return
     const finalTitle =
       title.trim() || feedFile.name.replace(/\.[^.]+$/, "").slice(0, 120) || "Arte"
     setSending(true)
@@ -421,6 +511,7 @@ function UploadDialog({
           logoCorner,
           feedPath,
           storyPath,
+          layout,
         }),
       })
       toast.success("Arte enviada")
@@ -430,6 +521,67 @@ function UploadDialog({
     } finally {
       setSending(false)
     }
+  }
+
+  if (step === 2 && layout && feedPreview) {
+    return (
+      <Dialog open onOpenChange={(o) => !o && !sending && onClose()}>
+        <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Posições — logo{hasPrice ? " e preço" : ""}</DialogTitle>
+            <DialogDescription>
+              Defina os padrões desta arte com a marca de exemplo. A unidade ainda pode
+              ajustar tudo na hora de baixar.
+            </DialogDescription>
+          </DialogHeader>
+          {storyPreview ? (
+            <Tabs defaultValue="feed">
+              <TabsList>
+                <TabsTrigger value="feed">{VARIANT_LABEL.feed}</TabsTrigger>
+                <TabsTrigger value="story">{VARIANT_LABEL.story}</TabsTrigger>
+              </TabsList>
+              {(["feed", "story"] as const).map((kind) => {
+                const preview = kind === "feed" ? feedPreview : storyPreview
+                const variantLayout = layout[kind]
+                if (!preview || !variantLayout) return null
+                return (
+                  <TabsContent key={kind} value={kind}>
+                    <ArtLayoutEditor
+                      artUrl={preview.url}
+                      artWidth={preview.width}
+                      artHeight={preview.height}
+                      brand={sampleBrand()}
+                      hasPrice={hasPrice}
+                      value={variantLayout}
+                      onChange={(next) => setLayout((prev) => (prev ? { ...prev, [kind]: next } : prev))}
+                    />
+                  </TabsContent>
+                )
+              })}
+            </Tabs>
+          ) : (
+            <ArtLayoutEditor
+              artUrl={feedPreview.url}
+              artWidth={feedPreview.width}
+              artHeight={feedPreview.height}
+              brand={sampleBrand()}
+              hasPrice={hasPrice}
+              value={layout.feed}
+              onChange={(next) => setLayout((prev) => (prev ? { ...prev, feed: next } : prev))}
+            />
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setStep(1)} disabled={sending}>
+              <ArrowLeft className="mr-1.5 h-4 w-4" /> Voltar
+            </Button>
+            <Button onClick={send} disabled={sending}>
+              {sending && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
+              Enviar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    )
   }
 
   return (
@@ -450,7 +602,13 @@ function UploadDialog({
               type="file"
               accept="image/png,image/jpeg,image/webp"
               disabled={sending}
-              onChange={(e) => setFeedFile(e.target.files?.[0] ?? null)}
+              onChange={(e) => {
+                setFeedFile(e.target.files?.[0] ?? null)
+                // Arquivo trocado: preview e layout do passo 2 sao re-derivados.
+                if (feedPreview) URL.revokeObjectURL(feedPreview.url)
+                setFeedPreview(null)
+                setLayout(null)
+              }}
             />
           </div>
           <div className="space-y-1.5">
@@ -460,7 +618,12 @@ function UploadDialog({
               type="file"
               accept="image/png,image/jpeg,image/webp"
               disabled={sending}
-              onChange={(e) => setStoryFile(e.target.files?.[0] ?? null)}
+              onChange={(e) => {
+                setStoryFile(e.target.files?.[0] ?? null)
+                if (storyPreview) URL.revokeObjectURL(storyPreview.url)
+                setStoryPreview(null)
+                setLayout(null)
+              }}
             />
             <p className="text-xs text-gray-500">
               Sem o arquivo de stories, a unidade só verá a versão de feed. Dá para anexar
@@ -524,9 +687,106 @@ function UploadDialog({
           <Button variant="outline" onClick={onClose} disabled={sending}>
             Cancelar
           </Button>
-          <Button onClick={send} disabled={sending || !feedFile}>
-            {sending && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
-            Enviar
+          <Button onClick={goToPositions} disabled={sending || !feedFile}>
+            Continuar → posições
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+/* ----------------------------- Layout dialog ----------------------------- */
+
+// Edita as POSICOES salvas de uma arte existente (arquivos ja no storage).
+function LayoutDialog({
+  art,
+  onClose,
+  onSaved,
+}: {
+  art: MarketingArt
+  onClose: () => void
+  onSaved: () => void
+}) {
+  const [layout, setLayout] = useState<ArtLayout>(() => ({
+    feed:
+      art.layout?.feed ??
+      defaultVariantLayout("feed", art.logoCorner as LogoCorner, art.hasPrice),
+    ...(art.storyFilePath
+      ? {
+          story:
+            art.layout?.story ??
+            defaultVariantLayout("story", art.logoCorner as LogoCorner, art.hasPrice),
+        }
+      : {}),
+  }))
+  const [saving, setSaving] = useState(false)
+
+  async function save() {
+    setSaving(true)
+    try {
+      await api(`/api/admin/artes/${art.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ layout }),
+      })
+      toast.success("Posições salvas")
+      onSaved()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Falha ao salvar")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const editorFor = (kind: ArtVariantKind) => {
+    const variantLayout = layout[kind]
+    if (!variantLayout) return null
+    const url = kind === "feed" ? art.publicUrl : art.storyPublicUrl
+    const width = kind === "feed" ? art.width : art.storyWidth
+    const height = kind === "feed" ? art.height : art.storyHeight
+    if (!url || !width || !height) return null
+    return (
+      <ArtLayoutEditor
+        artUrl={url}
+        artWidth={width}
+        artHeight={height}
+        brand={sampleBrand()}
+        hasPrice={art.hasPrice}
+        value={variantLayout}
+        onChange={(next) => setLayout((prev) => ({ ...prev, [kind]: next }))}
+      />
+    )
+  }
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && !saving && onClose()}>
+      <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-xl">
+        <DialogHeader>
+          <DialogTitle>Posições — {art.title}</DialogTitle>
+          <DialogDescription>
+            Padrões desta arte com a marca de exemplo. A unidade ainda pode ajustar tudo na
+            hora de baixar.
+          </DialogDescription>
+        </DialogHeader>
+        {art.storyFilePath ? (
+          <Tabs defaultValue="feed">
+            <TabsList>
+              <TabsTrigger value="feed">{VARIANT_LABEL.feed}</TabsTrigger>
+              <TabsTrigger value="story">{VARIANT_LABEL.story}</TabsTrigger>
+            </TabsList>
+            <TabsContent value="feed">{editorFor("feed")}</TabsContent>
+            <TabsContent value="story">{editorFor("story")}</TabsContent>
+          </Tabs>
+        ) : (
+          editorFor("feed")
+        )}
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={saving}>
+            Cancelar
+          </Button>
+          <Button onClick={save} disabled={saving}>
+            {saving && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
+            Salvar posições
           </Button>
         </DialogFooter>
       </DialogContent>
