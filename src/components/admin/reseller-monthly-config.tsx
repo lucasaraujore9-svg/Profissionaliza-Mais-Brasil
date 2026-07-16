@@ -75,9 +75,10 @@ export function ResellerMonthlyConfig({
         </span>
       </div>
       <p className="mt-1 text-xs text-gray-600">
-        Quando liberado, o revendedor pode ativar a mensalidade em
-        Configurações → Pagamento e marcar cursos como parcelado. O escopo abaixo
-        define onde o parcelado vale.
+        Ao liberar, a mensalidade (e o carnê no boleto da venda direta) já fica
+        ativa para a unidade — o revendedor pode desligar depois em
+        Configurações → Pagamento. O escopo abaixo define onde o parcelado
+        vale.
         {monthlyAllowed && (
           <>
             {" "}

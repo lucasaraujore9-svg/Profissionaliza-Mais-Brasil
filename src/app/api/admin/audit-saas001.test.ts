@@ -68,7 +68,7 @@ describe("SAAS-001 — audit trail em mutações admin", () => {
   it("mensalidade → tenant.monthly.update", async () => {
     p.tenant.findUnique.mockResolvedValue({
       id: "t1", slug: "s", customDomain: null, accountManagerId: null,
-      monthlyAllowed: false, monthlyScope: "DIRECT_ONLY",
+      monthlyAllowed: false, monthlyEnabled: false, monthlyScope: "DIRECT_ONLY",
     })
     p.tenant.update.mockResolvedValue({ id: "t1", monthlyAllowed: true, monthlyEnabled: true, monthlyScope: "DIRECT_ONLY" })
     const res = await mensalidadePut(

@@ -55,6 +55,7 @@ export const PUT = withRequestContextParams<{ id: string }>(
         customDomain: true,
         accountManagerId: true,
         monthlyAllowed: true,
+        monthlyEnabled: true,
         monthlyScope: true,
       },
     })
@@ -72,11 +73,18 @@ export const PUT = withRequestContextParams<{ id: string }>(
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
+    // Ao LIBERAR (bloqueado → liberado), a mensalidade já nasce ativa na
+    // unidade — sem depender do revendedor ligar o toggle dele. O revendedor
+    // continua podendo desligar depois em Configurações → Pagamento, e um
+    // re-save do admin (ex.: troca de escopo) não sobrescreve essa escolha.
+    const liberating = parsed.data.monthlyAllowed && !tenant.monthlyAllowed
+
     const updated = await prisma.tenant.update({
       where: { id },
       data: {
         monthlyAllowed: parsed.data.monthlyAllowed,
         monthlyScope: parsed.data.monthlyScope,
+        ...(liberating ? { monthlyEnabled: true } : {}),
       },
       select: {
         id: true,
@@ -102,10 +110,12 @@ export const PUT = withRequestContextParams<{ id: string }>(
       tenantId: id,
       payloadBefore: {
         monthlyAllowed: tenant.monthlyAllowed,
+        monthlyEnabled: tenant.monthlyEnabled,
         monthlyScope: tenant.monthlyScope,
       },
       payloadAfter: {
         monthlyAllowed: parsed.data.monthlyAllowed,
+        monthlyEnabled: updated.monthlyEnabled,
         monthlyScope: parsed.data.monthlyScope,
       },
     })
