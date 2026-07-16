@@ -1,5 +1,4 @@
 import Image from "next/image"
-import { shouldUnoptimizeImage } from "@/lib/images"
 import {
   Scissors,
   Heart,
@@ -82,7 +81,6 @@ export function CourseThumb({
           fill
           sizes="(min-width: 1024px) 25vw, (min-width: 640px) 33vw, 50vw"
           className="object-cover"
-          unoptimized={shouldUnoptimizeImage(imageUrl)}
         />
         {hours && (
           // NAO usar backdrop-blur aqui: `backdrop-filter` num badge sobre a

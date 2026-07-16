@@ -52,16 +52,19 @@ const nextConfig: NextConfig = {
   // empacota-los em paginas/rotas server.
   serverExternalPackages: ["@react-pdf/renderer", "qrcode"],
   images: {
-    // Otimizacao de imagem da Vercel DESLIGADA globalmente. A cota de
-    // Image Optimization da conta foi esgotada e o otimizador passou a
-    // responder 402 (OPTIMIZED_IMAGE_REQUEST_PAYMENT_REQUIRED) para TODA
-    // imagem servida via /_next/image — derrubando logos (Supabase), capas
-    // (playcurso) e banners. Servindo direto (unoptimized) nada depende da
-    // cota paga; o CSP img-src ja libera supabase.co, playcurso.com e
-    // s3.bmbr.com.br (capas dos cursos da fornecedora LMS).
-    // Para reativar, habilite/contrate o recurso no painel da Vercel e
-    // entao remova este flag.
-    unoptimized: true,
+    // Otimizador de imagem da Vercel segue DESLIGADO (cota 402 esgotada), mas
+    // servir os originais direto (unoptimized global) derrubava Android de
+    // entrada: dezenas de imagens em resolucao cheia estouram a memoria da GPU
+    // e o compositor pinta faixas de ruido na vitrine (mesma familia dos
+    // "fantasmas" mobile). O loader customizado abaixo roteia as imagens
+    // remotas pelo nosso proxy /api/img (sharp + WebP + cache no CDN), que nao
+    // depende da cota paga. Fora da allowlist do loader, a imagem passa direto
+    // (equivalente a unoptimized).
+    loader: "custom",
+    loaderFile: "./src/lib/image-loader.ts",
+    // Com loader customizado o Next nao consulta remotePatterns; a lista fica
+    // como documentacao dos hosts aceitos (a allowlist real esta em
+    // src/lib/images.ts, compartilhada entre loader e proxy).
     remotePatterns: [
       { protocol: "https", hostname: "*.supabase.co" },
       { protocol: "https", hostname: "playcurso.com" },

@@ -1,7 +1,6 @@
 import Link from "next/link"
 import Image from "next/image"
 import { ArrowLeft, BookOpen, Check, Layers } from "lucide-react"
-import { shouldUnoptimizeImage } from "@/lib/images"
 import type { VitrinePackageDetail } from "@/lib/packages/vitrine"
 
 function formatBRL(value: number): string {
@@ -52,7 +51,6 @@ export function PackageDetailView({
                     fill
                     sizes="(max-width: 1024px) 100vw, 800px"
                     className="object-cover"
-                    unoptimized={shouldUnoptimizeImage(pkg.coverImageUrl)}
                   />
                 ) : (
                   <div className="absolute inset-0 flex items-center justify-center text-[var(--color-pmb-green)]">
@@ -95,7 +93,6 @@ export function PackageDetailView({
                           fill
                           sizes="48px"
                           className="object-cover"
-                          unoptimized={shouldUnoptimizeImage(c.coverImageUrl)}
                         />
                       </div>
                     ) : (

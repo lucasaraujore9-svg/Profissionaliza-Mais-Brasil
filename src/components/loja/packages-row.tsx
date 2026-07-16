@@ -1,7 +1,6 @@
 import Link from "next/link"
 import Image from "next/image"
 import { Layers, ArrowRight } from "lucide-react"
-import { shouldUnoptimizeImage } from "@/lib/images"
 import type { VitrinePackageCard } from "@/lib/packages/vitrine"
 
 function formatBRL(value: number): string {
@@ -70,7 +69,6 @@ function PackageCard({ pkg, hrefBase }: { pkg: VitrinePackageCard; hrefBase: str
             fill
             sizes="(max-width: 768px) 100vw, 320px"
             className="object-cover transition-transform group-hover:scale-105"
-            unoptimized={shouldUnoptimizeImage(pkg.coverImageUrl)}
           />
         ) : (
           <div className="absolute inset-0 flex items-center justify-center text-[var(--color-pmb-green)]">

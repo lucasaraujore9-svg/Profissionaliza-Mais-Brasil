@@ -5,7 +5,10 @@
 //  - APIs e rotas dinâmicas: NUNCA cacheia (sempre online)
 // Versionar via SW_VERSION quando publicar mudança que requer reset de cache.
 
-const SW_VERSION = "v3"
+// v4: purga caches de builds antigos — PWAs instalados antes do proxy de
+// imagem (/api/img) seguravam HTML/assets do bundle pre-fix e continuavam
+// exibindo a vitrine com imagens em resolucao cheia (ruido de GPU no Android).
+const SW_VERSION = "v4"
 const STATIC_CACHE = `pmb-static-${SW_VERSION}`
 const PAGES_CACHE = `pmb-pages-${SW_VERSION}`
 

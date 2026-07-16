@@ -1,24 +1,30 @@
-// Decide se uma imagem deve PULAR o otimizador do Next/Vercel (`unoptimized`).
+// Allowlist de origens de imagem que o proxy de redimensionamento (/api/img)
+// aceita buscar. Compartilhada entre o loader do next/image (client) e a rota
+// do proxy (server) — por isso este módulo não pode importar nada server-only.
 //
-// Capas de curso vêm da plataforma parceira (playcurso.com) — um origin de
-// terceiro que não controlamos e que, sob carga (uma grade com dezenas de
-// capas), fica lento ou limita as conexões. Quando o otimizador da Vercel
-// busca essas imagens server-side e o origin trava, a otimização FALHA de forma
-// dura (imagem quebrada) e ainda congestiona o otimizador — chegando a derrubar
-// imagens confiáveis (a logo do Supabase) renderizadas na mesma página.
-//
-// Servindo essas imagens direto (`unoptimized`), o navegador as carrega de forma
-// lazy e distribuída entre os clientes, com cache próprio e degradação suave.
-//
-// Mantemos a otimização para imagens no nosso Supabase Storage (logos, banners e
-// uploads das revendas) e para assets locais — origens confiáveis e no allowlist.
-export function shouldUnoptimizeImage(url: string | null | undefined): boolean {
-  if (!url) return false
-  // data:, blob: e caminhos locais (/images/...) seguem o fluxo padrão (otimizado).
-  if (!url.startsWith("http://") && !url.startsWith("https://")) return false
+// Contexto: a otimização de imagem da Vercel está desligada (cota 402 — ver
+// next.config.ts). Servir os originais direto derrubava aparelhos Android de
+// entrada: dezenas de imagens em resolução cheia estouram a memória da GPU e
+// o compositor do Chrome renderiza faixas de ruído (mesma família dos
+// "fantasmas" da vitrine mobile). O proxy /api/img devolve variantes WebP
+// redimensionadas, cacheadas no CDN — sem depender da cota paga.
+const PROXYABLE_HOSTS = new Set([
+  "playcurso.com", // capas de curso da fornecedora EA
+  "s3.bmbr.com.br", // capas de curso da fornecedora LMS
+  "img.youtube.com", // thumbnails dos módulos de Treinamento
+  "i.ytimg.com",
+])
+
+export function isProxyableImageUrl(url: string | null | undefined): boolean {
+  if (!url || !url.startsWith("https://")) return false
   try {
-    const host = new URL(url).hostname
-    return !host.endsWith(".supabase.co")
+    const { hostname, pathname, username, password } = new URL(url)
+    if (username || password) return false
+    // SVG/GIF passam direto: redimensionar não ajuda (SVG) ou perderia a
+    // animação (GIF) — e nenhum dos dois é o peso que derruba a GPU.
+    const lower = pathname.toLowerCase()
+    if (lower.endsWith(".svg") || lower.endsWith(".gif")) return false
+    return hostname.endsWith(".supabase.co") || PROXYABLE_HOSTS.has(hostname)
   } catch {
     return false
   }
