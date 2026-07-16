@@ -233,3 +233,48 @@ export function checkPackageCoverDimensions(
   }
   return { ok: true, expected, got }
 }
+
+/**
+ * Especificacao das artes de divulgacao (banco de artes). Proporcao livre —
+ * o admin sobe posts de feed, story, etc. Minimo evita artes borradas; o
+ * maxSide e a guarda de memoria do canvas client-side que compoe a arte no
+ * browser da revenda (4096x4096 RGBA ~ 64MB, dentro do teto do Safari iOS).
+ */
+export const ART_SPEC = {
+  minWidth: 600,
+  minHeight: 600,
+  maxSide: 4096,
+} as const
+
+export function checkArtDimensions(
+  buffer: ArrayBuffer | Buffer,
+  mime: string,
+): DimensionCheck {
+  const expected = { width: ART_SPEC.minWidth, height: ART_SPEC.minHeight }
+  const got = readImageDimensions(buffer, mime)
+  if (!got) {
+    return {
+      ok: false,
+      expected,
+      got: null,
+      message: "Nao foi possivel ler as dimensoes da imagem",
+    }
+  }
+  if (got.width < ART_SPEC.minWidth || got.height < ART_SPEC.minHeight) {
+    return {
+      ok: false,
+      expected,
+      got,
+      message: `Arte muito pequena. Use no mínimo ${ART_SPEC.minWidth}x${ART_SPEC.minHeight}px. Recebida ${got.width}x${got.height}px.`,
+    }
+  }
+  if (got.width > ART_SPEC.maxSide || got.height > ART_SPEC.maxSide) {
+    return {
+      ok: false,
+      expected,
+      got,
+      message: `Arte muito grande. O lado maior não pode passar de ${ART_SPEC.maxSide}px. Recebida ${got.width}x${got.height}px.`,
+    }
+  }
+  return { ok: true, expected, got }
+}

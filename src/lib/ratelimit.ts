@@ -196,6 +196,9 @@ export const RATE_LIMITS = {
   certificateValidate: { name: "cert-validate", limit: 30, windowSec: 60 },
   alunoVerificarPagamento: { name: "aluno-verificar-pag", limit: 6, windowSec: 60 },
   upload: { name: "upload", limit: 10, windowSec: 60 },
+  // Banco de artes (SUPER_ADMIN only): mais folgado que `upload` para nao
+  // estrangular a migracao do acervo (upload multi-file em lote).
+  artesUpload: { name: "artes-upload", limit: 30, windowSec: 60 },
   // Automacao
   lojaLeads: { name: "loja-leads", limit: 5, windowSec: 60 },
   lojaLeadsByEmail: { name: "loja-leads-email", limit: 3, windowSec: 3600 },

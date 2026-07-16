@@ -21,6 +21,7 @@ enum UserRole {
   PMB_REVENDA_SALES // Vendedor de revenda (B2B): trabalha leads e fecha unidades
   PMB_RESELLER_MGR // Gerente de unidades / suporte (ve as unidades atribuidas)
   PMB_FINANCEIRO // Financeiro — ajusta comissoes, marca pagamentos e anexa comprovante
+  PMB_DESIGNER // Designer — gerencia o banco de artes de divulgacao (/admin/artes)
   RESELLER // Dono ou consultor de tenant
   STUDENT // Aluno acessa /aluno com matriculas e pagamentos
 }
@@ -2309,4 +2310,32 @@ model TrainingProgress {
   @@index([userId])
   @@index([videoId], map: "training_progress_video_id_idx")
   @@map("training_progress")
+}
+
+// Banco de artes de divulgacao (global, sem tenantId — toda unidade consome o
+// que estiver published). O arquivo base sobe SEM logo/telefone/valor; a
+// personalizacao (logo no topo, rodape com site/whatsapp/rede social, badge de
+// preco) e composta client-side no download (src/lib/artes/compose.ts).
+model MarketingArt {
+  id       String  @id @default(cuid())
+  title    String
+  // Categoria livre (string simples) — filtro no painel via DISTINCT.
+  category String?
+  // Path no bucket vitrine-assets (ex: "artes/<uuid>.png"), nunca URL completa.
+  filePath String  @map("file_path")
+  width    Int
+  height   Int
+  // Arte de curso "com valor": a revenda digita o preco na hora de baixar.
+  hasPrice Boolean @default(false) @map("has_price")
+  // Canto do topo onde o logo da revenda e carimbado: "top-left" | "top-right"
+  // (string simples validada por Zod, mesmo padrao de Tenant.whatsappFloatSide).
+  logoCorner String @default("top-right") @map("logo_corner")
+  published  Boolean @default(true)
+  position   Int     @default(0)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([published, position])
+  @@map("marketing_arts")
 }

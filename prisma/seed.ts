@@ -143,6 +143,19 @@ async function main() {
     },
   })
 
+  await prisma.user.upsert({
+    where: { email: "designer@pmb.com.br" },
+    update: { role: UserRole.PMB_DESIGNER, status: "ATIVO" },
+    create: {
+      email: "designer@pmb.com.br",
+      name: "Designer PMB",
+      passwordHash: await bcrypt.hash("designer123", 10),
+      role: UserRole.PMB_DESIGNER,
+      status: "ATIVO",
+      updatedAt: new Date(),
+    },
+  })
+
   // Tenant 1 (com gerente) + Tenant 2 (sem gerente)
   const tenant1 = await prisma.tenant.upsert({
     where: { slug: "revenda1" },
@@ -689,6 +702,7 @@ async function main() {
   console.log("- SUPER_ADMIN: super@pmb.com.br / super123")
   console.log("- PMB_SALES: vendas@pmb.com.br / vendas123")
   console.log("- PMB_RESELLER_MGR: gerente@pmb.com.br / gerente123")
+  console.log("- PMB_DESIGNER: designer@pmb.com.br / designer123 (só /admin/artes)")
   console.log("- RESELLER owner1: revenda1@teste.com / teste123 (tenant=revenda1, gerente=gerente)")
   console.log("- RESELLER owner2: revenda2@teste.com / teste123 (tenant=revenda2, sem gerente)")
   console.log("- Consultor: consultor1@teste.com / teste123 (tenant1, maxDiscount=20%)")

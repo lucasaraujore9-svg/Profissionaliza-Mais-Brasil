@@ -15,6 +15,7 @@ const PMB_TEAM: UserRole[] = [
   "PMB_REVENDA_SALES",
   "PMB_RESELLER_MGR",
   "PMB_FINANCEIRO",
+  "PMB_DESIGNER",
 ]
 
 async function currentSession(): Promise<AuthedSession | null> {
@@ -48,6 +49,21 @@ export async function requirePmbTeam(): Promise<
 > {
   const session = await currentSession()
   if (!session || !PMB_TEAM.includes(session.role)) return { ok: false, response: deny() }
+  return { ok: true, session }
+}
+
+/**
+ * Gestor do banco de artes de divulgação: SUPER_ADMIN ou PMB_DESIGNER.
+ * O designer só tem esta área — as demais rotas admin continuam fechadas
+ * para ele (nenhum outro guard o aceita além do requirePmbTeam genérico).
+ */
+export async function requireArtesManager(): Promise<
+  { ok: true; session: AuthedSession } | { ok: false; response: Response }
+> {
+  const session = await currentSession()
+  if (!session || (session.role !== "PMB_DESIGNER" && session.role !== "SUPER_ADMIN")) {
+    return { ok: false, response: deny() }
+  }
   return { ok: true, session }
 }
 

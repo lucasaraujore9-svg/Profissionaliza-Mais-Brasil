@@ -20,6 +20,7 @@ const IMPERSONATABLE_ROLES = [
   "PMB_REVENDA_SALES",
   "PMB_RESELLER_MGR",
   "PMB_FINANCEIRO",
+  "PMB_DESIGNER",
 ] as const
 
 export const POST = withRequestContextParams<{ id: string }>(

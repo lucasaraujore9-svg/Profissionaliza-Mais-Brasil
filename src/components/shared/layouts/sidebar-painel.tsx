@@ -22,6 +22,7 @@ import {
   LifeBuoy,
   Lock,
   Video,
+  Images,
   Store,
   BarChart3,
   ChevronLeft,
@@ -44,6 +45,7 @@ interface NavItem {
 const ALL_ITEMS: NavItem[] = [
   { href: "/painel", label: "Dashboard", icon: LayoutDashboard },
   { href: "/painel/treinamentos", label: "Treinamentos", icon: Video },
+  { href: "/painel/artes", label: "Artes de divulgação", icon: Images },
   { href: "/painel/cursos", label: "Catálogo", icon: GraduationCap },
   { href: "/painel/alunos", label: "Alunos", icon: Users },
   { href: "/painel/atendimento", label: "Atendimento", icon: LifeBuoy, ownerOnly: true },

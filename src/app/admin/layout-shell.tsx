@@ -4,7 +4,7 @@ import { SidebarAdmin } from "@/components/shared/layouts/sidebar-admin"
 import { HeaderDashboard } from "@/components/shared/layouts/header-dashboard"
 import { useSidebarCollapsed } from "@/components/shared/layouts/use-sidebar-collapsed"
 
-type Role = "SUPER_ADMIN" | "PMB_SALES" | "PMB_SALES_MGR" | "PMB_REVENDA_SALES" | "PMB_RESELLER_MGR" | "PMB_FINANCEIRO"
+type Role = "SUPER_ADMIN" | "PMB_SALES" | "PMB_SALES_MGR" | "PMB_REVENDA_SALES" | "PMB_RESELLER_MGR" | "PMB_FINANCEIRO" | "PMB_DESIGNER"
 
 export function AdminLayoutShell({
   children,

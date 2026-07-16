@@ -25,12 +25,13 @@ import {
   LifeBuoy,
   Building2,
   Video,
+  Images,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
-type Role = "SUPER_ADMIN" | "PMB_SALES" | "PMB_SALES_MGR" | "PMB_REVENDA_SALES" | "PMB_RESELLER_MGR" | "PMB_FINANCEIRO"
+type Role = "SUPER_ADMIN" | "PMB_SALES" | "PMB_SALES_MGR" | "PMB_REVENDA_SALES" | "PMB_RESELLER_MGR" | "PMB_FINANCEIRO" | "PMB_DESIGNER"
 
 const ALL_ITEMS: {
   href: string
@@ -64,12 +65,13 @@ const ALL_ITEMS: {
   { href: "/admin/equipe", label: "Equipe", icon: UserCog, roles: ["SUPER_ADMIN"] },
   { href: "/admin/comunicacao", label: "Comunicação", icon: MessageSquare, roles: ["SUPER_ADMIN"] },
   { href: "/admin/treinamentos", label: "Treinamentos", icon: Video, roles: ["SUPER_ADMIN"] },
+  { href: "/admin/artes", label: "Artes", icon: Images, roles: ["SUPER_ADMIN", "PMB_DESIGNER"] },
   // Equipe interna (não-super): assiste os treinamentos globais (SUPER_ADMIN
   // assiste pela própria tela de gestão via botão "Assistir").
   { href: "/admin/treinamentos/assistir", label: "Treinamentos", icon: Video, roles: ["PMB_SALES", "PMB_SALES_MGR", "PMB_REVENDA_SALES", "PMB_RESELLER_MGR", "PMB_FINANCEIRO"] },
   { href: "/admin/automacao", label: "Automação", icon: Zap, roles: ["SUPER_ADMIN"] },
   { href: "/admin/configuracoes", label: "Configurações", icon: Settings, roles: ["SUPER_ADMIN"] },
-  { href: "/admin/meu-perfil", label: "Meu perfil", icon: UserCircle, roles: ["SUPER_ADMIN", "PMB_SALES", "PMB_SALES_MGR", "PMB_REVENDA_SALES", "PMB_RESELLER_MGR", "PMB_FINANCEIRO"] },
+  { href: "/admin/meu-perfil", label: "Meu perfil", icon: UserCircle, roles: ["SUPER_ADMIN", "PMB_SALES", "PMB_SALES_MGR", "PMB_REVENDA_SALES", "PMB_RESELLER_MGR", "PMB_FINANCEIRO", "PMB_DESIGNER"] },
 ]
 
 function initialsOf(name?: string): string {

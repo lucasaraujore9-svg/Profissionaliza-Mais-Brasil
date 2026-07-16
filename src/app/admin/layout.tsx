@@ -46,7 +46,7 @@ export default async function AdminLayout({
         />
       )}
       <AdminLayoutShell
-        role={session.role as "SUPER_ADMIN" | "PMB_SALES" | "PMB_SALES_MGR" | "PMB_REVENDA_SALES" | "PMB_RESELLER_MGR" | "PMB_FINANCEIRO"}
+        role={session.role as "SUPER_ADMIN" | "PMB_SALES" | "PMB_SALES_MGR" | "PMB_REVENDA_SALES" | "PMB_RESELLER_MGR" | "PMB_FINANCEIRO" | "PMB_DESIGNER"}
         userName={session.name ?? "Admin"}
         userEmail={session.email ?? ""}
         defaultCollapsed={sidebarCollapsed}
