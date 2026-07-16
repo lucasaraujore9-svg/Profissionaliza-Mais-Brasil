@@ -77,6 +77,38 @@ async function api(url: string, init?: RequestInit) {
   return json
 }
 
+const UPLOAD_ALLOWED = new Set(["image/png", "image/jpeg", "image/jpg", "image/webp"])
+const UPLOAD_MAX_BYTES = 10 * 1024 * 1024
+
+// Envia o arquivo DIRETO ao Supabase Storage via URL assinada (o body das
+// functions da Vercel e limitado a 4.5MB — o arquivo nao pode passar pela
+// nossa API). Devolve o path gravado, que a rota de create/file valida.
+async function uploadToStorage(file: File, kind: "feed" | "story"): Promise<string> {
+  const label = kind === "feed" ? "feed" : "stories"
+  if (!UPLOAD_ALLOWED.has(file.type)) {
+    throw new Error(`Arquivo de ${label}: use PNG, JPG ou WEBP`)
+  }
+  if (file.size > UPLOAD_MAX_BYTES) {
+    throw new Error(`Arquivo de ${label} maior que 10MB`)
+  }
+  const signed = await api("/api/admin/artes/upload-url", {
+    method: "POST",
+    body: JSON.stringify({ kind, contentType: file.type, size: file.size }),
+  })
+  const { path, uploadUrl } = signed.data as { path: string; uploadUrl: string }
+  // Sem x-upsert: o token assinado ja define a politica e os paths sao UUIDs
+  // unicos (nunca colidem).
+  const put = await fetch(uploadUrl, {
+    method: "PUT",
+    headers: { "content-type": file.type },
+    body: file,
+  })
+  if (!put.ok) {
+    throw new Error(`Falha ao enviar o arquivo de ${label} para o storage`)
+  }
+  return path
+}
+
 const CORNER_LABEL: Record<MarketingArt["logoCorner"], string> = {
   "top-left": "Logo no topo esquerdo",
   "top-right": "Logo no topo direito",
@@ -377,16 +409,20 @@ function UploadDialog({
       title.trim() || feedFile.name.replace(/\.[^.]+$/, "").slice(0, 120) || "Arte"
     setSending(true)
     try {
-      const form = new FormData()
-      form.set("feedFile", feedFile)
-      if (storyFile) form.set("storyFile", storyFile)
-      form.set("title", finalTitle)
-      if (category.trim()) form.set("category", category.trim())
-      form.set("hasPrice", String(hasPrice))
-      form.set("logoCorner", logoCorner)
-      const res = await fetch("/api/admin/artes", { method: "POST", body: form })
-      const json = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(json?.error ?? "Erro no upload")
+      // Upload direto ao Storage (signed URL) e depois o registro via JSON.
+      const feedPath = await uploadToStorage(feedFile, "feed")
+      const storyPath = storyFile ? await uploadToStorage(storyFile, "story") : null
+      await api("/api/admin/artes", {
+        method: "POST",
+        body: JSON.stringify({
+          title: finalTitle,
+          category: category.trim() || null,
+          hasPrice,
+          logoCorner,
+          feedPath,
+          storyPath,
+        }),
+      })
       toast.success("Arte enviada")
       onDone()
     } catch (e) {
@@ -520,12 +556,11 @@ function EditDialog({
   const [saving, setSaving] = useState(false)
 
   async function replaceVariant(kind: "feed" | "story", file: File) {
-    const form = new FormData()
-    form.set("kind", kind)
-    form.set("file", file)
-    const res = await fetch(`/api/admin/artes/${art.id}/file`, { method: "POST", body: form })
-    const json = await res.json().catch(() => ({}))
-    if (!res.ok) throw new Error(json?.error ?? "Erro ao trocar arquivo")
+    const path = await uploadToStorage(file, kind)
+    await api(`/api/admin/artes/${art.id}/file`, {
+      method: "POST",
+      body: JSON.stringify({ kind, path }),
+    })
   }
 
   async function save() {
