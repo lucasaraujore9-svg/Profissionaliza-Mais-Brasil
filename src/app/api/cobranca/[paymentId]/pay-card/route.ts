@@ -171,7 +171,7 @@ export const POST = withRequestContextParams<{ paymentId: string }>(
       creditCard,
       creditCardHolderInfo,
       remoteIp: clientIp(request),
-    })
+    }, motherAsaasKey())
 
     // POST /installments/ responde 200 ao CRIAR o parcelamento — isso não
     // garante que o cartão foi capturado. A 1ª parcela pode ficar em

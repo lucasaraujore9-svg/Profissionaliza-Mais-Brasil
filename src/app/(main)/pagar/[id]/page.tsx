@@ -4,6 +4,14 @@ import { prisma } from "@/lib/prisma"
 import { isPmbAppHost } from "@/lib/tenant/urls"
 import { OrderSummary } from "@/components/loja/order-summary"
 import { PmbCheckoutForm } from "@/components/loja/pmb-checkout-form"
+import {
+  InstallmentsSection,
+  type InstallmentCarne,
+} from "@/components/aluno/installments-section"
+import {
+  isWithinRevealWindow,
+  INSTALLMENT_REVEAL_WINDOW_DAYS,
+} from "@/lib/installments/schedule"
 import { getSystemSettings } from "@/lib/system-settings"
 import { displayInterestFreeInstallments } from "@/lib/mercadopago/installments"
 
@@ -67,12 +75,97 @@ export default async function PagarPmbPage({ params }: PagarPmbPageProps) {
         },
       },
       student: { select: { nome: true, email: true, cpf: true, fone: true } },
+      boletoInstallments: {
+        where: { status: { not: "CANCELLED" } },
+        orderBy: { number: "asc" },
+      },
     },
   })
 
   if (!enrollment) {
     return <Aviso titulo="Cobrança não encontrada" texto="Este link de pagamento é inválido ou expirou." />
   }
+
+  // Compra parcelada no boleto com carnê JÁ EMITIDO: não re-emitimos cobrança
+  // (a rota de retomada devolve 409) — mostramos as parcelas do carnê para o
+  // aluno pagar a pendente/vencida. Vale para PENDING (entrada em aberto),
+  // ACTIVE (parcelas futuras), SUSPENDED (parcela vencida) e COMPLETED.
+  if (
+    enrollment.boletoInstallments.length > 0 &&
+    enrollment.status !== "CANCELLED"
+  ) {
+    const now = new Date()
+    const carne: InstallmentCarne = {
+      enrollmentId: enrollment.id,
+      courseName: enrollment.course.nome,
+      parcelas: enrollment.boletoInstallments.map((row) => {
+        const inWindow = isWithinRevealWindow(
+          { number: row.number, dueDate: row.dueDate },
+          now,
+        )
+        let availableFromISO: string | null = null
+        if (!inWindow) {
+          const from = new Date(row.dueDate)
+          from.setUTCDate(from.getUTCDate() - INSTALLMENT_REVEAL_WINDOW_DAYS)
+          availableFromISO = from.toISOString()
+        }
+        return {
+          number: row.number,
+          amount: Number(row.amount),
+          dueDateISO: row.dueDate.toISOString(),
+          status: row.status,
+          available:
+            row.status !== "PAID" && row.status !== "CANCELLED" && inWindow,
+          availableFromISO,
+          invoiceUrl: row.invoiceUrl,
+          digitableLine: row.digitableLine,
+        }
+      }),
+    }
+
+    return (
+      <section className="bg-[#FAFAFA] py-10 md:py-16">
+        <div className="mx-auto max-w-6xl px-4 md:px-6">
+          <header className="mb-8">
+            <h1 className="text-2xl font-bold tracking-tight text-[var(--color-pmb-green-900)] md:text-3xl">
+              Carnê de boletos
+            </h1>
+            <p className="mt-1 text-sm text-gray-600">
+              {enrollment.status === "SUSPENDED"
+                ? "Há boleto vencido em aberto — pague para reativar seu acesso."
+                : "Acompanhe e pague as parcelas da sua compra."}
+            </p>
+          </header>
+
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_380px] lg:gap-8">
+            <div>
+              <InstallmentsSection carnes={[carne]} />
+            </div>
+            <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start">
+              <OrderSummary
+                courseName={enrollment.course.nome}
+                courseCategory={
+                  enrollment.course.categoriaLoja ??
+                  enrollment.course.categoriaInterna
+                }
+                courseHours={enrollment.course.cargaHoraria}
+                courseImageUrl={
+                  enrollment.course.capaOverride ?? enrollment.course.capaImageUrl
+                }
+                basePrice={Number(enrollment.originalAmount)}
+                discountAmount={Number(enrollment.discountAmount)}
+                finalPrice={Number(enrollment.finalAmount)}
+                couponCode={null}
+                parcelasSugeridas={null}
+                paymentType="ONE_TIME"
+              />
+            </aside>
+          </div>
+        </div>
+      </section>
+    )
+  }
+
   if (enrollment.status === "ACTIVE" || enrollment.status === "COMPLETED") {
     return (
       <Aviso
@@ -114,6 +207,9 @@ export default async function PagarPmbPage({ params }: PagarPmbPageProps) {
           <PmbCheckoutForm
             couponCode={null}
             initPath={`/api/checkout/enrollment/${enrollment.id}`}
+            amount={Number(enrollment.finalAmount)}
+            cardMaxInstallments={settings.pmbInterestFreeInstallments}
+            isMonthly={isMonthly}
             prefill={{
               nome: s.nome,
               email: s.email,

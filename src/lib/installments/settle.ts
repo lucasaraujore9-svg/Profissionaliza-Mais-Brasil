@@ -33,6 +33,16 @@ export async function settleBoletoInstallment(params: {
 }): Promise<void> {
   const { installment, tenant, event } = params
 
+  // Lê o status ANTES do fulfill: se esta for a ÚLTIMA parcela de uma matrícula
+  // SUSPENDED, o fulfill a marca COMPLETED — sem este snapshot, maybeReactivate
+  // veria COMPLETED, retornaria cedo e o aluno ficaria bloqueado na plataforma
+  // para sempre mesmo com o carnê 100% quitado.
+  const before = await prisma.enrollment.findUnique({
+    where: { id: installment.enrollmentId },
+    select: { status: true },
+  })
+  const wasSuspended = before?.status === "SUSPENDED"
+
   // Provisiona (1ª) / registra (demais). Idempotente por payment id + advisory
   // lock — re-entregas do webhook viram no-op.
   await fulfillEnrollment(tenant, installment.enrollmentId, {
@@ -52,19 +62,27 @@ export async function settleBoletoInstallment(params: {
     })
     .catch(swallow("installments.settle.mark_paid"))
 
-  await maybeReactivate(installment.enrollmentId)
+  await maybeReactivate(installment.enrollmentId, wasSuspended)
 }
 
 /**
  * Se a matrícula estava SUSPENDED (bloqueada por inadimplência) e não há mais
  * parcela vencida em aberto, restaura o acesso do aluno na plataforma e reativa.
+ * `wasSuspended` cobre a última parcela: o fulfill já virou COMPLETED, mas o
+ * aluno ainda está bloqueado na plataforma — desbloqueia mantendo COMPLETED.
  */
-async function maybeReactivate(enrollmentId: string): Promise<void> {
+async function maybeReactivate(
+  enrollmentId: string,
+  wasSuspended = false,
+): Promise<void> {
   const enrollment = await prisma.enrollment.findUnique({
     where: { id: enrollmentId },
     select: { id: true, status: true, studentId: true },
   })
-  if (!enrollment || enrollment.status !== "SUSPENDED") return
+  if (!enrollment) return
+  const completedWhileSuspended =
+    wasSuspended && enrollment.status === "COMPLETED"
+  if (enrollment.status !== "SUSPENDED" && !completedWhileSuspended) return
 
   const open = await prisma.boletoInstallment.findMany({
     where: {
@@ -86,10 +104,14 @@ async function maybeReactivate(enrollmentId: string): Promise<void> {
     return // não reativa se o desbloqueio na plataforma falhou
   }
 
-  await prisma.enrollment.update({
-    where: { id: enrollmentId },
-    data: { status: "ACTIVE" },
-  })
+  // Quitou tudo enquanto suspensa: mantém COMPLETED (só o desbloqueio acima
+  // importava). Caso normal: volta a ACTIVE.
+  if (!completedWhileSuspended) {
+    await prisma.enrollment.update({
+      where: { id: enrollmentId },
+      data: { status: "ACTIVE" },
+    })
+  }
 
   await createNotification({
     audience: "STUDENT",

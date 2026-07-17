@@ -4,8 +4,14 @@ import { prisma } from "@/lib/prisma"
 import {
   deletePayment as deleteAsaasPayment,
   cancelSubscription as cancelAsaasSubscription,
+  deleteInstallment as deleteAsaasInstallment,
+  motherAsaasKey,
   AsaasApiError,
 } from "@/lib/asaas/client"
+import {
+  pmbMaxBoletoInstallments,
+  pmbMaxCardInstallments,
+} from "@/lib/installments/pmb-rules"
 import { issuePmbAsaasCharge } from "@/lib/checkout/issue-pmb-asaas-charge"
 import { assertCouponMatchesEnrollment } from "@/lib/checkout/assert-tenant-gateway"
 import { getOrCreatePmbTenant } from "@/lib/pmb-tenant"
@@ -80,6 +86,10 @@ const bodySchema = z.object({
     .transform(normalizePhone),
   endereco: z.string().trim().max(300).optional(),
   paymentMethod: z.enum(["PIX", "BOLETO", "CREDIT_CARD"]).optional(),
+  // Parcelamento (gateway Asaas): cartão até o teto do admin; boleto com as
+  // regras parcela mínima R$50 / máx 6 boletos — validadas adiante contra o
+  // finalAmount do SERVIDOR (com cupom), nunca contra o que o client exibiu.
+  installments: z.number().int().min(1).max(12).optional(),
   creditCard: creditCardSchema.optional(),
   creditCardHolder: creditCardHolderSchema.optional(),
   // Aceite obrigatório dos Termos de Uso e da Política de Privacidade — reforço
@@ -293,6 +303,7 @@ export const POST = withRequestContext(
         gateway: true,
         asaasPaymentId: true,
         asaasSubscriptionId: true,
+        asaasInstallmentId: true,
       },
     })
     if (existingEnrollment) {
@@ -313,6 +324,15 @@ export const POST = withRequestContext(
           await cancelAsaasSubscription(
             existingEnrollment.asaasSubscriptionId,
           ).catch(swallow("pmb-checkout.switch.cancel_subscription"))
+        }
+        // Parcelamento (carnê de boleto ou cartão parcelado): apagar o PLANO
+        // remove todas as cobranças não pagas de uma vez — sem isso o Asaas
+        // seguiria emitindo boletos da tentativa abandonada.
+        if (existingEnrollment.asaasInstallmentId) {
+          await deleteAsaasInstallment(
+            existingEnrollment.asaasInstallmentId,
+            motherAsaasKey(),
+          ).catch(swallow("pmb-checkout.switch.delete_installment"))
         }
         if (existingEnrollment.asaasPaymentId) {
           await deleteAsaasPayment(existingEnrollment.asaasPaymentId).catch(
@@ -384,6 +404,59 @@ export const POST = withRequestContext(
       }
       couponId = coupon.id
       consumedCouponId = coupon.id
+    }
+
+    // ── Validação do parcelamento (contra o finalAmount do SERVIDOR, já com
+    // cupom). Regras: boleto = parcela mínima R$50 e máx 6 boletos; cartão =
+    // teto do admin (parcelas sem juros) + mínimo R$5/parcela. Falhou → libera
+    // o cupom reservado e devolve 400 com o máximo real.
+    const installmentsChosen = data.installments ?? 1
+    if (installmentsChosen > 1) {
+      const rejectInstallments = async (message: string, code: string) => {
+        if (consumedCouponId) {
+          await releaseCoupon(consumedCouponId).catch(swallow("pmb-checkout"))
+        }
+        return NextResponse.json({ error: message, code }, { status: 400 })
+      }
+      if (gateway !== "ASAAS") {
+        return rejectInstallments(
+          "Parcelamento indisponível neste gateway",
+          "INSTALLMENTS_UNSUPPORTED",
+        )
+      }
+      if (isMonthly) {
+        return rejectInstallments(
+          "Cursos com mensalidade não aceitam parcelamento adicional",
+          "INSTALLMENTS_NOT_ALLOWED",
+        )
+      }
+      if (data.paymentMethod === "BOLETO") {
+        const cap = pmbMaxBoletoInstallments(finalAmount)
+        if (installmentsChosen > cap) {
+          return rejectInstallments(
+            cap > 1
+              ? `Para este valor, o boleto pode ser parcelado em até ${cap}x (parcela mínima de R$ 50).`
+              : "Este valor não permite parcelamento no boleto (parcela mínima de R$ 50).",
+            "INSTALLMENTS_INVALID",
+          )
+        }
+      } else if (data.paymentMethod === "CREDIT_CARD") {
+        const cap = pmbMaxCardInstallments(
+          finalAmount,
+          settings.pmbInterestFreeInstallments,
+        )
+        if (installmentsChosen > cap) {
+          return rejectInstallments(
+            `Para este valor, o cartão pode ser parcelado em até ${cap}x.`,
+            "INSTALLMENTS_INVALID",
+          )
+        }
+      } else {
+        return rejectInstallments(
+          "Parcelamento disponível apenas no cartão de crédito ou boleto",
+          "INSTALLMENTS_INVALID",
+        )
+      }
     }
 
     const enrollment = await prisma.enrollment.create({
@@ -474,6 +547,7 @@ export const POST = withRequestContext(
         isMonthly,
         monthlyMonths,
         billingType,
+        installments: installmentsChosen,
         creditCard: data.creditCard,
         creditCardHolder: data.creditCardHolder,
         remoteIp: clientIp(request),

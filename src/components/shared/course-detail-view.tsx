@@ -26,6 +26,11 @@ export interface CourseDetailData {
   price: number
   originalPrice: number | null
   parcelas: number | null
+  /**
+   * Parcelamento no BOLETO (carnê) da vitrine PMB: "ou em até Nx de R$X no
+   * boleto". Ausente/null (vitrines de revenda, valores baixos) = linha oculta.
+   */
+  boletoParcelas?: { n: number; valor: number } | null
   /** ONE_TIME = preco cheio; MONTHLY = mensalidade recorrente. */
   paymentType?: "ONE_TIME" | "MONTHLY"
   /** Quantidade total de mensalidades quando paymentType === "MONTHLY". */
@@ -127,6 +132,10 @@ export function CourseDetailView({
   // (1 = só à vista), cai para 1 e a linha "ou Nx sem juros" não é exibida.
   const parcelas = course.parcelas ?? 1
   const valorParcela = course.price > 0 ? course.price / parcelas : 0
+  const boletoParcelas =
+    !isMonthly && course.boletoParcelas && course.boletoParcelas.n > 1
+      ? course.boletoParcelas
+      : null
   const desconto =
     course.originalPrice && course.originalPrice > course.price
       ? Math.round(
@@ -476,6 +485,12 @@ export function CourseDetailView({
                       </p>
                     )
                   )}
+                  {boletoParcelas && course.price > 0 && (
+                    <p className="mt-0.5 text-[13px] text-[rgba(2,89,24,0.7)]">
+                      ou em até {boletoParcelas.n}x de{" "}
+                      {formatBRL(boletoParcelas.valor)} no boleto
+                    </p>
+                  )}
                 </div>
 
                 <Link
@@ -548,11 +563,17 @@ export function CourseDetailView({
               <p className="truncate text-[11px] text-[rgba(2,89,24,0.65)]">
                 {monthlyMonths} mensalidades
               </p>
+            ) : course.price > 0 && parcelas > 1 ? (
+              <p className="truncate text-[11px] text-[rgba(2,89,24,0.65)]">
+                ou {parcelas}x de {formatBRL(valorParcela)}
+                {boletoParcelas ? ` · ${boletoParcelas.n}x no boleto` : ""}
+              </p>
             ) : (
-              course.price > 0 &&
-              parcelas > 1 && (
+              boletoParcelas &&
+              course.price > 0 && (
                 <p className="truncate text-[11px] text-[rgba(2,89,24,0.65)]">
-                  ou {parcelas}x de {formatBRL(valorParcela)}
+                  em até {boletoParcelas.n}x de {formatBRL(boletoParcelas.valor)}{" "}
+                  no boleto
                 </p>
               )
             )}

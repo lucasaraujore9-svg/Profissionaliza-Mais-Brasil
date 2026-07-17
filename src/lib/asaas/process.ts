@@ -5,6 +5,7 @@ import { sendEmail } from "@/lib/email/resend"
 import { afterResponse } from "@/lib/after-response"
 import { blockTenantStudents, unblockTenantStudents } from "@/lib/auto-block"
 import { fulfillEnrollment } from "@/lib/enrollment/fulfill"
+import { settleBoletoInstallment } from "@/lib/installments/settle"
 import { pmbPlataformaPolo, pmbPlataformaVendedorId } from "@/lib/pmb-config"
 import { createNotification } from "@/lib/notifications"
 import { invalidateTenant } from "@/lib/redis/tenant-cache"
@@ -227,6 +228,7 @@ async function processPmbDirectSale(
   if (!enrollment || enrollment.tenantId !== null) return false
 
   if (event === "PAYMENT_RECEIVED" || event === "PAYMENT_CONFIRMED") {
+    const wasSuspended = enrollment.status === "SUSPENDED"
     await fulfillEnrollment(
       {
         id: "__pmb__",
@@ -243,6 +245,22 @@ async function processPmbDirectSale(
         paymentType: enrollment.paymentType,
       },
     )
+    // Recuperação pós-OVERDUE (mensalidade/cartão parcelado): o branch de
+    // parcela subsequente do fulfill registra o pagamento mas NÃO mexe no
+    // status — sem isto, uma matrícula suspensa por atraso ficaria SUSPENDED
+    // para sempre mesmo com a cobrança regularizada. (Carnê de boleto não passa
+    // aqui — reativa via settleBoletoInstallment/maybeReactivate.)
+    if (wasSuspended) {
+      const fresh = await prisma.enrollment.findUnique({
+        where: { id: enrollment.id },
+        select: { status: true },
+      })
+      if (fresh?.status === "SUSPENDED") {
+        await prisma.enrollment
+          .update({ where: { id: enrollment.id }, data: { status: "ACTIVE" } })
+          .catch(swallow("asaas.process"))
+      }
+    }
     await markLog(
       logId,
       true,
@@ -322,6 +340,49 @@ export async function processAsaasWebhook(
 
     const subscriptionId = payment.subscription
     if (!subscriptionId) {
+      // Parcela de carnê da VITRINE PMB (tenantId=null): roteia pela linha
+      // BoletoInstallment (asaasPaymentId), como no branch da revenda
+      // (reseller-process.ts). Roda ANTES de processPmbDirectSale de propósito:
+      // as parcelas usam externalReference carne_<id> (não pmb_enr_), e um
+      // PAYMENT_OVERDUE de parcela NÃO pode cair no SUSPENDED genérico da venda
+      // direta — o sweep diário é o dono da semântica de atraso do carnê.
+      const pmbParcel = await prisma.boletoInstallment.findFirst({
+        where: { asaasPaymentId: payment.id, tenantId: null },
+      })
+      if (pmbParcel) {
+        if (event === "PAYMENT_RECEIVED" || event === "PAYMENT_CONFIRMED") {
+          await settleBoletoInstallment({
+            installment: pmbParcel,
+            tenant: {
+              id: "__pmb__",
+              slug: pmbPlataformaPolo(),
+              plataformaVendedorId: pmbPlataformaVendedorId(),
+              isPmbVitrine: true,
+            },
+            event: {
+              gateway: "ASAAS",
+              externalPaymentId: payment.id,
+              amount: payment.value,
+              paidAt: payment.paymentDate
+                ? new Date(payment.paymentDate)
+                : new Date(),
+            },
+          })
+          await markLog(
+            logId,
+            true,
+            `pmb carne parcela ${pmbParcel.number} liquidada`,
+          )
+          return
+        }
+        await markLog(
+          logId,
+          true,
+          `pmb carne parcela ${pmbParcel.number}: ${event} — sem acao (sweep trata atraso)`,
+        )
+        return
+      }
+
       const handled = await processPmbDirectSale(logId, event, payment)
       if (handled) return
       await markLog(logId, true, `sem subscription: ${event}`)

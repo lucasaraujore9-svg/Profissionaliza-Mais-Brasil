@@ -63,7 +63,8 @@ enum EnrollmentStatus {
 enum PaymentType {
   ONE_TIME // Pagamento unico
   MONTHLY // Assinatura mensal
-  BOLETO_INSTALLMENT // Carne: N boletos com vencimentos mensais (venda direta da revenda)
+  BOLETO_INSTALLMENT // Carne: N boletos com vencimentos mensais (venda direta da revenda e vitrine PMB)
+  CARD_INSTALLMENT // Parcelado no cartao via Asaas /installments (vitrine PMB)
 }
 
 // Status de cada parcela (boleto) de um carne de venda direta. Ver

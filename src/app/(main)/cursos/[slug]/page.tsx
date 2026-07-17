@@ -11,6 +11,10 @@ import { courseJsonLd, breadcrumbJsonLd } from "@/lib/seo/jsonld"
 import { SITE_NAME, siteUrl } from "@/lib/seo/site"
 import { getSystemSettings } from "@/lib/system-settings"
 import { displayInterestFreeInstallments } from "@/lib/mercadopago/installments"
+import {
+  perInstallment,
+  pmbMaxBoletoInstallments,
+} from "@/lib/installments/pmb-rules"
 
 type LoadedCurso = CourseDetailData & {
   id: string
@@ -45,6 +49,16 @@ async function loadCurso(slug: string): Promise<LoadedCurso | null> {
     // Pagamento único: "Nx sem juros" vem do nº GLOBAL da PMB (não por curso).
     const settings = await getSystemSettings()
 
+    // Parcelamento no boleto (carnê, só no gateway Asaas): "em até Nx de R$X".
+    // Regra: parcela mínima R$50, máx 6 boletos — mesma dos seletores/rotas.
+    const isMonthlyCourse = c.paymentTypeMain === "MONTHLY"
+    const maxBoleto =
+      settings.pmbDirectSaleGateway === "ASAAS" && !isMonthlyCourse
+        ? pmbMaxBoletoInstallments(price)
+        : 1
+    const boletoParcelas =
+      maxBoleto > 1 ? { n: maxBoleto, valor: perInstallment(price, maxBoleto) } : null
+
     return {
       id: c.id,
       slug: c.slug,
@@ -60,6 +74,7 @@ async function loadCurso(slug: string): Promise<LoadedCurso | null> {
       parcelas: displayInterestFreeInstallments(
         settings.pmbInterestFreeInstallments,
       ),
+      boletoParcelas,
       lessons: c.courseLessons.map((l) => ({
         id: l.id,
         nome: l.nome,

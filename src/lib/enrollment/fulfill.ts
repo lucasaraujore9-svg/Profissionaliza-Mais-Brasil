@@ -176,10 +176,13 @@ async function fulfillEnrollmentLocked(
   })
   if (alreadyPaid) return
 
-  // Termo da cobrança recorrente na copy: carnê fala "parcela"; mensal, "mensalidade".
-  const isCarne = enrollment.paymentType === "BOLETO_INSTALLMENT"
-  const parcelaWord = isCarne ? "Parcela" : "Mensalidade"
-  const parcelasWord = isCarne ? "parcelas" : "mensalidades"
+  // Termo da cobrança recorrente na copy: carnê/cartão parcelado falam
+  // "parcela"; mensal, "mensalidade".
+  const isParcelado =
+    enrollment.paymentType === "BOLETO_INSTALLMENT" ||
+    enrollment.paymentType === "CARD_INSTALLMENT"
+  const parcelaWord = isParcelado ? "Parcela" : "Mensalidade"
+  const parcelasWord = isParcelado ? "parcelas" : "mensalidades"
 
   // Cobranca subsequente de uma subscription: aluno ja foi matriculado, so
   // registramos o pagamento, incrementamos a contagem e fechamos o ciclo na ultima.

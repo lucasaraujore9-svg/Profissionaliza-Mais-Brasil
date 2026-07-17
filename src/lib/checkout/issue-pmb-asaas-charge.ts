@@ -3,6 +3,9 @@ import {
   findOrCreateAsaasCustomer,
   createPayment as createAsaasPayment,
   createSubscription as createAsaasSubscription,
+  createInstallmentWithCreditCard,
+  getInstallmentPayments,
+  deleteInstallment,
   listPayments as listAsaasPayments,
   getPixQrCode,
   getBillingInfo,
@@ -12,6 +15,14 @@ import {
 import { dueDateInDays } from "@/lib/checkout/due-date"
 import { asaasWebhookUrl } from "@/lib/tenant/urls"
 import { assertPmbCharge, TenantGatewayIsolationError } from "@/lib/checkout/assert-tenant-gateway"
+import { createBoletoInstallmentPlan } from "@/lib/installments/plan"
+import {
+  perInstallment,
+  pmbMaxBoletoInstallments,
+  pmbMaxCardInstallments,
+} from "@/lib/installments/pmb-rules"
+import { getSystemSettings } from "@/lib/system-settings"
+import { swallow } from "@/lib/errors"
 
 /**
  * Cobrança Asaas do sistema-mãe (PMB) para UMA matrícula. Extraído de
@@ -43,10 +54,19 @@ export interface IssuePmbAsaasChargeInput {
     asaasCustomerId: string | null
   }
   courseNome: string
+  /** Descrição da cobrança no Asaas. Default: `Curso: ${courseNome}`. */
+  description?: string
   finalAmount: number
   isMonthly: boolean
   monthlyMonths: number | null
   billingType: "PIX" | "BOLETO" | "CREDIT_CARD" | "UNDEFINED"
+  /**
+   * Nº de parcelas escolhido no checkout (cartão ou boleto). 1/undefined = à
+   * vista (fluxo atual). Ignorado quando isMonthly. As regras (boleto: parcela
+   * mínima R$50 e máx 6; cartão: teto do admin + mínimo R$5) são RE-validadas
+   * aqui — nunca confiar só na rota.
+   */
+  installments?: number
   creditCard?: {
     holderName: string
     number: string
@@ -76,6 +96,16 @@ export type PmbAsaasChargeResult =
       bankSlipUrl: string | null
       identificationField: string | null
       barCode: string | null
+      /** Presente quando a compra foi parcelada no boleto (carnê). */
+      carne?: {
+        count: number
+        parcelas: Array<{
+          number: number
+          amount: number
+          dueDate: string
+          invoiceUrl: string | null
+        }>
+      }
     }
   | { mode: "redirect"; initPoint: string | null }
 
@@ -87,14 +117,18 @@ export async function issuePmbAsaasCharge(
     externalReference,
     student,
     courseNome,
+    description,
     finalAmount,
     isMonthly,
     monthlyMonths,
     billingType,
+    installments,
     creditCard,
     creditCardHolder,
     remoteIp,
   } = input
+
+  const chargeDescription = description ?? `Curso: ${courseNome}`
 
   // Defesa em profundidade no hop do dinheiro: esta função SEMPRE cobra na
   // conta-mãe (PMB). Confirma, autoritativamente no banco, que a matrícula é PMB
@@ -122,6 +156,79 @@ export async function issuePmbAsaasCharge(
   })
 
   const motherKey = motherAsaasKey()
+
+  // ── Parcelamento (só compra one-time): normaliza e RE-valida as regras ──
+  // Boleto: cada parcela >= R$50, máx 6 boletos. Cartão: teto do admin
+  // (parcelas sem juros) + mínimo R$5/parcela, teto absoluto 12x. A rota já
+  // devolve 400 amigável; aqui é defesa em profundidade (lança).
+  const n =
+    !isMonthly && installments && installments > 1
+      ? Math.floor(installments)
+      : 1
+  if (n > 1 && billingType === "BOLETO") {
+    const cap = pmbMaxBoletoInstallments(finalAmount)
+    if (n > cap) {
+      throw new Error(
+        `Parcelamento no boleto acima do permitido para este valor (máximo ${cap}x)`,
+      )
+    }
+  }
+  if (n > 1 && billingType === "CREDIT_CARD") {
+    // Sem os dados do cartão o fluxo cairia na cobrança à vista com
+    // installmentsTotal já gravado — estado inconsistente. As rotas já exigem
+    // o cartão (400) antes de chegar aqui.
+    if (!creditCard || !creditCardHolder) {
+      throw new Error("Dados do cartão obrigatórios para parcelamento")
+    }
+    const settings = await getSystemSettings()
+    const cap = pmbMaxCardInstallments(
+      finalAmount,
+      settings.pmbInterestFreeInstallments,
+    )
+    if (n > cap) {
+      throw new Error(
+        `Parcelamento no cartão acima do permitido (máximo ${cap}x)`,
+      )
+    }
+  }
+
+  // Normaliza a intenção na matrícula ANTES de qualquer chamada Asaas: os
+  // eventos das N cobranças chegam pelo webhook e o fulfillEnrollment decide
+  // "1ª parcela provisiona / demais incrementam" por installmentsTotal — sem
+  // isso, cada parcela confirmada re-provisionaria acesso e re-enviaria emails.
+  // N=1 RESETA uma tentativa parcelada anterior (retry na tela /pagar).
+  if (!isMonthly) {
+    if (billingType === "CREDIT_CARD" && n > 1) {
+      await prisma.enrollment.update({
+        where: { id: enrollmentId },
+        data: {
+          paymentType: "CARD_INSTALLMENT",
+          installmentsTotal: n,
+          externalReference,
+        },
+      })
+    } else if (billingType === "BOLETO" && n > 1) {
+      await prisma.enrollment.update({
+        where: { id: enrollmentId },
+        data: {
+          paymentType: "BOLETO_INSTALLMENT",
+          installmentsTotal: n,
+          // Carnê NÃO usa pmb_enr_: o webhook roteia cada parcela pela linha
+          // BoletoInstallment (asaasPaymentId), como na venda direta da revenda.
+          externalReference: `carne_${enrollmentId}`,
+        },
+      })
+    } else {
+      await prisma.enrollment.update({
+        where: { id: enrollmentId },
+        data: {
+          paymentType: "ONE_TIME",
+          installmentsTotal: null,
+          externalReference,
+        },
+      })
+    }
+  }
 
   const phoneDigits = student.fone.replace(/\D/g, "")
 
@@ -239,13 +346,131 @@ export async function issuePmbAsaasCharge(
     return { mode: "redirect", initPoint: firstPayment?.invoiceUrl ?? null }
   }
 
+  // ──── ONE_TIME parcelado no CARTÃO (POST /installments/) ────
+  // Captura o valor cheio em N parcelas no cartão numa única chamada. Cada
+  // cobrança gerada carrega externalReference pmb_enr_<id>: a 1ª CONFIRMED
+  // ativa a matrícula via processPmbDirectSale; as demais (confirmadas mês a
+  // mês pelo Asaas) caem no branch de incremento do fulfillEnrollment porque
+  // installmentsTotal=n foi persistido acima.
+  if (billingType === "CREDIT_CARD" && creditCard && holderInfo && n > 1) {
+    const installment = await createInstallmentWithCreditCard(
+      {
+        installmentCount: n,
+        customer: customer.id,
+        value: perInstallment(finalAmount, n),
+        totalValue: finalAmount,
+        billingType: "CREDIT_CARD",
+        dueDate: dueDateInDays(0),
+        description: chargeDescription,
+        paymentExternalReference: externalReference,
+        creditCard,
+        creditCardHolderInfo: holderInfo,
+        remoteIp,
+      },
+      motherKey,
+    )
+
+    // 200 = parcelamento CRIADO, não capturado: a 1ª parcela pode estar em
+    // AWAITING_RISK_ANALYSIS. Consulta o status real (padrão de
+    // /api/cobranca/[paymentId]/pay-card). Falha na consulta → PENDING; o
+    // webhook (pmb_enr_) é a rede de segurança quando a análise aprovar.
+    const firstCharge = await getInstallmentPayments(installment.id, motherKey)
+      .then(
+        (list) =>
+          [...list.data].sort((a, b) => a.dueDate.localeCompare(b.dueDate))[0] ??
+          null,
+      )
+      .catch(() => null)
+
+    await prisma.enrollment.update({
+      where: { id: enrollmentId },
+      data: {
+        externalReference,
+        asaasCustomerId: customer.id,
+        asaasInstallmentId: installment.id,
+        asaasPaymentId: firstCharge?.id ?? null,
+        asaasInvoiceUrl: firstCharge?.invoiceUrl ?? null,
+      },
+    })
+
+    return {
+      mode: "credit_card_result",
+      status: firstCharge?.status ?? "PENDING",
+      paymentId: firstCharge?.id ?? null,
+    }
+  }
+
+  // ──── ONE_TIME parcelado no BOLETO (carnê, POST /installments) ────
+  // Reusa o maquinário da venda direta da revenda (plan.ts), que no contexto
+  // PMB (tenantId=null) emite na conta-mãe e cria uma BoletoInstallment por
+  // parcela — o webhook liquida cada uma por asaasPaymentId e o sweep diário
+  // cuida de atraso/bloqueio.
+  if (billingType === "BOLETO" && n > 1) {
+    try {
+      const plan = await createBoletoInstallmentPlan({
+        enrollmentId,
+        count: n,
+        installmentValue: perInstallment(finalAmount, n),
+        // 1º boleto vence em 3 dias (mesma janela do boleto à vista); os demais
+        // mensais. Meio-dia UTC = convenção das linhas BoletoInstallment.
+        firstDueDate: new Date(`${dueDateInDays(3)}T12:00:00Z`),
+        exactTotalValue: finalAmount,
+        description: chargeDescription,
+      })
+
+      const first = plan.installments[0] ?? null
+      const billing = first?.asaasPaymentId
+        ? await getBillingInfo(first.asaasPaymentId, motherKey).catch(() => null)
+        : null
+
+      return {
+        mode: "boleto",
+        paymentId: first?.asaasPaymentId ?? "",
+        bankSlipUrl: plan.firstBoletoUrl,
+        identificationField: billing?.bankSlip?.identificationField ?? null,
+        barCode: billing?.bankSlip?.barCode ?? null,
+        carne: {
+          count: n,
+          parcelas: plan.installments.map((r) => ({
+            number: r.number,
+            amount: Number(r.amount),
+            dueDate: r.dueDate.toISOString(),
+            invoiceUrl: r.invoiceUrl,
+          })),
+        },
+      }
+    } catch (error) {
+      // Carnê órfão: se o parcelamento chegou a ser criado no Asaas
+      // (asaasInstallmentId persistido cedo pelo plan.ts), apaga lá — senão o
+      // Asaas seguiria emitindo boletos de uma compra que falhou.
+      const enr = await prisma.enrollment
+        .findUnique({
+          where: { id: enrollmentId },
+          select: { asaasInstallmentId: true },
+        })
+        .catch(() => null)
+      if (enr?.asaasInstallmentId) {
+        await deleteInstallment(enr.asaasInstallmentId, motherKey).catch(
+          swallow("pmb-carne.cleanup_asaas"),
+        )
+        await prisma.enrollment
+          .update({
+            where: { id: enrollmentId },
+            data: { asaasInstallmentId: null },
+          })
+          .catch(swallow("pmb-carne.cleanup_row"))
+      }
+      throw error
+    }
+  }
+
   // ──── ONE_TIME ────
   const payment = await createAsaasPayment({
     customer: customer.id,
     billingType,
     value: finalAmount,
     dueDate: dueDateInDays(3),
-    description: `Curso: ${courseNome}`,
+    description: chargeDescription,
     externalReference,
     notificationUrl: asaasWebhookUrl(),
   }, motherKey)

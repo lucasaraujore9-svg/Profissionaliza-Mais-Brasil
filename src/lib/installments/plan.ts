@@ -24,9 +24,10 @@ import {
   getCustomer as getAsaasCustomer,
   createInstallmentWithBoleto,
   getInstallmentPayments,
+  motherAsaasKey,
   AsaasApiError,
 } from "@/lib/asaas/client"
-import { mpWebhookUrl } from "@/lib/tenant/urls"
+import { asaasWebhookUrl, mpWebhookUrl } from "@/lib/tenant/urls"
 import {
   buildInstallmentSchedule,
   MP_BOLETO_METHOD_ID,
@@ -39,6 +40,15 @@ export interface CreatePlanInput {
   installmentValue: number
   /** Vencimento da 1ª parcela. As demais são mensais a partir dela. */
   firstDueDate: Date
+  /**
+   * Total EXATO da venda (checkout self-service da PMB). Quando informado, vai
+   * como `totalValue` ao Asaas, que reconcilia a última parcela — evita drift
+   * de centavos (6×166,67 ≠ 1.000,00). Ausente = round(count × installmentValue)
+   * (venda direta da revenda, onde o operador define o valor da parcela).
+   */
+  exactTotalValue?: number
+  /** Descrição da cobrança no Asaas. Default: `Curso: ${nome do curso}`. */
+  description?: string
 }
 
 export interface CreatePlanResult {
@@ -69,13 +79,18 @@ interface PlanContext {
       asaasCustomerId: string | null
     }
   }
+  /**
+   * null = matrícula da vitrine PMB (tenantId=null): o carnê é emitido na
+   * conta-mãe Asaas (motherAsaasKey), sempre gateway ASAAS. Não-nulo = venda
+   * direta da revenda, na conta da própria unidade.
+   */
   tenant: {
     id: string
     slug: string
     salesGateway: "MP" | "ASAAS"
     mpAccessToken: string | null
     asaasApiKey: string | null
-  }
+  } | null
 }
 
 async function loadContext(enrollmentId: string): Promise<PlanContext> {
@@ -114,10 +129,9 @@ async function loadContext(enrollmentId: string): Promise<PlanContext> {
     },
   })
   if (!enrollment) throw new Error(`enrollment ${enrollmentId} nao encontrado`)
-  if (!enrollment.tenant) {
-    // Carnê é feature da venda direta da REVENDA (conta MP/Asaas da unidade).
-    throw new Error(`carne exige tenant (revenda) — enrollment ${enrollmentId} e da vitrine PMB`)
-  }
+  // enrollment.tenant === null → matrícula da vitrine PMB: carnê na conta-mãe
+  // (ver createAsaasCarne). O caminho MP continua exclusivo da revenda — a
+  // guarda fica em emitMpBoletoForRow/createMpInstallmentPlan.
   return {
     enrollment: {
       id: enrollment.id,
@@ -163,8 +177,9 @@ export async function createBoletoInstallmentPlan(
   const ctx = await loadContext(input.enrollmentId)
 
   // Asaas gera o carnê nativo (vencimentos definidos por ele); no MP montamos a
-  // agenda e emitimos boleto a boleto.
-  if (ctx.tenant.salesGateway === "ASAAS") {
+  // agenda e emitimos boleto a boleto. PMB (sem tenant) é sempre Asaas
+  // conta-mãe — a rota de checkout só oferece carnê quando o gateway é ASAAS.
+  if (!ctx.tenant || ctx.tenant.salesGateway === "ASAAS") {
     return createAsaasCarne(ctx, input)
   }
   const schedule = buildInstallmentSchedule({
@@ -177,8 +192,16 @@ export async function createBoletoInstallmentPlan(
 
 // ── Asaas: carnê nativo ─────────────────────────────────────────────────────
 
-/** Resolve/cria o cliente na conta Asaas DA UNIDADE (não a global da PMB). */
-async function resolveAsaasCustomerId(ctx: PlanContext, apiKey: string): Promise<string> {
+/**
+ * Resolve/cria o cliente na conta Asaas correta: da UNIDADE (venda direta) ou
+ * conta-mãe (vitrine PMB). O externalReference segue a convenção de cada lado
+ * (`student_<id>` vs `pmb_student_<id>`, mesma usada por issuePmbAsaasCharge).
+ */
+async function resolveAsaasCustomerId(
+  ctx: PlanContext,
+  apiKey: string,
+  isPmb: boolean,
+): Promise<string> {
   const s = ctx.enrollment.student
   if (s.asaasCustomerId) {
     try {
@@ -196,7 +219,7 @@ async function resolveAsaasCustomerId(ctx: PlanContext, apiKey: string): Promise
       mobilePhone: s.fone ?? undefined,
       postalCode: s.cep ?? undefined,
       addressNumber: s.numero ?? undefined,
-      externalReference: `student_${s.id}`,
+      externalReference: isPmb ? `pmb_student_${s.id}` : `student_${s.id}`,
     },
     apiKey,
   )
@@ -207,16 +230,23 @@ async function createAsaasCarne(
   ctx: PlanContext,
   input: CreatePlanInput,
 ): Promise<CreatePlanResult> {
-  if (!ctx.tenant.asaasApiKey) {
+  const isPmb = ctx.tenant === null
+  if (!isPmb && !ctx.tenant?.asaasApiKey) {
     throw new Error("unidade sem conta Asaas conectada — não é possível gerar o carnê")
   }
   if (!ctx.enrollment.student.cpf) {
     throw new Error("CPF do aluno é obrigatório para gerar o carnê no Asaas")
   }
-  const apiKey = decryptTenantAsaasKey(ctx.tenant.asaasApiKey)
-  const customerId = await resolveAsaasCustomerId(ctx, apiKey)
+  // Hop do dinheiro: vitrine PMB cobra na conta-mãe; venda direta, na conta da
+  // unidade. Chave sempre explícita.
+  const apiKey = isPmb
+    ? motherAsaasKey()
+    : decryptTenantAsaasKey(ctx.tenant!.asaasApiKey!)
+  const customerId = await resolveAsaasCustomerId(ctx, apiKey, isPmb)
 
-  const totalValue = Math.round(input.count * input.installmentValue * 100) / 100
+  const totalValue =
+    input.exactTotalValue ??
+    Math.round(input.count * input.installmentValue * 100) / 100
   const installment = await createInstallmentWithBoleto(
     {
       installmentCount: input.count,
@@ -225,16 +255,26 @@ async function createAsaasCarne(
       totalValue,
       billingType: "BOLETO",
       dueDate: ymd(input.firstDueDate),
-      description: `Curso: ${ctx.enrollment.courseNome}`,
+      description: input.description ?? `Curso: ${ctx.enrollment.courseNome}`,
       // NÃO usa prefixo enr_ (o webhook Asaas casa enr_ com a matrícula direto —
       // aqui queremos o ramo de parcela, que casa por asaasPaymentId).
       paymentExternalReference: `carne_${ctx.enrollment.id}`,
-      // Sem notificationUrl por cobrança: a unidade configura o webhook DE CONTA
-      // (?tenant=<slug>) no painel Asaas — todos os eventos, inclusive as parcelas
-      // do carnê, caem em /api/webhooks/asaas e são roteados por asaasPaymentId.
+      // Revenda: sem notificationUrl por cobrança — a unidade configura o webhook
+      // DE CONTA (?tenant=<slug>) no painel Asaas. PMB: a conta-mãe roteia por
+      // cobrança, então apontamos o webhook global explicitamente (mesma
+      // convenção de issuePmbAsaasCharge).
+      ...(isPmb ? { notificationUrl: asaasWebhookUrl() } : {}),
     },
     apiKey,
   )
+
+  // Persiste o id do carnê IMEDIATAMENTE: se qualquer passo abaixo falhar, o
+  // chamador consegue apagar o parcelamento no Asaas (deleteInstallment) em vez
+  // de deixar um carnê órfão emitindo boletos para o comprador.
+  await prisma.enrollment.update({
+    where: { id: ctx.enrollment.id },
+    data: { asaasInstallmentId: installment.id, asaasCustomerId: customerId },
+  })
 
   // Lista as cobranças geradas (retry: o Asaas pode demorar um instante).
   let payments = [] as Awaited<ReturnType<typeof getInstallmentPayments>>["data"]
@@ -281,8 +321,6 @@ async function createAsaasCarne(
   await prisma.enrollment.update({
     where: { id: ctx.enrollment.id },
     data: {
-      asaasInstallmentId: installment.id,
-      asaasCustomerId: customerId,
       externalReference:
         ctx.enrollment.externalReference ?? `carne_${ctx.enrollment.id}`,
     },
@@ -297,6 +335,10 @@ async function createMpInstallmentPlan(
   ctx: PlanContext,
   schedule: ScheduledInstallment[],
 ): Promise<CreatePlanResult> {
+  if (!ctx.tenant) {
+    // Vitrine PMB nunca chega aqui (roteada para o carnê Asaas acima).
+    throw new Error("carnê MP exige tenant (revenda) — matrícula é da vitrine PMB")
+  }
   if (!ctx.tenant.mpAccessToken) {
     throw new Error("unidade sem Mercado Pago conectado — não é possível gerar o carnê")
   }
@@ -336,6 +378,9 @@ async function emitMpBoletoForRow(
   row: BoletoInstallment,
   ctx: PlanContext,
 ): Promise<BoletoInstallment> {
+  if (!ctx.tenant) {
+    throw new Error("boleto MP de parcela exige tenant (revenda) — matrícula é da vitrine PMB")
+  }
   const s = ctx.enrollment.student
   if (!s.email) throw new Error(`aluno ${s.id} sem email — boleto MP exige email`)
   if (!s.cpf) throw new Error(`aluno ${s.id} sem CPF — boleto MP exige CPF`)

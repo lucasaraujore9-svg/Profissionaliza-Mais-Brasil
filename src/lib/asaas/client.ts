@@ -346,14 +346,17 @@ export async function payWithCreditCard(
  * Cria e cobra um parcelamento no cartão de crédito (POST /installments/).
  * Diferente de payWithCreditCard, este endpoint divide o valor em N parcelas
  * no cartão numa única chamada. Usado para parcelar a 1ª mensalidade do
- * revendedor. ATENÇÃO: 200 significa que o parcelamento foi CRIADO, não que o
+ * revendedor e a compra parcelada no cartão da vitrine PMB. `apiKey` é
+ * explícita (hop do dinheiro): conta-mãe nos dois casos hoje.
+ * ATENÇÃO: 200 significa que o parcelamento foi CRIADO, não que o
  * cartão foi capturado — a 1ª parcela pode ficar em AWAITING_RISK_ANALYSIS.
- * Confirme o status real via getInstallmentPayments antes de ativar a revenda.
+ * Confirme o status real via getInstallmentPayments antes de liberar acesso.
  */
 export async function createInstallmentWithCreditCard(
   params: AsaasCreateInstallmentCardParams,
+  apiKey: string,
 ): Promise<AsaasInstallment> {
-  return request<AsaasInstallment>("POST", "/installments/", params)
+  return request<AsaasInstallment>("POST", "/installments/", params, apiKey)
 }
 
 /**
@@ -384,6 +387,25 @@ export async function getInstallmentPayments(
   return request<AsaasPaymentList>(
     "GET",
     `/installments/${installmentId}/payments`,
+    undefined,
+    apiKey,
+  )
+}
+
+/**
+ * Remove um parcelamento e TODAS as cobranças ainda não pagas dele
+ * (DELETE /installments/{id}). Usado na troca de método de pagamento e na
+ * limpeza de um parcelamento órfão quando a persistência local falhou — sem
+ * isso o Asaas seguiria notificando o comprador com boletos de uma compra
+ * que não existe mais no nosso banco.
+ */
+export async function deleteInstallment(
+  installmentId: string,
+  apiKey: string,
+): Promise<{ deleted: boolean; id: string }> {
+  return request<{ deleted: boolean; id: string }>(
+    "DELETE",
+    `/installments/${installmentId}`,
     undefined,
     apiKey,
   )

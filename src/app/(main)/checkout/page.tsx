@@ -129,7 +129,12 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
             installmentsPath: "/api/checkout/installments",
           } as const)
         : null
-      : ({ kind: "pmb", initPath: "/api/checkout/package" } as const)
+      : ({
+          kind: "pmb",
+          initPath: "/api/checkout/package",
+          cardMaxInstallments: settings.pmbInterestFreeInstallments,
+          isMonthly: false,
+        } as const)
 
     return (
       <section className="bg-[#FAFAFA] py-10 md:py-16">
@@ -304,7 +309,11 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
           installmentsPath: "/api/checkout/installments",
         } as const)
       : null
-    : ({ kind: "pmb" } as const)
+    : ({
+        kind: "pmb",
+        cardMaxInstallments: settings.pmbInterestFreeInstallments,
+        isMonthly: course.paymentTypeMain === "MONTHLY",
+      } as const)
 
   return (
     <section className="bg-[#FAFAFA] py-10 md:py-16">

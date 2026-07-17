@@ -20,6 +20,11 @@ import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { TermsAcceptance } from "@/components/loja/terms-acceptance"
 import { clientLogger } from "@/lib/logger-client"
+import {
+  perInstallment,
+  pmbMaxBoletoInstallments,
+  pmbMaxCardInstallments,
+} from "@/lib/installments/pmb-rules"
 
 export interface PmbCheckoutFormProps {
   courseId?: string
@@ -27,6 +32,15 @@ export interface PmbCheckoutFormProps {
   packageId?: string
   couponCode: string | null
   initPath?: string
+  /**
+   * Valor final da compra (com cupom) — base dos seletores de parcelamento.
+   * Ausente = seletores ocultos (compra segue à vista, como antes).
+   */
+  amount?: number
+  /** Teto de parcelas no cartão (config admin "parcelas sem juros", 1..12). */
+  cardMaxInstallments?: number
+  /** Curso com mensalidade: sem parcelamento adicional. */
+  isMonthly?: boolean
   /**
    * Retomada de cobrança (tela /pagar): pré-preenche os dados do aluno já
    * conhecidos da matrícula. O endpoint de retomada usa o aluno do banco como
@@ -68,6 +82,16 @@ type Status =
       enrollmentId: string
       bankSlipUrl: string | null
       identificationField: string | null
+      /** Compra parcelada no boleto: parcelas do carnê emitido. */
+      carne?: {
+        count: number
+        parcelas: Array<{
+          number: number
+          amount: number
+          dueDate: string
+          invoiceUrl: string | null
+        }>
+      }
     }
   | { kind: "approved"; enrollmentId: string }
   | { kind: "declined"; message: string }
@@ -123,11 +147,18 @@ function formatCep(v: string): string {
   return `${d.slice(0, 5)}-${d.slice(5)}`
 }
 
+function brl(v: number): string {
+  return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
+}
+
 export function PmbCheckoutForm({
   courseId,
   packageId,
   couponCode,
   initPath = "/api/checkout",
+  amount,
+  cardMaxInstallments,
+  isMonthly,
   prefill,
 }: PmbCheckoutFormProps) {
   const [form, setForm] = useState<FormState>(() =>
@@ -146,6 +177,19 @@ export function PmbCheckoutForm({
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
   const [acceptedTerms, setAcceptedTerms] = useState(false)
   const [termsError, setTermsError] = useState(false)
+  const [cardInstallments, setCardInstallments] = useState(1)
+  const [boletoMode, setBoletoMode] = useState<"avista" | "parcelado">("avista")
+  const [boletoInstallments, setBoletoInstallments] = useState(2)
+
+  // Tetos de parcelamento calculados no client SÓ para montar o seletor — o
+  // servidor re-valida contra o valor real (regras: boleto R$50 mín/6 máx;
+  // cartão teto do admin + R$5 mín). Sem amount (fluxos antigos) = à vista.
+  const cardCap =
+    !isMonthly && amount && amount > 0
+      ? pmbMaxCardInstallments(amount, cardMaxInstallments ?? 1)
+      : 1
+  const boletoCap =
+    !isMonthly && amount && amount > 0 ? pmbMaxBoletoInstallments(amount) : 1
 
   function setField<K extends keyof FormState>(key: K, value: string) {
     setForm((p) => ({ ...p, [key]: value }))
@@ -165,6 +209,15 @@ export function PmbCheckoutForm({
     setStatus({ kind: "submitting" })
     setFieldErrors({})
 
+    // Parcelas escolhidas para o método ativo (clampadas ao teto local; o
+    // servidor re-valida de qualquer forma). 1 = à vista, campo omitido.
+    const chosenInstallments =
+      method === "CREDIT_CARD"
+        ? Math.min(cardInstallments, cardCap)
+        : method === "BOLETO" && boletoMode === "parcelado"
+          ? Math.min(Math.max(boletoInstallments, 2), boletoCap)
+          : 1
+
     const body: Record<string, unknown> = {
       ...(packageId ? { packageId } : { courseId }),
       couponCode: couponCode ?? undefined,
@@ -174,6 +227,7 @@ export function PmbCheckoutForm({
       fone: form.telefone,
       endereco: form.endereco || undefined,
       paymentMethod: method,
+      ...(chosenInstallments > 1 ? { installments: chosenInstallments } : {}),
       acceptedTerms: true,
     }
 
@@ -258,6 +312,7 @@ export function PmbCheckoutForm({
             enrollmentId: d.enrollmentId,
             bankSlipUrl: d.bankSlipUrl,
             identificationField: d.identificationField,
+            carne: d.carne ?? undefined,
           })
           return
         case "credit_card_result": {
@@ -555,6 +610,29 @@ export function PmbCheckoutForm({
                 required
               />
             </div>
+            {cardCap > 1 && amount && amount > 0 && (
+              <div>
+                <Label htmlFor="cc-parcelas">Parcelamento</Label>
+                <select
+                  id="cc-parcelas"
+                  value={Math.min(cardInstallments, cardCap)}
+                  onChange={(e) => setCardInstallments(Number(e.target.value))}
+                  disabled={submitting}
+                  className="mt-1.5 w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-800 focus:border-[var(--color-pmb-green)] focus:outline-none focus:ring-1 focus:ring-[var(--color-pmb-green)] disabled:opacity-60"
+                >
+                  {Array.from({ length: cardCap }, (_, i) => i + 1).map((n) => (
+                    <option key={n} value={n}>
+                      {n === 1
+                        ? `1x de ${brl(amount)} à vista`
+                        : `${n}x de ${brl(perInstallment(amount, n))} sem juros`}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 text-[11px] text-gray-400">
+                  Em até {cardCap}x sem juros no cartão.
+                </p>
+              </div>
+            )}
           </div>
         )}
 
@@ -566,10 +644,77 @@ export function PmbCheckoutForm({
         )}
 
         {method === "BOLETO" && (
-          <p className="mt-6 rounded-xl bg-[var(--color-pmb-lime-50)]/40 p-4 text-xs text-[var(--color-pmb-green-700)]">
-            Geramos o boleto imediatamente. A compensação leva até 3 dias úteis
-            após o pagamento.
-          </p>
+          <div className="mt-6 space-y-4 border-t border-gray-100 pt-6">
+            {boletoCap > 1 && amount && amount > 0 && (
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setBoletoMode("avista")}
+                    disabled={submitting}
+                    className={`rounded-xl border p-3 text-left text-sm transition-all ${
+                      boletoMode === "avista"
+                        ? "border-[var(--color-pmb-green)] bg-[var(--color-pmb-lime-50)]/50 font-medium text-[var(--color-pmb-green-900)]"
+                        : "border-gray-200 bg-white text-gray-600 hover:border-gray-300"
+                    }`}
+                  >
+                    À vista
+                    <span className="mt-0.5 block text-xs font-normal text-gray-500">
+                      1 boleto de {brl(amount)}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBoletoMode("parcelado")}
+                    disabled={submitting}
+                    className={`rounded-xl border p-3 text-left text-sm transition-all ${
+                      boletoMode === "parcelado"
+                        ? "border-[var(--color-pmb-green)] bg-[var(--color-pmb-lime-50)]/50 font-medium text-[var(--color-pmb-green-900)]"
+                        : "border-gray-200 bg-white text-gray-600 hover:border-gray-300"
+                    }`}
+                  >
+                    Parcelado (carnê)
+                    <span className="mt-0.5 block text-xs font-normal text-gray-500">
+                      em até {boletoCap}x de{" "}
+                      {brl(perInstallment(amount, boletoCap))}
+                    </span>
+                  </button>
+                </div>
+
+                {boletoMode === "parcelado" && (
+                  <div>
+                    <Label htmlFor="boleto-parcelas">Número de boletos</Label>
+                    <select
+                      id="boleto-parcelas"
+                      value={Math.min(Math.max(boletoInstallments, 2), boletoCap)}
+                      onChange={(e) =>
+                        setBoletoInstallments(Number(e.target.value))
+                      }
+                      disabled={submitting}
+                      className="mt-1.5 w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-800 focus:border-[var(--color-pmb-green)] focus:outline-none focus:ring-1 focus:ring-[var(--color-pmb-green)] disabled:opacity-60"
+                    >
+                      {Array.from({ length: boletoCap - 1 }, (_, i) => i + 2).map(
+                        (n) => (
+                          <option key={n} value={n}>
+                            {n}x de {brl(perInstallment(amount, n))} no boleto
+                          </option>
+                        ),
+                      )}
+                    </select>
+                    <p className="mt-1 text-[11px] text-gray-400">
+                      O 1º boleto vence em 3 dias e libera o acesso; os demais
+                      vencem mensalmente. Parcela mínima de R$ 50.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+            <p className="rounded-xl bg-[var(--color-pmb-lime-50)]/40 p-4 text-xs text-[var(--color-pmb-green-700)]">
+              {boletoMode === "parcelado" && boletoCap > 1
+                ? "Geramos todos os boletos do carnê imediatamente. O acesso é liberado após a compensação do 1º boleto (até 3 dias úteis)."
+                : "Geramos o boleto imediatamente. A compensação leva até 3 dias úteis após o pagamento."}
+            </p>
+          </div>
         )}
       </div>
 
@@ -854,17 +999,55 @@ function BoletoResult({
       // ignora
     }
   }
+  const carne = status.carne ?? null
+
   return (
     <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm lg:p-8">
       <div className="flex items-center gap-2">
         <Receipt className="h-5 w-5 text-[var(--color-pmb-green)]" />
         <h2 className="text-base font-semibold text-[var(--color-pmb-green-900)]">
-          Pague com boleto
+          {carne ? `Carnê gerado — ${carne.count}x no boleto` : "Pague com boleto"}
         </h2>
       </div>
       <p className="mt-2 text-sm text-gray-600">
-        Copie a linha digitável ou abra o boleto para pagar pelo banco/app.
+        {carne
+          ? "Pague o 1º boleto para liberar o acesso. As demais parcelas vencem mensalmente."
+          : "Copie a linha digitável ou abra o boleto para pagar pelo banco/app."}
       </p>
+
+      {carne && (
+        <ul className="mt-6 space-y-2">
+          {carne.parcelas.map((p) => (
+            <li
+              key={p.number}
+              className="flex items-center justify-between rounded-xl border border-gray-200 p-3 text-sm"
+            >
+              <div>
+                <span className="font-medium text-gray-900">
+                  Parcela {p.number} · {brl(p.amount)}
+                </span>
+                <span className="ml-2 text-xs text-gray-500">
+                  vence {new Date(p.dueDate).toLocaleDateString("pt-BR")}
+                </span>
+              </div>
+              {p.number === 1 ? (
+                <span className="rounded-full bg-[var(--color-pmb-lime-50)] px-2.5 py-1 text-[11px] font-semibold text-[var(--color-pmb-green-700)]">
+                  Pague agora
+                </span>
+              ) : p.invoiceUrl ? (
+                <a
+                  href={p.invoiceUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs font-medium text-[var(--color-pmb-green)] underline-offset-4 hover:underline"
+                >
+                  Ver boleto
+                </a>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      )}
 
       {status.identificationField && (
         <div className="mt-6 space-y-2">
@@ -895,15 +1078,16 @@ function BoletoResult({
           rel="noopener noreferrer"
           className="mt-6 inline-flex w-full items-center justify-center rounded-lg bg-[var(--color-pmb-green)] px-4 py-3 text-sm font-bold text-white transition-colors hover:bg-[var(--color-pmb-green-700)]"
         >
-          Abrir boleto em PDF
+          {carne ? "Abrir 1º boleto em PDF" : "Abrir boleto em PDF"}
         </a>
       )}
 
       <div className="mt-6 flex items-start gap-2 rounded-xl bg-[var(--color-pmb-lime-50)]/40 p-4 text-sm text-[var(--color-pmb-green-700)]">
         <span className="mt-0.5 inline-block h-2 w-2 animate-pulse rounded-full bg-[var(--color-pmb-green)]" />
         <span>
-          Aguardando o pagamento. A compensação leva até 3 dias úteis. Você
-          receberá um email quando a matrícula for ativada.
+          {carne
+            ? "Aguardando o pagamento do 1º boleto. Depois de matriculado, acompanhe e pague as demais parcelas em Meus Pagamentos (/aluno) — você também recebe cada boleto por email."
+            : "Aguardando o pagamento. A compensação leva até 3 dias úteis. Você receberá um email quando a matrícula for ativada."}
         </span>
       </div>
 
