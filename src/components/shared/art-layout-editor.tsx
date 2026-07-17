@@ -281,13 +281,15 @@ export function ArtLayoutEditor({
   }
 
   return (
-    <div className={cn("space-y-3", className)}>
-      <div className="relative overflow-hidden rounded-lg border border-gray-200 bg-gray-50">
+    // Duas colunas no desktop: previa a esquerda, controles a direita — o
+    // usuario ve a edicao acontecendo enquanto ajusta. Empilha no mobile.
+    <div className={cn("flex flex-col gap-3 md:flex-row md:items-start md:gap-4", className)}>
+      <div className="relative min-w-0 flex-1 overflow-hidden rounded-lg border border-gray-200 bg-gray-50">
         <canvas
           ref={canvasRef}
           className={cn(
             "block h-auto w-full",
-            artHeight / artWidth >= 1.4 && "mx-auto max-w-[280px]",
+            artHeight / artWidth >= 1.4 && "mx-auto max-w-[300px]",
           )}
           style={{ touchAction: "none", cursor }}
           onPointerDown={onPointerDown}
@@ -312,11 +314,13 @@ export function ArtLayoutEditor({
         )}
       </div>
 
+      {/* Coluna de controles (direita no desktop) */}
+      <div className="w-full space-y-3 md:w-64 md:shrink-0">
       <p className="text-xs text-gray-500">
         Arraste o logo, o rodapé{hasPrice ? " e o preço" : ""} na prévia para posicionar.
       </p>
 
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-1">
         <div className="space-y-1">
           <Label htmlFor="le-logo-size" className="text-xs">
             Tamanho do logo
@@ -423,7 +427,7 @@ export function ArtLayoutEditor({
         )}
       </div>
 
-      <div className="grid gap-2 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-2">
         <label className="flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2">
           <span className="text-sm text-gray-800">Fundo branco no logo</span>
           <Switch
@@ -443,7 +447,7 @@ export function ArtLayoutEditor({
       </div>
 
       <div className="flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2">
-        <span className="text-sm text-gray-800">Cor do texto do rodapé</span>
+        <span className="text-sm text-gray-800">Cor do rodapé</span>
         <div className="flex items-center gap-2">
           <button
             type="button"
@@ -474,6 +478,7 @@ export function ArtLayoutEditor({
             )}
           />
         </div>
+      </div>
       </div>
     </div>
   )

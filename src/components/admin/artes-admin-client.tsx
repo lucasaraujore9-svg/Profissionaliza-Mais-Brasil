@@ -526,7 +526,7 @@ function UploadDialog({
   if (step === 2 && layout && feedPreview) {
     return (
       <Dialog open onOpenChange={(o) => !o && !sending && onClose()}>
-        <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-xl">
+        <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-3xl">
           <DialogHeader>
             <DialogTitle>Posições — logo{hasPrice ? " e preço" : ""}</DialogTitle>
             <DialogDescription>
@@ -760,7 +760,7 @@ function LayoutDialog({
 
   return (
     <Dialog open onOpenChange={(o) => !o && !saving && onClose()}>
-      <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-xl">
+      <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>Posições — {art.title}</DialogTitle>
           <DialogDescription>
