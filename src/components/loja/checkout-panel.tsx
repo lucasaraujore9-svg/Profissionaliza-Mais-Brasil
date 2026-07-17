@@ -43,8 +43,6 @@ type FormConfig =
   | {
       kind: "pmb"
       initPath?: string
-      /** Teto de parcelas no cartão (config admin "parcelas sem juros"). */
-      cardMaxInstallments?: number
       /** Curso com mensalidade: sem parcelamento adicional (cartão/boleto). */
       isMonthly?: boolean
     }
@@ -137,7 +135,6 @@ export function CheckoutPanel({
             couponCode={couponCode}
             initPath={form.initPath}
             amount={finalPrice}
-            cardMaxInstallments={form.cardMaxInstallments}
             isMonthly={form.isMonthly}
           />
         )}

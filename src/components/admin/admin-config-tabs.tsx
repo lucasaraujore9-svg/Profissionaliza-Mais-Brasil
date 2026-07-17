@@ -254,10 +254,11 @@ function GeneralTab({
           Vendas diretas — parcelamento sem juros
         </h3>
         <p className="mt-1 text-xs text-gray-600">
-          Nas vendas diretas da PMB (vitrine PMB), o aluno parcela no cartão em
-          até <strong>12x</strong>. Defina em quantas dessas parcelas a PMB
-          assume o juros (sem juros para o aluno). O valor exibido no checkout é
-          sempre o confirmado pelo Mercado Pago.
+          Nas vendas diretas da PMB (vitrine PMB), o aluno sempre pode parcelar
+          no cartão em até <strong>12x</strong>. Este número define o
+          &quot;até Nx sem juros&quot; anunciado no catálogo e nas páginas de
+          curso. No Mercado Pago, é até onde a PMB assume o juros; no Asaas, o
+          parcelamento é o valor total dividido — sempre sem juros para o aluno.
         </p>
 
         <div className="mt-5 max-w-xs">

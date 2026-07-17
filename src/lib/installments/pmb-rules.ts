@@ -7,8 +7,11 @@
  * para a venda direta MANUAL da revenda (operador escolhe valor/parcelas).
  * Aqui as regras são as da compra self-service pelo site:
  *   - boleto: cada parcela >= R$ 50 e no máximo 6 boletos;
- *   - cartão: teto = config do admin ("parcelas sem juros", 1..12) e cada
- *     parcela >= R$ 5 (mínimo do Asaas para cartão).
+ *   - cartão: sempre até 12x (modelo do produto: o aluno SEMPRE pode dividir;
+ *     no Asaas o parcelamento é o valor total dividido — sem juros para o
+ *     aluno), com cada parcela >= R$ 5 (mínimo do Asaas). A config do admin
+ *     ("parcelas sem juros") é só o número ANUNCIADO nas vitrines — não limita
+ *     o checkout.
  */
 
 /** Valor mínimo de CADA boleto do parcelamento self-service. */
@@ -20,7 +23,7 @@ export const PMB_BOLETO_MAX_PARCELAS = 6
 /** Mínimo do Asaas por parcela no cartão. */
 export const PMB_CARD_MIN_PARCELA = 5
 
-/** Teto absoluto de parcelas no cartão (independe da config do admin). */
+/** Teto de parcelas no cartão (independe da config do admin). */
 export const PMB_CARD_ABS_MAX = 12
 
 /**
@@ -35,15 +38,14 @@ export function pmbMaxBoletoInstallments(total: number): number {
 }
 
 /**
- * Máximo de parcelas no cartão para um total, dado o teto configurado no admin
- * (SystemSettings.pmbInterestFreeInstallments). Cada parcela precisa valer pelo
- * menos R$ 5 (regra do Asaas); teto absoluto 12x.
+ * Máximo de parcelas no cartão para um total: sempre até 12x, limitado apenas
+ * pela parcela mínima de R$ 5 (regra do Asaas). NÃO depende da config do admin
+ * — "parcelas sem juros" é exibição, nunca gate de disponibilidade.
  */
-export function pmbMaxCardInstallments(total: number, adminCap: number): number {
+export function pmbMaxCardInstallments(total: number): number {
   if (!Number.isFinite(total) || total <= 0) return 1
-  const cap = Number.isFinite(adminCap) && adminCap >= 1 ? Math.floor(adminCap) : 1
   const byMinValue = Math.floor(total / PMB_CARD_MIN_PARCELA)
-  return Math.max(1, Math.min(cap, byMinValue, PMB_CARD_ABS_MAX))
+  return Math.max(1, Math.min(byMinValue, PMB_CARD_ABS_MAX))
 }
 
 /**

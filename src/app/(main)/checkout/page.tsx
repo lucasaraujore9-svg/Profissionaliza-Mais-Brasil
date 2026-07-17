@@ -132,7 +132,6 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
       : ({
           kind: "pmb",
           initPath: "/api/checkout/package",
-          cardMaxInstallments: settings.pmbInterestFreeInstallments,
           isMonthly: false,
         } as const)
 
@@ -311,7 +310,6 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
       : null
     : ({
         kind: "pmb",
-        cardMaxInstallments: settings.pmbInterestFreeInstallments,
         isMonthly: course.paymentTypeMain === "MONTHLY",
       } as const)
 

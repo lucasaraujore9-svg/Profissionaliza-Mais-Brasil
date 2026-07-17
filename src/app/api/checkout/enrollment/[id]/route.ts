@@ -12,7 +12,6 @@ import {
   pmbMaxBoletoInstallments,
   pmbMaxCardInstallments,
 } from "@/lib/installments/pmb-rules"
-import { getSystemSettings } from "@/lib/system-settings"
 import { issuePmbAsaasCharge } from "@/lib/checkout/issue-pmb-asaas-charge"
 import { TenantGatewayIsolationError } from "@/lib/checkout/assert-tenant-gateway"
 import { rateLimit, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
@@ -258,11 +257,7 @@ export const POST = withRequestContextParams<{ id: string }>(
           )
         }
       } else if (data.paymentMethod === "CREDIT_CARD") {
-        const settings = await getSystemSettings()
-        const cap = pmbMaxCardInstallments(
-          finalAmount,
-          settings.pmbInterestFreeInstallments,
-        )
+        const cap = pmbMaxCardInstallments(finalAmount)
         if (installmentsChosen > cap) {
           return NextResponse.json(
             {

@@ -441,10 +441,7 @@ export const POST = withRequestContext(
           )
         }
       } else if (data.paymentMethod === "CREDIT_CARD") {
-        const cap = pmbMaxCardInstallments(
-          finalAmount,
-          settings.pmbInterestFreeInstallments,
-        )
+        const cap = pmbMaxCardInstallments(finalAmount)
         if (installmentsChosen > cap) {
           return rejectInstallments(
             `Para este valor, o cartão pode ser parcelado em até ${cap}x.`,

@@ -208,7 +208,6 @@ export default async function PagarPmbPage({ params }: PagarPmbPageProps) {
             couponCode={null}
             initPath={`/api/checkout/enrollment/${enrollment.id}`}
             amount={Number(enrollment.finalAmount)}
-            cardMaxInstallments={settings.pmbInterestFreeInstallments}
             isMonthly={isMonthly}
             prefill={{
               nome: s.nome,

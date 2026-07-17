@@ -37,8 +37,6 @@ export interface PmbCheckoutFormProps {
    * Ausente = seletores ocultos (compra segue à vista, como antes).
    */
   amount?: number
-  /** Teto de parcelas no cartão (config admin "parcelas sem juros", 1..12). */
-  cardMaxInstallments?: number
   /** Curso com mensalidade: sem parcelamento adicional. */
   isMonthly?: boolean
   /**
@@ -157,7 +155,6 @@ export function PmbCheckoutForm({
   couponCode,
   initPath = "/api/checkout",
   amount,
-  cardMaxInstallments,
   isMonthly,
   prefill,
 }: PmbCheckoutFormProps) {
@@ -183,11 +180,9 @@ export function PmbCheckoutForm({
 
   // Tetos de parcelamento calculados no client SÓ para montar o seletor — o
   // servidor re-valida contra o valor real (regras: boleto R$50 mín/6 máx;
-  // cartão teto do admin + R$5 mín). Sem amount (fluxos antigos) = à vista.
+  // cartão até 12x + R$5 mín). Sem amount (fluxos antigos) = à vista.
   const cardCap =
-    !isMonthly && amount && amount > 0
-      ? pmbMaxCardInstallments(amount, cardMaxInstallments ?? 1)
-      : 1
+    !isMonthly && amount && amount > 0 ? pmbMaxCardInstallments(amount) : 1
   const boletoCap =
     !isMonthly && amount && amount > 0 ? pmbMaxBoletoInstallments(amount) : 1
 

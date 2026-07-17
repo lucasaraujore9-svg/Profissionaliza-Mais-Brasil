@@ -21,7 +21,6 @@ import {
   pmbMaxBoletoInstallments,
   pmbMaxCardInstallments,
 } from "@/lib/installments/pmb-rules"
-import { getSystemSettings } from "@/lib/system-settings"
 import { swallow } from "@/lib/errors"
 
 /**
@@ -158,9 +157,9 @@ export async function issuePmbAsaasCharge(
   const motherKey = motherAsaasKey()
 
   // ── Parcelamento (só compra one-time): normaliza e RE-valida as regras ──
-  // Boleto: cada parcela >= R$50, máx 6 boletos. Cartão: teto do admin
-  // (parcelas sem juros) + mínimo R$5/parcela, teto absoluto 12x. A rota já
-  // devolve 400 amigável; aqui é defesa em profundidade (lança).
+  // Boleto: cada parcela >= R$50, máx 6 boletos. Cartão: até 12x, mínimo
+  // R$5/parcela. A rota já devolve 400 amigável; aqui é defesa em profundidade
+  // (lança).
   const n =
     !isMonthly && installments && installments > 1
       ? Math.floor(installments)
@@ -180,11 +179,7 @@ export async function issuePmbAsaasCharge(
     if (!creditCard || !creditCardHolder) {
       throw new Error("Dados do cartão obrigatórios para parcelamento")
     }
-    const settings = await getSystemSettings()
-    const cap = pmbMaxCardInstallments(
-      finalAmount,
-      settings.pmbInterestFreeInstallments,
-    )
+    const cap = pmbMaxCardInstallments(finalAmount)
     if (n > cap) {
       throw new Error(
         `Parcelamento no cartão acima do permitido (máximo ${cap}x)`,

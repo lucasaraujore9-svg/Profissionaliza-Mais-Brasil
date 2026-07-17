@@ -33,24 +33,21 @@ describe("pmbMaxBoletoInstallments", () => {
 })
 
 describe("pmbMaxCardInstallments", () => {
-  it("respeita o teto do admin", () => {
-    expect(pmbMaxCardInstallments(1000, 6)).toBe(6)
-    expect(pmbMaxCardInstallments(1000, 12)).toBe(12)
-    expect(pmbMaxCardInstallments(1000, 1)).toBe(1)
-  })
-
-  it("teto absoluto 12x mesmo com config acima", () => {
-    expect(pmbMaxCardInstallments(1000, 24)).toBe(12)
+  it("sempre oferece até 12x, independente da config do admin", () => {
+    expect(pmbMaxCardInstallments(1000)).toBe(12)
+    expect(pmbMaxCardInstallments(60)).toBe(12)
   })
 
   it("parcela mínima de R$5 limita valores baixos", () => {
-    expect(pmbMaxCardInstallments(20, 12)).toBe(4)
-    expect(pmbMaxCardInstallments(4.99, 12)).toBe(1)
+    expect(pmbMaxCardInstallments(20)).toBe(4)
+    expect(pmbMaxCardInstallments(59.99)).toBe(11)
+    expect(pmbMaxCardInstallments(4.99)).toBe(1)
   })
 
-  it("config inválida cai em 1", () => {
-    expect(pmbMaxCardInstallments(1000, 0)).toBe(1)
-    expect(pmbMaxCardInstallments(1000, Number.NaN)).toBe(1)
+  it("valores inválidos caem em 1 (à vista)", () => {
+    expect(pmbMaxCardInstallments(0)).toBe(1)
+    expect(pmbMaxCardInstallments(-10)).toBe(1)
+    expect(pmbMaxCardInstallments(Number.NaN)).toBe(1)
   })
 })
 
