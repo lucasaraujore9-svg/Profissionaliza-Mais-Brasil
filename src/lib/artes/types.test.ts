@@ -41,6 +41,15 @@ describe("defaultVariantLayout", () => {
     expect(layout.price).toBeDefined()
     expect(layout.price!.scale).toBe(1)
   })
+
+  it("inclui footer centrado na âncora legada com pads default", () => {
+    const layout = defaultVariantLayout("feed", "top-right", false)
+    const fb = ART_ANCHORS.feed.footerBox
+    expect(layout.footer!.cx).toBeCloseTo(fb.x + fb.w / 2)
+    expect(layout.footer!.w).toBe(fb.w)
+    expect(layout.footerPad).toBeCloseTo(0.6)
+    expect(layout.logo.pad).toBeCloseTo(0.12)
+  })
 })
 
 describe("clampLogoPlacement / clampPricePlacement", () => {
@@ -88,6 +97,9 @@ describe("resolveVariantLayout", () => {
     expect(layout.logo.bg).toBe(true)
     expect(layout.footerBg).toBe(false)
     expect(layout.price).toBeDefined() // injetado do default
+    // layout salvo antes do rodape posicionavel: footer vem da ancora legada
+    expect(layout.footer).toBeDefined()
+    expect(layout.footerPad).toBeCloseTo(0.6)
   })
 })
 

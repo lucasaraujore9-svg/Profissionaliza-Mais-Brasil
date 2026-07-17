@@ -39,7 +39,22 @@ export interface LogoPlacement {
   w: number // largura relativa da CAIXA de contain do logo
   h: number // altura relativa da caixa (slider escala w/h uniformemente)
   bg: boolean // quadrado branco atras do logo
+  // Margem do quadrado branco em volta do logo desenhado (fracao do lado
+  // maior do logo). Ausente = 0.12.
+  pad?: number
 }
+
+export const LOGO_PAD_DEFAULT = 0.12
+
+// Caixa de conteudo do rodape, arrastavel como o logo. A ALTURA do quadrado
+// branco e derivada do conteudo + padding (footerPad), nao e fixa.
+export interface FooterPlacement {
+  cx: number
+  cy: number
+  w: number // largura relativa da caixa
+}
+
+export const FOOTER_PAD_DEFAULT = 0.6
 
 export interface PricePlacement {
   cx: number
@@ -52,10 +67,15 @@ export interface PricePlacement {
 export interface VariantLayout {
   logo: LogoPlacement
   price?: PricePlacement // presente quando a arte tem hasPrice
-  footerBg: boolean // fundo branco do rodape (posicao do rodape e FIXA)
+  // Posicao/largura do rodape. Ausente = ancora legada da variante.
+  footer?: FooterPlacement
+  footerBg: boolean // fundo branco do rodape
   // Cor do texto/icones do rodape (hex #rrggbb). Ausente = automatica:
   // textOnWhite(primaryColor) com fundo, branco com sombra sem fundo.
   footerColor?: string
+  // Margem do quadrado branco do rodape em volta do conteudo (multiplo do
+  // font-size base). Ausente = 0.6.
+  footerPad?: number
 }
 
 export interface ArtLayout {
@@ -223,6 +243,18 @@ export function clampPricePlacement(p: PricePlacement): PricePlacement {
   }
 }
 
+export function clampFooterPlacement(p: FooterPlacement): FooterPlacement {
+  const clamp = (v: number, min: number, max: number) =>
+    Math.min(max, Math.max(min, v))
+  const w = clamp(p.w, 0.3, 1)
+  return {
+    ...p,
+    w,
+    cx: clamp(p.cx, w / 2, 1 - w / 2),
+    cy: clamp(p.cy, 0.05, 0.97),
+  }
+}
+
 // Layout default por variante — deriva das ancoras do template legado, entao
 // artes antigas (layout null) rendem exatamente como antes. Fundos:
 // - logo.bg=false: artes legadas ja TEM a caixa branca pintada no arquivo; o
@@ -238,6 +270,7 @@ export function defaultVariantLayout(
 ): VariantLayout {
   const anchors = ART_ANCHORS[kind]
   const box = logoCorner === "top-left" ? mirrorBoxLeft(anchors.logoBox) : anchors.logoBox
+  const fb = anchors.footerBox
   return {
     logo: {
       cx: box.x + box.w / 2,
@@ -245,6 +278,7 @@ export function defaultVariantLayout(
       w: box.w,
       h: box.h,
       bg: false,
+      pad: LOGO_PAD_DEFAULT,
     },
     ...(hasPrice
       ? {
@@ -254,7 +288,9 @@ export function defaultVariantLayout(
               : { cx: 0.78, cy: 0.775, scale: 1 },
         }
       : {}),
+    footer: { cx: fb.x + fb.w / 2, cy: fb.y + fb.h / 2, w: fb.w },
     footerBg: true,
+    footerPad: FOOTER_PAD_DEFAULT,
   }
 }
 
@@ -269,8 +305,12 @@ export function resolveVariantLayout(art: ArtItem, kind: ArtVariantKind): Varian
     ...(art.hasPrice
       ? { price: clampPricePlacement(saved.price ?? fallback.price!) }
       : {}),
+    // Layouts salvos antes do rodape posicionavel nao tem `footer` — cai na
+    // ancora legada (fallback).
+    footer: clampFooterPlacement(saved.footer ?? fallback.footer!),
     footerBg: saved.footerBg,
     ...(saved.footerColor ? { footerColor: saved.footerColor } : {}),
+    footerPad: saved.footerPad ?? FOOTER_PAD_DEFAULT,
   }
 }
 

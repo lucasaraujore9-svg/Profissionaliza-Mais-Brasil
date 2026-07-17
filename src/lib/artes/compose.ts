@@ -19,11 +19,14 @@
 
 import {
   ART_ANCHORS,
+  clampFooterPlacement,
   clampLogoPlacement,
   clampPricePlacement,
   contrastTextColor,
+  FOOTER_PAD_DEFAULT,
   footerGroups,
   formatPriceBRL,
+  LOGO_PAD_DEFAULT,
   textOnWhite,
   type TenantBrand,
   type VariantLayout,
@@ -149,25 +152,33 @@ interface MeasuredGroup {
   textW: number
 }
 
-// Desenha uma linha de grupos [icone + texto] centrada em (cx, centerY).
-// Reduz a fonte ate caber em maxW (piso 55%). Retorna o fontSize usado.
-function drawGroupsLine(
+interface LineFit {
+  fontSize: number
+  totalW: number
+  lineH: number
+  iconSize: number
+  gapIconText: number
+  gapGroups: number
+  weight: number
+  measured: MeasuredGroup[]
+}
+
+// Mede uma linha de grupos [icone + texto], reduzindo a fonte ate caber em
+// maxW (piso 55%). Separado do desenho para a ALTURA do quadrado do rodape
+// poder ser derivada do conteudo antes de pintar.
+function fitGroupsLine(
   ctx: CanvasRenderingContext2D,
   family: string,
   groups: { icon: ReturnType<typeof iconFor>; text: string }[],
   weight: number,
   baseFontSize: number,
-  cx: number,
-  centerY: number,
   maxW: number,
-  ink: string,
-  shadow: boolean,
-): void {
-  if (groups.length === 0) return
-  const minFontSize = Math.round(baseFontSize * 0.55)
+): LineFit {
+  const minFontSize = Math.max(10, Math.round(baseFontSize * 0.55))
   let fontSize = baseFontSize
   let measured: MeasuredGroup[] = []
   let totalW = 0
+  let dims = { iconSize: 0, gapIconText: 0, gapGroups: 0 }
 
   const measure = (size: number) => {
     ctx.font = `${weight} ${size}px ${family}`
@@ -184,28 +195,49 @@ function drawGroupsLine(
     return { iconSize, gapIconText, gapGroups }
   }
 
-  let dims = measure(fontSize)
+  dims = measure(fontSize)
   while (fontSize > minFontSize && totalW > maxW) {
     fontSize -= 1
     dims = measure(fontSize)
   }
 
+  return {
+    fontSize,
+    totalW,
+    lineH: dims.iconSize,
+    ...dims,
+    weight,
+    measured,
+  }
+}
+
+// Pinta uma linha ja medida, centrada em (cx, centerY).
+function paintGroupsLine(
+  ctx: CanvasRenderingContext2D,
+  family: string,
+  fit: LineFit,
+  cx: number,
+  centerY: number,
+  ink: string,
+  shadow: boolean,
+): void {
+  if (fit.measured.length === 0) return
   ctx.fillStyle = ink
   ctx.textAlign = "left"
   ctx.textBaseline = "middle"
-  setInkShadow(ctx, fontSize, shadow)
+  setInkShadow(ctx, fit.fontSize, shadow)
 
-  let x = cx - totalW / 2
-  for (const g of measured) {
-    drawIcon(ctx, g.icon, x, centerY - dims.iconSize / 2, dims.iconSize, ink)
+  let x = cx - fit.totalW / 2
+  for (const g of fit.measured) {
+    drawIcon(ctx, g.icon, x, centerY - fit.iconSize / 2, fit.iconSize, ink)
     // drawIcon faz save/restore — o shadow do texto precisa ser re-aplicado ao
     // proprio fillText (shadow e estado do ctx, preservado fora do save).
-    ctx.font = `${weight} ${fontSize}px ${family}`
+    ctx.font = `${fit.weight} ${fit.fontSize}px ${family}`
     ctx.fillStyle = ink
-    ctx.fillText(g.text, x + dims.iconSize + dims.gapIconText, centerY)
-    x += dims.iconSize + dims.gapIconText + g.textW + dims.gapGroups
+    ctx.fillText(g.text, x + fit.iconSize + fit.gapIconText, centerY)
+    x += fit.iconSize + fit.gapIconText + g.textW + fit.gapGroups
   }
-  setInkShadow(ctx, fontSize, false)
+  setInkShadow(ctx, fit.fontSize, false)
 }
 
 export async function composeArt(
@@ -216,8 +248,10 @@ export async function composeArt(
   const layout: VariantLayout = {
     logo: clampLogoPlacement(params.layout.logo),
     ...(params.layout.price ? { price: clampPricePlacement(params.layout.price) } : {}),
+    ...(params.layout.footer ? { footer: clampFooterPlacement(params.layout.footer) } : {}),
     footerBg: params.layout.footerBg,
     ...(params.layout.footerColor ? { footerColor: params.layout.footerColor } : {}),
+    footerPad: params.layout.footerPad,
   }
 
   const [family, artImg, logoImg] = await Promise.all([
@@ -243,45 +277,61 @@ export async function composeArt(
   // 1. Arte base preenchendo o canvas (dimensoes vem do banco = naturais).
   ctx.drawImage(artImg, 0, 0, artWidth, artHeight)
 
-  // 2. Rodape (posicao FIXA nas ancoras da variante; fica ATRAS de logo/preco
-  //    se sobrepostos — os elementos moveis sempre por cima).
+  // 2. Rodape posicionavel (fica ATRAS de logo/preco se sobrepostos — os
+  //    elementos moveis sempre por cima). A ALTURA do quadrado e derivada do
+  //    conteudo + padding (footerPad), nao e fixa.
   const kind = artHeight / artWidth >= 1.4 ? "story" : "feed"
   const fb = ART_ANCHORS[kind].footerBox
-  const footerRect: PixelRect = {
-    x: fb.x * artWidth,
-    y: fb.y * artHeight,
-    w: fb.w * artWidth,
-    h: fb.h * artHeight,
-  }
+  const footerPlacement = clampFooterPlacement(
+    layout.footer ?? { cx: fb.x + fb.w / 2, cy: fb.y + fb.h / 2, w: fb.w },
+  )
+  const footerW = footerPlacement.w * artWidth
+  const baseFont = Math.round(
+    kind === "story" ? clamp(footerW * 0.055, 18, 64) : clamp(footerW * 0.033, 14, 44),
+  )
+  const padPx = (layout.footerPad ?? FOOTER_PAD_DEFAULT) * baseFont
+  const maxContentW = footerW - padPx * 2
 
   const groups = footerGroups(tenant).map((g) => ({ icon: iconFor(g.icon), text: g.text }))
-  if (layout.footerBg) {
-    ctx.fillStyle = "#ffffff"
-    drawRoundRect(ctx, footerRect.x, footerRect.y, footerRect.w, footerRect.h, footerRect.h * 0.22)
-    ctx.fill()
-  }
   // Cor custom do designer/revenda vence; senao a automatica. A sombra de
   // legibilidade acompanha a ausencia de fundo, independente da cor.
   const footerInk =
     layout.footerColor ?? (layout.footerBg ? textOnWhite(tenant.primaryColor) : "#ffffff")
   const footerShadow = !layout.footerBg
-  const footerCx = footerRect.x + footerRect.w / 2
-  const maxLineW = footerRect.w * 0.92
 
-  if (kind === "story") {
-    // Empilhado: site em destaque na 1a linha; contato + rede na 2a.
-    const line2 = groups.slice(1)
-    const font1 = Math.round(clamp(footerRect.h * 0.3, 18, 60))
-    if (line2.length === 0) {
-      drawGroupsLine(ctx, family, groups.slice(0, 1), 800, font1, footerCx, footerRect.y + footerRect.h * 0.5, maxLineW, footerInk, footerShadow)
-    } else {
-      drawGroupsLine(ctx, family, groups.slice(0, 1), 800, font1, footerCx, footerRect.y + footerRect.h * 0.38, maxLineW, footerInk, footerShadow)
-      drawGroupsLine(ctx, family, line2, 600, Math.round(font1 * 0.62), footerCx, footerRect.y + footerRect.h * 0.7, maxLineW, footerInk, footerShadow)
-    }
-  } else {
-    // Feed: 1 linha com todos os grupos.
-    const base = Math.round(clamp(footerRect.h * 0.32, 14, 44))
-    drawGroupsLine(ctx, family, groups, 600, base, footerCx, footerRect.y + footerRect.h / 2, maxLineW, footerInk, footerShadow)
+  // Medicao das linhas (feed: 1 linha; story: site em destaque + contatos).
+  const line2Groups = kind === "story" ? groups.slice(1) : []
+  const fit1 =
+    kind === "story"
+      ? fitGroupsLine(ctx, family, groups.slice(0, 1), 800, baseFont, maxContentW)
+      : fitGroupsLine(ctx, family, groups, 600, baseFont, maxContentW)
+  const fit2 =
+    line2Groups.length > 0
+      ? fitGroupsLine(ctx, family, line2Groups, 600, Math.round(baseFont * 0.62), maxContentW)
+      : null
+  const lineGap = fit2 ? fit1.fontSize * 0.45 : 0
+  const contentH = fit1.lineH + (fit2 ? lineGap + fit2.lineH : 0)
+
+  const boxH = contentH + padPx * 2
+  const footerRect: PixelRect = {
+    x: footerPlacement.cx * artWidth - footerW / 2,
+    y: footerPlacement.cy * artHeight - boxH / 2,
+    w: footerW,
+    h: boxH,
+  }
+
+  if (layout.footerBg) {
+    ctx.fillStyle = "#ffffff"
+    drawRoundRect(ctx, footerRect.x, footerRect.y, footerRect.w, footerRect.h, boxH * 0.28)
+    ctx.fill()
+  }
+
+  const footerCx = footerRect.x + footerRect.w / 2
+  const line1CenterY = footerRect.y + padPx + fit1.lineH / 2
+  paintGroupsLine(ctx, family, fit1, footerCx, line1CenterY, footerInk, footerShadow)
+  if (fit2) {
+    const line2CenterY = footerRect.y + padPx + fit1.lineH + lineGap + fit2.lineH / 2
+    paintGroupsLine(ctx, family, fit2, footerCx, line2CenterY, footerInk, footerShadow)
   }
 
   // 3. Logo no placement (caixa de contain arrastavel/redimensionavel).
@@ -298,9 +348,10 @@ export async function composeArt(
     const x = logoRect.x + (logoRect.w - w) / 2
     const y = logoRect.y + (logoRect.h - h) / 2
     if (layout.logo.bg) {
-      const pad = Math.max(w, h) * 0.12
+      // Margem do quadrado branco em volta do logo desenhado (configuravel).
+      const pad = Math.max(w, h) * (layout.logo.pad ?? LOGO_PAD_DEFAULT)
       ctx.fillStyle = "#ffffff"
-      drawRoundRect(ctx, x - pad, y - pad, w + pad * 2, h + pad * 2, pad)
+      drawRoundRect(ctx, x - pad, y - pad, w + pad * 2, h + pad * 2, Math.max(pad, Math.max(w, h) * 0.06))
       ctx.fill()
     }
     ctx.drawImage(logoImg, x, y, w, h)

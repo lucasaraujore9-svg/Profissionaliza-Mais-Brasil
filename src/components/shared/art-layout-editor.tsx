@@ -7,7 +7,14 @@ import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { cn } from "@/lib/utils"
 import type { TenantBrand, VariantLayout } from "@/lib/artes/types"
-import { clampLogoPlacement, clampPricePlacement } from "@/lib/artes/types"
+import {
+  ART_ANCHORS,
+  clampFooterPlacement,
+  clampLogoPlacement,
+  clampPricePlacement,
+  FOOTER_PAD_DEFAULT,
+  LOGO_PAD_DEFAULT,
+} from "@/lib/artes/types"
 import { composeArt, type ComposedGeometry } from "@/lib/artes/compose"
 
 export type EditorState = "loading" | "ready" | "error"
@@ -59,7 +66,7 @@ export function sampleBrand(): TenantBrand {
 }
 
 interface DragState {
-  target: "logo" | "price"
+  target: "logo" | "price" | "footer"
   offsetX: number // pointer - centro do elemento (px do canvas)
   offsetY: number
 }
@@ -71,12 +78,13 @@ function hitTest(
   geometry: ComposedGeometry,
   x: number,
   y: number,
-): "logo" | "price" | null {
+): "logo" | "price" | "footer" | null {
   const within = (r: { x: number; y: number; w: number; h: number }) =>
     x >= r.x - HIT_SLOP && x <= r.x + r.w + HIT_SLOP && y >= r.y - HIT_SLOP && y <= r.y + r.h + HIT_SLOP
-  // Preco primeiro: menor e desenhado por cima.
+  // Do menor para o maior: preco -> logo -> rodape.
   if (geometry.priceRect && within(geometry.priceRect)) return "price"
   if (within(geometry.logoRect)) return "logo"
+  if (within(geometry.footerRect)) return "footer"
   return null
 }
 
@@ -179,6 +187,7 @@ export function ArtLayoutEditor({
     }
     stroke(geometry.logoRect)
     if (geometry.priceRect) stroke(geometry.priceRect)
+    stroke(geometry.footerRect)
   }
 
   function toCanvasXY(e: React.PointerEvent<HTMLCanvasElement>) {
@@ -198,12 +207,25 @@ export function ArtLayoutEditor({
     if (!target) return
     if (target === "price" && (!hasPrice || !value.price)) return
     e.currentTarget.setPointerCapture(e.pointerId)
-    const rect = target === "price" ? geometry.priceRect! : geometry.logoRect
+    const rect =
+      target === "price"
+        ? geometry.priceRect!
+        : target === "footer"
+          ? geometry.footerRect
+          : geometry.logoRect
     dragRef.current = {
       target,
       offsetX: x - (rect.x + rect.w / 2),
       offsetY: y - (rect.y + rect.h / 2),
     }
+  }
+
+  // Placement atual do rodape (layouts salvos antes do rodape posicionavel
+  // nao tem `footer` — deriva da ancora legada da variante).
+  function currentFooter() {
+    if (latestValue.current.footer) return latestValue.current.footer
+    const fb = ART_ANCHORS[artHeight / artWidth >= 1.4 ? "story" : "feed"].footerBox
+    return { cx: fb.x + fb.w / 2, cy: fb.y + fb.h / 2, w: fb.w }
   }
 
   function onPointerMove(e: React.PointerEvent<HTMLCanvasElement>) {
@@ -224,6 +246,11 @@ export function ArtLayoutEditor({
       onChange({
         ...latestValue.current,
         logo: clampLogoPlacement({ ...latestValue.current.logo, cx, cy }),
+      })
+    } else if (drag.target === "footer") {
+      onChange({
+        ...latestValue.current,
+        footer: clampFooterPlacement({ ...currentFooter(), cx, cy }),
       })
     } else if (latestValue.current.price) {
       onChange({
@@ -286,7 +313,7 @@ export function ArtLayoutEditor({
       </div>
 
       <p className="text-xs text-gray-500">
-        Arraste o logo{hasPrice ? " e o preço" : ""} na prévia para posicionar.
+        Arraste o logo, o rodapé{hasPrice ? " e o preço" : ""} na prévia para posicionar.
       </p>
 
       <div className="grid gap-3 sm:grid-cols-2">
@@ -302,6 +329,29 @@ export function ArtLayoutEditor({
             step={0.5}
             value={Math.round(value.logo.w * 1000) / 10}
             onChange={(e) => setLogoWidth(Number(e.target.value))}
+            className="w-full accent-[var(--color-pmb-green)]"
+          />
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor="le-footer-w" className="text-xs">
+            Largura do rodapé
+          </Label>
+          <input
+            id="le-footer-w"
+            type="range"
+            min={30}
+            max={100}
+            step={1}
+            value={Math.round(currentFooter().w * 100)}
+            onChange={(e) =>
+              onChange({
+                ...latestValue.current,
+                footer: clampFooterPlacement({
+                  ...currentFooter(),
+                  w: Number(e.target.value) / 100,
+                }),
+              })
+            }
             className="w-full accent-[var(--color-pmb-green)]"
           />
         </div>
@@ -325,6 +375,47 @@ export function ArtLayoutEditor({
                     scale: Number(e.target.value),
                   }),
                 })
+              }
+              className="w-full accent-[var(--color-pmb-green)]"
+            />
+          </div>
+        )}
+        {value.logo.bg && (
+          <div className="space-y-1">
+            <Label htmlFor="le-logo-pad" className="text-xs">
+              Margem do fundo do logo
+            </Label>
+            <input
+              id="le-logo-pad"
+              type="range"
+              min={0}
+              max={50}
+              step={1}
+              value={Math.round((value.logo.pad ?? LOGO_PAD_DEFAULT) * 100)}
+              onChange={(e) =>
+                onChange({
+                  ...latestValue.current,
+                  logo: { ...latestValue.current.logo, pad: Number(e.target.value) / 100 },
+                })
+              }
+              className="w-full accent-[var(--color-pmb-green)]"
+            />
+          </div>
+        )}
+        {value.footerBg && (
+          <div className="space-y-1">
+            <Label htmlFor="le-footer-pad" className="text-xs">
+              Margem do fundo do rodapé
+            </Label>
+            <input
+              id="le-footer-pad"
+              type="range"
+              min={0}
+              max={200}
+              step={5}
+              value={Math.round((value.footerPad ?? FOOTER_PAD_DEFAULT) * 100)}
+              onChange={(e) =>
+                onChange({ ...latestValue.current, footerPad: Number(e.target.value) / 100 })
               }
               className="w-full accent-[var(--color-pmb-green)]"
             />

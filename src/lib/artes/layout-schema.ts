@@ -12,6 +12,7 @@ const logoPlacementSchema = z.object({
   w: z.number().min(0.04).max(0.9),
   h: z.number().min(0.02).max(0.9),
   bg: z.boolean(),
+  pad: z.number().min(0).max(0.6).optional(),
 })
 
 const pricePlacementSchema = z.object({
@@ -20,15 +21,23 @@ const pricePlacementSchema = z.object({
   scale: z.number().min(0.5).max(2.5),
 })
 
+const footerPlacementSchema = z.object({
+  cx: rel,
+  cy: rel,
+  w: z.number().min(0.3).max(1),
+})
+
 export const variantLayoutSchema = z.object({
   logo: logoPlacementSchema,
   price: pricePlacementSchema.optional(),
+  footer: footerPlacementSchema.optional(),
   footerBg: z.boolean(),
   // Hex #rrggbb; ausente = cor automatica.
   footerColor: z
     .string()
     .regex(/^#[0-9a-fA-F]{6}$/)
     .optional(),
+  footerPad: z.number().min(0).max(2).optional(),
 })
 
 export const artLayoutSchema = z.object({
