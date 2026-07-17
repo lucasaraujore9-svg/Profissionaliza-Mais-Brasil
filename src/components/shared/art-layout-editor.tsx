@@ -92,7 +92,7 @@ function hitTest(
 
 function ControlGroup({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <div className="space-y-2 rounded-lg border border-gray-100 bg-gray-50/60 p-3">
+    <div className="mb-3 space-y-2 break-inside-avoid rounded-lg border border-gray-100 bg-gray-50/60 p-3">
       <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">{title}</p>
       {children}
     </div>
@@ -390,7 +390,7 @@ export function ArtLayoutEditor({
   return (
     // Duas colunas no desktop: previa a esquerda, controles a direita — o
     // usuario ve a edicao acontecendo enquanto ajusta. Empilha no mobile.
-    <div className={cn("flex flex-col gap-3 md:flex-row md:items-start md:gap-4", className)}>
+    <div className={cn("flex flex-col gap-3 lg:flex-row lg:items-start lg:gap-4", className)}>
       <div className="relative min-w-0 flex-1 overflow-hidden rounded-lg border border-gray-200 bg-gray-50">
         <canvas
           ref={canvasRef}
@@ -421,17 +421,14 @@ export function ArtLayoutEditor({
         )}
       </div>
 
-      {/* Coluna de controles (direita no desktop) */}
-      <div className="w-full space-y-3 md:w-64 md:shrink-0">
-      {headerControls && (
-        <>
-          {headerControls}
-          <div className="border-t border-gray-100" />
-        </>
-      )}
+      {/* Coluna de controles (ao lado no desktop) — cards em 2 colunas p/ evitar rolagem */}
+      <div className="w-full space-y-3 lg:w-[34rem] lg:shrink-0">
       <p className="text-xs text-gray-500">
         Arraste o logo, o rodapé{hasPrice ? " e o preço" : ""} na prévia para posicionar.
       </p>
+
+      <div className="gap-3 sm:columns-2">
+      {headerControls && <div className="mb-3 break-inside-avoid">{headerControls}</div>}
 
       <ControlGroup title="Logo">
         <RangeRow
@@ -567,6 +564,7 @@ export function ArtLayoutEditor({
           />
         </ControlGroup>
       )}
+      </div>
       </div>
     </div>
   )

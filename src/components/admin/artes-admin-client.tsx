@@ -526,7 +526,7 @@ function UploadDialog({
   if (step === 2 && layout && feedPreview) {
     return (
       <Dialog open onOpenChange={(o) => !o && !sending && onClose()}>
-        <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-3xl">
+        <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-5xl">
           <DialogHeader>
             <DialogTitle>Posições — logo{hasPrice ? " e preço" : ""}</DialogTitle>
             <DialogDescription>
