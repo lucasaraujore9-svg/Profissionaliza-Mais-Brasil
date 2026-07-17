@@ -27,6 +27,7 @@ import {
   footerGroups,
   formatPriceBRL,
   LOGO_PAD_DEFAULT,
+  PRICE_PAD_DEFAULT,
   textOnWhite,
   type TenantBrand,
   type VariantLayout,
@@ -380,26 +381,29 @@ export async function composeArt(
     setInkShadow(ctx, nameSize, false)
   }
 
-  // 4. Selo de preco no placement (pill com fundo proprio na cor secundaria).
+  // 4. Selo de preco no placement. Tamanho do valor (scale), tamanho do fundo
+  // (pad), cor do fundo e cor do valor sao configuraveis; ausentes caem no
+  // padrao (fundo = secondaryColor, texto = contraste automatico).
   let priceRect: PixelRect | null = null
   if (priceCents != null && layout.price) {
     const label = formatPriceBRL(priceCents)
     const fontSize = Math.round(clamp(artWidth * 0.045, 18, 64) * layout.price.scale)
     ctx.font = `800 ${fontSize}px ${family}`
     const textWidth = ctx.measureText(label).width
-    const padX = fontSize * 0.7
-    const padY = fontSize * 0.45
+    const padMul = layout.price.pad ?? PRICE_PAD_DEFAULT
+    const padX = fontSize * 0.7 * padMul
+    const padY = fontSize * 0.45 * padMul
     const pillW = textWidth + padX * 2
     const pillH = fontSize + padY * 2
     const x = clamp(layout.price.cx * artWidth - pillW / 2, 0, artWidth - pillW)
     const y = clamp(layout.price.cy * artHeight - pillH / 2, 0, artHeight - pillH)
 
-    const bg = tenant.secondaryColor || "#1e40af"
+    const bg = layout.price.bgColor || tenant.secondaryColor || "#1e40af"
     ctx.fillStyle = bg
     drawRoundRect(ctx, x, y, pillW, pillH, pillH / 2)
     ctx.fill()
 
-    ctx.fillStyle = contrastTextColor(bg)
+    ctx.fillStyle = layout.price.textColor || contrastTextColor(bg)
     ctx.textAlign = "center"
     ctx.textBaseline = "middle"
     ctx.fillText(label, x + pillW / 2, y + pillH / 2)

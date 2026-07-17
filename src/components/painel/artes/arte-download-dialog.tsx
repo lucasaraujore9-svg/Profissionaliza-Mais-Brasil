@@ -195,6 +195,61 @@ export function ArteDownloadDialog({
   const downloadLabel =
     downloadBoth && art.story ? "Baixar as 2 (.zip)" : `Baixar ${VARIANT_LABEL[previewKind]}`
 
+  // Tudo que NAO e a arte (versao, valor, .zip) vai para a coluna lateral do
+  // editor via headerControls — nada fica embaixo da previa.
+  const controls = (
+    <div className="space-y-3">
+      {art.story && (
+        <div className="space-y-1">
+          <Label className="text-xs">Versão da arte</Label>
+          <div className="flex items-center gap-2">
+            {(["feed", "story"] as const).map((kind) => (
+              <button
+                key={kind}
+                type="button"
+                onClick={() => setPreviewKind(kind)}
+                className={cn(
+                  "rounded-full border px-3 py-1 text-sm font-medium transition-colors",
+                  previewKind === kind
+                    ? "border-[var(--color-pmb-green)] bg-[var(--color-pmb-green)]/10 text-[var(--color-pmb-green)]"
+                    : "border-gray-200 text-gray-600 hover:border-gray-300",
+                )}
+              >
+                {VARIANT_LABEL[kind]}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {art.hasPrice && (
+        <div className="space-y-1.5">
+          <Label htmlFor="arte-preco">Valor exibido na arte</Label>
+          <PriceInput id="arte-preco" priceCents={priceCents} onChange={setPriceCents} />
+          <p className="text-xs text-gray-500">
+            {priceCents != null
+              ? `Será carimbado como ${formatPriceBRL(priceCents)}.`
+              : "Digite o valor para liberar o download (a prévia mostra R$ 199,90 de exemplo)."}
+          </p>
+        </div>
+      )}
+
+      {art.story && (
+        <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-gray-200 px-3 py-2.5">
+          <input
+            type="checkbox"
+            checked={downloadBoth}
+            onChange={(e) => setDownloadBoth(e.target.checked)}
+            className="mt-0.5 h-4 w-4 accent-[var(--color-pmb-green)]"
+          />
+          <span className="text-sm text-gray-800">
+            Baixar as duas versões (feed + stories) num .zip
+          </span>
+        </label>
+      )}
+    </div>
+  )
+
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
@@ -207,26 +262,6 @@ export function ArteDownloadDialog({
         </DialogHeader>
 
         <div className="space-y-4">
-          {art.story && (
-            <div className="flex items-center gap-2">
-              {(["feed", "story"] as const).map((kind) => (
-                <button
-                  key={kind}
-                  type="button"
-                  onClick={() => setPreviewKind(kind)}
-                  className={cn(
-                    "rounded-full border px-3 py-1 text-sm font-medium transition-colors",
-                    previewKind === kind
-                      ? "border-[var(--color-pmb-green)] bg-[var(--color-pmb-green)]/10 text-[var(--color-pmb-green)]"
-                      : "border-gray-200 text-gray-600 hover:border-gray-300",
-                  )}
-                >
-                  {VARIANT_LABEL[kind]}
-                </button>
-              ))}
-            </div>
-          )}
-
           <ArtLayoutEditor
             artUrl={previewVariant.url}
             artWidth={previewVariant.width}
@@ -237,33 +272,8 @@ export function ArteDownloadDialog({
             value={layouts[previewKind]}
             onChange={(next) => setLayouts((prev) => ({ ...prev, [previewKind]: next }))}
             onStateChange={setEditorState}
+            headerControls={controls}
           />
-
-          {art.story && (
-            <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-gray-200 px-3 py-2.5">
-              <input
-                type="checkbox"
-                checked={downloadBoth}
-                onChange={(e) => setDownloadBoth(e.target.checked)}
-                className="h-4 w-4 accent-[var(--color-pmb-green)]"
-              />
-              <span className="text-sm text-gray-800">
-                Baixar as duas versões (feed + stories) num .zip
-              </span>
-            </label>
-          )}
-
-          {art.hasPrice && (
-            <div className="space-y-1.5">
-              <Label htmlFor="arte-preco">Valor exibido na arte</Label>
-              <PriceInput id="arte-preco" priceCents={priceCents} onChange={setPriceCents} />
-              <p className="text-xs text-gray-500">
-                {priceCents != null
-                  ? `Será carimbado como ${formatPriceBRL(priceCents)}.`
-                  : "Digite o valor para liberar o download (a prévia mostra R$ 199,90 de exemplo)."}
-              </p>
-            </div>
-          )}
         </div>
 
         <DialogFooter>

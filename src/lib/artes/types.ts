@@ -59,10 +59,19 @@ export const FOOTER_PAD_DEFAULT = 0.6
 export interface PricePlacement {
   cx: number
   cy: number
-  // Multiplicador sobre o tamanho-base do pill (a largura real depende do
-  // texto digitado pela revenda, que o designer nao conhece).
+  // Multiplicador sobre o tamanho-base do TEXTO do pill (a largura real depende
+  // do texto digitado pela revenda, que o designer nao conhece).
   scale: number
+  // Multiplicador da margem interna do selo (tamanho do fundo em volta do
+  // valor). Ausente = 1.
+  pad?: number
+  // Cor do fundo do selo (#rrggbb). Ausente = secondaryColor da unidade.
+  bgColor?: string
+  // Cor do valor/texto (#rrggbb). Ausente = contraste automatico sobre o fundo.
+  textColor?: string
 }
+
+export const PRICE_PAD_DEFAULT = 1
 
 export interface VariantLayout {
   logo: LogoPlacement
@@ -238,6 +247,7 @@ export function clampPricePlacement(p: PricePlacement): PricePlacement {
   return {
     ...p,
     scale: clamp(p.scale, 0.5, 2.5),
+    ...(p.pad != null ? { pad: clamp(p.pad, 0.3, 3) } : {}),
     cx: clamp(p.cx, 0.03, 0.97),
     cy: clamp(p.cy, 0.03, 0.97),
   }

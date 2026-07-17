@@ -19,6 +19,15 @@ const pricePlacementSchema = z.object({
   cx: rel,
   cy: rel,
   scale: z.number().min(0.5).max(2.5),
+  pad: z.number().min(0.3).max(3).optional(),
+  bgColor: z
+    .string()
+    .regex(/^#[0-9a-fA-F]{6}$/)
+    .optional(),
+  textColor: z
+    .string()
+    .regex(/^#[0-9a-fA-F]{6}$/)
+    .optional(),
 })
 
 const footerPlacementSchema = z.object({

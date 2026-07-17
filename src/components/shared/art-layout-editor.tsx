@@ -1,9 +1,8 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState, type ReactNode } from "react"
 import { Loader2, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { cn } from "@/lib/utils"
 import type { TenantBrand, VariantLayout } from "@/lib/artes/types"
@@ -14,6 +13,7 @@ import {
   clampPricePlacement,
   FOOTER_PAD_DEFAULT,
   LOGO_PAD_DEFAULT,
+  PRICE_PAD_DEFAULT,
 } from "@/lib/artes/types"
 import { composeArt, type ComposedGeometry } from "@/lib/artes/compose"
 
@@ -88,6 +88,109 @@ function hitTest(
   return null
 }
 
+// ---- controles laterais (agrupados por elemento, para nao confundir) ----
+
+function ControlGroup({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div className="space-y-2 rounded-lg border border-gray-100 bg-gray-50/60 p-3">
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">{title}</p>
+      {children}
+    </div>
+  )
+}
+
+function RangeRow({
+  label,
+  min,
+  max,
+  step,
+  value,
+  onChange,
+}: {
+  label: string
+  min: number
+  max: number
+  step: number
+  value: number
+  onChange: (v: number) => void
+}) {
+  return (
+    <label className="block space-y-1">
+      <span className="text-xs text-gray-600">{label}</span>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="w-full accent-[var(--color-pmb-green)]"
+      />
+    </label>
+  )
+}
+
+function SwitchRow({
+  label,
+  checked,
+  onCheckedChange,
+}: {
+  label: string
+  checked: boolean
+  onCheckedChange: (v: boolean) => void
+}) {
+  return (
+    <label className="flex items-center justify-between gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2">
+      <span className="text-sm text-gray-800">{label}</span>
+      <Switch checked={checked} onCheckedChange={onCheckedChange} />
+    </label>
+  )
+}
+
+// Cor com opcao "Automática" (limpa a cor custom) + seletor. `color` ausente =
+// automatica.
+function ColorRow({
+  label,
+  color,
+  onAuto,
+  onPick,
+}: {
+  label: string
+  color?: string
+  onAuto: () => void
+  onPick: (hex: string) => void
+}) {
+  return (
+    <div className="flex items-center justify-between gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2">
+      <span className="text-sm text-gray-800">{label}</span>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={onAuto}
+          className={cn(
+            "rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors",
+            !color
+              ? "border-[var(--color-pmb-green)] bg-[var(--color-pmb-green)]/10 text-[var(--color-pmb-green)]"
+              : "border-gray-200 text-gray-600 hover:border-gray-300",
+          )}
+        >
+          Automática
+        </button>
+        <input
+          type="color"
+          aria-label={label}
+          value={color ?? "#ffffff"}
+          onChange={(e) => onPick(e.target.value)}
+          className={cn(
+            "h-7 w-9 cursor-pointer rounded border bg-transparent p-0.5",
+            color ? "border-[var(--color-pmb-green)]" : "border-gray-200",
+          )}
+        />
+      </div>
+    </div>
+  )
+}
+
 export function ArtLayoutEditor({
   artUrl,
   artWidth,
@@ -99,6 +202,7 @@ export function ArtLayoutEditor({
   onChange,
   onStateChange,
   className,
+  headerControls,
 }: {
   artUrl: string
   artWidth: number
@@ -111,6 +215,9 @@ export function ArtLayoutEditor({
   onChange: (next: VariantLayout) => void
   onStateChange?: (state: EditorState) => void
   className?: string
+  // Controles extras (versao/preco/zip) renderizados NO TOPO da coluna lateral,
+  // para que nada alem da arte fique embaixo da previa.
+  headerControls?: ReactNode
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const geometryRef = useRef<ComposedGeometry | null>(null)
@@ -316,169 +423,150 @@ export function ArtLayoutEditor({
 
       {/* Coluna de controles (direita no desktop) */}
       <div className="w-full space-y-3 md:w-64 md:shrink-0">
+      {headerControls && (
+        <>
+          {headerControls}
+          <div className="border-t border-gray-100" />
+        </>
+      )}
       <p className="text-xs text-gray-500">
         Arraste o logo, o rodapé{hasPrice ? " e o preço" : ""} na prévia para posicionar.
       </p>
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-1">
-        <div className="space-y-1">
-          <Label htmlFor="le-logo-size" className="text-xs">
-            Tamanho do logo
-          </Label>
-          <input
-            id="le-logo-size"
-            type="range"
-            min={8}
+      <ControlGroup title="Logo">
+        <RangeRow
+          label="Tamanho do logo"
+          min={8}
+          max={50}
+          step={0.5}
+          value={Math.round(value.logo.w * 1000) / 10}
+          onChange={(v) => setLogoWidth(v)}
+        />
+        <SwitchRow
+          label="Fundo branco no logo"
+          checked={value.logo.bg}
+          onCheckedChange={(bg) =>
+            onChange({ ...latestValue.current, logo: { ...latestValue.current.logo, bg } })
+          }
+        />
+        {value.logo.bg && (
+          <RangeRow
+            label="Tamanho do fundo do logo"
+            min={0}
             max={50}
-            step={0.5}
-            value={Math.round(value.logo.w * 1000) / 10}
-            onChange={(e) => setLogoWidth(Number(e.target.value))}
-            className="w-full accent-[var(--color-pmb-green)]"
-          />
-        </div>
-        <div className="space-y-1">
-          <Label htmlFor="le-footer-w" className="text-xs">
-            Largura do rodapé
-          </Label>
-          <input
-            id="le-footer-w"
-            type="range"
-            min={30}
-            max={100}
             step={1}
-            value={Math.round(currentFooter().w * 100)}
-            onChange={(e) =>
+            value={Math.round((value.logo.pad ?? LOGO_PAD_DEFAULT) * 100)}
+            onChange={(v) =>
               onChange({
                 ...latestValue.current,
-                footer: clampFooterPlacement({
-                  ...currentFooter(),
-                  w: Number(e.target.value) / 100,
-                }),
+                logo: { ...latestValue.current.logo, pad: v / 100 },
               })
             }
-            className="w-full accent-[var(--color-pmb-green)]"
           />
-        </div>
-        {hasPrice && value.price && (
-          <div className="space-y-1">
-            <Label htmlFor="le-price-size" className="text-xs">
-              Tamanho do preço
-            </Label>
-            <input
-              id="le-price-size"
-              type="range"
-              min={0.6}
-              max={2}
-              step={0.05}
-              value={value.price.scale}
-              onChange={(e) =>
-                onChange({
-                  ...latestValue.current,
-                  price: clampPricePlacement({
-                    ...latestValue.current.price!,
-                    scale: Number(e.target.value),
-                  }),
-                })
-              }
-              className="w-full accent-[var(--color-pmb-green)]"
-            />
-          </div>
         )}
-        {value.logo.bg && (
-          <div className="space-y-1">
-            <Label htmlFor="le-logo-pad" className="text-xs">
-              Margem do fundo do logo
-            </Label>
-            <input
-              id="le-logo-pad"
-              type="range"
-              min={0}
-              max={50}
-              step={1}
-              value={Math.round((value.logo.pad ?? LOGO_PAD_DEFAULT) * 100)}
-              onChange={(e) =>
-                onChange({
-                  ...latestValue.current,
-                  logo: { ...latestValue.current.logo, pad: Number(e.target.value) / 100 },
-                })
-              }
-              className="w-full accent-[var(--color-pmb-green)]"
-            />
-          </div>
-        )}
+      </ControlGroup>
+
+      <ControlGroup title="Rodapé (contatos)">
+        <RangeRow
+          label="Largura do rodapé"
+          min={30}
+          max={100}
+          step={1}
+          value={Math.round(currentFooter().w * 100)}
+          onChange={(v) =>
+            onChange({
+              ...latestValue.current,
+              footer: clampFooterPlacement({ ...currentFooter(), w: v / 100 }),
+            })
+          }
+        />
+        <SwitchRow
+          label="Fundo branco no rodapé"
+          checked={value.footerBg}
+          onCheckedChange={(footerBg) => onChange({ ...latestValue.current, footerBg })}
+        />
         {value.footerBg && (
-          <div className="space-y-1">
-            <Label htmlFor="le-footer-pad" className="text-xs">
-              Margem do fundo do rodapé
-            </Label>
-            <input
-              id="le-footer-pad"
-              type="range"
-              min={0}
-              max={200}
-              step={5}
-              value={Math.round((value.footerPad ?? FOOTER_PAD_DEFAULT) * 100)}
-              onChange={(e) =>
-                onChange({ ...latestValue.current, footerPad: Number(e.target.value) / 100 })
-              }
-              className="w-full accent-[var(--color-pmb-green)]"
-            />
-          </div>
+          <RangeRow
+            label="Tamanho do fundo do rodapé"
+            min={0}
+            max={200}
+            step={5}
+            value={Math.round((value.footerPad ?? FOOTER_PAD_DEFAULT) * 100)}
+            onChange={(v) => onChange({ ...latestValue.current, footerPad: v / 100 })}
+          />
         )}
-      </div>
+        <ColorRow
+          label="Cor do texto"
+          color={value.footerColor}
+          onAuto={() => {
+            const next = { ...latestValue.current }
+            delete next.footerColor
+            onChange(next)
+          }}
+          onPick={(hex) => onChange({ ...latestValue.current, footerColor: hex })}
+        />
+      </ControlGroup>
 
-      <div className="grid grid-cols-1 gap-2">
-        <label className="flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2">
-          <span className="text-sm text-gray-800">Fundo branco no logo</span>
-          <Switch
-            checked={value.logo.bg}
-            onCheckedChange={(bg) =>
-              onChange({ ...latestValue.current, logo: { ...latestValue.current.logo, bg } })
+      {hasPrice && value.price && (
+        <ControlGroup title="Selo de preço">
+          <RangeRow
+            label="Tamanho do valor"
+            min={0.6}
+            max={2}
+            step={0.05}
+            value={value.price.scale}
+            onChange={(v) =>
+              onChange({
+                ...latestValue.current,
+                price: clampPricePlacement({ ...latestValue.current.price!, scale: v }),
+              })
             }
           />
-        </label>
-        <label className="flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2">
-          <span className="text-sm text-gray-800">Fundo branco no rodapé</span>
-          <Switch
-            checked={value.footerBg}
-            onCheckedChange={(footerBg) => onChange({ ...latestValue.current, footerBg })}
+          <RangeRow
+            label="Tamanho do fundo"
+            min={0.4}
+            max={2.5}
+            step={0.05}
+            value={value.price.pad ?? PRICE_PAD_DEFAULT}
+            onChange={(v) =>
+              onChange({
+                ...latestValue.current,
+                price: clampPricePlacement({ ...latestValue.current.price!, pad: v }),
+              })
+            }
           />
-        </label>
-      </div>
-
-      <div className="flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2">
-        <span className="text-sm text-gray-800">Cor do rodapé</span>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => {
-              const next = { ...latestValue.current }
-              delete next.footerColor
-              onChange(next)
+          <ColorRow
+            label="Cor do fundo"
+            color={value.price.bgColor}
+            onAuto={() => {
+              const price = { ...latestValue.current.price! }
+              delete price.bgColor
+              onChange({ ...latestValue.current, price })
             }}
-            className={cn(
-              "rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors",
-              !value.footerColor
-                ? "border-[var(--color-pmb-green)] bg-[var(--color-pmb-green)]/10 text-[var(--color-pmb-green)]"
-                : "border-gray-200 text-gray-600 hover:border-gray-300",
-            )}
-          >
-            Automática
-          </button>
-          <input
-            type="color"
-            aria-label="Cor do texto do rodapé"
-            value={value.footerColor ?? "#ffffff"}
-            onChange={(e) =>
-              onChange({ ...latestValue.current, footerColor: e.target.value })
+            onPick={(hex) =>
+              onChange({
+                ...latestValue.current,
+                price: { ...latestValue.current.price!, bgColor: hex },
+              })
             }
-            className={cn(
-              "h-7 w-9 cursor-pointer rounded border bg-transparent p-0.5",
-              value.footerColor ? "border-[var(--color-pmb-green)]" : "border-gray-200",
-            )}
           />
-        </div>
-      </div>
+          <ColorRow
+            label="Cor do valor"
+            color={value.price.textColor}
+            onAuto={() => {
+              const price = { ...latestValue.current.price! }
+              delete price.textColor
+              onChange({ ...latestValue.current, price })
+            }}
+            onPick={(hex) =>
+              onChange({
+                ...latestValue.current,
+                price: { ...latestValue.current.price!, textColor: hex },
+              })
+            }
+          />
+        </ControlGroup>
+      )}
       </div>
     </div>
   )
