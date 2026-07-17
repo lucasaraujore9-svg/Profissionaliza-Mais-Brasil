@@ -104,7 +104,7 @@ export function ArtesGrid({ arts, brand }: { arts: ArtItem[]; brand: TenantBrand
                 onClick={() => (selecting ? toggleSelect(art.id) : setPreview(art))}
                 className="block w-full text-left"
               >
-                <div className="relative aspect-square bg-gray-100">
+                <div className="relative aspect-[4/5] bg-gray-100">
                   <Image
                     src={art.feed.url}
                     alt={art.title}
