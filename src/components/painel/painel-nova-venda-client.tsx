@@ -1,20 +1,31 @@
 "use client"
 
 import Link from "next/link"
-import { useState } from "react"
-import { ArrowLeft, Copy, ExternalLink, Loader2 } from "lucide-react"
+import { useEffect, useRef, useState } from "react"
+import { toast } from "sonner"
+import {
+  CheckCircle2,
+  Copy,
+  ExternalLink,
+  Loader2,
+  RefreshCw,
+  Search,
+  UserPlus,
+  Users,
+  X,
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
   Select,
   SelectContent,
-  SelectGroup,
   SelectItem,
-  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 interface CourseOption {
   id: string
@@ -31,19 +42,35 @@ interface PackageOption {
 }
 
 /**
- * Opção unificada do seletor de venda direta. O `value` codifica o tipo
- * (`c:` = curso, `p:` = pacote) para que curso e pacote coexistam num único
- * `<Select>` sem colisão de ids. Pacote é sempre pagamento único (ONE_TIME).
+ * Item unificado do seletor (curso ou pacote). Pacote é sempre pagamento único.
+ * O `kind` roteia o corpo da venda: tenantCourseId vs packageId.
  */
-type SaleOption = {
-  value: string
+type SaleItem = {
   kind: "course" | "package"
   id: string
-  label: string
-  price: number
+  nome: string
+  preco: number
   paymentType: "ONE_TIME" | "MONTHLY"
   courseCount?: number
 }
+
+/** Aluno vindo da busca (alunos da própria unidade). */
+interface StudentResult {
+  id: string
+  nome: string
+  email: string | null
+  cpf: string | null
+  fone: string | null
+}
+
+/**
+ * Aluno selecionado para a venda: OU um aluno já existente da unidade
+ * (isNew=false, carrega o id) OU um aluno novo digitado na hora (isNew=true,
+ * ainda não persistido — o backend cria/reaproveita por CPF no submit).
+ */
+type SelectedStudent =
+  | { isNew: false; id: string; nome: string; email: string | null; cpf: string | null; fone: string | null }
+  | { isNew: true; nome: string; email: string; cpf: string; fone: string }
 
 /** Capability de venda parcelada no boleto (só presente quando ativa). */
 interface InstallmentConfig {
@@ -51,17 +78,6 @@ interface InstallmentConfig {
   maxCount: number
   /** Gateway de venda da unidade — MP exige endereço do aluno no boleto. */
   gateway: "MP" | "ASAAS"
-}
-
-function formatBRL(n: number): string {
-  return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
-}
-
-/** Data de hoje + N dias em YYYY-MM-DD (para default e mínimo do input date). */
-function isoDatePlusDays(days: number): string {
-  const d = new Date()
-  d.setDate(d.getDate() + days)
-  return d.toISOString().slice(0, 10)
 }
 
 interface CreatedVenda {
@@ -81,105 +97,255 @@ interface CreatedVenda {
   }
 }
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function fmt(n: number): string {
+  return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
+}
+
+function maskCpf(v: string): string {
+  const d = v.replace(/\D/g, "").slice(0, 11)
+  if (d.length <= 3) return d
+  if (d.length <= 6) return `${d.slice(0, 3)}.${d.slice(3)}`
+  if (d.length <= 9) return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6)}`
+  return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`
+}
+
+function validateCpf(cpf: string): boolean {
+  const d = cpf.replace(/\D/g, "")
+  if (d.length !== 11 || /^(\d)\1+$/.test(d)) return false
+  let s = 0
+  for (let i = 0; i < 9; i++) s += +d[i] * (10 - i)
+  let r = (s * 10) % 11
+  if (r >= 10) r = 0
+  if (r !== +d[9]) return false
+  s = 0
+  for (let i = 0; i < 10; i++) s += +d[i] * (11 - i)
+  r = (s * 10) % 11
+  if (r >= 10) r = 0
+  return r === +d[10]
+}
+
+function validateEmail(email: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+}
+
+/** Data de hoje + N dias em YYYY-MM-DD (para default e mínimo do input date). */
+function isoDatePlusDays(days: number): string {
+  const d = new Date()
+  d.setDate(d.getDate() + days)
+  return d.toISOString().slice(0, 10)
+}
+
+// ─── Main Component ───────────────────────────────────────────────────────────
+
 export function PainelNovaVendaClient({
+  cap,
+  gateway,
   courses,
   packages,
   installmentConfig,
 }: {
+  /** Cap de desconto (%) do vendedor logado: dono 100, consultor = maxDiscount. */
+  cap: number
+  /** Gateway de venda da unidade (rótulo/carnê). Venda normal é sempre MP. */
+  gateway: "MP" | "ASAAS"
   courses: CourseOption[]
   packages: PackageOption[]
   installmentConfig: InstallmentConfig | null
 }) {
+  // Lista unificada: cursos primeiro, depois pacotes (prefixados "Pacote:").
+  const items: SaleItem[] = [
+    ...courses.map((c) => ({
+      kind: "course" as const,
+      id: c.id,
+      nome: c.nome,
+      preco: c.price,
+      paymentType: c.paymentType,
+    })),
+    ...packages.map((p) => ({
+      kind: "package" as const,
+      id: p.id,
+      nome: `Pacote: ${p.name}`,
+      preco: p.price,
+      paymentType: "ONE_TIME" as const,
+      courseCount: p.courseCount,
+    })),
+  ]
+
+  // ── Bolsa de estudo (sem cobrança) ──
+  const [bolsista, setBolsista] = useState(false)
+
+  // ── Step 1 — Aluno ──
+  const [studentTab, setStudentTab] = useState<"search" | "new">("search")
+  const [query, setQuery] = useState("")
+  const [searchResults, setSearchResults] = useState<StudentResult[]>([])
+  const [searching, setSearching] = useState(false)
+  const [selectedStudent, setSelectedStudent] = useState<SelectedStudent | null>(null)
+  const [newStudent, setNewStudent] = useState({ nome: "", email: "", cpf: "", fone: "" })
+  const [studentErrors, setStudentErrors] = useState<Record<string, string>>({})
+  const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // ── Step 2 — Curso ou pacote ──
+  const [courseSearch, setCourseSearch] = useState("")
+  const [selectedItem, setSelectedItem] = useState<SaleItem | null>(null)
+  const isPkg = selectedItem?.kind === "package"
+
+  // ── Step 3 — Desconto (manual OU cupom, nunca os dois) ──
+  const [couponCode, setCouponCode] = useState("")
+  const [manualPct, setManualPct] = useState("")
+
+  // ── Forma de pagamento: link normal vs carnê (parcelado no boleto) ──
+  const [paymentMode, setPaymentMode] = useState<"normal" | "installment">("normal")
+  const [inst, setInst] = useState({ count: 2, value: "", firstDueDate: isoDatePlusDays(7) })
+  const [addr, setAddr] = useState({ cep: "", rua: "", numero: "", bairro: "", cidade: "", estado: "" })
+
+  // ── Submit / resultado ──
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [created, setCreated] = useState<CreatedVenda | null>(null)
   const [copied, setCopied] = useState(false)
 
-  // Opções unificadas: cursos primeiro, depois pacotes. O value codifica o tipo.
-  const courseOptions: SaleOption[] = courses.map((c) => ({
-    value: `c:${c.id}`,
-    kind: "course",
-    id: c.id,
-    label: `${c.nome} — ${formatBRL(c.price)}${c.paymentType === "MONTHLY" ? "/mês" : ""}`,
-    price: c.price,
-    paymentType: c.paymentType,
-  }))
-  const packageOptions: SaleOption[] = packages.map((p) => ({
-    value: `p:${p.id}`,
-    kind: "package",
-    id: p.id,
-    label: `Pacote: ${p.name} — ${formatBRL(p.price)}`,
-    price: p.price,
-    paymentType: "ONE_TIME",
-    courseCount: p.courseCount,
-  }))
-
-  const [form, setForm] = useState({
-    nome: "",
-    email: "",
-    cpf: "",
-    fone: "",
-    // Value codificado da opção selecionada (`c:<id>` ou `p:<id>`).
-    selection: "",
-    couponCode: "",
-    bolsista: false,
-  })
-
-  // Modo de pagamento: "normal" (link comum) vs "installment" (carnê no boleto).
-  const [paymentMode, setPaymentMode] = useState<"normal" | "installment">("normal")
-  const [inst, setInst] = useState({
-    count: 2,
-    value: "",
-    firstDueDate: isoDatePlusDays(7),
-  })
-  const [addr, setAddr] = useState({
-    cep: "",
-    rua: "",
-    numero: "",
-    bairro: "",
-    cidade: "",
-    estado: "",
-  })
-
-  const selected =
-    [...courseOptions, ...packageOptions].find(
-      (o) => o.value === form.selection,
-    ) ?? null
-  const isPackage = selected?.kind === "package"
-
-  const installmentAvailable = !!installmentConfig && !form.bolsista
+  const installmentAvailable = !!installmentConfig && !bolsista
   const isInstallment = installmentAvailable && paymentMode === "installment"
   const needsAddress = isInstallment && installmentConfig?.gateway === "MP"
   const installmentValueNum = Number(inst.value.replace(",", ".")) || 0
-  const installmentTotal =
-    Math.round(installmentValueNum * inst.count * 100) / 100
+  const installmentTotal = Math.round(installmentValueNum * inst.count * 100) / 100
 
-  async function submit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault()
+  // Desconto manual derivado do input (aceita vírgula BR). Válido quando está
+  // entre 0 (exclusivo) e o cap do vendedor; acima do cap o form bloqueia.
+  const manualPctNumber = manualPct.trim() === "" ? 0 : Number(manualPct.replace(",", "."))
+  const manualValid = Number.isFinite(manualPctNumber) && manualPctNumber > 0 && manualPctNumber <= cap
+  const manualDiscountAmount =
+    manualValid && selectedItem
+      ? Number(((selectedItem.preco * manualPctNumber) / 100).toFixed(2))
+      : 0
+
+  // Busca de alunos (debounced) — restrita aos alunos da própria unidade.
+  useEffect(() => {
+    if (searchTimeout.current) clearTimeout(searchTimeout.current)
+    if (!query.trim()) {
+      setSearchResults([])
+      return
+    }
+    searchTimeout.current = setTimeout(async () => {
+      setSearching(true)
+      try {
+        const res = await fetch(`/api/painel/alunos?q=${encodeURIComponent(query)}`)
+        const body = await res.json()
+        setSearchResults(body.data?.students ?? [])
+      } catch {
+        setSearchResults([])
+      } finally {
+        setSearching(false)
+      }
+    }, 300)
+  }, [query])
+
+  // Troca de curso zera desconto e link.
+  useEffect(() => {
+    setCouponCode("")
+    setManualPct("")
+    setCreated(null)
+  }, [selectedItem])
+
+  // Troca de aluno zera link.
+  useEffect(() => {
+    setCreated(null)
+  }, [selectedStudent])
+
+  // Ao ativar a bolsa, zera desconto e volta para o modo normal (bolsa não gera
+  // cobrança nem carnê).
+  useEffect(() => {
+    setCreated(null)
+    if (bolsista) {
+      setCouponCode("")
+      setManualPct("")
+      setPaymentMode("normal")
+    }
+  }, [bolsista])
+
+  function handleCpfChange(v: string) {
+    setNewStudent((s) => ({ ...s, cpf: maskCpf(v) }))
+    setStudentErrors((e) => ({ ...e, cpf: "" }))
+  }
+
+  function validateNewStudent(): boolean {
+    const errors: Record<string, string> = {}
+    if (!newStudent.nome.trim() || newStudent.nome.trim().length < 3)
+      errors.nome = "Nome precisa ter pelo menos 3 caracteres"
+    if (!validateEmail(newStudent.email)) errors.email = "E-mail inválido"
+    if (!validateCpf(newStudent.cpf)) errors.cpf = "CPF inválido"
+    if (newStudent.fone.replace(/\D/g, "").length < 10) errors.fone = "Telefone inválido"
+    setStudentErrors(errors)
+    return Object.keys(errors).length === 0
+  }
+
+  function confirmNewStudent() {
+    if (!validateNewStudent()) return
+    setSelectedStudent({
+      isNew: true,
+      nome: newStudent.nome.trim(),
+      email: newStudent.email.trim(),
+      cpf: newStudent.cpf,
+      fone: newStudent.fone,
+    })
+    toast.success("Aluno selecionado para a venda")
+  }
+
+  function resetAll() {
+    setBolsista(false)
+    setStudentTab("search")
+    setQuery("")
+    setSearchResults([])
+    setSelectedStudent(null)
+    setNewStudent({ nome: "", email: "", cpf: "", fone: "" })
+    setStudentErrors({})
+    setCourseSearch("")
+    setSelectedItem(null)
+    setCouponCode("")
+    setManualPct("")
+    setPaymentMode("normal")
+    setInst({ count: 2, value: "", firstDueDate: isoDatePlusDays(7) })
+    setAddr({ cep: "", rua: "", numero: "", bairro: "", cidade: "", estado: "" })
+    setError(null)
+    setFieldErrors({})
+    setCreated(null)
+  }
+
+  async function submit() {
+    if (!selectedStudent || !selectedItem) return
     setSubmitting(true)
     setError(null)
     setFieldErrors({})
-
     try {
       const res = await fetch("/api/painel/vendas", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          nome: form.nome.trim(),
-          email: form.email.trim(),
-          cpf: form.cpf.replace(/\D/g, ""),
-          fone: form.fone.replace(/\D/g, ""),
+          // Aluno: existente (studentId) OU dados do novo aluno.
+          ...(selectedStudent.isNew
+            ? {
+                nome: selectedStudent.nome,
+                email: selectedStudent.email,
+                cpf: selectedStudent.cpf.replace(/\D/g, ""),
+                fone: selectedStudent.fone.replace(/\D/g, ""),
+              }
+            : { studentId: selectedStudent.id }),
           // Curso individual envia tenantCourseId; pacote envia packageId.
-          ...(isPackage
-            ? { packageId: selected?.id }
-            : { tenantCourseId: selected?.id ?? "" }),
-          // Cupom não se aplica a bolsa nem a carnê (valor definido manualmente).
+          ...(isPkg ? { packageId: selectedItem.id } : { tenantCourseId: selectedItem.id }),
+          // Cupom não se aplica a bolsa, carnê nem quando há desconto manual.
           couponCode:
-            form.bolsista || isInstallment
+            bolsista || isInstallment || manualValid || !couponCode.trim()
               ? undefined
-              : form.couponCode.trim() || undefined,
-          bolsista: form.bolsista || undefined,
+              : couponCode.trim(),
+          // Desconto manual não se aplica a bolsa, carnê nem quando há cupom.
+          manualDiscountPercent:
+            bolsista || isInstallment || couponCode.trim() || !manualValid
+              ? undefined
+              : manualPctNumber,
+          bolsista: bolsista || undefined,
           boletoInstallment: isInstallment
             ? {
                 count: inst.count,
@@ -201,9 +367,7 @@ export function PainelNovaVendaClient({
       })
       const body = await res.json()
       if (!res.ok) {
-        const fields = body.fields as
-          | Record<string, string[] | undefined>
-          | undefined
+        const fields = body.fields as Record<string, string[] | undefined> | undefined
         if (fields) {
           const mapped: Record<string, string> = {}
           for (const [key, msgs] of Object.entries(fields)) {
@@ -211,8 +375,7 @@ export function PainelNovaVendaClient({
           }
           setFieldErrors(mapped)
         }
-        const firstError =
-          fields && Object.values(fields).find((arr) => arr && arr.length)
+        const firstError = fields && Object.values(fields).find((arr) => arr && arr.length)
         setError(firstError?.[0] ?? body.error ?? "Erro ao gerar venda")
         return
       }
@@ -232,6 +395,19 @@ export function PainelNovaVendaClient({
     setTimeout(() => setCopied(false), 1500)
   }
 
+  const filteredItems = items.filter((c) =>
+    c.nome.toLowerCase().includes(courseSearch.toLowerCase()),
+  )
+
+  const basePrice = selectedItem?.preco ?? 0
+  const finalPrice = bolsista
+    ? 0
+    : manualValid && selectedItem
+      ? Math.max(0, Number((basePrice - manualDiscountAmount).toFixed(2)))
+      : basePrice
+
+  // ─── Resultado (venda criada) ──────────────────────────────────────────────
+
   if (created) {
     return (
       <div className="space-y-5">
@@ -248,29 +424,19 @@ export function PainelNovaVendaClient({
           <div className="rounded-2xl border border-[var(--color-pmb-green)]/20 bg-[var(--color-pmb-green)]/5 p-6 text-[var(--color-pmb-green-900)]">
             <h2 className="text-base font-bold">
               Carnê gerado — {created.installment.count}x de{" "}
-              {formatBRL(created.installment.installmentValue)}
+              {fmt(created.installment.installmentValue)}
             </h2>
             <p className="mt-2 text-sm">
-              O aluno acessa cada boleto na área dele. A{" "}
-              <strong>1ª parcela</strong> já está disponível; as próximas ficam
-              disponíveis <strong>7 dias antes de cada vencimento</strong>. O
-              acesso ao curso é liberado quando a 1ª parcela for paga.
+              O aluno acessa cada boleto na área dele. A <strong>1ª parcela</strong>{" "}
+              já está disponível; as próximas ficam disponíveis{" "}
+              <strong>7 dias antes de cada vencimento</strong>. O acesso ao curso é
+              liberado quando a 1ª parcela for paga.
             </p>
 
             <div className="mt-4 grid gap-2 sm:grid-cols-3">
-              <Mini
-                label="Parcelas"
-                value={`${created.installment.count}x`}
-              />
-              <Mini
-                label="Cada parcela"
-                value={formatBRL(created.installment.installmentValue)}
-              />
-              <Mini
-                label="Total"
-                value={formatBRL(created.installment.total)}
-                accent
-              />
+              <Mini label="Parcelas" value={`${created.installment.count}x`} />
+              <Mini label="Cada parcela" value={fmt(created.installment.installmentValue)} />
+              <Mini label="Total" value={fmt(created.installment.total)} accent />
             </div>
 
             {created.installment.firstBoletoUrl && (
@@ -297,23 +463,17 @@ export function PainelNovaVendaClient({
           </div>
         ) : (
           <div className="rounded-2xl border border-[var(--color-pmb-green)]/20 bg-[var(--color-pmb-green)]/5 p-6 text-[var(--color-pmb-green-900)]">
-            <h2 className="text-base font-bold">
-              Venda criada — link de pagamento gerado
-            </h2>
+            <h2 className="text-base font-bold">Venda criada — link de pagamento gerado</h2>
             <p className="mt-2 text-sm">
-              Envie o link abaixo para o aluno finalizar o pagamento na sua
-              própria loja (cartão, PIX ou boleto — sem sair do site). A
-              matrícula é ativada automaticamente após a confirmação do
-              pagamento.
+              Envie o link abaixo para o aluno finalizar o pagamento na sua própria
+              loja (cartão, PIX ou boleto — sem sair do site). A matrícula é ativada
+              automaticamente após a confirmação do pagamento.
             </p>
 
             <div className="mt-4 grid gap-2 sm:grid-cols-3">
-              <Mini label="Original" value={formatBRL(created.basePrice ?? 0)} />
-              <Mini
-                label="Desconto"
-                value={formatBRL(created.discountAmount ?? 0)}
-              />
-              <Mini label="Final" value={formatBRL(created.finalAmount)} accent />
+              <Mini label="Original" value={fmt(created.basePrice ?? 0)} />
+              <Mini label="Desconto" value={fmt(created.discountAmount ?? 0)} />
+              <Mini label="Final" value={fmt(created.finalAmount)} accent />
             </div>
 
             <div className="mt-4 flex flex-wrap items-center gap-2">
@@ -339,40 +499,11 @@ export function PainelNovaVendaClient({
         )}
 
         <div className="flex gap-3">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => {
-              setCreated(null)
-              setForm((f) => ({
-                ...f,
-                nome: "",
-                email: "",
-                cpf: "",
-                fone: "",
-                couponCode: "",
-                bolsista: false,
-              }))
-              setPaymentMode("normal")
-              setInst({ count: 2, value: "", firstDueDate: isoDatePlusDays(7) })
-              setAddr({
-                cep: "",
-                rua: "",
-                numero: "",
-                bairro: "",
-                cidade: "",
-                estado: "",
-              })
-            }}
-          >
+          <Button type="button" variant="outline" onClick={resetAll}>
             Nova venda
           </Button>
           <Link href="/painel/vendas">
-            <Button
-              variant="outline"
-              type="button"
-              className="text-[var(--color-pmb-green-900)]"
-            >
+            <Button variant="outline" type="button" className="text-[var(--color-pmb-green-900)]">
               Ver minhas vendas
             </Button>
           </Link>
@@ -381,504 +512,636 @@ export function PainelNovaVendaClient({
     )
   }
 
+  // ─── Formulário ─────────────────────────────────────────────────────────────
+
   return (
-    <form onSubmit={submit} className="space-y-6">
-      <div
-        data-tour="vendas-nova:aluno"
-        className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm"
-      >
-        <h3 className="text-sm font-bold text-[var(--color-pmb-green-900)]">
-          Dados do aluno
-        </h3>
-        <p className="mt-1 text-xs text-gray-500">
-          Se o CPF já existir nos seus alunos, atualizamos os dados.
+    <div className="max-w-3xl space-y-6">
+      {!bolsista && cap > 0 && (
+        <p className="text-sm text-gray-500">
+          Desconto manual disponível: até <strong>{cap}%</strong>
         </p>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <div className="sm:col-span-2">
-            <Label htmlFor="v-nome">Nome completo</Label>
-            <Input
-              id="v-nome"
-              value={form.nome}
-              onChange={(e) => setForm({ ...form, nome: e.target.value })}
-              required
-              minLength={3}
-              aria-invalid={!!fieldErrors.nome}
-              aria-describedby={fieldErrors.nome ? "v-nome-error" : undefined}
-              className="mt-1.5"
-            />
-            {fieldErrors.nome && (
-              <p id="v-nome-error" className="mt-1 text-xs text-rose-600">
-                {fieldErrors.nome}
-              </p>
-            )}
-          </div>
-          <div>
-            <Label htmlFor="v-email">Email</Label>
-            <Input
-              id="v-email"
-              type="email"
-              value={form.email}
-              onChange={(e) => setForm({ ...form, email: e.target.value })}
-              required
-              aria-invalid={!!fieldErrors.email}
-              aria-describedby={fieldErrors.email ? "v-email-error" : undefined}
-              className="mt-1.5"
-            />
-            {fieldErrors.email && (
-              <p id="v-email-error" className="mt-1 text-xs text-rose-600">
-                {fieldErrors.email}
-              </p>
-            )}
-          </div>
-          <div>
-            <Label htmlFor="v-fone">Celular</Label>
-            <Input
-              id="v-fone"
-              value={form.fone}
-              onChange={(e) => setForm({ ...form, fone: e.target.value })}
-              required
-              placeholder="(11) 99999-9999"
-              aria-invalid={!!fieldErrors.fone}
-              aria-describedby={fieldErrors.fone ? "v-fone-error" : undefined}
-              className="mt-1.5"
-            />
-            {fieldErrors.fone && (
-              <p id="v-fone-error" className="mt-1 text-xs text-rose-600">
-                {fieldErrors.fone}
-              </p>
-            )}
-          </div>
-          <div className="sm:col-span-2">
-            <Label htmlFor="v-cpf">CPF</Label>
-            <Input
-              id="v-cpf"
-              value={form.cpf}
-              onChange={(e) => setForm({ ...form, cpf: e.target.value })}
-              required
-              placeholder="Apenas números"
-              aria-invalid={!!fieldErrors.cpf}
-              aria-describedby={fieldErrors.cpf ? "v-cpf-error" : undefined}
-              className="mt-1.5"
-            />
-            {fieldErrors.cpf && (
-              <p id="v-cpf-error" className="mt-1 text-xs text-rose-600">
-                {fieldErrors.cpf}
-              </p>
-            )}
-          </div>
-        </div>
-      </div>
+      )}
 
-      <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-        <h3 className="text-sm font-bold text-[var(--color-pmb-green-900)]">
-          Curso e pagamento
-        </h3>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <div data-tour="vendas-nova:curso" className="sm:col-span-2">
-            <Label htmlFor="v-curso">Curso ou pacote da sua vitrine</Label>
-            <Select
-              value={form.selection}
-              onValueChange={(v) => setForm({ ...form, selection: v ?? "" })}
-            >
-              <SelectTrigger
-                id="v-curso"
-                className="mt-1.5 h-10 w-full"
-                aria-invalid={
-                  !!fieldErrors.tenantCourseId || !!fieldErrors.packageId
-                }
-              >
-                {/* Função-filho: o Base UI resolve o rótulo a partir do value
-                    codificado — sem isso o gatilho mostraria o id cru. */}
-                <SelectValue placeholder="Selecione um curso ou pacote…">
-                  {(value) =>
-                    [...courseOptions, ...packageOptions].find(
-                      (o) => o.value === value,
-                    )?.label ?? "Selecione um curso ou pacote…"
-                  }
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {courseOptions.length > 0 && (
-                  <SelectGroup>
-                    <SelectLabel>Cursos</SelectLabel>
-                    {courseOptions.map((o) => (
-                      <SelectItem key={o.value} value={o.value}>
-                        {o.label}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                )}
-                {packageOptions.length > 0 && (
-                  <SelectGroup>
-                    <SelectLabel>Pacotes</SelectLabel>
-                    {packageOptions.map((o) => (
-                      <SelectItem key={o.value} value={o.value}>
-                        {o.label}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                )}
-              </SelectContent>
-            </Select>
-            {(fieldErrors.tenantCourseId || fieldErrors.packageId) && (
-              <p className="mt-1 text-xs text-rose-600">
-                {fieldErrors.tenantCourseId ?? fieldErrors.packageId}
-              </p>
-            )}
-            {selected && !isInstallment && (
-              <p className="mt-1.5 text-xs text-gray-500">
-                {isPackage
-                  ? `Pacote • ${selected.courseCount} ${selected.courseCount === 1 ? "curso" : "cursos"} • Pagamento único`
-                  : `Tipo: ${selected.paymentType === "MONTHLY" ? "Mensalidade recorrente" : "Pagamento único"}`}
-              </p>
-            )}
-          </div>
-          {!isInstallment && (
-            <div data-tour="vendas-nova:cupom">
-              <Label htmlFor="v-cupom">Cupom (opcional)</Label>
-              <Input
-                id="v-cupom"
-                value={form.couponCode}
-                onChange={(e) =>
-                  setForm({ ...form, couponCode: e.target.value.toUpperCase() })
-                }
-                disabled={form.bolsista}
-                aria-invalid={!!fieldErrors.couponCode}
-                aria-describedby={
-                  fieldErrors.couponCode ? "v-cupom-error" : undefined
-                }
-                className="mt-1.5"
-                placeholder="Ex: BLACKFRIDAY"
-              />
-              {fieldErrors.couponCode && (
-                <p id="v-cupom-error" className="mt-1 text-xs text-rose-600">
-                  {fieldErrors.couponCode}
-                </p>
-              )}
-              {form.bolsista && (
-                <p className="mt-1.5 text-xs text-gray-400">
-                  Indisponível para bolsistas — a matrícula é gratuita.
-                </p>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Modo de pagamento (só quando a unidade tem carnê liberado) */}
-        {installmentAvailable && (
-          <div className="mt-4">
-            <span className="text-xs font-semibold text-gray-600">
-              Forma de pagamento
-            </span>
-            <div className="mt-1.5 inline-flex rounded-lg border border-gray-200 p-0.5">
-              <button
-                type="button"
-                onClick={() => setPaymentMode("normal")}
-                className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${
-                  paymentMode === "normal"
-                    ? "bg-[var(--color-pmb-green)] text-white"
-                    : "text-gray-600 hover:bg-gray-50"
-                }`}
-              >
-                Link de pagamento
-              </button>
-              <button
-                type="button"
-                onClick={() => setPaymentMode("installment")}
-                className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${
-                  paymentMode === "installment"
-                    ? "bg-[var(--color-pmb-green)] text-white"
-                    : "text-gray-600 hover:bg-gray-50"
-                }`}
-              >
-                Parcelado no boleto (carnê)
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Campos do carnê */}
-        {isInstallment && installmentConfig && (
-          <div className="mt-4 grid gap-3 rounded-xl border border-[var(--color-pmb-green)]/20 bg-[var(--color-pmb-green)]/5 p-4 sm:grid-cols-3">
-            <div>
-              <Label htmlFor="v-parcelas">Nº de parcelas</Label>
-              <Select
-                value={String(inst.count)}
-                onValueChange={(v) =>
-                  setInst({ ...inst, count: Number(v) || 2 })
-                }
-              >
-                <SelectTrigger id="v-parcelas" className="mt-1.5 h-10 w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {Array.from(
-                    { length: Math.max(0, installmentConfig.maxCount - 1) },
-                    (_, i) => i + 2,
-                  ).map((n) => (
-                    <SelectItem key={n} value={String(n)}>
-                      {n}x
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {fieldErrors["boletoInstallment.count"] && (
-                <p className="mt-1 text-xs text-rose-600">
-                  {fieldErrors["boletoInstallment.count"]}
-                </p>
-              )}
-            </div>
-            <div>
-              <Label htmlFor="v-parcela-valor">Valor de cada parcela</Label>
-              <Input
-                id="v-parcela-valor"
-                inputMode="decimal"
-                value={inst.value}
-                onChange={(e) => setInst({ ...inst, value: e.target.value })}
-                placeholder="Ex: 89,90"
-                className="mt-1.5"
-                required
-              />
-              {fieldErrors["boletoInstallment.installmentValue"] && (
-                <p className="mt-1 text-xs text-rose-600">
-                  {fieldErrors["boletoInstallment.installmentValue"]}
-                </p>
-              )}
-            </div>
-            <div>
-              <Label htmlFor="v-parcela-venc">1º vencimento</Label>
-              <Input
-                id="v-parcela-venc"
-                type="date"
-                value={inst.firstDueDate}
-                min={isoDatePlusDays(1)}
-                onChange={(e) =>
-                  setInst({ ...inst, firstDueDate: e.target.value })
-                }
-                className="mt-1.5"
-                required
-              />
-              {fieldErrors["boletoInstallment.firstDueDate"] && (
-                <p className="mt-1 text-xs text-rose-600">
-                  {fieldErrors["boletoInstallment.firstDueDate"]}
-                </p>
-              )}
-            </div>
-            <p className="sm:col-span-3 text-xs text-gray-600">
-              A 1ª parcela fica disponível na hora; as próximas, 7 dias antes de
-              cada vencimento, na área do aluno. O acesso é liberado quando a 1ª
-              parcela for paga.
-            </p>
-          </div>
-        )}
-
-        {/* Endereço do aluno — exigido pelo Mercado Pago para emitir o boleto */}
-        {needsAddress && (
-          <div className="mt-4">
-            <h4 className="text-xs font-bold text-[var(--color-pmb-green-900)]">
-              Endereço do aluno (para o boleto)
-            </h4>
-            <div className="mt-2 grid gap-3 sm:grid-cols-6">
-              <div className="sm:col-span-2">
-                <Label htmlFor="v-cep">CEP</Label>
-                <Input
-                  id="v-cep"
-                  value={addr.cep}
-                  onChange={(e) => setAddr({ ...addr, cep: e.target.value })}
-                  className="mt-1.5"
-                  required
-                />
-              </div>
-              <div className="sm:col-span-3">
-                <Label htmlFor="v-rua">Logradouro</Label>
-                <Input
-                  id="v-rua"
-                  value={addr.rua}
-                  onChange={(e) => setAddr({ ...addr, rua: e.target.value })}
-                  className="mt-1.5"
-                  required
-                />
-              </div>
-              <div className="sm:col-span-1">
-                <Label htmlFor="v-numero">Número</Label>
-                <Input
-                  id="v-numero"
-                  value={addr.numero}
-                  onChange={(e) => setAddr({ ...addr, numero: e.target.value })}
-                  className="mt-1.5"
-                  required
-                />
-              </div>
-              <div className="sm:col-span-2">
-                <Label htmlFor="v-bairro">Bairro</Label>
-                <Input
-                  id="v-bairro"
-                  value={addr.bairro}
-                  onChange={(e) => setAddr({ ...addr, bairro: e.target.value })}
-                  className="mt-1.5"
-                  required
-                />
-              </div>
-              <div className="sm:col-span-3">
-                <Label htmlFor="v-cidade">Cidade</Label>
-                <Input
-                  id="v-cidade"
-                  value={addr.cidade}
-                  onChange={(e) => setAddr({ ...addr, cidade: e.target.value })}
-                  className="mt-1.5"
-                  required
-                />
-              </div>
-              <div className="sm:col-span-1">
-                <Label htmlFor="v-uf">UF</Label>
-                <Input
-                  id="v-uf"
-                  value={addr.estado}
-                  maxLength={2}
-                  onChange={(e) => setAddr({ ...addr, estado: e.target.value })}
-                  className="mt-1.5"
-                  required
-                />
-              </div>
-            </div>
-          </div>
-        )}
-
-        <label
-          data-tour="vendas-nova:bolsista"
-          className="mt-4 flex cursor-pointer items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3"
-        >
-          <input
-            type="checkbox"
-            checked={form.bolsista}
-            onChange={(e) => {
-              const checked = e.target.checked
-              setForm({ ...form, bolsista: checked })
-              if (checked) setPaymentMode("normal")
-            }}
-            className="mt-0.5 h-4 w-4 accent-amber-600"
-          />
-          <span className="text-sm">
-            <span className="font-semibold text-amber-900">
-              Bolsista (bolsa de estudo)
-            </span>
-            <span className="mt-0.5 block text-xs text-amber-700">
-              Matricula o aluno na plataforma de aulas{" "}
-              <strong>sem gerar cobrança</strong>. Nenhum link/boleto é criado.
-            </span>
+      {/* ── Bolsa de estudo ─────────────────────────────────────────────── */}
+      <label
+        data-tour="vendas-nova:bolsista"
+        className="flex cursor-pointer items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4"
+      >
+        <input
+          type="checkbox"
+          checked={bolsista}
+          onChange={(e) => setBolsista(e.target.checked)}
+          className="mt-0.5 h-4 w-4 accent-amber-600"
+        />
+        <span className="text-sm">
+          <span className="font-semibold text-amber-900">Bolsista (bolsa de estudo)</span>
+          <span className="mt-0.5 block text-xs text-amber-700">
+            Matricula o aluno na plataforma de aulas{" "}
+            <strong>sem gerar cobrança</strong>. Nenhum link/boleto é criado.
           </span>
-        </label>
-      </div>
+        </span>
+      </label>
 
-      {selected && (
-        <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-          <h3 className="text-sm font-bold text-[var(--color-pmb-green-900)]">
-            Resumo do pedido
-          </h3>
-          {isInstallment ? (
-            <dl className="mt-3 space-y-2 text-sm">
-              <div className="flex items-center justify-between">
-                <dt className="text-gray-600">Parcelas</dt>
-                <dd className="font-mono text-gray-900">
-                  {inst.count}x de {formatBRL(installmentValueNum)}
-                </dd>
+      {/* ── 1. Aluno ─────────────────────────────────────────────────────── */}
+      <div data-tour="vendas-nova:aluno">
+        <Section title="1. Aluno" done={!!selectedStudent}>
+          {selectedStudent ? (
+            <div className="flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+              <div>
+                <p className="font-semibold text-[var(--color-pmb-green-900)]">
+                  {selectedStudent.nome}
+                  {selectedStudent.isNew && (
+                    <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
+                      novo
+                    </span>
+                  )}
+                </p>
+                <p className="text-xs text-gray-500">
+                  {selectedStudent.email}
+                  {selectedStudent.cpf ? ` · CPF ${maskCpf(selectedStudent.cpf)}` : ""}
+                </p>
               </div>
-              <div className="flex items-center justify-between border-t border-gray-100 pt-2">
-                <dt className="font-semibold text-[var(--color-pmb-green-900)]">
-                  Total do carnê
-                </dt>
-                <dd className="font-mono text-base font-bold text-[var(--color-pmb-green-700)]">
-                  {formatBRL(installmentTotal)}
-                </dd>
-              </div>
-            </dl>
+              <Button variant="ghost" size="sm" onClick={() => setSelectedStudent(null)}>
+                <X className="mr-1 h-4 w-4" /> Trocar
+              </Button>
+            </div>
           ) : (
-            <dl className="mt-3 space-y-2 text-sm">
-              <div className="flex items-center justify-between">
-                <dt className="text-gray-600">Valor original</dt>
-                <dd className="font-mono text-gray-900">
-                  {formatBRL(selected.price)}
-                  {selected.paymentType === "MONTHLY" ? "/mês" : ""}
-                </dd>
-              </div>
-              <div className="flex items-center justify-between">
-                <dt className="text-gray-600">
-                  {form.bolsista ? "Bolsa de estudo" : "Cupom"}
-                </dt>
-                <dd className="font-mono text-gray-900">
-                  {form.bolsista
-                    ? `- ${formatBRL(selected.price)}`
-                    : form.couponCode.trim()
-                      ? "a confirmar"
-                      : "—"}
-                </dd>
-              </div>
-              <div className="flex items-center justify-between border-t border-gray-100 pt-2">
-                <dt className="font-semibold text-[var(--color-pmb-green-900)]">
-                  Total a pagar
-                </dt>
-                <dd className="font-mono text-base font-bold text-[var(--color-pmb-green-700)]">
-                  {form.bolsista
-                    ? formatBRL(0)
-                    : form.couponCode.trim()
-                      ? `até ${formatBRL(selected.price)}`
-                      : formatBRL(selected.price)}
-                  {!form.bolsista && selected.paymentType === "MONTHLY"
-                    ? "/mês"
-                    : ""}
-                </dd>
-              </div>
-            </dl>
-          )}
-          {!form.bolsista && !isInstallment && form.couponCode.trim() && (
-            <p className="mt-2 text-xs text-gray-500">
-              O desconto do cupom é validado ao gerar o link de pagamento.
-            </p>
-          )}
-        </div>
-      )}
-
-      {error && (
-        <div
-          role="alert"
-          className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700"
-        >
-          {error}
-        </div>
-      )}
-
-      <div className="flex justify-between gap-3">
-        <Link href="/painel/vendas">
-          <Button type="button" variant="outline">
-            <ArrowLeft className="mr-1.5 h-4 w-4" />
-            Voltar
-          </Button>
-        </Link>
-        <Button
-          type="submit"
-          disabled={submitting}
-          data-tour="vendas-nova:submit"
-          className="bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)]"
-        >
-          {submitting ? (
             <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              {form.bolsista
-                ? "Concedendo bolsa..."
-                : isInstallment
-                  ? "Gerando carnê..."
-                  : "Gerando link..."}
+              <div className="mb-4 flex gap-2">
+                <TabButton active={studentTab === "search"} onClick={() => setStudentTab("search")}>
+                  <Users className="h-3.5 w-3.5" /> Buscar existente
+                </TabButton>
+                <TabButton active={studentTab === "new"} onClick={() => setStudentTab("new")}>
+                  <UserPlus className="h-3.5 w-3.5" /> Novo aluno
+                </TabButton>
+              </div>
+
+              {studentTab === "search" ? (
+                <div className="space-y-3">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                    <Input
+                      placeholder="Buscar por nome, e-mail ou CPF…"
+                      value={query}
+                      onChange={(e) => setQuery(e.target.value)}
+                      className="pl-9"
+                    />
+                    {searching && (
+                      <RefreshCw className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-gray-400" />
+                    )}
+                  </div>
+                  {searchResults.length > 0 && (
+                    <ul className="divide-y divide-gray-100 rounded-xl border border-gray-200 bg-white">
+                      {searchResults.map((s) => (
+                        <li key={s.id}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedStudent({ isNew: false, ...s })
+                              setQuery("")
+                              setSearchResults([])
+                            }}
+                            className="w-full px-4 py-3 text-left transition-colors hover:bg-[var(--color-pmb-lime-50)]"
+                          >
+                            <p className="text-sm font-medium text-gray-900">{s.nome}</p>
+                            <p className="text-xs text-gray-500">
+                              {s.email}
+                              {s.cpf ? ` · CPF ${maskCpf(s.cpf)}` : ""}
+                            </p>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {query && !searching && searchResults.length === 0 && (
+                    <p className="text-sm text-gray-500">
+                      Nenhum aluno encontrado.{" "}
+                      <button
+                        type="button"
+                        className="text-[var(--color-pmb-green)] underline"
+                        onClick={() => setStudentTab("new")}
+                      >
+                        Cadastrar novo
+                      </button>
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="col-span-2">
+                    <Label>Nome completo</Label>
+                    <Input
+                      value={newStudent.nome}
+                      onChange={(e) => {
+                        setNewStudent((s) => ({ ...s, nome: e.target.value }))
+                        setStudentErrors((er) => ({ ...er, nome: "" }))
+                      }}
+                      className={studentErrors.nome ? "border-red-400" : ""}
+                    />
+                    {studentErrors.nome && (
+                      <p className="mt-1 text-xs text-red-600">{studentErrors.nome}</p>
+                    )}
+                  </div>
+                  <div>
+                    <Label>E-mail</Label>
+                    <Input
+                      type="email"
+                      value={newStudent.email}
+                      onChange={(e) => {
+                        setNewStudent((s) => ({ ...s, email: e.target.value }))
+                        setStudentErrors((er) => ({ ...er, email: "" }))
+                      }}
+                      className={studentErrors.email ? "border-red-400" : ""}
+                    />
+                    {studentErrors.email && (
+                      <p className="mt-1 text-xs text-red-600">{studentErrors.email}</p>
+                    )}
+                  </div>
+                  <div>
+                    <Label>CPF</Label>
+                    <Input
+                      placeholder="000.000.000-00"
+                      value={newStudent.cpf}
+                      onChange={(e) => handleCpfChange(e.target.value)}
+                      className={studentErrors.cpf ? "border-red-400" : ""}
+                    />
+                    {studentErrors.cpf && (
+                      <p className="mt-1 text-xs text-red-600">{studentErrors.cpf}</p>
+                    )}
+                  </div>
+                  <div className="col-span-2">
+                    <Label>Telefone</Label>
+                    <Input
+                      placeholder="(11) 99999-9999"
+                      value={newStudent.fone}
+                      onChange={(e) => {
+                        setNewStudent((s) => ({ ...s, fone: e.target.value }))
+                        setStudentErrors((er) => ({ ...er, fone: "" }))
+                      }}
+                      className={studentErrors.fone ? "border-red-400" : ""}
+                    />
+                    {studentErrors.fone && (
+                      <p className="mt-1 text-xs text-red-600">{studentErrors.fone}</p>
+                    )}
+                  </div>
+                  <div className="col-span-2">
+                    <Button
+                      onClick={confirmNewStudent}
+                      className="bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)]"
+                    >
+                      Usar este aluno
+                    </Button>
+                    <p className="mt-1.5 text-xs text-gray-400">
+                      Se o CPF já existir nos seus alunos, os dados são atualizados no
+                      momento da venda.
+                    </p>
+                  </div>
+                </div>
+              )}
             </>
-          ) : form.bolsista ? (
-            "Conceder bolsa de estudo"
-          ) : isInstallment ? (
-            "Gerar carnê no boleto"
-          ) : (
-            "Gerar link de pagamento"
           )}
-        </Button>
+        </Section>
       </div>
-    </form>
+
+      {/* ── 2. Curso ou pacote ───────────────────────────────────────────── */}
+      <div data-tour="vendas-nova:curso">
+        <Section title="2. Curso ou pacote" done={!!selectedItem}>
+          {selectedItem ? (
+            <div className="flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+              <div>
+                <p className="font-semibold text-[var(--color-pmb-green-900)]">{selectedItem.nome}</p>
+                <p className="text-xs text-gray-500">
+                  {fmt(selectedItem.preco)}
+                  {selectedItem.kind === "package"
+                    ? ` · ${selectedItem.courseCount} ${selectedItem.courseCount === 1 ? "curso" : "cursos"} · pagamento único`
+                    : selectedItem.paymentType === "MONTHLY"
+                      ? " · mensalidade recorrente"
+                      : " · pagamento único"}
+                </p>
+              </div>
+              <Button variant="ghost" size="sm" onClick={() => setSelectedItem(null)}>
+                <X className="mr-1 h-4 w-4" /> Trocar
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                <Input
+                  placeholder="Buscar curso ou pacote da sua vitrine…"
+                  value={courseSearch}
+                  onChange={(e) => setCourseSearch(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
+              <ul className="max-h-64 divide-y divide-gray-100 overflow-y-auto rounded-xl border border-gray-200 bg-white">
+                {filteredItems.length === 0 && (
+                  <li className="px-4 py-3 text-sm text-gray-400">
+                    Nenhum curso ou pacote encontrado
+                  </li>
+                )}
+                {filteredItems.map((c) => (
+                  <li key={`${c.kind}:${c.id}`}>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedItem(c)}
+                      className="w-full px-4 py-3 text-left transition-colors hover:bg-[var(--color-pmb-lime-50)]"
+                    >
+                      <p className="text-sm font-medium text-gray-900">{c.nome}</p>
+                      <p className="text-xs text-gray-500">
+                        {fmt(c.preco)}
+                        {c.kind === "package"
+                          ? ` · ${c.courseCount} ${c.courseCount === 1 ? "curso" : "cursos"}`
+                          : c.paymentType === "MONTHLY"
+                            ? " · mensal"
+                            : " · único"}
+                      </p>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </Section>
+      </div>
+
+      {/* ── 3. Pagamento (desconto / carnê) ──────────────────────────────── */}
+      {!bolsista && (
+        <Section
+          title="3. Pagamento"
+          done={isInstallment ? installmentValueNum > 0 : !!couponCode.trim() || manualValid}
+        >
+          {/* Forma de pagamento (só quando a unidade tem carnê liberado) */}
+          {installmentAvailable && (
+            <div className="mb-4">
+              <span className="text-xs font-semibold text-gray-600">Forma de pagamento</span>
+              <div className="mt-1.5 inline-flex rounded-lg border border-gray-200 p-0.5">
+                <button
+                  type="button"
+                  onClick={() => setPaymentMode("normal")}
+                  className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${
+                    paymentMode === "normal"
+                      ? "bg-[var(--color-pmb-green)] text-white"
+                      : "text-gray-600 hover:bg-gray-50"
+                  }`}
+                >
+                  Link de pagamento
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPaymentMode("installment")}
+                  className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${
+                    paymentMode === "installment"
+                      ? "bg-[var(--color-pmb-green)] text-white"
+                      : "text-gray-600 hover:bg-gray-50"
+                  }`}
+                >
+                  Parcelado no boleto (carnê)
+                </button>
+              </div>
+            </div>
+          )}
+
+          {isInstallment && installmentConfig ? (
+            /* ── Carnê ── */
+            <div className="grid gap-3 rounded-xl border border-[var(--color-pmb-green)]/20 bg-[var(--color-pmb-green)]/5 p-4 sm:grid-cols-3">
+              <div>
+                <Label htmlFor="v-parcelas">Nº de parcelas</Label>
+                <Select
+                  value={String(inst.count)}
+                  onValueChange={(v) => setInst({ ...inst, count: Number(v) || 2 })}
+                >
+                  <SelectTrigger id="v-parcelas" className="mt-1.5 h-10 w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Array.from(
+                      { length: Math.max(0, installmentConfig.maxCount - 1) },
+                      (_, i) => i + 2,
+                    ).map((n) => (
+                      <SelectItem key={n} value={String(n)}>
+                        {n}x
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {fieldErrors["boletoInstallment.count"] && (
+                  <p className="mt-1 text-xs text-rose-600">{fieldErrors["boletoInstallment.count"]}</p>
+                )}
+              </div>
+              <div>
+                <Label htmlFor="v-parcela-valor">Valor de cada parcela</Label>
+                <Input
+                  id="v-parcela-valor"
+                  inputMode="decimal"
+                  value={inst.value}
+                  onChange={(e) => setInst({ ...inst, value: e.target.value })}
+                  placeholder="Ex: 89,90"
+                  className="mt-1.5"
+                />
+                {fieldErrors["boletoInstallment.installmentValue"] && (
+                  <p className="mt-1 text-xs text-rose-600">
+                    {fieldErrors["boletoInstallment.installmentValue"]}
+                  </p>
+                )}
+              </div>
+              <div>
+                <Label htmlFor="v-parcela-venc">1º vencimento</Label>
+                <Input
+                  id="v-parcela-venc"
+                  type="date"
+                  value={inst.firstDueDate}
+                  min={isoDatePlusDays(1)}
+                  onChange={(e) => setInst({ ...inst, firstDueDate: e.target.value })}
+                  className="mt-1.5"
+                />
+                {fieldErrors["boletoInstallment.firstDueDate"] && (
+                  <p className="mt-1 text-xs text-rose-600">
+                    {fieldErrors["boletoInstallment.firstDueDate"]}
+                  </p>
+                )}
+              </div>
+              <p className="text-xs text-gray-600 sm:col-span-3">
+                A 1ª parcela fica disponível na hora; as próximas, 7 dias antes de cada
+                vencimento, na área do aluno. O acesso é liberado quando a 1ª parcela for paga.
+              </p>
+            </div>
+          ) : (
+            /* ── Desconto (manual OU cupom) ── */
+            <div data-tour="vendas-nova:cupom" className="space-y-4">
+              <div className="space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">
+                  Desconto na hora
+                </p>
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="number"
+                    inputMode="decimal"
+                    min={0}
+                    max={cap}
+                    step="0.5"
+                    placeholder="0"
+                    value={manualPct}
+                    onChange={(e) => setManualPct(e.target.value)}
+                    disabled={!selectedItem || !!couponCode.trim() || cap <= 0}
+                    className="w-28"
+                  />
+                  <span className="text-sm text-gray-500">% — até {cap}%</span>
+                </div>
+                {manualPct.trim() !== "" && !manualValid && (
+                  <p className="text-xs font-medium text-red-600">
+                    {Number.isFinite(manualPctNumber) && manualPctNumber > cap
+                      ? `Acima do seu limite de ${cap}%`
+                      : "Percentual inválido"}
+                  </p>
+                )}
+                {manualValid && selectedItem && (
+                  <p className="text-xs text-emerald-600">
+                    − {fmt(manualDiscountAmount)} · de {fmt(selectedItem.preco)} por{" "}
+                    <strong>{fmt(finalPrice)}</strong>
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-2 border-t pt-4">
+                <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">
+                  Ou cupom
+                </p>
+                <Input
+                  placeholder="CODIGO"
+                  value={couponCode}
+                  onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+                  disabled={!selectedItem || manualPct.trim() !== ""}
+                  className="font-mono uppercase"
+                  aria-invalid={!!fieldErrors.couponCode}
+                />
+                {fieldErrors.couponCode && (
+                  <p className="text-xs font-medium text-red-600">{fieldErrors.couponCode}</p>
+                )}
+                <p className="text-xs text-gray-400">
+                  O desconto do cupom é validado ao gerar o link de pagamento.
+                </p>
+              </div>
+
+              {!selectedItem && (
+                <p className="text-xs text-gray-400">
+                  Selecione um {isPkg ? "pacote" : "curso"} antes de aplicar desconto
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Endereço do aluno — exigido pelo Mercado Pago para emitir o boleto */}
+          {needsAddress && (
+            <div className="mt-4">
+              <h4 className="text-xs font-bold text-[var(--color-pmb-green-900)]">
+                Endereço do aluno (para o boleto)
+              </h4>
+              <div className="mt-2 grid gap-3 sm:grid-cols-6">
+                <div className="sm:col-span-2">
+                  <Label htmlFor="v-cep">CEP</Label>
+                  <Input
+                    id="v-cep"
+                    value={addr.cep}
+                    onChange={(e) => setAddr({ ...addr, cep: e.target.value })}
+                    className="mt-1.5"
+                  />
+                </div>
+                <div className="sm:col-span-3">
+                  <Label htmlFor="v-rua">Logradouro</Label>
+                  <Input
+                    id="v-rua"
+                    value={addr.rua}
+                    onChange={(e) => setAddr({ ...addr, rua: e.target.value })}
+                    className="mt-1.5"
+                  />
+                </div>
+                <div className="sm:col-span-1">
+                  <Label htmlFor="v-numero">Número</Label>
+                  <Input
+                    id="v-numero"
+                    value={addr.numero}
+                    onChange={(e) => setAddr({ ...addr, numero: e.target.value })}
+                    className="mt-1.5"
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <Label htmlFor="v-bairro">Bairro</Label>
+                  <Input
+                    id="v-bairro"
+                    value={addr.bairro}
+                    onChange={(e) => setAddr({ ...addr, bairro: e.target.value })}
+                    className="mt-1.5"
+                  />
+                </div>
+                <div className="sm:col-span-3">
+                  <Label htmlFor="v-cidade">Cidade</Label>
+                  <Input
+                    id="v-cidade"
+                    value={addr.cidade}
+                    onChange={(e) => setAddr({ ...addr, cidade: e.target.value })}
+                    className="mt-1.5"
+                  />
+                </div>
+                <div className="sm:col-span-1">
+                  <Label htmlFor="v-uf">UF</Label>
+                  <Input
+                    id="v-uf"
+                    value={addr.estado}
+                    maxLength={2}
+                    onChange={(e) => setAddr({ ...addr, estado: e.target.value })}
+                    className="mt-1.5"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+        </Section>
+      )}
+
+      {/* ── 4. Gerar link / Conceder bolsa ───────────────────────────────── */}
+      <div data-tour="vendas-nova:submit">
+      <Section
+        title={bolsista ? "4. Conceder bolsa" : "4. Gerar link de pagamento"}
+        done={false}
+      >
+        {selectedStudent && selectedItem ? (
+          <div className="space-y-4">
+            <div className="space-y-1 rounded-xl bg-gray-50 p-4 text-sm">
+              <Row label="Aluno" value={selectedStudent.nome} />
+              <Row label={isPkg ? "Pacote" : "Curso"} value={selectedItem.nome} />
+              {isInstallment ? (
+                <>
+                  <Row label="Parcelas" value={`${inst.count}x de ${fmt(installmentValueNum)}`} />
+                  <Row label="Total do carnê" value={fmt(installmentTotal)} bold />
+                  <Row label="Cobrança" value={`Carnê (boleto ${gateway === "ASAAS" ? "Asaas" : "Mercado Pago"})`} />
+                </>
+              ) : (
+                <>
+                  <Row label={bolsista ? "Valor" : "Preço base"} value={fmt(basePrice)} />
+                  {bolsista ? (
+                    <Row label="Bolsa de estudo" value={`− ${fmt(basePrice)}`} className="text-amber-600" />
+                  ) : manualValid ? (
+                    <Row
+                      label={`Desconto (${manualPctNumber}%)`}
+                      value={`− ${fmt(manualDiscountAmount)}`}
+                      className="text-emerald-600"
+                    />
+                  ) : couponCode.trim() ? (
+                    <Row label="Cupom" value="a confirmar" className="text-gray-500" />
+                  ) : null}
+                  <Row label="Total" value={couponCode.trim() && !manualValid ? `até ${fmt(finalPrice)}` : fmt(finalPrice)} bold />
+                  <Row
+                    label={bolsista ? "Cobrança" : "Pagamento"}
+                    value={bolsista ? "Nenhuma (bolsa)" : "Link na sua loja (cartão, PIX ou boleto)"}
+                  />
+                </>
+              )}
+            </div>
+
+            {error && (
+              <div
+                role="alert"
+                className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700"
+              >
+                {error}
+              </div>
+            )}
+
+            <Button
+              onClick={submit}
+              disabled={submitting}
+              className="bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)]"
+            >
+              {submitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  {bolsista ? "Concedendo bolsa…" : isInstallment ? "Gerando carnê…" : "Gerando link…"}
+                </>
+              ) : bolsista ? (
+                "Conceder bolsa de estudo"
+              ) : isInstallment ? (
+                "Gerar carnê no boleto"
+              ) : (
+                "Gerar link de pagamento"
+              )}
+            </Button>
+          </div>
+        ) : (
+          <p className="text-sm text-gray-400">Selecione o aluno e o curso para continuar.</p>
+        )}
+      </Section>
+      </div>
+    </div>
+  )
+}
+
+// ─── Helpers UI ───────────────────────────────────────────────────────────────
+
+function Section({
+  title,
+  done,
+  children,
+}: {
+  title: string
+  done?: boolean
+  children: React.ReactNode
+}) {
+  return (
+    <div
+      className={`rounded-2xl border bg-white p-5 shadow-sm transition-colors ${
+        done ? "border-emerald-200" : "border-gray-200"
+      }`}
+    >
+      <h2 className="mb-4 flex items-center gap-2 font-semibold text-[var(--color-pmb-green-900)]">
+        {done && <CheckCircle2 className="h-4 w-4 text-emerald-500" />}
+        {title}
+      </h2>
+      {children}
+    </div>
+  )
+}
+
+function TabButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean
+  onClick: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+        active
+          ? "bg-[var(--color-pmb-green)] text-white"
+          : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+      }`}
+    >
+      {children}
+    </button>
+  )
+}
+
+function Row({
+  label,
+  value,
+  bold,
+  className,
+}: {
+  label: string
+  value: string
+  bold?: boolean
+  className?: string
+}) {
+  return (
+    <div className="flex justify-between">
+      <span className="text-gray-500">{label}</span>
+      <span className={`${bold ? "font-bold" : ""} ${className ?? ""}`}>{value}</span>
+    </div>
   )
 }
 
@@ -898,9 +1161,7 @@ function Mini({
       </p>
       <p
         className={`mt-1 font-mono text-base font-bold ${
-          accent
-            ? "text-[var(--color-pmb-green-700)]"
-            : "text-[var(--color-pmb-green-900)]"
+          accent ? "text-[var(--color-pmb-green-700)]" : "text-[var(--color-pmb-green-900)]"
         }`}
       >
         {value}

@@ -24,28 +24,41 @@ import {
 } from "@/lib/installments/schedule"
 import { getPackageForCheckout } from "@/lib/packages/vitrine"
 
-const createSchema = z.object({
-  // Dados do aluno (cria ou reaproveita por CPF/email)
-  nome: z.string().trim().min(3).max(160),
-  email: z.string().email().toLowerCase().trim(),
-  cpf: z
-    .string()
-    .trim()
-    .refine(isValidCpf, "CPF inválido")
-    .transform(stripCpf),
-  fone: z
-    .string()
-    .trim()
-    .refine(isValidPhone, "Telefone inválido")
-    .transform(normalizePhone),
+const createSchema = z
+  .object({
+    // Aluno da venda: OU um aluno JÁ EXISTENTE da unidade (studentId, sempre
+    // escopado ao tenant no handler — a busca da tela só devolve alunos da
+    // própria revenda), OU os dados de um NOVO aluno (criado/reaproveitado por
+    // CPF no submit). Exatamente um dos dois — validado no .refine abaixo.
+    // Espelha a venda direta do PMB (buscar existente | novo aluno), porém com
+    // o acesso restrito aos alunos da revenda.
+    studentId: z.string().min(1).optional(),
+    nome: z.string().trim().min(3).max(160).optional(),
+    email: z.string().email().toLowerCase().trim().optional(),
+    cpf: z
+      .string()
+      .trim()
+      .refine(isValidCpf, "CPF inválido")
+      .transform(stripCpf)
+      .optional(),
+    fone: z
+      .string()
+      .trim()
+      .refine(isValidPhone, "Telefone inválido")
+      .transform(normalizePhone)
+      .optional(),
 
-  // Alvo da venda: curso (TenantCourse do próprio tenant) OU pacote
-  // (CoursePackage). Exatamente um dos dois — validado no .refine abaixo.
-  tenantCourseId: z.string().min(1).optional(),
-  packageId: z.string().min(1).optional(),
-  couponCode: z.string().trim().max(64).optional(),
-  // Bolsa de estudo: matricula sem cobranca no Mercado Pago.
-  bolsista: z.boolean().optional(),
+    // Alvo da venda: curso (TenantCourse do próprio tenant) OU pacote
+    // (CoursePackage). Exatamente um dos dois — validado no .refine abaixo.
+    tenantCourseId: z.string().min(1).optional(),
+    packageId: z.string().min(1).optional(),
+    couponCode: z.string().trim().max(64).optional(),
+    // Desconto manual (%) dado pelo vendedor na hora, sem cupom. Teto = cap do
+    // vendedor (dono 100%, consultor = maxDiscount). Mutuamente exclusivo com
+    // couponCode (validado no .refine abaixo).
+    manualDiscountPercent: z.number().positive().max(100).optional(),
+    // Bolsa de estudo: matricula sem cobranca no Mercado Pago.
+    bolsista: z.boolean().optional(),
   // Venda parcelada no boleto (carnê): a revenda define nº de parcelas + valor
   // de cada parcela + 1º vencimento. Só válido quando a unidade tem a capability.
   boletoInstallment: z
@@ -72,6 +85,17 @@ const createSchema = z.object({
   .refine((v) => !!v.tenantCourseId !== !!v.packageId, {
     message: "Informe tenantCourseId ou packageId",
     path: ["tenantCourseId"],
+  })
+  // Aluno: um aluno existente (studentId) OU os dados completos de um novo
+  // aluno, nunca ambos/nenhum.
+  .refine((v) => !!v.studentId !== !!(v.nome && v.email && v.cpf && v.fone), {
+    message: "Informe um aluno existente ou os dados de um novo aluno",
+    path: ["studentId"],
+  })
+  // Desconto: cupom OU desconto manual, nunca os dois.
+  .refine((v) => !(v.couponCode && v.manualDiscountPercent), {
+    message: "Use cupom OU desconto manual, não os dois",
+    path: ["manualDiscountPercent"],
   })
 
 export const GET = withRequestContext(
@@ -366,33 +390,88 @@ export const POST = withRequestContext(
       couponId = coupon.id
     }
 
-    const finalAmount = finalAmountFromCoupon ?? basePrice
-
-    // Reuso o upsertStudent: protege contra corrupção de CPF entre alunos
-    // distintos com o mesmo email e trata race condition de checkouts paralelos.
-    // Status inicial "INTERESSADO" porque o aluno ainda não pagou — o fulfill
-    // promove para ATIVO quando o webhook confirma.
-    let student: { id: string; nome: string; email: string | null; cpf: string | null }
-    try {
-      student = await upsertStudent({
-        tenantId: tenant.id,
-        nome: data.nome,
-        email: data.email,
-        cpf: data.cpf,
-        fone: data.fone,
-        polo: tenantPolo(tenant),
-        vendedorId: tenant.plataformaVendedorId,
-        plataformaAlunoIdFallback: `pending_${Date.now()}`,
-        initialStatus: "INTERESSADO",
-      })
-    } catch (err) {
-      if (err instanceof StudentEmailConflictError) {
+    // ── Desconto manual (sem cupom) ───────────────────────────────────────
+    // O vendedor digita o percentual na hora; o teto é o cap dele (dono 100%,
+    // consultor = maxDiscount, já resolvido em `cap`). Mutuamente exclusivo com
+    // cupom (schema) e não se aplica a bolsa nem a carnê (valor manual).
+    if (!isBolsista && !isInstallment && data.manualDiscountPercent) {
+      if (data.manualDiscountPercent > cap + 0.01) {
         return NextResponse.json(
-          { error: err.message, code: err.code },
-          { status: 409 },
+          { error: `Desconto excede seu cap (${cap}%)` },
+          { status: 403 },
         )
       }
-      throw err
+      const applied = applyCouponDiscount({
+        basePrice,
+        discountType: "PERCENTAGE",
+        discountValue: data.manualDiscountPercent,
+      })
+      discountAmount = applied.discountAmount
+      finalAmountFromCoupon = applied.finalAmount
+    }
+
+    const finalAmount = finalAmountFromCoupon ?? basePrice
+
+    // Resolve o aluno: OU um aluno JÁ EXISTENTE da unidade (studentId, sempre
+    // escopado ao tenant — a limitação de acesso aos alunos da revenda), OU um
+    // NOVO aluno criado/reaproveitado por CPF. Espelha a venda direta do PMB
+    // (buscar existente | novo aluno).
+    let student: {
+      id: string
+      nome: string
+      email: string | null
+      cpf: string | null
+      fone: string | null
+    }
+    if (data.studentId) {
+      // Isolamento P0: só encontra o aluno se ele pertence a ESTA unidade. Um
+      // studentId de outro tenant devolve 404 (nunca vaza aluno cross-tenant).
+      const found = await prisma.student.findFirst({
+        where: { id: data.studentId, tenantId: tenant.id },
+        select: { id: true, nome: true, email: true, cpf: true, fone: true },
+      })
+      if (!found) {
+        if (couponId) await releaseCoupon(couponId).catch(swallow("painel.vendas"))
+        return NextResponse.json(
+          { error: "Aluno não encontrado" },
+          { status: 404 },
+        )
+      }
+      if (!found.email) {
+        if (couponId) await releaseCoupon(couponId).catch(swallow("painel.vendas"))
+        return NextResponse.json(
+          { error: "Aluno sem email cadastrado" },
+          { status: 400 },
+        )
+      }
+      student = found
+    } else {
+      // Novo aluno: upsertStudent protege contra corrupção de CPF entre alunos
+      // distintos com o mesmo email e trata race de checkouts paralelos. Status
+      // inicial "INTERESSADO" porque o aluno ainda não pagou — o fulfill promove
+      // para ATIVO quando o webhook confirma (mantém o provisionamento da revenda).
+      try {
+        student = await upsertStudent({
+          tenantId: tenant.id,
+          nome: data.nome!,
+          email: data.email!,
+          cpf: data.cpf!,
+          fone: data.fone!,
+          polo: tenantPolo(tenant),
+          vendedorId: tenant.plataformaVendedorId,
+          plataformaAlunoIdFallback: `pending_${Date.now()}`,
+          initialStatus: "INTERESSADO",
+        })
+      } catch (err) {
+        if (err instanceof StudentEmailConflictError) {
+          if (couponId) await releaseCoupon(couponId).catch(swallow("painel.vendas"))
+          return NextResponse.json(
+            { error: err.message, code: err.code },
+            { status: 409 },
+          )
+        }
+        throw err
+      }
     }
 
     // Duplicidade: pacote compara pela matrícula primária do pacote; curso, pelo

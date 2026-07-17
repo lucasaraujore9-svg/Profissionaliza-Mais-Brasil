@@ -20,7 +20,7 @@ export default async function PainelNovaVendaPage() {
 
   await ensureTenantCourses(user.tenantId)
 
-  const [tenant, tenantCourses, vitrinePackages] = await Promise.all([
+  const [tenant, tenantCourses, vitrinePackages, member] = await Promise.all([
     prisma.tenant.findUnique({
       where: { id: user.tenantId },
       select: {
@@ -39,7 +39,20 @@ export default async function PainelNovaVendaPage() {
     }),
     // Pacotes vendáveis nesta vitrine (PMB distribuídos + próprios da unidade).
     resolveVitrinePackages(user.tenantId),
+    // Cap de desconto do vendedor logado: o dono da unidade (sem TenantMember)
+    // não tem teto (100%); consultor ativo usa o próprio maxDiscount; consultor
+    // inativo fica sem desconto (0). Mesma regra aplicada no POST da rota.
+    prisma.tenantMember.findFirst({
+      where: { tenantId: user.tenantId, userId: user.id },
+      select: { maxDiscount: true, status: true },
+    }),
   ])
+
+  const cap = !member
+    ? 100
+    : member.status === "ATIVO"
+      ? Math.min(Math.max(Math.trunc(member.maxDiscount ?? 0), 0), 100)
+      : 0
 
   const courses = tenantCourses
     .filter((tc) => tc.course.status === "ATIVO")
@@ -72,6 +85,8 @@ export default async function PainelNovaVendaPage() {
         description="Cadastre o aluno, escolha o curso e gere o link de pagamento."
       />
       <PainelNovaVendaClient
+        cap={cap}
+        gateway={tenant?.salesGateway ?? "MP"}
         courses={courses}
         packages={packages}
         installmentConfig={installmentConfig}
