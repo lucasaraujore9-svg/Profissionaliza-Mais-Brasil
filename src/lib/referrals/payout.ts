@@ -205,14 +205,14 @@ export async function requestPayout(
     return created
   })
 
-  // Notifica admins
+  // Notifica o financeiro — e quem confere, paga e anexa o comprovante.
   const tenant = await prisma.tenant.findUnique({
     where: { id: input.referrerTenantId },
     select: { name: true },
   })
   await createNotification({
     audience: "ROLE",
-    roleTarget: "SUPER_ADMIN",
+    roleTarget: "PMB_FINANCEIRO",
     level: "INFO",
     title: `Novo saque de indicacao solicitado: ${tenant?.name ?? input.referrerTenantId}`,
     body: `R$ ${totalAmount.toFixed(2)} via ${input.method}. Aprove em /admin/indicacoes/saques.`,
@@ -640,18 +640,16 @@ export async function processMonthlyPayouts(): Promise<{
       href: "/painel/indicacoes",
     })
 
-    // Notifica equipe financeira (financeiro + super) — eles pagam manualmente.
-    for (const roleTarget of ["SUPER_ADMIN", "PMB_FINANCEIRO"] as const) {
-      await createNotification({
-        audience: "ROLE",
-        roleTarget,
-        level: "WARNING",
-        title: `Comissao a pagar: ${tenant?.name ?? tenantId}`,
-        body: `R$ ${total.toFixed(2).replace(".", ",")} ${hasPix ? "via PIX" : "(sem PIX cadastrado, pagar manual)"}. Pague, marque como pago e anexe o comprovante em /admin/indicacoes/saques.`,
-        category: "referral",
-        href: "/admin/indicacoes/saques",
-      })
-    }
+    // Notifica a equipe financeira — eles pagam manualmente.
+    await createNotification({
+      audience: "ROLE",
+      roleTarget: "PMB_FINANCEIRO",
+      level: "WARNING",
+      title: `Comissao a pagar: ${tenant?.name ?? tenantId}`,
+      body: `R$ ${total.toFixed(2).replace(".", ",")} ${hasPix ? "via PIX" : "(sem PIX cadastrado, pagar manual)"}. Pague, marque como pago e anexe o comprovante em /admin/indicacoes/saques.`,
+      category: "referral",
+      href: "/admin/indicacoes/saques",
+    })
     notifiedTenants += 1
   }
 
