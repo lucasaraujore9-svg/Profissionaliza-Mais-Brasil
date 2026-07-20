@@ -6,6 +6,10 @@ import { requireSuperAdmin } from "@/lib/auth/guards"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { contextLogger } from "@/lib/logger"
 import { runInChunks } from "@/lib/concurrency"
+import {
+  APRENDIZADO_MAX_ITEMS,
+  APRENDIZADO_MAX_LEN,
+} from "@/lib/courses/aprendizado"
 
 // PERF-013: nº de updates individuais concorrentes por lote (corta o wall-time
 // de lotes grandes sem estourar o pool do Supabase).
@@ -37,6 +41,7 @@ export const GET = withRequestContext(
         parcelasSugeridas: true,
         descricaoOverride: true,
         descricao: true,
+        aprendizado: true,
       },
     })
 
@@ -52,6 +57,10 @@ export const GET = withRequestContext(
         defaultParcelas: c.parcelasSugeridas,
         customDescription: c.descricaoOverride,
         defaultDescription: c.descricao,
+        // No catálogo mãe não há camada acima: o que está gravado JÁ é o padrão
+        // herdado pelas revendas — por isso os dois campos apontam pro mesmo.
+        customAprendizado: c.aprendizado,
+        defaultAprendizado: c.aprendizado,
       })),
     })
   },
@@ -68,6 +77,11 @@ const itemSchema = z.object({
   price: z.number().positive("Preço deve ser maior que zero").optional(),
   customParcelas: z.number().int().min(1).max(24).nullable().optional(),
   customDescription: z.string().trim().max(2000).nullable().optional(),
+  // Vira Course.aprendizado — o padrão herdado por TODAS as vitrines.
+  customAprendizado: z
+    .array(z.string().trim().min(1).max(APRENDIZADO_MAX_LEN))
+    .max(APRENDIZADO_MAX_ITEMS)
+    .optional(),
 })
 
 const bulkSchema = z.object({
@@ -130,6 +144,9 @@ export const PUT = withRequestContext(
           }),
           ...(it.customDescription !== undefined && {
             descricaoOverride: it.customDescription,
+          }),
+          ...(it.customAprendizado !== undefined && {
+            aprendizado: it.customAprendizado,
           }),
         },
       }),

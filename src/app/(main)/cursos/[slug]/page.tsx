@@ -81,6 +81,8 @@ async function loadCurso(slug: string): Promise<LoadedCurso | null> {
         ordem: l.ordem,
       })),
       matriz: c.matrizCurricular,
+      // Vitrine mãe: só o padrão global (não há camada de revenda aqui).
+      aprendizado: c.aprendizado,
       hasPrice: price > 0,
     }
   } catch {

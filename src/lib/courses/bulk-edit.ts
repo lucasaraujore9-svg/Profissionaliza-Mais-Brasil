@@ -9,6 +9,8 @@
  * "Preço inválido" e abortaria o lote inteiro.
  */
 
+import { aprendizadoToText, parseAprendizado } from "./aprendizado"
+
 /** Linha vinda do servidor (subconjunto necessário para montar o payload). */
 export interface BulkRowInput {
   id: string
@@ -16,6 +18,8 @@ export interface BulkRowInput {
   price: number
   customParcelas: number | null
   customDescription: string | null
+  /** "O que vai aprender" próprio desta linha. Vazio = herda o padrão. */
+  customAprendizado: string[]
 }
 
 /** Estado editável de cada linha (strings dos inputs). */
@@ -23,6 +27,8 @@ export interface RowDraft {
   price: string
   parcelas: string
   description: string
+  /** Um item por linha; string vazia = herda o padrão. */
+  aprendizado: string
 }
 
 /** Item parcial enviado ao endpoint de lote. */
@@ -31,6 +37,7 @@ export interface BulkItem {
   price?: number
   customParcelas?: number | null
   customDescription?: string | null
+  customAprendizado?: string[]
 }
 
 export type BuildBulkItemsResult =
@@ -54,6 +61,7 @@ export function draftFromRow(row: BulkRowInput): RowDraft {
     price: formatPrice(row.price),
     parcelas: row.customParcelas != null ? String(row.customParcelas) : "",
     description: row.customDescription ?? "",
+    aprendizado: aprendizadoToText(row.customAprendizado),
   }
 }
 
@@ -102,6 +110,11 @@ export function buildBulkItems(
 
     if (d.description !== original.description) {
       item.customDescription = d.description.trim() || null
+    }
+
+    // Lista vazia é um valor válido: significa "voltar ao padrão do catálogo".
+    if (d.aprendizado !== original.aprendizado) {
+      item.customAprendizado = parseAprendizado(d.aprendizado)
     }
 
     items.push(item)

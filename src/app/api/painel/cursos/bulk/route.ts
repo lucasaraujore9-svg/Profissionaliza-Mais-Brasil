@@ -6,6 +6,10 @@ import { ensureTenantCourses } from "@/lib/tenant/ensure-courses"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { contextLogger } from "@/lib/logger"
 import { runInChunks } from "@/lib/concurrency"
+import {
+  APRENDIZADO_MAX_ITEMS,
+  APRENDIZADO_MAX_LEN,
+} from "@/lib/courses/aprendizado"
 
 // PERF-013: nº de updates individuais concorrentes por lote.
 const BULK_CONCURRENCY = 10
@@ -36,6 +40,7 @@ export const GET = withRequestContext(
             descricaoOverride: true,
             parcelasSugeridas: true,
             parcelasOverride: true,
+            aprendizado: true,
           },
         },
       },
@@ -53,6 +58,8 @@ export const GET = withRequestContext(
         customDescription: tc.customDescription,
         defaultDescription:
           tc.course.descricaoOverride ?? tc.course.descricao,
+        customAprendizado: tc.customAprendizado,
+        defaultAprendizado: tc.course.aprendizado,
       })),
     })
   },
@@ -60,7 +67,7 @@ export const GET = withRequestContext(
 
 /* ------------------------------------------------------------------ */
 /* PUT — atualização em lote                                            */
-/* Aceita só os 3 campos da planilha. Não toca em paymentType,         */
+/* Aceita só os campos da planilha. Não toca em paymentType,           */
 /* visibilidade, destaque, capa, etc.                                  */
 /* ------------------------------------------------------------------ */
 const itemSchema = z.object({
@@ -68,6 +75,11 @@ const itemSchema = z.object({
   price: z.number().positive("Preço deve ser maior que zero").optional(),
   customParcelas: z.number().int().min(1).max(24).nullable().optional(),
   customDescription: z.string().trim().max(2000).nullable().optional(),
+  // Lista vazia = volta ao padrão definido pela PMB no catálogo mãe.
+  customAprendizado: z
+    .array(z.string().trim().min(1).max(APRENDIZADO_MAX_LEN))
+    .max(APRENDIZADO_MAX_ITEMS)
+    .optional(),
 })
 
 const bulkSchema = z.object({
@@ -133,6 +145,9 @@ export const PUT = withRequestContext(
           }),
           ...(it.customDescription !== undefined && {
             customDescription: it.customDescription,
+          }),
+          ...(it.customAprendizado !== undefined && {
+            customAprendizado: it.customAprendizado,
           }),
         },
       }),

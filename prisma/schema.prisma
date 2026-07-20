@@ -612,6 +612,13 @@ model Course {
   // partir dos PDFs oficiais de matriz. Vazio => curso sem matriz: a pagina e o
   // verso do certificado seguem o layout atual (sem a secao).
   matrizCurricular  String[] @default([]) @map("matriz_curricular")
+
+  // Bullets da secao "O que voce vai aprender" na pagina do curso. Conteudo
+  // global PMB editado no catalogo do admin: e o PADRAO herdado por TODAS as
+  // vitrines (mae, revendas ativas e futuras). Cada revenda pode sobrescrever
+  // so na sua vitrine via TenantCourse.customAprendizado. Vazio => a pagina cai
+  // no texto generico APRENDIZADO_DEFAULT (src/lib/courses/aprendizado.ts).
+  aprendizado       String[] @default([])
   precoOriginal     Decimal? @map("preco_original") @db.Decimal(10, 2) // Parseado do formato BR
   precoPromocional  Decimal? @map("preco_promocional") @db.Decimal(10, 2)
   parcelasSugeridas Int?     @map("parcelas_sugeridas") // Campo "parcelas"
@@ -761,6 +768,9 @@ model TenantCourse {
   isVisible         Boolean @default(true) @map("is_visible")
   customDescription String? @map("custom_description") @db.Text
   customCapaUrl     String? @map("custom_capa_url")
+  // Override da secao "O que voce vai aprender" SO nesta vitrine. Vazio =>
+  // herda Course.aprendizado (padrao definido pela PMB no catalogo mae).
+  customAprendizado String[] @default([]) @map("custom_aprendizado")
   customParcelas    Int?    @map("custom_parcelas")
   customOrder       Int     @default(0) @map("custom_order") // Ordem na vitrine
   isFeatured        Boolean @default(false) @map("is_featured") // Destaque na vitrine

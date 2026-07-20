@@ -5,6 +5,12 @@ import { Settings2 } from "lucide-react"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet"
 import { appDomain } from "@/lib/tenant/urls"
 import {
+  APRENDIZADO_DEFAULT,
+  APRENDIZADO_MAX_ITEMS,
+  aprendizadoToText,
+  parseAprendizado,
+} from "@/lib/courses/aprendizado"
+import {
   CategoryManagerDialog,
   type Category,
 } from "./category-manager-dialog"
@@ -24,6 +30,7 @@ interface CourseDetail {
   destaqueHome: boolean
   ordemHome: number | null
   descricaoOverride: string | null
+  aprendizado: string[]
   capaOverride: string | null
   categoriaLoja: string | null
   categoryId: string | null
@@ -66,6 +73,9 @@ export function CatalogEditDrawer({ courseId, open, onOpenChange, onSaved }: Cat
   const [tenants, setTenants] = useState<TenantLookup[]>([])
   const [tenantFilter, setTenantFilter] = useState("")
   const [categoryDialogOpen, setCategoryDialogOpen] = useState(false)
+  // Texto cru do textarea de "O que vai aprender" (1 item por linha). Mantido
+  // fora de `detail` para não perder linhas em branco enquanto o admin digita.
+  const [aprendizadoText, setAprendizadoText] = useState("")
 
   const loadCategories = useCallback(async () => {
     try {
@@ -104,8 +114,11 @@ export function CatalogEditDrawer({ courseId, open, onOpenChange, onSaved }: Cat
     fetch(`/api/admin/catalogo/${courseId}`, { signal: ctrl.signal })
       .then((r) => r.json())
       .then((b) => {
-        if (b.data) setDetail(b.data as CourseDetail)
-        else setError(b.error ?? "Falha ao carregar curso")
+        if (b.data) {
+          const data = b.data as CourseDetail
+          setDetail(data)
+          setAprendizadoText(aprendizadoToText(data.aprendizado))
+        } else setError(b.error ?? "Falha ao carregar curso")
       })
       .catch((err) => {
         if (err?.name !== "AbortError") setError("Erro de rede")
@@ -126,6 +139,7 @@ export function CatalogEditDrawer({ courseId, open, onOpenChange, onSaved }: Cat
       destaqueHome: detail.destaqueHome,
       ordemHome: detail.ordemHome,
       descricaoOverride: detail.descricaoOverride,
+      aprendizado: parseAprendizado(aprendizadoText),
       capaOverride: detail.capaOverride,
       parcelasOverride: detail.parcelasOverride,
       categoriaLoja: detail.categoriaLoja,
@@ -414,6 +428,25 @@ export function CatalogEditDrawer({ courseId, open, onOpenChange, onSaved }: Cat
                 }
                 className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
               />
+            </div>
+
+            <div>
+              <label htmlFor="aprendizado" className="text-xs font-semibold text-gray-700">
+                O que voce vai aprender — 1 item por linha (max {APRENDIZADO_MAX_ITEMS})
+              </label>
+              <textarea
+                id="aprendizado"
+                rows={6}
+                value={aprendizadoText}
+                onChange={(e) => setAprendizadoText(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                placeholder={APRENDIZADO_DEFAULT.join("\n")}
+              />
+              <p className="mt-1 text-[11px] text-gray-500">
+                Vira o PADRAO deste curso em todas as vitrines (PMB e revendas).
+                Cada revenda pode sobrescrever na vitrine dela. Em branco = texto
+                generico.
+              </p>
             </div>
 
             {detail.paymentTypeMain === "ONE_TIME" && (

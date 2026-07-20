@@ -14,6 +14,7 @@ import {
   ShieldCheck,
   Smartphone,
 } from "lucide-react"
+import { resolveAprendizado } from "@/lib/courses/aprendizado"
 
 export interface CourseDetailData {
   slug: string
@@ -41,6 +42,12 @@ export interface CourseDetailData {
    * Quando vazia/ausente, a seção não é renderizada e a página segue como hoje.
    */
   matriz?: string[]
+  /**
+   * Bullets de "O que você vai aprender", já resolvidos pela hierarquia
+   * revenda > PMB (ver src/lib/courses/aprendizado.ts). Vazio/ausente => a
+   * seção cai no texto genérico APRENDIZADO_DEFAULT.
+   */
+  aprendizado?: string[]
 }
 
 interface CourseDetailViewProps {
@@ -63,15 +70,6 @@ interface CourseDetailViewProps {
    */
   inquirySlot?: React.ReactNode
 }
-
-const APRENDIZADO_DEFAULT = [
-  "Fundamentos teóricos e práticos da profissão",
-  "Ferramentas e materiais essenciais do dia a dia",
-  "Técnicas modernas e mais procuradas no mercado",
-  "Como atender clientes com excelência",
-  "Precificação e gestão do seu negócio",
-  "Marketing e captação nas redes sociais",
-]
 
 const PARA_QUEM = [
   "Quem quer aprender uma profissão do zero",
@@ -267,9 +265,9 @@ export function CourseDetailView({
                 O que você vai aprender
               </h2>
               <ul className="mt-4 grid gap-3 sm:grid-cols-2">
-                {APRENDIZADO_DEFAULT.map((item) => (
+                {resolveAprendizado(course.aprendizado).map((item, idx) => (
                   <li
-                    key={item}
+                    key={`${idx}-${item}`}
                     className="flex items-start gap-2.5 rounded-xl border border-[rgba(2,89,24,0.08)] bg-white p-4 text-[14px] text-[var(--color-pmb-green)]"
                   >
                     <CheckCircle2

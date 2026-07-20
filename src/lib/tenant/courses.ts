@@ -320,6 +320,11 @@ export interface TenantCourseDetail extends TenantCourseListItem {
   lessons: Array<{ id: string; nome: string; ordem: number }>
   /** Matriz curricular oficial (conteúdo global PMB). Vazia => curso sem matriz. */
   matriz: string[]
+  /**
+   * "O que você vai aprender" já resolvido: override da revenda quando existe,
+   * senão o padrão da PMB. Vazio => a página usa o texto genérico.
+   */
+  aprendizado: string[]
 }
 
 export async function getTenantCourseBySlug(
@@ -392,6 +397,11 @@ export async function getTenantCourseBySlug(
         ordem: l.ordem,
       })),
       matriz: tc.course.matrizCurricular,
+      // Hierarquia: revenda > PMB. Lista vazia da revenda = "herda a da PMB".
+      aprendizado:
+        tc.customAprendizado.length > 0
+          ? tc.customAprendizado
+          : tc.course.aprendizado,
     }
   } catch (error) {
     contextLogger().error(

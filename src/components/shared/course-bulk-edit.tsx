@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { Info, Loader2, Wand2, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { resolveAprendizado } from "@/lib/courses/aprendizado"
 import {
   buildBulkItems,
   draftFromRow,
@@ -20,6 +21,8 @@ interface BulkRow {
   defaultParcelas: number | null
   customDescription: string | null
   defaultDescription: string | null
+  customAprendizado: string[]
+  defaultAprendizado: string[]
 }
 
 interface CourseBulkEditProps {
@@ -40,7 +43,7 @@ export function CourseBulkEdit({
   onSaved,
   endpoint,
   title = "Edição em massa",
-  subtitle = "Edite preço e descrição de vários cursos de uma vez.",
+  subtitle = "Edite preço, descrição e o que o aluno vai aprender em vários cursos de uma vez.",
   scopeNote,
 }: CourseBulkEditProps) {
   const [rows, setRows] = useState<BulkRow[] | null>(null)
@@ -123,7 +126,8 @@ export function CourseBulkEdit({
       const original = draftFromRow(row)
       if (
         d.price !== original.price ||
-        d.description !== original.description
+        d.description !== original.description ||
+        d.aprendizado !== original.aprendizado
       ) {
         set.add(row.id)
       }
@@ -187,7 +191,7 @@ export function CourseBulkEdit({
         role="dialog"
         aria-modal="true"
         aria-labelledby="course-bulk-edit-title"
-        className="relative flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl"
+        className="relative flex max-h-[90vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl"
       >
         <header className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
           <div>
@@ -288,6 +292,12 @@ export function CourseBulkEdit({
                   <th className="py-2 pr-3">Curso</th>
                   <th className="w-32 px-3 py-2">Preço (R$)</th>
                   <th className="px-3 py-2">Descrição</th>
+                  <th className="px-3 py-2">
+                    O que vai aprender
+                    <span className="block font-normal normal-case tracking-normal text-gray-400">
+                      1 item por linha
+                    </span>
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -337,6 +347,19 @@ export function CourseBulkEdit({
                               : "Descrição padrão do catálogo"
                           }
                           className="w-full resize-y rounded-md border border-gray-200 px-2 py-1.5 text-xs outline-none focus:border-[var(--color-pmb-green)] focus:ring-1 focus:ring-[var(--color-pmb-lime)]"
+                        />
+                      </td>
+                      <td className="px-3 py-3">
+                        <textarea
+                          value={d.aprendizado}
+                          onChange={(e) =>
+                            updateDraft(row.id, { aprendizado: e.target.value })
+                          }
+                          rows={4}
+                          placeholder={resolveAprendizado(
+                            row.defaultAprendizado,
+                          ).join("\n")}
+                          className="w-full resize-y rounded-md border border-gray-200 px-2 py-1.5 font-sans text-xs outline-none focus:border-[var(--color-pmb-green)] focus:ring-1 focus:ring-[var(--color-pmb-lime)]"
                         />
                       </td>
                     </tr>

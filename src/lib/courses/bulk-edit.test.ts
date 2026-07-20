@@ -26,6 +26,7 @@ describe("buildBulkItems", () => {
     price: 197.9,
     customParcelas: null,
     customDescription: null,
+    customAprendizado: [],
   }
   // Curso sem preço (price 0) — ex. curso LMS oculto. Aparece na planilha.
   const free: BulkRowInput = {
@@ -34,6 +35,7 @@ describe("buildBulkItems", () => {
     price: 0,
     customParcelas: null,
     customDescription: null,
+    customAprendizado: [],
   }
 
   it("envia somente os campos alterados (parcelas) sem tocar no preço", () => {
@@ -96,12 +98,60 @@ describe("buildBulkItems", () => {
   it("envia preço e parcelas juntos quando ambos mudaram", () => {
     const rows = [priced]
     const drafts = rowsToDrafts(rows)
-    drafts.a = { price: "250,00", parcelas: "6", description: "" }
+    drafts.a = {
+      price: "250,00",
+      parcelas: "6",
+      description: "",
+      aprendizado: "",
+    }
 
     const res = buildBulkItems(rows, drafts, new Set(["a"]))
     expect(res.ok).toBe(true)
     if (!res.ok) return
     expect(res.items).toEqual([{ id: "a", price: 250, customParcelas: 6 }])
+  })
+
+  it("envia o 'vai aprender' como lista, uma linha por item", () => {
+    const rows = [priced]
+    const drafts = rowsToDrafts(rows)
+    drafts.a = {
+      ...drafts.a,
+      aprendizado: "Corte masculino\n  Barba  \n\nColoração\n",
+    }
+
+    const res = buildBulkItems(rows, drafts, new Set(["a"]))
+    expect(res.ok).toBe(true)
+    if (!res.ok) return
+    // Linhas em branco somem e os itens vêm trimados.
+    expect(res.items).toEqual([
+      {
+        id: "a",
+        customAprendizado: ["Corte masculino", "Barba", "Coloração"],
+      },
+    ])
+  })
+
+  it("limpar o 'vai aprender' envia lista vazia (volta ao padrão)", () => {
+    const rows = [{ ...priced, customAprendizado: ["Item próprio"] }]
+    const drafts = rowsToDrafts(rows)
+    drafts.a = { ...drafts.a, aprendizado: "" }
+
+    const res = buildBulkItems(rows, drafts, new Set(["a"]))
+    expect(res.ok).toBe(true)
+    if (!res.ok) return
+    expect(res.items).toEqual([{ id: "a", customAprendizado: [] }])
+  })
+
+  it("não envia o 'vai aprender' quando só o preço mudou", () => {
+    const rows = [{ ...priced, customAprendizado: ["Item próprio"] }]
+    const drafts = rowsToDrafts(rows)
+    drafts.a = { ...drafts.a, price: "250,00" }
+
+    const res = buildBulkItems(rows, drafts, new Set(["a"]))
+    expect(res.ok).toBe(true)
+    if (!res.ok) return
+    expect(res.items).toEqual([{ id: "a", price: 250 }])
+    expect(res.items[0]).not.toHaveProperty("customAprendizado")
   })
 
   it("ignora linhas não marcadas como alteradas", () => {

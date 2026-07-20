@@ -4,6 +4,10 @@ import { prisma } from "@/lib/prisma"
 import { requireResellerSession } from "@/lib/auth/reseller-session"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 import { monthlyActive } from "@/lib/tenant/monthly-policy"
+import {
+  APRENDIZADO_MAX_ITEMS,
+  APRENDIZADO_MAX_LEN,
+} from "@/lib/courses/aprendizado"
 
 async function tenantMonthlyActive(tenantId: string): Promise<boolean> {
   const t = await prisma.tenant.findUnique({
@@ -19,6 +23,11 @@ const updateSchema = z.object({
   customDescription: z.string().trim().max(2000).nullable().optional(),
   customCapaUrl: z.string().url().nullable().optional(),
   customParcelas: z.number().int().min(1).max(24).nullable().optional(),
+  // Lista vazia = "voltar ao padrão da PMB" (não existe "esconder a seção").
+  customAprendizado: z
+    .array(z.string().trim().min(1).max(APRENDIZADO_MAX_LEN))
+    .max(APRENDIZADO_MAX_ITEMS)
+    .optional(),
   isVisible: z.boolean().optional(),
   isFeatured: z.boolean().optional(),
   customOrder: z.number().int().min(0).optional(),
@@ -86,11 +95,15 @@ export const GET = withRequestContextParams<{ id: string }>(
         customDescription: tc.customDescription,
         customCapaUrl: tc.customCapaUrl,
         customParcelas: tc.customParcelas,
+        customAprendizado: tc.customAprendizado,
         // Defaults vindos do catálogo (úteis pro form mostrar "valor padrão")
         defaultCapaUrl: tc.course.capaOverride ?? tc.course.capaImageUrl,
         defaultParcelas:
           tc.course.parcelasOverride ?? tc.course.parcelasSugeridas,
         defaultDescription: tc.course.descricaoOverride ?? tc.course.descricao,
+        // Padrão definido pela PMB no catálogo mãe (vazio => texto genérico,
+        // que o painel exibe como placeholder).
+        defaultAprendizado: tc.course.aprendizado,
         enrollmentsCount: tc._count.enrollments,
       },
     })
@@ -158,6 +171,9 @@ export const PUT = withRequestContextParams<{ id: string }>(
         ...(parsed.data.customParcelas !== undefined && {
           customParcelas: parsed.data.customParcelas,
         }),
+        ...(parsed.data.customAprendizado !== undefined && {
+          customAprendizado: parsed.data.customAprendizado,
+        }),
         ...(parsed.data.isVisible !== undefined && { isVisible: parsed.data.isVisible }),
         ...(parsed.data.isFeatured !== undefined && { isFeatured: parsed.data.isFeatured }),
         ...(parsed.data.customOrder !== undefined && { customOrder: parsed.data.customOrder }),
@@ -172,6 +188,7 @@ export const PUT = withRequestContextParams<{ id: string }>(
         customDescription: updated.customDescription,
         customCapaUrl: updated.customCapaUrl,
         customParcelas: updated.customParcelas,
+        customAprendizado: updated.customAprendizado,
         isVisible: updated.isVisible,
         isFeatured: updated.isFeatured,
         customOrder: updated.customOrder,

@@ -7,6 +7,13 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import {
+  APRENDIZADO_DEFAULT,
+  APRENDIZADO_MAX_ITEMS,
+  aprendizadoToText,
+  parseAprendizado,
+  resolveAprendizado,
+} from "@/lib/courses/aprendizado"
 import type { CourseListItem } from "./course-types"
 
 interface CourseEditDrawerProps {
@@ -30,9 +37,11 @@ interface CourseDetail {
   customDescription: string | null
   customCapaUrl: string | null
   customParcelas: number | null
+  customAprendizado: string[]
   defaultCapaUrl: string | null
   defaultParcelas: number | null
   defaultDescription: string | null
+  defaultAprendizado: string[]
 }
 
 export function CourseEditDrawer({
@@ -46,6 +55,9 @@ export function CourseEditDrawer({
   const [price, setPrice] = useState("")
   const [paymentType, setPaymentType] = useState<"ONE_TIME" | "MONTHLY">("ONE_TIME")
   const [description, setDescription] = useState("")
+  // Texto cru de "O que vai aprender" (1 item por linha). Vazio = herda o
+  // padrão da PMB — por isso o placeholder mostra o que está herdado hoje.
+  const [aprendizado, setAprendizado] = useState("")
   const [parcelas, setParcelas] = useState("")
   const [isVisible, setIsVisible] = useState(true)
   const [isFeatured, setIsFeatured] = useState(false)
@@ -82,6 +94,7 @@ export function CourseEditDrawer({
         )
         setPaymentType(data.paymentType)
         setDescription(data.customDescription ?? "")
+        setAprendizado(aprendizadoToText(data.customAprendizado))
         setParcelas(
           data.customParcelas != null ? String(data.customParcelas) : "",
         )
@@ -188,6 +201,8 @@ export function CourseEditDrawer({
           price: numericPrice,
           paymentType,
           customDescription: description.trim() || null,
+          // Lista vazia = volta ao padrão da PMB.
+          customAprendizado: parseAprendizado(aprendizado),
           // ONE_TIME não usa parcelas por curso (o "Nx sem juros" vem do nº
           // global da unidade e o cartão vai até 12x). Limpa o valor para não
           // deixar um teto antigo/herdado preso e invisível no checkout.
@@ -320,6 +335,31 @@ export function CourseEditDrawer({
                       : "Deixe em branco para usar a descrição padrão."
                   }
                 />
+              </div>
+
+              <div>
+                <Label htmlFor="edit-aprendizado">
+                  O que você vai aprender{" "}
+                  <span className="text-[11px] font-normal text-gray-500">
+                    (1 item por linha · até {APRENDIZADO_MAX_ITEMS})
+                  </span>
+                </Label>
+                <Textarea
+                  id="edit-aprendizado"
+                  rows={6}
+                  value={aprendizado}
+                  onChange={(e) => setAprendizado(e.target.value)}
+                  className="mt-1.5"
+                  placeholder={resolveAprendizado(
+                    detail?.defaultAprendizado,
+                    APRENDIZADO_DEFAULT,
+                  ).join("\n")}
+                />
+                <p className="mt-1 text-[11px] text-gray-500">
+                  {aprendizado.trim()
+                    ? "Lista personalizada — vale só nesta vitrine."
+                    : "Em branco: usa a lista padrão do catálogo (mostrada acima em cinza)."}
+                </p>
               </div>
 
               <div>

@@ -4,12 +4,25 @@ import { prisma } from "@/lib/prisma"
 import { requireAdminSession } from "@/lib/auth/admin-session"
 import { requireSuperAdmin } from "@/lib/auth/guards"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
+import {
+  APRENDIZADO_MAX_ITEMS,
+  APRENDIZADO_MAX_LEN,
+} from "@/lib/courses/aprendizado"
+
+/**
+ * Bullets de "O que você vai aprender". Lista vazia é válida e significa
+ * "voltar ao texto genérico" — o mesmo contrato usado no painel da revenda.
+ */
+const aprendizadoSchema = z
+  .array(z.string().trim().min(1).max(APRENDIZADO_MAX_LEN))
+  .max(APRENDIZADO_MAX_ITEMS)
 
 const patchSchema = z.object({
   precoVitrineMain: z.number().nonnegative().nullable().optional(),
   destaqueHome: z.boolean().optional(),
   ordemHome: z.number().int().nullable().optional(),
   descricaoOverride: z.string().nullable().optional(),
+  aprendizado: aprendizadoSchema.optional(),
   capaOverride: z.string().url().nullable().optional(),
   parcelasOverride: z.number().int().min(1).max(24).nullable().optional(),
   categoriaLoja: z.string().nullable().optional(),
@@ -62,6 +75,7 @@ export const GET = withRequestContextParams<{ id: string }>(
       destaqueHome: true,
       ordemHome: true,
       descricaoOverride: true,
+      aprendizado: true,
       capaOverride: true,
       parcelasSugeridas: true,
       parcelasOverride: true,
@@ -158,6 +172,7 @@ export const PATCH = withRequestContextParams<{ id: string }>(
       destaqueHome: true,
       ordemHome: true,
       descricaoOverride: true,
+      aprendizado: true,
       capaOverride: true,
       parcelasOverride: true,
       categoriaLoja: true,
