@@ -1,13 +1,11 @@
 "use client"
 
 import Link from "next/link"
-import { useEffect, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
 import {
   Share2,
   Copy,
   Check,
-  Save,
-  RotateCcw,
   Users,
   TrendingUp,
   TrendingDown,
@@ -37,48 +35,19 @@ export interface ReferrerSummary {
   slug: string
 }
 
-interface TierRow {
-  untilMonth: number | null
-  percent: number
-}
-
 interface ResellerReferralConfigProps {
   tenantId: string
   referralCode: string
-  referralPercent: number | null
+  /** Minimo de indicacoes ativas em vigor — apenas para exibir a elegibilidade.
+   *  A EDICAO da regra vive no card "Regra de comissao de indicacao". */
   referralMinReferrals: number | null
-  /** Escala de comissão desta unidade (quando indicada). null/[] = sem escala. */
-  referralTiers: unknown
-  /** Data de ativação (base p/ contar os meses da escala). ISO ou null. */
-  activatedAt: string | null
   pixKey: string | null
   pixKeyType: string | null
   referrer: ReferrerSummary | null
   stats: ReferralStats
-  onSaved?: () => void
 }
 
 /** Normaliza o JSON salvo numa lista de faixas para o editor. */
-function parseTierRows(value: unknown): TierRow[] {
-  if (!Array.isArray(value)) return []
-  const rows: TierRow[] = []
-  for (const raw of value) {
-    if (!raw || typeof raw !== "object") continue
-    const obj = raw as Record<string, unknown>
-    const percent = Number(obj.percent)
-    if (!Number.isFinite(percent)) continue
-    const until =
-      obj.untilMonth === null || obj.untilMonth === undefined
-        ? null
-        : Number(obj.untilMonth)
-    rows.push({
-      untilMonth: until != null && Number.isFinite(until) ? until : null,
-      percent,
-    })
-  }
-  return rows
-}
-
 function formatBRL(value: number): string {
   return value.toLocaleString("pt-BR", {
     style: "currency",
@@ -155,49 +124,18 @@ function buildMonthOptions(count: number): Array<{ value: string; label: string 
 export function ResellerReferralConfig({
   tenantId,
   referralCode,
-  referralPercent,
   referralMinReferrals,
-  referralTiers,
-  activatedAt,
   pixKey,
   pixKeyType,
   referrer,
   stats,
-  onSaved,
 }: ResellerReferralConfigProps) {
-  const [percentInput, setPercentInput] = useState<string>(
-    referralPercent != null ? String(referralPercent) : "",
-  )
-  const [tierRows, setTierRows] = useState<TierRow[]>(() =>
-    parseTierRows(referralTiers),
-  )
-  const [savingTiers, setSavingTiers] = useState(false)
-  useEffect(() => {
-    setTierRows(parseTierRows(referralTiers))
-  }, [referralTiers])
-  const [minInput, setMinInput] = useState<string>(
-    referralMinReferrals != null ? String(referralMinReferrals) : "",
-  )
-  const [savingMin, setSavingMin] = useState(false)
-  const [resettingMin, setResettingMin] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const [resetting, setResetting] = useState(false)
   const [copied, setCopied] = useState(false)
   const monthOptions = useMemo(() => buildMonthOptions(12), [])
   const [demoMonth, setDemoMonth] = useState<string>(
     monthOptions[0]?.value ?? currentMonthIso(),
   )
   const [downloading, setDownloading] = useState(false)
-
-  useEffect(() => {
-    setPercentInput(referralPercent != null ? String(referralPercent) : "")
-  }, [referralPercent])
-
-  useEffect(() => {
-    setMinInput(
-      referralMinReferrals != null ? String(referralMinReferrals) : "",
-    )
-  }, [referralMinReferrals])
 
   async function copyCode() {
     try {
@@ -207,182 +145,6 @@ export function ResellerReferralConfig({
       setTimeout(() => setCopied(false), 2000)
     } catch {
       toast.error("Não foi possível copiar")
-    }
-  }
-
-  async function savePercent() {
-    const raw = percentInput.trim()
-    if (!raw) {
-      toast.error("Informe um percentual ou use 'Usar padrão'")
-      return
-    }
-    const parsed = Number(raw.replace(",", "."))
-    if (Number.isNaN(parsed) || parsed < 0 || parsed > 100) {
-      toast.error("Percentual inválido (0 a 100)")
-      return
-    }
-    setSaving(true)
-    try {
-      const res = await fetch(
-        `/api/admin/tenants/${tenantId}/referral-percent`,
-        {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ percent: parsed }),
-        },
-      )
-      const body = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        toast.error(body.error ?? "Falha ao salvar percentual")
-        return
-      }
-      toast.success("Percentual atualizado")
-      onSaved?.()
-    } catch {
-      toast.error("Erro de rede ao salvar")
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  async function resetToDefault() {
-    setResetting(true)
-    try {
-      const res = await fetch(
-        `/api/admin/tenants/${tenantId}/referral-percent`,
-        {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ percent: null }),
-        },
-      )
-      const body = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        toast.error(body.error ?? "Falha ao redefinir")
-        return
-      }
-      setPercentInput("")
-      toast.success(`Voltou ao padrão (${stats.defaultPercent}%)`)
-      onSaved?.()
-    } catch {
-      toast.error("Erro de rede ao redefinir")
-    } finally {
-      setResetting(false)
-    }
-  }
-
-  function addTierRow() {
-    setTierRows((rows) => [...rows, { untilMonth: null, percent: 0 }])
-  }
-  function removeTierRow(index: number) {
-    setTierRows((rows) => rows.filter((_, i) => i !== index))
-  }
-  function updateTierRow(index: number, patch: Partial<TierRow>) {
-    setTierRows((rows) =>
-      rows.map((r, i) => (i === index ? { ...r, ...patch } : r)),
-    )
-  }
-
-  async function saveTiers() {
-    // Validação: percentuais 0–100; untilMonth >=1 ou vazio (=null). No máximo
-    // uma faixa "em diante" (null), que deve ser a última.
-    for (const r of tierRows) {
-      if (!Number.isFinite(r.percent) || r.percent < 0 || r.percent > 100) {
-        toast.error("Percentual de faixa inválido (0 a 100)")
-        return
-      }
-      if (r.untilMonth != null && (!Number.isInteger(r.untilMonth) || r.untilMonth < 1)) {
-        toast.error("Mês limite inválido (inteiro ≥ 1 ou vazio para 'em diante')")
-        return
-      }
-    }
-    const openTiers = tierRows.filter((r) => r.untilMonth == null)
-    if (openTiers.length > 1) {
-      toast.error("Só pode haver uma faixa 'em diante' (sem mês limite)")
-      return
-    }
-    setSavingTiers(true)
-    try {
-      const res = await fetch(`/api/admin/tenants/${tenantId}/referral-percent`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        // [] limpa a escala (volta ao percentual fixo).
-        body: JSON.stringify({ tiers: tierRows }),
-      })
-      const body = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        toast.error(body.error ?? "Falha ao salvar escala")
-        return
-      }
-      toast.success(
-        tierRows.length > 0 ? "Escala de comissão salva" : "Escala removida",
-      )
-      onSaved?.()
-    } catch {
-      toast.error("Erro de rede ao salvar escala")
-    } finally {
-      setSavingTiers(false)
-    }
-  }
-
-  async function saveMinReferrals() {
-    const raw = minInput.trim()
-    if (!raw) {
-      toast.error("Informe o mínimo ou use 'Usar padrão'")
-      return
-    }
-    const parsed = Number(raw)
-    if (!Number.isInteger(parsed) || parsed < 0 || parsed > 1000) {
-      toast.error("Mínimo inválido (número inteiro de 0 a 1000)")
-      return
-    }
-    setSavingMin(true)
-    try {
-      const res = await fetch(
-        `/api/admin/tenants/${tenantId}/referral-percent`,
-        {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ minReferrals: parsed }),
-        },
-      )
-      const body = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        toast.error(body.error ?? "Falha ao salvar mínimo")
-        return
-      }
-      toast.success("Mínimo de indicações atualizado")
-      onSaved?.()
-    } catch {
-      toast.error("Erro de rede ao salvar")
-    } finally {
-      setSavingMin(false)
-    }
-  }
-
-  async function resetMinToDefault() {
-    setResettingMin(true)
-    try {
-      const res = await fetch(
-        `/api/admin/tenants/${tenantId}/referral-percent`,
-        {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ minReferrals: null }),
-        },
-      )
-      const body = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        toast.error(body.error ?? "Falha ao redefinir")
-        return
-      }
-      setMinInput("")
-      toast.success(`Voltou ao padrão (${stats.defaultMinReferrals})`)
-      onSaved?.()
-    } catch {
-      toast.error("Erro de rede ao redefinir")
-    } finally {
-      setResettingMin(false)
     }
   }
 
@@ -418,14 +180,9 @@ export function ResellerReferralConfig({
     }
   }
 
-  const usingDefault = referralPercent == null
-  const effectivePercent = usingDefault ? stats.defaultPercent : referralPercent
   const nextPayout = computeNextPayoutDate(stats.payoutDay)
 
-  const usingDefaultMin = referralMinReferrals == null
-  const effectiveMin = usingDefaultMin
-    ? stats.defaultMinReferrals
-    : referralMinReferrals
+  const effectiveMin = referralMinReferrals ?? stats.defaultMinReferrals
   const meetsMin = effectiveMin <= 0 || stats.activeReferrals >= effectiveMin
 
   return (
@@ -438,18 +195,10 @@ export function ResellerReferralConfig({
             Indicação
           </h3>
         </div>
-        <span
-          className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
-            usingDefault
-              ? "bg-gray-100 text-gray-600"
-              : "bg-[var(--color-pmb-lime-50)] text-[var(--color-pmb-green-900)]"
-          }`}
-        >
-          {usingDefault ? "Padrão" : "Override"} {effectivePercent}%
-        </span>
       </div>
       <p className="mt-1 text-xs text-gray-600">
-        Código de indicação, comissões e percentual deste revendedor.
+        Código de indicação, PIX e demonstrativo. A regra de comissão fica no
+        card abaixo.
       </p>
 
       {/* Codigo de indicacao */}
@@ -500,198 +249,16 @@ export function ResellerReferralConfig({
         </div>
       )}
 
-      {/* Editor de % */}
+      {/* Elegibilidade (somente leitura).
+          A EDICAO da regra de comissao — percentual, escala por tempo e minimo
+          de indicacoes — vive agora no card unico "Regra de comissao de
+          indicacao" (ResellerCommissionOverrideForm), logo abaixo. Antes havia
+          um editor de % aqui e outro la, gravando a mesma coluna por caminhos
+          diferentes: quem preenchia o daqui via o sistema pagar o padrao global. */}
       <div className="mt-5 space-y-2 border-t border-gray-100 pt-5">
-        <label className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
-          Percentual de comissão (override)
-        </label>
-        <div className="flex items-center gap-2">
-          <div className="relative flex-1">
-            <input
-              type="number"
-              min={0}
-              max={100}
-              step="0.1"
-              value={percentInput}
-              onChange={(e) => setPercentInput(e.target.value)}
-              placeholder={`Padrão: ${stats.defaultPercent}`}
-              className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 pr-8 font-mono text-sm focus:border-[var(--color-pmb-green)] focus:outline-none focus:ring-1 focus:ring-[var(--color-pmb-green)]"
-            />
-            <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs text-gray-400">
-              %
-            </span>
-          </div>
-          <Button
-            size="sm"
-            type="button"
-            onClick={savePercent}
-            disabled={saving || resetting}
-            className="bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)]"
-          >
-            <Save className="mr-1.5 h-3.5 w-3.5" />
-            {saving ? "Salvando..." : "Salvar %"}
-          </Button>
-        </div>
-        <div className="flex items-center justify-between gap-2">
-          <p className="text-[11px] text-gray-500">
-            {usingDefault
-              ? `Usando padrão global (${stats.defaultPercent}%).`
-              : `Override ativo. Padrão global é ${stats.defaultPercent}%.`}
-          </p>
-          {!usingDefault && (
-            <button
-              type="button"
-              onClick={resetToDefault}
-              disabled={saving || resetting}
-              className="inline-flex items-center gap-1 text-[11px] font-medium text-gray-600 hover:text-[var(--color-pmb-green-900)] disabled:opacity-50"
-            >
-              <RotateCcw className="h-3 w-3" />
-              {resetting ? "Aguarde..." : "Usar padrão"}
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Editor de escala (tiers) por tempo de vida da unidade */}
-      <div className="mt-5 space-y-2 border-t border-gray-100 pt-5">
-        <label className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
-          Escala de comissão por tempo (override)
-        </label>
-        <p className="text-[11px] text-gray-500">
-          Varia o percentual conforme os meses desde a ativação desta unidade.
-          Ex.: até o mês 6 = 50%, depois (em diante) = 20%. Deixe o mês limite
-          vazio para “em diante”. Sem faixas, usa o percentual fixo acima.
-          {activatedAt && (
-            <>
-              {" "}
-              Ativada em{" "}
-              {formatDateBR(new Date(activatedAt))}.
-            </>
-          )}
-        </p>
-
-        {tierRows.length > 0 && (
-          <div className="space-y-2">
-            {tierRows.map((row, i) => (
-              <div key={i} className="flex items-center gap-2">
-                <div className="flex items-center gap-1">
-                  <span className="text-[11px] text-gray-500">até o mês</span>
-                  <input
-                    type="number"
-                    min={1}
-                    step="1"
-                    value={row.untilMonth ?? ""}
-                    placeholder="∞"
-                    onChange={(e) =>
-                      updateTierRow(i, {
-                        untilMonth:
-                          e.target.value.trim() === ""
-                            ? null
-                            : Number(e.target.value),
-                      })
-                    }
-                    className="w-20 rounded-md border border-gray-300 bg-white px-2 py-1.5 font-mono text-sm focus:border-[var(--color-pmb-green)] focus:outline-none focus:ring-1 focus:ring-[var(--color-pmb-green)]"
-                  />
-                </div>
-                <div className="relative flex-1">
-                  <input
-                    type="number"
-                    min={0}
-                    max={100}
-                    step="0.1"
-                    value={row.percent}
-                    onChange={(e) =>
-                      updateTierRow(i, { percent: Number(e.target.value) })
-                    }
-                    className="w-full rounded-md border border-gray-300 bg-white px-3 py-1.5 pr-8 font-mono text-sm focus:border-[var(--color-pmb-green)] focus:outline-none focus:ring-1 focus:ring-[var(--color-pmb-green)]"
-                  />
-                  <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs text-gray-400">
-                    %
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => removeTierRow(i)}
-                  className="rounded-md px-2 py-1 text-[11px] font-medium text-red-600 hover:bg-red-50"
-                >
-                  Remover
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={addTierRow}
-            className="inline-flex items-center gap-1 text-[11px] font-medium text-[var(--color-pmb-green-900)] hover:underline"
-          >
-            + Adicionar faixa
-          </button>
-          <Button
-            size="sm"
-            type="button"
-            onClick={saveTiers}
-            disabled={savingTiers}
-            className="ml-auto bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)]"
-          >
-            <Save className="mr-1.5 h-3.5 w-3.5" />
-            {savingTiers ? "Salvando..." : "Salvar escala"}
-          </Button>
-        </div>
-        <p className="text-[11px] text-gray-500">
-          {tierRows.length > 0
-            ? "A escala tem prioridade sobre o percentual fixo."
-            : "Sem escala configurada — usa o percentual fixo acima."}
-        </p>
-      </div>
-
-      {/* Editor de minimo de indicacoes */}
-      <div className="mt-5 space-y-2 border-t border-gray-100 pt-5">
-        <label className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
-          Mínimo de indicações ativas (override)
-        </label>
-        <div className="flex items-center gap-2">
-          <input
-            type="number"
-            min={0}
-            max={1000}
-            step="1"
-            value={minInput}
-            onChange={(e) => setMinInput(e.target.value)}
-            placeholder={`Padrão: ${stats.defaultMinReferrals}`}
-            className="w-full flex-1 rounded-md border border-gray-300 bg-white px-3 py-2 font-mono text-sm focus:border-[var(--color-pmb-green)] focus:outline-none focus:ring-1 focus:ring-[var(--color-pmb-green)]"
-          />
-          <Button
-            size="sm"
-            type="button"
-            onClick={saveMinReferrals}
-            disabled={savingMin || resettingMin}
-            className="bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)]"
-          >
-            <Save className="mr-1.5 h-3.5 w-3.5" />
-            {savingMin ? "Salvando..." : "Salvar"}
-          </Button>
-        </div>
-        <div className="flex items-center justify-between gap-2">
-          <p className="text-[11px] text-gray-500">
-            {usingDefaultMin
-              ? `Usando padrão global (${stats.defaultMinReferrals}).`
-              : `Override ativo. Padrão global é ${stats.defaultMinReferrals}.`}
-          </p>
-          {!usingDefaultMin && (
-            <button
-              type="button"
-              onClick={resetMinToDefault}
-              disabled={savingMin || resettingMin}
-              className="inline-flex items-center gap-1 text-[11px] font-medium text-gray-600 hover:text-[var(--color-pmb-green-900)] disabled:opacity-50"
-            >
-              <RotateCcw className="h-3 w-3" />
-              {resettingMin ? "Aguarde..." : "Usar padrão"}
-            </button>
-          )}
-        </div>
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+          Elegibilidade
+        </span>
         <div
           className={`rounded-md px-3 py-2 text-[11px] ${
             meetsMin

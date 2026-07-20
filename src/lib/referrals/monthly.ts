@@ -1,13 +1,19 @@
 /**
- * Motor de comissao por FAIXAS (MONTHLY_TIERED) — calculo do fechamento mensal.
+ * Motor de comissao de indicacao — calculo do fechamento mensal.
  *
- * Para cada indicador cujo modo efetivo e MONTHLY_TIERED, apura UMA comissao do
- * mes (ReferralMonthlyCommission, idempotente em (referrer, period)):
+ * Desde a unificacao este e o UNICO motor: todo indicador e apurado aqui,
+ * qualquer que seja o `commissionMode` gravado (o modo legado por pagamento foi
+ * aposentado em ./commission.ts). Nenhum indicador pode "cair fora" dos dois
+ * motores — era assim que uma regra mal configurada rendia R$ 0 em silencio.
+ *
+ * Para cada indicador, apura UMA comissao do mes
+ * (ReferralMonthlyCommission, idempotente em (referrer, period)):
  *   1. Conta o que determina a faixa: novas revendas indicadas no mes OU nº de
  *      unidades ativas (rule.bracketBasis).
  *   2. Escolhe a faixa -> rate (R$ por unidade se FIXED, % se PERCENT).
- *   3. Define a base de pagamento: TODAS as ativas OU so as indicadas no mes
- *      (rule.payoutBase), sempre excluindo cortesia (planValue = 0).
+ *   3. Define a base de pagamento (rule.payoutBase): TODAS as ativas, so as
+ *      indicadas no mes, ou so as que PAGARAM no mes — sempre excluindo
+ *      cortesia (planValue = 0).
  *   4. Valor: FIXED = rate × nº de unidades da base; PERCENT = Σ (mensalidade
  *      recebida no mes × rate / 100) por unidade da base.
  *
@@ -21,12 +27,15 @@ import { computeAvailableAt } from "@/lib/referrals/commission"
 import { swallow } from "@/lib/errors"
 import {
   resolveBracket,
-  resolveEffectivePhases,
   resolvePhase,
   monthsInProgram,
+  type CommissionPlanSettings,
   type CommissionPhase,
-  type GlobalCommissionConfig,
 } from "@/lib/referrals/rules"
+import {
+  resolveEffectiveCommissionForEngine,
+  type GlobalCommissionInput,
+} from "@/lib/referrals/effective-rule"
 
 const SETTINGS_ID = "default"
 const DEFAULT_PAYOUT_DAY = 20
@@ -114,19 +123,23 @@ export async function computeMonthlyCommissions(period: string): Promise<{
       commissionPayoutBase: true,
       commissionBrackets: true,
       commissionPlan: true,
+      defaultReferralPercent: true,
+      defaultReferralMinReferrals: true,
     },
   })
   if (!settings?.referralEnabled) {
     return { processed: 0, created: 0, updated: 0, skipped: 0 }
   }
 
-  const global: GlobalCommissionConfig & { commissionPlan: unknown } = {
+  const global: GlobalCommissionInput = {
     commissionMode: settings.commissionMode,
     commissionBracketBasis: settings.commissionBracketBasis,
     commissionRateType: settings.commissionRateType,
     commissionPayoutBase: settings.commissionPayoutBase,
     commissionBrackets: settings.commissionBrackets,
     commissionPlan: settings.commissionPlan,
+    defaultReferralPercent: settings.defaultReferralPercent,
+    defaultReferralMinReferrals: settings.defaultReferralMinReferrals,
   }
   const payoutDay = settings.referralPayoutDay ?? DEFAULT_PAYOUT_DAY
   const availableAt = computeAvailableAt(range.start, payoutDay)
@@ -144,6 +157,7 @@ export async function computeMonthlyCommissions(period: string): Promise<{
       commissionBrackets: true,
       commissionPlan: true,
       commissionPlanStartedAt: true,
+      referralMinReferrals: true,
     },
   })
 
@@ -153,24 +167,19 @@ export async function computeMonthlyCommissions(period: string): Promise<{
   let skipped = 0
 
   for (const referrer of referrers) {
-    // Modo (legado vs por faixas) e uma escolha de topo (override -> global).
-    const mode = referrer.commissionMode ?? global.commissionMode
-    if (mode !== "MONTHLY_TIERED") continue // motor legado cuida desses
-
-    // Resolve o PLANO de fases efetivo (override -> global -> faixa singular).
+    // Motor unico: nao ha mais desvio por `commissionMode`. Todo indicador e
+    // apurado aqui, e a regra efetiva nunca vem vazia (ha fallback percentual).
     // A fase ativa NAO e escolhida aqui: cada unidade indicada tem o seu proprio
     // relogio (idade da unidade), entao a selecao de fase acontece por unidade
     // dentro de computeForReferrer.
-    const phases = resolveEffectivePhases(referrer, global)
-    if (phases.length === 0) {
-      skipped++
-      continue // sem plano nem faixas configuradas — nada a apurar
-    }
+    const rule = resolveEffectiveCommissionForEngine(referrer, global)
     processed++
     const outcome = await computeForReferrer(
       referrer.id,
       referrer.name,
-      phases,
+      rule.phases,
+      rule.settings,
+      rule.minReferrals,
       period,
       range,
       availableAt,
@@ -187,6 +196,8 @@ async function computeForReferrer(
   referrerTenantId: string,
   referrerName: string,
   phases: CommissionPhase[],
+  settings: CommissionPlanSettings,
+  minReferrals: number,
   period: string,
   range: { start: Date; end: Date },
   availableAt: Date,
@@ -221,6 +232,14 @@ async function computeForReferrer(
     prisma.tenant.count({ where: { referrerTenantId, status: "ACTIVE" } }),
   ])
 
+  // PORTAO DE ELEGIBILIDADE (herdado do motor legado): o indicador so passa a
+  // receber depois de atingir o minimo de indicacoes ATIVAS. Enquanto nao
+  // atinge, a competencia fica retida (nenhuma linha criada). Quando atinge, o
+  // catch-up do cron (recentClosedPeriods) reapura os meses retidos da janela.
+  if (minReferrals > 0 && activeTotalCount < minReferrals) {
+    return removeIfExists(existing?.id)
+  }
+
   // Universo de unidades candidatas: ativas com plano pago (cortesia planValue=0
   // nunca gera pagamento). A inclusao final depende do payoutBase da FASE ATIVA
   // de cada unidade (avaliado no loop). createdAt/activatedAt/commissionPlanStartedAt
@@ -238,28 +257,96 @@ async function computeForReferrer(
   })
   if (units.length === 0) return removeIfExists(existing?.id)
 
-  // Mensalidades recebidas no mes por unidade (so usadas por fases PERCENT).
+  // Mensalidades recebidas no mes, FATURA A FATURA (nao somadas por unidade).
+  //
+  // A granularidade por fatura e obrigatoria por dois motivos:
+  //   1. `clock: "paidInvoices"` precisa saber QUAL fatura e (1a, 2a, ...);
+  //   2. `promoPaidUntil` e uma regra sobre a DATA de cada pagamento — uma janela
+  //      que termina no meio do mes (ex.: 15/12) parte a competencia ao meio, e
+  //      duas unidades da mesma apuracao saem com percentuais diferentes.
+  // Somar por unidade, como era antes, apagava as duas informacoes.
+  //
   // Mesmo anti-duplicidade do motor legado: ignora pagamentos ja cobertos por
   // uma ReferralCommission legada nao-cancelada.
-  const paidByTenant = new Map<string, Prisma.Decimal>()
+  //
+  // A busca traz TODAS as faturas recebidas do mes, inclusive as ja cobertas
+  // pelo ledger legado. O filtro anti-duplicidade vira uma marca (`elegivel`)
+  // em vez de um `where`, porque as duas perguntas sao diferentes:
+  //   - "que numero de fatura e esta?" -> conta TODAS (a fatura ja comissionada
+  //     pelo legado continua sendo a 1a da unidade);
+  //   - "esta fatura gera valor agora?" -> so as elegiveis.
+  // Filtrar na query misturava as duas: a 2a fatura do mes virava indice 0 da
+  // lista e era tratada como a primeira, pagando o percentual de entrada duas
+  // vezes no mes de transicao entre motores.
+  const ids = units.map((u) => u.id)
+  const paidInMonth = new Map<
+    string,
+    { amount: Prisma.Decimal; paidAt: Date; elegivel: boolean }[]
+  >()
   {
-    const ids = units.map((u) => u.id)
+    const rows = await prisma.tenantPayment.findMany({
+      where: {
+        tenantId: { in: ids },
+        status: { in: RECEIVED_STATUSES },
+        paidAt: { gte: range.start, lt: range.end },
+      },
+      select: {
+        tenantId: true,
+        amount: true,
+        paidAt: true,
+        referralCommission: { select: { status: true } },
+      },
+      orderBy: { paidAt: "asc" },
+    })
+    for (const r of rows) {
+      if (!r.paidAt) continue
+      const list = paidInMonth.get(r.tenantId) ?? []
+      list.push({
+        amount: new Prisma.Decimal(r.amount),
+        paidAt: r.paidAt,
+        elegivel:
+          !r.referralCommission || r.referralCommission.status === "CANCELLED",
+      })
+      paidInMonth.set(r.tenantId, list)
+    }
+  }
+
+  // Quantas faturas a unidade JA tinha pago antes desta competencia. E o que
+  // define se a fatura deste mes e a 1a da vida dela (relogio `paidInvoices`).
+  // Aqui NAO aplicamos o filtro anti-duplicidade: a pergunta e "que numero de
+  // fatura e esta", e uma fatura antiga paga pelo motor legado conta igual.
+  const priorPaidCount = new Map<string, number>()
+  if (settings.clock === "paidInvoices") {
     const grouped = await prisma.tenantPayment.groupBy({
       by: ["tenantId"],
       where: {
         tenantId: { in: ids },
         status: { in: RECEIVED_STATUSES },
-        paidAt: { gte: range.start, lt: range.end },
-        OR: [
-          { referralCommission: { is: null } },
-          { referralCommission: { status: "CANCELLED" } },
-        ],
+        paidAt: { lt: range.start },
       },
-      _sum: { amount: true },
+      _count: { _all: true },
     })
-    for (const g of grouped) {
-      paidByTenant.set(g.tenantId, new Prisma.Decimal(g._sum.amount ?? 0))
+    for (const g of grouped) priorPaidCount.set(g.tenantId, g._count._all)
+  }
+
+  /**
+   * Fase valida para uma cobranca. `elapsed` e meses ou nº de faturas ja pagas,
+   * conforme o relogio. A janela promocional derruba para a fase FINAL qualquer
+   * fatura paga depois do limite — mesmo sendo a 1a da unidade.
+   */
+  const phaseFor = (
+    elapsed: number,
+    paidAt: Date | null,
+  ): { index: number; phase: CommissionPhase } | null => {
+    const active = resolvePhase(phases, elapsed)
+    if (!active) return null
+    const limit = settings.promoPaidUntil
+    if (!limit || !paidAt || phases.length < 2) return active
+    const lastIndex = phases.length - 1
+    if (active.index !== lastIndex && paidAt > limit) {
+      return { index: lastIndex, phase: phases[lastIndex] }
     }
+    return active
   }
 
   let amount = new Prisma.Decimal(0)
@@ -279,14 +366,27 @@ async function computeForReferrer(
     // existia na competencia — nao entra (evita inflar mes retroativo). O clamp
     // em monthsInProgram so cobre a fase; aqui excluimos a unidade de vez.
     if (monthAnchor(anchor) > monthAnchor(range.start)) continue
-    const ageMonths = monthsInProgram(anchor, range.start)
-    const active = resolvePhase(phases, ageMonths)
+
+    const payments = paidInMonth.get(u.id) ?? []
+    // So as faturas que ainda nao foram pagas pelo ledger legado geram valor.
+    const elegiveis = payments.filter((p) => p.elegivel)
+    const priorPaid = priorPaidCount.get(u.id) ?? 0
+    const byInvoice = settings.clock === "paidInvoices"
+
+    // Fase "da unidade": governa os portoes e o valor FIXED. Com relogio por
+    // fatura, e a fase da PRIMEIRA fatura do mes (com relogio por mes, a idade).
+    const unitElapsed = byInvoice ? priorPaid : monthsInProgram(anchor, range.start)
+    const active = phaseFor(unitElapsed, payments[0]?.paidAt ?? null)
     if (!active) continue
     const phase = active.phase
 
     // payoutBase da fase: REFERRED_THIS_MONTH so inclui a unidade no mes em que
-    // ela entrou; ALL_ACTIVE inclui sempre.
+    // ela entrou; PAID_THIS_MONTH so inclui quem pagou mensalidade no mes
+    // (unidade ativa e inadimplente nao gera comissao); ALL_ACTIVE inclui sempre.
     if (phase.payoutBase === "REFERRED_THIS_MONTH" && !referredThisMonth) continue
+    // Fatura ja coberta pelo ledger legado nao conta como "pagou no mes" aqui —
+    // senao o valor fixo sairia por cima de uma comissao que ja existe.
+    if (phase.payoutBase === "PAID_THIS_MONTH" && elegiveis.length === 0) continue
 
     // Faixa escolhida pela contagem do indicador, conforme a base da fase.
     const count =
@@ -298,7 +398,9 @@ async function computeForReferrer(
     const rate = new Prisma.Decimal(bracket.value)
 
     if (phase.rateType === "FIXED") {
-      // R$ por unidade ativa (independe de pagamento no mes).
+      // R$ por unidade da base — UMA vez por unidade, mesmo que ela tenha pago
+      // duas faturas no mes. Com payoutBase ALL_ACTIVE independe de pagamento;
+      // com PAID_THIS_MONTH so chega aqui quem pagou (portao acima).
       amount = amount.add(rate)
       lines.push({
         tenantId: u.id,
@@ -310,20 +412,91 @@ async function computeForReferrer(
         phaseIndex: active.index,
       })
     } else {
-      // PERCENT: % sobre a mensalidade efetivamente recebida no mes da unidade.
-      const mensalidade = paidByTenant.get(u.id) ?? new Prisma.Decimal(0)
-      if (mensalidade.lte(0)) continue // unidade nao pagou no mes
-      const line = mensalidade.mul(rate).div(100).toDecimalPlaces(2)
-      baseSum = baseSum.add(mensalidade)
-      amount = amount.add(line)
+      // PERCENT: % sobre cada mensalidade recebida no mes. Uma fatura por vez —
+      // com relogio por fatura, a 1a e a 2a fatura do mesmo mes podem cair em
+      // fases diferentes (e a janela promocional olha a data de CADA uma).
+      if (elegiveis.length === 0) continue // nenhuma fatura nova para comissionar
+
+      // Agrupa as faturas do mes pela TAXA efetiva de cada uma, soma a base do
+      // grupo e so entao aplica o percentual, arredondando UMA vez por taxa.
+      //
+      // Arredondar fatura a fatura mudaria o valor de quem ja usa o motor: 3
+      // faturas de R$ 33,33 a 10% dao R$ 9,99 arredondando cada uma e R$ 10,00
+      // somando antes — que e o que o motor sempre pagou. Com taxa unica (o
+      // caso de todo plano por mes) este caminho e aritmeticamente identico ao
+      // antigo; a granularidade so muda quando as faturas caem em fases
+      // diferentes, e ai o agrupamento por taxa e o comportamento correto.
+      const porTaxa = new Map<number, { base: Prisma.Decimal; phaseIndex: number }>()
+      // Fases FIXED alcancadas por alguma fatura entram como parcela fixa, UMA
+      // vez por fase — R$ por unidade nao vira R$ por fatura.
+      const fixasAplicadas = new Map<number, Prisma.Decimal>()
+
+      // O ordinal percorre TODAS as faturas do mes (o `i`), nao so as
+      // elegiveis: a 2a fatura do mes continua sendo a 2a mesmo que a 1a ja
+      // tenha sido comissionada pelo motor legado.
+      for (let i = 0; i < payments.length; i++) {
+        const pay = payments[i]
+        if (!pay.elegivel) continue
+        // Com relogio por mes a fase e a mesma para todas as faturas; com
+        // relogio por fatura, cada uma tem o seu ordinal.
+        const forThis = byInvoice ? phaseFor(priorPaid + i, pay.paidAt) : active
+        if (!forThis) continue
+        const brk = resolveBracket(
+          forThis.phase.brackets,
+          forThis.phase.bracketBasis === "NEW_REFERRALS_MONTH"
+            ? newThisMonthCount
+            : activeTotalCount,
+        )
+        if (!brk) continue
+        // Num plano que mistura FIXED e PERCENT, uma fatura pode cair numa fase
+        // FIXED enquanto a unidade entrou por uma fase PERCENT. Sem esta
+        // distincao o valor em R$ da faixa seria lido como percentual (R$75
+        // viraria 75% da mensalidade).
+        if (forThis.phase.rateType === "FIXED") {
+          if (!fixasAplicadas.has(forThis.index)) {
+            fixasAplicadas.set(forThis.index, new Prisma.Decimal(brk.value))
+          }
+          continue
+        }
+        const grupo = porTaxa.get(brk.value)
+        if (grupo) grupo.base = grupo.base.add(pay.amount)
+        else porTaxa.set(brk.value, { base: pay.amount, phaseIndex: forThis.index })
+      }
+      if (porTaxa.size === 0 && fixasAplicadas.size === 0) continue
+
+      let unitMensalidade = new Prisma.Decimal(0)
+      let unitAmount = new Prisma.Decimal(0)
+      // A linha do snapshot resume a unidade; quando as faturas do mes caem em
+      // fases distintas, guardamos a da PRIMEIRA taxa encontrada (o valor somado
+      // segue fiel, e o sentinela de plano misto ja existe no topo).
+      const primeiroPercent = [...porTaxa][0]
+      const primeiraFixa = [...fixasAplicadas][0]
+      const unitRate = primeiroPercent ? primeiroPercent[0] : Number(primeiraFixa[1])
+      const unitPhaseIndex = primeiroPercent
+        ? primeiroPercent[1].phaseIndex
+        : primeiraFixa[0]
+
+      for (const [taxa, grupo] of porTaxa) {
+        unitMensalidade = unitMensalidade.add(grupo.base)
+        unitAmount = unitAmount.add(
+          grupo.base.mul(new Prisma.Decimal(taxa)).div(100).toDecimalPlaces(2),
+        )
+      }
+      for (const valorFixo of fixasAplicadas.values()) {
+        unitAmount = unitAmount.add(valorFixo)
+      }
+
+      if (unitAmount.lte(0)) continue
+      baseSum = baseSum.add(unitMensalidade)
+      amount = amount.add(unitAmount)
       lines.push({
         tenantId: u.id,
         name: u.name,
-        mensalidade: Number(mensalidade),
-        amount: Number(line),
+        mensalidade: Number(unitMensalidade),
+        amount: Number(unitAmount),
         rateType: "PERCENT",
-        rate: bracket.value,
-        phaseIndex: active.index,
+        rate: unitRate,
+        phaseIndex: unitPhaseIndex,
       })
     }
   }

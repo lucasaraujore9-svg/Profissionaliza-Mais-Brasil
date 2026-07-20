@@ -1354,6 +1354,7 @@ enum CommissionRateType {
 enum CommissionPayoutBase {
   ALL_ACTIVE // Valor/percentual incide sobre TODAS as unidades ativas
   REFERRED_THIS_MONTH // Incide apenas sobre as unidades indicadas naquele mes
+  PAID_THIS_MONTH // Incide apenas sobre as unidades que PAGARAM mensalidade no mes
 }
 
 // ============================================================

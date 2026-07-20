@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
+import { AlertTriangle, Info } from "lucide-react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -11,25 +12,43 @@ import {
   CommissionPlanEditor,
   cleanBrackets,
   phasesFromJson,
+  settingsFromJson,
+  planToJson,
+  type PlanSettingsDraft,
+  type PayoutBase,
   type PhaseDraft,
 } from "@/components/admin/commission-plan-editor"
 import type { CommissionBracket } from "@/lib/referrals/rules"
 
-type CommissionMode = "PER_PAYMENT_PERCENT" | "MONTHLY_TIERED"
 type Scope = "ALL" | "NEW_ONLY"
+
+/** Modo de edicao — os dois gravam no MESMO bloco `commission*`. */
+type EditorMode = "SIMPLE" | "ADVANCED"
 
 interface InitialValues {
   referralEnabled: boolean
   defaultReferralPercent: number
+  /** Minimo padrao de indicacoes ATIVAS para o indicador receber. 0 = sem minimo. */
+  defaultReferralMinReferrals: number
   referralMinPayout: number
   referralPayoutDay: number
-  commissionMode: CommissionMode
   commissionBracketBasis: "NEW_REFERRALS_MONTH" | "ACTIVE_UNITS"
   commissionRateType: "FIXED" | "PERCENT"
-  commissionPayoutBase: "ALL_ACTIVE" | "REFERRED_THIS_MONTH"
+  commissionPayoutBase: PayoutBase
   commissionBrackets: CommissionBracket[]
   /** Plano multi-fase persistido (JSON cru do banco). */
   commissionPlan: unknown
+}
+
+/**
+ * Regra global que esta valendo agora, resolvida NO SERVIDOR pelo mesmo
+ * `resolveEffectiveCommission` que o fechamento mensal usa. Vem pronta como
+ * prop — e por isso que a tela nao consegue anunciar uma regra diferente da que
+ * o sistema paga.
+ */
+export interface CommissionPreview {
+  description: string
+  warnings: string[]
 }
 
 const selectClass =
@@ -54,26 +73,86 @@ function initialPhases(initial: InitialValues): PhaseDraft[] {
   ]
 }
 
-export function AdminReferralSettingsForm({ initial }: { initial: InitialValues }) {
+/**
+ * Extrai o percentual de uma regra que seja "fase unica + faixa unica +
+ * PERCENT" — o formato que o editor Simples produz. Devolve null quando a regra
+ * salva e mais complexa que isso (ai a tela abre direto no Avancado, sem
+ * achatar nada).
+ */
+function simplePercentFrom(initial: InitialValues): number | null {
+  const planPhases = phasesFromJson(initial.commissionPlan)
+  if (planPhases.length > 1) return null
+  const phase = planPhases[0]
+  if (phase) {
+    if (phase.rateType !== "PERCENT" || phase.brackets.length !== 1) return null
+    if (phase.brackets[0].upTo !== null) return null
+    return phase.brackets[0].value
+  }
+  const brackets = initial.commissionBrackets
+  if (brackets.length !== 1 || brackets[0].upTo !== null) return null
+  if (initial.commissionRateType !== "PERCENT") return null
+  return brackets[0].value
+}
+
+/** Sem plano e sem faixas: a rede nunca configurou regra (roda no fallback). */
+function isUnconfigured(initial: InitialValues): boolean {
+  return (
+    phasesFromJson(initial.commissionPlan).length === 0 &&
+    initial.commissionBrackets.length === 0
+  )
+}
+
+/**
+ * Regra GLOBAL de comissao de indicacao (padrao da rede).
+ *
+ * Espelha o card por revendedor (`ResellerCommissionOverrideForm`): dois niveis
+ * de edicao (Simples e Avancado) sobre o MESMO armazenamento `commission*`, com
+ * um preview vindo do resolvedor que o motor usa. O seletor de "modelo de
+ * comissao" saiu: o motor e unico (fechamento mensal) desde a unificacao.
+ */
+export function AdminReferralSettingsForm({
+  initial,
+  preview,
+}: {
+  initial: InitialValues
+  /** Regra efetiva global ja resolvida no servidor. Atualiza junto com `initial`. */
+  preview: CommissionPreview
+}) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
   const [referralEnabled, setReferralEnabled] = useState(initial.referralEnabled)
   const [defaultReferralPercent, setDefaultReferralPercent] = useState(
     initial.defaultReferralPercent,
   )
+  const [defaultMinReferrals, setDefaultMinReferrals] = useState(
+    initial.defaultReferralMinReferrals,
+  )
   const [referralMinPayout, setReferralMinPayout] = useState(initial.referralMinPayout)
   const [referralPayoutDay, setReferralPayoutDay] = useState(initial.referralPayoutDay)
-  const [commissionMode, setCommissionMode] = useState<CommissionMode>(
-    initial.commissionMode,
+  const simplePercent = simplePercentFrom(initial)
+  const [editorMode, setEditorMode] = useState<EditorMode>(
+    simplePercent != null || isUnconfigured(initial) ? "SIMPLE" : "ADVANCED",
+  )
+  const [percent, setPercent] = useState<number>(
+    simplePercent ?? initial.defaultReferralPercent,
   )
   const [phases, setPhases] = useState<PhaseDraft[]>(() => initialPhases(initial))
+  const [planSettings, setPlanSettings] = useState<PlanSettingsDraft>(() =>
+    settingsFromJson(initial.commissionPlan),
+  )
   const [scope, setScope] = useState<Scope>("ALL")
-
-  const isMonthly = commissionMode === "MONTHLY_TIERED"
 
   function submit() {
     if (defaultReferralPercent < 0 || defaultReferralPercent > 100) {
-      toast.error("O percentual deve estar entre 0 e 100")
+      toast.error("O percentual padrão deve estar entre 0 e 100")
+      return
+    }
+    if (
+      !Number.isInteger(defaultMinReferrals) ||
+      defaultMinReferrals < 0 ||
+      defaultMinReferrals > 1000
+    ) {
+      toast.error("O mínimo de indicações deve ser um inteiro entre 0 e 1000")
       return
     }
     if (referralMinPayout < 0 || referralMinPayout > 100000) {
@@ -85,7 +164,24 @@ export function AdminReferralSettingsForm({ initial }: { initial: InitialValues 
       return
     }
 
-    if (isMonthly) {
+    // Bloco `commission*` — os dois editores gravam nas mesmas colunas.
+    let rulePayload: Record<string, unknown>
+
+    if (editorMode === "SIMPLE") {
+      if (!Number.isFinite(percent) || percent <= 0 || percent > 100) {
+        toast.error("O percentual da regra deve estar entre 0 e 100")
+        return
+      }
+      rulePayload = {
+        commissionRateType: "PERCENT",
+        commissionBracketBasis: "ACTIVE_UNITS",
+        commissionPayoutBase: "ALL_ACTIVE",
+        commissionBrackets: [{ upTo: null, value: percent }],
+        // Fase unica nao precisa de plano — limpa qualquer plano residual para o
+        // Simples nao ficar escondido atras de um multi-fase antigo.
+        commissionPlan: null,
+      }
+    } else {
       if (phases.length === 0) {
         toast.error("Adicione ao menos uma fase de comissão")
         return
@@ -112,35 +208,40 @@ export function AdminReferralSettingsForm({ initial }: { initial: InitialValues 
           return
         }
       }
-    }
 
-    // Fase representativa (1a) alimenta os campos singulares exigidos pela API e
-    // o fallback do motor. O plano multi-fase só é enviado quando há > 1 fase.
-    const rep = phases[0]
-    const planPayload =
-      isMonthly && phases.length > 1
-        ? phases.map((p, i) => ({
-            // a última fase sempre "em diante"
-            durationMonths:
-              i === phases.length - 1 ? null : (p.durationMonths ?? 1),
-            rateType: p.rateType,
-            bracketBasis: p.bracketBasis,
-            payoutBase: p.payoutBase,
-            brackets: cleanBrackets(p.brackets),
-          }))
-        : []
+      // Fase representativa (1a) alimenta os campos singulares exigidos pela API
+      // e o fallback do motor. O plano multi-fase só vai quando há > 1 fase.
+      const rep = phases[0]
+      rulePayload = {
+        commissionBracketBasis: rep.bracketBasis,
+        commissionRateType: rep.rateType,
+        commissionPayoutBase: rep.payoutBase,
+        commissionBrackets: cleanBrackets(rep.brackets),
+        commissionPlan:
+          phases.length > 1
+            ? planToJson(
+                phases.map((p, i) => ({
+                  ...p,
+                  // a última fase sempre "em diante"
+                  durationMonths:
+                    i === phases.length - 1 ? null : (p.durationMonths ?? 1),
+                  brackets: cleanBrackets(p.brackets),
+                })),
+                planSettings,
+              )
+            : null,
+      }
+    }
 
     const payload = {
       referralEnabled,
       defaultReferralPercent,
+      defaultReferralMinReferrals: defaultMinReferrals,
       referralMinPayout,
       referralPayoutDay,
-      commissionMode,
-      commissionBracketBasis: rep?.bracketBasis ?? "NEW_REFERRALS_MONTH",
-      commissionRateType: rep?.rateType ?? "FIXED",
-      commissionPayoutBase: rep?.payoutBase ?? "ALL_ACTIVE",
-      commissionBrackets: rep ? cleanBrackets(rep.brackets) : [],
-      commissionPlan: planPayload,
+      // Motor unico: nao ha mais escolha de modelo.
+      commissionMode: "MONTHLY_TIERED",
+      ...rulePayload,
       scope,
     }
 
@@ -173,6 +274,28 @@ export function AdminReferralSettingsForm({ initial }: { initial: InitialValues 
 
   return (
     <div className="space-y-6 max-w-2xl">
+      {/* Regra que esta valendo AGORA — vem do mesmo resolvedor que o motor usa. */}
+      <div className="rounded-md border border-[var(--color-pmb-green)]/30 bg-[var(--color-pmb-lime-50)]/40 px-3 py-2.5">
+        <div className="flex items-start gap-2">
+          <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--color-pmb-green-900)]" />
+          <div className="space-y-1">
+            <span className="block text-[11px] font-semibold uppercase tracking-wide text-[var(--color-pmb-green-900)]">
+              Regra efetiva hoje
+            </span>
+            <p className="text-xs text-gray-700">{preview.description}</p>
+          </div>
+        </div>
+        {preview.warnings.map((w) => (
+          <p
+            key={w}
+            className="mt-2 flex items-start gap-2 rounded bg-amber-50 px-2 py-1.5 text-[11px] text-amber-800"
+          >
+            <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+            {w}
+          </p>
+        ))}
+      </div>
+
       <Card className="p-6 space-y-5">
         <div className="space-y-2">
           <Label className="flex items-center gap-2">
@@ -219,48 +342,90 @@ export function AdminReferralSettingsForm({ initial }: { initial: InitialValues 
       <Card className="p-6 space-y-5">
         <div>
           <h3 className="text-sm font-semibold text-[var(--color-pmb-green-900)]">
-            Como a comissão é calculada
+            Regra padrão da rede
           </h3>
           <p className="mt-1 text-xs text-gray-500">
-            Escolha o modelo de cálculo padrão da rede. Cada unidade pode ter um
-            override próprio na aba “Comissões” do revendedor.
+            Quanto cada indicador ganha sobre a mensalidade das revendas que ele
+            indicar. Vale para toda unidade que não tem regra própria (definida na
+            aba “Comissões” do revendedor). Tudo é apurado no fechamento mensal.
           </p>
         </div>
 
         <div className="space-y-2">
-          <Label>Modelo de comissão</Label>
+          <Label>Como definir</Label>
           <select
             className={selectClass}
-            value={commissionMode}
-            onChange={(e) => setCommissionMode(e.target.value as CommissionMode)}
+            value={editorMode}
+            onChange={(e) => setEditorMode(e.target.value as EditorMode)}
           >
-            <option value="PER_PAYMENT_PERCENT">
-              Percentual por mensalidade (legado, por pagamento)
+            <option value="SIMPLE">
+              Simples — um percentual fixo sobre cada mensalidade
             </option>
-            <option value="MONTHLY_TIERED">
-              Por faixas (valor/percentual no fechamento mensal)
+            <option value="ADVANCED">
+              Avançado — faixas por volume e fases por tempo
             </option>
           </select>
         </div>
 
-        {!isMonthly ? (
+        {editorMode === "SIMPLE" ? (
           <div className="space-y-2">
-            <Label>Percentual padrão (%)</Label>
+            <Label>Percentual (%)</Label>
             <Input
               type="number"
               step="0.01"
               min={0}
               max={100}
-              value={defaultReferralPercent}
-              onChange={(e) => setDefaultReferralPercent(Number(e.target.value))}
+              value={percent}
+              onChange={(e) => setPercent(Number(e.target.value))}
             />
             <p className="text-xs text-gray-500">
-              Aplicado aos indicadores sem override individual.
+              % da mensalidade de cada unidade indicada ativa, apurado no
+              fechamento mensal.
             </p>
           </div>
         ) : (
-          <CommissionPlanEditor phases={phases} onChange={setPhases} />
+          <CommissionPlanEditor
+            phases={phases}
+            onChange={setPhases}
+            settings={planSettings}
+            onSettingsChange={setPlanSettings}
+          />
         )}
+
+        <div className="space-y-2 border-t border-gray-100 pt-5">
+          <Label>Mínimo de indicações ativas (padrão)</Label>
+          <Input
+            type="number"
+            step="1"
+            min={0}
+            max={1000}
+            value={defaultMinReferrals}
+            onChange={(e) => setDefaultMinReferrals(Number(e.target.value))}
+          />
+          <p className="text-xs text-gray-500">
+            Quantas indicadas ativas um indicador precisa ter para começar a
+            receber. 0 = sem mínimo. Enquanto não atingir, as comissões ficam
+            retidas e são apuradas retroativamente quando o mínimo for alcançado.
+            Cada unidade pode ter um mínimo próprio.
+          </p>
+        </div>
+
+        <div className="space-y-2 border-t border-gray-100 pt-5">
+          <Label>Percentual padrão (%)</Label>
+          <Input
+            type="number"
+            step="0.01"
+            min={0}
+            max={100}
+            value={defaultReferralPercent}
+            onChange={(e) => setDefaultReferralPercent(Number(e.target.value))}
+          />
+          <p className="text-xs text-gray-500">
+            Último fallback: só é usado quando não há regra global configurada
+            acima nem regra própria da unidade. Em operação normal, nenhum
+            indicador cai aqui.
+          </p>
+        </div>
       </Card>
 
       {/* Escopo da mudança — congelar existentes ou aplicar a todas. */}

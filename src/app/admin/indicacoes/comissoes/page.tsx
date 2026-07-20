@@ -3,6 +3,7 @@ import { redirect } from "next/navigation"
 import { ArrowLeft, Download } from "lucide-react"
 import { prisma } from "@/lib/prisma"
 import { requireAdminSession } from "@/lib/auth/admin-session"
+import { parseLinesSnapshot } from "@/lib/referrals/lines-snapshot"
 import { PageHeader } from "@/components/painel/page-header"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -32,6 +33,60 @@ const STATUS_OPTS: ReferralCommissionStatus[] = [
   "PAID",
   "CANCELLED",
 ]
+
+function formatPeriod(period: string): string {
+  const m = /^(\d{4})-(\d{2})$/.exec(period)
+  return m ? `${m[2]}/${m[1]}` : period
+}
+
+/**
+ * Descreve a taxa de uma comissao mensal na coluna "%". Prefere a quebra por
+ * unidade (carrega o rate aplicado a cada uma) para detectar plano multi-fase;
+ * rate de topo 0 e o sentinela desse caso quando nao ha linhas com rate.
+ */
+function describeTaxaMensal(m: {
+  rateType: string
+  rate: Prisma.Decimal
+  linesSnapshot: Prisma.JsonValue | null
+}): string {
+  const withRate = parseLinesSnapshot(m.linesSnapshot).filter(
+    (l): l is typeof l & { rate: number } => typeof l.rate === "number",
+  )
+  const first = withRate[0]
+  if (first) {
+    const distinct = new Set(withRate.map((l) => `${l.rateType ?? "?"}:${l.rate}`))
+    if (distinct.size > 1) return "misto"
+    return first.rateType === "PERCENT"
+      ? `${first.rate.toFixed(2)}%`
+      : `${formatMoney(first.rate)}/unid.`
+  }
+  const rate = Number(m.rate)
+  if (!rate) return "misto"
+  return m.rateType === "PERCENT"
+    ? `${rate.toFixed(2)}%`
+    : `${formatMoney(rate)}/unid.`
+}
+
+/**
+ * Linha normalizada da tabela principal. Os dois ledgers (por pagamento e por
+ * faixas/mensal) sao reduzidos a este formato para caber nas mesmas colunas.
+ */
+type LinhaComissao = {
+  key: string
+  createdAt: Date
+  referrer: { id: string; name: string }
+  /** So o ledger legado tem uma unidade indicada unica (com link). */
+  indicado: { id: string; name: string } | null
+  indicadoLabel: string
+  indicadoDetalhe: string | null
+  /** Competencia "MM/AAAA" — so existe no ledger mensal. */
+  competencia: string | null
+  base: number | null
+  taxaLabel: string
+  amount: number
+  availableAt: Date
+  status: ReferralCommissionStatus
+}
 
 export default async function AdminComissoesPage({
   searchParams,
@@ -66,36 +121,123 @@ export default async function AdminComissoesPage({
   }`
 
   const filters: Prisma.ReferralCommissionWhereInput = {}
-  if (sp.referrer) filters.referrerTenantId = sp.referrer
+  const monthlyFilters: Prisma.ReferralMonthlyCommissionWhereInput = {}
+  if (sp.referrer) {
+    filters.referrerTenantId = sp.referrer
+    monthlyFilters.referrerTenantId = sp.referrer
+  }
   if (sp.referred) filters.referredTenantId = sp.referred
   if (sp.status && STATUS_OPTS.includes(sp.status as ReferralCommissionStatus)) {
     filters.status = sp.status as ReferralCommissionStatus
+    monthlyFilters.status = sp.status as ReferralCommissionStatus
   }
   const days = sp.days ? Number(sp.days) : 90
   if (Number.isFinite(days) && days > 0) {
     const since = new Date()
     since.setDate(since.getDate() - days)
     filters.createdAt = { gte: since }
+    monthlyFilters.createdAt = { gte: since }
   }
 
-  const commissions = await prisma.referralCommission.findMany({
-    where: filters,
-    select: {
-      id: true,
-      status: true,
-      baseAmount: true,
-      percent: true,
-      amount: true,
-      availableAt: true,
-      paidAt: true,
-      createdAt: true,
-      cancelReason: true,
-      referrer: { select: { id: true, name: true, slug: true } },
-      referred: { select: { id: true, name: true, slug: true } },
-    },
-    orderBy: { createdAt: "desc" },
-    take: 500,
-  })
+  const [legacyCommissions, monthlyRows] = await Promise.all([
+    prisma.referralCommission.findMany({
+      where: filters,
+      select: {
+        id: true,
+        status: true,
+        baseAmount: true,
+        percent: true,
+        amount: true,
+        availableAt: true,
+        paidAt: true,
+        createdAt: true,
+        cancelReason: true,
+        referrer: { select: { id: true, name: true, slug: true } },
+        referred: { select: { id: true, name: true, slug: true } },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 500,
+    }),
+    prisma.referralMonthlyCommission.findMany({
+      where: monthlyFilters,
+      select: {
+        id: true,
+        status: true,
+        period: true,
+        rateType: true,
+        rate: true,
+        unitCount: true,
+        baseSum: true,
+        amount: true,
+        availableAt: true,
+        createdAt: true,
+        linesSnapshot: true,
+        referrer: { select: { id: true, name: true, slug: true } },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 500,
+    }),
+  ])
+
+  const legacyLinhas: LinhaComissao[] = legacyCommissions.map((c) => ({
+    key: `legacy-${c.id}`,
+    createdAt: c.createdAt,
+    referrer: { id: c.referrer.id, name: c.referrer.name },
+    indicado: { id: c.referred.id, name: c.referred.name },
+    indicadoLabel: c.referred.name,
+    indicadoDetalhe: null,
+    competencia: null,
+    base: Number(c.baseAmount),
+    taxaLabel: `${Number(c.percent).toFixed(2)}%`,
+    amount: Number(c.amount),
+    availableAt: c.availableAt,
+    status: c.status,
+  }))
+
+  const monthlyLinhas: LinhaComissao[] = monthlyRows
+    // O ledger mensal nao tem referredTenantId: quando o filtro de indicada esta
+    // ativo, a atribuicao so existe na quebra por unidade do snapshot.
+    .filter((m) =>
+      sp.referred
+        ? parseLinesSnapshot(m.linesSnapshot).some(
+            (l) => l.tenantId === sp.referred,
+          )
+        : true,
+    )
+    .map((m) => {
+      const nomes = parseLinesSnapshot(m.linesSnapshot)
+        .map((l) => l.name)
+        .filter((n) => n !== "")
+      const detalhe =
+        nomes.length === 0
+          ? null
+          : nomes.length <= 3
+            ? nomes.join(", ")
+            : `${nomes.slice(0, 3).join(", ")} +${nomes.length - 3}`
+      const base = Number(m.baseSum)
+      return {
+        key: `monthly-${m.id}`,
+        createdAt: m.createdAt,
+        referrer: { id: m.referrer.id, name: m.referrer.name },
+        indicado: null,
+        indicadoLabel: `${m.unitCount} unidade(s)`,
+        indicadoDetalhe: detalhe,
+        competencia: formatPeriod(m.period),
+        // FIXED nao acumula base em dinheiro (baseSum = 0) — nao ha o que exibir.
+        base: base > 0 ? base : null,
+        taxaLabel: describeTaxaMensal(m),
+        amount: Number(m.amount),
+        availableAt: m.availableAt,
+        status: m.status,
+      }
+    })
+
+  const commissions: LinhaComissao[] = [...legacyLinhas, ...monthlyLinhas]
+    .sort((a, b) => {
+      const diff = b.createdAt.getTime() - a.createdAt.getTime()
+      return diff !== 0 ? diff : a.key.localeCompare(b.key)
+    })
+    .slice(0, 500)
 
   // Clawbacks pendentes (estorno apos comissao liberada/paga) dos dois motores.
   // So SUPER_ADMIN e PMB_FINANCEIRO podem resolver (endpoint gated igual).
@@ -280,8 +422,15 @@ export default async function AdminComissoesPage({
               </TableRow>
             ) : (
               commissions.map((c) => (
-                <TableRow key={c.id}>
-                  <TableCell>{c.createdAt.toLocaleDateString("pt-BR")}</TableCell>
+                <TableRow key={c.key}>
+                  <TableCell>
+                    <div>{c.createdAt.toLocaleDateString("pt-BR")}</div>
+                    {c.competencia ? (
+                      <div className="text-xs text-gray-400">
+                        Comp. {c.competencia}
+                      </div>
+                    ) : null}
+                  </TableCell>
                   <TableCell className="font-medium">
                     <Link
                       href={`/admin/revendedores/${c.referrer.id}`}
@@ -291,21 +440,32 @@ export default async function AdminComissoesPage({
                     </Link>
                   </TableCell>
                   <TableCell>
-                    <Link
-                      href={`/admin/revendedores/${c.referred.id}`}
-                      className="hover:underline"
-                    >
-                      {c.referred.name}
-                    </Link>
+                    {c.indicado ? (
+                      <Link
+                        href={`/admin/revendedores/${c.indicado.id}`}
+                        className="hover:underline"
+                      >
+                        {c.indicado.name}
+                      </Link>
+                    ) : (
+                      <>
+                        <div>{c.indicadoLabel}</div>
+                        {c.indicadoDetalhe ? (
+                          <div className="text-xs text-gray-400">
+                            {c.indicadoDetalhe}
+                          </div>
+                        ) : null}
+                      </>
+                    )}
                   </TableCell>
                   <TableCell className="text-right font-mono">
-                    {formatMoney(Number(c.baseAmount))}
+                    {c.base === null ? "—" : formatMoney(c.base)}
                   </TableCell>
                   <TableCell className="text-right font-mono">
-                    {Number(c.percent).toFixed(2)}%
+                    {c.taxaLabel}
                   </TableCell>
                   <TableCell className="text-right font-mono font-semibold">
-                    {formatMoney(Number(c.amount))}
+                    {formatMoney(c.amount)}
                   </TableCell>
                   <TableCell>
                     {c.availableAt.toLocaleDateString("pt-BR")}

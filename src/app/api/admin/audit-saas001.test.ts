@@ -90,7 +90,19 @@ describe("SAAS-001 — audit trail em mutações admin", () => {
       commissionPayoutBase: null, commissionBrackets: null, commissionPlan: null,
       commissionPlanStartedAt: null, commissionOverrideSource: null,
     })
-    const res = await referralPut(jreq({ percent: 10 }), params("t1"))
+    // `percent` saiu do contrato na unificacao: a regra e sempre o bloco
+    // commission* (aqui, o equivalente do editor Simples: 10% em faixa unica).
+    const res = await referralPut(
+      jreq({
+        commissionMode: "MONTHLY_TIERED",
+        commissionRateType: "PERCENT",
+        commissionBracketBasis: "ACTIVE_UNITS",
+        commissionPayoutBase: "ALL_ACTIVE",
+        commissionBrackets: [{ upTo: null, value: 10 }],
+        commissionPlan: null,
+      }),
+      params("t1"),
+    )
     expect(res.status).toBe(200)
     expect(audit).toHaveBeenCalledWith(expect.objectContaining({ action: "tenant.referral_percent.update" }))
   })

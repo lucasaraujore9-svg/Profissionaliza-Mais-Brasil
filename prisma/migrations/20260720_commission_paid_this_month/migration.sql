@@ -1,0 +1,18 @@
+-- Base de pagamento "somente quem pagou no mes" (CommissionPayoutBase.PAID_THIS_MONTH).
+--
+-- Ate aqui a base de pagamento so sabia dizer "todas as ativas" ou "as indicadas
+-- neste mes". Faltava a regra que o contrato da CARREIRA DIGITAL exige: a faixa e
+-- escolhida pelo numero de unidades ATIVAS, mas o valor so incide sobre as que
+-- efetivamente PAGARAM a mensalidade no mes — unidade ativa e inadimplente nao
+-- gera comissao.
+--
+-- Efeito colateral desejado: no modo FIXED este e o unico payoutBase que consulta
+-- os pagamentos do mes, e por isso e tambem o unico que herda o filtro
+-- anti-duplicidade (mensalidade ja coberta por uma ReferralCommission legada viva
+-- nao entra) — fechando a brecha de pagamento em dobro na transicao de motor.
+--
+-- ISOLADA numa migration propria porque o Postgres nao permite USAR um valor de
+-- enum recem-adicionado no mesmo arquivo/transacao ("unsafe use of new value").
+-- Mesmo padrao de 20260717_card_installment_enum. Nada de bloco DO aqui: dentro
+-- de uma funcao o Postgres recusa ALTER TYPE ... ADD.
+ALTER TYPE "CommissionPayoutBase" ADD VALUE IF NOT EXISTS 'PAID_THIS_MONTH';

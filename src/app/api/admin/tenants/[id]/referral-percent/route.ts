@@ -5,15 +5,8 @@ import { prisma } from "@/lib/prisma"
 import { requireAdminSession } from "@/lib/auth/admin-session"
 import { canManageCommissions } from "@/lib/auth/roles"
 import { logAudit } from "@/lib/audit"
-import { sortTiers } from "@/lib/referrals/tiers"
 import { sortBrackets } from "@/lib/referrals/rules"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
-
-const tierSchema = z.object({
-  // null = "deste mes em diante" (sem teto). >=1 caso contrario.
-  untilMonth: z.number().int().min(1).max(600).nullable(),
-  percent: z.number().min(0).max(100),
-})
 
 const bracketSchema = z.object({
   upTo: z.number().int().min(1).nullable(),
@@ -25,7 +18,7 @@ const phaseSchema = z
     durationMonths: z.number().int().min(1).max(600).nullable(),
     rateType: z.enum(["FIXED", "PERCENT"]),
     bracketBasis: z.enum(["NEW_REFERRALS_MONTH", "ACTIVE_UNITS"]),
-    payoutBase: z.enum(["ALL_ACTIVE", "REFERRED_THIS_MONTH"]),
+    payoutBase: z.enum(["ALL_ACTIVE", "REFERRED_THIS_MONTH", "PAID_THIS_MONTH"]),
     brackets: z.array(bracketSchema).min(1).max(20),
   })
   .refine((p) => p.brackets.filter((b) => b.upTo === null).length <= 1, {
@@ -33,35 +26,49 @@ const phaseSchema = z
     path: ["brackets"],
   })
 
+/**
+ * Plano aceito nas DUAS formas: array cru de fases (formato historico, ainda
+ * enviado por clientes antigos) ou objeto com as fases mais os ajustes de topo
+ * (relogio + janela promocional). `normalizePlan` reduz as duas a uma so.
+ */
+const planSchema = z.union([
+  z.array(phaseSchema).max(12),
+  z.object({
+    phases: z.array(phaseSchema).max(12),
+    clock: z.enum(["months", "paidInvoices"]).optional(),
+    promoPaidUntil: z.string().datetime().nullable().optional(),
+  }),
+])
+
+type PlanInput = z.infer<typeof planSchema>
+
+function normalizePlan(plan: PlanInput | null | undefined) {
+  if (!plan) return null
+  return Array.isArray(plan) ? { phases: plan } : plan
+}
+
 const bodySchema = z
   .object({
-    // Permite null para "voltar ao percentual padrao".
-    percent: z.number().min(0).max(100).nullable().optional(),
     // Minimo de indicacoes ATIVAS para a unidade receber comissao de
     // recorrencia. null = volta ao padrao global. 0 = sem minimo.
     minReferrals: z.number().int().min(0).max(1000).nullable().optional(),
-    // Escala de comissao desta unidade (quando indicada). [] ou null limpam a
-    // escala (volta ao percentual fixo). Max 12 faixas.
-    tiers: z.array(tierSchema).max(12).nullable().optional(),
-    // Override do motor por faixas para ESTA unidade (null em cada campo =>
-    // herda o padrao global de SystemSettings).
-    commissionMode: z
-      .enum(["PER_PAYMENT_PERCENT", "MONTHLY_TIERED"])
-      .nullable()
-      .optional(),
+    // Override da regra de comissao DESTA unidade quando ela e a INDICADORA
+    // (null em cada campo => herda o padrao global de SystemSettings).
+    // PER_PAYMENT_PERCENT foi aposentado na unificacao: existe um motor so.
+    commissionMode: z.enum(["MONTHLY_TIERED"]).nullable().optional(),
     commissionBracketBasis: z
       .enum(["NEW_REFERRALS_MONTH", "ACTIVE_UNITS"])
       .nullable()
       .optional(),
     commissionRateType: z.enum(["FIXED", "PERCENT"]).nullable().optional(),
     commissionPayoutBase: z
-      .enum(["ALL_ACTIVE", "REFERRED_THIS_MONTH"])
+      .enum(["ALL_ACTIVE", "REFERRED_THIS_MONTH", "PAID_THIS_MONTH"])
       .nullable()
       .optional(),
     commissionBrackets: z.array(bracketSchema).max(20).nullable().optional(),
     // Plano MULTI-FASE override desta unidade (quando ela e a INDICADORA).
     // null/[] => sem plano (cai nas faixas singulares -> global).
-    commissionPlan: z.array(phaseSchema).max(12).nullable().optional(),
+    commissionPlan: planSchema.nullable().optional(),
     // Ancora do relogio de fases desta unidade quando indicada. ISO date ou null.
     commissionPlanStartedAt: z.string().datetime().nullable().optional(),
     // Acao explicita: limpa TODO o override de comissao (volta a herdar o global).
@@ -69,9 +76,7 @@ const bodySchema = z
   })
   .refine(
     (data) =>
-      data.percent !== undefined ||
       data.minReferrals !== undefined ||
-      data.tiers !== undefined ||
       data.commissionMode !== undefined ||
       data.commissionBracketBasis !== undefined ||
       data.commissionRateType !== undefined ||
@@ -93,9 +98,12 @@ const bodySchema = z
   )
   .refine(
     // Só a última fase pode ser "em diante" (durationMonths null).
-    (data) =>
-      !data.commissionPlan ||
-      data.commissionPlan.slice(0, -1).every((p) => p.durationMonths !== null),
+    (data) => {
+      const plan = normalizePlan(data.commissionPlan)
+      return (
+        !plan || plan.phases.slice(0, -1).every((p) => p.durationMonths !== null)
+      )
+    },
     {
       message:
         "Só a última fase pode ser 'em diante' (sem duração). Defina a duração das demais.",
@@ -148,23 +156,10 @@ export const PUT = withRequestContextParams<{ id: string }>(
   }
 
   const data: Prisma.TenantUpdateInput = {}
-  if (parsed.data.percent !== undefined) {
-    data.referralPercent =
-      parsed.data.percent === null
-        ? null
-        : new Prisma.Decimal(parsed.data.percent)
-  }
   if (parsed.data.minReferrals !== undefined) {
     data.referralMinReferrals = parsed.data.minReferrals
   }
-  if (parsed.data.tiers !== undefined) {
-    // null ou [] => limpa a escala. Caso contrario, persiste normalizado/ordenado.
-    data.referralTiers =
-      parsed.data.tiers && parsed.data.tiers.length > 0
-        ? (sortTiers(parsed.data.tiers) as unknown as Prisma.InputJsonValue)
-        : Prisma.DbNull
-  }
-  // Override do motor por faixas. Duas vias:
+  // Override da regra de comissao. Duas vias:
   //  - clearCommissionOverride: zera TUDO (volta a herdar o global, source null).
   //  - caso contrario: aplica os campos informados e marca a origem como MANUAL
   //    (preserva contra o "aplicar a todas" da regra global, que so limpa FROZEN).
@@ -177,6 +172,16 @@ export const PUT = withRequestContextParams<{ id: string }>(
     data.commissionPlan = Prisma.DbNull
     data.commissionPlanStartedAt = null
     data.commissionOverrideSource = null
+    // Os campos legados (`referralPercent`/`referralTiers`) tambem tem de sair:
+    // antes eles sobreviviam invisiveis a um "herda o global" e voltavam a
+    // valer se alguem reativasse o motor legado. Nao sao mais lidos no calculo,
+    // mas deixa-los para tras confundiria qualquer auditoria futura.
+    data.referralPercent = null
+    data.referralTiers = Prisma.DbNull
+    // O minimo so volta ao padrao global se o proprio payload nao pediu um valor.
+    if (parsed.data.minReferrals === undefined) {
+      data.referralMinReferrals = null
+    }
   } else {
     if (parsed.data.commissionMode !== undefined) {
       data.commissionMode = parsed.data.commissionMode
@@ -197,16 +202,23 @@ export const PUT = withRequestContextParams<{ id: string }>(
           : Prisma.DbNull
     }
     if (parsed.data.commissionPlan !== undefined) {
+      const plan = normalizePlan(parsed.data.commissionPlan)
       data.commissionPlan =
-        parsed.data.commissionPlan && parsed.data.commissionPlan.length > 0
+        plan && plan.phases.length > 0
           ? ({
-              phases: parsed.data.commissionPlan.map((p) => ({
+              phases: plan.phases.map((p) => ({
                 durationMonths: p.durationMonths,
                 rateType: p.rateType,
                 bracketBasis: p.bracketBasis,
                 payoutBase: p.payoutBase,
                 brackets: sortBrackets(p.brackets),
               })),
+              // Ajustes de topo so vao ao banco quando saem do padrao — plano
+              // simples nao carrega campo inerte.
+              ...("clock" in plan && plan.clock ? { clock: plan.clock } : {}),
+              ...("promoPaidUntil" in plan && plan.promoPaidUntil
+                ? { promoPaidUntil: plan.promoPaidUntil }
+                : {}),
             } as unknown as Prisma.InputJsonValue)
           : Prisma.DbNull
     }

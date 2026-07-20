@@ -31,7 +31,7 @@ export const indicacoesComissoesModule: BiModule = {
       monthlyByStatus,
       legacyTotal,
       monthlyTotal,
-      topReferrers,
+      topReferrersRaw,
       recentPayouts,
     ] = await Promise.all([
       prisma.referralCommission.aggregate({
@@ -58,13 +58,22 @@ export const indicacoesComissoesModule: BiModule = {
       prisma.referralMonthlyCommission.groupBy({ by: ["status"], where: scope, _sum: { amount: true } }),
       prisma.referralCommission.aggregate({ _sum: { amount: true }, where: scope }),
       prisma.referralMonthlyCommission.aggregate({ _sum: { amount: true }, where: scope }),
-      prisma.referralCommission.groupBy({
-        by: ["referrerTenantId"],
-        where: { ...scope, createdAt: range },
-        _sum: { amount: true },
-        orderBy: { _sum: { amount: "desc" } },
-        take: 10,
-      }),
+      // Sem `take` nos groupBy: o top real só existe depois de somar os dois
+      // motores por indicador — cortar antes descartaria quem lidera na soma.
+      Promise.all([
+        prisma.referralCommission.groupBy({
+          by: ["referrerTenantId"],
+          where: { ...scope, createdAt: range },
+          _sum: { amount: true },
+          orderBy: { _sum: { amount: "desc" } },
+        }),
+        prisma.referralMonthlyCommission.groupBy({
+          by: ["referrerTenantId"],
+          where: { ...scope, createdAt: range },
+          _sum: { amount: true },
+          orderBy: { _sum: { amount: "desc" } },
+        }),
+      ]),
       prisma.referralPayout.findMany({
         where: { ...(referrerFilter ? { referrer: referrerFilter } : {}) },
         orderBy: { createdAt: "desc" },
@@ -130,7 +139,20 @@ export const indicacoesComissoesModule: BiModule = {
       },
     ]
 
-    // Top indicadores por comissão.
+    // Top indicadores por comissão — soma dos dois motores por indicador.
+    const [legacyByReferrer, monthlyByReferrer] = topReferrersRaw
+    const referrerTotals = new Map<string, number>()
+    for (const r of [...legacyByReferrer, ...monthlyByReferrer]) {
+      referrerTotals.set(
+        r.referrerTenantId,
+        (referrerTotals.get(r.referrerTenantId) ?? 0) + Number(r._sum.amount ?? 0),
+      )
+    }
+    const topReferrers = [...referrerTotals.entries()]
+      .map(([referrerTenantId, valor]) => ({ referrerTenantId, valor }))
+      .sort((a, b) => b.valor - a.valor)
+      .slice(0, 10)
+
     const referrerIds = topReferrers.map((r) => r.referrerTenantId)
     const referrerTenants = await prisma.tenant.findMany({
       where: { id: { in: referrerIds } },
@@ -150,7 +172,7 @@ export const indicacoesComissoesModule: BiModule = {
         rows: topReferrers.map((r) => ({
           id: r.referrerTenantId,
           nome: referrerName.get(r.referrerTenantId) ?? "—",
-          valor: Number(r._sum.amount ?? 0),
+          valor: r.valor,
         })),
       },
       {

@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import {
+  describeEffectiveCommission,
+  resolveEffectiveCommission,
+} from "@/lib/referrals/effective-rule"
 import { requireAdminSession } from "@/lib/auth/admin-session"
 import { invalidateTenant } from "@/lib/redis/tenant-cache"
 import { logAudit } from "@/lib/audit"
@@ -98,6 +102,12 @@ export const GET = withRequestContextParams<{ id: string }>(
           defaultReferralPercent: true,
           referralPayoutDay: true,
           defaultReferralMinReferrals: true,
+          commissionMode: true,
+          commissionBracketBasis: true,
+          commissionRateType: true,
+          commissionPayoutBase: true,
+          commissionBrackets: true,
+          commissionPlan: true,
         },
       }),
       prisma.tenant.count({ where: { referrerTenantId: id } }),
@@ -143,6 +153,15 @@ export const GET = withRequestContextParams<{ id: string }>(
   const referralPayoutDay = systemSettings?.referralPayoutDay ?? 20
   const defaultReferralMinReferrals =
     systemSettings?.defaultReferralMinReferrals ?? 3
+
+  // Regra de comissao que ESTA VALENDO para esta unidade, resolvida pelo mesmo
+  // `resolveEffectiveCommission` que o fechamento mensal usa. Enviada pronta
+  // para a tela nao poder exibir um percentual diferente do que o sistema paga.
+  const effectiveRule = resolveEffectiveCommission(tenant, systemSettings)
+  const commissionPreview = {
+    description: describeEffectiveCommission(effectiveRule),
+    warnings: effectiveRule.warnings,
+  }
 
   const referralStats = {
     defaultPercent: defaultReferralPercent,
@@ -361,6 +380,7 @@ export const GET = withRequestContextParams<{ id: string }>(
         commissionBrackets: tenant.commissionBrackets ?? null,
         commissionPlan: tenant.commissionPlan ?? null,
         commissionOverrideSource: tenant.commissionOverrideSource ?? null,
+        commissionPreview,
         // Unidade Tecnica
         tecnicaEnabled: tenant.tecnicaEnabled,
         tecnicaUrl: tenant.tecnicaUrl,
