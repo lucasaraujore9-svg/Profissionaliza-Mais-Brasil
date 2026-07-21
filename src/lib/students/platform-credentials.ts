@@ -20,6 +20,23 @@ export function getStudentPlatformLoginUrl(): string {
   return process.env.EA_STUDENT_LOGIN_URL?.trim() || DEFAULT_STUDENT_LOGIN_URL
 }
 
+/**
+ * Copy única para quando a plataforma de aulas recusa a troca de senha.
+ *
+ * A API v2 da Escola Avançada não expõe alteração de senha de aluno (o campo
+ * `senha` só existe em `funcionarios/novo`), então `usuarios/editar` descarta o
+ * parâmetro e responde "sucesso". Estas mensagens substituem o falso positivo
+ * que era mostrado antes.
+ */
+export const PLATFORM_PASSWORD_UNSUPPORTED_STUDENT =
+  "A plataforma de aulas não permite trocar a senha por aqui — quem define a senha é ela. Sua senha atual está no card “acesso à plataforma de aulas”, na sua área do aluno."
+
+export const PLATFORM_PASSWORD_UNSUPPORTED_STAFF =
+  "A plataforma de aulas (Escola Avançada) não permite alterar a senha do aluno pela API — `usuarios/editar` não aceita o campo `senha`. A senha exibida foi ressincronizada com a que realmente vale lá; repasse-a ao aluno."
+
+export const PLATFORM_PASSWORD_UNVERIFIED =
+  "A plataforma de aulas não respondeu à conferência da senha. Nada foi alterado — tente novamente em alguns minutos."
+
 export interface StudentPlatformCredentials {
   /** Login (usuário) do aluno na plataforma de aulas. */
   login: string

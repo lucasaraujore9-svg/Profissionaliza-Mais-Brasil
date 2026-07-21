@@ -392,6 +392,13 @@ function PlatformAccessSection({
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
         setChangeResult({ ok: false, text: data.error ?? "Falha ao trocar a senha" })
+        // 422 com `currentPassword`: a plataforma recusou a troca e o snapshot
+        // foi ressincronizado com a senha real — recarrega para o card parar de
+        // mostrar o valor antigo.
+        if (data.currentPassword) {
+          setReveal(true)
+          router.refresh()
+        }
       } else {
         setReveal(true)
         setShowChange(false)

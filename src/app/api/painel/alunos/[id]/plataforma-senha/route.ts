@@ -3,6 +3,10 @@ import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { requireResellerSession } from "@/lib/auth/reseller-session"
 import { changeStudentPlatformPassword } from "@/lib/students/plataforma-actions"
+import {
+  PLATFORM_PASSWORD_UNSUPPORTED_STAFF,
+  PLATFORM_PASSWORD_UNVERIFIED,
+} from "@/lib/students/platform-credentials"
 import { generateTemporaryPassword } from "@/lib/students/generate-password"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 
@@ -46,6 +50,21 @@ export const POST = withRequestContextParams<{ id: string }>(
       return NextResponse.json(
         { error: "Aluno ainda não está na plataforma de aulas (sem matrícula paga)." },
         { status: 400 },
+      )
+    }
+
+    // A EA ignora `senha` em `usuarios/editar` e ainda responde "sucesso" — não
+    // repassamos esse falso positivo. Devolvemos a senha que REALMENTE vale lá
+    // (já ressincronizada no snapshot) para a unidade conseguir atender o aluno.
+    if (!result.applied) {
+      return NextResponse.json(
+        {
+          error: result.effectivePassword
+            ? PLATFORM_PASSWORD_UNSUPPORTED_STAFF
+            : PLATFORM_PASSWORD_UNVERIFIED,
+          currentPassword: result.effectivePassword,
+        },
+        { status: 422 },
       )
     }
 

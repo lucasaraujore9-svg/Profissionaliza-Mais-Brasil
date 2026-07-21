@@ -314,6 +314,23 @@
 - **Reativar aluno:** `status = "ativo"`, `apostila = "liberar"`
 - **Atualizar dados pessoais** se necessário
 
+**🚫 NÃO dá para trocar a senha do aluno por aqui.** A lista oficial de campos de
+`usuarios/editar` não inclui `senha` — esse campo só existe em
+`funcionarios/novo`. Se enviado, a API **descarta em silêncio** e mesmo assim
+responde `"Aluno editado com sucesso!"`. Verificado contra a coleção oficial
+(Postman) em jul/2026.
+
+Consequência prática: **nunca confie no retorno** para dar "senha alterada" como
+certo. `changeStudentPlatformPassword` envia o campo e depois **relê**
+`usuarios/listar` para confirmar; sem confirmação, não reporta sucesso e não
+grava o snapshot local (foi exatamente esse falso positivo que corrompeu a senha
+exibida na área do aluno).
+
+Recuperação de senha do aluno: a tela de login da plataforma não faz reset
+automatizado (o "Esqueci minha senha" de lá abre atendimento por WhatsApp do
+fornecedor). O caminho self-service é nosso — área do aluno + `POST
+/api/aluno/credenciais-plataforma`.
+
 ---
 
 ### 4.3 POST `usuarios/listar` — Buscar aluno

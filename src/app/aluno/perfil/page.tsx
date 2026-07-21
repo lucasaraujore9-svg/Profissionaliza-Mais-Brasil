@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma"
 import { requireStudentSession } from "@/lib/auth/student-session"
 import { StudentProfileForm } from "@/components/aluno/student-profile-form"
 import { StudentPasswordForm } from "@/components/aluno/student-password-form"
-import { PlatformPasswordForm } from "@/components/aluno/platform-password-form"
+import { PlatformAccessHelp } from "@/components/aluno/platform-access-help"
 import { DeleteAccountSection } from "@/components/aluno/delete-account-section"
 import { getStudentPlatformCredentials } from "@/lib/students/platform-credentials"
 
@@ -29,8 +29,8 @@ export default async function StudentProfilePage() {
 
   if (!student) return null
 
-  // So oferece a troca de senha da plataforma de aulas quando o aluno ja foi
-  // cadastrado la (matricula paga) — caso contrario nao ha senha a redefinir.
+  // So oferece a ajuda de acesso a plataforma de aulas quando o aluno ja foi
+  // cadastrado la (matricula paga) — antes disso nao ha credencial nenhuma.
   const platformCredentials = await getStudentPlatformCredentials(
     session.studentId,
   )
@@ -68,7 +68,7 @@ export default async function StudentProfilePage() {
         <StudentPasswordForm passwordSetAt={student.passwordSetAt?.toISOString() ?? null} />
       </div>
 
-      {platformCredentials && <PlatformPasswordForm />}
+      {platformCredentials && <PlatformAccessHelp />}
 
       <DeleteAccountSection />
     </div>

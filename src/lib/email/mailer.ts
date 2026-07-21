@@ -55,6 +55,10 @@ import {
   PaymentRejectedTemplate,
   type PaymentRejectedTemplateProps,
 } from "./templates/payment-rejected"
+import {
+  PlatformAccessTemplate,
+  type PlatformAccessTemplateProps,
+} from "./templates/platform-access"
 import { sendSmtp, getDefaultFrom } from "./smtp"
 
 export class EmailError extends Error {
@@ -88,6 +92,7 @@ export type EmailTemplate =
   | { type: "notification"; props: NotificationTemplateProps }
   | { type: "payment-pending"; props: PaymentPendingTemplateProps }
   | { type: "payment-rejected"; props: PaymentRejectedTemplateProps }
+  | { type: "platform-access"; props: PlatformAccessTemplateProps }
 
 interface SendEmailParams {
   to: string | string[]
@@ -170,6 +175,8 @@ function renderTemplate(template: EmailTemplate): React.ReactElement {
       return PaymentPendingTemplate(template.props)
     case "payment-rejected":
       return PaymentRejectedTemplate(template.props)
+    case "platform-access":
+      return PlatformAccessTemplate(template.props)
   }
 }
 

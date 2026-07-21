@@ -65,8 +65,16 @@ export interface EANovoAlunoResult {
 export interface EAEditarAlunoParams extends Partial<EANovoAlunoParams> {
   id_aluno: number
   /**
-   * Nova senha do aluno na plataforma de aulas. `usuarios/novo` gera a senha
-   * automaticamente, mas `usuarios/editar` aceita o campo para redefini-la.
+   * ⚠️ NAO FUNCIONA. A API v2 nao permite definir a senha de um ALUNO: o campo
+   * `senha` so existe em `funcionarios/novo`. Em `usuarios/editar` a EA
+   * DESCARTA o parametro em silencio e ainda responde "Aluno editado com
+   * sucesso!" — o que fazia o sistema reportar uma troca de senha que nunca
+   * aconteceu (verificado contra a colecao oficial da API, jul/2026).
+   *
+   * Mantido no tipo porque `changeStudentPlatformPassword` ainda envia o campo
+   * e CONFERE o resultado relendo `usuarios/listar` — se um dia a EA passar a
+   * aceitar, o recurso volta a funcionar sozinho. Nao usar em outro lugar sem
+   * a mesma releitura de confirmacao.
    */
   senha?: string
 }
