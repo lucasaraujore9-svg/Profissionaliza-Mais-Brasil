@@ -122,6 +122,7 @@ export function CheckoutPanel({
             courseId={courseId}
             packageId={packageId}
             couponCode={couponCode}
+            amount={finalPrice}
             initPath={form.initPath}
             processPath={form.processPath}
             statusPath={form.statusPath}

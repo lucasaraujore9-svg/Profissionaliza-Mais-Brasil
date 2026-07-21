@@ -6,18 +6,7 @@ import { requireSuperAdmin } from "@/lib/auth/guards"
 import { sendInvite } from "@/lib/auth/invite"
 import { generateTempPassword, sendCredentialsEmail } from "@/lib/auth/credentials"
 import { withRequestContext } from "@/lib/observability/with-request-context"
-
-const PMB_ROLES = ["SUPER_ADMIN", "PMB_SALES", "PMB_SALES_MGR", "PMB_REVENDA_SALES", "PMB_RESELLER_MGR", "PMB_FINANCEIRO", "PMB_DESIGNER"] as const
-
-const ROLE_LABEL: Record<string, string> = {
-  SUPER_ADMIN: "Super Admin",
-  PMB_SALES: "Vendedor de curso",
-  PMB_SALES_MGR: "Gerente de vendas",
-  PMB_REVENDA_SALES: "Vendedor de revenda",
-  PMB_RESELLER_MGR: "Gerente de unidades",
-  PMB_FINANCEIRO: "Financeiro",
-  PMB_DESIGNER: "Designer",
-}
+import { PMB_TEAM_ROLES, pmbRoleLabel } from "@/lib/auth/roles"
 
 export const GET = withRequestContext(
   { action: "admin.equipe.list", route: "/api/admin/equipe" },
@@ -26,7 +15,7 @@ export const GET = withRequestContext(
   if (!guard.ok) return guard.response
 
   const users = await prisma.user.findMany({
-    where: { role: { in: [...PMB_ROLES] } },
+    where: { role: { in: [...PMB_TEAM_ROLES] } },
     select: {
       id: true,
       name: true,
@@ -65,7 +54,7 @@ const createSchema = z
   .object({
     name: z.string().min(2),
     email: z.string().trim().toLowerCase().email(),
-    role: z.enum(PMB_ROLES),
+    role: z.enum(PMB_TEAM_ROLES),
     phone: z.string().optional(),
     // "invite" (padrão): envia link para o usuário definir a senha.
     // "password": cria a conta já com senha e envia as credenciais por email.
@@ -161,7 +150,7 @@ export const POST = withRequestContext(
       userEmail: user.email,
       tempPassword,
       contextLabel: "Equipe PMB",
-      roleLabel: ROLE_LABEL[user.role] ?? user.role,
+      roleLabel: pmbRoleLabel(user.role),
     })
   } else {
     const inviter = await prisma.user.findUnique({

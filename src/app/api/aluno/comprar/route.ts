@@ -28,6 +28,13 @@ import { withRequestContext } from "@/lib/observability/with-request-context"
 import { tenantCheckoutMode } from "@/lib/tenant/checkout-mode"
 import { effectivePaymentType } from "@/lib/tenant/monthly-policy"
 import { isSellablePrice } from "@/lib/checkout/price-guard"
+import { getOrCreatePmbTenant } from "@/lib/pmb-tenant"
+import {
+  isFreeAmount,
+  pmbTenantContext,
+  releaseFreeEnrollment,
+  resellerTenantContext,
+} from "@/lib/checkout/free-enrollment"
 import { contextLogger } from "@/lib/logger"
 
 const createSchema = z.object({
@@ -217,7 +224,7 @@ async function handleResellerInit(
         tenantId,
         status: { in: ["PENDING", "ACTIVE", "COMPLETED"] },
       },
-      select: { id: true, status: true, couponId: true },
+      select: { id: true, status: true, couponId: true, finalAmount: true },
     })
 
     if (existing && existing.status !== "PENDING") {
@@ -232,14 +239,27 @@ async function handleResellerInit(
     }
 
     if (existing) {
+      let reusedAmount = Number(existing.finalAmount)
       if (consumedCouponId && !existing.couponId) {
         await prisma.enrollment.update({
           where: { id: existing.id },
           data: { originalAmount: basePrice, discountAmount, finalAmount, couponId },
         })
+        reusedAmount = finalAmount
       } else if (consumedCouponId) {
         await releaseCoupon(consumedCouponId).catch(swallow("aluno.comprar.reseller"))
         consumedCouponId = null
+      }
+      // Cupom zerou o valor da matrícula reaproveitada: libera aqui, senão o
+      // aluno cairia na tela de pagamento com R$ 0 (mesma regra de
+      // /api/loja/checkout no reuso).
+      if (isFreeAmount(reusedAmount)) {
+        // Zerado ANTES do await: o cupom já está gravado na matrícula
+        // reaproveitada, então devolvê-lo no catch liberaria um uso que segue
+        // vinculado a uma venda viva.
+        consumedCouponId = null
+        await releaseFreeEnrollment(resellerTenantContext(tenant), existing.id)
+        return NextResponse.json({ data: { enrollmentId: existing.id, free: true } })
       }
       // O cliente (student-buy-client) usa só enrollmentId; a tela /pagar
       // re-lê preço/gateway/parcelas do banco. Não devolvemos campos derivados
@@ -265,6 +285,49 @@ async function handleResellerInit(
       select: { id: true },
     })
     createdEnrollmentId = enrollment.id
+
+    // ── Cupom cobriu 100% ────────────────────────────────────────────────────
+    // Gateway recusa R$ 0: libera o acesso na hora, sem mandar o aluno para a
+    // tela de pagamento.
+    //
+    // Rollback PRÓPRIO (e não o catch externo) porque `releaseFreeEnrollment`
+    // provisiona o acesso e marca a matrícula ACTIVE ANTES de escrever as
+    // notificações: uma falha tardia faria o catch externo apagar uma matrícula
+    // JÁ provisionada. Só desfazemos o que continua PENDING.
+    if (isFreeAmount(finalAmount)) {
+      try {
+        await releaseFreeEnrollment(resellerTenantContext(tenant), enrollment.id)
+      } catch (err) {
+        const stillPending = await prisma.enrollment
+          .findUnique({ where: { id: enrollment.id }, select: { status: true } })
+          .catch(() => null)
+        if (stillPending?.status === "PENDING") {
+          await prisma.enrollment
+            .delete({ where: { id: enrollment.id } })
+            .catch(swallow("aluno.comprar.reseller.free_rollback"))
+          if (consumedCouponId) {
+            await releaseCoupon(consumedCouponId).catch(
+              swallow("aluno.comprar.reseller.free_rollback"),
+            )
+          }
+        }
+        createdEnrollmentId = null
+        consumedCouponId = null
+        contextLogger().error(
+          { err, event: "aluno.comprar.reseller.free_failed", enrollmentId: enrollment.id },
+          "liberacao de compra com desconto integral falhou",
+        )
+        return NextResponse.json(
+          { error: "Falha ao liberar o curso. Tente novamente." },
+          { status: 502 },
+        )
+      }
+      consumedCouponId = null // venda concluída: não liberar a reserva no catch
+      createdEnrollmentId = null // matrícula viva: o catch externo não pode apagá-la
+      return NextResponse.json({
+        data: { enrollmentId: enrollment.id, free: true },
+      })
+    }
 
     await prisma.enrollment.update({
       where: { id: enrollment.id },
@@ -510,6 +573,34 @@ export const POST = withRequestContext(
     },
     select: { id: true },
   })
+
+  // ── Cupom cobriu 100% ──────────────────────────────────────────────────────
+  // Gateway recusa R$ 0: libera o acesso na hora, sem cobrança. O rollback é
+  // obrigatório: sem ele, uma falha da plataforma de aulas deixaria exatamente
+  // o estado que este guard existe para evitar — matrícula PENDING de R$ 0 com
+  // o cupom consumido, travando o aluno em "cobrança pendente" nas retentativas.
+  if (isFreeAmount(finalAmount)) {
+    try {
+      const pmbTenant = await getOrCreatePmbTenant()
+      await releaseFreeEnrollment(pmbTenantContext(pmbTenant), enrollment.id)
+    } catch (err) {
+      await prisma.enrollment
+        .delete({ where: { id: enrollment.id } })
+        .catch(swallow("aluno.comprar.free_rollback"))
+      if (couponId) await releaseCoupon(couponId).catch(swallow("aluno.comprar.free_rollback"))
+      contextLogger().error(
+        { err, event: "aluno.comprar.free_failed", enrollmentId: enrollment.id },
+        "liberacao de compra com desconto integral falhou",
+      )
+      return NextResponse.json(
+        { error: "Falha ao liberar o curso. Tente novamente." },
+        { status: 502 },
+      )
+    }
+    return NextResponse.json({
+      data: { enrollmentId: enrollment.id, free: true },
+    })
+  }
 
   const externalReference = `pmb_enr_${enrollment.id}`
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? ""

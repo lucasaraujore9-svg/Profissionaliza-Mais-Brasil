@@ -1,17 +1,25 @@
-import { Prisma } from "@prisma/client"
+/**
+ * Ledger LEGADO de comissao de indicacao (uma linha por mensalidade paga).
+ *
+ * O motor que criava essas linhas foi APOSENTADO na unificacao: hoje existe um
+ * unico motor, o fechamento mensal em ./monthly.ts. Este arquivo permanece
+ * porque o ledger legado continua existindo como historico e ainda precisa de:
+ *   - estorno/clawback das linhas antigas (refund total e parcial);
+ *   - soma nos totais do painel (`summaryForTenant`);
+ *   - `computeAvailableAt`, que os dois motores sempre compartilharam.
+ *
+ * `createCommissionForTenantPayment` e `backfillReferrerCommissions` viraram
+ * no-op logado: os chamadores (webhook Asaas, pagamento por cartao, payout)
+ * seguem intactos, mas nenhuma linha nova nasce aqui.
+ */
 import type { ReferralCommission } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { createNotification } from "@/lib/notifications"
 import { contextLogger } from "@/lib/logger"
 import { swallow } from "@/lib/errors"
-import { parseReferralTiers, resolveTierPercent } from "@/lib/referrals/tiers"
-import { resolveCommissionRule } from "@/lib/referrals/rules"
 import { CLAWBACK_MARKER_PREFIX, isClawbackMarked } from "@/lib/referrals/clawback"
 
-const SETTINGS_ID = "default"
-const DEFAULT_PERCENT = 5
 const DEFAULT_PAYOUT_DAY = 20
-const DEFAULT_MIN_REFERRALS = 3
 
 /**
  * Calcula a data em que a comissao fica disponivel para saque.
@@ -37,382 +45,38 @@ export function computeAvailableAt(paidAt: Date, payoutDay = DEFAULT_PAYOUT_DAY)
   return d
 }
 
-async function readReferralSettings() {
-  const row = await prisma.systemSettings.findUnique({
-    where: { id: SETTINGS_ID },
-    select: {
-      referralEnabled: true,
-      defaultReferralPercent: true,
-      referralPayoutDay: true,
-      referralMinPayout: true,
-      defaultReferralMinReferrals: true,
-      commissionMode: true,
-      commissionBracketBasis: true,
-      commissionRateType: true,
-      commissionPayoutBase: true,
-      commissionBrackets: true,
-    },
-  })
-  return {
-    enabled: row?.referralEnabled ?? true,
-    defaultPercent: Number(row?.defaultReferralPercent ?? DEFAULT_PERCENT),
-    payoutDay: row?.referralPayoutDay ?? DEFAULT_PAYOUT_DAY,
-    minPayout: Number(row?.referralMinPayout ?? 50),
-    defaultMinReferrals:
-      row?.defaultReferralMinReferrals ?? DEFAULT_MIN_REFERRALS,
-    // Config global do motor por faixas — usada para decidir se ESTE indicador
-    // opera por pagamento (legado) ou por fechamento mensal (MONTHLY_TIERED).
-    commissionGlobal: row
-      ? {
-          commissionMode: row.commissionMode,
-          commissionBracketBasis: row.commissionBracketBasis,
-          commissionRateType: row.commissionRateType,
-          commissionPayoutBase: row.commissionPayoutBase,
-          commissionBrackets: row.commissionBrackets,
-        }
-      : null,
-  }
-}
+const LEGACY_NOOP_EVENT = "referrals.legacy_engine_noop"
 
 /**
- * True se o indicador opera no motor MONTHLY_TIERED (faixas). Nesse caso as
- * comissoes NAO sao criadas por pagamento — o fechamento mensal
- * (src/lib/referrals/monthly.ts) apura tudo. Resolve override (Tenant) sobre o
- * padrao global (SystemSettings).
- */
-function referrerUsesMonthlyEngine(
-  referrer: {
-    commissionMode: import("@prisma/client").CommissionMode | null
-    commissionBracketBasis: import("@prisma/client").CommissionBracketBasis | null
-    commissionRateType: import("@prisma/client").CommissionRateType | null
-    commissionPayoutBase: import("@prisma/client").CommissionPayoutBase | null
-    commissionBrackets: Prisma.JsonValue | null
-  },
-  settings: ReferralSettings,
-): boolean {
-  if (!settings.commissionGlobal) return false
-  return resolveCommissionRule(referrer, settings.commissionGlobal).mode === "MONTHLY_TIERED"
-}
-
-type ReferralSettings = Awaited<ReturnType<typeof readReferralSettings>>
-
-/**
- * Conta as unidades indicadas por `referrerTenantId` que estao ATIVAS.
- * E essa contagem que destrava a comissao de recorrencia (minimo de
- * indicacoes). Unidades canceladas/inadimplentes nao contam.
- */
-async function countActiveReferrals(referrerTenantId: string): Promise<number> {
-  return prisma.tenant.count({
-    where: { referrerTenantId, status: "ACTIVE" },
-  })
-}
-
-interface TpForCommission {
-  id: string
-  amount: Prisma.Decimal
-  paidAt: Date
-}
-interface ReferredForCommission {
-  id: string
-  name: string
-  referralPercent: Prisma.Decimal | null
-  // Escala de comissao por tempo de vida desta unidade (quando configurada).
-  referralTiers: Prisma.JsonValue | null
-  // Base para contar os meses da escala (fallback createdAt).
-  activatedAt: Date | null
-  createdAt: Date
-}
-interface ReferrerForCommission {
-  id: string
-  owner: { email: string | null } | null
-}
-
-/**
- * Cria UMA ReferralCommission para uma TenantPayment ja paga, aplicando
- * anti-fraude (mesmo email entre donos), percentual e notificacao.
+ * APOSENTADA. O motor por pagamento foi substituido pelo fechamento mensal
+ * (`computeMonthlyCommissions` em ./monthly.ts), que apura TODOS os indicadores.
  *
- * NAO faz o gate de minimo de indicacoes — o caller decide se chama. Usada
- * tanto pelo fluxo direto (webhook) quanto pelo backfill retroativo.
- *
- * Idempotente por tenantPaymentId. Retorna null se anti-fraude bloquear,
- * percentual <= 0, ou a comissao ja existir via race resolvida.
- */
-async function createCommissionRow(
-  tp: TpForCommission,
-  referred: ReferredForCommission,
-  referrer: ReferrerForCommission,
-  settings: ReferralSettings,
-): Promise<ReferralCommission | null> {
-  const existing = await prisma.referralCommission.findUnique({
-    where: { tenantPaymentId: tp.id },
-  })
-  if (existing) return existing
-
-  // Verificacao anti-fraude: mesmo email entre referrer.owner e referred.owner.
-  if (referrer.owner?.email && referred.id !== referrer.id) {
-    const referredOwner = await prisma.user.findFirst({
-      where: { tenantId: referred.id },
-      select: { email: true },
-    })
-    if (referredOwner?.email && referredOwner.email === referrer.owner.email) {
-      contextLogger().warn(
-        { event: "referrals.same_owner_email", referrerId: referrer.id, referredId: referred.id },
-        "mesmo email entre referrer e referred — comissão não criada",
-      )
-      return null
-    }
-  }
-
-  // Percentual efetivo: a escala por tempo de vida da unidade indicada tem
-  // prioridade; sem escala, cai no override individual e depois no padrao
-  // global. A escala conta meses de calendario desde a ativacao da unidade
-  // (activatedAt; fallback createdAt) ate a data do pagamento.
-  const tierPercent = resolveTierPercent(
-    parseReferralTiers(referred.referralTiers),
-    referred.activatedAt ?? referred.createdAt,
-    tp.paidAt,
-  )
-  const percent =
-    tierPercent != null
-      ? tierPercent
-      : referred.referralPercent != null
-        ? Number(referred.referralPercent)
-        : settings.defaultPercent
-
-  if (!percent || percent <= 0) return null
-
-  const baseAmount = new Prisma.Decimal(tp.amount)
-  const percentDecimal = new Prisma.Decimal(percent)
-  const amount = baseAmount.mul(percentDecimal).div(100).toDecimalPlaces(2)
-
-  const availableAt = computeAvailableAt(tp.paidAt, settings.payoutDay)
-
-  let commission: ReferralCommission
-  try {
-    commission = await prisma.referralCommission.create({
-      data: {
-        referrerTenantId: referrer.id,
-        referredTenantId: referred.id,
-        tenantPaymentId: tp.id,
-        baseAmount,
-        percent: percentDecimal,
-        amount,
-        status: "PENDING",
-        availableAt,
-      },
-    })
-  } catch (err) {
-    // Race condition no unique tenantPaymentId
-    const reread = await prisma.referralCommission.findUnique({
-      where: { tenantPaymentId: tp.id },
-    })
-    if (reread) return reread
-    throw err
-  }
-
-  // Notifica indicador
-  const amountFmt = amount.toFixed(2).replace(".", ",")
-  await createNotification({
-    audience: "TENANT",
-    tenantId: referrer.id,
-    level: "SUCCESS",
-    title: "Nova comissao de indicacao",
-    body: `Voce ganhou R$ ${amountFmt} pela mensalidade de ${referred.name}. Liberacao em ${availableAt.toLocaleDateString("pt-BR")}.`,
-    category: "referral",
-    href: "/painel/indicacoes",
-  })
-
-  return commission
-}
-
-/**
- * Gera retroativamente as comissoes das mensalidades pagas das unidades
- * indicadas por `referrerTenantId`, caso o indicador ja tenha atingido o
- * minimo de indicacoes ATIVAS.
- *
- * Enquanto o indicador esta abaixo do minimo, as comissoes nao sao criadas
- * (ficam "retidas"). Assim que ele atinge o minimo, esta funcao varre as
- * mensalidades pagas que ainda nao tem comissao e as cria — incluindo as do
- * periodo retido. Idempotente: pula mensalidades que ja possuem comissao.
- *
- * Retorna a quantidade de comissoes criadas nesta chamada.
- */
-export async function backfillReferrerCommissions(
-  referrerTenantId: string,
-): Promise<number> {
-  const settings = await readReferralSettings()
-  if (!settings.enabled) return 0
-
-  const referrer = await prisma.tenant.findUnique({
-    where: { id: referrerTenantId },
-    select: {
-      id: true,
-      referralMinReferrals: true,
-      owner: { select: { email: true } },
-      commissionMode: true,
-      commissionBracketBasis: true,
-      commissionRateType: true,
-      commissionPayoutBase: true,
-      commissionBrackets: true,
-    },
-  })
-  if (!referrer) return 0
-
-  // Modo por faixas: o fechamento mensal (monthly.ts) cuida; nao retrocria
-  // comissoes por pagamento para esse indicador.
-  if (referrerUsesMonthlyEngine(referrer, settings)) return 0
-
-  const minReferrals = referrer.referralMinReferrals ?? settings.defaultMinReferrals
-  if (minReferrals > 0) {
-    const activeReferrals = await countActiveReferrals(referrer.id)
-    if (activeReferrals < minReferrals) return 0 // ainda nao elegivel
-  }
-
-  const referredTenants = await prisma.tenant.findMany({
-    where: { referrerTenantId },
-    select: {
-      id: true,
-      name: true,
-      referralPercent: true,
-      referralTiers: true,
-      activatedAt: true,
-      createdAt: true,
-    },
-  })
-  if (referredTenants.length === 0) return 0
-
-  const referredById = new Map(referredTenants.map((r) => [r.id, r]))
-
-  // Mensalidades pagas das indicadas que ainda nao geraram comissao.
-  const paidPayments = await prisma.tenantPayment.findMany({
-    where: {
-      tenantId: { in: referredTenants.map((r) => r.id) },
-      paidAt: { not: null },
-      referralCommission: { is: null },
-    },
-    select: { id: true, tenantId: true, amount: true, paidAt: true },
-  })
-
-  let created = 0
-  for (const tp of paidPayments) {
-    const referred = referredById.get(tp.tenantId)
-    if (!referred || !tp.paidAt) continue
-    const row = await createCommissionRow(
-      { id: tp.id, amount: tp.amount, paidAt: tp.paidAt },
-      referred,
-      referrer,
-      settings,
-    )
-    if (row) created += 1
-  }
-  return created
-}
-
-/**
- * Cria a comissao de indicacao para uma TenantPayment recebida.
- *
- * Regra anti-piramide: SEMPRE 1 nivel apenas. Nunca olhamos referrer.referrerTenantId.
- *
- * Idempotente: se ja existe ReferralCommission com este tenantPaymentId, retorna a existente.
- * Retorna null se:
- *   - feature desativada
- *   - referredTenant nao tem referrerTenantId
- *   - referrerTenantId aponta para tenant inexistente
- *   - tenantPayment nao pago (sem paidAt)
- *   - indicador ainda nao atingiu o minimo de indicacoes ATIVAS (gate);
- *     nesse caso a comissao fica retida e e gerada retroativamente depois.
- *
- * Ao criar (gate aberto), dispara o backfill retroativo do indicador.
- * Notifica o indicador (in-app) ao criar a comissao.
+ * Mantida como no-op para nao mexer nos chamadores (webhook Asaas em
+ * src/lib/asaas/process.ts e pagamento por cartao em
+ * src/app/api/cobranca/[paymentId]/pay-card/route.ts) e para que qualquer
+ * chamada residual apareca no log em vez de criar uma linha fantasma no ledger
+ * legado — que hoje o motor mensal trataria como "mensalidade ja comissionada"
+ * e excluiria da apuracao, causando comissao a menos.
  */
 export async function createCommissionForTenantPayment(
   tenantPaymentId: string,
 ): Promise<ReferralCommission | null> {
-  // Idempotencia
-  const existing = await prisma.referralCommission.findUnique({
-    where: { tenantPaymentId },
-  })
-  if (existing) return existing
-
-  const settings = await readReferralSettings()
-  if (!settings.enabled) return null
-
-  const tp = await prisma.tenantPayment.findUnique({
-    where: { id: tenantPaymentId },
-    select: {
-      id: true,
-      tenantId: true,
-      amount: true,
-      paidAt: true,
-      status: true,
-    },
-  })
-  if (!tp) return null
-  if (!tp.paidAt) return null
-
-  const referred = await prisma.tenant.findUnique({
-    where: { id: tp.tenantId },
-    select: {
-      id: true,
-      name: true,
-      referrerTenantId: true,
-      referralPercent: true,
-      referralTiers: true,
-      activatedAt: true,
-      createdAt: true,
-    },
-  })
-  if (!referred?.referrerTenantId) return null
-
-  // 1-nivel apenas: nunca olhamos referrer.referrerTenantId
-  const referrer = await prisma.tenant.findUnique({
-    where: { id: referred.referrerTenantId },
-    select: {
-      id: true,
-      referralMinReferrals: true,
-      owner: { select: { email: true } },
-      commissionMode: true,
-      commissionBracketBasis: true,
-      commissionRateType: true,
-      commissionPayoutBase: true,
-      commissionBrackets: true,
-    },
-  })
-  if (!referrer) return null
-
-  // Modo por faixas: comissao apurada no fechamento mensal (monthly.ts), nunca
-  // por pagamento individual. Nao cria ReferralCommission para esse indicador.
-  if (referrerUsesMonthlyEngine(referrer, settings)) return null
-
-  // GATE: a unidade indicadora so recebe comissao de recorrencia depois de
-  // atingir o minimo de indicacoes ATIVAS (override por unidade ou padrao
-  // global). Enquanto nao atinge, a comissao fica "retida" (nao criada) e
-  // sera gerada retroativamente assim que o minimo for alcancado.
-  const minReferrals =
-    referrer.referralMinReferrals ?? settings.defaultMinReferrals
-  if (minReferrals > 0) {
-    const activeReferrals = await countActiveReferrals(referrer.id)
-    if (activeReferrals < minReferrals) return null
-  }
-
-  // Gate aberto: cria a comissao desta mensalidade...
-  const commission = await createCommissionRow(
-    { id: tp.id, amount: tp.amount, paidAt: tp.paidAt },
-    referred,
-    referrer,
-    settings,
+  contextLogger().info(
+    { event: LEGACY_NOOP_EVENT, fn: "createCommissionForTenantPayment", tenantPaymentId },
+    "motor legado aposentado — comissao sera apurada no fechamento mensal",
   )
+  return null
+}
 
-  // ...e faz o backfill retroativo das mensalidades retidas enquanto o gate
-  // estava fechado (idempotente — pula as que ja tem comissao).
-  await backfillReferrerCommissions(referrer.id).catch((err) => {
-    contextLogger().error(
-      { err, event: "referrals.backfill_failed", referrerTenantId: referrer.id },
-      "backfill de comissoes retroativas falhou",
-    )
-  })
-
-  return commission
+/** APOSENTADA junto com o motor legado. Ver `createCommissionForTenantPayment`. */
+export async function backfillReferrerCommissions(
+  referrerTenantId: string,
+): Promise<number> {
+  contextLogger().info(
+    { event: LEGACY_NOOP_EVENT, fn: "backfillReferrerCommissions", referrerTenantId },
+    "motor legado aposentado — comissao sera apurada no fechamento mensal",
+  )
+  return 0
 }
 
 /**
@@ -573,14 +237,35 @@ export async function freezeCommissionForPartialRefund(
 }
 
 export interface ReferralSummary {
+  /** Apuracao ainda sem data de liberacao. */
   pending: number
+  /** Apuracao liberada, aguardando o pagamento do financeiro. */
   available: number
+  /**
+   * CAIXA: quanto a unidade efetivamente recebeu (soma dos ReferralPayout PAID).
+   * Nao vem das comissoes porque o financeiro pode ajustar o valor na hora de
+   * marcar o saque como pago — o ajuste altera so o payout, e e o payout que
+   * corresponde ao dinheiro que saiu.
+   */
   paid: number
+  /**
+   * APURACAO das comissoes que ja foram liquidadas (status PAID nos dois
+   * ledgers). Sem ajuste manual e igual a `paid`; quando diferem, a diferenca e
+   * exatamente o ajuste feito pelo financeiro — a UI usa isso para explicar o
+   * descasamento entre o extrato de comissoes e o valor recebido.
+   */
+  accruedPaid: number
   cancelled: number
   /** Total de unidades indicadas (qualquer status). */
   totalReferrals: number
   /** Unidades indicadas ATIVAS — é esta a métrica exibida como "indicados ativos". */
   activeReferrals: number
+  /**
+   * Tudo que ja virou dinheiro ou ainda vai virar: apuracao nao paga
+   * (pending + available) + caixa (paid). A parcela ja liquidada entra UMA vez,
+   * pelo valor pago — nao pela apuracao — para nao contar a mesma comissao duas
+   * vezes nem esconder o ajuste do financeiro.
+   */
   totalGenerated: number
 }
 
@@ -595,8 +280,7 @@ export async function summaryForTenant(referrerTenantId: string): Promise<Referr
     monthlyGrouped,
     referralsCount,
     activeReferralsCount,
-    totalGenerated,
-    monthlyTotalGenerated,
+    payoutsPaid,
   ] = await Promise.all([
     prisma.referralCommission.groupBy({
       by: ["status"],
@@ -610,18 +294,12 @@ export async function summaryForTenant(referrerTenantId: string): Promise<Referr
     }),
     prisma.tenant.count({ where: { referrerTenantId } }),
     prisma.tenant.count({ where: { referrerTenantId, status: "ACTIVE" } }),
-    prisma.referralCommission.aggregate({
-      where: {
-        referrerTenantId,
-        status: { in: ["PENDING", "AVAILABLE", "PAID"] },
-      },
-      _sum: { amount: true },
-    }),
-    prisma.referralMonthlyCommission.aggregate({
-      where: {
-        referrerTenantId,
-        status: { in: ["PENDING", "AVAILABLE", "PAID"] },
-      },
+    // Fonte do "pago": o caixa. Toda comissao so chega a PAID atraves de um
+    // payout (markPayoutPaid e o unico caminho), entao nao existe comissao paga
+    // fora desta soma — e esta soma reflete o valor realmente transferido,
+    // inclusive quando o financeiro ajustou o valor no ato do pagamento.
+    prisma.referralPayout.aggregate({
+      where: { referrerTenantId, status: "PAID" },
       _sum: { amount: true },
     }),
   ])
@@ -639,15 +317,16 @@ export async function summaryForTenant(referrerTenantId: string): Promise<Referr
     totals[g.status] += Number(g._sum.amount ?? 0)
   }
 
+  const paid = Number(payoutsPaid._sum.amount ?? 0)
+
   return {
     pending: totals.PENDING,
     available: totals.AVAILABLE,
-    paid: totals.PAID,
+    paid,
+    accruedPaid: totals.PAID,
     cancelled: totals.CANCELLED,
     totalReferrals: referralsCount,
     activeReferrals: activeReferralsCount,
-    totalGenerated:
-      Number(totalGenerated._sum.amount ?? 0) +
-      Number(monthlyTotalGenerated._sum.amount ?? 0),
+    totalGenerated: totals.PENDING + totals.AVAILABLE + paid,
   }
 }

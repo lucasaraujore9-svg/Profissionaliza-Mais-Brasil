@@ -2,8 +2,7 @@ import { notFound, redirect } from "next/navigation"
 import { prisma } from "@/lib/prisma"
 import { requireAdminSession } from "@/lib/auth/admin-session"
 import { EquipeDetailClient } from "@/components/admin/equipe-detail-client"
-
-const PMB_ROLES = ["SUPER_ADMIN", "PMB_SALES", "PMB_SALES_MGR", "PMB_REVENDA_SALES", "PMB_RESELLER_MGR"] as const
+import { isPmbTeamRole } from "@/lib/auth/roles"
 
 export const dynamic = "force-dynamic"
 
@@ -36,7 +35,7 @@ export default async function EquipeDetailPage({
     },
   })
 
-  if (!user || !(PMB_ROLES as readonly string[]).includes(user.role)) notFound()
+  if (!user || !isPmbTeamRole(user.role)) notFound()
 
   const salesManagers = await prisma.user.findMany({
     where: { role: "PMB_SALES_MGR", status: "ATIVO" },

@@ -22,6 +22,12 @@ import {
   pmbMaxCardInstallments,
 } from "@/lib/installments/pmb-rules"
 import { swallow } from "@/lib/errors"
+import {
+  isFreeAmount,
+  pmbTenantContext,
+  releaseFreeEnrollment,
+} from "@/lib/checkout/free-enrollment"
+import { getOrCreatePmbTenant } from "@/lib/pmb-tenant"
 
 /**
  * Cobrança Asaas do sistema-mãe (PMB) para UMA matrícula. Extraído de
@@ -107,6 +113,8 @@ export type PmbAsaasChargeResult =
       }
     }
   | { mode: "redirect"; initPoint: string | null }
+  /** Cupom/desconto zerou o valor: acesso liberado sem cobrança. */
+  | { mode: "free" }
 
 export async function issuePmbAsaasCharge(
   input: IssuePmbAsaasChargeInput,
@@ -153,6 +161,16 @@ export async function issuePmbAsaasCharge(
     studentTenantSlug: guard.student?.tenant?.slug ?? null,
     context: "issuePmbAsaasCharge",
   })
+
+  // ── Valor zerado (cupom de 100%) ──────────────────────────────────────────
+  // O Asaas recusa cobrança de R$ 0. Libera a matrícula direto, sem gateway.
+  // Fica aqui (e não só nas rotas) para cobrir todo consumidor desta função:
+  // checkout de curso, de pacote e a retomada pela tela /pagar.
+  if (isFreeAmount(finalAmount)) {
+    const pmbTenant = await getOrCreatePmbTenant()
+    await releaseFreeEnrollment(pmbTenantContext(pmbTenant), enrollmentId)
+    return { mode: "free" }
+  }
 
   const motherKey = motherAsaasKey()
 

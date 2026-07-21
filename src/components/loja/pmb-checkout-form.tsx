@@ -285,6 +285,12 @@ export function PmbCheckoutForm({
 
       const d = payload.data
       switch (d.mode) {
+        // Cupom cobriu 100% do valor: o servidor já liberou a matrícula, não
+        // houve cobrança. Segue direto para a confirmação.
+        case "free":
+          setStatus({ kind: "approved", enrollmentId: d.enrollmentId })
+          window.location.href = `/checkout/confirmacao?enrollment_id=${d.enrollmentId}`
+          return
         case "pix":
           if (!d.pix?.encodedImage) {
             setStatus({
@@ -391,6 +397,8 @@ export function PmbCheckoutForm({
   }, [status])
 
   const submitting = status.kind === "submitting"
+  // Cupom cobriu 100%: não há forma de pagamento a escolher.
+  const isFree = typeof amount === "number" && amount <= 0
 
   // ─── Telas de resultado (substituem o form quando há um modo ativo) ───
   if (status.kind === "pix") {
@@ -492,7 +500,24 @@ export function PmbCheckoutForm({
         </div>
       </div>
 
-      {/* SEÇÃO 2: FORMA DE PAGAMENTO ──────────────────────────────────── */}
+      {/* SEÇÃO 2: FORMA DE PAGAMENTO — some quando o cupom cobriu 100% do valor.
+          Sem isso, escolher cartão travaria o envio na validação `required`. */}
+      {isFree ? (
+        <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm lg:p-8">
+          <div className="flex items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--color-pmb-lime-50)] font-mono text-sm font-semibold text-[var(--color-pmb-green)]">
+              02
+            </div>
+            <h2 className="text-base font-semibold text-[var(--color-pmb-green-900)]">
+              Pagamento
+            </h2>
+          </div>
+          <p className="mt-6 rounded-lg bg-[var(--color-pmb-lime-50)]/60 px-4 py-3 text-sm text-[var(--color-pmb-green-700)]">
+            Seu cupom cobriu <strong>100% do valor</strong>. Não há nada a pagar —
+            é só concluir a matrícula e começar a estudar.
+          </p>
+        </div>
+      ) : (
       <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm lg:p-8">
         <div className="flex items-center gap-2">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--color-pmb-lime-50)] font-mono text-sm font-semibold text-[var(--color-pmb-green)]">
@@ -712,6 +737,7 @@ export function PmbCheckoutForm({
           </div>
         )}
       </div>
+      )}
 
       {/* ERROS / DECLINED ─────────────────────────────────────────────── */}
       {(status.kind === "error" || status.kind === "declined") && (
@@ -775,10 +801,16 @@ export function PmbCheckoutForm({
           className="w-full bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)]"
         >
           <Lock className="mr-2 h-4 w-4" />
-          {submitting ? "Processando..." : "Finalizar Compra"}
+          {submitting
+            ? "Processando..."
+            : isFree
+              ? "Concluir matrícula"
+              : "Finalizar Compra"}
         </Button>
         <p className="text-center text-xs text-gray-500">
-          Pagamento processado com segurança. Seus dados não são armazenados.
+          {isFree
+            ? "Nenhuma cobrança será feita. O acesso é liberado na hora."
+            : "Pagamento processado com segurança. Seus dados não são armazenados."}
         </p>
       </div>
     </form>

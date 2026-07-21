@@ -4,8 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { requireSuperAdmin } from "@/lib/auth/guards"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 import { logAudit } from "@/lib/audit"
-
-const PMB_ROLES = ["SUPER_ADMIN", "PMB_SALES", "PMB_SALES_MGR", "PMB_REVENDA_SALES", "PMB_RESELLER_MGR", "PMB_DESIGNER"] as const
+import { PMB_TEAM_ROLES, isPmbTeamRole } from "@/lib/auth/roles"
 
 export const GET = withRequestContextParams<{ id: string }>(
   { action: "admin.equipe.get", route: "/api/admin/equipe/[id]" },
@@ -33,7 +32,7 @@ export const GET = withRequestContextParams<{ id: string }>(
     },
   })
 
-  if (!user || !(PMB_ROLES as readonly string[]).includes(user.role)) {
+  if (!user || !isPmbTeamRole(user.role)) {
     return NextResponse.json({ error: "Não encontrado" }, { status: 404 })
   }
 
@@ -60,7 +59,7 @@ export const GET = withRequestContextParams<{ id: string }>(
 const patchSchema = z.object({
   name: z.string().min(2).optional(),
   email: z.string().trim().toLowerCase().email().optional(),
-  role: z.enum(PMB_ROLES).optional(),
+  role: z.enum(PMB_TEAM_ROLES).optional(),
   status: z.enum(["ATIVO", "INATIVO"]).optional(),
   phone: z.string().nullable().optional(),
   image: z.string().url().nullable().optional(),
@@ -95,7 +94,7 @@ export const PATCH = withRequestContextParams<{ id: string }>(
   }
 
   const target = await prisma.user.findUnique({ where: { id }, select: { id: true, role: true } })
-  if (!target || !(PMB_ROLES as readonly string[]).includes(target.role)) {
+  if (!target || !isPmbTeamRole(target.role)) {
     return NextResponse.json({ error: "Não encontrado" }, { status: 404 })
   }
 
@@ -174,7 +173,7 @@ export const DELETE = withRequestContextParams<{ id: string }>(
   }
 
   const target = await prisma.user.findUnique({ where: { id }, select: { role: true, status: true } })
-  if (!target || !(PMB_ROLES as readonly string[]).includes(target.role)) {
+  if (!target || !isPmbTeamRole(target.role)) {
     return NextResponse.json({ error: "Não encontrado" }, { status: 404 })
   }
 

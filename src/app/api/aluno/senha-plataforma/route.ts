@@ -2,6 +2,11 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 import { requireStudentSession } from "@/lib/auth/student-session"
 import { changeStudentPlatformPassword } from "@/lib/students/plataforma-actions"
+import {
+  PLATFORM_PASSWORD_UNSUPPORTED_STUDENT,
+  PLATFORM_PASSWORD_UNVERIFIED,
+} from "@/lib/students/platform-credentials"
+import { rateLimitByKey, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
 import { EAApiError, EANetworkError } from "@/lib/plataforma-cursos/errors"
 import { contextLogger } from "@/lib/logger"
 import { withRequestContext } from "@/lib/observability/with-request-context"
@@ -26,6 +31,15 @@ export const PATCH = withRequestContext(
       return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
     }
 
+    // Cada chamada custa DUAS idas à Escola Avançada (escrever + reler para
+    // conferir) e hoje a EA sempre recusa a troca — ou seja, é um endpoint que
+    // só gasta cota externa. Chaveado pelo aluno, como o de credenciais.
+    const rl = await rateLimitByKey(
+      session.studentId,
+      RATE_LIMITS.alunoSenhaPlataforma,
+    )
+    if (!rl.ok) return rateLimitResponse(rl)
+
     let payload: unknown
     try {
       payload = await request.json()
@@ -45,10 +59,11 @@ export const PATCH = withRequestContext(
     }
 
     try {
-      const { onPlatform } = await changeStudentPlatformPassword(
-        session.studentId,
-        parsed.data.newPassword,
-      )
+      const { onPlatform, applied, effectivePassword } =
+        await changeStudentPlatformPassword(
+          session.studentId,
+          parsed.data.newPassword,
+        )
 
       if (!onPlatform) {
         return NextResponse.json(
@@ -57,6 +72,20 @@ export const PATCH = withRequestContext(
               "Você ainda não tem acesso à plataforma de aulas. Conclua uma compra para liberar o acesso.",
           },
           { status: 409 },
+        )
+      }
+
+      // A plataforma de aulas descarta a troca de senha e responde "sucesso".
+      // Antes esse falso positivo virava "senha atualizada" na tela — e o aluno
+      // ficava sem conseguir entrar. Agora falha de forma honesta.
+      if (!applied) {
+        return NextResponse.json(
+          {
+            error: effectivePassword
+              ? PLATFORM_PASSWORD_UNSUPPORTED_STUDENT
+              : PLATFORM_PASSWORD_UNVERIFIED,
+          },
+          { status: 422 },
         )
       }
 

@@ -195,6 +195,22 @@ export const RATE_LIMITS = {
   cobrancaPayCard: { name: "cobranca-paycard", limit: 5, windowSec: 60 },
   certificateValidate: { name: "cert-validate", limit: 30, windowSec: 60 },
   alunoVerificarPagamento: { name: "aluno-verificar-pag", limit: 6, windowSec: 60 },
+  // Reenvio dos dados de acesso à plataforma de aulas (por aluno logado): cada
+  // chamada dispara 1 leitura na EA + 1 e-mail. Janela longa para não virar
+  // ferramenta de flood na caixa do próprio aluno.
+  alunoCredenciaisPlataforma: {
+    name: "aluno-cred-plataforma",
+    limit: 3,
+    windowSec: 900,
+  },
+  // Troca de senha na plataforma de aulas (por aluno logado): 2 idas à EA por
+  // chamada (escrever + reler para conferir). A EA hoje sempre recusa a troca,
+  // então repetir só queima cota externa.
+  alunoSenhaPlataforma: {
+    name: "aluno-senha-plataforma",
+    limit: 5,
+    windowSec: 900,
+  },
   upload: { name: "upload", limit: 10, windowSec: 60 },
   // Banco de artes (SUPER_ADMIN only): mais folgado que `upload` para nao
   // estrangular a migracao do acervo (upload multi-file em lote).

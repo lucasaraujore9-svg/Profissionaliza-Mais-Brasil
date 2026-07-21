@@ -3,8 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { requireSuperAdmin } from "@/lib/auth/guards"
 import { sendInvite } from "@/lib/auth/invite"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
-
-const PMB_ROLES = ["SUPER_ADMIN", "PMB_SALES", "PMB_SALES_MGR", "PMB_REVENDA_SALES", "PMB_RESELLER_MGR"] as const
+import { isPmbTeamRole } from "@/lib/auth/roles"
 
 export const POST = withRequestContextParams<{ id: string }>(
   { action: "admin.equipe.resend_invite", route: "/api/admin/equipe/[id]/resend-invite" },
@@ -17,7 +16,7 @@ export const POST = withRequestContextParams<{ id: string }>(
     where: { id },
     select: { id: true, name: true, email: true, role: true },
   })
-  if (!user || !(PMB_ROLES as readonly string[]).includes(user.role)) {
+  if (!user || !isPmbTeamRole(user.role)) {
     return NextResponse.json({ error: "Não encontrado" }, { status: 404 })
   }
 

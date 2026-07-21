@@ -8,6 +8,7 @@ vi.mock("@/lib/prisma", () => ({
   prisma: {
     payment: { findMany: vi.fn() },
     referralCommission: { findMany: vi.fn() },
+    referralMonthlyCommission: { findMany: vi.fn() },
     referralPayout: { findMany: vi.fn() },
     tenant: { findUnique: vi.fn() },
   },
@@ -29,6 +30,7 @@ const audit = logAudit as unknown as ReturnType<typeof vi.fn>
 const p = prisma as unknown as {
   payment: { findMany: ReturnType<typeof vi.fn> }
   referralCommission: { findMany: ReturnType<typeof vi.fn> }
+  referralMonthlyCommission: { findMany: ReturnType<typeof vi.fn> }
   referralPayout: { findMany: ReturnType<typeof vi.fn> }
   tenant: { findUnique: ReturnType<typeof vi.fn> }
 }
@@ -44,6 +46,7 @@ beforeEach(() => {
   resellerSession.mockResolvedValue({ userId: "u2", tenantId: "t1" })
   p.payment.findMany.mockResolvedValue([])
   p.referralCommission.findMany.mockResolvedValue([])
+  p.referralMonthlyCommission.findMany.mockResolvedValue([])
   p.referralPayout.findMany.mockResolvedValue([])
   p.tenant.findUnique.mockResolvedValue({ id: "t1", slug: "unidade", accountManagerId: null })
 })

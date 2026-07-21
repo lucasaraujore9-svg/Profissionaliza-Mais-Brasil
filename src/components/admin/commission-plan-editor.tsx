@@ -4,11 +4,30 @@ import { Trash2, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { parsePlan, type CommissionBracket } from "@/lib/referrals/rules"
+import {
+  parsePlan,
+  parsePlanSettings,
+  DEFAULT_PLAN_SETTINGS,
+  type CommissionBracket,
+  type CommissionClock,
+  type CommissionPlanSettings,
+} from "@/lib/referrals/rules"
 
 export type RateType = "FIXED" | "PERCENT"
 export type BracketBasis = "NEW_REFERRALS_MONTH" | "ACTIVE_UNITS"
-export type PayoutBase = "ALL_ACTIVE" | "REFERRED_THIS_MONTH"
+export type PayoutBase = "ALL_ACTIVE" | "REFERRED_THIS_MONTH" | "PAID_THIS_MONTH"
+
+/** Ajustes do plano em edicao (valem para todas as fases). */
+export interface PlanSettingsDraft {
+  clock: CommissionClock
+  /** "AAAA-MM-DD" (formato do <input type="date">) ou "" quando sem janela. */
+  promoPaidUntil: string
+}
+
+export const DEFAULT_SETTINGS_DRAFT: PlanSettingsDraft = {
+  clock: "months",
+  promoPaidUntil: "",
+}
 
 /** Uma fase do plano em edicao. durationMonths null = fase final "em diante". */
 export interface PhaseDraft {
@@ -45,10 +64,19 @@ function basisNoun(basis: BracketBasis): string {
 export function CommissionPlanEditor({
   phases,
   onChange,
+  settings,
+  onSettingsChange,
 }: {
   phases: PhaseDraft[]
   onChange: (next: PhaseDraft[]) => void
+  /** Ajustes de topo. Omitir esconde o bloco (mantem o plano no padrao). */
+  settings?: PlanSettingsDraft
+  onSettingsChange?: (next: PlanSettingsDraft) => void
 }) {
+  const cfg = settings ?? DEFAULT_SETTINGS_DRAFT
+  const byInvoice = cfg.clock === "paidInvoices"
+  /** Substantivo da duracao da fase — muda com o relogio. */
+  const durationNoun = byInvoice ? "faturas pagas de cada unidade" : "meses de cada unidade"
   function updatePhase(i: number, patch: Partial<PhaseDraft>) {
     onChange(phases.map((p, idx) => (idx === i ? { ...p, ...patch } : p)))
   }
@@ -94,6 +122,47 @@ export function CommissionPlanEditor({
 
   return (
     <div className="space-y-4">
+      {onSettingsChange && (
+        <div className="space-y-4 rounded-lg border border-gray-200 bg-gray-50/60 p-4">
+          <div className="space-y-2">
+            <Label>O que faz a fase avançar</Label>
+            <select
+              className={selectClass}
+              value={cfg.clock}
+              onChange={(e) =>
+                onSettingsChange({ ...cfg, clock: e.target.value as CommissionClock })
+              }
+            >
+              <option value="months">Meses de vida da unidade indicada</option>
+              <option value="paidInvoices">Faturas pagas pela unidade indicada</option>
+            </select>
+            <p className="text-xs text-gray-500">
+              {byInvoice
+                ? "“Primeira mensalidade” conta a 1ª fatura PAGA — a unidade que atrasar não perde o percentual de entrada."
+                : "A fase avança pelo calendário, mesmo que a unidade não pague."}
+            </p>
+          </div>
+
+          {byInvoice && (
+            <div className="space-y-2">
+              <Label>Promoção vale para faturas pagas até</Label>
+              <Input
+                type="date"
+                className="w-full sm:w-56"
+                value={cfg.promoPaidUntil}
+                onChange={(e) =>
+                  onSettingsChange({ ...cfg, promoPaidUntil: e.target.value })
+                }
+              />
+              <p className="text-xs text-gray-500">
+                Fatura paga depois desta data cai direto na última fase, mesmo sendo a
+                primeira da unidade. Deixe em branco para promoção sem prazo.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
       {phases.map((phase, pi) => {
         const isPercent = phase.rateType === "PERCENT"
         const noun = basisNoun(phase.bracketBasis)
@@ -141,7 +210,7 @@ export function CommissionPlanEditor({
                   />
                 )}
                 <span className="text-gray-600">
-                  {phase.durationMonths === null ? "" : "meses de cada unidade"}
+                  {phase.durationMonths === null ? "" : durationNoun}
                 </span>
                 <label className="ml-auto flex items-center gap-1 text-xs text-gray-500">
                   <input
@@ -202,7 +271,15 @@ export function CommissionPlanEditor({
                   <option value="REFERRED_THIS_MONTH">
                     Apenas as indicadas naquele mês
                   </option>
+                  <option value="PAID_THIS_MONTH">
+                    Apenas as que pagaram a mensalidade no mês
+                  </option>
                 </select>
+                {phase.payoutBase === "PAID_THIS_MONTH" && (
+                  <p className="text-xs text-gray-500">
+                    Unidade ativa que ficou inadimplente no mês não gera comissão.
+                  </p>
+                )}
               </div>
             </div>
 
@@ -321,6 +398,47 @@ export function CommissionPlanEditor({
 export function phasesFromJson(value: unknown): PhaseDraft[] {
   return parsePlan(value)
 }
+
+/**
+ * Le os ajustes de topo do plano em formato de draft (data como string do
+ * `<input type="date">`). Delega para `parsePlanSettings`, a MESMA funcao que o
+ * motor usa — a tela nunca interpreta a janela de um jeito e o calculo de outro.
+ */
+export function settingsFromJson(value: unknown): PlanSettingsDraft {
+  const s = parsePlanSettings(value)
+  return {
+    clock: s.clock,
+    // Volta para a data BRASILEIRA que o admin digitou: o instante gravado e o
+    // fim do dia em -03:00, entao `toISOString()` cru cairia no dia seguinte.
+    promoPaidUntil: s.promoPaidUntil
+      ? new Date(s.promoPaidUntil.getTime() - 3 * 60 * 60 * 1000)
+          .toISOString()
+          .slice(0, 10)
+      : "",
+  }
+}
+
+/**
+ * Monta o JSON do plano a partir dos drafts. Os ajustes de topo so entram
+ * quando saem do padrao, para nao poluir planos simples com campos inertes.
+ * `promoPaidUntil` e gravado no fim do dia informado em HORARIO DE BRASILIA
+ * (-03:00), nao em UTC. A data vem de um <input type="date"> que o admin le como
+ * data brasileira: gravar `T23:59:59.999Z` fecharia a janela as 20:59 do dia do
+ * prazo, e uma fatura paga as 22h — dentro do prazo contratual — cairia fora.
+ */
+export function planToJson(
+  phases: PhaseDraft[],
+  settings: PlanSettingsDraft = DEFAULT_SETTINGS_DRAFT,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = { phases }
+  if (settings.clock !== DEFAULT_PLAN_SETTINGS.clock) out.clock = settings.clock
+  if (settings.clock === "paidInvoices" && settings.promoPaidUntil) {
+    out.promoPaidUntil = `${settings.promoPaidUntil}T23:59:59.999-03:00`
+  }
+  return out
+}
+
+export type { CommissionPlanSettings }
 
 /**
  * Limpa faixas para o formato exato do zod do servidor (upTo int>=1|null,

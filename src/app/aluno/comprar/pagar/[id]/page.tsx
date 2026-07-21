@@ -152,6 +152,7 @@ export default async function StudentPagarPage({ params }: PagarPageProps) {
           {enrollment.gateway === "ASAAS" ? (
             <AsaasCheckoutForm
               enrollmentId={enrollment.id}
+              amount={Number(enrollment.finalAmount)}
               defaultNome={enrollment.student.nome ?? undefined}
               defaultEmail={payerEmail}
               processPath="/api/aluno/comprar/process"

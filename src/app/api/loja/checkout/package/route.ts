@@ -18,6 +18,11 @@ import { isValidPhone, normalizePhone } from "@/lib/validation/phone"
 import { tenantCheckoutMode } from "@/lib/tenant/checkout-mode"
 import { tenantPolo } from "@/lib/tenant/slug"
 import { getPackageForCheckout } from "@/lib/packages/vitrine"
+import {
+  isFreeAmount,
+  releaseFreeEnrollment,
+  resellerTenantContext,
+} from "@/lib/checkout/free-enrollment"
 
 // Checkout de PACOTE na vitrine da revenda. Pagamento à vista (ONE_TIME). Cria a
 // matrícula PRIMÁRIA (packagePrimary=true) que carrega o pagamento do valor cheio
@@ -290,6 +295,16 @@ export const POST = withRequestContext(
           await releaseCoupon(consumedCouponId).catch(swallow("loja.pkg.checkout"))
           consumedCouponId = null
         }
+        // Cupom zerou o valor: libera na hora (o gateway recusaria R$ 0).
+        if (isFreeAmount(reusedAmount)) {
+          await releaseFreeEnrollment(resellerTenantContext(tenant), existing.id)
+          // O cupom já está gravado na matrícula reaproveitada: devolvê-lo no
+          // catch descontaria um uso que continua vinculado a uma venda viva.
+          consumedCouponId = null
+          return NextResponse.json({
+            data: { enrollmentId: existing.id, mode: "free", amount: 0 },
+          })
+        }
         return NextResponse.json({
           data: {
             enrollmentId: existing.id,
@@ -343,6 +358,16 @@ export const POST = withRequestContext(
           courseSnapshot: `Pacote: ${pkg.name}`,
           visitorId: readVisitorId(request),
         }).catch(swallow("loja_pkg_checkout.lead_link"))
+      }
+
+      // ── Cupom cobriu 100% ──────────────────────────────────────────────────
+      // Gateway recusa R$ 0: libera o pacote inteiro na hora, como bolsa.
+      if (isFreeAmount(finalAmount)) {
+        await releaseFreeEnrollment(resellerTenantContext(tenant), enrollment.id)
+        consumedCouponId = null // venda concluída: não liberar a reserva no catch
+        return NextResponse.json({
+          data: { enrollmentId: enrollment.id, mode: "free", amount: 0 },
+        })
       }
 
       return NextResponse.json({

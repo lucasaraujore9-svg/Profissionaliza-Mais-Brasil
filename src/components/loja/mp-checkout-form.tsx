@@ -370,12 +370,26 @@ export function MpCheckoutForm({
       }
       return null
     }
+    // Cupom cobriu 100% do valor: o servidor já liberou a matrícula (não há o
+    // que cobrar). Vai direto para a confirmação, sem tokenizar cartão nem
+    // gerar PIX/boleto.
+    if (payload.data.mode === "free") {
+      setStatus({ kind: "approved" })
+      window.location.href = successUrlFor(payload.data.enrollmentId)
+      return null
+    }
+
     setActiveEnrollmentId(payload.data.enrollmentId)
     return {
       enrollmentId: payload.data.enrollmentId,
       payerEmail: payload.data.payerEmail ?? form.email,
     }
   }
+
+  // Cupom cobriu 100%: não há forma de pagamento a escolher. O servidor libera
+  // a matrícula no init e o form só coleta o cadastro do aluno. Declarado aqui
+  // (e não junto do JSX) porque `buildFormData` depende dele.
+  const isFree = typeof amount === "number" && amount <= 0
 
   /** Monta o formData do método escolhido (tokeniza o cartão quando preciso). */
   async function buildFormData(
@@ -391,6 +405,15 @@ export function MpCheckoutForm({
       first_name: first || undefined,
       last_name: last || undefined,
       ...(identification ? { identification } : {}),
+    }
+
+    // Valor zerado: a seção de forma de pagamento nem é renderizada, então
+    // `method` guarda o que o efeito de `payment_methods` deixou (pode ter
+    // saído do PIX sozinho) e os campos de cartão estão vazios — tokenizar aqui
+    // falharia sem que o usuário tivesse UI para corrigir. O servidor libera a
+    // matrícula pelo guard de valor zero e ignora o método.
+    if (isFree) {
+      return { payment_method_id: "pix", payer: basePayer }
     }
 
     if (method === "PIX") {
@@ -642,7 +665,18 @@ export function MpCheckoutForm({
         </div>
       </div>
 
-      {/* SEÇÃO 2: FORMA DE PAGAMENTO */}
+      {/* SEÇÃO 2: FORMA DE PAGAMENTO — some quando o cupom cobriu 100% do valor.
+          Além de não fazer sentido escolher como pagar R$ 0, manter os campos de
+          cartão no DOM travaria o envio na validação `required` do navegador. */}
+      {isFree ? (
+        <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm lg:p-8">
+          <SectionHeader n="02" title="Pagamento" />
+          <p className="mt-6 rounded-lg bg-[color-mix(in_srgb,var(--color-pmb-green)_10%,white)] px-4 py-3 text-sm text-gray-700">
+            Seu cupom cobriu <strong>100% do valor</strong>. Não há nada a pagar —
+            é só concluir a matrícula e começar a estudar.
+          </p>
+        </div>
+      ) : (
       <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm lg:p-8">
         <SectionHeader n="02" title="Forma de pagamento" />
         <div className="mt-6 space-y-3">
@@ -727,6 +761,7 @@ export function MpCheckoutForm({
           </div>
         )}
       </div>
+      )}
 
       {(status.kind === "error" || status.kind === "declined") && (
         <div className="space-y-3">
@@ -773,11 +808,16 @@ export function MpCheckoutForm({
         />
         <Button type="submit" size="lg" disabled={submitting} className="w-full bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)]">
           <Lock className="mr-2 h-4 w-4" />
-          {submitting ? "Processando..." : "Finalizar Compra"}
+          {submitting
+            ? "Processando..."
+            : isFree
+              ? "Concluir matrícula"
+              : "Finalizar Compra"}
         </Button>
         <p className="text-center text-xs text-gray-500">
-          Pagamento processado com segurança aqui no site. Seus dados de cartão
-          não são armazenados.
+          {isFree
+            ? "Nenhuma cobrança será feita. O acesso é liberado na hora."
+            : "Pagamento processado com segurança aqui no site. Seus dados de cartão não são armazenados."}
         </p>
       </div>
     </form>

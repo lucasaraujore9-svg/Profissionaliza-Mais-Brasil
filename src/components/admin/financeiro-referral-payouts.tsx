@@ -69,7 +69,7 @@ interface ReferralMonthlyCommissionRow {
   period: string
   rateType: "FIXED" | "PERCENT"
   bracketBasis: "NEW_REFERRALS_MONTH" | "ACTIVE_UNITS"
-  payoutBase: "ALL_ACTIVE" | "REFERRED_THIS_MONTH"
+  payoutBase: "ALL_ACTIVE" | "REFERRED_THIS_MONTH" | "PAID_THIS_MONTH"
   bracketCount: number
   rate: number
   unitCount: number
@@ -110,6 +110,7 @@ const BASIS_LABEL: Record<string, string> = {
 const PAYOUT_BASE_LABEL: Record<string, string> = {
   ALL_ACTIVE: "todas ativas",
   REFERRED_THIS_MONTH: "indicadas no mês",
+  PAID_THIS_MONTH: "pagantes no mês",
 }
 function formatPeriod(period: string): string {
   const m = /^(\d{4})-(\d{2})$/.exec(period)

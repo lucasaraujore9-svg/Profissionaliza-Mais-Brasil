@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { EquipeImpersonateButton } from "./equipe-impersonate-button"
+import { PMB_ROLE_LABEL, PMB_TEAM_ROLES, pmbRoleLabel } from "@/lib/auth/roles"
 
 export interface EquipeMember {
   id: string
@@ -41,15 +42,8 @@ export interface SalesManagerOption {
 
 const NO_MANAGER = "__none__"
 
-const ROLE_LABEL: Record<string, string> = {
-  SUPER_ADMIN: "Super Admin",
-  PMB_SALES: "Vendedor de curso",
-  PMB_SALES_MGR: "Gerente de vendas",
-  PMB_REVENDA_SALES: "Vendedor de revenda",
-  PMB_RESELLER_MGR: "Gerente de unidades",
-}
-
-const ROLES = ["SUPER_ADMIN", "PMB_SALES", "PMB_SALES_MGR", "PMB_REVENDA_SALES", "PMB_RESELLER_MGR"] as const
+const ROLE_LABEL = PMB_ROLE_LABEL
+const ROLES = PMB_TEAM_ROLES
 
 export function EquipeDetailClient({
   member,
@@ -162,7 +156,7 @@ export function EquipeDetailClient({
           </h1>
           <p className="text-sm text-muted-foreground">{member.email}</p>
           <div className="mt-2 flex gap-2">
-            <Badge variant="outline">{ROLE_LABEL[member.role]}</Badge>
+            <Badge variant="outline">{pmbRoleLabel(member.role)}</Badge>
             {member.pendingInvite ? (
               <Badge variant="secondary" className="gap-1">
                 <Mail className="h-3 w-3" /> convite pendente

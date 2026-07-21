@@ -30,6 +30,7 @@ import {
   CredentialsResultPanel,
   type CreateMode,
 } from "@/components/shared/account-credentials-fields"
+import { PMB_ROLE_LABEL, PMB_TEAM_ROLES, pmbRoleLabel } from "@/lib/auth/roles"
 
 export interface EquipeItem {
   id: string
@@ -52,17 +53,8 @@ export interface SalesManagerOption {
 
 const NO_MANAGER = "__none__"
 
-const ROLE_LABEL: Record<string, string> = {
-  SUPER_ADMIN: "Super Admin",
-  PMB_SALES: "Vendedor de curso",
-  PMB_SALES_MGR: "Gerente de vendas",
-  PMB_REVENDA_SALES: "Vendedor de revenda",
-  PMB_RESELLER_MGR: "Gerente de unidades",
-  PMB_FINANCEIRO: "Financeiro",
-  PMB_DESIGNER: "Designer",
-}
-
-const ROLES = ["SUPER_ADMIN", "PMB_SALES", "PMB_SALES_MGR", "PMB_REVENDA_SALES", "PMB_RESELLER_MGR", "PMB_FINANCEIRO", "PMB_DESIGNER"] as const
+const ROLE_LABEL = PMB_ROLE_LABEL
+const ROLES = PMB_TEAM_ROLES
 
 export function EquipeClient({
   initialItems,
@@ -226,7 +218,7 @@ export function EquipeClient({
                   )}
                 </td>
                 <td className="px-4 py-3 text-muted-foreground">{u.email}</td>
-                <td className="px-4 py-3">{ROLE_LABEL[u.role] ?? u.role}</td>
+                <td className="px-4 py-3">{pmbRoleLabel(u.role)}</td>
                 <td className="px-4 py-3">
                   {u.pendingInvite ? (
                     <Badge variant="secondary" className="gap-1">

@@ -28,6 +28,17 @@ interface Props {
   courseName?: string
   description?: string
   actionLabel?: string
+  /**
+   * Rótulo do campo de senha. A EA usa "Senha" (o valor é ressincronizado com a
+   * plataforma); provedores cuja senha nós só vimos no cadastro usam o padrão
+   * "Senha inicial".
+   */
+  senhaLabel?: string
+  /**
+   * Observação no rodapé do card. Sobrescreve o texto padrão. Aceita JSX para
+   * o rodapé poder levar uma ação (ex.: link para pedir o reenvio por e-mail).
+   */
+  footnote?: React.ReactNode
 }
 
 function CopyButton({ value, label }: { value: string; label: string }) {
@@ -73,6 +84,8 @@ export function PlatformCredentialsCard({
   courseName,
   description,
   actionLabel = "Acessar plataforma de aulas",
+  senhaLabel = "Senha inicial",
+  footnote,
 }: Props) {
   const [show, setShow] = useState(false)
   const title = courseName ?? platformName
@@ -115,7 +128,7 @@ export function PlatformCredentialsCard({
         {/* Senha */}
         <div className="rounded-xl border border-gray-200 bg-gray-50 p-3">
           <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
-            <KeyRound className="h-3.5 w-3.5" /> Senha inicial
+            <KeyRound className="h-3.5 w-3.5" /> {senhaLabel}
           </p>
           {senha ? (
             <div className="mt-1 flex items-center justify-between gap-2">
@@ -159,8 +172,8 @@ export function PlatformCredentialsCard({
       )}
 
       <p className="mt-3 text-[11px] text-gray-500">
-        Esta é a senha inicial. Se você alterá-la dentro da plataforma, use a
-        nova senha — este painel mostra apenas a senha original.
+        {footnote ??
+          "Esta é a senha inicial. Se você alterá-la dentro da plataforma, use a nova senha — este painel mostra apenas a senha original."}
       </p>
     </section>
   )

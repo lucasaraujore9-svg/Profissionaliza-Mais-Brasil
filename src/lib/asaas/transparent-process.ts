@@ -12,6 +12,7 @@ import {
   AsaasApiError,
 } from "./client"
 import { fulfillFromAsaasPayment, type AsaasFulfillTenant } from "./fulfillment"
+import { isFreeAmount, releaseFreeEnrollment } from "@/lib/checkout/free-enrollment"
 import type {
   AsaasCreditCard,
   AsaasCreditCardHolderInfo,
@@ -152,6 +153,16 @@ export async function processTransparentAsaasPayment(
   formData: AsaasTransparentFormData,
   ctx: AsaasTransparentCtx,
 ): Promise<TransparentResult> {
+  // ── Valor zerado (cupom de 100%) ──────────────────────────────────────────
+  // O Asaas recusa cobrança de R$ 0 (valor mínimo). Libera a matrícula direto,
+  // sem gateway — e antes de exigir CPF/cartão, que não fazem sentido aqui.
+  // `status: "approved"` (e não "free") porque é o contrato que as telas de
+  // checkout e de /pagar já tratam como sucesso.
+  if (isFreeAmount(enrollment.finalAmount)) {
+    await releaseFreeEnrollment(ctx.fulfillTenant, enrollment.id)
+    return { kind: "approved", status: "approved" }
+  }
+
   if (!enrollment.studentCpf) {
     return {
       kind: "error",

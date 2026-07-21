@@ -8,6 +8,7 @@ import { markPayoutPaid } from "@/lib/referrals/payout"
 import { contextLogger } from "@/lib/logger"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 import { logAudit } from "@/lib/audit"
+import { swallow } from "@/lib/errors"
 
 const bodySchema = z.object({
   asaasTransferId: z.string().min(1).max(80).optional().nullable(),
@@ -105,9 +106,15 @@ export const POST = withRequestContextParams<{ id: string }>(
   const nextNotes = appendNote(payout.notes, baseNote, adminName)
 
   try {
-    // Ajusta o valor do payout ANTES de marcar como pago, para que a
-    // notificacao ao revendedor e as comissoes liquidadas reflitam o valor
-    // efetivamente pago.
+    // CAIXA x APURACAO: este update altera SO o `amount` do payout — o dinheiro
+    // que efetivamente saiu. As comissoes vinculadas continuam com o `amount`
+    // que o motor apurou, e essa divergencia e INTENCIONAL: reescrever a
+    // apuracao apagaria a evidencia de que houve ajuste manual. Por isso os
+    // relatorios leem "pago" do ReferralPayout (caixa) e so "pendente"/
+    // "disponivel" das comissoes (apuracao).
+    // O ajuste vem ANTES de markPayoutPaid de proposito: a notificacao enviada
+    // ao revendedor la dentro le o amount ja gravado no payout, entao ela sai
+    // com o valor realmente pago.
     if (amountChanged) {
       await prisma.referralPayout.update({
         where: { id: payout.id },
@@ -115,10 +122,28 @@ export const POST = withRequestContextParams<{ id: string }>(
       })
     }
 
-    const updated = await markPayoutPaid(
-      payout.id,
-      parsed.data.asaasTransferId?.trim() || null,
-    )
+    let updated
+    try {
+      updated = await markPayoutPaid(
+        payout.id,
+        parsed.data.asaasTransferId?.trim() || null,
+      )
+    } catch (err) {
+      // markPayoutPaid recusa o saque em casos que a rota NAO pre-checa
+      // (CLAWBACK_FROZEN, falha de transacao). Sem este desfazer, o valor
+      // ajustado ficava gravado enquanto a nota e o log de auditoria — que sao
+      // o que explica o ajuste — nunca chegavam a rodar: o saque seguia ABERTO
+      // exibindo um numero que ninguem consegue justificar.
+      if (amountChanged) {
+        await prisma.referralPayout
+          .update({
+            where: { id: payout.id },
+            data: { amount: new Prisma.Decimal(currentAmount) },
+          })
+          .catch(swallow("admin.financeiro.mark_paid_amount_restore"))
+      }
+      throw err
+    }
 
     await prisma.referralPayout.update({
       where: { id: payout.id },

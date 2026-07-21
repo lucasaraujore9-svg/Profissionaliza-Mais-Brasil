@@ -2,8 +2,7 @@ import { redirect } from "next/navigation"
 import { prisma } from "@/lib/prisma"
 import { requireAdminSession } from "@/lib/auth/admin-session"
 import { EquipeClient } from "@/components/admin/equipe-client"
-
-const PMB_ROLES = ["SUPER_ADMIN", "PMB_SALES", "PMB_SALES_MGR", "PMB_REVENDA_SALES", "PMB_RESELLER_MGR"] as const
+import { PMB_TEAM_ROLES } from "@/lib/auth/roles"
 
 export const dynamic = "force-dynamic"
 
@@ -13,7 +12,7 @@ export default async function EquipePage() {
   if (session.role !== "SUPER_ADMIN") redirect("/admin")
 
   const users = await prisma.user.findMany({
-    where: { role: { in: [...PMB_ROLES] } },
+    where: { role: { in: [...PMB_TEAM_ROLES] } },
     select: {
       id: true,
       name: true,

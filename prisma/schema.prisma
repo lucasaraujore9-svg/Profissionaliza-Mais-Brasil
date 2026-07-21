@@ -1354,6 +1354,7 @@ enum CommissionRateType {
 enum CommissionPayoutBase {
   ALL_ACTIVE // Valor/percentual incide sobre TODAS as unidades ativas
   REFERRED_THIS_MONTH // Incide apenas sobre as unidades indicadas naquele mes
+  PAID_THIS_MONTH // Incide apenas sobre as unidades que PAGARAM mensalidade no mes
 }
 
 // ============================================================
@@ -1676,6 +1677,11 @@ model SystemSettings {
   // Minimo padrao de indicacoes ATIVAS para uma unidade comecar a receber
   // comissao de recorrencia. Override por unidade em Tenant.referralMinReferrals.
   defaultReferralMinReferrals Int     @default(3) @map("default_referral_min_referrals")
+  // Primeira competencia ("AAAA-MM") que pertence ao motor unico. Competencias
+  // ANTERIORES ficaram com o ledger legado (ReferralCommission) e ja foram
+  // liquidadas — reapura-las criaria uma segunda comissao sobre o mesmo mes.
+  // Null = sem corte (apura tudo). Ver src/lib/referrals/monthly.ts.
+  commissionUnifiedSince      String? @map("commission_unified_since")
   // Janela mensal: comissoes referentes a TenantPayments pagos no mes M
   // ficam AVAILABLE no dia X do mes M+1 (referralPayoutDay).
   referralPayoutDay           Int     @default(20) @map("referral_payout_day") // dia do mes do pagamento (1-20; cron libera no dia 20)

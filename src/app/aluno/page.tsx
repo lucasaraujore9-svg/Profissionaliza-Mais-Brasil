@@ -208,6 +208,28 @@ export default async function StudentDashboardPage() {
                 login={platformCredentials.login}
                 senha={platformCredentials.senha}
                 loginUrl={plataformaLoginUrl}
+                senhaLabel="Senha"
+                // A tela de login da EA não recupera senha por e-mail (o
+                // "Esqueci minha senha" de lá abre atendimento). Então este card
+                // é a via rápida: mostra a senha e leva para o reenvio.
+                //
+                // O texto NÃO afirma "a senha é esta": esta página lê o retrato
+                // cifrado (`getStudentPlatformCredentials`) sem consultar a EA,
+                // então o valor pode estar defasado. Quem confere de verdade é
+                // /api/aluno/credenciais-plataforma, que ressincroniza antes de
+                // mandar o e-mail — e é para lá que o link leva.
+                footnote={
+                  <>
+                    Esqueceu a senha? Normalmente é esta. Se não funcionar,{" "}
+                    <Link
+                      href="/aluno/perfil"
+                      className="font-semibold text-[var(--color-pmb-green)] underline underline-offset-2"
+                    >
+                      peça os dados de acesso por e-mail
+                    </Link>{" "}
+                    — conferimos na plataforma de aulas antes de enviar.
+                  </>
+                }
               />
             )}
 

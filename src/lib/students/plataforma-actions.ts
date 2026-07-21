@@ -195,6 +195,34 @@ async function isPersonBlockedInAnotherTenant(student: {
 }
 
 /**
+ * Le a senha que de fato vale na plataforma de aulas via `usuarios/listar`
+ * (fonte da verdade do acesso as aulas).
+ *
+ * Nunca lanca. Devolve `null` quando nao foi possivel saber — listar falhou
+ * (rede/API) ou veio sem senha. `null` significa "desconhecido", NAO "vazio":
+ * quem chama precisa distinguir os dois para nao gravar retrato errado.
+ */
+export async function readPlatformPassword(
+  plataformaAlunoId: number,
+): Promise<string | null> {
+  try {
+    const aluno = await buscarAluno({ id: plataformaAlunoId })
+    const senha = aluno?.senha != null ? String(aluno.senha).trim() : ""
+    if (senha) return senha
+    contextLogger().warn(
+      { event: "plataforma.listar_senha_vazia", plataformaAlunoId },
+      "usuarios/listar nao retornou senha",
+    )
+  } catch (err) {
+    contextLogger().warn(
+      { err, event: "plataforma.listar_senha_failed", plataformaAlunoId },
+      "falha ao reler senha autoritativa da plataforma",
+    )
+  }
+  return null
+}
+
+/**
  * Resolve a senha autoritativa do aluno na plataforma de aulas relendo de
  * `usuarios/listar` (fonte da verdade), porque a resposta de `usuarios/novo`
  * nem sempre traz a senha real de login.
@@ -207,21 +235,7 @@ export async function resolveAuthoritativePlatformPassword(
   plataformaAlunoId: number,
   fallbackSenha: string,
 ): Promise<string> {
-  try {
-    const aluno = await buscarAluno({ id: plataformaAlunoId })
-    const senha = aluno?.senha != null ? String(aluno.senha).trim() : ""
-    if (senha) return senha
-    contextLogger().warn(
-      { event: "plataforma.listar_senha_vazia", plataformaAlunoId },
-      "usuarios/listar nao retornou senha — usando a senha do cadastro como fallback",
-    )
-  } catch (err) {
-    contextLogger().warn(
-      { err, event: "plataforma.listar_senha_failed", plataformaAlunoId },
-      "falha ao reler senha autoritativa da plataforma — usando a senha do cadastro como fallback",
-    )
-  }
-  return fallbackSenha
+  return (await readPlatformPassword(plataformaAlunoId)) ?? fallbackSenha
 }
 
 /**
@@ -380,21 +394,50 @@ export async function ensureStudentOnPlatform(
   return { plataformaAlunoId: Number.parseInt(platformLogin, 10), created: true, plataformaSenha }
 }
 
+export interface PlatformPasswordChangeResult {
+  /** false = aluno ainda nao existe na plataforma de aulas (sem matricula paga). */
+  onPlatform: boolean
+  /**
+   * true  = a plataforma REALMENTE trocou a senha (confirmado relendo
+   *         `usuarios/listar` depois da escrita).
+   * false = a chamada respondeu "sucesso" mas a senha la continua outra, ou nao
+   *         foi possivel confirmar. Quem chama NAO pode reportar sucesso.
+   */
+  applied: boolean
+  /**
+   * Senha que de fato vale na plataforma apos a tentativa. `null` quando nao
+   * conseguimos reler (EA fora do ar) — nesse caso nada foi gravado.
+   */
+  effectivePassword: string | null
+}
+
 /**
- * Altera a senha do aluno na plataforma de aulas (EA) e sincroniza a copia
- * criptografada no nosso banco (exibida na area do aluno).
+ * Tenta alterar a senha do aluno na plataforma de aulas (EA) e sincroniza a
+ * copia criptografada do nosso banco (exibida na area do aluno) com o valor que
+ * REALMENTE vale la.
  *
- * A plataforma de aulas e a fonte da verdade do acesso as aulas, entao a senha
- * e trocada la primeiro via `usuarios/editar`; so depois atualizamos o snapshot
- * criptografado em `plataformaAlunoSenha`.
+ * ⚠️ A API v2 da Escola Avancada NAO expoe troca de senha de aluno. O campo
+ * `senha` so existe em `funcionarios/novo`; `usuarios/novo` gera a senha e
+ * `usuarios/editar` nao tem esse campo — manda-lo faz a EA DESCARTAR o
+ * parametro em silencio e ainda responder "Aluno editado com sucesso!".
+ * Confiar nesse retorno era o bug: reportavamos sucesso ao aluno e gravavamos
+ * no snapshot uma senha inexistente, destruindo a unica via de recuperacao que
+ * funciona (a senha reta exibida em /aluno).
  *
- * Retorna `{ onPlatform: false }` quando o aluno ainda nao foi cadastrado na
- * plataforma (sem matricula paga) — nesse caso nao ha senha a alterar.
+ * Por isso a escrita e sempre seguida de uma RELEITURA (`usuarios/listar`):
+ * - releu e bate com a nova senha  → aplicou de verdade; grava o snapshot.
+ * - releu e veio outra coisa       → a EA ignorou; grava a senha REAL
+ *                                    (auto-corrige retratos ja corrompidos) e
+ *                                    devolve `applied: false`.
+ * - nao conseguiu reler            → estado desconhecido; nao grava nada.
+ *
+ * Mantemos a tentativa de escrita (em vez de so recusar) para que o recurso
+ * volte a funcionar sozinho caso a EA passe a aceitar `senha` em `editar`.
  */
 export async function changeStudentPlatformPassword(
   studentId: string,
   newPassword: string,
-): Promise<{ onPlatform: boolean }> {
+): Promise<PlatformPasswordChangeResult> {
   const student = await prisma.student.findUnique({
     where: { id: studentId },
     select: { id: true, plataformaAlunoId: true },
@@ -404,19 +447,70 @@ export async function changeStudentPlatformPassword(
   const plataformaId = parseExternalId(student.plataformaAlunoId)
   const isPending = student.plataformaAlunoId?.startsWith("pending") ?? false
   if (plataformaId === null || isPending) {
-    return { onPlatform: false }
+    return { onPlatform: false, applied: false, effectivePassword: null }
   }
 
-  // Troca a senha na plataforma de aulas.
   await editarAluno({ id_aluno: plataformaId, senha: newPassword })
 
-  // Sincroniza a copia criptografada exibida no painel do aluno.
+  const effective = await readPlatformPassword(plataformaId)
+  if (effective === null) {
+    // Estado desconhecido: nao sabemos se a senha mudou. Deixar o snapshot como
+    // esta e melhor do que grava-lo com um palpite.
+    contextLogger().warn(
+      { event: "plataforma.senha_change_unverified", studentId, plataformaAlunoId: plataformaId },
+      "nao foi possivel confirmar a troca de senha na plataforma — snapshot preservado",
+    )
+    return { onPlatform: true, applied: false, effectivePassword: null }
+  }
+
+  const applied = effective === newPassword
+  if (!applied) {
+    contextLogger().warn(
+      { event: "plataforma.senha_change_ignored", studentId, plataformaAlunoId: plataformaId },
+      "a plataforma de aulas ignorou a troca de senha (usuarios/editar nao suporta `senha`) — snapshot ressincronizado com a senha real",
+    )
+  }
+
+  // Grava sempre o valor autoritativo: quando aplicou e a nova senha; quando
+  // nao aplicou, ressincroniza o snapshot com a senha real da EA.
   await prisma.student.update({
     where: { id: student.id },
-    data: { plataformaAlunoSenha: encrypt(newPassword) },
+    data: { plataformaAlunoSenha: encrypt(effective) },
   })
 
-  return { onPlatform: true }
+  return { onPlatform: true, applied, effectivePassword: effective }
+}
+
+/**
+ * Ressincroniza o snapshot cifrado (`plataformaAlunoSenha`) com a senha real da
+ * plataforma de aulas. Usado antes de exibir/reenviar credenciais, para que o
+ * aluno nunca receba um valor defasado.
+ *
+ * Nunca lanca: se a EA estiver fora do ar mantemos o snapshot atual.
+ */
+export async function resyncStudentPlatformPassword(
+  studentId: string,
+): Promise<{ onPlatform: boolean; password: string | null }> {
+  const student = await prisma.student.findUnique({
+    where: { id: studentId },
+    select: { id: true, plataformaAlunoId: true },
+  })
+  if (!student) throw new Error(`student ${studentId} nao encontrado`)
+
+  const plataformaId = parseExternalId(student.plataformaAlunoId)
+  const isPending = student.plataformaAlunoId?.startsWith("pending") ?? false
+  if (plataformaId === null || isPending) {
+    return { onPlatform: false, password: null }
+  }
+
+  const real = await readPlatformPassword(plataformaId)
+  if (real === null) return { onPlatform: true, password: null }
+
+  await prisma.student.update({
+    where: { id: student.id },
+    data: { plataformaAlunoSenha: encrypt(real) },
+  })
+  return { onPlatform: true, password: real }
 }
 
 /**

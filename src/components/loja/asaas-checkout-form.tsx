@@ -34,6 +34,12 @@ export interface AsaasCheckoutFormProps {
   /** Compra de PACOTE: enviado em vez de courseId ao initPath. */
   packageId?: string
   couponCode?: string | null
+  /**
+   * Valor final (já com cupom). Quando zerado, a escolha de forma de pagamento
+   * some — não há o que cobrar e os campos `required` do cartão travariam o
+   * envio no navegador.
+   */
+  amount?: number
   initPath?: string
   processPath?: string
   statusPath?: string
@@ -103,6 +109,7 @@ export function AsaasCheckoutForm({
   courseId,
   packageId,
   couponCode,
+  amount,
   initPath = "/api/loja/checkout",
   processPath = "/api/loja/checkout/process",
   statusPath = "/api/loja/checkout/status",
@@ -195,6 +202,14 @@ export function AsaasCheckoutForm({
       }
       return null
     }
+    // Cupom cobriu 100% do valor: o servidor já liberou a matrícula (não há o
+    // que cobrar). Vai direto para a confirmação.
+    if (payload.data.mode === "free") {
+      setStatus({ kind: "approved" })
+      window.location.href = successUrlFor(payload.data.enrollmentId)
+      return null
+    }
+
     setActiveEnrollmentId(payload.data.enrollmentId)
     return { enrollmentId: payload.data.enrollmentId }
   }
@@ -318,6 +333,8 @@ export function AsaasCheckoutForm({
   }, [status, activeEnrollmentId, statusPath, confirmacaoPath])
 
   const submitting = status.kind === "submitting"
+  // Cupom cobriu 100%: não há forma de pagamento a escolher.
+  const isFree = typeof amount === "number" && amount <= 0
 
   function backToForm() {
     setStatus({ kind: "idle" })
@@ -370,6 +387,17 @@ export function AsaasCheckoutForm({
         </div>
       </div>
 
+      {/* Cupom cobriu 100%: sem escolha de forma de pagamento — não há o que
+          cobrar e os campos `required` do cartão travariam o envio. */}
+      {isFree ? (
+        <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm lg:p-8">
+          <SectionHeader n="02" title="Pagamento" />
+          <p className="mt-6 rounded-lg bg-[color-mix(in_srgb,var(--color-pmb-green)_10%,white)] px-4 py-3 text-sm text-gray-700">
+            Seu cupom cobriu <strong>100% do valor</strong>. Não há nada a pagar —
+            é só concluir a matrícula e começar a estudar.
+          </p>
+        </div>
+      ) : (
       <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm lg:p-8">
         <SectionHeader n="02" title="Forma de pagamento" />
         <div className="mt-6 space-y-3">
@@ -409,6 +437,7 @@ export function AsaasCheckoutForm({
           </p>
         )}
       </div>
+      )}
 
       {(status.kind === "error" || status.kind === "declined") && (
         <div className="space-y-3">
@@ -455,11 +484,16 @@ export function AsaasCheckoutForm({
         />
         <Button type="submit" size="lg" disabled={submitting} className="w-full bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)]">
           <Lock className="mr-2 h-4 w-4" />
-          {submitting ? "Processando..." : "Finalizar Compra"}
+          {submitting
+            ? "Processando..."
+            : isFree
+              ? "Concluir matrícula"
+              : "Finalizar Compra"}
         </Button>
         <p className="text-center text-xs text-gray-500">
-          Pagamento processado com segurança aqui no site. Seus dados de cartão
-          não são armazenados.
+          {isFree
+            ? "Nenhuma cobrança será feita. O acesso é liberado na hora."
+            : "Pagamento processado com segurança aqui no site. Seus dados de cartão não são armazenados."}
         </p>
       </div>
     </form>

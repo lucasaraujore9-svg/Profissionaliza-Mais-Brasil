@@ -20,6 +20,11 @@ import { provisionStudentAccess } from "@/lib/students/access"
 import { fulfillScholarshipEnrollment } from "@/lib/enrollment/fulfill"
 import { tryConsumeCoupon, releaseCoupon } from "@/lib/coupons/consume"
 import { applyCouponDiscount } from "@/lib/coupons/discount"
+import {
+  isFreeAmount,
+  pmbTenantContext,
+  releaseFreeEnrollment,
+} from "@/lib/checkout/free-enrollment"
 import { effectiveSalesCap } from "@/lib/coupons/sales-cap"
 import { assertCouponMatchesEnrollment } from "@/lib/checkout/assert-tenant-gateway"
 import { dueDateInDays } from "@/lib/checkout/due-date"
@@ -422,6 +427,31 @@ export const POST = withRequestContext(
     },
     select: { id: true },
   })
+
+  // ── Desconto zerou o valor (cupom de 100% ou desconto manual integral) ────
+  // Não há link de pagamento a gerar: libera o acesso na hora, pelo mesmo
+  // caminho da bolsa. Sem isto o vendedor gerava um link que o gateway recusava.
+  if (isFreeAmount(finalAmount)) {
+    try {
+      await releaseFreeEnrollment(pmbTenantContext(pmbTenant), enrollment.id)
+    } catch (err) {
+      await prisma.enrollment
+        .delete({ where: { id: enrollment.id } })
+        .catch(swallow("admin.vendas.free.rollback"))
+      if (couponId) await releaseCoupon(couponId).catch(swallow("admin.vendas"))
+      contextLogger().error(
+        { err, event: "admin.vendas.free_failed", studentId: student.id },
+        "liberacao de venda com desconto integral falhou",
+      )
+      return NextResponse.json(
+        { error: "Falha ao matricular o aluno na plataforma de aulas. Tente novamente." },
+        { status: 502 },
+      )
+    }
+    return NextResponse.json({
+      data: { enrollmentId: enrollment.id, scholarship: true, finalAmount: 0 },
+    })
+  }
 
   const externalReference = `pmb_enr_${enrollment.id}`
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? ""

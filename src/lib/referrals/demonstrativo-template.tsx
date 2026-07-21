@@ -34,6 +34,16 @@ export interface DemonstrativoRenderData {
     grossFormatted: string
     irrfFormatted: string
     netFormatted: string
+    /**
+     * Preenchido SO quando o valor pago (caixa) diverge da soma das linhas
+     * (apuracao) — tipicamente um ajuste manual do financeiro no mark-paid. Um
+     * documento financeiro nao pode fechar por um numero que as linhas nao somam.
+     */
+    adjustment: {
+      accruedFormatted: string
+      deltaFormatted: string
+      note: string | null
+    } | null
   }
   emittedAtFormatted: string
 }
@@ -212,6 +222,18 @@ const styles = StyleSheet.create({
     fontFamily: "Helvetica-Bold",
     color: TEXT_DARK,
   },
+  totalsAdjustmentBlock: {
+    borderBottomWidth: 1,
+    borderBottomColor: BORDER,
+    paddingBottom: 4,
+    marginBottom: 2,
+  },
+  totalsAdjustmentNote: {
+    fontSize: 8,
+    color: TEXT_MUTED,
+    fontStyle: "italic",
+    marginTop: 1,
+  },
   totalsNetRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -367,6 +389,29 @@ export function DemonstrativoDocument(data: DemonstrativoRenderData) {
         <View style={styles.section}>
           <Text style={styles.sectionHeader}>Totais</Text>
           <View style={styles.totalsBox}>
+            {totals.adjustment ? (
+              <View style={styles.totalsAdjustmentBlock}>
+                <View style={styles.totalsRow}>
+                  <Text style={styles.totalsLabel}>
+                    Comissoes apuradas no periodo
+                  </Text>
+                  <Text style={styles.totalsValue}>
+                    {totals.adjustment.accruedFormatted}
+                  </Text>
+                </View>
+                <View style={styles.totalsRow}>
+                  <Text style={styles.totalsLabel}>Ajuste do financeiro</Text>
+                  <Text style={styles.totalsValue}>
+                    {totals.adjustment.deltaFormatted}
+                  </Text>
+                </View>
+                {totals.adjustment.note ? (
+                  <Text style={styles.totalsAdjustmentNote}>
+                    {totals.adjustment.note}
+                  </Text>
+                ) : null}
+              </View>
+            ) : null}
             <View style={styles.totalsRow}>
               <Text style={styles.totalsLabel}>Total bruto</Text>
               <Text style={styles.totalsValue}>{totals.grossFormatted}</Text>

@@ -6,6 +6,10 @@ import { requireAdminSession } from "@/lib/auth/admin-session"
 import { PageHeader } from "@/components/painel/page-header"
 import { AdminReferralSettingsForm } from "@/components/admin/admin-referral-settings-form"
 import { parseBrackets } from "@/lib/referrals/rules"
+import {
+  describeEffectiveCommission,
+  resolveEffectiveCommission,
+} from "@/lib/referrals/effective-rule"
 
 export const dynamic = "force-dynamic"
 
@@ -21,6 +25,7 @@ export default async function AdminReferralSettingsPage() {
     select: {
       referralEnabled: true,
       defaultReferralPercent: true,
+      defaultReferralMinReferrals: true,
       referralMinPayout: true,
       referralPayoutDay: true,
       commissionMode: true,
@@ -31,6 +36,11 @@ export default async function AdminReferralSettingsPage() {
       commissionPlan: true,
     },
   })
+
+  // Regra GLOBAL que esta valendo, resolvida pelo mesmo
+  // `resolveEffectiveCommission` que o fechamento mensal usa. `referrer = null`
+  // porque aqui descrevemos o padrao da rede, nao a regra de uma unidade.
+  const effectiveRule = resolveEffectiveCommission(null, settings)
 
   return (
     <div className="space-y-6">
@@ -44,21 +54,25 @@ export default async function AdminReferralSettingsPage() {
 
       <PageHeader
         title="Configurações do programa de indicação"
-        description="Defina o percentual padrão, valor mínimo de saque e o dia do mês em que comissões ficam disponíveis."
+        description="Defina a regra padrão de comissão da rede, o valor mínimo de saque e o dia do mês em que comissões ficam disponíveis."
       />
 
       <AdminReferralSettingsForm
         initial={{
           referralEnabled: settings.referralEnabled,
           defaultReferralPercent: Number(settings.defaultReferralPercent),
+          defaultReferralMinReferrals: settings.defaultReferralMinReferrals,
           referralMinPayout: Number(settings.referralMinPayout),
           referralPayoutDay: settings.referralPayoutDay,
-          commissionMode: settings.commissionMode,
           commissionBracketBasis: settings.commissionBracketBasis,
           commissionRateType: settings.commissionRateType,
           commissionPayoutBase: settings.commissionPayoutBase,
           commissionBrackets: parseBrackets(settings.commissionBrackets),
           commissionPlan: settings.commissionPlan,
+        }}
+        preview={{
+          description: describeEffectiveCommission(effectiveRule),
+          warnings: effectiveRule.warnings,
         }}
       />
     </div>
