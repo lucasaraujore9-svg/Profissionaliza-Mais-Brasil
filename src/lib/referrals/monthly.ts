@@ -125,9 +125,19 @@ export async function computeMonthlyCommissions(period: string): Promise<{
       commissionPlan: true,
       defaultReferralPercent: true,
       defaultReferralMinReferrals: true,
+      commissionUnifiedSince: true,
     },
   })
   if (!settings?.referralEnabled) {
+    return { processed: 0, created: 0, updated: 0, skipped: 0 }
+  }
+
+  // Competencias anteriores ao corte pertencem ao ledger legado e ja foram
+  // liquidadas de la. Apura-las aqui criaria uma SEGUNDA comissao sobre o mesmo
+  // mes — o motor unico nao consulta o ledger legado quando o payoutBase e
+  // ALL_ACTIVE, entao a protecao tem de ser explicita. Comparacao lexicografica
+  // funciona porque o formato e sempre "AAAA-MM".
+  if (settings.commissionUnifiedSince && period < settings.commissionUnifiedSince) {
     return { processed: 0, created: 0, updated: 0, skipped: 0 }
   }
 
@@ -218,19 +228,105 @@ async function computeForReferrer(
     return "skipped"
   }
 
+  // Unidades que PAGARAM mensalidade nesta competencia — independente do status
+  // que elas tenham HOJE.
+  //
+  // Uma unidade inadimplente vira SUSPENDED automaticamente (webhook
+  // PAYMENT_OVERDUE do Asaas, ver src/lib/asaas/process.ts). Como o fechamento
+  // roda depois do mes fechado, montar o universo so com `status: ACTIVE` fazia
+  // a unidade que pagou em junho e atrasou em julho DESAPARECER da apuracao de
+  // junho — o indicador perdia a comissao de um dinheiro que a PMB recebeu de
+  // verdade. Pagamento e fato consumado: quem pagou na competencia entra nela.
+  const paidRows = await prisma.tenantPayment.findMany({
+    where: {
+      tenant: { referrerTenantId },
+      status: { in: RECEIVED_STATUSES },
+      paidAt: { gte: range.start, lt: range.end },
+    },
+    select: { tenantId: true },
+  })
+  const paidTenantIds = [...new Set(paidRows.map((p) => p.tenantId))]
+
   // Contagens no nivel do INDICADOR — usadas para escolher a faixa DENTRO da fase
   // de cada unidade (a faixa por volume continua sendo agregada do indicador,
   // mesmo que cada unidade esteja numa fase diferente do tempo).
-  const [newThisMonthCount, activeTotalCount] = await Promise.all([
+  const [newThisMonthCount, activeNowCount] = await Promise.all([
+    // NEW_REFERRALS_MONTH = revendas ATIVADAS na competencia.
+    //
+    // Conta por `activatedAt`, nao por `createdAt`: o gatilho comercial e a
+    // venda ativada, e uma unidade cadastrada em 30/06 que so ativou em 02/07 e
+    // uma venda de julho. Unidade que nunca ativou (`activatedAt` null) nao
+    // entra em mes nenhum.
+    //
+    // SUSPENDED continua contando, de proposito: ativacao e fato historico e
+    // filtrar pelo status de HOJE faria a faixa de um mes passado encolher toda
+    // vez que uma unidade ativada naquele mes ficasse inadimplente depois.
+    // CANCELLED, porem, sai: contrato desfeito (fraude, arrependimento,
+    // duplicidade) nunca foi venda, e mante-lo inflaria a faixa — que na CDA
+    // multiplica o valor por TODA a carteira.
+    //
+    // `planValue > 0` espelha o universo de unidades abaixo: cortesia nunca
+    // gera receita, entao nao pode empurrar a faixa para cima.
     prisma.tenant.count({
       where: {
         referrerTenantId,
-        status: "ACTIVE",
-        createdAt: { gte: range.start, lt: range.end },
+        planValue: { gt: 0 },
+        status: { not: "CANCELLED" },
+        // COALESCE(activated_at, created_at) dentro da competencia — a MESMA
+        // convencao do backfill da migration 20260620.
+        //
+        // `activatedAt` sozinho nao serve: so o webhook do Asaas o grava
+        // (src/lib/asaas/process.ts). A ativacao por cartao
+        // (/api/cobranca/[paymentId]/pay-card) muda o status e deixa o campo
+        // nulo, e essas unidades sumiriam da contagem — derrubando a faixa do
+        // indicador inteiro. O fallback por `createdAt` cobre esse caso.
+        OR: [
+          { activatedAt: { gte: range.start, lt: range.end } },
+          { activatedAt: null, createdAt: { gte: range.start, lt: range.end } },
+        ],
       },
     }),
-    prisma.tenant.count({ where: { referrerTenantId, status: "ACTIVE" } }),
+    // Mesmo filtro `planValue > 0` do universo: os dois numeros sao somados em
+    // `activeTotalCount`, e populacoes com filtros diferentes davam um total que
+    // nao correspondia a carteira que de fato recebe.
+    prisma.tenant.count({
+      where: { referrerTenantId, status: "ACTIVE", planValue: { gt: 0 } },
+    }),
   ])
+
+  // Universo de unidades candidatas: as ativas HOJE mais as que pagaram na
+  // competencia (mesmo que suspensas depois). Sempre com plano pago: cortesia
+  // (planValue = 0) nunca gera comissao. A inclusao final depende do payoutBase
+  // da FASE ATIVA de cada unidade (avaliado no loop).
+  // createdAt/activatedAt/commissionPlanStartedAt definem o relogio PROPRIO de
+  // cada unidade.
+  const units = await prisma.tenant.findMany({
+    where: {
+      referrerTenantId,
+      planValue: { gt: 0 },
+      OR: [{ status: "ACTIVE" }, { id: { in: paidTenantIds } }],
+    },
+    select: {
+      id: true,
+      name: true,
+      status: true,
+      planValue: true,
+      createdAt: true,
+      activatedAt: true,
+      commissionPlanStartedAt: true,
+    },
+  })
+
+  // "Unidades ativas" para efeito de FAIXA significa ATIVAS E ADIMPLENTES: como
+  // o inadimplente e suspenso automaticamente, `status: ACTIVE` ja exclui quem
+  // nao paga. Somamos de volta quem pagou NA COMPETENCIA e so depois foi
+  // suspenso — senao a faixa encolheria retroativamente a cada reprocessamento,
+  // punindo o indicador por uma inadimplencia posterior ao mes apurado.
+  const paidSet = new Set(paidTenantIds)
+  const paidButNotActive = units.filter(
+    (u) => u.status !== "ACTIVE" && paidSet.has(u.id),
+  ).length
+  const activeTotalCount = activeNowCount + paidButNotActive
 
   // PORTAO DE ELEGIBILIDADE (herdado do motor legado): o indicador so passa a
   // receber depois de atingir o minimo de indicacoes ATIVAS. Enquanto nao
@@ -240,22 +336,9 @@ async function computeForReferrer(
     return removeIfExists(existing?.id)
   }
 
-  // Universo de unidades candidatas: ativas com plano pago (cortesia planValue=0
-  // nunca gera pagamento). A inclusao final depende do payoutBase da FASE ATIVA
-  // de cada unidade (avaliado no loop). createdAt/activatedAt/commissionPlanStartedAt
-  // definem o relogio PROPRIO de cada unidade.
-  const units = await prisma.tenant.findMany({
-    where: { referrerTenantId, status: "ACTIVE", planValue: { gt: 0 } },
-    select: {
-      id: true,
-      name: true,
-      planValue: true,
-      createdAt: true,
-      activatedAt: true,
-      commissionPlanStartedAt: true,
-    },
-  })
   if (units.length === 0) return removeIfExists(existing?.id)
+
+  const ids = units.map((u) => u.id)
 
   // Mensalidades recebidas no mes, FATURA A FATURA (nao somadas por unidade).
   //
@@ -278,7 +361,6 @@ async function computeForReferrer(
   // Filtrar na query misturava as duas: a 2a fatura do mes virava indice 0 da
   // lista e era tratada como a primeira, pagando o percentual de entrada duas
   // vezes no mes de transicao entre motores.
-  const ids = units.map((u) => u.id)
   const paidInMonth = new Map<
     string,
     { amount: Prisma.Decimal; paidAt: Date; elegivel: boolean }[]
@@ -354,8 +436,15 @@ async function computeForReferrer(
   const lines: MonthlyLine[] = []
 
   for (const u of units) {
+    // "Indicada NESTE mes" pela ATIVACAO, com o mesmo COALESCE da contagem de
+    // faixa (`newThisMonthCount`). Enquanto este gate olhava `createdAt` e a
+    // faixa olhava `activatedAt`, as duas metades da MESMA regra discordavam
+    // sobre a que mes uma indicada pertence: uma unidade cadastrada em 30/06 e
+    // ativada em 02/07 subia a faixa de julho mas era paga como indicada de
+    // junho.
+    const referralMonthAnchor = u.activatedAt ?? u.createdAt
     const referredThisMonth =
-      u.createdAt >= range.start && u.createdAt < range.end
+      referralMonthAnchor >= range.start && referralMonthAnchor < range.end
     // Relogio PROPRIO da unidade: idade em meses desde a ativacao DELA
     // (commissionPlanStartedAt > activatedAt > createdAt). A fase do plano e
     // escolhida por essa idade — unidades em meses diferentes podem estar em

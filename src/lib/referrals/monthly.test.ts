@@ -62,6 +62,7 @@ const RANGE_START = new Date(Date.UTC(2026, 4, 1))
 const RANGE_END = new Date(Date.UTC(2026, 5, 1))
 
 interface SettingsRow {
+  commissionUnifiedSince?: string | null
   referralEnabled: boolean
   referralPayoutDay: number | null
   commissionMode: CommissionMode
@@ -121,6 +122,7 @@ function referrer(over: Partial<ReferrerRow> = {}): ReferrerRow {
 interface UnitRow {
   id: string
   name: string
+  status: string
   planValue: Prisma.Decimal
   createdAt: Date
   activatedAt: Date | null
@@ -148,6 +150,9 @@ function unit(id: string, over: UnitOverrides = {}): UnitRow {
   return {
     id,
     name: `Unidade ${id}`,
+    // A query de unidades filtra por ACTIVE OU "pagou na competencia"; o motor
+    // le o status para nao encolher a faixa por suspensao posterior ao mes.
+    status: "ACTIVE",
     planValue: new Prisma.Decimal(planValue ?? 239),
     // Ancora bem anterior ao periodo apurado: por padrao a unidade entra.
     createdAt: new Date(Date.UTC(2025, 0, 10)),
@@ -302,13 +307,47 @@ function arrange(s: Scenario = {}): void {
   // Os dois findMany do motor se distinguem pelo `where`: indicadores tem
   // `referrals`, unidades indicadas tem `referrerTenantId`.
   db.tenant.findMany.mockImplementation(
-    async (args: { where: Record<string, unknown> }) =>
-      args.where.referrals ? referrers : units,
+    async (args: { where: Record<string, unknown> }) => {
+      if (args.where.referrals) return referrers
+      // O mock HONRA o `where` do universo de unidades: planValue > 0 e
+      // "ACTIVE OU pagou na competencia". Sem isso, trocar esse filtro na
+      // implementacao nao quebraria teste nenhum — foi assim que a suspensao
+      // posterior ao mes apagava a comissao sem ninguem perceber.
+      const or = args.where.OR as
+        | [{ status: string }, { id: { in: string[] } }]
+        | undefined
+      const status = args.where.status as string | undefined
+      const paidIds = new Set(or?.[1]?.id?.in ?? [])
+      return units.filter((u) => {
+        if (Number(u.planValue) <= 0) return false
+        // `status` sozinho (sem o OR) e exatamente o filtro que apagava a
+        // unidade suspensa DEPOIS de pagar — o mock precisa reproduzi-lo para
+        // que reintroduzir esse bug quebre o teste.
+        if (status) return u.status === status
+        if (or) return u.status === "ACTIVE" || paidIds.has(u.id)
+        return true
+      })
+    },
   )
-  // Os dois count: o do mes tem filtro de createdAt, o total nao.
+  // Os dois count: o do mes filtra por activatedAt, o total nao.
   db.tenant.count.mockImplementation(
-    async (args: { where: Record<string, unknown> }) =>
-      args.where.createdAt ? (s.newThisMonth ?? 0) : (s.activeTotal ?? units.length),
+    async (args: { where: Record<string, unknown> }) => {
+      // "Novas do mes" e contado por COALESCE(activatedAt, createdAt) na
+      // competencia — no Prisma isso vira um `OR` de dois ramos. O total da
+      // carteira nao tem filtro de data.
+      //
+      // Discriminamos pelo `OR`, e os DOIS counts exigem `planValue > 0` (o
+      // filtro que impede cortesia de empurrar a faixa): se a implementacao
+      // deixar de mandar esse filtro, o mock lanca e o teste quebra.
+      expect(args.where.planValue).toEqual({ gt: 0 })
+      if (args.where.OR) {
+        // Ramo "novas do mes": contrato desfeito nao conta como venda.
+        expect(args.where.status).toEqual({ not: "CANCELLED" })
+        return s.newThisMonth ?? 0
+      }
+      expect(args.where.status).toBe("ACTIVE")
+      return s.activeTotal ?? units.length
+    },
   )
   db.referralMonthlyCommission.findUnique.mockResolvedValue(s.existing ?? null)
   // O mock HONRA o `where` que a implementacao monta (ids, status e o OR de
@@ -316,8 +355,20 @@ function arrange(s: Scenario = {}): void {
   // volta e o filtro real do motor — nao o teste.
   const rows = toPaymentRows(s.paid ?? {})
   // Mensalidades do mes, fatura a fatura (o motor precisa da data de cada uma).
-  db.tenantPayment.findMany.mockImplementation(async (args: GroupByArgs) =>
-    rows
+  db.tenantPayment.findMany.mockImplementation(async (args: GroupByArgs) => {
+    const where = args.where as Record<string, unknown>
+    // Descoberta de "quem pagou na competencia": filtra so por status + janela.
+    if (where.tenant) {
+      return rows
+        .filter(
+          (row) =>
+            ["RECEIVED", "CONFIRMED"].includes(row.status) &&
+            row.paidAt >= RANGE_START &&
+            row.paidAt < RANGE_END,
+        )
+        .map((row) => ({ tenantId: row.tenantId }))
+    }
+    return rows
       .filter((row) => matchesWhere(row, args.where))
       .sort((a, b) => a.paidAt.getTime() - b.paidAt.getTime())
       .map((row) => ({
@@ -327,8 +378,8 @@ function arrange(s: Scenario = {}): void {
         // O motor decide a elegibilidade em codigo (nao mais no `where`), entao
         // o mock precisa devolver a relacao como o Prisma devolveria.
         referralCommission: row.referralCommission,
-      })),
-  )
+      }))
+  })
   // Contagem de faturas pagas ANTES da competencia (relogio por fatura).
   db.tenantPayment.groupBy.mockImplementation(async (args: GroupByArgs) => {
     const porTenant = new Map<string, number>()
@@ -1006,69 +1057,53 @@ describe("computeMonthlyCommissions — regressao: a regra e do INDICADOR", () =
 // recebendo o valor errado de verdade.
 // ---------------------------------------------------------------------------
 
-describe("contrato CARREIRA DIGITAL — faixa por ativas, R$ por unidade que PAGOU", () => {
-  /** 0-10 => R$75/unidade; 11-25 => R$85; 26+ => R$100. */
-  const FAIXAS = [
-    { upTo: 10, value: 75 },
-    { upTo: 25, value: 85 },
-    { upTo: null, value: 100 },
-  ]
-
-  function cda(units: UnitRow[], paid: Record<string, PaidEntry>, activeTotal: number) {
+describe("corte do motor unico (commissionUnifiedSince)", () => {
+  // Junho/2026 foi liquidado pelo ledger legado e pago a mao. Sem o corte, o
+  // catch-up de 3 meses do cron reapuraria junho e criaria uma segunda comissao
+  // sobre dinheiro que ja saiu do caixa.
+  it("nao apura competencia anterior ao corte", async () => {
     arrange({
+      settings: { commissionUnifiedSince: "2026-07" },
+      referrers: [referrer({ commissionBrackets: [{ upTo: null, value: 75 }] })],
+      units: [unit("u1")],
+    })
+
+    const r = await computeMonthlyCommissions("2026-06")
+
+    expect(r).toEqual({ processed: 0, created: 0, updated: 0, skipped: 0 })
+    expect(db.referralMonthlyCommission.create).not.toHaveBeenCalled()
+  })
+
+  it("apura a competencia do corte em diante", async () => {
+    arrange({
+      settings: { commissionUnifiedSince: "2026-05" },
       referrers: [
         referrer({
-          commissionBrackets: FAIXAS,
+          commissionBrackets: [{ upTo: null, value: 75 }],
           commissionRateType: "FIXED",
-          commissionBracketBasis: "ACTIVE_UNITS",
-          commissionPayoutBase: "PAID_THIS_MONTH",
+          commissionPayoutBase: "ALL_ACTIVE",
         }),
       ],
-      units,
-      paid,
-      activeTotal,
+      units: [unit("u1")],
     })
-  }
 
-  it("7 ativas na faixa 0-10, 5 pagantes => 5 x R$75 = R$375", async () => {
-    const units = ["u1", "u2", "u3", "u4", "u5", "u6", "u7"].map((id) => unit(id))
-    // As duas ultimas estao ATIVAS mas nao pagaram no mes.
-    cda(units, { u1: 239, u2: 239, u3: 239, u4: 239, u5: 239 }, 7)
+    await computeMonthlyCommissions(PERIOD) // 2026-05
 
-    await computeMonthlyCommissions(PERIOD)
-
-    const data = created()
-    expect(Number(data.amount)).toBe(375)
-    expect(data.unitCount).toBe(5)
-    // A FAIXA olha as 7 ativas; o VALOR so as 5 que pagaram.
-    expect(data.bracketCount).toBe(7)
-    expect(Number(data.rate)).toBe(75)
+    expect(Number(created().amount)).toBe(75)
   })
 
-  it("unidade ativa e inadimplente nao entra na conta", async () => {
-    cda([unit("u1"), unit("u2")], { u1: 239 }, 2)
-
-    await computeMonthlyCommissions(PERIOD)
-
-    const data = created()
-    expect(Number(data.amount)).toBe(75) // e nao 150
-    expect(data.linesSnapshot.map((l) => l.tenantId)).toEqual(["u1"])
-  })
-
-  it("a faixa sobe com o numero de ATIVAS, nao com o de pagantes", async () => {
-    const units = Array.from({ length: 12 }, (_, i) => unit(`u${i + 1}`))
-    // 12 ativas => faixa 11-25 (R$85), mesmo com apenas 2 pagando.
-    cda(units, { u1: 239, u2: 239 }, 12)
-
-    await computeMonthlyCommissions(PERIOD)
-
-    const data = created()
-    expect(Number(data.rate)).toBe(85)
-    expect(Number(data.amount)).toBe(170) // 2 x 85
-  })
-
-  it("unidade que pagou DUAS faturas no mes conta uma vez so (valor fixo)", async () => {
-    cda([unit("u1")], { u1: [{ amount: 239 }, { amount: 239 }] }, 1)
+  it("sem corte configurado, apura qualquer competencia", async () => {
+    arrange({
+      settings: { commissionUnifiedSince: null },
+      referrers: [
+        referrer({
+          commissionBrackets: [{ upTo: null, value: 75 }],
+          commissionRateType: "FIXED",
+          commissionPayoutBase: "ALL_ACTIVE",
+        }),
+      ],
+      units: [unit("u1")],
+    })
 
     await computeMonthlyCommissions(PERIOD)
 
@@ -1076,6 +1111,157 @@ describe("contrato CARREIRA DIGITAL — faixa por ativas, R$ por unidade que PAG
   })
 })
 
+describe("contrato CARREIRA DIGITAL — faixa pelas ATIVACOES do mes, R$ sobre a carteira", () => {
+  // Contrato: o GATILHO e quantas revendas foram ATIVADAS no mes; o VALOR incide
+  // sobre TODA a carteira ativa.
+  //   ate 10 ativacoes -> R$ 75 por revenda ativa
+  //   11 a 25          -> R$ 85 por revenda ativa
+  //   26+              -> R$ 100 por revenda ativa
+  const FAIXAS = [
+    { upTo: 10, value: 75 },
+    { upTo: 25, value: 85 },
+    { upTo: null, value: 100 },
+  ]
+
+  function cda(units: UnitRow[], newThisMonth: number, activeTotal = units.length) {
+    arrange({
+      referrers: [
+        referrer({
+          commissionBrackets: FAIXAS,
+          commissionRateType: "FIXED",
+          commissionBracketBasis: "NEW_REFERRALS_MONTH",
+          commissionPayoutBase: "ALL_ACTIVE",
+        }),
+      ],
+      units,
+      newThisMonth,
+      activeTotal,
+    })
+  }
+
+  // Competencia real de junho/2026: 1 unica ativacao no mes e 1 unica revenda na
+  // carteira. Foi o que o financeiro pagou a mao (R$ 75,00).
+  it("junho/2026 reproduzido: 1 ativacao, carteira de 1 => R$ 75", async () => {
+    cda([unit("u1")], 1)
+
+    await computeMonthlyCommissions(PERIOD)
+
+    const data = created()
+    expect(Number(data.rate)).toBe(75)
+    expect(data.unitCount).toBe(1)
+    expect(Number(data.amount)).toBe(75)
+  })
+
+  // Competencia real de julho/2026: 6 ativacoes no mes, carteira de 7.
+  it("julho/2026 reproduzido: 6 ativacoes, carteira de 7 => 7 x R$ 75 = R$ 525", async () => {
+    const units = ["u1", "u2", "u3", "u4", "u5", "u6", "u7"].map((id) => unit(id))
+    cda(units, 6)
+
+    await computeMonthlyCommissions(PERIOD)
+
+    const data = created()
+    expect(Number(data.rate)).toBe(75)
+    expect(data.bracketCount).toBe(6) // a faixa olha as ATIVACOES do mes
+    expect(data.unitCount).toBe(7) // o valor incide sobre a carteira toda
+    expect(Number(data.amount)).toBe(525)
+  })
+
+  it("o valor NAO depende de quem pagou no mes: carteira inteira remunera", async () => {
+    const units = ["u1", "u2", "u3"].map((id) => unit(id))
+    // Ninguem pagou mensalidade na competencia — com ALL_ACTIVE isso e
+    // irrelevante, o que conta e estar ativa.
+    cda(units, 2)
+
+    await computeMonthlyCommissions(PERIOD)
+
+    const data = created()
+    expect(Number(data.amount)).toBe(225) // 3 x R$ 75
+    expect(data.linesSnapshot.map((l) => l.tenantId)).toEqual(["u1", "u2", "u3"])
+  })
+
+  it("11 ativacoes no mes sobem a faixa para R$ 85 em TODA a carteira", async () => {
+    const units = Array.from({ length: 15 }, (_, i) => unit(`u${i + 1}`))
+    cda(units, 11)
+
+    await computeMonthlyCommissions(PERIOD)
+
+    const data = created()
+    expect(Number(data.rate)).toBe(85)
+    expect(Number(data.amount)).toBe(15 * 85)
+  })
+
+  it("26 ativacoes no mes sobem a faixa para R$ 100", async () => {
+    const units = Array.from({ length: 30 }, (_, i) => unit(`u${i + 1}`))
+    cda(units, 26)
+
+    await computeMonthlyCommissions(PERIOD)
+
+    const data = created()
+    expect(Number(data.rate)).toBe(100)
+    expect(Number(data.amount)).toBe(30 * 100)
+  })
+
+  it("carteira grande sem ativacao no mes fica na faixa de entrada", async () => {
+    const units = Array.from({ length: 30 }, (_, i) => unit(`u${i + 1}`))
+    // 30 revendas ativas, nenhuma ativada NESTE mes => faixa 0-10 (R$ 75).
+    cda(units, 0)
+
+    await computeMonthlyCommissions(PERIOD)
+
+    const data = created()
+    expect(Number(data.rate)).toBe(75)
+    expect(Number(data.amount)).toBe(30 * 75)
+  })
+
+  // Caso real: a BE Educacional pagou junho e so em 18/07 ficou inadimplente,
+  // virando SUSPENDED pelo webhook do Asaas. Como o fechamento roda depois disso
+  // (e o cron reapura 3 meses), montar o universo so com `status: ACTIVE`
+  // apagaria a comissao de um mes ja fechado. Ativacao/pagamento sao fatos.
+  it("unidade que pagou na competencia e foi suspensa DEPOIS continua contando", async () => {
+    arrange({
+      referrers: [
+        referrer({
+          commissionBrackets: FAIXAS,
+          commissionRateType: "FIXED",
+          commissionBracketBasis: "NEW_REFERRALS_MONTH",
+          commissionPayoutBase: "ALL_ACTIVE",
+        }),
+      ],
+      units: [unit("u1", { status: "SUSPENDED" }), unit("u2")],
+      paid: { u1: 239 },
+      newThisMonth: 1,
+      activeTotal: 1, // ativas HOJE: so a u2 sobrou
+    })
+
+    await computeMonthlyCommissions(PERIOD)
+
+    const data = created()
+    expect(Number(data.amount)).toBe(150) // 2 x R$ 75, e nao 75
+    expect(data.linesSnapshot.map((l) => l.tenantId)).toEqual(["u1", "u2"])
+  })
+
+  it("unidade suspensa que NAO pagou na competencia fica de fora", async () => {
+    arrange({
+      referrers: [
+        referrer({
+          commissionBrackets: FAIXAS,
+          commissionRateType: "FIXED",
+          commissionBracketBasis: "NEW_REFERRALS_MONTH",
+          commissionPayoutBase: "ALL_ACTIVE",
+        }),
+      ],
+      units: [unit("u1", { status: "SUSPENDED" }), unit("u2")],
+      newThisMonth: 1,
+      activeTotal: 1,
+    })
+
+    await computeMonthlyCommissions(PERIOD)
+
+    const data = created()
+    expect(Number(data.amount)).toBe(75)
+    expect(data.linesSnapshot.map((l) => l.tenantId)).toEqual(["u2"])
+  })
+})
 describe("contrato INOVASUL — 50% da 1a fatura paga, 10% nas demais", () => {
   /** Janela promocional do contrato: 1a fatura paga ate 15/12/2026. */
   const PROMO_ATE = "2026-12-15T23:59:59.999Z"
@@ -1386,5 +1572,117 @@ describe("janela promocional: borda de fuso (o prazo e a data BRASILEIRA)", () =
     await computeMonthlyCommissions("2026-12")
 
     expect(Number(created().amount)).toBe(23.9)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// FIXED + PAID_THIS_MONTH — configuracao ainda selecionavel no construtor de
+// regras, mas que ficou sem cobertura quando a suite da CDA migrou para
+// ALL_ACTIVE. Sao invariantes proprios deste payoutBase: o valor fixo e por
+// UNIDADE (nao por fatura) e so entra quem pagou na competencia.
+// ---------------------------------------------------------------------------
+
+describe("FIXED + PAID_THIS_MONTH — valor por unidade que pagou", () => {
+  function fixo(units: UnitRow[], paid: Scenario["paid"], activeTotal = units.length) {
+    arrange({
+      referrers: [
+        referrer({
+          commissionBrackets: [{ upTo: null, value: 75 }],
+          commissionRateType: "FIXED",
+          commissionBracketBasis: "ACTIVE_UNITS",
+          commissionPayoutBase: "PAID_THIS_MONTH",
+        }),
+      ],
+      units,
+      paid,
+      activeTotal,
+    })
+  }
+
+  it("unidade que pagou DUAS faturas no mes conta UMA vez (valor e por unidade)", async () => {
+    fixo([unit("u1")], { u1: [{ amount: 239 }, { amount: 239 }] })
+
+    await computeMonthlyCommissions(PERIOD)
+
+    const data = created()
+    expect(data.unitCount).toBe(1)
+    expect(Number(data.amount)).toBe(75) // e nao 150
+  })
+
+  it("unidade ativa porem inadimplente no mes NAO entra", async () => {
+    fixo([unit("u1"), unit("u2")], { u1: 239 }, 2)
+
+    await computeMonthlyCommissions(PERIOD)
+
+    const data = created()
+    expect(data.linesSnapshot.map((l) => l.tenantId)).toEqual(["u1"])
+    expect(Number(data.amount)).toBe(75)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Mes da indicacao: a faixa (`newThisMonthCount`) e o portao por unidade
+// (`REFERRED_THIS_MONTH`) precisam concordar sobre a que mes uma indicada
+// pertence. Ancora = COALESCE(activatedAt, createdAt).
+// ---------------------------------------------------------------------------
+
+describe("mes da indicacao — ancora unica COALESCE(activatedAt, createdAt)", () => {
+  function comPayoutBase(units: UnitRow[]) {
+    arrange({
+      referrers: [
+        referrer({
+          commissionBrackets: [{ upTo: null, value: 50 }],
+          commissionRateType: "PERCENT",
+          commissionBracketBasis: "ACTIVE_UNITS",
+          commissionPayoutBase: "REFERRED_THIS_MONTH",
+        }),
+      ],
+      units,
+      activeTotal: units.length,
+      paid: Object.fromEntries(units.map((u) => [u.id, 239])),
+    })
+  }
+
+  it("cadastrada no mes ANTERIOR e ATIVADA na competencia conta como do mes", async () => {
+    // O caso que fazia as duas metades da regra discordarem: a faixa ja contava
+    // por ativacao, mas o portao por unidade olhava `createdAt` e a excluia.
+    comPayoutBase([
+      unit("ativadaAgora", {
+        createdAt: new Date(Date.UTC(2026, 3, 28)), // 28/04
+        activatedAt: new Date(Date.UTC(2026, 4, 2)), // 02/05 (competencia)
+      }),
+    ])
+
+    await computeMonthlyCommissions(PERIOD)
+
+    const data = created()
+    expect(data.linesSnapshot.map((l) => l.tenantId)).toEqual(["ativadaAgora"])
+  })
+
+  it("cadastrada na competencia mas ATIVADA depois NAO conta como do mes", async () => {
+    comPayoutBase([
+      unit("ativadaDepois", {
+        createdAt: new Date(Date.UTC(2026, 4, 28)), // 28/05 (competencia)
+        activatedAt: new Date(Date.UTC(2026, 5, 3)), // 03/06
+      }),
+    ])
+
+    await computeMonthlyCommissions(PERIOD)
+
+    expect(db.referralMonthlyCommission.create).not.toHaveBeenCalled()
+  })
+
+  it("sem activatedAt cai em createdAt (ativacao por cartao nao grava o campo)", async () => {
+    comPayoutBase([
+      unit("semAncora", {
+        createdAt: new Date(Date.UTC(2026, 4, 10)), // 10/05 (competencia)
+        activatedAt: null,
+      }),
+    ])
+
+    await computeMonthlyCommissions(PERIOD)
+
+    const data = created()
+    expect(data.linesSnapshot.map((l) => l.tenantId)).toEqual(["semAncora"])
   })
 })

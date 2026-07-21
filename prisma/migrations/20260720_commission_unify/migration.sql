@@ -4,27 +4,32 @@
 --   (A) legado: tenants.referral_percent / referral_tiers, lidos do tenant INDICADO
 --   (B) faixas: tenants.commission_*, lidos do tenant INDICADOR
 -- As duas eram editaveis em cards diferentes da MESMA tela e gravavam a mesma
--- coluna por caminhos diferentes. Quem configurava 50% na pagina do indicador via
--- o sistema pagar o padrao global — o caso concreto que originou esta migracao.
+-- coluna por caminhos diferentes.
 --
--- Aqui traduzimos a regra legada de cada indicador para o bloco commission_*,
--- que passa a ser a UNICA fonte de verdade. Os campos legados NAO sao apagados:
--- ficam como evidencia do que valia antes (o codigo nao os le mais no calculo).
+-- POR QUE AS REGRAS SAO ESCRITAS EXPLICITAMENTE, E NAO TRADUZIDAS:
+-- a primeira versao desta migration derivava a regra de cada indicador a partir
+-- de `referral_percent`. Isso se provou ERRADO: a CARREIRA DIGITAL tinha 50%
+-- gravado ali, mas o contrato real dela nunca foi percentual — e valor FIXO por
+-- faixa (R$ 75/85/100 por unidade). O campo legado guardava um numero que nunca
+-- refletiu acordo nenhum, justamente porque ninguem conseguia ve-lo em vigor.
+-- Traduzi-lo automaticamente teria carimbado o dado errado como se fosse regra.
+-- Por isso: os contratos conhecidos entram um a um, conferidos com o dono.
 --
 -- Idempotente: aplicada automaticamente no build por
 -- scripts/apply-pending-migrations.mjs e segura para re-execucao.
+--
+-- Ver tambem 20260721_commission_unified_since: e ela que impede o motor unico
+-- de reapurar competencias que ja foram liquidadas pelo ledger legado.
 
 -- ---------------------------------------------------------------------------
--- 1. Regra GLOBAL (system_settings)
+-- 1. Regra GLOBAL (system_settings) — o padrao de quem nao tem contrato proprio
 -- ---------------------------------------------------------------------------
 -- Estado encontrado em producao: mode PER_PAYMENT_PERCENT + rate_type FIXED +
 -- brackets [{"upTo":10,"value":0}] — faixas DEGENERADAS, que pagariam R$ 0 por
--- unidade se alguem trocasse o modo. O percentual que de fato valia estava em
--- default_referral_percent. Traduzimos esse percentual para uma faixa unica
--- PERCENT sobre todas as ativas, que e o que o motor unico consome.
+-- unidade. O percentual que de fato valia estava em default_referral_percent.
 --
 -- Guarda: so reescreve quando as faixas globais estao ausentes ou zeradas. Uma
--- regra global ja configurada de proposito (qualquer faixa com valor > 0) fica
+-- regra global configurada de proposito (qualquer faixa com valor > 0) fica
 -- intacta.
 UPDATE "system_settings" s
 SET
@@ -47,91 +52,93 @@ WHERE s."commission_plan" IS NULL
   );
 
 -- ---------------------------------------------------------------------------
--- 2. Regra POR INDICADOR (tenants)
+-- 2. CARREIRA DIGITAL ACADEMY — valor FIXO por faixa
 -- ---------------------------------------------------------------------------
--- Traduz a regra legada de quem tem referral_percent e/ou referral_tiers e ainda
--- nao tem regra propria no bloco novo. Alvo: apenas tenants que SAO indicadores
--- (tem ao menos uma unidade indicada) — em qualquer outro tenant o campo legado
--- nunca teve efeito e copia-lo criaria uma regra que nunca existiu.
+-- Contrato (confirmado pelo dono em 2026-07-21):
+--   O GATILHO e o volume de vendas ATIVADAS no mes; o VALOR incide sobre a
+--   carteira ativa inteira.
+--     ate 10 ativacoes no mes ........ R$  75 por revenda ativa
+--     de 11 a 25 ativacoes no mes .... R$  85 por revenda ativa
+--     26 ou mais ativacoes no mes .... R$ 100 por revenda ativa
 --
--- Semantica adotada (decidida com o dono): a regra pertence ao INDICADOR e o
--- relogio das fases pertence a cada unidade indicada. Uma escala legada
--- [{untilMonth:N, percent:P}] vira uma fase de N meses a P%, fechada por uma
--- fase final "em diante" com o percentual fixo da unidade — que e exatamente o
--- que o formulario antigo prometia ("depois disso, use este %").
-UPDATE "tenants" t
+-- Sao dois eixos independentes, e por isso duas colunas:
+--   `bracket_basis = NEW_REFERRALS_MONTH` -> escolhe a FAIXA pelas ativacoes do mes;
+--   `payout_base   = ALL_ACTIVE`          -> aplica o valor a TODA a carteira ativa.
+-- Uma revenda ativa que nao ativou ninguem no mes continua rendendo (a faixa e
+-- que cai para a de entrada). Como o inadimplente vira SUSPENDED, "ativa" ja
+-- significa "ativa e adimplente".
+--
+-- `resolveBracket` escolhe a 1a faixa cujo `upTo >= contagem`, entao
+-- [10 -> 75, 25 -> 85, sem teto -> 100] reproduz a tabela acima exatamente.
+UPDATE "tenants"
+SET
+  "commission_mode" = 'MONTHLY_TIERED',
+  "commission_rate_type" = 'FIXED',
+  "commission_bracket_basis" = 'NEW_REFERRALS_MONTH',
+  "commission_payout_base" = 'ALL_ACTIVE',
+  "commission_brackets" = jsonb_build_array(
+    jsonb_build_object('upTo', 10,   'value', 75),
+    jsonb_build_object('upTo', 25,   'value', 85),
+    jsonb_build_object('upTo', NULL, 'value', 100)
+  ),
+  "commission_plan" = NULL,
+  "commission_override_source" = 'MANUAL',
+  -- O 50% legado nunca foi o acordo desta unidade. Some para nao voltar a ser
+  -- lido como contrato por quem abrir a tabela daqui a seis meses; o historico
+  -- do que estava gravado vive no git e nas notas dos saques.
+  "referral_percent" = NULL,
+  "referral_tiers" = NULL
+WHERE "slug" = 'carreiradigitalacademy'
+  AND "commission_brackets" IS NULL;
+
+-- ---------------------------------------------------------------------------
+-- 3. INOVASUL EDUCACIONAL — percentual com 1o mes promocional
+-- ---------------------------------------------------------------------------
+-- Contrato (confirmado pelo dono em 2026-07-20): 1o mes de cada unidade
+-- indicada a 50%, dai em diante 15%. Corrobora o saque de 2026-06 pago a mao
+-- (R$ 119,50 = 50% de R$ 239 na 1a mensalidade da BE Educacional).
+--
+-- O relogio das fases e o de CADA unidade indicada (activated_at dela), nao o do
+-- indicador — ver resolvePhase/monthsInProgram em src/lib/referrals/.
+UPDATE "tenants"
 SET
   "commission_mode" = 'MONTHLY_TIERED',
   "commission_rate_type" = 'PERCENT',
   "commission_bracket_basis" = 'ACTIVE_UNITS',
   "commission_payout_base" = 'ALL_ACTIVE',
   "commission_brackets" = jsonb_build_array(
-    jsonb_build_object(
-      'upTo', NULL,
-      -- Faixa singular = o percentual "de regime". Com escala, o valor de regime
-      -- e o da fase final; sem escala, o proprio referral_percent.
-      'value', t."referral_percent"
-    )
+    jsonb_build_object('upTo', NULL, 'value', 15)
   ),
-  "commission_plan" = CASE
-    WHEN t."referral_tiers" IS NOT NULL
-     AND jsonb_typeof(t."referral_tiers"::jsonb) = 'array'
-     AND jsonb_array_length(t."referral_tiers"::jsonb) > 0
-    THEN jsonb_build_object(
-      'phases',
-      (
-        SELECT jsonb_agg(phase ORDER BY ord)
-        FROM (
-          -- Fases vindas da escala: duracao = diferenca entre tetos consecutivos
-          -- (a escala legada e cumulativa "ate o mes N", o plano novo e por
-          -- duracao). Faixas sem teto viram a fase final.
-          SELECT
-            row_number() OVER (ORDER BY (tier ->> 'untilMonth')::int) AS ord,
-            jsonb_build_object(
-              'durationMonths',
-              (tier ->> 'untilMonth')::int
-                - COALESCE(
-                    lag((tier ->> 'untilMonth')::int)
-                      OVER (ORDER BY (tier ->> 'untilMonth')::int),
-                    0
-                  ),
-              'rateType', 'PERCENT',
-              'bracketBasis', 'ACTIVE_UNITS',
-              'payoutBase', 'ALL_ACTIVE',
-              'brackets', jsonb_build_array(
-                jsonb_build_object('upTo', NULL, 'value', (tier ->> 'percent')::numeric)
-              )
-            ) AS phase
-          FROM jsonb_array_elements(t."referral_tiers"::jsonb) AS tier
-          WHERE tier ->> 'untilMonth' IS NOT NULL
-
-          UNION ALL
-
-          -- Fase final "em diante" com o percentual fixo da unidade.
-          SELECT
-            1000000 AS ord,
-            jsonb_build_object(
-              'durationMonths', NULL,
-              'rateType', 'PERCENT',
-              'bracketBasis', 'ACTIVE_UNITS',
-              'payoutBase', 'ALL_ACTIVE',
-              'brackets', jsonb_build_array(
-                jsonb_build_object('upTo', NULL, 'value', t."referral_percent")
-              )
-            ) AS phase
-        ) AS phases_src
+  "commission_plan" = jsonb_build_object(
+    'phases', jsonb_build_array(
+      jsonb_build_object(
+        'durationMonths', 1,
+        'rateType', 'PERCENT',
+        'bracketBasis', 'ACTIVE_UNITS',
+        'payoutBase', 'ALL_ACTIVE',
+        'brackets', jsonb_build_array(jsonb_build_object('upTo', NULL, 'value', 50))
+      ),
+      jsonb_build_object(
+        'durationMonths', NULL,
+        'rateType', 'PERCENT',
+        'bracketBasis', 'ACTIVE_UNITS',
+        'payoutBase', 'ALL_ACTIVE',
+        'brackets', jsonb_build_array(jsonb_build_object('upTo', NULL, 'value', 15))
       )
     )
-    ELSE NULL
-  END,
-  "commission_override_source" = 'MANUAL'
-WHERE t."referral_percent" IS NOT NULL
-  AND t."commission_plan" IS NULL
-  AND t."commission_brackets" IS NULL
-  AND EXISTS (SELECT 1 FROM "tenants" r WHERE r."referrer_tenant_id" = t."id");
+  ),
+  "commission_override_source" = 'MANUAL',
+  -- A escala legada (`[{untilMonth:1, percent:50}]` + 15% fixo) era ambigua: sem
+  -- faixa final, o codigo repetia os 50% para sempre e os 15% eram letra morta.
+  -- O plano acima e a leitura que o dono confirmou; o legado sai para nao restar
+  -- duas versoes da mesma regra.
+  "referral_percent" = NULL,
+  "referral_tiers" = NULL
+WHERE "slug" = 'inovasuleducacional'
+  AND "commission_plan" IS NULL;
 
 -- ---------------------------------------------------------------------------
--- 3. Aposenta o modo legado nas linhas que sobraram
+-- 4. Aposenta o modo legado nas linhas que sobraram
 -- ---------------------------------------------------------------------------
 -- O motor ja ignora commission_mode (todo indicador e apurado no fechamento
 -- mensal), mas deixar 'PER_PAYMENT_PERCENT' gravado faria qualquer auditoria

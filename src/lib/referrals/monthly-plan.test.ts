@@ -158,6 +158,7 @@ function referrer(over: Partial<ReferrerRow> = {}): ReferrerRow {
 interface UnitRow {
   id: string
   name: string
+  status: string
   planValue: Prisma.Decimal
   createdAt: Date
   activatedAt: Date | null
@@ -172,6 +173,9 @@ function unit(
   return {
     id,
     name: `Unidade ${id}`,
+    // A query de unidades filtra por ACTIVE OU "pagou na competencia"; o motor
+    // le o status para nao encolher a faixa por suspensao posterior ao mes.
+    status: "ACTIVE",
     planValue: new Prisma.Decimal(planValue ?? 239),
     // Ancora bem anterior ao periodo apurado: por padrao a unidade entra e NAO
     // conta como "indicada neste mes".
@@ -231,10 +235,13 @@ function arrange(s: Scenario = {}): void {
     async (args: { where: Record<string, unknown> }) =>
       args.where.referrals ? referrers : units,
   )
-  // Os dois count: o do mes tem filtro de createdAt, o total nao.
+  // Os dois count: o do mes filtra por activatedAt, o total nao.
   db.tenant.count.mockImplementation(
     async (args: { where: Record<string, unknown> }) =>
-      args.where.createdAt ? (s.newThisMonth ?? 0) : (s.activeTotal ?? units.length),
+      // "Novas do mes" e contado por COALESCE(activatedAt, createdAt) na
+      // competencia — no Prisma isso vira um `OR` de dois ramos. O total da
+      // carteira nao tem filtro de data.
+      args.where.OR ? (s.newThisMonth ?? 0) : (s.activeTotal ?? units.length),
   )
   db.referralMonthlyCommission.findUnique.mockResolvedValue(s.existing ?? null)
   const paid = s.paid ?? {}
