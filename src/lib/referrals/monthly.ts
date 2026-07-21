@@ -276,17 +276,26 @@ async function computeForReferrer(
         referrerTenantId,
         planValue: { gt: 0 },
         status: { not: "CANCELLED" },
-        // COALESCE(activated_at, created_at) dentro da competencia — a MESMA
-        // convencao do backfill da migration 20260620.
-        //
         // `activatedAt` sozinho nao serve: so o webhook do Asaas o grava
         // (src/lib/asaas/process.ts). A ativacao por cartao
         // (/api/cobranca/[paymentId]/pay-card) muda o status e deixa o campo
         // nulo, e essas unidades sumiriam da contagem — derrubando a faixa do
-        // indicador inteiro. O fallback por `createdAt` cobre esse caso.
+        // indicador inteiro.
+        //
+        // O fallback por `createdAt` exige `status: ACTIVE` porque ele so pode
+        // cobrir quem ATIVOU sem o timestamp ter sido gravado. Sem essa
+        // exigencia ele passava a valer tambem para quem NUNCA ativou (unidade
+        // cadastrada e nunca paga nasce com `activatedAt` nulo), contando como
+        // venda do mes uma ativacao que nao existiu e inflando a faixa — que
+        // aqui multiplica o valor por TODA a carteira. Em producao isso fazia
+        // julho/2026 da CDA contar 8 ativacoes em vez de 6.
         OR: [
           { activatedAt: { gte: range.start, lt: range.end } },
-          { activatedAt: null, createdAt: { gte: range.start, lt: range.end } },
+          {
+            activatedAt: null,
+            status: "ACTIVE",
+            createdAt: { gte: range.start, lt: range.end },
+          },
         ],
       },
     }),

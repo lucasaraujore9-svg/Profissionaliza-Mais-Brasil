@@ -343,6 +343,15 @@ function arrange(s: Scenario = {}): void {
       if (args.where.OR) {
         // Ramo "novas do mes": contrato desfeito nao conta como venda.
         expect(args.where.status).toEqual({ not: "CANCELLED" })
+        // O fallback por `createdAt` (para quem ativou sem o timestamp ser
+        // gravado) SO pode valer para unidade ACTIVE — senao quem nunca ativou
+        // entraria como venda do mes. Ver o teste de regressao adiante.
+        const [porAtivacao, porCriacao] = args.where.OR as [
+          Record<string, unknown>,
+          Record<string, unknown>,
+        ]
+        expect(porAtivacao.activatedAt).toBeDefined()
+        expect(porCriacao).toMatchObject({ activatedAt: null, status: "ACTIVE" })
         return s.newThisMonth ?? 0
       }
       expect(args.where.status).toBe("ACTIVE")
