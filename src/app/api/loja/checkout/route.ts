@@ -6,6 +6,11 @@ import { cpfHasRegisteredLogin } from "@/lib/students/cpf-already-registered"
 import { provisionStudentAccess } from "@/lib/students/access"
 import { tryConsumeCoupon, releaseCoupon } from "@/lib/coupons/consume"
 import { applyCouponDiscount } from "@/lib/coupons/discount"
+import {
+  isFreeAmount,
+  releaseFreeEnrollment,
+  resellerTenantContext,
+} from "@/lib/checkout/free-enrollment"
 import { assertCouponMatchesEnrollment } from "@/lib/checkout/assert-tenant-gateway"
 import { rateLimit, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
 import { swallow } from "@/lib/errors"
@@ -406,6 +411,26 @@ export const POST = withRequestContext(
         consumedCouponId = null
       }
 
+      // Cupom zerou o valor: libera na hora em vez de devolver o form de
+      // pagamento (o gateway recusaria R$ 0).
+      if (isFreeAmount(reusedAmount)) {
+        // ANTES do await, não depois: o cupom já foi GRAVADO na matrícula
+        // reaproveitada logo acima. Se `releaseFreeEnrollment` lançar (a EA
+        // rethrow em `provisionEaAccess`), o catch externo devolveria um uso
+        // que continua vinculado a uma venda viva — o cupom passaria de
+        // `maxUses`. A matrícula reaproveitada não é apagada pelo catch
+        // (`createdEnrollmentId` é null aqui), então o consumo segue válido.
+        consumedCouponId = null
+        await releaseFreeEnrollment(resellerTenantContext(tenant), existingEnrollment.id)
+        return NextResponse.json({
+          data: {
+            enrollmentId: existingEnrollment.id,
+            mode: "free",
+            amount: 0,
+          },
+        })
+      }
+
       const isMonthlyReuse = existingEnrollment.paymentType === "MONTHLY"
       return NextResponse.json({
         data: {
@@ -468,6 +493,49 @@ export const POST = withRequestContext(
         courseSnapshot: tenantCourse.course.nome,
         visitorId: readVisitorId(request),
       }).catch(swallow("loja_checkout.lead_link"))
+    }
+
+    // ── Cupom cobriu 100% ────────────────────────────────────────────────────
+    // Não há cobrança a fazer (MP/Asaas recusam R$ 0): libera o acesso na hora,
+    // como bolsa. O cupom consumido acima NÃO é devolvido — o uso foi efetivo.
+    //
+    // Rollback PRÓPRIO (e não o catch externo) porque `releaseFreeEnrollment`
+    // provisiona o acesso e marca a matrícula ACTIVE ANTES de escrever as
+    // notificações: uma falha tardia faria o catch externo apagar uma matrícula
+    // JÁ provisionada. Só desfazemos o que continua PENDING.
+    if (isFreeAmount(finalAmount)) {
+      try {
+        await releaseFreeEnrollment(resellerTenantContext(tenant), enrollment.id)
+      } catch (err) {
+        const stillPending = await prisma.enrollment
+          .findUnique({ where: { id: enrollment.id }, select: { status: true } })
+          .catch(() => null)
+        if (stillPending?.status === "PENDING") {
+          await prisma.enrollment
+            .delete({ where: { id: enrollment.id } })
+            .catch(swallow("loja_checkout.free_rollback"))
+          if (consumedCouponId) {
+            await releaseCoupon(consumedCouponId).catch(
+              swallow("loja_checkout.free_rollback"),
+            )
+          }
+        }
+        createdEnrollmentId = null
+        consumedCouponId = null
+        contextLogger().error(
+          { err, event: "loja_checkout.free_failed", enrollmentId: enrollment.id },
+          "liberacao de compra com desconto integral falhou",
+        )
+        return NextResponse.json(
+          { error: "Falha ao liberar o curso. Tente novamente." },
+          { status: 502 },
+        )
+      }
+      consumedCouponId = null // venda concluída: não liberar a reserva no catch
+      createdEnrollmentId = null // matrícula viva: o catch externo não pode apagá-la
+      return NextResponse.json({
+        data: { enrollmentId: enrollment.id, mode: "free", amount: 0 },
+      })
     }
 
     const externalReference = `enr_${enrollment.id}`

@@ -85,6 +85,11 @@ export function StudentBuyClient() {
         setFeedback(body.error ?? "Falha ao iniciar compra")
         return
       }
+      // Cupom cobriu 100%: não há cobrança — o acesso já foi liberado.
+      if (body.data?.free) {
+        router.push("/aluno/cursos")
+        return
+      }
       // PMB (venda direta): a resposta traz initPoint → redirect ao gateway.
       // Checar PRIMEIRO porque a resposta PMB também inclui enrollmentId.
       const initPoint = body.data?.initPoint

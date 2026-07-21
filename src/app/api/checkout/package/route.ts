@@ -8,6 +8,11 @@ import {
   pmbMaxCardInstallments,
 } from "@/lib/installments/pmb-rules"
 import { getOrCreatePmbTenant } from "@/lib/pmb-tenant"
+import {
+  isFreeAmount,
+  pmbTenantContext,
+  releaseFreeEnrollment,
+} from "@/lib/checkout/free-enrollment"
 import { assertCouponMatchesEnrollment } from "@/lib/checkout/assert-tenant-gateway"
 import { tryConsumeCoupon, releaseCoupon } from "@/lib/coupons/consume"
 import { applyCouponDiscount } from "@/lib/coupons/discount"
@@ -350,6 +355,16 @@ export const POST = withRequestContext(
       })
       createdEnrollmentId = enrollment.id
       const externalReference = `pmb_enr_${enrollment.id}`
+
+      // ── Cupom cobriu 100% ──────────────────────────────────────────────────
+      // Gateway recusa R$ 0: libera o pacote inteiro na hora, como bolsa.
+      if (isFreeAmount(finalAmount)) {
+        await releaseFreeEnrollment(pmbTenantContext(pmbTenant), enrollment.id)
+        consumedCouponId = null // venda concluída: não liberar a reserva no catch
+        return NextResponse.json({
+          data: { enrollmentId: enrollment.id, mode: "free", amount: 0 },
+        })
+      }
 
       // ── MP (Checkout Transparente) — cobrança em /api/checkout/mp/process ──
       if (gateway === "MP") {

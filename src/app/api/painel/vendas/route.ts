@@ -12,6 +12,11 @@ import { contextLogger } from "@/lib/logger"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { upsertStudent, StudentEmailConflictError } from "@/lib/students/upsert"
 import { fulfillScholarshipEnrollment } from "@/lib/enrollment/fulfill"
+import {
+  isFreeAmount,
+  releaseFreeEnrollment,
+  resellerTenantContext,
+} from "@/lib/checkout/free-enrollment"
 import { isValidCpf, stripCpf } from "@/lib/validation/cpf"
 import { isValidPhone, normalizePhone } from "@/lib/validation/phone"
 import { effectivePaymentType, monthlyActive } from "@/lib/tenant/monthly-policy"
@@ -700,6 +705,38 @@ export const POST = withRequestContext(
       },
       select: { id: true },
     })
+
+    // ── Desconto zerou o valor (cupom de 100% ou desconto manual integral) ──
+    // Não há link de pagamento a gerar: libera o acesso na hora, pelo mesmo
+    // caminho da bolsa. Atenção: a unidade ainda precisa ter o MP conectado
+    // para chegar aqui — o guard de gateway roda antes do cálculo do desconto.
+    // Sem MP, a saída para venda sem cobrança continua sendo a flag "bolsista".
+    if (isFreeAmount(finalAmount)) {
+      try {
+        await releaseFreeEnrollment(resellerTenantContext(tenant), enrollment.id)
+      } catch (err) {
+        await prisma.enrollment
+          .delete({ where: { id: enrollment.id } })
+          .catch(swallow("painel.vendas.free_rollback"))
+        if (couponId) await releaseCoupon(couponId).catch(swallow("painel.vendas.free_rollback"))
+        contextLogger().error(
+          { err, event: "painel.vendas.free_failed", studentId: student.id },
+          "liberacao de venda com desconto integral falhou",
+        )
+        return NextResponse.json(
+          { error: "Falha ao matricular o aluno na plataforma de aulas. Tente novamente." },
+          { status: 502 },
+        )
+      }
+      return NextResponse.json({
+        data: {
+          enrollmentId: enrollment.id,
+          scholarship: true,
+          finalAmount: 0,
+          studentId: student.id,
+        },
+      })
+    }
 
     // Padronizado: `enr_<id>` (mesmo formato de /api/loja/checkout). O webhook
     // identifica o tenant pela query string `?tenant=<slug>` na notification_url.

@@ -15,6 +15,11 @@ import {
 import { issuePmbAsaasCharge } from "@/lib/checkout/issue-pmb-asaas-charge"
 import { assertCouponMatchesEnrollment } from "@/lib/checkout/assert-tenant-gateway"
 import { getOrCreatePmbTenant } from "@/lib/pmb-tenant"
+import {
+  isFreeAmount,
+  pmbTenantContext,
+  releaseFreeEnrollment,
+} from "@/lib/checkout/free-enrollment"
 import { tryConsumeCoupon, releaseCoupon } from "@/lib/coupons/consume"
 import { applyCouponDiscount } from "@/lib/coupons/discount"
 import { rateLimit, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
@@ -495,6 +500,50 @@ export const POST = withRequestContext(
         courseSnapshot: course.nome,
         visitorId: readVisitorId(request),
       }).catch(swallow("pmb_checkout.lead_link"))
+    }
+
+    // ── Cupom cobriu 100% ────────────────────────────────────────────────────
+    // Asaas e MP recusam cobrança de R$ 0: libera o acesso na hora, como bolsa,
+    // sem passar por gateway. O cupom consumido acima NÃO é devolvido.
+    //
+    // Rollback PRÓPRIO (e não o catch externo) porque `releaseFreeEnrollment`
+    // provisiona o acesso e marca a matrícula ACTIVE ANTES de escrever as
+    // notificações: uma falha tardia faria o catch externo apagar uma matrícula
+    // JÁ provisionada, deixando o aluno com acesso na plataforma de aulas e sem
+    // matrícula aqui. Só desfazemos o que continua PENDING.
+    if (isFreeAmount(finalAmount)) {
+      try {
+        await releaseFreeEnrollment(pmbTenantContext(pmbTenant), enrollment.id)
+      } catch (err) {
+        const stillPending = await prisma.enrollment
+          .findUnique({ where: { id: enrollment.id }, select: { status: true } })
+          .catch(() => null)
+        if (stillPending?.status === "PENDING") {
+          await prisma.enrollment
+            .delete({ where: { id: enrollment.id } })
+            .catch(swallow("pmb_checkout.free_rollback"))
+          if (consumedCouponId) {
+            await releaseCoupon(consumedCouponId).catch(
+              swallow("pmb_checkout.free_rollback"),
+            )
+          }
+        }
+        createdEnrollmentId = null
+        consumedCouponId = null
+        contextLogger().error(
+          { err, event: "pmb_checkout.free_failed", enrollmentId: enrollment.id },
+          "liberacao de compra com desconto integral falhou",
+        )
+        return NextResponse.json(
+          { error: "Falha ao liberar o curso. Tente novamente." },
+          { status: 502 },
+        )
+      }
+      consumedCouponId = null // venda concluída: não liberar a reserva no catch
+      createdEnrollmentId = null // matrícula viva: o catch externo não pode apagá-la
+      return NextResponse.json({
+        data: { enrollmentId: enrollment.id, mode: "free", amount: 0 },
+      })
     }
 
     const externalReference = `pmb_enr_${enrollment.id}`

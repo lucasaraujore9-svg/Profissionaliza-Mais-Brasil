@@ -2,6 +2,7 @@ import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { createPayment, createPreapproval } from "./client"
 import { fulfillFromMpPayment, type MpFulfillTenant } from "./fulfillment"
+import { isFreeAmount, releaseFreeEnrollment } from "@/lib/checkout/free-enrollment"
 import { MAX_CARD_INSTALLMENTS } from "./installments"
 import type { MPCreatePaymentParams } from "./types"
 
@@ -105,6 +106,19 @@ export async function processTransparentMpPayment(
   const payerEmail = formData.payer?.email ?? enrollment.studentEmail ?? undefined
   const cpf =
     formData.payer?.identification?.number ?? enrollment.studentCpf ?? undefined
+
+  // ── Valor zerado (cupom de 100%) ──────────────────────────────────────────
+  // O MP recusa `transaction_amount: 0`. Libera a matrícula direto, sem gateway.
+  // Guard de última linha: as rotas de init já desviam antes de montar o form,
+  // mas a tela /pagar e os links de venda direta chegam aqui com a matrícula
+  // pronta.
+  // `status: "approved"` (e não "free") porque é o contrato que as telas de
+  // checkout e de /pagar já tratam como sucesso — um status novo as deixaria
+  // presas em "pagamento em análise".
+  if (isFreeAmount(amount)) {
+    await releaseFreeEnrollment(ctx.fulfillTenant, enrollment.id)
+    return { kind: "approved", status: "approved" }
+  }
 
   if (!payerEmail) {
     return {

@@ -45,12 +45,41 @@ import { contextLogger } from "@/lib/logger"
  * externalPaymentId. Se outro processo segura o lock, aborta — webhook é
  * re-entregue mais tarde quando o primeiro já terminou.
  */
-function advisoryLockKey(gateway: PaymentGateway, externalPaymentId: string): bigint {
+function advisoryLockKeyFrom(seed: string): bigint {
   // Hash truncado para 63 bits (Postgres bigint signed, evita overflow).
   // BigInt() constructor em vez de literal `n` pra compat com target ES2017.
-  const h = createHash("sha256").update(`${gateway}:${externalPaymentId}`).digest()
+  const h = createHash("sha256").update(seed).digest()
   const high = h.readBigUInt64BE(0)
   return high & BigInt("0x7fffffffffffffff")
+}
+
+function advisoryLockKey(gateway: PaymentGateway, externalPaymentId: string): bigint {
+  return advisoryLockKeyFrom(`${gateway}:${externalPaymentId}`)
+}
+
+/**
+ * Roda `fn` sob advisory lock do Postgres. Devolve `false` quando outro
+ * processo ja detem o lock (nada foi executado).
+ *
+ * `pg_try_advisory_lock` e nao-bloqueante; o unlock vai no finally para nao
+ * vazar lock em pool longo (Supabase pooler).
+ */
+async function withAdvisoryLock(
+  lockKey: bigint,
+  fn: () => Promise<void>,
+): Promise<boolean> {
+  const lockResult = await prisma.$queryRaw<Array<{ pg_try_advisory_lock: boolean }>>`
+    SELECT pg_try_advisory_lock(${lockKey}::bigint)
+  `
+  if (lockResult[0]?.pg_try_advisory_lock !== true) return false
+  try {
+    await fn()
+  } finally {
+    await prisma.$queryRaw`SELECT pg_advisory_unlock(${lockKey}::bigint)`.catch(
+      swallow("fulfill.unlock"),
+    )
+  }
+  return true
 }
 
 export interface TenantContext {
@@ -98,12 +127,11 @@ export async function fulfillEnrollment(
   // o lock, retorna false e abortamos — webhook é re-entregue depois.
   // O lock vive enquanto a conexão estiver aberta; liberamos explicitamente
   // no finally pra não vazar em pools longos (Supabase pooler).
-  const lockKey = advisoryLockKey(event.gateway, event.externalPaymentId)
-  const lockResult = await prisma.$queryRaw<Array<{ pg_try_advisory_lock: boolean }>>`
-    SELECT pg_try_advisory_lock(${lockKey}::bigint)
-  `
-  const acquired = lockResult[0]?.pg_try_advisory_lock === true
-  if (!acquired) {
+  const ran = await withAdvisoryLock(
+    advisoryLockKey(event.gateway, event.externalPaymentId),
+    () => fulfillEnrollmentLocked(tenant, enrollmentId, event),
+  )
+  if (!ran) {
     contextLogger().info(
       {
         event: "fulfill.lock_busy",
@@ -111,15 +139,6 @@ export async function fulfillEnrollment(
         externalPaymentId: event.externalPaymentId,
       },
       "outro processo já está executando fulfill deste pagamento — abortando",
-    )
-    return
-  }
-
-  try {
-    await fulfillEnrollmentLocked(tenant, enrollmentId, event)
-  } finally {
-    await prisma.$queryRaw`SELECT pg_advisory_unlock(${lockKey}::bigint)`.catch(
-      swallow("fulfill.unlock"),
     )
   }
 }
@@ -945,18 +964,55 @@ async function provisionCourseForStudent(
 }
 
 /**
- * Concede bolsa de estudo: cria o aluno na plataforma (com bolsista=S, via flag
- * no Student), vincula o curso e dispara os emails — SEM cobranca em gateway e
- * SEM registro de Payment. Marca a matricula como ACTIVE imediatamente.
+ * Motivo pelo qual a matricula e liberada sem passar por gateway. Muda apenas
+ * os textos das notificacoes — o provisionamento e identico.
  *
- * Chamado de forma SINCRONA pelas rotas de venda direta (admin e painel), so
- * em venda direta. Idempotente via `startedAt`: se a matricula ja foi
- * provisionada, faz no-op.
+ * - `SCHOLARSHIP`: bolsa concedida na venda direta (flag `Student.bolsista`).
+ * - `FULL_DISCOUNT`: cupom/desconto zerou o valor (ex.: cupom de 100%). Nao ha
+ *   o que cobrar, entao a venda e liberada como se fosse bolsa.
+ */
+export type FreeEnrollmentReason = "SCHOLARSHIP" | "FULL_DISCOUNT"
+
+/**
+ * Libera a matricula SEM cobranca: cria o aluno na plataforma, vincula o curso
+ * e dispara os emails — SEM chamada a gateway e SEM registro de Payment. Marca
+ * a matricula como ACTIVE imediatamente.
+ *
+ * Usada em dois casos (ver `FreeEnrollmentReason`): bolsa de estudo na venda
+ * direta e valor zerado por desconto integral em qualquer canal de checkout.
+ * Chamada de forma SINCRONA.
+ *
+ * CONCORRENCIA: `startedAt` sozinho e um le-depois-escreve, e com o cupom de
+ * 100% esta funcao passou a ser alcancavel por rota PUBLICA (duplo clique em
+ * "Concluir matricula", retry do cliente, webhook + retorno sincrono). Duas
+ * chamadas simultaneas passariam as duas pelo guard e provisionariam o aluno
+ * DUAS VEZES na plataforma de aulas. Por isso o mesmo advisory lock do fluxo
+ * pago, aqui chaveado pela matricula. Perder o lock e no-op: quem o detem esta
+ * fazendo exatamente este trabalho.
  */
 export async function fulfillScholarshipEnrollment(
   tenant: TenantContext,
   enrollmentId: string,
+  opts?: { reason?: FreeEnrollmentReason },
 ): Promise<void> {
+  const ran = await withAdvisoryLock(
+    advisoryLockKeyFrom(`FREE_ENROLLMENT:${enrollmentId}`),
+    () => fulfillScholarshipEnrollmentLocked(tenant, enrollmentId, opts),
+  )
+  if (!ran) {
+    contextLogger().info(
+      { event: "fulfill.scholarship.lock_busy", enrollmentId },
+      "outro processo ja esta liberando esta matricula — abortando",
+    )
+  }
+}
+
+async function fulfillScholarshipEnrollmentLocked(
+  tenant: TenantContext,
+  enrollmentId: string,
+  opts?: { reason?: FreeEnrollmentReason },
+): Promise<void> {
+  const reason: FreeEnrollmentReason = opts?.reason ?? "SCHOLARSHIP"
   const enrollment = await prisma.enrollment.findUnique({
     where: { id: enrollmentId },
     include: {
@@ -1005,12 +1061,18 @@ export async function fulfillScholarshipEnrollment(
     ? `pacote ${enrollment.coursePackage.name}`
     : enrollment.course.nome
 
+  const isFullDiscount = reason === "FULL_DISCOUNT"
+
   await createNotification({
     audience: "STUDENT",
     studentId: enrollment.student.id,
     level: "SUCCESS",
-    title: `Bolsa de estudo concedida — ${purchaseName}`,
-    body: "Acesse a área de aulas para começar agora — sem nenhuma cobrança.",
+    title: isFullDiscount
+      ? `Matrícula liberada — ${purchaseName}`
+      : `Bolsa de estudo concedida — ${purchaseName}`,
+    body: isFullDiscount
+      ? "Seu cupom cobriu 100% do valor. Acesse a área de aulas para começar agora."
+      : "Acesse a área de aulas para começar agora — sem nenhuma cobrança.",
     category: "enrollment",
     href: "/aluno/cursos",
     // Email de matrícula dedicado já enviado em provisionEnrollmentAccess.
@@ -1022,8 +1084,12 @@ export async function fulfillScholarshipEnrollment(
       audience: "TENANT",
       tenantId: tenant.id,
       level: "SUCCESS",
-      title: `Bolsa concedida — ${purchaseName}`,
-      body: `${enrollment.student.nome} recebeu bolsa de estudo (sem cobrança).`,
+      title: isFullDiscount
+        ? `Venda com desconto integral — ${purchaseName}`
+        : `Bolsa concedida — ${purchaseName}`,
+      body: isFullDiscount
+        ? `${enrollment.student.nome} usou cupom de 100% e teve o acesso liberado (sem cobrança).`
+        : `${enrollment.student.nome} recebeu bolsa de estudo (sem cobrança).`,
       category: "sale",
       href: "/painel/vendas",
     })
@@ -1032,8 +1098,12 @@ export async function fulfillScholarshipEnrollment(
       audience: "ROLE",
       roleTarget: "SUPER_ADMIN",
       level: "SUCCESS",
-      title: `Bolsa de estudo — ${purchaseName}`,
-      body: `${enrollment.student.nome} (vitrine PMB) recebeu bolsa de estudo (sem cobrança).`,
+      title: isFullDiscount
+        ? `Venda com desconto integral — ${purchaseName}`
+        : `Bolsa de estudo — ${purchaseName}`,
+      body: isFullDiscount
+        ? `${enrollment.student.nome} (vitrine PMB) usou cupom de 100% e teve o acesso liberado (sem cobrança).`
+        : `${enrollment.student.nome} (vitrine PMB) recebeu bolsa de estudo (sem cobrança).`,
       category: "sale",
       href: "/admin/vendas",
     })
