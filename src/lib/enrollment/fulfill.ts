@@ -999,12 +999,31 @@ export async function fulfillScholarshipEnrollment(
     advisoryLockKeyFrom(`FREE_ENROLLMENT:${enrollmentId}`),
     () => fulfillScholarshipEnrollmentLocked(tenant, enrollmentId, opts),
   )
-  if (!ran) {
+  if (ran) return
+
+  // Lock ocupado: outro processo esta liberando esta mesma matricula. NAO
+  // podemos simplesmente retornar — quem chama trataria como sucesso e diria ao
+  // aluno que o curso foi liberado sem que nada tenha sido provisionado (o
+  // outro processo ainda pode falhar). Conferimos o estado real: so e sucesso
+  // se a matricula ja estiver provisionada.
+  const current = await prisma.enrollment.findUnique({
+    where: { id: enrollmentId },
+    select: { startedAt: true },
+  })
+  if (current?.startedAt) {
     contextLogger().info(
-      { event: "fulfill.scholarship.lock_busy", enrollmentId },
-      "outro processo ja esta liberando esta matricula — abortando",
+      { event: "fulfill.scholarship.lock_busy_already_done", enrollmentId },
+      "matricula ja provisionada por outro processo — no-op",
     )
+    return
   }
+  contextLogger().warn(
+    { event: "fulfill.scholarship.lock_busy", enrollmentId },
+    "outro processo esta liberando esta matricula e ela ainda nao esta ativa",
+  )
+  throw new Error(
+    `liberacao da matricula ${enrollmentId} ja esta em andamento em outro processo`,
+  )
 }
 
 async function fulfillScholarshipEnrollmentLocked(

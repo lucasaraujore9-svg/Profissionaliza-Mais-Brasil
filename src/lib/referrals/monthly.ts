@@ -237,9 +237,13 @@ async function computeForReferrer(
   // a unidade que pagou em junho e atrasou em julho DESAPARECER da apuracao de
   // junho — o indicador perdia a comissao de um dinheiro que a PMB recebeu de
   // verdade. Pagamento e fato consumado: quem pagou na competencia entra nela.
+  // SUSPENDED entra (e o ponto acima); CANCELLED nao. Contrato desfeito e
+  // excluido de todas as demais contagens, e sem este filtro ele voltaria por
+  // aqui — a unidade cancelada que chegou a pagar reentraria no universo e na
+  // faixa, contradizendo a exclusao feita nas contagens.
   const paidRows = await prisma.tenantPayment.findMany({
     where: {
-      tenant: { referrerTenantId },
+      tenant: { referrerTenantId, status: { not: "CANCELLED" } },
       status: { in: RECEIVED_STATUSES },
       paidAt: { gte: range.start, lt: range.end },
     },

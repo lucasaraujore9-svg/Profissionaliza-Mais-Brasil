@@ -7,6 +7,7 @@ import {
   PLATFORM_PASSWORD_UNVERIFIED,
 } from "@/lib/students/platform-credentials"
 import { generateTemporaryPassword } from "@/lib/students/generate-password"
+import { rateLimitByKey, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 
 const bodySchema = z.object({
@@ -22,6 +23,15 @@ export const POST = withRequestContextParams<{ id: string }>(
   async (request: Request, ctx) => {
     const guard = await requirePmbTeam()
     if (!guard.ok) return guard.response
+
+    // Mesmo motivo do endpoint do aluno: cada chamada custa duas idas a EA
+    // (escrever + reler para conferir) e hoje a troca sempre fracassa, entao
+    // repetir so queima cota externa. Chaveado pelo usuario PMB.
+    const rl = await rateLimitByKey(
+      guard.session.userId,
+      RATE_LIMITS.alunoSenhaPlataforma,
+    )
+    if (!rl.ok) return rateLimitResponse(rl)
 
     const { id } = await ctx.params
 
