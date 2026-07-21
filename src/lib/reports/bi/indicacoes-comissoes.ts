@@ -25,7 +25,6 @@ export const indicacoesComissoesModule: BiModule = {
       legacyInRange,
       monthlyInRange,
       available,
-      paid,
       payoutsPaid,
       legacyByStatus,
       monthlyByStatus,
@@ -46,13 +45,16 @@ export const indicacoesComissoesModule: BiModule = {
         prisma.referralCommission.aggregate({ _sum: { amount: true }, where: { ...scope, status: "AVAILABLE" } }),
         prisma.referralMonthlyCommission.aggregate({ _sum: { amount: true }, where: { ...scope, status: "AVAILABLE" } }),
       ]),
-      Promise.all([
-        prisma.referralCommission.aggregate({ _sum: { amount: true }, where: { ...scope, status: "PAID" } }),
-        prisma.referralMonthlyCommission.aggregate({ _sum: { amount: true }, where: { ...scope, status: "PAID" } }),
-      ]),
+      // Recortado por `paidAt` no periodo, como os demais KPIs: sem isso um
+      // total de caixa VITALICIO aparecia ao lado de valores do mes, e o
+      // relatorio de um mes fechado nunca mudava de valor.
       prisma.referralPayout.aggregate({
         _sum: { amount: true },
-        where: { status: "PAID", ...(referrerFilter ? { referrer: referrerFilter } : {}) },
+        where: {
+          status: "PAID",
+          paidAt: range,
+          ...(referrerFilter ? { referrer: referrerFilter } : {}),
+        },
       }),
       prisma.referralCommission.groupBy({ by: ["status"], where: scope, _sum: { amount: true } }),
       prisma.referralMonthlyCommission.groupBy({ by: ["status"], where: scope, _sum: { amount: true } }),
@@ -92,32 +94,53 @@ export const indicacoesComissoesModule: BiModule = {
       Number(legacyInRange._sum.amount ?? 0) + Number(monthlyInRange._sum.amount ?? 0)
     const disponivel =
       Number(available[0]._sum.amount ?? 0) + Number(available[1]._sum.amount ?? 0)
-    const pago = Number(paid[0]._sum.amount ?? 0) + Number(paid[1]._sum.amount ?? 0)
+    // "Pago" e CAIXA, nao apuracao: sai de ReferralPayout PAID. O financeiro pode
+    // ajustar o valor na hora de liquidar o saque, e esse ajuste vive so no
+    // payout — somar as comissoes PAID reportaria menos do que saiu do caixa.
+    const pago = Number(payoutsPaid._sum.amount ?? 0)
 
-    const kpis: KpiDatum[] = [
-      { key: "gerado", label: "Geradas no período", value: gerado, format: "currency", icon: "share-2" },
-      { key: "disponivel", label: "Disponível a pagar", value: disponivel, format: "currency", icon: "wallet" },
-      { key: "pago", label: "Já pagas", value: pago, format: "currency", icon: "check-circle-2" },
-      {
-        key: "saques",
-        label: "Saques liquidados",
-        value: Number(payoutsPaid._sum.amount ?? 0),
-        format: "currency",
-        icon: "circle-dollar-sign",
-      },
-    ]
-
-    // Status combinado (ambos os motores).
+    // Status combinado (ambos os motores) — apuracao pura.
     const statusMap = new Map<string, number>()
     for (const r of [...legacyByStatus, ...monthlyByStatus]) {
       statusMap.set(r.status, (statusMap.get(r.status) ?? 0) + Number(r._sum.amount ?? 0))
     }
 
+    const kpis: KpiDatum[] = [
+      { key: "gerado", label: "Geradas no período", value: gerado, format: "currency", icon: "share-2" },
+      {
+        key: "pendente",
+        label: "Pendente",
+        value: statusMap.get("PENDING") ?? 0,
+        format: "currency",
+        icon: "clock",
+        hint: "Apurado, ainda não liberado",
+      },
+      {
+        key: "disponivel",
+        label: "Disponível a pagar",
+        value: disponivel,
+        format: "currency",
+        icon: "wallet",
+        hint: "Apurado e liberado para saque",
+      },
+      {
+        key: "pago",
+        label: "Pago (saques liquidados)",
+        value: pago,
+        format: "currency",
+        icon: "circle-dollar-sign",
+        hint: "Caixa: transferido no período",
+      },
+    ]
+
     const series: ReportSeries[] = [
       {
         id: "by-status",
         kind: "bar",
-        title: "Comissões por status",
+        title: "Comissões por status (apuração)",
+        // A fatia "Paga" e o valor APURADO; o KPI "Pago" e o caixa. Divergem
+        // sempre que o financeiro ajusta o valor ao liquidar o saque.
+        subtitle: "Valor apurado pelo motor — o KPI “Pago” mostra o caixa",
         xKey: "x",
         series: [{ key: "value", label: "Valor", format: "currency" }],
         points: [...statusMap.entries()].map(([s, value]) => ({
@@ -178,6 +201,7 @@ export const indicacoesComissoesModule: BiModule = {
       {
         id: "saques",
         title: "Saques recentes",
+        subtitle: "Valor de caixa — os liquidados somam o KPI “Pago”",
         columns: [
           { key: "nome", label: "Indicador", href: "/admin/revendedores/{id}" },
           { key: "status", label: "Status" },

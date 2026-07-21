@@ -33,7 +33,7 @@ export default async function AdminIndicacoesPage() {
     redirect("/admin")
   }
 
-  const [referrers, totals, monthlyTotals] = await Promise.all([
+  const [referrers, totals, monthlyTotals, payoutsPaidByReferrer] = await Promise.all([
     prisma.tenant.findMany({
       where: {
         referrals: { some: {} },
@@ -64,35 +64,48 @@ export default async function AdminIndicacoesPage() {
       by: ["status"],
       _sum: { amount: true },
     }),
+    // "Pago" e CAIXA, nao apuracao: sai de ReferralPayout PAID. O financeiro
+    // pode ajustar o valor ao liquidar o saque e esse ajuste vive so no payout,
+    // entao somar comissoes PAID mostraria menos do que saiu do caixa.
+    prisma.referralPayout.groupBy({
+      by: ["referrerTenantId"],
+      where: { status: "PAID" },
+      _sum: { amount: true },
+    }),
   ])
 
   const totalsMap: Record<string, number> = {
     PENDING: 0,
     AVAILABLE: 0,
-    PAID: 0,
     CANCELLED: 0,
   }
   for (const t of totals) {
+    if (t.status === "PAID") continue
     totalsMap[t.status] += Number(t._sum.amount ?? 0)
   }
   for (const t of monthlyTotals) {
+    if (t.status === "PAID") continue
     totalsMap[t.status] += Number(t._sum.amount ?? 0)
   }
+
+  const paidByReferrer = new Map(
+    payoutsPaidByReferrer.map((p) => [p.referrerTenantId, Number(p._sum.amount ?? 0)]),
+  )
+  const paidTotal = [...paidByReferrer.values()].reduce((a, b) => a + b, 0)
 
   const items = referrers
     .map((r) => {
       const totals = {
         PENDING: 0,
         AVAILABLE: 0,
-        PAID: 0,
       }
       for (const c of r.referralCommissionsReceived) {
-        if (c.status === "PENDING" || c.status === "AVAILABLE" || c.status === "PAID") {
+        if (c.status === "PENDING" || c.status === "AVAILABLE") {
           totals[c.status] += Number(c.amount)
         }
       }
       for (const c of r.referralMonthlyCommissions) {
-        if (c.status === "PENDING" || c.status === "AVAILABLE" || c.status === "PAID") {
+        if (c.status === "PENDING" || c.status === "AVAILABLE") {
           totals[c.status] += Number(c.amount)
         }
       }
@@ -104,6 +117,7 @@ export default async function AdminIndicacoesPage() {
         activeReferralsCount: r.referrals.filter((x) => x.status === "ACTIVE")
           .length,
         ...totals,
+        PAID: paidByReferrer.get(r.id) ?? 0,
       }
     })
     .sort((a, b) => b.PAID + b.AVAILABLE + b.PENDING - (a.PAID + a.AVAILABLE + a.PENDING))
@@ -134,9 +148,16 @@ export default async function AdminIndicacoesPage() {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <SummaryTile label="Pendente" value={formatMoney(totalsMap.PENDING)} />
         <SummaryTile label="Disponível" value={formatMoney(totalsMap.AVAILABLE)} highlight />
-        <SummaryTile label="Pago" value={formatMoney(totalsMap.PAID)} />
+        <SummaryTile label="Pago (saques)" value={formatMoney(paidTotal)} />
         <SummaryTile label="Cancelado" value={formatMoney(totalsMap.CANCELLED)} />
       </div>
+
+      <p className="-mt-2 text-xs text-gray-500">
+        Pendente, Disponível e Cancelado são valores <strong>apurados</strong> pelo
+        motor de comissão. Pago é <strong>caixa</strong>: a soma dos saques
+        liquidados — pode divergir da apuração quando o financeiro ajusta o valor
+        no momento do pagamento.
+      </p>
 
       <Card className="overflow-hidden">
         <Table>
@@ -147,7 +168,7 @@ export default async function AdminIndicacoesPage() {
               <TableHead className="text-right">Indicados ativos</TableHead>
               <TableHead className="text-right">Pendente</TableHead>
               <TableHead className="text-right">Disponível</TableHead>
-              <TableHead className="text-right">Pago</TableHead>
+              <TableHead className="text-right">Pago (saques)</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>

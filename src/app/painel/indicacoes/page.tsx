@@ -235,6 +235,13 @@ export default async function PainelIndicacoesPage() {
   const baseUrl = `https://www.${vitrineDomain()}`
   const referralLink = `${baseUrl}/seja-revendedor?ref=${encodeURIComponent(referralCode)}`
 
+  // "Total pago" e caixa (soma dos saques pagos) enquanto o extrato de comissoes
+  // mostra a apuracao. Quando o financeiro ajusta o valor no ato do pagamento os
+  // dois deixam de bater — avisamos para a unidade nao achar que falta dinheiro.
+  // Tolerancia de 1 centavo: os valores vem de Decimal convertido para number.
+  const hasPayoutAdjustment =
+    Math.abs(summary.paid - summary.accruedPaid) >= 0.01
+
   // Opcoes de mes (ultimos 12) para o demonstrativo PDF.
   const demoMonthOptions = buildDemoMonthOptions(12)
   const defaultDemoMonth = demoMonthOptions[0]?.value ?? ""
@@ -281,7 +288,15 @@ export default async function PainelIndicacoesPage() {
           hint={`Liberado dia ${payoutDay}; pago após conferência`}
           highlight
         />
-        <SummaryTile label="Total pago" value={formatMoney(summary.paid)} />
+        <SummaryTile
+          label="Total pago"
+          value={formatMoney(summary.paid)}
+          hint={
+            hasPayoutAdjustment
+              ? `Valor recebido. Comissões apuradas: ${formatMoney(summary.accruedPaid)} — diferença por ajuste do financeiro`
+              : undefined
+          }
+        />
       </div>
 
       <Card

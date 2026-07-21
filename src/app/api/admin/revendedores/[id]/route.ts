@@ -81,18 +81,19 @@ export const GET = withRequestContextParams<{ id: string }>(
   // totalReferrals: tenants indicados por ESTE tenant (qualquer status, exceto CANCELLED).
   // totalCommissionGenerated: somatorio de comissoes que ESTE tenant gerou para o seu referrer
   //   (status != CANCELLED). Representa quanto o indicador dele ja recebeu/recebera por causa dele.
-  // totalCommissionReceived: somatorio de comissoes que ESTE tenant ja recebeu (status=PAID)
-  //   por causa de tenants que ele indicou.
-  // totalReferralsPaidToMe: somatorio do que ele tem disponivel + ja pago (AVAILABLE + PAID)
-  //   — view util para o card de pagamento proximo.
+  // totalCommissionReceived: CAIXA — soma dos ReferralPayout PAID deste tenant como
+  //   indicador. Nao sai das comissoes PAID porque o financeiro pode ajustar o valor
+  //   ao liquidar o saque, e esse ajuste vive so no payout: a apuracao continua com o
+  //   valor original, entao soma-la mostraria menos do que a unidade recebeu de fato.
+  // totalReferralsPaidToMe: disponivel (apuracao) + ja pago (caixa) — view util para o
+  //   card de pagamento proximo.
   const [
     systemSettings,
     referralsCount,
     activeReferralsCount,
     generatedAgg,
-    receivedPaidAgg,
+    payoutsPaidAgg,
     receivedAvailableAgg,
-    monthlyReceivedPaidAgg,
     monthlyReceivedAvailableAgg,
   ] =
     await Promise.all([
@@ -119,30 +120,25 @@ export const GET = withRequestContextParams<{ id: string }>(
         },
         _sum: { amount: true },
       }),
-      prisma.referralCommission.aggregate({
-        where: {
-          referrerTenantId: id,
-          status: "PAID",
-        },
-        _sum: { amount: true },
-      }),
-      prisma.referralCommission.aggregate({
-        where: {
-          referrerTenantId: id,
-          status: { in: ["AVAILABLE", "PAID"] },
-        },
-        _sum: { amount: true },
-      }),
-      // Motor por faixas (MONTHLY_TIERED) — keyed por referrer, somado aos
-      // totais "recebido" para a unidade não aparecer zerada no modo mensal.
-      // (totalCommissionGenerated não é somável aqui: o ledger mensal não tem
-      // referredTenantId para atribuir a contribuição de UMA indicada.)
-      prisma.referralMonthlyCommission.aggregate({
+      // Caixa: um unico ledger para os dois motores — todo saque liquidado passa
+      // por aqui, independente de qual motor apurou a comissao vinculada.
+      prisma.referralPayout.aggregate({
         where: { referrerTenantId: id, status: "PAID" },
         _sum: { amount: true },
       }),
+      prisma.referralCommission.aggregate({
+        where: {
+          referrerTenantId: id,
+          status: "AVAILABLE",
+        },
+        _sum: { amount: true },
+      }),
+      // Motor por faixas (MONTHLY_TIERED) — keyed por referrer, somado ao
+      // disponível para a unidade não aparecer zerada no modo mensal.
+      // (totalCommissionGenerated não é somável aqui: o ledger mensal não tem
+      // referredTenantId para atribuir a contribuição de UMA indicada.)
       prisma.referralMonthlyCommission.aggregate({
-        where: { referrerTenantId: id, status: { in: ["AVAILABLE", "PAID"] } },
+        where: { referrerTenantId: id, status: "AVAILABLE" },
         _sum: { amount: true },
       }),
     ])
@@ -170,12 +166,11 @@ export const GET = withRequestContextParams<{ id: string }>(
     totalReferrals: referralsCount,
     activeReferrals: activeReferralsCount,
     totalCommissionGenerated: Number(generatedAgg._sum.amount ?? 0),
-    totalCommissionReceived:
-      Number(receivedPaidAgg._sum.amount ?? 0) +
-      Number(monthlyReceivedPaidAgg._sum.amount ?? 0),
+    totalCommissionReceived: Number(payoutsPaidAgg._sum.amount ?? 0),
     totalReferralsPaidToMe:
       Number(receivedAvailableAgg._sum.amount ?? 0) +
-      Number(monthlyReceivedAvailableAgg._sum.amount ?? 0),
+      Number(monthlyReceivedAvailableAgg._sum.amount ?? 0) +
+      Number(payoutsPaidAgg._sum.amount ?? 0),
   }
 
   // Busca dados atualizados do Asaas: subscription + pagamentos.

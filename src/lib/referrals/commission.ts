@@ -237,14 +237,35 @@ export async function freezeCommissionForPartialRefund(
 }
 
 export interface ReferralSummary {
+  /** Apuracao ainda sem data de liberacao. */
   pending: number
+  /** Apuracao liberada, aguardando o pagamento do financeiro. */
   available: number
+  /**
+   * CAIXA: quanto a unidade efetivamente recebeu (soma dos ReferralPayout PAID).
+   * Nao vem das comissoes porque o financeiro pode ajustar o valor na hora de
+   * marcar o saque como pago — o ajuste altera so o payout, e e o payout que
+   * corresponde ao dinheiro que saiu.
+   */
   paid: number
+  /**
+   * APURACAO das comissoes que ja foram liquidadas (status PAID nos dois
+   * ledgers). Sem ajuste manual e igual a `paid`; quando diferem, a diferenca e
+   * exatamente o ajuste feito pelo financeiro — a UI usa isso para explicar o
+   * descasamento entre o extrato de comissoes e o valor recebido.
+   */
+  accruedPaid: number
   cancelled: number
   /** Total de unidades indicadas (qualquer status). */
   totalReferrals: number
   /** Unidades indicadas ATIVAS — é esta a métrica exibida como "indicados ativos". */
   activeReferrals: number
+  /**
+   * Tudo que ja virou dinheiro ou ainda vai virar: apuracao nao paga
+   * (pending + available) + caixa (paid). A parcela ja liquidada entra UMA vez,
+   * pelo valor pago — nao pela apuracao — para nao contar a mesma comissao duas
+   * vezes nem esconder o ajuste do financeiro.
+   */
   totalGenerated: number
 }
 
@@ -259,8 +280,7 @@ export async function summaryForTenant(referrerTenantId: string): Promise<Referr
     monthlyGrouped,
     referralsCount,
     activeReferralsCount,
-    totalGenerated,
-    monthlyTotalGenerated,
+    payoutsPaid,
   ] = await Promise.all([
     prisma.referralCommission.groupBy({
       by: ["status"],
@@ -274,18 +294,12 @@ export async function summaryForTenant(referrerTenantId: string): Promise<Referr
     }),
     prisma.tenant.count({ where: { referrerTenantId } }),
     prisma.tenant.count({ where: { referrerTenantId, status: "ACTIVE" } }),
-    prisma.referralCommission.aggregate({
-      where: {
-        referrerTenantId,
-        status: { in: ["PENDING", "AVAILABLE", "PAID"] },
-      },
-      _sum: { amount: true },
-    }),
-    prisma.referralMonthlyCommission.aggregate({
-      where: {
-        referrerTenantId,
-        status: { in: ["PENDING", "AVAILABLE", "PAID"] },
-      },
+    // Fonte do "pago": o caixa. Toda comissao so chega a PAID atraves de um
+    // payout (markPayoutPaid e o unico caminho), entao nao existe comissao paga
+    // fora desta soma — e esta soma reflete o valor realmente transferido,
+    // inclusive quando o financeiro ajustou o valor no ato do pagamento.
+    prisma.referralPayout.aggregate({
+      where: { referrerTenantId, status: "PAID" },
       _sum: { amount: true },
     }),
   ])
@@ -303,15 +317,16 @@ export async function summaryForTenant(referrerTenantId: string): Promise<Referr
     totals[g.status] += Number(g._sum.amount ?? 0)
   }
 
+  const paid = Number(payoutsPaid._sum.amount ?? 0)
+
   return {
     pending: totals.PENDING,
     available: totals.AVAILABLE,
-    paid: totals.PAID,
+    paid,
+    accruedPaid: totals.PAID,
     cancelled: totals.CANCELLED,
     totalReferrals: referralsCount,
     activeReferrals: activeReferralsCount,
-    totalGenerated:
-      Number(totalGenerated._sum.amount ?? 0) +
-      Number(monthlyTotalGenerated._sum.amount ?? 0),
+    totalGenerated: totals.PENDING + totals.AVAILABLE + paid,
   }
 }

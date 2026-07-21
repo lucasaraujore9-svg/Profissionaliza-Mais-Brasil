@@ -8,8 +8,15 @@ export const indicacoesModule: PainelBiModule = {
   async run(ctx: PainelBiContext) {
     const { period, tenantId, canSellResellers } = ctx
 
-    const [summary, monthly, legacyByMonth] = await Promise.all([
+    const [summary, payoutsPaid, monthly, legacyByMonth] = await Promise.all([
       summaryForTenant(tenantId),
+      // "Já pago" e CAIXA: o financeiro pode ajustar o valor ao liquidar o saque
+      // e o ajuste fica so no payout — somar comissoes PAID mostraria a esta
+      // unidade menos do que ela recebeu de fato.
+      prisma.referralPayout.aggregate({
+        _sum: { amount: true },
+        where: { referrerTenantId: tenantId, status: "PAID" },
+      }),
       prisma.referralMonthlyCommission.findMany({
         where: { referrerTenantId: tenantId },
         orderBy: { period: "asc" },
@@ -21,10 +28,19 @@ export const indicacoesModule: PainelBiModule = {
       }),
     ])
 
+    const pago = Number(payoutsPaid._sum.amount ?? 0)
+
     const kpis: KpiDatum[] = [
       { key: "pending", label: "Pendente", value: summary.pending, format: "currency", icon: "clock" },
       { key: "available", label: "Disponível", value: summary.available, format: "currency", icon: "wallet" },
-      { key: "paid", label: "Já pago", value: summary.paid, format: "currency", icon: "check-circle-2" },
+      {
+        key: "paid",
+        label: "Já pago (saques)",
+        value: pago,
+        format: "currency",
+        icon: "circle-dollar-sign",
+        hint: "Valor recebido nos saques liquidados",
+      },
       { key: "generated", label: "Total gerado", value: summary.totalGenerated, format: "currency", icon: "share-2" },
       { key: "activeRef", label: "Indicados ativos", value: summary.activeReferrals, format: "number", icon: "store" },
       { key: "totalRef", label: "Total de indicados", value: summary.totalReferrals, format: "number", icon: "users" },
@@ -47,7 +63,10 @@ export const indicacoesModule: PainelBiModule = {
       {
         id: "by-status",
         kind: "donut",
-        title: "Comissões por status",
+        title: "Comissões por status (apuração)",
+        // A fatia "Paga" e o valor APURADO das comissoes; o tile "Já pago" e o
+        // caixa. Divergem quando o financeiro ajusta o valor do saque ao pagar.
+        subtitle: "Valores apurados — o tile “Já pago” mostra o recebido",
         xKey: "x",
         series: [{ key: "value", label: "Valor", format: "currency" }],
         points: [
