@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { requireStudentSession } from "@/lib/auth/student-session"
 import { createLmsSsoToken, normalizeLmsPublicUrl } from "@/lib/lms"
+import { resolvePaceGateSettings } from "@/lib/enrollment/pace-settings"
 import { contextLogger } from "@/lib/logger"
 
 /**
@@ -41,6 +42,7 @@ export async function GET(
       tenantId: true,
       lmsPlayback: true,
       lmsPortalUrl: true,
+      paceBlockedAt: true,
       student: { select: { id: true } },
       course: { select: { provider: true } },
     },
@@ -48,6 +50,14 @@ export async function GET(
 
   if (!enrollment || enrollment.course.provider !== "LMS") {
     return errorRedirect("indisponivel")
+  }
+
+  // Cota de aulas: matrícula travada pelo parcelamento não abre o player. É a
+  // porta do nosso lado — enquanto o LMS não expõe o limite por matrícula
+  // (PATCH /enrollments/:id/limit), recusar o SSO é o que impede a sessão nova.
+  if (enrollment.paceBlockedAt) {
+    const { enabled } = await resolvePaceGateSettings(enrollment.tenantId)
+    if (enabled) return errorRedirect("cota")
   }
 
   // Curso de parceiro (redirect): assiste no portal do parceiro com as

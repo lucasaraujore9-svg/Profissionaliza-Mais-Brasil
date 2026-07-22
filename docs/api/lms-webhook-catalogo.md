@@ -500,6 +500,49 @@ aluno antes.
 `tenantExternalId` e `returnUrl` são opcionais. **Erros:** `400` (`studentExternalId`
 obrigatório), `404` (aluno não encontrado — matricule antes).
 
+### 8.6. `PATCH /api/v1/enrollments/:id/limit` — cota de aulas ⏳ *a implementar*
+
+> **Status:** especificado pelo PMB, **pendente do lado do LMS**. Enquanto não existir,
+> o PMB usa `PATCH /students/:id/access` (§8.3) como paliativo — que é tudo-ou-nada
+> por aluno. Este endpoint é o que torna a trava **exata e por curso**.
+
+**Para quê.** Na venda parcelada (carnê/mensalidade) o aluno só pode avançar até a
+fração do curso que já pagou: `cota = floor(parcelas pagas / total × 100)`. Um plano
+2× libera 50% já na 1ª parcela; 6× libera 16%. Sem isso, quem paga a 1ª de 6 maratona
+o curso e some — e a única defesa do PMB é recusar o certificado.
+
+**Body:**
+
+```json
+{ "maxPercent": 50, "reason": "installment", "unlockUrl": "https://…/aluno/pagamentos" }
+```
+
+| Campo | Tipo | Descrição |
+|---|---|---|
+| `maxPercent` | int \| null | Teto de progresso liberado (0–100). **`null` remove o limite** (curso quitado). |
+| `reason` | string | Motivo, para a mensagem ao aluno. Hoje só `"installment"`. |
+| `unlockUrl` | string (URL) | Para onde mandar o aluno destravar (checkout do PMB). |
+
+**Resposta `200`:** `{ "data": { "enrollmentId": "uuid", "maxPercent": 50 } }`
+
+**Comportamento esperado:**
+
+- **Idempotente** — reenviar o mesmo `maxPercent` é no-op.
+- O LMS **impede iniciar a aula** que ultrapassaria `maxPercent` e exibe a mensagem com
+  o `unlockUrl`. Aula já iniciada pode terminar; o bloqueio vale para avançar.
+- O aluno **mantém acesso ao que já liberou** — a trava é um teto, não uma revogação.
+- ⛔ **Nunca desvincular a matrícula no parceiro.** Em curso de parceiro
+  (`origin != "own"`, provisionado na Escola Avançada por baixo), o LMS deve aplicar a
+  trava por **flag de acesso** — a mesma semântica de `PATCH /students/:id/access`.
+  Desvincular e revincular na EA **ZERA o progresso do aluno** (verificado em
+  jul/2026; ver `docs/api/plataforma-parceira-api-completa.md` §4.5). Uma trava que
+  destrói progresso é pior que não ter trava.
+
+**Erros:** `400` (`maxPercent` fora de 0–100), `404` (matrícula não encontrada).
+
+**Lado do PMB:** `setLmsEnrollmentLimit()` em `src/lib/lms/client.ts`; o cálculo da cota
+vive em `src/lib/enrollment/pace-gate.ts` e o motor em `src/lib/enrollment/pace.ts`.
+
 ---
 
 ## 9. Webhooks LMS → PMB

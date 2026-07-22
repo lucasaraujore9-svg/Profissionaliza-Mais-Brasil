@@ -168,6 +168,30 @@ export async function revokeLmsEnrollment(enrollmentId: string): Promise<void> {
 }
 
 /**
+ * Define a COTA DE AULAS de uma matricula: o aluno so avanca ate `maxPercent`
+ * do curso. `null` remove o limite (parcelamento quitado). Idempotente.
+ *
+ * Contrato em docs/api/lms-webhook-catalogo.md §8.6. ⏳ PENDENTE do lado do LMS —
+ * ate ele existir, `isLmsEnrollmentLimitSupported()` devolve false e o motor da
+ * cota cai no paliativo `setLmsStudentAccess` (tudo-ou-nada por aluno).
+ *
+ * ⛔ O LMS NAO pode implementar isto desvinculando a matricula no parceiro: na
+ * Escola Avancada desvincular e revincular ZERA o progresso do aluno. A trava
+ * tem que ser flag de acesso reversivel.
+ */
+export async function setLmsEnrollmentLimit(
+  lmsEnrollmentId: string,
+  maxPercent: number | null,
+  opts: { reason?: string; unlockUrl?: string } = {},
+): Promise<void> {
+  await lmsRequest<{ data: unknown }>(
+    "PATCH",
+    `/enrollments/${encodeURIComponent(lmsEnrollmentId)}/limit`,
+    { body: { maxPercent, reason: opts.reason ?? "installment", unlockUrl: opts.unlockUrl } },
+  )
+}
+
+/**
  * Bloqueia/reativa o aluno e propaga aos parceiros. `studentRef` aceita o id
  * interno do LMS OU o externalId (nosso Student.id).
  */

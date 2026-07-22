@@ -5,6 +5,12 @@ import { syncStudentProgress } from "@/lib/students/progress"
 import { getStudentPlatformLoginUrl } from "@/lib/students/platform-credentials"
 import { EmitCertificateButton } from "@/components/aluno/emit-certificate-button"
 import { PayPendingButton } from "@/components/aluno/pay-pending-button"
+import {
+  evaluatePace,
+  installmentWord,
+  isConclusionBlockedByPace,
+} from "@/lib/enrollment/pace-gate"
+import { resolvePaceGateSettings } from "@/lib/enrollment/pace-settings"
 import { contextLogger } from "@/lib/logger"
 import {
   Award,
@@ -13,6 +19,7 @@ import {
   Clock,
   ExternalLink,
   GraduationCap,
+  Lock,
   ShoppingBag,
   XCircle,
 } from "lucide-react"
@@ -66,6 +73,8 @@ const ACCESS_ERROR_MESSAGE: Record<string, string> = {
     "O acesso ao parceiro está indisponível agora. Fale com o suporte se persistir.",
   falha:
     "Não foi possível abrir o curso agora. Tente novamente em instantes.",
+  cota:
+    "Você já assistiu tudo o que as parcelas pagas liberam. Pague a próxima para continuar.",
 }
 
 export default async function StudentCoursesPage({
@@ -122,6 +131,16 @@ export default async function StudentCoursesPage({
     select: { certificateMinPercent: true },
   })
   const minPercent = settings?.certificateMinPercent ?? 80
+
+  // Cota de aulas: o interruptor é por unidade, e o aluno pode ter matrículas em
+  // unidades diferentes — resolve uma vez por tenant distinto em vez de por card.
+  const paceGateByTenant = new Map<string | null, boolean>()
+  for (const tenantId of new Set(enrollments.map((e) => e.tenantId))) {
+    paceGateByTenant.set(
+      tenantId,
+      (await resolvePaceGateSettings(tenantId)).enabled,
+    )
+  }
 
   // URL da plataforma de aulas (env EA_STUDENT_LOGIN_URL com fallback playcurso).
   const plataformaLoginUrl = getStudentPlatformLoginUrl()
@@ -183,11 +202,23 @@ export default async function StudentCoursesPage({
             const BadgeIcon = badge.icon
             const isActive = e.status === "ACTIVE" || e.status === "COMPLETED"
             const isPending = e.status === "PENDING"
+            // Cota de aulas (venda parcelada): o aluno só avança até a fatia que
+            // já pagou. `pace.blocked` reflete a marca aplicada pelo motor, e a
+            // conclusão fica travada enquanto houver parcela em aberto.
+            const gateEnabled = paceGateByTenant.get(e.tenantId) ?? false
+            const pace = evaluatePace(e)
+            const paceBlocked = gateEnabled && e.paceBlockedAt !== null
+            const conclusionBlocked = isConclusionBlockedByPace({
+              ...e,
+              gateEnabled,
+            })
             // Curso concluído (segundo o progresso da plataforma) e ainda sem
-            // certificado emitido → libera a emissão self-service.
+            // certificado emitido → libera a emissão self-service. Com o
+            // parcelamento em aberto o botão NÃO aparece: o backend recusaria.
             const isConcluded =
               e.progressStatus === "CONCLUIDO" || percent >= minPercent
-            const canEmitCertificate = isActive && isConcluded && !certificate
+            const canEmitCertificate =
+              isActive && isConcluded && !certificate && !conclusionBlocked
 
             return (
               <article
@@ -243,19 +274,61 @@ export default async function StudentCoursesPage({
                         </span>
                       </div>
                       <div
-                        className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-gray-100"
+                        className="relative mt-1.5 h-2 w-full overflow-hidden rounded-full bg-gray-100"
                         role="progressbar"
                         aria-valuenow={percent}
                         aria-valuemin={0}
                         aria-valuemax={100}
                       >
                         <div
-                          className="h-2 rounded-full bg-[var(--color-pmb-green)] transition-all"
+                          className={`h-2 rounded-full transition-all ${
+                            paceBlocked
+                              ? "bg-amber-500"
+                              : "bg-[var(--color-pmb-green)]"
+                          }`}
                           style={{
                             width: `${Math.max(0, Math.min(100, percent))}%`,
                           }}
                         />
+                        {/* Marcador da cota: mostra ATÉ ONDE o pagamento liberou. */}
+                        {gateEnabled && pace.gated && pace.allowedPercent < 100 && (
+                          <span
+                            aria-hidden
+                            className="absolute top-0 h-2 w-0.5 bg-amber-700"
+                            style={{ left: `${pace.allowedPercent}%` }}
+                          />
+                        )}
                       </div>
+                      {gateEnabled && pace.gated && pace.allowedPercent < 100 && (
+                        <p className="mt-1 text-[11px] text-gray-500">
+                          Liberado até {pace.allowedPercent}% ·{" "}
+                          {pace.installmentsPaid} de {pace.installmentsTotal}{" "}
+                          {installmentWord(e.paymentType, true)} pagas
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Cota atingida: explica o porquê e leva direto ao pagamento. */}
+                  {paceBlocked && (
+                    <div className="mt-4 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+                      <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                      <span>
+                        Você assistiu tudo o que as{" "}
+                        {installmentWord(e.paymentType, true)} pagas liberam.
+                        Pague a próxima para continuar de onde parou.
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Concluiu o conteúdo mas ainda deve: o certificado aguarda. */}
+                  {!paceBlocked && conclusionBlocked && isConcluded && (
+                    <div className="mt-4 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+                      <Award className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                      <span>
+                        Conteúdo concluído! O certificado é liberado assim que
+                        você quitar as {installmentWord(e.paymentType, true)}.
+                      </span>
                     </div>
                   )}
 
@@ -276,7 +349,17 @@ export default async function StudentCoursesPage({
                     {/* CTA PRIMÁRIO destacado para a ação mais importante.
                         Curso LMS: SSO de uso único pelo nosso backend (sem
                         login/senha). Curso EA: link da plataforma legada. */}
-                    {isActive && e.course.provider === "LMS" ? (
+                    {isActive && paceBlocked ? (
+                      // Cota atingida: o botão de assistir dá lugar ao de pagar.
+                      // Manter "Acessar" levaria o aluno a uma porta fechada.
+                      <Link
+                        href="/aluno/pagamentos"
+                        className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-amber-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-amber-600"
+                      >
+                        <Lock className="h-4 w-4" />
+                        Liberar próximas aulas
+                      </Link>
+                    ) : isActive && e.course.provider === "LMS" ? (
                       <a
                         href={`/api/aluno/curso/${e.id}/acessar`}
                         className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--color-pmb-green)] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[var(--color-pmb-green-700)]"
