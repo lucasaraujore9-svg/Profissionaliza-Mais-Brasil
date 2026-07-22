@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { isCronAuthorized } from "@/lib/auth/bearer"
+import { authorizeCron } from "@/lib/observability/cron-heartbeat"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { contextLogger } from "@/lib/logger"
 import { createNotification } from "@/lib/notifications"
@@ -24,7 +24,7 @@ export const POST = withRequestContext(
     route: "/api/cron/sweep-boleto-installments",
   },
   async (request: Request) => {
-    if (!isCronAuthorized(request)) {
+    if (!(await authorizeCron(request))) {
       return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
     }
     const log = contextLogger()

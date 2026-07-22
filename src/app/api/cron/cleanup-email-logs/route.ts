@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { isCronAuthorized } from "@/lib/auth/bearer"
+import { authorizeCron } from "@/lib/observability/cron-heartbeat"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { contextLogger } from "@/lib/logger"
 import { env } from "@/lib/env"
@@ -32,7 +32,7 @@ const RETENTION_DAYS = env.EMAIL_LOG_RETENTION_DAYS ?? 90
 export const POST = withRequestContext(
   { action: "cron.cleanup_email_logs", route: "/api/cron/cleanup-email-logs" },
   async (request: Request) => {
-    if (!isCronAuthorized(request)) {
+    if (!(await authorizeCron(request))) {
       return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
     }
 

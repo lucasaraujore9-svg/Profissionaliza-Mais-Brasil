@@ -5,7 +5,11 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 vi.mock("@/lib/prisma", () => ({ prisma: { tenant: { findMany: vi.fn() } } }))
 vi.mock("@/lib/redis/cache", () => ({ get: vi.fn(), set: vi.fn(), invalidate: vi.fn() }))
 vi.mock("@/lib/asaas/reconcile", () => ({ reconcileTenantPayments: vi.fn() }))
-vi.mock("@/lib/auth/bearer", () => ({ isCronAuthorized: vi.fn(() => true) }))
+// O batimento do cron tem suite propria (cron-heartbeat.test.ts); aqui so
+// precisamos passar pela autorizacao.
+vi.mock("@/lib/observability/cron-heartbeat", () => ({
+  authorizeCron: vi.fn(async () => true),
+}))
 vi.mock("@/lib/pmb-config", () => ({ PMB_TENANT_SLUG: "__pmb__" }))
 vi.mock("@/lib/logger", () => ({ contextLogger: () => ({ info: vi.fn() }) }))
 

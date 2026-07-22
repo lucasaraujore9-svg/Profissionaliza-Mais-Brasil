@@ -19,7 +19,11 @@ vi.mock("@/lib/students/reactivation-guard", () => ({
 }))
 vi.mock("@/lib/tenant/cache-invalidation", () => ({ invalidateTenantCache: vi.fn() }))
 vi.mock("@/lib/notifications", () => ({ createNotification: vi.fn(() => Promise.resolve(null)) }))
-vi.mock("@/lib/auth/bearer", () => ({ isCronAuthorized: vi.fn(() => true) }))
+// O batimento do cron tem suite propria (cron-heartbeat.test.ts); aqui so
+// precisamos passar pela autorizacao.
+vi.mock("@/lib/observability/cron-heartbeat", () => ({
+  authorizeCron: vi.fn(async () => true),
+}))
 vi.mock("@/lib/pmb-config", () => ({ PMB_TENANT_SLUG: "__pmb__" }))
 vi.mock("@/lib/logger", () => ({
   contextLogger: () => ({ info: logInfo, error: logError }),

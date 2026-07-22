@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { syncLmsDayUpdate } from "@/lib/lms/day-update"
-import { isCronAuthorized } from "@/lib/auth/bearer"
+import { authorizeCron } from "@/lib/observability/cron-heartbeat"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { contextLogger } from "@/lib/logger"
 
@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic"
 export const POST = withRequestContext(
   { action: "cron.sync_day_update_lms", route: "/api/cron/sync-day-update-lms" },
   async (request: Request) => {
-    if (!isCronAuthorized(request)) {
+    if (!(await authorizeCron(request))) {
       return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
     }
     try {

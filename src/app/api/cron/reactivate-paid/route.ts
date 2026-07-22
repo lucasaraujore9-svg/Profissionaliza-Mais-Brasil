@@ -5,7 +5,7 @@ import { unblockStudentInEA } from "@/lib/students/plataforma-actions"
 import { canReactivateUnderTenant } from "@/lib/students/reactivation-guard"
 import { invalidateTenantCache } from "@/lib/tenant/cache-invalidation"
 import { createNotification } from "@/lib/notifications"
-import { isCronAuthorized } from "@/lib/auth/bearer"
+import { authorizeCron } from "@/lib/observability/cron-heartbeat"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { contextLogger } from "@/lib/logger"
 import { PMB_TENANT_SLUG } from "@/lib/pmb-config"
@@ -152,7 +152,7 @@ async function processReactivations() {
 export const POST = withRequestContext(
   { action: "cron.reactivate_paid", route: "/api/cron/reactivate-paid" },
   async (request: Request) => {
-    if (!isCronAuthorized(request)) {
+    if (!(await authorizeCron(request))) {
       return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
     }
     const log = contextLogger()

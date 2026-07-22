@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { blockStudentInEA } from "@/lib/students/plataforma-actions"
 import { createNotification } from "@/lib/notifications"
-import { isCronAuthorized } from "@/lib/auth/bearer"
+import { authorizeCron } from "@/lib/observability/cron-heartbeat"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { contextLogger } from "@/lib/logger"
 import { addMonthsClamped } from "@/lib/dates"
@@ -170,7 +170,7 @@ async function processOverdueStudents() {
 export const POST = withRequestContext(
   { action: "cron.sweep_students_overdue", route: "/api/cron/sweep-students-overdue" },
   async (request: Request) => {
-    if (!isCronAuthorized(request)) {
+    if (!(await authorizeCron(request))) {
       return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
     }
     const log = contextLogger()

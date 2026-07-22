@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { syncCatalogFromLMS } from "@/lib/catalog/sync-lms"
-import { isCronAuthorized } from "@/lib/auth/bearer"
+import { authorizeCron } from "@/lib/observability/cron-heartbeat"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { contextLogger } from "@/lib/logger"
 
@@ -9,7 +9,7 @@ export const maxDuration = 300
 export const POST = withRequestContext(
   { action: "cron.sync_cursos_lms", route: "/api/cron/sync-cursos-lms" },
   async (request: Request) => {
-    if (!isCronAuthorized(request)) {
+    if (!(await authorizeCron(request))) {
       return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
     }
 

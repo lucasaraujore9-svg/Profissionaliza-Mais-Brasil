@@ -4,7 +4,7 @@ import {
   computeMonthlyCommissions,
   recentClosedPeriods,
 } from "@/lib/referrals/monthly"
-import { isCronAuthorized } from "@/lib/auth/bearer"
+import { authorizeCron } from "@/lib/observability/cron-heartbeat"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { contextLogger } from "@/lib/logger"
 
@@ -17,7 +17,7 @@ const CATCHUP_MONTHS = 3
 export const POST = withRequestContext(
   { action: "cron.referral_monthly_payout", route: "/api/cron/referral-monthly-payout" },
   async (request: Request) => {
-    if (!isCronAuthorized(request)) {
+    if (!(await authorizeCron(request))) {
       return NextResponse.json({ error: "Nao autorizado" }, { status: 401 })
     }
 

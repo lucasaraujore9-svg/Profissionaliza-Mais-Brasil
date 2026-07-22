@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { isCronAuthorized } from "@/lib/auth/bearer"
+import { authorizeCron } from "@/lib/observability/cron-heartbeat"
 import { reconcileTenantPayments } from "@/lib/asaas/reconcile"
 import { PMB_TENANT_SLUG } from "@/lib/pmb-config"
 import { contextLogger } from "@/lib/logger"
@@ -80,7 +80,7 @@ async function run() {
 }
 
 export async function POST(request: Request) {
-  if (!isCronAuthorized(request)) {
+  if (!(await authorizeCron(request))) {
     return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
   }
   const result = await run()

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { isCronAuthorized } from "@/lib/auth/bearer"
+import { authorizeCron } from "@/lib/observability/cron-heartbeat"
 import { isVercelConfigured } from "@/lib/vercel/client"
 import {
   ensureCustomDomainCert,
@@ -25,7 +25,7 @@ export const dynamic = "force-dynamic"
  * Auth: Bearer CRON_SECRET (padrao dos demais crons).
  */
 export async function POST(request: Request) {
-  if (!isCronAuthorized(request)) {
+  if (!(await authorizeCron(request))) {
     return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
   }
   if (!isVercelConfigured()) {

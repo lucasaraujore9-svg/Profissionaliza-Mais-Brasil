@@ -1663,6 +1663,25 @@ model TenantNotificationOverride {
   @@map("tenant_notification_overrides")
 }
 
+/**
+ * Batimento dos jobs agendados. Uma linha por job (`jobName` = ultimo segmento
+ * da rota, ex.: "sync-progresso").
+ *
+ * POR QUE EXISTE: os crons rodam no pg_cron do Supabase chamando nossas rotas
+ * por HTTP. Se a ponte quebra (foi o que houve entre 30/04 e 10/06 de 2026,
+ * quando o pg_net mudou de schema e TODOS os jobs falharam), nada avisa — a
+ * falha passou seis semanas despercebida. `cron.job_run_details` so prova que o
+ * Postgres disparou, nao que a rota rodou. Esta tabela e a prova do lado da
+ * aplicacao, e o que permite a tela do admin dizer "nao roda ha X horas".
+ */
+model CronRun {
+  jobName   String   @id @map("job_name")
+  lastRunAt DateTime @map("last_run_at")
+  runCount  Int      @default(0) @map("run_count")
+
+  @@map("cron_runs")
+}
+
 model SystemSettings {
   id                   String         @id @default("default")
   pmbDirectSaleGateway PaymentGateway @default(MP) @map("pmb_direct_sale_gateway")

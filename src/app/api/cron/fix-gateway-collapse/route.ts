@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { isCronAuthorized } from "@/lib/auth/bearer"
+import { authorizeCron } from "@/lib/observability/cron-heartbeat"
 import { PMB_TENANT_SLUG } from "@/lib/pmb-config"
 import {
   getPayment as getAsaasPayment,
@@ -54,7 +54,7 @@ const ASAAS_PAID = new Set(["RECEIVED", "CONFIRMED", "RECEIVED_IN_CASH"])
 // Disparado pelo `app_internal.run_cron` (net.http_post) como os demais crons, e
 // também acionável por GET manual. Ambos os métodos compartilham o handler.
 async function handle(request: Request) {
-  if (!isCronAuthorized(request)) {
+  if (!(await authorizeCron(request))) {
     return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
   }
 

@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { blockTenantStudents } from "@/lib/auto-block"
 import { sendEmail } from "@/lib/email/resend"
 import { createNotification } from "@/lib/notifications"
-import { isCronAuthorized } from "@/lib/auth/bearer"
+import { authorizeCron } from "@/lib/observability/cron-heartbeat"
 import { invalidateTenantCache } from "@/lib/tenant/cache-invalidation"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { contextLogger } from "@/lib/logger"
@@ -180,7 +180,7 @@ async function processOverdueTenants() {
 export const POST = withRequestContext(
   { action: "cron.sweep_tenants_overdue", route: "/api/cron/sweep-tenants-overdue" },
   async (request: Request) => {
-    if (!isCronAuthorized(request)) {
+    if (!(await authorizeCron(request))) {
       return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
     }
     const result = await processOverdueTenants()

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { putLmsTenantBranding, isLmsConfigured } from "@/lib/lms"
 import { PMB_TENANT_SLUG } from "@/lib/pmb-config"
-import { isCronAuthorized } from "@/lib/auth/bearer"
+import { authorizeCron } from "@/lib/observability/cron-heartbeat"
 import { contextLogger } from "@/lib/logger"
 
 export const maxDuration = 300
@@ -76,7 +76,7 @@ async function run(opts: { write: boolean; limit: number }) {
 }
 
 export async function POST(request: Request) {
-  if (!isCronAuthorized(request)) {
+  if (!(await authorizeCron(request))) {
     return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
   }
   const url = new URL(request.url)

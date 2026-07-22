@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { buscarAluno } from "@/lib/plataforma-cursos/client"
 import { encrypt, decrypt } from "@/lib/crypto"
-import { isCronAuthorized } from "@/lib/auth/bearer"
+import { authorizeCron } from "@/lib/observability/cron-heartbeat"
 import { contextLogger } from "@/lib/logger"
 
 export const maxDuration = 300
@@ -125,7 +125,7 @@ async function resync(opts: {
 }
 
 export async function POST(request: Request) {
-  if (!isCronAuthorized(request)) {
+  if (!(await authorizeCron(request))) {
     return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
   }
   const url = new URL(request.url)
