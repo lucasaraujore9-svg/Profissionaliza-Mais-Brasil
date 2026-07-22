@@ -311,8 +311,32 @@
 
 **Uso no Projeto:**
 - **Bloquear aluno inadimplente:** `status = "bloqueado"`, `apostila = "bloquear"`
+- **Travar por cota de aulas:** `status = "devedor"`, `apostila = "bloquear"`
 - **Reativar aluno:** `status = "ativo"`, `apostila = "liberar"`
 - **Atualizar dados pessoais** se necessário
+
+> ### Efeito de `status = "devedor"` — confirmado
+>
+> **`devedor` bloqueia o aluno COMPLETAMENTE** (verificado em jul/2026). Não é um
+> rótulo: o acesso às aulas cai de fato. A lista oficial de valores está na coleção
+> Postman do fornecedor ([documenter.getpostman.com/view/20632445/2s93z3f5Bt](https://documenter.getpostman.com/view/20632445/2s93z3f5Bt)),
+> que documenta os valores aceitos mas **não** descreve o efeito de cada um — daí a
+> verificação empírica.
+>
+> Duas consequências práticas:
+>
+> 1. **`devedor` e `bloqueado` travam igual.** A escolha entre os dois é
+>    **semântica**, para o suporte da unidade saber na própria EA por que o aluno
+>    parou: `bloqueado` = inadimplência, `devedor` = cota de aulas (venda parcelada
+>    em dia, mas aluno adiantado no conteúdo). Ninguém deve tratar `devedor` como
+>    trava "mais fraca" — não é.
+> 2. **O bloqueio é por LOGIN, e o login é único por pessoa** (reaproveitado entre
+>    unidades). Como ele derruba tudo, travar um aluno por causa de UM curso
+>    parcelado tira dele os outros cursos — inclusive os já quitados, inclusive de
+>    outra unidade. É exatamente por isso que a cota de aulas só corta o login
+>    quando **nenhum** outro curso daquela pessoa está liberado
+>    (`SystemSettings.paceGateStrict = false`, o padrão). Ver
+>    `src/lib/enrollment/pace.ts`.
 
 **🚫 NÃO dá para trocar a senha do aluno por aqui.** A lista oficial de campos de
 `usuarios/editar` não inclui `senha` — esse campo só existe em

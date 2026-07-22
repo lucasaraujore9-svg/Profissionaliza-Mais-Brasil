@@ -737,13 +737,23 @@ export async function blockStudentInEA(studentId: string): Promise<void> {
 
 /**
  * Status enviado a plataforma de aulas quando a trava e a COTA DE AULAS (venda
- * parcelada, aluno em dia mas adiantado no conteudo) — decisao do produto em
- * 2026-07-22. Distinto de "bloqueado", que fica reservado a INADIMPLENCIA, para
- * o suporte da unidade saber na propria EA por que o aluno esta travado.
+ * parcelada, aluno em dia mas adiantado no conteudo).
  *
- * Constante isolada de proposito: se a EA nao barrar a aula com `devedor` (a doc
- * da API v2 nao especifica — validar com aluno de teste), trocar aqui por
- * "bloqueado", que comprovadamente barra, resolve em uma linha.
+ * ✅ VERIFICADO (jul/2026): `devedor` bloqueia o aluno COMPLETAMENTE na EA — nao
+ * e rotulo. A doc da API v2 lista os valores aceitos mas nao descreve o efeito
+ * de cada um, entao isto foi confirmado empiricamente.
+ *
+ * Consequencias que o resto do modulo depende:
+ *
+ *  - `devedor` e `bloqueado` travam IGUAL. A escolha entre os dois e semantica,
+ *    para o suporte da unidade saber na propria EA por que o aluno parou
+ *    (`bloqueado` = inadimplencia, `devedor` = cota). NAO tratar `devedor` como
+ *    trava mais fraca.
+ *  - Como bloqueia por completo, e o login e unico por pessoa e compartilhado
+ *    entre unidades, travar por causa de UM curso derruba os demais — inclusive
+ *    quitados. E o que sustenta a politica conservadora de `shouldCutPlatformAccess`
+ *    (so corta quando nenhum outro curso da pessoa esta liberado) e a inclusao
+ *    de DEVEDOR em `isPersonBlockedInAnotherTenant`.
  */
 const EA_PACE_STATUS = "devedor"
 
