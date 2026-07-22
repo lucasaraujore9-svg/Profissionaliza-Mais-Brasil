@@ -69,7 +69,7 @@ function carne(paid: number, total: number, progress: number, extra = {}) {
     paceAppliedPercent: null,
     paceExemptAt: null,
     course: { nome: "Eletricista" },
-    student: { nome: "Maria" },
+    student: { nome: "Maria", status: "ATIVO" },
     ...extra,
   }
 }
@@ -109,13 +109,52 @@ describe("evaluatePaceGate — travar", () => {
   })
 
   it("é idempotente — já travado não rechama a plataforma", async () => {
+    // Estado coerente de um aluno já travado: DEVEDOR na plataforma.
     p.enrollment.findUnique.mockResolvedValue(
-      carne(1, 2, 70, { paceBlockedAt: new Date(), paceAppliedPercent: 50 }),
+      carne(1, 2, 70, {
+        paceBlockedAt: new Date(),
+        paceAppliedPercent: 50,
+        student: { nome: "Maria", status: "DEVEDOR" },
+      }),
     )
 
     const out = await evaluatePaceGate("e1")
 
     expect(out?.changed).toBe(false)
+    expect(setBlockMock).not.toHaveBeenCalled()
+  })
+
+  it("REAPLICA o corte quando outro fluxo devolveu o acesso (deriva)", async () => {
+    // `Student.status` tem vários donos: auto-unblock do tenant que voltou a
+    // pagar, desbloqueio manual, reativação ao vincular curso novo. Se um deles
+    // devolve ATIVO a um aluno que continua travado pela cota e nada reaplica o
+    // corte, ele assiste o que não pagou — sem transição, o motor era cego.
+    p.enrollment.findUnique.mockResolvedValue(
+      carne(1, 2, 70, {
+        paceBlockedAt: new Date(),
+        paceAppliedPercent: 50,
+        student: { nome: "Maria", status: "ATIVO" },
+      }),
+    )
+
+    const out = await evaluatePaceGate("e1")
+
+    expect(setBlockMock).toHaveBeenCalledWith("s1", true)
+    expect(out).toMatchObject({ blocked: true, platformApplied: true })
+  })
+
+  it("não reaplica por cima da trava de inadimplência (BLOQUEADO)", async () => {
+    // BLOQUEADO pertence à trava mais forte; rebaixar para DEVEDOR seria afrouxar.
+    p.enrollment.findUnique.mockResolvedValue(
+      carne(1, 2, 70, {
+        paceBlockedAt: new Date(),
+        paceAppliedPercent: 50,
+        student: { nome: "Maria", status: "BLOQUEADO" },
+      }),
+    )
+
+    await evaluatePaceGate("e1")
+
     expect(setBlockMock).not.toHaveBeenCalled()
   })
 
@@ -188,7 +227,11 @@ describe("evaluatePaceGate — liberar", () => {
   it("continua travado se a nova cota ainda não passou o progresso", async () => {
     // 2 de 6 pagas = 33%, mas o aluno já assistiu 50% → segue travado.
     p.enrollment.findUnique.mockResolvedValue(
-      carne(2, 6, 50, { paceBlockedAt: new Date(), paceAppliedPercent: 16 }),
+      carne(2, 6, 50, {
+        paceBlockedAt: new Date(),
+        paceAppliedPercent: 16,
+        student: { nome: "Maria", status: "DEVEDOR" },
+      }),
     )
 
     const out = await evaluatePaceGate("e1")

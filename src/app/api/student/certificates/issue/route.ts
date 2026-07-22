@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { requireStudentSession } from "@/lib/auth/student-session"
-import { issueCertificateIfEligible } from "@/lib/certificates/issue"
+import { issueCertificateIfEligible, PaceGateError } from "@/lib/certificates/issue"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { contextLogger } from "@/lib/logger"
 
@@ -101,6 +101,21 @@ export const POST = withRequestContext(
       const cert = await issueCertificateIfEligible(enrollment.id, "AUTO")
       return NextResponse.json({ id: cert.id, code: cert.code }, { status: 200 })
     } catch (err) {
+      // Cota de aulas: recusa ESPERADA e acionável — o aluno concluiu o
+      // conteúdo mas ainda deve parcelas. Mandar "tente novamente" (o genérico
+      // abaixo) seria conselho errado: repetir nunca vai funcionar, quitar sim.
+      // Também não é erro de servidor — 400 com a mensagem real.
+      if (err instanceof PaceGateError) {
+        contextLogger().info(
+          {
+            event: "student.certificates.pace_blocked",
+            enrollmentId: enrollment.id,
+            studentId: session.studentId,
+          },
+          "certificado recusado — parcelamento em aberto",
+        )
+        return NextResponse.json({ error: err.message }, { status: 400 })
+      }
       contextLogger().error(
         {
           err,

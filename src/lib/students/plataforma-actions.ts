@@ -188,7 +188,16 @@ async function isPersonBlockedInAnotherTenant(student: {
   if (student.email) orFilters.push({ email: student.email })
   if (orFilters.length === 0) return false
   const blocked = await prisma.student.findFirst({
-    where: { id: { not: student.id }, OR: orFilters, status: "BLOQUEADO" },
+    where: {
+      id: { not: student.id },
+      OR: orFilters,
+      // DEVEDOR conta junto com BLOQUEADO: e a trava da COTA DE AULAS, que
+      // tambem restringe o acesso. Sem ele, comprar um curso numa segunda
+      // unidade reativava o login e devolvia as aulas ainda nao pagas da
+      // primeira — o mesmo vazamento cross-tenant que este guard existe para
+      // impedir, so que pela porta da cota.
+      status: { in: ["BLOQUEADO", "DEVEDOR"] },
+    },
     select: { id: true },
   })
   return Boolean(blocked)

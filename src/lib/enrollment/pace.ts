@@ -76,7 +76,11 @@ export async function evaluatePaceGate(
       select: {
         ...PACE_SELECT,
         course: { select: { nome: true } },
-        student: { select: { nome: true } },
+        // `status` do aluno entra para detectar DERIVA: quem mais mexe neste
+        // campo (auto-block/unblock do tenant, desbloqueio manual do admin,
+        // reativacao ao vincular curso) pode ter devolvido o acesso sem saber
+        // da cota. Ver o ramo de reconciliacao abaixo.
+        student: { select: { nome: true, status: true } },
       },
     })
     if (!enrollment) return null
@@ -124,6 +128,42 @@ export async function evaluatePaceGate(
     }
     if (!state.blocked && wasBlocked) {
       return await applyRelease(enrollment, state)
+    }
+
+    // Sem transicao — MAS o acesso na plataforma pode ter derivado. O campo
+    // `Student.status` tem varios donos: o auto-block/unblock por inadimplencia
+    // do tenant, o desbloqueio manual do admin/painel e a reativacao ao vincular
+    // um curso novo. Qualquer um deles pode ter devolvido o acesso de um aluno
+    // que continua travado pela cota — e, como nao houve transicao, nada
+    // reaplicaria o corte: o aluno seguiria assistindo o que nao pagou.
+    // ATIVO e o unico estado que indica deriva: BLOQUEADO pertence a trava mais
+    // forte (inadimplencia) e DEVEDOR ja e a nossa, aplicada.
+    if (state.blocked && wasBlocked && enrollment.student.status === "ATIVO") {
+      const cut = await shouldCutPlatformAccess(enrollment, strict)
+      if (cut) {
+        const reapplied = await setStudentPaceBlock(enrollment.studentId, true).catch(
+          (err) => {
+            contextLogger().error(
+              { err, event: "pace.reapply_failed", enrollmentId: enrollment.id },
+              "reaplicacao do corte apos deriva falhou — proxima varredura re-tenta",
+            )
+            return false
+          },
+        )
+        if (reapplied) {
+          contextLogger().warn(
+            { event: "pace.reapplied_after_drift", enrollmentId: enrollment.id, studentId: enrollment.studentId },
+            "acesso do aluno havia sido devolvido por outro fluxo — corte da cota reaplicado",
+          )
+        }
+        return {
+          enrollmentId: enrollment.id,
+          allowedPercent: state.allowedPercent,
+          blocked: true,
+          changed: reapplied,
+          platformApplied: reapplied,
+        }
+      }
     }
 
     // Sem transicao. Só atualiza a cota exibida quando ela mudou (ex.: parcela
