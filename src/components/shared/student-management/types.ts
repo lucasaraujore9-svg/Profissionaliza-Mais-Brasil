@@ -21,6 +21,20 @@ export interface StudentEnrollmentItem {
   checkoutUrl: string | null
   startedAt: string | null
   createdAt: string
+
+  // ── Cota de aulas (venda parcelada) ───────────────────────────────────────
+  /** Progresso sincronizado da plataforma de aulas (0-100). */
+  progressPercent: number
+  /**
+   * Fatia do curso liberada pelas parcelas pagas (0-100), calculada no servidor
+   * para a UI nunca discordar do motor. `null` = matricula fora da regra da
+   * cota (a vista, cartao parcelado ou parcela unica).
+   */
+  paceAllowedPercent: number | null
+  /** A matricula esta travada agora por ter atingido a cota? */
+  paceBlocked: boolean
+  /** Liberacao manual concedida (SUPER_ADMIN) — desarma a trava. */
+  paceExemptAt: string | null
 }
 
 export interface StudentPaymentItem {
@@ -105,6 +119,12 @@ export interface StudentData {
   notifications: StudentNotificationItem[]
   /** Credenciais do LMS por curso (próprio do LMS ou parceiro). */
   lmsCredentials: StudentLmsCredentialItem[]
+  /**
+   * A cota de aulas está valendo para a unidade deste aluno? Quando falsa, a UI
+   * não mostra a coluna — exibir uma cota que não está sendo aplicada só
+   * confundiria quem atende.
+   */
+  paceGateEnabled: boolean
 }
 
 /** Define qual API root + permissoes o componente usa. */

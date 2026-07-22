@@ -84,6 +84,13 @@ interface EnrollmentOption {
   progressStatus: string | null
   hasActiveCertificate: boolean
   tenantName?: string
+  /**
+   * Cota de aulas: parcelamento em aberto. O backend RECUSA a emissão, então a
+   * UI não pode oferecer o botão — ele falharia sempre.
+   */
+  paceBlocksConclusion?: boolean
+  installmentsPaid?: number
+  installmentsTotal?: number | null
 }
 
 interface Props {
@@ -301,6 +308,11 @@ export function CertificateIssueForm({
   const selectedConcluded = selectedEnrollment
     ? isEnrollmentConcludedForCertificate(selectedEnrollment, minPercent)
     : false
+  // Concluiu o conteúdo mas ainda deve parcelas: a emissão fica travada até a
+  // quitação. Nem o `force` do SUPER_ADMIN é oferecido aqui — furar a cota é
+  // decisão de negócio, feita em "Liberar cota" na gestão do aluno, onde fica
+  // auditada.
+  const selectedPaceBlocked = selectedEnrollment?.paceBlocksConclusion === true
 
   return (
     <div className="space-y-6">
@@ -450,11 +462,15 @@ export function CertificateIssueForm({
                           )}
                         </div>
                       </div>
-                      {!completed && !e.hasActiveCertificate && (
+                      {e.paceBlocksConclusion ? (
+                        <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800">
+                          Parcelas em aberto
+                        </span>
+                      ) : !completed && !e.hasActiveCertificate ? (
                         <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800">
                           Não concluído
                         </span>
-                      )}
+                      ) : null}
                     </button>
                   </li>
                 )
@@ -500,6 +516,25 @@ export function CertificateIssueForm({
             </div>
           )}
 
+          {selectedPaceBlocked && (
+            <div className="mt-4 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
+              <div className="flex-1">
+                <p className="text-xs font-semibold text-amber-900">
+                  Parcelamento em aberto — certificado bloqueado
+                </p>
+                <p className="mt-1 text-xs text-amber-800">
+                  {selectedEnrollment.installmentsTotal
+                    ? `Foram pagas ${selectedEnrollment.installmentsPaid ?? 0} de ${selectedEnrollment.installmentsTotal} parcelas. `
+                    : ""}
+                  O certificado é liberado assim que a venda for quitada. Para
+                  abrir exceção, use “Liberar cota” na gestão do aluno — a
+                  liberação fica registrada com quem a concedeu.
+                </p>
+              </div>
+            </div>
+          )}
+
           {!selectedConcluded && !canForce && (
             <div className="mt-4 flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4">
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-700" />
@@ -527,7 +562,7 @@ export function CertificateIssueForm({
               <button
                 type="button"
                 onClick={submit}
-                disabled={submitting || (!selectedConcluded && !force)}
+                disabled={submitting || selectedPaceBlocked || (!selectedConcluded && !force)}
                 className="inline-flex items-center gap-2 rounded-lg bg-[var(--color-pmb-green)] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[var(--color-pmb-green-700)] disabled:opacity-50"
               >
                 {submitting && <Loader2 className="h-4 w-4 animate-spin" />}

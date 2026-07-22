@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { isConclusionBlockedByPace } from "@/lib/enrollment/pace-gate"
+import { resolvePaceGateSettings } from "@/lib/enrollment/pace-settings"
 import { requireAdminSession } from "@/lib/auth/admin-session"
 import { PMB_TENANT_SLUG } from "@/lib/pmb-config"
 import { withRequestContext } from "@/lib/observability/with-request-context"
@@ -60,6 +62,12 @@ export const GET = withRequestContext(
     take: 50,
   })
 
+  // Interruptor por unidade: o admin lista matrículas de tenants diferentes.
+  const paceGateByTenant = new Map<string | null, boolean>()
+  for (const tid of new Set(enrollments.map((e) => e.tenantId))) {
+    paceGateByTenant.set(tid, (await resolvePaceGateSettings(tid)).enabled)
+  }
+
   return NextResponse.json({
     data: {
       student: {
@@ -75,6 +83,15 @@ export const GET = withRequestContext(
         cargaHoraria: e.course.cargaHoraria,
         progressPercent: e.progressPercent ?? 0,
         progressStatus: e.progressStatus,
+        // Cota de aulas: com parcelamento em aberto o backend RECUSA a emissão.
+        // Sem este campo o formulário ofereceria um botão que sempre falha.
+        // O admin enxerga várias unidades, então o interruptor é por tenant.
+        paceBlocksConclusion: isConclusionBlockedByPace({
+          ...e,
+          gateEnabled: paceGateByTenant.get(e.tenantId) ?? false,
+        }),
+        installmentsPaid: e.installmentsPaid,
+        installmentsTotal: e.installmentsTotal,
         hasActiveCertificate: e.certificates.some((c) => !c.revokedAt),
         tenantId: e.tenantId,
         tenantName: e.tenant?.name ?? "PMB (Vitrine principal)",

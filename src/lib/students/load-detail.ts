@@ -8,6 +8,11 @@ import {
   countEnrollmentStatuses,
 } from "@/lib/students/display-status"
 import { buildEnrollmentCheckoutUrl } from "@/lib/students/checkout-link"
+import {
+  computeAllowedPercent,
+  isPaceGatedPlan,
+} from "@/lib/enrollment/pace-gate"
+import { resolvePaceGateSettings } from "@/lib/enrollment/pace-settings"
 
 /**
  * Carrega o aluno completo + matriculas + pagamentos + notas + notificacoes
@@ -113,6 +118,10 @@ export async function loadStudentDetail(args: {
     0,
   )
 
+  // A cota vale para esta unidade? Sem isso a tela mostraria uma cota que não
+  // está sendo aplicada — pior que não mostrar nada.
+  const { enabled: paceGateEnabled } = await resolvePaceGateSettings(student.tenantId)
+
   return {
     id: student.id,
     nome: student.nome,
@@ -143,6 +152,7 @@ export async function loadStudentDetail(args: {
     lastLoginAt: student.lastLoginAt?.toISOString() ?? null,
     createdAt: student.createdAt.toISOString(),
     totalPaid,
+    paceGateEnabled,
     enrollments: student.enrollments.map((e) => ({
       id: e.id,
       courseName: e.course.nome,
@@ -165,6 +175,12 @@ export async function loadStudentDetail(args: {
       }),
       startedAt: e.startedAt?.toISOString() ?? null,
       createdAt: e.createdAt.toISOString(),
+      // Cota de aulas: calculada aqui com a MESMA função do motor, para a tela
+      // nunca discordar do que está de fato aplicado na plataforma.
+      progressPercent: e.progressPercent ?? 0,
+      paceAllowedPercent: isPaceGatedPlan(e) ? computeAllowedPercent(e) : null,
+      paceBlocked: e.paceBlockedAt !== null,
+      paceExemptAt: e.paceExemptAt?.toISOString() ?? null,
     })),
     payments: payments.map((p) => ({
       id: p.id,

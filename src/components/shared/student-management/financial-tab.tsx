@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { CheckCircle2, Clock, XCircle } from "lucide-react"
+import { CheckCircle2, Clock, Lock, Unlock, XCircle } from "lucide-react"
 import { toast } from "sonner"
 import type { ManagementScope, StudentData } from "./types"
 import { apiBase } from "./types"
@@ -92,6 +92,11 @@ export function FinancialTab({
     null,
   )
   const [cancelling, setCancelling] = useState<string | null>(null)
+  const [cotaLoading, setCotaLoading] = useState<string | null>(null)
+  // A revenda VÊ a cota mas não a libera — destravar é abrir mão de uma garantia
+  // de recebimento da rede. A rota exige SUPER_ADMIN de qualquer forma; isto é
+  // só o gate visual, para o botão não aparecer e falhar.
+  const canManageCota = scope.kind === "admin"
 
   async function cancelEnrollment(enrollmentId: string, removeAccess: boolean) {
     setTarget(null)
@@ -131,6 +136,37 @@ export function FinancialTab({
     }
   }
 
+  /**
+   * Liberação manual da cota (SUPER_ADMIN). Válvula de escape para o caso que a
+   * regra não previu — acordo comercial, erro de cobrança, cortesia.
+   */
+  async function setCota(enrollmentId: string, exempt: boolean) {
+    setCotaLoading(enrollmentId)
+    try {
+      const res = await fetch(
+        `${apiBase(scope, student.id)}/enrollments/${enrollmentId}/cota`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ exempt }),
+        },
+      )
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        toast.error(body.error ?? "Falha ao alterar a cota")
+        return
+      }
+      toast.success(
+        exempt ? "Cota liberada — acesso destravado" : "Cota reativada",
+      )
+      router.refresh()
+    } catch {
+      toast.error("Erro de rede ao alterar a cota")
+    } finally {
+      setCotaLoading(null)
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* Matrículas */}
@@ -154,6 +190,9 @@ export function FinancialTab({
                   <th className="px-4 py-2 font-semibold">Gateway</th>
                   <th className="px-4 py-2 font-semibold">Valor</th>
                   <th className="px-4 py-2 font-semibold">Status</th>
+                  {student.paceGateEnabled && (
+                    <th className="px-4 py-2 font-semibold">Cota de aulas</th>
+                  )}
                   <th className="px-4 py-2 font-semibold">Início</th>
                   <th className="px-4 py-2 font-semibold">Checkout</th>
                   <th className="px-4 py-2 font-semibold">Ações</th>
@@ -190,6 +229,16 @@ export function FinancialTab({
                           {badge.label}
                         </span>
                       </td>
+                      {student.paceGateEnabled && (
+                        <td className="px-4 py-3">
+                          <CotaCell
+                            enrollment={e}
+                            canManage={canManageCota}
+                            loading={cotaLoading === e.id}
+                            onToggle={(exempt) => setCota(e.id, exempt)}
+                          />
+                        </td>
+                      )}
                       <td className="px-4 py-3 text-xs text-gray-600">
                         {formatDate(e.startedAt ?? e.createdAt)}
                       </td>
@@ -335,6 +384,76 @@ export function FinancialTab({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+    </div>
+  )
+}
+
+/**
+ * Estado da cota de aulas de uma matrícula.
+ *
+ * Mostra sempre a fatia liberada e as parcelas pagas — é o que o atendimento
+ * precisa para responder "por que meu curso parou?" sem abrir outra tela.
+ */
+function CotaCell({
+  enrollment: e,
+  canManage,
+  loading,
+  onToggle,
+}: {
+  enrollment: StudentData["enrollments"][number]
+  canManage: boolean
+  loading: boolean
+  onToggle: (exempt: boolean) => void
+}) {
+  // Fora da regra (à vista, cartão parcelado, parcela única): não há cota.
+  if (e.paceAllowedPercent === null) {
+    return <span className="text-xs text-gray-400">—</span>
+  }
+
+  const exempt = e.paceExemptAt !== null
+  const quitado = e.paceAllowedPercent >= 100
+
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center gap-1.5">
+        {exempt ? (
+          <Unlock className="h-3 w-3 text-blue-600" aria-hidden />
+        ) : e.paceBlocked ? (
+          <Lock className="h-3 w-3 text-amber-600" aria-hidden />
+        ) : null}
+        <span
+          className={`text-xs font-semibold ${
+            exempt
+              ? "text-blue-700"
+              : e.paceBlocked
+                ? "text-amber-700"
+                : "text-gray-700"
+          }`}
+        >
+          {exempt
+            ? "Liberada manualmente"
+            : quitado
+              ? "Quitado — 100%"
+              : `${e.paceAllowedPercent}% liberado`}
+        </span>
+      </div>
+      {!exempt && !quitado && (
+        <p className="text-[11px] text-gray-500">
+          {e.installmentsPaid}/{e.installmentsTotal} pagas · assistiu{" "}
+          {e.progressPercent}%
+        </p>
+      )}
+      {canManage && !quitado && (
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-6 px-2 text-[11px]"
+          disabled={loading}
+          onClick={() => onToggle(!exempt)}
+        >
+          {loading ? "Aguarde…" : exempt ? "Reativar cota" : "Liberar cota"}
+        </Button>
+      )}
     </div>
   )
 }

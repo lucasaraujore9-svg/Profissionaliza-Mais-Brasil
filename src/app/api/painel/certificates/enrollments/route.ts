@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { isConclusionBlockedByPace } from "@/lib/enrollment/pace-gate"
+import { resolvePaceGateSettings } from "@/lib/enrollment/pace-settings"
 import { requireResellerSession } from "@/lib/auth/reseller-session"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 
@@ -38,6 +40,9 @@ export const GET = withRequestContext(
       take: 50,
     })
 
+    // A cota vale para esta unidade? Resolvido uma vez — o painel é single-tenant.
+    const { enabled: paceGateEnabled } = await resolvePaceGateSettings(ctx.tenantId)
+
     return NextResponse.json({
       data: {
         student: {
@@ -52,6 +57,14 @@ export const GET = withRequestContext(
           cargaHoraria: e.course.cargaHoraria,
           progressPercent: e.progressPercent ?? 0,
           progressStatus: e.progressStatus,
+          // Cota de aulas: com parcelamento em aberto o backend RECUSA a
+          // emissão. Sem este campo o formulário ofereceria um botão que sempre
+          // falha — a UI precisa saber o mesmo que o motor.
+          paceBlocksConclusion: paceGateEnabled
+            ? isConclusionBlockedByPace({ ...e, gateEnabled: true })
+            : false,
+          installmentsPaid: e.installmentsPaid,
+          installmentsTotal: e.installmentsTotal,
           hasActiveCertificate: e.certificates.some((c) => !c.revokedAt),
           createdAt: e.createdAt.toISOString(),
         })),
