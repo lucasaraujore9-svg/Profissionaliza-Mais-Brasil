@@ -5,14 +5,19 @@
  *   B. Marca parcelas vencidas como OVERDUE e bloqueia o acesso do aluno na
  *      plataforma (mesmo primitivo do auto-block por inadimplência). A parcela
  *      paga depois reativa via settleBoletoInstallment.
+ *   C. Reconcilia a cota de aulas (trava proporcional ao pagamento) — rede de
+ *      segurança dos gatilhos em tempo real. Ver `reconcilePaceGates`.
  *
- * Idempotente: A pula parcelas já emitidas; B pula matrículas já suspensas.
+ * Idempotente: A pula parcelas já emitidas; B pula matrículas já suspensas;
+ * C só age na transição.
  */
 import { prisma } from "@/lib/prisma"
 import { blockStudentInEA } from "@/lib/students/plataforma-actions"
 import { createNotification } from "@/lib/notifications"
 import { swallow } from "@/lib/errors"
 import { contextLogger } from "@/lib/logger"
+import { evaluatePaceGate } from "@/lib/enrollment/pace"
+import { PACE_GATED_PAYMENT_TYPES } from "@/lib/enrollment/pace-gate"
 import { generateMpBoletoForInstallment } from "./plan"
 import { isOverdue, INSTALLMENT_REVEAL_WINDOW_DAYS } from "./schedule"
 
@@ -25,6 +30,8 @@ export interface SweepResult {
   markedOverdue: number
   /** Matrículas suspensas (aluno bloqueado ou venda PENDING abandonada). */
   suspended: number
+  /** Matrículas cuja cota de aulas mudou de estado nesta rodada. */
+  paceReconciled: number
 }
 
 const GENERATE_BATCH = 200
@@ -36,6 +43,7 @@ export async function runBoletoInstallmentSweep(now: Date = new Date()): Promise
     generateErrors: 0,
     markedOverdue: 0,
     suspended: 0,
+    paceReconciled: 0,
   }
 
   // ── A. Emitir boletos MP na janela de 7 dias ───────────────────────────────
@@ -90,7 +98,49 @@ export async function runBoletoInstallmentSweep(now: Date = new Date()): Promise
     if (suspended) result.suspended++
   }
 
+  // ── C. Reconciliar a cota de aulas ─────────────────────────────────────────
+  result.paceReconciled = await reconcilePaceGates()
+
   return result
+}
+
+const PACE_BATCH = 500
+
+/**
+ * Rede de segurança da cota de aulas. Os gatilhos normais (sync de progresso,
+ * webhook do LMS, parcela paga) cobrem o caso feliz; esta varredura pega o que
+ * escapou:
+ *   - corte na plataforma que falhou (EA/LMS fora do ar na hora);
+ *   - matrícula que deveria destravar mas cujo webhook não chegou;
+ *   - aluno que parou de abrir a área do aluno (na EA o progresso só vem do pull,
+ *     então sem esta passada ninguém reavaliaria a matrícula dele);
+ *   - interruptor desligado depois de já ter travado gente.
+ *
+ * Varre as JÁ TRAVADAS (índice `pace_blocked_at`, poucas linhas) e as matrículas
+ * parceladas vivas cujo progresso passou da cota. `evaluatePaceGate` é idempotente
+ * e nunca lança, então uma falha isolada não derruba a varredura.
+ */
+async function reconcilePaceGates(): Promise<number> {
+  const candidates = await prisma.enrollment.findMany({
+    where: {
+      status: "ACTIVE",
+      paymentType: { in: [...PACE_GATED_PAYMENT_TYPES] },
+      installmentsTotal: { gt: 1 },
+      OR: [
+        { paceBlockedAt: { not: null } },
+        { paceExemptAt: null, progressPercent: { gt: 0 } },
+      ],
+    },
+    select: { id: true },
+    take: PACE_BATCH,
+  })
+
+  let reconciled = 0
+  for (const row of candidates) {
+    const res = await evaluatePaceGate(row.id)
+    if (res?.changed) reconciled++
+  }
+  return reconciled
 }
 
 /**

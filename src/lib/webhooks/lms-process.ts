@@ -1,6 +1,7 @@
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { issueCertificateIfEligible, PaceGateError } from "@/lib/certificates/issue"
+import { evaluatePaceGate } from "@/lib/enrollment/pace"
 import {
   syncSingleLmsCourse,
   deactivateLmsCourse,
@@ -190,6 +191,11 @@ export async function processLmsWebhookEvent(
           progressSyncedAt: new Date(),
         },
       })
+      // Cota de aulas: este é o gatilho mais rápido que temos — o LMS avisa a
+      // cada aula concluída, então a trava cai praticamente no instante em que o
+      // aluno atinge a fatia paga (na EA, sem webhook, a latência é do pull).
+      await evaluatePaceGate(enr.id)
+
       return { ok: true, message: `progresso atualizado (matrícula ${enr.id})` }
     }
 

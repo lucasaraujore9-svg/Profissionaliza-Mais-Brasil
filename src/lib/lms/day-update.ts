@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma"
 import { lmsDayUpdate } from "./client"
 import type { LmsDayStudent } from "./types"
 import { issueCertificateIfEligible, PaceGateError } from "@/lib/certificates/issue"
+import { evaluatePaceGate } from "@/lib/enrollment/pace"
 import { contextLogger } from "@/lib/logger"
 
 const SETTINGS_ID = "default"
@@ -98,6 +99,11 @@ export async function syncLmsDayUpdate(): Promise<LmsDayUpdateResult> {
         },
       })
       progressUpdated += 1
+
+      // Cota de aulas: reavalia com o progresso recém-sincronizado. No LMS este
+      // é o caminho de hora em hora; o webhook `lesson.completed` cobre o tempo
+      // quase real.
+      await evaluatePaceGate(enrollmentId)
 
       // Conclusao => emite o certificado do PMB (dedup interna por enrollment).
       if (completed && settings.certificateAutoIssue) {

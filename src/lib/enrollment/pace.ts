@@ -15,12 +15,315 @@ import {
   findPersonStudentIds,
   setStudentPaceBlock,
 } from "@/lib/students/plataforma-actions"
-import { isPaceBlocked } from "./pace-gate"
+import {
+  evaluatePace,
+  isPaceBlocked,
+  isPaceGatedPlan,
+  installmentWord,
+  type PaceState,
+} from "./pace-gate"
+import { resolvePaceGateSettings } from "./pace-settings"
+import { createNotification } from "@/lib/notifications"
 import { contextLogger } from "@/lib/logger"
 import { swallow } from "@/lib/errors"
 
 /** Matriculas que ainda podem justificar a trava de ritmo. */
 const LIVE_STATUSES = ["ACTIVE", "SUSPENDED"] as const
+
+/** Campos minimos para decidir a cota de uma matricula. */
+const PACE_SELECT = {
+  id: true,
+  tenantId: true,
+  studentId: true,
+  status: true,
+  paymentType: true,
+  installmentsPaid: true,
+  installmentsTotal: true,
+  progressPercent: true,
+  paceBlockedAt: true,
+  paceAppliedPercent: true,
+  paceExemptAt: true,
+} as const
+
+export interface PaceEvaluation {
+  enrollmentId: string
+  /** Fatia do curso liberada agora (0-100). */
+  allowedPercent: number
+  /** A matricula ficou travada ao fim desta avaliacao? */
+  blocked: boolean
+  /** Houve transicao (travou agora / liberou agora). */
+  changed: boolean
+  /** O acesso na plataforma de aulas foi de fato cortado/devolvido. */
+  platformApplied: boolean
+}
+
+/**
+ * Avalia a cota de UMA matricula e reconcilia o mundo com ela: trava quando o
+ * aluno atinge a fatia paga, libera quando uma parcela nova entra.
+ *
+ * IDEMPOTENTE — so age na transicao. Chamada a cada sync de progresso, a cada
+ * parcela paga e na varredura diaria; sem isso, rechamaria EA/LMS a cada rodada.
+ *
+ * Nunca lanca: a cota nao pode derrubar o sync de progresso nem o webhook de
+ * pagamento que a invocou. Devolve null quando nao ha nada a avaliar.
+ */
+export async function evaluatePaceGate(
+  enrollmentId: string,
+): Promise<PaceEvaluation | null> {
+  try {
+    const enrollment = await prisma.enrollment.findUnique({
+      where: { id: enrollmentId },
+      select: {
+        ...PACE_SELECT,
+        course: { select: { nome: true } },
+        student: { select: { nome: true } },
+      },
+    })
+    if (!enrollment) return null
+
+    // Matricula fora de operacao (CANCELLED/COMPLETED/PENDING): nao ha o que
+    // travar. Se carregava a marca da cota, limpa — deixar o flag numa matricula
+    // morta faria a UI mostrar "travado por parcelamento" num curso encerrado.
+    if (enrollment.status !== "ACTIVE") {
+      if (enrollment.paceBlockedAt) {
+        await clearPaceFlags([enrollment.id])
+        await releaseStudentPaceIfClear(enrollment.studentId)
+      }
+      return null
+    }
+
+    const { enabled, strict } = await resolvePaceGateSettings(enrollment.tenantId)
+
+    // Interruptor desligado ou liberacao manual: garante que ninguem fique preso
+    // por uma trava que nao vale mais. Desligar a feature TEM que soltar quem ela
+    // travou — senao o "off" nao seria realmente off.
+    if (!enabled || enrollment.paceExemptAt) {
+      if (enrollment.paceBlockedAt) {
+        await clearPaceFlags([enrollment.id])
+        const released = await releaseStudentPaceIfClear(enrollment.studentId)
+        return {
+          enrollmentId: enrollment.id,
+          allowedPercent: 100,
+          blocked: false,
+          changed: true,
+          platformApplied: released,
+        }
+      }
+      return null
+    }
+
+    const state = evaluatePace(enrollment)
+    const wasBlocked = enrollment.paceBlockedAt !== null
+
+    // `await` obrigatório (não `return applyBlock(...)`): sem ele a promise sai
+    // do bloco try sem ser aguardada e uma rejeição escaparia do catch abaixo —
+    // quebrando o contrato de "nunca lança" e derrubando o sync de progresso ou
+    // o webhook de pagamento que chamou.
+    if (state.blocked && !wasBlocked) {
+      return await applyBlock(enrollment, state, strict)
+    }
+    if (!state.blocked && wasBlocked) {
+      return await applyRelease(enrollment, state)
+    }
+
+    // Sem transicao. Só atualiza a cota exibida quando ela mudou (ex.: parcela
+    // paga que aumentou a fatia sem destravar, porque o aluno ja passou dela).
+    if (state.gated && enrollment.paceAppliedPercent !== state.allowedPercent) {
+      await prisma.enrollment
+        .update({
+          where: { id: enrollment.id },
+          data: { paceAppliedPercent: state.allowedPercent },
+        })
+        .catch(swallow("pace.update_applied_percent"))
+    }
+    return {
+      enrollmentId: enrollment.id,
+      allowedPercent: state.allowedPercent,
+      blocked: state.blocked,
+      changed: false,
+      platformApplied: false,
+    }
+  } catch (err) {
+    contextLogger().error(
+      { err, event: "pace.evaluate_failed", enrollmentId },
+      "avaliacao da cota de aulas falhou",
+    )
+    return null
+  }
+}
+
+/** Trava a matricula e (se a politica permitir) corta o acesso na plataforma. */
+async function applyBlock(
+  enrollment: {
+    id: string
+    studentId: string
+    tenantId: string | null
+    paymentType: Parameters<typeof installmentWord>[0]
+    course: { nome: string }
+    student: { nome: string }
+  },
+  state: PaceState,
+  strict: boolean,
+): Promise<PaceEvaluation> {
+  const cut = await shouldCutPlatformAccess(enrollment, strict)
+  let platformApplied = false
+  if (cut) {
+    try {
+      platformApplied = await setStudentPaceBlock(enrollment.studentId, true)
+    } catch (err) {
+      // A propagacao falhou (EA/LMS fora do ar). NAO abortamos: a marca local
+      // ainda vale para a UI e para a trava de certificado, e a varredura diaria
+      // re-tenta o corte. Abortar deixaria o aluno completamente destravado.
+      contextLogger().error(
+        { err, event: "pace.block_platform_failed", enrollmentId: enrollment.id },
+        "corte do acesso na plataforma falhou — marca local aplicada mesmo assim",
+      )
+    }
+  }
+
+  await prisma.enrollment.update({
+    where: { id: enrollment.id },
+    data: { paceBlockedAt: new Date(), paceAppliedPercent: state.allowedPercent },
+  })
+
+  const word = installmentWord(enrollment.paymentType)
+  await createNotification({
+    audience: "STUDENT",
+    studentId: enrollment.studentId,
+    level: "WARNING",
+    title: `Aulas liberadas até ${state.allowedPercent}% — ${enrollment.course.nome}`,
+    body:
+      `Você já assistiu tudo o que as ${state.installmentsPaid} de ` +
+      `${state.installmentsTotal} ${installmentWord(enrollment.paymentType, true)} pagas liberam. ` +
+      `Pague a próxima ${word} para continuar de onde parou.`,
+    category: "payment",
+    href: "/aluno/pagamentos",
+  }).catch(swallow("pace.notify_student_block"))
+
+  if (enrollment.tenantId) {
+    await createNotification({
+      audience: "TENANT",
+      tenantId: enrollment.tenantId,
+      level: "INFO",
+      title: `Cota de aulas atingida — ${enrollment.student.nome}`,
+      body: `${enrollment.course.nome}: ${state.installmentsPaid}/${state.installmentsTotal} pagas. O acesso volta com a próxima ${word}.`,
+      category: "payment",
+      href: "/painel/financeiro",
+    }).catch(swallow("pace.notify_tenant_block"))
+  }
+
+  contextLogger().info(
+    {
+      event: "pace.blocked",
+      enrollmentId: enrollment.id,
+      allowedPercent: state.allowedPercent,
+      platformCut: platformApplied,
+      strict,
+    },
+    "cota de aulas atingida — matricula travada",
+  )
+
+  return {
+    enrollmentId: enrollment.id,
+    allowedPercent: state.allowedPercent,
+    blocked: true,
+    changed: true,
+    platformApplied,
+  }
+}
+
+/** Libera a matricula (parcela nova entrou) e devolve o acesso, se puder. */
+async function applyRelease(
+  enrollment: { id: string; studentId: string; course: { nome: string } },
+  state: PaceState,
+): Promise<PaceEvaluation> {
+  await prisma.enrollment.update({
+    where: { id: enrollment.id },
+    data: { paceBlockedAt: null, paceAppliedPercent: state.allowedPercent },
+  })
+
+  const platformApplied = await releaseStudentPaceIfClear(enrollment.studentId)
+
+  await createNotification({
+    audience: "STUDENT",
+    studentId: enrollment.studentId,
+    level: "SUCCESS",
+    title: `Novas aulas liberadas — ${enrollment.course.nome}`,
+    body:
+      state.allowedPercent >= 100
+        ? "Curso quitado: todas as aulas e o certificado estão liberados."
+        : `Pagamento confirmado. Você já pode assistir até ${state.allowedPercent}% do curso.`,
+    category: "enrollment",
+    href: "/aluno/cursos",
+  }).catch(swallow("pace.notify_student_release"))
+
+  contextLogger().info(
+    {
+      event: "pace.released",
+      enrollmentId: enrollment.id,
+      allowedPercent: state.allowedPercent,
+      platformRestored: platformApplied,
+    },
+    "cota de aulas ampliada — matricula liberada",
+  )
+
+  return {
+    enrollmentId: enrollment.id,
+    allowedPercent: state.allowedPercent,
+    blocked: false,
+    changed: true,
+    platformApplied,
+  }
+}
+
+/**
+ * Podemos cortar o acesso do aluno na plataforma de aulas?
+ *
+ * O `status` da EA e por LOGIN, nao por curso — e o login e compartilhado entre
+ * unidades pela mesma pessoa. Cortar por causa de UM curso derruba todos os
+ * outros, inclusive os ja quitados (28,6% dos logins tem mais de um curso ativo,
+ * medido em prod em 2026-07-22).
+ *
+ * Politica padrao (`strict = false`): so corta quando NENHUMA outra matricula
+ * viva da pessoa esta liberada. Nos demais casos a trava de aulas nao acontece —
+ * mas a de CONCLUSAO (certificado) continua valendo, e e ela que impede o abuso.
+ *
+ * Recalcula a cota dos irmaos em vez de ler `paceBlockedAt`: duas matriculas que
+ * batem a cota na mesma varredura precisam decidir igual, independentemente da
+ * ordem em que forem avaliadas.
+ */
+async function shouldCutPlatformAccess(
+  enrollment: { id: string; studentId: string },
+  strict: boolean,
+): Promise<boolean> {
+  if (strict) return true
+
+  const personIds = await findPersonStudentIds(enrollment.studentId)
+  const siblings = await prisma.enrollment.findMany({
+    where: {
+      studentId: { in: personIds },
+      status: { in: [...LIVE_STATUSES] },
+      id: { not: enrollment.id },
+    },
+    select: PACE_SELECT,
+  })
+
+  const anyFree = siblings.some(
+    (s) => s.paceExemptAt !== null || !isPaceGatedPlan(s) || !isPaceBlocked(s),
+  )
+  if (anyFree) {
+    contextLogger().info(
+      {
+        event: "pace.skip_platform_cut",
+        enrollmentId: enrollment.id,
+        studentId: enrollment.studentId,
+        freeSiblings: siblings.length,
+      },
+      "corte na plataforma pulado — o login tem outro curso liberado (trava de certificado segue valendo)",
+    )
+  }
+  return !anyFree
+}
 
 /**
  * Libera o acesso do aluno na plataforma SE nenhuma matricula viva da mesma

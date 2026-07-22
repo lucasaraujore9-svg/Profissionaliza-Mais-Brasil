@@ -11,6 +11,7 @@
 import type { BoletoInstallment } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { fulfillEnrollment, type TenantContext } from "@/lib/enrollment/fulfill"
+import { evaluatePaceGate } from "@/lib/enrollment/pace"
 import { unblockStudentInEA } from "@/lib/students/plataforma-actions"
 import { createNotification } from "@/lib/notifications"
 import { swallow } from "@/lib/errors"
@@ -63,6 +64,13 @@ export async function settleBoletoInstallment(params: {
     .catch(swallow("installments.settle.mark_paid"))
 
   await maybeReactivate(installment.enrollmentId, wasSuspended)
+
+  // Cota de aulas: a parcela paga aumentou a fatia liberada. Reavalia DEPOIS do
+  // maybeReactivate — que pode ter acabado de devolver o acesso por
+  // inadimplência resolvida — para que a trava de ritmo seja reaplicada caso o
+  // aluno já tenha passado da nova cota. Sem esta ordem, quitar uma parcela
+  // atrasada destravaria o curso inteiro de quem está adiantado no conteúdo.
+  await evaluatePaceGate(installment.enrollmentId)
 }
 
 /**

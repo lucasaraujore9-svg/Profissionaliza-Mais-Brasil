@@ -14,6 +14,7 @@ import { getStudentPlatformLoginUrl } from "@/lib/students/platform-credentials"
 import type { EnrollmentSchoolAccess } from "@/lib/email/templates/enrollment"
 import { generatePasswordWithHash } from "@/lib/students/generate-password"
 import { createNotification } from "@/lib/notifications"
+import { evaluatePaceGate } from "@/lib/enrollment/pace"
 import { addMonthsClamped } from "@/lib/dates"
 import { appUrl as resolveAppUrl } from "@/lib/tenant/urls"
 import { afterResponse } from "@/lib/after-response"
@@ -271,6 +272,11 @@ async function fulfillEnrollmentLocked(
         href: "/painel/financeiro",
       })
     }
+
+    // Cota de aulas: a mensalidade/parcela paga ampliou a fatia liberada.
+    // Idempotente — no carnê o `settle` reavalia de novo depois de tratar a
+    // reativação por inadimplência, e a segunda passada vira no-op.
+    await evaluatePaceGate(enrollment.id)
 
     return
   }

@@ -1,16 +1,30 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
-// O que precisa ser provado: a liberação do acesso do aluno na plataforma só
-// acontece quando NENHUMA matrícula viva da mesma PESSOA ainda merece a trava.
-// O login da plataforma é único por pessoa e compartilhado entre unidades —
-// liberar cedo demais devolveria acesso a um curso que ainda não foi pago.
+// Motor da cota de aulas. O que precisa ser provado:
+//  (a) trava AO ATINGIR a fatia paga e libera quando uma parcela nova entra;
+//  (b) é IDEMPOTENTE — só chama EA/LMS na transição, não a cada varredura;
+//  (c) a política de colateral: o status da plataforma é por LOGIN, então não
+//      podemos cortar o acesso de quem tem outro curso liberado no mesmo login;
+//  (d) desligar o interruptor SOLTA quem já estava travado;
+//  (e) falha da plataforma não pode deixar o aluno destravado localmente.
 
 vi.mock("@/lib/prisma", () => ({
-  prisma: { enrollment: { findMany: vi.fn(), updateMany: vi.fn() } },
+  prisma: {
+    enrollment: {
+      findUnique: vi.fn(),
+      findMany: vi.fn(),
+      update: vi.fn(),
+      updateMany: vi.fn(),
+    },
+  },
 }))
 vi.mock("@/lib/students/plataforma-actions", () => ({
   findPersonStudentIds: vi.fn(),
   setStudentPaceBlock: vi.fn(),
+}))
+vi.mock("./pace-settings", () => ({ resolvePaceGateSettings: vi.fn() }))
+vi.mock("@/lib/notifications", () => ({
+  createNotification: vi.fn(() => Promise.resolve()),
 }))
 vi.mock("@/lib/logger", () => ({
   contextLogger: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }),
@@ -21,35 +35,220 @@ import {
   findPersonStudentIds,
   setStudentPaceBlock,
 } from "@/lib/students/plataforma-actions"
-import { releaseStudentPaceIfClear, clearPaceFlags } from "./pace"
+import { resolvePaceGateSettings } from "./pace-settings"
+import {
+  evaluatePaceGate,
+  releaseStudentPaceIfClear,
+  clearPaceFlags,
+} from "./pace"
 
 const p = prisma as unknown as {
   enrollment: {
+    findUnique: ReturnType<typeof vi.fn>
     findMany: ReturnType<typeof vi.fn>
+    update: ReturnType<typeof vi.fn>
     updateMany: ReturnType<typeof vi.fn>
   }
 }
 const personIdsMock = findPersonStudentIds as unknown as ReturnType<typeof vi.fn>
 const setBlockMock = setStudentPaceBlock as unknown as ReturnType<typeof vi.fn>
+const settingsMock = resolvePaceGateSettings as unknown as ReturnType<typeof vi.fn>
 
-/** Matrícula de carnê: `paid` de `total` parcelas pagas, `progress`% assistido. */
+/** Matrícula de carnê: `paid` de `total` pagas, `progress`% assistido. */
 function carne(paid: number, total: number, progress: number, extra = {}) {
   return {
     id: "e1",
+    tenantId: "t1",
+    studentId: "s1",
+    status: "ACTIVE",
     paymentType: "BOLETO_INSTALLMENT",
     installmentsPaid: paid,
     installmentsTotal: total,
     progressPercent: progress,
+    paceBlockedAt: null,
+    paceAppliedPercent: null,
     paceExemptAt: null,
+    course: { nome: "Eletricista" },
+    student: { nome: "Maria" },
     ...extra,
   }
 }
 
 beforeEach(() => {
   vi.clearAllMocks()
+  settingsMock.mockResolvedValue({ enabled: true, strict: false })
   personIdsMock.mockResolvedValue(["s1"])
   setBlockMock.mockResolvedValue(true)
+  p.enrollment.findMany.mockResolvedValue([])
+  p.enrollment.update.mockResolvedValue({})
   p.enrollment.updateMany.mockResolvedValue({ count: 0 })
+})
+
+describe("evaluatePaceGate — travar", () => {
+  it("trava ao ATINGIR a cota (2x, 1 paga = 50%)", async () => {
+    p.enrollment.findUnique.mockResolvedValue(carne(1, 2, 50))
+
+    const out = await evaluatePaceGate("e1")
+
+    expect(out).toMatchObject({ blocked: true, changed: true, allowedPercent: 50 })
+    expect(setBlockMock).toHaveBeenCalledWith("s1", true)
+    expect(p.enrollment.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ paceAppliedPercent: 50 }),
+      }),
+    )
+  })
+
+  it("não trava quem ainda está abaixo da cota", async () => {
+    p.enrollment.findUnique.mockResolvedValue(carne(1, 2, 49))
+
+    const out = await evaluatePaceGate("e1")
+
+    expect(out).toMatchObject({ blocked: false, changed: false })
+    expect(setBlockMock).not.toHaveBeenCalled()
+  })
+
+  it("é idempotente — já travado não rechama a plataforma", async () => {
+    p.enrollment.findUnique.mockResolvedValue(
+      carne(1, 2, 70, { paceBlockedAt: new Date(), paceAppliedPercent: 50 }),
+    )
+
+    const out = await evaluatePaceGate("e1")
+
+    expect(out?.changed).toBe(false)
+    expect(setBlockMock).not.toHaveBeenCalled()
+  })
+
+  it("marca localmente mesmo se o corte na plataforma falhar", async () => {
+    // Deixar a matrícula destravada porque a EA caiu seria pior: a trava de
+    // certificado depende da marca local, e a varredura diária re-tenta o corte.
+    p.enrollment.findUnique.mockResolvedValue(carne(1, 2, 50))
+    setBlockMock.mockRejectedValue(new Error("EA fora do ar"))
+
+    const out = await evaluatePaceGate("e1")
+
+    expect(out).toMatchObject({ blocked: true, changed: true, platformApplied: false })
+    expect(p.enrollment.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ paceBlockedAt: expect.any(Date) }),
+      }),
+    )
+  })
+})
+
+describe("evaluatePaceGate — política de colateral na plataforma", () => {
+  it("NÃO corta o acesso quando o login tem outro curso liberado", async () => {
+    // O status da EA é por login: cortar aqui derrubaria um curso já pago.
+    p.enrollment.findUnique.mockResolvedValue(carne(1, 2, 50))
+    p.enrollment.findMany.mockResolvedValue([
+      { ...carne(1, 1, 90, { id: "e2" }), paymentType: "ONE_TIME" },
+    ])
+
+    const out = await evaluatePaceGate("e1")
+
+    // A matrícula fica travada localmente (UI + certificado), mas o aluno não
+    // perde o acesso à plataforma.
+    expect(out).toMatchObject({ blocked: true, platformApplied: false })
+    expect(setBlockMock).not.toHaveBeenCalled()
+  })
+
+  it("corta quando TODOS os cursos do login estão travados pela cota", async () => {
+    p.enrollment.findUnique.mockResolvedValue(carne(1, 2, 50))
+    p.enrollment.findMany.mockResolvedValue([carne(1, 4, 80, { id: "e2" })])
+
+    await evaluatePaceGate("e1")
+
+    expect(setBlockMock).toHaveBeenCalledWith("s1", true)
+  })
+
+  it("no modo estrito corta mesmo com outro curso liberado", async () => {
+    settingsMock.mockResolvedValue({ enabled: true, strict: true })
+    p.enrollment.findUnique.mockResolvedValue(carne(1, 2, 50))
+
+    await evaluatePaceGate("e1")
+
+    expect(setBlockMock).toHaveBeenCalledWith("s1", true)
+    // Modo estrito nem consulta os irmãos.
+    expect(p.enrollment.findMany).not.toHaveBeenCalled()
+  })
+})
+
+describe("evaluatePaceGate — liberar", () => {
+  it("libera quando uma parcela nova amplia a cota além do progresso", async () => {
+    p.enrollment.findUnique.mockResolvedValue(
+      carne(2, 2, 60, { paceBlockedAt: new Date(), paceAppliedPercent: 50 }),
+    )
+
+    const out = await evaluatePaceGate("e1")
+
+    expect(out).toMatchObject({ blocked: false, changed: true, allowedPercent: 100 })
+    expect(setBlockMock).toHaveBeenCalledWith("s1", false)
+  })
+
+  it("continua travado se a nova cota ainda não passou o progresso", async () => {
+    // 2 de 6 pagas = 33%, mas o aluno já assistiu 50% → segue travado.
+    p.enrollment.findUnique.mockResolvedValue(
+      carne(2, 6, 50, { paceBlockedAt: new Date(), paceAppliedPercent: 16 }),
+    )
+
+    const out = await evaluatePaceGate("e1")
+
+    expect(out).toMatchObject({ blocked: true, changed: false })
+    expect(setBlockMock).not.toHaveBeenCalled()
+    // A cota exibida acompanha o pagamento mesmo sem destravar.
+    expect(p.enrollment.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { paceAppliedPercent: 33 } }),
+    )
+  })
+
+  it("desligar o interruptor SOLTA quem já estava travado", async () => {
+    settingsMock.mockResolvedValue({ enabled: false, strict: false })
+    p.enrollment.findUnique.mockResolvedValue(
+      carne(1, 6, 90, { paceBlockedAt: new Date() }),
+    )
+
+    const out = await evaluatePaceGate("e1")
+
+    expect(out).toMatchObject({ blocked: false, changed: true })
+    expect(p.enrollment.updateMany).toHaveBeenCalled()
+    expect(setBlockMock).toHaveBeenCalledWith("s1", false)
+  })
+
+  it("liberação manual (paceExemptAt) desarma a trava", async () => {
+    p.enrollment.findUnique.mockResolvedValue(
+      carne(1, 6, 90, { paceBlockedAt: new Date(), paceExemptAt: new Date() }),
+    )
+
+    const out = await evaluatePaceGate("e1")
+
+    expect(out).toMatchObject({ blocked: false, changed: true })
+    expect(setBlockMock).toHaveBeenCalledWith("s1", false)
+  })
+
+  it("matrícula fora de operação limpa a marca e reavalia o aluno", async () => {
+    p.enrollment.findUnique.mockResolvedValue(
+      carne(1, 6, 90, { status: "CANCELLED", paceBlockedAt: new Date() }),
+    )
+
+    expect(await evaluatePaceGate("e1")).toBeNull()
+    expect(p.enrollment.updateMany).toHaveBeenCalled()
+    expect(setBlockMock).toHaveBeenCalledWith("s1", false)
+  })
+
+  it("não avalia matrícula inexistente", async () => {
+    p.enrollment.findUnique.mockResolvedValue(null)
+    expect(await evaluatePaceGate("nope")).toBeNull()
+  })
+
+  it("NUNCA lança — falha na transição não derruba quem chamou", async () => {
+    // Guarda o `await` em `return await applyBlock(...)`: sem ele a promise sai
+    // do try sem ser aguardada e a rejeição escapa do catch, derrubando o sync
+    // de progresso / o webhook de pagamento que invocou a avaliação.
+    p.enrollment.findUnique.mockResolvedValue(carne(1, 2, 50))
+    p.enrollment.update.mockRejectedValue(new Error("pooler caiu"))
+
+    await expect(evaluatePaceGate("e1")).resolves.toBeNull()
+  })
 })
 
 describe("releaseStudentPaceIfClear", () => {
@@ -61,28 +260,24 @@ describe("releaseStudentPaceIfClear", () => {
   })
 
   it("libera quando as matrículas vivas estão dentro da cota", async () => {
-    // 1 de 2 parcelas pagas = cota 50%; com 30% assistido ainda há folga.
     p.enrollment.findMany.mockResolvedValue([carne(1, 2, 30)])
 
     expect(await releaseStudentPaceIfClear("s1")).toBe(true)
-    expect(setBlockMock).toHaveBeenCalledWith("s1", false)
   })
 
   it("NÃO libera enquanto outra matrícula ainda estiver travada", async () => {
-    // Cota 50% com 60% assistido → segue travado.
     p.enrollment.findMany.mockResolvedValue([carne(1, 2, 60, { id: "e2" })])
 
     expect(await releaseStudentPaceIfClear("s1")).toBe(false)
     expect(setBlockMock).not.toHaveBeenCalled()
   })
 
-  it("ignora matrícula com liberação manual (paceExemptAt)", async () => {
+  it("ignora matrícula com liberação manual", async () => {
     p.enrollment.findMany.mockResolvedValue([
       carne(1, 2, 90, { paceExemptAt: new Date() }),
     ])
 
     expect(await releaseStudentPaceIfClear("s1")).toBe(true)
-    expect(setBlockMock).toHaveBeenCalledWith("s1", false)
   })
 
   it("olha as matrículas de TODAS as identidades da mesma pessoa", async () => {

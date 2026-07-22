@@ -2,6 +2,8 @@ import { prisma } from "@/lib/prisma"
 import { cursosVinculados } from "@/lib/plataforma-cursos/client"
 import type { EACursoVinculado } from "@/lib/plataforma-cursos/types"
 import { issueCertificateIfEligible, PaceGateError } from "@/lib/certificates/issue"
+import { evaluatePaceGate } from "@/lib/enrollment/pace"
+import { isPaceGatedPlan } from "@/lib/enrollment/pace-gate"
 import { get as cacheGet, set as cacheSet } from "@/lib/redis/cache"
 import { contextLogger } from "@/lib/logger"
 
@@ -258,6 +260,16 @@ export async function syncStudentProgress(
       where: { id: u.enrollmentId },
       data: u.data,
     })
+  }
+
+  // Cota de aulas: com o progresso recém-atualizado, reavalia quem passou da
+  // fatia paga. Este é o gatilho principal na EA — a plataforma não tem webhook,
+  // então o progresso só chega por este pull (cron diário e, na prática, a cada
+  // abertura de /aluno/cursos, com cache de 5 min). Pré-filtra pelo plano com a
+  // função pura para não consultar configuração de quem não é parcelado.
+  for (const e of enrollmentsSorted) {
+    if (!isPaceGatedPlan(e)) continue
+    await evaluatePaceGate(e.id)
   }
 
   // Emite certificados (sequencial para nao saturar render PDF)
