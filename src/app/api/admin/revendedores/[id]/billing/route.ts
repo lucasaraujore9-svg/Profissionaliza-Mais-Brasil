@@ -405,6 +405,13 @@ export const PATCH = withRequestContextParams<{ id: string }>(
       subscriptionCreated: Boolean(newSubscriptionId),
       free: clearSubscription,
       activated: updateData.status === "ACTIVE",
+      // A cobrança foi arrumada, mas a unidade continua CANCELADA — a vitrine
+      // segue fora do ar. Status e cobrança são independentes de propósito
+      // (reativar é decisão explícita), então quem editou o Financeiro precisa
+      // ser avisado de que falta um passo; sem isto o admin recria a assinatura
+      // e acha que resolveu.
+      stillCancelled:
+        (updateData.status ?? tenant.status) === "CANCELLED" && asaasUpdated,
       promo: wantsPromo
         ? { months: parsed.data.promoMonths, value: parsed.data.promoValue }
         : null,

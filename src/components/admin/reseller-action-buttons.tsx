@@ -157,6 +157,19 @@ export function ResellerActionButtons({
             </p>
           )}
 
+          {/* Cancelar NÃO pode ser uma via de mão única. Recriar a assinatura na
+              aba Financeiro não tira a unidade de CANCELLED (o status é
+              independente da cobrança), então sem este aviso + o botão Ativar
+              habilitado o admin recria a cobrança e a vitrine segue fora do ar
+              sem nenhuma pista do que falta fazer. */}
+          {isCancelled && (
+            <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              Unidade cancelada: a vitrine está fora do ar e o painel bloqueado.
+              Recriar a cobrança no Financeiro <strong>não</strong> reabre a
+              unidade — use <strong>Reativar</strong> abaixo.
+            </p>
+          )}
+
           <div className="mt-4 flex flex-col gap-2 sm:flex-row">
             <Button
               variant="outline"
@@ -169,13 +182,24 @@ export function ResellerActionButtons({
             </Button>
             <Button
               className="flex-1 bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)]"
-              disabled={isCancelled || loading !== null || status === "ACTIVE"}
+              disabled={loading !== null || status === "ACTIVE"}
               onClick={() => setStatus("ACTIVE")}
             >
               <Play className="h-4 w-4" />
-              {loading === "ACTIVE" ? "Aguarde..." : "Ativar"}
+              {loading === "ACTIVE"
+                ? "Aguarde..."
+                : isCancelled
+                  ? "Reativar unidade"
+                  : "Ativar"}
             </Button>
           </div>
+
+          {isCancelled && (
+            <p className="mt-2 text-[11px] text-gray-500">
+              Reativar apenas reabre o acesso. Confira antes, no Financeiro, se a
+              assinatura e a próxima cobrança estão como você espera.
+            </p>
+          )}
         </ResellerCard>
       )}
 

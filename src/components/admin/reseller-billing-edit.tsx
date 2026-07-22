@@ -160,14 +160,20 @@ export function ResellerBillingEdit({
         setFirstPaymentId(json.data.firstPaymentId)
       }
 
+      // A unidade segue CANCELADA: arrumar a cobrança não reabre a vitrine.
+      // Sem este aviso o admin acha que resolveu e a loja continua fora do ar.
+      const pendente = json.data?.stillCancelled
+        ? " Atenção: a unidade continua CANCELADA e a vitrine segue fora do ar — reative em Configurações › Status da assinatura."
+        : ""
+
       if (json.data?.free) {
-        setOk("Revenda agora é gratuita — cobrança removida do Asaas.")
+        setOk("Revenda agora é gratuita — cobrança removida do Asaas." + pendente)
       } else if (json.data?.promo) {
-        setOk("Promoção configurada com sucesso.")
+        setOk("Promoção configurada com sucesso." + pendente)
       } else if (json.data?.subscriptionCreated) {
-        setOk("Cobrança automática criada com sucesso.")
+        setOk("Cobrança automática criada com sucesso." + pendente)
       } else if (json.data?.asaasUpdated) {
-        setOk("Cobrança atualizada com sucesso.")
+        setOk("Cobrança atualizada com sucesso." + pendente)
       } else {
         setOk("Banco atualizado.")
       }
