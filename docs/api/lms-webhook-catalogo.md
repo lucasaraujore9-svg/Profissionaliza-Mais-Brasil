@@ -500,11 +500,12 @@ aluno antes.
 `tenantExternalId` e `returnUrl` são opcionais. **Erros:** `400` (`studentExternalId`
 obrigatório), `404` (aluno não encontrado — matricule antes).
 
-### 8.6. `PATCH /api/v1/enrollments/:id/limit` — cota de aulas ⏳ *a implementar*
+### 8.6. `PATCH /api/v1/enrollments/:id/limit` — cota de aulas ✅ *implementado*
 
-> **Status:** especificado pelo PMB, **pendente do lado do LMS**. Enquanto não existir,
-> o PMB usa `PATCH /students/:id/access` (§8.3) como paliativo — que é tudo-ou-nada
-> por aluno. Este endpoint é o que torna a trava **exata e por curso**.
+> **Status:** implementado dos DOIS lados (LMS commit `83ec0b1`). O PMB envia o teto por
+> `setLmsEnrollmentLimit`; matrícula sem LMS segue no paliativo `PATCH /students/:id/access`
+> (§8.3), que é tudo-ou-nada por aluno. **Pendente de deploy:** as 3 colunas novas em
+> `Enrollment` precisam da migration no Postgres do LMS antes de subir o código.
 
 **Para quê.** Na venda parcelada (carnê/mensalidade) o aluno só pode avançar até a
 fração do curso que já pagou: `cota = floor(parcelas pagas / total × 100)`. Um plano

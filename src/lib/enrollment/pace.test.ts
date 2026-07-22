@@ -23,6 +23,13 @@ vi.mock("@/lib/students/plataforma-actions", () => ({
   setStudentPaceBlock: vi.fn(),
 }))
 vi.mock("./pace-settings", () => ({ resolvePaceGateSettings: vi.fn() }))
+// LMS desligado por padrão: os testes da EA seguem exercitando o corte por aluno.
+// Os testes do teto por matrícula ligam explicitamente.
+vi.mock("@/lib/lms", () => ({
+  isLmsConfigured: vi.fn(() => false),
+  setLmsEnrollmentLimit: vi.fn(async () => undefined),
+}))
+vi.mock("@/lib/tenant/urls", () => ({ appUrl: () => "https://pmb.test" }))
 vi.mock("@/lib/notifications", () => ({
   createNotification: vi.fn(() => Promise.resolve()),
 }))
@@ -36,6 +43,7 @@ import {
   setStudentPaceBlock,
 } from "@/lib/students/plataforma-actions"
 import { resolvePaceGateSettings } from "./pace-settings"
+import { isLmsConfigured, setLmsEnrollmentLimit } from "@/lib/lms"
 import {
   evaluatePaceGate,
   releaseStudentPaceIfClear,
@@ -53,6 +61,8 @@ const p = prisma as unknown as {
 const personIdsMock = findPersonStudentIds as unknown as ReturnType<typeof vi.fn>
 const setBlockMock = setStudentPaceBlock as unknown as ReturnType<typeof vi.fn>
 const settingsMock = resolvePaceGateSettings as unknown as ReturnType<typeof vi.fn>
+const lmsConfiguredMock = isLmsConfigured as unknown as ReturnType<typeof vi.fn>
+const lmsLimitMock = setLmsEnrollmentLimit as unknown as ReturnType<typeof vi.fn>
 
 /** Matrícula de carnê: `paid` de `total` pagas, `progress`% assistido. */
 function carne(paid: number, total: number, progress: number, extra = {}) {
@@ -68,6 +78,7 @@ function carne(paid: number, total: number, progress: number, extra = {}) {
     paceBlockedAt: null,
     paceAppliedPercent: null,
     paceExemptAt: null,
+    lmsEnrollmentId: null,
     course: { nome: "Eletricista" },
     student: { nome: "Maria", status: "ATIVO" },
     ...extra,
@@ -82,6 +93,99 @@ beforeEach(() => {
   p.enrollment.findMany.mockResolvedValue([])
   p.enrollment.update.mockResolvedValue({})
   p.enrollment.updateMany.mockResolvedValue({ count: 0 })
+  lmsConfiguredMock.mockReturnValue(false)
+  lmsLimitMock.mockResolvedValue(undefined)
+})
+
+describe("evaluatePaceGate — teto por matrícula no LMS", () => {
+  // O LMS aceita cota POR MATRÍCULA (PATCH /enrollments/:id/limit). É exato e
+  // não tem o colateral do status da EA, que é por login e derrubaria os outros
+  // cursos da pessoa — por isso este caminho ignora a política de colateral.
+  beforeEach(() => {
+    lmsConfiguredMock.mockReturnValue(true)
+  })
+
+  it("manda o teto ao LMS e NÃO corta o aluno inteiro", async () => {
+    p.enrollment.findUnique.mockResolvedValue(
+      carne(1, 2, 50, { lmsEnrollmentId: "lms_enr_1" }),
+    )
+
+    const out = await evaluatePaceGate("e1")
+
+    expect(lmsLimitMock).toHaveBeenCalledWith(
+      "lms_enr_1",
+      50,
+      expect.objectContaining({ reason: "installment" }),
+    )
+    expect(setBlockMock).not.toHaveBeenCalled()
+    expect(out).toMatchObject({ blocked: true, platformApplied: true })
+  })
+
+  it("não consulta a política de colateral — o teto não tem colateral", async () => {
+    p.enrollment.findUnique.mockResolvedValue(
+      carne(1, 2, 50, { lmsEnrollmentId: "lms_enr_1" }),
+    )
+
+    await evaluatePaceGate("e1")
+
+    expect(p.enrollment.findMany).not.toHaveBeenCalled()
+  })
+
+  it("quitado REMOVE o teto (null), não apenas amplia", async () => {
+    p.enrollment.findUnique.mockResolvedValue(
+      carne(2, 2, 60, {
+        lmsEnrollmentId: "lms_enr_1",
+        paceBlockedAt: new Date(),
+        paceAppliedPercent: 50,
+        student: { nome: "Maria", status: "DEVEDOR" },
+      }),
+    )
+
+    await evaluatePaceGate("e1")
+
+    expect(lmsLimitMock).toHaveBeenCalledWith("lms_enr_1", null, expect.anything())
+  })
+
+  it("parcela nova amplia o teto mesmo sem destravar", async () => {
+    // 2 de 6 pagas = 33%, mas o aluno já assistiu 50%: segue travado — e ainda
+    // assim o teto no LMS precisa subir, senão ele pagou e continuaria preso.
+    p.enrollment.findUnique.mockResolvedValue(
+      carne(2, 6, 50, {
+        lmsEnrollmentId: "lms_enr_1",
+        paceBlockedAt: new Date(),
+        paceAppliedPercent: 16,
+        student: { nome: "Maria", status: "DEVEDOR" },
+      }),
+    )
+
+    await evaluatePaceGate("e1")
+
+    expect(lmsLimitMock).toHaveBeenCalledWith("lms_enr_1", 33, expect.anything())
+  })
+
+  it("LMS fora do ar cai no corte por aluno (fail-closed)", async () => {
+    lmsLimitMock.mockRejectedValue(new Error("LMS 502"))
+    p.enrollment.findUnique.mockResolvedValue(
+      carne(1, 2, 50, { lmsEnrollmentId: "lms_enr_1" }),
+    )
+
+    const out = await evaluatePaceGate("e1")
+
+    expect(setBlockMock).toHaveBeenCalledWith("s1", true)
+    expect(out).toMatchObject({ blocked: true })
+  })
+
+  it("sem LMS configurado, nem tenta — usa o caminho da EA", async () => {
+    lmsConfiguredMock.mockReturnValue(false)
+    p.enrollment.findUnique.mockResolvedValue(
+      carne(1, 2, 50, { lmsEnrollmentId: "lms_enr_1" }),
+    )
+
+    await evaluatePaceGate("e1")
+
+    expect(lmsLimitMock).not.toHaveBeenCalled()
+    expect(setBlockMock).toHaveBeenCalledWith("s1", true)
+  })
 })
 
 describe("evaluatePaceGate — travar", () => {

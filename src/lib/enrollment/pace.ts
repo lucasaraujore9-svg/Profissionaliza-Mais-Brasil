@@ -23,6 +23,8 @@ import {
   type PaceState,
 } from "./pace-gate"
 import { resolvePaceGateSettings } from "./pace-settings"
+import { setLmsEnrollmentLimit, isLmsConfigured } from "@/lib/lms"
+import { appUrl } from "@/lib/tenant/urls"
 import { createNotification } from "@/lib/notifications"
 import { contextLogger } from "@/lib/logger"
 import { swallow } from "@/lib/errors"
@@ -43,6 +45,9 @@ const PACE_SELECT = {
   paceBlockedAt: true,
   paceAppliedPercent: true,
   paceExemptAt: true,
+  // Matricula no LMS: quando existe, a cota vai como TETO por matricula em vez
+  // do corte por aluno. Ver applyLmsLimit.
+  lmsEnrollmentId: true,
 } as const
 
 export interface PaceEvaluation {
@@ -175,6 +180,13 @@ export async function evaluatePaceGate(
           data: { paceAppliedPercent: state.allowedPercent },
         })
         .catch(swallow("pace.update_applied_percent"))
+      // A cota subiu sem destravar (o aluno ja passou dela): o teto no LMS
+      // precisa acompanhar mesmo assim, senao o aluno pagou e continuaria
+      // preso na fatia antiga.
+      await applyLmsLimit(
+        enrollment,
+        state.allowedPercent >= 100 ? null : state.allowedPercent,
+      )
     }
     return {
       enrollmentId: enrollment.id,
@@ -192,6 +204,43 @@ export async function evaluatePaceGate(
   }
 }
 
+/**
+ * Propaga a cota ao LMS como TETO POR MATRICULA (PATCH /enrollments/:id/limit).
+ *
+ * E o caminho preferencial sempre que a matricula for do LMS: ao contrario do
+ * status da EA — que e por login e derrubaria os outros cursos da pessoa — o
+ * teto vale so para esta matricula. Por isso NAO passa pela politica de
+ * colateral: nao ha colateral a evitar.
+ *
+ * `percent` null remove o teto (quitado). Devolve false se a chamada falhou —
+ * a varredura diaria re-tenta.
+ */
+async function applyLmsLimit(
+  enrollment: { id: string; lmsEnrollmentId: string | null },
+  percent: number | null,
+): Promise<boolean> {
+  if (!enrollment.lmsEnrollmentId || !isLmsConfigured()) return false
+  try {
+    await setLmsEnrollmentLimit(enrollment.lmsEnrollmentId, percent, {
+      reason: "installment",
+      unlockUrl: `${appUrl().replace(/\/$/, "")}/aluno/pagamentos`,
+    })
+    return true
+  } catch (err) {
+    contextLogger().error(
+      {
+        err,
+        event: "pace.lms_limit_failed",
+        enrollmentId: enrollment.id,
+        lmsEnrollmentId: enrollment.lmsEnrollmentId,
+        percent,
+      },
+      "envio da cota ao LMS falhou — varredura diaria re-tenta",
+    )
+    return false
+  }
+}
+
 /** Trava a matricula e (se a politica permitir) corta o acesso na plataforma. */
 async function applyBlock(
   enrollment: {
@@ -199,14 +248,18 @@ async function applyBlock(
     studentId: string
     tenantId: string | null
     paymentType: Parameters<typeof installmentWord>[0]
+    lmsEnrollmentId: string | null
     course: { nome: string }
     student: { nome: string }
   },
   state: PaceState,
   strict: boolean,
 ): Promise<PaceEvaluation> {
-  const cut = await shouldCutPlatformAccess(enrollment, strict)
-  let platformApplied = false
+  // LMS: teto por matricula, exato e sem colateral. So caimos no corte por
+  // aluno (EA) quando a matricula nao e do LMS.
+  let platformApplied = await applyLmsLimit(enrollment, state.allowedPercent)
+
+  const cut = !platformApplied && (await shouldCutPlatformAccess(enrollment, strict))
   if (cut) {
     try {
       platformApplied = await setStudentPaceBlock(enrollment.studentId, true)
@@ -274,7 +327,12 @@ async function applyBlock(
 
 /** Libera a matricula (parcela nova entrou) e devolve o acesso, se puder. */
 async function applyRelease(
-  enrollment: { id: string; studentId: string; course: { nome: string } },
+  enrollment: {
+    id: string
+    studentId: string
+    lmsEnrollmentId: string | null
+    course: { nome: string }
+  },
   state: PaceState,
 ): Promise<PaceEvaluation> {
   await prisma.enrollment.update({
@@ -282,7 +340,13 @@ async function applyRelease(
     data: { paceBlockedAt: null, paceAppliedPercent: state.allowedPercent },
   })
 
-  const platformApplied = await releaseStudentPaceIfClear(enrollment.studentId)
+  // Quitado remove o teto; cota ampliada (mas ainda parcial) apenas sobe o teto.
+  const lmsApplied = await applyLmsLimit(
+    enrollment,
+    state.allowedPercent >= 100 ? null : state.allowedPercent,
+  )
+  const platformApplied =
+    (await releaseStudentPaceIfClear(enrollment.studentId)) || lmsApplied
 
   await createNotification({
     audience: "STUDENT",
