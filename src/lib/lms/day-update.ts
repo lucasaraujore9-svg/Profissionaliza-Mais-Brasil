@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { lmsDayUpdate } from "./client"
 import type { LmsDayStudent } from "./types"
-import { issueCertificateIfEligible } from "@/lib/certificates/issue"
+import { issueCertificateIfEligible, PaceGateError } from "@/lib/certificates/issue"
 import { contextLogger } from "@/lib/logger"
 
 const SETTINGS_ID = "default"
@@ -105,10 +105,20 @@ export async function syncLmsDayUpdate(): Promise<LmsDayUpdateResult> {
           await issueCertificateIfEligible(enrollmentId, "AUTO")
           certificatesIssued += 1
         } catch (err) {
-          log.error(
-            { err, event: "lms.day_update.certificate_failed", enrollmentId },
-            "emissao de certificado (conclusao LMS) falhou",
-          )
+          // Cota de aulas: recusa ESPERADA enquanto faltar parcela. O delta roda
+          // de hora em hora — logar como erro encheria o log de ruido ate a
+          // quitacao, quando o certificado sai sozinho.
+          if (err instanceof PaceGateError) {
+            log.info(
+              { event: "lms.day_update.certificate_pace_blocked", enrollmentId },
+              "certificado adiado — parcelamento em aberto",
+            )
+          } else {
+            log.error(
+              { err, event: "lms.day_update.certificate_failed", enrollmentId },
+              "emissao de certificado (conclusao LMS) falhou",
+            )
+          }
         }
       }
     }

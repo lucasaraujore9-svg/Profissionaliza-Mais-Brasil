@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { cursosVinculados } from "@/lib/plataforma-cursos/client"
 import type { EACursoVinculado } from "@/lib/plataforma-cursos/types"
-import { issueCertificateIfEligible } from "@/lib/certificates/issue"
+import { issueCertificateIfEligible, PaceGateError } from "@/lib/certificates/issue"
 import { get as cacheGet, set as cacheSet } from "@/lib/redis/cache"
 import { contextLogger } from "@/lib/logger"
 
@@ -267,6 +267,16 @@ export async function syncStudentProgress(
       await issueCertificateIfEligible(enrollmentId, "AUTO")
       certificatesIssued++
     } catch (err) {
+      // Cota de aulas: parcelamento em aberto é recusa ESPERADA (o aluno
+      // concluiu mas ainda deve parcelas) — não polui o log de erro a cada
+      // sincronização. O certificado sai sozinho quando a última parcela cair.
+      if (err instanceof PaceGateError) {
+        contextLogger().info(
+          { event: "student-progress.cert_pace_blocked", enrollmentId, studentId },
+          "certificado adiado — parcelamento em aberto",
+        )
+        continue
+      }
       contextLogger().error(
         { err, event: "student-progress.cert_issue_failed", enrollmentId, studentId },
         "falha ao emitir certificado para enrollment",

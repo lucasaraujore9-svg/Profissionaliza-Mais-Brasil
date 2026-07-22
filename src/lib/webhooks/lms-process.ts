@@ -1,6 +1,6 @@
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { issueCertificateIfEligible } from "@/lib/certificates/issue"
+import { issueCertificateIfEligible, PaceGateError } from "@/lib/certificates/issue"
 import {
   syncSingleLmsCourse,
   deactivateLmsCourse,
@@ -146,7 +146,25 @@ export async function processLmsWebhookEvent(
       })
 
       if (await certificateAutoIssueEnabled()) {
-        await issueCertificateIfEligible(enr.id, "AUTO")
+        try {
+          await issueCertificateIfEligible(enr.id, "AUTO")
+        } catch (err) {
+          // Cota de aulas: o aluno terminou o conteúdo mas ainda deve parcelas.
+          // É recusa TERMINAL para este webhook — sem o try/catch, o erro subiria
+          // como 500 e o LMS re-entregaria o evento indefinidamente. O certificado
+          // é emitido pelo `settle` da última parcela.
+          if (err instanceof PaceGateError) {
+            contextLogger().info(
+              { event: "lms.webhook.certificate_pace_blocked", enrollmentId: enr.id },
+              "certificado adiado — parcelamento em aberto",
+            )
+            return {
+              ok: true,
+              message: `conclusão registrada; certificado aguarda quitação (matrícula ${enr.id})`,
+            }
+          }
+          throw err
+        }
       }
       return { ok: true, message: `conclusão processada (matrícula ${enr.id})` }
     }

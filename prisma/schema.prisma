@@ -474,6 +474,12 @@ model Tenant {
   monthlyEnabled Boolean      @default(false) @map("monthly_enabled")
   monthlyScope   MonthlyScope @default(DIRECT_ONLY) @map("monthly_scope")
 
+  // Cota de aulas (trava proporcional ao pagamento) por unidade.
+  // null = herda SystemSettings.paceGateEnabled. Permite ligar a trava numa
+  // unidade piloto antes da rede toda — ou desliga-la onde o parcelamento longo
+  // tornaria a cota agressiva demais.
+  paceGateEnabled Boolean? @map("pace_gate_enabled")
+
   // Relacoes
   tenantCourses                TenantCourse[]
   coursePackages               CoursePackage[]
@@ -1014,6 +1020,18 @@ model Enrollment {
   installmentsTotal Int? @map("installments_total") // = course.monthlyMonthsMain no momento da compra
   installmentsPaid  Int  @default(0) @map("installments_paid")
 
+  // ── Cota de aulas (trava de conclusao proporcional ao pagamento) ──────────
+  // Na venda parcelada o acesso e liberado em fatias: o aluno so avanca ate
+  // floor(installmentsPaid / installmentsTotal x 100)% do curso. A cota e SEMPRE
+  // recalculada dos contadores acima (ver src/lib/enrollment/pace-gate.ts); os
+  // campos abaixo guardam apenas o que ja foi PROPAGADO ao provedor (idempotencia
+  // — nao rechamar EA/LMS a cada varredura) e o estado exibido na UI.
+  paceAppliedPercent Int?      @map("pace_applied_percent") // ultima cota propagada
+  paceBlockedAt      DateTime? @map("pace_blocked_at") // null = curso liberado
+  // Liberacao manual da cota (SUPER_ADMIN) — desarma a trava desta matricula.
+  paceExemptAt       DateTime? @map("pace_exempt_at")
+  paceExemptByUserId String?   @map("pace_exempt_by_user_id") // escalar (sem FK), so auditoria
+
   // Cupom
   couponId String? @map("coupon_id")
   coupon   Coupon? @relation(fields: [couponId], references: [id])
@@ -1074,6 +1092,9 @@ model Enrollment {
   @@index([studentId, status])
   @@index([couponId], map: "enrollments_coupon_id_idx")
   @@index([tenantCourseId], map: "enrollments_tenant_course_id_idx")
+  // Varredura de reavaliacao da cota (fase C do sweep do carne) — le so as
+  // matriculas ja travadas, que sao poucas.
+  @@index([paceBlockedAt])
   // DB-001: BI hub conta matrículas por bucket de created_at (platform-wide) e
   // por status ao longo do tempo — sem tenant líder o composto [tenantId,...]
   // não serve.
@@ -1702,6 +1723,20 @@ model SystemSettings {
   // sem plano/override proprio seguem estas fases. Vazio => cai nos campos
   // commission* singulares acima. Ver src/lib/referrals/rules.ts.
   commissionPlan         Json?                  @map("commission_plan")
+
+  // ── Cota de aulas (trava proporcional ao pagamento) ──────────────────────
+  // Interruptor global. Sobe DESLIGADO: liga-se primeiro numa unidade
+  // (Tenant.paceGateEnabled) e so depois na rede toda.
+  paceGateEnabled Boolean @default(false) @map("pace_gate_enabled")
+  // Politica do corte na plataforma de aulas. O `status` do aluno na EA e por
+  // LOGIN, nao por curso — e 28,6% dos logins tem mais de um curso ativo
+  // (medido em 2026-07-22). Cortar o login por causa da cota de UM curso
+  // derrubaria cursos ja pagos.
+  //   false (padrao): so corta quando TODAS as matriculas do login estao
+  //                   travadas pela cota. Zero colateral; nos demais casos
+  //                   sobra a trava de certificado, que ja impede a conclusao.
+  //   true  (estrito): corta assim que qualquer matricula bate a cota.
+  paceGateStrict  Boolean @default(false) @map("pace_gate_strict")
 
   // Certificados
   certificateMinPercent Int     @default(80) @map("certificate_min_percent") // % minimo na plataforma p/ auto-emissao

@@ -727,6 +727,124 @@ export async function blockStudentInEA(studentId: string): Promise<void> {
 }
 
 /**
+ * Status enviado a plataforma de aulas quando a trava e a COTA DE AULAS (venda
+ * parcelada, aluno em dia mas adiantado no conteudo) — decisao do produto em
+ * 2026-07-22. Distinto de "bloqueado", que fica reservado a INADIMPLENCIA, para
+ * o suporte da unidade saber na propria EA por que o aluno esta travado.
+ *
+ * Constante isolada de proposito: se a EA nao barrar a aula com `devedor` (a doc
+ * da API v2 nao especifica — validar com aluno de teste), trocar aqui por
+ * "bloqueado", que comprovadamente barra, resolve em uma linha.
+ */
+const EA_PACE_STATUS = "devedor"
+
+/**
+ * Ids dos nossos Student que representam a MESMA PESSOA — e portanto compartilham
+ * um unico login na plataforma de aulas (regra de negocio: um usuario por CPF,
+ * reaproveitado entre revendas; ver `findExistingPlatformLogin`).
+ *
+ * Necessario porque status/apostila sao por LOGIN, nao por curso: qualquer trava
+ * precisa saber o que mais aquela pessoa tem liberado antes de cortar.
+ */
+export async function findPersonStudentIds(studentId: string): Promise<string[]> {
+  const student = await prisma.student.findUnique({
+    where: { id: studentId },
+    select: { id: true, cpf: true, email: true },
+  })
+  if (!student) return []
+
+  const orFilters: { cpf?: string; email?: string }[] = []
+  if (student.cpf) orFilters.push({ cpf: student.cpf })
+  if (student.email) orFilters.push({ email: student.email })
+  if (orFilters.length === 0) return [student.id]
+
+  const siblings = await prisma.student.findMany({
+    where: { OR: orFilters },
+    select: { id: true },
+  })
+  const ids = new Set(siblings.map((s) => s.id))
+  ids.add(student.id)
+  return [...ids]
+}
+
+/**
+ * Aplica (ou remove) a trava de COTA DE AULAS no acesso do aluno.
+ *
+ * Precedencia sobre a trava de inadimplencia sai de graca do proprio estado
+ * local, sem resolver central:
+ *   - so TRAVA quem esta ATIVO — um aluno ja BLOQUEADO por inadimplencia nao e
+ *     rebaixado para DEVEDOR (seria afrouxar a trava mais forte);
+ *   - so LIBERA quem esta DEVEDOR — ou seja, quem foi travado por ESTA regra.
+ *     Um BLOQUEADO segue com a inadimplencia, que tem dono proprio (o sweep do
+ *     carne e o auto-block do tenant).
+ *
+ * Propaga aos dois canais, como `blockStudentInEA`: EA por login (`editarAluno`)
+ * e LMS por aluno (`setLmsStudentAccess`). NUNCA desvincula curso — na EA
+ * desvincular e revincular ZERA o progresso do aluno (confirmado em 2026-07-22).
+ *
+ * Devolve `true` quando o estado mudou de fato.
+ */
+export async function setStudentPaceBlock(
+  studentId: string,
+  blocked: boolean,
+): Promise<boolean> {
+  const student = await prisma.student.findUnique({
+    where: { id: studentId },
+    select: {
+      id: true,
+      status: true,
+      plataformaAlunoId: true,
+      enrollments: {
+        where: { lmsEnrollmentId: { not: null } },
+        select: { id: true },
+        take: 1,
+      },
+    },
+  })
+  if (!student) throw new Error(`student ${studentId} nao encontrado`)
+
+  // Precedencia: nao mexe em quem esta sob outra trava (BLOQUEADO/INATIVO/...).
+  const expectedFrom = blocked ? "ATIVO" : "DEVEDOR"
+  if (student.status !== expectedFrom) return false
+
+  const platformId = parseExternalId(student.plataformaAlunoId)
+  const hasLms = student.enrollments.length > 0
+  // Aluno que ainda nao foi para nenhuma plataforma: nada a propagar. Nao e erro
+  // (a cota vale a partir do provisionamento) — so nao ha o que travar.
+  if (platformId === null && !hasLms) return false
+
+  if (platformId !== null) {
+    await editarAluno({
+      id_aluno: platformId,
+      status: blocked ? EA_PACE_STATUS : "ativo",
+      apostila: blocked ? "bloquear" : "liberar",
+    })
+  }
+  if (hasLms) {
+    // Simetrico a blockStudentInEA: propaga a falha em vez de engolir, para o
+    // status local NAO ser gravado antes do LMS confirmar — senao a varredura
+    // seguinte veria o estado ja aplicado e nunca re-tentaria.
+    try {
+      await setLmsStudentAccess(student.id, blocked ? "blocked" : "active")
+    } catch (err) {
+      contextLogger().error(
+        { err, event: "students.lms_pace_block_failed", studentId, blocked },
+        "propagacao da cota de aulas ao LMS falhou",
+      )
+      throw err
+    }
+  }
+
+  await prisma.student.update({
+    where: { id: student.id },
+    data: blocked
+      ? { status: "DEVEDOR", apostila: "BLOQUEADA" }
+      : { status: "ATIVO", apostila: "LIBERADA" },
+  })
+  return true
+}
+
+/**
  * Sincroniza dados de perfil do aluno na plataforma (sem mexer em status/apostila).
  * Idempotente: se o aluno ainda nao foi para a plataforma, ignora (so faz sentido
  * apos pagamento/criacao). Usa editarAluno passando apenas os campos que o

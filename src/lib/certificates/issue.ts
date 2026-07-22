@@ -9,9 +9,33 @@ import {
 } from "./template-resolver"
 import { generateAndUploadPdf } from "./generate-pdf"
 import { isEnrollmentConcludedForCertificate } from "./eligibility"
+import {
+  evaluatePace,
+  hasOpenInstallmentPlan,
+  installmentWord,
+  isConclusionBlockedByPace,
+} from "@/lib/enrollment/pace-gate"
+import { resolvePaceGateSettings } from "@/lib/enrollment/pace-settings"
 import { contextLogger } from "@/lib/logger"
 
 const SETTINGS_ID = "default"
+
+/**
+ * Emissao recusada porque a venda parcelada ainda nao foi quitada (cota de
+ * aulas). Tipo proprio para as rotas distinguirem "nao concluiu o curso" de
+ * "concluiu mas ainda deve parcelas" — sao mensagens diferentes ao operador.
+ */
+export class PaceGateError extends Error {
+  readonly installmentsPaid: number
+  readonly installmentsTotal: number | null
+
+  constructor(message: string, installmentsPaid: number, installmentsTotal: number | null) {
+    super(message)
+    this.name = "PaceGateError"
+    this.installmentsPaid = installmentsPaid
+    this.installmentsTotal = installmentsTotal
+  }
+}
 
 async function ensureSystemSettings() {
   return prisma.systemSettings.upsert({
@@ -56,6 +80,39 @@ export async function issueCertificateIfEligible(
     throw new Error(
       `Matrícula ${enrollmentId} não está elegível para certificado (status=${enrollment.status})`,
     )
+  }
+
+  // ── Cota de aulas: sem quitar o parcelamento, não há conclusão ────────────
+  // Esta é a trava que NÃO vaza. O aluno pode até driblar o player da
+  // plataforma de aulas (a EA só bloqueia por login, não por curso), mas o
+  // certificado é emitido por nós — então enquanto faltar parcela, não conclui.
+  // Vale para TODOS os caminhos de emissão automática (sync de progresso EA,
+  // delta LMS, webhook course.completed, botão do próprio aluno); a emissão
+  // manual só passa com `force`, que a camada de API concede apenas ao
+  // SUPER_ADMIN.
+  if (!options.force && hasOpenInstallmentPlan(enrollment)) {
+    const { enabled } = await resolvePaceGateSettings(enrollment.tenantId)
+    if (isConclusionBlockedByPace({ ...enrollment, gateEnabled: enabled })) {
+      const state = evaluatePace(enrollment)
+      const word = installmentWord(enrollment.paymentType, state.remaining > 1)
+      contextLogger().info(
+        {
+          event: "certificates.pace_gate_blocked",
+          enrollmentId,
+          source,
+          installmentsPaid: state.installmentsPaid,
+          installmentsTotal: state.installmentsTotal,
+        },
+        "emissão de certificado recusada — parcelamento em aberto",
+      )
+      throw new PaceGateError(
+        `Faltam ${state.remaining} ${word} para quitar o curso ` +
+          `(${state.installmentsPaid} de ${state.installmentsTotal} pagas). ` +
+          "O certificado é liberado após a quitação.",
+        state.installmentsPaid,
+        state.installmentsTotal,
+      )
+    }
   }
 
   // Reusa certificado nao revogado existente (a nao ser que force=true)

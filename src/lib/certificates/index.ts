@@ -2,6 +2,7 @@ export {
   issueCertificateIfEligible,
   issueCertificateManual,
   revokeCertificate,
+  PaceGateError,
 } from "./issue"
 export { generateAndUploadPdf, validationUrlFor } from "./generate-pdf"
 export {
