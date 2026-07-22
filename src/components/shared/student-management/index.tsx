@@ -57,7 +57,7 @@ export function StudentManagement({ student, scope, currentUserId }: Props) {
         <OverviewTab student={student} />
       </TabsContent>
       <TabsContent value="financial">
-        <FinancialTab student={student} />
+        <FinancialTab student={student} scope={scope} />
       </TabsContent>
       <TabsContent value="notes">
         <NotesTab

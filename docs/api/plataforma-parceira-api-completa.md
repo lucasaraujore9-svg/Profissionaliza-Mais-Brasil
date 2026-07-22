@@ -440,6 +440,24 @@ ou
 
 **Uso no Projeto:** Cancelamento de matrícula em curso específico. Cuidado: sem IDs remove tudo.
 
+> ### ⛔ Desvincular ZERA o progresso do aluno
+>
+> Remover um curso e **revinculá-lo depois faz o aluno voltar do zero** — a EA não
+> preserva o histórico de aulas assistidas (verificado em jul/2026). Consequências:
+>
+> - **Nunca** use `remover_curso_combo` como trava temporária de acesso. Para
+>   suspender sem destruir progresso, use `usuarios/editar` com `status`
+>   (`bloqueado` = inadimplência, `devedor` = cota de aulas) e/ou
+>   `apostila: "bloquear"` — são flags reversíveis.
+> - `unlinkCourseFromStudent` (`src/lib/students/plataforma-actions.ts`) chama este
+>   endpoint no ramo EA. Ele é usado pelo cancelamento de matrícula
+>   (`src/lib/enrollment/cancel.ts`, opção `removeAccess`), onde a perda é
+>   aceitável — o aluno está perdendo o curso mesmo. Se um dia o cancelamento
+>   virar reversível, **isto vira perda de dado**.
+> - Vale também para o LMS: cursos de parceiro (`origin != "own"`) são
+>   provisionados na EA por baixo, então um `revoke` que desvincule lá tem o mesmo
+>   efeito. Ver a cláusula do contrato em `docs/api/lms-webhook-catalogo.md`.
+
 ---
 
 ### 4.6 POST `usuarios/notaspresenciais` — Exibir notas presenciais

@@ -16,10 +16,19 @@ import {
 import { ResellerCard } from "./reseller-card"
 import type { ResellerStatus } from "./reseller-table"
 
+/** Blocos renderizáveis — permite mostrar a assinatura em "Cobrança" e a
+ *  anonimização (LGPD) em "Avançado" sem duplicar o componente. */
+export type ResellerActionSection = "status" | "cancel" | "anonymize"
+
+const ALL_SECTIONS: ResellerActionSection[] = ["status", "cancel", "anonymize"]
+
 interface ResellerActionButtonsProps {
   tenantId: string
   status: ResellerStatus
   isSuperAdmin?: boolean
+  /** Política de cancelamento da unidade — usada como padrão do destino dos alunos. */
+  keepStudentsActive?: boolean | null
+  show?: ResellerActionSection[]
   onChanged?: () => void
 }
 
@@ -27,11 +36,17 @@ export function ResellerActionButtons({
   tenantId,
   status,
   isSuperAdmin = false,
+  keepStudentsActive = null,
+  show = ALL_SECTIONS,
   onChanged,
 }: ResellerActionButtonsProps) {
   const [loading, setLoading] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [cancelOpen, setCancelOpen] = useState(false)
+  // Destino dos alunos ao cancelar. Pré-seleciona pela política já configurada
+  // da unidade (`cancellationPolicy.keepStudentsActive`, default manter).
+  const [blockStudents, setBlockStudents] = useState(keepStudentsActive === false)
+  const [deleteOpenCharges, setDeleteOpenCharges] = useState(true)
   const [anonOpen, setAnonOpen] = useState(false)
   const [anonConfirm, setAnonConfirm] = useState("")
 
@@ -63,6 +78,8 @@ export function ResellerActionButtons({
     try {
       const res = await fetch(`/api/admin/revendedores/${tenantId}`, {
         method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ blockStudents, deleteOpenCharges }),
       })
       const body = await res.json()
       if (!res.ok) {
@@ -70,6 +87,19 @@ export function ResellerActionButtons({
         return
       }
       setCancelOpen(false)
+      const { deletedCharges = 0, studentsBlocked = 0, warnings = [] } =
+        (body.data ?? {}) as {
+          deletedCharges?: number
+          studentsBlocked?: number
+          warnings?: string[]
+        }
+      const parts = ["Assinatura cancelada"]
+      if (deletedCharges > 0) parts.push(`${deletedCharges} cobrança(s) apagada(s)`)
+      if (studentsBlocked > 0) parts.push(`${studentsBlocked} aluno(s) bloqueado(s)`)
+      toast.success(parts.join(" · "))
+      // Falhas parciais (uma cobrança que não apagou, alunos que não bloquearam)
+      // não podem sumir: o admin precisa saber o que ficou pendente.
+      for (const w of warnings) toast.warning(w)
       onChanged?.()
     } catch {
       setError("Erro de rede ao cancelar assinatura")
@@ -109,95 +139,113 @@ export function ResellerActionButtons({
   }
 
   const isCancelled = status === "CANCELLED"
+  const showStatus = show.includes("status")
+  const showCancel = show.includes("cancel")
+  const showAnonymize = show.includes("anonymize") && isSuperAdmin
+  const showRiskZone = showCancel || showAnonymize
 
   return (
     <div className="space-y-6">
-      <ResellerCard
-        title="Status da assinatura"
-        description="Suspenda ou reative o acesso da unidade."
-      >
-        {error && (
-          <p className="mt-3 rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">
-            {error}
-          </p>
-        )}
+      {showStatus && (
+        <ResellerCard
+          title="Status da assinatura"
+          description="Suspenda ou reative o acesso da unidade."
+        >
+          {error && (
+            <p className="mt-3 rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">
+              {error}
+            </p>
+          )}
 
-        <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-          <Button
-            variant="outline"
-            className="flex-1"
-            disabled={isCancelled || loading !== null || status === "SUSPENDED"}
-            onClick={() => setStatus("SUSPENDED")}
-          >
-            <Pause className="h-4 w-4" />
-            {loading === "SUSPENDED" ? "Aguarde..." : "Suspender"}
-          </Button>
-          <Button
-            className="flex-1 bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)]"
-            disabled={isCancelled || loading !== null || status === "ACTIVE"}
-            onClick={() => setStatus("ACTIVE")}
-          >
-            <Play className="h-4 w-4" />
-            {loading === "ACTIVE" ? "Aguarde..." : "Ativar"}
-          </Button>
-        </div>
-      </ResellerCard>
-
-      {/* Zona de risco — operacoes destrutivas/irreversiveis */}
-      <div className="rounded-2xl border border-rose-200 bg-rose-50/40 p-6">
-        <h3 className="text-sm font-semibold text-rose-700">Zona de risco</h3>
-        <p className="mt-1 text-xs text-rose-600/80">
-          Operações destrutivas. Confirme com atenção.
-        </p>
-
-        <div className="mt-4 space-y-4">
-          <div className="flex flex-col gap-2 rounded-lg border border-rose-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-800">
-                Cancelar assinatura
-              </p>
-              <p className="mt-0.5 text-xs text-gray-500">
-                Encerra a cobrança e suspende o acesso da unidade.
-              </p>
-            </div>
+          <div className="mt-4 flex flex-col gap-2 sm:flex-row">
             <Button
               variant="outline"
-              className="border-rose-200 text-rose-600 hover:bg-rose-50"
-              disabled={isCancelled || loading !== null}
-              onClick={() => setCancelOpen(true)}
+              className="flex-1"
+              disabled={isCancelled || loading !== null || status === "SUSPENDED"}
+              onClick={() => setStatus("SUSPENDED")}
             >
-              <Ban className="h-4 w-4" />
-              Cancelar assinatura
+              <Pause className="h-4 w-4" />
+              {loading === "SUSPENDED" ? "Aguarde..." : "Suspender"}
+            </Button>
+            <Button
+              className="flex-1 bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)]"
+              disabled={isCancelled || loading !== null || status === "ACTIVE"}
+              onClick={() => setStatus("ACTIVE")}
+            >
+              <Play className="h-4 w-4" />
+              {loading === "ACTIVE" ? "Aguarde..." : "Ativar"}
             </Button>
           </div>
+        </ResellerCard>
+      )}
 
-          {isSuperAdmin && (
-            <div className="flex flex-col gap-2 rounded-lg border border-rose-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-800">
-                  Anonimizar conta (LGPD)
-                </p>
-                <p className="mt-0.5 text-xs text-gray-500">
-                  Ação irreversível: remove a PII e desativa o login. Registros
-                  de negócio são preservados.
-                </p>
-              </div>
-              <Button
-                variant="outline"
-                className="border-rose-300 text-rose-700 hover:bg-rose-50"
-                disabled={isCancelled || loading !== null}
-                onClick={() => {
-                  setAnonConfirm("")
-                  setAnonOpen(true)
-                }}
-              >
-                <ShieldOff className="h-4 w-4" />
-                Anonimizar
-              </Button>
-            </div>
+      {/* Zona de risco — operacoes destrutivas/irreversiveis */}
+      {showRiskZone && (
+        <div className="rounded-2xl border border-rose-200 bg-rose-50/40 p-6">
+          <h3 className="text-sm font-semibold text-rose-700">Zona de risco</h3>
+          <p className="mt-1 text-xs text-rose-600/80">
+            Operações destrutivas. Confirme com atenção.
+          </p>
+
+          {!showStatus && error && (
+            <p className="mt-3 rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">
+              {error}
+            </p>
           )}
+
+          <div className="mt-4 space-y-4">
+            {showCancel && (
+              <div className="flex flex-col gap-2 rounded-lg border border-rose-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-800">
+                    Cancelar assinatura
+                  </p>
+                  <p className="mt-0.5 text-xs text-gray-500">
+                    Encerra as assinaturas no Asaas (inclusive a promocional),
+                    apaga as mensalidades em aberto e marca a unidade como
+                    cancelada.
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  className="border-rose-200 text-rose-600 hover:bg-rose-50"
+                  disabled={isCancelled || loading !== null}
+                  onClick={() => setCancelOpen(true)}
+                >
+                  <Ban className="h-4 w-4" />
+                  {isCancelled ? "Já cancelada" : "Cancelar assinatura"}
+                </Button>
+              </div>
+            )}
+
+            {showAnonymize && (
+              <div className="flex flex-col gap-2 rounded-lg border border-rose-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-800">
+                    Anonimizar conta (LGPD)
+                  </p>
+                  <p className="mt-0.5 text-xs text-gray-500">
+                    Ação irreversível: remove a PII e desativa o login. Registros
+                    de negócio são preservados.
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  className="border-rose-300 text-rose-700 hover:bg-rose-50"
+                  disabled={isCancelled || loading !== null}
+                  onClick={() => {
+                    setAnonConfirm("")
+                    setAnonOpen(true)
+                  }}
+                >
+                  <ShieldOff className="h-4 w-4" />
+                  Anonimizar
+                </Button>
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Confirmacao: cancelar assinatura */}
       <AlertDialog open={cancelOpen} onOpenChange={setCancelOpen}>
@@ -205,10 +253,84 @@ export function ResellerActionButtons({
           <AlertDialogHeader>
             <AlertDialogTitle>Cancelar assinatura?</AlertDialogTitle>
             <AlertDialogDescription>
-              Tem certeza que deseja cancelar a assinatura deste revendedor? A
-              cobrança será encerrada e o acesso suspenso.
+              As assinaturas no Asaas (regular e promocional) serão encerradas e
+              a unidade passa a CANCELADA. Escolha abaixo o que fazer com os
+              alunos e com as mensalidades já emitidas.
             </AlertDialogDescription>
           </AlertDialogHeader>
+
+          <div className="space-y-4">
+            <fieldset className="space-y-2">
+              <legend className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                Alunos da unidade
+              </legend>
+              <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-gray-200 p-3 text-sm hover:bg-gray-50">
+                <input
+                  type="radio"
+                  name="blockStudents"
+                  className="mt-0.5"
+                  checked={!blockStudents}
+                  onChange={() => setBlockStudents(false)}
+                />
+                <span>
+                  <span className="font-medium text-gray-800">
+                    Manter o acesso dos alunos
+                  </span>
+                  <span className="mt-0.5 block text-xs text-gray-500">
+                    Eles continuam estudando na plataforma de aulas. Só a
+                    cobrança da unidade para.
+                  </span>
+                </span>
+              </label>
+              <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-rose-200 p-3 text-sm hover:bg-rose-50">
+                <input
+                  type="radio"
+                  name="blockStudents"
+                  className="mt-0.5"
+                  checked={blockStudents}
+                  onChange={() => setBlockStudents(true)}
+                />
+                <span>
+                  <span className="font-medium text-rose-700">
+                    Bloquear os alunos na plataforma
+                  </span>
+                  <span className="mt-0.5 block text-xs text-gray-500">
+                    Todos os alunos da unidade perdem o acesso às aulas
+                    imediatamente.
+                  </span>
+                </span>
+              </label>
+              {keepStudentsActive !== null && (
+                <p className="text-[11px] text-gray-400">
+                  Política configurada nesta unidade:{" "}
+                  {keepStudentsActive
+                    ? "manter alunos ativos"
+                    : "bloquear alunos"}
+                  .
+                </p>
+              )}
+            </fieldset>
+
+            <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-gray-200 p-3 text-sm hover:bg-gray-50">
+              <input
+                type="checkbox"
+                className="mt-0.5"
+                checked={deleteOpenCharges}
+                onChange={(e) => setDeleteOpenCharges(e.target.checked)}
+              />
+              <span>
+                <span className="font-medium text-gray-800">
+                  Apagar mensalidades em aberto
+                </span>
+                <span className="mt-0.5 block text-xs text-gray-500">
+                  Cancela no Asaas os boletos/PIX pendentes ou vencidos, para a
+                  unidade não continuar recebendo cobrança. Desmarque para
+                  manter a dívida cobrável.
+                </span>
+              </span>
+            </label>
+          </div>
+
           <AlertDialogFooter>
             <Button
               variant="outline"

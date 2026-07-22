@@ -282,6 +282,19 @@ export function ResellerDetailClient({
             cancellationPolicy={data.reseller.cancellationPolicy}
             onSaved={load}
           />
+          {/* Status + cancelamento da assinatura vivem aqui, junto da cobrança
+              e da política de cancelamento que os governa. A anonimização
+              (LGPD) segue em "Avançado". */}
+          <ResellerActionButtons
+            tenantId={tenantId}
+            status={data.reseller.status}
+            isSuperAdmin={isSuperAdmin}
+            keepStudentsActive={
+              data.reseller.cancellationPolicy?.keepStudentsActive ?? null
+            }
+            show={["status", "cancel"]}
+            onChanged={load}
+          />
         </TabsContent>
 
         {/* Vitrine & extras */}
@@ -421,6 +434,7 @@ export function ResellerDetailClient({
             tenantId={tenantId}
             status={data.reseller.status}
             isSuperAdmin={isSuperAdmin}
+            show={["anonymize"]}
             onChanged={load}
           />
         </TabsContent>

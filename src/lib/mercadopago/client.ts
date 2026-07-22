@@ -261,6 +261,26 @@ export async function cancelPreapproval(
   return request<MPPreapproval>("PUT", `/preapproval/${preapprovalId}`, accessToken, { status: "cancelled" })
 }
 
+/**
+ * Cancela um pagamento AINDA NÃO PAGO (PIX/boleto `pending` ou cartão
+ * `in_process`) — `PUT /v1/payments/{id}` com `status: "cancelled"`. O MP para
+ * de exibir/notificar a cobrança e ela não pode mais ser paga.
+ *
+ * Só vale para pagamento não aprovado; dinheiro já recebido exige `refundPayment`.
+ * O `accessToken` DEVE ser o da conta que criou o pagamento (a da unidade, nas
+ * vendas de revenda) — com o token errado o MP responde 404.
+ *
+ * https://www.mercadopago.com.br/developers/pt/reference/payments/_payments_id/put
+ */
+export async function cancelPayment(
+  accessToken: string,
+  paymentId: string,
+): Promise<MPPayment> {
+  return request<MPPayment>("PUT", `/v1/payments/${paymentId}`, accessToken, {
+    status: "cancelled",
+  })
+}
+
 export interface MPRefund {
   id: number
   payment_id: number

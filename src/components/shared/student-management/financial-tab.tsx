@@ -1,8 +1,28 @@
 "use client"
 
+import { useState } from "react"
+import { useRouter } from "next/navigation"
 import { CheckCircle2, Clock, XCircle } from "lucide-react"
-import type { StudentData } from "./types"
+import { toast } from "sonner"
+import type { ManagementScope, StudentData } from "./types"
+import { apiBase } from "./types"
 import { CheckoutLink } from "@/components/shared/checkout-link"
+import { Button } from "@/components/ui/button"
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+
+/**
+ * Matrícula cancelável pela gestão: pagamento pendente ou curso ainda não
+ * concluído. Espelha `isCancellableEnrollmentStatus` em
+ * src/lib/enrollment/cancel.ts — a API é quem manda, isto é só o gate visual.
+ */
+const CANCELLABLE = new Set(["PENDING", "ACTIVE", "SUSPENDED"])
 
 function brl(value: number): string {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
@@ -60,7 +80,57 @@ function statusIcon(status: string) {
   return XCircle
 }
 
-export function FinancialTab({ student }: { student: StudentData }) {
+export function FinancialTab({
+  student,
+  scope,
+}: {
+  student: StudentData
+  scope: ManagementScope
+}) {
+  const router = useRouter()
+  const [target, setTarget] = useState<{ id: string; courseName: string } | null>(
+    null,
+  )
+  const [cancelling, setCancelling] = useState<string | null>(null)
+
+  async function cancelEnrollment(enrollmentId: string, removeAccess: boolean) {
+    setTarget(null)
+    setCancelling(enrollmentId)
+    try {
+      const res = await fetch(
+        `${apiBase(scope, student.id)}/enrollments/${enrollmentId}/cancelar`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ removeAccess }),
+        },
+      )
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        toast.error(body.error ?? "Falha ao cancelar matrícula")
+        return
+      }
+      toast.success("Matrícula cancelada")
+      // A cobrança/plataforma podem falhar sem impedir o cancelamento local —
+      // avisar é obrigatório, senão o operador acha que o gateway foi limpo.
+      if (body.data?.gatewayError) {
+        toast.warning(
+          `Matrícula cancelada, mas a cobrança no gateway não foi encerrada: ${body.data.gatewayError}`,
+        )
+      }
+      if (body.data?.platformError) {
+        toast.warning(
+          `Matrícula cancelada, mas o acesso na plataforma de aulas não foi removido: ${body.data.platformError}`,
+        )
+      }
+      router.refresh()
+    } catch {
+      toast.error("Erro de rede ao cancelar matrícula")
+    } finally {
+      setCancelling(null)
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* Matrículas */}
@@ -86,6 +156,7 @@ export function FinancialTab({ student }: { student: StudentData }) {
                   <th className="px-4 py-2 font-semibold">Status</th>
                   <th className="px-4 py-2 font-semibold">Início</th>
                   <th className="px-4 py-2 font-semibold">Checkout</th>
+                  <th className="px-4 py-2 font-semibold">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -125,6 +196,23 @@ export function FinancialTab({ student }: { student: StudentData }) {
                       <td className="px-4 py-3">
                         {e.checkoutUrl ? (
                           <CheckoutLink url={e.checkoutUrl} />
+                        ) : (
+                          <span className="text-xs text-gray-400">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        {CANCELLABLE.has(e.status) ? (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="border-rose-200 text-rose-600 hover:bg-rose-50"
+                            disabled={cancelling !== null}
+                            onClick={() =>
+                              setTarget({ id: e.id, courseName: e.courseName })
+                            }
+                          >
+                            {cancelling === e.id ? "Cancelando…" : "Cancelar"}
+                          </Button>
                         ) : (
                           <span className="text-xs text-gray-400">—</span>
                         )}
@@ -192,6 +280,61 @@ export function FinancialTab({ student }: { student: StudentData }) {
           </div>
         )}
       </section>
+
+      {/* Confirmação: cancelar matrícula. Duas saídas distintas — encerrar só a
+          cobrança (aluno segue estudando) ou também tirar o acesso às aulas. */}
+      <AlertDialog
+        open={target !== null}
+        onOpenChange={(open) => {
+          if (!open) setTarget(null)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cancelar matrícula</AlertDialogTitle>
+            <AlertDialogDescription>
+              {target
+                ? `Curso: ${target.courseName}. Escolha como deseja cancelar — o valor já pago não é estornado por aqui.`
+                : ""}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          <div className="flex flex-col gap-3">
+            <button
+              type="button"
+              onClick={() => target && cancelEnrollment(target.id, false)}
+              className="w-full rounded-lg border border-amber-200 px-4 py-3 text-left transition-colors hover:bg-amber-50"
+            >
+              <span className="text-sm font-medium text-amber-700">
+                Cancelar somente a cobrança
+              </span>
+              <p className="mt-0.5 text-xs text-gray-500">
+                Encerra a matrícula e a cobrança no gateway. O aluno mantém o
+                acesso às aulas já liberadas.
+              </p>
+            </button>
+            <button
+              type="button"
+              onClick={() => target && cancelEnrollment(target.id, true)}
+              className="w-full rounded-lg border border-rose-200 px-4 py-3 text-left transition-colors hover:bg-rose-50"
+            >
+              <span className="text-sm font-medium text-rose-700">
+                Cancelar e remover o acesso às aulas
+              </span>
+              <p className="mt-0.5 text-xs text-gray-500">
+                Além de encerrar a cobrança, desvincula o curso na plataforma de
+                aulas.
+              </p>
+            </button>
+          </div>
+
+          <AlertDialogFooter>
+            <Button variant="outline" onClick={() => setTarget(null)}>
+              Voltar
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

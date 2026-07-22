@@ -234,12 +234,23 @@ export async function getSubscription(
   return request<AsaasSubscription>("GET", `/subscriptions/${subscriptionId}`)
 }
 
+/**
+ * Cancela (remove) uma assinatura no Asaas.
+ *
+ * `apiKey`: conta da unidade (revenda vendendo curso mensal pela conta dela);
+ * omitido = conta-mãe PMB (mensalidade dos revendedores + vitrine PMB). Cancelar
+ * uma assinatura de revenda com a chave-mãe devolve 404 silencioso e a cobrança
+ * do aluno seguiria viva — sempre passe a chave da conta que criou a assinatura.
+ */
 export async function cancelSubscription(
   subscriptionId: string,
+  apiKey?: string,
 ): Promise<{ deleted: boolean; id: string }> {
   return request<{ deleted: boolean; id: string }>(
     "DELETE",
     `/subscriptions/${subscriptionId}`,
+    undefined,
+    apiKey,
   )
 }
 
@@ -286,12 +297,19 @@ export async function getPayment(
   return request<AsaasPayment>("GET", `/payments/${paymentId}`, undefined, apiKey)
 }
 
+/**
+ * Remove uma cobrança ainda não paga. `apiKey`: conta da unidade (revenda);
+ * omitido = conta-mãe PMB. Mesma advertência de `cancelSubscription`.
+ */
 export async function deletePayment(
   paymentId: string,
+  apiKey?: string,
 ): Promise<{ deleted: boolean; id: string }> {
   return request<{ deleted: boolean; id: string }>(
     "DELETE",
     `/payments/${paymentId}`,
+    undefined,
+    apiKey,
   )
 }
 
@@ -300,16 +318,20 @@ export async function deletePayment(
  * voluntário). Asaas só aceita refund em pagamentos `RECEIVED` ou
  * `CONFIRMED`. Para `PENDING`/`AWAITING_RISK_ANALYSIS`, use deletePayment.
  *
+ * `apiKey`: conta da unidade (revenda); omitido = conta-mãe PMB.
+ *
  * https://docs.asaas.com/reference/estornar-cobranca
  */
 export async function refundPayment(
   paymentId: string,
   options?: { value?: number; description?: string },
+  apiKey?: string,
 ): Promise<AsaasPayment> {
   return request<AsaasPayment>(
     "POST",
     `/payments/${paymentId}/refund`,
     options ?? {},
+    apiKey,
   )
 }
 

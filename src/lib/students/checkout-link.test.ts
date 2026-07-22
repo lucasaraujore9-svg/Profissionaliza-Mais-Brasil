@@ -65,12 +65,24 @@ describe("buildEnrollmentCheckoutUrl", () => {
     ).toBeNull()
   })
 
-  it("nao oferece a pagina /pagar (MP-only) para revenda Asaas abandonada sem fatura", () => {
-    // Revenda Asaas com carrinho abandonado: ainda sem asaasInvoiceUrl. A /pagar
-    // so monta o Brick do MP, entao link nenhum e melhor que link MP quebrado.
+  it("revenda Asaas sem fatura ainda emitida: monta a /pagar da vitrine", () => {
+    // Venda direta / carrinho abandonado de unidade Asaas: o asaasInvoiceUrl so
+    // nasce quando o aluno escolhe a forma de pagamento, mas a /pagar ja ramifica
+    // por gateway e renderiza o formulario Asaas. Sem isto, TODA venda direta das
+    // unidades Asaas ficava sem link reenviavel no painel.
+    expect(buildEnrollmentCheckoutUrl({ ...base, gateway: "ASAAS" })).toBe(
+      "https://revenda1.livrecursos.com.br/pagar/enr_123",
+    )
+  })
+
+  it("revenda Asaas com dominio proprio: /pagar no dominio da loja", () => {
     expect(
-      buildEnrollmentCheckoutUrl({ ...base, gateway: "ASAAS" }),
-    ).toBeNull()
+      buildEnrollmentCheckoutUrl({
+        ...base,
+        gateway: "ASAAS",
+        tenantCustomDomain: "cursosjoao.com.br",
+      }),
+    ).toBe("https://cursosjoao.com.br/pagar/enr_123")
   })
 
   it("usa a fatura Asaas da revenda quando ja existe", () => {

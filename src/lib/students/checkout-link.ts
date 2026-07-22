@@ -25,16 +25,16 @@ export interface CheckoutLinkInput {
  * Ordem de resolucao (a 1a que existir vence):
  *   1. asaasInvoiceUrl — fatura Asaas persistida. Cobre o sistema mae (PMB usa
  *      Asaas para tudo) e as revendas Asaas (excecao) com fatura ja criada.
- *   2. Pagina /pagar da revenda (SO gateway MP) — checkout transparente: todo
- *      PENDING de uma revenda MP tem pagina publica reconstruivel a partir do id
- *      + dominio da loja. Cobre venda direta /painel/vendas e carrinho abandonado
- *      da vitrine. A /pagar so renderiza o Brick do MP (exige mpPublicKey), entao
- *      NAO serve para revenda Asaas: nesse caso o link util e o asaasInvoiceUrl
- *      (passo 1); abandonado sem fatura ainda fica sem link (melhor que link MP
- *      quebrado).
+ *   2. Pagina /pagar da revenda (MP ou Asaas) — checkout transparente: todo
+ *      PENDING de uma revenda tem pagina publica reconstruivel a partir do id +
+ *      dominio da loja. Cobre venda direta /painel/vendas e carrinho abandonado
+ *      da vitrine. A /pagar ramifica pelo `Enrollment.gateway` (Brick do MP vs
+ *      formulario Asaas), entao serve aos dois — antes era MP-only e a venda
+ *      direta de uma unidade Asaas ficava sem link reenviavel no painel (o
+ *      asaasInvoiceUrl so nasce quando o aluno escolhe a forma de pagamento).
  *
- * Retorna null quando nao ha link disponivel (ex.: revenda Asaas abandonada sem
- * fatura).
+ * Retorna null quando nao ha link disponivel (ex.: PMB via MP, sem init_point
+ * persistido).
  */
 export function buildEnrollmentCheckoutUrl(input: CheckoutLinkInput): string | null {
   if (input.status !== "PENDING") return null
@@ -51,10 +51,11 @@ export function buildEnrollmentCheckoutUrl(input: CheckoutLinkInput): string | n
   // revenda Asaas — excecao sem tela transparente propria).
   if (input.asaasInvoiceUrl) return input.asaasInvoiceUrl
 
-  // Revenda via MP (gateway transparente): a cobranca pendente sempre tem pagina
-  // publica de pagamento. Restrito a MP porque /pagar so monta o Brick do MP.
+  // Revenda (checkout transparente): a cobranca pendente sempre tem pagina
+  // publica de pagamento, em qualquer um dos dois gateways — a /pagar decide o
+  // formulario pelo `Enrollment.gateway`.
   if (
-    input.gateway === "MP" &&
+    (input.gateway === "MP" || input.gateway === "ASAAS") &&
     input.tenantSlug &&
     input.tenantSlug !== PMB_TENANT_SLUG
   ) {

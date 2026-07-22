@@ -8,9 +8,12 @@ vi.mock("@/lib/prisma", () => ({
     tenant: { findUnique: vi.fn() },
     tenantCourse: { findFirst: vi.fn() },
     tenantMember: { findFirst: vi.fn() },
-    student: { findFirst: vi.fn() },
+    student: { findFirst: vi.fn(), update: vi.fn() },
     enrollment: { findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
   },
+}))
+vi.mock("@/lib/enrollment/fulfill", () => ({
+  fulfillScholarshipEnrollment: vi.fn().mockResolvedValue(undefined),
 }))
 vi.mock("@/lib/auth/reseller-session", () => ({ requireResellerSession: vi.fn() }))
 vi.mock("@/lib/auth", () => ({ auth: vi.fn() }))
@@ -24,7 +27,10 @@ const p = prisma as unknown as {
   tenant: { findUnique: ReturnType<typeof vi.fn> }
   tenantCourse: { findFirst: ReturnType<typeof vi.fn> }
   tenantMember: { findFirst: ReturnType<typeof vi.fn> }
-  student: { findFirst: ReturnType<typeof vi.fn> }
+  student: {
+    findFirst: ReturnType<typeof vi.fn>
+    update: ReturnType<typeof vi.fn>
+  }
   enrollment: {
     findFirst: ReturnType<typeof vi.fn>
     create: ReturnType<typeof vi.fn>
@@ -222,6 +228,20 @@ describe("venda direta herda o gateway da unidade", () => {
     expect(res.status).toBe(503)
     const json = (await res.json()) as { error: string }
     expect(json.error).toContain("Mercado Pago")
+  })
+
+  it("bolsa em unidade ASAAS registra gateway=ASAAS (rótulo honesto no BI)", async () => {
+    p.tenant.findUnique.mockResolvedValue(asaasTenant())
+    mockSellableCourse()
+    mockStudent()
+    p.student.update.mockResolvedValue({ id: "s1" })
+
+    const res = await POST(bodyExistingStudent({ bolsista: true }))
+    expect(res.status).toBe(200)
+    const created = p.enrollment.create.mock.calls[0][0] as {
+      data: { gateway: string }
+    }
+    expect(created.data.gateway).toBe("ASAAS")
   })
 
   it("aluno existente sem CPF numa unidade ASAAS → 400 antes de criar matrícula", async () => {

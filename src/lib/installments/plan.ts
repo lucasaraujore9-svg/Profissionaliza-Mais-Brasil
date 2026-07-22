@@ -259,13 +259,17 @@ async function createAsaasCarne(
       // NÃO usa prefixo enr_ (o webhook Asaas casa enr_ com a matrícula direto —
       // aqui queremos o ramo de parcela, que casa por asaasPaymentId).
       paymentExternalReference: `carne_${ctx.enrollment.id}`,
-      // Webhook POR COBRANÇA em ambos os lados: a conta-mãe aponta para o
-      // handler global; a revenda, para o handler dela (?tenant=<slug>) — mesma
-      // convenção do checkout transparente (loja/checkout/process). Antes a
-      // revenda não mandava nada e dependia 100% de a unidade ter criado o
-      // webhook DE CONTA no painel do Asaas; quem não criou emitia o carnê e
-      // nunca liquidava (aluno pagava e o acesso não era liberado).
-      notificationUrl: isPmb ? asaasWebhookUrl() : asaasWebhookUrl(ctx.tenant!.slug),
+      // ATENÇÃO: `notificationUrl` NÃO existe no InstallmentSaveRequestDTO do
+      // Asaas (conferido na spec oficial: POST /v3/installments só aceita
+      // installmentCount/customer/value/totalValue/billingType/dueDate/
+      // description/postalService/daysAfterDueDate.../paymentExternalReference/
+      // discount/interest/fine/splits). O Asaas ignora o campo — ele está aqui
+      // apenas por simetria com issuePmbAsaasCharge e NÃO redireciona webhook.
+      // Logo a liquidação do carnê depende 100% do webhook DE CONTA: a conta-mãe
+      // já tem o global configurado; a UNIDADE precisa cadastrar o dela apontando
+      // para .../api/webhooks/asaas?tenant=<slug>, senão o aluno paga a parcela e
+      // o acesso nunca é liberado. Não há como forçar isso por cobrança.
+      ...(isPmb ? { notificationUrl: asaasWebhookUrl() } : {}),
     },
     apiKey,
   )
