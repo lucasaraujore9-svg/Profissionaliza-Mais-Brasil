@@ -19,6 +19,15 @@ vi.mock("@/lib/prisma", () => ({ prisma: db }))
 const requireAdminSession = vi.hoisted(() => vi.fn())
 vi.mock("@/lib/auth/admin-session", () => ({ requireAdminSession }))
 
+const blockTenantStudents = vi.hoisted(() =>
+  vi.fn(
+    async (): Promise<{
+      affectedStudents: number
+      affectedEnrollments: number
+      errors: string[]
+    }> => ({ affectedStudents: 3, affectedEnrollments: 4, errors: [] }),
+  ),
+)
 const unblockTenantStudents = vi.hoisted(() =>
   vi.fn(
     async (): Promise<{
@@ -28,7 +37,7 @@ const unblockTenantStudents = vi.hoisted(() =>
     }> => ({ affectedStudents: 2, affectedEnrollments: 3, errors: [] }),
   ),
 )
-vi.mock("@/lib/auto-block", () => ({ unblockTenantStudents }))
+vi.mock("@/lib/auto-block", () => ({ blockTenantStudents, unblockTenantStudents }))
 
 vi.mock("@/lib/redis/tenant-cache", () => ({ invalidateTenant: vi.fn() }))
 vi.mock("@/lib/audit", () => ({ logAudit: vi.fn() }))
@@ -114,6 +123,46 @@ describe("PATCH /admin/revendedores/[id]/status — reativação", () => {
     await PATCH(req("SUSPENDED"), { params })
 
     expect(unblockTenantStudents).not.toHaveBeenCalled()
+  })
+})
+
+describe("PATCH /admin/revendedores/[id]/status — suspensão", () => {
+  // O card sempre prometeu "Suspenda ou reative o acesso da unidade", mas a rota
+  // só trocava o status: a loja saía do ar e os alunos seguiam assistindo. O
+  // admin suspendia acreditando ter cortado o acesso — e não tinha.
+  it("ACTIVE → SUSPENDED bloqueia os alunos da unidade", async () => {
+    db.tenant.findUnique.mockResolvedValue({
+      id: "t1",
+      slug: "unidade",
+      customDomain: null,
+      accountManagerId: null,
+      status: "ACTIVE",
+    })
+
+    const res = await PATCH(req("SUSPENDED"), { params })
+
+    expect(res.status).toBe(200)
+    expect(blockTenantStudents).toHaveBeenCalledWith("t1")
+    expect((await res.json()).data.studentsBlocked).toBe(3)
+  })
+
+  it("SUSPENDED → SUSPENDED não rebloqueia (sem transição)", async () => {
+    db.tenant.findUnique.mockResolvedValue({
+      id: "t1",
+      slug: "unidade",
+      customDomain: null,
+      accountManagerId: null,
+      status: "SUSPENDED",
+    })
+
+    await PATCH(req("SUSPENDED"), { params })
+
+    expect(blockTenantStudents).not.toHaveBeenCalled()
+  })
+
+  it("reativar NÃO bloqueia ninguém", async () => {
+    await PATCH(req("ACTIVE"), { params })
+    expect(blockTenantStudents).not.toHaveBeenCalled()
   })
 
   it("falha parcial no desbloqueio não derruba a reativação", async () => {

@@ -5,7 +5,7 @@ import { requireAdminSession } from "@/lib/auth/admin-session"
 import { invalidateTenant } from "@/lib/redis/tenant-cache"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 import { logAudit } from "@/lib/audit"
-import { unblockTenantStudents } from "@/lib/auto-block"
+import { blockTenantStudents, unblockTenantStudents } from "@/lib/auto-block"
 import { contextLogger } from "@/lib/logger"
 
 const schema = z.object({
@@ -88,6 +88,30 @@ export const PATCH = withRequestContextParams<{ id: string }>(
     }
   }
 
+  // Suspender a unidade CORTA o acesso dos alunos dela. O card sempre prometeu
+  // isso ("Suspenda ou reative o acesso da unidade"), mas a rota só trocava o
+  // status: a loja saía do ar e os alunos continuavam assistindo. O admin
+  // suspendia acreditando ter cortado o acesso — e não tinha.
+  //
+  // Mesmo primitivo do auto-block por inadimplência (src/lib/auto-block.ts), e
+  // vale para qualquer `billingMode`: aqui a suspensão é um ato DELIBERADO do
+  // admin, não uma inferência de cobrança.
+  let studentsBlocked = 0
+  if (parsed.data.status === "SUSPENDED" && tenant.status !== "SUSPENDED") {
+    const block = await blockTenantStudents(id)
+    studentsBlocked = block.affectedStudents
+    if (block.errors.length > 0) {
+      contextLogger().error(
+        {
+          event: "admin.revendedores.status.block_partial",
+          tenantId: id,
+          errors: block.errors.length,
+        },
+        "unidade suspensa mas nem todos os alunos foram bloqueados",
+      )
+    }
+  }
+
   // SAAS-001: trilha de auditoria da transição manual de lifecycle do tenant.
   await logAudit({
     action: "tenant.status.update",
@@ -97,9 +121,11 @@ export const PATCH = withRequestContextParams<{ id: string }>(
     actorRole: ctx.role,
     tenantId: id,
     payloadBefore: { status: tenant.status },
-    payloadAfter: { status: parsed.data.status, studentsUnblocked },
+    payloadAfter: { status: parsed.data.status, studentsUnblocked, studentsBlocked },
   })
 
-  return NextResponse.json({ data: { status: parsed.data.status, studentsUnblocked } })
+  return NextResponse.json({
+    data: { status: parsed.data.status, studentsUnblocked, studentsBlocked },
+  })
   },
 )

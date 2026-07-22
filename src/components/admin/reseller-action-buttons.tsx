@@ -43,6 +43,7 @@ export function ResellerActionButtons({
   const [loading, setLoading] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [cancelOpen, setCancelOpen] = useState(false)
+  const [suspendOpen, setSuspendOpen] = useState(false)
   // Destino dos alunos ao cancelar. Pré-seleciona pela política já configurada
   // da unidade (`cancellationPolicy.keepStudentsActive`, default manter).
   const [blockStudents, setBlockStudents] = useState(keepStudentsActive === false)
@@ -63,6 +64,16 @@ export function ResellerActionButtons({
       if (!res.ok) {
         setError(body.error ?? "Falha ao atualizar status")
         return
+      }
+      // Suspender/reativar mexe no acesso dos ALUNOS, não só no da unidade.
+      // Dizer quantos foram afetados é o que torna a ação verificável — sem
+      // isso o admin não tem como saber se o corte realmente aconteceu.
+      const blocked = body.data?.studentsBlocked ?? 0
+      const unblocked = body.data?.studentsUnblocked ?? 0
+      if (blocked > 0) {
+        toast.success(`Unidade suspensa · ${blocked} aluno(s) bloqueado(s) na plataforma de aulas`)
+      } else if (unblocked > 0) {
+        toast.success(`Unidade reativada · ${unblocked} aluno(s) desbloqueado(s)`)
       }
       onChanged?.()
     } catch {
@@ -149,7 +160,7 @@ export function ResellerActionButtons({
       {showStatus && (
         <ResellerCard
           title="Status da assinatura"
-          description="Suspenda ou reative o acesso da unidade."
+          description="Suspenda ou reative o acesso da unidade e dos alunos dela."
         >
           {error && (
             <p className="mt-3 rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">
@@ -175,7 +186,7 @@ export function ResellerActionButtons({
               variant="outline"
               className="flex-1"
               disabled={isCancelled || loading !== null || status === "SUSPENDED"}
-              onClick={() => setStatus("SUSPENDED")}
+              onClick={() => setSuspendOpen(true)}
             >
               <Pause className="h-4 w-4" />
               {loading === "SUSPENDED" ? "Aguarde..." : "Suspender"}
@@ -202,6 +213,38 @@ export function ResellerActionButtons({
           )}
         </ResellerCard>
       )}
+
+      {/* Suspender corta o acesso dos ALUNOS também — merece confirmação, do
+          mesmo jeito que o cancelamento. */}
+      <AlertDialog open={suspendOpen} onOpenChange={setSuspendOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Suspender a unidade?</AlertDialogTitle>
+            <AlertDialogDescription>
+              A vitrine sai do ar e o painel da unidade fica bloqueado.{" "}
+              <strong>Os alunos dela perdem o acesso às aulas</strong> na
+              plataforma — as matrículas ativas passam a suspensas. Reativar a
+              unidade devolve o acesso de todos eles.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <Button variant="outline" onClick={() => setSuspendOpen(false)}>
+              Cancelar
+            </Button>
+            <Button
+              className="bg-amber-500 text-white hover:bg-amber-600"
+              disabled={loading !== null}
+              onClick={() => {
+                setSuspendOpen(false)
+                void setStatus("SUSPENDED")
+              }}
+            >
+              <Pause className="h-4 w-4" />
+              Suspender unidade e alunos
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Zona de risco — operacoes destrutivas/irreversiveis */}
       {showRiskZone && (

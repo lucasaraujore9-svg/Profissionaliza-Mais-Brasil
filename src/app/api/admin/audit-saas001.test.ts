@@ -13,6 +13,20 @@ vi.mock("@/lib/prisma", () => ({
 vi.mock("@/lib/auth/admin-session", () => ({ requireAdminSession: vi.fn() }))
 vi.mock("@/lib/auth/guards", () => ({ requireSuperAdmin: vi.fn() }))
 vi.mock("@/lib/redis/tenant-cache", () => ({ invalidateTenant: vi.fn() }))
+// Suspender/reativar unidade propaga aos alunos (auto-block). Aqui o foco é a
+// TRILHA DE AUDITORIA — a propagação tem suíte própria (status-unblock.test.ts).
+vi.mock("@/lib/auto-block", () => ({
+  blockTenantStudents: vi.fn(async () => ({
+    affectedStudents: 0,
+    affectedEnrollments: 0,
+    errors: [],
+  })),
+  unblockTenantStudents: vi.fn(async () => ({
+    affectedStudents: 0,
+    affectedEnrollments: 0,
+    errors: [],
+  })),
+}))
 vi.mock("@/lib/auth/roles", () => ({ canManageCommissions: () => true }))
 vi.mock("bcryptjs", () => ({ hash: vi.fn(async () => "hash") }))
 vi.mock("@/lib/students/generate-password", () => ({
