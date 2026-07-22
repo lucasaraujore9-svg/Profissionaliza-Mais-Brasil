@@ -20,6 +20,7 @@ import {
 import { isValidCpf, stripCpf } from "@/lib/validation/cpf"
 import { isValidPhone, normalizePhone } from "@/lib/validation/phone"
 import { effectivePaymentType, monthlyActive } from "@/lib/tenant/monthly-policy"
+import { tenantCheckoutMode } from "@/lib/tenant/checkout-mode"
 import { activeCustomDomain, vitrineUrl } from "@/lib/tenant/urls"
 import { tenantPolo } from "@/lib/tenant/slug"
 import { createBoletoInstallmentPlan } from "@/lib/installments/plan"
@@ -193,8 +194,10 @@ export const POST = withRequestContext(
         monthlyEnabled: true,
         monthlyScope: true,
         salesGateway: true,
+        asaasGatewayEnabled: true,
         asaasConnected: true,
         asaasApiKey: true,
+        asaasWebhookToken: true,
       },
     })
     if (!tenant) {
@@ -210,36 +213,50 @@ export const POST = withRequestContext(
       )
     }
 
-    // Carnê (parcelado no boleto): exige a capability ativa e usa o gateway de
-    // venda da unidade (Asaas gera o carnê nativo; MP emite N boletos avulsos).
+    // Gateway ATIVO da unidade, pela MESMA fonte de verdade da vitrine
+    // (src/lib/tenant/checkout-mode.ts). A venda direta era a única superfície
+    // de venda que não consultava esse helper: o link de pagamento exigia
+    // Mercado Pago incondicionalmente (503 "Conecte o Mercado Pago") mesmo para
+    // quem escolheu o Asaas, e gravava `gateway: "MP"` fixo na matrícula — numa
+    // unidade que migrou para o Asaas sem revogar o token antigo do MP, isso
+    // cobrava na conta que ela considera desativada. NONE = gateway escolhido
+    // não está pronto; nunca há fallback para o outro (REGRA DE OURO).
+    const mode = tenantCheckoutMode(tenant)
+
     const isInstallment = !isBolsista && !!data.boletoInstallment
-    if (isInstallment) {
-      // Carnê usa a MESMA capability de "Pagamento parcelado (mensalidade)".
-      if (!monthlyActive(tenant)) {
+    // Carnê usa a MESMA capability de "Pagamento parcelado (mensalidade)".
+    if (isInstallment && !monthlyActive(tenant)) {
+      return NextResponse.json(
+        { error: "Pagamento parcelado não está habilitado para sua unidade." },
+        { status: 403 },
+      )
+    }
+    // Toda venda COM cobrança (link transparente ou carnê) sai pelo gateway
+    // ativo da unidade. A bolsa não cobra e por isso pula o gate.
+    if (!isBolsista) {
+      if (mode === "NONE") {
         return NextResponse.json(
-          { error: "Pagamento parcelado não está habilitado para sua unidade." },
-          { status: 403 },
-        )
-      }
-      if (tenant.salesGateway === "ASAAS") {
-        if (!tenant.asaasConnected || !tenant.asaasApiKey) {
-          return NextResponse.json(
-            { error: "Conecte o Asaas em /painel/configuracoes para gerar carnês." },
-            { status: 503 },
-          )
-        }
-      } else if (!tenant.mpAccessToken) {
-        return NextResponse.json(
-          { error: "Conecte o Mercado Pago em /painel/configuracoes" },
+          {
+            error:
+              tenant.salesGateway === "ASAAS"
+                ? "Conecte o Asaas em /painel/configuracoes para vender."
+                : "Conecte o Mercado Pago em /painel/configuracoes",
+          },
           { status: 503 },
         )
       }
-    } else if (!isBolsista && !tenant.mpAccessToken) {
-      // Venda normal (link transparente) — sempre pelo Mercado Pago.
-      return NextResponse.json(
-        { error: "Conecte o Mercado Pago em /painel/configuracoes" },
-        { status: 503 },
-      )
+      // Asaas: sem o token do webhook a cobrança até é criada, mas a confirmação
+      // do pagamento é recusada em /api/webhooks/asaas (401) e o aluno nunca é
+      // matriculado. Mesma trava autoritativa do /api/loja/checkout.
+      if (mode === "ASAAS" && !tenant.asaasWebhookToken) {
+        return NextResponse.json(
+          {
+            error:
+              "Conexão com o Asaas incompleta — reconecte a conta em /painel/configuracoes.",
+          },
+          { status: 503 },
+        )
+      }
     }
 
     // Resolve o alvo da venda em variáveis unificadas (curso ou pacote). O
@@ -479,6 +496,21 @@ export const POST = withRequestContext(
       }
     }
 
+    // O Asaas exige o CPF do pagador para criar o cliente da cobrança (tanto no
+    // carnê quanto no link). Aluno NOVO sempre traz CPF (schema); o aluno
+    // EXISTENTE pode não ter — valida aqui em vez de estourar lá dentro do
+    // gateway, que só falharia depois de criar a matrícula (502 + rollback).
+    if (!isBolsista && tenant.salesGateway === "ASAAS" && !student.cpf) {
+      if (couponId) await releaseCoupon(couponId).catch(swallow("painel.vendas"))
+      return NextResponse.json(
+        {
+          error:
+            "Aluno sem CPF cadastrado — o Asaas exige o CPF para gerar a cobrança.",
+        },
+        { status: 400 },
+      )
+    }
+
     // Duplicidade: pacote compara pela matrícula primária do pacote; curso, pelo
     // Course. Espelha o gate do checkout de pacote (checkout/package/route.ts).
     const existingEnrollment = await prisma.enrollment.findFirst({
@@ -527,7 +559,9 @@ export const POST = withRequestContext(
           soldByUserId: userId,
           paymentType: rawPaymentType,
           status: "PENDING",
-          gateway: "MP",
+          // Bolsa não cobra, mas a coluna alimenta o BI: registra o gateway
+          // ATIVO da unidade em vez de mentir "MP" numa unidade Asaas.
+          gateway: tenant.salesGateway,
           originalAmount: basePrice,
           discountAmount: basePrice,
           finalAmount: 0,
@@ -696,7 +730,10 @@ export const POST = withRequestContext(
         soldByUserId: userId,
         paymentType: effectiveType,
         status: "PENDING",
-        gateway: "MP",
+        // Herda o gateway ATIVO da unidade — /api/loja/checkout/process roteia a
+        // cobrança por este campo, então gravar "MP" fixo mandava o dinheiro da
+        // unidade Asaas para a conta MP antiga (ou travava a venda em 503).
+        gateway: tenant.salesGateway,
         originalAmount: basePrice,
         discountAmount,
         finalAmount,
@@ -708,9 +745,9 @@ export const POST = withRequestContext(
 
     // ── Desconto zerou o valor (cupom de 100% ou desconto manual integral) ──
     // Não há link de pagamento a gerar: libera o acesso na hora, pelo mesmo
-    // caminho da bolsa. Atenção: a unidade ainda precisa ter o MP conectado
-    // para chegar aqui — o guard de gateway roda antes do cálculo do desconto.
-    // Sem MP, a saída para venda sem cobrança continua sendo a flag "bolsista".
+    // caminho da bolsa. Atenção: a unidade ainda precisa ter um gateway pronto
+    // para chegar aqui — o guard roda antes do cálculo do desconto. Sem
+    // gateway, a saída para venda sem cobrança continua sendo a flag "bolsista".
     if (isFreeAmount(finalAmount)) {
       try {
         await releaseFreeEnrollment(resellerTenantContext(tenant), enrollment.id)
@@ -741,9 +778,11 @@ export const POST = withRequestContext(
     // Padronizado: `enr_<id>` (mesmo formato de /api/loja/checkout). O webhook
     // identifica o tenant pela query string `?tenant=<slug>` na notification_url.
     const externalReference = `enr_${enrollment.id}`
-    // Re-checagem para narrowing: o guard de mpAccessToken acima e condicional
-    // (bolsa pula). Checkout transparente também exige a public key.
-    if (!tenant.mpAccessToken || !tenant.mpPublicKey) {
+    // Defesa em profundidade: o guard de gateway acima é condicional (a bolsa
+    // pula). No MP o checkout transparente exige token + public key; no Asaas
+    // não existe public key — a cobrança é criada server-side no /process com a
+    // api key da unidade. Por isso a checagem é POR GATEWAY, não fixa no MP.
+    if (mode === "MP" && (!tenant.mpAccessToken || !tenant.mpPublicKey)) {
       await prisma.enrollment.delete({ where: { id: enrollment.id } }).catch(swallow("painel.vendas.rollback"))
       if (couponId) await releaseCoupon(couponId).catch(swallow("painel.vendas.rollback"))
       return NextResponse.json(
@@ -752,10 +791,10 @@ export const POST = withRequestContext(
       )
     }
 
-    // Checkout Transparente: NÃO criamos preference no MP. O link enviado ao
-    // aluno aponta para a NOSSA página de pagamento na vitrine do revendedor
-    // (/loja/pagar/<id>), onde ele paga cartão/PIX/boleto sem sair do domínio
-    // da loja — nunca é redirecionado para o site do Mercado Pago.
+    // Checkout Transparente: NÃO criamos cobrança em gateway nenhum aqui. O link
+    // enviado ao aluno aponta para a NOSSA página de pagamento na vitrine do
+    // revendedor (/loja/pagar/<id>), onde ele paga cartão/PIX/boleto sem sair do
+    // domínio da loja — a cobrança nasce no /process, no gateway da matrícula.
     try {
       await prisma.enrollment.update({
         where: { id: enrollment.id },

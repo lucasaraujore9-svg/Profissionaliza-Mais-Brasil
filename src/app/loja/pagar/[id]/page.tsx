@@ -2,6 +2,7 @@ import { headers } from "next/headers"
 import Link from "next/link"
 import { prisma } from "@/lib/prisma"
 import { MpCheckoutForm } from "@/components/loja/mp-checkout-form"
+import { AsaasCheckoutForm } from "@/components/loja/asaas-checkout-form"
 import { OrderSummary } from "@/components/loja/order-summary"
 import {
   MAX_CARD_INSTALLMENTS,
@@ -54,6 +55,10 @@ export default async function PagarPage({ params }: PagarPageProps) {
     select: {
       id: true,
       status: true,
+      // Gateway da matrícula (herdado do salesGateway da unidade na venda). É
+      // ele — e não as credenciais MP — que decide qual formulário renderizar,
+      // igual a /aluno/comprar/pagar/[id].
+      gateway: true,
       paymentType: true,
       finalAmount: true,
       originalAmount: true,
@@ -71,7 +76,7 @@ export default async function PagarPage({ params }: PagarPageProps) {
           capaImageUrl: true,
         },
       },
-      student: { select: { email: true, nome: true } },
+      student: { select: { email: true, nome: true, cpf: true } },
       tenant: {
         select: {
           status: true,
@@ -106,7 +111,19 @@ export default async function PagarPage({ params }: PagarPageProps) {
     return <Aviso titulo="Cobrança indisponível" texto="Esta cobrança não está mais ativa." />
   }
 
-  if (enrollment.tenant.status !== "ACTIVE" || !enrollment.tenant.mpPublicKey) {
+  if (enrollment.tenant.status !== "ACTIVE") {
+    return (
+      <Aviso
+        titulo="Loja indisponível"
+        texto="Esta loja não está aceitando pagamentos no momento."
+      />
+    )
+  }
+
+  const isAsaas = enrollment.gateway === "ASAAS"
+  // A public key só existe (e só é necessária) no Payment Brick do MP. Exigi-la
+  // sempre barrava a cobrança de uma unidade que vende pelo Asaas.
+  if (!isAsaas && !enrollment.tenant.mpPublicKey) {
     return (
       <Aviso
         titulo="Loja indisponível"
@@ -118,6 +135,11 @@ export default async function PagarPage({ params }: PagarPageProps) {
   const payerEmail = enrollment.student.email
   if (!payerEmail) {
     return <Aviso titulo="Cadastro incompleto" texto="Falta o e-mail do aluno nesta cobrança. Contate a loja." />
+  }
+  // O Asaas cria o cliente da cobrança a partir do CPF do aluno da matrícula (o
+  // CPF digitado aqui não é usado): sem ele a cobrança falharia no gateway.
+  if (isAsaas && !enrollment.student.cpf) {
+    return <Aviso titulo="Cadastro incompleto" texto="Falta o CPF do aluno nesta cobrança. Contate a loja." />
   }
 
   // No cartão o aluno sempre pode dividir em até 12x (mensal = recorrência, 1x).
@@ -148,17 +170,29 @@ export default async function PagarPage({ params }: PagarPageProps) {
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_380px] lg:gap-8">
           <div>
-            <MpCheckoutForm
-              publicKey={enrollment.tenant.mpPublicKey}
-              amount={Number(enrollment.finalAmount)}
-              maxInstallments={maxInstallments}
-              interestFreeInstallments={
-                enrollment.tenant.interestFreeInstallments
-              }
-              enrollmentId={enrollment.id}
-              defaultNome={enrollment.student.nome ?? undefined}
-              defaultEmail={payerEmail}
-            />
+            {isAsaas ? (
+              // payMode: a matrícula já existe, então o form pula o init e cobra
+              // direto no /process, que roteia pelo enrollment.gateway. Os paths
+              // default já são os da vitrine (/api/loja/checkout/*).
+              <AsaasCheckoutForm
+                enrollmentId={enrollment.id}
+                amount={Number(enrollment.finalAmount)}
+                defaultNome={enrollment.student.nome ?? undefined}
+                defaultEmail={payerEmail}
+              />
+            ) : (
+              <MpCheckoutForm
+                publicKey={enrollment.tenant.mpPublicKey!}
+                amount={Number(enrollment.finalAmount)}
+                maxInstallments={maxInstallments}
+                interestFreeInstallments={
+                  enrollment.tenant.interestFreeInstallments
+                }
+                enrollmentId={enrollment.id}
+                defaultNome={enrollment.student.nome ?? undefined}
+                defaultEmail={payerEmail}
+              />
+            )}
           </div>
 
           <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start">
@@ -176,7 +210,9 @@ export default async function PagarPage({ params }: PagarPageProps) {
               finalPrice={Number(enrollment.finalAmount)}
               couponCode={null}
               parcelasSugeridas={
-                isMonthly
+                // "Nx sem juros" é do cartão do MP; a cobrança avulsa no Asaas
+                // não parcela, então não anuncia parcelamento que não existe.
+                isMonthly || isAsaas
                   ? null
                   : displayInterestFreeInstallments(
                       enrollment.tenant.interestFreeInstallments,
