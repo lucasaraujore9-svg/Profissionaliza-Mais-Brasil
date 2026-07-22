@@ -5,6 +5,8 @@ import { requireAdminSession } from "@/lib/auth/admin-session"
 import { invalidateTenant } from "@/lib/redis/tenant-cache"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 import { logAudit } from "@/lib/audit"
+import { unblockTenantStudents } from "@/lib/auto-block"
+import { contextLogger } from "@/lib/logger"
 
 const schema = z.object({
   status: z.enum(["ACTIVE", "SUSPENDED", "PENDING", "CANCELLED"]),
@@ -60,6 +62,32 @@ export const PATCH = withRequestContextParams<{ id: string }>(
 
   await invalidateTenant(tenant)
 
+  // Reativar a unidade TEM que devolver o acesso dos alunos que foram bloqueados
+  // enquanto ela estava suspensa. Sem isto eles ficam órfãos: o cron
+  // `reactivate-paid` só varre tenants SUSPENDED, então assim que o status vira
+  // ACTIVE na mão a unidade sai do radar dele e ninguém mais desbloqueia
+  // ninguém — alunos em dia (inclusive bolsistas) seguem sem aula por tempo
+  // indeterminado. Foi o que aconteceu com `profissionalizantes` em 21/07/2026.
+  //
+  // Idempotente: `unblockTenantStudents` só toca em quem está BLOQUEADO. Não
+  // reabre quem foi travado pela COTA DE AULAS (status DEVEDOR), que tem dono
+  // próprio.
+  let studentsUnblocked = 0
+  if (parsed.data.status === "ACTIVE" && tenant.status !== "ACTIVE") {
+    const unblock = await unblockTenantStudents(id)
+    studentsUnblocked = unblock.affectedStudents
+    if (unblock.errors.length > 0) {
+      contextLogger().error(
+        {
+          event: "admin.revendedores.status.unblock_partial",
+          tenantId: id,
+          errors: unblock.errors.length,
+        },
+        "unidade reativada mas nem todos os alunos foram desbloqueados",
+      )
+    }
+  }
+
   // SAAS-001: trilha de auditoria da transição manual de lifecycle do tenant.
   await logAudit({
     action: "tenant.status.update",
@@ -69,9 +97,9 @@ export const PATCH = withRequestContextParams<{ id: string }>(
     actorRole: ctx.role,
     tenantId: id,
     payloadBefore: { status: tenant.status },
-    payloadAfter: { status: parsed.data.status },
+    payloadAfter: { status: parsed.data.status, studentsUnblocked },
   })
 
-  return NextResponse.json({ data: { status: parsed.data.status } })
+  return NextResponse.json({ data: { status: parsed.data.status, studentsUnblocked } })
   },
 )
