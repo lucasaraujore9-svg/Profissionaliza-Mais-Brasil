@@ -31,12 +31,6 @@ export function SecurityTab({
   scope: ManagementScope
 }) {
   const router = useRouter()
-  const [resetting, setResetting] = useState(false)
-  const [resetResult, setResetResult] = useState<{
-    ok: boolean
-    text: string
-    tempPassword?: string
-  } | null>(null)
   const [blocking, setBlocking] = useState(false)
   const isBlocked = student.status === "BLOQUEADO"
 
@@ -46,34 +40,6 @@ export function SecurityTab({
     student.plataformaAlunoId &&
       !student.plataformaAlunoId.startsWith("pending"),
   )
-
-  async function handleResetPassword() {
-    if (!confirm("Resetar a senha do aluno? Uma senha temporária será enviada por email.")) return
-    setResetting(true)
-    setResetResult(null)
-    try {
-      const res = await fetch(`${apiBase(scope, student.id)}/reset-password`, {
-        method: "POST",
-      })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        setResetResult({ ok: false, text: data.error ?? "Falha ao resetar" })
-      } else {
-        setResetResult({
-          ok: true,
-          text: data.emailSent
-            ? "Senha resetada e email enviado ao aluno."
-            : "Senha resetada. Email não pôde ser enviado — copie a senha abaixo e entregue ao aluno.",
-          tempPassword: data.tempPassword,
-        })
-        router.refresh()
-      }
-    } catch {
-      setResetResult({ ok: false, text: "Erro de rede" })
-    } finally {
-      setResetting(false)
-    }
-  }
 
   async function handleToggleBlock() {
     const action = isBlocked ? "desbloquear" : "bloquear"
@@ -106,53 +72,7 @@ export function SecurityTab({
 
       <LmsAccessSection credentials={student.lmsCredentials} />
 
-      <section className="rounded-xl border border-gray-200 bg-white p-5">
-        <div className="flex items-center gap-2">
-          <KeyRound className="h-4 w-4 text-[var(--color-pmb-green)]" />
-          <h2 className="text-sm font-semibold text-[var(--color-pmb-green-900)]">
-            Senha de acesso ao painel
-          </h2>
-        </div>
-        <p className="mt-1 text-xs text-gray-500">
-          Reseta a senha do aluno no painel <code>/aluno</code>. Gera uma senha
-          temporária aleatória, envia por email e força a troca no próximo
-          login. <strong>Não afeta a senha da plataforma de aulas.</strong>
-        </p>
-
-        {resetResult && (
-          <div
-            className={`mt-3 rounded-md px-3 py-2 text-xs ${
-              resetResult.ok
-                ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
-                : "bg-rose-50 text-rose-700 ring-1 ring-rose-200"
-            }`}
-          >
-            <p>{resetResult.text}</p>
-            {resetResult.tempPassword && (
-              <p className="mt-2 font-mono text-sm font-bold">
-                Senha temporária: <code>{resetResult.tempPassword}</code>
-              </p>
-            )}
-          </div>
-        )}
-
-        <div className="mt-4">
-          <button
-            type="button"
-            onClick={handleResetPassword}
-            disabled={resetting || !student.email}
-            className="inline-flex items-center gap-2 rounded-lg border border-[var(--color-pmb-green)] bg-white px-4 py-2 text-sm font-semibold text-[var(--color-pmb-green)] shadow-sm hover:bg-[var(--color-pmb-lime-50)] disabled:opacity-50"
-          >
-            <KeyRound className="h-4 w-4" />
-            {resetting ? "Resetando..." : "Resetar senha"}
-          </button>
-          {!student.email && (
-            <p className="mt-2 text-xs text-rose-600">
-              Aluno sem email cadastrado — não é possível enviar a senha.
-            </p>
-          )}
-        </div>
-      </section>
+      <PanelPasswordSection student={student} scope={scope} />
 
       <section className="rounded-xl border border-gray-200 bg-white p-5">
         <div className="flex items-center gap-2">
@@ -199,6 +119,198 @@ export function SecurityTab({
         </div>
       </section>
     </div>
+  )
+}
+
+/**
+ * Senha do aluno no painel `/aluno` (a nossa — não a da plataforma de aulas).
+ *
+ * Dois modos: **definir** uma senha específica (quem atende digita e repassa ao
+ * aluno na hora) ou **gerar** uma temporária aleatória. A senha atual nunca é
+ * exibida — o banco só guarda o hash bcrypt, então o valor só aparece uma vez,
+ * logo após a troca.
+ */
+function PanelPasswordSection({
+  student,
+  scope,
+}: {
+  student: StudentData
+  scope: ManagementScope
+}) {
+  const router = useRouter()
+  const [open, setOpen] = useState(false)
+  const [newPassword, setNewPassword] = useState("")
+  const [saving, setSaving] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const [result, setResult] = useState<{
+    ok: boolean
+    text: string
+    password?: string
+  } | null>(null)
+
+  async function copy(value: string) {
+    try {
+      await navigator.clipboard.writeText(value)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      /* clipboard indisponível — usuário copia manualmente */
+    }
+  }
+
+  async function submit(generate: boolean) {
+    if (!generate && newPassword.trim().length < 8) {
+      setResult({ ok: false, text: "A senha precisa ter ao menos 8 caracteres." })
+      return
+    }
+    if (
+      generate &&
+      !confirm(
+        "Gerar uma senha temporária aleatória? Ela será enviada por email ao aluno.",
+      )
+    ) {
+      return
+    }
+    setSaving(true)
+    setResult(null)
+    setCopied(false)
+    try {
+      const res = await fetch(`${apiBase(scope, student.id)}/reset-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          generate ? { generate: true } : { newPassword: newPassword.trim() },
+        ),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setResult({ ok: false, text: data.error ?? "Falha ao trocar a senha" })
+        return
+      }
+      setOpen(false)
+      setNewPassword("")
+      setResult({
+        ok: true,
+        text: data.emailSent
+          ? "Senha alterada e enviada por email ao aluno. Copie abaixo para repassar também."
+          : "Senha alterada. O email não foi enviado — copie abaixo e entregue ao aluno.",
+        password: data.tempPassword,
+      })
+      router.refresh()
+    } catch {
+      setResult({ ok: false, text: "Erro de rede" })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <section className="rounded-xl border border-gray-200 bg-white p-5">
+      <div className="flex items-center gap-2">
+        <KeyRound className="h-4 w-4 text-[var(--color-pmb-green)]" />
+        <h2 className="text-sm font-semibold text-[var(--color-pmb-green-900)]">
+          Senha de acesso ao painel
+        </h2>
+      </div>
+      <p className="mt-1 text-xs text-gray-500">
+        Senha do aluno no painel <code>/aluno</code>. Você pode definir uma senha
+        específica ou gerar uma temporária aleatória. A senha atual{" "}
+        <strong>não pode ser exibida</strong> — fica guardada criptografada.{" "}
+        <strong>Não afeta a senha da plataforma de aulas.</strong>
+      </p>
+
+      {result && (
+        <div
+          className={`mt-3 rounded-md px-3 py-2 text-xs ${
+            result.ok
+              ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
+              : "bg-rose-50 text-rose-700 ring-1 ring-rose-200"
+          }`}
+        >
+          <p>{result.text}</p>
+          {result.password && (
+            <div className="mt-2 flex items-center gap-2">
+              <code className="flex-1 rounded-md border border-emerald-300 bg-white px-3 py-2 font-mono text-sm font-semibold text-emerald-900">
+                {result.password}
+              </code>
+              <button
+                type="button"
+                onClick={() => copy(result.password as string)}
+                className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-emerald-300 bg-white px-3 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-100"
+              >
+                {copied ? (
+                  <Check className="h-3.5 w-3.5" />
+                ) : (
+                  <Copy className="h-3.5 w-3.5" />
+                )}
+                {copied ? "Copiado" : "Copiar"}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="mt-4">
+        <button
+          type="button"
+          onClick={() => {
+            setOpen((v) => !v)
+            setResult(null)
+          }}
+          className="inline-flex items-center gap-2 rounded-lg border border-[var(--color-pmb-green)] bg-white px-4 py-2 text-sm font-semibold text-[var(--color-pmb-green)] shadow-sm hover:bg-[var(--color-pmb-lime-50)]"
+        >
+          <KeyRound className="h-4 w-4" />
+          Trocar senha
+        </button>
+      </div>
+
+      {open && (
+        <div className="mt-4 rounded-lg border border-gray-200 bg-gray-50 p-4">
+          <label className="text-xs font-medium text-gray-600" htmlFor="panel-pwd">
+            Nova senha
+          </label>
+          <div className="mt-1 flex flex-wrap items-center gap-2">
+            <input
+              id="panel-pwd"
+              type="text"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              placeholder="Mínimo 8 caracteres"
+              autoComplete="new-password"
+              className="min-w-[12rem] flex-1 rounded-lg border border-gray-300 px-3 py-2 font-mono text-sm focus:border-[var(--color-pmb-green)] focus:outline-none"
+            />
+            <button
+              type="button"
+              onClick={() => submit(false)}
+              disabled={saving}
+              className="inline-flex items-center gap-2 rounded-lg bg-[var(--color-pmb-green)] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:opacity-90 disabled:opacity-50"
+            >
+              <Check className="h-4 w-4" />
+              {saving ? "Salvando..." : "Salvar"}
+            </button>
+            <button
+              type="button"
+              onClick={() => submit(true)}
+              disabled={saving || !student.email}
+              className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm hover:bg-gray-50 disabled:opacity-50"
+              title={
+                student.email
+                  ? "Gerar uma senha temporária aleatória e enviar por email"
+                  : "Aluno sem email cadastrado — defina a senha manualmente"
+              }
+            >
+              <Sparkles className="h-4 w-4" />
+              Gerar automática
+            </button>
+          </div>
+          <p className="mt-2 text-[11px] text-gray-500">
+            {student.email
+              ? "A senha é enviada por email ao aluno e também exibida aqui para você repassar."
+              : "Aluno sem email cadastrado — a senha não será enviada. Copie e entregue ao aluno."}
+          </p>
+        </div>
+      )}
+    </section>
   )
 }
 

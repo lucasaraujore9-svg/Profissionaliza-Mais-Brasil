@@ -125,15 +125,49 @@ export async function notifyStudent(
   }
 }
 
+export const setStudentPasswordSchema = z.object({
+  /**
+   * Senha escolhida por quem atende. Ausente (ou `generate: true`) = o sistema
+   * gera uma temporária aleatória — comportamento historico do botao "Resetar".
+   */
+  newPassword: z.string().min(8, "A senha precisa ter pelo menos 8 caracteres").max(72).optional(),
+  generate: z.boolean().optional(),
+})
+
+export interface SetStudentPasswordOptions {
+  /**
+   * Defesa em profundidade: o painel do revendedor SEMPRE passa `ctx.tenantId`
+   * para que nenhum `id` forjado alcance aluno de outra loja.
+   */
+  tenantId?: string
+  /** Senha definida manualmente. Quando ausente, gera uma temporaria. */
+  newPassword?: string
+}
+
 interface ResetPasswordResult {
   tempPassword: string
   emailSent: boolean
+  /** `false` quando quem atende digitou a senha em vez de deixar o sistema gerar. */
+  generated: boolean
 }
 
+/**
+ * Troca a senha do aluno no painel `/aluno`. Dois modos:
+ *
+ * - **Gerada** (default): senha temporaria aleatoria, `passwordSetAt = null`
+ *   (o perfil do aluno pede que ele defina a dele) e email com a senha.
+ * - **Definida** (`newPassword`): quem atende escolhe a senha e a repassa ao
+ *   aluno. Como e uma senha conhecida e deliberada, grava `passwordSetAt` —
+ *   igual ao reset de senha do revendedor, que tambem nao forca nova troca.
+ *
+ * Nao toca na senha da plataforma de aulas (EA/LMS) — essa vive em
+ * `plataforma-actions.ts`.
+ */
 export async function resetStudentPassword(
   studentId: string,
-  tenantId?: string,
+  options: SetStudentPasswordOptions = {},
 ): Promise<ResetPasswordResult | { error: string }> {
+  const { tenantId, newPassword } = options
   const student = await prisma.student.findFirst({
     where: tenantId ? { id: studentId, tenantId } : { id: studentId },
     select: {
@@ -153,26 +187,33 @@ export async function resetStudentPassword(
     },
   })
   if (!student) return { error: "Aluno não encontrado" }
-  if (!student.email) return { error: "Aluno sem email cadastrado" }
+  // Sem email so bloqueia o modo gerado: ali a senha existe para ser enviada.
+  // Quando quem atende define a senha, ela e repassada na hora pela UI.
+  if (!student.email && !newPassword) {
+    return { error: "Aluno sem email cadastrado" }
+  }
 
-  const plain = generateTemporaryPassword()
+  const generated = !newPassword
+  const plain = newPassword ?? generateTemporaryPassword()
   const hashed = await hash(plain, 12)
 
   await prisma.student.update({
     where: { id: studentId },
     data: {
       passwordHash: hashed,
-      passwordSetAt: null, // forca aluno a saber que e temporaria
-      // resetToken/Expires limpos — admin gerou senha temporaria direta
+      // Gerada: null forca o aluno a saber que e temporaria. Definida: senha
+      // conhecida e escolhida por quem atende — nao ha troca pendente.
+      passwordSetAt: generated ? null : new Date(),
+      // resetToken/Expires limpos — a senha acabou de ser trocada aqui.
       resetToken: null,
       resetTokenExpires: null,
     },
   })
 
-  // Envia email com a senha temporaria reusando o template student-welcome
-  // (mesmo conteudo: identificacao + senha + CTA pra logar).
-  if (!isEmailConfigured()) {
-    return { tempPassword: plain, emailSent: false }
+  // Envia email com a senha reusando o template student-welcome (mesmo
+  // conteudo: identificacao + senha + CTA pra logar).
+  if (!student.email || !isEmailConfigured()) {
+    return { tempPassword: plain, emailSent: false, generated }
   }
 
   const isPmb = student.tenant.slug === PMB_TENANT_SLUG
@@ -185,7 +226,9 @@ export async function resetStudentPassword(
       to: student.email,
       from: emailFromForBrand(brand),
       replyTo: brand.replyTo ?? undefined,
-      subject: `Sua nova senha temporária — ${brand.name}`,
+      subject: generated
+        ? `Sua nova senha temporária — ${brand.name}`
+        : `Sua nova senha de acesso — ${brand.name}`,
       template: {
         type: "student-welcome",
         props: {
@@ -194,15 +237,16 @@ export async function resetStudentPassword(
           temporaryPassword: plain,
           loginUrl: `${storeBase}/login`,
           brand,
+          passwordLabel: generated ? "Senha temporária" : "Sua senha",
         },
       },
     })
-    return { tempPassword: plain, emailSent: true }
+    return { tempPassword: plain, emailSent: true, generated }
   } catch (err) {
     contextLogger().warn(
       { err, event: "student.reset_password.email_failed", studentId },
-      "Falha ao enviar email de reset — admin recebe a senha temporaria via UI",
+      "Falha ao enviar email de reset — admin recebe a senha via UI",
     )
-    return { tempPassword: plain, emailSent: false }
+    return { tempPassword: plain, emailSent: false, generated }
   }
 }

@@ -9,6 +9,12 @@ export interface StudentWelcomeTemplateProps {
   loginUrl: string
   /** Marca da loja/revenda (header, rodapé, corpo). Default: PMB. */
   brand?: EmailBrand
+  /**
+   * Rótulo da senha no box de credenciais. Default "Senha temporária" (senha
+   * gerada pelo sistema). Quem atende pode DEFINIR uma senha específica para o
+   * aluno — nesse caso ela não é temporária e o email não deve chamá-la assim.
+   */
+  passwordLabel?: string
 }
 
 /**
@@ -22,6 +28,7 @@ export function StudentWelcomeTemplate({
   temporaryPassword,
   loginUrl,
   brand = PMB_EMAIL_BRAND,
+  passwordLabel = "Senha temporária",
 }: StudentWelcomeTemplateProps) {
   const firstName = studentName.split(" ")[0] || studentName
   const storeName = brand.name
@@ -54,7 +61,7 @@ export function StudentWelcomeTemplate({
         <Text style={styles.credentialLabel}>Seu acesso</Text>
         <Text style={styles.credentialValue}>{studentEmail}</Text>
 
-        <Text style={styles.credentialLabel}>Senha temporária</Text>
+        <Text style={styles.credentialLabel}>{passwordLabel}</Text>
         <Text style={styles.credentialValueMono}>{temporaryPassword}</Text>
 
         <Text style={styles.credentialHint}>
