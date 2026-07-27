@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import {
   AlertCircle,
   CheckCircle2,
@@ -46,6 +46,10 @@ export interface AsaasCheckoutFormProps {
   confirmacaoPath?: string
   // Link/recompra (payMode): matrícula já existe → pula o init e cobra direto.
   enrollmentId?: string
+  /** Parcela já emitida do carnê que deve ser paga sem criar outra cobrança. */
+  boletoInstallmentId?: string
+  /** Texto do botão principal em payMode (ex.: "Pagar parcela"). */
+  submitLabel?: string
   defaultNome?: string
   defaultEmail?: string
 }
@@ -119,14 +123,19 @@ export function AsaasCheckoutForm({
   // (ex.: `/aluno/pagamentos`) são honrados como estão.
   confirmacaoPath,
   enrollmentId,
+  boletoInstallmentId,
+  submitLabel,
   defaultNome,
   defaultEmail,
 }: AsaasCheckoutFormProps) {
-  function successUrlFor(id: string): string {
-    const base =
-      confirmacaoPath ?? storePath(window.location.pathname, "/confirmacao")
-    return `${base}?enrollment_id=${encodeURIComponent(id)}`
-  }
+  const successUrlFor = useCallback(
+    (id: string): string => {
+      const base =
+        confirmacaoPath ?? storePath(window.location.pathname, "/confirmacao")
+      return `${base}?enrollment_id=${encodeURIComponent(id)}`
+    },
+    [confirmacaoPath],
+  )
   const [form, setForm] = useState<FormState>({
     nome: defaultNome ?? "",
     email: defaultEmail ?? "",
@@ -253,6 +262,7 @@ export function AsaasCheckoutForm({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           enrollmentId: ensured.enrollmentId,
+          ...(boletoInstallmentId ? { boletoInstallmentId } : {}),
           formData: buildFormData(),
         }),
       })
@@ -313,7 +323,11 @@ export function AsaasCheckoutForm({
       if (cancelled) return
       try {
         const res = await fetch(
-          `${statusPath}?enrollment_id=${encodeURIComponent(id)}`,
+          `${statusPath}?enrollment_id=${encodeURIComponent(id)}${
+            boletoInstallmentId
+              ? `&installment_id=${encodeURIComponent(boletoInstallmentId)}`
+              : ""
+          }`,
           { cache: "no-store" },
         )
         const data = await res.json()
@@ -329,8 +343,13 @@ export function AsaasCheckoutForm({
       cancelled = true
       clearInterval(interval)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, activeEnrollmentId, statusPath, confirmacaoPath])
+  }, [
+    status,
+    activeEnrollmentId,
+    statusPath,
+    boletoInstallmentId,
+    successUrlFor,
+  ])
 
   const submitting = status.kind === "submitting"
   // Cupom cobriu 100%: não há forma de pagamento a escolher.
@@ -488,7 +507,7 @@ export function AsaasCheckoutForm({
             ? "Processando..."
             : isFree
               ? "Concluir matrícula"
-              : "Finalizar Compra"}
+              : submitLabel ?? "Finalizar Compra"}
         </Button>
         <p className="text-center text-xs text-gray-500">
           {isFree

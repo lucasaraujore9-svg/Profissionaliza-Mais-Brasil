@@ -14,15 +14,15 @@ describe("OrderSummary", () => {
         finalPrice={300}
         couponCode={null}
         parcelasSugeridas={null}
-        installmentPlan={{ count: 3, amount: 100 }}
+        installmentPlan={{ count: 3, amount: 100, currentNumber: 1 }}
       />,
     )
 
     expect(html).toContain("Combo educação")
-    expect(html).toContain("Total da compra")
+    expect(html).toContain("Parcela 1 de 3")
     expect(html).toContain("3x")
     expect(html).toContain("100,00")
-    expect(html).toContain("no boleto")
+    expect(html).toContain("total")
   })
 
   it("mantém o total separado do valor de cada parcela", () => {
@@ -36,7 +36,7 @@ describe("OrderSummary", () => {
         finalPrice={300}
         couponCode={null}
         parcelasSugeridas={null}
-        installmentPlan={{ count: 3, amount: 100 }}
+        installmentPlan={{ count: 3, amount: 100, currentNumber: 1 }}
       />,
     )
 

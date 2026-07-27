@@ -8,6 +8,7 @@ import {
 } from "@/lib/mercadopago/transparent-process"
 import { decryptTenantAsaasKey } from "@/lib/asaas/client"
 import {
+  processExistingAsaasInstallmentPayment,
   processTransparentAsaasPayment,
   asaasFormDataSchema,
 } from "@/lib/asaas/transparent-process"
@@ -15,11 +16,14 @@ import { rateLimit, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
 import { contextLogger } from "@/lib/logger"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { mpWebhookUrl, asaasWebhookUrl, vitrineUrl } from "@/lib/tenant/urls"
+import { isWithinRevealWindow } from "@/lib/installments/schedule"
 
 // O formData varia por gateway (MP tokeniza no browser; Asaas envia o cartão ao
 // servidor). Aceitamos os dois shapes e ramificamos pelo enrollment.gateway.
 const bodySchema = z.object({
   enrollmentId: z.string().min(1),
+  /** Parcela existente do carnê que o checkout transparente deve pagar. */
+  boletoInstallmentId: z.string().min(1).optional(),
   formData: z.union([transparentFormDataSchema, asaasFormDataSchema]),
 })
 
@@ -51,7 +55,7 @@ export const POST = withRequestContext(
       )
     }
 
-    const { enrollmentId, formData } = parsed.data
+    const { enrollmentId, boletoInstallmentId, formData } = parsed.data
 
     try {
       const enrollment = await prisma.enrollment.findUnique({
@@ -68,6 +72,10 @@ export const POST = withRequestContext(
           asaasCustomerId: true,
           course: { select: { nome: true } },
           student: { select: { nome: true, email: true, cpf: true, fone: true } },
+          boletoInstallments: {
+            where: { status: { not: "CANCELLED" } },
+            orderBy: { number: "asc" },
+          },
           tenant: {
             select: {
               id: true,
@@ -104,14 +112,60 @@ export const POST = withRequestContext(
         )
       }
 
-      if (enrollment.status === "ACTIVE" || enrollment.status === "COMPLETED") {
-        return NextResponse.json({ data: { status: "approved" } })
-      }
-      if (enrollment.status !== "PENDING") {
+      const openInstallment =
+        enrollment.paymentType === "BOLETO_INSTALLMENT"
+          ? boletoInstallmentId
+            ? enrollment.boletoInstallments.find(
+                (row) => row.id === boletoInstallmentId,
+              )
+            : enrollment.boletoInstallments.find(
+                (row) => row.status !== "PAID",
+              )
+          : undefined
+      if (
+        enrollment.paymentType === "BOLETO_INSTALLMENT" &&
+        boletoInstallmentId &&
+        !openInstallment
+      ) {
         return NextResponse.json(
-          { error: "Esta matrícula não pode ser paga", code: "INVALID_STATE" },
+          { error: "Parcela não encontrada", code: "INSTALLMENT_NOT_FOUND" },
+          { status: 404 },
+        )
+      }
+      if (
+        openInstallment &&
+        !isWithinRevealWindow({
+          number: openInstallment.number,
+          dueDate: openInstallment.dueDate,
+        })
+      ) {
+        return NextResponse.json(
+          {
+            error: "Esta parcela ainda não está disponível para pagamento",
+            code: "INSTALLMENT_NOT_AVAILABLE",
+          },
           { status: 409 },
         )
+      }
+      const isExistingAsaasInstallment =
+        enrollment.gateway === "ASAAS" && !!openInstallment
+
+      // Uma matrícula de carnê fica ACTIVE após a 1ª parcela, mas as seguintes
+      // continuam pagáveis pelo mesmo checkout. Para os demais tipos, mantém o
+      // gate histórico: só PENDING chega ao processador.
+      if (!isExistingAsaasInstallment) {
+        if (
+          enrollment.status === "ACTIVE" ||
+          enrollment.status === "COMPLETED"
+        ) {
+          return NextResponse.json({ data: { status: "approved" } })
+        }
+        if (enrollment.status !== "PENDING") {
+          return NextResponse.json(
+            { error: "Esta matrícula não pode ser paga", code: "INVALID_STATE" },
+            { status: 409 },
+          )
+        }
       }
 
       const tenant = enrollment.tenant
@@ -156,33 +210,44 @@ export const POST = withRequestContext(
           request.headers.get("x-real-ip")?.trim() ||
           null
 
-        const asaasResult = await processTransparentAsaasPayment(
-          {
-            id: enrollment.id,
-            finalAmount: Number(enrollment.finalAmount),
-            paymentType: enrollment.paymentType,
-            installmentsTotal: enrollment.installmentsTotal,
-            externalReference: enrollment.externalReference ?? `enr_${enrollment.id}`,
-            courseNome: enrollment.course.nome,
-            studentNome: enrollment.student.nome,
-            studentEmail: enrollment.student.email,
-            studentCpf: enrollment.student.cpf,
-            studentFone: enrollment.student.fone,
-            asaasCustomerId: enrollment.asaasCustomerId,
+        const enrollmentInput = {
+          id: enrollment.id,
+          finalAmount: Number(enrollment.finalAmount),
+          paymentType: enrollment.paymentType,
+          installmentsTotal: enrollment.installmentsTotal,
+          externalReference:
+            enrollment.externalReference ?? `enr_${enrollment.id}`,
+          courseNome: enrollment.course.nome,
+          studentNome: enrollment.student.nome,
+          studentEmail: enrollment.student.email,
+          studentCpf: enrollment.student.cpf,
+          studentFone: enrollment.student.fone,
+          asaasCustomerId: enrollment.asaasCustomerId,
+        }
+        const asaasCtx = {
+          apiKey: decryptTenantAsaasKey(tenant.asaasApiKey),
+          fulfillTenant: {
+            id: tenant.id,
+            slug: tenant.slug,
+            name: tenant.name,
+            plataformaVendedorId: tenant.plataformaVendedorId,
           },
-          asaasParsed.data,
-          {
-            apiKey: decryptTenantAsaasKey(tenant.asaasApiKey),
-            fulfillTenant: {
-              id: tenant.id,
-              slug: tenant.slug,
-              name: tenant.name,
-              plataformaVendedorId: tenant.plataformaVendedorId,
-            },
-            notificationUrl: asaasWebhookUrl(tenant.slug),
-            remoteIp: fwd,
-          },
-        )
+          notificationUrl: asaasWebhookUrl(tenant.slug),
+          remoteIp: fwd,
+        }
+
+        const asaasResult = openInstallment
+          ? await processExistingAsaasInstallmentPayment(
+              openInstallment,
+              enrollmentInput,
+              asaasParsed.data,
+              asaasCtx,
+            )
+          : await processTransparentAsaasPayment(
+              enrollmentInput,
+              asaasParsed.data,
+              asaasCtx,
+            )
 
         if (asaasResult.kind === "error") {
           return NextResponse.json(
@@ -199,6 +264,18 @@ export const POST = withRequestContext(
       }
 
       // ── Mercado Pago (padrão): cartão tokenizado no browser ─────────────────
+      // O carnê MP já possui pagamentos próprios por parcela e não aceita troca
+      // transparente de método aqui. Impede que um POST forjado crie uma nova
+      // cobrança pelo `finalAmount` total.
+      if (enrollment.paymentType === "BOLETO_INSTALLMENT") {
+        return NextResponse.json(
+          {
+            error: "Use o boleto disponível para pagar esta parcela",
+            code: "INSTALLMENT_METHOD_UNAVAILABLE",
+          },
+          { status: 409 },
+        )
+      }
       if (!tenant.mpAccessToken) {
         return NextResponse.json(
           { error: "Loja indisponível para pagamento", code: "TENANT_INACTIVE" },

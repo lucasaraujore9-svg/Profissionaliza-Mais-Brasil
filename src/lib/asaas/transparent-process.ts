@@ -1,4 +1,5 @@
 import { z } from "zod"
+import type { BoletoInstallment } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { dueDateInDays } from "@/lib/checkout/due-date"
 import {
@@ -8,11 +9,14 @@ import {
   createSubscription as createAsaasSubscription,
   getPixQrCode,
   getBillingInfo,
+  getPayment,
+  payWithCreditCard,
   listPayments as listAsaasPayments,
   AsaasApiError,
 } from "./client"
 import { fulfillFromAsaasPayment, type AsaasFulfillTenant } from "./fulfillment"
 import { isFreeAmount, releaseFreeEnrollment } from "@/lib/checkout/free-enrollment"
+import { settleBoletoInstallment } from "@/lib/installments/settle"
 import type {
   AsaasCreditCard,
   AsaasCreditCardHolderInfo,
@@ -90,6 +94,173 @@ const PENDING_STATUSES = new Set([
   "AWAITING_RISK_ANALYSIS",
   "AWAITING_CHARGEBACK_REVERSAL",
 ])
+
+/**
+ * Paga, dentro do checkout transparente, uma cobrança que JÁ pertence ao carnê.
+ *
+ * A venda direta cria as N cobranças no Asaas antecipadamente. Por isso este
+ * fluxo nunca chama `createPayment`: PIX e boleto reutilizam a cobrança da
+ * parcela, e cartão usa `/payments/{id}/payWithCreditCard`. Assim o valor
+ * cobrado é o da parcela e o `asaasPaymentId` continua sendo o mesmo que o
+ * webhook usa para liquidar `BoletoInstallment`.
+ */
+export async function processExistingAsaasInstallmentPayment(
+  installment: BoletoInstallment,
+  enrollment: AsaasTransparentEnrollment,
+  formData: AsaasTransparentFormData,
+  ctx: AsaasTransparentCtx,
+): Promise<TransparentResult> {
+  const paymentId = installment.asaasPaymentId
+  if (!paymentId) {
+    return {
+      kind: "error",
+      httpStatus: 409,
+      error: "A parcela ainda não possui cobrança disponível",
+      code: "INSTALLMENT_NOT_GENERATED",
+    }
+  }
+  if (!enrollment.studentCpf) {
+    return {
+      kind: "error",
+      httpStatus: 400,
+      error: "CPF do pagador é obrigatório no Asaas",
+      code: "PAYER_CPF_MISSING",
+    }
+  }
+  if (formData.method === "CREDIT_CARD" && !formData.card) {
+    return {
+      kind: "error",
+      httpStatus: 400,
+      error: "Dados do cartão ausentes",
+      code: "CARD_REQUIRED",
+    }
+  }
+
+  let payment: AsaasPayment
+  try {
+    payment = await getPayment(paymentId, ctx.apiKey)
+  } catch (err) {
+    return asaasErrorToResult(err)
+  }
+
+  const settleConfirmed = async (confirmed: AsaasPayment) => {
+    await settleBoletoInstallment({
+      installment,
+      tenant: {
+        ...ctx.fulfillTenant,
+        isPmbVitrine: false,
+      },
+      event: {
+        gateway: "ASAAS",
+        externalPaymentId: confirmed.id,
+        amount: confirmed.value,
+        paidAt: confirmed.paymentDate
+          ? new Date(confirmed.paymentDate)
+          : new Date(),
+      },
+    })
+  }
+
+  // Retomada idempotente: se o Asaas já confirma como paga e o webhook ainda
+  // não atualizou o banco, a própria resposta do checkout conclui a parcela.
+  if (CONFIRMED_STATUSES.has(payment.status)) {
+    await settleConfirmed(payment)
+    return { kind: "approved", status: payment.status }
+  }
+  // A captura no cartão não é idempotente. Se a cobrança está sob análise ou
+  // reversão, só aguardamos o webhook/status — nunca reenviamos os dados.
+  if (
+    payment.status !== "PENDING" &&
+    payment.status !== "OVERDUE" &&
+    PENDING_STATUSES.has(payment.status)
+  ) {
+    return { kind: "pending" }
+  }
+  if (
+    payment.status !== "PENDING" &&
+    payment.status !== "OVERDUE" &&
+    !PENDING_STATUSES.has(payment.status)
+  ) {
+    return {
+      kind: "error",
+      httpStatus: 409,
+      error: "Esta parcela não está disponível para pagamento",
+      code: "INSTALLMENT_NOT_PAYABLE",
+      statusDetail: payment.status,
+    }
+  }
+
+  if (formData.method === "PIX") {
+    const qr = await getPixQrCode(paymentId, ctx.apiKey).catch(() => null)
+    if (!qr?.payload) {
+      return {
+        kind: "error",
+        httpStatus: 502,
+        error: "Não foi possível gerar o PIX desta parcela",
+        code: "PIX_UNAVAILABLE",
+      }
+    }
+    return {
+      kind: "pending",
+      pix: {
+        qrCode: qr.payload,
+        qrCodeBase64: qr.encodedImage ?? "",
+        ticketUrl: payment.invoiceUrl,
+      },
+    }
+  }
+
+  if (formData.method === "BOLETO") {
+    const billing = await getBillingInfo(paymentId, ctx.apiKey).catch(() => null)
+    const url =
+      billing?.bankSlip?.bankSlipUrl ??
+      payment.bankSlipUrl ??
+      payment.invoiceUrl
+    return {
+      kind: "pending",
+      boleto: {
+        url,
+        digitableLine: billing?.bankSlip?.identificationField,
+      },
+    }
+  }
+
+  const cardPair = buildCardPair(formData, enrollment)
+  if (!cardPair) {
+    return {
+      kind: "error",
+      httpStatus: 400,
+      error: "Dados do cartão ausentes",
+      code: "CARD_REQUIRED",
+    }
+  }
+  try {
+    const result = await payWithCreditCard(
+      paymentId,
+      {
+        ...cardPair,
+        remoteIp: ctx.remoteIp ?? "0.0.0.0",
+      },
+      ctx.apiKey,
+    )
+    if (CONFIRMED_STATUSES.has(result.status)) {
+      await settleConfirmed(result)
+      return { kind: "approved", status: result.status }
+    }
+    if (PENDING_STATUSES.has(result.status)) {
+      return { kind: "pending" }
+    }
+    return {
+      kind: "error",
+      httpStatus: 400,
+      error: "Pagamento recusado. Tente outro cartão ou método.",
+      code: "PAYMENT_REJECTED",
+      statusDetail: result.status,
+    }
+  } catch (err) {
+    return asaasErrorToResult(err)
+  }
+}
 
 /** Resolve/cria o customer na conta Asaas DA UNIDADE (não a global da PMB). */
 async function resolveCustomerId(

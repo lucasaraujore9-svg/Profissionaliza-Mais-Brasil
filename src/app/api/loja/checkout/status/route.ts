@@ -16,6 +16,7 @@ export const GET = withRequestContext(
 
     const url = new URL(request.url)
     const enrollmentId = url.searchParams.get("enrollment_id")
+    const installmentId = url.searchParams.get("installment_id")
     if (!enrollmentId) {
       return NextResponse.json(
         { error: "enrollment_id obrigatório", code: "MISSING_ID" },
@@ -47,6 +48,34 @@ export const GET = withRequestContext(
         { error: "Matrícula não encontrada", code: "NOT_FOUND" },
         { status: 404 },
       )
+    }
+
+    // No carnê, a matrícula fica ACTIVE após a entrada. Para acompanhar PIX ou
+    // boleto das parcelas seguintes, o estado autoritativo é o da própria linha
+    // BoletoInstallment — não o status geral da matrícula.
+    if (installmentId) {
+      const installment = await prisma.boletoInstallment.findFirst({
+        where: {
+          id: installmentId,
+          enrollmentId: enrollment.id,
+          tenantId,
+        },
+        select: { id: true, status: true },
+      })
+      if (!installment) {
+        return NextResponse.json(
+          { error: "Parcela não encontrada", code: "INSTALLMENT_NOT_FOUND" },
+          { status: 404 },
+        )
+      }
+      return NextResponse.json({
+        data: {
+          enrollmentId: enrollment.id,
+          installmentId: installment.id,
+          status: installment.status,
+          paid: installment.status === "PAID",
+        },
+      })
     }
 
     return NextResponse.json({

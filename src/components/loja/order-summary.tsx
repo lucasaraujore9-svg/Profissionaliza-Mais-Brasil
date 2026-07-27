@@ -24,6 +24,8 @@ export interface OrderSummaryProps {
   installmentPlan?: {
     count: number
     amount: number
+    /** Parcela que está sendo paga agora. Default: 1. */
+    currentNumber?: number
   } | null
 }
 
@@ -60,8 +62,9 @@ export function OrderSummary({
   const totalLabel = isMonthly
     ? "Mensalidade"
     : installmentPlan
-      ? "Total da compra"
+      ? `Parcela ${installmentPlan.currentNumber ?? 1} de ${installmentPlan.count}`
       : "Total"
+  const highlightedAmount = installmentPlan?.amount ?? finalPrice
 
   return (
     <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm lg:p-8">
@@ -118,7 +121,7 @@ export function OrderSummary({
       <div className="mt-5 flex items-center justify-between border-t border-gray-100 pt-5">
         <span className="text-sm font-medium text-[var(--color-pmb-green-900)]">{totalLabel}</span>
         <span className="font-mono text-2xl font-bold text-[var(--color-pmb-green-900)]">
-          {formatBRL(finalPrice)}
+          {formatBRL(highlightedAmount)}
           {isMonthly && (
             <span className="ml-1 text-sm font-medium text-gray-500">/mês</span>
           )}
@@ -134,14 +137,14 @@ export function OrderSummary({
 
       {installmentPlan && installmentPlan.count > 1 && (
         <div className="mt-2 text-right text-xs text-gray-500">
-          <span className="font-mono font-semibold">
-            {installmentPlan.count}x
-          </span>{" "}
+          Compra dividida em{" "}
+          <span className="font-mono font-semibold">{installmentPlan.count}x</span>{" "}
           de{" "}
           <span className="font-mono font-semibold">
             {formatBRL(installmentPlan.amount)}
-          </span>{" "}
-          no boleto
+          </span>
+          {" · "}total{" "}
+          <span className="font-mono font-medium">{formatBRL(finalPrice)}</span>
         </div>
       )}
 

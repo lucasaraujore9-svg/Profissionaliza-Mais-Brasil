@@ -133,15 +133,30 @@ export default async function PagarPage({ params }: PagarPageProps) {
     enrollment.tenantCourse?.customCapaUrl ??
     enrollment.course.capaOverride ??
     enrollment.course.capaImageUrl
+  const installmentCount =
+    enrollment.installmentsTotal ?? enrollment.boletoInstallments.length
+  const now = new Date()
+  const currentInstallment = enrollment.boletoInstallments.find(
+    (row) =>
+      row.status !== "PAID" &&
+      isWithinRevealWindow(
+        { number: row.number, dueDate: row.dueDate },
+        now,
+      ),
+  )
+  const isTransparentInstallment =
+    enrollment.paymentType === "BOLETO_INSTALLMENT" &&
+    enrollment.gateway === "ASAAS" &&
+    !!currentInstallment
 
-  // O carnê já foi criado na venda direta. Não oferecemos um novo checkout
-  // sobre `finalAmount` (o total da compra): mostramos as N parcelas reais,
-  // com seus boletos, vencimentos e valor unitário.
+  // No Asaas, o checkout transparente consegue pagar a cobrança JÁ criada da
+  // parcela (PIX/cartão/boleto) sem duplicá-la. O painel de boletos permanece
+  // como fallback para carnê MP e para um plano já totalmente quitado.
   if (
     enrollment.boletoInstallments.length > 0 &&
-    enrollment.status !== "CANCELLED"
+    enrollment.status !== "CANCELLED" &&
+    !isTransparentInstallment
   ) {
-    const now = new Date()
     const carne: InstallmentCarne = {
       enrollmentId: enrollment.id,
       courseName: summaryName,
@@ -169,8 +184,6 @@ export default async function PagarPage({ params }: PagarPageProps) {
         }
       }),
     }
-    const installmentCount =
-      enrollment.installmentsTotal ?? enrollment.boletoInstallments.length
     const installmentAmount =
       Number(enrollment.boletoInstallments[0]?.amount) ||
       Number(enrollment.finalAmount) / installmentCount
@@ -209,6 +222,7 @@ export default async function PagarPage({ params }: PagarPageProps) {
                 installmentPlan={{
                   count: installmentCount,
                   amount: installmentAmount,
+                  currentNumber: 1,
                 }}
               />
             </aside>
@@ -218,7 +232,10 @@ export default async function PagarPage({ params }: PagarPageProps) {
     )
   }
 
-  if (enrollment.status === "ACTIVE" || enrollment.status === "COMPLETED") {
+  if (
+    !isTransparentInstallment &&
+    (enrollment.status === "ACTIVE" || enrollment.status === "COMPLETED")
+  ) {
     return (
       <Aviso
         titulo="Pagamento já confirmado"
@@ -227,7 +244,11 @@ export default async function PagarPage({ params }: PagarPageProps) {
     )
   }
 
-  if (enrollment.status !== "PENDING") {
+  if (
+    isTransparentInstallment
+      ? enrollment.status === "CANCELLED"
+      : enrollment.status !== "PENDING"
+  ) {
     return <Aviso titulo="Cobrança indisponível" texto="Esta cobrança não está mais ativa." />
   }
 
@@ -257,6 +278,9 @@ export default async function PagarPage({ params }: PagarPageProps) {
   // O nº de parcelas SEM juros vem de tenant.interestFreeInstallments.
   const isMonthly = enrollment.paymentType === "MONTHLY"
   const maxInstallments = isMonthly ? 1 : MAX_CARD_INSTALLMENTS
+  const checkoutAmount = currentInstallment
+    ? Number(currentInstallment.amount)
+    : Number(enrollment.finalAmount)
 
   return (
     <section className="bg-[#FAFAFA] py-10 md:py-16">
@@ -266,7 +290,9 @@ export default async function PagarPage({ params }: PagarPageProps) {
             Finalizar pagamento
           </h1>
           <p className="mt-1 text-sm text-gray-600">
-            Escolha a forma de pagamento. É seguro e processado aqui mesmo.
+            {currentInstallment
+              ? `Pague a parcela ${currentInstallment.number} de ${installmentCount}. Escolha PIX, cartão ou boleto.`
+              : "Escolha a forma de pagamento. É seguro e processado aqui mesmo."}
           </p>
         </header>
 
@@ -278,7 +304,13 @@ export default async function PagarPage({ params }: PagarPageProps) {
               // default já são os da vitrine (/api/loja/checkout/*).
               <AsaasCheckoutForm
                 enrollmentId={enrollment.id}
-                amount={Number(enrollment.finalAmount)}
+                boletoInstallmentId={currentInstallment?.id}
+                amount={checkoutAmount}
+                submitLabel={
+                  currentInstallment
+                    ? `Pagar parcela ${currentInstallment.number}`
+                    : undefined
+                }
                 defaultNome={enrollment.student.nome ?? undefined}
                 defaultEmail={payerEmail}
               />
@@ -310,14 +342,29 @@ export default async function PagarPage({ params }: PagarPageProps) {
               parcelasSugeridas={
                 // "Nx sem juros" é do cartão do MP; a cobrança avulsa no Asaas
                 // não parcela, então não anuncia parcelamento que não existe.
-                isMonthly || isAsaas
+                isMonthly || isAsaas || !!currentInstallment
                   ? null
                   : displayInterestFreeInstallments(
                       enrollment.tenant.interestFreeInstallments,
                     )
               }
-              paymentType={isMonthly ? "MONTHLY" : "ONE_TIME"}
-              monthlyMonths={enrollment.installmentsTotal ?? maxInstallments}
+              paymentType={
+                isMonthly && !currentInstallment ? "MONTHLY" : "ONE_TIME"
+              }
+              monthlyMonths={
+                currentInstallment
+                  ? undefined
+                  : enrollment.installmentsTotal ?? maxInstallments
+              }
+              installmentPlan={
+                currentInstallment
+                  ? {
+                      count: installmentCount,
+                      amount: checkoutAmount,
+                      currentNumber: currentInstallment.number,
+                    }
+                  : null
+              }
             />
           </aside>
         </div>
