@@ -7,19 +7,19 @@ const cursos = [
   {
     nome: "Pacote Office",
     categoria: "Informática",
-    preco: "R$ 197",
+    preco: "R$ 499",
     gradient: "from-[#07B2D9] to-[#025918]",
   },
   {
-    nome: "Cuidador de Idosos",
+    nome: "Cuidador de Idoso",
     categoria: "Saúde",
-    preco: "R$ 247",
+    preco: "R$ 497",
     gradient: "from-[#F2B705] to-[#8C3A27]",
   },
   {
-    nome: "Eletricista Predial",
+    nome: "Eletricista",
     categoria: "Técnico",
-    preco: "R$ 297",
+    preco: "R$ 697",
     gradient: "from-[#C0D904] to-[#025918]",
   },
 ]

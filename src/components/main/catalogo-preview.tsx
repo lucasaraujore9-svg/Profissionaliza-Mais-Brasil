@@ -13,32 +13,48 @@ const categorias = [
   {
     icon: Laptop2,
     nome: "Informática",
-    cursos: ["Pacote Office completo", "Excel avançado", "Manutenção de computador"],
+    cursos: [
+      "Pacote Office",
+      "Excel Básico e Avançado",
+      "Montagem e Manutenção de PC",
+    ],
   },
   {
     icon: Heart,
     nome: "Saúde e bem-estar",
-    cursos: ["Cuidador de idosos", "Auxiliar de enfermagem", "Massoterapia"],
+    cursos: [
+      "Cuidador de Idoso",
+      "Agente Comunitário de Saúde",
+      "Socorrista APH",
+    ],
   },
   {
     icon: Wrench,
     nome: "Técnico profissional",
-    cursos: ["Eletricista predial", "Mecânica de motos", "Refrigeração"],
+    cursos: ["Eletricista", "Energia Solar", "Solda MIG/MAG"],
   },
   {
     icon: Briefcase,
     nome: "Administração e vendas",
-    cursos: ["Gestão de pequenos negócios", "Vendas e atendimento", "Recursos humanos"],
+    cursos: [
+      "Administração Mercado de trabalho",
+      "Técnicas de Vendas",
+      "Gestão em RH",
+    ],
   },
   {
     icon: Sparkles,
     nome: "Beleza e estética",
-    cursos: ["Cabeleireiro profissional", "Design de sobrancelhas", "Maquiagem"],
+    cursos: [
+      "Barbeiro Profissional",
+      "Designer de Cílios & Sobrancelha",
+      "Maquiagem",
+    ],
   },
   {
     icon: Calculator,
     nome: "Finanças e contabilidade",
-    cursos: ["Departamento pessoal", "Rotinas contábeis", "Educação financeira"],
+    cursos: ["Departamento Pessoal", "Contabilidade", "Matemática financeira"],
   },
 ]
 
