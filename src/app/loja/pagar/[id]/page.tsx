@@ -5,6 +5,14 @@ import { MpCheckoutForm } from "@/components/loja/mp-checkout-form"
 import { AsaasCheckoutForm } from "@/components/loja/asaas-checkout-form"
 import { OrderSummary } from "@/components/loja/order-summary"
 import {
+  InstallmentsSection,
+  type InstallmentCarne,
+} from "@/components/aluno/installments-section"
+import {
+  isWithinRevealWindow,
+  INSTALLMENT_REVEAL_WINDOW_DAYS,
+} from "@/lib/installments/schedule"
+import {
   MAX_CARD_INSTALLMENTS,
   displayInterestFreeInstallments,
 } from "@/lib/mercadopago/installments"
@@ -65,7 +73,7 @@ export default async function PagarPage({ params }: PagarPageProps) {
       discountAmount: true,
       installmentsTotal: true,
       coursePackageId: true,
-      coursePackage: { select: { name: true } },
+      coursePackage: { select: { name: true, coverImageUrl: true } },
       course: {
         select: {
           nome: true,
@@ -91,11 +99,123 @@ export default async function PagarPage({ params }: PagarPageProps) {
           course: { select: { parcelasSugeridas: true, parcelasOverride: true } },
         },
       },
+      boletoInstallments: {
+        where: { status: { not: "CANCELLED" } },
+        orderBy: { number: "asc" },
+      },
     },
   })
 
   if (!enrollment || !enrollment.tenant) {
     return <Aviso titulo="Cobrança não encontrada" texto="Este link de pagamento é inválido ou expirou." />
+  }
+
+  if (enrollment.tenant.status !== "ACTIVE") {
+    return (
+      <Aviso
+        titulo="Loja indisponível"
+        texto="Esta loja não está aceitando pagamentos no momento."
+      />
+    )
+  }
+
+  // Venda de pacote: o nome comercial do pacote é o item comprado. O `course`
+  // da matrícula é apenas o primeiro curso técnico usado pelo fulfillment.
+  const isPackage = !!enrollment.coursePackageId
+  const summaryName = isPackage
+    ? enrollment.coursePackage?.name ?? "Pacote de cursos"
+    : enrollment.course.nome
+  const summaryCategory = isPackage
+    ? "Pacote"
+    : enrollment.course.categoriaLoja ?? enrollment.course.categoriaInterna
+  const summaryImage =
+    enrollment.coursePackage?.coverImageUrl ??
+    enrollment.tenantCourse?.customCapaUrl ??
+    enrollment.course.capaOverride ??
+    enrollment.course.capaImageUrl
+
+  // O carnê já foi criado na venda direta. Não oferecemos um novo checkout
+  // sobre `finalAmount` (o total da compra): mostramos as N parcelas reais,
+  // com seus boletos, vencimentos e valor unitário.
+  if (
+    enrollment.boletoInstallments.length > 0 &&
+    enrollment.status !== "CANCELLED"
+  ) {
+    const now = new Date()
+    const carne: InstallmentCarne = {
+      enrollmentId: enrollment.id,
+      courseName: summaryName,
+      parcelas: enrollment.boletoInstallments.map((row) => {
+        const inWindow = isWithinRevealWindow(
+          { number: row.number, dueDate: row.dueDate },
+          now,
+        )
+        let availableFromISO: string | null = null
+        if (!inWindow) {
+          const from = new Date(row.dueDate)
+          from.setUTCDate(from.getUTCDate() - INSTALLMENT_REVEAL_WINDOW_DAYS)
+          availableFromISO = from.toISOString()
+        }
+        return {
+          number: row.number,
+          amount: Number(row.amount),
+          dueDateISO: row.dueDate.toISOString(),
+          status: row.status,
+          available:
+            row.status !== "PAID" && row.status !== "CANCELLED" && inWindow,
+          availableFromISO,
+          invoiceUrl: row.invoiceUrl,
+          digitableLine: row.digitableLine,
+        }
+      }),
+    }
+    const installmentCount =
+      enrollment.installmentsTotal ?? enrollment.boletoInstallments.length
+    const installmentAmount =
+      Number(enrollment.boletoInstallments[0]?.amount) ||
+      Number(enrollment.finalAmount) / installmentCount
+
+    return (
+      <section className="bg-[#FAFAFA] py-10 md:py-16">
+        <div className="mx-auto max-w-6xl px-4 md:px-6">
+          <header className="mb-8">
+            <h1 className="text-2xl font-bold tracking-tight text-[var(--color-pmb-green-900)] md:text-3xl">
+              Pagamento parcelado
+            </h1>
+            <p className="mt-1 text-sm text-gray-600">
+              Sua compra foi dividida em {installmentCount} parcelas de{" "}
+              {installmentAmount.toLocaleString("pt-BR", {
+                style: "currency",
+                currency: "BRL",
+              })}
+              .
+            </p>
+          </header>
+
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_380px] lg:gap-8">
+            <InstallmentsSection carnes={[carne]} />
+            <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start">
+              <OrderSummary
+                courseName={summaryName}
+                courseCategory={summaryCategory}
+                courseHours={isPackage ? null : enrollment.course.cargaHoraria}
+                courseImageUrl={summaryImage}
+                basePrice={Number(enrollment.originalAmount)}
+                discountAmount={Number(enrollment.discountAmount)}
+                finalPrice={Number(enrollment.finalAmount)}
+                couponCode={null}
+                parcelasSugeridas={null}
+                paymentType="ONE_TIME"
+                installmentPlan={{
+                  count: installmentCount,
+                  amount: installmentAmount,
+                }}
+              />
+            </aside>
+          </div>
+        </div>
+      </section>
+    )
   }
 
   if (enrollment.status === "ACTIVE" || enrollment.status === "COMPLETED") {
@@ -109,15 +229,6 @@ export default async function PagarPage({ params }: PagarPageProps) {
 
   if (enrollment.status !== "PENDING") {
     return <Aviso titulo="Cobrança indisponível" texto="Esta cobrança não está mais ativa." />
-  }
-
-  if (enrollment.tenant.status !== "ACTIVE") {
-    return (
-      <Aviso
-        titulo="Loja indisponível"
-        texto="Esta loja não está aceitando pagamentos no momento."
-      />
-    )
   }
 
   const isAsaas = enrollment.gateway === "ASAAS"
@@ -146,15 +257,6 @@ export default async function PagarPage({ params }: PagarPageProps) {
   // O nº de parcelas SEM juros vem de tenant.interestFreeInstallments.
   const isMonthly = enrollment.paymentType === "MONTHLY"
   const maxInstallments = isMonthly ? 1 : MAX_CARD_INSTALLMENTS
-
-  // Venda de pacote: o resumo mostra o nome do pacote, não o do curso primário.
-  const isPackage = !!enrollment.coursePackageId
-  const summaryName = isPackage
-    ? enrollment.coursePackage?.name ?? "Pacote de cursos"
-    : enrollment.course.nome
-  const summaryCategory = isPackage
-    ? "Pacote"
-    : enrollment.course.categoriaLoja ?? enrollment.course.categoriaInterna
 
   return (
     <section className="bg-[#FAFAFA] py-10 md:py-16">
@@ -200,11 +302,7 @@ export default async function PagarPage({ params }: PagarPageProps) {
               courseName={summaryName}
               courseCategory={summaryCategory}
               courseHours={isPackage ? null : enrollment.course.cargaHoraria}
-              courseImageUrl={
-                enrollment.tenantCourse?.customCapaUrl ??
-                enrollment.course.capaOverride ??
-                enrollment.course.capaImageUrl
-              }
+              courseImageUrl={summaryImage}
               basePrice={Number(enrollment.originalAmount)}
               discountAmount={Number(enrollment.discountAmount)}
               finalPrice={Number(enrollment.finalAmount)}

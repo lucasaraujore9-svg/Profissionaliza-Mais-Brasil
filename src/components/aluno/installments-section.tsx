@@ -50,7 +50,7 @@ export function InstallmentsSection({ carnes }: { carnes: InstallmentCarne[] }) 
       </div>
       <p className="mt-1 text-xs text-gray-500">
         Cada parcela fica disponível a partir de 7 dias antes do vencimento. Pague
-        o boleto para manter seu acesso ao curso.
+        o boleto para manter o acesso à sua compra.
       </p>
 
       <div className="mt-4 space-y-5">

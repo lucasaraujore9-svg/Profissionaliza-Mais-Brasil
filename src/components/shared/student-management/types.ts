@@ -5,7 +5,14 @@
  */
 export interface StudentEnrollmentItem {
   id: string
+  /** Curso técnico vinculado por esta matrícula. */
   courseName: string
+  /** Pacote comercial da compra, quando esta matrícula faz parte de um pacote. */
+  packageName: string | null
+  /** Quantidade de cursos do pacote no momento da consulta. */
+  packageCourseCount: number | null
+  /** Identifica a matrícula que carrega a compra/cobrança do pacote. */
+  packagePrimary: boolean
   status: string
   paymentType: string
   gateway: string

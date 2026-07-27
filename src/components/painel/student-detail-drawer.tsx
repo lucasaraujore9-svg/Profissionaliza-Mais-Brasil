@@ -21,6 +21,9 @@ import type { StudentStatus } from "./student-table"
 interface EnrollmentDetail {
   id: string
   courseName: string
+  packageName: string | null
+  packageCourseCount: number | null
+  packagePrimary: boolean
   status: string
   amount: number
   createdAt: string
@@ -275,32 +278,55 @@ export function StudentDetailDrawer({
               </div>
 
               <div>
-                <h3 className="text-sm font-semibold text-[var(--color-pmb-green-900)]">Cursos</h3>
+                <h3 className="text-sm font-semibold text-[var(--color-pmb-green-900)]">
+                  Cursos e pacotes
+                </h3>
                 {student.enrollments.length === 0 ? (
                   <div className="mt-3 rounded-xl border border-dashed border-gray-200 bg-white p-4 text-center text-xs text-gray-500">
                     Nenhum curso matriculado.
                   </div>
                 ) : (
                   <ul className="mt-3 space-y-3">
-                    {student.enrollments.map((course) => (
-                      <li
-                        key={course.id}
-                        className="rounded-xl border border-gray-100 bg-white p-4"
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="text-sm font-medium text-[var(--color-pmb-green-900)]">
-                            {course.courseName}
+                    {student.enrollments.map((course) => {
+                      const isPackagePurchase =
+                        course.packagePrimary && !!course.packageName
+                      return (
+                        <li
+                          key={course.id}
+                          className="rounded-xl border border-gray-100 bg-white p-4"
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <div>
+                              <div className="text-sm font-medium text-[var(--color-pmb-green-900)]">
+                                {isPackagePurchase
+                                  ? course.packageName
+                                  : course.courseName}
+                              </div>
+                              {isPackagePurchase && (
+                                <div className="mt-0.5 text-[10px] text-gray-500">
+                                  Pacote
+                                  {course.packageCourseCount
+                                    ? ` com ${course.packageCourseCount} cursos`
+                                    : ""}
+                                </div>
+                              )}
+                              {!course.packagePrimary && course.packageName && (
+                                <div className="mt-0.5 text-[10px] text-gray-500">
+                                  Incluído no pacote {course.packageName}
+                                </div>
+                              )}
+                            </div>
+                            <span className="font-mono text-xs text-gray-500">
+                              {formatCurrency(course.amount)}
+                            </span>
                           </div>
-                          <span className="font-mono text-xs text-gray-500">
-                            {formatCurrency(course.amount)}
-                          </span>
-                        </div>
-                        <div className="mt-2 flex items-center justify-between text-[10px] text-gray-500">
-                          <span>Matriculado em {formatDate(course.createdAt)}</span>
-                          <SaleStatusBadge status={course.status} />
-                        </div>
-                      </li>
-                    ))}
+                          <div className="mt-2 flex items-center justify-between text-[10px] text-gray-500">
+                            <span>Matriculado em {formatDate(course.createdAt)}</span>
+                            <SaleStatusBadge status={course.status} />
+                          </div>
+                        </li>
+                      )
+                    })}
                   </ul>
                 )}
               </div>

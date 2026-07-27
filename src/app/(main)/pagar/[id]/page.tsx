@@ -63,6 +63,8 @@ export default async function PagarPmbPage({ params }: PagarPmbPageProps) {
       finalAmount: true,
       originalAmount: true,
       discountAmount: true,
+      coursePackageId: true,
+      coursePackage: { select: { name: true, coverImageUrl: true } },
       course: {
         select: {
           nome: true,
@@ -86,6 +88,20 @@ export default async function PagarPmbPage({ params }: PagarPmbPageProps) {
     return <Aviso titulo="Cobrança não encontrada" texto="Este link de pagamento é inválido ou expirou." />
   }
 
+  // `course` é o curso primário técnico do fulfillment. Para uma compra de
+  // pacote, o item comercial que deve aparecer para o aluno é o pacote.
+  const isPackage = !!enrollment.coursePackageId
+  const summaryName = isPackage
+    ? enrollment.coursePackage?.name ?? "Pacote de cursos"
+    : enrollment.course.nome
+  const summaryCategory = isPackage
+    ? "Pacote"
+    : enrollment.course.categoriaLoja ?? enrollment.course.categoriaInterna
+  const summaryImage =
+    enrollment.coursePackage?.coverImageUrl ??
+    enrollment.course.capaOverride ??
+    enrollment.course.capaImageUrl
+
   // Compra parcelada no boleto com carnê JÁ EMITIDO: não re-emitimos cobrança
   // (a rota de retomada devolve 409) — mostramos as parcelas do carnê para o
   // aluno pagar a pendente/vencida. Vale para PENDING (entrada em aberto),
@@ -97,7 +113,7 @@ export default async function PagarPmbPage({ params }: PagarPmbPageProps) {
     const now = new Date()
     const carne: InstallmentCarne = {
       enrollmentId: enrollment.id,
-      courseName: enrollment.course.nome,
+      courseName: summaryName,
       parcelas: enrollment.boletoInstallments.map((row) => {
         const inWindow = isWithinRevealWindow(
           { number: row.number, dueDate: row.dueDate },
@@ -143,21 +159,22 @@ export default async function PagarPmbPage({ params }: PagarPmbPageProps) {
             </div>
             <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start">
               <OrderSummary
-                courseName={enrollment.course.nome}
-                courseCategory={
-                  enrollment.course.categoriaLoja ??
-                  enrollment.course.categoriaInterna
-                }
-                courseHours={enrollment.course.cargaHoraria}
-                courseImageUrl={
-                  enrollment.course.capaOverride ?? enrollment.course.capaImageUrl
-                }
+                courseName={summaryName}
+                courseCategory={summaryCategory}
+                courseHours={isPackage ? null : enrollment.course.cargaHoraria}
+                courseImageUrl={summaryImage}
                 basePrice={Number(enrollment.originalAmount)}
                 discountAmount={Number(enrollment.discountAmount)}
                 finalPrice={Number(enrollment.finalAmount)}
                 couponCode={null}
                 parcelasSugeridas={null}
                 paymentType="ONE_TIME"
+                installmentPlan={{
+                  count:
+                    enrollment.installmentsTotal ??
+                    enrollment.boletoInstallments.length,
+                  amount: Number(enrollment.boletoInstallments[0]?.amount),
+                }}
               />
             </aside>
           </div>
@@ -219,14 +236,10 @@ export default async function PagarPmbPage({ params }: PagarPmbPageProps) {
 
           <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start">
             <OrderSummary
-              courseName={enrollment.course.nome}
-              courseCategory={
-                enrollment.course.categoriaLoja ?? enrollment.course.categoriaInterna
-              }
-              courseHours={enrollment.course.cargaHoraria}
-              courseImageUrl={
-                enrollment.course.capaOverride ?? enrollment.course.capaImageUrl
-              }
+              courseName={summaryName}
+              courseCategory={summaryCategory}
+              courseHours={isPackage ? null : enrollment.course.cargaHoraria}
+              courseImageUrl={summaryImage}
               basePrice={Number(enrollment.originalAmount)}
               discountAmount={Number(enrollment.discountAmount)}
               finalPrice={Number(enrollment.finalAmount)}

@@ -27,6 +27,12 @@ export const GET = withRequestContextParams<{ id: string }>(
           include: {
             course: { select: { nome: true } },
             tenantCourse: { select: { price: true } },
+            coursePackage: {
+              select: {
+                name: true,
+                _count: { select: { items: true } },
+              },
+            },
           },
           orderBy: { createdAt: "desc" },
         },
@@ -59,6 +65,9 @@ export const GET = withRequestContextParams<{ id: string }>(
         enrollments: student.enrollments.map((e) => ({
           id: e.id,
           courseName: e.course.nome,
+          packageName: e.coursePackage?.name ?? null,
+          packageCourseCount: e.coursePackage?._count.items ?? null,
+          packagePrimary: e.packagePrimary,
           status: e.status,
           amount: Number(e.finalAmount),
           createdAt: e.createdAt.toISOString(),

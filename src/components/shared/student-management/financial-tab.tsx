@@ -185,7 +185,7 @@ export function FinancialTab({
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-100 text-left text-[11px] uppercase tracking-wider text-gray-500">
-                  <th className="px-4 py-2 font-semibold">Curso</th>
+                  <th className="px-4 py-2 font-semibold">Curso / pacote</th>
                   <th className="px-4 py-2 font-semibold">Tipo</th>
                   <th className="px-4 py-2 font-semibold">Gateway</th>
                   <th className="px-4 py-2 font-semibold">Valor</th>
@@ -202,17 +202,48 @@ export function FinancialTab({
                 {student.enrollments.map((e) => {
                   const badge = statusBadge(e.status)
                   const Icon = statusIcon(e.status)
+                  const isPackagePurchase = e.packagePrimary && !!e.packageName
+                  const displayName =
+                    e.packagePrimary && e.packageName
+                      ? e.packageName
+                      : e.courseName
                   return (
                     <tr key={e.id}>
                       <td className="px-4 py-3 font-medium text-[var(--color-pmb-green-900)]">
-                        {e.courseName}
+                        <div>{displayName}</div>
+                        {isPackagePurchase && (
+                          <div className="mt-0.5 text-[11px] font-normal text-gray-500">
+                            Pacote
+                            {e.packageCourseCount
+                              ? ` com ${e.packageCourseCount} cursos`
+                              : ""}
+                          </div>
+                        )}
+                        {!e.packagePrimary && e.packageName && (
+                          <div className="mt-0.5 text-[11px] font-normal text-gray-500">
+                            Incluído no pacote {e.packageName}
+                          </div>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-xs text-gray-600">
-                        {e.paymentType === "MONTHLY" ? "Mensal" : "Único"}
-                        {e.installmentsTotal && (
-                          <span className="ml-1 text-gray-400">
-                            ({e.installmentsPaid}/{e.installmentsTotal})
-                          </span>
+                        {e.paymentType === "BOLETO_INSTALLMENT"
+                          ? "Carnê"
+                          : e.paymentType === "MONTHLY"
+                            ? "Mensal"
+                            : "Único"}
+                        {e.paymentType === "BOLETO_INSTALLMENT" &&
+                        e.installmentsTotal ? (
+                          <div className="mt-0.5 text-[11px] text-gray-500">
+                            {e.installmentsTotal}x de{" "}
+                            {brl(e.finalAmount / e.installmentsTotal)} ·{" "}
+                            {e.installmentsPaid}/{e.installmentsTotal} pagas
+                          </div>
+                        ) : (
+                          e.installmentsTotal && (
+                            <span className="ml-1 text-gray-400">
+                              ({e.installmentsPaid}/{e.installmentsTotal})
+                            </span>
+                          )
                         )}
                       </td>
                       <td className="px-4 py-3 text-xs text-gray-600">
@@ -257,7 +288,7 @@ export function FinancialTab({
                             className="border-rose-200 text-rose-600 hover:bg-rose-50"
                             disabled={cancelling !== null}
                             onClick={() =>
-                              setTarget({ id: e.id, courseName: e.courseName })
+                              setTarget({ id: e.id, courseName: displayName })
                             }
                           >
                             {cancelling === e.id ? "Cancelando…" : "Cancelar"}
@@ -343,7 +374,7 @@ export function FinancialTab({
             <AlertDialogTitle>Cancelar matrícula</AlertDialogTitle>
             <AlertDialogDescription>
               {target
-                ? `Curso: ${target.courseName}. Escolha como deseja cancelar — o valor já pago não é estornado por aqui.`
+                ? `Curso/pacote: ${target.courseName}. Escolha como deseja cancelar — o valor já pago não é estornado por aqui.`
                 : ""}
             </AlertDialogDescription>
           </AlertDialogHeader>

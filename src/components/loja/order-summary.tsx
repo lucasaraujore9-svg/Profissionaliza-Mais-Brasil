@@ -16,6 +16,15 @@ export interface OrderSummaryProps {
   paymentType?: "ONE_TIME" | "MONTHLY"
   /** Quantidade total de mensalidades quando paymentType === "MONTHLY". */
   monthlyMonths?: number | null
+  /**
+   * Plano fechado de uma venda em carnê. Diferente de `parcelasSugeridas`,
+   * que é apenas uma simulação do cartão, estes são o número e o valor reais
+   * persistidos em `BoletoInstallment`.
+   */
+  installmentPlan?: {
+    count: number
+    amount: number
+  } | null
 }
 
 function formatBRL(value: number): string {
@@ -38,6 +47,7 @@ export function OrderSummary({
   parcelasSugeridas,
   paymentType = "ONE_TIME",
   monthlyMonths,
+  installmentPlan,
 }: OrderSummaryProps) {
   const isMonthly = paymentType === "MONTHLY"
   const months = isMonthly ? monthlyMonths ?? 12 : null
@@ -47,7 +57,11 @@ export function OrderSummary({
       ? `${parcelasSugeridas}x de ${formatBRL(finalPrice / parcelasSugeridas)}`
       : null
 
-  const totalLabel = isMonthly ? "Mensalidade" : "Total"
+  const totalLabel = isMonthly
+    ? "Mensalidade"
+    : installmentPlan
+      ? "Total da compra"
+      : "Total"
 
   return (
     <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm lg:p-8">
@@ -115,6 +129,19 @@ export function OrderSummary({
         <div className="mt-2 text-right text-xs text-gray-500">
           <span className="font-mono font-medium">{months}</span> mensalidades de{" "}
           <span className="font-mono font-medium">{formatBRL(finalPrice)}</span>
+        </div>
+      )}
+
+      {installmentPlan && installmentPlan.count > 1 && (
+        <div className="mt-2 text-right text-xs text-gray-500">
+          <span className="font-mono font-semibold">
+            {installmentPlan.count}x
+          </span>{" "}
+          de{" "}
+          <span className="font-mono font-semibold">
+            {formatBRL(installmentPlan.amount)}
+          </span>{" "}
+          no boleto
         </div>
       )}
 

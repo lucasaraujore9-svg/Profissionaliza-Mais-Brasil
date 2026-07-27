@@ -36,6 +36,12 @@ export async function loadStudentDetail(args: {
         orderBy: { createdAt: "desc" },
         include: {
           course: { select: { nome: true } },
+          coursePackage: {
+            select: {
+              name: true,
+              _count: { select: { items: true } },
+            },
+          },
         },
       },
       notes: {
@@ -52,7 +58,14 @@ export async function loadStudentDetail(args: {
     prisma.payment.findMany({
       where: { enrollmentId: { in: enrollmentIds } },
       orderBy: [{ paidAt: "desc" }, { createdAt: "desc" }],
-      include: { enrollment: { include: { course: { select: { nome: true } } } } },
+      include: {
+        enrollment: {
+          include: {
+            course: { select: { nome: true } },
+            coursePackage: { select: { name: true } },
+          },
+        },
+      },
       take: 100,
     }),
     prisma.notification.findMany({
@@ -156,6 +169,9 @@ export async function loadStudentDetail(args: {
     enrollments: student.enrollments.map((e) => ({
       id: e.id,
       courseName: e.course.nome,
+      packageName: e.coursePackage?.name ?? null,
+      packageCourseCount: e.coursePackage?._count.items ?? null,
+      packagePrimary: e.packagePrimary,
       status: e.status,
       paymentType: e.paymentType,
       gateway: e.gateway,
@@ -187,7 +203,10 @@ export async function loadStudentDetail(args: {
       amount: Number(p.amount),
       status: p.mpStatus,
       paidAt: p.paidAt?.toISOString() ?? null,
-      courseName: p.enrollment.course.nome,
+      courseName:
+        p.enrollment.packagePrimary && p.enrollment.coursePackage
+          ? p.enrollment.coursePackage.name
+          : p.enrollment.course.nome,
       createdAt: p.createdAt.toISOString(),
     })),
     notes: student.notes.map((n) => ({
