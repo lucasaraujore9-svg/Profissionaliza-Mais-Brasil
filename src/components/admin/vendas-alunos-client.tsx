@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import Link from "next/link"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
+import { studentStatusLabel } from "@/lib/labels"
 
 interface StudentItem {
   id: string
@@ -78,7 +79,7 @@ export function VendasAlunosClient() {
                 <td className="px-4 py-3 text-muted-foreground">{s.plataformaAlunoId ?? "—"}</td>
                 <td className="px-4 py-3">
                   <Badge variant={s.status === "ATIVO" ? "default" : "outline"}>
-                    {s.status}
+                    {studentStatusLabel(s.status)}
                   </Badge>
                 </td>
                 <td className="px-4 py-3 text-muted-foreground">

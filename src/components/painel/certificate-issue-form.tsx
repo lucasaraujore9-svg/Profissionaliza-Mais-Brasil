@@ -9,6 +9,7 @@ import {
   DEFAULT_CERTIFICATE_MIN_PERCENT,
   isEnrollmentConcludedForCertificate,
 } from "@/lib/certificates/eligibility"
+import { enrollmentStatusLabel } from "@/lib/labels"
 
 const STEPPER = [
   { n: 1, label: "Aluno" },
@@ -446,7 +447,7 @@ export function CertificateIssueForm({
                         </div>
                         <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-gray-600">
                           <span className="rounded-full bg-gray-100 px-2 py-0.5 font-semibold">
-                            {e.status}
+                            {enrollmentStatusLabel(e.status)}
                           </span>
                           <span>{e.cargaHoraria ?? "Sem carga"}</span>
                           <span>Progresso: {e.progressPercent}%</span>

@@ -4,6 +4,7 @@ import { ChevronLeft } from "lucide-react"
 import { requireAdminSession } from "@/lib/auth/admin-session"
 import { prisma } from "@/lib/prisma"
 import { getOrCreatePmbTenant } from "@/lib/pmb-tenant"
+import { studentStatusLabel } from "@/lib/labels"
 import { Badge } from "@/components/ui/badge"
 import { StudentManagementClient } from "@/components/admin/student-management-client"
 
@@ -136,7 +137,7 @@ export default async function StudentDetailPage({ params }: PageProps) {
           {student.nome}
         </h1>
         <Badge variant={studentStatusBadgeVariant(student.status)}>
-          {student.status}
+          {studentStatusLabel(student.status)}
         </Badge>
       </div>
 

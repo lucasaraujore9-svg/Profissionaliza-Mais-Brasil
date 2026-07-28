@@ -3,6 +3,10 @@ import { redirect } from "next/navigation"
 import { ArrowLeft } from "lucide-react"
 import { prisma } from "@/lib/prisma"
 import { requireAdminSession } from "@/lib/auth/admin-session"
+import {
+  referralPayoutMethodLabel,
+  referralPayoutStatusLabel,
+} from "@/lib/labels"
 import { PageHeader } from "@/components/painel/page-header"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -108,7 +112,7 @@ export default async function AdminSaquesPage() {
                   <TableCell className="text-right font-mono">
                     {formatMoney(Number(p.amount))}
                   </TableCell>
-                  <TableCell>{p.method}</TableCell>
+                  <TableCell>{referralPayoutMethodLabel(p.method)}</TableCell>
                   <TableCell className="text-xs text-gray-600">
                     {p.pixKey
                       ? `${p.pixKeyType ?? ""}: ${p.pixKey}`
@@ -124,7 +128,7 @@ export default async function AdminSaquesPage() {
                             : "secondary"
                       }
                     >
-                      {p.status}
+                      {referralPayoutStatusLabel(p.status)}
                     </Badge>
                     {p.failureReason ? (
                       <p className="mt-1 text-[10px] text-red-600">

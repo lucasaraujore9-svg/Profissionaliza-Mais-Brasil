@@ -4,6 +4,7 @@ import { ArrowLeft, Download } from "lucide-react"
 import { prisma } from "@/lib/prisma"
 import { requireAdminSession } from "@/lib/auth/admin-session"
 import { parseLinesSnapshot } from "@/lib/referrals/lines-snapshot"
+import { referralCommissionStatusLabel } from "@/lib/labels"
 import { PageHeader } from "@/components/painel/page-header"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -482,7 +483,7 @@ export default async function AdminComissoesPage({
                               : "secondary"
                       }
                     >
-                      {c.status}
+                      {referralCommissionStatusLabel(c.status)}
                     </Badge>
                   </TableCell>
                 </TableRow>

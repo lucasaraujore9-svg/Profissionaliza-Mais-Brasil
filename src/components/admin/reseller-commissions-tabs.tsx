@@ -6,6 +6,10 @@ import type {
   ReferralCommissionStatus,
   ReferralPayoutStatus,
 } from "@prisma/client"
+import {
+  referralCommissionStatusLabel,
+  referralPayoutStatusLabel,
+} from "@/lib/labels"
 import { Card } from "@/components/ui/card"
 import { StatusBadge, type BadgeTone } from "@/components/shared/status-badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -68,12 +72,6 @@ const STATUS_OPTS: Array<{ value: ReferralCommissionStatus | "ALL"; label: strin
   { value: "CANCELLED", label: "Cancelada" },
 ]
 
-const STATUS_LABEL: Record<ReferralCommissionStatus, string> = {
-  PENDING: "Pendente",
-  AVAILABLE: "Disponível",
-  PAID: "Pago",
-  CANCELLED: "Cancelada",
-}
 
 const BRL = new Intl.NumberFormat("pt-BR", {
   style: "currency",
@@ -317,7 +315,7 @@ function CommissionsTable({
                   </TableCell>
                   <TableCell>
                     <StatusBadge tone={STATUS_TONE[c.status]}>
-                      {STATUS_LABEL[c.status]}
+                      {referralCommissionStatusLabel(c.status)}
                     </StatusBadge>
                     {c.status === "CANCELLED" && c.cancelReason && (
                       <div className="mt-1 text-[10px] text-gray-500">
@@ -334,7 +332,7 @@ function CommissionsTable({
                         href={`/admin/indicacoes/saques?payout=${c.payout.id}`}
                         className="text-[var(--color-pmb-green-900)] hover:underline"
                       >
-                        {c.payout.status}
+                        {referralPayoutStatusLabel(c.payout.status)}
                       </Link>
                     ) : (
                       <span className="text-gray-400">-</span>

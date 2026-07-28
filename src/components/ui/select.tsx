@@ -4,9 +4,59 @@ import * as React from "react"
 import { Select as SelectPrimitive } from "@base-ui/react/select"
 
 import { cn } from "@/lib/utils"
+import {
+  collectSelectItems,
+  selectItemsSignature,
+  type DerivedItem,
+} from "./select-items"
 import { ChevronDownIcon, CheckIcon, ChevronUpIcon } from "lucide-react"
 
-const Select = SelectPrimitive.Root
+const isSelectItem = (type: unknown) => type === SelectItem
+
+/**
+ * Deriva `items` do JSX e mantém a IDENTIDADE do array estável enquanto os pares
+ * valor/rótulo não mudarem. Sem isso, um array novo a cada render dispararia o
+ * `store.update` do Base UI (que tem `items` nas deps) e re-renderizaria o
+ * `<SelectValue>` à toa.
+ */
+function useDerivedItems(children: React.ReactNode): DerivedItem[] {
+  const signature = React.useMemo(
+    () => selectItemsSignature(collectSelectItems(children, isSelectItem)),
+    [children],
+  )
+
+  return React.useMemo(
+    () => collectSelectItems(children, isSelectItem),
+    // `children` fica de fora de propósito: sua identidade muda a cada render
+    // do componente pai, enquanto `signature` resume os pares valor/rótulo —
+    // a única coisa que o Base UI consome daqui.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [signature],
+  )
+}
+
+/**
+ * Diferente do Radix, o `<Select.Value>` do Base UI NÃO lê o texto do item
+ * selecionado: ele resolve o rótulo contra a prop `items` do Root e, sem ela,
+ * cai em `String(value)` — ou seja, mostra o enum cru do banco ("consultant")
+ * ou o id ("cmb3x…") no lugar do nome.
+ *
+ * Este wrapper monta `items` a partir dos próprios `<SelectItem>` do JSX, então
+ * todo Select exibe o rótulo correto sem que cada tela precise repetir o mapa.
+ * Passar `items` explicitamente continua funcionando e tem precedência.
+ */
+function Select<Value, Multiple extends boolean | undefined = false>({
+  children,
+  items,
+  ...props
+}: SelectPrimitive.Root.Props<Value, Multiple>) {
+  const derivedItems = useDerivedItems(children)
+  return (
+    <SelectPrimitive.Root items={items ?? derivedItems} {...props}>
+      {children}
+    </SelectPrimitive.Root>
+  )
+}
 
 function SelectGroup({ className, ...props }: SelectPrimitive.Group.Props) {
   return (

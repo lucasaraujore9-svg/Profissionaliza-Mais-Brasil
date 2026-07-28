@@ -3,6 +3,7 @@ import Link from "next/link"
 import { ChevronLeft } from "lucide-react"
 import { requireAdminSession } from "@/lib/auth/admin-session"
 import { loadStudentDetail } from "@/lib/students/load-detail"
+import { studentStatusLabel } from "@/lib/labels"
 import { Badge } from "@/components/ui/badge"
 import { StudentManagement } from "@/components/shared/student-management"
 
@@ -49,7 +50,7 @@ export default async function AdminStudentDetailPage({ params }: PageProps) {
               {student.nome}
             </h1>
             <Badge variant={statusVariant(student.status)}>
-              {student.status}
+              {studentStatusLabel(student.status)}
             </Badge>
           </div>
           <p className="mt-1 text-sm text-gray-600">

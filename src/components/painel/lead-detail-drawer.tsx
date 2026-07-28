@@ -17,6 +17,7 @@ import {
   FileText,
   UserRound,
 } from "lucide-react"
+import { enrollmentStatusLabel } from "@/lib/labels"
 import { STAGE_META, type StageKey } from "./lead-kanban.shared"
 import { LeadStageBadge } from "./lead-stage"
 
@@ -332,7 +333,8 @@ export function LeadDetailDrawer({
               {lead.enrollment && (
                 <div className="mt-3 rounded-lg border border-gray-200 bg-gray-50 p-3 text-[12px]">
                   <p className="text-gray-700">
-                    <strong>Matrícula:</strong> {lead.enrollment.status} ·{" "}
+                    <strong>Matrícula:</strong>{" "}
+                    {enrollmentStatusLabel(lead.enrollment.status)} ·{" "}
                     <span className="font-mono">
                       R$ {lead.enrollment.finalAmount.toFixed(2).replace(".", ",")}
                     </span>

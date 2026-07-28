@@ -4,6 +4,11 @@ import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Badge } from "@/components/ui/badge"
+import {
+  enrollmentStatusLabel,
+  paymentGatewayLabel,
+  paymentTypeLabel,
+} from "@/lib/labels"
 
 interface EnrollmentItem {
   id: string
@@ -69,19 +74,6 @@ function formatCurrency(value: number): string {
 function formatDate(iso: string | null | undefined): string {
   if (!iso) return "—"
   return new Date(iso).toLocaleDateString("pt-BR")
-}
-
-function gatewayLabel(gateway: string): string {
-  if (gateway === "ASAAS") return "Asaas"
-  if (gateway === "MP") return "Mercado Pago"
-  return gateway
-}
-
-function paymentTypeLabel(type: string): string {
-  if (type === "ONE_TIME") return "Único"
-  if (type === "INSTALLMENTS") return "Parcelado"
-  if (type === "SUBSCRIPTION") return "Assinatura"
-  return type
 }
 
 export function StudentManagementClient({ student: initialStudent, role }: Props) {
@@ -301,11 +293,11 @@ export function StudentManagementClient({ student: initialStudent, role }: Props
                       <td className="px-4 py-3">{formatCurrency(e.finalAmount)}</td>
                       <td className="px-4 py-3">
                         <Badge variant={statusBadgeVariant(e.status)}>
-                          {e.status}
+                          {enrollmentStatusLabel(e.status)}
                         </Badge>
                       </td>
                       <td className="px-4 py-3 text-muted-foreground">
-                        {gatewayLabel(e.gateway)}
+                        {paymentGatewayLabel(e.gateway)}
                       </td>
                       <td className="px-4 py-3 text-muted-foreground">
                         {formatDate(e.createdAt)}

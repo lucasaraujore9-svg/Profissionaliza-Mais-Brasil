@@ -5,6 +5,7 @@ import Link from "next/link"
 import { Input } from "@/components/ui/input"
 import { Loader2 } from "lucide-react"
 import { vitrineHost } from "@/lib/tenant/urls"
+import { studentStatusLabel } from "@/lib/labels"
 import { ImpersonateButton } from "@/components/shared/impersonate-button"
 
 interface TenantOption {
@@ -214,7 +215,7 @@ export function GlobalStudentsClient({
                         <span
                           className={`inline-block rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase ${statusClass}`}
                         >
-                          {s.status}
+                          {studentStatusLabel(s.status)}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-xs text-gray-500">
