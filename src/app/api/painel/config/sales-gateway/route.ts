@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { invalidateTenant } from "@/lib/redis/tenant-cache"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { swallow } from "@/lib/errors"
+import { logAudit } from "@/lib/audit"
 
 // Define o gateway ATIVO da vitrine da unidade (MP padrao | ASAAS). Uma venda
 // por vez vai por um gateway — o /api/loja/checkout le tenant.salesGateway.
@@ -40,7 +41,7 @@ export const PATCH = withRequestContext(
       select: {
         slug: true,
         customDomain: true,
-        asaasGatewayEnabled: true,
+        asaasConnected: true,
         asaasApiKey: true,
         asaasWebhookToken: true,
         mpAccessToken: true,
@@ -55,13 +56,15 @@ export const PATCH = withRequestContext(
     // So permite ATIVAR um gateway que esteja realmente pronto para vender —
     // caso contrario a vitrine ficaria com checkout quebrado.
     if (parsed.data.gateway === "ASAAS") {
-      if (!tenant.asaasGatewayEnabled) {
-        return NextResponse.json(
-          { error: "Gateway Asaas não liberado para sua unidade", code: "ASAAS_NOT_ALLOWED" },
-          { status: 403 },
-        )
-      }
-      if (!tenant.asaasApiKey || !tenant.asaasWebhookToken) {
+      // `asaasConnected` entra na trava porque e ELE, e so ele, que
+      // `tenantCheckoutMode` consulta para liberar o Asaas. Validar aqui apenas
+      // as credenciais deixaria a rota ativar um gateway que toda a vitrine
+      // resolve como NONE — painel dizendo "Asaas ativo" e loja sem checkout.
+      if (
+        !tenant.asaasConnected ||
+        !tenant.asaasApiKey ||
+        !tenant.asaasWebhookToken
+      ) {
         return NextResponse.json(
           {
             error: "Conecte a API key e o token do webhook do Asaas antes de ativá-lo",
@@ -87,6 +90,21 @@ export const PATCH = withRequestContext(
     await prisma.tenant.update({
       where: { id: tenantId },
       data: { salesGateway: parsed.data.gateway },
+    })
+
+    // SAAS-001: trilha de auditoria da TROCA do gateway ativo. Esta rota e o
+    // unico writer de `salesGateway` que sobrou (a rota admin que tambem o
+    // escrevia saiu quando o Asaas deixou de ser capability), e e a operacao que
+    // decide em qual conta cai toda a receita da unidade — precisa de registro
+    // de quem/o que/quando, como connect-asaas e connect-mp ja tinham.
+    await logAudit({
+      action: "tenant.gateway.switch",
+      resource: "Tenant",
+      resourceId: tenantId,
+      actorUserId: ctx.userId,
+      actorRole: "RESELLER",
+      tenantId,
+      payloadAfter: { salesGateway: parsed.data.gateway },
     })
 
     await invalidateTenant({

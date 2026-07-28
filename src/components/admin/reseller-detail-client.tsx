@@ -45,7 +45,7 @@ import { ResellerTecnicaConfig } from "./reseller-tecnica-config"
 import { ResellerEjaConfig } from "./reseller-eja-config"
 import { ResellerAutomationConfig } from "./reseller-automation-config"
 import { ResellerCanSellConfig } from "./reseller-can-sell-config"
-import { ResellerAsaasGatewayConfig } from "./reseller-asaas-gateway-config"
+import { ResellerSalesGatewayStatus } from "./reseller-sales-gateway-status"
 import {
   ResellerMonthlyConfig,
   type MonthlyScope,
@@ -91,9 +91,9 @@ interface DetailResponse {
     monthlyAllowed: boolean
     monthlyEnabled: boolean
     monthlyScope: MonthlyScope
-    asaasGatewayEnabled: boolean
     asaasConnected: boolean
     salesGateway: "MP" | "ASAAS"
+    checkoutMode: "MP" | "ASAAS" | "NONE"
     accountManagerId: string | null
   }
   referrer: ReferrerSummary | null
@@ -341,12 +341,10 @@ export function ResellerDetailClient({
               monthlyScope={data.reseller.monthlyScope}
               onSaved={load}
             />
-            <ResellerAsaasGatewayConfig
-              tenantId={tenantId}
-              asaasGatewayEnabled={data.reseller.asaasGatewayEnabled}
+            <ResellerSalesGatewayStatus
               asaasConnected={data.reseller.asaasConnected}
               salesGateway={data.reseller.salesGateway}
-              onSaved={load}
+              checkoutMode={data.reseller.checkoutMode}
             />
           </div>
         </TabsContent>

@@ -102,7 +102,7 @@ describe("SAAS-001 — audit trail em equipe e gateways da unidade", () => {
   })
 
   it("Asaas connect → tenant.gateway.connect sem credencial no payload", async () => {
-    p.tenant.findUnique.mockResolvedValue({ asaasGatewayEnabled: true, asaasApiKey: null })
+    p.tenant.findUnique.mockResolvedValue({ asaasApiKey: null })
     const res = await asaasConnect(jreq({ apiKey: "asaas-secret-api-key-123" }))
     expect(res.status).toBe(200)
     const call = audit.mock.calls.find(

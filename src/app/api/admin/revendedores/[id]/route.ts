@@ -16,6 +16,7 @@ import {
   AsaasApiError,
 } from "@/lib/asaas/client"
 import { swallow } from "@/lib/errors"
+import { tenantCheckoutMode } from "@/lib/tenant/checkout-mode"
 import { contextLogger } from "@/lib/logger"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 import { requireAdmin } from "@/lib/auth/admin-guard"
@@ -411,10 +412,13 @@ export const GET = withRequestContextParams<{ id: string }>(
         monthlyAllowed: tenant.monthlyAllowed,
         monthlyEnabled: tenant.monthlyEnabled,
         monthlyScope: tenant.monthlyScope,
-        // Gateway Asaas da unidade (capability + estado de conexao)
-        asaasGatewayEnabled: tenant.asaasGatewayEnabled,
+        // Gateway de vendas da unidade. `checkoutMode` vem do MESMO helper que a
+        // vitrine usa: sem ele o card do admin afirmava "Ativo: Mercado Pago"
+        // para unidade nenhuma conta conectada, e o suporte concluia que a loja
+        // vendia normalmente enquanto o checkout estava morto (NONE).
         asaasConnected: tenant.asaasConnected,
         salesGateway: tenant.salesGateway,
+        checkoutMode: tenantCheckoutMode(tenant),
       },
       referrer: tenant.referrer
         ? {

@@ -47,9 +47,9 @@ export const GET = withRequestContext(
         monthlyEnabled: true,
         monthlyScope: true,
         interestFreeInstallments: true,
-        // Asaas como gateway de vendas (so aparece no painel quando liberado).
-        // asaasConnected ja indica conexao; nao buscamos a api key (segredo) aqui.
-        asaasGatewayEnabled: true,
+        // Asaas como gateway de vendas — disponivel para TODA unidade (nao ha
+        // mais capability). asaasConnected indica se ela ja conectou a conta;
+        // nao buscamos a api key (segredo) aqui.
         asaasConnected: true,
         asaasWebhookToken: true,
         salesGateway: true,

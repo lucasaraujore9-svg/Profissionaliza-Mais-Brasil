@@ -9,9 +9,10 @@ import type { ConfigDataWithTenant } from "./config-tabs.types"
 
 /**
  * Conexao da conta Asaas PROPRIA da unidade (gateway de vendas) — espelha o
- * card do Mercado Pago em billing-section.tsx. So e renderizado quando o Admin
- * Master liberou `asaasGatewayEnabled` para a unidade. A unidade cola a API key
- * da conta Asaas dela e o token de auth do webhook (que ela configura no painel
+ * card do Mercado Pago em billing-section.tsx. Aparece para TODA unidade: o
+ * Asaas deixou de ser capability liberada caso a caso pelo Admin Master, e as
+ * duas opcoes de gateway ficam sempre disponiveis. A unidade cola a API key da
+ * conta Asaas dela e o token de auth do webhook (que ela configura no painel
  * Asaas, apontando para a URL exibida aqui). Ambos sao criptografados no servidor.
  */
 interface AsaasGatewaySectionProps {
@@ -33,6 +34,15 @@ export function AsaasGatewaySection({ data, onUpdate }: AsaasGatewaySectionProps
   const [success, setSuccess] = useState<string | null>(null)
   const [showForm, setShowForm] = useState(false)
   const [copied, setCopied] = useState(false)
+
+  // Prontidão do MP pela MESMA trinca que o PATCH /sales-gateway exige (token +
+  // public key + assinatura secreta). Sem isso o botão do Mercado Pago ficava
+  // sempre clicável: a unidade que só conectou o Asaas — caso suportado desde
+  // que o Asaas passou a valer para todas — clicava e levava 400 sem entender.
+  const mpReady =
+    data.tenant.mpConnected &&
+    data.tenant.mpPublicKeyConfigured &&
+    data.tenant.mpWebhookConfigured
 
   async function copyWebhookUrl() {
     try {
@@ -72,12 +82,17 @@ export function AsaasGatewaySection({ data, onUpdate }: AsaasGatewaySectionProps
         return
       }
       setConnected(true)
-      setWebhookConfigured(Boolean(token))
+      // Só promove o estado do token quando um token FOI enviado: o servidor
+      // preserva o `asaasWebhookToken` existente quando o campo vem vazio, e
+      // sobrescrever com `false` fazia o card acusar "falta token do webhook"
+      // (e desabilitar o Asaas) numa conta que continuava completa.
+      const nextWebhookConfigured = token ? true : webhookConfigured
+      setWebhookConfigured(nextWebhookConfigured)
       setApiKeyInput("")
       setTokenInput("")
       setShowForm(false)
       setSuccess(
-        token
+        nextWebhookConfigured
           ? "Asaas conectado com sucesso."
           : "API key conectada. Cadastre o token do webhook para liberar as vendas.",
       )
@@ -85,7 +100,7 @@ export function AsaasGatewaySection({ data, onUpdate }: AsaasGatewaySectionProps
         tenant: {
           ...data.tenant,
           asaasConnected: true,
-          asaasWebhookConfigured: Boolean(token),
+          asaasWebhookConfigured: nextWebhookConfigured,
         },
       })
     } catch {
@@ -135,20 +150,25 @@ export function AsaasGatewaySection({ data, onUpdate }: AsaasGatewaySectionProps
       const res = await fetch("/api/painel/config/connect-asaas", {
         method: "DELETE",
       })
+      const json = await res.json().catch(() => null)
       if (!res.ok) {
-        const json = await res.json().catch(() => null)
         setError(json?.error ?? "Erro ao desconectar")
         return
       }
+      // O gateway ativo resultante vem do servidor: ele só volta para MP quando
+      // o Mercado Pago está realmente pronto. Assumir "MP" aqui mentia para a
+      // unidade que desconectou o Asaas sem ter MP configurado.
+      const nextGateway: "MP" | "ASAAS" =
+        json?.data?.salesGateway === "ASAAS" ? "ASAAS" : "MP"
       setConnected(false)
       setWebhookConfigured(false)
-      setSalesGateway("MP")
+      setSalesGateway(nextGateway)
       onUpdate({
         tenant: {
           ...data.tenant,
           asaasConnected: false,
           asaasWebhookConfigured: false,
-          salesGateway: "MP",
+          salesGateway: nextGateway,
         },
       })
     } catch {
@@ -202,9 +222,9 @@ export function AsaasGatewaySection({ data, onUpdate }: AsaasGatewaySectionProps
         <div className="mt-5 grid gap-3 sm:grid-cols-2">
           <button
             type="button"
-            disabled={gatewaySaving}
+            disabled={gatewaySaving || !mpReady}
             onClick={() => selectGateway("MP")}
-            className={`rounded-xl border-2 p-4 text-left transition-all disabled:opacity-60 ${
+            className={`rounded-xl border-2 p-4 text-left transition-all disabled:cursor-not-allowed disabled:opacity-50 ${
               salesGateway === "MP"
                 ? "border-[var(--color-pmb-green)] bg-[var(--color-pmb-lime-50)]/50 shadow-sm"
                 : "border-gray-200 bg-white"
@@ -219,7 +239,9 @@ export function AsaasGatewaySection({ data, onUpdate }: AsaasGatewaySectionProps
               )}
             </div>
             <p className="mt-1 text-xs text-gray-600">
-              Recebe via sua conta Mercado Pago.
+              {mpReady
+                ? "Recebe via sua conta Mercado Pago."
+                : "Conecte o Mercado Pago (token, public key e assinatura) para ativar."}
             </p>
           </button>
           <button

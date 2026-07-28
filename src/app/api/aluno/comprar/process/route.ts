@@ -76,7 +76,6 @@ export const POST = withRequestContext(
               plataformaVendedorId: true,
               asaasApiKey: true,
               asaasWebhookToken: true,
-              asaasGatewayEnabled: true,
               asaasConnected: true,
             },
           },
@@ -117,7 +116,14 @@ export const POST = withRequestContext(
 
       // ── Asaas: conta própria da unidade (cartão vai ao servidor) ──
       if (enrollment.gateway === "ASAAS") {
-        if (!tenant.asaasGatewayEnabled || !tenant.asaasConnected || !tenant.asaasApiKey) {
+        // Inclui o token do webhook: sem ele o /api/webhooks/asaas rejeita os
+        // callbacks desta conta com 401 e a cobrança fica sem liquidação — o
+        // aluno paga e nunca é matriculado. Mesmo gate do init da recompra.
+        if (
+          !tenant.asaasConnected ||
+          !tenant.asaasApiKey ||
+          !tenant.asaasWebhookToken
+        ) {
           return NextResponse.json(
             { error: "Loja indisponível para pagamento", code: "TENANT_INACTIVE" },
             { status: 403 },

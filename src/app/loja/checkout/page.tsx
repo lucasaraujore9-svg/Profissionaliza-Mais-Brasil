@@ -116,14 +116,12 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
         mpAccessToken: true,
         mpPublicKey: true,
         salesGateway: true,
-        asaasGatewayEnabled: true,
         asaasConnected: true,
         interestFreeInstallments: true,
       },
     })
     const checkoutMode = tenantCheckoutMode({
       salesGateway: tenantGateway?.salesGateway,
-      asaasGatewayEnabled: tenantGateway?.asaasGatewayEnabled,
       asaasConnected: tenantGateway?.asaasConnected,
       mpAccessToken: tenantGateway?.mpAccessToken,
       mpPublicKey: tenantGateway?.mpPublicKey,
@@ -275,7 +273,6 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
       mpAccessToken: true,
       mpPublicKey: true,
       salesGateway: true,
-      asaasGatewayEnabled: true,
       asaasConnected: true,
       interestFreeInstallments: true,
     },
@@ -284,12 +281,11 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
   // Gateway efetivo da unidade via helper central (mesma regra do
   // /api/loja/checkout). MP | ASAAS | NONE. Não buscamos o asaas_webhook_token
   // (segredo) neste server component público: marcar salesGateway=ASAAS já exige
-  // api key + token (rota sales-gateway), e desconectar/revogar reverte para MP —
+  // api key + token (rota sales-gateway), e desconectar reverte para MP —
   // então salesGateway==="ASAAS" implica o token presente. A checagem
   // autoritativa (com o token) acontece em /api/loja/checkout antes de cobrar.
   const checkoutMode = tenantCheckoutMode({
     salesGateway: tenantGateway?.salesGateway,
-    asaasGatewayEnabled: tenantGateway?.asaasGatewayEnabled,
     asaasConnected: tenantGateway?.asaasConnected,
     mpAccessToken: tenantGateway?.mpAccessToken,
     mpPublicKey: tenantGateway?.mpPublicKey,

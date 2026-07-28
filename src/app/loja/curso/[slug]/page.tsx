@@ -81,14 +81,12 @@ export default async function CoursePage({ params }: CoursePageProps) {
       mpAccessToken: true,
       mpPublicKey: true,
       salesGateway: true,
-      asaasGatewayEnabled: true,
       asaasConnected: true,
       interestFreeInstallments: true,
     },
   })
   const checkoutMode = tenantCheckoutMode({
     salesGateway: tenantPayment?.salesGateway,
-    asaasGatewayEnabled: tenantPayment?.asaasGatewayEnabled,
     asaasConnected: tenantPayment?.asaasConnected,
     mpAccessToken: tenantPayment?.mpAccessToken,
     mpPublicKey: tenantPayment?.mpPublicKey,

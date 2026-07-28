@@ -44,7 +44,7 @@ export const ADMIN_PERMISSIONS = [
   // ATENÇÃO: esta não é só um filtro de listagem. Ela é o substituto de TODO
   // bypass `role === "SUPER_ADMIN"` do código anterior — quem a tem passa
   // direto pelo recorte de carteira em senha do titular, impersonação,
-  // gateway, revogação de certificado e export de comissões. Por isso está em
+  // revogação de certificado e export de comissões. Por isso está em
   // SUPER_EXCLUSIVE: conceder por override transformaria um gerente de
   // unidades em super admin de fato, com um checkbox de nome inofensivo.
   "unidades.viewAll",
@@ -52,7 +52,9 @@ export const ADMIN_PERMISSIONS = [
   "unidades.manage",
   // Cobranças da unidade no Asaas: reconciliar, cancelar, reemitir.
   "unidades.billing",
-  // Redefinir a senha do titular e trocar o gateway Asaas da unidade.
+  // Redefinir a senha do titular da unidade. (O gateway de vendas saiu daqui:
+  // desde que o Asaas passou a valer para todas as unidades, quem escolhe e
+  // conecta é a própria unidade — o /admin só lê esse estado.)
   "unidades.credenciais",
   "unidades.impersonate",
   // LGPD: anonimização definitiva dos dados da unidade.
@@ -422,7 +424,7 @@ export const ADMIN_PERMISSION_GROUPS: {
       { perm: "unidades.create", label: "Criar unidade" },
       { perm: "unidades.manage", label: "Editar dados, status e política" },
       { perm: "unidades.billing", label: "Gerir as cobranças da unidade" },
-      { perm: "unidades.credenciais", label: "Trocar senha do titular e gateway" },
+      { perm: "unidades.credenciais", label: "Trocar senha do titular" },
       { perm: "unidades.impersonate", label: "Entrar como a unidade" },
       { perm: "unidades.comissoes", label: "Ver comissões da unidade" },
       { perm: "unidades.governanca", label: "Atribuir responsável, habilitar módulos e cancelar" },

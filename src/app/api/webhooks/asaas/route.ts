@@ -75,7 +75,6 @@ async function handleReseller(request: Request, slug: string) {
       plataformaVendedorId: true,
       asaasApiKey: true,
       asaasWebhookToken: true,
-      asaasGatewayEnabled: true,
       asaasConnected: true,
     },
   })
@@ -83,7 +82,6 @@ async function handleReseller(request: Request, slug: string) {
   // Sem tenant / sem credenciais → 401 genérico (não revela qual slug existe).
   if (
     !tenant ||
-    !tenant.asaasGatewayEnabled ||
     !tenant.asaasConnected ||
     !tenant.asaasWebhookToken ||
     !tenant.asaasApiKey

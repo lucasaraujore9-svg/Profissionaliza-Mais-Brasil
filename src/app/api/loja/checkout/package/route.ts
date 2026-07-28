@@ -124,7 +124,6 @@ export const POST = withRequestContext(
           plataformaVendedorId: true,
           automationEnabled: true,
           salesGateway: true,
-          asaasGatewayEnabled: true,
           asaasConnected: true,
           asaasWebhookToken: true,
         },
@@ -153,7 +152,6 @@ export const POST = withRequestContext(
 
       const mode = tenantCheckoutMode({
         salesGateway: tenant.salesGateway,
-        asaasGatewayEnabled: tenant.asaasGatewayEnabled,
         asaasConnected: tenant.asaasConnected,
         mpAccessToken: tenant.mpAccessToken,
         mpPublicKey: tenant.mpPublicKey,

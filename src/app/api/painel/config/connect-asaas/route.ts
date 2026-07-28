@@ -41,22 +41,16 @@ export const POST = withRequestContext(
 
     const tenantId = ctx.tenantId
 
-    // Gate de capability: a unidade so pode conectar o Asaas se o Admin Master
-    // liberou. Sem isso, alguem com sessao de revenda poderia configurar a conta
-    // Asaas mesmo com a feature desligada (defesa em profundidade — a UI tambem
-    // esconde, mas o servidor e a fronteira de verdade).
+    // Conectar o Asaas nao depende mais de capability do Admin Master: as duas
+    // opcoes de gateway valem para toda unidade. Quem pode configurar continua
+    // sendo decidido pela permissao `gateway.manage` do guard acima. A leitura
+    // abaixo so serve para o update so-de-token (exige API key ja conectada).
     const tenant = await prisma.tenant.findUnique({
       where: { id: tenantId },
-      select: { asaasGatewayEnabled: true, asaasApiKey: true },
+      select: { asaasApiKey: true },
     })
     if (!tenant) {
       return NextResponse.json({ error: "Recurso não encontrado" }, { status: 404 })
-    }
-    if (!tenant.asaasGatewayEnabled) {
-      return NextResponse.json(
-        { error: "Gateway Asaas não liberado para sua unidade", code: "ASAAS_NOT_ALLOWED" },
-        { status: 403 },
-      )
     }
 
     let payload: unknown
@@ -145,15 +139,34 @@ export const DELETE = withRequestContext(
 
     const tenantId = ctx.tenantId
 
-    // Desconectar tambem reverte o gateway ativo para MP — uma unidade nao pode
-    // ficar com salesGateway=ASAAS sem credenciais (quebraria todo o checkout).
+    // Desconectar reverte o gateway ativo para MP APENAS quando o Mercado Pago
+    // esta de fato pronto (mesma trinca exigida pelo PATCH /sales-gateway).
+    // Reverter incondicionalmente violava a REGRA DE OURO do checkout: a unidade
+    // que migrou para o Asaas e nunca revogou o token antigo do MP voltaria a
+    // cobrar, sem pedir nada, numa conta que ela considera desativada. Sem MP
+    // pronto, `salesGateway` continua ASAAS e o checkout-mode devolve NONE —
+    // a vitrine mostra o formulario de contato ate a unidade reconectar algo.
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: {
+        salesGateway: true,
+        mpAccessToken: true,
+        mpPublicKey: true,
+        mpWebhookSecret: true,
+      },
+    })
+    const mpReady = Boolean(
+      tenant?.mpAccessToken && tenant?.mpPublicKey && tenant?.mpWebhookSecret,
+    )
+    const salesGateway = mpReady ? "MP" : (tenant?.salesGateway ?? "MP")
+
     await prisma.tenant.update({
       where: { id: tenantId },
       data: {
         asaasApiKey: null,
         asaasWebhookToken: null,
         asaasConnected: false,
-        salesGateway: "MP",
+        ...(mpReady ? { salesGateway: "MP" as const } : {}),
       },
     })
 
@@ -165,9 +178,9 @@ export const DELETE = withRequestContext(
       actorUserId: ctx.userId,
       actorRole: "RESELLER",
       tenantId,
-      payloadAfter: { gateway: "ASAAS", salesGateway: "MP" },
+      payloadAfter: { gateway: "ASAAS", salesGateway },
     })
 
-    return NextResponse.json({ data: { connected: false, salesGateway: "MP" } })
+    return NextResponse.json({ data: { connected: false, salesGateway } })
   },
 )

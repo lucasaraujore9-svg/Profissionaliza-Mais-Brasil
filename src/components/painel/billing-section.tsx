@@ -728,9 +728,12 @@ export function BillingSection({ data, onUpdate }: BillingSectionProps) {
         )}
       </div>
 
-      {/* Gateway Asaas — só aparece para unidades que o Admin Master liberou.
-          Quando não liberado, nada é renderizado (nem a seção, nem aviso). */}
-      {data.tenant.asaasGatewayEnabled && (
+      {/* Gateway Asaas — disponível para TODA unidade (deixou de ser capability
+          liberada caso a caso pelo Admin Master). Aqui ela conecta a conta e
+          escolhe qual dos dois gateways fica ativo. O gate de render é o mesmo
+          do guard das rotas (`gateway.manage`): sem ele a pessoa digitaria a
+          API key e o token só para levar 403 ao salvar. */}
+      {data.canManagePix && (
         <AsaasGatewaySection data={data} onUpdate={onUpdate} />
       )}
     </div>

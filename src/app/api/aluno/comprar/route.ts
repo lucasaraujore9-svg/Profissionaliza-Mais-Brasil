@@ -51,7 +51,6 @@ interface ResellerTenant {
   mpPublicKey: string | null
   plataformaVendedorId: string | null
   salesGateway: string | null
-  asaasGatewayEnabled: boolean
   asaasConnected: boolean
   asaasWebhookToken: string | null
   monthlyAllowed: boolean
@@ -85,7 +84,6 @@ async function handleResellerInit(
 
     const mode = tenantCheckoutMode({
       salesGateway: tenant.salesGateway,
-      asaasGatewayEnabled: tenant.asaasGatewayEnabled,
       asaasConnected: tenant.asaasConnected,
       mpAccessToken: tenant.mpAccessToken,
       mpPublicKey: tenant.mpPublicKey,
@@ -407,7 +405,6 @@ export const POST = withRequestContext(
           mpPublicKey: true,
           plataformaVendedorId: true,
           salesGateway: true,
-          asaasGatewayEnabled: true,
           asaasConnected: true,
           asaasWebhookToken: true,
           monthlyAllowed: true,

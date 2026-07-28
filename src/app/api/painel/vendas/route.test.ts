@@ -78,7 +78,6 @@ beforeEach(() => {
     monthlyEnabled: false,
     monthlyScope: "DIRECT_ONLY",
     salesGateway: "MP",
-    asaasGatewayEnabled: false,
     asaasConnected: false,
     asaasApiKey: null,
     asaasWebhookToken: null,
@@ -108,7 +107,6 @@ function asaasTenant(overrides: Record<string, unknown> = {}) {
     monthlyEnabled: false,
     monthlyScope: "DIRECT_ONLY",
     salesGateway: "ASAAS",
-    asaasGatewayEnabled: true,
     asaasConnected: true,
     asaasApiKey: "enc-asaas",
     asaasWebhookToken: "enc-wh",
@@ -222,7 +220,6 @@ describe("venda direta herda o gateway da unidade", () => {
     p.tenant.findUnique.mockResolvedValue({
       ...asaasTenant(),
       salesGateway: "MP",
-      asaasGatewayEnabled: false,
       asaasConnected: false,
       asaasApiKey: null,
       asaasWebhookToken: null,

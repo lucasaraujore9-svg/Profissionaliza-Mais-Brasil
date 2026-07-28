@@ -148,9 +148,8 @@ export const POST = withRequestContext(
           monthlyAllowed: true,
           monthlyEnabled: true,
           monthlyScope: true,
-          // Gateway de vendas da unidade (MP padrão | ASAAS quando liberado+conectado).
+          // Gateway de vendas da unidade (MP padrão | ASAAS quando conectado).
           salesGateway: true,
-          asaasGatewayEnabled: true,
           asaasConnected: true,
           asaasWebhookToken: true,
         },
@@ -213,7 +212,6 @@ export const POST = withRequestContext(
     // revenda — jamais o do sistema mãe.
     const mode = tenantCheckoutMode({
       salesGateway: tenant.salesGateway,
-      asaasGatewayEnabled: tenant.asaasGatewayEnabled,
       asaasConnected: tenant.asaasConnected,
       mpAccessToken: tenant.mpAccessToken,
       mpPublicKey: tenant.mpPublicKey,

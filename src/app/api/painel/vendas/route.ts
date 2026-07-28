@@ -195,7 +195,6 @@ export const POST = withRequestContext(
         monthlyEnabled: true,
         monthlyScope: true,
         salesGateway: true,
-        asaasGatewayEnabled: true,
         asaasConnected: true,
         asaasApiKey: true,
         asaasWebhookToken: true,

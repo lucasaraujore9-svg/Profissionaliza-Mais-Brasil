@@ -344,19 +344,22 @@ model Tenant {
   // pagando a mensalidade dela PARA a PMB; estes sao a unidade RECEBENDO dos
   // alunos pela conta Asaas dela. Espelha o par mpAccessToken/mpWebhookSecret.
   //
-  // asaasGatewayEnabled: capability liberada pelo Admin Master (default OFF). Sem
-  //   ela, a config do Asaas nem aparece no painel da unidade (so quem ativou ve).
+  // asaasGatewayEnabled: DEPRECADO (migration 20260728_asaas_gateway_always_on).
+  //   Era a capability liberada caso a caso pelo Admin Master; o Asaas deixou de
+  //   ser feature opcional — toda unidade tem as duas opcoes de gateway. NADA no
+  //   codigo le este campo; ele so continua aqui porque o DROP da coluna quebra a
+  //   versao antiga durante a janela de deploy. Remover numa migration futura.
   // asaasApiKey: API key da conta Asaas da unidade (header access_token), AES-256.
   // asaasWebhookToken: token de auth do webhook que a unidade configura no painel
   //   Asaas dela e cola aqui — usado para validar os webhooks daquela conta. AES-256.
   // asaasConnected: a unidade ja informou a API key (espelha mpConnected).
-  asaasGatewayEnabled Boolean @default(false) @map("asaas_gateway_enabled")
+  asaasGatewayEnabled Boolean @default(true) @map("asaas_gateway_enabled")
   asaasApiKey         String? @map("asaas_api_key") // Criptografado AES-256
   asaasWebhookToken   String? @map("asaas_webhook_token") // Criptografado AES-256
   asaasConnected      Boolean @default(false) @map("asaas_connected")
 
   // Gateway ATIVO da vitrine da unidade. Uma venda por vez vai por um gateway.
-  // MP (padrao) ou ASAAS (so escolhivel quando asaasGatewayEnabled + asaasConnected).
+  // MP (padrao) ou ASAAS (escolhivel assim que a unidade conecta a conta Asaas).
   // Lido em /api/loja/checkout para definir Enrollment.gateway.
   salesGateway PaymentGateway @default(MP) @map("sales_gateway")
 
