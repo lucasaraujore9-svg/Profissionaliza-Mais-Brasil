@@ -148,6 +148,8 @@ describe("prévia 'ver como'", () => {
     const ctx = await painelContext()
     expect(ctx?.isPreview).toBe(true)
     expect(ctx?.memberRole).toBe("manager")
+    // Simula um MEMBRO: quem lê isOwner deve ver o mesmo que o membro veria.
+    expect(ctx?.isOwner).toBe(false)
     expect(ctx?.can("financeiro.view")).toBe(true)
     // Gerente TEM vitrine.manage no preset — a prévia derruba por ser escrita.
     expect(ctx?.can("vitrine.manage")).toBe(false)

@@ -134,7 +134,10 @@ export async function painelContext(): Promise<PainelContext | null> {
         userId,
         tenantId,
         memberRole: previewRole,
-        isOwner: true,
+        // `false` de propósito: a prévia simula um MEMBRO, e quem lê
+        // `isOwner` (ex.: o dispatcher de BI) deve enxergar o mesmo que o
+        // membro enxergaria. O cookie já foi validado contra o dono real.
+        isOwner: false,
         isPreview: true,
         permissions: toReadOnly(resolvePermissions(previewRole)),
         maxDiscount: null,
