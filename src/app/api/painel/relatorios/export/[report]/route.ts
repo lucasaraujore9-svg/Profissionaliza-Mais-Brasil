@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server"
-import { prisma } from "@/lib/prisma"
 import { requirePainel } from "@/lib/auth/painel-guard"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 import { buildCsv, csvResponse } from "@/lib/reports/csv"
@@ -12,8 +11,8 @@ export const dynamic = "force-dynamic"
 
 /**
  * Gera um relatório CSV (ou preview JSON) da unidade. SEMPRE tenant-scoped:
- * `filters.tenantId = ctx.tenantId` (o runner lança se faltar). Defs owner-only
- * exigem owner direto.
+ * `filters.tenantId = ctx.tenantId` (o runner lança se faltar). Cada def
+ * declara a permissão que exige.
  */
 export const GET = withRequestContextParams<{ report: string }>(
   { action: "painel.relatorios.export.get", route: "/api/painel/relatorios/export/[report]" },
@@ -28,12 +27,8 @@ export const GET = withRequestContextParams<{ report: string }>(
       return NextResponse.json({ error: "Relatório inexistente" }, { status: 404 })
     }
 
-    if (def.ownerOnly) {
-      const owner = await prisma.user.findFirst({
-        where: { id: ctx.userId, tenantId: ctx.tenantId },
-        select: { id: true },
-      })
-      if (!owner) return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
+    if (!ctx.can(def.perm)) {
+      return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
     }
 
     const { searchParams } = new URL(request.url)

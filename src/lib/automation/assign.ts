@@ -1,5 +1,9 @@
 import { prisma } from "@/lib/prisma"
 import { contextLogger } from "@/lib/logger"
+import {
+  normalizeMemberRole,
+  resolvePermissions,
+} from "@/lib/auth/painel-permissions"
 
 export interface LeadAssignee {
   userId: string
@@ -11,19 +15,31 @@ export interface LeadAssignee {
 }
 
 /**
- * Consultores da unidade (TenantMember role="consultant") com o flag `active`
- * indicando quem entra no rodizio de leads. So entra quem esta ATIVO e ja
- * aceitou o convite (tem senha definida). Ordenado por createdAt asc para um
- * rodizio estavel (a ordem nao muda quando um novo consultor entra no fim).
+ * Membros da unidade que podem receber lead — quem tem a permissao `leads.view`
+ * (vendedor por preset; gerente tambem; secretaria/financeiro nao, salvo
+ * concessao do dono). Filtrar por PERMISSAO e nao por role="consultant" e o que
+ * evita que um Gerente nunca entre no rodizio.
+ *
+ * `active` marca quem esta elegivel de fato: status ATIVO e convite ja aceito
+ * (tem senha). Ordenado por createdAt asc para um rodizio estavel — a ordem nao
+ * muda quando alguem novo entra no fim.
  */
 export async function listLeadAssignees(tenantId: string): Promise<LeadAssignee[]> {
-  const members = await prisma.tenantMember.findMany({
-    where: { tenantId, role: "consultant" },
+  const rows = await prisma.tenantMember.findMany({
+    where: { tenantId },
     include: {
       user: { select: { id: true, name: true, email: true, passwordHash: true } },
     },
     orderBy: { createdAt: "asc" },
   })
+
+  const members = rows.filter((m) =>
+    resolvePermissions(
+      normalizeMemberRole(m.role),
+      m.extraPermissions,
+      m.revokedPermissions,
+    ).has("leads.view"),
+  )
 
   return members.map((m) => {
     const pendingInvite = !m.user.passwordHash

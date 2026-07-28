@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import type { Prisma } from "@prisma/client"
+import type { PainelPermission } from "@/lib/auth/painel-permissions"
 import { brl, isoDate, isoDateTime } from "./csv"
 
 /**
@@ -11,8 +12,8 @@ export interface PainelReportDef {
   id: string
   label: string
   description: string
-  /** Só o dono da unidade pode gerar (consultores não). */
-  ownerOnly?: boolean
+  /** Permissão exigida para gerar este relatório. */
+  perm: PainelPermission
 }
 
 export interface PainelReportFilters {
@@ -34,11 +35,11 @@ export interface PainelReportRunner {
 const MAX_ROWS = 10_000
 
 export const PAINEL_REPORT_DEFS: PainelReportDef[] = [
-  { id: "vendas", label: "Vendas (matrículas)", description: "Matrículas da unidade com aluno, curso, valores e status." },
-  { id: "alunos", label: "Alunos", description: "Base de alunos da unidade com status e matrículas ativas." },
-  { id: "pagamentos", label: "Pagamentos recebidos", description: "Pagamentos aprovados no período." },
-  { id: "cupons", label: "Cupons", description: "Cupons da unidade com uso acumulado." },
-  { id: "cursos", label: "Cursos mais vendidos", description: "Ranking de cursos por matrículas pagas." },
+  { id: "vendas", label: "Vendas (matrículas)", description: "Matrículas da unidade com aluno, curso, valores e status.", perm: "vendas.viewAll" },
+  { id: "alunos", label: "Alunos", description: "Base de alunos da unidade com status e matrículas ativas.", perm: "alunos.viewAll" },
+  { id: "pagamentos", label: "Pagamentos recebidos", description: "Pagamentos aprovados no período.", perm: "financeiro.export" },
+  { id: "cupons", label: "Cupons", description: "Cupons da unidade com uso acumulado.", perm: "cupons.view" },
+  { id: "cursos", label: "Cursos mais vendidos", description: "Ranking de cursos por matrículas pagas.", perm: "catalogo.view" },
 ]
 
 function requireTenant(filters: PainelReportFilters): string {

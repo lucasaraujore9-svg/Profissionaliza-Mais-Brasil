@@ -10,8 +10,8 @@ export const dynamic = "force-dynamic"
 
 /**
  * Dispatcher de BI do painel (revenda). ISOLAMENTO MULTI-TENANT (P0): a sessão
- * fixa `ctx.tenantId` e todos os módulos filtram por ele. Abas owner-only são
- * reforçadas aqui no servidor — nunca confiar no cliente ter escondido a aba.
+ * fixa `ctx.tenantId` e todos os módulos filtram por ele. A permissão de cada
+ * aba é reforçada aqui no servidor — nunca confiar no cliente ter escondido a aba.
  */
 export const GET = withRequestContextParams<{ tab: string }>(
   { action: "painel.relatorios.bi.get", route: "/api/painel/relatorios/bi/[tab]" },
@@ -25,23 +25,16 @@ export const GET = withRequestContextParams<{ tab: string }>(
       return NextResponse.json({ error: "Aba inexistente" }, { status: 404 })
     }
 
-    // Owner direto = User.tenantId aponta para a unidade (consultores têm null).
-    const [owner, tenant] = await Promise.all([
-      prisma.user.findFirst({
-        where: { id: ctx.userId, tenantId: ctx.tenantId },
-        select: { id: true },
-      }),
-      prisma.tenant.findUnique({
-        where: { id: ctx.tenantId },
-        select: { canSellResellers: true },
-      }),
-    ])
-    const isOwner = !!owner
-    const canSellResellers = !!tenant?.canSellResellers
-
-    if (!canViewPainelTab(tab, isOwner)) {
+    if (!canViewPainelTab(tab, ctx.can)) {
       return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
     }
+
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: ctx.tenantId },
+      select: { canSellResellers: true },
+    })
+    const isOwner = ctx.isOwner
+    const canSellResellers = !!tenant?.canSellResellers
 
     const biModule = getPainelBiModule(tab)
     if (!biModule) {

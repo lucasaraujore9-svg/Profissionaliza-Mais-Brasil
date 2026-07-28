@@ -15,6 +15,11 @@ import {
 import { loadTenantEmailBrand } from "@/lib/email/tenant-brand"
 import { appUrl } from "@/lib/tenant/urls"
 import { afterResponse } from "@/lib/after-response"
+import {
+  normalizeMemberRole,
+  resolvePermissions,
+  type PainelPermission,
+} from "@/lib/auth/painel-permissions"
 
 /**
  * Categorias cujas notificações também viram EMAIL (ponte notificação→email).
@@ -109,14 +114,15 @@ async function dispatchNotificationEmails(
 export type NotificationConfigTarget = "TENANT" | "STUDENT" | "ADMIN"
 
 /**
- * Categorias da audiencia TENANT que pertencem ao DONO da revenda (financeiro
- * e comissoes de indicacao). Nao devem ser entregues aos consultores
- * (TenantMember) — so ao owner do tenant.
+ * Categorias da audiencia TENANT que exigem uma PERMISSAO especifica do membro.
+ * Antes eram "so o dono"; agora o dono pode delegar (ex.: dar `cobrancas.view`
+ * ao Financeiro da unidade) e a notificacao acompanha a delegacao. Categoria
+ * fora deste mapa vai para todo mundo da unidade.
  */
-const OWNER_ONLY_TENANT_CATEGORIES = new Set<string>([
-  "tenant-billing",
-  "referral",
-])
+const CATEGORY_PERMISSION: Record<string, PainelPermission> = {
+  "tenant-billing": "cobrancas.view",
+  referral: "indicacoes.view",
+}
 
 function audienceToConfigTarget(
   audience: NotificationAudience,
@@ -299,26 +305,40 @@ export async function createNotification(
     }
     if (input.audience === "TENANT") {
       // Expande para os Users do tenant (owner + memberships). Categorias
-      // financeiras (cobranca da revenda, comissoes) sao so do dono — nao
-      // vazam para consultores.
-      const ownerOnly = input.category
-        ? OWNER_ONLY_TENANT_CATEGORIES.has(input.category)
-        : false
+      // sensiveis (cobranca da unidade, comissoes) so vao para quem tem a
+      // permissao correspondente — o dono sempre tem; um membro so se o dono
+      // concedeu em /painel/equipe.
+      const requiredPerm = input.category
+        ? CATEGORY_PERMISSION[input.category]
+        : undefined
       const [owner, members] = await Promise.all([
         prisma.user.findFirst({
           where: { tenantId: input.tenantId },
           select: { id: true },
         }),
-        ownerOnly
-          ? Promise.resolve([] as { userId: string }[])
-          : prisma.tenantMember.findMany({
-              where: { tenantId: input.tenantId },
-              select: { userId: true },
-            }),
+        prisma.tenantMember.findMany({
+          where: { tenantId: input.tenantId, status: "ATIVO" },
+          select: {
+            userId: true,
+            role: true,
+            extraPermissions: true,
+            revokedPermissions: true,
+          },
+        }),
       ])
       const userIds = new Set<string>()
       if (owner) userIds.add(owner.id)
-      for (const m of members) userIds.add(m.userId)
+      for (const m of members) {
+        if (requiredPerm) {
+          const perms = resolvePermissions(
+            normalizeMemberRole(m.role),
+            m.extraPermissions,
+            m.revokedPermissions,
+          )
+          if (!perms.has(requiredPerm)) continue
+        }
+        userIds.add(m.userId)
+      }
 
       if (userIds.size === 0) return null
 

@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation"
 import { Suspense } from "react"
-import { prisma } from "@/lib/prisma"
-import { requireResellerSession } from "@/lib/auth/reseller-session"
+import { requirePainelPage } from "@/lib/auth/painel-guard"
 import {
   allowedPainelTabs,
   canViewPainelTab,
@@ -17,23 +16,16 @@ export default async function PainelRelatoriosTabPage({
 }: {
   params: Promise<{ tab: string }>
 }) {
-  const ctx = await requireResellerSession()
-  if (!ctx) redirect("/login?callbackUrl=/painel/relatorios")
-
-  // Owner direto = User.tenantId aponta para a unidade (consultores têm null).
-  const owner = await prisma.user.findFirst({
-    where: { id: ctx.userId, tenantId: ctx.tenantId },
-    select: { id: true },
-  })
-  const isOwner = !!owner
+  const ctx = await requirePainelPage("relatorios.view")
 
   const { tab } = await params
-  // Gate server-side: consultor não acessa aba owner-only.
-  if (!canViewPainelTab(tab, isOwner)) {
+  // Gate server-side por permissão da aba — nunca confiar no client ter
+  // escondido o botão. O dispatcher de BI repete a checagem.
+  if (!canViewPainelTab(tab, ctx.can)) {
     redirect(`/painel/relatorios/${DEFAULT_PAINEL_TAB}`)
   }
 
-  const tabs = allowedPainelTabs(isOwner).map((t) => ({
+  const tabs = allowedPainelTabs(ctx.can).map((t) => ({
     id: t.slug,
     label: t.label,
     icon: t.icon,
