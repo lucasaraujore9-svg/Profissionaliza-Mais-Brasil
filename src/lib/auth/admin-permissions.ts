@@ -100,6 +100,10 @@ export const ADMIN_PERMISSIONS = [
   // isso era `role !== "PMB_SALES" -> sem teto`, que abria 100% para qualquer
   // papel que recebesse `vendas.create`/`cupons.manage` por override.
   "vendas.descontoIlimitado",
+  // Matricular como BOLSISTA: libera o curso com finalAmount 0, sem gateway.
+  // Sem permissao propria, era o caminho aberto para furar o teto acima —
+  // quem tomava 403 num desconto de 11% marcava "Bolsa" e dava 100%.
+  "vendas.bolsa",
   "cupons.view",
   "cupons.manage",
 
@@ -173,12 +177,21 @@ const ALL: readonly AdminPermission[] = ADMIN_PERMISSIONS
  * usuários e editar permissões — inclusive as próprias —, que é exatamente o
  * caminho de escalada de privilégio que este modelo existe para fechar.
  */
-export const SUPER_EXCLUSIVE = ["equipe.manage", "unidades.viewAll"] as const
+export const SUPER_EXCLUSIVE = [
+  "equipe.manage",
+  "unidades.viewAll",
+  // Grava `Tenant.accountManagerId`: quem a tem se auto-atribui a carteira de
+  // qualquer unidade e, por tabela, ganha senha do titular, impersonacao,
+  // cobranca e ledger de comissao dela. Mesma escalada que fechamos em
+  // `unidades.viewAll`, so que em dois passos.
+  "unidades.governanca",
+] as const
 
 /** Concedíveis por override, mas com aviso destacado na UI de Equipe. */
 export const SENSITIVE = [
   "integracoes.manage",
   "vendas.descontoIlimitado",
+  "vendas.bolsa",
   "alunos.viewAll",
   "vendas.viewAll",
   "leadsRevenda.viewAll",
@@ -187,7 +200,6 @@ export const SENSITIVE = [
   "unidades.credenciais",
   "unidades.impersonate",
   "unidades.anonimizar",
-  "unidades.governanca",
   "alunos.impersonate",
   "alunosRede.view",
   "alunosRede.manage",
@@ -224,6 +236,7 @@ export const ADMIN_ROLE_PRESETS: Record<PmbTeamRole, readonly AdminPermission[]>
     "atendimento.manage",
     "vendas.view",
     "vendas.create",
+    "vendas.bolsa",
     "cupons.view",
     "cupons.manage",
     "catalogo.view",
@@ -447,6 +460,7 @@ export const ADMIN_PERMISSION_GROUPS: {
       { perm: "vendas.viewAll", label: "Ver as vendas de toda a equipe" },
       { perm: "vendas.create", label: "Registrar nova venda" },
       { perm: "vendas.descontoIlimitado", label: "Dar desconto sem teto" },
+      { perm: "vendas.bolsa", label: "Matricular como bolsista (100%)" },
       { perm: "cupons.view", label: "Ver cupons" },
       { perm: "cupons.manage", label: "Criar e editar cupons" },
     ],

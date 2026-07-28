@@ -1,7 +1,8 @@
 import Link from "next/link"
+import { redirect } from "next/navigation"
 import { ArrowLeft, Download } from "lucide-react"
 import { prisma } from "@/lib/prisma"
-import { requireAdminPage } from "@/lib/auth/admin-guard"
+import { adminHome, requireAdminPage } from "@/lib/auth/admin-guard"
 import { parseLinesSnapshot } from "@/lib/referrals/lines-snapshot"
 import { referralCommissionStatusLabel } from "@/lib/labels"
 import { PageHeader } from "@/components/painel/page-header"
@@ -112,8 +113,19 @@ export default async function AdminComissoesPage({
     exportParams.toString() ? `?${exportParams.toString()}` : ""
   }`
 
-  const filters: Prisma.ReferralCommissionWhereInput = {}
-  const monthlyFilters: Prisma.ReferralMonthlyCommissionWhereInput = {}
+  // Mesmo recorte do export irmao (/api/admin/referrals/commissions/export).
+  const scope = await session.comissoesScope()
+  if (!scope) redirect(adminHome(session))
+  // Os dois ledgers tem `referrer` para Tenant, mas os WhereInput sao tipos
+  // distintos — daí o filtro ser montado uma vez por ledger.
+  const scopedReferrer = Object.keys(scope!).length > 0 ? scope! : null
+
+  const filters: Prisma.ReferralCommissionWhereInput = scopedReferrer
+    ? { referrer: scopedReferrer }
+    : {}
+  const monthlyFilters: Prisma.ReferralMonthlyCommissionWhereInput = scopedReferrer
+    ? { referrer: scopedReferrer }
+    : {}
   if (sp.referrer) {
     filters.referrerTenantId = sp.referrer
     monthlyFilters.referrerTenantId = sp.referrer
@@ -236,7 +248,10 @@ export default async function AdminComissoesPage({
   const canResolve = session.can("indicacoes.clawback")
   const [legacyClawbacks, monthlyClawbacks] = await Promise.all([
     prisma.referralCommission.findMany({
-      where: { cancelReason: { startsWith: "[CLAWBACK_PENDING]" } },
+      where: {
+        cancelReason: { startsWith: "[CLAWBACK_PENDING]" },
+        ...(scopedReferrer ? { referrer: scopedReferrer } : {}),
+      },
       select: {
         id: true,
         amount: true,
@@ -248,7 +263,10 @@ export default async function AdminComissoesPage({
       take: 100,
     }),
     prisma.referralMonthlyCommission.findMany({
-      where: { cancelReason: { startsWith: "[CLAWBACK_PENDING]" } },
+      where: {
+        cancelReason: { startsWith: "[CLAWBACK_PENDING]" },
+        ...(scopedReferrer ? { referrer: scopedReferrer } : {}),
+      },
       select: {
         id: true,
         amount: true,

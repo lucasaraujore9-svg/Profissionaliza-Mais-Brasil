@@ -7,7 +7,7 @@ import { contextLogger } from "@/lib/logger"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { SLUG_REGEX } from "@/lib/tenant/slug"
 import { createReseller } from "@/lib/resellers/create"
-import { requireAdmin } from "@/lib/auth/admin-guard"
+import { requireAdmin, type AdminContext } from "@/lib/auth/admin-guard"
 
 export const GET = withRequestContext(
   { action: "admin.revendedores.list", route: "/api/admin/revendedores" },
@@ -189,6 +189,20 @@ const createSchema = z.object({
     path: ["tecnicaUrl"],
   })
 
+/**
+ * O lead está no escopo de quem chamou? Usa o mesmo `leadsRevendaWhere()` do
+ * guard (dono, time de vendas ou rede inteira) em vez de re-derivar pelo papel.
+ */
+async function leadInScope(ctx: AdminContext, leadId: string): Promise<boolean> {
+  const scope = await ctx.leadsRevendaWhere()
+  if (!scope) return false
+  const found = await prisma.lead.findFirst({
+    where: { id: leadId, ...scope },
+    select: { id: true },
+  })
+  return !!found
+}
+
 export const POST = withRequestContext(
   { action: "admin.revendedores.create", route: "/api/admin/revendedores" },
   async (request: Request) => {
@@ -221,8 +235,11 @@ export const POST = withRequestContext(
       where: { id: data.leadId },
       select: { id: true, referrerTenantId: true, ownerUserId: true },
     })
-    // Vendedor de revenda só converte o que é dele.
-    if (lead && ctx.role === "PMB_REVENDA_SALES" && lead.ownerUserId !== ctx.userId) {
+    // Só converte o lead que está no seu escopo. Antes a checagem só disparava
+    // para PMB_REVENDA_SALES, então quem tinha `unidades.create` por preset
+    // (gerente de vendas) ou por override convertia o lead de outra pessoa,
+    // herdando o referrerTenantId e definindo o salesUserId.
+    if (lead && !(await leadInScope(ctx, lead.id))) {
       return NextResponse.json(
         { error: "Este lead não está atribuído a você" },
         { status: 403 },

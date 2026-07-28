@@ -13,9 +13,14 @@ export const GET = withRequestContext(
   // opera a vitrine PMB (`alunos.view` sem `unidades.viewAll`) e quem administra
   // uma carteira de unidades. Quem não se encaixa em nenhum e também não vê a
   // rede inteira receberia dados fora do seu escopo — devolve lista vazia.
+  // Ordem importa: quem tem carteira de unidades e recortado por tenant, mesmo
+  // que tambem tenha `alunos.view`. Com `pmbOnly` na frente, conceder
+  // "Ver alunos da vitrine PMB" a um gerente de unidades o tirava do ramo
+  // escopado por tenant — ele perdia o export da propria carteira e o
+  // `?tenantId=` passava sem checagem de posse.
   const seesAll = session.can("unidades.viewAll")
-  const pmbOnly = !seesAll && session.can("alunos.view")
   const carteira = !seesAll && session.can("unidades.view")
+  const pmbOnly = !seesAll && !carteira && session.can("alunos.view")
   if (!seesAll && !pmbOnly && !carteira) {
     return NextResponse.json({ data: { reports: [], role: session.role } })
   }

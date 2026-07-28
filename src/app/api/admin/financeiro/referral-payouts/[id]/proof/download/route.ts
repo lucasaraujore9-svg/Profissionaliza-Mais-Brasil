@@ -4,6 +4,7 @@ import { downloadPayoutProof } from "@/lib/storage/payout-proof"
 import { contextLogger } from "@/lib/logger"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 import { requireAdmin } from "@/lib/auth/admin-guard"
+import { payoutScopeWhere } from "@/lib/referrals/payout-scope"
 
 export const dynamic = "force-dynamic"
 export const maxDuration = 60
@@ -19,8 +20,14 @@ export const GET = withRequestContextParams<{ id: string }>(
     const guard = await requireAdmin("financeiro.manage")
     if (!guard.ok) return guard.response
     const { id } = await params
-    const payout = await prisma.referralPayout.findUnique({
-      where: { id },
+    // `financeiro.manage` autoriza a acao; o recorte abaixo amarra o saque
+    // a carteira de quem chamou — sem ele, o id na URL alcancava a rede.
+    const scopeWhere = await payoutScopeWhere(guard.ctx, id)
+    if (!scopeWhere) {
+      return NextResponse.json({ error: "Permissão negada" }, { status: 403 })
+    }
+    const payout = await prisma.referralPayout.findFirst({
+      where: scopeWhere,
       select: { proofUrl: true },
     })
     if (!payout?.proofUrl) {

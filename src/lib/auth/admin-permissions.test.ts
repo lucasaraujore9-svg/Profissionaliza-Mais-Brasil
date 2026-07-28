@@ -22,6 +22,33 @@ describe("catálogo", () => {
     expect(perms.has("unidades.viewAll")).toBe(false)
   })
 
+  /**
+   * `unidades.governanca` grava `Tenant.accountManagerId`. Concedida por
+   * override, ela permitia à pessoa se auto-atribuir a carteira de qualquer
+   * unidade e, por tabela, ganhar senha do titular, impersonação, cobrança e
+   * ledger de comissão — a mesma escalada de `unidades.viewAll`, em dois passos.
+   */
+  it("unidades.governanca é exclusiva do Super Admin", () => {
+    expect(SUPER_EXCLUSIVE).toContain("unidades.governanca")
+    const perms = resolveAdminPermissions("PMB_RESELLER_MGR", ["unidades.governanca"])
+    expect(perms.has("unidades.governanca")).toBe(false)
+  })
+
+  /**
+   * Bolsa entrega o curso por R$ 0. Sem permissão própria era o caminho de
+   * fuga do teto de desconto: quem tomava 403 num desconto de 11% marcava
+   * "Bolsa de estudo" e concedia 100%.
+   */
+  it("matricular como bolsista exige permissão própria", () => {
+    for (const role of PMB_TEAM_ROLES) {
+      const podeVender = ADMIN_ROLE_PRESETS[role].includes("vendas.create")
+      const podeBolsa = ADMIN_ROLE_PRESETS[role].includes("vendas.bolsa")
+      // Só quem já vendia concede bolsa; ninguém ganha bolsa sem vender.
+      if (podeBolsa) expect(podeVender, role).toBe(true)
+    }
+    expect(resolveAdminPermissions("PMB_RESELLER_MGR").has("vendas.bolsa")).toBe(false)
+  })
+
   it("não tem permissão duplicada", () => {
     expect(new Set(ADMIN_PERMISSIONS).size).toBe(ADMIN_PERMISSIONS.length)
   })

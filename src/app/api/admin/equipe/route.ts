@@ -150,9 +150,14 @@ export const POST = withRequestContext(
   const salesManagerId =
     parsed.data.role === "PMB_REVENDA_SALES" ? parsed.data.salesManagerId ?? null : null
 
-  // Cap individual de desconto só vale para vendedor de curso.
-  const maxDiscount =
-    parsed.data.role === "PMB_SALES" ? parsed.data.maxDiscount ?? null : null
+  // Cap individual de desconto vale para quem vende (permissao), nao para um
+  // papel — ver o irmao PATCH em equipe/[id].
+  const podeVender = resolveAdminPermissions(
+    parsed.data.role,
+    parsed.data.extraPermissions ?? [],
+    parsed.data.revokedPermissions ?? [],
+  ).has("vendas.create")
+  const maxDiscount = podeVender ? parsed.data.maxDiscount ?? null : null
   if (salesManagerId) {
     const mgr = await prisma.user.findUnique({
       where: { id: salesManagerId },

@@ -26,7 +26,11 @@ const PAGE_SIZE = 200
  * pagina 2 (fundamentacao legal). Idempotente: sobrescreve cada objeto no
  * Storage pelo id do certificado.
  *
- * SUPER_ADMIN-only: percorre todos os tenants (operacao global de manutencao).
+ * Percorre TODOS os tenants (manutencao global) e sobrescreve o PDF de cada
+ * certificado no Storage — por isso exige `unidades.viewAll` alem de
+ * `certificados.manage`. A rota irma de certificado unico recusa a mesma
+ * mutacao para certificado de revendedor fora da carteira; sem o segundo
+ * requisito, quem so opera a vitrine PMB reescrevia o PDF da rede inteira.
  * Roda no servidor (Vercel), onde os segredos de producao estao injetados.
  */
 export const POST = withRequestContext(
@@ -35,7 +39,7 @@ export const POST = withRequestContext(
     // Aceita SUPER_ADMIN (botão no admin) OU CRON_SECRET (gatilho de
     // manutenção server-to-server, ex: ops/automação). Ambos são privilegiados.
     if (!isCronAuthorized(request)) {
-      const guard = await requireAdmin("certificados.manage")
+      const guard = await requireAdmin("certificados.manage", "unidades.viewAll")
       if (!guard.ok) return guard.response
     }
 

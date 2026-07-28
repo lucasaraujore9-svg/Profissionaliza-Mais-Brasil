@@ -122,7 +122,16 @@ export const POST = withRequestContext(
     )
   }
 
+  // Bolsa entrega o curso por R$ 0. Sem permissao propria era o caminho aberto
+  // para furar o teto de desconto: quem tomava 403 num desconto de 11% marcava
+  // "Bolsa de estudo" e concedia 100%.
   const isBolsista = parsed.data.bolsista === true
+  if (isBolsista && !guard.ctx.can("vendas.bolsa")) {
+    return NextResponse.json(
+      { error: "Sem permissão para matricular como bolsista" },
+      { status: 403 },
+    )
+  }
 
   const settings = await getSystemSettings()
   const gateway = settings.pmbDirectSaleGateway

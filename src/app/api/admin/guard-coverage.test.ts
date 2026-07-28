@@ -45,13 +45,43 @@ describe("cobertura do guard em /api/admin", () => {
     expect(files.length).toBeGreaterThan(100)
   })
 
+  // Cobertura POR HANDLER, não por arquivo: procurar `requireAdmin(` em algum
+  // lugar do route.ts deixava passar um `export const DELETE` novo, sem gate,
+  // dentro de um arquivo cujo GET já era gateado — exatamente o buraco que este
+  // teste diz fechar. Contamos os handlers HTTP exportados contra as chamadas
+  // do guard.
+  const HTTP =
+    /^export (const|async function) (GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\b/gm
+  const GUARD = /\brequireAdmin(Any)?\(/g
+
   it.each(files.filter((f) => !(f in EXCECOES)))(
-    "%s passa por requireAdmin",
+    "%s: todo handler HTTP passa por requireAdmin",
     (rel) => {
       const src = readFileSync(join(ROOT, rel), "utf-8")
-      expect(src).toMatch(/\brequireAdmin(Any)?\(/)
+      const handlers = src.match(HTTP) ?? []
+      const guards = src.match(GUARD) ?? []
+      expect(handlers.length, "arquivo sem handler HTTP exportado").toBeGreaterThan(0)
+      expect(
+        guards.length,
+        `${handlers.length} handler(s), ${guards.length} chamada(s) de guard`,
+      ).toBeGreaterThanOrEqual(handlers.length)
     },
   )
+
+  /**
+   * `requireAdmin()` sem argumento só exige sessão da equipe interna. É
+   * legítimo em auto-serviço (o próprio perfil); em qualquer outra rota é um
+   * gate que não gateia nada.
+   */
+  it("requireAdmin() sem permissão só aparece em auto-serviço", () => {
+    const AUTO_SERVICO = ["me/route.ts"]
+    const offenders = files.filter((rel) => {
+      if (AUTO_SERVICO.includes(rel)) return false
+      const src = readFileSync(join(ROOT, rel), "utf-8")
+      return /\brequireAdmin(Any)?\(\s*\)/.test(src)
+    })
+    expect(offenders).toEqual([])
+  })
 
   it("nenhuma rota volta a decidir autorização por papel cru", () => {
     const offenders = files.filter((rel) => {

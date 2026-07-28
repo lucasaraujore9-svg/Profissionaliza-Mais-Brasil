@@ -23,9 +23,14 @@ export const GET = withRequestContextParams<{ type: string }>(
   //   opera só a vitrine PMB                 -> só `pmbSalesAllowed`
   //   administra uma carteira de unidades    -> escopado por tenantId (abaixo)
   // Quem não se encaixa em nenhum exportaria dados fora do seu escopo.
+  // Ordem importa: quem tem carteira de unidades e recortado por tenant, mesmo
+  // que tambem tenha `alunos.view`. Com `pmbOnly` na frente, conceder
+  // "Ver alunos da vitrine PMB" a um gerente de unidades o tirava do ramo
+  // escopado por tenant — ele perdia o export da propria carteira e o
+  // `?tenantId=` passava sem checagem de posse.
   const seesAll = session.can("unidades.viewAll")
-  const pmbOnly = !seesAll && session.can("alunos.view")
-  const carteira = !seesAll && !pmbOnly && session.can("unidades.view")
+  const carteira = !seesAll && session.can("unidades.view")
+  const pmbOnly = !seesAll && !carteira && session.can("alunos.view")
   if (!seesAll && !pmbOnly && !carteira) {
     return NextResponse.json(
       { error: "Sem permissão para gerar relatórios" },

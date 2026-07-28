@@ -8,6 +8,7 @@ import { withRequestContextParams } from "@/lib/observability/with-request-conte
 import { logAudit } from "@/lib/audit"
 import { swallow } from "@/lib/errors"
 import { requireAdmin } from "@/lib/auth/admin-guard"
+import { payoutScopeWhere } from "@/lib/referrals/payout-scope"
 
 const bodySchema = z.object({
   asaasTransferId: z.string().min(1).max(80).optional().nullable(),
@@ -61,8 +62,14 @@ export const POST = withRequestContextParams<{ id: string }>(
     )
   }
 
-  const payout = await prisma.referralPayout.findUnique({
-    where: { id },
+  // `financeiro.manage` autoriza a acao; o recorte abaixo amarra o saque
+  // a carteira de quem chamou — sem ele, o id na URL alcancava a rede.
+  const scopeWhere = await payoutScopeWhere(guard.ctx, id)
+  if (!scopeWhere) {
+    return NextResponse.json({ error: "Permissão negada" }, { status: 403 })
+  }
+  const payout = await prisma.referralPayout.findFirst({
+    where: scopeWhere,
     select: { id: true, status: true, notes: true, amount: true, proofUrl: true },
   })
   if (!payout) {

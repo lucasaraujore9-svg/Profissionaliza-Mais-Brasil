@@ -15,11 +15,15 @@ export const indicacoesComissoesModule: BiModule = {
     // Recorte do dinheiro: sem visão financeira do ecossistema, só as unidades
     // da própria carteira — no formato do papel (accountManagerId, salesUserId
     // ou time), resolvido pelo guard e não re-derivado aqui.
+    //
+    // `null` significa "não alcança unidade nenhuma" e tem de FECHAR. Colapsar
+    // `null` e `{}` no mesmo "sem filtro" era fail-open: revogar
+    // `unidades.view` de um gerente devolvia o ledger da rede inteira, a mesma
+    // inversão ("revogar amplia") que o comissoesScope existe para fechar.
     const referrerFilter = await session.comissoesScope()
+    if (!referrerFilter) return buildPayload(period, {})
     const scope =
-      referrerFilter && Object.keys(referrerFilter).length > 0
-        ? { referrer: referrerFilter }
-        : {}
+      Object.keys(referrerFilter).length > 0 ? { referrer: referrerFilter } : {}
     const range = { gte: period.start, lt: period.end }
 
     const [
@@ -54,7 +58,7 @@ export const indicacoesComissoesModule: BiModule = {
         where: {
           status: "PAID",
           paidAt: range,
-          ...(referrerFilter ? { referrer: referrerFilter } : {}),
+          ...scope,
         },
       }),
       prisma.referralCommission.groupBy({ by: ["status"], where: scope, _sum: { amount: true } }),
@@ -78,7 +82,7 @@ export const indicacoesComissoesModule: BiModule = {
         }),
       ]),
       prisma.referralPayout.findMany({
-        where: { ...(referrerFilter ? { referrer: referrerFilter } : {}) },
+        where: scope,
         orderBy: { createdAt: "desc" },
         take: 20,
         select: {

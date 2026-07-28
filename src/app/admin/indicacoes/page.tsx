@@ -1,6 +1,7 @@
 import Link from "next/link"
 import { prisma } from "@/lib/prisma"
-import { requireAdminPage } from "@/lib/auth/admin-guard"
+import { redirect } from "next/navigation"
+import { adminHome, requireAdminPage } from "@/lib/auth/admin-guard"
 import { PageHeader } from "@/components/painel/page-header"
 import { Card } from "@/components/ui/card"
 import {
@@ -22,11 +23,18 @@ function formatMoney(n: number): string {
 }
 
 export default async function AdminIndicacoesPage() {
-  await requireAdminPage("indicacoes.view")
+  const ctx = await requireAdminPage("indicacoes.view")
+
+  // As APIs de indicacao passaram a recortar por carteira; a pagina consultava
+  // o Prisma sem `where` e mostrava na tela o que a API ja filtrava. `null` =
+  // nao alcanca unidade nenhuma -> sai do hub em vez de listar tudo.
+  const scope = await ctx.comissoesScope()
+  if (!scope) redirect(adminHome(ctx))
 
   const [referrers, totals, monthlyTotals, payoutsPaidByReferrer] = await Promise.all([
     prisma.tenant.findMany({
       where: {
+        ...scope,
         referrals: { some: {} },
       },
       select: {
@@ -60,7 +68,7 @@ export default async function AdminIndicacoesPage() {
     // entao somar comissoes PAID mostraria menos do que saiu do caixa.
     prisma.referralPayout.groupBy({
       by: ["referrerTenantId"],
-      where: { status: "PAID" },
+      where: { status: "PAID", referrer: scope },
       _sum: { amount: true },
     }),
   ])

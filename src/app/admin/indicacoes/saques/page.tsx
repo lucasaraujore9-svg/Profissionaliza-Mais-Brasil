@@ -1,7 +1,8 @@
 import Link from "next/link"
 import { ArrowLeft } from "lucide-react"
 import { prisma } from "@/lib/prisma"
-import { requireAdminPage } from "@/lib/auth/admin-guard"
+import { redirect } from "next/navigation"
+import { adminHome, requireAdminPage } from "@/lib/auth/admin-guard"
 import {
   referralPayoutMethodLabel,
   referralPayoutStatusLabel,
@@ -29,9 +30,16 @@ function formatMoney(n: number): string {
 }
 
 export default async function AdminSaquesPage() {
-  await requireAdminPage("indicacoes.view")
+  const ctx = await requireAdminPage("indicacoes.view")
+
+  // A tela expoe chave PIX, valor e transferId — PII financeira. Mesmo recorte
+  // de GET /api/admin/financeiro/referral-payouts: sem visao do ecossistema, so
+  // a propria carteira.
+  const scope = await ctx.comissoesScope()
+  if (!scope) redirect(adminHome(ctx))
 
   const payouts = await prisma.referralPayout.findMany({
+    where: { referrer: scope },
     select: {
       id: true,
       amount: true,

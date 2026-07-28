@@ -8,6 +8,7 @@ import {
 } from "@/lib/asaas/client"
 import { prisma } from "@/lib/prisma"
 import { swallow } from "@/lib/errors"
+import { contextLogger } from "@/lib/logger"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 import { requireAdmin, type AdminContext } from "@/lib/auth/admin-guard"
 
@@ -28,6 +29,14 @@ const patchSchema = z.object({
  * PATCH, reprecificava) a mensalidade de uma unidade fora da carteira dela,
  * passando um `paymentId` arbitrário. O `tenantId` só entrava no `updateMany`
  * local, que silenciosamente não casava nada.
+ *
+ * A prova de posse tem DUAS fontes, porque a tela também tem duas: o detalhe da
+ * unidade lista `[...vindas do Asaas, ...vindas do banco]`. Uma cobrança cujo
+ * webhook `PAYMENT_CREATED` não chegou aparece na tela sem linha em
+ * `TenantPayment` — exigir a linha local negava o cancelamento de uma cobrança
+ * real e viva, que é justamente a que o admin precisa cancelar. Quando não há
+ * espelho local, perguntamos ao Asaas de quem é a cobrança e comparamos com o
+ * `asaasCustomerId` da unidade.
  */
 async function assertPaymentInScope(
   ctx: AdminContext,
@@ -36,17 +45,45 @@ async function assertPaymentInScope(
 ): Promise<Response | null> {
   const tenant = await prisma.tenant.findUnique({
     where: { id: tenantId },
-    select: { accountManagerId: true, salesUserId: true },
+    select: {
+      accountManagerId: true,
+      salesUserId: true,
+      asaasCustomerId: true,
+    },
   })
   if (!(await ctx.canAccessTenant(tenant))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
-  const payment = await prisma.tenantPayment.findFirst({
+
+  const local = await prisma.tenantPayment.findFirst({
     where: { asaasPaymentId: paymentId, tenantId },
     select: { id: true },
   })
-  if (!payment) {
+  if (local) return null
+
+  // Sem espelho local: a posse é confirmada no próprio Asaas.
+  if (!tenant?.asaasCustomerId) {
     return NextResponse.json({ error: "Cobrança não encontrada" }, { status: 404 })
+  }
+  try {
+    const remote = await getPayment(paymentId)
+    if (remote.customer !== tenant.asaasCustomerId) {
+      // 404, não 403: não revela que a cobrança existe em outra unidade.
+      return NextResponse.json({ error: "Cobrança não encontrada" }, { status: 404 })
+    }
+  } catch (error) {
+    if (error instanceof AsaasApiError && error.statusCode === 404) {
+      return NextResponse.json({ error: "Cobrança não encontrada" }, { status: 404 })
+    }
+    contextLogger().error(
+      { event: "payment.scope_check_failed", tenantId, paymentId, err: error },
+      "falha ao confirmar a posse da cobrança no Asaas",
+    )
+    // Indisponibilidade do Asaas NÃO pode virar autorização.
+    return NextResponse.json(
+      { error: "Não foi possível confirmar a cobrança no Asaas. Tente novamente." },
+      { status: 503 },
+    )
   }
   return null
 }

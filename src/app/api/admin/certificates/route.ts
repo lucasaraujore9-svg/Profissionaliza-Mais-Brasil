@@ -49,6 +49,13 @@ export const GET = withRequestContext(
       where.tenant = scope
     }
   } else if (!ctx.can("unidades.viewAll")) {
+    // Sem carteira de unidades, so a vitrine PMB — e so para quem opera a
+    // vitrine. `adminCanAccessCertTenant` exige `alunos.view` para o mesmo
+    // certificado no download/regenerate; sem este espelho a tela listava um
+    // PDF que a acao seguinte recusava com 403.
+    if (!ctx.can("alunos.view")) {
+      return NextResponse.json({ data: [] })
+    }
     where.tenantId = null
   }
 

@@ -175,8 +175,16 @@ export const PATCH = withRequestContextParams<{ id: string }>(
     data.revokedPermissions ??= []
   }
 
-  // Cap individual de desconto: só vendedor de curso (PMB_SALES) o tem.
-  if (effectiveRole !== "PMB_SALES" && (data.role !== undefined || data.maxDiscount !== undefined)) {
+  // Cap individual de desconto: vale para QUEM VENDE, nao para um papel. Zerar
+  // por `role !== "PMB_SALES"` fazia o admin configurar 10% para alguem que
+  // recebeu `vendas.create` por override e o campo virar null — caindo no
+  // padrao de 50%, cinco vezes o teto pretendido, sem erro na tela.
+  const podeVender = resolveAdminPermissions(
+    effectiveRole,
+    data.extraPermissions ?? target.extraPermissions,
+    data.revokedPermissions ?? target.revokedPermissions,
+  ).has("vendas.create")
+  if (!podeVender && (data.role !== undefined || data.maxDiscount !== undefined)) {
     data.maxDiscount = null
   }
 

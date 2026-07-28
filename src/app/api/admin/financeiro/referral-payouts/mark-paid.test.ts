@@ -14,7 +14,7 @@ vi.mock("@/lib/logger", () => ({
 }))
 vi.mock("@/lib/prisma", () => ({
   prisma: {
-    referralPayout: { findUnique: vi.fn(), update: vi.fn() },
+    referralPayout: { findFirst: vi.fn(), update: vi.fn() },
     referralCommission: { update: vi.fn(), updateMany: vi.fn() },
     referralMonthlyCommission: { update: vi.fn(), updateMany: vi.fn() },
   },
@@ -41,7 +41,7 @@ const guardMock = requireAdmin as unknown as ReturnType<typeof vi.fn>
 const markPaidFn = markPayoutPaid as unknown as ReturnType<typeof vi.fn>
 const p = prisma as unknown as {
   referralPayout: {
-    findUnique: ReturnType<typeof vi.fn>
+    findFirst: ReturnType<typeof vi.fn>
     update: ReturnType<typeof vi.fn>
   }
   referralCommission: {
@@ -78,7 +78,7 @@ beforeEach(() => {
     amount: new Prisma.Decimal("23.90"),
     proofUrl: "https://storage/comprovante.pdf",
   }
-  p.referralPayout.findUnique.mockImplementation(async () => payoutRow)
+  p.referralPayout.findFirst.mockImplementation(async () => payoutRow)
   p.referralPayout.update.mockImplementation(
     async ({ data }: { data: Partial<PayoutRow> }) => {
       payoutRow = { ...payoutRow, ...data }

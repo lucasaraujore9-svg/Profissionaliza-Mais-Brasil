@@ -4,6 +4,10 @@ import { prisma } from "@/lib/prisma"
 import { revokeCertificate } from "@/lib/certificates"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 import { requireAdmin } from "@/lib/auth/admin-guard"
+import {
+  adminCanAccessCertTenant,
+  certScopeDeniedResponse,
+} from "@/lib/certificates/admin-scope"
 
 const schema = z.object({
   reason: z.string().trim().min(3, "Justificativa muito curta").max(500),
@@ -44,13 +48,13 @@ export const POST = withRequestContextParams<{ id: string }>(
     return NextResponse.json({ error: "Certificado já está revogado" }, { status: 409 })
   }
 
-  // R24: quem não enxerga a rede inteira só revoga certificado da vitrine PMB
-  // (tenantId = null) — nunca o de um aluno de revendedor.
-  if (cert.tenantId !== null && !ctx.can("unidades.viewAll")) {
-    return NextResponse.json(
-      { error: "Sem permissão para revogar certificados de revendedores" },
-      { status: 403 },
-    )
+  // R24: mesmo escopo de download/regenerate/issue — certificado da vitrine
+  // PMB exige operar a vitrine; certificado de unidade exige alcancar aquela
+  // unidade na carteira. Antes daqui saia um par errado nos dois sentidos: o
+  // gerente de unidades nao revogava a propria carteira (403) e revogava
+  // certificado da vitrine PMB, que ele nem consegue listar.
+  if (!(await adminCanAccessCertTenant(ctx, cert.tenantId))) {
+    return certScopeDeniedResponse()
   }
 
   try {

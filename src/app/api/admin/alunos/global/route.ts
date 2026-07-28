@@ -6,13 +6,19 @@ import {
   deriveStudentDisplayStatus,
   countEnrollmentStatuses,
 } from "@/lib/students/display-status"
-import { requireAdmin } from "@/lib/auth/admin-guard"
+import { requireAdminAny } from "@/lib/auth/admin-guard"
 
 export const GET = withRequestContext(
   { action: "admin.alunos.global.list", route: "/api/admin/alunos/global" },
   async (request: Request) => {
-  const guard = await requireAdmin("alunosRede.view")
+  // Serve duas telas: a lista de alunos da rede e o autocomplete de "emitir
+  // certificado". Quem tem `certificados.manage` sem `alunosRede.view` (o
+  // gerente de unidades) precisa achar o aluno para emitir — mas so dentro do
+  // proprio escopo, aplicado logo abaixo. Sem isto a tela de emissao abria e o
+  // primeiro passo do fluxo devolvia 403.
+  const guard = await requireAdminAny("alunosRede.view", "certificados.manage")
   if (!guard.ok) return guard.response
+  const ctx = guard.ctx
 
   const url = new URL(request.url)
   const q = url.searchParams.get("q")?.trim() ?? ""
@@ -35,6 +41,19 @@ export const GET = withRequestContext(
     where.tenant = { slug: "__pmb__" }
   } else if (tenantFilter && tenantFilter !== "all") {
     where.tenantId = tenantFilter
+  }
+
+  // Sem `alunosRede.view`, a busca fica restrita ao escopo da pessoa: as
+  // unidades da carteira dela e, se operar a vitrine, os alunos da PMB.
+  if (!ctx.can("alunosRede.view")) {
+    const unidades = await ctx.unidadesWhere()
+    const alcance: Prisma.StudentWhereInput[] = []
+    if (unidades) alcance.push({ tenant: unidades })
+    if (ctx.can("alunos.view")) alcance.push({ tenant: { slug: "__pmb__" } })
+    if (alcance.length === 0) {
+      return NextResponse.json({ data: [] })
+    }
+    where.AND = [...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []), { OR: alcance }]
   }
 
   const students = await prisma.student.findMany({

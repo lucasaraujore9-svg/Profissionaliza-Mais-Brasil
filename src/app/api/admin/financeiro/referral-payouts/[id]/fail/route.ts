@@ -5,6 +5,7 @@ import { failPayout } from "@/lib/referrals/payout"
 import { contextLogger } from "@/lib/logger"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 import { requireAdmin } from "@/lib/auth/admin-guard"
+import { payoutScopeWhere } from "@/lib/referrals/payout-scope"
 
 const bodySchema = z.object({
   reason: z.string().min(3).max(500),
@@ -34,8 +35,14 @@ export const POST = withRequestContextParams<{ id: string }>(
     )
   }
 
-  const payout = await prisma.referralPayout.findUnique({
-    where: { id },
+  // `financeiro.manage` autoriza a acao; o recorte abaixo amarra o saque
+  // a carteira de quem chamou — sem ele, o id na URL alcancava a rede.
+  const scopeWhere = await payoutScopeWhere(guard.ctx, id)
+  if (!scopeWhere) {
+    return NextResponse.json({ error: "Permissão negada" }, { status: 403 })
+  }
+  const payout = await prisma.referralPayout.findFirst({
+    where: scopeWhere,
     select: { id: true, status: true },
   })
   if (!payout) {

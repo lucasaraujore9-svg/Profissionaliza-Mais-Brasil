@@ -6,6 +6,7 @@ import { rateLimit, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 import { logAudit } from "@/lib/audit"
 import { requireAdmin } from "@/lib/auth/admin-guard"
+import { payoutScopeWhere } from "@/lib/referrals/payout-scope"
 
 const MAX_BYTES = 8 * 1024 * 1024 // 8MB
 // Comprovante: imagem ou PDF. SVG bloqueado (pode carregar <script>).
@@ -63,8 +64,14 @@ export const POST = withRequestContextParams<{ id: string }>(
 
     const { id } = await context.params
 
-    const payout = await prisma.referralPayout.findUnique({
-      where: { id },
+    // `financeiro.manage` autoriza a acao; o recorte abaixo amarra o saque
+    // a carteira de quem chamou — sem ele, o id na URL alcancava a rede.
+    const scopeWhere = await payoutScopeWhere(guard.ctx, id)
+    if (!scopeWhere) {
+      return NextResponse.json({ error: "Permissão negada" }, { status: 403 })
+    }
+    const payout = await prisma.referralPayout.findFirst({
+      where: scopeWhere,
       select: { id: true },
     })
     if (!payout) {
