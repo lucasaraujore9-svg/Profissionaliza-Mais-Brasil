@@ -58,14 +58,33 @@ Cupons:
 - [ ] NAO acessa /admin (redirect /login)
 - [ ] Nao ve dados de revenda2
 
-### RESELLER consultor (consultor1)
-- [ ] Acessa /painel (owner do TenantMember)
-- [ ] Sidebar sem "Equipe" (ownerOnly=true)
-- [ ] Sidebar sem "Dominio", "Vitrine", "Configuracoes"
-- [ ] Cria cupom 20% OK
-- [ ] Tenta cupom 25% -> 403 com mensagem "Seu cap de desconto e 20%"
-- [ ] Ve apenas proprias vendas no painel
-- [ ] Nao acessa dados de outro tenant
+### Equipe da unidade (TenantMember)
+
+A unidade tem 4 papeis atribuiveis alem do titular. Presets em
+`src/lib/auth/painel-permissions.ts` (fonte unica); o dono ajusta permissao a
+permissao em /painel/equipe.
+
+| Papel      | Ve                                                                                 | NAO ve / nao faz                                                        |
+|------------|------------------------------------------------------------------------------------|-------------------------------------------------------------------------|
+| Gerente    | Alunos, vendas, leads, catalogo, cupons, financeiro, certificados, vitrine, atendimento, automacao, relatorios | Gateway, dominio, equipe, indicacoes, cobrancas, excluir conta          |
+| Vendedor   | Dashboard, catalogo (leitura), cupons (leitura), treinamentos, artes — alunos/vendas/leads **so os dele** | Financeiro, vitrine, dominio, configuracoes, equipe, certificados, comunicacao, relatorios |
+| Secretaria | Alunos (todos), atendimento, certificados, comunicacao, catalogo (leitura)          | Financeiro, vendas, cupons, vitrine, dominio, equipe, relatorios         |
+| Financeiro | Financeiro, relatorios (sem Indicacoes), cupons, alunos/vendas (leitura, todos)     | Vitrine, dominio, catalogo (edicao), equipe, certificados, atendimento   |
+
+Checklist por papel — logar como cada um e conferir:
+
+- [ ] **Vendedor**: sidebar sem Financeiro/Vitrine/Dominio/Configuracoes/Equipe/Indicacoes/Certificados/Comunicacao
+- [ ] **Vendedor**: lista de alunos mostra so os que ele originou (matricula com `soldByUserId` dele)
+- [ ] **Vendedor**: abrir `/painel/alunos/<id-de-aluno-de-outro-vendedor>` -> 404
+- [ ] **Vendedor**: kanban de leads mostra so os atribuidos a ele
+- [ ] **Vendedor**: dashboard soma so as vendas dele (nao o faturamento da unidade)
+- [ ] **Vendedor**: cria cupom no cap dele; acima do cap -> 403
+- [ ] **Secretaria**: ve todos os alunos, sem nenhum menu de dinheiro
+- [ ] **Financeiro**: acessa Financeiro e Relatorios; aba "Indicacoes & rede" ausente
+- [ ] **Gerente**: opera a unidade, mas /painel/configuracoes mostra so "Conta" e "Seguranca"
+- [ ] **Todos**: /painel/configuracoes permite trocar a propria senha
+- [ ] **Titular**: botao do olho em /painel/equipe abre a previa; banner aparece; salvar qualquer
+      coisa na previa nao altera nada (modo leitura); "Sair da previa" volta ao normal
 
 ## Fronteiras de API (curl/DevTools)
 
@@ -83,6 +102,21 @@ Esperado: 403
 # Consultor tenta criar cupom 30%
 POST /api/painel/cupons body={"code":"Y30","discountType":"PERCENTAGE","discountValue":30,...}
 Esperado: 403
+
+# Vendedor da unidade tenta tocar no que nao lhe compete (regressao do vazamento
+# que motivou os papeis — antes TODAS respondiam 200)
+POST /api/painel/config/connect-mp        -> 403
+POST /api/painel/dominio                  -> 403
+GET  /api/painel/financeiro               -> 403
+GET  /api/painel/indicacoes/demonstrativo -> 403
+GET  /api/painel/cobrancas                -> 403
+POST /api/painel/equipe                   -> 403
+GET  /api/painel/alunos/<aluno-de-outro-vendedor> -> 404
+
+# Membro tenta escalar o proprio privilegio via override
+PATCH /api/painel/equipe/<id> body={"extraPermissions":["equipe.manage"]}
+Esperado: 400 (permissao exclusiva do titular) — e 403 antes disso, porque
+so o titular alcanca a rota
 
 # RESELLER owner cria cupom 80%
 POST /api/painel/cupons body={"code":"Z80","discountType":"PERCENTAGE","discountValue":80,...}

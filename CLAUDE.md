@@ -60,10 +60,41 @@ Segunda fornecedora de cursos: LMS proprio em `https://lms.bmbr.com.br` (API M2M
 - **Fluxo:** provisionamento ramifica em `fulfill.ts` (`provisionLmsAccess` via `POST /enrollments`, Idempotency-Key = id do pagamento; `provisionCourseForStudent` cobre pacotes mistos). `provisioning.ok=false` → alerta SUPER_ADMIN e segue. Catalogo: `sync-lms.ts` + cron `/api/cron/sync-cursos-lms`. Progresso/conclusao: `lms/day-update.ts` (delta, substitui webhook) + cron `/api/cron/sync-day-update-lms` → emite certificado existente. SSO: `/api/aluno/curso/[enrollmentId]/acessar` (botao no `/aluno` ramifica EA vs LMS). Bloqueio/revogacao: branch em `plataforma-actions.ts` (`setLmsStudentAccess`/`revokeLmsEnrollment`).
 - **Pendente de deploy:** rodar os 2 novos jobs em `prisma/sql/pg_cron_jobs.sql` no Supabase (pg_cron manual); setar `LMS_API_URL`/`LMS_API_KEY` no Vercel. Validado: tsc + lint verdes, build compila, conexao live `GET /api/v1/courses` → 200.
 
+### Papeis da equipe da unidade (2026-07-28, branch `feat/painel-roles`)
+
+Antes: a unidade tinha so `owner` e `consultant`, e os dois viam o painel
+completo do dono — o filtro `ownerOnly` do menu era codigo morto (`isOwner`
+default `true`, nunca passado pela layout) e 85 das 93 rotas `/api/painel`
+usavam `requireResellerSession`, que nao distingue dono de membro.
+
+- **Fonte unica:** `src/lib/auth/painel-permissions.ts` — catalogo fechado de
+  permissoes, 4 papeis atribuiveis (`manager`, `consultant`, `support`,
+  `finance`) + `owner`, `resolvePermissions` (preset ∪ extra − revoked).
+  `OWNER_EXCLUSIVE` (`equipe.manage`, `conta.delete`) nunca e concedida por
+  override. Papel desconhecido — inclusive `"owner"` numa membership — cai no
+  preset mais restrito (fail-closed).
+- **Guard:** `src/lib/auth/painel-guard.ts` — `requirePainel` (403) para rotas,
+  `requirePainelPage` (redirect) para paginas, `painelContext` para a layout.
+  Permissoes NAO vao no JWT (ficariam obsoletas por ate 60s); sao resolvidas por
+  request numa query indexada.
+- **Escopo de dados:** `ctx.scope.{alunos,vendas,pagamentos,leads}` usa os campos
+  de autoria ja existentes (`soldByUserId`, `ownerUserId`). Sem `*.viewAll`, a
+  pessoa so ve a propria carteira — nas listagens **e** nos lookups por ID.
+  Cuidado: em `where` que ja usa a chave `enrollments`, o escopo tem que ir em
+  `AND`, senao o spread o sobrescreve (dois vazamentos assim ja foram corrigidos).
+- **Overrides por pessoa:** `TenantMember.extraPermissions/revokedPermissions`
+  (migration `20260728_tenant_member_roles`, idempotente, sem backfill).
+- **Previa "ver como":** cookie assinado de 30 min, so para o dono, sempre
+  reduzido a somente leitura por `toReadOnly`.
+- **Quebra deliberada no deploy:** consultores existentes seguem com
+  `role='consultant'` e caem no preset restrito de Vendedor. Quem atuava como
+  gerente precisa ser repromovido pelo dono em `/painel/equipe`.
+
 ### Bugs conhecidos (pendentes)
 
 - **Middleware file convention deprecado** no Next 16 (usar `proxy` em vez de `middleware`).
 - Consultor (TenantMember) nao popula `session.user.tenantId` no JWT — cap de desconto e validado server-side via lookup de TenantMember na API.
+- `npm run build` local para em "Collecting page data" por falta de `DATABASE_URL`: as envs Sensitive da Vercel nao descem no `vercel env pull`. Compile + typecheck passam; para fechar o build localmente, exporte um `DATABASE_URL` qualquer.
 
 ### Proximas etapas
 
