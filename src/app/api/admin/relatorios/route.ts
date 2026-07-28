@@ -1,28 +1,31 @@
 import { NextResponse } from "next/server"
-import { requireAdminSession } from "@/lib/auth/admin-session"
 import { REPORT_DEFS } from "@/lib/reports/definitions"
 import { withRequestContext } from "@/lib/observability/with-request-context"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 export const GET = withRequestContext(
   { action: "admin.relatorios.list", route: "/api/admin/relatorios" },
   async () => {
-  const session = await requireAdminSession()
-  if (!session) {
-    return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-  }
-  // Papéis modelados pelos runners. PMB_REVENDA_SALES/PMB_SALES_MGR não são
-  // escopados → lista vazia (a geração também os bloqueia em /[type]).
-  const REPORT_ROLES = ["SUPER_ADMIN", "PMB_SALES", "PMB_RESELLER_MGR"]
-  if (!REPORT_ROLES.includes(session.role)) {
+  const guard = await requireAdmin("relatorios.export")
+  if (!guard.ok) return guard.response
+  const session = guard.ctx
+  // Os runners de CSV só têm recorte modelado para dois perfis de escopo: quem
+  // opera a vitrine PMB (`alunos.view` sem `unidades.viewAll`) e quem administra
+  // uma carteira de unidades. Quem não se encaixa em nenhum e também não vê a
+  // rede inteira receberia dados fora do seu escopo — devolve lista vazia.
+  const seesAll = session.can("unidades.viewAll")
+  const pmbOnly = !seesAll && session.can("alunos.view")
+  const carteira = !seesAll && session.can("unidades.view")
+  if (!seesAll && !pmbOnly && !carteira) {
     return NextResponse.json({ data: { reports: [], role: session.role } })
   }
 
   const reports = REPORT_DEFS.filter(
     (r) =>
-      // needsSuperAdmin → só super
-      (!r.needsSuperAdmin || session.role === "SUPER_ADMIN") &&
-      // PMB_SALES só enxerga os relatórios B2C permitidos
-      (session.role !== "PMB_SALES" || r.pmbSalesAllowed),
+      // needsSuperAdmin → só quem enxerga o ecossistema inteiro
+      (!r.needsSuperAdmin || seesAll) &&
+      // quem só opera a vitrine PMB fica nos relatórios B2C
+      (!pmbOnly || r.pmbSalesAllowed),
   ).map((r) => ({
     id: r.id,
     group: r.group,

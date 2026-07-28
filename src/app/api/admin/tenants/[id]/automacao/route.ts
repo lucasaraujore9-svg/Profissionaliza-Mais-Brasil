@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { requireAdminSession } from "@/lib/auth/admin-session"
 import { invalidateTenant } from "@/lib/redis/tenant-cache"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 import { DEFAULT_AUTOMATION_TEMPLATES } from "@/lib/automation/default-templates"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 const bodySchema = z.object({
   enabled: z.boolean(),
@@ -16,17 +16,9 @@ export const PUT = withRequestContextParams<{ id: string }>(
     route: "/api/admin/tenants/[id]/automacao",
   },
   async (request: Request, context) => {
-    const session = await requireAdminSession()
-    if (!session) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
-    if (
-      session.role !== "SUPER_ADMIN" &&
-      session.role !== "PMB_RESELLER_MGR"
-    ) {
-      return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
-    }
-
+    const guard = await requireAdmin("unidades.manage")
+    if (!guard.ok) return guard.response
+    const session = guard.ctx
     const { id } = await context.params
 
     let payload: unknown
@@ -53,6 +45,7 @@ export const PUT = withRequestContextParams<{ id: string }>(
         slug: true,
         customDomain: true,
         accountManagerId: true,
+        salesUserId: true,
         automationEnabled: true,
       },
     })
@@ -63,10 +56,7 @@ export const PUT = withRequestContextParams<{ id: string }>(
       )
     }
 
-    if (
-      session.role === "PMB_RESELLER_MGR" &&
-      tenant.accountManagerId !== session.userId
-    ) {
+    if (!(await session.canAccessTenant(tenant))) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 

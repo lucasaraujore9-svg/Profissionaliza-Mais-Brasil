@@ -2,8 +2,6 @@ import { NextResponse } from "next/server"
 import type { Prisma } from "@prisma/client"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { requireAdminSession } from "@/lib/auth/admin-session"
-import { canAccessTenantScope } from "@/lib/auth/scope"
 import { logAudit } from "@/lib/audit"
 import { invalidateTenantCache } from "@/lib/tenant/cache-invalidation"
 import {
@@ -18,6 +16,7 @@ import {
 } from "@/lib/asaas/client"
 import { createPromoBilling } from "@/lib/asaas/promo"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 const patchSchema = z
   .object({
@@ -58,10 +57,9 @@ function isoDayPlus(days: number): string {
 export const PATCH = withRequestContextParams<{ id: string }>(
   { action: "admin.revendedores.billing.update", route: "/api/admin/revendedores/[id]/billing" },
   async (request: Request, ctx) => {
-  const session = await requireAdminSession()
-  if (!session) {
-    return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-  }
+  const guard = await requireAdmin("unidades.billing")
+  if (!guard.ok) return guard.response
+  const session = guard.ctx
 
   const { id } = await ctx.params
 
@@ -111,9 +109,9 @@ export const PATCH = withRequestContextParams<{ id: string }>(
       { status: 404 },
     )
   }
-  // Escopo: super vê tudo; gerente de suporte, vendedor de revenda e gerente de
-  // vendas editam apenas as próprias unidades (mesma regra de tenantScopeWhere).
-  if (!(await canAccessTenantScope(session, tenant))) {
+  // `unidades.billing` já decidiu QUEM mexe em cobrança; aqui fica o recorte de
+  // QUAIS unidades — quem não vê a rede inteira alcança só a própria carteira.
+  if (!(await session.canAccessTenant(tenant))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
   if (tenant.slug === "__pmb__") {

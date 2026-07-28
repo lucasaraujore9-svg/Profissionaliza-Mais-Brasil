@@ -16,8 +16,8 @@ const db = vi.hoisted(() => ({
 }))
 vi.mock("@/lib/prisma", () => ({ prisma: db }))
 
-const requireAdminSession = vi.hoisted(() => vi.fn())
-vi.mock("@/lib/auth/admin-session", () => ({ requireAdminSession }))
+const requireAdmin = vi.hoisted(() => vi.fn())
+vi.mock("@/lib/auth/admin-guard", () => ({ requireAdmin }))
 
 const blockTenantStudents = vi.hoisted(() =>
   vi.fn(
@@ -46,6 +46,7 @@ vi.mock("@/lib/logger", () => ({
 }))
 
 import { PATCH } from "@/app/api/admin/revendedores/[id]/status/route"
+import { adminGuardFor } from "@/test/admin-ctx"
 
 const params = Promise.resolve({ id: "t1" })
 
@@ -59,11 +60,9 @@ function req(status: string) {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  requireAdminSession.mockResolvedValue({
-    userId: "u1",
-    role: "SUPER_ADMIN",
-    email: "admin@pmb.com.br",
-  })
+  requireAdmin.mockImplementation(
+    adminGuardFor({ userId: "u1", role: "SUPER_ADMIN" }).requireAdmin,
+  )
   db.tenant.findUnique.mockResolvedValue({
     id: "t1",
     slug: "unidade",

@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { requireAdminSession } from "@/lib/auth/admin-session"
 import { generateDemonstrativoPdf } from "@/lib/referrals/demonstrativo"
 import { contextLogger } from "@/lib/logger"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 const querySchema = z.object({
   month: z.string().regex(/^\d{4}-\d{2}$/, "Mes invalido (YYYY-MM)"),
@@ -13,10 +13,9 @@ const querySchema = z.object({
 export const GET = withRequestContextParams<{ id: string }>(
   { action: "admin.revendedores.comissoes.demonstrativo", route: "/api/admin/revendedores/[id]/comissoes/demonstrativo" },
   async (request: Request, { params }) => {
-  const ctx = await requireAdminSession()
-  if (!ctx) {
-    return NextResponse.json({ error: "Nao autenticado" }, { status: 401 })
-  }
+  const guard = await requireAdmin("unidades.comissoes")
+  if (!guard.ok) return guard.response
+  const ctx = guard.ctx
 
   const { id } = await params
   const url = new URL(request.url)
@@ -39,6 +38,7 @@ export const GET = withRequestContextParams<{ id: string }>(
       id: true,
       slug: true,
       accountManagerId: true,
+      salesUserId: true,
     },
   })
   if (!tenant) {
@@ -51,9 +51,7 @@ export const GET = withRequestContextParams<{ id: string }>(
   // Comissões/financeiro de revenda: só SUPER_ADMIN e o gerente de suporte
   // (account manager) da unidade. Allowlist positiva — sem ela, papéis comerciais
   // (PMB_REVENDA_SALES/PMB_SALES_MGR) baixariam comissões de qualquer unidade.
-  const allowed =
-    ctx.role === "SUPER_ADMIN" ||
-    (ctx.role === "PMB_RESELLER_MGR" && tenant.accountManagerId === ctx.userId)
+  const allowed = await ctx.canAccessTenant(tenant)
   if (!allowed) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }

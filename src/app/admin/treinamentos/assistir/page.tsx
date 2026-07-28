@@ -1,5 +1,4 @@
-import { redirect } from "next/navigation"
-import { requireAdminSession } from "@/lib/auth/admin-session"
+import { requireAdminPage } from "@/lib/auth/admin-guard"
 import { prisma } from "@/lib/prisma"
 import { PageHeader } from "@/components/painel/page-header"
 import { TrainingsGrid, type TrainingModuleCard } from "@/components/painel/trainings-grid"
@@ -12,8 +11,7 @@ export const metadata = {
 // admin). Espelha /painel/treinamentos, mas com basePath/endpoint próprios do
 // admin. A gestão (criar/editar) continua em /admin/treinamentos (SUPER_ADMIN).
 export default async function AdminAssistirTreinamentosPage() {
-  const session = await requireAdminSession()
-  if (!session) redirect("/login?callbackUrl=/admin/treinamentos/assistir")
+  const session = await requireAdminPage("treinamentos.view")
   const userId = session.userId
 
   const modules = await prisma.trainingModule.findMany({

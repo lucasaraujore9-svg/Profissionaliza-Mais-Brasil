@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { requireAdminSession } from "@/lib/auth/admin-session"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 import { sendManualWhatsAppToLead } from "@/lib/automation/dispatch"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 const bodySchema = z.object({
   message: z.string().trim().min(1, "Mensagem vazia").max(2000),
@@ -12,12 +12,8 @@ const bodySchema = z.object({
 export const POST = withRequestContextParams<{ id: string }>(
   { action: "admin.leads.whatsapp", route: "/api/admin/leads/[id]/whatsapp" },
   async (request: Request, { params }) => {
-    const ctx = await requireAdminSession()
-    if (!ctx) return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    if (ctx.role !== "SUPER_ADMIN" && ctx.role !== "PMB_SALES") {
-      return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
-    }
-
+    const guard = await requireAdmin("leads.manage")
+    if (!guard.ok) return guard.response
     const { id } = await params
     const lead = await prisma.studentLead.findFirst({
       where: { id, tenantId: null },

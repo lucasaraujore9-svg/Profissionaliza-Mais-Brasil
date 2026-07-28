@@ -2,7 +2,6 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 import type { PaymentType } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
-import { requirePmbSales } from "@/lib/auth/guards"
 import { getOrCreatePmbTenant } from "@/lib/pmb-tenant"
 import { pmbMpAccessToken } from "@/lib/pmb-config"
 import { createPreference, createPreapproval } from "@/lib/mercadopago/client"
@@ -32,20 +31,21 @@ import { swallow } from "@/lib/errors"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { asaasWebhookUrl, mpWebhookUrl } from "@/lib/tenant/urls"
 import { getPackageForCheckout } from "@/lib/packages/vitrine"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 export const GET = withRequestContext(
   { action: "admin.vendas.list", route: "/api/admin/vendas" },
   async (request: Request) => {
-  const guard = await requirePmbSales()
+  const guard = await requireAdmin("vendas.view")
   if (!guard.ok) return guard.response
 
   const url = new URL(request.url)
   const limit = Math.min(Number(url.searchParams.get("limit") ?? "50"), 200)
 
   const where =
-    guard.session.role === "SUPER_ADMIN"
+    guard.ctx.can("vendas.viewAll")
       ? { tenantId: null }
-      : { tenantId: null, soldByUserId: guard.session.userId }
+      : { tenantId: null, soldByUserId: guard.ctx.userId }
 
   const enrollments = await prisma.enrollment.findMany({
     where,
@@ -60,7 +60,7 @@ export const GET = withRequestContext(
   })
 
   return NextResponse.json({
-    role: guard.session.role,
+    role: guard.ctx.role,
     data: enrollments.map((e) => ({
       id: e.id,
       studentName: e.student.nome,
@@ -104,7 +104,7 @@ const createSchema = z
 export const POST = withRequestContext(
   { action: "admin.vendas.create", route: "/api/admin/vendas" },
   async (request: Request) => {
-  const guard = await requirePmbSales()
+  const guard = await requireAdmin("vendas.create")
   if (!guard.ok) return guard.response
 
   let payload: unknown
@@ -282,7 +282,7 @@ export const POST = withRequestContext(
         courseId: enrollmentCourseId,
         coursePackageId: enrollmentCoursePackageId,
         packagePrimary: isPackage,
-        soldByUserId: guard.session.userId,
+        soldByUserId: guard.ctx.userId,
         paymentType: rawPaymentType,
         status: "PENDING",
         gateway,
@@ -335,9 +335,10 @@ export const POST = withRequestContext(
 
   // ── Desconto manual (sem cupom) ─────────────────────────────────────────
   // O vendedor digita o percentual na hora; o teto e o cap individual dele
-  // (User.maxDiscount; padrao 50 para PMB_SALES, 100 para SUPER_ADMIN).
+  // (User.maxDiscount, padrao 50). So quem tem `vendas.descontoIlimitado`
+  // passa sem teto — ver lib/coupons/sales-cap.ts.
   if (parsed.data.manualDiscountPercent) {
-    const cap = await effectiveSalesCap(guard.session)
+    const cap = await effectiveSalesCap(guard.ctx)
     if (parsed.data.manualDiscountPercent > cap + 0.01) {
       return NextResponse.json(
         { error: `Desconto excede seu cap (${cap}%)` },
@@ -415,7 +416,7 @@ export const POST = withRequestContext(
       courseId: enrollmentCourseId,
       coursePackageId: enrollmentCoursePackageId,
       packagePrimary: isPackage,
-      soldByUserId: guard.session.userId,
+      soldByUserId: guard.ctx.userId,
       paymentType: rawPaymentType,
       status: "PENDING",
       gateway,

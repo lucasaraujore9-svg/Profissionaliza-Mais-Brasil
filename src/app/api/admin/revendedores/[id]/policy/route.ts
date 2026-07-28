@@ -2,9 +2,9 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
-import { requireAdminSession } from "@/lib/auth/admin-session"
 import { invalidateTenant } from "@/lib/redis/tenant-cache"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 const schema = z.object({
   billingMode: z.enum(["AUTO", "MANUAL"]).optional(),
@@ -21,16 +21,12 @@ const schema = z.object({
 export const PATCH = withRequestContextParams<{ id: string }>(
   { action: "admin.revendedores.policy.update", route: "/api/admin/revendedores/[id]/policy" },
   async (request: Request, { params }) => {
-  const ctx = await requireAdminSession()
-  if (!ctx) {
-    return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-  }
-
-  // billingMode/política de cancelamento afetam cobrança e o auto-block de
-  // inadimplência — restrito a SUPER_ADMIN (PMB_SALES/MGR não alteram).
-  if (ctx.role !== "SUPER_ADMIN") {
-    return NextResponse.json({ error: "Apenas SUPER_ADMIN pode alterar a política" }, { status: 403 })
-  }
+  // billingMode e política de cancelamento afetam a cobrança e o auto-block de
+  // inadimplência: é decisão de contrato, não de operação da carteira — daí
+  // `unidades.governanca` (e não `unidades.manage`, que o gerente de unidades
+  // tem para administrar as unidades atribuídas a ele).
+  const guard = await requireAdmin("unidades.governanca")
+  if (!guard.ok) return guard.response
 
   const { id } = await params
 

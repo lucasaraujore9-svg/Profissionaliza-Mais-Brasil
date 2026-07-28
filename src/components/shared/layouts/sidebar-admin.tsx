@@ -31,47 +31,55 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
-type Role = "SUPER_ADMIN" | "PMB_SALES" | "PMB_SALES_MGR" | "PMB_REVENDA_SALES" | "PMB_RESELLER_MGR" | "PMB_FINANCEIRO" | "PMB_DESIGNER"
+import type { AdminPermission } from "@/lib/auth/admin-permissions"
 
+/**
+ * Itens do menu com a permissão que cada um exige. A visibilidade do menu e o
+ * guard da rota leem a MESMA fonte (`lib/auth/admin-permissions.ts`) — antes a
+ * lista de papéis vivia aqui e divergia das rotas (Financeiro aparecia para o
+ * vendedor de curso e a tela abria vazia com 403 na única aba).
+ */
 const ALL_ITEMS: {
   href: string
   label: string
   icon: typeof LayoutDashboard
-  roles: Role[]
+  permission: AdminPermission
+  /** Item alternativo: some quando a pessoa também tem `hiddenWhen`. */
+  hiddenWhen?: AdminPermission
 }[] = [
-  { href: "/admin", label: "Dashboard", icon: LayoutDashboard, roles: ["SUPER_ADMIN", "PMB_SALES", "PMB_SALES_MGR", "PMB_REVENDA_SALES", "PMB_RESELLER_MGR", "PMB_FINANCEIRO"] },
-  // Unidades: visíveis para suporte (account manager) e para o comercial de
-  // revenda (gerente de vendas + vendedor de revenda). Cada papel só enxerga
-  // as unidades atribuídas a ele (escopo aplicado na rota/queries).
-  { href: "/admin/revendedores", label: "Revendedores", icon: Users, roles: ["SUPER_ADMIN", "PMB_RESELLER_MGR", "PMB_SALES_MGR", "PMB_REVENDA_SALES"] },
-  // Funil B2B: time de revenda (gerente de vendas + vendedor de revenda).
-  { href: "/admin/leads-revenda", label: "Leads de revenda", icon: Building2, roles: ["SUPER_ADMIN", "PMB_SALES_MGR", "PMB_REVENDA_SALES"] },
-  // Lista de alunos (vitrine PMB B2C): super + vendedor de curso (escopado).
-  { href: "/admin/alunos", label: "Alunos", icon: GraduationCap, roles: ["SUPER_ADMIN", "PMB_SALES"] },
-  { href: "/admin/leads", label: "Leads", icon: Inbox, roles: ["SUPER_ADMIN", "PMB_SALES"] },
-  { href: "/admin/atendimento", label: "Atendimento", icon: LifeBuoy, roles: ["SUPER_ADMIN", "PMB_SALES"] },
-  { href: "/admin/vendas", label: "Vendas diretas", icon: ShoppingCart, roles: ["SUPER_ADMIN", "PMB_SALES"] },
-  // Financeiro: super (visão geral + mensalidades) e, só para "Comissões a
-  // pagar" (escopado), vendedor de curso e gerente de suporte.
-  { href: "/admin/financeiro", label: "Financeiro", icon: DollarSign, roles: ["SUPER_ADMIN", "PMB_FINANCEIRO", "PMB_SALES", "PMB_RESELLER_MGR"] },
-  { href: "/admin/indicacoes", label: "Indicações", icon: Share2, roles: ["SUPER_ADMIN", "PMB_FINANCEIRO", "PMB_RESELLER_MGR"] },
-  { href: "/admin/certificados", label: "Certificados", icon: Award, roles: ["SUPER_ADMIN"] },
-  { href: "/admin/catalogo", label: "Catálogo", icon: BookOpen, roles: ["SUPER_ADMIN", "PMB_SALES", "PMB_SALES_MGR", "PMB_REVENDA_SALES", "PMB_RESELLER_MGR"] },
-  { href: "/admin/vitrine", label: "Vitrine", icon: Palette, roles: ["SUPER_ADMIN"] },
-  // Hub de BI "Relatórios" (absorveu o antigo Analytics + Relatórios). Cada
-  // papel só vê as abas permitidas (ver src/lib/reports/tabs.ts); a visibilidade
-  // fina por aba é reforçada server-side no dispatcher e no [tab]/page.tsx.
-  { href: "/admin/relatorios", label: "Relatórios", icon: BarChart3, roles: ["SUPER_ADMIN", "PMB_FINANCEIRO", "PMB_SALES", "PMB_SALES_MGR", "PMB_REVENDA_SALES", "PMB_RESELLER_MGR"] },
-  { href: "/admin/equipe", label: "Equipe", icon: UserCog, roles: ["SUPER_ADMIN"] },
-  { href: "/admin/comunicacao", label: "Comunicação", icon: MessageSquare, roles: ["SUPER_ADMIN"] },
-  { href: "/admin/treinamentos", label: "Treinamentos", icon: Video, roles: ["SUPER_ADMIN"] },
-  { href: "/admin/artes", label: "Artes", icon: Images, roles: ["SUPER_ADMIN", "PMB_DESIGNER"] },
-  // Equipe interna (não-super): assiste os treinamentos globais (SUPER_ADMIN
-  // assiste pela própria tela de gestão via botão "Assistir").
-  { href: "/admin/treinamentos/assistir", label: "Treinamentos", icon: Video, roles: ["PMB_SALES", "PMB_SALES_MGR", "PMB_REVENDA_SALES", "PMB_RESELLER_MGR", "PMB_FINANCEIRO"] },
-  { href: "/admin/automacao", label: "Automação", icon: Zap, roles: ["SUPER_ADMIN"] },
-  { href: "/admin/configuracoes", label: "Configurações", icon: Settings, roles: ["SUPER_ADMIN"] },
-  { href: "/admin/meu-perfil", label: "Meu perfil", icon: UserCircle, roles: ["SUPER_ADMIN", "PMB_SALES", "PMB_SALES_MGR", "PMB_REVENDA_SALES", "PMB_RESELLER_MGR", "PMB_FINANCEIRO", "PMB_DESIGNER"] },
+  { href: "/admin", label: "Dashboard", icon: LayoutDashboard, permission: "dashboard.view" },
+  // Unidades: cada papel só enxerga as atribuídas a ele (escopo aplicado nas
+  // queries via `admin-guard`).
+  { href: "/admin/revendedores", label: "Revendedores", icon: Users, permission: "unidades.view" },
+  { href: "/admin/leads-revenda", label: "Leads de revenda", icon: Building2, permission: "leadsRevenda.view" },
+  { href: "/admin/alunos", label: "Alunos", icon: GraduationCap, permission: "alunosRede.view" },
+  { href: "/admin/leads", label: "Leads", icon: Inbox, permission: "leads.view" },
+  { href: "/admin/atendimento", label: "Atendimento", icon: LifeBuoy, permission: "atendimento.manage" },
+  { href: "/admin/vendas", label: "Vendas diretas", icon: ShoppingCart, permission: "vendas.view" },
+  { href: "/admin/financeiro", label: "Financeiro", icon: DollarSign, permission: "financeiro.view" },
+  { href: "/admin/indicacoes", label: "Indicações", icon: Share2, permission: "indicacoes.view" },
+  { href: "/admin/certificados", label: "Certificados", icon: Award, permission: "certificados.view" },
+  { href: "/admin/catalogo", label: "Catálogo", icon: BookOpen, permission: "catalogo.view" },
+  { href: "/admin/vitrine", label: "Vitrine", icon: Palette, permission: "vitrine.manage" },
+  // Hub de BI "Relatórios" (absorveu o antigo Analytics). A visibilidade fina
+  // por aba vem de `lib/reports/tabs.ts`, também por permissão.
+  { href: "/admin/relatorios", label: "Relatórios", icon: BarChart3, permission: "relatorios.view" },
+  { href: "/admin/equipe", label: "Equipe", icon: UserCog, permission: "equipe.manage" },
+  { href: "/admin/comunicacao", label: "Comunicação", icon: MessageSquare, permission: "comunicacao.manage" },
+  { href: "/admin/treinamentos", label: "Treinamentos", icon: Video, permission: "treinamentos.manage" },
+  { href: "/admin/artes", label: "Artes", icon: Images, permission: "artes.view" },
+  // Quem gerencia os treinamentos assiste pela própria tela de gestão (botão
+  // "Assistir") — daí o `hiddenWhen`, que evita o item duplicado no menu.
+  {
+    href: "/admin/treinamentos/assistir",
+    label: "Treinamentos",
+    icon: Video,
+    permission: "treinamentos.view",
+    hiddenWhen: "treinamentos.manage",
+  },
+  { href: "/admin/automacao", label: "Automação", icon: Zap, permission: "automacao.manage" },
+  { href: "/admin/configuracoes", label: "Configurações", icon: Settings, permission: "configuracoes.manage" },
+  { href: "/admin/meu-perfil", label: "Meu perfil", icon: UserCircle, permission: "perfil.edit" },
 ]
 
 function initialsOf(name?: string): string {
@@ -83,7 +91,8 @@ function initialsOf(name?: string): string {
 }
 
 interface Props {
-  role?: Role
+  /** Permissões efetivas de quem está logado (ver `admin-guard`). */
+  permissions?: readonly AdminPermission[]
   userName?: string
   userEmail?: string
   /** Menu recolhido (só ícones). Aplicado só na instância desktop. */
@@ -94,14 +103,19 @@ interface Props {
 }
 
 export function SidebarAdmin({
-  role = "SUPER_ADMIN",
+  permissions = [],
   userName,
   userEmail,
   collapsed = false,
   onToggleCollapse,
 }: Props = {}) {
   const pathname = usePathname()
-  const navItems = ALL_ITEMS.filter((item) => item.roles.includes(role))
+  const granted = new Set<AdminPermission>(permissions)
+  const navItems = ALL_ITEMS.filter(
+    (item) =>
+      granted.has(item.permission) &&
+      !(item.hiddenWhen && granted.has(item.hiddenWhen)),
+  )
 
   return (
     <aside

@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { requirePmbTeam } from "@/lib/auth/guards"
 import { noteSchema } from "@/lib/students/management"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 export const GET = withRequestContextParams<{ id: string }>(
   { action: "admin.alunos.notes.list", route: "/api/admin/alunos/[id]/notes" },
   async (_request: Request, ctx) => {
-    const guard = await requirePmbTeam()
+    const guard = await requireAdmin("alunosRede.view")
     if (!guard.ok) return guard.response
 
     const { id } = await ctx.params
@@ -31,7 +31,7 @@ export const GET = withRequestContextParams<{ id: string }>(
 export const POST = withRequestContextParams<{ id: string }>(
   { action: "admin.alunos.notes.create", route: "/api/admin/alunos/[id]/notes" },
   async (request: Request, ctx) => {
-    const guard = await requirePmbTeam()
+    const guard = await requireAdmin("alunosRede.manage")
     if (!guard.ok) return guard.response
 
     const { id } = await ctx.params
@@ -61,7 +61,7 @@ export const POST = withRequestContextParams<{ id: string }>(
     const note = await prisma.studentNote.create({
       data: {
         studentId: id,
-        authorId: guard.session.userId,
+        authorId: guard.ctx.userId,
         body: parsed.data.body,
       },
       include: { author: { select: { id: true, name: true } } },
@@ -83,7 +83,7 @@ export const POST = withRequestContextParams<{ id: string }>(
 export const DELETE = withRequestContextParams<{ id: string }>(
   { action: "admin.alunos.notes.delete", route: "/api/admin/alunos/[id]/notes" },
   async (request: Request, ctx) => {
-    const guard = await requirePmbTeam()
+    const guard = await requireAdmin("alunosRede.manage")
     if (!guard.ok) return guard.response
 
     const { id } = await ctx.params
@@ -95,7 +95,7 @@ export const DELETE = withRequestContextParams<{ id: string }>(
 
     // Apaga apenas notas do proprio autor.
     const result = await prisma.studentNote.deleteMany({
-      where: { id: noteId, studentId: id, authorId: guard.session.userId },
+      where: { id: noteId, studentId: id, authorId: guard.ctx.userId },
     })
     if (result.count === 0) {
       return NextResponse.json({ error: "Nota não encontrada" }, { status: 404 })

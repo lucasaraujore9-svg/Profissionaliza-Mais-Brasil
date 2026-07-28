@@ -1,6 +1,5 @@
 import { prisma } from "@/lib/prisma"
 import type { Prisma } from "@prisma/client"
-import { tenantScopeWhere } from "@/lib/auth/scope"
 import type { KpiDatum, ReportSeries, ReportTable } from "../types"
 import { buildPayload, type BiContext, type BiModule } from "./context"
 
@@ -14,7 +13,7 @@ function planBucket(v: number): string {
 export const redeRevendedoresModule: BiModule = {
   async run(ctx: BiContext) {
     const { period, session } = ctx
-    const scope = await tenantScopeWhere({ userId: session.userId, role: session.role })
+    const scope = await session.unidadesWhere()
     if (!scope) return buildPayload(period, {})
 
     // Exclui o placeholder da vitrine PMB.

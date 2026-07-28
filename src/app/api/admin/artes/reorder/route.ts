@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { requireArtesManager } from "@/lib/auth/guards"
 import { withRequestContext } from "@/lib/observability/with-request-context"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 // Reordena artes. O client envia a lista completa de ids na nova ordem;
 // gravamos `position` = indice com updates SEQUENCIAIS.
@@ -17,7 +17,7 @@ const bodySchema = z.object({
 export const POST = withRequestContext(
   { action: "admin.artes.reorder", route: "/api/admin/artes/reorder" },
   async (request: Request) => {
-    const guard = await requireArtesManager()
+    const guard = await requireAdmin("artes.manage")
     if (!guard.ok) return guard.response
 
     let payload: unknown

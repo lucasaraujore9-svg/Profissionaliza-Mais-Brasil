@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { requireAdminSession } from "@/lib/auth/admin-session"
 import { withRequestContext } from "@/lib/observability/with-request-context"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 // POST /api/admin/treinamentos/progress — marca/desmarca uma aula como assistida
 // pelo membro da equipe PMB logado. Espelha /api/painel/treinamentos/progress
@@ -16,10 +16,9 @@ const bodySchema = z.object({
 export const POST = withRequestContext(
   { action: "admin.treinamentos.progress", route: "/api/admin/treinamentos/progress" },
   async (request: Request) => {
-    const session = await requireAdminSession()
-    if (!session) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
+    const guard = await requireAdmin("treinamentos.view")
+    if (!guard.ok) return guard.response
+    const session = guard.ctx
 
     let payload: unknown
     try {

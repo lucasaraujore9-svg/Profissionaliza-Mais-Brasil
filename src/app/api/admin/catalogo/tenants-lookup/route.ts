@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { requireAdminSession } from "@/lib/auth/admin-session"
 import { withRequestContext } from "@/lib/observability/with-request-context"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 /**
  * Lookup minimo de tenants para popular o multi-select de visibilidade
@@ -12,10 +12,8 @@ import { withRequestContext } from "@/lib/observability/with-request-context"
 export const GET = withRequestContext(
   { action: "admin.catalogo.tenants_lookup", route: "/api/admin/catalogo/tenants-lookup" },
   async () => {
-  const ctx = await requireAdminSession()
-  if (!ctx) {
-    return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-  }
+  const guard = await requireAdmin("catalogo.view")
+  if (!guard.ok) return guard.response
 
   const tenants = await prisma.tenant.findMany({
     where: { status: { in: ["ACTIVE", "PENDING", "SUSPENDED"] } },

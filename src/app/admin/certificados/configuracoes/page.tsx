@@ -1,8 +1,7 @@
 import Link from "next/link"
-import { redirect } from "next/navigation"
 import { ArrowLeft } from "lucide-react"
 import { prisma } from "@/lib/prisma"
-import { requireAdminSession } from "@/lib/auth/admin-session"
+import { requireAdminPage } from "@/lib/auth/admin-guard"
 import { PageHeader } from "@/components/painel/page-header"
 import { AdminCertificateSettingsForm } from "@/components/admin/admin-certificate-settings-form"
 import { RegenerateAllCertificates } from "@/components/admin/regenerate-all-certificates"
@@ -16,11 +15,7 @@ export const dynamic = "force-dynamic"
 const SETTINGS_ID = "default"
 
 export default async function AdminCertificadosConfiguracoesPage() {
-  const ctx = await requireAdminSession()
-  if (!ctx || ctx.role !== "SUPER_ADMIN") {
-    redirect("/admin/certificados")
-  }
-
+  await requireAdminPage("certificados.template")
   const [settings, template] = await Promise.all([
     prisma.systemSettings.upsert({
       where: { id: SETTINGS_ID },

@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { requireSuperAdmin } from "@/lib/auth/guards"
 import { createNotification } from "@/lib/notifications"
 import { sendPushToAnonymous } from "@/lib/notifications/push-server"
 import { getOrCreatePmbTenant } from "@/lib/pmb-tenant"
 import type { NotificationLevel } from "@prisma/client"
 import { withRequestContext } from "@/lib/observability/with-request-context"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 /** Permite até 5 min para broadcasts grandes */
 export const maxDuration = 300
@@ -60,7 +60,7 @@ const schema = z.discriminatedUnion("target", [
 export const POST = withRequestContext(
   { action: "admin.notifications.broadcast", route: "/api/admin/notifications/broadcast" },
   async (request: Request) => {
-  const auth = await requireSuperAdmin()
+  const auth = await requireAdmin("comunicacao.manage")
   if (!auth.ok) return auth.response
 
   let raw: unknown

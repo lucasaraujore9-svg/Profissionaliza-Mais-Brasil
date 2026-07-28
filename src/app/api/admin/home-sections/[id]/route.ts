@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
-import { requireSuperAdmin } from "@/lib/auth/guards"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 import { updateSection, deleteSection } from "@/lib/home/api"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 const SCOPE = { tenantId: null }
 
@@ -11,7 +11,7 @@ export const PATCH = withRequestContextParams<{ id: string }>(
     request: Request,
     { params }: { params: Promise<{ id: string }> },
   ) => {
-    const guard = await requireSuperAdmin()
+    const guard = await requireAdmin("vitrine.manage")
     if (!guard.ok) return guard.response
     const { id } = await params
     const body = await request.json().catch(() => null)
@@ -25,7 +25,7 @@ export const DELETE = withRequestContextParams<{ id: string }>(
     _request: Request,
     { params }: { params: Promise<{ id: string }> },
   ) => {
-    const guard = await requireSuperAdmin()
+    const guard = await requireAdmin("vitrine.manage")
     if (!guard.ok) return guard.response
     const { id } = await params
     return deleteSection(SCOPE, id)

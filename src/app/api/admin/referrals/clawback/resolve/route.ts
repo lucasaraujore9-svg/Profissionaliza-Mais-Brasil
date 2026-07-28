@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { requireAdminSession } from "@/lib/auth/admin-session"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { contextLogger } from "@/lib/logger"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 // Resolve um clawback pendente ([CLAWBACK_PENDING]) marcado quando uma mensalidade
 // e estornada DEPOIS da comissao ja estar liberada/paga. Ate aqui nao havia
@@ -56,14 +56,9 @@ const LINKED_PAYOUT_MSG =
 export const POST = withRequestContext(
   { action: "admin.referrals.clawback.resolve", route: "/api/admin/referrals/clawback/resolve" },
   async (request: Request) => {
-    const session = await requireAdminSession()
-    if (!session) {
-      return NextResponse.json({ error: "Nao autenticado" }, { status: 401 })
-    }
-    if (session.role !== "SUPER_ADMIN" && session.role !== "PMB_FINANCEIRO") {
-      return NextResponse.json({ error: "Sem permissao" }, { status: 403 })
-    }
-
+    const guard = await requireAdmin("indicacoes.clawback")
+    if (!guard.ok) return guard.response
+    const session = guard.ctx
     let payload: unknown
     try {
       payload = await request.json()

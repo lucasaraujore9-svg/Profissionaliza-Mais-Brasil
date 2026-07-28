@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { requireAdminSession } from "@/lib/auth/admin-session"
 import { isCronAuthorized } from "@/lib/auth/bearer"
 import { generateAndUploadPdf } from "@/lib/certificates/generate-pdf"
 import { contextLogger } from "@/lib/logger"
 import { withRequestContext } from "@/lib/observability/with-request-context"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 export const dynamic = "force-dynamic"
 export const maxDuration = 300
@@ -35,13 +35,8 @@ export const POST = withRequestContext(
     // Aceita SUPER_ADMIN (botão no admin) OU CRON_SECRET (gatilho de
     // manutenção server-to-server, ex: ops/automação). Ambos são privilegiados.
     if (!isCronAuthorized(request)) {
-      const ctx = await requireAdminSession()
-      if (!ctx) {
-        return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-      }
-      if (ctx.role !== "SUPER_ADMIN") {
-        return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
-      }
+      const guard = await requireAdmin("certificados.manage")
+      if (!guard.ok) return guard.response
     }
 
     const log = contextLogger()

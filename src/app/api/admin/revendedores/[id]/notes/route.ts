@@ -1,27 +1,26 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { requirePmbTeam } from "@/lib/auth/guards"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
+import { requireAdmin, type AdminContext } from "@/lib/auth/admin-guard"
 
-async function assertCanAccess(tenantId: string, session: { userId: string; role: string }) {
-  if (session.role === "SUPER_ADMIN") return true
-  if (session.role !== "PMB_RESELLER_MGR") return false
+/** Recorte da carteira, no formato do papel de quem chamou. */
+async function assertCanAccess(tenantId: string, ctx: AdminContext) {
   const t = await prisma.tenant.findUnique({
     where: { id: tenantId },
-    select: { accountManagerId: true },
+    select: { accountManagerId: true, salesUserId: true },
   })
-  return t?.accountManagerId === session.userId
+  return ctx.canAccessTenant(t)
 }
 
 export const GET = withRequestContextParams<{ id: string }>(
   { action: "admin.revendedores.notes.list", route: "/api/admin/revendedores/[id]/notes" },
   async (_req: Request, ctx) => {
-  const guard = await requirePmbTeam()
+  const guard = await requireAdmin("unidades.view")
   if (!guard.ok) return guard.response
   const { id } = await ctx.params
 
-  if (!(await assertCanAccess(id, guard.session))) {
+  if (!(await assertCanAccess(id, guard.ctx))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
 
@@ -47,11 +46,11 @@ const createSchema = z.object({ body: z.string().min(1).max(4000) })
 export const POST = withRequestContextParams<{ id: string }>(
   { action: "admin.revendedores.notes.create", route: "/api/admin/revendedores/[id]/notes" },
   async (req: Request, ctx) => {
-  const guard = await requirePmbTeam()
+  const guard = await requireAdmin("unidades.manage")
   if (!guard.ok) return guard.response
   const { id } = await ctx.params
 
-  if (!(await assertCanAccess(id, guard.session))) {
+  if (!(await assertCanAccess(id, guard.ctx))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
 
@@ -70,7 +69,7 @@ export const POST = withRequestContextParams<{ id: string }>(
   const note = await prisma.tenantSupportNote.create({
     data: {
       tenantId: id,
-      authorId: guard.session.userId,
+      authorId: guard.ctx.userId,
       body: parsed.data.body,
     },
     include: { author: { select: { name: true } } },

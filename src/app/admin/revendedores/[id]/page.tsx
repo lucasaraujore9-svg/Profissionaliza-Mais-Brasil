@@ -1,7 +1,7 @@
 import { PageHeader } from "@/components/painel/page-header"
 import { ResellerBackLink } from "@/components/admin/reseller-back-link"
 import { ResellerDetailClient } from "@/components/admin/reseller-detail-client"
-import { requireAdminSession } from "@/lib/auth/admin-session"
+import { requireAdminPage } from "@/lib/auth/admin-guard"
 import { prisma } from "@/lib/prisma"
 
 export default async function ResellerDetailPage({
@@ -10,8 +10,8 @@ export default async function ResellerDetailPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
-  const session = await requireAdminSession()
-  const isSuperAdmin = session?.role === "SUPER_ADMIN"
+  const session = await requireAdminPage("unidades.view")
+  const isSuperAdmin = session.can("unidades.governanca")
 
   // Vendedor de revenda atual da unidade + lista de vendedores ativos para o
   // controle de atribuicao (espelha o gerente de suporte/accountManager).
@@ -61,7 +61,7 @@ export default async function ResellerDetailPage({
         tenantId={id}
         isSuperAdmin={isSuperAdmin}
         viewerId={session?.userId ?? null}
-        viewerRole={session?.role ?? null}
+        viewerRole={session.role}
         salesUserId={tenant?.salesUserId ?? null}
         salesUserName={tenant?.salesUser?.name ?? null}
         salesUsers={salesUsers}

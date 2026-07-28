@@ -2,7 +2,6 @@ import { NextResponse } from "next/server"
 import { randomBytes } from "node:crypto"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { requireAdminSession } from "@/lib/auth/admin-session"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import {
   startSession,
@@ -11,6 +10,7 @@ import {
   WhatsAppNumberNotFoundError,
 } from "@/lib/automation/wa-client"
 import { contextLogger } from "@/lib/logger"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 const schema = z.object({
   phone: z.string().trim().min(8).max(20),
@@ -22,14 +22,8 @@ export const POST = withRequestContext(
     route: "/api/admin/automacao/whatsapp/pair",
   },
   async (request: Request) => {
-    const ctx = await requireAdminSession()
-    if (!ctx) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
-    if (ctx.role !== "SUPER_ADMIN") {
-      return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
-    }
-
+    const guard = await requireAdmin("automacao.manage")
+    if (!guard.ok) return guard.response
     let raw: unknown
     try {
       raw = await request.json()

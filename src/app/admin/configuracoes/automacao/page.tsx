@@ -1,17 +1,14 @@
 import Link from "next/link"
-import { redirect } from "next/navigation"
 import { ArrowLeft } from "lucide-react"
 import { prisma } from "@/lib/prisma"
-import { requireAdminSession } from "@/lib/auth/admin-session"
+import { requireAdminPage } from "@/lib/auth/admin-guard"
 import { PageHeader } from "@/components/painel/page-header"
 import { AdminAutomationSettingsForm } from "@/components/admin/admin-automation-settings-form"
 
 export const dynamic = "force-dynamic"
 
 export default async function AdminAutomationSettingsPage() {
-  const session = await requireAdminSession()
-  if (!session) redirect("/login?callbackUrl=/admin/configuracoes/automacao")
-  if (session.role !== "SUPER_ADMIN") redirect("/admin/configuracoes")
+  await requireAdminPage("configuracoes.manage")
 
   const settings = await prisma.systemSettings.upsert({
     where: { id: "default" },

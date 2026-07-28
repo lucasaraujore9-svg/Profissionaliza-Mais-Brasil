@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { requireAdminSession } from "@/lib/auth/admin-session"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { AutomationTemplateKey } from "@prisma/client"
 import { DEFAULT_AUTOMATION_TEMPLATES } from "@/lib/automation/default-templates"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 export const GET = withRequestContext(
   {
@@ -12,14 +12,8 @@ export const GET = withRequestContext(
     route: "/api/admin/automacao/templates",
   },
   async () => {
-    const ctx = await requireAdminSession()
-    if (!ctx) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
-    if (ctx.role !== "SUPER_ADMIN") {
-      return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
-    }
-
+    const guard = await requireAdmin("automacao.manage")
+    if (!guard.ok) return guard.response
     let templates = await prisma.automationMessageTemplate.findMany({
       where: { tenantId: null },
       orderBy: { key: "asc" },
@@ -79,14 +73,8 @@ export const PUT = withRequestContext(
     route: "/api/admin/automacao/templates",
   },
   async (request: Request) => {
-    const ctx = await requireAdminSession()
-    if (!ctx) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
-    if (ctx.role !== "SUPER_ADMIN") {
-      return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
-    }
-
+    const guard = await requireAdmin("automacao.manage")
+    if (!guard.ok) return guard.response
     let payload: unknown
     try {
       payload = await request.json()

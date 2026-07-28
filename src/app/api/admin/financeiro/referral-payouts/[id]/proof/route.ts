@@ -1,12 +1,11 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { requireAdminSession } from "@/lib/auth/admin-session"
-import { canMarkPaid } from "@/lib/auth/roles"
 import { uploadPayoutProof } from "@/lib/storage/payout-proof"
 import { isValidImageMagic } from "@/lib/storage/validate-image"
 import { rateLimit, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 import { logAudit } from "@/lib/audit"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 const MAX_BYTES = 8 * 1024 * 1024 // 8MB
 // Comprovante: imagem ou PDF. SVG bloqueado (pode carregar <script>).
@@ -56,14 +55,9 @@ export const POST = withRequestContextParams<{ id: string }>(
     route: "/api/admin/financeiro/referral-payouts/[id]/proof",
   },
   async (request: Request, context) => {
-    const session = await requireAdminSession()
-    if (!session) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
-    if (!canMarkPaid(session.role)) {
-      return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
-    }
-
+    const guard = await requireAdmin("financeiro.manage")
+    if (!guard.ok) return guard.response
+    const session = guard.ctx
     const rl = await rateLimit(request, RATE_LIMITS.upload)
     if (!rl.ok) return rateLimitResponse(rl)
 

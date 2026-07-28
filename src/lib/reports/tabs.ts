@@ -1,97 +1,93 @@
-import type { UserRole } from "@prisma/client"
+import type { PmbTeamRole } from "@/lib/auth/roles"
+import type { AdminPermission } from "@/lib/auth/admin-permissions"
 
 /**
- * Fonte única das abas do hub admin "Relatórios": metadados + allowlist por
- * papel + aba padrão por papel. Consumido pela page (redirect), pelo
- * `[tab]/page.tsx` (gate), pela barra de abas e pelo dispatcher da API.
+ * Fonte única das abas do hub admin "Relatórios": metadados + permissão exigida
+ * + aba padrão por papel. Consumido pela page (redirect), pelo `[tab]/page.tsx`
+ * (gate), pela barra de abas e pelo dispatcher da API.
+ *
+ * Cada aba exige UMA permissão do catálogo (`lib/auth/admin-permissions.ts`).
+ * A matriz por papel não vive mais aqui: ela é consequência dos presets — e,
+ * com isso, o super admin pode liberar uma aba isolada para uma pessoa sem
+ * mexer no papel dela.
  */
 export interface ReportTabMeta {
   slug: string
   label: string
   /** Nome de ícone lucide (registro em src/components/reports/icons.ts). */
   icon: string
-  roles: UserRole[]
+  permission: AdminPermission
   /** Papéis para os quais esta é a aba de entrada (usada no redirect raiz). */
-  defaultFor?: UserRole[]
+  defaultFor?: PmbTeamRole[]
 }
-
-const ALL: UserRole[] = [
-  "SUPER_ADMIN",
-  "PMB_FINANCEIRO",
-  "PMB_SALES",
-  "PMB_SALES_MGR",
-  "PMB_REVENDA_SALES",
-  "PMB_RESELLER_MGR",
-]
 
 export const REPORT_TABS: ReportTabMeta[] = [
   {
     // Resumo executivo do ecossistema (MRR de todas as revendas, top revendas
-    // por GMV, funil global). Sem recorte por papel viável → restrito aos papéis
-    // com visão de todo o ecossistema. Espelha o least-privilege do export CSV.
+    // por GMV, funil global). Sem recorte por papel viável → permissão própria,
+    // fora dos presets de escopo limitado. Espelha o least-privilege do export.
     slug: "visao-geral",
     label: "Visão geral",
     icon: "bar-chart-3",
-    roles: ["SUPER_ADMIN", "PMB_FINANCEIRO"],
+    permission: "relatorios.visaoGeral",
     defaultFor: ["SUPER_ADMIN"],
   },
   {
-    // PMB_SALES (vendedor de curso B2C) é forçado ao segmento PMB no módulo
+    // O vendedor de curso (B2C) é forçado ao segmento PMB no módulo
     // (receita-vendas.ts) — nunca vê receita de revendedores.
     slug: "receita-vendas",
     label: "Receita & vendas",
     icon: "trending-up",
-    roles: ["SUPER_ADMIN", "PMB_FINANCEIRO", "PMB_SALES"],
+    permission: "relatorios.receitaVendas",
     defaultFor: ["PMB_SALES"],
   },
   {
     // Ecossistêmico (base total de alunos + alunos por revendedor). Sem variante
-    // PMB-escopada limpa → SUPER_ADMIN apenas. PMB_SALES obtém a visão PMB via
-    // export CSV `alunos-vitrine-pmb`.
+    // PMB-escopada limpa → só quem tem a permissão dedicada.
     slug: "alunos-matriculas",
     label: "Alunos & matrículas",
     icon: "graduation-cap",
-    roles: ["SUPER_ADMIN"],
+    permission: "relatorios.alunos",
   },
   {
     slug: "rede-revendedores",
     label: "Revendedores",
     icon: "store",
-    roles: ["SUPER_ADMIN", "PMB_SALES_MGR", "PMB_REVENDA_SALES", "PMB_RESELLER_MGR"],
+    permission: "relatorios.revendedores",
     defaultFor: ["PMB_SALES_MGR", "PMB_REVENDA_SALES", "PMB_RESELLER_MGR"],
   },
   {
     slug: "financeiro",
     label: "Financeiro",
     icon: "dollar-sign",
-    roles: ["SUPER_ADMIN", "PMB_FINANCEIRO"],
+    permission: "relatorios.financeiro",
     defaultFor: ["PMB_FINANCEIRO"],
   },
   {
     slug: "indicacoes-comissoes",
     label: "Indicações & comissões",
     icon: "share-2",
-    roles: ["SUPER_ADMIN", "PMB_FINANCEIRO", "PMB_RESELLER_MGR"],
+    permission: "relatorios.indicacoes",
   },
   {
     // Ecossistêmico (cursos/cupons de todos os tenants). Sem variante
-    // PMB-escopada limpa → SUPER_ADMIN apenas.
+    // PMB-escopada limpa → permissão dedicada.
     slug: "cursos-cupons",
     label: "Cursos & cupons",
     icon: "book-open",
-    roles: ["SUPER_ADMIN"],
+    permission: "relatorios.cursos",
   },
   {
     slug: "leads-conversao",
     label: "Leads & conversão",
     icon: "inbox",
-    roles: ["SUPER_ADMIN", "PMB_SALES_MGR", "PMB_REVENDA_SALES"],
+    permission: "relatorios.leads",
   },
   {
     slug: "exportacoes",
     label: "Exportações",
     icon: "receipt",
-    roles: ALL,
+    permission: "relatorios.export",
   },
 ]
 
@@ -99,19 +95,32 @@ export function reportTab(slug: string): ReportTabMeta | undefined {
   return REPORT_TABS.find((t) => t.slug === slug)
 }
 
-export function allowedTabs(role: UserRole): ReportTabMeta[] {
-  return REPORT_TABS.filter((t) => t.roles.includes(role))
+export function allowedTabs(
+  permissions: ReadonlySet<AdminPermission>,
+): ReportTabMeta[] {
+  return REPORT_TABS.filter((t) => permissions.has(t.permission))
 }
 
-export function canViewTab(role: UserRole, slug: string): boolean {
+export function canViewTab(
+  permissions: ReadonlySet<AdminPermission>,
+  slug: string,
+): boolean {
   const tab = reportTab(slug)
-  return !!tab && tab.roles.includes(role)
+  return !!tab && permissions.has(tab.permission)
 }
 
-/** Aba de entrada do papel (primeira `defaultFor`, senão a 1ª permitida). */
-export function defaultTab(role: UserRole): string {
-  const preferred = REPORT_TABS.find((t) => t.defaultFor?.includes(role))
+/**
+ * Aba de entrada: a `defaultFor` do papel quando a pessoa ainda a alcança,
+ * senão a primeira permitida. `null` quando não sobra nenhuma — o chamador
+ * decide o destino (a página manda para a home acessível da pessoa).
+ */
+export function defaultTab(
+  role: PmbTeamRole,
+  permissions: ReadonlySet<AdminPermission>,
+): string | null {
+  const preferred = REPORT_TABS.find(
+    (t) => t.defaultFor?.includes(role) && permissions.has(t.permission),
+  )
   if (preferred) return preferred.slug
-  const first = allowedTabs(role)[0]
-  return first?.slug ?? "visao-geral"
+  return allowedTabs(permissions)[0]?.slug ?? null
 }

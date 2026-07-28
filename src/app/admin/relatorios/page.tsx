@@ -1,12 +1,14 @@
 import { redirect } from "next/navigation"
-import { requireAdminSession } from "@/lib/auth/admin-session"
+import { adminHome, requireAdminPage } from "@/lib/auth/admin-guard"
 import { defaultTab } from "@/lib/reports/tabs"
 
 export const dynamic = "force-dynamic"
 
-// Raiz do hub de BI: valida sessão e redireciona para a aba de entrada do papel.
+// Raiz do hub de BI: valida a sessão e redireciona para a aba de entrada da
+// pessoa. Sem nenhuma aba permitida, sai do hub — nunca aterrissa numa aba que
+// devolveria 403.
 export default async function AdminRelatoriosPage() {
-  const session = await requireAdminSession()
-  if (!session) redirect("/login?callbackUrl=/admin/relatorios")
-  redirect(`/admin/relatorios/${defaultTab(session.role)}`)
+  const session = await requireAdminPage("relatorios.view")
+  const tab = defaultTab(session.role, session.permissions)
+  redirect(tab ? `/admin/relatorios/${tab}` : adminHome(session))
 }

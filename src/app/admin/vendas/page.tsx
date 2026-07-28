@@ -1,6 +1,5 @@
-import { redirect } from "next/navigation"
 import Link from "next/link"
-import { requireAdminSession } from "@/lib/auth/admin-session"
+import { requireAdminPage } from "@/lib/auth/admin-guard"
 import { prisma } from "@/lib/prisma"
 import { Plus, Tag, Users } from "lucide-react"
 import { SyncPaymentButton } from "@/components/admin/sync-payment-button"
@@ -15,14 +14,10 @@ function formatBRL(n: number): string {
 }
 
 export default async function VendasDashboardPage() {
-  const session = await requireAdminSession()
-  if (!session) redirect("/login?callbackUrl=/admin/vendas")
-  if (session.role !== "SUPER_ADMIN" && session.role !== "PMB_SALES") {
-    redirect("/admin")
-  }
+  const session = await requireAdminPage("vendas.view")
 
   const baseWhere =
-    session.role === "SUPER_ADMIN"
+    session.can("vendas.viewAll")
       ? { tenantId: null as null }
       : { tenantId: null as null, soldByUserId: session.userId }
 
@@ -69,7 +64,7 @@ export default async function VendasDashboardPage() {
             Vendas Diretas PMB
           </h1>
           <p className="text-sm text-muted-foreground">
-            {session.role === "SUPER_ADMIN"
+            {session.can("vendas.viewAll")
               ? "Todas as vendas da vitrine principal"
               : "Suas vendas na vitrine principal"}
           </p>
@@ -116,7 +111,7 @@ export default async function VendasDashboardPage() {
               <th className="px-4 py-3 font-semibold">Valor</th>
               <th className="px-4 py-3 font-semibold">Status</th>
               <th className="px-4 py-3 font-semibold">Link de pagamento</th>
-              {session.role === "SUPER_ADMIN" && (
+              {session.can("vendas.viewAll") && (
                 <th className="px-4 py-3 font-semibold">Vendedor</th>
               )}
               <th className="px-4 py-3 font-semibold">Data</th>
@@ -159,7 +154,7 @@ export default async function VendasDashboardPage() {
                     )
                   })()}
                 </td>
-                {session.role === "SUPER_ADMIN" && (
+                {session.can("vendas.viewAll") && (
                   <td className="px-4 py-3 text-muted-foreground">
                     {e.soldByUser?.name ?? "—"}
                   </td>
@@ -172,7 +167,7 @@ export default async function VendasDashboardPage() {
             {recentEnrollments.length === 0 && (
               <tr>
                 <td
-                  colSpan={session.role === "SUPER_ADMIN" ? 7 : 6}
+                  colSpan={session.can("vendas.viewAll") ? 7 : 6}
                   className="px-4 py-8 text-center text-muted-foreground"
                 >
                   Nenhuma venda registrada ainda

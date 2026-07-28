@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { requireSuperAdmin } from "@/lib/auth/guards"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 import { logAudit } from "@/lib/audit"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 const schema = z.object({
   managerId: z.string().nullable(),
@@ -12,7 +12,7 @@ const schema = z.object({
 export const PATCH = withRequestContextParams<{ id: string }>(
   { action: "admin.revendedores.manager.update", route: "/api/admin/revendedores/[id]/manager" },
   async (req: Request, ctx) => {
-  const guard = await requireSuperAdmin()
+  const guard = await requireAdmin("unidades.governanca")
   if (!guard.ok) return guard.response
   const { id } = await ctx.params
 
@@ -61,8 +61,8 @@ export const PATCH = withRequestContextParams<{ id: string }>(
     action: "tenant.manager.update",
     resource: "Tenant",
     resourceId: id,
-    actorUserId: guard.session.userId,
-    actorRole: guard.session.role,
+    actorUserId: guard.ctx.userId,
+    actorRole: guard.ctx.role,
     tenantId: id,
     payloadBefore: { accountManagerId: before?.accountManagerId ?? null },
     payloadAfter: { accountManagerId: updated.accountManagerId },

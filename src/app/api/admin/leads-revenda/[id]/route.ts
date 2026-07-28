@@ -1,21 +1,17 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { requireAdminSession } from "@/lib/auth/admin-session"
-import { canHandleRevendaLeads, leadScopeWhere } from "@/lib/auth/scope"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 const schema = z
   .object({
     status: z.enum(["NEW", "CONTACTED", "CONVERTED", "LOST"]).optional(),
     columnOrder: z.number().int().nonnegative().optional(),
-    // Reatribuicao de dono. `null` = remover dono. So SUPER_ADMIN / gerente de
-    // vendas podem reatribuir (validado abaixo).
+    // Reatribuicao de dono. `null` = remover dono. Exige `leadsRevenda.config`
+    // — a mesma permissao do rodizio, que e quem decide de quem e o lead.
     ownerUserId: z.string().nullable().optional(),
   })
   .refine((v) => Object.keys(v).length > 0, { message: "Nada para atualizar" })
-
-// Papeis que podem reatribuir o dono de um lead.
-const CAN_REASSIGN = ["SUPER_ADMIN", "PMB_SALES_MGR"]
 
 // Atualiza um Lead de revenda (funil B2B): status (kanban), columnOrder
 // (reordenacao) e ownerUserId (reatribuicao). Escopo por papel: vendedor de
@@ -24,13 +20,8 @@ export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const session = await requireAdminSession()
-  if (!session) {
-    return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-  }
-  if (!canHandleRevendaLeads(session.role)) {
-    return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
-  }
+  const guard = await requireAdmin("leadsRevenda.manage")
+  if (!guard.ok) return guard.response
 
   const { id } = await params
 
@@ -45,8 +36,8 @@ export async function PATCH(
     return NextResponse.json({ error: "Dados inválidos" }, { status: 400 })
   }
 
-  // Reatribuicao de dono e restrita a super/gerente de vendas.
-  if (parsed.data.ownerUserId !== undefined && !CAN_REASSIGN.includes(session.role)) {
+  // Reatribuir o dono e decidir a carteira do time — mesma permissao do rodizio.
+  if (parsed.data.ownerUserId !== undefined && !guard.ctx.can("leadsRevenda.config")) {
     return NextResponse.json(
       { error: "Sem permissão para reatribuir o lead" },
       { status: 403 },
@@ -54,7 +45,7 @@ export async function PATCH(
   }
 
   // Garante que o lead esta no escopo do ator antes de qualquer mudanca.
-  const scope = await leadScopeWhere(session)
+  const scope = await guard.ctx.leadsRevendaWhere()
   if (!scope) {
     return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
   }

@@ -1,7 +1,6 @@
 import Link from "next/link"
-import { redirect } from "next/navigation"
 import { prisma } from "@/lib/prisma"
-import { requireAdminSession } from "@/lib/auth/admin-session"
+import { requireAdminPage } from "@/lib/auth/admin-guard"
 import { PageHeader } from "@/components/painel/page-header"
 import { Card } from "@/components/ui/card"
 import {
@@ -23,15 +22,7 @@ function formatMoney(n: number): string {
 }
 
 export default async function AdminIndicacoesPage() {
-  const session = await requireAdminSession()
-  if (!session) redirect("/login?callbackUrl=/admin/indicacoes")
-  if (
-    session.role !== "SUPER_ADMIN" &&
-    session.role !== "PMB_RESELLER_MGR" &&
-    session.role !== "PMB_FINANCEIRO"
-  ) {
-    redirect("/admin")
-  }
+  await requireAdminPage("indicacoes.view")
 
   const [referrers, totals, monthlyTotals, payoutsPaidByReferrer] = await Promise.all([
     prisma.tenant.findMany({

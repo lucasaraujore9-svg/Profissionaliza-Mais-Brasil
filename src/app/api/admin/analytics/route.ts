@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { requireAdminSession } from "@/lib/auth/admin-session"
 import { withRequestContext } from "@/lib/observability/with-request-context"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 const PERIODS = {
   "7d": 7,
@@ -78,16 +78,10 @@ async function fetchEnrollmentsByMonthSQL(since: Date): Promise<
 export const GET = withRequestContext(
   { action: "admin.analytics.get", route: "/api/admin/analytics" },
   async (request: Request) => {
-  const ctx = await requireAdminSession()
-  if (!ctx) {
-    return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-  }
+  const guard = await requireAdmin("relatorios.visaoGeral")
+  if (!guard.ok) return guard.response
   // Analytics expoe MRR/churn/LTV e ranking do ecossistema (dados globais).
   // A tela /admin/analytics e SUPER_ADMIN-only — alinha a API ao gate da UI.
-  if (ctx.role !== "SUPER_ADMIN") {
-    return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
-  }
-
   const url = new URL(request.url)
   const periodParam = (url.searchParams.get("period") ?? "30d") as Period
   const days = PERIODS[periodParam] ?? 30

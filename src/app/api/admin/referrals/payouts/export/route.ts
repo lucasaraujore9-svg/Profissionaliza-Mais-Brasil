@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server"
 import type { Prisma, ReferralPayoutStatus } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
-import { requireAdminSession } from "@/lib/auth/admin-session"
 import {
   arrayToCsv,
   csvFilename,
@@ -11,6 +10,7 @@ import {
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { MAX_EXPORT_ROWS, truncationNotice } from "@/lib/reports/export-limit"
 import { logAudit } from "@/lib/audit"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 export const dynamic = "force-dynamic"
 
@@ -55,10 +55,9 @@ const HEADERS: CsvHeader<PayoutCsvRow>[] = [
 export const GET = withRequestContext(
   { action: "admin.referrals.payouts.export", route: "/api/admin/referrals/payouts/export" },
   async (request: Request) => {
-  const session = await requireAdminSession()
-  if (!session) {
-    return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-  }
+  const guard = await requireAdmin("indicacoes.view")
+  if (!guard.ok) return guard.response
+  const session = guard.ctx
 
   const url = new URL(request.url)
   const status = url.searchParams.get("status") ?? "all"
@@ -105,16 +104,16 @@ export const GET = withRequestContext(
     where.requestedAt = dateFilter
   }
 
-  // Escopo por papel (espelha approve/fail e a pagina /admin/indicacoes):
-  // PMB_SALES nao acessa financeiro de indicacao; PMB_RESELLER_MGR so exporta
-  // saques de tenants atribuidos a ele (CSV expoe PIX/valores — PII financeira).
-  if (session.role === "PMB_SALES") {
+  // O CSV expoe PIX/valores (PII financeira): `indicacoes.view` decide QUEM
+  // exporta e `comissoesScope()` decide QUAIS saques, no formato do papel.
+  const scope = await session.comissoesScope()
+  if (!scope) {
     return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
   }
-  if (session.role === "PMB_RESELLER_MGR") {
+  if (Object.keys(scope).length > 0) {
     where.AND = [
       ...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []),
-      { referrer: { accountManagerId: session.userId } },
+      { referrer: scope },
     ]
   }
 

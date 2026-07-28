@@ -1,6 +1,5 @@
-import { redirect } from "next/navigation"
 import Link from "next/link"
-import { requireAdminSession } from "@/lib/auth/admin-session"
+import { requireAdminPage } from "@/lib/auth/admin-guard"
 import { prisma } from "@/lib/prisma"
 import { PageHeader } from "@/components/painel/page-header"
 import {
@@ -10,9 +9,6 @@ import {
 } from "@/components/admin/leads-revenda-list"
 import { LeadsRevendaKanban } from "@/components/admin/leads-revenda-kanban"
 import {
-  canHandleRevendaLeads,
-  canConvertRevendaLeads,
-  leadScopeWhere,
 } from "@/lib/auth/scope"
 import { listRevendaLeadAssignees } from "@/lib/automation/assign"
 import { LeadRevendaDistributionToggle } from "@/components/admin/lead-revenda-distribution-toggle"
@@ -32,15 +28,11 @@ export default async function AdminLeadsRevendaPage({
 }: {
   searchParams: Promise<{ status?: string; view?: string }>
 }) {
-  const session = await requireAdminSession()
-  if (!session) redirect("/login?callbackUrl=/admin/leads-revenda")
-  if (!canHandleRevendaLeads(session.role)) {
-    redirect("/admin")
-  }
-
+  const session = await requireAdminPage("leadsRevenda.view")
   // Escopo de visibilidade: vendedor de revenda vê só os seus; gerente de vendas
-  // vê o time; super vê todos. `null` nunca ocorre aqui (guard acima garante).
-  const scope = (await leadScopeWhere(session)) ?? { id: "__none__" }
+  // vê o time; super vê todos. `null` = sem recorte modelado para o papel —
+  // fecha em vez de listar tudo.
+  const scope = (await session.leadsRevendaWhere()) ?? { id: "__none__" }
 
   const sp = await searchParams
   const view = sp.view === "kanban" ? "kanban" : "list"
@@ -94,10 +86,10 @@ export default async function AdminLeadsRevendaPage({
     ownerName: l.owner?.name ?? null,
   }))
 
-  const canConvert = canConvertRevendaLeads(session.role)
+  const canConvert = session.can("leadsRevenda.manage")
   // Reatribuir dono e configurar o rodízio são ações de super/gerente de vendas.
   const canConfig =
-    session.role === "SUPER_ADMIN" || session.role === "PMB_SALES_MGR"
+    session.can("leadsRevenda.config")
   const allAssignees = canConfig ? await listRevendaLeadAssignees() : []
   const assignees = allAssignees.map((a) => ({
     userId: a.userId,

@@ -1,15 +1,15 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { requireSuperAdmin } from "@/lib/auth/guards"
 import { withRequestContext } from "@/lib/observability/with-request-context"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 // GET /api/admin/treinamentos/modules
 // Lista todos os modulos (publicados ou nao) com seus videos, na ordem de gestao.
 export const GET = withRequestContext(
   { action: "admin.treinamentos.modules.list", route: "/api/admin/treinamentos/modules" },
   async () => {
-    const guard = await requireSuperAdmin()
+    const guard = await requireAdmin("treinamentos.manage")
     if (!guard.ok) return guard.response
 
     const modules = await prisma.trainingModule.findMany({
@@ -35,7 +35,7 @@ const createSchema = z.object({
 export const POST = withRequestContext(
   { action: "admin.treinamentos.modules.create", route: "/api/admin/treinamentos/modules" },
   async (request: Request) => {
-    const guard = await requireSuperAdmin()
+    const guard = await requireAdmin("treinamentos.manage")
     if (!guard.ok) return guard.response
 
     let payload: unknown

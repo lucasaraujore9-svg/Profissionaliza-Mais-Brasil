@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server"
-import { requireAdminSession } from "@/lib/auth/admin-session"
 import { prisma } from "@/lib/prisma"
 import { buildCsv, csvResponse } from "@/lib/reports/csv"
 import {
@@ -8,24 +7,26 @@ import {
 } from "@/lib/reports/definitions"
 import { contextLogger } from "@/lib/logger"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 export const dynamic = "force-dynamic"
 
 export const GET = withRequestContextParams<{ type: string }>(
   { action: "admin.relatorios.generate", route: "/api/admin/relatorios/[type]" },
   async (request: Request, ctx) => {
-  const session = await requireAdminSession()
-  if (!session) {
-    return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-  }
-  // Allowlist de papéis modelados pelos runners (globais por natureza):
-  //   SUPER_ADMIN      -> tudo
-  //   PMB_SALES        -> só pmbSalesAllowed (B2C vitrine PMB)
-  //   PMB_RESELLER_MGR -> escopado por tenantId que ele gerencia (abaixo)
-  // PMB_REVENDA_SALES e PMB_SALES_MGR NÃO são escopados aqui — sem este gate
-  // exportariam dados de todo o ecossistema (fora do escopo deles).
-  const REPORT_ROLES = ["SUPER_ADMIN", "PMB_SALES", "PMB_RESELLER_MGR"]
-  if (!REPORT_ROLES.includes(session.role)) {
+  const guard = await requireAdmin("relatorios.export")
+  if (!guard.ok) return guard.response
+  const session = guard.ctx
+  // `relatorios.export` decide QUEM exporta; aqui decidimos COM QUAL recorte.
+  // Os runners são globais por natureza e só têm dois recortes modelados:
+  //   vê a rede inteira (`unidades.viewAll`) -> tudo
+  //   opera só a vitrine PMB                 -> só `pmbSalesAllowed`
+  //   administra uma carteira de unidades    -> escopado por tenantId (abaixo)
+  // Quem não se encaixa em nenhum exportaria dados fora do seu escopo.
+  const seesAll = session.can("unidades.viewAll")
+  const pmbOnly = !seesAll && session.can("alunos.view")
+  const carteira = !seesAll && !pmbOnly && session.can("unidades.view")
+  if (!seesAll && !pmbOnly && !carteira) {
     return NextResponse.json(
       { error: "Sem permissão para gerar relatórios" },
       { status: 403 },
@@ -37,7 +38,7 @@ export const GET = withRequestContextParams<{ type: string }>(
   if (!def) {
     return NextResponse.json({ error: "Relatório não encontrado" }, { status: 404 })
   }
-  if (def.needsSuperAdmin && session.role !== "SUPER_ADMIN") {
+  if (def.needsSuperAdmin && !seesAll) {
     return NextResponse.json(
       { error: "Apenas SUPER_ADMIN pode gerar este relatório" },
       { status: 403 },
@@ -45,7 +46,7 @@ export const GET = withRequestContextParams<{ type: string }>(
   }
   // PMB_SALES so gera relatorios self-escopados ao contexto PMB. Os demais
   // cobrem todos os tenants (dados de revendedores fora do escopo de PMB_SALES).
-  if (session.role === "PMB_SALES" && !def.pmbSalesAllowed) {
+  if (pmbOnly && !def.pmbSalesAllowed) {
     return NextResponse.json(
       { error: "Sem permissão para este relatório" },
       { status: 403 },
@@ -67,13 +68,13 @@ export const GET = withRequestContextParams<{ type: string }>(
   // PMB_RESELLER_MGR só pode filtrar por tenants atribuídos a ele.
   // Sem tenantId, força filtro implícito; com tenantId, valida ownership.
   const tenantId = requestedTenantId
-  if (session.role === "PMB_RESELLER_MGR") {
+  if (carteira) {
     if (requestedTenantId) {
       const t = await prisma.tenant.findUnique({
         where: { id: requestedTenantId },
-        select: { accountManagerId: true },
+        select: { accountManagerId: true, salesUserId: true },
       })
-      if (t?.accountManagerId !== session.userId) {
+      if (!(await session.canAccessTenant(t))) {
         return NextResponse.json({ error: "Sem permissao para este tenant" }, { status: 403 })
       }
     } else {

@@ -1,11 +1,11 @@
 import { randomUUID } from "node:crypto"
 import { NextResponse } from "next/server"
 import { z } from "zod"
-import { requireArtesManager } from "@/lib/auth/guards"
 import { createSignedUploadUrl } from "@/lib/supabase/storage"
 import { rateLimit, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { ART_ALLOWED_TYPES, ART_MAX_BYTES, artExtensionFor } from "@/lib/artes/admin-upload"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 const bodySchema = z.object({
   kind: z.enum(["feed", "story"]),
@@ -21,7 +21,7 @@ const bodySchema = z.object({
 export const POST = withRequestContext(
   { action: "admin.artes.upload-url", route: "/api/admin/artes/upload-url" },
   async (request: Request) => {
-    const guard = await requireArtesManager()
+    const guard = await requireAdmin("artes.manage")
     if (!guard.ok) return guard.response
 
     const rl = await rateLimit(request, RATE_LIMITS.artesUpload)

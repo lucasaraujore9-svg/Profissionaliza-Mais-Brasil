@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation"
 import { Suspense } from "react"
-import { requireAdminSession } from "@/lib/auth/admin-session"
+import { adminHome, requireAdminPage } from "@/lib/auth/admin-guard"
 import { allowedTabs, canViewTab, defaultTab } from "@/lib/reports/tabs"
 import { AdminRelatoriosClient } from "@/components/admin/admin-relatorios-client"
 import { ReportSkeleton } from "@/components/reports/states"
@@ -12,17 +12,18 @@ export default async function AdminRelatoriosTabPage({
 }: {
   params: Promise<{ tab: string }>
 }) {
-  const session = await requireAdminSession()
-  if (!session) redirect("/login?callbackUrl=/admin/relatorios")
+  const session = await requireAdminPage("relatorios.view")
 
   const { tab } = await params
-  // Gate server-side por aba: redireciona para a aba padrão do papel se a URL
-  // apontar para uma aba que ele não pode ver.
-  if (!canViewTab(session.role, tab)) {
-    redirect(`/admin/relatorios/${defaultTab(session.role)}`)
+  // Gate server-side por aba: redireciona para a aba de entrada da pessoa se a
+  // URL apontar para uma aba que ela não pode ver. Sem nenhuma aba permitida
+  // (todas revogadas), sai do hub em vez de entrar em loop de redirect.
+  if (!canViewTab(session.permissions, tab)) {
+    const fallback = defaultTab(session.role, session.permissions)
+    redirect(fallback ? `/admin/relatorios/${fallback}` : adminHome(session))
   }
 
-  const tabs = allowedTabs(session.role).map((t) => ({
+  const tabs = allowedTabs(session.permissions).map((t) => ({
     id: t.slug,
     label: t.label,
     icon: t.icon,

@@ -1,21 +1,21 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { requirePmbSales } from "@/lib/auth/guards"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { logAudit } from "@/lib/audit"
 import { effectiveSalesCap } from "@/lib/coupons/sales-cap"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 export const GET = withRequestContext(
   { action: "admin.cupons.list", route: "/api/admin/cupons" },
   async () => {
-  const guard = await requirePmbSales()
+  const guard = await requireAdmin("cupons.view")
   if (!guard.ok) return guard.response
 
-  const where =
-    guard.session.role === "SUPER_ADMIN"
-      ? { tenantId: null }
-      : { tenantId: null, createdByUserId: guard.session.userId }
+  // Sem `vendas.viewAll` a pessoa so enxerga os cupons que ela mesma criou.
+  const where = guard.ctx.can("vendas.viewAll")
+    ? { tenantId: null }
+    : { tenantId: null, createdByUserId: guard.ctx.userId }
 
   const coupons = await prisma.coupon.findMany({
     where,
@@ -69,7 +69,7 @@ const createSchema = z
 export const POST = withRequestContext(
   { action: "admin.cupons.create", route: "/api/admin/cupons" },
   async (request: Request) => {
-  const guard = await requirePmbSales()
+  const guard = await requireAdmin("cupons.manage")
   if (!guard.ok) return guard.response
 
   let payload: unknown
@@ -87,12 +87,16 @@ export const POST = withRequestContext(
     )
   }
 
-  if (guard.session.role === "PMB_SALES") {
-    const cap = await effectiveSalesCap(guard.session)
+  // Teto de desconto: vale para QUALQUER pessoa que crie cupom sem
+  // `vendas.descontoIlimitado`. Antes a checagem inteira estava dentro de
+  // `if (role === "PMB_SALES")`, entao conceder `cupons.manage` a outro papel
+  // liberava cupom de 100% (matricula gratuita na vitrine PMB).
+  if (!guard.ctx.can("vendas.descontoIlimitado")) {
+    const cap = await effectiveSalesCap(guard.ctx)
     if (parsed.data.discountType === "FIXED") {
       return NextResponse.json(
         {
-          error: `PMB_SALES só pode criar cupons percentuais (cap ${cap}%)`,
+          error: `Sem desconto sem teto, só é possível criar cupom percentual (cap ${cap}%)`,
         },
         { status: 403 },
       )
@@ -128,8 +132,8 @@ export const POST = withRequestContext(
       validFrom: new Date(parsed.data.validFrom),
       validUntil: new Date(parsed.data.validUntil),
       isActive: true,
-      createdByUserId: guard.session.userId,
-      createdByRole: guard.session.role,
+      createdByUserId: guard.ctx.userId,
+      createdByRole: guard.ctx.role,
     },
   })
 
@@ -138,8 +142,8 @@ export const POST = withRequestContext(
     action: "coupon.create",
     resource: "Coupon",
     resourceId: coupon.id,
-    actorUserId: guard.session.userId,
-    actorRole: guard.session.role,
+    actorUserId: guard.ctx.userId,
+    actorRole: guard.ctx.role,
     payloadAfter: {
       code: coupon.code,
       discountType: coupon.discountType,

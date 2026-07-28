@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server"
 import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
-import { requireAdminSession } from "@/lib/auth/admin-session"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { getSessionStatus, stopSession } from "@/lib/automation/wa-client"
 import { swallow } from "@/lib/errors"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 export const GET = withRequestContext(
   {
@@ -12,14 +12,8 @@ export const GET = withRequestContext(
     route: "/api/admin/automacao/whatsapp/status",
   },
   async () => {
-    const ctx = await requireAdminSession()
-    if (!ctx) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
-    if (ctx.role !== "SUPER_ADMIN") {
-      return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
-    }
-
+    const guard = await requireAdmin("automacao.manage")
+    if (!guard.ok) return guard.response
     const settings = await prisma.systemSettings.upsert({
       where: { id: "default" },
       create: { id: "default" },

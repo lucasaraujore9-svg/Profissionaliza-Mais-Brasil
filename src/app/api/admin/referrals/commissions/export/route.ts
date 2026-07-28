@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server"
 import type { Prisma, ReferralCommissionStatus } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
-import { requireAdminSession } from "@/lib/auth/admin-session"
 import {
   arrayToCsv,
   csvFilename,
@@ -12,6 +11,7 @@ import { withRequestContext } from "@/lib/observability/with-request-context"
 import { MAX_EXPORT_ROWS, truncationNotice } from "@/lib/reports/export-limit"
 import { logAudit } from "@/lib/audit"
 import { linePercent, parseLinesSnapshot } from "@/lib/referrals/lines-snapshot"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 export const dynamic = "force-dynamic"
 
@@ -70,10 +70,9 @@ interface SortableRow {
 export const GET = withRequestContext(
   { action: "admin.referrals.commissions.export", route: "/api/admin/referrals/commissions/export" },
   async (request: Request) => {
-  const session = await requireAdminSession()
-  if (!session) {
-    return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-  }
+  const guard = await requireAdmin("indicacoes.view")
+  if (!guard.ok) return guard.response
+  const session = guard.ctx
 
   const url = new URL(request.url)
   const status = url.searchParams.get("status")
@@ -126,18 +125,19 @@ export const GET = withRequestContext(
     monthlyWhere.createdAt = createdAtFilter
   }
 
-  // Escopo por papel (espelha a pagina /admin/indicacoes e o financeiro
-  // SUPER_ADMIN-only): PMB_SALES nao acessa comissoes de indicacao;
-  // PMB_RESELLER_MGR so exporta comissoes de tenants atribuidos a ele.
-  if (session.role === "PMB_SALES") {
+  // `indicacoes.view` ja decidiu QUEM exporta; `comissoesScope()` decide QUAIS
+  // linhas — sem restricao para a visao financeira do ecossistema, so a
+  // carteira (no formato do papel) para quem administra unidades.
+  const scope = await session.comissoesScope()
+  if (!scope) {
     return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
   }
-  if (session.role === "PMB_RESELLER_MGR") {
+  if (Object.keys(scope).length > 0) {
     where.AND = [
       ...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []),
-      { referrer: { accountManagerId: session.userId } },
+      { referrer: scope },
     ]
-    monthlyWhere.referrer = { accountManagerId: session.userId }
+    monthlyWhere.referrer = scope
   }
 
   const [commissions, monthlyCommissions] = await Promise.all([

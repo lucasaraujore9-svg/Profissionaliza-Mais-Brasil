@@ -2,17 +2,16 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { isConclusionBlockedByPace } from "@/lib/enrollment/pace-gate"
 import { resolvePaceGateSettings } from "@/lib/enrollment/pace-settings"
-import { requireAdminSession } from "@/lib/auth/admin-session"
 import { PMB_TENANT_SLUG } from "@/lib/pmb-config"
 import { withRequestContext } from "@/lib/observability/with-request-context"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 export const GET = withRequestContext(
   { action: "admin.certificates.enrollments.list", route: "/api/admin/certificates/enrollments" },
   async (request: Request) => {
-  const ctx = await requireAdminSession()
-  if (!ctx) {
-    return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-  }
+  const guard = await requireAdmin("certificados.view")
+  if (!guard.ok) return guard.response
+  const ctx = guard.ctx
 
   const url = new URL(request.url)
   const studentId = url.searchParams.get("studentId")
@@ -27,7 +26,7 @@ export const GET = withRequestContext(
       tenantId: true,
       nome: true,
       cpf: true,
-      tenant: { select: { slug: true, accountManagerId: true } },
+      tenant: { select: { slug: true, accountManagerId: true, salesUserId: true } },
     },
   })
   if (!student) {
@@ -39,16 +38,15 @@ export const GET = withRequestContext(
   // revendedor por studentId. Aluno PMB = tenant placeholder "__pmb__" (ou null).
   const isPmbStudent =
     student.tenantId === null || student.tenant?.slug === PMB_TENANT_SLUG
-  if (ctx.role === "PMB_SALES") {
-    if (!isPmbStudent) {
+  if (!ctx.can("unidades.viewAll")) {
+    const ok = isPmbStudent
+      ? // Aluno da vitrine PMB: basta operar a vitrine.
+        ctx.can("alunos.view")
+      : // Aluno de uma unidade: só quem alcança aquela unidade na carteira.
+        await ctx.canAccessTenant(student.tenant)
+    if (!ok) {
       return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
     }
-  } else if (ctx.role === "PMB_RESELLER_MGR") {
-    if (isPmbStudent || student.tenant?.accountManagerId !== ctx.userId) {
-      return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
-    }
-  } else if (ctx.role !== "SUPER_ADMIN") {
-    return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
   }
 
   const enrollments = await prisma.enrollment.findMany({

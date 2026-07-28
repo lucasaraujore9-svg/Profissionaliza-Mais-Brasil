@@ -1,16 +1,15 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { requireAdminSession } from "@/lib/auth/admin-session"
 import type { Prisma } from "@prisma/client"
 import { withRequestContext } from "@/lib/observability/with-request-context"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 export const GET = withRequestContext(
   { action: "admin.certificates.list", route: "/api/admin/certificates" },
   async (request: Request) => {
-  const ctx = await requireAdminSession()
-  if (!ctx) {
-    return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-  }
+  const guard = await requireAdmin("certificados.view")
+  if (!guard.ok) return guard.response
+  const ctx = guard.ctx
 
   const url = new URL(request.url)
   const q = url.searchParams.get("q")?.trim() ?? ""
@@ -28,22 +27,28 @@ export const GET = withRequestContext(
     where.tenantId = tenantFilter
   }
 
-  // PMB_RESELLER_MGR só vê certificados dos tenants atribuídos a ele (ou PMB se permitido).
-  // PMB_SALES é equiparado: só certificados PMB.
-  if (ctx.role === "PMB_RESELLER_MGR") {
+  // Recorte de quem não enxerga a rede inteira. Quem administra unidades vê os
+  // certificados da própria carteira; quem só opera a vitrine PMB (vendedor de
+  // curso) vê apenas os certificados da PMB.
+  if (!ctx.can("unidades.viewAll") && ctx.can("unidades.view")) {
     if (tenantFilter && tenantFilter !== "pmb" && tenantFilter !== "any" && tenantFilter !== "all") {
       const t = await prisma.tenant.findUnique({
         where: { id: tenantFilter },
-        select: { accountManagerId: true },
+        select: { accountManagerId: true, salesUserId: true },
       })
-      if (t?.accountManagerId !== ctx.userId) {
+      if (!(await ctx.canAccessTenant(t))) {
         return NextResponse.json({ error: "Sem permissao para este tenant" }, { status: 403 })
       }
     } else {
-      // Sem tenant explícito ou "any"/"all" — restringe aos tenants do mgr.
-      where.tenant = { accountManagerId: ctx.userId }
+      // Sem tenant explícito ou "any"/"all" — restringe à carteira, no formato
+      // do papel (`unidadesWhere` cobre accountManagerId, salesUserId e time).
+      const scope = await ctx.unidadesWhere()
+      if (!scope) {
+        return NextResponse.json({ error: "Sem permissao" }, { status: 403 })
+      }
+      where.tenant = scope
     }
-  } else if (ctx.role === "PMB_SALES") {
+  } else if (!ctx.can("unidades.viewAll")) {
     where.tenantId = null
   }
 

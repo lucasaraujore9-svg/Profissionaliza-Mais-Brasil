@@ -2,8 +2,8 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 import { compare, hash } from "bcryptjs"
 import { prisma } from "@/lib/prisma"
-import { requireAdminSession } from "@/lib/auth/admin-session"
 import { withRequestContext } from "@/lib/observability/with-request-context"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 const bodySchema = z
   .object({
@@ -19,10 +19,9 @@ const bodySchema = z
 export const PUT = withRequestContext(
   { action: "admin.me.password.update", route: "/api/admin/me/password" },
   async (request: Request) => {
-  const ctx = await requireAdminSession()
-  if (!ctx) {
-    return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-  }
+  const guard = await requireAdmin("perfil.edit")
+  if (!guard.ok) return guard.response
+  const ctx = guard.ctx
 
   let payload: unknown
   try {

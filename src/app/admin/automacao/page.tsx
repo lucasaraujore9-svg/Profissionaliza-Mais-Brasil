@@ -1,5 +1,4 @@
 import Link from "next/link"
-import { redirect } from "next/navigation"
 import {
   MessageCircle,
   ListChecks,
@@ -7,7 +6,7 @@ import {
   CheckCircle2,
   XCircle,
 } from "lucide-react"
-import { requireAdminSession } from "@/lib/auth/admin-session"
+import { requireAdminPage } from "@/lib/auth/admin-guard"
 import { prisma } from "@/lib/prisma"
 import { PageHeader } from "@/components/painel/page-header"
 
@@ -20,9 +19,7 @@ const WA_STATUS_LABEL: Record<string, { label: string; color: string }> = {
 }
 
 export default async function AdminAutomacaoPage() {
-  const session = await requireAdminSession()
-  if (!session) redirect("/login?callbackUrl=/admin/automacao")
-  if (session.role !== "SUPER_ADMIN") redirect("/admin")
+  await requireAdminPage("automacao.manage")
 
   const settings = await prisma.systemSettings.upsert({
     where: { id: "default" },

@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { requireArtesManager } from "@/lib/auth/guards"
 import { deleteVitrineAsset } from "@/lib/supabase/storage"
 import { rateLimit, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 import { validateUploadedArtObject, withArtUrls } from "@/lib/artes/admin-upload"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 const bodySchema = z.object({
   kind: z.enum(["feed", "story"]),
@@ -18,7 +18,7 @@ const bodySchema = z.object({
 export const POST = withRequestContextParams<{ id: string }>(
   { action: "admin.artes.file", route: "/api/admin/artes/[id]/file" },
   async (request: Request, { params }) => {
-    const guard = await requireArtesManager()
+    const guard = await requireAdmin("artes.manage")
     if (!guard.ok) return guard.response
 
     const rl = await rateLimit(request, RATE_LIMITS.artesUpload)

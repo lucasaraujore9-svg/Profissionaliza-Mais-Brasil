@@ -1,15 +1,27 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { requireSuperAdmin } from "@/lib/auth/guards"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 import { logAudit } from "@/lib/audit"
 import { PMB_TEAM_ROLES, isPmbTeamRole } from "@/lib/auth/roles"
+import {
+  ADMIN_PERMISSIONS,
+  SUPER_EXCLUSIVE,
+  filterAdminPermissions,
+  resolveAdminPermissions,
+} from "@/lib/auth/admin-permissions"
+
+const SUPER_EXCLUSIVE_SET = new Set<string>(SUPER_EXCLUSIVE)
+
+const permissionList = z
+  .array(z.enum(ADMIN_PERMISSIONS))
+  .max(ADMIN_PERMISSIONS.length)
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 export const GET = withRequestContextParams<{ id: string }>(
   { action: "admin.equipe.get", route: "/api/admin/equipe/[id]" },
   async (_req: Request, ctx) => {
-  const guard = await requireSuperAdmin()
+  const guard = await requireAdmin("equipe.manage")
   if (!guard.ok) return guard.response
   const { id } = await ctx.params
 
@@ -29,6 +41,8 @@ export const GET = withRequestContextParams<{ id: string }>(
       salesManagerId: true,
       salesManager: { select: { name: true } },
       maxDiscount: true,
+      extraPermissions: true,
+      revokedPermissions: true,
     },
   })
 
@@ -51,6 +65,15 @@ export const GET = withRequestContextParams<{ id: string }>(
       salesManagerId: user.salesManagerId,
       salesManagerName: user.salesManager?.name ?? null,
       maxDiscount: user.maxDiscount,
+      extraPermissions: filterAdminPermissions(user.extraPermissions),
+      revokedPermissions: filterAdminPermissions(user.revokedPermissions),
+      permissions: [
+        ...resolveAdminPermissions(
+          user.role,
+          user.extraPermissions,
+          user.revokedPermissions,
+        ),
+      ],
     },
   })
   },
@@ -69,12 +92,14 @@ const patchSchema = z.object({
   // Cap individual de desconto (%) nas vendas diretas. Zerado se o papel não
   // for PMB_SALES (normalizado abaixo). null = padrão da role (50).
   maxDiscount: z.number().int().min(0).max(100).nullable().optional(),
+  extraPermissions: permissionList.optional(),
+  revokedPermissions: permissionList.optional(),
 })
 
 export const PATCH = withRequestContextParams<{ id: string }>(
   { action: "admin.equipe.update", route: "/api/admin/equipe/[id]" },
   async (req: Request, ctx) => {
-  const guard = await requireSuperAdmin()
+  const guard = await requireAdmin("equipe.manage")
   if (!guard.ok) return guard.response
   const { id } = await ctx.params
 
@@ -93,7 +118,31 @@ export const PATCH = withRequestContextParams<{ id: string }>(
     )
   }
 
-  const target = await prisma.user.findUnique({ where: { id }, select: { id: true, role: true } })
+  // Barreira de escalada: gerir a equipe continua exclusivo do Super Admin,
+  // mesmo via ajuste individual — é a permissão que permitiria a uma pessoa
+  // ampliar os próprios poderes.
+  const escalating = (parsed.data.extraPermissions ?? []).filter((perm) =>
+    SUPER_EXCLUSIVE_SET.has(perm),
+  )
+  if (escalating.length > 0) {
+    return NextResponse.json(
+      {
+        error: "Estas permissões são exclusivas do Super Admin",
+        fields: { extraPermissions: escalating },
+      },
+      { status: 400 },
+    )
+  }
+
+  const target = await prisma.user.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      role: true,
+      extraPermissions: true,
+      revokedPermissions: true,
+    },
+  })
   if (!target || !isPmbTeamRole(target.role)) {
     return NextResponse.json({ error: "Não encontrado" }, { status: 404 })
   }
@@ -116,6 +165,15 @@ export const PATCH = withRequestContextParams<{ id: string }>(
   // Normaliza o vínculo com gerente de vendas: só vendedor de revenda o tem.
   const data = { ...parsed.data }
   const effectiveRole = data.role ?? target.role
+
+  // Trocar de papel zera os ajustes finos que o chamador não reenviou: os
+  // overrides do papel anterior quase nunca fazem sentido no novo e produziriam
+  // combinações surpreendentes (ex.: um "revoga financeiro" herdado num
+  // Financeiro). A UI já manda as listas vazias; isto cobre outros clientes.
+  if (data.role !== undefined && data.role !== target.role) {
+    data.extraPermissions ??= []
+    data.revokedPermissions ??= []
+  }
 
   // Cap individual de desconto: só vendedor de curso (PMB_SALES) o tem.
   if (effectiveRole !== "PMB_SALES" && (data.role !== undefined || data.maxDiscount !== undefined)) {
@@ -143,7 +201,16 @@ export const PATCH = withRequestContextParams<{ id: string }>(
   const updated = await prisma.user.update({
     where: { id },
     data,
-    select: { id: true, name: true, email: true, role: true, status: true, maxDiscount: true },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      role: true,
+      status: true,
+      maxDiscount: true,
+      extraPermissions: true,
+      revokedPermissions: true,
+    },
   })
 
   // SAAS-001: trilha de auditoria de alteração de papel/status/cap (permissão).
@@ -151,10 +218,20 @@ export const PATCH = withRequestContextParams<{ id: string }>(
     action: "user.role_update",
     resource: "User",
     resourceId: id,
-    actorUserId: guard.session.userId,
-    actorRole: guard.session.role,
-    payloadBefore: { role: target.role },
-    payloadAfter: { role: updated.role, status: updated.status, maxDiscount: updated.maxDiscount },
+    actorUserId: guard.ctx.userId,
+    actorRole: guard.ctx.role,
+    payloadBefore: {
+      role: target.role,
+      extraPermissions: target.extraPermissions,
+      revokedPermissions: target.revokedPermissions,
+    },
+    payloadAfter: {
+      role: updated.role,
+      status: updated.status,
+      maxDiscount: updated.maxDiscount,
+      extraPermissions: updated.extraPermissions,
+      revokedPermissions: updated.revokedPermissions,
+    },
   })
 
   return NextResponse.json({ data: updated })
@@ -164,11 +241,11 @@ export const PATCH = withRequestContextParams<{ id: string }>(
 export const DELETE = withRequestContextParams<{ id: string }>(
   { action: "admin.equipe.delete", route: "/api/admin/equipe/[id]" },
   async (_req: Request, ctx) => {
-  const guard = await requireSuperAdmin()
+  const guard = await requireAdmin("equipe.manage")
   if (!guard.ok) return guard.response
   const { id } = await ctx.params
 
-  if (id === guard.session.userId) {
+  if (id === guard.ctx.userId) {
     return NextResponse.json({ error: "Você não pode se desativar" }, { status: 400 })
   }
 
@@ -193,8 +270,8 @@ export const DELETE = withRequestContextParams<{ id: string }>(
     action: "user.deactivate",
     resource: "User",
     resourceId: id,
-    actorUserId: guard.session.userId,
-    actorRole: guard.session.role,
+    actorUserId: guard.ctx.userId,
+    actorRole: guard.ctx.role,
     payloadBefore: { role: target.role, status: target.status },
     payloadAfter: { status: "INATIVO" },
   })

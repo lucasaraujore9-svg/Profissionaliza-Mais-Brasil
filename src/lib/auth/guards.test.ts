@@ -10,7 +10,7 @@ vi.mock("@/lib/prisma", () => ({
 
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { requireArtesManager, requireResellerSeller } from "./guards"
+import { requireResellerSeller } from "./guards"
 
 const authMock = auth as unknown as ReturnType<typeof vi.fn>
 const userFindFirst = prisma.user.findFirst as unknown as ReturnType<typeof vi.fn>
@@ -25,39 +25,6 @@ beforeEach(() => {
 function session(user: Record<string, unknown> | null) {
   authMock.mockResolvedValue(user ? { user } : null)
 }
-
-describe("requireArtesManager", () => {
-  it("libera SUPER_ADMIN e PMB_DESIGNER", async () => {
-    for (const role of ["SUPER_ADMIN", "PMB_DESIGNER"] as const) {
-      session({ id: "u1", role, tenantId: null })
-      const r = await requireArtesManager()
-      expect(r.ok).toBe(true)
-    }
-  })
-
-  it("nega os demais papéis internos e externos", async () => {
-    for (const role of [
-      "PMB_SALES",
-      "PMB_SALES_MGR",
-      "PMB_REVENDA_SALES",
-      "PMB_RESELLER_MGR",
-      "PMB_FINANCEIRO",
-      "RESELLER",
-      "STUDENT",
-    ] as const) {
-      session({ id: "u1", role, tenantId: null })
-      const r = await requireArtesManager()
-      expect(r.ok).toBe(false)
-      if (!r.ok) expect(r.response.status).toBe(403)
-    }
-  })
-
-  it("nega sem sessão", async () => {
-    session(null)
-    const r = await requireArtesManager()
-    expect(r.ok).toBe(false)
-  })
-})
 
 describe("requireResellerSeller", () => {
   it("nega quem não é RESELLER", async () => {

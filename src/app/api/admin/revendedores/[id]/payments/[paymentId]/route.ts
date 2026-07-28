@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
-import { requireSuperAdmin } from "@/lib/auth/guards"
 import {
   deletePayment,
   updatePayment,
@@ -10,6 +9,7 @@ import {
 import { prisma } from "@/lib/prisma"
 import { swallow } from "@/lib/errors"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
+import { requireAdmin, type AdminContext } from "@/lib/auth/admin-guard"
 
 const patchSchema = z.object({
   dueDate: z
@@ -19,13 +19,47 @@ const patchSchema = z.object({
   value: z.number().positive().max(100000).optional(),
 })
 
+/**
+ * Prova que a cobrança pertence à unidade da URL E que a unidade está no escopo
+ * de quem chamou.
+ *
+ * Sem isto, o handler agia só sobre `paymentId` — e como `deletePayment` bate na
+ * chave Asaas da MÃE, qualquer pessoa com `unidades.billing` cancelava (ou, no
+ * PATCH, reprecificava) a mensalidade de uma unidade fora da carteira dela,
+ * passando um `paymentId` arbitrário. O `tenantId` só entrava no `updateMany`
+ * local, que silenciosamente não casava nada.
+ */
+async function assertPaymentInScope(
+  ctx: AdminContext,
+  tenantId: string,
+  paymentId: string,
+): Promise<Response | null> {
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { accountManagerId: true, salesUserId: true },
+  })
+  if (!(await ctx.canAccessTenant(tenant))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  }
+  const payment = await prisma.tenantPayment.findFirst({
+    where: { asaasPaymentId: paymentId, tenantId },
+    select: { id: true },
+  })
+  if (!payment) {
+    return NextResponse.json({ error: "Cobrança não encontrada" }, { status: 404 })
+  }
+  return null
+}
+
 export const PATCH = withRequestContextParams<{ id: string; paymentId: string }>(
   { action: "admin.revendedores.payments.update", route: "/api/admin/revendedores/[id]/payments/[paymentId]" },
   async (request: Request, ctx) => {
-  const guard = await requireSuperAdmin()
+  const guard = await requireAdmin("unidades.billing")
   if (!guard.ok) return guard.response
 
   const { id: tenantId, paymentId } = await ctx.params
+  const denied = await assertPaymentInScope(guard.ctx, tenantId, paymentId)
+  if (denied) return denied
 
   let body: unknown
   try {
@@ -95,10 +129,12 @@ export const PATCH = withRequestContextParams<{ id: string; paymentId: string }>
 export const DELETE = withRequestContextParams<{ id: string; paymentId: string }>(
   { action: "admin.revendedores.payments.delete", route: "/api/admin/revendedores/[id]/payments/[paymentId]" },
   async (_request: Request, ctx) => {
-  const guard = await requireSuperAdmin()
+  const guard = await requireAdmin("unidades.billing")
   if (!guard.ok) return guard.response
 
   const { id: tenantId, paymentId } = await ctx.params
+  const denied = await assertPaymentInScope(guard.ctx, tenantId, paymentId)
+  if (denied) return denied
 
   try {
     await deletePayment(paymentId)

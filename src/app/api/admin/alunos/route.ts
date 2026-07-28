@@ -2,7 +2,6 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
-import { requirePmbSales } from "@/lib/auth/guards"
 import { getOrCreatePmbTenant } from "@/lib/pmb-tenant"
 import { pmbPlataformaPolo, pmbPlataformaVendedorId } from "@/lib/pmb-config"
 import { ensureStudentOnPlatform } from "@/lib/students/plataforma-actions"
@@ -15,11 +14,12 @@ import {
   deriveStudentDisplayStatus,
   countEnrollmentStatuses,
 } from "@/lib/students/display-status"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 export const GET = withRequestContext(
   { action: "admin.alunos.list", route: "/api/admin/alunos" },
   async (request: Request) => {
-  const guard = await requirePmbSales()
+  const guard = await requireAdmin("alunos.view")
   if (!guard.ok) return guard.response
 
   const pmbTenant = await getOrCreatePmbTenant()
@@ -28,12 +28,12 @@ export const GET = withRequestContext(
   const q = url.searchParams.get("q")?.trim() ?? ""
 
   const whereStudent =
-    guard.session.role === "SUPER_ADMIN"
+    guard.ctx.can("alunos.viewAll")
       ? { tenantId: pmbTenant.id }
       : {
           tenantId: pmbTenant.id,
           enrollments: {
-            some: { tenantId: null, soldByUserId: guard.session.userId },
+            some: { tenantId: null, soldByUserId: guard.ctx.userId },
           },
         }
 
@@ -90,7 +90,7 @@ const createSchema = z.object({
 export const POST = withRequestContext(
   { action: "admin.alunos.create", route: "/api/admin/alunos" },
   async (request: Request) => {
-  const guard = await requirePmbSales()
+  const guard = await requireAdmin("alunos.manage")
   if (!guard.ok) return guard.response
 
   let payload: unknown

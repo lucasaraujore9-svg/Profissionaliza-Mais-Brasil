@@ -13,7 +13,7 @@ vi.mock("@/lib/prisma", () => ({
     tenant: { findUnique: vi.fn() },
   },
 }))
-vi.mock("@/lib/auth/admin-session", () => ({ requireAdminSession: vi.fn() }))
+vi.mock("@/lib/auth/admin-guard", () => ({ requireAdmin: vi.fn() }))
 // Rotas de /painel resolvem papel + permissoes via painelContext (consulta
 // prisma.user/tenantMember). Mockamos o guard e usamos um contexto coerente
 // derivado dos presets reais — ver src/test/painel-ctx.ts.
@@ -21,7 +21,8 @@ vi.mock("@/lib/auth/painel-guard", () => ({ requirePainel: vi.fn() }))
 
 import { logAudit } from "@/lib/audit"
 import { prisma } from "@/lib/prisma"
-import { requireAdminSession } from "@/lib/auth/admin-session"
+import { requireAdmin } from "@/lib/auth/admin-guard"
+import { adminGuardFor } from "@/test/admin-ctx"
 import { requirePainel } from "@/lib/auth/painel-guard"
 import { painelGuardOk } from "@/test/painel-ctx"
 
@@ -38,7 +39,7 @@ const p = prisma as unknown as {
   referralPayout: { findMany: ReturnType<typeof vi.fn> }
   tenant: { findUnique: ReturnType<typeof vi.fn> }
 }
-const adminSession = requireAdminSession as unknown as ReturnType<typeof vi.fn>
+const guardMock = requireAdmin as unknown as ReturnType<typeof vi.fn>
 const resellerSession = requirePainel as unknown as ReturnType<typeof vi.fn>
 
 const req = (url: string) => new Request(url)
@@ -46,7 +47,7 @@ const params = (id: string) => ({ params: Promise.resolve({ id }) })
 
 beforeEach(() => {
   vi.clearAllMocks()
-  adminSession.mockResolvedValue({ userId: "u1", role: "SUPER_ADMIN" })
+  guardMock.mockImplementation(adminGuardFor({ role: "SUPER_ADMIN" }).requireAdmin)
   resellerSession.mockResolvedValue(painelGuardOk({ userId: "u2" }))
   p.payment.findMany.mockResolvedValue([])
   p.referralCommission.findMany.mockResolvedValue([])

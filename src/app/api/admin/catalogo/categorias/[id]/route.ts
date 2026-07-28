@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { requireSuperAdmin } from "@/lib/auth/guards"
 import { slugifyCategoria } from "@/lib/catalog/home"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 import { contextLogger } from "@/lib/logger"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 const updateSchema = z
   .object({
@@ -21,7 +21,7 @@ const updateSchema = z
 export const PATCH = withRequestContextParams<{ id: string }>(
   { action: "admin.catalogo.categorias.update", route: "/api/admin/catalogo/categorias/[id]" },
   async (request: Request, ctx) => {
-  const guard = await requireSuperAdmin()
+  const guard = await requireAdmin("catalogo.manage")
   if (!guard.ok) return guard.response
 
   const { id } = await ctx.params
@@ -103,7 +103,7 @@ export const PATCH = withRequestContextParams<{ id: string }>(
 export const DELETE = withRequestContextParams<{ id: string }>(
   { action: "admin.catalogo.categorias.delete", route: "/api/admin/catalogo/categorias/[id]" },
   async (_request: Request, ctx) => {
-  const guard = await requireSuperAdmin()
+  const guard = await requireAdmin("catalogo.manage")
   if (!guard.ok) return guard.response
 
   const { id } = await ctx.params

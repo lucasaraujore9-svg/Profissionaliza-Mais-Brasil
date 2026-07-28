@@ -1,5 +1,6 @@
 import Link from "next/link"
 import { ArrowLeft } from "lucide-react"
+import { requireAdminPage } from "@/lib/auth/admin-guard"
 import { ReportViewer } from "@/components/admin/report-viewer"
 
 // Viewer de exportação CSV (antes em `relatorios/[type]`). Realocado para
@@ -11,6 +12,8 @@ export default async function ReportViewerPage({
   params: Promise<{ type: string }>
   searchParams: Promise<{ from?: string; to?: string }>
 }) {
+  await requireAdminPage("relatorios.export")
+
   const { type } = await params
   const { from, to } = await searchParams
 

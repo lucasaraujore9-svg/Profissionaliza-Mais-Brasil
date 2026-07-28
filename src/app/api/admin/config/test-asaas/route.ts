@@ -1,15 +1,13 @@
 import { NextResponse } from "next/server"
-import { requireAdminSession } from "@/lib/auth/admin-session"
 import { AsaasApiError } from "@/lib/asaas/client"
 import { withRequestContext } from "@/lib/observability/with-request-context"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 export const POST = withRequestContext(
   { action: "admin.config.test_asaas", route: "/api/admin/config/test-asaas" },
   async () => {
-  const ctx = await requireAdminSession()
-  if (!ctx) {
-    return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-  }
+  const guard = await requireAdmin("integracoes.manage")
+  if (!guard.ok) return guard.response
 
   const apiUrl = process.env.ASAAS_API_URL
   const apiKey = process.env.ASAAS_API_KEY

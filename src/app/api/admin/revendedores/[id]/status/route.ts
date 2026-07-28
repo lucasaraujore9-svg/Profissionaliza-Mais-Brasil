@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { requireAdminSession } from "@/lib/auth/admin-session"
 import { invalidateTenant } from "@/lib/redis/tenant-cache"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 import { logAudit } from "@/lib/audit"
 import { blockTenantStudents, unblockTenantStudents } from "@/lib/auto-block"
 import { contextLogger } from "@/lib/logger"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 const schema = z.object({
   status: z.enum(["ACTIVE", "SUSPENDED", "PENDING", "CANCELLED"]),
@@ -15,10 +15,9 @@ const schema = z.object({
 export const PATCH = withRequestContextParams<{ id: string }>(
   { action: "admin.revendedores.status.update", route: "/api/admin/revendedores/[id]/status" },
   async (request: Request, { params }) => {
-  const ctx = await requireAdminSession()
-  if (!ctx) {
-    return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-  }
+  const guard = await requireAdmin("unidades.manage")
+  if (!guard.ok) return guard.response
+  const ctx = guard.ctx
 
   const { id } = await params
 
@@ -39,19 +38,15 @@ export const PATCH = withRequestContextParams<{ id: string }>(
 
   const tenant = await prisma.tenant.findUnique({
     where: { id },
-    select: { id: true, slug: true, customDomain: true, accountManagerId: true, status: true },
+    select: { id: true, slug: true, customDomain: true, accountManagerId: true, salesUserId: true, status: true },
   })
 
   if (!tenant) {
     return NextResponse.json({ error: "Revendedor não encontrado" }, { status: 404 })
   }
 
-  // Escopo de autorização: SUPER_ADMIN gerencia todos; PMB_RESELLER_MGR só os
-  // revendedores que gerencia (accountManagerId); PMB_SALES não muda status.
-  if (
-    ctx.role !== "SUPER_ADMIN" &&
-    !(ctx.role === "PMB_RESELLER_MGR" && tenant.accountManagerId === ctx.userId)
-  ) {
+  // Quem não vê a rede inteira só alcança a própria carteira.
+  if (!(await ctx.canAccessTenant(tenant))) {
     return NextResponse.json({ error: "Sem permissão para este revendedor" }, { status: 403 })
   }
 

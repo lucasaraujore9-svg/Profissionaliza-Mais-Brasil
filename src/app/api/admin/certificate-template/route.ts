@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { requireSuperAdmin } from "@/lib/auth/guards"
 import { withRequestContext } from "@/lib/observability/with-request-context"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 const layoutEnum = z.enum(["CLASSIC", "MODERN", "MINIMAL"])
 
@@ -33,7 +33,7 @@ const upsertSchema = z.object({
 export const GET = withRequestContext(
   { action: "admin.certificate_template.get", route: "/api/admin/certificate-template" },
   async () => {
-  const guard = await requireSuperAdmin()
+  const guard = await requireAdmin("certificados.template")
   if (!guard.ok) return guard.response
 
   const template = await prisma.certificateTemplate.findFirst({
@@ -70,7 +70,7 @@ export const GET = withRequestContext(
 export const PUT = withRequestContext(
   { action: "admin.certificate_template.upsert", route: "/api/admin/certificate-template" },
   async (request: Request) => {
-  const guard = await requireSuperAdmin()
+  const guard = await requireAdmin("certificados.template")
   if (!guard.ok) return guard.response
 
   let payload: unknown

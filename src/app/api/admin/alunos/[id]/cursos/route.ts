@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { requireAdminSession } from "@/lib/auth/admin-session"
 import { getOrCreatePmbTenant } from "@/lib/pmb-tenant"
 import {
   linkCourseToStudent,
@@ -14,6 +13,7 @@ import {
 } from "@/lib/plataforma-cursos/errors"
 import { createNotification } from "@/lib/notifications"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 const linkSchema = z.object({
   courseId: z.string().cuid(),
@@ -32,10 +32,8 @@ async function assertPmbStudent(
 export const GET = withRequestContextParams<{ id: string }>(
   { action: "admin.alunos.cursos.list", route: "/api/admin/alunos/[id]/cursos" },
   async (_request: Request, ctx) => {
-  const session = await requireAdminSession()
-  if (!session) {
-    return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-  }
+  const guard = await requireAdmin("alunosRede.view")
+  if (!guard.ok) return guard.response
   const { id } = await ctx.params
 
   const pmbStudent = await assertPmbStudent(id)
@@ -77,17 +75,8 @@ export const GET = withRequestContextParams<{ id: string }>(
 export const POST = withRequestContextParams<{ id: string }>(
   { action: "admin.alunos.cursos.link", route: "/api/admin/alunos/[id]/cursos" },
   async (request: Request, ctx) => {
-  const session = await requireAdminSession()
-  if (!session) {
-    return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-  }
-  if (session.role !== "SUPER_ADMIN") {
-    return NextResponse.json(
-      { error: "Apenas SUPER_ADMIN pode vincular cursos manualmente" },
-      { status: 403 },
-    )
-  }
-
+  const guard = await requireAdmin("alunosRede.acesso")
+  if (!guard.ok) return guard.response
   const { id: studentId } = await ctx.params
 
   let payload: unknown
@@ -167,17 +156,8 @@ export const POST = withRequestContextParams<{ id: string }>(
 export const DELETE = withRequestContextParams<{ id: string }>(
   { action: "admin.alunos.cursos.unlink", route: "/api/admin/alunos/[id]/cursos" },
   async (request: Request, ctx) => {
-  const session = await requireAdminSession()
-  if (!session) {
-    return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-  }
-  if (session.role !== "SUPER_ADMIN") {
-    return NextResponse.json(
-      { error: "Apenas SUPER_ADMIN pode desvincular cursos" },
-      { status: 403 },
-    )
-  }
-
+  const guard = await requireAdmin("alunosRede.acesso")
+  if (!guard.ok) return guard.response
   const { id: studentId } = await ctx.params
   const url = new URL(request.url)
   const courseId = url.searchParams.get("courseId")

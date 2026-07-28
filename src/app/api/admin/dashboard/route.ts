@@ -1,13 +1,11 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import type { LeadStatus, TenantStatus } from "@prisma/client"
-import { requireAdminSession } from "@/lib/auth/admin-session"
 import {
-  tenantScopeWhere,
-  leadScopeWhere,
   salesTeamIds,
 } from "@/lib/auth/scope"
 import { withRequestContext } from "@/lib/observability/with-request-context"
+import { requireAdmin, type AdminContext } from "@/lib/auth/admin-guard"
 
 const FEE_RATE = 0.089 // 8.9% taxas médias Asaas+MP para cálculo de líquido aproximado
 
@@ -43,10 +41,9 @@ interface ScopedLead {
 export const GET = withRequestContext(
   { action: "admin.dashboard.get", route: "/api/admin/dashboard" },
   async (request: Request) => {
-    const session = await requireAdminSession()
-    if (!session) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
+    const guard = await requireAdmin("dashboard.view")
+    if (!guard.ok) return guard.response
+    const session = guard.ctx
 
     const { searchParams } = new URL(request.url)
     const periodRaw = searchParams.get("period") ?? "30d"
@@ -59,37 +56,37 @@ export const GET = withRequestContext(
     else if (period === "90d") periodStart.setDate(now.getDate() - 90)
     else periodStart.setMonth(now.getMonth() - 12)
 
-    // SUPER_ADMIN mantém o dashboard completo do ecossistema. Os demais papéis
-    // recebem um painel com escopo (apenas as unidades/leads/vendas deles).
-    if (session.role === "SUPER_ADMIN") {
+    // Qual painel montar segue as PERMISSÕES resolvidas, não o papel cru — se
+    // o super admin revoga `unidades.view` de alguém, o dado precisa sumir da
+    // home junto com o item de menu, não continuar saindo por aqui.
+    if (session.can("unidades.viewAll")) {
       return NextResponse.json({
         data: await buildAdminDashboard(period, periodStart, now),
       })
     }
 
-    if (
-      session.role === "PMB_REVENDA_SALES" ||
-      session.role === "PMB_SALES_MGR"
-    ) {
+    // Funil B2B (unidades + leads de revenda) para quem trabalha os dois.
+    if (session.can("unidades.view") && session.can("leadsRevenda.view")) {
       return NextResponse.json({
         data: await buildRevendaDashboard(session, periodStart),
       })
     }
 
-    if (session.role === "PMB_RESELLER_MGR") {
+    // Só a carteira de unidades, sem funil.
+    if (session.can("unidades.view")) {
       return NextResponse.json({
         data: await buildSuporteDashboard(session),
       })
     }
 
-    if (session.role === "PMB_SALES") {
+    if (session.can("vendas.view")) {
       return NextResponse.json({
         data: await buildVendasDashboard(session.userId, periodStart),
       })
     }
 
-    // Papel autenticado no time PMB mas sem dashboard próprio: payload vazio
-    // (o client mostra um estado neutro em vez de erro).
+    // Sem nenhuma área com dashboard próprio: payload vazio (o client mostra um
+    // estado neutro em vez de erro).
     return NextResponse.json({ data: { variant: "empty" as const } })
   },
 )
@@ -225,13 +222,10 @@ async function buildAdminDashboard(
 // vendas (PMB_SALES_MGR). Escopo: suas unidades + seus leads (ou do time).
 // ---------------------------------------------------------------------------
 
-async function buildRevendaDashboard(
-  session: { userId: string; role: string },
-  periodStart: Date,
-) {
+async function buildRevendaDashboard(session: AdminContext, periodStart: Date) {
   const isManager = session.role === "PMB_SALES_MGR"
-  const tWhere = (await tenantScopeWhere(session)) ?? { id: "__none__" }
-  const lWhere = (await leadScopeWhere(session)) ?? { id: "__none__" }
+  const tWhere = (await session.unidadesWhere()) ?? { id: "__none__" }
+  const lWhere = (await session.leadsRevendaWhere()) ?? { id: "__none__" }
   const openLead = { in: ["NEW", "CONTACTED"] as LeadStatus[] }
 
   const [
@@ -338,11 +332,8 @@ async function buildRevendaDashboard(
 // Gerente de suporte (PMB_RESELLER_MGR) — unidades onde é account manager.
 // ---------------------------------------------------------------------------
 
-async function buildSuporteDashboard(session: {
-  userId: string
-  role: string
-}) {
-  const tWhere = (await tenantScopeWhere(session)) ?? { id: "__none__" }
+async function buildSuporteDashboard(session: AdminContext) {
+  const tWhere = (await session.unidadesWhere()) ?? { id: "__none__" }
 
   const [activeUnits, pendingUnits, suspendedUnits, total, unitsRaw] =
     await Promise.all([

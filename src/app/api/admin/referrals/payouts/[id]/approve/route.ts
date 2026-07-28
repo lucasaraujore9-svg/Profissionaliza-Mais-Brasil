@@ -2,10 +2,10 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
-import { requireAdminSession } from "@/lib/auth/admin-session"
 import { markPayoutPaid } from "@/lib/referrals/payout"
 import { contextLogger } from "@/lib/logger"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 const bodySchema = z.object({
   asaasTransferId: z.string().min(1).max(80).optional().nullable(),
@@ -14,17 +14,9 @@ const bodySchema = z.object({
 export const POST = withRequestContextParams<{ id: string }>(
   { action: "admin.referrals.payouts.approve", route: "/api/admin/referrals/payouts/[id]/approve" },
   async (request: Request, context) => {
-  const session = await requireAdminSession()
-  if (!session) {
-    return NextResponse.json({ error: "Nao autenticado" }, { status: 401 })
-  }
-  if (
-    session.role !== "SUPER_ADMIN" &&
-    session.role !== "PMB_RESELLER_MGR"
-  ) {
-    return NextResponse.json({ error: "Sem permissao" }, { status: 403 })
-  }
-
+  const guard = await requireAdmin("indicacoes.saques")
+  if (!guard.ok) return guard.response
+  const session = guard.ctx
   const { id } = await context.params
 
   let payload: unknown
@@ -59,13 +51,19 @@ export const POST = withRequestContextParams<{ id: string }>(
     )
   }
 
-  // PMB_RESELLER_MGR só pode aprovar payouts de tenants atribuídos a ele.
-  if (session.role === "PMB_RESELLER_MGR") {
-    const tenant = await prisma.tenant.findUnique({
-      where: { id: payout.referrerTenantId },
-      select: { accountManagerId: true },
+  // Recorte da carteira: quem não tem visão financeira do ecossistema só
+  // decide sobre saques das unidades que enxerga — no formato do próprio papel
+  // (accountManagerId, salesUserId ou time), não só accountManagerId.
+  const scope = await session.comissoesScope()
+  if (!scope) {
+    return NextResponse.json({ error: "Sem permissao" }, { status: 403 })
+  }
+  if (Object.keys(scope).length > 0) {
+    const tenant = await prisma.tenant.findFirst({
+      where: { id: payout.referrerTenantId, ...scope },
+      select: { id: true },
     })
-    if (tenant?.accountManagerId !== session.userId) {
+    if (!tenant) {
       return NextResponse.json({ error: "Sem permissao" }, { status: 403 })
     }
   }

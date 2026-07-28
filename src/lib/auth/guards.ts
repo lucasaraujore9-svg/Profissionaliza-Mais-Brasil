@@ -2,21 +2,17 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import type { UserRole } from "@prisma/client"
 
+/**
+ * Guards de sessão da REVENDA (/painel). Os guards da equipe interna PMB saíram
+ * daqui: o admin passou a resolver permissão por request em
+ * `lib/auth/admin-guard.ts`, sobre o catálogo de `lib/auth/admin-permissions.ts`.
+ */
+
 export interface AuthedSession {
   userId: string
   role: UserRole
   tenantId: string | null
 }
-
-const PMB_TEAM: UserRole[] = [
-  "SUPER_ADMIN",
-  "PMB_SALES",
-  "PMB_SALES_MGR",
-  "PMB_REVENDA_SALES",
-  "PMB_RESELLER_MGR",
-  "PMB_FINANCEIRO",
-  "PMB_DESIGNER",
-]
 
 async function currentSession(): Promise<AuthedSession | null> {
   const session = await auth()
@@ -34,57 +30,6 @@ function deny(): Response {
     status: 403,
     headers: { "content-type": "application/json" },
   })
-}
-
-export async function requireSuperAdmin(): Promise<
-  { ok: true; session: AuthedSession } | { ok: false; response: Response }
-> {
-  const session = await currentSession()
-  if (!session || session.role !== "SUPER_ADMIN") return { ok: false, response: deny() }
-  return { ok: true, session }
-}
-
-export async function requirePmbTeam(): Promise<
-  { ok: true; session: AuthedSession } | { ok: false; response: Response }
-> {
-  const session = await currentSession()
-  if (!session || !PMB_TEAM.includes(session.role)) return { ok: false, response: deny() }
-  return { ok: true, session }
-}
-
-/**
- * Gestor do banco de artes de divulgação: SUPER_ADMIN ou PMB_DESIGNER.
- * O designer só tem esta área — as demais rotas admin continuam fechadas
- * para ele (nenhum outro guard o aceita além do requirePmbTeam genérico).
- */
-export async function requireArtesManager(): Promise<
-  { ok: true; session: AuthedSession } | { ok: false; response: Response }
-> {
-  const session = await currentSession()
-  if (!session || (session.role !== "PMB_DESIGNER" && session.role !== "SUPER_ADMIN")) {
-    return { ok: false, response: deny() }
-  }
-  return { ok: true, session }
-}
-
-export async function requirePmbSales(): Promise<
-  { ok: true; session: AuthedSession } | { ok: false; response: Response }
-> {
-  const session = await currentSession()
-  if (!session || (session.role !== "PMB_SALES" && session.role !== "SUPER_ADMIN")) {
-    return { ok: false, response: deny() }
-  }
-  return { ok: true, session }
-}
-
-export async function requirePmbResellerMgr(): Promise<
-  { ok: true; session: AuthedSession } | { ok: false; response: Response }
-> {
-  const session = await currentSession()
-  if (!session || (session.role !== "PMB_RESELLER_MGR" && session.role !== "SUPER_ADMIN")) {
-    return { ok: false, response: deny() }
-  }
-  return { ok: true, session }
 }
 
 export async function requireResellerOwner(

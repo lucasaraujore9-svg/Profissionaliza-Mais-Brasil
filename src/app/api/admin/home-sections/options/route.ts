@@ -1,6 +1,6 @@
-import { requireSuperAdmin } from "@/lib/auth/guards"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { getHomeSectionsOptions } from "@/lib/home/options"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 export const GET = withRequestContext(
   {
@@ -8,7 +8,7 @@ export const GET = withRequestContext(
     route: "/api/admin/home-sections/options",
   },
   async () => {
-    const guard = await requireSuperAdmin()
+    const guard = await requireAdmin("vitrine.manage")
     if (!guard.ok) return guard.response
     return getHomeSectionsOptions()
   },

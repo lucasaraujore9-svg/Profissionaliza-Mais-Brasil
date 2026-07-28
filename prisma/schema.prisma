@@ -140,6 +140,14 @@ model User {
   // Definido pelo SUPER_ADMIN em /admin/equipe. Ver src/lib/coupons/sales-cap.ts
   maxDiscount Int? @map("max_discount")
 
+  // Ajustes finos por pessoa sobre o preset do papel (equipe interna PMB).
+  // Permissoes fora do catalogo sao ignoradas na resolucao; SUPER_EXCLUSIVE
+  // nunca e concedida por extraPermissions. Fonte da verdade dos presets:
+  // src/lib/auth/admin-permissions.ts. Nao se aplica a RESELLER/STUDENT — o
+  // ajuste fino do membro de unidade vive em TenantMember.
+  extraPermissions   String[] @default([]) @map("extra_permissions")
+  revokedPermissions String[] @default([]) @map("revoked_permissions")
+
   // Relacao: se for RESELLER, qual tenant e dono
   tenantId String? @unique @map("tenant_id")
   tenant   Tenant? @relation("TenantOwner", fields: [tenantId], references: [id])

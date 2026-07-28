@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { requireSuperAdmin } from "@/lib/auth/guards"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { ensureUniquePackageSlug } from "@/lib/packages/slug"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 /* ------------------------------------------------------------------ */
 /* GET — lista os pacotes da PMB (tenant_id = null)                    */
@@ -11,7 +11,7 @@ import { ensureUniquePackageSlug } from "@/lib/packages/slug"
 export const GET = withRequestContext(
   { action: "admin.pacotes.list", route: "/api/admin/pacotes" },
   async () => {
-    const guard = await requireSuperAdmin()
+    const guard = await requireAdmin("pacotes.manage")
     if (!guard.ok) return guard.response
 
     const packages = await prisma.coursePackage.findMany({
@@ -61,7 +61,7 @@ const createSchema = z.object({
 export const POST = withRequestContext(
   { action: "admin.pacotes.create", route: "/api/admin/pacotes" },
   async (request: Request) => {
-    const guard = await requireSuperAdmin()
+    const guard = await requireAdmin("pacotes.manage")
     if (!guard.ok) return guard.response
 
     let payload: unknown
@@ -108,8 +108,8 @@ export const POST = withRequestContext(
         featured: data.featured ?? false,
         enabled: data.enabled ?? true,
         position: data.position ?? 0,
-        createdByUserId: guard.session.userId,
-        createdByRole: guard.session.role,
+        createdByUserId: guard.ctx.userId,
+        createdByRole: guard.ctx.role,
         items: {
           create: courseIds.map((courseId, i) => ({ courseId, order: i })),
         },

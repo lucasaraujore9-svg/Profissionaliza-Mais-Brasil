@@ -1,24 +1,16 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { requireAdminSession } from "@/lib/auth/admin-session"
 import { blockStudentInEA } from "@/lib/students/plataforma-actions"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 import { logAudit } from "@/lib/audit"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 export const POST = withRequestContextParams<{ id: string }>(
   { action: "admin.alunos.block", route: "/api/admin/alunos/[id]/bloquear" },
   async (_request: Request, { params }) => {
-  const session = await requireAdminSession()
-  if (!session) {
-    return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-  }
-  if (session.role !== "SUPER_ADMIN") {
-    return NextResponse.json(
-      { error: "Apenas SUPER_ADMIN pode bloquear alunos" },
-      { status: 403 },
-    )
-  }
-
+  const guard = await requireAdmin("alunosRede.acesso")
+  if (!guard.ok) return guard.response
+  const session = guard.ctx
   const { id } = await params
   const student = await prisma.student.findUnique({
     where: { id },

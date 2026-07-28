@@ -2,9 +2,9 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
-import { requireSuperAdmin } from "@/lib/auth/guards"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 import { extractYoutubeId } from "@/lib/training/youtube"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 const updateSchema = z
   .object({
@@ -20,7 +20,7 @@ const updateSchema = z
 export const PATCH = withRequestContextParams<{ id: string }>(
   { action: "admin.treinamentos.videos.update", route: "/api/admin/treinamentos/videos/[id]" },
   async (request: Request, { params }) => {
-    const guard = await requireSuperAdmin()
+    const guard = await requireAdmin("treinamentos.manage")
     if (!guard.ok) return guard.response
 
     const { id } = await params
@@ -78,7 +78,7 @@ export const PATCH = withRequestContextParams<{ id: string }>(
 export const DELETE = withRequestContextParams<{ id: string }>(
   { action: "admin.treinamentos.videos.delete", route: "/api/admin/treinamentos/videos/[id]" },
   async (_request: Request, { params }) => {
-    const guard = await requireSuperAdmin()
+    const guard = await requireAdmin("treinamentos.manage")
     if (!guard.ok) return guard.response
 
     const { id } = await params

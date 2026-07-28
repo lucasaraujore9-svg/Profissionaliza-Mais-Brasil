@@ -1,5 +1,4 @@
 import { prisma } from "@/lib/prisma"
-import type { Prisma } from "@prisma/client"
 import type { KpiDatum, ReportSeries, ReportTable } from "../types"
 import { buildPayload, type BiContext, type BiModule } from "./context"
 
@@ -13,12 +12,14 @@ const STATUS_LABELS: Record<string, string> = {
 export const indicacoesComissoesModule: BiModule = {
   async run(ctx: BiContext) {
     const { period, session } = ctx
-    // PMB_RESELLER_MGR só enxerga comissões de revendas que ele gerencia.
-    const referrerFilter: Prisma.TenantWhereInput | undefined =
-      session.role === "PMB_RESELLER_MGR"
-        ? { accountManagerId: session.userId }
-        : undefined
-    const scope = referrerFilter ? { referrer: referrerFilter } : {}
+    // Recorte do dinheiro: sem visão financeira do ecossistema, só as unidades
+    // da própria carteira — no formato do papel (accountManagerId, salesUserId
+    // ou time), resolvido pelo guard e não re-derivado aqui.
+    const referrerFilter = await session.comissoesScope()
+    const scope =
+      referrerFilter && Object.keys(referrerFilter).length > 0
+        ? { referrer: referrerFilter }
+        : {}
     const range = { gte: period.start, lt: period.end }
 
     const [

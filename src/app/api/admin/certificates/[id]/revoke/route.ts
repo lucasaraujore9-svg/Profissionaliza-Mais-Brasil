@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { requireAdminSession } from "@/lib/auth/admin-session"
 import { revokeCertificate } from "@/lib/certificates"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 const schema = z.object({
   reason: z.string().trim().min(3, "Justificativa muito curta").max(500),
@@ -12,10 +12,9 @@ const schema = z.object({
 export const POST = withRequestContextParams<{ id: string }>(
   { action: "admin.certificates.revoke", route: "/api/admin/certificates/[id]/revoke" },
   async (request: Request, { params }) => {
-  const ctx = await requireAdminSession()
-  if (!ctx) {
-    return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-  }
+  const guard = await requireAdmin("certificados.manage")
+  if (!guard.ok) return guard.response
+  const ctx = guard.ctx
 
   const { id } = await params
 
@@ -45,11 +44,11 @@ export const POST = withRequestContextParams<{ id: string }>(
     return NextResponse.json({ error: "Certificado já está revogado" }, { status: 409 })
   }
 
-  // R24: PMB staff (PMB_SALES, PMB_RESELLER_MGR) só podem revogar certificados PMB
-  // (tenantId = null). Certificados de revendedores (tenantId != null) exigem SUPER_ADMIN.
-  if (cert.tenantId !== null && ctx.role !== "SUPER_ADMIN") {
+  // R24: quem não enxerga a rede inteira só revoga certificado da vitrine PMB
+  // (tenantId = null) — nunca o de um aluno de revendedor.
+  if (cert.tenantId !== null && !ctx.can("unidades.viewAll")) {
     return NextResponse.json(
-      { error: "Apenas SUPER_ADMIN pode revogar certificados de revendedores" },
+      { error: "Sem permissão para revogar certificados de revendedores" },
       { status: 403 },
     )
   }

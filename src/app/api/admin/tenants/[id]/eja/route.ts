@@ -2,10 +2,10 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
-import { requireAdminSession } from "@/lib/auth/admin-session"
 import { invalidateTenant } from "@/lib/redis/tenant-cache"
 import { setEjaSectionEnabled } from "@/lib/home/sections"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 // Link da página de EJA de um revendedor. A imagem do banner é padronizada pela
 // PMB; aqui a unidade define apenas o link de destino, o rótulo e o flag.
@@ -31,18 +31,10 @@ export const PUT = withRequestContextParams<{ id: string }>(
     route: "/api/admin/tenants/[id]/eja",
   },
   async (request: Request, context) => {
-    const session = await requireAdminSession()
-    if (!session) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
+    const guard = await requireAdmin("unidades.manage")
+    if (!guard.ok) return guard.response
+    const session = guard.ctx
     // Apenas SUPER_ADMIN e PMB_RESELLER_MGR (do tenant) podem alterar.
-    if (
-      session.role !== "SUPER_ADMIN" &&
-      session.role !== "PMB_RESELLER_MGR"
-    ) {
-      return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
-    }
-
     const { id } = await context.params
 
     let payload: unknown
@@ -69,6 +61,7 @@ export const PUT = withRequestContextParams<{ id: string }>(
         slug: true,
         customDomain: true,
         accountManagerId: true,
+        salesUserId: true,
       },
     })
     if (!tenant) {
@@ -79,10 +72,7 @@ export const PUT = withRequestContextParams<{ id: string }>(
     }
 
     // PMB_RESELLER_MGR só pode editar tenants sob sua gestão.
-    if (
-      session.role === "PMB_RESELLER_MGR" &&
-      tenant.accountManagerId !== session.userId
-    ) {
+    if (!(await session.canAccessTenant(tenant))) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 

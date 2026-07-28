@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { requireAdminSession } from "@/lib/auth/admin-session"
 import {
   arrayToCsv,
   csvFilename,
@@ -14,6 +13,7 @@ import {
   parseLinesSnapshot,
   type MonthlyCommissionLine,
 } from "@/lib/referrals/lines-snapshot"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 export const dynamic = "force-dynamic"
 
@@ -72,10 +72,9 @@ function percentCell(line: MonthlyCommissionLine): number | string {
 export const GET = withRequestContextParams<{ id: string }>(
   { action: "admin.revendedores.comissoes.export", route: "/api/admin/revendedores/[id]/comissoes/export" },
   async (_req: Request, ctx) => {
-  const session = await requireAdminSession()
-  if (!session) {
-    return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-  }
+  const guard = await requireAdmin("unidades.comissoes")
+  if (!guard.ok) return guard.response
+  const session = guard.ctx
 
   const { id } = await ctx.params
 
@@ -86,6 +85,7 @@ export const GET = withRequestContextParams<{ id: string }>(
       name: true,
       slug: true,
       accountManagerId: true,
+      salesUserId: true,
       referrerTenantId: true,
     },
   })
@@ -93,14 +93,10 @@ export const GET = withRequestContextParams<{ id: string }>(
     return NextResponse.json({ error: "Revendedor não encontrado" }, { status: 404 })
   }
 
-  // Mesmo escopo do irmao comissoes/demonstrativo: PMB_RESELLER_MGR so acessa
-  // tenants atribuidos; PMB_SALES nao tem acesso a financeiro de revenda. Sem
-  // isto, qualquer membro PMB baixaria o CSV de comissoes (valores/percentuais)
-  // de qualquer revendedor por id.
-  const allowed =
-    session.role === "SUPER_ADMIN" ||
-    (session.role === "PMB_RESELLER_MGR" &&
-      tenant.accountManagerId === session.userId)
+  // Mesmo escopo do irmao comissoes/demonstrativo: `unidades.comissoes` ja
+  // decidiu QUEM baixa o CSV; aqui fica o recorte de QUAIS unidades — sem ele,
+  // quem tem a permissao baixaria comissoes de qualquer revendedor por id.
+  const allowed = await session.canAccessTenant(tenant)
   if (!allowed) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }

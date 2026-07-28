@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { requireSuperAdmin } from "@/lib/auth/guards"
 import { deleteVitrineAsset, extractAssetPath } from "@/lib/supabase/storage"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 const patchSchema = z.object({
   order: z.number().int().min(0).max(99).optional(),
@@ -17,7 +17,7 @@ export const PATCH = withRequestContextParams<{ id: string }>(
     request: Request,
     { params }: { params: Promise<{ id: string }> },
   ) => {
-    const guard = await requireSuperAdmin()
+    const guard = await requireAdmin("vitrine.manage")
     if (!guard.ok) return guard.response
 
     const { id } = await params
@@ -56,7 +56,7 @@ export const DELETE = withRequestContextParams<{ id: string }>(
     _request: Request,
     { params }: { params: Promise<{ id: string }> },
   ) => {
-    const guard = await requireSuperAdmin()
+    const guard = await requireAdmin("vitrine.manage")
     if (!guard.ok) return guard.response
 
     const { id } = await params

@@ -1,6 +1,5 @@
 import { prisma } from "@/lib/prisma"
 import type { Prisma } from "@prisma/client"
-import { leadScopeWhere } from "@/lib/auth/scope"
 import type { KpiDatum, ReportSeries, ReportTable } from "../types"
 import { buildPayload, type BiContext, type BiModule } from "./context"
 
@@ -14,7 +13,7 @@ const STATUS_LABELS: Record<string, string> = {
 export const leadsConversaoModule: BiModule = {
   async run(ctx: BiContext) {
     const { period, session } = ctx
-    const scope = await leadScopeWhere({ userId: session.userId, role: session.role })
+    const scope = await session.leadsRevendaWhere()
     if (!scope) return buildPayload(period, {})
 
     const range = { gte: period.start, lt: period.end }

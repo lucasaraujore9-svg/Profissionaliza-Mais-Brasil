@@ -99,20 +99,3 @@ export async function leadScopeWhere(
       return null
   }
 }
-
-/** Pode trabalhar (mover/converter) leads de revenda B2B. */
-export function canHandleRevendaLeads(role: UserRole | string): boolean {
-  return (
-    role === "SUPER_ADMIN" ||
-    role === "PMB_SALES_MGR" ||
-    role === "PMB_REVENDA_SALES"
-  )
-}
-
-/**
- * Pode converter um lead em unidade. Alem dos papeis comerciais, o dono do lead
- * e seu gerente. A checagem fina (dono/time) e feita por leadScopeWhere na rota.
- */
-export function canConvertRevendaLeads(role: UserRole | string): boolean {
-  return canHandleRevendaLeads(role)
-}

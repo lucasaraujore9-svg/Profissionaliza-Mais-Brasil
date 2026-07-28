@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { requireSuperAdmin } from "@/lib/auth/guards"
 import { slugifyCategoria } from "@/lib/catalog/home"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { contextLogger } from "@/lib/logger"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 const createSchema = z.object({
   name: z.string().trim().min(2, "Nome muito curto").max(80),
@@ -17,7 +17,7 @@ const createSchema = z.object({
 export const GET = withRequestContext(
   { action: "admin.catalogo.categorias.list", route: "/api/admin/catalogo/categorias" },
   async () => {
-  const guard = await requireSuperAdmin()
+  const guard = await requireAdmin("catalogo.manage")
   if (!guard.ok) return guard.response
 
   const categories = await prisma.category.findMany({
@@ -50,7 +50,7 @@ export const GET = withRequestContext(
 export const POST = withRequestContext(
   { action: "admin.catalogo.categorias.create", route: "/api/admin/catalogo/categorias" },
   async (request: Request) => {
-  const guard = await requireSuperAdmin()
+  const guard = await requireAdmin("catalogo.manage")
   if (!guard.ok) return guard.response
 
   let payload: unknown

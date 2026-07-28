@@ -90,6 +90,74 @@ usavam `requireResellerSession`, que nao distingue dono de membro.
   `role='consultant'` e caem no preset restrito de Vendedor. Quem atuava como
   gerente precisa ser repromovido pelo dono em `/painel/equipe`.
 
+### Papeis e permissoes do sistema mae (2026-07-28)
+
+Mesmo modelo da unidade, agora no /admin. Antes: sete valores de `UserRole` e a
+matriz reimplementada a mao em cada rota (`requireAdminSession` + um
+`if (role !== "SUPER_ADMIN")`), espalhada por 139 rotas e 47 paginas — foi assim
+que /admin/financeiro passou a abrir para o vendedor de curso com a unica aba da
+tela retornando 403.
+
+- **Fonte unica:** `src/lib/auth/admin-permissions.ts` — catalogo fechado de
+  permissoes + um preset por papel PMB. Os presets REPRODUZEM a matriz que os
+  guards antigos aplicavam (ha teste de paridade), tirando os tightenings
+  listados no fim desta secao. O que muda e que a matriz virou declarativa e
+  ajustavel pessoa a pessoa.
+- **A autorizacao virou permissao; as regras de negocio a jusante TAMBEM
+  precisam.** Foi a causa raiz de cinco escaladas pegas na revisao: o guard
+  passou a aceitar quem tem a permissao, mas o teto de desconto, o filtro de
+  dono do cupom e o recorte de carteira continuavam perguntando "o papel e
+  PMB_SALES?" e respondendo "nao e, entao libera". Ao mover um gate para
+  permissao, procure toda trava interna que dependia daquele papel.
+- **`unidades.viewAll` e SUPER_EXCLUSIVE.** Ela nao e so um filtro de listagem:
+  e o substituto de todo bypass `role === "SUPER_ADMIN"` do codigo antigo, e
+  quem a tem passa direto pelo recorte de carteira em senha do titular,
+  impersonacao, gateway e export de comissoes.
+- **Recorte de carteira sai do guard, nunca e re-derivado na rota.** Use
+  `ctx.canAccessTenant(tenant)` (unidade ja carregada), `ctx.unidadesWhere()`
+  (listagem) ou `ctx.comissoesScope()` (dinheiro de indicacao). A derivacao
+  `can("unidades.view") && !can("unidades.viewAll")` que estava espalhada era
+  errada nos dois sentidos: revogar `unidades.view` REMOVIA o filtro (ampliando
+  o acesso) e ela assumia `accountManagerId` para papeis ligados por
+  `salesUserId`.
+- **Guard:** `src/lib/auth/admin-guard.ts` — `requireAdmin` (403) para rotas,
+  `requireAdminPage` (redirect) para paginas, `adminContext` para a layout.
+  Variantes `requireAdminAny` / `requireAdminPageAny` quando a rota tem dois
+  publicos. Permissoes NAO vao no JWT (ficariam obsoletas por ate 60s pelo
+  throttle do callback); sao resolvidas por request num `findUnique` na PK.
+- **Escopo de dados:** continua ESTRUTURAL, vindo de `lib/auth/scope.ts` — no
+  admin a unidade pertence a alguem por `accountManagerId`, `salesUserId` ou
+  pelo time de vendas, conforme o papel. As permissoes `*.viewAll` funcionam
+  como "ignore o recorte do papel": `ctx.unidadesWhere()` devolve `{}` para quem
+  as tem, `null` para quem nao alcanca unidade nenhuma (a rota fecha).
+- **Overrides por pessoa:** `User.extraPermissions/revokedPermissions`
+  (migration `20260728_user_permissions`, idempotente, sem backfill). Editaveis
+  em /admin/equipe (mesmo componente de "Permissoes avancadas" do painel).
+  `equipe.manage` e SUPER_EXCLUSIVE — nunca concedida por override, porque e a
+  permissao que deixaria alguem ampliar os proprios poderes.
+- **Invariante testada:** `src/app/api/admin/guard-coverage.test.ts` quebra se
+  uma rota nova nascer sem `requireAdmin`, se uma pagina nascer sem
+  `requireAdminPage`, se alguem voltar a decidir autorizacao pelo papel do ator,
+  ou se um guard por papel reaparecer.
+- **Revisao multi-agente (xhigh) rodada antes do commit:** 15 defeitos
+  confirmados, todos corrigidos. Cinco eram escalada de privilegio real
+  (cancelar cobranca de qualquer unidade, desconto e cupom de 100% sem teto,
+  clawback fora da carteira, saques da rede inteira ao REVOGAR uma permissao) e
+  um era IDOR na pagina de comissoes da unidade. O teste de paridade chegou a
+  ratificar um alargamento como se fosse a matriz antiga — trava de regressao
+  que codifica o comportamento novo nao protege nada.
+- **Tightenings deliberados** (rotas que estavam largas demais e agora fecham):
+  notas/senha/reenvio de e-mail do aluno e a busca global de alunos saem do
+  `requirePmbTeam` (que aceitava ate o Designer) e passam a exigir
+  `alunosRede.*`; o export de comissoes/saques exige `indicacoes.view`; o
+  cancelamento de matricula de aluno de unidade exige `unidades.manage`.
+  A aba "Exportacoes" dos relatorios some para gerente de vendas, vendedor de
+  revenda e financeiro — a API de export nunca os atendeu (403). Escritas
+  destrutivas que estavam sob permissao de leitura foram movidas para a de
+  escrita (`artes.manage`, `vendas.create`), e trocar o token do Mercado Pago
+  passou a exigir `integracoes.manage` (a tela ja escondia o campo; so o PATCH
+  direto passava).
+
 ### Bugs conhecidos (pendentes)
 
 - **Middleware file convention deprecado** no Next 16 (usar `proxy` em vez de `middleware`).

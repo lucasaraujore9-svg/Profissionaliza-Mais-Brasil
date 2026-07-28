@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { requireSuperAdmin } from "@/lib/auth/guards"
 import { withRequestContext } from "@/lib/observability/with-request-context"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 // Reordena modulos ou videos. O client envia a lista completa de ids na nova
 // ordem; gravamos `position` = indice com updates SEQUENCIAIS.
@@ -19,7 +19,7 @@ const bodySchema = z.object({
 export const POST = withRequestContext(
   { action: "admin.treinamentos.reorder", route: "/api/admin/treinamentos/reorder" },
   async (request: Request) => {
-    const guard = await requireSuperAdmin()
+    const guard = await requireAdmin("treinamentos.manage")
     if (!guard.ok) return guard.response
 
     let payload: unknown

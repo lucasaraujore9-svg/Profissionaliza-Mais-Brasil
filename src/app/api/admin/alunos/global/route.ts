@@ -1,17 +1,17 @@
 import { NextResponse } from "next/server"
 import type { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
-import { requirePmbTeam } from "@/lib/auth/guards"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import {
   deriveStudentDisplayStatus,
   countEnrollmentStatuses,
 } from "@/lib/students/display-status"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 export const GET = withRequestContext(
   { action: "admin.alunos.global.list", route: "/api/admin/alunos/global" },
   async (request: Request) => {
-  const guard = await requirePmbTeam()
+  const guard = await requireAdmin("alunosRede.view")
   if (!guard.ok) return guard.response
 
   const url = new URL(request.url)

@@ -1,5 +1,4 @@
 import { prisma } from "@/lib/prisma"
-import { canViewFinance } from "@/lib/auth/roles"
 import { getPlacarSnapshot } from "@/lib/placar/snapshot"
 import { fillBuckets, toSeriesPoints } from "../bucket"
 import {
@@ -10,13 +9,13 @@ import type { KpiDatum, ReportSeries, ReportTable } from "../types"
 import { buildPayload, type BiContext, type BiModule } from "./context"
 
 /**
- * Visão Geral — resumo executivo do ecossistema. KPIs financeiros só aparecem
- * para papéis com visão financeira (canViewFinance); os demais veem operação.
+ * Visão Geral — resumo executivo do ecossistema. Os KPIs financeiros só
+ * aparecem para quem tem `financeiro.view`; os demais veem só a operação.
  */
 export const visaoGeralModule: BiModule = {
   async run(ctx: BiContext) {
     const { period, session } = ctx
-    const finance = canViewFinance(session.role)
+    const finance = session.can("financeiro.view")
 
     const [
       revenue,

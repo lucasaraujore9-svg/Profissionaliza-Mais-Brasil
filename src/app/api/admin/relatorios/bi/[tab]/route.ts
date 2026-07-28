@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server"
-import { requireAdminSession } from "@/lib/auth/admin-session"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 import { resolvePeriod } from "@/lib/reports/period"
 import { canViewTab, reportTab } from "@/lib/reports/tabs"
 import { getBiModule } from "@/lib/reports/bi"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 export const dynamic = "force-dynamic"
 
@@ -18,16 +18,15 @@ export const dynamic = "force-dynamic"
 export const GET = withRequestContextParams<{ tab: string }>(
   { action: "admin.relatorios.bi.get", route: "/api/admin/relatorios/bi/[tab]" },
   async (request: Request, ctx) => {
-    const session = await requireAdminSession()
-    if (!session) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
+    const guard = await requireAdmin("relatorios.view")
+    if (!guard.ok) return guard.response
+    const session = guard.ctx
 
     const { tab } = await ctx.params
     if (!reportTab(tab)) {
       return NextResponse.json({ error: "Aba inexistente" }, { status: 404 })
     }
-    if (!canViewTab(session.role, tab)) {
+    if (!canViewTab(session.permissions, tab)) {
       return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
     }
 

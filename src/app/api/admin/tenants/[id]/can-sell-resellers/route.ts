@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { requireAdminSession } from "@/lib/auth/admin-session"
 import { logAudit } from "@/lib/audit"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 // Liga/desliga o módulo "Revender revendas" de uma unidade. Decisão comercial
 // → restrito ao SUPER_ADMIN. Quando ligado, a unidade ganha o menu
@@ -16,14 +16,9 @@ export const PUT = withRequestContextParams<{ id: string }>(
     route: "/api/admin/tenants/[id]/can-sell-resellers",
   },
   async (request: Request, context) => {
-    const session = await requireAdminSession()
-    if (!session) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
-    if (session.role !== "SUPER_ADMIN") {
-      return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
-    }
-
+    const guard = await requireAdmin("unidades.governanca")
+    if (!guard.ok) return guard.response
+    const session = guard.ctx
     const { id } = await context.params
 
     let payload: unknown

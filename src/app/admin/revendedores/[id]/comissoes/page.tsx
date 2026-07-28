@@ -1,11 +1,11 @@
-import { notFound, redirect } from "next/navigation"
+import { notFound } from "next/navigation"
 import type { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import {
   describeEffectiveCommission,
   resolveEffectiveCommission,
 } from "@/lib/referrals/effective-rule"
-import { requireAdminSession } from "@/lib/auth/admin-session"
+import { requireAdminPage } from "@/lib/auth/admin-guard"
 import { PageHeader } from "@/components/painel/page-header"
 import { ResellerBackLink } from "@/components/admin/reseller-back-link"
 import {
@@ -174,10 +174,7 @@ export default async function ResellerCommissionsPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
-  const session = await requireAdminSession()
-  if (!session) {
-    redirect(`/login?callbackUrl=/admin/revendedores/${id}/comissoes`)
-  }
+  const ctx = await requireAdminPage("unidades.comissoes")
 
   const tenant = await prisma.tenant.findUnique({
     where: { id },
@@ -185,6 +182,8 @@ export default async function ResellerCommissionsPage({
       id: true,
       name: true,
       slug: true,
+      accountManagerId: true,
+      salesUserId: true,
       referrerTenantId: true,
       referralMinReferrals: true,
       commissionBracketBasis: true,
@@ -195,7 +194,11 @@ export default async function ResellerCommissionsPage({
       commissionOverrideSource: true,
     },
   })
-  if (!tenant) notFound()
+  // Mesmo recorte das APIs irmãs (export e demonstrativo): a permissão diz QUEM
+  // vê comissões, a carteira diz de QUAIS unidades. Sem isto a página abria o
+  // ledger completo de qualquer unidade por id — 404 (e não 403) para não
+  // revelar a existência de unidades fora do escopo.
+  if (!tenant || !(await ctx.canAccessTenant(tenant))) notFound()
 
   // Regra que ESTA VALENDO, resolvida pelo mesmo `resolveEffectiveCommission`
   // que o fechamento mensal usa — a tela nao pode divergir do que o sistema paga.

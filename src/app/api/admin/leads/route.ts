@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { requireAdminSession } from "@/lib/auth/admin-session"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { reconcileLeadStages } from "@/lib/automation/leads"
 import { StudentLeadStage } from "@prisma/client"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 const ALL_STAGES: StudentLeadStage[] = [
   "NEW",
@@ -22,15 +22,9 @@ const PER_STAGE_LIMIT = 200
 export const GET = withRequestContext(
   { action: "admin.leads.list", route: "/api/admin/leads" },
   async (request: Request) => {
-    const ctx = await requireAdminSession()
-    if (!ctx) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
+    const guard = await requireAdmin("leads.view")
+    if (!guard.ok) return guard.response
     // Apenas SUPER_ADMIN e PMB_SALES (vendas diretas PMB) acessam os leads do PMB.
-    if (ctx.role !== "SUPER_ADMIN" && ctx.role !== "PMB_SALES") {
-      return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
-    }
-
     // Reconcilia colunas com o estado real (paga → WON, expirada → ABANDONED)
     // antes de montar o board. Cobre webhooks perdidos / cron atrasado.
     const settings = await prisma.systemSettings.findUnique({

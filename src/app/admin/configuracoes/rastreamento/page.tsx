@@ -1,7 +1,6 @@
 import Link from "next/link"
-import { redirect } from "next/navigation"
 import { ArrowLeft } from "lucide-react"
-import { requireAdminSession } from "@/lib/auth/admin-session"
+import { requireAdminPage } from "@/lib/auth/admin-guard"
 import { PageHeader } from "@/components/painel/page-header"
 import { AdminTrackingSettingsForm } from "@/components/admin/admin-tracking-settings-form"
 import { readPmbPixels } from "@/lib/tracking/store"
@@ -9,9 +8,7 @@ import { readPmbPixels } from "@/lib/tracking/store"
 export const dynamic = "force-dynamic"
 
 export default async function AdminTrackingSettingsPage() {
-  const session = await requireAdminSession()
-  if (!session) redirect("/login?callbackUrl=/admin/configuracoes/rastreamento")
-  if (session.role !== "SUPER_ADMIN") redirect("/admin/configuracoes")
+  await requireAdminPage("configuracoes.manage")
 
   const pixels = await readPmbPixels()
 

@@ -1,21 +1,13 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { requireAdminSession } from "@/lib/auth/admin-session"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 import { listRevendaLeadAssignees } from "@/lib/automation/assign"
-
-// Quem configura o rodízio: super e gerente de vendas.
-const CAN_CONFIG = ["SUPER_ADMIN", "PMB_SALES_MGR"]
 
 // GET — estado atual do rodízio + vendedores de revenda elegíveis.
 export async function GET() {
-  const session = await requireAdminSession()
-  if (!session) {
-    return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-  }
-  if (!CAN_CONFIG.includes(session.role)) {
-    return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
-  }
+  const guard = await requireAdmin("leadsRevenda.config")
+  if (!guard.ok) return guard.response
 
   const settings = await prisma.systemSettings.findUnique({
     where: { id: "default" },
@@ -40,13 +32,8 @@ const schema = z.object({ autoAssign: z.boolean() })
 
 // PUT — liga/desliga o rodízio automático.
 export async function PUT(request: Request) {
-  const session = await requireAdminSession()
-  if (!session) {
-    return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-  }
-  if (!CAN_CONFIG.includes(session.role)) {
-    return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
-  }
+  const guard = await requireAdmin("leadsRevenda.config")
+  if (!guard.ok) return guard.response
 
   let body: unknown
   try {

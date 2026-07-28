@@ -1,12 +1,9 @@
-import { redirect } from "next/navigation"
 import { PageHeader } from "@/components/painel/page-header"
-import { requireAdminSession } from "@/lib/auth/admin-session"
+import { requireAdminPage } from "@/lib/auth/admin-guard"
 import { ComunicacaoAdminClient } from "@/components/admin/comunicacao-admin-client"
 
 export default async function AdminComunicacaoPage() {
-  const ctx = await requireAdminSession()
-  if (!ctx) redirect("/login")
-  if (ctx.role !== "SUPER_ADMIN") redirect("/admin")
+  await requireAdminPage("comunicacao.manage")
 
   return (
     <div className="space-y-6">

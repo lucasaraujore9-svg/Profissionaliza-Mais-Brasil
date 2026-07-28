@@ -1,15 +1,13 @@
-import { redirect } from "next/navigation"
 import { prisma } from "@/lib/prisma"
-import { requireAdminSession } from "@/lib/auth/admin-session"
+import { requireAdminPage } from "@/lib/auth/admin-guard"
 import { EquipeClient } from "@/components/admin/equipe-client"
 import { PMB_TEAM_ROLES } from "@/lib/auth/roles"
+import { filterAdminPermissions } from "@/lib/auth/admin-permissions"
 
 export const dynamic = "force-dynamic"
 
 export default async function EquipePage() {
-  const session = await requireAdminSession()
-  if (!session) redirect("/login?callbackUrl=/admin/equipe")
-  if (session.role !== "SUPER_ADMIN") redirect("/admin")
+  await requireAdminPage("equipe.manage")
 
   const users = await prisma.user.findMany({
     where: { role: { in: [...PMB_TEAM_ROLES] } },
@@ -25,6 +23,8 @@ export default async function EquipePage() {
       lastActiveAt: true,
       passwordHash: true,
       createdAt: true,
+      extraPermissions: true,
+      revokedPermissions: true,
     },
     orderBy: { name: "asc" },
   })
@@ -47,6 +47,10 @@ export default async function EquipePage() {
     lastActiveAt: u.lastActiveAt?.toISOString() ?? null,
     pendingInvite: !u.passwordHash,
     createdAt: u.createdAt.toISOString(),
+    // Só o total: a listagem mostra o selo "ajustado"; o detalhe mostra quais.
+    customPermissionCount:
+      filterAdminPermissions(u.extraPermissions).length +
+      filterAdminPermissions(u.revokedPermissions).length,
   }))
 
   return <EquipeClient initialItems={items} salesManagers={salesManagers} />

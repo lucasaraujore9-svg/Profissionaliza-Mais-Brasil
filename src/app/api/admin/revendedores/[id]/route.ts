@@ -5,7 +5,6 @@ import {
   describeEffectiveCommission,
   resolveEffectiveCommission,
 } from "@/lib/referrals/effective-rule"
-import { requireAdminSession } from "@/lib/auth/admin-session"
 import { invalidateTenant } from "@/lib/redis/tenant-cache"
 import { logAudit } from "@/lib/audit"
 import { blockTenantStudents } from "@/lib/auto-block"
@@ -18,8 +17,8 @@ import {
 } from "@/lib/asaas/client"
 import { swallow } from "@/lib/errors"
 import { contextLogger } from "@/lib/logger"
-import { canAccessTenantScope } from "@/lib/auth/scope"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 // Escopo de acesso a uma unidade já carregada: ver canAccessTenantScope em
 // @/lib/auth/scope (mesma regra de tenantScopeWhere).
@@ -27,10 +26,9 @@ import { withRequestContextParams } from "@/lib/observability/with-request-conte
 export const GET = withRequestContextParams<{ id: string }>(
   { action: "admin.revendedores.get", route: "/api/admin/revendedores/[id]" },
   async (_request: Request, { params }) => {
-  const ctx = await requireAdminSession()
-  if (!ctx) {
-    return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-  }
+  const guard = await requireAdmin("unidades.view")
+  if (!guard.ok) return guard.response
+  const ctx = guard.ctx
 
   const { id } = await params
 
@@ -50,7 +48,7 @@ export const GET = withRequestContextParams<{ id: string }>(
     },
   })
 
-  if (!(await canAccessTenantScope(ctx, tenant))) {
+  if (!(await ctx.canAccessTenant(tenant))) {
     // 403 mesmo quando o tenant não existe — não revela a existência fora do escopo.
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
@@ -449,18 +447,10 @@ const cancelSchema = z.object({
 export const DELETE = withRequestContextParams<{ id: string }>(
   { action: "admin.revendedores.delete", route: "/api/admin/revendedores/[id]" },
   async (request: Request, { params }) => {
-  const ctx = await requireAdminSession()
-  if (!ctx) {
-    return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-  }
+  const guard = await requireAdmin("unidades.governanca")
+  if (!guard.ok) return guard.response
+  const ctx = guard.ctx
   // Cancelar tenant é ação destrutiva — restringe a SUPER_ADMIN.
-  if (ctx.role !== "SUPER_ADMIN") {
-    return NextResponse.json(
-      { error: "Apenas SUPER_ADMIN pode cancelar revendedor" },
-      { status: 403 },
-    )
-  }
-
   const { id } = await params
 
   let payload: unknown

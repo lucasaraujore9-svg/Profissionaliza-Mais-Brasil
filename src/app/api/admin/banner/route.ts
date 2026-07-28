@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { requireSuperAdmin } from "@/lib/auth/guards"
 import { withRequestContext } from "@/lib/observability/with-request-context"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 const createSchema = z.object({
   desktopUrl: z.string().url(),
@@ -14,7 +14,7 @@ const createSchema = z.object({
 export const GET = withRequestContext(
   { action: "admin.banner.list", route: "/api/admin/banner" },
   async () => {
-    const guard = await requireSuperAdmin()
+    const guard = await requireAdmin("vitrine.manage")
     if (!guard.ok) return guard.response
 
     const slides = await prisma.bannerSlide.findMany({
@@ -29,7 +29,7 @@ export const GET = withRequestContext(
 export const POST = withRequestContext(
   { action: "admin.banner.create", route: "/api/admin/banner" },
   async (request: Request) => {
-    const guard = await requireSuperAdmin()
+    const guard = await requireAdmin("vitrine.manage")
     if (!guard.ok) return guard.response
 
     const body = await request.json().catch(() => null)

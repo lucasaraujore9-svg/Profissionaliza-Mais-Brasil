@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
-import { requireSuperAdmin } from "@/lib/auth/guards"
 import { PMB_PUBLIC_NAME } from "@/lib/pmb-config"
 import {
   refreshGroupBranding,
@@ -10,6 +9,7 @@ import { renderCertificateBuffer } from "@/lib/certificates/generate-pdf"
 import { sampleCertificateFields } from "@/lib/certificates/sample"
 import { contextLogger } from "@/lib/logger"
 import { withRequestContext } from "@/lib/observability/with-request-context"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 export const dynamic = "force-dynamic"
 export const maxDuration = 60
@@ -49,7 +49,7 @@ const DEFAULT_SECONDARY = "#0f3d24"
 export const POST = withRequestContext(
   { action: "admin.certificate_template.preview", route: "/api/admin/certificate-template/preview" },
   async (request: Request) => {
-    const guard = await requireSuperAdmin()
+    const guard = await requireAdmin("certificados.template")
     if (!guard.ok) return guard.response
 
     let payload: unknown

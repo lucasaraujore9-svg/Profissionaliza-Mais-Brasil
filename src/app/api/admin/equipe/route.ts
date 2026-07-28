@@ -2,16 +2,38 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 import { hash } from "bcryptjs"
 import { prisma } from "@/lib/prisma"
-import { requireSuperAdmin } from "@/lib/auth/guards"
 import { sendInvite } from "@/lib/auth/invite"
 import { generateTempPassword, sendCredentialsEmail } from "@/lib/auth/credentials"
 import { withRequestContext } from "@/lib/observability/with-request-context"
+import { logAudit } from "@/lib/audit"
 import { PMB_TEAM_ROLES, pmbRoleLabel } from "@/lib/auth/roles"
+import {
+  ADMIN_PERMISSIONS,
+  SUPER_EXCLUSIVE,
+  filterAdminPermissions,
+  resolveAdminPermissions,
+} from "@/lib/auth/admin-permissions"
+
+const SUPER_EXCLUSIVE_SET = new Set<string>(SUPER_EXCLUSIVE)
+
+/**
+ * Ajustes finos por pessoa. `extraPermissions` NUNCA concede uma permissão
+ * exclusiva do super admin — rejeitamos aqui (400) além de o resolvedor
+ * ignorar, para o erro ficar visível em vez de silencioso.
+ */
+const permissionList = z
+  .array(z.enum(ADMIN_PERMISSIONS))
+  .max(ADMIN_PERMISSIONS.length)
+
+function escalating(perms: readonly string[] | undefined): string[] {
+  return (perms ?? []).filter((perm) => SUPER_EXCLUSIVE_SET.has(perm))
+}
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 export const GET = withRequestContext(
   { action: "admin.equipe.list", route: "/api/admin/equipe" },
   async () => {
-  const guard = await requireSuperAdmin()
+  const guard = await requireAdmin("equipe.manage")
   if (!guard.ok) return guard.response
 
   const users = await prisma.user.findMany({
@@ -28,6 +50,8 @@ export const GET = withRequestContext(
       createdAt: true,
       salesManagerId: true,
       salesManager: { select: { name: true } },
+      extraPermissions: true,
+      revokedPermissions: true,
     },
     orderBy: { name: "asc" },
   })
@@ -45,6 +69,16 @@ export const GET = withRequestContext(
       createdAt: u.createdAt.toISOString(),
       salesManagerId: u.salesManagerId,
       salesManagerName: u.salesManager?.name ?? null,
+      extraPermissions: filterAdminPermissions(u.extraPermissions),
+      revokedPermissions: filterAdminPermissions(u.revokedPermissions),
+      // Conjunto efetivo — a UI marca os checkboxes a partir dele.
+      permissions: [
+        ...resolveAdminPermissions(
+          u.role as (typeof PMB_TEAM_ROLES)[number],
+          u.extraPermissions,
+          u.revokedPermissions,
+        ),
+      ],
     })),
   })
   },
@@ -67,6 +101,8 @@ const createSchema = z
     // Cap individual de desconto (%) nas vendas diretas. Só se aplica quando
     // role === PMB_SALES; null/ausente = padrão da role (50).
     maxDiscount: z.number().int().min(0).max(100).nullable().optional(),
+    extraPermissions: permissionList.optional(),
+    revokedPermissions: permissionList.optional(),
   })
   .refine((d) => d.mode !== "password" || !d.password || d.password.length >= 8, {
     message: "A senha deve ter no mínimo 8 caracteres",
@@ -76,7 +112,7 @@ const createSchema = z
 export const POST = withRequestContext(
   { action: "admin.equipe.create", route: "/api/admin/equipe" },
   async (req: Request) => {
-  const guard = await requireSuperAdmin()
+  const guard = await requireAdmin("equipe.manage")
   if (!guard.ok) return guard.response
 
   let body: unknown
@@ -90,6 +126,17 @@ export const POST = withRequestContext(
   if (!parsed.success) {
     return NextResponse.json(
       { error: "Dados inválidos", details: parsed.error.flatten() },
+      { status: 400 },
+    )
+  }
+
+  const bad = escalating(parsed.data.extraPermissions)
+  if (bad.length > 0) {
+    return NextResponse.json(
+      {
+        error: "Estas permissões são exclusivas do Super Admin",
+        fields: { extraPermissions: bad },
+      },
       { status: 400 },
     )
   }
@@ -138,8 +185,30 @@ export const POST = withRequestContext(
       status: "ATIVO",
       salesManagerId,
       maxDiscount,
+      extraPermissions: parsed.data.extraPermissions ?? [],
+      revokedPermissions: parsed.data.revokedPermissions ?? [],
     },
     select: { id: true, name: true, email: true, role: true },
+  })
+
+  // SAAS-001: a criação passou a carregar o mesmo poder que a edição — pode
+  // nascer com `unidades.credenciais`/`impersonate` via ajuste fino. Sem esta
+  // trilha, investigar depois como a conta ganhou o privilégio não devolvia
+  // nada: só as edições posteriores (PATCH) eram registradas.
+  await logAudit({
+    action: "user.create",
+    resource: "User",
+    resourceId: user.id,
+    actorUserId: guard.ctx.userId,
+    actorRole: guard.ctx.role,
+    payloadAfter: {
+      role: user.role,
+      status: "ATIVO",
+      salesManagerId,
+      maxDiscount,
+      extraPermissions: parsed.data.extraPermissions ?? [],
+      revokedPermissions: parsed.data.revokedPermissions ?? [],
+    },
   })
 
   let emailSent = false
@@ -154,7 +223,7 @@ export const POST = withRequestContext(
     })
   } else {
     const inviter = await prisma.user.findUnique({
-      where: { id: guard.session.userId },
+      where: { id: guard.ctx.userId },
       select: { name: true },
     })
 

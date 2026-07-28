@@ -1,16 +1,11 @@
-import { redirect } from "next/navigation"
 import { Inbox } from "lucide-react"
-import { requireAdminSession } from "@/lib/auth/admin-session"
+import { requireAdminPage } from "@/lib/auth/admin-guard"
 import { prisma } from "@/lib/prisma"
 import { PageHeader } from "@/components/painel/page-header"
 import { LeadsKanbanBoard } from "@/components/painel/leads-kanban-board"
 
 export default async function AdminLeadsPage() {
-  const session = await requireAdminSession()
-  if (!session) redirect("/login?callbackUrl=/admin/leads")
-  if (session.role !== "SUPER_ADMIN" && session.role !== "PMB_SALES") {
-    redirect("/admin")
-  }
+  await requireAdminPage("leads.view")
 
   const settings = await prisma.systemSettings.upsert({
     where: { id: "default" },

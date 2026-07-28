@@ -1,10 +1,9 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { requireAdminSession } from "@/lib/auth/admin-session"
-import { canMarkPaid } from "@/lib/auth/roles"
 import { downloadPayoutProof } from "@/lib/storage/payout-proof"
 import { contextLogger } from "@/lib/logger"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 export const dynamic = "force-dynamic"
 export const maxDuration = 60
@@ -17,14 +16,8 @@ export const GET = withRequestContextParams<{ id: string }>(
     route: "/api/admin/financeiro/referral-payouts/[id]/proof/download",
   },
   async (_request: Request, { params }) => {
-    const session = await requireAdminSession()
-    if (!session) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
-    if (!canMarkPaid(session.role)) {
-      return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
-    }
-
+    const guard = await requireAdmin("financeiro.manage")
+    if (!guard.ok) return guard.response
     const { id } = await params
     const payout = await prisma.referralPayout.findUnique({
       where: { id },

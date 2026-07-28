@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { requireAdminSession } from "@/lib/auth/admin-session"
 import { evaluatePaceGate } from "@/lib/enrollment/pace"
 import { logAudit } from "@/lib/audit"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 const schema = z.object({
   /** true = libera a cota (destrava); false = devolve a matrícula à regra. */
@@ -31,17 +31,9 @@ export const PATCH = withRequestContextParams<{ id: string; enrollmentId: string
     route: "/api/admin/alunos/[id]/enrollments/[enrollmentId]/cota",
   },
   async (request: Request, ctx) => {
-    const session = await requireAdminSession()
-    if (!session) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
-    if (session.role !== "SUPER_ADMIN") {
-      return NextResponse.json(
-        { error: "Só o SUPER_ADMIN pode liberar a cota de aulas." },
-        { status: 403 },
-      )
-    }
-
+    const guard = await requireAdmin("alunosRede.acesso")
+    if (!guard.ok) return guard.response
+    const session = guard.ctx
     const { id: studentId, enrollmentId } = await ctx.params
 
     const parsed = schema.safeParse(await request.json().catch(() => ({})))

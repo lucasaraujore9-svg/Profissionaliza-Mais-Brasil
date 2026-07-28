@@ -1,28 +1,18 @@
 import { NextResponse } from "next/server"
-import { requireAdminSession } from "@/lib/auth/admin-session"
 import { prisma } from "@/lib/prisma"
 import { startImpersonation } from "@/lib/auth/start-impersonation"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
-import { contextLogger } from "@/lib/logger"
 import { logAudit } from "@/lib/audit"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 // POST /api/admin/alunos/[id]/impersonate — SUPER_ADMIN acessa a área do aluno
 // como o aluno (mesmas telas que ele vê). Privilégio crítico → só SUPER_ADMIN.
 export const POST = withRequestContextParams<{ id: string }>(
   { action: "admin.alunos.impersonate", route: "/api/admin/alunos/[id]/impersonate" },
   async (_request: Request, { params }) => {
-    const admin = await requireAdminSession()
-    if (!admin) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
-    if (admin.role !== "SUPER_ADMIN") {
-      contextLogger().warn(
-        { event: "impersonate.denied", actorId: admin.userId, actorRole: admin.role },
-        "tentativa de impersonate de aluno por papel não-SUPER_ADMIN",
-      )
-      return NextResponse.json({ error: "Permissão negada" }, { status: 403 })
-    }
-
+    const guard = await requireAdmin("alunos.impersonate")
+    if (!guard.ok) return guard.response
+    const admin = guard.ctx
     const { id: studentId } = await params
     const student = await prisma.student.findUnique({
       where: { id: studentId },

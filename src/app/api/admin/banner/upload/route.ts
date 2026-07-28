@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server"
-import { requireSuperAdmin } from "@/lib/auth/guards"
 import { uploadVitrineAsset } from "@/lib/supabase/storage"
 import { isValidImageMagic } from "@/lib/storage/validate-image"
 import { checkBannerDimensions, type BannerSlot } from "@/lib/storage/image-dims"
 import { rateLimit, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
 import { withRequestContext } from "@/lib/observability/with-request-context"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 const MAX_BYTES = 5 * 1024 * 1024 // 5MB
 const ALLOWED_TYPES = new Set([
@@ -32,7 +32,7 @@ function extensionFor(mime: string): string {
 export const POST = withRequestContext(
   { action: "admin.banner.upload", route: "/api/admin/banner/upload" },
   async (request: Request) => {
-    const guard = await requireSuperAdmin()
+    const guard = await requireAdmin("vitrine.manage")
     if (!guard.ok) return guard.response
 
     const rl = await rateLimit(request, RATE_LIMITS.upload)

@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server"
 import type { Prisma, ReferralPayoutStatus } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
-import { requireAdminSession } from "@/lib/auth/admin-session"
 import { withRequestContext } from "@/lib/observability/with-request-context"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 const ALLOWED_STATUS: ReferralPayoutStatus[] = [
   "REQUESTED",
@@ -15,10 +15,9 @@ const ALLOWED_STATUS: ReferralPayoutStatus[] = [
 export const GET = withRequestContext(
   { action: "admin.financeiro.referral_payouts.list", route: "/api/admin/financeiro/referral-payouts" },
   async (request: Request) => {
-  const session = await requireAdminSession()
-  if (!session) {
-    return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-  }
+  const guard = await requireAdmin("financeiro.view")
+  if (!guard.ok) return guard.response
+  const session = guard.ctx
 
   const url = new URL(request.url)
   const status = url.searchParams.get("status") ?? "all"
@@ -62,22 +61,18 @@ export const GET = withRequestContext(
     if (filter.gte || filter.lte) where.requestedAt = filter
   }
 
-  // Escopo por papel (espelha a pagina /admin/indicacoes/saques): allowlist
-  // explicita — só SUPER_ADMIN, PMB_FINANCEIRO e PMB_RESELLER_MGR veem saques.
-  // PIX/valores/transferId são PII financeira; um deny-list (só 403 PMB_SALES)
-  // vazava tudo para PMB_SALES_MGR e PMB_REVENDA_SALES, que caíam no fallback
-  // sem filtro. PMB_RESELLER_MGR continua restrito aos tenants que gerencia.
-  if (
-    session.role !== "SUPER_ADMIN" &&
-    session.role !== "PMB_FINANCEIRO" &&
-    session.role !== "PMB_RESELLER_MGR"
-  ) {
-    return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
+  // PIX/valores/transferId são PII financeira: `financeiro.view` decide QUEM
+  // abre a lista, e `comissoesScope()` decide QUAIS saques — sem restrição para
+  // a visão financeira do ecossistema, só a carteira para quem administra
+  // unidades, e negado para quem não alcança unidade nenhuma.
+  const scope = await session.comissoesScope()
+  if (!scope) {
+    return NextResponse.json({ error: "Permissão negada" }, { status: 403 })
   }
-  if (session.role === "PMB_RESELLER_MGR") {
+  if (Object.keys(scope).length > 0) {
     where.AND = [
       ...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []),
-      { referrer: { accountManagerId: session.userId } },
+      { referrer: scope },
     ]
   }
 

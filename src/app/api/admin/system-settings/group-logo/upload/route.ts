@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { requireSuperAdmin } from "@/lib/auth/guards"
 import {
   deleteVitrineAsset,
   extractAssetPath,
@@ -9,6 +8,7 @@ import {
 import { isValidImageMagic } from "@/lib/storage/validate-image"
 import { rateLimit, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
 import { withRequestContext } from "@/lib/observability/with-request-context"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 const SETTINGS_ID = "default"
 const MAX_BYTES = 2 * 1024 * 1024
@@ -37,7 +37,7 @@ function extensionFor(mime: string): string {
 export const POST = withRequestContext(
   { action: "admin.system_settings.group_logo.upload", route: "/api/admin/system-settings/group-logo/upload" },
   async (request: Request) => {
-  const guard = await requireSuperAdmin()
+  const guard = await requireAdmin("vitrine.manage")
   if (!guard.ok) return guard.response
 
   const rl = await rateLimit(request, RATE_LIMITS.upload)
@@ -117,7 +117,7 @@ export const POST = withRequestContext(
 export const DELETE = withRequestContext(
   { action: "admin.system_settings.group_logo.delete", route: "/api/admin/system-settings/group-logo/upload" },
   async (request: Request) => {
-  const guard = await requireSuperAdmin()
+  const guard = await requireAdmin("vitrine.manage")
   if (!guard.ok) return guard.response
 
   const rl = await rateLimit(request, RATE_LIMITS.upload)

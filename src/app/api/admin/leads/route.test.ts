@@ -10,11 +10,12 @@ vi.mock("@/lib/prisma", () => ({
     studentLead: { findMany: vi.fn() },
   },
 }))
-vi.mock("@/lib/auth/admin-session", () => ({ requireAdminSession: vi.fn() }))
+vi.mock("@/lib/auth/admin-guard", () => ({ requireAdmin: vi.fn() }))
 vi.mock("@/lib/automation/leads", () => ({ reconcileLeadStages: vi.fn() }))
 
 import { prisma } from "@/lib/prisma"
-import { requireAdminSession } from "@/lib/auth/admin-session"
+import { requireAdmin } from "@/lib/auth/admin-guard"
+import { adminGuardFor } from "@/test/admin-ctx"
 import { GET } from "./route"
 
 const p = prisma as unknown as {
@@ -22,7 +23,7 @@ const p = prisma as unknown as {
   course: { findUnique: ReturnType<typeof vi.fn> }
   studentLead: { findMany: ReturnType<typeof vi.fn> }
 }
-const sessionMock = requireAdminSession as unknown as ReturnType<typeof vi.fn>
+const guardMock = requireAdmin as unknown as ReturnType<typeof vi.fn>
 
 function req() {
   return new Request("http://x/api/admin/leads")
@@ -30,7 +31,7 @@ function req() {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  sessionMock.mockResolvedValue({ role: "SUPER_ADMIN" })
+  guardMock.mockImplementation(adminGuardFor({ role: "SUPER_ADMIN" }).requireAdmin)
   p.systemSettings.findUnique.mockResolvedValue({ pmbAbandonedAfterHours: 24 })
   // Devolve 1 lead cujo stage espelha o filtro do where (simula partição por coluna).
   p.studentLead.findMany.mockImplementation(async (args: { where: { stage: string } }) => [
@@ -68,7 +69,9 @@ describe("admin/leads — cap por coluna (PERF-004)", () => {
   })
 
   it("papel sem permissão → 403 sem consultar leads", async () => {
-    sessionMock.mockResolvedValue({ role: "PMB_RESELLER_MGR" })
+    guardMock.mockImplementation(
+      adminGuardFor({ role: "PMB_RESELLER_MGR" }).requireAdmin,
+    )
     const res = await GET(req())
     expect(res.status).toBe(403)
     expect(p.studentLead.findMany).not.toHaveBeenCalled()

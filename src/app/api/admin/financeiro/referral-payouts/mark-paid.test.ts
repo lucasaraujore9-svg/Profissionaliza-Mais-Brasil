@@ -7,7 +7,7 @@ import { Prisma } from "@prisma/client"
 // esse contrato — se alguem "consertar" reescrevendo o amount das comissoes,
 // perdemos a evidencia do ajuste e o teste quebra.
 vi.mock("@/lib/audit", () => ({ logAudit: vi.fn() }))
-vi.mock("@/lib/auth/admin-session", () => ({ requireAdminSession: vi.fn() }))
+vi.mock("@/lib/auth/admin-guard", () => ({ requireAdmin: vi.fn() }))
 vi.mock("@/lib/referrals/payout", () => ({ markPayoutPaid: vi.fn() }))
 vi.mock("@/lib/logger", () => ({
   contextLogger: () => ({ error: vi.fn(), warn: vi.fn(), info: vi.fn() }),
@@ -22,7 +22,8 @@ vi.mock("@/lib/prisma", () => ({
 
 import { logAudit } from "@/lib/audit"
 import { prisma } from "@/lib/prisma"
-import { requireAdminSession } from "@/lib/auth/admin-session"
+import { requireAdmin } from "@/lib/auth/admin-guard"
+import { adminGuardFor } from "@/test/admin-ctx"
 import { markPayoutPaid } from "@/lib/referrals/payout"
 
 import { POST as markPaid } from "./[id]/mark-paid/route"
@@ -36,7 +37,7 @@ interface PayoutRow {
 }
 
 const audit = logAudit as unknown as ReturnType<typeof vi.fn>
-const adminSession = requireAdminSession as unknown as ReturnType<typeof vi.fn>
+const guardMock = requireAdmin as unknown as ReturnType<typeof vi.fn>
 const markPaidFn = markPayoutPaid as unknown as ReturnType<typeof vi.fn>
 const p = prisma as unknown as {
   referralPayout: {
@@ -66,12 +67,9 @@ const ctx = (id: string) => ({ params: Promise.resolve({ id }) })
 
 beforeEach(() => {
   vi.clearAllMocks()
-  adminSession.mockResolvedValue({
-    userId: "u1",
-    role: "PMB_FINANCEIRO",
-    name: "Financeiro",
-    email: "fin@pmb.com.br",
-  })
+  guardMock.mockImplementation(
+    adminGuardFor({ userId: "u1", role: "PMB_FINANCEIRO" }).requireAdmin,
+  )
   // Caso real de producao: comissao apurada R$ 23,90, saque pago R$ 75,00.
   payoutRow = {
     id: "p1",
@@ -191,7 +189,9 @@ describe("mark-paid — gates", () => {
   })
 
   it("papel sem permissao financeira: 403", async () => {
-    adminSession.mockResolvedValue({ userId: "u9", role: "PMB_DESIGNER" })
+    guardMock.mockImplementation(
+      adminGuardFor({ userId: "u9", role: "PMB_DESIGNER" }).requireAdmin,
+    )
 
     const res = await markPaid(req({ amount: 75 }), ctx("p1"))
     expect(res.status).toBe(403)

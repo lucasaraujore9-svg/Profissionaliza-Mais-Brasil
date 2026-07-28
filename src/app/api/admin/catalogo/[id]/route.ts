@@ -1,13 +1,12 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { requireAdminSession } from "@/lib/auth/admin-session"
-import { requireSuperAdmin } from "@/lib/auth/guards"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 import {
   APRENDIZADO_MAX_ITEMS,
   APRENDIZADO_MAX_LEN,
 } from "@/lib/courses/aprendizado"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 /**
  * Bullets de "O que você vai aprender". Lista vazia é válida e significa
@@ -44,8 +43,8 @@ const patchSchema = z.object({
 export const GET = withRequestContextParams<{ id: string }>(
   { action: "admin.catalogo.get", route: "/api/admin/catalogo/[id]" },
   async (_req: Request, { params }) => {
-  const ctx = await requireAdminSession()
-  if (!ctx) return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
+  const guard = await requireAdmin("catalogo.view")
+  if (!guard.ok) return guard.response
 
   const { id } = await params
   const course = await prisma.course.findUnique({
@@ -105,7 +104,7 @@ export const GET = withRequestContextParams<{ id: string }>(
 export const PATCH = withRequestContextParams<{ id: string }>(
   { action: "admin.catalogo.update", route: "/api/admin/catalogo/[id]" },
   async (req: Request, { params }) => {
-  const guard = await requireSuperAdmin()
+  const guard = await requireAdmin("catalogo.manage")
   if (!guard.ok) return guard.response
 
   const { id } = await params

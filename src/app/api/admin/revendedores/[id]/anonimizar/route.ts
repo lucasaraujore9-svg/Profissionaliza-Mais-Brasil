@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { requireAdminSession } from "@/lib/auth/admin-session"
 import { anonymizeResellerOwner } from "@/lib/lgpd/anonymize"
 import { PMB_TENANT_SLUG } from "@/lib/pmb-config"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 const bodySchema = z.object({ confirm: z.literal("ANONIMIZAR") })
 
@@ -13,17 +13,9 @@ const bodySchema = z.object({ confirm: z.literal("ANONIMIZAR") })
 export const POST = withRequestContextParams<{ id: string }>(
   { action: "admin.revendedores.anonymize", route: "/api/admin/revendedores/[id]/anonimizar" },
   async (request: Request, { params }) => {
-    const ctx = await requireAdminSession()
-    if (!ctx) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
-    if (ctx.role !== "SUPER_ADMIN") {
-      return NextResponse.json(
-        { error: "Apenas SUPER_ADMIN pode anonimizar contas" },
-        { status: 403 },
-      )
-    }
-
+    const guard = await requireAdmin("unidades.anonimizar")
+    if (!guard.ok) return guard.response
+    const ctx = guard.ctx
     const { id } = await params
 
     let payload: unknown

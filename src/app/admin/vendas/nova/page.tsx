@@ -1,5 +1,4 @@
-import { redirect } from "next/navigation"
-import { requireAdminSession } from "@/lib/auth/admin-session"
+import { requireAdminPage } from "@/lib/auth/admin-guard"
 import { prisma } from "@/lib/prisma"
 import { getSystemSettings } from "@/lib/system-settings"
 import { NovaVendaClient } from "@/components/admin/nova-venda-client"
@@ -10,11 +9,7 @@ import { effectiveSalesCap } from "@/lib/coupons/sales-cap"
 export const dynamic = "force-dynamic"
 
 export default async function NovaVendaPage() {
-  const session = await requireAdminSession()
-  if (!session) redirect("/login?callbackUrl=/admin/vendas/nova")
-  if (session.role !== "SUPER_ADMIN" && session.role !== "PMB_SALES") {
-    redirect("/admin")
-  }
+  const session = await requireAdminPage("vendas.create")
 
   const [courses, vitrinePackages, settings, cap] = await Promise.all([
     prisma.course.findMany({

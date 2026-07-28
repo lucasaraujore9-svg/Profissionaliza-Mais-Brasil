@@ -122,3 +122,97 @@ so o titular alcanca a rota
 POST /api/painel/cupons body={"code":"Z80","discountType":"PERCENTAGE","discountValue":80,...}
 Esperado: 200
 ```
+
+## Permissoes da equipe interna PMB (/admin/equipe)
+
+Desde 2026-07-28 o admin usa o mesmo modelo da unidade: o `UserRole` define um
+PRESET de permissoes (`src/lib/auth/admin-permissions.ts`) e o super admin
+ajusta pessoa a pessoa em **/admin/equipe → abrir a pessoa → Permissoes
+avancadas**. Os presets reproduzem a matriz anterior, entao este checklist
+continua valendo — o que muda e que agora da para conceder/revogar item a item.
+
+### Roteiro do ajuste fino
+
+- [ ] Abrir um vendedor de curso e marcar `financeiro.view` em Permissoes
+      avancadas. Salvar. O menu "Financeiro" aparece para ele **sem relogar**
+      (as permissoes sao resolvidas por request, nao vem do JWT).
+- [ ] Desmarcar `cupons.manage` do mesmo vendedor. `POST /api/admin/cupons`
+      passa a responder 403; a listagem continua abrindo (`cupons.view`).
+- [ ] Trocar o papel da pessoa. Os ajustes finos sao zerados (o preset novo vale
+      inteiro) — a UI limpa e a API tambem, para nenhum override do papel
+      anterior sobreviver.
+- [ ] Selo "(ajustado)" aparece na linha da pessoa em /admin/equipe assim que
+      houver ao menos um ajuste.
+- [ ] Suspender a pessoa (status INATIVO) derruba o acesso na proxima
+      requisicao, mesmo com o token ainda valido.
+
+### Fronteiras que precisam continuar fechadas
+
+```
+# Escalada de privilegio via ajuste fino (a unica permissao exclusiva)
+PATCH /api/admin/equipe/<id> body={"extraPermissions":["equipe.manage"]}
+Esperado: 400 (exclusiva do Super Admin)
+
+# Designer: so o banco de artes
+GET  /api/admin/alunos/global                 -> 403
+POST /api/admin/alunos/<id>/reset-password    -> 403
+GET  /api/admin/dashboard                     -> 403
+GET  /admin                                   -> redirect para /admin/artes
+
+# Comercial de revenda: sem aluno, sem dinheiro
+GET  /api/admin/referrals/commissions/export  -> 403
+GET  /api/admin/financeiro/referral-payouts   -> 403
+POST /api/admin/alunos/<id>/enrollments/<e>/cancelar -> 403
+
+# Financeiro: dinheiro sim, unidade e catalogo nao
+PATCH /api/admin/revendedores/<id>/status     -> 403
+PATCH /api/admin/catalogo/<id>                -> 403
+GET   /api/admin/relatorios/<tipo>            -> 403 (export nunca o atendeu)
+
+# Gerente de unidades: administra a carteira, nao o contrato
+PATCH /api/admin/revendedores/<id>/policy            -> 403
+PATCH /api/admin/tenants/<id>/can-sell-resellers     -> 403
+PATCH /api/admin/revendedores/<id>/manager           -> 403
+PATCH /api/admin/revendedores/<id>/status  (unidade nao atribuida) -> 403
+```
+
+### Regressoes fechadas na revisao (rodar em homologacao antes do deploy)
+
+Cinco escaladas reais foram introduzidas quando a autorizacao virou permissao e
+as travas internas ficaram no papel. Cada linha abaixo e o cenario exato:
+
+```
+# 1. Cobranca de unidade fora da carteira (era SUPER_ADMIN-only e ficou sem
+#    checagem de dono — `deletePayment` bate na chave Asaas da MAE)
+como PMB_RESELLER_MGR:
+DELETE /api/admin/revendedores/<unidade-que-ele-NAO-gerencia>/payments/<id> -> 403
+PATCH  /api/admin/revendedores/<unidade-dele>/payments/<id-de-outra-unidade> -> 404
+
+# 2. Desconto de 100% ao receber `vendas.create` por ajuste fino
+conceda "Registrar nova venda" a um PMB_RESELLER_MGR e poste:
+POST /api/admin/vendas {"manualDiscountPercent": 100, ...} -> 403 (cap 50%)
+
+# 3. Cupom de 100% ao receber `cupons.manage` por ajuste fino
+POST /api/admin/cupons {"discountType":"PERCENTAGE","discountValue":100} -> 403
+PATCH /api/admin/cupons/<cupom-de-OUTRO-vendedor>/toggle -> 403
+
+# 4. Clawback fora do publico (era super + financeiro)
+como PMB_RESELLER_MGR:
+POST /api/admin/referrals/clawback/resolve -> 403
+
+# 5. REVOGAR permissao ampliava o acesso (derivacao invertida)
+em /admin/equipe, desmarque "Ver as unidades atribuidas" de um PMB_RESELLER_MGR
+que mantem "Ver as comissoes a pagar", e chame:
+GET /api/admin/financeiro/referral-payouts -> 403 (antes: PIX de TODA a rede)
+
+# 6. IDOR na pagina de comissoes da unidade
+como PMB_RESELLER_MGR, abra
+/admin/revendedores/<unidade-que-ele-NAO-gerencia>/comissoes -> 404
+
+# 7. Token do gateway sem a permissao de credencial
+com `configuracoes.manage` e SEM `integracoes.manage`:
+PATCH /api/admin/config {"pmbMpAccessToken":"..."} -> 403
+
+# 8. `unidades.viewAll` nao e concedivel (viraria super admin de fato)
+PATCH /api/admin/equipe/<id> {"extraPermissions":["unidades.viewAll"]} -> 400
+```

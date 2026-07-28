@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
-import { requireAdminSession } from "@/lib/auth/admin-session"
 import { syncAllCatalogs } from "@/lib/catalog/sync-all"
 import { withRequestContext } from "@/lib/observability/with-request-context"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 // Sync de 120+ cursos em DUAS plataformas (EA + LMS) pode passar dos 10s default.
 export const maxDuration = 120
@@ -9,17 +9,11 @@ export const maxDuration = 120
 export const POST = withRequestContext(
   { action: "admin.catalogo.sync", route: "/api/admin/catalogo/sync" },
   async () => {
-  const ctx = await requireAdminSession()
-  if (!ctx) {
-    return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-  }
+  const guard = await requireAdmin("catalogo.sync")
+  if (!guard.ok) return guard.response
   // Sync muta o catalogo GLOBAL (precos, categorias, status, HomeSections).
   // Consistente com catalogo/[id], catalogo/categorias e system-settings,
   // que sao SUPER_ADMIN-only.
-  if (ctx.role !== "SUPER_ADMIN") {
-    return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
-  }
-
   // Sincroniza TODAS as fornecedoras (EA + LMS), tolerando falha parcial.
   const result = await syncAllCatalogs("manual")
 

@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
-import { requirePmbTeam } from "@/lib/auth/guards"
 import { changeStudentPlatformPassword } from "@/lib/students/plataforma-actions"
 import {
   PLATFORM_PASSWORD_UNSUPPORTED_STAFF,
@@ -9,6 +8,7 @@ import {
 import { generateTemporaryPassword } from "@/lib/students/generate-password"
 import { rateLimitByKey, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 const bodySchema = z.object({
   newPassword: z.string().trim().min(6).max(60).optional(),
@@ -21,14 +21,14 @@ export const POST = withRequestContextParams<{ id: string }>(
     route: "/api/admin/alunos/[id]/plataforma-senha",
   },
   async (request: Request, ctx) => {
-    const guard = await requirePmbTeam()
+    const guard = await requireAdmin("alunosRede.manage")
     if (!guard.ok) return guard.response
 
     // Mesmo motivo do endpoint do aluno: cada chamada custa duas idas a EA
     // (escrever + reler para conferir) e hoje a troca sempre fracassa, entao
     // repetir so queima cota externa. Chaveado pelo usuario PMB.
     const rl = await rateLimitByKey(
-      guard.session.userId,
+      guard.ctx.userId,
       RATE_LIMITS.alunoSenhaPlataforma,
     )
     if (!rl.ok) return rateLimitResponse(rl)

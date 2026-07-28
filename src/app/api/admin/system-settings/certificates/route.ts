@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { requireSuperAdmin } from "@/lib/auth/guards"
 import { withRequestContext } from "@/lib/observability/with-request-context"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 const SETTINGS_ID = "default"
 
@@ -25,7 +25,7 @@ const SELECT = {
 export const GET = withRequestContext(
   { action: "admin.system_settings.certificates.get", route: "/api/admin/system-settings/certificates" },
   async () => {
-  const guard = await requireSuperAdmin()
+  const guard = await requireAdmin("certificados.template")
   if (!guard.ok) return guard.response
 
   const row = await prisma.systemSettings.upsert({
@@ -42,7 +42,7 @@ export const GET = withRequestContext(
 export const PUT = withRequestContext(
   { action: "admin.system_settings.certificates.update", route: "/api/admin/system-settings/certificates" },
   async (request: Request) => {
-  const guard = await requireSuperAdmin()
+  const guard = await requireAdmin("certificados.template")
   if (!guard.ok) return guard.response
 
   let payload: unknown

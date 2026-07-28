@@ -1,7 +1,7 @@
-import { requireSuperAdmin } from "@/lib/auth/guards"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { rateLimit, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
 import { handlePackageCoverUpload } from "@/lib/packages/cover-upload"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 /* ------------------------------------------------------------------ */
 /* POST — upload da capa de um pacote da PMB (Supabase Storage)        */
@@ -10,7 +10,7 @@ import { handlePackageCoverUpload } from "@/lib/packages/cover-upload"
 export const POST = withRequestContext(
   { action: "admin.pacotes.capa_upload", route: "/api/admin/pacotes/capa" },
   async (request: Request) => {
-    const guard = await requireSuperAdmin()
+    const guard = await requireAdmin("pacotes.manage")
     if (!guard.ok) return guard.response
 
     const rl = await rateLimit(request, RATE_LIMITS.upload)

@@ -1,18 +1,18 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { requireArtesManager } from "@/lib/auth/guards"
 import { deleteVitrineAsset } from "@/lib/supabase/storage"
 import { rateLimit, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { ART_PATH_RE, validateUploadedArtObject, withArtUrls } from "@/lib/artes/admin-upload"
 import { artLayoutSchema } from "@/lib/artes/layout-schema"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 // GET /api/admin/artes — lista todas (publicadas ou nao) na ordem de gestao.
 export const GET = withRequestContext(
   { action: "admin.artes.list", route: "/api/admin/artes" },
   async () => {
-    const guard = await requireArtesManager()
+    const guard = await requireAdmin("artes.view")
     if (!guard.ok) return guard.response
 
     const arts = await prisma.marketingArt.findMany({
@@ -43,7 +43,7 @@ const createSchema = z.object({
 export const POST = withRequestContext(
   { action: "admin.artes.create", route: "/api/admin/artes" },
   async (request: Request) => {
-    const guard = await requireArtesManager()
+    const guard = await requireAdmin("artes.manage")
     if (!guard.ok) return guard.response
 
     const rl = await rateLimit(request, RATE_LIMITS.artesUpload)

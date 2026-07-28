@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { requireSuperAdmin } from "@/lib/auth/guards"
 import type { NotificationLevel } from "@prisma/client"
 import { withRequestContext } from "@/lib/observability/with-request-context"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 const VALID_TARGETS = ["TENANT", "STUDENT", "ADMIN"] as const
 type ConfigTarget = (typeof VALID_TARGETS)[number]
@@ -18,7 +18,7 @@ const NOTIFICATION_LEVELS: NotificationLevel[] = [
 export const GET = withRequestContext(
   { action: "admin.notifications.auto_config.list", route: "/api/admin/notifications/auto-config" },
   async (request: Request) => {
-  const auth = await requireSuperAdmin()
+  const auth = await requireAdmin("configuracoes.manage")
   if (!auth.ok) return auth.response
 
   const { searchParams } = new URL(request.url)
@@ -58,7 +58,7 @@ const patchSchema = z.object({
 export const PATCH = withRequestContext(
   { action: "admin.notifications.auto_config.update", route: "/api/admin/notifications/auto-config" },
   async (request: Request) => {
-  const auth = await requireSuperAdmin()
+  const auth = await requireAdmin("configuracoes.manage")
   if (!auth.ok) return auth.response
 
   let body: unknown

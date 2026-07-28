@@ -1,8 +1,7 @@
 import Link from "next/link"
-import { redirect } from "next/navigation"
 import { ArrowLeft } from "lucide-react"
 import { prisma } from "@/lib/prisma"
-import { requireAdminSession } from "@/lib/auth/admin-session"
+import { requireAdminPage } from "@/lib/auth/admin-guard"
 import { PageHeader } from "@/components/painel/page-header"
 import { AdminTecnicaSettingsForm } from "@/components/admin/admin-tecnica-settings-form"
 import { parseTecnicaCourses } from "@/lib/catalog/tecnica"
@@ -10,9 +9,7 @@ import { parseTecnicaCourses } from "@/lib/catalog/tecnica"
 export const dynamic = "force-dynamic"
 
 export default async function AdminTecnicaSettingsPage() {
-  const session = await requireAdminSession()
-  if (!session) redirect("/login?callbackUrl=/admin/configuracoes/unidade-tecnica")
-  if (session.role !== "SUPER_ADMIN") redirect("/admin/configuracoes")
+  await requireAdminPage("vitrine.manage")
 
   const settings = await prisma.systemSettings.upsert({
     where: { id: "default" },

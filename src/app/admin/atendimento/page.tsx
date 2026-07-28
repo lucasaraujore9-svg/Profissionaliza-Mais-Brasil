@@ -1,6 +1,5 @@
-import { redirect } from "next/navigation"
 import Link from "next/link"
-import { requireAdminSession } from "@/lib/auth/admin-session"
+import { requireAdminPage } from "@/lib/auth/admin-guard"
 import { prisma } from "@/lib/prisma"
 import { PageHeader } from "@/components/painel/page-header"
 import {
@@ -28,11 +27,7 @@ export default async function AdminAtendimentoPage({
 }: {
   searchParams: Promise<{ status?: string; kind?: string }>
 }) {
-  const session = await requireAdminSession()
-  if (!session) redirect("/login?callbackUrl=/admin/atendimento")
-  if (session.role !== "SUPER_ADMIN" && session.role !== "PMB_SALES") {
-    redirect("/admin")
-  }
+  await requireAdminPage("atendimento.manage")
 
   const sp = await searchParams
   const status: Status = sp.status === "RESOLVED" ? "RESOLVED" : "OPEN"

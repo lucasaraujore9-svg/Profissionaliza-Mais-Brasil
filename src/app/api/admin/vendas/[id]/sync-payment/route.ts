@@ -1,18 +1,18 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { requirePmbSales } from "@/lib/auth/guards"
 import { getPayment as getAsaasPayment, listPayments as listAsaasPayments } from "@/lib/asaas/client"
 import { searchPayments as searchMpPayments } from "@/lib/mercadopago/client"
 import { pmbMpAccessToken, pmbPlataformaPolo, pmbPlataformaVendedorId } from "@/lib/pmb-config"
 import { fulfillEnrollment } from "@/lib/enrollment/fulfill"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 export const dynamic = "force-dynamic"
 
 export const POST = withRequestContextParams<{ id: string }>(
   { action: "admin.vendas.sync_payment", route: "/api/admin/vendas/[id]/sync-payment" },
   async (_request: Request, { params }) => {
-  const guard = await requirePmbSales()
+  const guard = await requireAdmin("vendas.create")
   if (!guard.ok) return guard.response
 
   const { id } = await params
@@ -21,9 +21,9 @@ export const POST = withRequestContextParams<{ id: string }>(
     where: {
       id,
       tenantId: null,
-      ...(guard.session.role === "SUPER_ADMIN"
+      ...(guard.ctx.can("vendas.viewAll")
         ? {}
-        : { soldByUserId: guard.session.userId }),
+        : { soldByUserId: guard.ctx.userId }),
     },
     select: {
       id: true,

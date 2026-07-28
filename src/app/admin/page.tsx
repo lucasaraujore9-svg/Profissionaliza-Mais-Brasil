@@ -1,6 +1,6 @@
 import { PageHeader } from "@/components/painel/page-header"
 import { AdminDashboardClient } from "@/components/admin/admin-dashboard-client"
-import { requireAdminSession } from "@/lib/auth/admin-session"
+import { requireAdminPage } from "@/lib/auth/admin-guard"
 
 function timeGreeting(date = new Date()): string {
   const hour = date.getHours()
@@ -18,7 +18,7 @@ const DESCRIPTION_BY_ROLE: Record<string, string> = {
 }
 
 export default async function AdminDashboardPage() {
-  const ctx = await requireAdminSession()
+  const ctx = await requireAdminPage("dashboard.view")
   const firstName = ctx?.name?.split(" ")[0] ?? "Admin"
   const description =
     (ctx && DESCRIPTION_BY_ROLE[ctx.role]) ??

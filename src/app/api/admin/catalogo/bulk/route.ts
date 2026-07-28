@@ -1,8 +1,6 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { requireAdminSession } from "@/lib/auth/admin-session"
-import { requireSuperAdmin } from "@/lib/auth/guards"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { contextLogger } from "@/lib/logger"
 import { runInChunks } from "@/lib/concurrency"
@@ -10,6 +8,7 @@ import {
   APRENDIZADO_MAX_ITEMS,
   APRENDIZADO_MAX_LEN,
 } from "@/lib/courses/aprendizado"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 // PERF-013: nº de updates individuais concorrentes por lote (corta o wall-time
 // de lotes grandes sem estourar o pool do Supabase).
@@ -23,10 +22,8 @@ const BULK_CONCURRENCY = 10
 export const GET = withRequestContext(
   { action: "admin.catalogo.bulk.list", route: "/api/admin/catalogo/bulk" },
   async () => {
-    const ctx = await requireAdminSession()
-    if (!ctx) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
+    const guard = await requireAdmin("catalogo.view")
+    if (!guard.ok) return guard.response
 
     const courses = await prisma.course.findMany({
       orderBy: { nome: "asc" },
@@ -91,7 +88,7 @@ const bulkSchema = z.object({
 export const PUT = withRequestContext(
   { action: "admin.catalogo.bulk.update", route: "/api/admin/catalogo/bulk" },
   async (request: Request) => {
-    const guard = await requireSuperAdmin()
+    const guard = await requireAdmin("catalogo.manage")
     if (!guard.ok) return guard.response
 
     let payload: unknown

@@ -1,24 +1,18 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { requireAdminSession } from "@/lib/auth/admin-session"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 const schema = z.object({ status: z.enum(["OPEN", "RESOLVED"]) })
 
-// Resolve/reabre uma mensagem da caixa PMB (tenantId null). SUPER_ADMIN e
-// PMB_SALES — mesmos papeis que veem /admin/atendimento.
+// Resolve/reabre uma mensagem da caixa PMB (tenantId null). Mesma permissão que
+// abre /admin/atendimento.
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const session = await requireAdminSession()
-  if (!session) {
-    return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-  }
-  if (session.role !== "SUPER_ADMIN" && session.role !== "PMB_SALES") {
-    return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
-  }
-
+  const guard = await requireAdmin("atendimento.manage")
+  if (!guard.ok) return guard.response
   const { id } = await params
 
   let payload: unknown
@@ -46,7 +40,7 @@ export async function PATCH(
     data: {
       status: parsed.data.status,
       resolvedAt: resolved ? new Date() : null,
-      resolvedByUserId: resolved ? session.userId : null,
+      resolvedByUserId: resolved ? guard.ctx.userId : null,
     },
   })
 

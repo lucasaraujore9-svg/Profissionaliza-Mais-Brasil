@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { requireAdminSession } from "@/lib/auth/admin-session"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 import { StudentLeadStage } from "@prisma/client"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 const bodySchema = z.object({
   stage: z.nativeEnum(StudentLeadStage),
@@ -13,12 +13,9 @@ const bodySchema = z.object({
 export const PATCH = withRequestContextParams<{ id: string }>(
   { action: "admin.leads.stage", route: "/api/admin/leads/[id]/stage" },
   async (request: Request, { params }) => {
-    const ctx = await requireAdminSession()
-    if (!ctx) return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    if (ctx.role !== "SUPER_ADMIN" && ctx.role !== "PMB_SALES") {
-      return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
-    }
-
+    const guard = await requireAdmin("leads.manage")
+    if (!guard.ok) return guard.response
+    const ctx = guard.ctx
     const { id } = await params
 
     let payload: unknown

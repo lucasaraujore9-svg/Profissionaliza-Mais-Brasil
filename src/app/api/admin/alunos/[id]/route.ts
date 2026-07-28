@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { requirePmbSales, requirePmbTeam } from "@/lib/auth/guards"
 import { getOrCreatePmbTenant } from "@/lib/pmb-tenant"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 import { applyStudentEdit, editSchema } from "@/lib/students/management"
@@ -8,11 +7,12 @@ import {
   deriveStudentDisplayStatus,
   countEnrollmentStatuses,
 } from "@/lib/students/display-status"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 export const GET = withRequestContextParams<{ id: string }>(
   { action: "admin.alunos.get", route: "/api/admin/alunos/[id]" },
   async (_request: Request, ctx) => {
-  const guard = await requirePmbSales()
+  const guard = await requireAdmin("alunos.view")
   if (!guard.ok) return guard.response
 
   const { id } = await ctx.params
@@ -20,9 +20,9 @@ export const GET = withRequestContextParams<{ id: string }>(
   const pmbTenant = await getOrCreatePmbTenant()
 
   const whereEnrollments =
-    guard.session.role === "SUPER_ADMIN"
+    guard.ctx.can("alunos.viewAll")
       ? { tenantId: null as null }
-      : { tenantId: null as null, soldByUserId: guard.session.userId }
+      : { tenantId: null as null, soldByUserId: guard.ctx.userId }
 
   const student = await prisma.student.findFirst({
     where: {
@@ -122,7 +122,7 @@ export const GET = withRequestContextParams<{ id: string }>(
 export const PATCH = withRequestContextParams<{ id: string }>(
   { action: "admin.alunos.update", route: "/api/admin/alunos/[id]" },
   async (request: Request, ctx) => {
-    const guard = await requirePmbTeam()
+    const guard = await requireAdmin("alunosRede.manage")
     if (!guard.ok) return guard.response
 
     const { id } = await ctx.params

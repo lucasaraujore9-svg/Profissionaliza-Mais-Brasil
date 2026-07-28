@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { requireAdminSession } from "@/lib/auth/admin-session"
 import {
   adminCanAccessCertTenant,
   certScopeDeniedResponse,
@@ -8,6 +7,7 @@ import {
 import { generateAndUploadPdf } from "@/lib/certificates/generate-pdf"
 import { contextLogger } from "@/lib/logger"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 export const dynamic = "force-dynamic"
 export const maxDuration = 60
@@ -18,10 +18,9 @@ export const maxDuration = 60
 export const POST = withRequestContextParams<{ id: string }>(
   { action: "admin.certificates.regenerate", route: "/api/admin/certificates/[id]/regenerate" },
   async (_request: Request, { params }) => {
-    const ctx = await requireAdminSession()
-    if (!ctx) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
+    const guard = await requireAdmin("certificados.manage")
+    if (!guard.ok) return guard.response
+    const ctx = guard.ctx
 
     const { id } = await params
     const cert = await prisma.certificate.findUnique({ where: { id } })
@@ -30,7 +29,7 @@ export const POST = withRequestContextParams<{ id: string }>(
     }
     // Escopo por papel: regenerar sobrescreve o PDF no Storage (mutacao). Sem
     // isto, qualquer membro PMB regeneraria certificados de qualquer revendedor.
-    if (!(await adminCanAccessCertTenant(ctx.role, ctx.userId, cert.tenantId))) {
+    if (!(await adminCanAccessCertTenant(ctx, cert.tenantId))) {
       return certScopeDeniedResponse()
     }
     if (cert.revokedAt) {

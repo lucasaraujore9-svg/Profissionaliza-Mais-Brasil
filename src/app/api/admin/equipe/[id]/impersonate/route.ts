@@ -1,11 +1,10 @@
 import { NextResponse } from "next/server"
-import { requireAdminSession } from "@/lib/auth/admin-session"
 import { prisma } from "@/lib/prisma"
 import { startImpersonation } from "@/lib/auth/start-impersonation"
 import { homeForRole } from "@/lib/auth/home-for-role"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
-import { contextLogger } from "@/lib/logger"
 import { logAudit } from "@/lib/audit"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 // POST /api/admin/equipe/[id]/impersonate — SUPER_ADMIN entra como um membro
 // INTERNO da equipe PMB (vendedor, gerente, financeiro) para ver exatamente o
@@ -26,18 +25,9 @@ const IMPERSONATABLE_ROLES = [
 export const POST = withRequestContextParams<{ id: string }>(
   { action: "admin.equipe.impersonate", route: "/api/admin/equipe/[id]/impersonate" },
   async (_request: Request, { params }) => {
-    const admin = await requireAdminSession()
-    if (!admin) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
-    if (admin.role !== "SUPER_ADMIN") {
-      contextLogger().warn(
-        { event: "impersonate.denied", actorId: admin.userId, actorRole: admin.role },
-        "tentativa de impersonate de equipe por papel não-SUPER_ADMIN",
-      )
-      return NextResponse.json({ error: "Permissão negada" }, { status: 403 })
-    }
-
+    const guard = await requireAdmin("equipe.manage")
+    if (!guard.ok) return guard.response
+    const admin = guard.ctx
     const { id: userId } = await params
 
     // Não impersonar a si mesmo (sem efeito + confunde o backup da sessão).

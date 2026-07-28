@@ -2,11 +2,11 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
-import { requireArtesManager } from "@/lib/auth/guards"
 import { deleteVitrineAsset } from "@/lib/supabase/storage"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 import { withArtUrls } from "@/lib/artes/admin-upload"
 import { artLayoutSchema } from "@/lib/artes/layout-schema"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 const updateSchema = z
   .object({
@@ -25,7 +25,7 @@ const updateSchema = z
 export const PATCH = withRequestContextParams<{ id: string }>(
   { action: "admin.artes.update", route: "/api/admin/artes/[id]" },
   async (request: Request, { params }) => {
-    const guard = await requireArtesManager()
+    const guard = await requireAdmin("artes.manage")
     if (!guard.ok) return guard.response
 
     const { id } = await params
@@ -73,7 +73,7 @@ export const PATCH = withRequestContextParams<{ id: string }>(
 export const DELETE = withRequestContextParams<{ id: string }>(
   { action: "admin.artes.delete", route: "/api/admin/artes/[id]" },
   async (_request: Request, { params }) => {
-    const guard = await requireArtesManager()
+    const guard = await requireAdmin("artes.manage")
     if (!guard.ok) return guard.response
 
     const { id } = await params

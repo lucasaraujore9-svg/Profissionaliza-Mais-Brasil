@@ -2,21 +2,19 @@ import { NextResponse } from "next/server"
 import type { Prisma } from "@prisma/client"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { requireAdminSession } from "@/lib/auth/admin-session"
-import { tenantScopeWhere } from "@/lib/auth/scope"
 import { resolveReferrerFromCookie } from "@/lib/referrals/capture"
 import { contextLogger } from "@/lib/logger"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { SLUG_REGEX } from "@/lib/tenant/slug"
 import { createReseller } from "@/lib/resellers/create"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 export const GET = withRequestContext(
   { action: "admin.revendedores.list", route: "/api/admin/revendedores" },
   async (request: Request) => {
-  const ctx = await requireAdminSession()
-  if (!ctx) {
-    return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-  }
+  const guard = await requireAdmin("unidades.view")
+  if (!guard.ok) return guard.response
+  const ctx = guard.ctx
 
   const { searchParams } = new URL(request.url)
   const q = searchParams.get("q")?.trim() ?? ""
@@ -36,11 +34,10 @@ export const GET = withRequestContext(
     where.status = status as Prisma.TenantWhereInput["status"]
   }
 
-  // Escopo de visibilidade por papel (src/lib/auth/scope.ts):
-  //   SUPER_ADMIN        -> todas;            PMB_RESELLER_MGR -> as que dá suporte
-  //   PMB_REVENDA_SALES  -> as que vendeu;    PMB_SALES_MGR    -> as do seu time
-  //   demais (ex: PMB_SALES = vendedor de curso) -> nenhuma (scope null)
-  const scope = await tenantScopeWhere(ctx)
+  // Escopo de visibilidade: `unidades.viewAll` vê todas; sem ela vale o recorte
+  // do papel (gerente de unidades -> as que dá suporte; vendedor de revenda ->
+  // as que vendeu; gerente de vendas -> as do time). `null` = nenhuma unidade.
+  const scope = await ctx.unidadesWhere()
   if (!scope) {
     return NextResponse.json({
       data: {
@@ -53,7 +50,7 @@ export const GET = withRequestContext(
   Object.assign(where, scope)
 
   // Filtro manual por gerente de suporte: só faz sentido para quem vê todas.
-  if (ctx.role === "SUPER_ADMIN") {
+  if (ctx.can("unidades.viewAll")) {
     const managerFilter = searchParams.get("manager")?.trim()
     if (managerFilter === "unassigned") where.accountManagerId = null
     else if (managerFilter) where.accountManagerId = managerFilter
@@ -195,25 +192,9 @@ const createSchema = z.object({
 export const POST = withRequestContext(
   { action: "admin.revendedores.create", route: "/api/admin/revendedores" },
   async (request: Request) => {
-  const ctx = await requireAdminSession()
-  if (!ctx) {
-    return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-  }
-  // Quem pode criar/converter: super, gerente de suporte e o time comercial de
-  // revenda (gerente de vendas + vendedor de revenda, que convertem leads).
-  const CAN_CREATE = [
-    "SUPER_ADMIN",
-    "PMB_RESELLER_MGR",
-    "PMB_SALES_MGR",
-    "PMB_REVENDA_SALES",
-  ]
-  if (!CAN_CREATE.includes(ctx.role)) {
-    return NextResponse.json(
-      { error: "Sem permissão para criar revenda" },
-      { status: 403 },
-    )
-  }
-
+  const guard = await requireAdmin("unidades.create")
+  if (!guard.ok) return guard.response
+  const ctx = guard.ctx
   let body: unknown
   try {
     body = await request.json()

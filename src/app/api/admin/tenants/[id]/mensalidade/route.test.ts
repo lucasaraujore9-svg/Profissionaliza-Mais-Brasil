@@ -10,17 +10,18 @@ vi.mock("@/lib/prisma", () => ({
     tenant: { findUnique: vi.fn(), update: vi.fn() },
   },
 }))
-vi.mock("@/lib/auth/admin-session", () => ({ requireAdminSession: vi.fn() }))
+vi.mock("@/lib/auth/admin-guard", () => ({ requireAdmin: vi.fn() }))
 vi.mock("@/lib/redis/tenant-cache", () => ({ invalidateTenant: vi.fn() }))
 
 import { prisma } from "@/lib/prisma"
-import { requireAdminSession } from "@/lib/auth/admin-session"
+import { requireAdmin } from "@/lib/auth/admin-guard"
+import { adminGuardFor } from "@/test/admin-ctx"
 import { PUT } from "./route"
 
 const p = prisma as unknown as {
   tenant: { findUnique: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn> }
 }
-const adminSession = requireAdminSession as unknown as ReturnType<typeof vi.fn>
+const guardMock = requireAdmin as unknown as ReturnType<typeof vi.fn>
 
 function jreq(body: unknown) {
   return new Request("http://x", {
@@ -46,7 +47,7 @@ function mockTenant(overrides: Partial<Record<string, unknown>> = {}) {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  adminSession.mockResolvedValue({ userId: "u1", role: "SUPER_ADMIN" })
+  guardMock.mockImplementation(adminGuardFor({ role: "SUPER_ADMIN" }).requireAdmin)
   p.tenant.update.mockResolvedValue({
     id: "t1",
     monthlyAllowed: true,

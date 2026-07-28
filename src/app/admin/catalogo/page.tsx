@@ -1,10 +1,10 @@
 import { PageHeader } from "@/components/painel/page-header"
 import { AdminCatalogTabs } from "@/components/admin/admin-catalog-tabs"
-import { requireAdminSession } from "@/lib/auth/admin-session"
+import { requireAdminPage } from "@/lib/auth/admin-guard"
 
 export default async function AdminCatalogPage() {
-  const session = await requireAdminSession()
-  const canEdit = session?.role === "SUPER_ADMIN"
+  const session = await requireAdminPage("catalogo.view")
+  const canEdit = session.can("catalogo.manage")
 
   return (
     <div className="space-y-6">

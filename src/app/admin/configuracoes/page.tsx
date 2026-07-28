@@ -2,7 +2,7 @@ import Link from "next/link"
 import { Share2, ChevronRight, Building2, Zap, LineChart } from "lucide-react"
 import { PageHeader } from "@/components/painel/page-header"
 import { AdminConfigClient } from "@/components/admin/admin-config-client"
-import { requireAdminSession } from "@/lib/auth/admin-session"
+import { requireAdminPage } from "@/lib/auth/admin-guard"
 import { env } from "@/lib/env"
 
 // Configurações de Certificados agora vivem dentro de /admin/certificados/configuracoes.
@@ -34,8 +34,8 @@ const SUB_SETTINGS = [
 ]
 
 export default async function AdminConfigPage() {
-  const ctx = await requireAdminSession()
-  const canEditGateway = ctx?.role === "SUPER_ADMIN"
+  const ctx = await requireAdminPage("configuracoes.manage")
+  const canEditGateway = ctx.can("integracoes.manage")
 
   // Segredo do webhook do LMS exibido na aba API — só para SUPER_ADMIN (precisa
   // dele para configurar o lado do LMS). Lido server-side; null se não for

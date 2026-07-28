@@ -1,54 +1,67 @@
 import { describe, it, expect } from "vitest"
+import {
+  ADMIN_ROLE_PRESETS,
+  PMB_TEAM_ROLES,
+  resolveAdminPermissions,
+  type PmbTeamRole,
+} from "@/lib/auth/admin-permissions"
 import { allowedTabs, canViewTab, defaultTab, reportTab } from "./tabs"
+
+/** As abas passaram a ser gateadas por permissão; o papel entra via preset. */
+const perms = (role: PmbTeamRole) => resolveAdminPermissions(role)
 
 describe("admin report tabs — gating", () => {
   it("SUPER_ADMIN vê todas as abas", () => {
-    const tabs = allowedTabs("SUPER_ADMIN")
+    const tabs = allowedTabs(perms("SUPER_ADMIN"))
     expect(tabs.map((t) => t.slug)).toContain("financeiro")
     expect(tabs.map((t) => t.slug)).toContain("leads-conversao")
     expect(tabs.length).toBe(9)
   })
 
   it("PMB_SALES não vê financeiro nem rede", () => {
-    expect(canViewTab("PMB_SALES", "financeiro")).toBe(false)
-    expect(canViewTab("PMB_SALES", "rede-revendedores")).toBe(false)
-    expect(canViewTab("PMB_SALES", "receita-vendas")).toBe(true)
+    expect(canViewTab(perms("PMB_SALES"), "financeiro")).toBe(false)
+    expect(canViewTab(perms("PMB_SALES"), "rede-revendedores")).toBe(false)
+    expect(canViewTab(perms("PMB_SALES"), "receita-vendas")).toBe(true)
   })
 
   it("PMB_FINANCEIRO vê financeiro e comissões, mas não leads", () => {
-    expect(canViewTab("PMB_FINANCEIRO", "financeiro")).toBe(true)
-    expect(canViewTab("PMB_FINANCEIRO", "indicacoes-comissoes")).toBe(true)
-    expect(canViewTab("PMB_FINANCEIRO", "leads-conversao")).toBe(false)
+    expect(canViewTab(perms("PMB_FINANCEIRO"), "financeiro")).toBe(true)
+    expect(canViewTab(perms("PMB_FINANCEIRO"), "indicacoes-comissoes")).toBe(true)
+    expect(canViewTab(perms("PMB_FINANCEIRO"), "leads-conversao")).toBe(false)
   })
 
   it("PMB_REVENDA_SALES vê rede/leads mas não financeiro", () => {
-    expect(canViewTab("PMB_REVENDA_SALES", "rede-revendedores")).toBe(true)
-    expect(canViewTab("PMB_REVENDA_SALES", "leads-conversao")).toBe(true)
-    expect(canViewTab("PMB_REVENDA_SALES", "financeiro")).toBe(false)
+    expect(canViewTab(perms("PMB_REVENDA_SALES"), "rede-revendedores")).toBe(true)
+    expect(canViewTab(perms("PMB_REVENDA_SALES"), "leads-conversao")).toBe(true)
+    expect(canViewTab(perms("PMB_REVENDA_SALES"), "financeiro")).toBe(false)
   })
 
   it("defaultTab respeita defaultFor por papel", () => {
-    expect(defaultTab("SUPER_ADMIN")).toBe("visao-geral")
-    expect(defaultTab("PMB_FINANCEIRO")).toBe("financeiro")
-    expect(defaultTab("PMB_SALES")).toBe("receita-vendas")
+    expect(defaultTab("SUPER_ADMIN", perms("SUPER_ADMIN"))).toBe("visao-geral")
+    expect(defaultTab("PMB_FINANCEIRO", perms("PMB_FINANCEIRO"))).toBe("financeiro")
+    expect(defaultTab("PMB_SALES", perms("PMB_SALES"))).toBe("receita-vendas")
   })
 
-  it("todos os papéis veem exportacoes", () => {
+  // A aba Exportações só aparece para quem a API de export realmente serve
+  // (`REPORT_ROLES` em /api/admin/relatorios/[type]). Antes ela era oferecida a
+  // todos os papéis e retornava 403 para gerente de vendas, vendedor de revenda
+  // e financeiro.
+  it("exportacoes só para os papéis que a API de export atende", () => {
+    for (const role of ["SUPER_ADMIN", "PMB_SALES", "PMB_RESELLER_MGR"] as const) {
+      expect(canViewTab(perms(role), "exportacoes"), role).toBe(true)
+    }
     for (const role of [
-      "SUPER_ADMIN",
       "PMB_FINANCEIRO",
-      "PMB_SALES",
       "PMB_SALES_MGR",
       "PMB_REVENDA_SALES",
-      "PMB_RESELLER_MGR",
     ] as const) {
-      expect(canViewTab(role, "exportacoes")).toBe(true)
+      expect(canViewTab(perms(role), "exportacoes"), role).toBe(false)
     }
   })
 
   it("aba inexistente não é vista por ninguém", () => {
     expect(reportTab("inexistente")).toBeUndefined()
-    expect(canViewTab("SUPER_ADMIN", "inexistente")).toBe(false)
+    expect(canViewTab(perms("SUPER_ADMIN"), "inexistente")).toBe(false)
   })
 })
 
@@ -75,34 +88,38 @@ describe("admin report tabs — SEG-009 authz de agregação global", () => {
   it("papéis de escopo limitado (mgr/revenda/reseller-mgr) não alcançam nenhuma aba de agregação global", () => {
     for (const role of SCOPED_ROLES) {
       for (const tab of GLOBAL_TABS) {
-        expect(canViewTab(role, tab)).toBe(false)
+        expect(canViewTab(perms(role), tab)).toBe(false)
       }
     }
   })
 
   it("visão geral (MRR + top revendas por GMV) só para SUPER_ADMIN e PMB_FINANCEIRO", () => {
-    expect(canViewTab("SUPER_ADMIN", "visao-geral")).toBe(true)
-    expect(canViewTab("PMB_FINANCEIRO", "visao-geral")).toBe(true)
+    expect(canViewTab(perms("SUPER_ADMIN"), "visao-geral")).toBe(true)
+    expect(canViewTab(perms("PMB_FINANCEIRO"), "visao-geral")).toBe(true)
     for (const role of [
       "PMB_SALES",
       "PMB_SALES_MGR",
       "PMB_REVENDA_SALES",
       "PMB_RESELLER_MGR",
     ] as const) {
-      expect(canViewTab(role, "visao-geral")).toBe(false)
+      expect(canViewTab(perms(role), "visao-geral")).toBe(false)
     }
   })
 
   it("PMB_SALES vê receita-vendas (escopado a PMB no módulo) mas não alunos/cursos globais", () => {
-    expect(canViewTab("PMB_SALES", "receita-vendas")).toBe(true)
-    expect(canViewTab("PMB_SALES", "alunos-matriculas")).toBe(false)
-    expect(canViewTab("PMB_SALES", "cursos-cupons")).toBe(false)
-    expect(canViewTab("PMB_SALES", "visao-geral")).toBe(false)
+    expect(canViewTab(perms("PMB_SALES"), "receita-vendas")).toBe(true)
+    expect(canViewTab(perms("PMB_SALES"), "alunos-matriculas")).toBe(false)
+    expect(canViewTab(perms("PMB_SALES"), "cursos-cupons")).toBe(false)
+    expect(canViewTab(perms("PMB_SALES"), "visao-geral")).toBe(false)
   })
 
   it("alunos/cursos globais são exclusivos de SUPER_ADMIN", () => {
     for (const tab of ["alunos-matriculas", "cursos-cupons"] as const) {
-      expect(reportTab(tab)?.roles).toEqual(["SUPER_ADMIN"])
+      const perm = reportTab(tab)!.permission
+      const holders = PMB_TEAM_ROLES.filter((r) =>
+        ADMIN_ROLE_PRESETS[r].includes(perm),
+      )
+      expect(holders).toEqual(["SUPER_ADMIN"])
     }
   })
 })

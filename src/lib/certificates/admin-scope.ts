@@ -1,35 +1,31 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import type { UserRole } from "@prisma/client"
+import type { AdminContext } from "@/lib/auth/admin-guard"
 
 /**
  * Escopo de acesso da equipe PMB a um certificado/matricula, espelhando
  * EXATAMENTE o filtro da listagem GET /api/admin/certificates:
- *  - SUPER_ADMIN: todos.
- *  - PMB_SALES: somente PMB (tenantId = null).
- *  - PMB_RESELLER_MGR: somente tenants atribuidos a ele (accountManagerId).
+ *  - certificado da VITRINE PMB (`certTenantId === null`): quem opera a
+ *    vitrine (`alunos.view`) ou quem enxerga a rede inteira;
+ *  - certificado de uma UNIDADE: so quem alcanca aquela unidade na carteira
+ *    (`canAccessTenant` cobre accountManagerId, salesUserId e time de vendas).
  *
- * `certTenantId` segue a convencao do certificado/matricula, onde `null` = PMB
- * (vitrine principal). Garante que download / regenerate / issue so operem no
- * que o papel ja pode LISTAR — fecha o vazamento/mutacao cross-tenant (o PDF
- * carrega nome + CPF do aluno, PII sensivel).
+ * Garante que download / regenerate / issue so operem no que a pessoa ja pode
+ * LISTAR — fecha o vazamento/mutacao cross-tenant (o PDF carrega nome + CPF do
+ * aluno, PII sensivel). Chaveado por PERMISSAO, nao por papel: assim conceder
+ * `certificados.manage` por override nao entrega a rede inteira junto.
  */
 export async function adminCanAccessCertTenant(
-  role: UserRole,
-  userId: string,
+  ctx: AdminContext,
   certTenantId: string | null,
 ): Promise<boolean> {
-  if (role === "SUPER_ADMIN") return true
-  if (role === "PMB_SALES") return certTenantId === null
-  if (role === "PMB_RESELLER_MGR") {
-    if (certTenantId === null) return false
-    const tenant = await prisma.tenant.findUnique({
-      where: { id: certTenantId },
-      select: { accountManagerId: true },
-    })
-    return tenant?.accountManagerId === userId
-  }
-  return false
+  if (ctx.can("unidades.viewAll")) return true
+  if (certTenantId === null) return ctx.can("alunos.view")
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: certTenantId },
+    select: { accountManagerId: true, salesUserId: true },
+  })
+  return ctx.canAccessTenant(tenant)
 }
 
 /** 403 padronizado para acesso a certificado fora do escopo do papel. */

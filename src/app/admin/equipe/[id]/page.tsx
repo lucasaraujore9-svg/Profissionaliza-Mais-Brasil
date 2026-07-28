@@ -1,8 +1,9 @@
-import { notFound, redirect } from "next/navigation"
+import { notFound } from "next/navigation"
 import { prisma } from "@/lib/prisma"
-import { requireAdminSession } from "@/lib/auth/admin-session"
+import { requireAdminPage } from "@/lib/auth/admin-guard"
 import { EquipeDetailClient } from "@/components/admin/equipe-detail-client"
 import { isPmbTeamRole } from "@/lib/auth/roles"
+import { filterAdminPermissions } from "@/lib/auth/admin-permissions"
 
 export const dynamic = "force-dynamic"
 
@@ -11,9 +12,7 @@ export default async function EquipeDetailPage({
 }: {
   params: Promise<{ id: string }>
 }) {
-  const session = await requireAdminSession()
-  if (!session) redirect("/login?callbackUrl=/admin/equipe")
-  if (session.role !== "SUPER_ADMIN") redirect("/admin")
+  const session = await requireAdminPage("equipe.manage")
 
   const { id } = await params
   const user = await prisma.user.findUnique({
@@ -32,6 +31,8 @@ export default async function EquipeDetailPage({
       lastActiveAt: true,
       passwordHash: true,
       createdAt: true,
+      extraPermissions: true,
+      revokedPermissions: true,
     },
   })
 
@@ -59,6 +60,8 @@ export default async function EquipeDetailPage({
         lastActiveAt: user.lastActiveAt?.toISOString() ?? null,
         pendingInvite: !user.passwordHash,
         createdAt: user.createdAt.toISOString(),
+        extraPermissions: filterAdminPermissions(user.extraPermissions),
+        revokedPermissions: filterAdminPermissions(user.revokedPermissions),
       }}
       isSelf={user.id === session.userId}
       salesManagers={salesManagers}

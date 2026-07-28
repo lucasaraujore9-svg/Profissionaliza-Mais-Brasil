@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { requireAdminSession } from "@/lib/auth/admin-session"
 import {
   adminCanAccessCertTenant,
   certScopeDeniedResponse,
 } from "@/lib/certificates/admin-scope"
 import { issueCertificateManual } from "@/lib/certificates"
 import { withRequestContext } from "@/lib/observability/with-request-context"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 const schema = z.object({
   enrollmentId: z.string().min(1),
@@ -17,10 +17,9 @@ const schema = z.object({
 export const POST = withRequestContext(
   { action: "admin.certificates.issue", route: "/api/admin/certificates/issue" },
   async (request: Request) => {
-  const ctx = await requireAdminSession()
-  if (!ctx) {
-    return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-  }
+  const guard = await requireAdmin("certificados.manage")
+  if (!guard.ok) return guard.response
+  const ctx = guard.ctx
 
   let payload: unknown
   try {
@@ -48,13 +47,13 @@ export const POST = withRequestContext(
   // Escopo por papel: emitir cria um certificado oficial (tenantId =
   // enrollment.tenantId) e notifica o aluno. Sem isto, PMB_SALES/PMB_RESELLER_MGR
   // emitiriam certificados em nome de revendedores que nao administram.
-  if (!(await adminCanAccessCertTenant(ctx.role, ctx.userId, enrollment.tenantId))) {
+  if (!(await adminCanAccessCertTenant(ctx, enrollment.tenantId))) {
     return certScopeDeniedResponse()
   }
 
-  // Somente o SUPER_ADMIN pode forcar emissao sem conclusao do curso.
-  // Demais papeis da equipe PMB recebem a mensagem de bloqueio.
-  const canForce = ctx.role === "SUPER_ADMIN"
+  // Forcar emissao sem conclusao do curso e privilegio de quem enxerga a rede
+  // inteira (`unidades.viewAll`, exclusiva do super admin).
+  const canForce = ctx.can("unidades.viewAll")
 
   try {
     const certificate = await issueCertificateManual({

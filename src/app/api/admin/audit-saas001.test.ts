@@ -10,8 +10,7 @@ vi.mock("@/lib/prisma", () => ({
     user: { findUnique: vi.fn(), update: vi.fn() },
   },
 }))
-vi.mock("@/lib/auth/admin-session", () => ({ requireAdminSession: vi.fn() }))
-vi.mock("@/lib/auth/guards", () => ({ requireSuperAdmin: vi.fn() }))
+vi.mock("@/lib/auth/admin-guard", () => ({ requireAdmin: vi.fn() }))
 vi.mock("@/lib/redis/tenant-cache", () => ({ invalidateTenant: vi.fn() }))
 // Suspender/reativar unidade propaga aos alunos (auto-block). Aqui o foco é a
 // TRILHA DE AUDITORIA — a propagação tem suíte própria (status-unblock.test.ts).
@@ -27,7 +26,6 @@ vi.mock("@/lib/auto-block", () => ({
     errors: [],
   })),
 }))
-vi.mock("@/lib/auth/roles", () => ({ canManageCommissions: () => true }))
 vi.mock("bcryptjs", () => ({ hash: vi.fn(async () => "hash") }))
 vi.mock("@/lib/students/generate-password", () => ({
   generateTemporaryPassword: () => "senha-gerada",
@@ -35,8 +33,8 @@ vi.mock("@/lib/students/generate-password", () => ({
 
 import { logAudit } from "@/lib/audit"
 import { prisma } from "@/lib/prisma"
-import { requireAdminSession } from "@/lib/auth/admin-session"
-import { requireSuperAdmin } from "@/lib/auth/guards"
+import { requireAdmin } from "@/lib/auth/admin-guard"
+import { adminGuardFor } from "@/test/admin-ctx"
 
 import { PATCH as statusPatch } from "./revendedores/[id]/status/route"
 import { PUT as mensalidadePut } from "./tenants/[id]/mensalidade/route"
@@ -50,8 +48,7 @@ const p = prisma as unknown as {
   tenant: { findUnique: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn> }
   user: { findUnique: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn> }
 }
-const adminSession = requireAdminSession as unknown as ReturnType<typeof vi.fn>
-const superAdmin = requireSuperAdmin as unknown as ReturnType<typeof vi.fn>
+const guardMock = requireAdmin as unknown as ReturnType<typeof vi.fn>
 
 function jreq(body: unknown) {
   return new Request("http://x", {
@@ -64,8 +61,7 @@ const params = (id: string) => ({ params: Promise.resolve({ id }) })
 
 beforeEach(() => {
   vi.clearAllMocks()
-  adminSession.mockResolvedValue({ userId: "u1", role: "SUPER_ADMIN" })
-  superAdmin.mockResolvedValue({ ok: true, session: { userId: "u1", role: "SUPER_ADMIN" } })
+  guardMock.mockImplementation(adminGuardFor({ role: "SUPER_ADMIN" }).requireAdmin)
 })
 
 describe("SAAS-001 — audit trail em mutações admin", () => {

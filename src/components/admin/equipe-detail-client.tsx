@@ -17,7 +17,12 @@ import {
 } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { EquipeImpersonateButton } from "./equipe-impersonate-button"
-import { PMB_ROLE_LABEL, PMB_TEAM_ROLES, pmbRoleLabel } from "@/lib/auth/roles"
+import { pmbRoleLabel, type PmbTeamRole } from "@/lib/auth/roles"
+import type { AdminPermission } from "@/lib/auth/admin-permissions"
+import {
+  AdminPermissionFields,
+  type AdminPermissionValue,
+} from "./admin-permission-fields"
 
 export interface EquipeMember {
   id: string
@@ -33,6 +38,9 @@ export interface EquipeMember {
   lastActiveAt: string | null
   pendingInvite: boolean
   createdAt: string
+  /** Ajustes finos gravados para esta pessoa (diferença contra o preset). */
+  extraPermissions: AdminPermission[]
+  revokedPermissions: AdminPermission[]
 }
 
 export interface SalesManagerOption {
@@ -41,9 +49,6 @@ export interface SalesManagerOption {
 }
 
 const NO_MANAGER = "__none__"
-
-const ROLE_LABEL = PMB_ROLE_LABEL
-const ROLES = PMB_TEAM_ROLES
 
 export function EquipeDetailClient({
   member,
@@ -56,11 +61,15 @@ export function EquipeDetailClient({
 }) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
+  const [perms, setPerms] = useState<AdminPermissionValue>({
+    role: member.role as PmbTeamRole,
+    extraPermissions: member.extraPermissions,
+    revokedPermissions: member.revokedPermissions,
+  })
   const [form, setForm] = useState({
     name: member.name,
     email: member.email,
     phone: member.phone ?? "",
-    role: member.role as (typeof ROLES)[number],
     status: member.status as "ATIVO" | "INATIVO",
     salesManagerId: member.salesManagerId ?? NO_MANAGER,
     // Cap individual de desconto (%) — só PMB_SALES. "" = padrão da role (50).
@@ -69,7 +78,7 @@ export function EquipeDetailClient({
 
   function save() {
     const maxDiscountNumber =
-      form.role === "PMB_SALES" && form.maxDiscount.trim() !== ""
+      perms.role === "PMB_SALES" && form.maxDiscount.trim() !== ""
         ? Number(form.maxDiscount)
         : null
     if (
@@ -87,10 +96,12 @@ export function EquipeDetailClient({
           name: form.name,
           email: form.email,
           phone: form.phone || null,
-          role: form.role,
+          role: perms.role,
           status: form.status,
+          extraPermissions: perms.extraPermissions,
+          revokedPermissions: perms.revokedPermissions,
           salesManagerId:
-            form.role === "PMB_REVENDA_SALES" && form.salesManagerId !== NO_MANAGER
+            perms.role === "PMB_REVENDA_SALES" && form.salesManagerId !== NO_MANAGER
               ? form.salesManagerId
               : null,
           maxDiscount: maxDiscountNumber,
@@ -226,26 +237,7 @@ export function EquipeDetailClient({
               onChange={(e) => setForm({ ...form, phone: e.target.value })}
             />
           </div>
-          <div>
-            <Label>Papel</Label>
-            <Select
-              value={form.role}
-              onValueChange={(v) => setForm({ ...form, role: v as (typeof ROLES)[number] })}
-              disabled={isSelf}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {ROLES.map((r) => (
-                  <SelectItem key={r} value={r}>
-                    {ROLE_LABEL[r]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          {form.role === "PMB_REVENDA_SALES" && (
+          {perms.role === "PMB_REVENDA_SALES" && (
             <div>
               <Label>Gerente de vendas</Label>
               <Select
@@ -268,7 +260,7 @@ export function EquipeDetailClient({
               </Select>
             </div>
           )}
-          {form.role === "PMB_SALES" && (
+          {perms.role === "PMB_SALES" && (
             <div>
               <Label>Cap de desconto (%)</Label>
               <Input
@@ -287,6 +279,14 @@ export function EquipeDetailClient({
             </div>
           )}
         </div>
+
+        <AdminPermissionFields
+          value={perms}
+          onChange={setPerms}
+          disabled={pending}
+          lockRole={isSelf}
+        />
+
         <div className="flex justify-end">
           <Button
             onClick={save}

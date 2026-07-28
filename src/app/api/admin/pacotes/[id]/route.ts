@@ -1,15 +1,15 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { requireSuperAdmin } from "@/lib/auth/guards"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 import { ensureUniquePackageSlug } from "@/lib/packages/slug"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 /* GET — um pacote da PMB com seus cursos (ordenados) */
 export const GET = withRequestContextParams<{ id: string }>(
   { action: "admin.pacotes.get", route: "/api/admin/pacotes/[id]" },
   async (_request: Request, ctx) => {
-    const guard = await requireSuperAdmin()
+    const guard = await requireAdmin("pacotes.manage")
     if (!guard.ok) return guard.response
 
     const { id } = await ctx.params
@@ -59,7 +59,7 @@ const updateSchema = z.object({
 export const PUT = withRequestContextParams<{ id: string }>(
   { action: "admin.pacotes.update", route: "/api/admin/pacotes/[id]" },
   async (request: Request, ctx) => {
-    const guard = await requireSuperAdmin()
+    const guard = await requireAdmin("pacotes.manage")
     if (!guard.ok) return guard.response
 
     const { id } = await ctx.params
@@ -139,7 +139,7 @@ export const PUT = withRequestContextParams<{ id: string }>(
 export const DELETE = withRequestContextParams<{ id: string }>(
   { action: "admin.pacotes.delete", route: "/api/admin/pacotes/[id]" },
   async (_request: Request, ctx) => {
-    const guard = await requireSuperAdmin()
+    const guard = await requireAdmin("pacotes.manage")
     if (!guard.ok) return guard.response
 
     const { id } = await ctx.params

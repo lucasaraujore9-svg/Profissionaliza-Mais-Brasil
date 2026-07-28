@@ -31,6 +31,11 @@ import {
   type CreateMode,
 } from "@/components/shared/account-credentials-fields"
 import { PMB_ROLE_LABEL, PMB_TEAM_ROLES, pmbRoleLabel } from "@/lib/auth/roles"
+import type { PmbTeamRole } from "@/lib/auth/roles"
+import {
+  AdminPermissionFields,
+  type AdminPermissionValue,
+} from "./admin-permission-fields"
 
 export interface EquipeItem {
   id: string
@@ -44,6 +49,8 @@ export interface EquipeItem {
   lastActiveAt: string | null
   pendingInvite: boolean
   createdAt: string
+  /** Quantos ajustes finos de permissão esta pessoa tem sobre o preset. */
+  customPermissionCount: number
 }
 
 export interface SalesManagerOption {
@@ -53,7 +60,7 @@ export interface SalesManagerOption {
 
 const NO_MANAGER = "__none__"
 
-const ROLE_LABEL = PMB_ROLE_LABEL
+const ROLE_LABEL: Record<PmbTeamRole, string> = PMB_ROLE_LABEL
 const ROLES = PMB_TEAM_ROLES
 
 export function EquipeClient({
@@ -75,10 +82,14 @@ export function EquipeClient({
     { email: string; password: string; emailSent: boolean } | null
   >(null)
 
+  const [perms, setPerms] = useState<AdminPermissionValue>({
+    role: "PMB_SALES",
+    extraPermissions: [],
+    revokedPermissions: [],
+  })
   const [form, setForm] = useState({
     name: "",
     email: "",
-    role: "PMB_SALES" as (typeof ROLES)[number],
     phone: "",
     salesManagerId: NO_MANAGER,
     // Cap individual de desconto (%) — só PMB_SALES. "" = padrão da role (50).
@@ -88,7 +99,8 @@ export function EquipeClient({
   const filtered = items.filter((i) => (filter === "ALL" ? true : i.role === filter))
 
   function resetForm() {
-    setForm({ name: "", email: "", role: "PMB_SALES", phone: "", salesManagerId: NO_MANAGER, maxDiscount: "" })
+    setPerms({ role: "PMB_SALES", extraPermissions: [], revokedPermissions: [] })
+    setForm({ name: "", email: "", phone: "", salesManagerId: NO_MANAGER, maxDiscount: "" })
     setMode("invite")
     setPassword("")
     setCreated(null)
@@ -109,7 +121,7 @@ export function EquipeClient({
       return
     }
     const maxDiscountNumber =
-      form.role === "PMB_SALES" && form.maxDiscount.trim() !== ""
+      perms.role === "PMB_SALES" && form.maxDiscount.trim() !== ""
         ? Number(form.maxDiscount)
         : undefined
     if (
@@ -125,8 +137,11 @@ export function EquipeClient({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           ...form,
+          role: perms.role,
+          extraPermissions: perms.extraPermissions,
+          revokedPermissions: perms.revokedPermissions,
           salesManagerId:
-            form.role === "PMB_REVENDA_SALES" && form.salesManagerId !== NO_MANAGER
+            perms.role === "PMB_REVENDA_SALES" && form.salesManagerId !== NO_MANAGER
               ? form.salesManagerId
               : undefined,
           maxDiscount: maxDiscountNumber,
@@ -218,7 +233,14 @@ export function EquipeClient({
                   )}
                 </td>
                 <td className="px-4 py-3 text-muted-foreground">{u.email}</td>
-                <td className="px-4 py-3">{pmbRoleLabel(u.role)}</td>
+                <td className="px-4 py-3">
+                  {pmbRoleLabel(u.role)}
+                  {u.customPermissionCount > 0 && (
+                    <span className="ml-1.5 text-xs text-muted-foreground">
+                      (ajustado)
+                    </span>
+                  )}
+                </td>
                 <td className="px-4 py-3">
                   {u.pendingInvite ? (
                     <Badge variant="secondary" className="gap-1">
@@ -316,25 +338,12 @@ export function EquipeClient({
                     onChange={(e) => setForm({ ...form, phone: e.target.value })}
                   />
                 </div>
-                <div>
-                  <Label>Papel</Label>
-                  <Select
-                    value={form.role}
-                    onValueChange={(v) => setForm({ ...form, role: v as (typeof ROLES)[number] })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {ROLES.map((r) => (
-                        <SelectItem key={r} value={r}>
-                          {ROLE_LABEL[r]}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                {form.role === "PMB_REVENDA_SALES" && (
+                <AdminPermissionFields
+                  value={perms}
+                  onChange={setPerms}
+                  disabled={pending}
+                />
+                {perms.role === "PMB_REVENDA_SALES" && (
                   <div>
                     <Label>Gerente de vendas</Label>
                     <Select
@@ -357,7 +366,7 @@ export function EquipeClient({
                     </Select>
                   </div>
                 )}
-                {form.role === "PMB_SALES" && (
+                {perms.role === "PMB_SALES" && (
                   <div>
                     <Label>Cap de desconto (%)</Label>
                     <Input

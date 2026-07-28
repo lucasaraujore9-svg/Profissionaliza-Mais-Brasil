@@ -3,18 +3,17 @@
 import { SidebarAdmin } from "@/components/shared/layouts/sidebar-admin"
 import { HeaderDashboard } from "@/components/shared/layouts/header-dashboard"
 import { useSidebarCollapsed } from "@/components/shared/layouts/use-sidebar-collapsed"
-
-type Role = "SUPER_ADMIN" | "PMB_SALES" | "PMB_SALES_MGR" | "PMB_REVENDA_SALES" | "PMB_RESELLER_MGR" | "PMB_FINANCEIRO" | "PMB_DESIGNER"
+import type { AdminPermission } from "@/lib/auth/admin-permissions"
 
 export function AdminLayoutShell({
   children,
-  role,
+  permissions,
   userName,
   userEmail,
   defaultCollapsed = false,
 }: {
   children: React.ReactNode
-  role: Role
+  permissions: AdminPermission[]
   userName: string
   userEmail: string
   defaultCollapsed?: boolean
@@ -24,7 +23,7 @@ export function AdminLayoutShell({
     <div className="flex h-screen overflow-hidden bg-[var(--color-pmb-mist)]">
       <div className="hidden h-full lg:block">
         <SidebarAdmin
-          role={role}
+          permissions={permissions}
           userName={userName}
           userEmail={userEmail}
           collapsed={collapsed}
@@ -36,7 +35,11 @@ export function AdminLayoutShell({
           userName={userName}
           profileHref="/admin/meu-perfil"
           mobileNav={
-            <SidebarAdmin role={role} userName={userName} userEmail={userEmail} />
+            <SidebarAdmin
+              permissions={permissions}
+              userName={userName}
+              userEmail={userEmail}
+            />
           }
         />
         <main className="flex-1 overflow-y-auto p-4 lg:p-6">{children}</main>

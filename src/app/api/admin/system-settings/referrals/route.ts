@@ -2,10 +2,10 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
-import { requireSuperAdmin } from "@/lib/auth/guards"
 import { sortBrackets, serializePlanSettings } from "@/lib/referrals/rules"
 import { resolveEffectiveCommission } from "@/lib/referrals/effective-rule"
 import { withRequestContext } from "@/lib/observability/with-request-context"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 const bracketSchema = z.object({
   upTo: z.number().int().min(1).nullable(),
@@ -98,7 +98,7 @@ const bodySchema = z.object({
 export const PUT = withRequestContext(
   { action: "admin.system_settings.referrals.update", route: "/api/admin/system-settings/referrals" },
   async (request: Request) => {
-  const guard = await requireSuperAdmin()
+  const guard = await requireAdmin("indicacoes.config")
   if (!guard.ok) return guard.response
 
   let payload: unknown

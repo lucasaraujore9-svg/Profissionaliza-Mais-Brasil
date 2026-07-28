@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { requireSuperAdmin } from "@/lib/auth/guards"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { extractYoutubeId } from "@/lib/training/youtube"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 const createSchema = z.object({
   moduleId: z.string().trim().min(1),
@@ -19,7 +19,7 @@ const createSchema = z.object({
 export const POST = withRequestContext(
   { action: "admin.treinamentos.videos.create", route: "/api/admin/treinamentos/videos" },
   async (request: Request) => {
-    const guard = await requireSuperAdmin()
+    const guard = await requireAdmin("treinamentos.manage")
     if (!guard.ok) return guard.response
 
     let payload: unknown

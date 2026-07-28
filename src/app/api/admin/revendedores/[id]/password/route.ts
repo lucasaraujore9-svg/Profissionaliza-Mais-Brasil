@@ -2,10 +2,10 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 import { hash } from "bcryptjs"
 import { prisma } from "@/lib/prisma"
-import { requireAdminSession } from "@/lib/auth/admin-session"
 import { generateTemporaryPassword } from "@/lib/students/generate-password"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 import { logAudit } from "@/lib/audit"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 // Aceita ou uma senha digitada pelo admin, ou a flag `generate` para o sistema
 // criar uma aleatória. Por questão de segurança, a senha NUNCA é "visualizada"
@@ -24,10 +24,9 @@ const bodySchema = z
 export const PATCH = withRequestContextParams<{ id: string }>(
   { action: "admin.revendedores.password.update", route: "/api/admin/revendedores/[id]/password" },
   async (request: Request, { params }) => {
-    const ctx = await requireAdminSession()
-    if (!ctx) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
+    const guard = await requireAdmin("unidades.credenciais")
+    if (!guard.ok) return guard.response
+    const ctx = guard.ctx
 
     const { id } = await params
 
@@ -52,6 +51,7 @@ export const PATCH = withRequestContextParams<{ id: string }>(
         id: true,
         slug: true,
         accountManagerId: true,
+        salesUserId: true,
         owner: { select: { id: true, email: true, name: true } },
       },
     })
@@ -69,12 +69,8 @@ export const PATCH = withRequestContextParams<{ id: string }>(
       )
     }
 
-    // Escopo de autorização: SUPER_ADMIN gerencia todos; PMB_RESELLER_MGR só os
-    // revendedores que gerencia (accountManagerId). PMB_SALES não troca senha.
-    if (
-      ctx.role !== "SUPER_ADMIN" &&
-      !(ctx.role === "PMB_RESELLER_MGR" && tenant.accountManagerId === ctx.userId)
-    ) {
+    // Quem não vê a rede inteira só alcança a própria carteira.
+    if (!(await ctx.canAccessTenant(tenant))) {
       return NextResponse.json({ error: "Sem permissão para este revendedor" }, { status: 403 })
     }
 

@@ -1,8 +1,7 @@
 import Link from "next/link"
-import { redirect } from "next/navigation"
 import { ArrowLeft } from "lucide-react"
 import { prisma } from "@/lib/prisma"
-import { requireAdminSession } from "@/lib/auth/admin-session"
+import { requireAdminPage } from "@/lib/auth/admin-guard"
 import {
   referralPayoutMethodLabel,
   referralPayoutStatusLabel,
@@ -30,15 +29,7 @@ function formatMoney(n: number): string {
 }
 
 export default async function AdminSaquesPage() {
-  const session = await requireAdminSession()
-  if (!session) redirect("/login?callbackUrl=/admin/indicacoes/saques")
-  if (
-    session.role !== "SUPER_ADMIN" &&
-    session.role !== "PMB_RESELLER_MGR" &&
-    session.role !== "PMB_FINANCEIRO"
-  ) {
-    redirect("/admin")
-  }
+  await requireAdminPage("indicacoes.view")
 
   const payouts = await prisma.referralPayout.findMany({
     select: {

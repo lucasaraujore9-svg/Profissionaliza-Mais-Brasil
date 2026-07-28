@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { requireSuperAdmin } from "@/lib/auth/guards"
 import { withRequestContext } from "@/lib/observability/with-request-context"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 export const GET = withRequestContext(
   { action: "admin.financeiro.get", route: "/api/admin/financeiro" },
   async () => {
-  const guard = await requireSuperAdmin()
+  const guard = await requireAdmin("financeiro.viewAll")
   if (!guard.ok) return guard.response
 
   const now = new Date()

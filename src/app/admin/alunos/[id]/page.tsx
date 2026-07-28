@@ -1,7 +1,7 @@
-import { redirect, notFound } from "next/navigation"
+import { notFound } from "next/navigation"
 import Link from "next/link"
 import { ChevronLeft } from "lucide-react"
-import { requireAdminSession } from "@/lib/auth/admin-session"
+import { requireAdminPage } from "@/lib/auth/admin-guard"
 import { loadStudentDetail } from "@/lib/students/load-detail"
 import { studentStatusLabel } from "@/lib/labels"
 import { Badge } from "@/components/ui/badge"
@@ -23,11 +23,10 @@ function statusVariant(
 }
 
 export default async function AdminStudentDetailPage({ params }: PageProps) {
-  const session = await requireAdminSession()
-  if (!session) redirect("/login?callbackUrl=/admin/alunos")
-  // requireAdminSession ja garante que e do time PMB (SUPER_ADMIN, PMB_SALES,
-  // PMB_RESELLER_MGR). Os tres podem acessar o detalhe; APIs ja se autorizam
-  // individualmente.
+  // `alunosRede.view` cobre a LEITURA do aluno de qualquer unidade. As ações da
+  // tela (editar, notificar, redefinir senha, bloquear) têm permissões próprias
+  // e são reforçadas nas APIs — ver `alunosRede.manage` e `alunosRede.acesso`.
+  const session = await requireAdminPage("alunosRede.view")
 
   const { id } = await params
   const student = await loadStudentDetail({ studentId: id })

@@ -1,8 +1,6 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { requirePmbTeam, type AuthedSession } from "@/lib/auth/guards"
-import { canAccessTenantScope } from "@/lib/auth/scope"
 import { refundPayment as refundAsaasPayment } from "@/lib/asaas/client"
 import { refundPayment as refundMpPayment } from "@/lib/mercadopago/client"
 import {
@@ -13,6 +11,7 @@ import { resolveEnrollmentGatewayKeys } from "@/lib/enrollment/gateway-credentia
 import { contextLogger } from "@/lib/logger"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 import { logAudit } from "@/lib/audit"
+import { requireAdminAny, type AdminContext } from "@/lib/auth/admin-guard"
 
 const bodySchema = z.object({
   // `removeFromEA` é o nome legado (UI de /admin/vendas/alunos); `removeAccess`
@@ -28,33 +27,36 @@ const bodySchema = z.object({
 })
 
 /**
- * Autorização por papel para cancelar a matrícula de QUALQUER aluno (vitrine
- * PMB ou de revenda):
- *   SUPER_ADMIN                                   -> qualquer matrícula
- *   PMB_SALES                                     -> só vendas da vitrine PMB
- *                                                    que ele mesmo originou
- *   PMB_RESELLER_MGR / PMB_REVENDA_SALES /
- *   PMB_SALES_MGR                                 -> só unidades no seu escopo
- *                                                    (canAccessTenantScope)
- *   demais (PMB_FINANCEIRO, PMB_DESIGNER)         -> nunca
+ * Autorização para cancelar a matrícula de QUALQUER aluno. A matrícula tem dois
+ * donos possíveis e cada um responde a uma permissão diferente:
+ *
+ *   tenantId === null  -> venda da vitrine PMB: exige `alunos.manage`, e sem
+ *                         `alunos.viewAll` só alcança o que a pessoa vendeu.
+ *   tenantId != null   -> aluno de uma unidade: exige `unidades.manage` E que a
+ *                         unidade esteja no escopo do ator (`canAccessTenant`).
+ *
+ * TIGHTENING deliberado em relação ao guard anterior (`requirePmbTeam` + papel):
+ * o comercial de revenda (PMB_REVENDA_SALES / PMB_SALES_MGR) passava aqui e
+ * podia cancelar — com estorno — a matrícula de um aluno da unidade que ele
+ * vendeu. Cancelar é ação de suporte, não de venda; ficou com quem administra a
+ * unidade. O super admin pode devolver caso a caso por permissão avançada.
  */
 async function canCancel(
-  session: AuthedSession,
+  ctx: AdminContext,
   enrollment: { tenantId: string | null; soldByUserId: string | null },
 ): Promise<boolean> {
-  if (session.role === "SUPER_ADMIN") return true
-
   if (enrollment.tenantId === null) {
-    return (
-      session.role === "PMB_SALES" && enrollment.soldByUserId === session.userId
-    )
+    if (!ctx.can("alunos.manage")) return false
+    return ctx.can("alunos.viewAll") || enrollment.soldByUserId === ctx.userId
   }
+
+  if (!ctx.can("unidades.manage")) return false
 
   const tenant = await prisma.tenant.findUnique({
     where: { id: enrollment.tenantId },
     select: { accountManagerId: true, salesUserId: true },
   })
-  return canAccessTenantScope(session, tenant)
+  return ctx.canAccessTenant(tenant)
 }
 
 export const POST = withRequestContextParams<{ id: string; enrollmentId: string }>(
@@ -63,7 +65,7 @@ export const POST = withRequestContextParams<{ id: string; enrollmentId: string 
     route: "/api/admin/alunos/[id]/enrollments/[enrollmentId]/cancelar",
   },
   async (request: Request, ctx) => {
-    const guard = await requirePmbTeam()
+    const guard = await requireAdminAny("alunos.manage", "unidades.manage")
     if (!guard.ok) return guard.response
 
     const { id: studentId, enrollmentId } = await ctx.params
@@ -96,7 +98,7 @@ export const POST = withRequestContextParams<{ id: string; enrollmentId: string 
       return NextResponse.json({ error: "Matrícula não encontrada" }, { status: 404 })
     }
 
-    if (!(await canCancel(guard.session, enrollment))) {
+    if (!(await canCancel(guard.ctx, enrollment))) {
       // 404 (e não 403) quando a matrícula está fora do escopo do ator: não
       // revela a existência de alunos de unidades que ele não gerencia.
       return NextResponse.json({ error: "Matrícula não encontrada" }, { status: 404 })
@@ -152,8 +154,8 @@ export const POST = withRequestContextParams<{ id: string; enrollmentId: string 
             action: "enrollment.refund",
             resource: "Payment",
             resourceId: p.id,
-            actorUserId: guard.session.userId,
-            actorRole: guard.session.role,
+            actorUserId: guard.ctx.userId,
+            actorRole: guard.ctx.role,
             tenantId: enrollment.tenantId,
             payloadAfter: {
               enrollmentId: enrollment.id,
@@ -178,8 +180,8 @@ export const POST = withRequestContextParams<{ id: string; enrollmentId: string 
       enrollmentId: enrollment.id,
       removeAccess,
       actor: {
-        userId: guard.session.userId,
-        role: guard.session.role,
+        userId: guard.ctx.userId,
+        role: guard.ctx.role,
       },
       reason,
     })

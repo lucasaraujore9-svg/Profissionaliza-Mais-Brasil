@@ -2,11 +2,10 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
-import { requireAdminSession } from "@/lib/auth/admin-session"
-import { canManageCommissions } from "@/lib/auth/roles"
 import { logAudit } from "@/lib/audit"
 import { sortBrackets } from "@/lib/referrals/rules"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 const bracketSchema = z.object({
   upTo: z.number().int().min(1).nullable(),
@@ -114,14 +113,9 @@ const bodySchema = z
 export const PUT = withRequestContextParams<{ id: string }>(
   { action: "admin.tenants.referral_percent.update", route: "/api/admin/tenants/[id]/referral-percent" },
   async (request: Request, context) => {
-  const session = await requireAdminSession()
-  if (!session) {
-    return NextResponse.json({ error: "Nao autenticado" }, { status: 401 })
-  }
-  if (!canManageCommissions(session.role)) {
-    return NextResponse.json({ error: "Sem permissao" }, { status: 403 })
-  }
-
+  const guard = await requireAdmin("indicacoes.percentUnidade")
+  if (!guard.ok) return guard.response
+  const session = guard.ctx
   const { id } = await context.params
 
   let payload: unknown

@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { requirePmbTeam } from "@/lib/auth/guards"
 import { notifySchema, notifyStudent } from "@/lib/students/management"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 export const POST = withRequestContextParams<{ id: string }>(
   { action: "admin.alunos.notify", route: "/api/admin/alunos/[id]/notify" },
   async (request: Request, ctx) => {
-    const guard = await requirePmbTeam()
+    const guard = await requireAdmin("alunosRede.manage")
     if (!guard.ok) return guard.response
 
     const { id } = await ctx.params

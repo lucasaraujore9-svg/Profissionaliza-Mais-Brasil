@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { requireSuperAdmin } from "@/lib/auth/guards"
 import { setEjaSectionEnabled } from "@/lib/home/sections"
 import { withRequestContext } from "@/lib/observability/with-request-context"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 // Conteúdo da seção "EJA" do site PMB + banner padronizado para a rede.
 // Diferente da Técnica, não há lista de cursos — só banner + link + rótulo.
@@ -44,7 +44,7 @@ export const GET = withRequestContext(
     route: "/api/admin/system-settings/eja",
   },
   async () => {
-    const guard = await requireSuperAdmin()
+    const guard = await requireAdmin("vitrine.manage")
     if (!guard.ok) return guard.response
 
     const settings = await prisma.systemSettings.findUnique({
@@ -76,7 +76,7 @@ export const PUT = withRequestContext(
     route: "/api/admin/system-settings/eja",
   },
   async (request: Request) => {
-    const guard = await requireSuperAdmin()
+    const guard = await requireAdmin("vitrine.manage")
     if (!guard.ok) return guard.response
 
     let payload: unknown

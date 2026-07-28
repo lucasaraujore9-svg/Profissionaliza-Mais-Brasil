@@ -1,16 +1,12 @@
-import { redirect } from "next/navigation"
 import { PageHeader } from "@/components/painel/page-header"
 import { BannerSlidesManager } from "@/components/shared/banner-slides-manager"
 import { VitrineTabsShell } from "@/components/vitrine/tabs-shell"
 import { HomeSectionsPanel } from "@/components/vitrine/home-sections-panel"
-import { requireSuperAdmin } from "@/lib/auth/guards"
+import { requireAdminPage } from "@/lib/auth/admin-guard"
 import { appUrl } from "@/lib/tenant/urls"
 
 export default async function AdminVitrinePage() {
-  const guard = await requireSuperAdmin()
-  if (!guard.ok) {
-    redirect("/admin")
-  }
+  await requireAdminPage("vitrine.manage")
 
   return (
     <div className="space-y-6">

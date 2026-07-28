@@ -1,11 +1,10 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { requireAdminSession } from "@/lib/auth/admin-session"
-import { canMarkPaid } from "@/lib/auth/roles"
 import { failPayout } from "@/lib/referrals/payout"
 import { contextLogger } from "@/lib/logger"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 const bodySchema = z.object({
   reason: z.string().min(3).max(500),
@@ -14,14 +13,8 @@ const bodySchema = z.object({
 export const POST = withRequestContextParams<{ id: string }>(
   { action: "admin.financeiro.referral_payouts.fail", route: "/api/admin/financeiro/referral-payouts/[id]/fail" },
   async (request: Request, context) => {
-  const session = await requireAdminSession()
-  if (!session) {
-    return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-  }
-  if (!canMarkPaid(session.role)) {
-    return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
-  }
-
+  const guard = await requireAdmin("financeiro.manage")
+  if (!guard.ok) return guard.response
   const { id } = await context.params
 
   let payload: unknown

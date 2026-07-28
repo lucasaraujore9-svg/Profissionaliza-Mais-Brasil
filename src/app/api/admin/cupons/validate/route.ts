@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { requirePmbSales } from "@/lib/auth/guards"
 import { withRequestContext } from "@/lib/observability/with-request-context"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 const schema = z.object({
   code: z.string().trim().min(1).max(64),
@@ -12,7 +12,7 @@ const schema = z.object({
 export const POST = withRequestContext(
   { action: "admin.cupons.validate", route: "/api/admin/cupons/validate" },
   async (request: Request) => {
-  const guard = await requirePmbSales()
+  const guard = await requireAdmin("cupons.view")
   if (!guard.ok) return guard.response
 
   let payload: unknown

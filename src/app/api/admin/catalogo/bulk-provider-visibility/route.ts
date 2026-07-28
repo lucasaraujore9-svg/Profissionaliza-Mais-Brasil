@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { requireSuperAdmin } from "@/lib/auth/guards"
 import { withRequestContext } from "@/lib/observability/with-request-context"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 /* ------------------------------------------------------------------ */
 /* POST — exibe/oculta EM MASSA todos os cursos de uma fornecedora na   */
@@ -21,7 +21,7 @@ export const POST = withRequestContext(
     route: "/api/admin/catalogo/bulk-provider-visibility",
   },
   async (request: Request) => {
-    const guard = await requireSuperAdmin()
+    const guard = await requireAdmin("catalogo.manage")
     if (!guard.ok) return guard.response
 
     let payload: unknown

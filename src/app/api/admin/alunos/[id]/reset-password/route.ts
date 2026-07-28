@@ -1,16 +1,16 @@
 import { NextResponse } from "next/server"
-import { requirePmbTeam } from "@/lib/auth/guards"
 import {
   resetStudentPassword,
   setStudentPasswordSchema,
 } from "@/lib/students/management"
 import { logAudit } from "@/lib/audit"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 export const POST = withRequestContextParams<{ id: string }>(
   { action: "admin.alunos.reset_password", route: "/api/admin/alunos/[id]/reset-password" },
   async (request: Request, ctx) => {
-    const guard = await requirePmbTeam()
+    const guard = await requireAdmin("alunosRede.manage")
     if (!guard.ok) return guard.response
 
     const { id } = await ctx.params
@@ -38,8 +38,8 @@ export const POST = withRequestContextParams<{ id: string }>(
       action: "student.password.reset",
       resource: "Student",
       resourceId: id,
-      actorUserId: guard.session.userId,
-      actorRole: guard.session.role,
+      actorUserId: guard.ctx.userId,
+      actorRole: guard.ctx.role,
       payloadAfter: { generated: result.generated, emailSent: result.emailSent },
     })
 

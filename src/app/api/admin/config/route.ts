@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
-import { requireAdminSession } from "@/lib/auth/admin-session"
 import { getLastSuccessfulSync } from "@/lib/catalog/sync-log"
 import {
   getSystemSettings,
@@ -11,14 +10,13 @@ import {
 } from "@/lib/system-settings"
 import { MAX_CARD_INSTALLMENTS } from "@/lib/mercadopago/installments"
 import { withRequestContext } from "@/lib/observability/with-request-context"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 export const GET = withRequestContext(
   { action: "admin.config.get", route: "/api/admin/config" },
   async () => {
-  const ctx = await requireAdminSession()
-  if (!ctx) {
-    return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-  }
+  const guard = await requireAdmin("configuracoes.manage")
+  if (!guard.ok) return guard.response
 
   const [lastSync, settings, mpToken] = await Promise.all([
     getLastSuccessfulSync(),
@@ -83,17 +81,8 @@ const patchSchema = z.object({
 export const PATCH = withRequestContext(
   { action: "admin.config.update", route: "/api/admin/config" },
   async (request: Request) => {
-  const ctx = await requireAdminSession()
-  if (!ctx) {
-    return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-  }
-  if (ctx.role !== "SUPER_ADMIN") {
-    return NextResponse.json(
-      { error: "Apenas SUPER_ADMIN pode alterar configurações globais" },
-      { status: 403 },
-    )
-  }
-
+  const guard = await requireAdmin("configuracoes.manage")
+  if (!guard.ok) return guard.response
   let payload: unknown
   try {
     payload = await request.json()
@@ -106,6 +95,20 @@ export const PATCH = withRequestContext(
     return NextResponse.json(
       { error: "Dados inválidos", fields: parsed.error.flatten().fieldErrors },
       { status: 400 },
+    )
+  }
+
+  // Token do Mercado Pago e escolha do gateway são CREDENCIAL, não preferência:
+  // exigem `integracoes.manage`, a mesma permissão que /admin/configuracoes usa
+  // para decidir se mostra o editor de gateway. Sem isto a UI escondia o campo
+  // e um PATCH direto reescrevia o token em que toda venda direta liquida.
+  const mexeEmCredencial =
+    parsed.data.pmbMpAccessToken !== undefined ||
+    parsed.data.pmbDirectSaleGateway !== undefined
+  if (mexeEmCredencial && !guard.ctx.can("integracoes.manage")) {
+    return NextResponse.json(
+      { error: "Alterar o gateway ou o token exige a permissão de integrações" },
+      { status: 403 },
     )
   }
 

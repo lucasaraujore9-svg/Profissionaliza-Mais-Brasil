@@ -1,35 +1,31 @@
 import { NextResponse } from "next/server"
-import { requireAdminSession } from "@/lib/auth/admin-session"
 import { prisma } from "@/lib/prisma"
 import { startImpersonation } from "@/lib/auth/start-impersonation"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 import { contextLogger } from "@/lib/logger"
 import { logAudit } from "@/lib/audit"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 export const POST = withRequestContextParams<{ id: string }>(
   { action: "admin.revendedores.impersonate", route: "/api/admin/revendedores/[id]/impersonate" },
   async (_request: Request, { params }) => {
-  const admin = await requireAdminSession()
-  if (!admin) {
-    return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-  }
+  const guard = await requireAdmin("unidades.impersonate")
+  if (!guard.ok) return guard.response
+  const admin = guard.ctx
 
   const { id: tenantId } = await params
 
   const tenant = await prisma.tenant.findUnique({
     where: { id: tenantId },
-    select: { id: true, name: true, slug: true, accountManagerId: true },
+    select: { id: true, name: true, slug: true, accountManagerId: true, salesUserId: true },
   })
   if (!tenant) {
     return NextResponse.json({ error: "Revendedor não encontrado" }, { status: 404 })
   }
 
-  // Quem pode impersonar uma revenda: SUPER_ADMIN (qualquer) ou o gerente de
-  // contas (PMB_RESELLER_MGR) DA revenda atribuída a ele. Os demais papéis ficam
-  // de fora para não trocarem o token MP / preços / financeiro do tenant.
-  const allowed =
-    admin.role === "SUPER_ADMIN" ||
-    (admin.role === "PMB_RESELLER_MGR" && tenant.accountManagerId === admin.userId)
+  // `unidades.impersonate` ja garantiu o direito; aqui fica o recorte: quem não
+  // enxerga a rede inteira só entra nas unidades da própria carteira.
+  const allowed = await admin.canAccessTenant(tenant)
   if (!allowed) {
     contextLogger().warn(
       { event: "impersonate.denied", actorId: admin.userId, actorRole: admin.role, tenantId },

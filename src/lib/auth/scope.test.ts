@@ -13,8 +13,6 @@ import {
   canAccessTenantScope,
   leadScopeWhere,
   salesTeamIds,
-  canHandleRevendaLeads,
-  canConvertRevendaLeads,
 } from "./scope"
 
 const findMany = prisma.user.findMany as unknown as ReturnType<typeof vi.fn>
@@ -113,17 +111,3 @@ describe("salesTeamIds inclui sempre o próprio gerente", () => {
   })
 })
 
-describe("canHandleRevendaLeads / canConvertRevendaLeads", () => {
-  it("permite SUPER_ADMIN, PMB_SALES_MGR, PMB_REVENDA_SALES", () => {
-    for (const r of ["SUPER_ADMIN", "PMB_SALES_MGR", "PMB_REVENDA_SALES"]) {
-      expect(canHandleRevendaLeads(r)).toBe(true)
-      expect(canConvertRevendaLeads(r)).toBe(true)
-    }
-  })
-  it("nega os demais papéis", () => {
-    for (const r of ["PMB_SALES", "PMB_RESELLER_MGR", "PMB_FINANCEIRO", "RESELLER"]) {
-      expect(canHandleRevendaLeads(r)).toBe(false)
-      expect(canConvertRevendaLeads(r)).toBe(false)
-    }
-  })
-})

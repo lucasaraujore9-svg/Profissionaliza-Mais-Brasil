@@ -1,19 +1,15 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { requireAdminSession } from "@/lib/auth/admin-session"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 import { getLeadCourseTimeline } from "@/lib/automation/leads"
 import { getLeadNavigationTimeline } from "@/lib/automation/tracking"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 export const GET = withRequestContextParams<{ id: string }>(
   { action: "admin.leads.get", route: "/api/admin/leads/[id]" },
   async (_request: Request, { params }) => {
-    const ctx = await requireAdminSession()
-    if (!ctx) return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    if (ctx.role !== "SUPER_ADMIN" && ctx.role !== "PMB_SALES") {
-      return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
-    }
-
+    const guard = await requireAdmin("leads.view")
+    if (!guard.ok) return guard.response
     const { id } = await params
     const lead = await prisma.studentLead.findFirst({
       where: { id, tenantId: null },
@@ -71,12 +67,9 @@ export const GET = withRequestContextParams<{ id: string }>(
 export const DELETE = withRequestContextParams<{ id: string }>(
   { action: "admin.leads.delete", route: "/api/admin/leads/[id]" },
   async (_request: Request, { params }) => {
-    const ctx = await requireAdminSession()
-    if (!ctx) return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    if (ctx.role !== "SUPER_ADMIN" && ctx.role !== "PMB_SALES") {
-      return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
-    }
-
+    const guard = await requireAdmin("leads.manage")
+    if (!guard.ok) return guard.response
+    const ctx = guard.ctx
     const { id } = await params
     const lead = await prisma.studentLead.findFirst({
       where: { id, tenantId: null },

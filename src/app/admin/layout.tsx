@@ -1,7 +1,7 @@
 import type { Metadata } from "next"
 import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
-import { requireAdminSession } from "@/lib/auth/admin-session"
+import { adminContext } from "@/lib/auth/admin-guard"
 import { ImpersonationBanner } from "@/components/admin/impersonation-banner"
 import {
   decodeImpersonationFlag,
@@ -20,8 +20,8 @@ export default async function AdminLayout({
 }: {
   children: React.ReactNode
 }) {
-  const session = await requireAdminSession()
-  if (!session) redirect("/login?callbackUrl=/admin")
+  const ctx = await adminContext()
+  if (!ctx) redirect("/login?callbackUrl=/admin")
 
   // NOTA: o enforcement server-side de mustChangePassword foi REVERTIDO aqui —
   // estava bloqueando contas existentes (super admin com flag legada) em
@@ -46,9 +46,9 @@ export default async function AdminLayout({
         />
       )}
       <AdminLayoutShell
-        role={session.role as "SUPER_ADMIN" | "PMB_SALES" | "PMB_SALES_MGR" | "PMB_REVENDA_SALES" | "PMB_RESELLER_MGR" | "PMB_FINANCEIRO" | "PMB_DESIGNER"}
-        userName={session.name ?? "Admin"}
-        userEmail={session.email ?? ""}
+        permissions={[...ctx.permissions]}
+        userName={ctx.name}
+        userEmail={ctx.email}
         defaultCollapsed={sidebarCollapsed}
       >
         {children}

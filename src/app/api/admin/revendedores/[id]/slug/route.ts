@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { requireAdminSession } from "@/lib/auth/admin-session"
 import {
   validateSlugFormat,
   isSlugAvailable,
@@ -15,6 +14,7 @@ import {
 import { swallow } from "@/lib/errors"
 import { contextLogger } from "@/lib/logger"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 const schema = z.object({
   slug: z.string().trim().toLowerCase().min(3).max(32),
@@ -33,19 +33,9 @@ const schema = z.object({
 export const PATCH = withRequestContextParams<{ id: string }>(
   { action: "admin.revendedores.slug.update", route: "/api/admin/revendedores/[id]/slug" },
   async (req: Request, ctx) => {
-    const session = await requireAdminSession()
-    if (!session) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
-    // Allowlist ESTRITA: editar subdominio e exclusivo da equipe mae nesses dois
-    // papeis. A revenda (RESELLER/consultor) nunca chega aqui (requireAdminSession
-    // ja exclui), e os papeis comerciais (PMB_SALES, PMB_SALES_MGR,
-    // PMB_REVENDA_SALES) tambem nao podem renomear subdominio.
-    const isSuperAdmin = session.role === "SUPER_ADMIN"
-    const isResellerMgr = session.role === "PMB_RESELLER_MGR"
-    if (!isSuperAdmin && !isResellerMgr) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-    }
+    const guard = await requireAdmin("unidades.manage")
+    if (!guard.ok) return guard.response
+    const session = guard.ctx
 
     const { id } = await ctx.params
 
@@ -57,15 +47,17 @@ export const PATCH = withRequestContextParams<{ id: string }>(
         poloName: true,
         customDomain: true,
         accountManagerId: true,
+        salesUserId: true,
       },
     })
     if (!tenant) {
       return NextResponse.json({ error: "Revendedor não encontrado" }, { status: 404 })
     }
 
-    // Escopo do gerente de revendedores: so as unidades atribuidas a ele.
-    // SUPER_ADMIN edita qualquer uma.
-    if (isResellerMgr && tenant.accountManagerId !== session.userId) {
+    // `unidades.manage` ja excluiu quem nao administra unidade (comercial de
+    // revenda, financeiro, designer). Aqui fica so o recorte da carteira: quem
+    // nao enxerga a rede inteira edita apenas as unidades atribuidas a ele.
+    if (!(await session.canAccessTenant(tenant))) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 

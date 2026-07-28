@@ -1,8 +1,7 @@
 import Link from "next/link"
-import { redirect } from "next/navigation"
 import { ArrowLeft } from "lucide-react"
 import { prisma } from "@/lib/prisma"
-import { requireAdminSession } from "@/lib/auth/admin-session"
+import { requireAdminPage } from "@/lib/auth/admin-guard"
 import { PageHeader } from "@/components/painel/page-header"
 import { AdminReferralSettingsForm } from "@/components/admin/admin-referral-settings-form"
 import { parseBrackets } from "@/lib/referrals/rules"
@@ -14,9 +13,7 @@ import {
 export const dynamic = "force-dynamic"
 
 export default async function AdminReferralSettingsPage() {
-  const session = await requireAdminSession()
-  if (!session) redirect("/login?callbackUrl=/admin/configuracoes/indicacoes")
-  if (session.role !== "SUPER_ADMIN") redirect("/admin/configuracoes")
+  await requireAdminPage("indicacoes.config")
 
   const settings = await prisma.systemSettings.upsert({
     where: { id: "default" },

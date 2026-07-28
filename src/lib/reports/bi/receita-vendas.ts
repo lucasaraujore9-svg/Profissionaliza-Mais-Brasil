@@ -30,19 +30,23 @@ function parseSegment(sp: URLSearchParams): Segment {
  * visão de todo o ecossistema e escolhem o segmento livremente.
  */
 export function resolveSegment(
-  role: string,
+  seesNetworkRevenue: boolean,
   sp: URLSearchParams,
 ): { segment: Segment; scopedToPmb: boolean } {
-  const scopedToPmb = role === "PMB_SALES"
+  const scopedToPmb = !seesNetworkRevenue
   return { segment: scopedToPmb ? "pmb" : parseSegment(sp), scopedToPmb }
 }
 
 export const receitaVendasModule: BiModule = {
   async run(ctx: BiContext) {
     const { period, sp, session } = ctx
-    // PMB_SALES só enxerga a vitrine PMB — nunca receita de revendedores; o
-    // split PMB×Revendedores é omitido para não revelar o total das revendas.
-    const { segment, scopedToPmb } = resolveSegment(session.role, sp)
+    // Sem `financeiro.viewAll` a pessoa fica presa à vitrine PMB — nunca vê
+    // receita de revendedores, e o split PMB×Revendedores é omitido para o
+    // total das revendas não vazar pela diferença.
+    const { segment, scopedToPmb } = resolveSegment(
+      session.can("financeiro.viewAll"),
+      sp,
+    )
 
     const paymentWhere: Prisma.PaymentWhereInput = {
       mpStatus: "APPROVED",

@@ -1,7 +1,7 @@
-import { notFound, redirect } from "next/navigation"
+import { notFound } from "next/navigation"
 import Link from "next/link"
 import { ChevronLeft } from "lucide-react"
-import { requireAdminSession } from "@/lib/auth/admin-session"
+import { requireAdminPage } from "@/lib/auth/admin-guard"
 import { prisma } from "@/lib/prisma"
 import { TrainingPlayer, type PlayerVideo } from "@/components/painel/training-player"
 
@@ -14,8 +14,7 @@ export default async function AdminAssistirTreinamentoModulePage({
 }: {
   params: Promise<{ moduleId: string }>
 }) {
-  const session = await requireAdminSession()
-  if (!session) redirect("/login?callbackUrl=/admin/treinamentos/assistir")
+  const session = await requireAdminPage("treinamentos.view")
   const userId = session.userId
   const { moduleId } = await params
 

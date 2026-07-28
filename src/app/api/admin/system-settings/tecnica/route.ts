@@ -2,9 +2,9 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
-import { requireSuperAdmin } from "@/lib/auth/guards"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { validateTecnicaCoursesInput } from "@/lib/catalog/tecnica"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 const bodySchema = z
   .object({
@@ -29,7 +29,7 @@ export const GET = withRequestContext(
     route: "/api/admin/system-settings/tecnica",
   },
   async () => {
-    const guard = await requireSuperAdmin()
+    const guard = await requireAdmin("vitrine.manage")
     if (!guard.ok) return guard.response
 
     const settings = await prisma.systemSettings.findUnique({
@@ -59,7 +59,7 @@ export const PUT = withRequestContext(
     route: "/api/admin/system-settings/tecnica",
   },
   async (request: Request) => {
-    const guard = await requireSuperAdmin()
+    const guard = await requireAdmin("vitrine.manage")
     if (!guard.ok) return guard.response
 
     let payload: unknown

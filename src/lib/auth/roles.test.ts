@@ -1,37 +1,38 @@
 import { describe, it, expect } from "vitest"
 import { UserRole } from "@prisma/client"
 import {
-  canViewFinance,
-  canViewFullFinance,
-  canMarkPaid,
-  canManageCommissions,
   PMB_TEAM_ROLES,
   PMB_ROLE_LABEL,
   isPmbTeamRole,
   pmbRoleLabel,
 } from "./roles"
+import { resolveAdminPermissions } from "./admin-permissions"
 
+// QA-008: a AuthZ financeira saiu daqui e virou permissão. O teste continua
+// provando a MESMA fronteira, agora contra os presets.
 describe("auth/roles — AuthZ financeira (QA-008)", () => {
-  it("canViewFinance libera SUPER_ADMIN/PMB_FINANCEIRO/PMB_SALES/PMB_RESELLER_MGR", () => {
-    for (const r of ["SUPER_ADMIN", "PMB_FINANCEIRO", "PMB_SALES", "PMB_RESELLER_MGR"] as const) {
-      expect(canViewFinance(r)).toBe(true)
+  it("comissões a pagar: super, financeiro e gerente de unidades", () => {
+    for (const r of ["SUPER_ADMIN", "PMB_FINANCEIRO", "PMB_RESELLER_MGR"] as const) {
+      expect(resolveAdminPermissions(r).has("financeiro.view"), r).toBe(true)
     }
-    for (const r of ["RESELLER", "PMB_SALES_MGR", "PMB_REVENDA_SALES"] as const) {
-      expect(canViewFinance(r)).toBe(false)
+    for (const r of ["PMB_SALES", "PMB_SALES_MGR", "PMB_REVENDA_SALES", "PMB_DESIGNER"] as const) {
+      expect(resolveAdminPermissions(r).has("financeiro.view"), r).toBe(false)
     }
-    expect(canViewFinance(null)).toBe(false)
-    expect(canViewFinance(undefined)).toBe(false)
   })
 
-  it("canViewFullFinance/canMarkPaid/canManageCommissions: só SUPER_ADMIN e PMB_FINANCEIRO", () => {
-    for (const fn of [canViewFullFinance, canMarkPaid, canManageCommissions]) {
-      expect(fn("SUPER_ADMIN")).toBe(true)
-      expect(fn("PMB_FINANCEIRO")).toBe(true)
-      expect(fn("PMB_SALES")).toBe(false)
-      expect(fn("PMB_RESELLER_MGR")).toBe(false)
-      expect(fn("RESELLER")).toBe(false)
-      expect(fn(null)).toBe(false)
-      expect(fn(undefined)).toBe(false)
+  it("visão completa, baixa de pagamento e % por unidade: só super e financeiro", () => {
+    for (const perm of [
+      "financeiro.viewAll",
+      "financeiro.manage",
+      // O irmão por unidade do antigo `canManageCommissions`. A regra GLOBAL do
+      // motor (`indicacoes.config`) era e continua SUPER_ADMIN-only.
+      "indicacoes.percentUnidade",
+    ] as const) {
+      expect(resolveAdminPermissions("SUPER_ADMIN").has(perm), perm).toBe(true)
+      expect(resolveAdminPermissions("PMB_FINANCEIRO").has(perm), perm).toBe(true)
+      for (const r of ["PMB_SALES", "PMB_RESELLER_MGR", "PMB_SALES_MGR", "PMB_REVENDA_SALES", "PMB_DESIGNER"] as const) {
+        expect(resolveAdminPermissions(r).has(perm), `${r} → ${perm}`).toBe(false)
+      }
     }
   })
 })

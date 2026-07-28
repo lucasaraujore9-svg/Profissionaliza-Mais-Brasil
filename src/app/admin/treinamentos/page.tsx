@@ -1,7 +1,6 @@
 import Link from "next/link"
-import { redirect } from "next/navigation"
 import { PlayCircle } from "lucide-react"
-import { requireAdminSession } from "@/lib/auth/admin-session"
+import { requireAdminPage } from "@/lib/auth/admin-guard"
 import { PageHeader } from "@/components/painel/page-header"
 import { TrainingsAdminClient } from "@/components/admin/trainings-admin-client"
 
@@ -9,9 +8,7 @@ export default async function AdminTreinamentosPage() {
   // Conteudo de treinamento e global e so o SUPER_ADMIN gerencia (as APIs ja
   // exigem requireSuperAdmin; este guard evita o shell vazio para os demais
   // perfis admin que o layout admite).
-  const session = await requireAdminSession()
-  if (!session) redirect("/login?callbackUrl=/admin/treinamentos")
-  if (session.role !== "SUPER_ADMIN") redirect("/admin")
+  await requireAdminPage("treinamentos.manage")
 
   return (
     <div className="space-y-6">

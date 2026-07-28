@@ -1,7 +1,7 @@
-import { redirect, notFound } from "next/navigation"
+import { notFound } from "next/navigation"
 import Link from "next/link"
 import { ChevronLeft } from "lucide-react"
-import { requireAdminSession } from "@/lib/auth/admin-session"
+import { requireAdminPage } from "@/lib/auth/admin-guard"
 import { prisma } from "@/lib/prisma"
 import { getOrCreatePmbTenant } from "@/lib/pmb-tenant"
 import { studentStatusLabel } from "@/lib/labels"
@@ -21,18 +21,14 @@ function studentStatusBadgeVariant(status: string): "default" | "outline" | "sec
 }
 
 export default async function StudentDetailPage({ params }: PageProps) {
-  const session = await requireAdminSession()
-  if (!session) redirect("/login?callbackUrl=/admin/vendas/alunos")
-  if (session.role !== "SUPER_ADMIN" && session.role !== "PMB_SALES") {
-    redirect("/admin")
-  }
+  const session = await requireAdminPage("alunos.view")
 
   const { id } = await params
 
   const pmbTenant = await getOrCreatePmbTenant()
 
   const whereEnrollments =
-    session.role === "SUPER_ADMIN"
+    session.can("alunos.viewAll")
       ? { tenantId: null as null }
       : { tenantId: null as null, soldByUserId: session.userId }
 

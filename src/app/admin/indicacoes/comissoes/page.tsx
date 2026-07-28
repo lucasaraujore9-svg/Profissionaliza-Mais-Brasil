@@ -1,8 +1,7 @@
 import Link from "next/link"
-import { redirect } from "next/navigation"
 import { ArrowLeft, Download } from "lucide-react"
 import { prisma } from "@/lib/prisma"
-import { requireAdminSession } from "@/lib/auth/admin-session"
+import { requireAdminPage } from "@/lib/auth/admin-guard"
 import { parseLinesSnapshot } from "@/lib/referrals/lines-snapshot"
 import { referralCommissionStatusLabel } from "@/lib/labels"
 import { PageHeader } from "@/components/painel/page-header"
@@ -99,15 +98,7 @@ export default async function AdminComissoesPage({
     days?: string
   }>
 }) {
-  const session = await requireAdminSession()
-  if (!session) redirect("/login?callbackUrl=/admin/indicacoes/comissoes")
-  if (
-    session.role !== "SUPER_ADMIN" &&
-    session.role !== "PMB_RESELLER_MGR" &&
-    session.role !== "PMB_FINANCEIRO"
-  ) {
-    redirect("/admin")
-  }
+  const session = await requireAdminPage("indicacoes.view")
 
   const sp = await searchParams
   const exportParams = new URLSearchParams()
@@ -241,9 +232,8 @@ export default async function AdminComissoesPage({
     .slice(0, 500)
 
   // Clawbacks pendentes (estorno apos comissao liberada/paga) dos dois motores.
-  // So SUPER_ADMIN e PMB_FINANCEIRO podem resolver (endpoint gated igual).
-  const canResolve =
-    session.role === "SUPER_ADMIN" || session.role === "PMB_FINANCEIRO"
+  // Mesma permissao do endpoint que resolve.
+  const canResolve = session.can("indicacoes.clawback")
   const [legacyClawbacks, monthlyClawbacks] = await Promise.all([
     prisma.referralCommission.findMany({
       where: { cancelReason: { startsWith: "[CLAWBACK_PENDING]" } },

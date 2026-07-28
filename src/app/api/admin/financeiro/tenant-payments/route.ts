@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server"
 import type { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
-import { requireAdminSession } from "@/lib/auth/admin-session"
 import { withRequestContext } from "@/lib/observability/with-request-context"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 const ALLOWED_STATUS = new Set([
   "PENDING",
@@ -15,16 +15,10 @@ const ALLOWED_STATUS = new Set([
 export const GET = withRequestContext(
   { action: "admin.financeiro.tenant_payments.list", route: "/api/admin/financeiro/tenant-payments" },
   async (request: Request) => {
-  const session = await requireAdminSession()
-  if (!session) {
-    return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-  }
+  const guard = await requireAdmin("financeiro.viewAll")
+  if (!guard.ok) return guard.response
   // Financeiro de revendedores (mensalidades/asaasPaymentId/notas) e a tela
   // /admin/financeiro sao SUPER_ADMIN-only; alinha a API ao gate da UI.
-  if (session.role !== "SUPER_ADMIN") {
-    return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
-  }
-
   const url = new URL(request.url)
   const status = url.searchParams.get("status") ?? "all"
   const search = url.searchParams.get("search")?.trim() ?? ""

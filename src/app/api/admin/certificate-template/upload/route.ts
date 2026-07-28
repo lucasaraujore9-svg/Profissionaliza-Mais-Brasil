@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { requireSuperAdmin } from "@/lib/auth/guards"
 import {
   deleteVitrineAsset,
   extractAssetPath,
@@ -9,6 +8,7 @@ import {
 import { isValidImageMagic } from "@/lib/storage/validate-image"
 import { rateLimit, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
 import { withRequestContext } from "@/lib/observability/with-request-context"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 const MAX_BYTES = 5 * 1024 * 1024
 // SVG bloqueado: XSS persistente via <script> embarcado seria servido inline.
@@ -49,7 +49,7 @@ function extensionFor(mime: string): string {
 export const POST = withRequestContext(
   { action: "admin.certificate_template.upload", route: "/api/admin/certificate-template/upload" },
   async (request: Request) => {
-  const guard = await requireSuperAdmin()
+  const guard = await requireAdmin("certificados.template")
   if (!guard.ok) return guard.response
 
   const rl = await rateLimit(request, RATE_LIMITS.upload)
@@ -142,7 +142,7 @@ export const POST = withRequestContext(
 export const DELETE = withRequestContext(
   { action: "admin.certificate_template.upload.delete", route: "/api/admin/certificate-template/upload" },
   async (request: Request) => {
-  const guard = await requireSuperAdmin()
+  const guard = await requireAdmin("certificados.template")
   if (!guard.ok) return guard.response
 
   const rl = await rateLimit(request, RATE_LIMITS.upload)

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
-import { requireAdminSession } from "@/lib/auth/admin-session"
 import { getCronHealth } from "@/lib/observability/cron-heartbeat"
 import { withRequestContext } from "@/lib/observability/with-request-context"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 /**
  * Saúde dos jobs agendados: quando cada um rodou pela última vez e quais estão
@@ -13,14 +13,8 @@ import { withRequestContext } from "@/lib/observability/with-request-context"
 export const GET = withRequestContext(
   { action: "admin.crons.health", route: "/api/admin/crons" },
   async () => {
-    const ctx = await requireAdminSession()
-    if (!ctx) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
-    if (ctx.role !== "SUPER_ADMIN") {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-    }
-
+    const guard = await requireAdmin("configuracoes.manage")
+    if (!guard.ok) return guard.response
     const jobs = await getCronHealth()
     return NextResponse.json({
       data: {

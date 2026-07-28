@@ -1,20 +1,14 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { requireAdminSession } from "@/lib/auth/admin-session"
 import { withRequestContext } from "@/lib/observability/with-request-context"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 export const GET = withRequestContext(
   { action: "admin.financeiro.overdue.list", route: "/api/admin/financeiro/overdue" },
   async () => {
-  const ctx = await requireAdminSession()
-  if (!ctx) {
-    return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-  }
+  const guard = await requireAdmin("financeiro.viewAll")
+  if (!guard.ok) return guard.response
   // Inadimplencia de tenants e SUPER_ADMIN-only (tela /admin/financeiro).
-  if (ctx.role !== "SUPER_ADMIN") {
-    return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
-  }
-
   const now = new Date()
 
   const overdue = await prisma.tenantPayment.findMany({

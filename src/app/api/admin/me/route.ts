@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { requireAdminSession } from "@/lib/auth/admin-session"
 import { withRequestContext } from "@/lib/observability/with-request-context"
+import { requireAdmin } from "@/lib/auth/admin-guard"
 
 const updateSchema = z.object({
   name: z.string().trim().min(3, "Nome muito curto").max(120),
@@ -18,10 +18,9 @@ const updateSchema = z.object({
 export const GET = withRequestContext(
   { action: "admin.me.get", route: "/api/admin/me" },
   async () => {
-  const ctx = await requireAdminSession()
-  if (!ctx) {
-    return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-  }
+  const guard = await requireAdmin()
+  if (!guard.ok) return guard.response
+  const ctx = guard.ctx
 
   const user = await prisma.user.findUnique({
     where: { id: ctx.userId },
@@ -47,10 +46,9 @@ export const GET = withRequestContext(
 export const PUT = withRequestContext(
   { action: "admin.me.update", route: "/api/admin/me" },
   async (request: Request) => {
-  const ctx = await requireAdminSession()
-  if (!ctx) {
-    return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-  }
+  const guard = await requireAdmin("perfil.edit")
+  if (!guard.ok) return guard.response
+  const ctx = guard.ctx
 
   let payload: unknown
   try {
