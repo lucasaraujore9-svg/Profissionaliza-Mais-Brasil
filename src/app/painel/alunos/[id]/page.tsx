@@ -1,7 +1,7 @@
-import { redirect, notFound } from "next/navigation"
+import { notFound } from "next/navigation"
 import Link from "next/link"
 import { ChevronLeft } from "lucide-react"
-import { requireResellerSession } from "@/lib/auth/reseller-session"
+import { requirePainelPage } from "@/lib/auth/painel-guard"
 import { loadStudentDetail } from "@/lib/students/load-detail"
 import { PageHeader } from "@/components/painel/page-header"
 import { StudentStatusBadge } from "@/components/painel/student-status"
@@ -14,14 +14,15 @@ interface PageProps {
 }
 
 export default async function PainelStudentDetailPage({ params }: PageProps) {
-  const session = await requireResellerSession()
-  if (!session) redirect("/login?callbackUrl=/painel/alunos")
+  const session = await requirePainelPage("alunos.view")
 
   const { id } = await params
-  // Filtra por tenantId — revendedor só vê alunos do próprio tenant.
+  // Filtra por tenantId (isolamento entre unidades) e pelo escopo do papel —
+  // sem `alunos.viewAll`, abrir o ID de um aluno de outro vendedor dá 404.
   const student = await loadStudentDetail({
     studentId: id,
     tenantId: session.tenantId,
+    scope: session.scope.alunos,
   })
   if (!student) notFound()
 

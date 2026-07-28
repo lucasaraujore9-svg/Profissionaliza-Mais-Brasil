@@ -16,7 +16,7 @@ export const GET = withRequestContextParams<{ id: string }>(
 
     const { id } = await params
     const lead = await prisma.studentLead.findFirst({
-      where: { id, tenantId: ctx.tenantId },
+      where: { id, tenantId: ctx.tenantId, ...ctx.scope.leads },
       include: {
         activities: {
           orderBy: { createdAt: "desc" },
@@ -106,7 +106,7 @@ export const PATCH = withRequestContextParams<{ id: string }>(
 
     const { id } = await params
     const lead = await prisma.studentLead.findFirst({
-      where: { id, tenantId: ctx.tenantId },
+      where: { id, tenantId: ctx.tenantId, ...ctx.scope.leads },
       select: { id: true, ownerUserId: true },
     })
     if (!lead) {
@@ -163,7 +163,7 @@ export const DELETE = withRequestContextParams<{ id: string }>(
 
     const { id } = await params
     const lead = await prisma.studentLead.findFirst({
-      where: { id, tenantId: ctx.tenantId },
+      where: { id, tenantId: ctx.tenantId, ...ctx.scope.leads },
       select: { id: true, stage: true },
     })
 

@@ -48,6 +48,12 @@ export const GET = withRequestContext(
       prisma.student.findMany({
         where: {
           tenantId: ctx.tenantId,
+          // Escopo do papel: sem `alunos.viewAll`, só os alunos que a pessoa
+          // originou (matrícula com soldByUserId dela). Vai em `AND` junto com
+          // `enrollmentWhere` porque os dois usam a chave `enrollments` — num
+          // spread, o filtro da tela sobrescreveria o escopo e vazaria a
+          // unidade inteira.
+          AND: [ctx.scope.alunos, enrollmentWhere],
           ...(search
             ? {
                 OR: [
@@ -64,7 +70,6 @@ export const GET = withRequestContext(
           ...(statusFilter && validStatus.includes(statusFilter)
             ? { status: statusFilter as "ATIVO" | "INATIVO" | "BLOQUEADO" | "DEVEDOR" | "FORMADO" | "INTERESSADO" }
             : {}),
-          ...enrollmentWhere,
         },
         include: {
           // Status das matriculas para derivar o status exibido (pago x pendente).
@@ -75,7 +80,7 @@ export const GET = withRequestContext(
       }),
       prisma.student.groupBy({
         by: ["status"],
-        where: { tenantId: ctx.tenantId },
+        where: { tenantId: ctx.tenantId, ...ctx.scope.alunos },
         _count: { _all: true },
       }),
       // Alunos ainda ATIVO mas sem pagamento confirmado (so matricula pendente).
@@ -85,7 +90,12 @@ export const GET = withRequestContext(
           tenantId: ctx.tenantId,
           status: "ATIVO",
           enrollments: { none: { status: { in: ["ACTIVE", "COMPLETED"] } } },
-          AND: { enrollments: { some: { status: "PENDING" } } },
+          // Escopo do papel dentro do AND pelo mesmo motivo da listagem: a
+          // chave `enrollments` já está ocupada acima.
+          AND: [
+            { enrollments: { some: { status: "PENDING" } } },
+            ctx.scope.alunos,
+          ],
         },
       }),
     ])

@@ -38,7 +38,7 @@ export const PATCH = withRequestContextParams<{ id: string }>(
     }
 
     const lead = await prisma.studentLead.findFirst({
-      where: { id, tenantId: ctx.tenantId },
+      where: { id, tenantId: ctx.tenantId, ...ctx.scope.leads },
       select: { id: true, stage: true },
     })
 

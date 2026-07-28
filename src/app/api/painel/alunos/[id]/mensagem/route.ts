@@ -41,7 +41,7 @@ export const POST = withRequestContextParams<{ id: string }>(
 
     const [student, tenant] = await Promise.all([
       prisma.student.findFirst({
-        where: { id, tenantId: ctx.tenantId },
+        where: { id, tenantId: ctx.tenantId, ...ctx.scope.alunos },
         select: { plataformaAlunoId: true },
       }),
       prisma.tenant.findUnique({

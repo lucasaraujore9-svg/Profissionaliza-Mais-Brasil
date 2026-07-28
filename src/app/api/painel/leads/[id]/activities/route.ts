@@ -20,7 +20,7 @@ export const POST = withRequestContextParams<{ id: string }>(
 
     const { id } = await params
     const lead = await prisma.studentLead.findFirst({
-      where: { id, tenantId: ctx.tenantId },
+      where: { id, tenantId: ctx.tenantId, ...ctx.scope.leads },
       select: { id: true },
     })
 

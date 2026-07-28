@@ -20,7 +20,7 @@ export const GET = withRequestContextParams<{ id: string }>(
 
     const { id } = await params
     const student = await prisma.student.findFirst({
-      where: { id, tenantId: ctx.tenantId },
+      where: { id, tenantId: ctx.tenantId, ...ctx.scope.alunos },
       include: {
         enrollments: {
           include: {

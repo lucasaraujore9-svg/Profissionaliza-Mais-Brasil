@@ -111,11 +111,14 @@ export const GET = withRequestContext(
     if (!guard.ok) return guard.response
     const { ctx } = guard
 
-    // Pega vendas diretas (com soldByUserId definido) do tenant.
+    // Pega vendas diretas (com soldByUserId definido) do tenant. Escopo do
+    // papel: sem `vendas.viewAll`, só as vendas que a própria pessoa originou —
+    // `ctx.scope.vendas` fixa soldByUserId nela e vence o `{ not: null }`.
     const enrollments = await prisma.enrollment.findMany({
       where: {
         tenantId: ctx.tenantId,
         soldByUserId: { not: null },
+        ...ctx.scope.vendas,
       },
       orderBy: { createdAt: "desc" },
       take: 50,

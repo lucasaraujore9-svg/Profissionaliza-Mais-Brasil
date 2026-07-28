@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma"
+import type { Prisma } from "@prisma/client"
 import { decrypt } from "@/lib/crypto"
 import { contextLogger } from "@/lib/logger"
 import { normalizeLmsPublicUrl } from "@/lib/lms/urls"
@@ -22,8 +23,14 @@ import { resolvePaceGateSettings } from "@/lib/enrollment/pace-settings"
 export async function loadStudentDetail(args: {
   studentId: string
   tenantId?: string | null
+  /**
+   * Filtro extra de escopo do papel (ver `PainelContext.scope.alunos`). Sem
+   * ele, um vendedor abriria pelo ID direto um aluno que não é da carteira
+   * dele — a lista já vem escopada, mas a URL não.
+   */
+  scope?: Prisma.StudentWhereInput
 }): Promise<StudentData | null> {
-  const where: { id: string; tenantId?: string } = { id: args.studentId }
+  const where: Prisma.StudentWhereInput = { id: args.studentId, ...args.scope }
   if (args.tenantId) {
     where.tenantId = args.tenantId
   }

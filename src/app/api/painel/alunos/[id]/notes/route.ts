@@ -13,7 +13,7 @@ export const GET = withRequestContextParams<{ id: string }>(
     const { id } = await params
 
     const student = await prisma.student.findFirst({
-      where: { id, tenantId: ctx.tenantId },
+      where: { id, tenantId: ctx.tenantId, ...ctx.scope.alunos },
       select: { id: true },
     })
     if (!student) {
@@ -60,7 +60,7 @@ export const POST = withRequestContextParams<{ id: string }>(
     }
 
     const student = await prisma.student.findFirst({
-      where: { id, tenantId: ctx.tenantId },
+      where: { id, tenantId: ctx.tenantId, ...ctx.scope.alunos },
       select: { id: true },
     })
     if (!student) {
@@ -105,7 +105,7 @@ export const DELETE = withRequestContextParams<{ id: string }>(
 
     // Garante tenant ownership: subquery em where exige student do tenant.
     const student = await prisma.student.findFirst({
-      where: { id, tenantId: ctx.tenantId },
+      where: { id, tenantId: ctx.tenantId, ...ctx.scope.alunos },
       select: { id: true },
     })
     if (!student) {

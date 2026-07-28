@@ -30,6 +30,8 @@ export interface PainelScope {
   alunos: Prisma.StudentWhereInput
   /** Filtro de matrículas/vendas: `{}` para quem tem vendas.viewAll. */
   vendas: Prisma.EnrollmentWhereInput
+  /** Filtro de pagamentos (faturamento): `{}` para quem tem vendas.viewAll. */
+  pagamentos: Prisma.PaymentWhereInput
   /** Filtro de leads: `{}` para quem tem leads.viewAll. */
   leads: Prisma.StudentLeadWhereInput
 }
@@ -69,6 +71,9 @@ function buildScope(
       ? {}
       : { enrollments: { some: { soldByUserId: userId } } },
     vendas: permissions.has("vendas.viewAll") ? {} : { soldByUserId: userId },
+    // Payment também carrega `soldByUserId` (gravado no fulfill a partir da
+    // matrícula), então o faturamento do dashboard segue a mesma fronteira.
+    pagamentos: permissions.has("vendas.viewAll") ? {} : { soldByUserId: userId },
     leads: permissions.has("leads.viewAll") ? {} : { ownerUserId: userId },
   }
 }

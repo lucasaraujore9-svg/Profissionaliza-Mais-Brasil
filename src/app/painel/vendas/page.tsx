@@ -1,7 +1,5 @@
 import Link from "next/link"
 import { Plus, ShoppingCart } from "lucide-react"
-import { redirect } from "next/navigation"
-import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { PageHeader } from "@/components/painel/page-header"
 import { EmptyState } from "@/components/shared/empty-state"
@@ -17,22 +15,19 @@ function fmtBRL(n: number): string {
 }
 
 export default async function PainelVendasPage() {
-  await requirePainelPage("vendas.view")
-  const session = await auth()
-  const user = session?.user as
-    | { tenantId?: string | null }
-    | undefined
-  if (!user?.tenantId) redirect("/login?callbackUrl=/painel/vendas")
+  const ctx = await requirePainelPage("vendas.view")
 
   const [tenant, enrollments] = await Promise.all([
     prisma.tenant.findUnique({
-      where: { id: user.tenantId },
+      where: { id: ctx.tenantId },
       select: { slug: true, customDomain: true },
     }),
+    // Escopo do papel: sem `vendas.viewAll`, só as vendas da própria pessoa.
     prisma.enrollment.findMany({
       where: {
-        tenantId: user.tenantId,
+        tenantId: ctx.tenantId,
         soldByUserId: { not: null },
+        ...ctx.scope.vendas,
       },
       orderBy: { createdAt: "desc" },
       take: 100,

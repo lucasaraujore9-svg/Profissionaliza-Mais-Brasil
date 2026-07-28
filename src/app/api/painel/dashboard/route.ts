@@ -90,6 +90,10 @@ export const GET = withRequestContext(
     const now = new Date()
     const cfg = buildPeriod(period, now)
 
+    // Autor a fixar nas queries quando o papel não vê a unidade inteira.
+    // `null` = sem restrição (dono, gerente, financeiro).
+    const scopedAuthor = ctx.can("vendas.viewAll") ? null : ctx.userId
+
     const [
       revenueAgg,
       revenuePrevAgg,
@@ -109,6 +113,9 @@ export const GET = withRequestContext(
         _sum: { amount: true },
         where: {
           tenantId: ctx.tenantId,
+          // Escopo do papel: sem `vendas.viewAll`, o dashboard mostra os
+          // números DA PESSOA, não o faturamento da unidade inteira.
+          ...ctx.scope.pagamentos,
           mpStatus: "APPROVED",
           paidAt: { gte: cfg.start, lte: cfg.end },
         },
@@ -117,6 +124,7 @@ export const GET = withRequestContext(
         _sum: { amount: true },
         where: {
           tenantId: ctx.tenantId,
+          ...ctx.scope.pagamentos,
           mpStatus: "APPROVED",
           paidAt: { gte: cfg.previousStart, lte: cfg.previousEnd },
         },
@@ -124,28 +132,34 @@ export const GET = withRequestContext(
       prisma.student.count({
         where: {
           tenantId: ctx.tenantId,
+          ...ctx.scope.alunos,
           createdAt: { gte: cfg.start, lte: cfg.end },
         },
       }),
       prisma.student.count({
         where: {
           tenantId: ctx.tenantId,
+          ...ctx.scope.alunos,
           createdAt: { gte: cfg.previousStart, lte: cfg.previousEnd },
         },
       }),
       prisma.enrollment.count({
         where: {
           tenantId: ctx.tenantId,
+          ...ctx.scope.vendas,
           createdAt: { gte: cfg.start, lte: cfg.end },
         },
       }),
       prisma.enrollment.count({
         where: {
           tenantId: ctx.tenantId,
+          ...ctx.scope.vendas,
           status: { in: ["ACTIVE", "COMPLETED"] },
           createdAt: { gte: cfg.start, lte: cfg.end },
         },
       }),
+      // Mesmo escopo do card de receita — aqui em SQL cru, com o autor como
+      // 5o parametro quando o papel nao tem `vendas.viewAll`.
       prisma.$queryRawUnsafe<Array<{ bucket: Date; revenue: number }>>(
         `SELECT date_trunc($1, paid_at) AS bucket,
                 COALESCE(SUM(amount)::float, 0) AS revenue
@@ -154,12 +168,14 @@ export const GET = withRequestContext(
            AND mp_status = 'APPROVED'
            AND paid_at >= $3
            AND paid_at <= $4
+           ${scopedAuthor ? "AND sold_by_user_id = $5" : ""}
          GROUP BY bucket
          ORDER BY bucket ASC`,
         cfg.bucket,
         ctx.tenantId,
         cfg.start,
         cfg.end,
+        ...(scopedAuthor ? [scopedAuthor] : []),
       ),
       // Vendas recentes: apenas matrículas que viraram venda de fato
       // (ACTIVE/COMPLETED) dentro do período selecionado — antes mostrava
@@ -167,6 +183,7 @@ export const GET = withRequestContext(
       prisma.enrollment.findMany({
         where: {
           tenantId: ctx.tenantId,
+          ...ctx.scope.vendas,
           status: { in: ["ACTIVE", "COMPLETED"] },
           createdAt: { gte: cfg.start, lte: cfg.end },
         },
@@ -186,6 +203,7 @@ export const GET = withRequestContext(
       prisma.payment.count({
         where: {
           tenantId: ctx.tenantId,
+          ...ctx.scope.pagamentos,
           mpStatus: "APPROVED",
           paidAt: { gte: cfg.start, lte: cfg.end },
         },

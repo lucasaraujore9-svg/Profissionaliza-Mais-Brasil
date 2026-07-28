@@ -51,6 +51,8 @@ export const GET = withRequestContext(
 
     const baseWhere = {
       tenantId: ctx.tenantId,
+      // Escopo do papel: sem `leads.viewAll`, só os leads atribuídos à pessoa.
+      ...ctx.scope.leads,
       ...(courseId ? { courseId } : {}),
       ...(source ? { source: source as never } : {}),
     }
