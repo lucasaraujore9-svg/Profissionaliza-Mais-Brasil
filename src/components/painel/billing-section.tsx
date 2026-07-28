@@ -5,12 +5,12 @@ import { Check, CheckCircle2, Copy, LinkIcon, Loader2, Unplug } from "lucide-rea
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import type { ConfigData } from "./config-tabs.types"
+import type { ConfigDataWithTenant } from "./config-tabs.types"
 import { AsaasGatewaySection } from "./asaas-gateway-section"
 
 interface BillingSectionProps {
-  data: ConfigData
-  onUpdate: (next: Partial<ConfigData>) => void
+  data: ConfigDataWithTenant
+  onUpdate: (next: Partial<ConfigDataWithTenant>) => void
 }
 
 export function BillingSection({ data, onUpdate }: BillingSectionProps) {

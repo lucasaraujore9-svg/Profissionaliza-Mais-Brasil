@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { requireResellerSession } from "@/lib/auth/reseller-session"
+import { requirePainel } from "@/lib/auth/painel-guard"
 import { issueCertificateManual } from "@/lib/certificates"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 
@@ -13,10 +13,9 @@ const schema = z.object({
 export const POST = withRequestContext(
   { action: "painel.certificates.issue", route: "/api/painel/certificates/issue" },
   async (request: Request) => {
-    const ctx = await requireResellerSession()
-    if (!ctx) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
+    const guard = await requirePainel("certificados.manage")
+    if (!guard.ok) return guard.response
+    const { ctx } = guard
 
     let payload: unknown
     try {

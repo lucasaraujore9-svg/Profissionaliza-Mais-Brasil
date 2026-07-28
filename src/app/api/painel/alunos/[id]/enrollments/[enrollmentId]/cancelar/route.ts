@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { requireResellerSession } from "@/lib/auth/reseller-session"
+import { requirePainel } from "@/lib/auth/painel-guard"
 import {
   cancelEnrollment,
   isCancellableEnrollmentStatus,
@@ -21,10 +21,10 @@ const bodySchema = z.object({
  * na conta MP/Asaas da própria unidade e a devolução é decisão dela, feita no
  * painel do gateway.
  *
- * Owner x consultor: o consultor (TenantMember, `User.tenantId = null`) desfaz
- * apenas venda ainda NÃO PAGA (PENDING) — desligar um aluno que já pagou é
- * decisão do dono da unidade. Mesma técnica de checagem de owner direto usada
- * em `requireResellerOwner` (src/lib/auth/guards.ts).
+ * Duas camadas de permissão: `alunos.manage` (+ escopo do papel) para desfazer
+ * uma venda ainda NÃO PAGA; matrícula já paga exige também `financeiro.view` —
+ * desligar quem pagou mexe em dinheiro e é decisão de quem enxerga o caixa
+ * (dono, gerente). Vendedor e secretaria ficam de fora dessa segunda camada.
  */
 export const POST = withRequestContextParams<{ id: string; enrollmentId: string }>(
   {
@@ -32,10 +32,9 @@ export const POST = withRequestContextParams<{ id: string; enrollmentId: string 
     route: "/api/painel/alunos/[id]/enrollments/[enrollmentId]/cancelar",
   },
   async (request: Request, ctx) => {
-    const session = await requireResellerSession()
-    if (!session) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
+    const guard = await requirePainel("alunos.manage")
+    if (!guard.ok) return guard.response
+    const { ctx: session } = guard
 
     const { id: studentId, enrollmentId } = await ctx.params
 
@@ -55,7 +54,7 @@ export const POST = withRequestContextParams<{ id: string; enrollmentId: string 
     // O aluno TEM que ser da unidade logada — junto com o `expectedTenantId`
     // passado ao motor, fecha o isolamento pelos dois lados (aluno e matrícula).
     const student = await prisma.student.findFirst({
-      where: { id: studentId, tenantId: session.tenantId },
+      where: { id: studentId, tenantId: session.tenantId, ...session.scope.alunos },
       select: { id: true },
     })
     if (!student) {
@@ -80,20 +79,14 @@ export const POST = withRequestContextParams<{ id: string; enrollmentId: string 
       )
     }
 
-    if (enrollment.status !== "PENDING") {
-      const owner = await prisma.user.findFirst({
-        where: { id: session.userId, tenantId: session.tenantId },
-        select: { id: true },
-      })
-      if (!owner) {
-        return NextResponse.json(
-          {
-            error:
-              "Só o titular da unidade pode cancelar uma matrícula já paga. Peça a ele.",
-          },
-          { status: 403 },
-        )
-      }
+    if (enrollment.status !== "PENDING" && !session.can("financeiro.view")) {
+      return NextResponse.json(
+        {
+          error:
+            "Só quem administra o financeiro da unidade pode cancelar uma matrícula já paga. Peça ao titular ou ao gerente.",
+        },
+        { status: 403 },
+      )
     }
 
     const outcome = await cancelEnrollment({

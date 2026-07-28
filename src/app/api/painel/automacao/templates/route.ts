@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { requireResellerSession } from "@/lib/auth/reseller-session"
+import { requirePainel } from "@/lib/auth/painel-guard"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { AutomationTemplateKey } from "@prisma/client"
 import { DEFAULT_AUTOMATION_TEMPLATES } from "@/lib/automation/default-templates"
@@ -13,10 +13,9 @@ export const GET = withRequestContext(
     route: "/api/painel/automacao/templates",
   },
   async () => {
-    const ctx = await requireResellerSession()
-    if (!ctx) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
+    const guard = await requirePainel("automacao.manage")
+    if (!guard.ok) return guard.response
+    const { ctx } = guard
 
     let templates = await prisma.automationMessageTemplate.findMany({
       where: { tenantId: ctx.tenantId },
@@ -69,10 +68,9 @@ export const PUT = withRequestContext(
     route: "/api/painel/automacao/templates",
   },
   async (request: Request) => {
-    const ctx = await requireResellerSession()
-    if (!ctx) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
+    const guard = await requirePainel("automacao.manage")
+    if (!guard.ok) return guard.response
+    const { ctx } = guard
 
     // SAAS-003: gate de entitlement no servidor (não confiar só na UI).
     if (!(await isTenantAutomationEnabled(ctx.tenantId))) {

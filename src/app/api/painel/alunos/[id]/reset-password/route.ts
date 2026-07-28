@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { requireResellerSession } from "@/lib/auth/reseller-session"
+import { requirePainel } from "@/lib/auth/painel-guard"
 import {
   resetStudentPassword,
   setStudentPasswordSchema,
@@ -14,10 +14,9 @@ export const POST = withRequestContextParams<{ id: string }>(
     route: "/api/painel/alunos/[id]/reset-password",
   },
   async (request: Request, { params }) => {
-    const ctx = await requireResellerSession()
-    if (!ctx) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
+    const guard = await requirePainel("alunos.manage")
+    if (!guard.ok) return guard.response
+    const { ctx } = guard
 
     const { id } = await params
     const student = await prisma.student.findFirst({

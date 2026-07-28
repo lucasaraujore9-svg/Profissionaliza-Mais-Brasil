@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { requireResellerSession } from "@/lib/auth/reseller-session"
+import { requirePainel } from "@/lib/auth/painel-guard"
 import { invalidateTenant } from "@/lib/redis/tenant-cache"
 import { deleteVitrineAsset, extractAssetPath } from "@/lib/supabase/storage"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
@@ -18,10 +18,9 @@ export const PATCH = withRequestContextParams<{ id: string }>(
     request: Request,
     { params }: { params: Promise<{ id: string }> },
   ) => {
-    const ctx = await requireResellerSession()
-    if (!ctx) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
+    const guard = await requirePainel("vitrine.manage")
+    if (!guard.ok) return guard.response
+    const { ctx } = guard
 
     const { id } = await params
     const slide = await prisma.bannerSlide.findFirst({
@@ -65,10 +64,9 @@ export const DELETE = withRequestContextParams<{ id: string }>(
     _request: Request,
     { params }: { params: Promise<{ id: string }> },
   ) => {
-    const ctx = await requireResellerSession()
-    if (!ctx) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
+    const guard = await requirePainel("vitrine.manage")
+    if (!guard.ok) return guard.response
+    const { ctx } = guard
 
     const { id } = await params
     const slide = await prisma.bannerSlide.findFirst({

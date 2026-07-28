@@ -2,10 +2,13 @@ import Link from "next/link"
 import { Plus } from "lucide-react"
 import { PageHeader } from "@/components/painel/page-header"
 import { CertificatesList } from "@/components/painel/certificates-list"
+import { requirePainelPage } from "@/lib/auth/painel-guard"
 
 export const dynamic = "force-dynamic"
 
-export default function PainelCertificadosEmitidosPage() {
+export default async function PainelCertificadosEmitidosPage() {
+  await requirePainelPage("certificados.view")
+
   return (
     <div className="space-y-6">
       <PageHeader

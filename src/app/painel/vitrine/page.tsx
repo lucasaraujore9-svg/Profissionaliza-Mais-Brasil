@@ -6,8 +6,10 @@ import { BannerSlidesManager } from "@/components/shared/banner-slides-manager"
 import { VitrineTabsShell } from "@/components/vitrine/tabs-shell"
 import { HomeSectionsPanel } from "@/components/vitrine/home-sections-panel"
 import { activeCustomDomain, vitrineUrl } from "@/lib/tenant/urls"
+import { requirePainelPage } from "@/lib/auth/painel-guard"
 
 export default async function PainelVitrinePage() {
+  await requirePainelPage("vitrine.manage")
   // Best-effort: link de preview da vitrine do revendedor logado.
   let previewUrl: string | null = null
   try {

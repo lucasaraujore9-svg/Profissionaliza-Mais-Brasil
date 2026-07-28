@@ -1,7 +1,10 @@
 import { PageHeader } from "@/components/painel/page-header"
 import { DomainConfig } from "@/components/painel/domain-config"
+import { requirePainelPage } from "@/lib/auth/painel-guard"
 
-export default function PainelDominioPage() {
+export default async function PainelDominioPage() {
+  await requirePainelPage("dominio.manage")
+
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <PageHeader

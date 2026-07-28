@@ -7,10 +7,12 @@ import { vitrineDomain } from "@/lib/tenant/urls"
 import { PageHeader } from "@/components/painel/page-header"
 import { Card } from "@/components/ui/card"
 import { CopyableText } from "@/components/painel/copyable-text"
+import { requirePainelPage } from "@/lib/auth/painel-guard"
 
 export const dynamic = "force-dynamic"
 
 export default async function PainelIndicacoesMateriaisPage() {
+  await requirePainelPage("indicacoes.view")
   const session = await auth()
   const user = session?.user as
     | { id?: string; role?: string; tenantId?: string | null }

@@ -9,12 +9,15 @@ import {
   type RevendaLead,
   type LeadStatus,
 } from "@/components/admin/leads-revenda-list"
+import { requirePainelPage } from "@/lib/auth/painel-guard"
 
 export const metadata = {
   title: "Leads de revenda | Painel",
 }
 
 export default async function PainelLeadsRevendaPage() {
+  await requirePainelPage("revendas.manage")
+
   const session = await auth()
   if (!session?.user || session.user.role !== "RESELLER" || !session.user.tenantId) {
     redirect("/login?callbackUrl=/painel/revendas/leads")

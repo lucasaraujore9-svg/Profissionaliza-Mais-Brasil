@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { requireResellerSession } from "@/lib/auth/reseller-session"
+import { requirePainel } from "@/lib/auth/painel-guard"
 import { downloadPayoutProof } from "@/lib/storage/payout-proof"
 import { contextLogger } from "@/lib/logger"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
@@ -16,10 +16,9 @@ export const GET = withRequestContextParams<{ payoutId: string }>(
     route: "/api/painel/indicacoes/proof/[payoutId]",
   },
   async (_request: Request, { params }) => {
-    const ctx = await requireResellerSession()
-    if (!ctx) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
+    const guard = await requirePainel("indicacoes.view")
+    if (!guard.ok) return guard.response
+    const { ctx } = guard
 
     const { payoutId } = await params
     const payout = await prisma.referralPayout.findUnique({

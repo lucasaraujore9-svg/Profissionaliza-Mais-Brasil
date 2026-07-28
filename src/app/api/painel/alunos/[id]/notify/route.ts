@@ -1,16 +1,15 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { requireResellerSession } from "@/lib/auth/reseller-session"
+import { requirePainel } from "@/lib/auth/painel-guard"
 import { notifySchema, notifyStudent } from "@/lib/students/management"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 
 export const POST = withRequestContextParams<{ id: string }>(
   { action: "painel.alunos.notify", route: "/api/painel/alunos/[id]/notify" },
   async (request: Request, { params }) => {
-    const ctx = await requireResellerSession()
-    if (!ctx) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
+    const guard = await requirePainel("alunos.manage")
+    if (!guard.ok) return guard.response
+    const { ctx } = guard
     const { id } = await params
 
     let payload: unknown

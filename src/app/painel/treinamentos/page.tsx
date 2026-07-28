@@ -3,12 +3,14 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { PageHeader } from "@/components/painel/page-header"
 import { TrainingsGrid, type TrainingModuleCard } from "@/components/painel/trainings-grid"
+import { requirePainelPage } from "@/lib/auth/painel-guard"
 
 export const metadata = {
   title: "Treinamentos | Painel",
 }
 
 export default async function PainelTreinamentosPage() {
+  await requirePainelPage("treinamentos.view")
   const session = await auth()
   if (!session?.user || session.user.role !== "RESELLER" || !session.user.tenantId) {
     redirect("/login?callbackUrl=/painel/treinamentos")

@@ -5,16 +5,18 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 vi.mock("@/lib/prisma", () => ({
   prisma: { user: { update: vi.fn() } },
 }))
-vi.mock("@/lib/auth/reseller-session", () => ({
-  requireResellerSession: vi.fn(),
-}))
+// A rota resolve papel + permissões via painelContext (que consulta
+// prisma.user/tenantMember). Aqui interessa só a validação do corpo, então
+// mockamos o guard e usamos um contexto coerente vindo dos presets reais.
+vi.mock("@/lib/auth/painel-guard", () => ({ requirePainel: vi.fn() }))
 
 import { prisma } from "@/lib/prisma"
-import { requireResellerSession } from "@/lib/auth/reseller-session"
+import { requirePainel } from "@/lib/auth/painel-guard"
+import { painelGuardOk } from "@/test/painel-ctx"
 import { POST } from "./route"
 
 const update = (prisma as unknown as { user: { update: ReturnType<typeof vi.fn> } }).user.update
-const sessionMock = requireResellerSession as unknown as ReturnType<typeof vi.fn>
+const guardMock = requirePainel as unknown as ReturnType<typeof vi.fn>
 
 function req(raw?: string) {
   return new Request("http://x/api/painel/onboarding-tour", {
@@ -27,13 +29,16 @@ function req(raw?: string) {
 beforeEach(() => {
   update.mockReset()
   update.mockResolvedValue({})
-  sessionMock.mockReset()
-  sessionMock.mockResolvedValue({ userId: "u1" })
+  guardMock.mockReset()
+  guardMock.mockResolvedValue(painelGuardOk())
 })
 
 describe("painel/onboarding-tour — validação de corpo (API-004)", () => {
   it("não autenticado → 401 e não grava", async () => {
-    sessionMock.mockResolvedValue(null)
+    guardMock.mockResolvedValue({
+      ok: false,
+      response: new Response(null, { status: 401 }),
+    })
     const res = await POST(req(JSON.stringify({ dontShowAgain: true })))
     expect(res.status).toBe(401)
     expect(update).not.toHaveBeenCalled()

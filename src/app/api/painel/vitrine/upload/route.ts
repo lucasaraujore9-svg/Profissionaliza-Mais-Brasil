@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { requireResellerSession } from "@/lib/auth/reseller-session"
+import { requirePainel } from "@/lib/auth/painel-guard"
 import { invalidateTenant } from "@/lib/redis/tenant-cache"
 import {
   deleteVitrineAsset,
@@ -40,10 +40,9 @@ function extensionFor(mime: string): string {
 export const POST = withRequestContext(
   { action: "painel.vitrine.upload", route: "/api/painel/vitrine/upload" },
   async (request: Request) => {
-    const ctx = await requireResellerSession()
-    if (!ctx) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
+    const guard = await requirePainel("vitrine.manage")
+    if (!guard.ok) return guard.response
+    const { ctx } = guard
 
     const rl = await rateLimit(request, RATE_LIMITS.upload)
     if (!rl.ok) return rateLimitResponse(rl)
@@ -162,10 +161,9 @@ export const POST = withRequestContext(
 export const DELETE = withRequestContext(
   { action: "painel.vitrine.upload_delete", route: "/api/painel/vitrine/upload" },
   async (request: Request) => {
-    const ctx = await requireResellerSession()
-    if (!ctx) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
+    const guard = await requirePainel("vitrine.manage")
+    if (!guard.ok) return guard.response
+    const { ctx } = guard
 
     const url = new URL(request.url)
     const kind = (url.searchParams.get("kind") ?? "").trim()

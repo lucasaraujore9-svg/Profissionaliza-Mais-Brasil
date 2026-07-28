@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
-import { requireResellerSession } from "@/lib/auth/reseller-session"
+import { requirePainel } from "@/lib/auth/painel-guard"
 import { prisma } from "@/lib/prisma"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 
@@ -50,10 +50,9 @@ function validatePixKey(type: PixType, key: string): string | null {
 export const GET = withRequestContext(
   { action: "painel.config.pix.get", route: "/api/painel/config/pix" },
   async () => {
-    const ctx = await requireResellerSession()
-    if (!ctx) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
+    const guard = await requirePainel("gateway.manage")
+    if (!guard.ok) return guard.response
+    const { ctx } = guard
 
     const tenant = await prisma.tenant.findUnique({
       where: { id: ctx.tenantId },
@@ -72,10 +71,9 @@ export const GET = withRequestContext(
 export const PATCH = withRequestContext(
   { action: "painel.config.pix.update", route: "/api/painel/config/pix" },
   async (request: Request) => {
-    const ctx = await requireResellerSession()
-    if (!ctx) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
+    const guard = await requirePainel("gateway.manage")
+    if (!guard.ok) return guard.response
+    const { ctx } = guard
 
     let payload: unknown
     try {

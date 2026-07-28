@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { requireResellerSession } from "@/lib/auth/reseller-session"
+import { requirePainel } from "@/lib/auth/painel-guard"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 
 export type DashboardPeriod = "today" | "7d" | "30d" | "90d" | "12m"
@@ -79,10 +79,9 @@ function pctChange(current: number, previous: number): number | null {
 export const GET = withRequestContext(
   { action: "painel.dashboard.get", route: "/api/painel/dashboard" },
   async (request: Request) => {
-    const ctx = await requireResellerSession()
-    if (!ctx) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
+    const guard = await requirePainel("dashboard.view")
+    if (!guard.ok) return guard.response
+    const { ctx } = guard
 
     const { searchParams } = new URL(request.url)
     const periodRaw = (searchParams.get("period") ?? "30d") as DashboardPeriod

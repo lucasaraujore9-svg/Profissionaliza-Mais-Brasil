@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { requireResellerSession } from "@/lib/auth/reseller-session"
+import { requirePainel } from "@/lib/auth/painel-guard"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 import { monthlyActive } from "@/lib/tenant/monthly-policy"
 import {
@@ -47,10 +47,9 @@ export const GET = withRequestContextParams<{ id: string }>(
     _request: Request,
     { params }: { params: Promise<{ id: string }> },
   ) => {
-    const ctx = await requireResellerSession()
-    if (!ctx) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
+    const guard = await requirePainel("catalogo.view")
+    if (!guard.ok) return guard.response
+    const { ctx } = guard
 
     const { id } = await params
     const tc = await prisma.tenantCourse.findFirst({
@@ -116,10 +115,9 @@ export const PUT = withRequestContextParams<{ id: string }>(
     request: Request,
     { params }: { params: Promise<{ id: string }> },
   ) => {
-    const ctx = await requireResellerSession()
-    if (!ctx) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
+    const guard = await requirePainel("catalogo.manage")
+    if (!guard.ok) return guard.response
+    const { ctx } = guard
 
     const { id } = await params
     if (!(await requireOwnCourse(ctx.tenantId, id))) {
@@ -203,10 +201,9 @@ export const DELETE = withRequestContextParams<{ id: string }>(
     _request: Request,
     { params }: { params: Promise<{ id: string }> },
   ) => {
-    const ctx = await requireResellerSession()
-    if (!ctx) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
+    const guard = await requirePainel("catalogo.manage")
+    if (!guard.ok) return guard.response
+    const { ctx } = guard
 
     const { id } = await params
     if (!(await requireOwnCourse(ctx.tenantId, id))) {

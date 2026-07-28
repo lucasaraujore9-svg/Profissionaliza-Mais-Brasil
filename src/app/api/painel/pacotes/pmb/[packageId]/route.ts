@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { requireResellerSession } from "@/lib/auth/reseller-session"
+import { requirePainel } from "@/lib/auth/painel-guard"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 
 const patchSchema = z.object({
@@ -16,10 +16,9 @@ const patchSchema = z.object({
 export const PATCH = withRequestContextParams<{ packageId: string }>(
   { action: "painel.pacotes.pmb.override", route: "/api/painel/pacotes/pmb/[packageId]" },
   async (request: Request, { params }: { params: Promise<{ packageId: string }> }) => {
-    const ctx = await requireResellerSession()
-    if (!ctx) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
+    const guard = await requirePainel("pacotes.manage")
+    if (!guard.ok) return guard.response
+    const { ctx } = guard
     const { packageId } = await params
 
     // Garante que o alvo é mesmo um pacote da PMB (tenantId null).

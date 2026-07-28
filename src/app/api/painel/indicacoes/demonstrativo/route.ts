@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { requireResellerSession } from "@/lib/auth/reseller-session"
+import { requirePainel } from "@/lib/auth/painel-guard"
 import { generateDemonstrativoPdf } from "@/lib/referrals/demonstrativo"
 import { contextLogger } from "@/lib/logger"
 import { withRequestContext } from "@/lib/observability/with-request-context"
@@ -13,10 +13,10 @@ const querySchema = z.object({
 export const GET = withRequestContext(
   { action: "painel.indicacoes.demonstrativo", route: "/api/painel/indicacoes/demonstrativo" },
   async (request: Request) => {
-    const session = await requireResellerSession()
-    if (!session) {
-      return NextResponse.json({ error: "Nao autenticado" }, { status: 401 })
-    }
+    const guard = await requirePainel("indicacoes.view")
+    if (!guard.ok) return guard.response
+    const { ctx } = guard
+    const session = ctx
 
     const url = new URL(request.url)
     const parsed = querySchema.safeParse({

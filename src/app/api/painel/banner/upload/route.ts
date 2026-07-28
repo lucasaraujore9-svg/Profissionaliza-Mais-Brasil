@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { requireResellerSession } from "@/lib/auth/reseller-session"
+import { requirePainel } from "@/lib/auth/painel-guard"
 import { uploadVitrineAsset } from "@/lib/supabase/storage"
 import { isValidImageMagic } from "@/lib/storage/validate-image"
 import { checkBannerDimensions, type BannerSlot } from "@/lib/storage/image-dims"
@@ -32,10 +32,9 @@ function extensionFor(mime: string): string {
 export const POST = withRequestContext(
   { action: "painel.banner.upload", route: "/api/painel/banner/upload" },
   async (request: Request) => {
-    const ctx = await requireResellerSession()
-    if (!ctx) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
+    const guard = await requirePainel("vitrine.manage")
+    if (!guard.ok) return guard.response
+    const { ctx } = guard
 
     const rl = await rateLimit(request, RATE_LIMITS.upload)
     if (!rl.ok) return rateLimitResponse(rl)

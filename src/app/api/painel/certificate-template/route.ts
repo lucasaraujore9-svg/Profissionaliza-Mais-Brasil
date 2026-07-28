@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { requireResellerSession } from "@/lib/auth/reseller-session"
-import { requireResellerOwner } from "@/lib/auth/guards"
+import { requirePainel } from "@/lib/auth/painel-guard"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 
 /**
@@ -20,13 +19,9 @@ const upsertSchema = z.object({
 export const GET = withRequestContext(
   { action: "painel.certificate_template.get", route: "/api/painel/certificate-template" },
   async () => {
-    const ctx = await requireResellerSession()
-    if (!ctx) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
-
-    const guard = await requireResellerOwner(ctx.tenantId)
+    const guard = await requirePainel("certificados.template")
     if (!guard.ok) return guard.response
+    const { ctx } = guard
 
     const template = await prisma.certificateTemplate.findUnique({
       where: { tenantId: ctx.tenantId },
@@ -48,12 +43,9 @@ export const GET = withRequestContext(
 export const PUT = withRequestContext(
   { action: "painel.certificate_template.update", route: "/api/painel/certificate-template" },
   async (request: Request) => {
-    const ctx = await requireResellerSession()
-    if (!ctx) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
-    const guard = await requireResellerOwner(ctx.tenantId)
+    const guard = await requirePainel("certificados.template")
     if (!guard.ok) return guard.response
+    const { ctx } = guard
 
     let payload: unknown
     try {

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { requireResellerSession } from "@/lib/auth/reseller-session"
+import { requirePainel } from "@/lib/auth/painel-guard"
 import { invalidateTenant } from "@/lib/redis/tenant-cache"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 
@@ -15,10 +15,9 @@ const createSchema = z.object({
 export const GET = withRequestContext(
   { action: "painel.banner.list", route: "/api/painel/banner" },
   async () => {
-    const ctx = await requireResellerSession()
-    if (!ctx) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
+    const guard = await requirePainel("vitrine.manage")
+    if (!guard.ok) return guard.response
+    const { ctx } = guard
 
     const slides = await prisma.bannerSlide.findMany({
       where: { tenantId: ctx.tenantId },
@@ -32,10 +31,9 @@ export const GET = withRequestContext(
 export const POST = withRequestContext(
   { action: "painel.banner.create", route: "/api/painel/banner" },
   async (request: Request) => {
-    const ctx = await requireResellerSession()
-    if (!ctx) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
+    const guard = await requirePainel("vitrine.manage")
+    if (!guard.ok) return guard.response
+    const { ctx } = guard
 
     const body = await request.json().catch(() => null)
     const parsed = createSchema.safeParse(body)

@@ -1,16 +1,15 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { requireResellerSession } from "@/lib/auth/reseller-session"
+import { requirePainel } from "@/lib/auth/painel-guard"
 import { noteSchema } from "@/lib/students/management"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 
 export const GET = withRequestContextParams<{ id: string }>(
   { action: "painel.alunos.notes.list", route: "/api/painel/alunos/[id]/notes" },
   async (_request: Request, { params }) => {
-    const ctx = await requireResellerSession()
-    if (!ctx) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
+    const guard = await requirePainel("alunos.view")
+    if (!guard.ok) return guard.response
+    const { ctx } = guard
     const { id } = await params
 
     const student = await prisma.student.findFirst({
@@ -41,10 +40,9 @@ export const GET = withRequestContextParams<{ id: string }>(
 export const POST = withRequestContextParams<{ id: string }>(
   { action: "painel.alunos.notes.create", route: "/api/painel/alunos/[id]/notes" },
   async (request: Request, { params }) => {
-    const ctx = await requireResellerSession()
-    if (!ctx) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
+    const guard = await requirePainel("alunos.manage")
+    if (!guard.ok) return guard.response
+    const { ctx } = guard
     const { id } = await params
 
     let payload: unknown
@@ -94,10 +92,9 @@ export const POST = withRequestContextParams<{ id: string }>(
 export const DELETE = withRequestContextParams<{ id: string }>(
   { action: "painel.alunos.notes.delete", route: "/api/painel/alunos/[id]/notes" },
   async (request: Request, { params }) => {
-    const ctx = await requireResellerSession()
-    if (!ctx) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
+    const guard = await requirePainel("alunos.manage")
+    if (!guard.ok) return guard.response
+    const { ctx } = guard
 
     const { id } = await params
     const url = new URL(request.url)

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { requireResellerSession } from "@/lib/auth/reseller-session"
+import { requirePainel } from "@/lib/auth/painel-guard"
 import { verifyProjectDomain } from "@/lib/vercel/client"
 import { resolveCustomDomainStatus } from "@/lib/vercel/domain-status"
 import { ensureCustomDomainCert } from "@/lib/vercel/ensure-cert"
@@ -12,10 +12,9 @@ import { withRequestContext } from "@/lib/observability/with-request-context"
 export const POST = withRequestContext(
   { action: "painel.dominio.verify", route: "/api/painel/dominio/verify" },
   async () => {
-    const ctx = await requireResellerSession()
-    if (!ctx) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
+    const guard = await requirePainel("dominio.manage")
+    if (!guard.ok) return guard.response
+    const { ctx } = guard
 
     const tenant = await prisma.tenant.findUnique({
       where: { id: ctx.tenantId },

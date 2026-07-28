@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { requireResellerSession } from "@/lib/auth/reseller-session"
+import { requirePainel } from "@/lib/auth/painel-guard"
 import { generateAndUploadPdf } from "@/lib/certificates/generate-pdf"
 import { contextLogger } from "@/lib/logger"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
@@ -13,10 +13,9 @@ export const maxDuration = 60
 export const POST = withRequestContextParams<{ id: string }>(
   { action: "painel.certificates.regenerate", route: "/api/painel/certificates/[id]/regenerate" },
   async (_request: Request, { params }) => {
-    const ctx = await requireResellerSession()
-    if (!ctx) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
+    const guard = await requirePainel("certificados.manage")
+    if (!guard.ok) return guard.response
+    const { ctx } = guard
 
     const { id } = await params
     const cert = await prisma.certificate.findUnique({ where: { id } })

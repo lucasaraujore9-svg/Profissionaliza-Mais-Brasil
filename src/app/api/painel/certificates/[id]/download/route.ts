@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { requireResellerSession } from "@/lib/auth/reseller-session"
+import { requirePainel } from "@/lib/auth/painel-guard"
 import { ensureFreshCertificatePdf } from "@/lib/certificates/freshness"
 import {
   downloadCertificatePdf,
@@ -17,10 +17,9 @@ export const maxDuration = 60
 export const GET = withRequestContextParams<{ id: string }>(
   { action: "painel.certificates.download", route: "/api/painel/certificates/[id]/download" },
   async (request: Request, { params }) => {
-    const ctx = await requireResellerSession()
-    if (!ctx) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
+    const guard = await requirePainel("certificados.view")
+    if (!guard.ok) return guard.response
+    const { ctx } = guard
 
     // ?inline=1 exibe o PDF no navegador (visualizar); padrão é baixar (attachment).
     const inline = new URL(request.url).searchParams.get("inline") === "1"

@@ -4,10 +4,12 @@ import { Award, FileText, Palette, Plus } from "lucide-react"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { PageHeader } from "@/components/painel/page-header"
+import { requirePainelPage } from "@/lib/auth/painel-guard"
 
 export const dynamic = "force-dynamic"
 
 export default async function PainelCertificadosPage() {
+  await requirePainelPage("certificados.view")
   const session = await auth()
   const user = session?.user as
     | { id?: string; role?: string; tenantId?: string | null }

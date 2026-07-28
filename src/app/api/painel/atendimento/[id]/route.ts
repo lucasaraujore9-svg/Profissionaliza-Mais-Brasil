@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { auth } from "@/lib/auth"
+import { requirePainel } from "@/lib/auth/painel-guard"
 
 const schema = z.object({ status: z.enum(["OPEN", "RESOLVED"]) })
 
@@ -11,15 +11,10 @@ export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const session = await auth()
-  if (
-    !session?.user ||
-    session.user.role !== "RESELLER" ||
-    !session.user.tenantId
-  ) {
-    return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
-  }
-  const tenantId = session.user.tenantId
+  const guard = await requirePainel("atendimento.manage")
+  if (!guard.ok) return guard.response
+  const { ctx } = guard
+  const tenantId = ctx.tenantId
 
   const { id } = await params
 
@@ -48,7 +43,7 @@ export async function PATCH(
     data: {
       status: parsed.data.status,
       resolvedAt: resolved ? new Date() : null,
-      resolvedByUserId: resolved ? session.user.id : null,
+      resolvedByUserId: resolved ? ctx.userId : null,
     },
   })
 

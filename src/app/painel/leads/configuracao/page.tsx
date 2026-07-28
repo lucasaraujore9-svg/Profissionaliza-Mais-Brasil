@@ -7,10 +7,12 @@ import { PageHeader } from "@/components/painel/page-header"
 import { AutomationGate } from "@/components/painel/automation-gate"
 import { listLeadAssignees } from "@/lib/automation/assign"
 import { LeadsDistribuicaoClient } from "@/components/painel/leads-distribuicao-client"
+import { requirePainelPage } from "@/lib/auth/painel-guard"
 
 export const dynamic = "force-dynamic"
 
 export default async function PainelLeadsConfiguracaoPage() {
+  await requirePainelPage("leads.config")
   const session = await auth()
   if (!session?.user || session.user.role !== "RESELLER" || !session.user.tenantId) {
     redirect("/login?callbackUrl=/painel/leads/configuracao")

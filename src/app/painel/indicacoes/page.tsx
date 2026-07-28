@@ -19,6 +19,7 @@ import {
 import { StatusBadge, type BadgeTone } from "@/components/shared/status-badge"
 import { EmptyState } from "@/components/shared/empty-state"
 import { ReferralLinkCopy } from "@/components/painel/referral-link-copy"
+import { requirePainelPage } from "@/lib/auth/painel-guard"
 
 const referralStatusTone: Record<string, BadgeTone> = {
   ACTIVE: "success",
@@ -143,6 +144,7 @@ function describeFaixa(m: {
 }
 
 export default async function PainelIndicacoesPage() {
+  await requirePainelPage("indicacoes.view")
   const session = await auth()
   const user = session?.user as
     | { id?: string; role?: string; tenantId?: string | null }

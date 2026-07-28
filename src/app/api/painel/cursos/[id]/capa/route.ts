@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { requireResellerSession } from "@/lib/auth/reseller-session"
+import { requirePainel } from "@/lib/auth/painel-guard"
 import {
   deleteVitrineAsset,
   extractAssetPath,
@@ -45,10 +45,9 @@ export const POST = withRequestContextParams<{ id: string }>(
     request: Request,
     { params }: { params: Promise<{ id: string }> },
   ) => {
-    const ctx = await requireResellerSession()
-    if (!ctx) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
+    const guard = await requirePainel("catalogo.manage")
+    if (!guard.ok) return guard.response
+    const { ctx } = guard
 
     const rl = await rateLimit(request, RATE_LIMITS.upload)
     if (!rl.ok) return rateLimitResponse(rl)
@@ -127,10 +126,9 @@ export const DELETE = withRequestContextParams<{ id: string }>(
     _request: Request,
     { params }: { params: Promise<{ id: string }> },
   ) => {
-    const ctx = await requireResellerSession()
-    if (!ctx) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
+    const guard = await requirePainel("catalogo.manage")
+    if (!guard.ok) return guard.response
+    const { ctx } = guard
 
     const { id } = await params
     const tc = await loadOwnedCourse(ctx.tenantId, id)

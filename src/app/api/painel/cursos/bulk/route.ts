@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { requireResellerSession } from "@/lib/auth/reseller-session"
+import { requirePainel } from "@/lib/auth/painel-guard"
 import { ensureTenantCourses } from "@/lib/tenant/ensure-courses"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { contextLogger } from "@/lib/logger"
@@ -22,10 +22,9 @@ const BULK_CONCURRENCY = 10
 export const GET = withRequestContext(
   { action: "painel.cursos.bulk.list", route: "/api/painel/cursos/bulk" },
   async () => {
-    const ctx = await requireResellerSession()
-    if (!ctx) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
+    const guard = await requirePainel("catalogo.view")
+    if (!guard.ok) return guard.response
+    const { ctx } = guard
 
     await ensureTenantCourses(ctx.tenantId)
 
@@ -89,10 +88,9 @@ const bulkSchema = z.object({
 export const PUT = withRequestContext(
   { action: "painel.cursos.bulk.update", route: "/api/painel/cursos/bulk" },
   async (request: Request) => {
-    const ctx = await requireResellerSession()
-    if (!ctx) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
+    const guard = await requirePainel("catalogo.manage")
+    if (!guard.ok) return guard.response
+    const { ctx } = guard
 
     let payload: unknown
     try {

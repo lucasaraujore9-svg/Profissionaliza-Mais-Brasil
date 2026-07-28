@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { requireResellerSession } from "@/lib/auth/reseller-session"
+import { requirePainel } from "@/lib/auth/painel-guard"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { parseTrackingPixelsInput } from "@/lib/tracking/schema"
 import { readTenantPixels, writeTenantPixels } from "@/lib/tracking/store"
@@ -8,10 +8,9 @@ import { readTenantPixels, writeTenantPixels } from "@/lib/tracking/store"
 export const GET = withRequestContext(
   { action: "painel.tracking.get", route: "/api/painel/tracking" },
   async () => {
-    const ctx = await requireResellerSession()
-    if (!ctx) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
+    const guard = await requirePainel("vitrine.manage")
+    if (!guard.ok) return guard.response
+    const { ctx } = guard
     const pixels = await readTenantPixels(ctx.tenantId)
     return NextResponse.json({ data: pixels })
   },
@@ -20,10 +19,9 @@ export const GET = withRequestContext(
 export const PUT = withRequestContext(
   { action: "painel.tracking.update", route: "/api/painel/tracking" },
   async (request: Request) => {
-    const ctx = await requireResellerSession()
-    if (!ctx) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
+    const guard = await requirePainel("vitrine.manage")
+    if (!guard.ok) return guard.response
+    const { ctx } = guard
 
     let payload: unknown
     try {

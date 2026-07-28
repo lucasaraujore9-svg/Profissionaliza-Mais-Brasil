@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server"
-import { requireResellerSession } from "@/lib/auth/reseller-session"
-import { requireResellerOwner } from "@/lib/auth/guards"
+import { requirePainel } from "@/lib/auth/painel-guard"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { getTenantBillingSummary } from "@/lib/tenant-billing/charges"
 
@@ -17,12 +16,9 @@ export const dynamic = "force-dynamic"
 export const GET = withRequestContext(
   { action: "painel.cobrancas.list", route: "/api/painel/cobrancas" },
   async (request: Request) => {
-    const ctx = await requireResellerSession()
-    if (!ctx) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
-    const guard = await requireResellerOwner(ctx.tenantId)
+    const guard = await requirePainel("cobrancas.view")
     if (!guard.ok) return guard.response
+    const { ctx } = guard
 
     const { searchParams } = new URL(request.url)
     const historyLimit = searchParams.get("history") === "0" ? 0 : 24

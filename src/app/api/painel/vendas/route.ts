@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 import type { PaymentType } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
-import { requireResellerSession } from "@/lib/auth/reseller-session"
+import { requirePainel } from "@/lib/auth/painel-guard"
 import { auth } from "@/lib/auth"
 import { tryConsumeCoupon, releaseCoupon } from "@/lib/coupons/consume"
 import { applyCouponDiscount } from "@/lib/coupons/discount"
@@ -107,10 +107,9 @@ const createSchema = z
 export const GET = withRequestContext(
   { action: "painel.vendas.list", route: "/api/painel/vendas" },
   async () => {
-    const ctx = await requireResellerSession()
-    if (!ctx) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
+    const guard = await requirePainel("vendas.view")
+    if (!guard.ok) return guard.response
+    const { ctx } = guard
 
     // Pega vendas diretas (com soldByUserId definido) do tenant.
     const enrollments = await prisma.enrollment.findMany({
@@ -149,10 +148,9 @@ export const GET = withRequestContext(
 export const POST = withRequestContext(
   { action: "painel.vendas.create", route: "/api/painel/vendas" },
   async (request: Request) => {
-    const ctx = await requireResellerSession()
-    if (!ctx) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
+    const guard = await requirePainel("vendas.create")
+    if (!guard.ok) return guard.response
+    const { ctx } = guard
 
     // Cap de desconto se for consultor (TenantMember)
     const session = await auth()

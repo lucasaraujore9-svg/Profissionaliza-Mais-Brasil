@@ -12,12 +12,14 @@ import {
 import { parseArtLayout } from "@/lib/artes/layout-schema"
 import { PageHeader } from "@/components/painel/page-header"
 import { ArtesGrid } from "@/components/painel/artes/artes-grid"
+import { requirePainelPage } from "@/lib/auth/painel-guard"
 
 export const metadata = {
   title: "Artes de divulgação | Painel",
 }
 
 export default async function PainelArtesPage() {
+  await requirePainelPage("artes.view")
   const session = await auth()
   if (!session?.user || session.user.role !== "RESELLER" || !session.user.tenantId) {
     redirect("/login?callbackUrl=/painel/artes")

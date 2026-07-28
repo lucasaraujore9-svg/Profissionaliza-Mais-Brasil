@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
-import { requireResellerSession } from "@/lib/auth/reseller-session"
+import { requirePainel } from "@/lib/auth/painel-guard"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { getSessionStatus, stopSession } from "@/lib/automation/wa-client"
 
@@ -11,10 +11,9 @@ export const GET = withRequestContext(
     route: "/api/painel/automacao/whatsapp/status",
   },
   async () => {
-    const ctx = await requireResellerSession()
-    if (!ctx) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
+    const guard = await requirePainel("automacao.manage")
+    if (!guard.ok) return guard.response
+    const { ctx } = guard
 
     const tenant = await prisma.tenant.findUnique({
       where: { id: ctx.tenantId },

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { auth } from "@/lib/auth"
+import { requirePainel } from "@/lib/auth/painel-guard"
 import { prisma } from "@/lib/prisma"
 import { startImpersonation } from "@/lib/auth/start-impersonation"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
@@ -10,28 +10,19 @@ import { logAudit } from "@/lib/audit"
 export const POST = withRequestContextParams<{ id: string }>(
   { action: "painel.alunos.impersonate", route: "/api/painel/alunos/[id]/impersonate" },
   async (_request: Request, { params }) => {
-    const session = await auth()
-    const user = session?.user as
-      | { id?: string; role?: string; tenantId?: string | null }
-      | undefined
-    if (!user?.id || user.role !== "RESELLER" || !user.tenantId) {
-      return NextResponse.json({ error: "Permissão negada" }, { status: 403 })
-    }
-    const tenantId = user.tenantId
-    const userId = user.id
-
-    // Owner DIRETO do tenant (consultor não impersona alunos).
-    const owner = await prisma.user.findFirst({
-      where: { id: userId, tenantId },
-      select: { id: true },
-    })
-    if (!owner) {
-      return NextResponse.json({ error: "Permissão negada" }, { status: 403 })
-    }
+    // Acessar a área do aluno como ele é privilégio à parte: fora de todos os
+    // presets da equipe, concedido caso a caso pelo dono em /painel/equipe.
+    const guard = await requirePainel("alunos.impersonate")
+    if (!guard.ok) return guard.response
+    const { ctx } = guard
+    const tenantId = ctx.tenantId
+    const userId = ctx.userId
 
     const { id: studentId } = await params
+    // Escopo do papel: quem não tem `alunos.viewAll` só alcança os próprios
+    // alunos — impersonar por ID direto não fura essa fronteira.
     const student = await prisma.student.findFirst({
-      where: { id: studentId, tenantId },
+      where: { id: studentId, tenantId, ...ctx.scope.alunos },
       select: { id: true, nome: true, email: true, tenantId: true },
     })
     if (!student) {

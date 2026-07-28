@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/painel/page-header"
 import { TenantChargesList } from "@/components/painel/tenant-charges-list"
 import { getTenantBillingSummary } from "@/lib/tenant-billing/charges"
 import { syncTenantChargesFromAsaas } from "@/lib/tenant-billing/sync"
+import { requirePainelPage } from "@/lib/auth/painel-guard"
 
 export const metadata = {
   title: "Minhas cobranças | Painel",
@@ -13,6 +14,7 @@ export const metadata = {
 export const dynamic = "force-dynamic"
 
 export default async function PainelCobrancasPage() {
+  await requirePainelPage("cobrancas.view")
   const session = await auth()
   if (
     !session?.user ||

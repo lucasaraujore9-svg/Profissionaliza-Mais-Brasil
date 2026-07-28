@@ -43,6 +43,11 @@ export type AssignableMemberRole = (typeof ASSIGNABLE_MEMBER_ROLES)[number]
 export const PAINEL_PERMISSIONS = [
   "dashboard.view",
 
+  // Auto-serviço: os próprios nome/e-mail/CPF e a própria senha. Está em TODOS
+  // os presets — ninguém pode ficar sem trocar a própria senha. Não dá acesso a
+  // nada da unidade (isso é `configuracoes.manage`).
+  "perfil.edit",
+
   "alunos.view",
   "alunos.viewAll",
   "alunos.manage",
@@ -157,6 +162,7 @@ export const ROLE_PRESETS: Record<PainelMemberRole, readonly PainelPermission[]>
   // comissões de indicação e exclusão da conta.
   manager: [
     "dashboard.view",
+    "perfil.edit",
     "alunos.view",
     "alunos.viewAll",
     "alunos.manage",
@@ -191,6 +197,7 @@ export const ROLE_PRESETS: Record<PainelMemberRole, readonly PainelPermission[]>
   // que ele mesmo originou.
   consultant: [
     "dashboard.view",
+    "perfil.edit",
     "alunos.view",
     "alunos.manage",
     "vendas.view",
@@ -206,6 +213,7 @@ export const ROLE_PRESETS: Record<PainelMemberRole, readonly PainelPermission[]>
   // alunos da unidade, mas nada de dinheiro (preço, financeiro, vendas).
   support: [
     "dashboard.view",
+    "perfil.edit",
     "alunos.view",
     "alunos.viewAll",
     "alunos.manage",
@@ -222,6 +230,7 @@ export const ROLE_PRESETS: Record<PainelMemberRole, readonly PainelPermission[]>
   // conciliar, sem poder editar catálogo, vitrine ou domínio.
   finance: [
     "dashboard.view",
+    "perfil.edit",
     "alunos.view",
     "alunos.viewAll",
     "vendas.view",
@@ -337,6 +346,7 @@ export const PERMISSION_GROUPS: {
     label: "Geral",
     permissions: [
       { perm: "dashboard.view", label: "Ver o dashboard" },
+      { perm: "perfil.edit", label: "Editar o próprio perfil e senha" },
       { perm: "treinamentos.view", label: "Ver treinamentos" },
       { perm: "artes.view", label: "Baixar artes de divulgação" },
     ],

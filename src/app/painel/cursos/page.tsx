@@ -1,7 +1,10 @@
 import { PageHeader } from "@/components/painel/page-header"
 import { PainelCatalogTabs } from "@/components/painel/painel-catalog-tabs"
+import { requirePainelPage } from "@/lib/auth/painel-guard"
 
-export default function PainelCursosPage() {
+export default async function PainelCursosPage() {
+  await requirePainelPage("catalogo.view")
+
   return (
     <div className="space-y-6">
       <PageHeader

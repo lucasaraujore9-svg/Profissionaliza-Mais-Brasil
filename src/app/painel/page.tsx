@@ -4,8 +4,11 @@ import { prisma } from "@/lib/prisma"
 import { DashboardWrapper } from "@/components/painel/dashboard-wrapper"
 import { TenantBillingCard } from "@/components/painel/tenant-billing-card"
 import { getTenantBillingSummary } from "@/lib/tenant-billing/charges"
+import { requirePainelPage } from "@/lib/auth/painel-guard"
 
 export default async function PainelDashboardPage() {
+  await requirePainelPage("dashboard.view")
+
   const session = await auth()
   if (!session?.user || session.user.role !== "RESELLER" || !session.user.tenantId) {
     redirect("/login")

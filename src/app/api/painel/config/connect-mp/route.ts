@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
-import { auth } from "@/lib/auth"
+import { requirePainel } from "@/lib/auth/painel-guard"
 import { prisma } from "@/lib/prisma"
 import { encrypt } from "@/lib/crypto"
 import { withRequestContext } from "@/lib/observability/with-request-context"
@@ -42,14 +42,9 @@ const bodySchema = z
 export const POST = withRequestContext(
   { action: "painel.config.connect_mp", route: "/api/painel/config/connect-mp" },
   async (request: Request) => {
-    const session = await auth()
-    if (
-      !session?.user ||
-      session.user.role !== "RESELLER" ||
-      !session.user.tenantId
-    ) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
+    const guard = await requirePainel("gateway.manage")
+    if (!guard.ok) return guard.response
+    const { ctx } = guard
 
     let payload: unknown
     try {
@@ -69,7 +64,7 @@ export const POST = withRequestContext(
       )
     }
 
-    const tenantId = session.user.tenantId as string
+    const tenantId = ctx.tenantId
 
     // Update só-de-secret: exige que o token já esteja conectado.
     if (!parsed.data.accessToken) {
@@ -184,7 +179,7 @@ export const POST = withRequestContext(
       action: "tenant.gateway.connect",
       resource: "Tenant",
       resourceId: tenantId,
-      actorUserId: session.user.id as string,
+      actorUserId: ctx.userId,
       actorRole: "RESELLER",
       tenantId,
       payloadAfter: {
@@ -208,16 +203,11 @@ export const POST = withRequestContext(
 export const DELETE = withRequestContext(
   { action: "painel.config.disconnect_mp", route: "/api/painel/config/connect-mp" },
   async () => {
-    const session = await auth()
-    if (
-      !session?.user ||
-      session.user.role !== "RESELLER" ||
-      !session.user.tenantId
-    ) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
+    const guard = await requirePainel("gateway.manage")
+    if (!guard.ok) return guard.response
+    const { ctx } = guard
 
-    const tenantId = session.user.tenantId as string
+    const tenantId = ctx.tenantId
     await prisma.tenant.update({
       where: { id: tenantId },
       data: {
@@ -235,7 +225,7 @@ export const DELETE = withRequestContext(
       action: "tenant.gateway.disconnect",
       resource: "Tenant",
       resourceId: tenantId,
-      actorUserId: session.user.id as string,
+      actorUserId: ctx.userId,
       actorRole: "RESELLER",
       tenantId,
       payloadAfter: { gateway: "MP" },

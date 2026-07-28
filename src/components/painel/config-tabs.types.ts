@@ -6,6 +6,14 @@
 export interface ConfigData {
   // cpf: 11 dígitos sem máscara (identificador alternativo de login) ou null.
   user: { id: string; name: string; email: string; cpf: string | null }
+  /** Administra a configuração da unidade (`configuracoes.manage`). */
+  canManageUnit: boolean
+  /** Configura o gateway/chave PIX da unidade (`gateway.manage`). */
+  canManagePix: boolean
+  /**
+   * `null` para membros sem `configuracoes.manage`: a API não devolve o bloco
+   * da unidade (gateway, mensalidade, parcelamento) para quem não o administra.
+   */
   tenant: {
     id: string
     name: string
@@ -28,5 +36,10 @@ export interface ConfigData {
     asaasWebhookConfigured: boolean
     asaasWebhookUrl: string
     salesGateway: "MP" | "ASAAS"
-  }
+  } | null
+}
+
+/** Estreita `ConfigData` para o caso em que o bloco da unidade veio. */
+export type ConfigDataWithTenant = ConfigData & {
+  tenant: NonNullable<ConfigData["tenant"]>
 }

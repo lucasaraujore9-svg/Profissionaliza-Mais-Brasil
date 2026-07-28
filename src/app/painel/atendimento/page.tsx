@@ -7,6 +7,7 @@ import {
   AtendimentoInbox,
   type AtendimentoMessage,
 } from "@/components/shared/atendimento-inbox"
+import { requirePainelPage } from "@/lib/auth/painel-guard"
 
 export const dynamic = "force-dynamic"
 
@@ -28,6 +29,7 @@ export default async function PainelAtendimentoPage({
 }: {
   searchParams: Promise<{ status?: string; kind?: string }>
 }) {
+  await requirePainelPage("atendimento.manage")
   const session = await auth()
   if (
     !session?.user ||

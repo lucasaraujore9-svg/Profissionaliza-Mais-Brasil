@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
-import { auth } from "@/lib/auth"
+import { requirePainel } from "@/lib/auth/painel-guard"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 
 const ONBOARDING_TOTAL_STEPS = 5
@@ -13,14 +13,9 @@ const bodySchema = z.object({
 export const POST = withRequestContext(
   { action: "painel.onboarding.progress", route: "/api/painel/onboarding" },
   async (request: Request) => {
-    const session = await auth()
-    if (
-      !session?.user ||
-      session.user.role !== "RESELLER" ||
-      !session.user.tenantId
-    ) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
+    // Progresso do onboarding da unidade: é o dono quem faz esse roteiro.
+    const guard = await requirePainel("configuracoes.manage")
+    if (!guard.ok) return guard.response
 
     let payload: unknown
     try {

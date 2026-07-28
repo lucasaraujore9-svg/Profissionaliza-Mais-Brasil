@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { requireResellerSession } from "@/lib/auth/reseller-session"
+import { requirePainel } from "@/lib/auth/painel-guard"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 
 // POST /api/painel/treinamentos/progress — marca/desmarca uma aula como assistida
@@ -14,10 +14,10 @@ const bodySchema = z.object({
 export const POST = withRequestContext(
   { action: "painel.treinamentos.progress", route: "/api/painel/treinamentos/progress" },
   async (request: Request) => {
-    const session = await requireResellerSession()
-    if (!session) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
+    const guard = await requirePainel("treinamentos.view")
+    if (!guard.ok) return guard.response
+    const { ctx } = guard
+    const session = ctx
 
     let payload: unknown
     try {

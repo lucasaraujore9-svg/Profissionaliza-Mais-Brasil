@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { requireResellerSession } from "@/lib/auth/reseller-session"
+import { requirePainel } from "@/lib/auth/painel-guard"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 import { getLeadCourseTimeline } from "@/lib/automation/leads"
 import { getLeadNavigationTimeline } from "@/lib/automation/tracking"
@@ -10,10 +10,9 @@ import { listLeadAssignees } from "@/lib/automation/assign"
 export const GET = withRequestContextParams<{ id: string }>(
   { action: "painel.leads.get", route: "/api/painel/leads/[id]" },
   async (_request: Request, { params }) => {
-    const ctx = await requireResellerSession()
-    if (!ctx) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
+    const guard = await requirePainel("leads.view")
+    if (!guard.ok) return guard.response
+    const { ctx } = guard
 
     const { id } = await params
     const lead = await prisma.studentLead.findFirst({
@@ -86,10 +85,9 @@ const patchSchema = z.object({
 export const PATCH = withRequestContextParams<{ id: string }>(
   { action: "painel.leads.update", route: "/api/painel/leads/[id]" },
   async (request: Request, { params }) => {
-    const ctx = await requireResellerSession()
-    if (!ctx) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
+    const guard = await requirePainel("leads.view")
+    if (!guard.ok) return guard.response
+    const { ctx } = guard
 
     let payload: unknown
     try {
@@ -159,10 +157,9 @@ export const PATCH = withRequestContextParams<{ id: string }>(
 export const DELETE = withRequestContextParams<{ id: string }>(
   { action: "painel.leads.delete", route: "/api/painel/leads/[id]" },
   async (_request: Request, { params }) => {
-    const ctx = await requireResellerSession()
-    if (!ctx) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
+    const guard = await requirePainel("leads.view")
+    if (!guard.ok) return guard.response
+    const { ctx } = guard
 
     const { id } = await params
     const lead = await prisma.studentLead.findFirst({

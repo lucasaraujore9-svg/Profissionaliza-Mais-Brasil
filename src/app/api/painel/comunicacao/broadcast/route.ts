@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { requireResellerSession } from "@/lib/auth/reseller-session"
+import { requirePainel } from "@/lib/auth/painel-guard"
 import { createNotification } from "@/lib/notifications"
 import type { NotificationLevel } from "@prisma/client"
 import { withRequestContext } from "@/lib/observability/with-request-context"
@@ -27,10 +27,9 @@ const schema = z.object({
 export const POST = withRequestContext(
   { action: "painel.comunicacao.broadcast", route: "/api/painel/comunicacao/broadcast" },
   async (request: Request) => {
-    const ctx = await requireResellerSession()
-    if (!ctx) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
+    const guard = await requirePainel("comunicacao.manage")
+    if (!guard.ok) return guard.response
+    const { ctx } = guard
 
     let raw: unknown
     try {

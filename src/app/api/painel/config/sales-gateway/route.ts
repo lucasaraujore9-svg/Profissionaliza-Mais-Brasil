@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
-import { auth } from "@/lib/auth"
+import { requirePainel } from "@/lib/auth/painel-guard"
 import { prisma } from "@/lib/prisma"
 import { invalidateTenant } from "@/lib/redis/tenant-cache"
 import { withRequestContext } from "@/lib/observability/with-request-context"
@@ -15,16 +15,11 @@ const bodySchema = z.object({
 export const PATCH = withRequestContext(
   { action: "painel.config.sales_gateway", route: "/api/painel/config/sales-gateway" },
   async (request: Request) => {
-    const session = await auth()
-    if (
-      !session?.user ||
-      session.user.role !== "RESELLER" ||
-      !session.user.tenantId
-    ) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
+    const guard = await requirePainel("gateway.manage")
+    if (!guard.ok) return guard.response
+    const { ctx } = guard
 
-    const tenantId = session.user.tenantId as string
+    const tenantId = ctx.tenantId
 
     let payload: unknown
     try {

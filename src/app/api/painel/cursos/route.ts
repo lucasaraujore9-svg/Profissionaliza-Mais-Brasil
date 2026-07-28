@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { requireResellerSession } from "@/lib/auth/reseller-session"
+import { requirePainel } from "@/lib/auth/painel-guard"
 import { ensureTenantCourses } from "@/lib/tenant/ensure-courses"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { displayInterestFreeInstallments } from "@/lib/mercadopago/installments"
@@ -8,10 +8,9 @@ import { displayInterestFreeInstallments } from "@/lib/mercadopago/installments"
 export const GET = withRequestContext(
   { action: "painel.cursos.list", route: "/api/painel/cursos" },
   async () => {
-    const ctx = await requireResellerSession()
-    if (!ctx) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
+    const guard = await requirePainel("catalogo.view")
+    if (!guard.ok) return guard.response
+    const { ctx } = guard
 
     // Idempotente: garante que o tenant tenha um TenantCourse pra cada
     // curso ATIVO do catálogo global (cria apenas o que falta).

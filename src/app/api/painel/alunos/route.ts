@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import type { Prisma } from "@prisma/client"
-import { requireResellerSession } from "@/lib/auth/reseller-session"
+import { requirePainel } from "@/lib/auth/painel-guard"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import {
   deriveStudentDisplayStatus,
@@ -11,10 +11,9 @@ import {
 export const GET = withRequestContext(
   { action: "painel.alunos.list", route: "/api/painel/alunos" },
   async (request: Request) => {
-    const ctx = await requireResellerSession()
-    if (!ctx) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
+    const guard = await requirePainel("alunos.view")
+    if (!guard.ok) return guard.response
+    const { ctx } = guard
 
     const { searchParams } = new URL(request.url)
     const search = searchParams.get("q")?.trim()

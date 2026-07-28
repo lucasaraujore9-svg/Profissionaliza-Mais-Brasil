@@ -1,17 +1,16 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { requireResellerSession } from "@/lib/auth/reseller-session"
+import { requirePainel } from "@/lib/auth/painel-guard"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { ensureUniquePackageSlug } from "@/lib/packages/slug"
 
 export const GET = withRequestContext(
   { action: "painel.pacotes.list", route: "/api/painel/pacotes" },
   async () => {
-    const ctx = await requireResellerSession()
-    if (!ctx) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
+    const guard = await requirePainel("catalogo.view")
+    if (!guard.ok) return guard.response
+    const { ctx } = guard
 
     const [pmb, own, overrides] = await Promise.all([
       prisma.coursePackage.findMany({
@@ -87,10 +86,9 @@ const createSchema = z.object({
 export const POST = withRequestContext(
   { action: "painel.pacotes.create", route: "/api/painel/pacotes" },
   async (request: Request) => {
-    const ctx = await requireResellerSession()
-    if (!ctx) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
+    const guard = await requirePainel("pacotes.manage")
+    if (!guard.ok) return guard.response
+    const { ctx } = guard
 
     let payload: unknown
     try {

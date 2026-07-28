@@ -1,34 +1,36 @@
 import { NextResponse } from "next/server"
-import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { mpWebhookUrl, asaasWebhookUrl } from "@/lib/tenant/urls"
 import { forbiddenNameError } from "@/lib/tenant/forbidden-names"
 import { painelConfigUpdateSchema } from "@/lib/schemas/painel-config"
-
-async function requireResellerSession() {
-  const session = await auth()
-  if (!session?.user || session.user.role !== "RESELLER" || !session.user.tenantId) {
-    return null
-  }
-  return {
-    userId: session.user.id as string,
-    tenantId: session.user.tenantId as string,
-  }
-}
+import { requirePainel } from "@/lib/auth/painel-guard"
 
 export const GET = withRequestContext(
   { action: "painel.config.get", route: "/api/painel/config" },
   async () => {
-    const ctx = await requireResellerSession()
-    if (!ctx) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
+    // Auto-serviço: qualquer membro carrega a própria conta (nome/e-mail/CPF)
+    // e a aba de senha. O bloco `tenant` — gateway, mensalidade, parcelamento —
+    // só sai para quem administra a unidade.
+    const guard = await requirePainel("perfil.edit")
+    if (!guard.ok) return guard.response
+    const { ctx } = guard
+    const canManageUnit = ctx.can("configuracoes.manage")
 
     const user = await prisma.user.findUnique({
       where: { id: ctx.userId },
       select: { id: true, name: true, email: true, cpf: true },
     })
+    if (!user) {
+      return NextResponse.json({ error: "Recurso não encontrado" }, { status: 404 })
+    }
+
+    if (!canManageUnit) {
+      return NextResponse.json({
+        data: { user, tenant: null, canManageUnit: false, canManagePix: ctx.can("gateway.manage") },
+      })
+    }
+
     const tenant = await prisma.tenant.findUnique({
       where: { id: ctx.tenantId },
       select: {
@@ -54,7 +56,7 @@ export const GET = withRequestContext(
       },
     })
 
-    if (!user || !tenant) {
+    if (!tenant) {
       return NextResponse.json({ error: "Recurso não encontrado" }, { status: 404 })
     }
 
@@ -69,6 +71,8 @@ export const GET = withRequestContext(
     return NextResponse.json({
       data: {
         user,
+        canManageUnit: true,
+        canManagePix: ctx.can("gateway.manage"),
         tenant: {
           ...tenantSafe,
           mpWebhookConfigured: mpWebhookSecret !== null,
@@ -88,10 +92,13 @@ export const GET = withRequestContext(
 export const PUT = withRequestContext(
   { action: "painel.config.update", route: "/api/painel/config" },
   async (request: Request) => {
-    const ctx = await requireResellerSession()
-    if (!ctx) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
+    // Os dados pessoais (nome/e-mail/CPF) são auto-serviço; renomear a UNIDADE
+    // exige administrar a configuração. Por isso o guard mínimo aqui é
+    // `perfil.edit` e o rename é aplicado condicionalmente mais abaixo.
+    const guard = await requirePainel("perfil.edit")
+    if (!guard.ok) return guard.response
+    const { ctx } = guard
+    const canManageUnit = ctx.can("configuracoes.manage")
 
     let payload: unknown
     try {
@@ -114,12 +121,14 @@ export const PUT = withRequestContext(
     // Marca reservada (contrato): a unidade não pode renomear-se usando
     // Bolsa Mais Brasil / Profissionaliza / Escola de Ensino a Distância /
     // Livre Cursos. Mesma regra da criação (admin).
-    const forbidden = forbiddenNameError(parsed.data.companyName)
-    if (forbidden) {
-      return NextResponse.json(
-        { error: forbidden, fields: { companyName: [forbidden] } },
-        { status: 400 },
-      )
+    if (canManageUnit) {
+      const forbidden = forbiddenNameError(parsed.data.companyName)
+      if (forbidden) {
+        return NextResponse.json(
+          { error: forbidden, fields: { companyName: [forbidden] } },
+          { status: 400 },
+        )
+      }
     }
 
     const emailTaken = await prisma.user.findFirst({
@@ -152,20 +161,22 @@ export const PUT = withRequestContext(
       }
     }
 
-    await prisma.$transaction([
-      prisma.user.update({
-        where: { id: ctx.userId },
-        data: {
-          name: parsed.data.name,
-          email: parsed.data.email,
-          cpf: parsed.data.cpf,
-        },
-      }),
-      prisma.tenant.update({
+    await prisma.user.update({
+      where: { id: ctx.userId },
+      data: {
+        name: parsed.data.name,
+        email: parsed.data.email,
+        cpf: parsed.data.cpf,
+      },
+    })
+    // Renomear a unidade é privilégio de quem administra a configuração — um
+    // membro comum salva só os próprios dados.
+    if (canManageUnit) {
+      await prisma.tenant.update({
         where: { id: ctx.tenantId },
         data: { name: parsed.data.companyName },
-      }),
-    ])
+      })
+    }
 
     return NextResponse.json({ data: { ok: true } })
   },

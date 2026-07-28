@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { requireResellerSession } from "@/lib/auth/reseller-session"
+import { requirePainel } from "@/lib/auth/painel-guard"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 
 const bodySchema = z.object({
@@ -14,10 +14,9 @@ export const POST = withRequestContextParams<{ id: string }>(
     route: "/api/painel/leads/[id]/activities",
   },
   async (request: Request, { params }) => {
-    const ctx = await requireResellerSession()
-    if (!ctx) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
+    const guard = await requirePainel("leads.view")
+    if (!guard.ok) return guard.response
+    const { ctx } = guard
 
     const { id } = await params
     const lead = await prisma.studentLead.findFirst({

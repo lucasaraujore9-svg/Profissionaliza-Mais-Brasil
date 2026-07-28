@@ -2,8 +2,10 @@ import { redirect } from "next/navigation"
 import { PageHeader } from "@/components/painel/page-header"
 import { requireResellerSession } from "@/lib/auth/reseller-session"
 import { ComunicacaoPainelClient } from "@/components/painel/comunicacao-painel-client"
+import { requirePainelPage } from "@/lib/auth/painel-guard"
 
 export default async function PainelComunicacaoPage() {
+  await requirePainelPage("comunicacao.manage")
   const ctx = await requireResellerSession()
   if (!ctx) redirect("/login")
 

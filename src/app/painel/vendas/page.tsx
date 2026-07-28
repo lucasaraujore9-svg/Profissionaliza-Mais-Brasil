@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/shared/empty-state"
 import { SaleStatusBadge } from "@/components/painel/sale-status"
 import { CheckoutLink } from "@/components/shared/checkout-link"
 import { buildEnrollmentCheckoutUrl } from "@/lib/students/checkout-link"
+import { requirePainelPage } from "@/lib/auth/painel-guard"
 
 export const dynamic = "force-dynamic"
 
@@ -16,6 +17,7 @@ function fmtBRL(n: number): string {
 }
 
 export default async function PainelVendasPage() {
+  await requirePainelPage("vendas.view")
   const session = await auth()
   const user = session?.user as
     | { tenantId?: string | null }

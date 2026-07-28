@@ -4,6 +4,7 @@ import { ChevronLeft } from "lucide-react"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { TrainingPlayer, type PlayerVideo } from "@/components/painel/training-player"
+import { requirePainelPage } from "@/lib/auth/painel-guard"
 
 export const metadata = {
   title: "Treinamento | Painel",
@@ -14,6 +15,7 @@ export default async function PainelTreinamentoModulePage({
 }: {
   params: Promise<{ moduleId: string }>
 }) {
+  await requirePainelPage("treinamentos.view")
   const session = await auth()
   if (!session?.user || session.user.role !== "RESELLER" || !session.user.tenantId) {
     redirect("/login?callbackUrl=/painel/treinamentos")

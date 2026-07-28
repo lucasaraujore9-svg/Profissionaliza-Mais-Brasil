@@ -1,5 +1,4 @@
-import { NextResponse } from "next/server"
-import { requireResellerSession } from "@/lib/auth/reseller-session"
+import { requirePainel } from "@/lib/auth/painel-guard"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { getHomeSectionsOptions } from "@/lib/home/options"
 
@@ -9,10 +8,8 @@ export const GET = withRequestContext(
     route: "/api/painel/home-sections/options",
   },
   async () => {
-    const ctx = await requireResellerSession()
-    if (!ctx) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
-    return getHomeSectionsOptions()
+    const guard = await requirePainel("vitrine.manage")
+    if (!guard.ok) return guard.response
+        return getHomeSectionsOptions()
   },
 )

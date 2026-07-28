@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
-import { auth } from "@/lib/auth"
+import { requirePainel } from "@/lib/auth/painel-guard"
 import { prisma } from "@/lib/prisma"
 import { encrypt } from "@/lib/crypto"
 import { withRequestContext } from "@/lib/observability/with-request-context"
@@ -35,16 +35,11 @@ const bodySchema = z
 export const POST = withRequestContext(
   { action: "painel.config.connect_asaas", route: "/api/painel/config/connect-asaas" },
   async (request: Request) => {
-    const session = await auth()
-    if (
-      !session?.user ||
-      session.user.role !== "RESELLER" ||
-      !session.user.tenantId
-    ) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
+    const guard = await requirePainel("gateway.manage")
+    if (!guard.ok) return guard.response
+    const { ctx } = guard
 
-    const tenantId = session.user.tenantId as string
+    const tenantId = ctx.tenantId
 
     // Gate de capability: a unidade so pode conectar o Asaas se o Admin Master
     // liberou. Sem isso, alguem com sessao de revenda poderia configurar a conta
@@ -122,7 +117,7 @@ export const POST = withRequestContext(
       action: "tenant.gateway.connect",
       resource: "Tenant",
       resourceId: tenantId,
-      actorUserId: session.user.id as string,
+      actorUserId: ctx.userId,
       actorRole: "RESELLER",
       tenantId,
       payloadAfter: {
@@ -144,16 +139,11 @@ export const POST = withRequestContext(
 export const DELETE = withRequestContext(
   { action: "painel.config.disconnect_asaas", route: "/api/painel/config/connect-asaas" },
   async () => {
-    const session = await auth()
-    if (
-      !session?.user ||
-      session.user.role !== "RESELLER" ||
-      !session.user.tenantId
-    ) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
+    const guard = await requirePainel("gateway.manage")
+    if (!guard.ok) return guard.response
+    const { ctx } = guard
 
-    const tenantId = session.user.tenantId as string
+    const tenantId = ctx.tenantId
 
     // Desconectar tambem reverte o gateway ativo para MP — uma unidade nao pode
     // ficar com salesGateway=ASAAS sem credenciais (quebraria todo o checkout).
@@ -172,7 +162,7 @@ export const DELETE = withRequestContext(
       action: "tenant.gateway.disconnect",
       resource: "Tenant",
       resourceId: tenantId,
-      actorUserId: session.user.id as string,
+      actorUserId: ctx.userId,
       actorRole: "RESELLER",
       tenantId,
       payloadAfter: { gateway: "ASAAS", salesGateway: "MP" },

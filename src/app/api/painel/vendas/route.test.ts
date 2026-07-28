@@ -15,11 +15,15 @@ vi.mock("@/lib/prisma", () => ({
 vi.mock("@/lib/enrollment/fulfill", () => ({
   fulfillScholarshipEnrollment: vi.fn().mockResolvedValue(undefined),
 }))
-vi.mock("@/lib/auth/reseller-session", () => ({ requireResellerSession: vi.fn() }))
+// Rotas de /painel resolvem papel + permissoes via painelContext (consulta
+// prisma.user/tenantMember). Mockamos o guard e usamos um contexto coerente
+// derivado dos presets reais — ver src/test/painel-ctx.ts.
+vi.mock("@/lib/auth/painel-guard", () => ({ requirePainel: vi.fn() }))
 vi.mock("@/lib/auth", () => ({ auth: vi.fn() }))
 
 import { prisma } from "@/lib/prisma"
-import { requireResellerSession } from "@/lib/auth/reseller-session"
+import { requirePainel } from "@/lib/auth/painel-guard"
+import { painelGuardOk } from "@/test/painel-ctx"
 import { auth } from "@/lib/auth"
 import { POST } from "./route"
 
@@ -37,7 +41,7 @@ const p = prisma as unknown as {
     update: ReturnType<typeof vi.fn>
   }
 }
-const resellerSession = requireResellerSession as unknown as ReturnType<typeof vi.fn>
+const resellerSession = requirePainel as unknown as ReturnType<typeof vi.fn>
 const authMock = auth as unknown as ReturnType<typeof vi.fn>
 
 function body(overrides: Record<string, unknown> = {}) {
@@ -57,7 +61,7 @@ function body(overrides: Record<string, unknown> = {}) {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  resellerSession.mockResolvedValue({ userId: "u1", tenantId: "t1" })
+  resellerSession.mockResolvedValue(painelGuardOk({ userId: "u1" }))
   authMock.mockResolvedValue({ user: { id: "u1" } })
   p.tenant.findUnique.mockResolvedValue({
     id: "t1",

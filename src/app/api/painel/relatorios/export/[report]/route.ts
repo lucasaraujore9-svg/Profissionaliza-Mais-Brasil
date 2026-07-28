@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { requireResellerSession } from "@/lib/auth/reseller-session"
+import { requirePainel } from "@/lib/auth/painel-guard"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 import { buildCsv, csvResponse } from "@/lib/reports/csv"
 import {
@@ -18,9 +18,9 @@ export const dynamic = "force-dynamic"
 export const GET = withRequestContextParams<{ report: string }>(
   { action: "painel.relatorios.export.get", route: "/api/painel/relatorios/export/[report]" },
   async (request: Request, routeCtx) => {
-    const ctx = await requireResellerSession()
-    if (!ctx) return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-
+    const guard = await requirePainel("relatorios.view")
+    if (!guard.ok) return guard.response
+    const { ctx } = guard
     const { report } = await routeCtx.params
     const def = painelReportDef(report)
     const runner = getPainelReportRunner(report)

@@ -11,6 +11,7 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { PageHeader } from "@/components/painel/page-header"
 import { AutomationGate } from "@/components/painel/automation-gate"
+import { requirePainelPage } from "@/lib/auth/painel-guard"
 
 const WA_STATUS_LABEL: Record<string, { label: string; color: string }> = {
   WORKING: { label: "Conectado", color: "text-emerald-700" },
@@ -21,6 +22,7 @@ const WA_STATUS_LABEL: Record<string, { label: string; color: string }> = {
 }
 
 export default async function PainelAutomacaoPage() {
+  await requirePainelPage("automacao.manage")
   const session = await auth()
   if (
     !session?.user ||

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { requireResellerSession } from "@/lib/auth/reseller-session"
+import { requirePainel } from "@/lib/auth/painel-guard"
 import { PMB_PUBLIC_NAME } from "@/lib/pmb-config"
 import { resolveCertificateTemplate } from "@/lib/certificates/template-resolver"
 import { renderCertificateBuffer } from "@/lib/certificates/generate-pdf"
@@ -21,10 +21,9 @@ type Layout = (typeof VALID_LAYOUTS)[number]
 export const GET = withRequestContext(
   { action: "painel.certificate_template.preview", route: "/api/painel/certificate-template/preview" },
   async (request: Request) => {
-    const ctx = await requireResellerSession()
-    if (!ctx) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
+    const guard = await requirePainel("certificados.template")
+    if (!guard.ok) return guard.response
+    const { ctx } = guard
 
     const layoutParam = new URL(request.url).searchParams.get("layout")
     const layoutOverride = VALID_LAYOUTS.includes(layoutParam as Layout)

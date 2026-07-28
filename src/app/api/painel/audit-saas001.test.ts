@@ -12,6 +12,9 @@ vi.mock("@/lib/prisma", () => ({
 }))
 vi.mock("@/lib/auth", () => ({ auth: vi.fn() }))
 vi.mock("@/lib/auth/guards", () => ({ requireResellerOwner: vi.fn() }))
+// As rotas de gateway passaram a exigir a permissao `gateway.manage`; o guard
+// consulta prisma.user/tenantMember, fora deste mock parcial de Prisma.
+vi.mock("@/lib/auth/painel-guard", () => ({ requirePainel: vi.fn() }))
 vi.mock("@/lib/crypto", () => ({ encrypt: (v: string) => `enc(${v})` }))
 vi.mock("@/lib/mercadopago/client", () => {
   class MPApiError extends Error {
@@ -31,6 +34,8 @@ import { logAudit } from "@/lib/audit"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import { requireResellerOwner } from "@/lib/auth/guards"
+import { requirePainel } from "@/lib/auth/painel-guard"
+import { painelGuardOk } from "@/test/painel-ctx"
 
 import { PATCH as equipePatch, DELETE as equipeDelete } from "./equipe/[id]/route"
 import { POST as mpConnect, DELETE as mpDisconnect } from "./config/connect-mp/route"
@@ -43,6 +48,7 @@ const p = prisma as unknown as {
 }
 const authMock = auth as unknown as ReturnType<typeof vi.fn>
 const ownerGuard = requireResellerOwner as unknown as ReturnType<typeof vi.fn>
+const painelGuard = requirePainel as unknown as ReturnType<typeof vi.fn>
 
 function jreq(body: unknown) {
   return new Request("http://x", {
@@ -59,6 +65,7 @@ beforeEach(() => {
     user: { id: "u1", role: "RESELLER", tenantId: "t1" },
   })
   ownerGuard.mockResolvedValue({ ok: true, session: { userId: "u1", role: "RESELLER" } })
+  painelGuard.mockResolvedValue(painelGuardOk())
   p.tenant.update.mockResolvedValue({})
 })
 

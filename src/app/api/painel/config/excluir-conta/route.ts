@@ -1,16 +1,9 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { auth } from "@/lib/auth"
-import { requireResellerOwner } from "@/lib/auth/guards"
+import { requirePainel } from "@/lib/auth/painel-guard"
 import { logAudit } from "@/lib/audit"
 import { swallow } from "@/lib/errors"
 import { withRequestContext } from "@/lib/observability/with-request-context"
-
-async function currentSession(): Promise<{ tenantId: string | null; userId: string | null }> {
-  const session = await auth()
-  const user = session?.user as { id?: string; tenantId?: string | null } | undefined
-  return { tenantId: user?.tenantId ?? null, userId: user?.id ?? null }
-}
 
 // Solicitação de exclusão de conta do REVENDEDOR (LGPD art. 18).
 // O owner solicita; registra como nota de suporte (visível no admin) e em
@@ -19,12 +12,10 @@ async function currentSession(): Promise<{ tenantId: string | null; userId: stri
 export const POST = withRequestContext(
   { action: "painel.config.delete_request", route: "/api/painel/config/excluir-conta" },
   async () => {
-    const { tenantId, userId } = await currentSession()
-    if (!tenantId || !userId) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-    }
-    const guard = await requireResellerOwner(tenantId)
+    // `conta.delete` é OWNER_EXCLUSIVE: nem override concede a um membro.
+    const guard = await requirePainel("conta.delete")
     if (!guard.ok) return guard.response
+    const { tenantId, userId } = guard.ctx
 
     await prisma.tenantSupportNote.create({
       data: {

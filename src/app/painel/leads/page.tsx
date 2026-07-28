@@ -6,8 +6,10 @@ import { prisma } from "@/lib/prisma"
 import { PageHeader } from "@/components/painel/page-header"
 import { LeadsKanbanBoard } from "@/components/painel/leads-kanban-board"
 import { AutomationGate } from "@/components/painel/automation-gate"
+import { requirePainelPage } from "@/lib/auth/painel-guard"
 
 export default async function PainelLeadsPage() {
+  await requirePainelPage("leads.view")
   const session = await auth()
   if (!session?.user || session.user.role !== "RESELLER" || !session.user.tenantId) {
     redirect("/login?callbackUrl=/painel/leads")

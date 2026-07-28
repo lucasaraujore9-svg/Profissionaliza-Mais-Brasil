@@ -5,10 +5,12 @@ import { PageHeader } from "@/components/painel/page-header"
 import { CertificateLayoutSelector } from "@/components/painel/certificate-layout-selector"
 import { resolveCertificateTemplate } from "@/lib/certificates/template-resolver"
 import type { CertificateTemplateData } from "@/components/shared/certificate-html-preview"
+import { requirePainelPage } from "@/lib/auth/painel-guard"
 
 export const dynamic = "force-dynamic"
 
 export default async function PainelCertificadosTemplatePage() {
+  await requirePainelPage("certificados.template")
   const session = await auth()
   const user = session?.user as
     | { id?: string; role?: string; tenantId?: string | null }

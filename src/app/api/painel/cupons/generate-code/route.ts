@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { requireResellerSession } from "@/lib/auth/reseller-session"
+import { requirePainel } from "@/lib/auth/painel-guard"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 
 const ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
@@ -16,10 +16,9 @@ function randomCode(length = 10): string {
 export const POST = withRequestContext(
   { action: "painel.cupons.generate_code", route: "/api/painel/cupons/generate-code" },
   async () => {
-    const ctx = await requireResellerSession()
-    if (!ctx) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
+    const guard = await requirePainel("cupons.manage")
+    if (!guard.ok) return guard.response
+    const { ctx } = guard
 
     for (let attempt = 0; attempt < 5; attempt++) {
       const code = randomCode()

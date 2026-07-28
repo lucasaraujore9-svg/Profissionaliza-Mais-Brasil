@@ -9,25 +9,34 @@ import { BillingSection } from "./billing-section"
 import { SecurityForm } from "./security-form"
 import { PixForm } from "./pix-form"
 import { TrackingForm } from "./tracking-form"
-import type { ConfigData } from "./config-tabs.types"
+import type { ConfigData, ConfigDataWithTenant } from "./config-tabs.types"
 
-const tabs = [
-  { id: "conta", label: "Conta" },
-  { id: "pagamento", label: "Pagamento" },
-  { id: "pix", label: "PIX (comissões)" },
-  { id: "rastreamento", label: "Rastreamento" },
-  { id: "seguranca", label: "Segurança" },
+const ALL_TABS = [
+  // "conta" e "segurança" são auto-serviço — todo membro precisa editar os
+  // próprios dados e trocar a própria senha. As demais são configuração da
+  // UNIDADE e só aparecem para quem a administra.
+  { id: "conta", label: "Conta", unitOnly: false },
+  { id: "pagamento", label: "Pagamento", unitOnly: true },
+  { id: "pix", label: "PIX (comissões)", unitOnly: true },
+  { id: "rastreamento", label: "Rastreamento", unitOnly: true },
+  { id: "seguranca", label: "Segurança", unitOnly: false },
 ] as const
 
-type TabId = (typeof tabs)[number]["id"]
+type TabId = (typeof ALL_TABS)[number]["id"]
 
 export function ConfigTabs() {
   const router = useRouter()
   const params = useSearchParams()
   const urlTab = params.get("tab") as TabId | null
-  const active: TabId = tabs.some((t) => t.id === urlTab) ? (urlTab as TabId) : "conta"
   const [data, setData] = useState<ConfigData | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
+
+  // Abas visíveis dependem do que a API devolveu: sem `canManageUnit` o bloco
+  // `tenant` nem chega ao client, então renderizar "Pagamento" quebraria.
+  const tabs = ALL_TABS.filter((t) => !t.unitOnly || data?.canManageUnit)
+  const active: TabId = tabs.some((t) => t.id === urlTab)
+    ? (urlTab as TabId)
+    : "conta"
 
   const setActive = useCallback(
     (id: TabId) => {
@@ -63,8 +72,14 @@ export function ConfigTabs() {
     setData((prev) => {
       if (!prev) return prev
       return {
+        ...prev,
         user: { ...prev.user, ...(next.user ?? {}) },
-        tenant: { ...prev.tenant, ...(next.tenant ?? {}) },
+        // `tenant` é null para quem não administra a unidade — nesse caso não há
+        // nada a mesclar e o bloco permanece null.
+        tenant:
+          prev.tenant && next.tenant
+            ? { ...prev.tenant, ...next.tenant }
+            : (next.tenant ?? prev.tenant),
       }
     })
   }
@@ -113,8 +128,11 @@ export function ConfigTabs() {
         {active === "conta" && (
           <AccountForm data={data} onUpdate={handleConfigUpdate} />
         )}
-        {active === "pagamento" && (
-          <BillingSection data={data} onUpdate={handleConfigUpdate} />
+        {active === "pagamento" && data.tenant && (
+          <BillingSection
+            data={data as ConfigDataWithTenant}
+            onUpdate={handleConfigUpdate}
+          />
         )}
         {active === "pix" && <PixForm />}
         {active === "rastreamento" && <TrackingForm />}

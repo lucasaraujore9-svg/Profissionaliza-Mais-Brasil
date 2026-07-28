@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { requireResellerSession } from "@/lib/auth/reseller-session"
+import { requirePainel } from "@/lib/auth/painel-guard"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { reconcileLeadStages } from "@/lib/automation/leads"
 import { listLeadAssignees } from "@/lib/automation/assign"
@@ -21,10 +21,9 @@ const PER_STAGE_LIMIT = 200
 export const GET = withRequestContext(
   { action: "painel.leads.list", route: "/api/painel/leads" },
   async (request: Request) => {
-    const ctx = await requireResellerSession()
-    if (!ctx) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
+    const guard = await requirePainel("leads.view")
+    if (!guard.ok) return guard.response
+    const { ctx } = guard
 
     // Reconcilia colunas com o estado real (paga → WON, expirada → ABANDONED)
     // antes de montar o board. Cobre webhooks perdidos / cron atrasado.

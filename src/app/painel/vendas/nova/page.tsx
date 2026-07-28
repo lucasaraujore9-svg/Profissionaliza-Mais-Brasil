@@ -7,10 +7,12 @@ import { ensureTenantCourses } from "@/lib/tenant/ensure-courses"
 import { coursePaymentType, monthlyActive } from "@/lib/tenant/monthly-policy"
 import { MAX_BOLETO_INSTALLMENTS } from "@/lib/installments/schedule"
 import { resolveVitrinePackages } from "@/lib/packages/vitrine"
+import { requirePainelPage } from "@/lib/auth/painel-guard"
 
 export const dynamic = "force-dynamic"
 
 export default async function PainelNovaVendaPage() {
+  await requirePainelPage("vendas.create")
   const session = await auth()
   const user = session?.user as
     | { id?: string; tenantId?: string | null; role?: string }

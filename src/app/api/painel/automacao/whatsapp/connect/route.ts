@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { randomBytes } from "node:crypto"
 import { prisma } from "@/lib/prisma"
-import { requireResellerSession } from "@/lib/auth/reseller-session"
+import { requirePainel } from "@/lib/auth/painel-guard"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import {
   startSession,
@@ -16,10 +16,9 @@ export const POST = withRequestContext(
     route: "/api/painel/automacao/whatsapp/connect",
   },
   async () => {
-    const ctx = await requireResellerSession()
-    if (!ctx) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
+    const guard = await requirePainel("automacao.manage")
+    if (!guard.ok) return guard.response
+    const { ctx } = guard
 
     const tenant = await prisma.tenant.findUnique({
       where: { id: ctx.tenantId },

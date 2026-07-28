@@ -1,5 +1,4 @@
-import { NextResponse } from "next/server"
-import { requireResellerSession } from "@/lib/auth/reseller-session"
+import { requirePainel } from "@/lib/auth/painel-guard"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { rateLimit, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
 import { handlePackageCoverUpload } from "@/lib/packages/cover-upload"
@@ -11,10 +10,9 @@ import { handlePackageCoverUpload } from "@/lib/packages/cover-upload"
 export const POST = withRequestContext(
   { action: "painel.pacotes.capa_upload", route: "/api/painel/pacotes/capa" },
   async (request: Request) => {
-    const ctx = await requireResellerSession()
-    if (!ctx) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
+    const guard = await requirePainel("pacotes.manage")
+    if (!guard.ok) return guard.response
+    const { ctx } = guard
 
     const rl = await rateLimit(request, RATE_LIMITS.upload)
     if (!rl.ok) return rateLimitResponse(rl)

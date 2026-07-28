@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { requireResellerSession } from "@/lib/auth/reseller-session"
+import { requirePainel } from "@/lib/auth/painel-guard"
 import {
   addProjectDomain,
   removeProjectDomain,
@@ -103,10 +103,9 @@ async function fetchTenantDomainInfo(tenantId: string) {
 export const GET = withRequestContext(
   { action: "painel.dominio.get", route: "/api/painel/dominio" },
   async () => {
-    const ctx = await requireResellerSession()
-    if (!ctx) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
+    const guard = await requirePainel("dominio.manage")
+    if (!guard.ok) return guard.response
+    const { ctx } = guard
 
     const info = await fetchTenantDomainInfo(ctx.tenantId)
     if (!info) {
@@ -132,10 +131,9 @@ const domainSchema = z.object({
 export const POST = withRequestContext(
   { action: "painel.dominio.add", route: "/api/painel/dominio" },
   async (request: Request) => {
-    const ctx = await requireResellerSession()
-    if (!ctx) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
+    const guard = await requirePainel("dominio.manage")
+    if (!guard.ok) return guard.response
+    const { ctx } = guard
 
     let payload: unknown
     try {
@@ -227,10 +225,9 @@ export const POST = withRequestContext(
 export const DELETE = withRequestContext(
   { action: "painel.dominio.remove", route: "/api/painel/dominio" },
   async () => {
-    const ctx = await requireResellerSession()
-    if (!ctx) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
+    const guard = await requirePainel("dominio.manage")
+    if (!guard.ok) return guard.response
+    const { ctx } = guard
 
     const tenant = await prisma.tenant.findUnique({
       where: { id: ctx.tenantId },

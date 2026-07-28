@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { requireResellerSession } from "@/lib/auth/reseller-session"
+import { requirePainel } from "@/lib/auth/painel-guard"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 import { ensureUniquePackageSlug } from "@/lib/packages/slug"
 
@@ -15,10 +15,9 @@ async function ownPackage(tenantId: string, id: string) {
 export const GET = withRequestContextParams<{ id: string }>(
   { action: "painel.pacotes.get", route: "/api/painel/pacotes/[id]" },
   async (_request: Request, { params }: { params: Promise<{ id: string }> }) => {
-    const ctx = await requireResellerSession()
-    if (!ctx) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
+    const guard = await requirePainel("catalogo.view")
+    if (!guard.ok) return guard.response
+    const { ctx } = guard
     const { id } = await params
     const pkg = await prisma.coursePackage.findFirst({
       where: { id, tenantId: ctx.tenantId },
@@ -62,10 +61,9 @@ const updateSchema = z.object({
 export const PUT = withRequestContextParams<{ id: string }>(
   { action: "painel.pacotes.update", route: "/api/painel/pacotes/[id]" },
   async (request: Request, { params }: { params: Promise<{ id: string }> }) => {
-    const ctx = await requireResellerSession()
-    if (!ctx) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
+    const guard = await requirePainel("pacotes.manage")
+    if (!guard.ok) return guard.response
+    const { ctx } = guard
     const { id } = await params
     const existing = await ownPackage(ctx.tenantId, id)
     if (!existing) {
@@ -130,10 +128,9 @@ export const PUT = withRequestContextParams<{ id: string }>(
 export const DELETE = withRequestContextParams<{ id: string }>(
   { action: "painel.pacotes.delete", route: "/api/painel/pacotes/[id]" },
   async (_request: Request, { params }: { params: Promise<{ id: string }> }) => {
-    const ctx = await requireResellerSession()
-    if (!ctx) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
+    const guard = await requirePainel("pacotes.manage")
+    if (!guard.ok) return guard.response
+    const { ctx } = guard
     const { id } = await params
     const existing = await ownPackage(ctx.tenantId, id)
     if (!existing) {

@@ -19,7 +19,10 @@ export function AccountForm({ data, onUpdate }: AccountFormProps) {
   const [name, setName] = useState(data.user.name)
   const [email, setEmail] = useState(data.user.email)
   const [cpf, setCpf] = useState(data.user.cpf ?? "")
-  const [companyName, setCompanyName] = useState(data.tenant.name)
+  // Membro sem `configuracoes.manage` não recebe o bloco da unidade e não
+  // renomeia a empresa — a aba vira só os dados pessoais dele.
+  const canRenameUnit = data.tenant !== null
+  const [companyName, setCompanyName] = useState(data.tenant?.name ?? "")
   const [status, setStatus] = useState<SubmitStatus>("idle")
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
@@ -30,11 +33,13 @@ export function AccountForm({ data, onUpdate }: AccountFormProps) {
     setErrorMessage(null)
 
     // Marca reservada (contrato) — feedback imediato; o servidor revalida.
-    const nameError = forbiddenNameError(companyName)
-    if (nameError) {
-      setErrors({ companyName: nameError })
-      setStatus("error")
-      return
+    if (canRenameUnit) {
+      const nameError = forbiddenNameError(companyName)
+      if (nameError) {
+        setErrors({ companyName: nameError })
+        setStatus("error")
+        return
+      }
     }
 
     setStatus("submitting")
@@ -64,7 +69,7 @@ export function AccountForm({ data, onUpdate }: AccountFormProps) {
 
       onUpdate({
         user: { ...data.user, name, email, cpf: cpf.replace(/\D/g, "") || null },
-        tenant: { ...data.tenant, name: companyName },
+        ...(data.tenant ? { tenant: { ...data.tenant, name: companyName } } : {}),
       })
       setStatus("success")
     } catch {
@@ -126,18 +131,20 @@ export function AccountForm({ data, onUpdate }: AccountFormProps) {
             <p className="mt-1 text-xs text-red-600">{errors.cpf}</p>
           )}
         </div>
-        <div className="md:col-span-2">
-          <Label htmlFor="cfg-empresa">Nome da empresa</Label>
-          <Input
-            id="cfg-empresa"
-            value={companyName}
-            onChange={(e) => setCompanyName(e.target.value)}
-            className="mt-1.5"
-          />
-          {errors.companyName && (
-            <p className="mt-1 text-xs text-red-600">{errors.companyName}</p>
-          )}
-        </div>
+        {canRenameUnit && (
+          <div className="md:col-span-2">
+            <Label htmlFor="cfg-empresa">Nome da empresa</Label>
+            <Input
+              id="cfg-empresa"
+              value={companyName}
+              onChange={(e) => setCompanyName(e.target.value)}
+              className="mt-1.5"
+            />
+            {errors.companyName && (
+              <p className="mt-1 text-xs text-red-600">{errors.companyName}</p>
+            )}
+          </div>
+        )}
       </div>
 
       {errorMessage && (

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { requireResellerSession } from "@/lib/auth/reseller-session"
+import { requirePainel } from "@/lib/auth/painel-guard"
 import { invalidateTenant } from "@/lib/redis/tenant-cache"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { syncTenantBrandingToLms } from "@/lib/lms"
@@ -56,10 +56,9 @@ async function readTenant(tenantId: string): Promise<VitrineDto | null> {
 export const GET = withRequestContext(
   { action: "painel.vitrine.get", route: "/api/painel/vitrine" },
   async () => {
-    const ctx = await requireResellerSession()
-    if (!ctx) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
+    const guard = await requirePainel("vitrine.manage")
+    if (!guard.ok) return guard.response
+    const { ctx } = guard
     const data = await readTenant(ctx.tenantId)
     if (!data) {
       return NextResponse.json({ error: "Tenant não encontrado" }, { status: 404 })
@@ -96,10 +95,9 @@ const updateSchema = z.object({
 export const PUT = withRequestContext(
   { action: "painel.vitrine.update", route: "/api/painel/vitrine" },
   async (request: Request) => {
-    const ctx = await requireResellerSession()
-    if (!ctx) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
+    const guard = await requirePainel("vitrine.manage")
+    if (!guard.ok) return guard.response
+    const { ctx } = guard
 
     let payload: unknown
     try {

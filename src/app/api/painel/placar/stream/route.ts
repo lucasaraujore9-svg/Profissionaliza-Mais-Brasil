@@ -1,4 +1,4 @@
-import { auth } from "@/lib/auth"
+import { requirePainel } from "@/lib/auth/painel-guard"
 import { prisma } from "@/lib/prisma"
 import {
   getReferralPlacarSnapshotCached as getReferralPlacarSnapshot,
@@ -19,11 +19,11 @@ const TICK_MS = 5000
 const MAX_TICKS = 54
 
 export async function GET() {
-  const session = await auth()
-  const tenantId = session?.user?.tenantId
-  if (!tenantId) {
-    return new Response("Unauthorized", { status: 401 })
-  }
+  // O placar é o scoreboard das revendas indicadas — mesma permissão da seção
+  // "Revendedor" no menu, e não apenas "estar logado na unidade".
+  const guard = await requirePainel("revendas.manage")
+  if (!guard.ok) return guard.response
+  const tenantId = guard.ctx.tenantId
 
   // Só revendedor de revenda (módulo ativo) acessa o placar de indicações.
   const tenant = await prisma.tenant.findUnique({

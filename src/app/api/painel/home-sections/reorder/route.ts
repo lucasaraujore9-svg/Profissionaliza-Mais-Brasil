@@ -1,5 +1,4 @@
-import { NextResponse } from "next/server"
-import { requireResellerSession } from "@/lib/auth/reseller-session"
+import { requirePainel } from "@/lib/auth/painel-guard"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { reorderSections } from "@/lib/home/api"
 
@@ -9,10 +8,9 @@ export const PATCH = withRequestContext(
     route: "/api/painel/home-sections/reorder",
   },
   async (request: Request) => {
-    const ctx = await requireResellerSession()
-    if (!ctx) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
+    const guard = await requirePainel("vitrine.manage")
+    if (!guard.ok) return guard.response
+    const { ctx } = guard
     const body = await request.json().catch(() => null)
     return reorderSections({ tenantId: ctx.tenantId }, body)
   },

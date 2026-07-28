@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { requireResellerSession } from "@/lib/auth/reseller-session"
+import { requirePainel } from "@/lib/auth/painel-guard"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { MAX_EXPORT_ROWS, truncationNotice } from "@/lib/reports/export-limit"
 import { logAudit } from "@/lib/audit"
@@ -22,10 +22,9 @@ function escapeCsv(value: string | number | null): string {
 export const GET = withRequestContext(
   { action: "painel.financeiro.export_csv", route: "/api/painel/financeiro/export-csv" },
   async (request: Request) => {
-    const ctx = await requireResellerSession()
-    if (!ctx) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
+    const guard = await requirePainel("financeiro.export")
+    if (!guard.ok) return guard.response
+    const { ctx } = guard
 
     const { searchParams } = new URL(request.url)
     const from = searchParams.get("from")

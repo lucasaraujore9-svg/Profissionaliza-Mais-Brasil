@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { requireResellerSession } from "@/lib/auth/reseller-session"
+import { requirePainel } from "@/lib/auth/painel-guard"
 import { changeStudentPlatformPassword } from "@/lib/students/plataforma-actions"
 import {
   PLATFORM_PASSWORD_UNSUPPORTED_STAFF,
@@ -22,10 +22,9 @@ export const POST = withRequestContextParams<{ id: string }>(
     route: "/api/painel/alunos/[id]/plataforma-senha",
   },
   async (request: Request, { params }) => {
-    const ctx = await requireResellerSession()
-    if (!ctx) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-    }
+    const guard = await requirePainel("alunos.manage")
+    if (!guard.ok) return guard.response
+    const { ctx } = guard
 
     // Mesmo motivo do endpoint do aluno: cada chamada custa duas idas a EA
     // (escrever + reler para conferir) e hoje a troca sempre fracassa, entao

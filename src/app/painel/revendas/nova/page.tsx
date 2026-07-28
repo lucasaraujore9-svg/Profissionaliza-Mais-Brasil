@@ -8,6 +8,7 @@ import {
   NovaRevendaForm,
   type NovaRevendaInitial,
 } from "@/components/painel/nova-revenda-form"
+import { requirePainelPage } from "@/lib/auth/painel-guard"
 
 export const metadata = {
   title: "Nova revenda | Painel",
@@ -18,6 +19,8 @@ export default async function NovaRevendaPage({
 }: {
   searchParams: Promise<{ leadId?: string }>
 }) {
+  await requirePainelPage("revendas.manage")
+
   const session = await auth()
   if (!session?.user || session.user.role !== "RESELLER" || !session.user.tenantId) {
     redirect("/login?callbackUrl=/painel/revendas/nova")
