@@ -23,7 +23,12 @@ const roleLabel: Record<string, string> = {
   PMB_SALES_MGR: "Gerente de vendas",
   PMB_REVENDA_SALES: "Vendedor de revenda",
   PMB_RESELLER_MGR: "Gerente de unidades",
-  consultant: "Consultor(a) de vendas",
+  // Papeis da equipe de uma unidade (TenantMember.role) — espelham
+  // ROLE_LABELS em lib/auth/painel-permissions.
+  manager: "Gerente da unidade",
+  consultant: "Vendedor(a)",
+  support: "Secretaria / atendimento",
+  finance: "Financeiro",
   RESELLER: "Revendedor(a)",
 }
 

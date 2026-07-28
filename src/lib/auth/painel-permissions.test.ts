@@ -142,9 +142,10 @@ describe("toReadOnly", () => {
 })
 
 describe("normalizeMemberRole", () => {
-  it("aceita papéis conhecidos", () => {
+  it("aceita os papéis atribuíveis", () => {
     expect(normalizeMemberRole("manager")).toBe("manager")
-    expect(normalizeMemberRole("owner")).toBe("owner")
+    expect(normalizeMemberRole("support")).toBe("support")
+    expect(normalizeMemberRole("finance")).toBe("finance")
   })
 
   it("cai no papel mais restrito para valores legados ou desconhecidos", () => {
@@ -154,6 +155,15 @@ describe("normalizeMemberRole", () => {
     expect(normalizeMemberRole("")).toBe("consultant")
     expect(normalizeMemberRole(null)).toBe("consultant")
     expect(normalizeMemberRole(undefined)).toBe("consultant")
+  })
+
+  it('"owner" numa membership NÃO escala para acesso total', () => {
+    // O dono é o User com `tenantId`, nunca um TenantMember. Uma linha com
+    // role="owner" (legado ou adulterada) não pode virar acesso total.
+    expect(normalizeMemberRole("owner")).toBe("consultant")
+    const perms = resolvePermissions(normalizeMemberRole("owner"))
+    expect(perms.has("gateway.manage")).toBe(false)
+    expect(perms.has("equipe.manage")).toBe(false)
   })
 })
 

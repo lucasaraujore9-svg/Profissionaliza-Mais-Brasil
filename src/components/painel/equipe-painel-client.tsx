@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
-import { Plus, Mail, UserX, UserCheck, Trash2, Users } from "lucide-react"
+import { Plus, Mail, UserX, UserCheck, Trash2, Users, Eye, Pencil } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -34,17 +34,37 @@ import {
   CredentialsResultPanel,
   type CreateMode,
 } from "@/components/shared/account-credentials-fields"
+import {
+  MemberPermissionFields,
+  type MemberPermissionValue,
+} from "./member-permission-fields"
+import {
+  roleLabel,
+  type AssignableMemberRole,
+  type PainelPermission,
+} from "@/lib/auth/painel-permissions"
 
 export interface ConsultantItem {
   membershipId: string
   userId: string
   name: string
   email: string
+  role: AssignableMemberRole
+  extraPermissions: PainelPermission[]
+  revokedPermissions: PainelPermission[]
+  /** Conjunto efetivo (preset + ajustes) — só para exibição. */
+  permissions: PainelPermission[]
   maxDiscount: number | null
   status: string
   pendingInvite: boolean
   lastActiveAt: string | null
   createdAt: string
+}
+
+const DEFAULT_PERMS: MemberPermissionValue = {
+  role: "consultant",
+  extraPermissions: [],
+  revokedPermissions: [],
 }
 
 export function EquipePainelClient({
@@ -63,6 +83,8 @@ export function EquipePainelClient({
     { email: string; password: string; emailSent: boolean } | null
   >(null)
   const [toRemove, setToRemove] = useState<ConsultantItem | null>(null)
+  const [editing, setEditing] = useState<ConsultantItem | null>(null)
+  const [perms, setPerms] = useState<MemberPermissionValue>(DEFAULT_PERMS)
   const [form, setForm] = useState({
     name: "",
     email: "",
@@ -71,6 +93,7 @@ export function EquipePainelClient({
 
   function resetForm() {
     setForm({ name: "", email: "", maxDiscount: "" })
+    setPerms(DEFAULT_PERMS)
     setMode("invite")
     setPassword("")
     setCreated(null)
@@ -102,6 +125,9 @@ export function EquipePainelClient({
         body: JSON.stringify({
           name: form.name,
           email: form.email,
+          role: perms.role,
+          extraPermissions: perms.extraPermissions,
+          revokedPermissions: perms.revokedPermissions,
           maxDiscount,
           mode,
           password: mode === "password" && password ? password : undefined,
@@ -119,9 +145,9 @@ export function EquipePainelClient({
           password: body.tempPassword,
           emailSent: body.emailSent ?? false,
         })
-        toast.success("Consultor criado")
+        toast.success(`${roleLabel(perms.role)} criado`)
       } else {
-        toast.success(mode === "password" ? "Consultor adicionado" : "Convite enviado")
+        toast.success(mode === "password" ? "Membro adicionado" : "Convite enviado")
         setOpen(false)
         resetForm()
       }
@@ -142,6 +168,55 @@ export function EquipePainelClient({
         return
       }
       router.refresh()
+    })
+  }
+
+  function openEdit(item: ConsultantItem) {
+    setEditing(item)
+    setPerms({
+      role: item.role,
+      extraPermissions: item.extraPermissions,
+      revokedPermissions: item.revokedPermissions,
+    })
+  }
+
+  function saveEdit() {
+    if (!editing) return
+    startTransition(async () => {
+      const res = await fetch(`/api/painel/equipe/${editing.membershipId}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          role: perms.role,
+          extraPermissions: perms.extraPermissions,
+          revokedPermissions: perms.revokedPermissions,
+        }),
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        toast.error(body.error ?? "Falha ao salvar")
+        return
+      }
+      toast.success("Permissões atualizadas")
+      setEditing(null)
+      setPerms(DEFAULT_PERMS)
+      router.refresh()
+    })
+  }
+
+  function preview(role: AssignableMemberRole) {
+    startTransition(async () => {
+      const res = await fetch("/api/painel/equipe/preview", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ role }),
+      })
+      if (!res.ok) {
+        toast.error("Falha ao abrir a prévia")
+        return
+      }
+      // Recarrega no dashboard: o layout relê o cookie e monta o menu do papel.
+      window.location.href = "/painel"
     })
   }
 
@@ -174,13 +249,13 @@ export function EquipePainelClient({
     <div className="space-y-6">
       <PageHeader
         title={`Equipe de ${tenantName}`}
-        description="Consultores que ajudam a vender cursos na sua vitrine"
+        description="Quem trabalha na sua unidade e o que cada pessoa pode acessar"
         actions={
           <Button
             onClick={openSheet}
             className="bg-[var(--color-pmb-green)] hover:bg-[var(--color-pmb-green-900)]"
           >
-            <Plus className="h-4 w-4 mr-2" /> Novo consultor
+            <Plus className="h-4 w-4 mr-2" /> Novo membro
           </Button>
         }
       />
@@ -188,14 +263,14 @@ export function EquipePainelClient({
       {initialItems.length === 0 ? (
         <EmptyState
           icon={Users}
-          title="Nenhum consultor cadastrado"
-          description="Convide consultores para ajudar a vender cursos na sua vitrine."
+          title="Nenhum membro cadastrado"
+          description="Convide vendedores, secretaria, financeiro ou um gerente para a sua unidade."
           action={
             <Button
               onClick={openSheet}
               className="bg-[var(--color-pmb-green)] hover:bg-[var(--color-pmb-green-900)]"
             >
-              <Plus className="h-4 w-4 mr-2" /> Novo consultor
+              <Plus className="h-4 w-4 mr-2" /> Novo membro
             </Button>
           }
         />
@@ -206,6 +281,7 @@ export function EquipePainelClient({
               <tr>
                 <th className="px-4 py-3 font-semibold text-[var(--color-pmb-green-900)]">Nome</th>
                 <th className="px-4 py-3 font-semibold text-[var(--color-pmb-green-900)]">Email</th>
+                <th className="px-4 py-3 font-semibold text-[var(--color-pmb-green-900)]">Papel</th>
                 <th className="px-4 py-3 font-semibold text-[var(--color-pmb-green-900)]">Cap desconto</th>
                 <th className="px-4 py-3 font-semibold text-[var(--color-pmb-green-900)]">Status</th>
                 <th className="px-4 py-3" />
@@ -219,6 +295,14 @@ export function EquipePainelClient({
                 >
                   <td className="px-4 py-3 font-medium">{c.name}</td>
                   <td className="px-4 py-3 text-muted-foreground">{c.email}</td>
+                  <td className="px-4 py-3">
+                    <StatusBadge tone="accent">{roleLabel(c.role)}</StatusBadge>
+                    {c.extraPermissions.length + c.revokedPermissions.length > 0 && (
+                      <span className="ml-1.5 text-xs text-muted-foreground">
+                        (ajustado)
+                      </span>
+                    )}
+                  </td>
                   <td className="px-4 py-3 font-mono">
                     {c.maxDiscount !== null ? `${c.maxDiscount}%` : "—"}
                   </td>
@@ -243,6 +327,24 @@ export function EquipePainelClient({
                         <Mail className="h-4 w-4" />
                       </Button>
                     )}
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => openEdit(c)}
+                      disabled={pending}
+                      title="Editar papel e permissões"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => preview(c.role)}
+                      disabled={pending}
+                      title={`Ver o painel como ${roleLabel(c.role)}`}
+                    >
+                      <Eye className="h-4 w-4" />
+                    </Button>
                     <Button
                       size="sm"
                       variant="ghost"
@@ -279,7 +381,7 @@ export function EquipePainelClient({
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Remover consultor</AlertDialogTitle>
+            <AlertDialogTitle>Remover membro</AlertDialogTitle>
             <AlertDialogDescription>
               {toRemove
                 ? `Remover ${toRemove.name} da equipe? Esta ação não pode ser desfeita.`
@@ -301,10 +403,52 @@ export function EquipePainelClient({
         </AlertDialogContent>
       </AlertDialog>
 
+      <Sheet
+        open={editing !== null}
+        onOpenChange={(o) => {
+          if (!o) {
+            setEditing(null)
+            setPerms(DEFAULT_PERMS)
+          }
+        }}
+      >
+        <SheetContent className="sm:max-w-md">
+          <SheetHeader>
+            <SheetTitle>Permissões de {editing?.name}</SheetTitle>
+            <SheetDescription>
+              Escolha o papel e, se precisar, ajuste permissão por permissão.
+            </SheetDescription>
+          </SheetHeader>
+          <div className="space-y-4 p-4">
+            <MemberPermissionFields
+              value={perms}
+              onChange={setPerms}
+              disabled={pending}
+            />
+          </div>
+          <SheetFooter>
+            <Button
+              variant="outline"
+              onClick={() => setEditing(null)}
+              disabled={pending}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={saveEdit}
+              disabled={pending}
+              className="bg-[var(--color-pmb-green)] hover:bg-[var(--color-pmb-green-900)]"
+            >
+              {pending ? "Salvando…" : "Salvar permissões"}
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
+
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetContent className="sm:max-w-md">
           <SheetHeader>
-            <SheetTitle>{created ? "Consultor criado" : "Novo consultor"}</SheetTitle>
+            <SheetTitle>{created ? "Membro criado" : "Novo membro"}</SheetTitle>
             <SheetDescription>
               {created
                 ? "Conta criada com senha. Repasse as credenciais abaixo."
@@ -350,6 +494,11 @@ export function EquipePainelClient({
                     onChange={(e) => setForm({ ...form, email: e.target.value })}
                   />
                 </div>
+                <MemberPermissionFields
+                  value={perms}
+                  onChange={setPerms}
+                  disabled={pending}
+                />
                 <div>
                   <Label>Cap de desconto (% — opcional)</Label>
                   <Input

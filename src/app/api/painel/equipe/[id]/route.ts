@@ -5,6 +5,13 @@ import { requireResellerOwner } from "@/lib/auth/guards"
 import { auth } from "@/lib/auth"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 import { logAudit } from "@/lib/audit"
+import {
+  ASSIGNABLE_MEMBER_ROLES,
+  OWNER_EXCLUSIVE,
+  PAINEL_PERMISSIONS,
+} from "@/lib/auth/painel-permissions"
+
+const OWNER_EXCLUSIVE_SET = new Set<string>(OWNER_EXCLUSIVE)
 
 async function currentTenantId(): Promise<string | null> {
   const session = await auth()
@@ -12,7 +19,12 @@ async function currentTenantId(): Promise<string | null> {
   return user?.tenantId ?? null
 }
 
+const permissionList = z.array(z.enum(PAINEL_PERMISSIONS)).max(PAINEL_PERMISSIONS.length)
+
 const patchSchema = z.object({
+  role: z.enum(ASSIGNABLE_MEMBER_ROLES).optional(),
+  extraPermissions: permissionList.optional(),
+  revokedPermissions: permissionList.optional(),
   maxDiscount: z.number().int().min(0).max(100).nullable().optional(),
   status: z.enum(["ATIVO", "INATIVO"]).optional(),
 })
@@ -38,6 +50,21 @@ export const PATCH = withRequestContextParams<{ id: string }>(
       return NextResponse.json({ error: "Dados inválidos" }, { status: 400 })
     }
 
+    // Barreira de escalada: gerir a equipe e excluir a conta continuam
+    // exclusivos do titular, mesmo via override individual.
+    const escalating = (parsed.data.extraPermissions ?? []).filter((perm) =>
+      OWNER_EXCLUSIVE_SET.has(perm),
+    )
+    if (escalating.length > 0) {
+      return NextResponse.json(
+        {
+          error: "Estas permissões são exclusivas do titular da unidade",
+          fields: { extraPermissions: escalating },
+        },
+        { status: 400 },
+      )
+    }
+
     const member = await prisma.tenantMember.findUnique({ where: { id } })
     if (!member || member.tenantId !== tenantId) {
       return NextResponse.json({ error: "Não encontrado" }, { status: 404 })
@@ -48,8 +75,8 @@ export const PATCH = withRequestContextParams<{ id: string }>(
       data: parsed.data,
     })
 
-    // SAAS-001: trilha de auditoria da alteração de cap de desconto/status do
-    // consultor — autoridade comercial da unidade.
+    // SAAS-001: trilha de auditoria da alteração de papel / cap de desconto /
+    // status / permissões do membro — autoridade comercial da unidade.
     await logAudit({
       action: "tenant_member.update",
       resource: "TenantMember",
@@ -57,7 +84,13 @@ export const PATCH = withRequestContextParams<{ id: string }>(
       actorUserId: guard.session.userId,
       actorRole: guard.session.role,
       tenantId,
-      payloadBefore: { maxDiscount: member.maxDiscount, status: member.status },
+      payloadBefore: {
+        role: member.role,
+        maxDiscount: member.maxDiscount,
+        status: member.status,
+        extraPermissions: member.extraPermissions,
+        revokedPermissions: member.revokedPermissions,
+      },
       payloadAfter: parsed.data,
     })
 

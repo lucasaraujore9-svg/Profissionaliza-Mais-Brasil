@@ -280,15 +280,31 @@ export function roleDescription(role: PainelMemberRole): string {
  * ("viewer", string vazia, papel removido numa versão futura) caem no preset
  * MAIS RESTRITO (consultant) — fail-closed, nunca fail-open.
  */
-export function normalizeMemberRole(raw: string | null | undefined): PainelMemberRole {
-  if (raw && (PAINEL_MEMBER_ROLES as readonly string[]).includes(raw)) {
-    return raw as PainelMemberRole
+export function normalizeMemberRole(
+  raw: string | null | undefined,
+): AssignableMemberRole {
+  if (raw && (ASSIGNABLE_MEMBER_ROLES as readonly string[]).includes(raw)) {
+    return raw as AssignableMemberRole
   }
+  // Inclui deliberadamente o caso `raw === "owner"`: "owner" NÃO é um papel
+  // atribuível a um TenantMember (o dono é o User com `tenantId`). Uma linha
+  // com esse valor — legado ou adulterada — daria acesso total; aqui ela cai no
+  // preset mais restrito em vez de escalar privilégio.
   return "consultant"
 }
 
 export function isPainelPermission(value: string): value is PainelPermission {
   return (PAINEL_PERMISSIONS as readonly string[]).includes(value)
+}
+
+/**
+ * Sanitiza uma lista crua do banco (`TenantMember.extraPermissions` é `String[]`)
+ * para o catálogo tipado, descartando entradas obsoletas.
+ */
+export function filterPainelPermissions(
+  raw: readonly string[],
+): PainelPermission[] {
+  return raw.filter(isPainelPermission)
 }
 
 /**

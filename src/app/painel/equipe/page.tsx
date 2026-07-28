@@ -1,30 +1,28 @@
 import { redirect } from "next/navigation"
-import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { EquipePainelClient } from "@/components/painel/equipe-painel-client"
 import { requirePainelPage } from "@/lib/auth/painel-guard"
+import {
+  filterPainelPermissions,
+  normalizeMemberRole,
+  resolvePermissions,
+} from "@/lib/auth/painel-permissions"
 
 export const dynamic = "force-dynamic"
 
 export default async function EquipePainelPage() {
-  await requirePainelPage("equipe.manage")
-  const session = await auth()
-  const user = session?.user as
-    | { id?: string; role?: string; tenantId?: string | null }
-    | undefined
-  if (!user?.id || user.role !== "RESELLER" || !user.tenantId) {
-    redirect("/login?callbackUrl=/painel/equipe")
-  }
+  // `equipe.manage` é OWNER_EXCLUSIVE — na prática, só o titular chega aqui.
+  const ctx = await requirePainelPage("equipe.manage")
 
-  // Apenas owner acessa
   const tenant = await prisma.tenant.findUnique({
-    where: { id: user.tenantId },
+    where: { id: ctx.tenantId },
     select: { id: true, name: true },
   })
   if (!tenant) redirect("/painel")
 
+  // Todos os papéis da unidade (antes a tela só listava "consultant").
   const members = await prisma.tenantMember.findMany({
-    where: { tenantId: user.tenantId, role: "consultant" },
+    where: { tenantId: ctx.tenantId },
     include: {
       user: {
         select: {
@@ -39,17 +37,26 @@ export default async function EquipePainelPage() {
     orderBy: { createdAt: "desc" },
   })
 
-  const items = members.map((m) => ({
-    membershipId: m.id,
-    userId: m.user.id,
-    name: m.user.name,
-    email: m.user.email,
-    maxDiscount: m.maxDiscount,
-    status: m.status,
-    pendingInvite: !m.user.passwordHash,
-    lastActiveAt: m.user.lastActiveAt?.toISOString() ?? null,
-    createdAt: m.createdAt.toISOString(),
-  }))
+  const items = members.map((m) => {
+    const role = normalizeMemberRole(m.role)
+    return {
+      membershipId: m.id,
+      userId: m.user.id,
+      name: m.user.name,
+      email: m.user.email,
+      role,
+      extraPermissions: filterPainelPermissions(m.extraPermissions),
+      revokedPermissions: filterPainelPermissions(m.revokedPermissions),
+      permissions: [
+        ...resolvePermissions(role, m.extraPermissions, m.revokedPermissions),
+      ],
+      maxDiscount: m.maxDiscount,
+      status: m.status,
+      pendingInvite: !m.user.passwordHash,
+      lastActiveAt: m.user.lastActiveAt?.toISOString() ?? null,
+      createdAt: m.createdAt.toISOString(),
+    }
+  })
 
   return <EquipePainelClient tenantName={tenant.name} initialItems={items} />
 }

@@ -8,6 +8,23 @@ import { sendInvite } from "@/lib/auth/invite"
 import { generateTempPassword, sendCredentialsEmail } from "@/lib/auth/credentials"
 import { tenantEmailBrand } from "@/lib/email/brand"
 import { withRequestContext } from "@/lib/observability/with-request-context"
+import {
+  ASSIGNABLE_MEMBER_ROLES,
+  OWNER_EXCLUSIVE,
+  PAINEL_PERMISSIONS,
+  filterPainelPermissions,
+  normalizeMemberRole,
+  resolvePermissions,
+  roleLabel,
+} from "@/lib/auth/painel-permissions"
+
+const OWNER_EXCLUSIVE_SET = new Set<string>(OWNER_EXCLUSIVE)
+
+/**
+ * Overrides por pessoa. `extraPermissions` NUNCA concede uma permissao
+ * exclusiva do dono — rejeitamos aqui (400) alem de o resolvedor ignorar.
+ */
+const permissionList = z.array(z.enum(PAINEL_PERMISSIONS)).max(PAINEL_PERMISSIONS.length)
 
 async function currentTenantId(): Promise<string | null> {
   const session = await auth()
@@ -25,8 +42,9 @@ export const GET = withRequestContext(
     const guard = await requireResellerOwner(tenantId)
     if (!guard.ok) return guard.response
 
+    // Lista TODOS os papeis da unidade (antes so "consultant" existia).
     const members = await prisma.tenantMember.findMany({
-      where: { tenantId, role: "consultant" },
+      where: { tenantId },
       include: {
         user: {
           select: {
@@ -42,17 +60,25 @@ export const GET = withRequestContext(
     })
 
     return NextResponse.json({
-      data: members.map((m) => ({
+      data: members.map((m) => {
+        const role = normalizeMemberRole(m.role)
+        return {
         membershipId: m.id,
         userId: m.user.id,
         name: m.user.name,
         email: m.user.email,
+        role,
+        extraPermissions: filterPainelPermissions(m.extraPermissions),
+        revokedPermissions: filterPainelPermissions(m.revokedPermissions),
+        // Conjunto efetivo — a UI marca os checkboxes a partir dele.
+        permissions: [...resolvePermissions(role, m.extraPermissions, m.revokedPermissions)],
         maxDiscount: m.maxDiscount,
         status: m.status,
         pendingInvite: !m.user.passwordHash,
         lastActiveAt: m.user.lastActiveAt?.toISOString() ?? null,
         createdAt: m.createdAt.toISOString(),
-      })),
+        }
+      }),
     })
   },
 )
@@ -60,6 +86,9 @@ export const GET = withRequestContext(
 const createSchema = z.object({
   name: z.string().min(2),
   email: z.string().trim().toLowerCase().email(),
+  role: z.enum(ASSIGNABLE_MEMBER_ROLES).default("consultant"),
+  extraPermissions: permissionList.optional(),
+  revokedPermissions: permissionList.optional(),
   maxDiscount: z.number().int().min(0).max(100).optional(),
   // "invite" (padrão): envia link para o consultor definir a senha.
   // "password": cria a conta já com senha e envia as credenciais por email.
@@ -88,6 +117,22 @@ export const POST = withRequestContext(
     if (!parsed.success) {
       return NextResponse.json(
         { error: "Dados inválidos", details: parsed.error.flatten() },
+        { status: 400 },
+      )
+    }
+
+    // Barreira de escalada: nenhum override pode conceder permissao exclusiva
+    // do dono (gerir a equipe / excluir a conta). O resolvedor tambem ignora,
+    // mas rejeitar aqui deixa o erro visivel em vez de silencioso.
+    const escalating = (parsed.data.extraPermissions ?? []).filter((perm) =>
+      OWNER_EXCLUSIVE_SET.has(perm),
+    )
+    if (escalating.length > 0) {
+      return NextResponse.json(
+        {
+          error: "Estas permissões são exclusivas do titular da unidade",
+          fields: { extraPermissions: escalating },
+        },
         { status: 400 },
       )
     }
@@ -137,20 +182,17 @@ export const POST = withRequestContext(
           },
         })
 
+    const memberData = {
+      role: parsed.data.role,
+      extraPermissions: parsed.data.extraPermissions ?? [],
+      revokedPermissions: parsed.data.revokedPermissions ?? [],
+      maxDiscount: parsed.data.maxDiscount ?? null,
+      status: "ATIVO",
+    }
     const membership = await prisma.tenantMember.upsert({
       where: { tenantId_userId: { tenantId, userId: user.id } },
-      create: {
-        tenantId,
-        userId: user.id,
-        role: "consultant",
-        maxDiscount: parsed.data.maxDiscount ?? null,
-        status: "ATIVO",
-      },
-      update: {
-        role: "consultant",
-        maxDiscount: parsed.data.maxDiscount ?? null,
-        status: "ATIVO",
-      },
+      create: { tenantId, userId: user.id, ...memberData },
+      update: memberData,
     })
 
     let emailSent = false
@@ -163,7 +205,7 @@ export const POST = withRequestContext(
           userEmail: user.email,
           tempPassword,
           contextLabel: tenant.name,
-          roleLabel: "Consultor",
+          roleLabel: roleLabel(parsed.data.role),
           brand: tenantEmailBrand(tenant),
         })
       } else {
@@ -177,7 +219,7 @@ export const POST = withRequestContext(
           userName: user.name,
           userEmail: user.email,
           inviterName: inviter?.name ?? "Equipe",
-          role: "consultant",
+          role: parsed.data.role,
           context: "reseller_consultant",
           tenantName: tenant.name,
           brand: tenantEmailBrand(tenant),
@@ -192,6 +234,7 @@ export const POST = withRequestContext(
           userId: user.id,
           name: user.name,
           email: user.email,
+          role: membership.role,
         },
         mode: parsed.data.mode,
         tempPassword,
