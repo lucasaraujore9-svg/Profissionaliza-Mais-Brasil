@@ -1,4 +1,5 @@
 import type { UserRole } from "@prisma/client"
+import type { PainelMemberRole } from "@/lib/auth/painel-permissions"
 
 /**
  * Tipos compartilhados pela sessão NextAuth.
@@ -7,7 +8,13 @@ import type { UserRole } from "@prisma/client"
  * espalhado pelo app. Atualizar este arquivo + auth.ts garante que todos
  * os consumidores vejam o shape correto.
  */
-type MemberRole = "owner" | "consultant" | null
+/**
+ * Papel do usuário DENTRO da unidade (revenda). `null` para quem não é da
+ * revenda (equipe PMB, aluno). As permissões efetivas NÃO vivem no token — são
+ * resolvidas por request em `lib/auth/painel-guard.ts`, para que uma mudança de
+ * papel não fique presa num JWT velho.
+ */
+type MemberRole = PainelMemberRole | null
 
 declare module "next-auth" {
   interface User {

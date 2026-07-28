@@ -11,6 +11,10 @@ import { rateLimitByKey, RATE_LIMITS } from "@/lib/ratelimit"
 import { swallow } from "@/lib/errors"
 import { contextLogger } from "@/lib/logger"
 import { isValidCpf, stripCpf } from "@/lib/validation/cpf"
+import {
+  normalizeMemberRole,
+  type PainelMemberRole,
+} from "@/lib/auth/painel-permissions"
 import "@/types"
 
 // O campo `email` aceita email OU CPF (aluno). A distinção é feita no
@@ -64,7 +68,7 @@ type UserSessionFields = {
   studentId: null
   mustChangePassword: boolean
   tenantStatus: string | null
-  memberRole: "owner" | "consultant" | null
+  memberRole: PainelMemberRole | null
 }
 
 /**
@@ -97,7 +101,7 @@ async function loadUserSessionFields(
   // ativa para popular tenantId, senão requireResellerSession sempre rejeita.
   let effectiveTenantId = user.tenantId
   let effectiveTenantStatus = user.tenant?.status ?? null
-  let memberRole: "owner" | "consultant" | null = user.tenantId ? "owner" : null
+  let memberRole: PainelMemberRole | null = user.tenantId ? "owner" : null
 
   if (!effectiveTenantId && user.role === "RESELLER") {
     const membership = await prisma.tenantMember.findFirst({
@@ -108,7 +112,7 @@ async function loadUserSessionFields(
     if (membership?.tenant) {
       effectiveTenantId = membership.tenant.id
       effectiveTenantStatus = membership.tenant.status
-      memberRole = "consultant"
+      memberRole = normalizeMemberRole(membership.role)
     }
   }
 

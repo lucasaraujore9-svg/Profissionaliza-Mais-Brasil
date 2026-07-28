@@ -27,6 +27,10 @@ import {
   SESSION_COOKIE_NAME,
   SESSION_MAX_AGE,
 } from "@/lib/auth/cookies"
+import {
+  normalizeMemberRole,
+  type PainelMemberRole,
+} from "@/lib/auth/painel-permissions"
 
 const HANDOFF_PREFIX = "auth:handoff:"
 const HANDOFF_TTL_SECONDS = 60
@@ -40,7 +44,7 @@ export interface ResellerSessionClaims {
   studentId: null
   mustChangePassword: boolean
   tenantStatus: string | null
-  memberRole: "owner" | "consultant" | null
+  memberRole: PainelMemberRole | null
 }
 
 // Origem (https://host) do dominio da unidade. Usa o dominio custom apenas
@@ -116,9 +120,7 @@ export async function resolveResellerClaims(
 
   let effectiveTenantId = user.tenantId
   let effectiveTenantStatus = user.tenant?.status ?? null
-  let memberRole: "owner" | "consultant" | null = user.tenantId
-    ? "owner"
-    : null
+  let memberRole: PainelMemberRole | null = user.tenantId ? "owner" : null
 
   if (!effectiveTenantId) {
     const membership = await prisma.tenantMember.findFirst({
@@ -129,7 +131,7 @@ export async function resolveResellerClaims(
     if (membership?.tenant) {
       effectiveTenantId = membership.tenant.id
       effectiveTenantStatus = membership.tenant.status
-      memberRole = "consultant"
+      memberRole = normalizeMemberRole(membership.role)
     }
   }
 

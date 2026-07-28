@@ -53,6 +53,7 @@ async function run() {
   const result = {
     tenants: tenants.length,
     markedDeleted: 0,
+    imported: 0,
     skipped: 0,
     errors: [] as string[],
   }
@@ -61,6 +62,7 @@ async function run() {
     try {
       const r = await reconcileTenantPayments(tenant)
       result.markedDeleted += r.markedDeleted
+      result.imported += r.imported ?? 0
       if (r.skipped) result.skipped += 1
     } catch (error) {
       const msg = error instanceof Error ? error.message : "erro desconhecido"

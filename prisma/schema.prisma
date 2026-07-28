@@ -216,18 +216,32 @@ model User {
 // ============================================================
 
 model TenantMember {
-  id          String @id @default(cuid())
-  tenantId    String @map("tenant_id")
-  tenant      Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  userId      String @map("user_id")
-  user        User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  role        String @default("manager") // owner, manager, viewer, consultant
-  maxDiscount Int?   @map("max_discount") // % cap para cupons (consultor)
+  id       String @id @default(cuid())
+  tenantId String @map("tenant_id")
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userId   String @map("user_id")
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Papel do membro dentro da unidade: manager | consultant | support | finance.
+  // O dono NAO tem TenantMember (e o User com tenantId apontando pro tenant) e
+  // recebe o preset "owner". Valores legados/desconhecidos caem no preset mais
+  // restrito (consultant) — ver normalizeMemberRole em lib/auth/painel-permissions.
+  role String @default("consultant")
+
+  // Ajustes finos por pessoa sobre o preset do papel. Permissoes fora do
+  // catalogo sao ignoradas na resolucao; OWNER_EXCLUSIVE nunca e concedida por
+  // extraPermissions. Fonte da verdade: src/lib/auth/painel-permissions.ts.
+  extraPermissions   String[] @default([]) @map("extra_permissions")
+  revokedPermissions String[] @default([]) @map("revoked_permissions")
+
+  maxDiscount Int?   @map("max_discount") // % cap para cupons (vendedor/gerente)
   status      String @default("ATIVO")
 
   createdAt DateTime @default(now()) @map("created_at")
 
   @@unique([tenantId, userId])
+  // Listagem da equipe e roteamento de notificacao filtram por (tenant, papel).
+  @@index([tenantId, role])
   @@map("tenant_members")
 }
 
@@ -1267,6 +1281,10 @@ model TenantPayment {
   appliedPayoutId    String?             @unique @map("applied_payout_id")
   appliedPayout      ReferralPayout?     @relation("AppliedToTenantPayment", fields: [appliedPayoutId], references: [id])
 
+  // Lembretes de vencimento ja disparados (D-5 / D-2 / D-0). Ver
+  // TenantPaymentReminder — e o livro-caixa de idempotencia do cron.
+  reminders TenantPaymentReminder[]
+
   // Gestao financeira manual (admin marca pago/anota)
   notes          String?   @map("notes") @db.Text // anotacoes do financeiro
   markedPaidAt   DateTime? @map("marked_paid_at") // quando admin marcou manualmente como pago
@@ -1287,6 +1305,29 @@ model TenantPayment {
   // — declarado aqui só para eliminar o drift schema↔banco (sem migration).
   @@index([markedPaidById], map: "tenant_payments_marked_paid_by_idx")
   @@map("tenant_payments")
+}
+
+/**
+ * Lembretes de vencimento da mensalidade da unidade (cron
+ * `tenant-payment-reminders`), um por cobranca e por janela: 5 dias antes,
+ * 2 dias antes e no proprio dia do vencimento.
+ *
+ * POR QUE EXISTE: e o livro-caixa de idempotencia. O cron pode rodar mais de
+ * uma vez no mesmo dia (re-tentativa do pg_net, execucao manual, deploy no meio
+ * da janela) e a unidade nao pode receber o mesmo aviso duas vezes — nem in-app,
+ * nem por email. A linha e gravada ANTES do disparo: quem conseguiu inserir e o
+ * unico dono daquele aviso.
+ */
+model TenantPaymentReminder {
+  tenantPaymentId String        @map("tenant_payment_id")
+  tenantPayment   TenantPayment @relation(fields: [tenantPaymentId], references: [id], onDelete: Cascade)
+  /** Dias entre o disparo e o vencimento: 5, 2 ou 0. */
+  offsetDays      Int           @map("offset_days")
+  sentAt          DateTime      @default(now()) @map("sent_at")
+
+  @@id([tenantPaymentId, offsetDays])
+  @@index([sentAt])
+  @@map("tenant_payment_reminders")
 }
 
 // ============================================================

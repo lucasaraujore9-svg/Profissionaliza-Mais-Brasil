@@ -10,8 +10,13 @@
  * de servidor (Prisma, next/headers, etc.). É só dado + funções puras.
  */
 
-/** Espelha session.user.memberRole. */
-export type MemberRole = "owner" | "consultant" | null
+/**
+ * Espelha session.user.memberRole. Import type-only — painel-permissions é
+ * dado puro, sem import de servidor, então não quebra a regra acima.
+ */
+import type { PainelMemberRole } from "@/lib/auth/painel-permissions"
+
+export type MemberRole = PainelMemberRole | null
 
 /** Em qual shell o tour vive. Define onde o engine é montado. */
 export type TourArea = "painel" | "aluno"

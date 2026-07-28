@@ -306,11 +306,14 @@ export const PAINEL_TOURS: TourDef[] = [
     steps: OWNER_OVERVIEW,
   },
   {
+    // Vale para todo membro que não é o dono. Os passos citam só áreas que
+    // qualquer papel enxerga; roteiros dedicados por papel podem vir depois —
+    // basta registrá-los ANTES deste (o primeiro que casa vence).
     id: "painel.overview",
     area: "painel",
-    label: "Visão geral (consultor)",
+    label: "Visão geral (equipe da unidade)",
     matches: exact("/painel"),
-    roles: ["consultant"],
+    roles: ["consultant", "manager", "support", "finance"],
     steps: CONSULTANT_OVERVIEW,
   },
   {

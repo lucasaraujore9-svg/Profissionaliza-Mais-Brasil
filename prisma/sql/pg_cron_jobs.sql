@@ -83,6 +83,14 @@ select cron.schedule('pmb-sync-day-update-lms', '45 * * * *',
 select cron.schedule('pmb-reconcile-tenant-payments', '0 8 * * *',
   $$ select app_internal.run_cron('/api/cron/reconcile-tenant-payments') $$);
 
+-- Lembretes de vencimento da mensalidade da unidade — 5 dias antes, 2 dias antes
+-- e no dia (diário 11:00 UTC = 08:00 BRT, de manhã e DEPOIS da reconciliação das
+-- 08:00 UTC, para avisar sobre o estado já sincronizado com o Asaas).
+-- Idempotente: cada (cobrança, janela) é reivindicada em tenant_payment_reminders
+-- antes do disparo, então rodar duas vezes no mesmo dia não reenvia nada.
+select cron.schedule('pmb-tenant-payment-reminders', '0 11 * * *',
+  $$ select app_internal.run_cron('/api/cron/tenant-payment-reminders') $$);
+
 -- ── Carnê (venda parcelada no boleto) ───────────────────────────────────────
 -- Emite os boletos MP cujo vencimento entrou na janela de 7 dias (o MP não tem
 -- carnê nativo — cada boleto é emitido perto do vencimento) e marca parcelas
