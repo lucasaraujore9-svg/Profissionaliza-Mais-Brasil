@@ -7,7 +7,13 @@ import { PainelPackagesClient } from "./painel-packages-client"
 
 type TabId = "cursos" | "pacotes"
 
-export function PainelCatalogTabs() {
+export function PainelCatalogTabs({
+  canManageCourses,
+  canManagePackages,
+}: {
+  canManageCourses: boolean
+  canManagePackages: boolean
+}) {
   const [active, setActive] = useState<TabId>("cursos")
 
   return (
@@ -33,7 +39,11 @@ export function PainelCatalogTabs() {
       </Tabs>
 
       <div className="mt-6">
-        {active === "cursos" ? <CourseListWrapper /> : <PainelPackagesClient />}
+        {active === "cursos" ? (
+          <CourseListWrapper canManage={canManageCourses} />
+        ) : (
+          <PainelPackagesClient canManage={canManagePackages} />
+        )}
       </div>
     </div>
   )

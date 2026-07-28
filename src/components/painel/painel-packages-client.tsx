@@ -54,7 +54,11 @@ function formatBRL(value: number): string {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
 }
 
-export function PainelPackagesClient() {
+/**
+ * @param canManage `pacotes.manage` resolvido server-side. Sem ela, todas as
+ * rotas de escrita de pacotes respondem 403 — a tela fica somente leitura.
+ */
+export function PainelPackagesClient({ canManage }: { canManage: boolean }) {
   const [pmb, setPmb] = useState<PmbPackage[] | null>(null)
   const [own, setOwn] = useState<OwnPackage[] | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -113,9 +117,9 @@ export function PainelPackagesClient() {
             Pacotes da Profissionaliza
           </h2>
           <p className="text-sm text-gray-500">
-            Disponibilizados automaticamente para a sua vitrine. Defina o seu preço,
-            destaque ou remova da sua loja. Os cursos do pacote são definidos pela
-            Profissionaliza.
+            {canManage
+              ? "Disponibilizados automaticamente para a sua vitrine. Defina o seu preço, destaque ou remova da sua loja. Os cursos do pacote são definidos pela Profissionaliza."
+              : "Disponibilizados automaticamente para a sua vitrine. Somente leitura — peça ao titular a permissão de gerenciar pacotes."}
           </p>
         </div>
         {pmb.length === 0 ? (
@@ -125,7 +129,12 @@ export function PainelPackagesClient() {
         ) : (
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
             {pmb.map((p) => (
-              <PmbPackageCard key={p.id} pkg={p} onSaved={load} />
+              <PmbPackageCard
+                key={p.id}
+                pkg={p}
+                onSaved={load}
+                canManage={canManage}
+              />
             ))}
           </div>
         )}
@@ -142,12 +151,14 @@ export function PainelPackagesClient() {
               Pacotes criados pela sua unidade. Você define os cursos e o preço.
             </p>
           </div>
-          <Button
-            onClick={() => setEditing("new")}
-            className="shrink-0 bg-[var(--color-pmb-green,#025918)] text-white hover:bg-[var(--color-pmb-green-700,#024514)]"
-          >
-            <Plus className="mr-1.5 h-4 w-4" /> Novo pacote
-          </Button>
+          {canManage && (
+            <Button
+              onClick={() => setEditing("new")}
+              className="shrink-0 bg-[var(--color-pmb-green,#025918)] text-white hover:bg-[var(--color-pmb-green-700,#024514)]"
+            >
+              <Plus className="mr-1.5 h-4 w-4" /> Novo pacote
+            </Button>
+          )}
         </div>
         {own.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-gray-200 bg-white p-8 text-center text-sm text-gray-500">
@@ -161,6 +172,7 @@ export function PainelPackagesClient() {
                 pkg={p}
                 onEdit={() => setEditing(p)}
                 onChanged={load}
+                canManage={canManage}
               />
             ))}
           </div>
@@ -185,7 +197,15 @@ export function PainelPackagesClient() {
 // Card de pacote PMB (override local da revenda)
 // ─────────────────────────────────────────────────────────────────────────
 
-function PmbPackageCard({ pkg, onSaved }: { pkg: PmbPackage; onSaved: () => void }) {
+function PmbPackageCard({
+  pkg,
+  onSaved,
+  canManage,
+}: {
+  pkg: PmbPackage
+  onSaved: () => void
+  canManage: boolean
+}) {
   const [priceInput, setPriceInput] = useState(
     pkg.hasCustomPrice ? String(pkg.effectivePrice) : "",
   )
@@ -247,48 +267,63 @@ function PmbPackageCard({ pkg, onSaved }: { pkg: PmbPackage; onSaved: () => void
         {formatBRL(pkg.basePrice)}
       </p>
 
-      <div className="mt-4 space-y-3 border-t border-gray-100 pt-4">
-        <div className="space-y-1.5">
-          <Label htmlFor={`price-${pkg.id}`} className="text-xs">
-            Seu preço (deixe vazio p/ usar o sugerido)
-          </Label>
-          <div className="flex gap-2">
-            <Input
-              id={`price-${pkg.id}`}
-              inputMode="decimal"
-              placeholder={String(pkg.basePrice)}
-              value={priceInput}
-              onChange={(e) => setPriceInput(e.target.value)}
+      {canManage ? (
+        <div className="mt-4 space-y-3 border-t border-gray-100 pt-4">
+          <div className="space-y-1.5">
+            <Label htmlFor={`price-${pkg.id}`} className="text-xs">
+              Seu preço (deixe vazio p/ usar o sugerido)
+            </Label>
+            <div className="flex gap-2">
+              <Input
+                id={`price-${pkg.id}`}
+                inputMode="decimal"
+                placeholder={String(pkg.basePrice)}
+                value={priceInput}
+                onChange={(e) => setPriceInput(e.target.value)}
+                disabled={saving}
+              />
+              <Button
+                variant="outline"
+                onClick={savePrice}
+                disabled={saving}
+                className="shrink-0"
+              >
+                Salvar
+              </Button>
+            </div>
+          </div>
+
+          <label className="flex items-center justify-between gap-2 text-sm">
+            <span className="text-gray-700">Visível na minha vitrine</span>
+            <Switch
+              checked={pkg.isVisible}
+              onCheckedChange={(v) => patch({ isVisible: v })}
               disabled={saving}
             />
-            <Button
-              variant="outline"
-              onClick={savePrice}
+          </label>
+          <label className="flex items-center justify-between gap-2 text-sm">
+            <span className="text-gray-700">Destacar na vitrine</span>
+            <Switch
+              checked={pkg.isFeatured}
+              onCheckedChange={(v) => patch({ isFeatured: v })}
               disabled={saving}
-              className="shrink-0"
-            >
-              Salvar
-            </Button>
-          </div>
+            />
+          </label>
         </div>
-
-        <label className="flex items-center justify-between gap-2 text-sm">
-          <span className="text-gray-700">Visível na minha vitrine</span>
-          <Switch
-            checked={pkg.isVisible}
-            onCheckedChange={(v) => patch({ isVisible: v })}
-            disabled={saving}
-          />
-        </label>
-        <label className="flex items-center justify-between gap-2 text-sm">
-          <span className="text-gray-700">Destacar na vitrine</span>
-          <Switch
-            checked={pkg.isFeatured}
-            onCheckedChange={(v) => patch({ isFeatured: v })}
-            disabled={saving}
-          />
-        </label>
-      </div>
+      ) : (
+        <div className="mt-4 space-y-1 border-t border-gray-100 pt-4 text-sm text-gray-600">
+          <p>
+            Seu preço:{" "}
+            <span className="font-mono font-bold text-[var(--color-pmb-green-900,#022c0c)]">
+              {formatBRL(pkg.effectivePrice)}
+            </span>
+          </p>
+          <p className="text-xs text-gray-500">
+            {pkg.isVisible ? "Visível" : "Oculto"} na vitrine
+            {pkg.isFeatured ? " • em destaque" : ""}
+          </p>
+        </div>
+      )}
     </div>
   )
 }
@@ -301,10 +336,12 @@ function OwnPackageCard({
   pkg,
   onEdit,
   onChanged,
+  canManage,
 }: {
   pkg: OwnPackage
   onEdit: () => void
   onChanged: () => void
+  canManage: boolean
 }) {
   const [deleting, setDeleting] = useState(false)
 
@@ -349,19 +386,21 @@ function OwnPackageCard({
         {formatBRL(pkg.price)}
       </div>
 
-      <div className="mt-4 flex gap-2 border-t border-gray-100 pt-4">
-        <Button variant="outline" onClick={onEdit} className="flex-1">
-          <Pencil className="mr-1.5 h-4 w-4" /> Editar
-        </Button>
-        <Button
-          variant="outline"
-          onClick={remove}
-          disabled={deleting}
-          className="text-red-600 hover:bg-red-50 hover:text-red-700"
-        >
-          {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-        </Button>
-      </div>
+      {canManage && (
+        <div className="mt-4 flex gap-2 border-t border-gray-100 pt-4">
+          <Button variant="outline" onClick={onEdit} className="flex-1">
+            <Pencil className="mr-1.5 h-4 w-4" /> Editar
+          </Button>
+          <Button
+            variant="outline"
+            onClick={remove}
+            disabled={deleting}
+            className="text-red-600 hover:bg-red-50 hover:text-red-700"
+          >
+            {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+          </Button>
+        </div>
+      )}
     </div>
   )
 }

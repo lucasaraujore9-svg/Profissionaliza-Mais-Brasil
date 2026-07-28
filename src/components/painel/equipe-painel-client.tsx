@@ -419,7 +419,10 @@ export function EquipePainelClient({
               Escolha o papel e, se precisar, ajuste permissão por permissão.
             </SheetDescription>
           </SheetHeader>
-          <div className="space-y-4 p-4">
+          {/* min-h-0 + flex-1: o SheetContent é `flex flex-col` de altura fixa.
+              Sem isto, abrir "Permissões avançadas" estoura a altura da gaveta
+              e o resto da lista fica inalcançável (não há como rolar). */}
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
             <MemberPermissionFields
               value={perms}
               onChange={setPerms}
@@ -460,7 +463,7 @@ export function EquipePainelClient({
 
           {created ? (
             <>
-              <div className="p-4">
+              <div className="min-h-0 flex-1 overflow-y-auto p-4">
                 <CredentialsResultPanel
                   email={created.email}
                   password={created.password}
@@ -481,7 +484,7 @@ export function EquipePainelClient({
             </>
           ) : (
             <>
-              <div className="space-y-4 p-4">
+              <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
                 <div>
                   <Label>Nome</Label>
                   <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />

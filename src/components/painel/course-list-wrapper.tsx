@@ -55,7 +55,12 @@ function formatBRL(value: number): string {
   })
 }
 
-export function CourseListWrapper() {
+/**
+ * @param canManage `catalogo.manage` resolvido server-side. Sem ela a tela é
+ * somente leitura: as APIs de edição respondem 403 e mostrar os botões só
+ * produziria erro no clique.
+ */
+export function CourseListWrapper({ canManage }: { canManage: boolean }) {
   const [courses, setCourses] = useState<CourseListItem[] | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -277,7 +282,7 @@ export function CourseListWrapper() {
                 Limpar filtros
               </button>
             )}
-            {courses && courses.length > 0 && (
+            {canManage && courses && courses.length > 0 && (
               <button
                 type="button"
                 onClick={() => setBulkOpen(true)}
@@ -339,7 +344,7 @@ export function CourseListWrapper() {
           </label>
         </div>
 
-        {!tipDismissed && (
+        {canManage && !tipDismissed && (
           <div className="mt-3 flex items-start gap-2 rounded-lg border border-[rgba(2,89,24,0.08)] bg-[var(--color-pmb-mist)]/40 p-3 text-xs text-[rgba(2,89,24,0.7)]">
             <HelpCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--color-pmb-green)]" />
             <p className="flex-1">
@@ -399,7 +404,9 @@ export function CourseListWrapper() {
             </h3>
             <span className="inline-flex items-center gap-1 text-[11px] text-gray-500">
               <Info className="h-3 w-3" />
-              Alterações afetam apenas a sua vitrine
+              {canManage
+                ? "Alterações afetam apenas a sua vitrine"
+                : "Somente leitura — peça ao titular a permissão de editar cursos"}
             </span>
           </div>
 
@@ -460,27 +467,44 @@ export function CourseListWrapper() {
                               <Star className="h-3.5 w-3.5 fill-[var(--color-pmb-gold)] text-[var(--color-pmb-gold)]" />
                             </span>
                           )}
-                          <button
-                            type="button"
-                            disabled={togglingId === c.id}
-                            onClick={() =>
-                              handleToggleVisibility(c.id, !c.isVisible)
-                            }
-                            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-gray-500 hover:bg-gray-100 hover:text-[var(--color-pmb-green-900)] disabled:cursor-not-allowed disabled:opacity-60"
-                            title={
-                              c.isVisible
-                                ? "Ocultar da vitrine"
-                                : "Mostrar na vitrine"
-                            }
-                          >
-                            {togglingId === c.id ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                            ) : c.isVisible ? (
-                              <Eye className="h-4 w-4" />
-                            ) : (
-                              <EyeOff className="h-4 w-4" />
-                            )}
-                          </button>
+                          {canManage ? (
+                            <button
+                              type="button"
+                              disabled={togglingId === c.id}
+                              onClick={() =>
+                                handleToggleVisibility(c.id, !c.isVisible)
+                              }
+                              className="inline-flex h-7 w-7 items-center justify-center rounded-md text-gray-500 hover:bg-gray-100 hover:text-[var(--color-pmb-green-900)] disabled:cursor-not-allowed disabled:opacity-60"
+                              title={
+                                c.isVisible
+                                  ? "Ocultar da vitrine"
+                                  : "Mostrar na vitrine"
+                              }
+                            >
+                              {togglingId === c.id ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : c.isVisible ? (
+                                <Eye className="h-4 w-4" />
+                              ) : (
+                                <EyeOff className="h-4 w-4" />
+                              )}
+                            </button>
+                          ) : (
+                            <span
+                              className="inline-flex h-7 w-7 items-center justify-center rounded-md text-gray-400"
+                              title={
+                                c.isVisible
+                                  ? "Visível na vitrine"
+                                  : "Oculto na vitrine"
+                              }
+                            >
+                              {c.isVisible ? (
+                                <Eye className="h-4 w-4" />
+                              ) : (
+                                <EyeOff className="h-4 w-4" />
+                              )}
+                            </span>
+                          )}
                         </div>
                       </div>
 
@@ -533,13 +557,15 @@ export function CourseListWrapper() {
                             <Sparkles className="h-3 w-3" /> parcelas
                           </span>
                         )}
-                        <button
-                          type="button"
-                          onClick={() => setEditingId(c.id)}
-                          className="ml-auto inline-flex items-center gap-1 rounded-full border border-[var(--color-pmb-green)] px-3 py-1 text-[11px] font-semibold text-[var(--color-pmb-green)] hover:bg-[var(--color-pmb-lime-50)]"
-                        >
-                          <Pencil className="h-3 w-3" /> Editar
-                        </button>
+                        {canManage && (
+                          <button
+                            type="button"
+                            onClick={() => setEditingId(c.id)}
+                            className="ml-auto inline-flex items-center gap-1 rounded-full border border-[var(--color-pmb-green)] px-3 py-1 text-[11px] font-semibold text-[var(--color-pmb-green)] hover:bg-[var(--color-pmb-lime-50)]"
+                          >
+                            <Pencil className="h-3 w-3" /> Editar
+                          </button>
+                        )}
                       </div>
                     </div>
                   </article>
