@@ -5,8 +5,16 @@ import { HeaderDashboard } from "@/components/shared/layouts/header-dashboard"
 import { TourRunner } from "@/components/shared/tour/tour-runner"
 import { BillingReminderPopup } from "@/components/painel/billing-reminder-popup"
 import { useSidebarCollapsed } from "@/components/shared/layouts/use-sidebar-collapsed"
+import type {
+  PainelMemberRole,
+  PainelPermission,
+} from "@/lib/auth/painel-permissions"
 
-type MemberRole = "owner" | "consultant" | null
+// Espelha `session.user.memberRole` (src/types/index.ts). Derivar do catálogo de
+// papéis em vez de reescrever a união aqui: quando um papel novo entra em
+// `PAINEL_MEMBER_ROLES`, este shell acompanha sem virar um segundo lugar da
+// verdade que sai de sincronia.
+type MemberRole = PainelMemberRole | null
 
 export interface PainelLayoutShellProps {
   children: React.ReactNode
@@ -17,6 +25,11 @@ export interface PainelLayoutShellProps {
   automationEnabled?: boolean
   canSellResellers?: boolean
   memberRole?: MemberRole
+  /**
+   * Permissões efetivas, resolvidas server-side em `layout.tsx`. Obrigatória:
+   * é o que decide quais itens do menu aparecem.
+   */
+  permissions: PainelPermission[]
   /** Ids de tours guiados já dispensados por este usuário. */
   dismissedTours?: string[]
   defaultCollapsed?: boolean
@@ -31,6 +44,7 @@ export function PainelLayoutShell({
   automationEnabled = false,
   canSellResellers = false,
   memberRole = "owner",
+  permissions,
   dismissedTours = [],
   defaultCollapsed = false,
 }: PainelLayoutShellProps) {
@@ -42,6 +56,8 @@ export function PainelLayoutShell({
           tenantName={tenantName ?? undefined}
           tenantLogoUrl={tenantLogoUrl ?? undefined}
           userEmail={userEmail}
+          permissions={permissions}
+          memberRole={memberRole ?? undefined}
           automationEnabled={automationEnabled}
           canSellResellers={canSellResellers}
           collapsed={collapsed}
@@ -55,6 +71,8 @@ export function PainelLayoutShell({
               tenantName={tenantName ?? undefined}
               tenantLogoUrl={tenantLogoUrl ?? undefined}
               userEmail={userEmail}
+              permissions={permissions}
+              memberRole={memberRole ?? undefined}
               automationEnabled={automationEnabled}
               canSellResellers={canSellResellers}
             />
@@ -74,9 +92,9 @@ export function PainelLayoutShell({
       />
       {/* Aviso de mensalidade a vencer/vencida. Fica no shell (e não na página
           do dashboard) para pegar o primeiro carregamento do painel, qualquer
-          que seja a rota de entrada. Só para o dono — a API responde 403 ao
-          consultor e o componente não renderiza nada. */}
-      {memberRole === "owner" && <BillingReminderPopup />}
+          que seja a rota de entrada. Gated pela mesma permissão da tela
+          /painel/cobrancas — a API também responde 403 a quem não a tem. */}
+      {permissions.includes("cobrancas.view") && <BillingReminderPopup />}
     </div>
   )
 }

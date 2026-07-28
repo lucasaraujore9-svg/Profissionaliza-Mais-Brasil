@@ -66,6 +66,11 @@ export const PAINEL_PERMISSIONS = [
   "financeiro.view",
   "financeiro.export",
 
+  // Mensalidade que a UNIDADE paga para a PMB (/painel/cobrancas) — não
+  // confundir com "financeiro", que é o dinheiro que entra das vendas. Fora de
+  // todos os presets: é do dono, e ele concede ao Financeiro se quiser.
+  "cobrancas.view",
+
   "certificados.view",
   "certificados.manage",
   "certificados.template",
@@ -111,6 +116,7 @@ export const SENSITIVE = [
   "dominio.manage",
   "indicacoes.view",
   "indicacoes.sacar",
+  "cobrancas.view",
   "alunos.impersonate",
   "configuracoes.manage",
 ] as const
@@ -370,6 +376,7 @@ export const PERMISSION_GROUPS: {
     permissions: [
       { perm: "financeiro.view", label: "Ver o financeiro" },
       { perm: "financeiro.export", label: "Exportar o financeiro" },
+      { perm: "cobrancas.view", label: "Ver as cobranças da unidade (mensalidade PMB)" },
       { perm: "relatorios.view", label: "Ver relatórios" },
       { perm: "relatorios.financeiro", label: "Ver a aba Financeiro dos relatórios" },
       { perm: "relatorios.indicacoes", label: "Ver a aba Indicações dos relatórios" },

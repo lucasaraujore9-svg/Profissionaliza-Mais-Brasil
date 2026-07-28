@@ -10,6 +10,8 @@ import {
   decodeImpersonationFlag,
   IMPERSONATION_FLAG_COOKIE,
 } from "@/lib/auth/impersonate"
+import { painelContext } from "@/lib/auth/painel-guard"
+import { PainelPreviewBanner } from "@/components/painel/painel-preview-banner"
 
 export const metadata: Metadata = {
   title: "Painel do Revendedor | Profissionaliza Mais Brasil",
@@ -34,7 +36,7 @@ export default async function PainelLayout({
   // contas existentes em produção). Re-introduzir só com revalidação de JWT
   // pós-troca e limpeza da flag legada em contas ativas. Ver R22.
 
-  const [cookieStore, tenant, currentUser] = await Promise.all([
+  const [cookieStore, tenant, currentUser, ctx] = await Promise.all([
     cookies(),
     prisma.tenant.findUnique({
       where: { id: session.user.tenantId },
@@ -44,7 +46,17 @@ export default async function PainelLayout({
       where: { id: session.user.id as string },
       select: { onboardingTourCompletedAt: true, dismissedTours: true },
     }),
+    // Papel + permissões efetivas na unidade. Resolvido AQUI, uma vez, e
+    // repassado ao shell: é o que decide quais itens do menu aparecem.
+    painelContext(),
   ])
+
+  // Sessão de RESELLER sem vínculo válido (membership removida/inativada
+  // enquanto o token ainda vive). Fail-closed: manda para o login em vez de
+  // renderizar um painel sem permissão nenhuma.
+  if (!ctx) {
+    redirect("/login?callbackUrl=/painel")
+  }
 
   // Tours já dispensados. Compat: a flag legada onboardingTourCompletedAt
   // cobria só o tour de visão geral — se preenchida, semeia "painel.overview".
@@ -69,6 +81,7 @@ export default async function PainelLayout({
           targetName={flag.targetName}
         />
       )}
+      {ctx.isPreview && <PainelPreviewBanner role={ctx.memberRole} />}
       <PainelLayoutShell
         userName={session.user.name ?? "Revendedor"}
         userEmail={session.user.email ?? ""}
@@ -76,7 +89,8 @@ export default async function PainelLayout({
         tenantLogoUrl={tenant?.logoUrl ?? null}
         automationEnabled={tenant?.automationEnabled ?? false}
         canSellResellers={tenant?.canSellResellers ?? false}
-        memberRole={session.user.memberRole ?? "owner"}
+        memberRole={ctx.memberRole}
+        permissions={[...ctx.permissions]}
         dismissedTours={dismissedTours}
         defaultCollapsed={sidebarCollapsed}
       >

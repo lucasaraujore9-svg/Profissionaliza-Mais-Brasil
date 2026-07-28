@@ -30,12 +30,18 @@ import {
   ChevronRight,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import {
+  roleLabel,
+  type PainelMemberRole,
+  type PainelPermission,
+} from "@/lib/auth/painel-permissions"
 
 interface NavItem {
   href: string
   label: string
   icon: typeof LayoutDashboard
-  ownerOnly?: boolean
+  /** Permissão exigida para o item aparecer. Ver lib/auth/painel-permissions. */
+  perm: PainelPermission
   automationOnly?: boolean
   /** Só aparece quando o módulo "revender revendas" está habilitado na unidade. */
   resellerSellerOnly?: boolean
@@ -44,19 +50,19 @@ interface NavItem {
 }
 
 const ALL_ITEMS: NavItem[] = [
-  { href: "/painel", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/painel/treinamentos", label: "Treinamentos", icon: Video },
-  { href: "/painel/artes", label: "Artes de divulgação", icon: Images },
-  { href: "/painel/cursos", label: "Catálogo", icon: GraduationCap },
-  { href: "/painel/alunos", label: "Alunos", icon: Users },
-  { href: "/painel/atendimento", label: "Atendimento", icon: LifeBuoy, ownerOnly: true },
-  { href: "/painel/leads", label: "Leads", icon: Inbox, ownerOnly: true, automationOnly: true },
-  { href: "/painel/vendas", label: "Vendas diretas", icon: ShoppingCart },
+  { href: "/painel", label: "Dashboard", icon: LayoutDashboard, perm: "dashboard.view" },
+  { href: "/painel/treinamentos", label: "Treinamentos", icon: Video, perm: "treinamentos.view" },
+  { href: "/painel/artes", label: "Artes de divulgação", icon: Images, perm: "artes.view" },
+  { href: "/painel/cursos", label: "Catálogo", icon: GraduationCap, perm: "catalogo.view" },
+  { href: "/painel/alunos", label: "Alunos", icon: Users, perm: "alunos.view" },
+  { href: "/painel/atendimento", label: "Atendimento", icon: LifeBuoy, perm: "atendimento.manage" },
+  { href: "/painel/leads", label: "Leads", icon: Inbox, perm: "leads.view", automationOnly: true },
+  { href: "/painel/vendas", label: "Vendas diretas", icon: ShoppingCart, perm: "vendas.view" },
   {
     href: "/painel/revendas",
     label: "Revendedor",
     icon: Store,
-    ownerOnly: true,
+    perm: "revendas.manage",
     resellerSellerOnly: true,
     children: [
       { href: "/painel/revendas/nova", label: "Criar revenda" },
@@ -65,28 +71,39 @@ const ALL_ITEMS: NavItem[] = [
       { href: "/painel/placar", label: "Placar" },
     ],
   },
-  { href: "/painel/cupons", label: "Cupons", icon: Tag },
-  { href: "/painel/financeiro", label: "Financeiro", icon: CreditCard },
+  { href: "/painel/cupons", label: "Cupons", icon: Tag, perm: "cupons.view" },
+  { href: "/painel/financeiro", label: "Financeiro", icon: CreditCard, perm: "financeiro.view" },
   // Mensalidade que a unidade paga para a PMB (não confundir com "Financeiro",
-  // que é o dinheiro que entra das vendas para alunos). Owner-only.
-  { href: "/painel/cobrancas", label: "Minhas cobranças", icon: ReceiptText, ownerOnly: true },
-  // Hub de BI da unidade (tenant-scoped). Abas owner-only são gated server-side.
-  { href: "/painel/relatorios", label: "Relatórios", icon: BarChart3 },
-  { href: "/painel/indicacoes", label: "Indicações", icon: Share2, ownerOnly: true },
-  { href: "/painel/certificados", label: "Certificados", icon: Award, ownerOnly: true },
-  { href: "/painel/equipe", label: "Equipe", icon: UserCog, ownerOnly: true },
-  { href: "/painel/comunicacao", label: "Comunicação", icon: MessageSquare, ownerOnly: true },
-  { href: "/painel/automacao", label: "Automação", icon: Zap, ownerOnly: true, automationOnly: true },
-  { href: "/painel/dominio", label: "Domínio", icon: Globe, ownerOnly: true },
-  { href: "/painel/vitrine", label: "Vitrine", icon: Palette, ownerOnly: true },
-  { href: "/painel/configuracoes", label: "Configurações", icon: Settings, ownerOnly: true },
+  // que é o dinheiro que entra das vendas para alunos). Fora de todos os
+  // presets: só o dono, salvo concessão explícita em /painel/equipe.
+  { href: "/painel/cobrancas", label: "Minhas cobranças", icon: ReceiptText, perm: "cobrancas.view" },
+  // Hub de BI da unidade (tenant-scoped). Cada aba tem a própria permissão,
+  // reforçada server-side no dispatcher e no [tab]/page.tsx.
+  { href: "/painel/relatorios", label: "Relatórios", icon: BarChart3, perm: "relatorios.view" },
+  { href: "/painel/indicacoes", label: "Indicações", icon: Share2, perm: "indicacoes.view" },
+  { href: "/painel/certificados", label: "Certificados", icon: Award, perm: "certificados.view" },
+  { href: "/painel/equipe", label: "Equipe", icon: UserCog, perm: "equipe.manage" },
+  { href: "/painel/comunicacao", label: "Comunicação", icon: MessageSquare, perm: "comunicacao.manage" },
+  { href: "/painel/automacao", label: "Automação", icon: Zap, perm: "automacao.manage", automationOnly: true },
+  { href: "/painel/dominio", label: "Domínio", icon: Globe, perm: "dominio.manage" },
+  { href: "/painel/vitrine", label: "Vitrine", icon: Palette, perm: "vitrine.manage" },
+  { href: "/painel/configuracoes", label: "Configurações", icon: Settings, perm: "configuracoes.manage" },
 ]
 
 interface SidebarPainelProps {
   tenantName?: string
   tenantLogoUrl?: string
   userEmail?: string
-  isOwner?: boolean
+  /**
+   * Permissões efetivas do usuário, resolvidas server-side em
+   * `src/app/painel/layout.tsx`. Obrigatória e SEM default de propósito: o bug
+   * que motivou esta refatoração era exatamente um default permissivo
+   * (`isOwner = true`) que a layout nunca sobrescrevia — todo membro da equipe
+   * recebia o menu completo do dono.
+   */
+  permissions: PainelPermission[]
+  /** Papel do usuário na unidade — exibido sob o nome da escola. */
+  memberRole?: PainelMemberRole
   automationEnabled?: boolean
   canSellResellers?: boolean
   /** Menu recolhido (só ícones). Aplicado só na instância desktop. */
@@ -100,19 +117,21 @@ export function SidebarPainel({
   tenantName,
   tenantLogoUrl,
   userEmail,
-  isOwner = true,
+  permissions,
+  memberRole = "owner",
   automationEnabled = false,
   canSellResellers = false,
   collapsed = false,
   onToggleCollapse,
 }: SidebarPainelProps) {
   const pathname = usePathname()
+  const granted = new Set(permissions)
   // Itens de automação continuam VISÍVEIS mesmo sem o módulo ativo — ao clicar,
   // a página mostra o paywall (fundo desfocado + pop-up comercial). Só ocultamos
-  // por papel (ownerOnly). "Revendas" depende do módulo canSellResellers (o
-  // acesso é reforçado server-side por requireResellerSeller).
+  // por permissão. "Revendas" exige, além da permissão, o módulo canSellResellers
+  // (o acesso é reforçado server-side por requireResellerSeller).
   const navItems = ALL_ITEMS.filter((item) => {
-    if (item.ownerOnly && !isOwner) return false
+    if (!granted.has(item.perm)) return false
     if (item.resellerSellerOnly && !canSellResellers) return false
     return true
   })
@@ -171,7 +190,7 @@ export function SidebarPainel({
               {tenantName ?? "Meu Painel"}
             </span>
             <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-pmb-lime)]">
-              Revendedor
+              {roleLabel(memberRole)}
             </span>
           </div>
         )}
