@@ -28,6 +28,14 @@ describe("tenantScopeWhere (QA-001 / SEG-001)", () => {
       accountManagerId: "mgr",
     })
   })
+  // O preset do diretor tem `unidades.viewAll`, então o admin-guard nem chega
+  // aqui. Este ramo é a degradação quando alguém REVOGA o viewAll dele: cai na
+  // carteira do gerente, não em "nenhuma unidade".
+  it("PMB_RESELLER_DIRECTOR degrada para accountManagerId", async () => {
+    expect(
+      await tenantScopeWhere({ userId: "dir", role: "PMB_RESELLER_DIRECTOR" }),
+    ).toEqual({ accountManagerId: "dir" })
+  })
   it("PMB_REVENDA_SALES escopa por salesUserId próprio", async () => {
     expect(await tenantScopeWhere({ userId: "s1", role: "PMB_REVENDA_SALES" })).toEqual({
       salesUserId: "s1",
@@ -59,6 +67,14 @@ describe("canAccessTenantScope — não vaza unidade de outro escopo", () => {
   it("PMB_RESELLER_MGR: só a própria (accountManagerId), nega alheia", async () => {
     expect(await canAccessTenantScope({ userId: "mgr", role: "PMB_RESELLER_MGR" }, own)).toBe(true)
     expect(await canAccessTenantScope({ userId: "mgr", role: "PMB_RESELLER_MGR" }, alheio)).toBe(false)
+  })
+  it("PMB_RESELLER_DIRECTOR sem viewAll: só a própria carteira", async () => {
+    expect(
+      await canAccessTenantScope({ userId: "mgr", role: "PMB_RESELLER_DIRECTOR" }, own),
+    ).toBe(true)
+    expect(
+      await canAccessTenantScope({ userId: "mgr", role: "PMB_RESELLER_DIRECTOR" }, alheio),
+    ).toBe(false)
   })
   it("PMB_REVENDA_SALES: só a própria (salesUserId), nega alheia", async () => {
     expect(await canAccessTenantScope({ userId: "s1", role: "PMB_REVENDA_SALES" }, own)).toBe(true)
@@ -97,6 +113,11 @@ describe("leadScopeWhere", () => {
     expect(await leadScopeWhere({ userId: "mgr", role: "PMB_SALES_MGR" })).toEqual({
       ownerUserId: { in: ["mgr", "r1"] },
     })
+  })
+  it("PMB_RESELLER_DIRECTOR → ownerUserId próprio (sem o viewAll do preset)", async () => {
+    expect(
+      await leadScopeWhere({ userId: "dir", role: "PMB_RESELLER_DIRECTOR" }),
+    ).toEqual({ ownerUserId: "dir" })
   })
   it("PMB_RESELLER_MGR não enxerga leads B2B → null", async () => {
     expect(await leadScopeWhere({ userId: "x", role: "PMB_RESELLER_MGR" })).toBeNull()

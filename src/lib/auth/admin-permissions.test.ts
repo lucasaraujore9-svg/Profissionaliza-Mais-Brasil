@@ -6,6 +6,7 @@ import {
   PMB_TEAM_ROLES,
   SENSITIVE,
   SUPER_EXCLUSIVE,
+  SUPER_EXCLUSIVE_BY_PRESET,
   filterAdminPermissions,
   resolveAdminPermissions,
   type AdminPermission,
@@ -16,7 +17,7 @@ describe("catálogo", () => {
   // do código anterior: quem a tem passa pelo recorte de carteira em senha do
   // titular, impersonação, gateway e export de comissões. Concedê-la por
   // override viraria um gerente de unidades em super admin de fato.
-  it("unidades.viewAll é exclusiva do Super Admin", () => {
+  it("unidades.viewAll nunca é concedida por override", () => {
     expect(SUPER_EXCLUSIVE).toContain("unidades.viewAll")
     const perms = resolveAdminPermissions("PMB_RESELLER_MGR", ["unidades.viewAll"])
     expect(perms.has("unidades.viewAll")).toBe(false)
@@ -28,7 +29,7 @@ describe("catálogo", () => {
    * unidade e, por tabela, ganhar senha do titular, impersonação, cobrança e
    * ledger de comissão — a mesma escalada de `unidades.viewAll`, em dois passos.
    */
-  it("unidades.governanca é exclusiva do Super Admin", () => {
+  it("unidades.governanca nunca é concedida por override", () => {
     expect(SUPER_EXCLUSIVE).toContain("unidades.governanca")
     const perms = resolveAdminPermissions("PMB_RESELLER_MGR", ["unidades.governanca"])
     expect(perms.has("unidades.governanca")).toBe(false)
@@ -79,12 +80,110 @@ describe("catálogo", () => {
     }
   })
 
-  it("nenhum preset além do SUPER_ADMIN concede permissão exclusiva", () => {
+  /**
+   * Igualdade EXATA contra a lista declarada — não "não contém". Um preset novo
+   * que ganhe uma exclusiva sem entrar em SUPER_EXCLUSIVE_BY_PRESET quebra
+   * aqui, e tirar de lá um papel que ainda a usa também quebra. É o que impede
+   * a exceção do Diretor de unidades de virar uma porta aberta a mais papéis.
+   */
+  it("só os papéis declarados carregam permissão exclusiva no preset", () => {
+    for (const role of PMB_TEAM_ROLES) {
+      const declarado = [...(SUPER_EXCLUSIVE_BY_PRESET[role] ?? [])].sort()
+      const real = SUPER_EXCLUSIVE.filter((perm) =>
+        ADMIN_ROLE_PRESETS[role].includes(perm),
+      ).sort()
+      expect(real, role).toEqual(declarado)
+    }
+  })
+
+  /**
+   * A linha que não se cruza: `equipe.manage` cria usuários e edita permissões
+   * — inclusive as próprias. Nem por preset, nem por override.
+   */
+  it("equipe.manage nunca sai do SUPER_ADMIN", () => {
     for (const role of PMB_TEAM_ROLES) {
       if (role === "SUPER_ADMIN") continue
-      for (const perm of SUPER_EXCLUSIVE) {
-        expect(ADMIN_ROLE_PRESETS[role], `${role} → ${perm}`).not.toContain(perm)
-      }
+      expect(ADMIN_ROLE_PRESETS[role], role).not.toContain("equipe.manage")
+      expect(
+        resolveAdminPermissions(role, ["equipe.manage"]).has("equipe.manage"),
+        role,
+      ).toBe(false)
+    }
+  })
+})
+
+/**
+ * O papel criado para dar suporte a TODAS as revendas sem ser super admin.
+ * Estes testes fixam a fronteira decidida: tudo de unidade, nada de dinheiro do
+ * ecossistema, nada de sistema.
+ */
+describe("PMB_RESELLER_DIRECTOR (Diretor de unidades)", () => {
+  const perms = resolveAdminPermissions("PMB_RESELLER_DIRECTOR")
+
+  it("alcança a rede inteira de unidades, com governança", () => {
+    for (const perm of [
+      "unidades.view",
+      "unidades.viewAll",
+      "unidades.create",
+      "unidades.manage",
+      "unidades.billing",
+      "unidades.credenciais",
+      "unidades.impersonate",
+      "unidades.comissoes",
+      "unidades.governanca",
+    ] as const) {
+      expect(perms.has(perm), perm).toBe(true)
+    }
+  })
+
+  it("faz suporte a aluno de qualquer unidade e trabalha o funil B2B", () => {
+    for (const perm of [
+      "alunosRede.view",
+      "alunosRede.manage",
+      "alunosRede.acesso",
+      "leadsRevenda.view",
+      "leadsRevenda.viewAll",
+      "leadsRevenda.manage",
+    ] as const) {
+      expect(perms.has(perm), perm).toBe(true)
+    }
+  })
+
+  it("não é super admin: fora do escopo de revenda ele não entra", () => {
+    for (const perm of [
+      // Dinheiro do ecossistema — quem baixa pagamento é o Financeiro.
+      "financeiro.viewAll",
+      "financeiro.manage",
+      "indicacoes.clawback",
+      "indicacoes.config",
+      "indicacoes.percentUnidade",
+      // Destruição LGPD irreversível.
+      "unidades.anonimizar",
+      // Produto, marca e sistema.
+      "catalogo.manage",
+      "pacotes.manage",
+      "vitrine.manage",
+      "configuracoes.manage",
+      "integracoes.manage",
+      "equipe.manage",
+      // Vitrine PMB (B2C) não é dele.
+      "vendas.create",
+      "vendas.bolsa",
+      "alunos.viewAll",
+    ] as const) {
+      expect(perms.has(perm), perm).toBe(false)
+    }
+  })
+
+  it("vê e aprova saque da rede, mas não dá baixa no pagamento", () => {
+    expect(perms.has("financeiro.view")).toBe(true)
+    expect(perms.has("indicacoes.saques")).toBe(true)
+    expect(perms.has("financeiro.manage")).toBe(false)
+  })
+
+  it("é estritamente mais amplo que o Gerente de unidades", () => {
+    for (const perm of ADMIN_ROLE_PRESETS.PMB_RESELLER_MGR) {
+      expect(perms.has(perm), perm).toBe(true)
     }
   })
 })

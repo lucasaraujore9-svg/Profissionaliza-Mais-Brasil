@@ -31,7 +31,13 @@ interface ListResponse {
   data: {
     stats: ResellerStats
     resellers: ResellerRow[]
-    role: "SUPER_ADMIN" | "PMB_SALES" | "PMB_SALES_MGR" | "PMB_REVENDA_SALES" | "PMB_RESELLER_MGR"
+    role: string
+    /**
+     * O que a tela pode mostrar, resolvido pelo guard na API. Gatear por papel
+     * cru aqui deixava a UI incompleta a cada papel novo — e divergia do
+     * backend, que decide por permissão.
+     */
+    can: { viewAll: boolean; governanca: boolean; create: boolean }
   }
 }
 
@@ -88,26 +94,19 @@ export function ResellerListClient() {
     load()
   }, [load])
 
-  // Carrega gerentes disponíveis (só precisa pra SUPER_ADMIN)
+  // Carrega os gerentes de conta disponíveis. A rota já devolve só os papéis
+  // elegíveis e ativos, sob a mesma permissão que autoriza a atribuição.
+  const canAssign = data?.can?.governanca ?? false
   useEffect(() => {
-    if (data?.role !== "SUPER_ADMIN") return
-    fetch("/api/admin/equipe")
+    if (!canAssign) return
+    fetch("/api/admin/revendedores/gerentes")
       .then((r) => r.json())
       .then((body) => {
-        const rows = (body.data ?? []) as {
-          id: string
-          name: string
-          role: string
-          status: string
-        }[]
-        setManagers(
-          rows
-            .filter((u) => u.role === "PMB_RESELLER_MGR" && u.status === "ATIVO")
-            .map((u) => ({ id: u.id, name: u.name })),
-        )
+        const rows = (body.data ?? []) as { id: string; name: string }[]
+        setManagers(rows.map((u) => ({ id: u.id, name: u.name })))
       })
       .catch(() => setManagers([]))
-  }, [data?.role])
+  }, [canAssign])
 
   function openAssign(tenantId: string) {
     const row = data?.resellers.find((r) => r.id === tenantId)
@@ -156,8 +155,8 @@ export function ResellerListClient() {
     return (
       <ResellerTable
         rows={data.resellers}
-        showManager={data.role === "SUPER_ADMIN"}
-        onAssign={data.role === "SUPER_ADMIN" ? openAssign : undefined}
+        showManager={data.can.viewAll}
+        onAssign={data.can.governanca ? openAssign : undefined}
       />
     )
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -179,15 +178,8 @@ export function ResellerListClient() {
             onFilterChange={setFilter}
           />
         </div>
-        {/* Quem pode cadastrar revenda: super, suporte (account manager) e o
-            comercial de revenda (gerente de vendas + vendedor de unidade). O
-            backend (POST /api/admin/revendedores) valida os mesmos papéis. */}
-        {(data?.role === "SUPER_ADMIN" ||
-          data?.role === "PMB_RESELLER_MGR" ||
-          data?.role === "PMB_SALES_MGR" ||
-          data?.role === "PMB_REVENDA_SALES") && (
-          <NewResellerDialog onCreated={load} />
-        )}
+        {/* Mesma permissão que o POST /api/admin/revendedores exige. */}
+        {data?.can?.create && <NewResellerDialog onCreated={load} />}
       </div>
       {content}
 

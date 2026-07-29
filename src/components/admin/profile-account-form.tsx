@@ -5,6 +5,7 @@ import { CheckCircle2, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { pmbRoleLabel } from "@/lib/auth/roles"
 
 type SubmitStatus = "idle" | "submitting" | "success" | "error"
 
@@ -70,14 +71,6 @@ export function ProfileAccountForm({ data, onUpdate }: Props) {
     }
   }
 
-  const roleLabel: Record<string, string> = {
-    SUPER_ADMIN: "Super Admin",
-    PMB_SALES: "Vendedor de curso",
-    PMB_SALES_MGR: "Gerente de vendas",
-    PMB_REVENDA_SALES: "Vendedor de revenda",
-    PMB_RESELLER_MGR: "Gerente de unidades",
-  }
-
   return (
     <form
       onSubmit={handleSubmit}
@@ -134,7 +127,7 @@ export function ProfileAccountForm({ data, onUpdate }: Props) {
           <Label htmlFor="profile-papel">Papel</Label>
           <Input
             id="profile-papel"
-            value={roleLabel[data.role] ?? data.role}
+            value={pmbRoleLabel(data.role)}
             disabled
             className="mt-1.5 bg-gray-50 text-gray-600"
           />

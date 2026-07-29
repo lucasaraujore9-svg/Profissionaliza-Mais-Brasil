@@ -13,6 +13,7 @@ const DESCRIPTION_BY_ROLE: Record<string, string> = {
   SUPER_ADMIN: "Visão geral do ecossistema Profissionaliza Mais Brasil.",
   PMB_SALES_MGR: "Resumo das unidades e leads do seu time de vendas.",
   PMB_REVENDA_SALES: "Resumo das suas unidades e leads de revenda.",
+  PMB_RESELLER_DIRECTOR: "Visão geral de todas as unidades da rede.",
   PMB_RESELLER_MGR: "Resumo das unidades sob o seu suporte.",
   PMB_SALES: "Resumo das suas vendas diretas na vitrine PMB.",
 }

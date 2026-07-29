@@ -60,6 +60,7 @@ export default async function ResellerDetailPage({
       <ResellerDetailClient
         tenantId={id}
         isSuperAdmin={isSuperAdmin}
+        seesAllUnits={session.can("unidades.viewAll")}
         viewerId={session?.userId ?? null}
         viewerRole={session.role}
         salesUserId={tenant?.salesUserId ?? null}

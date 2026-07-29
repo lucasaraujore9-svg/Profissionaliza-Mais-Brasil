@@ -168,9 +168,17 @@ export function AdminPermissionFields({
                       />
                       <span className="flex-1">
                         {label}
+                        {/* SUPER_EXCLUSIVE não é "só o Super Admin tem" — é
+                            "não se concede por aqui". Um preset pode carregá-la
+                            (o Diretor de unidades carrega `unidades.viewAll` e
+                            `unidades.governanca`), e nesse caso o checkbox
+                            aparece marcado e travado. Rotular de super-only
+                            mentiria sobre quem tem o quê. */}
                         {superOnly && (
                           <span className="ml-1.5 text-xs text-muted-foreground">
-                            (só o Super Admin)
+                            {checked
+                              ? "(vem do papel)"
+                              : "(só pelo papel, não por ajuste)"}
                           </span>
                         )}
                         {sensitive && !superOnly && (

@@ -12,7 +12,12 @@ import { resolveAdminPermissions } from "./admin-permissions"
 // provando a MESMA fronteira, agora contra os presets.
 describe("auth/roles — AuthZ financeira (QA-008)", () => {
   it("comissões a pagar: super, financeiro e gerente de unidades", () => {
-    for (const r of ["SUPER_ADMIN", "PMB_FINANCEIRO", "PMB_RESELLER_MGR"] as const) {
+    for (const r of [
+      "SUPER_ADMIN",
+      "PMB_FINANCEIRO",
+      "PMB_RESELLER_DIRECTOR",
+      "PMB_RESELLER_MGR",
+    ] as const) {
       expect(resolveAdminPermissions(r).has("financeiro.view"), r).toBe(true)
     }
     for (const r of ["PMB_SALES", "PMB_SALES_MGR", "PMB_REVENDA_SALES", "PMB_DESIGNER"] as const) {
@@ -30,7 +35,14 @@ describe("auth/roles — AuthZ financeira (QA-008)", () => {
     ] as const) {
       expect(resolveAdminPermissions("SUPER_ADMIN").has(perm), perm).toBe(true)
       expect(resolveAdminPermissions("PMB_FINANCEIRO").has(perm), perm).toBe(true)
-      for (const r of ["PMB_SALES", "PMB_RESELLER_MGR", "PMB_SALES_MGR", "PMB_REVENDA_SALES", "PMB_DESIGNER"] as const) {
+      for (const r of [
+        "PMB_SALES",
+        "PMB_RESELLER_DIRECTOR",
+        "PMB_RESELLER_MGR",
+        "PMB_SALES_MGR",
+        "PMB_REVENDA_SALES",
+        "PMB_DESIGNER",
+      ] as const) {
         expect(resolveAdminPermissions(r).has(perm), `${r} → ${perm}`).toBe(false)
       }
     }

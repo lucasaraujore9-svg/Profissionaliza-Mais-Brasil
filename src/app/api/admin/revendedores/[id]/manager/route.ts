@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 import { logAudit } from "@/lib/audit"
 import { requireAdmin } from "@/lib/auth/admin-guard"
+import { ACCOUNT_MANAGER_ROLES } from "@/lib/auth/roles"
 
 const schema = z.object({
   managerId: z.string().nullable(),
@@ -33,7 +34,13 @@ export const PATCH = withRequestContextParams<{ id: string }>(
       where: { id: parsed.data.managerId },
       select: { role: true, status: true },
     })
-    if (!mgr || mgr.role !== "PMB_RESELLER_MGR" || mgr.status !== "ATIVO") {
+    // Regra de negocio sobre o ALVO (quem vai receber a carteira), nao sobre
+    // quem chama — a autorizacao do ator ja foi feita em `unidades.governanca`.
+    if (
+      !mgr ||
+      !(ACCOUNT_MANAGER_ROLES as readonly string[]).includes(mgr.role) ||
+      mgr.status !== "ATIVO"
+    ) {
       return NextResponse.json(
         { error: "Gerente inválido ou inativo" },
         { status: 400 },

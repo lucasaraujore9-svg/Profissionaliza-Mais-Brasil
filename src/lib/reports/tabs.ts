@@ -54,7 +54,12 @@ export const REPORT_TABS: ReportTabMeta[] = [
     label: "Revendedores",
     icon: "store",
     permission: "relatorios.revendedores",
-    defaultFor: ["PMB_SALES_MGR", "PMB_REVENDA_SALES", "PMB_RESELLER_MGR"],
+    defaultFor: [
+      "PMB_SALES_MGR",
+      "PMB_REVENDA_SALES",
+      "PMB_RESELLER_DIRECTOR",
+      "PMB_RESELLER_MGR",
+    ],
   },
   {
     slug: "financeiro",

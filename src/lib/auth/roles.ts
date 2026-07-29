@@ -23,6 +23,7 @@ export const PMB_TEAM_ROLES = [
   "PMB_SALES",
   "PMB_SALES_MGR",
   "PMB_REVENDA_SALES",
+  "PMB_RESELLER_DIRECTOR",
   "PMB_RESELLER_MGR",
   "PMB_FINANCEIRO",
   "PMB_DESIGNER",
@@ -30,12 +31,24 @@ export const PMB_TEAM_ROLES = [
 
 export type PmbTeamRole = (typeof PMB_TEAM_ROLES)[number]
 
+/**
+ * Papéis elegíveis a SER gerente de conta de uma unidade
+ * (`Tenant.accountManagerId`). Não é permissão — é o vínculo estrutural que
+ * `lib/auth/scope.ts` usa para recortar a carteira. Fonte única da rota que
+ * atribui e da que lista as opções.
+ */
+export const ACCOUNT_MANAGER_ROLES = [
+  "PMB_RESELLER_MGR",
+  "PMB_RESELLER_DIRECTOR",
+] as const satisfies readonly PmbTeamRole[]
+
 /** Rótulo exibido para cada papel interno. */
 export const PMB_ROLE_LABEL: Record<PmbTeamRole, string> = {
   SUPER_ADMIN: "Super Admin",
   PMB_SALES: "Vendedor de curso",
   PMB_SALES_MGR: "Gerente de vendas",
   PMB_REVENDA_SALES: "Vendedor de revenda",
+  PMB_RESELLER_DIRECTOR: "Diretor de unidades",
   PMB_RESELLER_MGR: "Gerente de unidades",
   PMB_FINANCEIRO: "Financeiro",
   PMB_DESIGNER: "Designer",

@@ -110,6 +110,8 @@ interface SalesUserOption {
 interface ResellerDetailClientProps {
   tenantId: string
   isSuperAdmin?: boolean
+  /** `unidades.viewAll`: alcança qualquer unidade, não só a própria carteira. */
+  seesAllUnits?: boolean
   viewerId?: string | null
   viewerRole?: UserRole | null
   salesUserId?: string | null
@@ -120,6 +122,7 @@ interface ResellerDetailClientProps {
 export function ResellerDetailClient({
   tenantId,
   isSuperAdmin = false,
+  seesAllUnits = false,
   viewerId = null,
   viewerRole = null,
   salesUserId = null,
@@ -208,10 +211,12 @@ export function ResellerDetailClient({
 
   if (!data) return null
 
-  // Edicao de subdominio: so equipe PMB. SUPER_ADMIN qualquer; gerente de
-  // revendedores apenas as unidades atribuidas a ele. A rota PATCH revalida.
+  // Edicao de subdominio: so equipe PMB. Quem enxerga a rede inteira
+  // (`unidades.viewAll`) edita qualquer unidade; o gerente de revendedores,
+  // apenas as atribuidas a ele. A rota PATCH revalida (unidades.manage +
+  // canAccessTenant).
   const canEditSlug =
-    viewerRole === "SUPER_ADMIN" ||
+    seesAllUnits ||
     (viewerRole === "PMB_RESELLER_MGR" &&
       data.reseller.accountManagerId === viewerId)
 

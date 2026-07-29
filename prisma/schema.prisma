@@ -19,6 +19,7 @@ enum UserRole {
   PMB_SALES // Vendedor de curso (vendas diretas vitrine PMB B2C, cupom ate 50%)
   PMB_SALES_MGR // Gerente de vendas — chefia dos vendedores de revenda (ve o time)
   PMB_REVENDA_SALES // Vendedor de revenda (B2B): trabalha leads e fecha unidades
+  PMB_RESELLER_DIRECTOR // Diretor de unidades — o gerente sem recorte de carteira (ve a rede toda)
   PMB_RESELLER_MGR // Gerente de unidades / suporte (ve as unidades atribuidas)
   PMB_FINANCEIRO // Financeiro — ajusta comissoes, marca pagamentos e anexa comprovante
   PMB_DESIGNER // Designer — gerencia o banco de artes de divulgacao (/admin/artes)

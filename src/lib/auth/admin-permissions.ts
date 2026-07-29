@@ -189,6 +189,32 @@ export const SUPER_EXCLUSIVE = [
   "unidades.governanca",
 ] as const
 
+/**
+ * Papéis cujo PRESET carrega permissão SUPER_EXCLUSIVE — e exatamente quais.
+ *
+ * SUPER_EXCLUSIVE quer dizer "nunca concedível por OVERRIDE" (ver
+ * `resolveAdminPermissions`), não "só o super admin pode ter". A distinção é o
+ * ponto: marcar `unidades.viewAll` num checkbox de quem tem carteira é escalada
+ * silenciosa — o gerente de unidades viraria super admin de fato sem que o nome
+ * da opção denunciasse isso. Declará-la no preset de um papel cujo trabalho É a
+ * rede inteira é uma decisão explícita, revisável e testada.
+ *
+ * Este mapa é a lista fechada dessas decisões: o teste exige igualdade exata,
+ * então nenhum preset ganha uma exclusiva sem passar por aqui.
+ *
+ * `equipe.manage` não entra para ninguém além do SUPER_ADMIN. É a linha que não
+ * se cruza — é a permissão com que alguém ampliaria os próprios poderes.
+ */
+export const SUPER_EXCLUSIVE_BY_PRESET: Partial<
+  Record<PmbTeamRole, readonly AdminPermission[]>
+> = {
+  SUPER_ADMIN: [...SUPER_EXCLUSIVE],
+  // Diretor de unidades: responde por todas as revendas, logo `viewAll` é o
+  // próprio conteúdo do cargo, e `governanca` (atribuir o responsável da conta)
+  // não é escalada para quem já alcança todas elas.
+  PMB_RESELLER_DIRECTOR: ["unidades.viewAll", "unidades.governanca"],
+}
+
 /** Concedíveis por override, mas com aviso destacado na UI de Equipe. */
 export const SENSITIVE = [
   "integracoes.manage",
@@ -282,6 +308,52 @@ export const ADMIN_ROLE_PRESETS: Record<PmbTeamRole, readonly AdminPermission[]>
     "relatorios.leads",
   ],
 
+  // Diretor de unidades: o Gerente de unidades sem o recorte de carteira. É o
+  // único preset além do SUPER_ADMIN que carrega `unidades.viewAll` — por isso
+  // ele existe como PAPEL e não como um conjunto de checkboxes: `viewAll` e
+  // `governanca` são SUPER_EXCLUSIVE justamente para não serem concedidas de
+  // forma avulsa a quem tem carteira (ver SUPER_EXCLUSIVE, acima).
+  //
+  // Fronteira deliberada — o que ele NÃO tem:
+  //   - dinheiro do ecossistema (`financeiro.viewAll/manage`,
+  //     `indicacoes.clawback/config/percentUnidade`): ele vê e aprova o saque
+  //     da rede, quem baixa o pagamento é o Financeiro;
+  //   - `unidades.anonimizar` (destruição LGPD irreversível);
+  //   - catálogo, vitrine PMB, vendas B2C, integrações e `equipe.manage`.
+  // Qualquer um desses é concedível pessoa a pessoa por override, exceto os
+  // SUPER_EXCLUSIVE.
+  PMB_RESELLER_DIRECTOR: [
+    "dashboard.view",
+    "perfil.edit",
+    "treinamentos.view",
+    "unidades.view",
+    "unidades.viewAll",
+    "unidades.create",
+    "unidades.manage",
+    "unidades.billing",
+    "unidades.credenciais",
+    "unidades.impersonate",
+    "unidades.comissoes",
+    "unidades.governanca",
+    "leadsRevenda.view",
+    "leadsRevenda.viewAll",
+    "leadsRevenda.manage",
+    "alunosRede.view",
+    "alunosRede.manage",
+    "alunosRede.acesso",
+    "financeiro.view",
+    "indicacoes.view",
+    "indicacoes.saques",
+    "certificados.view",
+    "certificados.manage",
+    "catalogo.view",
+    "relatorios.view",
+    "relatorios.revendedores",
+    "relatorios.indicacoes",
+    "relatorios.leads",
+    "relatorios.export",
+  ],
+
   // Gerente de unidades / suporte: cuida das unidades sob a sua carteira —
   // dados, status, cobrança, senha do titular e acesso "entrar como".
   PMB_RESELLER_MGR: [
@@ -340,6 +412,8 @@ const ROLE_DESCRIPTIONS: Record<PmbTeamRole, string> = {
     "Chefia os vendedores de revenda. Vê as unidades e os leads B2B do time, sem acesso ao financeiro.",
   PMB_REVENDA_SALES:
     "Trabalha os leads B2B e fecha unidades. Enxerga apenas as unidades e leads atribuídos a ele.",
+  PMB_RESELLER_DIRECTOR:
+    "Responde por TODAS as unidades da rede: suporte, dados, valores, cobrança, senha do titular, entrar como e governança da conta. Não baixa pagamento nem mexe em catálogo, vitrine ou equipe.",
   PMB_RESELLER_MGR:
     "Cuida das unidades sob a sua carteira: dados, status, cobrança, senha do titular e comissões.",
   PMB_FINANCEIRO:

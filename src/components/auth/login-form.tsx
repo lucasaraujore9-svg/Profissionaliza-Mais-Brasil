@@ -115,6 +115,7 @@ export function LoginForm() {
         role === "PMB_SALES" ||
         role === "PMB_SALES_MGR" ||
         role === "PMB_REVENDA_SALES" ||
+        role === "PMB_RESELLER_DIRECTOR" ||
         role === "PMB_RESELLER_MGR"
       ) {
         router.push("/admin")

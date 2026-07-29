@@ -16,6 +16,16 @@ export const GET = withRequestContext(
   if (!guard.ok) return guard.response
   const ctx = guard.ctx
 
+  // O que a TELA pode mostrar. Vai junto com a lista para o cliente não
+  // reimplementar a matriz — antes ele gateava a coluna "gerente de conta" e o
+  // botão de cadastrar por `role === "SUPER_ADMIN"`, e qualquer papel novo com
+  // as permissões certas nascia com a UI incompleta.
+  const can = {
+    viewAll: ctx.can("unidades.viewAll"),
+    governanca: ctx.can("unidades.governanca"),
+    create: ctx.can("unidades.create"),
+  }
+
   const { searchParams } = new URL(request.url)
   const q = searchParams.get("q")?.trim() ?? ""
   const status = searchParams.get("status")?.trim().toUpperCase() ?? ""
@@ -44,6 +54,7 @@ export const GET = withRequestContext(
         stats: { total: 0, active: 0, pending: 0, suspended: 0, cancelled: 0 },
         resellers: [],
         role: ctx.role,
+        can,
       },
     })
   }
@@ -126,6 +137,7 @@ export const GET = withRequestContext(
         createdAt: t.createdAt.toISOString(),
       })),
       role: ctx.role,
+      can,
     },
   })
   },

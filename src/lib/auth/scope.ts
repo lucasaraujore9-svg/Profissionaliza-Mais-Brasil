@@ -12,6 +12,14 @@ import type { Prisma, UserRole } from "@prisma/client"
  *                             SEUS leads B2B (Lead.ownerUserId)
  *   - PMB_RESELLER_MGR     -> apenas as unidades onde e suporte (accountManagerId);
  *                             nao enxerga leads B2B
+ *   - PMB_RESELLER_DIRECTOR-> mesmo vinculo estrutural do gerente de unidades
+ *                             (accountManagerId) + os seus leads B2B. Na pratica
+ *                             o preset dele tem `unidades.viewAll` e
+ *                             `leadsRevenda.viewAll`, entao o admin-guard
+ *                             curto-circuita para `{}` antes de chegar aqui —
+ *                             este ramo so vale se alguem REVOGAR o viewAll
+ *                             dele, e serve pra degradar para a carteira em vez
+ *                             de zerar o acesso.
  *   - PMB_SALES            -> vendedor de curso (B2C); nao enxerga unidades/leads B2B
  *
  * As funcoes retornam um `where` Prisma pronto pra espalhar na query, ou `null`
@@ -42,6 +50,7 @@ export async function tenantScopeWhere(
   switch (actor.role) {
     case "SUPER_ADMIN":
       return {}
+    case "PMB_RESELLER_DIRECTOR":
     case "PMB_RESELLER_MGR":
       return { accountManagerId: actor.userId }
     case "PMB_REVENDA_SALES":
@@ -70,6 +79,7 @@ export async function canAccessTenantScope(
   switch (actor.role) {
     case "SUPER_ADMIN":
       return true
+    case "PMB_RESELLER_DIRECTOR":
     case "PMB_RESELLER_MGR":
       return tenant.accountManagerId === actor.userId
     case "PMB_REVENDA_SALES":
@@ -91,6 +101,7 @@ export async function leadScopeWhere(
   switch (actor.role) {
     case "SUPER_ADMIN":
       return {}
+    case "PMB_RESELLER_DIRECTOR":
     case "PMB_REVENDA_SALES":
       return { ownerUserId: actor.userId }
     case "PMB_SALES_MGR":

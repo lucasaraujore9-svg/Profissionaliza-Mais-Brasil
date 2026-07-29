@@ -158,6 +158,37 @@ tela retornando 403.
   passou a exigir `integracoes.manage` (a tela ja escondia o campo; so o PATCH
   direto passava).
 
+### Diretor de unidades (2026-07-29)
+
+Papel novo `PMB_RESELLER_DIRECTOR` ("Diretor de unidades"): faz pela REDE INTEIRA
+o que o Gerente de unidades faz pela carteira dele — suporte, dados, valores,
+cobranca, senha do titular, entrar como, governanca da conta.
+
+- **Por que papel novo e nao editar `PMB_RESELLER_MGR`:** `unidades.viewAll` e
+  `unidades.governanca` sao SUPER_EXCLUSIVE (nao concediveis por override), entao
+  so um PRESET pode carrega-las; e ampliar o gerente existente tiraria o recorte
+  de carteira de quem ja opera em producao.
+- **`SUPER_EXCLUSIVE` != "so o super admin tem".** Significa "nunca concedida por
+  OVERRIDE". A lista de presets que legitimamente as carregam vive em
+  `SUPER_EXCLUSIVE_BY_PRESET` e o teste exige igualdade EXATA — preset novo com
+  exclusiva sem declarar ali quebra o build. `equipe.manage` continua fora de
+  qualquer preset que nao seja o do super.
+- **Nao precisou tocar em rota nenhuma:** guards, dashboard, relatorios,
+  `unidadesWhere()` e `canAccessTenant()` ja chaveiam em `unidades.viewAll`.
+  O que precisou mudar foi a UI que ainda gateava por `role === "SUPER_ADMIN"`
+  (lista de revendedores e edicao de subdominio) — agora recebe flags de
+  permissao da API.
+- **Nova rota `GET /api/admin/revendedores/gerentes`** (`unidades.governanca`):
+  o seletor "atribuir gerente de conta" lia de `/api/admin/equipe`, que exige
+  `equipe.manage` — o diretor via o seletor vazio.
+- **Fora do papel, de proposito:** financeiro global (`financeiro.viewAll/manage`,
+  clawback, regras de comissao), `unidades.anonimizar`, catalogo, vitrine, vendas
+  B2C, integracoes e equipe. Ele VE e aprova saque da rede; quem da baixa no
+  pagamento e o Financeiro.
+- **Deploy:** migration `20260729_pmb_reseller_director_role` so adiciona o valor
+  no enum (idempotente, sem backfill). Ninguem vira diretor sozinho — promova em
+  /admin/equipe.
+
 ### Bugs conhecidos (pendentes)
 
 - **Middleware file convention deprecado** no Next 16 (usar `proxy` em vez de `middleware`).

@@ -143,6 +143,22 @@ async function main() {
     },
   })
 
+  // Diretor de unidades: mesmo trabalho do gerente acima, porém sobre a rede
+  // inteira (unidades.viewAll no preset). Sem carteira atribuída de propósito —
+  // é justamente o papel que não depende de accountManagerId para enxergar.
+  await prisma.user.upsert({
+    where: { email: "diretor@pmb.com.br" },
+    update: { role: UserRole.PMB_RESELLER_DIRECTOR, status: "ATIVO" },
+    create: {
+      email: "diretor@pmb.com.br",
+      name: "Diretor de Unidades",
+      passwordHash: await bcrypt.hash("diretor123", 10),
+      role: UserRole.PMB_RESELLER_DIRECTOR,
+      status: "ATIVO",
+      updatedAt: new Date(),
+    },
+  })
+
   await prisma.user.upsert({
     where: { email: "designer@pmb.com.br" },
     update: { role: UserRole.PMB_DESIGNER, status: "ATIVO" },
@@ -701,7 +717,8 @@ async function main() {
   console.log("Seed completo:")
   console.log("- SUPER_ADMIN: super@pmb.com.br / super123")
   console.log("- PMB_SALES: vendas@pmb.com.br / vendas123")
-  console.log("- PMB_RESELLER_MGR: gerente@pmb.com.br / gerente123")
+  console.log("- PMB_RESELLER_MGR: gerente@pmb.com.br / gerente123 (só a carteira dele)")
+  console.log("- PMB_RESELLER_DIRECTOR: diretor@pmb.com.br / diretor123 (todas as unidades)")
   console.log("- PMB_DESIGNER: designer@pmb.com.br / designer123 (só /admin/artes)")
   console.log("- RESELLER owner1: revenda1@teste.com / teste123 (tenant=revenda1, gerente=gerente)")
   console.log("- RESELLER owner2: revenda2@teste.com / teste123 (tenant=revenda2, sem gerente)")

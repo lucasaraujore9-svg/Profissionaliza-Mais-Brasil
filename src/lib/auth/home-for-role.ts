@@ -6,6 +6,7 @@ export function homeForRole(role?: UserRole | string | null): string {
     case "PMB_SALES":
     case "PMB_SALES_MGR":
     case "PMB_REVENDA_SALES":
+    case "PMB_RESELLER_DIRECTOR":
     case "PMB_RESELLER_MGR":
     case "PMB_FINANCEIRO":
       return "/admin"

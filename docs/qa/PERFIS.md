@@ -10,6 +10,7 @@ Checklist manual executado apos `npx prisma db seed`.
 | SUPER_ADMIN (legado) | admin@pmb.com.br          | admin123     | Tudo                                    |
 | PMB_SALES            | vendas@pmb.com.br         | vendas123    | Vendas diretas, cap cupom 50%           |
 | PMB_RESELLER_MGR     | gerente@pmb.com.br        | gerente123   | Tenant1 (atribuido); Tenant2 invisivel  |
+| PMB_RESELLER_DIRECTOR| diretor@pmb.com.br        | diretor123   | TODAS as unidades; sem financeiro global|
 | RESELLER owner 1     | revenda1@teste.com        | teste123     | /painel tenant1                         |
 | RESELLER owner 2     | revenda2@teste.com        | teste123     | /painel tenant2                         |
 | Consultor tenant1    | consultor1@teste.com      | teste123     | /painel tenant1 (cap desconto 20%)      |
@@ -50,6 +51,29 @@ Cupons:
 - [ ] Pode adicionar notas de suporte no detalhe de revenda1
 - [ ] Sidebar sem /admin/vendas, sem /admin/equipe
 - [ ] Nao ve botao "Editar" no catalogo
+
+### PMB_RESELLER_DIRECTOR (Diretor de unidades)
+
+O gerente acima SEM o recorte de carteira. E o unico papel alem do SUPER_ADMIN
+cujo preset carrega `unidades.viewAll` — declarado em `SUPER_EXCLUSIVE_BY_PRESET`
+(`src/lib/auth/admin-permissions.ts`), com teste de igualdade exata.
+
+- [ ] /admin/revendedores lista revenda1 E revenda2 (nenhuma atribuida a ele)
+- [ ] GET /api/admin/revendedores/<id-tenant2> -> 200 (o gerente toma 403 no mesmo id)
+- [ ] Coluna "Gerente de conta" aparece e o botao "Atribuir" funciona
+      (usa /api/admin/revendedores/gerentes, nao /api/admin/equipe)
+- [ ] Muda a mensalidade em Cobranca (planValue) de qualquer unidade
+- [ ] Troca a senha do titular e usa "Entrar como" em qualquer unidade
+- [ ] Cancela unidade e edita a politica de contrato (governanca)
+- [ ] Busca aluno de qualquer unidade em /admin/alunos e gere o acesso dele
+- [ ] Sidebar SEM: Vendas diretas, Vitrine, Equipe, Configuracoes, Automacao
+- [ ] /admin/financeiro abre so na aba "Comissoes a pagar" (sem Visao geral nem
+      Mensalidades a receber)
+- [ ] POST /api/admin/revendedores/<id>/anonimizar -> 403 (LGPD segue com o super)
+- [ ] PATCH /api/admin/configuracoes (ou integracoes) -> 403
+- [ ] /admin/equipe -> redirect (nao gerencia a propria equipe)
+- [ ] Em /admin/equipe (como super), o checkbox "Ver todas as unidades da rede"
+      aparece MARCADO e travado, com o rotulo "(vem do papel)"
 
 ### RESELLER (owner revenda1)
 - [ ] Acessa /painel completo
