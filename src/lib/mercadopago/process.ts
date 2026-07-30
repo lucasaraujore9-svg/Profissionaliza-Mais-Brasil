@@ -549,28 +549,56 @@ export async function reconcilePendingEnrollment(
   // assinatura (cobre o mensal da revenda, que so efetiva via webhook).
   if (enrollment.gateway === "ASAAS") {
     const isPmb = enrollment.tenantId === null
-    const ctx = isPmb
-      ? {
-          id: "__pmb__",
-          slug: pmbPlataformaPolo(),
-          name: "Profissionaliza Mais Brasil",
-          plataformaVendedorId: pmbPlataformaVendedorId(),
-          isPmbVitrine: true as const,
-        }
-      : await resolveTenantById(enrollment.tenantId!)
-    if (!ctx) return { status: "unsupported" }
+
+    // Contexto de fulfillment da venda Asaas. NÃO usa `resolveTenantById`: aquele
+    // resolvedor é do fluxo do Mercado Pago e devolve `null` quando a unidade não
+    // tem `mpAccessToken` — o que fazia TODA venda de uma unidade Asaas-only
+    // (ceipro, n1, umnovohorizonte hoje) responder "unsupported" sem sequer
+    // consultar o Asaas. Era o motivo de o "verificar pagamento"/"já fiz o
+    // pagamento" nunca destravar uma cobrança dessas unidades. Aqui pedimos
+    // apenas o que o fulfill precisa; a credencial do Asaas vem logo abaixo.
+    let ctx: {
+      id: string
+      slug: string
+      name: string
+      plataformaVendedorId: string | null
+      isPmbVitrine: boolean
+    } | null = null
 
     // Chave da conta Asaas a usar nas consultas: undefined = global PMB; para
     // revenda, descriptografa a chave da unidade. Sem chave conectada não há
     // como reconciliar — pede para aguardar (o webhook ainda pode chegar).
     let asaasApiKey: string | undefined
-    if (!isPmb) {
+
+    if (isPmb) {
+      ctx = {
+        id: "__pmb__",
+        slug: pmbPlataformaPolo(),
+        name: "Profissionaliza Mais Brasil",
+        plataformaVendedorId: pmbPlataformaVendedorId(),
+        isPmbVitrine: true,
+      }
+    } else {
       const merchant = await prisma.tenant.findUnique({
         where: { id: enrollment.tenantId! },
-        select: { asaasApiKey: true },
+        select: {
+          id: true,
+          slug: true,
+          name: true,
+          plataformaVendedorId: true,
+          asaasApiKey: true,
+        },
       })
-      if (!merchant?.asaasApiKey) return { status: "pending" }
+      if (!merchant) return { status: "unsupported" }
+      if (!merchant.asaasApiKey) return { status: "pending" }
       asaasApiKey = decryptTenantAsaasKey(merchant.asaasApiKey)
+      ctx = {
+        id: merchant.id,
+        slug: merchant.slug,
+        name: merchant.name,
+        plataformaVendedorId: merchant.plataformaVendedorId,
+        isPmbVitrine: false,
+      }
     }
 
     let asaasPaymentId = enrollment.asaasPaymentId

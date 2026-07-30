@@ -195,6 +195,11 @@ export const RATE_LIMITS = {
   cobrancaPayCard: { name: "cobranca-paycard", limit: 5, windowSec: 60 },
   certificateValidate: { name: "cert-validate", limit: 30, windowSec: 60 },
   alunoVerificarPagamento: { name: "aluno-verificar-pag", limit: 6, windowSec: 60 },
+  // "Verificar pagamento" da gestão (unidade e sistema mãe): cada clique é 1+
+  // consulta ao gateway da venda (MP ou Asaas da conta dona). Limite por
+  // OPERADOR, mais folgado que o do aluno porque o atendimento verifica várias
+  // cobranças em sequência ao destravar uma fila.
+  gestaoVerificarPagamento: { name: "gestao-verificar-pag", limit: 20, windowSec: 60 },
   // Reenvio dos dados de acesso à plataforma de aulas (por aluno logado): cada
   // chamada dispara 1 leitura na EA + 1 e-mail. Janela longa para não virar
   // ferramenta de flood na caixa do próprio aluno.

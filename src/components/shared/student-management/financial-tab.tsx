@@ -7,6 +7,7 @@ import { toast } from "sonner"
 import type { ManagementScope, StudentData } from "./types"
 import { apiBase } from "./types"
 import { CheckoutLink } from "@/components/shared/checkout-link"
+import { VerifyPaymentButton } from "@/components/shared/verify-payment-button"
 import { Button } from "@/components/ui/button"
 import {
   AlertDialog,
@@ -23,6 +24,14 @@ import {
  * src/lib/enrollment/cancel.ts — a API é quem manda, isto é só o gate visual.
  */
 const CANCELLABLE = new Set(["PENDING", "ACTIVE", "SUSPENDED"])
+
+/**
+ * Matrícula com cobrança em aberto — a verificação no gateway faz sentido.
+ * SUSPENDED entra porque a cobrança vencida paga depois continua liquidável;
+ * é justamente o estado em que um webhook perdido deixa a venda presa.
+ * Espelha o gate das rotas `verificar-pagamento` (a API é quem manda).
+ */
+const VERIFIABLE = new Set(["PENDING", "SUSPENDED"])
 
 function brl(value: number): string {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
@@ -281,18 +290,29 @@ export function FinancialTab({
                         )}
                       </td>
                       <td className="px-4 py-3">
-                        {CANCELLABLE.has(e.status) ? (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="border-rose-200 text-rose-600 hover:bg-rose-50"
-                            disabled={cancelling !== null}
-                            onClick={() =>
-                              setTarget({ id: e.id, courseName: displayName })
-                            }
-                          >
-                            {cancelling === e.id ? "Cancelando…" : "Cancelar"}
-                          </Button>
+                        {VERIFIABLE.has(e.status) || CANCELLABLE.has(e.status) ? (
+                          <div className="flex flex-wrap items-center gap-2">
+                            {/* Cobrança em aberto: dá para perguntar ao gateway
+                                se já foi paga, sem depender do webhook. */}
+                            {VERIFIABLE.has(e.status) && (
+                              <VerifyPaymentButton
+                                url={`${apiBase(scope, student.id)}/enrollments/${e.id}/verificar-pagamento`}
+                              />
+                            )}
+                            {CANCELLABLE.has(e.status) && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="border-rose-200 text-rose-600 hover:bg-rose-50"
+                                disabled={cancelling !== null}
+                                onClick={() =>
+                                  setTarget({ id: e.id, courseName: displayName })
+                                }
+                              >
+                                {cancelling === e.id ? "Cancelando…" : "Cancelar"}
+                              </Button>
+                            )}
+                          </div>
                         ) : (
                           <span className="text-xs text-gray-400">—</span>
                         )}

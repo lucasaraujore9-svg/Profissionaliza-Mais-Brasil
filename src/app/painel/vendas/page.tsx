@@ -5,8 +5,12 @@ import { PageHeader } from "@/components/painel/page-header"
 import { EmptyState } from "@/components/shared/empty-state"
 import { SaleStatusBadge } from "@/components/painel/sale-status"
 import { CheckoutLink } from "@/components/shared/checkout-link"
+import { VerifyPaymentButton } from "@/components/shared/verify-payment-button"
 import { buildEnrollmentCheckoutUrl } from "@/lib/students/checkout-link"
 import { requirePainelPage } from "@/lib/auth/painel-guard"
+
+/** Cobrança em aberto: cabe perguntar ao gateway se já foi paga. */
+const VERIFIABLE = new Set(["PENDING", "SUSPENDED"])
 
 export const dynamic = "force-dynamic"
 
@@ -16,6 +20,10 @@ function fmtBRL(n: number): string {
 
 export default async function PainelVendasPage() {
   const ctx = await requirePainelPage("vendas.view")
+  // O endpoint de verificação exige `alunos.manage` (mesma matriz da rota irmã
+  // de cancelamento). Quem só concilia (Financeiro) enxerga a venda pendente,
+  // mas não vê um botão que responderia 403.
+  const canVerifyPayment = ctx.can("alunos.manage")
 
   const [tenant, enrollments] = await Promise.all([
     prisma.tenant.findUnique({
@@ -88,6 +96,7 @@ export default async function PainelVendasPage() {
                   <th data-tour="vendas:link" className="px-4 py-2.5">Link de pagamento</th>
                   <th className="px-4 py-2.5">Vendido por</th>
                   <th className="px-4 py-2.5">Data</th>
+                  {canVerifyPayment && <th className="px-4 py-2.5">Ações</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -149,6 +158,18 @@ export default async function PainelVendasPage() {
                         minute: "2-digit",
                       })}
                     </td>
+                    {canVerifyPayment && (
+                      <td className="px-4 py-3">
+                        {VERIFIABLE.has(e.status) ? (
+                          <VerifyPaymentButton
+                            url={`/api/painel/alunos/${e.studentId}/enrollments/${e.id}/verificar-pagamento`}
+                            label="Verificar"
+                          />
+                        ) : (
+                          <span className="text-xs text-gray-400">—</span>
+                        )}
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
