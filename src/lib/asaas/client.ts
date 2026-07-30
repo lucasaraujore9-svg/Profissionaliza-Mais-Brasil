@@ -14,6 +14,9 @@ import type {
   AsaasCreateInstallmentBoletoParams,
   AsaasInstallment,
   AsaasErrorResponse,
+  AsaasWebhookConfig,
+  AsaasWebhookConfigInput,
+  AsaasWebhookConfigList,
 } from "./types"
 import { contextLogger } from "@/lib/logger"
 import { decrypt } from "@/lib/crypto"
@@ -460,4 +463,59 @@ export async function listPayments(
  */
 export function decryptTenantAsaasKey(encrypted: string): string {
   return decrypt(encrypted)
+}
+
+// ── Webhooks da CONTA ──
+// O Asaas notifica por CONTA, não por cobrança: `notificationUrl` no corpo do
+// POST /payments é ignorado (não existe no DTO). Sem um registro aqui, a conta
+// da unidade nunca chama o nosso /api/webhooks/asaas — e toda venda por PIX ou
+// boleto fica PENDING para sempre. Estas funções existem para que o registro
+// seja feito por nós, e não dependa de a unidade acertar a configuração à mão
+// no painel do Asaas.
+
+export async function listWebhooks(
+  apiKey: string,
+): Promise<AsaasWebhookConfigList> {
+  return request<AsaasWebhookConfigList>(
+    "GET",
+    "/webhooks?limit=100",
+    undefined,
+    apiKey,
+  )
+}
+
+export async function createWebhook(
+  params: AsaasWebhookConfigInput,
+  apiKey: string,
+): Promise<AsaasWebhookConfig> {
+  return request<AsaasWebhookConfig>("POST", "/webhooks", params, apiKey)
+}
+
+export async function updateWebhook(
+  webhookId: string,
+  params: AsaasWebhookConfigInput,
+  apiKey: string,
+): Promise<AsaasWebhookConfig> {
+  return request<AsaasWebhookConfig>(
+    "PUT",
+    `/webhooks/${webhookId}`,
+    params,
+    apiKey,
+  )
+}
+
+/**
+ * Tira o webhook da penalização (backoff) que o Asaas aplica após uma sequência
+ * de entregas falhas. Sem isso, mesmo com a URL correta a fila continua parada.
+ */
+export async function removeWebhookBackoff(
+  webhookId: string,
+  apiKey: string,
+): Promise<void> {
+  await request<unknown>(
+    "POST",
+    `/webhooks/${webhookId}/removeBackoff`,
+    undefined,
+    apiKey,
+  )
 }

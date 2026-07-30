@@ -278,6 +278,50 @@ export interface AsaasWebhookPayload {
   subscription?: AsaasSubscription
 }
 
+// ── Configuração de webhook da CONTA (POST/GET/PUT /v3/webhooks) ──
+// O webhook do Asaas é por CONTA, não por cobrança: `notificationUrl` não existe
+// no DTO de criação de cobrança/assinatura e é ignorado silenciosamente. É por
+// isso que a unidade só recebe callbacks se existir um registro aqui.
+export interface AsaasWebhookConfigInput {
+  name: string
+  url: string
+  /** E-mail que o Asaas avisa quando o webhook começa a falhar. */
+  email: string
+  enabled: boolean
+  /** Fila de sincronização interrompida (o Asaas liga isto sozinho após falhas). */
+  interrupted: boolean
+  apiVersion: 3
+  /** Token enviado no header `asaas-access-token`. O Asaas exige 32+ caracteres. */
+  authToken: string
+  sendType: "SEQUENTIALLY" | "NON_SEQUENTIALLY"
+  events: AsaasWebhookEvent[]
+}
+
+export interface AsaasWebhookConfig {
+  id: string
+  name: string
+  url: string
+  email: string
+  enabled: boolean
+  interrupted: boolean
+  apiVersion: number
+  /** O Asaas nunca devolve o token — só informa se existe algum. */
+  hasAuthToken: boolean
+  sendType: string
+  /** Quantidade de entregas penalizadas — sinal de fila em backoff. */
+  penalizedRequestsCount: number
+  events: AsaasWebhookEvent[]
+}
+
+export interface AsaasWebhookConfigList {
+  object: string
+  hasMore: boolean
+  totalCount: number
+  limit: number
+  offset: number
+  data: AsaasWebhookConfig[]
+}
+
 // ── API Error ──
 export interface AsaasErrorResponse {
   errors: Array<{

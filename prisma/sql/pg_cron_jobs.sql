@@ -107,3 +107,15 @@ select cron.schedule('pmb-sweep-boleto-installments', '30 7 * * *',
 -- emite o cert de quem apontou e ainda nao tem. Idempotente. 09:00 UTC.
 select cron.schedule('pmb-ensure-domain-certs', '0 9 * * *',
   $$ select app_internal.run_cron('/api/cron/ensure-domain-certs') $$);
+
+-- ── Webhook do Asaas nas contas das UNIDADES ────────────────────────────────
+-- No Asaas o webhook e da CONTA (notificationUrl na cobranca e ignorado). Enquanto
+-- o cadastro dependeu da unidade, nenhuma conta de revenda notificou uma unica vez:
+-- aluno pagava por PIX/boleto e a matricula ficava PENDING para sempre. Hoje o
+-- registro e automatico na conexao; este cron cobre o resto do ciclo de vida —
+-- unidade conectada antes disso existir, webhook apagado/desativado a mao, e fila
+-- que o Asaas interrompeu ou penalizou apos falhas (nao volta sozinha).
+-- So age quando o estado NAO esta saudavel (o ensure rotaciona o token).
+-- Idempotente. 09:30 UTC, logo apos os certs.
+select cron.schedule('pmb-ensure-asaas-webhooks', '30 9 * * *',
+  $$ select app_internal.run_cron('/api/cron/ensure-asaas-webhooks') $$);

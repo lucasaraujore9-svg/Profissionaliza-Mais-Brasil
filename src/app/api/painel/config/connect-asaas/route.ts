@@ -5,12 +5,16 @@ import { prisma } from "@/lib/prisma"
 import { encrypt } from "@/lib/crypto"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { logAudit } from "@/lib/audit"
+import { ensureTenantAsaasWebhook } from "@/lib/asaas/webhook-provision"
 
 // Conexao da conta Asaas PROPRIA da unidade (gateway de vendas). Espelha
-// /api/painel/config/connect-mp: a unidade cola a API key da conta Asaas dela
-// + o token de auth do webhook que ela configura no painel Asaas. Ambos sao
-// criptografados (AES-256). NUNCA confundir com a integracao Asaas da
-// mensalidade da unidade para a PMB (asaasCustomerId/asaasSubscriptionId).
+// /api/painel/config/connect-mp: a unidade cola a API key da conta Asaas dela.
+// A partir do registro automatico, o token do webhook e GERADO por nos e o
+// webhook e criado na conta dela via API — o campo manual continua aceito so
+// como saida de emergencia (chave sem permissao de configurar webhook, ou
+// unidade que prefere cadastrar a mao no painel do Asaas). Tudo criptografado
+// (AES-256). NUNCA confundir com a integracao Asaas da mensalidade da unidade
+// para a PMB (asaasCustomerId/asaasSubscriptionId).
 const bodySchema = z
   .object({
     // Opcional: permite atualizar so o token do webhook depois, sem reenviar a
@@ -47,7 +51,12 @@ export const POST = withRequestContext(
     // abaixo so serve para o update so-de-token (exige API key ja conectada).
     const tenant = await prisma.tenant.findUnique({
       where: { id: tenantId },
-      select: { asaasApiKey: true },
+      select: {
+        asaasApiKey: true,
+        slug: true,
+        supportEmail: true,
+        owner: { select: { email: true } },
+      },
     })
     if (!tenant) {
       return NextResponse.json({ error: "Recurso não encontrado" }, { status: 404 })
@@ -105,6 +114,25 @@ export const POST = withRequestContext(
       },
     })
 
+    // ── Registro automático do webhook na conta Asaas da unidade ─────────────
+    // É o passo que faltava para a venda confirmar sozinha: no Asaas o webhook é
+    // da CONTA (o `notificationUrl` da cobrança é ignorado), e enquanto ele
+    // dependeu de configuração manual nenhuma conta de revenda chegou a notificar
+    // — aluno pagava e a matrícula ficava PENDING.
+    //
+    // Pulamos quando a unidade mandou um token manual: nesse caso ela declarou
+    // que cadastrou o webhook à mão, e sobrescrever o token dela quebraria o que
+    // já funciona.
+    let webhook: Awaited<ReturnType<typeof ensureTenantAsaasWebhook>> | null = null
+    if (!encryptedToken) {
+      webhook = await ensureTenantAsaasWebhook({
+        id: tenantId,
+        slug: tenant.slug,
+        asaasApiKey: encryptedKey ?? tenant.asaasApiKey,
+        notifyEmail: tenant.owner?.email ?? tenant.supportEmail,
+      })
+    }
+
     // SAAS-001: trilha de auditoria da conexão do gateway Asaas. NUNCA registrar
     // API key/token no payload — só quais campos foram tocados.
     await logAudit({
@@ -117,14 +145,23 @@ export const POST = withRequestContext(
       payloadAfter: {
         gateway: "ASAAS",
         apiKeyUpdated: Boolean(encryptedKey),
-        webhookConfigured: encryptedToken !== null,
+        webhookConfigured: encryptedToken !== null || webhook?.ok === true,
+        webhookAutoRegistered: webhook?.ok === true,
+        ...(webhook && !webhook.ok ? { webhookError: webhook.code } : {}),
       },
     })
 
     return NextResponse.json({
       data: {
         connected: encryptedKey !== null || Boolean(tenant.asaasApiKey),
-        webhookConfigured: encryptedToken !== null,
+        // Token presente: veio do cadastro manual OU foi gerado pelo registro
+        // automático. É ele que o nosso receiver valida.
+        webhookConfigured: encryptedToken !== null || webhook?.ok === true,
+        webhook: webhook
+          ? webhook.ok
+            ? { ok: true, created: webhook.created, url: webhook.url }
+            : { ok: false, code: webhook.code, message: webhook.message }
+          : null,
       },
     })
   },

@@ -200,6 +200,18 @@ export const RATE_LIMITS = {
   // OPERADOR, mais folgado que o do aluno porque o atendimento verifica várias
   // cobranças em sequência ao destravar uma fila.
   gestaoVerificarPagamento: { name: "gestao-verificar-pag", limit: 20, windowSec: 60 },
+  // Estado do webhook na conta Asaas da unidade: 1 chamada externa por request,
+  // disparada ao abrir a aba de gateway. failOpen porque é diagnóstico — se o
+  // Upstash cair, é melhor mostrar o estado real do que esconder a tela.
+  asaasWebhookStatus: {
+    name: "asaas-wh-status",
+    limit: 20,
+    windowSec: 60,
+    failOpen: true,
+  },
+  // Registro/reparo do webhook: escreve na conta do gateway (cria o webhook e
+  // ROTACIONA o token). Mais apertado — repetir em rajada só rotaciona token à toa.
+  asaasWebhookEnsure: { name: "asaas-wh-ensure", limit: 5, windowSec: 60 },
   // Reenvio dos dados de acesso à plataforma de aulas (por aluno logado): cada
   // chamada dispara 1 leitura na EA + 1 e-mail. Janela longa para não virar
   // ferramenta de flood na caixa do próprio aluno.
