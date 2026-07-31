@@ -6,6 +6,7 @@ import {
   AtendimentoInbox,
   type AtendimentoMessage,
 } from "@/components/shared/atendimento-inbox"
+import { WriteGate } from "@/components/shared/permissions/permission-context"
 
 export const dynamic = "force-dynamic"
 
@@ -27,7 +28,7 @@ export default async function AdminAtendimentoPage({
 }: {
   searchParams: Promise<{ status?: string; kind?: string }>
 }) {
-  await requireAdminPage("atendimento.manage")
+  await requireAdminPage("atendimento.view")
 
   const sp = await searchParams
   const status: Status = sp.status === "RESOLVED" ? "RESOLVED" : "OPEN"
@@ -103,11 +104,16 @@ export default async function AdminAtendimentoPage({
         ))}
       </div>
 
-      <AtendimentoInbox
-        messages={messages}
-        apiBase="/api/admin/atendimento"
-        alunoBase="/admin/alunos"
-      />
+      <WriteGate
+        perm="atendimento.manage"
+        notice="Você está vendo a caixa em modo somente leitura. Para responder e resolver chamados, peça a permissão “Responder a caixa de atendimento”."
+      >
+        <AtendimentoInbox
+          messages={messages}
+          apiBase="/api/admin/atendimento"
+          alunoBase="/admin/alunos"
+        />
+      </WriteGate>
     </div>
   )
 }

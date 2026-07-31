@@ -35,7 +35,7 @@ async function loadTenant(tenantId: string) {
 export const GET = withRequestContext(
   { action: "painel.config.asaas_webhook.status", route: "/api/painel/config/asaas-webhook" },
   async () => {
-    const guard = await requirePainel("gateway.manage")
+    const guard = await requirePainel("gateway.view")
     if (!guard.ok) return guard.response
 
     const tenant = await loadTenant(guard.ctx.tenantId)

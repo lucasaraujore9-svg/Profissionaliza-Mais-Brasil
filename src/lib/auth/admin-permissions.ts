@@ -27,6 +27,13 @@ export { PMB_TEAM_ROLES }
  *   `.view`    — leitura da área
  *   `.viewAll` — ignora o escopo comercial do papel e vê a rede inteira
  *   demais     — ação de escrita
+ *
+ * TODA área com tela própria tem o PAR ver/editar. Antes, várias delas
+ * (vitrine, automação, configurações, integrações, equipe, pacotes,
+ * atendimento, comunicação) só existiam na forma `.manage`: para CONSULTAR a
+ * tela era preciso conceder o poder de ALTERÁ-LA. O par torna possível o acesso
+ * somente-leitura, e o mapa WRITE_IMPLIES_READ garante que conceder a escrita já
+ * concede a leitura — ninguém precisa marcar as duas.
  */
 export const ADMIN_PERMISSIONS = [
   // ---- Geral -------------------------------------------------------------
@@ -91,6 +98,7 @@ export const ADMIN_PERMISSIONS = [
   // ---- Leads B2C e atendimento -------------------------------------------
   "leads.view",
   "leads.manage",
+  "atendimento.view",
   "atendimento.manage",
 
   // ---- Vendas diretas da vitrine PMB -------------------------------------
@@ -132,6 +140,7 @@ export const ADMIN_PERMISSIONS = [
   "catalogo.view",
   "catalogo.manage",
   "catalogo.sync",
+  "pacotes.view",
   "pacotes.manage",
 
   // ---- Certificados ------------------------------------------------------
@@ -141,7 +150,9 @@ export const ADMIN_PERMISSIONS = [
 
   // ---- Marca e conteúdo --------------------------------------------------
   // Vitrine PMB, banner, seções da home, EJA e unidade técnica globais.
+  "vitrine.view",
   "vitrine.manage",
+  "comunicacao.view",
   "comunicacao.manage",
   "treinamentos.manage",
   "artes.view",
@@ -162,11 +173,17 @@ export const ADMIN_PERMISSIONS = [
   "relatorios.export",
 
   // ---- Sistema -----------------------------------------------------------
+  "automacao.view",
   "automacao.manage",
+  "configuracoes.view",
   "configuracoes.manage",
   // Tokens e chaves: Asaas/Mercado Pago da PMB, API da plataforma parceira,
   // chave de webhook. Separada de `configuracoes.manage` por ser credencial.
+  // A leitura mostra apenas o ESTADO da integração (conectada, mascarada) — o
+  // segredo em si nunca sai do servidor.
+  "integracoes.view",
   "integracoes.manage",
+  "equipe.view",
   "equipe.manage",
 ] as const
 
@@ -218,6 +235,11 @@ export const SUPER_EXCLUSIVE_BY_PRESET: Partial<
 /** Concedíveis por override, mas com aviso destacado na UI de Equipe. */
 export const SENSITIVE = [
   "integracoes.manage",
+  // Somente leitura, mas revela quais gateways/APIs estão conectados e com que
+  // conta. O segredo em si nunca é devolvido ao client.
+  "integracoes.view",
+  // Expõe nome, e-mail e papel de toda a equipe interna.
+  "equipe.view",
   "vendas.descontoIlimitado",
   "vendas.bolsa",
   "alunos.viewAll",
@@ -237,6 +259,105 @@ export const SENSITIVE = [
 ] as const
 
 const SUPER_EXCLUSIVE_SET = new Set<string>(SUPER_EXCLUSIVE)
+
+/**
+ * Escrita → leitura correspondente. Quem pode alterar uma área sempre pode
+ * abri-la; sem isto, separar o par ver/editar exigiria marcar dois checkboxes
+ * por área e um preset esquecido deixaria alguém com poder de gravar numa tela
+ * que não abre.
+ *
+ * `*.viewAll` também aponta para o `.view` da área: "ver tudo" sem "ver" é
+ * incoerente e, pior, `unidadesWhere()` responde `null` (nega) quando falta
+ * `unidades.view` — o par explícito evita esse estado morto.
+ *
+ * A revogação usa este mapa ao contrário e é FAIL-CLOSED: revogar a leitura
+ * derruba junto toda escrita que dependia dela (ver `resolveAdminPermissions`).
+ * Sem isso, tirar `catalogo.view` de alguém deixaria a pessoa sem a tela e ainda
+ * com o PATCH liberado.
+ */
+export const WRITE_IMPLIES_READ: Readonly<
+  Partial<Record<AdminPermission, AdminPermission>>
+> = {
+  "unidades.viewAll": "unidades.view",
+  "unidades.create": "unidades.view",
+  "unidades.manage": "unidades.view",
+  "unidades.billing": "unidades.view",
+  "unidades.credenciais": "unidades.view",
+  "unidades.impersonate": "unidades.view",
+  "unidades.anonimizar": "unidades.view",
+  "unidades.comissoes": "unidades.view",
+  "unidades.governanca": "unidades.view",
+  "leadsRevenda.viewAll": "leadsRevenda.view",
+  "leadsRevenda.manage": "leadsRevenda.view",
+  "leadsRevenda.config": "leadsRevenda.view",
+  "alunosRede.manage": "alunosRede.view",
+  "alunosRede.acesso": "alunosRede.view",
+  "alunos.viewAll": "alunos.view",
+  "alunos.manage": "alunos.view",
+  "alunos.impersonate": "alunos.view",
+  "leads.manage": "leads.view",
+  "atendimento.manage": "atendimento.view",
+  "vendas.viewAll": "vendas.view",
+  "vendas.create": "vendas.view",
+  "vendas.descontoIlimitado": "vendas.view",
+  "vendas.bolsa": "vendas.view",
+  "cupons.manage": "cupons.view",
+  "financeiro.viewAll": "financeiro.view",
+  "financeiro.manage": "financeiro.view",
+  "indicacoes.saques": "indicacoes.view",
+  "indicacoes.clawback": "indicacoes.view",
+  "indicacoes.config": "indicacoes.view",
+  "indicacoes.percentUnidade": "indicacoes.view",
+  "catalogo.manage": "catalogo.view",
+  "catalogo.sync": "catalogo.view",
+  "pacotes.manage": "pacotes.view",
+  "certificados.manage": "certificados.view",
+  "certificados.template": "certificados.view",
+  "vitrine.manage": "vitrine.view",
+  "comunicacao.manage": "comunicacao.view",
+  "treinamentos.manage": "treinamentos.view",
+  "artes.manage": "artes.view",
+  "relatorios.visaoGeral": "relatorios.view",
+  "relatorios.receitaVendas": "relatorios.view",
+  "relatorios.alunos": "relatorios.view",
+  "relatorios.revendedores": "relatorios.view",
+  "relatorios.financeiro": "relatorios.view",
+  "relatorios.indicacoes": "relatorios.view",
+  "relatorios.cursos": "relatorios.view",
+  "relatorios.leads": "relatorios.view",
+  "relatorios.export": "relatorios.view",
+  "automacao.manage": "automacao.view",
+  "configuracoes.manage": "configuracoes.view",
+  "integracoes.manage": "integracoes.view",
+  "equipe.manage": "equipe.view",
+}
+
+const IMPLICATION_PAIRS = Object.entries(WRITE_IMPLIES_READ) as [
+  AdminPermission,
+  AdminPermission,
+][]
+
+/**
+ * Fecha o conjunto sobre WRITE_IMPLIES_READ.
+ *
+ * `revoked` entra aqui, e não só na subtração, porque a ordem importa: expandir
+ * as implicações DEPOIS de subtrair devolveria a leitura que acabou de ser
+ * tirada. Com a leitura revogada, quem manda é o fail-closed — a escrita cai
+ * junto.
+ */
+function applyImplications(
+  perms: Set<AdminPermission>,
+  revoked: ReadonlySet<AdminPermission>,
+): void {
+  for (const [write, read] of IMPLICATION_PAIRS) {
+    if (!perms.has(write)) continue
+    if (revoked.has(read)) {
+      perms.delete(write)
+      continue
+    }
+    perms.add(read)
+  }
+}
 
 /**
  * Presets por papel — a matriz que os guards antigos aplicavam, agora explícita.
@@ -449,6 +570,8 @@ export function filterAdminPermissions(
  *   auto-trancar para fora, e isso evita um estado sem ninguém capaz de gerir a
  *   equipe.
  * - Entradas fora do catálogo são descartadas silenciosamente.
+ * - Por fim, toda escrita concede a leitura da sua área (WRITE_IMPLIES_READ) e
+ *   revogar a leitura derruba a escrita junto.
  */
 export function resolveAdminPermissions(
   role: PmbTeamRole,
@@ -463,12 +586,15 @@ export function resolveAdminPermissions(
     result.add(perm)
   }
 
-  if (role === "SUPER_ADMIN") return result
-
-  for (const perm of revoked) {
-    if (!isAdminPermission(perm)) continue
-    result.delete(perm)
+  if (role === "SUPER_ADMIN") {
+    applyImplications(result, new Set())
+    return result
   }
+
+  const revokedSet = new Set<AdminPermission>(filterAdminPermissions(revoked))
+  for (const perm of revokedSet) result.delete(perm)
+
+  applyImplications(result, revokedSet)
 
   return result
 }
@@ -531,6 +657,7 @@ export const ADMIN_PERMISSION_GROUPS: {
     permissions: [
       { perm: "leads.view", label: "Ver os leads da vitrine PMB" },
       { perm: "leads.manage", label: "Trabalhar os leads da vitrine PMB" },
+      { perm: "atendimento.view", label: "Ver a caixa de atendimento" },
       { perm: "atendimento.manage", label: "Responder a caixa de atendimento" },
       { perm: "vendas.view", label: "Ver as vendas diretas" },
       { perm: "vendas.viewAll", label: "Ver as vendas de toda a equipe" },
@@ -560,6 +687,7 @@ export const ADMIN_PERMISSION_GROUPS: {
       { perm: "catalogo.view", label: "Ver o catálogo" },
       { perm: "catalogo.manage", label: "Editar cursos, preços e categorias" },
       { perm: "catalogo.sync", label: "Sincronizar com as fornecedoras" },
+      { perm: "pacotes.view", label: "Ver os pacotes" },
       { perm: "pacotes.manage", label: "Gerenciar pacotes" },
       { perm: "certificados.view", label: "Ver certificados" },
       { perm: "certificados.manage", label: "Emitir e revogar certificados" },
@@ -569,7 +697,9 @@ export const ADMIN_PERMISSION_GROUPS: {
   {
     label: "Marca e conteúdo",
     permissions: [
+      { perm: "vitrine.view", label: "Ver a vitrine, o banner e a home" },
       { perm: "vitrine.manage", label: "Editar a vitrine, o banner e a home" },
+      { perm: "comunicacao.view", label: "Ver os comunicados" },
       { perm: "comunicacao.manage", label: "Enviar comunicados" },
       { perm: "treinamentos.manage", label: "Gerenciar os treinamentos" },
       { perm: "artes.view", label: "Ver o banco de artes" },
@@ -594,9 +724,13 @@ export const ADMIN_PERMISSION_GROUPS: {
   {
     label: "Sistema",
     permissions: [
+      { perm: "automacao.view", label: "Ver a automação" },
       { perm: "automacao.manage", label: "Configurar a automação" },
+      { perm: "configuracoes.view", label: "Ver as configurações do sistema" },
       { perm: "configuracoes.manage", label: "Editar as configurações do sistema" },
+      { perm: "integracoes.view", label: "Ver o estado das integrações" },
       { perm: "integracoes.manage", label: "Gerenciar tokens e integrações" },
+      { perm: "equipe.view", label: "Ver a equipe interna" },
       { perm: "equipe.manage", label: "Gerenciar a equipe interna" },
     ],
   },

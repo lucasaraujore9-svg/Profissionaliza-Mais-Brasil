@@ -56,7 +56,7 @@ async function readTenant(tenantId: string): Promise<VitrineDto | null> {
 export const GET = withRequestContext(
   { action: "painel.vitrine.get", route: "/api/painel/vitrine" },
   async () => {
-    const guard = await requirePainel("vitrine.manage")
+    const guard = await requirePainel("vitrine.view")
     if (!guard.ok) return guard.response
     const { ctx } = guard
     const data = await readTenant(ctx.tenantId)

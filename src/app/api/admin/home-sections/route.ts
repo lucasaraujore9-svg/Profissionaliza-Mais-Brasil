@@ -12,7 +12,7 @@ const SCOPE = { tenantId: null }
 export const GET = withRequestContext(
   { action: "admin.home_sections.list", route: "/api/admin/home-sections" },
   async () => {
-    const guard = await requireAdmin("vitrine.manage")
+    const guard = await requireAdmin("vitrine.view")
     if (!guard.ok) return guard.response
     // Backfill: garante as seções singleton para ambientes/escopos anteriores a elas.
     await ensureTecnicaSection(null)

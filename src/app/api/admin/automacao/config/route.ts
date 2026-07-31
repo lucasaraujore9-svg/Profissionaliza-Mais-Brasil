@@ -7,7 +7,7 @@ import { requireAdmin } from "@/lib/auth/admin-guard"
 export const GET = withRequestContext(
   { action: "admin.automacao.config.get", route: "/api/admin/automacao/config" },
   async () => {
-    const guard = await requireAdmin("automacao.manage")
+    const guard = await requireAdmin("automacao.view")
     if (!guard.ok) return guard.response
     const settings = await prisma.systemSettings.upsert({
       where: { id: "default" },

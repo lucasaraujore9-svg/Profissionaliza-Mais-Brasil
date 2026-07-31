@@ -25,7 +25,7 @@ const SELECT = {
 export const GET = withRequestContext(
   { action: "admin.system_settings.certificates.get", route: "/api/admin/system-settings/certificates" },
   async () => {
-  const guard = await requireAdmin("certificados.template")
+  const guard = await requireAdmin("certificados.view")
   if (!guard.ok) return guard.response
 
   const row = await prisma.systemSettings.upsert({

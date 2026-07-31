@@ -6,7 +6,7 @@ import { listRevendaLeadAssignees } from "@/lib/automation/assign"
 
 // GET — estado atual do rodízio + vendedores de revenda elegíveis.
 export async function GET() {
-  const guard = await requireAdmin("leadsRevenda.config")
+  const guard = await requireAdmin("leadsRevenda.view")
   if (!guard.ok) return guard.response
 
   const settings = await prisma.systemSettings.findUnique({

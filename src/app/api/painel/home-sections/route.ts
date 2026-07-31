@@ -6,7 +6,7 @@ import { ensureTenantHomeSections } from "@/lib/home/sections"
 export const GET = withRequestContext(
   { action: "painel.home_sections.list", route: "/api/painel/home-sections" },
   async () => {
-    const guard = await requirePainel("vitrine.manage")
+    const guard = await requirePainel("vitrine.view")
     if (!guard.ok) return guard.response
     const { ctx } = guard
     // Bootstrap: se o tenant ainda nao tem secoes proprias, clona as do PMB.

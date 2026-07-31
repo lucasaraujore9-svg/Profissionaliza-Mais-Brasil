@@ -5,11 +5,12 @@ import { requireAdminPage } from "@/lib/auth/admin-guard"
 import { PageHeader } from "@/components/painel/page-header"
 import { AdminTecnicaSettingsForm } from "@/components/admin/admin-tecnica-settings-form"
 import { parseTecnicaCourses } from "@/lib/catalog/tecnica"
+import { WriteGate } from "@/components/shared/permissions/permission-context"
 
 export const dynamic = "force-dynamic"
 
 export default async function AdminTecnicaSettingsPage() {
-  await requireAdminPage("vitrine.manage")
+  await requireAdminPage("vitrine.view")
 
   const settings = await prisma.systemSettings.upsert({
     where: { id: "default" },
@@ -29,33 +30,38 @@ export default async function AdminTecnicaSettingsPage() {
   )
 
   return (
-    <div className="space-y-6">
-      <Link
-        href="/admin/configuracoes"
-        className="inline-flex items-center gap-2 text-xs font-semibold text-gray-600 hover:text-[var(--color-pmb-green-900)]"
-      >
-        <ArrowLeft className="h-3.5 w-3.5" />
-        Voltar para configurações
-      </Link>
+    <WriteGate
+      perm="vitrine.manage"
+      notice="Você está vendo esta configuração em modo somente leitura. Para editá-la, peça a permissão “Editar a vitrine, o banner e a home”."
+    >
+      <div className="space-y-6">
+        <Link
+          href="/admin/configuracoes"
+          className="inline-flex items-center gap-2 text-xs font-semibold text-gray-600 hover:text-[var(--color-pmb-green-900)]"
+        >
+          <ArrowLeft className="h-3.5 w-3.5" />
+          Voltar para configurações
+        </Link>
 
-      <PageHeader
-        title="Unidade Técnica — site PMB"
-        description="Habilita a categoria, item de menu e seção “Cursos Técnicos” no site institucional profissionalizamaisbrasil.com.br. Para vitrines de revendedor, configure individualmente em cada revendedor."
-      />
+        <PageHeader
+          title="Unidade Técnica — site PMB"
+          description="Habilita a categoria, item de menu e seção “Cursos Técnicos” no site institucional profissionalizamaisbrasil.com.br. Para vitrines de revendedor, configure individualmente em cada revendedor."
+        />
 
-      <AdminTecnicaSettingsForm
-        initial={{
-          enabled: settings.tecnicaEnabled,
-          url: settings.tecnicaUrl,
-          label: settings.tecnicaLabel,
-          courses: coursesNormalized.map((c) => ({
-            name: c.name,
-            // Esconde a URL no editor quando ela coincide com a base — assim
-            // o admin nao precisa repetir manualmente a URL em todo curso.
-            url: c.url === settings.tecnicaUrl ? "" : c.url,
-          })),
-        }}
-      />
-    </div>
+        <AdminTecnicaSettingsForm
+          initial={{
+            enabled: settings.tecnicaEnabled,
+            url: settings.tecnicaUrl,
+            label: settings.tecnicaLabel,
+            courses: coursesNormalized.map((c) => ({
+              name: c.name,
+              // Esconde a URL no editor quando ela coincide com a base — assim
+              // o admin nao precisa repetir manualmente a URL em todo curso.
+              url: c.url === settings.tecnicaUrl ? "" : c.url,
+            })),
+          }}
+        />
+      </div>
+    </WriteGate>
   )
 }

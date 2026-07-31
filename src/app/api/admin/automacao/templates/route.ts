@@ -12,7 +12,7 @@ export const GET = withRequestContext(
     route: "/api/admin/automacao/templates",
   },
   async () => {
-    const guard = await requireAdmin("automacao.manage")
+    const guard = await requireAdmin("automacao.view")
     if (!guard.ok) return guard.response
     let templates = await prisma.automationMessageTemplate.findMany({
       where: { tenantId: null },

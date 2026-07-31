@@ -2,6 +2,7 @@ import { notFound } from "next/navigation"
 import { prisma } from "@/lib/prisma"
 import { requireAdminPage } from "@/lib/auth/admin-guard"
 import { EquipeDetailClient } from "@/components/admin/equipe-detail-client"
+import { WriteGate } from "@/components/shared/permissions/permission-context"
 import { isPmbTeamRole } from "@/lib/auth/roles"
 import { filterAdminPermissions } from "@/lib/auth/admin-permissions"
 
@@ -12,7 +13,7 @@ export default async function EquipeDetailPage({
 }: {
   params: Promise<{ id: string }>
 }) {
-  const session = await requireAdminPage("equipe.manage")
+  const session = await requireAdminPage("equipe.view")
 
   const { id } = await params
   const user = await prisma.user.findUnique({
@@ -45,6 +46,10 @@ export default async function EquipeDetailPage({
   })
 
   return (
+    <WriteGate
+      perm="equipe.manage"
+      notice="Você está vendo esta pessoa em modo somente leitura. Alterar papel, permissões e status é exclusivo do super admin."
+    >
     <EquipeDetailClient
       member={{
         id: user.id,
@@ -66,5 +71,6 @@ export default async function EquipeDetailPage({
       isSelf={user.id === session.userId}
       salesManagers={salesManagers}
     />
+    </WriteGate>
   )
 }

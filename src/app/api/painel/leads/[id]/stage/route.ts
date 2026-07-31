@@ -13,7 +13,7 @@ const bodySchema = z.object({
 export const PATCH = withRequestContextParams<{ id: string }>(
   { action: "painel.leads.stage", route: "/api/painel/leads/[id]/stage" },
   async (request: Request, { params }) => {
-    const guard = await requirePainel("leads.view")
+    const guard = await requirePainel("leads.manage")
     if (!guard.ok) return guard.response
     const { ctx } = guard
 

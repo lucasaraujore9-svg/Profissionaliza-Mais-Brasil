@@ -4,9 +4,10 @@ import { prisma } from "@/lib/prisma"
 import { PageHeader } from "@/components/painel/page-header"
 import { MessageTemplateEditor } from "@/components/painel/message-template-editor"
 import { requirePainelPage } from "@/lib/auth/painel-guard"
+import { WriteGate } from "@/components/shared/permissions/permission-context"
 
 export default async function PainelAutomacaoMensagensPage() {
-  await requirePainelPage("automacao.manage")
+  await requirePainelPage("automacao.view")
   const session = await auth()
   if (
     !session?.user ||
@@ -26,12 +27,17 @@ export default async function PainelAutomacaoMensagensPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Mensagens automáticas"
-        description="Edite os textos enviados automaticamente em cada etapa do funil."
-      />
-      <MessageTemplateEditor />
-    </div>
+    <WriteGate
+      perm="automacao.manage"
+      notice="Você está vendo os templates em modo somente leitura. Para editá-los, peça a permissão “Configurar a automação”."
+    >
+      <div className="space-y-6">
+        <PageHeader
+          title="Mensagens automáticas"
+          description="Edite os textos enviados automaticamente em cada etapa do funil."
+        />
+        <MessageTemplateEditor />
+      </div>
+    </WriteGate>
   )
 }

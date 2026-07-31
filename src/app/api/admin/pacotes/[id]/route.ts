@@ -9,7 +9,7 @@ import { requireAdmin } from "@/lib/auth/admin-guard"
 export const GET = withRequestContextParams<{ id: string }>(
   { action: "admin.pacotes.get", route: "/api/admin/pacotes/[id]" },
   async (_request: Request, ctx) => {
-    const guard = await requireAdmin("pacotes.manage")
+    const guard = await requireAdmin("pacotes.view")
     if (!guard.ok) return guard.response
 
     const { id } = await ctx.params

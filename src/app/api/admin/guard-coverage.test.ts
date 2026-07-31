@@ -171,3 +171,71 @@ describe("cobertura do guard nas páginas /admin", () => {
     expect(offenders).toEqual([])
   })
 })
+
+/**
+ * Invariante do par ver/editar.
+ *
+ * Um handler de ESCRITA guardado por permissão de LEITURA é o buraco que este
+ * modelo existe para fechar: quem recebeu "pode consultar" ganha "pode alterar"
+ * de brinde. Foi assim que, do lado da unidade, o Vendedor — cujo preset tem
+ * `leads.view` — conseguia EXCLUIR lead.
+ *
+ * A checagem é por HANDLER (o guard fica dentro de cada `export const POST`),
+ * não por arquivo: um DELETE novo num route.ts cujo GET já é gateado não pode
+ * herdar o gate do vizinho.
+ */
+describe("escrita não pode ser guardada por permissão de leitura (/api/admin)", () => {
+  const files = routeFiles(ROOT)
+  const WRITE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"])
+  const HANDLER_START =
+    /^export (?:const|async function) (GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\b/
+
+  /**
+   * Escritas que LEGITIMAMENTE exigem só a permissão de leitura da área.
+   * Todas são auto-serviço ou consulta expressa como POST — nunca alteram um
+   * dado de terceiro.
+   */
+  const EXCECOES: Record<string, string> = {
+    "cupons/validate/route.ts":
+      "Consulta expressa como POST (valida um código e devolve o desconto). " +
+      "Não grava nada; é POST só porque o código vai no corpo.",
+    "treinamentos/progress/route.ts":
+      "Auto-serviço: grava o PRÓPRIO progresso de quem assiste. Quem pode " +
+      "assistir (`treinamentos.view`) pode marcar a própria aula como vista.",
+  }
+
+  const READ = /\.(view|viewAll)$/
+
+  it("nenhum POST/PUT/PATCH/DELETE se contenta com .view", () => {
+    const offenders: string[] = []
+
+    for (const rel of files) {
+      if (rel in EXCECOES) continue
+      const lines = readFileSync(join(ROOT, rel), "utf-8").split("\n")
+
+      const starts: { method: string; line: number }[] = []
+      lines.forEach((l, i) => {
+        const m = l.match(HANDLER_START)
+        if (m) starts.push({ method: m[1], line: i })
+      })
+
+      starts.forEach((s, idx) => {
+        if (!WRITE_METHODS.has(s.method)) return
+        const end = idx + 1 < starts.length ? starts[idx + 1].line : lines.length
+        const body = lines.slice(s.line, end).join("\n")
+        const call = body.match(/\brequireAdmin(?:Any)?\(([^)]*)\)/)
+        if (!call) return // cobertura de guard é problema do teste acima
+
+        const perms = (call[1].match(/"([^"]+)"/g) ?? []).map((p) =>
+          p.replace(/"/g, ""),
+        )
+        if (perms.length === 0) return
+        if (perms.every((p) => READ.test(p))) {
+          offenders.push(`${rel} → ${s.method} guardado por ${perms.join(", ")}`)
+        }
+      })
+    }
+
+    expect(offenders).toEqual([])
+  })
+})

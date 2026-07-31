@@ -38,6 +38,11 @@ export default async function AdminSaquesPage() {
   const scope = await ctx.comissoesScope()
   if (!scope) redirect(adminHome(ctx))
 
+  // O download do comprovante é `financeiro.manage` na rota — mesma permissão
+  // de quem dá baixa. Sem isto o link aparecia para quem só acompanha a
+  // carteira e abria uma aba com 403.
+  const podeBaixarComprovante = ctx.can("financeiro.manage")
+
   const payouts = await prisma.referralPayout.findMany({
     where: { referrer: scope },
     select: {
@@ -138,7 +143,7 @@ export default async function AdminSaquesPage() {
                   <TableCell className="text-right">
                     {p.status === "REQUESTED" || p.status === "PROCESSING" ? (
                       <AdminPayoutRowActions payoutId={p.id} proofUrl={p.proofUrl} />
-                    ) : p.proofUrl ? (
+                    ) : p.proofUrl && podeBaixarComprovante ? (
                       <a
                         href={`/api/admin/financeiro/referral-payouts/${p.id}/proof/download`}
                         target="_blank"

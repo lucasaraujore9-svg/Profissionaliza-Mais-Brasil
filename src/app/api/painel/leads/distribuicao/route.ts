@@ -11,7 +11,7 @@ export const GET = withRequestContext(
     route: "/api/painel/leads/distribuicao",
   },
   async () => {
-    const guard = await requirePainel("leads.config")
+    const guard = await requirePainel("leads.view")
     if (!guard.ok) return guard.response
     const { ctx } = guard
 

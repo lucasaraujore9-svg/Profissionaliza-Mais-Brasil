@@ -21,7 +21,7 @@ import { requireAdmin } from "@/lib/auth/admin-guard"
 export const GET = withRequestContextParams<{ id: string }>(
   { action: "admin.equipe.get", route: "/api/admin/equipe/[id]" },
   async (_req: Request, ctx) => {
-  const guard = await requireAdmin("equipe.manage")
+  const guard = await requireAdmin("equipe.view")
   if (!guard.ok) return guard.response
   const { id } = await ctx.params
 

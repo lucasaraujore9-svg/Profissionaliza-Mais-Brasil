@@ -14,7 +14,7 @@ export const POST = withRequestContextParams<{ id: string }>(
     route: "/api/painel/leads/[id]/activities",
   },
   async (request: Request, { params }) => {
-    const guard = await requirePainel("leads.view")
+    const guard = await requirePainel("leads.manage")
     if (!guard.ok) return guard.response
     const { ctx } = guard
 

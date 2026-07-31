@@ -54,18 +54,18 @@ const ALL_ITEMS: {
   { href: "/admin/leads-revenda", label: "Leads de revenda", icon: Building2, permission: "leadsRevenda.view" },
   { href: "/admin/alunos", label: "Alunos", icon: GraduationCap, permission: "alunosRede.view" },
   { href: "/admin/leads", label: "Leads", icon: Inbox, permission: "leads.view" },
-  { href: "/admin/atendimento", label: "Atendimento", icon: LifeBuoy, permission: "atendimento.manage" },
+  { href: "/admin/atendimento", label: "Atendimento", icon: LifeBuoy, permission: "atendimento.view" },
   { href: "/admin/vendas", label: "Vendas diretas", icon: ShoppingCart, permission: "vendas.view" },
   { href: "/admin/financeiro", label: "Financeiro", icon: DollarSign, permission: "financeiro.view" },
   { href: "/admin/indicacoes", label: "Indicações", icon: Share2, permission: "indicacoes.view" },
   { href: "/admin/certificados", label: "Certificados", icon: Award, permission: "certificados.view" },
   { href: "/admin/catalogo", label: "Catálogo", icon: BookOpen, permission: "catalogo.view" },
-  { href: "/admin/vitrine", label: "Vitrine", icon: Palette, permission: "vitrine.manage" },
+  { href: "/admin/vitrine", label: "Vitrine", icon: Palette, permission: "vitrine.view" },
   // Hub de BI "Relatórios" (absorveu o antigo Analytics). A visibilidade fina
   // por aba vem de `lib/reports/tabs.ts`, também por permissão.
   { href: "/admin/relatorios", label: "Relatórios", icon: BarChart3, permission: "relatorios.view" },
-  { href: "/admin/equipe", label: "Equipe", icon: UserCog, permission: "equipe.manage" },
-  { href: "/admin/comunicacao", label: "Comunicação", icon: MessageSquare, permission: "comunicacao.manage" },
+  { href: "/admin/equipe", label: "Equipe", icon: UserCog, permission: "equipe.view" },
+  { href: "/admin/comunicacao", label: "Comunicação", icon: MessageSquare, permission: "comunicacao.view" },
   { href: "/admin/treinamentos", label: "Treinamentos", icon: Video, permission: "treinamentos.manage" },
   { href: "/admin/artes", label: "Artes", icon: Images, permission: "artes.view" },
   // Quem gerencia os treinamentos assiste pela própria tela de gestão (botão
@@ -77,8 +77,8 @@ const ALL_ITEMS: {
     permission: "treinamentos.view",
     hiddenWhen: "treinamentos.manage",
   },
-  { href: "/admin/automacao", label: "Automação", icon: Zap, permission: "automacao.manage" },
-  { href: "/admin/configuracoes", label: "Configurações", icon: Settings, permission: "configuracoes.manage" },
+  { href: "/admin/automacao", label: "Automação", icon: Zap, permission: "automacao.view" },
+  { href: "/admin/configuracoes", label: "Configurações", icon: Settings, permission: "configuracoes.view" },
   { href: "/admin/meu-perfil", label: "Meu perfil", icon: UserCircle, permission: "perfil.edit" },
 ]
 

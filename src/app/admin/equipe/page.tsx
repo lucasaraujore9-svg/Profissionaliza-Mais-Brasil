@@ -1,13 +1,14 @@
 import { prisma } from "@/lib/prisma"
 import { requireAdminPage } from "@/lib/auth/admin-guard"
 import { EquipeClient } from "@/components/admin/equipe-client"
+import { WriteGate } from "@/components/shared/permissions/permission-context"
 import { PMB_TEAM_ROLES } from "@/lib/auth/roles"
 import { filterAdminPermissions } from "@/lib/auth/admin-permissions"
 
 export const dynamic = "force-dynamic"
 
 export default async function EquipePage() {
-  await requireAdminPage("equipe.manage")
+  await requireAdminPage("equipe.view")
 
   const users = await prisma.user.findMany({
     where: { role: { in: [...PMB_TEAM_ROLES] } },
@@ -53,5 +54,12 @@ export default async function EquipePage() {
       filterAdminPermissions(u.revokedPermissions).length,
   }))
 
-  return <EquipeClient initialItems={items} salesManagers={salesManagers} />
+  return (
+    <WriteGate
+      perm="equipe.manage"
+      notice="Você está vendo a equipe em modo somente leitura. Criar usuários e alterar permissões é exclusivo do super admin."
+    >
+      <EquipeClient initialItems={items} salesManagers={salesManagers} />
+    </WriteGate>
+  )
 }

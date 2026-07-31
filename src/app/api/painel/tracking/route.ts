@@ -8,7 +8,7 @@ import { readTenantPixels, writeTenantPixels } from "@/lib/tracking/store"
 export const GET = withRequestContext(
   { action: "painel.tracking.get", route: "/api/painel/tracking" },
   async () => {
-    const guard = await requirePainel("vitrine.manage")
+    const guard = await requirePainel("vitrine.view")
     if (!guard.ok) return guard.response
     const { ctx } = guard
     const pixels = await readTenantPixels(ctx.tenantId)

@@ -189,6 +189,65 @@ cobranca, senha do titular, entrar como, governanca da conta.
   no enum (idempotente, sem backfill). Ninguem vira diretor sozinho — promova em
   /admin/equipe.
 
+### Par ver/editar em todas as areas (2026-07-31)
+
+O modelo de permissoes ja tinha `.view` vs `.manage` na maioria das areas, mas a
+disciplina nao era uniforme. Tres buracos, nos dois paineis:
+
+- **Areas so com `.manage`** — para CONSULTAR vitrine, dominio, automacao,
+  equipe, configuracoes, integracoes, gateway, atendimento, comunicacao, pacotes
+  e sub-revendas era preciso conceder o poder de ALTERA-LAS. Nao existia acesso
+  somente-leitura.
+- **Escrita guardada por leitura** — PATCH, DELETE, mudanca de etapa, atividades
+  e WhatsApp de lead no painel exigiam apenas `leads.view`. **`leads.manage` nao
+  existia.** O preset do Vendedor tem `leads.view`: ele APAGAVA lead.
+- **UI sem gate** — 30 paginas abriam com `.view` e desenhavam o botao de
+  escrita assim mesmo; o 403 so aparecia depois do clique. O caso visivel era
+  `/painel/cupons` mostrando "Novo cupom" para quem so tem `cupons.view`.
+
+**Mecanismo — `WRITE_IMPLIES_READ`** (um mapa em cada catalogo de permissoes):
+toda escrita concede a leitura da sua area, entao criar os `.view` faltantes NAO
+mexeu em preset nenhum (quem editava continua enxergando). A revogacao usa o
+mapa ao contrario e e **fail-closed**: revogar `catalogo.view` derruba
+`catalogo.manage` junto — sem isso, tirar a leitura deixava a pessoa sem a tela
+e com o PATCH liberado, que e pior do que nao ter revogado nada. `applyImplications`
+faz UMA passada; ha teste exigindo que nenhuma chave do mapa seja tambem um alvo.
+
+**Nenhum preset ganhou `.view` novo.** As permissoes de leitura novas nascem
+fora de todos os presets e sao concedidas pessoa a pessoa nos checkboxes de
+"Permissoes avancadas". Excecao: `leads.manage` entrou em `manager` e
+`consultant` para preservar o que eles ja faziam.
+
+- **Guards:** 43 handlers reapontados — todo GET para `.view`, toda escrita para
+  a permissao de escrita. Menus (`sidebar-admin`/`sidebar-painel`) passaram a
+  gatear pela LEITURA, senao quem tem acesso somente-leitura alcancava a pagina
+  pela URL mas nao pelo menu. Sub-item de menu agora aceita `perm` propria
+  ("Criar revenda" some numa secao aberta para leitura).
+- **UI:** `src/components/shared/permissions/permission-context.tsx` — os dois
+  layouts ja entregavam o conjunto de permissoes ao client, agora via contexto.
+  `useCan`/`Can` para gate pontual e `WriteGate` para tela de formulario
+  inteira (envolve em `<fieldset disabled>`, que desabilita nativamente todo
+  controle aninhado + banner de somente-leitura). `WriteGate` aceita LISTA de
+  permissoes = "basta uma" (telas que misturam areas, como /admin/configuracoes).
+  Fora do provedor, `useCan` devolve `false` — fail-closed.
+  **Limite:** `fieldset disabled` nao neutraliza `<a>` nem handler em `div`;
+  nesses casos gatear explicitamente com `<Can>`.
+- **Invariante testada:** `guard-coverage.test.ts` (admin e agora painel) quebra
+  se um POST/PUT/PATCH/DELETE nascer guardado so por `.view`. Verificada POR
+  MUTACAO nos dois lados antes do commit. Ha tambem teste exigindo que toda
+  escrita do catalogo declare seu par de leitura — permissao nova sem par quebra
+  o build.
+- **Divida registrada, nao escondida:** `/api/painel/equipe/*` e
+  `/api/painel/revendas/*` ainda usam guard por PAPEL
+  (`requireResellerOwner`/`requireResellerSeller`) e por isso nao respondem a
+  overrides. Lista FECHADA num teste: rota nova com guard por papel quebra.
+- **Nao e vazamento hoje, mas mudou o menu:** `/painel/configuracoes` (a tela da
+  propria senha) era gateada no menu por `configuracoes.manage` e sumia para
+  quase todo mundo; passou a `perfil.edit`. E a lista de "Modulos" em
+  /admin/configuracoes era escondida por `integracoes.manage`, que nao tem
+  relacao com aquelas telas — agora cada modulo declara a permissao do proprio
+  destino.
+
 ### Bugs conhecidos (pendentes)
 
 - **Middleware file convention deprecado** no Next 16 (usar `proxy` em vez de `middleware`).

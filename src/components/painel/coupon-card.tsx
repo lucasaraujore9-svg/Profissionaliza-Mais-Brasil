@@ -2,6 +2,7 @@
 
 import { Tag, Calendar, Users } from "lucide-react"
 import { StatusBadge } from "@/components/shared/status-badge"
+import { useCan } from "@/components/shared/permissions/permission-context"
 
 export interface CouponListItem {
   id: string
@@ -58,6 +59,7 @@ export function CouponCard({
   onViewUsage,
 }: CouponCardProps) {
   const { isActive } = coupon
+  const canManage = useCan("cupons.manage")
 
   return (
     <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm transition-shadow hover:shadow-md">
@@ -107,28 +109,36 @@ export function CouponCard({
           >
             Ver histórico
           </button>
-          <label className="inline-flex cursor-pointer items-center gap-2">
+          {/* Sem `cupons.manage` o cupom vira etiqueta de status: pausar/ativar
+              é escrita e a API recusa. */}
+          {canManage ? (
+            <label className="inline-flex cursor-pointer items-center gap-2">
+              <span className="text-xs font-medium text-gray-600">
+                {isActive ? "Ativo" : "Pausado"}
+              </span>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={isActive}
+                aria-label={`Cupom ${coupon.code}: ${isActive ? "ativo, clique para pausar" : "pausado, clique para ativar"}`}
+                disabled={pending}
+                onClick={() => onToggle(coupon)}
+                className={`relative h-5 w-9 rounded-full transition-colors disabled:opacity-50 ${
+                  isActive ? "bg-[var(--color-pmb-green)]" : "bg-gray-300"
+                }`}
+              >
+                <span
+                  className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${
+                    isActive ? "translate-x-4" : "translate-x-0.5"
+                  }`}
+                />
+              </button>
+            </label>
+          ) : (
             <span className="text-xs font-medium text-gray-600">
               {isActive ? "Ativo" : "Pausado"}
             </span>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={isActive}
-              aria-label={`Cupom ${coupon.code}: ${isActive ? "ativo, clique para pausar" : "pausado, clique para ativar"}`}
-              disabled={pending}
-              onClick={() => onToggle(coupon)}
-              className={`relative h-5 w-9 rounded-full transition-colors disabled:opacity-50 ${
-                isActive ? "bg-[var(--color-pmb-green)]" : "bg-gray-300"
-              }`}
-            >
-              <span
-                className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${
-                  isActive ? "translate-x-4" : "translate-x-0.5"
-                }`}
-              />
-            </button>
-          </label>
+          )}
         </div>
       </div>
     </div>

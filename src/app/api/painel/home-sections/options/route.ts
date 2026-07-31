@@ -8,7 +8,7 @@ export const GET = withRequestContext(
     route: "/api/painel/home-sections/options",
   },
   async () => {
-    const guard = await requirePainel("vitrine.manage")
+    const guard = await requirePainel("vitrine.view")
     if (!guard.ok) return guard.response
         return getHomeSectionsOptions()
   },

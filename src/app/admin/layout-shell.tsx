@@ -3,6 +3,7 @@
 import { SidebarAdmin } from "@/components/shared/layouts/sidebar-admin"
 import { HeaderDashboard } from "@/components/shared/layouts/header-dashboard"
 import { useSidebarCollapsed } from "@/components/shared/layouts/use-sidebar-collapsed"
+import { PermissionProvider } from "@/components/shared/permissions/permission-context"
 import type { AdminPermission } from "@/lib/auth/admin-permissions"
 
 export function AdminLayoutShell({
@@ -20,6 +21,7 @@ export function AdminLayoutShell({
 }) {
   const { collapsed, toggle } = useSidebarCollapsed(defaultCollapsed)
   return (
+    <PermissionProvider permissions={permissions}>
     <div className="flex h-screen overflow-hidden bg-[var(--color-pmb-mist)]">
       <div className="hidden h-full lg:block">
         <SidebarAdmin
@@ -45,5 +47,6 @@ export function AdminLayoutShell({
         <main className="flex-1 overflow-y-auto p-4 lg:p-6">{children}</main>
       </div>
     </div>
+    </PermissionProvider>
   )
 }

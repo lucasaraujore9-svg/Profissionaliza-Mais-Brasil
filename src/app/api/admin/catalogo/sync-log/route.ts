@@ -6,7 +6,7 @@ import { requireAdmin } from "@/lib/auth/admin-guard"
 export const GET = withRequestContext(
   { action: "admin.catalogo.sync_log.list", route: "/api/admin/catalogo/sync-log" },
   async () => {
-  const guard = await requireAdmin("catalogo.sync")
+  const guard = await requireAdmin("catalogo.view")
   if (!guard.ok) return guard.response
   // Log do sync acompanha o sync (SUPER_ADMIN-only).
   const logs = await listSyncLogs()

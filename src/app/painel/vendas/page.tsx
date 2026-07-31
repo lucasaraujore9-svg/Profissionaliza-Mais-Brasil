@@ -24,6 +24,9 @@ export default async function PainelVendasPage() {
   // de cancelamento). Quem só concilia (Financeiro) enxerga a venda pendente,
   // mas não vê um botão que responderia 403.
   const canVerifyPayment = ctx.can("alunos.manage")
+  // O Financeiro da unidade concilia vendas sem registrar venda nova: tem
+  // `vendas.view` sem `vendas.create`, e /painel/vendas/nova o redirigiria.
+  const canCreateSale = ctx.can("vendas.create")
 
   const [tenant, enrollments] = await Promise.all([
     prisma.tenant.findUnique({
@@ -54,14 +57,16 @@ export default async function PainelVendasPage() {
         title="Vendas diretas"
         description="Vendas em que você gerou o link de pagamento manualmente. Vendas pela vitrine pública aparecem em Financeiro."
         actions={
-          <Link
-            href="/painel/vendas/nova"
-            data-tour="vendas:nova"
-            className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-pmb-green)] px-4 py-2 text-xs font-bold text-white hover:bg-[var(--color-pmb-green-700)]"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            Nova venda
-          </Link>
+          canCreateSale ? (
+            <Link
+              href="/painel/vendas/nova"
+              data-tour="vendas:nova"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-pmb-green)] px-4 py-2 text-xs font-bold text-white hover:bg-[var(--color-pmb-green-700)]"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Nova venda
+            </Link>
+          ) : null
         }
       />
 
@@ -71,13 +76,15 @@ export default async function PainelVendasPage() {
           title="Nenhuma venda direta ainda"
           description="Gere um link de pagamento manual para um aluno e ele aparecerá aqui."
           action={
-            <Link
-              href="/painel/vendas/nova"
-              className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-pmb-green)] px-4 py-2 text-xs font-bold text-white hover:bg-[var(--color-pmb-green-700)]"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              Gerar primeira venda
-            </Link>
+            canCreateSale ? (
+              <Link
+                href="/painel/vendas/nova"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-pmb-green)] px-4 py-2 text-xs font-bold text-white hover:bg-[var(--color-pmb-green-700)]"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Gerar primeira venda
+              </Link>
+            ) : null
           }
         />
       ) : (

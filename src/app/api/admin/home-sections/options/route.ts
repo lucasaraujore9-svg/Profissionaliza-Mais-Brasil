@@ -8,7 +8,7 @@ export const GET = withRequestContext(
     route: "/api/admin/home-sections/options",
   },
   async () => {
-    const guard = await requireAdmin("vitrine.manage")
+    const guard = await requireAdmin("vitrine.view")
     if (!guard.ok) return guard.response
     return getHomeSectionsOptions()
   },

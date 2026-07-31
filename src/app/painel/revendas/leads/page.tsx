@@ -16,7 +16,7 @@ export const metadata = {
 }
 
 export default async function PainelLeadsRevendaPage() {
-  await requirePainelPage("revendas.manage")
+  await requirePainelPage("revendas.view")
 
   const session = await auth()
   if (!session?.user || session.user.role !== "RESELLER" || !session.user.tenantId) {

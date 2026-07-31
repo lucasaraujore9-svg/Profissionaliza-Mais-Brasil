@@ -12,7 +12,7 @@ import { requirePainelPage } from "@/lib/auth/painel-guard"
 export const dynamic = "force-dynamic"
 
 export default async function PainelPlacarPage() {
-  await requirePainelPage("revendas.manage")
+  await requirePainelPage("revendas.view")
   const session = await auth()
   const tenantId = session?.user?.tenantId
   if (!tenantId) redirect("/login?callbackUrl=/painel/placar")

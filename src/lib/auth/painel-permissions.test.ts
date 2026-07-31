@@ -6,6 +6,7 @@ import {
   PAINEL_PERMISSIONS,
   PERMISSION_GROUPS,
   ROLE_PRESETS,
+  WRITE_IMPLIES_READ,
   isWritePermission,
   normalizeMemberRole,
   resolvePermissions,
@@ -184,5 +185,114 @@ describe("catálogo e UI", () => {
   it("todo papel tem rótulo próprio", () => {
     const labels = PAINEL_MEMBER_ROLES.map(roleLabel)
     expect(new Set(labels).size).toBe(PAINEL_MEMBER_ROLES.length)
+  })
+})
+
+/**
+ * Estrutura do par ver/editar.
+ *
+ * Antes, uma dúzia de áreas da unidade só existia na forma `.manage`: para
+ * ABRIR a vitrine, o domínio, a automação, a equipe, as configurações ou o
+ * gateway era preciso conceder o poder de ALTERÁ-LOS. Estes testes impedem que
+ * uma permissão nova nasça assim de novo.
+ */
+describe("par ver/editar (WRITE_IMPLIES_READ)", () => {
+  const pares = Object.entries(WRITE_IMPLIES_READ) as [
+    PainelPermission,
+    PainelPermission,
+  ][]
+
+  it("só referencia permissões do catálogo", () => {
+    for (const [write, read] of pares) {
+      expect(PAINEL_PERMISSIONS, write).toContain(write)
+      expect(PAINEL_PERMISSIONS, read).toContain(read)
+    }
+  })
+
+  it("todo alvo é uma permissão de leitura", () => {
+    for (const [write, read] of pares) {
+      expect(read.endsWith(".view"), `${write} → ${read}`).toBe(true)
+    }
+  })
+
+  // `applyImplications` faz UMA passada. Se uma chave fosse também um alvo
+  // (A → B e B → C), conceder A deixaria de conceder C sem ninguém perceber.
+  it("nenhuma chave é também um alvo — uma passada basta", () => {
+    const alvos = new Set(pares.map(([, read]) => read))
+    const chaves = pares.map(([write]) => write)
+    expect(chaves.filter((k) => alvos.has(k))).toEqual([])
+  })
+
+  it("toda permissão de escrita declara a leitura correspondente", () => {
+    // `perfil.edit` é auto-serviço (nome, CPF e a própria senha) e
+    // `conta.delete` destrói a unidade — nenhuma das duas é uma ÁREA com tela
+    // de consulta separada.
+    const SEM_AREA: PainelPermission[] = ["perfil.edit", "conta.delete"]
+    const semPar = PAINEL_PERMISSIONS.filter((perm) => {
+      if (perm.endsWith(".view") || perm.endsWith(".viewAll")) return false
+      if (SEM_AREA.includes(perm)) return false
+      return !(perm in WRITE_IMPLIES_READ)
+    })
+    expect(semPar).toEqual([])
+  })
+
+  it("conceder a escrita já concede a leitura", () => {
+    const perms = resolvePermissions("consultant", ["vitrine.manage"])
+    expect(perms.has("vitrine.view")).toBe(true)
+  })
+
+  /**
+   * Fail-closed: revogar a leitura derruba a escrita junto. Sem isto, tirar
+   * `catalogo.view` de alguém deixaria a pessoa sem a tela e ainda com o PATCH
+   * liberado — pior do que não ter revogado nada.
+   */
+  it("revogar a leitura derruba a escrita da mesma área", () => {
+    const perms = resolvePermissions("manager", [], ["catalogo.view"])
+    expect(ROLE_PRESETS.manager).toContain("catalogo.manage")
+    expect(perms.has("catalogo.view")).toBe(false)
+    expect(perms.has("catalogo.manage")).toBe(false)
+  })
+
+  it("revogar só a escrita preserva a leitura", () => {
+    const perms = resolvePermissions("manager", [], ["catalogo.manage"])
+    expect(perms.has("catalogo.manage")).toBe(false)
+    expect(perms.has("catalogo.view")).toBe(true)
+  })
+
+  // O dono ignora `revoked` — inclusive para o fail-closed, senão ele se
+  // trancaria fora da própria unidade com um checkbox.
+  it("o dono mantém tudo mesmo revogando a leitura", () => {
+    const perms = resolvePermissions("owner", [], ["catalogo.view"])
+    expect(perms.has("catalogo.view")).toBe(true)
+    expect(perms.has("catalogo.manage")).toBe(true)
+  })
+})
+
+/**
+ * O defeito concreto que motivou a revisão: PATCH, DELETE, mudança de etapa,
+ * atividades e WhatsApp de lead eram guardados por `leads.view`. Quem só podia
+ * CONSULTAR o funil apagava lead.
+ */
+describe("leads: consultar não é trabalhar", () => {
+  it("leads.manage existe e é permissão de escrita", () => {
+    expect(PAINEL_PERMISSIONS).toContain("leads.manage")
+    expect(isWritePermission("leads.manage")).toBe(true)
+  })
+
+  it("quem só recebe leads.view não trabalha o funil", () => {
+    const perms = resolvePermissions("support", ["leads.view"])
+    expect(perms.has("leads.view")).toBe(true)
+    expect(perms.has("leads.manage")).toBe(false)
+  })
+
+  it("gerente e vendedor seguem trabalhando o funil", () => {
+    for (const role of ["manager", "consultant"] as const) {
+      expect(resolvePermissions(role).has("leads.manage"), role).toBe(true)
+    }
+  })
+
+  // A prévia "ver como" nunca escreve.
+  it("a prévia somente-leitura perde leads.manage", () => {
+    expect(toReadOnly(resolvePermissions("manager")).has("leads.manage")).toBe(false)
   })
 })

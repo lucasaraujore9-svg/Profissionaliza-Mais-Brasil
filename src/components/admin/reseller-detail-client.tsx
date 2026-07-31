@@ -10,6 +10,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { useCan } from "@/components/shared/permissions/permission-context"
 import { Button } from "@/components/ui/button"
 import { BlockSkeleton } from "@/components/shared/loading-skeletons"
 import { ResellerCard } from "./reseller-card"
@@ -129,6 +130,19 @@ export function ResellerDetailClient({
   salesUserName = null,
   salesUsers = [],
 }: ResellerDetailClientProps) {
+  // Uma aba por permissão de escrita, espelhando o que cada rota exige. O
+  // gerente e o vendedor de revenda têm `unidades.view` sem `unidades.manage`:
+  // antes, eles abriam a unidade e viam as cinco abas de gestão inteiras, com
+  // todo formulário respondendo 403 no salvar.
+  const canManage = useCan("unidades.manage")
+  const canBilling = useCan("unidades.billing")
+  const canCredenciais = useCan("unidades.credenciais")
+  const canAnonimizar = useCan("unidades.anonimizar")
+  const canComissoes = useCan("unidades.comissoes")
+  // `isSuperAdmin` é, na origem, `ctx.can("unidades.governanca")` — quem
+  // reatribui o vendedor responsável pela unidade.
+  const canAdvanced = canCredenciais || canAnonimizar || isSuperAdmin
+
   const [data, setData] = useState<DetailResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -214,11 +228,13 @@ export function ResellerDetailClient({
   // Edicao de subdominio: so equipe PMB. Quem enxerga a rede inteira
   // (`unidades.viewAll`) edita qualquer unidade; o gerente de revendedores,
   // apenas as atribuidas a ele. A rota PATCH revalida (unidades.manage +
-  // canAccessTenant).
+  // canAccessTenant) — por isso a permissao de escrita entra no `&&`: sem ela o
+  // campo aparecia e o PATCH respondia 403.
   const canEditSlug =
-    seesAllUnits ||
-    (viewerRole === "PMB_RESELLER_MGR" &&
-      data.reseller.accountManagerId === viewerId)
+    canManage &&
+    (seesAllUnits ||
+      (viewerRole === "PMB_RESELLER_MGR" &&
+        data.reseller.accountManagerId === viewerId))
 
   return (
     <div className="space-y-6">
@@ -227,10 +243,12 @@ export function ResellerDetailClient({
       <Tabs defaultValue="overview" className="gap-6">
         <TabsList variant="line" className="flex-wrap">
           <TabsTrigger value="overview">Visão geral</TabsTrigger>
-          <TabsTrigger value="billing">Cobrança</TabsTrigger>
-          <TabsTrigger value="vitrine">Vitrine &amp; extras</TabsTrigger>
-          <TabsTrigger value="referral">Indicação</TabsTrigger>
-          <TabsTrigger value="advanced">Avançado</TabsTrigger>
+          {canBilling && <TabsTrigger value="billing">Cobrança</TabsTrigger>}
+          {canManage && (
+            <TabsTrigger value="vitrine">Vitrine &amp; extras</TabsTrigger>
+          )}
+          {canComissoes && <TabsTrigger value="referral">Indicação</TabsTrigger>}
+          {canAdvanced && <TabsTrigger value="advanced">Avançado</TabsTrigger>}
         </TabsList>
 
         {/* Visão geral */}
@@ -238,6 +256,7 @@ export function ResellerDetailClient({
           <div className="grid gap-6 xl:grid-cols-[2fr_1fr]">
             <div className="space-y-6">
               <ResellerStudentCount students={data.students} />
+              {canBilling && (
               <ResellerBillingEdit
                 tenantId={tenantId}
                 planValue={data.reseller.planValue}
@@ -251,6 +270,7 @@ export function ResellerDetailClient({
                 promoMonths={data.reseller.promoMonths}
                 onSaved={load}
               />
+              )}
             </div>
             <div className="space-y-6">
               <ResellerSupportNotes
@@ -262,6 +282,7 @@ export function ResellerDetailClient({
         </TabsContent>
 
         {/* Cobrança */}
+        {canBilling && (
         <TabsContent value="billing" className="space-y-6">
           <ResellerBillingEdit
             tenantId={tenantId}
@@ -301,8 +322,10 @@ export function ResellerDetailClient({
             onChanged={load}
           />
         </TabsContent>
+        )}
 
         {/* Vitrine & extras */}
+        {canManage && (
         <TabsContent value="vitrine" className="space-y-6">
           <div className="grid gap-6 xl:grid-cols-2">
             {canEditSlug && (
@@ -353,8 +376,10 @@ export function ResellerDetailClient({
             />
           </div>
         </TabsContent>
+        )}
 
         {/* Indicação */}
+        {canComissoes && (
         <TabsContent value="referral" className="space-y-6">
           <ResellerReferralConfig
             tenantId={tenantId}
@@ -381,8 +406,10 @@ export function ResellerDetailClient({
             onSaved={load}
           />
         </TabsContent>
+        )}
 
         {/* Avançado */}
+        {canAdvanced && (
         <TabsContent value="advanced" className="space-y-6">
           {isSuperAdmin && (
             <ResellerCard
@@ -429,18 +456,23 @@ export function ResellerDetailClient({
               </div>
             </ResellerCard>
           )}
-          <ResellerPasswordEdit
-            tenantId={tenantId}
-            ownerEmail={data.reseller.email}
-          />
-          <ResellerActionButtons
-            tenantId={tenantId}
-            status={data.reseller.status}
-            isSuperAdmin={isSuperAdmin}
-            show={["anonymize"]}
-            onChanged={load}
-          />
+          {canCredenciais && (
+            <ResellerPasswordEdit
+              tenantId={tenantId}
+              ownerEmail={data.reseller.email}
+            />
+          )}
+          {canAnonimizar && (
+            <ResellerActionButtons
+              tenantId={tenantId}
+              status={data.reseller.status}
+              isSuperAdmin={isSuperAdmin}
+              show={["anonymize"]}
+              onChanged={load}
+            />
+          )}
         </TabsContent>
+        )}
       </Tabs>
     </div>
   )

@@ -19,7 +19,7 @@ const WA_STATUS_LABEL: Record<string, { label: string; color: string }> = {
 }
 
 export default async function AdminAutomacaoPage() {
-  await requireAdminPage("automacao.manage")
+  await requireAdminPage("automacao.view")
 
   const settings = await prisma.systemSettings.upsert({
     where: { id: "default" },

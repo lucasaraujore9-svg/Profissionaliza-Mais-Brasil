@@ -39,6 +39,13 @@ export type AssignableMemberRole = (typeof ASSIGNABLE_MEMBER_ROLES)[number]
  *   demais    — ação de escrita
  * O modo somente-leitura da prévia ("ver como") depende dessa convenção; ver
  * READ_ONLY_SUFFIXES abaixo.
+ *
+ * TODA área com tela própria tem o PAR ver/editar. Antes, uma dúzia de áreas
+ * (vitrine, domínio, automação, equipe, configurações, gateway, atendimento,
+ * comunicação, pacotes, sub-revendas) só existia na forma `.manage`: para
+ * CONSULTAR a tela era preciso dar o poder de ALTERÁ-LA. O par torna possível o
+ * acesso somente-leitura, e o mapa WRITE_IMPLIES_READ garante que conceder a
+ * escrita já concede a leitura — ninguém precisa marcar as duas.
  */
 export const PAINEL_PERMISSIONS = [
   "dashboard.view",
@@ -59,10 +66,15 @@ export const PAINEL_PERMISSIONS = [
 
   "leads.view",
   "leads.viewAll",
+  // Trabalhar o lead: editar, mover de etapa, registrar atividade, disparar
+  // WhatsApp e excluir. Existe porque essas escritas eram guardadas por
+  // `leads.view` — quem só podia CONSULTAR o funil apagava lead.
+  "leads.manage",
   "leads.config",
 
   "catalogo.view",
   "catalogo.manage",
+  "pacotes.view",
   "pacotes.manage",
 
   "cupons.view",
@@ -80,7 +92,9 @@ export const PAINEL_PERMISSIONS = [
   "certificados.manage",
   "certificados.template",
 
+  "atendimento.view",
   "atendimento.manage",
+  "comunicacao.view",
   "comunicacao.manage",
 
   "relatorios.view",
@@ -90,16 +104,23 @@ export const PAINEL_PERMISSIONS = [
   "indicacoes.view",
   "indicacoes.sacar",
 
+  "vitrine.view",
   "vitrine.manage",
+  "dominio.view",
   "dominio.manage",
+  "automacao.view",
   "automacao.manage",
+  "revendas.view",
   "revendas.manage",
 
   "treinamentos.view",
   "artes.view",
 
+  "equipe.view",
   "equipe.manage",
+  "configuracoes.view",
   "configuracoes.manage",
+  "gateway.view",
   "gateway.manage",
   "conta.delete",
 ] as const
@@ -118,12 +139,18 @@ export const OWNER_EXCLUSIVE = ["equipe.manage", "conta.delete"] as const
 /** Concedíveis por override, mas com aviso destacado na UI de Equipe. */
 export const SENSITIVE = [
   "gateway.manage",
+  // Somente leitura, mas revela o estado do meio de pagamento da unidade
+  // (conta conectada, chave PIX, parcelamento) — nunca o token, que não sai do
+  // servidor.
+  "gateway.view",
   "dominio.manage",
   "indicacoes.view",
   "indicacoes.sacar",
   "cobrancas.view",
   "alunos.impersonate",
   "configuracoes.manage",
+  // Expõe nome, e-mail e papel de todo mundo da equipe.
+  "equipe.view",
 ] as const
 
 const OWNER_EXCLUSIVE_SET = new Set<string>(OWNER_EXCLUSIVE)
@@ -145,6 +172,78 @@ const READ_ONLY_SUFFIXES = [
 
 export function isWritePermission(perm: PainelPermission): boolean {
   return READ_ONLY_SUFFIXES.some((suffix) => perm.endsWith(suffix))
+}
+
+/**
+ * Escrita → leitura correspondente. Quem pode alterar uma área sempre pode
+ * abri-la; sem isto, separar o par ver/editar exigiria marcar dois checkboxes
+ * para cada área e um preset esquecido deixaria alguém com poder de gravar numa
+ * tela que não abre.
+ *
+ * `*.viewAll` também aponta para o `.view` da área: "ver tudo" sem "ver" é um
+ * estado incoerente que o guard interpretaria como ausência de acesso.
+ *
+ * A revogação usa este mapa ao contrário e é FAIL-CLOSED: revogar a leitura
+ * derruba junto toda escrita que dependia dela (ver `resolvePermissions`). Sem
+ * isso, tirar `catalogo.view` de alguém deixaria a pessoa sem a tela e ainda com
+ * o PATCH liberado.
+ */
+export const WRITE_IMPLIES_READ: Readonly<
+  Partial<Record<PainelPermission, PainelPermission>>
+> = {
+  "alunos.viewAll": "alunos.view",
+  "alunos.manage": "alunos.view",
+  "alunos.impersonate": "alunos.view",
+  "vendas.viewAll": "vendas.view",
+  "vendas.create": "vendas.view",
+  "leads.viewAll": "leads.view",
+  "leads.manage": "leads.view",
+  "leads.config": "leads.view",
+  "catalogo.manage": "catalogo.view",
+  "pacotes.manage": "pacotes.view",
+  "cupons.manage": "cupons.view",
+  "financeiro.export": "financeiro.view",
+  "certificados.manage": "certificados.view",
+  "certificados.template": "certificados.view",
+  "atendimento.manage": "atendimento.view",
+  "comunicacao.manage": "comunicacao.view",
+  "relatorios.financeiro": "relatorios.view",
+  "relatorios.indicacoes": "relatorios.view",
+  "indicacoes.sacar": "indicacoes.view",
+  "vitrine.manage": "vitrine.view",
+  "dominio.manage": "dominio.view",
+  "automacao.manage": "automacao.view",
+  "revendas.manage": "revendas.view",
+  "equipe.manage": "equipe.view",
+  "configuracoes.manage": "configuracoes.view",
+  "gateway.manage": "gateway.view",
+}
+
+const IMPLICATION_PAIRS = Object.entries(WRITE_IMPLIES_READ) as [
+  PainelPermission,
+  PainelPermission,
+][]
+
+/**
+ * Fecha o conjunto sobre WRITE_IMPLIES_READ.
+ *
+ * `revoked` entra aqui, e não só na subtração, porque a ordem importa: expandir
+ * as implicações DEPOIS de subtrair devolveria a leitura que o dono acabou de
+ * tirar. Com a leitura revogada, quem manda é o fail-closed — a escrita cai
+ * junto.
+ */
+function applyImplications(
+  perms: Set<PainelPermission>,
+  revoked: ReadonlySet<PainelPermission>,
+): void {
+  for (const [write, read] of IMPLICATION_PAIRS) {
+    if (!perms.has(write)) continue
+    if (revoked.has(read)) {
+      perms.delete(write)
+      continue
+    }
+    perms.add(read)
+  }
 }
 
 /**
@@ -171,6 +270,7 @@ export const ROLE_PRESETS: Record<PainelMemberRole, readonly PainelPermission[]>
     "vendas.create",
     "leads.view",
     "leads.viewAll",
+    "leads.manage",
     "leads.config",
     "catalogo.view",
     "catalogo.manage",
@@ -203,6 +303,10 @@ export const ROLE_PRESETS: Record<PainelMemberRole, readonly PainelPermission[]>
     "vendas.view",
     "vendas.create",
     "leads.view",
+    // O vendedor trabalha a própria carteira de leads (o escopo continua vindo
+    // de `ownerUserId`); esta permissão só torna explícito o que ele já fazia
+    // quando as escrituras do funil eram guardadas por `leads.view`.
+    "leads.manage",
     "catalogo.view",
     "cupons.view",
     "treinamentos.view",
@@ -316,6 +420,8 @@ export function filterPainelPermissions(
  * - O dono ignora `revoked` — não faz sentido o dono se auto-trancar fora da
  *   própria unidade, e isso evita um estado sem ninguém capaz de gerir a equipe.
  * - Entradas fora do catálogo são descartadas silenciosamente.
+ * - Por fim, toda escrita concede a leitura da sua área (WRITE_IMPLIES_READ) e
+ *   revogar a leitura derruba a escrita junto.
  */
 export function resolvePermissions(
   role: PainelMemberRole,
@@ -330,12 +436,15 @@ export function resolvePermissions(
     result.add(perm)
   }
 
-  if (role === "owner") return result
-
-  for (const perm of revoked) {
-    if (!isPainelPermission(perm)) continue
-    result.delete(perm)
+  if (role === "owner") {
+    applyImplications(result, new Set())
+    return result
   }
+
+  const revokedSet = new Set<PainelPermission>(filterPainelPermissions(revoked))
+  for (const perm of revokedSet) result.delete(perm)
+
+  applyImplications(result, revokedSet)
 
   return result
 }
@@ -384,6 +493,7 @@ export const PERMISSION_GROUPS: {
       { perm: "vendas.create", label: "Registrar nova venda" },
       { perm: "leads.view", label: "Ver leads" },
       { perm: "leads.viewAll", label: "Ver leads de toda a unidade" },
+      { perm: "leads.manage", label: "Trabalhar, mover e excluir leads" },
       { perm: "leads.config", label: "Configurar distribuição de leads" },
     ],
   },
@@ -392,6 +502,7 @@ export const PERMISSION_GROUPS: {
     permissions: [
       { perm: "catalogo.view", label: "Ver o catálogo" },
       { perm: "catalogo.manage", label: "Editar cursos e preços" },
+      { perm: "pacotes.view", label: "Ver os pacotes" },
       { perm: "pacotes.manage", label: "Gerenciar pacotes" },
       { perm: "cupons.view", label: "Ver cupons" },
       { perm: "cupons.manage", label: "Criar e editar cupons" },
@@ -413,7 +524,9 @@ export const PERMISSION_GROUPS: {
   {
     label: "Atendimento",
     permissions: [
+      { perm: "atendimento.view", label: "Ver a caixa de atendimento" },
       { perm: "atendimento.manage", label: "Responder a caixa de atendimento" },
+      { perm: "comunicacao.view", label: "Ver os comunicados" },
       { perm: "comunicacao.manage", label: "Enviar comunicados" },
       { perm: "certificados.view", label: "Ver certificados" },
       { perm: "certificados.manage", label: "Emitir e revogar certificados" },
@@ -423,12 +536,19 @@ export const PERMISSION_GROUPS: {
   {
     label: "Configuração da unidade",
     permissions: [
+      { perm: "vitrine.view", label: "Ver a vitrine e a home" },
       { perm: "vitrine.manage", label: "Editar a vitrine" },
+      { perm: "dominio.view", label: "Ver o domínio" },
       { perm: "dominio.manage", label: "Configurar o domínio" },
+      { perm: "automacao.view", label: "Ver a automação" },
       { perm: "automacao.manage", label: "Configurar a automação" },
+      { perm: "revendas.view", label: "Ver as sub-revendas e o placar" },
       { perm: "revendas.manage", label: "Gerenciar sub-revendas" },
+      { perm: "configuracoes.view", label: "Ver as configurações da conta" },
       { perm: "configuracoes.manage", label: "Editar as configurações da conta" },
+      { perm: "gateway.view", label: "Ver o gateway de pagamento" },
       { perm: "gateway.manage", label: "Configurar o gateway de pagamento" },
+      { perm: "equipe.view", label: "Ver a equipe" },
       { perm: "equipe.manage", label: "Gerenciar a equipe" },
       { perm: "conta.delete", label: "Solicitar exclusão da conta" },
     ],

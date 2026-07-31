@@ -6,11 +6,12 @@ import { CertificateLayoutSelector } from "@/components/painel/certificate-layou
 import { resolveCertificateTemplate } from "@/lib/certificates/template-resolver"
 import type { CertificateTemplateData } from "@/components/shared/certificate-html-preview"
 import { requirePainelPage } from "@/lib/auth/painel-guard"
+import { WriteGate } from "@/components/shared/permissions/permission-context"
 
 export const dynamic = "force-dynamic"
 
 export default async function PainelCertificadosTemplatePage() {
-  await requirePainelPage("certificados.template")
+  await requirePainelPage("certificados.view")
   const session = await auth()
   const user = session?.user as
     | { id?: string; role?: string; tenantId?: string | null }
@@ -56,20 +57,25 @@ export default async function PainelCertificadosTemplatePage() {
   }
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Layout do certificado"
-        description="Escolha entre os layouts disponíveis. A logo, o texto e as cores são padronizados — a logo é puxada automaticamente da sua escola."
-      />
+    <WriteGate
+      perm="certificados.template"
+      notice="Você está vendo o modelo do certificado em modo somente leitura. Para editá-lo, peça a permissão “Editar o modelo do certificado”."
+    >
+      <div className="space-y-6">
+        <PageHeader
+          title="Layout do certificado"
+          description="Escolha entre os layouts disponíveis. A logo, o texto e as cores são padronizados — a logo é puxada automaticamente da sua escola."
+        />
 
-      <CertificateLayoutSelector
-        initialLayout={initialLayout}
-        tenantLogoUrl={tenant?.logoUrl ?? null}
-        tenantName={tenant?.name ?? "Sua Escola"}
-        template={template}
-        groupLogoUrl={resolved.groupLogoUrl}
-        groupName={resolved.groupName}
-      />
-    </div>
+        <CertificateLayoutSelector
+          initialLayout={initialLayout}
+          tenantLogoUrl={tenant?.logoUrl ?? null}
+          tenantName={tenant?.name ?? "Sua Escola"}
+          template={template}
+          groupLogoUrl={resolved.groupLogoUrl}
+          groupName={resolved.groupName}
+        />
+      </div>
+    </WriteGate>
   )
 }

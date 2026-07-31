@@ -7,7 +7,7 @@ import { withRequestContext } from "@/lib/observability/with-request-context"
 export const GET = withRequestContext(
   { action: "painel.comunicacao.alunos.list", route: "/api/painel/comunicacao/alunos" },
   async (request: Request) => {
-    const guard = await requirePainel("comunicacao.manage")
+    const guard = await requirePainel("comunicacao.view")
     if (!guard.ok) return guard.response
     const { ctx } = guard
 

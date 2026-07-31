@@ -33,7 +33,7 @@ import { requireAdmin } from "@/lib/auth/admin-guard"
 export const GET = withRequestContext(
   { action: "admin.equipe.list", route: "/api/admin/equipe" },
   async () => {
-  const guard = await requireAdmin("equipe.manage")
+  const guard = await requireAdmin("equipe.view")
   if (!guard.ok) return guard.response
 
   const users = await prisma.user.findMany({

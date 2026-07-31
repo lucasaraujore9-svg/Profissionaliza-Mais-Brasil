@@ -15,6 +15,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { useCan } from "@/components/shared/permissions/permission-context"
 
 export function AdminPayoutRowActions({
   payoutId,
@@ -24,6 +25,12 @@ export function AdminPayoutRowActions({
   /** Comprovante já anexado a este saque (quando ausente, exige anexar p/ aprovar). */
   proofUrl?: string | null
 }) {
+  // A tela abre com `indicacoes.view`, mas dar baixa no pagamento é
+  // `financeiro.manage` (é o que as rotas de mark-paid/proof/fail exigem). O
+  // gerente e o diretor de unidades acompanham os saques da carteira sem serem
+  // quem paga — para eles, a linha não tem botão de ação.
+  const canSettle = useCan("financeiro.manage")
+
   const router = useRouter()
   const [pending, startTransition] = useTransition()
   const [approveOpen, setApproveOpen] = useState(false)
@@ -101,6 +108,10 @@ export function AdminPayoutRowActions({
       setReason("")
       router.refresh()
     })
+  }
+
+  if (!canSettle) {
+    return <span className="text-xs text-gray-400">Aguardando o financeiro</span>
   }
 
   return (

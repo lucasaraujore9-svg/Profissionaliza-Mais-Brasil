@@ -103,7 +103,7 @@ async function fetchTenantDomainInfo(tenantId: string) {
 export const GET = withRequestContext(
   { action: "painel.dominio.get", route: "/api/painel/dominio" },
   async () => {
-    const guard = await requirePainel("dominio.manage")
+    const guard = await requirePainel("dominio.view")
     if (!guard.ok) return guard.response
     const { ctx } = guard
 

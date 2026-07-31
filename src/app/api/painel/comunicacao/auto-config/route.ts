@@ -7,7 +7,7 @@ import { withRequestContext } from "@/lib/observability/with-request-context"
 export const GET = withRequestContext(
   { action: "painel.comunicacao.auto_config.list", route: "/api/painel/comunicacao/auto-config" },
   async () => {
-    const guard = await requirePainel("comunicacao.manage")
+    const guard = await requirePainel("comunicacao.view")
     if (!guard.ok) return guard.response
     const { ctx } = guard
 

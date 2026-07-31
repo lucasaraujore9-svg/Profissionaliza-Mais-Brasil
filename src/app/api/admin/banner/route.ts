@@ -14,7 +14,7 @@ const createSchema = z.object({
 export const GET = withRequestContext(
   { action: "admin.banner.list", route: "/api/admin/banner" },
   async () => {
-    const guard = await requireAdmin("vitrine.manage")
+    const guard = await requireAdmin("vitrine.view")
     if (!guard.ok) return guard.response
 
     const slides = await prisma.bannerSlide.findMany({

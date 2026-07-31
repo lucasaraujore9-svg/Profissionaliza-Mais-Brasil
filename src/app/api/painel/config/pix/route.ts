@@ -50,7 +50,7 @@ function validatePixKey(type: PixType, key: string): string | null {
 export const GET = withRequestContext(
   { action: "painel.config.pix.get", route: "/api/painel/config/pix" },
   async () => {
-    const guard = await requirePainel("gateway.manage")
+    const guard = await requirePainel("gateway.view")
     if (!guard.ok) return guard.response
     const { ctx } = guard
 

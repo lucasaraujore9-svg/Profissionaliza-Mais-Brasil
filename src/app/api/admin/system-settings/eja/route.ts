@@ -44,7 +44,7 @@ export const GET = withRequestContext(
     route: "/api/admin/system-settings/eja",
   },
   async () => {
-    const guard = await requireAdmin("vitrine.manage")
+    const guard = await requireAdmin("vitrine.view")
     if (!guard.ok) return guard.response
 
     const settings = await prisma.systemSettings.findUnique({

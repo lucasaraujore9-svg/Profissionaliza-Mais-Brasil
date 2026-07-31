@@ -11,8 +11,13 @@ import {
   type CouponUsageItem,
 } from "./coupon-usage-table"
 import { CreateCouponModal } from "./create-coupon-modal"
+import { useCan } from "@/components/shared/permissions/permission-context"
 
 export function CouponGrid() {
+  // O Vendedor da unidade tem `cupons.view` sem `cupons.manage`: ele acompanha
+  // os cupons, não os cria. Antes, o botão aparecia para ele e a API respondia
+  // 403 depois do clique.
+  const canManage = useCan("cupons.manage")
   const [coupons, setCoupons] = useState<CouponListItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -116,14 +121,16 @@ export function CouponGrid() {
         title="Cupons"
         description="Crie códigos promocionais e acompanhe quem está usando."
         actions={
-          <Button
-            data-tour="cupons:novo"
-            className="bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)]"
-            onClick={() => setModalOpen(true)}
-          >
-            <Plus className="mr-2 h-4 w-4" />
-            Novo cupom
-          </Button>
+          canManage ? (
+            <Button
+              data-tour="cupons:novo"
+              className="bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)]"
+              onClick={() => setModalOpen(true)}
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              Novo cupom
+            </Button>
+          ) : null
         }
       />
 
@@ -167,18 +174,24 @@ export function CouponGrid() {
       ) : coupons.length === 0 ? (
         <EmptyState
           icon={Tag}
-          title="Crie seu primeiro cupom"
-          description="Cupons ajudam você a atrair novos alunos com descontos. Defina um código, valor e período de validade — e pronto, seu aluno aplica no checkout."
+          title={canManage ? "Crie seu primeiro cupom" : "Nenhum cupom por aqui"}
+          description={
+            canManage
+              ? "Cupons ajudam você a atrair novos alunos com descontos. Defina um código, valor e período de validade — e pronto, seu aluno aplica no checkout."
+              : "Esta unidade ainda não tem cupons cadastrados. Quem cria e edita cupons é quem tem a permissão “Criar e editar cupons”."
+          }
           action={
-            <button
-              type="button"
-              onClick={() => setModalOpen(true)}
-              className="inline-flex items-center gap-2 rounded-lg bg-[var(--color-pmb-green)] px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[var(--color-pmb-green-700)]"
-            >
-              <Plus className="h-4 w-4" />
-              Criar cupom agora
-              <ArrowRight className="h-4 w-4" />
-            </button>
+            canManage ? (
+              <button
+                type="button"
+                onClick={() => setModalOpen(true)}
+                className="inline-flex items-center gap-2 rounded-lg bg-[var(--color-pmb-green)] px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[var(--color-pmb-green-700)]"
+              >
+                <Plus className="h-4 w-4" />
+                Criar cupom agora
+                <ArrowRight className="h-4 w-4" />
+              </button>
+            ) : null
           }
         />
       ) : (

@@ -7,9 +7,10 @@ import { VitrineTabsShell } from "@/components/vitrine/tabs-shell"
 import { HomeSectionsPanel } from "@/components/vitrine/home-sections-panel"
 import { activeCustomDomain, vitrineUrl } from "@/lib/tenant/urls"
 import { requirePainelPage } from "@/lib/auth/painel-guard"
+import { WriteGate } from "@/components/shared/permissions/permission-context"
 
 export default async function PainelVitrinePage() {
-  await requirePainelPage("vitrine.manage")
+  await requirePainelPage("vitrine.view")
   // Best-effort: link de preview da vitrine do revendedor logado.
   let previewUrl: string | null = null
   try {
@@ -31,43 +32,48 @@ export default async function PainelVitrinePage() {
   }
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Minha vitrine"
-        description="Personalize sua loja em poucos cliques. Cada aba é uma área independente — banner principal, seções da home e identidade visual."
-      />
+    <WriteGate
+      perm="vitrine.manage"
+      notice="Você está vendo a vitrine em modo somente leitura. Para editá-la, peça a permissão “Editar a vitrine”."
+    >
+      <div className="space-y-6">
+        <PageHeader
+          title="Minha vitrine"
+          description="Personalize sua loja em poucos cliques. Cada aba é uma área independente — banner principal, seções da home e identidade visual."
+        />
 
-      <VitrineTabsShell
-        previewUrl={previewUrl}
-        tabs={[
-          {
-            value: "banner",
-            label: "Banner principal",
-            content: (
-              <BannerSlidesManager
-                apiBase="/api/painel/banner"
-                title="Banner principal da vitrine"
-                description="Adicione uma imagem única ou múltiplos slides. Cada slide precisa de versão desktop (1920×600px) e mobile (1080×1080px)."
-              />
-            ),
-          },
-          {
-            value: "secoes",
-            label: "Seções da home",
-            content: (
-              <HomeSectionsPanel
-                apiBase="/api/painel/home-sections"
-                hint="A primeira seção (“Cursos mais vendidos da semana”) é fixa. As outras você pode ligar, desligar, reordenar e personalizar — toda categoria nova aparece aqui automaticamente, desativada, esperando você ativar."
-              />
-            ),
-          },
-          {
-            value: "personalizacao",
-            label: "Personalização",
-            content: <VitrineEditor />,
-          },
-        ]}
-      />
-    </div>
+        <VitrineTabsShell
+          previewUrl={previewUrl}
+          tabs={[
+            {
+              value: "banner",
+              label: "Banner principal",
+              content: (
+                <BannerSlidesManager
+                  apiBase="/api/painel/banner"
+                  title="Banner principal da vitrine"
+                  description="Adicione uma imagem única ou múltiplos slides. Cada slide precisa de versão desktop (1920×600px) e mobile (1080×1080px)."
+                />
+              ),
+            },
+            {
+              value: "secoes",
+              label: "Seções da home",
+              content: (
+                <HomeSectionsPanel
+                  apiBase="/api/painel/home-sections"
+                  hint="A primeira seção (“Cursos mais vendidos da semana”) é fixa. As outras você pode ligar, desligar, reordenar e personalizar — toda categoria nova aparece aqui automaticamente, desativada, esperando você ativar."
+                />
+              ),
+            },
+            {
+              value: "personalizacao",
+              label: "Personalização",
+              content: <VitrineEditor />,
+            },
+          ]}
+        />
+      </div>
+    </WriteGate>
   )
 }

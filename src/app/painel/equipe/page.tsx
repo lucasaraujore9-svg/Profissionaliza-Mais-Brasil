@@ -2,6 +2,7 @@ import { redirect } from "next/navigation"
 import { prisma } from "@/lib/prisma"
 import { EquipePainelClient } from "@/components/painel/equipe-painel-client"
 import { requirePainelPage } from "@/lib/auth/painel-guard"
+import { WriteGate } from "@/components/shared/permissions/permission-context"
 import {
   filterPainelPermissions,
   normalizeMemberRole,
@@ -12,7 +13,7 @@ export const dynamic = "force-dynamic"
 
 export default async function EquipePainelPage() {
   // `equipe.manage` é OWNER_EXCLUSIVE — na prática, só o titular chega aqui.
-  const ctx = await requirePainelPage("equipe.manage")
+  const ctx = await requirePainelPage("equipe.view")
 
   const tenant = await prisma.tenant.findUnique({
     where: { id: ctx.tenantId },
@@ -58,5 +59,12 @@ export default async function EquipePainelPage() {
     }
   })
 
-  return <EquipePainelClient tenantName={tenant.name} initialItems={items} />
+  return (
+    <WriteGate
+      perm="equipe.manage"
+      notice="Você está vendo a equipe em modo somente leitura. Convidar e editar membros é exclusivo do proprietário da unidade."
+    >
+      <EquipePainelClient tenantName={tenant.name} initialItems={items} />
+    </WriteGate>
+  )
 }

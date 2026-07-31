@@ -20,6 +20,7 @@ import {
 import { enrollmentStatusLabel } from "@/lib/labels"
 import { STAGE_META, type StageKey } from "./lead-kanban.shared"
 import { LeadStageBadge } from "./lead-stage"
+import { useCan } from "@/components/shared/permissions/permission-context"
 
 interface LeadActivity {
   id: string
@@ -99,6 +100,8 @@ export function LeadDetailDrawer({
   onClose,
   onChanged,
 }: LeadDetailDrawerProps) {
+  const canManage = useCan("leads.manage")
+
   const [lead, setLead] = useState<LeadDetail | null>(null)
   const [loading, setLoading] = useState(false)
   const [note, setNote] = useState("")
@@ -496,6 +499,11 @@ export function LeadDetailDrawer({
               </ul>
             </div>
 
+            {/* Disparar WhatsApp e anotar no histórico são escritas
+                (`leads.manage`). Sem ela o drawer vira consulta: dados do lead
+                e histórico, sem campos de ação. */}
+            {canManage && (
+            <>
             <div className="mt-6">
               <h4 className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
                 <MessageCircle className="h-3.5 w-3.5" />
@@ -557,18 +565,24 @@ export function LeadDetailDrawer({
                 Salvar anotação
               </button>
             </div>
+            </>
+            )}
           </div>
         )}
 
         {lead && (
           <footer className="flex items-center justify-between border-t border-gray-200 px-5 py-3">
-            <button
-              onClick={discard}
-              className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12px] font-semibold text-rose-600 hover:bg-rose-50"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-              Descartar lead
-            </button>
+            {canManage ? (
+              <button
+                onClick={discard}
+                className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12px] font-semibold text-rose-600 hover:bg-rose-50"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Descartar lead
+              </button>
+            ) : (
+              <span />
+            )}
             <span className="font-mono text-[10px] text-gray-400">ID: {lead.id}</span>
           </footer>
         )}

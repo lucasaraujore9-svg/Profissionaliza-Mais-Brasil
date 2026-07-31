@@ -19,7 +19,7 @@ const upsertSchema = z.object({
 export const GET = withRequestContext(
   { action: "painel.certificate_template.get", route: "/api/painel/certificate-template" },
   async () => {
-    const guard = await requirePainel("certificados.template")
+    const guard = await requirePainel("certificados.view")
     if (!guard.ok) return guard.response
     const { ctx } = guard
 

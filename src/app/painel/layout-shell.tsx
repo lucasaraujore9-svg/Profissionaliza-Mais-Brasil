@@ -5,6 +5,7 @@ import { HeaderDashboard } from "@/components/shared/layouts/header-dashboard"
 import { TourRunner } from "@/components/shared/tour/tour-runner"
 import { BillingReminderPopup } from "@/components/painel/billing-reminder-popup"
 import { useSidebarCollapsed } from "@/components/shared/layouts/use-sidebar-collapsed"
+import { PermissionProvider } from "@/components/shared/permissions/permission-context"
 import type {
   PainelMemberRole,
   PainelPermission,
@@ -50,6 +51,7 @@ export function PainelLayoutShell({
 }: PainelLayoutShellProps) {
   const { collapsed, toggle } = useSidebarCollapsed(defaultCollapsed)
   return (
+    <PermissionProvider permissions={permissions}>
     <div className="flex h-screen overflow-hidden">
       <div className="hidden h-full lg:block">
         <SidebarPainel
@@ -96,5 +98,6 @@ export function PainelLayoutShell({
           /painel/cobrancas — a API também responde 403 a quem não a tem. */}
       {permissions.includes("cobrancas.view") && <BillingReminderPopup />}
     </div>
+    </PermissionProvider>
   )
 }

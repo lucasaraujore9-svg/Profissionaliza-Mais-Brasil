@@ -7,6 +7,7 @@ import {
   SENSITIVE,
   SUPER_EXCLUSIVE,
   SUPER_EXCLUSIVE_BY_PRESET,
+  WRITE_IMPLIES_READ,
   filterAdminPermissions,
   resolveAdminPermissions,
   type AdminPermission,
@@ -199,9 +200,25 @@ describe("grupos da UI", () => {
 })
 
 describe("resolveAdminPermissions", () => {
-  it("sem overrides devolve exatamente o preset do papel", () => {
+  it("sem overrides devolve o preset fechado sobre WRITE_IMPLIES_READ", () => {
     const perms = resolveAdminPermissions("PMB_SALES")
-    expect([...perms].sort()).toEqual([...ADMIN_ROLE_PRESETS.PMB_SALES].sort())
+    // O preset inteiro continua lá...
+    for (const perm of ADMIN_ROLE_PRESETS.PMB_SALES) {
+      expect(perms.has(perm), perm).toBe(true)
+    }
+    // ...e o que sobra é EXCLUSIVAMENTE leitura implicada por uma escrita do
+    // próprio preset. Nada entra por outro caminho.
+    const preset = new Set<AdminPermission>(ADMIN_ROLE_PRESETS.PMB_SALES)
+    const esperado = new Set<AdminPermission>(preset)
+    for (const perm of preset) {
+      const read = WRITE_IMPLIES_READ[perm]
+      if (read) esperado.add(read)
+    }
+    expect([...perms].sort()).toEqual([...esperado].sort())
+    // E o caso concreto que motivou a mudança: quem responde a caixa de
+    // atendimento passa a poder ABRI-LA sem um segundo checkbox.
+    expect(ADMIN_ROLE_PRESETS.PMB_SALES).not.toContain("atendimento.view")
+    expect(perms.has("atendimento.view")).toBe(true)
   })
 
   it("extra soma permissões ao preset", () => {
@@ -330,5 +347,93 @@ describe("paridade com a matriz de papéis anterior", () => {
   it.each(cases)("%s → %s = %s", (role, perm, expected) => {
     const perms = resolveAdminPermissions(role as never)
     expect(perms.has(perm)).toBe(expected)
+  })
+})
+
+/**
+ * Estrutura do par ver/editar.
+ *
+ * O modelo antigo tinha áreas que só existiam na forma `.manage`: para ABRIR a
+ * tela de configurações, integrações, vitrine, automação ou equipe era preciso
+ * conceder o poder de ALTERÁ-LA. Estes testes impedem que uma permissão nova
+ * nasça assim de novo.
+ */
+describe("par ver/editar (WRITE_IMPLIES_READ)", () => {
+  const pares = Object.entries(WRITE_IMPLIES_READ) as [
+    AdminPermission,
+    AdminPermission,
+  ][]
+
+  it("só referencia permissões do catálogo", () => {
+    for (const [write, read] of pares) {
+      expect(ADMIN_PERMISSIONS, write).toContain(write)
+      expect(ADMIN_PERMISSIONS, read).toContain(read)
+    }
+  })
+
+  it("todo alvo é uma permissão de leitura", () => {
+    for (const [write, read] of pares) {
+      expect(read.endsWith(".view"), `${write} → ${read}`).toBe(true)
+    }
+  })
+
+  // `applyImplications` faz UMA passada. Se uma chave fosse também um valor
+  // (A → B e B → C), conceder A deixaria de conceder C sem ninguém perceber.
+  it("nenhuma chave é também um alvo — uma passada basta", () => {
+    const alvos = new Set(pares.map(([, read]) => read))
+    const chaves = pares.map(([write]) => write)
+    expect(chaves.filter((k) => alvos.has(k))).toEqual([])
+  })
+
+  /**
+   * A regra que fecha o buraco para o futuro: toda escrita declara qual leitura
+   * ela pressupõe. Sem isto, alguém adiciona `relatorios.novaAba` guardando o
+   * GET pela permissão de escrita e a área volta a não ter modo consulta.
+   */
+  it("toda permissão de escrita declara a leitura correspondente", () => {
+    // `perfil.edit` é auto-serviço (o próprio nome e a própria senha): não é uma
+    // ÁREA do sistema e não tem tela de consulta separada.
+    const AUTO_SERVICO: AdminPermission[] = ["perfil.edit"]
+    const semPar = ADMIN_PERMISSIONS.filter((perm) => {
+      if (perm.endsWith(".view") || perm.endsWith(".viewAll")) return false
+      if (AUTO_SERVICO.includes(perm)) return false
+      return !(perm in WRITE_IMPLIES_READ)
+    })
+    expect(semPar).toEqual([])
+  })
+
+  it("conceder a escrita já concede a leitura", () => {
+    const perms = resolveAdminPermissions("PMB_DESIGNER", ["catalogo.manage"])
+    expect(perms.has("catalogo.view")).toBe(true)
+  })
+
+  /**
+   * Fail-closed: revogar a leitura derruba a escrita junto. Sem isto, tirar
+   * `catalogo.view` de alguém deixaria a pessoa sem a tela e ainda com o PATCH
+   * liberado — que é pior do que não ter revogado nada.
+   */
+  it("revogar a leitura derruba a escrita da mesma área", () => {
+    const perms = resolveAdminPermissions(
+      "PMB_SALES",
+      [],
+      ["cupons.view"],
+    )
+    expect(ADMIN_ROLE_PRESETS.PMB_SALES).toContain("cupons.manage")
+    expect(perms.has("cupons.view")).toBe(false)
+    expect(perms.has("cupons.manage")).toBe(false)
+  })
+
+  it("revogar só a escrita preserva a leitura", () => {
+    const perms = resolveAdminPermissions("PMB_SALES", [], ["cupons.manage"])
+    expect(perms.has("cupons.manage")).toBe(false)
+    expect(perms.has("cupons.view")).toBe(true)
+  })
+
+  // O SUPER_ADMIN ignora `revoked` — inclusive para o fail-closed, senão o dono
+  // do sistema se trancaria fora com um checkbox.
+  it("SUPER_ADMIN mantém tudo mesmo revogando a leitura", () => {
+    const perms = resolveAdminPermissions("SUPER_ADMIN", [], ["cupons.view"])
+    expect(perms.has("cupons.view")).toBe(true)
+    expect(perms.has("cupons.manage")).toBe(true)
   })
 })

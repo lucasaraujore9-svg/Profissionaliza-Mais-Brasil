@@ -12,7 +12,7 @@ export const GET = withRequestContext(
     route: "/api/admin/automacao/whatsapp/status",
   },
   async () => {
-    const guard = await requireAdmin("automacao.manage")
+    const guard = await requireAdmin("automacao.view")
     if (!guard.ok) return guard.response
     const settings = await prisma.systemSettings.upsert({
       where: { id: "default" },

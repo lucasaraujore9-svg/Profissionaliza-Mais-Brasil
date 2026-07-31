@@ -12,7 +12,7 @@ const bodySchema = z.object({
 export const POST = withRequestContextParams<{ id: string }>(
   { action: "painel.leads.whatsapp", route: "/api/painel/leads/[id]/whatsapp" },
   async (request: Request, { params }) => {
-    const guard = await requirePainel("leads.view")
+    const guard = await requirePainel("leads.manage")
     if (!guard.ok) return guard.response
     const { ctx } = guard
 

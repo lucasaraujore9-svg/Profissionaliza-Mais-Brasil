@@ -33,7 +33,7 @@ const upsertSchema = z.object({
 export const GET = withRequestContext(
   { action: "admin.certificate_template.get", route: "/api/admin/certificate-template" },
   async () => {
-  const guard = await requireAdmin("certificados.template")
+  const guard = await requireAdmin("certificados.view")
   if (!guard.ok) return guard.response
 
   const template = await prisma.certificateTemplate.findFirst({

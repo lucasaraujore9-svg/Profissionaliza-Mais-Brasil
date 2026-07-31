@@ -21,7 +21,7 @@ const MAX_TICKS = 54
 export async function GET() {
   // O placar é o scoreboard das revendas indicadas — mesma permissão da seção
   // "Revendedor" no menu, e não apenas "estar logado na unidade".
-  const guard = await requirePainel("revendas.manage")
+  const guard = await requirePainel("revendas.view")
   if (!guard.ok) return guard.response
   const tenantId = guard.ctx.tenantId
 

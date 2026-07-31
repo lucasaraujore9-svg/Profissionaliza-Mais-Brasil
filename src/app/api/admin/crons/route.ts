@@ -13,7 +13,7 @@ import { requireAdmin } from "@/lib/auth/admin-guard"
 export const GET = withRequestContext(
   { action: "admin.crons.health", route: "/api/admin/crons" },
   async () => {
-    const guard = await requireAdmin("configuracoes.manage")
+    const guard = await requireAdmin("configuracoes.view")
     if (!guard.ok) return guard.response
     const jobs = await getCronHealth()
     return NextResponse.json({

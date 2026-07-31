@@ -9,11 +9,12 @@ import {
   describeEffectiveCommission,
   resolveEffectiveCommission,
 } from "@/lib/referrals/effective-rule"
+import { WriteGate } from "@/components/shared/permissions/permission-context"
 
 export const dynamic = "force-dynamic"
 
 export default async function AdminReferralSettingsPage() {
-  await requireAdminPage("indicacoes.config")
+  await requireAdminPage("indicacoes.view")
 
   const settings = await prisma.systemSettings.upsert({
     where: { id: "default" },
@@ -40,38 +41,43 @@ export default async function AdminReferralSettingsPage() {
   const effectiveRule = resolveEffectiveCommission(null, settings)
 
   return (
-    <div className="space-y-6">
-      <Link
-        href="/admin/configuracoes"
-        className="inline-flex items-center gap-2 text-xs font-semibold text-gray-600 hover:text-[var(--color-pmb-green-900)]"
-      >
-        <ArrowLeft className="h-3.5 w-3.5" />
-        Voltar para configurações
-      </Link>
+    <WriteGate
+      perm="indicacoes.config"
+      notice="Você está vendo as regras de comissão em modo somente leitura. Para alterá-las, peça a permissão “Configurar as regras globais de comissão”."
+    >
+      <div className="space-y-6">
+        <Link
+          href="/admin/configuracoes"
+          className="inline-flex items-center gap-2 text-xs font-semibold text-gray-600 hover:text-[var(--color-pmb-green-900)]"
+        >
+          <ArrowLeft className="h-3.5 w-3.5" />
+          Voltar para configurações
+        </Link>
 
-      <PageHeader
-        title="Configurações do programa de indicação"
-        description="Defina a regra padrão de comissão da rede, o valor mínimo de saque e o dia do mês em que comissões ficam disponíveis."
-      />
+        <PageHeader
+          title="Configurações do programa de indicação"
+          description="Defina a regra padrão de comissão da rede, o valor mínimo de saque e o dia do mês em que comissões ficam disponíveis."
+        />
 
-      <AdminReferralSettingsForm
-        initial={{
-          referralEnabled: settings.referralEnabled,
-          defaultReferralPercent: Number(settings.defaultReferralPercent),
-          defaultReferralMinReferrals: settings.defaultReferralMinReferrals,
-          referralMinPayout: Number(settings.referralMinPayout),
-          referralPayoutDay: settings.referralPayoutDay,
-          commissionBracketBasis: settings.commissionBracketBasis,
-          commissionRateType: settings.commissionRateType,
-          commissionPayoutBase: settings.commissionPayoutBase,
-          commissionBrackets: parseBrackets(settings.commissionBrackets),
-          commissionPlan: settings.commissionPlan,
-        }}
-        preview={{
-          description: describeEffectiveCommission(effectiveRule),
-          warnings: effectiveRule.warnings,
-        }}
-      />
-    </div>
+        <AdminReferralSettingsForm
+          initial={{
+            referralEnabled: settings.referralEnabled,
+            defaultReferralPercent: Number(settings.defaultReferralPercent),
+            defaultReferralMinReferrals: settings.defaultReferralMinReferrals,
+            referralMinPayout: Number(settings.referralMinPayout),
+            referralPayoutDay: settings.referralPayoutDay,
+            commissionBracketBasis: settings.commissionBracketBasis,
+            commissionRateType: settings.commissionRateType,
+            commissionPayoutBase: settings.commissionPayoutBase,
+            commissionBrackets: parseBrackets(settings.commissionBrackets),
+            commissionPlan: settings.commissionPlan,
+          }}
+          preview={{
+            description: describeEffectiveCommission(effectiveRule),
+            warnings: effectiveRule.warnings,
+          }}
+        />
+      </div>
+    </WriteGate>
   )
 }

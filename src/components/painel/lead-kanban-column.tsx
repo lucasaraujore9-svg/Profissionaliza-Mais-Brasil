@@ -20,7 +20,11 @@ interface LeadKanbanColumnProps {
   stage: StageKey
   leads: LeadCardData[]
   onSelect: (id: string) => void
-  onMove: (id: string, toStage: StageKey) => void
+  /**
+   * Ausente = quadro somente leitura (sem `leads.manage`): não arrasta, não
+   * aceita drop e o cartão não oferece "mover para".
+   */
+  onMove?: (id: string, toStage: StageKey) => void
 }
 
 export function LeadKanbanColumn({
@@ -33,6 +37,7 @@ export function LeadKanbanColumn({
   const [isOver, setIsOver] = useState(false)
 
   function handleDragOver(e: React.DragEvent) {
+    if (!onMove) return
     // Só aceita o drop se o que está sendo arrastado é um lead nosso.
     if (!e.dataTransfer.types.includes(DRAG_MIME)) return
     e.preventDefault()
@@ -41,6 +46,7 @@ export function LeadKanbanColumn({
   }
 
   function handleDrop(e: React.DragEvent) {
+    if (!onMove) return
     const id = e.dataTransfer.getData(DRAG_MIME)
     setIsOver(false)
     if (!id) return
@@ -95,7 +101,8 @@ interface LeadCardProps {
   lead: LeadCardData
   currentStage: StageKey
   onClick: () => void
-  onMove: (id: string, toStage: StageKey) => void
+  /** Ausente = cartão somente leitura. */
+  onMove?: (id: string, toStage: StageKey) => void
 }
 
 function LeadCard({ lead, currentStage, onClick, onMove }: LeadCardProps) {
@@ -118,14 +125,16 @@ function LeadCard({ lead, currentStage, onClick, onMove }: LeadCardProps) {
     setDragging(true)
   }
 
+  const canMove = Boolean(onMove)
+
   return (
     <div
-      draggable
-      onDragStart={handleDragStart}
+      draggable={canMove}
+      onDragStart={canMove ? handleDragStart : undefined}
       onDragEnd={() => setDragging(false)}
-      className={`group relative cursor-grab rounded-lg border border-gray-200 bg-white p-3 shadow-sm transition hover:border-[var(--color-pmb-green)] hover:shadow-md active:cursor-grabbing ${
-        dragging ? "opacity-40" : ""
-      }`}
+      className={`group relative rounded-lg border border-gray-200 bg-white p-3 shadow-sm transition hover:border-[var(--color-pmb-green)] hover:shadow-md ${
+        canMove ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"
+      } ${dragging ? "opacity-40" : ""}`}
     >
       <div
         onClick={onClick}
@@ -183,6 +192,7 @@ function LeadCard({ lead, currentStage, onClick, onMove }: LeadCardProps) {
       </div>
 
       <div ref={ref} className="absolute right-1 top-1">
+        {onMove && (
         <button
           type="button"
           onClick={(e) => {
@@ -194,7 +204,8 @@ function LeadCard({ lead, currentStage, onClick, onMove }: LeadCardProps) {
         >
           <MoreVertical className="h-3.5 w-3.5" />
         </button>
-        {open && (
+        )}
+        {open && onMove && (
           <div className="absolute right-0 z-10 mt-1 w-44 rounded-md border border-gray-200 bg-white p-1 shadow-lg">
             <p className="px-2 py-1 text-[10px] font-semibold uppercase text-gray-400">
               Mover para

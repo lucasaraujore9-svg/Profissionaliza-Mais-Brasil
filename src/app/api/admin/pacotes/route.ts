@@ -11,7 +11,7 @@ import { requireAdmin } from "@/lib/auth/admin-guard"
 export const GET = withRequestContext(
   { action: "admin.pacotes.list", route: "/api/admin/pacotes" },
   async () => {
-    const guard = await requireAdmin("pacotes.manage")
+    const guard = await requireAdmin("pacotes.view")
     if (!guard.ok) return guard.response
 
     const packages = await prisma.coursePackage.findMany({

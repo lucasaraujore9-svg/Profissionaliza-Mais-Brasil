@@ -18,7 +18,7 @@ const NOTIFICATION_LEVELS: NotificationLevel[] = [
 export const GET = withRequestContext(
   { action: "admin.notifications.auto_config.list", route: "/api/admin/notifications/auto-config" },
   async (request: Request) => {
-  const auth = await requireAdmin("configuracoes.manage")
+  const auth = await requireAdmin("configuracoes.view")
   if (!auth.ok) return auth.response
 
   const { searchParams } = new URL(request.url)

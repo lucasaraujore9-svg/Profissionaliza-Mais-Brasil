@@ -8,6 +8,7 @@ import {
   type AtendimentoMessage,
 } from "@/components/shared/atendimento-inbox"
 import { requirePainelPage } from "@/lib/auth/painel-guard"
+import { WriteGate } from "@/components/shared/permissions/permission-context"
 
 export const dynamic = "force-dynamic"
 
@@ -29,7 +30,7 @@ export default async function PainelAtendimentoPage({
 }: {
   searchParams: Promise<{ status?: string; kind?: string }>
 }) {
-  await requirePainelPage("atendimento.manage")
+  await requirePainelPage("atendimento.view")
   const session = await auth()
   if (
     !session?.user ||
@@ -78,47 +79,52 @@ export default async function PainelAtendimentoPage({
   }
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Atendimento"
-        description="Mensagens de contato da sua vitrine e chamados de suporte dos seus alunos."
-      />
+    <WriteGate
+      perm="atendimento.manage"
+      notice="Você está vendo a caixa em modo somente leitura. Para responder e resolver chamados, peça a permissão “Responder a caixa de atendimento”."
+    >
+      <div className="space-y-6">
+        <PageHeader
+          title="Atendimento"
+          description="Mensagens de contato da sua vitrine e chamados de suporte dos seus alunos."
+        />
 
-      <div className="flex flex-wrap gap-2">
-        {STATUS_TABS.map((t) => (
-          <Link
-            key={t.value}
-            href={tabHref({ status: t.value })}
-            className={`rounded-full px-3.5 py-1.5 text-xs font-bold ${
-              status === t.value
-                ? "bg-[var(--color-pmb-green)] text-white"
-                : "border border-gray-200 bg-white text-gray-600"
-            }`}
-          >
-            {t.label}
-          </Link>
-        ))}
-        <span className="mx-1 self-center text-gray-300">|</span>
-        {KIND_TABS.map((t) => (
-          <Link
-            key={t.value}
-            href={tabHref({ kind: t.value })}
-            className={`rounded-full px-3.5 py-1.5 text-xs font-bold ${
-              kind === t.value
-                ? "bg-[var(--color-pmb-green)] text-white"
-                : "border border-gray-200 bg-white text-gray-600"
-            }`}
-          >
-            {t.label}
-          </Link>
-        ))}
+        <div className="flex flex-wrap gap-2">
+          {STATUS_TABS.map((t) => (
+            <Link
+              key={t.value}
+              href={tabHref({ status: t.value })}
+              className={`rounded-full px-3.5 py-1.5 text-xs font-bold ${
+                status === t.value
+                  ? "bg-[var(--color-pmb-green)] text-white"
+                  : "border border-gray-200 bg-white text-gray-600"
+              }`}
+            >
+              {t.label}
+            </Link>
+          ))}
+          <span className="mx-1 self-center text-gray-300">|</span>
+          {KIND_TABS.map((t) => (
+            <Link
+              key={t.value}
+              href={tabHref({ kind: t.value })}
+              className={`rounded-full px-3.5 py-1.5 text-xs font-bold ${
+                kind === t.value
+                  ? "bg-[var(--color-pmb-green)] text-white"
+                  : "border border-gray-200 bg-white text-gray-600"
+              }`}
+            >
+              {t.label}
+            </Link>
+          ))}
+        </div>
+
+        <AtendimentoInbox
+          messages={messages}
+          apiBase="/api/painel/atendimento"
+          alunoBase="/painel/alunos"
+        />
       </div>
-
-      <AtendimentoInbox
-        messages={messages}
-        apiBase="/api/painel/atendimento"
-        alunoBase="/painel/alunos"
-      />
-    </div>
+    </WriteGate>
   )
 }

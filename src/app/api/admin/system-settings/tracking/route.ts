@@ -8,7 +8,7 @@ import { requireAdmin } from "@/lib/auth/admin-guard"
 export const GET = withRequestContext(
   { action: "admin.system_settings.tracking.get", route: "/api/admin/system-settings/tracking" },
   async () => {
-    const guard = await requireAdmin("configuracoes.manage")
+    const guard = await requireAdmin("configuracoes.view")
     if (!guard.ok) return guard.response
     const pixels = await readPmbPixels()
     return NextResponse.json({ data: pixels })

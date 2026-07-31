@@ -22,7 +22,7 @@ const WA_STATUS_LABEL: Record<string, { label: string; color: string }> = {
 }
 
 export default async function PainelAutomacaoPage() {
-  await requirePainelPage("automacao.manage")
+  await requirePainelPage("automacao.view")
   const session = await auth()
   if (
     !session?.user ||

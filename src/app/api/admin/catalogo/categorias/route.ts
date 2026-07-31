@@ -17,7 +17,7 @@ const createSchema = z.object({
 export const GET = withRequestContext(
   { action: "admin.catalogo.categorias.list", route: "/api/admin/catalogo/categorias" },
   async () => {
-  const guard = await requireAdmin("catalogo.manage")
+  const guard = await requireAdmin("catalogo.view")
   if (!guard.ok) return guard.response
 
   const categories = await prisma.category.findMany({

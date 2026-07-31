@@ -13,7 +13,7 @@ export const GET = withRequestContext(
     route: "/api/painel/automacao/templates",
   },
   async () => {
-    const guard = await requirePainel("automacao.manage")
+    const guard = await requirePainel("automacao.view")
     if (!guard.ok) return guard.response
     const { ctx } = guard
 

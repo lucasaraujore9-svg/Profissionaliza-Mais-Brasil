@@ -5,6 +5,7 @@ import { Eye, Ban, Unlock, ChevronUp, ChevronDown, ChevronsUpDown, Users } from 
 import { EmptyState } from "@/components/shared/empty-state"
 import { TableRowsSkeleton } from "@/components/shared/loading-skeletons"
 import { StudentStatusBadge, type StudentStatusKey } from "./student-status"
+import { useCan } from "@/components/shared/permissions/permission-context"
 
 // Status canonicos do aluno — fonte unica de verdade em ./student-status.
 export type StudentStatus = StudentStatusKey
@@ -68,6 +69,8 @@ export function StudentTable({
   onViewDetails,
   onToggleBlock,
 }: StudentTableProps) {
+  const canManage = useCan("alunos.manage")
+
   if (loading) {
     return (
       <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
@@ -164,18 +167,23 @@ export function StudentTable({
                       >
                         <Eye className="h-4 w-4" />
                       </button>
-                      <button
-                        type="button"
-                        disabled={isPending}
-                        onClick={() => onToggleBlock(student)}
-                        className={`rounded-md p-1.5 hover:bg-gray-100 disabled:opacity-50 ${
-                          isBlocked ? "text-green-600" : "text-gray-500 hover:text-red-600"
-                        }`}
-                        aria-label={isBlocked ? "Desbloquear aluno" : "Bloquear aluno"}
-                        title={isBlocked ? "Desbloquear" : "Bloquear"}
-                      >
-                        {isBlocked ? <Unlock className="h-4 w-4" /> : <Ban className="h-4 w-4" />}
-                      </button>
+                      {/* Bloquear/desbloquear é `alunos.manage`. O Financeiro da
+                          unidade lê a carteira para conciliar e não mexe no
+                          acesso do aluno. */}
+                      {canManage && (
+                        <button
+                          type="button"
+                          disabled={isPending}
+                          onClick={() => onToggleBlock(student)}
+                          className={`rounded-md p-1.5 hover:bg-gray-100 disabled:opacity-50 ${
+                            isBlocked ? "text-green-600" : "text-gray-500 hover:text-red-600"
+                          }`}
+                          aria-label={isBlocked ? "Desbloquear aluno" : "Bloquear aluno"}
+                          title={isBlocked ? "Desbloquear" : "Bloquear"}
+                        >
+                          {isBlocked ? <Unlock className="h-4 w-4" /> : <Ban className="h-4 w-4" />}
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>

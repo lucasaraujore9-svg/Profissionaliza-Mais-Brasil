@@ -45,27 +45,34 @@ interface NavItem {
   automationOnly?: boolean
   /** Só aparece quando o módulo "revender revendas" está habilitado na unidade. */
   resellerSellerOnly?: boolean
-  /** Sub-itens exibidos (indentados) quando a seção está ativa. */
-  children?: { href: string; label: string }[]
+  /**
+   * Sub-itens exibidos (indentados) quando a seção está ativa. `perm` própria
+   * quando o sub-item é mais restrito que a seção — o pai abre para leitura e
+   * só quem escreve enxerga a ação de criar.
+   */
+  children?: { href: string; label: string; perm?: PainelPermission }[]
 }
 
+// O item do menu gateia pela permissão de LEITURA da área. Gatear por `.manage`
+// escondia a tela de quem tinha acesso somente-leitura: a pessoa alcançava a
+// página pela URL, mas não pelo menu.
 const ALL_ITEMS: NavItem[] = [
   { href: "/painel", label: "Dashboard", icon: LayoutDashboard, perm: "dashboard.view" },
   { href: "/painel/treinamentos", label: "Treinamentos", icon: Video, perm: "treinamentos.view" },
   { href: "/painel/artes", label: "Artes de divulgação", icon: Images, perm: "artes.view" },
   { href: "/painel/cursos", label: "Catálogo", icon: GraduationCap, perm: "catalogo.view" },
   { href: "/painel/alunos", label: "Alunos", icon: Users, perm: "alunos.view" },
-  { href: "/painel/atendimento", label: "Atendimento", icon: LifeBuoy, perm: "atendimento.manage" },
+  { href: "/painel/atendimento", label: "Atendimento", icon: LifeBuoy, perm: "atendimento.view" },
   { href: "/painel/leads", label: "Leads", icon: Inbox, perm: "leads.view", automationOnly: true },
   { href: "/painel/vendas", label: "Vendas diretas", icon: ShoppingCart, perm: "vendas.view" },
   {
     href: "/painel/revendas",
     label: "Revendedor",
     icon: Store,
-    perm: "revendas.manage",
+    perm: "revendas.view",
     resellerSellerOnly: true,
     children: [
-      { href: "/painel/revendas/nova", label: "Criar revenda" },
+      { href: "/painel/revendas/nova", label: "Criar revenda", perm: "revendas.manage" },
       { href: "/painel/revendas/leads", label: "Leads revendas" },
       // Placar de indicações: scoreboard das revendas que ele indicou.
       { href: "/painel/placar", label: "Placar" },
@@ -82,12 +89,16 @@ const ALL_ITEMS: NavItem[] = [
   { href: "/painel/relatorios", label: "Relatórios", icon: BarChart3, perm: "relatorios.view" },
   { href: "/painel/indicacoes", label: "Indicações", icon: Share2, perm: "indicacoes.view" },
   { href: "/painel/certificados", label: "Certificados", icon: Award, perm: "certificados.view" },
-  { href: "/painel/equipe", label: "Equipe", icon: UserCog, perm: "equipe.manage" },
-  { href: "/painel/comunicacao", label: "Comunicação", icon: MessageSquare, perm: "comunicacao.manage" },
-  { href: "/painel/automacao", label: "Automação", icon: Zap, perm: "automacao.manage", automationOnly: true },
-  { href: "/painel/dominio", label: "Domínio", icon: Globe, perm: "dominio.manage" },
-  { href: "/painel/vitrine", label: "Vitrine", icon: Palette, perm: "vitrine.manage" },
-  { href: "/painel/configuracoes", label: "Configurações", icon: Settings, perm: "configuracoes.manage" },
+  { href: "/painel/equipe", label: "Equipe", icon: UserCog, perm: "equipe.view" },
+  { href: "/painel/comunicacao", label: "Comunicação", icon: MessageSquare, perm: "comunicacao.view" },
+  { href: "/painel/automacao", label: "Automação", icon: Zap, perm: "automacao.view", automationOnly: true },
+  { href: "/painel/dominio", label: "Domínio", icon: Globe, perm: "dominio.view" },
+  { href: "/painel/vitrine", label: "Vitrine", icon: Palette, perm: "vitrine.view" },
+  // A tela é a do PRÓPRIO cadastro e da própria senha (a página exige
+  // `perfil.edit`); as abas da conta dentro dela têm gate próprio. Gatear o menu
+  // por `configuracoes.manage` escondia de quase todo mundo o único lugar onde
+  // se troca a própria senha.
+  { href: "/painel/configuracoes", label: "Configurações", icon: Settings, perm: "perfil.edit" },
 ]
 
 interface SidebarPainelProps {
@@ -243,6 +254,9 @@ export function SidebarPainel({
               {!collapsed && item.children && sectionActive && (
                 <div className="mt-1 space-y-1 pl-6">
                   {item.children.map((child) => {
+                    // Sub-item mais restrito que a seção (ex.: "Criar revenda"
+                    // sob uma seção aberta para leitura).
+                    if (child.perm && !granted.has(child.perm)) return null
                     const childActive =
                       pathname === child.href || pathname.startsWith(child.href + "/")
                     return (

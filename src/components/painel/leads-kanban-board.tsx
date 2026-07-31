@@ -8,6 +8,7 @@ import { LeadDetailDrawer } from "./lead-detail-drawer"
 import { STAGE_META, type StageKey, type LeadCardData } from "./lead-kanban.shared"
 import { BlockSkeleton } from "@/components/shared/loading-skeletons"
 import { EmptyState } from "@/components/shared/empty-state"
+import { useCan } from "@/components/shared/permissions/permission-context"
 
 type BoardData = Record<StageKey, LeadCardData[]>
 
@@ -35,6 +36,11 @@ interface LeadsKanbanBoardProps {
 export function LeadsKanbanBoard({
   apiBase = "/api/painel/leads",
 }: LeadsKanbanBoardProps = {}) {
+  // Mesma permissão nos dois catálogos (admin e unidade): trabalhar o funil é
+  // escrita. Antes de `leads.manage` existir, mover e excluir lead passavam por
+  // `leads.view` — quem só consultava o quadro apagava lead.
+  const canManage = useCan("leads.manage")
+
   const [board, setBoard] = useState<BoardData>(emptyBoard())
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -141,7 +147,9 @@ export function LeadsKanbanBoard({
               stage={stage}
               leads={board[stage]}
               onSelect={setSelectedId}
-              onMove={moveLead}
+              // Sem `leads.manage` o quadro é só de consulta: a etapa não muda
+              // e o PATCH /stage responderia 403.
+              onMove={canManage ? moveLead : undefined}
             />
           ))}
         </div>

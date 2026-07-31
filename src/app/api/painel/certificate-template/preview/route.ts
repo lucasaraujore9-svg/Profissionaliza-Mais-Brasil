@@ -21,7 +21,7 @@ type Layout = (typeof VALID_LAYOUTS)[number]
 export const GET = withRequestContext(
   { action: "painel.certificate_template.preview", route: "/api/painel/certificate-template/preview" },
   async (request: Request) => {
-    const guard = await requirePainel("certificados.template")
+    const guard = await requirePainel("certificados.view")
     if (!guard.ok) return guard.response
     const { ctx } = guard
 

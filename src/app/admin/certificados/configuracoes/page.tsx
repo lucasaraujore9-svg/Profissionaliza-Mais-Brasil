@@ -9,13 +9,14 @@ import {
   CertificateTemplateEditor,
   type CertificateTemplateData,
 } from "@/components/painel/certificate-template-editor"
+import { WriteGate } from "@/components/shared/permissions/permission-context"
 
 export const dynamic = "force-dynamic"
 
 const SETTINGS_ID = "default"
 
 export default async function AdminCertificadosConfiguracoesPage() {
-  await requireAdminPage("certificados.template")
+  await requireAdminPage("certificados.view")
   const [settings, template] = await Promise.all([
     prisma.systemSettings.upsert({
       where: { id: SETTINGS_ID },
@@ -54,73 +55,78 @@ export default async function AdminCertificadosConfiguracoesPage() {
     : null
 
   return (
-    <div className="space-y-6">
-      <Link
-        href="/admin/certificados"
-        className="inline-flex items-center gap-2 text-xs font-semibold text-gray-600 hover:text-[var(--color-pmb-green-900)]"
-      >
-        <ArrowLeft className="h-3.5 w-3.5" />
-        Voltar
-      </Link>
+    <WriteGate
+      perm="certificados.template"
+      notice="Você está vendo o modelo do certificado em modo somente leitura. Para editá-lo, peça a permissão “Editar o modelo do certificado”."
+    >
+      <div className="space-y-6">
+        <Link
+          href="/admin/certificados"
+          className="inline-flex items-center gap-2 text-xs font-semibold text-gray-600 hover:text-[var(--color-pmb-green-900)]"
+        >
+          <ArrowLeft className="h-3.5 w-3.5" />
+          Voltar
+        </Link>
 
-      <PageHeader
-        title="Configurações de certificados"
-        description="Regras globais de emissão, branding do Grupo e template padrão da vitrine PMB."
-      />
-
-      {/* Seção 1 — Regras globais + Logo do Grupo */}
-      <section className="space-y-3">
-        <header>
-          <h2 className="text-base font-semibold text-[var(--color-pmb-green-900)]">
-            Regras globais
-          </h2>
-          <p className="text-sm text-gray-600">
-            Controlam quando o sistema emite certificados automaticamente e a logo
-            do Grupo Bolsa Mais Brasil que aparece em todos os certificados.
-          </p>
-        </header>
-        <AdminCertificateSettingsForm initial={settings} />
-      </section>
-
-      {/* Manutenção — regenerar PDFs já emitidos com o layout atual */}
-      <section className="space-y-3 pt-4">
-        <header>
-          <h2 className="text-base font-semibold text-[var(--color-pmb-green-900)]">
-            Manutenção
-          </h2>
-          <p className="text-sm text-gray-600">
-            Os PDFs já emitidos são atualizados automaticamente no próximo
-            download/validação quando o template muda. Use este botão para
-            forçar a reaplicação imediata do layout atual a todos os
-            certificados de uma vez. Sobrescreve os PDFs no Storage.
-          </p>
-        </header>
-        <RegenerateAllCertificates />
-      </section>
-
-      {/* Seção 2 — Template padrão PMB */}
-      <section className="space-y-3 pt-4">
-        <header>
-          <h2 className="text-base font-semibold text-[var(--color-pmb-green-900)]">
-            Template padrão Profissionaliza Mais Brasil
-          </h2>
-          <p className="text-sm text-gray-600">
-            Layout usado na vitrine PMB e como fallback para revendedores sem
-            template próprio. Revendedores escolhem apenas o layout
-            (CLASSIC/MODERN/MINIMAL); todo o resto (logo da escola, cores, textos
-            e assinatura) é controlado por este template.
-          </p>
-        </header>
-        <CertificateTemplateEditor
-          initial={initialTemplate}
-          saveEndpoint="/api/admin/certificate-template"
-          uploadEndpoint="/api/admin/certificate-template/upload"
-          previewEndpoint="/api/admin/certificate-template/preview"
-          scopeLabel="Template padrão PMB (vitrine própria)"
-          groupLogoUrl={settings.groupLogoUrl}
-          groupName={settings.groupName}
+        <PageHeader
+          title="Configurações de certificados"
+          description="Regras globais de emissão, branding do Grupo e template padrão da vitrine PMB."
         />
-      </section>
-    </div>
+
+        {/* Seção 1 — Regras globais + Logo do Grupo */}
+        <section className="space-y-3">
+          <header>
+            <h2 className="text-base font-semibold text-[var(--color-pmb-green-900)]">
+              Regras globais
+            </h2>
+            <p className="text-sm text-gray-600">
+              Controlam quando o sistema emite certificados automaticamente e a logo
+              do Grupo Bolsa Mais Brasil que aparece em todos os certificados.
+            </p>
+          </header>
+          <AdminCertificateSettingsForm initial={settings} />
+        </section>
+
+        {/* Manutenção — regenerar PDFs já emitidos com o layout atual */}
+        <section className="space-y-3 pt-4">
+          <header>
+            <h2 className="text-base font-semibold text-[var(--color-pmb-green-900)]">
+              Manutenção
+            </h2>
+            <p className="text-sm text-gray-600">
+              Os PDFs já emitidos são atualizados automaticamente no próximo
+              download/validação quando o template muda. Use este botão para
+              forçar a reaplicação imediata do layout atual a todos os
+              certificados de uma vez. Sobrescreve os PDFs no Storage.
+            </p>
+          </header>
+          <RegenerateAllCertificates />
+        </section>
+
+        {/* Seção 2 — Template padrão PMB */}
+        <section className="space-y-3 pt-4">
+          <header>
+            <h2 className="text-base font-semibold text-[var(--color-pmb-green-900)]">
+              Template padrão Profissionaliza Mais Brasil
+            </h2>
+            <p className="text-sm text-gray-600">
+              Layout usado na vitrine PMB e como fallback para revendedores sem
+              template próprio. Revendedores escolhem apenas o layout
+              (CLASSIC/MODERN/MINIMAL); todo o resto (logo da escola, cores, textos
+              e assinatura) é controlado por este template.
+            </p>
+          </header>
+          <CertificateTemplateEditor
+            initial={initialTemplate}
+            saveEndpoint="/api/admin/certificate-template"
+            uploadEndpoint="/api/admin/certificate-template/upload"
+            previewEndpoint="/api/admin/certificate-template/preview"
+            scopeLabel="Template padrão PMB (vitrine própria)"
+            groupLogoUrl={settings.groupLogoUrl}
+            groupName={settings.groupName}
+          />
+        </section>
+      </div>
+    </WriteGate>
   )
 }

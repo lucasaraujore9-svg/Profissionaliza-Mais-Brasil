@@ -85,7 +85,7 @@ const patchSchema = z.object({
 export const PATCH = withRequestContextParams<{ id: string }>(
   { action: "painel.leads.update", route: "/api/painel/leads/[id]" },
   async (request: Request, { params }) => {
-    const guard = await requirePainel("leads.view")
+    const guard = await requirePainel("leads.manage")
     if (!guard.ok) return guard.response
     const { ctx } = guard
 
@@ -157,7 +157,7 @@ export const PATCH = withRequestContextParams<{ id: string }>(
 export const DELETE = withRequestContextParams<{ id: string }>(
   { action: "painel.leads.delete", route: "/api/painel/leads/[id]" },
   async (_request: Request, { params }) => {
-    const guard = await requirePainel("leads.view")
+    const guard = await requirePainel("leads.manage")
     if (!guard.ok) return guard.response
     const { ctx } = guard
 
