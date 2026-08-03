@@ -5,7 +5,14 @@
 
 export interface ConfigData {
   // cpf: 11 dígitos sem máscara (identificador alternativo de login) ou null.
-  user: { id: string; name: string; email: string; cpf: string | null }
+  // phone: DDD + número, sem máscara, ou null.
+  user: {
+    id: string
+    name: string
+    email: string
+    cpf: string | null
+    phone: string | null
+  }
   /** Administra a configuração da unidade (`configuracoes.manage`). */
   canManageUnit: boolean
   /** Configura o gateway/chave PIX da unidade (`gateway.manage`). */

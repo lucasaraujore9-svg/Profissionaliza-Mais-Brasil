@@ -1,4 +1,5 @@
-import { Mail, Calendar, Globe, Link as LinkIcon } from "lucide-react"
+import { Mail, Calendar, Globe, Link as LinkIcon, Phone } from "lucide-react"
+import { formatPhone } from "@/lib/validation/phone"
 import type { ResellerStatus } from "./reseller-table"
 import { ResellerStatusBadge } from "./reseller-status"
 import { ResellerImpersonateButton } from "./reseller-impersonate-button"
@@ -10,6 +11,8 @@ export interface ResellerProfileData {
   status: ResellerStatus
   email: string | null
   ownerName: string | null
+  /** Telefone do titular, como informado no cadastro da unidade. */
+  ownerPhone: string | null
   planValue: number
   customDomain: string | null
   createdAt: string
@@ -64,6 +67,12 @@ export function ResellerProfile({ reseller }: ResellerProfileProps) {
               <p className="flex items-center gap-2">
                 <Mail className="h-4 w-4 text-gray-400" />
                 {reseller.email}
+              </p>
+            )}
+            {reseller.ownerPhone && (
+              <p className="flex items-center gap-2">
+                <Phone className="h-4 w-4 text-gray-400" />
+                {formatPhone(reseller.ownerPhone)}
               </p>
             )}
             <p className="flex items-center gap-2">

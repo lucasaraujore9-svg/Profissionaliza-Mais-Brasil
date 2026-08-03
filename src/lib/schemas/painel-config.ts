@@ -1,5 +1,6 @@
 import { z } from "zod"
 import { isValidCpf, stripCpf } from "@/lib/validation/cpf"
+import { isValidPhone, normalizePhone } from "@/lib/validation/phone"
 
 // Schema do PUT /api/painel/config (aba "Dados da conta" do painel).
 // Extraído do route handler para ser testável (route.ts só pode exportar
@@ -17,6 +18,17 @@ export const painelConfigUpdateSchema = z.object({
     .optional()
     .transform((v) => (v ? stripCpf(v) : null))
     .refine((v) => v === null || isValidCpf(v), "CPF inválido"),
+  // Telefone de contato (User.phone) — coletado no cadastro da unidade e, até
+  // agora, sem nenhuma tela onde pudesse ser conferido ou corrigido. Opcional e
+  // apagável (string vazia → null); normalizado para DDD + número.
+  phone: z
+    .string()
+    .trim()
+    .max(20)
+    .optional()
+    .transform((v) => (v ? v : null))
+    .refine((v) => v === null || isValidPhone(v), "Telefone inválido")
+    .transform((v) => (v === null ? null : normalizePhone(v))),
 })
 
 export type PainelConfigUpdateInput = z.infer<typeof painelConfigUpdateSchema>

@@ -36,7 +36,7 @@ export const GET = withRequestContextParams<{ id: string }>(
   const tenant = await prisma.tenant.findUnique({
     where: { id },
     include: {
-      owner: { select: { email: true, name: true } },
+      owner: { select: { email: true, name: true, phone: true } },
       accountManager: { select: { id: true, name: true } },
       referrer: { select: { id: true, name: true, slug: true } },
       tenantPayments: {
@@ -347,6 +347,8 @@ export const GET = withRequestContextParams<{ id: string }>(
         createdAt: tenant.createdAt.toISOString(),
         email: tenant.owner?.email ?? null,
         ownerName: tenant.owner?.name ?? null,
+        // Telefone informado no cadastro da unidade (User.phone do titular).
+        ownerPhone: tenant.owner?.phone ?? null,
         asaasCustomerId: tenant.asaasCustomerId,
         asaasSubscriptionId: tenant.asaasSubscriptionId,
         asaasPromoSubscriptionId: tenant.asaasPromoSubscriptionId,

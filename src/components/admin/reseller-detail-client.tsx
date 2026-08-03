@@ -14,6 +14,7 @@ import { useCan } from "@/components/shared/permissions/permission-context"
 import { Button } from "@/components/ui/button"
 import { BlockSkeleton } from "@/components/shared/loading-skeletons"
 import { ResellerCard } from "./reseller-card"
+import { ResellerOwnerContact } from "./reseller-owner-contact"
 import { ResellerProfile, type ResellerProfileData } from "./reseller-profile"
 import {
   ResellerPaymentHistory,
@@ -273,6 +274,14 @@ export function ResellerDetailClient({
               )}
             </div>
             <div className="space-y-6">
+              <ResellerOwnerContact
+                tenantId={tenantId}
+                ownerName={data.reseller.ownerName}
+                ownerEmail={data.reseller.email}
+                ownerPhone={data.reseller.ownerPhone}
+                canManage={canManage}
+                onSaved={load}
+              />
               <ResellerSupportNotes
                 tenantId={tenantId}
                 whatsapp={(data.reseller as { whatsapp?: string | null }).whatsapp ?? null}

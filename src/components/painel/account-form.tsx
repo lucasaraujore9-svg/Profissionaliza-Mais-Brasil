@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { forbiddenNameError } from "@/lib/tenant/forbidden-names"
+import { formatPhone, normalizePhone } from "@/lib/validation/phone"
 import type { ConfigData } from "./config-tabs.types"
 
 interface AccountFormProps {
@@ -19,6 +20,9 @@ export function AccountForm({ data, onUpdate }: AccountFormProps) {
   const [name, setName] = useState(data.user.name)
   const [email, setEmail] = useState(data.user.email)
   const [cpf, setCpf] = useState(data.user.cpf ?? "")
+  const [phone, setPhone] = useState(
+    data.user.phone ? formatPhone(data.user.phone) : "",
+  )
   // Membro sem `configuracoes.manage` não recebe o bloco da unidade e não
   // renomeia a empresa — a aba vira só os dados pessoais dele.
   const canRenameUnit = data.tenant !== null
@@ -48,7 +52,7 @@ export function AccountForm({ data, onUpdate }: AccountFormProps) {
       const response = await fetch("/api/painel/config", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, companyName, cpf }),
+        body: JSON.stringify({ name, email, companyName, cpf, phone }),
       })
       const json = await response.json()
 
@@ -68,7 +72,13 @@ export function AccountForm({ data, onUpdate }: AccountFormProps) {
       }
 
       onUpdate({
-        user: { ...data.user, name, email, cpf: cpf.replace(/\D/g, "") || null },
+        user: {
+          ...data.user,
+          name,
+          email,
+          cpf: cpf.replace(/\D/g, "") || null,
+          phone: phone.trim() ? normalizePhone(phone) : null,
+        },
         ...(data.tenant ? { tenant: { ...data.tenant, name: companyName } } : {}),
       })
       setStatus("success")
@@ -112,6 +122,24 @@ export function AccountForm({ data, onUpdate }: AccountFormProps) {
           />
           {errors.email && (
             <p className="mt-1 text-xs text-red-600">{errors.email}</p>
+          )}
+        </div>
+        <div>
+          <Label htmlFor="cfg-telefone">Telefone</Label>
+          <Input
+            id="cfg-telefone"
+            type="tel"
+            inputMode="tel"
+            placeholder="(11) 99999-9999"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            className="mt-1.5"
+          />
+          <p className="mt-1 text-xs text-gray-500">
+            Telefone de contato da unidade. Deixe em branco para remover.
+          </p>
+          {errors.phone && (
+            <p className="mt-1 text-xs text-red-600">{errors.phone}</p>
           )}
         </div>
         <div>

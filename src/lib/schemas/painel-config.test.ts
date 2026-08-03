@@ -49,3 +49,29 @@ describe("painelConfigUpdateSchema — cpf", () => {
     expect(parsed.email).toBe("maria@exemplo.com.br")
   })
 })
+
+// Telefone (User.phone): era coletado no cadastro da unidade e não tinha
+// nenhuma tela onde pudesse ser conferido ou corrigido. Mesmo contrato do CPF —
+// máscara aceita, valor normalizado, vazio apaga.
+describe("painelConfigUpdateSchema — phone", () => {
+  it("aceita máscara e normaliza para DDD + número", () => {
+    expect(
+      painelConfigUpdateSchema.parse({ ...base, phone: "(11) 99999-9999" }).phone,
+    ).toBe("11999999999")
+    expect(
+      painelConfigUpdateSchema.parse({ ...base, phone: "+55 11 3333-4444" }).phone,
+    ).toBe("1133334444")
+  })
+
+  it("telefone ausente ou vazio vira null (campo apagável)", () => {
+    expect(painelConfigUpdateSchema.parse(base).phone).toBeNull()
+    expect(painelConfigUpdateSchema.parse({ ...base, phone: "" }).phone).toBeNull()
+    expect(painelConfigUpdateSchema.parse({ ...base, phone: "  " }).phone).toBeNull()
+  })
+
+  it("rejeita telefone incompleto", () => {
+    expect(
+      painelConfigUpdateSchema.safeParse({ ...base, phone: "99999-9999" }).success,
+    ).toBe(false)
+  })
+})

@@ -3,6 +3,7 @@
 import Link from "next/link"
 import { ExternalLink, FileText, Users, Calendar, Store } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { formatPhone } from "@/lib/validation/phone"
 
 // Visão SOMENTE-LEITURA de uma sub-revenda para o revendedor-vendedor que a
 // trouxe. Espelha as abas "Visão geral" e "Cobrança" do sistema mãe, mas SEM os
@@ -120,7 +121,9 @@ export function SubRevendaDetail({ data }: { data: SubRevendaDetailData }) {
             <div className="mt-2 divide-y divide-gray-100">
               <InfoRow label="Nome">{data.ownerName ?? "—"}</InfoRow>
               <InfoRow label="E-mail">{data.ownerEmail ?? "—"}</InfoRow>
-              <InfoRow label="Telefone">{data.ownerPhone ?? "—"}</InfoRow>
+              <InfoRow label="Telefone">
+                {data.ownerPhone ? formatPhone(data.ownerPhone) : "—"}
+              </InfoRow>
               <InfoRow label="Mensalidade">{brl(data.planValue)}</InfoRow>
               {data.promoValue != null && data.promoMonths != null && (
                 <InfoRow label="Promoção">

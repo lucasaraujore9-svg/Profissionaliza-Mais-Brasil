@@ -12,7 +12,10 @@
  */
 export function normalizePhone(value: string): string {
   const digits = value.replace(/\D/g, "")
-  // Remove prefixo 55 (Brasil) se vier de +55 ou 0055.
+  // Remove o prefixo 55 (Brasil) quando o total fecha em DDI + DDD + número —
+  // é a forma que chega de `+55`. Um `0055` (discagem internacional) passa
+  // batido de propósito: alargar isso mexeria no `isValidPhone` de todos os
+  // checkouts.
   if (digits.length === 13 && digits.startsWith("55")) return digits.slice(2)
   if (digits.length === 12 && digits.startsWith("55")) return digits.slice(2)
   return digits
@@ -30,4 +33,20 @@ export function isValidPhone(value: string): boolean {
     return normalized[2] === "9"
   }
   return false
+}
+
+/**
+ * Formata para EXIBIÇÃO: `(11) 99999-9999` (celular) ou `(11) 9999-9999`
+ * (fixo).
+ *
+ * Devolve o valor original quando não reconhece o formato. Números gravados
+ * antes da normalização (o cadastro de revenda salvava exatamente o que o
+ * operador digitou) podem estar fora do padrão 10/11 dígitos — mostrar o dado
+ * cru é melhor do que esconder o telefone que a pessoa foi procurar.
+ */
+export function formatPhone(value: string): string {
+  const d = normalizePhone(value)
+  if (d.length === 11) return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`
+  if (d.length === 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`
+  return value
 }

@@ -19,7 +19,7 @@ export const GET = withRequestContext(
 
     const user = await prisma.user.findUnique({
       where: { id: ctx.userId },
-      select: { id: true, name: true, email: true, cpf: true },
+      select: { id: true, name: true, email: true, cpf: true, phone: true },
     })
     if (!user) {
       return NextResponse.json({ error: "Recurso não encontrado" }, { status: 404 })
@@ -167,6 +167,7 @@ export const PUT = withRequestContext(
         name: parsed.data.name,
         email: parsed.data.email,
         cpf: parsed.data.cpf,
+        phone: parsed.data.phone,
       },
     })
     // Renomear a unidade é privilégio de quem administra a configuração — um
