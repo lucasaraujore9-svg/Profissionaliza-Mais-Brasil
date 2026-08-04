@@ -19,14 +19,23 @@ export async function GET() {
   const slug = h.get("x-tenant-slug")
   const tenantId = h.get("x-tenant-id")
 
-  let tenant: { name: string; primaryColor: string | null; logoUrl: string | null } | null =
-    null
+  let tenant: {
+    name: string
+    primaryColor: string | null
+    logoUrl: string | null
+    faviconUrl: string | null
+  } | null = null
 
   if (tenantId || slug) {
     try {
       tenant = await prisma.tenant.findFirst({
         where: tenantId ? { id: tenantId } : { slug: slug ?? undefined },
-        select: { name: true, primaryColor: true, logoUrl: true },
+        select: {
+          name: true,
+          primaryColor: true,
+          logoUrl: true,
+          faviconUrl: true,
+        },
       })
     } catch {
       tenant = null
@@ -36,9 +45,11 @@ export async function GET() {
   const name = tenant?.name ?? "Cursos Online"
   const themeColor = tenant?.primaryColor ?? DEFAULT_THEME_COLOR
 
-  // Ícone do app = logo da unidade (sem logo, sem ícone — nunca a logo da PMB).
-  const icons = tenant?.logoUrl
-    ? [{ src: tenant.logoUrl, sizes: "any", purpose: "any" as const }]
+  // Ícone do app = favicon da unidade e, na falta dela, a logo (sem nenhuma das
+  // duas, sem ícone — nunca a logo da PMB).
+  const iconUrl = tenant?.faviconUrl ?? tenant?.logoUrl ?? null
+  const icons = iconUrl
+    ? [{ src: iconUrl, sizes: "any", purpose: "any" as const }]
     : []
 
   const manifest = {

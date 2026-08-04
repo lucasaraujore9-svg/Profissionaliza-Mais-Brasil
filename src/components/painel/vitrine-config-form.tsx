@@ -23,6 +23,7 @@ export interface VitrineConfig {
   tagline: string | null
   description: string | null
   logoUrl: string | null
+  faviconUrl: string | null
   primaryColor: string
   secondaryColor: string
   whatsapp: string | null
@@ -37,7 +38,7 @@ export interface VitrineConfig {
   supportHours: string | null
 }
 
-export type VitrineAssetKind = "logo"
+export type VitrineAssetKind = "logo" | "favicon"
 
 interface VitrineConfigFormProps {
   config: VitrineConfig
@@ -55,8 +56,10 @@ export function VitrineConfigForm({
   uploading,
 }: VitrineConfigFormProps) {
   const [uploadError, setUploadError] = useState<string | null>(null)
-  const [removeOpen, setRemoveOpen] = useState(false)
+  // Qual asset o diálogo de confirmação está prestes a remover (null = fechado).
+  const [removeKind, setRemoveKind] = useState<VitrineAssetKind | null>(null)
   const logoInputRef = useRef<HTMLInputElement | null>(null)
+  const faviconInputRef = useRef<HTMLInputElement | null>(null)
 
   const update = <K extends keyof VitrineConfig>(
     key: K,
@@ -76,10 +79,12 @@ export function VitrineConfigForm({
   }
 
   async function confirmRemove() {
+    if (!removeKind) return
+    const kind = removeKind
     setUploadError(null)
-    setRemoveOpen(false)
+    setRemoveKind(null)
     try {
-      await onRemove("logo")
+      await onRemove(kind)
     } catch (err) {
       setUploadError(err instanceof Error ? err.message : "Erro ao remover")
     }
@@ -101,9 +106,25 @@ export function VitrineConfigForm({
             uploading={uploading === "logo"}
             inputRef={logoInputRef}
             onChoose={(file) => handleFile("logo", file)}
-            onRemove={() => setRemoveOpen(true)}
+            onRemove={() => setRemoveKind("logo")}
+          />
+          <AssetUploader
+            label="Favicon"
+            hint="PNG quadrado com fundo transparente • ideal 512 × 512 px • máx 5MB"
+            previewUrl={config.faviconUrl}
+            uploading={uploading === "favicon"}
+            inputRef={faviconInputRef}
+            onChoose={(file) => handleFile("favicon", file)}
+            onRemove={() => setRemoveKind("favicon")}
           />
         </div>
+
+        <p className="mt-3 text-[11px] text-gray-500">
+          O favicon é o ícone que aparece na aba do navegador e no atalho quando
+          alguém instala sua vitrine no celular. Como ele é desenhado bem pequeno
+          (32 × 32 px), use um símbolo quadrado — uma logo horizontal costuma
+          ficar ilegível nesse tamanho. Sem favicon própria, usamos a sua logo.
+        </p>
 
         <p className="mt-4 rounded-lg border border-[var(--color-pmb-green)]/20 bg-[var(--color-pmb-lime-50)]/50 px-3 py-2 text-xs text-gray-600">
           Para personalizar o banner principal (hero) da sua vitrine, adicione
@@ -334,13 +355,21 @@ export function VitrineConfigForm({
         )}
       </section>
 
-      <AlertDialog open={removeOpen} onOpenChange={setRemoveOpen}>
+      <AlertDialog
+        open={removeKind !== null}
+        onOpenChange={(open) => {
+          if (!open) setRemoveKind(null)
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Remover o logo</AlertDialogTitle>
+            <AlertDialogTitle>
+              Remover {removeKind === "favicon" ? "o favicon" : "o logo"}
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              A vitrine voltará a exibir o nome da loja sem logo até você enviar
-              uma nova imagem.
+              {removeKind === "favicon"
+                ? "A aba do navegador voltará a usar a sua logo como ícone. Se você também não tiver logo, o navegador exibe o ícone padrão dele."
+                : "A vitrine voltará a exibir o nome da loja sem logo até você enviar uma nova imagem."}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

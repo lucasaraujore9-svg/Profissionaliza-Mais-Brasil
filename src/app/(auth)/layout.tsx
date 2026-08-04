@@ -6,11 +6,13 @@ import { getCurrentTenant } from "@/lib/tenant/current"
 export async function generateMetadata(): Promise<Metadata> {
   const tenant = await getCurrentTenant()
   const name = tenant?.name ?? "Profissionaliza Mais Brasil"
+  // Favicon dedicada da unidade quando existir; sem ela, cai na logo.
+  const iconUrl = tenant?.faviconUrl ?? tenant?.logoUrl ?? null
   return {
     title: `Acessar conta | ${name}`,
     description: "Faça login na sua conta — alunos, revendedores e equipe.",
-    ...(tenant?.logoUrl
-      ? { icons: { icon: [{ url: tenant.logoUrl }], apple: [{ url: tenant.logoUrl }] } }
+    ...(iconUrl
+      ? { icons: { icon: [{ url: iconUrl }], apple: [{ url: iconUrl }] } }
       : {}),
   }
 }

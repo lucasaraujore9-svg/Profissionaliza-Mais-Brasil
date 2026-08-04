@@ -21,7 +21,20 @@ const ALLOWED_TYPES = new Set([
   "image/jpg",
   "image/webp",
 ])
-const ALLOWED_KINDS = new Set(["logo", "banner"])
+// Cada kind grava numa coluna distinta do tenant. Mapa (e nao ternario) porque
+// sao 3 destinos: um ternario `kind === "logo" ? ... : ...` mandaria o favicon
+// para a coluna do banner silenciosamente.
+const KIND_FIELD = {
+  logo: "logoUrl",
+  banner: "bannerUrl",
+  favicon: "faviconUrl",
+} as const
+
+type AssetKind = keyof typeof KIND_FIELD
+
+function isAssetKind(value: string): value is AssetKind {
+  return Object.prototype.hasOwnProperty.call(KIND_FIELD, value)
+}
 
 function extensionFor(mime: string): string {
   switch (mime) {
@@ -57,9 +70,9 @@ export const POST = withRequestContext(
     const kind = String(form.get("kind") ?? "").trim()
     const file = form.get("file")
 
-    if (!ALLOWED_KINDS.has(kind)) {
+    if (!isAssetKind(kind)) {
       return NextResponse.json(
-        { error: "kind deve ser 'logo' ou 'banner'" },
+        { error: "kind deve ser 'logo', 'banner' ou 'favicon'" },
         { status: 400 },
       )
     }
@@ -88,6 +101,7 @@ export const POST = withRequestContext(
         customDomain: true,
         logoUrl: true,
         bannerUrl: true,
+        faviconUrl: true,
       },
     })
     if (!tenant) {
@@ -117,12 +131,13 @@ export const POST = withRequestContext(
       )
     }
 
-    const previousUrl = kind === "logo" ? tenant.logoUrl : tenant.bannerUrl
+    const field = KIND_FIELD[kind]
+    const previousUrl = tenant[field]
     const previousPath = extractAssetPath(previousUrl)
 
     await prisma.tenant.update({
       where: { id: tenant.id },
-      data: kind === "logo" ? { logoUrl: uploadedUrl } : { bannerUrl: uploadedUrl },
+      data: { [field]: uploadedUrl },
     })
 
     await invalidateTenant({
@@ -167,9 +182,9 @@ export const DELETE = withRequestContext(
 
     const url = new URL(request.url)
     const kind = (url.searchParams.get("kind") ?? "").trim()
-    if (!ALLOWED_KINDS.has(kind)) {
+    if (!isAssetKind(kind)) {
       return NextResponse.json(
-        { error: "kind deve ser 'logo' ou 'banner'" },
+        { error: "kind deve ser 'logo', 'banner' ou 'favicon'" },
         { status: 400 },
       )
     }
@@ -183,18 +198,20 @@ export const DELETE = withRequestContext(
         customDomain: true,
         logoUrl: true,
         bannerUrl: true,
+        faviconUrl: true,
       },
     })
     if (!tenant) {
       return NextResponse.json({ error: "Tenant não encontrado" }, { status: 404 })
     }
 
-    const currentUrl = kind === "logo" ? tenant.logoUrl : tenant.bannerUrl
+    const field = KIND_FIELD[kind]
+    const currentUrl = tenant[field]
     const currentPath = extractAssetPath(currentUrl)
 
     await prisma.tenant.update({
       where: { id: tenant.id },
-      data: kind === "logo" ? { logoUrl: null } : { bannerUrl: null },
+      data: { [field]: null },
     })
 
     await invalidateTenant({

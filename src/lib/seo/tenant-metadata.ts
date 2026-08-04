@@ -26,10 +26,12 @@ export function tenantVitrineMetadata(
     tenant?.tagline ??
     `Cursos profissionalizantes online com certificado na vitrine ${name}.`
 
-  // Favicon = logo do revendedor. Sem logo, lista vazia para NÃO herdar a
-  // favicon da PMB (combinado com a remoção de src/app/favicon.ico).
-  const icons: Metadata["icons"] = tenant?.logoUrl
-    ? { icon: [{ url: tenant.logoUrl }], apple: [{ url: tenant.logoUrl }] }
+  // Favicon dedicada da unidade quando existir; sem ela, cai na logo (o
+  // comportamento histórico). Sem nenhuma das duas, lista vazia para NÃO herdar
+  // a favicon da PMB (combinado com a remoção de src/app/favicon.ico).
+  const iconUrl = tenant?.faviconUrl ?? tenant?.logoUrl ?? null
+  const icons: Metadata["icons"] = iconUrl
+    ? { icon: [{ url: iconUrl }], apple: [{ url: iconUrl }] }
     : { icon: [] }
 
   // Imagem de preview (og/twitter) = banner ou logo da unidade. Sem nenhum,

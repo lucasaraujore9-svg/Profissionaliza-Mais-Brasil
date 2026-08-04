@@ -8,6 +8,9 @@ interface VitrinePreviewProps {
 
 export function VitrinePreview({ config, previewHost }: VitrinePreviewProps) {
   const heroBackground = `linear-gradient(135deg, ${config.primaryColor}, ${config.secondaryColor})`
+  // Mesma precedência do <head> da vitrine (lib/seo/tenant-metadata): favicon
+  // própria e, na falta dela, a logo.
+  const tabIcon = config.faviconUrl ?? config.logoUrl
 
   return (
     <div className="sticky top-4 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-lg">
@@ -17,8 +20,19 @@ export function VitrinePreview({ config, previewHost }: VitrinePreviewProps) {
           <span className="h-2.5 w-2.5 rounded-full bg-yellow-400" />
           <span className="h-2.5 w-2.5 rounded-full bg-green-400" />
         </div>
-        <span className="flex-1 truncate rounded bg-white px-2 py-0.5 text-center font-mono text-[10px] text-gray-500">
-          {previewHost}
+        <span className="flex flex-1 items-center justify-center gap-1.5 truncate rounded bg-white px-2 py-0.5 font-mono text-[10px] text-gray-500">
+          {tabIcon && (
+            <span className="relative h-3 w-3 shrink-0">
+              <Image
+                src={tabIcon}
+                alt=""
+                fill
+                className="rounded-[2px] object-contain"
+                unoptimized
+              />
+            </span>
+          )}
+          <span className="truncate">{previewHost}</span>
         </span>
       </div>
 

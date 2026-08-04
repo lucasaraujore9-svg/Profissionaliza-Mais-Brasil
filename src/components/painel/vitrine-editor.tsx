@@ -12,11 +12,20 @@ import { VitrinePreview } from "./vitrine-preview"
 import { BlockSkeleton } from "@/components/shared/loading-skeletons"
 import { clientLogger } from "@/lib/logger-client"
 
+// Campo do config que cada asset alimenta. Sem esse mapa o upload do favicon
+// sobrescreveria a logo no estado local (a API grava na coluna certa, mas a tela
+// mostraria o arquivo errado até o próximo reload).
+const ASSET_FIELD: Record<VitrineAssetKind, "logoUrl" | "faviconUrl"> = {
+  logo: "logoUrl",
+  favicon: "faviconUrl",
+}
+
 const defaultConfig: VitrineConfig = {
   name: "",
   tagline: null,
   description: null,
   logoUrl: null,
+  faviconUrl: null,
   primaryColor: "#025918", // --color-pmb-green
   secondaryColor: "#014712", // --color-pmb-green-700
   whatsapp: null,
@@ -109,8 +118,9 @@ export function VitrineEditor() {
           throw new Error(body.error ?? "Falha ao enviar arquivo")
         }
         const url = body.data.url as string
-        setConfig((prev) => ({ ...prev, logoUrl: url }))
-        setInitial((prev) => ({ ...prev, logoUrl: url }))
+        const field = ASSET_FIELD[kind]
+        setConfig((prev) => ({ ...prev, [field]: url }))
+        setInitial((prev) => ({ ...prev, [field]: url }))
       } finally {
         setUploading(null)
       }
@@ -128,8 +138,9 @@ export function VitrineEditor() {
       if (!res.ok) {
         throw new Error(body.error ?? "Falha ao remover arquivo")
       }
-      setConfig((prev) => ({ ...prev, logoUrl: null }))
-      setInitial((prev) => ({ ...prev, logoUrl: null }))
+      const field = ASSET_FIELD[kind]
+      setConfig((prev) => ({ ...prev, [field]: null }))
+      setInitial((prev) => ({ ...prev, [field]: null }))
     } finally {
       setUploading(null)
     }

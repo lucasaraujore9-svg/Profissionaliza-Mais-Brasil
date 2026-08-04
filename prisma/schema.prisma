@@ -269,6 +269,9 @@ model Tenant {
 
   // Personalizacao da vitrine
   logoUrl        String? @map("logo_url")
+  // Icone da aba do navegador / atalho do PWA. Opcional: sem favicon propria a
+  // vitrine cai na logoUrl (comportamento historico). Ver lib/seo/tenant-metadata.
+  faviconUrl     String? @map("favicon_url")
   primaryColor   String  @default("#2563eb") @map("primary_color") // Azul padrao
   secondaryColor String  @default("#1e40af") @map("secondary_color")
   bannerUrl      String? @map("banner_url")

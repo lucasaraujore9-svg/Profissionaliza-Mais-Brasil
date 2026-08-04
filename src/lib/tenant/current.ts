@@ -10,6 +10,10 @@ export interface CurrentTenant {
   name: string
   status: string
   logoUrl: string | null
+  // Pode vir `undefined` de uma entrada antiga do cache de branding no Redis
+  // (gravada antes do campo existir). Todo consumidor usa `faviconUrl ?? logoUrl`,
+  // então o pior caso é a vitrine exibir a logo como ícone até o TTL expirar.
+  faviconUrl: string | null
   bannerUrl: string | null
   primaryColor: string
   secondaryColor: string
@@ -64,6 +68,7 @@ export const getCurrentTenant = cache(
           name: true,
           status: true,
           logoUrl: true,
+          faviconUrl: true,
           bannerUrl: true,
           primaryColor: true,
           secondaryColor: true,

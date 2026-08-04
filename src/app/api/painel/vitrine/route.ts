@@ -11,6 +11,7 @@ interface VitrineDto {
   tagline: string | null
   description: string | null
   logoUrl: string | null
+  faviconUrl: string | null
   bannerUrl: string | null
   primaryColor: string
   secondaryColor: string
@@ -34,6 +35,7 @@ async function readTenant(tenantId: string): Promise<VitrineDto | null> {
       tagline: true,
       description: true,
       logoUrl: true,
+      faviconUrl: true,
       bannerUrl: true,
       primaryColor: true,
       secondaryColor: true,
@@ -89,6 +91,7 @@ const updateSchema = z.object({
   supportEmail: z.string().trim().email("E-mail inválido").max(160).nullable().optional(),
   supportHours: z.string().trim().max(120).nullable().optional(),
   logoUrl: z.string().url().nullable().optional(),
+  faviconUrl: z.string().url().nullable().optional(),
   bannerUrl: z.string().url().nullable().optional(),
 })
 
