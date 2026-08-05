@@ -29,6 +29,8 @@ import {
   MAX_BOLETO_INSTALLMENTS,
 } from "@/lib/installments/schedule"
 import { getPackageForCheckout } from "@/lib/packages/vitrine"
+import { MAX_SALE_COURSES, dedupeIds } from "@/lib/enrollment/multi-course"
+import { rollbackSaleEnrollment } from "@/lib/enrollment/multi-course-server"
 
 const createSchema = z
   .object({
@@ -54,9 +56,16 @@ const createSchema = z
       .transform(normalizePhone)
       .optional(),
 
-    // Alvo da venda: curso (TenantCourse do próprio tenant) OU pacote
-    // (CoursePackage). Exatamente um dos dois — validado no .refine abaixo.
-    tenantCourseId: z.string().min(1).optional(),
+    // Alvo da venda: UM OU MAIS cursos da própria vitrine (TenantCourse) OU um
+    // pacote (CoursePackage). Exatamente um dos dois — validado no .refine
+    // abaixo. Com vários cursos a venda soma os preços numa única cobrança: o
+    // 1º da lista vira a matrícula primária e os demais entram em
+    // `Enrollment.bundleCourseIds` (satélites criados no fulfill).
+    tenantCourseIds: z
+      .array(z.string().min(1))
+      .min(1)
+      .max(MAX_SALE_COURSES)
+      .optional(),
     packageId: z.string().min(1).optional(),
     couponCode: z.string().trim().max(64).optional(),
     // Desconto manual (%) dado pelo vendedor na hora, sem cupom. Teto = cap do
@@ -87,10 +96,10 @@ const createSchema = z
     })
     .optional(),
 })
-  // XOR: a venda é de um curso OU de um pacote, nunca ambos/nenhum.
-  .refine((v) => !!v.tenantCourseId !== !!v.packageId, {
-    message: "Informe tenantCourseId ou packageId",
-    path: ["tenantCourseId"],
+  // XOR: a venda é de curso(s) OU de um pacote, nunca ambos/nenhum.
+  .refine((v) => !!v.tenantCourseIds?.length !== !!v.packageId, {
+    message: "Informe tenantCourseIds ou packageId",
+    path: ["tenantCourseIds"],
   })
   // Aluno: um aluno existente (studentId) OU os dados completos de um novo
   // aluno, nunca ambos/nenhum.
@@ -136,6 +145,9 @@ export const GET = withRequestContext(
         studentName: e.student.nome,
         studentEmail: e.student.email,
         courseName: e.course.nome,
+        // Venda com mais de um curso: o `courseName` é o curso principal (o que
+        // carrega a cobrança); a contagem revela os que vieram junto.
+        courseCount: 1 + e.bundleCourseIds.length,
         couponCode: e.coupon?.code ?? null,
         originalAmount: Number(e.originalAmount),
         discountAmount: Number(e.discountAmount),
@@ -259,17 +271,24 @@ export const POST = withRequestContext(
       }
     }
 
-    // Resolve o alvo da venda em variáveis unificadas (curso ou pacote). O
+    // Resolve o alvo da venda em variáveis unificadas (curso(s) ou pacote). O
     // pacote cria a matrícula PRIMÁRIA (packagePrimary=true, tenantCourseId=null,
     // courseId=curso primário); os satélites nascem no fulfill/settle. Pacote é
     // sempre pagamento único.
+    //
+    // Venda com VÁRIOS cursos: mesma mecânica sem pacote no catálogo — o 1º
+    // curso vira a primária (que carrega o valor SOMADO) e os demais vão em
+    // `bundleCourseIds`, virando satélites no fulfill.
     const isPackage = !!data.packageId
     let basePrice: number
     let enrollmentCourseId: string
     let enrollmentTenantCourseId: string | null
     let enrollmentCoursePackageId: string | null
+    let bundleCourseIds: string[] = []
     let rawPaymentType: PaymentType
     let monthlyMonthsMain: number | null
+    /** Todos os cursos cobertos pela venda — usado no gate de duplicidade. */
+    let saleCourseIds: string[]
 
     if (isPackage) {
       const pkg = await getPackageForCheckout(tenant.id, data.packageId!)
@@ -285,9 +304,13 @@ export const POST = withRequestContext(
       enrollmentCoursePackageId = pkg.id
       rawPaymentType = "ONE_TIME"
       monthlyMonthsMain = null
+      // Duplicidade de pacote é checada pela matrícula primária do pacote, não
+      // curso a curso (regra histórica) — ver o gate mais abaixo.
+      saleCourseIds = [enrollmentCourseId]
     } else {
-      const tenantCourse = await prisma.tenantCourse.findFirst({
-        where: { id: data.tenantCourseId, tenantId: tenant.id, isVisible: true },
+      const requestedIds = dedupeIds(data.tenantCourseIds!)
+      const found = await prisma.tenantCourse.findMany({
+        where: { id: { in: requestedIds }, tenantId: tenant.id, isVisible: true },
         include: {
           course: {
             select: {
@@ -300,35 +323,72 @@ export const POST = withRequestContext(
           },
         },
       })
-      if (!tenantCourse) {
+      const byId = new Map(found.map((tc) => [tc.id, tc]))
+      // Ordem do vendedor preservada: o 1º curso escolhido é o que vira a
+      // matrícula primária (a que carrega a cobrança).
+      const tenantCourses = requestedIds
+        .map((id) => byId.get(id))
+        .filter((tc): tc is (typeof found)[number] => !!tc)
+      if (tenantCourses.length !== requestedIds.length) {
         return NextResponse.json(
           { error: "Curso não encontrado na sua vitrine" },
           { status: 404 },
         )
       }
+
       // SAAS-010: mesmo gate de ec832d0 aplicado à venda manual do painel. Um
       // curso desativado/removido na origem (EA/LMS → status="INATIVO") não pode
       // ser vendido nem via POST direto, mesmo que o revendedor tenha mantido
       // TenantCourse.isVisible=true (a visibilidade é flag independente). Evita
       // gerar matrícula cujo provisionamento na plataforma parceira falharia.
-      if (tenantCourse.course.status !== "ATIVO") {
+      const inativo = tenantCourses.find((tc) => tc.course.status !== "ATIVO")
+      if (inativo) {
         return NextResponse.json(
           { error: "Curso indisponível" },
           { status: 404 },
         )
       }
-      basePrice = Number(tenantCourse.price)
-      if (basePrice <= 0) {
+
+      const semPreco = tenantCourses.find((tc) => !(Number(tc.price) > 0))
+      if (semPreco) {
         return NextResponse.json(
-          { error: "Curso sem preço configurado" },
+          {
+            error:
+              tenantCourses.length > 1
+                ? `Curso sem preço configurado: ${semPreco.course.nome}`
+                : "Curso sem preço configurado",
+          },
           { status: 400 },
         )
       }
-      enrollmentCourseId = tenantCourse.courseId
-      enrollmentTenantCourseId = tenantCourse.id
+
+      // Mensalidade é um contrato recorrente de UM curso: somá-la ao preço à
+      // vista de outros numa cobrança única cobraria só o 1º mês pelo pacote
+      // todo. Curso mensal só é vendido sozinho.
+      const mensal = tenantCourses.find(
+        (tc) => effectivePaymentType(tc.paymentType, tenant, "direct") === "MONTHLY",
+      )
+      if (tenantCourses.length > 1 && mensal) {
+        return NextResponse.json(
+          {
+            error: `O curso "${mensal.course.nome}" é vendido como mensalidade e precisa ser vendido sozinho.`,
+          },
+          { status: 400 },
+        )
+      }
+
+      const primary = tenantCourses[0]
+      basePrice =
+        Math.round(
+          tenantCourses.reduce((sum, tc) => sum + Number(tc.price), 0) * 100,
+        ) / 100
+      enrollmentCourseId = primary.courseId
+      enrollmentTenantCourseId = primary.id
       enrollmentCoursePackageId = null
-      rawPaymentType = tenantCourse.paymentType
-      monthlyMonthsMain = tenantCourse.course.monthlyMonthsMain
+      bundleCourseIds = tenantCourses.slice(1).map((tc) => tc.courseId)
+      rawPaymentType = primary.paymentType
+      monthlyMonthsMain = primary.course.monthlyMonthsMain
+      saleCourseIds = tenantCourses.map((tc) => tc.courseId)
     }
     if (basePrice <= 0) {
       return NextResponse.json(
@@ -511,22 +571,28 @@ export const POST = withRequestContext(
       )
     }
 
-    // Duplicidade: pacote compara pela matrícula primária do pacote; curso, pelo
-    // Course. Espelha o gate do checkout de pacote (checkout/package/route.ts).
+    // Duplicidade: pacote compara pela matrícula primária do pacote; curso(s),
+    // pelo Course — TODOS os cursos da venda, senão o aluno pagaria de novo por
+    // um curso que já tem só porque ele não era o primeiro da lista. Espelha o
+    // gate do checkout de pacote (checkout/package/route.ts).
     const existingEnrollment = await prisma.enrollment.findFirst({
       where: {
         studentId: student.id,
         ...(isPackage
           ? { coursePackageId: enrollmentCoursePackageId!, packagePrimary: true }
-          : { courseId: enrollmentCourseId }),
+          : { courseId: { in: saleCourseIds } }),
         tenantId: tenant.id,
         status: { in: ["PENDING", "ACTIVE", "COMPLETED"] },
       },
-      select: { id: true, status: true },
+      select: { id: true, status: true, course: { select: { nome: true } } },
     })
     if (existingEnrollment) {
       if (couponId) await releaseCoupon(couponId).catch(swallow("painel.vendas"))
-      const alvo = isPackage ? "pacote" : "curso"
+      const alvo = isPackage
+        ? "pacote"
+        : saleCourseIds.length > 1
+          ? `curso "${existingEnrollment.course.nome}"`
+          : "curso"
       return NextResponse.json(
         {
           error:
@@ -556,6 +622,7 @@ export const POST = withRequestContext(
           courseId: enrollmentCourseId,
           coursePackageId: enrollmentCoursePackageId,
           packagePrimary: isPackage,
+          bundleCourseIds,
           soldByUserId: userId,
           paymentType: rawPaymentType,
           status: "PENDING",
@@ -583,9 +650,9 @@ export const POST = withRequestContext(
           enrollment.id,
         )
       } catch (err) {
-        await prisma.enrollment
-          .delete({ where: { id: enrollment.id } })
-          .catch(swallow("painel.vendas.bolsa_rollback"))
+        await rollbackSaleEnrollment(enrollment.id).catch(
+          swallow("painel.vendas.bolsa_rollback"),
+        )
         contextLogger().error(
           { err, event: "painel.vendas.bolsa_failed", studentId: student.id },
           "concessao de bolsa falhou",
@@ -663,6 +730,7 @@ export const POST = withRequestContext(
           courseId: enrollmentCourseId,
           coursePackageId: enrollmentCoursePackageId,
           packagePrimary: isPackage,
+          bundleCourseIds,
           soldByUserId: userId,
           paymentType: "BOLETO_INSTALLMENT",
           status: "PENDING",
@@ -727,6 +795,7 @@ export const POST = withRequestContext(
         courseId: enrollmentCourseId,
         coursePackageId: enrollmentCoursePackageId,
         packagePrimary: isPackage,
+        bundleCourseIds,
         soldByUserId: userId,
         paymentType: effectiveType,
         status: "PENDING",
@@ -752,9 +821,9 @@ export const POST = withRequestContext(
       try {
         await releaseFreeEnrollment(resellerTenantContext(tenant), enrollment.id)
       } catch (err) {
-        await prisma.enrollment
-          .delete({ where: { id: enrollment.id } })
-          .catch(swallow("painel.vendas.free_rollback"))
+        await rollbackSaleEnrollment(enrollment.id).catch(
+          swallow("painel.vendas.free_rollback"),
+        )
         if (couponId) await releaseCoupon(couponId).catch(swallow("painel.vendas.free_rollback"))
         contextLogger().error(
           { err, event: "painel.vendas.free_failed", studentId: student.id },

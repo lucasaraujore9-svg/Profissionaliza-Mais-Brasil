@@ -32,6 +32,12 @@ import { withRequestContext } from "@/lib/observability/with-request-context"
 import { asaasWebhookUrl, mpWebhookUrl } from "@/lib/tenant/urls"
 import { getPackageForCheckout } from "@/lib/packages/vitrine"
 import { requireAdmin } from "@/lib/auth/admin-guard"
+import {
+  MAX_SALE_COURSES,
+  dedupeIds,
+  saleItemLabel,
+} from "@/lib/enrollment/multi-course"
+import { rollbackSaleEnrollment } from "@/lib/enrollment/multi-course-server"
 
 export const GET = withRequestContext(
   { action: "admin.vendas.list", route: "/api/admin/vendas" },
@@ -66,6 +72,9 @@ export const GET = withRequestContext(
       studentName: e.student.nome,
       studentEmail: e.student.email,
       courseName: e.course.nome,
+      // Venda com mais de um curso: o `courseName` é o curso principal (o que
+      // carrega a cobrança); a contagem revela os que vieram junto.
+      courseCount: 1 + e.bundleCourseIds.length,
       couponCode: e.coupon?.code ?? null,
       originalAmount: Number(e.originalAmount),
       discountAmount: Number(e.discountAmount),
@@ -82,8 +91,15 @@ export const GET = withRequestContext(
 const createSchema = z
   .object({
     studentId: z.string().min(1),
-    // Alvo da venda: curso OU pacote (CoursePackage PMB). Exatamente um.
-    courseId: z.string().min(1).optional(),
+    // Alvo da venda: UM OU MAIS cursos OU um pacote (CoursePackage PMB).
+    // Exatamente um dos dois. Com vários cursos a venda soma os preços numa
+    // única cobrança: o 1º da lista vira a matrícula primária e os demais
+    // entram em `Enrollment.bundleCourseIds` (satélites criados no fulfill).
+    courseIds: z
+      .array(z.string().min(1))
+      .min(1)
+      .max(MAX_SALE_COURSES)
+      .optional(),
     packageId: z.string().min(1).optional(),
     couponCode: z.string().trim().max(64).optional(),
     // Desconto manual (%) dado pelo vendedor na hora da venda, sem cupom.
@@ -92,9 +108,9 @@ const createSchema = z
     // Bolsa de estudo: cria o aluno na plataforma sem gerar cobranca no gateway.
     bolsista: z.boolean().optional(),
   })
-  .refine((v) => !!v.courseId !== !!v.packageId, {
-    message: "Informe courseId ou packageId",
-    path: ["courseId"],
+  .refine((v) => !!v.courseIds?.length !== !!v.packageId, {
+    message: "Informe courseIds ou packageId",
+    path: ["courseIds"],
   })
   .refine((v) => !(v.couponCode && v.manualDiscountPercent), {
     message: "Use cupom OU desconto manual, não os dois",
@@ -179,16 +195,23 @@ export const POST = withRequestContext(
     )
   }
 
-  // Resolve o alvo da venda em variáveis unificadas (curso ou pacote PMB). O
+  // Resolve o alvo da venda em variáveis unificadas (curso(s) ou pacote PMB). O
   // pacote cria a matrícula PRIMÁRIA (packagePrimary=true, courseId=curso
   // primário); os satélites nascem no fulfill. Pacote é sempre pagamento único.
+  //
+  // Venda com VÁRIOS cursos: mesma mecânica sem pacote no catálogo — o 1º curso
+  // vira a primária (que carrega o valor SOMADO) e os demais vão em
+  // `bundleCourseIds`, virando satélites no fulfill.
   const isPackage = !!parsed.data.packageId
   let basePrice: number
   let enrollmentCourseId: string
   let enrollmentCoursePackageId: string | null
+  let bundleCourseIds: string[] = []
   let purchaseName: string
   let rawPaymentType: PaymentType
   let monthlyMonthsMain: number | null
+  /** Todos os cursos cobertos pela venda — usado no gate de duplicidade. */
+  let saleCourseIds: string[]
 
   if (isPackage) {
     const pkg = await getPackageForCheckout(null, parsed.data.packageId!)
@@ -201,9 +224,13 @@ export const POST = withRequestContext(
     purchaseName = `Pacote: ${pkg.name}`
     rawPaymentType = "ONE_TIME"
     monthlyMonthsMain = null
+    // Duplicidade de pacote é checada pela matrícula primária do pacote, não
+    // curso a curso (regra histórica) — ver o gate mais abaixo.
+    saleCourseIds = [enrollmentCourseId]
   } else {
-    const course = await prisma.course.findUnique({
-      where: { id: parsed.data.courseId },
+    const requestedIds = dedupeIds(parsed.data.courseIds!)
+    const found = await prisma.course.findMany({
+      where: { id: { in: requestedIds } },
       select: {
         id: true,
         nome: true,
@@ -215,23 +242,57 @@ export const POST = withRequestContext(
         monthlyMonthsMain: true,
       },
     })
-    if (!course || course.status !== "ATIVO") {
+    const byId = new Map(found.map((c) => [c.id, c]))
+    // Ordem do vendedor preservada: o 1º curso escolhido é o que vira a
+    // matrícula primária (a que carrega a cobrança).
+    const courses = requestedIds
+      .map((id) => byId.get(id))
+      .filter((c): c is (typeof found)[number] => !!c)
+    if (
+      courses.length !== requestedIds.length ||
+      courses.some((c) => c.status !== "ATIVO")
+    ) {
       return NextResponse.json({ error: "Curso não disponível" }, { status: 404 })
     }
-    basePrice = Number(
-      course.precoVitrineMain ?? course.precoPromocional ?? course.precoOriginal ?? 0,
-    )
-    if (basePrice <= 0) {
+
+    const precoDe = (c: (typeof found)[number]) =>
+      Number(c.precoVitrineMain ?? c.precoPromocional ?? c.precoOriginal ?? 0)
+    const semPreco = courses.find((c) => !(precoDe(c) > 0))
+    if (semPreco) {
       return NextResponse.json(
-        { error: "Curso sem preço da vitrine PMB" },
+        {
+          error:
+            courses.length > 1
+              ? `Curso sem preço da vitrine PMB: ${semPreco.nome}`
+              : "Curso sem preço da vitrine PMB",
+        },
         { status: 400 },
       )
     }
-    enrollmentCourseId = course.id
+
+    // Mensalidade é um contrato recorrente de UM curso: somá-la ao preço à vista
+    // de outros numa cobrança única cobraria só o 1º mês pelo pacote todo. Curso
+    // mensal só é vendido sozinho.
+    const mensal = courses.find((c) => c.paymentTypeMain === "MONTHLY")
+    if (courses.length > 1 && mensal) {
+      return NextResponse.json(
+        {
+          error: `O curso "${mensal.nome}" é vendido como mensalidade e precisa ser vendido sozinho.`,
+        },
+        { status: 400 },
+      )
+    }
+
+    const primary = courses[0]
+    basePrice =
+      Math.round(courses.reduce((sum, c) => sum + precoDe(c), 0) * 100) / 100
+    enrollmentCourseId = primary.id
     enrollmentCoursePackageId = null
-    purchaseName = course.nome
-    rawPaymentType = course.paymentTypeMain
-    monthlyMonthsMain = course.monthlyMonthsMain
+    bundleCourseIds = courses.slice(1).map((c) => c.id)
+    purchaseName = saleItemLabel(courses.map((c) => c.nome))
+    rawPaymentType = primary.paymentTypeMain
+    monthlyMonthsMain = primary.monthlyMonthsMain
+    saleCourseIds = courses.map((c) => c.id)
   }
 
   // Na bolsa o fulfillScholarshipEnrollment cuida da senha do painel + email de
@@ -248,19 +309,25 @@ export const POST = withRequestContext(
     })
   }
 
-  // Duplicidade: pacote compara pela matrícula primária; curso, pelo Course.
+  // Duplicidade: pacote compara pela matrícula primária; curso(s), pelo Course —
+  // TODOS os cursos da venda, senão o aluno pagaria de novo por um curso que já
+  // tem só porque ele não era o primeiro da lista.
   const existingEnrollment = await prisma.enrollment.findFirst({
     where: {
       studentId: student.id,
       ...(isPackage
         ? { coursePackageId: enrollmentCoursePackageId!, packagePrimary: true }
-        : { courseId: enrollmentCourseId }),
+        : { courseId: { in: saleCourseIds } }),
       status: { in: ["PENDING", "ACTIVE", "COMPLETED"] },
     },
-    select: { id: true, status: true },
+    select: { id: true, status: true, course: { select: { nome: true } } },
   })
   if (existingEnrollment) {
-    const alvo = isPackage ? "pacote" : "curso"
+    const alvo = isPackage
+      ? "pacote"
+      : saleCourseIds.length > 1
+        ? `curso "${existingEnrollment.course.nome}"`
+        : "curso"
     return NextResponse.json(
       {
         error:
@@ -291,6 +358,7 @@ export const POST = withRequestContext(
         courseId: enrollmentCourseId,
         coursePackageId: enrollmentCoursePackageId,
         packagePrimary: isPackage,
+        bundleCourseIds,
         soldByUserId: guard.ctx.userId,
         paymentType: rawPaymentType,
         status: "PENDING",
@@ -316,9 +384,9 @@ export const POST = withRequestContext(
         enrollment.id,
       )
     } catch (err) {
-      await prisma.enrollment
-        .delete({ where: { id: enrollment.id } })
-        .catch(swallow("admin.vendas.bolsa.rollback"))
+      await rollbackSaleEnrollment(enrollment.id).catch(
+        swallow("admin.vendas.bolsa.rollback"),
+      )
       contextLogger().error(
         { err, event: "admin.vendas.bolsa_failed", studentId: student.id, courseId: enrollmentCourseId },
         "concessao de bolsa falhou",
@@ -425,6 +493,7 @@ export const POST = withRequestContext(
       courseId: enrollmentCourseId,
       coursePackageId: enrollmentCoursePackageId,
       packagePrimary: isPackage,
+      bundleCourseIds,
       soldByUserId: guard.ctx.userId,
       paymentType: rawPaymentType,
       status: "PENDING",
@@ -445,9 +514,9 @@ export const POST = withRequestContext(
     try {
       await releaseFreeEnrollment(pmbTenantContext(pmbTenant), enrollment.id)
     } catch (err) {
-      await prisma.enrollment
-        .delete({ where: { id: enrollment.id } })
-        .catch(swallow("admin.vendas.free.rollback"))
+      await rollbackSaleEnrollment(enrollment.id).catch(
+        swallow("admin.vendas.free.rollback"),
+      )
       if (couponId) await releaseCoupon(couponId).catch(swallow("admin.vendas"))
       contextLogger().error(
         { err, event: "admin.vendas.free_failed", studentId: student.id },
@@ -675,7 +744,12 @@ export const POST = withRequestContext(
       billingType: "UNDEFINED",
       value: finalAmount,
       dueDate: dueDateInDays(3),
-      description: isPackage ? purchaseName : `Curso: ${purchaseName}`,
+      // "Curso: X" só faz sentido na venda de um curso avulso; pacote e venda
+      // multi-curso já carregam o próprio rótulo.
+      description:
+        isPackage || bundleCourseIds.length > 0
+          ? purchaseName
+          : `Curso: ${purchaseName}`,
       externalReference,
       notificationUrl: asaasWebhookUrl(),
     }, motherAsaasKey())

@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { isConclusionBlockedByPace } from "@/lib/enrollment/pace-gate"
+import {
+  PACE_PRIMARY_SELECT,
+  isConclusionBlockedByPace,
+} from "@/lib/enrollment/pace-gate"
 import { resolvePaceGateSettings } from "@/lib/enrollment/pace-settings"
 import { PMB_TENANT_SLUG } from "@/lib/pmb-config"
 import { withRequestContext } from "@/lib/observability/with-request-context"
@@ -56,6 +59,9 @@ export const GET = withRequestContext(
       course: { select: { id: true, nome: true, cargaHoraria: true } },
       certificates: { select: { id: true, code: true, revokedAt: true } },
       tenant: { select: { id: true, name: true, slug: true } },
+      // Satelite de compra com varios cursos herda o parcelamento da primaria —
+      // sem isto a tela ofereceria "emitir certificado" num curso nao quitado.
+      ...PACE_PRIMARY_SELECT,
     },
     take: 50,
   })

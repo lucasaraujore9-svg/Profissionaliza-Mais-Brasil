@@ -103,6 +103,7 @@ function enrollment(overrides: Record<string, unknown> = {}) {
     gateway: "ASAAS",
     coursePackageId: null,
     packagePrimary: false,
+    bundleCourseIds: [],
     asaasPaymentId: null,
     asaasSubscriptionId: null,
     asaasInstallmentId: null,
@@ -246,6 +247,41 @@ describe("cancelEnrollment — efeitos", () => {
   it("satélite isolado não busca (nem cancela) a primária", async () => {
     p.enrollment.findFirst.mockResolvedValue(
       enrollment({ id: "e2", coursePackageId: "pkg1", packagePrimary: false }),
+    )
+
+    const out = await cancelEnrollment({ enrollmentId: "e2", removeAccess: false, actor })
+
+    expect(out.ok && out.cancelledIds).toEqual(["e2"])
+    expect(p.enrollment.findMany).not.toHaveBeenCalled()
+  })
+
+  // Venda direta com vários cursos: a primária carrega a cobrança da compra
+  // inteira, então cancelá-la tem que derrubar os cursos que vieram junto —
+  // mesma regra do pacote, só que localizados por `primaryEnrollmentId`.
+  it("primária de venda multi-curso arrasta as satélites", async () => {
+    p.enrollment.findFirst.mockResolvedValue(
+      enrollment({ bundleCourseIds: ["c2", "c3"] }),
+    )
+    p.enrollment.findMany.mockResolvedValue([
+      { id: "e2", courseId: "c2" },
+      { id: "e3", courseId: "c3" },
+    ])
+
+    const out = await cancelEnrollment({ enrollmentId: "e1", removeAccess: true, actor })
+
+    expect(p.enrollment.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ primaryEnrollmentId: "e1" }),
+      }),
+    )
+    expect(out.ok && out.cancelledIds).toEqual(["e1", "e2", "e3"])
+    expect(p.enrollment.update).toHaveBeenCalledTimes(3)
+    expect(unlinkMock.mock.calls.map((c) => c[1])).toEqual(["c1", "c2", "c3"])
+  })
+
+  it("satélite de venda multi-curso não arrasta a primária", async () => {
+    p.enrollment.findFirst.mockResolvedValue(
+      enrollment({ id: "e2", courseId: "c2", bundleCourseIds: [] }),
     )
 
     const out = await cancelEnrollment({ enrollmentId: "e2", removeAccess: false, actor })

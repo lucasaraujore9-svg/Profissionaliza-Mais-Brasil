@@ -10,6 +10,8 @@ import {
 import { generateAndUploadPdf } from "./generate-pdf"
 import { isEnrollmentConcludedForCertificate } from "./eligibility"
 import {
+  PACE_PRIMARY_SELECT,
+  effectivePacePlan,
   evaluatePace,
   hasOpenInstallmentPlan,
   installmentWord,
@@ -68,6 +70,10 @@ export async function issueCertificateIfEligible(
       student: true,
       course: true,
       tenant: { select: { id: true, slug: true, name: true } },
+      // Satélite de compra com vários cursos: o parcelamento (e portanto a trava
+      // de conclusão) é o da matrícula que pagou. Sem isto, o curso 2 de uma
+      // venda em 6x emitiria certificado com 1 parcela paga.
+      ...PACE_PRIMARY_SELECT,
     },
   })
   if (!enrollment) throw new Error(`Enrollment ${enrollmentId} nao encontrado`)
@@ -94,7 +100,12 @@ export async function issueCertificateIfEligible(
     const { enabled } = await resolvePaceGateSettings(enrollment.tenantId)
     if (isConclusionBlockedByPace({ ...enrollment, gateEnabled: enabled })) {
       const state = evaluatePace(enrollment)
-      const word = installmentWord(enrollment.paymentType, state.remaining > 1)
+      // Numa satelite o paymentType da linha e ONE_TIME: a copy tem que seguir
+      // o plano EFETIVO (mensalidade x parcela) da compra.
+      const word = installmentWord(
+        effectivePacePlan(enrollment).paymentType,
+        state.remaining > 1,
+      )
       contextLogger().info(
         {
           event: "certificates.pace_gate_blocked",

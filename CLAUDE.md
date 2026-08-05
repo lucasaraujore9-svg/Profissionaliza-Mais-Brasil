@@ -284,6 +284,57 @@ unico, devolve os dados completos da unidade (revenda). Contrato em
 - **Limite:** 120 req/min POR CHAVE (`rateLimitByKey`), nao por IP: o limite e
   do contrato, nao da maquina de saida.
 
+### Venda direta com mais de um curso (2026-08-05)
+
+Antes, uma venda direta (no /admin e no /painel) era de UM curso ou de UM pacote
+do catalogo. Vender dois cursos avulsos exigia duas vendas, duas cobrancas e
+dois links — e o desconto/cupom nao enxergava o total.
+
+- **Reusa a mecanica do PACOTE, sem produto no catalogo.** A venda vira UMA
+  cobranca do valor somado: a matricula PRIMARIA (1o curso da lista) carrega o
+  Payment e lista os extras em `Enrollment.bundleCourseIds`; no fulfill cada
+  extra vira uma matricula SATELITE (finalAmount 0, sem Payment, sem dupla
+  receita). Migration idempotente `20260805_enrollment_bundle`.
+- **`primaryEnrollment` e o ponteiro que faltava** — vale para os DOIS casos
+  (pacote e multi-curso). E por ele que a COTA DE AULAS descobre o parcelamento
+  de uma satelite, que nao tem cobranca propria (ONE_TIME, `installmentsTotal`
+  null). Sem ele, o curso 2 de uma venda em 6x saia 100% liberado ja na 1a
+  parcela. O backfill da migration liga as satelites de pacote JA EXISTENTES —
+  com desempate deterministico, porque `(student_id, course_package_id)` nao e
+  unico (o mesmo aluno pode ter comprado o mesmo pacote duas vezes).
+- **O plano NAO e copiado para a satelite de proposito:** `installmentsTotal` e
+  campo de COBRANCA (sweep do carne, varredura de inadimplencia) e a copia faria
+  esses jobs tratarem a satelite como se tivesse boleto proprio. A heranca fica
+  em UM lugar: `effectivePacePlan` (pace-gate.ts). Toda leitura que alimenta as
+  funcoes de cota precisa espalhar `PACE_PRIMARY_SELECT` — sem ele a satelite se
+  apresenta como curso quitado e escapa da cota calada. O `where` gemeo
+  (`PACE_GATED_WHERE`, usado pela varredura diaria) tem teste de PARIDADE com
+  `isPaceGatedPlan`.
+- **Ordem importa no fulfill:** as satelites so podem ser avaliadas pela cota
+  DEPOIS da transacao que grava `installmentsPaid` da primaria. Avaliar antes le
+  "0 de N parcelas pagas" e bloqueia o aluno em 0% no ato da compra — cortando o
+  acesso e mandando "voce ja assistiu tudo o que as parcelas liberam" junto com
+  a confirmacao. Quem avalia e `evaluateSatellitePaceGates`, no chamador.
+- **A satelite herda `tenantCourseId`** na venda de unidade: e a coluna pela qual
+  o DELETE /api/painel/cursos/[id] conta matriculas ativas antes de deixar
+  remover um curso da vitrine. Satelite sem ela sumia dessa contagem.
+- **Descricao da cobranca** ("3 cursos: A, B, C") vem de `saleItemLabel` na venda
+  direta e de `descreverItemCobranca` (multi-course-server.ts) nas rotas de
+  checkout — senao o boleto do valor somado chega nomeando so o curso principal.
+  `multi-course.ts` e PURO porque os formularios de venda (client) importam
+  `MAX_SALE_COURSES` dali; o que toca o banco mora no `-server`.
+- **Curso mensal so e vendido sozinho:** somar mensalidade ao preco a vista de
+  outros numa cobranca unica cobraria so o 1o mes pelo conjunto.
+- **Gates:** duplicidade olha TODOS os cursos da venda (senao o aluno paga de
+  novo por um curso que ja tem, so por nao ser o primeiro da lista); curso
+  inativo ou ja matriculado no fulfill alerta o SUPER_ADMIN em vez de sumir
+  calado (o valor foi cobrado); rollback de venda que falhou apaga as satelites
+  junto (`rollbackSaleEnrollment`) — orfas ACTIVE travariam toda nova tentativa
+  com 409.
+- **Quebra de contrato interna:** `/api/painel/vendas` passou de `tenantCourseId`
+  para `tenantCourseIds` (e `/api/admin/vendas` de `courseId` para `courseIds`).
+  Clientes atualizados no mesmo commit.
+
 ### Bugs conhecidos (pendentes)
 
 - **Middleware file convention deprecado** no Next 16 (usar `proxy` em vez de `middleware`).

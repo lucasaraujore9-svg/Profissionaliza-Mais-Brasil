@@ -17,6 +17,7 @@ import { TenantGatewayIsolationError } from "@/lib/checkout/assert-tenant-gatewa
 import { rateLimit, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
 import { isPmbAppHost } from "@/lib/tenant/urls"
 import { clientIp } from "@/lib/http/client-ip"
+import { descreverItemCobranca } from "@/lib/enrollment/multi-course-server"
 import { stripCpf } from "@/lib/validation/cpf"
 import { swallow } from "@/lib/errors"
 import { contextLogger } from "@/lib/logger"
@@ -126,6 +127,9 @@ export const POST = withRequestContextParams<{ id: string }>(
         asaasInstallmentId: true,
         boletoInstallments: { select: { id: true }, take: 1 },
         course: { select: { nome: true } },
+        // Venda direta com mais de um curso: `course` é só o principal, mas a
+        // cobrança é do valor SOMADO. A descrição precisa dos dois.
+        bundleCourseIds: true,
         student: {
           select: {
             id: true,
@@ -290,7 +294,12 @@ export const POST = withRequestContextParams<{ id: string }>(
           fone: student.fone,
           asaasCustomerId: student.asaasCustomerId,
         },
-        courseNome: enrollment.course.nome,
+        // Todos os cursos da compra, não só o primário: a cobrança soma os
+        // preços e é este texto que o aluno lê no boleto/extrato.
+        courseNome: await descreverItemCobranca(
+          enrollment.course.nome,
+          enrollment.bundleCourseIds,
+        ),
         finalAmount: Number(enrollment.finalAmount),
         isMonthly,
         monthlyMonths,

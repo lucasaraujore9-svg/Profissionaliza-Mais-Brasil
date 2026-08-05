@@ -126,7 +126,17 @@ export default async function VendasDashboardPage() {
                     {e.student.email}
                   </div>
                 </td>
-                <td className="px-4 py-3">{e.course.nome}</td>
+                <td className="px-4 py-3">
+                  {e.course.nome}
+                  {/* Venda com mais de um curso: o nome acima é o curso
+                      principal (o que carrega a cobrança). */}
+                  {e.bundleCourseIds.length > 0 && (
+                    <div className="text-xs text-muted-foreground">
+                      + {e.bundleCourseIds.length}{" "}
+                      {e.bundleCourseIds.length === 1 ? "curso" : "cursos"} na mesma venda
+                    </div>
+                  )}
+                </td>
                 <td className="px-4 py-3">{formatBRL(Number(e.finalAmount))}</td>
                 <td className="px-4 py-3">
                   {e.status === "PENDING" ? (

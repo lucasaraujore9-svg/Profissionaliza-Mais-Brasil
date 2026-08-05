@@ -17,7 +17,7 @@ import { createNotification } from "@/lib/notifications"
 import { swallow } from "@/lib/errors"
 import { contextLogger } from "@/lib/logger"
 import { evaluatePaceGate } from "@/lib/enrollment/pace"
-import { PACE_GATED_PAYMENT_TYPES } from "@/lib/enrollment/pace-gate"
+import { PACE_GATED_WHERE } from "@/lib/enrollment/pace-gate"
 import { generateMpBoletoForInstallment } from "./plan"
 import { isOverdue, INSTALLMENT_REVEAL_WINDOW_DAYS } from "./schedule"
 
@@ -124,11 +124,20 @@ async function reconcilePaceGates(): Promise<number> {
   const candidates = await prisma.enrollment.findMany({
     where: {
       status: "ACTIVE",
-      paymentType: { in: [...PACE_GATED_PAYMENT_TYPES] },
-      installmentsTotal: { gt: 1 },
-      OR: [
-        { paceBlockedAt: { not: null } },
-        { paceExemptAt: null, progressPercent: { gt: 0 } },
+      // `AND` explícito: dois `OR` soltos no mesmo nível são chaves do mesmo
+      // objeto — o segundo sobrescreveria o primeiro.
+      AND: [
+        // "Está sob a regra da cota?" — plano próprio OU herdado da matrícula
+        // que pagou. Gêmeo SQL de `isPaceGatedPlan`, travado por teste de
+        // paridade. Sem o ramo herdado, a satélite de uma compra parcelada
+        // (ONE_TIME, sem parcelas) ficava fora da varredura para sempre.
+        PACE_GATED_WHERE,
+        {
+          OR: [
+            { paceBlockedAt: { not: null } },
+            { paceExemptAt: null, progressPercent: { gt: 0 } },
+          ],
+        },
       ],
     },
     select: { id: true },

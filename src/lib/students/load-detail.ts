@@ -11,6 +11,7 @@ import {
 import { buildEnrollmentCheckoutUrl } from "@/lib/students/checkout-link"
 import {
   computeAllowedPercent,
+  effectivePacePlan,
   isPaceGatedPlan,
 } from "@/lib/enrollment/pace-gate"
 import { resolvePaceGateSettings } from "@/lib/enrollment/pace-settings"
@@ -47,6 +48,19 @@ export async function loadStudentDetail(args: {
             select: {
               name: true,
               _count: { select: { items: true } },
+            },
+          },
+          // Compra com vários cursos: a satélite (finalAmount 0) aponta para a
+          // matrícula que carregou a cobrança. Serve a dois propósitos aqui:
+          // explicar a linha de R$ 0,00 e — via os campos de parcelamento — dar
+          // à satélite a MESMA cota de aulas da compra (ela não tem plano
+          // próprio). Ver PacePlanSource em pace-gate.ts.
+          primaryEnrollment: {
+            select: {
+              paymentType: true,
+              installmentsTotal: true,
+              installmentsPaid: true,
+              course: { select: { nome: true } },
             },
           },
         },
@@ -179,12 +193,26 @@ export async function loadStudentDetail(args: {
       packageName: e.coursePackage?.name ?? null,
       packageCourseCount: e.coursePackage?._count.items ?? null,
       packagePrimary: e.packagePrimary,
+      // Venda direta multi-curso: na primária, quantos cursos a cobrança cobre;
+      // na satélite, o curso da matrícula que carregou o pagamento.
+      bundleCourseCount: e.bundleCourseIds.length
+        ? e.bundleCourseIds.length + 1
+        : null,
+      // Satélite de PACOTE já se explica por `packageName` ("Incluído no pacote
+      // X") — não repetir a mesma informação com outro rótulo.
+      bundleOfCourseName: e.coursePackage
+        ? null
+        : e.primaryEnrollment?.course.nome ?? null,
       status: e.status,
       paymentType: e.paymentType,
       gateway: e.gateway,
       finalAmount: Number(e.finalAmount),
-      installmentsTotal: e.installmentsTotal,
-      installmentsPaid: e.installmentsPaid,
+      // Plano EFETIVO, igual ao `paceAllowedPercent` logo abaixo. Numa satélite
+      // as colunas próprias são null/0 (ela não tem cobrança), então lê-las
+      // direto produzia a tela incoerente "liberado até 33% · 0 de 0 parcelas"
+      // — quem atende não conseguia explicar o limite nem dizer quantas faltam.
+      installmentsTotal: effectivePacePlan(e).installmentsTotal,
+      installmentsPaid: effectivePacePlan(e).installmentsPaid,
       asaasInvoiceUrl: e.asaasInvoiceUrl,
       // Link para admin/revenda recuperarem o checkout de uma cobranca pendente
       // (venda direta aguardando pagamento ou carrinho abandonado).

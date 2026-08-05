@@ -13,6 +13,16 @@ export interface StudentEnrollmentItem {
   packageCourseCount: number | null
   /** Identifica a matrícula que carrega a compra/cobrança do pacote. */
   packagePrimary: boolean
+  /**
+   * Venda direta com MAIS DE UM CURSO (sem pacote no catálogo): total de cursos
+   * que esta cobrança cobre. `null` fora desse caso.
+   */
+  bundleCourseCount: number | null
+  /**
+   * Curso da matrícula que carregou a cobrança, quando ESTA matrícula é um
+   * satélite de uma venda multi-curso (finalAmount 0). `null` fora desse caso.
+   */
+  bundleOfCourseName: string | null
   status: string
   paymentType: string
   gateway: string

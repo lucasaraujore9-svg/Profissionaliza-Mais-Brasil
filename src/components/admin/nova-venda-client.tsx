@@ -6,6 +6,7 @@ import { CheckCircle2, Search, X, UserPlus, Users, RefreshCw, ExternalLink, Copy
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { MAX_SALE_COURSES } from "@/lib/enrollment/multi-course"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -135,10 +136,50 @@ export function NovaVendaClient({
   const [savingStudent, setSavingStudent] = useState(false)
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Step 2 — Curso ou pacote
+  // Step 2 — Curso(s) ou pacote. A venda aceita VÁRIOS cursos (uma cobrança só,
+  // pela soma dos preços) ou UM pacote — nunca a mistura dos dois.
   const [courseSearch, setCourseSearch] = useState("")
-  const [selectedItem, setSelectedItem] = useState<SaleItem | null>(null)
-  const isPkg = selectedItem?.kind === "package"
+  const [selectedItems, setSelectedItems] = useState<SaleItem[]>([])
+  const isPkg = selectedItems[0]?.kind === "package"
+  const hasSelection = selectedItems.length > 0
+  const isMulti = selectedItems.length > 1
+  // Curso mensal é contrato recorrente de UM curso: o servidor recusa somá-lo a
+  // outros, então a tela nem deixa marcar.
+  const hasMonthly = selectedItems.some(
+    (i) => i.kind === "course" && i.paymentType === "MONTHLY",
+  )
+
+  function isSelected(item: SaleItem): boolean {
+    return selectedItems.some((i) => i.kind === item.kind && i.id === item.id)
+  }
+
+  /** Motivo de o item não poder entrar na seleção atual — null = pode. */
+  function blockedReason(item: SaleItem): string | null {
+    if (isSelected(item) || item.kind === "package") return null
+    if (!hasSelection) return null
+    if (isPkg) return null // clicar num curso troca o pacote pelo curso
+    if (hasMonthly) return "o curso mensal é vendido sozinho"
+    if (item.paymentType === "MONTHLY") return "curso mensal — vendido sozinho"
+    if (selectedItems.length >= MAX_SALE_COURSES)
+      return `máximo de ${MAX_SALE_COURSES} cursos por venda`
+    return null
+  }
+
+  function toggleItem(item: SaleItem) {
+    setSelectedItems((prev) => {
+      // Pacote é a venda inteira: substitui tudo (ou desmarca).
+      if (item.kind === "package") {
+        const same = prev.length === 1 && prev[0].kind === "package" && prev[0].id === item.id
+        return same ? [] : [item]
+      }
+      // Escolher um curso descarta um pacote que estivesse selecionado.
+      const courses = prev.filter((i) => i.kind === "course")
+      if (courses.some((i) => i.id === item.id)) {
+        return courses.filter((i) => i.id !== item.id)
+      }
+      return [...courses, item]
+    })
+  }
 
   // Step 3 — Desconto (cupom OU manual, nunca os dois)
   const [couponCode, setCouponCode] = useState("")
@@ -179,18 +220,18 @@ export function NovaVendaClient({
     }, 300)
   }, [query])
 
-  // Reset coupon/manual discount when course changes
+  // Reset coupon/manual discount when the selection changes (o total muda)
   useEffect(() => {
     setCouponResult(null)
     setCouponError(null)
     setCouponCode("")
     setManualPct("")
-  }, [selectedItem])
+  }, [selectedItems])
 
-  // Reset link when student or course changes
+  // Reset link when student or selection changes
   useEffect(() => {
     setLinkResult(null)
-  }, [selectedStudent, selectedItem])
+  }, [selectedStudent, selectedItems])
 
   // Ao ativar a bolsa, zera cupom/desconto manual (não há valor a descontar) e o link.
   useEffect(() => {
@@ -249,9 +290,9 @@ export function NovaVendaClient({
   }
 
   async function validateCoupon() {
-    // Cupom (preview) só para curso — a rota de validação usa courseId.
-    if (!couponCode.trim() || !selectedItem || selectedItem.kind !== "course")
-      return
+    // Cupom (preview) só para curso(s) — a rota de validação usa courseIds e
+    // soma os preços, exatamente como a venda vai cobrar.
+    if (!couponCode.trim() || !hasSelection || isPkg) return
     setValidatingCoupon(true)
     setCouponError(null)
     setCouponResult(null)
@@ -259,7 +300,10 @@ export function NovaVendaClient({
       const res = await fetch("/api/admin/cupons/validate", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ code: couponCode.trim(), courseId: selectedItem.id }),
+        body: JSON.stringify({
+          code: couponCode.trim(),
+          courseIds: selectedItems.map((i) => i.id),
+        }),
       })
       const body = await res.json()
       if (!res.ok) {
@@ -276,18 +320,23 @@ export function NovaVendaClient({
     }
   }
 
+  // Preço base da venda: a SOMA dos itens selecionados (um pacote sempre está
+  // sozinho, então a soma é o preço dele).
+  const basePrice =
+    Math.round(selectedItems.reduce((sum, i) => sum + i.preco, 0) * 100) / 100
+
   // Desconto manual derivado do input (aceita vírgula BR). Válido quando está
   // entre 0 (exclusivo) e o cap do vendedor; acima do cap o form bloqueia.
   const manualPctNumber = manualPct.trim() === "" ? 0 : Number(manualPct.replace(",", "."))
   const manualValid =
     Number.isFinite(manualPctNumber) && manualPctNumber > 0 && manualPctNumber <= cap
   const manualDiscountAmount =
-    manualValid && selectedItem
-      ? Number(((selectedItem.preco * manualPctNumber) / 100).toFixed(2))
+    manualValid && hasSelection
+      ? Number(((basePrice * manualPctNumber) / 100).toFixed(2))
       : 0
 
   async function generateLink() {
-    if (!selectedStudent || !selectedItem) return
+    if (!selectedStudent || !hasSelection) return
     setGeneratingLink(true)
     try {
       const res = await fetch("/api/admin/vendas", {
@@ -295,10 +344,10 @@ export function NovaVendaClient({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           studentId: selectedStudent.id,
-          // Curso envia courseId; pacote envia packageId.
-          ...(selectedItem.kind === "package"
-            ? { packageId: selectedItem.id }
-            : { courseId: selectedItem.id }),
+          // Curso(s) enviam courseIds; pacote envia packageId.
+          ...(isPkg
+            ? { packageId: selectedItems[0].id }
+            : { courseIds: selectedItems.map((i) => i.id) }),
           couponCode: bolsista || !couponResult ? undefined : couponCode.trim(),
           manualDiscountPercent:
             bolsista || couponResult || !manualValid ? undefined : manualPctNumber,
@@ -331,9 +380,9 @@ export function NovaVendaClient({
     ? 0
     : couponResult
       ? couponResult.finalAmount
-      : manualValid && selectedItem
-        ? Math.max(0, Number((selectedItem.preco - manualDiscountAmount).toFixed(2)))
-        : selectedItem?.preco ?? 0
+      : manualValid && hasSelection
+        ? Math.max(0, Number((basePrice - manualDiscountAmount).toFixed(2)))
+        : basePrice
 
   // ─── Render ───────────────────────────────────────────────────────────────
 
@@ -480,60 +529,100 @@ export function NovaVendaClient({
         )}
       </Section>
 
-      {/* ── 2. Curso ou pacote ───────────────────────────────────────────── */}
-      <Section title="2. Curso ou pacote" done={!!selectedItem}>
-        {selectedItem ? (
-          <div className="flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 p-4">
-            <div>
-              <p className="font-semibold text-[var(--color-pmb-green-900)]">{selectedItem.nome}</p>
-              <p className="text-xs text-gray-500">
-                {fmt(selectedItem.preco)}
-                {selectedItem.kind === "package"
-                  ? ` · ${selectedItem.courseCount} ${selectedItem.courseCount === 1 ? "curso" : "cursos"} · pagamento único`
-                  : selectedItem.paymentType === "MONTHLY" && selectedItem.monthlyMonths
-                    ? ` · ${selectedItem.monthlyMonths}x mensais`
-                    : " · pagamento único"}
-              </p>
-            </div>
-            <Button variant="ghost" size="sm" onClick={() => { setSelectedItem(null); setLinkResult(null) }}>
-              <X className="h-4 w-4 mr-1" /> Trocar
-            </Button>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-              <Input
-                placeholder="Buscar curso ou pacote…"
-                value={courseSearch}
-                onChange={(e) => setCourseSearch(e.target.value)}
-                className="pl-9"
-              />
-            </div>
-            <ul className="max-h-64 divide-y divide-gray-100 overflow-y-auto rounded-xl border border-gray-200 bg-white">
-              {filteredItems.length === 0 && (
-                <li className="px-4 py-3 text-sm text-gray-400">Nenhum curso ou pacote encontrado</li>
+      {/* ── 2. Cursos ou pacote ──────────────────────────────────────────── */}
+      {/* Vários cursos = uma cobrança só, pela soma dos preços. Um pacote é a
+          venda inteira e por isso nunca soma com cursos avulsos. */}
+      <Section title="2. Cursos ou pacote" done={hasSelection}>
+        <div className="space-y-3">
+          {hasSelection && (
+            <ul className="divide-y divide-emerald-100 rounded-xl border border-emerald-200 bg-emerald-50">
+              {selectedItems.map((item) => (
+                <li key={`sel:${item.kind}:${item.id}`} className="flex items-center justify-between gap-3 p-3">
+                  <div className="min-w-0">
+                    <p className="truncate font-semibold text-[var(--color-pmb-green-900)]">{item.nome}</p>
+                    <p className="text-xs text-gray-500">
+                      {fmt(item.preco)}
+                      {item.kind === "package"
+                        ? ` · ${item.courseCount} ${item.courseCount === 1 ? "curso" : "cursos"} · pagamento único`
+                        : item.paymentType === "MONTHLY" && item.monthlyMonths
+                          ? ` · ${item.monthlyMonths}x mensais`
+                          : " · pagamento único"}
+                    </p>
+                  </div>
+                  <Button variant="ghost" size="sm" onClick={() => toggleItem(item)}>
+                    <X className="mr-1 h-4 w-4" /> Remover
+                  </Button>
+                </li>
+              ))}
+              {isMulti && (
+                <li className="flex justify-between p-3 text-sm">
+                  <span className="text-gray-500">
+                    {selectedItems.length} cursos · uma única cobrança
+                  </span>
+                  <span className="font-bold text-[var(--color-pmb-green-900)]">{fmt(basePrice)}</span>
+                </li>
               )}
-              {filteredItems.map((c) => (
+            </ul>
+          )}
+
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            <Input
+              placeholder={hasSelection ? "Adicionar outro curso…" : "Buscar curso ou pacote…"}
+              value={courseSearch}
+              onChange={(e) => setCourseSearch(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+          <ul className="max-h-64 divide-y divide-gray-100 overflow-y-auto rounded-xl border border-gray-200 bg-white">
+            {filteredItems.length === 0 && (
+              <li className="px-4 py-3 text-sm text-gray-400">Nenhum curso ou pacote encontrado</li>
+            )}
+            {filteredItems.map((c) => {
+              const selected = isSelected(c)
+              const blocked = blockedReason(c)
+              return (
                 <li key={`${c.kind}:${c.id}`}>
                   <button
                     type="button"
-                    onClick={() => setSelectedItem(c)}
-                    className="w-full px-4 py-3 text-left transition-colors hover:bg-[var(--color-pmb-lime-50)]"
+                    disabled={!!blocked}
+                    onClick={() => toggleItem(c)}
+                    className={`flex w-full items-center gap-3 px-4 py-3 text-left transition-colors ${
+                      blocked
+                        ? "cursor-not-allowed opacity-50"
+                        : "hover:bg-[var(--color-pmb-lime-50)]"
+                    }`}
                   >
-                    <p className="text-sm font-medium text-gray-900">{c.nome}</p>
-                    <p className="text-xs text-gray-500">
-                      {fmt(c.preco)}
-                      {c.kind === "package"
-                        ? ` · ${c.courseCount} ${c.courseCount === 1 ? "curso" : "cursos"}`
-                        : c.paymentType === "MONTHLY" && c.monthlyMonths ? ` · ${c.monthlyMonths}x mensais` : " · único"}
-                    </p>
+                    <span
+                      className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
+                        selected
+                          ? "border-[var(--color-pmb-green)] bg-[var(--color-pmb-green)] text-white"
+                          : "border-gray-300"
+                      }`}
+                      aria-hidden
+                    >
+                      {selected && <CheckCircle2 className="h-3 w-3" />}
+                    </span>
+                    <span className="min-w-0">
+                      <p className="truncate text-sm font-medium text-gray-900">{c.nome}</p>
+                      <p className="text-xs text-gray-500">
+                        {fmt(c.preco)}
+                        {c.kind === "package"
+                          ? ` · ${c.courseCount} ${c.courseCount === 1 ? "curso" : "cursos"}`
+                          : c.paymentType === "MONTHLY" && c.monthlyMonths ? ` · ${c.monthlyMonths}x mensais` : " · único"}
+                        {blocked ? ` · ${blocked}` : ""}
+                      </p>
+                    </span>
                   </button>
                 </li>
-              ))}
-            </ul>
-          </div>
-        )}
+              )
+            })}
+          </ul>
+          <p className="text-xs text-gray-400">
+            Marque quantos cursos quiser (até {MAX_SALE_COURSES}) — o aluno recebe
+            um único link com a soma. Pacote é vendido sozinho.
+          </p>
+        </div>
       </Section>
 
       {/* ── 3. Desconto ──────────────────────────────────────────────────── */}
@@ -575,7 +664,7 @@ export function NovaVendaClient({
                   placeholder="0"
                   value={manualPct}
                   onChange={(e) => setManualPct(e.target.value)}
-                  disabled={!selectedItem}
+                  disabled={!hasSelection}
                   className="w-28"
                 />
                 <span className="text-sm text-gray-500">% — até {cap}%</span>
@@ -587,15 +676,15 @@ export function NovaVendaClient({
                     : "Percentual inválido"}
                 </p>
               )}
-              {manualValid && selectedItem && (
+              {manualValid && hasSelection && (
                 <p className="text-xs text-emerald-600">
-                  − {fmt(manualDiscountAmount)} · de {fmt(selectedItem.preco)} por{" "}
+                  − {fmt(manualDiscountAmount)} · de {fmt(basePrice)} por{" "}
                   <strong>{fmt(finalPrice)}</strong>
                 </p>
               )}
             </div>
 
-            {/* Cupom — só curso (a validação usa courseId). Aplicar cupom é
+            {/* Cupom — só curso(s) (a validação usa courseIds). Aplicar cupom é
                 livre (qualquer cupom ativo, mesmo acima do cap — quem criou já
                 foi validado); o cap vale só para o desconto manual acima. */}
             {!isPkg && (
@@ -608,12 +697,12 @@ export function NovaVendaClient({
                     placeholder="CODIGO"
                     value={couponCode}
                     onChange={(e) => { setCouponCode(e.target.value.toUpperCase()); setCouponError(null) }}
-                    disabled={!selectedItem}
+                    disabled={!hasSelection}
                     className="font-mono uppercase"
                   />
                   <Button
                     onClick={validateCoupon}
-                    disabled={validatingCoupon || !couponCode.trim() || !selectedItem}
+                    disabled={validatingCoupon || !couponCode.trim() || !hasSelection}
                     variant="outline"
                   >
                     {validatingCoupon ? "Validando…" : "Aplicar"}
@@ -625,9 +714,9 @@ export function NovaVendaClient({
               </div>
             )}
 
-            {!selectedItem && (
+            {!hasSelection && (
               <p className="text-xs text-gray-400">
-                Selecione um {isPkg ? "pacote" : "curso"} antes de aplicar desconto
+                Selecione o curso ou o pacote antes de aplicar desconto
               </p>
             )}
             <p className="text-xs text-gray-400">
@@ -641,14 +730,26 @@ export function NovaVendaClient({
 
       {/* ── 4. Gerar link / Conceder bolsa ───────────────────────────────── */}
       <Section title={bolsista ? "4. Conceder bolsa" : "4. Gerar link de pagamento"} done={!!linkResult}>
-        {selectedStudent && selectedItem ? (
+        {selectedStudent && hasSelection ? (
           <div className="space-y-4">
             <div className="rounded-xl bg-gray-50 p-4 text-sm space-y-1">
               <Row label="Aluno" value={selectedStudent.nome} />
-              <Row label={isPkg ? "Pacote" : "Curso"} value={selectedItem.nome} />
-              <Row label={bolsista ? "Valor" : "Preço base"} value={fmt(selectedItem.preco)} />
+              {selectedItems.map((item, i) => (
+                <Row
+                  key={`sum:${item.kind}:${item.id}`}
+                  label={
+                    isPkg
+                      ? "Pacote"
+                      : isMulti
+                        ? `Curso ${i + 1}`
+                        : "Curso"
+                  }
+                  value={`${item.nome} — ${fmt(item.preco)}`}
+                />
+              ))}
+              <Row label={bolsista ? "Valor" : "Preço base"} value={fmt(basePrice)} />
               {bolsista ? (
-                <Row label="Bolsa de estudo" value={`− ${fmt(selectedItem.preco)}`} className="text-amber-600" />
+                <Row label="Bolsa de estudo" value={`− ${fmt(basePrice)}`} className="text-amber-600" />
               ) : couponResult ? (
                 <Row label="Desconto (cupom)" value={`− ${fmt(couponResult.discountAmount)}`} className="text-emerald-600" />
               ) : manualValid ? (
@@ -674,7 +775,8 @@ export function NovaVendaClient({
                   <CheckCircle2 className="h-4 w-4" /> Bolsa concedida
                 </div>
                 <p className="text-sm text-amber-800">
-                  {selectedStudent.nome} foi matriculado em <strong>{selectedItem.nome}</strong> na
+                  {selectedStudent.nome} foi matriculado em{" "}
+                  <strong>{selectedItems.map((i) => i.nome).join(", ")}</strong> na
                   plataforma de aulas, sem cobrança. As credenciais de acesso foram enviadas por e-mail.
                 </p>
                 <Button
@@ -683,7 +785,7 @@ export function NovaVendaClient({
                   className="text-gray-500"
                   onClick={() => {
                     setSelectedStudent(null)
-                    setSelectedItem(null)
+                    setSelectedItems([])
                     setCouponResult(null)
                     setCouponCode("")
                     setManualPct("")
@@ -721,7 +823,7 @@ export function NovaVendaClient({
                   className="text-gray-500"
                   onClick={() => {
                     setSelectedStudent(null)
-                    setSelectedItem(null)
+                    setSelectedItems([])
                     setCouponResult(null)
                     setCouponCode("")
                     setManualPct("")

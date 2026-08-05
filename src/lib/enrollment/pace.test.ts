@@ -46,6 +46,7 @@ import { resolvePaceGateSettings } from "./pace-settings"
 import { isLmsConfigured, setLmsEnrollmentLimit } from "@/lib/lms"
 import {
   evaluatePaceGate,
+  evaluateSatellitePaceGates,
   releaseStudentPaceIfClear,
   clearPaceFlags,
 } from "./pace"
@@ -463,5 +464,124 @@ describe("clearPaceFlags", () => {
       where: { id: { in: ["e1", "e2"] }, paceBlockedAt: { not: null } },
       data: { paceBlockedAt: null, paceAppliedPercent: null },
     })
+  })
+})
+
+// ── Satélites de uma compra com vários cursos ───────────────────────────────
+// O satélite (curso 2..N de um pacote ou de uma venda multi-curso) não tem
+// cobrança própria: nasce ONE_TIME, sem parcelas. O plano vem da primária pela
+// relação `primaryEnrollment` — sem isso ele passaria por "curso quitado".
+describe("cota das satélites (compra com vários cursos)", () => {
+  /** Satélite ONE_TIME de valor 0 ligado a um carnê 6x com `paid` pagas. */
+  function satellite(paid: number, progress: number, extra = {}) {
+    return {
+      id: "sat1",
+      tenantId: "t1",
+      studentId: "s1",
+      status: "ACTIVE",
+      paymentType: "ONE_TIME",
+      installmentsPaid: 0,
+      installmentsTotal: null,
+      progressPercent: progress,
+      paceBlockedAt: null,
+      paceAppliedPercent: null,
+      paceExemptAt: null,
+      lmsEnrollmentId: null,
+      primaryEnrollment: {
+        paymentType: "BOLETO_INSTALLMENT",
+        installmentsPaid: paid,
+        installmentsTotal: 6,
+      },
+      course: { nome: "Curso 2 da compra" },
+      student: { nome: "Maria", status: "ATIVO" },
+      ...extra,
+    }
+  }
+
+  it("trava o curso extra na MESMA fatia da compra (1/6 = 16%)", async () => {
+    p.enrollment.findUnique.mockResolvedValue(satellite(1, 20))
+
+    const out = await evaluatePaceGate("sat1")
+
+    expect(out?.blocked).toBe(true)
+    expect(out?.allowedPercent).toBe(16)
+    expect(p.enrollment.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ paceAppliedPercent: 16 }),
+      }),
+    )
+  })
+
+  it("não trava quem ainda está dentro da fatia paga", async () => {
+    p.enrollment.findUnique.mockResolvedValue(satellite(1, 10))
+
+    const out = await evaluatePaceGate("sat1")
+
+    expect(out?.blocked).toBe(false)
+    expect(setBlockMock).not.toHaveBeenCalled()
+  })
+
+  it("compra quitada libera o curso extra por inteiro", async () => {
+    p.enrollment.findUnique.mockResolvedValue(satellite(6, 100))
+
+    const out = await evaluatePaceGate("sat1")
+
+    expect(out?.allowedPercent).toBe(100)
+    expect(out?.blocked).toBe(false)
+  })
+
+  // Regressão específica: o satélite entrava na lista de irmãos como se fosse
+  // curso à vista e, por parecer "livre", cancelava o corte da matrícula que de
+  // fato devia parcelas — a compra inteira escapava da trava na plataforma.
+  it("satélite travado NÃO conta como irmão livre na política de colateral", async () => {
+    p.enrollment.findUnique.mockResolvedValue(carne(1, 2, 50))
+    p.enrollment.findMany.mockResolvedValue([satellite(1, 90)])
+
+    await evaluatePaceGate("e1")
+
+    expect(setBlockMock).toHaveBeenCalledWith("s1", true)
+  })
+
+  it("um curso à vista de verdade continua cancelando o corte", async () => {
+    p.enrollment.findUnique.mockResolvedValue(carne(1, 2, 50))
+    p.enrollment.findMany.mockResolvedValue([
+      {
+        id: "e9",
+        paymentType: "ONE_TIME",
+        installmentsPaid: 0,
+        installmentsTotal: null,
+        progressPercent: 90,
+        paceExemptAt: null,
+        primaryEnrollment: null,
+      },
+    ])
+
+    await evaluatePaceGate("e1")
+
+    expect(setBlockMock).not.toHaveBeenCalledWith("s1", true)
+  })
+})
+
+describe("evaluateSatellitePaceGates", () => {
+  it("reavalia os demais cursos da compra quando uma parcela entra", async () => {
+    p.enrollment.findMany.mockResolvedValue([{ id: "sat1" }, { id: "sat2" }])
+    p.enrollment.findUnique.mockResolvedValue(null) // corta cedo em cada um
+
+    await evaluateSatellitePaceGates("e1")
+
+    expect(p.enrollment.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { primaryEnrollmentId: "e1", status: "ACTIVE" },
+      }),
+    )
+    expect(p.enrollment.findUnique).toHaveBeenCalledTimes(2)
+  })
+
+  it("compra de curso avulso não tem satélite — nenhuma avaliação extra", async () => {
+    p.enrollment.findMany.mockResolvedValue([])
+
+    await evaluateSatellitePaceGates("e1")
+
+    expect(p.enrollment.findUnique).not.toHaveBeenCalled()
   })
 })

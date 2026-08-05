@@ -233,6 +233,16 @@ export function FinancialTab({
                             Incluído no pacote {e.packageName}
                           </div>
                         )}
+                        {e.bundleCourseCount && (
+                          <div className="mt-0.5 text-[11px] font-normal text-gray-500">
+                            Venda com {e.bundleCourseCount} cursos
+                          </div>
+                        )}
+                        {e.bundleOfCourseName && (
+                          <div className="mt-0.5 text-[11px] font-normal text-gray-500">
+                            Incluído na venda de {e.bundleOfCourseName}
+                          </div>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-xs text-gray-600">
                         {e.paymentType === "BOLETO_INSTALLMENT"

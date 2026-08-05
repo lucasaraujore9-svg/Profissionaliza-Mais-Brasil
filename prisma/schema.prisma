@@ -1025,6 +1025,26 @@ model Enrollment {
   coursePackage   CoursePackage? @relation(fields: [coursePackageId], references: [id], onDelete: SetNull)
   packagePrimary  Boolean        @default(false) @map("package_primary")
 
+  // Venda direta com MAIS DE UM CURSO (avulsa, sem pacote no catalogo). Mesma
+  // mecanica do pacote, so que a lista de cursos e da VENDA, nao de um produto:
+  // a matricula PRIMARIA carrega o Payment do valor somado e guarda aqui os
+  // cursos EXTRA (o 1o fica em `courseId`). Curso unico/pacote: array vazio.
+  bundleCourseIds String[] @default([]) @map("bundle_course_ids")
+
+  // Ponteiro da SATELITE para a matricula que carrega a cobranca da compra.
+  // Vale para os DOIS casos (pacote do catalogo e venda multi-curso) e e por ele
+  // que a COTA DE AULAS descobre o parcelamento de uma satelite — ela nao tem
+  // cobranca propria (finalAmount 0, paymentType ONE_TIME, installmentsTotal
+  // null). Sem o ponteiro, o curso 2 de uma venda em 6x sairia 100% liberado ja
+  // na 1a parcela. Null na primaria e na venda de curso avulso.
+  //
+  // O plano NAO e copiado para a satelite de proposito: `installmentsTotal` e
+  // campo de COBRANCA (sweep do carne, varredura de inadimplencia) e uma copia
+  // faria esses jobs tratarem a satelite como se tivesse boleto proprio.
+  primaryEnrollmentId  String?      @map("primary_enrollment_id")
+  primaryEnrollment    Enrollment?  @relation("EnrollmentSatellites", fields: [primaryEnrollmentId], references: [id], onDelete: SetNull)
+  satelliteEnrollments Enrollment[] @relation("EnrollmentSatellites")
+
   // Pagamento
   paymentType    PaymentType      @map("payment_type")
   status         EnrollmentStatus @default(PENDING)
@@ -1117,6 +1137,9 @@ model Enrollment {
   @@index([asaasPaymentId])
   @@index([progressStatus])
   @@index([coursePackageId])
+  // Satelites de uma venda multi-curso: o cancelamento da primaria arrasta as
+  // satelites por este campo.
+  @@index([primaryEnrollmentId])
   @@index([lmsEnrollmentId])
   // Composite: dashboards do painel filtram constantemente por
   // (tenantId + status) — dezenas de queries por load.

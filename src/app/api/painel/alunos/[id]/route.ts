@@ -32,6 +32,9 @@ export const GET = withRequestContextParams<{ id: string }>(
                 _count: { select: { items: true } },
               },
             },
+            // Venda direta com vários cursos: a satélite (finalAmount 0) aponta
+            // para a matrícula que carregou a cobrança.
+            primaryEnrollment: { select: { course: { select: { nome: true } } } },
           },
           orderBy: { createdAt: "desc" },
         },
@@ -67,6 +70,13 @@ export const GET = withRequestContextParams<{ id: string }>(
           packageName: e.coursePackage?.name ?? null,
           packageCourseCount: e.coursePackage?._count.items ?? null,
           packagePrimary: e.packagePrimary,
+          bundleCourseCount: e.bundleCourseIds.length
+            ? e.bundleCourseIds.length + 1
+            : null,
+          // Satélite de PACOTE já se explica por `packageName`.
+          bundleOfCourseName: e.coursePackage
+            ? null
+            : e.primaryEnrollment?.course.nome ?? null,
           status: e.status,
           amount: Number(e.finalAmount),
           createdAt: e.createdAt.toISOString(),

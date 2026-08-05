@@ -17,6 +17,7 @@ import { contextLogger } from "@/lib/logger"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { mpWebhookUrl, asaasWebhookUrl, vitrineUrl } from "@/lib/tenant/urls"
 import { isWithinRevealWindow } from "@/lib/installments/schedule"
+import { descreverItemCobranca } from "@/lib/enrollment/multi-course-server"
 
 // O formData varia por gateway (MP tokeniza no browser; Asaas envia o cartão ao
 // servidor). Aceitamos os dois shapes e ramificamos pelo enrollment.gateway.
@@ -71,6 +72,9 @@ export const POST = withRequestContext(
           externalReference: true,
           asaasCustomerId: true,
           course: { select: { nome: true } },
+          // Venda direta com mais de um curso: `course` é só o principal, mas a
+          // cobrança é do valor SOMADO. A descrição precisa dos dois.
+          bundleCourseIds: true,
           student: { select: { nome: true, email: true, cpf: true, fone: true } },
           boletoInstallments: {
             where: { status: { not: "CANCELLED" } },
@@ -167,6 +171,16 @@ export const POST = withRequestContext(
         }
       }
 
+      // Nome do item na cobrança (boleto, PIX, fatura do cartão). Numa venda
+      // multi-curso o aluno vê "3 cursos: A, B, C" e não só o curso principal —
+      // sem isto a cobrança de R$ 900 chega nomeando um curso de R$ 300, o que o
+      // aluno lê como erro e o emissor como divergência. Mesma função que a
+      // venda direta do /admin usa, então as duas descrições coincidem.
+      const itemNome = await descreverItemCobranca(
+        enrollment.course.nome,
+        enrollment.bundleCourseIds,
+      )
+
       const tenant = enrollment.tenant
       if (tenant.status !== "ACTIVE") {
         return NextResponse.json(
@@ -220,7 +234,7 @@ export const POST = withRequestContext(
           installmentsTotal: enrollment.installmentsTotal,
           externalReference:
             enrollment.externalReference ?? `enr_${enrollment.id}`,
-          courseNome: enrollment.course.nome,
+          courseNome: itemNome,
           studentNome: enrollment.student.nome,
           studentEmail: enrollment.student.email,
           studentCpf: enrollment.student.cpf,
@@ -300,7 +314,7 @@ export const POST = withRequestContext(
           paymentType: enrollment.paymentType,
           installmentsTotal: enrollment.installmentsTotal,
           externalReference: enrollment.externalReference ?? `enr_${enrollment.id}`,
-          courseNome: enrollment.course.nome,
+          courseNome: itemNome,
           studentNome: enrollment.student.nome,
           studentEmail: enrollment.student.email,
           studentCpf: enrollment.student.cpf,

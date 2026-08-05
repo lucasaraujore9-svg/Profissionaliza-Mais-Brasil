@@ -86,6 +86,7 @@ export async function cancelEnrollment(
       gateway: true,
       coursePackageId: true,
       packagePrimary: true,
+      bundleCourseIds: true,
       asaasPaymentId: true,
       asaasSubscriptionId: true,
       asaasInstallmentId: true,
@@ -105,10 +106,11 @@ export async function cancelEnrollment(
 
   await cancelAtGateway(enrollment, keys, gatewayErrors)
 
-  // Satélites de pacote: a matrícula PRIMÁRIA carrega o pagamento do pacote
-  // inteiro, então cancelá-la tem que arrastar os cursos que vieram junto
-  // (finalAmount 0, sem cobrança própria). Cancelar um satélite isolado NÃO
-  // toca na primária — o aluno perde só aquele curso.
+  // Satélites: a matrícula PRIMÁRIA carrega o pagamento da compra inteira, então
+  // cancelá-la tem que arrastar os cursos que vieram junto (finalAmount 0, sem
+  // cobrança própria). Vale para o pacote do catálogo e para a venda direta
+  // multi-curso. Cancelar um satélite isolado NÃO toca na primária — o aluno
+  // perde só aquele curso.
   const satellites =
     enrollment.packagePrimary && enrollment.coursePackageId
       ? await prisma.enrollment.findMany({
@@ -121,7 +123,15 @@ export async function cancelEnrollment(
           },
           select: { id: true, courseId: true },
         })
-      : []
+      : enrollment.bundleCourseIds.length > 0
+        ? await prisma.enrollment.findMany({
+            where: {
+              primaryEnrollmentId: enrollment.id,
+              status: { in: CANCELLABLE_STATUSES },
+            },
+            select: { id: true, courseId: true },
+          })
+        : []
 
   const cancelledIds = [enrollment.id, ...satellites.map((s) => s.id)]
 

@@ -65,6 +65,8 @@ export default async function PagarPmbPage({ params }: PagarPmbPageProps) {
       discountAmount: true,
       coursePackageId: true,
       coursePackage: { select: { name: true, coverImageUrl: true } },
+      // Venda direta com mais de um curso: o `course` abaixo é só o principal.
+      bundleCourseIds: true,
       course: {
         select: {
           nome: true,
@@ -91,12 +93,25 @@ export default async function PagarPmbPage({ params }: PagarPmbPageProps) {
   // `course` é o curso primário técnico do fulfillment. Para uma compra de
   // pacote, o item comercial que deve aparecer para o aluno é o pacote.
   const isPackage = !!enrollment.coursePackageId
+  // Venda direta com vários cursos: o aluno precisa ver TUDO o que está pagando,
+  // não só o curso principal.
+  const bundleCourses = enrollment.bundleCourseIds.length
+    ? await prisma.course.findMany({
+        where: { id: { in: enrollment.bundleCourseIds } },
+        select: { nome: true },
+      })
+    : []
+  const isBundle = bundleCourses.length > 0
   const summaryName = isPackage
     ? enrollment.coursePackage?.name ?? "Pacote de cursos"
-    : enrollment.course.nome
+    : isBundle
+      ? [enrollment.course.nome, ...bundleCourses.map((c) => c.nome)].join(" + ")
+      : enrollment.course.nome
   const summaryCategory = isPackage
     ? "Pacote"
-    : enrollment.course.categoriaLoja ?? enrollment.course.categoriaInterna
+    : isBundle
+      ? `${bundleCourses.length + 1} cursos`
+      : enrollment.course.categoriaLoja ?? enrollment.course.categoriaInterna
   const summaryImage =
     enrollment.coursePackage?.coverImageUrl ??
     enrollment.course.capaOverride ??

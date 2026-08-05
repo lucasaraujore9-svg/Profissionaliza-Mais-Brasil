@@ -14,7 +14,10 @@ import { getStudentPlatformLoginUrl } from "@/lib/students/platform-credentials"
 import type { EnrollmentSchoolAccess } from "@/lib/email/templates/enrollment"
 import { generatePasswordWithHash } from "@/lib/students/generate-password"
 import { createNotification } from "@/lib/notifications"
-import { evaluatePaceGate } from "@/lib/enrollment/pace"
+import {
+  evaluatePaceGate,
+  evaluateSatellitePaceGates,
+} from "@/lib/enrollment/pace"
 import { addMonthsClamped } from "@/lib/dates"
 import { appUrl as resolveAppUrl } from "@/lib/tenant/urls"
 import { afterResponse } from "@/lib/after-response"
@@ -277,6 +280,10 @@ async function fulfillEnrollmentLocked(
     // Idempotente — no carnê o `settle` reavalia de novo depois de tratar a
     // reativação por inadimplência, e a segunda passada vira no-op.
     await evaluatePaceGate(enrollment.id)
+    // Os demais cursos da MESMA compra (satélites de pacote / venda
+    // multi-curso) seguem o mesmo parcelamento: a parcela que acabou de entrar
+    // amplia a fatia deles também. Sem isto, só o curso principal destravaria.
+    await evaluateSatellitePaceGates(enrollment.id)
 
     return
   }
@@ -296,19 +303,18 @@ async function fulfillEnrollmentLocked(
   const accessStartedAt = new Date()
   const accessExpiresAt = addMonthsClamped(accessStartedAt, STUDENT_ACCESS_MONTHS)
 
-  // Pacote de cursos: a matrícula primária já liberou o 1º curso acima. Agora
-  // liberamos os demais cursos do pacote (link na plataforma + matrícula
-  // satélite ACTIVE, finalAmount 0 — sem Payment, sem dupla receita). Antes do
-  // Payment para herdar a retry-safety do webhook. Best-effort por curso:
-  // uma falha alerta o admin mas não bloqueia a ativação do pacote inteiro.
-  if (enrollment.coursePackageId) {
-    await provisionPackageSiblings(
-      tenant,
-      enrollment,
-      accessStartedAt,
-      accessExpiresAt,
-    )
-  }
+  // Compra com mais de um curso (pacote do catálogo OU venda direta multi-curso):
+  // a matrícula primária já liberou o 1º curso acima. Agora liberamos os demais
+  // (link na plataforma + matrícula satélite ACTIVE, finalAmount 0 — sem
+  // Payment, sem dupla receita). Antes do Payment para herdar a retry-safety do
+  // webhook. Best-effort por curso: uma falha alerta o admin mas não bloqueia a
+  // ativação do restante da compra.
+  await provisionSiblingCourses(
+    tenant,
+    enrollment,
+    accessStartedAt,
+    accessExpiresAt,
+  )
 
   // Transação para Payment + Enrollment.update — evita estado inconsistente
   // (Payment órfão com Enrollment.PENDING) se a 2ª query falhar.
@@ -349,10 +355,15 @@ async function fulfillEnrollmentLocked(
     }),
   ])
 
-  // Nome do item comprado: pacote (quando houver) ou o curso avulso.
-  const purchaseName = enrollment.coursePackage
-    ? `pacote ${enrollment.coursePackage.name}`
-    : enrollment.course.nome
+  // Cota de aulas das satélites — DEPOIS da transação acima, que é quem grava
+  // `installmentsPaid` da primária. Avaliar antes leria zero parcelas pagas e
+  // bloquearia o aluno em 0% no ato da compra. No-op em compra à vista e em
+  // compra sem cursos adicionais (a consulta é pelo índice de
+  // `primary_enrollment_id`).
+  await evaluateSatellitePaceGates(enrollment.id)
+
+  // Nome do item comprado: pacote, venda multi-curso ou o curso avulso.
+  const purchaseName = purchaseLabel(enrollment)
 
   // Notificacoes in-app
   await createNotification({
@@ -360,11 +371,23 @@ async function fulfillEnrollmentLocked(
     studentId: enrollment.student.id,
     level: "SUCCESS",
     title: `Matrícula confirmada — ${purchaseName}`,
-    body: enrollment.coursePackage
-      ? "Todos os cursos do pacote foram liberados. Acesse a área de aulas."
-      : enrollment.installmentsTotal
+    // As duas informações são independentes e as duas importam: O QUE foi
+    // liberado (um curso, o pacote, os N cursos da compra) e ONDE o aluno está
+    // no parcelamento. Escolher só uma delas — como fazia o encadeamento
+    // anterior — some com "primeira de 6 parcelas" justamente na compra
+    // multi-curso parcelada, que é onde a cota de aulas mais limita o acesso.
+    body: [
+      enrollment.coursePackage
+        ? "Todos os cursos do pacote foram liberados."
+        : siblingCount(enrollment) > 0
+          ? "Todos os cursos da compra foram liberados."
+          : null,
+      enrollment.installmentsTotal
         ? `Primeira de ${enrollment.installmentsTotal} ${parcelasWord} paga.`
         : "Acesse a área de aulas para começar agora.",
+    ]
+      .filter(Boolean)
+      .join(" "),
     category: "enrollment",
     href: "/aluno/cursos",
     // O email de matrícula dedicado (template `enrollment`) já é enviado em
@@ -399,74 +422,159 @@ async function fulfillEnrollmentLocked(
   }
 }
 
+/** Matrícula primária de uma compra que pode carregar mais de um curso. */
+interface EnrollmentWithSiblings {
+  id: string
+  courseId: string
+  coursePackageId: string | null
+  /** Cursos EXTRA de uma venda direta multi-curso (o 1º está em `courseId`). */
+  bundleCourseIds?: string[]
+  gateway: PaymentGateway
+  soldByUserId: string | null
+  student: { id: string; nome: string; email: string | null }
+}
+
+/** Quantos cursos EXTRA uma venda direta multi-curso libera além do primário. */
+function siblingCount(enrollment: { bundleCourseIds?: string[] }): number {
+  return enrollment.bundleCourseIds?.length ?? 0
+}
+
 /**
- * Libera os cursos restantes de um pacote para o aluno: vincula cada curso na
- * plataforma de aulas e cria a matrícula satélite ACTIVE (finalAmount 0, sem
- * Payment). O 1º curso (matrícula primária) já foi provisionado pelo chamador.
+ * Nome comercial da compra para notificações/emails: o pacote, quando houver;
+ * "curso + N cursos" numa venda direta multi-curso; senão o curso avulso.
+ */
+function purchaseLabel(enrollment: {
+  course: { nome: string }
+  coursePackage?: { name: string } | null
+  bundleCourseIds?: string[]
+}): string {
+  if (enrollment.coursePackage) return `pacote ${enrollment.coursePackage.name}`
+  const extras = enrollment.bundleCourseIds?.length ?? 0
+  if (extras > 0) {
+    return `${enrollment.course.nome} + ${extras} ${extras === 1 ? "curso" : "cursos"}`
+  }
+  return enrollment.course.nome
+}
+
+/**
+ * Libera os cursos restantes de uma compra com mais de um curso: vincula cada
+ * curso na plataforma de aulas e cria a matrícula satélite ACTIVE (finalAmount
+ * 0, sem Payment). O 1º curso (matrícula primária) já foi provisionado pelo
+ * chamador. No-op para compra de curso avulso.
+ *
+ * Duas origens da lista, mesma mecânica:
+ *  - PACOTE do catálogo (`coursePackageId`) → itens do pacote; a satélite herda
+ *    `coursePackageId` com `packagePrimary=false`.
+ *  - VENDA DIRETA multi-curso (`bundleCourseIds`) → cursos escolhidos na venda;
+ *    a satélite aponta para a primária por `primaryEnrollmentId`.
  *
  * Best-effort por curso: uma falha de vínculo alerta o SUPER_ADMIN e segue para
- * os demais — não rethrow, para não bloquear a ativação do pacote já pago.
+ * os demais — não rethrow, para não bloquear a ativação do que já foi pago.
  */
-async function provisionPackageSiblings(
+async function provisionSiblingCourses(
   tenant: TenantContext,
-  enrollment: {
-    id: string
-    courseId: string
-    coursePackageId: string | null
-    gateway: PaymentGateway
-    soldByUserId: string | null
-    student: { id: string; nome: string; email: string | null }
-  },
+  enrollment: EnrollmentWithSiblings,
   startedAt: Date,
   expiresAt: Date,
 ): Promise<void> {
-  if (!enrollment.coursePackageId) return
+  const isPackage = !!enrollment.coursePackageId
+  const bundleIds = enrollment.bundleCourseIds ?? []
+  if (!isPackage && bundleIds.length === 0) return
+
   const expectedTenantId = tenant.isPmbVitrine ? null : tenant.id
+  const courseSelect = {
+    id: true,
+    nome: true,
+    status: true,
+    provider: true,
+    lmsCourseId: true,
+  } as const
 
-  const items = await prisma.coursePackageItem.findMany({
-    where: { packageId: enrollment.coursePackageId },
-    orderBy: { order: "asc" },
-    include: {
-      course: {
-        select: { id: true, nome: true, status: true, provider: true, lmsCourseId: true },
-      },
-    },
-  })
+  // Origem da lista de cursos irmãos.
+  const siblings = isPackage
+    ? (
+        await prisma.coursePackageItem.findMany({
+          where: { packageId: enrollment.coursePackageId! },
+          orderBy: { order: "asc" },
+          include: { course: { select: courseSelect } },
+        })
+      ).map((item) => item.course)
+    : await prisma.course.findMany({
+        where: { id: { in: bundleIds } },
+        select: courseSelect,
+      })
 
-  for (const item of items) {
-    if (item.course.id === enrollment.courseId) continue // primário já liberado
-    if (item.course.status !== "ATIVO") continue
+  // Venda multi-curso de UNIDADE: a satélite precisa apontar para o
+  // `TenantCourse` do seu curso, como toda venda direta sempre fez. É por essa
+  // coluna que o DELETE /api/painel/cursos/[id] conta "matrículas ativas" antes
+  // de deixar a unidade remover um curso da vitrine — satélite sem ela some
+  // dessa contagem e o curso seria apagado com aluno matriculado dentro.
+  // Pacote é exceção histórica: a primária dele também nasce sem tenantCourseId.
+  const tenantCourseByCourseId = new Map<string, string>()
+  if (!isPackage && expectedTenantId) {
+    const rows = await prisma.tenantCourse.findMany({
+      where: { tenantId: expectedTenantId, courseId: { in: bundleIds } },
+      select: { id: true, courseId: true },
+    })
+    for (const row of rows) tenantCourseByCourseId.set(row.courseId, row.id)
+  }
+
+  for (const course of siblings) {
+    if (course.id === enrollment.courseId) continue // primário já liberado
+    if (course.status !== "ATIVO") {
+      // Pacote: o curso saiu do ar depois da montagem do pacote — segue em
+      // silêncio (comportamento histórico). Venda direta: o aluno pagou por
+      // ESTE curso, então a omissão precisa ser visível para quem atende.
+      if (!isPackage) {
+        await createNotification({
+          audience: "ROLE",
+          roleTarget: "SUPER_ADMIN",
+          level: "ERROR",
+          title: "Curso da venda não liberado",
+          body: `Aluno ${enrollment.student.nome}: o curso "${course.nome}" foi vendido junto mas está inativo no catálogo e não pôde ser liberado.`,
+          category: "fulfillment",
+          href: `/admin/alunos/${enrollment.student.id}`,
+        }).catch(swallow("fulfill.notify_bundle_inactive"))
+      }
+      continue
+    }
 
     let provisioned: Awaited<ReturnType<typeof provisionCourseForStudent>> | null = null
     try {
-      // Idempotency-Key estavel por (matricula primaria, curso) para o LMS.
+      // Idempotency-Key estavel por (matricula primaria, curso) para o LMS. O
+      // prefixo `pkg:` do pacote e HISTORICO — nao mudar, sob pena de
+      // reprovisionar compras ja entregues numa reentrega de webhook.
       provisioned = await provisionCourseForStudent(
         tenant,
         enrollment.student,
-        item.course,
-        `pkg:${enrollment.id}:${item.course.id}`,
+        course,
+        `${isPackage ? "pkg" : "bundle"}:${enrollment.id}:${course.id}`,
       )
     } catch (err) {
       contextLogger().error(
         {
           err,
-          event: "fulfill.package_sibling_link_failed",
+          event: isPackage
+            ? "fulfill.package_sibling_link_failed"
+            : "fulfill.bundle_sibling_link_failed",
           enrollmentId: enrollment.id,
           studentId: enrollment.student.id,
-          courseId: item.course.id,
+          courseId: course.id,
           packageId: enrollment.coursePackageId,
         },
-        "vínculo de curso do pacote falhou — alertando admin",
+        "vínculo de curso adicional da compra falhou — alertando admin",
       )
       await createNotification({
         audience: "ROLE",
         roleTarget: "SUPER_ADMIN",
         level: "ERROR",
-        title: "Curso de pacote não liberado",
-        body: `Aluno ${enrollment.student.nome}: o curso "${item.course.nome}" do pacote não pôde ser vinculado na plataforma. Libere manualmente.`,
+        title: isPackage ? "Curso de pacote não liberado" : "Curso da venda não liberado",
+        body: `Aluno ${enrollment.student.nome}: o curso "${course.nome}" ${
+          isPackage ? "do pacote" : "da venda"
+        } não pôde ser vinculado na plataforma. Libere manualmente.`,
         category: "fulfillment",
         href: `/admin/alunos/${enrollment.student.id}`,
-      }).catch(swallow("fulfill.notify_package_sibling"))
+      }).catch(swallow("fulfill.notify_sibling"))
       continue
     }
     if (!provisioned) continue // inalcançável (o catch faz continue) — satisfaz o TS
@@ -475,21 +583,46 @@ async function provisionPackageSiblings(
     const existing = await prisma.enrollment.findFirst({
       where: {
         studentId: enrollment.student.id,
-        courseId: item.course.id,
+        courseId: course.id,
         tenantId: expectedTenantId,
         status: { in: ["PENDING", "ACTIVE", "COMPLETED"] },
       },
       select: { id: true },
     })
-    if (existing) continue
+    if (existing) {
+      // O aluno já tinha acesso a este curso. No pacote isso é rotina (pacotes
+      // se sobrepõem). Na venda direta o curso foi COBRADO nesta compra: o
+      // valor entrou somado e não vai virar acesso novo, então a omissão tem
+      // que aparecer para quem atende — senão o aluno pagou por N cursos,
+      // recebeu N-1 e ninguém fica sabendo. O gate de duplicidade das rotas de
+      // venda só olha o instante da venda; entre ela e o pagamento o aluno pode
+      // ter comprado o mesmo curso por fora.
+      if (!isPackage) {
+        await createNotification({
+          audience: "ROLE",
+          roleTarget: "SUPER_ADMIN",
+          level: "WARNING",
+          title: "Curso da venda já estava liberado",
+          body: `Aluno ${enrollment.student.nome}: o curso "${course.nome}" foi cobrado nesta venda mas o aluno já tinha matrícula ativa nele. Verifique se cabe estorno.`,
+          category: "fulfillment",
+          href: `/admin/alunos/${enrollment.student.id}`,
+        }).catch(swallow("fulfill.notify_bundle_duplicate"))
+      }
+      continue
+    }
 
     await prisma.enrollment.create({
       data: {
         tenantId: expectedTenantId,
         studentId: enrollment.student.id,
-        courseId: item.course.id,
+        courseId: course.id,
+        tenantCourseId: tenantCourseByCourseId.get(course.id) ?? null,
         coursePackageId: enrollment.coursePackageId,
         packagePrimary: false,
+        // Ponteiro para quem carrega a cobrança — vale para pacote E venda
+        // multi-curso. É por ele que a COTA DE AULAS descobre o parcelamento
+        // desta satélite (que não tem plano próprio). Ver PacePlanSource.
+        primaryEnrollmentId: enrollment.id,
         soldByUserId: enrollment.soldByUserId ?? null,
         paymentType: "ONE_TIME",
         status: "ACTIVE",
@@ -508,6 +641,14 @@ async function provisionPackageSiblings(
       },
     })
   }
+
+  // A cota das satélites NÃO é avaliada aqui de propósito. Esta função roda
+  // ANTES da transação que grava `installmentsPaid` da primária, então uma
+  // avaliação neste ponto leria "0 de N parcelas pagas" e nasceria bloqueando o
+  // aluno em 0% — cortando o acesso e disparando "você já assistiu tudo o que
+  // as parcelas pagas liberam" no exato momento da compra. Quem avalia é o
+  // chamador, via `evaluateSatellitePaceGates`, depois de a parcela estar
+  // contabilizada.
 }
 
 /** Forma minima do enrollment carregado que provisionEnrollmentAccess precisa. */
@@ -1060,17 +1201,15 @@ async function fulfillScholarshipEnrollmentLocked(
   const accessStartedAt = new Date()
   const accessExpiresAt = addMonthsClamped(accessStartedAt, STUDENT_ACCESS_MONTHS)
 
-  // Bolsa de PACOTE: a matrícula primária liberou o 1º curso acima; agora
-  // liberamos os demais cursos do pacote (satélites ACTIVE, finalAmount 0, sem
+  // Bolsa de PACOTE ou de venda multi-curso: a matrícula primária liberou o 1º
+  // curso acima; agora liberamos os demais (satélites ACTIVE, finalAmount 0, sem
   // Payment) — mesma rotina best-effort do fluxo pago.
-  if (enrollment.coursePackageId) {
-    await provisionPackageSiblings(
-      tenant,
-      enrollment,
-      accessStartedAt,
-      accessExpiresAt,
-    )
-  }
+  await provisionSiblingCourses(
+    tenant,
+    enrollment,
+    accessStartedAt,
+    accessExpiresAt,
+  )
 
   await prisma.enrollment.update({
     where: { id: enrollment.id },
@@ -1081,10 +1220,14 @@ async function fulfillScholarshipEnrollmentLocked(
     },
   })
 
-  // Nome exibido nas notificações: pacote mostra o nome do pacote.
-  const purchaseName = enrollment.coursePackage
-    ? `pacote ${enrollment.coursePackage.name}`
-    : enrollment.course.nome
+  // Bolsa não tem parcelamento, então a cota não trava nada — mas a chamada
+  // mantém a mesma ordem do fluxo pago (avaliar só depois de a primária estar
+  // gravada) e cobre a bolsa concedida sobre uma matrícula que já tinha plano.
+  await evaluateSatellitePaceGates(enrollment.id)
+
+  // Nome exibido nas notificações: pacote mostra o nome do pacote; venda
+  // multi-curso mostra o curso principal + quantos vieram junto.
+  const purchaseName = purchaseLabel(enrollment)
 
   const isFullDiscount = reason === "FULL_DISCOUNT"
 

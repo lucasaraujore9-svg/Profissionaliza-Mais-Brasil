@@ -119,6 +119,14 @@ export default async function PainelVendasPage() {
                     </td>
                     <td className="px-4 py-3 text-xs">
                       {e.course.nome}
+                      {/* Venda com mais de um curso: o nome acima é o curso
+                          principal (o que carrega a cobrança). */}
+                      {e.bundleCourseIds.length > 0 && (
+                        <div className="text-[10px] text-gray-500">
+                          + {e.bundleCourseIds.length}{" "}
+                          {e.bundleCourseIds.length === 1 ? "curso" : "cursos"} na mesma venda
+                        </div>
+                      )}
                       {e.coupon && (
                         <div className="text-[10px] text-[var(--color-pmb-green-700)]">
                           cupom {e.coupon.code}

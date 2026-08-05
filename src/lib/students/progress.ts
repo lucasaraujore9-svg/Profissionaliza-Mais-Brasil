@@ -3,7 +3,10 @@ import { cursosVinculados } from "@/lib/plataforma-cursos/client"
 import type { EACursoVinculado } from "@/lib/plataforma-cursos/types"
 import { issueCertificateIfEligible, PaceGateError } from "@/lib/certificates/issue"
 import { evaluatePaceGate } from "@/lib/enrollment/pace"
-import { isPaceGatedPlan } from "@/lib/enrollment/pace-gate"
+import {
+  PACE_PRIMARY_SELECT,
+  isPaceGatedPlan,
+} from "@/lib/enrollment/pace-gate"
 import { get as cacheGet, set as cacheSet } from "@/lib/redis/cache"
 import { contextLogger } from "@/lib/logger"
 
@@ -111,6 +114,10 @@ export async function syncStudentProgress(
     },
     include: {
       course: { select: { id: true, nome: true } },
+      // O pré-filtro `isPaceGatedPlan(e)` mais abaixo decide quem vai à
+      // reavaliação da cota. Sem o plano da primária, toda satélite de compra
+      // parcelada seria descartada como "curso à vista" e nunca reavaliada.
+      ...PACE_PRIMARY_SELECT,
     },
   })
   if (enrollments.length === 0) {

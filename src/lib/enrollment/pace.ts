@@ -16,6 +16,7 @@ import {
   setStudentPaceBlock,
 } from "@/lib/students/plataforma-actions"
 import {
+  effectivePacePlan,
   evaluatePace,
   isPaceBlocked,
   isPaceGatedPlan,
@@ -48,6 +49,17 @@ const PACE_SELECT = {
   // Matricula no LMS: quando existe, a cota vai como TETO por matricula em vez
   // do corte por aluno. Ver applyLmsLimit.
   lmsEnrollmentId: true,
+  // SATELITE de uma compra com varios cursos (pacote ou venda multi-curso): o
+  // parcelamento vive na matricula que carregou a cobranca. OBRIGATORIO em toda
+  // leitura que alimenta as funcoes puras — sem ele a satelite se apresenta como
+  // ONE_TIME quitada e escapa da cota. Ver PacePlanSource em pace-gate.ts.
+  primaryEnrollment: {
+    select: {
+      paymentType: true,
+      installmentsTotal: true,
+      installmentsPaid: true,
+    },
+  },
 } as const
 
 export interface PaceEvaluation {
@@ -129,7 +141,13 @@ export async function evaluatePaceGate(
     // quebrando o contrato de "nunca lança" e derrubando o sync de progresso ou
     // o webhook de pagamento que chamou.
     if (state.blocked && !wasBlocked) {
-      return await applyBlock(enrollment, state, strict)
+      // Copy da notificacao segue o plano EFETIVO: numa satelite de compra
+      // mensal, "mensalidade" — o ONE_TIME da propria linha diria "parcela".
+      return await applyBlock(
+        { ...enrollment, paymentType: effectivePacePlan(enrollment).paymentType },
+        state,
+        strict,
+      )
     }
     if (!state.blocked && wasBlocked) {
       return await applyRelease(enrollment, state)
@@ -201,6 +219,29 @@ export async function evaluatePaceGate(
       "avaliacao da cota de aulas falhou",
     )
     return null
+  }
+}
+
+/**
+ * Reavalia a cota dos DEMAIS cursos da mesma compra (satelites de pacote ou de
+ * venda multi-curso).
+ *
+ * Os satelites nao tem plano proprio — herdam o da primaria —, entao toda
+ * parcela paga precisa passar por eles tambem: sem isto, so o curso principal
+ * ganharia a fatia nova e os outros ficariam presos na cota antiga.
+ *
+ * Compra a vista nao tem satelite: a consulta e pelo indice
+ * `primary_enrollment_id` e custa praticamente nada.
+ */
+export async function evaluateSatellitePaceGates(
+  primaryEnrollmentId: string,
+): Promise<void> {
+  const satellites = await prisma.enrollment.findMany({
+    where: { primaryEnrollmentId, status: "ACTIVE" },
+    select: { id: true },
+  })
+  for (const satellite of satellites) {
+    await evaluatePaceGate(satellite.id)
   }
 }
 
@@ -412,6 +453,10 @@ async function shouldCutPlatformAccess(
     select: PACE_SELECT,
   })
 
+  // `isPaceGatedPlan`/`isPaceBlocked` resolvem o plano da primaria quando o
+  // irmao e satelite (PACE_SELECT carrega a relacao). Sem isso, uma satelite de
+  // carne se apresentaria como curso quitado e viraria "irmao livre",
+  // cancelando o corte da matricula que de fato deve parcelas.
   const anyFree = siblings.some(
     (s) => s.paceExemptAt !== null || !isPaceGatedPlan(s) || !isPaceBlocked(s),
   )
@@ -463,6 +508,15 @@ export async function releaseStudentPaceIfClear(
         installmentsTotal: true,
         progressPercent: true,
         paceExemptAt: true,
+        // Satelite herda o parcelamento da primaria — sem isso ela nunca conta
+        // como "ainda travada" e o aluno seria liberado na plataforma cedo demais.
+        primaryEnrollment: {
+          select: {
+            paymentType: true,
+            installmentsTotal: true,
+            installmentsPaid: true,
+          },
+        },
       },
     })
 

@@ -3,10 +3,14 @@ import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { requireAdmin } from "@/lib/auth/admin-guard"
+import { MAX_SALE_COURSES, dedupeIds } from "@/lib/enrollment/multi-course"
 
 const schema = z.object({
   code: z.string().trim().min(1).max(64),
-  courseId: z.string().min(1),
+  // Prévia do desconto sobre UM OU MAIS cursos: a venda direta multi-curso cobra
+  // a soma dos preços numa cobrança só, então o cupom (sobretudo o FIXED) tem
+  // que ser calculado sobre o mesmo total que será cobrado.
+  courseIds: z.array(z.string().min(1)).min(1).max(MAX_SALE_COURSES),
 })
 
 export const POST = withRequestContext(
@@ -27,15 +31,24 @@ export const POST = withRequestContext(
     return NextResponse.json({ error: "Dados inválidos" }, { status: 400 })
   }
 
-  const course = await prisma.course.findUnique({
-    where: { id: parsed.data.courseId },
+  const courseIds = dedupeIds(parsed.data.courseIds)
+  const courses = await prisma.course.findMany({
+    where: { id: { in: courseIds } },
     select: { precoVitrineMain: true, precoPromocional: true, precoOriginal: true, status: true },
   })
-  if (!course || course.status !== "ATIVO") {
+  if (courses.length !== courseIds.length || courses.some((c) => c.status !== "ATIVO")) {
     return NextResponse.json({ error: "Curso não encontrado" }, { status: 404 })
   }
 
-  const basePrice = Number(course.precoVitrineMain ?? course.precoPromocional ?? course.precoOriginal ?? 0)
+  // Mesmo total que a venda vai cobrar: a soma dos preços dos cursos escolhidos.
+  const basePrice =
+    Math.round(
+      courses.reduce(
+        (sum, c) =>
+          sum + Number(c.precoVitrineMain ?? c.precoPromocional ?? c.precoOriginal ?? 0),
+        0,
+      ) * 100,
+    ) / 100
   if (basePrice <= 0) {
     return NextResponse.json({ error: "Curso sem preço configurado" }, { status: 400 })
   }

@@ -6,7 +6,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     tenant: { findUnique: vi.fn() },
-    tenantCourse: { findFirst: vi.fn() },
+    tenantCourse: { findMany: vi.fn() },
     tenantMember: { findFirst: vi.fn() },
     student: { findFirst: vi.fn(), update: vi.fn() },
     enrollment: { findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
@@ -29,7 +29,7 @@ import { POST } from "./route"
 
 const p = prisma as unknown as {
   tenant: { findUnique: ReturnType<typeof vi.fn> }
-  tenantCourse: { findFirst: ReturnType<typeof vi.fn> }
+  tenantCourse: { findMany: ReturnType<typeof vi.fn> }
   tenantMember: { findFirst: ReturnType<typeof vi.fn> }
   student: {
     findFirst: ReturnType<typeof vi.fn>
@@ -53,7 +53,7 @@ function body(overrides: Record<string, unknown> = {}) {
       email: "aluno@teste.com",
       cpf: "111.444.777-35",
       fone: "11987654321",
-      tenantCourseId: "tc1",
+      tenantCourseIds: ["tc1"],
       ...overrides,
     }),
   })
@@ -116,19 +116,21 @@ function asaasTenant(overrides: Record<string, unknown> = {}) {
 
 /** Curso vendável + aluno existente completo + sem matrícula duplicada. */
 function mockSellableCourse() {
-  p.tenantCourse.findFirst.mockResolvedValue({
-    id: "tc1",
-    price: 100,
-    courseId: "c1",
-    paymentType: "ONE_TIME",
-    course: {
-      id: "c1",
-      nome: "Curso",
-      slug: "curso",
-      monthlyMonthsMain: null,
-      status: "ATIVO",
+  p.tenantCourse.findMany.mockResolvedValue([
+    {
+      id: "tc1",
+      price: 100,
+      courseId: "c1",
+      paymentType: "ONE_TIME",
+      course: {
+        id: "c1",
+        nome: "Curso",
+        slug: "curso",
+        monthlyMonthsMain: null,
+        status: "ATIVO",
+      },
     },
-  })
+  ])
   p.tenantMember.findFirst.mockResolvedValue(null) // owner: cap 100%
   p.enrollment.findFirst.mockResolvedValue(null)
   p.enrollment.create.mockResolvedValue({ id: "e1" })
@@ -151,14 +153,14 @@ function bodyExistingStudent(overrides: Record<string, unknown> = {}) {
   return new Request("http://x/api/painel/vendas", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ studentId: "s1", tenantCourseId: "tc1", ...overrides }),
+    body: JSON.stringify({ studentId: "s1", tenantCourseIds: ["tc1"], ...overrides }),
   })
 }
 
 describe("venda direta herda o gateway da unidade", () => {
   it("unidade ASAAS sem MP não é bloqueada com 'Conecte o Mercado Pago'", async () => {
     p.tenant.findUnique.mockResolvedValue(asaasTenant())
-    p.tenantCourse.findFirst.mockResolvedValue(null) // para no gate seguinte
+    p.tenantCourse.findMany.mockResolvedValue([]) // para no gate seguinte
 
     const res = await POST(body())
     const json = (await res.json()) as { error: string }
@@ -258,13 +260,177 @@ describe("venda direta herda o gateway da unidade", () => {
   })
 })
 
+// ── Venda com mais de um curso ──────────────────────────────────────────────
+// Uma cobrança só, pela SOMA dos preços: o 1º curso escolhido vira a matrícula
+// primária (que carrega o valor) e os demais ficam em `bundleCourseIds`,
+// virando satélites no fulfill.
+describe("venda direta com vários cursos", () => {
+  /** Dois cursos vendáveis da vitrine da unidade, 100 + 250. */
+  function mockTwoCourses() {
+    p.tenantCourse.findMany.mockResolvedValue([
+      {
+        id: "tc1",
+        price: 100,
+        courseId: "c1",
+        paymentType: "ONE_TIME",
+        course: { id: "c1", nome: "Curso A", slug: "a", monthlyMonthsMain: null, status: "ATIVO" },
+      },
+      {
+        id: "tc2",
+        price: 250,
+        courseId: "c2",
+        paymentType: "ONE_TIME",
+        course: { id: "c2", nome: "Curso B", slug: "b", monthlyMonthsMain: null, status: "ATIVO" },
+      },
+    ])
+    p.tenantMember.findFirst.mockResolvedValue(null)
+    p.enrollment.findFirst.mockResolvedValue(null)
+    p.enrollment.create.mockResolvedValue({ id: "e1" })
+    p.enrollment.update.mockResolvedValue({ id: "e1" })
+  }
+
+  it("cobra a soma e guarda os cursos extras na matrícula primária", async () => {
+    mockTwoCourses()
+    mockStudent()
+
+    const res = await POST(bodyExistingStudent({ tenantCourseIds: ["tc1", "tc2"] }))
+    expect(res.status).toBe(200)
+    const created = p.enrollment.create.mock.calls[0][0] as {
+      data: {
+        courseId: string
+        tenantCourseId: string
+        originalAmount: number
+        finalAmount: number
+        bundleCourseIds: string[]
+      }
+    }
+    // 1º curso escolhido = primária; o valor é o total da venda.
+    expect(created.data.courseId).toBe("c1")
+    expect(created.data.tenantCourseId).toBe("tc1")
+    expect(created.data.originalAmount).toBe(350)
+    expect(created.data.finalAmount).toBe(350)
+    expect(created.data.bundleCourseIds).toEqual(["c2"])
+    // Uma matrícula só é criada agora — os satélites nascem no fulfill.
+    expect(p.enrollment.create).toHaveBeenCalledTimes(1)
+  })
+
+  it("a ordem escolhida define a primária (2º curso primeiro)", async () => {
+    mockTwoCourses()
+    mockStudent()
+
+    await POST(bodyExistingStudent({ tenantCourseIds: ["tc2", "tc1"] }))
+    const created = p.enrollment.create.mock.calls[0][0] as {
+      data: { courseId: string; bundleCourseIds: string[] }
+    }
+    expect(created.data.courseId).toBe("c2")
+    expect(created.data.bundleCourseIds).toEqual(["c1"])
+  })
+
+  it("desconto manual incide sobre o TOTAL da venda, não sobre o 1º curso", async () => {
+    mockTwoCourses()
+    mockStudent()
+
+    await POST(
+      bodyExistingStudent({ tenantCourseIds: ["tc1", "tc2"], manualDiscountPercent: 10 }),
+    )
+    const created = p.enrollment.create.mock.calls[0][0] as {
+      data: { discountAmount: number; finalAmount: number }
+    }
+    expect(created.data.discountAmount).toBe(35)
+    expect(created.data.finalAmount).toBe(315)
+  })
+
+  // Mensalidade é contrato recorrente de UM curso: somá-la ao preço à vista de
+  // outros cobraria só o 1º mês pela venda inteira.
+  it("curso mensal junto de outro → 400 e nenhuma matrícula", async () => {
+    p.tenant.findUnique.mockResolvedValue({
+      ...asaasTenant(),
+      salesGateway: "MP",
+      mpAccessToken: "enc-token",
+      mpPublicKey: "pk",
+      monthlyAllowed: true,
+      monthlyEnabled: true,
+    })
+    mockTwoCourses()
+    p.tenantCourse.findMany.mockResolvedValue([
+      {
+        id: "tc1",
+        price: 100,
+        courseId: "c1",
+        paymentType: "MONTHLY",
+        course: { id: "c1", nome: "Curso A", slug: "a", monthlyMonthsMain: 12, status: "ATIVO" },
+      },
+      {
+        id: "tc2",
+        price: 250,
+        courseId: "c2",
+        paymentType: "ONE_TIME",
+        course: { id: "c2", nome: "Curso B", slug: "b", monthlyMonthsMain: null, status: "ATIVO" },
+      },
+    ])
+    mockStudent()
+
+    const res = await POST(bodyExistingStudent({ tenantCourseIds: ["tc1", "tc2"] }))
+    expect(res.status).toBe(400)
+    const json = (await res.json()) as { error: string }
+    expect(json.error).toContain("Curso A")
+    expect(p.enrollment.create).not.toHaveBeenCalled()
+  })
+
+  // A duplicidade tem que olhar TODOS os cursos da venda: cobrar de novo um
+  // curso que o aluno já tem só porque ele não era o primeiro da lista seria
+  // cobrança indevida.
+  it("aluno que já tem um dos cursos → 409 nomeando o curso", async () => {
+    mockTwoCourses()
+    mockStudent()
+    p.enrollment.findFirst.mockResolvedValue({
+      id: "e0",
+      status: "ACTIVE",
+      course: { nome: "Curso B" },
+    })
+
+    const res = await POST(bodyExistingStudent({ tenantCourseIds: ["tc1", "tc2"] }))
+    expect(res.status).toBe(409)
+    const json = (await res.json()) as { error: string }
+    expect(json.error).toContain("Curso B")
+    expect(p.enrollment.create).not.toHaveBeenCalled()
+    // O gate consultou os dois cursos, não só o primário.
+    const where = p.enrollment.findFirst.mock.calls[0][0].where as {
+      courseId: { in: string[] }
+    }
+    expect(where.courseId.in.sort()).toEqual(["c1", "c2"])
+  })
+
+  it("um curso pedido que não é da vitrine → 404 (nenhuma venda parcial)", async () => {
+    mockTwoCourses()
+    p.tenantCourse.findMany.mockResolvedValue([
+      {
+        id: "tc1",
+        price: 100,
+        courseId: "c1",
+        paymentType: "ONE_TIME",
+        course: { id: "c1", nome: "Curso A", slug: "a", monthlyMonthsMain: null, status: "ATIVO" },
+      },
+    ])
+    mockStudent()
+
+    const res = await POST(bodyExistingStudent({ tenantCourseIds: ["tc1", "tc9"] }))
+    expect(res.status).toBe(404)
+    expect(p.enrollment.create).not.toHaveBeenCalled()
+  })
+})
+
 describe("SAAS-010 — gate status=ATIVO na venda manual do painel", () => {
   it("curso INATIVO (isVisible=true) → 404 Curso indisponível", async () => {
-    p.tenantCourse.findFirst.mockResolvedValue({
-      id: "tc1",
-      price: 100,
-      course: { id: "c1", nome: "Curso", slug: "curso", monthlyMonthsMain: null, status: "INATIVO" },
-    })
+    p.tenantCourse.findMany.mockResolvedValue([
+      {
+        id: "tc1",
+        price: 100,
+        courseId: "c1",
+        paymentType: "ONE_TIME",
+        course: { id: "c1", nome: "Curso", slug: "curso", monthlyMonthsMain: null, status: "INATIVO" },
+      },
+    ])
     const res = await POST(body())
     expect(res.status).toBe(404)
     const json = (await res.json()) as { error: string }
@@ -272,7 +438,7 @@ describe("SAAS-010 — gate status=ATIVO na venda manual do painel", () => {
   })
 
   it("TenantCourse ausente → 404 Curso não encontrado (mensagem distinta do gate)", async () => {
-    p.tenantCourse.findFirst.mockResolvedValue(null)
+    p.tenantCourse.findMany.mockResolvedValue([])
     const res = await POST(body())
     expect(res.status).toBe(404)
     const json = (await res.json()) as { error: string }

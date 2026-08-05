@@ -24,6 +24,10 @@ interface EnrollmentDetail {
   packageName: string | null
   packageCourseCount: number | null
   packagePrimary: boolean
+  /** Venda direta multi-curso: total de cursos que esta cobrança cobre. */
+  bundleCourseCount: number | null
+  /** Curso da matrícula que pagou, quando esta é satélite de uma venda multi-curso. */
+  bundleOfCourseName: string | null
   status: string
   amount: number
   createdAt: string
@@ -313,6 +317,16 @@ export function StudentDetailDrawer({
                               {!course.packagePrimary && course.packageName && (
                                 <div className="mt-0.5 text-[10px] text-gray-500">
                                   Incluído no pacote {course.packageName}
+                                </div>
+                              )}
+                              {course.bundleCourseCount && (
+                                <div className="mt-0.5 text-[10px] text-gray-500">
+                                  Venda com {course.bundleCourseCount} cursos
+                                </div>
+                              )}
+                              {course.bundleOfCourseName && (
+                                <div className="mt-0.5 text-[10px] text-gray-500">
+                                  Incluído na venda de {course.bundleOfCourseName}
                                 </div>
                               )}
                             </div>

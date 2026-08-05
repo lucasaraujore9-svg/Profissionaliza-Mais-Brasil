@@ -6,6 +6,8 @@ import { getStudentPlatformLoginUrl } from "@/lib/students/platform-credentials"
 import { EmitCertificateButton } from "@/components/aluno/emit-certificate-button"
 import { PayPendingButton } from "@/components/aluno/pay-pending-button"
 import {
+  PACE_PRIMARY_SELECT,
+  effectivePacePlan,
   evaluatePace,
   installmentWord,
   isConclusionBlockedByPace,
@@ -120,6 +122,9 @@ export default async function StudentCoursesPage({
       },
       // Payability da loja p/ decidir o destino do botao "Pagar agora".
       tenant: { select: { status: true, mpPublicKey: true } },
+      // Satélite de compra com vários cursos: a cota e a trava de conclusão
+      // vêm do parcelamento da matrícula que pagou, não desta linha.
+      ...PACE_PRIMARY_SELECT,
     },
     orderBy: { createdAt: "desc" },
   })
@@ -207,6 +212,9 @@ export default async function StudentCoursesPage({
             // conclusão fica travada enquanto houver parcela em aberto.
             const gateEnabled = paceGateByTenant.get(e.tenantId) ?? false
             const pace = evaluatePace(e)
+            // Numa satelite o paymentType da propria linha e ONE_TIME: a copy
+            // segue o plano EFETIVO (mensalidade x parcela) da compra.
+            const paceWord = effectivePacePlan(e).paymentType
             const paceBlocked = gateEnabled && e.paceBlockedAt !== null
             const conclusionBlocked = isConclusionBlockedByPace({
               ...e,
@@ -303,7 +311,7 @@ export default async function StudentCoursesPage({
                         <p className="mt-1 text-[11px] text-gray-500">
                           Liberado até {pace.allowedPercent}% ·{" "}
                           {pace.installmentsPaid} de {pace.installmentsTotal}{" "}
-                          {installmentWord(e.paymentType, true)} pagas
+                          {installmentWord(paceWord, true)} pagas
                         </p>
                       )}
                     </div>
@@ -315,7 +323,7 @@ export default async function StudentCoursesPage({
                       <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                       <span>
                         Você assistiu tudo o que as{" "}
-                        {installmentWord(e.paymentType, true)} pagas liberam.
+                        {installmentWord(paceWord, true)} pagas liberam.
                         Pague a próxima para continuar de onde parou.
                       </span>
                     </div>
@@ -327,7 +335,7 @@ export default async function StudentCoursesPage({
                       <Award className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                       <span>
                         Conteúdo concluído! O certificado é liberado assim que
-                        você quitar as {installmentWord(e.paymentType, true)}.
+                        você quitar as {installmentWord(paceWord, true)}.
                       </span>
                     </div>
                   )}

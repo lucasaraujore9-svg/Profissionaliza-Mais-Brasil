@@ -13,12 +13,18 @@ vi.mock("@/lib/prisma", () => {
     enrollment: {
       findUnique: vi.fn(),
       findFirst: vi.fn(),
+      findMany: vi.fn(),
       update: vi.fn(),
       create: vi.fn(),
     },
     payment: { findFirst: vi.fn(), create: vi.fn() },
     student: { update: vi.fn() },
     coursePackageItem: { findMany: vi.fn() },
+    course: { findMany: vi.fn() },
+    // Venda multi-curso de unidade: a satélite resolve aqui o TenantCourse do
+    // seu curso (é a coluna pela qual o painel conta matrículas ativas antes de
+    // deixar remover um curso da vitrine).
+    tenantCourse: { findMany: vi.fn() },
   }
   return { prisma }
 })
@@ -68,12 +74,15 @@ const p = prisma as unknown as {
   enrollment: {
     findUnique: ReturnType<typeof vi.fn>
     findFirst: ReturnType<typeof vi.fn>
+    findMany: ReturnType<typeof vi.fn>
     update: ReturnType<typeof vi.fn>
     create: ReturnType<typeof vi.fn>
   }
   payment: { findFirst: ReturnType<typeof vi.fn>; create: ReturnType<typeof vi.fn> }
   student: { update: ReturnType<typeof vi.fn> }
   coursePackageItem: { findMany: ReturnType<typeof vi.fn> }
+  course: { findMany: ReturnType<typeof vi.fn> }
+  tenantCourse: { findMany: ReturnType<typeof vi.fn> }
 }
 const ensureMock = ensureStudentOnPlatform as unknown as ReturnType<typeof vi.fn>
 const linkMock = linkCourseToStudent as unknown as ReturnType<typeof vi.fn>
@@ -109,6 +118,7 @@ function enrollment(overrides: EnrollmentOverride = {}) {
     courseId: "c1",
     coursePackageId: null,
     coursePackage: null,
+    bundleCourseIds: [],
     soldByUserId: null,
     paymentType: "ONE_TIME",
     startedAt: null,
@@ -136,9 +146,14 @@ beforeEach(() => {
   p.payment.findFirst.mockResolvedValue(null)
   p.payment.create.mockResolvedValue({ id: "pmt1" })
   p.enrollment.update.mockResolvedValue({})
-  p.enrollment.create.mockResolvedValue({})
+  // `evaluateSatellitePaceGates` varre as satélites da compra depois que a
+  // parcela é contabilizada. Sem satélite ACTIVE, é no-op.
+  p.enrollment.findMany.mockResolvedValue([])
+  p.enrollment.create.mockResolvedValue({ id: "sat1" })
   p.student.update.mockResolvedValue({})
   p.coursePackageItem.findMany.mockResolvedValue([])
+  p.course.findMany.mockResolvedValue([])
+  p.tenantCourse.findMany.mockResolvedValue([])
   ensureMock.mockResolvedValue({ plataformaAlunoId: 42, created: true, plataformaSenha: "sec" })
   linkMock.mockResolvedValue(undefined)
   notifyMock.mockResolvedValue(undefined)
@@ -276,12 +291,74 @@ describe("fulfillEnrollment — dinheiro pós-webhook (QA-013)", () => {
       expect(data.finalAmount).toBe(0)
       expect(data.packagePrimary).toBe(false)
       expect(data.coursePackageId).toBe("pkg1")
+      // Ponteiro para quem pagou: e por ele que a COTA DE AULAS descobre o
+      // parcelamento do pacote (a satelite nao tem plano proprio).
+      expect(data.primaryEnrollmentId).toBe("e1")
     }
     expect(satelliteCalls.map((d) => d.courseId).sort()).toEqual(["c2", "c3"])
     // Satélite LMS provisionado via LMS; satélite EA via ensure+link.
     expect(lmsMock).toHaveBeenCalledWith(
       expect.objectContaining({ courseId: "lms-c3" }),
       "pkg:e1:c3",
+    )
+  })
+
+  // Venda direta com mais de um curso: mesma mecânica do pacote, mas a lista de
+  // cursos é da VENDA (`bundleCourseIds`) e a satélite aponta para a primária
+  // por `primaryEnrollmentId` — não há pacote no catálogo.
+  it("(g) venda multi-curso: satélites finalAmount 0 ligados à primária por primaryEnrollmentId", async () => {
+    p.enrollment.findUnique.mockResolvedValue(
+      enrollment({ bundleCourseIds: ["c2", "c3"] }),
+    )
+    p.course.findMany.mockResolvedValue([
+      { id: "c2", nome: "Extra EA", status: "ATIVO", provider: "EA", lmsCourseId: null },
+      { id: "c3", nome: "Extra LMS", status: "ATIVO", provider: "LMS", lmsCourseId: "lms-c3" },
+    ])
+    p.enrollment.findFirst.mockResolvedValue(null)
+    lmsMock.mockResolvedValue({
+      enrollmentId: "lms-e3",
+      origin: "own",
+      playback: "sso",
+      studentId: null,
+      provisioning: { ok: true },
+      partnerAccess: null,
+    })
+
+    await fulfillEnrollment(eaTenant, "e1", event)
+
+    const satelliteCalls = p.enrollment.create.mock.calls.map((c) => c[0].data)
+    expect(satelliteCalls).toHaveLength(2)
+    for (const data of satelliteCalls) {
+      expect(data.finalAmount).toBe(0)
+      expect(data.packagePrimary).toBe(false)
+      expect(data.coursePackageId).toBeNull()
+      expect(data.primaryEnrollmentId).toBe("e1")
+      expect(data.status).toBe("ACTIVE")
+    }
+    expect(satelliteCalls.map((d) => d.courseId).sort()).toEqual(["c2", "c3"])
+    // Idempotency-Key própria (`bundle:`) — nunca colide com a do pacote.
+    expect(lmsMock).toHaveBeenCalledWith(
+      expect.objectContaining({ courseId: "lms-c3" }),
+      "bundle:e1:c3",
+    )
+    // Um único Payment: a receita fica toda na primária.
+    expect(p.payment.create).toHaveBeenCalledTimes(1)
+  })
+
+  it("(g2) curso da venda multi-curso que ficou INATIVO não é liberado e alerta o admin", async () => {
+    p.enrollment.findUnique.mockResolvedValue(enrollment({ bundleCourseIds: ["c2"] }))
+    p.course.findMany.mockResolvedValue([
+      { id: "c2", nome: "Extra fora do ar", status: "INATIVO", provider: "EA", lmsCourseId: null },
+    ])
+
+    await fulfillEnrollment(eaTenant, "e1", event)
+
+    expect(p.enrollment.create).not.toHaveBeenCalled()
+    expect(notifyMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        roleTarget: "SUPER_ADMIN",
+        title: "Curso da venda não liberado",
+      }),
     )
   })
 
