@@ -248,6 +248,42 @@ fora de todos os presets e sao concedidas pessoa a pessoa nos checkboxes de
   relacao com aquelas telas — agora cada modulo declara a permissao do proprio
   destino.
 
+### API de parceiros — consulta de unidades (2026-08-05)
+
+Superficie de saida do PMB para SISTEMAS DE TERCEIROS: dado um identificador
+unico, devolve os dados completos da unidade (revenda). Contrato em
+`docs/api/parceiros-v1.md`.
+
+- **Rotas:** `GET /api/v1/unidades/lookup?<campo>=<valor>`, atalho por path
+  `GET /api/v1/unidades/{identificador}` e `GET /api/v1/ping` (verificacao de
+  chave). Servidas no dominio da PMB; o proxy nao reescreve `/api`.
+- **Chave por INTEGRADOR, nao segredo unico em env** (model `ApiKey`, migration
+  idempotente `20260805_partner_api_keys`). Guardamos so o SHA-256 — o segredo
+  aparece UMA vez, no POST que o criou. Revogar derruba so aquele parceiro.
+  SHA-256 e nao bcrypt porque o segredo e CSPRNG de 256 bits: o hash rapido e o
+  que permite lookup por indice unico. **Sem chave ativa, /api/v1 responde 401
+  para todo mundo** — nada a ligar no deploy.
+- **Identificadores:** `email`/`cpf`/`telefone` do TITULAR (`User`), e
+  `id`/`slug`/`dominio`/`codigo` da unidade. Dois campos na mesma requisicao =
+  400: se apontassem para unidades diferentes, escolher um seria errar calado.
+  `?q=` deduz o tipo — CPF x celular (ambos 11 digitos) pelo DV; slug/id/codigo
+  sao indistinguiveis pela forma, entao a consulta cobre os tres num `OR` e a
+  resposta diz qual casou.
+- **`telefone` e o unico sem unicidade** (`User.phone` nao tem `@unique` e foi
+  gravado como a pessoa digitou). Comparacao normalizada em memoria sobre os
+  titulares (1 linha por unidade); empate devolve 409, nunca um palpite.
+- **`unidade-payload.ts` e a FRONTEIRA de dados** — allowlist, com teste que
+  quebra se nome proibido entrar no select. Fora: credencial de gateway,
+  segredo de webhook, mensalidade, comissao, PIX, dados de aluno. CPF do
+  titular sai mascarado. Recurso novo pede escopo novo + allowlist propria;
+  ampliar `unidades.read` daria ao parceiro o que ele nao contratou.
+- **Gestao:** /admin/configuracoes → aba API (`integracoes.view` para ver,
+  `integracoes.manage` para criar/revogar). Criacao/alteracao/revogacao entram
+  em `audit_logs` (`api_key.*`), sem o segredo. A listagem mostra ultimo uso,
+  IP e total de chamadas — olhe antes de revogar.
+- **Limite:** 120 req/min POR CHAVE (`rateLimitByKey`), nao por IP: o limite e
+  do contrato, nao da maquina de saida.
+
 ### Bugs conhecidos (pendentes)
 
 - **Middleware file convention deprecado** no Next 16 (usar `proxy` em vez de `middleware`).

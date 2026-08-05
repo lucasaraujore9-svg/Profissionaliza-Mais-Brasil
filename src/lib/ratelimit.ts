@@ -161,7 +161,7 @@ export function rateLimitResponse(result: RateLimitResult): Response {
   )
 }
 
-function ipFrom(request: Request): string {
+export function ipFrom(request: Request): string {
   // Na Vercel, o proxy confiável sempre ANEXA o IP real do cliente como
   // último segmento de x-forwarded-for. Usar o primeiro segmento é inseguro
   // pois pode ser forjado pelo cliente. Preferimos x-real-ip (já sanitizado

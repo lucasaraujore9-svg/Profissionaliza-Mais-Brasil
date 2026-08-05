@@ -184,6 +184,9 @@ model User {
   // Notas internas escritas sobre alunos por este usuario
   studentNotes StudentNote[] @relation("StudentNotes")
 
+  // Chaves da API de parceiros (/api/v1) criadas por este usuario
+  createdApiKeys ApiKey[] @relation("CreatedApiKeys")
+
   // TenantPayments / ReferralPayouts marcados manualmente como pagos por este admin
   markedTenantPayments   TenantPayment[]  @relation("MarkedTenantPayments")
   markedReferralPayouts  ReferralPayout[] @relation("MarkedReferralPayouts")
@@ -2476,4 +2479,57 @@ model MarketingArt {
 
   @@index([published, position])
   @@map("marketing_arts")
+}
+
+// ============================================================
+// API DE PARCEIROS (/api/v1) — chaves de integracao
+//
+// Chave por SISTEMA INTEGRADO (nao por pessoa). O segredo completo so existe
+// em texto puro no instante da criacao: guardamos apenas o SHA-256 dele, e a
+// UI mostra o valor uma unica vez. Revogar um parceiro nao derruba os outros
+// (era o problema de um segredo unico em env, no padrao CRON_SECRET).
+//
+// Formato do segredo: "pmb_live_<32 bytes em base64url>". O `prefix` guarda os
+// primeiros caracteres para a UI identificar a chave ("pmb_live_a1b2c3d4…")
+// sem nunca reter o segredo.
+// ============================================================
+
+model ApiKey {
+  id   String @id @default(cuid())
+  // Nome do sistema integrado ("CRM da rede", "ERP do contador"). So rotulo.
+  name String
+
+  // Primeiros chars do segredo — exibidos na listagem. Unique porque tambem
+  // serve de identificador humano da chave nos logs.
+  prefix String @unique
+  // SHA-256 (hex) do segredo completo. Unique => lookup O(1) por indice, sem
+  // varrer a tabela comparando hash a hash. O segredo tem 256 bits de entropia,
+  // entao hash rapido basta (nao e senha de humano, nao sofre ataque de dicionario).
+  keyHash String @unique @map("key_hash")
+
+  // Escopos concedidos (catalogo fechado em src/lib/api-parceiros/scopes.ts).
+  // Chave sem o escopo exigido pela rota recebe 403.
+  scopes String[] @default([])
+
+  // ACTIVE | REVOKED. Revogar preserva a linha (trilha de auditoria);
+  // nunca reaproveitamos o hash.
+  status    String    @default("ACTIVE")
+  revokedAt DateTime? @map("revoked_at")
+  // Expiracao opcional. Null = nao expira.
+  expiresAt DateTime? @map("expires_at")
+
+  // Telemetria de uso — responde "esse integrador ainda esta chamando?" antes
+  // de revogar. Atualizada best-effort (nunca derruba a resposta da API).
+  lastUsedAt DateTime? @map("last_used_at")
+  lastUsedIp String?   @map("last_used_ip")
+  usageCount Int       @default(0) @map("usage_count")
+
+  createdById String? @map("created_by_id")
+  createdBy   User?   @relation("CreatedApiKeys", fields: [createdById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([status, createdAt])
+  @@map("api_keys")
 }

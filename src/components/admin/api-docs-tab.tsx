@@ -10,9 +10,13 @@ import {
   KeyRound,
   Eye,
   EyeOff,
+  PlugZap,
 } from "lucide-react"
+import { ApiKeysManager } from "./api-keys-manager"
+import { Can } from "@/components/shared/permissions/permission-context"
 
 const WEBHOOK_URL = "https://profissionalizamaisbrasil.com.br/api/webhooks/lms"
+const PARCEIROS_BASE = "https://profissionalizamaisbrasil.com.br/api/v1"
 
 interface EventRow {
   type: string
@@ -119,6 +123,95 @@ const LMS_AGENT_MD = [
   "- Nunca inclua a senha do aluno nesses eventos.",
 ].join("\n")
 
+// Documentação copiável para o dev do SISTEMA PARCEIRO que vai consumir a API
+// de consulta de unidades. Contrato completo em docs/api/parceiros-v1.md — este
+// resumo é o que se entrega junto com a chave. Mesma restrição do MD acima: sem
+// backticks e sem ${...} dentro do template literal.
+const PARCEIRO_AGENT_MD = [
+  "# PMB — API de consulta de unidades (revendas) v1",
+  "",
+  "Dado um identificador unico de uma pessoa ou de uma unidade, a API devolve os",
+  "dados completos da unidade: id, slug, subdominio, dominio proprio, contato,",
+  "redes sociais, identidade visual e titular.",
+  "",
+  "## Base URL",
+  PARCEIROS_BASE,
+  "",
+  "## Autenticacao",
+  "Envie a chave em UM destes headers (as duas formas funcionam):",
+  "  Authorization: Bearer <chave>",
+  "  X-API-Key: <chave>",
+  "",
+  "A chave e emitida pela equipe PMB, uma por sistema integrado, e aparece uma",
+  "UNICA vez (o PMB guarda so o hash). Guarde como senha de producao: variavel de",
+  "ambiente do SERVIDOR, nunca no front-end, no app nem em log.",
+  "",
+  "Teste a credencial antes de qualquer outra coisa:",
+  "    GET /api/v1/ping",
+  "",
+  "## Consulta",
+  "    GET /api/v1/unidades/lookup?<identificador>=<valor>",
+  "",
+  "Informe EXATAMENTE UM identificador por requisicao:",
+  "  email      e-mail do titular da unidade (unico; caminho preferido)",
+  "  cpf        CPF do titular, com ou sem mascara",
+  "  telefone   telefone do titular — NAO e unico, pode devolver 409",
+  "  id         id da unidade",
+  "  slug       slug da unidade (= subdominio da vitrine)",
+  "  dominio    dominio proprio (aceita URL completa e www.)",
+  "  codigo     codigo de indicacao da unidade",
+  "  q          valor solto: a API deduz o tipo (conveniencia, nao contrato)",
+  "",
+  "Atalho por caminho (mesma deducao do q):",
+  "    GET /api/v1/unidades/{identificador}",
+  "",
+  "Exemplo:",
+  "    curl -H \"Authorization: Bearer $PMB_API_KEY\" \\",
+  "      \"" + PARCEIROS_BASE + "/unidades/lookup?email=joao@exemplo.com.br\"",
+  "",
+  "## Resposta",
+  "    { \"ok\": true, \"data\": { \"encontradoPor\": {...}, \"unidade\": {...} } }",
+  "",
+  "Blocos da unidade: dominio{}, contato{}, redesSociais{}, identidadeVisual{},",
+  "titular{}, recursos{}, alem de id, nome, slug, status, ativa, codigoIndicacao",
+  "e as datas.",
+  "",
+  "Use dominio.url para montar links: e o dominio proprio quando existe, senao o",
+  "subdominio.",
+  "",
+  "CONSULTE o status: PENDING | ACTIVE | SUSPENDED | CANCELLED. A API devolve",
+  "unidade suspensa e cancelada de proposito — decidir o que fazer com elas e do",
+  "seu lado.",
+  "",
+  "O CPF do titular sai MASCARADO. Credenciais de gateway, mensalidade, comissao,",
+  "PIX e dados de alunos nunca sao devolvidos.",
+  "",
+  "## Erros — ramifique no code, nao na mensagem",
+  "  400 MISSING_IDENTIFIER   nenhum identificador, ou mais de um",
+  "  400 INVALID_IDENTIFIER   forma invalida (CPF com DV errado, e-mail torto...)",
+  "  401 INVALID_API_KEY      chave ausente/errada/revogada/expirada (nao distingue)",
+  "  403 INSUFFICIENT_SCOPE   chave sem o escopo unidades.read",
+  "  404 NOT_FOUND            nenhuma unidade casou com o identificador",
+  "  409 MULTIPLE_MATCHES     so em telefone: repita por e-mail, CPF ou slug",
+  "  429 RATE_LIMITED         details.retryAfterSec diz quanto esperar",
+  "  500 INTERNAL_ERROR       falha no PMB; pode repetir",
+  "",
+  "Envelope de erro:",
+  "    { \"ok\": false, \"error\": { \"message\": \"...\", \"code\": \"NOT_FOUND\" } }",
+  "",
+  "## Limite",
+  "120 requisicoes por minuto POR CHAVE. Cacheie a resposta alguns minutos — os",
+  "dados de uma unidade mudam raramente — e implemente backoff no 429.",
+  "",
+  "## Checklist antes de subir",
+  "1. Chave em env do servidor, fora do controle de versao.",
+  "2. GET /api/v1/ping responde 200 no ambiente de producao.",
+  "3. 404 tratado como 'nao encontrado', nao como erro — a maioria dos contatos",
+  "   consultados NAO vai ser de uma unidade.",
+  "4. Cache + backoff no 429.",
+  "5. O status da unidade e levado em conta antes de exibi-la como ativa.",
+].join("\n")
+
 function CopyButton({ value }: { value: string }) {
   const [copied, setCopied] = useState(false)
   async function copy() {
@@ -218,6 +311,82 @@ export function ApiDocsTab({
 }) {
   return (
     <div className="space-y-6">
+      {/* ── API de parceiros (PMB → sistemas de terceiros) ──────────────────
+          Gateado por `integracoes.view`: sem ela a listagem de chaves responde
+          403 e a seção inteira só mostraria erro. Quem chega aqui por
+          `configuracoes.view` continua vendo o resto da aba. */}
+      <Can perm="integracoes.view">
+      <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm lg:p-8">
+        <div className="flex items-center gap-2">
+          <PlugZap className="h-4 w-4 text-[var(--color-pmb-green)]" />
+          <h3 className="text-sm font-semibold text-[var(--color-pmb-green-900)]">
+            API de parceiros — consulta de unidades (PMB → terceiros)
+          </h3>
+        </div>
+        <p className="mt-1 text-xs text-gray-600">
+          O sistema parceiro envia um dado único (e-mail, CPF, telefone, slug,
+          domínio…) e recebe de volta os dados completos da unidade: id, slug,
+          subdomínio, domínio próprio, contato, redes sociais, identidade visual
+          e titular.
+        </p>
+
+        <div className="mt-4 space-y-2 rounded-xl bg-gray-50 p-4 ring-1 ring-gray-200">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+            Endpoints
+          </p>
+          <p className="break-all font-mono text-xs font-semibold text-gray-800">
+            GET {PARCEIROS_BASE}/unidades/lookup?email=…
+          </p>
+          <p className="break-all font-mono text-xs font-semibold text-gray-800">
+            GET {PARCEIROS_BASE}/unidades/{"{identificador}"}
+          </p>
+          <p className="break-all font-mono text-xs text-gray-500">
+            GET {PARCEIROS_BASE}/ping — verificação da chave
+          </p>
+        </div>
+
+        <ul className="mt-4 space-y-2 text-xs text-gray-600">
+          <li>
+            <strong>Identificadores:</strong> <code>email</code>, <code>cpf</code>,{" "}
+            <code>telefone</code> (do titular), <code>id</code>, <code>slug</code>,{" "}
+            <code>dominio</code>, <code>codigo</code> (da unidade) ou{" "}
+            <code>q</code> (a API deduz). Um por requisição.
+          </li>
+          <li>
+            <strong>Autenticação:</strong>{" "}
+            <code>Authorization: Bearer &lt;chave&gt;</code> ou{" "}
+            <code>X-API-Key</code>, com escopo <code>unidades.read</code>. Limite
+            de 120 req/min por chave.
+          </li>
+          <li>
+            <strong>Nunca sai daqui:</strong> credenciais de gateway, segredos de
+            webhook, mensalidade, comissão, PIX e dados de alunos. O CPF do
+            titular sai mascarado.
+          </li>
+        </ul>
+      </section>
+
+      {/* Chaves dos parceiros */}
+      <ApiKeysManager />
+
+      {/* MD copiável para o dev do parceiro */}
+      <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm lg:p-8">
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="text-sm font-semibold text-[var(--color-pmb-green-900)]">
+            Documentação para o dev do parceiro (copiável)
+          </h3>
+          <CopyButton value={PARCEIRO_AGENT_MD} />
+        </div>
+        <p className="mt-1 text-xs text-gray-600">
+          Entregue junto com a chave. Contrato completo em{" "}
+          <code>docs/api/parceiros-v1.md</code>.
+        </p>
+        <pre className="mt-4 max-h-[28rem] overflow-auto rounded-xl bg-gray-900 p-4 text-[11px] leading-relaxed text-gray-100">
+          <code>{PARCEIRO_AGENT_MD}</code>
+        </pre>
+      </section>
+      </Can>
+
       {/* Visão geral */}
       <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm lg:p-8">
         <div className="flex items-center gap-2">
