@@ -189,22 +189,25 @@ export async function evaluatePaceGate(
       }
     }
 
-    // Sem transicao. Só atualiza a cota exibida quando ela mudou (ex.: parcela
-    // paga que aumentou a fatia sem destravar, porque o aluno ja passou dela).
+    // Sem transicao. Só propaga quando a cota mudou — o que cobre dois casos:
+    // a parcela paga que aumentou a fatia sem destravar (o aluno ja passou
+    // dela) e, com `paceAppliedPercent` null, a matricula parcelada que ainda
+    // NAO tem teto no LMS: a venda recem-fechada e a re-tentativa de um envio
+    // que falhou. Sem esta segunda, o aluno de 6x saia com o curso inteiro
+    // aberto no LMS ate bater a cota — que e exatamente o que a cota evita.
     if (state.gated && enrollment.paceAppliedPercent !== state.allowedPercent) {
-      await prisma.enrollment
-        .update({
-          where: { id: enrollment.id },
-          data: { paceAppliedPercent: state.allowedPercent },
-        })
-        .catch(swallow("pace.update_applied_percent"))
-      // A cota subiu sem destravar (o aluno ja passou dela): o teto no LMS
-      // precisa acompanhar mesmo assim, senao o aluno pagou e continuaria
-      // preso na fatia antiga.
-      await applyLmsLimit(
+      const lmsResult = await applyLmsLimit(
         enrollment,
         state.allowedPercent >= 100 ? null : state.allowedPercent,
       )
+      if (lmsResult !== "failed") {
+        await prisma.enrollment
+          .update({
+            where: { id: enrollment.id },
+            data: { paceAppliedPercent: state.allowedPercent },
+          })
+          .catch(swallow("pace.update_applied_percent"))
+      }
     }
     return {
       enrollmentId: enrollment.id,
@@ -246,6 +249,16 @@ export async function evaluateSatellitePaceGates(
 }
 
 /**
+ * Resultado da propagacao do teto ao LMS.
+ *
+ * Tri-estado de proposito: "nao havia teto a mandar" (matricula da EA) e
+ * "mandei e falhou" levam os dois ao corte por aluno, mas so o segundo pede
+ * nova tentativa. Um booleano unico confundia os dois e era por isso que a
+ * re-tentativa prometida no log nunca acontecia.
+ */
+type LmsLimitResult = "applied" | "skipped" | "failed"
+
+/**
  * Propaga a cota ao LMS como TETO POR MATRICULA (PATCH /enrollments/:id/limit).
  *
  * E o caminho preferencial sempre que a matricula for do LMS: ao contrario do
@@ -253,20 +266,19 @@ export async function evaluateSatellitePaceGates(
  * teto vale so para esta matricula. Por isso NAO passa pela politica de
  * colateral: nao ha colateral a evitar.
  *
- * `percent` null remove o teto (quitado). Devolve false se a chamada falhou —
- * a varredura diaria re-tenta.
+ * `percent` null remove o teto (quitado).
  */
 async function applyLmsLimit(
   enrollment: { id: string; lmsEnrollmentId: string | null },
   percent: number | null,
-): Promise<boolean> {
-  if (!enrollment.lmsEnrollmentId || !isLmsConfigured()) return false
+): Promise<LmsLimitResult> {
+  if (!enrollment.lmsEnrollmentId || !isLmsConfigured()) return "skipped"
   try {
     await setLmsEnrollmentLimit(enrollment.lmsEnrollmentId, percent, {
       reason: "installment",
       unlockUrl: `${appUrl().replace(/\/$/, "")}/aluno/pagamentos`,
     })
-    return true
+    return "applied"
   } catch (err) {
     contextLogger().error(
       {
@@ -278,8 +290,25 @@ async function applyLmsLimit(
       },
       "envio da cota ao LMS falhou — varredura diaria re-tenta",
     )
-    return false
+    return "failed"
   }
+}
+
+/**
+ * Valor a gravar em `paceAppliedPercent` — a coluna e "ultima cota PROPAGADA",
+ * nao "ultima cota calculada".
+ *
+ * Quando o envio ao LMS falha gravamos null: e assim que a varredura diaria
+ * reconhece que ainda ha teto a mandar (`reconcilePaceGates` varre as gated com
+ * `paceAppliedPercent` null). Gravar o valor calculado faria a comparacao bater
+ * na proxima passada e a re-tentativa nunca sairia — o aluno ficaria preso na
+ * fatia antiga depois de pagar, ou solto na fatia inteira sem ter pago.
+ */
+function propagatedPercent(
+  result: LmsLimitResult,
+  allowedPercent: number,
+): number | null {
+  return result === "failed" ? null : allowedPercent
 }
 
 /** Trava a matricula e (se a politica permitir) corta o acesso na plataforma. */
@@ -297,8 +326,9 @@ async function applyBlock(
   strict: boolean,
 ): Promise<PaceEvaluation> {
   // LMS: teto por matricula, exato e sem colateral. So caimos no corte por
-  // aluno (EA) quando a matricula nao e do LMS.
-  let platformApplied = await applyLmsLimit(enrollment, state.allowedPercent)
+  // aluno (EA) quando a matricula nao e do LMS — ou quando o teto falhou.
+  const lmsResult = await applyLmsLimit(enrollment, state.allowedPercent)
+  let platformApplied = lmsResult === "applied"
 
   const cut = !platformApplied && (await shouldCutPlatformAccess(enrollment, strict))
   if (cut) {
@@ -317,7 +347,10 @@ async function applyBlock(
 
   await prisma.enrollment.update({
     where: { id: enrollment.id },
-    data: { paceBlockedAt: new Date(), paceAppliedPercent: state.allowedPercent },
+    data: {
+      paceBlockedAt: new Date(),
+      paceAppliedPercent: propagatedPercent(lmsResult, state.allowedPercent),
+    },
   })
 
   const word = installmentWord(enrollment.paymentType)
@@ -376,18 +409,26 @@ async function applyRelease(
   },
   state: PaceState,
 ): Promise<PaceEvaluation> {
-  await prisma.enrollment.update({
-    where: { id: enrollment.id },
-    data: { paceBlockedAt: null, paceAppliedPercent: state.allowedPercent },
-  })
-
   // Quitado remove o teto; cota ampliada (mas ainda parcial) apenas sobe o teto.
-  const lmsApplied = await applyLmsLimit(
+  // ANTES do update local, para `paceAppliedPercent` registrar so o que de fato
+  // saiu daqui — ver `propagatedPercent`. Sem isso, um LMS fora do ar na hora
+  // deixava o aluno pago preso no teto antigo, e nada re-tentava.
+  const lmsResult = await applyLmsLimit(
     enrollment,
     state.allowedPercent >= 100 ? null : state.allowedPercent,
   )
+
+  await prisma.enrollment.update({
+    where: { id: enrollment.id },
+    data: {
+      paceBlockedAt: null,
+      paceAppliedPercent: propagatedPercent(lmsResult, state.allowedPercent),
+    },
+  })
+
   const platformApplied =
-    (await releaseStudentPaceIfClear(enrollment.studentId)) || lmsApplied
+    (await releaseStudentPaceIfClear(enrollment.studentId)) ||
+    lmsResult === "applied"
 
   await createNotification({
     audience: "STUDENT",

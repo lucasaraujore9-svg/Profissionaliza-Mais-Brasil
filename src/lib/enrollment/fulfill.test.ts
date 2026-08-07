@@ -55,6 +55,12 @@ vi.mock("@/lib/students/generate-password", () => ({
   generatePasswordWithHash: vi.fn().mockResolvedValue({ plain: "pw", hash: "h" }),
 }))
 vi.mock("@/lib/notifications", () => ({ createNotification: vi.fn() }))
+// Cota de aulas: motor real fora do escopo daqui. O que importa provar é que o
+// fulfill CHAMA a avaliação — é ela que manda o teto ao LMS no ato da compra.
+vi.mock("@/lib/enrollment/pace", () => ({
+  evaluatePaceGate: vi.fn(),
+  evaluateSatellitePaceGates: vi.fn(),
+}))
 // afterResponse: no-op — não roda o callback de emails (fora do escopo do dinheiro).
 vi.mock("@/lib/after-response", () => ({ afterResponse: vi.fn() }))
 vi.mock("@/lib/logger", () => ({
@@ -66,6 +72,7 @@ import { prisma } from "@/lib/prisma"
 import { ensureStudentOnPlatform, linkCourseToStudent } from "@/lib/students/plataforma-actions"
 import { createLmsEnrollment } from "@/lib/lms"
 import { createNotification } from "@/lib/notifications"
+import { evaluatePaceGate } from "@/lib/enrollment/pace"
 import { fulfillEnrollment, type TenantContext, type PaymentEvent } from "./fulfill"
 
 const p = prisma as unknown as {
@@ -88,6 +95,7 @@ const ensureMock = ensureStudentOnPlatform as unknown as ReturnType<typeof vi.fn
 const linkMock = linkCourseToStudent as unknown as ReturnType<typeof vi.fn>
 const lmsMock = createLmsEnrollment as unknown as ReturnType<typeof vi.fn>
 const notifyMock = createNotification as unknown as ReturnType<typeof vi.fn>
+const paceMock = evaluatePaceGate as unknown as ReturnType<typeof vi.fn>
 
 const eaTenant: TenantContext = {
   id: "t1",
@@ -185,6 +193,29 @@ describe("fulfillEnrollment — dinheiro pós-webhook (QA-013)", () => {
     expect(ensureMock).toHaveBeenCalledWith("s1")
     expect(linkMock).toHaveBeenCalledWith("s1", "c1")
     expect(lmsMock).not.toHaveBeenCalled()
+  })
+
+  it("(a2) venda parcelada avalia a cota da PRÓPRIA matrícula na 1ª parcela", async () => {
+    // Regressão: a 1ª cobrança só avaliava as satélites, então a matrícula
+    // principal de um carnê 6x nascia sem teto no LMS — o curso INTEIRO ficava
+    // aberto com 1 de 6 parcelas pagas, e a trava só chegaria depois, reativa,
+    // quando o aluno já tivesse assistido além do que pagou.
+    p.enrollment.findUnique.mockResolvedValue(
+      enrollment({
+        paymentType: "BOLETO_INSTALLMENT",
+        installmentsTotal: 6,
+        installmentsPaid: 0,
+      }),
+    )
+
+    await fulfillEnrollment(eaTenant, "e1", event)
+
+    expect(p.enrollment.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ installmentsPaid: 1 }),
+      }),
+    )
+    expect(paceMock).toHaveBeenCalledWith("e1")
   })
 
   it("(b) LMS aprovado: chama createLmsEnrollment com Idempotency-Key = id do pagamento e NÃO usa a EA", async () => {

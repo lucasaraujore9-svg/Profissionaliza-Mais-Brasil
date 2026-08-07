@@ -136,6 +136,14 @@ async function reconcilePaceGates(): Promise<number> {
           OR: [
             { paceBlockedAt: { not: null } },
             { paceExemptAt: null, progressPercent: { gt: 0 } },
+            // Ainda sem teto propagado: venda parcelada nova (ou reprovisionada)
+            // e re-tentativa de um envio ao LMS que falhou. Sem esta cláusula, a
+            // matrícula que nunca chegou a andar ficava com o curso INTEIRO
+            // aberto no LMS — e só entrava na varredura depois de o aluno já ter
+            // assistido além do que pagou, que é tarde demais.
+            // Auto-limitada: a 1ª passada grava `paceAppliedPercent` e ela sai
+            // do filtro.
+            { paceExemptAt: null, paceAppliedPercent: null },
           ],
         },
       ],

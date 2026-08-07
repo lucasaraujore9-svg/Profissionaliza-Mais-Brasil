@@ -335,6 +335,54 @@ dois links — e o desconto/cupom nao enxergava o total.
   para `tenantCourseIds` (e `/api/admin/vendas` de `courseId` para `courseIds`).
   Clientes atualizados no mesmo commit.
 
+### Cota de aulas LIGADA em producao (2026-08-07)
+
+A trava proporcional ao pagamento (`pace-gate.ts` + `pace.ts`, escrita em
+2026-07-22) estava **desligada em producao desde que foi escrita**:
+`SystemSettings.paceGateEnabled = false`, nenhum tenant sobrescrevendo. Todo o
+motor rodava e devolvia cedo. O caso que expos foi um aluno de carne 6x que
+pagou 1 parcela (16% liberados), assistiu 45% do curso e nao foi travado —
+inadimplencia nao pegava porque a 2a parcela nem tinha vencido.
+
+- **Ligada globalmente** (`pace_gate_enabled = true`, `strict` continua false) e
+  varredura disparada na hora. Regra: `cota = floor(pagas/total x 100)`; vale
+  para `BOLETO_INSTALLMENT` e `MONTHLY` com mais de 1 parcela. Compra a vista e
+  cartao parcelado ficam de fora — nos dois o valor ja foi autorizado.
+- **Interruptor ganhou tela:** `/admin/configuracoes/cota-aulas`
+  (`configuracoes.view` para ver, `configuracoes.manage` para alterar) +
+  `PUT /api/admin/system-settings/pace-gate`, auditado. Antes so existia a
+  coluna — ligar/desligar exigia SQL na producao. A tela mostra o impacto
+  (matriculas sob a regra, quantas passaram da cota, quantas estao travadas)
+  antes de o dono virar a chave. O override por unidade (`Tenant.paceGateEnabled`)
+  continua so no banco.
+- **A 1a cobranca nao avaliava a PROPRIA matricula** — so as satelites. Numa
+  venda 6x o curso principal nascia sem teto no LMS e a trava so chegava depois,
+  reativa, quando o aluno ja tivesse assistido alem do que pagou. `fulfill.ts`
+  passou a chamar `evaluatePaceGate(enrollment.id)` logo apos a transacao que
+  grava `installmentsPaid` (antes dela leria zero parcelas pagas e travaria o
+  aluno em 0% no ato da compra).
+- **`paceAppliedPercent` virou "ultima cota PROPAGADA", nao "calculada".** Era
+  gravado antes/independentemente do `PATCH /enrollments/:id/limit` do LMS: um
+  envio falho ficava marcado como aplicado, a comparacao batia na passada
+  seguinte e a re-tentativa prometida no log **nunca saia** — o aluno que pagou
+  seguia preso no teto antigo. Agora falha grava null, e null e o sinal de
+  "ainda ha teto a mandar" que a varredura procura. `applyLmsLimit` devolve
+  tri-estado (`applied` / `skipped` / `failed`) porque "nao havia teto a mandar"
+  (matricula da EA) e "mandei e falhou" caem os dois no corte por aluno, mas so
+  o segundo pede nova tentativa.
+- **A varredura diaria ignorava quem nunca andou:** o filtro exigia
+  `progressPercent > 0`. Matricula parcelada com 0% ficava com o curso INTEIRO
+  aberto no LMS ate o aluno passar da cota. Entrou a clausula
+  `{ paceExemptAt: null, paceAppliedPercent: null }` — auto-limitada, some do
+  filtro na 1a passada bem-sucedida.
+- **Confirmado ponta a ponta em prod:** `PATCH /enrollments/:id/limit` do LMS
+  responde 200 e guarda `maxPercent` (o comentario em
+  `/api/aluno/curso/[id]/acessar` dizendo "enquanto o LMS nao expoe o limite"
+  esta desatualizado). Como a rota de SSO tambem recusa matricula com
+  `paceBlockedAt`, hoje o aluno travado perde o acesso a TUDO daquele curso,
+  inclusive a fatia que pagou — mais duro que o "teto, nao revogacao" do
+  contrato do LMS. Deliberado por ora; afrouxar e uma decisao comercial.
+
 ### Bugs conhecidos (pendentes)
 
 - **Middleware file convention deprecado** no Next 16 (usar `proxy` em vez de `middleware`).

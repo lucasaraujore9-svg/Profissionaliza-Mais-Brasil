@@ -355,11 +355,20 @@ async function fulfillEnrollmentLocked(
     }),
   ])
 
-  // Cota de aulas das satélites — DEPOIS da transação acima, que é quem grava
-  // `installmentsPaid` da primária. Avaliar antes leria zero parcelas pagas e
-  // bloquearia o aluno em 0% no ato da compra. No-op em compra à vista e em
-  // compra sem cursos adicionais (a consulta é pelo índice de
-  // `primary_enrollment_id`).
+  // Cota de aulas — DEPOIS da transação acima, que é quem grava
+  // `installmentsPaid`. Avaliar antes leria zero parcelas pagas e bloquearia o
+  // aluno em 0% no ato da compra.
+  //
+  // A PRÓPRIA matrícula entra aqui, não só as satélites: numa venda em 6x a 1ª
+  // parcela libera 16% do curso, e é esta chamada que manda o teto ao LMS no
+  // ato da compra. Sem ela o curso nascia INTEIRO aberto e a trava só chegava
+  // depois — reativa, quando o aluno já tivesse assistido além do que pagou.
+  // No-op em compra à vista (não é plano parcelado) e idempotente com o
+  // `evaluatePaceGate` que `settleBoletoInstallment` faz logo em seguida.
+  await evaluatePaceGate(enrollment.id)
+  // Os demais cursos da compra (satélites de pacote / venda multi-curso)
+  // herdam o mesmo parcelamento. No-op em compra sem cursos adicionais (a
+  // consulta é pelo índice de `primary_enrollment_id`).
   await evaluateSatellitePaceGates(enrollment.id)
 
   // Nome do item comprado: pacote, venda multi-curso ou o curso avulso.

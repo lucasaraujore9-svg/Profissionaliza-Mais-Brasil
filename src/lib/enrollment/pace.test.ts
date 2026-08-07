@@ -176,6 +176,75 @@ describe("evaluatePaceGate — teto por matrícula no LMS", () => {
     expect(out).toMatchObject({ blocked: true })
   })
 
+  // `paceAppliedPercent` é "última cota PROPAGADA", não "última calculada". É
+  // esse campo que a varredura diária usa para saber que ainda há teto a mandar
+  // (ver a cláusula `paceAppliedPercent: null` em reconcilePaceGates). Gravar o
+  // valor calculado depois de um envio falho fazia a comparação bater na
+  // passada seguinte — a re-tentativa prometida no log nunca saía.
+  it("envio falho ao LMS grava paceAppliedPercent null (marca de re-tentativa)", async () => {
+    lmsLimitMock.mockRejectedValue(new Error("LMS 502"))
+    p.enrollment.findUnique.mockResolvedValue(
+      carne(1, 2, 50, { lmsEnrollmentId: "lms_enr_1" }),
+    )
+
+    await evaluatePaceGate("e1")
+
+    expect(p.enrollment.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ paceAppliedPercent: null }),
+      }),
+    )
+  })
+
+  it("envio falho ao LIBERAR também deixa a marca de re-tentativa", async () => {
+    // O aluno pagou e destravou do nosso lado; se o teto antigo continuar no
+    // LMS ele segue preso na fatia velha — e nada re-tentaria.
+    lmsLimitMock.mockRejectedValue(new Error("LMS 502"))
+    p.enrollment.findUnique.mockResolvedValue(
+      carne(2, 2, 60, {
+        lmsEnrollmentId: "lms_enr_1",
+        paceBlockedAt: new Date(),
+        paceAppliedPercent: 50,
+      }),
+    )
+
+    await evaluatePaceGate("e1")
+
+    expect(p.enrollment.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: { paceBlockedAt: null, paceAppliedPercent: null },
+      }),
+    )
+  })
+
+  it("matrícula parcelada ainda sem teto recebe o teto sem estar travada", async () => {
+    // Venda 6x recém-fechada: 16% liberados, 0% assistido. Não há transição de
+    // bloqueio — e é justamente aqui que o teto precisa sair, senão o curso
+    // nasce inteiro aberto no LMS.
+    p.enrollment.findUnique.mockResolvedValue(
+      carne(1, 6, 0, { lmsEnrollmentId: "lms_enr_1" }),
+    )
+
+    const out = await evaluatePaceGate("e1")
+
+    expect(out).toMatchObject({ blocked: false, allowedPercent: 16 })
+    expect(lmsLimitMock).toHaveBeenCalledWith("lms_enr_1", 16, expect.anything())
+    expect(p.enrollment.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { paceAppliedPercent: 16 } }),
+    )
+  })
+
+  it("teto que falhou não é dado como propagado — segue null para a varredura", async () => {
+    lmsLimitMock.mockRejectedValue(new Error("LMS 502"))
+    p.enrollment.findUnique.mockResolvedValue(
+      carne(1, 6, 0, { lmsEnrollmentId: "lms_enr_1" }),
+    )
+
+    await evaluatePaceGate("e1")
+
+    expect(p.enrollment.update).not.toHaveBeenCalled()
+  })
+
   it("sem LMS configurado, nem tenta — usa o caminho da EA", async () => {
     lmsConfiguredMock.mockReturnValue(false)
     p.enrollment.findUnique.mockResolvedValue(
