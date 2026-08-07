@@ -71,7 +71,7 @@ async function ensureLmsCategory(cat: LmsCategory): Promise<string | null> {
 }
 
 /**
- * Sincroniza o catalogo da nova fornecedora (LMS lms.bmbr.com.br) para Course.
+ * Sincroniza o catalogo da fornecedora propria (LMS) para Course.
  *
  * Diferencas em relacao ao syncCatalogFromEA:
  *  - Match por `lmsCourseId` (UUID estavel), nao por nome.

@@ -30,6 +30,17 @@ export async function loadStudentDetail(args: {
    * dele — a lista já vem escopada, mas a URL não.
    */
   scope?: Prisma.StudentWhereInput
+  /**
+   * Deixa passar para a tela o marcador de COMO o curso é atendido por baixo
+   * (`courseAccess[].isPartner`). Só o sistema mãe, que opera as integrações,
+   * deve receber isso — no painel da unidade a origem do curso não aparece nem
+   * para o dono.
+   *
+   * Default `false` de propósito: este objeto é serializado dentro de um Client
+   * Component, então tudo que entra nele vai parar no HTML. Quem quiser o
+   * marcador pede explicitamente.
+   */
+  includeProviderOrigin?: boolean
 }): Promise<StudentData | null> {
   const where: Prisma.StudentWhereInput = { id: args.studentId, ...args.scope }
   if (args.tenantId) {
@@ -111,11 +122,15 @@ export async function loadStudentDetail(args: {
     }
   }
 
-  // Credenciais do LMS por curso (proprio do LMS ou parceiro). Guardadas por
-  // matricula porque origin/playback variam por curso. Senha CIFRADA — decifrada
-  // aqui, degradando a `null` se corrompida (mesma politica do plataformaSenha).
-  // Lidas das matriculas ja escopadas pelo `student` (isolamento por tenant).
-  const lmsCredentials = student.enrollments
+  // Credenciais de acesso as aulas, por curso. Guardadas por matricula porque
+  // variam de curso para curso. Senha CIFRADA — decifrada aqui, degradando a
+  // `null` se corrompida (mesma politica do plataformaSenha). Lidas das
+  // matriculas ja escopadas pelo `student` (isolamento por tenant).
+  //
+  // FRONTEIRA: `lmsOrigin`/`lmsPlayback` sao roteamento interno e NAO podem
+  // atravessar daqui, porque este objeto e serializado no payload RSC. O que sai
+  // e um unico booleano derivado, e so quando o caller pede.
+  const courseAccess = student.enrollments
     .filter((e) => e.lmsLogin)
     .map((e) => {
       let senha: string | null = null
@@ -130,18 +145,19 @@ export async function loadStudentDetail(args: {
               studentId: student.id,
               enrollmentId: e.id,
             },
-            "falha ao descriptografar senha do LMS — exibindo só o login",
+            "falha ao descriptografar senha de acesso — exibindo só o login",
           )
         }
       }
       return {
         enrollmentId: e.id,
         courseName: e.course.nome,
-        origin: e.lmsOrigin,
-        playback: e.lmsPlayback,
         login: e.lmsLogin as string,
         senha,
         portalUrl: normalizeLmsPublicUrl(e.lmsPortalUrl),
+        ...(args.includeProviderOrigin
+          ? { isPartner: Boolean(e.lmsOrigin && e.lmsOrigin !== "own") }
+          : {}),
       }
     })
 
@@ -259,6 +275,6 @@ export async function loadStudentDetail(args: {
       createdAt: n.createdAt.toISOString(),
       readAt: n.readAt?.toISOString() ?? null,
     })),
-    lmsCredentials,
+    courseAccess,
   }
 }

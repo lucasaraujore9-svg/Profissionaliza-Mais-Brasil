@@ -3,17 +3,17 @@ import { decrypt } from "@/lib/crypto"
 import { contextLogger } from "@/lib/logger"
 
 /**
- * URL padrão da tela de login da plataforma de aulas (playcurso). Usada como
- * fallback quando `EA_STUDENT_LOGIN_URL` não está configurada no ambiente — os
- * alunos da venda direta PMB acessam todos a mesma plataforma, então o botão
- * "Acessar plataforma de aulas" precisa sempre funcionar.
+ * URL padrão da tela de login da plataforma de aulas. Usada como fallback
+ * quando `EA_STUDENT_LOGIN_URL` não está configurada no ambiente — os alunos da
+ * venda direta PMB acessam todos a mesma plataforma, então o botão "Acessar
+ * aulas" precisa sempre funcionar.
  */
 const DEFAULT_STUDENT_LOGIN_URL =
   "https://playcurso.com/bolsamaisbrasil/metodo/login.php"
 
 /**
  * Retorna a URL de login da plataforma de aulas exibida na área do aluno.
- * Prioriza `EA_STUDENT_LOGIN_URL`; cai no padrão do playcurso se não estiver
+ * Prioriza `EA_STUDENT_LOGIN_URL`; cai no padrão acima se não estiver
  * configurada.
  */
 export function getStudentPlatformLoginUrl(): string {
@@ -23,7 +23,7 @@ export function getStudentPlatformLoginUrl(): string {
 /**
  * Copy única para quando a plataforma de aulas recusa a troca de senha.
  *
- * A API v2 da Escola Avançada não expõe alteração de senha de aluno (o campo
+ * A API v2 da fornecedora EA não expõe alteração de senha de aluno (o campo
  * `senha` só existe em `funcionarios/novo`), então `usuarios/editar` descarta o
  * parâmetro e responde "sucesso". Estas mensagens substituem o falso positivo
  * que era mostrado antes.
@@ -31,8 +31,16 @@ export function getStudentPlatformLoginUrl(): string {
 export const PLATFORM_PASSWORD_UNSUPPORTED_STUDENT =
   "A plataforma de aulas não permite trocar a senha por aqui — quem define a senha é ela. Sua senha atual está no card “acesso à plataforma de aulas”, na sua área do aluno."
 
-export const PLATFORM_PASSWORD_UNSUPPORTED_STAFF =
+/**
+ * Duas versões porque o público é diferente. O sistema mãe opera a integração e
+ * precisa do detalhe técnico para diagnosticar; a unidade só precisa saber o que
+ * fazer agora — e não deve receber o nome da fornecedora nem o endpoint dela.
+ */
+export const PLATFORM_PASSWORD_UNSUPPORTED_STAFF_ADMIN =
   "A plataforma de aulas (Escola Avançada) não permite alterar a senha do aluno pela API — `usuarios/editar` não aceita o campo `senha`. A senha exibida foi ressincronizada com a que realmente vale lá; repasse-a ao aluno."
+
+export const PLATFORM_PASSWORD_UNSUPPORTED_STAFF_TENANT =
+  "A senha das aulas não pode ser alterada por aqui — quem a define é a plataforma de aulas. A senha exibida foi conferida e é a que vale hoje; repasse-a ao aluno."
 
 export const PLATFORM_PASSWORD_UNVERIFIED =
   "A plataforma de aulas não respondeu à conferência da senha. Nada foi alterado — tente novamente em alguns minutos."

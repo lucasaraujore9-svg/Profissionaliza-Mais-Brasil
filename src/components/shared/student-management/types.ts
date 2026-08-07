@@ -72,22 +72,27 @@ export interface StudentNoteItem {
 }
 
 /**
- * Credencial de acesso a plataforma do LMS por curso (curso proprio do LMS ou
- * parceiro). Espelha plataformaSenha (EA), mas e POR MATRICULA — origin/playback
- * variam por curso.
+ * Credencial de acesso as aulas de UM curso. E por MATRICULA (e nao por aluno)
+ * porque cada curso tem a sua.
+ *
+ * Este objeto e serializado no payload RSC da tela de gestao, entao ele nao
+ * carrega nada sobre COMO o curso e atendido por baixo — so `isPartner`, e
+ * apenas quando o caller e o sistema mae (ver `includeProviderOrigin` em
+ * `loadStudentDetail`).
  */
-export interface StudentLmsCredentialItem {
+export interface StudentCourseAccessItem {
   enrollmentId: string
   courseName: string
-  /** "own" (curso proprio do LMS) | chave do parceiro. */
-  origin: string | null
-  /** "local" (SSO no player do LMS) | "redirect" (assiste no parceiro). */
-  playback: string | null
   login: string
   /** Senha descriptografada; `null` quando ausente/corrompida (só o login). */
   senha: string | null
-  /** URL do portal do parceiro (cursos redirect). */
+  /** URL direta de acesso ao curso, quando existe. */
   portalUrl: string | null
+  /**
+   * Presente SO no sistema mae: o curso e servido por um parceiro por baixo.
+   * `undefined` no painel da unidade — de proposito.
+   */
+  isPartner?: boolean
 }
 
 export interface StudentNotificationItem {
@@ -117,7 +122,7 @@ export interface StudentData {
   apostila: string
   plataformaAlunoId: string | null
   /**
-   * Senha do aluno na plataforma de aulas (EA), descriptografada para exibição
+   * Senha do aluno na plataforma de aulas, descriptografada para exibição
    * na gestão. `null` quando o aluno ainda não está na plataforma ou quando a
    * senha não pôde ser descriptografada (legado/zerada) — nesse caso só o login
    * é exibido.
@@ -134,8 +139,8 @@ export interface StudentData {
   payments: StudentPaymentItem[]
   notes: StudentNoteItem[]
   notifications: StudentNotificationItem[]
-  /** Credenciais do LMS por curso (próprio do LMS ou parceiro). */
-  lmsCredentials: StudentLmsCredentialItem[]
+  /** Credenciais de acesso às aulas, por curso. */
+  courseAccess: StudentCourseAccessItem[]
   /**
    * A cota de aulas está valendo para a unidade deste aluno? Quando falsa, a UI
    * não mostra a coluna — exibir uma cota que não está sendo aplicada só

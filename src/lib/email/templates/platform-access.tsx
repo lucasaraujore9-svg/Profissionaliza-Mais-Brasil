@@ -4,7 +4,7 @@ import type { EmailBrand } from "../brand"
 
 export interface PlatformAccessTemplateProps {
   studentName: string
-  /** Usuário do aluno na plataforma de aulas (EA: ea_aluno_id). */
+  /** Usuário do aluno na plataforma de aulas. */
   login: string
   /** URL da área do aluno (Sistema Acadêmico) — é lá que a senha fica visível. */
   studentPanelUrl: string
@@ -17,11 +17,10 @@ export interface PlatformAccessTemplateProps {
  * "Seus dados de acesso à plataforma de aulas" — disparado pelo próprio aluno
  * quando não consegue entrar.
  *
- * Existe porque a plataforma de aulas (Escola Avançada) não tem recuperação de
- * senha automatizada: o "Esqueci minha senha" da tela de login dela abre um
- * atendimento por WhatsApp do fornecedor, e a API v2 não expõe troca de senha
- * de aluno. A recuperação self-service, portanto, é nossa — e o caminho é a
- * área do aluno.
+ * Existe porque a plataforma de aulas não tem recuperação de senha automatizada:
+ * o "Esqueci minha senha" da tela de login dela abre um atendimento por WhatsApp
+ * do fornecedor, e a API dele não expõe troca de senha de aluno. A recuperação
+ * self-service, portanto, é nossa — e o caminho é a área do aluno.
  *
  * LGPD-012: a senha NÃO vai no corpo do e-mail (canal não é fim-a-fim seguro).
  * Mandamos o usuário e o caminho até ela, que fica na área do aluno atrás de

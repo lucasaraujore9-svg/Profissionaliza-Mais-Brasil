@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 import { changeStudentPlatformPassword } from "@/lib/students/plataforma-actions"
 import {
-  PLATFORM_PASSWORD_UNSUPPORTED_STAFF,
+  PLATFORM_PASSWORD_UNSUPPORTED_STAFF_ADMIN,
   PLATFORM_PASSWORD_UNVERIFIED,
 } from "@/lib/students/platform-credentials"
 import { generateTemporaryPassword } from "@/lib/students/generate-password"
@@ -60,7 +60,7 @@ export const POST = withRequestContextParams<{ id: string }>(
       return NextResponse.json(
         {
           error: result.effectivePassword
-            ? PLATFORM_PASSWORD_UNSUPPORTED_STAFF
+            ? PLATFORM_PASSWORD_UNSUPPORTED_STAFF_ADMIN
             : PLATFORM_PASSWORD_UNVERIFIED,
           currentPassword: result.effectivePassword,
         },

@@ -31,7 +31,7 @@ export const PATCH = withRequestContext(
       return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
     }
 
-    // Cada chamada custa DUAS idas à Escola Avançada (escrever + reler para
+    // Cada chamada custa DUAS idas à fornecedora EA (escrever + reler para
     // conferir) e hoje a EA sempre recusa a troca — ou seja, é um endpoint que
     // só gasta cota externa. Chaveado pelo aluno, como o de credenciais.
     const rl = await rateLimitByKey(

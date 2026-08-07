@@ -14,7 +14,7 @@ import { withRequestContext } from "@/lib/observability/with-request-context"
 // Exclusão/anonimização de conta do titular (LGPD art. 18, R13 / issue 116).
 // Default: ANONIMIZAÇÃO (não hard-delete) — preserva integridade contábil
 // (Enrollment/Payment continuam existindo, sem PII vinculada). Bloqueia o
-// acesso na plataforma parceira e impede login futuro (passwordHash/email nulos).
+// acesso na plataforma de aulas e impede login futuro (passwordHash/email nulos).
 const bodySchema = z.object({
   confirm: z.literal("EXCLUIR MINHA CONTA"),
 })
@@ -52,7 +52,7 @@ export const DELETE = withRequestContext(
       return NextResponse.json({ error: "Conta não encontrada" }, { status: 404 })
     }
 
-    // Revoga acesso na plataforma parceira (best-effort — não bloqueia a exclusão).
+    // Revoga acesso na plataforma de aulas (best-effort — não bloqueia a exclusão).
     await blockStudentInEA(student.id).catch(swallow("aluno.conta.block_ea"))
 
     // LGPD-013: propaga a exclusão aos subprocessadores onde há API (LMS: revoga

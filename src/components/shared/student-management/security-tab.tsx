@@ -19,7 +19,7 @@ import {
 import type {
   ManagementScope,
   StudentData,
-  StudentLmsCredentialItem,
+  StudentCourseAccessItem,
 } from "./types"
 import { apiBase } from "./types"
 
@@ -70,7 +70,7 @@ export function SecurityTab({
         onPlatform={onPlatform}
       />
 
-      <LmsAccessSection credentials={student.lmsCredentials} />
+      <CourseAccessSection credentials={student.courseAccess} scope={scope} />
 
       <PanelPasswordSection student={student} scope={scope} />
 
@@ -315,38 +315,53 @@ function PanelPasswordSection({
 }
 
 /**
- * Acesso ao LMS por curso (curso próprio do LMS ou parceiro). Read-only: o LMS é
- * a fonte da credencial; aqui só exibimos para suporte (revelar/copiar + portal).
- * Só aparece quando há credencial gravada (matrícula paga e provisionada).
+ * Acesso às aulas por curso. Read-only: a credencial é gerada na matrícula e
+ * aqui só exibimos para suporte (revelar/copiar + link direto). Só aparece
+ * quando há credencial gravada (matrícula paga e provisionada).
+ *
+ * A tela é a MESMA para o sistema mãe e para a unidade; o que muda é quanto ela
+ * conta. Na unidade não aparece de onde o curso vem — nem para o dono.
  */
-function LmsAccessSection({
+function CourseAccessSection({
   credentials,
+  scope,
 }: {
-  credentials: StudentLmsCredentialItem[]
+  credentials: StudentCourseAccessItem[]
+  scope: ManagementScope
 }) {
   if (credentials.length === 0) return null
+  const isMotherSystem = scope.kind === "admin"
   return (
     <section className="rounded-xl border border-gray-200 bg-white p-5">
       <div className="flex items-center gap-2">
         <GraduationCap className="h-4 w-4 text-[var(--color-pmb-green)]" />
         <h2 className="text-sm font-semibold text-[var(--color-pmb-green-900)]">
-          Acesso ao LMS (por curso)
+          {isMotherSystem
+            ? "Acesso ao LMS (por curso)"
+            : "Acesso às aulas (por curso)"}
         </h2>
       </div>
       <p className="mt-1 text-xs text-gray-500">
-        Credenciais de cada curso entregue pelo LMS (próprio ou parceiro). A senha
-        é gerada na matrícula e fica criptografada — exibida aqui para suporte.
+        {isMotherSystem
+          ? "Credenciais de cada curso entregue pelo LMS (próprio ou parceiro). A senha é gerada na matrícula e fica criptografada — exibida aqui para suporte."
+          : "Credenciais de cada curso do aluno. A senha é gerada na matrícula e fica criptografada — exibida aqui para suporte."}
       </p>
       <ul className="mt-4 space-y-3">
         {credentials.map((c) => (
-          <LmsCredentialRow key={c.enrollmentId} cred={c} />
+          <CourseAccessRow key={c.enrollmentId} cred={c} scope={scope} />
         ))}
       </ul>
     </section>
   )
 }
 
-function LmsCredentialRow({ cred }: { cred: StudentLmsCredentialItem }) {
+function CourseAccessRow({
+  cred,
+  scope,
+}: {
+  cred: StudentCourseAccessItem
+  scope: ManagementScope
+}) {
   const [reveal, setReveal] = useState(false)
   const [copied, setCopied] = useState(false)
 
@@ -360,7 +375,9 @@ function LmsCredentialRow({ cred }: { cred: StudentLmsCredentialItem }) {
     }
   }
 
-  const isPartner = Boolean(cred.origin && cred.origin !== "own")
+  // `isPartner` só vem preenchido para o sistema mãe (ver `includeProviderOrigin`
+  // em loadStudentDetail). No painel da unidade ele é `undefined` e o selo some.
+  const showOriginBadge = scope.kind === "admin" && cred.isPartner !== undefined
 
   return (
     <li className="rounded-lg bg-gray-50 p-3 ring-1 ring-gray-200">
@@ -368,9 +385,11 @@ function LmsCredentialRow({ cred }: { cred: StudentLmsCredentialItem }) {
         <p className="truncate text-sm font-semibold text-gray-800">
           {cred.courseName}
         </p>
-        <span className="shrink-0 rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-gray-500 ring-1 ring-gray-200">
-          {isPartner ? "Parceiro" : "LMS"}
-        </span>
+        {showOriginBadge && (
+          <span className="shrink-0 rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-gray-500 ring-1 ring-gray-200">
+            {cred.isPartner ? "Parceiro" : "LMS"}
+          </span>
+        )}
       </div>
       <dl className="mt-2 grid gap-2 sm:grid-cols-2">
         <div>
@@ -431,7 +450,9 @@ function LmsCredentialRow({ cred }: { cred: StudentLmsCredentialItem }) {
           rel="noopener noreferrer"
           className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--color-pmb-green)] hover:underline"
         >
-          Abrir portal do curso
+          {scope.kind === "admin"
+            ? "Abrir portal do curso"
+            : "Abrir acesso do curso"}
           <ExternalLink className="h-3.5 w-3.5" />
         </a>
       )}
@@ -440,7 +461,7 @@ function LmsCredentialRow({ cred }: { cred: StudentLmsCredentialItem }) {
 }
 
 /**
- * Credenciais da plataforma de aulas (EA): ver login + senha, trocar a senha e
+ * Credenciais gerais da plataforma de aulas: ver login + senha, trocar a senha e
  * reenviar o email de credenciais (que o aluno nem sempre recebe na matrícula).
  */
 function PlatformAccessSection({
@@ -561,9 +582,9 @@ function PlatformAccessSection({
         </h2>
       </div>
       <p className="mt-1 text-xs text-gray-500">
-        Credenciais usadas pelo aluno para <strong>assistir às aulas</strong> na
-        plataforma parceira. Aqui você vê a senha, troca quando necessário e
-        reenvia o email de acesso caso o aluno não tenha recebido.
+        Credenciais usadas pelo aluno para <strong>assistir às aulas</strong>.
+        Aqui você vê a senha, troca quando necessário e reenvia o email de
+        acesso caso o aluno não tenha recebido.
       </p>
 
       {!onPlatform ? (

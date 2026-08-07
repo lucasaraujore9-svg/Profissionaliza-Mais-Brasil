@@ -12,33 +12,13 @@ import {
 } from "lucide-react"
 
 interface Props {
+  /** Curso a que este acesso pertence — é o título do card. */
+  courseName: string
   login: string
   /** Senha inicial; null quando não temos o valor (usar a recebida por email). */
   senha: string | null
-  /** URL da tela de login da plataforma de aulas. */
+  /** Destino do botão "Acessar aulas". `null` esconde o botão. */
   loginUrl: string | null
-  /** Nome visível da plataforma externa. */
-  platformName?: string
-  /** Rótulo curto da fornecedora (EA, LMS próprio, parceiro etc.). */
-  providerLabel?: string
-  /**
-   * Nome do curso. Quando informado (credencial do LMS por curso), vira o título
-   * do card. Sem ele (credencial global da EA) usa o título genérico.
-   */
-  courseName?: string
-  description?: string
-  actionLabel?: string
-  /**
-   * Rótulo do campo de senha. A EA usa "Senha" (o valor é ressincronizado com a
-   * plataforma); provedores cuja senha nós só vimos no cadastro usam o padrão
-   * "Senha inicial".
-   */
-  senhaLabel?: string
-  /**
-   * Observação no rodapé do card. Sobrescreve o texto padrão. Aceita JSX para
-   * o rodapé poder levar uma ação (ex.: link para pedir o reenvio por e-mail).
-   */
-  footnote?: React.ReactNode
 }
 
 function CopyButton({ value, label }: { value: string; label: string }) {
@@ -71,24 +51,23 @@ function CopyButton({ value, label }: { value: string; label: string }) {
 }
 
 /**
- * Card "Seu acesso à plataforma de aulas" exibido na área do aluno após o
- * pagamento. Mostra usuário + senha inicial (mascarada, com revelar/copiar) e
- * o botão que leva direto à tela de login da plataforma.
+ * Card de acesso às aulas de UM curso, exibido na área do aluno após o
+ * pagamento. Mostra usuário + senha inicial (mascarada, com revelar/copiar) e o
+ * botão que abre as aulas.
+ *
+ * Os textos são FIXOS de propósito: o aluno tem um card por curso e todos
+ * precisam ser indistinguíveis entre si. Rótulo, descrição ou botão variando por
+ * curso revelaria como cada um é atendido nos bastidores — que é exatamente o
+ * que esta tela não deve contar. Se precisar variar algo aqui, confirme antes
+ * que a variação não decorre da origem do curso.
  */
 export function PlatformCredentialsCard({
+  courseName,
   login,
   senha,
   loginUrl,
-  platformName = "Plataforma de aulas",
-  providerLabel,
-  courseName,
-  description,
-  actionLabel = "Acessar plataforma de aulas",
-  senhaLabel = "Senha inicial",
-  footnote,
 }: Props) {
   const [show, setShow] = useState(false)
-  const title = courseName ?? platformName
 
   return (
     <section className="overflow-hidden rounded-2xl border border-[var(--color-pmb-green)]/20 bg-white p-6 text-[var(--color-pmb-green-900)] shadow-sm">
@@ -98,17 +77,16 @@ export function PlatformCredentialsCard({
         </span>
         <div>
           <p className="text-[11px] font-bold uppercase tracking-wider text-[var(--color-pmb-green)]">
-            {providerLabel ?? "Acesso às aulas"}
+            Acesso às aulas
           </p>
           <h2 className="text-lg font-semibold">
-            {title}
+            {courseName}
           </h2>
         </div>
       </div>
 
       <p className="mt-4 text-sm leading-relaxed text-gray-600">
-        {description ??
-          "Use o usuário e a senha abaixo para entrar na plataforma onde ficam as aulas deste curso."}
+        Use o usuário e a senha abaixo para assistir às aulas deste curso.
       </p>
 
       <div className="mt-5 grid gap-3 sm:grid-cols-2">
@@ -128,7 +106,7 @@ export function PlatformCredentialsCard({
         {/* Senha */}
         <div className="rounded-xl border border-gray-200 bg-gray-50 p-3">
           <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
-            <KeyRound className="h-3.5 w-3.5" /> {senhaLabel}
+            <KeyRound className="h-3.5 w-3.5" /> Senha
           </p>
           {senha ? (
             <div className="mt-1 flex items-center justify-between gap-2">
@@ -166,14 +144,14 @@ export function PlatformCredentialsCard({
           rel="noopener noreferrer"
           className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--color-pmb-green)] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[var(--color-pmb-green-700)] sm:w-auto"
         >
-          {actionLabel}
+          Acessar aulas
           <ExternalLink className="h-4 w-4" />
         </a>
       )}
 
       <p className="mt-3 text-[11px] text-gray-500">
-        {footnote ??
-          "Esta é a senha inicial. Se você alterá-la dentro da plataforma, use a nova senha — este painel mostra apenas a senha original."}
+        Esta é a senha inicial. Se você trocá-la depois de entrar, use a nova
+        senha — aqui aparece sempre a original.
       </p>
     </section>
   )

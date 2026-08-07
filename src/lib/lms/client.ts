@@ -176,7 +176,7 @@ export async function revokeLmsEnrollment(enrollmentId: string): Promise<void> {
  * cota cai no paliativo `setLmsStudentAccess` (tudo-ou-nada por aluno).
  *
  * ⛔ O LMS NAO pode implementar isto desvinculando a matricula no parceiro: na
- * Escola Avancada desvincular e revincular ZERA o progresso do aluno. A trava
+ * fornecedora EA, desvincular e revincular ZERA o progresso do aluno. A trava
  * tem que ser flag de acesso reversivel.
  */
 export async function setLmsEnrollmentLimit(

@@ -2,9 +2,9 @@ import { Button, Hr, Section, Text } from "@react-email/components"
 import { EmailLayout, styles } from "./_layout"
 import type { EmailBrand } from "../brand"
 
-/** Credenciais da plataforma de aulas (EA ou LMS) entregues no email. */
+/** Credenciais da plataforma de aulas entregues no email. */
 export interface EnrollmentSchoolAccess {
-  /** Usuário/login na plataforma de aulas (EA: ea_aluno_id; LMS: login do parceiro). */
+  /** Usuário/login do aluno na plataforma de aulas. */
   login: string
   /**
    * LGPD-012: a senha inicial NÃO é mais renderizada no e-mail (canal inseguro).
@@ -13,7 +13,7 @@ export interface EnrollmentSchoolAccess {
    * @deprecated não usar — a senha não trafega por e-mail.
    */
   password?: string | null
-  /** URL de login da plataforma (EA) ou portal do parceiro (LMS). null = acessar via área do aluno. */
+  /** Destino do botão de acesso às aulas. null = acessar via área do aluno. */
   loginUrl?: string | null
 }
 
@@ -30,8 +30,8 @@ export interface EnrollmentTemplateProps {
    */
   isNewStudent?: boolean
   /**
-   * Credenciais da Plataforma da Escola (EA ou LMS). Quando ausente, o email
-   * orienta o acesso pela área do aluno.
+   * Credenciais da Plataforma de Aulas. Quando ausente, o email orienta o
+   * acesso pela área do aluno.
    */
   school?: EnrollmentSchoolAccess | null
   /** Marca da loja/revenda (header, rodapé). Default: PMB. */
@@ -76,11 +76,9 @@ export function EnrollmentTemplate({
       </Text>
 
       <Text style={styles.paragraph}>
-        Para estudar, você usa <strong>duas plataformas</strong>: o{" "}
-        <strong>Sistema Acadêmico</strong> (a sua área do aluno, onde ficam
-        matrículas, progresso e certificados) e a{" "}
-        <strong>Plataforma da Escola</strong> (onde ficam os vídeos e as
-        atividades das aulas). Veja abaixo como entrar em cada uma.
+        Na sua <strong>área do aluno</strong> ficam matrículas, progresso e
+        certificados; na <strong>Plataforma de Aulas</strong> ficam os vídeos e
+        as atividades. Veja abaixo como entrar em cada uma.
       </Text>
 
       <Hr style={styles.hr} />
@@ -108,10 +106,12 @@ export function EnrollmentTemplate({
         </Section>
       </Section>
 
-      {/* 2) Plataforma da Escola — onde ficam as aulas (EA ou LMS) */}
+      {/* 2) Plataforma de Aulas — onde o aluno assiste. O destino do botão muda
+             conforme a origem do curso, mas o texto NÃO: o aluno não deve
+             perceber que existe mais de uma. */}
       <Section style={styles.credentialBox}>
         <Text style={styles.credentialLabel}>
-          🏫 Plataforma da Escola — onde ficam as aulas
+          🏫 Plataforma de Aulas — onde ficam as aulas
         </Text>
         {school?.login ? (
           <>
@@ -128,14 +128,14 @@ export function EnrollmentTemplate({
             {school.loginUrl ? (
               <Section style={styles.buttonRow}>
                 <Button style={styles.accentButton} href={school.loginUrl}>
-                  Acessar a plataforma de aulas
+                  Acessar aulas
                 </Button>
               </Section>
             ) : (
               <Text style={styles.credentialHint}>
                 Para assistir, entre na sua área do aluno, abra{" "}
                 <strong>{courseName}</strong> e clique em{" "}
-                <strong>acessar a plataforma de aulas</strong>.
+                <strong>Acessar aulas</strong>.
               </Text>
             )}
           </>
@@ -146,10 +146,10 @@ export function EnrollmentTemplate({
             </Text>
             <Text style={styles.step}>
               2. Abra <strong>{courseName}</strong> e clique em{" "}
-              <strong>acessar a plataforma de aulas</strong>.
+              <strong>Acessar aulas</strong>.
             </Text>
             <Text style={styles.step}>
-              3. É na plataforma de aulas que ficam os vídeos e as atividades —
+              3. É na Plataforma de Aulas que ficam os vídeos e as atividades —
               seu progresso volta para a área do aluno.
             </Text>
           </>
@@ -172,7 +172,7 @@ EnrollmentTemplate.PreviewProps = {
   school: {
     login: "12345",
     password: "mrmc3112",
-    loginUrl: "https://playcurso.com/bolsamaisbrasil/metodo/login.php",
+    loginUrl: "https://exemplo.com/aulas/login",
   },
   brand: {
     name: "Cursos Pro João",

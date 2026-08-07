@@ -425,7 +425,7 @@ export interface PlatformPasswordChangeResult {
  * copia criptografada do nosso banco (exibida na area do aluno) com o valor que
  * REALMENTE vale la.
  *
- * ⚠️ A API v2 da Escola Avancada NAO expoe troca de senha de aluno. O campo
+ * ⚠️ A API v2 da fornecedora EA NAO expoe troca de senha de aluno. O campo
  * `senha` so existe em `funcionarios/novo`; `usuarios/novo` gera a senha e
  * `usuarios/editar` nao tem esse campo — manda-lo faz a EA DESCARTAR o
  * parametro em silencio e ainda responder "Aluno editado com sucesso!".

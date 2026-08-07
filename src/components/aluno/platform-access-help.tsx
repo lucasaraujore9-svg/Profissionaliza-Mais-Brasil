@@ -9,7 +9,7 @@ import { KeyRound, Mail, ArrowRight } from "lucide-react"
  * exibido no perfil do aluno.
  *
  * Substituiu o antigo formulário de "redefinir senha da plataforma": a API da
- * Escola Avançada não permite trocar a senha do aluno (`usuarios/editar` não tem
+ * fornecedora EA não permite trocar a senha do aluno (`usuarios/editar` não tem
  * o campo `senha`), então aquele formulário sempre respondia "sucesso" sem
  * mudar nada — e ainda gravava no nosso banco uma senha inexistente, quebrando a
  * única via de acesso que funcionava.

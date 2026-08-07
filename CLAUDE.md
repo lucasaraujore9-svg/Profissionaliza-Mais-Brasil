@@ -53,7 +53,7 @@ SUPER_ADMIN primario agora e `super@pmb.com.br` / `super123`. Matriz completa em
 
 ### Nova fornecedora LMS (2026-06-19, branch `feat/lms-provider`)
 
-Segunda fornecedora de cursos: LMS proprio em `https://lms.bmbr.com.br` (API M2M REST JSON `/api/v1`, Bearer `LMS_API_KEY`). **Aditiva** — EA legada intacta. O LMS provisiona nos parceiros por baixo (PMB → LMS → EA); financeiro 100% no PMB.
+Segunda fornecedora de cursos: LMS proprio (host em `LMS_API_URL`; API M2M REST JSON `/api/v1`, Bearer `LMS_API_KEY`). **Aditiva** — EA legada intacta. O LMS provisiona nos parceiros por baixo (PMB → LMS → EA); financeiro 100% no PMB.
 
 - **Discriminador:** `Course.provider` (enum `EA`|`LMS`, default EA). `Course.lmsCourseId` (UUID/cuid, chave de match do sync) + `lmsSlug`. `nome` deixou de ser unique global → `@@unique([provider, nome])` (ripple corrigido em `sync.ts` + `seed.ts`). `Enrollment.lmsEnrollmentId`, `Student.lmsStudentId`, `SystemSettings.lmsDayUpdateCursor`. Migration idempotente `prisma/migrations/20260619_lms_provider`.
 - **Client:** `src/lib/lms/` (config/errors/types/client) — wrappers tipados de todos os endpoints, retry/timeout no padrao EA.

@@ -12,7 +12,7 @@ describe("EnrollmentTemplate", () => {
   it("aluno novo: confirma matrícula e explica a plataforma de aulas", async () => {
     const html = await render(EnrollmentTemplate({ ...baseProps, isNewStudent: true }))
     expect(html).toContain("Tudo certo")
-    expect(html).toContain("plataforma de aulas")
+    expect(html).toMatch(/plataforma de aulas/i)
     expect(html).not.toContain("Novo curso liberado")
   })
 
@@ -28,14 +28,16 @@ describe("EnrollmentTemplate", () => {
     expect(html).toContain("Tudo certo")
   })
 
-  it("explica as 2 plataformas e mostra o login do Sistema Acadêmico", async () => {
+  it("mostra a área do aluno e a Plataforma de Aulas, sem nomear fornecedora", async () => {
     const html = await render(
       EnrollmentTemplate({ ...baseProps, studentEmail: "maria@email.com" }),
     )
     expect(html).toContain("Sistema Acadêmico")
-    expect(html).toContain("Plataforma da Escola")
+    expect(html).toContain("Plataforma de Aulas")
     // Login do Sistema Acadêmico (área do aluno) = e-mail do aluno.
     expect(html).toContain("maria@email.com")
+    // O aluno não deve saber que os cursos vêm de fornecedoras diferentes.
+    expect(html).not.toMatch(/Escola Avan|Plataforma da Escola|\bLMS\b|parceir/i)
   })
 
   it("com credenciais da escola: exibe usuário e link, mas NUNCA a senha (LGPD-012)", async () => {
@@ -45,7 +47,7 @@ describe("EnrollmentTemplate", () => {
         school: {
           login: "98765",
           password: "abc12345",
-          loginUrl: "https://playcurso.com/login.php",
+          loginUrl: "https://exemplo.com/aulas/login",
         },
       }),
     )
@@ -54,13 +56,13 @@ describe("EnrollmentTemplate", () => {
     expect(html).not.toContain("abc12345")
     // Orienta o aluno a obter a senha na área do aluno.
     expect(html).toContain("área do aluno")
-    expect(html).toContain("Acessar a plataforma de aulas")
-    expect(html).toContain("https://playcurso.com/login.php")
+    expect(html).toContain("Acessar aulas")
+    expect(html).toContain("https://exemplo.com/aulas/login")
   })
 
   it("sem credenciais da escola: orienta acesso pela área do aluno e não vaza senha", async () => {
     const html = await render(EnrollmentTemplate({ ...baseProps, school: null }))
-    expect(html).toContain("acessar a plataforma de aulas")
+    expect(html).toContain("Acessar aulas")
     // Sem bloco de credenciais não há senha inventada no corpo.
     expect(html).not.toContain("Usuário:")
   })

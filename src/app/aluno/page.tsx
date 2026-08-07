@@ -1,11 +1,8 @@
 import Link from "next/link"
 import { prisma } from "@/lib/prisma"
 import { requireStudentSession } from "@/lib/auth/student-session"
-import {
-  getStudentPlatformCredentials,
-  getStudentPlatformLoginUrl,
-} from "@/lib/students/platform-credentials"
-import { getLmsEnrollmentCredentials } from "@/lib/students/lms-credentials"
+import { getStudentPlatformLoginUrl } from "@/lib/students/platform-credentials"
+import { getCourseAccessCards } from "@/lib/students/course-access"
 import { PlatformCredentialsCard } from "@/components/aluno/platform-credentials-card"
 import { PaymentCheckButton } from "@/components/aluno/payment-check-button"
 import { PayPendingButton } from "@/components/aluno/pay-pending-button"
@@ -18,7 +15,6 @@ import {
   GraduationCap,
   HelpCircle,
   MonitorPlay,
-  ShieldCheck,
   ShoppingBag,
 } from "lucide-react"
 
@@ -37,7 +33,7 @@ export default async function StudentDashboardPage() {
   const session = await requireStudentSession()
   if (!session) return null
 
-  const [enrollments, payments, platformCredentials, lmsCredentials] =
+  const [enrollments, payments, courseAccess] =
     await Promise.all([
       prisma.enrollment.findMany({
         where: { studentId: session.studentId },
@@ -61,10 +57,9 @@ export default async function StudentDashboardPage() {
         take: 5,
         include: { enrollment: { include: { course: { select: { nome: true } } } } },
       }),
-      getStudentPlatformCredentials(session.studentId),
-      // Credenciais do LMS por curso (proprio do LMS ou parceiro). Ja filtra por
-      // matricula paga e so retorna quando ha credencial gravada.
-      getLmsEnrollmentCredentials(session.studentId),
+      // Um cartao de acesso por curso, ja achatado e sem nada que denuncie de
+      // onde o curso vem. Filtra por matricula paga la dentro.
+      getCourseAccessCards(session.studentId),
     ])
 
   const activeEnrollments = enrollments.filter(
@@ -74,18 +69,15 @@ export default async function StudentDashboardPage() {
   const pendingEnrollments = enrollments.filter((e) => e.status === "PENDING")
   const totalPaid = payments.reduce((sum, p) => sum + Number(p.amount), 0)
   const hasNoEnrollments = enrollments.length === 0
-  const hasPlatformAccess = Boolean(platformCredentials) || lmsCredentials.length > 0
+  const hasPlatformAccess = courseAccess.length > 0
   const continueEnrollment = activeEnrollments[0] ?? null
 
-  // URL da plataforma de aulas (env EA_STUDENT_LOGIN_URL com fallback playcurso).
-  const plataformaLoginUrl = getStudentPlatformLoginUrl()
-
-  // Link "continuar estudando": curso LMS abre via SSO do nosso backend; curso
-  // EA abre o login da plataforma legada.
+  // Destino do "continuar estudando". A ramificacao por origem do curso acontece
+  // AQUI, no servidor: o client recebe so o href resultante.
   const continueHref = continueEnrollment
     ? continueEnrollment.course.provider === "LMS"
       ? `/api/aluno/curso/${continueEnrollment.id}/acessar`
-      : plataformaLoginUrl
+      : getStudentPlatformLoginUrl()
     : null
 
   const firstName = session.name?.split(" ")[0] ?? "aluno"
@@ -99,7 +91,7 @@ export default async function StudentDashboardPage() {
         <p className="mt-1 text-sm text-gray-600">
           {hasNoEnrollments
             ? "Vamos começar? Escolha um curso e comece a estudar hoje mesmo."
-            : "Esta é a sua plataforma acadêmica: acompanhe cursos, pagamentos e certificados aqui — e acesse a plataforma de aulas para assistir aos vídeos."}
+            : "Acompanhe seus cursos, pagamentos e certificados por aqui — e acesse suas aulas quando quiser."}
         </p>
       </header>
 
@@ -139,121 +131,50 @@ export default async function StudentDashboardPage() {
 
       {hasPlatformAccess && (
         <section className="space-y-4">
-          <div>
-            <h2 className="text-lg font-semibold text-[var(--color-pmb-green-900)]">
-              Suas 2 plataformas
-            </h2>
-            <p className="mt-1 text-sm text-gray-600">
-              A área do aluno organiza sua vida acadêmica; as aulas ficam na
-              plataforma indicada em cada curso.
-            </p>
-          </div>
-
-          <div className="grid gap-4 lg:grid-cols-2">
-            <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-              <div className="flex items-center gap-3">
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--color-pmb-lime-50)] text-[var(--color-pmb-green)]">
-                  <ShieldCheck className="h-5 w-5" />
-                </span>
-                <div>
-                  <p className="text-[11px] font-bold uppercase tracking-wide text-gray-500">
-                    Plataforma 1
-                  </p>
-                  <h3 className="font-semibold text-[var(--color-pmb-green-900)]">
-                    Área do aluno PMB
-                  </h3>
-                </div>
-              </div>
-              <p className="mt-3 text-sm text-gray-600">
-                Matrículas, pagamentos, progresso, suporte e certificados ficam
-                nesta área.
-              </p>
-              <Link
-                href="/aluno/cursos"
-                className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-[var(--color-pmb-green)] hover:underline"
-              >
-                Ver meus cursos
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-            </div>
-
-            <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-              <div className="flex items-center gap-3">
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-700">
-                  <MonitorPlay className="h-5 w-5" />
-                </span>
-                <div>
-                  <p className="text-[11px] font-bold uppercase tracking-wide text-gray-500">
-                    Plataforma 2
-                  </p>
-                  <h3 className="font-semibold text-[var(--color-pmb-green-900)]">
-                    Plataforma de aulas
-                  </h3>
-                </div>
-              </div>
-              <p className="mt-3 text-sm text-gray-600">
-                Cada curso informa abaixo se usa Escola Avançada, LMS próprio
-                ou portal parceiro, com usuário e senha correspondentes.
+          <div className="flex items-center gap-3">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-700">
+              <MonitorPlay className="h-5 w-5" />
+            </span>
+            <div>
+              <h2 className="text-lg font-semibold text-[var(--color-pmb-green-900)]">
+                Plataforma de Aulas
+              </h2>
+              <p className="mt-0.5 text-sm text-gray-600">
+                Seus acessos para assistir às aulas.
               </p>
             </div>
           </div>
 
+          {/* Um cartão por curso, todos com o MESMO formato. Diferenciar o
+              cartão por curso denunciaria como cada um é atendido — é por isso
+              que rótulo, descrição e botão são fixos aqui. */}
           <div className="grid gap-4 xl:grid-cols-2">
-            {platformCredentials && (
+            {courseAccess.map((c) => (
               <PlatformCredentialsCard
-                platformName="Escola Avançada"
-                providerLabel="Aulas EA"
-                description="Use estas credenciais para entrar nos cursos atendidos pela Escola Avançada."
-                actionLabel="Acessar EA"
-                login={platformCredentials.login}
-                senha={platformCredentials.senha}
-                loginUrl={plataformaLoginUrl}
-                senhaLabel="Senha"
-                // A tela de login da EA não recupera senha por e-mail (o
-                // "Esqueci minha senha" de lá abre atendimento). Então este card
-                // é a via rápida: mostra a senha e leva para o reenvio.
-                //
-                // O texto NÃO afirma "a senha é esta": esta página lê o retrato
-                // cifrado (`getStudentPlatformCredentials`) sem consultar a EA,
-                // então o valor pode estar defasado. Quem confere de verdade é
-                // /api/aluno/credenciais-plataforma, que ressincroniza antes de
-                // mandar o e-mail — e é para lá que o link leva.
-                footnote={
-                  <>
-                    Esqueceu a senha? Normalmente é esta. Se não funcionar,{" "}
-                    <Link
-                      href="/aluno/perfil"
-                      className="font-semibold text-[var(--color-pmb-green)] underline underline-offset-2"
-                    >
-                      peça os dados de acesso por e-mail
-                    </Link>{" "}
-                    — conferimos na plataforma de aulas antes de enviar.
-                  </>
-                }
+                key={c.enrollmentId}
+                courseName={c.courseName}
+                login={c.login}
+                senha={c.senha}
+                loginUrl={c.accessUrl}
               />
-            )}
-
-            {lmsCredentials.map((c) => {
-              const isOwnLms = c.origin === "own" || c.playback === "local"
-              return (
-                <PlatformCredentialsCard
-                  key={c.enrollmentId}
-                  platformName={isOwnLms ? "LMS próprio" : "Portal parceiro"}
-                  providerLabel={isOwnLms ? "Aulas LMS próprio" : "Aulas LMS parceiro"}
-                  courseName={c.courseNome}
-                  description={
-                    isOwnLms
-                      ? "Use estas credenciais para entrar no LMS próprio. O botão também libera o acesso por SSO."
-                      : "Use estas credenciais no portal parceiro indicado para este curso."
-                  }
-                  actionLabel={isOwnLms ? "Acessar LMS" : "Acessar portal"}
-                  login={c.login}
-                  senha={c.senha}
-                  loginUrl={c.portalUrl ?? `/api/aluno/curso/${c.enrollmentId}/acessar`}
-                />
-              )
-            })}
+            ))}
           </div>
+
+          {/* A senha mostrada acima é um retrato gravado na compra, que pode
+              estar defasado. Quem confere de verdade é
+              /api/aluno/credenciais-plataforma (ressincroniza antes de enviar),
+              e é para lá que este link leva. Fica fora do cartão porque vale
+              para a seção inteira. */}
+          <p className="text-xs text-gray-500">
+            Não consegue entrar?{" "}
+            <Link
+              href="/aluno/perfil"
+              className="font-semibold text-[var(--color-pmb-green)] underline underline-offset-2"
+            >
+              Peça os dados de acesso por e-mail
+            </Link>{" "}
+            — conferimos antes de enviar.
+          </p>
         </section>
       )}
 

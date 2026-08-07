@@ -127,7 +127,7 @@ const envSchema = z.object({
   ASAAS_API_URL: requiredInProd(z.string().url()),
   ASAAS_API_KEY: requiredInProd(z.string().min(1)),
 
-  // LMS (2ª fornecedora — lms.bmbr.com.br). Opcionais: a feature pode estar
+  // LMS (2ª fornecedora). Opcionais: a feature pode estar
   // desligada. Quando ligada, faltar a chave quebraria o provisionamento em
   // runtime — assertEnv() emite warning não-fatal em prod (COD-001).
   LMS_API_URL: optionalUrl(),

@@ -21,10 +21,10 @@ export const maxDuration = 30
 /**
  * Reenvia ao próprio aluno os dados de acesso à plataforma de aulas.
  *
- * Existe porque a plataforma de aulas (Escola Avançada) não tem recuperação de
- * senha automatizada: o "Esqueci minha senha" da tela de login dela abre um
- * atendimento por WhatsApp do fornecedor, e a API v2 não expõe troca de senha
- * de aluno. A recuperação self-service é nossa.
+ * Existe porque a plataforma de aulas não tem recuperação de senha automatizada:
+ * o "Esqueci minha senha" da tela de login dela abre um atendimento por WhatsApp
+ * do fornecedor, e a API dele não expõe troca de senha de aluno. A recuperação
+ * self-service é nossa.
  *
  * O que faz:
  *  1. Ressincroniza o snapshot cifrado com a senha que REALMENTE vale na EA —

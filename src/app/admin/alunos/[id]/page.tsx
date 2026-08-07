@@ -29,7 +29,12 @@ export default async function AdminStudentDetailPage({ params }: PageProps) {
   const session = await requireAdminPage("alunosRede.view")
 
   const { id } = await params
-  const student = await loadStudentDetail({ studentId: id })
+  // Sistema mãe: é quem opera as integrações, então recebe o marcador de origem
+  // do curso. O painel da unidade não passa esta flag — ver loadStudentDetail.
+  const student = await loadStudentDetail({
+    studentId: id,
+    includeProviderOrigin: true,
+  })
   if (!student) notFound()
 
   return (

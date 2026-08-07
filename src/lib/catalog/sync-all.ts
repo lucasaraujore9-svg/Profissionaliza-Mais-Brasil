@@ -23,7 +23,7 @@ export interface MultiSyncResult {
 }
 
 /**
- * Sincroniza o catálogo de TODAS as fornecedoras (Escola Avançada + LMS) e
+ * Sincroniza o catálogo de TODAS as fornecedoras (EA + LMS) e
  * agrega o resultado. Tolerante a falha parcial: se uma plataforma falha, a
  * outra ainda é aplicada e o erro vai em `errors` (o caller decide o status).
  * O LMS é pulado quando não há credenciais configuradas (`isLmsConfigured`).

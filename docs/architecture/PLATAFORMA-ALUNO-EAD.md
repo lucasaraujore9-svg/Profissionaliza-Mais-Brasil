@@ -22,7 +22,7 @@
 
 Hoje o sistema é **vitrine + checkout + CRM de alunos + orquestrador de acesso + certificador**.
 Toda a **pedagogia** (assistir aula, vídeo, material, avaliação, progresso real) acontece **fora**,
-na plataforma parceira (EA), via `usuarios/novo` + `usuarios/vinculocurso` + login externo em `playcurso.com`.
+na plataforma parceira (EA), via `usuarios/novo` + `usuarios/vinculocurso` + login externo no host da fornecedora (`EA_STUDENT_LOGIN_URL`).
 
 | Camada | Existe hoje? | Onde |
 |---|---|---|

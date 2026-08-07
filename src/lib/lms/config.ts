@@ -1,5 +1,5 @@
 /**
- * Configuracao do client da nova fornecedora de cursos (LMS lms.bmbr.com.br).
+ * Configuracao do client da fornecedora de cursos propria (LMS).
  *
  * API M2M REST JSON em /api/v1, autenticada por `Authorization: Bearer <LMS_API_KEY>`.
  * Diferente da EA (form-data PHP em src/lib/plataforma-cursos), o LMS e ele

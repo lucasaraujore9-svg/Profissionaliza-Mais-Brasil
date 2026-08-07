@@ -66,13 +66,17 @@ const PROGRESS_STATUS_LABEL: Record<string, string> = {
   AGUARDANDO: "Aguardando início",
 }
 
-// Mensagens amigáveis para a falha de acesso ao curso LMS (FE-005). A rota
+// Mensagens amigáveis para a falha de abrir as aulas (FE-005). A rota
 // /api/aluno/curso/[id]/acessar redireciona para cá com ?erro=<code> quando não
 // consegue abrir o curso, em vez de responder JSON cru.
+//
+// Os CÓDIGOS aparecem na barra de endereço do aluno — mantenha-os genéricos.
+// Um código que nomeie o caminho interno (ex.: "parceiro") entrega ali o que a
+// tela toda foi escrita para não contar.
 const ACCESS_ERROR_MESSAGE: Record<string, string> = {
   indisponivel: "Este curso não está disponível para acesso no momento.",
-  parceiro:
-    "O acesso ao parceiro está indisponível agora. Fale com o suporte se persistir.",
+  sem_acesso:
+    "Não foi possível abrir as aulas deste curso agora. Fale com o suporte se persistir.",
   falha:
     "Não foi possível abrir o curso agora. Tente novamente em instantes.",
   cota:
@@ -147,7 +151,7 @@ export default async function StudentCoursesPage({
     )
   }
 
-  // URL da plataforma de aulas (env EA_STUDENT_LOGIN_URL com fallback playcurso).
+  // Tela de login das aulas (env EA_STUDENT_LOGIN_URL, com fallback embutido).
   const plataformaLoginUrl = getStudentPlatformLoginUrl()
 
   return (
@@ -355,8 +359,11 @@ export default async function StudentCoursesPage({
                     data-tour="aluno-cursos:acessar"
                   >
                     {/* CTA PRIMÁRIO destacado para a ação mais importante.
-                        Curso LMS: SSO de uso único pelo nosso backend (sem
-                        login/senha). Curso EA: link da plataforma legada. */}
+                        O destino muda conforme a origem do curso (SSO de uso
+                        único pelo nosso backend x link de login), mas RÓTULO e
+                        comportamento do botão são idênticos de propósito: um
+                        "Acessar curso" aqui e um "Acessar aulas" ali diriam ao
+                        aluno que os cursos vêm de lugares diferentes. */}
                     {isActive && paceBlocked ? (
                       // Cota atingida: o botão de assistir dá lugar ao de pagar.
                       // Manter "Acessar" levaria o aluno a uma porta fechada.
@@ -370,9 +377,11 @@ export default async function StudentCoursesPage({
                     ) : isActive && e.course.provider === "LMS" ? (
                       <a
                         href={`/api/aluno/curso/${e.id}/acessar`}
+                        target="_blank"
+                        rel="noopener noreferrer"
                         className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--color-pmb-green)] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[var(--color-pmb-green-700)]"
                       >
-                        Acessar curso
+                        Acessar aulas
                         <ExternalLink className="h-4 w-4" />
                       </a>
                     ) : isActive && plataformaLoginUrl ? (

@@ -340,7 +340,7 @@ export const POST = withRequestContext(
       // curso desativado/removido na origem (EA/LMS → status="INATIVO") não pode
       // ser vendido nem via POST direto, mesmo que o revendedor tenha mantido
       // TenantCourse.isVisible=true (a visibilidade é flag independente). Evita
-      // gerar matrícula cujo provisionamento na plataforma parceira falharia.
+      // gerar matrícula cujo provisionamento na plataforma de aulas falharia.
       const inativo = tenantCourses.find((tc) => tc.course.status !== "ATIVO")
       if (inativo) {
         return NextResponse.json(

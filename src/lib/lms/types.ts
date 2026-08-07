@@ -1,5 +1,5 @@
 /**
- * Tipos da API do LMS (lms.bmbr.com.br/api/v1). Datas em ISO-8601 (UTC).
+ * Tipos da API do LMS (/api/v1). Datas em ISO-8601 (UTC).
  * Sucesso: { data: ... }. Erro: { error: "mensagem" } com status HTTP.
  */
 

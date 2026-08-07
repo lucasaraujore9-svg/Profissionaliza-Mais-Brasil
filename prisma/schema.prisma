@@ -614,9 +614,9 @@ model StudentNote {
 // CURSOS (sincronizados da plataforma de aulas)
 // ============================================================
 
-// Fornecedora de origem do curso. EA = Escola Avancada (integracao legada
-// form-data PHP em src/lib/plataforma-cursos). LMS = nova fornecedora propria
-// (lms.bmbr.com.br, API REST JSON em src/lib/lms). A fornecedora define o canal
+// Fornecedora de origem do curso. EA = fornecedora legada (integracao
+// form-data PHP em src/lib/plataforma-cursos). LMS = fornecedora propria
+// (API REST JSON em src/lib/lms). A fornecedora define o canal
 // de provisionamento, acesso e sincronizacao de progresso — a vitrine/checkout
 // sao agnosticos de provider. Cursos existentes nascem EA (default).
 enum CourseProvider {

@@ -68,7 +68,7 @@ export async function GET(
     if (portalUrl) {
       return NextResponse.redirect(portalUrl)
     }
-    return errorRedirect("parceiro")
+    return errorRedirect("sem_acesso")
   }
 
   try {
