@@ -108,6 +108,17 @@ select cron.schedule('pmb-sweep-boleto-installments', '30 7 * * *',
 select cron.schedule('pmb-ensure-domain-certs', '0 9 * * *',
   $$ select app_internal.run_cron('/api/cron/ensure-domain-certs') $$);
 
+-- ── Saude das sessoes de WhatsApp (automacao) ───────────────────────────────
+-- A sessao morre no engine sem avisar ninguem e o painel seguia mostrando
+-- "conectado" (o snapshot wa_status so era reescrito quando alguem abria a tela
+-- de conexao). Em 2026-08-07, 26 das 45 unidades ditas conectadas estavam FAILED
+-- — automacao parada em silencio, sem uma mensagem sequer.
+-- Confere cada sessao contra o engine, religa o que da (worker caido com
+-- credencial valida) e AVISA a unidade quando so o QR resolve. Idempotente: o
+-- aviso tem cooldown de 24h. 3x ao dia (08:20 / 14:20 / 20:20 UTC).
+select cron.schedule('pmb-check-wa-sessions', '20 8,14,20 * * *',
+  $$ select app_internal.run_cron('/api/cron/check-wa-sessions') $$);
+
 -- ── Webhook do Asaas nas contas das UNIDADES ────────────────────────────────
 -- No Asaas o webhook e da CONTA (notificationUrl na cobranca e ignorado). Enquanto
 -- o cadastro dependeu da unidade, nenhuma conta de revenda notificou uma unica vez:

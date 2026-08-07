@@ -8,9 +8,10 @@ import {
   isPushSupported,
   getPushPermissionState,
   subscribeToPush,
+  syncExistingSubscription,
 } from "@/lib/notifications/push-client"
 
-// Banner suave de opt-in de notificações para VISITANTES do site público.
+// Banner suave de opt-in de notificações.
 // Estratégia: nunca dispara o prompt nativo automaticamente (Chrome/Safari
 // bloqueiam e iOS exige gesto). Mostramos um convite discreto e só ao clicar
 // em "Ativar" pedimos a permissão de fato — padrão recomendado, mais confiável
@@ -18,14 +19,31 @@ import {
 
 const SNOOZE_KEY = "pmb_push_prompt_v1"
 const COOKIE_CONSENT_KEY = "pmb_cookie_consent_v1"
-// Reaparece após este intervalo se o visitante apenas dispensou (sem decidir).
+// Reaparece após este intervalo se a pessoa apenas dispensou (sem decidir).
 const SNOOZE_MS = 1000 * 60 * 60 * 24 * 7 // 7 dias
 // Espera após o consent de cookies para não empilhar dois banners.
 const SHOW_DELAY_MS = 3500
+// Nas áreas logadas não há banner de cookies para esperar: mostra mais rápido.
+const SHOW_DELAY_LOGGED_MS = 1500
+// Marca de rebind já feito nesta aba — evita um POST por navegação.
+const SYNC_FLAG = "pmb_push_synced_v1"
 
-// Áreas logadas/privadas têm seu próprio fluxo (sino de notificações,
-// painel de dispositivos) — o banner público não aparece nelas.
-const SUPPRESSED_PREFIXES = ["/admin", "/painel", "/aluno", "/login", "/cadastro", "/recuperar-senha", "/checkout"]
+// Onde o convite NUNCA aparece: telas de autenticação (a pessoa está no meio de
+// uma tarefa curta) e o checkout (nada pode competir com a compra).
+const SUPPRESSED_PREFIXES = [
+  "/login",
+  "/cadastro",
+  "/recuperar-senha",
+  "/checkout",
+]
+
+// Áreas logadas. O banner PRECISA aparecer aqui: é o dono da unidade e a equipe
+// que recebem alerta de venda, lead e mensalidade. Antes estavam na lista de
+// supressão, "porque a área logada tem seu próprio fluxo" — só que esse fluxo
+// era uma aba escondida em Comunicação → Dispositivos, que quase ninguém achava.
+// Resultado medido em produção: de 77 pessoas com notificação em 7 dias, só 18
+// tinham assinatura de push. As outras 59 nunca foram convidadas.
+const LOGGED_PREFIXES = ["/admin", "/painel", "/aluno"]
 
 function isSnoozed(): boolean {
   try {
@@ -61,6 +79,22 @@ export function PushPrompt() {
   const [busy, setBusy] = useState(false)
 
   const suppressed = SUPPRESSED_PREFIXES.some((p) => pathname?.startsWith(p))
+  const logged = LOGGED_PREFIXES.some((p) => pathname?.startsWith(p))
+
+  // Rebind silencioso: roda em QUALQUER rota (inclusive as suprimidas) porque
+  // não mostra nada nem pede permissão — só reapresenta ao servidor a assinatura
+  // que o navegador já tem, para que ela passe a pertencer a quem está logado.
+  useEffect(() => {
+    if (!isPushSupported()) return
+    if (getPushPermissionState() !== "granted") return
+    try {
+      if (window.sessionStorage.getItem(SYNC_FLAG)) return
+      window.sessionStorage.setItem(SYNC_FLAG, "1")
+    } catch {
+      /* storage bloqueado — segue e sincroniza mesmo assim */
+    }
+    void syncExistingSubscription()
+  }, [pathname])
 
   useEffect(() => {
     if (suppressed) return
@@ -72,19 +106,23 @@ export function PushPrompt() {
     let cancelled = false
 
     const scheduleShow = () => {
-      showTimer = setTimeout(() => {
-        // revalida no momento de exibir (estado pode ter mudado)
-        if (
-          !cancelled &&
-          getPushPermissionState() === "default" &&
-          !isSnoozed()
-        ) {
-          setVisible(true)
-        }
-      }, SHOW_DELAY_MS)
+      showTimer = setTimeout(
+        () => {
+          // revalida no momento de exibir (estado pode ter mudado)
+          if (
+            !cancelled &&
+            getPushPermissionState() === "default" &&
+            !isSnoozed()
+          ) {
+            setVisible(true)
+          }
+        },
+        logged ? SHOW_DELAY_LOGGED_MS : SHOW_DELAY_MS,
+      )
     }
 
-    if (cookieConsentDecided()) {
+    // Na área logada não existe banner de cookies competindo por espaço.
+    if (logged || cookieConsentDecided()) {
       scheduleShow()
       return () => {
         cancelled = true
@@ -105,7 +143,7 @@ export function PushPrompt() {
       if (showTimer) clearTimeout(showTimer)
       window.removeEventListener("pmb-consent-changed", onConsent)
     }
-  }, [suppressed, pathname])
+  }, [suppressed, logged, pathname])
 
   async function handleEnable() {
     if (busy) return
@@ -113,7 +151,11 @@ export function PushPrompt() {
     try {
       const result = await subscribeToPush()
       if (result === "granted") {
-        toast.success("Notificações ativadas! Você vai receber nossas novidades.")
+        toast.success(
+          logged
+            ? "Notificações ativadas! Você será avisado neste aparelho."
+            : "Notificações ativadas! Você vai receber nossas novidades.",
+        )
       } else if (result === "denied") {
         toast.info(
           "Notificações bloqueadas. Você pode liberar depois nas configurações do navegador.",
@@ -149,11 +191,14 @@ export function PushPrompt() {
           </span>
           <div>
             <p className="text-sm font-bold text-[var(--color-pmb-green-900)]">
-              Quer receber novidades?
+              {logged
+                ? "Quer ser avisado na hora?"
+                : "Quer receber novidades?"}
             </p>
             <p className="mt-1 text-[13px] leading-relaxed text-gray-600">
-              Ative as notificações e seja o primeiro a saber de novos cursos,
-              promoções e descontos exclusivos — direto no seu navegador.
+              {logged
+                ? "Ative as notificações e receba neste aparelho os avisos de nova venda, novo lead e vencimento de mensalidade — mesmo com o painel fechado."
+                : "Ative as notificações e seja o primeiro a saber de novos cursos, promoções e descontos exclusivos — direto no seu navegador."}
             </p>
           </div>
         </div>

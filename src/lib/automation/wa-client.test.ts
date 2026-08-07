@@ -9,7 +9,11 @@ vi.mock("@/lib/logger", () => ({
   contextLogger: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }),
 }))
 
-import { sendTextMessage, WhatsAppNumberNotFoundError } from "./wa-client"
+import {
+  ensureSessionWorking,
+  sendTextMessage,
+  WhatsAppNumberNotFoundError,
+} from "./wa-client"
 
 function jsonRes(status: number, body: unknown): Response {
   return {
@@ -113,5 +117,91 @@ describe("wa-client.sendTextMessage — retry em falha transitória (API-008)", 
       sendTextMessage({ sessionName: "s1", toPhone: "+5511999999999", body: "oi" }),
     ).rejects.toBeInstanceOf(WhatsAppNumberNotFoundError)
     expect(sendCalls).toBe(0)
+  })
+})
+
+// A sessão cai sozinha no engine (restart do servidor, queda no celular) e o
+// snapshot `waStatus` do banco continua dizendo WORKING. Era a 2ª maior causa de
+// falha de disparo em produção: 16 registros de "Engine rejeitou envio (422):
+// Session status is not as expected ... status: FAILED".
+describe("wa-client — sessão caída no engine (422) é ressuscitada", () => {
+  // Engine roteado por estado: `sessionState` controla o que /api/sessions/{n}
+  // responde e o que /api/sendText aceita.
+  function wireEngine(initialState: string) {
+    const calls = { send: 0, start: 0, status: 0 }
+    let sessionState = initialState
+
+    fetchMock.mockImplementation(async (url: string) => {
+      const u = String(url)
+
+      if (u.includes("/api/contacts/check-exists")) {
+        return jsonRes(200, { numberExists: true, chatId: "5511999999999@c.us" })
+      }
+      if (u.includes("/api/sessions/start")) {
+        calls.start++
+        sessionState = "WORKING" // credenciais salvas → volta sozinha
+        return jsonRes(200, { status: "WORKING" })
+      }
+      if (u.includes("/auth/qr")) {
+        return jsonRes(200, { data: "x".repeat(120), mimetype: "image/png" })
+      }
+      if (u.includes("/api/sendText")) {
+        calls.send++
+        if (sessionState !== "WORKING") {
+          return jsonRes(422, {
+            error:
+              "Session status is not as expected. Try again later or restart the session",
+            status: sessionState,
+            expected: ["WORKING"],
+          })
+        }
+        return jsonRes(200, { id: "msg-ok" })
+      }
+      // GET /api/sessions/{name} — consulta de estado (depois de start/stop).
+      if (u.includes("/api/sessions/")) {
+        calls.status++
+        return jsonRes(200, {
+          status: sessionState,
+          me: { phone: "5511888888888" },
+        })
+      }
+      throw new Error(`unexpected url ${u}`)
+    })
+
+    return calls
+  }
+
+  it("422 de sessão caída → religa a sessão e reenvia (entrega)", async () => {
+    const calls = wireEngine("FAILED")
+
+    const out = await sendTextMessage({
+      sessionName: "s1",
+      toPhone: "+5511999999999",
+      body: "oi",
+    })
+
+    expect(out.engineMessageId).toBe("msg-ok")
+    expect(calls.start).toBe(1) // ressuscitou
+    expect(calls.send).toBe(2) // 1 recusado + 1 depois de religar
+  })
+
+  it("ensureSessionWorking devolve WORKING após reiniciar sessão caída", async () => {
+    const calls = wireEngine("DISCONNECTED")
+
+    const live = await ensureSessionWorking("s1")
+
+    expect(live.status).toBe("WORKING")
+    expect(calls.start).toBe(1)
+  })
+
+  it("SCAN_QR_CODE não é ressuscitável — não tenta reiniciar", async () => {
+    // Credenciais perdidas: só o dono resolve, escaneando o QR. Reiniciar aqui
+    // só geraria carga inútil no engine.
+    const calls = wireEngine("SCAN_QR_CODE")
+
+    const live = await ensureSessionWorking("s1")
+
+    expect(live.status).toBe("SCAN_QR_CODE")
+    expect(calls.start).toBe(0)
   })
 })

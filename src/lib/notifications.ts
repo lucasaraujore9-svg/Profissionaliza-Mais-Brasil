@@ -122,6 +122,9 @@ export type NotificationConfigTarget = "TENANT" | "STUDENT" | "ADMIN"
 const CATEGORY_PERMISSION: Record<string, PainelPermission> = {
   "tenant-billing": "cobrancas.view",
   referral: "indicacoes.view",
+  // Aviso de WhatsApp desconectado: só faz sentido para quem alcança a tela de
+  // Automação — é lá que se reconecta.
+  automacao: "automacao.view",
 }
 
 function audienceToConfigTarget(
@@ -375,15 +378,19 @@ export async function createNotification(
           href: input.href ?? null,
         })),
       })
-      // push em paralelo (best-effort, nao bloqueia)
-      void sendPushToUsers(filteredUserIds, {
-        title: input.title,
-        body: input.body,
-        href: input.href,
-        level: input.level,
-        category: input.category,
-        tag: input.category ?? "pmb-tenant",
-      })
+      // Push em background (best-effort, nao bloqueia) — mas via `after()`, nao
+      // como promise solta: a instancia serverless congela ao enviar a resposta
+      // e mataria o envio no meio do caminho.
+      afterResponse(() =>
+        sendPushToUsers(filteredUserIds, {
+          title: input.title,
+          body: input.body,
+          href: input.href,
+          level: input.level,
+          category: input.category,
+          tag: input.category ?? "pmb-tenant",
+        }),
+      )
       return null
     }
 
@@ -425,14 +432,16 @@ export async function createNotification(
           href: input.href ?? null,
         })),
       })
-      void sendPushToUsers(filteredUserIds, {
-        title: input.title,
-        body: input.body,
-        href: input.href,
-        level: input.level,
-        category: input.category,
-        tag: input.category ?? "pmb-role",
-      })
+      afterResponse(() =>
+        sendPushToUsers(filteredUserIds, {
+          title: input.title,
+          body: input.body,
+          href: input.href,
+          level: input.level,
+          category: input.category,
+          tag: input.category ?? "pmb-role",
+        }),
+      )
       return null
     }
 
@@ -480,19 +489,21 @@ export async function createNotification(
 
     const created = await prisma.notification.create({ data, select: { id: true } })
 
-    void sendPushToTarget(
-      input.audience === "USER"
-        ? { userId: input.userId }
-        : { studentId: input.studentId },
-      {
-        title: input.title,
-        body: input.body,
-        href: input.href,
-        level: input.level,
-        category: input.category,
-        tag: input.category ?? "pmb-notif",
-        notificationId: created.id,
-      },
+    afterResponse(() =>
+      sendPushToTarget(
+        input.audience === "USER"
+          ? { userId: input.userId }
+          : { studentId: input.studentId },
+        {
+          title: input.title,
+          body: input.body,
+          href: input.href,
+          level: input.level,
+          category: input.category,
+          tag: input.category ?? "pmb-notif",
+          notificationId: created.id,
+        },
+      ),
     )
 
     return { id: created.id }

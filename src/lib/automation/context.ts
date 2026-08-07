@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma"
+import { contextLogger } from "@/lib/logger"
 
 /**
  * Contexto unificado do modulo Automacao. Abstrai a diferenca entre
@@ -121,6 +122,61 @@ export async function isTenantAutomationEnabled(
     select: { automationEnabled: true },
   })
   return tenant?.automationEnabled ?? false
+}
+
+/**
+ * Grava de volta o estado REAL da sessao observado no engine.
+ *
+ * Ate aqui o snapshot `waStatus` so era atualizado quando alguem abria a tela
+ * de conexao — entao ele mentia por dias, e o painel mostrava "conectado" para
+ * uma sessao morta (ou o contrario). Toda vez que o disparo consulta o engine
+ * aproveitamos para corrigir o snapshot, de graca.
+ *
+ * Best-effort: nunca lanca. O telefone so entra quando vem preenchido, e uma
+ * colisao de numero (P2002 — mesmo WhatsApp ligado em outra unidade) degrada
+ * para gravar apenas o status.
+ */
+export async function syncWaSnapshot(
+  tenantId: string | null,
+  status: string,
+  connectedPhone: string | null,
+): Promise<void> {
+  try {
+    if (tenantId === null) {
+      await prisma.systemSettings.update({
+        where: { id: "default" },
+        data: {
+          pmbWaStatus: status,
+          ...(connectedPhone ? { pmbWaConnectedPhone: connectedPhone } : {}),
+          pmbWaStatusUpdatedAt: new Date(),
+        },
+      })
+      return
+    }
+
+    try {
+      await prisma.tenant.update({
+        where: { id: tenantId },
+        data: {
+          waStatus: status,
+          ...(connectedPhone ? { waConnectedPhone: connectedPhone } : {}),
+          waStatusUpdatedAt: new Date(),
+        },
+      })
+    } catch {
+      // Colisao de telefone (ou qualquer erro na escrita do numero): grava so
+      // o status, que e o que o gate de disparo consulta.
+      await prisma.tenant.update({
+        where: { id: tenantId },
+        data: { waStatus: status, waStatusUpdatedAt: new Date() },
+      })
+    }
+  } catch (err) {
+    contextLogger().warn(
+      { err, event: "automation.wa_snapshot_sync_failed", tenantId },
+      "Falha ao sincronizar snapshot da sessao WhatsApp",
+    )
+  }
 }
 
 function vitrineHostBase(): string {

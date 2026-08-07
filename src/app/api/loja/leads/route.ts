@@ -10,6 +10,7 @@ import {
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { contextLogger } from "@/lib/logger"
 import { queueLeadMessage } from "@/lib/automation/dispatch"
+import { afterResponse } from "@/lib/after-response"
 import { resolveTenantFromRequest } from "@/lib/tenant/from-request"
 import { linkVisitorToLead, readVisitorId } from "@/lib/automation/tracking"
 import { pickNextLeadOwner } from "@/lib/automation/assign"
@@ -192,15 +193,20 @@ export const POST = withRequestContext(
 
     await inheritVisitorHistory(lead.id)
 
-    // Disparo do WhatsApp e fire-and-forget. Falha aqui nao quebra o form.
-    queueLeadMessage({
-      leadId: lead.id,
-      templateKey: "FORM_SUBMITTED",
-    }).catch((err) => {
-      contextLogger().error(
-        { err, event: "loja.leads.dispatch_failed", leadId: lead.id },
-        "Falha ao enfileirar mensagem de form_submitted",
-      )
+    // Disparo do WhatsApp roda DEPOIS da resposta (nao segura o form), mas
+    // dentro de `after()`: uma promise solta morre quando a instancia serverless
+    // congela ao enviar a resposta, e era assim que ~44% dos disparos de
+    // formulario sumiam sem deixar nem registro de falha.
+    afterResponse(async () => {
+      await queueLeadMessage({
+        leadId: lead.id,
+        templateKey: "FORM_SUBMITTED",
+      }).catch((err) => {
+        contextLogger().error(
+          { err, event: "loja.leads.dispatch_failed", leadId: lead.id },
+          "Falha ao enfileirar mensagem de form_submitted",
+        )
+      })
     })
 
     return NextResponse.json({ data: { id: lead.id } }, { status: 201 })

@@ -156,6 +156,79 @@ export async function getSessionStatus(
   }
 }
 
+// Estados em que vale tentar religar sozinho. SCAN_QR_CODE (credenciais
+// perdidas — so o dono resolve) e CONNECTING (ja esta subindo) nao entram.
+const REVIVABLE_STATUSES: ReadonlySet<WaStatus> = new Set<WaStatus>([
+  "DISCONNECTED",
+  "FAILED",
+])
+
+// FAILED e o estado ZUMBI: o engine ainda considera a sessao "started" (um
+// /sessions/start devolve 422 "is already started") mas o worker esta morto e
+// todo envio volta 422. Medido em producao: 26 das 45 unidades ditas conectadas
+// estavam assim. So um stop ANTES do start recicla o worker.
+const NEEDS_RECYCLE: ReadonlySet<WaStatus> = new Set<WaStatus>(["FAILED"])
+
+// Espera entre as reconsultas apos o start. O worker leva alguns segundos para
+// reautenticar com as credenciais salvas.
+const REVIVE_POLL_MS = [1_000, 2_000, 3_000] as const
+
+/**
+ * Garante que a sessao esteja de pe ANTES de um envio, ressuscitando-a quando
+ * possivel.
+ *
+ * Por que existe: o `waStatus` no banco e um SNAPSHOT, gravado so quando alguem
+ * abre a tela de conexao. O engine, porem, derruba o worker sozinho (restart do
+ * servidor, queda da sessao no celular). O snapshot fica mentindo nas DUAS
+ * direcoes — dizendo WORKING quando o engine ja respondia 422
+ * "Session status is not as expected", e dizendo DISCONNECTED quando a sessao
+ * voltou. As duas mentiras juntas respondiam pela maioria das falhas de disparo
+ * em producao. Aqui perguntamos ao engine (fonte da verdade) e tentamos religar.
+ *
+ * Nunca lanca: devolve o ultimo estado observado para o caller decidir.
+ */
+export async function ensureSessionWorking(
+  sessionName: string,
+): Promise<SessionStatus> {
+  let live = await getSessionStatus(sessionName)
+  if (live.status === "WORKING") return live
+  if (!REVIVABLE_STATUSES.has(live.status)) return live
+
+  try {
+    // Zumbi (FAILED): o start sozinho volta "already started" e nao muda nada.
+    // Reciclar o worker e o unico caminho. `stopSession` PRESERVA as credenciais
+    // salvas — se elas ainda valem, a sessao volta a WORKING; se o aparelho
+    // desvinculou o WhatsApp, cai em SCAN_QR_CODE, que e a verdade e o que o
+    // dono precisa ver no painel (em vez de um "conectado" mentiroso).
+    if (NEEDS_RECYCLE.has(live.status)) {
+      await stopSession(sessionName)
+    }
+    await startSession(sessionName)
+  } catch (err) {
+    contextLogger().warn(
+      { err, event: "wa.revive_start_failed", sessionName },
+      "Falha ao reiniciar sessao WhatsApp caida",
+    )
+    return live
+  }
+
+  for (const waitMs of REVIVE_POLL_MS) {
+    await sleep(waitMs)
+    live = await getSessionStatus(sessionName)
+    if (live.status === "WORKING") {
+      contextLogger().info(
+        { event: "wa.revived", sessionName },
+        "Sessao WhatsApp ressuscitada antes do envio",
+      )
+      return live
+    }
+    // Credenciais perdidas: so o dono resolve, escaneando o QR de novo.
+    if (live.status === "SCAN_QR_CODE") return live
+  }
+
+  return live
+}
+
 async function fetchQrAsDataUrl(
   sessionName: string,
   inline: string | null,
@@ -403,17 +476,76 @@ export async function sendTextMessage(
   // (2) dispara a mensagem usando o id resolvido, com retry em falha
   // TRANSITÓRIA (5xx / rede / timeout). 4xx (requisição/sessão inválida) e
   // WhatsAppNumberNotFoundError NÃO são retentados.
+  let attempt = await postSendText(args.sessionName, chatId, args.body)
+
+  // O engine devolve 422 quando o worker da sessao caiu — a mensagem estava
+  // legitimamente pronta para sair, so o canal morreu. Era a 2a maior causa de
+  // falha em producao. Tenta religar a sessao e repete UMA vez.
+  if (attempt.sessionNotWorking) {
+    const live = await ensureSessionWorking(args.sessionName)
+    if (live.status === "WORKING") {
+      attempt = await postSendText(args.sessionName, chatId, args.body)
+    }
+  }
+
+  if (!attempt.res) {
+    contextLogger().warn(
+      {
+        err: attempt.lastErr,
+        event: "wa.send_retry_exhausted",
+        sessionName: args.sessionName,
+      },
+      "Falha ao enviar mensagem WhatsApp após retries (transitório)",
+    )
+    throw new Error(
+      `Falha ao enviar após ${SEND_MAX_RETRIES + 1} tentativas: ${String(attempt.lastErr)}`,
+    )
+  }
+
+  if (!attempt.res.ok) {
+    throw new Error(
+      `Engine rejeitou envio (${attempt.res.status}): ${attempt.body.slice(0, 200)}`,
+    )
+  }
+
+  let data: {
+    id?: string
+    messageId?: string
+    _data?: { id?: { id?: string } }
+  } = {}
+  try {
+    data = JSON.parse(attempt.body || "{}")
+  } catch {
+    // Engine respondeu 200 com corpo nao-JSON: o envio saiu, so nao sabemos o id.
+  }
+  const engineMessageId =
+    data.id ?? data.messageId ?? data._data?.id?.id ?? "unknown"
+  return { engineMessageId }
+}
+
+interface SendAttempt {
+  res: Response | null
+  // Corpo ja lido (Response so pode ser consumida uma vez).
+  body: string
+  lastErr: unknown
+  // 422 com a mensagem de sessao fora do ar — recuperavel religando a sessao.
+  sessionNotWorking: boolean
+}
+
+/** Uma rodada de POST /api/sendText, com retry nas falhas transitorias. */
+async function postSendText(
+  sessionName: string,
+  chatId: string,
+  text: string,
+): Promise<SendAttempt> {
   let res: Response | null = null
   let lastErr: unknown = null
+
   for (let attempt = 0; attempt <= SEND_MAX_RETRIES; attempt++) {
     try {
       res = await gatewayFetch(`/api/sendText`, {
         method: "POST",
-        body: JSON.stringify({
-          session: args.sessionName,
-          chatId,
-          text: args.body,
-        }),
+        body: JSON.stringify({ session: sessionName, chatId, text }),
       })
       if (res.ok) break
       // 4xx: erro terminal (não adianta retentar) — sai e trata abaixo.
@@ -429,29 +561,13 @@ export async function sendTextMessage(
     }
   }
 
-  if (!res) {
-    contextLogger().warn(
-      { err: lastErr, event: "wa.send_retry_exhausted", sessionName: args.sessionName },
-      "Falha ao enviar mensagem WhatsApp após retries (transitório)",
-    )
-    throw new Error(
-      `Falha ao enviar após ${SEND_MAX_RETRIES + 1} tentativas: ${String(lastErr)}`,
-    )
-  }
+  // Le o corpo SEMPRE (Response so pode ser consumida uma vez, e o caso de
+  // sucesso precisa dele para extrair o engineMessageId).
+  const body = res ? await res.text().catch(() => "") : ""
+  const sessionNotWorking =
+    res?.status === 422 && /session status is not as expected/i.test(body)
 
-  if (!res.ok) {
-    const txt = await res.text().catch(() => "")
-    throw new Error(`Engine rejeitou envio (${res.status}): ${txt.slice(0, 200)}`)
-  }
-
-  const data = (await res.json().catch(() => ({}))) as {
-    id?: string
-    messageId?: string
-    _data?: { id?: { id?: string } }
-  }
-  const engineMessageId =
-    data.id ?? data.messageId ?? data._data?.id?.id ?? "unknown"
-  return { engineMessageId }
+  return { res, body, lastErr, sessionNotWorking }
 }
 
 function toChatId(phone: string): string {

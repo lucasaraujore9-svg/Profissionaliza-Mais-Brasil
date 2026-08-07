@@ -3,9 +3,69 @@ import { contextLogger } from "@/lib/logger"
 import { swallow } from "@/lib/errors"
 import { AutomationTemplateKey } from "@prisma/client"
 import { renderTemplate } from "./templates"
-import { sendTextMessage, WhatsAppNumberNotFoundError } from "./wa-client"
+import {
+  ensureSessionWorking,
+  sendTextMessage,
+  WhatsAppNumberNotFoundError,
+} from "./wa-client"
 import { rateLimitByKey, RATE_LIMITS } from "@/lib/ratelimit"
-import { resolveAutomationContext } from "./context"
+import {
+  resolveAutomationContext,
+  syncWaSnapshot,
+  type AutomationContext,
+} from "./context"
+import { alertWaDisconnected } from "./health"
+
+// Memo curto do resultado da checagem, por sessao. O sweep de carrinho
+// abandonado percorre VARIOS leads da mesma unidade em sequencia; sem isto,
+// cada lead pagaria de novo o round-trip ao engine (e ate 6s de espera pela
+// religada) para chegar a mesma conclusao, estourando o orcamento do cron.
+const CHANNEL_MEMO_MS = 60_000
+const channelMemo = new Map<string, { at: number; ready: boolean }>()
+
+/**
+ * Decide se o canal esta apto a enviar AGORA, consultando o engine quando o
+ * snapshot local diz que nao.
+ *
+ * O snapshot `waStatus` do banco so era atualizado quando alguem abria a tela
+ * de conexao, entao ele ficava obsoleto por dias e derrubava disparos de
+ * sessoes que estavam perfeitamente de pe (`wa_not_connected` era a maior causa
+ * de falha em producao). Agora o snapshot vale como atalho: se ele diz WORKING,
+ * seguimos direto; se diz qualquer outra coisa, perguntamos ao engine e ainda
+ * tentamos religar a sessao antes de desistir.
+ */
+async function ensureChannelReady(
+  ctx: AutomationContext,
+): Promise<{ ready: boolean; sessionName: string | null }> {
+  if (!ctx.waSessionName) return { ready: false, sessionName: null }
+  if (ctx.waStatus === "WORKING") {
+    return { ready: true, sessionName: ctx.waSessionName }
+  }
+
+  const memo = channelMemo.get(ctx.waSessionName)
+  if (memo && Date.now() - memo.at < CHANNEL_MEMO_MS) {
+    return { ready: memo.ready, sessionName: ctx.waSessionName }
+  }
+
+  const live = await ensureSessionWorking(ctx.waSessionName)
+  channelMemo.set(ctx.waSessionName, {
+    at: Date.now(),
+    ready: live.status === "WORKING",
+  })
+  await syncWaSnapshot(ctx.tenantId, live.status, live.connectedPhone)
+
+  // Canal caido e credencial expirada so o dono resolve (lendo o QR de novo).
+  // Ate aqui ninguem era avisado: o painel seguia dizendo "conectado" e as
+  // mensagens simplesmente paravam de sair. Avisar e a unica correcao possivel.
+  if (live.status !== "WORKING") {
+    await alertWaDisconnected(ctx.tenantId, live.status)
+  }
+
+  return {
+    ready: live.status === "WORKING",
+    sessionName: ctx.waSessionName,
+  }
+}
 
 interface QueueLeadMessageArgs {
   leadId: string
@@ -26,6 +86,15 @@ export async function queueLeadMessage(
     contextLogger().error(
       { err, event: "automation.dispatch.unhandled", leadId: args.leadId },
       "Falha nao tratada no envio de mensagem de lead",
+    )
+    // Registra no historico do lead. Sem isto, um erro inesperado (timeout de
+    // conexao com o banco, engine fora do ar) sumia deixando o lead sem NENHUM
+    // rastro — indistinguivel de um disparo que nunca foi tentado.
+    await recordFailure(
+      args.leadId,
+      args.templateKey,
+      err instanceof Error ? err.message : "unexpected_error",
+      "Falha inesperada ao enviar",
     )
   }
 }
@@ -57,7 +126,8 @@ export async function sendLeadMessage(args: QueueLeadMessageArgs): Promise<void>
     await recordFailure(leadId, templateKey, "automation_disabled")
     return
   }
-  if (ctx.waStatus !== "WORKING" || !ctx.waSessionName) {
+  const channel = await ensureChannelReady(ctx)
+  if (!channel.ready || !channel.sessionName) {
     await recordFailure(leadId, templateKey, "wa_not_connected")
     return
   }
@@ -91,7 +161,7 @@ export async function sendLeadMessage(args: QueueLeadMessageArgs): Promise<void>
   })
 
   const sessionRl = await rateLimitByKey(
-    ctx.waSessionName,
+    channel.sessionName,
     RATE_LIMITS.waSend,
   )
   if (!sessionRl.ok) {
@@ -101,7 +171,7 @@ export async function sendLeadMessage(args: QueueLeadMessageArgs): Promise<void>
 
   try {
     const result = await sendTextMessage({
-      sessionName: ctx.waSessionName,
+      sessionName: channel.sessionName,
       toPhone: lead.telefone,
       body,
     })
@@ -174,7 +244,7 @@ export async function sendManualWhatsAppToLead(
   }
 
   const ctx = await resolveAutomationContext(lead.tenantId)
-  if (!ctx || !ctx.enabled || ctx.waStatus !== "WORKING" || !ctx.waSessionName) {
+  if (!ctx || !ctx.enabled) {
     return {
       ok: false,
       code: "wa_not_connected",
@@ -182,7 +252,16 @@ export async function sendManualWhatsAppToLead(
     }
   }
 
-  const sessionRl = await rateLimitByKey(ctx.waSessionName, RATE_LIMITS.waSend)
+  const channel = await ensureChannelReady(ctx)
+  if (!channel.ready || !channel.sessionName) {
+    return {
+      ok: false,
+      code: "wa_not_connected",
+      message: "WhatsApp não conectado. Conecte em Automação para enviar mensagens.",
+    }
+  }
+
+  const sessionRl = await rateLimitByKey(channel.sessionName, RATE_LIMITS.waSend)
   if (!sessionRl.ok) {
     return {
       ok: false,
@@ -193,7 +272,7 @@ export async function sendManualWhatsAppToLead(
 
   try {
     const result = await sendTextMessage({
-      sessionName: ctx.waSessionName,
+      sessionName: channel.sessionName,
       toPhone: lead.telefone,
       body,
     })

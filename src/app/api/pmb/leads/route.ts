@@ -10,6 +10,7 @@ import {
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { contextLogger } from "@/lib/logger"
 import { queueLeadMessage } from "@/lib/automation/dispatch"
+import { afterResponse } from "@/lib/after-response"
 import { CONSENT_VERSION } from "@/lib/legal/version"
 
 const DEDUP_WINDOW_MS = 24 * 60 * 60 * 1000
@@ -155,14 +156,18 @@ export const POST = withRequestContext(
       select: { id: true },
     })
 
-    queueLeadMessage({
-      leadId: lead.id,
-      templateKey: "FORM_SUBMITTED",
-    }).catch((err) => {
-      contextLogger().error(
-        { err, event: "pmb.leads.dispatch_failed", leadId: lead.id },
-        "Falha ao enfileirar mensagem de form_submitted",
-      )
+    // Em `after()`, nao como promise solta: a instancia serverless congela ao
+    // enviar a resposta e mataria o disparo no meio (ver loja/leads).
+    afterResponse(async () => {
+      await queueLeadMessage({
+        leadId: lead.id,
+        templateKey: "FORM_SUBMITTED",
+      }).catch((err) => {
+        contextLogger().error(
+          { err, event: "pmb.leads.dispatch_failed", leadId: lead.id },
+          "Falha ao enfileirar mensagem de form_submitted",
+        )
+      })
     })
 
     return NextResponse.json({ data: { id: lead.id } }, { status: 201 })

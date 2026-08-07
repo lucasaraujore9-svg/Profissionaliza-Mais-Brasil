@@ -60,6 +60,55 @@ async function fetchPublicKey(): Promise<string | null> {
   }
 }
 
+/** POSTa as chaves da assinatura para o servidor (idempotente). */
+async function persistSubscription(sub: PushSubscription): Promise<void> {
+  const payload = {
+    endpoint: sub.endpoint,
+    p256dh: arrayBufferToBase64(sub.getKey("p256dh")),
+    auth: arrayBufferToBase64(sub.getKey("auth")),
+    userAgent: navigator.userAgent,
+  }
+
+  try {
+    const res = await fetch("/api/push/subscribe", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload),
+    })
+    if (!res.ok) {
+      clientLogger.warn({ event: "push.client.subscribe_api_error", status: res.status }, "/api/push/subscribe respondeu erro")
+    }
+  } catch (err) {
+    clientLogger.warn({ err: String(err), event: "push.client.subscribe_post_failed" }, "POST /api/push/subscribe falhou")
+  }
+}
+
+/**
+ * Revincula ao dono atual uma assinatura que o navegador JA possui, sem pedir
+ * permissao nem mostrar nada.
+ *
+ * Por que: quem assinou como VISITANTE (banner do site publico) e depois entrou
+ * na conta continuava com a linha marcada como anonima no banco — e notificacao
+ * de venda/lead/mensalidade e endereçada ao usuario, entao nunca chegava naquele
+ * aparelho. O endpoint do navegador e o mesmo; so faltava reapresenta-lo estando
+ * logado para o servidor trocar o dono da assinatura.
+ *
+ * Silencioso e idempotente: sai na hora se nao houver assinatura ou permissao.
+ */
+export async function syncExistingSubscription(): Promise<boolean> {
+  if (!isPushSupported()) return false
+  if (getPushPermissionState() !== "granted") return false
+
+  const reg = await getRegistration()
+  if (!reg) return false
+
+  const sub = await reg.pushManager.getSubscription()
+  if (!sub) return false
+
+  await persistSubscription(sub)
+  return true
+}
+
 /**
  * Ativa push: pede permissao, cria PushSubscription e persiste no servidor.
  * Retorna o novo estado de permissao.
@@ -95,26 +144,7 @@ export async function subscribeToPush(): Promise<
     }
   }
 
-  const payload = {
-    endpoint: sub.endpoint,
-    p256dh: arrayBufferToBase64(sub.getKey("p256dh")),
-    auth: arrayBufferToBase64(sub.getKey("auth")),
-    userAgent: navigator.userAgent,
-  }
-
-  try {
-    const res = await fetch("/api/push/subscribe", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(payload),
-    })
-    if (!res.ok) {
-      clientLogger.warn({ event: "push.client.subscribe_api_error", status: res.status }, "/api/push/subscribe respondeu erro")
-    }
-  } catch (err) {
-    clientLogger.warn({ err: String(err), event: "push.client.subscribe_post_failed" }, "POST /api/push/subscribe falhou")
-  }
-
+  await persistSubscription(sub)
   return "granted"
 }
 

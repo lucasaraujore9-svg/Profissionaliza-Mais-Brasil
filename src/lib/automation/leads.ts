@@ -7,6 +7,17 @@ import { StudentLeadStage } from "@prisma/client"
 
 const DEDUP_WINDOW_MS = 48 * 60 * 60 * 1000
 
+// Janela em que ainda faz sentido mandar a confirmacao de compra atrasada
+// (webhook perdido, recuperado pela reconciliacao). Fora dela, so corrigimos a
+// coluna do board — a mensagem chegaria descontextualizada.
+const LATE_CONFIRM_WINDOW_MS = 7 * 24 * 60 * 60 * 1000
+
+function isRecentPayment(paidAt: Date | null): boolean {
+  // Sem data de pagamento nao da para saber se e recente — nao arrisca.
+  if (!paidAt) return false
+  return Date.now() - paidAt.getTime() <= LATE_CONFIRM_WINDOW_MS
+}
+
 interface UpsertLeadFromCheckoutArgs {
   // null = vitrine PMB (sistema mae)
   tenantId: string | null
@@ -239,7 +250,10 @@ export async function sweepAbandonedLeadsForContext(
       }),
     ])
 
-    queueLeadMessage({
+    // AGUARDA o disparo: isto roda dentro do cron, onde latencia nao importa,
+    // e uma promise solta morreria quando a instancia congelasse ao responder —
+    // era assim que ~48% das mensagens de carrinho abandonado sumiam.
+    await queueLeadMessage({
       leadId: lead.id,
       templateKey: "CHECKOUT_ABANDONED",
     }).catch((err) => {
@@ -297,7 +311,7 @@ export async function reconcileLeadStages(
           finalAmount: true,
           payments: {
             where: { mpStatus: "APPROVED" },
-            select: { amount: true },
+            select: { amount: true, paidAt: true },
             take: 1,
           },
         },
@@ -314,7 +328,7 @@ export async function reconcileLeadStages(
 
     if (isPaid) {
       const amount = Number((approved?.amount ?? enr.finalAmount).toString())
-      await prisma
+      const moved = await prisma
         .$transaction([
           prisma.studentLead.update({
             where: { id: lead.id },
@@ -333,12 +347,36 @@ export async function reconcileLeadStages(
             },
           }),
         ])
+        .then(() => true)
         .catch((err) => {
           contextLogger().error(
             { err, event: "automation.leads.reconcile_won_failed", leadId: lead.id },
             "Falha ao reconciliar lead para WON",
           )
+          return false
         })
+
+      // Chegar aqui significa que o webhook de pagamento se perdeu: a matricula
+      // esta paga mas ninguem disparou a confirmacao. Ate agora o reconcile so
+      // arrumava a coluna do board e o aluno ficava sem mensagem nenhuma.
+      // A transicao para WON acontece UMA vez (o filtro exclui quem ja e WON),
+      // entao disparar aqui nao duplica. So nao ressuscitamos pagamentos
+      // antigos — "parabens pelo seu pagamento" semanas depois nao ajuda.
+      if (moved && isRecentPayment(approved?.paidAt ?? null)) {
+        await queueLeadMessage({
+          leadId: lead.id,
+          templateKey: "PURCHASE_CONFIRMED",
+        }).catch((err) => {
+          contextLogger().error(
+            {
+              err,
+              event: "automation.leads.reconcile_purchase_dispatch_failed",
+              leadId: lead.id,
+            },
+            "Falha ao enfileirar PURCHASE_CONFIRMED na reconciliacao",
+          )
+        })
+      }
     } else if (lead.stage === "CHECKOUT_STARTED" && lead.createdAt <= cutoff) {
       await prisma
         .$transaction([
