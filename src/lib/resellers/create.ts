@@ -3,6 +3,11 @@ import { randomBytes } from "node:crypto"
 import { prisma } from "@/lib/prisma"
 import { logAudit } from "@/lib/audit"
 import {
+  findBlockedUnitsForPerson,
+  assertCortesiaNaCriacao,
+  CORTESIA_AUDIT,
+} from "@/lib/tenants/lifecycle"
+import {
   AsaasApiError,
   createCustomer,
   createSubscription,
@@ -55,6 +60,12 @@ export interface CreateResellerInput {
   salesUserId?: string | null
   referrerTenantId?: string | null
   canSellResellers?: boolean
+  /**
+   * Poder de furar a trava de cortesia por TITULAR. Resolvido na rota a partir
+   * de `ctx.can("unidades.cortesiaExcepcional")` + o `reason` do body. O painel
+   * (sub-revenda) não passa nada: lá ninguém tem essa permissão.
+   */
+  cortesiaOverride?: { allowed: boolean; reason?: string | null }
   /** Ator que disparou a criação (para a trilha de auditoria). */
   actor: { userId: string; role: string; email?: string | null }
 }
@@ -81,7 +92,14 @@ export interface CreateResellerSuccess {
 
 export type CreateResellerResult =
   | CreateResellerSuccess
-  | { ok: false; status: number; error: string; fields?: Record<string, string[]> }
+  | {
+      ok: false
+      status: number
+      error: string
+      fields?: Record<string, string[]>
+      /** 403 da cortesia: quem TEM a permissão só precisa justificar. */
+      requiresReason?: boolean
+    }
 
 function isoDayPlus(days: number): string {
   const d = new Date()
@@ -124,14 +142,70 @@ export async function createReseller(
     }
   }
 
-  // Senha temporária — enviada por e-mail; admin pode repassar se o e-mail falhar.
-  const tempPassword = randomBytes(9).toString("base64url")
-  const passwordHash = await hash(tempPassword, 12)
-
   // Cobrança no Asaas da PMB. Revenda gratuita: mensalidade 0 → nasce ATIVA.
   const isFree = input.planValue === 0
   const isPromo =
     !isFree && input.promoMonths !== undefined && input.promoValue !== undefined
+
+  // Concessão auditada só DEPOIS de a unidade existir — registrar antes
+  // deixaria linha fantasma se a criação abortasse no meio.
+  let cortesiaConcedida: { reason?: string; payload: unknown } | null = null
+
+  // ── Cortesia excepcional por TITULAR ────────────────────────────────────
+  // A trava de cortesia é por TENANT. Sem isto, cancelar a unidade que nunca
+  // pagou e abrir outra de graça para o MESMO dono contornava a regra inteira —
+  // o titular é a pessoa, não a linha do banco.
+  //
+  // Só vale para unidade que nasce SEM PAGAR (cortesia ou promoção): a preço
+  // cheio a pessoa volta como cliente de verdade e, se não pagar, cai na trava
+  // sozinha. Fica no núcleo compartilhado de propósito, então /admin e o painel
+  // herdam a mesma regra e um chamador novo não nasce sem ela. Na rota do
+  // painel o gatilho nunca dispara (planValue é restrito a 209/239, sem promo).
+  const cortesiaTrigger = isFree ? "free" : isPromo ? "promo" : null
+  if (cortesiaTrigger) {
+    const blockedUnits = await findBlockedUnitsForPerson({
+      cpfCnpj: input.ownerCpfCnpj,
+      email: input.ownerEmail,
+      phone: input.ownerPhone,
+    })
+    const verdict = assertCortesiaNaCriacao({
+      blockedUnits,
+      trigger: cortesiaTrigger,
+      override: input.cortesiaOverride ?? { allowed: false },
+    })
+
+    const payload = {
+      trigger: cortesiaTrigger,
+      slug: input.slug,
+      ownerEmail: input.ownerEmail,
+      planValue: input.planValue,
+      unidadesTravadas: blockedUnits.map((u) => u.slug),
+    }
+
+    if (verdict.blocked) {
+      await logAudit({
+        action: CORTESIA_AUDIT.blocked,
+        resource: "Tenant",
+        actorUserId: input.actor.userId,
+        actorRole: input.actor.role,
+        actorEmail: input.actor.email ?? undefined,
+        payloadAfter: payload,
+      })
+      return {
+        ok: false,
+        status: 403,
+        error: verdict.message,
+        requiresReason: verdict.requiresReason,
+      }
+    }
+    if (verdict.overridden) {
+      cortesiaConcedida = { reason: verdict.reason, payload }
+    }
+  }
+
+  // Senha temporária — enviada por e-mail; admin pode repassar se o e-mail falhar.
+  const tempPassword = randomBytes(9).toString("base64url")
+  const passwordHash = await hash(tempPassword, 12)
 
   let asaasCustomerId: string | null = null
   let asaasSubscriptionId: string | null = null
@@ -243,6 +317,23 @@ export async function createReseller(
       referrerTenantId: input.referrerTenantId ?? null,
     },
   })
+
+  // Cortesia liberada pelo super admin: auditada agora, com a unidade já criada.
+  if (cortesiaConcedida) {
+    await logAudit({
+      action: CORTESIA_AUDIT.granted,
+      resource: "Tenant",
+      resourceId: tenant.id,
+      actorUserId: input.actor.userId,
+      actorRole: input.actor.role,
+      actorEmail: input.actor.email ?? undefined,
+      tenantId: tenant.id,
+      payloadAfter: {
+        ...(cortesiaConcedida.payload as Record<string, unknown>),
+        reason: cortesiaConcedida.reason,
+      },
+    })
+  }
 
   // Semeia o TenantPayment PENDING da 1ª mensalidade (fecha a janela de 404 na
   // página /cobranca antes do webhook PAYMENT_CREATED). Best-effort.

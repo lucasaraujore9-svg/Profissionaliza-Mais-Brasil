@@ -55,6 +55,7 @@ import { prisma } from "@/lib/prisma"
 import { PAID_STATUSES } from "@/lib/tenant-billing/types"
 import { PMB_TENANT_SLUG } from "@/lib/pmb-config"
 import { brDayStartUtc } from "@/lib/dates"
+import { normalizePhone } from "@/lib/validation/phone"
 
 /**
  * Status de cobrança que contam como dinheiro que entrou.
@@ -72,12 +73,26 @@ import { brDayStartUtc } from "@/lib/dates"
  */
 export const EVER_PAID_STATUSES = [...PAID_STATUSES, "RECEIVED_IN_CASH"] as const
 
-/** Uma cobrança que representa dinheiro recebido — pelo Asaas ou na mão. */
+/**
+ * Uma cobrança que representa dinheiro que ENTROU alguma vez.
+ *
+ * `paidAt` está aqui porque `status` é MUTÁVEL e não guarda história:
+ * `asaas/process.ts` faz upsert de `status: payment.status` para todo evento
+ * roteado, então um estorno, estorno parcial ou chargeback reescreve a MESMA
+ * linha que era `RECEIVED` e ela sai da lista de status pagos. Sem `paidAt`, uma
+ * unidade que pagou de verdade voltaria a ler como "nunca pagou": sairia da base
+ * do churn, apareceria em "Nunca ativou" e receberia 403 ao ser reativada — e o
+ * cabeçalho deste módulo promete justamente o contrário, que o predicado é
+ * MONOTÔNICO. `paidAt` só é gravado quando o pagamento foi confirmado e
+ * sobrevive às transições seguintes.
+ */
 export const EVER_PAID_PAYMENT_WHERE: Prisma.TenantPaymentWhereInput = {
   OR: [
     { status: { in: [...EVER_PAID_STATUSES] } },
     // Baixa manual do financeiro da PMB (PIX/espécie fora do Asaas).
     { markedPaidAt: { not: null } },
+    // Prova imutável de que o dinheiro entrou, sobrevive a estorno/chargeback.
+    { paidAt: { not: null } },
   ],
 }
 
@@ -102,6 +117,15 @@ export const NEVER_ACTIVATED_WHERE: Prisma.TenantWhereInput = {
   status: { in: [...INACTIVE_STATUSES] },
   ...NEVER_PAID_TENANT_WHERE,
 }
+
+/**
+ * Valor do filtro `?status=` da lista de /admin/revendedores para este balde.
+ *
+ * Não é um `TenantStatus` — é um recorte que cruza status e histórico de
+ * pagamento. Fica aqui, junto do `where` que ele representa, para a rota e o
+ * cliente não divergirem numa string solta.
+ */
+export const NUNCA_ATIVOU_FILTER = "NUNCA_ATIVOU"
 
 /**
  * População do churn: quem já foi cliente pagante, sem o placeholder da vitrine
@@ -138,8 +162,10 @@ export type CortesiaTrigger =
   | "free"
   /** Criar ou estender período promocional. */
   | "promo"
-  /** Empurrar o vencimento para além de D+10. */
+  /** Empurrar o vencimento para além do teto. */
   | "postpone"
+  /** Reduzir o valor de uma cobrança já emitida. */
+  | "discount"
   /** Devolver a unidade ao ar (status ACTIVE ou PENDING). */
   | "reactivate"
 
@@ -147,7 +173,28 @@ const TRIGGER_LABEL: Record<CortesiaTrigger, string> = {
   free: "tornar a unidade gratuita",
   promo: "conceder período promocional",
   postpone: "adiar o vencimento",
+  discount: "reduzir o valor da cobrança",
   reactivate: "reativar a unidade",
+}
+
+/**
+ * Reativar é o ÚNICO gatilho que exige a unidade já estar fora do ar; os demais
+ * valem em QUALQUER status enquanto ela nunca tiver pago.
+ *
+ * A distinção não é cosmética — foi o furo que sobrou da primeira versão. A
+ * criação fixa a 1ª cobrança em D+3, então os vencimentos esticados que
+ * motivaram a regra (`valedosaber` D+20, `andersoncidade` D+15,
+ * `concluirconsultoriaeducacional` D+11) só podem ter sido gravados enquanto a
+ * unidade ainda era `PENDING` — ela só vira `SUSPENDED` DEPOIS de vencer. Com o
+ * gate exigindo SUSPENDED/CANCELLED, o caminho que de fato produziu o problema
+ * continuava aberto.
+ */
+const REQUIRES_INACTIVE: Record<CortesiaTrigger, boolean> = {
+  free: false,
+  promo: false,
+  postpone: false,
+  discount: false,
+  reactivate: true,
 }
 
 export interface TenantLifecycle {
@@ -156,9 +203,15 @@ export interface TenantLifecycle {
   status: TenantStatus
   accountManagerId: string | null
   salesUserId: string | null
+  /** Nascimento da unidade — âncora IMUTÁVEL do teto de vencimento. */
+  createdAt: Date
   /** Já teve ao menos uma mensalidade paga. */
   everPaid: boolean
-  /** Está fora do ar e nunca pagou — sujeita à cortesia excepcional. */
+  /**
+   * Está fora do ar E nunca pagou. É o balde "Nunca ativou" do relatório e o
+   * gatilho da REATIVAÇÃO — não dos demais, que valem em qualquer status
+   * (ver `REQUIRES_INACTIVE`).
+   */
   neverActivated: boolean
 }
 
@@ -178,6 +231,7 @@ export async function loadTenantLifecycle(
       status: true,
       accountManagerId: true,
       salesUserId: true,
+      createdAt: true,
       // `take: 1` — só interessa se existe alguma, não quantas.
       tenantPayments: {
         where: EVER_PAID_PAYMENT_WHERE,
@@ -195,36 +249,49 @@ export async function loadTenantLifecycle(
     status: row.status,
     accountManagerId: row.accountManagerId,
     salesUserId: row.salesUserId,
+    createdAt: row.createdAt,
     everPaid,
     neverActivated:
       !everPaid && (INACTIVE_STATUSES as readonly string[]).includes(row.status),
   }
 }
 
+/** Normaliza para meia-noite UTC do dia civil, aceitando `YYYY-MM-DD` ou Date. */
+function toUtcDay(value: string | Date): Date {
+  return typeof value === "string"
+    ? new Date(`${value}T00:00:00.000Z`)
+    : new Date(
+        Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()),
+      )
+}
+
 /**
- * `true` se o vencimento pedido está além do prazo tolerado.
+ * `true` se o vencimento pedido está além do prazo tolerado para a unidade.
  *
- * Compara em DIA CIVIL BRASILEIRO. O servidor roda em UTC e o vencimento é uma
- * data civil do Brasil — sem `brDayStartUtc`, uma data digitada como "hoje" no
- * Brasil pode ler como amanhã no servidor e o corte erra por um dia.
+ * A ÂNCORA É `createdAt`, NÃO "hoje" — e isso é o ponto. Ancorado em hoje, o
+ * teto vira uma janela deslizante: adiar para hoje+10, no dia seguinte adiar de
+ * novo para hoje+10 (que já é D+11 do original), e em um mês o vencimento está
+ * 40 dias à frente sem nenhuma linha de auditoria, porque nenhuma das chamadas
+ * chegou a ser bloqueada. `createdAt` é imutável, então o limite é absoluto e
+ * repetir a operação não compra prazo nenhum.
+ *
+ * Consequência deliberada: numa unidade antiga que nunca pagou, `createdAt + 10`
+ * já passou, então QUALQUER vencimento futuro conta como esticado e cai no gate.
+ * É o comportamento certo — dar prazo novo a quem nunca pagou é exatamente a
+ * cortesia que o dono quis controlar.
+ *
+ * Compara em DIA CIVIL BRASILEIRO (`brDayStartUtc`): o servidor roda em UTC e o
+ * vencimento é uma data civil do Brasil; sem isso o corte erra por um dia entre
+ * 21h e meia-noite.
  */
 export function isDueDateStretched(
   dueDate: string | Date,
-  now: Date = new Date(),
+  tenantCreatedAt: Date,
 ): boolean {
-  const due =
-    typeof dueDate === "string"
-      ? new Date(`${dueDate}T00:00:00.000Z`)
-      : new Date(
-          Date.UTC(
-            dueDate.getUTCFullYear(),
-            dueDate.getUTCMonth(),
-            dueDate.getUTCDate(),
-          ),
-        )
+  const due = toUtcDay(dueDate)
   if (Number.isNaN(due.getTime())) return false
 
-  const limit = brDayStartUtc(now)
+  const limit = brDayStartUtc(tenantCreatedAt)
   limit.setUTCDate(limit.getUTCDate() + MAX_DUE_DAYS_AHEAD)
   return due.getTime() > limit.getTime()
 }
@@ -247,20 +314,140 @@ export type CortesiaVerdict =
  * seco.
  */
 export function assertCortesiaExcepcional(input: {
-  tenant: Pick<TenantLifecycle, "neverActivated">
+  tenant: Pick<TenantLifecycle, "everPaid" | "neverActivated">
   trigger: CortesiaTrigger
   override: { allowed: boolean; reason?: string | null }
 }): CortesiaVerdict {
-  if (!input.tenant.neverActivated) return { blocked: false, overridden: false }
+  // Quem já pagou nunca entra no gate, qualquer que seja o gatilho.
+  if (input.tenant.everPaid) return { blocked: false, overridden: false }
+  // Reativar exige que ela esteja fora do ar; os demais valem em qualquer
+  // status enquanto ela nunca tiver pago — inclusive `PENDING`, que é onde os
+  // prazos esticados eram gravados.
+  if (REQUIRES_INACTIVE[input.trigger] && !input.tenant.neverActivated) {
+    return { blocked: false, overridden: false }
+  }
 
-  const base =
-    "Esta unidade nunca pagou nenhuma mensalidade e está suspensa ou cancelada."
+  const base = input.tenant.neverActivated
+    ? "Esta unidade nunca pagou nenhuma mensalidade e está suspensa ou cancelada."
+    : "Esta unidade nunca pagou nenhuma mensalidade."
 
   if (!input.override.allowed) {
     return {
       blocked: true,
       requiresReason: false,
-      message: `${base} Cortesia, promoção e adiamento de vencimento exigem liberação do super admin.`,
+      message: `${base} ${TRIGGER_LABEL[input.trigger].replace(/^./, (c) => c.toUpperCase())} exige liberação do super admin.`,
+    }
+  }
+
+  const reason = input.override.reason?.trim()
+  if (!reason || reason.length < MIN_REASON_LENGTH) {
+    return {
+      blocked: true,
+      requiresReason: true,
+      message: `${base} Para ${TRIGGER_LABEL[input.trigger]} assim mesmo, descreva o motivo (mínimo ${MIN_REASON_LENGTH} caracteres) — ele fica registrado na auditoria.`,
+    }
+  }
+
+  return { blocked: false, overridden: true, reason }
+}
+
+/** Unidade travada que pertence ao titular sendo cadastrado. */
+export interface BlockedUnitForPerson {
+  id: string
+  slug: string
+  name: string
+  status: TenantStatus
+}
+
+/** Só os dígitos — `User.cpf` é gravado assim. */
+function digits(value: string | null | undefined): string {
+  return (value ?? "").replace(/\D/g, "")
+}
+
+/**
+ * Unidades travadas (fora do ar e que nunca pagaram) pertencentes à MESMA
+ * pessoa que está sendo cadastrada como titular.
+ *
+ * POR QUE EXISTE: a trava de cortesia é por TENANT. Sem isto, cancelar a
+ * unidade que nunca pagou e abrir outra em cortesia para o mesmo dono
+ * contornava a regra inteira — o titular é a pessoa, não a linha do banco.
+ *
+ * TRÊS IDENTIFICADORES, casados EM MEMÓRIA sobre o conjunto travado (um titular
+ * por unidade, hoje ~20 linhas). Não dá para fazer o `where` no banco pelos três
+ * de uma vez: `User.phone` NÃO tem unicidade e foi gravado como a pessoa
+ * digitou — "(31) 99999-8888" e "+5531999998888" são a mesma pessoa e nenhum
+ * `equals`/`contains` os aproxima. Normalizar em memória é o mesmo caminho que a
+ * API de parceiros já usa (`lib/api-parceiros/lookup.ts`).
+ *
+ * O custo é limitado pelo TAMANHO DA BLACKLIST, que o negócio quer pequeno. Se
+ * um dia crescer para milhares, troque por prefiltro em `cpf`/`email` (ambos
+ * únicos e indexados) mantendo o telefone em memória.
+ */
+export async function findBlockedUnitsForPerson(person: {
+  cpfCnpj?: string | null
+  email?: string | null
+  phone?: string | null
+}): Promise<BlockedUnitForPerson[]> {
+  const cpf = digits(person.cpfCnpj)
+  const email = person.email?.trim().toLowerCase() ?? ""
+  const phone = person.phone ? normalizePhone(person.phone) : ""
+  if (!cpf && !email && !phone) return []
+
+  const candidatos = await prisma.tenant.findMany({
+    where: { ...NEVER_ACTIVATED_WHERE, slug: { not: PMB_TENANT_SLUG } },
+    select: {
+      id: true,
+      slug: true,
+      name: true,
+      status: true,
+      owner: { select: { cpf: true, email: true, phone: true } },
+    },
+  })
+
+  return candidatos
+    .filter((t) => {
+      const dono = t.owner
+      if (!dono) return false
+      // CPF e e-mail são únicos no banco; telefone não é, por isso normaliza.
+      if (cpf && digits(dono.cpf) === cpf) return true
+      if (email && dono.email.trim().toLowerCase() === email) return true
+      if (phone && dono.phone && normalizePhone(dono.phone) === phone) return true
+      return false
+    })
+    .map(({ id, slug, name, status }) => ({ id, slug, name, status }))
+}
+
+/**
+ * Gate da CRIAÇÃO: nasce de graça (ou em promoção) para quem já tem unidade
+ * travada?
+ *
+ * Separado de `assertCortesiaExcepcional` porque o motivo do bloqueio é outro —
+ * lá é "ESTA unidade nunca pagou", aqui é "ESTE TITULAR já tem unidade que nunca
+ * pagou" — e a mensagem precisa nomear quais, senão quem cadastra não entende o
+ * 403. Mesma forma de veredito, para o diálogo de justificativa funcionar igual.
+ */
+export function assertCortesiaNaCriacao(input: {
+  blockedUnits: BlockedUnitForPerson[]
+  trigger: CortesiaTrigger
+  override: { allowed: boolean; reason?: string | null }
+}): CortesiaVerdict {
+  if (input.blockedUnits.length === 0) {
+    return { blocked: false, overridden: false }
+  }
+
+  const lista = input.blockedUnits
+    .map((u) => `${u.name} (${u.slug}, ${u.status === "CANCELLED" ? "cancelada" : "suspensa"})`)
+    .join("; ")
+  const base =
+    input.blockedUnits.length === 1
+      ? `Este titular já tem uma unidade que nunca pagou nenhuma mensalidade: ${lista}.`
+      : `Este titular já tem ${input.blockedUnits.length} unidades que nunca pagaram nenhuma mensalidade: ${lista}.`
+
+  if (!input.override.allowed) {
+    return {
+      blocked: true,
+      requiresReason: false,
+      message: `${base} Criar outra em cortesia ou promoção exige liberação do super admin — a preço cheio, pode cadastrar normalmente.`,
     }
   }
 

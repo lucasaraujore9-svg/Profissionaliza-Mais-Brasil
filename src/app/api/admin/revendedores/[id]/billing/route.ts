@@ -151,19 +151,25 @@ export const PATCH = withRequestContextParams<{ id: string }>(
   //
   // `planValue: 0` é o mais direto: além de zerar a mensalidade, o bloco de
   // persistência mais abaixo promove PENDING/SUSPENDED para ACTIVE sozinho.
+  const lifecycle = await loadTenantLifecycle(id)
   const cortesiaTrigger: CortesiaTrigger | null =
     parsed.data.planValue === 0
       ? "free"
       : parsed.data.promoMonths !== undefined || parsed.data.promoValue !== undefined
         ? "promo"
-        : parsed.data.nextDueDate && isDueDateStretched(parsed.data.nextDueDate)
+        : parsed.data.nextDueDate &&
+            lifecycle &&
+            isDueDateStretched(parsed.data.nextDueDate, lifecycle.createdAt)
           ? "postpone"
           : null
 
+  let cortesiaConcedida: string | undefined
   if (cortesiaTrigger) {
-    const lifecycle = await loadTenantLifecycle(id)
     const verdict = assertCortesiaExcepcional({
-      tenant: { neverActivated: lifecycle?.neverActivated ?? false },
+      tenant: {
+        everPaid: lifecycle?.everPaid ?? true,
+        neverActivated: lifecycle?.neverActivated ?? false,
+      },
       trigger: cortesiaTrigger,
       override: {
         allowed: session.can("unidades.cortesiaExcepcional"),
@@ -195,26 +201,10 @@ export const PATCH = withRequestContextParams<{ id: string }>(
       )
     }
 
-    if (verdict.overridden) {
-      await logAudit({
-        action: CORTESIA_AUDIT.granted,
-        resource: "Tenant",
-        resourceId: id,
-        actorUserId: session.userId,
-        actorRole: session.role,
-        actorEmail: session.email,
-        tenantId: id,
-        payloadBefore: { planValue: Number(tenant.planValue), status: tenant.status },
-        payloadAfter: {
-          trigger: cortesiaTrigger,
-          planValue: parsed.data.planValue,
-          promoMonths: parsed.data.promoMonths,
-          promoValue: parsed.data.promoValue,
-          nextDueDate: parsed.data.nextDueDate,
-          reason: verdict.reason,
-        },
-      })
-    }
+    // Auditada só DEPOIS da escrita — este handler pode abortar com 502 no
+    // Asaas sem tocar no banco, e uma linha "cortesia concedida" numa operação
+    // que não aconteceu envenena a própria trilha que o dono usa para auditar.
+    if (verdict.overridden) cortesiaConcedida = verdict.reason
   }
 
   // Capturas não-nulas: TS não preserva o narrowing de `tenant`/`parsed.data`
@@ -456,6 +446,28 @@ export const PATCH = withRequestContextParams<{ id: string }>(
   if (promoValueUpdate !== undefined) updateData.promoValue = promoValueUpdate
   if (promoMonthsUpdate !== undefined) updateData.promoMonths = promoMonthsUpdate
   await prisma.tenant.update({ where: { id }, data: updateData })
+
+  // Concessão de cortesia auditada só agora, com a mudança já persistida.
+  if (cortesiaConcedida) {
+    await logAudit({
+      action: CORTESIA_AUDIT.granted,
+      resource: "Tenant",
+      resourceId: id,
+      actorUserId: session.userId,
+      actorRole: session.role,
+      actorEmail: session.email,
+      tenantId: id,
+      payloadBefore: { planValue: Number(tenant.planValue), status: tenant.status },
+      payloadAfter: {
+        trigger: cortesiaTrigger,
+        planValue: parsed.data.planValue,
+        promoMonths: parsed.data.promoMonths,
+        promoValue: parsed.data.promoValue,
+        nextDueDate: parsed.data.nextDueDate,
+        reason: cortesiaConcedida,
+      },
+    })
+  }
 
   // PERF-001: se ativou a revenda (free), invalida o cache p/ a vitrine vender já.
   if (updateData.status === "ACTIVE") {

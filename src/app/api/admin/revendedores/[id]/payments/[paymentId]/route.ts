@@ -19,6 +19,7 @@ import {
   CORTESIA_AUDIT,
   MIN_REASON_LENGTH,
   MAX_REASON_LENGTH,
+  type CortesiaTrigger,
 } from "@/lib/tenants/lifecycle"
 
 const patchSchema = z.object({
@@ -131,20 +132,67 @@ export const PATCH = withRequestContextParams<{ id: string; paymentId: string }>
     )
   }
 
-  // Cortesia excepcional: adiar a cobrança de uma unidade que nunca pagou é
-  // esticar o prazo pela porta dos fundos — é a MESMA cobrança cujo
-  // não-pagamento define a blacklist, só que editada uma a uma em vez de pela
-  // assinatura.
-  if (parsed.data.dueDate && isDueDateStretched(parsed.data.dueDate)) {
-    const lifecycle = await loadTenantLifecycle(tenantId)
+  // Valida que o pagamento está pendente antes de editar. Precisa vir ANTES do
+  // gate: é daqui que sai o valor atual com que a redução é comparada.
+  let valorAtual: number | null = null
+  try {
+    const payment = await getPayment(paymentId)
+    if (payment.status !== "PENDING" && payment.status !== "OVERDUE") {
+      return NextResponse.json(
+        { error: "Só é possível editar cobranças pendentes ou vencidas" },
+        { status: 400 },
+      )
+    }
+    valorAtual = typeof payment.value === "number" ? payment.value : null
+  } catch (error) {
+    if (error instanceof AsaasApiError && error.statusCode === 404) {
+      return NextResponse.json({ error: "Cobrança não encontrada no Asaas" }, { status: 404 })
+    }
+    return NextResponse.json({ error: "Erro ao verificar cobrança" }, { status: 502 })
+  }
+
+  // Cortesia excepcional. Esta rota edita a MESMA cobrança cujo não-pagamento
+  // define a trava, uma a uma em vez de pela assinatura — e os DOIS campos são
+  // caminhos de fuga:
+  //   - `dueDate`: esticar o prazo pela porta dos fundos;
+  //   - `value`: reprecificar para R$ 0,01 faz a unidade "pagar", o webhook
+  //     grava um TenantPayment RECEIVED e ela sai da trava PARA SEMPRE, porque
+  //     `everPaid` é irreversível de propósito.
+  const lifecycle = await loadTenantLifecycle(tenantId)
+  const reduzValor =
+    parsed.data.value !== undefined &&
+    valorAtual !== null &&
+    parsed.data.value < valorAtual
+  const cortesiaTrigger: CortesiaTrigger | null =
+    parsed.data.dueDate &&
+    lifecycle &&
+    isDueDateStretched(parsed.data.dueDate, lifecycle.createdAt)
+      ? "postpone"
+      : reduzValor
+        ? "discount"
+        : null
+
+  let cortesiaConcedida: string | undefined
+  if (cortesiaTrigger) {
     const verdict = assertCortesiaExcepcional({
-      tenant: { neverActivated: lifecycle?.neverActivated ?? false },
-      trigger: "postpone",
+      tenant: {
+        everPaid: lifecycle?.everPaid ?? true,
+        neverActivated: lifecycle?.neverActivated ?? false,
+      },
+      trigger: cortesiaTrigger,
       override: {
         allowed: guard.ctx.can("unidades.cortesiaExcepcional"),
         reason: parsed.data.reason,
       },
     })
+
+    const payload = {
+      trigger: cortesiaTrigger,
+      paymentId,
+      dueDate: parsed.data.dueDate,
+      value: parsed.data.value,
+      valueAnterior: valorAtual,
+    }
 
     if (verdict.blocked) {
       await logAudit({
@@ -155,51 +203,14 @@ export const PATCH = withRequestContextParams<{ id: string; paymentId: string }>
         actorRole: guard.ctx.role,
         actorEmail: guard.ctx.email,
         tenantId,
-        payloadAfter: {
-          trigger: "postpone",
-          paymentId,
-          dueDate: parsed.data.dueDate,
-        },
+        payloadAfter: payload,
       })
       return NextResponse.json(
         { error: verdict.message, requiresReason: verdict.requiresReason },
         { status: 403 },
       )
     }
-
-    if (verdict.overridden) {
-      await logAudit({
-        action: CORTESIA_AUDIT.granted,
-        resource: "Tenant",
-        resourceId: tenantId,
-        actorUserId: guard.ctx.userId,
-        actorRole: guard.ctx.role,
-        actorEmail: guard.ctx.email,
-        tenantId,
-        payloadAfter: {
-          trigger: "postpone",
-          paymentId,
-          dueDate: parsed.data.dueDate,
-          reason: verdict.reason,
-        },
-      })
-    }
-  }
-
-  // Valida que o pagamento está pendente antes de editar
-  try {
-    const payment = await getPayment(paymentId)
-    if (payment.status !== "PENDING" && payment.status !== "OVERDUE") {
-      return NextResponse.json(
-        { error: "Só é possível editar cobranças pendentes ou vencidas" },
-        { status: 400 },
-      )
-    }
-  } catch (error) {
-    if (error instanceof AsaasApiError && error.statusCode === 404) {
-      return NextResponse.json({ error: "Cobrança não encontrada no Asaas" }, { status: 404 })
-    }
-    return NextResponse.json({ error: "Erro ao verificar cobrança" }, { status: 502 })
+    if (verdict.overridden) cortesiaConcedida = verdict.reason
   }
 
   // Atualiza no Asaas
@@ -212,6 +223,27 @@ export const PATCH = withRequestContextParams<{ id: string; paymentId: string }>
     const message =
       error instanceof AsaasApiError ? error.message : "Falha ao atualizar cobrança no Asaas"
     return NextResponse.json({ error: message }, { status: 502 })
+  }
+
+  // Auditada só depois de o Asaas aceitar — antes disso a cortesia não existiu.
+  if (cortesiaConcedida) {
+    await logAudit({
+      action: CORTESIA_AUDIT.granted,
+      resource: "Tenant",
+      resourceId: tenantId,
+      actorUserId: guard.ctx.userId,
+      actorRole: guard.ctx.role,
+      actorEmail: guard.ctx.email,
+      tenantId,
+      payloadAfter: {
+        trigger: cortesiaTrigger,
+        paymentId,
+        dueDate: parsed.data.dueDate,
+        value: parsed.data.value,
+        valueAnterior: valorAtual,
+        reason: cortesiaConcedida,
+      },
+    })
   }
 
   // Sincroniza no banco (best-effort)

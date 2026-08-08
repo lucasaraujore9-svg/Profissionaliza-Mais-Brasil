@@ -2,7 +2,11 @@
 
 import { useState } from "react"
 import { Save, CalendarClock, DollarSign, ExternalLink, AlertTriangle } from "lucide-react"
-import { CortesiaReasonDialog, type CortesiaPrompt } from "./cortesia-reason-dialog"
+import {
+  CortesiaReasonDialog,
+  type CortesiaPrompt,
+  type CortesiaRetryResult,
+} from "./cortesia-reason-dialog"
 
 interface Props {
   tenantId: string
@@ -88,22 +92,22 @@ export function ResellerBillingEdit({
     noSubscription ||
     promoDirty
 
-  /** Devolve `true` só quando a cobrança foi realmente gravada. */
-  async function save(reason?: string): Promise<boolean> {
+  /** Devolve o resultado para o diálogo de cortesia — o erro é exibido DENTRO dele. */
+  async function save(reason?: string): Promise<CortesiaRetryResult> {
     setError(null)
     setOk(null)
     setFirstPaymentId(null)
     if (!Number.isFinite(numericValue) || numericValue < 0) {
       setError("Valor inválido")
-      return false
+      return { ok: false }
     }
     if (dueDate && !/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) {
       setError("Data inválida")
-      return false
+      return { ok: false }
     }
     if (needsCpf && !cpfCnpj.replace(/\D/g, "")) {
       setError("CPF/CNPJ é obrigatório para criar a cobrança automática")
-      return false
+      return { ok: false }
     }
 
     const usePromo = promoEnabled && !isFree
@@ -112,15 +116,15 @@ export function ResellerBillingEdit({
     if (usePromo) {
       if (!Number.isFinite(promoValueNum) || promoValueNum < 0) {
         setError("Valor promocional inválido")
-        return false
+        return { ok: false }
       }
       if (!Number.isInteger(promoMonthsNum) || promoMonthsNum < 1) {
         setError("Nº de meses da promoção inválido")
-        return false
+        return { ok: false }
       }
       if (numericValue <= 0) {
         setError("Promoção exige mensalidade cheia maior que zero")
-        return false
+        return { ok: false }
       }
     }
 
@@ -160,10 +164,11 @@ export function ResellerBillingEdit({
         // Cortesia excepcional: quem tem a permissão só precisa justificar.
         if (res.status === 403 && json.requiresReason) {
           setCortesia({ message: json.error, retry: (r) => save(r) })
-          return false
+          return { ok: false }
         }
-        setError(json.error ?? "Falha ao salvar")
-        return false
+        const msg = json.error ?? "Falha ao salvar"
+        setError(msg)
+        return { ok: false, error: msg }
       }
 
       if (json.data?.firstPaymentId) {
@@ -189,10 +194,11 @@ export function ResellerBillingEdit({
       }
 
       onSaved?.()
-      return true
+      return { ok: true }
     } catch {
-      setError("Erro de rede ao salvar")
-      return false
+      const msg = "Erro de rede ao salvar"
+      setError(msg)
+      return { ok: false, error: msg }
     } finally {
       setSaving(false)
     }

@@ -54,10 +54,20 @@ export function AdminFinanceSummary({ summary }: AdminFinanceSummaryProps) {
         hint="12× MRR"
         icon={TrendingUp}
       />
+      {/* "(pagantes)" no rótulo não é cosmético: a base deste número mudou —
+          o denominador passou a ser só quem já pagou ao menos uma mensalidade,
+          e unidades que nunca pagaram saíram dos dois lados da conta. Sem o
+          aviso, a queda do dia do deploy (9,5% → 4,4% em produção) e o salto do
+          hint de "Acima do saudável" para "Dentro do esperado" seriam lidos
+          como melhora comercial que não aconteceu. */}
       <NeutralCard
-        label="Churn rate"
+        label="Churn (pagantes)"
         value={`${summary.churnRate.toFixed(1)}%`}
-        hint={churnHigh ? "Acima do saudável" : "Dentro do esperado"}
+        hint={
+          churnHigh
+            ? "Acima do saudável · só quem já pagou"
+            : "Dentro do esperado · só quem já pagou"
+        }
         icon={Users}
         tone={churnHigh ? "warn" : "good"}
       />

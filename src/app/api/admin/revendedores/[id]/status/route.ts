@@ -74,10 +74,14 @@ export const PATCH = withRequestContextParams<{ id: string }>(
   }
 
   // Cortesia excepcional: unidade que nunca pagou não volta ao ar de graça.
+  let cortesiaConcedida: string | undefined
   if ((REACTIVATING_STATUSES as readonly string[]).includes(parsed.data.status)) {
     const lifecycle = await loadTenantLifecycle(id)
     const verdict = assertCortesiaExcepcional({
-      tenant: { neverActivated: lifecycle?.neverActivated ?? false },
+      tenant: {
+        everPaid: lifecycle?.everPaid ?? true,
+        neverActivated: lifecycle?.neverActivated ?? false,
+      },
       trigger: "reactivate",
       override: {
         allowed: ctx.can("unidades.cortesiaExcepcional"),
@@ -105,29 +109,36 @@ export const PATCH = withRequestContextParams<{ id: string }>(
       )
     }
 
-    if (verdict.overridden) {
-      await logAudit({
-        action: CORTESIA_AUDIT.granted,
-        resource: "Tenant",
-        resourceId: id,
-        actorUserId: ctx.userId,
-        actorRole: ctx.role,
-        actorEmail: ctx.email,
-        tenantId: id,
-        payloadBefore: { status: tenant.status },
-        payloadAfter: {
-          status: parsed.data.status,
-          trigger: "reactivate",
-          reason: verdict.reason,
-        },
-      })
-    }
+    // A concessão só é auditada DEPOIS da escrita — ver abaixo. Registrá-la
+    // aqui deixaria linha fantasma se a operação abortasse.
+    if (verdict.overridden) cortesiaConcedida = verdict.reason
   }
 
   await prisma.tenant.update({
     where: { id },
     data: { status: parsed.data.status },
   })
+
+  // Concessão auditada só agora, com a mudança já gravada: uma trilha que
+  // afirma "cortesia concedida" numa operação que falhou é pior do que trilha
+  // nenhuma — o dono audita em cima dela.
+  if (cortesiaConcedida) {
+    await logAudit({
+      action: CORTESIA_AUDIT.granted,
+      resource: "Tenant",
+      resourceId: id,
+      actorUserId: ctx.userId,
+      actorRole: ctx.role,
+      actorEmail: ctx.email,
+      tenantId: id,
+      payloadBefore: { status: tenant.status },
+      payloadAfter: {
+        status: parsed.data.status,
+        trigger: "reactivate",
+        reason: cortesiaConcedida,
+      },
+    })
+  }
 
   await invalidateTenant(tenant)
 

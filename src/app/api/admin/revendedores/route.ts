@@ -6,6 +6,13 @@ import { resolveReferrerFromCookie } from "@/lib/referrals/capture"
 import { contextLogger } from "@/lib/logger"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { SLUG_REGEX } from "@/lib/tenant/slug"
+import {
+  MIN_REASON_LENGTH,
+  MAX_REASON_LENGTH,
+  NEVER_ACTIVATED_WHERE,
+  NUNCA_ATIVOU_FILTER,
+} from "@/lib/tenants/lifecycle"
+import { PMB_TENANT_SLUG } from "@/lib/pmb-config"
 import { createReseller } from "@/lib/resellers/create"
 import { requireAdmin, type AdminContext } from "@/lib/auth/admin-guard"
 
@@ -42,6 +49,11 @@ export const GET = withRequestContext(
   }
   if (status && ["ACTIVE", "PENDING", "SUSPENDED", "CANCELLED"].includes(status)) {
     where.status = status as Prisma.TenantWhereInput["status"]
+  } else if (status === NUNCA_ATIVOU_FILTER) {
+    // Não é um `TenantStatus` — é o recorte "fora do ar E nunca pagou", o mesmo
+    // balde do relatório. Vira filtro aqui para o dono poder revisar e cancelar
+    // essas unidades em lote.
+    Object.assign(where, NEVER_ACTIVATED_WHERE)
   }
 
   // Escopo de visibilidade: `unidades.viewAll` vê todas; sem ela vale o recorte
@@ -69,7 +81,7 @@ export const GET = withRequestContext(
 
   const scopeOnly = Object.keys(scope).length ? scope : undefined
 
-  const [tenants, stats] = await Promise.all([
+  const [tenants, stats, nuncaAtivouStats, nuncaAtivouRows] = await Promise.all([
     prisma.tenant.findMany({
       where,
       select: {
@@ -97,6 +109,17 @@ export const GET = withRequestContext(
       _count: { _all: true },
       where: scopeOnly,
     }),
+    prisma.tenant.groupBy({
+      by: ["status"],
+      _count: { _all: true },
+      where: { ...(scopeOnly ?? {}), ...NEVER_ACTIVATED_WHERE, slug: { not: PMB_TENANT_SLUG } },
+    }),
+    // Quais das unidades LISTADAS nunca pagaram — alimenta o selo e a seleção
+    // em lote sem uma segunda consulta por linha.
+    prisma.tenant.findMany({
+      where: { ...where, ...NEVER_ACTIVATED_WHERE },
+      select: { id: true },
+    }),
   ])
 
   const statsMap: Record<string, number> = {
@@ -111,14 +134,29 @@ export const GET = withRequestContext(
 
   const total = Object.values(statsMap).reduce((a, b) => a + b, 0)
 
+  // Quem nunca pagou sai de "Suspensas"/"Canceladas" e ganha balde próprio —
+  // as duas populações são comercialmente diferentes: uma é cliente perdido, a
+  // outra nunca chegou a ser cliente.
+  const nuncaAtivouPorStatus: Record<string, number> = { SUSPENDED: 0, CANCELLED: 0 }
+  for (const row of nuncaAtivouStats) {
+    nuncaAtivouPorStatus[row.status] = row._count._all
+  }
+  const nuncaAtivouSuspensas = nuncaAtivouPorStatus.SUSPENDED
+  const nuncaAtivouCanceladas = nuncaAtivouPorStatus.CANCELLED
+  const nuncaAtivouTotal = nuncaAtivouSuspensas + nuncaAtivouCanceladas
+  const nuncaAtivouIds = new Set(nuncaAtivouRows.map((r) => r.id))
+
   return NextResponse.json({
     data: {
       stats: {
         total,
         active: statsMap.ACTIVE,
         pending: statsMap.PENDING,
-        suspended: statsMap.SUSPENDED,
-        cancelled: statsMap.CANCELLED,
+        // "Suspensas" e "Canceladas" descontam quem nunca pagou — mesma
+        // separação do relatório, senão a tela e o BI discordam.
+        suspended: statsMap.SUSPENDED - nuncaAtivouSuspensas,
+        cancelled: statsMap.CANCELLED - nuncaAtivouCanceladas,
+        nuncaAtivou: nuncaAtivouTotal,
       },
       resellers: tenants.map((t) => ({
         id: t.id,
@@ -135,6 +173,7 @@ export const GET = withRequestContext(
         salesUserId: t.salesUserId,
         salesUserName: t.salesUser?.name ?? null,
         createdAt: t.createdAt.toISOString(),
+        nuncaAtivou: nuncaAtivouIds.has(t.id),
       })),
       role: ctx.role,
       can,
@@ -181,6 +220,8 @@ const createSchema = z.object({
   // indicacao vem do referrerTenantId gravado no lead (nao do cookie do admin)
   // e o lead e marcado CONVERTED + ligado ao tenant criado.
   leadId: z.string().optional().nullable(),
+  // Justificativa da cortesia excepcional por TITULAR (ver lib/tenants/lifecycle).
+  reason: z.string().trim().min(MIN_REASON_LENGTH).max(MAX_REASON_LENGTH).optional(),
 })
   .refine(
     (d) =>
@@ -272,6 +313,11 @@ export const POST = withRequestContext(
       : data.salesUserId ?? null)
 
   const result = await createReseller({
+    // Só o super admin fura a trava por titular; os demais tomam 403.
+    cortesiaOverride: {
+      allowed: ctx.can("unidades.cortesiaExcepcional"),
+      reason: data.reason,
+    },
     name: data.name,
     slug: data.slug,
     ownerName: data.ownerName,
@@ -295,9 +341,13 @@ export const POST = withRequestContext(
 
   if (!result.ok) {
     return NextResponse.json(
-      result.fields
-        ? { error: result.error, fields: result.fields }
-        : { error: result.error },
+      {
+        error: result.error,
+        ...(result.fields ? { fields: result.fields } : {}),
+        // Sinaliza ao cliente que a pessoa TEM o poder e só falta justificar —
+        // é o que abre o diálogo de motivo em vez de um erro seco.
+        ...(result.requiresReason ? { requiresReason: true } : {}),
+      },
       { status: result.status },
     )
   }

@@ -13,7 +13,11 @@ import {
 } from "@/components/ui/alert-dialog"
 import { ResellerCard } from "./reseller-card"
 import { ResellerStatusBadge } from "./reseller-status"
-import { CortesiaReasonDialog, type CortesiaPrompt } from "./cortesia-reason-dialog"
+import {
+  CortesiaReasonDialog,
+  type CortesiaPrompt,
+  type CortesiaRetryResult,
+} from "./cortesia-reason-dialog"
 
 export interface ResellerPayment {
   id: string
@@ -156,9 +160,9 @@ export function ResellerPaymentHistory({
     setSaveError(null)
   }
 
-  /** Devolve `true` só quando a cobrança foi realmente atualizada. */
-  async function saveEdit(reason?: string): Promise<boolean> {
-    if (!editing) return false
+  /** Devolve o resultado para o diálogo de cortesia — o erro é exibido DENTRO dele. */
+  async function saveEdit(reason?: string): Promise<CortesiaRetryResult> {
+    if (!editing) return { ok: false }
     setSaving(true)
     setSaveError(null)
     try {
@@ -181,17 +185,19 @@ export function ResellerPaymentHistory({
         // Cortesia excepcional: adiar cobrança de unidade que nunca pagou.
         if (res.status === 403 && json.requiresReason) {
           setCortesia({ message: json.error, retry: (r) => saveEdit(r) })
-          return false
+          return { ok: false }
         }
-        setSaveError(json.error ?? "Falha ao salvar")
-        return false
+        const msg = json.error ?? "Falha ao salvar"
+        setSaveError(msg)
+        return { ok: false, error: msg }
       }
       setEditing(null)
       onRefresh?.()
-      return true
+      return { ok: true }
     } catch {
-      setSaveError("Erro de rede ao salvar")
-      return false
+      const msg = "Erro de rede ao salvar"
+      setSaveError(msg)
+      return { ok: false, error: msg }
     } finally {
       setSaving(false)
     }

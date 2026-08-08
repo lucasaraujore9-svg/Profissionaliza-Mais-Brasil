@@ -17,15 +17,24 @@ import {
 const MIN_REASON = 10
 const MAX_REASON = 500
 
+export type CortesiaRetryResult =
+  | { ok: true }
+  /**
+   * `error` é exibido DENTRO do diálogo. O componente pai também guarda a
+   * mensagem no estado dele, mas aquele banner renderiza ATRÁS do overlay do
+   * modal — o operador via o botão voltar ao normal sem explicação nenhuma e
+   * clicava de novo.
+   */
+  | { ok: false; error?: string }
+
 export interface CortesiaPrompt {
   /** Mensagem que a API devolveu no 403 — já explica o que está sendo liberado. */
   message: string
   /**
-   * Refaz a chamada, agora com a justificativa. Devolve `true` só quando a
-   * operação passou — em caso de falha o diálogo tem que CONTINUAR aberto, ou o
-   * usuário vê a janela sumir e conclui que deu certo.
+   * Refaz a chamada, agora com a justificativa. Em caso de falha o diálogo tem
+   * que CONTINUAR aberto — se sumisse, o usuário concluiria que deu certo.
    */
-  retry: (reason: string) => Promise<boolean>
+  retry: (reason: string) => Promise<CortesiaRetryResult>
 }
 
 /**
@@ -45,28 +54,44 @@ export function CortesiaReasonDialog({
 }) {
   const [reason, setReason] = useState("")
   const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   // Cada nova solicitação começa com o campo limpo — reaproveitar a
   // justificativa anterior seria registrar um motivo que ninguém escreveu.
   useEffect(() => {
-    if (prompt) setReason("")
+    if (prompt) {
+      setReason("")
+      setError(null)
+    }
   }, [prompt])
 
   const trimmed = reason.trim()
   const tooShort = trimmed.length < MIN_REASON
 
   async function confirm() {
-    if (!prompt || tooShort) return
+    if (!prompt || tooShort || saving) return
     setSaving(true)
+    setError(null)
     try {
-      if (await prompt.retry(trimmed)) onClose()
+      const result = await prompt.retry(trimmed)
+      if (result.ok) onClose()
+      else setError(result.error ?? "Não foi possível concluir. Tente novamente.")
     } finally {
       setSaving(false)
     }
   }
 
   return (
-    <AlertDialog open={Boolean(prompt)} onOpenChange={(o) => !o && onClose()}>
+    <AlertDialog
+      open={Boolean(prompt)}
+      // Enquanto a requisição está em voo, o diálogo NÃO fecha — nem por
+      // Escape, nem por clique fora. O botão Cancelar já ficava desabilitado,
+      // mas o Escape continuava passando: a janela sumia como se tivesse
+      // abortado e a cortesia era concedida assim mesmo no servidor.
+      onOpenChange={(o) => {
+        if (!o && !saving) onClose()
+      }}
+    >
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle className="flex items-center gap-2">
@@ -89,6 +114,11 @@ export function CortesiaReasonDialog({
               ? `Faltam ${MIN_REASON - trimmed.length} caractere(s).`
               : `${trimmed.length}/${MAX_REASON} · fica registrado na auditoria com o seu nome.`}
           </p>
+          {error && (
+            <p className="rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">
+              {error}
+            </p>
+          )}
         </div>
 
         <AlertDialogFooter>

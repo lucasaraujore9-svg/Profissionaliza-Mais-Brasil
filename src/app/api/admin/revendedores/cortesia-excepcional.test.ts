@@ -49,7 +49,9 @@ vi.mock("@/lib/logger", () => ({
   contextLogger: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }),
 }))
 
-const getPayment = vi.hoisted(() => vi.fn(async () => ({ status: "PENDING" })))
+const getPayment = vi.hoisted(() =>
+  vi.fn(async (): Promise<{ status: string; value?: number }> => ({ status: "PENDING" })),
+)
 const updatePayment = vi.hoisted(() => vi.fn(async () => ({})))
 vi.mock("@/lib/asaas/client", () => ({
   getPayment,
@@ -78,7 +80,14 @@ import { adminGuardFor } from "@/test/admin-ctx"
 
 const MOTIVO = "unidade renegociou, pagamento combinado por PIX na sexta"
 
-/** Unidade fora do ar que nunca pagou — a que o gate protege. */
+/**
+ * `createdAt` é a âncora do teto de vencimento. Um INSTANTE real (não uma data
+ * já normalizada): `brDayStartUtc` de uma meia-noite UTC volta um dia, porque
+ * meia-noite em UTC ainda é a noite anterior no Brasil.
+ */
+const CRIADA_EM = new Date()
+
+/** Unidade que nunca pagou — a que o gate protege. */
 function nuncaPagou(status: "SUSPENDED" | "CANCELLED" | "PENDING" | "ACTIVE") {
   return {
     id: "t1",
@@ -89,6 +98,7 @@ function nuncaPagou(status: "SUSPENDED" | "CANCELLED" | "PENDING" | "ACTIVE") {
     salesUserId: null,
     status,
     planValue: 239,
+    createdAt: CRIADA_EM,
     asaasCustomerId: "cus_1",
     asaasSubscriptionId: "sub_0",
     asaasPromoSubscriptionId: null,
@@ -112,8 +122,14 @@ function jaPagou(status: "SUSPENDED" | "CANCELLED") {
  * noite. Foi assim que o CI quebrou às 00:08 UTC (21:08 BRT) no commit 536dedd,
  * com o código de produção correto.
  */
+/**
+ * D+N a partir do DIA CIVIL BRASILEIRO da criação — a mesma conta que
+ * `isDueDateStretched` faz. Derivar por `toISOString()` daria o dia UTC e
+ * erraria por um dia entre 21h e meia-noite no Brasil (foi assim que o CI
+ * quebrou no commit 536dedd).
+ */
 function diasAFrente(dias: number): string {
-  const d = brDayStartUtc()
+  const d = brDayStartUtc(CRIADA_EM)
   d.setUTCDate(d.getUTCDate() + dias)
   return d.toISOString().slice(0, 10)
 }
@@ -198,13 +214,142 @@ describe("status — laundering por PENDING", () => {
   })
 
   it("PENDING → ACTIVE segue livre para quem nunca foi suspensa", async () => {
-    // Unidade nova, aguardando o 1º pagamento: não é o caso da regra.
+    // Unidade nova, aguardando o 1º pagamento: não é o caso da REATIVAÇÃO.
     semCortesia()
     db.tenant.findUnique.mockResolvedValue(nuncaPagou("PENDING"))
 
     const res = await PATCH_STATUS(statusReq({ status: "ACTIVE" }), statusParams)
 
     expect(res.status).toBe(200)
+  })
+})
+
+/*
+ * O furo que sobrou da primeira versão: o gate exigia SUSPENDED/CANCELLED, mas a
+ * criação fixa a 1ª cobrança em D+3 — os prazos esticados de produção
+ * (`valedosaber` D+20, `andersoncidade` D+15) só podem ter sido gravados
+ * enquanto a unidade ainda era PENDING, porque ela só vira SUSPENDED DEPOIS de
+ * vencer. Reverter `REQUIRES_INACTIVE` tem que quebrar este bloco.
+ */
+describe("cortesia em unidade PENDING que nunca pagou", () => {
+  beforeEach(() => {
+    semCortesia()
+    db.tenant.findUnique.mockResolvedValue(nuncaPagou("PENDING"))
+  })
+
+  it("bloqueia tornar gratuita", async () => {
+    const res = await PATCH_BILLING(billingReq({ planValue: 0 }), statusParams)
+    expect(res.status).toBe(403)
+  })
+
+  it("bloqueia conceder promoção", async () => {
+    const res = await PATCH_BILLING(
+      billingReq({ planValue: 239, promoMonths: 6, promoValue: 1 }),
+      statusParams,
+    )
+    expect(res.status).toBe(403)
+  })
+
+  it("bloqueia esticar o vencimento da assinatura", async () => {
+    const res = await PATCH_BILLING(
+      billingReq({ nextDueDate: diasAFrente(MAX_DUE_DAYS_AHEAD + 1) }),
+      statusParams,
+    )
+    expect(res.status).toBe(403)
+  })
+
+  it("bloqueia esticar a cobrança individual", async () => {
+    const res = await PATCH_PAYMENT(
+      paymentReq({ dueDate: diasAFrente(MAX_DUE_DAYS_AHEAD + 5) }),
+      paymentParams,
+    )
+    expect(res.status).toBe(403)
+    expect(updatePayment).not.toHaveBeenCalled()
+  })
+
+  it("continua aceitando o prazo dentro do limite", async () => {
+    const res = await PATCH_BILLING(
+      billingReq({ nextDueDate: diasAFrente(MAX_DUE_DAYS_AHEAD) }),
+      statusParams,
+    )
+    expect(res.status).toBe(200)
+  })
+})
+
+/*
+ * Reprecificar a cobrança para um valor simbólico faz a unidade "pagar", o
+ * webhook grava um TenantPayment RECEIVED e ela sai da trava PARA SEMPRE —
+ * `everPaid` é irreversível de propósito. O gate cobria só `dueDate`.
+ */
+describe("cobrança individual — redução de valor", () => {
+  beforeEach(() => {
+    getPayment.mockResolvedValue({ status: "PENDING", value: 239 })
+  })
+
+  it("bloqueia reduzir o valor de unidade que nunca pagou", async () => {
+    semCortesia()
+    db.tenant.findUnique.mockResolvedValue(nuncaPagou("SUSPENDED"))
+
+    const res = await PATCH_PAYMENT(paymentReq({ value: 0.01 }), paymentParams)
+
+    expect(res.status).toBe(403)
+    expect(updatePayment).not.toHaveBeenCalled()
+  })
+
+  it("aceita AUMENTAR o valor — não é cortesia", async () => {
+    semCortesia()
+    db.tenant.findUnique.mockResolvedValue(nuncaPagou("SUSPENDED"))
+
+    const res = await PATCH_PAYMENT(paymentReq({ value: 300 }), paymentParams)
+
+    expect(res.status).toBe(200)
+  })
+
+  it("libera redução para unidade que já pagou", async () => {
+    semCortesia()
+    db.tenant.findUnique.mockResolvedValue(jaPagou("SUSPENDED"))
+
+    const res = await PATCH_PAYMENT(paymentReq({ value: 0.01 }), paymentParams)
+
+    expect(res.status).toBe(200)
+  })
+
+  it("super admin com motivo reduz e audita como desconto", async () => {
+    db.tenant.findUnique.mockResolvedValue(nuncaPagou("SUSPENDED"))
+
+    const res = await PATCH_PAYMENT(
+      paymentReq({ value: 0.01, reason: MOTIVO }),
+      paymentParams,
+    )
+
+    expect(res.status).toBe(200)
+    expect(logAudit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: CORTESIA_AUDIT.granted,
+        payloadAfter: expect.objectContaining({ trigger: "discount" }),
+      }),
+    )
+  })
+})
+
+/*
+ * A trilha é o que o dono usa para auditar. Uma linha "cortesia concedida" numa
+ * operação que abortou é pior do que trilha nenhuma.
+ */
+describe("auditoria da concessão", () => {
+  it("não registra concessão quando o Asaas falha e nada é gravado", async () => {
+    db.tenant.findUnique.mockResolvedValue(nuncaPagou("SUSPENDED"))
+    updatePayment.mockRejectedValueOnce(new Error("asaas fora do ar"))
+
+    const res = await PATCH_PAYMENT(
+      paymentReq({ dueDate: diasAFrente(60), reason: MOTIVO }),
+      paymentParams,
+    )
+
+    expect(res.status).toBe(502)
+    expect(logAudit).not.toHaveBeenCalledWith(
+      expect.objectContaining({ action: CORTESIA_AUDIT.granted }),
+    )
   })
 })
 
