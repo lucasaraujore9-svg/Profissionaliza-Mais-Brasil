@@ -73,6 +73,7 @@ import { PATCH as PATCH_STATUS } from "@/app/api/admin/revendedores/[id]/status/
 import { PATCH as PATCH_BILLING } from "@/app/api/admin/revendedores/[id]/billing/route"
 import { PATCH as PATCH_PAYMENT } from "@/app/api/admin/revendedores/[id]/payments/[paymentId]/route"
 import { CORTESIA_AUDIT, MAX_DUE_DAYS_AHEAD } from "@/lib/tenants/lifecycle"
+import { brDayStartUtc } from "@/lib/dates"
 import { adminGuardFor } from "@/test/admin-ctx"
 
 const MOTIVO = "unidade renegociou, pagamento combinado por PIX na sexta"
@@ -101,9 +102,19 @@ function jaPagou(status: "SUSPENDED" | "CANCELLED") {
   return { ...nuncaPagou(status), tenantPayments: [{ id: "pago-1" }] }
 }
 
+/**
+ * Data a N dias do DIA CIVIL BRASILEIRO — não do dia UTC.
+ *
+ * `new Date().toISOString()` devolve o dia UTC, e entre 21h e meia-noite no
+ * Brasil ele já virou o dia seguinte. Como o gate corta por `brDayStartUtc`, um
+ * helper baseado em UTC empurra os casos "exatamente no limite" um dia para
+ * frente e eles passam a bater em 403 — o teste fica verde de dia e vermelho de
+ * noite. Foi assim que o CI quebrou às 00:08 UTC (21:08 BRT) no commit 536dedd,
+ * com o código de produção correto.
+ */
 function diasAFrente(dias: number): string {
-  const d = new Date()
-  d.setDate(d.getDate() + dias)
+  const d = brDayStartUtc()
+  d.setUTCDate(d.getUTCDate() + dias)
   return d.toISOString().slice(0, 10)
 }
 

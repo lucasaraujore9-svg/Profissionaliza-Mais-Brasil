@@ -13,6 +13,7 @@ import {
 } from "./lifecycle"
 import { PAID_STATUSES } from "@/lib/tenant-billing/types"
 import { PMB_TENANT_SLUG } from "@/lib/pmb-config"
+import { brDayStartUtc } from "@/lib/dates"
 
 describe("EVER_PAID_STATUSES", () => {
   it("cobre tudo que PAID_STATUSES cobre", () => {
@@ -128,6 +129,33 @@ describe("isDueDateStretched", () => {
 
   it("o limite é o padrão da criação mais a folga", () => {
     expect(MAX_DUE_DAYS_AHEAD).toBe(DEFAULT_FIRST_DUE_DAYS + CORTESIA_GRACE_DAYS)
+  })
+
+  /**
+   * O limite tem que ser o MESMO em qualquer hora do dia.
+   *
+   * Regressão real: o helper dos testes de rota montava a data com
+   * `new Date().toISOString()` (dia UTC) enquanto o corte usa o dia civil
+   * brasileiro. Das 00h às 03h UTC — 21h à meia-noite no Brasil — os dois
+   * discordam em um dia, e o caso "exatamente no limite" virava 403. O CI
+   * quebrou às 00:08 UTC com o código de produção correto.
+   *
+   * Varrer as 24 horas pega essa classe de erro sem depender de a suíte rodar
+   * na janela ruim.
+   */
+  it("o corte não muda com a hora do dia", () => {
+    for (let hora = 0; hora < 24; hora++) {
+      const agora = new Date(Date.UTC(2026, 7, 8, hora, 30, 0))
+      const diaCivilBr = brDayStartUtc(agora)
+
+      const noLimite = new Date(diaCivilBr)
+      noLimite.setUTCDate(noLimite.getUTCDate() + MAX_DUE_DAYS_AHEAD)
+      const umDiaAlem = new Date(diaCivilBr)
+      umDiaAlem.setUTCDate(umDiaAlem.getUTCDate() + MAX_DUE_DAYS_AHEAD + 1)
+
+      expect(isDueDateStretched(noLimite, agora), `${hora}h UTC — no limite`).toBe(false)
+      expect(isDueDateStretched(umDiaAlem, agora), `${hora}h UTC — um dia além`).toBe(true)
+    }
   })
 })
 
