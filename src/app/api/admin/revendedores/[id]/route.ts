@@ -7,19 +7,13 @@ import {
 } from "@/lib/referrals/effective-rule"
 import { invalidateTenant } from "@/lib/redis/tenant-cache"
 import { logAudit } from "@/lib/audit"
-import { blockTenantStudents } from "@/lib/auto-block"
-import {
-  cancelSubscription,
-  deletePayment,
-  getSubscription,
-  listPayments,
-  AsaasApiError,
-} from "@/lib/asaas/client"
+import { getSubscription, listPayments } from "@/lib/asaas/client"
 import { swallow } from "@/lib/errors"
 import { tenantCheckoutMode } from "@/lib/tenant/checkout-mode"
 import { contextLogger } from "@/lib/logger"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 import { requireAdmin } from "@/lib/auth/admin-guard"
+import { cancelTenant, CANCELABLE_TENANT_SELECT } from "@/lib/resellers/cancel"
 
 // Escopo de acesso a uma unidade já carregada: ver canAccessTenantScope em
 // @/lib/auth/scope (mesma regra de tenantScopeWhere).
@@ -473,99 +467,19 @@ export const DELETE = withRequestContextParams<{ id: string }>(
 
   const tenant = await prisma.tenant.findUnique({
     where: { id },
-    select: {
-      id: true,
-      slug: true,
-      status: true,
-      customDomain: true,
-      asaasSubscriptionId: true,
-      asaasPromoSubscriptionId: true,
-    },
+    select: CANCELABLE_TENANT_SELECT,
   })
 
   if (!tenant) {
     return NextResponse.json({ error: "Revendedor não encontrado" }, { status: 404 })
   }
 
-  // As DUAS assinaturas: a regular (planValue) e a promocional (primeiras N
-  // mensalidades com maxPayments). Cancelar só a regular deixava a promo viva
-  // cobrando uma unidade já cancelada.
-  const subscriptionIds = [
-    tenant.asaasSubscriptionId,
-    tenant.asaasPromoSubscriptionId,
-  ].filter((s): s is string => Boolean(s))
-
-  for (const subscriptionId of subscriptionIds) {
-    try {
-      await cancelSubscription(subscriptionId)
-    } catch (error) {
-      // 404 = a assinatura já não existe no Asaas; qualquer outro erro aborta
-      // ANTES de mexer no banco, para não marcar CANCELLED uma unidade que
-      // seguiria sendo cobrada.
-      if (error instanceof AsaasApiError && error.statusCode !== 404) {
-        return NextResponse.json(
-          { error: `Falha ao cancelar assinatura Asaas: ${error.message}` },
-          { status: 502 },
-        )
-      }
-      if (!(error instanceof AsaasApiError)) {
-        return NextResponse.json(
-          { error: "Falha ao cancelar assinatura Asaas" },
-          { status: 502 },
-        )
-      }
-    }
+  // Núcleo compartilhado com o cancelamento em LOTE — ver `lib/resellers/cancel`.
+  const outcome = await cancelTenant(tenant, { blockStudents, deleteOpenCharges })
+  if (!outcome.ok) {
+    return NextResponse.json({ error: outcome.error }, { status: outcome.status })
   }
-
-  const warnings: string[] = []
-
-  // Mensalidades já emitidas e em aberto: sem apagá-las, o ex-revendedor
-  // continua recebendo boleto/PIX de uma assinatura que não existe mais.
-  // DELETING é o estado intermediário — o webhook PAYMENT_DELETED confirma
-  // para DELETED (mesma semântica de .../payments/[paymentId] DELETE).
-  let deletedCharges = 0
-  if (deleteOpenCharges) {
-    const openCharges = await prisma.tenantPayment.findMany({
-      where: { tenantId: id, status: { in: ["PENDING", "OVERDUE"] } },
-      select: { id: true, asaasPaymentId: true },
-    })
-    for (const charge of openCharges) {
-      try {
-        await deletePayment(charge.asaasPaymentId)
-      } catch (error) {
-        if (!(error instanceof AsaasApiError && error.statusCode === 404)) {
-          warnings.push(
-            `cobrança ${charge.asaasPaymentId}: ${
-              error instanceof Error ? error.message : "falha ao apagar no Asaas"
-            }`,
-          )
-          continue
-        }
-      }
-      await prisma.tenantPayment
-        .update({ where: { id: charge.id }, data: { status: "DELETING" } })
-        .catch(swallow("admin.revendedores.cancel"))
-      deletedCharges += 1
-    }
-  }
-
-  await prisma.tenant.update({
-    where: { id },
-    data: { status: "CANCELLED" },
-  })
-
-  await invalidateTenant(tenant)
-
-  // Destino dos alunos: escolhido pelo admin no diálogo de confirmação. Reusa a
-  // mesma função do cron de inadimplência (src/lib/auto-block.ts).
-  let studentsBlocked = 0
-  if (blockStudents) {
-    const block = await blockTenantStudents(id)
-    studentsBlocked = block.affectedStudents
-    if (block.errors.length > 0) {
-      warnings.push(`${block.errors.length} aluno(s) não puderam ser bloqueados`)
-    }
-  }
+  const { cancelledSubscriptions, deletedCharges, studentsBlocked, warnings } = outcome
 
   // SAAS-001: trilha de auditoria de cancelamento de revenda (ação destrutiva).
   await logAudit({
@@ -577,14 +491,14 @@ export const DELETE = withRequestContextParams<{ id: string }>(
     actorEmail: ctx.email,
     tenantId: id,
     payloadBefore: {
-      slug: tenant.slug,
-      status: tenant.status,
-      hadAsaasSubscription: Boolean(tenant.asaasSubscriptionId),
-      hadAsaasPromoSubscription: Boolean(tenant.asaasPromoSubscriptionId),
+      slug: outcome.before.slug,
+      status: outcome.before.status,
+      hadAsaasSubscription: outcome.before.hadSubscription,
+      hadAsaasPromoSubscription: outcome.before.hadPromoSubscription,
     },
     payloadAfter: {
       status: "CANCELLED",
-      cancelledSubscriptions: subscriptionIds.length,
+      cancelledSubscriptions,
       deletedCharges,
       studentsBlocked,
       blockStudents,

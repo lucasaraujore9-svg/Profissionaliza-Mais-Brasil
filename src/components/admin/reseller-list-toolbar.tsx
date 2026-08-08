@@ -3,7 +3,17 @@
 import { Search } from "lucide-react"
 import { Input } from "@/components/ui/input"
 
-export type ResellerFilter = "TODOS" | "ACTIVE" | "PENDING" | "SUSPENDED"
+/**
+ * `NUNCA_ATIVOU` não é um `TenantStatus` — é o recorte "fora do ar E nunca
+ * pagou", o mesmo balde do relatório. A string casa com `NUNCA_ATIVOU_FILTER`
+ * de `lib/tenants/lifecycle`, que é quem a traduz em `where` no servidor.
+ */
+export type ResellerFilter =
+  | "TODOS"
+  | "ACTIVE"
+  | "PENDING"
+  | "SUSPENDED"
+  | "NUNCA_ATIVOU"
 
 interface ResellerListToolbarProps {
   query: string
@@ -17,6 +27,7 @@ const FILTERS: { key: ResellerFilter; label: string }[] = [
   { key: "ACTIVE", label: "Ativos" },
   { key: "PENDING", label: "Pendentes" },
   { key: "SUSPENDED", label: "Suspensos" },
+  { key: "NUNCA_ATIVOU", label: "Nunca ativou" },
 ]
 
 export function ResellerListToolbar({

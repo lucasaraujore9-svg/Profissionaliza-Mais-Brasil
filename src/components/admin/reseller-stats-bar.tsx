@@ -4,6 +4,8 @@ export interface ResellerStats {
   pending: number
   suspended: number
   cancelled: number
+  /** Fora do ar E nunca pagou — separado de "Suspensos" (ver lifecycle.ts). */
+  nuncaAtivou: number
 }
 
 interface ResellerStatsBarProps {
@@ -16,10 +18,15 @@ export function ResellerStatsBar({ stats }: ResellerStatsBarProps) {
     { label: "Ativos", value: stats.active, accent: "text-[var(--color-pmb-green-700)]" },
     { label: "Pendentes", value: stats.pending, accent: "text-[var(--color-pmb-gold-600)]" },
     { label: "Suspensos", value: stats.suspended, accent: "text-rose-600" },
+    {
+      label: "Nunca ativou",
+      value: stats.nuncaAtivou,
+      accent: "text-gray-500",
+    },
   ]
 
   return (
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
       {items.map((stat) => (
         <div
           key={stat.label}

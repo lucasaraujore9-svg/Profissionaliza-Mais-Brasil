@@ -26,6 +26,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { StatCardsSkeleton, TableRowsSkeleton } from "@/components/shared/loading-skeletons"
 import { NewResellerDialog } from "./new-reseller-dialog"
+import { ResellerBulkCancel } from "./reseller-bulk-cancel"
 
 interface ListResponse {
   data: {
@@ -167,7 +168,7 @@ export function ResellerListClient() {
       {data ? (
         <ResellerStatsBar stats={data.stats} />
       ) : (
-        <StatCardsSkeleton count={4} />
+        <StatCardsSkeleton count={5} />
       )}
       <div className="flex flex-col items-stretch justify-between gap-3 sm:flex-row sm:items-center">
         <div className="flex-1">
@@ -181,6 +182,13 @@ export function ResellerListClient() {
         {/* Mesma permissão que o POST /api/admin/revendedores exige. */}
         {data?.can?.create && <NewResellerDialog onCreated={load} />}
       </div>
+
+      {/* Só no balde "Nunca ativou" e só para quem cancela — mesma permissão
+          (`unidades.governanca`) que o cancelamento individual. */}
+      {filter === "NUNCA_ATIVOU" && data?.can?.governanca && (
+        <ResellerBulkCancel rows={data.resellers} onDone={load} />
+      )}
+
       {content}
 
       <Dialog open={!!assignTenantId} onOpenChange={(o) => !o && setAssignTenantId(null)}>

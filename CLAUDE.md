@@ -446,6 +446,59 @@ canceladas) foram para o balde novo "Nunca ativou".
   `EVER_PAID_STATUSES` — mudou la, migration nova aqui, senao o Postgres para de
   usar o indice em silencio.
 
+### Revisao da cortesia: 10 defeitos + trava por titular (2026-08-08)
+
+Revisao multi-agente (29 agentes) sobre a feature JA EM PRODUCAO achou 10
+defeitos. Os quatro primeiros valem como padrao, nao so como conserto:
+
+- **O gate nao cobria `PENDING`.** `neverActivated` exigia SUSPENDED/CANCELLED,
+  mas a criacao fixa a 1a cobranca em D+3: os prazos esticados que calibraram a
+  regra so podem ter sido gravados enquanto a unidade ainda era PENDING — ela so
+  vira SUSPENDED DEPOIS de vencer. O caminho que PRODUZIU o problema era o unico
+  que continuava aberto. Agora `REQUIRES_INACTIVE` separa por gatilho: reativar
+  exige estar fora do ar; free/promo/postpone/discount valem em qualquer status
+  enquanto ela nunca tiver pago.
+- **Status de cobranca e MUTAVEL.** `asaas/process.ts` faz upsert do status atual
+  a cada evento, entao estorno/chargeback reescreve a linha que era RECEIVED e
+  apaga o pagamento. Predicado passou a aceitar `paidAt IS NOT NULL`, que
+  sobrevive as transicoes. Qualquer regra de "ja aconteceu" precisa de um campo
+  que nao seja reescrito.
+- **Gate parcial e gate furado.** O `dueDate` do PATCH de cobranca estava
+  guardado e o `value` do MESMO handler nao: reprecificar para R$ 0,01 fazia a
+  unidade "pagar" e sair da trava para sempre. Ao gatear um handler, olhe TODOS
+  os campos que ele escreve.
+- **Teto ancorado em "hoje" desliza.** Adiar todo dia para hoje+10 empurrava o
+  vencimento indefinidamente sem NUNCA ser bloqueado nem auditado. A ancora
+  virou `Tenant.createdAt`, que e imutavel.
+
+Os outros seis: auditoria de concessao gravada ANTES da escrita (502 deixava
+linha fantasma); `loadTenantLifecycle` sem teste nenhum (remover o filtro de
+pagamento mantinha os 1646 verdes); erro da retentativa pintado ATRAS do overlay
+do modal; Escape durante a requisicao fechava o dialogo mas concedia; card de
+/admin/financeiro ainda rotulado "Churn rate" com limiar de 5% sobre base nova;
+`CREATE INDEX CONCURRENTLY IF NOT EXISTS` nao e re-executavel (build abortada
+deixa indice INVALID que o `IF NOT EXISTS` passa a pular para sempre).
+
+**Trava por TITULAR.** A trava era por TENANT — cancelar a unidade que nunca
+pagou e abrir outra de graca para o mesmo dono contornava tudo.
+`findBlockedUnitsForPerson` casa por CPF, e-mail e telefone; o telefone EM
+MEMORIA, porque `User.phone` nao tem unicidade e foi gravado como a pessoa
+digitou (mesmo caminho da API de parceiros). Vale so para unidade que nasce SEM
+PAGAR: a preco cheio a pessoa volta como cliente de verdade e, se nao pagar, cai
+na trava sozinha. Fica no nucleo `createReseller`, entao /admin e o painel
+herdam a regra e um chamador novo nao nasce sem ela.
+
+**Cancelamento em lote** das que nunca pagaram: filtro "Nunca ativou" em
+/admin/revendedores + `POST /api/admin/revendedores/cancelar-lote`
+(`unidades.governanca`, a mesma do cancelamento individual). O servidor
+RE-DERIVA a elegibilidade — os ids do corpo sao FILTRO sobre `NEVER_ACTIVATED_WHERE`,
+nunca a fonte da verdade. Cada unidade segue a `cancellationPolicy` DELA para os
+alunos. **Nao move o churn:** o predicado ja exclui quem nunca pagou dos dois
+lados da razao; elas so migram de "suspensas" para "canceladas" dentro do mesmo
+balde. `lib/resellers/cancel.ts` e o nucleo compartilhado com o DELETE
+individual — duplicar um fluxo destrutivo que fala com o Asaas e como as duas
+metades divergem em silencio.
+
 ### Bugs conhecidos (pendentes)
 
 - **Middleware file convention deprecado** no Next 16 (usar `proxy` em vez de `middleware`).
