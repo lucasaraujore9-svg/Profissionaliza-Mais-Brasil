@@ -22,6 +22,7 @@ import {
   BarChart3,
   Repeat,
   UserPlus,
+  UserX,
   CheckCircle2,
   Clock,
   type LucideIcon,
@@ -55,6 +56,7 @@ export const REPORT_ICONS: Record<string, LucideIcon> = {
   "bar-chart-3": BarChart3,
   repeat: Repeat,
   "user-plus": UserPlus,
+  "user-x": UserX,
   "check-circle-2": CheckCircle2,
   clock: Clock,
 }

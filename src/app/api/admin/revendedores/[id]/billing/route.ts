@@ -17,6 +17,15 @@ import {
 import { createPromoBilling } from "@/lib/asaas/promo"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 import { requireAdmin } from "@/lib/auth/admin-guard"
+import {
+  loadTenantLifecycle,
+  assertCortesiaExcepcional,
+  isDueDateStretched,
+  CORTESIA_AUDIT,
+  MIN_REASON_LENGTH,
+  MAX_REASON_LENGTH,
+  type CortesiaTrigger,
+} from "@/lib/tenants/lifecycle"
 
 const patchSchema = z
   .object({
@@ -31,6 +40,8 @@ const patchSchema = z
       .optional(),
     ownerCpfCnpj: z.string().min(11).max(20).optional(),
     syncWithAsaas: z.boolean().default(true),
+    // Justificativa da cortesia excepcional (ver `lib/tenants/lifecycle.ts`).
+    reason: z.string().trim().min(MIN_REASON_LENGTH).max(MAX_REASON_LENGTH).optional(),
   })
   .refine(
     (d) =>
@@ -131,6 +142,78 @@ export const PATCH = withRequestContextParams<{ id: string }>(
         { error: "A data de próximo vencimento não pode ser no passado" },
         { status: 400 },
       )
+    }
+  }
+
+  // Cortesia excepcional: os três gatilhos que devolvem uma unidade ao ar sem
+  // ela pagar. Avaliado ANTES de qualquer chamada ao Asaas — bloquear depois de
+  // já ter cancelado a assinatura lá deixaria a unidade sem cobrança nenhuma.
+  //
+  // `planValue: 0` é o mais direto: além de zerar a mensalidade, o bloco de
+  // persistência mais abaixo promove PENDING/SUSPENDED para ACTIVE sozinho.
+  const cortesiaTrigger: CortesiaTrigger | null =
+    parsed.data.planValue === 0
+      ? "free"
+      : parsed.data.promoMonths !== undefined || parsed.data.promoValue !== undefined
+        ? "promo"
+        : parsed.data.nextDueDate && isDueDateStretched(parsed.data.nextDueDate)
+          ? "postpone"
+          : null
+
+  if (cortesiaTrigger) {
+    const lifecycle = await loadTenantLifecycle(id)
+    const verdict = assertCortesiaExcepcional({
+      tenant: { neverActivated: lifecycle?.neverActivated ?? false },
+      trigger: cortesiaTrigger,
+      override: {
+        allowed: session.can("unidades.cortesiaExcepcional"),
+        reason: parsed.data.reason,
+      },
+    })
+
+    if (verdict.blocked) {
+      await logAudit({
+        action: CORTESIA_AUDIT.blocked,
+        resource: "Tenant",
+        resourceId: id,
+        actorUserId: session.userId,
+        actorRole: session.role,
+        actorEmail: session.email,
+        tenantId: id,
+        payloadBefore: { planValue: Number(tenant.planValue), status: tenant.status },
+        payloadAfter: {
+          trigger: cortesiaTrigger,
+          planValue: parsed.data.planValue,
+          promoMonths: parsed.data.promoMonths,
+          promoValue: parsed.data.promoValue,
+          nextDueDate: parsed.data.nextDueDate,
+        },
+      })
+      return NextResponse.json(
+        { error: verdict.message, requiresReason: verdict.requiresReason },
+        { status: 403 },
+      )
+    }
+
+    if (verdict.overridden) {
+      await logAudit({
+        action: CORTESIA_AUDIT.granted,
+        resource: "Tenant",
+        resourceId: id,
+        actorUserId: session.userId,
+        actorRole: session.role,
+        actorEmail: session.email,
+        tenantId: id,
+        payloadBefore: { planValue: Number(tenant.planValue), status: tenant.status },
+        payloadAfter: {
+          trigger: cortesiaTrigger,
+          planValue: parsed.data.planValue,
+          promoMonths: parsed.data.promoMonths,
+          promoValue: parsed.data.promoValue,
+          nextDueDate: parsed.data.nextDueDate,
+          reason: verdict.reason,
+        },
+      })
     }
   }
 

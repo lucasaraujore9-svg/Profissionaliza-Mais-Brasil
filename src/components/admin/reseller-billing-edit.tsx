@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { Save, CalendarClock, DollarSign, ExternalLink, AlertTriangle } from "lucide-react"
+import { CortesiaReasonDialog, type CortesiaPrompt } from "./cortesia-reason-dialog"
 
 interface Props {
   tenantId: string
@@ -63,6 +64,7 @@ export function ResellerBillingEdit({
     promoMonths != null ? String(promoMonths) : "3",
   )
   const [saving, setSaving] = useState(false)
+  const [cortesia, setCortesia] = useState<CortesiaPrompt | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [ok, setOk] = useState<string | null>(null)
   const [firstPaymentId, setFirstPaymentId] = useState<string | null>(null)
@@ -86,21 +88,22 @@ export function ResellerBillingEdit({
     noSubscription ||
     promoDirty
 
-  async function save() {
+  /** Devolve `true` só quando a cobrança foi realmente gravada. */
+  async function save(reason?: string): Promise<boolean> {
     setError(null)
     setOk(null)
     setFirstPaymentId(null)
     if (!Number.isFinite(numericValue) || numericValue < 0) {
       setError("Valor inválido")
-      return
+      return false
     }
     if (dueDate && !/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) {
       setError("Data inválida")
-      return
+      return false
     }
     if (needsCpf && !cpfCnpj.replace(/\D/g, "")) {
       setError("CPF/CNPJ é obrigatório para criar a cobrança automática")
-      return
+      return false
     }
 
     const usePromo = promoEnabled && !isFree
@@ -109,15 +112,15 @@ export function ResellerBillingEdit({
     if (usePromo) {
       if (!Number.isFinite(promoValueNum) || promoValueNum < 0) {
         setError("Valor promocional inválido")
-        return
+        return false
       }
       if (!Number.isInteger(promoMonthsNum) || promoMonthsNum < 1) {
         setError("Nº de meses da promoção inválido")
-        return
+        return false
       }
       if (numericValue <= 0) {
         setError("Promoção exige mensalidade cheia maior que zero")
-        return
+        return false
       }
     }
 
@@ -129,7 +132,9 @@ export function ResellerBillingEdit({
         ownerCpfCnpj?: string
         promoMonths?: number
         promoValue?: number
+        reason?: string
       } = {}
+      if (reason) body.reason = reason
       // Promo e "tornar grátis" exigem reenviar o planValue mesmo se igual,
       // pois a rota decide o fluxo a partir dele.
       if (numericValue !== effectiveValue || usePromo || isFree) {
@@ -152,8 +157,13 @@ export function ResellerBillingEdit({
       )
       const json = await res.json()
       if (!res.ok) {
+        // Cortesia excepcional: quem tem a permissão só precisa justificar.
+        if (res.status === 403 && json.requiresReason) {
+          setCortesia({ message: json.error, retry: (r) => save(r) })
+          return false
+        }
         setError(json.error ?? "Falha ao salvar")
-        return
+        return false
       }
 
       if (json.data?.firstPaymentId) {
@@ -179,8 +189,10 @@ export function ResellerBillingEdit({
       }
 
       onSaved?.()
+      return true
     } catch {
       setError("Erro de rede ao salvar")
+      return false
     } finally {
       setSaving(false)
     }
@@ -367,7 +379,7 @@ export function ResellerBillingEdit({
       <div className="mt-4 flex justify-end">
         <button
           type="button"
-          onClick={save}
+          onClick={() => save()}
           disabled={saving || !dirty}
           className="inline-flex items-center gap-2 rounded-lg bg-[var(--color-pmb-green)] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[var(--color-pmb-green-700)] disabled:opacity-50"
         >
@@ -383,6 +395,8 @@ export function ResellerBillingEdit({
                   : "Salvar mensalidade"}
         </button>
       </div>
+
+      <CortesiaReasonDialog prompt={cortesia} onClose={() => setCortesia(null)} />
     </div>
   )
 }

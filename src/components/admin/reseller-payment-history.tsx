@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { ResellerCard } from "./reseller-card"
 import { ResellerStatusBadge } from "./reseller-status"
+import { CortesiaReasonDialog, type CortesiaPrompt } from "./cortesia-reason-dialog"
 
 export interface ResellerPayment {
   id: string
@@ -74,6 +75,7 @@ export function ResellerPaymentHistory({
   const [cancelTarget, setCancelTarget] = useState<string | null>(null)
   const [editing, setEditing]         = useState<EditState | null>(null)
   const [saving, setSaving]           = useState(false)
+  const [cortesia, setCortesia]       = useState<CortesiaPrompt | null>(null)
   const [saveError, setSaveError]     = useState<string | null>(null)
   // Cobranças aguardando confirmação do cancelamento (webhook PAYMENT_DELETED).
   // Enquanto o id estiver aqui, a linha mostra "Apagando cobrança…".
@@ -154,15 +156,17 @@ export function ResellerPaymentHistory({
     setSaveError(null)
   }
 
-  async function saveEdit() {
-    if (!editing) return
+  /** Devolve `true` só quando a cobrança foi realmente atualizada. */
+  async function saveEdit(reason?: string): Promise<boolean> {
+    if (!editing) return false
     setSaving(true)
     setSaveError(null)
     try {
-      const body: { dueDate?: string; value?: number } = {}
+      const body: { dueDate?: string; value?: number; reason?: string } = {}
       if (editing.dueDate) body.dueDate = editing.dueDate
       const numVal = Number(editing.value)
       if (Number.isFinite(numVal) && numVal > 0) body.value = numVal
+      if (reason) body.reason = reason
 
       const res = await fetch(
         `/api/admin/revendedores/${tenantId}/payments/${editing.paymentId}`,
@@ -174,13 +178,20 @@ export function ResellerPaymentHistory({
       )
       const json = await res.json()
       if (!res.ok) {
+        // Cortesia excepcional: adiar cobrança de unidade que nunca pagou.
+        if (res.status === 403 && json.requiresReason) {
+          setCortesia({ message: json.error, retry: (r) => saveEdit(r) })
+          return false
+        }
         setSaveError(json.error ?? "Falha ao salvar")
-        return
+        return false
       }
       setEditing(null)
       onRefresh?.()
+      return true
     } catch {
       setSaveError("Erro de rede ao salvar")
+      return false
     } finally {
       setSaving(false)
     }
@@ -311,7 +322,7 @@ export function ResellerPaymentHistory({
                           <Button
                             type="button"
                             size="xs"
-                            onClick={saveEdit}
+                            onClick={() => saveEdit()}
                             disabled={saving}
                             title="Salvar"
                             className="bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)]"
@@ -400,6 +411,8 @@ export function ResellerPaymentHistory({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <CortesiaReasonDialog prompt={cortesia} onClose={() => setCortesia(null)} />
     </ResellerCard>
   )
 }

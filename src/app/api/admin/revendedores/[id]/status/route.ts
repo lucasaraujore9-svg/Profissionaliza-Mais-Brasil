@@ -7,10 +7,33 @@ import { logAudit } from "@/lib/audit"
 import { blockTenantStudents, unblockTenantStudents } from "@/lib/auto-block"
 import { contextLogger } from "@/lib/logger"
 import { requireAdmin } from "@/lib/auth/admin-guard"
+import {
+  loadTenantLifecycle,
+  assertCortesiaExcepcional,
+  CORTESIA_AUDIT,
+  MIN_REASON_LENGTH,
+  MAX_REASON_LENGTH,
+} from "@/lib/tenants/lifecycle"
 
 const schema = z.object({
   status: z.enum(["ACTIVE", "SUSPENDED", "PENDING", "CANCELLED"]),
+  // Justificativa da cortesia excepcional. Só é lida quando o gate bloqueia e
+  // quem chamou tem `unidades.cortesiaExcepcional`.
+  reason: z.string().trim().min(MIN_REASON_LENGTH).max(MAX_REASON_LENGTH).optional(),
 })
+
+/**
+ * Estados que devolvem a unidade ao ar — ou fingem que ela nunca saiu.
+ *
+ * `PENDING` está aqui junto com `ACTIVE` de propósito. Ele significa "aguardando
+ * o primeiro pagamento", que é exatamente a ficção que uma unidade
+ * suspensa/cancelada precisa vestir para escapar do gate: `SUSPENDED → PENDING`
+ * (o gate não olharia o destino) e depois `PENDING → ACTIVE` (a origem já não é
+ * suspensa). Duas chamadas lícitas e a trava nunca dispara. Pior: com a unidade
+ * em `PENDING`, a rota de billing ainda promove para `ACTIVE` sozinha ao torná-la
+ * gratuita. Por isso o gate olha o estado de ORIGEM, não só o de destino.
+ */
+const REACTIVATING_STATUSES = ["ACTIVE", "PENDING"] as const
 
 export const PATCH = withRequestContextParams<{ id: string }>(
   { action: "admin.revendedores.status.update", route: "/api/admin/revendedores/[id]/status" },
@@ -48,6 +71,57 @@ export const PATCH = withRequestContextParams<{ id: string }>(
   // Quem não vê a rede inteira só alcança a própria carteira.
   if (!(await ctx.canAccessTenant(tenant))) {
     return NextResponse.json({ error: "Sem permissão para este revendedor" }, { status: 403 })
+  }
+
+  // Cortesia excepcional: unidade que nunca pagou não volta ao ar de graça.
+  if ((REACTIVATING_STATUSES as readonly string[]).includes(parsed.data.status)) {
+    const lifecycle = await loadTenantLifecycle(id)
+    const verdict = assertCortesiaExcepcional({
+      tenant: { neverActivated: lifecycle?.neverActivated ?? false },
+      trigger: "reactivate",
+      override: {
+        allowed: ctx.can("unidades.cortesiaExcepcional"),
+        reason: parsed.data.reason,
+      },
+    })
+
+    if (verdict.blocked) {
+      // Tentativa negada também entra na trilha: é assim que o dono enxerga
+      // quem insiste em reabrir unidade que nunca pagou.
+      await logAudit({
+        action: CORTESIA_AUDIT.blocked,
+        resource: "Tenant",
+        resourceId: id,
+        actorUserId: ctx.userId,
+        actorRole: ctx.role,
+        actorEmail: ctx.email,
+        tenantId: id,
+        payloadBefore: { status: tenant.status },
+        payloadAfter: { status: parsed.data.status, trigger: "reactivate" },
+      })
+      return NextResponse.json(
+        { error: verdict.message, requiresReason: verdict.requiresReason },
+        { status: 403 },
+      )
+    }
+
+    if (verdict.overridden) {
+      await logAudit({
+        action: CORTESIA_AUDIT.granted,
+        resource: "Tenant",
+        resourceId: id,
+        actorUserId: ctx.userId,
+        actorRole: ctx.role,
+        actorEmail: ctx.email,
+        tenantId: id,
+        payloadBefore: { status: tenant.status },
+        payloadAfter: {
+          status: parsed.data.status,
+          trigger: "reactivate",
+          reason: verdict.reason,
+        },
+      })
+    }
   }
 
   await prisma.tenant.update({

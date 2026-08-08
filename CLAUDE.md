@@ -383,6 +383,69 @@ inadimplencia nao pegava porque a 2a parcela nem tinha vencido.
   inclusive a fatia que pagou — mais duro que o "teto, nao revogacao" do
   contrato do LMS. Deliberado por ora; afrouxar e uma decisao comercial.
 
+### Churn honesto + cortesia excepcional (2026-08-07)
+
+O churn contava como cliente perdido quem nunca foi cliente. A formula era
+`canceladas / total` num snapshot lifetime, DUPLICADA em tres lugares com
+filtros divergentes (`bi/financeiro.ts`, `api/admin/financeiro`,
+`api/admin/analytics` — este ultimo nem tinha o `planValue > 0`). Unidade que
+nasceu cortesia, ganhou prazo esticado ou foi suspensa antes do 1o boleto
+entrava no numerador; `PENDING` que nunca pagou inflava o denominador.
+Medido em prod: **9,5% -> 4,4%**, e **20 unidades** (13 suspensas + 7
+canceladas) foram para o balde novo "Nunca ativou".
+
+- **Fonte unica:** `src/lib/tenants/lifecycle.ts` — clausulas `where`
+  (`EVER_PAID_*`, `NEVER_ACTIVATED_WHERE`, `CHURN_BASE_WHERE`), as constantes de
+  prazo e o gate `assertCortesiaExcepcional` (PURO, sem I/O). Um arquivo so: os
+  relatorios importam as clausulas, as rotas importam o gate.
+- **O predicado e SO "nunca pagou"** — as tres situacoes do pedido (nunca pagou
+  / cortesia / vencimento futuro) colapsam nele. `planValue === 0` como clausula
+  independente estaria ERRADO: e o valor de HOJE, sobrescrito sem historico, e
+  classificaria como "nunca ativou" a unidade que pagou 6 meses, virou cortesia
+  e so depois cancelou — churn real. "Nunca pagou" e monotonico.
+- **`Tenant.activatedAt` NAO serve de prova de pagamento** — parece servir (so o
+  webhook o grava), mas a migration `20260620_referral_commission_tiers` fez
+  backfill com `COALESCE(MIN(paid_at), created_at)`: o fallback carimbou 12
+  unidades que nunca pagaram. Usa-lo devolveria o churn a 9,7% e anularia a
+  mudanca. O ledger `tenant_payments` E confiavel — verificado em prod que
+  nenhuma cobranca paga virou `DELETED` (`DELETED` = cobranca em aberto removida
+  do Asaas no cancelamento).
+- **`RECEIVED_IN_CASH` entrou em `EVER_PAID_STATUSES`**, nao em `PAID_STATUSES`:
+  aquela constante alimenta /painel/cobrancas e o cron de lembretes, raio de
+  explosao diferente. Zero linhas hoje — e blindagem.
+- **O gate olha o status de ORIGEM, nao o de destino.** Foi o furo que anulava o
+  recurso: `SUSPENDED -> PENDING` (destino nao e ACTIVE, passa) e depois
+  `PENDING -> ACTIVE` (origem nao e mais suspensa, passa) reativavam de graca com
+  duas chamadas licitas. Por isso `REACTIVATING_STATUSES = ["ACTIVE","PENDING"]`.
+  Ha teste dedicado, **verificado por mutacao**.
+- **4 rotas guardadas:** `status` (reativar), `billing` (planValue 0 / promo /
+  vencimento > D+10), `payments/[paymentId]` (adiar a cobranca individual — o
+  mesmo prazo, uma a uma) e `mark-paid`, que **nao bloqueia** (registrar PIX
+  recebido por fora e o caminho legitimo de sair da trava) mas grava
+  `tenant.cortesia_excepcional.laundered` e notifica o SUPER_ADMIN **sem
+  `category`**, para nao poder ser silenciado por preferencia.
+- **Permissao `unidades.cortesiaExcepcional`** e SUPER_EXCLUSIVE — concedida por
+  override, seria um checkbox de nome ameno reabrindo o buraco. Nao esta no
+  preset do Diretor de unidades de proposito.
+- **403 devolve `requiresReason: true`** quando a pessoa TEM o poder e so falta
+  justificar — e o que faz a UI abrir o dialogo (`cortesia-reason-dialog.tsx`)
+  em vez de mostrar erro seco. O motivo vai para `audit_logs`; tentativas
+  NEGADAS tambem sao auditadas.
+- **Prazo tolerado = D+10** (`DEFAULT_FIRST_DUE_DAYS + CORTESIA_GRACE_DAYS`),
+  calibrado nos casos reais: `valedosaber` nasceu D+20, `andersoncidade` D+15,
+  `concluirconsultoriaeducacional` D+11 — nenhuma pagou. Comparacao em dia civil
+  brasileiro (`brDayStartUtc`), senao o servidor em UTC erra por um dia.
+- **Descoberta lateral:** `promoValue`/`promoMonths` NUNCA foram usados em
+  producao. O "periodo promocional" que o dono descreve sempre foi vencimento
+  esticado na mao.
+- **Fora de escopo, por decisao do dono:** a blacklist e por TENANT, nao por
+  pessoa — nada impede cancelar e criar outra unidade cortesia para o mesmo
+  dono; e nao ha piso de `planValue` (R$ 1 passa).
+- **Deploy:** migration `20260807_tenant_payments_ever_paid_idx` (indice parcial,
+  `CONCURRENTLY`, idempotente, sem backfill). A lista de status dele espelha
+  `EVER_PAID_STATUSES` — mudou la, migration nova aqui, senao o Postgres para de
+  usar o indice em silencio.
+
 ### Bugs conhecidos (pendentes)
 
 - **Middleware file convention deprecado** no Next 16 (usar `proxy` em vez de `middleware`).

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { requireAdmin } from "@/lib/auth/admin-guard"
+import { CHURN_BASE_WHERE } from "@/lib/tenants/lifecycle"
 
 const PERIODS = {
   "7d": 7,
@@ -111,8 +112,12 @@ export const GET = withRequestContext(
       where: { mpStatus: "APPROVED", createdAt: { gte: since } },
     }),
     prisma.tenant.count({ where: { status: "ACTIVE" } }),
-    prisma.tenant.count(),
-    prisma.tenant.count({ where: { status: "CANCELLED" } }),
+    // Mesma base do churn da aba Financeiro: só quem chegou a ser cliente
+    // pagante (`lib/tenants/lifecycle.ts`). Aqui a fórmula estava ainda mais
+    // solta — nem o filtro de `planValue > 0` existia, então cortesia e a
+    // própria PMB entravam no denominador.
+    prisma.tenant.count({ where: CHURN_BASE_WHERE }),
+    prisma.tenant.count({ where: { ...CHURN_BASE_WHERE, status: "CANCELLED" } }),
     prisma.tenant.aggregate({
       where: { status: "ACTIVE" },
       _sum: { planValue: true },

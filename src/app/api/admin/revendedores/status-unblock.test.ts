@@ -58,18 +58,31 @@ function req(status: string) {
   })
 }
 
+/**
+ * `findUnique` atende DUAS leituras nesta rota: a do handler e a de
+ * `loadTenantLifecycle`. Por isso o mock carrega `tenantPayments` — uma
+ * mensalidade paga, que é o caso destes testes: unidade que era cliente e caiu
+ * em inadimplência. Sem nenhuma paga ela cairia na cortesia excepcional e a
+ * reativação passa a exigir justificativa (ver `cortesia-excepcional.test.ts`).
+ */
+function tenantRow(status: string) {
+  return {
+    id: "t1",
+    slug: "unidade",
+    customDomain: null,
+    accountManagerId: null,
+    salesUserId: null,
+    status,
+    tenantPayments: [{ id: "pago-1" }],
+  }
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
   requireAdmin.mockImplementation(
     adminGuardFor({ userId: "u1", role: "SUPER_ADMIN" }).requireAdmin,
   )
-  db.tenant.findUnique.mockResolvedValue({
-    id: "t1",
-    slug: "unidade",
-    customDomain: null,
-    accountManagerId: null,
-    status: "SUSPENDED",
-  })
+  db.tenant.findUnique.mockResolvedValue(tenantRow("SUSPENDED"))
   db.tenant.update.mockResolvedValue({})
 })
 
@@ -83,13 +96,7 @@ describe("PATCH /admin/revendedores/[id]/status — reativação", () => {
   })
 
   it("CANCELLED → ACTIVE também desbloqueia", async () => {
-    db.tenant.findUnique.mockResolvedValue({
-      id: "t1",
-      slug: "unidade",
-      customDomain: null,
-      accountManagerId: null,
-      status: "CANCELLED",
-    })
+    db.tenant.findUnique.mockResolvedValue(tenantRow("CANCELLED"))
 
     await PATCH(req("ACTIVE"), { params })
 
@@ -97,13 +104,7 @@ describe("PATCH /admin/revendedores/[id]/status — reativação", () => {
   })
 
   it("ACTIVE → ACTIVE não mexe em ninguém (sem transição)", async () => {
-    db.tenant.findUnique.mockResolvedValue({
-      id: "t1",
-      slug: "unidade",
-      customDomain: null,
-      accountManagerId: null,
-      status: "ACTIVE",
-    })
+    db.tenant.findUnique.mockResolvedValue(tenantRow("ACTIVE"))
 
     await PATCH(req("ACTIVE"), { params })
 
@@ -111,13 +112,7 @@ describe("PATCH /admin/revendedores/[id]/status — reativação", () => {
   })
 
   it("ACTIVE → SUSPENDED não desbloqueia (direção oposta)", async () => {
-    db.tenant.findUnique.mockResolvedValue({
-      id: "t1",
-      slug: "unidade",
-      customDomain: null,
-      accountManagerId: null,
-      status: "ACTIVE",
-    })
+    db.tenant.findUnique.mockResolvedValue(tenantRow("ACTIVE"))
 
     await PATCH(req("SUSPENDED"), { params })
 
@@ -130,13 +125,7 @@ describe("PATCH /admin/revendedores/[id]/status — suspensão", () => {
   // só trocava o status: a loja saía do ar e os alunos seguiam assistindo. O
   // admin suspendia acreditando ter cortado o acesso — e não tinha.
   it("ACTIVE → SUSPENDED bloqueia os alunos da unidade", async () => {
-    db.tenant.findUnique.mockResolvedValue({
-      id: "t1",
-      slug: "unidade",
-      customDomain: null,
-      accountManagerId: null,
-      status: "ACTIVE",
-    })
+    db.tenant.findUnique.mockResolvedValue(tenantRow("ACTIVE"))
 
     const res = await PATCH(req("SUSPENDED"), { params })
 
@@ -146,13 +135,7 @@ describe("PATCH /admin/revendedores/[id]/status — suspensão", () => {
   })
 
   it("SUSPENDED → SUSPENDED não rebloqueia (sem transição)", async () => {
-    db.tenant.findUnique.mockResolvedValue({
-      id: "t1",
-      slug: "unidade",
-      customDomain: null,
-      accountManagerId: null,
-      status: "SUSPENDED",
-    })
+    db.tenant.findUnique.mockResolvedValue(tenantRow("SUSPENDED"))
 
     await PATCH(req("SUSPENDED"), { params })
 

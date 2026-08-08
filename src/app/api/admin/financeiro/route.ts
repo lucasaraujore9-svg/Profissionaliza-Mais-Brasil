@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { requireAdmin } from "@/lib/auth/admin-guard"
+import { CHURN_BASE_WHERE } from "@/lib/tenants/lifecycle"
 
 export const GET = withRequestContext(
   { action: "admin.financeiro.get", route: "/api/admin/financeiro" },
@@ -30,8 +31,11 @@ export const GET = withRequestContext(
       where: { status: "ACTIVE", planValue: { gt: 0 } },
       select: { planValue: true },
     }),
-    prisma.tenant.count({ where: { status: "CANCELLED", planValue: { gt: 0 } } }),
-    prisma.tenant.count({ where: { planValue: { gt: 0 } } }),
+    // Churn conta só quem chegou a ser cliente pagante — `planValue > 0` é o
+    // valor de HOJE e não distingue "nunca pagou" de "pagava e saiu". Mesma
+    // fonte que a aba Financeiro do relatório (`lib/tenants/lifecycle.ts`).
+    prisma.tenant.count({ where: { ...CHURN_BASE_WHERE, status: "CANCELLED" } }),
+    prisma.tenant.count({ where: CHURN_BASE_WHERE }),
     prisma.tenant.aggregate({
       _sum: { planValue: true },
       where: { status: "ACTIVE", planValue: { gt: 0 } },

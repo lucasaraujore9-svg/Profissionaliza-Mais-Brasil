@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma"
+import { CHURN_BASE_WHERE, NEVER_ACTIVATED_WHERE } from "@/lib/tenants/lifecycle"
 import { bucketKey, bucketLabel, fillBuckets } from "../bucket"
 import { approvedRevenueTotal } from "../aggregations"
 import type { KpiDatum, ReportSeries, ReportTable, SeriesPoint } from "../types"
@@ -39,8 +40,9 @@ export const financeiroModule: BiModule = {
 
     const [
       activeTenants,
-      cancelledTenants,
-      totalTenants,
+      churnedTenants,
+      payingTenants,
+      neverActivatedTenants,
       mrrAgg,
       paidLast30Agg,
       paidPrev30Agg,
@@ -55,8 +57,14 @@ export const financeiroModule: BiModule = {
         where: { status: "ACTIVE", planValue: { gt: 0 } },
         select: { planValue: true },
       }),
-      prisma.tenant.count({ where: { status: "CANCELLED", planValue: { gt: 0 } } }),
-      prisma.tenant.count({ where: { planValue: { gt: 0 } } }),
+      // Churn conta só quem CHEGOU a ser cliente pagante. `planValue > 0` não
+      // serve de proxy: é o valor de hoje, e unidade que nasceu de graça (ou
+      // com o vencimento lá na frente) e foi suspensa antes do 1º boleto
+      // entrava no numerador como cliente perdido — sem nunca ter dado receita.
+      // Ver `lib/tenants/lifecycle.ts`.
+      prisma.tenant.count({ where: { ...CHURN_BASE_WHERE, status: "CANCELLED" } }),
+      prisma.tenant.count({ where: CHURN_BASE_WHERE }),
+      prisma.tenant.count({ where: NEVER_ACTIVATED_WHERE }),
       prisma.tenant.aggregate({
         _sum: { planValue: true },
         where: { status: "ACTIVE", planValue: { gt: 0 } },
@@ -104,7 +112,7 @@ export const financeiroModule: BiModule = {
 
     const mrr = Number(mrrAgg._sum.planValue ?? 0)
     const arr = mrr * 12
-    const churn = totalTenants > 0 ? (cancelledTenants / totalTenants) * 100 : 0
+    const churn = payingTenants > 0 ? (churnedTenants / payingTenants) * 100 : 0
     const paidLast30 = Number(paidLast30Agg._sum.amount ?? 0)
     const paidPrev30 = Number(paidPrev30Agg._sum.amount ?? 0)
     const avgTicket = activeTenants.length > 0 ? mrr / activeTenants.length : 0
@@ -113,7 +121,25 @@ export const financeiroModule: BiModule = {
     const kpis: KpiDatum[] = [
       { key: "mrr", label: "MRR", value: mrr, format: "currency", icon: "repeat" },
       { key: "arr", label: "ARR", value: arr, format: "currency", icon: "circle-dollar-sign" },
-      { key: "churn", label: "Churn", value: churn, format: "percent", icon: "alert-triangle", invertDelta: true },
+      // "(pagantes)" no rótulo é deliberado: a base mudou, e comparar este
+      // número com o do mês passado sem perceber isso levaria à conclusão
+      // errada de que o churn caiu sozinho.
+      {
+        key: "churn",
+        label: "Churn (pagantes)",
+        value: churn,
+        format: "percent",
+        icon: "alert-triangle",
+        invertDelta: true,
+      },
+      {
+        key: "nuncaAtivou",
+        label: "Nunca ativou",
+        value: neverActivatedTenants,
+        format: "number",
+        icon: "user-x",
+        invertDelta: true,
+      },
       { key: "ltv", label: "LTV", value: ltv, format: "currency", icon: "trending-up" },
       {
         key: "paid30",

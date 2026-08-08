@@ -3,6 +3,10 @@ import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 import { requireAdmin } from "@/lib/auth/admin-guard"
+import { logAudit } from "@/lib/audit"
+import { createNotification } from "@/lib/notifications"
+import { swallow } from "@/lib/errors"
+import { loadTenantLifecycle, CORTESIA_AUDIT } from "@/lib/tenants/lifecycle"
 
 const bodySchema = z.object({
   paidAt: z.string().optional().nullable(),
@@ -48,7 +52,14 @@ export const POST = withRequestContextParams<{ id: string }>(
 
   const payment = await prisma.tenantPayment.findUnique({
     where: { id },
-    select: { id: true, status: true, notes: true },
+    select: {
+      id: true,
+      status: true,
+      notes: true,
+      amount: true,
+      tenantId: true,
+      tenant: { select: { name: true } },
+    },
   })
   if (!payment) {
     return NextResponse.json(
@@ -62,6 +73,16 @@ export const POST = withRequestContextParams<{ id: string }>(
       { status: 409 },
     )
   }
+
+  // Baixa manual numa unidade que está fora do ar e nunca pagou TIRA ela da
+  // regra de cortesia excepcional sem dinheiro nenhum passar por gateway — e o
+  // cron `reactivate-paid` ainda a devolve ao ar sozinho em até 48h.
+  //
+  // Não bloqueamos: registrar PIX/espécie recebido fora do Asaas é justamente o
+  // caminho legítimo de a unidade sair da situação, e travá-lo atrás do super
+  // admin emperraria o financeiro. Mas isto não pode acontecer calado.
+  const lifecycle = await loadTenantLifecycle(payment.tenantId)
+  const saiDaBlacklist = lifecycle?.neverActivated ?? false
 
   const now = new Date()
   let paidAt = now
@@ -86,6 +107,37 @@ export const POST = withRequestContextParams<{ id: string }>(
     },
     select: { id: true, status: true, paidAt: true, markedPaidAt: true },
   })
+
+  if (saiDaBlacklist) {
+    const unidade = payment.tenant?.name ?? payment.tenantId
+    const valor = Number(payment.amount).toLocaleString("pt-BR", {
+      style: "currency",
+      currency: "BRL",
+    })
+    await logAudit({
+      action: CORTESIA_AUDIT.laundered,
+      resource: "TenantPayment",
+      resourceId: id,
+      actorUserId: session.userId,
+      actorRole: session.role,
+      actorEmail: session.email,
+      tenantId: payment.tenantId,
+      payloadBefore: { status: payment.status, tenantStatus: lifecycle?.status },
+      payloadAfter: { status: "RECEIVED", markedPaidAt: now.toISOString(), amount: Number(payment.amount) },
+    })
+    await createNotification({
+      audience: "ROLE",
+      roleTarget: "SUPER_ADMIN",
+      level: "WARNING",
+      title: "Baixa manual em unidade que nunca pagou",
+      body: `${adminName} marcou como paga a mensalidade de ${valor} da unidade ${unidade}, que está ${lifecycle?.status === "CANCELLED" ? "cancelada" : "suspensa"} e nunca teve nenhuma mensalidade paga. Isso a tira da trava de cortesia excepcional e o cron de reativação pode devolvê-la ao ar em até 48h.`,
+      // Sem `category` de propósito: este é o ÚNICO sinal de que a trava foi
+      // contornada, e categoria pode ser desligada em /admin/configuracoes ou
+      // por preferência de quem recebe. Mesmo padrão do alerta de parcelamento
+      // não confirmado em `cobranca/[paymentId]/pay-card`.
+      href: `/admin/revendedores/${payment.tenantId}`,
+    }).catch(swallow("financeiro.mark_paid.notify"))
+  }
 
   return NextResponse.json({
     data: {

@@ -73,6 +73,12 @@ export const ADMIN_PERMISSIONS = [
   // porque o gerente de unidades administra a carteira que lhe deram — não
   // redefine quem é dono dela nem amplia o contrato.
   "unidades.governanca",
+  // Liberar cortesia, promoção ou prazo esticado para unidade que está
+  // suspensa/cancelada e NUNCA pagou nenhuma mensalidade (ver
+  // `lib/tenants/lifecycle.ts`). Sem ela, essas unidades só voltam ao ar
+  // pagando — que é o ponto: elas nasceram de graça, nunca geraram receita e
+  // eram reativadas de graça de novo, num ciclo que só produzia churn falso.
+  "unidades.cortesiaExcepcional",
 
   // ---- Funil B2B (leads de revenda) --------------------------------------
   "leadsRevenda.view",
@@ -204,6 +210,11 @@ export const SUPER_EXCLUSIVE = [
   // cobranca e ledger de comissao dela. Mesma escalada que fechamos em
   // `unidades.viewAll`, so que em dois passos.
   "unidades.governanca",
+  // A permissao de furar a propria regra: quem a tem devolve ao ar, de graca,
+  // uma unidade que nunca pagou. Concedida por override, ela viraria um
+  // checkbox de nome ameno que reabre exatamente o buraco que o gate fecha —
+  // e o gate e a UNICA trava contra o ciclo "cortesia -> suspende -> cortesia".
+  "unidades.cortesiaExcepcional",
 ] as const
 
 /**
@@ -287,6 +298,7 @@ export const WRITE_IMPLIES_READ: Readonly<
   "unidades.anonimizar": "unidades.view",
   "unidades.comissoes": "unidades.view",
   "unidades.governanca": "unidades.view",
+  "unidades.cortesiaExcepcional": "unidades.view",
   "leadsRevenda.viewAll": "leadsRevenda.view",
   "leadsRevenda.manage": "leadsRevenda.view",
   "leadsRevenda.config": "leadsRevenda.view",
@@ -628,6 +640,10 @@ export const ADMIN_PERMISSION_GROUPS: {
       { perm: "unidades.impersonate", label: "Entrar como a unidade" },
       { perm: "unidades.comissoes", label: "Ver comissões da unidade" },
       { perm: "unidades.governanca", label: "Atribuir responsável, habilitar módulos e cancelar" },
+      {
+        perm: "unidades.cortesiaExcepcional",
+        label: "Liberar cortesia, promoção ou prazo para unidade que nunca pagou",
+      },
       { perm: "unidades.anonimizar", label: "Anonimizar a unidade (LGPD)" },
     ],
   },

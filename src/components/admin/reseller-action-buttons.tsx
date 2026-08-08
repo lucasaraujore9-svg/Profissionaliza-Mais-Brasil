@@ -14,6 +14,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { ResellerCard } from "./reseller-card"
+import { CortesiaReasonDialog, type CortesiaPrompt } from "./cortesia-reason-dialog"
 import type { ResellerStatus } from "./reseller-table"
 
 /** Blocos renderizáveis — permite mostrar a assinatura em "Cobrança" e a
@@ -50,20 +51,32 @@ export function ResellerActionButtons({
   const [deleteOpenCharges, setDeleteOpenCharges] = useState(true)
   const [anonOpen, setAnonOpen] = useState(false)
   const [anonConfirm, setAnonConfirm] = useState("")
+  const [cortesia, setCortesia] = useState<CortesiaPrompt | null>(null)
 
-  async function setStatus(next: ResellerStatus) {
+  /** Devolve `true` só quando o status foi realmente gravado. */
+  async function setStatus(next: ResellerStatus, reason?: string): Promise<boolean> {
     setLoading(next)
     setError(null)
     try {
       const res = await fetch(`/api/admin/revendedores/${tenantId}/status`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: next }),
+        body: JSON.stringify({ status: next, ...(reason ? { reason } : {}) }),
       })
       const body = await res.json()
       if (!res.ok) {
+        // Cortesia excepcional: quem TEM a permissão só precisa justificar.
+        // Abrir o diálogo em vez de mostrar o erro é o que separa "você não
+        // pode" de "você pode, mas isto fica registrado".
+        if (res.status === 403 && body.requiresReason) {
+          setCortesia({
+            message: body.error,
+            retry: (r) => setStatus(next, r),
+          })
+          return false
+        }
         setError(body.error ?? "Falha ao atualizar status")
-        return
+        return false
       }
       // Suspender/reativar mexe no acesso dos ALUNOS, não só no da unidade.
       // Dizer quantos foram afetados é o que torna a ação verificável — sem
@@ -76,8 +89,10 @@ export function ResellerActionButtons({
         toast.success(`Unidade reativada · ${unblocked} aluno(s) desbloqueado(s)`)
       }
       onChanged?.()
+      return true
     } catch {
       setError("Erro de rede ao atualizar status")
+      return false
     } finally {
       setLoading(null)
     }
@@ -462,6 +477,8 @@ export function ResellerActionButtons({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <CortesiaReasonDialog prompt={cortesia} onClose={() => setCortesia(null)} />
     </div>
   )
 }

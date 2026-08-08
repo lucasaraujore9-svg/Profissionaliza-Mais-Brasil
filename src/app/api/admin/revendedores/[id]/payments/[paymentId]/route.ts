@@ -11,6 +11,15 @@ import { swallow } from "@/lib/errors"
 import { contextLogger } from "@/lib/logger"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 import { requireAdmin, type AdminContext } from "@/lib/auth/admin-guard"
+import { logAudit } from "@/lib/audit"
+import {
+  loadTenantLifecycle,
+  assertCortesiaExcepcional,
+  isDueDateStretched,
+  CORTESIA_AUDIT,
+  MIN_REASON_LENGTH,
+  MAX_REASON_LENGTH,
+} from "@/lib/tenants/lifecycle"
 
 const patchSchema = z.object({
   dueDate: z
@@ -18,6 +27,8 @@ const patchSchema = z.object({
     .regex(/^\d{4}-\d{2}-\d{2}$/, "formato esperado YYYY-MM-DD")
     .optional(),
   value: z.number().positive().max(100000).optional(),
+  // Justificativa da cortesia excepcional (ver `lib/tenants/lifecycle.ts`).
+  reason: z.string().trim().min(MIN_REASON_LENGTH).max(MAX_REASON_LENGTH).optional(),
 })
 
 /**
@@ -118,6 +129,61 @@ export const PATCH = withRequestContextParams<{ id: string; paymentId: string }>
       { error: "Informe ao menos dueDate ou value" },
       { status: 400 },
     )
+  }
+
+  // Cortesia excepcional: adiar a cobrança de uma unidade que nunca pagou é
+  // esticar o prazo pela porta dos fundos — é a MESMA cobrança cujo
+  // não-pagamento define a blacklist, só que editada uma a uma em vez de pela
+  // assinatura.
+  if (parsed.data.dueDate && isDueDateStretched(parsed.data.dueDate)) {
+    const lifecycle = await loadTenantLifecycle(tenantId)
+    const verdict = assertCortesiaExcepcional({
+      tenant: { neverActivated: lifecycle?.neverActivated ?? false },
+      trigger: "postpone",
+      override: {
+        allowed: guard.ctx.can("unidades.cortesiaExcepcional"),
+        reason: parsed.data.reason,
+      },
+    })
+
+    if (verdict.blocked) {
+      await logAudit({
+        action: CORTESIA_AUDIT.blocked,
+        resource: "Tenant",
+        resourceId: tenantId,
+        actorUserId: guard.ctx.userId,
+        actorRole: guard.ctx.role,
+        actorEmail: guard.ctx.email,
+        tenantId,
+        payloadAfter: {
+          trigger: "postpone",
+          paymentId,
+          dueDate: parsed.data.dueDate,
+        },
+      })
+      return NextResponse.json(
+        { error: verdict.message, requiresReason: verdict.requiresReason },
+        { status: 403 },
+      )
+    }
+
+    if (verdict.overridden) {
+      await logAudit({
+        action: CORTESIA_AUDIT.granted,
+        resource: "Tenant",
+        resourceId: tenantId,
+        actorUserId: guard.ctx.userId,
+        actorRole: guard.ctx.role,
+        actorEmail: guard.ctx.email,
+        tenantId,
+        payloadAfter: {
+          trigger: "postpone",
+          paymentId,
+          dueDate: parsed.data.dueDate,
+          reason: verdict.reason,
+        },
+      })
+    }
   }
 
   // Valida que o pagamento está pendente antes de editar

@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import type { Prisma } from "@prisma/client"
+import { PMB_TENANT_SLUG } from "@/lib/pmb-config"
+import { EVER_PAID_PAYMENT_WHERE } from "@/lib/tenants/lifecycle"
 import { brl, isoDate, isoDateTime } from "./csv"
 
 export interface ReportFilters {
@@ -601,6 +603,10 @@ const RUNNERS: Record<string, ReportRunner> = {
             orderBy: { dueDate: "desc" },
             take: 1,
           },
+          // Uma linha basta para saber se a unidade já foi cliente pagante.
+          // Sem esta coluna o CSV discordaria da tela, que separa
+          // "Inadimplentes / canceladas" de "Nunca ativou".
+          _count: { select: { tenantPayments: { where: EVER_PAID_PAYMENT_WHERE } } },
         },
       })
       return {
@@ -608,6 +614,7 @@ const RUNNERS: Record<string, ReportRunner> = {
             "nome",
             "slug",
             "status",
+            "nunca_ativou",
             "owner_nome",
             "owner_email",
             "account_manager",
@@ -616,11 +623,12 @@ const RUNNERS: Record<string, ReportRunner> = {
             "valor_em_atraso",
           ],
           rows: tenants
-            .filter((t) => t.slug !== "__pmb__")
+            .filter((t) => t.slug !== PMB_TENANT_SLUG)
             .map((t) => [
               t.name,
               t.slug,
               t.status,
+              t._count.tenantPayments === 0 ? "sim" : "nao",
               t.owner?.name ?? "",
               t.owner?.email ?? "",
               t.accountManager?.name ?? "",
