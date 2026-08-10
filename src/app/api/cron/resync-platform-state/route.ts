@@ -38,8 +38,17 @@ export const dynamic = "force-dynamic"
  * ler o relatório, varra em lotes (`?limit=80`); rodando sem limite, o que
  * sobra é a notificação ao SUPER_ADMIN e o log.
  *
+ * Só `status` dispara correção: `apostila` e `bolsista` NÃO são legíveis —
+ * `usuarios/listar` devolve null nos dois mesmo em aluno criado com
+ * `bolsista: "S"` (verificado em 10/08/2026 contra 6 alunos de bolsa em
+ * produção). Compará-los marcaria a base inteira como divergente para sempre.
+ * Para reescrever o retrato de quem está com o status certo e a flag errada,
+ * use `force=1`.
+ *
  * Query params:
  *   apply=1        corrige de fato (default: dry-run, só relata)
+ *   force=1        reescreve o retrato mesmo sem divergência de status
+ *                  (só faz efeito junto com apply=1)
  *   ids=4455,4465  limita a `ea_aluno_id` específicos
  *   limit=500      teto de alunos varridos quando `ids` não é passado
  *
@@ -52,7 +61,12 @@ const CONCURRENCY = 5
 const DEFAULT_LIMIT = 500
 const MAX_LIMIT = 2000
 
-async function resync(opts: { ids: string[]; apply: boolean; limit: number }) {
+async function resync(opts: {
+  ids: string[]
+  apply: boolean
+  force: boolean
+  limit: number
+}) {
   const students = await prisma.student.findMany({
     where: opts.ids.length
       ? { plataformaAlunoId: { in: opts.ids } }
@@ -67,6 +81,7 @@ async function resync(opts: { ids: string[]; apply: boolean; limit: number }) {
     ok: 0,
     diverged: 0,
     fixed: 0,
+    reasserted: 0,
     skipped: 0,
     failed: 0,
   }
@@ -78,7 +93,10 @@ async function resync(opts: { ids: string[]; apply: boolean; limit: number }) {
     tally.scanned += 1
     let audit: PlatformStateAudit
     try {
-      audit = await auditStudentPlatformState(s.id, { apply: opts.apply })
+      audit = await auditStudentPlatformState(s.id, {
+        apply: opts.apply,
+        force: opts.force,
+      })
     } catch (err) {
       tally.failed += 1
       contextLogger().error(
@@ -98,6 +116,11 @@ async function resync(opts: { ids: string[]; apply: boolean; limit: number }) {
       case "fixed":
         tally.fixed += 1
         break
+      case "reasserted":
+        // Reescrita pedida por `force`, sem divergência de status — não é
+        // achado, não polui o relatório.
+        tally.reasserted += 1
+        return
       case "failed":
         tally.failed += 1
         break
@@ -114,7 +137,7 @@ async function resync(opts: { ids: string[]; apply: boolean; limit: number }) {
     await Promise.all(students.slice(i, i + CONCURRENCY).map(processOne))
   }
 
-  return { apply: opts.apply, tally, details }
+  return { apply: opts.apply, force: opts.force, tally, details }
 }
 
 export const POST = withRequestContext(
@@ -133,15 +156,16 @@ export const POST = withRequestContext(
       .map((s) => s.trim())
       .filter(Boolean)
     const apply = url.searchParams.get("apply") === "1"
+    const force = url.searchParams.get("force") === "1"
     const limit = Math.min(
       Number(url.searchParams.get("limit")) || DEFAULT_LIMIT,
       MAX_LIMIT,
     )
 
-    const result = await resync({ ids, apply, limit })
+    const result = await resync({ ids, apply, force, limit })
 
     contextLogger().info(
-      { event: "cron.resync_platform_state.done", apply, ...result.tally },
+      { event: "cron.resync_platform_state.done", apply, force, ...result.tally },
       "resync-platform-state concluído",
     )
 
@@ -154,7 +178,7 @@ export const POST = withRequestContext(
         roleTarget: "SUPER_ADMIN",
         level: "ERROR",
         title: "Alunos com estado divergente na plataforma de aulas",
-        body: `${result.tally.diverged} aluno(s) com status/bolsista fora do nosso registro e ${result.tally.failed} falha(s) na varredura. Rode com ?apply=1 para corrigir.`,
+        body: `${result.tally.diverged} aluno(s) com status na plataforma diferente do nosso registro e ${result.tally.failed} falha(s) na varredura. Rode com ?apply=1 para corrigir.`,
         category: "cron",
         href: "/admin/alunos",
       }).catch(() => undefined)

@@ -337,7 +337,17 @@ Valores dos campos de estado, conforme a coleção oficial (conferida em 10/08/2
 > entra no payload junto com a definição de quem é dono do valor.
 >
 > Para consertar quem já foi rebaixado: `POST /api/cron/resync-platform-state`
-> (dry-run por padrão, `?apply=1` corrige, `?ids=4455` limita).
+> (dry-run por padrão, `?apply=1` corrige, `?ids=4455` limita, `?force=1`
+> reescreve mesmo sem divergência).
+>
+> **`status` é o único campo de estado observável.** `usuarios/listar` devolve
+> `apostila: null` e `bolsista: null` **mesmo em aluno criado com
+> `bolsista: "S"`** — verificado em 10/08/2026 contra 6 alunos de bolsa em
+> produção (ids 4503, 4504, 4508, 4509, 4510, 4512): todos leram `null` na flag
+> e `ATIVO` no status. Consequência prática: os dois campos entram em toda
+> ESCRITA, mas nenhum pode ser usado como gatilho de divergência — comparar
+> marcaria a base inteira como quebrada para sempre e a varredura reescreveria
+> tudo a cada execução, sem nunca convergir. É por isso que existe o `force=1`.
 
 > ### `bolsista` = "não vincule cobrança a este aluno"
 >

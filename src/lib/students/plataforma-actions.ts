@@ -1093,11 +1093,17 @@ export { resolvePoloContextForStudent }
  * Divergencia, portanto, e sempre erro da plataforma — nunca uma decisao dela
  * que devemos respeitar.
  *
- * `apostila` NAO entra na comparacao: a colecao oficial documenta os valores de
- * ESCRITA (`liberar`/`bloquear`) e nao o formato de leitura de
- * `usuarios/listar` (que volta null nos exemplos). Comparar as cegas geraria
- * divergencia fantasma em toda a base. Ela vai junto na CORRECAO, que reescreve
- * o retrato inteiro.
+ * SO `status` entra na comparacao. `apostila` e `bolsista` NAO sao observaveis:
+ * `usuarios/listar` devolve null nos dois, mesmo em aluno criado com
+ * `bolsista: "S"` — verificado em 10/08/2026 contra 6 alunos de bolsa em
+ * producao, todos com `bolsista: null` na leitura e `status: "ATIVO"` correto.
+ * Usa-los como gatilho marcaria a base inteira como divergente para sempre e a
+ * varredura nunca convergiria (reescreveria todo mundo a cada execucao). Os
+ * dois seguem no payload da CORRECAO, que reescreve o retrato inteiro — eles
+ * so nao podem ser o que DECIDE corrigir.
+ *
+ * Para reafirmar o retrato de quem nao esta divergente no `status` (ex.: acertar
+ * `bolsista` de quem entrou por cupom de 100%), use `force`.
  */
 export interface PlatformStateAudit {
   studentId: string
@@ -1111,7 +1117,10 @@ export interface PlatformStateAudit {
   outcome:
     | "ok"
     | "diverged"
+    /** Status estava errado na plataforma e foi corrigido. */
     | "fixed"
+    /** Status ja estava certo; retrato reescrito por `force`. */
+    | "reasserted"
     | "skipped_not_on_platform"
     | "skipped_blocked_elsewhere"
     | "failed"
@@ -1120,7 +1129,15 @@ export interface PlatformStateAudit {
 
 export async function auditStudentPlatformState(
   studentId: string,
-  opts: { apply: boolean },
+  opts: {
+    apply: boolean
+    /**
+     * Reafirma o retrato mesmo sem divergencia de `status`. Necessario porque
+     * `bolsista`/`apostila` nao sao legiveis: sem isto nao ha como consertar
+     * quem tem o status certo e a flag errada.
+     */
+    force?: boolean
+  },
 ): Promise<PlatformStateAudit> {
   const student = await prisma.student.findUnique({
     where: { id: studentId },
@@ -1166,15 +1183,24 @@ export async function auditStudentPlatformState(
     }
   }
 
+  // So `status` decide — ver o cabecalho: `bolsista` volta null na leitura
+  // mesmo quando esta setado, entao compara-lo marcaria todo bolsista como
+  // divergente para sempre.
   const statusDiverged = parseEaStatus(eaStatus) !== student.status
-  // `null` na plataforma = campo nunca preenchido; equivale a "nao bolsista".
-  const bolsistaDiverged = (eaBolsista ?? false) !== expectedBolsista
-  if (!statusDiverged && !bolsistaDiverged) {
+  if (!statusDiverged && !opts.force) {
     return { ...base, eaStatus, eaBolsista, expectedBolsista, outcome: "ok" }
   }
 
+  // `force` e uma ACAO, nao um achado: em simulacao ele nao inventa problema —
+  // quem nao tem divergencia de status sai como "ok".
   if (!opts.apply) {
-    return { ...base, eaStatus, eaBolsista, expectedBolsista, outcome: "diverged" }
+    return {
+      ...base,
+      eaStatus,
+      eaBolsista,
+      expectedBolsista,
+      outcome: statusDiverged ? "diverged" : "ok",
+    }
   }
 
   // Mesma guarda de isolamento cross-tenant de `ensureStudentActiveOnPlatform`:
@@ -1203,5 +1229,11 @@ export async function auditStudentPlatformState(
     }
   }
 
-  return { ...base, eaStatus, eaBolsista, expectedBolsista, outcome: "fixed" }
+  return {
+    ...base,
+    eaStatus,
+    eaBolsista,
+    expectedBolsista,
+    outcome: statusDiverged ? "fixed" : "reasserted",
+  }
 }
