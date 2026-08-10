@@ -21,6 +21,9 @@ vi.mock("@/lib/prisma", () => ({
       update: vi.fn(),
       findFirst: vi.fn(),
     },
+    // `pushPlatformState` resolve o bolsista efetivo (acesso sem cobrança) antes
+    // de montar o payload de usuarios/editar.
+    enrollment: { findFirst: vi.fn() },
   },
 }))
 vi.mock("@/lib/crypto", () => ({ encrypt: (s: string) => s, decrypt: (s: string) => s }))
@@ -43,6 +46,7 @@ const editarAlunoMock = vi.mocked(editarAluno)
 const studentFindUnique = vi.mocked(prisma.student.findUnique)
 const studentUpdate = vi.mocked(prisma.student.update)
 const studentFindFirst = vi.mocked(prisma.student.findFirst)
+const enrollmentFindFirst = vi.mocked(prisma.enrollment.findFirst)
 
 // O select de ensureStudentActiveOnPlatform devolve um subconjunto do Student —
 // cast para o tipo que o Prisma client espera nas asserts dos mocks.
@@ -53,6 +57,8 @@ beforeEach(() => {
   vi.clearAllMocks()
   // Por padrao ninguem esta bloqueado em outra unidade.
   studentFindFirst.mockResolvedValue(null)
+  // Por padrao a pessoa nao tem matricula gratuita (nao e bolsista).
+  enrollmentFindFirst.mockResolvedValue(null as never)
 })
 
 describe("ensureStudentActiveOnPlatform", () => {
@@ -62,6 +68,9 @@ describe("ensureStudentActiveOnPlatform", () => {
         id: "s1",
         cpf: "12345678900",
         email: "katia@example.com",
+        nome: "KATIA",
+        polo: "unidade",
+        bolsista: false,
         status: "INTERESSADO",
         apostila: "LIBERADA",
       }),
@@ -69,11 +78,18 @@ describe("ensureStudentActiveOnPlatform", () => {
 
     await ensureStudentActiveOnPlatform("s1", 4358)
 
-    expect(editarAlunoMock).toHaveBeenCalledWith({
-      id_aluno: 4358,
-      status: "ativo",
-      apostila: "liberar",
-    })
+    // O payload carrega o retrato COMPLETO — campo omitido em usuarios/editar
+    // volta ao default da plataforma (`interessado`), ver platform-state.ts.
+    expect(editarAlunoMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id_aluno: 4358,
+        status: "ativo",
+        apostila: "liberar",
+        bolsista: "N",
+        nome: "KATIA",
+        polo: "unidade",
+      }),
+    )
     expect(studentUpdate).toHaveBeenCalledWith({
       where: { id: "s1" },
       data: { status: "ATIVO", apostila: "LIBERADA" },
@@ -86,6 +102,9 @@ describe("ensureStudentActiveOnPlatform", () => {
         id: "s1",
         cpf: "12345678900",
         email: "katia@example.com",
+        nome: "KATIA",
+        polo: "unidade",
+        bolsista: false,
         status: "INTERESSADO",
         apostila: "LIBERADA",
       }),
@@ -105,6 +124,9 @@ describe("ensureStudentActiveOnPlatform", () => {
         id: "s1",
         cpf: "12345678900",
         email: "katia@example.com",
+        nome: "KATIA",
+        polo: "unidade",
+        bolsista: false,
         status: "ATIVO",
         apostila: "LIBERADA",
       }),
@@ -112,11 +134,18 @@ describe("ensureStudentActiveOnPlatform", () => {
 
     await ensureStudentActiveOnPlatform("s1", 4358)
 
-    expect(editarAlunoMock).toHaveBeenCalledWith({
-      id_aluno: 4358,
-      status: "ativo",
-      apostila: "liberar",
-    })
+    // O payload carrega o retrato COMPLETO — campo omitido em usuarios/editar
+    // volta ao default da plataforma (`interessado`), ver platform-state.ts.
+    expect(editarAlunoMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id_aluno: 4358,
+        status: "ativo",
+        apostila: "liberar",
+        bolsista: "N",
+        nome: "KATIA",
+        polo: "unidade",
+      }),
+    )
     expect(studentUpdate).not.toHaveBeenCalled()
   })
 

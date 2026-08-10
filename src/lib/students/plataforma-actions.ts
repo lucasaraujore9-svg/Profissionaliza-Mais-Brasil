@@ -1,3 +1,4 @@
+import { Prisma, type StudentStatus } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import {
   criarAluno,
@@ -12,6 +13,12 @@ import { tenantPolo } from "@/lib/tenant/slug"
 import { encrypt } from "@/lib/crypto"
 import { contextLogger } from "@/lib/logger"
 import { setLmsStudentAccess, revokeLmsEnrollment } from "@/lib/lms"
+import {
+  buildEditarAlunoPayload,
+  parseEaBolsista,
+  parseEaStatus,
+  type PlatformStateOverrides,
+} from "@/lib/students/platform-state"
 
 /**
  * Camada UNICA de integracao com a plataforma de aulas (plataforma).
@@ -204,6 +211,126 @@ async function isPersonBlockedInAnotherTenant(student: {
 }
 
 /**
+ * Campos que compoem o retrato enviado a `usuarios/editar`. TODA leitura que
+ * antecede uma edicao na plataforma usa este select — sem ele o payload nasce
+ * parcial, que e exatamente o bug que `platform-state.ts` fecha (campo omitido
+ * = campo resetado para o default `interessado`).
+ */
+const PLATFORM_SNAPSHOT_SELECT = {
+  id: true,
+  plataformaAlunoId: true,
+  nome: true,
+  email: true,
+  fone: true,
+  fone2: true,
+  cpf: true,
+  rg: true,
+  sexo: true,
+  nascimento: true,
+  rua: true,
+  numero: true,
+  bairro: true,
+  cidade: true,
+  estado: true,
+  cep: true,
+  polo: true,
+  status: true,
+  apostila: true,
+  bolsista: true,
+} satisfies Prisma.StudentSelect
+
+type PlatformSnapshotRow = Prisma.StudentGetPayload<{
+  select: typeof PLATFORM_SNAPSHOT_SELECT
+}>
+
+/**
+ * Matricula que da acesso SEM cobranca: cupom de 100%, desconto integral ou
+ * bolsa concedida na venda direta.
+ *
+ * `primaryEnrollmentId: null` e obrigatorio — a satelite de pacote/venda
+ * multi-curso tambem tem `finalAmount` 0 (a cobranca vive na primaria), entao
+ * sem esse filtro todo mundo que comprou um pacote PAGO viraria bolsista.
+ *
+ * `status` so exclui CANCELLED, e nao "so ACTIVE/COMPLETED", porque
+ * `fulfillScholarshipEnrollment` provisiona o aluno na plataforma ANTES de
+ * gravar ACTIVE: no momento do `criarAluno` a matricula gratuita ainda esta
+ * PENDING, e exigir ACTIVE criaria o aluno sem a flag.
+ */
+const FREE_ACCESS_ENROLLMENT_WHERE = {
+  status: { not: "CANCELLED" },
+  finalAmount: { lte: 0 },
+  primaryEnrollmentId: null,
+} satisfies Prisma.EnrollmentWhereInput
+
+/**
+ * `bolsista` na plataforma e por LOGIN, e o login e unico por pessoa
+ * (compartilhado entre unidades) — mesma regra de `status`/`apostila`. Por isso
+ * a pergunta e "esta PESSOA tem algum acesso sem cobranca?", nao "este registro
+ * tem".
+ *
+ * NAO e `Student.bolsista` puro: a flag local significa "bolsa institucional
+ * concedida numa venda direta" (decisao de 2026-07-21: cupom promocional nao e
+ * bolsa institucional), enquanto a plataforma usa `bolsista` para "nao vincule
+ * cobranca a este aluno". Quem entrou por cupom de 100% cai no segundo caso sem
+ * ter o primeiro — e foi assim que uma aluna gratuita foi parar no modulo
+ * financeiro da fornecedora como se devesse.
+ *
+ * Erra para o lado permissivo de proposito: `S` so diz a plataforma para nao
+ * cobrar, nunca restringe acesso.
+ */
+async function resolvePlatformBolsista(student: {
+  id: string
+  cpf: string | null
+  email: string | null
+  bolsista: boolean
+}): Promise<boolean> {
+  if (student.bolsista) return true
+
+  const orFilters: Prisma.StudentWhereInput[] = [{ id: student.id }]
+  if (student.cpf) orFilters.push({ cpf: student.cpf })
+  if (student.email) orFilters.push({ email: student.email })
+
+  const free = await prisma.enrollment.findFirst({
+    where: { ...FREE_ACCESS_ENROLLMENT_WHERE, student: { OR: orFilters } },
+    select: { id: true },
+  })
+  return free !== null
+}
+
+/**
+ * PONTO UNICO DE SAIDA para `usuarios/editar`.
+ *
+ * Existe para que nenhuma edicao possa ser parcial: o payload sempre carrega
+ * `status`, `apostila` e `bolsista`, montados a partir do nosso registro (com
+ * os overrides de quem chamou por cima). Ver o cabecalho de
+ * `platform-state.ts` para o incidente que originou a regra.
+ *
+ * Ha teste de cobertura (`platform-edit-coverage.test.ts`) que quebra se
+ * `editarAluno` for chamado de qualquer outro arquivo.
+ */
+async function pushPlatformState(
+  student: PlatformSnapshotRow,
+  overrides: PlatformStateOverrides & {
+    senha?: string
+    /** Login na plataforma quando ainda nao foi gravado em `student`. */
+    plataformaAlunoId?: number
+  } = {},
+): Promise<void> {
+  const plataformaAlunoId =
+    overrides.plataformaAlunoId ?? parseExternalId(student.plataformaAlunoId)
+  if (plataformaAlunoId === null) {
+    throw new Error("aluno sem plataforma_aluno_id (ainda nao foi para a plataforma)")
+  }
+
+  const bolsista =
+    overrides.bolsista ?? (await resolvePlatformBolsista(student))
+
+  await editarAluno(
+    buildEditarAlunoPayload(plataformaAlunoId, { ...student, bolsista }, overrides),
+  )
+}
+
+/**
  * Le a senha que de fato vale na plataforma de aulas via `usuarios/listar`
  * (fonte da verdade do acesso as aulas).
  *
@@ -307,11 +434,16 @@ export async function ensureStudentOnPlatform(
       email: student.email,
     })
     if (!blockedElsewhere) {
-      await editarAluno({
-        id_aluno: reused.plataformaAlunoId,
-        status: "ativo",
-        apostila: "liberar",
-      })
+      // `polo` é o novo (desta unidade), não o gravado — a linha só é
+      // atualizada logo abaixo.
+      await pushPlatformState(
+        { ...student, polo },
+        {
+          status: "ATIVO",
+          apostila: "LIBERADA",
+          plataformaAlunoId: reused.plataformaAlunoId,
+        },
+      )
     } else {
       contextLogger().warn(
         {
@@ -366,10 +498,11 @@ export async function ensureStudentOnPlatform(
     // sempre vazio na plataforma de aulas, para qualquer venda (revenda ou
     // PMB). O `polo` é o que identifica a unidade do aluno.
     vendedor: undefined,
-    // Bolsista (bolsa de estudo): a plataforma espera "S"/"N". So enviamos
-    // quando o aluno foi marcado como bolsista numa venda direta — o EA libera
-    // o acesso sem vincular cobranca financeira na plataforma.
-    bolsista: student.bolsista ? "S" : undefined,
+    // Bolsista: a plataforma espera "S"/"N" e usa a flag para NAO vincular
+    // cobranca ao aluno. Sempre explicito (nunca undefined) — omitir deixa o
+    // campo no default deles. Cobre a bolsa da venda direta E o acesso liberado
+    // sem cobranca (cupom de 100%), ver `resolvePlatformBolsista`.
+    bolsista: (await resolvePlatformBolsista(student)) ? "S" : "N",
   })
 
   const platformLogin = String(result.login)
@@ -449,7 +582,7 @@ export async function changeStudentPlatformPassword(
 ): Promise<PlatformPasswordChangeResult> {
   const student = await prisma.student.findUnique({
     where: { id: studentId },
-    select: { id: true, plataformaAlunoId: true },
+    select: PLATFORM_SNAPSHOT_SELECT,
   })
   if (!student) throw new Error(`student ${studentId} nao encontrado`)
 
@@ -459,7 +592,11 @@ export async function changeStudentPlatformPassword(
     return { onPlatform: false, applied: false, effectivePassword: null }
   }
 
-  await editarAluno({ id_aluno: plataformaId, senha: newPassword })
+  // ⚠️ Este `editar` acompanha o retrato COMPLETO do aluno, e nao so a senha.
+  // Mandar `{ id_aluno, senha }` sozinho foi o que rebaixou uma aluna ativa a
+  // "interessado" em producao (05/08/2026): a plataforma reescreve os campos
+  // omitidos com o default dela. Ver `platform-state.ts`.
+  await pushPlatformState(student, { senha: newPassword })
 
   const effective = await readPlatformPassword(plataformaId)
   if (effective === null) {
@@ -607,7 +744,7 @@ export async function ensureStudentActiveOnPlatform(
 ): Promise<void> {
   const student = await prisma.student.findUnique({
     where: { id: studentId },
-    select: { id: true, cpf: true, email: true, status: true, apostila: true },
+    select: PLATFORM_SNAPSHOT_SELECT,
   })
   if (!student) return
 
@@ -625,7 +762,11 @@ export async function ensureStudentActiveOnPlatform(
 
   // Idempotente: a EA aceita reenviar o mesmo status. So tocamos o banco quando
   // o status local ainda nao reflete ATIVO/LIBERADA.
-  await editarAluno({ id_aluno: plataformaAlunoId, status: "ativo", apostila: "liberar" })
+  await pushPlatformState(student, {
+    status: "ATIVO",
+    apostila: "LIBERADA",
+    plataformaAlunoId,
+  })
   if (student.status !== "ATIVO" || student.apostila !== "LIBERADA") {
     await prisma.student.update({
       where: { id: student.id },
@@ -687,8 +828,7 @@ export async function blockStudentInEA(studentId: string): Promise<void> {
   const student = await prisma.student.findUnique({
     where: { id: studentId },
     select: {
-      id: true,
-      plataformaAlunoId: true,
+      ...PLATFORM_SNAPSHOT_SELECT,
       enrollments: {
         where: { lmsEnrollmentId: { not: null } },
         select: { id: true },
@@ -709,7 +849,10 @@ export async function blockStudentInEA(studentId: string): Promise<void> {
   // EA: bloqueio por-login. LMS: bloqueio por-student (best-effort + log — os
   // crons de sweep reaplicam; o bloqueio do LMS e idempotente).
   if (platformId !== null) {
-    await editarAluno({ id_aluno: platformId, status: "bloqueado", apostila: "bloquear" })
+    await pushPlatformState(student, {
+      status: "BLOQUEADO",
+      apostila: "BLOQUEADA",
+    })
   }
   if (hasLms) {
     // NAO engolir a falha: se virasse só log, o status local ja seria BLOQUEADO
@@ -755,7 +898,7 @@ export async function blockStudentInEA(studentId: string): Promise<void> {
  *    (so corta quando nenhum outro curso da pessoa esta liberado) e a inclusao
  *    de DEVEDOR em `isPersonBlockedInAnotherTenant`.
  */
-const EA_PACE_STATUS = "devedor"
+const EA_PACE_STATUS: StudentStatus = "DEVEDOR"
 
 /**
  * Ids dos nossos Student que representam a MESMA PESSOA — e portanto compartilham
@@ -810,9 +953,7 @@ export async function setStudentPaceBlock(
   const student = await prisma.student.findUnique({
     where: { id: studentId },
     select: {
-      id: true,
-      status: true,
-      plataformaAlunoId: true,
+      ...PLATFORM_SNAPSHOT_SELECT,
       enrollments: {
         where: { lmsEnrollmentId: { not: null } },
         select: { id: true },
@@ -833,10 +974,9 @@ export async function setStudentPaceBlock(
   if (platformId === null && !hasLms) return false
 
   if (platformId !== null) {
-    await editarAluno({
-      id_aluno: platformId,
-      status: blocked ? EA_PACE_STATUS : "ativo",
-      apostila: blocked ? "bloquear" : "liberar",
+    await pushPlatformState(student, {
+      status: blocked ? EA_PACE_STATUS : "ATIVO",
+      apostila: blocked ? "BLOQUEADA" : "LIBERADA",
     })
   }
   if (hasLms) {
@@ -864,27 +1004,15 @@ export async function setStudentPaceBlock(
 }
 
 /**
- * Sincroniza dados de perfil do aluno na plataforma (sem mexer em status/apostila).
- * Idempotente: se o aluno ainda nao foi para a plataforma, ignora (so faz sentido
- * apos pagamento/criacao). Usa editarAluno passando apenas os campos que o
- * usuario pode editar no /aluno/perfil.
+ * Sincroniza dados de perfil do aluno na plataforma SEM alterar status/apostila
+ * — mas reenviando os dois, porque na plataforma "campo omitido" e "campo
+ * resetado" sao a mesma coisa. Idempotente: se o aluno ainda nao foi para a
+ * plataforma, ignora (so faz sentido apos pagamento/criacao).
  */
 export async function syncStudentProfileToEA(studentId: string): Promise<void> {
   const student = await prisma.student.findUnique({
     where: { id: studentId },
-    select: {
-      plataformaAlunoId: true,
-      nome: true,
-      email: true,
-      fone: true,
-      cpf: true,
-      cidade: true,
-      estado: true,
-      cep: true,
-      rua: true,
-      numero: true,
-      bairro: true,
-    },
+    select: PLATFORM_SNAPSHOT_SELECT,
   })
   if (!student) throw new Error(`student ${studentId} nao encontrado`)
   const platformId = parseExternalId(student.plataformaAlunoId)
@@ -893,19 +1021,10 @@ export async function syncStudentProfileToEA(studentId: string): Promise<void> {
     return
   }
 
-  await editarAluno({
-    id_aluno: platformId,
-    nome: student.nome,
-    email: student.email ?? undefined,
-    fone: student.fone ?? undefined,
-    cpf: student.cpf ?? undefined,
-    cidade: student.cidade ?? undefined,
-    estado: student.estado ?? undefined,
-    cep: student.cep ?? undefined,
-    rua: student.rua ?? undefined,
-    numero: student.numero ?? undefined,
-    bairro: student.bairro ?? undefined,
-  })
+  // Sem overrides de estado: o retrato leva o status/apostila/bolsista ATUAIS.
+  // Antes esta funcao mandava so os campos de perfil, e a plataforma resetava o
+  // status do aluno para o default (`interessado`) a cada edicao de perfil.
+  await pushPlatformState(student)
 }
 
 /**
@@ -915,8 +1034,7 @@ export async function unblockStudentInEA(studentId: string): Promise<void> {
   const student = await prisma.student.findUnique({
     where: { id: studentId },
     select: {
-      id: true,
-      plataformaAlunoId: true,
+      ...PLATFORM_SNAPSHOT_SELECT,
       enrollments: {
         where: { lmsEnrollmentId: { not: null } },
         select: { id: true },
@@ -934,7 +1052,7 @@ export async function unblockStudentInEA(studentId: string): Promise<void> {
   }
 
   if (platformId !== null) {
-    await editarAluno({ id_aluno: platformId, status: "ativo", apostila: "liberar" })
+    await pushPlatformState(student, { status: "ATIVO", apostila: "LIBERADA" })
   }
   if (hasLms) {
     // Simetrico ao bloqueio: propaga a falha para o status local nao ser marcado
@@ -958,3 +1076,132 @@ export async function unblockStudentInEA(studentId: string): Promise<void> {
 }
 
 export { resolvePoloContextForStudent }
+
+/**
+ * Confere o cadastro do aluno NA PLATAFORMA contra o nosso estado e, opcional-
+ * mente, corrige.
+ *
+ * Remediacao do incidente de 2026-08-05: uma edicao parcial (`{ id_aluno,
+ * senha }`) rebaixava o aluno para o default `interessado` da plataforma. Do
+ * lado de ca nada mudava — `Student.status` seguia `ATIVO` —, entao o aluno
+ * perdia as aulas em silencio e nenhum relatorio nosso acusava. O codigo que
+ * causava isso ja foi fechado (`pushPlatformState`), mas quem foi rebaixado
+ * antes continua rebaixado ate alguem reescrever o cadastro.
+ *
+ * O NOSSO banco e a fonte da verdade: todo bloqueio legitimo (inadimplencia,
+ * cota de aulas, prazo) passa por este modulo e grava `Student.status` junto.
+ * Divergencia, portanto, e sempre erro da plataforma — nunca uma decisao dela
+ * que devemos respeitar.
+ *
+ * `apostila` NAO entra na comparacao: a colecao oficial documenta os valores de
+ * ESCRITA (`liberar`/`bloquear`) e nao o formato de leitura de
+ * `usuarios/listar` (que volta null nos exemplos). Comparar as cegas geraria
+ * divergencia fantasma em toda a base. Ela vai junto na CORRECAO, que reescreve
+ * o retrato inteiro.
+ */
+export interface PlatformStateAudit {
+  studentId: string
+  nome: string
+  plataformaAlunoId: string
+  /** Status cru devolvido por `usuarios/listar`. */
+  eaStatus: string | null
+  eaBolsista: boolean | null
+  expectedStatus: StudentStatus
+  expectedBolsista: boolean
+  outcome:
+    | "ok"
+    | "diverged"
+    | "fixed"
+    | "skipped_not_on_platform"
+    | "skipped_blocked_elsewhere"
+    | "failed"
+  error?: string
+}
+
+export async function auditStudentPlatformState(
+  studentId: string,
+  opts: { apply: boolean },
+): Promise<PlatformStateAudit> {
+  const student = await prisma.student.findUnique({
+    where: { id: studentId },
+    select: PLATFORM_SNAPSHOT_SELECT,
+  })
+  if (!student) throw new Error(`student ${studentId} nao encontrado`)
+
+  const base = {
+    studentId: student.id,
+    nome: student.nome,
+    plataformaAlunoId: student.plataformaAlunoId,
+    expectedStatus: student.status,
+  }
+
+  const platformId = parseExternalId(student.plataformaAlunoId)
+  const isPending = student.plataformaAlunoId?.startsWith("pending") ?? false
+  if (platformId === null || isPending) {
+    return {
+      ...base,
+      eaStatus: null,
+      eaBolsista: null,
+      expectedBolsista: false,
+      outcome: "skipped_not_on_platform",
+    }
+  }
+
+  const expectedBolsista = await resolvePlatformBolsista(student)
+
+  let eaStatus: string | null = null
+  let eaBolsista: boolean | null = null
+  try {
+    const aluno = await buscarAluno({ id: platformId })
+    eaStatus = aluno?.status != null ? String(aluno.status) : null
+    eaBolsista = parseEaBolsista(aluno?.bolsista)
+  } catch (err) {
+    return {
+      ...base,
+      eaStatus: null,
+      eaBolsista: null,
+      expectedBolsista,
+      outcome: "failed",
+      error: err instanceof Error ? err.message : "erro desconhecido",
+    }
+  }
+
+  const statusDiverged = parseEaStatus(eaStatus) !== student.status
+  // `null` na plataforma = campo nunca preenchido; equivale a "nao bolsista".
+  const bolsistaDiverged = (eaBolsista ?? false) !== expectedBolsista
+  if (!statusDiverged && !bolsistaDiverged) {
+    return { ...base, eaStatus, eaBolsista, expectedBolsista, outcome: "ok" }
+  }
+
+  if (!opts.apply) {
+    return { ...base, eaStatus, eaBolsista, expectedBolsista, outcome: "diverged" }
+  }
+
+  // Mesma guarda de isolamento cross-tenant de `ensureStudentActiveOnPlatform`:
+  // o login e compartilhado entre unidades, entao reafirmar ATIVO aqui reabriria
+  // os cursos de uma unidade onde a pessoa esta bloqueada por inadimplencia.
+  if (student.status === "ATIVO" && (await isPersonBlockedInAnotherTenant(student))) {
+    return {
+      ...base,
+      eaStatus,
+      eaBolsista,
+      expectedBolsista,
+      outcome: "skipped_blocked_elsewhere",
+    }
+  }
+
+  try {
+    await pushPlatformState(student, { bolsista: expectedBolsista })
+  } catch (err) {
+    return {
+      ...base,
+      eaStatus,
+      eaBolsista,
+      expectedBolsista,
+      outcome: "failed",
+      error: err instanceof Error ? err.message : "erro desconhecido",
+    }
+  }
+
+  return { ...base, eaStatus, eaBolsista, expectedBolsista, outcome: "fixed" }
+}

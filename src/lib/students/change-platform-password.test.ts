@@ -13,6 +13,8 @@ vi.mock("@/lib/plataforma-cursos/client", () => ({
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     student: { findUnique: vi.fn(), update: vi.fn() },
+    // `pushPlatformState` resolve o bolsista efetivo antes de montar o payload.
+    enrollment: { findFirst: vi.fn() },
   },
 }))
 // encrypt identidade: deixa o snapshot gravado legível na asserção.
@@ -39,6 +41,7 @@ const editarAlunoMock = vi.mocked(editarAluno)
 const buscarAlunoMock = vi.mocked(buscarAluno)
 const findUnique = vi.mocked(prisma.student.findUnique)
 const update = vi.mocked(prisma.student.update)
+const enrollmentFindFirst = vi.mocked(prisma.enrollment.findFirst)
 
 // EA tipa senha como number, mas na prática vem string/number — cast nos mocks.
 const ea = (senha: unknown) =>
@@ -48,6 +51,24 @@ function mockStudent(plataformaAlunoId: string) {
   findUnique.mockResolvedValue({
     id: "stu_1",
     plataformaAlunoId,
+    nome: "MARIA LUIZA VIANA SOARES",
+    email: "aluna@example.com",
+    fone: null,
+    fone2: null,
+    cpf: "70062665480",
+    rg: null,
+    sexo: null,
+    nascimento: null,
+    rua: null,
+    numero: null,
+    bairro: null,
+    cidade: null,
+    estado: null,
+    cep: null,
+    polo: "logosescolateologicacursosprofis",
+    status: "ATIVO",
+    apostila: "LIBERADA",
+    bolsista: false,
   } as never)
 }
 
@@ -55,6 +76,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   editarAlunoMock.mockResolvedValue("Aluno editado com sucesso!")
   update.mockResolvedValue({} as never)
+  enrollmentFindFirst.mockResolvedValue(null as never)
 })
 
 describe("changeStudentPlatformPassword", () => {
@@ -78,7 +100,19 @@ describe("changeStudentPlatformPassword", () => {
 
     const result = await changeStudentPlatformPassword("stu_1", "nova123")
 
-    expect(editarAlunoMock).toHaveBeenCalledWith({ id_aluno: 4373, senha: "nova123" })
+    // Regressão do incidente de 2026-08-05: a edição NÃO pode ser parcial. Sem
+    // status/apostila no payload a plataforma reescreve o cadastro no default
+    // dela (`interessado`) e o aluno perde as aulas — com o nosso banco ainda
+    // dizendo ATIVO.
+    expect(editarAlunoMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id_aluno: 4373,
+        senha: "nova123",
+        status: "ativo",
+        apostila: "liberar",
+        bolsista: "N",
+      }),
+    )
     expect(result).toEqual({
       onPlatform: true,
       applied: true,

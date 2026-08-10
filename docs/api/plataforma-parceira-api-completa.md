@@ -301,6 +301,54 @@
 | `id_aluno` | int | ✅ | ID do aluno (login retornado no cadastro) |
 | *(demais)* | - | ❌ | Mesmos campos de `usuarios/novo` |
 
+Valores dos campos de estado, conforme a coleção oficial (conferida em 10/08/2026):
+
+| Campo | Valores aceitos |
+|---|---|
+| `status` | `ativo`, `inativo`, `bloqueado`, `devedor`, `formado`, **`interessado`** |
+| `apostila` | `liberar`, `bloquear` |
+| `bolsista` | `s`, `n` |
+| `certificado` | `s`, `n` |
+| `datafinal` | `YYYY-MM-DD` |
+
+> ### 🚨 `usuarios/editar` NÃO é um PATCH — campo omitido é campo RESETADO
+>
+> **Incidente de 05/08/2026.** A troca de senha mandava `usuarios/editar` com
+> apenas `id_aluno` + `senha`. A plataforma reescreveu o cadastro inteiro com os
+> defaults dela, e o default de `status` é **`interessado`** — o estágio de lead
+> do CRM deles, sem acesso às aulas.
+>
+> Resultado: uma aluna com matrícula `ACTIVE`, curso vinculado e cupom de 100%
+> amanheceu como "Interessado" e perdeu o acesso. **Nada aparecia do nosso
+> lado** — `Student.status` continuava `ATIVO`, nenhum log, nenhum relatório.
+> Silêncio total até a unidade abrir chamado.
+>
+> **Regra:** todo `usuarios/editar` sai de `pushPlatformState`
+> (`src/lib/students/plataforma-actions.ts`) e carrega **sempre** `status`,
+> `apostila` e `bolsista`, montados a partir do nosso registro. Nunca mandar uma
+> edição parcial de campo de estado. A tradução dos enums e a montagem do
+> payload ficam em `src/lib/students/platform-state.ts`; há teste que quebra o
+> build se `editarAluno` for chamado de qualquer outro arquivo.
+>
+> Campos de perfil vazios do nosso lado saem como `undefined` (o `buildFormData`
+> os descarta), então o que estiver na plataforma é preservado — asseveramos o
+> que sabemos, não apagamos o que não sabemos. Se um dia se descobrir que a
+> plataforma também reseta `certificado`/`datafinal`/`obs` numa edição, o campo
+> entra no payload junto com a definição de quem é dono do valor.
+>
+> Para consertar quem já foi rebaixado: `POST /api/cron/resync-platform-state`
+> (dry-run por padrão, `?apply=1` corrige, `?ids=4455` limita).
+
+> ### `bolsista` = "não vincule cobrança a este aluno"
+>
+> A flag existe no `novo` e no `editar`. Ela **não** é o nosso
+> `Student.bolsista` (que significa "bolsa institucional concedida numa venda
+> direta"): quem entra por **cupom de 100%** também precisa dela, senão vai para
+> a plataforma como aluno pagante e cai no módulo financeiro da fornecedora sem
+> nenhum pagamento a registrar. A derivação (por PESSOA, porque o login é único
+> por CPF) fica em `resolvePlatformBolsista`. Enviamos sempre `S` ou `N`
+> explícito — omitir cai no default deles.
+
 **Response (200):**
 ```json
 {
