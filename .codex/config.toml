@@ -1,0 +1,6 @@
+[mcp_servers.asaas]
+url = "https://docs.asaas.com/mcp"
+
+[mcp_servers.supabase]
+url = "https://mcp.supabase.com/mcp?project_ref=jpwskehhnplmmtgyyxmf"
+bearer_token_env_var = "SUPABASE_ACCESS_TOKEN"
