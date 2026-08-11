@@ -412,6 +412,28 @@ export class WhatsAppNumberNotFoundError extends Error {
 }
 
 /**
+ * Lancado quando o engine recusou o envio porque a SESSAO esta fora do ar (422
+ * "Session status is not as expected") e a religada automatica nao resolveu.
+ *
+ * Existe para o caller distinguir "o canal morreu" de um erro qualquer do
+ * engine: so no primeiro caso faz sentido corrigir o snapshot do banco e avisar
+ * a unidade. Sem este tipo, a unica evidencia era a string do 422 — e o disparo
+ * seguia registrando falha com o banco dizendo "conectado", indefinidamente.
+ *
+ * `liveStatus` e o ultimo estado observado no engine (o que o dono precisa ver).
+ */
+export class WhatsAppSessionDownError extends Error {
+  readonly sessionName: string
+  readonly liveStatus: WaStatus
+  constructor(sessionName: string, liveStatus: WaStatus) {
+    super(`Sessao ${sessionName} fora do ar no engine (${liveStatus})`)
+    this.name = "WhatsAppSessionDownError"
+    this.sessionName = sessionName
+    this.liveStatus = liveStatus
+  }
+}
+
+/**
  * Resolve o chatId REAL do numero no WhatsApp antes de enviar.
  *
  * Por que: numeros BR sofrem do "nono digito" — o id efetivamente registrado
@@ -485,6 +507,16 @@ export async function sendTextMessage(
     const live = await ensureSessionWorking(args.sessionName)
     if (live.status === "WORKING") {
       attempt = await postSendText(args.sessionName, chatId, args.body)
+    }
+    // Religar nao resolveu (credencial expirada, aparelho desvinculado). O
+    // caller precisa saber que foi o CANAL que morreu — e ele quem corrige o
+    // snapshot do banco e avisa a unidade.
+    if (attempt.sessionNotWorking) {
+      // Quando a religada REPORTOU WORKING e mesmo assim o envio voltou 422, o
+      // proprio engine acabou de dizer que a sessao nao esta operante — vale
+      // mais que o status otimista de um instante atras.
+      const observed = live.status === "WORKING" ? "FAILED" : live.status
+      throw new WhatsAppSessionDownError(args.sessionName, observed)
     }
   }
 

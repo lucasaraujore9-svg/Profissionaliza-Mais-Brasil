@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { contextLogger } from "@/lib/logger"
 import { createNotification } from "@/lib/notifications"
+import { runInChunks } from "@/lib/concurrency"
 import { ensureSessionWorking } from "./wa-client"
 import { syncWaSnapshot } from "./context"
 
@@ -97,10 +98,17 @@ export interface WaHealthResult {
   avisosEnviados: number
 }
 
+// Quantas sessoes conferimos ao mesmo tempo. Verificar uma sessao caida custa
+// ate ~20s (status + stop + start + 3 sondagens com espera), entao em serie
+// 49 unidades nao cabiam nos 300s de `maxDuration`: a primeira execucao real
+// parou em 41 e as 8 do fim da lista nunca eram alcancadas. Sao chamadas HTTP
+// ao engine, nao consultas ao banco — o limite protege o engine, nao o pooler.
+const HEALTH_CONCURRENCY = 6
+
 /**
  * Varre as unidades com automacao ligada e sessao criada, confronta o snapshot
  * do banco com o engine, tenta religar o que da e avisa quem precisa reconectar
- * na mao.
+ * na mao. Cobre tambem a vitrine PMB (sistema mae).
  *
  * Idempotente: pode rodar quantas vezes quiser. O aviso tem cooldown proprio.
  */
@@ -120,33 +128,77 @@ export async function checkWaSessionsHealth(): Promise<WaHealthResult> {
       waSessionName: { not: null },
     },
     select: { id: true, slug: true, waSessionName: true, waStatus: true },
+    // Menos recente primeiro: se ainda assim a execucao for cortada no meio,
+    // a proxima comeca por quem esta ha mais tempo sem conferencia, em vez de
+    // reconferir sempre os mesmos e deixar uma cauda permanentemente cega.
+    orderBy: { waStatusUpdatedAt: { sort: "asc", nulls: "first" } },
   })
 
-  for (const t of tenants) {
-    if (!t.waSessionName) continue
+  // A vitrine PMB tem sessao propria e ficava de fora desta varredura — o
+  // snapshot dela chegou a passar 2 meses sem uma unica conferencia.
+  const settings = await prisma.systemSettings.findUnique({
+    where: { id: "default" },
+    select: { pmbAutomationEnabled: true, pmbWaSessionName: true, pmbWaStatus: true },
+  })
+
+  const alvos: Array<{
+    tenantId: string | null
+    label: string
+    sessionName: string
+    snapshot: string
+  }> = tenants
+    .filter((t): t is typeof t & { waSessionName: string } => !!t.waSessionName)
+    .map((t) => ({
+      tenantId: t.id,
+      label: t.slug,
+      sessionName: t.waSessionName,
+      snapshot: t.waStatus,
+    }))
+
+  if (settings?.pmbAutomationEnabled && settings.pmbWaSessionName) {
+    alvos.push({
+      tenantId: null,
+      label: "__pmb__",
+      sessionName: settings.pmbWaSessionName,
+      snapshot: settings.pmbWaStatus,
+    })
+  }
+
+  const settled = await runInChunks(alvos, HEALTH_CONCURRENCY, async (alvo) => {
+    const live = await ensureSessionWorking(alvo.sessionName)
+    await syncWaSnapshot(alvo.tenantId, live.status, live.connectedPhone)
+
+    if (live.status === "WORKING") {
+      // Estava mentindo antes: o snapshot dizia caído e o canal estava de pé.
+      return { saudavel: true, recuperada: alvo.snapshot !== "WORKING", avisou: false }
+    }
+
+    const avisou = await alertWaDisconnected(alvo.tenantId, live.status)
+    return { saudavel: false, recuperada: false, avisou }
+  })
+
+  settled.forEach((outcome, i) => {
     result.verificadas++
-    try {
-      const live = await ensureSessionWorking(t.waSessionName)
-      await syncWaSnapshot(t.id, live.status, live.connectedPhone)
-
-      if (live.status === "WORKING") {
-        result.saudaveis++
-        // Estava mentindo antes: o snapshot dizia caído e o canal estava de pé.
-        if (t.waStatus !== "WORKING") result.recuperadas++
-        continue
-      }
-
-      result.precisamReconectar++
-      if (await alertWaDisconnected(t.id, live.status)) {
-        result.avisosEnviados++
-      }
-    } catch (err) {
+    if (outcome.status === "rejected") {
       contextLogger().error(
-        { err, event: "automation.wa_health_failed", tenantId: t.id, slug: t.slug },
+        {
+          err: outcome.reason,
+          event: "automation.wa_health_failed",
+          tenantId: alvos[i].tenantId,
+          slug: alvos[i].label,
+        },
         "Falha ao verificar saude da sessao WhatsApp da unidade",
       )
+      return
     }
-  }
+    if (outcome.value.saudavel) {
+      result.saudaveis++
+      if (outcome.value.recuperada) result.recuperadas++
+      return
+    }
+    result.precisamReconectar++
+    if (outcome.value.avisou) result.avisosEnviados++
+  })
 
   return result
 }

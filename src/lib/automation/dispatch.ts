@@ -7,6 +7,7 @@ import {
   ensureSessionWorking,
   sendTextMessage,
   WhatsAppNumberNotFoundError,
+  WhatsAppSessionDownError,
 } from "./wa-client"
 import { rateLimitByKey, RATE_LIMITS } from "@/lib/ratelimit"
 import {
@@ -23,22 +24,33 @@ import { alertWaDisconnected } from "./health"
 const CHANNEL_MEMO_MS = 60_000
 const channelMemo = new Map<string, { at: number; ready: boolean }>()
 
+// Validade do atalho "o snapshot diz WORKING, pode enviar". Passado disso,
+// perguntamos ao engine antes de confiar.
+//
+// Por que existe: em 2026-08-11, 28 das 46 unidades marcadas WORKING estavam
+// FAILED no engine, com snapshots parados havia semanas — o cron de saude que
+// os manteria frescos nunca chegou a ser agendado. Um atalho SEM prazo faz o
+// disparo depender de um job externo existir; com prazo, o pior caso e uma
+// consulta a mais ao engine. A janela e folgada de proposito: o cron roda a
+// cada ~6h, entao no caminho feliz este limite nunca e alcancado.
+const SNAPSHOT_MAX_AGE_MS = 6 * 60 * 60 * 1000
+
 /**
  * Decide se o canal esta apto a enviar AGORA, consultando o engine quando o
- * snapshot local diz que nao.
+ * snapshot local diz que nao — ou quando ele esta velho demais para valer.
  *
  * O snapshot `waStatus` do banco so era atualizado quando alguem abria a tela
  * de conexao, entao ele ficava obsoleto por dias e derrubava disparos de
  * sessoes que estavam perfeitamente de pe (`wa_not_connected` era a maior causa
- * de falha em producao). Agora o snapshot vale como atalho: se ele diz WORKING,
- * seguimos direto; se diz qualquer outra coisa, perguntamos ao engine e ainda
- * tentamos religar a sessao antes de desistir.
+ * de falha em producao). Agora o snapshot vale como atalho: se ele diz WORKING
+ * e foi escrito ha pouco, seguimos direto; caso contrario perguntamos ao engine
+ * e ainda tentamos religar a sessao antes de desistir.
  */
 async function ensureChannelReady(
   ctx: AutomationContext,
 ): Promise<{ ready: boolean; sessionName: string | null }> {
   if (!ctx.waSessionName) return { ready: false, sessionName: null }
-  if (ctx.waStatus === "WORKING") {
+  if (ctx.waStatus === "WORKING" && isSnapshotFresh(ctx.waStatusUpdatedAt)) {
     return { ready: true, sessionName: ctx.waSessionName }
   }
 
@@ -65,6 +77,32 @@ async function ensureChannelReady(
     ready: live.status === "WORKING",
     sessionName: ctx.waSessionName,
   }
+}
+
+/** Snapshot sem data e tratado como velho — nao ha o que confiar. */
+function isSnapshotFresh(updatedAt: Date | null): boolean {
+  if (!updatedAt) return false
+  return Date.now() - updatedAt.getTime() < SNAPSHOT_MAX_AGE_MS
+}
+
+/**
+ * O envio falhou porque o CANAL caiu: corrige o snapshot mentiroso e avisa quem
+ * precisa reconectar.
+ *
+ * Ate aqui isso so acontecia dentro de `ensureChannelReady` — que e justamente
+ * o passo pulado quando o snapshot diz WORKING. Resultado: a unidade cujo
+ * snapshot congelou em WORKING falhava todo disparo com 422, nunca era avisada
+ * e nunca tinha o snapshot corrigido. O estado errado se auto-perpetuava.
+ */
+async function handleSessionDown(
+  ctx: AutomationContext,
+  err: WhatsAppSessionDownError,
+): Promise<void> {
+  // Invalida o memo: os proximos leads do mesmo sweep nao podem reaproveitar
+  // um "ready" que a realidade acabou de desmentir.
+  channelMemo.delete(err.sessionName)
+  await syncWaSnapshot(ctx.tenantId, err.liveStatus, null)
+  await alertWaDisconnected(ctx.tenantId, err.liveStatus)
 }
 
 interface QueueLeadMessageArgs {
@@ -202,6 +240,26 @@ export async function sendLeadMessage(args: QueueLeadMessageArgs): Promise<void>
       )
       return
     }
+    // Canal caido: corrige o snapshot e avisa a unidade antes de registrar.
+    if (err instanceof WhatsAppSessionDownError) {
+      contextLogger().warn(
+        {
+          event: "automation.dispatch.session_down",
+          leadId,
+          templateKey,
+          liveStatus: err.liveStatus,
+        },
+        "Sessao WhatsApp caiu durante o envio",
+      )
+      await handleSessionDown(ctx, err)
+      await recordFailure(
+        leadId,
+        templateKey,
+        "wa_not_connected",
+        "WhatsApp desconectado — reconecte em Automação → Conexão",
+      )
+      return
+    }
     contextLogger().error(
       { err, event: "automation.dispatch.send_failed", leadId, templateKey },
       "Engine WhatsApp rejeitou o envio",
@@ -305,6 +363,33 @@ export async function sendManualWhatsAppToLead(
         ok: false,
         code: "no_whatsapp",
         message: "Este número não possui conta no WhatsApp.",
+      }
+    }
+    if (err instanceof WhatsAppSessionDownError) {
+      contextLogger().warn(
+        {
+          event: "automation.dispatch.manual_session_down",
+          leadId,
+          liveStatus: err.liveStatus,
+        },
+        "Sessao WhatsApp caiu durante o envio manual",
+      )
+      await handleSessionDown(ctx, err)
+      await prisma.studentLeadActivity
+        .create({
+          data: {
+            leadId,
+            kind: "WA_MESSAGE_FAILED",
+            body: "WhatsApp desconectado",
+            metadata: { manual: true, reason: "wa_not_connected" },
+          },
+        })
+        .catch(swallow("automation.dispatch.activity_session_down"))
+      return {
+        ok: false,
+        code: "wa_not_connected",
+        message:
+          "A conexão do WhatsApp caiu. Reconecte em Automação → Conexão para enviar mensagens.",
       }
     }
     contextLogger().error(

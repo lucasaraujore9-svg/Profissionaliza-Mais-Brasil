@@ -17,6 +17,10 @@ export interface AutomationContext {
   waSessionName: string | null
   waConnectedPhone: string | null
   waStatus: string
+  // Quando o snapshot acima foi escrito. `null` = nunca — trate como obsoleto.
+  // O disparo usa isto para decidir se ainda pode confiar num "WORKING" antigo
+  // em vez de perguntar ao engine (ver SNAPSHOT_MAX_AGE_MS em dispatch.ts).
+  waStatusUpdatedAt: Date | null
   abandonedAfterHours: number
   // Nome amigavel exibido em mensagens ({{escola}})
   displayName: string
@@ -37,6 +41,7 @@ export async function getTenantAutomationContext(
       waSessionName: true,
       waConnectedPhone: true,
       waStatus: true,
+      waStatusUpdatedAt: true,
       abandonedAfterHours: true,
     },
   })
@@ -49,6 +54,7 @@ export async function getTenantAutomationContext(
     waSessionName: tenant.waSessionName,
     waConnectedPhone: tenant.waConnectedPhone,
     waStatus: tenant.waStatus,
+    waStatusUpdatedAt: tenant.waStatusUpdatedAt,
     abandonedAfterHours: tenant.abandonedAfterHours,
     displayName: tenant.name,
     publicHost: `${tenant.slug}.${vitrineHostBase()}`,
@@ -65,6 +71,7 @@ export async function getPmbAutomationContext(): Promise<AutomationContext> {
       pmbWaSessionName: true,
       pmbWaConnectedPhone: true,
       pmbWaStatus: true,
+      pmbWaStatusUpdatedAt: true,
       pmbAbandonedAfterHours: true,
     },
   })
@@ -75,6 +82,7 @@ export async function getPmbAutomationContext(): Promise<AutomationContext> {
     waSessionName: settings.pmbWaSessionName,
     waConnectedPhone: settings.pmbWaConnectedPhone,
     waStatus: settings.pmbWaStatus,
+    waStatusUpdatedAt: settings.pmbWaStatusUpdatedAt,
     abandonedAfterHours: settings.pmbAbandonedAfterHours,
     displayName: "Profissionaliza Mais Brasil",
     publicHost: appHostBase(),
