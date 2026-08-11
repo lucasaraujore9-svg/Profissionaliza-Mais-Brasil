@@ -2,7 +2,7 @@
 
 import { headers } from "next/headers"
 import { prisma } from "@/lib/prisma"
-import { applyCouponDiscount } from "@/lib/coupons/discount"
+import { lookupCouponForScope } from "@/lib/coupons/lookup"
 import { rateLimitByKey, RATE_LIMITS } from "@/lib/ratelimit"
 import type {
   CouponPreviewInput,
@@ -68,59 +68,8 @@ export async function previewCheckoutCoupon(
     return { ok: false, error: "Muitas tentativas. Aguarde um instante e tente novamente." }
   }
 
-  // Não filtra isActive/validade no findFirst para diferenciar as mensagens
-  // (mesma UX da rota /api/loja/cupom/validar).
-  const coupon = await prisma.coupon.findFirst({
-    where: { tenantId, code },
-    select: {
-      code: true,
-      discountType: true,
-      discountValue: true,
-      maxUses: true,
-      usedCount: true,
-      isActive: true,
-      validFrom: true,
-      validUntil: true,
-    },
-  })
-
-  if (!coupon) {
-    return { ok: false, error: "Cupom não encontrado. Confira a digitação." }
-  }
-  if (!coupon.isActive) {
-    return { ok: false, error: "Este cupom foi desativado." }
-  }
-  const now = new Date()
-  if (coupon.validFrom > now) {
-    return {
-      ok: false,
-      error: `Cupom ainda não está válido (começa em ${coupon.validFrom.toLocaleDateString("pt-BR")}).`,
-    }
-  }
-  if (coupon.validUntil < now) {
-    return {
-      ok: false,
-      error: `Este cupom expirou em ${coupon.validUntil.toLocaleDateString("pt-BR")}.`,
-    }
-  }
-  if (coupon.maxUses !== null && coupon.usedCount >= coupon.maxUses) {
-    return { ok: false, error: "Cupom esgotado — todas as utilizações já foram usadas." }
-  }
-
-  const { discountAmount, finalAmount } = applyCouponDiscount({
-    basePrice,
-    discountType: coupon.discountType,
-    discountValue: coupon.discountValue,
-  })
-
-  return {
-    ok: true,
-    coupon: {
-      code: coupon.code,
-      discountType: coupon.discountType,
-      discountValue: Number(coupon.discountValue),
-      discountAmount,
-      finalPrice: finalAmount,
-    },
-  }
+  // Busca + regras de estado + cálculo do desconto vivem em
+  // `lookupCouponForScope`, compartilhado com a prévia da área do aluno
+  // (/api/aluno/cupom/validar) — mesma mensagem de erro e mesma aritmética.
+  return lookupCouponForScope({ tenantId, code, basePrice })
 }

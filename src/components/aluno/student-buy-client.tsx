@@ -3,6 +3,20 @@
 import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Loader2, Search, ShoppingBag, CheckCircle2 } from "lucide-react"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Button } from "@/components/ui/button"
+import {
+  CouponField,
+  type AppliedCoupon,
+  type CouponValidateResult,
+} from "@/components/loja/coupon-field"
 
 interface CatalogCourse {
   id: string
@@ -29,8 +43,13 @@ export function StudentBuyClient() {
   const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useState("")
   const [category, setCategory] = useState<string>("all")
-  const [buying, setBuying] = useState<string | null>(null)
   const [feedback, setFeedback] = useState<string | null>(null)
+  // Curso em confirmação: abre o resumo onde o cupom é digitado antes de gerar
+  // a cobrança.
+  const [selected, setSelected] = useState<CatalogCourse | null>(null)
+  const [coupon, setCoupon] = useState<AppliedCoupon | null>(null)
+  const [submitting, setSubmitting] = useState(false)
+  const [modalError, setModalError] = useState<string | null>(null)
 
   useEffect(() => {
     async function load() {
@@ -71,18 +90,65 @@ export function StudentBuyClient() {
     })
   }, [courses, query, category])
 
-  async function buy(courseId: string) {
-    setBuying(courseId)
+  function openBuy(course: CatalogCourse) {
+    setSelected(course)
+    // O desconto foi calculado sobre o preço DAQUELE curso — trocar de curso
+    // zera o cupom aplicado em vez de reaproveitar um valor que não vale mais.
+    setCoupon(null)
+    setModalError(null)
     setFeedback(null)
+  }
+
+  function closeBuy(open: boolean) {
+    // Fechar no meio da requisição deixaria a cobrança seguindo sem tela: a
+    // matrícula é criada no servidor de qualquer jeito.
+    if (submitting) return
+    if (!open) {
+      setSelected(null)
+      setCoupon(null)
+      setModalError(null)
+    }
+  }
+
+  async function validateCoupon(code: string): Promise<CouponValidateResult> {
+    if (!selected) return { ok: false, error: "Selecione um curso." }
+    try {
+      const res = await fetch("/api/aluno/cupom/validar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code, courseId: selected.id }),
+      })
+      const body = await res.json()
+      if (!res.ok || !body.data) {
+        return { ok: false, error: body.error ?? "Cupom inválido" }
+      }
+      return { ok: true, coupon: body.data as AppliedCoupon }
+    } catch {
+      return { ok: false, error: "Erro ao validar cupom. Tente novamente." }
+    }
+  }
+
+  async function confirmBuy() {
+    if (!selected || submitting) return
+    setSubmitting(true)
+    setModalError(null)
     try {
       const res = await fetch("/api/aluno/comprar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ courseId }),
+        body: JSON.stringify({
+          courseId: selected.id,
+          // O servidor revalida e recalcula o cupom ao criar a matrícula — a
+          // prévia acima é só o que o aluno vê.
+          couponCode: coupon?.code,
+        }),
       })
       const body = await res.json()
       if (!res.ok) {
-        setFeedback(body.error ?? "Falha ao iniciar compra")
+        // Erro fica DENTRO do resumo: o cupom pode ter esgotado entre a prévia
+        // e a compra, e o aluno precisa poder removê-lo e seguir sem perder a
+        // tela.
+        setModalError(body.error ?? "Falha ao iniciar compra")
         return
       }
       // Cupom cobriu 100%: não há cobrança — o acesso já foi liberado.
@@ -104,11 +170,11 @@ export function StudentBuyClient() {
         router.push(`/aluno/comprar/pagar/${enrollmentId}`)
         return
       }
-      setFeedback("Cobrança gerada, mas o link de pagamento não veio.")
+      setModalError("Cobrança gerada, mas o link de pagamento não veio.")
     } catch {
-      setFeedback("Erro de rede ao iniciar compra")
+      setModalError("Erro de rede ao iniciar compra")
     } finally {
-      setBuying(null)
+      setSubmitting(false)
     }
   }
 
@@ -127,6 +193,12 @@ export function StudentBuyClient() {
       </div>
     )
   }
+
+  const isMonthlySelected = selected?.paymentType === "MONTHLY"
+  const basePrice = selected?.price ?? 0
+  const discountAmount = coupon?.discountAmount ?? 0
+  const finalPrice = coupon ? coupon.finalPrice : basePrice
+  const monthlyMonths = selected?.monthlyMonths ?? null
 
   return (
     <div className="space-y-5">
@@ -244,12 +316,12 @@ export function StudentBuyClient() {
                     ) : (
                       <button
                         type="button"
-                        onClick={() => buy(c.id)}
-                        disabled={buying === c.id}
+                        onClick={() => openBuy(c)}
+                        disabled={submitting && selected?.id === c.id}
                         data-tour="aluno-comprar:comprar"
                         className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--color-pmb-green)] px-3 py-2 text-xs font-semibold text-white hover:bg-[var(--color-pmb-green-700)] disabled:opacity-50"
                       >
-                        {buying === c.id ? (
+                        {submitting && selected?.id === c.id ? (
                           <Loader2 className="h-4 w-4 animate-spin" />
                         ) : (
                           <ShoppingBag className="h-4 w-4" />
@@ -264,6 +336,82 @@ export function StudentBuyClient() {
           })}
         </div>
       )}
+
+      <Dialog open={selected !== null} onOpenChange={closeBuy}>
+        <DialogContent className="sm:max-w-md" showCloseButton={!submitting}>
+          <DialogHeader>
+            <DialogTitle>Confirmar compra</DialogTitle>
+            <DialogDescription>
+              {selected?.nome ?? ""}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4" data-tour="aluno-comprar:resumo">
+            <CouponField
+              applied={coupon}
+              onApply={setCoupon}
+              onRemove={() => setCoupon(null)}
+              onValidate={validateCoupon}
+            />
+
+            <dl className="space-y-1.5 rounded-xl border border-gray-200 p-4 text-sm">
+              <div className="flex items-center justify-between text-gray-600">
+                <dt>{isMonthlySelected ? "Mensalidade" : "Subtotal"}</dt>
+                <dd className="font-mono">{brl(basePrice)}</dd>
+              </div>
+              {discountAmount > 0 && (
+                <div className="flex items-center justify-between text-green-700">
+                  <dt>Desconto ({coupon?.code})</dt>
+                  <dd className="font-mono">− {brl(discountAmount)}</dd>
+                </div>
+              )}
+              <div className="flex items-baseline justify-between border-t border-gray-200 pt-2 text-[var(--color-pmb-green-900)]">
+                <dt className="font-semibold">
+                  {isMonthlySelected ? "Total por mês" : "Total"}
+                </dt>
+                <dd className="font-mono text-lg font-bold text-[var(--color-pmb-green)]">
+                  {brl(finalPrice)}
+                </dd>
+              </div>
+              {isMonthlySelected && monthlyMonths ? (
+                <p className="pt-1 text-[11px] text-gray-500">
+                  {monthlyMonths}{" "}
+                  {monthlyMonths === 1 ? "mensalidade" : "mensalidades"} de{" "}
+                  {brl(finalPrice)}
+                  {discountAmount > 0 ? " (desconto vale para cada mês)" : ""}
+                </p>
+              ) : null}
+              {finalPrice <= 0 && (
+                <p className="pt-1 text-[11px] text-green-700">
+                  O cupom cobre o valor inteiro — o curso é liberado na hora, sem
+                  pagamento.
+                </p>
+              )}
+            </dl>
+
+            {modalError && (
+              <p className="rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">
+                {modalError}
+              </p>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={submitting}
+              onClick={() => closeBuy(false)}
+            >
+              Cancelar
+            </Button>
+            <Button type="button" disabled={submitting} onClick={confirmBuy}>
+              {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
+              {finalPrice <= 0 ? "Liberar curso" : "Ir para o pagamento"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

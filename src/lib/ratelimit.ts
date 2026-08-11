@@ -195,6 +195,10 @@ export const RATE_LIMITS = {
   cobrancaPayCard: { name: "cobranca-paycard", limit: 5, windowSec: 60 },
   certificateValidate: { name: "cert-validate", limit: 30, windowSec: 60 },
   alunoVerificarPagamento: { name: "aluno-verificar-pag", limit: 6, windowSec: 60 },
+  // Prévia de cupom na recompra do aluno logado. Chaveado pelo ALUNO (não pelo
+  // IP): a tentativa cega de adivinhar código é o abuso a conter, e o aluno é o
+  // identificador estável aqui. Mesma folga da vitrine (`publicCupom`).
+  alunoCupom: { name: "aluno-cupom", limit: 20, windowSec: 60 },
   // "Verificar pagamento" da gestão (unidade e sistema mãe): cada clique é 1+
   // consulta ao gateway da venda (MP ou Asaas da conta dona). Limite por
   // OPERADOR, mais folgado que o do aluno porque o atendimento verifica várias

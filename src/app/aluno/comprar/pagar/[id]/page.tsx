@@ -66,6 +66,9 @@ export default async function StudentPagarPage({ params }: PagarPageProps) {
           capaImageUrl: true,
         },
       },
+      // O cupom aplicado no resumo da compra precisa aparecer aqui também —
+      // sem o código, o abatimento chega à tela de pagamento sem explicação.
+      coupon: { select: { code: true } },
       student: { select: { email: true, nome: true } },
       tenant: {
         select: {
@@ -122,7 +125,7 @@ export default async function StudentPagarPage({ params }: PagarPageProps) {
         basePrice={Number(enrollment.originalAmount)}
         discountAmount={Number(enrollment.discountAmount)}
         finalPrice={Number(enrollment.finalAmount)}
-        couponCode={null}
+        couponCode={enrollment.coupon?.code ?? null}
         parcelasSugeridas={
           isMonthly
             ? null
