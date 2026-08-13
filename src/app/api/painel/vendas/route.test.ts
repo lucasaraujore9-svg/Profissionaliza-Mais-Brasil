@@ -53,6 +53,9 @@ function body(overrides: Record<string, unknown> = {}) {
       email: "aluno@teste.com",
       cpf: "111.444.777-35",
       fone: "11987654321",
+      // Aluno NOVO precisa da data de nascimento: e ela que diz se ha
+      // responsavel financeiro a exigir. Adulto => sem bloco de responsavel.
+      nascimento: "1990-01-01",
       tenantCourseIds: ["tc1"],
       ...overrides,
     }),
@@ -144,6 +147,13 @@ function mockStudent(overrides: Record<string, unknown> = {}) {
     email: "aluno@teste.com",
     cpf: "11144477735",
     fone: "11987654321",
+    nascimento: null,
+    responsavel: null,
+    cpfResponsavel: null,
+    responsavelEmail: null,
+    responsavelFone: null,
+    asaasCustomerId: null,
+    responsavelAsaasCustomerId: null,
     ...overrides,
   })
 }
@@ -443,5 +453,70 @@ describe("SAAS-010 — gate status=ATIVO na venda manual do painel", () => {
     expect(res.status).toBe(404)
     const json = (await res.json()) as { error: string }
     expect(json.error).toBe("Curso não encontrado na sua vitrine")
+  })
+})
+
+// ── Responsável financeiro (aluno menor) ───────────────────────────────────
+// A maior parte das vendas usa a aba "buscar aluno", então o gate que de fato
+// segura o problema é o do aluno JÁ EXISTENTE: sem ele a venda passaria com o
+// cadastro velho e o certificado sairia no nome errado de novo.
+
+describe("responsável financeiro", () => {
+  beforeEach(() => {
+    mockSellableCourse()
+  })
+
+  it("aluno novo MENOR sem responsável é recusado", async () => {
+    const res = await POST(body({ nascimento: "2012-05-10" }))
+    expect(res.status).toBe(400)
+    const json = await res.json()
+    expect(JSON.stringify(json)).toContain("responsável")
+  })
+
+  it("aluno novo menor COM responsável passa do schema", async () => {
+    const res = await POST(
+      body({
+        nascimento: "2012-05-10",
+        responsavel: "Maria da Silva",
+        responsavelCpf: "390.533.447-05",
+        responsavelEmail: "maria@teste.com",
+        responsavelFone: "11988887777",
+        responsavelParentesco: "mae",
+      }),
+    )
+    // Passa da validação — o que vier depois é o fluxo normal da venda.
+    expect(res.status).not.toBe(400)
+  })
+
+  it("aluno novo sem data de nascimento é recusado", async () => {
+    const res = await POST(body({ nascimento: undefined }))
+    expect(res.status).toBe(400)
+  })
+
+  it("aluno EXISTENTE menor sem responsável na ficha é recusado", async () => {
+    mockStudent({ nascimento: new Date("2012-05-10T00:00:00.000Z") })
+    const res = await POST(bodyExistingStudent())
+    expect(res.status).toBe(400)
+    const json = await res.json()
+    expect(json.code).toBe("GUARDIAN_REQUIRED")
+    // A tela precisa do id para abrir a ficha e completar o cadastro.
+    expect(json.studentId).toBe("s1")
+  })
+
+  it("aluno EXISTENTE menor COM responsável na ficha passa", async () => {
+    mockStudent({
+      nascimento: new Date("2012-05-10T00:00:00.000Z"),
+      responsavel: "Maria da Silva",
+      cpfResponsavel: "39053344705",
+    })
+    const res = await POST(bodyExistingStudent())
+    expect(res.status).not.toBe(400)
+  })
+
+  it("aluno EXISTENTE sem data de nascimento NÃO é bloqueado (legado)", async () => {
+    // 217 dos 230 alunos em produção não têm data. Bloquear seria um apagão.
+    mockStudent({ nascimento: null })
+    const res = await POST(bodyExistingStudent())
+    expect(res.status).not.toBe(400)
   })
 })

@@ -18,6 +18,7 @@ import { withRequestContext } from "@/lib/observability/with-request-context"
 import { mpWebhookUrl, asaasWebhookUrl, vitrineUrl } from "@/lib/tenant/urls"
 import { isWithinRevealWindow } from "@/lib/installments/schedule"
 import { descreverItemCobranca } from "@/lib/enrollment/multi-course-server"
+import { PAYER_SELECT, resolvePayer } from "@/lib/checkout/payer"
 
 // O formData varia por gateway (MP tokeniza no browser; Asaas envia o cartão ao
 // servidor). Aceitamos os dois shapes e ramificamos pelo enrollment.gateway.
@@ -75,7 +76,7 @@ export const POST = withRequestContext(
           // Venda direta com mais de um curso: `course` é só o principal, mas a
           // cobrança é do valor SOMADO. A descrição precisa dos dois.
           bundleCourseIds: true,
-          student: { select: { nome: true, email: true, cpf: true, fone: true } },
+          student: { select: PAYER_SELECT },
           boletoInstallments: {
             where: { status: { not: "CANCELLED" } },
             orderBy: { number: "asc" },
@@ -114,6 +115,11 @@ export const POST = withRequestContext(
           { status: 403 },
         )
       }
+
+      // Quem PAGA nao e necessariamente quem estuda: com aluno menor, a cobranca
+      // sai no CPF do RESPONSAVEL FINANCEIRO. O certificado continua no nome do
+      // aluno (src/lib/certificates/issue.ts le o Student, nao o pagador).
+      const payer = resolvePayer(enrollment.student)
 
       const openInstallment =
         enrollment.paymentType === "BOLETO_INSTALLMENT"
@@ -235,10 +241,14 @@ export const POST = withRequestContext(
           externalReference:
             enrollment.externalReference ?? `enr_${enrollment.id}`,
           courseNome: itemNome,
-          studentNome: enrollment.student.nome,
-          studentEmail: enrollment.student.email,
-          studentCpf: enrollment.student.cpf,
-          studentFone: enrollment.student.fone,
+          // Quem PAGA: com aluno menor, o responsavel financeiro.
+          payerNome: payer.nome,
+          payerEmail: payer.email,
+          payerCpf: payer.cpf,
+          payerFone: payer.fone,
+          payerAsaasCustomerId: payer.asaasCustomerId,
+          payerExternalReference: payer.asaasExternalReference,
+          payerKind: payer.kind,
           asaasCustomerId: enrollment.asaasCustomerId,
         }
         const asaasCtx = {
@@ -315,9 +325,10 @@ export const POST = withRequestContext(
           installmentsTotal: enrollment.installmentsTotal,
           externalReference: enrollment.externalReference ?? `enr_${enrollment.id}`,
           courseNome: itemNome,
-          studentNome: enrollment.student.nome,
-          studentEmail: enrollment.student.email,
-          studentCpf: enrollment.student.cpf,
+          payerNome: payer.nome,
+          payerEmail: payer.email,
+          payerCpf: payer.cpf,
+          payerKind: payer.kind,
         },
         mpParsed.data,
         {

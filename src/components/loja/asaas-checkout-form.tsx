@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react"
 import {
   AlertCircle,
+  Cake,
   CheckCircle2,
   Copy,
   CreditCard,
@@ -19,6 +20,9 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { TermsAcceptance } from "@/components/loja/terms-acceptance"
+import { applyServerFieldErrors } from "@/lib/checkout/field-errors"
+import { GuardianFields } from "@/components/shared/guardian/guardian-fields"
+import { useGuardian } from "@/components/shared/guardian/use-guardian"
 import { clientLogger } from "@/lib/logger-client"
 import { storePath } from "@/lib/tenant/vitrine-paths"
 
@@ -81,7 +85,17 @@ type Status =
   | { kind: "declined"; message: string }
   | { kind: "needs_login"; message: string; loginUrl: string }
 
-type FieldErrors = Partial<Record<keyof FormState, string>>
+// O servidor devolve erros por CAMPO (`fieldErrors`), inclusive dos campos do
+// responsável financeiro, que não vivem em FormState.
+type FieldErrors = Partial<Record<keyof FormState | GuardianErrorKey, string>>
+type GuardianErrorKey =
+  | "nascimento"
+  | "responsavel"
+  | "responsavelCpf"
+  | "responsavelEmail"
+  | "responsavelFone"
+  | "responsavelParentesco"
+  | "responsavelDeclaracao"
 
 function formatCpf(v: string): string {
   const d = v.replace(/\D/g, "").slice(0, 11)
@@ -152,6 +166,9 @@ export function AsaasCheckoutForm({
   const [method, setMethod] = useState<Method>("PIX")
   const [status, setStatus] = useState<Status>({ kind: "idle" })
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
+  // Data de nascimento + responsável financeiro. A regra de "quem é menor" vem
+  // de src/lib/students/guardian.ts — a MESMA que o Zod do servidor usa.
+  const guardianCtl = useGuardian()
   const [acceptedTerms, setAcceptedTerms] = useState(false)
   const [termsError, setTermsError] = useState(false)
   // payMode: a matrícula já existe (recebida via prop) → ensureEnrollment a
@@ -179,18 +196,24 @@ export function AsaasCheckoutForm({
         fone: form.telefone,
         endereco: form.endereco || undefined,
         acceptedTerms: true,
+        nascimento: guardianCtl.nascimento,
+        ...guardianCtl.payload(),
       }),
     })
     const payload = await res.json()
     if (!res.ok || !payload.data?.enrollmentId) {
       if (payload.code === "VALIDATION_ERROR" && payload.details) {
-        const mapped: FieldErrors = {}
-        for (const [field, msgs] of Object.entries(payload.details)) {
-          const key = field === "fone" ? "telefone" : (field as keyof FormState)
-          const first = Array.isArray(msgs) ? msgs[0] : undefined
-          if (first && key in form) mapped[key] = first as string
-        }
-        setFieldErrors(mapped)
+        // Renomeia `fone` -> `telefone` (nome do campo na tela) e deixa passar
+        // os campos do responsável, que não vivem no FormState local — antes
+        // eles eram descartados e o erro sumia sem destacar campo nenhum.
+        const details = Object.fromEntries(
+          Object.entries(payload.details as Record<string, unknown>).map(
+            ([k, v]) => [k === "fone" ? "telefone" : k, v],
+          ),
+        )
+        setFieldErrors(
+          applyServerFieldErrors(details, (k) => k in form) as FieldErrors,
+        )
         setStatus({ kind: "error", message: "Revise os campos destacados." })
       } else if (payload.code === "CPF_ALREADY_REGISTERED") {
         // CPF já tem cadastro com acesso: pede login em vez de criar nova
@@ -396,13 +419,43 @@ export function AsaasCheckoutForm({
       <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm lg:p-8">
         <SectionHeader n="01" title="Seus dados" />
         <div className="mt-6 space-y-5">
-          <FieldText id="nome" label="Nome completo" placeholder="Como aparece no seu documento" icon={User} value={form.nome} onChange={(v) => setField("nome", v)} error={fieldErrors.nome} disabled={submitting} required />
+          <FieldText id="nome" label="Nome completo do aluno" placeholder="Quem vai estudar e receber o certificado" icon={User} value={form.nome} onChange={(v) => setField("nome", v)} error={fieldErrors.nome} disabled={submitting} required />
           <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
             <FieldText id="email" label="Email" type="email" placeholder="voce@email.com" icon={Mail} value={form.email} onChange={(v) => setField("email", v)} error={fieldErrors.email} disabled={submitting} required />
             <FieldText id="telefone" label="Telefone (WhatsApp)" type="tel" placeholder="(11) 99999-9999" icon={Phone} value={form.telefone} onChange={(v) => setField("telefone", formatPhone(v))} error={fieldErrors.telefone} disabled={submitting} required />
           </div>
           <FieldText id="cpf" label="CPF" placeholder="000.000.000-00" icon={IdCard} mono value={form.cpf} onChange={(v) => setField("cpf", formatCpf(v))} error={fieldErrors.cpf} disabled={submitting} required />
+          <FieldText id="nascimento" label="Data de nascimento do aluno" type="date" icon={Cake} value={guardianCtl.nascimento} onChange={guardianCtl.setNascimento} error={fieldErrors.nascimento} disabled={submitting} required />
+          <p className="-mt-2 text-xs text-gray-500">
+            O certificado é emitido com o nome e a data que você informar aqui.
+          </p>
           <FieldText id="endereco" label="Endereço (opcional)" placeholder="Rua, número, bairro, cidade, UF" icon={MapPin} value={form.endereco} onChange={(v) => setField("endereco", v)} disabled={submitting} />
+          {!guardianCtl.required && (
+            <button
+              type="button"
+              className="text-xs font-medium text-[var(--color-pmb-green)] underline underline-offset-2"
+              onClick={() => guardianCtl.setManualOpen(!guardianCtl.manualOpen)}
+              disabled={submitting}
+            >
+              {guardianCtl.manualOpen
+                ? "Sou eu quem vai pagar"
+                : "Quem vai pagar não é o aluno?"}
+            </button>
+          )}
+          {/* Desmontado (e não escondido por CSS) quando não se aplica: manter os
+              inputs no DOM travaria o envio na validação `required` do navegador —
+              a mesma lição já registrada no branch `isFree` do checkout do MP. */}
+          {guardianCtl.open && (
+            <GuardianFields
+              value={guardianCtl.guardian}
+              onChange={guardianCtl.setGuardian}
+              fieldErrors={fieldErrors}
+              disabled={submitting}
+              required={guardianCtl.required}
+              formatCpf={formatCpf}
+              formatPhone={formatPhone}
+            />
+          )}
         </div>
       </div>
 

@@ -56,9 +56,10 @@ function enrollment(
     installmentsTotal: null,
     externalReference: "enr_enr_1",
     courseNome: "Curso Teste",
-    studentNome: "Aluno",
-    studentEmail: "aluno@test.com",
-    studentCpf: "12345678909",
+    payerNome: "Aluno",
+    payerEmail: "aluno@test.com",
+    payerCpf: "12345678909",
+    payerKind: "STUDENT",
     ...overrides,
   }
 }
@@ -104,7 +105,7 @@ describe("processTransparentMpPayment — valor zerado por cupom", () => {
 
   it("libera mesmo sem e-mail do pagador — não há cobrança a fazer", async () => {
     const result = await processTransparentMpPayment(
-      enrollment({ studentEmail: null }),
+      enrollment({ payerEmail: null }),
       { payment_method_id: "pix" },
       CTX,
     )

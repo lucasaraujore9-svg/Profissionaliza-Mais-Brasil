@@ -61,10 +61,32 @@ export interface AsaasTransparentEnrollment {
   installmentsTotal: number | null
   externalReference: string
   courseNome: string
-  studentNome: string | null
-  studentEmail: string | null
-  studentCpf: string | null
-  studentFone: string | null
+  /**
+   * QUEM PAGA — nao necessariamente quem estuda. Monte com `resolvePayer`
+   * (src/lib/checkout/payer.ts): com aluno menor, estes campos sao os do
+   * RESPONSAVEL FINANCEIRO. O certificado continua saindo no nome do aluno.
+   */
+  payerNome: string | null
+  payerEmail: string | null
+  payerCpf: string | null
+  payerFone: string | null
+  /**
+   * Customer Asaas do PAGADOR (coluna `asaasCustomerId` do aluno OU
+   * `responsavelAsaasCustomerId`), ja resolvido por `resolvePayer`. Nunca
+   * misturar as duas colunas: o `cus_` da mae no campo do aluno o faria cobrar
+   * nela para sempre.
+   */
+  payerAsaasCustomerId: string | null
+  /** `student_enr_<id>` ou `guardian_<studentId>`. Descritivo: o Asaas
+   *  deduplica customer por cpfCnpj, nao por esta referencia. */
+  payerExternalReference: string
+  /**
+   * `"GUARDIAN"` INVALIDA o `asaasCustomerId` carimbado na matricula: ele pode
+   * ter sido gravado por uma tentativa anterior, quando o pagador ainda era o
+   * proprio aluno menor.
+   */
+  payerKind: "STUDENT" | "GUARDIAN"
+  /** Cobranca por matricula, gravada por uma compra anterior nesta mesma conta. */
   asaasCustomerId: string | null
 }
 
@@ -119,7 +141,7 @@ export async function processExistingAsaasInstallmentPayment(
       code: "INSTALLMENT_NOT_GENERATED",
     }
   }
-  if (!enrollment.studentCpf) {
+  if (!enrollment.payerCpf) {
     return {
       kind: "error",
       httpStatus: 400,
@@ -267,10 +289,29 @@ async function resolveCustomerId(
   enrollment: AsaasTransparentEnrollment,
   apiKey: string,
 ): Promise<string> {
-  // O asaasCustomerId salvo no enrollment pertence à conta da unidade (gravado
-  // por uma compra anterior nesta mesma conta) — tenta reutilizar; se sumiu
-  // (conta trocada, id obsoleto), recria.
-  if (enrollment.asaasCustomerId) {
+  // ORDEM IMPORTA: o customer do PAGADOR vem primeiro.
+  //
+  // `enrollment.asaasCustomerId` e carimbado por uma cobranca anterior DESTA
+  // matricula. Se a 1a tentativa saiu antes de a ficha ganhar o responsavel, ele
+  // aponta para o customer do MENOR — e consulta-lo primeiro faria a cobranca
+  // ser lancada no aluno enquanto o `creditCardHolderInfo` ja leva o CPF da mae,
+  // misturando exatamente as duas identidades que este recurso separa.
+  if (enrollment.payerAsaasCustomerId) {
+    try {
+      const existing = await getAsaasCustomer(
+        enrollment.payerAsaasCustomerId,
+        apiKey,
+      )
+      if (existing && !existing.deleted) return existing.id
+    } catch (err) {
+      if (!(err instanceof AsaasApiError && err.statusCode === 404)) throw err
+    }
+  }
+  // Customer carimbado nesta matricula por uma compra anterior na MESMA conta.
+  // So e reutilizavel quando quem paga e o PROPRIO ALUNO: com responsavel, esse
+  // id pode ser o do menor, gravado numa tentativa anterior a ficha ser
+  // completada.
+  if (enrollment.asaasCustomerId && enrollment.payerKind === "STUDENT") {
     try {
       const existing = await getAsaasCustomer(enrollment.asaasCustomerId, apiKey)
       if (existing && !existing.deleted) return existing.id
@@ -278,13 +319,17 @@ async function resolveCustomerId(
       if (!(err instanceof AsaasApiError && err.statusCode === 404)) throw err
     }
   }
+  // O lookup do Asaas e por cpfCnpj. Aluno e responsavel tem CPFs diferentes
+  // por construcao (withGuardianRule recusa iguais), entao nao ha como se
+  // misturarem aqui; e a MESMA mae pagando por dois filhos resolver para UM
+  // customer e o comportamento correto — o Asaas rejeita dois com o mesmo CPF.
   const { customer } = await findOrCreateAsaasCustomer(
     {
-      name: enrollment.studentNome ?? "Aluno",
-      email: enrollment.studentEmail ?? undefined,
-      cpfCnpj: enrollment.studentCpf ?? "",
-      mobilePhone: enrollment.studentFone ?? undefined,
-      externalReference: `student_enr_${enrollment.id}`,
+      name: enrollment.payerNome ?? "Aluno",
+      email: enrollment.payerEmail ?? undefined,
+      cpfCnpj: enrollment.payerCpf ?? "",
+      mobilePhone: enrollment.payerFone ?? undefined,
+      externalReference: enrollment.payerExternalReference,
     },
     apiKey,
   )
@@ -297,9 +342,11 @@ function buildCardPair(
 ): { creditCard: AsaasCreditCard; creditCardHolderInfo: AsaasCreditCardHolderInfo } | null {
   if (!formData.card) return null
   const card = formData.card
-  const cpf = (enrollment.studentCpf ?? "").replace(/\D/g, "")
+  // CPF e telefone do HOLDER sao os do pagador — com aluno menor, os do
+  // responsavel. Telefone de menor nao serve para analise de risco de cartao.
+  const cpf = (enrollment.payerCpf ?? "").replace(/\D/g, "")
   const postalCode = (formData.postalCode ?? "").replace(/\D/g, "")
-  const phone = (formData.phone ?? enrollment.studentFone ?? "").replace(/\D/g, "")
+  const phone = (formData.phone ?? enrollment.payerFone ?? "").replace(/\D/g, "")
   return {
     creditCard: {
       holderName: card.holderName,
@@ -309,8 +356,10 @@ function buildCardPair(
       ccv: card.ccv,
     },
     creditCardHolderInfo: {
-      name: card.holderName || (enrollment.studentNome ?? "Aluno"),
-      email: enrollment.studentEmail ?? "",
+      // `card.holderName` e o nome em relevo no cartao (vem do form); o
+      // fallback e o nome do PAGADOR, nunca o do aluno.
+      name: card.holderName || (enrollment.payerNome ?? "Aluno"),
+      email: enrollment.payerEmail ?? "",
       cpfCnpj: cpf,
       postalCode,
       addressNumber: formData.addressNumber ?? "0",
@@ -334,7 +383,7 @@ export async function processTransparentAsaasPayment(
     return { kind: "approved", status: "approved" }
   }
 
-  if (!enrollment.studentCpf) {
+  if (!enrollment.payerCpf) {
     return {
       kind: "error",
       httpStatus: 400,

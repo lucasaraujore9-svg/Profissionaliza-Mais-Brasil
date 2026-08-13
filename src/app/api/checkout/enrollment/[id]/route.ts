@@ -22,6 +22,7 @@ import { stripCpf } from "@/lib/validation/cpf"
 import { swallow } from "@/lib/errors"
 import { contextLogger } from "@/lib/logger"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
+import { PAYER_SELECT, resolvePayer } from "@/lib/checkout/payer"
 
 // Cartão: mesmo schema do checkout público (/api/checkout).
 const creditCardSchema = z.object({
@@ -130,16 +131,7 @@ export const POST = withRequestContextParams<{ id: string }>(
         // Venda direta com mais de um curso: `course` é só o principal, mas a
         // cobrança é do valor SOMADO. A descrição precisa dos dois.
         bundleCourseIds: true,
-        student: {
-          select: {
-            id: true,
-            nome: true,
-            email: true,
-            cpf: true,
-            fone: true,
-            asaasCustomerId: true,
-          },
-        },
+        student: { select: PAYER_SELECT },
       },
     })
 
@@ -286,14 +278,8 @@ export const POST = withRequestContextParams<{ id: string }>(
       const result = await issuePmbAsaasCharge({
         enrollmentId: enrollment.id,
         externalReference: `pmb_enr_${enrollment.id}`,
-        student: {
-          id: student.id,
-          nome: student.nome,
-          email: student.email,
-          cpf,
-          fone: student.fone,
-          asaasCustomerId: student.asaasCustomerId,
-        },
+        student: { id: student.id },
+        payer: resolvePayer(student),
         // Todos os cursos da compra, não só o primário: a cobrança soma os
         // preços e é este texto que o aluno lê no boleto/extrato.
         courseNome: await descreverItemCobranca(

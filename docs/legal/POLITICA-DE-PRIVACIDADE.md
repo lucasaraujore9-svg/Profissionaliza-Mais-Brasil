@@ -150,6 +150,10 @@ A plataforma poderá ser utilizada por adolescentes, conforme a natureza do curs
 
 Quando houver necessidade de consentimento específico de responsável legal, a plataforma poderá solicitar informações complementares para verificação da autorização, sem prejuízo da adoção de outros mecanismos juridicamente admitidos.
 
+**Dados do responsável financeiro.** Na contratação de curso para aluno menor de 18 anos, são coletados do responsável financeiro: nome completo, CPF, grau de parentesco com o aluno, e-mail e telefone; facultativamente, o RG. A **finalidade** é a execução do contrato — emissão e cobrança do pagamento junto ao meio de pagamento, comunicação sobre a cobrança e comprovação da autorização do responsável legal. A **base legal** é a execução de contrato do qual o titular é parte e o cumprimento de obrigação legal.
+
+Esses dados **não** são utilizados para emissão do certificado, que é gerado com o nome e o CPF do **aluno**. Também não são compartilhados com a plataforma de aulas para outra finalidade que não a identificação do responsável pelo aluno menor. A retenção segue os mesmos prazos aplicáveis aos dados de cobrança (seção 15). O responsável financeiro é titular dos próprios dados e pode exercer os direitos da seção 17 pelo canal da seção 18.
+
 ## 14. Segurança da informação
 
 O PROFISSIONALIZA MAIS BRASIL adota medidas técnicas e administrativas razoáveis para proteção dos dados pessoais contra acessos não autorizados, destruição, perda, alteração, comunicação ou qualquer forma de tratamento inadequado ou ilícito.

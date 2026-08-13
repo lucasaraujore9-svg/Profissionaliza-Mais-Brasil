@@ -1,4 +1,11 @@
 import { z } from "zod"
+import {
+  buildGuardianWrite,
+  guardianData,
+  guardianShape,
+  nascimentoFieldOptional,
+  withGuardianRule,
+} from "@/lib/students/guardian"
 import { prisma } from "@/lib/prisma"
 import { hash } from "bcryptjs"
 import { generateTemporaryPassword } from "@/lib/students/generate-password"
@@ -14,7 +21,15 @@ import {
 import { PMB_TENANT_SLUG } from "@/lib/pmb-config"
 import type { NotificationLevel } from "@prisma/client"
 
-export const editSchema = z.object({
+/**
+ * Edicao de cadastro (admin + painel). `nascimento` continua OPCIONAL aqui de
+ * proposito: 217 dos 230 alunos em producao nao a tem, e exigi-la
+ * retroativamente travaria toda a base numa tela que as pessoas usam para
+ * outras coisas. Mas assim que uma data de MENOR e informada,
+ * `withGuardianRule` passa a exigir o responsavel no mesmo request.
+ */
+export const editSchema = withGuardianRule(
+  z.object({
   nome: z.string().trim().min(2).max(120),
   email: z.string().trim().toLowerCase().max(160).optional().or(z.literal("")),
   fone: z.string().trim().max(40).optional().or(z.literal("")),
@@ -26,12 +41,11 @@ export const editSchema = z.object({
   rua: z.string().trim().max(200).optional().or(z.literal("")),
   numero: z.string().trim().max(20).optional().or(z.literal("")),
   bairro: z.string().trim().max(80).optional().or(z.literal("")),
-  nascimento: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/, "Data inválida")
-    .optional()
-    .or(z.literal("")),
-})
+  nascimento: nascimentoFieldOptional,
+  ...guardianShape,
+  }),
+  { requireNascimento: false },
+)
 
 export type EditStudentInput = z.infer<typeof editSchema>
 
@@ -58,6 +72,9 @@ export async function applyStudentEdit(
   data: EditStudentInput,
   tenantId?: string,
 ): Promise<boolean> {
+  // O formulario de edicao SEMPRE traz o bloco do responsavel, entao
+  // `collected = true`: vir vazio significa "remover", nao "nao perguntei".
+  const { nascimento, guardian } = buildGuardianWrite(data)
   const result = await prisma.student.updateMany({
     where: tenantId ? { id: studentId, tenantId } : { id: studentId },
     data: {
@@ -72,7 +89,8 @@ export async function applyStudentEdit(
       rua: nullable(data.rua),
       numero: nullable(data.numero),
       bairro: nullable(data.bairro),
-      nascimento: data.nascimento ? new Date(data.nascimento) : null,
+      nascimento,
+      ...guardianData(guardian),
     },
   })
   return result.count > 0

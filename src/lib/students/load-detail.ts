@@ -186,6 +186,12 @@ export async function loadStudentDetail(args: {
     bairro: student.bairro,
     numero: student.numero,
     nascimento: student.nascimento?.toISOString() ?? null,
+    responsavel: student.responsavel,
+    cpfResponsavel: student.cpfResponsavel,
+    rgResponsavel: student.rgResponsavel,
+    responsavelEmail: student.responsavelEmail,
+    responsavelFone: student.responsavelFone,
+    responsavelParentesco: student.responsavelParentesco,
     // Status exibido derivado das matriculas: aluno ATIVO sem pagamento
     // confirmado (so matricula pendente) aparece como "PENDENTE".
     status: deriveStudentDisplayStatus(

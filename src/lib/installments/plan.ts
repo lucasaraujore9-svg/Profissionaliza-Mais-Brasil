@@ -29,6 +29,11 @@ import {
 } from "@/lib/asaas/client"
 import { asaasWebhookUrl, mpWebhookUrl } from "@/lib/tenant/urls"
 import {
+  PAYER_SELECT,
+  resolvePayer,
+  type PayerSource,
+} from "@/lib/checkout/payer"
+import {
   buildInstallmentSchedule,
   MP_BOLETO_METHOD_ID,
   type ScheduledInstallment,
@@ -64,19 +69,15 @@ interface PlanContext {
     tenantId: string | null
     externalReference: string | null
     courseNome: string
-    student: {
-      id: string
-      nome: string
-      email: string | null
-      cpf: string | null
-      fone: string | null
+    // PayerSource garante que os campos do responsavel estao carregados: sem
+    // eles o carne de um aluno menor sairia cobrado no CPF do menor.
+    student: PayerSource & {
       cep: string | null
       rua: string | null
       numero: string | null
       bairro: string | null
       cidade: string | null
       estado: string | null
-      asaasCustomerId: string | null
     }
   }
   /**
@@ -103,18 +104,13 @@ async function loadContext(enrollmentId: string): Promise<PlanContext> {
       course: { select: { nome: true } },
       student: {
         select: {
-          id: true,
-          nome: true,
-          email: true,
-          cpf: true,
-          fone: true,
+          ...PAYER_SELECT,
           cep: true,
           rua: true,
           numero: true,
           bairro: true,
           cidade: true,
           estado: true,
-          asaasCustomerId: true,
         },
       },
       tenant: {
@@ -203,9 +199,11 @@ async function resolveAsaasCustomerId(
   isPmb: boolean,
 ): Promise<string> {
   const s = ctx.enrollment.student
-  if (s.asaasCustomerId) {
+  // O carne e cobrado de QUEM PAGA — com aluno menor, o responsavel financeiro.
+  const payer = resolvePayer(s)
+  if (payer.asaasCustomerId) {
     try {
-      const existing = await getAsaasCustomer(s.asaasCustomerId, apiKey)
+      const existing = await getAsaasCustomer(payer.asaasCustomerId, apiKey)
       if (existing && !existing.deleted) return existing.id
     } catch (err) {
       if (!(err instanceof AsaasApiError && err.statusCode === 404)) throw err
@@ -213,13 +211,15 @@ async function resolveAsaasCustomerId(
   }
   const { customer } = await findOrCreateAsaasCustomer(
     {
-      name: s.nome,
-      email: s.email ?? undefined,
-      cpfCnpj: s.cpf ?? "",
-      mobilePhone: s.fone ?? undefined,
+      name: payer.nome,
+      email: payer.email ?? undefined,
+      cpfCnpj: payer.cpf ?? "",
+      mobilePhone: payer.fone ?? undefined,
       postalCode: s.cep ?? undefined,
       addressNumber: s.numero ?? undefined,
-      externalReference: isPmb ? `pmb_student_${s.id}` : `student_${s.id}`,
+      externalReference: isPmb
+        ? `pmb_${payer.asaasExternalReference}`
+        : payer.asaasExternalReference,
     },
     apiKey,
   )
@@ -388,8 +388,13 @@ async function emitMpBoletoForRow(
     throw new Error("boleto MP de parcela exige tenant (revenda) — matrícula é da vitrine PMB")
   }
   const s = ctx.enrollment.student
-  if (!s.email) throw new Error(`aluno ${s.id} sem email — boleto MP exige email`)
-  if (!s.cpf) throw new Error(`aluno ${s.id} sem CPF — boleto MP exige CPF`)
+  // O boleto e cobrado de QUEM PAGA — com aluno menor, o responsavel financeiro.
+  // O ENDERECO continua sendo o do aluno: e o endereco de entrega/cadastro que o
+  // MP exige no boleto, nao identidade do pagador.
+  const payer = resolvePayer(s)
+  if (!payer.email)
+    throw new Error(`aluno ${s.id} sem email — boleto MP exige email`)
+  if (!payer.cpf) throw new Error(`aluno ${s.id} sem CPF — boleto MP exige CPF`)
   if (!s.cep || !s.rua || !s.numero || !s.bairro || !s.cidade || !s.estado) {
     throw new Error(
       `aluno ${s.id} sem endereço completo — boleto MP exige CEP/logradouro/número/bairro/cidade/UF`,
@@ -397,7 +402,7 @@ async function emitMpBoletoForRow(
   }
 
   const accessToken = decryptTenantMpToken(ctx.tenant.mpAccessToken!)
-  const { first, last } = splitName(s.nome)
+  const { first, last } = splitName(payer.nome)
   const externalReference = `parc_${row.id}`
 
   const params: MPCreatePaymentParams = {
@@ -408,10 +413,10 @@ async function emitMpBoletoForRow(
     notification_url: mpWebhookUrl(ctx.tenant.slug),
     date_of_expiration: boletoExpirationIso(row.dueDate),
     payer: {
-      email: s.email,
+      email: payer.email,
       first_name: first,
       last_name: last,
-      identification: { type: "CPF", number: s.cpf.replace(/\D/g, "") },
+      identification: { type: "CPF", number: payer.cpf.replace(/\D/g, "") },
       address: {
         zip_code: s.cep.replace(/\D/g, ""),
         street_name: s.rua,

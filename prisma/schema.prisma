@@ -924,9 +924,35 @@ model Student {
   rg             String?
   sexo           String?
   nascimento     DateTime?
-  responsavel    String? // Nome do responsavel (menores)
-  rgResponsavel  String?   @map("rg_responsavel")
-  cpfResponsavel String?   @map("cpf_responsavel")
+
+  // ── Responsavel financeiro (aluno menor de idade) ────────────────────────
+  // Quem PAGA e responde legalmente, quando nao e o proprio aluno. O aluno
+  // continua sendo o titular do certificado: `nome`/`cpf` acima sao sempre os
+  // DELE. Ver src/lib/students/guardian.ts (regra) e src/lib/checkout/payer.ts
+  // (roteamento da cobranca).
+  //
+  // Os tres primeiros ja existiam desde a migration inicial (herdados do schema
+  // da plataforma de aulas, que sempre aceitou responsavel/rg/cpf) e nunca
+  // foram escritos por codigo nosso.
+  responsavel           String? // Nome do responsavel (menores)
+  rgResponsavel         String? @map("rg_responsavel")
+  cpfResponsavel        String? @map("cpf_responsavel")
+  responsavelEmail      String? @map("responsavel_email")
+  responsavelFone       String? @map("responsavel_fone")
+  responsavelParentesco String? @map("responsavel_parentesco")
+  /// Quando o bloco foi COLETADO. Nao e um booleano derivado de `nascimento`:
+  /// booleano derivado desincroniza, que e exatamente a doenca que este
+  /// recurso combate. null = nunca passou pelo fluxo novo (legado da EA).
+  responsavelDefinidoEm DateTime? @map("responsavel_definido_em")
+  /// Customer Asaas DO RESPONSAVEL. Separado de `asaasCustomerId` de proposito:
+  /// gravar o `cus_` da mae naquele campo faria o aluno cobrar nela PARA SEMPRE,
+  /// inclusive depois dos 18, e o reuso do customer nunca detectaria o erro.
+  responsavelAsaasCustomerId String? @map("responsavel_asaas_customer_id")
+
+  /// Marca "olhei a titularidade deste cadastro e esta correta". Substitui um
+  /// model de fila inteiro — a base cabe numa tela. Ver src/lib/students/titularity/.
+  titularidadeRevisadaEm   DateTime? @map("titularidade_revisada_em")
+  titularidadeRevisadaPorId String?  @map("titularidade_revisada_por_id")
 
   // Endereco
   rua    String?
@@ -983,6 +1009,10 @@ model Student {
   @@unique([tenantId, email])
   @@unique([tenantId, cpf])
   @@index([tenantId])
+  // Login do aluno aceita o CPF do RESPONSAVEL (src/lib/auth.ts): depois de uma
+  // correcao de titularidade o `cpf` passa a ser o do filho, e sem este OR a mae
+  // — que era quem vinha entrando — perderia o acesso em silencio.
+  @@index([tenantId, cpfResponsavel])
   @@index([plataformaAlunoId])
   @@index([tenantId, status])
   @@index([resetToken])
@@ -2122,6 +2152,14 @@ model Certificate {
   // Revogacao
   revokedAt     DateTime? @map("revoked_at")
   revokedReason String?   @map("revoked_reason")
+
+  // Correcao de TITULARIDADE (certificado emitido no nome do responsavel em vez
+  // do aluno). Reescreve o snapshot acima e mantem o mesmo `code`: trocar o
+  // codigo faria /validar/{code} responder "nao encontrado" para quem conferisse
+  // o codigo antigo — le como fraude. Ver src/lib/students/titularity/apply.ts.
+  correctedAt      DateTime? @map("corrected_at")
+  correctedByUserId String?  @map("corrected_by_user_id")
+  correctionReason String?   @map("correction_reason")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")

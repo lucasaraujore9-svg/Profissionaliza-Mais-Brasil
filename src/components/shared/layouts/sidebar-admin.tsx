@@ -53,6 +53,10 @@ const ALL_ITEMS: {
   { href: "/admin/revendedores", label: "Revendedores", icon: Users, permission: "unidades.view" },
   { href: "/admin/leads-revenda", label: "Leads de revenda", icon: Building2, permission: "leadsRevenda.view" },
   { href: "/admin/alunos", label: "Alunos", icon: GraduationCap, permission: "alunosRede.view" },
+  // `alunosRede.view` (não `alunos.view`): a fila alcança aluno de qualquer
+  // unidade. Gateada pela LEITURA — quem só consulta precisa achar a tela pelo
+  // menu, e não só pela URL; a escrita é gateada na própria rota.
+  { href: "/admin/alunos/titularidade", label: "Titularidade", icon: UserCog, permission: "alunosRede.view" },
   { href: "/admin/leads", label: "Leads", icon: Inbox, permission: "leads.view" },
   { href: "/admin/atendimento", label: "Atendimento", icon: LifeBuoy, permission: "atendimento.view" },
   { href: "/admin/vendas", label: "Vendas diretas", icon: ShoppingCart, permission: "vendas.view" },

@@ -1,5 +1,7 @@
 "use client"
 
+import { GuardianFields } from "@/components/shared/guardian/guardian-fields"
+import { useGuardian } from "@/components/shared/guardian/use-guardian"
 import Link from "next/link"
 import { useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
@@ -62,6 +64,10 @@ interface StudentResult {
   email: string | null
   cpf: string | null
   fone: string | null
+  nascimento?: string | null
+  responsavel?: string | null
+  /** Aluno menor cuja ficha ainda não tem responsável — a venda será recusada. */
+  guardianMissing?: boolean
 }
 
 /**
@@ -70,7 +76,15 @@ interface StudentResult {
  * ainda não persistido — o backend cria/reaproveita por CPF no submit).
  */
 type SelectedStudent =
-  | { isNew: false; id: string; nome: string; email: string | null; cpf: string | null; fone: string | null }
+  | {
+      isNew: false
+      id: string
+      nome: string
+      email: string | null
+      cpf: string | null
+      fone: string | null
+      guardianMissing?: boolean
+    }
   | { isNew: true; nome: string; email: string; cpf: string; fone: string }
 
 /** Capability de venda parcelada no boleto (só presente quando ativa). */
@@ -184,6 +198,8 @@ export function PainelNovaVendaClient({
   const [searching, setSearching] = useState(false)
   const [selectedStudent, setSelectedStudent] = useState<SelectedStudent | null>(null)
   const [newStudent, setNewStudent] = useState({ nome: "", email: "", cpf: "", fone: "" })
+  // Data de nascimento + responsável financeiro: mesma regra do servidor.
+  const guardianCtl = useGuardian()
   const [studentErrors, setStudentErrors] = useState<Record<string, string>>({})
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -323,6 +339,11 @@ export function PainelNovaVendaClient({
     if (!validateEmail(newStudent.email)) errors.email = "E-mail inválido"
     if (!validateCpf(newStudent.cpf)) errors.cpf = "CPF inválido"
     if (newStudent.fone.replace(/\D/g, "").length < 10) errors.fone = "Telefone inválido"
+    if (!guardianCtl.nascimento)
+      errors.nascimento = "Informe a data de nascimento do aluno"
+    // O servidor é a autoridade; aqui só antecipamos para não gastar um round-trip.
+    if (guardianCtl.required && !guardianCtl.guardian.responsavel.trim())
+      errors.responsavel = "Aluno menor de 18 anos: informe o responsável financeiro"
     setStudentErrors(errors)
     return Object.keys(errors).length === 0
   }
@@ -376,6 +397,8 @@ export function PainelNovaVendaClient({
                 email: selectedStudent.email,
                 cpf: selectedStudent.cpf.replace(/\D/g, ""),
                 fone: selectedStudent.fone.replace(/\D/g, ""),
+                nascimento: guardianCtl.nascimento,
+                ...guardianCtl.payload(),
               }
             : { studentId: selectedStudent.id }),
           // Curso individual envia tenantCourseId; pacote envia packageId.
@@ -594,6 +617,22 @@ export function PainelNovaVendaClient({
           {selectedStudent ? (
             <div className="flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 p-4">
               <div>
+                {!selectedStudent.isNew && selectedStudent.guardianMissing && (
+                  <div className="mb-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+                    <strong className="block">Cadastro incompleto</strong>
+                    Aluno menor de 18 anos sem responsável financeiro na ficha. A
+                    cobrança precisa sair no CPF de um adulto — e o certificado,
+                    no nome do aluno.{" "}
+                    <a
+                      href={`/painel/alunos/${selectedStudent.id}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="font-medium underline underline-offset-2"
+                    >
+                      Completar cadastro do aluno
+                    </a>
+                  </div>
+                )}
                 <p className="font-semibold text-[var(--color-pmb-green-900)]">
                   {selectedStudent.nome}
                   {selectedStudent.isNew && (
@@ -653,7 +692,17 @@ export function PainelNovaVendaClient({
                             <p className="text-xs text-gray-500">
                               {s.email}
                               {s.cpf ? ` · CPF ${maskCpf(s.cpf)}` : ""}
+                              {s.nascimento
+                                ? ` · nasc. ${s.nascimento.split("-").reverse().join("/")}`
+                                : " · sem data de nascimento"}
+                              {s.responsavel ? ` · resp. ${s.responsavel}` : ""}
                             </p>
+                            {s.guardianMissing && (
+                              <p className="mt-1 text-xs font-medium text-amber-700">
+                                Menor de 18 sem responsável financeiro — complete
+                                a ficha antes de vender.
+                              </p>
+                            )}
                           </button>
                         </li>
                       ))}
@@ -674,8 +723,17 @@ export function PainelNovaVendaClient({
                 </div>
               ) : (
                 <div className="grid grid-cols-2 gap-4">
+                  <div className="col-span-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                    <strong className="block">Por que pedimos a data de nascimento</strong>
+                    O certificado é emitido com o nome do <strong>aluno</strong>,
+                    exatamente como está no cadastro. Se o aluno tem menos de 18
+                    anos, cadastre-o com o nome dele e informe a mãe, o pai ou o
+                    responsável no bloco &quot;Responsável financeiro&quot;. A
+                    cobrança sai no CPF do responsável; o certificado, no nome do
+                    aluno.
+                  </div>
                   <div className="col-span-2">
-                    <Label>Nome completo</Label>
+                    <Label>Nome completo do aluno</Label>
                     <Input
                       value={newStudent.nome}
                       onChange={(e) => {
@@ -730,6 +788,49 @@ export function PainelNovaVendaClient({
                       <p className="mt-1 text-xs text-red-600">{studentErrors.fone}</p>
                     )}
                   </div>
+                  <div className="col-span-2">
+                    <Label>Data de nascimento do aluno</Label>
+                    <Input
+                      type="date"
+                      value={guardianCtl.nascimento}
+                      onChange={(e) => {
+                        guardianCtl.setNascimento(e.target.value)
+                        setStudentErrors((er) => ({ ...er, nascimento: "" }))
+                      }}
+                      className={studentErrors.nascimento ? "border-red-400" : ""}
+                    />
+                    {studentErrors.nascimento && (
+                      <p className="mt-1 text-xs text-red-600">{studentErrors.nascimento}</p>
+                    )}
+                    <p className="mt-1 text-xs text-gray-500">
+                      Nunca cadastre o responsável como se fosse o aluno — o
+                      certificado sairia no nome errado.
+                    </p>
+                  </div>
+                  {!guardianCtl.required && (
+                    <div className="col-span-2">
+                      <button
+                        type="button"
+                        className="text-xs font-medium text-[var(--color-pmb-green)] underline underline-offset-2"
+                        onClick={() => guardianCtl.setManualOpen(!guardianCtl.manualOpen)}
+                      >
+                        {guardianCtl.manualOpen ? "Quem paga é o próprio aluno" : "Quem vai pagar não é o aluno?"}
+                      </button>
+                    </div>
+                  )}
+                  {guardianCtl.open && (
+                    <div className="col-span-2">
+                      <GuardianFields
+                        value={guardianCtl.guardian}
+                        onChange={guardianCtl.setGuardian}
+                        fieldErrors={studentErrors}
+                        required={guardianCtl.required}
+                        variant="staff"
+                        formatCpf={maskCpf}
+                        formatPhone={(v) => v}
+                      />
+                    </div>
+                  )}
                   <div className="col-span-2">
                     <Button
                       onClick={confirmNewStudent}
@@ -1153,7 +1254,14 @@ export function PainelNovaVendaClient({
 
             <Button
               onClick={submit}
-              disabled={submitting}
+              // A API recusa com GUARDIAN_REQUIRED; desabilitar aqui evita que
+              // o vendedor descubra a regra só depois de clicar.
+              disabled={
+                submitting ||
+                (!!selectedStudent &&
+                  !selectedStudent.isNew &&
+                  !!selectedStudent.guardianMissing)
+              }
               className="bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)]"
             >
               {submitting ? (

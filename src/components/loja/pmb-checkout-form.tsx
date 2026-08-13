@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import {
   AlertCircle,
+  Cake,
   CheckCircle2,
   Copy,
   CreditCard,
@@ -15,6 +16,9 @@ import {
   Receipt,
   User,
 } from "lucide-react"
+import { GUARDIAN_FIELD_KEYS } from "@/lib/checkout/field-errors"
+import { GuardianFields } from "@/components/shared/guardian/guardian-fields"
+import { useGuardian } from "@/components/shared/guardian/use-guardian"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
@@ -96,7 +100,17 @@ type Status =
   // CPF já cadastrado: o aluno precisa logar para concluir (gate server-side).
   | { kind: "needs_login"; message: string; loginUrl: string }
 
-type FieldErrors = Partial<Record<keyof FormState, string>>
+// O servidor devolve erros por CAMPO (`fieldErrors`), inclusive dos campos do
+// responsável financeiro, que não vivem em FormState.
+type FieldErrors = Partial<Record<keyof FormState | GuardianErrorKey, string>>
+type GuardianErrorKey =
+  | "nascimento"
+  | "responsavel"
+  | "responsavelCpf"
+  | "responsavelEmail"
+  | "responsavelFone"
+  | "responsavelParentesco"
+  | "responsavelDeclaracao"
 
 const INITIAL: FormState = {
   nome: "",
@@ -172,6 +186,7 @@ export function PmbCheckoutForm({
   const [method, setMethod] = useState<Method>("PIX")
   const [status, setStatus] = useState<Status>({ kind: "idle" })
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
+  const guardianCtl = useGuardian()
   const [acceptedTerms, setAcceptedTerms] = useState(false)
   const [termsError, setTermsError] = useState(false)
   const [cardInstallments, setCardInstallments] = useState(1)
@@ -224,6 +239,8 @@ export function PmbCheckoutForm({
       paymentMethod: method,
       ...(chosenInstallments > 1 ? { installments: chosenInstallments } : {}),
       acceptedTerms: true,
+      nascimento: guardianCtl.nascimento,
+      ...guardianCtl.payload(),
     }
 
     if (method === "CREDIT_CARD") {
@@ -260,6 +277,12 @@ export function PmbCheckoutForm({
             else if (field === "creditCard") mapped.ccNumber = first
             else if (field === "creditCardHolder") mapped.ccCep = first
             else if (field in INITIAL) mapped[field as keyof FormState] = first
+            // Campos do responsável financeiro não vivem no FormState: sem esta
+            // linha o servidor recusaria a venda e a tela não destacaria nada.
+            else if (
+              (GUARDIAN_FIELD_KEYS as readonly string[]).includes(field)
+            )
+              mapped[field as GuardianErrorKey] = first
           }
           setFieldErrors(mapped)
           setStatus({ kind: "error", message: "Revise os campos destacados." })
@@ -441,8 +464,8 @@ export function PmbCheckoutForm({
         <div className="mt-6 space-y-5">
           <FieldText
             id="nome"
-            label="Nome completo"
-            placeholder="Como aparece no seu documento"
+            label="Nome completo do aluno"
+            placeholder="Quem vai estudar e receber o certificado"
             icon={User}
             value={form.nome}
             onChange={(v) => setField("nome", v)}
@@ -497,6 +520,35 @@ export function PmbCheckoutForm({
             onChange={(v) => setField("endereco", v)}
             disabled={submitting}
           />
+          <FieldText id="nascimento" label="Data de nascimento do aluno" type="date" icon={Cake} value={guardianCtl.nascimento} onChange={guardianCtl.setNascimento} error={fieldErrors.nascimento} disabled={submitting} required />
+          <p className="-mt-2 text-xs text-gray-500">
+            O certificado é emitido com o nome e a data que você informar aqui.
+          </p>
+          {!guardianCtl.required && (
+            <button
+              type="button"
+              className="text-xs font-medium text-[var(--color-pmb-green)] underline underline-offset-2"
+              onClick={() => guardianCtl.setManualOpen(!guardianCtl.manualOpen)}
+              disabled={submitting}
+            >
+              {guardianCtl.manualOpen
+                ? "Sou eu quem vai pagar"
+                : "Quem vai pagar não é o aluno?"}
+            </button>
+          )}
+          {/* Desmontado (e não escondido por CSS) quando não se aplica: manter os
+              inputs no DOM travaria o envio na validação `required` do navegador. */}
+          {guardianCtl.open && (
+            <GuardianFields
+              value={guardianCtl.guardian}
+              onChange={guardianCtl.setGuardian}
+              fieldErrors={fieldErrors}
+              disabled={submitting}
+              required={guardianCtl.required}
+              formatCpf={formatCpf}
+              formatPhone={formatPhone}
+            />
+          )}
         </div>
       </div>
 

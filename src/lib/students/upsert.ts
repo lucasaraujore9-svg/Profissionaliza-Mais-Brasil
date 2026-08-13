@@ -1,5 +1,7 @@
 import { Prisma, type StudentStatus } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
+import { PAYER_SELECT } from "@/lib/checkout/payer"
+import { guardianData, type GuardianWrite } from "@/lib/students/guardian"
 
 export class StudentEmailConflictError extends Error {
   readonly code = "STUDENT_EMAIL_CONFLICT"
@@ -40,6 +42,19 @@ export interface UpsertStudentInput {
   vendedorId: string | null
   plataformaAlunoIdFallback: string // ex: `pending_<timestamp>`
   /**
+   * Data de nascimento do ALUNO. Tri-estado:
+   *   undefined = nao coletado, NAO tocar (recompra, webhooks)
+   *   null      = coletado e vazio, LIMPAR
+   *   Date      = gravar
+   */
+  nascimento?: Date | null
+  /**
+   * Responsavel financeiro, mesmo tri-estado. `undefined` e o que impede um
+   * update parcial de apagar o responsavel de quem ja tinha; `null` e o que
+   * impede um responsavel obsoleto de sobreviver. Ver src/lib/students/guardian.ts.
+   */
+  guardian?: GuardianWrite
+  /**
    * Status inicial quando o aluno é criado. Default: ATIVO (vitrines de
    * checkout direto, onde o aluno já forneceu seus dados). Em vendas
    * iniciadas pelo painel do revendedor/admin (aguardando aluno pagar),
@@ -49,22 +64,19 @@ export interface UpsertStudentInput {
   initialStatus?: StudentStatus
 }
 
-export interface UpsertedStudent {
-  id: string
-  nome: string
-  email: string | null
-  cpf: string | null
-  fone: string | null
-  asaasCustomerId: string | null
-}
+/**
+ * Inclui os campos de `PAYER_SELECT` para que o chamador possa passar o
+ * resultado direto a `resolvePayer` sem uma segunda consulta — e para que
+ * esquecer um campo do pagador vire erro de compilacao, nao cobranca no CPF
+ * errado.
+ */
+export type UpsertedStudent = Prisma.StudentGetPayload<{
+  select: typeof SELECT
+}>
 
 const SELECT = {
-  id: true,
-  nome: true,
-  email: true,
-  cpf: true,
-  fone: true,
-  asaasCustomerId: true,
+  ...PAYER_SELECT,
+  nascimento: true,
 } as const
 
 function isUniqueViolation(error: unknown): boolean {
@@ -93,6 +105,12 @@ export async function upsertStudent(
         email,
         fone,
         rua: endereco ?? undefined,
+        // `undefined` NAO aparece no SQL: um checkout que nao coletou o bloco
+        // preserva o responsavel ja cadastrado. `null` limpa de verdade.
+        ...(input.nascimento !== undefined
+          ? { nascimento: input.nascimento }
+          : {}),
+        ...guardianData(input.guardian),
       },
       select: SELECT,
     })
@@ -118,6 +136,10 @@ export async function upsertStudent(
           cpf,
           fone,
           rua: endereco ?? undefined,
+          ...(input.nascimento !== undefined
+            ? { nascimento: input.nascimento }
+            : {}),
+          ...guardianData(input.guardian),
         },
         select: SELECT,
       })
@@ -147,6 +169,8 @@ export async function upsertStudent(
         vendedorId: input.vendedorId,
         plataformaAlunoId: input.plataformaAlunoIdFallback,
         status: input.initialStatus ?? "ATIVO",
+        nascimento: input.nascimento ?? null,
+        ...guardianData(input.guardian ?? null),
       },
       select: SELECT,
     })

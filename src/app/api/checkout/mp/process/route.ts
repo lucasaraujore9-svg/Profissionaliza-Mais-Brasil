@@ -15,6 +15,7 @@ import { rateLimit, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
 import { contextLogger } from "@/lib/logger"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { mpWebhookUrl, isPmbAppHost } from "@/lib/tenant/urls"
+import { PAYER_SELECT, resolvePayer } from "@/lib/checkout/payer"
 
 const bodySchema = z.object({
   enrollmentId: z.string().min(1),
@@ -75,7 +76,7 @@ export const POST = withRequestContext(
           installmentsTotal: true,
           externalReference: true,
           course: { select: { nome: true } },
-          student: { select: { nome: true, email: true, cpf: true } },
+          student: { select: PAYER_SELECT },
         },
       })
 
@@ -95,6 +96,11 @@ export const POST = withRequestContext(
           { status: 409 },
         )
       }
+
+      // Quem PAGA nao e necessariamente quem estuda: com aluno menor, a cobranca
+      // sai no CPF do RESPONSAVEL FINANCEIRO. O certificado continua no nome do
+      // aluno (src/lib/certificates/issue.ts le o Student, nao o pagador).
+      const payer = resolvePayer(enrollment.student)
 
       const token = await pmbMpAccessToken()
       if (!token) {
@@ -119,9 +125,10 @@ export const POST = withRequestContext(
           externalReference:
             enrollment.externalReference ?? `pmb_enr_${enrollment.id}`,
           courseNome: enrollment.course.nome,
-          studentNome: enrollment.student.nome,
-          studentEmail: enrollment.student.email,
-          studentCpf: enrollment.student.cpf,
+          payerNome: payer.nome,
+          payerEmail: payer.email,
+          payerCpf: payer.cpf,
+          payerKind: payer.kind,
         },
         formData,
         {

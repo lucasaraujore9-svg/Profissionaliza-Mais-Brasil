@@ -1,3 +1,4 @@
+import { guardianRequirement, hasGuardian } from "@/lib/students/guardian"
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
@@ -36,6 +37,7 @@ import {
   resellerTenantContext,
 } from "@/lib/checkout/free-enrollment"
 import { contextLogger } from "@/lib/logger"
+import { asaasCustomerUpdate, PAYER_SELECT, resolvePayer } from "@/lib/checkout/payer"
 
 const createSchema = z.object({
   courseId: z.string().min(1),
@@ -105,7 +107,7 @@ async function handleResellerInit(
     const [student, tenantCourse] = await Promise.all([
       prisma.student.findUnique({
         where: { id: studentId },
-        select: { id: true, email: true, cpf: true },
+        select: { ...PAYER_SELECT, nascimento: true },
       }),
       prisma.tenantCourse.findFirst({
         where: {
@@ -137,13 +139,37 @@ async function handleResellerInit(
         { status: 400 },
       )
     }
+    // Menor sem responsavel na ficha: a recompra NAO recoleta dados, entao a
+    // cobranca sairia no CPF da crianca. Manda completar o perfil em vez de
+    // deixar passar.
+    if (
+      guardianRequirement(student.nascimento) === "REQUIRED" &&
+      !hasGuardian(student)
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Cadastro incompleto: aluno menor de 18 anos precisa de responsável financeiro. Fale com a sua unidade para completar o cadastro.",
+          code: "GUARDIAN_REQUIRED",
+        },
+        { status: 400 },
+      )
+    }
+
+    // Quem PAGA — com aluno menor, o responsavel financeiro ja cadastrado.
+    // A recompra NAO recoleta dados: o pagador sai do que ja esta na ficha.
+    const payer = resolvePayer(student)
+
     // Asaas exige CPF do pagador e o Payment Brick (payMode) não reenvia o CPF
     // digitado — sem CPF no cadastro a cobrança trava no /pagar. Bloqueia cedo
     // com mensagem clara (nenhum cupom foi consumido até aqui).
-    if (gateway === "ASAAS" && !student.cpf) {
+    if (gateway === "ASAAS" && !payer.cpf) {
       return NextResponse.json(
         {
-          error: "Cadastre seu CPF no perfil antes de comprar nesta loja",
+          error:
+            payer.kind === "GUARDIAN"
+              ? "Cadastre o CPF do responsável financeiro antes de comprar nesta loja"
+              : "Cadastre seu CPF no perfil antes de comprar nesta loja",
           code: "STUDENT_CPF_REQUIRED",
         },
         { status: 400 },
@@ -387,14 +413,12 @@ export const POST = withRequestContext(
   const studentRecord = await prisma.student.findUnique({
     where: { id: session.studentId },
     select: {
-      id: true,
       // Dados do comprador usados no ramo PMB abaixo — selecionados já aqui para
       // não repetir um segundo student.findUnique da MESMA linha por checkout.
-      nome: true,
-      email: true,
-      cpf: true,
-      fone: true,
-      asaasCustomerId: true,
+      // PAYER_SELECT tras tambem o responsavel financeiro: quem paga por um
+      // aluno menor e ele, nao o aluno.
+      ...PAYER_SELECT,
+      nascimento: true,
       tenant: {
         select: {
           id: true,
@@ -444,6 +468,21 @@ export const POST = withRequestContext(
   // `studentRecord` (já lido acima para o roteamento) traz os dados do comprador;
   // reaproveita em vez de reconsultar a mesma linha.
   const student = studentRecord
+  if (
+    guardianRequirement(student.nascimento) === "REQUIRED" &&
+    !hasGuardian(student)
+  ) {
+    return NextResponse.json(
+      {
+        error:
+          "Cadastro incompleto: aluno menor de 18 anos precisa de responsável financeiro. Fale com a sua unidade para completar o cadastro.",
+        code: "GUARDIAN_REQUIRED",
+      },
+      { status: 400 },
+    )
+  }
+  // Quem PAGA nesta venda direta PMB — responsavel financeiro quando houver.
+  const payer = resolvePayer(student)
   const course = await prisma.course.findUnique({
     where: { id: parsed.data.courseId },
     select: {
@@ -675,11 +714,12 @@ export const POST = withRequestContext(
             currency_id: "BRL",
           },
         ],
+        // Quem PAGA — com aluno menor, o responsavel financeiro ja cadastrado.
         payer: {
-          name: student.nome,
-          email: student.email,
-          identification: student.cpf
-            ? { type: "CPF", number: student.cpf }
+          name: payer.nome,
+          email: payer.email ?? student.email!,
+          identification: payer.cpf
+            ? { type: "CPF", number: payer.cpf }
             : undefined,
         },
         back_urls: appUrl
@@ -724,11 +764,16 @@ export const POST = withRequestContext(
     if (couponId) await releaseCoupon(couponId).catch(swallow("aluno.comprar"))
     return NextResponse.json({ error: "Asaas não configurado" }, { status: 503 })
   }
-  if (!student.cpf) {
+  if (!payer.cpf) {
     await prisma.enrollment.delete({ where: { id: enrollment.id } })
     if (couponId) await releaseCoupon(couponId).catch(swallow("aluno.comprar"))
     return NextResponse.json(
-      { error: "Cadastre seu CPF no perfil antes de comprar via Asaas" },
+      {
+        error:
+          payer.kind === "GUARDIAN"
+            ? "Cadastre o CPF do responsável financeiro antes de comprar via Asaas"
+            : "Cadastre seu CPF no perfil antes de comprar via Asaas",
+      },
       { status: 400 },
     )
   }
@@ -742,9 +787,9 @@ export const POST = withRequestContext(
     // respondia 502 com a mensagem "HTTP 404"). Tratamos o 404 como "id obsoleto":
     // recriamos o customer na conta atual e regravamos o id no aluno.
     let customer: Awaited<ReturnType<typeof getAsaasCustomer>> | null = null
-    if (student.asaasCustomerId) {
+    if (payer.asaasCustomerId) {
       try {
-        customer = await getAsaasCustomer(student.asaasCustomerId)
+        customer = await getAsaasCustomer(payer.asaasCustomerId)
       } catch (err) {
         if (err instanceof AsaasApiError && err.statusCode === 404) {
           customer = null
@@ -756,16 +801,16 @@ export const POST = withRequestContext(
 
     if (!customer) {
       const result = await findOrCreateAsaasCustomer({
-        name: student.nome,
-        email: student.email,
-        cpfCnpj: student.cpf,
-        mobilePhone: student.fone ?? undefined,
-        externalReference: `pmb_student_${student.id}`,
+        name: payer.nome,
+        email: payer.email ?? "",
+        cpfCnpj: payer.cpf ?? "",
+        mobilePhone: payer.fone ?? undefined,
+        externalReference: `pmb_${payer.asaasExternalReference}`,
       })
       customer = result.customer
       await prisma.student.update({
         where: { id: student.id },
-        data: { asaasCustomerId: customer.id },
+        data: asaasCustomerUpdate(payer, customer.id),
       })
     }
 

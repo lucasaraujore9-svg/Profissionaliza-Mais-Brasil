@@ -184,6 +184,12 @@ A utilização da plataforma por menores de 18 anos deverá observar a legislaç
 
 O responsável legal responderá pelas informações fornecidas, contratação, pagamento e acompanhamento do uso da plataforma pelo menor, sem prejuízo da observância do melhor interesse da criança ou adolescente.
 
+**Responsável financeiro.** Na contratação de curso para aluno com menos de 18 anos, é obrigatória a indicação de um **responsável financeiro** maior de idade, com nome completo, CPF, grau de parentesco, e-mail e telefone. A cobrança é emitida em nome e no CPF do responsável financeiro, que declara, no ato da contratação, assumir a contratação e o pagamento.
+
+**Titularidade do certificado.** O aluno é o titular do curso e do certificado. O **certificado é emitido no nome e no CPF do ALUNO**, e não do responsável financeiro, independentemente de quem efetuou o pagamento. A indicação do responsável financeiro não transfere a titularidade acadêmica.
+
+Constatado que um cadastro foi registrado com os dados do responsável no lugar dos do aluno, o PROFISSIONALIZA MAIS BRASIL poderá corrigir a titularidade do cadastro e do certificado já emitido, mediante verificação documental, preservando o código de validação originalmente atribuído.
+
 ## 22. Comunicações
 
 Comunicações necessárias à execução do serviço poderão ser enviadas independentemente de consentimento específico. Comunicações promocionais poderão ser enviadas conforme a Política de Privacidade e a legislação aplicável, assegurado o direito de cancelamento.

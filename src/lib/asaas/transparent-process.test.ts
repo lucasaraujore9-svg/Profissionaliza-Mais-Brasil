@@ -52,8 +52,11 @@ import {
   payWithCreditCard,
 } from "./client"
 import { settleBoletoInstallment } from "@/lib/installments/settle"
+import { findOrCreateAsaasCustomer } from "./client"
+import { resolvePayer, type PayerSource } from "@/lib/checkout/payer"
 import {
   processExistingAsaasInstallmentPayment,
+  processTransparentAsaasPayment,
   type AsaasTransparentCtx,
   type AsaasTransparentEnrollment,
 } from "./transparent-process"
@@ -91,10 +94,13 @@ const enrollment: AsaasTransparentEnrollment = {
   installmentsTotal: 3,
   externalReference: "carne_enr_1",
   courseNome: "Combo educação",
-  studentNome: "Aluno",
-  studentEmail: "aluno@example.com",
-  studentCpf: "11144477735",
-  studentFone: "11999999999",
+  payerNome: "Aluno",
+  payerEmail: "aluno@example.com",
+  payerCpf: "11144477735",
+  payerFone: "11999999999",
+  payerAsaasCustomerId: "cus_1",
+  payerExternalReference: "student_enr_enr_1",
+  payerKind: "STUDENT",
   asaasCustomerId: "cus_1",
 }
 
@@ -256,5 +262,112 @@ describe("checkout transparente de parcela Asaas existente", () => {
     expect(result).toEqual({ kind: "pending" })
     expect(payWithCreditCardMock).not.toHaveBeenCalled()
     expect(createPaymentMock).not.toHaveBeenCalled()
+  })
+})
+
+// ── Responsavel financeiro: a cobranca sai no CPF DELE ─────────────────────
+// Este e o teste que prende a correcao do bug de negocio. Se ele passar a
+// mandar o CPF do aluno menor, a venda volta a exigir que a mae seja cadastrada
+// como se fosse a aluna — e o certificado volta a sair no nome errado.
+
+const CPF_ALUNO = "52998224725"
+const CPF_RESP = "39053344705"
+
+const alunoMenor: PayerSource = {
+  id: "stu_1",
+  nome: "João Pedro da Silva",
+  email: "joao@exemplo.com",
+  cpf: CPF_ALUNO,
+  fone: "31988887777",
+  responsavel: "Maria da Silva",
+  cpfResponsavel: CPF_RESP,
+  responsavelEmail: "maria@exemplo.com",
+  responsavelFone: "31999998888",
+  asaasCustomerId: null,
+  responsavelAsaasCustomerId: null,
+}
+
+function enrollmentDe(payerSource: PayerSource): AsaasTransparentEnrollment {
+  const payer = resolvePayer(payerSource)
+  return {
+    id: "enr_9",
+    finalAmount: 300,
+    paymentType: "ONE_TIME",
+    installmentsTotal: null,
+    externalReference: "enr_9",
+    courseNome: "Auxiliar Administrativo",
+    payerNome: payer.nome,
+    payerEmail: payer.email,
+    payerCpf: payer.cpf,
+    payerFone: payer.fone,
+    payerAsaasCustomerId: payer.asaasCustomerId,
+    payerExternalReference: payer.asaasExternalReference,
+    payerKind: payer.kind,
+    asaasCustomerId: null,
+  }
+}
+
+describe("responsável financeiro (aluno menor)", () => {
+  beforeEach(() => {
+    vi.mocked(findOrCreateAsaasCustomer).mockResolvedValue({
+      customer: { id: "cus_mae" },
+      created: true,
+    } as unknown as Awaited<ReturnType<typeof findOrCreateAsaasCustomer>>)
+    createPaymentMock.mockResolvedValue({
+      id: "pay_9",
+      status: "PENDING",
+    } as never)
+  })
+
+  it("cria o customer Asaas no CPF do RESPONSÁVEL, não no do aluno", async () => {
+    await processTransparentAsaasPayment(
+      enrollmentDe(alunoMenor),
+      { method: "PIX" },
+      ctx,
+    )
+
+    const arg = vi.mocked(findOrCreateAsaasCustomer).mock.calls[0]![0]
+    expect(arg.cpfCnpj).toBe(CPF_RESP)
+    expect(arg.cpfCnpj).not.toBe(CPF_ALUNO)
+    expect(arg.name).toBe("Maria da Silva")
+    expect(arg.email).toBe("maria@exemplo.com")
+  })
+
+  it("sem responsável, segue cobrando no CPF do próprio aluno", async () => {
+    await processTransparentAsaasPayment(
+      enrollmentDe({
+        ...alunoMenor,
+        responsavel: null,
+        cpfResponsavel: null,
+      }),
+      { method: "PIX" },
+      ctx,
+    )
+
+    const arg = vi.mocked(findOrCreateAsaasCustomer).mock.calls[0]![0]
+    expect(arg.cpfCnpj).toBe(CPF_ALUNO)
+  })
+
+  it("o holder do cartão também é o responsável", async () => {
+    await processTransparentAsaasPayment(
+      enrollmentDe(alunoMenor),
+      {
+        method: "CREDIT_CARD",
+        card: {
+          holderName: "MARIA DA SILVA",
+          number: "4111111111111111",
+          expiryMonth: "12",
+          expiryYear: "28",
+          ccv: "123",
+        },
+        postalCode: "01001000",
+        addressNumber: "100",
+      },
+      ctx,
+    )
+
+    const holder = createPaymentMock.mock.calls[0]![0].creditCardHolderInfo
+    expect(holder?.cpfCnpj).toBe(CPF_RESP)
+    expect(holder?.phone).toBe("31999998888")
   })
 })

@@ -13,6 +13,11 @@ interface ProfileData {
   rua: string
   numero: string
   bairro: string
+  /** `""` quando ainda não informada — só nesse caso o aluno pode preencher. */
+  nascimento: string
+  /** Responsável financeiro, em LEITURA: quem altera é a unidade. */
+  responsavel: string | null
+  responsavelCpf: string | null
 }
 
 export function StudentProfileForm({ initial }: { initial: ProfileData }) {
@@ -58,11 +63,37 @@ export function StudentProfileForm({ initial }: { initial: ProfileData }) {
         aqui. Se trocar o email, use o novo email (ou o CPF) no próximo login.
       </p>
 
+      {data.responsavel && (
+        <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+          <strong className="block">Responsável financeiro</strong>
+          {data.responsavel}
+          {data.responsavelCpf ? ` · CPF ${data.responsavelCpf}` : ""}
+          <span className="mt-1 block text-amber-800">
+            As cobranças saem no nome do responsável. Seu certificado é emitido
+            no seu nome. Para alterar, fale com a sua unidade.
+          </span>
+        </div>
+      )}
+
       <div className="mt-5 grid gap-4 sm:grid-cols-2">
-        <Field label="Nome completo" value={data.nome} onChange={(v) => set("nome", v)} />
+        <Field label="Nome completo" value={data.nome} onChange={(v) => set("nome", v)} hint="Este é o nome que sai no seu certificado." />
         <Field label="Email" value={data.email} onChange={(v) => set("email", v)} />
         <Field label="CPF" value={data.cpf} readOnly />
         <Field label="Telefone" value={data.fone} onChange={(v) => set("fone", v)} />
+        {/* Editável só enquanto for nula: é identidade do certificado, como o
+            CPF. Depois de preenchida, quem corrige é a unidade. */}
+        <Field
+          label="Data de nascimento"
+          type="date"
+          value={data.nascimento}
+          onChange={initial.nascimento ? undefined : (v) => set("nascimento", v)}
+          readOnly={Boolean(initial.nascimento)}
+          hint={
+            initial.nascimento
+              ? "Para corrigir a data de nascimento, fale com a sua unidade."
+              : "Confirme sua data de nascimento — ela vai no seu certificado."
+          }
+        />
 
         <Field label="CEP" value={data.cep} onChange={(v) => set("cep", v)} />
         <Field label="Cidade" value={data.cidade} onChange={(v) => set("cidade", v)} />
@@ -102,22 +133,27 @@ function Field({
   value,
   onChange,
   readOnly,
+  type = "text",
+  hint,
 }: {
   label: string
   value: string
   onChange?: (v: string) => void
   readOnly?: boolean
+  type?: string
+  hint?: string
 }) {
   return (
     <label className="block">
       <span className="text-xs font-semibold text-gray-700">{label}</span>
       <input
-        type="text"
+        type={type}
         value={value}
         readOnly={readOnly}
         onChange={onChange ? (e) => onChange(e.target.value) : undefined}
         className={`mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm ${readOnly ? "bg-gray-50 text-gray-500" : "bg-white"}`}
       />
+      {hint && <span className="mt-1 block text-xs text-gray-500">{hint}</span>}
     </label>
   )
 }

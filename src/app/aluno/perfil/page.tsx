@@ -23,6 +23,9 @@ export default async function StudentProfilePage() {
       rua: true,
       numero: true,
       bairro: true,
+      nascimento: true,
+      responsavel: true,
+      cpfResponsavel: true,
       passwordSetAt: true,
     },
   })
@@ -53,6 +56,11 @@ export default async function StudentProfilePage() {
             nome: student.nome,
             email: student.email ?? "",
             fone: student.fone ?? "",
+            nascimento: student.nascimento
+              ? student.nascimento.toISOString().slice(0, 10)
+              : "",
+            responsavel: student.responsavel,
+            responsavelCpf: student.cpfResponsavel,
             cpf: student.cpf ?? "",
             cidade: student.cidade ?? "",
             estado: student.estado ?? "",

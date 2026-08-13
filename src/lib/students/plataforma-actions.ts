@@ -227,6 +227,11 @@ const PLATFORM_SNAPSHOT_SELECT = {
   rg: true,
   sexo: true,
   nascimento: true,
+  // Responsável financeiro: a plataforma de aulas sempre aceitou estes campos;
+  // passamos a ser autoritativos sobre eles desde que a venda os coleta.
+  responsavel: true,
+  rgResponsavel: true,
+  cpfResponsavel: true,
   rua: true,
   numero: true,
   bairro: true,
@@ -491,6 +496,11 @@ export async function ensureStudentOnPlatform(
       ? student.nascimento.toISOString().slice(0, 10)
       : undefined,
     sexo: student.sexo ?? undefined,
+    // Responsável financeiro (aluno menor). Aqui é CRIAÇÃO, então não há risco
+    // de sobrescrever o que a plataforma já tinha.
+    responsavel: student.responsavel ?? undefined,
+    rg_responsavel: student.rgResponsavel ?? undefined,
+    cpf_responsavel: student.cpfResponsavel ?? undefined,
     polo,
     status: "ativo",
     apostila: "liberar",

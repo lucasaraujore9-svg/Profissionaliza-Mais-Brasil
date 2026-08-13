@@ -16,6 +16,7 @@ import { rateLimit, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
 import { contextLogger } from "@/lib/logger"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { mpWebhookUrl, asaasWebhookUrl, vitrineUrl } from "@/lib/tenant/urls"
+import { PAYER_SELECT, resolvePayer } from "@/lib/checkout/payer"
 
 // Recompra autenticada de aluno de revenda via Payment Brick. Espelha
 // /api/loja/checkout/process, MAS autoriza pela SESSÃO do aluno (dono da
@@ -65,7 +66,7 @@ export const POST = withRequestContext(
           externalReference: true,
           asaasCustomerId: true,
           course: { select: { nome: true } },
-          student: { select: { nome: true, email: true, cpf: true, fone: true } },
+          student: { select: PAYER_SELECT },
           tenant: {
             select: {
               id: true,
@@ -100,6 +101,11 @@ export const POST = withRequestContext(
           { status: 409 },
         )
       }
+
+      // Quem PAGA nao e necessariamente quem estuda: com aluno menor, a cobranca
+      // sai no CPF do RESPONSAVEL FINANCEIRO. O certificado continua no nome do
+      // aluno (src/lib/certificates/issue.ts le o Student, nao o pagador).
+      const payer = resolvePayer(enrollment.student)
 
       const tenant = enrollment.tenant
       if (tenant.status !== "ACTIVE") {
@@ -149,10 +155,13 @@ export const POST = withRequestContext(
             installmentsTotal: enrollment.installmentsTotal,
             externalReference: enrollment.externalReference ?? `enr_${enrollment.id}`,
             courseNome: enrollment.course.nome,
-            studentNome: enrollment.student.nome,
-            studentEmail: enrollment.student.email,
-            studentCpf: enrollment.student.cpf,
-            studentFone: enrollment.student.fone,
+            payerNome: payer.nome,
+            payerEmail: payer.email,
+            payerCpf: payer.cpf,
+            payerFone: payer.fone,
+            payerAsaasCustomerId: payer.asaasCustomerId,
+            payerExternalReference: payer.asaasExternalReference,
+            payerKind: payer.kind,
             asaasCustomerId: enrollment.asaasCustomerId,
           },
           asaasParsed.data,
@@ -206,9 +215,10 @@ export const POST = withRequestContext(
           installmentsTotal: enrollment.installmentsTotal,
           externalReference: enrollment.externalReference ?? `enr_${enrollment.id}`,
           courseNome: enrollment.course.nome,
-          studentNome: enrollment.student.nome,
-          studentEmail: enrollment.student.email,
-          studentCpf: enrollment.student.cpf,
+          payerNome: payer.nome,
+          payerEmail: payer.email,
+          payerCpf: payer.cpf,
+          payerKind: payer.kind,
         },
         mpParsed.data,
         {

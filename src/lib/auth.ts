@@ -270,31 +270,61 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           },
         })
 
-        if (!student?.passwordHash || !student.email) return null
+        // Fallback: o CPF pode ser o do RESPONSÁVEL FINANCEIRO. Sem ele, uma
+        // correção de titularidade (o `cpf` passa a ser o do filho) tiraria o
+        // acesso da mãe EM SILÊNCIO — e era ela quem vinha entrando.
+        //
+        // É uma SEGUNDA consulta, e não um `OR`, porque o CPF próprio tem de
+        // vencer: uma mãe que tem conta própria E é responsável do filho no
+        // mesmo tenant casaria as duas linhas, e um `findFirst` sem ordem
+        // poderia devolver a do filho — a senha não bateria e ela ficaria
+        // trancada fora da própria conta. Sustentado pelo índice
+        // (tenant_id, cpf_responsavel).
+        const account =
+          student ??
+          (isCpfLogin
+            ? await prisma.student.findFirst({
+                where: {
+                  cpfResponsavel: cpfDigits,
+                  tenantId: targetTenantId,
+                  passwordHash: { not: null },
+                },
+                select: {
+                  id: true,
+                  nome: true,
+                  email: true,
+                  passwordHash: true,
+                  tenantId: true,
+                  status: true,
+                },
+              })
+            : null)
 
-        const isValid = await compare(parsed.data.password, student.passwordHash)
+        if (!account?.passwordHash || !account.email) return null
+
+        const isValid = await compare(parsed.data.password, account.passwordHash)
         if (!isValid) return null
 
         // Bloqueia login de aluno suspenso (BLOQUEADO) ou desativado (INATIVO).
         // ATIVO, DEVEDOR (pra resolver pagamento), FORMADO, INTERESSADO podem logar.
-        if (student.status === "BLOQUEADO" || student.status === "INATIVO") {
+        if (account.status === "BLOQUEADO" || account.status === "INATIVO") {
           return null
         }
 
         await prisma.student
           .update({
-            where: { id: student.id },
+            where: { id: account.id },
             data: { lastLoginAt: new Date() },
           })
           .catch(swallow("auth.lastLogin"))
 
         return {
-          id: student.id,
-          email: student.email,
-          name: student.nome,
+          id: account.id,
+          email: account.email,
+          name: account.nome,
           role: "STUDENT",
-          tenantId: student.tenantId,
-          studentId: student.id,
+          tenantId: account.tenantId,
+          studentId: account.id,
           mustChangePassword: false,
         }
       },

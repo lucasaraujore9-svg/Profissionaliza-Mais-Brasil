@@ -24,8 +24,21 @@ import { effectivePaymentType } from "@/lib/tenant/monthly-policy"
 import { tenantCheckoutMode } from "@/lib/tenant/checkout-mode"
 import { tenantPolo } from "@/lib/tenant/slug"
 import { isSellablePrice } from "@/lib/checkout/price-guard"
+import {
+  buildGuardianWrite,
+  guardianShape,
+  nascimentoField,
+  withGuardianRule,
+} from "@/lib/students/guardian"
 
-const bodySchema = z.object({
+/**
+ * Checkout. `nascimento` do ALUNO e obrigatorio: e o unico jeito de saber quem
+ * e menor. Quando indicar menor de 18, `withGuardianRule` exige o bloco do
+ * RESPONSAVEL FINANCEIRO — a cobranca sai no CPF dele e o certificado continua
+ * saindo no nome do aluno.
+ */
+const bodySchema = withGuardianRule(
+  z.object({
   courseId: z.string().min(1),
   couponCode: z
     .string()
@@ -52,7 +65,13 @@ const bodySchema = z.object({
   acceptedTerms: z.literal(true, {
     message: "É necessário aceitar os Termos de Uso e a Política de Privacidade",
   }),
-})
+  nascimento: nascimentoField,
+  ...guardianShape,
+  }),
+  // Declaracao de responsabilidade legal: os Termos (secao 183) e a Politica de
+  // Privacidade (151) ja a prometem; ate aqui o codigo nunca a coletou.
+  { requireDeclaracao: true },
+)
 
 type ParsedBody = z.infer<typeof bodySchema>
 
@@ -333,6 +352,16 @@ export const POST = withRequestContext(
 
     const finalAmount = finalAmountFromCoupon ?? basePrice
 
+    // Data de nascimento + responsavel financeiro, no formato tri-estado que o
+    // upsert entende. `collected = true`: este formulario SEMPRE traz o bloco.
+    const { nascimento, guardian } = buildGuardianWrite(data, {
+        // Checkout ANONIMO: pode adicionar responsavel, nunca remover. Sem isto
+        // qualquer pessoa com o CPF/e-mail de um aluno refaria o checkout com
+        // uma data de adulto e apagaria o responsavel ja verificado — mandando
+        // a proxima cobranca para o CPF do menor.
+        allowClear: false,
+      })
+
     const student = await upsertStudent({
       tenantId,
       nome: normalize(data.nome),
@@ -343,6 +372,8 @@ export const POST = withRequestContext(
       polo: tenantPolo(tenant),
       vendedorId: tenant.plataformaVendedorId,
       plataformaAlunoIdFallback: `pending_${Date.now()}`,
+      nascimento,
+      guardian,
     })
 
     await provisionStudentAccess(student.id, {

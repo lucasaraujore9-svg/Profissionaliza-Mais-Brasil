@@ -62,6 +62,7 @@ const ALL_ITEMS: NavItem[] = [
   { href: "/painel/artes", label: "Artes de divulgação", icon: Images, perm: "artes.view" },
   { href: "/painel/cursos", label: "Catálogo", icon: GraduationCap, perm: "catalogo.view" },
   { href: "/painel/alunos", label: "Alunos", icon: Users, perm: "alunos.view" },
+  { href: "/painel/alunos/titularidade", label: "Titularidade", icon: UserCog, perm: "alunos.view" },
   { href: "/painel/atendimento", label: "Atendimento", icon: LifeBuoy, perm: "atendimento.view" },
   { href: "/painel/leads", label: "Leads", icon: Inbox, perm: "leads.view", automationOnly: true },
   { href: "/painel/vendas", label: "Vendas diretas", icon: ShoppingCart, perm: "vendas.view" },

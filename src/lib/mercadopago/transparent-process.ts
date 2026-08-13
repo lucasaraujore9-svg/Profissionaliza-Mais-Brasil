@@ -55,9 +55,25 @@ export interface TransparentEnrollment {
   installmentsTotal: number | null
   externalReference: string
   courseNome: string
-  studentNome: string | null
-  studentEmail: string | null
-  studentCpf: string | null
+  /**
+   * QUEM PAGA — nao necessariamente quem estuda. Monte com `resolvePayer`
+   * (src/lib/checkout/payer.ts); quando o aluno e menor, estes campos sao os do
+   * RESPONSAVEL FINANCEIRO. O certificado continua saindo no nome do aluno.
+   *
+   * O nome antigo (`studentNome`/`studentCpf`) era metade da causa raiz: dizia
+   * ao leitor que o pagador e o aluno, e nao ha lugar no fluxo em que isso fosse
+   * questionado.
+   */
+  payerNome: string | null
+  payerEmail: string | null
+  payerCpf: string | null
+  /**
+   * `"GUARDIAN"` faz o servidor IGNORAR o pagador vindo do formulario. Sem
+   * isso, `formData.payer` tem precedencia e um front desatualizado (ou
+   * adulterado) mandaria o CPF do menor — desfazendo a separacao exatamente no
+   * ponto do dinheiro.
+   */
+  payerKind: "STUDENT" | "GUARDIAN"
 }
 
 export interface TransparentCtx {
@@ -103,9 +119,14 @@ export async function processTransparentMpPayment(
 ): Promise<TransparentResult> {
   const amount = enrollment.finalAmount
   const externalReference = enrollment.externalReference
-  const payerEmail = formData.payer?.email ?? enrollment.studentEmail ?? undefined
+  // Quando quem paga e o RESPONSAVEL, o servidor e a autoridade: o que veio do
+  // formulario e descartado. Aceitar `formData.payer` aqui permitiria a um front
+  // desatualizado (ou a quem edite a requisicao) mandar o CPF do menor de volta
+  // para o gateway — que e exatamente o defeito que este recurso corrige.
+  const fromForm = enrollment.payerKind === "GUARDIAN" ? undefined : formData.payer
+  const payerEmail = fromForm?.email ?? enrollment.payerEmail ?? undefined
   const cpf =
-    formData.payer?.identification?.number ?? enrollment.studentCpf ?? undefined
+    fromForm?.identification?.number ?? enrollment.payerCpf ?? undefined
 
   // ── Valor zerado (cupom de 100%) ──────────────────────────────────────────
   // O MP recusa `transaction_amount: 0`. Libera a matrícula direto, sem gateway.
@@ -181,9 +202,12 @@ export async function processTransparentMpPayment(
     notification_url: ctx.notificationUrl,
     payer: {
       email: payerEmail,
-      first_name: formData.payer?.first_name ?? enrollment.studentNome ?? undefined,
-      last_name: formData.payer?.last_name,
+      first_name: fromForm?.first_name ?? enrollment.payerNome ?? undefined,
+      last_name: fromForm?.last_name,
       ...(cpf ? { identification: { type: "CPF", number: cpf } } : {}),
+      // Endereco continua vindo do FORMULARIO mesmo com responsavel: e o
+      // endereco de cobranca digitado na hora do pagamento (dado do cartao),
+      // nao identidade de quem paga.
       ...(formData.payer?.address
         ? {
             address: {

@@ -28,6 +28,7 @@ import {
   releaseFreeEnrollment,
 } from "@/lib/checkout/free-enrollment"
 import { getOrCreatePmbTenant } from "@/lib/pmb-tenant"
+import { asaasCustomerUpdate, type PayerIdentity } from "@/lib/checkout/payer"
 
 /**
  * Cobrança Asaas do sistema-mãe (PMB) para UMA matrícula. Extraído de
@@ -50,14 +51,14 @@ export interface IssuePmbAsaasChargeInput {
   enrollmentId: string
   /** Deve ser `pmb_enr_<enrollmentId>` — o weblook casa por este prefixo. */
   externalReference: string
-  student: {
-    id: string
-    nome: string
-    email: string
-    cpf: string
-    fone: string
-    asaasCustomerId: string | null
-  }
+  /**
+   * O ALUNO — usado so para `student.id` (a quem a cobranca pertence). Nome,
+   * CPF e contato da COBRANCA vem de `payer`, que pode ser o responsavel
+   * financeiro quando o aluno e menor.
+   */
+  student: { id: string }
+  /** Quem PAGA. Monte com `resolvePayer` (src/lib/checkout/payer.ts). */
+  payer: PayerIdentity
   courseNome: string
   /** Descrição da cobrança no Asaas. Default: `Curso: ${courseNome}`. */
   description?: string
@@ -123,6 +124,7 @@ export async function issuePmbAsaasCharge(
     enrollmentId,
     externalReference,
     student,
+    payer,
     courseNome,
     description,
     finalAmount,
@@ -243,29 +245,32 @@ export async function issuePmbAsaasCharge(
     }
   }
 
-  const phoneDigits = student.fone.replace(/\D/g, "")
+  const phoneDigits = (payer.fone ?? "").replace(/\D/g, "")
 
   const { customer } = await findOrCreateAsaasCustomer({
-    name: student.nome,
-    email: student.email,
-    cpfCnpj: student.cpf,
-    mobilePhone: student.fone,
-    externalReference: `pmb_student_${student.id}`,
+    name: payer.nome,
+    email: payer.email ?? undefined,
+    cpfCnpj: payer.cpf ?? "",
+    mobilePhone: payer.fone ?? undefined,
+    externalReference: `pmb_${payer.asaasExternalReference}`,
   })
 
-  if (!student.asaasCustomerId) {
+  // Grava na COLUNA DO PAGADOR. Escrever o customer do responsavel em
+  // `asaasCustomerId` faria o aluno cobrar nele para sempre — inclusive depois
+  // dos 18 — e o reuso do customer em cache esconderia o erro.
+  if (!payer.asaasCustomerId) {
     await prisma.student.update({
       where: { id: student.id },
-      data: { asaasCustomerId: customer.id },
+      data: asaasCustomerUpdate(payer, customer.id),
     })
   }
 
   const holderInfo =
     creditCard && creditCardHolder
       ? {
-          name: student.nome,
-          email: student.email,
-          cpfCnpj: student.cpf,
+          name: payer.nome,
+          email: payer.email ?? "",
+          cpfCnpj: payer.cpf ?? "",
           postalCode: creditCardHolder.postalCode,
           addressNumber: creditCardHolder.addressNumber,
           addressComplement: creditCardHolder.addressComplement,

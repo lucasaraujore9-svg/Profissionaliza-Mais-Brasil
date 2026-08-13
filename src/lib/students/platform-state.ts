@@ -64,10 +64,16 @@ export function parseEaBolsista(value: unknown): boolean | null {
 /**
  * O retrato do aluno que NÓS somos donos e reasseveramos na plataforma a cada
  * edição. Campos fora desta lista (`certificado`, `datafinal`, `obs`,
- * `responsavel`, `vendedor`, `funcionario_cadastro`) são deliberadamente NÃO
- * enviados: não temos valor autoritativo para eles, e mandar o nosso default
- * apagaria o que a plataforma tem. Se um dia a plataforma resetar algum deles
- * numa edição, é aqui que entra o campo — junto com a fonte da verdade dele.
+ * `vendedor`, `funcionario_cadastro`) são deliberadamente NÃO enviados: não
+ * temos valor autoritativo para eles, e mandar o nosso default apagaria o que a
+ * plataforma tem. Se um dia a plataforma resetar algum deles numa edição, é
+ * aqui que entra o campo — junto com a fonte da verdade dele.
+ *
+ * `responsavel`/`rg_responsavel`/`cpf_responsavel` ESTAVAM nessa lista de
+ * exclusões, com a justificativa "não temos valor autoritativo". Isso deixou de
+ * valer: desde o responsável financeiro, o formulário de venda COLETA esses
+ * dados e nós passamos a ser a fonte da verdade deles. Mantê-los fora agora
+ * deixaria a plataforma de aulas sem saber quem responde pelo aluno menor.
  */
 export interface PlatformStudentSnapshot {
   nome: string
@@ -78,6 +84,9 @@ export interface PlatformStudentSnapshot {
   rg: string | null
   sexo: string | null
   nascimento: Date | null
+  responsavel: string | null
+  rgResponsavel: string | null
+  cpfResponsavel: string | null
   rua: string | null
   numero: string | null
   bairro: string | null
@@ -148,6 +157,13 @@ export function buildEditarAlunoPayload(
     rg: text(snapshot.rg),
     sexo: text(snapshot.sexo),
     nascimento: isoDate(snapshot.nascimento),
+    // `text()` descarta vazio, então responsável nulo do nosso lado PRESERVA o
+    // que a plataforma tiver. Mandar string vazia para forçar a limpeza seria a
+    // mesma classe do incidente de 2026-08-05 (campo omitido/zerado derrubando
+    // o aluno para "interessado") — não fazer.
+    responsavel: text(snapshot.responsavel),
+    rg_responsavel: text(snapshot.rgResponsavel),
+    cpf_responsavel: text(snapshot.cpfResponsavel),
     rua: text(snapshot.rua),
     numero: text(snapshot.numero),
     bairro: text(snapshot.bairro),

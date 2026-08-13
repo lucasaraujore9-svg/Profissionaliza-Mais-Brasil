@@ -1,3 +1,4 @@
+import { guardianRequirement, hasGuardian } from "@/lib/students/guardian"
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import type { Prisma } from "@prisma/client"
@@ -131,6 +132,15 @@ export const GET = withRequestContext(
             createdAt: s.createdAt.toISOString(),
             coursesCount: counts.paidEnrollments,
             plataformaAlunoId: s.plataformaAlunoId,
+            nascimento: s.nascimento
+              ? s.nascimento.toISOString().slice(0, 10)
+              : null,
+            responsavel: s.responsavel,
+            // A tela de venda precisa saber que falta responsável ANTES do
+            // submit — a maior parte das vendas usa a busca, não o cadastro novo.
+            guardianMissing:
+              guardianRequirement(s.nascimento) === "REQUIRED" &&
+              !hasGuardian(s),
           }
         }),
         stats,

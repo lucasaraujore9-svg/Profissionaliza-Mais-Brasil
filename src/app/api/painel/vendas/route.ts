@@ -1,3 +1,16 @@
+import {
+  PAYER_SELECT,
+  resolvePayer,
+  type PayerSource,
+} from "@/lib/checkout/payer"
+import {
+  buildGuardianWrite,
+  guardianRequirement,
+  guardianShape,
+  hasGuardian,
+  nascimentoFieldOptional,
+  withGuardianRule,
+} from "@/lib/students/guardian"
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import type { PaymentType } from "@prisma/client"
@@ -32,7 +45,8 @@ import { getPackageForCheckout } from "@/lib/packages/vitrine"
 import { MAX_SALE_COURSES, dedupeIds } from "@/lib/enrollment/multi-course"
 import { rollbackSaleEnrollment } from "@/lib/enrollment/multi-course-server"
 
-const createSchema = z
+const createSchema = withGuardianRule(
+  z
   .object({
     // Aluno da venda: OU um aluno JÁ EXISTENTE da unidade (studentId, sempre
     // escopado ao tenant no handler — a busca da tela só devolve alunos da
@@ -55,6 +69,11 @@ const createSchema = z
       .refine(isValidPhone, "Telefone inválido")
       .transform(normalizePhone)
       .optional(),
+    // Data de nascimento do ALUNO NOVO. Opcional no shape porque a venda para
+    // aluno EXISTENTE nao submete dados de identidade (XOR acima); quando vier
+    // e indicar menor de 18, `withGuardianRule` exige o responsavel.
+    nascimento: nascimentoFieldOptional,
+    ...guardianShape,
 
     // Alvo da venda: UM OU MAIS cursos da própria vitrine (TenantCourse) OU um
     // pacote (CoursePackage). Exatamente um dos dois — validado no .refine
@@ -112,6 +131,19 @@ const createSchema = z
     message: "Use cupom OU desconto manual, não os dois",
     path: ["manualDiscountPercent"],
   })
+  // Aluno NOVO: a data de nascimento e OBRIGATORIA. Sem ela nao ha como saber
+  // se e menor, e foi por essa lacuna que a base legada ficou com a mae
+  // cadastrada como se fosse a aluna. (Aluno EXISTENTE nao passa por aqui — o
+  // gate dele e no handler, contra o que ja esta gravado.)
+  .refine((v) => !v.nome || !!v.nascimento, {
+    message: "Informe a data de nascimento do aluno",
+    path: ["nascimento"],
+  }),
+  // Aluno NOVO traz a data de nascimento e, se menor, o responsavel. Aluno
+  // EXISTENTE nao submete nenhum dos dois (o XOR acima) — por isso a data nao e
+  // obrigatoria aqui; o gate do aluno existente vive no handler.
+  { requireNascimento: false },
+)
 
 export const GET = withRequestContext(
   { action: "painel.vendas.list", route: "/api/painel/vendas" },
@@ -498,19 +530,15 @@ export const POST = withRequestContext(
     // escopado ao tenant — a limitação de acesso aos alunos da revenda), OU um
     // NOVO aluno criado/reaproveitado por CPF. Espelha a venda direta do PMB
     // (buscar existente | novo aluno).
-    let student: {
-      id: string
-      nome: string
-      email: string | null
-      cpf: string | null
-      fone: string | null
-    }
+    // PayerSource garante que os campos do responsavel vieram no select — sem
+    // eles a cobranca de um aluno menor sairia no CPF do menor.
+    let student: PayerSource & { nascimento: Date | null }
     if (data.studentId) {
       // Isolamento P0: só encontra o aluno se ele pertence a ESTA unidade. Um
       // studentId de outro tenant devolve 404 (nunca vaza aluno cross-tenant).
       const found = await prisma.student.findFirst({
         where: { id: data.studentId, tenantId: tenant.id },
-        select: { id: true, nome: true, email: true, cpf: true, fone: true },
+        select: { ...PAYER_SELECT, nascimento: true },
       })
       if (!found) {
         if (couponId) await releaseCoupon(couponId).catch(swallow("painel.vendas"))
@@ -543,6 +571,7 @@ export const POST = withRequestContext(
           vendedorId: tenant.plataformaVendedorId,
           plataformaAlunoIdFallback: `pending_${Date.now()}`,
           initialStatus: "INTERESSADO",
+          ...buildGuardianWrite(data),
         })
       } catch (err) {
         if (err instanceof StudentEmailConflictError) {
@@ -560,12 +589,35 @@ export const POST = withRequestContext(
     // carnê quanto no link). Aluno NOVO sempre traz CPF (schema); o aluno
     // EXISTENTE pode não ter — valida aqui em vez de estourar lá dentro do
     // gateway, que só falharia depois de criar a matrícula (502 + rollback).
-    if (!isBolsista && tenant.salesGateway === "ASAAS" && !student.cpf) {
+    // Aluno EXISTENTE menor de idade sem responsavel na ficha: a venda passaria
+    // com o dado velho, que e como a base legada ficou errada. A maior parte das
+    // vendas usa a aba "buscar aluno", entao este e o gate que de fato segura.
+    if (
+      guardianRequirement(student.nascimento) === "REQUIRED" &&
+      !hasGuardian(student)
+    ) {
       if (couponId) await releaseCoupon(couponId).catch(swallow("painel.vendas"))
       return NextResponse.json(
         {
           error:
-            "Aluno sem CPF cadastrado — o Asaas exige o CPF para gerar a cobrança.",
+            "Aluno menor de 18 anos sem responsável financeiro. Complete o cadastro do aluno antes de vender — o certificado sai no nome do aluno, e a cobrança no CPF do responsável.",
+          code: "GUARDIAN_REQUIRED",
+          studentId: student.id,
+        },
+        { status: 400 },
+      )
+    }
+
+    // O Asaas cobra de QUEM PAGA — com aluno menor, o responsavel financeiro.
+    const payer = resolvePayer(student)
+    if (!isBolsista && tenant.salesGateway === "ASAAS" && !payer.cpf) {
+      if (couponId) await releaseCoupon(couponId).catch(swallow("painel.vendas"))
+      return NextResponse.json(
+        {
+          error:
+            payer.kind === "GUARDIAN"
+              ? "Responsável financeiro sem CPF cadastrado — o Asaas exige o CPF para gerar a cobrança."
+              : "Aluno sem CPF cadastrado — o Asaas exige o CPF para gerar a cobrança.",
         },
         { status: 400 },
       )

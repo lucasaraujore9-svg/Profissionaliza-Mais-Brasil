@@ -1,5 +1,9 @@
 "use client"
 
+import { GuardianFields } from "@/components/shared/guardian/guardian-fields"
+import { useGuardian } from "@/components/shared/guardian/use-guardian"
+import { parentescoFromLabel } from "@/lib/students/guardian"
+import { applyServerFieldErrors } from "@/lib/checkout/field-errors"
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { Save } from "lucide-react"
@@ -18,7 +22,6 @@ interface FormState {
   rua: string
   numero: string
   bairro: string
-  nascimento: string
 }
 
 function toInputDate(iso: string | null): string {
@@ -46,9 +49,26 @@ export function EditTab({
     rua: student.rua ?? "",
     numero: student.numero ?? "",
     bairro: student.bairro ?? "",
-    nascimento: toInputDate(student.nascimento),
   })
   const [saving, setSaving] = useState(false)
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+  // Nascimento + responsável: mesma regra do servidor (lib/students/guardian).
+  const guardianCtl = useGuardian({
+    nascimento: toInputDate(student.nascimento),
+    guardian: {
+      responsavel: student.responsavel ?? "",
+      responsavelCpf: student.cpfResponsavel ?? "",
+      responsavelRg: student.rgResponsavel ?? "",
+      responsavelEmail: student.responsavelEmail ?? "",
+      responsavelFone: student.responsavelFone ?? "",
+      // A coluna guarda o rótulo ("Mãe"); o select espera a chave (`mae`).
+      responsavelParentesco: parentescoFromLabel(student.responsavelParentesco),
+      responsavelParentescoOutro:
+        parentescoFromLabel(student.responsavelParentesco) === "outro"
+          ? (student.responsavelParentesco ?? "")
+          : "",
+    },
+  })
   const [result, setResult] = useState<{ ok: boolean; text: string } | null>(
     null,
   )
@@ -69,12 +89,25 @@ export function EditTab({
       const res = await fetch(apiBase(scope, student.id), {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify({
+          ...form,
+          nascimento: guardianCtl.nascimento,
+          ...guardianCtl.payload(),
+        }),
       })
       const body = await res.json().catch(() => ({}))
       if (!res.ok) {
+        // O 400 do responsável vem por CAMPO — sem isto a pessoa veria só
+        // "Dados inválidos" e não saberia o que corrigir.
+        setFieldErrors(
+          applyServerFieldErrors(body.fields ?? {}, () => true) as Record<
+            string,
+            string
+          >,
+        )
         setResult({ ok: false, text: body.error ?? "Falha ao salvar" })
       } else {
+        setFieldErrors({})
         setResult({ ok: true, text: "Dados atualizados." })
         router.refresh()
       }
@@ -119,9 +152,13 @@ export function EditTab({
         <Field label="Nascimento">
           <input
             type="date"
-            {...bind("nascimento")}
+            value={guardianCtl.nascimento}
+            onChange={(e) => guardianCtl.setNascimento(e.target.value)}
             className={inputClass}
           />
+          <p className="mt-1 text-xs text-gray-500">
+            É ela que define se o aluno precisa de responsável financeiro.
+          </p>
         </Field>
         <Field label="Telefone">
           <input
@@ -195,6 +232,35 @@ export function EditTab({
             />
           </Field>
         </div>
+      </section>
+
+      {/* Responsável financeiro — sempre visível, porque é aqui que a base
+          legada é completada. Obrigatório quando a data indica menor de 18. */}
+      <section className="space-y-4 border-t border-gray-100 pt-5">
+        {!guardianCtl.required && !guardianCtl.open && (
+          <button
+            type="button"
+            className="text-xs font-medium text-[var(--color-pmb-green)] underline underline-offset-2"
+            onClick={() => guardianCtl.setManualOpen(true)}
+          >
+            Quem paga não é o próprio aluno? Informe o responsável financeiro.
+          </button>
+        )}
+        {guardianCtl.open && (
+          <GuardianFields
+            value={guardianCtl.guardian}
+            onChange={guardianCtl.setGuardian}
+            fieldErrors={fieldErrors}
+            disabled={saving}
+            required={guardianCtl.required}
+            variant="staff"
+            /* A declaração de responsabilidade é coletada na VENDA, não numa
+               tela de manutenção de cadastro. */
+            showDeclaration={false}
+            formatCpf={(v) => v}
+            formatPhone={(v) => v}
+          />
+        )}
       </section>
 
       {result && (

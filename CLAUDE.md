@@ -499,6 +499,159 @@ balde. `lib/resellers/cancel.ts` e o nucleo compartilhado com o DELETE
 individual — duplicar um fluxo destrutivo que fala com o Asaas e como as duas
 metades divergem em silencio.
 
+### Responsavel financeiro para aluno menor (2026-08-13)
+
+Existia UMA identidade por venda: o `Student` era ao mesmo tempo quem estuda e
+quem paga. Como o gateway exige pagador adulto com CPF, a unica forma de vender
+para um menor era cadastrar a MAE como se fosse a aluna — e o **certificado, que
+le `Student.nome`/`cpf` no ato da emissao, saia no nome dela**. Nao havia regra
+de idade em lugar nenhum do codigo.
+
+- **O banco JA TINHA os campos, mortos:** `nascimento`, `responsavel`,
+  `rgResponsavel`, `cpfResponsavel` vieram da migration inicial (herdados do
+  schema da EA, que sempre aceitou esses campos) e nunca foram escritos.
+  Migration `20260813_responsavel_financeiro` so acrescenta contato
+  (`responsavel_email/fone/parentesco`), `responsavel_definido_em`,
+  `responsavel_asaas_customer_id`, os dois campos de revisao de titularidade e
+  `certificates.corrected_*`. Aditiva e idempotente, sem backfill.
+- **Fonte unica:** `src/lib/students/guardian.ts` — `isMinor` (dia civil BR via
+  `brDayStartUtc`), `guardianRequirement`, `guardianShape` + `withGuardianRule`
+  (shape e refine ACOPLADOS, para nenhuma rota reimplementar a regra) e a
+  escrita tri-estado `GuardianWrite`. **`nascimento = null` significa
+  DESCONHECIDO, nunca "adulto"**, e `UNKNOWN` NUNCA bloqueia — 217 dos 230
+  alunos em producao nao tem data, e travar a recompra deles seria um apagao.
+- **O pagador foi desacoplado ANTES da UI, e a ordem e restricao, nao
+  preferencia.** `src/lib/checkout/payer.ts` (`PAYER_SELECT`/`resolvePayer`):
+  como `resolvePayer` so aceita `PayerSource`, todo call site com `select` mais
+  estreito NAO COMPILA — o compilador substitui um teste estrutural. Os
+  contratos de gateway tiveram `studentNome/studentCpf` **renomeados** para
+  `payer*`: o rename quebra a compilacao nos call sites de proposito (um campo
+  opcional seria esquecivel). Se a UI viesse primeiro, o primeiro responsavel
+  coletado geraria cobranca no CPF do menor.
+- **A regra do pagador e DATA-DRIVEN, nao CLOCK-DRIVEN:** vence quem esta na
+  ficha (`responsavel` + `cpfResponsavel`), nao "quem e menor hoje". Assim o
+  aluno que faz 18 no meio de um carne continua cobrando o mesmo customer
+  Asaas, sem assinatura orfa.
+- **`responsavelAsaasCustomerId` e coluna separada de proposito.** Gravar o
+  `cus_` da mae em `asaasCustomerId` faria o aluno cobrar nela PARA SEMPRE,
+  inclusive depois dos 18 — e, como o codigo reusa o customer em cache, o erro
+  nunca seria detectado. Ha teste de mutacao nas duas colunas.
+- **CPF do responsavel != CPF do aluno** e trava no refine: sem ela o
+  `findOrCreateAsaasCustomer` (dedupe por `cpfCnpj`) resolveria os dois papeis
+  para o MESMO customer e a separacao viraria no-op.
+- **O gate que de fato segura e o do aluno EXISTENTE**, nao o do cadastro novo:
+  a maior parte das vendas usa a aba "buscar aluno". `/api/painel/vendas`
+  recusa com `GUARDIAN_REQUIRED` + `studentId`, e as duas telas de venda mostram
+  o aviso com link para completar a ficha ANTES do submit.
+- **Login passou a aceitar o CPF do RESPONSAVEL** (`src/lib/auth.ts`, `OR` em
+  `cpfResponsavel` + indice). Sem isso, corrigir a titularidade (o `cpf` vira o
+  do filho) tiraria o acesso da mae em silencio — e era ela quem vinha entrando.
+- **Remediacao do passado** (`src/lib/students/titularity/`): fila em
+  `/admin/alunos/titularidade` e `/painel/alunos/titularidade`. Dimensionada
+  pelos numeros REAIS de producao (230 alunos, 51 certificados em 17 alunos):
+  **sem model de fila, sem cron de varredura, sem lote** — os sinais sao
+  calculados na hora. Nao existe deteccao confiavel (o nome da mae e um nome de
+  aluno valido; o CPF nao codifica data de nascimento); a maquina ordena, a
+  pessoa decide, nada auto-corrige.
+- **O certificado corrigido MANTEM o `code`.** Ele ja circulou; troca-lo faria
+  `/validar/{code}` responder "nao encontrado" para quem conferisse o codigo
+  antigo — **le como fraude**. E NAO se reemite: `force` grava
+  `completionDate: new Date()` (a data de conclusao viraria hoje) e obrigaria a
+  revogar o original, deixando "Certificado revogado" em vermelho na pagina
+  publica de um aluno legitimo. Corrige-se o snapshot e nulifica-se
+  `pdfUrl`/`pdfGeneratedAt` (forma documentada de forcar regeneracao), com
+  regeneracao ansiosa apos o commit.
+- **Auditoria DENTRO da transacao**, contra o padrao do projeto: `logAudit`
+  engole falha de persistencia por design, e para reescrita de documento oficial
+  um buraco silencioso na trilha e inaceitavel. Um `AuditLog` por certificado.
+- **Permissao CONJUNTA, sem permissao nova:** corrigir cadastro exige
+  `alunos.manage`; reescrever certificado exige tambem `certificados.manage` —
+  quem atende conserta ficha, mas nao reescreve diploma. Criar permissao nova
+  obrigaria a mexer nos dois catalogos, no `WRITE_IMPLIES_READ`, em todos os
+  presets e nas listas de rotulos.
+- **EA passou a receber `responsavel`/`cpf_responsavel`/`rg_responsavel`** (o
+  contrato sempre aceitou). O comentario de `platform-state.ts` que justificava
+  a omissao por "nao temos valor autoritativo" foi ATUALIZADO — sem isso o
+  proximo leitor removeria o campo de novo. `text()` descarta vazio, entao campo
+  nulo do nosso lado PRESERVA o que a EA tem (mandar string vazia seria a mesma
+  classe do incidente de 2026-08-05). LMS fica de fora: `{name, email}` so, e
+  ele nao cobra nem certifica.
+- **Invariante testada:** `src/lib/students/guardian-coverage.test.ts` quebra se
+  uma rota nova criar aluno sem importar a regra, se `prisma.student.create`
+  aparecer fora dos dois pontos conhecidos, ou se `lib/certificates/**` passar a
+  ler campos do responsavel. Verificada POR MUTACAO, junto com `isMinor`, a
+  trava de CPF igual e a escrita tri-estado.
+- **Decisoes do dono:** CPF do aluno obrigatorio (inclusive menor); data de
+  nascimento obrigatoria em toda porta de venda; e-mail do responsavel em campo
+  proprio (o do aluno segue sendo a chave de login). **`certificate_require_cpf`
+  continua `false` em producao** — nao foi ligado junto, mudaria a emissao dos
+  230 alunos de uma vez.
+- **Divida registrada:** dois irmaos menores com o mesmo e-mail continuam sem
+  caber (`@@unique([tenantId, email])`); a mensagem de conflito passou a
+  explicar em vez de so barrar. O conserto real e login/identidade por CPF —
+  fora de escopo, raio grande.
+
+**Revisao multi-agente antes do commit: 15 defeitos, todos corrigidos.** Os que
+valem como padrao, nao so como conserto:
+
+- **Familia de permissao errada.** As rotas de titularidade nasceram sob
+  `alunos.*` (vitrine B2C da PMB) quando alcancam aluno de QUALQUER unidade —
+  `alunosRede.*`. Efeito duplo: quem tinha `alunos.manage` reescrevia certificado
+  de aluno de revenda por um gate mais fraco que o da edicao comum, e o **Diretor
+  de unidades**, cujo trabalho e exatamente esse, tomava 403 e nem via o menu.
+  Ao criar rota que toca aluno, conferir QUAL das duas familias se aplica.
+- **Recorte de carteira esquecido.** A fila e a correcao do painel filtravam so
+  por `tenantId`, sem `ctx.scope.alunos`. O preset de Vendedor tem
+  `alunos.view/manage` e NAO tem `alunos.viewAll`: ele listava nome, e-mail e CPF
+  de toda a unidade e podia reescrever qualquer cadastro. Toda rota
+  `/api/painel/alunos*` espalha esse filtro — rota nova tambem tem que espalhar.
+- **A regra compartilhada bloqueava o proprio caminho de remediacao.**
+  `withGuardianRule` recusa responsavel sem data de nascimento e exige
+  e-mail/telefone/parentesco — correto na VENDA, fatal na correcao de cadastro
+  LEGADO, que sempre nomeia responsavel e quase nunca tem esses dados. Vieram as
+  opcoes `requireNascimentoComResponsavel` e `requireGuardianContact`. Regra
+  unica nao significa regra unica-forma.
+- **Checkout ANONIMO podia APAGAR responsavel.** `buildGuardianWrite` devolvia
+  `null` (= limpar) quando o bloco nao vinha, entao refazer o checkout de um
+  menor com uma data de adulto zerava o responsavel ja verificado e mandava a
+  cobranca seguinte para o CPF da crianca. Os 4 checkouts publicos passaram a
+  usar `allowClear: false`: fluxo anonimo ADICIONA, nunca REMOVE.
+- **`OR` em login e armadilha.** O `OR: [{cpf}, {cpfResponsavel}]` num `findFirst`
+  sem ordem podia devolver a linha do FILHO para a mae que tem conta propria e e
+  responsavel dele no mesmo tenant — senha nao bate, ela fica trancada fora da
+  propria conta. Virou consulta em DUAS etapas, com o CPF proprio vencendo.
+- **`void promise` morre na Vercel.** A "regeneracao ansiosa" do PDF e o sync
+  com a EA usavam `void`, que pode ser congelado junto com a invocacao assim que
+  a resposta sai — nem o `.catch` roda. Trocado por `afterResponse`.
+- **Gate so no painel nao e gate.** `GUARDIAN_REQUIRED` de aluno existente
+  existia em `/api/painel/vendas` mas nao em `/api/admin/vendas` nem na recompra
+  `/api/aluno/comprar` — as duas cobravam no CPF do menor. Ao criar um gate,
+  varrer TODAS as portas equivalentes.
+- **O compilador nao pega pagador montado a mao.** O rename `student*` -> `payer*`
+  quebrou os call sites tipados, mas tres lugares montavam `payer: {...}` como
+  literal (`admin/vendas` MP, `aluno/comprar` MP, carne MP em `installments/plan`)
+  e passaram batido. Varredura por `payer: {` / `cpfCnpj:` / `identification:`
+  quando o dono de um dado muda.
+- **`asaasCustomerId` da matricula tinha precedencia sobre o do pagador**: uma
+  1a tentativa feita antes de a ficha ganhar o responsavel carimbava o customer
+  do MENOR, e a cobranca seguinte era lancada nele com o CPF da mae no
+  `creditCardHolderInfo`. `payerKind` agora invalida esse cache.
+- **Fila sem saida de dispensa.** So havia "Corrigir": os 17 alunos com
+  certificado — a maioria correta — ficariam presos na lista para sempre, e a
+  unica forma de limpar seria submeter uma correcao falsa. O PATCH existia e
+  nenhum componente o chamava.
+- Outros: P2002 ao gravar o CPF do filho que ja tem cadastro proprio virava 500
+  generico; `markTitularityReviewed` gravava auditoria sem `tenantId` (sumia da
+  visao por unidade); `PATCH /api/aluno/perfil` aceitava `nascimento: 2999-12-31`
+  sem a sanidade que a regra compartilhada ja tinha; o parentesco nao voltava
+  para o select (a coluna guarda o ROTULO, o select espera a CHAVE), fazendo todo
+  salvamento de menor falhar; e o modulo que reescreve documento oficial era o
+  unico sem teste — agora tem, verificado por mutacao.
+- **Cuidado de bundle:** `signals.ts` consulta o banco, entao os rotulos e tipos
+  vivem em `titularity/types.ts`. Importar valor de um modulo que toca Prisma num
+  componente `"use client"` arrasta o driver `pg` para o navegador e quebra o
+  build com "Can't resolve 'dns'".
+
 ### Bugs conhecidos (pendentes)
 
 - **Middleware file convention deprecado** no Next 16 (usar `proxy` em vez de `middleware`).

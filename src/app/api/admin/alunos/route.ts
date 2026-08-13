@@ -15,6 +15,15 @@ import {
   countEnrollmentStatuses,
 } from "@/lib/students/display-status"
 import { requireAdmin } from "@/lib/auth/admin-guard"
+import {
+  buildGuardianWrite,
+  guardianData,
+  guardianRequirement,
+  guardianShape,
+  hasGuardian,
+  nascimentoField,
+  withGuardianRule,
+} from "@/lib/students/guardian"
 
 export const GET = withRequestContext(
   { action: "admin.alunos.list", route: "/api/admin/alunos" },
@@ -61,6 +70,11 @@ export const GET = withRequestContext(
       status: true,
       plataformaAlunoId: true,
       createdAt: true,
+      // A tela de venda precisa saber se falta responsavel ANTES do submit —
+      // a maior parte das vendas usa a busca, nao o cadastro novo.
+      nascimento: true,
+      responsavel: true,
+      cpfResponsavel: true,
       enrollments: { select: { status: true } },
     },
   })
@@ -75,17 +89,33 @@ export const GET = withRequestContext(
       status: deriveStudentDisplayStatus(s.status, countEnrollmentStatuses(s.enrollments)),
       plataformaAlunoId: s.plataformaAlunoId,
       createdAt: s.createdAt.toISOString(),
+      nascimento: s.nascimento ? s.nascimento.toISOString().slice(0, 10) : null,
+      responsavel: s.responsavel,
+      // Sinal pronto para a UI: aluno menor cuja ficha ainda nao tem
+      // responsavel financeiro. A venda dele sera recusada no submit.
+      guardianMissing:
+        guardianRequirement(s.nascimento) === "REQUIRED" && !hasGuardian(s),
     })),
   })
   },
 )
 
-const createSchema = z.object({
-  nome: z.string().trim().min(3).max(160),
-  email: z.string().email().toLowerCase().trim(),
-  cpf: z.string().trim().min(11).max(14),
-  fone: z.string().trim().optional(),
-})
+/**
+ * Criacao de aluno no /admin. `nascimento` e obrigatorio: sem ela nao ha como
+ * saber se o aluno e menor, e foi exatamente essa lacuna que fez os vendedores
+ * cadastrarem a mae como se fosse a aluna. `withGuardianRule` exige o bloco do
+ * responsavel quando a data indicar menor de 18.
+ */
+const createSchema = withGuardianRule(
+  z.object({
+    nome: z.string().trim().min(3).max(160),
+    email: z.string().email().toLowerCase().trim(),
+    cpf: z.string().trim().min(11).max(14),
+    fone: z.string().trim().optional(),
+    nascimento: nascimentoField,
+    ...guardianShape,
+  }),
+)
 
 export const POST = withRequestContext(
   { action: "admin.alunos.create", route: "/api/admin/alunos" },
@@ -112,6 +142,7 @@ export const POST = withRequestContext(
     return NextResponse.json({ error: "CPF inválido" }, { status: 400 })
   }
   const cpf = stripCpf(parsed.data.cpf)
+  const { nascimento, guardian } = buildGuardianWrite(parsed.data)
 
   const pmbTenant = await getOrCreatePmbTenant()
 
@@ -137,6 +168,8 @@ export const POST = withRequestContext(
         email: parsed.data.email,
         cpf,
         fone: parsed.data.fone,
+        nascimento,
+        ...guardianData(guardian),
         polo: pmbPlataformaPolo(),
         vendedorId: pmbPlataformaVendedorId(),
         plataformaAlunoId: `pending_${Date.now()}`,
@@ -180,16 +213,21 @@ export const POST = withRequestContext(
   try {
     const settings = await getSystemSettings()
     if (settings.pmbDirectSaleGateway === "ASAAS" && process.env.ASAAS_API_KEY) {
+      // Customer no nome de QUEM PAGA — com aluno menor, o responsavel.
       const { customer } = await findOrCreateAsaasCustomer({
-        name: parsed.data.nome,
-        email: parsed.data.email,
-        cpfCnpj: cpf,
-        mobilePhone: parsed.data.fone,
-        externalReference: `pmb_student_${student.id}`,
+        name: guardian?.nome ?? parsed.data.nome,
+        email: guardian?.email ?? parsed.data.email,
+        cpfCnpj: guardian?.cpf ?? cpf,
+        mobilePhone: guardian?.fone ?? parsed.data.fone,
+        externalReference: guardian
+          ? `pmb_guardian_${student.id}`
+          : `pmb_student_${student.id}`,
       })
       await prisma.student.update({
         where: { id: student.id },
-        data: { asaasCustomerId: customer.id },
+        data: guardian
+          ? { responsavelAsaasCustomerId: customer.id }
+          : { asaasCustomerId: customer.id },
       })
     }
   } catch (err) {

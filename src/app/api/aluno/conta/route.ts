@@ -83,6 +83,13 @@ export const DELETE = withRequestContext(
         responsavel: null,
         rgResponsavel: null,
         cpfResponsavel: null,
+        responsavelEmail: null,
+        responsavelFone: null,
+        responsavelParentesco: null,
+        responsavelDefinidoEm: null,
+        // Bookkeeping de gateway, mas ainda assim vinculado a uma pessoa
+        // identificável — some junto na anonimização.
+        responsavelAsaasCustomerId: null,
         rua: null,
         bairro: null,
         cidade: null,

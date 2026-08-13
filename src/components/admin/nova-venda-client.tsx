@@ -1,5 +1,8 @@
 "use client"
 
+import { GuardianFields } from "@/components/shared/guardian/guardian-fields"
+import { useGuardian } from "@/components/shared/guardian/use-guardian"
+import { applyServerFieldErrors } from "@/lib/checkout/field-errors"
 import { useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 import { CheckCircle2, Search, X, UserPlus, Users, RefreshCw, ExternalLink, Copy } from "lucide-react"
@@ -45,6 +48,10 @@ interface StudentResult {
   email: string | null
   cpf: string | null
   fone: string | null
+  nascimento?: string | null
+  responsavel?: string | null
+  /** Aluno menor cuja ficha ainda não tem responsável — a venda será recusada. */
+  guardianMissing?: boolean
 }
 
 interface CouponResult {
@@ -132,6 +139,8 @@ export function NovaVendaClient({
   const [searching, setSearching] = useState(false)
   const [selectedStudent, setSelectedStudent] = useState<StudentResult | null>(null)
   const [newStudent, setNewStudent] = useState({ nome: "", email: "", cpf: "", fone: "" })
+  // Data de nascimento + responsável financeiro: mesma regra do servidor.
+  const guardianCtl = useGuardian()
   const [studentErrors, setStudentErrors] = useState<Record<string, string>>({})
   const [savingStudent, setSavingStudent] = useState(false)
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -257,6 +266,11 @@ export function NovaVendaClient({
       errors.email = "E-mail inválido"
     if (!validateCpf(newStudent.cpf))
       errors.cpf = "CPF inválido"
+    if (!guardianCtl.nascimento)
+      errors.nascimento = "Informe a data de nascimento do aluno"
+    // O servidor é a autoridade; aqui só antecipamos para não gastar um round-trip.
+    if (guardianCtl.required && !guardianCtl.guardian.responsavel.trim())
+      errors.responsavel = "Aluno menor de 18 anos: informe o responsável financeiro"
     setStudentErrors(errors)
     return Object.keys(errors).length === 0
   }
@@ -273,10 +287,19 @@ export function NovaVendaClient({
           email: newStudent.email.trim(),
           cpf: newStudent.cpf,
           fone: newStudent.fone.trim() || undefined,
+          nascimento: guardianCtl.nascimento,
+          ...guardianCtl.payload(),
         }),
       })
       const body = await res.json()
       if (!res.ok) {
+        // O 400 do responsável vem por CAMPO — sem isto o vendedor só veria
+        // "Dados inválidos" e não saberia o que corrigir.
+        if (body.fields) {
+          setStudentErrors(
+            applyServerFieldErrors(body.fields, () => true) as Record<string, string>,
+          )
+        }
         toast.error(body.error ?? "Falha ao salvar aluno")
         return
       }
@@ -466,7 +489,16 @@ export function NovaVendaClient({
                           className="w-full px-4 py-3 text-left transition-colors hover:bg-[var(--color-pmb-lime-50)]"
                         >
                           <p className="text-sm font-medium text-gray-900">{s.nome}</p>
-                          <p className="text-xs text-gray-500">{s.email} · CPF {s.cpf}</p>
+                          <p className="text-xs text-gray-500">
+                            {s.email} · CPF {s.cpf}
+                            {s.nascimento ? ` · nasc. ${s.nascimento.split("-").reverse().join("/")}` : " · sem data de nascimento"}
+                            {s.responsavel ? ` · resp. ${s.responsavel}` : ""}
+                          </p>
+                          {s.guardianMissing && (
+                            <p className="mt-1 text-xs font-medium text-amber-700">
+                              Menor de 18 sem responsável financeiro — complete a ficha antes de vender.
+                            </p>
+                          )}
                         </button>
                       </li>
                     ))}
@@ -478,8 +510,17 @@ export function NovaVendaClient({
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-4">
+                <div className="col-span-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                  <strong className="block">Por que pedimos a data de nascimento</strong>
+                  O certificado é emitido com o nome do <strong>aluno</strong>,
+                  exatamente como está no cadastro. Se o aluno tem menos de 18
+                  anos, cadastre-o com o nome dele e informe a mãe, o pai ou o
+                  responsável no bloco &quot;Responsável financeiro&quot;. A
+                  cobrança sai no CPF do responsável; o certificado, no nome do
+                  aluno.
+                </div>
                 <div className="col-span-2">
-                  <Label>Nome completo</Label>
+                  <Label>Nome completo do aluno</Label>
                   <Input
                     value={newStudent.nome}
                     onChange={(e) => { setNewStudent((s) => ({ ...s, nome: e.target.value })); setStudentErrors((er) => ({ ...er, nome: "" })) }}
@@ -514,6 +555,45 @@ export function NovaVendaClient({
                     onChange={(e) => setNewStudent((s) => ({ ...s, fone: e.target.value }))}
                   />
                 </div>
+                <div className="col-span-2">
+                  <Label>Data de nascimento do aluno</Label>
+                  <Input
+                    type="date"
+                    value={guardianCtl.nascimento}
+                    onChange={(e) => { guardianCtl.setNascimento(e.target.value); setStudentErrors((er) => ({ ...er, nascimento: "" })) }}
+                    className={studentErrors.nascimento ? "border-red-400" : ""}
+                  />
+                  {studentErrors.nascimento && <p className="mt-1 text-xs text-red-600">{studentErrors.nascimento}</p>}
+                  <p className="mt-1 text-xs text-gray-500">
+                    Nunca cadastre o responsável como se fosse o aluno — o
+                    certificado sairia no nome errado.
+                  </p>
+                </div>
+                {!guardianCtl.required && (
+                  <div className="col-span-2">
+                    <button
+                      type="button"
+                      className="text-xs font-medium text-[var(--color-pmb-green)] underline underline-offset-2"
+                      onClick={() => guardianCtl.setManualOpen(!guardianCtl.manualOpen)}
+                    >
+                      {guardianCtl.manualOpen ? "Quem paga é o próprio aluno" : "Quem vai pagar não é o aluno?"}
+                    </button>
+                  </div>
+                )}
+                {guardianCtl.open && (
+                  <div className="col-span-2">
+                    <GuardianFields
+                      value={guardianCtl.guardian}
+                      onChange={guardianCtl.setGuardian}
+                      fieldErrors={studentErrors}
+                      disabled={savingStudent}
+                      required={guardianCtl.required}
+                      variant="staff"
+                      formatCpf={maskCpf}
+                      formatPhone={(v) => v}
+                    />
+                  </div>
+                )}
                 <div className="col-span-2">
                   <Button
                     onClick={saveStudent}
@@ -732,6 +812,22 @@ export function NovaVendaClient({
       <Section title={bolsista ? "4. Conceder bolsa" : "4. Gerar link de pagamento"} done={!!linkResult}>
         {selectedStudent && hasSelection ? (
           <div className="space-y-4">
+            {selectedStudent.guardianMissing && (
+              <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+                <strong className="block">Cadastro incompleto</strong>
+                {selectedStudent.nome} tem menos de 18 anos e não tem responsável
+                financeiro na ficha. A cobrança precisa sair no CPF de um adulto —
+                e o certificado, no nome do aluno.{" "}
+                <a
+                  href={`/admin/alunos/${selectedStudent.id}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-medium underline underline-offset-2"
+                >
+                  Completar cadastro do aluno
+                </a>
+              </div>
+            )}
             <div className="rounded-xl bg-gray-50 p-4 text-sm space-y-1">
               <Row label="Aluno" value={selectedStudent.nome} />
               {selectedItems.map((item, i) => (
@@ -762,7 +858,9 @@ export function NovaVendaClient({
             {!linkResult ? (
               <Button
                 onClick={generateLink}
-                disabled={generatingLink}
+                // A API recusa com GUARDIAN_REQUIRED; desabilitar aqui evita
+                // que o vendedor descubra a regra só depois de clicar.
+                disabled={generatingLink || !!selectedStudent?.guardianMissing}
                 className="bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)]"
               >
                 {generatingLink

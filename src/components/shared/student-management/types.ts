@@ -118,6 +118,14 @@ export interface StudentData {
   bairro: string | null
   numero: string | null
   nascimento: string | null
+  // Responsável financeiro (aluno menor). O certificado continua saindo com
+  // `nome`/`cpf` do ALUNO — estes campos são de quem paga.
+  responsavel: string | null
+  cpfResponsavel: string | null
+  rgResponsavel: string | null
+  responsavelEmail: string | null
+  responsavelFone: string | null
+  responsavelParentesco: string | null
   status: string
   apostila: string
   plataformaAlunoId: string | null

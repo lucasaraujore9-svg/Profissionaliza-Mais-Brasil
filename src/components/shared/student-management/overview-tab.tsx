@@ -78,6 +78,27 @@ export function OverviewTab({ student }: { student: StudentData }) {
           <InfoField label="CEP" value={student.cep} />
           <InfoField label="Origem" value={student.tenantName} />
         </dl>
+        {/* Só aparece quando existe — a maioria dos alunos é adulta e paga por
+            si. O certificado usa `nome`/`cpf` do ALUNO, nunca estes campos. */}
+        {student.responsavel && (
+          <div className="border-t border-gray-100 px-4 py-4">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-amber-700">
+              Responsável financeiro
+            </h3>
+            <dl className="mt-3 grid grid-cols-2 gap-x-8 gap-y-4 sm:grid-cols-3">
+              <InfoField label="Nome" value={student.responsavel} />
+              <InfoField label="CPF" value={student.cpfResponsavel} />
+              <InfoField label="Parentesco" value={student.responsavelParentesco} />
+              <InfoField label="E-mail" value={student.responsavelEmail} />
+              <InfoField label="Telefone" value={student.responsavelFone} />
+              <InfoField label="RG" value={student.rgResponsavel} />
+            </dl>
+            <p className="mt-3 text-xs text-gray-500">
+              A cobrança sai no CPF do responsável. O certificado é emitido no
+              nome do aluno.
+            </p>
+          </div>
+        )}
       </section>
 
       {/* Identificadores técnicos */}
