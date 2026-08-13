@@ -80,8 +80,13 @@ export function TitularityForm({
     }
   }
 
+  // Reescrever um certificado sem CPF produziria um documento incompleto: o CPF
+  // é impresso nele e conferido na validação pública.
+  const exigeCpf = corrigirCertificados && candidate.certificatesCount > 0
+
   const pronto =
     nomeAluno.trim().length >= 3 &&
+    (!exigeCpf || cpfAluno.replace(/\D/g, "").length === 11) &&
     justificativa.trim().length >= 10 &&
     confirmado &&
     (!guardianCtl.open || guardianCtl.guardian.responsavel.trim().length >= 3)
@@ -139,7 +144,11 @@ export function TitularityForm({
           <label className="block">
             <span className="text-xs font-medium text-gray-700">
               CPF do aluno{" "}
-              <span className="font-normal text-gray-400">(opcional)</span>
+              {exigeCpf ? (
+                <span className="font-normal text-amber-700">(obrigatório)</span>
+              ) : (
+                <span className="font-normal text-gray-400">(opcional)</span>
+              )}
             </span>
             <input
               type="text"
@@ -149,8 +158,9 @@ export function TitularityForm({
               className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 font-mono text-sm"
             />
             <span className="mt-1 block text-xs text-gray-500">
-              Se não tiver em mãos, deixe em branco — a correção do nome não
-              fica travada por isso.
+              {exigeCpf
+                ? "O CPF é impresso no certificado e conferido na validação pública — sem ele o documento sairia incompleto."
+                : "Se não tiver em mãos, deixe em branco — a correção do nome não fica travada por isso."}
             </span>
             {fieldErrors.cpf && (
               <span className="mt-1 block text-xs text-red-600">

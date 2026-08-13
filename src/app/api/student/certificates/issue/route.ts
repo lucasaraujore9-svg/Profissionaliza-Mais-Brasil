@@ -2,7 +2,11 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { requireStudentSession } from "@/lib/auth/student-session"
-import { issueCertificateIfEligible, PaceGateError } from "@/lib/certificates/issue"
+import {
+  issueCertificateIfEligible,
+  MissingCpfError,
+  PaceGateError,
+} from "@/lib/certificates/issue"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { contextLogger } from "@/lib/logger"
 
@@ -115,6 +119,22 @@ export const POST = withRequestContext(
           "certificado recusado — parcelamento em aberto",
         )
         return NextResponse.json({ error: err.message }, { status: 400 })
+      }
+      // Cadastro sem CPF: recusa esperada e acionável, igual à cota. Cair no
+      // genérico abaixo mandaria o aluno "tentar novamente" para sempre.
+      if (err instanceof MissingCpfError) {
+        contextLogger().info(
+          {
+            event: "student.certificates.cpf_missing",
+            enrollmentId: enrollment.id,
+            studentId: session.studentId,
+          },
+          "certificado recusado — aluno sem CPF no cadastro",
+        )
+        return NextResponse.json(
+          { error: err.message, code: "STUDENT_CPF_REQUIRED" },
+          { status: 400 },
+        )
       }
       contextLogger().error(
         {

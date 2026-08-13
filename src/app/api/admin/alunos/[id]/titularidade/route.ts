@@ -6,6 +6,8 @@ import {
   applyTitularityCorrection,
   markTitularityReviewed,
   titularitySchema,
+  TitularityCpfConflictError,
+  TitularityCpfRequiredError,
   TitularityScopeError,
 } from "@/lib/students/titularity/apply"
 import { prisma } from "@/lib/prisma"
@@ -121,6 +123,18 @@ export const POST = withRequestContextParams<{ id: string }>(
         return NextResponse.json(
           { error: "Aluno não encontrado" },
           { status: 404 },
+        )
+      }
+      // Recusas ESPERADAS e acionáveis (falta o CPF do aluno; o CPF já é de
+      // outro cadastro). Sem estes dois, quem revisa recebe um 500 genérico e
+      // não descobre o que precisa fazer.
+      if (
+        err instanceof TitularityCpfRequiredError ||
+        err instanceof TitularityCpfConflictError
+      ) {
+        return NextResponse.json(
+          { error: err.message, code: err.code, fields: { cpf: [err.message] } },
+          { status: 400 },
         )
       }
       throw err

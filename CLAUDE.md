@@ -583,9 +583,22 @@ de idade em lugar nenhum do codigo.
   trava de CPF igual e a escrita tri-estado.
 - **Decisoes do dono:** CPF do aluno obrigatorio (inclusive menor); data de
   nascimento obrigatoria em toda porta de venda; e-mail do responsavel em campo
-  proprio (o do aluno segue sendo a chave de login). **`certificate_require_cpf`
-  continua `false` em producao** — nao foi ligado junto, mudaria a emissao dos
-  230 alunos de uma vez.
+  proprio (o do aluno segue sendo a chave de login).
+- **`certificate_require_cpf` LIGADO em producao (2026-08-13).** Impacto medido
+  antes de virar a chave: 1 aluno sem CPF, sem matricula ativa, e ZERO
+  certificados emitidos sem CPF — ninguem foi bloqueado. Toggle em
+  /admin/certificados/configuracoes.
+  - O gate deixou de lancar `Error` generico e virou `MissingCpfError`, no
+    mesmo padrao do `PaceGateError`: recusa ESPERADA e ACIONAVEL. Antes o aluno
+    recebia "nao foi possivel emitir agora, tente novamente" — conselho que
+    nunca funcionaria, porque repetir nao preenche CPF nenhum.
+  - **A correcao de titularidade passou a EXIGIR o CPF do aluno quando ha
+    certificado a reescrever.** Ela permitia CPF vazio (para nao travar o
+    conserto do NOME de cadastro legado); com a exigencia ligada isso gravaria
+    `studentCpf: null` num documento — trocaria um certificado errado por um
+    certificado incompleto. Sem certificado emitido, o CPF segue opcional: a
+    maioria dos cadastros a corrigir nao tem documento, e travar tudo por um
+    RG que a unidade nao tem em maos seria pior.
 - **Divida registrada:** dois irmaos menores com o mesmo e-mail continuam sem
   caber (`@@unique([tenantId, email])`); a mensagem de conflito passou a
   explicar em vez de so barrar. O conserto real e login/identidade por CPF —

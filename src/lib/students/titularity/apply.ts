@@ -39,10 +39,14 @@ export const titularitySchema = withGuardianRule(
     nome: z.string().trim().min(3).max(160),
     nascimento: nascimentoFieldOptional,
     /**
-     * CPF do aluno. OPCIONAL aqui, ao contrário da venda nova: travar a
-     * correção do NOME por um documento que a unidade não tem em mãos no
-     * momento é pior do que corrigir só o nome. O certificado já sabe imprimir
-     * sem CPF (`certificateRequireCpf` está desligado em produção).
+     * CPF do aluno. Opcional no SCHEMA, obrigatório no HANDLER quando a
+     * correção vai tocar certificado — ver `applyTitularityCorrection`.
+     *
+     * Por que não simplesmente obrigatório: a maioria dos cadastros a corrigir
+     * não tem certificado emitido, e travar a correção do NOME por um documento
+     * que a unidade não tem em mãos no momento é pior do que corrigir só o nome.
+     * Mas o CPF é impresso no certificado e usado na validação pública, então
+     * reescrever um documento SEM ele produziria um certificado inválido.
      */
     cpf: z.string().trim().max(20).optional().or(z.literal("")),
     ...guardianShape,
@@ -93,6 +97,20 @@ export class TitularityScopeError extends Error {
  * correto do filho. Sem este tratamento o P2002 sobe como 500 generico e quem
  * revisa nao descobre que a causa e um cadastro duplicado.
  */
+/**
+ * Correção que reescreveria um certificado sem o CPF do aluno. O CPF é impresso
+ * no documento e conferido na validação pública — trocar o nome e apagar o CPF
+ * transformaria um certificado errado num certificado incompleto.
+ */
+export class TitularityCpfRequiredError extends Error {
+  readonly code = "TITULARITY_CPF_REQUIRED"
+  constructor(qtd: number) {
+    super(
+      `Informe o CPF do aluno: ${qtd} certificado(s) será(ão) reemitido(s) com esses dados, e o CPF é impresso no documento e usado na validação pública.`,
+    )
+  }
+}
+
 export class TitularityCpfConflictError extends Error {
   readonly code = "TITULARITY_CPF_CONFLICT"
   constructor() {
@@ -170,6 +188,13 @@ export async function applyTitularityCorrection(
         select: { id: true, code: true, studentName: true, studentCpf: true },
       })
     : []
+
+  // O CPF do aluno passa a ser exigido assim que houver documento a reescrever.
+  // Sem isto, a correção trocaria o nome e gravaria `studentCpf: null` — um
+  // certificado sem CPF, que é justamente o que a exigência proíbe.
+  if (certificates.length > 0 && !alunoCpf) {
+    throw new TitularityCpfRequiredError(certificates.length)
+  }
 
   const now = new Date()
 

@@ -31,6 +31,7 @@ import {
   applyTitularityCorrection,
   markTitularityReviewed,
   titularitySchema,
+  TitularityCpfRequiredError,
   TitularityScopeError,
 } from "./apply"
 
@@ -115,7 +116,7 @@ describe("titularitySchema — o cadastro LEGADO precisa passar", () => {
 
 describe("applyTitularityCorrection", () => {
   it("o cadastro passa a ser do ALUNO e a mãe vira responsável", async () => {
-    await applyTitularityCorrection("s1", parse(), ACTOR)
+    await applyTitularityCorrection("s1", parse({ cpf: "529.982.247-25" }), ACTOR)
 
     const data = tx.student.update.mock.calls[0]![0].data
     expect(data.nome).toBe("João Pedro da Silva")
@@ -126,7 +127,7 @@ describe("applyTitularityCorrection", () => {
   it("MANTÉM o código do certificado e só troca o snapshot", async () => {
     // Trocar o código faria /validar/{code} responder "não encontrado" para
     // quem conferisse o código antigo — lê como fraude.
-    await applyTitularityCorrection("s1", parse(), ACTOR)
+    await applyTitularityCorrection("s1", parse({ cpf: "529.982.247-25" }), ACTOR)
 
     const call = tx.certificate.update.mock.calls[0]![0]
     expect(call.where).toEqual({ id: "cert1" })
@@ -135,7 +136,7 @@ describe("applyTitularityCorrection", () => {
   })
 
   it("nulifica pdfUrl e pdfGeneratedAt para forçar a regeneração", async () => {
-    await applyTitularityCorrection("s1", parse(), ACTOR)
+    await applyTitularityCorrection("s1", parse({ cpf: "529.982.247-25" }), ACTOR)
 
     const data = tx.certificate.update.mock.calls[0]![0].data
     expect(data.pdfUrl).toBeNull()
@@ -143,26 +144,55 @@ describe("applyTitularityCorrection", () => {
   })
 
   it("NÃO toca em certificado revogado (é fato histórico)", async () => {
-    await applyTitularityCorrection("s1", parse(), ACTOR)
+    await applyTitularityCorrection("s1", parse({ cpf: "529.982.247-25" }), ACTOR)
     expect(p.certificate.findMany.mock.calls[0]![0].where).toMatchObject({
       revokedAt: null,
     })
   })
 
   it("regenera o PDF de forma ansiosa após o commit", async () => {
-    await applyTitularityCorrection("s1", parse(), ACTOR)
+    await applyTitularityCorrection("s1", parse({ cpf: "529.982.247-25" }), ACTOR)
     expect(generateAndUploadPdf).toHaveBeenCalledWith("cert1")
   })
 
   it("audita DENTRO da transação: aluno + um log por certificado", async () => {
     // `logAudit` engole falha por design; para reescrita de documento oficial um
     // buraco silencioso na trilha é inaceitável, então vai na transação.
-    await applyTitularityCorrection("s1", parse(), ACTOR)
+    await applyTitularityCorrection("s1", parse({ cpf: "529.982.247-25" }), ACTOR)
 
     const actions = tx.auditLog.create.mock.calls.map((c) => c[0].data.action)
     expect(actions).toContain("certificate.titularity.correct")
     expect(actions).toContain("student.titularity.correct")
     expect(p.auditLog.create).not.toHaveBeenCalled()
+  })
+
+  it("EXIGE o CPF do aluno quando há certificado a reescrever", async () => {
+    // Trocar o nome e gravar `studentCpf: null` produziria um certificado sem
+    // CPF — o CPF é impresso no documento e conferido na validação pública.
+    await expect(
+      applyTitularityCorrection("s1", parse(), ACTOR),
+    ).rejects.toBeInstanceOf(TitularityCpfRequiredError)
+    expect(tx.student.update).not.toHaveBeenCalled()
+    expect(tx.certificate.update).not.toHaveBeenCalled()
+  })
+
+  it("com o CPF do aluno informado, o certificado é corrigido", async () => {
+    await applyTitularityCorrection(
+      "s1",
+      parse({ cpf: "529.982.247-25" }),
+      ACTOR,
+    )
+    expect(tx.certificate.update.mock.calls[0]![0].data.studentCpf).toBe(
+      "52998224725",
+    )
+  })
+
+  it("SEM certificado, o CPF do aluno continua opcional", async () => {
+    // A maioria dos cadastros a corrigir não tem certificado; travar a correção
+    // do NOME por um documento ausente seria pior do que corrigir só o nome.
+    p.certificate.findMany.mockResolvedValue([])
+    await applyTitularityCorrection("s1", parse(), ACTOR)
+    expect(tx.student.update).toHaveBeenCalledTimes(1)
   })
 
   it("não corrige certificados quando a pessoa optou por não corrigir", async () => {

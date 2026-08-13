@@ -39,6 +39,23 @@ export class PaceGateError extends Error {
   }
 }
 
+/**
+ * Aluno sem CPF com a exigencia de CPF no certificado LIGADA.
+ *
+ * Tipo proprio pelo mesmo motivo do `PaceGateError`: e uma recusa ESPERADA e
+ * ACIONAVEL, nao falha de servidor. Sem ele o aluno recebia "nao foi possivel
+ * emitir agora, tente novamente" — conselho que nunca vai funcionar, porque
+ * repetir nao preenche CPF nenhum.
+ */
+export class MissingCpfError extends Error {
+  constructor() {
+    super(
+      "Certificado exige o CPF do aluno. Peça à sua unidade para completar o cadastro — o CPF é impresso no documento e usado na validação pública.",
+    )
+    this.name = "MissingCpfError"
+  }
+}
+
 async function ensureSystemSettings() {
   return prisma.systemSettings.upsert({
     where: { id: SETTINGS_ID },
@@ -136,10 +153,8 @@ export async function issueCertificateIfEligible(
   }
 
   const settings = await ensureSystemSettings()
-  if (settings.certificateRequireCpf && !enrollment.student.cpf) {
-    throw new Error(
-      "Aluno sem CPF — exigencia da configuracao certificateRequireCpf.",
-    )
+  if (settings.certificateRequireCpf && !enrollment.student.cpf?.trim()) {
+    throw new MissingCpfError()
   }
 
   const tenantSlug = enrollment.tenant?.slug ?? null
