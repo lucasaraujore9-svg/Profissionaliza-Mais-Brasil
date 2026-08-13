@@ -121,8 +121,17 @@ export function PmbMpTokenConfig({
               className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 font-mono text-xs focus:border-[var(--color-pmb-green)] focus:outline-none"
             />
             <p className="mt-1 text-[11px] text-gray-500">
-              Pegue em mercadopago.com.br/developers → Suas integrações → Credenciais
-              de produção → Access Token.
+              Pegue no{" "}
+              <a
+                href="https://www.mercadopago.com.br/developers/panel/app"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium text-[#009EE3] underline underline-offset-2"
+              >
+                painel de desenvolvedores do Mercado Pago
+              </a>{" "}
+              → sua aplicação → <strong>Credenciais de produção</strong> →{" "}
+              <strong>Access Token</strong>.
             </p>
           </div>
 

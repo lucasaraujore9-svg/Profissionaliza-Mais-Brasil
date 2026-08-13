@@ -6,11 +6,18 @@ liberadas **automaticamente** assim que o pagamento for aprovado.
 
 Você vai fazer isso **uma única vez**. Leva cerca de 10 minutos.
 
-> Você vai precisar de **duas informações** do Mercado Pago:
-> 1. O **Access Token de produção**
-> 2. A **Chave secreta** do webhook (assinatura)
+> Você vai precisar de **três informações** do Mercado Pago, nesta ordem:
+> 1. A **Public Key** de produção
+> 2. O **Access Token** de produção
+> 3. A **assinatura secreta** do webhook
 >
-> Os dois são colados no seu painel, em **Configurações → Pagamentos**.
+> As três são coladas no seu painel, em **Configurações → Pagamento**, na mesma
+> ordem em que os campos aparecem lá.
+
+**Por que a ordem importa:** a Public Key e o Access Token saem da **mesma tela**
+de credenciais e já existem assim que você cria a aplicação. Já a assinatura
+secreta **só é gerada depois** que você cadastra a URL de notificação — por isso
+ela é a última.
 
 ---
 
@@ -18,12 +25,12 @@ Você vai fazer isso **uma única vez**. Leva cerca de 10 minutos.
 
 - Tenha uma **conta no Mercado Pago** (a mesma onde você quer receber o dinheiro).
 - Faça login no Mercado Pago **na mesma conta** durante todo o processo.
-- Deixe a aba do **seu painel** aberta em **Configurações → Pagamentos** — você
-  vai copiar uma URL de lá no Passo 2.
+- Deixe a aba do **seu painel** aberta em **Configurações → Pagamento** — o passo
+  a passo completo está lá, e é de lá que você copia a URL do Passo 4.
 
 ---
 
-## Passo 1 — Pegar o Access Token de produção
+## Passo 1 — Abrir o painel de desenvolvedores e criar a aplicação
 
 1. Acesse o painel de desenvolvedores (Suas integrações):
    👉 **https://www.mercadopago.com.br/developers/panel/app**
@@ -38,16 +45,38 @@ Você vai fazer isso **uma única vez**. Leva cerca de 10 minutos.
    - Pode ser que o Mercado Pago peça para você **ativar as credenciais de
      produção** preenchendo alguns dados do seu negócio. Faça isso.
 
-4. Copie o **Access Token** (começa com `APP_USR-...`).
-   - ⚠️ Use as **credenciais de PRODUÇÃO**, não as de teste.
-   - ⚠️ Esse token é secreto — não compartilhe com ninguém além do nosso painel.
-
 📎 Ajuda oficial: [Onde encontro as credenciais?](https://www.mercadopago.com.br/ajuda/onde-encontro-credenciais_20214)
 · [Credenciais (documentação)](https://www.mercadopago.com.br/developers/pt/docs/your-integrations/credentials)
 
 ---
 
-## Passo 2 — Configurar o webhook e pegar a Chave secreta
+## Passo 2 — Copiar a Public Key
+
+Na tela de **Credenciais de produção**, o **primeiro** campo é a **Public Key**.
+
+1. Copie o valor (começa com `APP_USR-...`).
+2. Cole no seu painel, no campo **Public Key (produção)**.
+
+> A Public Key é o que monta a tela de pagamento **dentro da sua loja**: o aluno
+> digita o cartão no seu site, sem ser redirecionado para o Mercado Pago. Sem
+> ela, o checkout não abre.
+
+---
+
+## Passo 3 — Copiar o Access Token
+
+Na **mesma tela**, logo abaixo da Public Key, está o **Access Token**.
+
+1. Copie o valor (também começa com `APP_USR-...`).
+2. Cole no seu painel, no campo **Access Token (produção)**.
+
+- ⚠️ Use as **credenciais de PRODUÇÃO**, não as de teste.
+- ⚠️ Esse token é secreto — não compartilhe com ninguém além do nosso painel.
+  Ele é criptografado antes de ser salvo e ninguém da equipe vê o valor.
+
+---
+
+## Passo 4 — Cadastrar a URL de notificação (webhook)
 
 O *webhook* é o aviso que o Mercado Pago envia ao nosso sistema quando um
 pagamento é aprovado. É ele que dispara a matrícula automática.
@@ -59,10 +88,11 @@ pagamento é aprovado. É ele que dispara a matrícula automática.
 2. Clique em **Configurar notificação** e selecione o modo **Produção**.
 
 3. No campo **URL**, cole a **URL do webhook da sua loja**.
-   - Essa URL está no **seu painel**, em **Configurações → Pagamentos**, no bloco
-     *"URL de notificação (webhook)"* — clique em **Copiar** e cole aqui.
+   - Essa URL está no **seu painel**, em **Configurações → Pagamento**, no
+     Passo 4 do tutorial — clique em **Copiar** e cole aqui.
    - Ela tem este formato (com o nome da sua loja no final):
      `https://www.profissionalizamaisbrasil.com.br/api/webhooks/mercadopago?tenant=SUA-LOJA`
+   - Cole a URL **inteira**, incluindo o trecho depois do `?`.
 
 4. Em **Eventos**, marque:
    - ✅ **Pagamentos** (obrigatório)
@@ -71,31 +101,36 @@ pagamento é aprovado. É ele que dispara a matrícula automática.
 
 5. Clique em **Salvar**.
 
-6. Após salvar, o Mercado Pago mostra a **Chave secreta** (também chamada de
-   *assinatura secreta* / *secret signature*). Clique para **revelar** e
-   **copie** esse valor.
-   - ⚠️ Sem essa chave, a matrícula automática **não funciona**.
-
 📎 Ajuda oficial: [Webhooks (documentação)](https://www.mercadopago.com.br/developers/pt/docs/your-integrations/notifications/webhooks)
 
 ---
 
-## Passo 3 — Colar as informações no seu painel
+## Passo 5 — Copiar a assinatura secreta
 
-1. Volte ao **seu painel** → **Configurações → Pagamentos**.
+Depois de salvar o webhook do Passo 4, o Mercado Pago mostra a
+**assinatura secreta** (também chamada de *chave secreta* / *secret signature*),
+na própria tela de Webhooks.
 
-2. Clique em **Conectar gateway de pagamento** (ou, se já estiver conectado,
-   no aviso para cadastrar a assinatura).
+1. Clique para **revelar** e **copie** esse valor.
+2. Cole no seu painel, no campo **Assinatura secreta do webhook**.
 
-3. Preencha:
-   - **Access Token MP** → o token do **Passo 1** (`APP_USR-...`).
-   - **Assinatura secreta do webhook** → a chave do **Passo 2**.
+- ⚠️ Sem essa chave, a matrícula automática **não funciona**: o aluno paga e não
+  recebe o acesso.
+- Se ainda não conseguiu gerá-la, você pode salvar sem ela e voltar depois — o
+  painel mostra um aviso amarelo com o campo para cadastrá-la.
 
-4. Clique em **Salvar**.
+---
 
-✅ Pronto! Quando o status mostrar **Conectado** (em verde), está tudo certo.
-Se aparecer **"Conectado · falta assinatura"** (em amarelo), volte ao Passo 2 e
-cadastre a chave secreta.
+## Passo 6 — Salvar no seu painel
+
+1. Volte ao **seu painel** → **Configurações → Pagamento**.
+2. Confira os três campos preenchidos (Public Key, Access Token e assinatura
+   secreta).
+3. Clique em **Salvar e conectar Mercado Pago**.
+
+✅ Pronto! Quando o status mostrar **Conectado** (em verde) e os três itens do
+checklist estiverem verdes, está tudo certo. Se aparecer
+**"Conexão incompleta"** (em amarelo), o próprio painel indica qual item falta.
 
 ---
 
@@ -113,11 +148,13 @@ cadastre a chave secreta.
 
 | Situação | O que fazer |
 |---|---|
-| Status fica em **"falta assinatura"** | Você colou o token mas não a Chave secreta. Refaça o Passo 2 e cadastre a chave. |
+| Status fica em **"Conexão incompleta"** | Olhe o checklist do card: o item amarelo diz o que falta (Public Key ou assinatura secreta). |
+| **Não acho a Public Key / o Access Token** | Elas ficam **dentro da aplicação** (developers → sua aplicação → Credenciais de produção), não na conta comum do Mercado Pago. |
 | Aluno paga mas **não é matriculado** | Confirme que a **URL** colada no Mercado Pago é exatamente a do seu painel e que o evento **Pagamentos** está marcado. |
 | Mercado Pago acusa **URL inválida** ao salvar | Use a URL **completa** copiada do painel (com `https://www.` no começo e `?tenant=...` no final). |
 | Usei o token de **teste** | Troque pelas **credenciais de produção** (`APP_USR-...`). |
-| Não acho a **Chave secreta** | Ela só aparece **depois de salvar** a configuração de Webhook, na própria tela de Webhooks. |
+| Não acho a **assinatura secreta** | Ela só aparece **depois de salvar** a configuração de Webhook (Passo 4), na própria tela de Webhooks. |
+| Erro **"conta não é do Brasil"** | Use uma conta do Mercado Pago **brasileira** (BRL) — é ela que recebe em reais. |
 
 ---
 
@@ -126,7 +163,7 @@ cadastre a chave secreta.
 - O dinheiro das vendas cai **direto na sua conta do Mercado Pago**.
 - Seus tokens são **criptografados** antes de serem salvos — ninguém da equipe vê
   o valor.
-- Você pode **desconectar** a qualquer momento em Configurações → Pagamentos.
+- Você pode **desconectar** a qualquer momento em Configurações → Pagamento.
 
 ---
 
