@@ -59,8 +59,6 @@ export interface CertificateRenderFields {
   code: string
   /** Nome da unidade emissora exibido no certificado. */
   unidade: string
-  /** Percentual de conclusão do curso (0-100); null => assume 100% na página 2. */
-  progressPercent: number | null
 }
 
 /**
@@ -108,7 +106,6 @@ export async function renderCertificateBuffer(
     completionDateFormatted: upperCert(formatCompletionDate(fields.completionDate)),
     code: upperCert(fields.code),
     unidade: upperCert(fields.unidade),
-    progressPercent: fields.progressPercent,
     validationUrl,
     qrCodeDataUrl,
     bodyResolved,
@@ -139,7 +136,6 @@ export async function generateAndUploadPdf(
     where: { id: certificateId },
     include: {
       tenant: { select: { name: true, slug: true } },
-      enrollment: { select: { progressPercent: true } },
       course: { select: { matrizCurricular: true } },
     },
   })
@@ -170,7 +166,6 @@ export async function generateAndUploadPdf(
     completionDate: cert.completionDate,
     code: cert.code,
     unidade,
-    progressPercent: cert.enrollment?.progressPercent ?? null,
   })
   const path = pdfPathFor(cert.tenantId, cert.id)
   const upload = await uploadCertificatePdf(path, buffer)

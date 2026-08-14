@@ -21,11 +21,6 @@ export interface CertificateRenderData {
   completionDateFormatted: string
   code: string
   unidade: string
-  /**
-   * Percentual de conclusão do curso (0-100) sincronizado da plataforma.
-   * Exibido no verso (página 2). `null` => assume 100% (certificado de conclusão).
-   */
-  progressPercent: number | null
   validationUrl: string
   qrCodeDataUrl: string | null
   /**

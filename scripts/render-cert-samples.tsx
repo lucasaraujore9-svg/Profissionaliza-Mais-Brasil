@@ -69,7 +69,6 @@ async function makeData(
     completionDateFormatted: "01 de junho de 2026",
     code: "pmb-7k3x9a2",
     unidade: "profissionaliza mais brasil",
-    progressPercent: 100,
     validationUrl,
     qrCodeDataUrl: qr,
     bodyResolved: body,

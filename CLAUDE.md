@@ -665,6 +665,49 @@ valem como padrao, nao so como conserto:
   componente `"use client"` arrasta o driver `pg` para o navegador e quebra o
   build com "Can't resolve 'dns'".
 
+### Aproveitamento do certificado + progresso sob demanda (2026-08-14)
+
+Aluno concluiu na plataforma de aulas, nao conseguiu emitir o certificado, e
+quando o SUPER_ADMIN forcou a emissao o documento saiu com "Aproveitamento:
+67%". Dois defeitos independentes, ambos com a mesma raiz: **o progresso e uma
+copia pull-only e ninguem a atualizava na hora que ela decidia algo**.
+
+- **A EA nao tem webhook.** O progresso so entrava por (a) cron diario das 07:00
+  e (b) o aluno abrir `/aluno/cursos`. **Nenhuma tela de emissao** — admin,
+  painel ou botao do aluno — puxava da EA antes de decidir "concluiu?". O
+  operador via CONCLUIDO na plataforma de aulas e EM_ANDAMENTO aqui, com ate 24h
+  de defasagem. Agora as tres portas chamam `syncStudentProgressBestEffort`
+  (`lib/students/progress.ts`); na rota do aluno so no caminho de RECUSA, para o
+  caso feliz nao pagar a latencia. O cache de 5 min da propria
+  `syncStudentProgress` evita martelar a EA.
+- **"Aproveitamento" nunca foi nota** — era `Enrollment.progressPercent`, o
+  percentual de AULAS ASSISTIDAS, e era lido **ao vivo na hora de gerar o PDF**.
+  Num documento oficial isso da (1) contradicao — "certificado de CONCLUSAO" que
+  imprime 67% — e (2) instabilidade: como o PDF e regerado sob demanda, o mesmo
+  certificado imprimia numeros diferentes a cada download. A EA marca CONCLUIDO
+  **abaixo de 100%** (o contrato documenta `CONCLUIDO / 95%`; ha certificados em
+  producao com 88% e 97%), entao nem sincronizar resolveria. Agora e a constante
+  `CERTIFICATE_COMPLETION_PERCENT = 100` e o `progressPercent` foi removido de
+  ponta a ponta do pipeline de render (`render-data` → `generate-pdf` →
+  3 layouts → sample). O preview HTML **ja** mostrava 100% fixo: o PDF era o
+  divergente.
+- **Mudanca no CODIGO de render nao invalidava PDF gerado.** `freshness.ts` so
+  comparava fontes de DADOS (template, tenant, settings) — nenhuma se move
+  quando o que muda e o layout. Sem isso a correcao acima so alcancaria
+  certificados novos. Entrou `RENDER_REVISION_AT`: PDF gerado antes dela e
+  desatualizado. **Ao mexer no codigo de render, bumpe a data para o inicio do
+  dia SEGUINTE** — ancorar em "agora" deixaria os PDFs gerados na janela entre
+  commit e deploy marcados como atuais, preservando o conteudo errado. A
+  comparacao fica FORA do try/catch, senao o fallback "assume atual" de falha de
+  leitura a engole.
+- **Descobertas de producao:** `certificate_auto_issue` esta **false** (toda
+  emissao e manual — o `toIssueCert` do sync nunca dispara) e
+  `certificate_min_percent` e **90**, nao o default 80 do schema. E o cron de
+  progresso so varre `status: ACTIVE`: emitir o certificado promove a matricula
+  a COMPLETED e ela sai da fila de sync para sempre. Nao e mais problema para o
+  documento (que agora nao le progresso), mas congela o "% concluido" exibido em
+  `/aluno/cursos`.
+
 ### Bugs conhecidos (pendentes)
 
 - **Middleware file convention deprecado** no Next 16 (usar `proxy` em vez de `middleware`).

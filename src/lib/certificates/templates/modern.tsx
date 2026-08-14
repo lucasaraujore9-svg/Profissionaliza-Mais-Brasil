@@ -8,7 +8,7 @@ import {
   StyleSheet,
 } from "@react-pdf/renderer"
 import type { CertificateRenderData } from "./classic"
-import { certificateInfoPage, resolveCompletionPercent } from "./info-page"
+import { certificateInfoPage, CERTIFICATE_COMPLETION_PERCENT } from "./info-page"
 
 /**
  * Layout MODERN: barra lateral colorida solida com logo + barra superior
@@ -17,7 +17,7 @@ import { certificateInfoPage, resolveCompletionPercent } from "./info-page"
 export function ModernCertificate(data: CertificateRenderData) {
   const t = data.template
   const displayUrl = data.validationUrl.replace(/^https?:\/\//, "")
-  const pct = resolveCompletionPercent(data.progressPercent)
+  const pct = CERTIFICATE_COMPLETION_PERCENT
   const styles = StyleSheet.create({
     page: {
       padding: 0,

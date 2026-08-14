@@ -14,7 +14,6 @@ export function sampleCertificateFields(unidade: string): CertificateRenderField
     completionDate: new Date(),
     code: "EXEMPLO-12345",
     unidade,
-    progressPercent: 100,
     matrizCurricular: [
       "Introdução e fundamentos da profissão",
       "Ferramentas e materiais essenciais",

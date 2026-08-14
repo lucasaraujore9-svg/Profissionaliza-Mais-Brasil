@@ -7,6 +7,8 @@ import {
   MissingCpfError,
   PaceGateError,
 } from "@/lib/certificates/issue"
+import { isEnrollmentConcludedForCertificate } from "@/lib/certificates/eligibility"
+import { syncStudentProgressBestEffort } from "@/lib/students/progress"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { contextLogger } from "@/lib/logger"
 
@@ -88,9 +90,30 @@ export const POST = withRequestContext(
       select: { certificateMinPercent: true },
     })
 
-    const concluded =
-      enrollment.progressStatus === "CONCLUIDO" ||
-      (enrollment.progressPercent ?? 0) >= settings.certificateMinPercent
+    let concluded = isEnrollmentConcludedForCertificate(
+      enrollment,
+      settings.certificateMinPercent,
+    )
+    // Segunda chance com o progresso FRESCO. A plataforma de aulas não tem
+    // webhook: a cópia local pode ter até 24h (cron das 07:00) e recusar quem
+    // acabou de concluir. Só no caminho de recusa — o aluno que já consta
+    // concluído não paga a latência da chamada externa.
+    if (!concluded) {
+      await syncStudentProgressBestEffort(
+        session.studentId,
+        "student.certificates.sync_failed",
+      )
+      const refreshed = await prisma.enrollment.findUnique({
+        where: { id: enrollment.id },
+        select: { status: true, progressStatus: true, progressPercent: true },
+      })
+      concluded = refreshed
+        ? isEnrollmentConcludedForCertificate(
+            refreshed,
+            settings.certificateMinPercent,
+          )
+        : false
+    }
     if (!concluded) {
       return NextResponse.json(
         {

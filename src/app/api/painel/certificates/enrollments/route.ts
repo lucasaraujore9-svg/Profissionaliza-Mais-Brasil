@@ -6,6 +6,7 @@ import {
 } from "@/lib/enrollment/pace-gate"
 import { resolvePaceGateSettings } from "@/lib/enrollment/pace-settings"
 import { requirePainel } from "@/lib/auth/painel-guard"
+import { syncStudentProgressBestEffort } from "@/lib/students/progress"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 
 export const GET = withRequestContext(
@@ -31,6 +32,14 @@ export const GET = withRequestContext(
     if (student.tenantId !== ctx.tenantId) {
       return NextResponse.json({ error: "Aluno de outro tenant" }, { status: 403 })
     }
+
+    // Progresso fresco da plataforma de aulas antes de listar — é esta resposta
+    // que decide entre oferecer "emitir" e mostrar o bloqueio. Ver
+    // `syncStudentProgressBestEffort`.
+    await syncStudentProgressBestEffort(
+      studentId,
+      "painel.certificates.enrollments.sync_failed",
+    )
 
     const enrollments = await prisma.enrollment.findMany({
       where: { studentId, tenantId: ctx.tenantId },

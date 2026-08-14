@@ -7,7 +7,7 @@ import {
   Image,
   StyleSheet,
 } from "@react-pdf/renderer"
-import { certificateInfoPage, resolveCompletionPercent } from "./info-page"
+import { certificateInfoPage, CERTIFICATE_COMPLETION_PERCENT } from "./info-page"
 import type { CertificateRenderData } from "./render-data"
 
 export type { CertificateRenderData } from "./render-data"
@@ -20,7 +20,7 @@ export type { CertificateRenderData } from "./render-data"
 export function ClassicCertificate(data: CertificateRenderData) {
   const t = data.template
   const displayUrl = data.validationUrl.replace(/^https?:\/\//, "")
-  const pct = resolveCompletionPercent(data.progressPercent)
+  const pct = CERTIFICATE_COMPLETION_PERCENT
   const styles = StyleSheet.create({
     page: {
       padding: 0,

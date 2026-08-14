@@ -77,6 +77,32 @@ export interface SyncProgressResult {
 }
 
 /**
+ * `syncStudentProgress` que NUNCA lança — para os pontos onde o progresso
+ * fresco é desejável mas a operação não pode falhar por causa da plataforma de
+ * aulas (telas de emissão de certificado, listagens).
+ *
+ * Existe porque a EA não tem webhook: a única forma de saber que o aluno
+ * concluiu é perguntar. Sem isso, a decisão "concluiu?" era tomada sobre uma
+ * cópia de até 24h (o cron das 07:00), e o operador que via "concluído" na
+ * plataforma de aulas encontrava "em andamento" aqui — exatamente o caso que
+ * originou esta função. O custo é 1 chamada à EA, já protegida pelo cache de
+ * 5 min que a própria `syncStudentProgress` aplica.
+ */
+export async function syncStudentProgressBestEffort(
+  studentId: string,
+  event: string,
+): Promise<void> {
+  try {
+    await syncStudentProgress(studentId)
+  } catch (err) {
+    contextLogger().warn(
+      { err, event, studentId },
+      "sync de progresso falhou — segue com a cópia local (pode estar desatualizada)",
+    )
+  }
+}
+
+/**
  * Sincroniza o progresso de um aluno consultando a plataforma parceira.
  * - Pula se ja sincronizado recentemente (cache 5min).
  * - Atualiza Enrollment.progressPercent / progressStatus / lastLessonAt / progressSyncedAt.

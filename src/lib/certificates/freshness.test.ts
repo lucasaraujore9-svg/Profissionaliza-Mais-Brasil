@@ -28,11 +28,20 @@ vi.mock("@/lib/logger", () => ({
   contextLogger: () => ({ warn: vi.fn(), error: vi.fn() }),
 }))
 
-import { isCertificatePdfStale, ensureFreshCertificatePdf } from "./freshness"
+import {
+  isCertificatePdfStale,
+  ensureFreshCertificatePdf,
+  RENDER_REVISION_AT,
+} from "./freshness"
 
-const T0 = new Date("2026-06-01T00:00:00Z") // antes da geração
-const T1 = new Date("2026-06-05T00:00:00Z") // geração do PDF
-const T2 = new Date("2026-06-08T00:00:00Z") // depois da geração
+// A linha do tempo é ancorada em RENDER_REVISION_AT em vez de datas fixas: os
+// casos abaixo testam as fontes de DADOS, e um PDF gerado antes da revisão do
+// código é desatualizado por outro motivo — as asserções de "atual" passariam a
+// medir a regra errada (e quebrariam a cada bump da revisão).
+const DAY = 24 * 60 * 60 * 1000
+const T0 = new Date(RENDER_REVISION_AT.getTime() + 1 * DAY) // antes da geração
+const T1 = new Date(RENDER_REVISION_AT.getTime() + 5 * DAY) // geração do PDF
+const T2 = new Date(RENDER_REVISION_AT.getTime() + 8 * DAY) // depois da geração
 
 function mockSources(opts: {
   global?: Date | null
@@ -105,6 +114,33 @@ describe("isCertificatePdfStale — PDF acompanha o modelo vigente", () => {
     mockSources({ global: T0, settings: T2 })
     expect(
       await isCertificatePdfStale({ tenantId: null, pdfUrl: "u", pdfGeneratedAt: T1 }),
+    ).toBe(true)
+  })
+
+  it("PDF gerado ANTES da revisão do código => desatualizado, mesmo sem fonte de dados nova", async () => {
+    // Foi o buraco que deixou "Aproveitamento: 67%" congelado num certificado
+    // de conclusão: nenhuma fonte de DADOS se move quando muda o layout. As
+    // fontes são anteriores ao próprio PDF de propósito — sem a regra da
+    // revisão este caso é "atual", que é justamente o comportamento errado.
+    const oldSource = new Date(RENDER_REVISION_AT.getTime() - 10 * DAY)
+    mockSources({ global: oldSource, settings: oldSource })
+    expect(
+      await isCertificatePdfStale({
+        tenantId: null,
+        pdfUrl: "u",
+        pdfGeneratedAt: new Date(RENDER_REVISION_AT.getTime() - 1),
+      }),
+    ).toBe(true)
+  })
+
+  it("revisão do código vence o fallback de erro de banco", async () => {
+    templateFindFirst.mockRejectedValue(new Error("db down"))
+    expect(
+      await isCertificatePdfStale({
+        tenantId: null,
+        pdfUrl: "u",
+        pdfGeneratedAt: new Date(RENDER_REVISION_AT.getTime() - 1),
+      }),
     ).toBe(true)
   })
 

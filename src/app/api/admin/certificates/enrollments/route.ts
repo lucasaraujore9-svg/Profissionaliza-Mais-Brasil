@@ -6,6 +6,7 @@ import {
 } from "@/lib/enrollment/pace-gate"
 import { resolvePaceGateSettings } from "@/lib/enrollment/pace-settings"
 import { PMB_TENANT_SLUG } from "@/lib/pmb-config"
+import { syncStudentProgressBestEffort } from "@/lib/students/progress"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { requireAdmin } from "@/lib/auth/admin-guard"
 
@@ -51,6 +52,14 @@ export const GET = withRequestContext(
       return NextResponse.json({ error: "Sem permissão" }, { status: 403 })
     }
   }
+
+  // Puxa o progresso da plataforma de aulas ANTES de listar: é esta resposta
+  // que decide se a tela oferece "emitir" ou a mensagem de bloqueio. Sem isto a
+  // decisão saía de uma cópia de até 24h e recusava aluno já concluído.
+  await syncStudentProgressBestEffort(
+    studentId,
+    "admin.certificates.enrollments.sync_failed",
+  )
 
   const enrollments = await prisma.enrollment.findMany({
     where: { studentId },

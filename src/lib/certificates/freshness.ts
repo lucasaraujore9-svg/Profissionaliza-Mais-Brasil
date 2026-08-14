@@ -4,6 +4,24 @@ import { contextLogger } from "@/lib/logger"
 
 const SETTINGS_ID = "default"
 
+/**
+ * Marca da última mudança no CÓDIGO de renderização do PDF (layouts, verso,
+ * regras de conteúdo). PDF gerado antes dela não reflete o certificado vigente.
+ *
+ * As fontes comparadas abaixo são todas de DADOS (template, tenant, settings) —
+ * nenhuma se move quando o que muda é o código do layout. Sem esta marca, uma
+ * correção no que vai impresso só alcançava certificados novos: os já gerados
+ * continuavam servindo o arquivo antigo para sempre, porque `pdfGeneratedAt`
+ * seguia mais recente que todas as fontes. Foi o que aconteceu com o campo
+ * "Aproveitamento", que imprimia progresso parcial em certificado de conclusão.
+ *
+ * **Ao mudar o código de renderização, bumpe esta data** para o início do dia
+ * SEGUINTE à alteração — nunca para "agora". A janela entre o commit e o deploy
+ * gera PDFs com o código antigo; ancorar em "agora" os deixaria marcados como
+ * atuais e o conteúdo errado sobreviveria à correção.
+ */
+export const RENDER_REVISION_AT = new Date("2026-08-15T00:00:00Z")
+
 export interface CertificatePdfRef {
   id: string
   tenantId: string | null
@@ -23,12 +41,20 @@ export interface CertificatePdfRef {
  * Comparar timestamps cobre tanto "Salvar" no editor quanto uploads de assets
  * (ambos tocam `updatedAt` da linha). Falha de leitura => considera atual
  * (não bloqueia o download por causa da checagem).
+ *
+ * Além das fontes de dados, o próprio CÓDIGO de renderização conta como fonte:
+ * ver `RENDER_REVISION_AT`.
  */
 export async function isCertificatePdfStale(
   cert: Pick<CertificatePdfRef, "tenantId" | "pdfUrl" | "pdfGeneratedAt">,
 ): Promise<boolean> {
   if (!cert.pdfUrl || !cert.pdfGeneratedAt) return true
   const generatedAt = cert.pdfGeneratedAt.getTime()
+
+  // Antes de qualquer I/O: o código de renderização mudou depois deste PDF.
+  // Fica fora do try/catch de propósito — é uma comparação local que não pode
+  // ser engolida pelo fallback "assume atual" de falha de leitura do banco.
+  if (generatedAt < RENDER_REVISION_AT.getTime()) return true
 
   try {
     const [globalTemplate, tenantTemplate, tenant, settings] = await Promise.all([

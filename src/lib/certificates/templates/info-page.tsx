@@ -20,18 +20,28 @@ export const LEGAL_BASIS_TEXT =
   "de pós-graduação."
 
 /**
- * Calcula o percentual de conclusão a exibir. Usa o progresso real da matrícula
- * (sincronizado da plataforma) quando disponível; na ausência (0/null) assume
- * 100%, pois a emissão de um certificado de CONCLUSÃO pressupõe o término do curso.
+ * Percentual de conclusão impresso no certificado — SEMPRE 100%.
+ *
+ * Antes isto era `Enrollment.progressPercent` lido AO VIVO na hora de gerar o
+ * PDF. Dois defeitos num documento oficial:
+ *
+ * 1. **Contradição.** O documento se intitula "certificado de CONCLUSÃO";
+ *    imprimir "Aproveitamento: 67%" nele afirma duas coisas incompatíveis. E o
+ *    número nunca foi nota: é o percentual de AULAS ASSISTIDAS reportado pela
+ *    plataforma de aulas, que marca "CONCLUÍDO" com percentual abaixo de 100
+ *    (o próprio contrato da EA documenta `CONCLUÍDO / 95%`, e há certificados
+ *    em produção emitidos com 88% e 97%).
+ * 2. **Instabilidade.** Sendo leitura ao vivo — e como o PDF é regerado sob
+ *    demanda por `ensureFreshCertificatePdf` — o MESMO certificado podia
+ *    imprimir números diferentes a cada download, conforme o progresso
+ *    sincronizasse depois da emissão.
+ *
+ * A premissa já estava escrita no código anterior, que assumia 100% quando o
+ * progresso vinha nulo/zero "pois a emissão de um certificado de CONCLUSÃO
+ * pressupõe o término do curso". O que faltava era aplicá-la sempre, inclusive
+ * quando havia um valor parcial para vazar.
  */
-export function resolveCompletionPercent(
-  progressPercent: number | null | undefined,
-): number {
-  if (typeof progressPercent === "number" && progressPercent > 0) {
-    return Math.min(100, Math.round(progressPercent))
-  }
-  return 100
-}
+export const CERTIFICATE_COMPLETION_PERCENT = 100
 
 /**
  * Densidade da grade da matriz curricular em função da quantidade de tópicos.
@@ -70,7 +80,7 @@ function matrizDensity(count: number): {
  */
 export function certificateInfoPage(data: CertificateRenderData): ReactElement {
   const t = data.template
-  const pct = resolveCompletionPercent(data.progressPercent)
+  const pct = CERTIFICATE_COMPLETION_PERCENT
   const displayUrl = data.validationUrl.replace(/^https?:\/\//, "")
   const matriz = (data.matrizCurricular ?? []).filter((s) => s.trim().length > 0)
   const hasMatriz = matriz.length > 0
