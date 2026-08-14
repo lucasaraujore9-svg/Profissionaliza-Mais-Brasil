@@ -71,6 +71,23 @@ export interface ChargeRow {
   markedPaidAt: Date | null
 }
 
+/**
+ * "Vencida há 12 dias" / "Vence hoje" / "Vence em 3 dias".
+ *
+ * Deriva da DATA, não do `status` do Asaas — o status só vira OVERDUE quando o
+ * webhook chega, e até lá um boleto vencido ontem se anunciaria como "a vencer".
+ * Mora aqui (módulo puro) porque a tabela do /admin e a planilha de export
+ * precisam dizer a mesma frase; duas cópias divergiriam no primeiro ajuste.
+ */
+export function situacaoCobranca(daysUntilDue: number): string {
+  if (daysUntilDue < 0) {
+    const dias = Math.abs(daysUntilDue)
+    return `Vencida há ${dias} ${dias === 1 ? "dia" : "dias"}`
+  }
+  if (daysUntilDue === 0) return "Vence hoje"
+  return `Vence em ${daysUntilDue} ${daysUntilDue === 1 ? "dia" : "dias"}`
+}
+
 export function urgencyOf(daysUntilDue: number): ChargeUrgency {
   if (daysUntilDue < 0) return "overdue"
   if (daysUntilDue === 0) return "due-today"

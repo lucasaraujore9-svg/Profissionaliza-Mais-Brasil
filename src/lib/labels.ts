@@ -16,6 +16,7 @@ import type {
   ReferralCommissionStatus,
   ReferralPayoutMethod,
   ReferralPayoutStatus,
+  TenantStatus,
 } from "@prisma/client"
 import type { StudentDisplayStatus } from "@/lib/students/display-status"
 
@@ -139,4 +140,34 @@ export function referralPayoutMethodLabel(
   method: ReferralPayoutMethod | string | null | undefined,
 ): string {
   return labelFrom(REFERRAL_PAYOUT_METHOD_LABELS, method)
+}
+
+/**
+ * Status de uma UNIDADE (`TenantStatus`) ou de uma cobrança da mensalidade dela
+ * no Asaas (`TenantPayment.status`, string livre vinda do gateway).
+ *
+ * Um mapa só, e não dois, porque a mesma badge (`ResellerStatusBadge`) renderiza
+ * os dois — e "PENDING" quer dizer a mesma coisa nos dois contextos. Separá-los
+ * obrigaria todo ponto de uso a saber de antemão qual dos dois está lendo.
+ */
+const TENANT_STATUS_LABELS: Record<string, string> = {
+  // Unidade
+  ACTIVE: "Ativo",
+  PENDING: "Pendente",
+  SUSPENDED: "Suspenso",
+  CANCELLED: "Cancelado",
+  // Cobrança da mensalidade no Asaas
+  RECEIVED: "Pago",
+  RECEIVED_IN_CASH: "Recebido em dinheiro",
+  CONFIRMED: "Confirmado",
+  OVERDUE: "Vencido",
+  REFUNDED: "Estornado",
+  DELETED: "Cancelado",
+  DELETING: "Apagando…",
+}
+
+export function tenantStatusLabel(
+  status: TenantStatus | string | null | undefined,
+): string {
+  return labelFrom(TENANT_STATUS_LABELS, status)
 }

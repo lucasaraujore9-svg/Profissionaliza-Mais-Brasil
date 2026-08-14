@@ -27,6 +27,7 @@ import { Button } from "@/components/ui/button"
 import { StatCardsSkeleton, TableRowsSkeleton } from "@/components/shared/loading-skeletons"
 import { NewResellerDialog } from "./new-reseller-dialog"
 import { ResellerBulkCancel } from "./reseller-bulk-cancel"
+import { ResellerExportButton } from "./reseller-export-button"
 
 interface ListResponse {
   data: {
@@ -141,7 +142,7 @@ export function ResellerListClient() {
     if (loading && !data) {
       return (
         <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
-          <TableRowsSkeleton rows={6} cols={5} />
+          <TableRowsSkeleton rows={6} cols={6} />
         </div>
       )
     }
@@ -179,8 +180,13 @@ export function ResellerListClient() {
             onFilterChange={setFilter}
           />
         </div>
-        {/* Mesma permissão que o POST /api/admin/revendedores exige. */}
-        {data?.can?.create && <NewResellerDialog onCreated={load} />}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Mesma permissão da lista (`unidades.view`) e o MESMO recorte: a
+              planilha sai com o filtro que está na tela. */}
+          <ResellerExportButton query={debouncedQuery} status={filter} />
+          {/* Mesma permissão que o POST /api/admin/revendedores exige. */}
+          {data?.can?.create && <NewResellerDialog onCreated={load} />}
+        </div>
       </div>
 
       {/* Só no balde "Nunca ativou" e só para quem cancela — mesma permissão

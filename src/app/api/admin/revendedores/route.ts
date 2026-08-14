@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server"
-import type { Prisma } from "@prisma/client"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { resolveReferrerFromCookie } from "@/lib/referrals/capture"
@@ -10,8 +9,16 @@ import {
   MIN_REASON_LENGTH,
   MAX_REASON_LENGTH,
   NEVER_ACTIVATED_WHERE,
-  NUNCA_ATIVOU_FILTER,
 } from "@/lib/tenants/lifecycle"
+import {
+  parseResellerListFilters,
+  resellerListWhere,
+} from "@/lib/admin/resellers/list-query"
+import {
+  getOpenChargesByTenant,
+  payUrlFor,
+  rollupOpenCharges,
+} from "@/lib/tenant-billing/charges"
 import { PMB_TENANT_SLUG } from "@/lib/pmb-config"
 import { createReseller } from "@/lib/resellers/create"
 import { requireAdmin, type AdminContext } from "@/lib/auth/admin-guard"
@@ -34,33 +41,13 @@ export const GET = withRequestContext(
   }
 
   const { searchParams } = new URL(request.url)
-  const q = searchParams.get("q")?.trim() ?? ""
-  const status = searchParams.get("status")?.trim().toUpperCase() ?? ""
-
-  const where: Prisma.TenantWhereInput = {}
-  if (q) {
-    where.OR = [
-      { name: { contains: q, mode: "insensitive" } },
-      { slug: { contains: q, mode: "insensitive" } },
-      { owner: { email: { contains: q, mode: "insensitive" } } },
-      // Busca tambem pelo nome do admin/dono da revenda (User.tenantId @unique).
-      { owner: { name: { contains: q, mode: "insensitive" } } },
-    ]
-  }
-  if (status && ["ACTIVE", "PENDING", "SUSPENDED", "CANCELLED"].includes(status)) {
-    where.status = status as Prisma.TenantWhereInput["status"]
-  } else if (status === NUNCA_ATIVOU_FILTER) {
-    // Não é um `TenantStatus` — é o recorte "fora do ar E nunca pagou", o mesmo
-    // balde do relatório. Vira filtro aqui para o dono poder revisar e cancelar
-    // essas unidades em lote.
-    Object.assign(where, NEVER_ACTIVATED_WHERE)
-  }
+  const filters = parseResellerListFilters(searchParams)
 
   // Escopo de visibilidade: `unidades.viewAll` vê todas; sem ela vale o recorte
   // do papel (gerente de unidades -> as que dá suporte; vendedor de revenda ->
   // as que vendeu; gerente de vendas -> as do time). `null` = nenhuma unidade.
-  const scope = await ctx.unidadesWhere()
-  if (!scope) {
+  const query = await resellerListWhere(ctx, filters)
+  if (!query) {
     return NextResponse.json({
       data: {
         stats: { total: 0, active: 0, pending: 0, suspended: 0, cancelled: 0 },
@@ -70,15 +57,7 @@ export const GET = withRequestContext(
       },
     })
   }
-  Object.assign(where, scope)
-
-  // Filtro manual por gerente de suporte: só faz sentido para quem vê todas.
-  if (ctx.can("unidades.viewAll")) {
-    const managerFilter = searchParams.get("manager")?.trim()
-    if (managerFilter === "unassigned") where.accountManagerId = null
-    else if (managerFilter) where.accountManagerId = managerFilter
-  }
-
+  const { where, scope } = query
   const scopeOnly = Object.keys(scope).length ? scope : undefined
 
   const [tenants, stats, nuncaAtivouStats, nuncaAtivouRows] = await Promise.all([
@@ -117,10 +96,16 @@ export const GET = withRequestContext(
     // Quais das unidades LISTADAS nunca pagaram — alimenta o selo e a seleção
     // em lote sem uma segunda consulta por linha.
     prisma.tenant.findMany({
-      where: { ...where, ...NEVER_ACTIVATED_WHERE },
+      where: { AND: [where, NEVER_ACTIVATED_WHERE] },
       select: { id: true },
     }),
   ])
+
+  // Vencimento da mensalidade: não existe coluna no `Tenant` (o `nextDueDate` do
+  // Asaas é da assinatura e só sai numa chamada live, inviável por linha). A
+  // fonte é `TenantPayment` — em UMA consulta para as 200 linhas, não uma por
+  // unidade.
+  const openByTenant = await getOpenChargesByTenant(tenants.map((t) => t.id))
 
   const statsMap: Record<string, number> = {
     ACTIVE: 0,
@@ -158,23 +143,40 @@ export const GET = withRequestContext(
         cancelled: statsMap.CANCELLED - nuncaAtivouCanceladas,
         nuncaAtivou: nuncaAtivouTotal,
       },
-      resellers: tenants.map((t) => ({
-        id: t.id,
-        name: t.name,
-        slug: t.slug,
-        status: t.status,
-        email: t.owner?.email ?? null,
-        ownerName: t.owner?.name ?? null,
-        referrerName: t.referrer?.name ?? null,
-        mrr: Number(t.planValue),
-        students: t._count.students,
-        accountManagerId: t.accountManagerId,
-        accountManagerName: t.accountManager?.name ?? null,
-        salesUserId: t.salesUserId,
-        salesUserName: t.salesUser?.name ?? null,
-        createdAt: t.createdAt.toISOString(),
-        nuncaAtivou: nuncaAtivouIds.has(t.id),
-      })),
+      resellers: tenants.map((t) => {
+        const billing = rollupOpenCharges(openByTenant.get(t.id) ?? [])
+        return {
+          id: t.id,
+          name: t.name,
+          slug: t.slug,
+          status: t.status,
+          email: t.owner?.email ?? null,
+          ownerName: t.owner?.name ?? null,
+          referrerName: t.referrer?.name ?? null,
+          mrr: Number(t.planValue),
+          students: t._count.students,
+          accountManagerId: t.accountManagerId,
+          accountManagerName: t.accountManager?.name ?? null,
+          salesUserId: t.salesUserId,
+          salesUserName: t.salesUser?.name ?? null,
+          createdAt: t.createdAt.toISOString(),
+          nuncaAtivou: nuncaAtivouIds.has(t.id),
+          // Próximo vencimento = a vencida mais antiga quando há atraso, senão a
+          // próxima a vencer (mesma regra do painel da unidade).
+          nextDue: billing.next
+            ? {
+                dueDate: billing.next.dueDate,
+                amount: billing.next.amount,
+                daysUntilDue: billing.next.daysUntilDue,
+                urgency: billing.next.urgency,
+                payUrl: payUrlFor(billing.next),
+              }
+            : null,
+          openCount: billing.openCount,
+          overdueCount: billing.overdueCount,
+          overdueAmount: billing.overdueAmount,
+        }
+      }),
       role: ctx.role,
       can,
     },

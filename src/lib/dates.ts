@@ -34,6 +34,40 @@ export function brDayStartUtc(now: Date = new Date()): Date {
   return new Date(`${ymd}T00:00:00.000Z`)
 }
 
+/**
+ * Dia civil BRASILEIRO de um INSTANTE, em "YYYY-MM-DD".
+ *
+ * Use para timestamps de verdade (`createdAt`, `paidAt`, `lastActiveAt`): o
+ * servidor roda em UTC, então uma venda das 22h de terça é 01h de quarta em UTC
+ * e apareceria no dia errado num relatório.
+ */
+export function brDayIso(date: Date): string {
+  return date.toLocaleDateString("en-CA", { timeZone: BR_TIMEZONE })
+}
+
+/** "YYYY-MM-DD HH:mm" no fuso brasileiro. Mesmo motivo de `brDayIso`. */
+export function brDateTimeIso(date: Date): string {
+  const day = brDayIso(date)
+  const time = date.toLocaleTimeString("en-GB", {
+    timeZone: BR_TIMEZONE,
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  })
+  return `${day} ${time}`
+}
+
+/**
+ * Dia de uma DATA CIVIL guardada como meia-noite UTC — `TenantPayment.dueDate`
+ * é o caso (`new Date("YYYY-MM-DD")` do Asaas).
+ *
+ * NÃO troque por `brDayIso` aqui: meia-noite UTC é 21h do dia ANTERIOR no
+ * Brasil, então converter o fuso de um vencimento o joga um dia para trás.
+ */
+export function utcDayIso(date: Date): string {
+  return date.toISOString().slice(0, 10)
+}
+
 const MS_PER_DAY = 86_400_000
 
 /**

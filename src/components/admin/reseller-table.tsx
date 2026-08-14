@@ -1,9 +1,26 @@
 import Link from "next/link"
 import { ChevronRight, Share2, Store } from "lucide-react"
 import { EmptyState } from "@/components/shared/empty-state"
+import {
+  situacaoCobranca,
+  type ChargeUrgency,
+} from "@/lib/tenant-billing/types"
 import { ResellerStatusBadge } from "./reseller-status"
 
 export type ResellerStatus = "ACTIVE" | "PENDING" | "SUSPENDED" | "CANCELLED"
+
+/**
+ * Próxima mensalidade da unidade para a PMB. É a cobrança VENCIDA mais antiga
+ * quando há atraso, senão a próxima a vencer — a mesma que o painel da unidade
+ * mostra, para as duas telas não discordarem sobre quem está devendo.
+ */
+export interface ResellerNextDue {
+  /** ISO do vencimento (data civil gravada como meia-noite UTC). */
+  dueDate: string
+  amount: number
+  daysUntilDue: number
+  urgency: ChargeUrgency
+}
 
 export interface ResellerRow {
   id: string
@@ -20,6 +37,8 @@ export interface ResellerRow {
   createdAt: string
   accountManagerId?: string | null
   accountManagerName?: string | null
+  nextDue?: ResellerNextDue | null
+  overdueCount?: number
 }
 
 interface ResellerTableProps {
@@ -30,6 +49,38 @@ interface ResellerTableProps {
 
 function formatMoney(v: number): string {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
+}
+
+/**
+ * `dueDate` é uma DATA civil gravada como meia-noite UTC. Formatar no fuso do
+ * navegador jogaria o vencimento um dia para trás no Brasil (21h do dia
+ * anterior) — daí o `timeZone: "UTC"`.
+ */
+function formatDueDate(iso: string): string {
+  return new Date(iso).toLocaleDateString("pt-BR", { timeZone: "UTC" })
+}
+
+const URGENCY_TEXT: Record<ChargeUrgency, string> = {
+  overdue: "text-red-600 font-semibold",
+  "due-today": "text-amber-600 font-semibold",
+  "due-soon": "text-amber-600",
+  scheduled: "text-gray-500",
+}
+
+function NextDueCell({ nextDue }: { nextDue?: ResellerNextDue | null }) {
+  if (!nextDue) {
+    return <span className="text-xs italic text-gray-400">sem cobrança</span>
+  }
+  return (
+    <>
+      <p className="font-mono text-sm text-[var(--color-pmb-green-900)]">
+        {formatDueDate(nextDue.dueDate)}
+      </p>
+      <p className={`mt-0.5 text-[11px] ${URGENCY_TEXT[nextDue.urgency]}`}>
+        {situacaoCobranca(nextDue.daysUntilDue)}
+      </p>
+    </>
+  )
 }
 
 export function ResellerTable({ rows, showManager = false, onAssign }: ResellerTableProps) {
@@ -52,6 +103,7 @@ export function ResellerTable({ rows, showManager = false, onAssign }: ResellerT
             <tr className="border-b border-gray-200 bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
               <th className="px-6 py-3 font-medium">Revendedor</th>
               <th className="px-6 py-3 text-right font-medium">MRR</th>
+              <th className="px-6 py-3 font-medium">Vencimento</th>
               <th className="px-6 py-3 text-right font-medium">Alunos</th>
               <th className="px-6 py-3 font-medium">Status</th>
               {showManager && <th className="px-6 py-3 font-medium">Gerente</th>}
@@ -78,6 +130,9 @@ export function ResellerTable({ rows, showManager = false, onAssign }: ResellerT
                 </td>
                 <td className="px-6 py-3 text-right font-mono font-semibold text-[var(--color-pmb-green-900)]">
                   {formatMoney(r.mrr)}
+                </td>
+                <td className="whitespace-nowrap px-6 py-3">
+                  <NextDueCell nextDue={r.nextDue} />
                 </td>
                 <td className="px-6 py-3 text-right font-mono text-gray-700">
                   {r.students.toLocaleString("pt-BR")}
@@ -160,6 +215,13 @@ export function ResellerTable({ rows, showManager = false, onAssign }: ResellerT
                   {r.students.toLocaleString("pt-BR")}
                 </span>
               </span>
+            </div>
+            <div className="mt-2 flex items-center justify-between text-xs text-gray-600">
+              <span>Vencimento</span>
+              {/* `div`, não `span`: NextDueCell renderiza parágrafos. */}
+              <div className="text-right">
+                <NextDueCell nextDue={r.nextDue} />
+              </div>
             </div>
             {showManager && (
               <div className="mt-3 flex items-center justify-between border-t border-gray-100 pt-3 text-xs">

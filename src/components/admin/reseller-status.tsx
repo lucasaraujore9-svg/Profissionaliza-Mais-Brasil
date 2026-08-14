@@ -1,4 +1,5 @@
 import { StatusBadge, type BadgeTone } from "@/components/shared/status-badge"
+import { tenantStatusLabel } from "@/lib/labels"
 
 /**
  * Badge de status unico para revendas (tenant) e suas faturas Asaas, sobre o
@@ -8,6 +9,10 @@ import { StatusBadge, type BadgeTone } from "@/components/shared/status-badge"
  * Aceita tanto os status de Tenant (ACTIVE/PENDING/SUSPENDED/CANCELLED) quanto
  * os de fatura Asaas (RECEIVED/CONFIRMED/OVERDUE/REFUNDED/DELETED). Status
  * desconhecido cai em neutral.
+ *
+ * O ROTULO vem de `tenantStatusLabel` (fonte unica em lib/labels) — o mapa que
+ * vivia aqui era a segunda copia, e o export de revendedores seria a terceira.
+ * So o TOM continua local: e decisao visual, nao traducao.
  */
 const TONE_MAP: Record<string, BadgeTone> = {
   // Tenant
@@ -24,19 +29,6 @@ const TONE_MAP: Record<string, BadgeTone> = {
   DELETING: "warning",
 }
 
-const LABEL_MAP: Record<string, string> = {
-  ACTIVE: "ativo",
-  PENDING: "pendente",
-  SUSPENDED: "suspenso",
-  CANCELLED: "cancelado",
-  RECEIVED: "pago",
-  CONFIRMED: "confirmado",
-  OVERDUE: "vencido",
-  REFUNDED: "estornado",
-  DELETED: "cancelado",
-  DELETING: "apagando…",
-}
-
 interface ResellerStatusBadgeProps {
   status: string
   className?: string
@@ -48,7 +40,7 @@ export function ResellerStatusBadge({
 }: ResellerStatusBadgeProps) {
   const key = status.toUpperCase()
   const tone = TONE_MAP[key] ?? "neutral"
-  const label = LABEL_MAP[key] ?? status.toLowerCase()
+  const label = tenantStatusLabel(key).toLowerCase()
   return (
     <StatusBadge tone={tone} className={className}>
       {label}
