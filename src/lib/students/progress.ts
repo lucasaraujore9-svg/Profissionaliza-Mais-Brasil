@@ -104,13 +104,21 @@ export async function syncStudentProgressBestEffort(
 
 /**
  * Sincroniza o progresso de um aluno consultando a plataforma parceira.
- * - Pula se ja sincronizado recentemente (cache 5min).
+ * - Pula se ja sincronizado recentemente (cache 5min) — salvo `force`.
  * - Atualiza Enrollment.progressPercent / progressStatus / lastLessonAt / progressSyncedAt.
  * - Emite certificado automaticamente quando elegivel (configuravel).
+ *
+ * `force` existe para o botao "Atualizar progresso" do aluno: os dois atalhos de
+ * 5 min sao otimizacao para chamada AUTOMATICA (abertura de pagina, cron), mas
+ * num pedido EXPLICITO eles transformariam o botao em placebo — o aluno clica,
+ * nada muda, e ele conclui que o sistema esta quebrado. Quem passa `force` e
+ * responsavel por limitar a frequencia (a rota do aluno usa rate limit).
  */
 export async function syncStudentProgress(
   studentId: string,
+  options: { force?: boolean } = {},
 ): Promise<SyncProgressResult> {
+  const force = options.force ?? false
   const student = await prisma.student.findUnique({
     where: { id: studentId },
     select: {
@@ -123,13 +131,15 @@ export async function syncStudentProgress(
   }
 
   // Cache no Redis (best-effort)
-  try {
-    const cached = await cacheGet(progressCacheKey(studentId))
-    if (cached) {
-      return { updated: 0, certificatesIssued: 0 }
+  if (!force) {
+    try {
+      const cached = await cacheGet(progressCacheKey(studentId))
+      if (cached) {
+        return { updated: 0, certificatesIssued: 0 }
+      }
+    } catch {
+      // ignora — cache e otimizacao
     }
-  } catch {
-    // ignora — cache e otimizacao
   }
 
   // Cache de banco (fallback se Redis off): se sincronizado < 5min, pula
@@ -155,7 +165,11 @@ export async function syncStudentProgress(
     if (!acc || e.progressSyncedAt > acc) return e.progressSyncedAt
     return acc
   }, null)
-  if (mostRecentSync && Date.now() - mostRecentSync.getTime() < PROGRESS_SKIP_MS) {
+  if (
+    !force &&
+    mostRecentSync &&
+    Date.now() - mostRecentSync.getTime() < PROGRESS_SKIP_MS
+  ) {
     // Marca no Redis e sai
     try {
       await cacheSet(progressCacheKey(studentId), "1", PROGRESS_TTL_SECONDS)

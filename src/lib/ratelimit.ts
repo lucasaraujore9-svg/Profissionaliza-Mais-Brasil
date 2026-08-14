@@ -224,6 +224,12 @@ export const RATE_LIMITS = {
     limit: 3,
     windowSec: 900,
   },
+  // "Atualizar progresso" do aluno logado: cada clique fura o cache de 5 min e
+  // vai à(s) plataforma(s) de aulas — 1 chamada à EA + 1 ao LMS por vez.
+  // Chaveado pelo ALUNO, não pelo IP: o custo é da conta dele, e alunos atrás do
+  // mesmo IP (lan house, escola) não podem se estrangular. 4 em 5 min dá margem
+  // para "terminei a aula agora" sem virar torneira para a cota externa.
+  alunoSyncProgresso: { name: "aluno-sync-progresso", limit: 4, windowSec: 300 },
   // Troca de senha na plataforma de aulas (por aluno logado): 2 idas à EA por
   // chamada (escrever + reler para conferir). A EA hoje sempre recusa a troca,
   // então repetir só queima cota externa.

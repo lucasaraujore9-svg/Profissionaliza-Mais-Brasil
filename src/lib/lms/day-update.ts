@@ -1,8 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { lmsDayUpdate } from "./client"
 import type { LmsDayStudent } from "./types"
-import { issueCertificateIfEligible, PaceGateError } from "@/lib/certificates/issue"
-import { evaluatePaceGate } from "@/lib/enrollment/pace"
+import { applyLmsCourseProgress } from "./apply-progress"
 import { contextLogger } from "@/lib/logger"
 
 const SETTINGS_ID = "default"
@@ -12,11 +11,6 @@ export interface LmsDayUpdateResult {
   progressUpdated: number
   certificatesIssued: number
   generatedAt: string
-}
-
-function clampPercent(p: number): number {
-  if (!Number.isFinite(p)) return 0
-  return Math.max(0, Math.min(100, Math.round(p)))
 }
 
 /**
@@ -84,49 +78,14 @@ export async function syncLmsDayUpdate(): Promise<LmsDayUpdateResult> {
       const enrollmentId = enrollmentByKey.get(enrollmentKey(studentId, sc.courseId))
       if (!enrollmentId) continue
 
-      const completed = sc.status === "completed"
-      await prisma.enrollment.update({
-        where: { id: enrollmentId },
-        data: {
-          progressPercent: clampPercent(sc.percent),
-          progressStatus: completed
-            ? "CONCLUIDO"
-            : sc.status === "in_progress"
-              ? "EM_ANDAMENTO"
-              : "AGUARDANDO",
-          ...(sc.lastActivityAt ? { lastLessonAt: new Date(sc.lastActivityAt) } : {}),
-          progressSyncedAt: new Date(),
-        },
+      // Grava progresso + cota + certificado na conclusao. Mesmo aplicador da
+      // atualizacao sob demanda do aluno — ver `applyLmsCourseProgress`.
+      const applied = await applyLmsCourseProgress(enrollmentId, sc, {
+        autoIssue: settings.certificateAutoIssue,
+        event: "lms.day_update",
       })
       progressUpdated += 1
-
-      // Cota de aulas: reavalia com o progresso recém-sincronizado. No LMS este
-      // é o caminho de hora em hora; o webhook `lesson.completed` cobre o tempo
-      // quase real.
-      await evaluatePaceGate(enrollmentId)
-
-      // Conclusao => emite o certificado do PMB (dedup interna por enrollment).
-      if (completed && settings.certificateAutoIssue) {
-        try {
-          await issueCertificateIfEligible(enrollmentId, "AUTO")
-          certificatesIssued += 1
-        } catch (err) {
-          // Cota de aulas: recusa ESPERADA enquanto faltar parcela. O delta roda
-          // de hora em hora — logar como erro encheria o log de ruido ate a
-          // quitacao, quando o certificado sai sozinho.
-          if (err instanceof PaceGateError) {
-            log.info(
-              { event: "lms.day_update.certificate_pace_blocked", enrollmentId },
-              "certificado adiado — parcelamento em aberto",
-            )
-          } else {
-            log.error(
-              { err, event: "lms.day_update.certificate_failed", enrollmentId },
-              "emissao de certificado (conclusao LMS) falhou",
-            )
-          }
-        }
-      }
+      if (applied.certificateIssued) certificatesIssued += 1
     }
   }
 

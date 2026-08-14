@@ -700,6 +700,25 @@ copia pull-only e ninguem a atualizava na hora que ela decidia algo**.
   commit e deploy marcados como atuais, preservando o conteudo errado. A
   comparacao fica FORA do try/catch, senao o fallback "assume atual" de falha de
   leitura a engole.
+- **Botao "Atualizar progresso"** em `/aluno/cursos`
+  (`components/aluno/sync-progress-button.tsx` →
+  `POST /api/aluno/progresso/sincronizar`): o aluno puxa na hora em vez de
+  esperar o proximo sync. **Passa `force: true`** — os dois atalhos de 5 min de
+  `syncStudentProgress` (Redis + `progressSyncedAt`) sao otimizacao para chamada
+  AUTOMATICA; num pedido EXPLICITO eles tornariam o botao um placebo. O
+  contrapeso e rate limit por ALUNO (`alunoSyncProgresso`, 4/5min), nao por IP —
+  o custo e da conta dele e alunos atras do mesmo IP nao podem se estrangular.
+- **O botao fala com as DUAS fornecedoras.** `syncStudentProgress` so cobre a
+  EA; 112 das 629 matriculas em producao sao LMS e ficariam com um botao mudo.
+  Entrou `syncLmsStudentProgress` (`lib/lms/student-progress.ts`), que pergunta
+  `GET /students/:ref` — o delta `day-update` nao serve para "atualizar agora"
+  porque o cursor e GLOBAL: forca-lo por um aluno reprocessaria a base inteira e
+  avancaria o cursor de todos. O mapeamento progresso→matricula foi extraido
+  para `lib/lms/apply-progress.ts` e e o MESMO nos dois caminhos: duplicar faria
+  as metades divergirem em silencio (bastaria uma esquecer `evaluatePaceGate`
+  para o aluno parcelado ficar com o curso inteiro liberado). A rota tolera
+  falha de cada fornecedora separadamente — a EA cair nao pode impedir o aluno
+  de LMS de atualizar.
 - **Descobertas de producao:** `certificate_auto_issue` esta **false** (toda
   emissao e manual — o `toIssueCert` do sync nunca dispara) e
   `certificate_min_percent` e **90**, nao o default 80 do schema. E o cron de

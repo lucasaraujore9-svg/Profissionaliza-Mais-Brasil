@@ -4,6 +4,7 @@ import { requireStudentSession } from "@/lib/auth/student-session"
 import { syncStudentProgress } from "@/lib/students/progress"
 import { getStudentPlatformLoginUrl } from "@/lib/students/platform-credentials"
 import { EmitCertificateButton } from "@/components/aluno/emit-certificate-button"
+import { SyncProgressButton } from "@/components/aluno/sync-progress-button"
 import { PayPendingButton } from "@/components/aluno/pay-pending-button"
 import {
   PACE_PRIMARY_SELECT,
@@ -156,14 +157,17 @@ export default async function StudentCoursesPage({
 
   return (
     <div className="space-y-6">
-      <header>
-        <h1 className="font-display text-3xl text-[var(--color-pmb-green-900)]">
-          Meus cursos
-        </h1>
-        <p className="mt-1 text-sm text-gray-600">
-          Acompanhe seu progresso, acesse as aulas e baixe seus certificados
-          quando concluir o curso.
-        </p>
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 className="font-display text-3xl text-[var(--color-pmb-green-900)]">
+            Meus cursos
+          </h1>
+          <p className="mt-1 text-sm text-gray-600">
+            Acompanhe seu progresso, acesse as aulas e baixe seus certificados
+            quando concluir o curso.
+          </p>
+        </div>
+        {enrollments.length > 0 && <SyncProgressButton />}
       </header>
 
       {accessError && (
