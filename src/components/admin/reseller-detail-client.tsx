@@ -398,6 +398,7 @@ export function ResellerDetailClient({
             pixKeyType={data.reseller.pixKeyType}
             referrer={data.referrer}
             stats={data.referralStats}
+            onSaved={load}
           />
           <ResellerCommissionOverrideForm
             tenantId={tenantId}

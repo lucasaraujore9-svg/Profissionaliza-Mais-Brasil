@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import {
   Share2,
   Copy,
@@ -14,9 +14,14 @@ import {
   ExternalLink,
   FileText,
   Download,
+  Pencil,
+  X,
 } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
+import { useCan } from "@/components/shared/permissions/permission-context"
+import { tenantStatusLabel } from "@/lib/labels"
+import type { TenantStatus } from "@prisma/client"
 
 export interface ReferralStats {
   defaultPercent: number
@@ -45,6 +50,15 @@ interface ResellerReferralConfigProps {
   pixKeyType: string | null
   referrer: ReferrerSummary | null
   stats: ReferralStats
+  /** Recarrega o detalhe da unidade após alterar a indicação. */
+  onSaved: () => void
+}
+
+interface ReferrerCandidate {
+  id: string
+  name: string
+  slug: string
+  status: TenantStatus
 }
 
 /** Normaliza o JSON salvo numa lista de faixas para o editor. */
@@ -129,6 +143,7 @@ export function ResellerReferralConfig({
   pixKeyType,
   referrer,
   stats,
+  onSaved,
 }: ResellerReferralConfigProps) {
   const [copied, setCopied] = useState(false)
   const monthOptions = useMemo(() => buildMonthOptions(12), [])
@@ -136,6 +151,87 @@ export function ResellerReferralConfig({
     monthOptions[0]?.value ?? currentMonthIso(),
   )
   const [downloading, setDownloading] = useState(false)
+
+  // Editar/atribuir a indicação — mesma permissão da rota PATCH .../referrer
+  // (atribuir gerente/vendedor é a mesma classe de decisão sobre a conta).
+  const canGovernanca = useCan("unidades.governanca")
+  const [editingReferrer, setEditingReferrer] = useState(false)
+  const [referrerQuery, setReferrerQuery] = useState("")
+  const [referrerOptions, setReferrerOptions] = useState<ReferrerCandidate[]>([])
+  const [searchingReferrer, setSearchingReferrer] = useState(false)
+  const [savingReferrer, setSavingReferrer] = useState(false)
+  const [confirmRemove, setConfirmRemove] = useState(false)
+
+  // Busca debounced na lista de unidades (mesmo endpoint da tela de
+  // revendedores — consulta só banco, sem chamadas ao Asaas).
+  useEffect(() => {
+    if (!editingReferrer) return
+    const q = referrerQuery.trim()
+    if (q.length < 2) {
+      setReferrerOptions([])
+      return
+    }
+    const handle = setTimeout(async () => {
+      setSearchingReferrer(true)
+      try {
+        const res = await fetch(
+          `/api/admin/revendedores?q=${encodeURIComponent(q)}`,
+        )
+        const body = await res.json().catch(() => ({}))
+        if (!res.ok) {
+          toast.error(body?.error ?? "Falha ao buscar unidades")
+          return
+        }
+        const rows = (body?.data?.resellers ?? []) as ReferrerCandidate[]
+        setReferrerOptions(
+          rows
+            // A unidade não pode indicar a si mesma; cancelada não indica
+            // (mesma regra da rota — filtrar aqui evita oferecer opção que
+            // voltaria 400 no salvar).
+            .filter((r) => r.id !== tenantId && r.status !== "CANCELLED")
+            .slice(0, 8),
+        )
+      } catch {
+        toast.error("Erro de rede ao buscar unidades")
+      } finally {
+        setSearchingReferrer(false)
+      }
+    }, 350)
+    return () => clearTimeout(handle)
+  }, [editingReferrer, referrerQuery, tenantId])
+
+  async function saveReferrer(referrerTenantId: string | null) {
+    setSavingReferrer(true)
+    try {
+      const res = await fetch(`/api/admin/revendedores/${tenantId}/referrer`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ referrerTenantId }),
+      })
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        toast.error(body?.error ?? "Falha ao atualizar a indicação")
+        return
+      }
+      const updatedName = (
+        body?.data?.referrer as { name?: string } | null | undefined
+      )?.name
+      toast.success(
+        referrerTenantId
+          ? `Indicação atribuída a ${updatedName ?? "unidade selecionada"}`
+          : "Indicação removida",
+      )
+      setEditingReferrer(false)
+      setReferrerQuery("")
+      setReferrerOptions([])
+      setConfirmRemove(false)
+      onSaved()
+    } catch {
+      toast.error("Erro de rede ao salvar a indicação")
+    } finally {
+      setSavingReferrer(false)
+    }
+  }
 
   async function copyCode() {
     try {
@@ -232,22 +328,133 @@ export function ResellerReferralConfig({
         </div>
       </div>
 
-      {/* Quem indicou */}
-      {referrer && (
-        <div className="mt-4 space-y-1.5">
+      {/* Quem indicou — editável para quem decide sobre a conta da unidade
+          (o código pode ter sido esquecido no cadastro). */}
+      <div className="mt-4 space-y-1.5">
+        <div className="flex items-center justify-between">
           <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
             Indicado por
           </span>
-          <Link
-            href={`/admin/revendedores/${referrer.id}`}
-            className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-[var(--color-pmb-green-900)] transition hover:border-[var(--color-pmb-green)] hover:bg-[var(--color-pmb-lime-50)]/30"
-          >
-            <span className="font-medium">{referrer.name}</span>
-            <span className="text-xs text-gray-500">/{referrer.slug}</span>
-            <ExternalLink className="ml-auto h-3.5 w-3.5 text-gray-400" />
-          </Link>
+          {canGovernanca && !editingReferrer && (
+            <button
+              type="button"
+              onClick={() => {
+                setEditingReferrer(true)
+                setConfirmRemove(false)
+              }}
+              className="inline-flex items-center gap-1 text-[11px] font-semibold text-[var(--color-pmb-green-900)] hover:text-[var(--color-pmb-green)]"
+            >
+              <Pencil className="h-3 w-3" />
+              {referrer ? "Alterar" : "Atribuir"}
+            </button>
+          )}
         </div>
-      )}
+
+        {referrer ? (
+          <div className="flex items-center gap-2">
+            <Link
+              href={`/admin/revendedores/${referrer.id}`}
+              className="inline-flex flex-1 items-center gap-1.5 rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-[var(--color-pmb-green-900)] transition hover:border-[var(--color-pmb-green)] hover:bg-[var(--color-pmb-lime-50)]/30"
+            >
+              <span className="font-medium">{referrer.name}</span>
+              <span className="text-xs text-gray-500">/{referrer.slug}</span>
+              <ExternalLink className="ml-auto h-3.5 w-3.5 text-gray-400" />
+            </Link>
+            {canGovernanca && !editingReferrer && (
+              <Button
+                size="sm"
+                variant="outline"
+                type="button"
+                disabled={savingReferrer}
+                onClick={() => {
+                  if (!confirmRemove) {
+                    setConfirmRemove(true)
+                    return
+                  }
+                  saveReferrer(null)
+                }}
+                className={`shrink-0 ${confirmRemove ? "border-red-300 text-red-700 hover:bg-red-50" : ""}`}
+              >
+                <X className="mr-1 h-3.5 w-3.5" />
+                {confirmRemove ? "Confirmar remoção" : "Remover"}
+              </Button>
+            )}
+          </div>
+        ) : (
+          <div className="rounded-md border border-dashed border-gray-300 bg-gray-50 px-3 py-2 text-xs text-gray-500">
+            Sem indicador — cadastro feito sem código de indicação.
+          </div>
+        )}
+
+        {editingReferrer && (
+          <div className="space-y-2 rounded-md border border-gray-200 bg-gray-50 p-3">
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={referrerQuery}
+                onChange={(e) => setReferrerQuery(e.target.value)}
+                placeholder="Buscar unidade por nome, slug ou e-mail do titular…"
+                autoFocus
+                disabled={savingReferrer}
+                className="flex-1 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:border-[var(--color-pmb-green)] focus:outline-none focus:ring-1 focus:ring-[var(--color-pmb-green)]"
+              />
+              <Button
+                size="sm"
+                variant="ghost"
+                type="button"
+                disabled={savingReferrer}
+                onClick={() => {
+                  setEditingReferrer(false)
+                  setReferrerQuery("")
+                  setReferrerOptions([])
+                }}
+                className="shrink-0"
+              >
+                Cancelar
+              </Button>
+            </div>
+
+            {searchingReferrer && (
+              <p className="text-[11px] text-gray-500">Buscando…</p>
+            )}
+            {!searchingReferrer &&
+              referrerQuery.trim().length >= 2 &&
+              referrerOptions.length === 0 && (
+                <p className="text-[11px] text-gray-500">
+                  Nenhuma unidade encontrada.
+                </p>
+              )}
+
+            {referrerOptions.length > 0 && (
+              <ul className="divide-y divide-gray-100 overflow-hidden rounded-md border border-gray-200 bg-white">
+                {referrerOptions.map((opt) => (
+                  <li key={opt.id}>
+                    <button
+                      type="button"
+                      disabled={savingReferrer}
+                      onClick={() => saveReferrer(opt.id)}
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition hover:bg-[var(--color-pmb-lime-50)]/40 disabled:opacity-50"
+                    >
+                      <span className="font-medium text-[var(--color-pmb-green-900)]">
+                        {opt.name}
+                      </span>
+                      <span className="text-xs text-gray-500">/{opt.slug}</span>
+                      <span className="ml-auto text-[10px] uppercase tracking-wide text-gray-400">
+                        {tenantStatusLabel(opt.status)}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            <p className="text-[11px] text-gray-500">
+              Vale a partir da próxima apuração de comissão. Comissões já
+              geradas não mudam de indicador.
+            </p>
+          </div>
+        )}
+      </div>
 
       {/* Elegibilidade (somente leitura).
           A EDICAO da regra de comissao — percentual, escala por tempo e minimo
