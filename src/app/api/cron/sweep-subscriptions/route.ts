@@ -89,7 +89,9 @@ async function processSubscriptions() {
   return result
 }
 
-export const GET = withRequestContext(
+// POST, como os demais crons: `app_internal.run_cron` (pg_cron -> pg_net) faz
+// POST, e um GET aqui responderia 405 — o job rodaria todo dia sem fazer nada.
+export const POST = withRequestContext(
   { action: "cron.sweep_subscriptions", route: "/api/cron/sweep-subscriptions" },
   async (request: Request) => {
     if (!(await authorizeCron(request))) {
