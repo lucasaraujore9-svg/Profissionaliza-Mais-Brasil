@@ -21,6 +21,11 @@ interface NavbarMainProps {
   tecnica?: NavbarTecnicaConfig
   /** Base do link de detalhe nas sugestões da busca: "/cursos" (PMB) ou "/curso" (vitrine). */
   courseHrefBase?: string
+  /**
+   * Esta loja vende assinatura. Só então o link aparece — numa vitrine sem
+   * plano visível ele levaria a uma listagem vazia.
+   */
+  hasPlans?: boolean
 }
 
 export function NavbarMain({
@@ -29,6 +34,7 @@ export function NavbarMain({
   tenantName,
   tecnica,
   courseHrefBase = "/cursos",
+  hasPlans = false,
 }: NavbarMainProps = {}) {
   // Sem fallback hardcoded: se nao houver categorias com cursos ativos, o
   // botao "Categorias" e a lista no mobile menu simplesmente nao aparecem.
@@ -194,6 +200,11 @@ export function NavbarMain({
         </form>
 
         <nav className="hidden lg:flex items-center gap-5 text-[14px] font-medium text-[var(--color-pmb-green)]">
+          {hasPlans && (
+            <Link href="/assinaturas" className="hover:underline underline-offset-4">
+              Assinaturas
+            </Link>
+          )}
           <Link href="/como-funciona" className="hover:underline underline-offset-4">
             Como funciona
           </Link>
@@ -238,6 +249,15 @@ export function NavbarMain({
             >
               Quero estudar
             </Link>
+            {hasPlans && (
+              <Link
+                href="/assinaturas"
+                onClick={() => setMobileOpen(false)}
+                className="py-2 text-[15px] font-medium text-[var(--color-pmb-green)]"
+              >
+                Assinaturas
+              </Link>
+            )}
             <Link
               href="/login"
               onClick={() => setMobileOpen(false)}

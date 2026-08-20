@@ -9,6 +9,10 @@ export default async function PainelCursosPage() {
   const ctx = await requirePainelPage("catalogo.view")
   const canManageCourses = ctx.can("catalogo.manage")
   const canManagePackages = ctx.can("pacotes.manage")
+  // Assinaturas tem familia propria de permissao: quem so cuida do catalogo de
+  // cursos nao precisa mexer no preco da assinatura da loja.
+  const canViewPlans = ctx.can("assinaturas.view")
+  const canManagePlans = ctx.can("assinaturas.manage")
 
   return (
     <div className="space-y-6">
@@ -16,14 +20,16 @@ export default async function PainelCursosPage() {
         title="Catálogo"
         description={
           canManageCourses
-            ? "Gerencie os cursos e os pacotes da sua vitrine: preço, visibilidade e destaque."
-            : "Consulte os cursos e os pacotes da sua vitrine."
+            ? "Gerencie os cursos, pacotes e assinaturas da sua vitrine: preço, visibilidade e destaque."
+            : "Consulte os cursos, pacotes e assinaturas da sua vitrine."
         }
       />
 
       <PainelCatalogTabs
         canManageCourses={canManageCourses}
         canManagePackages={canManagePackages}
+        canViewPlans={canViewPlans}
+        canManagePlans={canManagePlans}
       />
     </div>
   )

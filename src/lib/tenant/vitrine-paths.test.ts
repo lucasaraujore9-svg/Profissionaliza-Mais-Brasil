@@ -64,3 +64,24 @@ describe("storePath", () => {
     expect(storePath("/lojas-parceiras", "/confirmacao")).toBe("/confirmacao")
   })
 })
+
+describe("assinaturas na vitrine da unidade", () => {
+  it("a listagem e o detalhe sao servidos pela vitrine", () => {
+    // Sem isto, /assinatura/:slug num subdomínio de revenda cairia no site
+    // principal — que só tem /assinaturas (produto da PMB) e responde 404 ali
+    // de propósito, deixando o link "Assinar" da unidade quebrado.
+    expect(isVitrinePath("/assinaturas")).toBe(true)
+    expect(isVitrinePath("/assinatura/plano-total")).toBe(true)
+    expect(isVitrinePath("/assinatura")).toBe(true)
+  })
+
+  it("nao captura o caminho do painel do aluno", () => {
+    // /aluno/assinatura é área logada, servida pelo site principal mesmo em
+    // subdomínio de revenda.
+    expect(isVitrinePath("/aluno/assinatura")).toBe(false)
+  })
+
+  it("nao captura sufixos parecidos", () => {
+    expect(isVitrinePath("/assinaturas-antigas")).toBe(false)
+  })
+})

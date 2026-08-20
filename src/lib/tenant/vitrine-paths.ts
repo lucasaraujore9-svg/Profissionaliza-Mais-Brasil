@@ -15,9 +15,16 @@
 // /loja/pacote/:slug. A home da revenda gera links para /pacote/:slug; sem o
 // prefixo aqui, a URL cairia no site principal (que só tem /pacotes, plural) e
 // daria 404 ao abrir um combo.
+//
+// "/assinatura" (detalhe do plano, singular) segue a mesma convencao de
+// "/pacote": a vitrine da unidade serve em /loja/assinatura/:slug e a listagem
+// linka para /assinatura/:slug. Sem o prefixo aqui, a URL cairia no site
+// principal — que tem /assinaturas (plural, produto da PMB) e responde 404 em
+// subdominio de revenda de proposito.
 export const VITRINE_PATH_PREFIXES = [
   "/curso",
   "/pacote",
+  "/assinatura",
   "/checkout",
   "/confirmacao",
   "/contato",
@@ -31,6 +38,11 @@ export function isVitrinePath(pathname: string): boolean {
   // "/curso/:slug" (singular, já coberto por VITRINE_PATH_PREFIXES); por isso
   // casamos "/cursos" exato e NÃO o prefixo "/cursos/" (evita 404 em /loja/cursos/x).
   if (pathname === "/cursos") return true
+  // "/assinaturas" (listagem) e servida pela vitrine (/loja/assinaturas), com
+  // preco e catalogo da unidade. Casamos o caminho EXATO — o prefixo
+  // "/assinatura" acima ja cobre o detalhe "/assinatura/:slug", e casar
+  // "/assinaturas/" daria 404 em /loja/assinaturas/x.
+  if (pathname === "/assinaturas") return true
   return VITRINE_PATH_PREFIXES.some(
     (p) => pathname === p || pathname.startsWith(`${p}/`),
   )

@@ -3,6 +3,7 @@ import { NavbarMain } from "@/components/shared/layouts/navbar-main"
 import { FooterMain } from "@/components/shared/layouts/footer-main"
 import { loadCategorias } from "@/lib/catalog/home"
 import { getCurrentTenant } from "@/lib/tenant/current"
+import { hasVitrinePlans } from "@/lib/subscriptions/plans"
 import { resolveVitrinePixels, resolvePmbSelfPixels } from "@/lib/tracking/resolve"
 import { TrackingPixels } from "@/components/shared/tracking-pixels"
 import { tecnicaFromTenant } from "@/lib/catalog/tecnica"
@@ -52,6 +53,10 @@ export default async function LojaLayout({
     getRequestOrigin(),
     classifyRequestHost(),
   ])
+
+  // O link de assinaturas só aparece quando esta loja tem plano vendável —
+  // caso contrário levaria a uma listagem vazia.
+  const hasPlans = tenant ? await hasVitrinePlans(tenant.id) : false
 
   // Domínio próprio do revendedor (host não bate em PMB nem em
   // livrecursos.com.br) → kind "unknown". Nesse contexto ocultamos o link
@@ -133,6 +138,7 @@ export default async function LojaLayout({
           return { enabled: t.enabled, label: t.label, url: t.url }
         })()}
         courseHrefBase="/curso"
+        hasPlans={hasPlans}
       />
       <main className="flex-1">{children}</main>
       <FooterMain

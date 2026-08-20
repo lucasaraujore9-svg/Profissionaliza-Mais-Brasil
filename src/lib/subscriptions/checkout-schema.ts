@@ -67,6 +67,20 @@ export const subscriptionCheckoutSchema = withGuardianRule(
     paymentMethod: z.enum(["PIX", "BOLETO", "CREDIT_CARD"]),
     creditCard: subscriptionCardSchema.optional(),
     creditCardHolder: subscriptionCardHolderSchema.optional(),
+    /**
+     * Token do cartao gerado no BROWSER (SDK do Mercado Pago). So a vitrine de
+     * unidade que usa MP manda isto — a recorrencia do MP exige o token e nunca
+     * ve o PAN. No Asaas o cartao trafega pelo nosso servidor (o Asaas nao tem
+     * tokenizacao no browser), entao ali vem `creditCard`.
+     */
+    cardToken: z.string().trim().min(1).max(200).optional(),
     acceptedTerms: z.literal(true),
   }),
 )
+
+/**
+ * Mesma forma na vitrine da REVENDA. Separado por clareza de nome, mas o objeto
+ * e identico de proposito: o que muda entre as duas lojas e a CONTA que recebe
+ * e o catalogo do plano, nunca o que se pede ao aluno.
+ */
+export const resellerSubscriptionCheckoutSchema = subscriptionCheckoutSchema

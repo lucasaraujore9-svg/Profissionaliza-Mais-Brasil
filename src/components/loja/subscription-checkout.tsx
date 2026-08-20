@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { Loader2 } from "lucide-react"
 import { PARENTESCOS, PARENTESCO_LABEL } from "@/lib/students/guardian"
+import { getMpInstance } from "@/lib/mercadopago/browser-sdk"
 
 /**
  * Contratação de assinatura na vitrine PMB.
@@ -19,14 +20,33 @@ interface Props {
   planId: string
   planName: string
   price: number
+  /** Rota de contratacao. Muda entre a vitrine PMB e a da unidade. */
+  endpoint?: string
+  /**
+   * Gateway da loja. Decide os MEIOS oferecidos: a recorrencia do Mercado Pago
+   * exige cartao tokenizado no browser e nao emite fatura de PIX/boleto por
+   * ciclo. Oferecer PIX numa loja de MP levaria a um 400 depois de a pessoa
+   * preencher tudo — o mesmo erro do incidente "revenda sem PIX".
+   */
+  gateway?: "MP" | "ASAAS"
+  /** Public key da conta MP da unidade — necessaria para tokenizar. */
+  mpPublicKey?: string | null
 }
 
 function money(v: number): string {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
 }
 
-export function SubscriptionCheckout({ planId, planName, price }: Props) {
-  const [method, setMethod] = useState<Method>("PIX")
+export function SubscriptionCheckout({
+  planId,
+  planName,
+  price,
+  endpoint = "/api/checkout/assinatura",
+  gateway = "ASAAS",
+  mpPublicKey = null,
+}: Props) {
+  const cardOnly = gateway === "MP"
+  const [method, setMethod] = useState<Method>(gateway === "MP" ? "CREDIT_CARD" : "PIX")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [done, setDone] = useState<{
@@ -74,10 +94,33 @@ export function SubscriptionCheckout({ planId, planName, price }: Props) {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch("/api/checkout/assinatura", {
+      // Mercado Pago: o cartao e tokenizado NO BROWSER e o PAN nunca passa pelo
+      // nosso servidor. No Asaas nao ha tokenizacao no browser, entao o cartao
+      // vai no corpo (TLS) — sao caminhos diferentes de propósito.
+      let cardToken: string | undefined
+      if (cardOnly && method === "CREDIT_CARD") {
+        if (!mpPublicKey) {
+          setError("Esta loja não está configurada para receber cartão.")
+          return
+        }
+        const mp = await getMpInstance(mpPublicKey)
+        const token = await mp.createCardToken({
+          cardNumber: f.number.replace(/\D/g, ""),
+          cardholderName: f.holderName,
+          cardExpirationMonth: f.expiryMonth,
+          cardExpirationYear: f.expiryYear,
+          securityCode: f.ccv,
+          identificationType: "CPF",
+          identificationNumber: (isMinor ? f.responsavelCpf : f.cpf).replace(/\D/g, ""),
+        })
+        cardToken = token.id
+      }
+
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          ...(cardToken ? { cardToken } : {}),
           planId,
           nome: f.nome,
           email: f.email,
@@ -95,7 +138,7 @@ export function SubscriptionCheckout({ planId, planName, price }: Props) {
                 responsavelParentesco: f.responsavelParentesco,
               }
             : {}),
-          ...(method === "CREDIT_CARD"
+          ...(method === "CREDIT_CARD" && !cardOnly
             ? {
                 creditCard: {
                   holderName: f.holderName,
@@ -245,7 +288,10 @@ export function SubscriptionCheckout({ planId, planName, price }: Props) {
           Pagamento
         </legend>
         <div className="flex flex-wrap gap-3">
-          {(["PIX", "BOLETO", "CREDIT_CARD"] as const).map((m) => (
+          {(cardOnly
+            ? (["CREDIT_CARD"] as const)
+            : (["PIX", "BOLETO", "CREDIT_CARD"] as const)
+          ).map((m) => (
             <label key={m} className="flex items-center gap-2 text-sm">
               <input type="radio" name="method" checked={method === m} onChange={() => setMethod(m)} />
               {m === "PIX" ? "PIX" : m === "BOLETO" ? "Boleto" : "Cartão de crédito"}

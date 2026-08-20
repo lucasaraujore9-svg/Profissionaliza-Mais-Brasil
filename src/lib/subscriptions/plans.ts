@@ -161,6 +161,19 @@ export async function resolveVitrinePlans(
   })
 }
 
+/**
+ * Esta vitrine vende assinatura? Usado pelo layout para decidir se o link
+ * aparece na navbar — sem isto o menu levaria a uma listagem vazia.
+ *
+ * Reusa `resolveVitrinePlans` de proposito: a pergunta "e vendavel?" ja tem
+ * varias condicoes (override oculto, preco zerado, escopo sem curso) e uma
+ * segunda implementacao mais barata divergiria da listagem.
+ */
+export async function hasVitrinePlans(tenantId: string | null): Promise<boolean> {
+  const plans = await resolveVitrinePlans(tenantId)
+  return plans.length > 0
+}
+
 /** Um plano pela slug, para a página pública de detalhe. */
 export async function getVitrinePlanBySlug(
   tenantId: string | null,

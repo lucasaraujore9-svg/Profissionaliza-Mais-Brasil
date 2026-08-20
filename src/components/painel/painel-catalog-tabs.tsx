@@ -4,15 +4,21 @@ import { useState } from "react"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { CourseListWrapper } from "./course-list-wrapper"
 import { PainelPackagesClient } from "./painel-packages-client"
+import { PainelPlansClient } from "./painel-plans-client"
 
-type TabId = "cursos" | "pacotes"
+type TabId = "cursos" | "pacotes" | "assinaturas"
 
 export function PainelCatalogTabs({
   canManageCourses,
   canManagePackages,
+  canViewPlans,
+  canManagePlans,
 }: {
   canManageCourses: boolean
   canManagePackages: boolean
+  /** Sem `assinaturas.view` a aba nem aparece — nao e so o botao que some. */
+  canViewPlans: boolean
+  canManagePlans: boolean
 }) {
   const [active, setActive] = useState<TabId>("cursos")
 
@@ -35,14 +41,24 @@ export function PainelCatalogTabs({
           >
             Pacotes
           </TabsTrigger>
+          {canViewPlans && (
+            <TabsTrigger
+              value="assinaturas"
+              className="data-active:bg-white data-active:text-[var(--color-pmb-green,#025918)] data-active:shadow-sm"
+            >
+              Assinaturas
+            </TabsTrigger>
+          )}
         </TabsList>
       </Tabs>
 
       <div className="mt-6">
-        {active === "cursos" ? (
-          <CourseListWrapper canManage={canManageCourses} />
-        ) : (
+        {active === "cursos" && <CourseListWrapper canManage={canManageCourses} />}
+        {active === "pacotes" && (
           <PainelPackagesClient canManage={canManagePackages} />
+        )}
+        {active === "assinaturas" && canViewPlans && (
+          <PainelPlansClient canManage={canManagePlans} />
         )}
       </div>
     </div>

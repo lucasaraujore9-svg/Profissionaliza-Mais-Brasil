@@ -4,6 +4,7 @@ import { FooterMain } from "@/components/shared/layouts/footer-main"
 import { loadCategorias } from "@/lib/catalog/home"
 import { loadPmbTecnicaConfig, tecnicaFromTenant } from "@/lib/catalog/tecnica"
 import { getCurrentTenant } from "@/lib/tenant/current"
+import { hasVitrinePlans } from "@/lib/subscriptions/plans"
 import { getRequestOrigin } from "@/lib/seo/host"
 import { normalizeSocialUrl, buildTenantSupportContacts } from "@/lib/branding"
 import { vitrineDomain } from "@/lib/tenant/urls"
@@ -80,10 +81,12 @@ export default async function MainLayout({
 
   // Sem tenant = site institucional PMB (comportamento original).
   if (!tenant) {
-    const [tecnica, pmbAutomationOn, pmbPixels] = await Promise.all([
+    const [tecnica, pmbAutomationOn, pmbPixels, hasPlans] = await Promise.all([
       loadPmbTecnicaConfig(),
       isPmbAutomationEnabled(),
       resolvePmbSelfPixels(),
+      // Link de assinaturas só quando há plano vendável na vitrine PMB.
+      hasVitrinePlans(null),
     ])
     return (
       <>
@@ -98,6 +101,7 @@ export default async function MainLayout({
         <NavbarMain
           categorias={categorias}
           tecnica={{ enabled: tecnica.enabled, label: tecnica.label, url: tecnica.url }}
+          hasPlans={hasPlans}
         />
         <main className="flex-1">{children}</main>
         <FooterMain categorias={categorias} />
