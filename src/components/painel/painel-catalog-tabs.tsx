@@ -13,12 +13,16 @@ export function PainelCatalogTabs({
   canManagePackages,
   canViewPlans,
   canManagePlans,
+  categories,
+  packages,
 }: {
   canManageCourses: boolean
   canManagePackages: boolean
   /** Sem `assinaturas.view` a aba nem aparece — nao e so o botao que some. */
   canViewPlans: boolean
   canManagePlans: boolean
+  categories: { id: string; name: string }[]
+  packages: { id: string; name: string }[]
 }) {
   const [active, setActive] = useState<TabId>("cursos")
 
@@ -58,7 +62,11 @@ export function PainelCatalogTabs({
           <PainelPackagesClient canManage={canManagePackages} />
         )}
         {active === "assinaturas" && canViewPlans && (
-          <PainelPlansClient canManage={canManagePlans} />
+          <PainelPlansClient
+            canManage={canManagePlans}
+            categories={categories}
+            packages={packages}
+          />
         )}
       </div>
     </div>
