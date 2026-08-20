@@ -230,6 +230,11 @@ export const RATE_LIMITS = {
   // mesmo IP (lan house, escola) não podem se estrangular. 4 em 5 min dá margem
   // para "terminei a aula agora" sem virar torneira para a cota externa.
   alunoSyncProgresso: { name: "aluno-sync-progresso", limit: 4, windowSec: 300 },
+  // Liberacao de curso por assinatura (por ALUNO, nao por IP): cada chamada
+  // provisiona na fornecedora. O teto e generoso porque abrir varios cursos
+  // seguidos e uso legitimo de quem acabou de assinar — o que se quer barrar e
+  // o loop automatizado.
+  alunoLiberarCurso: { name: "aluno-liberar-curso", limit: 20, windowSec: 300 },
   // Troca de senha na plataforma de aulas (por aluno logado): 2 idas à EA por
   // chamada (escrever + reler para conferir). A EA hoje sempre recusa a troca,
   // então repetir só queima cota externa.

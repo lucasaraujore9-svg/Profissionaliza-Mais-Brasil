@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { invalidateTenant } from "@/lib/redis/tenant-cache"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 import { requireAdmin } from "@/lib/auth/admin-guard"
+import { ASAAS_MAX_INSTALLMENTS } from "@/lib/tenant-billing/installments"
 
 const schema = z.object({
   billingMode: z.enum(["AUTO", "MANUAL"]).optional(),
@@ -14,6 +15,18 @@ const schema = z.object({
       keepStudentsActive: z.boolean().optional(),
       notifyStudents: z.boolean().optional(),
     })
+    .nullable()
+    .optional(),
+  /**
+   * Teto de parcelas no cartão das mensalidades desta unidade (a partir da 2ª).
+   * `null` = volta a usar o padrão global (SystemSettings). Não confundir com
+   * `firstPaymentMaxInstallments`, que é a entrada negociada na venda.
+   */
+  monthlyMaxInstallments: z
+    .number()
+    .int()
+    .min(1)
+    .max(ASAAS_MAX_INSTALLMENTS)
     .nullable()
     .optional(),
 })
@@ -63,11 +76,18 @@ export const PATCH = withRequestContextParams<{ id: string }>(
         ? Prisma.JsonNull
         : parsed.data.cancellationPolicy
   }
+  if (parsed.data.monthlyMaxInstallments !== undefined) {
+    data.monthlyMaxInstallments = parsed.data.monthlyMaxInstallments
+  }
 
   const updated = await prisma.tenant.update({
     where: { id },
     data,
-    select: { billingMode: true, cancellationPolicy: true },
+    select: {
+      billingMode: true,
+      cancellationPolicy: true,
+      monthlyMaxInstallments: true,
+    },
   })
 
   await invalidateTenant(tenant)
@@ -76,6 +96,7 @@ export const PATCH = withRequestContextParams<{ id: string }>(
     data: {
       billingMode: updated.billingMode,
       cancellationPolicy: updated.cancellationPolicy,
+      monthlyMaxInstallments: updated.monthlyMaxInstallments,
     },
   })
   },

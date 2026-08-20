@@ -148,6 +148,8 @@ export const ADMIN_PERMISSIONS = [
   "catalogo.sync",
   "pacotes.view",
   "pacotes.manage",
+  "assinaturas.view",
+  "assinaturas.manage",
 
   // ---- Certificados ------------------------------------------------------
   "certificados.view",
@@ -323,6 +325,7 @@ export const WRITE_IMPLIES_READ: Readonly<
   "catalogo.manage": "catalogo.view",
   "catalogo.sync": "catalogo.view",
   "pacotes.manage": "pacotes.view",
+  "assinaturas.manage": "assinaturas.view",
   "certificados.manage": "certificados.view",
   "certificados.template": "certificados.view",
   "vitrine.manage": "vitrine.view",
@@ -705,6 +708,8 @@ export const ADMIN_PERMISSION_GROUPS: {
       { perm: "catalogo.sync", label: "Sincronizar com as fornecedoras" },
       { perm: "pacotes.view", label: "Ver os pacotes" },
       { perm: "pacotes.manage", label: "Gerenciar pacotes" },
+      { perm: "assinaturas.view", label: "Ver os planos de assinatura" },
+      { perm: "assinaturas.manage", label: "Gerenciar planos de assinatura" },
       { perm: "certificados.view", label: "Ver certificados" },
       { perm: "certificados.manage", label: "Emitir e revogar certificados" },
       { perm: "certificados.template", label: "Editar o modelo do certificado" },

@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest"
 import type { TenantCharge } from "@/lib/tenant-billing/types"
 import {
+  chargePayUrl,
   buildCobrancasSheet,
   buildHistoricoSheet,
   buildUnidadesSheet,
@@ -35,6 +36,7 @@ function charge(over: Partial<TenantCharge> = {}): TenantCharge {
     daysUntilDue: 6,
     urgency: "scheduled",
     markedPaid: false,
+  installment: null,
     ...over,
   }
 }
@@ -265,5 +267,23 @@ describe("planilha de revendedores", () => {
   it("o aviso de truncamento acompanha a aba", () => {
     const sheet = buildUnidadesSheet([unit()], "cortado em 10000")
     expect(sheet.note).toBe("cortado em 10000")
+  })
+})
+
+describe("chargePayUrl", () => {
+  it("devolve vazio para cobranca ja parcelada, nunca a string 'null'", () => {
+    // `payUrlFor` devolve null nesse caso (o id é um `ins_...`). Interpolar
+    // direto produzia "https://…com.brnull" na planilha do time comercial — e o
+    // TypeScript não reclama de `null` dentro de template literal.
+    const parcelada = charge({ installment: { count: 6, paid: 2 } })
+    const url = chargePayUrl(parcelada)
+    expect(url).toBe("")
+    expect(url).not.toContain("null")
+  })
+
+  it("devolve o link absoluto para cobranca comum", () => {
+    const url = chargePayUrl(charge())
+    expect(url).toContain("/cobranca/pay_1")
+    expect(url).not.toContain("null")
   })
 })

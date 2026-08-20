@@ -101,10 +101,21 @@ export default async function AlunoLayout({
     redirect("/login")
   }
 
-  const studentRow = await prisma.student.findUnique({
-    where: { id: session.studentId },
-    select: { dismissedTours: true },
-  })
+  const [studentRow, liveSubscription] = await Promise.all([
+    prisma.student.findUnique({
+      where: { id: session.studentId },
+      select: { dismissedTours: true },
+    }),
+    // Menu de assinatura só para quem assina. Conta CANCELLED de fora de
+    // propósito: quem cancelou não precisa do item de volta no menu.
+    prisma.studentSubscription.findFirst({
+      where: {
+        studentId: session.studentId,
+        status: { in: ["ACTIVE", "PAST_DUE", "PENDING"] },
+      },
+      select: { id: true },
+    }),
+  ])
   const dismissedTours = studentRow?.dismissedTours ?? []
 
   const cookieStore = await cookies()
@@ -144,6 +155,7 @@ export default async function AlunoLayout({
       <StudentShell
         session={session}
         dismissedTours={dismissedTours}
+        hasSubscription={liveSubscription !== null}
         {...branding}
       >
         {children}

@@ -1,7 +1,7 @@
 import Link from "next/link"
 import { Download, ExternalLink, FileText, ReceiptText } from "lucide-react"
 import type { TenantBillingSummary, TenantCharge } from "@/lib/tenant-billing/types"
-import { payUrlFor } from "@/lib/tenant-billing/types"
+import { installmentLabel, payUrlFor } from "@/lib/tenant-billing/types"
 import { EmptyState } from "@/components/shared/empty-state"
 import {
   URGENCY_STYLE,
@@ -74,6 +74,7 @@ function SummaryCards({ summary }: { summary: TenantBillingSummary }) {
 }
 
 function ChargeRow({ charge, payable }: { charge: TenantCharge; payable: boolean }) {
+  const payUrl = payUrlFor(charge)
   const style = URGENCY_STYLE[charge.urgency]
   return (
     <li className={`rounded-xl border p-4 ${payable ? style.ring : "border-gray-200 bg-white"}`}>
@@ -127,13 +128,24 @@ function ChargeRow({ charge, payable }: { charge: TenantCharge; payable: boolean
                 Fatura
               </a>
             )}
-            <Link
-              href={payUrlFor(charge)}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-pmb-green)] px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-[var(--color-pmb-green-700)]"
-            >
-              <ReceiptText className="h-3.5 w-3.5" />
-              Pagar agora
-            </Link>
+            {payUrl ? (
+              <Link
+                href={payUrl}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-pmb-green)] px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-[var(--color-pmb-green-700)]"
+              >
+                <ReceiptText className="h-3.5 w-3.5" />
+                Pagar agora
+              </Link>
+            ) : (
+              // Mensalidade já parcelada no cartão: o valor cheio foi
+              // autorizado na compra e não há segunda via a emitir.
+              charge.installment && (
+                <span className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-600">
+                  <ReceiptText className="h-3.5 w-3.5" />
+                  {installmentLabel(charge.installment)}
+                </span>
+              )
+            )}
           </div>
         )}
       </div>

@@ -3,6 +3,10 @@ import Image from "next/image"
 import { getPayment, AsaasApiError } from "@/lib/asaas/client"
 import { prisma } from "@/lib/prisma"
 import { CheckoutClient } from "./checkout-client"
+import {
+  isFirstMonthlyCharge,
+  maxInstallmentsForCharge,
+} from "@/lib/tenant-billing/installments"
 
 interface Props {
   params: Promise<{ paymentId: string }>
@@ -49,21 +53,40 @@ export default async function CobrancaPage({ params }: Props) {
   const isPending =
     payment.status === "PENDING" || payment.status === "OVERDUE"
 
-  // Parcelamento da 1ª mensalidade: só é oferecido enquanto a revenda está
-  // PENDING (primeira mensalidade não paga). O teto vem do tenant.
+  // Parcelamento no cartão: vale para QUALQUER mensalidade em aberto, não só a
+  // primeira. O teto sai de `maxInstallmentsForCharge` — a MESMA função que a
+  // rota de pagamento aplica, senão a tela oferece um número que a API recusa.
   let maxInstallments = 1
+  let isFirstCharge = false
   if (isPending && payment.subscription) {
-    const tenant = await prisma.tenant.findFirst({
-      where: {
-        OR: [
-          { asaasSubscriptionId: payment.subscription },
-          { asaasPromoSubscriptionId: payment.subscription },
-        ],
-      },
-      select: { status: true, firstPaymentMaxInstallments: true },
-    })
-    if (tenant && tenant.status === "PENDING") {
-      maxInstallments = Math.max(1, tenant.firstPaymentMaxInstallments)
+    const [tenant, settings] = await Promise.all([
+      prisma.tenant.findFirst({
+        where: {
+          OR: [
+            { asaasSubscriptionId: payment.subscription },
+            { asaasPromoSubscriptionId: payment.subscription },
+          ],
+        },
+        select: {
+          status: true,
+          firstPaymentMaxInstallments: true,
+          monthlyMaxInstallments: true,
+        },
+      }),
+      prisma.systemSettings.findUnique({
+        where: { id: "default" },
+        select: { tenantMonthlyMaxInstallments: true },
+      }),
+    ])
+    if (tenant) {
+      isFirstCharge = isFirstMonthlyCharge(tenant.status)
+      maxInstallments = maxInstallmentsForCharge({
+        tenantStatus: tenant.status,
+        firstPaymentMaxInstallments: tenant.firstPaymentMaxInstallments,
+        monthlyMaxInstallments: tenant.monthlyMaxInstallments,
+        globalMonthlyMaxInstallments:
+          settings?.tenantMonthlyMaxInstallments ?? 12,
+      })
     }
   }
 
@@ -176,6 +199,7 @@ export default async function CobrancaPage({ params }: Props) {
             billingType={payment.billingType}
             amount={payment.value}
             maxInstallments={maxInstallments}
+            isFirstCharge={isFirstCharge}
           />
         )}
       </main>

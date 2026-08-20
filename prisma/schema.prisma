@@ -84,6 +84,24 @@ enum MonthlyScope {
   DIRECT_AND_VITRINE // Tambem a vitrine publica (compra self-service do lead)
 }
 
+/// Escopo de cursos que uma assinatura libera. ALL e CATEGORY sao DINAMICOS:
+/// o conjunto e resolvido por query no momento do acesso, nunca materializado —
+/// curso novo na categoria entra sozinho, sem tocar no plano.
+enum SubscriptionScope {
+  ALL // todo o catalogo vendavel da vitrine
+  CATEGORY // uma ou mais categorias (Category/CourseCategory)
+  PACKAGE // os cursos de um CoursePackage
+  COURSES // lista fixa de cursos
+}
+
+enum SubscriptionStatus {
+  PENDING // criada, aguardando o 1o pagamento
+  ACTIVE // em dia
+  PAST_DUE // atrasada, dentro da carencia (ainda da acesso)
+  CANCELLED // encerrada (pelo aluno, pela carencia ou por estorno)
+  EXPIRED // ciclo terminou sem renovacao
+}
+
 enum CourseVisibility {
   ALL // disponivel para todos os tenants ativos
   ALLOWLIST // apenas os tenants em allowedTenantIds
@@ -326,6 +344,13 @@ model Tenant {
   // 1 = a vista (sem parcelamento). So vale para a 1a mensalidade.
   firstPaymentMaxInstallments Int @default(1) @map("first_payment_max_installments")
 
+  // Parcelamento no cartao das mensalidades SEGUINTES (unidade ja ativada).
+  // Diferente de firstPaymentMaxInstallments, que so vale para a 1a mensalidade:
+  // este e o teto de qualquer cobranca em aberto. null => usa o padrao global
+  // SystemSettings.tenantMonthlyMaxInstallments. Resolucao unica em
+  // src/lib/tenant-billing/installments.ts — nunca reimplementar a escolha.
+  monthlyMaxInstallments Int? @map("monthly_max_installments")
+
   // Parcelamento SEM JUROS das VENDAS DE CURSOS aos alunos (Mercado Pago). O teto
   // de parcelas oferecido e sempre 12x (MAX_CARD_INSTALLMENTS); este campo define
   // ate quantas parcelas a unidade anuncia como "sem juros" (1 = so a vista sem
@@ -516,6 +541,9 @@ model Tenant {
   tenantCourses                TenantCourse[]
   coursePackages               CoursePackage[]
   tenantPackages               TenantPackage[]
+  subscriptionPlans            SubscriptionPlan[]
+  tenantSubscriptionPlans      TenantSubscriptionPlan[]
+  studentSubscriptions         StudentSubscription[]
   students                     Student[]
   enrollments                  Enrollment[]
   payments                     Payment[]
@@ -858,6 +886,7 @@ model CoursePackage {
   items          CoursePackageItem[]
   tenantPackages TenantPackage[]
   enrollments    Enrollment[]
+  subscriptionPlans SubscriptionPlan[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -904,6 +933,168 @@ model TenantPackage {
   @@unique([tenantId, packageId])
   @@index([tenantId, isVisible])
   @@map("tenant_packages")
+}
+
+// ============================================================
+// ASSINATURAS DE ALUNO
+// ============================================================
+// Acesso recorrente a um CONJUNTO de cursos enquanto o aluno paga a
+// mensalidade. Diferente de PaymentType.MONTHLY, que e um parcelado mensal com
+// FIM programado (maxPayments no Asaas / end_date no MP): a assinatura renova
+// ate ser cancelada.
+//
+// Distribuicao segue o padrao de CoursePackage: plano com tenantId=null e da
+// PMB e aparece automaticamente em TODAS as vitrines (atuais e futuras); a
+// revenda so ajusta preco/visibilidade via TenantSubscriptionPlan.
+
+model SubscriptionPlan {
+  id       String  @id @default(cuid())
+  tenantId String? @map("tenant_id") // null = plano da PMB (auto-distribuido)
+  tenant   Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  name          String
+  slug          String
+  description   String? @db.Text
+  coverImageUrl String? @map("cover_image_url")
+  /// Mensalidade sugerida (plano PMB) / propria (plano da revenda).
+  price         Decimal @db.Decimal(10, 2)
+
+  /// Como o conjunto de cursos e determinado. Ver SubscriptionScope.
+  scope SubscriptionScope @default(ALL)
+  /// scope=CATEGORY: aceita varias categorias (o aluno alcanca a uniao delas).
+  categoryIds String[] @default([]) @map("category_ids")
+  /// scope=PACKAGE: os cursos vem dos itens deste pacote.
+  packageId   String?  @map("package_id")
+  package     CoursePackage? @relation(fields: [packageId], references: [id], onDelete: SetNull)
+  /// scope=COURSES: lista fixa.
+  courseIds   String[] @default([]) @map("course_ids")
+
+  featured Boolean @default(false)
+  position Int     @default(0)
+  enabled  Boolean @default(true)
+
+  // Auditoria (sem FK — apenas registro do criador)
+  createdByUserId String?   @map("created_by_user_id")
+  createdByRole   UserRole? @map("created_by_role")
+
+  tenantPlans   TenantSubscriptionPlan[]
+  subscriptions StudentSubscription[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([tenantId, slug])
+  @@index([tenantId, enabled])
+  @@map("subscription_plans")
+}
+
+/// Override por revenda de um plano (PMB ou proprio). Ausencia da linha => usa
+/// os defaults do plano. isVisible=false => "removi da minha vitrine".
+model TenantSubscriptionPlan {
+  id       String @id @default(cuid())
+  tenantId String @map("tenant_id")
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  planId   String @map("plan_id")
+  plan     SubscriptionPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  price          Decimal? @db.Decimal(10, 2) // null = usa SubscriptionPlan.price
+  isVisible      Boolean  @default(true) @map("is_visible")
+  isFeatured     Boolean  @default(false) @map("is_featured")
+  customOrder    Int      @default(0) @map("custom_order")
+  customCoverUrl String?  @map("custom_cover_url")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([tenantId, planId])
+  @@index([tenantId, isVisible])
+  @@map("tenant_subscription_plans")
+}
+
+/// A assinatura de UM aluno. E ela que da acesso: `currentPeriodEnd` diz ate
+/// quando o ciclo pago vale.
+model StudentSubscription {
+  id        String  @id @default(cuid())
+  studentId String  @map("student_id")
+  student   Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  tenantId  String? @map("tenant_id") // null = vitrine principal PMB
+  tenant    Tenant? @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  planId    String  @map("plan_id")
+  plan      SubscriptionPlan @relation(fields: [planId], references: [id])
+
+  status SubscriptionStatus @default(PENDING)
+
+  /// Preco CONGELADO na contratacao. O preco do plano muda; o que o assinante
+  /// paga, nao — sem isto um reajuste no catalogo reprecificaria retroativamente
+  /// todo mundo.
+  priceAtPurchase Decimal @map("price_at_purchase") @db.Decimal(10, 2)
+
+  gateway     PaymentGateway @default(MP)
+  /// CREDIT_CARD (debito automatico), PIX ou BOLETO (fatura mensal manual).
+  billingType String?        @map("billing_type")
+
+  // Ids da recorrencia no gateway
+  mpPreapprovalId     String? @unique @map("mp_preapproval_id") // preapproval_xxxx
+  asaasSubscriptionId String? @unique @map("asaas_subscription_id")
+  asaasCustomerId     String? @map("asaas_customer_id")
+  externalReference   String? @map("external_reference")
+
+  /// Fim do ciclo PAGO. E o predicado de acesso — nao `status` sozinho, que fica
+  /// PAST_DUE durante a carencia e ainda deve liberar.
+  currentPeriodEnd DateTime? @map("current_period_end")
+
+  startedAt   DateTime? @map("started_at")
+  cancelledAt DateTime? @map("cancelled_at")
+  /// Pedido de cancelamento que so vale no fim do ciclo ja pago.
+  cancelAtPeriodEnd Boolean @default(false) @map("cancel_at_period_end")
+
+  couponId String? @map("coupon_id")
+  coupon   Coupon? @relation(fields: [couponId], references: [id])
+
+  payments    SubscriptionPayment[]
+  enrollments Enrollment[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([studentId, status])
+  @@index([tenantId, status])
+  // Varredura de renovacao/carencia do cron.
+  @@index([status, currentPeriodEnd])
+  @@map("student_subscriptions")
+}
+
+/// Uma cobranca de ciclo da assinatura.
+///
+/// Model proprio em vez de reusar `Payment`: la `enrollmentId` e NOT NULL e
+/// alimenta o BI (@@index([mpStatus, paidAt])). Torna-lo opcional espalharia
+/// null por relatorios que hoje assumem matricula.
+model SubscriptionPayment {
+  id             String              @id @default(cuid())
+  subscriptionId String              @map("subscription_id")
+  subscription   StudentSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  tenantId       String?             @map("tenant_id") // espelha a assinatura
+
+  amount  Decimal        @db.Decimal(10, 2)
+  gateway PaymentGateway
+
+  mpPaymentId    String? @unique @map("mp_payment_id")
+  asaasPaymentId String? @unique @map("asaas_payment_id")
+
+  status      String // PENDING, CONFIRMED, RECEIVED, OVERDUE, REFUNDED...
+  billingType String?   @map("billing_type")
+  dueDate     DateTime  @map("due_date")
+  paidAt      DateTime? @map("paid_at")
+
+  invoiceUrl  String? @map("invoice_url") @db.Text
+  bankSlipUrl String? @map("bank_slip_url") @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([subscriptionId])
+  @@index([tenantId, paidAt])
+  @@index([status, dueDate])
+  @@map("subscription_payments")
 }
 
 // ============================================================
@@ -999,6 +1190,7 @@ model Student {
 
   // Relacoes
   enrollments     Enrollment[]
+  subscriptions StudentSubscription[]
   certificates    Certificate[]
   notes           StudentNote[]
   contactMessages ContactMessage[]
@@ -1114,6 +1306,21 @@ model Enrollment {
   paceExemptAt       DateTime? @map("pace_exempt_at")
   paceExemptByUserId String?   @map("pace_exempt_by_user_id") // escalar (sem FK), so auditoria
 
+  // Matricula nascida de uma ASSINATURA (nao de uma compra avulsa). Criada sob
+  // demanda, quando o assinante abre o curso pela primeira vez.
+  //
+  // Nasce com finalAmount 0, paymentType ONE_TIME, installmentsTotal null e SEM
+  // Payment: quem carrega o dinheiro e o SubscriptionPayment do ciclo. O
+  // ONE_TIME tambem a mantem FORA da cota de aulas (PACE_GATED_PAYMENT_TYPES so
+  // cobre BOLETO_INSTALLMENT e MONTHLY) — assinatura nao tem parcela a
+  // proporcionalizar.
+  //
+  // `expiresAt` fica NULL: o prazo e o da assinatura, nao os 12 meses de
+  // STUDENT_ACCESS_MONTHS. O sweep de expiracao filtra `expiresAt not null`,
+  // entao a matricula de assinante nao e cortada por tempo.
+  studentSubscriptionId String?              @map("student_subscription_id")
+  studentSubscription   StudentSubscription? @relation(fields: [studentSubscriptionId], references: [id], onDelete: SetNull)
+
   // Cupom
   couponId String? @map("coupon_id")
   coupon   Coupon? @relation(fields: [couponId], references: [id])
@@ -1171,6 +1378,8 @@ model Enrollment {
   // satelites por este campo.
   @@index([primaryEnrollmentId])
   @@index([lmsEnrollmentId])
+  // Corte de acesso ao cancelar a assinatura varre por aqui.
+  @@index([studentSubscriptionId])
   // Composite: dashboards do painel filtram constantemente por
   // (tenantId + status) — dezenas de queries por load.
   @@index([tenantId, status])
@@ -1312,6 +1521,7 @@ model Coupon {
 
   // Relacoes
   enrollments Enrollment[]
+  subscriptions StudentSubscription[]
   payments    Payment[]
 
   createdAt DateTime @default(now()) @map("created_at")
@@ -1333,9 +1543,25 @@ model TenantPayment {
   tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   // Asaas
-  asaasPaymentId String  @unique @map("asaas_payment_id") // pay_xxxx
+  // ATENCAO: numa mensalidade PARCELADA no cartao esta coluna guarda o id do
+  // PARCELAMENTO (`ins_...`), nao o de uma cobranca — o parcelamento substitui a
+  // cobranca original, que e removida do Asaas. Por isso `getPayment` nao
+  // resolve esse id e a linha nao oferece "Pagar agora".
+  asaasPaymentId String  @unique @map("asaas_payment_id") // pay_xxxx (ou ins_xxxx num parcelamento)
   amount         Decimal @db.Decimal(10, 2)
   billingType    String? @map("billing_type") // PIX, BOLETO, CREDIT_CARD
+
+  // Mensalidade paga de forma PARCELADA no cartao. UMA linha representa o
+  // parcelamento inteiro: `amount` e o valor cheio da mensalidade, ja autorizado
+  // no cartao. As parcelas 2..N NAO viram linhas novas — criariam receita
+  // duplicada no financeiro; elas so avancam `installmentPaidCount`.
+  installmentId    String?  @map("installment_id") // ins_xxxx
+  installmentCount Int?     @map("installment_count") // N parcelas
+  // Ids das parcelas JA liquidadas. E a UNICA fonte da contagem ("3 de 6" e o
+  // tamanho do array) e ao mesmo tempo a chave de idempotencia: o Asaas
+  // reentrega webhook, e um contador puro somaria a mesma parcela duas vezes,
+  // exibindo "7 de 6". Guardar os ids torna a re-entrega um no-op natural.
+  installmentPaidIds String[] @default([]) @map("installment_paid_ids")
 
   // Links de pagamento
   invoiceUrl  String? @map("invoice_url") @db.Text
@@ -1375,6 +1601,8 @@ model TenantPayment {
   // DB-010: índice já existe no banco desde 20260522_financial_manual_management
   // — declarado aqui só para eliminar o drift schema↔banco (sem migration).
   @@index([markedPaidById], map: "tenant_payments_marked_paid_by_idx")
+  // Webhook das parcelas 2..N casa a linha-pai por aqui.
+  @@index([installmentId])
   @@map("tenant_payments")
 }
 
@@ -1801,6 +2029,12 @@ model SystemSettings {
   // Parcelamento sem juros das vendas diretas da PMB (vitrine PMB, conta MP da
   // PMB). Espelha Tenant.interestFreeInstallments mas para a PMB. Teto 12x.
   pmbInterestFreeInstallments Int @default(1) @map("pmb_interest_free_installments")
+
+  // Teto PADRAO de parcelas no cartao para as mensalidades da unidade (revenda
+  // pagando a PMB) depois da 1a. Cada unidade pode sobrescrever em
+  // Tenant.monthlyMaxInstallments. 1 = sem parcelamento. Teto duro 21x (limite
+  // do Asaas em POST /installments/).
+  tenantMonthlyMaxInstallments Int @default(12) @map("tenant_monthly_max_installments")
   lastCatalogSyncJson  String?        @map("last_catalog_sync_json") @db.Text
 
   // Cursor incremental do delta sync do LMS (GET /api/v1/day-update?since=).

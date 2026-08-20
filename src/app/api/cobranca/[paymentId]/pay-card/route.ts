@@ -12,6 +12,13 @@ import {
   AsaasApiError,
 } from "@/lib/asaas/client"
 import { addMonths } from "@/lib/asaas/promo"
+import {
+  ASAAS_MAX_INSTALLMENTS,
+  isFirstMonthlyCharge,
+  maxInstallmentsForCharge,
+  postCaptureTransition,
+} from "@/lib/tenant-billing/installments"
+import { unblockTenantStudents } from "@/lib/auto-block"
 import { isKnownAsaasPayment } from "@/lib/asaas/ownership"
 import { prisma } from "@/lib/prisma"
 import { invalidateTenant } from "@/lib/redis/tenant-cache"
@@ -41,8 +48,10 @@ const bodySchema = z.object({
     phone: z.string().min(10).max(15),
     mobilePhone: z.string().optional(),
   }),
-  // Parcelamento da 1ª mensalidade no cartão. 1 (ou ausente) = à vista.
-  installmentCount: z.number().int().min(1).max(21).optional(),
+  // Parcelamento no cartão desta cobrança. 1 (ou ausente) = à vista. O teto
+  // REAL vem do tenant (ver maxInstallmentsForCharge); aqui só o limite duro do
+  // Asaas, para não mandar ao gateway um número que ele recusa.
+  installmentCount: z.number().int().min(1).max(ASAAS_MAX_INSTALLMENTS).optional(),
 })
 
 export const POST = withRequestContextParams<{ paymentId: string }>(
@@ -111,10 +120,14 @@ export const POST = withRequestContextParams<{ paymentId: string }>(
       })
     }
 
-    // ── Parcelado: só para a 1ª mensalidade do revendedor ──
+    // ── Parcelado: qualquer mensalidade em aberto do revendedor ──
     // O Asaas não parcela uma cobrança de assinatura já existente; criamos um
     // parcelamento no cartão (POST /installments/) pelo valor cheio e removemos
     // a cobrança original da assinatura para não cobrar em duplicidade.
+    //
+    // O parcelamento divide SÓ esta cobrança: a assinatura segue gerando as
+    // mensalidades dos meses seguintes normalmente (a tela avisa isso antes de
+    // confirmar).
     const subscriptionId = payment.subscription
     const tenant = subscriptionId
       ? await prisma.tenant.findFirst({
@@ -131,6 +144,7 @@ export const POST = withRequestContextParams<{ paymentId: string }>(
             customDomain: true,
             status: true,
             firstPaymentMaxInstallments: true,
+            monthlyMaxInstallments: true,
           },
         })
       : null
@@ -141,17 +155,28 @@ export const POST = withRequestContextParams<{ paymentId: string }>(
         { status: 400 },
       )
     }
-    // Parcelamento só vale na 1ª mensalidade (revenda ainda não ativada).
-    if (tenant.status !== "PENDING") {
-      return NextResponse.json(
-        { error: "O parcelamento só está disponível na primeira mensalidade" },
-        { status: 400 },
-      )
-    }
-    const maxN = Math.max(1, tenant.firstPaymentMaxInstallments)
+
+    // Teto pela MESMA regra que a tela usou para montar o select. Unidade já
+    // ativa cai no padrão global (`tenantMonthlyMaxInstallments`); só a 1ª
+    // mensalidade usa o teto negociado na venda da revenda.
+    const settings = await prisma.systemSettings.findUnique({
+      where: { id: "default" },
+      select: { tenantMonthlyMaxInstallments: true },
+    })
+    const maxN = maxInstallmentsForCharge({
+      tenantStatus: tenant.status,
+      firstPaymentMaxInstallments: tenant.firstPaymentMaxInstallments,
+      monthlyMaxInstallments: tenant.monthlyMaxInstallments,
+      globalMonthlyMaxInstallments: settings?.tenantMonthlyMaxInstallments ?? 12,
+    })
     if (installmentCount > maxN) {
       return NextResponse.json(
-        { error: `Parcelamento máximo permitido: ${maxN}x` },
+        {
+          error:
+            maxN === 1
+              ? "Esta cobrança não pode ser parcelada"
+              : `Parcelamento máximo permitido: ${maxN}x`,
+        },
         { status: 400 },
       )
     }
@@ -245,7 +270,7 @@ export const POST = withRequestContextParams<{ paymentId: string }>(
         roleTarget: "SUPER_ADMIN",
         level: "WARNING",
         title: "Cobrança original não removida",
-        body: `Revenda ${tenant.name}: a 1ª mensalidade foi parcelada (${installment.id}), mas a cobrança original ${paymentId} não pôde ser removida automaticamente. Remova no Asaas para evitar suspensão por vencimento.`,
+        body: `Revenda ${tenant.name}: a mensalidade (venc. ${payment.dueDate}) foi parcelada (${installment.id}), mas a cobrança original ${paymentId} não pôde ser removida automaticamente. Remova no Asaas para evitar suspensão por vencimento.`,
         href: "/admin/revendedores",
       }).catch(swallow("cobranca.installment"))
     }
@@ -274,6 +299,12 @@ export const POST = withRequestContextParams<{ paymentId: string }>(
       update: {
         status: captured ? "CONFIRMED" : "PENDING",
         paidAt: captured ? new Date() : null,
+        installmentId: installment.id,
+        installmentCount,
+        // A 1a parcela e capturada AQUI, de forma sincrona — o webhook dela
+        // chegaria depois e, sem este registro, seria contada de novo.
+        installmentPaidIds:
+          captured && firstCharge ? { set: [firstCharge.id] } : undefined,
       },
       create: {
         tenantId: tenant.id,
@@ -283,6 +314,12 @@ export const POST = withRequestContextParams<{ paymentId: string }>(
         status: captured ? "CONFIRMED" : "PENDING",
         dueDate: new Date(payment.dueDate),
         paidAt: captured ? new Date() : null,
+        // Marca a linha como parcelamento: `asaasPaymentId` guarda um `ins_...`,
+        // que não resolve em GET /payments/{id}. É por estes campos que a tela
+        // de cobranças sabe não oferecer "Pagar agora" e exibir "1 de N".
+        installmentId: installment.id,
+        installmentCount,
+        installmentPaidIds: captured && firstCharge ? [firstCharge.id] : [],
       },
       select: { id: true },
     })
@@ -315,15 +352,47 @@ export const POST = withRequestContextParams<{ paymentId: string }>(
       })
     }
 
-    await prisma.tenant.update({
-      where: { id: tenant.id },
-      data: { status: "ACTIVE" },
-    })
-    await invalidateTenant({
-      id: tenant.id,
-      slug: tenant.slug,
-      customDomain: tenant.customDomain,
-    }).catch(swallow("cobranca.installment"))
+    // A promoção decide pelo status de ORIGEM da unidade (ver
+    // postCaptureTransition): PENDING ativa; SUSPENDED ativa E desbloqueia os
+    // alunos — sem isso a unidade paga a mensalidade atrasada parcelada e os
+    // alunos dela seguem bloqueados na plataforma de aulas. Unidade já ACTIVE
+    // não é "reativada": desbloquear ali mascararia um bloqueio manual legítimo.
+    const transition = postCaptureTransition(tenant.status)
+
+    if (transition.activate) {
+      await prisma.tenant.update({
+        where: { id: tenant.id },
+        data: { status: "ACTIVE" },
+      })
+      await invalidateTenant({
+        id: tenant.id,
+        slug: tenant.slug,
+        customDomain: tenant.customDomain,
+      }).catch(swallow("cobranca.installment"))
+    }
+
+    if (transition.unblockStudents) {
+      const unblock = await unblockTenantStudents(tenant.id).catch((err) => {
+        contextLogger().error(
+          { err, event: "cobranca.installment.unblock_failed", tenantId: tenant.id },
+          "falha ao desbloquear alunos apos parcelamento da mensalidade",
+        )
+        return null
+      })
+      if (!unblock || unblock.errors.length > 0) {
+        // Não derruba o pagamento (o dinheiro entrou), mas alguém precisa
+        // destravar os alunos na mão — silenciar deixaria a unidade paga com a
+        // vitrine funcionando e os alunos sem acesso.
+        await createNotification({
+          audience: "ROLE",
+          roleTarget: "SUPER_ADMIN",
+          level: "WARNING",
+          title: "Alunos não desbloqueados após pagamento",
+          body: `Revenda ${tenant.name}: a mensalidade foi paga (parcelamento ${installment.id}) e a unidade reativada, mas o desbloqueio dos alunos na plataforma de aulas falhou. Verifique em /admin/revendedores.`,
+          href: "/admin/revendedores",
+        }).catch(swallow("cobranca.installment"))
+      }
+    }
 
     await createCommissionForTenantPayment(tenantPaymentRow.id).catch((err) =>
       contextLogger().error(
@@ -337,7 +406,9 @@ export const POST = withRequestContextParams<{ paymentId: string }>(
       tenantId: tenant.id,
       level: "SUCCESS",
       title: "Mensalidade paga",
-      body: `Primeira mensalidade parcelada em ${installmentCount}x confirmada.`,
+      body: isFirstMonthlyCharge(tenant.status)
+        ? `Primeira mensalidade parcelada em ${installmentCount}x confirmada.`
+        : `Mensalidade com vencimento em ${payment.dueDate} parcelada em ${installmentCount}x confirmada. As mensalidades dos próximos meses seguem normalmente.`,
       category: "tenant-billing",
       href: "/painel/financeiro",
     }).catch(swallow("cobranca.installment"))

@@ -49,7 +49,12 @@ import { contextLogger } from "@/lib/logger"
  * externalPaymentId. Se outro processo segura o lock, aborta — webhook é
  * re-entregue mais tarde quando o primeiro já terminou.
  */
-function advisoryLockKeyFrom(seed: string): bigint {
+/**
+ * Chave de advisory lock a partir de uma semente estavel. Exportada para que a
+ * liberacao sob demanda das ASSINATURAS use o mesmo mecanismo de serializacao —
+ * um segundo esquema de lock nao enxergaria este.
+ */
+export function advisoryLockKeyFrom(seed: string): bigint {
   // Hash truncado para 63 bits (Postgres bigint signed, evita overflow).
   // BigInt() constructor em vez de literal `n` pra compat com target ES2017.
   const h = createHash("sha256").update(seed).digest()
@@ -68,7 +73,7 @@ function advisoryLockKey(gateway: PaymentGateway, externalPaymentId: string): bi
  * `pg_try_advisory_lock` e nao-bloqueante; o unlock vai no finally para nao
  * vazar lock em pool longo (Supabase pooler).
  */
-async function withAdvisoryLock(
+export async function withAdvisoryLock(
   lockKey: bigint,
   fn: () => Promise<void>,
 ): Promise<boolean> {
@@ -1053,7 +1058,14 @@ async function notifyLmsProvisionError(
  *
  * EA: garante o aluno (idempotente) + vincula o curso. LMS: POST /enrollments.
  */
-async function provisionCourseForStudent(
+/**
+ * Vincula UM curso ao aluno na fornecedora certa (EA ou LMS), sem tocar em
+ * cobranca. Exportada porque a liberacao sob demanda de uma ASSINATURA precisa
+ * exatamente disto — reimplementar o roteamento por provider faria as duas
+ * metades divergirem em silencio (bastaria uma esquecer o `ensureStudentOnPlatform`
+ * da EA para o aluno de pacote misto ficar sem login).
+ */
+export async function provisionCourseForStudent(
   tenant: TenantContext,
   student: { id: string; nome: string; email: string | null },
   course: { id: string; nome: string; provider: CourseProvider; lmsCourseId: string | null },

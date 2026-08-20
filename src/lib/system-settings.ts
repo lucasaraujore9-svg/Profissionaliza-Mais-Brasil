@@ -3,19 +3,25 @@ import type { PaymentGateway } from "@prisma/client"
 import { encrypt, decrypt } from "@/lib/crypto"
 import { contextLogger } from "@/lib/logger"
 
+import { ASAAS_MAX_INSTALLMENTS } from "@/lib/tenant-billing/installments"
+
 const SETTINGS_ID = "default"
 
 export interface SystemSettings {
   pmbDirectSaleGateway: PaymentGateway
   pmbMpAccessTokenEnc: string | null
   pmbInterestFreeInstallments: number
+  /** Teto padrão de parcelas da mensalidade da unidade (a partir da 2ª). */
+  tenantMonthlyMaxInstallments: number
   updatedAt: Date
 }
+
 
 const SETTINGS_SELECT = {
   pmbDirectSaleGateway: true,
   pmbMpAccessTokenEnc: true,
   pmbInterestFreeInstallments: true,
+  tenantMonthlyMaxInstallments: true,
   updatedAt: true,
 } as const
 
@@ -79,6 +85,32 @@ export async function updatePmbInterestFreeInstallments(
     where: { id: SETTINGS_ID },
     update: { pmbInterestFreeInstallments: clamped },
     create: { id: SETTINGS_ID, pmbInterestFreeInstallments: clamped },
+    select: SETTINGS_SELECT,
+  })
+  invalidateSystemSettingsCache()
+  return row
+}
+
+/**
+ * Teto PADRAO de parcelas no cartao para as mensalidades que a unidade paga a
+ * PMB (a partir da 2a). Cada unidade pode sobrescrever em
+ * `Tenant.monthlyMaxInstallments`; a escolha entre os dois mora em
+ * `lib/tenant-billing/installments.ts`, nunca aqui.
+ *
+ * Limite duro no do Asaas (POST /installments/), nao em 12: parcelar uma
+ * mensalidade e alivio de fluxo de caixa e o gateway aceita mais que isso.
+ */
+export async function updateTenantMonthlyMaxInstallments(
+  value: number,
+): Promise<SystemSettings> {
+  const clamped = Math.min(
+    Math.max(1, Math.trunc(value)),
+    ASAAS_MAX_INSTALLMENTS,
+  )
+  const row = await prisma.systemSettings.upsert({
+    where: { id: SETTINGS_ID },
+    update: { tenantMonthlyMaxInstallments: clamped },
+    create: { id: SETTINGS_ID, tenantMonthlyMaxInstallments: clamped },
     select: SETTINGS_SELECT,
   })
   invalidateSystemSettingsCache()

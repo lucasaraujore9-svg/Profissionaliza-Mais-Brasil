@@ -133,9 +133,17 @@ function dataHora(iso: string | null): string | null {
   return iso ? brDateTimeIso(new Date(iso)) : null
 }
 
-/** Link absoluto da nossa página de cobrança (PIX + boleto + cartão). */
+/**
+ * Link absoluto da nossa página de cobrança (PIX + boleto + cartão).
+ *
+ * Vazio quando a cobrança já foi parcelada no cartão: ali `payUrlFor` devolve
+ * `null` (o id é um `ins_...`, que não resolve). Interpolar direto produzia a
+ * string literal "…com.brnull" na planilha — o TypeScript não reclama de `null`
+ * dentro de template literal, então só o teste pega.
+ */
 export function chargePayUrl(charge: TenantCharge): string {
-  return `${appUrl()}${payUrlFor(charge)}`
+  const path = payUrlFor(charge)
+  return path ? `${appUrl()}${path}` : ""
 }
 
 function paceLabel(value: boolean | null): string {

@@ -19,6 +19,12 @@ import { logAudit } from "@/lib/audit"
 import type { AsaasWebhookPayload } from "./types"
 import { swallow } from "@/lib/errors"
 import { contextLogger } from "@/lib/logger"
+import {
+  settleSubscriptionCycle,
+  markSubscriptionPastDue,
+  revokeSubscriptionForRefund,
+  recordOpenSubscriptionCharge,
+} from "@/lib/subscriptions/renew"
 
 function formatMoney(value: number): string {
   return new Intl.NumberFormat("pt-BR", {
@@ -191,6 +197,125 @@ async function markLog(
       },
     })
     .catch(swallow("asaas.process"))
+}
+
+/**
+ * Parcela de uma MENSALIDADE DA UNIDADE parcelada no cartao.
+ *
+ * Por que existe: ao parcelar, criamos um parcelamento no Asaas
+ * (POST /installments/) e REMOVEMOS a cobranca original da assinatura, senao a
+ * unidade pagaria duas vezes. A consequencia e que as N parcelas chegam ao
+ * webhook SEM `subscription` — elas nao casam com a assinatura da unidade, nao
+ * casam com `BoletoInstallment` e nao casam com venda de aluno. Antes disto
+ * caiam todas no fallback "sem subscription" e a linha em `tenant_payments`
+ * ficava congelada no estado gravado na hora da compra.
+ *
+ * A linha-pai (`asaas_payment_id` = `ins_...`) representa o parcelamento
+ * INTEIRO: `amount` ja e o valor cheio da mensalidade. Por isso aqui NAO se cria
+ * linha nova por parcela — seria receita multiplicada por N no financeiro — nem
+ * se mexe em `amount`. So avanca a contagem de parcelas pagas.
+ *
+ * Tambem NAO suspende a unidade num `PAYMENT_OVERDUE` de parcela: o valor cheio
+ * ja foi autorizado no cartao na captura da 1a parcela, e uma parcela que o
+ * emissor recusa depois e assunto de conciliacao, nao motivo para tirar a
+ * vitrine do ar. Alertamos o SUPER_ADMIN em vez disso.
+ *
+ * Devolve `false` quando o parcelamento nao e de mensalidade de unidade (ex.:
+ * carne de aluno), para o caller seguir com os demais roteamentos.
+ */
+export async function processTenantInstallmentPayment(
+  logId: string,
+  event: string,
+  payment: NonNullable<AsaasWebhookPayload["payment"]>,
+): Promise<boolean> {
+  const installmentId = payment.installment
+  if (!installmentId) return false
+
+  const row = await prisma.tenantPayment.findFirst({
+    where: { installmentId },
+    select: {
+      id: true,
+      tenantId: true,
+      status: true,
+      paidAt: true,
+      installmentCount: true,
+      installmentPaidIds: true,
+      tenant: { select: { name: true } },
+    },
+  })
+  if (!row) return false
+
+  const isPaid = event === "PAYMENT_RECEIVED" || event === "PAYMENT_CONFIRMED"
+
+  if (isPaid) {
+    const total = row.installmentCount ?? 0
+
+    // Re-entrega do Asaas: a parcela ja contada nao avanca nada. Sem isto a
+    // linha passaria a exibir "7 de 6".
+    if (row.installmentPaidIds.includes(payment.id)) {
+      await markLog(logId, true, `mensalidade parcelada: parcela ${payment.id} ja contabilizada`)
+      return true
+    }
+
+    // `push` no proprio UPDATE: duas entregas simultaneas nao podem ler o mesmo
+    // array e uma sobrescrever a outra (o guard acima e read-then-write).
+    const updated = await prisma.tenantPayment.update({
+      where: { id: row.id },
+      data: {
+        status: "CONFIRMED",
+        // `paidAt` marca a COMPETENCIA da mensalidade e so e gravado na
+        // primeira liquidacao. Reescrever a cada parcela empurrava a data mes a
+        // mes: uma mensalidade de janeiro parcelada em 6x aparecia como receita
+        // de junho nos relatorios (que agrupam por `paid_at`), e janeiro ficava
+        // zerado.
+        ...(row.paidAt
+          ? {}
+          : {
+              paidAt: payment.paymentDate
+                ? new Date(payment.paymentDate)
+                : new Date(),
+            }),
+        installmentPaidIds: { push: payment.id },
+      },
+      select: { installmentPaidIds: true },
+    })
+    const paidCount = updated.installmentPaidIds.length
+
+    contextLogger().info(
+      {
+        event: "asaas.tenant_installment.paid",
+        tenantId: row.tenantId,
+        installmentId,
+        paid: paidCount,
+        total,
+      },
+      "parcela de mensalidade parcelada liquidada",
+    )
+
+    await markLog(
+      logId,
+      true,
+      `mensalidade parcelada: parcela ${paidCount}${total ? `/${total}` : ""} liquidada`,
+    )
+    return true
+  }
+
+  if (event === "PAYMENT_OVERDUE" || event === "PAYMENT_REFUNDED") {
+    await createNotification({
+      audience: "ROLE",
+      roleTarget: "SUPER_ADMIN",
+      level: "WARNING",
+      title: "Parcela de mensalidade com problema",
+      body: `Revenda ${row.tenant.name}: a parcela ${payment.id} do parcelamento ${installmentId} veio como ${event}. A unidade NAO foi suspensa (o valor cheio foi autorizado na compra) — concilie no Asaas.`,
+      href: "/admin/financeiro",
+    }).catch(swallow("asaas.tenant_installment"))
+
+    await markLog(logId, true, `mensalidade parcelada: ${event} — alerta enviado`)
+    return true
+  }
+
+  await markLog(logId, true, `mensalidade parcelada: ${event} — sem acao`)
+  return true
 }
 
 async function processPmbDirectSale(
@@ -383,9 +508,99 @@ export async function processAsaasWebhook(
         return
       }
 
+      // Parcela de uma MENSALIDADE DA UNIDADE parcelada no cartao. O
+      // parcelamento substitui a cobranca da assinatura (que e removida), entao
+      // as parcelas chegam SEM `subscription` — sem este branch elas morriam no
+      // fallback abaixo e a linha em tenant_payments nunca refletia o recebido.
+      if (payment.installment) {
+        const handledInstallment = await processTenantInstallmentPayment(
+          logId,
+          event,
+          payment,
+        )
+        if (handledInstallment) return
+      }
+
       const handled = await processPmbDirectSale(logId, event, payment)
       if (handled) return
       await markLog(logId, true, `sem subscription: ${event}`)
+      return
+    }
+
+    // ASSINATURA DE ALUNO. Roteada ANTES da matricula e do tenant: os tres usam
+    // `asaasSubscriptionId`, e uma assinatura nao casaria com nenhum dos outros
+    // dois — cairia no fallback e o ciclo nunca renovaria.
+    const studentSub = await prisma.studentSubscription.findFirst({
+      where: { asaasSubscriptionId: subscriptionId },
+      select: { id: true },
+    })
+    if (studentSub) {
+      if (event === "PAYMENT_RECEIVED" || event === "PAYMENT_CONFIRMED") {
+        const { settled } = await settleSubscriptionCycle(studentSub.id, {
+          gateway: "ASAAS",
+          externalPaymentId: payment.id,
+          amount: payment.value,
+          paidAt: payment.paymentDate ? new Date(payment.paymentDate) : new Date(),
+          dueDate: new Date(payment.dueDate),
+          billingType: payment.billingType,
+          invoiceUrl: payment.invoiceUrl,
+          bankSlipUrl: payment.bankSlipUrl,
+        })
+        await markLog(
+          logId,
+          true,
+          settled
+            ? `assinatura ${studentSub.id}: ciclo liquidado`
+            : `assinatura ${studentSub.id}: ciclo ja registrado`,
+        )
+        return
+      }
+      if (event === "PAYMENT_OVERDUE") {
+        // Grava a fatura ANTES de marcar o atraso: é este link que a área do
+        // aluno mostra para ele regularizar dentro da carência.
+        await recordOpenSubscriptionCharge(studentSub.id, {
+          gateway: "ASAAS",
+          externalPaymentId: payment.id,
+          amount: payment.value,
+          dueDate: new Date(payment.dueDate),
+          billingType: payment.billingType,
+          invoiceUrl: payment.invoiceUrl,
+          bankSlipUrl: payment.bankSlipUrl,
+          status: "OVERDUE",
+        })
+        // Só MARCA. Quem corta é o cron, depois da carência — revogar aqui
+        // apagaria o progresso na EA de quem se atrasou um dia.
+        await markSubscriptionPastDue(studentSub.id)
+        await markLog(logId, true, `assinatura ${studentSub.id}: em atraso`)
+        return
+      }
+
+      if (event === "PAYMENT_CREATED" || event === "PAYMENT_UPDATED") {
+        // Ciclo novo emitido pela recorrência: guarda o link de pagamento.
+        await recordOpenSubscriptionCharge(studentSub.id, {
+          gateway: "ASAAS",
+          externalPaymentId: payment.id,
+          amount: payment.value,
+          dueDate: new Date(payment.dueDate),
+          billingType: payment.billingType,
+          invoiceUrl: payment.invoiceUrl,
+          bankSlipUrl: payment.bankSlipUrl,
+          status: "PENDING",
+        })
+        await markLog(logId, true, `assinatura ${studentSub.id}: cobranca em aberto registrada`)
+        return
+      }
+      if (
+        event === "PAYMENT_REFUNDED" ||
+        event === "PAYMENT_CHARGEBACK_REQUESTED"
+      ) {
+        // Sem carência: ela existe para quem está tentando pagar, não para quem
+        // pediu o dinheiro de volta.
+        await revokeSubscriptionForRefund(studentSub.id)
+        await markLog(logId, true, `assinatura ${studentSub.id}: estornada`)
+        return
+      }
+      await markLog(logId, true, `assinatura ${studentSub.id}: ${event} — sem acao`)
       return
     }
 

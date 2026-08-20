@@ -36,6 +36,11 @@ const SELECT = {
   invoiceUrl: true,
   bankSlipUrl: true,
   markedPaidAt: true,
+  // Sem estes três a UI nunca reconhece uma mensalidade parcelada e volta a
+  // oferecer "Pagar agora" num id `ins_...` que dá 404.
+  installmentId: true,
+  installmentCount: true,
+  installmentPaidIds: true,
 } as const
 
 /**

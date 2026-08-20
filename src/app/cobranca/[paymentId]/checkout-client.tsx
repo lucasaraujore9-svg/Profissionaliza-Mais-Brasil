@@ -7,8 +7,14 @@ interface Props {
   paymentId: string
   billingType: string
   amount: number
-  /** Teto de parcelas no cartão para a 1ª mensalidade (1 = à vista). */
+  /** Teto de parcelas no cartão para esta cobrança (1 = à vista). */
   maxInstallments: number
+  /**
+   * Esta é a 1ª mensalidade (unidade ainda não ativada). Muda só o AVISO: numa
+   * mensalidade corrente é preciso deixar claro que parcelar divide ESTA
+   * cobrança e não suspende as dos próximos meses.
+   */
+  isFirstCharge: boolean
 }
 
 type Tab = "PIX" | "BOLETO" | "CARTAO"
@@ -254,11 +260,13 @@ function CardTab({
   onPaid,
   amount,
   maxInstallments,
+  isFirstCharge,
 }: {
   paymentId: string
   onPaid: () => void
   amount: number
   maxInstallments: number
+  isFirstCharge: boolean
 }) {
   const [installmentCount, setInstallmentCount] = useState(1)
   const [form, setForm] = useState<CardForm>({
@@ -527,8 +535,15 @@ function CardTab({
               ))}
             </select>
           </Field>
+          {installmentCount > 1 && !isFirstCharge && (
+            <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-[11px] leading-relaxed text-amber-800">
+              O parcelamento divide <strong>apenas esta cobrança</strong>. As
+              mensalidades dos próximos meses continuam sendo geradas
+              normalmente, no valor cheio.
+            </p>
+          )}
           <p className="mt-1 text-[11px] text-gray-400">
-            Parcelamento disponível apenas para a primeira mensalidade.
+            Sem juros. Cobrado no seu cartão de crédito.
           </p>
         </div>
       )}
@@ -610,6 +625,7 @@ export function CheckoutClient({
   billingType,
   amount,
   maxInstallments,
+  isFirstCharge,
 }: Props) {
   const [tab, setTab] = useState<Tab>("PIX")
   const [billingInfo, setBillingInfo] = useState<AsaasBillingInfo | null>(null)
@@ -745,6 +761,7 @@ export function CheckoutClient({
                 onPaid={onPaid}
                 amount={amount}
                 maxInstallments={maxInstallments}
+                isFirstCharge={isFirstCharge}
               />
             )}
           </>

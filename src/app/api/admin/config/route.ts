@@ -6,9 +6,11 @@ import {
   updatePmbDirectSaleGateway,
   updatePmbMpAccessToken,
   updatePmbInterestFreeInstallments,
+  updateTenantMonthlyMaxInstallments,
   getPmbMpAccessTokenAsync,
 } from "@/lib/system-settings"
 import { MAX_CARD_INSTALLMENTS } from "@/lib/mercadopago/installments"
+import { ASAAS_MAX_INSTALLMENTS } from "@/lib/tenant-billing/installments"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { requireAdmin } from "@/lib/auth/admin-guard"
 
@@ -38,6 +40,7 @@ export const GET = withRequestContext(
         supportEmail: "atendimento@profissionalizamaisbrasil.com.br",
         pmbDirectSaleGateway: settings.pmbDirectSaleGateway,
         pmbInterestFreeInstallments: settings.pmbInterestFreeInstallments,
+        tenantMonthlyMaxInstallments: settings.tenantMonthlyMaxInstallments,
       },
       integrations: {
         ea: {
@@ -75,6 +78,15 @@ const patchSchema = z.object({
     .int()
     .min(1)
     .max(MAX_CARD_INSTALLMENTS)
+    .optional(),
+  // Teto de parcelas da mensalidade da unidade (a partir da 2a). Vai ate o
+  // limite do Asaas, nao ate 12: e outra negociacao — alivio de fluxo de caixa
+  // de quem ja e cliente, nao o "sem juros" anunciado na venda de curso.
+  tenantMonthlyMaxInstallments: z
+    .number()
+    .int()
+    .min(1)
+    .max(ASAAS_MAX_INSTALLMENTS)
     .optional(),
 })
 
@@ -134,28 +146,35 @@ export const PATCH = withRequestContext(
     await updatePmbMpAccessToken(parsed.data.pmbMpAccessToken)
   }
 
+  // Os dois ajustes numéricos são aplicados ANTES de qualquer resposta e o
+  // resultado é acumulado. Antes cada bloco tinha o próprio `return` antecipado,
+  // então um PATCH que trouxesse os dois campos gravava só o primeiro e
+  // respondia 200 — a segunda configuração sumia em silêncio.
+  const applied: Record<string, number | string> = {}
+
   if (parsed.data.pmbInterestFreeInstallments !== undefined) {
     const updated = await updatePmbInterestFreeInstallments(
       parsed.data.pmbInterestFreeInstallments,
     )
-    if (!parsed.data.pmbDirectSaleGateway) {
-      return NextResponse.json({
-        data: {
-          pmbInterestFreeInstallments: updated.pmbInterestFreeInstallments,
-        },
-      })
-    }
+    applied.pmbInterestFreeInstallments = updated.pmbInterestFreeInstallments
+  }
+
+  if (parsed.data.tenantMonthlyMaxInstallments !== undefined) {
+    const updated = await updateTenantMonthlyMaxInstallments(
+      parsed.data.tenantMonthlyMaxInstallments,
+    )
+    applied.tenantMonthlyMaxInstallments = updated.tenantMonthlyMaxInstallments
   }
 
   if (parsed.data.pmbDirectSaleGateway) {
     const updated = await updatePmbDirectSaleGateway(
       parsed.data.pmbDirectSaleGateway,
     )
-    return NextResponse.json({
-      data: { pmbDirectSaleGateway: updated.pmbDirectSaleGateway },
-    })
+    applied.pmbDirectSaleGateway = updated.pmbDirectSaleGateway
   }
 
-  return NextResponse.json({ data: { ok: true } })
+  return NextResponse.json({
+    data: Object.keys(applied).length > 0 ? applied : { ok: true },
+  })
   },
 )

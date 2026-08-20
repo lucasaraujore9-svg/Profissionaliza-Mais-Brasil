@@ -130,3 +130,16 @@ select cron.schedule('pmb-check-wa-sessions', '20 8,14,20 * * *',
 -- Idempotente. 09:30 UTC, logo apos os certs.
 select cron.schedule('pmb-ensure-asaas-webhooks', '30 9 * * *',
   $$ select app_internal.run_cron('/api/cron/ensure-asaas-webhooks') $$);
+
+-- ── Assinaturas de aluno ────────────────────────────────────────────────────
+-- A queda de uma assinatura NAO chega sozinha. Com cartao o gateway avisa
+-- quando a cobranca falha; com PIX/boleto ele so EMITE a fatura — se o aluno
+-- simplesmente nao pagar, nenhum evento e disparado e a assinatura ficaria
+-- valendo para sempre. Este e o unico ponto que converte "parou de pagar" em
+-- "perdeu acesso".
+--
+-- Duas fases: ciclo vencido dentro da carencia so marca PAST_DUE (NAO toca na
+-- fornecedora, porque revogar na EA APAGA o progresso do aluno); carencia
+-- esgotada cancela e revoga de fato. Idempotente. 08:00 UTC (05:00 BRT).
+select cron.schedule('pmb-sweep-subscriptions', '0 8 * * *',
+  $$ select app_internal.run_cron('/api/cron/sweep-subscriptions') $$);

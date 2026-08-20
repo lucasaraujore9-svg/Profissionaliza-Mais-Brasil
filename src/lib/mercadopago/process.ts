@@ -19,6 +19,11 @@ import {
   notifyStudentPaymentRejected,
 } from "./student-payment-emails"
 import { swallow } from "@/lib/errors"
+import {
+  settleSubscriptionCycle,
+  markSubscriptionPastDue,
+  revokeSubscriptionForRefund,
+} from "@/lib/subscriptions/renew"
 import { isTransientWebhookError } from "@/lib/webhooks/transient"
 import { contextLogger } from "@/lib/logger"
 
@@ -436,6 +441,64 @@ export async function processMpWebhook(args: ProcessArgs): Promise<void> {
     // ── Parcela de carnê (parc_<id>): roteia pela linha da parcela ──────────
     if (payment.external_reference?.startsWith("parc_")) {
       await handleInstallmentMpPayment(tenant, payment, logId)
+      return
+    }
+
+    // ── Assinatura de aluno (pmb_sub_<id>) ─────────────────────────────────
+    // Roteada ANTES de `resolveEnrollmentId`: uma assinatura não tem matrícula
+    // própria (as matrículas nascem sob demanda, uma por curso aberto), então
+    // cairia em "enrollment nao encontrado" e o ciclo nunca renovaria.
+    if (payment.external_reference?.startsWith("pmb_sub_")) {
+      const subscriptionId = payment.external_reference.slice("pmb_sub_".length)
+      const sub = await prisma.studentSubscription.findUnique({
+        where: { id: subscriptionId },
+        select: { id: true },
+      })
+      if (!sub) {
+        await markLog(logId, true, `assinatura ${subscriptionId} nao encontrada`)
+        return
+      }
+
+      if (payment.status === "approved") {
+        const { settled } = await settleSubscriptionCycle(sub.id, {
+          gateway: "MP",
+          externalPaymentId: String(payment.id),
+          amount: payment.transaction_amount,
+          paidAt: payment.date_approved
+            ? new Date(payment.date_approved)
+            : new Date(),
+          dueDate: new Date(),
+          billingType: payment.payment_type_id,
+        })
+        await markLog(
+          logId,
+          true,
+          settled
+            ? `assinatura ${sub.id}: ciclo liquidado`
+            : `assinatura ${sub.id}: ciclo ja registrado`,
+        )
+        return
+      }
+
+      if (
+        payment.status === "refunded" ||
+        payment.status === "charged_back" ||
+        payment.status === "cancelled"
+      ) {
+        await revokeSubscriptionForRefund(sub.id)
+        await markLog(logId, true, `assinatura ${sub.id}: ${payment.status}`)
+        return
+      }
+
+      if (payment.status === "rejected") {
+        // Cartão recusado na renovação: marca em atraso e deixa a carência
+        // correr. Cortar aqui apagaria o progresso de quem só trocou de cartão.
+        await markSubscriptionPastDue(sub.id)
+        await markLog(logId, true, `assinatura ${sub.id}: cobranca recusada`)
+        return
+      }
+
+      await markLog(logId, true, `assinatura ${sub.id}: status=${payment.status}`)
       return
     }
 

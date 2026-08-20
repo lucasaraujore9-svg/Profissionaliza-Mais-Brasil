@@ -18,6 +18,7 @@ import {
  */
 export function TenantBillingCard({ summary }: { summary: TenantBillingSummary }) {
   const next = summary.next
+  const nextPayUrl = next ? payUrlFor(next) : null
 
   if (!next) {
     return (
@@ -87,12 +88,14 @@ export function TenantBillingCard({ summary }: { summary: TenantBillingSummary }
             Ver todas
             <ArrowRight className="h-3.5 w-3.5" />
           </Link>
-          <Link
-            href={payUrlFor(next)}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-pmb-green)] px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-[var(--color-pmb-green-700)]"
-          >
-            Pagar agora
-          </Link>
+          {nextPayUrl && (
+            <Link
+              href={nextPayUrl}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-pmb-green)] px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-[var(--color-pmb-green-700)]"
+            >
+              Pagar agora
+            </Link>
+          )}
         </div>
       </div>
     </div>

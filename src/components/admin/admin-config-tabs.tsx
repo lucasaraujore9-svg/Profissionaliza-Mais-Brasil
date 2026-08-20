@@ -10,6 +10,7 @@ import { WebhookConfig, type WebhookConfigData } from "./webhook-config"
 import { SystemInfo, type SystemInfoData } from "./system-info"
 import { PmbMpTokenConfig } from "./pmb-mp-token-config"
 import { ApiDocsTab } from "./api-docs-tab"
+import { ASAAS_MAX_INSTALLMENTS } from "@/lib/tenant-billing/installments"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 
@@ -31,6 +32,7 @@ export interface GeneralConfigData {
   supportEmail: string
   pmbDirectSaleGateway: PaymentGatewayId
   pmbInterestFreeInstallments: number
+  tenantMonthlyMaxInstallments: number
 }
 
 interface GeneralTabProps {
@@ -83,6 +85,38 @@ function GeneralTab({
       setIfError("Erro de rede ao salvar")
     } finally {
       setIfSaving(false)
+    }
+  }
+
+  const [tenantMaxInst, setTenantMaxInst] = useState(
+    general.tenantMonthlyMaxInstallments,
+  )
+  const [tmSaving, setTmSaving] = useState(false)
+  const [tmError, setTmError] = useState<string | null>(null)
+  const [tmOk, setTmOk] = useState(false)
+
+  async function saveTenantMaxInst(next: number) {
+    setTenantMaxInst(next)
+    setTmSaving(true)
+    setTmError(null)
+    setTmOk(false)
+    try {
+      const res = await fetch("/api/admin/config", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tenantMonthlyMaxInstallments: next }),
+      })
+      const body = await res.json()
+      if (!res.ok) {
+        setTmError(body.error ?? "Falha ao salvar")
+        return
+      }
+      setTmOk(true)
+      setTimeout(() => setTmOk(false), 2000)
+    } catch {
+      setTmError("Erro de rede ao salvar")
+    } finally {
+      setTmSaving(false)
     }
   }
 
@@ -288,6 +322,60 @@ function GeneralTab({
         {ifOk && (
           <p className="mt-3 rounded-md bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
             Parcelamento atualizado.
+          </p>
+        )}
+        {!canEditGateway && (
+          <p className="mt-3 text-[11px] text-gray-500">
+            Somente SUPER_ADMIN pode alterar este parâmetro.
+          </p>
+        )}
+      </div>
+
+      <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm lg:p-8">
+        <h3 className="text-sm font-semibold text-[var(--color-pmb-green-900)]">
+          Mensalidade das unidades — parcelamento no cartão
+        </h3>
+        <p className="mt-1 text-xs text-gray-600">
+          Até quantas vezes uma unidade pode dividir no cartão uma mensalidade
+          em aberto, na tela de pagamento da cobrança. Vale para{" "}
+          <strong>qualquer</strong> cobrança pendente ou vencida — o parcelamento
+          divide só aquela cobrança, e as mensalidades dos meses seguintes
+          continuam sendo geradas normalmente. Sem juros: é o valor da
+          mensalidade dividido.
+        </p>
+        <p className="mt-2 text-xs text-gray-500">
+          A <strong>primeira</strong> mensalidade não usa este número — ela segue
+          o teto definido na criação da unidade. Cada unidade também pode ter um
+          limite próprio, em /admin/revendedores.
+        </p>
+
+        <div className="mt-5 max-w-xs">
+          <Label htmlFor="tenant-monthly-max">Parcelas permitidas</Label>
+          <select
+            id="tenant-monthly-max"
+            value={tenantMaxInst}
+            disabled={!canEditGateway || tmSaving}
+            onChange={(e) => saveTenantMaxInst(Number(e.target.value))}
+            className="mt-1.5 w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-800 focus:border-[var(--color-pmb-green)] focus:outline-none focus:ring-1 focus:ring-[var(--color-pmb-green)] disabled:opacity-60"
+          >
+            {Array.from({ length: ASAAS_MAX_INSTALLMENTS }, (_, i) => i + 1).map(
+              (n) => (
+                <option key={n} value={n}>
+                  {n === 1 ? "Sem parcelamento (só à vista)" : `Até ${n}x`}
+                </option>
+              ),
+            )}
+          </select>
+        </div>
+
+        {tmError && (
+          <p className="mt-3 rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">
+            {tmError}
+          </p>
+        )}
+        {tmOk && (
+          <p className="mt-3 rounded-md bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
+            Parcelamento das mensalidades atualizado.
           </p>
         )}
         {!canEditGateway && (

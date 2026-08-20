@@ -26,6 +26,7 @@ import {
   Building2,
   Video,
   Images,
+  Sparkles,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react"
@@ -64,6 +65,7 @@ const ALL_ITEMS: {
   { href: "/admin/indicacoes", label: "Indicações", icon: Share2, permission: "indicacoes.view" },
   { href: "/admin/certificados", label: "Certificados", icon: Award, permission: "certificados.view" },
   { href: "/admin/catalogo", label: "Catálogo", icon: BookOpen, permission: "catalogo.view" },
+  { href: "/admin/assinaturas", label: "Assinaturas", icon: Sparkles, permission: "assinaturas.view" },
   { href: "/admin/vitrine", label: "Vitrine", icon: Palette, permission: "vitrine.view" },
   // Hub de BI "Relatórios" (absorveu o antigo Analytics). A visibilidade fina
   // por aba vem de `lib/reports/tabs.ts`, também por permissão.

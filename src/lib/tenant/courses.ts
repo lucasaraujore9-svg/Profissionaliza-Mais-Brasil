@@ -72,7 +72,13 @@ interface ListFilters {
  *   - ALLOWLIST → so se o tenant estiver em `allowedTenantIds`
  *   - DENYLIST  → todos exceto se o tenant estiver em `blockedTenantIds`
  */
-function visibilityFilter(tenantId: string): Prisma.CourseWhereInput {
+/**
+ * Um curso do catalogo mae so alcanca a vitrine de uma unidade se a curadoria
+ * da PMB permitir. Exportado para que a resolucao de escopo das ASSINATURAS
+ * (lib/subscriptions/scope.ts) aplique exatamente o mesmo criterio — uma quarta
+ * copia desta regra divergiria no primeiro ajuste.
+ */
+export function visibilityFilter(tenantId: string): Prisma.CourseWhereInput {
   return {
     OR: [
       { visibilityMode: "ALL" },

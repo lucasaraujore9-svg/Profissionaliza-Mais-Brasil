@@ -188,7 +188,10 @@ export function BillingReminderPopup() {
 
         <div className="flex flex-col gap-2 border-t border-gray-100 p-5 sm:flex-row-reverse">
           <Link
-            href={charges.length === 1 ? payUrlFor(first) : "/painel/cobrancas"}
+            href={
+              (charges.length === 1 ? payUrlFor(first) : null) ??
+              "/painel/cobrancas"
+            }
             onClick={dismiss}
             className="inline-flex flex-1 items-center justify-center rounded-lg bg-[var(--color-pmb-green)] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[var(--color-pmb-green-700)]"
           >

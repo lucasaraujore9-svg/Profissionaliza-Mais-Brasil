@@ -155,6 +155,15 @@ export interface AsaasPayment {
   id: string
   customer: string
   subscription: string | null
+  /**
+   * Id do parcelamento (`ins_...`) quando esta cobranca e uma PARCELA de um
+   * carne/parcelamento. Cobrancas avulsas e de assinatura vem com null.
+   *
+   * E por ele que o webhook reconhece as parcelas 2..N de uma mensalidade
+   * parcelada no cartao: elas chegam SEM `subscription` e, sem este campo,
+   * caiam no fallback "sem subscription" sem atualizar nada.
+   */
+  installment: string | null
   billingType: string
   value: number
   netValue: number

@@ -16,6 +16,7 @@ import {
   Menu,
   X,
   HelpCircle,
+  Sparkles,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { NotificationBell } from "@/components/shared/notification-bell"
@@ -27,15 +28,25 @@ interface SessionShape {
   name?: string
 }
 
-const NAV = [
-  { href: "/aluno", label: "Visão geral", icon: LayoutDashboard },
-  { href: "/aluno/cursos", label: "Meus cursos", icon: GraduationCap },
-  { href: "/aluno/certificados", label: "Certificados", icon: Award },
-  { href: "/aluno/comprar", label: "Comprar curso", icon: ShoppingBag },
-  { href: "/aluno/pagamentos", label: "Pagamentos", icon: CreditCard },
-  { href: "/aluno/suporte", label: "Suporte", icon: HelpCircle },
-  { href: "/aluno/perfil", label: "Meu perfil", icon: UserCircle },
-]
+/**
+ * "Minha assinatura" só aparece para quem assina. A maioria dos alunos compra
+ * curso avulso e um item morto no menu deles seria ruído — e clicar levaria a
+ * uma tela vazia explicando um produto que eles não contrataram.
+ */
+function navFor(hasSubscription: boolean) {
+  return [
+    { href: "/aluno", label: "Visão geral", icon: LayoutDashboard },
+    { href: "/aluno/cursos", label: "Meus cursos", icon: GraduationCap },
+    ...(hasSubscription
+      ? [{ href: "/aluno/assinatura", label: "Minha assinatura", icon: Sparkles }]
+      : []),
+    { href: "/aluno/certificados", label: "Certificados", icon: Award },
+    { href: "/aluno/comprar", label: "Comprar curso", icon: ShoppingBag },
+    { href: "/aluno/pagamentos", label: "Pagamentos", icon: CreditCard },
+    { href: "/aluno/suporte", label: "Suporte", icon: HelpCircle },
+    { href: "/aluno/perfil", label: "Meu perfil", icon: UserCircle },
+  ]
+}
 
 function initialsOf(name?: string): string {
   if (!name) return "AL"
@@ -48,6 +59,7 @@ function initialsOf(name?: string): string {
 interface SidebarContentProps {
   session: SessionShape
   pathname: string
+  hasSubscription: boolean
   storeName?: string
   logoUrl?: string
   onNavigate?: () => void
@@ -56,6 +68,7 @@ interface SidebarContentProps {
 function SidebarContent({
   session,
   pathname,
+  hasSubscription,
   storeName,
   logoUrl,
   onNavigate,
@@ -102,7 +115,7 @@ function SidebarContent({
       </div>
 
       <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
-        {NAV.map((item) => {
+        {navFor(hasSubscription).map((item) => {
           const isActive =
             pathname === item.href ||
             (item.href !== "/aluno" && pathname.startsWith(item.href))
@@ -162,6 +175,8 @@ function SidebarContent({
 interface StudentShellProps {
   session: SessionShape
   children: React.ReactNode
+  /** O aluno tem assinatura viva — libera o item "Minha assinatura" no menu. */
+  hasSubscription?: boolean
   /** Cor primária do tenant (vitrine). Default = verde PMB. */
   brandPrimary?: string
   /** Cor de destaque do tenant. Default = lime PMB. */
@@ -182,6 +197,7 @@ export function StudentShell({
   storeName,
   logoUrl,
   dismissedTours = [],
+  hasSubscription = false,
 }: StudentShellProps) {
   const pathname = usePathname()
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -206,6 +222,7 @@ export function StudentShell({
         <SidebarContent
           session={session}
           pathname={pathname}
+          hasSubscription={hasSubscription}
           storeName={storeName}
           logoUrl={logoUrl}
         />
@@ -235,6 +252,7 @@ export function StudentShell({
             <SidebarContent
               session={session}
               pathname={pathname}
+              hasSubscription={hasSubscription}
               storeName={storeName}
               logoUrl={logoUrl}
               onNavigate={() => setMobileOpen(false)}

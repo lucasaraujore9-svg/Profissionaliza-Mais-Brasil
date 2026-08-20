@@ -40,6 +40,12 @@ export interface TenantCharge {
   urgency: ChargeUrgency
   /** Marcada como paga manualmente pelo financeiro da PMB. */
   markedPaid: boolean
+  /**
+   * Mensalidade paga de forma PARCELADA no cartão. Quando presente,
+   * `asaasPaymentId` guarda o id do PARCELAMENTO (`ins_...`), que não resolve em
+   * GET /payments/{id} — por isso esta linha não oferece "Pagar agora".
+   */
+  installment: { count: number | null; paid: number } | null
 }
 
 export interface TenantBillingSummary {
@@ -69,6 +75,9 @@ export interface ChargeRow {
   invoiceUrl: string | null
   bankSlipUrl: string | null
   markedPaidAt: Date | null
+  installmentId?: string | null
+  installmentCount?: number | null
+  installmentPaidIds?: string[]
 }
 
 /**
@@ -113,14 +122,35 @@ export function toCharge(row: ChargeRow, now: Date = new Date()): TenantCharge {
     daysUntilDue,
     urgency: urgencyOf(daysUntilDue),
     markedPaid: row.markedPaidAt !== null,
+    installment: row.installmentId
+      ? {
+          count: row.installmentCount ?? null,
+          paid: row.installmentPaidIds?.length ?? 0,
+        }
+      : null,
   }
 }
 
 /**
  * Link para a unidade pagar. Preferimos a nossa página de cobrança
  * (/cobranca/[asaasPaymentId]) — ela oferece PIX, boleto e cartão, e é onde o
- * parcelamento da 1ª mensalidade vive.
+ * parcelamento no cartão vive.
+ *
+ * Devolve `null` para uma cobrança JÁ parcelada: ali `asaasPaymentId` é um
+ * `ins_...`, que o `getPayment` da página não resolve — o link levaria a um 404.
+ * O valor cheio já foi autorizado no cartão; não há o que pagar de novo.
  */
-export function payUrlFor(charge: Pick<TenantCharge, "asaasPaymentId">): string {
+export function payUrlFor(
+  charge: Pick<TenantCharge, "asaasPaymentId" | "installment">,
+): string | null {
+  if (charge.installment) return null
   return `/cobranca/${charge.asaasPaymentId}`
+}
+
+/** "3 de 6" — rótulo da mensalidade parcelada. */
+export function installmentLabel(
+  installment: NonNullable<TenantCharge["installment"]>,
+): string {
+  if (!installment.count) return "Parcelada no cartão"
+  return `Parcelada em ${installment.count}x · ${installment.paid} de ${installment.count} paga${installment.paid === 1 ? "" : "s"}`
 }
