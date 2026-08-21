@@ -15,6 +15,7 @@ import {
   Smartphone,
 } from "lucide-react"
 import { resolveAprendizado } from "@/lib/courses/aprendizado"
+import { RegulamentacaoNote } from "@/components/shared/regulamentacao-note"
 
 export interface CourseDetailData {
   slug: string
@@ -69,6 +70,11 @@ interface CourseDetailViewProps {
    * para exibir o card "Receba mais informacoes".
    */
   inquirySlot?: React.ReactNode
+  /**
+   * Marca ofertante exibida na nota de regulamentacao. Em vitrine de revenda e
+   * o nome da unidade; ausente = marca PMB.
+   */
+  brandName?: string | null
 }
 
 const PARA_QUEM = [
@@ -119,6 +125,7 @@ export function CourseDetailView({
   secondaryCtaHref,
   secondaryCtaLabel,
   inquirySlot,
+  brandName,
 }: CourseDetailViewProps) {
   const paragrafos = splitParagraphs(course.descricao)
   const cargaHoraria = course.cargaHoraria
@@ -428,6 +435,9 @@ export function CourseDetailView({
                 ))}
               </div>
             </div>
+
+            {/* Regulamentacao (nota legal dos cursos livres) */}
+            <RegulamentacaoNote brandName={brandName} />
           </div>
 
           {/* SIDEBAR PRICING (sticky) */}

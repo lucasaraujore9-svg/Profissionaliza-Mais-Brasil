@@ -159,6 +159,7 @@ export default async function CoursePage({ params }: CoursePageProps) {
         backHref="/"
         backLabel="Voltar para a loja"
         inquirySlot={inquirySlot}
+        brandName={tenant.name}
       />
     </>
   )

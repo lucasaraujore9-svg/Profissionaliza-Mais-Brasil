@@ -8,6 +8,7 @@ import {
   listTenantCatalog,
   type TenantCourseListItem,
 } from "@/lib/tenant/courses"
+import { RegulamentacaoNote } from "@/components/shared/regulamentacao-note"
 
 export const dynamic = "force-dynamic"
 
@@ -222,6 +223,8 @@ export default async function LojaCursosPage({
             />
           </>
         )}
+
+        <RegulamentacaoNote brandName={tenant.name} className="mt-10" />
       </section>
     </div>
   )

@@ -4,6 +4,7 @@ import { CourseCard } from "@/components/main/home/course-card"
 import { SearchAutocomplete } from "@/components/shared/search-autocomplete"
 import { CatalogPager } from "@/components/shared/catalog-pager"
 import { loadCatalogo, loadCategorias } from "@/lib/catalog/home"
+import { RegulamentacaoNote } from "@/components/shared/regulamentacao-note"
 
 // PERF-003: catálogo paginado server-side (evita carregar 112+ cursos por load).
 const PAGE_SIZE = 24
@@ -148,6 +149,8 @@ export default async function CursosPage({
             />
           </>
         )}
+
+        <RegulamentacaoNote className="mt-10" />
       </section>
     </div>
   )
