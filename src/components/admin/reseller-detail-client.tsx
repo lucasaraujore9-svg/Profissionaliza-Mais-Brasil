@@ -47,6 +47,7 @@ import { ResellerTecnicaConfig } from "./reseller-tecnica-config"
 import { ResellerEjaConfig } from "./reseller-eja-config"
 import { ResellerAutomationConfig } from "./reseller-automation-config"
 import { ResellerCanSellConfig } from "./reseller-can-sell-config"
+import { ResellerCourseAuthoringConfig } from "./reseller-course-authoring-config"
 import { ResellerSalesGatewayStatus } from "./reseller-sales-gateway-status"
 import {
   ResellerMonthlyConfig,
@@ -88,6 +89,8 @@ interface DetailResponse {
     ejaLabel: string | null
     automationEnabled: boolean
     canSellResellers: boolean
+    courseAuthoringEnabled: boolean
+    asaasWalletId?: string | null
     waConnectedPhone: string | null
     waStatus: string
     monthlyAllowed: boolean
@@ -369,6 +372,12 @@ export function ResellerDetailClient({
             <ResellerCanSellConfig
               tenantId={tenantId}
               canSellResellers={data.reseller.canSellResellers}
+              onSaved={load}
+            />
+            <ResellerCourseAuthoringConfig
+              tenantId={tenantId}
+              courseAuthoringEnabled={data.reseller.courseAuthoringEnabled}
+              asaasWalletId={data.reseller.asaasWalletId}
               onSaved={load}
             />
             <ResellerMonthlyConfig

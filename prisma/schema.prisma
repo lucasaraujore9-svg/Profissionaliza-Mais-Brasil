@@ -512,6 +512,12 @@ model Tenant {
   // cobradas no Asaas da PMB (sistema mae) e atreladas a ela via referrerTenantId
   // — ela vira uma especie de admin/suporte dessas sub-revendas.
   canSellResellers    Boolean   @default(false) @map("can_sell_resellers")
+  // Modulo "Produzir cursos": a unidade cria curso proprio, define os termos
+  // comerciais e publica alem da propria vitrine. Habilitacao COMERCIAL,
+  // concedida pela equipe do sistema mae em /admin/revendedores/[id] →
+  // "Vitrine & extras" — nao se confunde com a permissao `cursosAutorais.*`,
+  // que diz QUEM dentro da unidade opera o modulo depois de ligado.
+  courseAuthoringEnabled Boolean @default(false) @map("course_authoring_enabled")
   // Nome unico da sessao no engine de WhatsApp (gerado como cuid na 1a conexao).
   waSessionName       String?   @unique @map("wa_session_name")
   // Telefone E.164 conectado (snapshot apos QR scan). Unique = um numero

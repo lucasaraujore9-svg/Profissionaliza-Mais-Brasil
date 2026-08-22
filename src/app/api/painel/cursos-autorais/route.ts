@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { requirePainel } from "@/lib/auth/painel-guard"
+import { requireCourseAuthoring } from "@/lib/course-authoring/module-gate"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { ensureUniqueCourseSlug } from "@/lib/catalog/sync"
 import { slugify } from "@/lib/utils"
@@ -22,7 +22,7 @@ import { createLmsCourseShell, isLmsAuthoringEnabled } from "@/lib/lms/authoring
 export const GET = withRequestContext(
   { action: "painel.cursos_autorais.list", route: "/api/painel/cursos-autorais" },
   async () => {
-    const guard = await requirePainel("cursosAutorais.view")
+    const guard = await requireCourseAuthoring("cursosAutorais.view")
     if (!guard.ok) return guard.response
     const { ctx } = guard
 
@@ -76,7 +76,7 @@ const createSchema = z.object({
 export const POST = withRequestContext(
   { action: "painel.cursos_autorais.create", route: "/api/painel/cursos-autorais" },
   async (request: Request) => {
-    const guard = await requirePainel("cursosAutorais.manage")
+    const guard = await requireCourseAuthoring("cursosAutorais.manage")
     if (!guard.ok) return guard.response
     const { ctx } = guard
 

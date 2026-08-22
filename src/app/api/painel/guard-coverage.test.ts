@@ -73,7 +73,10 @@ describe("escrita não pode ser guardada por permissão de leitura (/api/painel)
         if (!WRITE_METHODS.has(s.method)) return
         const end = idx + 1 < starts.length ? starts[idx + 1].line : lines.length
         const body = lines.slice(s.line, end).join("\n")
-        const call = body.match(/\brequirePainel\(([^)]*)\)/)
+        // `requireCourseAuthoring` envolve `requirePainel` (mesma assinatura) e
+        // acrescenta a habilitação por unidade. Sem reconhecê-lo aqui, as rotas
+        // de curso de autoria saíam CALADAS deste invariante ao serem migradas.
+        const call = body.match(/\brequire(?:Painel|CourseAuthoring)\(([^)]*)\)/)
         if (!call) return
 
         const perms = (call[1].match(/"([^"]+)"/g) ?? []).map((p) =>
@@ -139,5 +142,57 @@ describe("dívida: rotas ainda com guard por papel", () => {
     // Igualdade exata: entrar na lista exige decisão consciente; sair dela
     // (migrar para requirePainel) também quebra e pede a atualização.
     expect(usandoPapel.sort()).toEqual([...CONHECIDAS].sort())
+  })
+})
+
+/**
+ * O módulo "Produzir cursos" é por UNIDADE (`Tenant.courseAuthoringEnabled`),
+ * não por pessoa.
+ *
+ * `cursosAutorais.*` responde "quem, dentro da unidade, opera o módulo" — e o
+ * preset do dono é `owner: ALL`, então uma rota que se contente com
+ * `requirePainel("cursosAutorais.manage")` abre a produção de curso para TODA
+ * revenda da rede. O gate de unidade mora em `requireCourseAuthoring`, e este
+ * teste existe para que a rota número seis não nasça sem ele.
+ */
+describe("rotas de curso de autoria exigem o módulo da unidade", () => {
+  const files = routeFiles(join(ROOT, "cursos-autorais")).map(
+    (rel) => `cursos-autorais/${rel}`,
+  )
+
+  it("encontra as rotas", () => {
+    expect(files.length).toBeGreaterThanOrEqual(3)
+  })
+
+  it("nenhum handler usa requirePainel direto", () => {
+    const offenders: string[] = []
+    for (const rel of files) {
+      const src = readFileSync(join(ROOT, rel), "utf-8")
+      if (/\brequirePainel\(/.test(src)) offenders.push(rel)
+      if (!/\brequireCourseAuthoring\(/.test(src)) {
+        offenders.push(`${rel} (sem requireCourseAuthoring)`)
+      }
+    }
+    expect(offenders).toEqual([])
+  })
+
+  it("todo handler exportado passa pelo gate — não só o primeiro", () => {
+    const offenders: string[] = []
+    for (const rel of files) {
+      const lines = readFileSync(join(ROOT, rel), "utf-8").split("\n")
+      const starts: { method: string; line: number }[] = []
+      lines.forEach((l, i) => {
+        const m = l.match(HANDLER_START)
+        if (m) starts.push({ method: m[1], line: i })
+      })
+      starts.forEach((s, idx) => {
+        const end = idx + 1 < starts.length ? starts[idx + 1].line : lines.length
+        const body = lines.slice(s.line, end).join("\n")
+        if (!/\brequireCourseAuthoring\(/.test(body)) {
+          offenders.push(`${rel} → ${s.method}`)
+        }
+      })
+    }
+    expect(offenders).toEqual([])
   })
 })

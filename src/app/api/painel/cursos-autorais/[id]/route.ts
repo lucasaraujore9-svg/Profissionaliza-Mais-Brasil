@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import type { Prisma } from "@prisma/client"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { requirePainel } from "@/lib/auth/painel-guard"
+import { requireCourseAuthoring } from "@/lib/course-authoring/module-gate"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 import { logAudit } from "@/lib/audit"
 import { contextLogger } from "@/lib/logger"
@@ -56,7 +56,7 @@ export const PATCH = withRequestContextParams<{ id: string }>(
     route: "/api/painel/cursos-autorais/[id]",
   },
   async (request, context) => {
-    const guard = await requirePainel("cursosAutorais.manage")
+    const guard = await requireCourseAuthoring("cursosAutorais.manage")
     if (!guard.ok) return guard.response
     const { ctx } = guard
     const { id } = await context.params
@@ -295,7 +295,7 @@ export const DELETE = withRequestContextParams<{ id: string }>(
     route: "/api/painel/cursos-autorais/[id]",
   },
   async (_request, context) => {
-    const guard = await requirePainel("cursosAutorais.manage")
+    const guard = await requireCourseAuthoring("cursosAutorais.manage")
     if (!guard.ok) return guard.response
     const { ctx } = guard
     const { id } = await context.params

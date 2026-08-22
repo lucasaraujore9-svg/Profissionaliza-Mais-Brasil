@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { requirePainel } from "@/lib/auth/painel-guard"
+import { requireCourseAuthoring } from "@/lib/course-authoring/module-gate"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 import { contextLogger } from "@/lib/logger"
 import { createLmsAuthorSsoToken, isLmsAuthoringEnabled } from "@/lib/lms/authoring"
@@ -20,7 +20,7 @@ export const POST = withRequestContextParams<{ id: string }>(
     route: "/api/painel/cursos-autorais/[id]/conteudo",
   },
   async (_request, context) => {
-    const guard = await requirePainel("cursosAutorais.manage")
+    const guard = await requireCourseAuthoring("cursosAutorais.manage")
     if (!guard.ok) return guard.response
     const { ctx } = guard
     const { id } = await context.params

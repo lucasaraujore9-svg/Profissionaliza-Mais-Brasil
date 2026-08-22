@@ -402,6 +402,7 @@ export const GET = withRequestContextParams<{ id: string }>(
         automationEnabled: tenant.automationEnabled,
         // Modulo "Revender revendas"
         canSellResellers: tenant.canSellResellers,
+        courseAuthoringEnabled: tenant.courseAuthoringEnabled,
         waConnectedPhone: tenant.waConnectedPhone,
         waStatus: tenant.waStatus,
         // Pagamento parcelado/mensalidade (habilita tb. o carnê no boleto)
