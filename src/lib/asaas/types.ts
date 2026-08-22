@@ -48,6 +48,40 @@ export interface AsaasCustomerList {
   data: AsaasCustomer[]
 }
 
+// ── Split de pagamento ──
+// Rateio nativo do Asaas: a cobranca nasce na conta de quem VENDEU e o Asaas
+// credita automaticamente as carteiras listadas aqui quando ela e recebida.
+//
+// Tres cuidados que a API impoe (docs.asaas.com/docs/split-de-pagamentos):
+//  1. NUNCA incluir a propria carteira (a do emissor) — a API lanca excecao.
+//     Todo o liquido nao direcionado ja fica com o emissor por padrao.
+//  2. `percentualValue` incide sobre o valor LIQUIDO (depois da tarifa do
+//     Asaas), nao sobre o bruto. Usamos percentual justamente porque ele nunca
+//     estoura o liquido — `fixedValue` pode, e ai o split e BLOQUEADO por
+//     divergencia (webhook PAYMENT_SPLIT_DIVERGENCE_BLOCK, 2 dias uteis para
+//     ajustar antes do cancelamento automatico).
+//  3. Em parcelamento o percentual e aplicado A CADA parcela — o que queremos:
+//     quem parou na 3a de 6 rateou so as 3 pagas, sem clawback.
+/** Split como o Asaas DEVOLVE na cobranca e nos webhooks. */
+export interface AsaasPaymentSplit {
+  id: string
+  walletId: string
+  fixedValue: number | null
+  percentualValue: number | null
+  totalValue: number | null
+  status: string
+  refusalReason: string | null
+}
+
+export interface AsaasSplit {
+  walletId: string
+  percentualValue?: number
+  fixedValue?: number
+  totalFixedValue?: number
+  externalReference?: string
+  description?: string
+}
+
 // ── Payment Creation ──
 export interface AsaasCreatePaymentParams {
   customer: string
@@ -63,6 +97,8 @@ export interface AsaasCreatePaymentParams {
   creditCard?: AsaasCreditCard
   creditCardHolderInfo?: AsaasCreditCardHolderInfo
   remoteIp?: string
+  /** Rateio: ver AsaasSplit. Omitir quando nao ha nada a repartir. */
+  splits?: AsaasSplit[]
 }
 
 // ── Subscription ──
@@ -82,6 +118,8 @@ export interface AsaasCreateSubscriptionParams {
   creditCard?: AsaasCreditCard
   creditCardHolderInfo?: AsaasCreditCardHolderInfo
   remoteIp?: string
+  /** Rateio aplicado a CADA ciclo da assinatura. */
+  splits?: AsaasSplit[]
 }
 
 export interface AsaasSubscription {
@@ -116,6 +154,8 @@ export interface AsaasCreateInstallmentCardParams {
   creditCardHolderInfo: AsaasCreditCardHolderInfo
   /** IP do COMPRADOR (não do servidor). Obrigatório no Asaas. */
   remoteIp: string
+  /** Rateio aplicado a CADA parcela. */
+  splits?: AsaasSplit[]
 }
 
 export interface AsaasInstallment {
@@ -148,10 +188,14 @@ export interface AsaasCreateInstallmentBoletoParams {
   /** Vai para externalReference de cada cobrança gerada (traço/roteamento). */
   paymentExternalReference?: string
   notificationUrl?: string
+  /** Rateio aplicado a CADA parcela do carnê. */
+  splits?: AsaasSplit[]
 }
 
 // ── Payment ──
 export interface AsaasPayment {
+  /** Rateio aplicado a esta cobranca (ausente quando nao ha split). */
+  splits?: AsaasPaymentSplit[]
   id: string
   customer: string
   subscription: string | null
@@ -270,6 +314,10 @@ export type AsaasWebhookEvent =
   | "PAYMENT_BANK_SLIP_VIEWED"
   | "PAYMENT_CHECKOUT_VIEWED"
   | "PAYMENT_CREDIT_CARD_CAPTURE_REFUSED"
+  // Liquidacao de UM split. O id daquele split vem em additionalInfo.splitId —
+  // e nao na raiz —, entao numa cobranca com mais de uma linha e ele que diz
+  // qual delas o evento fecha.
+  | "PAYMENT_SPLIT_DONE"
   | "PAYMENT_SPLIT_CANCELLED"
   | "PAYMENT_SPLIT_DIVERGENCE_BLOCK"
   | "PAYMENT_SPLIT_DIVERGENCE_BLOCK_FINISHED"

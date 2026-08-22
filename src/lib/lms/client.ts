@@ -34,7 +34,7 @@ interface LmsRequestOptions {
  * (envelope inteiro — `{ data, ... }` ou flat). Retry so em 5xx/rede; 4xx e
  * erro de negocio sao lancados de imediato.
  */
-async function lmsRequest<T>(
+export async function lmsRequest<T>(
   method: "GET" | "POST" | "PATCH" | "PUT",
   path: string,
   opts: LmsRequestOptions = {},

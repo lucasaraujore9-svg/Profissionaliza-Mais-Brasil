@@ -10,6 +10,10 @@ import { fulfillFromAsaasPayment, type AsaasFulfillTenant } from "./fulfillment"
 import { settleBoletoInstallment } from "@/lib/installments/settle"
 import { createNotification } from "@/lib/notifications"
 import { swallow } from "@/lib/errors"
+import {
+  applySplitEvent,
+  splitIdFromPayload,
+} from "@/lib/course-authoring/split-webhook"
 import { contextLogger } from "@/lib/logger"
 import type { AsaasWebhookPayload } from "./types"
 
@@ -248,6 +252,24 @@ export async function processResellerAsaasWebhook(
           href: "/painel/financeiro",
         }).catch(swallow("asaas.reseller.process"))
         await markLog(logId, true, `${event}: ${payment.id} — notificado`)
+        return
+      }
+
+      case "PAYMENT_SPLIT_DONE":
+      case "PAYMENT_SPLIT_CANCELLED":
+      case "PAYMENT_SPLIT_DIVERGENCE_BLOCK":
+      case "PAYMENT_SPLIT_DIVERGENCE_BLOCK_FINISHED": {
+        // Rateio de curso produzido por outra unidade. Sem estes handlers os
+        // eventos caiam no `default:` e um split RECUSADO ou BLOQUEADO ficava
+        // "pendente" para sempre no extrato — ninguem saberia que o produtor
+        // nao recebeu.
+        const note = await applySplitEvent(event, {
+          asaasPaymentId: payment.id,
+          splitId: splitIdFromPayload(payload),
+          tenantId: tenant.id,
+          splits: payment.splits,
+        })
+        await markLog(logId, true, note)
         return
       }
 

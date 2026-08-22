@@ -1,4 +1,8 @@
 import { createHash } from "node:crypto"
+import {
+  parseSplitSnapshot,
+  writeSplitLines,
+} from "@/lib/course-authoring/split-server"
 import { prisma } from "@/lib/prisma"
 import { sendEmail } from "@/lib/email/mailer"
 import { PMB_EMAIL_BRAND, emailFromForBrand } from "@/lib/email/brand"
@@ -193,6 +197,11 @@ async function fulfillEnrollmentLocked(
     )
   }
 
+  // Termos de rateio CONGELADOS no checkout. Ler daqui — e nao recalcular a
+  // partir do curso — e o que garante que uma edicao do produtor no meio de um
+  // carne nao reescreva as parcelas ja acordadas.
+  const splitSnapshot = parseSplitSnapshot(enrollment.authorSplitSnapshot)
+
   const idempotencyWhere =
     event.gateway === "MP"
       ? { mpPaymentId: event.externalPaymentId }
@@ -226,8 +235,12 @@ async function fulfillEnrollmentLocked(
     // Transação para garantir que Payment + Enrollment.update sejam atômicos.
     // Se uma falha, nenhuma é persistida — o webhook é re-entregue e tudo
     // re-tenta limpamente (idempotência via mpPaymentId no início da função).
-    await prisma.$transaction([
-      prisma.payment.create({
+    // Transacao INTERATIVA (nao a forma em array): as linhas de rateio precisam
+    // do id do Payment recem-criado, e extrato sem pagamento — ou pagamento sem
+    // extrato — sao os dois estados que nao podem existir. Sao 3 operacoes,
+    // longe do lote grande que ja quebrou sobre o pooler.
+    await prisma.$transaction(async (tx) => {
+      const payment = await tx.payment.create({
         data: {
           tenantId: expectedTenantId,
           enrollmentId: enrollment.id,
@@ -243,15 +256,28 @@ async function fulfillEnrollmentLocked(
           mpStatusDetail: event.mpStatusDetail ?? null,
           paidAt: event.paidAt,
         },
-      }),
-      prisma.enrollment.update({
+        select: { id: true },
+      })
+      await tx.enrollment.update({
         where: { id: enrollment.id },
         data: {
           installmentsPaid: newPaidCount,
           ...(reachedTotal ? { status: "COMPLETED" } : {}),
         },
-      }),
-    ])
+      })
+      // Curso de autoria de outra unidade: cada parcela rateia a MESMA fatia
+      // sobre o valor dela — o que o Asaas ja faz com percentual em
+      // parcelamento. Quem parou na 3a de 6 rateou so as 3 pagas.
+      if (splitSnapshot) {
+        await writeSplitLines(tx, {
+          paymentId: payment.id,
+          enrollmentId: enrollment.id,
+          courseId: enrollment.course.id,
+          snapshot: splitSnapshot,
+          paidAmount: event.amount,
+        })
+      }
+    })
 
     // Notifica o aluno: parcela paga
     await createNotification({
@@ -323,8 +349,8 @@ async function fulfillEnrollmentLocked(
 
   // Transação para Payment + Enrollment.update — evita estado inconsistente
   // (Payment órfão com Enrollment.PENDING) se a 2ª query falhar.
-  await prisma.$transaction([
-    prisma.payment.create({
+  await prisma.$transaction(async (tx) => {
+    const payment = await tx.payment.create({
       data: {
         tenantId: tenant.isPmbVitrine ? null : tenant.id,
         enrollmentId: enrollment.id,
@@ -339,8 +365,9 @@ async function fulfillEnrollmentLocked(
         mpStatusDetail: event.mpStatusDetail ?? null,
         paidAt: event.paidAt,
       },
-    }),
-    prisma.enrollment.update({
+      select: { id: true },
+    })
+    await tx.enrollment.update({
       where: { id: enrollment.id },
       data: {
         status: reachedTotalOnFirst ? "COMPLETED" : "ACTIVE",
@@ -357,8 +384,17 @@ async function fulfillEnrollmentLocked(
         accessWarnDaysSent: [],
         installmentsPaid: firstInstallmentPaid,
       },
-    }),
-  ])
+    })
+    if (splitSnapshot) {
+      await writeSplitLines(tx, {
+        paymentId: payment.id,
+        enrollmentId: enrollment.id,
+        courseId: enrollment.course.id,
+        snapshot: splitSnapshot,
+        paidAmount: event.amount,
+      })
+    }
+  })
 
   // Cota de aulas — DEPOIS da transação acima, que é quem grava
   // `installmentsPaid`. Avaliar antes leria zero parcelas pagas e bloquearia o

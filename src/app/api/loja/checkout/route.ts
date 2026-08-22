@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import type { Prisma } from "@prisma/client"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { upsertStudent, StudentEmailConflictError } from "@/lib/students/upsert"
@@ -22,6 +23,14 @@ import { isValidCpf, stripCpf } from "@/lib/validation/cpf"
 import { isValidPhone, normalizePhone } from "@/lib/validation/phone"
 import { effectivePaymentType } from "@/lib/tenant/monthly-policy"
 import { tenantCheckoutMode } from "@/lib/tenant/checkout-mode"
+import {
+  AUTHORED_COURSE_SELECT,
+  authoredSaleGate,
+} from "@/lib/course-authoring/checkout-gate"
+import {
+  resolveSaleSplit,
+  saleRequiresSplit,
+} from "@/lib/course-authoring/split-server"
 import { tenantPolo } from "@/lib/tenant/slug"
 import { isSellablePrice } from "@/lib/checkout/price-guard"
 import {
@@ -196,6 +205,10 @@ export const POST = withRequestContext(
               monthlyMonthsMain: true,
               parcelasSugeridas: true,
               parcelasOverride: true,
+              // Sem estas colunas o curso de autoria se apresenta como curso
+              // comum da PMB e a venda sai SEM rateio: o produtor nunca recebe
+              // e ninguem percebe.
+              ...AUTHORED_COURSE_SELECT,
             },
           },
         },
@@ -236,10 +249,15 @@ export const POST = withRequestContext(
       mpPublicKey: tenant.mpPublicKey,
     })
 
+    // Curso produzido por OUTRA unidade: o rateio só existe no Asaas, então o
+    // gateway escolhido pela loja é ignorado aqui de propósito. Cair no MP
+    // silenciosamente venderia o curso sem repasse nenhum ao produtor.
+    const requiresSplit = saleRequiresSplit(tenantCourse.course, tenantId)
+
     // Asaas precisa do token do webhook p/ validar o callback antes de cobrar.
     // O helper usa o invariante salesGateway===ASAAS ⇒ token presente; aqui
     // confirmamos de forma autoritativa.
-    if (mode === "ASAAS" && !tenant.asaasWebhookToken) {
+    if (!requiresSplit && mode === "ASAAS" && !tenant.asaasWebhookToken) {
       return NextResponse.json(
         { error: "Gateway Asaas incompleto", code: "ASAAS_NOT_CONFIGURED" },
         { status: 503 },
@@ -250,7 +268,7 @@ export const POST = withRequestContext(
     // revenda + lead) em vez de cobrar. Não há cobrança possível aqui. 503
     // (serviço indisponível por configuração) — mesma semântica do antigo
     // MP_NOT_CONFIGURED.
-    if (mode === "NONE") {
+    if (!requiresSplit && mode === "NONE") {
       return NextResponse.json(
         {
           error: "Loja ainda não configurou o pagamento",
@@ -260,7 +278,10 @@ export const POST = withRequestContext(
       )
     }
 
-    const gateway: "MP" | "ASAAS" = mode
+    // A loja pode estar com o MP como gateway padrão e ainda assim vender curso
+    // de terceiro — desde que tenha a conta Asaas conectada, que é o que o gate
+    // abaixo confere.
+    const gateway: "MP" | "ASAAS" = requiresSplit ? "ASAAS" : (mode as "MP" | "ASAAS")
 
     const basePrice = Number(tenantCourse.price)
 
@@ -289,6 +310,21 @@ export const POST = withRequestContext(
         { status: 409 },
       )
     }
+
+    // Gate de rateio ANTES do bloco de cupom: recusar depois de
+    // `tryConsumeCoupon` vazaria um uso do cupom numa venda que nem aconteceu.
+    // Aqui ele valida composição da venda, gateway da loja, carteiras e preço;
+    // o snapshot definitivo é remontado abaixo, já com o desconto.
+    const gate = await authoredSaleGate({
+      courses: [tenantCourse.course],
+      sellerTenantId: tenantId,
+      seller: {
+        asaasConnected: tenant.asaasConnected,
+        asaasWebhookToken: tenant.asaasWebhookToken,
+      },
+      listPrice: basePrice,
+    })
+    if (!gate.ok) return gate.response
 
     let discountAmount = 0
     let couponId: string | null = null
@@ -351,6 +387,30 @@ export const POST = withRequestContext(
     }
 
     const finalAmount = finalAmountFromCoupon ?? basePrice
+
+    // Com desconto o rateio muda: a parte do produtor continua sendo calculada
+    // sobre a tabela e a do vendedor absorve o abatimento — remontamos para que
+    // o snapshot congelado na matrícula reflita o que foi de fato cobrado.
+    let splitSnapshot = gate.split
+    if (splitSnapshot && discountAmount > 0) {
+      const recomputed = await resolveSaleSplit({
+        course: tenantCourse.course,
+        sellerTenantId: tenantId,
+        listPrice: basePrice,
+        discount: discountAmount,
+      })
+      if (!recomputed.ok) {
+        if (consumedCouponId) {
+          await releaseCoupon(consumedCouponId).catch(swallow("loja.checkout"))
+          consumedCouponId = null
+        }
+        return NextResponse.json(
+          { error: recomputed.message, code: recomputed.error },
+          { status: 400 },
+        )
+      }
+      splitSnapshot = recomputed.value
+    }
 
     // Data de nascimento + responsavel financeiro, no formato tri-estado que o
     // upsert entende. `collected = true`: este formulario SEMPRE traz o bloco.
@@ -506,6 +566,12 @@ export const POST = withRequestContext(
         finalAmount,
         couponId,
         installmentsTotal: monthlyMonths,
+        // Termos CONGELADOS: um carnê paga ao longo de meses e o produtor pode
+        // editar a comissão no meio. As parcelas seguintes seguem o acordo
+        // desta venda, não o do dia do pagamento.
+        authorSplitSnapshot: splitSnapshot
+          ? (splitSnapshot as unknown as Prisma.InputJsonValue)
+          : undefined,
       },
       select: { id: true },
     })

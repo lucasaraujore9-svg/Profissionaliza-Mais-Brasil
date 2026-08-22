@@ -17,6 +17,7 @@ import type { BoletoInstallment } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { contextLogger } from "@/lib/logger"
 import { decryptTenantMpToken, createPayment as createMpPayment } from "@/lib/mercadopago/client"
+import { asaasSplitsForEnrollment } from "@/lib/course-authoring/split-server"
 import type { MPCreatePaymentParams } from "@/lib/mercadopago/types"
 import {
   decryptTenantAsaasKey,
@@ -251,6 +252,10 @@ async function createAsaasCarne(
     {
       installmentCount: input.count,
       customer: customerId,
+      // Rateio por PARCELA: e assim que o Asaas trata percentual em
+      // parcelamento, e e o comportamento certo — aluno que parou na 3a de 6
+      // rateou so as 3 pagas, sem clawback nenhum a fazer depois.
+      splits: await asaasSplitsForEnrollment(ctx.enrollment.id),
       value: input.installmentValue,
       totalValue,
       billingType: "BOLETO",

@@ -39,6 +39,10 @@ export interface LmsCourse {
   // campo — quando ausente, o sync NAO mexe na matriz existente. `[]` = sem matriz.
   curriculum?: LmsCurriculumItem[]
   totalWorkloadHours?: number | null
+  // Unidade DONA do conteudo (`tenantExternalId`, o mesmo de PUT /tenants/:id).
+  // Ausente/null = curso do catalogo da PMB — e o caso de todo o catalogo de
+  // hoje. Opcional para tolerar a versao do LMS que ainda nao devolve o campo.
+  ownerTenantExternalId?: string | null
   version: number
   publishedAt: string
   moduleCount: number

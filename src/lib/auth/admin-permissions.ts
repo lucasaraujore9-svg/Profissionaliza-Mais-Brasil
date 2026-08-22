@@ -146,6 +146,12 @@ export const ADMIN_PERMISSIONS = [
   "catalogo.view",
   "catalogo.manage",
   "catalogo.sync",
+  // Cursos PRODUZIDOS pelas unidades. Nao ha aprovacao previa (decisao do dono):
+  // estas permissoes sao a intervencao REATIVA da PMB — enxergar o que a rede
+  // publicou e pausar o que nao pode continuar na vitrine. Deliberadamente fora
+  // de SUPER_EXCLUSIVE: e trabalho de curadoria, nao poder de escalada.
+  "cursosAutorais.view",
+  "cursosAutorais.manage",
   "pacotes.view",
   "pacotes.manage",
   "assinaturas.view",
@@ -323,6 +329,7 @@ export const WRITE_IMPLIES_READ: Readonly<
   "indicacoes.config": "indicacoes.view",
   "indicacoes.percentUnidade": "indicacoes.view",
   "catalogo.manage": "catalogo.view",
+  "cursosAutorais.manage": "cursosAutorais.view",
   "catalogo.sync": "catalogo.view",
   "pacotes.manage": "pacotes.view",
   "assinaturas.manage": "assinaturas.view",
@@ -705,6 +712,8 @@ export const ADMIN_PERMISSION_GROUPS: {
     permissions: [
       { perm: "catalogo.view", label: "Ver o catálogo" },
       { perm: "catalogo.manage", label: "Editar cursos, preços e categorias" },
+      { perm: "cursosAutorais.view", label: "Ver os cursos produzidos pelas unidades" },
+      { perm: "cursosAutorais.manage", label: "Pausar cursos produzidos pelas unidades" },
       { perm: "catalogo.sync", label: "Sincronizar com as fornecedoras" },
       { perm: "pacotes.view", label: "Ver os pacotes" },
       { perm: "pacotes.manage", label: "Gerenciar pacotes" },

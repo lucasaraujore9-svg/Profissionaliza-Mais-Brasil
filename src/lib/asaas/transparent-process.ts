@@ -17,6 +17,7 @@ import {
 import { fulfillFromAsaasPayment, type AsaasFulfillTenant } from "./fulfillment"
 import { isFreeAmount, releaseFreeEnrollment } from "@/lib/checkout/free-enrollment"
 import { settleBoletoInstallment } from "@/lib/installments/settle"
+import { asaasSplitsForEnrollment } from "@/lib/course-authoring/split-server"
 import type {
   AsaasCreditCard,
   AsaasCreditCardHolderInfo,
@@ -422,6 +423,10 @@ export async function processTransparentAsaasPayment(
         {
           customer: customerId,
           billingType: "CREDIT_CARD",
+          // Rateio lido da PROPRIA matricula: nenhum call-site precisa lembrar
+          // de passar. Esquecer o split e o pior defeito desta feature — a
+          // venda acontece, o aluno recebe o curso e o produtor nunca e pago.
+          splits: await asaasSplitsForEnrollment(enrollment.id),
           value: enrollment.finalAmount,
           nextDueDate: dueDateInDays(0),
           cycle: "MONTHLY",
@@ -497,6 +502,7 @@ export async function processTransparentAsaasPayment(
       {
         customer: customerId,
         billingType,
+        splits: await asaasSplitsForEnrollment(enrollment.id),
         value: enrollment.finalAmount,
         // Cartão captura na hora; PIX/boleto vencem em 3 dias.
         dueDate: dueDateInDays(billingType === "CREDIT_CARD" ? 0 : 3),

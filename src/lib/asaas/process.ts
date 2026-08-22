@@ -20,6 +20,11 @@ import type { AsaasWebhookPayload } from "./types"
 import { swallow } from "@/lib/errors"
 import { contextLogger } from "@/lib/logger"
 import {
+  applySplitEvent,
+  isSplitEvent,
+  splitIdFromPayload,
+} from "@/lib/course-authoring/split-webhook"
+import {
   settleSubscriptionCycle,
   markSubscriptionPastDue,
   revokeSubscriptionForRefund,
@@ -461,6 +466,26 @@ export async function processAsaasWebhook(
         return
       }
       throw err
+    }
+
+    // ── Eventos de rateio ────────────────────────────────────────────────
+    // ANTES de qualquer roteamento. Uma cobranca COM split e, por definicao,
+    // uma venda direta da vitrine PMB — e `processPmbDirectSale` devolve `true`
+    // para TODO evento que casa com a matricula (o `${event} sem fulfillment`
+    // do fim). Tratado la embaixo no switch, o ramo era inalcancavel justamente
+    // para as cobrancas que tem rateio: o alerta de DIVERGENCE_BLOCK nunca
+    // saia, o Asaas cancelava o split em 2 dias uteis e o produtor perdia o
+    // dinheiro daquela venda em silencio.
+    if (isSplitEvent(event)) {
+      const splitNote = await applySplitEvent(event, {
+        asaasPaymentId: payment.id,
+        splitId: splitIdFromPayload(payload),
+        // Conta-mae: a cobranca emitida aqui tem `Payment.tenantId` null.
+        tenantId: null,
+        splits: payment.splits,
+      })
+      await markLog(logId, true, splitNote)
+      return
     }
 
     const subscriptionId = payment.subscription

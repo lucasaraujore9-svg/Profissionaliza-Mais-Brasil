@@ -3,6 +3,20 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 // SAAS-010: a venda manual do painel deve aplicar o mesmo gate status=ATIVO do
 // checkout da vitrine (ec832d0). Curso desativado na origem (status="INATIVO")
 // com TenantCourse.isVisible=true não pode ser vendido — 404 "Curso indisponível".
+/**
+ * Colunas de autoria que a rota passou a selecionar. Curso do catalogo da PMB
+ * tem `authorTenantId: null` — e o que faz o gate de rateio ficar de fora.
+ */
+const SEM_AUTORIA = {
+  authorTenantId: null,
+  authoredStatus: null,
+  distribution: "OWN_ONLY" as const,
+  pricingMode: "FIXED" as const,
+  authorAmount: null,
+  sellerCommissionPercent: null,
+  platformFeePercent: null,
+}
+
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     tenant: { findUnique: vi.fn() },
@@ -131,6 +145,7 @@ function mockSellableCourse() {
         slug: "curso",
         monthlyMonthsMain: null,
         status: "ATIVO",
+        ...SEM_AUTORIA,
       },
     },
   ])
@@ -283,14 +298,14 @@ describe("venda direta com vários cursos", () => {
         price: 100,
         courseId: "c1",
         paymentType: "ONE_TIME",
-        course: { id: "c1", nome: "Curso A", slug: "a", monthlyMonthsMain: null, status: "ATIVO" },
+        course: { id: "c1", nome: "Curso A", slug: "a", monthlyMonthsMain: null, status: "ATIVO" , ...SEM_AUTORIA },
       },
       {
         id: "tc2",
         price: 250,
         courseId: "c2",
         paymentType: "ONE_TIME",
-        course: { id: "c2", nome: "Curso B", slug: "b", monthlyMonthsMain: null, status: "ATIVO" },
+        course: { id: "c2", nome: "Curso B", slug: "b", monthlyMonthsMain: null, status: "ATIVO" , ...SEM_AUTORIA },
       },
     ])
     p.tenantMember.findFirst.mockResolvedValue(null)
@@ -368,14 +383,14 @@ describe("venda direta com vários cursos", () => {
         price: 100,
         courseId: "c1",
         paymentType: "MONTHLY",
-        course: { id: "c1", nome: "Curso A", slug: "a", monthlyMonthsMain: 12, status: "ATIVO" },
+        course: { id: "c1", nome: "Curso A", slug: "a", monthlyMonthsMain: 12, status: "ATIVO" , ...SEM_AUTORIA },
       },
       {
         id: "tc2",
         price: 250,
         courseId: "c2",
         paymentType: "ONE_TIME",
-        course: { id: "c2", nome: "Curso B", slug: "b", monthlyMonthsMain: null, status: "ATIVO" },
+        course: { id: "c2", nome: "Curso B", slug: "b", monthlyMonthsMain: null, status: "ATIVO" , ...SEM_AUTORIA },
       },
     ])
     mockStudent()
@@ -419,7 +434,7 @@ describe("venda direta com vários cursos", () => {
         price: 100,
         courseId: "c1",
         paymentType: "ONE_TIME",
-        course: { id: "c1", nome: "Curso A", slug: "a", monthlyMonthsMain: null, status: "ATIVO" },
+        course: { id: "c1", nome: "Curso A", slug: "a", monthlyMonthsMain: null, status: "ATIVO" , ...SEM_AUTORIA },
       },
     ])
     mockStudent()

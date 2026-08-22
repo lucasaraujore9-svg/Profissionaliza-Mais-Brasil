@@ -14,6 +14,11 @@ export default async function PainelCursosPage() {
   // cursos nao precisa mexer no preco da assinatura da loja.
   const canViewPlans = ctx.can("assinaturas.view")
   const canManagePlans = ctx.can("assinaturas.manage")
+  // Cursos de AUTORIA da unidade: familia propria de permissao. Definir o preco
+  // de um curso da PMB na vitrine nao deveria habilitar publicar produto
+  // proprio na rede inteira, com comissao e repasse.
+  const canViewAuthored = ctx.can("cursosAutorais.view")
+  const canManageAuthored = ctx.can("cursosAutorais.manage")
 
   // Opcoes de escopo para a unidade montar um plano PROPRIO. Pacotes: os dela e
   // os da PMB — nunca os de outra revenda, que liberariam cursos que nao sao
@@ -52,6 +57,8 @@ export default async function PainelCursosPage() {
         canManagePackages={canManagePackages}
         canViewPlans={canViewPlans}
         canManagePlans={canManagePlans}
+        canViewAuthored={canViewAuthored}
+        canManageAuthored={canManageAuthored}
         categories={categories}
         packages={packages}
       />

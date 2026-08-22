@@ -9,6 +9,11 @@ vi.mock("@/lib/prisma", () => {
   const prisma = {
     $transaction: vi.fn(async (arr: Promise<unknown>[]) => Promise.all(arr)),
     course: {
+      // O match do sync EA é findFirst: o unique de `nome` virou composto com
+      // `authorTenantId`, e o Prisma não faz findUnique em composto com coluna
+      // nula. `findUnique` segue aqui para o lookup por plataformaCourseId (EA)
+      // e por lmsCourseId (LMS), que são unique de coluna única.
+      findFirst: vi.fn(),
       findUnique: vi.fn(),
       update: vi.fn(),
       create: vi.fn(),
@@ -40,6 +45,7 @@ import { syncSingleLmsCourse } from "./sync-lms"
 const p = prisma as unknown as {
   $transaction: ReturnType<typeof vi.fn>
   course: {
+    findFirst: ReturnType<typeof vi.fn>
     findUnique: ReturnType<typeof vi.fn>
     update: ReturnType<typeof vi.fn>
     create: ReturnType<typeof vi.fn>
@@ -79,7 +85,7 @@ describe("syncCatalogFromEA — curadoria preservada no UPDATE (QA-015)", () => 
     // ensureCategory encontra a categoria do feed (não cria).
     p.category.findFirst.mockResolvedValue({ id: "cat-feed" })
     // Curso já existe com curadoria do admin: INATIVO + categoria antiga + categoria principal manual.
-    p.course.findUnique.mockResolvedValue({
+    p.course.findFirst.mockResolvedValue({
       id: "c_ea",
       plataformaCourseId: null,
       categoryId: "cat-manual",
@@ -96,12 +102,20 @@ describe("syncCatalogFromEA — curadoria preservada no UPDATE (QA-015)", () => 
     expect(data.categoriaLoja).toBe("Categoria Curada")
     expect(data.categoryId).toBe("cat-manual") // remapeamento manual preservado
     expect(p.course.create).not.toHaveBeenCalled()
+    // Trava anti-sequestro: o sync da fornecedora só casa com curso do catálogo
+    // da PMB. Sem `authorTenantId: null`, uma unidade que publicasse um curso
+    // de mesmo nome teria descrição, carga horária, capa e preço reescritos
+    // pelo feed todo dia às 6h — o produto dela apagado em silêncio.
+    expect(p.course.findFirst.mock.calls[0][0].where).toMatchObject({
+      provider: "EA",
+      authorTenantId: null,
+    })
   })
 
   it("curso NOVO → CREATE define status e categoriaLoja a partir do feed", async () => {
     listarMock.mockResolvedValue([eaCurso({ status: "ATIVO", categoria_loja: "Informática Feed" })])
     p.category.findFirst.mockResolvedValue({ id: "cat-feed2" })
-    p.course.findUnique.mockResolvedValue(null) // curso novo
+    p.course.findFirst.mockResolvedValue(null) // curso novo
 
     await syncCatalogFromEA("cron")
 

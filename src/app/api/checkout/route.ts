@@ -1,4 +1,10 @@
 import { NextResponse } from "next/server"
+import type { Prisma } from "@prisma/client"
+import {
+  AUTHORED_COURSE_SELECT,
+  authoredSaleGate,
+} from "@/lib/course-authoring/checkout-gate"
+import { resolveSaleSplit } from "@/lib/course-authoring/split-server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import {
@@ -234,7 +240,6 @@ export const POST = withRequestContext(
     const course = await prisma.course.findUnique({
       where: { id: data.courseId },
       select: {
-        id: true,
         nome: true,
         slug: true,
         status: true,
@@ -244,6 +249,10 @@ export const POST = withRequestContext(
         precoOriginal: true,
         paymentTypeMain: true,
         monthlyMonthsMain: true,
+        // Curso de autoria de uma unidade vendido na vitrine principal: aqui a
+        // PMB e a VENDEDORA e retem comissao + taxa; so a linha do produtor
+        // viaja por split.
+        ...AUTHORED_COURSE_SELECT,
       },
     })
 
@@ -268,6 +277,45 @@ export const POST = withRequestContext(
         { error: "Curso sem preço configurado", code: "COURSE_NO_PRICE" },
         { status: 400 },
       )
+    }
+
+    // Gate de rateio ANTES do cupom: recusar depois de consumir o cupom vazaria
+    // um uso numa venda que nem aconteceu.
+    const gate = await authoredSaleGate({
+      courses: [course],
+      sellerTenantId: null,
+      seller: null,
+      listPrice: basePrice,
+    })
+    if (!gate.ok) return gate.response
+
+    // `forcedGateway` é ORDEM, não sugestão. Sem esta variável ele era gravado
+    // na matrícula e todo o resto da rota continuava roteando por
+    // `settings.pmbDirectSaleGateway`: com a vitrine PMB no Mercado Pago, o
+    // curso de autoria saía por um gateway que não tem rateio e o produtor
+    // nunca recebia. Os pré-checks lá em cima rodaram para o gateway
+    // CONFIGURADO — o Asaas forçado precisa dos dele aqui.
+    const effectiveGateway = gate.forcedGateway ?? gateway
+    if (effectiveGateway === "ASAAS" && gateway !== "ASAAS") {
+      const missingAsaas = [
+        !process.env.ASAAS_API_URL && "ASAAS_API_URL",
+        !process.env.ASAAS_API_KEY && "ASAAS_API_KEY",
+      ].filter(Boolean) as string[]
+      if (missingAsaas.length > 0) {
+        return NextResponse.json(
+          {
+            error: `Asaas não configurado: faltam ${missingAsaas.join(", ")}`,
+            code: "ASAAS_NOT_CONFIGURED",
+          },
+          { status: 503 },
+        )
+      }
+      if (data.paymentMethod === "CREDIT_CARD" && (!data.creditCard || !data.creditCardHolder)) {
+        return NextResponse.json(
+          { error: "Dados do cartão obrigatórios", code: "CREDIT_CARD_REQUIRED" },
+          { status: 400 },
+        )
+      }
     }
 
     const pmbTenant = await getOrCreatePmbTenant()
@@ -455,7 +503,7 @@ export const POST = withRequestContext(
         }
         return NextResponse.json({ error: message, code }, { status: 400 })
       }
-      if (gateway !== "ASAAS") {
+      if (effectiveGateway !== "ASAAS") {
         return rejectInstallments(
           "Parcelamento indisponível neste gateway",
           "INSTALLMENTS_UNSUPPORTED",
@@ -493,6 +541,25 @@ export const POST = withRequestContext(
       }
     }
 
+    // Com desconto o rateio muda: a parte do produtor continua sobre a tabela e
+    // a da vendedora (aqui, a PMB) absorve o abatimento.
+    let splitSnapshot = gate.split
+    if (splitSnapshot && discountAmount > 0) {
+      const recomputed = await resolveSaleSplit({
+        course,
+        sellerTenantId: null,
+        listPrice: basePrice,
+        discount: discountAmount,
+      })
+      if (!recomputed.ok) {
+        return NextResponse.json(
+          { error: recomputed.message, code: recomputed.error },
+          { status: 400 },
+        )
+      }
+      splitSnapshot = recomputed.value
+    }
+
     const enrollment = await prisma.enrollment.create({
       data: {
         tenantId: null,
@@ -501,12 +568,17 @@ export const POST = withRequestContext(
         courseId: course.id,
         paymentType: course.paymentTypeMain,
         status: "PENDING",
-        gateway,
+        // Rateio so existe no Asaas: a config global de gateway da vitrine PMB
+        // e ignorada quando a venda precisa repassar ao produtor.
+        gateway: effectiveGateway,
         originalAmount: basePrice,
         discountAmount,
         finalAmount,
         couponId,
         installmentsTotal: monthlyMonths,
+        authorSplitSnapshot: splitSnapshot
+          ? (splitSnapshot as unknown as Prisma.InputJsonValue)
+          : undefined,
       },
       select: { id: true },
     })
@@ -584,7 +656,7 @@ export const POST = withRequestContext(
     // Não criamos preference aqui: apenas marcamos a external_reference e
     // devolvemos os dados para o form montar o checkout (cartão/PIX/boleto) na
     // própria tela. A cobrança acontece em POST /api/checkout/mp/process.
-    if (gateway === "MP") {
+    if (effectiveGateway === "MP") {
       await prisma.enrollment.update({
         where: { id: enrollment.id },
         data: { externalReference },

@@ -42,8 +42,14 @@ export const POST = withRequestContext(
     const { provider, action } = parsed.data
     const hidden = action === "hide"
 
+    // `authorTenantId: null` restringe a acao ao catalogo da PMB. "Ocultar
+    // todos os cursos LMS" e uma ferramenta de curadoria do catalogo da casa —
+    // curso de autoria de uma unidade tambem e provider=LMS, e sem esta clausula
+    // um clique tiraria da vitrine principal o produto de toda a rede, sem que a
+    // tela sequer mencione isso. Quem pausa curso de autoria e a acao dedicada
+    // em /admin/catalogo, curso a curso.
     const result = await prisma.course.updateMany({
-      where: { provider },
+      where: { provider, authorTenantId: null },
       data: { hiddenMain: hidden },
     })
 

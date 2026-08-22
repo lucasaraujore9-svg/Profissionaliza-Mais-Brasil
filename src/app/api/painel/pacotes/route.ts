@@ -109,11 +109,29 @@ export const POST = withRequestContext(
     const courseIds = Array.from(new Set(data.courseIds))
     const courses = await prisma.course.findMany({
       where: { id: { in: courseIds }, status: "ATIVO" },
-      select: { id: true },
+      select: { id: true, nome: true, authorTenantId: true },
     })
     if (courses.length !== courseIds.length) {
       return NextResponse.json(
         { error: "Um ou mais cursos são inválidos ou inativos", code: "INVALID_COURSES" },
+        { status: 400 },
+      )
+    }
+
+    // Curso produzido por OUTRA unidade não entra em pacote. O rateio é da
+    // cobrança inteira: num pacote, o percentual do produtor incidiria também
+    // sobre os cursos que não são dele — e, pior, um preço de pacote abaixo do
+    // piso dele contornaria em silêncio o valor que ele definiu. Mesma trava do
+    // checkout, onde curso de terceiro vende sozinho.
+    const alheio = courses.find(
+      (c) => c.authorTenantId !== null && c.authorTenantId !== ctx.tenantId,
+    )
+    if (alheio) {
+      return NextResponse.json(
+        {
+          error: `O curso "${alheio.nome}" é produzido por outra unidade e não pode entrar em um pacote.`,
+          code: "AUTHORED_COURSE_ALONE",
+        },
         { status: 400 },
       )
     }

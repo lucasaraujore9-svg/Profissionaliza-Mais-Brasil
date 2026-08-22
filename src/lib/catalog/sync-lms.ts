@@ -222,8 +222,40 @@ async function upsertLmsCourse(
 
   const existing = await prisma.course.findUnique({
     where: { lmsCourseId: curso.id },
-    select: { id: true, categoryId: true, status: true },
+    select: { id: true, categoryId: true, status: true, authorTenantId: true },
   })
+
+  // Curso com DONO no LMS e curso de autoria de uma unidade. O caminho normal e
+  // ele ja existir aqui (o PMB e quem cria a casca no LMS, em
+  // /api/painel/cursos-autorais), entao o `existing` acima casa por lmsCourseId
+  // e a autoria e preservada — `dataBase` nao toca em nenhuma coluna comercial.
+  //
+  // Este bloco cobre o outro caminho: um curso que aparece no feed SEM linha
+  // correspondente aqui. Sem ele, o create abaixo o gravaria com
+  // authorTenantId = null, ou seja, como curso do CATALOGO DA PMB — distribuido
+  // de graca para a rede inteira e vendido sem repasse nenhum ao dono. Na
+  // duvida ele nasce como rascunho oculto: aparecer atrasado e recuperavel,
+  // vender o produto de alguem sem pagar nao e.
+  const ownerRef = curso.ownerTenantExternalId?.trim()
+  const ownerTenant = ownerRef
+    ? await prisma.tenant.findFirst({
+        where: { OR: [{ id: ownerRef }, { slug: ownerRef }] },
+        select: { id: true },
+      })
+    : null
+  const authoringOnCreate = ownerRef
+    ? {
+        authorTenantId: ownerTenant?.id ?? null,
+        authoredStatus: "DRAFT" as const,
+        distribution: "OWN_ONLY" as const,
+      }
+    : {}
+  if (ownerRef && !ownerTenant) {
+    contextLogger().warn(
+      { event: "lms.sync.unknown_owner", slug: curso.slug, ownerRef },
+      "curso do LMS aponta para uma unidade desconhecida — mantido fora das vitrines",
+    )
+  }
 
   // Em update, so define a principal se o curso ainda nao tem uma — preserva
   // remapeamentos manuais do admin (mesma regra do sync EA).
@@ -258,8 +290,11 @@ async function upsertLmsCourse(
     const created = await prisma.course.create({
       data: {
         ...dataBase,
+        ...authoringOnCreate,
         categoryId: effectiveCategoryId,
-        hiddenMain: !nasceAtivo,
+        // Curso com dono nunca nasce visivel na vitrine principal: quem decide
+        // o alcance dele e o `distribution` que a unidade escolhe no painel.
+        hiddenMain: !nasceAtivo || Boolean(ownerRef),
         slug: await ensureUniqueCourseSlug(slugify(curso.slug || curso.title)),
       },
       select: { id: true },
@@ -282,7 +317,7 @@ async function upsertLmsCourse(
   // revendas agora — a vitrine publica delas nao roda ensureTenantCourses
   // sozinha, entao sem isto so apareceria depois que o painel da revenda
   // sincronizasse. Best-effort: falha aqui nao aborta o sync do catalogo.
-  if (!existing && nasceAtivo) {
+  if (!existing && nasceAtivo && !ownerRef) {
     await ensureCourseForResellers(courseId).catch((err) => {
       contextLogger().warn(
         { event: "lms.sync.propagate_failed", slug: curso.slug, err: String(err) },

@@ -102,6 +102,29 @@ describe("vitrineGateWhere", () => {
     expect(JSON.stringify(gates)).toContain("visibilityMode")
   })
 
+  it("curso de autoria de OUTRA unidade nunca entra num plano", () => {
+    // A assinatura e uma cobranca recorrente por um CONJUNTO de cursos: nao ha
+    // como ratear dela o repasse do produtor (o split e da cobranca inteira), e
+    // `release.ts` provisiona sem cobranca. Sem esta clausula, um plano
+    // `scope: "ALL"` (que devolve `{}`) alcancava a rede inteira de graca.
+    expect(vitrineGateWhere("t1")).toContainEqual({
+      OR: [{ authorTenantId: null }, { authorTenantId: "t1" }],
+    })
+    // O autor pode, sim, colocar o PROPRIO curso no plano dele.
+    expect(vitrineGateWhere(null)).toContainEqual({
+      OR: [{ authorTenantId: null }, { authorTenantId: null }],
+    })
+  })
+
+  it("plano ALL nao escapa da trava de autoria", () => {
+    // A clausula mora no gate de VITRINE, nao no escopo do plano, justamente
+    // porque `planScopeWhere({scope:"ALL"})` devolve `{}`.
+    const w = planCourseWhere(plan({ scope: "ALL" }), "t1")
+    expect(w.AND as unknown[]).toContainEqual({
+      OR: [{ authorTenantId: null }, { authorTenantId: "t1" }],
+    })
+  })
+
   it("revenda NAO usa o gate de preco da vitrine mae", () => {
     // Na revenda o preco efetivo e o TenantCourse.price; aplicar
     // COURSE_HAS_PRICE ali barraria curso que a unidade precifica sozinha.

@@ -10,6 +10,10 @@ export default async function AdminCatalogPage() {
   // cursos nao necessariamente responde pelo produto de assinatura.
   const canViewPlans = session.can("assinaturas.view")
   const canManagePlans = session.can("assinaturas.manage")
+  // Cursos produzidos pelas UNIDADES. Familia propria de permissao: curadoria do
+  // catalogo da PMB e uma coisa; pausar o produto de uma unidade e outra.
+  const canViewAuthored = session.can("cursosAutorais.view")
+  const canManageAuthored = session.can("cursosAutorais.manage")
 
   // Opcoes do seletor de escopo do plano. So carregadas quando a aba existe —
   // sao duas queries que nao servem a quem nao a ve.
@@ -38,6 +42,8 @@ export default async function AdminCatalogPage() {
         canEdit={canEdit}
         canViewPlans={canViewPlans}
         canManagePlans={canManagePlans}
+        canViewAuthored={canViewAuthored}
+        canManageAuthored={canManageAuthored}
         categories={categories}
         packages={packages}
       />

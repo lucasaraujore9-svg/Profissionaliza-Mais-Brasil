@@ -132,6 +132,18 @@ const envSchema = z.object({
   // runtime — assertEnv() emite warning não-fatal em prod (COD-001).
   LMS_API_URL: optionalUrl(),
   LMS_API_KEY: z.string().optional(),
+  // Autoria de curso pela unidade. Depende de endpoints que o LMS ainda precisa
+  // expor (POST /courses, PATCH /courses/:id, POST /sso/author-token — ver
+  // docs/api/lms-autoria-unidade.md). Enquanto for diferente de "true", a
+  // unidade monta o curso e os termos comerciais mas ele fica em RASCUNHO:
+  // publicar sem conteudo faria a venda ser cobrada e o provisionamento falhar
+  // com o aluno ja tendo pago.
+  LMS_AUTHORING_ENABLED: z.string().optional(),
+
+  // Carteira Asaas da PMB — destino dos 5% de intermediacao quando quem vende
+  // e uma unidade. Opcional: sem ela, `getPlatformWalletId()` descobre pela
+  // conta-mae (uma chamada de rede a mais no caminho do checkout).
+  ASAAS_PMB_WALLET_ID: z.string().optional(),
 
   // Vercel (gerencia DNS de custom domains dos revendedores)
   VERCEL_TOKEN: z.string().optional(),

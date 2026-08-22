@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { requirePainel } from "@/lib/auth/painel-guard"
 import { withRequestContext } from "@/lib/observability/with-request-context"
+import { loadSplitStatement } from "@/lib/course-authoring/statement"
 
 export const GET = withRequestContext(
   { action: "painel.financeiro.get", route: "/api/painel/financeiro" },
@@ -147,6 +148,14 @@ export const GET = withRequestContext(
           : Promise.resolve([]),
       ])
 
+    // Rateio: `Payment.amount` deixou de ser a receita da loja quando a venda e
+    // de curso produzido por outra unidade. Sem estes numeros, o card "Recebido"
+    // conta como dela um dinheiro que o Asaas ja debitou na liquidacao.
+    const split = await loadSplitStatement(ctx.tenantId, {
+      gte: dateFrom,
+      lte: dateTo,
+    })
+
     const monthRevenue = Number(monthApproved._sum.amount ?? 0)
     const received = Number(allTimeAgg._sum.amount ?? 0)
     const pending = Number(pendingAgg._sum.finalAmount ?? 0)
@@ -201,6 +210,7 @@ export const GET = withRequestContext(
           pending,
           toReceive,
         },
+        split,
         charts: {
           week: weekChart,
           month: monthChart,

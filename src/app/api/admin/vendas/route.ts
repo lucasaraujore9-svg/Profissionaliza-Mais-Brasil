@@ -1,5 +1,6 @@
 import { guardianRequirement, hasGuardian } from "@/lib/students/guardian"
 import { NextResponse } from "next/server"
+import type { Prisma } from "@prisma/client"
 import { z } from "zod"
 import type { PaymentType } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
@@ -19,6 +20,15 @@ import { contextLogger } from "@/lib/logger"
 import { provisionStudentAccess } from "@/lib/students/access"
 import { fulfillScholarshipEnrollment } from "@/lib/enrollment/fulfill"
 import { tryConsumeCoupon, releaseCoupon } from "@/lib/coupons/consume"
+import {
+  AUTHORED_COURSE_SELECT,
+  authoredSaleGate,
+  type AuthoredCourseSource,
+} from "@/lib/course-authoring/checkout-gate"
+import {
+  asaasSplitsForEnrollment,
+  resolveSaleSplit,
+} from "@/lib/course-authoring/split-server"
 import { applyCouponDiscount } from "@/lib/coupons/discount"
 import {
   isFreeAmount,
@@ -226,6 +236,8 @@ export const POST = withRequestContext(
   let monthlyMonthsMain: number | null
   /** Todos os cursos cobertos pela venda — usado no gate de duplicidade. */
   let saleCourseIds: string[]
+  /** Colunas de autoria dos cursos da venda, para o gate de rateio. */
+  let saleCourses: AuthoredCourseSource[] = []
 
   if (isPackage) {
     const pkg = await getPackageForCheckout(null, parsed.data.packageId!)
@@ -246,7 +258,6 @@ export const POST = withRequestContext(
     const found = await prisma.course.findMany({
       where: { id: { in: requestedIds } },
       select: {
-        id: true,
         nome: true,
         status: true,
         precoVitrineMain: true,
@@ -254,6 +265,10 @@ export const POST = withRequestContext(
         precoOriginal: true,
         paymentTypeMain: true,
         monthlyMonthsMain: true,
+        // A vitrine PMB também vende curso produzido por uma unidade: aqui a
+        // PMB é a VENDEDORA e retém comissão + taxa; só a linha do produtor
+        // viaja por split.
+        ...AUTHORED_COURSE_SELECT,
       },
     })
     const byId = new Map(found.map((c) => [c.id, c]))
@@ -268,6 +283,8 @@ export const POST = withRequestContext(
     ) {
       return NextResponse.json({ error: "Curso não disponível" }, { status: 404 })
     }
+
+    saleCourses = courses
 
     const precoDe = (c: (typeof found)[number]) =>
       Number(c.precoVitrineMain ?? c.precoPromocional ?? c.precoOriginal ?? 0)
@@ -353,6 +370,37 @@ export const POST = withRequestContext(
     )
   }
 
+  // Gate de rateio ANTES da bolsa e do desconto/cupom. Antes da bolsa porque
+  // conceder de graca o curso de outra unidade e justamente o caso em que o
+  // produtor nao recebe nada; antes do cupom porque recusar depois de
+  // `tryConsumeCoupon` vazaria um uso numa venda que nem aconteceu.
+  const gate = await authoredSaleGate({
+    courses: saleCourses,
+    sellerTenantId: null,
+    seller: null,
+    listPrice: basePrice,
+    freeGrant: isBolsista,
+  })
+  if (!gate.ok) return gate.response
+
+  // O gate manda no gateway — `forcedGateway` e ordem, nao sugestao. Sem esta
+  // variavel ele era gravado na matricula e o ramo de cobranca logo abaixo
+  // continuava olhando `settings.pmbDirectSaleGateway`: a venda de curso
+  // autoral saia pelo Mercado Pago, que nao tem rateio, e o produtor nunca
+  // recebia. O pre-check de credenciais la em cima rodou para o gateway
+  // CONFIGURADO, entao o Asaas forcado precisa do dele aqui.
+  const effectiveGateway = gate.forcedGateway ?? gateway
+  if (
+    !isBolsista &&
+    effectiveGateway === "ASAAS" &&
+    (!process.env.ASAAS_API_URL || !process.env.ASAAS_API_KEY)
+  ) {
+    return NextResponse.json(
+      { error: "Asaas não configurado (ASAAS_API_URL/ASAAS_API_KEY)" },
+      { status: 503 },
+    )
+  }
+
   // ── Bolsa de estudo ─────────────────────────────────────────────────────
   // Sem cobranca: marca o aluno como bolsista, cria a matricula ja ACTIVE e
   // provisiona o acesso na plataforma de aulas de forma sincrona. Cupom e
@@ -376,7 +424,7 @@ export const POST = withRequestContext(
         soldByUserId: guard.ctx.userId,
         paymentType: rawPaymentType,
         status: "PENDING",
-        gateway,
+        gateway: effectiveGateway,
         originalAmount: basePrice,
         discountAmount: basePrice,
         finalAmount: 0,
@@ -499,6 +547,25 @@ export const POST = withRequestContext(
 
   // MP+MONTHLY agora suportado via preapproval (subscription)
 
+  // Desconto sai do bolso de quem vende (aqui, a PMB), nunca do produtor.
+  let splitSnapshot = gate.split
+  if (splitSnapshot && discountAmount > 0) {
+    const recomputed = await resolveSaleSplit({
+      course: saleCourses[0],
+      sellerTenantId: null,
+      listPrice: basePrice,
+      discount: discountAmount,
+    })
+    if (!recomputed.ok) {
+      if (couponId) await releaseCoupon(couponId).catch(() => undefined)
+      return NextResponse.json(
+        { error: recomputed.message, code: recomputed.error },
+        { status: 400 },
+      )
+    }
+    splitSnapshot = recomputed.value
+  }
+
   const enrollment = await prisma.enrollment.create({
     data: {
       tenantId: null,
@@ -511,12 +578,15 @@ export const POST = withRequestContext(
       soldByUserId: guard.ctx.userId,
       paymentType: rawPaymentType,
       status: "PENDING",
-      gateway,
+      gateway: effectiveGateway,
       originalAmount: basePrice,
       discountAmount,
       finalAmount,
       couponId,
       installmentsTotal: monthlyMonths,
+      authorSplitSnapshot: splitSnapshot
+        ? (splitSnapshot as unknown as Prisma.InputJsonValue)
+        : undefined,
     },
     select: { id: true },
   })
@@ -549,7 +619,7 @@ export const POST = withRequestContext(
   const externalReference = `pmb_enr_${enrollment.id}`
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? ""
 
-  if (gateway === "MP") {
+  if (effectiveGateway === "MP") {
     const mpToken = await pmbMpAccessToken()
     if (!mpToken) {
       await prisma.enrollment.delete({ where: { id: enrollment.id } }).catch(swallow("admin.vendas"))
@@ -677,7 +747,7 @@ export const POST = withRequestContext(
     }
   }
 
-  // gateway === "ASAAS"
+  // effectiveGateway === "ASAAS"
   // Quem PAGA: com aluno menor, o responsavel financeiro. O CPF exigido pelo
   // Asaas e o DELE — e por faltar essa distincao que a venda de menor so passava
   // cadastrando a mae como se fosse a aluna.
@@ -724,6 +794,10 @@ export const POST = withRequestContext(
         externalReference,
         maxPayments: monthlyMonths,
         notificationUrl: asaasWebhookUrl(),
+        // Rateio do curso de autoria — lido do snapshot congelado na matricula.
+        // Sem ele a cobranca nasce sem split: a PMB fica com 100% e a linha
+        // PRODUCER do extrato espera liquidacao para sempre.
+        splits: await asaasSplitsForEnrollment(enrollment.id),
       }, motherAsaasKey())
 
       // Asaas gera as cobrancas async; busca a 1a invoice em ate 3 tentativas
@@ -782,6 +856,7 @@ export const POST = withRequestContext(
           : `Curso: ${purchaseName}`,
       externalReference,
       notificationUrl: asaasWebhookUrl(),
+      splits: await asaasSplitsForEnrollment(enrollment.id),
     }, motherAsaasKey())
 
     await prisma.enrollment.update({

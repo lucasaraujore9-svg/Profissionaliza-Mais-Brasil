@@ -84,7 +84,7 @@ export const POST = withRequestContext(
     const courseIds = Array.from(new Set(data.courseIds))
     const existing = await prisma.course.findMany({
       where: { id: { in: courseIds } },
-      select: { id: true },
+      select: { id: true, nome: true, authorTenantId: true },
     })
     const existingIds = new Set(existing.map((c) => c.id))
     const missing = courseIds.filter((id) => !existingIds.has(id))
@@ -92,6 +92,22 @@ export const POST = withRequestContext(
       return NextResponse.json(
         { error: "Um ou mais cursos não foram encontrados." },
         { status: 404 },
+      )
+    }
+
+    // Curso produzido por uma UNIDADE não entra em pacote da PMB. Um pacote da
+    // PMB é auto-distribuído para toda a rede: o curso da unidade seria vendido
+    // em todas as vitrines sob o preço do pacote, sem rateio nenhum — o
+    // produtor entregaria o conteúdo dele de graça. Mesma trava do checkout,
+    // onde curso de autoria vende sozinho.
+    const autoral = existing.find((c) => c.authorTenantId !== null)
+    if (autoral) {
+      return NextResponse.json(
+        {
+          error: `O curso "${autoral.nome}" é produzido por uma unidade e não pode entrar em um pacote da PMB.`,
+          code: "AUTHORED_COURSE_ALONE",
+        },
+        { status: 400 },
       )
     }
 

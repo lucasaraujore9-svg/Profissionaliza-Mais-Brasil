@@ -88,11 +88,27 @@ export const PUT = withRequestContextParams<{ id: string }>(
     const courseIds = Array.from(new Set(data.courseIds))
     const courses = await prisma.course.findMany({
       where: { id: { in: courseIds }, status: "ATIVO" },
-      select: { id: true },
+      select: { id: true, nome: true, authorTenantId: true },
     })
     if (courses.length !== courseIds.length) {
       return NextResponse.json(
         { error: "Um ou mais cursos são inválidos ou inativos", code: "INVALID_COURSES" },
+        { status: 400 },
+      )
+    }
+
+    // Mesma trava da criação: curso de outra unidade não entra em pacote —
+    // senão o rateio da cobrança inteira alcançaria cursos que não são do
+    // produtor, e o preço do pacote contornaria o piso que ele definiu.
+    const alheio = courses.find(
+      (c) => c.authorTenantId !== null && c.authorTenantId !== ctx.tenantId,
+    )
+    if (alheio) {
+      return NextResponse.json(
+        {
+          error: `O curso "${alheio.nome}" é produzido por outra unidade e não pode entrar em um pacote.`,
+          code: "AUTHORED_COURSE_ALONE",
+        },
         { status: 400 },
       )
     }

@@ -387,16 +387,27 @@ async function main() {
     },
   ]
 
+  // findFirst + create/update em vez de upsert: o unique de nome passou a ser
+  // (provider, authorTenantId, nome) e o Prisma nao aceita coluna nula num
+  // unique composto. Mesmo motivo do Coupon, que ja usa este par por causa do
+  // @@unique([tenantId, code]) com NULL.
   for (const c of cursos) {
-    await prisma.course.upsert({
-      where: { provider_nome: { provider: "EA", nome: c.nome } },
-      update: {
-        precoVitrineMain: c.precoVitrineMain,
-        destaqueHome: c.destaqueHome,
-        ordemHome: c.ordemHome ?? null,
-      },
-      create: { ...c, updatedAt: new Date() },
+    const existing = await prisma.course.findFirst({
+      where: { provider: "EA", nome: c.nome, authorTenantId: null },
+      select: { id: true },
     })
+    if (existing) {
+      await prisma.course.update({
+        where: { id: existing.id },
+        data: {
+          precoVitrineMain: c.precoVitrineMain,
+          destaqueHome: c.destaqueHome,
+          ordemHome: c.ordemHome ?? null,
+        },
+      })
+    } else {
+      await prisma.course.create({ data: { ...c, updatedAt: new Date() } })
+    }
   }
 
   // Seção "Idiomas" da home (PMB) — cria/atualiza com os 4 cursos de idiomas.

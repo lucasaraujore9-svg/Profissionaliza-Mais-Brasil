@@ -5,19 +5,25 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { CourseListWrapper } from "./course-list-wrapper"
 import { PainelPackagesClient } from "./painel-packages-client"
 import { PainelPlansClient } from "./painel-plans-client"
+import { PainelAuthoredCoursesClient } from "./painel-authored-courses-client"
 
-type TabId = "cursos" | "pacotes" | "assinaturas"
+type TabId = "cursos" | "meus-cursos" | "pacotes" | "assinaturas"
 
 export function PainelCatalogTabs({
   canManageCourses,
   canManagePackages,
   canViewPlans,
   canManagePlans,
+  canViewAuthored,
+  canManageAuthored,
   categories,
   packages,
 }: {
   canManageCourses: boolean
   canManagePackages: boolean
+  /** Sem `cursosAutorais.view` a aba nem aparece. */
+  canViewAuthored: boolean
+  canManageAuthored: boolean
   /** Sem `assinaturas.view` a aba nem aparece — nao e so o botao que some. */
   canViewPlans: boolean
   canManagePlans: boolean
@@ -39,6 +45,14 @@ export function PainelCatalogTabs({
           >
             Cursos
           </TabsTrigger>
+          {canViewAuthored && (
+            <TabsTrigger
+              value="meus-cursos"
+              className="data-active:bg-white data-active:text-[var(--color-pmb-green,#025918)] data-active:shadow-sm"
+            >
+              Meus cursos
+            </TabsTrigger>
+          )}
           <TabsTrigger
             value="pacotes"
             className="data-active:bg-white data-active:text-[var(--color-pmb-green,#025918)] data-active:shadow-sm"
@@ -58,6 +72,9 @@ export function PainelCatalogTabs({
 
       <div className="mt-6">
         {active === "cursos" && <CourseListWrapper canManage={canManageCourses} />}
+        {active === "meus-cursos" && canViewAuthored && (
+          <PainelAuthoredCoursesClient canManage={canManageAuthored} />
+        )}
         {active === "pacotes" && (
           <PainelPackagesClient canManage={canManagePackages} />
         )}

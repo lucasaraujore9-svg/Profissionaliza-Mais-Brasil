@@ -76,6 +76,12 @@ export const PAINEL_PERMISSIONS = [
   "catalogo.manage",
   "pacotes.view",
   "pacotes.manage",
+  // Cursos PRODUZIDOS pela propria unidade (autoria) — separada de catalogo.*,
+  // que e a curadoria do catalogo da PMB na vitrine dela. Sao poderes
+  // diferentes: definir o preco de um curso da PMB na vitrine nao deveria
+  // habilitar publicar produto proprio na rede inteira, com comissao e repasse.
+  "cursosAutorais.view",
+  "cursosAutorais.manage",
   "assinaturas.view",
   "assinaturas.manage",
 
@@ -203,6 +209,7 @@ export const WRITE_IMPLIES_READ: Readonly<
   "leads.config": "leads.view",
   "catalogo.manage": "catalogo.view",
   "pacotes.manage": "pacotes.view",
+  "cursosAutorais.manage": "cursosAutorais.view",
   "assinaturas.manage": "assinaturas.view",
   "cupons.manage": "cupons.view",
   "financeiro.export": "financeiro.view",
@@ -278,6 +285,9 @@ export const ROLE_PRESETS: Record<PainelMemberRole, readonly PainelPermission[]>
     "catalogo.view",
     "catalogo.manage",
     "pacotes.manage",
+    // Produzir e precificar curso proprio e a mesma natureza de trabalho que o
+    // gerente ja faz com o catalogo. O dono recebe por `owner: ALL`.
+    "cursosAutorais.manage",
     "cupons.view",
     "cupons.manage",
     "financeiro.view",
@@ -507,6 +517,11 @@ export const PERMISSION_GROUPS: {
       { perm: "catalogo.manage", label: "Editar cursos e preços" },
       { perm: "pacotes.view", label: "Ver os pacotes" },
       { perm: "pacotes.manage", label: "Gerenciar pacotes" },
+      { perm: "cursosAutorais.view", label: "Ver os cursos produzidos pela unidade" },
+      {
+        perm: "cursosAutorais.manage",
+        label: "Criar cursos próprios, definir alcance e comissão",
+      },
       { perm: "assinaturas.view", label: "Ver os planos de assinatura" },
       { perm: "assinaturas.manage", label: "Gerenciar planos de assinatura" },
       { perm: "cupons.view", label: "Ver cupons" },

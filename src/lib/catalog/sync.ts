@@ -138,11 +138,21 @@ export async function syncCatalogFromEA(
         syncedAt: new Date(),
       }
 
-      // Match por (provider=EA, nome): o unique de `nome` agora e composto por
-      // fornecedora. O sync EA so toca em cursos EA — cursos LMS de mesmo nome
-      // ficam noutra linha e nao colidem.
-      const existing = await prisma.course.findUnique({
-        where: { provider_nome: { provider: "EA", nome: curso.nome } },
+      // Match por (provider=EA, nome, SEM autor): o unique de `nome` e composto
+      // por fornecedora E por autor. O sync EA so toca em cursos EA — cursos LMS
+      // de mesmo nome ficam noutra linha e nao colidem.
+      //
+      // `authorTenantId: null` e a trava que impede o SEQUESTRO de um curso de
+      // autoria: se uma unidade publicar "Excel Basico" e a fornecedora tiver um
+      // curso com o mesmo nome, sem esta clausula o sync casaria com a linha da
+      // unidade e reescreveria descricao, carga horaria, capa e preco com os do
+      // feed — apagando o produto dela em silencio, todo dia as 6h.
+      //
+      // findFirst (nao findUnique) porque o Prisma nao aceita coluna nula num
+      // unique composto; a unicidade real e garantida pelo indice parcial
+      // `courses_provider_nome_pmb_key` (migration 20260821_course_authoring).
+      const existing = await prisma.course.findFirst({
+        where: { provider: "EA", nome: curso.nome, authorTenantId: null },
         select: {
           id: true,
           plataformaCourseId: true,
@@ -179,7 +189,7 @@ export async function syncCatalogFromEA(
       let courseId: string
       if (existing) {
         await prisma.course.update({
-          where: { provider_nome: { provider: "EA", nome: curso.nome } },
+          where: { id: existing.id },
           data: {
             ...dataBase,
             categoryId: effectiveCategoryId,

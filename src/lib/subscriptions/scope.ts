@@ -81,7 +81,19 @@ export function planScopeWhere(plan: PlanScopeInput): Prisma.CourseWhereInput {
  *   escolheu vender.
  */
 export function vitrineGateWhere(tenantId: string | null): Prisma.CourseWhereInput[] {
-  const gates: Prisma.CourseWhereInput[] = [{ status: "ATIVO" }]
+  const gates: Prisma.CourseWhereInput[] = [
+    { status: "ATIVO" },
+    // Curso produzido por OUTRA unidade nunca entra num plano. A assinatura é
+    // uma cobrança recorrente por um conjunto de cursos: não há como ratear
+    // dela o repasse de um produtor (o split é da cobrança inteira), e o
+    // `release.ts` provisiona a matrícula sem cobrança nenhuma — o produtor
+    // daria o curso de graça, sem sequer um registro da venda. Mesma trava de
+    // "curso de autoria de terceiro vende sozinho" no `authoredSaleGate`.
+    //
+    // Mora aqui, no gate de vitrine, porque `scope: "ALL"` devolve `{}`: fosse
+    // no escopo do plano, um plano ALL alcançaria a rede inteira.
+    { OR: [{ authorTenantId: null }, { authorTenantId: tenantId }] },
+  ]
 
   if (tenantId === null) {
     gates.push({ hiddenMain: false }, COURSE_HAS_PRICE)

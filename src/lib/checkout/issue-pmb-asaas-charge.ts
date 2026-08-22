@@ -13,6 +13,7 @@ import {
   motherAsaasKey,
 } from "@/lib/asaas/client"
 import { dueDateInDays } from "@/lib/checkout/due-date"
+import { asaasSplitsForEnrollment } from "@/lib/course-authoring/split-server"
 import { asaasWebhookUrl } from "@/lib/tenant/urls"
 import { assertPmbCharge, TenantGatewayIsolationError } from "@/lib/checkout/assert-tenant-gateway"
 import { createBoletoInstallmentPlan } from "@/lib/installments/plan"
@@ -291,6 +292,7 @@ export async function issuePmbAsaasCharge(
     const subscription = await createAsaasSubscription({
       customer: customer.id,
       billingType,
+      splits: await asaasSplitsForEnrollment(enrollmentId),
       value: finalAmount,
       // Cartão captura na hora (vence hoje); PIX/boleto vencem em 3 dias.
       nextDueDate: dueDateInDays(billingType === "CREDIT_CARD" ? 0 : 3),
@@ -375,6 +377,7 @@ export async function issuePmbAsaasCharge(
       {
         installmentCount: n,
         customer: customer.id,
+        splits: await asaasSplitsForEnrollment(enrollmentId),
         value: perInstallment(finalAmount, n),
         totalValue: finalAmount,
         billingType: "CREDIT_CARD",
@@ -486,6 +489,11 @@ export async function issuePmbAsaasCharge(
   const payment = await createAsaasPayment({
     customer: customer.id,
     billingType,
+    // A vitrine PMB tambem vende curso de autoria de unidade: aqui a PMB e a
+    // VENDEDORA, entao ela retem comissao + taxa como resto e so a linha do
+    // produtor viaja. Mandar a propria carteira faria o Asaas recusar a
+    // cobranca inteira.
+    splits: await asaasSplitsForEnrollment(enrollmentId),
     value: finalAmount,
     dueDate: dueDateInDays(3),
     description: chargeDescription,

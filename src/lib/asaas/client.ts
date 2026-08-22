@@ -519,3 +519,26 @@ export async function removeWebhookBackoff(
     apiKey,
   )
 }
+
+// ── Carteira (walletId) ──
+// Endereco de destino de um split. E dado da CONTA, entao a unica forma de
+// obte-lo e chamar com a chave de API daquela conta: com a chave da unidade
+// vem a carteira dela; com a chave da conta-mae, a da PMB.
+//
+// Existe para que ninguem precise copiar e colar walletId do painel do Asaas —
+// um caractere trocado mandaria dinheiro para a carteira de um desconhecido, e
+// o erro so apareceria na conciliacao.
+
+interface AsaasWalletList {
+  data: { object: string; id: string }[]
+}
+
+/**
+ * Recupera o walletId da conta dona de `apiKey`.
+ * Devolve null quando a conta nao expoe carteira (nunca lanca por isso — o
+ * caller decide se aquilo bloqueia a operacao).
+ */
+export async function retrieveWalletId(apiKey: string): Promise<string | null> {
+  const res = await request<AsaasWalletList>("GET", "/wallets/", undefined, apiKey)
+  return res.data?.[0]?.id ?? null
+}

@@ -5,6 +5,7 @@ import Link from "next/link"
 import { Download, AlertTriangle, RotateCcw, BarChart3 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { PageHeader } from "@/components/painel/page-header"
+import { FinanceSplitCard, type SplitStatement } from "./finance-split-card"
 import {
   FinanceSummaryCards,
   type FinanceMetrics,
@@ -40,6 +41,7 @@ const emptyMetrics: FinanceMetrics = {
 
 export function FinanceDashboard() {
   const [metrics, setMetrics] = useState<FinanceMetrics>(emptyMetrics)
+  const [split, setSplit] = useState<SplitStatement | null>(null)
   const [week, setWeek] = useState<ChartPoint[]>([])
   const [month, setMonth] = useState<ChartPoint[]>([])
   const [payments, setPayments] = useState<PaymentRow[]>([])
@@ -69,6 +71,7 @@ export function FinanceDashboard() {
         return
       }
       setMetrics(body.data.metrics)
+      setSplit(body.data.split ?? null)
       setWeek(body.data.charts.week)
       setMonth(body.data.charts.month)
       setPayments(body.data.payments)
@@ -154,6 +157,8 @@ export function FinanceDashboard() {
       </div>
       <div data-tour="financeiro:resumo">
         <FinanceSummaryCards metrics={metrics} loading={isInitial} />
+
+        {split && <FinanceSplitCard split={split} />}
       </div>
       <FinanceBarChart week={week} month={month} loading={isInitial} />
       <div data-tour="financeiro:transacoes">

@@ -12,6 +12,7 @@ import {
   withGuardianRule,
 } from "@/lib/students/guardian"
 import { NextResponse } from "next/server"
+import type { Prisma } from "@prisma/client"
 import { z } from "zod"
 import type { PaymentType } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
@@ -20,6 +21,12 @@ import { auth } from "@/lib/auth"
 import { tryConsumeCoupon, releaseCoupon } from "@/lib/coupons/consume"
 import { applyCouponDiscount } from "@/lib/coupons/discount"
 import { assertCouponMatchesEnrollment } from "@/lib/checkout/assert-tenant-gateway"
+import {
+  AUTHORED_COURSE_SELECT,
+  authoredSaleGate,
+  type AuthoredCourseSource,
+} from "@/lib/course-authoring/checkout-gate"
+import { resolveSaleSplit } from "@/lib/course-authoring/split-server"
 import { swallow } from "@/lib/errors"
 import { contextLogger } from "@/lib/logger"
 import { withRequestContext } from "@/lib/observability/with-request-context"
@@ -321,6 +328,13 @@ export const POST = withRequestContext(
     let monthlyMonthsMain: number | null
     /** Todos os cursos cobertos pela venda — usado no gate de duplicidade. */
     let saleCourseIds: string[]
+    /**
+     * Colunas de autoria dos cursos da venda, para o gate de rateio. Fica vazio
+     * nos ramos de PACOTE e de matrícula existente: pacote de terceiro não
+     * existe (o escopo de um pacote é sempre da própria loja ou da PMB) e a
+     * matrícula existente já nasceu com o snapshot dela.
+     */
+    let saleCourses: AuthoredCourseSource[] = []
 
     if (isPackage) {
       const pkg = await getPackageForCheckout(tenant.id, data.packageId!)
@@ -346,11 +360,11 @@ export const POST = withRequestContext(
         include: {
           course: {
             select: {
-              id: true,
               nome: true,
               slug: true,
               monthlyMonthsMain: true,
               status: true,
+              ...AUTHORED_COURSE_SELECT,
             },
           },
         },
@@ -409,6 +423,8 @@ export const POST = withRequestContext(
         )
       }
 
+      saleCourses = tenantCourses.map((tc) => tc.course)
+
       const primary = tenantCourses[0]
       basePrice =
         Math.round(
@@ -442,6 +458,25 @@ export const POST = withRequestContext(
       )
     }
     const cap = isOwner ? 100 : (member?.maxDiscount ?? 0)
+
+    // Gate de rateio (curso produzido por outra unidade). Antes do cupom pelo
+    // mesmo motivo das demais portas: recusar depois de `tryConsumeCoupon`
+    // vazaria um uso numa venda que nem aconteceu. A bolsa também passa por
+    // aqui de propósito — dar de graça o curso de outra unidade é justamente o
+    // caso em que o produtor não receberia nada, e é `freeGrant` quem recusa:
+    // o resto do gate olha gateway, carteira e preço, e uma concessão sem
+    // cobrança passava por todos os três.
+    const gate = await authoredSaleGate({
+      courses: saleCourses,
+      sellerTenantId: tenant.id,
+      seller: {
+        asaasConnected: tenant.asaasConnected,
+        asaasWebhookToken: tenant.asaasWebhookToken,
+      },
+      listPrice: basePrice,
+      freeGrant: isBolsista,
+    })
+    if (!gate.ok) return gate.response
 
     let discountAmount = 0
     let couponId: string | null = null
@@ -839,6 +874,26 @@ export const POST = withRequestContext(
     const isMonthly = effectiveType === "MONTHLY"
     const monthlyMonths = isMonthly ? monthlyMonthsMain ?? 12 : null
 
+    // Desconto sai do bolso de quem vende, nunca do produtor — o snapshot
+    // precisa refletir o valor efetivamente cobrado.
+    let splitSnapshot = gate.split
+    if (splitSnapshot && discountAmount > 0) {
+      const recomputed = await resolveSaleSplit({
+        course: saleCourses[0],
+        sellerTenantId: tenant.id,
+        listPrice: basePrice,
+        discount: discountAmount,
+      })
+      if (!recomputed.ok) {
+        if (couponId) await releaseCoupon(couponId).catch(swallow("painel.vendas.split"))
+        return NextResponse.json(
+          { error: recomputed.message, code: recomputed.error },
+          { status: 400 },
+        )
+      }
+      splitSnapshot = recomputed.value
+    }
+
     const enrollment = await prisma.enrollment.create({
       data: {
         tenantId: tenant.id,
@@ -854,12 +909,17 @@ export const POST = withRequestContext(
         // Herda o gateway ATIVO da unidade — /api/loja/checkout/process roteia a
         // cobrança por este campo, então gravar "MP" fixo mandava o dinheiro da
         // unidade Asaas para a conta MP antiga (ou travava a venda em 503).
-        gateway: tenant.salesGateway,
+        // Rateio obriga Asaas: sem isso a venda de curso de terceiro numa
+        // unidade que usa MP sairia sem repasse nenhum ao produtor.
+        gateway: gate.forcedGateway ?? tenant.salesGateway,
         originalAmount: basePrice,
         discountAmount,
         finalAmount,
         couponId,
         installmentsTotal: monthlyMonths,
+        authorSplitSnapshot: splitSnapshot
+          ? (splitSnapshot as unknown as Prisma.InputJsonValue)
+          : undefined,
       },
       select: { id: true },
     })

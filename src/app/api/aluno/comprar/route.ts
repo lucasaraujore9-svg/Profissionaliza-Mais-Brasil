@@ -1,5 +1,15 @@
 import { guardianRequirement, hasGuardian } from "@/lib/students/guardian"
 import { NextResponse } from "next/server"
+import type { Prisma } from "@prisma/client"
+import {
+  AUTHORED_COURSE_SELECT,
+  authoredSaleGate,
+} from "@/lib/course-authoring/checkout-gate"
+import {
+  asaasSplitsForEnrollment,
+  resolveSaleSplit,
+  saleRequiresSplit,
+} from "@/lib/course-authoring/split-server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { requireStudentSession } from "@/lib/auth/student-session"
@@ -96,13 +106,6 @@ async function handleResellerInit(
         { status: 503 },
       )
     }
-    if (mode === "NONE") {
-      return NextResponse.json(
-        { error: "Loja ainda não configurou o pagamento", code: "CHECKOUT_UNAVAILABLE" },
-        { status: 503 },
-      )
-    }
-    const gateway: "MP" | "ASAAS" = mode
 
     const [student, tenantCourse] = await Promise.all([
       prisma.student.findUnique({
@@ -124,6 +127,8 @@ async function handleResellerInit(
               monthlyMonthsMain: true,
               parcelasSugeridas: true,
               parcelasOverride: true,
+              // Recompra tambem alcanca curso de autoria de outra unidade.
+              ...AUTHORED_COURSE_SELECT,
             },
           },
         },
@@ -133,6 +138,20 @@ async function handleResellerInit(
     if (!student) {
       return NextResponse.json({ error: "Aluno não encontrado" }, { status: 404 })
     }
+
+    // O gateway so pode ser decidido depois de saber QUAL curso e: rateio
+    // obriga Asaas, e a checagem de "loja sem gateway" nao se aplica quando a
+    // venda vai pela conta Asaas dela de qualquer forma.
+    const requiresSplit = tenantCourse
+      ? saleRequiresSplit(tenantCourse.course, tenantId)
+      : false
+    if (!requiresSplit && mode === "NONE") {
+      return NextResponse.json(
+        { error: "Loja ainda não configurou o pagamento", code: "CHECKOUT_UNAVAILABLE" },
+        { status: 503 },
+      )
+    }
+    const gateway: "MP" | "ASAAS" = requiresSplit ? "ASAAS" : (mode as "MP" | "ASAAS")
     if (!student.email) {
       return NextResponse.json(
         { error: "Cadastre seu email no perfil antes de comprar" },
@@ -189,6 +208,18 @@ async function handleResellerInit(
         { status: 400 },
       )
     }
+
+    // Gate de rateio antes do cupom — recusar depois de consumi-lo vazaria um uso.
+    const gate = await authoredSaleGate({
+      courses: [tenantCourse.course],
+      sellerTenantId: tenantId,
+      seller: {
+        asaasConnected: tenant.asaasConnected,
+        asaasWebhookToken: tenant.asaasWebhookToken,
+      },
+      listPrice: basePrice,
+    })
+    if (!gate.ok) return gate.response
 
     let discountAmount = 0
     let couponId: string | null = null
@@ -291,6 +322,30 @@ async function handleResellerInit(
       return NextResponse.json({ data: { enrollmentId: existing.id } })
     }
 
+    // Com desconto o rateio muda: a parte do produtor continua sobre a tabela e
+    // a do vendedor absorve o abatimento. Sem remontar, os percentuais do
+    // snapshot (calculados sem desconto) fariam o PRODUTOR pagar a promocao.
+    let splitSnapshot = gate.split
+    if (splitSnapshot && discountAmount > 0) {
+      const recomputed = await resolveSaleSplit({
+        course: tenantCourse.course,
+        sellerTenantId: tenantId,
+        listPrice: basePrice,
+        discount: discountAmount,
+      })
+      if (!recomputed.ok) {
+        if (consumedCouponId) {
+          await releaseCoupon(consumedCouponId).catch(swallow("aluno.comprar"))
+          consumedCouponId = null
+        }
+        return NextResponse.json(
+          { error: recomputed.message, code: recomputed.error },
+          { status: 400 },
+        )
+      }
+      splitSnapshot = recomputed.value
+    }
+
     const enrollment = await prisma.enrollment.create({
       data: {
         tenantId,
@@ -305,6 +360,9 @@ async function handleResellerInit(
         finalAmount,
         couponId,
         installmentsTotal: monthlyMonths,
+        authorSplitSnapshot: splitSnapshot
+          ? (splitSnapshot as unknown as Prisma.InputJsonValue)
+          : undefined,
       },
       select: { id: true },
     })
@@ -486,7 +544,6 @@ export const POST = withRequestContext(
   const course = await prisma.course.findUnique({
     where: { id: parsed.data.courseId },
     select: {
-      id: true,
       nome: true,
       status: true,
       precoVitrineMain: true,
@@ -494,6 +551,7 @@ export const POST = withRequestContext(
       precoOriginal: true,
       paymentTypeMain: true,
       monthlyMonthsMain: true,
+      ...AUTHORED_COURSE_SELECT,
     },
   })
 
@@ -538,6 +596,31 @@ export const POST = withRequestContext(
     return NextResponse.json(
       { error: "Curso sem preço configurado na vitrine" },
       { status: 400 },
+    )
+  }
+
+  // Gate de rateio antes do cupom (mesma razao das outras portas: recusar
+  // depois de consumir o cupom vazaria um uso).
+  const gate = await authoredSaleGate({
+    courses: [course],
+    sellerTenantId: null,
+    seller: null,
+    listPrice: basePrice,
+  })
+  if (!gate.ok) return gate.response
+
+  // `forcedGateway` é ORDEM, não sugestão: sem esta variável ele ia para a
+  // matrícula e a cobrança continuava sendo montada por
+  // `settings.pmbDirectSaleGateway` — com a vitrine PMB no Mercado Pago, o
+  // curso de autoria era vendido por um gateway sem rateio.
+  const effectiveGateway = gate.forcedGateway ?? gateway
+  if (
+    effectiveGateway === "ASAAS" &&
+    (!process.env.ASAAS_API_URL || !process.env.ASAAS_API_KEY)
+  ) {
+    return NextResponse.json(
+      { error: "Asaas não configurado" },
+      { status: 503 },
     )
   }
 
@@ -592,6 +675,26 @@ export const POST = withRequestContext(
 
   // MP+MONTHLY agora suportado via preapproval
 
+  let splitSnapshot = gate.split
+  if (splitSnapshot && discountAmount > 0) {
+    const recomputed = await resolveSaleSplit({
+      course,
+      sellerTenantId: null,
+      listPrice: basePrice,
+      discount: discountAmount,
+    })
+    if (!recomputed.ok) {
+      // O cupom já foi reservado acima: sem devolvê-lo, um uso é queimado numa
+      // venda que não aconteceu (as outras três portas já liberavam aqui).
+      if (couponId) await releaseCoupon(couponId).catch(swallow("aluno.comprar"))
+      return NextResponse.json(
+        { error: recomputed.message, code: recomputed.error },
+        { status: 400 },
+      )
+    }
+    splitSnapshot = recomputed.value
+  }
+
   const enrollment = await prisma.enrollment.create({
     data: {
       tenantId: null,
@@ -600,12 +703,15 @@ export const POST = withRequestContext(
       courseId: course.id,
       paymentType: course.paymentTypeMain,
       status: "PENDING",
-      gateway,
+      gateway: effectiveGateway,
       originalAmount: basePrice,
       discountAmount,
       finalAmount,
       couponId,
       installmentsTotal: monthlyMonths,
+      authorSplitSnapshot: splitSnapshot
+        ? (splitSnapshot as unknown as Prisma.InputJsonValue)
+        : undefined,
     },
     select: { id: true },
   })
@@ -641,7 +747,7 @@ export const POST = withRequestContext(
   const externalReference = `pmb_enr_${enrollment.id}`
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? ""
 
-  if (gateway === "MP") {
+  if (effectiveGateway === "MP") {
     const mpToken = await pmbMpAccessToken()
     if (!mpToken) {
       await prisma.enrollment.delete({ where: { id: enrollment.id } })
@@ -825,6 +931,9 @@ export const POST = withRequestContext(
         externalReference,
         maxPayments: monthlyMonths,
         notificationUrl: asaasWebhookUrl(),
+        // Rateio do curso de autoria, lido do snapshot congelado na matrícula.
+        // Sem ele a cobrança nasce sem split e o produtor nunca é pago.
+        splits: await asaasSplitsForEnrollment(enrollment.id),
       }, motherAsaasKey())
 
       let firstInvoiceUrl: string | null = null
@@ -875,6 +984,7 @@ export const POST = withRequestContext(
       description: `Curso: ${course.nome}`,
       externalReference,
       notificationUrl: asaasWebhookUrl(),
+      splits: await asaasSplitsForEnrollment(enrollment.id),
     }, motherAsaasKey())
 
     await prisma.enrollment.update({

@@ -9,7 +9,14 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 vi.mock("@/lib/prisma", () => {
   const prisma = {
     $queryRaw: vi.fn().mockResolvedValue([{ pg_try_advisory_lock: true }]),
-    $transaction: vi.fn(async (arr: Promise<unknown>[]) => Promise.all(arr)),
+    // O fulfill usa transacao INTERATIVA (as linhas de rateio precisam do id do
+    // Payment recem-criado). O mock aceita as duas formas para nao amarrar o
+    // teste ao formato da chamada.
+    $transaction: vi.fn(async (arg: unknown) =>
+      typeof arg === "function"
+        ? await (arg as (tx: unknown) => Promise<unknown>)(prisma)
+        : Promise.all(arg as Promise<unknown>[]),
+    ),
     enrollment: {
       findUnique: vi.fn(),
       findFirst: vi.fn(),
@@ -18,6 +25,7 @@ vi.mock("@/lib/prisma", () => {
       create: vi.fn(),
     },
     payment: { findFirst: vi.fn(), create: vi.fn() },
+    courseSaleSplit: { createMany: vi.fn().mockResolvedValue({ count: 0 }) },
     student: { update: vi.fn() },
     coursePackageItem: { findMany: vi.fn() },
     course: { findMany: vi.fn() },
@@ -150,7 +158,11 @@ function enrollment(overrides: EnrollmentOverride = {}) {
 beforeEach(() => {
   vi.clearAllMocks()
   p.$queryRaw.mockResolvedValue([{ pg_try_advisory_lock: true }])
-  p.$transaction.mockImplementation(async (arr: Promise<unknown>[]) => Promise.all(arr))
+  p.$transaction.mockImplementation(async (arg: unknown) =>
+    typeof arg === "function"
+      ? await (arg as (tx: unknown) => Promise<unknown>)(p)
+      : Promise.all(arg as Promise<unknown>[]),
+  )
   p.payment.findFirst.mockResolvedValue(null)
   p.payment.create.mockResolvedValue({ id: "pmt1" })
   p.enrollment.update.mockResolvedValue({})

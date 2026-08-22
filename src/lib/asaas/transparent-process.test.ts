@@ -3,7 +3,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
-    enrollment: { update: vi.fn() },
+    enrollment: {
+      update: vi.fn(),
+      // Lido por `asaasSplitsForEnrollment` para descobrir se a cobranca leva
+      // rateio. Sem snapshot = venda comum, sem split.
+      findUnique: vi.fn().mockResolvedValue({ authorSplitSnapshot: null }),
+    },
   },
 }))
 
