@@ -309,12 +309,12 @@ model Tenant {
   whatsappFloatSide    String  @default("right") @map("whatsapp_float_side") // "right" | "left"
   whatsappFloatMessage String? @map("whatsapp_float_message") // Mensagem pre-preenchida (?text=)
 
-  instagram      String?
-  facebook       String?
-  youtube        String?
-  tiktok         String?
-  supportEmail   String? @map("support_email") // E-mail de atendimento exibido no rodape da vitrine
-  supportHours   String? @map("support_hours") // Horario de atendimento exibido no rodape e na barra de beneficios da vitrine
+  instagram    String?
+  facebook     String?
+  youtube      String?
+  tiktok       String?
+  supportEmail String? @map("support_email") // E-mail de atendimento exibido no rodape da vitrine
+  supportHours String? @map("support_hours") // Horario de atendimento exibido no rodape e na barra de beneficios da vitrine
 
   // Status e config
   status      TenantStatus @default(PENDING)
@@ -389,6 +389,18 @@ model Tenant {
   asaasApiKey         String? @map("asaas_api_key") // Criptografado AES-256
   asaasWebhookToken   String? @map("asaas_webhook_token") // Criptografado AES-256
   asaasConnected      Boolean @default(false) @map("asaas_connected")
+
+  // Carteira Asaas (walletId) DESTA unidade — o endereco para onde o split
+  // manda dinheiro quando ela e a PRODUTORA de um curso vendido por outra loja.
+  // Descoberto automaticamente por GET /v3/wallets/ com a propria asaasApiKey
+  // (ver src/lib/course-authoring/wallet.ts): a unidade nunca digita este valor.
+  //
+  // Os dois gates sao de ALTURAS diferentes, de proposito:
+  //   RECEBER (publicar curso alem da propria vitrine) — basta asaasWalletId.
+  //   VENDER curso de terceiro — precisa de asaasConnected + asaasWebhookToken,
+  //     porque a cobranca e EMITIDA na conta dela e ela reparte por split.
+  asaasWalletId        String?   @map("asaas_wallet_id")
+  asaasWalletCheckedAt DateTime? @map("asaas_wallet_checked_at")
 
   // Gateway ATIVO da vitrine da unidade. Uma venda por vez vai por um gateway.
   // MP (padrao) ou ASAAS (escolhivel assim que a unidade conecta a conta Asaas).
@@ -539,6 +551,8 @@ model Tenant {
 
   // Relacoes
   tenantCourses                TenantCourse[]
+  authoredCourses              Course[]                     @relation("AuthoredCourses")
+  courseSaleSplits             CourseSaleSplit[]            @relation("CourseSplitBeneficiary")
   coursePackages               CoursePackage[]
   tenantPackages               TenantPackage[]
   subscriptionPlans            SubscriptionPlan[]
@@ -642,6 +656,40 @@ model StudentNote {
 // CURSOS (sincronizados da plataforma de aulas)
 // ============================================================
 
+// Alcance escolhido pelo AUTOR de um curso de autoria da unidade. Eixo
+// independente de `Course.visibilityMode`, que continua sendo a curadoria da PMB
+// (ela ainda pode bloquear um curso numa unidade especifica). Os dois filtram.
+//   OWN_ONLY    — so a vitrine de quem criou
+//   OWN_AND_PMB — a vitrine do autor + a vitrine principal da PMB
+//   NETWORK     — todas as vitrines (autor + PMB + demais unidades com carteira)
+enum CourseDistribution {
+  OWN_ONLY
+  OWN_AND_PMB
+  NETWORK
+}
+
+// O que o numero digitado pelo autor (`Course.authorAmount`) SIGNIFICA.
+//   FIXED            — preco final, igual em toda vitrine
+//   MIN_PRICE        — piso de preco; a unidade vende por igual ou mais
+//   MIN_PRODUCER_NET — quanto o PRODUTOR recebe por venda; a diferenca e do
+//                      vendedor. O preco minimo de venda passa a ser
+//                      authorAmount / (1 - comissao - taxa), calculado em
+//                      src/lib/course-authoring/split.ts.
+enum AuthoredPricingMode {
+  FIXED
+  MIN_PRICE
+  MIN_PRODUCER_NET
+}
+
+// Ciclo de vida do curso de autoria. Nao ha aprovacao da PMB: DRAFT -> PUBLISHED
+// e ato do proprio autor. PAUSED e a intervencao REATIVA do /admin (tira das
+// vitrines sem apagar historico nem matricula).
+enum AuthoredCourseStatus {
+  DRAFT
+  PUBLISHED
+  PAUSED
+}
+
 // Fornecedora de origem do curso. EA = fornecedora legada (integracao
 // form-data PHP em src/lib/plataforma-cursos). LMS = fornecedora propria
 // (API REST JSON em src/lib/lms). A fornecedora define o canal
@@ -677,7 +725,7 @@ model Course {
   // TODAS as vitrines — mae, revendas ativas/pendentes e futuras), curado a
   // partir dos PDFs oficiais de matriz. Vazio => curso sem matriz: a pagina e o
   // verso do certificado seguem o layout atual (sem a secao).
-  matrizCurricular  String[] @default([]) @map("matriz_curricular")
+  matrizCurricular String[] @default([]) @map("matriz_curricular")
 
   // Bullets da secao "O que voce vai aprender" na pagina do curso. Conteudo
   // global PMB editado no catalogo do admin: e o PADRAO herdado por TODAS as
@@ -715,6 +763,28 @@ model Course {
   allowedTenantIds String[]         @default([]) @map("allowed_tenant_ids")
   blockedTenantIds String[]         @default([]) @map("blocked_tenant_ids")
 
+  // ── Autoria da unidade (marketplace de duas pontas) ──
+  // authorTenantId null = catalogo da PMB (TODO o legado e todo curso vindo do
+  // sync EA/LMS). Preenchido = curso PRODUZIDO por uma unidade, que escolhe
+  // alcance, preco e a comissao de quem vender.
+  //
+  // Estes campos moram no Course pelo mesmo motivo que `precoVitrineMain` e
+  // `visibilityMode`: os syncs preservam curadoria de proposito (sync.ts e
+  // sync-lms.ts so reescrevem o que a fornecedora e dona). Um sync NUNCA pode
+  // sobrescrever termo comercial de autoria.
+  authorTenantId          String?               @map("author_tenant_id")
+  authorTenant            Tenant?               @relation("AuthoredCourses", fields: [authorTenantId], references: [id], onDelete: Restrict)
+  authorUserId            String?               @map("author_user_id")
+  authoredStatus          AuthoredCourseStatus? @map("authored_status")
+  distribution            CourseDistribution    @default(OWN_ONLY)
+  pricingMode             AuthoredPricingMode   @default(FIXED) @map("pricing_mode")
+  authorAmount            Decimal?              @map("author_amount") @db.Decimal(10, 2)
+  sellerCommissionPercent Decimal?              @map("seller_commission_percent") @db.Decimal(5, 2)
+  // Snapshot da taxa da plataforma no momento da publicacao — NAO leitura viva.
+  // Mesma disciplina de ReferralMonthlyCommission: mudar a taxa global amanha
+  // nao pode reescrever o que ja foi acordado com o produtor.
+  platformFeePercent      Decimal?              @map("platform_fee_percent") @db.Decimal(5, 2)
+
   // Exibicao
   destaque     Boolean @default(false)
   status       String  @default("ATIVO") // ATIVO / INATIVO
@@ -722,15 +792,26 @@ model Course {
   capaImageUrl String? @map("capa_image_url")
 
   // Overrides da vitrine principal PMB (curadoria admin — nao tocar no sync)
-  precoVitrineMain  Decimal?    @map("preco_vitrine_main") @db.Decimal(10, 2)
-  destaqueHome      Boolean     @default(false) @map("destaque_home")
-  ordemHome         Int?        @map("ordem_home")
-  hiddenMain        Boolean     @default(false) @map("hidden_main")
-  descricaoOverride String?     @map("descricao_override") @db.Text
-  capaOverride      String?     @map("capa_override")
-  parcelasOverride  Int?        @map("parcelas_override")
-  paymentTypeMain   PaymentType @default(ONE_TIME) @map("payment_type_main") // ONE_TIME ou MONTHLY na vitrine PMB
-  monthlyMonthsMain Int?        @map("monthly_months_main") // Quantidade de mensalidades quando paymentTypeMain=MONTHLY
+  precoVitrineMain   Decimal?    @map("preco_vitrine_main") @db.Decimal(10, 2)
+  // Preco DE TABELA da vitrine PMB — o "De R$ X" riscado ao lado do preco de
+  // venda. Curadoria do admin, editavel em /admin/catalogo.
+  //
+  // NAO confundir com `precoOriginal`: aquele e o preco-base que vem do FEED
+  // (EA e LMS) e e reescrito a cada sync diario, entao nunca foi editavel aqui.
+  // Este e override puro — o sync nunca o toca, pela mesma regra de
+  // `precoVitrineMain`.
+  //
+  // null (ou <= preco de venda) => a vitrine nao exibe "De". Nao ha fallback
+  // para `precoOriginal`: quem decide o ancora e quem edita o catalogo.
+  precoDeVitrineMain Decimal?    @map("preco_de_vitrine_main") @db.Decimal(10, 2)
+  destaqueHome       Boolean     @default(false) @map("destaque_home")
+  ordemHome          Int?        @map("ordem_home")
+  hiddenMain         Boolean     @default(false) @map("hidden_main")
+  descricaoOverride  String?     @map("descricao_override") @db.Text
+  capaOverride       String?     @map("capa_override")
+  parcelasOverride   Int?        @map("parcelas_override")
+  paymentTypeMain    PaymentType @default(ONE_TIME) @map("payment_type_main") // ONE_TIME ou MONTHLY na vitrine PMB
+  monthlyMonthsMain  Int?        @map("monthly_months_main") // Quantidade de mensalidades quando paymentTypeMain=MONTHLY
 
   // Slug para URL amigavel (gerado do nome)
   slug String @unique
@@ -750,10 +831,18 @@ model Course {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  // Nome e unico POR FORNECEDORA: um curso EA e um curso LMS podem ter o mesmo
-  // titulo sem colidir. O sync casa por (provider, nome) — sync EA usa
-  // provider=EA, sync LMS usa provider=LMS (mas a chave real do LMS e lmsCourseId).
-  @@unique([provider, nome])
+  // Nome e unico POR FORNECEDORA **E POR AUTOR**: um curso EA e um curso LMS
+  // podem ter o mesmo titulo sem colidir, e duas unidades podem publicar
+  // "Excel Basico" sem uma barrar a outra.
+  //
+  // ATENCAO: Postgres trata NULL como distinto, entao este composto NAO dedupe
+  // o catalogo da PMB (author_tenant_id IS NULL). A garantia antiga e preservada
+  // por um INDICE UNICO PARCIAL criado na migration
+  // (20260821_course_authoring: courses_provider_nome_pmb_key). Como o Prisma
+  // nao faz findUnique em composto com coluna nula, o sync EA casa por
+  // findFirst({ provider, nome, authorTenantId: null }) — ver src/lib/catalog/sync.ts.
+  @@unique([provider, authorTenantId, nome])
+  @@index([authorTenantId, authoredStatus])
   @@index([provider])
   @@index([status])
   @@index([categoriaLoja])
@@ -825,21 +914,25 @@ model TenantCourse {
 
   // Precificacao do revendedor
   price       Decimal     @db.Decimal(10, 2) // Preco definido pelo revendedor
+  // Preco DE TABELA desta vitrine — o "De R$ X" riscado. Definido pela
+  // unidade, independente do "De" da PMB: quem vende e quem escolhe a ancora.
+  // null (ou <= `price`) => a vitrine nao exibe "De".
+  precoDe     Decimal?    @map("preco_de") @db.Decimal(10, 2)
   paymentType PaymentType @default(ONE_TIME) @map("payment_type")
 
   // Se mensal, dados do plano no MP
   mpPlanId String? @map("mp_plan_id") // preapproval_plan_xxxx
 
   // Visibilidade e customizacao
-  isVisible         Boolean @default(true) @map("is_visible")
-  customDescription String? @map("custom_description") @db.Text
-  customCapaUrl     String? @map("custom_capa_url")
+  isVisible         Boolean  @default(true) @map("is_visible")
+  customDescription String?  @map("custom_description") @db.Text
+  customCapaUrl     String?  @map("custom_capa_url")
   // Override da secao "O que voce vai aprender" SO nesta vitrine. Vazio =>
   // herda Course.aprendizado (padrao definido pela PMB no catalogo mae).
   customAprendizado String[] @default([]) @map("custom_aprendizado")
-  customParcelas    Int?    @map("custom_parcelas")
-  customOrder       Int     @default(0) @map("custom_order") // Ordem na vitrine
-  isFeatured        Boolean @default(false) @map("is_featured") // Destaque na vitrine
+  customParcelas    Int?     @map("custom_parcelas")
+  customOrder       Int      @default(0) @map("custom_order") // Ordem na vitrine
+  isFeatured        Boolean  @default(false) @map("is_featured") // Destaque na vitrine
 
   enrollments Enrollment[]
 
@@ -883,9 +976,9 @@ model CoursePackage {
   createdByUserId String?   @map("created_by_user_id")
   createdByRole   UserRole? @map("created_by_role")
 
-  items          CoursePackageItem[]
-  tenantPackages TenantPackage[]
-  enrollments    Enrollment[]
+  items             CoursePackageItem[]
+  tenantPackages    TenantPackage[]
+  enrollments       Enrollment[]
   subscriptionPlans SubscriptionPlan[]
 
   createdAt DateTime @default(now()) @map("created_at")
@@ -960,14 +1053,14 @@ model SubscriptionPlan {
   price         Decimal @db.Decimal(10, 2)
 
   /// Como o conjunto de cursos e determinado. Ver SubscriptionScope.
-  scope SubscriptionScope @default(ALL)
+  scope       SubscriptionScope @default(ALL)
   /// scope=CATEGORY: aceita varias categorias (o aluno alcanca a uniao delas).
-  categoryIds String[] @default([]) @map("category_ids")
+  categoryIds String[]          @default([]) @map("category_ids")
   /// scope=PACKAGE: os cursos vem dos itens deste pacote.
-  packageId   String?  @map("package_id")
-  package     CoursePackage? @relation(fields: [packageId], references: [id], onDelete: SetNull)
+  packageId   String?           @map("package_id")
+  package     CoursePackage?    @relation(fields: [packageId], references: [id], onDelete: SetNull)
   /// scope=COURSES: lista fixa.
-  courseIds   String[] @default([]) @map("course_ids")
+  courseIds   String[]          @default([]) @map("course_ids")
 
   featured Boolean @default(false)
   position Int     @default(0)
@@ -991,10 +1084,10 @@ model SubscriptionPlan {
 /// Override por revenda de um plano (PMB ou proprio). Ausencia da linha => usa
 /// os defaults do plano. isVisible=false => "removi da minha vitrine".
 model TenantSubscriptionPlan {
-  id       String @id @default(cuid())
-  tenantId String @map("tenant_id")
-  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  planId   String @map("plan_id")
+  id       String           @id @default(cuid())
+  tenantId String           @map("tenant_id")
+  tenant   Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  planId   String           @map("plan_id")
   plan     SubscriptionPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
 
   price          Decimal? @db.Decimal(10, 2) // null = usa SubscriptionPlan.price
@@ -1014,12 +1107,12 @@ model TenantSubscriptionPlan {
 /// A assinatura de UM aluno. E ela que da acesso: `currentPeriodEnd` diz ate
 /// quando o ciclo pago vale.
 model StudentSubscription {
-  id        String  @id @default(cuid())
-  studentId String  @map("student_id")
-  student   Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  tenantId  String? @map("tenant_id") // null = vitrine principal PMB
-  tenant    Tenant? @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  planId    String  @map("plan_id")
+  id        String           @id @default(cuid())
+  studentId String           @map("student_id")
+  student   Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  tenantId  String?          @map("tenant_id") // null = vitrine principal PMB
+  tenant    Tenant?          @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  planId    String           @map("plan_id")
   plan      SubscriptionPlan @relation(fields: [planId], references: [id])
 
   status SubscriptionStatus @default(PENDING)
@@ -1043,10 +1136,10 @@ model StudentSubscription {
   /// PAST_DUE durante a carencia e ainda deve liberar.
   currentPeriodEnd DateTime? @map("current_period_end")
 
-  startedAt   DateTime? @map("started_at")
-  cancelledAt DateTime? @map("cancelled_at")
+  startedAt         DateTime? @map("started_at")
+  cancelledAt       DateTime? @map("cancelled_at")
   /// Pedido de cancelamento que so vale no fim do ciclo ja pago.
-  cancelAtPeriodEnd Boolean @default(false) @map("cancel_at_period_end")
+  cancelAtPeriodEnd Boolean   @default(false) @map("cancel_at_period_end")
 
   couponId String? @map("coupon_id")
   coupon   Coupon? @relation(fields: [couponId], references: [id])
@@ -1107,14 +1200,14 @@ model Student {
   tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   // Dados pessoais
-  nome           String
-  email          String?
-  fone           String?
-  fone2          String?
-  cpf            String?
-  rg             String?
-  sexo           String?
-  nascimento     DateTime?
+  nome       String
+  email      String?
+  fone       String?
+  fone2      String?
+  cpf        String?
+  rg         String?
+  sexo       String?
+  nascimento DateTime?
 
   // ── Responsavel financeiro (aluno menor de idade) ────────────────────────
   // Quem PAGA e responde legalmente, quando nao e o proprio aluno. O aluno
@@ -1125,25 +1218,25 @@ model Student {
   // Os tres primeiros ja existiam desde a migration inicial (herdados do schema
   // da plataforma de aulas, que sempre aceitou responsavel/rg/cpf) e nunca
   // foram escritos por codigo nosso.
-  responsavel           String? // Nome do responsavel (menores)
-  rgResponsavel         String? @map("rg_responsavel")
-  cpfResponsavel        String? @map("cpf_responsavel")
-  responsavelEmail      String? @map("responsavel_email")
-  responsavelFone       String? @map("responsavel_fone")
-  responsavelParentesco String? @map("responsavel_parentesco")
+  responsavel                String? // Nome do responsavel (menores)
+  rgResponsavel              String?   @map("rg_responsavel")
+  cpfResponsavel             String?   @map("cpf_responsavel")
+  responsavelEmail           String?   @map("responsavel_email")
+  responsavelFone            String?   @map("responsavel_fone")
+  responsavelParentesco      String?   @map("responsavel_parentesco")
   /// Quando o bloco foi COLETADO. Nao e um booleano derivado de `nascimento`:
   /// booleano derivado desincroniza, que e exatamente a doenca que este
   /// recurso combate. null = nunca passou pelo fluxo novo (legado da EA).
-  responsavelDefinidoEm DateTime? @map("responsavel_definido_em")
+  responsavelDefinidoEm      DateTime? @map("responsavel_definido_em")
   /// Customer Asaas DO RESPONSAVEL. Separado de `asaasCustomerId` de proposito:
   /// gravar o `cus_` da mae naquele campo faria o aluno cobrar nela PARA SEMPRE,
   /// inclusive depois dos 18, e o reuso do customer nunca detectaria o erro.
-  responsavelAsaasCustomerId String? @map("responsavel_asaas_customer_id")
+  responsavelAsaasCustomerId String?   @map("responsavel_asaas_customer_id")
 
   /// Marca "olhei a titularidade deste cadastro e esta correta". Substitui um
   /// model de fila inteiro — a base cabe numa tela. Ver src/lib/students/titularity/.
-  titularidadeRevisadaEm   DateTime? @map("titularidade_revisada_em")
-  titularidadeRevisadaPorId String?  @map("titularidade_revisada_por_id")
+  titularidadeRevisadaEm    DateTime? @map("titularidade_revisada_em")
+  titularidadeRevisadaPorId String?   @map("titularidade_revisada_por_id")
 
   // Endereco
   rua    String?
@@ -1190,7 +1283,7 @@ model Student {
 
   // Relacoes
   enrollments     Enrollment[]
-  subscriptions StudentSubscription[]
+  subscriptions   StudentSubscription[]
   certificates    Certificate[]
   notes           StudentNote[]
   contactMessages ContactMessage[]
@@ -1276,6 +1369,13 @@ model Enrollment {
 
   // Gateway escolhido (vitrine PMB pode usar MP ou ASAAS)
   gateway PaymentGateway @default(MP)
+
+  // Termos de rateio CONGELADOS no checkout, quando esta matricula e de um curso
+  // de autoria de OUTRA unidade. Um carne de 6x paga ao longo de meses: se o
+  // produtor editar a comissao no meio, as parcelas seguintes NAO podem mudar de
+  // regra. Formato em src/lib/course-authoring/split.ts (SplitSnapshot).
+  // Null = venda comum do catalogo PMB (sem rateio).
+  authorSplitSnapshot Json? @map("author_split_snapshot")
 
   // Mercado Pago
   mpPreferenceId    String? @map("mp_preference_id") // preference_xxxx
@@ -1433,6 +1533,10 @@ model Payment {
   couponId String? @map("coupon_id")
   coupon   Coupon? @relation(fields: [couponId], references: [id])
 
+  // Linhas de rateio realizadas (curso de autoria de outra unidade). Vazio na
+  // esmagadora maioria dos pagamentos.
+  courseSaleSplits CourseSaleSplit[]
+
   paidAt    DateTime? @map("paid_at")
   createdAt DateTime  @default(now()) @map("created_at")
 
@@ -1452,6 +1556,90 @@ model Payment {
   // aqui só para eliminar o drift schema↔banco (sem migration).
   @@index([soldByUserId], map: "payments_sold_by_user_id_idx")
   @@map("payments")
+}
+
+// ============================================================
+// RATEIO DE VENDA (curso de autoria de outra unidade)
+// ============================================================
+
+// Papel de cada parte no rateio de UMA venda.
+//   PRODUCER — a unidade que PRODUZIU o curso
+//   SELLER   — a unidade dona da vitrine onde a compra aconteceu
+//   PLATFORM — a PMB, pela intermediacao e distribuicao
+enum CourseSplitRole {
+  PRODUCER
+  SELLER
+  PLATFORM
+}
+
+// Espelha os status de split do Asaas. A linha nasce PENDING no ato do
+// pagamento e caminha pelos webhooks PAYMENT_SPLIT_*.
+enum CourseSplitStatus {
+  PENDING
+  AWAITING_CREDIT
+  DONE
+  REFUSED
+  CANCELLED
+  REFUNDED
+  // Exclusivo nosso: a parte que NAO viaja por split — fica na conta de quem
+  // emitiu a cobranca (o vendedor) como resto liquido. Registrada mesmo assim
+  // para que o extrato feche em 100% sem o leitor ter que fazer a subtracao.
+  RETAINED
+}
+
+/// Uma linha de rateio REALIZADA, por pagamento e por papel.
+///
+/// Nasce na MESMA transacao do Payment (src/lib/enrollment/fulfill.ts), lida do
+/// snapshot congelado em Enrollment.authorSplitSnapshot — nunca recalculada a
+/// partir dos termos VIVOS do curso, senao uma edicao do produtor reescreveria
+/// as parcelas ja pagas de um carne.
+///
+/// `@@unique([paymentId, role])` e a chave de idempotencia: a re-entrega do
+/// webhook do gateway re-executa o fulfill, e a segunda passada nao pode
+/// duplicar o extrato. Mesmo molde de ReferralMonthlyCommission.
+model CourseSaleSplit {
+  id String @id @default(cuid())
+
+  paymentId String  @map("payment_id")
+  payment   Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+
+  // Denormalizados para o extrato nao precisar de 3 joins em toda leitura.
+  enrollmentId String @map("enrollment_id")
+  courseId     String @map("course_id")
+
+  role CourseSplitRole
+
+  // null = PMB (segue a convencao de Payment.tenantId/Enrollment.tenantId, onde
+  // null ja significa "vitrine principal PMB").
+  beneficiaryTenantId String? @map("beneficiary_tenant_id")
+  beneficiaryTenant   Tenant? @relation("CourseSplitBeneficiary", fields: [beneficiaryTenantId], references: [id], onDelete: Restrict)
+
+  // Carteira Asaas de destino no momento da cobranca. Snapshot: a unidade pode
+  // trocar de conta depois, e o extrato tem que continuar dizendo para onde o
+  // dinheiro DAQUELA venda foi. Null na linha RETAINED (nao viaja).
+  walletId String? @map("wallet_id")
+
+  // Valor ESPERADO, calculado sobre o bruto. O Asaas liquida sobre o LIQUIDO
+  // (depois da tarifa dele), entao o creditado costuma ser alguns centavos
+  // menor — a diferenca e a fatia proporcional da tarifa. Ver split.ts.
+  amount         Decimal  @db.Decimal(10, 2)
+  percentApplied Decimal? @map("percent_applied") @db.Decimal(7, 4)
+
+  // Id do split no Asaas, quando ha. Chega no webhook em additionalInfo.splitId.
+  asaasSplitId  String?           @unique @map("asaas_split_id")
+  status        CourseSplitStatus @default(PENDING)
+  // Preenchido quando status=REFUSED (o Asaas manda o motivo).
+  refusalReason String?           @map("refusal_reason")
+  settledAt     DateTime?         @map("settled_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([paymentId, role])
+  @@index([beneficiaryTenantId, status])
+  @@index([courseId])
+  @@index([enrollmentId])
+  @@map("course_sale_splits")
 }
 
 // Uma parcela (boleto) de um carne de venda direta (PaymentType.BOLETO_INSTALLMENT).
@@ -1520,9 +1708,9 @@ model Coupon {
   isActive   Boolean  @default(true) @map("is_active")
 
   // Relacoes
-  enrollments Enrollment[]
+  enrollments   Enrollment[]
   subscriptions StudentSubscription[]
-  payments    Payment[]
+  payments      Payment[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -1555,8 +1743,8 @@ model TenantPayment {
   // parcelamento inteiro: `amount` e o valor cheio da mensalidade, ja autorizado
   // no cartao. As parcelas 2..N NAO viram linhas novas — criariam receita
   // duplicada no financeiro; elas so avancam `installmentPaidCount`.
-  installmentId    String?  @map("installment_id") // ins_xxxx
-  installmentCount Int?     @map("installment_count") // N parcelas
+  installmentId      String?  @map("installment_id") // ins_xxxx
+  installmentCount   Int?     @map("installment_count") // N parcelas
   // Ids das parcelas JA liquidadas. E a UNICA fonte da contagem ("3 de 6" e o
   // tamanho do array) e ao mesmo tempo a chave de idempotencia: o Asaas
   // reentrega webhook, e um contador puro somaria a mesma parcela duas vezes,
@@ -1610,7 +1798,6 @@ model TenantPayment {
  * Lembretes de vencimento da mensalidade da unidade (cron
  * `tenant-payment-reminders`), um por cobranca e por janela: 5 dias antes,
  * 2 dias antes e no proprio dia do vencimento.
- *
  * POR QUE EXISTE: e o livro-caixa de idempotencia. O cron pode rodar mais de
  * uma vez no mesmo dia (re-tentativa do pg_net, execucao manual, deploy no meio
  * da janela) e a unidade nao pode receber o mesmo aviso duas vezes — nem in-app,
@@ -1620,7 +1807,9 @@ model TenantPayment {
 model TenantPaymentReminder {
   tenantPaymentId String        @map("tenant_payment_id")
   tenantPayment   TenantPayment @relation(fields: [tenantPaymentId], references: [id], onDelete: Cascade)
-  /** Dias entre o disparo e o vencimento: 5, 2 ou 0. */
+  /**
+   * Dias entre o disparo e o vencimento: 5, 2 ou 0.
+   */
   offsetDays      Int           @map("offset_days")
   sentAt          DateTime      @default(now()) @map("sent_at")
 
@@ -2006,7 +2195,6 @@ model TenantNotificationOverride {
 /**
  * Batimento dos jobs agendados. Uma linha por job (`jobName` = ultimo segmento
  * da rota, ex.: "sync-progresso").
- *
  * POR QUE EXISTE: os crons rodam no pg_cron do Supabase chamando nossas rotas
  * por HTTP. Se a ponte quebra (foi o que houve entre 30/04 e 10/06 de 2026,
  * quando o pg_net mudou de schema e TODOS os jobs falharam), nada avisa — a
@@ -2023,19 +2211,19 @@ model CronRun {
 }
 
 model SystemSettings {
-  id                   String         @id @default("default")
-  pmbDirectSaleGateway PaymentGateway @default(MP) @map("pmb_direct_sale_gateway")
-  pmbMpAccessTokenEnc  String?        @map("pmb_mp_access_token_enc") @db.Text
+  id                          String         @id @default("default")
+  pmbDirectSaleGateway        PaymentGateway @default(MP) @map("pmb_direct_sale_gateway")
+  pmbMpAccessTokenEnc         String?        @map("pmb_mp_access_token_enc") @db.Text
   // Parcelamento sem juros das vendas diretas da PMB (vitrine PMB, conta MP da
   // PMB). Espelha Tenant.interestFreeInstallments mas para a PMB. Teto 12x.
-  pmbInterestFreeInstallments Int @default(1) @map("pmb_interest_free_installments")
+  pmbInterestFreeInstallments Int            @default(1) @map("pmb_interest_free_installments")
 
   // Teto PADRAO de parcelas no cartao para as mensalidades da unidade (revenda
   // pagando a PMB) depois da 1a. Cada unidade pode sobrescrever em
   // Tenant.monthlyMaxInstallments. 1 = sem parcelamento. Teto duro 21x (limite
   // do Asaas em POST /installments/).
-  tenantMonthlyMaxInstallments Int @default(12) @map("tenant_monthly_max_installments")
-  lastCatalogSyncJson  String?        @map("last_catalog_sync_json") @db.Text
+  tenantMonthlyMaxInstallments Int     @default(12) @map("tenant_monthly_max_installments")
+  lastCatalogSyncJson          String? @map("last_catalog_sync_json") @db.Text
 
   // Cursor incremental do delta sync do LMS (GET /api/v1/day-update?since=).
   // Guardamos o `generatedAt` da ultima resposta processada com sucesso e o
@@ -2391,9 +2579,9 @@ model Certificate {
   // do aluno). Reescreve o snapshot acima e mantem o mesmo `code`: trocar o
   // codigo faria /validar/{code} responder "nao encontrado" para quem conferisse
   // o codigo antigo — le como fraude. Ver src/lib/students/titularity/apply.ts.
-  correctedAt      DateTime? @map("corrected_at")
-  correctedByUserId String?  @map("corrected_by_user_id")
-  correctionReason String?   @map("correction_reason")
+  correctedAt       DateTime? @map("corrected_at")
+  correctedByUserId String?   @map("corrected_by_user_id")
+  correctionReason  String?   @map("correction_reason")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -2742,32 +2930,32 @@ model TrainingProgress {
 // personalizacao (logo no topo, rodape com site/whatsapp/rede social, badge de
 // preco) e composta client-side no download (src/lib/artes/compose.ts).
 model MarketingArt {
-  id       String  @id @default(cuid())
-  title    String
+  id            String  @id @default(cuid())
+  title         String
   // Categoria livre (string simples) — filtro no painel via DISTINCT.
-  category String?
+  category      String?
   // Variante FEED (quadrada/4:5) — path no bucket vitrine-assets
   // (ex: "artes/<uuid>.png"), nunca URL completa.
-  filePath String  @map("file_path")
-  width    Int
-  height   Int
+  filePath      String  @map("file_path")
+  width         Int
+  height        Int
   // Variante STORIES (9:16, vertical) — opcional; quando presente a revenda
   // escolhe baixar feed, stories ou as duas.
   storyFilePath String? @map("story_file_path")
   storyWidth    Int?    @map("story_width")
   storyHeight   Int?    @map("story_height")
   // Arte de curso "com valor": a revenda digita o preco na hora de baixar.
-  hasPrice Boolean @default(false) @map("has_price")
+  hasPrice      Boolean @default(false) @map("has_price")
   // Canto do topo onde o logo da revenda e carimbado: "top-left" | "top-right"
   // (string simples validada por Zod, mesmo padrao de Tenant.whatsappFloatSide).
   // LEGADO: usado so para derivar o layout default quando `layout` e null.
-  logoCorner String @default("top-right") @map("logo_corner")
+  logoCorner    String  @default("top-right") @map("logo_corner")
   // Posicoes/tamanhos definidos pelo designer por variante (ArtLayout em
   // src/lib/artes/types.ts): logo e preco arrastaveis + fundos brancos
   // opcionais. Null = defaults derivados de ART_ANCHORS + logoCorner.
-  layout Json?
-  published  Boolean @default(true)
-  position   Int     @default(0)
+  layout        Json?
+  published     Boolean @default(true)
+  position      Int     @default(0)
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -2796,7 +2984,7 @@ model ApiKey {
 
   // Primeiros chars do segredo — exibidos na listagem. Unique porque tambem
   // serve de identificador humano da chave nos logs.
-  prefix String @unique
+  prefix  String @unique
   // SHA-256 (hex) do segredo completo. Unique => lookup O(1) por indice, sem
   // varrer a tabela comparando hash a hash. O segredo tem 256 bits de entropia,
   // entao hash rapido basta (nao e senha de humano, nao sofre ataque de dicionario).
