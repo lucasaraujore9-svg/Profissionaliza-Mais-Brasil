@@ -106,9 +106,12 @@ export const GET = withRequestContext(
       categoria: tc.course.categoriaLoja ?? tc.course.categoriaInterna,
       horas: tc.course.cargaHoraria,
       price: Number(tc.price),
-      originalPrice: tc.course.precoOriginal
-        ? Number(tc.course.precoOriginal)
-        : null,
+      // "De R$ X" definido pela unidade (TenantCourse.precoDe), nao o preco-base
+      // do fornecedor. Vazio ou <= price => sem "De".
+      originalPrice:
+        tc.precoDe && Number(tc.precoDe) > Number(tc.price)
+          ? Number(tc.precoDe)
+          : null,
       imageUrl: tc.course.capaImageUrl,
       isFeatured: tc.isFeatured,
       paymentType: coursePaymentType(tc.paymentType),

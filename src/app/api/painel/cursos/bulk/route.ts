@@ -3,6 +3,10 @@ import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { requirePainel } from "@/lib/auth/painel-guard"
 import { ensureTenantCourses } from "@/lib/tenant/ensure-courses"
+import {
+  AUTHORED_COURSE_SELECT,
+  validateSalePriceForCourse,
+} from "@/lib/course-authoring/split-server"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { contextLogger } from "@/lib/logger"
 import { runInChunks } from "@/lib/concurrency"
@@ -50,6 +54,7 @@ export const GET = withRequestContext(
         id: tc.id,
         title: tc.course.nome,
         price: Number(tc.price),
+        precoDe: tc.precoDe != null ? Number(tc.precoDe) : null,
         paymentType: tc.paymentType,
         customParcelas: tc.customParcelas,
         defaultParcelas:
@@ -72,6 +77,8 @@ export const GET = withRequestContext(
 const itemSchema = z.object({
   id: z.string().min(1),
   price: z.number().positive("Preço deve ser maior que zero").optional(),
+  // Preco de tabela ("De R$ X"). null = limpar (a vitrine deixa de exibir "De").
+  precoDe: z.number().positive().nullable().optional(),
   customParcelas: z.number().int().min(1).max(24).nullable().optional(),
   customDescription: z.string().trim().max(2000).nullable().optional(),
   // Lista vazia = volta ao padrão definido pela PMB no catálogo mãe.
@@ -114,7 +121,7 @@ export const PUT = withRequestContext(
     const ids = parsed.data.items.map((it) => it.id)
     const owned = await prisma.tenantCourse.findMany({
       where: { id: { in: ids }, tenantId: ctx.tenantId },
-      select: { id: true },
+      select: { id: true, courseId: true, price: true },
     })
     const ownedIds = new Set(owned.map((o) => o.id))
     const foreign = ids.filter((id) => !ownedIds.has(id))
@@ -122,6 +129,66 @@ export const PUT = withRequestContext(
       return NextResponse.json(
         { error: "Um ou mais cursos não pertencem à sua unidade." },
         { status: 403 },
+      )
+    }
+
+    // Piso do produtor também vale na planilha em massa. É por aqui que a
+    // unidade reprecifica dezenas de cursos de uma vez — deixar a validação só
+    // na edição individual seria a mesma coisa que não ter validação.
+    //
+    // UMA leitura para o lote inteiro. Um `findUnique` por item eram 200
+    // idas seriais ao pooler antes de a primeira escrita comecar, numa rota que
+    // ja limita a concorrencia das escritas de proposito.
+    const courseByTc = new Map(owned.map((o) => [o.id, o.courseId]))
+    const authoredCourses = await prisma.course.findMany({
+      where: { id: { in: [...new Set(owned.map((o) => o.courseId))] } },
+      select: AUTHORED_COURSE_SELECT,
+    })
+    const courseById = new Map(authoredCourses.map((c) => [c.id, c]))
+    const priceIssues: { id: string; error: string }[] = []
+    for (const it of parsed.data.items) {
+      if (it.price === undefined) continue
+      const courseId = courseByTc.get(it.id)
+      const course = courseId ? courseById.get(courseId) : undefined
+      if (!course) continue
+      const issue = validateSalePriceForCourse(course, ctx.tenantId, it.price)
+      if (issue) priceIssues.push({ id: it.id, error: issue.error })
+    }
+    if (priceIssues.length > 0) {
+      return NextResponse.json(
+        {
+          error: "Um ou mais preços estão abaixo do mínimo definido pelo produtor.",
+          code: "PRICE_BELOW_MINIMUM",
+          items: priceIssues,
+        },
+        { status: 400 },
+      )
+    }
+
+    // "De" menor ou igual ao preco de venda nao desenha nada na vitrine. Compara
+    // contra o preco que VAI valer nesta linha: o do lote quando enviado, senao
+    // o gravado (a planilha permite mexer so no "De").
+    const priceByTc = new Map(owned.map((o) => [o.id, Number(o.price)]))
+    const compareAtIssues: { id: string; error: string }[] = []
+    for (const it of parsed.data.items) {
+      if (it.precoDe == null) continue
+      const precoVenda = it.price ?? priceByTc.get(it.id) ?? 0
+      if (precoVenda > 0 && it.precoDe <= precoVenda) {
+        compareAtIssues.push({
+          id: it.id,
+          error: "Preço de tabela precisa ser maior que o preço de venda.",
+        })
+      }
+    }
+    if (compareAtIssues.length > 0) {
+      return NextResponse.json(
+        {
+          error:
+            'Um ou mais preços de tabela não são maiores que o preço de venda — a vitrine não exibiria o "De".',
+          code: "COMPARE_AT_NOT_GREATER",
+          items: compareAtIssues,
+        },
+        { status: 400 },
       )
     }
 
@@ -138,6 +205,7 @@ export const PUT = withRequestContext(
         where: { id: it.id },
         data: {
           ...(it.price !== undefined && { price: it.price }),
+          ...(it.precoDe !== undefined && { precoDe: it.precoDe }),
           ...(it.customParcelas !== undefined && {
             customParcelas: it.customParcelas,
           }),

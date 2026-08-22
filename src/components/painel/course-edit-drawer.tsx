@@ -29,6 +29,7 @@ interface CourseDetail {
   description: string | null
   capaImageUrl: string | null
   price: number
+  precoDe: number | null
   parcelas: number | null
   paymentType: "ONE_TIME" | "MONTHLY"
   monthlyAvailable: boolean
@@ -53,6 +54,8 @@ export function CourseEditDrawer({
   const [detail, setDetail] = useState<CourseDetail | null>(null)
   const [loading, setLoading] = useState(false)
   const [price, setPrice] = useState("")
+  // Preço de tabela ("De R$ X" riscado). Vazio = a vitrine não exibe "De".
+  const [precoDe, setPrecoDe] = useState("")
   const [paymentType, setPaymentType] = useState<"ONE_TIME" | "MONTHLY">("ONE_TIME")
   const [description, setDescription] = useState("")
   // Texto cru de "O que vai aprender" (1 item por linha). Vazio = herda o
@@ -91,6 +94,14 @@ export function CourseEditDrawer({
             minimumFractionDigits: 2,
             maximumFractionDigits: 2,
           }),
+        )
+        setPrecoDe(
+          data.precoDe != null
+            ? data.precoDe.toLocaleString("pt-BR", {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })
+            : "",
         )
         setPaymentType(data.paymentType)
         setDescription(data.customDescription ?? "")
@@ -182,6 +193,27 @@ export function CourseEditDrawer({
       return
     }
 
+    // Vazio é um valor válido aqui: significa "sem De". Só valida o que foi
+    // digitado — e o "De" tem que ser maior que o preço de venda, senão a
+    // vitrine não desenha o riscado e o ajuste passa despercebido.
+    let precoDeValue: number | null = null
+    if (precoDe.trim()) {
+      const n = parseFloat(precoDe.replace(/\./g, "").replace(",", "."))
+      if (Number.isNaN(n) || n <= 0) {
+        setError("Preço de tabela inválido")
+        setSaving(false)
+        return
+      }
+      if (n <= numericPrice) {
+        setError(
+          'O preço de tabela precisa ser maior que o preço de venda para aparecer como "De" na vitrine.',
+        )
+        setSaving(false)
+        return
+      }
+      precoDeValue = n
+    }
+
     let parcelasValue: number | null = null
     if (parcelas.trim()) {
       const n = parseInt(parcelas, 10)
@@ -199,6 +231,7 @@ export function CourseEditDrawer({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           price: numericPrice,
+          precoDe: precoDeValue,
           paymentType,
           customDescription: description.trim() || null,
           // Lista vazia = volta ao padrão da PMB.
@@ -422,6 +455,71 @@ export function CourseEditDrawer({
                   placeholder="0,00"
                   inputMode="decimal"
                 />
+              </div>
+
+              <div>
+                <Label htmlFor="edit-preco-de">
+                  Preço de tabela — o &quot;De R$&quot; riscado{" "}
+                  <span className="text-[11px] font-normal text-gray-500">
+                    (opcional)
+                  </span>
+                </Label>
+                <Input
+                  id="edit-preco-de"
+                  value={precoDe}
+                  onChange={(e) => setPrecoDe(e.target.value)}
+                  className="mt-1.5 font-mono"
+                  placeholder="Vazio = sem &quot;De&quot;"
+                  inputMode="decimal"
+                />
+                <p className="mt-1.5 text-[11px] text-gray-500">
+                  Aparece riscado antes do preço na sua vitrine. Precisa ser
+                  maior que o preço acima.
+                </p>
+                {(() => {
+                  const de = parseFloat(
+                    precoDe.replace(/\./g, "").replace(",", "."),
+                  )
+                  const venda = parseFloat(
+                    price.replace(/\./g, "").replace(",", "."),
+                  )
+                  if (
+                    !precoDe.trim() ||
+                    !Number.isFinite(de) ||
+                    !Number.isFinite(venda) ||
+                    venda <= 0
+                  ) {
+                    return null
+                  }
+                  if (de <= venda) {
+                    return (
+                      <p className="mt-1.5 text-[11px] font-semibold text-amber-700">
+                        Precisa ser maior que o preço de venda — do contrário a
+                        vitrine não exibe o &quot;De&quot;.
+                      </p>
+                    )
+                  }
+                  const off = Math.round(((de - venda) / de) * 100)
+                  return (
+                    <p className="mt-1.5 text-[11px] text-[var(--color-pmb-green-900)]">
+                      Vitrine exibe{" "}
+                      <span className="line-through">
+                        {de.toLocaleString("pt-BR", {
+                          style: "currency",
+                          currency: "BRL",
+                        })}
+                      </span>{" "}
+                      →{" "}
+                      <strong className="font-mono">
+                        {venda.toLocaleString("pt-BR", {
+                          style: "currency",
+                          currency: "BRL",
+                        })}
+                      </strong>{" "}
+                      ({off}% OFF)
+                    </p>
+                  )
+                })()}
               </div>
 
               {/* Pagamento único usa o nº GLOBAL de parcelas sem juros da unidade

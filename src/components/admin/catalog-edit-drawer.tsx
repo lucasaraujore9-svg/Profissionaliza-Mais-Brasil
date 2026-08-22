@@ -26,7 +26,10 @@ interface CourseDetail {
   id: string
   nome: string
   precoOriginal: number | null
+  /** Promoção do catálogo; entra na cascata de preço de venda do servidor. */
+  precoPromocional: number | null
   precoVitrineMain: number | null
+  precoDeVitrineMain: number | null
   destaqueHome: boolean
   ordemHome: number | null
   descricaoOverride: string | null
@@ -136,6 +139,7 @@ export function CatalogEditDrawer({ courseId, open, onOpenChange, onSaved }: Cat
     const visibility = visibilityFromDetail(detail)
     const body = {
       precoVitrineMain: detail.precoVitrineMain,
+      precoDeVitrineMain: detail.precoDeVitrineMain,
       destaqueHome: detail.destaqueHome,
       ordemHome: detail.ordemHome,
       descricaoOverride: detail.descricaoOverride,
@@ -340,6 +344,69 @@ export function CatalogEditDrawer({ courseId, open, onOpenChange, onSaved }: Cat
                     </div>
                   </div>
                 )}
+            </div>
+
+            <div>
+              <label htmlFor="preco-de-vitrine-main" className="text-xs font-semibold text-gray-700">
+                Preço de tabela — o &quot;De R$&quot; riscado (R$)
+              </label>
+              <input
+                id="preco-de-vitrine-main"
+                type="number"
+                step="0.01"
+                min="0"
+                value={detail.precoDeVitrineMain ?? ""}
+                onChange={(e) =>
+                  setDetail({
+                    ...detail,
+                    // Vazio e 0 significam a mesma coisa: sem "De".
+                    precoDeVitrineMain: Number(e.target.value) || null,
+                  })
+                }
+                className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[var(--color-pmb-green)] focus:outline-none"
+                placeholder="Deixe vazio para não exibir &quot;De&quot;"
+              />
+              <p className="mt-1 text-[11px] text-gray-500">
+                Aparece riscado antes do preço de venda na vitrine PMB. Precisa
+                ser <strong>maior</strong> que o preço acima. Vazio = a vitrine
+                mostra só o preço de venda.
+              </p>
+              {(() => {
+                const de = detail.precoDeVitrineMain
+                // MESMA cascata do PATCH (`precoVitrineMain ?? precoPromocional
+                // ?? precoOriginal`, com `||` para tratar 0 como ausente).
+                // Sem `precoPromocional` o aviso divergia do servidor: a gaveta
+                // dizia "14% OFF" e o salvar voltava COMPARE_AT_NOT_GREATER.
+                const venda =
+                  Number(detail.precoVitrineMain ?? 0) ||
+                  Number(detail.precoPromocional ?? 0) ||
+                  Number(detail.precoOriginal ?? 0)
+                if (de == null || venda <= 0) return null
+                if (de <= venda) {
+                  return (
+                    <p className="mt-1.5 text-[11px] font-semibold text-amber-700">
+                      Precisa ser maior que {venda.toLocaleString("pt-BR", {
+                        style: "currency",
+                        currency: "BRL",
+                      })} — do contrário a vitrine não exibe o &quot;De&quot;.
+                    </p>
+                  )
+                }
+                const off = Math.round(((de - venda) / de) * 100)
+                return (
+                  <p className="mt-1.5 text-[11px] text-[var(--color-pmb-green-900)]">
+                    Vitrine exibe{" "}
+                    <span className="line-through">
+                      {de.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                    </span>{" "}
+                    →{" "}
+                    <strong className="font-mono">
+                      {venda.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                    </strong>{" "}
+                    ({off}% OFF)
+                  </p>
+                )
+              })()}
             </div>
 
             <div className="flex items-center gap-3">

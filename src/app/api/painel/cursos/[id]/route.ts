@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
+import { validateTenantCoursePrice } from "@/lib/course-authoring/split-server"
 import { requirePainel } from "@/lib/auth/painel-guard"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 import { monthlyActive } from "@/lib/tenant/monthly-policy"
@@ -19,6 +20,8 @@ async function tenantMonthlyActive(tenantId: string): Promise<boolean> {
 
 const updateSchema = z.object({
   price: z.number().positive("Preço deve ser maior que zero"),
+  // Preco de tabela desta vitrine ("De R$ X" riscado). null = sem "De".
+  precoDe: z.number().positive().nullable().optional(),
   paymentType: z.enum(["ONE_TIME", "MONTHLY"]),
   customDescription: z.string().trim().max(2000).nullable().optional(),
   customCapaUrl: z.string().url().nullable().optional(),
@@ -36,9 +39,9 @@ const updateSchema = z.object({
 async function requireOwnCourse(tenantId: string, id: string) {
   const tc = await prisma.tenantCourse.findFirst({
     where: { id, tenantId },
-    select: { id: true },
+    select: { id: true, courseId: true },
   })
-  return tc !== null
+  return tc
 }
 
 export const GET = withRequestContextParams<{ id: string }>(
@@ -83,6 +86,7 @@ export const GET = withRequestContextParams<{ id: string }>(
         qtdAulas: tc.course.qtdAulas,
         cargaHoraria: tc.course.cargaHoraria,
         price: Number(tc.price),
+        precoDe: tc.precoDe != null ? Number(tc.precoDe) : null,
         parcelas:
           tc.customParcelas ??
           tc.course.parcelasOverride ??
@@ -120,7 +124,8 @@ export const PUT = withRequestContextParams<{ id: string }>(
     const { ctx } = guard
 
     const { id } = await params
-    if (!(await requireOwnCourse(ctx.tenantId, id))) {
+    const owned = await requireOwnCourse(ctx.tenantId, id)
+    if (!owned) {
       return NextResponse.json({ error: "Curso não encontrado" }, { status: 404 })
     }
 
@@ -137,6 +142,36 @@ export const PUT = withRequestContextParams<{ id: string }>(
         {
           error: "Dados inválidos",
           fields: parsed.error.flatten().fieldErrors,
+        },
+        { status: 400 },
+      )
+    }
+
+    // Curso produzido por OUTRA unidade tem piso definido pelo produtor. Validar
+    // só no checkout deixaria a loja num estado pior que erro: o curso listado,
+    // a unidade achando que vendeu por R$ 1, e a recusa aparecendo com o aluno
+    // na tela de pagamento.
+    const priceError = await validateTenantCoursePrice(
+      owned.courseId,
+      ctx.tenantId,
+      parsed.data.price,
+    )
+    if (priceError) {
+      return NextResponse.json(priceError, { status: 400 })
+    }
+
+    // Preco de tabela abaixo (ou igual) ao de venda nao desenha "De" nenhum na
+    // vitrine. Recusar aqui e melhor do que salvar e a unidade nunca entender
+    // por que o riscado nao aparece.
+    if (
+      parsed.data.precoDe != null &&
+      parsed.data.precoDe <= parsed.data.price
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "O preço de tabela precisa ser maior que o preço de venda para aparecer como \"De\" na vitrine.",
+          code: "COMPARE_AT_NOT_GREATER",
         },
         { status: 400 },
       )
@@ -162,6 +197,7 @@ export const PUT = withRequestContextParams<{ id: string }>(
       data: {
         price: parsed.data.price,
         paymentType: parsed.data.paymentType,
+        ...(parsed.data.precoDe !== undefined && { precoDe: parsed.data.precoDe }),
         customDescription: parsed.data.customDescription ?? null,
         ...(parsed.data.customCapaUrl !== undefined && {
           customCapaUrl: parsed.data.customCapaUrl,
@@ -182,6 +218,7 @@ export const PUT = withRequestContextParams<{ id: string }>(
       data: {
         id: updated.id,
         price: Number(updated.price),
+        precoDe: updated.precoDe != null ? Number(updated.precoDe) : null,
         paymentType: updated.paymentType,
         customDescription: updated.customDescription,
         customCapaUrl: updated.customCapaUrl,

@@ -102,7 +102,6 @@ const CARD_COURSE_SELECT = {
   categoriaLoja: true,
   categoriaInterna: true,
   cargaHoraria: true,
-  precoOriginal: true,
   capaOverride: true,
   capaImageUrl: true,
   parcelasOverride: true,
@@ -144,9 +143,14 @@ function mapTenantCourseItem(
     categoria: tc.course.categoriaLoja ?? tc.course.categoriaInterna,
     horas: tc.course.cargaHoraria,
     price: Number(tc.price),
-    originalPrice: tc.course.precoOriginal
-      ? Number(tc.course.precoOriginal)
-      : null,
+    // "De R$ X" da vitrine DESTA unidade. Vem de `tc.precoDe` (editavel em
+    // /painel/cursos), nao do `precoOriginal` do catalogo mae — aquele e o
+    // preco-base do fornecedor, reescrito pelo sync e nunca escolhido por quem
+    // vende. Vazio ou <= price => sem "De".
+    originalPrice:
+      tc.precoDe && Number(tc.precoDe) > Number(tc.price)
+        ? Number(tc.precoDe)
+        : null,
     imageUrl:
       tc.customCapaUrl ?? tc.course.capaOverride ?? tc.course.capaImageUrl,
     // Pagamento único: "Nx sem juros" vem do nº GLOBAL da unidade (não por curso).
@@ -385,9 +389,10 @@ export async function getTenantCourseBySlug(
       categoria: tc.course.categoriaLoja ?? tc.course.categoriaInterna,
       horas: tc.course.cargaHoraria,
       price: Number(tc.price),
-      originalPrice: tc.course.precoOriginal
-        ? Number(tc.course.precoOriginal)
-        : null,
+      originalPrice:
+        tc.precoDe && Number(tc.precoDe) > Number(tc.price)
+          ? Number(tc.precoDe)
+          : null,
       imageUrl:
         tc.customCapaUrl ?? tc.course.capaOverride ?? tc.course.capaImageUrl,
       parcelas: displayParcelas,

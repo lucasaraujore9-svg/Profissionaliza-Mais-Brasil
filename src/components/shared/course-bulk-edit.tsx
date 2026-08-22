@@ -16,6 +16,7 @@ interface BulkRow {
   id: string
   title: string
   price: number
+  precoDe: number | null
   paymentType: "ONE_TIME" | "MONTHLY"
   customParcelas: number | null
   defaultParcelas: number | null
@@ -126,6 +127,7 @@ export function CourseBulkEdit({
       const original = draftFromRow(row)
       if (
         d.price !== original.price ||
+        d.precoDe !== original.precoDe ||
         d.description !== original.description ||
         d.aprendizado !== original.aprendizado
       ) {
@@ -291,6 +293,12 @@ export function CourseBulkEdit({
                 <tr className="border-b border-gray-200 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-400">
                   <th className="py-2 pr-3">Curso</th>
                   <th className="w-32 px-3 py-2">Preço (R$)</th>
+                  <th className="w-32 px-3 py-2">
+                    De (R$)
+                    <span className="block font-normal normal-case tracking-normal text-gray-400">
+                      vazio = sem &quot;De&quot;
+                    </span>
+                  </th>
                   <th className="px-3 py-2">Descrição</th>
                   <th className="px-3 py-2">
                     O que vai aprender
@@ -330,6 +338,17 @@ export function CourseBulkEdit({
                           }
                           inputMode="decimal"
                           placeholder="0,00"
+                          className="w-full rounded-md border border-gray-200 px-2 py-1.5 font-mono text-sm outline-none focus:border-[var(--color-pmb-green)] focus:ring-1 focus:ring-[var(--color-pmb-lime)]"
+                        />
+                      </td>
+                      <td className="px-3 py-3">
+                        <input
+                          value={d.precoDe}
+                          onChange={(e) =>
+                            updateDraft(row.id, { precoDe: e.target.value })
+                          }
+                          inputMode="decimal"
+                          placeholder="—"
                           className="w-full rounded-md border border-gray-200 px-2 py-1.5 font-mono text-sm outline-none focus:border-[var(--color-pmb-green)] focus:ring-1 focus:ring-[var(--color-pmb-lime)]"
                         />
                       </td>

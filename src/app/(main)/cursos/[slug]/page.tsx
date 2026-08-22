@@ -41,9 +41,12 @@ async function loadCurso(slug: string): Promise<LoadedCurso | null> {
     // detalhe (mesmo por link direto). Antes exibia a pagina com CTA "/contato".
     if (price <= 0) return null
 
+    // "De R$ X" riscado: SO o preco de tabela curado em /admin/catalogo. Nao
+    // cai mais em `precoOriginal` — aquele e o preco-base do feed, reescrito
+    // pelo sync diario, e por isso nunca foi editavel. Vazio => sem "De".
     const originalPrice =
-      c.precoOriginal && Number(c.precoOriginal) > price
-        ? Number(c.precoOriginal)
+      c.precoDeVitrineMain && Number(c.precoDeVitrineMain) > price
+        ? Number(c.precoDeVitrineMain)
         : null
 
     // Pagamento único: "Nx sem juros" vem do nº GLOBAL da PMB (não por curso).

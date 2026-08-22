@@ -16,6 +16,8 @@ export interface BulkRowInput {
   id: string
   title: string
   price: number
+  /** Preco de tabela ("De R$ X"). null = a vitrine nao exibe "De". */
+  precoDe: number | null
   customParcelas: number | null
   customDescription: string | null
   /** "O que vai aprender" próprio desta linha. Vazio = herda o padrão. */
@@ -25,6 +27,8 @@ export interface BulkRowInput {
 /** Estado editável de cada linha (strings dos inputs). */
 export interface RowDraft {
   price: string
+  /** Vazio = sem "De" (limpar o campo e uma acao valida, nao "nao mexeu"). */
+  precoDe: string
   parcelas: string
   description: string
   /** Um item por linha; string vazia = herda o padrão. */
@@ -35,6 +39,7 @@ export interface RowDraft {
 export interface BulkItem {
   id: string
   price?: number
+  precoDe?: number | null
   customParcelas?: number | null
   customDescription?: string | null
   customAprendizado?: string[]
@@ -59,6 +64,7 @@ export function parsePrice(input: string): number {
 export function draftFromRow(row: BulkRowInput): RowDraft {
   return {
     price: formatPrice(row.price),
+    precoDe: row.precoDe != null ? formatPrice(row.precoDe) : "",
     parcelas: row.customParcelas != null ? String(row.customParcelas) : "",
     description: row.customDescription ?? "",
     aprendizado: aprendizadoToText(row.customAprendizado),
@@ -91,6 +97,29 @@ export function buildBulkItems(
         return { ok: false, error: `Preço inválido em "${row.title}"` }
       }
       item.price = numericPrice
+    }
+
+    // Campo vazio e um valor VALIDO aqui ("tire o De desta linha"), diferente
+    // do preco de venda, onde vazio/zero e erro. E o "De" tem que ser maior que
+    // o preco de venda que VAI valer nesta mesma linha (o editado, se mudou),
+    // senao a vitrine nao desenha nada e o lote passa em silencio.
+    if (d.precoDe !== original.precoDe) {
+      if (!d.precoDe.trim()) {
+        item.precoDe = null
+      } else {
+        const numericPrecoDe = parsePrice(d.precoDe)
+        if (Number.isNaN(numericPrecoDe) || numericPrecoDe <= 0) {
+          return { ok: false, error: `Preço de tabela inválido em "${row.title}"` }
+        }
+        const precoVenda = item.price ?? row.price
+        if (precoVenda > 0 && numericPrecoDe <= precoVenda) {
+          return {
+            ok: false,
+            error: `Preço de tabela em "${row.title}": precisa ser maior que o preço de venda`,
+          }
+        }
+        item.precoDe = numericPrecoDe
+      }
     }
 
     if (d.parcelas !== original.parcelas) {

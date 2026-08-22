@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
+import { validateTenantCoursePrice } from "@/lib/course-authoring/split-server"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 import {
   APRENDIZADO_MAX_ITEMS,
@@ -18,6 +19,8 @@ const aprendizadoSchema = z
 
 const patchSchema = z.object({
   precoVitrineMain: z.number().nonnegative().nullable().optional(),
+  // Preco de tabela ("De R$ X" riscado). null = vitrine sem "De".
+  precoDeVitrineMain: z.number().positive().nullable().optional(),
   destaqueHome: z.boolean().optional(),
   ordemHome: z.number().int().nullable().optional(),
   descricaoOverride: z.string().nullable().optional(),
@@ -71,6 +74,7 @@ export const GET = withRequestContextParams<{ id: string }>(
       status: true,
       capaImageUrl: true,
       precoVitrineMain: true,
+      precoDeVitrineMain: true,
       destaqueHome: true,
       ordemHome: true,
       descricaoOverride: true,
@@ -96,6 +100,9 @@ export const GET = withRequestContextParams<{ id: string }>(
       precoOriginal: course.precoOriginal ? Number(course.precoOriginal) : null,
       precoPromocional: course.precoPromocional ? Number(course.precoPromocional) : null,
       precoVitrineMain: course.precoVitrineMain ? Number(course.precoVitrineMain) : null,
+      precoDeVitrineMain: course.precoDeVitrineMain
+        ? Number(course.precoDeVitrineMain)
+        : null,
     },
   })
   },
@@ -116,6 +123,57 @@ export const PATCH = withRequestContextParams<{ id: string }>(
 
   // Separa `categoryIds` (relacao M2M) dos campos escalares do Course.
   const { categoryIds, ...data } = parsed.data
+
+  // Curso produzido por uma unidade tem termos comerciais definidos por ELA: o
+  // /admin escolhe se o curso entra na vitrine da PMB, nao por quanto o produtor
+  // vende. Sem esta checagem o preco invalido era gravado, o curso continuava
+  // listado e quem recusava era o `authoredSaleGate` — com o aluno na tela de
+  // pagamento. Mesma regra que /api/painel/cursos ja aplica na escrita.
+  if (data.precoVitrineMain != null) {
+    const priceError = await validateTenantCoursePrice(id, null, data.precoVitrineMain)
+    if (priceError) {
+      return NextResponse.json(
+        { error: priceError.error, code: priceError.code },
+        { status: 400 },
+      )
+    }
+  }
+
+  // Preco de tabela precisa ser MAIOR que o preco de venda, senao a vitrine
+  // simplesmente nao desenha o "De" — salvar em silencio deixaria o admin
+  // achando que configurou algo que nunca aparece. Compara contra o preco que
+  // VAI valer depois deste PATCH (o do corpo quando enviado, senao o gravado).
+  if (data.precoDeVitrineMain != null) {
+    const atual = await prisma.course.findUnique({
+      where: { id },
+      select: {
+        precoVitrineMain: true,
+        precoPromocional: true,
+        precoOriginal: true,
+      },
+    })
+    if (!atual) {
+      return NextResponse.json({ error: "Não encontrado" }, { status: 404 })
+    }
+    const precoVenda =
+      Number(
+        data.precoVitrineMain !== undefined
+          ? data.precoVitrineMain
+          : atual.precoVitrineMain,
+      ) ||
+      Number(atual.precoPromocional ?? 0) ||
+      Number(atual.precoOriginal ?? 0)
+    if (precoVenda > 0 && data.precoDeVitrineMain <= precoVenda) {
+      return NextResponse.json(
+        {
+          error:
+            "O preço de tabela precisa ser maior que o preço de venda para aparecer como \"De\" na vitrine.",
+          code: "COMPARE_AT_NOT_GREATER",
+        },
+        { status: 400 },
+      )
+    }
+  }
 
   // Se mudou para ONE_TIME, zera monthlyMonthsMain. Se MONTHLY sem meses,
   // garante um default razoavel.
@@ -168,6 +226,7 @@ export const PATCH = withRequestContextParams<{ id: string }>(
     select: {
       id: true,
       precoVitrineMain: true,
+      precoDeVitrineMain: true,
       destaqueHome: true,
       ordemHome: true,
       descricaoOverride: true,
@@ -190,6 +249,9 @@ export const PATCH = withRequestContextParams<{ id: string }>(
     data: {
       ...updated,
       precoVitrineMain: updated.precoVitrineMain ? Number(updated.precoVitrineMain) : null,
+      precoDeVitrineMain: updated.precoDeVitrineMain
+        ? Number(updated.precoDeVitrineMain)
+        : null,
     },
   })
   },
