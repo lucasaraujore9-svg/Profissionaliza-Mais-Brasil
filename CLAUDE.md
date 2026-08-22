@@ -727,6 +727,196 @@ copia pull-only e ninguem a atualizava na hora que ela decidia algo**.
   documento (que agora nao le progresso), mas congela o "% concluido" exibido em
   `/aluno/cursos`.
 
+### Cancelamento automatico por inadimplencia (2026-08-21)
+
+A unidade que fica **7 dias** com a mensalidade vencida agora e CANCELADA
+sozinha. Antes o relogio parava na suspensao (D+3) e ninguem cancelava: em
+21/08 havia 23 unidades vencidas, uma delas ha 29 dias, todas suspensas e
+acumulando.
+
+- **A regua e uma so:** `src/lib/tenants/overdue-policy.ts` (PURO) decide
+  suspender (D+3), avisar (D+5) e cancelar (D+7). O motor
+  (`overdue-sweep.ts`) executa e a rota do cron virou casca. O relogio das
+  tres decisoes e o MESMO — o `dueDate` da cobranca mais antiga em aberto, em
+  dia civil brasileiro (`daysUntilBrDay`). Contar a partir da SUSPENSAO faria
+  o prazo depender de quando o cron rodou; contar em UTC cancelaria com 6 dias
+  e 21 horas.
+- **O cancelamento nunca vem antes da suspensao:**
+  `cancelAfterDays = max(7, gracePeriodDays)`. Ha unidade em producao com
+  carencia 15 — sem o `max` ela pularia direto de "vendendo" para "cancelada".
+- **Cancelar e irreversivel, entao pede TRES provas** (suspender nao pede
+  nenhuma — se desfaz sozinho no `reactivate-paid`): (1) a cobranca nao tem
+  `paidAt`/`markedPaidAt`, campos que sobrevivem a reescrita de status pelo
+  webhook; (2) nao existe cobranca de ciclo POSTERIOR ja paga — se ha, a linha
+  velha e residuo de reconciliacao, nao divida; (3) o Asaas CONFIRMA na hora
+  que ela segue em aberto. Asaas fora do ar, id que nao resolve (`ins_` de
+  mensalidade parcelada) ou status inesperado (estorno, chargeback) **adiam**
+  o cancelamento. Fail-closed: adiar custa 6h, cancelar errado custa um cliente.
+- **O padrao de bloqueio de aluno e OPOSTO nos dois eventos — nao unifique.**
+  Na SUSPENSAO, politica ausente => bloqueia (comportamento que ja rodava; a
+  suspensao se desfaz ao pagar). No CANCELAMENTO, politica ausente => MANTEM o
+  aluno (`shouldBlockStudentsOnCancel`), igual ao cancelamento manual e ao em
+  lote: o aluno pagou o curso dele.
+- **Zero migration e zero job novo.** O aviso de D+5 reusa
+  `TenantPaymentReminder` com `offsetDays` NEGATIVO (`-5` = 5 dias DEPOIS do
+  vencimento; os lembretes pre-vencimento sao 5/2/0) — a PK composta e o que
+  impede aviso duplicado quando o pg_net re-tenta. E a varredura mora no
+  `pmb-sweep-tenants-overdue`, que ja roda de 6 em 6 horas: cron novo teria que
+  ser agendado a mao no pg_cron e ja aconteceu de dois ficarem de fora.
+- **`?dryRun=1`** na rota do cron calcula tudo e devolve QUEM SERIA cancelado
+  sem escrever, sem falar com o Asaas e sem avisar ninguem. E como se confere
+  um backlog antes da primeira execucao.
+- **Saida por unidade:** `cancellationPolicy.autoCancel: false` (negociacao em
+  curso) e `autoCancelAfterDays` (prazo proprio, nunca abaixo da carencia),
+  editaveis em /admin/revendedores/[id]. De quebra, o formulario mostrava
+  carencia **15** para unidade sem politica enquanto a varredura suspendia em
+  **3** — quem abrisse a tela e salvasse sem mexer em nada triplicava o prazo
+  sem querer (foi o que aconteceu com `vocequervocepode`, a unica unidade com
+  politica gravada). O default da tela agora e o do cron.
+- **Trilha:** `audit_logs` com `action: "tenant.cancel"`, `actorRole: "SYSTEM"`
+  e `payloadAfter.origem = "auto_inadimplencia"` — distingue das linhas do
+  cancelamento manual (`origem` ausente) e do lote (`lote_nunca_ativou`).
+- **Decisao do dono (21/08):** a regra vale para o PASSADO. Na primeira
+  execucao, as 13 unidades ja passadas de 7 dias sao canceladas — 11 delas ja
+  foram pagantes. Isso **move o churn** (ao contrario do cancelamento em lote
+  das "nunca ativou"): essas 11 estao na base do churn e migram de suspensa
+  para cancelada.
+- Testes: `overdue-policy.test.ts` (regua) e `overdue-sweep.test.ts` (as provas
+  antes de destruir, o dry-run e a falha parcial), verificados POR MUTACAO —
+  trocar o `max` por `??`, remover a guarda de ciclo pago ou inverter o padrao
+  de bloqueio da suspensao derruba o teste correspondente.
+
+### Cursos de autoria da unidade + split Asaas (2026-08-21)
+
+O catalogo era global e de dono unico: `Course` nao tinha `tenantId`, nem
+`createdByUserId`, nem marcador de origem — cursos so entravam por sync das duas
+fornecedoras e **nao existia POST de criacao de curso em lugar nenhum**, nem no
+/admin. A unidade passa a PRODUZIR curso proprio, escolher em quais vitrines ele
+e vendido e definir a comissao de quem vender. Isso traz o problema que o repo
+nunca teve: **uma venda cujo dinheiro pertence a mais de um tenant**.
+
+**As regras de dinheiro** (decisoes do dono, travadas na conversa):
+
+```
+Vitrine do proprio autor  -> produtor 100%, sem split e SEM os 5% da PMB
+Vitrine de outra unidade  -> vendedor c% (>=10) - PMB 5% - produtor o resto
+Vitrine PMB               -> a PMB e a vendedora: retem c% + 5%
+```
+
+- **Quem EMITE a cobranca e a vitrine que vendeu.** Escolha do dono, e a mais
+  segura: `Payment.tenantId` continua sendo o tenant da matricula, entao o
+  invariante de `assert-tenant-gateway.ts` (escrito depois do vazamento de
+  receita do Polo Betim) **vale sem nenhuma excecao**. O dinheiro cruza tenants
+  so pelas linhas de split, que sao explicitas e auditaveis.
+- **Tres modos de preco**, o produtor escolhe por curso: `FIXED` (preco igual em
+  toda vitrine), `MIN_PRICE` (piso; produtor e vendedor sobem juntos) e
+  `MIN_PRODUCER_NET` (o produtor recebe um valor fixo e a diferenca e toda do
+  vendedor — preco minimo passa a ser `authorAmount / (1 - c - f)`, senao a
+  comissao minima nao caberia).
+- **Desconto sai do bolso de quem vende, nunca do produtor:** a parte do produtor
+  e calculada sobre o preco DE TABELA e a taxa da PMB sobre o valor COBRADO. Sem
+  isso um cupom de 50% faria o produtor pagar por uma promocao que nao autorizou.
+  `computeSplit` recusa (`DISCOUNT_EXCEEDS_SELLER_SHARE`) quando o desconto
+  zeraria a parte do vendedor.
+- **`percentualValue` do Asaas incide sobre o LIQUIDO**, nao sobre o bruto: a
+  tarifa do gateway acaba rateada proporcionalmente entre os tres. Foi escolha —
+  percentual nunca estoura o liquido; `fixedValue` pode, e ai o split e BLOQUEADO
+  por divergencia. Os valores em `CourseSaleSplit.amount` sao o ESPERADO sobre o
+  bruto, e o creditado sai alguns centavos menor.
+
+**Arquitetura:**
+
+- **Autoria mora no `Course`, nao em tabela nova** (`authorTenantId` null = todo
+  o catalogo da PMB), pelo mesmo motivo de `precoVitrineMain`/`visibilityMode`:
+  os syncs preservam curadoria de proposito. `Course.distribution` e a escolha do
+  AUTOR; `visibilityMode` continua sendo a curadoria da PMB — eixos independentes,
+  os dois filtram.
+- **Ripple do unique:** `@@unique([provider, nome])` virou
+  `@@unique([provider, authorTenantId, nome])` + **indice unico PARCIAL**
+  (`WHERE author_tenant_id IS NULL`) preservando a garantia do catalogo da PMB —
+  Postgres trata NULL como distinto num composto. Como o Prisma nao faz
+  `findUnique` com coluna nula, `sync.ts` e `seed.ts` passaram a `findFirst`.
+  A clausula `authorTenantId: null` no match do sync EA e a trava que impede o
+  **sequestro**: sem ela, uma unidade publicando "Excel Basico" teria o curso
+  reescrito com os dados do feed todo dia as 6h.
+- **Motor PURO** em `src/lib/course-authoring/split.ts` — o simulador do painel
+  importa dali, entao o servidor e a tela nunca divergem no numero prometido.
+  `sellerIsProducer` devolve `lines: []`: a regra dos 100% mora num lugar so.
+- **Snapshot congelado** em `Enrollment.authorSplitSnapshot`: um carne paga ao
+  longo de meses e o produtor pode editar a comissao no meio. As linhas
+  realizadas ficam em `CourseSaleSplit`, `@@unique([paymentId, role])`.
+- **`asaasSplitsForEnrollment(enrollmentId)`** e o que faz o rateio ser
+  impossivel de esquecer: quem monta a cobranca chama com o id da matricula e
+  recebe o array. Esquecer o split e o pior defeito da feature — a venda
+  acontece, o aluno recebe o curso e o produtor simplesmente nunca e pago, sem
+  erro em lugar nenhum.
+- **`fulfill.ts` virou transacao INTERATIVA** nos dois `payment.create` (as
+  linhas precisam do id do Payment). Sao 3 operacoes — longe do lote que ja
+  quebrou sobre o pooler. Herda as tres camadas de idempotencia existentes.
+- **Gate unico `authoredSaleGate`** nas oito portas de venda, pela licao do
+  `GUARDIAN_REQUIRED` (nasceu numa rota so e duas portas seguiram cobrando
+  errado por meses). Ele forca `gateway = ASAAS` ignorando o
+  `tenantCheckoutMode` da loja — cair no MP calado venderia SEM repasse — e
+  responde **503 `SPLIT_GATEWAY_REQUIRED`** quando a loja nao tem Asaas.
+- **Carteira Asaas** (`Tenant.asaasWalletId`) descoberta por `GET /v3/wallets/`
+  com a chave que a unidade JA conecta: ninguem digita walletId (um caractere
+  trocado mandaria dinheiro para um desconhecido). Dois gates de alturas
+  diferentes: RECEBER exige so a carteira; VENDER curso de terceiro exige
+  `asaasConnected` + `asaasWebhookToken`, porque a cobranca nasce na conta dela.
+- **Distribuicao:** `ensureTenantCourses` ganhou filtro de origem — sem ele o
+  curso da unidade A entraria na vitrine de B, C e D ainda em rascunho. Curso da
+  rede so alcanca quem tem carteira: melhor nao aparecer do que aparecer e
+  quebrar no checkout. Nasce VISIVEL e a unidade desativa (decisao do dono).
+- **Preco validado na ESCRITA do `TenantCourse`**, individual e em massa — nao so
+  no checkout. Validar so no checkout deixa a loja num estado pior que erro: o
+  curso listado, a unidade achando que vendeu por R$ 1, e a recusa aparecendo com
+  o aluno na tela de pagamento.
+- **Webhooks `PAYMENT_SPLIT_*` ganharam handler.** Ja estavam no union de tipos e
+  caiam no `default:` silencioso. O que mais importa e o `DIVERGENCE_BLOCK`: o
+  Asaas da **2 dias uteis** para ajustar antes de CANCELAR o split e liberar o
+  valor inteiro ao emissor — passado o prazo em silencio, o produtor perde o
+  dinheiro daquela venda. O alerta vai ao SUPER_ADMIN **sem `category`**, para
+  nao poder ser silenciado por preferencia.
+- **Permissoes:** par novo `cursosAutorais.view/manage` nos DOIS catalogos.
+  Familia propria de proposito — definir o preco de um curso da PMB na vitrine
+  nao deveria habilitar publicar produto proprio na rede, com comissao e
+  repasse. No /admin **nao entra em `SUPER_EXCLUSIVE`** (dispararia o teste de
+  igualdade exata de `SUPER_EXCLUSIVE_BY_PRESET`); e curadoria, nao escalada.
+
+**Limites deliberados da v1:**
+
+- **Curso de autoria de terceiro VENDE SOZINHO** — nao entra em venda
+  multi-curso nem em pacote (bloqueado tambem na criacao/edicao de pacote). O
+  split e da cobranca INTEIRA: num carrinho misto o percentual do produtor
+  atingiria o curso da PMB. Mesma trava de "curso mensal so e vendido sozinho".
+- **Sem aprovacao da PMB** (decisao do dono): o produtor publica direto. A
+  contrapartida e reativa — aba "Cursos das unidades" em /admin/catalogo com
+  acao de PAUSAR, que tira das vitrines e **nao mexe em matricula** (cortar quem
+  ja pagou puniria a pessoa errada).
+- **Certificado** continua saindo com a marca do tenant VENDEDOR. Para curso de
+  autoria de terceiro isso merece decisao do dono (autor? vendedor? ambos?).
+- **Unidade que perde a carteira** com cursos de terceiro ja na vitrine: o
+  checkout fecha com `SPLIT_GATEWAY_REQUIRED`. Varredura que oculta esses cursos
+  fica como follow-up.
+
+**Dependencia fora deste repo:** as aulas ficam no LMS, que precisa expor
+`POST /api/v1/courses` (casca com dono), `PATCH /api/v1/courses/:id`,
+`POST /api/v1/sso/author-token` e `ownerTenantExternalId` no catalogo — contrato
+em `docs/api/lms-autoria-unidade.md`. **Regra de ouro do lado de la: curso com
+dono NAO entra no catalogo global** (o PMB o gravaria como curso da PMB e ele
+seria distribuido de graca para a rede). Enquanto `LMS_AUTHORING_ENABLED` nao for
+`true`, a camada comercial inteira funciona e o curso fica em RASCUNHO —
+publicar sem conteudo faria a venda ser cobrada e o provisionamento falhar com o
+aluno ja tendo pago.
+
+**Deploy:** migration `20260821_course_authoring` (aditiva, idempotente, sem
+backfill — `author_tenant_id` nasce null = catalogo da PMB). Envs opcionais:
+`ASAAS_PMB_WALLET_ID` (sem ela, descoberta pela conta-mae a cada checkout) e
+`LMS_AUTHORING_ENABLED`. **Prototipar o split em SANDBOX antes de producao** —
+cobranca avulsa com 2 linhas, carne 3x conferindo o split por parcela, carteira
+inexistente (tem que falhar no ato, nao na liquidacao) e estorno conferindo a
+reversao automatica.
+
 ### Bugs conhecidos (pendentes)
 
 - **Middleware file convention deprecado** no Next 16 (usar `proxy` em vez de `middleware`).
