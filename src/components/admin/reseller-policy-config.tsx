@@ -3,6 +3,10 @@
 import { useEffect, useState } from "react"
 import { CheckCircle2, Loader2, Save } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import {
+  AUTO_CANCEL_OVERDUE_DAYS,
+  DEFAULT_SUSPEND_GRACE_DAYS,
+} from "@/lib/tenants/overdue-policy"
 
 export type BillingMode = "AUTO" | "MANUAL"
 
@@ -10,6 +14,8 @@ export interface CancellationPolicy {
   gracePeriodDays?: number
   keepStudentsActive?: boolean
   notifyStudents?: boolean
+  autoCancel?: boolean
+  autoCancelAfterDays?: number
 }
 
 interface ResellerPolicyConfigProps {
@@ -29,18 +35,34 @@ export function ResellerPolicyConfig({
   const [modeSaving, setModeSaving] = useState<BillingMode | null>(null)
   const [modeError, setModeError] = useState<string | null>(null)
 
-  const [grace, setGrace] = useState<number>(cancellationPolicy?.gracePeriodDays ?? 15)
+  // Os defaults REPRODUZEM o que o cron faz quando a unidade não tem política
+  // (lib/tenants/overdue-policy). Antes a carência aparecia como 15 enquanto a
+  // varredura suspendia em 3 — quem abrisse a tela e salvasse sem mexer em nada
+  // triplicava o prazo da unidade sem querer (aconteceu em produção).
+  const [grace, setGrace] = useState<number>(
+    cancellationPolicy?.gracePeriodDays ?? DEFAULT_SUSPEND_GRACE_DAYS,
+  )
   const [keep, setKeep] = useState<boolean>(cancellationPolicy?.keepStudentsActive ?? true)
   const [notify, setNotify] = useState<boolean>(cancellationPolicy?.notifyStudents ?? true)
+  const [autoCancel, setAutoCancel] = useState<boolean>(
+    cancellationPolicy?.autoCancel !== false,
+  )
+  const [cancelDays, setCancelDays] = useState<number>(
+    cancellationPolicy?.autoCancelAfterDays ?? AUTO_CANCEL_OVERDUE_DAYS,
+  )
+  // O corte nunca vem antes da suspensão — a tela mostra o prazo que VAI valer.
+  const effectiveCancelDays = Math.max(cancelDays, grace)
   const [policySaving, setPolicySaving] = useState(false)
   const [policyError, setPolicyError] = useState<string | null>(null)
   const [policyOk, setPolicyOk] = useState(false)
 
   useEffect(() => {
     setMode(billingMode)
-    setGrace(cancellationPolicy?.gracePeriodDays ?? 15)
+    setGrace(cancellationPolicy?.gracePeriodDays ?? DEFAULT_SUSPEND_GRACE_DAYS)
     setKeep(cancellationPolicy?.keepStudentsActive ?? true)
     setNotify(cancellationPolicy?.notifyStudents ?? true)
+    setAutoCancel(cancellationPolicy?.autoCancel !== false)
+    setCancelDays(cancellationPolicy?.autoCancelAfterDays ?? AUTO_CANCEL_OVERDUE_DAYS)
   }, [billingMode, cancellationPolicy])
 
   async function changeMode(next: BillingMode) {
@@ -80,6 +102,8 @@ export function ResellerPolicyConfig({
             gracePeriodDays: grace,
             keepStudentsActive: keep,
             notifyStudents: notify,
+            autoCancel,
+            autoCancelAfterDays: cancelDays,
           },
         }),
       })
@@ -171,7 +195,55 @@ export function ResellerPolicyConfig({
             onChange={(e) => setGrace(Number(e.target.value))}
             className="w-28 rounded-md border border-gray-300 bg-white px-3 py-2 font-mono text-sm"
           />
+          <span className="text-[11px] text-gray-500">
+            Dias de atraso até a unidade ser suspensa.
+          </span>
         </label>
+
+        <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50/60 p-3">
+          <label className="flex items-center gap-2 text-xs text-gray-800">
+            <input
+              type="checkbox"
+              checked={autoCancel}
+              onChange={(e) => setAutoCancel(e.target.checked)}
+              className="h-4 w-4 rounded border-gray-300"
+            />
+            <span className="font-medium">Cancelar automaticamente por inadimplência</span>
+          </label>
+          <label className="flex flex-col gap-1 text-xs">
+            <span className="font-medium text-[var(--color-pmb-green-900)]">
+              Cancelar após (dias de atraso)
+            </span>
+            <input
+              type="number"
+              min={0}
+              max={365}
+              value={cancelDays}
+              disabled={!autoCancel}
+              onChange={(e) => setCancelDays(Number(e.target.value))}
+              className="w-28 rounded-md border border-gray-300 bg-white px-3 py-2 font-mono text-sm disabled:bg-gray-100 disabled:text-gray-400"
+            />
+          </label>
+          <p className="text-[11px] text-amber-900">
+            {autoCancel ? (
+              <>
+                A unidade será <strong>cancelada</strong> após{" "}
+                <strong>{effectiveCancelDays} dias</strong> de atraso: a assinatura no
+                Asaas é encerrada, as cobranças em aberto são removidas e a vitrine sai
+                do ar. Não volta sozinha com o pagamento.
+                {effectiveCancelDays !== cancelDays && (
+                  <> O prazo nunca fica abaixo da carência de suspensão ({grace} dias).</>
+                )}
+              </>
+            ) : (
+              <>
+                Cancelamento automático <strong>desligado</strong> para esta unidade. Ela
+                será suspensa por inadimplência, mas nunca cancelada sozinha — use
+                enquanto houver negociação em curso.
+              </>
+            )}
+          </p>
+        </div>
 
         <label className="flex items-center gap-2 text-xs text-gray-700">
           <input

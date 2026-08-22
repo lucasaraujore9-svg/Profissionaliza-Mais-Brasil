@@ -14,6 +14,16 @@ const schema = z.object({
       gracePeriodDays: z.number().int().min(0).max(365).optional(),
       keepStudentsActive: z.boolean().optional(),
       notifyStudents: z.boolean().optional(),
+      /**
+       * Cancelamento automático por inadimplência (D+7 por padrão). `false`
+       * desliga o corte SÓ desta unidade — a saída para uma negociação em
+       * curso, sem precisar desligar a regra da rede inteira. Ver
+       * `lib/tenants/overdue-policy`: o prazo efetivo nunca fica abaixo de
+       * `gracePeriodDays`, senão a unidade seria cancelada sem antes ser
+       * suspensa.
+       */
+      autoCancel: z.boolean().optional(),
+      autoCancelAfterDays: z.number().int().min(0).max(365).optional(),
     })
     .nullable()
     .optional(),
