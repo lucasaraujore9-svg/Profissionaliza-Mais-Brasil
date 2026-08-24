@@ -3,9 +3,9 @@
 > Complementa `docs/api/lms-webhook-catalogo.md`. Aqui está **o que o LMS
 > precisa expor** para que uma unidade (revenda) produza o próprio curso.
 >
-> **Estado:** implementado do lado do PMB, atrás da flag `LMS_AUTHORING_ENABLED`.
-> Aguardando os endpoints do lado do LMS.
-> **Data:** 2026-08-21.
+> **Estado:** implementado dos DOIS lados. Falta apenas ligar
+> `LMS_AUTHORING_ENABLED=true` na Vercel (ver §5).
+> **Data:** 2026-08-21 (PMB) · 2026-08-23 (LMS).
 
 ---
 
@@ -16,9 +16,9 @@ próprio, escolhe em quais vitrines ele é vendido e define a comissão de quem
 vender. O financeiro (cobrança, rateio, comissão, certificado) continua **100%
 no PMB** — o LMS entrega **conteúdo**, como já faz.
 
-Hoje o `/api/v1` do LMS é leitura de catálogo + comandos de matrícula. A área de
-autoria vive em `/api/autoria`, marcada como interna, e **não existe curso com
-dono**. São essas duas lacunas que este documento fecha.
+Antes desta entrega, o `/api/v1` do LMS era leitura de catálogo + comandos de
+matrícula; a área de autoria vivia em `/api/autoria`, interna, e **não existia
+curso com dono**. Eram essas duas lacunas — hoje fechadas nos dois repositórios.
 
 ## 2. O princípio que não pode ser quebrado
 
@@ -88,6 +88,22 @@ de outra unidade nem do catálogo da PMB. O PMB já garante a outra metade —
 só emite o token para quem é autor do curso (filtro por `authorTenantId` na
 própria query).
 
+Como o LMS cumpre isso (`src/lib/authoring-scope.ts` de lá): o token cria uma
+sessão `role: "author"` presa a UM curso, e **toda** action de edição e **toda**
+rota de upload comparam duas coisas antes de escrever —
+`course.ownerTenantExternalId === session.tenantExternalId` **e**
+`course.id === session.courseId`. A primeira isola o catálogo da plataforma por
+construção: lá o dono é `null`, e `null` nunca é igual ao id de uma unidade.
+
+O curso dono é resolvido subindo pela **relação da entidade alterada**
+(aula → módulo → curso), nunca pelo `courseId` que veio no formulário — senão
+bastaria mandar o próprio `courseId` junto com o `id` da aula de outro.
+
+A área `/autoria` continua sendo do dono da plataforma: cada página
+administrativa cobra `requireAdmin()`, e a sessão de autor só alcança o editor,
+a pré-visualização e a prova **daquele** curso. Apagar curso e criar categoria
+seguem exclusivos do admin.
+
 ### 3.4 `GET /api/v1/courses` — campo novo
 
 Acréscimo **aditivo** ao payload de cada curso:
@@ -115,10 +131,25 @@ O mesmo campo deve viajar em `GET /api/v1/courses/:slug` e no delta
 
 ## 5. Ligar em produção
 
-1. Implementar §3.1–§3.4 no LMS.
-2. Setar `LMS_AUTHORING_ENABLED=true` na Vercel.
-3. Conferir numa unidade de teste: criar curso → "Conteúdo" abre a autoria →
-   publicar → o curso aparece na vitrine dela.
+§3.1–§3.4 **já estão implementados** no LMS (`area-do-aluno-pmb`). O deploy de lá
+roda `prisma db push` no start, então a coluna `ownerTenantExternalId` e a tabela
+`AuthorToken` sobem sozinhas — ambas aditivas, sem backfill.
+
+1. Deploy do LMS.
+2. Setar `LMS_AUTHORING_ENABLED=true` na Vercel (PMB).
+3. Liberar o módulo **Produzir cursos** para a unidade de teste em
+   /admin/revendedores/[id] → "Vitrine & extras". Sem isso a aba "Meus cursos"
+   nem aparece para ela — é habilitação comercial, por unidade.
+4. Conferir na unidade de teste: criar curso → "Conteúdo" abre a autoria do LMS
+   → subir uma aula com vídeo → gerar matriz → publicar → o curso aparece na
+   vitrine dela.
+
+### O que NÃO ligar junto
+
+Só depois de o fluxo acima fechar é que faz sentido publicar para a rede
+(`distribution: NETWORK`): aí entra o rateio, que pede a carteira Asaas da
+unidade e merece um teste em sandbox antes (cobrança avulsa com 2 linhas e um
+carnê 3x conferindo o split por parcela).
 
 Enquanto a flag estiver desligada, a unidade monta o curso e os termos
 comerciais normalmente, mas ele fica em **rascunho**: publicar sem conteúdo

@@ -18,6 +18,7 @@ import {
 } from "@/lib/course-authoring/course-payload"
 import { canReceiveSplit, syncTenantWallet } from "@/lib/course-authoring/wallet"
 import { createLmsCourseShell, isLmsAuthoringEnabled } from "@/lib/lms/authoring"
+import { syncTenantBrandingToLms } from "@/lib/lms"
 
 export const GET = withRequestContext(
   { action: "painel.cursos_autorais.list", route: "/api/painel/cursos-autorais" },
@@ -132,6 +133,18 @@ export const POST = withRequestContext(
     let lmsSlug: string | null = null
     if (isLmsAuthoringEnabled()) {
       try {
+        // Garante que a unidade EXISTE do lado do LMS antes de criar a casca:
+        // `POST /courses` de lá recusa (400) dono desconhecido, e o registro
+        // (`PUT /tenants/:id`) é best-effort — roda na criação da revenda e ao
+        // salvar a vitrine. Uma unidade anterior à integração, que nunca abriu
+        // a tela de vitrine, não estaria registrada e ficaria sem conseguir
+        // criar curso nenhum, com um 502 genérico na cara dela.
+        const tenant = await prisma.tenant.findUnique({
+          where: { id: ctx.tenantId },
+          select: { id: true, slug: true, name: true, logoUrl: true },
+        })
+        if (tenant) await syncTenantBrandingToLms(tenant)
+
         const shell = await createLmsCourseShell({
           ownerTenantExternalId: ctx.tenantId,
           title: data.nome,
