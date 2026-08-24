@@ -4,9 +4,15 @@ import { PMB_TENANT_SLUG } from "@/lib/pmb-config"
 import { contextLogger } from "@/lib/logger"
 
 /**
- * Registra (best-effort) o branding white-label da revenda no LMS
- * (PUT /api/v1/tenants/:id). Sem isto, o aluno da revenda vê a marca PMB
- * (fallback) na plataforma de aulas.
+ * Registra (best-effort) a identidade da revenda no LMS
+ * (PUT /api/v1/tenants/:id): nome, logo E as duas cores da vitrine.
+ *
+ * Sem isto o aluno da revenda vê a marca PMB (fallback) na plataforma de aulas —
+ * e, desde a autoria de curso pela unidade, a PRÓPRIA revenda editaria o curso
+ * dela dentro de uma casca com a marca da plataforma.
+ *
+ * As cores vão junto de propósito: identidade é logo + cor. Mandar só a logo
+ * entrega a marca pela metade — o nome da unidade sobre o verde da PMB.
  *
  * No-op quando:
  *  - o LMS não está configurado (LMS_API_URL/KEY ausentes) — não quebra fluxos
@@ -21,6 +27,9 @@ export async function syncTenantBrandingToLms(tenant: {
   slug: string
   name: string
   logoUrl: string | null
+  /** Ausentes = a chamada não conhece as cores; o LMS PRESERVA o que já gravou. */
+  primaryColor?: string | null
+  secondaryColor?: string | null
 }): Promise<void> {
   if (!isLmsConfigured()) return
   if (tenant.slug === PMB_TENANT_SLUG) return
@@ -28,6 +37,11 @@ export async function syncTenantBrandingToLms(tenant: {
     await putLmsTenantBranding(tenant.id, {
       brandName: tenant.name,
       logoUrl: tenant.logoUrl,
+      // `undefined` (campo fora do JSON) preserva; `""` limpa. Por isso o
+      // `?? undefined` e não `?? ""`: um caller que não carregou as cores não
+      // pode apagar a personalização da unidade.
+      primaryColor: tenant.primaryColor ?? undefined,
+      secondaryColor: tenant.secondaryColor ?? undefined,
     })
   } catch (err) {
     contextLogger().warn(

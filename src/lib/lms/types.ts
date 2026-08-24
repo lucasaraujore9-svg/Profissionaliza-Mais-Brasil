@@ -110,6 +110,14 @@ export interface LmsTenantBrandingRequest {
   brandName?: string
   logoUrl?: string | null
   certificateBaseUrl?: string
+  /**
+   * Identidade visual que a unidade definiu em /painel/vitrine → Personalizacao.
+   * Hex (`#RGB`/`#RRGGBB`); `""` limpa e volta a paleta padrao da plataforma.
+   * CAMPO AUSENTE preserva o que ja esta la — chamadas que nao conhecem as
+   * cores nao podem apagar a personalizacao de quem ja a tem.
+   */
+  primaryColor?: string
+  secondaryColor?: string
 }
 
 // ── Acesso / aluno ────────────────────────────────────────

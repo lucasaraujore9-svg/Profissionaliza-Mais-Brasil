@@ -138,13 +138,19 @@ export const PUT = withRequestContext(
 
     const data = await readTenant(tenant.id)
 
-    // Re-sincroniza o branding (nome/logo) com o LMS. Best-effort, no-op sem LMS.
+    // Re-sincroniza a identidade (nome, logo E cores) com a plataforma de aulas.
+    // Best-effort, no-op sem LMS. É esta rota que salva a aba Personalização,
+    // então é por aqui que a cor escolhida chega lá — sem ela, a unidade veria a
+    // própria logo sobre a paleta da PMB, tanto o aluno dela quanto ela mesma
+    // ao editar um curso próprio.
     if (data) {
       await syncTenantBrandingToLms({
         id: tenant.id,
         slug: tenant.slug,
         name: data.name,
         logoUrl: data.logoUrl,
+        primaryColor: data.primaryColor,
+        secondaryColor: data.secondaryColor,
       })
     }
 
