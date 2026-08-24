@@ -108,6 +108,95 @@ interface SendEmailParams {
 }
 
 /**
+ * Limite do que vai para `EmailLog.error`. A coluna é `Text`, mas uma cadeia de
+ * `cause` pode arrastar stack e corpo de resposta inteiros — o valor de
+ * diagnóstico está nos primeiros caracteres.
+ */
+const MAX_LOGGED_ERROR = 2000
+
+/** Profundidade máxima da cadeia de `cause` percorrida. */
+const MAX_CAUSE_DEPTH = 5
+
+/**
+ * Campos que o nodemailer pendura no erro e que o `message` não carrega. São
+ * eles que separam senha inválida (`EAUTH` / 535) de timeout (`ETIMEDOUT`) ou
+ * recusa do destinatário (`EENVELOPE`) — sem eles, "Falha ao enviar" é a mesma
+ * linha para causas que pedem ações opostas.
+ */
+function providerDetails(value: object): string {
+  const { code, responseCode, command } = value as {
+    code?: unknown
+    responseCode?: unknown
+    command?: unknown
+  }
+  const parts = [
+    typeof code === "string" ? code : null,
+    typeof responseCode === "number" ? String(responseCode) : null,
+    typeof command === "string" ? command : null,
+  ].filter((part): part is string => Boolean(part))
+  return parts.length > 0 ? ` (${parts.join(", ")})` : ""
+}
+
+/** Mensagem legível de um elo da cadeia, ou `null` se não houver uma. */
+function messageOf(value: unknown): string | null {
+  if (value instanceof Error) return value.message
+  if (typeof value === "string") return value
+  if (typeof value === "object" && value !== null) {
+    const { message } = value as { message?: unknown }
+    if (typeof message === "string") return message
+    try {
+      return JSON.stringify(value)
+    } catch {
+      return null
+    }
+  }
+  if (value === null || value === undefined) return null
+  return String(value)
+}
+
+/**
+ * Achata um erro e sua cadeia de `cause` numa linha só, para `EmailLog.error`.
+ *
+ * Por que existe: `sendEmail` embrulha a falha do provedor num `EmailError`
+ * genérico ("Falha ao enviar email via SMTP") e a resposta real do servidor
+ * fica só no `cause`. Gravar apenas `err.message` foi o que transformou o
+ * apagão de 24/08/2026 — a senha da caixa `nao-responda` trocada, SMTP
+ * respondendo `535 5.7.8 authentication failed` — em 63 linhas de log
+ * idênticas e mudas: o diagnóstico teve que ser refeito reproduzindo o envio
+ * à mão. A causa é a única parte acionável, então ela precisa ser PERSISTIDA,
+ * não só lançada.
+ */
+export function describeEmailError(error: unknown): string | null {
+  const chain: string[] = []
+  const seen = new Set<unknown>()
+  let current: unknown = error
+
+  while (current !== null && current !== undefined && chain.length < MAX_CAUSE_DEPTH) {
+    if (typeof current === "object") {
+      // Cadeia cíclica (`a.cause = b; b.cause = a`) travaria o laço.
+      if (seen.has(current)) break
+      seen.add(current)
+    }
+
+    const message = messageOf(current)
+    if (message === null) break
+
+    const details =
+      typeof current === "object" && current !== null ? providerDetails(current) : ""
+    chain.push(`${message}${details}`)
+
+    current =
+      typeof current === "object" && current !== null
+        ? (current as { cause?: unknown }).cause
+        : undefined
+  }
+
+  if (chain.length === 0) return null
+  const text = chain.join(" | causa: ")
+  return text.length > MAX_LOGGED_ERROR ? `${text.slice(0, MAX_LOGGED_ERROR)}…` : text
+}
+
+/**
  * Registra a tentativa de envio em `EmailLog` (best-effort). NUNCA lança: uma
  * falha de log não pode derrubar o envio nem mascarar o erro real do provedor.
  * Prisma é importado dinamicamente para manter o mailer leve e utilizável em
@@ -131,12 +220,7 @@ async function logEmailAttempt(entry: {
         template: entry.template,
         status: entry.status,
         provider: entry.provider,
-        error:
-          entry.error instanceof Error
-            ? entry.error.message
-            : entry.error
-              ? String(entry.error)
-              : null,
+        error: describeEmailError(entry.error),
         tenantId: entry.tenantId ?? null,
       },
     })
