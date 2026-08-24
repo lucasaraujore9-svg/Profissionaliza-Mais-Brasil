@@ -22,6 +22,7 @@ import { readVisitorId } from "@/lib/automation/tracking"
 import { isValidCpf, stripCpf } from "@/lib/validation/cpf"
 import { isValidPhone, normalizePhone } from "@/lib/validation/phone"
 import { tenantCheckoutMode } from "@/lib/tenant/checkout-mode"
+import { resolveSaleGateway } from "@/lib/checkout/sale-gateway"
 import { tenantPolo } from "@/lib/tenant/slug"
 import { getPackageForCheckout } from "@/lib/packages/vitrine"
 import {
@@ -175,19 +176,6 @@ export const POST = withRequestContext(
         mpAccessToken: tenant.mpAccessToken,
         mpPublicKey: tenant.mpPublicKey,
       })
-      if (mode === "ASAAS" && !tenant.asaasWebhookToken) {
-        return NextResponse.json(
-          { error: "Gateway Asaas incompleto", code: "ASAAS_NOT_CONFIGURED" },
-          { status: 503 },
-        )
-      }
-      if (mode === "NONE") {
-        return NextResponse.json(
-          { error: "Loja ainda não configurou o pagamento", code: "CHECKOUT_UNAVAILABLE" },
-          { status: 503 },
-        )
-      }
-      const gateway: "MP" | "ASAAS" = mode
 
       const basePrice = pkg.price
       const primaryCourse = pkg.courses[0]
@@ -210,6 +198,7 @@ export const POST = withRequestContext(
       let discountAmount = 0
       let couponId: string | null = null
       let finalAmount = basePrice
+      let couponToReserve: string | null = null
       if (data.couponCode) {
         const now = new Date()
         const coupon = await prisma.coupon.findFirst({
@@ -245,15 +234,39 @@ export const POST = withRequestContext(
         })
         discountAmount = calc.discountAmount
         finalAmount = calc.finalAmount
-        const reserved = await tryConsumeCoupon(coupon.id)
+        couponToReserve = coupon.id
+      }
+
+      // Gateway do pacote — resolvido DEPOIS do desconto de propósito. Cupom
+      // que zera o valor não vai a gateway nenhum: o pacote é liberado como
+      // bolsa, e por isso a unidade sem conta bancária conectada consegue honrar
+      // o cupom de 100% que ela mesma emitiu. Regra única em sale-gateway.ts.
+      const gatewayGate = resolveSaleGateway({
+        mode,
+        salesGateway: tenant.salesGateway,
+        asaasWebhookToken: tenant.asaasWebhookToken,
+        finalAmount,
+      })
+      if (!gatewayGate.ok) {
+        return NextResponse.json(
+          { error: gatewayGate.error, code: gatewayGate.code },
+          { status: gatewayGate.status },
+        )
+      }
+      const gateway = gatewayGate.gateway
+
+      // Reserva atômica DEPOIS do gate: recusar a venda com a reserva já feita
+      // queimaria um uso numa compra que nem aconteceu.
+      if (couponToReserve) {
+        const reserved = await tryConsumeCoupon(couponToReserve)
         if (!reserved) {
           return NextResponse.json(
             { error: "Cupom esgotado", code: "COUPON_EXHAUSTED" },
             { status: 400 },
           )
         }
-        couponId = coupon.id
-        consumedCouponId = coupon.id
+        couponId = couponToReserve
+        consumedCouponId = couponToReserve
       }
 
         // Data de nascimento + responsavel financeiro, no formato tri-estado que

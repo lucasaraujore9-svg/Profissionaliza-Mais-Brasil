@@ -1,5 +1,4 @@
 import Link from "next/link"
-import { OrderSummary } from "@/components/loja/order-summary"
 import { CheckoutPanel } from "@/components/loja/checkout-panel"
 import { CheckoutInquiryForm } from "@/components/loja/checkout-inquiry-form"
 import { getCurrentTenant } from "@/lib/tenant/current"
@@ -130,9 +129,11 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
     const validatedCoupon = couponParam
       ? await resolveCoupon(tenant.id, couponParam, pkg.price)
       : null
-    const discountAmount = validatedCoupon?.discountAmount ?? 0
-    const finalPrice = validatedCoupon?.finalPrice ?? pkg.price
     const pkgMpPublicKey = tenantGateway?.mpPublicKey ?? null
+    // Sem gateway conectado a loja não cobra — mas o cupom dela continua valendo.
+    // O painel mostra o campo de cupom em qualquer caso: sobrando saldo a pagar
+    // cai no formulário de contato (o que a vitrine já fazia); com cupom de 100%
+    // vira matrícula gratuita, liberada na hora como bolsa.
     const pkgPanelForm =
       checkoutMode === "ASAAS"
         ? ({ kind: "asaas", initPath: "/api/loja/checkout/package" } as const)
@@ -144,63 +145,50 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
               maxInstallments: MAX_CARD_INSTALLMENTS,
               interestFreeInstallments: tenantGateway?.interestFreeInstallments ?? 1,
             } as const)
-          : null
+          : ({
+              kind: "free",
+              initPath: "/api/loja/checkout/package",
+              inquiry: (
+                <CheckoutInquiryForm
+                  packageId={pkg.id}
+                  courseName={`Pacote: ${pkg.name}`}
+                  escolaName={tenant.name}
+                />
+              ),
+            } as const)
 
     return (
       <section className="bg-[#FAFAFA] py-10 md:py-16">
         <div className="mx-auto max-w-6xl px-4 md:px-6">
           <header className="mb-8">
             <h1 className="text-2xl font-bold tracking-tight text-[var(--color-pmb-green-900)] md:text-3xl">
-              {checkoutMode === "NONE" ? "Tenho interesse" : "Finalizar compra"}
+              {checkoutMode === "NONE" ? "Finalizar matrícula" : "Finalizar compra"}
             </h1>
+            {/* Texto que serve aos DOIS estados da loja sem gateway: o cupom é
+                aplicado no cliente e pode zerar o valor depois desta renderização. */}
             <p className="mt-1 text-sm text-gray-600">
-              Preencha seus dados e escolha a forma de pagamento.
+              {checkoutMode === "NONE"
+                ? "Tem um cupom de desconto? Aplique abaixo. Sem cupom, deixe seus dados que a escola entra em contato para concluir sua matrícula."
+                : "Preencha seus dados e escolha a forma de pagamento."}
             </p>
           </header>
 
-          {pkgPanelForm ? (
-            <CheckoutPanel
-              target={{ packageId: pkg.id }}
-              couponScope={{ kind: "tenant", tenantId: tenant.id }}
-              basePrice={pkg.price}
-              initialCoupon={validatedCoupon}
-              form={pkgPanelForm}
-              summary={{
-                courseName: pkg.name,
-                courseCategory: `Pacote • ${pkg.courses.length} ${pkg.courses.length === 1 ? "curso" : "cursos"}`,
-                courseHours: null,
-                courseImageUrl: null,
-                basePrice: pkg.price,
-                parcelasSugeridas: null,
-                paymentType: "ONE_TIME",
-              }}
-            />
-          ) : (
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_380px] lg:gap-8">
-              <div className="space-y-6">
-                <CheckoutInquiryForm
-                  packageId={pkg.id}
-                  courseName={`Pacote: ${pkg.name}`}
-                  escolaName={tenant.name}
-                />
-              </div>
-
-              <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start">
-                <OrderSummary
-                  courseName={pkg.name}
-                  courseCategory={`Pacote • ${pkg.courses.length} ${pkg.courses.length === 1 ? "curso" : "cursos"}`}
-                  courseHours={null}
-                  courseImageUrl={null}
-                  basePrice={pkg.price}
-                  discountAmount={discountAmount}
-                  finalPrice={finalPrice}
-                  couponCode={validatedCoupon?.code ?? null}
-                  parcelasSugeridas={null}
-                  paymentType="ONE_TIME"
-                />
-              </aside>
-            </div>
-          )}
+          <CheckoutPanel
+            target={{ packageId: pkg.id }}
+            couponScope={{ kind: "tenant", tenantId: tenant.id }}
+            basePrice={pkg.price}
+            initialCoupon={validatedCoupon}
+            form={pkgPanelForm}
+            summary={{
+              courseName: pkg.name,
+              courseCategory: `Pacote • ${pkg.courses.length} ${pkg.courses.length === 1 ? "curso" : "cursos"}`,
+              courseHours: null,
+              courseImageUrl: null,
+              basePrice: pkg.price,
+              parcelasSugeridas: null,
+              paymentType: "ONE_TIME",
+            }}
+          />
         </div>
       </section>
     )
@@ -313,9 +301,11 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
     ? await resolveCoupon(tenant.id, couponParam, basePrice)
     : null
 
-  const discountAmount = validatedCoupon?.discountAmount ?? 0
-  const finalPrice = validatedCoupon?.finalPrice ?? basePrice
   const courseMpPublicKey = tenantGateway?.mpPublicKey ?? null
+  // Sem gateway conectado a loja não cobra — mas o cupom dela continua valendo.
+  // O painel mostra o campo de cupom em qualquer caso: sobrando saldo a pagar
+  // cai no formulário de contato (o que a vitrine já fazia); com cupom de 100%
+  // vira matrícula gratuita, liberada na hora como bolsa.
   const coursePanelForm =
     checkoutMode === "ASAAS"
       ? ({ kind: "asaas" } as const)
@@ -327,18 +317,31 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
             maxInstallments: effectiveType === "MONTHLY" ? 1 : MAX_CARD_INSTALLMENTS,
             interestFreeInstallments: tenantGateway?.interestFreeInstallments ?? 1,
           } as const)
-        : null
+        : ({
+            kind: "free",
+            inquiry: (
+              /* Unidade sem gateway próprio: NUNCA cai no checkout do sistema
+                 mãe. Captura o interesse (e-mail p/ a revenda + lead). */
+              <CheckoutInquiryForm
+                courseId={tenantCourse.id}
+                courseName={tenantCourse.course.nome}
+                escolaName={tenant.name}
+              />
+            ),
+          } as const)
 
   return (
     <section className="bg-[#FAFAFA] py-10 md:py-16">
       <div className="mx-auto max-w-6xl px-4 md:px-6">
         <header className="mb-8">
           <h1 className="text-2xl font-bold tracking-tight text-[var(--color-pmb-green-900)] md:text-3xl">
-            {checkoutMode === "NONE" ? "Tenho interesse" : "Finalizar compra"}
+            {checkoutMode === "NONE" ? "Finalizar matrícula" : "Finalizar compra"}
           </h1>
+          {/* Texto que serve aos DOIS estados da loja sem gateway: o cupom é
+              aplicado no cliente e pode zerar o valor depois desta renderização. */}
           <p className="mt-1 text-sm text-gray-600">
             {checkoutMode === "NONE"
-              ? "Deixe seus dados que a escola entra em contato para concluir sua matrícula."
+              ? "Tem um cupom de desconto? Aplique abaixo. Sem cupom, deixe seus dados que a escola entra em contato para concluir sua matrícula."
               : "Preencha seus dados e escolha a forma de pagamento."}
           </p>
           {error === "payment_failed" && (
@@ -348,69 +351,30 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
           )}
         </header>
 
-        {coursePanelForm ? (
-          <CheckoutPanel
-            target={{ courseId: tenantCourse.id }}
-            couponScope={{ kind: "tenant", tenantId: tenant.id }}
-            basePrice={basePrice}
-            initialCoupon={validatedCoupon}
-            form={coursePanelForm}
-            summary={{
-              courseName: tenantCourse.course.nome,
-              courseCategory:
-                tenantCourse.course.categoriaLoja ??
-                tenantCourse.course.categoriaInterna,
-              courseHours: tenantCourse.course.cargaHoraria,
-              courseImageUrl:
-                tenantCourse.customCapaUrl ??
-                tenantCourse.course.capaOverride ??
-                tenantCourse.course.capaImageUrl,
-              basePrice,
-              parcelasSugeridas:
-                effectiveType === "MONTHLY" ? effectiveParcelas : oneTimeParcelas,
-              paymentType: effectiveType,
-              monthlyMonths:
-                effectiveParcelas ?? tenantCourse.course.monthlyMonthsMain,
-            }}
-          />
-        ) : (
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_380px] lg:gap-8">
-            <div className="space-y-6">
-              {/* Unidade sem gateway próprio configurado: NUNCA cai no checkout do
-                  sistema mãe. Captura o interesse (e-mail p/ a revenda + lead). */}
-              <CheckoutInquiryForm
-                courseId={tenantCourse.id}
-                courseName={tenantCourse.course.nome}
-                escolaName={tenant.name}
-              />
-            </div>
-
-            <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start">
-              <OrderSummary
-                courseName={tenantCourse.course.nome}
-                courseCategory={
-                  tenantCourse.course.categoriaLoja ??
-                  tenantCourse.course.categoriaInterna
-                }
-                courseHours={tenantCourse.course.cargaHoraria}
-                courseImageUrl={
-                  tenantCourse.customCapaUrl ??
-                  tenantCourse.course.capaOverride ??
-                  tenantCourse.course.capaImageUrl
-                }
-                basePrice={basePrice}
-                discountAmount={discountAmount}
-                finalPrice={finalPrice}
-                couponCode={validatedCoupon?.code ?? null}
-                parcelasSugeridas={
-                  effectiveType === "MONTHLY" ? effectiveParcelas : oneTimeParcelas
-                }
-                paymentType={effectiveType}
-                monthlyMonths={effectiveParcelas ?? tenantCourse.course.monthlyMonthsMain}
-              />
-            </aside>
-          </div>
-        )}
+        <CheckoutPanel
+          target={{ courseId: tenantCourse.id }}
+          couponScope={{ kind: "tenant", tenantId: tenant.id }}
+          basePrice={basePrice}
+          initialCoupon={validatedCoupon}
+          form={coursePanelForm}
+          summary={{
+            courseName: tenantCourse.course.nome,
+            courseCategory:
+              tenantCourse.course.categoriaLoja ??
+              tenantCourse.course.categoriaInterna,
+            courseHours: tenantCourse.course.cargaHoraria,
+            courseImageUrl:
+              tenantCourse.customCapaUrl ??
+              tenantCourse.course.capaOverride ??
+              tenantCourse.course.capaImageUrl,
+            basePrice,
+            parcelasSugeridas:
+              effectiveType === "MONTHLY" ? effectiveParcelas : oneTimeParcelas,
+            paymentType: effectiveType,
+            monthlyMonths:
+              effectiveParcelas ?? tenantCourse.course.monthlyMonthsMain,
+          }}
+        />
       </div>
     </section>
   )

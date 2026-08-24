@@ -5,6 +5,7 @@ import { OrderSummary, type OrderSummaryProps } from "./order-summary"
 import { MpCheckoutForm } from "./mp-checkout-form"
 import { AsaasCheckoutForm } from "./asaas-checkout-form"
 import { PmbCheckoutForm } from "./pmb-checkout-form"
+import { FreeCheckoutForm } from "./free-checkout-form"
 import { CouponField, type AppliedCoupon } from "./coupon-field"
 import { previewCheckoutCoupon } from "@/lib/coupons/preview"
 import type { CouponScope } from "@/lib/coupons/types"
@@ -45,6 +46,19 @@ type FormConfig =
       initPath?: string
       /** Curso com mensalidade: sem parcelamento adicional (cartão/boleto). */
       isMonthly?: boolean
+    }
+  | {
+      /**
+       * Loja SEM conta bancária conectada. Não há cobrança possível, mas o
+       * cupom existe e pode zerar o valor: enquanto sobrar algo a pagar a tela
+       * mostra o formulário de contato (`inquiry`); quando o cupom cobre 100%
+       * ela vira a matrícula gratuita, liberada na hora como bolsa.
+       */
+      kind: "free"
+      initPath?: string
+      confirmacaoPath?: string
+      /** Captura de interesse — o que a vitrine já mostrava nesse estado. */
+      inquiry: React.ReactNode
     }
 
 export interface CheckoutPanelProps {
@@ -129,6 +143,18 @@ export function CheckoutPanel({
             confirmacaoPath={form.confirmacaoPath}
           />
         )}
+        {form.kind === "free" &&
+          (finalPrice > 0 ? (
+            form.inquiry
+          ) : (
+            <FreeCheckoutForm
+              courseId={courseId}
+              packageId={packageId}
+              couponCode={couponCode}
+              initPath={form.initPath}
+              confirmacaoPath={form.confirmacaoPath}
+            />
+          ))}
         {form.kind === "pmb" && (
           <PmbCheckoutForm
             courseId={courseId}

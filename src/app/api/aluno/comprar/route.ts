@@ -37,6 +37,7 @@ import { mpWebhookUrl, asaasWebhookUrl } from "@/lib/tenant/urls"
 import { swallow } from "@/lib/errors"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { tenantCheckoutMode } from "@/lib/tenant/checkout-mode"
+import { resolveSaleGateway } from "@/lib/checkout/sale-gateway"
 import { effectivePaymentType } from "@/lib/tenant/monthly-policy"
 import { isSellablePrice } from "@/lib/checkout/price-guard"
 import { getOrCreatePmbTenant } from "@/lib/pmb-tenant"
@@ -62,7 +63,9 @@ interface ResellerTenant {
   mpAccessToken: string | null
   mpPublicKey: string | null
   plataformaVendedorId: string | null
-  salesGateway: string | null
+  // Enum do banco (NOT NULL, default MP) — tipar como `string` obrigaria a
+  // reafirmar o par MP|ASAAS na resolucao do gateway da venda.
+  salesGateway: "MP" | "ASAAS"
   asaasConnected: boolean
   asaasWebhookToken: string | null
   monthlyAllowed: boolean
@@ -100,12 +103,6 @@ async function handleResellerInit(
       mpAccessToken: tenant.mpAccessToken,
       mpPublicKey: tenant.mpPublicKey,
     })
-    if (mode === "ASAAS" && !tenant.asaasWebhookToken) {
-      return NextResponse.json(
-        { error: "Gateway Asaas incompleto", code: "ASAAS_NOT_CONFIGURED" },
-        { status: 503 },
-      )
-    }
 
     const [student, tenantCourse] = await Promise.all([
       prisma.student.findUnique({
@@ -139,19 +136,13 @@ async function handleResellerInit(
       return NextResponse.json({ error: "Aluno não encontrado" }, { status: 404 })
     }
 
-    // O gateway so pode ser decidido depois de saber QUAL curso e: rateio
-    // obriga Asaas, e a checagem de "loja sem gateway" nao se aplica quando a
-    // venda vai pela conta Asaas dela de qualquer forma.
+    // O gateway so pode ser decidido depois de saber QUAL curso e (rateio
+    // obriga Asaas) e QUANTO sera cobrado (cupom de 100% nao vai a gateway
+    // nenhum) — a resolucao acontece depois do bloco de cupom, mais abaixo.
     const requiresSplit = tenantCourse
       ? saleRequiresSplit(tenantCourse.course, tenantId)
       : false
-    if (!requiresSplit && mode === "NONE") {
-      return NextResponse.json(
-        { error: "Loja ainda não configurou o pagamento", code: "CHECKOUT_UNAVAILABLE" },
-        { status: 503 },
-      )
-    }
-    const gateway: "MP" | "ASAAS" = requiresSplit ? "ASAAS" : (mode as "MP" | "ASAAS")
+
     if (!student.email) {
       return NextResponse.json(
         { error: "Cadastre seu email no perfil antes de comprar" },
@@ -179,21 +170,6 @@ async function handleResellerInit(
     // A recompra NAO recoleta dados: o pagador sai do que ja esta na ficha.
     const payer = resolvePayer(student)
 
-    // Asaas exige CPF do pagador e o Payment Brick (payMode) não reenvia o CPF
-    // digitado — sem CPF no cadastro a cobrança trava no /pagar. Bloqueia cedo
-    // com mensagem clara (nenhum cupom foi consumido até aqui).
-    if (gateway === "ASAAS" && !payer.cpf) {
-      return NextResponse.json(
-        {
-          error:
-            payer.kind === "GUARDIAN"
-              ? "Cadastre o CPF do responsável financeiro antes de comprar nesta loja"
-              : "Cadastre seu CPF no perfil antes de comprar nesta loja",
-          code: "STUDENT_CPF_REQUIRED",
-        },
-        { status: 400 },
-      )
-    }
     if (!tenantCourse) {
       return NextResponse.json(
         { error: "Curso não encontrado", code: "COURSE_NOT_FOUND" },
@@ -224,6 +200,7 @@ async function handleResellerInit(
     let discountAmount = 0
     let couponId: string | null = null
     let finalAmountFromCoupon: number | null = null
+    let couponToReserve: string | null = null
     if (data.couponCode) {
       const code = data.couponCode.toUpperCase()
       const now = new Date()
@@ -256,15 +233,57 @@ async function handleResellerInit(
       })
       discountAmount = calc.discountAmount
       finalAmountFromCoupon = calc.finalAmount
-      const reserved = await tryConsumeCoupon(coupon.id)
-      if (!reserved) {
-        return NextResponse.json({ error: "Cupom esgotado", code: "COUPON_EXHAUSTED" }, { status: 400 })
-      }
-      couponId = coupon.id
-      consumedCouponId = coupon.id
+      couponToReserve = coupon.id
     }
 
     const finalAmount = finalAmountFromCoupon ?? basePrice
+
+    // Gateway da recompra — resolvido DEPOIS do desconto de propósito. Cupom que
+    // zera o valor não vai a gateway nenhum: a matrícula é liberada como bolsa,
+    // e por isso a unidade que ainda não conectou conta bancária consegue honrar
+    // o cupom de 100% que ela mesma emitiu. Regra única em sale-gateway.ts.
+    const gatewayGate = resolveSaleGateway({
+      mode,
+      salesGateway: tenant.salesGateway,
+      asaasWebhookToken: tenant.asaasWebhookToken,
+      requiresSplit,
+      finalAmount,
+    })
+    if (!gatewayGate.ok) {
+      return NextResponse.json(
+        { error: gatewayGate.error, code: gatewayGate.code },
+        { status: gatewayGate.status },
+      )
+    }
+    const gateway = gatewayGate.gateway
+
+    // Asaas exige CPF do pagador e o Payment Brick (payMode) não reenvia o CPF
+    // digitado — sem CPF no cadastro a cobrança trava no /pagar. Só vale quando
+    // há cobrança: numa liberação gratuita não existe pagador a identificar.
+    // Antes da reserva do cupom, para não queimar um uso numa venda recusada.
+    if (!gatewayGate.free && gateway === "ASAAS" && !payer.cpf) {
+      return NextResponse.json(
+        {
+          error:
+            payer.kind === "GUARDIAN"
+              ? "Cadastre o CPF do responsável financeiro antes de comprar nesta loja"
+              : "Cadastre seu CPF no perfil antes de comprar nesta loja",
+          code: "STUDENT_CPF_REQUIRED",
+        },
+        { status: 400 },
+      )
+    }
+
+    // Reserva atômica DEPOIS dos gates: recusar a venda com a reserva já feita
+    // queimaria um uso numa compra que nem aconteceu.
+    if (couponToReserve) {
+      const reserved = await tryConsumeCoupon(couponToReserve)
+      if (!reserved) {
+        return NextResponse.json({ error: "Cupom esgotado", code: "COUPON_EXHAUSTED" }, { status: 400 })
+      }
+      couponId = couponToReserve
+      consumedCouponId = couponToReserve
+    }
 
     const effectiveType = effectivePaymentType(tenantCourse.paymentType, tenant, "vitrine")
     const isMonthly = effectiveType === "MONTHLY"

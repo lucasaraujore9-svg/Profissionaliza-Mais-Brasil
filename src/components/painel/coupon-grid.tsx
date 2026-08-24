@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { ArrowRight, CheckCircle2, Plus, Tag, TrendingUp } from "lucide-react"
+import { ArrowRight, CheckCircle2, Info, Plus, Tag, TrendingUp } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { PageHeader } from "@/components/painel/page-header"
 import { EmptyState } from "@/components/shared/empty-state"
@@ -13,7 +13,18 @@ import {
 import { CreateCouponModal } from "./create-coupon-modal"
 import { useCan } from "@/components/shared/permissions/permission-context"
 
-export function CouponGrid() {
+export interface CouponGridProps {
+  /**
+   * Loja sem conta de recebimento conectada. O cupom continua valendo — o que
+   * muda é o desfecho na vitrine: cupom de 100% matricula na hora (sem
+   * cobrança), qualquer valor restante cai no formulário de contato porque não
+   * há como cobrar. Dizer isso aqui evita o cupom de 30% que a unidade acha que
+   * está vendendo e não está.
+   */
+  checkoutUnavailable?: boolean
+}
+
+export function CouponGrid({ checkoutUnavailable = false }: CouponGridProps) {
   // O Vendedor da unidade tem `cupons.view` sem `cupons.manage`: ele acompanha
   // os cupons, não os cria. Antes, o botão aparecia para ele e a API respondia
   // 403 depois do clique.
@@ -133,6 +144,19 @@ export function CouponGrid() {
           ) : null
         }
       />
+
+      {checkoutUnavailable && (
+        <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          <Info className="mt-0.5 h-4 w-4 shrink-0" />
+          <p>
+            Sua loja ainda não tem conta de recebimento conectada. Os cupons
+            funcionam mesmo assim: um cupom de <strong>100%</strong> matricula o
+            aluno na hora, sem cobrança. Já um cupom parcial não fecha a venda —
+            o aluno cai no formulário de contato até você conectar o Mercado Pago
+            ou o Asaas em Configurações.
+          </p>
+        </div>
+      )}
 
       {/* Estatísticas */}
       {coupons.length > 0 && (

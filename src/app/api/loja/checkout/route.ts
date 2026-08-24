@@ -33,6 +33,7 @@ import {
 } from "@/lib/course-authoring/split-server"
 import { tenantPolo } from "@/lib/tenant/slug"
 import { isSellablePrice } from "@/lib/checkout/price-guard"
+import { resolveSaleGateway } from "@/lib/checkout/sale-gateway"
 import {
   buildGuardianWrite,
   guardianShape,
@@ -254,35 +255,6 @@ export const POST = withRequestContext(
     // silenciosamente venderia o curso sem repasse nenhum ao produtor.
     const requiresSplit = saleRequiresSplit(tenantCourse.course, tenantId)
 
-    // Asaas precisa do token do webhook p/ validar o callback antes de cobrar.
-    // O helper usa o invariante salesGateway===ASAAS ⇒ token presente; aqui
-    // confirmamos de forma autoritativa.
-    if (!requiresSplit && mode === "ASAAS" && !tenant.asaasWebhookToken) {
-      return NextResponse.json(
-        { error: "Gateway Asaas incompleto", code: "ASAAS_NOT_CONFIGURED" },
-        { status: 503 },
-      )
-    }
-
-    // Sem gateway próprio: a vitrine exibe o formulário de contato (e-mail p/ a
-    // revenda + lead) em vez de cobrar. Não há cobrança possível aqui. 503
-    // (serviço indisponível por configuração) — mesma semântica do antigo
-    // MP_NOT_CONFIGURED.
-    if (!requiresSplit && mode === "NONE") {
-      return NextResponse.json(
-        {
-          error: "Loja ainda não configurou o pagamento",
-          code: "CHECKOUT_UNAVAILABLE",
-        },
-        { status: 503 },
-      )
-    }
-
-    // A loja pode estar com o MP como gateway padrão e ainda assim vender curso
-    // de terceiro — desde que tenha a conta Asaas conectada, que é o que o gate
-    // abaixo confere.
-    const gateway: "MP" | "ASAAS" = requiresSplit ? "ASAAS" : (mode as "MP" | "ASAAS")
-
     const basePrice = Number(tenantCourse.price)
 
     // SAAS-004: trava explícita do preço positivo no caminho de receita.
@@ -329,6 +301,7 @@ export const POST = withRequestContext(
     let discountAmount = 0
     let couponId: string | null = null
     let finalAmountFromCoupon: number | null = null
+    let couponToReserve: string | null = null
     if (data.couponCode) {
       const now = new Date()
       const coupon = await prisma.coupon.findFirst({
@@ -373,20 +346,44 @@ export const POST = withRequestContext(
       })
       discountAmount = calc.discountAmount
       finalAmountFromCoupon = calc.finalAmount
+      couponToReserve = coupon.id
+    }
 
-      // Reserva atômica do cupom — evita estouro de maxUses em compras concorrentes.
-      const reserved = await tryConsumeCoupon(coupon.id)
+    const finalAmount = finalAmountFromCoupon ?? basePrice
+
+    // Gateway da venda — resolvido DEPOIS do desconto de propósito. Cupom que
+    // zera o valor não vai a gateway nenhum: a matrícula é liberada como bolsa,
+    // e por isso a unidade que ainda não conectou conta bancária consegue honrar
+    // o cupom de 100% que ela mesma emitiu. Regra única em sale-gateway.ts.
+    const gatewayGate = resolveSaleGateway({
+      mode,
+      salesGateway: tenant.salesGateway,
+      asaasWebhookToken: tenant.asaasWebhookToken,
+      requiresSplit,
+      finalAmount,
+    })
+    if (!gatewayGate.ok) {
+      return NextResponse.json(
+        { error: gatewayGate.error, code: gatewayGate.code },
+        { status: gatewayGate.status },
+      )
+    }
+    const gateway = gatewayGate.gateway
+
+    // Reserva atômica do cupom — evita estouro de maxUses em compras
+    // concorrentes. DEPOIS do gate acima: recusar a venda com a reserva já feita
+    // queimaria um uso numa compra que nem aconteceu.
+    if (couponToReserve) {
+      const reserved = await tryConsumeCoupon(couponToReserve)
       if (!reserved) {
         return NextResponse.json(
           { error: "Cupom esgotado", code: "COUPON_EXHAUSTED" },
           { status: 400 },
         )
       }
-      couponId = coupon.id
-      consumedCouponId = coupon.id
+      couponId = couponToReserve
+      consumedCouponId = couponToReserve
     }
-
-    const finalAmount = finalAmountFromCoupon ?? basePrice
 
     // Com desconto o rateio muda: a parte do produtor continua sendo calculada
     // sobre a tabela e a do vendedor absorve o abatimento — remontamos para que
