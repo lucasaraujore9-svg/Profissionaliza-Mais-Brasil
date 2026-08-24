@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { resolveAprendizado } from "@/lib/courses/aprendizado"
 import {
   buildBulkItems,
+  chunkBulkItems,
   draftFromRow,
   formatPrice,
   parsePrice,
@@ -152,23 +153,43 @@ export function CourseBulkEdit({
     }
     const items = built.items
 
+    // O lote vai FATIADO: a vitrine de uma unidade passa de 200 cursos e
+    // "Aplicar a todos" marca todas as linhas de uma vez, o que estourava o
+    // teto do endpoint e voltava um "Dados inválidos" seco. Envio sequencial
+    // (não em paralelo) para não abrir N conexões contra o pooler de uma vez.
+    const chunks = chunkBulkItems(items)
+    let savedCount = 0
+    const failed: { id: string; error: string }[] = []
+
     try {
-      const res = await fetch(endpoint, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ items }),
-      })
-      const json = await res.json().catch(() => null)
-      if (!res.ok) {
-        const base = json?.error ?? "Erro ao salvar"
-        setError(json?.detail ? `${base} (${json.detail})` : base)
-        return
+      for (const chunk of chunks) {
+        const res = await fetch(endpoint, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ items: chunk }),
+        })
+        const json = await res.json().catch(() => null)
+        if (!res.ok) {
+          const base = json?.error ?? "Erro ao salvar"
+          const detail = json?.detail ? ` (${json.detail})` : ""
+          // Um lote pode ter gravado antes de o seguinte ser recusado — dizer
+          // isso evita que a pessoa refaça tudo achando que nada foi salvo.
+          const partial =
+            savedCount > 0
+              ? ` ${savedCount} curso(s) já foram salvos antes da falha.`
+              : ""
+          setError(`${base}${detail}${partial}`)
+          return
+        }
+        savedCount += (json?.data?.updated as number | undefined) ?? 0
+        const chunkFailed = json?.data?.failed as
+          | { id: string; error: string }[]
+          | undefined
+        if (chunkFailed?.length) failed.push(...chunkFailed)
       }
+
       // Sucesso parcial: alguns cursos falharam. Mantém o modal aberto e avisa.
-      const failed = json?.data?.failed as
-        | { id: string; error: string }[]
-        | undefined
-      if (failed && failed.length > 0) {
+      if (failed.length > 0) {
         setError(
           `${failed.length} curso(s) não foram salvos: ${failed[0].error}`,
         )

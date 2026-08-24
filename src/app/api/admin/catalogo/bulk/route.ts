@@ -12,6 +12,7 @@ import {
   APRENDIZADO_MAX_ITEMS,
   APRENDIZADO_MAX_LEN,
 } from "@/lib/courses/aprendizado"
+import { BULK_EDIT_MAX_ITEMS } from "@/lib/courses/bulk-edit"
 import { requireAdmin } from "@/lib/auth/admin-guard"
 
 // PERF-013: nº de updates individuais concorrentes por lote (corta o wall-time
@@ -92,7 +93,13 @@ const itemSchema = z.object({
 })
 
 const bulkSchema = z.object({
-  items: z.array(itemSchema).min(1).max(500),
+  items: z
+    .array(itemSchema)
+    .min(1)
+    .max(
+      BULK_EDIT_MAX_ITEMS,
+      `Envie no maximo ${BULK_EDIT_MAX_ITEMS} cursos por vez.`,
+    ),
 })
 
 export const PUT = withRequestContext(
@@ -110,9 +117,12 @@ export const PUT = withRequestContext(
 
     const parsed = bulkSchema.safeParse(payload)
     if (!parsed.success) {
+      // `detail` e a UNICA parte que a planilha mostra na tela — ver o gemeo
+      // em /api/painel/cursos/bulk.
       return NextResponse.json(
         {
           error: "Dados inválidos",
+          detail: parsed.error.issues[0]?.message,
           fields: parsed.error.flatten().fieldErrors,
         },
         { status: 400 },

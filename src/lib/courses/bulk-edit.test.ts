@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest"
 import {
+  BULK_EDIT_MAX_ITEMS,
   buildBulkItems,
+  chunkBulkItems,
   draftFromRow,
   formatPrice,
   parsePrice,
+  type BulkItem,
   type BulkRowInput,
   type RowDraft,
 } from "./bulk-edit"
@@ -226,5 +229,36 @@ describe("buildBulkItems", () => {
     if (!res.ok) return
     expect(res.items).toHaveLength(1)
     expect(res.items[0].id).toBe("a")
+  })
+})
+
+describe("chunkBulkItems", () => {
+  const make = (n: number): BulkItem[] =>
+    Array.from({ length: n }, (_, i) => ({ id: `c${i}`, price: 39.9 }))
+
+  it("nao fatia quando cabe num envio so", () => {
+    const chunks = chunkBulkItems(make(212), BULK_EDIT_MAX_ITEMS)
+    expect(chunks).toHaveLength(1)
+    expect(chunks[0]).toHaveLength(212)
+  })
+
+  it("fatia no teto e preserva todos os itens, sem repetir nem perder", () => {
+    const items = make(1201)
+    const chunks = chunkBulkItems(items, BULK_EDIT_MAX_ITEMS)
+    expect(chunks).toHaveLength(3)
+    for (const chunk of chunks) {
+      expect(chunk.length).toBeLessThanOrEqual(BULK_EDIT_MAX_ITEMS)
+    }
+    const flat = chunks.flat()
+    expect(flat).toEqual(items)
+    expect(new Set(flat.map((i) => i.id)).size).toBe(items.length)
+  })
+
+  it("lista vazia nao gera envio nenhum", () => {
+    expect(chunkBulkItems([], BULK_EDIT_MAX_ITEMS)).toEqual([])
+  })
+
+  it("recusa tamanho de lote invalido", () => {
+    expect(() => chunkBulkItems(make(3), 0)).toThrow()
   })
 })

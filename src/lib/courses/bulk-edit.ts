@@ -45,6 +45,31 @@ export interface BulkItem {
   customAprendizado?: string[]
 }
 
+/**
+ * Teto de itens aceito por requisicao do endpoint de lote (os dois: painel e
+ * catalogo mae). O cliente FATIA o payload neste tamanho — nunca conte com a
+ * planilha caber num envio so: em 24/08/2026 a rede tinha 214 cursos e 108
+ * unidades com mais de 200 na vitrine, e o teto antigo do painel (200) fazia
+ * "Aplicar a todos" morrer com "Dados invalidos" para todas elas.
+ */
+export const BULK_EDIT_MAX_ITEMS = 500
+
+/**
+ * Fatia os itens em lotes de no maximo `size`. Lista vazia devolve `[]` — o
+ * chamador nao deve disparar requisicao nenhuma quando nada mudou.
+ */
+export function chunkBulkItems(
+  items: readonly BulkItem[],
+  size: number = BULK_EDIT_MAX_ITEMS,
+): BulkItem[][] {
+  if (size < 1) throw new Error("chunkBulkItems: size deve ser >= 1")
+  const chunks: BulkItem[][] = []
+  for (let i = 0; i < items.length; i += size) {
+    chunks.push(items.slice(i, i + size))
+  }
+  return chunks
+}
+
 export type BuildBulkItemsResult =
   | { ok: true; items: BulkItem[] }
   | { ok: false; error: string }

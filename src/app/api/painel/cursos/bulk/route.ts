@@ -14,6 +14,7 @@ import {
   APRENDIZADO_MAX_ITEMS,
   APRENDIZADO_MAX_LEN,
 } from "@/lib/courses/aprendizado"
+import { BULK_EDIT_MAX_ITEMS } from "@/lib/courses/bulk-edit"
 
 // PERF-013: nº de updates individuais concorrentes por lote.
 const BULK_CONCURRENCY = 10
@@ -89,7 +90,13 @@ const itemSchema = z.object({
 })
 
 const bulkSchema = z.object({
-  items: z.array(itemSchema).min(1).max(200),
+  items: z
+    .array(itemSchema)
+    .min(1)
+    .max(
+      BULK_EDIT_MAX_ITEMS,
+      `Envie no maximo ${BULK_EDIT_MAX_ITEMS} cursos por vez.`,
+    ),
 })
 
 export const PUT = withRequestContext(
@@ -108,9 +115,13 @@ export const PUT = withRequestContext(
 
     const parsed = bulkSchema.safeParse(payload)
     if (!parsed.success) {
+      // `detail` e a UNICA parte que a planilha mostra na tela. Sem ela, um
+      // lote grande demais (ou um campo fora de faixa) virava um "Dados
+      // invalidos" seco, sem dizer qual linha nem por que.
       return NextResponse.json(
         {
           error: "Dados inválidos",
+          detail: parsed.error.issues[0]?.message,
           fields: parsed.error.flatten().fieldErrors,
         },
         { status: 400 },
