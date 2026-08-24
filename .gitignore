@@ -60,4 +60,9 @@ scripts/sb-query.mjs
 # misc
 *.tsbuildinfo
 next-env.d.ts
-.env*
+# `.env*` foi acrescentado pelo `vercel link`. Trocado por `.env*.local`: o
+# padrao largo sombreava o `.env.example`, que E versionado — hoje ele segue
+# rastreado (o .gitignore nao desrastreia), mas bastaria alguem apaga-lo e
+# recria-lo para o arquivo sumir do repo em silencio. As linhas 13-20 ja cobrem
+# os arquivos de env reais.
+.env*.local
