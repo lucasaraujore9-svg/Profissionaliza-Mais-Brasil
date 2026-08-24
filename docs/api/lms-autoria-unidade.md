@@ -3,9 +3,10 @@
 > Complementa `docs/api/lms-webhook-catalogo.md`. Aqui está **o que o LMS
 > precisa expor** para que uma unidade (revenda) produza o próprio curso.
 >
-> **Estado:** implementado dos DOIS lados. Falta apenas ligar
-> `LMS_AUTHORING_ENABLED=true` na Vercel (ver §5).
-> **Data:** 2026-08-21 (PMB) · 2026-08-23 (LMS).
+> **Estado:** LIGADO e VALIDADO em produção (24/08/2026). `LMS_AUTHORING_ENABLED`
+> está `true` na Vercel. O que falta é habilitação COMERCIAL, unidade a unidade
+> (ver §5).
+> **Data:** 2026-08-21 (PMB) · 2026-08-23 (LMS) · 2026-08-24 (produção).
 
 ---
 
@@ -129,20 +130,38 @@ O mesmo campo deve viajar em `GET /api/v1/courses/:slug` e no delta
 - O webhook `course.published` / `course.updated` / `course.unpublished`
   continua igual — o PMB re-puxa o catálogo.
 
-## 5. Ligar em produção
+## 5. Estado em produção
 
-§3.1–§3.4 **já estão implementados** no LMS (`area-do-aluno-pmb`). O deploy de lá
-roda `prisma db push` no start, então a coluna `ownerTenantExternalId` e a tabela
-`AuthorToken` sobem sozinhas — ambas aditivas, sem backfill.
+**Já feito** (24/08/2026): LMS no ar com §3.1–§3.4, `LMS_AUTHORING_ENABLED=true`
+na Vercel, e o módulo **Produzir cursos** ligado na unidade `vocequervocepode`.
 
-1. Deploy do LMS.
-2. Setar `LMS_AUTHORING_ENABLED=true` na Vercel (PMB).
-3. Liberar o módulo **Produzir cursos** para a unidade de teste em
-   /admin/revendedores/[id] → "Vitrine & extras". Sem isso a aba "Meus cursos"
-   nem aparece para ela — é habilitação comercial, por unidade.
-4. Conferir na unidade de teste: criar curso → "Conteúdo" abre a autoria do LMS
-   → subir uma aula com vídeo → gerar matriz → publicar → o curso aparece na
-   vitrine dela.
+**Para liberar outra unidade:** /admin/revendedores/[id] → aba "Vitrine &
+extras" → *Produzir cursos*. É habilitação comercial, uma a uma; sem ela a aba
+"Meus cursos" nem aparece no painel da unidade.
+
+### O que foi validado contra produção
+
+| # | Verificação | Resultado |
+|---|---|---|
+| 1 | `POST /courses` com dono desconhecido | 400 |
+| 2 | Casca criada com dono, em rascunho | ok |
+| 3 | Curso com dono NÃO entra em `GET /courses` enquanto rascunho | ok |
+| 4 | `author-token` para curso de OUTRA unidade | 403 |
+| 5 | `author-token` para curso do catálogo da PMB | 403 |
+| 6 | `PATCH published` em curso do catálogo da PMB | 403 |
+| 7 | SSO de uso único; replay | `/login?erro=autoria` |
+| 8 | Sessão de autor abre o PRÓPRIO curso | 200 |
+| 9 | Upload de capa no próprio curso | grava no MinIO |
+| 10 | Upload em curso de outro dono | 403 |
+| 11 | `presign`/`complete` em aula de outro dono | 403 |
+| 12 | Upload sem sessão | 401 |
+
+### O que ainda depende de um navegador
+
+O caminho pelo PAINEL (a unidade logada clicando em Catálogo → Meus cursos →
+Novo curso → Conteúdo) não foi percorrido com sessão real — a cadeia
+servidor-a-servidor acima cobre tudo o que ele aciona, mas o clique em si e a
+tela ficam para uma conferência sua.
 
 ### O que NÃO ligar junto
 

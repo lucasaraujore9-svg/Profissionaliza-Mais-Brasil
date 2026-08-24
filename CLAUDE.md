@@ -917,6 +917,61 @@ cobranca avulsa com 2 linhas, carne 3x conferindo o split por parcela, carteira
 inexistente (tem que falhar no ato, nao na liquidacao) e estorno conferindo a
 reversao automatica.
 
+### Autoria de curso pela unidade LIGADA em producao (2026-08-24)
+
+A camada comercial estava pronta desde 21/08, mas o LMS nao tinha nada do
+contrato: `POST /api/v1/courses` e `PATCH /courses/:id` respondiam **405**,
+`POST /sso/author-token` **404**, e `Course` **nao tinha dono**. A area
+`/autoria` de la era `requireAdmin()` — o proprio codigo dizia "nao e escopada
+por revenda". Com a flag ligada naquele estado, a unidade criaria a casca e o
+botao "Conteudo" nao abriria nada.
+
+**Os dois lados agora:**
+
+- **LMS** (`Area do Aluno PMB`, repo separado): `Course.ownerTenantExternalId`
+  (null = catalogo da plataforma), os tres endpoints, o campo no
+  catalogo/detalhe/`day-update`, e a sessao `role: "author"` presa a UM curso
+  (`src/lib/authoring-scope.ts`). **A invariante:** passa so quando
+  `ownerTenantExternalId === session.tenantExternalId` **E**
+  `id === session.courseId`. A primeira isola o catalogo da plataforma POR
+  CONSTRUCAO — la o dono e `null`. O curso dono e resolvido subindo pela
+  RELACAO da entidade (aula → modulo → curso), nunca pelo `courseId` do
+  FormData, que e do cliente.
+- **PMB**: `Tenant.courseAuthoringEnabled` — habilitacao COMERCIAL por unidade,
+  aba "Vitrine & extras" de /admin/revendedores/[id], molde de
+  `canSellResellers`. **Nao se confunde com `cursosAutorais.*`**, que e
+  permissao de PESSOA: o preset do dono e `owner: ALL`, entao sem a chave da
+  unidade TODA revenda produziria curso. Guard unico em
+  `lib/course-authoring/module-gate.ts`.
+
+**Publicar e BLOQUEANTE, nao best-effort.** O LMS recusa (409) curso sem aula,
+matriz ou categoria. O PMB espelhava isso em `afterResponse(...).catch(log)`:
+a recusa virava uma linha de log e o curso VAZIO ia para a vitrine — o aluno
+compraria e cairia num curso sem conteudo. Hoje o publicar AGUARDA o LMS e
+acontece ANTES da escrita na vitrine (409 devolve a mensagem DELE, que lista o
+que falta; qualquer outra falha e 502 fail-closed). Despublicar segue
+best-effort de proposito: tirar de venda e a direcao SEGURA, e bloquear
+impediria o produtor de tirar do ar o proprio curso porque a outra ponta caiu.
+
+**Validado ponta a ponta em producao (24/08)**, com a unidade
+`vocequervocepode`: casca com dono criada; curso fora do catalogo global
+(rascunho); token recusado para outra unidade (403); SSO de uso unico (replay →
+`/login?erro=autoria`); upload de capa gravando no MinIO; upload, presign e
+complete recusados (403) para curso e aula de outro dono; sem sessao 401.
+
+**Dois defeitos so apareceram na validacao, nao nos testes:** o SSO mandava o
+autor para `/curso-autoria/<id>` (o grupo `(autoria)` nao entra na URL — o
+editor e `/autoria/curso/<id>`), entregando um 404 com o token ja queimado; e as
+telas administrativas mandavam o autor para `/login`, beco sem saida para quem
+nao tem senha la (agora `requireAdminArea()` devolve ao curso dele).
+
+**Cuidado de deploy — a integracao Git da Vercel caiu em silencio.** Entre 21 e
+24/08 o projeto ficou com `link: null`: push em main deixou de gerar deploy e
+producao serviu codigo velho por 3 dias enquanto 4 commits "subiam". **Push
+aceito no GitHub NAO prova deploy** — conferir
+`gh api repos/<owner>/<repo>/deployments --jq .[0]`. Religado com
+`npx vercel git connect --yes`.
+
 ### Bugs conhecidos (pendentes)
 
 - **Middleware file convention deprecado** no Next 16 (usar `proxy` em vez de `middleware`).
