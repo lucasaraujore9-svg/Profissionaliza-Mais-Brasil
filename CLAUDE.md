@@ -1000,6 +1000,38 @@ aceito no GitHub NAO prova deploy** — conferir
 `gh api repos/<owner>/<repo>/deployments --jq .[0]`. Religado com
 `npx vercel git connect --yes`.
 
+### Identidade da unidade dentro do LMS (2026-08-24)
+
+So `brandName` e `logoUrl` chegavam a plataforma de aulas: o aluno via a logo da
+unidade sobre a paleta VERDE da PMB, e — desde a autoria — a propria unidade
+editava o curso dela numa casca com a marca da plataforma ("Minha Escola").
+
+- `TenantLink` ganhou `primaryColor`/`secondaryColor` (aditivo, `""` = padrao),
+  enviados por `PUT /api/v1/tenants/:id`.
+- **O mapeamento e COPIADO da vitrine do PMB** (`lms: src/lib/tenant-theme.ts` x
+  `pmb: src/app/loja/layout.tsx`): a primaria colapsa a rampa
+  `--color-pmb-green*`, a secundaria colapsa `--color-pmb-gold*`. As duas
+  aplicacoes compartilham a MESMA paleta — repetir o mapeamento e o que faz a
+  unidade ver a MESMA cor nos dois lugares. Sobrescrever a RAMPA (e nao so
+  `--primary`) e o que re-skina a casca: a barra lateral da autoria pinta com
+  `--color-pmb-green-700` direto.
+- Vale para a autoria E para a area do aluno, incluindo o `<head>`
+  (`<title>`, `application-name`, `theme-color`) — a aba dizia "Minha Escola"
+  enquanto a pagina ja mostrava a marca da unidade.
+- **A cor vem de outro sistema e entra dentro de `<style>`**: `safeHex` so aceita
+  `#RGB`/`#RRGGBB` e DESCARTA o resto. Um `}` solto fecharia a regra e o resto
+  viraria CSS arbitrario na pagina de todo aluno daquela revenda.
+- **Campo AUSENTE preserva; `""` limpa.** Das quatro chamadas de
+  `syncTenantBrandingToLms`, tres nao conhecem as cores (upload de logo x2 e
+  criacao da revenda) — por isso `?? undefined` e nao `?? ""`, senao trocar a
+  logo apagaria a identidade. Ha teste, verificado por mutacao.
+- **Backfill feito (88/88)**: a cor so chegaria ao LMS quando a unidade salvasse
+  a Personalizacao. Decisao do dono: empurrar todas, iguais a vitrine —
+  inclusive as 43 que nunca escolheram cor e estao no **azul padrao do banco**
+  (`#2563eb`), que ja e o que a vitrine delas mostra. (Cuidado: o default do
+  schema e AZUL, nao o verde da plataforma — por isso `isCustomColor` compara com
+  `#025918` e praticamente toda unidade conta como "custom".)
+
 ### Bugs conhecidos (pendentes)
 
 - **Middleware file convention deprecado** no Next 16 (usar `proxy` em vez de `middleware`).
