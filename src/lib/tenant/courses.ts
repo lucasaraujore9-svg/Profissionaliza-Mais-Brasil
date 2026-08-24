@@ -335,6 +335,12 @@ export interface TenantCourseDetail extends TenantCourseListItem {
    * senão o padrão da PMB. Vazio => a página usa o texto genérico.
    */
   aprendizado: string[]
+  /**
+   * Unidade que PRODUZIU o curso (`Course.authorTenantId`). null = catalogo da
+   * PMB, que e a esmagadora maioria. Alimenta a nota de responsabilidade pelo
+   * conteudo na pagina do curso.
+   */
+  authorTenantName: string | null
 }
 
 export async function getTenantCourseBySlug(
@@ -354,6 +360,7 @@ export async function getTenantCourseBySlug(
         course: {
           include: {
             courseLessons: { orderBy: { ordem: "asc" } },
+            authorTenant: { select: { name: true } },
           },
         },
       },
@@ -408,6 +415,7 @@ export async function getTenantCourseBySlug(
         ordem: l.ordem,
       })),
       matriz: tc.course.matrizCurricular,
+      authorTenantName: tc.course.authorTenant?.name ?? null,
       // Hierarquia: revenda > PMB. Lista vazia da revenda = "herda a da PMB".
       aprendizado:
         tc.customAprendizado.length > 0

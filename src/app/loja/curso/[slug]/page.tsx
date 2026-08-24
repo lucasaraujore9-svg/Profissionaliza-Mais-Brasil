@@ -112,6 +112,7 @@ export default async function CoursePage({ params }: CoursePageProps) {
     lessons: course.lessons,
     matriz: course.matriz,
     aprendizado: course.aprendizado,
+    authorName: course.authorTenantName,
   }
 
   // CTA sempre aponta para o checkout DA VITRINE. Quando a unidade não tem

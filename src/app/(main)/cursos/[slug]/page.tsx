@@ -28,6 +28,7 @@ async function loadCurso(slug: string): Promise<LoadedCurso | null> {
       where: { slug },
       include: {
         courseLessons: { orderBy: { ordem: "asc" } },
+        authorTenant: { select: { name: true } },
       },
     })
     if (!c || c.status === "INATIVO" || c.hiddenMain) return null
@@ -86,6 +87,11 @@ async function loadCurso(slug: string): Promise<LoadedCurso | null> {
       matriz: c.matrizCurricular,
       // Vitrine mãe: só o padrão global (não há camada de revenda aqui).
       aprendizado: c.aprendizado,
+      // Curso produzido por uma unidade também pode ser vendido AQUI (o autor
+      // escolhe `distribution: OWN_AND_PMB`). A nota de responsabilidade tem
+      // que aparecer na vitrine da PMB pelo mesmo motivo que na da revenda —
+      // aqui até mais, porque o comprador está na marca da plataforma.
+      authorName: c.authorTenant?.name ?? null,
       hasPrice: price > 0,
     }
   } catch {

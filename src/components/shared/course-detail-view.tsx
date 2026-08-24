@@ -16,6 +16,7 @@ import {
 } from "lucide-react"
 import { resolveAprendizado } from "@/lib/courses/aprendizado"
 import { RegulamentacaoNote } from "@/components/shared/regulamentacao-note"
+import { AutoriaNote } from "@/components/shared/autoria-note"
 
 export interface CourseDetailData {
   slug: string
@@ -49,6 +50,11 @@ export interface CourseDetailData {
    * seção cai no texto genérico APRENDIZADO_DEFAULT.
    */
   aprendizado?: string[]
+  /**
+   * Unidade que PRODUZIU o curso, quando ele nao e do catalogo da PMB. Alimenta
+   * a nota de responsabilidade pelo conteudo. Ausente/null = curso da PMB.
+   */
+  authorName?: string | null
 }
 
 interface CourseDetailViewProps {
@@ -435,6 +441,11 @@ export function CourseDetailView({
                 ))}
               </div>
             </div>
+
+            {/* Responsabilidade pelo conteudo — so em curso de autoria de
+                unidade. Vem ANTES da regulamentacao: quem compra precisa saber
+                de quem e o conteudo antes de ler a natureza legal dele. */}
+            <AutoriaNote authorName={course.authorName} className="mb-6" />
 
             {/* Regulamentacao (nota legal dos cursos livres) */}
             <RegulamentacaoNote brandName={brandName} />
