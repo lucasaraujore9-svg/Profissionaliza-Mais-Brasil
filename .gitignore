@@ -60,3 +60,4 @@ scripts/sb-query.mjs
 # misc
 *.tsbuildinfo
 next-env.d.ts
+.env*

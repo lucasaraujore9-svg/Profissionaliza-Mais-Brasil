@@ -21,6 +21,7 @@ import {
 } from "@/lib/course-authoring/course-payload"
 import { syncTenantWallet } from "@/lib/course-authoring/wallet"
 import { isLmsAuthoringEnabled, setLmsCoursePublished } from "@/lib/lms/authoring"
+import { LmsApiError } from "@/lib/lms/errors"
 import {
   ensureCourseForResellers,
   ensureTenantCourses,
@@ -156,6 +157,46 @@ export const PATCH = withRequestContextParams<{ id: string }>(
     const isPublished = nextStatus === "PUBLISHED"
     const floor = minSalePrice(terms)
 
+    // ── Publicar: a plataforma de aulas decide ANTES de a vitrine mudar ──────
+    //
+    // A checagem acima só sabe que a CASCA existe (`lmsCourseId`), não que há
+    // aula, matriz e categoria — quem sabe isso é a plataforma de aulas, e ela
+    // recusa com 409. Espelhar depois, em `afterResponse` best-effort (como o
+    // ramo de despublicar abaixo ainda faz), engolia essa recusa num log: o
+    // curso VAZIO ficava à venda na vitrine, e o aluno pagaria por um curso sem
+    // conteúdo — exatamente o que este fluxo inteiro existe para evitar.
+    //
+    // A mensagem da recusa é repassada ao produtor porque ela LISTA o que
+    // falta ("Defina o valor sugerido…", "O curso precisa de ao menos uma
+    // aula."). Um "não foi possível publicar" genérico não diz o que fazer.
+    if (isPublished && isLmsAuthoringEnabled() && course.lmsCourseId) {
+      try {
+        await setLmsCoursePublished(course.lmsCourseId, true)
+      } catch (err) {
+        const status = err instanceof LmsApiError ? err.statusCode : undefined
+        contextLogger().warn(
+          { event: "course_authoring.lms_publish_refused", courseId: course.id, status, err },
+          "plataforma de aulas recusou a publicação",
+        )
+        // 409 = o curso está incompleto (acionável). Qualquer outra falha é
+        // indisponibilidade: fail-closed, porque publicar aqui e não lá deixa
+        // um curso à venda que o aluno não conseguiria acessar.
+        return NextResponse.json(
+          {
+            error:
+              status === 409
+                // `apiError` e nao `message`: esta traz o prefixo "HTTP 409:",
+                // que nao diz nada ao produtor.
+                ? ((err as LmsApiError).apiError ??
+                   "Complete o conteúdo do curso na plataforma de aulas antes de publicá-lo.")
+                : "A plataforma de aulas não respondeu agora. Tente publicar novamente em instantes.",
+            code: status === 409 ? "CONTENT_NOT_READY" : "LMS_UNAVAILABLE",
+          },
+          { status: status === 409 ? 409 : 502 },
+        )
+      }
+    }
+
     const updated = await prisma.course.update({
       where: { id: course.id },
       data: {
@@ -250,12 +291,16 @@ export const PATCH = withRequestContextParams<{ id: string }>(
       })
     }
 
-    if (isLmsAuthoringEnabled() && course.lmsCourseId) {
+    // Despublicar espelha best-effort, e a assimetria é deliberada: tirar de
+    // venda é a direção SEGURA. Falhar aqui deixa o curso publicado lá e fora
+    // da vitrine aqui — inofensivo. Bloquear seria pior: o produtor não
+    // conseguiria tirar do ar o próprio curso porque a outra ponta caiu.
+    if (!isPublished && isLmsAuthoringEnabled() && course.lmsCourseId) {
       afterResponse(() =>
-        setLmsCoursePublished(course.lmsCourseId as string, isPublished).catch((err) => {
+        setLmsCoursePublished(course.lmsCourseId as string, false).catch((err) => {
           contextLogger().warn(
-            { event: "course_authoring.lms_publish_failed", courseId: course.id, err },
-            "não foi possível espelhar a publicação no LMS",
+            { event: "course_authoring.lms_unpublish_failed", courseId: course.id, err },
+            "não foi possível espelhar a despublicação no LMS",
           )
         }),
       )
