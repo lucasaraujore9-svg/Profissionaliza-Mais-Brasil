@@ -139,9 +139,19 @@ export const POST = withRequestContext(
         // salvar a vitrine. Uma unidade anterior à integração, que nunca abriu
         // a tela de vitrine, não estaria registrada e ficaria sem conseguir
         // criar curso nenhum, com um 502 genérico na cara dela.
+        // Leva a identidade INTEIRA (nome, logo e cores): e nesta area que a
+        // unidade vai editar o curso dela, e a casca de la se pinta com o que
+        // este sync gravar. Sem as cores ela trabalharia sobre a paleta da PMB.
         const tenant = await prisma.tenant.findUnique({
           where: { id: ctx.tenantId },
-          select: { id: true, slug: true, name: true, logoUrl: true },
+          select: {
+            id: true,
+            slug: true,
+            name: true,
+            logoUrl: true,
+            primaryColor: true,
+            secondaryColor: true,
+          },
         })
         if (tenant) await syncTenantBrandingToLms(tenant)
 
