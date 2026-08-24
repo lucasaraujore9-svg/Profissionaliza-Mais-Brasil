@@ -917,6 +917,34 @@ cobranca avulsa com 2 linhas, carne 3x conferindo o split por parcela, carteira
 inexistente (tem que falhar no ato, nao na liquidacao) e estorno conferindo a
 reversao automatica.
 
+### Cancelamento por inadimplencia EXECUTADO + cron diario (2026-08-24)
+
+Primeira execucao real da regra escrita em 21/08 — ela nunca tinha rodado,
+porque a integracao Git da Vercel estava caida e producao servia codigo velho.
+
+- **13 unidades canceladas**, todas SUSPENDED, entre 9 e 32 dias de atraso
+  (~R$ 2.994/mes que ja nao entrava). Dry-run rodado antes: bateu exatamente com
+  a lista, zero adiadas. Cada uma com `audit_logs` action `tenant.cancel`,
+  `actorRole: SYSTEM`, `payloadAfter.origem = "auto_inadimplencia"`.
+- **Nenhum aluno foi tocado** — politica ausente => MANTEM o acesso
+  (`shouldBlockStudentsOnCancel`). Os 8 bloqueados ja estavam desde a SUSPENSAO
+  (a regra e oposta la, de proposito). Verificado por `updated_at`.
+- **Zero cobranca OVERDUE restante**; as abertas foram para `DELETING`
+  aguardando o webhook `PAYMENT_DELETED`. O `asaas_subscription_id` continua
+  gravado por historico — a assinatura foi cancelada no Asaas, e isso e
+  pre-requisito: `cancelTenant` aborta ANTES de mexer no banco se o Asaas falhar.
+- **`pg_net` estoura o timeout de 60s dele** enquanto o sweep ainda roda (13
+  cancelamentos x 2-4 chamadas ao Asaas). O job COMPLETA na Vercel (maxDuration
+  300), mas `net._http_response` fica com `status_code` null. Para conferir o
+  resultado, olhe o BANCO (status das unidades / `audit_logs`), nao a resposta
+  HTTP.
+
+**Cron passou de `0 */6 * * *` para `1 3 * * *`** = 00:01 de Brasilia. O horario
+nao e decorativo: a regua conta em DIA CIVIL BRASILEIRO, e as 03:01 UTC o dia ja
+virou no Brasil. `1 0 * * *` (00:01 UTC = 21:01 BRT do dia anterior) avaliaria o
+dia brasileiro ANTERIOR e atrasaria tudo em um dia. Efeito colateral aceito: a
+SUSPENSAO (D+3) sai pelo mesmo job e agora pode demorar ate 24h.
+
 ### Autoria de curso pela unidade LIGADA em producao (2026-08-24)
 
 A camada comercial estava pronta desde 21/08, mas o LMS nao tinha nada do

@@ -28,8 +28,18 @@ select cron.schedule('pmb-sync-cursos', '0 6 * * *',
 select cron.schedule('pmb-sync-progresso', '0 7 * * *',
   $$ select app_internal.run_cron('/api/cron/sync-progresso') $$);
 
--- Suspensão de tenants inadimplentes (a cada 6h)
-select cron.schedule('pmb-sweep-tenants-overdue', '0 */6 * * *',
+-- Inadimplência da unidade: suspende (D+3), avisa (D+5) e CANCELA (D+7).
+-- Diário às 00:01 de BRASÍLIA = 03:01 UTC (o banco roda em UTC).
+--
+-- O horário não é decorativo: a régua inteira (`daysUntilBrDay`/`brDayStartUtc`)
+-- conta em DIA CIVIL BRASILEIRO. Às 03:01 UTC o dia já virou no Brasil, então a
+-- unidade que completa D+7 hoje é tratada no começo desse dia. Agendar
+-- `1 0 * * *` (00:01 UTC = 21:01 BRT do dia ANTERIOR) faria o job avaliar o dia
+-- brasileiro anterior e o cancelamento sairia um dia depois do esperado.
+--
+-- Era `0 */6 * * *` até 24/08/2026. A troca para diário atrasa em até 24h a
+-- SUSPENSÃO (D+3), que sai pelo mesmo job — decisão do dono.
+select cron.schedule('pmb-sweep-tenants-overdue', '1 3 * * *',
   $$ select app_internal.run_cron('/api/cron/sweep-tenants-overdue') $$);
 
 -- Bloqueio de alunos inadimplentes (diário 07:00)
