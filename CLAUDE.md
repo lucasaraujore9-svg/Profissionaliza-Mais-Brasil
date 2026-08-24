@@ -1032,6 +1032,30 @@ editava o curso dela numa casca com a marca da plataforma ("Minha Escola").
   schema e AZUL, nao o verde da plataforma — por isso `isCustomColor` compara com
   `#025918` e praticamente toda unidade conta como "custom".)
 
+### Responsabilidade pelo conteudo de curso de autoria (2026-08-24)
+
+O catalogo passou a ter DUAS origens que ninguem distingue de fora: curso da PMB
+(curado) e curso que uma unidade produziu por conta propria. Tres superficies
+passam a dizer de quem e o conteudo — e de quem NAO e:
+
+- **Vitrine (PMB e revenda)** — `AutoriaNote`, bloco completo na pagina do curso:
+  responsabilidade integral da unidade pelo material E pela autoria,
+  originalidade, veracidade, atualizacao e adequacao legal (incl. direitos
+  autorais e de imagem); isenta NOMINALMENTE as tres marcas e diz para quem
+  reclamar. Componente SEPARADO da `RegulamentacaoNote` de proposito: aquela e
+  texto juridico fechado sobre curso livre e vale para TODO curso.
+- **Certificado** — linha discreta no VERSO, dentro do corpo da fundamentacao
+  legal (6.8pt). A FRENTE e do aluno: uma isencao ali mudaria o tom do documento
+  que ele mostra a um empregador. `authorName` != `unidade` (quem produziu vs.
+  quem emitiu/vendeu). **Exigiu bump de `RENDER_REVISION_AT` para 2026-08-25** —
+  sem ele a nota so sairia em certificados NOVOS.
+- **Area do aluno (LMS)** — "Conteudo de {unidade}" como item de META no card,
+  por ULTIMO. Bloco juridico em cada card competiria com o ato de estudar.
+
+**Nenhuma das tres renderiza quando o curso e da PMB** (a esmagadora maioria):
+uma nota dizendo que a plataforma "nao se responsabiliza" impressa num curso da
+PROPRIA plataforma seria pior que nota nenhuma. Verificado por mutacao nas tres.
+
 ### Bugs conhecidos (pendentes)
 
 - **Middleware file convention deprecado** no Next 16 (usar `proxy` em vez de `middleware`).
