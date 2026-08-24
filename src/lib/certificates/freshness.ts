@@ -20,7 +20,7 @@ const SETTINGS_ID = "default"
  * gera PDFs com o código antigo; ancorar em "agora" os deixaria marcados como
  * atuais e o conteúdo errado sobreviveria à correção.
  */
-export const RENDER_REVISION_AT = new Date("2026-08-15T00:00:00Z")
+export const RENDER_REVISION_AT = new Date("2026-08-25T00:00:00Z")
 
 export interface CertificatePdfRef {
   id: string

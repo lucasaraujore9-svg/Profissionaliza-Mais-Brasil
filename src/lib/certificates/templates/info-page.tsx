@@ -20,6 +20,31 @@ export const LEGAL_BASIS_TEXT =
   "de pós-graduação."
 
 /**
+ * Nota de responsabilidade pelo conteudo, impressa no verso quando o curso foi
+ * produzido por uma UNIDADE (e nao pelo catalogo da PMB).
+ *
+ * Exportada e pura para poder ser testada: o resto do verso e componente
+ * @react-pdf, que nao renderiza em DOM. Mesmo motivo de `LEGAL_BASIS_TEXT` ser
+ * uma constante e nao texto solto no JSX.
+ *
+ * Devolve `null` quando nao ha autor — o caso da esmagadora maioria dos
+ * certificados. Uma isencao impressa num curso da PROPRIA plataforma seria pior
+ * que nota nenhuma.
+ */
+export function authorResponsibilityNote(
+  authorName?: string | null,
+): string | null {
+  const autor = authorName?.trim()
+  if (!autor) return null
+  return (
+    `Conteúdo programático de autoria e responsabilidade de ${autor}. ` +
+    "A Profissionaliza Mais Brasil, a Livre Cursos e o Grupo Bolsa Mais Brasil " +
+    "atuam como plataforma de tecnologia e distribuição, não respondendo pelo " +
+    "conteúdo, pela autoria ou pela originalidade do material deste curso."
+  )
+}
+
+/**
  * Percentual de conclusão impresso no certificado — SEMPRE 100%.
  *
  * Antes isto era `Enrollment.progressPercent` lido AO VIVO na hora de gerar o
@@ -83,6 +108,7 @@ export function certificateInfoPage(data: CertificateRenderData): ReactElement {
   const pct = CERTIFICATE_COMPLETION_PERCENT
   const displayUrl = data.validationUrl.replace(/^https?:\/\//, "")
   const matriz = (data.matrizCurricular ?? []).filter((s) => s.trim().length > 0)
+  const authorNote = authorResponsibilityNote(data.authorName)
   const hasMatriz = matriz.length > 0
   const d = matrizDensity(matriz.length)
 
@@ -206,6 +232,14 @@ export function certificateInfoPage(data: CertificateRenderData): ReactElement {
       lineHeight: 1.45,
       color: "#4B5563",
       textAlign: "justify",
+    },
+    // Um degrau abaixo da fundamentacao legal: mesma familia, menor e mais
+    // clara. "Bem sutil" e o pedido — a nota informa sem competir com o
+    // documento.
+    authorNote: {
+      fontSize: 6.8,
+      color: "#6B7280",
+      marginTop: 5,
     },
     // Matriz curricular (conteúdo programático) — grade de densidade adaptativa
     matrizList: {
@@ -351,6 +385,15 @@ export function certificateInfoPage(data: CertificateRenderData): ReactElement {
         {/* Fundamentação legal */}
         <Text style={styles.sectionTitle}>{LEGAL_BASIS_TITLE}</Text>
         <Text style={styles.legalText}>{LEGAL_BASIS_TEXT}</Text>
+
+        {/* Responsabilidade pelo conteudo — so em curso produzido por uma
+            unidade. Fica AQUI, no verso e no mesmo corpo da fundamentacao
+            legal, porque e nota de rodape: a frente do certificado e do aluno,
+            e uma isencao impressa nela mudaria o tom do documento que ele vai
+            mostrar a um empregador. */}
+        {authorNote ? (
+          <Text style={[styles.legalText, styles.authorNote]}>{authorNote}</Text>
+        ) : null}
 
         <View style={styles.spacer} />
 

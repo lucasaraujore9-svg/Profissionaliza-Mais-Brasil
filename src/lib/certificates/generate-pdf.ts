@@ -59,6 +59,13 @@ export interface CertificateRenderFields {
   code: string
   /** Nome da unidade emissora exibido no certificado. */
   unidade: string
+  /**
+   * Unidade que PRODUZIU o conteudo (`Course.authorTenantId`). Ausente = curso
+   * do catalogo da PMB. Nao confundir com `unidade`, que e quem EMITIU o
+   * certificado (quem vendeu) — num curso de autoria de terceiro os dois sao
+   * unidades diferentes, e e exatamente esse o caso que a nota explica.
+   */
+  authorName?: string | null
 }
 
 /**
@@ -106,6 +113,8 @@ export async function renderCertificateBuffer(
     completionDateFormatted: upperCert(formatCompletionDate(fields.completionDate)),
     code: upperCert(fields.code),
     unidade: upperCert(fields.unidade),
+    // Sem `upperCert`: e frase de rodape, nao um dado do certificado.
+    authorName: fields.authorName ?? null,
     validationUrl,
     qrCodeDataUrl,
     bodyResolved,
@@ -136,7 +145,12 @@ export async function generateAndUploadPdf(
     where: { id: certificateId },
     include: {
       tenant: { select: { name: true, slug: true } },
-      course: { select: { matrizCurricular: true } },
+      course: {
+        select: {
+          matrizCurricular: true,
+          authorTenant: { select: { name: true } },
+        },
+      },
     },
   })
   if (!cert) {
@@ -166,6 +180,7 @@ export async function generateAndUploadPdf(
     completionDate: cert.completionDate,
     code: cert.code,
     unidade,
+    authorName: cert.course?.authorTenant?.name ?? null,
   })
   const path = pdfPathFor(cert.tenantId, cert.id)
   const upload = await uploadCertificatePdf(path, buffer)

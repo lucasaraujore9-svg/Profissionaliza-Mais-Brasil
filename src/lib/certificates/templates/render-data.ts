@@ -21,6 +21,15 @@ export interface CertificateRenderData {
   completionDateFormatted: string
   code: string
   unidade: string
+  /**
+   * Unidade que PRODUZIU o conteudo, quando o curso nao e do catalogo da PMB.
+   * Vira uma linha discreta no verso, junto da fundamentacao legal. Ausente =
+   * curso da PMB (a esmagadora maioria) e nada e impresso.
+   *
+   * NAO vai em MAIUSCULO como os demais campos: e texto corrido de nota de
+   * rodape, nao um dado do certificado.
+   */
+  authorName?: string | null
   validationUrl: string
   qrCodeDataUrl: string | null
   /**
