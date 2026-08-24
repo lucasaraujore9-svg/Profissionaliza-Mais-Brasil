@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
+import type { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { resolveReferrerFromCookie } from "@/lib/referrals/capture"
 import { contextLogger } from "@/lib/logger"
@@ -15,13 +16,120 @@ import {
   resellerListWhere,
 } from "@/lib/admin/resellers/list-query"
 import {
+  compareNextDue,
+  parseResellerSort,
+  resellerOrderBy,
+  type ResellerSort,
+} from "@/lib/admin/resellers/sort"
+import {
   getOpenChargesByTenant,
   payUrlFor,
   rollupOpenCharges,
+  type TenantCharge,
 } from "@/lib/tenant-billing/charges"
 import { PMB_TENANT_SLUG } from "@/lib/pmb-config"
 import { createReseller } from "@/lib/resellers/create"
 import { requireAdmin, type AdminContext } from "@/lib/auth/admin-guard"
+
+/** Teto de linhas da listagem. A ordenação é aplicada ANTES do corte. */
+const LIST_LIMIT = 200
+
+/**
+ * Allowlist de colunas da linha. Um `const` só porque a ordenação por
+ * vencimento carrega as linhas por uma segunda consulta — dois `select`
+ * escritos à mão divergiriam no primeiro campo novo, e a lista passaria a
+ * mostrar coisas diferentes conforme a coluna que a pessoa clicou.
+ */
+const TENANT_SELECT = {
+  id: true,
+  name: true,
+  slug: true,
+  status: true,
+  planValue: true,
+  createdAt: true,
+  owner: { select: { email: true, name: true } },
+  // Indicacao 1-nivel: nome da revenda que indicou esta (badge na lista).
+  referrerTenantId: true,
+  referrer: { select: { name: true } },
+  accountManagerId: true,
+  accountManager: { select: { id: true, name: true } },
+  salesUserId: true,
+  salesUser: { select: { id: true, name: true } },
+  _count: { select: { students: true } },
+} satisfies Prisma.TenantSelect
+
+type ResellerPageRow = Prisma.TenantGetPayload<{ select: typeof TENANT_SELECT }>
+
+/**
+ * As linhas da página + as cobranças em aberto delas.
+ *
+ * Duas estratégias, pela mesma razão: a página é o TOPO da ordenação, não as
+ * 200 mais novas reordenadas depois.
+ *
+ * - Coluna do banco (nome, MRR, alunos, status, gerente, cadastro): o `orderBy`
+ *   e o `take` vão juntos na consulta.
+ * - Vencimento: não é coluna do `Tenant` (o `nextDueDate` do Asaas é da
+ *   assinatura e só sai numa chamada live, inviável por linha). Aqui a próxima
+ *   cobrança de TODAS as unidades do filtro é lida primeiro — em UMA consulta,
+ *   não uma por unidade —, a ordem é decidida em memória e só então as linhas
+ *   da página são carregadas.
+ */
+async function loadResellerPage(
+  where: Prisma.TenantWhereInput,
+  sort: ResellerSort,
+): Promise<{
+  tenants: ResellerPageRow[]
+  openByTenant: Map<string, TenantCharge[]>
+}> {
+  const orderBy = resellerOrderBy(sort)
+
+  if (orderBy) {
+    const tenants = await prisma.tenant.findMany({
+      where,
+      select: TENANT_SELECT,
+      orderBy,
+      take: LIST_LIMIT,
+    })
+    return {
+      tenants,
+      openByTenant: await getOpenChargesByTenant(tenants.map((t) => t.id)),
+    }
+  }
+
+  // Sem `take`: o corte só pode acontecer DEPOIS de ordenar. São centenas de
+  // ids hoje (a rede inteira), e o custo real é a leitura de cobranças abaixo,
+  // que tem teto próprio. Se a rede chegar aos milhares, esta ordenação precisa
+  // descer para SQL (agregado por unidade) em vez de crescer aqui.
+  const candidates = await prisma.tenant.findMany({
+    where,
+    select: { id: true, createdAt: true },
+  })
+  const openByTenant = await getOpenChargesByTenant(candidates.map((c) => c.id))
+  const pageIds = candidates
+    .sort((a, b) => {
+      const cmp = compareNextDue(
+        openByTenant.get(a.id)?.[0],
+        openByTenant.get(b.id)?.[0],
+        sort.dir,
+      )
+      // Desempate pelo cadastro (mais nova primeiro), igual às demais colunas:
+      // sem ele a página muda de conteúdo entre dois carregamentos iguais.
+      return cmp !== 0 ? cmp : b.createdAt.getTime() - a.createdAt.getTime()
+    })
+    .slice(0, LIST_LIMIT)
+    .map((c) => c.id)
+
+  const rows = await prisma.tenant.findMany({
+    where: { id: { in: pageIds } },
+    select: TENANT_SELECT,
+  })
+  const byId = new Map(rows.map((r) => [r.id, r]))
+  return {
+    // `pageIds` manda: o `findMany` acima devolve na ordem do banco.
+    tenants: pageIds.map((id) => byId.get(id)).filter((r) => r !== undefined),
+    openByTenant,
+  }
+}
 
 export const GET = withRequestContext(
   { action: "admin.revendedores.list", route: "/api/admin/revendedores" },
@@ -42,6 +150,7 @@ export const GET = withRequestContext(
 
   const { searchParams } = new URL(request.url)
   const filters = parseResellerListFilters(searchParams)
+  const sort = parseResellerSort(searchParams)
 
   // Escopo de visibilidade: `unidades.viewAll` vê todas; sem ela vale o recorte
   // do papel (gerente de unidades -> as que dá suporte; vendedor de revenda ->
@@ -60,29 +169,8 @@ export const GET = withRequestContext(
   const { where, scope } = query
   const scopeOnly = Object.keys(scope).length ? scope : undefined
 
-  const [tenants, stats, nuncaAtivouStats, nuncaAtivouRows] = await Promise.all([
-    prisma.tenant.findMany({
-      where,
-      select: {
-        id: true,
-        name: true,
-        slug: true,
-        status: true,
-        planValue: true,
-        createdAt: true,
-        owner: { select: { email: true, name: true } },
-        // Indicacao 1-nivel: nome da revenda que indicou esta (badge na lista).
-        referrerTenantId: true,
-        referrer: { select: { name: true } },
-        accountManagerId: true,
-        accountManager: { select: { id: true, name: true } },
-        salesUserId: true,
-        salesUser: { select: { id: true, name: true } },
-        _count: { select: { students: true } },
-      },
-      orderBy: { createdAt: "desc" },
-      take: 200,
-    }),
+  const [page, stats, nuncaAtivouStats, nuncaAtivouRows] = await Promise.all([
+    loadResellerPage(where, sort),
     prisma.tenant.groupBy({
       by: ["status"],
       _count: { _all: true },
@@ -101,11 +189,7 @@ export const GET = withRequestContext(
     }),
   ])
 
-  // Vencimento da mensalidade: não existe coluna no `Tenant` (o `nextDueDate` do
-  // Asaas é da assinatura e só sai numa chamada live, inviável por linha). A
-  // fonte é `TenantPayment` — em UMA consulta para as 200 linhas, não uma por
-  // unidade.
-  const openByTenant = await getOpenChargesByTenant(tenants.map((t) => t.id))
+  const { tenants, openByTenant } = page
 
   const statsMap: Record<string, number> = {
     ACTIVE: 0,

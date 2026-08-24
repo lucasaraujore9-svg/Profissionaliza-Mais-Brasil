@@ -9,6 +9,10 @@ import {
 } from "./reseller-list-toolbar"
 import { ResellerTable, type ResellerRow } from "./reseller-table"
 import {
+  DEFAULT_RESELLER_SORT,
+  type ResellerSort,
+} from "@/lib/admin/resellers/sort"
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -60,6 +64,10 @@ function useDebounced<T>(value: T, delay = 300): T {
 export function ResellerListClient() {
   const [query, setQuery] = useState("")
   const [filter, setFilter] = useState<ResellerFilter>("TODOS")
+  // A ordenação é do SERVIDOR (a lista é cortada em 200 linhas; ordenar aqui
+  // reordenaria só a página já baixada), então trocar de coluna recarrega —
+  // como já acontece com a busca e o filtro de status.
+  const [sort, setSort] = useState<ResellerSort>(DEFAULT_RESELLER_SORT)
   const [data, setData] = useState<ListResponse["data"] | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -77,6 +85,8 @@ export function ResellerListClient() {
     const params = new URLSearchParams()
     if (debouncedQuery.trim()) params.set("q", debouncedQuery.trim())
     if (filter !== "TODOS") params.set("status", filter)
+    params.set("sort", sort.key)
+    params.set("dir", sort.dir)
     try {
       const res = await fetch(`/api/admin/revendedores?${params.toString()}`)
       const body = await res.json()
@@ -90,7 +100,7 @@ export function ResellerListClient() {
     } finally {
       setLoading(false)
     }
-  }, [debouncedQuery, filter])
+  }, [debouncedQuery, filter, sort])
 
   useEffect(() => {
     load()
@@ -159,10 +169,12 @@ export function ResellerListClient() {
         rows={data.resellers}
         showManager={data.can.viewAll}
         onAssign={data.can.governanca ? openAssign : undefined}
+        sort={sort}
+        onSortChange={setSort}
       />
     )
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, loading, error])
+  }, [data, loading, error, sort])
 
   return (
     <div className="space-y-6">

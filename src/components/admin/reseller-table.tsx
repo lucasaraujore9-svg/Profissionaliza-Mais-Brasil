@@ -1,10 +1,16 @@
 import Link from "next/link"
-import { ChevronRight, Share2, Store } from "lucide-react"
+import { ArrowDown, ArrowUp, ArrowUpDown, ChevronRight, Share2, Store } from "lucide-react"
 import { EmptyState } from "@/components/shared/empty-state"
 import {
   situacaoCobranca,
   type ChargeUrgency,
 } from "@/lib/tenant-billing/types"
+import {
+  RESELLER_SORT_LABELS,
+  toggleResellerSort,
+  type ResellerSort,
+  type ResellerSortKey,
+} from "@/lib/admin/resellers/sort"
 import { ResellerStatusBadge } from "./reseller-status"
 
 export type ResellerStatus = "ACTIVE" | "PENDING" | "SUSPENDED" | "CANCELLED"
@@ -45,6 +51,9 @@ interface ResellerTableProps {
   rows: ResellerRow[]
   showManager?: boolean
   onAssign?: (tenantId: string) => void
+  /** Ordenação em vigor. Sem `onSortChange`, os títulos ficam estáticos. */
+  sort?: ResellerSort
+  onSortChange?: (sort: ResellerSort) => void
 }
 
 function formatMoney(v: number): string {
@@ -83,7 +92,128 @@ function NextDueCell({ nextDue }: { nextDue?: ResellerNextDue | null }) {
   )
 }
 
-export function ResellerTable({ rows, showManager = false, onAssign }: ResellerTableProps) {
+interface SortableHeadProps {
+  column: ResellerSortKey
+  sort?: ResellerSort
+  onSortChange?: (sort: ResellerSort) => void
+  align?: "left" | "right"
+  className?: string
+}
+
+/**
+ * Título de coluna clicável. Sem `onSortChange` (ou sem `sort`) desenha o
+ * rótulo simples — a tabela continua servindo a quem não pluga ordenação.
+ */
+function SortableHead({
+  column,
+  sort,
+  onSortChange,
+  align = "left",
+  className = "",
+}: SortableHeadProps) {
+  const label = RESELLER_SORT_LABELS[column]
+  const base = `px-6 py-3 font-medium ${align === "right" ? "text-right" : ""} ${className}`
+
+  if (!sort || !onSortChange) {
+    return <th className={base}>{label}</th>
+  }
+
+  const active = sort.key === column
+  return (
+    <th
+      className={base}
+      aria-sort={active ? (sort.dir === "asc" ? "ascending" : "descending") : "none"}
+    >
+      <button
+        type="button"
+        onClick={() => onSortChange(toggleResellerSort(sort, column))}
+        className={`inline-flex items-center gap-1 uppercase tracking-wide transition-colors hover:text-[var(--color-pmb-green-900)] ${
+          align === "right" ? "flex-row-reverse" : ""
+        } ${active ? "text-[var(--color-pmb-green)]" : ""}`}
+        title={`Ordenar por ${label}`}
+      >
+        {label}
+        {active ? (
+          sort.dir === "asc" ? (
+            <ArrowUp className="h-3 w-3" />
+          ) : (
+            <ArrowDown className="h-3 w-3" />
+          )
+        ) : (
+          <ArrowUpDown className="h-3 w-3 text-gray-300" />
+        )}
+      </button>
+    </th>
+  )
+}
+
+/**
+ * Ordenação no mobile: os cards não têm cabeçalho onde clicar. Um `select`
+ * nativo (e não o do design system) porque aqui ele é um controle acessório —
+ * e porque o wrapper de `Select` exige plumbing de itens que não paga a pena
+ * para sete opções.
+ */
+function MobileSortControl({
+  sort,
+  onSortChange,
+  columns,
+}: {
+  sort: ResellerSort
+  onSortChange: (sort: ResellerSort) => void
+  columns: ResellerSortKey[]
+}) {
+  return (
+    <div className="mb-3 flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-3 py-2 shadow-sm md:hidden">
+      <label htmlFor="reseller-sort" className="text-xs font-medium text-gray-500">
+        Ordenar por
+      </label>
+      <select
+        id="reseller-sort"
+        value={sort.key}
+        onChange={(e) =>
+          onSortChange({
+            key: e.target.value as ResellerSortKey,
+            dir: sort.dir,
+          })
+        }
+        className="flex-1 rounded-md border border-gray-200 bg-white px-2 py-1 text-xs text-[var(--color-pmb-green-900)]"
+      >
+        {columns.map((key) => (
+          <option key={key} value={key}>
+            {RESELLER_SORT_LABELS[key]}
+          </option>
+        ))}
+      </select>
+      <button
+        type="button"
+        onClick={() => onSortChange({ key: sort.key, dir: sort.dir === "asc" ? "desc" : "asc" })}
+        className="inline-flex h-7 w-7 items-center justify-center rounded-md text-[var(--color-pmb-green)] hover:bg-[var(--color-pmb-lime-100)]"
+        aria-label={sort.dir === "asc" ? "Ordem crescente" : "Ordem decrescente"}
+      >
+        {sort.dir === "asc" ? (
+          <ArrowUp className="h-4 w-4" />
+        ) : (
+          <ArrowDown className="h-4 w-4" />
+        )}
+      </button>
+    </div>
+  )
+}
+
+export function ResellerTable({
+  rows,
+  showManager = false,
+  onAssign,
+  sort,
+  onSortChange,
+}: ResellerTableProps) {
+  // O seletor do mobile inclui "Cadastro", que não tem coluna na tabela: é a
+  // ordenação PADRÃO, e sem a opção o `select` cairia na primeira da lista e
+  // anunciaria uma ordem que não é a que está na tela.
+  const sortableColumns: ResellerSortKey[] = showManager
+    ? ["nome", "mrr", "vencimento", "alunos", "status", "gerente", "criacao"]
+    : ["nome", "mrr", "vencimento", "alunos", "status", "criacao"]
+
   if (rows.length === 0) {
     return (
       <EmptyState
@@ -101,12 +231,14 @@ export function ResellerTable({ rows, showManager = false, onAssign }: ResellerT
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-200 bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
-              <th className="px-6 py-3 font-medium">Revendedor</th>
-              <th className="px-6 py-3 text-right font-medium">MRR</th>
-              <th className="px-6 py-3 font-medium">Vencimento</th>
-              <th className="px-6 py-3 text-right font-medium">Alunos</th>
-              <th className="px-6 py-3 font-medium">Status</th>
-              {showManager && <th className="px-6 py-3 font-medium">Gerente</th>}
+              <SortableHead column="nome" sort={sort} onSortChange={onSortChange} />
+              <SortableHead column="mrr" sort={sort} onSortChange={onSortChange} align="right" />
+              <SortableHead column="vencimento" sort={sort} onSortChange={onSortChange} />
+              <SortableHead column="alunos" sort={sort} onSortChange={onSortChange} align="right" />
+              <SortableHead column="status" sort={sort} onSortChange={onSortChange} />
+              {showManager && (
+                <SortableHead column="gerente" sort={sort} onSortChange={onSortChange} />
+              )}
               <th className="px-6 py-3 text-right font-medium">Ações</th>
             </tr>
           </thead>
@@ -176,6 +308,13 @@ export function ResellerTable({ rows, showManager = false, onAssign }: ResellerT
       </div>
 
       {/* Cards — mobile (< md) */}
+      {sort && onSortChange && (
+        <MobileSortControl
+          sort={sort}
+          onSortChange={onSortChange}
+          columns={sortableColumns}
+        />
+      )}
       <div className="space-y-3 md:hidden">
         {rows.map((r) => (
           <div
