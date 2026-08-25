@@ -1014,6 +1014,79 @@ export async function setStudentPaceBlock(
 }
 
 /**
+ * Aplica (ou remove) a trava de JANELA DE HORARIO no acesso do aluno a
+ * fornecedora legada (EA).
+ *
+ * ⚠️ Esta e a UNICA trava do sistema cujo motivo NAO cabe em `Student.status`.
+ * BLOQUEADO ja pertence a inadimplencia e DEVEDOR a cota de aulas; um terceiro
+ * motivo reusando qualquer um dos dois faria a liberacao da manha devolver
+ * acesso a quem esta travado por divida. Por isso o discriminador e a coluna
+ * `scheduleBlockedAt`: so bloqueia quem esta ATIVO, e so libera quem carrega a
+ * marca — quem foi travado por ESTA regra.
+ *
+ * NAO toca no LMS, de proposito. La a janela e aplicada AULA A AULA pelo proprio
+ * LMS (`lessonGate`), que e mais fino e reversivel na hora; mandar
+ * `setLmsStudentAccess` daqui seria uma segunda trava disputando a mesma
+ * decisao — e quem perdesse a corrida deixaria o aluno preso.
+ *
+ * Devolve `true` quando o estado mudou de fato.
+ */
+export async function setStudentScheduleBlock(
+  studentId: string,
+  blocked: boolean,
+): Promise<boolean> {
+  const student = await prisma.student.findUnique({
+    where: { id: studentId },
+    select: { ...PLATFORM_SNAPSHOT_SELECT, scheduleBlockedAt: true },
+  })
+  if (!student) throw new Error(`student ${studentId} nao encontrado`)
+
+  // Precedencia. BLOQUEAR: so quem esta ATIVO — nao rebaixamos quem ja esta sob
+  // trava mais forte. LIBERAR: so quem carrega a NOSSA marca — um BLOQUEADO sem
+  // ela e inadimplencia, e tem dono proprio.
+  if (blocked) {
+    if (student.status !== "ATIVO" || student.scheduleBlockedAt !== null) return false
+  } else if (student.scheduleBlockedAt === null) {
+    return false
+  }
+
+  const platformId = parseExternalId(student.plataformaAlunoId)
+  // Aluno que nunca foi para a fornecedora legada: nao ha o que travar aqui.
+  // Nao e erro — os cursos dele no LMS ja sao gateados la.
+  if (platformId === null) return false
+
+  await pushPlatformState(student, {
+    status: blocked ? "BLOQUEADO" : "ATIVO",
+    apostila: blocked ? "BLOQUEADA" : "LIBERADA",
+  })
+
+  await prisma.student.update({
+    where: { id: student.id },
+    data: blocked
+      ? { status: "BLOQUEADO", apostila: "BLOQUEADA", scheduleBlockedAt: new Date() }
+      : { status: "ATIVO", apostila: "LIBERADA", scheduleBlockedAt: null },
+  })
+  return true
+}
+
+/**
+ * Larga a trava de horario SEM devolver acesso: o aluno segue bloqueado, mas o
+ * motivo passa a ser de outra camada.
+ *
+ * Existe por causa de uma corrida real: enquanto o aluno esta travado pelo
+ * relogio, a unidade pode ficar inadimplente. O `blockTenantStudents` PULA quem
+ * ja esta BLOQUEADO, entao a inadimplencia nao carimba nada — e a liberacao das
+ * 08:00 devolveria o acesso a um aluno de unidade suspensa. Aqui a janela
+ * apenas solta a marca e entrega o aluno a camada que agora manda.
+ */
+export async function releaseScheduleMarkKeepingBlock(studentId: string): Promise<void> {
+  await prisma.student.updateMany({
+    where: { id: studentId, scheduleBlockedAt: { not: null } },
+    data: { scheduleBlockedAt: null },
+  })
+}
+
+/**
  * Sincroniza dados de perfil do aluno na plataforma SEM alterar status/apostila
  * — mas reenviando os dois, porque na plataforma "campo omitido" e "campo
  * resetado" sao a mesma coisa. Idempotente: se o aluno ainda nao foi para a

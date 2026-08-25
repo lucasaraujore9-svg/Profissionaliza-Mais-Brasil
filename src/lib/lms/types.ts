@@ -82,6 +82,13 @@ export interface LmsEnrollmentRequest {
   student: { name: string; email: string }
   courseId: string
   tenantExternalId?: string
+  /**
+   * Override das REGRAS PEDAGOGICAS desta matricula, ja resolvido aqui. Omitir
+   * (ou `null`) faz a matricula HERDAR o padrao da unidade, que o LMS ja tem —
+   * e o que permite a unidade editar o proprio padrao depois e alcancar as
+   * matriculas antigas. Ver `pedagogyForNewEnrollment`.
+   */
+  pedagogy?: Record<string, unknown> | null
 }
 
 /**
@@ -118,6 +125,12 @@ export interface LmsTenantBrandingRequest {
    */
   primaryColor?: string
   secondaryColor?: string
+  /**
+   * REGRAS PEDAGOGICAS padrao da unidade (`PedagogyPolicy` serializavel).
+   * `null` limpa; campo AUSENTE preserva — as chamadas de branding nao
+   * conhecem a politica e nao podem apaga-la, exatamente como as cores.
+   */
+  pedagogy?: Record<string, unknown> | null
 }
 
 // ── Acesso / aluno ────────────────────────────────────────

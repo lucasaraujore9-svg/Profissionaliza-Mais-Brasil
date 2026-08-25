@@ -1056,6 +1056,71 @@ passam a dizer de quem e o conteudo — e de quem NAO e:
 uma nota dizendo que a plataforma "nao se responsabiliza" impressa num curso da
 PROPRIA plataforma seria pior que nota nenhuma. Verificado por mutacao nas tres.
 
+### Regras pedagogicas: a unidade define como as aulas abrem (2026-08-25)
+
+Antes, o aluno navegava livre pelo curso: as unicas travas eram a PROVA (que
+para a sequencia) e a COTA DE PARCELAMENTO. A unidade passa a definir tres
+eixos INDEPENDENTES — ordem, ritmo e horario — com padrao por unidade e
+override por curso NAQUELA vitrine.
+
+- **Motor PURO e DUPLICADO de proposito.** `src/lib/pedagogia/{policy,gate,
+  br-time}.ts` no PMB e `src/lib/pedagogia.ts` no LMS, com os MESMOS 30 testes
+  e os mesmos nomes de caso — e o que faz a divergencia aparecer. Precedente:
+  `tenant-theme.ts`. O LMS conhece a grade e decide aula a aula sem uma chamada
+  de rede por clique; o PMB precisa das mesmas respostas para a tela de
+  configuracao e para a janela na fornecedora legada.
+- **Alcance HONESTO, e e a decisao mais importante da feature.** Em producao,
+  448 das 589 matriculas vivas estao na fornecedora legada, cuja API nao tem
+  gate por aula, nem progresso por aula, nem webhook — o unico controle e
+  `usuarios/editar` ativo/bloqueado, **por login**. Entao: os tres eixos valem
+  na plataforma propria; **so o horario** alcanca a legada, e fechando o acesso
+  INTEIRO do aluno. A tela do painel diz isso em numeros antes de a unidade
+  configurar — mas **sem nomear a fornecedora**, que a invariante de sigilo
+  (`students/course-access.test.ts`) proibe: ela fala do EFEITO por curso.
+- **`Student.status` nao tinha espaco para um terceiro motivo.** BLOQUEADO ja e
+  inadimplencia e DEVEDOR ja e a cota; reusar qualquer um faria a liberacao da
+  manha devolver acesso a quem deve. Dai a coluna `scheduleBlockedAt` como
+  DISCRIMINADOR: `setStudentScheduleBlock` so bloqueia quem esta ATIVO e so
+  libera quem carrega a marca.
+- **A corrida que quase passou:** enquanto o aluno esta travado pelo relogio, a
+  unidade pode ficar inadimplente — e `blockTenantStudents` PULA quem ja esta
+  BLOQUEADO, entao ninguem carimba. Liberar as 08:00 devolveria acesso de
+  unidade suspensa. Por isso `hasStrongerBlock` + o estado `handoff`: soltamos a
+  marca e deixamos o bloqueio de pe. Testado e VERIFICADO POR MUTACAO (5/5).
+- **A janela nao toca no LMS**, so na legada: la ela e aplicada aula a aula pelo
+  proprio LMS, que e mais fino. Duas travas disputando a decisao deixariam o
+  aluno preso quando uma perdesse a corrida.
+- **REVISAO nunca e barrada** por ordem, gotejamento ou cota — a cota limita o
+  AVANCO, e travar o que o aluno ja conquistou seria apaga-lo. A JANELA, sim,
+  vale para a revisao: ela e sobre QUANDO se estuda. E ela vem PRIMEIRO na
+  ordem de avaliacao, senao o aluno fora do horario receberia "conclua a aula
+  anterior" — conselho que tambem nao funcionaria.
+- **`parsePolicy` resolve todo valor invalido para o lado MENOS restritivo** e
+  nunca lanca: e lido no caminho quente do player, e um JSON corrompido travaria
+  quem pagou. Cota `0` vira "sem cota"; janela invertida e descartada INTEIRA
+  (guardar meia janela fecharia 24h); os sete dias marcados viram `[]`. O
+  formulario usa um schema SEPARADO que RECUSA com mensagem — normalizar calado
+  faria a unidade salvar "das 22h as 2h" e nao travar ninguem.
+- **`null` no curso HERDA, e herdar se propaga mandando `null`** ao LMS (limpa o
+  override da matricula). Mandar a politica da unidade resolvida congelaria a
+  matricula na regra da epoca, e editar o padrao depois nao a alcancaria.
+- **O gate DURO mora em `lessonAccess`** (LMS), o funil por onde passam
+  progresso, anotacoes e comentarios — rota nova herda a regra sem fazer nada. A
+  matricula chega PRONTA do chamador: recarrega-la sairia uma vez por
+  salvamento de posicao do player, o endpoint mais chamado do sistema.
+- **Fuso:** o LMS nao tinha nenhum helper de horario brasileiro. `brOffsetMinutes`
+  e derivado do Intl e nao constante `-180` — o Brasil ja teve horario de verao,
+  e a constante errada deslocaria toda janela em uma hora sem ninguem perceber.
+- **Permissao `pedagogia.view/manage`** (familia propria): precificar e decisao
+  comercial, definir como o aluno estuda e pedagogica, e a unidade costuma
+  entregar as duas a pessoas diferentes. A regra alcanca aluno que JA COMPROU —
+  por isso toda alteracao vai para `audit_logs` com antes e depois.
+- **Deploy:** migration `20260825_pedagogia` (aditiva, idempotente, sem backfill
+  — `pedagogy_policy` nasce NULL = comportamento de hoje). No LMS, `db push`
+  cria as duas colunas com default `""`. Falta **agendar `pmb-pedagogia-janela`
+  no pg_cron** (job novo NAO se agenda sozinho — conferir `cron.job` apos o
+  deploy) e rodar `?dryRun=1` antes da primeira execucao real.
+
 ### Bugs conhecidos (pendentes)
 
 - **Middleware file convention deprecado** no Next 16 (usar `proxy` em vez de `middleware`).

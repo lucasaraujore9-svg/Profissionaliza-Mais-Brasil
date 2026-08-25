@@ -74,6 +74,14 @@ export const PAINEL_PERMISSIONS = [
 
   "catalogo.view",
   "catalogo.manage",
+  // REGRAS PEDAGOGICAS — em que ordem as aulas abrem, quantas por dia e em que
+  // horarios. Familia PROPRIA e nao `catalogo.*` de proposito: precificar e
+  // escolher quais cursos aparecem na vitrine e trabalho comercial; definir
+  // como o aluno estuda e decisao PEDAGOGICA, e a unidade tipicamente entrega
+  // as duas a pessoas diferentes. Alem disso, a regra alcanca aluno que JA
+  // COMPROU — quem mexe aqui muda o acesso de quem ja pagou.
+  "pedagogia.view",
+  "pedagogia.manage",
   "pacotes.view",
   "pacotes.manage",
   // Cursos PRODUZIDOS pela propria unidade (autoria) — separada de catalogo.*,
@@ -208,6 +216,7 @@ export const WRITE_IMPLIES_READ: Readonly<
   "leads.manage": "leads.view",
   "leads.config": "leads.view",
   "catalogo.manage": "catalogo.view",
+  "pedagogia.manage": "pedagogia.view",
   "pacotes.manage": "pacotes.view",
   "cursosAutorais.manage": "cursosAutorais.view",
   "assinaturas.manage": "assinaturas.view",
@@ -515,6 +524,8 @@ export const PERMISSION_GROUPS: {
     permissions: [
       { perm: "catalogo.view", label: "Ver o catálogo" },
       { perm: "catalogo.manage", label: "Editar cursos e preços" },
+      { perm: "pedagogia.view", label: "Ver as regras de liberação das aulas" },
+      { perm: "pedagogia.manage", label: "Definir ordem, ritmo e horário de estudo" },
       { perm: "pacotes.view", label: "Ver os pacotes" },
       { perm: "pacotes.manage", label: "Gerenciar pacotes" },
       { perm: "cursosAutorais.view", label: "Ver os cursos produzidos pela unidade" },

@@ -32,7 +32,7 @@ vi.mock("@/lib/prisma", () => {
     // Venda multi-curso de unidade: a satélite resolve aqui o TenantCourse do
     // seu curso (é a coluna pela qual o painel conta matrículas ativas antes de
     // deixar remover um curso da vitrine).
-    tenantCourse: { findMany: vi.fn() },
+    tenantCourse: { findMany: vi.fn(), findUnique: vi.fn() },
   }
   return { prisma }
 })
@@ -97,7 +97,10 @@ const p = prisma as unknown as {
   student: { update: ReturnType<typeof vi.fn> }
   coursePackageItem: { findMany: ReturnType<typeof vi.fn> }
   course: { findMany: ReturnType<typeof vi.fn> }
-  tenantCourse: { findMany: ReturnType<typeof vi.fn> }
+  tenantCourse: {
+    findMany: ReturnType<typeof vi.fn>
+    findUnique: ReturnType<typeof vi.fn>
+  }
 }
 const ensureMock = ensureStudentOnPlatform as unknown as ReturnType<typeof vi.fn>
 const linkMock = linkCourseToStudent as unknown as ReturnType<typeof vi.fn>
@@ -174,6 +177,10 @@ beforeEach(() => {
   p.coursePackageItem.findMany.mockResolvedValue([])
   p.course.findMany.mockResolvedValue([])
   p.tenantCourse.findMany.mockResolvedValue([])
+  // Regras pedagógicas: sem override de curso, a matrícula nasce herdando o
+  // padrão da unidade (`pedagogyForNewEnrollment` devolve null e não consulta
+  // mais nada). É o estado da esmagadora maioria das vendas.
+  p.tenantCourse.findUnique.mockResolvedValue({ pedagogyPolicy: null })
   ensureMock.mockResolvedValue({ plataformaAlunoId: 42, created: true, plataformaSenha: "sec" })
   linkMock.mockResolvedValue(undefined)
   notifyMock.mockResolvedValue(undefined)

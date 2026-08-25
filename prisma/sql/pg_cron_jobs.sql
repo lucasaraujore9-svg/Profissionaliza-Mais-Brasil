@@ -153,3 +153,18 @@ select cron.schedule('pmb-ensure-asaas-webhooks', '30 9 * * *',
 -- esgotada cancela e revoga de fato. Idempotente. 08:00 UTC (05:00 BRT).
 select cron.schedule('pmb-sweep-subscriptions', '0 8 * * *',
   $$ select app_internal.run_cron('/api/cron/sweep-subscriptions') $$);
+
+-- ── Janela de horario na fornecedora legada ─────────────────────────────────
+-- A unidade define em que dias e horarios o aluno pode estudar. Nos cursos da
+-- plataforma propria a regra e aplicada AULA A AULA pelo proprio LMS, sem cron;
+-- na fornecedora legada o unico controle e o login (ela nao tem gate por aula),
+-- entao alguem precisa abrir e fechar no relogio — e este job.
+--
+-- O intervalo de 15 min E a precisao da regra: uma janela que fecha as 18:00
+-- fecha, na pratica, entre 18:00 e 18:15. Aumentar economiza pouco e piora a
+-- promessa feita a unidade.
+--
+-- No-op enquanto nenhuma unidade configurar horario (a 1a consulta volta vazia).
+-- Idempotente: cada transicao so parte do estado que a habilita.
+select cron.schedule('pmb-pedagogia-janela', '*/15 * * * *',
+  $$ select app_internal.run_cron('/api/cron/pedagogia-janela') $$);

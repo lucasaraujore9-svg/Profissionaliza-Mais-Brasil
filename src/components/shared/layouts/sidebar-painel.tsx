@@ -28,6 +28,7 @@ import {
   BarChart3,
   ChevronLeft,
   ChevronRight,
+  CalendarClock,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
@@ -61,6 +62,7 @@ const ALL_ITEMS: NavItem[] = [
   { href: "/painel/treinamentos", label: "Treinamentos", icon: Video, perm: "treinamentos.view" },
   { href: "/painel/artes", label: "Artes de divulgação", icon: Images, perm: "artes.view" },
   { href: "/painel/cursos", label: "Catálogo", icon: GraduationCap, perm: "catalogo.view" },
+  { href: "/painel/pedagogia", label: "Regras de estudo", icon: CalendarClock, perm: "pedagogia.view" },
   { href: "/painel/alunos", label: "Alunos", icon: Users, perm: "alunos.view" },
   { href: "/painel/alunos/titularidade", label: "Titularidade", icon: UserCog, perm: "alunos.view" },
   { href: "/painel/atendimento", label: "Atendimento", icon: LifeBuoy, perm: "atendimento.view" },

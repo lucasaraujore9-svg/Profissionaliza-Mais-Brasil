@@ -506,35 +506,35 @@ model Tenant {
   // Modulo Automacao — disparo de WhatsApp + CRM de leads. Quando habilitado
   // pelo admin, a vitrine exibe um card "Receba mais informacoes" na pagina
   // do curso e o painel ganha menus Automacao + Leads.
-  automationEnabled   Boolean   @default(false) @map("automation_enabled")
+  automationEnabled      Boolean   @default(false) @map("automation_enabled")
   // Modulo "Revender revendas": quando habilitado pelo admin, esta unidade ganha
   // o menu de venda de revendas (/painel/revendas). As revendas que ela cria sao
   // cobradas no Asaas da PMB (sistema mae) e atreladas a ela via referrerTenantId
   // — ela vira uma especie de admin/suporte dessas sub-revendas.
-  canSellResellers    Boolean   @default(false) @map("can_sell_resellers")
+  canSellResellers       Boolean   @default(false) @map("can_sell_resellers")
   // Modulo "Produzir cursos": a unidade cria curso proprio, define os termos
   // comerciais e publica alem da propria vitrine. Habilitacao COMERCIAL,
   // concedida pela equipe do sistema mae em /admin/revendedores/[id] →
   // "Vitrine & extras" — nao se confunde com a permissao `cursosAutorais.*`,
   // que diz QUEM dentro da unidade opera o modulo depois de ligado.
-  courseAuthoringEnabled Boolean @default(false) @map("course_authoring_enabled")
+  courseAuthoringEnabled Boolean   @default(false) @map("course_authoring_enabled")
   // Nome unico da sessao no engine de WhatsApp (gerado como cuid na 1a conexao).
-  waSessionName       String?   @unique @map("wa_session_name")
+  waSessionName          String?   @unique @map("wa_session_name")
   // Telefone E.164 conectado (snapshot apos QR scan). Unique = um numero
   // so pode estar conectado a um tenant.
-  waConnectedPhone    String?   @unique @map("wa_connected_phone")
+  waConnectedPhone       String?   @unique @map("wa_connected_phone")
   // Status local espelhado do engine: DISCONNECTED, CONNECTING, SCAN_QR_CODE,
   // WORKING, FAILED. Refrescado por polling.
-  waStatus            String    @default("DISCONNECTED") @map("wa_status")
-  waStatusUpdatedAt   DateTime? @map("wa_status_updated_at")
+  waStatus               String    @default("DISCONNECTED") @map("wa_status")
+  waStatusUpdatedAt      DateTime? @map("wa_status_updated_at")
   // Horas apos checkout_started sem pagamento aprovado pra cair em ABANDONED.
-  abandonedAfterHours Int       @default(24) @map("abandoned_after_hours")
+  abandonedAfterHours    Int       @default(24) @map("abandoned_after_hours")
   // Distribuicao automatica de leads (rodizio/round-robin) entre os consultores
   // ativos da Equipe. Quando ligado, cada lead novo nasce com ownerUserId
   // apontando para o proximo consultor na fila. leadAssignCursor e o ponteiro
   // do rodizio (incrementado a cada atribuicao). Ver src/lib/automation/assign.ts.
-  leadAutoAssign      Boolean   @default(false) @map("lead_auto_assign")
-  leadAssignCursor    Int       @default(0) @map("lead_assign_cursor")
+  leadAutoAssign         Boolean   @default(false) @map("lead_auto_assign")
+  leadAssignCursor       Int       @default(0) @map("lead_assign_cursor")
 
   // Pagamento parcelado/mensalidade (PaymentType.MONTHLY) por unidade.
   // monthlyAllowed: capability liberada pelo Admin Master.
@@ -554,6 +554,22 @@ model Tenant {
   // unidade piloto antes da rede toda — ou desliga-la onde o parcelamento longo
   // tornaria a cota agressiva demais.
   paceGateEnabled Boolean? @map("pace_gate_enabled")
+
+  // REGRAS PEDAGOGICAS padrao desta unidade: em que ordem as aulas abrem
+  // (livre / sequencial / gotejamento), quantas por dia e em que dias e
+  // horarios o aluno pode estudar. Formato e defaults em
+  // src/lib/pedagogia/policy.ts (`PedagogyPolicy`); null = sem regra, que e
+  // exatamente o comportamento historico.
+  //
+  // Json e nao colunas pelo mesmo motivo de `cancellationPolicy` e
+  // `commissionPlan`: e um bloco que viaja INTEIRO para a plataforma de aulas
+  // (PUT /api/v1/tenants/:id) e que ganha eixos novos sem migration.
+  //
+  // ⚠️ So e APLICADA em curso da plataforma propria (provider LMS). Na
+  // fornecedora legada (EA) nao ha grade nossa para barrar aula a aula — o
+  // unico eixo que alcanca a EA e a JANELA DE HORARIO, e ainda assim por
+  // login, via `setStudentScheduleBlock`. Ver src/lib/pedagogia/ea-window.ts.
+  pedagogyPolicy Json? @map("pedagogy_policy")
 
   // Relacoes
   tenantCourses                TenantCourse[]
@@ -940,6 +956,13 @@ model TenantCourse {
   customOrder       Int      @default(0) @map("custom_order") // Ordem na vitrine
   isFeatured        Boolean  @default(false) @map("is_featured") // Destaque na vitrine
 
+  // Override das REGRAS PEDAGOGICAS so nesta vitrine. null => herda
+  // `Tenant.pedagogyPolicy`. O override e do TenantCourse (a linha "curso X
+  // nesta vitrine") e nao do Course de proposito: o mesmo curso e vendido por
+  // varias unidades, cada uma com o proprio ritmo. Vale INTEIRO — ver
+  // `resolvePolicy` em src/lib/pedagogia/policy.ts.
+  pedagogyPolicy Json? @map("pedagogy_policy")
+
   enrollments Enrollment[]
 
   createdAt DateTime @default(now()) @map("created_at")
@@ -1270,6 +1293,19 @@ model Student {
   // Status na plataforma
   status   StudentStatus  @default(ATIVO)
   apostila ApostilaStatus @default(LIBERADA)
+
+  // Marca de que o aluno esta bloqueado na plataforma de aulas por estar FORA
+  // DA JANELA DE HORARIO da unidade — e nao por inadimplencia, cota ou decisao
+  // de alguem. E o DISCRIMINADOR da trava: `Student.status` e um enum unico e
+  // BLOQUEADO ja pertence a inadimplencia; sem esta coluna, a liberacao das
+  // 08:00 nao teria como saber se aquele BLOQUEADO era dela ou de outra regra
+  // — e devolveria acesso a um inadimplente.
+  //
+  // Escrita SO por `setStudentScheduleBlock` (src/lib/pedagogia/ea-window.ts),
+  // que so bloqueia quem esta ATIVO e so libera quem tem esta marca. O indice
+  // e PARCIAL (`WHERE schedule_blocked_at IS NOT NULL`) e por isso vive so na
+  // migration — o Prisma nao expressa indice parcial no schema.
+  scheduleBlockedAt DateTime? @map("schedule_blocked_at")
 
   // Controle
   certificado Boolean   @default(false)

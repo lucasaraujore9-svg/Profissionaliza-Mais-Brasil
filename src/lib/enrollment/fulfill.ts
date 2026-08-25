@@ -13,6 +13,7 @@ import {
   linkCourseToStudent,
 } from "@/lib/students/plataforma-actions"
 import { createLmsEnrollment, type LmsEnrollmentResponse } from "@/lib/lms"
+import { pedagogyForNewEnrollment } from "@/lib/pedagogia/sync"
 import { encrypt } from "@/lib/crypto"
 import { getStudentPlatformLoginUrl } from "@/lib/students/platform-credentials"
 import type { EnrollmentSchoolAccess } from "@/lib/email/templates/enrollment"
@@ -971,6 +972,14 @@ async function provisionLmsAccess(
   const wasNew = !enrollment.student.lmsStudentId
   const tenantExternalId = tenant.isPmbVitrine ? undefined : tenant.id
 
+  // REGRAS PEDAGOGICAS: so o OVERRIDE do curso viaja na matricula. `null` =
+  // herda o padrao da unidade, que o LMS ja tem — e o que faz a unidade editar
+  // o proprio padrao depois e alcancar tambem as matriculas ja criadas.
+  const pedagogy = await pedagogyForNewEnrollment(
+    tenant.isPmbVitrine ? null : tenant.id,
+    enrollment.course.id,
+  )
+
   let res: LmsEnrollmentResponse
   try {
     res = await createLmsEnrollment(
@@ -979,6 +988,7 @@ async function provisionLmsAccess(
         student: { name: enrollment.student.nome, email: enrollment.student.email },
         courseId: enrollment.course.lmsCourseId,
         tenantExternalId,
+        pedagogy,
       },
       idempotencyKey,
     )
@@ -1123,6 +1133,13 @@ export async function provisionCourseForStudent(
         student: { name: student.nome, email: student.email },
         courseId: course.lmsCourseId,
         tenantExternalId: tenant.isPmbVitrine ? undefined : tenant.id,
+        // A SATELITE tambem carrega a regra do curso DELA: num pacote, cada
+        // curso pode ter ritmo proprio, e a satelite nao passa pelo caminho
+        // acima. Esquecer aqui deixaria metade do pacote sem regra.
+        pedagogy: await pedagogyForNewEnrollment(
+          tenant.isPmbVitrine ? null : tenant.id,
+          course.id,
+        ),
       },
       idempotencyKey,
     )

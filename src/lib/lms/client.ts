@@ -192,6 +192,25 @@ export async function setLmsEnrollmentLimit(
 }
 
 /**
+ * Grava as REGRAS PEDAGOGICAS de UMA matricula no LMS (override do padrao da
+ * unidade). O corpo vai JA RESOLVIDO — o LMS nao conhece a precedencia entre
+ * unidade e curso, so aplica o que recebe.
+ *
+ * `null` faz a matricula voltar a HERDAR o padrao da unidade. Nao confundir com
+ * "sem regra": para tirar a trava de UMA matricula, mande a politica aberta.
+ */
+export async function setLmsEnrollmentPolicy(
+  lmsEnrollmentId: string,
+  pedagogy: Record<string, unknown> | null,
+): Promise<void> {
+  await lmsRequest<{ data: unknown }>(
+    "PATCH",
+    `/enrollments/${encodeURIComponent(lmsEnrollmentId)}/policy`,
+    { body: { pedagogy } },
+  )
+}
+
+/**
  * Bloqueia/reativa o aluno e propaga aos parceiros. `studentRef` aceita o id
  * interno do LMS OU o externalId (nosso Student.id).
  */
