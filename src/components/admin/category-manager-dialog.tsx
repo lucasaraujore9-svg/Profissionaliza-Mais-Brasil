@@ -1,8 +1,9 @@
 "use client"
 
-import { useEffect, useState, useCallback } from "react"
-import { Loader2, Plus, Pencil, Trash2, X, Check } from "lucide-react"
+import { useEffect, useState, useCallback, useMemo } from "react"
+import { Loader2, Plus, Pencil, Trash2, X, Check, Merge, AlertTriangle } from "lucide-react"
 import { toast } from "sonner"
+import { findDuplicateGroups } from "@/lib/catalog/category-name"
 import {
   Dialog,
   DialogContent,
@@ -47,6 +48,10 @@ export function CategoryManagerDialog({
   const [newName, setNewName] = useState("")
   const [creating, setCreating] = useState(false)
   const [savingEdit, setSavingEdit] = useState(false)
+  /** Id da categoria de destino enquanto a unificacao esta em voo. */
+  const [merging, setMerging] = useState<string | null>(null)
+  /** Linha em modo "unificar em…": id da categoria que sera ABSORVIDA. */
+  const [mergeInto, setMergeInto] = useState<string | null>(null)
 
   const refresh = useCallback(async () => {
     setLoading(true)
@@ -65,6 +70,52 @@ export function CategoryManagerDialog({
   useEffect(() => {
     if (open) refresh()
   }, [open, refresh])
+
+  /**
+   * Categorias que sao A MESMA escrita de dois jeitos — so mudam acento, caixa
+   * ou pontuacao. A mesma regra que o sync do LMS usa para nao criar a duplicata
+   * (`@/lib/catalog/category-name`), entao o que a tela oferece unificar e
+   * exatamente o que o sync deixaria de recriar.
+   *
+   * Parecidas ("Informatica" x "Informatica e Tecnologia") NAO entram aqui: sao
+   * nomes diferentes e junta-las e decisao editorial, feita pelo botao de
+   * unificar de cada linha.
+   */
+  const duplicados = useMemo(() => findDuplicateGroups(categories), [categories])
+
+  async function handleMerge(targetId: string, sourceIds: string[], destino: string) {
+    const origens = categories
+      .filter((c) => sourceIds.includes(c.id))
+      .map((c) => `"${c.name}" (${c.courseCount} curso${c.courseCount !== 1 ? "s" : ""})`)
+      .join(", ")
+    if (
+      !window.confirm(
+        `Unificar ${origens} em "${destino}"?\n\nOs cursos passam para "${destino}" e as outras categorias somem da vitrine. Não dá para desfazer.`,
+      )
+    ) {
+      return
+    }
+    setMerging(targetId)
+    try {
+      const res = await fetch("/api/admin/catalogo/categorias/unificar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targetId, sourceIds }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json?.error ?? "Falha ao unificar")
+      toast.success(
+        `Unificado em "${destino}" — ${json.data.cursosAfetados} curso(s) movido(s)`,
+      )
+      setMergeInto(null)
+      await refresh()
+      onChanged?.()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Falha ao unificar")
+    } finally {
+      setMerging(null)
+    }
+  }
 
   async function handleCreate() {
     const name = newName.trim()
@@ -149,6 +200,68 @@ export function CategoryManagerDialog({
             Cursos vinculados a uma categoria removida ficam &ldquo;sem categoria&rdquo;.
           </DialogDescription>
         </DialogHeader>
+
+        {duplicados.length > 0 && (
+          <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
+            <p className="flex items-center gap-2 text-sm font-bold text-amber-900">
+              <AlertTriangle className="h-4 w-4" />
+              {duplicados.length} categoria{duplicados.length !== 1 ? "s" : ""} repetida
+              {duplicados.length !== 1 ? "s" : ""}
+            </p>
+            <p className="text-xs text-amber-800">
+              As de cada linha são a mesma categoria escrita de outro jeito (acento, caixa ou
+              pontuação). Unificar move os cursos para a que ficar — a que tem mais cursos vem
+              sugerida.
+            </p>
+            {duplicados.map((grupo) => {
+              // Destino sugerido: a que ja carrega mais cursos, para mover menos
+              // vinculo e preservar o nome que a rede ja ve na vitrine.
+              const ordenado = [...grupo.members].sort((a, b) => b.courseCount - a.courseCount)
+              const alvo = ordenado[0]
+              const origens = ordenado.slice(1)
+              return (
+                <div
+                  key={grupo.key}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-200 bg-white px-3 py-2"
+                >
+                  <div className="min-w-0 flex-1 text-xs">
+                    {ordenado.map((m, i) => (
+                      <span key={m.id}>
+                        {i > 0 && <span className="text-gray-400"> + </span>}
+                        <span className={i === 0 ? "font-bold text-[var(--color-pmb-green-900)]" : "text-gray-600"}>
+                          {m.name}
+                        </span>
+                        <span className="text-gray-400">
+                          {" "}
+                          ({m.courseCount} curso{m.courseCount !== 1 ? "s" : ""})
+                        </span>
+                      </span>
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    disabled={merging === alvo.id}
+                    onClick={() =>
+                      handleMerge(
+                        alvo.id,
+                        origens.map((o) => o.id),
+                        alvo.name,
+                      )
+                    }
+                    className="inline-flex shrink-0 items-center gap-1 rounded-md bg-[var(--color-pmb-green)] px-2.5 py-1.5 text-xs font-bold text-white disabled:opacity-50"
+                  >
+                    {merging === alvo.id ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <Merge className="h-3 w-3" />
+                    )}
+                    Unificar em &ldquo;{alvo.name}&rdquo;
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        )}
 
         <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white p-2">
           <input
@@ -291,12 +404,45 @@ export function CategoryManagerDialog({
                           </button>
                           <button
                             type="button"
+                            onClick={() => setMergeInto(mergeInto === cat.id ? null : cat.id)}
+                            className="inline-flex items-center gap-1 rounded-md border border-gray-200 px-2 py-1 text-xs text-gray-700 hover:bg-gray-50"
+                          >
+                            <Merge className="h-3 w-3" />
+                            Unificar
+                          </button>
+                          <button
+                            type="button"
                             onClick={() => handleDelete(cat)}
                             className="inline-flex items-center gap-1 rounded-md border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50"
                           >
                             <Trash2 className="h-3 w-3" />
                             Apagar
                           </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {mergeInto === cat.id && !isEditing && (
+                      <div className="mt-2 rounded-md border border-gray-200 bg-gray-50 p-2">
+                        <p className="mb-1.5 text-[11px] text-gray-600">
+                          Mover os {cat.courseCount} curso(s) de{" "}
+                          <b>{cat.name}</b> para qual categoria? Depois disso,{" "}
+                          <b>{cat.name}</b> deixa de existir.
+                        </p>
+                        <div className="flex flex-wrap gap-1">
+                          {categories
+                            .filter((c) => c.id !== cat.id)
+                            .map((destino) => (
+                              <button
+                                key={destino.id}
+                                type="button"
+                                disabled={merging === destino.id}
+                                onClick={() => handleMerge(destino.id, [cat.id], destino.name)}
+                                className="rounded-md border border-gray-200 bg-white px-2 py-1 text-[11px] hover:border-[var(--color-pmb-green)] hover:bg-white disabled:opacity-50"
+                              >
+                                {destino.name}
+                              </button>
+                            ))}
                         </div>
                       </div>
                     )}

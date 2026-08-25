@@ -12,11 +12,24 @@ import { slugify } from "@/lib/utils"
 import { contextLogger } from "@/lib/logger"
 import { pushSyncLog, type SyncLogEntry } from "./sync-log"
 import { slugifyCategoria } from "./home"
+import {
+  cleanCategoryName,
+  normalizeCategoryName,
+  findSameCategory,
+} from "./category-name"
 import { ensureCourseForResellers } from "@/lib/tenant/ensure-courses"
 import { ensureUniqueCourseSlug, type SyncResult } from "./sync"
 
 // Cache por UUID da categoria LMS (chave estavel) -> Category.id do PMB.
+// Vale por EXECUCAO: `resetLmsCategoryCache()` o limpa no inicio de cada sync.
+// Sem isso, numa instancia de vida longa o cache continuaria apontando para uma
+// Category que o admin unificou (apagou) no meio do caminho, e o
+// `courseCategory.upsert` quebraria com violacao de chave estrangeira.
 const lmsCategoryCache = new Map<string, string>()
+
+function resetLmsCategoryCache() {
+  lmsCategoryCache.clear()
+}
 
 /**
  * Converte a matriz curricular (grade) do LMS na lista de topicos do PMB
@@ -37,37 +50,96 @@ export function mapCurriculumToMatriz(
 
 /**
  * Garante que existe uma Category no PMB para a categoria recebida do LMS e
- * retorna o `categoryId`. Idempotente: reusa por slug OU nome (casa com
- * categorias ja criadas pelo sync EA de mesmo nome). Renomear/desativar Category
- * fica a cargo do admin — o sync nunca sobrescreve nome/slug de uma existente.
+ * retorna o `categoryId`. Renomear/desativar fica a cargo do admin — o sync
+ * nunca sobrescreve nome/slug de uma existente.
+ *
+ * ── Como o catalogo acabou com categoria repetida ──────────────────────────
+ * O match era `WHERE slug = ? OR name = ?`, e os dois lados falhavam:
+ *
+ *  · o `slug` preferido era o que o LMS manda, que atropela o
+ *    CATEGORIA_SLUG_OVERRIDES daqui ("INFORMATICA E TECNOLOGIA" -> `informatica`).
+ *    O LMS mandava `informatica-e-tecnologia` e nao casava com `informatica`;
+ *  · o `name` do Postgres e SENSIVEL A CAIXA E ACENTO, entao
+ *    "Informatica e Tecnologia" nao casava com "Informatica E Tecnologia", nem
+ *    "diversas areas" com "Diversas Areas".
+ *
+ * Resultado: duas linhas para a mesma categoria, as duas na vitrine.
+ *
+ * Agora sao TRES tentativas, da mais especifica para a mais tolerante:
+ *   1. slug do LMS (chave estavel quando ja bateu antes);
+ *   2. slug DESTE lado (`slugifyCategoria`), que aplica os overrides;
+ *   3. CHAVE DE UNIFICACAO do nome — a mesma regra do LMS.
+ *
+ * A (3) e a que fecha a porta: enquanto ela existir, unificar duas categorias no
+ * /admin nao e desfeito pelo sync das 6h.
  */
 async function ensureLmsCategory(cat: LmsCategory): Promise<string | null> {
-  const name = cat.name?.trim()
-  if (!name) return null
+  const name = cleanCategoryName(cat.name ?? "")
+  if (!name || !normalizeCategoryName(name)) return null
 
   if (lmsCategoryCache.has(cat.id)) {
     return lmsCategoryCache.get(cat.id) ?? null
   }
 
-  // Slug estavel: usa o do LMS quando presente, senao deriva do nome (mesma
-  // funcao do sync EA, pra maximizar o match com categorias existentes).
-  const slug = cat.slug?.trim() || slugifyCategoria(name)
+  const lmsSlug = cat.slug?.trim() || ""
+  const pmbSlug = slugifyCategoria(name)
 
-  const existing = await prisma.category.findFirst({
-    where: { OR: [{ slug }, { name }] },
-    select: { id: true },
-  })
-  if (existing) {
-    lmsCategoryCache.set(cat.id, existing.id)
-    return existing.id
+  // Uma consulta por slug, NA ORDEM — e nao um `slug: { in: [...] }`, que nao
+  // define qual linha volta quando as duas ainda existem (era o caso: `informatica`
+  // e `informatica-e-tecnologia` conviviam) e faria o mesmo curso cair numa
+  // categoria diferente a cada execucao.
+  for (const slug of [lmsSlug, pmbSlug]) {
+    if (!slug) continue
+    const porSlug = await prisma.category.findUnique({
+      where: { slug },
+      select: { id: true },
+    })
+    if (porSlug) {
+      lmsCategoryCache.set(cat.id, porSlug.id)
+      return porSlug.id
+    }
+  }
+
+  // Comparacao por chave de unificacao: tira acento e pontuacao, coisa que o
+  // `WHERE` do Postgres nao faz sem `unaccent` (extensao nao instalada aqui).
+  // Sao poucas dezenas de linhas — o custo e irrelevante perto de recriar uma
+  // duplicata na vitrine de toda a rede.
+  const todas = await prisma.category.findMany({ select: { id: true, name: true } })
+  const mesma = findSameCategory(name, todas)
+  if (mesma) {
+    lmsCategoryCache.set(cat.id, mesma.id)
+    return mesma.id
   }
 
   const created = await prisma.category.create({
-    data: { name, slug, isActive: true, displayOrder: 0 },
+    data: {
+      name,
+      // `pmbSlug` e nao o do LMS: e o slug que respeita os overrides e o que o
+      // resto do PMB deriva de um nome. Gravar o do LMS deixaria a proxima
+      // categoria com o mesmo nome sem casar por slug de novo.
+      slug: await ensureUniqueCategorySlug(pmbSlug),
+      isActive: true,
+      displayOrder: 0,
+    },
     select: { id: true },
   })
   lmsCategoryCache.set(cat.id, created.id)
   return created.id
+}
+
+/**
+ * `Category.slug` e unico. So colide quando um slug antigo ficou ocupado por uma
+ * categoria de nome diferente (as duas rodadas de match acima ja teriam casado
+ * se fossem a mesma), entao o sufixo e rede de seguranca, nao caminho comum.
+ */
+async function ensureUniqueCategorySlug(base: string): Promise<string> {
+  const root = base || "categoria"
+  let slug = root
+  let n = 1
+  while (await prisma.category.findUnique({ where: { slug }, select: { id: true } })) {
+    slug = `${root}-${++n}`
+  }
+  return slug
 }
 
 /**
@@ -96,6 +168,7 @@ export async function syncCatalogFromLMS(
   source: "manual" | "cron",
 ): Promise<SyncResult> {
   const start = Date.now()
+  resetLmsCategoryCache()
 
   try {
     const cursos = await listLmsCourses()
@@ -354,6 +427,12 @@ async function upsertLmsCourse(
 export async function syncSingleLmsCourse(
   slug: string,
 ): Promise<{ created: boolean } | null> {
+  // Este e o caminho de VIDA LONGA (webhook `course.updated`, muitos por dia na
+  // mesma instancia): sem limpar, o cache seguiria apontando para uma Category
+  // que o admin unificou nesse meio-tempo e o vinculo quebraria por FK. Um curso
+  // tem poucas categorias — o cache quase nao ajuda aqui de qualquer forma.
+  resetLmsCategoryCache()
+
   let detail
   try {
     detail = await getLmsCourse(slug)
