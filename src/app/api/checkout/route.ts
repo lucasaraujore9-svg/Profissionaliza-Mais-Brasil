@@ -240,7 +240,6 @@ export const POST = withRequestContext(
     const course = await prisma.course.findUnique({
       where: { id: data.courseId },
       select: {
-        nome: true,
         slug: true,
         status: true,
         hiddenMain: true,

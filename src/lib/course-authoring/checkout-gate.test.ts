@@ -22,6 +22,10 @@ type Course = Parameters<typeof authoredSaleGate>[0]["courses"][number]
 function pmbCourse(id = "c_pmb"): Course {
   return {
     id,
+    nome: "Curso PMB",
+    provider: "EA",
+    plataformaCourseId: "267",
+    lmsCourseId: null,
     authorTenantId: null,
     authoredStatus: null,
     distribution: "OWN_ONLY",
@@ -35,6 +39,10 @@ function pmbCourse(id = "c_pmb"): Course {
 function authoredCourse(over: Partial<Record<string, unknown>> = {}): Course {
   return {
     id: "c_autoral",
+    nome: "Curso Autoral",
+    provider: "LMS",
+    plataformaCourseId: null,
+    lmsCourseId: "lms_c_autoral",
     authorTenantId: PRODUCER,
     authoredStatus: "PUBLISHED",
     distribution: "NETWORK",
@@ -247,5 +255,75 @@ describe("estado do curso e das carteiras", () => {
         code: "PRICE_MUST_MATCH_FIXED",
       })
     }
+  })
+})
+
+/**
+ * Curso sem identificador da fornecedora não é matriculável. O gate mora AQUI —
+ * e não numa rota — pela mesma lição do `GUARDIAN_REQUIRED`: as oito portas de
+ * venda passam por `authoredSaleGate`, então porta nova herda a regra sem ter
+ * que lembrar dela.
+ *
+ * Sem este gate, a venda acontece, o aluno é cobrado e o provisionamento morre
+ * no fim do fluxo com "Falha ao matricular o aluno na plataforma de aulas" —
+ * e "tente novamente" é um conselho que nunca funciona.
+ */
+describe("curso não matriculável na plataforma de aulas", () => {
+  it("curso EA sem plataformaCourseId é recusado com 409, antes de qualquer cobrança", async () => {
+    const res = await authoredSaleGate({
+      courses: [{ ...pmbCourse("c_orfao"), plataformaCourseId: null }] as Course[],
+      sellerTenantId: SELLER,
+      seller: connectedSeller,
+      listPrice: 700,
+    })
+    expect(res.ok).toBe(false)
+    if (res.ok) return
+    expect(res.response.status).toBe(409)
+    const json = (await res.response.json()) as { code: string; error: string }
+    expect(json.code).toBe("COURSE_NOT_PROVISIONABLE")
+    expect(json.error).toContain("Curso PMB")
+  })
+
+  it("curso LMS sem lmsCourseId também é recusado", async () => {
+    const res = await authoredSaleGate({
+      courses: [{ ...authoredCourse(), lmsCourseId: null }] as Course[],
+      sellerTenantId: PRODUCER,
+      seller: connectedSeller,
+      listPrice: 200,
+    })
+    expect(res.ok).toBe(false)
+    if (res.ok) return
+    expect(res.response.status).toBe(409)
+  })
+
+  it("recusa a venda MULTI-CURSO quando o defeito está no 2º curso, não no 1º", async () => {
+    const res = await authoredSaleGate({
+      courses: [
+        pmbCourse("c_ok"),
+        { ...pmbCourse("c_orfao"), nome: "Corretor de Imóveis", plataformaCourseId: null },
+      ] as Course[],
+      sellerTenantId: SELLER,
+      seller: connectedSeller,
+      listPrice: 800,
+    })
+    expect(res.ok).toBe(false)
+    if (res.ok) return
+    const json = (await res.response.json()) as { error: string }
+    expect(json.error).toContain("Corretor de Imóveis")
+  })
+
+  it("o gate roda ANTES do de rateio — curso de terceiro sem id não vira 503 de carteira", async () => {
+    const res = await authoredSaleGate({
+      courses: [{ ...authoredCourse(), lmsCourseId: null }] as Course[],
+      sellerTenantId: SELLER,
+      // Loja SEM Asaas: sem a ordem certa isto responderia SPLIT_GATEWAY_REQUIRED
+      // e esconderia o defeito real (o curso não tem como ser matriculado).
+      seller: { asaasConnected: false, asaasWebhookToken: null },
+      listPrice: 200,
+    })
+    expect(res.ok).toBe(false)
+    if (res.ok) return
+    const json = (await res.response.json()) as { code: string }
+    expect(json.code).toBe("COURSE_NOT_PROVISIONABLE")
   })
 })

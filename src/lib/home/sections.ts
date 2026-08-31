@@ -1,7 +1,7 @@
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import type { Course } from "@/components/main/home/course-card"
-import { COURSE_HAS_PRICE } from "@/lib/catalog/visibility"
+import { COURSE_HAS_PRICE, COURSE_PROVISIONABLE } from "@/lib/catalog/visibility"
 import { interestFreeLabel } from "@/lib/mercadopago/installments"
 import { coursePaymentType } from "@/lib/tenant/monthly-policy"
 
@@ -701,7 +701,7 @@ async function fetchCoursesByIds(
         id: { in: ids },
         status: "ATIVO",
         hiddenMain: false,
-        AND: [COURSE_HAS_PRICE],
+        AND: [COURSE_HAS_PRICE, COURSE_PROVISIONABLE],
       },
       select: courseSelect,
     }),

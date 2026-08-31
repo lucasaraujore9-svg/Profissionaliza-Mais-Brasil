@@ -2,7 +2,7 @@ import type { MetadataRoute } from "next"
 import { prisma } from "@/lib/prisma"
 import { classifyRequestHost, getRequestOrigin } from "@/lib/seo/host"
 import { vitrineDomain } from "@/lib/tenant/urls"
-import { COURSE_HAS_PRICE } from "@/lib/catalog/visibility"
+import { COURSE_HAS_PRICE, COURSE_PROVISIONABLE } from "@/lib/catalog/visibility"
 
 const APP_BASE_URL =
   process.env.NEXT_PUBLIC_APP_URL ?? "https://profissionalizamaisbrasil.com.br"
@@ -74,7 +74,7 @@ async function appSitemap(): Promise<MetadataRoute.Sitemap> {
   let courseEntries: MetadataRoute.Sitemap = []
   try {
     const courses = await prisma.course.findMany({
-      where: { status: "ATIVO", hiddenMain: false, AND: [COURSE_HAS_PRICE] },
+      where: { status: "ATIVO", hiddenMain: false, AND: [COURSE_HAS_PRICE, COURSE_PROVISIONABLE] },
       select: { slug: true, updatedAt: true },
       take: 5000,
     })

@@ -258,7 +258,6 @@ export const POST = withRequestContext(
     const found = await prisma.course.findMany({
       where: { id: { in: requestedIds } },
       select: {
-        nome: true,
         status: true,
         precoVitrineMain: true,
         precoPromocional: true,

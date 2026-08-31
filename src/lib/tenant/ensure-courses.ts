@@ -2,6 +2,7 @@ import type { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { PMB_TENANT_SLUG } from "@/lib/pmb-config"
 import { minSalePrice, type AuthorTerms } from "@/lib/course-authoring/split"
+import { COURSE_PROVISIONABLE } from "@/lib/catalog/visibility"
 
 /**
  * Colunas de autoria necessarias para decidir se um curso entra na vitrine de
@@ -59,7 +60,11 @@ export function catalogScopeForTenant(
       authoredStatus: "PUBLISHED",
     })
   }
-  return { status: "ATIVO", OR: scope }
+  // Mesmo espirito do gate de carteira: curso que a plataforma de aulas nao
+  // consegue matricular nao e propagado para vitrine nenhuma. Sem isto, uma
+  // linha sem id da fornecedora ganha um TenantCourse em CADA unidade e so
+  // aparece o problema no fim do checkout, com o aluno ja cobrado.
+  return { status: "ATIVO", AND: [COURSE_PROVISIONABLE], OR: scope }
 }
 
 /**
@@ -175,6 +180,9 @@ export async function ensureCourseForResellers(courseId: string): Promise<number
     where: { id: courseId },
     select: {
       status: true,
+      provider: true,
+      plataformaCourseId: true,
+      lmsCourseId: true,
       precoVitrineMain: true,
       precoPromocional: true,
       precoOriginal: true,
@@ -183,6 +191,15 @@ export async function ensureCourseForResellers(courseId: string): Promise<number
     },
   })
   if (!course || course.status !== "ATIVO") return 0
+
+  // Espelha `COURSE_PROVISIONABLE` no sentido inverso (um curso -> muitos
+  // tenants). Este e o caminho que espalhou o curso 267 renomeado por 18
+  // vitrines: ele roda no CREATE do sync, quando a linha ainda nao tinha id da
+  // fornecedora. Um `where` nao cabe aqui (a linha ja veio carregada), entao a
+  // regra e repetida como guarda — se as duas divergirem, esta e a mais nova.
+  const providerId =
+    course.provider === "LMS" ? course.lmsCourseId : course.plataformaCourseId
+  if (!providerId) return 0
 
   const isAuthored = course.authorTenantId !== null
   if (

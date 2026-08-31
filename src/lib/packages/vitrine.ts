@@ -248,7 +248,14 @@ export async function getPackageForCheckout(
         orderBy: { order: "asc" },
         include: {
           course: {
-            select: { id: true, nome: true, status: true, plataformaCourseId: true },
+            select: {
+              id: true,
+              nome: true,
+              status: true,
+              provider: true,
+              plataformaCourseId: true,
+              lmsCourseId: true,
+            },
           },
         },
       },
@@ -261,7 +268,16 @@ export async function getPackageForCheckout(
         price: unknown
         enabled: boolean
         tenantId: string | null
-        items: { course: { id: string; nome: string; status: string; plataformaCourseId: string | null } }[]
+        items: {
+          course: {
+            id: string
+            nome: string
+            status: string
+            provider: "EA" | "LMS"
+            plataformaCourseId: string | null
+            lmsCourseId: string | null
+          }
+        }[]
       }
     | null
 
@@ -283,9 +299,22 @@ export async function getPackageForCheckout(
     return null
   }
 
-  const courses = pkg.items
-    .filter((i) => i.course.status === "ATIVO")
-    .map((i) => ({ id: i.course.id, nome: i.course.nome, plataformaCourseId: i.course.plataformaCourseId }))
+  const ativos = pkg.items.filter((i) => i.course.status === "ATIVO")
+
+  // Curso sem identificador da fornecedora nao e matriculavel (ver
+  // COURSE_PROVISIONABLE). Aqui a saida e recusar o PACOTE INTEIRO, nao remover
+  // o curso da lista: quem compra "5 cursos" e recebe 4 pagou por algo que nao
+  // foi entregue, e o silencio esconderia justamente o defeito.
+  const semFornecedora = ativos.find((i) =>
+    i.course.provider === "LMS" ? !i.course.lmsCourseId : !i.course.plataformaCourseId,
+  )
+  if (semFornecedora) return null
+
+  const courses = ativos.map((i) => ({
+    id: i.course.id,
+    nome: i.course.nome,
+    plataformaCourseId: i.course.plataformaCourseId,
+  }))
 
   if (courses.length === 0 || !(price > 0)) return null
 

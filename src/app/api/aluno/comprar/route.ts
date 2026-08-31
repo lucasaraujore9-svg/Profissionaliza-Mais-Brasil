@@ -120,7 +120,6 @@ async function handleResellerInit(
         include: {
           course: {
             select: {
-              nome: true,
               monthlyMonthsMain: true,
               parcelasSugeridas: true,
               parcelasOverride: true,
@@ -563,7 +562,6 @@ export const POST = withRequestContext(
   const course = await prisma.course.findUnique({
     where: { id: parsed.data.courseId },
     select: {
-      nome: true,
       status: true,
       precoVitrineMain: true,
       precoPromocional: true,

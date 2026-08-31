@@ -3,6 +3,7 @@ import type { Prisma } from "@prisma/client"
 import { contextLogger } from "@/lib/logger"
 import { effectivePaymentType, type MonthlyPolicy } from "@/lib/tenant/monthly-policy"
 import { displayInterestFreeInstallments } from "@/lib/mercadopago/installments"
+import { COURSE_PROVISIONABLE } from "@/lib/catalog/visibility"
 
 /**
  * Politica de exibicao da unidade: parcelado/mensalidade + nº GLOBAL de parcelas
@@ -74,12 +75,18 @@ interface ListFilters {
  */
 /**
  * Um curso do catalogo mae so alcanca a vitrine de uma unidade se a curadoria
- * da PMB permitir. Exportado para que a resolucao de escopo das ASSINATURAS
- * (lib/subscriptions/scope.ts) aplique exatamente o mesmo criterio — uma quarta
- * copia desta regra divergiria no primeiro ajuste.
+ * da PMB permitir E se ele for matriculavel. Exportado para que a resolucao de
+ * escopo das ASSINATURAS (lib/subscriptions/scope.ts) aplique exatamente o mesmo
+ * criterio — uma quarta copia desta regra divergiria no primeiro ajuste.
+ *
+ * `COURSE_PROVISIONABLE` entra AQUI, no ponto por onde as tres consultas da
+ * vitrine ja passam, e nao em cada uma delas: gate que precisa ser lembrado a
+ * cada query nova e gate que uma hora fica de fora. Ele vai em `AND` porque o
+ * criterio de curadoria ocupa o `OR` da raiz.
  */
 export function visibilityFilter(tenantId: string): Prisma.CourseWhereInput {
   return {
+    AND: [COURSE_PROVISIONABLE],
     OR: [
       { visibilityMode: "ALL" },
       { visibilityMode: "ALLOWLIST", allowedTenantIds: { has: tenantId } },

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { requireStudentSession } from "@/lib/auth/student-session"
 import { withRequestContext } from "@/lib/observability/with-request-context"
-import { COURSE_HAS_PRICE } from "@/lib/catalog/visibility"
+import { COURSE_HAS_PRICE, COURSE_PROVISIONABLE } from "@/lib/catalog/visibility"
 import { listTenantCourses } from "@/lib/tenant/courses"
 import { coursePaymentType } from "@/lib/tenant/monthly-policy"
 import { PMB_TENANT_SLUG } from "@/lib/pmb-config"
@@ -87,7 +87,7 @@ export const GET = withRequestContext(
   // Pagamento único: "Nx sem juros" vem do nº GLOBAL da PMB (SystemSettings).
   const pmbInterestFree = (await getSystemSettings()).pmbInterestFreeInstallments
   const courses = await prisma.course.findMany({
-    where: { status: "ATIVO", hiddenMain: false, AND: [COURSE_HAS_PRICE] },
+    where: { status: "ATIVO", hiddenMain: false, AND: [COURSE_HAS_PRICE, COURSE_PROVISIONABLE] },
     orderBy: [{ destaqueHome: "desc" }, { ordemHome: "asc" }, { nome: "asc" }],
     select: {
       id: true,

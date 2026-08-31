@@ -318,3 +318,156 @@ describe("ensureLmsCategory — a duplicata não pode renascer no sync", () => {
     expect(p.category.create.mock.calls[0][0].data.name).toBe("saúde")
   })
 })
+
+/**
+ * A REGRESSÃO QUE ESTA SUÍTE EXISTE PARA IMPEDIR.
+ *
+ * A fornecedora renomeou o curso 267 de "Auxiliar Corretor de Imóveis" para
+ * "Preparatório para Corretor de Imóveis". O sync casava por NOME, não achou
+ * nada, e criou uma linha NOVA — que nasceu SEM `plataformaCourseId`, porque o
+ * 267 já estava tomado pela linha antiga (a coluna é `@unique`).
+ *
+ * O resultado em produção: o mesmo curso duplicado em 18 vitrines, a cópia velha
+ * com o preço velho, e a cópia nova IMPOSSÍVEL de matricular — toda venda e toda
+ * liberação morriam com "Falha ao matricular o aluno na plataforma de aulas",
+ * DEPOIS de o aluno ter sido cobrado.
+ *
+ * O nome é mutável na fornecedora e nunca foi chave. O único identificador
+ * estável que o feed expõe vem embutido na URL da capa.
+ */
+describe("syncCatalogFromEA — renomear na fornecedora não pode duplicar o curso", () => {
+  const CAPA_267 = "https://playcurso.com/x/metodo/imagemcursos/267.jpg"
+
+  function feedCurso(nome: string, capa: string | null = CAPA_267, categoria = "Administrativo") {
+    return {
+      nome,
+      aulas: "30",
+      preco: "999,00",
+      status: "ATIVO",
+      categoria_loja: categoria,
+      capa_image: capa,
+    }
+  }
+
+  const LINHA_267 = {
+    id: "ea_267",
+    nome: "Auxiliar Corretor de Imóveis",
+    plataformaCourseId: "267",
+    categoryId: "cat_adm",
+    status: "ATIVO",
+    categoriaLoja: "ADMINISTRATIVO",
+  }
+
+  it("casa pelo ID da capa e RENOMEIA a linha existente — nunca cria a segunda", async () => {
+    listarMock.mockResolvedValue([feedCurso("Preparatório para Corretor de Imóveis")])
+    p.category.findFirst.mockResolvedValue({ id: "cat_adm" })
+    // Só casa por plataformaCourseId. Por NOME não acharia nada (é o nome novo),
+    // que é exatamente o que produzia a linha duplicada.
+    p.course.findFirst.mockImplementation(
+      async ({ where }: { where: { plataformaCourseId?: string } }) =>
+        where.plataformaCourseId === "267" ? LINHA_267 : null,
+    )
+
+    await syncCatalogFromEA("cron")
+
+    expect(p.course.create).not.toHaveBeenCalled()
+    expect(p.course.update).toHaveBeenCalledTimes(1)
+    expect(p.course.update.mock.calls[0][0].where).toEqual({ id: "ea_267" })
+    expect(p.course.update.mock.calls[0][0].data.nome).toBe(
+      "Preparatório para Corretor de Imóveis",
+    )
+  })
+
+  it("a PRIMEIRA consulta é por plataformaCourseId — o nome é só fallback", async () => {
+    listarMock.mockResolvedValue([feedCurso("Nome Qualquer")])
+    p.category.findFirst.mockResolvedValue({ id: "cat_adm" })
+    p.course.findFirst.mockResolvedValue(null)
+    p.course.findUnique.mockResolvedValue(null)
+
+    await syncCatalogFromEA("cron")
+
+    expect(p.course.findFirst.mock.calls[0][0].where).toMatchObject({
+      provider: "EA",
+      plataformaCourseId: "267",
+      authorTenantId: null,
+    })
+    // Trava anti-sequestro preservada nas DUAS consultas.
+    expect(p.course.findFirst.mock.calls[1][0].where).toMatchObject({
+      provider: "EA",
+      nome: "Nome Qualquer",
+      authorTenantId: null,
+    })
+  })
+
+  it("curso novo com id livre nasce COM o id e visível na vitrine-mãe", async () => {
+    listarMock.mockResolvedValue([feedCurso("Curso Inédito")])
+    p.category.findFirst.mockResolvedValue({ id: "cat_adm" })
+    p.course.findFirst.mockResolvedValue(null)
+    p.course.findUnique.mockResolvedValue(null) // id livre e slug livre
+
+    await syncCatalogFromEA("cron")
+
+    const data = p.course.create.mock.calls[0][0].data
+    expect(data.plataformaCourseId).toBe("267")
+    expect(data.hiddenMain).toBe(false)
+  })
+
+  it("id da capa já tomado por outra linha → nasce SEM id e OCULTO, não vendável", async () => {
+    listarMock.mockResolvedValue([feedCurso("Curso Colidente")])
+    p.category.findFirst.mockResolvedValue({ id: "cat_adm" })
+    p.course.findFirst.mockResolvedValue(null) // nem por id nem por nome
+    p.course.findUnique.mockImplementation(
+      async ({ where }: { where: { plataformaCourseId?: string; slug?: string } }) =>
+        where.plataformaCourseId ? { id: "outra_linha", nome: "Outro Curso" } : null,
+    )
+
+    await syncCatalogFromEA("cron")
+
+    const data = p.course.create.mock.calls[0][0].data
+    // Sem id da fornecedora a matrícula é impossível: a linha não pode nascer
+    // vendável. `hiddenMain` a tira da vitrine-mãe; COURSE_PROVISIONABLE a tira
+    // das vitrines de revenda.
+    expect(data.plataformaCourseId).toBeUndefined()
+    expect(data.hiddenMain).toBe(true)
+  })
+
+  it("capa fora da convenção (sem id extraível) também nasce oculta", async () => {
+    listarMock.mockResolvedValue([
+      feedCurso("Curso Sem Id", "https://playcurso.com/x/metodo/imagemcursos/capa-nova.jpg"),
+    ])
+    p.category.findFirst.mockResolvedValue({ id: "cat_adm" })
+    p.course.findFirst.mockResolvedValue(null)
+    p.course.findUnique.mockResolvedValue(null)
+
+    await syncCatalogFromEA("cron")
+
+    const data = p.course.create.mock.calls[0][0].data
+    expect(data.plataformaCourseId).toBeUndefined()
+    expect(data.hiddenMain).toBe(true)
+  })
+
+  it("uma linha que explode não derruba o catálogo inteiro", async () => {
+    listarMock.mockResolvedValue([
+      feedCurso("Curso Que Explode", CAPA_267),
+      feedCurso("Curso Saudável", "https://playcurso.com/x/metodo/imagemcursos/268.jpg"),
+    ])
+    p.category.findFirst.mockResolvedValue({ id: "cat_adm" })
+    p.course.findFirst.mockImplementation(
+      async ({ where }: { where: { plataformaCourseId?: string } }) =>
+        where.plataformaCourseId === "267"
+          ? LINHA_267
+          : where.plataformaCourseId === "268"
+            ? { ...LINHA_267, id: "ea_268", nome: "Curso Saudável", plataformaCourseId: "268" }
+            : null,
+    )
+    // A colisão de nome no índice único parcial é o caso concreto: sem o
+    // try/catch por curso, o throw abortava o sync e a rede passava o dia com o
+    // catálogo da véspera.
+    p.course.update.mockRejectedValueOnce(new Error("Unique constraint failed on nome"))
+
+    const res = await syncCatalogFromEA("cron")
+
+    expect(p.course.update).toHaveBeenCalledTimes(2) // seguiu para o segundo
+    expect(res.updated).toBe(1) // só o saudável entrou na conta
+  })
+})

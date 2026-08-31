@@ -200,9 +200,7 @@ export const POST = withRequestContext(
         include: {
           course: {
             select: {
-              nome: true,
               slug: true,
-              plataformaCourseId: true,
               monthlyMonthsMain: true,
               parcelasSugeridas: true,
               parcelasOverride: true,

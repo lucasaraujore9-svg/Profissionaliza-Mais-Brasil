@@ -74,6 +74,29 @@ function deny(status: number, error: string, code: string): AuthoredSaleGateResu
 export async function authoredSaleGate(
   input: AuthoredSaleGateInput,
 ): Promise<AuthoredSaleGateResult> {
+  // ── Curso que a plataforma de aulas nao consegue matricular ──────────────
+  //
+  // Antes de qualquer coisa, e independente de rateio: sem o identificador da
+  // fornecedora (`plataformaCourseId` na legada, `lmsCourseId` na propria) o
+  // provisionamento morre no FIM do fluxo, com o aluno ja cobrado, e a mensagem
+  // que sobra ("tente novamente") e um conselho que nunca funciona — repetir nao
+  // inventa o id que falta.
+  //
+  // O caso real: a fornecedora renomeou o curso 267, o sync criou uma linha nova
+  // sem id e ela foi parar em 18 vitrines. `COURSE_PROVISIONABLE` tira essas
+  // linhas das listagens; este gate cobre o acesso por ID direto, que e como as
+  // rotas de venda carregam o curso.
+  const semFornecedora = input.courses.find((c) =>
+    c.provider === "LMS" ? !c.lmsCourseId : !c.plataformaCourseId,
+  )
+  if (semFornecedora) {
+    return deny(
+      409,
+      `O curso "${semFornecedora.nome}" está sem vínculo com a plataforma de aulas e não pode ser matriculado. Avise o suporte da PMB — vender agora cobraria o aluno sem liberar o acesso.`,
+      "COURSE_NOT_PROVISIONABLE",
+    )
+  }
+
   const needSplit = input.courses.filter((c) =>
     saleRequiresSplit(c, input.sellerTenantId),
   )

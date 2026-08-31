@@ -25,6 +25,14 @@ import {
  */
 export const AUTHORED_COURSE_SELECT = {
   id: true,
+  nome: true,
+  // Identificadores da fornecedora: `authoredSaleGate` recusa a venda de um
+  // curso que a plataforma de aulas nao conseguiria matricular. Ficam no select
+  // COMPARTILHADO de proposito — as oito portas de venda ja o espalham, entao
+  // porta nova herda o gate sem ter que lembrar dele.
+  provider: true,
+  plataformaCourseId: true,
+  lmsCourseId: true,
   authorTenantId: true,
   authoredStatus: true,
   distribution: true,

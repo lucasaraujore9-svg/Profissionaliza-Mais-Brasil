@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import type { Course } from "@/components/main/home/course-card"
-import { COURSE_HAS_PRICE } from "./visibility"
+import { COURSE_HAS_PRICE, COURSE_PROVISIONABLE } from "./visibility"
 import { interestFreeLabel } from "@/lib/mercadopago/installments"
 import { getSystemSettings } from "@/lib/system-settings"
 import { coursePaymentType } from "@/lib/tenant/monthly-policy"
@@ -145,7 +145,7 @@ export async function loadCategorias(minCount = 0): Promise<CategoriaInfo[]> {
           select: {
             courseLinks: {
               where: {
-                course: { status: "ATIVO", hiddenMain: false, AND: [COURSE_HAS_PRICE] },
+                course: { status: "ATIVO", hiddenMain: false, AND: [COURSE_HAS_PRICE, COURSE_PROVISIONABLE] },
               },
             },
           },
@@ -196,7 +196,7 @@ export async function loadCatalogo({
       status: "ATIVO",
       hiddenMain: false,
       // Regra: curso sem valor nao aparece. AND para nao colidir com o OR da busca.
-      AND: [COURSE_HAS_PRICE],
+      AND: [COURSE_HAS_PRICE, COURSE_PROVISIONABLE],
     }
 
     if (q && q.trim()) {
@@ -276,7 +276,7 @@ export async function loadShowcase(tenantId?: string): Promise<ShowcaseCard[]> {
         hiddenMain: false,
         destaque: true,
         capaImageUrl: { not: null },
-        AND: [COURSE_HAS_PRICE],
+        AND: [COURSE_HAS_PRICE, COURSE_PROVISIONABLE],
       },
       orderBy: { nome: "asc" },
       take: 6,
@@ -289,7 +289,7 @@ export async function loadShowcase(tenantId?: string): Promise<ShowcaseCard[]> {
           status: "ATIVO",
           hiddenMain: false,
           capaImageUrl: { not: null },
-          AND: [COURSE_HAS_PRICE],
+          AND: [COURSE_HAS_PRICE, COURSE_PROVISIONABLE],
         },
         orderBy: { nome: "asc" },
         take: 3 - rows.length,

@@ -4,10 +4,16 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 // checkout da vitrine (ec832d0). Curso desativado na origem (status="INATIVO")
 // com TenantCourse.isVisible=true não pode ser vendido — 404 "Curso indisponível".
 /**
- * Colunas de autoria que a rota passou a selecionar. Curso do catalogo da PMB
- * tem `authorTenantId: null` — e o que faz o gate de rateio ficar de fora.
+ * Colunas que `AUTHORED_COURSE_SELECT` traz e que a rota passou a selecionar.
+ * Curso do catalogo da PMB tem `authorTenantId: null` — e o que faz o gate de
+ * rateio ficar de fora — e carrega o id da fornecedora, sem o qual
+ * `authoredSaleGate` recusa a venda com COURSE_NOT_PROVISIONABLE (o curso nao
+ * teria como ser matriculado na plataforma de aulas).
  */
 const SEM_AUTORIA = {
+  provider: "EA" as const,
+  plataformaCourseId: "267",
+  lmsCourseId: null,
   authorTenantId: null,
   authoredStatus: null,
   distribution: "OWN_ONLY" as const,

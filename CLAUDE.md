@@ -1121,6 +1121,80 @@ override por curso NAQUELA vitrine.
   no pg_cron** (job novo NAO se agenda sozinho — conferir `cron.job` apos o
   deploy) e rodar `?dryRun=1` antes da primeira execucao real.
 
+### Curso renomeado na fornecedora virava duplicata invendavel (2026-08-31)
+
+A EAD Carelli nao conseguia liberar "Preparatorio para Corretor de Imoveis":
+**"Falha ao matricular o aluno na plataforma de aulas. Tente novamente."** —
+conselho que nunca funcionaria, porque repetir nao inventa o id que faltava.
+
+- **A causa:** o sync EA identificava o curso pelo **NOME**, que e MUTAVEL na
+  fornecedora. Em 29/08 ela renomeou o curso **267** de "Auxiliar Corretor de
+  Imoveis" para "Preparatorio para  Corretor de Imoveis" (com dois espacos). O
+  match por nome nao achou nada, o sync CRIOU uma linha nova — e ela nasceu **sem
+  `plataformaCourseId`**, porque o 267 ja estava tomado pela linha antiga
+  (`@unique`) e o `canSetEaCourseId` desistia **em silencio**. Sem id, o
+  provisionamento morre em `linkCourseToStudent`; o gate ja era fail-closed, o
+  problema e que a linha chegou a ser vendavel.
+- **Raio real, maior do que o chamado:** a duplicata caiu na vitrine de **18
+  unidades** (via `ensureCourseForResellers`), com o preco velho na copia velha e
+  o preco novo na copia nova. Nenhum aluno chegou a pagar — a unica matricula era
+  a tentativa da Carelli, ja revertida — mas no **checkout publico** o aluno
+  PAGA primeiro e o provisionamento falha depois (`provisioning.ok=false` so
+  alerta o SUPER_ADMIN). Foi sorte, nao desenho.
+- **`ea_course_id` so existe por convencao de URL.** O endpoint `cursos/listar`
+  nao devolve o id numerico: ele e extraido da capa
+  (`/imagemcursos/<id>.<ext>`, `extractCourseIdFromCapa`). E o unico
+  identificador estavel que o feed expoe — e mesmo assim some quando o admin da
+  fornecedora sobe uma capa com outro nome de arquivo. Por isso o gate de
+  visibilidade abaixo nao e redundante com o fix do sync: **o buraco tem duas
+  entradas**.
+- **Fix 1 — identidade pelo ID, nome so como fallback** (`upsertEaCourse` em
+  `catalog/sync.ts`): casa primeiro por `plataformaCourseId`, depois por nome.
+  Renomeacao vira UPDATE da linha existente. `authorTenantId: null` continua nas
+  DUAS consultas (trava anti-sequestro). Renomeacao vai para o log
+  (`catalog.sync_ea.renamed`) e id ja tomado por outra linha virou WARN
+  (`catalog.sync_ea.duplicate_platform_id`) em vez de silencio.
+- **Fix 2 — `COURSE_PROVISIONABLE`** (`catalog/visibility.ts`): "curso que a
+  plataforma de aulas nao consegue matricular nao pode ser vendido". Mora em
+  `visibilityFilter` e em `catalogScopeForTenant` — os pontos por onde as
+  consultas de vitrine e a propagacao **ja passam** —, e ao lado de
+  `COURSE_HAS_PRICE` na vitrine mae. Gate que precisa ser lembrado a cada query
+  nova e gate que uma hora fica de fora.
+- **Fix 3 — recusa na porta de venda.** Os identificadores entraram no
+  `AUTHORED_COURSE_SELECT`, entao `authoredSaleGate` (o gate unico das oito
+  portas) recusa com **409 `COURSE_NOT_PROVISIONABLE`** nomeando o curso, ANTES
+  da cobranca. Ele roda ANTES do gate de rateio de proposito: numa loja sem
+  Asaas, um curso de terceiro sem id responderia `SPLIT_GATEWAY_REQUIRED` e
+  esconderia o defeito real.
+- **Pacote recusa INTEIRO**, nao remove o curso da lista: quem compra "5 cursos"
+  e recebe 4 pagou por algo que nao foi entregue, e o silencio esconderia
+  justamente o defeito.
+- **Curso novo sem id nasce `hiddenMain: true`.** O gate ja o tiraria das
+  vitrines; nascer oculto faz o estado APARECER em /admin/catalogo em vez de o
+  curso simplesmente sumir.
+- **Sync ficou tolerante a falha por linha.** O corpo do loop virou
+  `upsertEaCourse` com try/catch por curso. Sem isso, o proprio fix 1 abriria um
+  risco novo: casar por id e renomear pode colidir com o indice unico parcial
+  (`courses_provider_nome_pmb_key`) quando a fornecedora troca dois nomes entre
+  si, e UM throw abortava o catalogo inteiro — a rede passaria o dia com o
+  catalogo da vespera.
+- **Producao remediada na hora** (nao esperou deploy): sinais de interesse
+  (`student_leads`, `visitor_events`) e a matricula CANCELLED foram REPONTADOS
+  para `ea_267` (e o mesmo curso — apagar registro de evento real e pior), as 18
+  `tenant_courses` da duplicata apagadas (todas as 18 unidades ja tinham
+  `ea_267` precificado e visivel), a duplicata removida e `ea_267` renomeada. O
+  bloco roda com guardas: aborta se a duplicata tiver certificado, pagamento ou
+  matricula viva. **Decisao do dono:** os R$ 700 que a Carelli definiu na
+  duplicata foram levados para a linha que sobreviveu (estava em R$ 197).
+- **A ordem importa na remediacao:** apagar a duplicata ANTES de renomear
+  `ea_267`, senao o indice unico parcial recusa o nome novo.
+- **Testes verificados POR MUTACAO** (`catalog/sync.test.ts`,
+  `catalog/visibility.test.ts`, `course-authoring/checkout-gate.test.ts`):
+  voltar a casar so por nome, tirar o `hiddenMain` fail-closed, remover o
+  try/catch por curso ou tirar o gate de qualquer uma das consultas derruba o
+  teste correspondente.
+
+
 ### Bugs conhecidos (pendentes)
 
 - **Middleware file convention deprecado** no Next 16 (usar `proxy` em vez de `middleware`).

@@ -360,7 +360,6 @@ export const POST = withRequestContext(
         include: {
           course: {
             select: {
-              nome: true,
               slug: true,
               monthlyMonthsMain: true,
               status: true,

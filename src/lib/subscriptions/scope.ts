@@ -1,5 +1,5 @@
 import type { Prisma } from "@prisma/client"
-import { COURSE_HAS_PRICE } from "@/lib/catalog/visibility"
+import { COURSE_HAS_PRICE, COURSE_PROVISIONABLE } from "@/lib/catalog/visibility"
 import { visibilityFilter } from "@/lib/tenant/courses"
 
 /**
@@ -96,7 +96,9 @@ export function vitrineGateWhere(tenantId: string | null): Prisma.CourseWhereInp
   ]
 
   if (tenantId === null) {
-    gates.push({ hiddenMain: false }, COURSE_HAS_PRICE)
+    // Na vitrine mae o par de gates e explicito; na de revenda ele ja vem dentro
+    // de `visibilityFilter`.
+    gates.push({ hiddenMain: false }, COURSE_HAS_PRICE, COURSE_PROVISIONABLE)
   } else {
     gates.push(visibilityFilter(tenantId), {
       tenantCourses: {
