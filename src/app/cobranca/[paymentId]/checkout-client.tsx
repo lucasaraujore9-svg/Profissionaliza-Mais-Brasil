@@ -84,8 +84,13 @@ function PixTab({
       return (
         <div className="flex flex-col items-center gap-4 py-8 text-center text-gray-500">
           <p className="text-sm font-medium">PIX indisponível para esta cobrança.</p>
+          {/* Não mandar "use o Boleto" sem saber se ele existe: numa cobrança
+              de assinatura no cartão o boleto TAMBÉM não é gerado, e o texto
+              antigo apontava para uma saída que não estava lá. */}
           <p className="text-xs text-gray-400">
-            Use o Boleto ou Cartão de crédito para pagar.
+            {billingInfo?.bankSlip
+              ? "Use o Boleto ou o Cartão de crédito para pagar."
+              : "Use o Cartão de crédito, ou libere as outras formas de pagamento acima."}
           </p>
         </div>
       )
@@ -632,6 +637,12 @@ export function CheckoutClient({
   const [billingLoading, setBillingLoading] = useState(true)
   const [billingError, setBillingError] = useState<string | null>(null)
   const [paid, setPaid] = useState(false)
+  // O `billingType` chega do servidor, mas pode ser AMPLIADO aqui (ver
+  // `liberarOutrosMetodos`). Sem estado local, destravar a cobrança não
+  // recalcularia as abas e o pagador continuaria vendo só "Cartão".
+  const [tipoEfetivo, setTipoEfetivo] = useState(billingType)
+  const [liberando, setLiberando] = useState(false)
+  const [erroLiberar, setErroLiberar] = useState<string | null>(null)
 
   const fetchBillingInfo = useCallback(async () => {
     setBillingLoading(true)
@@ -665,23 +676,55 @@ export function CheckoutClient({
     }
   }, [billingInfo])
 
+  /**
+   * Destrava a cobrança presa a um único meio. Uma mensalidade de assinatura no
+   * CARTÃO não gera PIX nem boleto: quando o emissor recusava o cartão, a
+   * unidade ficava sem NENHUMA forma de pagar — era o que estava acontecendo em
+   * produção. Aqui ela pede para aceitar qualquer meio, e as abas se recalculam.
+   */
+  const liberarOutrosMetodos = useCallback(async () => {
+    setLiberando(true)
+    setErroLiberar(null)
+    try {
+      const res = await fetch(`/api/cobranca/${paymentId}/liberar-metodos`, {
+        method: "POST",
+      })
+      const json = await res.json()
+      if (!res.ok) {
+        setErroLiberar(json.error ?? "Não foi possível liberar outras formas de pagamento.")
+        return
+      }
+      setTipoEfetivo(json.data.billingType as string)
+      setTab("PIX")
+      await fetchBillingInfo()
+    } catch {
+      setErroLiberar("Erro de rede. Tente novamente.")
+    } finally {
+      setLiberando(false)
+    }
+  }, [paymentId, fetchBillingInfo])
+
   const tabs = [
     {
       id: "PIX" as Tab,
       label: "PIX",
-      available: billingType === "PIX" || billingType === "UNDEFINED",
+      available: tipoEfetivo === "PIX" || tipoEfetivo === "UNDEFINED",
     },
     {
       id: "BOLETO" as Tab,
       label: "Boleto",
-      available: billingType === "BOLETO" || billingType === "UNDEFINED",
+      available: tipoEfetivo === "BOLETO" || tipoEfetivo === "UNDEFINED",
     },
     {
       id: "CARTAO" as Tab,
       label: "Cartão",
-      available: billingType === "CREDIT_CARD" || billingType === "UNDEFINED",
+      available: tipoEfetivo === "CREDIT_CARD" || tipoEfetivo === "UNDEFINED",
     },
   ].filter((t) => t.available)
+
+  // Cobrança travada num meio só: oferece a saída. Sem isto, cartão recusado =
+  // beco sem saída.
+  const presaNumMetodoSo = tabs.length === 1 && tipoEfetivo !== "UNDEFINED"
 
   if (paid) {
     return (
@@ -725,6 +768,28 @@ export function CheckoutClient({
           </button>
         ))}
       </div>
+
+      {presaNumMetodoSo && (
+        <div className="border-b border-amber-200 bg-amber-50 px-6 py-3">
+          <p className="text-xs text-amber-900">
+            Esta cobrança aceita somente{" "}
+            <strong>{tabs[0]?.label.toLowerCase()}</strong>. Se não conseguir
+            pagar assim, libere as outras formas.
+          </p>
+          <button
+            type="button"
+            onClick={liberarOutrosMetodos}
+            disabled={liberando}
+            className="mt-2 inline-flex items-center gap-2 rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-amber-700 disabled:opacity-60"
+          >
+            {liberando ? <Spinner /> : null}
+            {liberando ? "Liberando…" : "Pagar com PIX ou boleto"}
+          </button>
+          {erroLiberar && (
+            <p className="mt-2 text-xs text-red-700">{erroLiberar}</p>
+          )}
+        </div>
+      )}
 
       {/* Tab content */}
       <div className="p-6">

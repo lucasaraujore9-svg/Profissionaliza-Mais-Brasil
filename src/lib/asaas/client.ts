@@ -342,6 +342,16 @@ export interface AsaasUpdatePaymentParams {
   dueDate?: string   // YYYY-MM-DD
   value?: number
   description?: string
+  /**
+   * Forma de pagamento aceita pela cobrança. `UNDEFINED` libera PIX + boleto +
+   * cartão; qualquer valor específico TRAVA a cobrança naquele meio.
+   *
+   * Existe porque uma cobrança criada com `CREDIT_CARD` não gera QR de PIX nem
+   * linha de boleto — o Asaas recusa `GET /pixQrCode` nela. Na prática o
+   * pagador ficava com um único meio disponível e, quando o emissor recusava o
+   * cartão, sem NENHUMA saída (ver /api/cobranca/[paymentId]/liberar-metodos).
+   */
+  billingType?: "BOLETO" | "CREDIT_CARD" | "PIX" | "UNDEFINED"
 }
 
 export async function updatePayment(
