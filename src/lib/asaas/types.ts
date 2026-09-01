@@ -212,6 +212,18 @@ export interface AsaasPayment {
   value: number
   netValue: number
   status: string
+  /**
+   * Cobranca REMOVIDA no Asaas. O DELETE e um SOFT DELETE: a cobranca removida
+   * segue respondendo 200 em `GET /payments/{id}` (ha ate um
+   * `POST /payments/{id}/restore` para desfazer) e MANTEM o ultimo `status` que
+   * teve — PENDING ou OVERDUE. "Removida" NAO e um valor de `status`.
+   *
+   * Portanto: quem pergunta "esta cobranca ainda existe?" tem que ler ESTE
+   * campo. Nem o 404 (que so acontece se o id nao resolve na conta) nem o
+   * `status` respondem essa pergunta. O campo sempre vem na resposta; faltava
+   * apenas aqui, e por isso nenhum call site conseguia le-lo.
+   */
+  deleted: boolean
   dueDate: string
   paymentDate: string | null
   clientPaymentDate: string | null

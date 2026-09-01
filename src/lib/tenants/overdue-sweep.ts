@@ -19,11 +19,15 @@
  *      reescrita de status);
  *   2. não pode existir cobrança de ciclo POSTERIOR já paga — se a unidade pagou
  *      o mês seguinte, a linha antiga é resíduo de reconciliação, não dívida;
- *   3. o Asaas tem que CONFIRMAR, na hora, que a cobrança segue em aberto.
+ *   3. o Asaas tem que CONFIRMAR, na hora, que a cobrança segue em aberto — e
+ *      "em aberto" é `deleted: false` MAIS um status de aberto. O DELETE do
+ *      Asaas é soft: a cobrança removida responde 200 e guarda o último status,
+ *      então olhar só o status faz esta prova ratificar dívida inexistente.
  *
- * Qualquer dúvida — Asaas fora do ar, id que não resolve, status inesperado —
- * pula o cancelamento e deixa para a próxima execução. Fail-closed: adiar o
- * cancelamento custa 6 horas; cancelar errado custa um cliente.
+ * Qualquer dúvida — Asaas fora do ar, id que não resolve, cobrança removida,
+ * status inesperado — pula o cancelamento e deixa para a próxima execução.
+ * Fail-closed: adiar o cancelamento custa 6 horas; cancelar errado custa um
+ * cliente.
  */
 import { prisma } from "@/lib/prisma"
 import { blockTenantStudents } from "@/lib/auto-block"
@@ -141,12 +145,31 @@ async function confirmDelinquency(
   try {
     payment = await getPayment(charge.asaasPaymentId)
   } catch (error) {
-    // 404 = cobrança não existe mais no Asaas (removida no cancelamento de uma
-    // assinatura antiga). Não é dívida — e a reconciliação diária marca DELETED.
+    // 404 = o id não resolve na conta. NÃO é o caso comum de cobrança removida
+    // (essa responde 200 com `deleted: true`, tratado logo abaixo): aqui é id
+    // de outra conta ou expurgado de vez. De todo modo não é dívida.
     if (error instanceof AsaasApiError && error.statusCode === 404) {
       return { ok: false, reason: "cobranca_inexistente_no_asaas" }
     }
     return { ok: false, reason: "asaas_indisponivel" }
+  }
+
+  // A cobrança foi REMOVIDA no Asaas (renegociação, assinatura recriada, ajuste
+  // manual do operador). O DELETE de lá é SOFT: ela responde 200 e MANTÉM o
+  // último status — PENDING/OVERDUE. Sem esta guarda, `OPEN_ASAAS_STATUSES`
+  // abaixo lê "em aberto" e a terceira prova — a que existe exatamente para
+  // impedir o cancelamento por uma linha velha — ratifica uma dívida que não
+  // existe. Cancelar uma unidade por uma cobrança que o próprio operador apagou
+  // é o pior desfecho possível daqui, e é irreversível.
+  if (payment.deleted) {
+    // Reconcilia na hora, como o ramo `pago_no_asaas` logo abaixo: sem isto a
+    // linha segue OVERDUE e a varredura volta a este mesmo ponto amanhã. NÃO
+    // reativa nada — cobrança apagada não é pagamento, e a unidade continua
+    // suspensa até pagar de fato.
+    await prisma.tenantPayment
+      .update({ where: { id: charge.id }, data: { status: "DELETED" } })
+      .catch(() => undefined)
+    return { ok: false, reason: "cobranca_removida_no_asaas" }
   }
 
   if (PAID_ASAAS_STATUSES.has(payment.status)) {

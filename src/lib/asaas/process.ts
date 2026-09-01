@@ -162,10 +162,12 @@ async function handleSubscriptionCancellation(
 
 /**
  * Confirma o cancelamento de uma cobrança (mensalidade) via webhook
- * PAYMENT_DELETED. Valida que a cobrança REALMENTE sumiu do Asaas (404) antes
- * de marcar DELETED — um evento que ainda resolve 200 é espúrio e é ignorado.
- * Fecha o ciclo iniciado pelo botão "Cancelar" do painel (que deixa a linha
- * em DELETING). asaasPaymentId é único, então o updateMany casa no máximo 1.
+ * PAYMENT_DELETED. Valida na fonte que a cobrança foi REALMENTE removida —
+ * `deleted: true` na re-busca, ou 404 — antes de marcar DELETED; um evento cuja
+ * cobrança segue viva é espúrio e é ignorado. Fecha o ciclo iniciado pelo botão
+ * "Cancelar" do painel (que deixa a linha em DELETING) e também pega a cobrança
+ * apagada direto no Asaas, sem esperar a reconciliação diária.
+ * asaasPaymentId é único, então o update casa no máximo 1 linha.
  */
 async function handlePaymentDeleted(
   logId: string,
@@ -177,12 +179,25 @@ async function handlePaymentDeleted(
     return
   }
 
-  // Validação: cobrança deletada responde 404. Se ainda existir (200), o
-  // evento não corresponde a um cancelamento efetivo → ignora.
+  // Validação: a cobrança foi mesmo removida?
+  //
+  // O DELETE do Asaas é um SOFT DELETE — a cobrança removida continua
+  // respondendo 200 aqui, e o `status` dela NÃO muda (fica em PENDING/OVERDUE).
+  // Quem prova a remoção é `payment.deleted`. A versão anterior desta função
+  // exigia 404 como prova e por isso IGNOROU todos os PAYMENT_DELETED que já
+  // recebemos, sem uma única confirmação; o que vinha salvando o banco era a
+  // reconciliação diária, que só percebe a remoção até 24h depois.
+  //
+  // Continuamos RE-BUSCANDO em vez de ler o `deleted` do corpo do webhook —
+  // mesma defesa em profundidade do resto do arquivo: corpo forjado não vira
+  // escrita no banco. O 404 segue valendo como prova: id que não resolve na
+  // conta é cobrança que não existe nem para ser lida.
   try {
-    await getAsaasPayment(paymentId)
-    await markLog(logId, true, `PAYMENT_DELETED mas ${paymentId} ainda existe no Asaas — ignorado`)
-    return
+    const payment = await getAsaasPayment(paymentId)
+    if (!payment.deleted) {
+      await markLog(logId, true, `PAYMENT_DELETED mas ${paymentId} não está removida no Asaas — ignorado`)
+      return
+    }
   } catch (err) {
     if (!(err instanceof AsaasApiError && err.statusCode === 404)) throw err
     // 404 confirmado → segue para marcar DELETED.
@@ -190,10 +205,26 @@ async function handlePaymentDeleted(
 
   const existing = await prisma.tenantPayment.findUnique({
     where: { asaasPaymentId: paymentId },
-    select: { id: true, tenantId: true },
+    select: { id: true, tenantId: true, paidAt: true, markedPaidAt: true },
   })
   if (!existing) {
     await markLog(logId, true, `PAYMENT_DELETED: ${paymentId} sem TenantPayment correspondente`)
+    return
+  }
+
+  // Mensalidade com PROVA DE PAGAMENTO nunca vira DELETED. `paidAt`/
+  // `markedPaidAt` sobrevivem à reescrita de status (mesma doutrina da terceira
+  // prova da varredura de inadimplência); `status` não.
+  //
+  // Não é hipótese: há mensalidades em produção que receberam PAYMENT_DELETED e
+  // hoje constam RECEIVED — cobrança removida e, no mesmo dia, restaurada
+  // (`POST /payments/{id}/restore`) e paga. Enquanto este handler era código
+  // morto isso não tinha consequência; agora ele ESCREVE, e apagar do extrato
+  // uma mensalidade que a unidade pagou tiraria receita real dos relatórios e
+  // da comissão do indicador. Na dúvida, preservamos o pagamento: a
+  // reconciliação diária corrige o caso contrário.
+  if (existing.paidAt || existing.markedPaidAt) {
+    await markLog(logId, true, `PAYMENT_DELETED: ${paymentId} tem pagamento registrado — ignorado`)
     return
   }
 

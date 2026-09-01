@@ -110,7 +110,12 @@ beforeEach(() => {
   db.tenantPayment.findFirst.mockResolvedValue(null)
   db.tenantPayment.update.mockResolvedValue({})
   db.tenantPaymentReminder.createMany.mockResolvedValue({ count: 1 })
-  asaas.getPayment.mockResolvedValue({ id: "pay_1", status: "OVERDUE", paymentDate: null })
+  asaas.getPayment.mockResolvedValue({
+    id: "pay_1",
+    status: "OVERDUE",
+    paymentDate: null,
+    deleted: false,
+  })
 })
 
 describe("cancelamento automático em D+7", () => {
@@ -201,6 +206,29 @@ describe("provas exigidas antes de destruir", () => {
 
     expect(cancelTenant).not.toHaveBeenCalled()
     expect(result.skippedCancellations[0].reason).toBe("cobranca_inexistente_no_asaas")
+  })
+
+  // O DELETE do Asaas é SOFT: a cobrança removida responde 200 e MANTÉM
+  // `status: "OVERDUE"`. Se a prova olhar só o status, ela lê "em aberto" e
+  // ratifica uma dívida que o próprio operador apagou — e o cancelamento é
+  // irreversível. É por isso que este teste manda o par (removida + em aberto).
+  it("não cancela por cobrança REMOVIDA que ainda se diz vencida — e reconcilia a linha", async () => {
+    db.tenant.findMany.mockResolvedValue([unidade(20)])
+    asaas.getPayment.mockResolvedValue({
+      id: "pay_1",
+      status: "OVERDUE",
+      paymentDate: null,
+      deleted: true,
+    })
+
+    const result = await runOverdueSweep({ now: NOW })
+
+    expect(cancelTenant).not.toHaveBeenCalled()
+    expect(result.skippedCancellations[0].reason).toBe("cobranca_removida_no_asaas")
+    expect(db.tenantPayment.update).toHaveBeenCalledWith({
+      where: { id: "tp1" },
+      data: { status: "DELETED" },
+    })
   })
 
   it("não cancela em estado inesperado do Asaas (estorno, chargeback)", async () => {

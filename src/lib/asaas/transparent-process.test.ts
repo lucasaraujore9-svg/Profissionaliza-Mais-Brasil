@@ -131,6 +131,7 @@ function payment(status = "PENDING") {
     value: 100,
     netValue: 98,
     status,
+    deleted: false,
     dueDate: "2026-07-30",
     paymentDate: status === "CONFIRMED" ? "2026-07-27" : null,
     clientPaymentDate: null,
