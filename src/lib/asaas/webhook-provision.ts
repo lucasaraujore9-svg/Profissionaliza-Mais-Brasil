@@ -109,19 +109,49 @@ function generateAuthToken(): string {
   return randomBytes(32).toString("base64url")
 }
 
+/** Slug em `?tenant=` da URL de um webhook, ou null quando não há. */
+export function webhookTenantSlug(url: string | null | undefined): string | null {
+  if (!url) return null
+  const match = url.match(/[?&]tenant=([a-z0-9_-]+)/i)
+  return match ? match[1].toLowerCase() : null
+}
+
 /**
- * Localiza o webhook DESTA integração na conta. Casa primeiro pela URL exata e,
- * se não achar, por qualquer webhook que aponte para o nosso endpoint — é assim
- * que corrigimos o registro feito à mão com a URL errada (sem `?tenant=<slug>`,
- * no apex em vez do www, sobrando barra), que hoje toma 401 em toda entrega.
+ * Localiza o webhook DESTA unidade na conta. Casa pela URL exata e, se não
+ * achar, por um webhook que aponte para o nosso endpoint **com o `?tenant=`
+ * desta mesma unidade** — é assim que corrigimos o registro feito à mão com a
+ * URL quase certa (apex em vez do www, barra sobrando), que toma 401 em toda
+ * entrega.
+ *
+ * O QUE ELE NUNCA PODE ADOTAR: um webhook do nosso endpoint SEM `?tenant=`.
+ * Essa é a assinatura do webhook GLOBAL da PMB, e o fallback antigo
+ * (`url.includes("/api/webhooks/asaas")`) casava com ele. Isso só é inofensivo
+ * enquanto cada unidade tem a própria conta Asaas — mas há unidade PRÓPRIA da
+ * PMB que usa deliberadamente a MESMA conta-mãe, para o dinheiro cair no mesmo
+ * caixa. Nela, `listWebhooks` devolve o webhook global da PMB, e o `ensure`
+ * seguinte faria `updateWebhook` nele: reescreveria a URL para `?tenant=<slug>`,
+ * trocaria o `authToken` (que é a env `ASAAS_WEBHOOK_TOKEN`) por um token
+ * gerado, e reduziria os eventos aos 6 de revenda. Resultado: a mensalidade da
+ * REDE INTEIRA deixaria de processar. Como o cron diário reexecuta o `ensure`
+ * sempre que o estado não está saudável, era um sorteio repetido todo dia.
+ *
+ * Não achar nada é o resultado certo nesse caso: o `ensure` cria um webhook
+ * novo, ao lado do global, em vez de sequestrá-lo.
  */
 function findOurWebhook(
   all: AsaasWebhookConfig[],
   expectedUrl: string,
+  slug: string,
 ): AsaasWebhookConfig | null {
   const exact = all.find((w) => w.url?.trim() === expectedUrl)
   if (exact) return exact
-  return all.find((w) => (w.url ?? "").includes("/api/webhooks/asaas")) ?? null
+  return (
+    all.find(
+      (w) =>
+        (w.url ?? "").includes("/api/webhooks/asaas") &&
+        webhookTenantSlug(w.url) === slug.toLowerCase(),
+    ) ?? null
+  )
 }
 
 function buildInput(
@@ -220,7 +250,7 @@ export async function ensureTenantAsaasWebhook(
   let created: boolean
   try {
     const existing = await listWebhooks(apiKey)
-    const ours = findOurWebhook(existing.data ?? [], expectedUrl)
+    const ours = findOurWebhook(existing.data ?? [], expectedUrl, tenant.slug)
     const input = buildInput(tenant, authToken)
 
     if (ours) {
@@ -333,7 +363,7 @@ export async function inspectTenantAsaasWebhook(
 
   try {
     const all = await listWebhooks(apiKey)
-    const ours = findOurWebhook(all.data ?? [], expectedUrl)
+    const ours = findOurWebhook(all.data ?? [], expectedUrl, tenant.slug)
     if (!ours) return empty
 
     const events = ours.events ?? []

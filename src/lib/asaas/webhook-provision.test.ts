@@ -129,10 +129,16 @@ describe("ensureTenantAsaasWebhook", () => {
     })
   })
 
-  it("webhook cadastrado à mão com a URL errada: corrige em vez de duplicar", async () => {
+  it("webhook cadastrado à mão com a URL quase certa (apex em vez do www): corrige em vez de duplicar", async () => {
     listMock.mockResolvedValue({
-      // Sem o ?tenant=<slug>, toda entrega cai no ramo global e toma 401.
-      data: [webhookRow({ id: "wh_9", url: "https://www.pmb.test/api/webhooks/asaas" })],
+      // O ?tenant= é DESTA unidade — só o host está errado, e nesse host toda
+      // entrega toma 401. É o caso que o reparo existe para resolver.
+      data: [
+        webhookRow({
+          id: "wh_9",
+          url: "https://pmb.test/api/webhooks/asaas?tenant=ceipro",
+        }),
+      ],
     })
 
     const result = await ensureTenantAsaasWebhook(tenant)
@@ -144,6 +150,44 @@ describe("ensureTenantAsaasWebhook", () => {
       expect.objectContaining({ url: EXPECTED_URL }),
       "chave-da-unidade",
     )
+  })
+
+  it("conta compartilhada com a PMB: NÃO sequestra o webhook global (sem ?tenant=) — cria o seu ao lado", async () => {
+    // Unidade PRÓPRIA da PMB usa a MESMA conta Asaas da matriz, de propósito,
+    // para o dinheiro cair no mesmo caixa. Nessa conta o `listWebhooks` devolve
+    // o webhook GLOBAL da PMB. Adotá-lo reescreveria a URL dele para
+    // `?tenant=<slug>` e trocaria o authToken (a env ASAAS_WEBHOOK_TOKEN) por um
+    // token gerado — a mensalidade da REDE INTEIRA pararia de processar.
+    listMock.mockResolvedValue({
+      data: [
+        webhookRow({ id: "wh_global", url: "https://www.pmb.test/api/webhooks/asaas" }),
+      ],
+    })
+
+    const result = await ensureTenantAsaasWebhook(tenant)
+
+    expect(result).toMatchObject({ ok: true, created: true })
+    expect(updateMock).not.toHaveBeenCalled()
+    expect(createMock).toHaveBeenCalledWith(
+      expect.objectContaining({ url: EXPECTED_URL }),
+      "chave-da-unidade",
+    )
+  })
+
+  it("webhook de OUTRA unidade na mesma conta: não é adotado", async () => {
+    listMock.mockResolvedValue({
+      data: [
+        webhookRow({
+          id: "wh_outra",
+          url: "https://www.pmb.test/api/webhooks/asaas?tenant=outraunidade",
+        }),
+      ],
+    })
+
+    const result = await ensureTenantAsaasWebhook(tenant)
+
+    expect(result).toMatchObject({ ok: true, created: true })
+    expect(updateMock).not.toHaveBeenCalled()
   })
 
   it("fila interrompida/penalizada: religa e tira do backoff", async () => {
