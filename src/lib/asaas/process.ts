@@ -1,4 +1,6 @@
+import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
+import { resolveOverdueRuler, overdueDays } from "@/lib/tenants/overdue-policy"
 import { getPayment as getAsaasPayment, AsaasApiError } from "./client"
 import { isTransientWebhookError } from "@/lib/webhooks/transient"
 import { sendEmail } from "@/lib/email/resend"
@@ -30,6 +32,26 @@ import {
   revokeSubscriptionForRefund,
   recordOpenSubscriptionCharge,
 } from "@/lib/subscriptions/renew"
+
+/**
+ * Campos da unidade que o processamento de MENSALIDADE precisa. Extraido para
+ * constante porque agora ha DOIS caminhos que resolvem a mesma unidade — pela
+ * assinatura (`asaasSubscriptionId`) e pelo cliente (`asaasCustomerId`, quando
+ * a cobranca e avulsa) — e os dois desembocam no mesmo bloco. Dois `select`
+ * escritos a mao divergiriam no primeiro campo novo, e o caminho esquecido
+ * quebraria em runtime.
+ */
+const TENANT_BILLING_SELECT = {
+  id: true,
+  name: true,
+  slug: true,
+  customDomain: true,
+  billingMode: true,
+  status: true,
+  activatedAt: true,
+  cancellationPolicy: true,
+  owner: { select: { email: true, name: true } },
+} as const
 
 function formatMoney(value: number): string {
   return new Intl.NumberFormat("pt-BR", {
@@ -489,6 +511,11 @@ export async function processAsaasWebhook(
     }
 
     const subscriptionId = payment.subscription
+    // Preenchido quando a cobranca e AVULSA (sem assinatura) e mesmo assim
+    // pertence a uma unidade — ver o bloco "MENSALIDADE AVULSA" abaixo.
+    let tenantFromCustomer: Prisma.TenantGetPayload<{
+      select: typeof TENANT_BILLING_SELECT
+    }> | null = null
     if (!subscriptionId) {
       // Parcela de carnê da VITRINE PMB (tenantId=null): roteia pela linha
       // BoletoInstallment (asaasPaymentId), como no branch da revenda
@@ -548,13 +575,46 @@ export async function processAsaasWebhook(
 
       const handled = await processPmbDirectSale(logId, event, payment)
       if (handled) return
-      await markLog(logId, true, `sem subscription: ${event}`)
-      return
+
+      // MENSALIDADE AVULSA DA UNIDADE.
+      //
+      // Cobranca criada A MAO no painel do Asaas — valor negociado, acordo de
+      // parcelamento, diferenca de plano — nasce SEM `subscription` e SEM
+      // `externalReference`. Ate aqui ela morria no fallback logo abaixo: a
+      // unidade PAGAVA e nada acontecia. Nao entrava no ledger pelo webhook,
+      // nao reativava a unidade suspensa, nao gerava comissao de indicacao.
+      // Medido em producao: 48 pagamentos recebidos e ignorados desde junho —
+      // `cesitec` pagou R$ 120 em 26/08 e seguiu CANCELADA; `ascentro...` pagou
+      // R$ 239 em 30/06 e seguiu SUSPENSA.
+      //
+      // O `reconcile` diario espelhava essas cobrancas em TenantPayment (por
+      // isso algumas aparecem como RECEIVED no financeiro), mas ele NAO mexe em
+      // status de unidade — o dinheiro entrava e a vitrine continuava fora do
+      // ar. Espelhar nao e efetivar.
+      //
+      // O unico vinculo que o Asaas propaga numa cobranca avulsa e o
+      // `customer`, que e exatamente o `asaasCustomerId` que gravamos quando a
+      // assinatura da unidade foi criada.
+      tenantFromCustomer = payment.customer
+        ? await prisma.tenant.findFirst({
+            where: { asaasCustomerId: payment.customer },
+            select: TENANT_BILLING_SELECT,
+          })
+        : null
+
+      if (!tenantFromCustomer) {
+        await markLog(logId, true, `sem subscription: ${event}`)
+        return
+      }
     }
 
     // ASSINATURA DE ALUNO. Roteada ANTES da matricula e do tenant: os tres usam
     // `asaasSubscriptionId`, e uma assinatura nao casaria com nenhum dos outros
     // dois — cairia no fallback e o ciclo nunca renovaria.
+    //
+    // Guardado por `subscriptionId`: a mensalidade avulsa resolvida acima chega
+    // aqui SEM assinatura e nao tem o que casar nestes dois blocos.
+    if (subscriptionId) {
     const studentSub = await prisma.studentSubscription.findFirst({
       where: { asaasSubscriptionId: subscriptionId },
       select: { id: true },
@@ -639,27 +699,22 @@ export async function processAsaasWebhook(
       const handled = await processPmbDirectSale(logId, event, payment)
       if (handled) return
     }
+    }
 
     // Casa tanto a assinatura regular quanto a promocional (mensalidade
     // promocional usa duas subscriptions; ambas cobram o mesmo tenant).
-    const tenant = await prisma.tenant.findFirst({
-      where: {
-        OR: [
-          { asaasSubscriptionId: subscriptionId },
-          { asaasPromoSubscriptionId: subscriptionId },
-        ],
-      },
-      select: {
-        id: true,
-        name: true,
-        slug: true,
-        customDomain: true,
-        billingMode: true,
-        status: true,
-        activatedAt: true,
-        owner: { select: { email: true, name: true } },
-      },
-    })
+    // `tenantFromCustomer` ja vem resolvido quando a cobranca e avulsa.
+    const tenant =
+      tenantFromCustomer ??
+      (await prisma.tenant.findFirst({
+        where: {
+          OR: [
+            { asaasSubscriptionId: subscriptionId },
+            { asaasPromoSubscriptionId: subscriptionId },
+          ],
+        },
+        select: TENANT_BILLING_SELECT,
+      }))
 
     if (!tenant) {
       await markLog(logId, true, `tenant nao encontrado para ${subscriptionId}`)
@@ -782,6 +837,34 @@ export async function processAsaasWebhook(
       }
 
       case "PAYMENT_OVERDUE": {
+        // A CARENCIA E DA REGUA, NAO DO GATEWAY.
+        //
+        // Este branch suspendia a unidade e bloqueava os alunos no INSTANTE em
+        // que o Asaas dispara PAYMENT_OVERDUE — que e D+1. A regra do produto
+        // (`overdue-policy.ts`, tambem usada pelo sweep diario) so corta em
+        // D+3, e ha unidade em producao com carencia propria de 15 dias. Como
+        // o webhook sempre chega antes do cron, ele decidia sozinho e a regua
+        // nunca era consultada: em 01/09 seis unidades foram suspensas com 1 ou
+        // 2 dias de atraso e 17 alunos perderam acesso as aulas.
+        //
+        // O relogio aqui e o MESMO do sweep — `dueDate` da cobranca, em dia
+        // civil brasileiro — para as duas metades nao divergirem.
+        const ruler = resolveOverdueRuler(tenant.cancellationPolicy)
+        const diasDeAtraso = overdueDays(new Date(payment.dueDate))
+
+        if (diasDeAtraso < ruler.suspendAfterDays) {
+          // Ainda dentro da carencia: a cobranca ja foi registrada no
+          // TenantPayment acima (a unidade ve o vencido no painel) e o e-mail
+          // de aviso sai normalmente. Quem suspende, se ela nao pagar, e o
+          // sweep diario quando o prazo estourar.
+          await markLog(
+            logId,
+            true,
+            `overdue ${diasDeAtraso}d — dentro da carencia de ${ruler.suspendAfterDays}d, sem suspensao`,
+          )
+          break
+        }
+
         await prisma.tenant.update({
           where: { id: tenant.id },
           data: { status: "SUSPENDED" },
