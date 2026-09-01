@@ -726,6 +726,25 @@ export function CheckoutClient({
   // beco sem saída.
   const presaNumMetodoSo = tabs.length === 1 && tipoEfetivo !== "UNDEFINED"
 
+  // A ABA MOSTRADA TEM QUE SER UMA DAS DISPONÍVEIS.
+  //
+  // `tab` nasce "PIX", mas a barra só desenha as abas que o billingType
+  // permite. Numa cobrança travada no CARTÃO isso divergia: a barra mostrava
+  // "Cartão" (única disponível) e o CORPO continuava na aba PIX, exibindo
+  // "PIX indisponível para esta cobrança". O auto-switch abaixo não salvava,
+  // porque ele só cobre o caso `sem PIX mas com boleto` — e numa cobrança de
+  // cartão o boleto também não existe.
+  //
+  // Era isto que fazia a mensalidade parecer quebrada: a pessoa abria o link
+  // para pagar e lia um erro de PIX numa tela cuja única aba era Cartão; ia no
+  // cartão, o emissor recusava, e os dois meios "não funcionavam".
+  useEffect(() => {
+    if (tabs.length === 0) return
+    if (!tabs.some((t) => t.id === tab)) {
+      setTab(tabs[0].id)
+    }
+  }, [tabs, tab])
+
   if (paid) {
     return (
       <div className="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50 p-8 text-center">

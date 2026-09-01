@@ -151,6 +151,7 @@ beforeEach(() => {
 describe("checkout transparente de parcela Asaas existente", () => {
   it("PIX reutiliza o paymentId da parcela sem criar cobrança", async () => {
     getPixQrCodeMock.mockResolvedValue({
+      success: true,
       payload: "pix-copia-e-cola",
       encodedImage: "base64",
       expirationDate: "2026-07-30",

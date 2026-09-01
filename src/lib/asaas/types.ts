@@ -234,6 +234,15 @@ export interface AsaasPaymentList {
 
 // ── PIX QR Code ──
 export interface AsaasPixQrCode {
+  /**
+   * O Asaas responde HTTP 200 mesmo quando NAO consegue gerar o QR (chave PIX
+   * ausente/invalida na conta, conta em analise): vem `success: false` com
+   * `encodedImage` e `payload` VAZIOS. Sem este campo declarado ninguem podia
+   * checa-lo, e a tela renderizava `data:image/png;base64,` — uma imagem
+   * quebrada — com o botao "copiar" copiando string vazia. Ou seja, o pior
+   * resultado possivel: parecia um QR que simplesmente nao funciona.
+   */
+  success: boolean
   encodedImage: string
   payload: string
   expirationDate: string

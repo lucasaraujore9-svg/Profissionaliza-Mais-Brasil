@@ -44,7 +44,13 @@ export const GET = withRequestContextParams<{ paymentId: string }>(
     }
 
     const billingInfo = billingResult.value
-    billingInfo.pix = pixResult.status === "fulfilled" ? pixResult.value : null
+    // `fulfilled` NAO significa QR utilizavel: o Asaas devolve 200 com
+    // `success: false` e strings vazias quando nao consegue gerar (chave PIX
+    // ausente na conta, conta em analise). Passar isso adiante fazia a tela
+    // desenhar `data:image/png;base64,` — imagem quebrada — e o botao copiar
+    // devolver vazio. `null` e honesto: a tela ja sabe dizer "PIX indisponivel".
+    const qr = pixResult.status === "fulfilled" ? pixResult.value : null
+    billingInfo.pix = qr && qr.success && qr.payload ? qr : null
 
     return NextResponse.json({ data: billingInfo })
   } catch (error) {
