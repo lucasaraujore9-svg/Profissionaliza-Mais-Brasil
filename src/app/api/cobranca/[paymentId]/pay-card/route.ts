@@ -20,6 +20,7 @@ import {
 } from "@/lib/tenant-billing/installments"
 import { unblockTenantStudents } from "@/lib/auto-block"
 import { isKnownAsaasPayment } from "@/lib/asaas/ownership"
+import { isChargePayable } from "@/lib/asaas/charge-status"
 import { prisma } from "@/lib/prisma"
 import { invalidateTenant } from "@/lib/redis/tenant-cache"
 import { createCommissionForTenantPayment } from "@/lib/referrals/commission"
@@ -99,7 +100,10 @@ export const POST = withRequestContextParams<{ paymentId: string }>(
 
   try {
     const payment = await getPayment(paymentId)
-    if (payment.status !== "PENDING" && payment.status !== "OVERDUE") {
+    // Inclui a cobrança REMOVIDA (soft delete mantém o status em aberto):
+    // capturar cartão contra uma cobrança que não existe mais é o pior caso
+    // desta rota — dinheiro sai sem dívida do outro lado.
+    if (!isChargePayable(payment)) {
       return NextResponse.json(
         { error: "Cobrança não está pendente de pagamento" },
         { status: 400 },

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { getPayment, updatePayment, AsaasApiError } from "@/lib/asaas/client"
 import { isKnownAsaasPayment } from "@/lib/asaas/ownership"
+import { isChargePayable } from "@/lib/asaas/charge-status"
 import { prisma } from "@/lib/prisma"
 import { logAudit } from "@/lib/audit"
 import { swallow } from "@/lib/errors"
@@ -64,8 +65,8 @@ export const POST = withRequestContextParams<{ paymentId: string }>(
     try {
       const payment = await getPayment(paymentId)
 
-      // Só cobrança ainda em aberto. Uma paga/estornada não se mexe.
-      if (payment.status !== "PENDING" && payment.status !== "OVERDUE") {
+      // Só cobrança ainda em aberto. Uma paga/estornada/REMOVIDA não se mexe.
+      if (!isChargePayable(payment)) {
         return NextResponse.json(
           { error: "Cobrança não está pendente de pagamento" },
           { status: 400 },

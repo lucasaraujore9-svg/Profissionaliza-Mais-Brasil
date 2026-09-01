@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { getPayment, AsaasApiError } from "@/lib/asaas/client"
 import { isKnownAsaasPayment } from "@/lib/asaas/ownership"
+import { chargeStatus } from "@/lib/asaas/charge-status"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 import { rateLimit, rateLimitResponse } from "@/lib/ratelimit"
 
@@ -27,7 +28,10 @@ export const GET = withRequestContextParams<{ paymentId: string }>(
     return NextResponse.json({
       data: {
         id: payment.id,
-        status: payment.status,
+        // `chargeStatus` colapsa a cobrança removida em DELETED: o Asaas
+        // devolve o status antigo (PENDING) numa cobrança apagada, e a tela
+        // seguiria dizendo "Pendente" para sempre.
+        status: chargeStatus(payment),
         value: payment.value,
         dueDate: payment.dueDate,
         description: payment.description,

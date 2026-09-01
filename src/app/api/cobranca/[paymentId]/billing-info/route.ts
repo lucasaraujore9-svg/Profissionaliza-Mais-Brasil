@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { getBillingInfo, getPixQrCode, getPayment, AsaasApiError } from "@/lib/asaas/client"
 import { isKnownAsaasPayment } from "@/lib/asaas/ownership"
+import { isChargePayable } from "@/lib/asaas/charge-status"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 import { rateLimit, rateLimitResponse } from "@/lib/ratelimit"
 
@@ -24,8 +25,11 @@ export const GET = withRequestContextParams<{ paymentId: string }>(
 
   try {
     const payment = await getPayment(paymentId)
-    const payable = payment.status === "PENDING" || payment.status === "OVERDUE"
-    if (!payable) {
+    // `isChargePayable` também recusa a cobrança REMOVIDA no Asaas, que mantém
+    // status PENDING (soft delete). Sem isso gerávamos um QR de PIX de uma
+    // cobrança inexistente e o banco do pagador respondia "QR Code não é
+    // válido".
+    if (!isChargePayable(payment)) {
       return NextResponse.json(
         { error: "Cobrança não está pendente de pagamento" },
         { status: 400 },

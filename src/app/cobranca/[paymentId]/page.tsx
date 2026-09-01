@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation"
 import Image from "next/image"
 import { getPayment, AsaasApiError } from "@/lib/asaas/client"
+import { chargeStatus, isChargePayable } from "@/lib/asaas/charge-status"
 import { prisma } from "@/lib/prisma"
 import { CheckoutClient } from "./checkout-client"
 import {
@@ -46,12 +47,16 @@ export default async function CobrancaPage({ params }: Props) {
     throw error
   }
 
-  const isPaid =
-    payment.status === "RECEIVED" || payment.status === "CONFIRMED"
-  const isCancelled =
-    payment.status === "REFUNDED" || payment.status === "DELETED"
-  const isPending =
-    payment.status === "PENDING" || payment.status === "OVERDUE"
+  // `status` do Asaas NUNCA vem como "DELETED" — não existe esse valor no enum
+  // da API. A cobrança removida é soft delete: responde 200 e mantém PENDING.
+  // Enquanto `isCancelled` dependia de `status === "DELETED"`, ele era código
+  // morto: a cobrança apagada caía em `isPending` e a tela abria o checkout
+  // inteiro, com um PIX que o banco do pagador recusa. `chargeStatus` colapsa
+  // o removido em "DELETED" e `isChargePayable` exige as duas condições.
+  const status = chargeStatus(payment)
+  const isPaid = status === "RECEIVED" || status === "CONFIRMED"
+  const isCancelled = status === "REFUNDED" || status === "DELETED"
+  const isPending = isChargePayable(payment)
 
   // Parcelamento no cartão: vale para QUALQUER mensalidade em aberto, não só a
   // primeira. O teto sai de `maxInstallmentsForCharge` — a MESMA função que a
@@ -90,8 +95,8 @@ export default async function CobrancaPage({ params }: Props) {
     }
   }
 
-  const statusInfo = STATUS_INFO[payment.status] ?? {
-    label: payment.status,
+  const statusInfo = STATUS_INFO[status] ?? {
+    label: status,
     color: "text-gray-500 bg-gray-100",
   }
 
