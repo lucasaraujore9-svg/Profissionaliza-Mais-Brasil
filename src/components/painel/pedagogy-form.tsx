@@ -86,30 +86,6 @@ export function PedagogyForm({
   return (
     <WriteGate perm="pedagogia.manage">
       <div className="space-y-6">
-        {alcance.parceira > 0 && (
-          <p
-            role="status"
-            className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
-          >
-            <strong>Nem todo curso aceita todas as regras.</strong>{" "}
-            {alcance.proprios > 0 ? (
-              <>
-                Em {alcance.proprios}{" "}
-                {alcance.proprios === 1 ? "curso da sua vitrine" : "cursos da sua vitrine"} valem
-                todas as regras abaixo, aula a aula. Nos outros {alcance.parceira},{" "}
-              </>
-            ) : (
-              <>
-                Nos {alcance.parceira} {alcance.parceira === 1 ? "curso" : "cursos"} da sua
-                vitrine,{" "}
-              </>
-            )}
-            só o <strong>horário de estudo</strong> é aplicado — e ele fecha o acesso do aluno
-            por completo enquanto durar, não apenas o curso configurado. Ordem e ritmo diário
-            não têm efeito neles.
-          </p>
-        )}
-
         {/* ── Ordem ───────────────────────────────────────────────── */}
         <Card className="p-6 space-y-4">
           <div>
