@@ -30,6 +30,13 @@ export interface PainelScope {
   alunos: Prisma.StudentWhereInput
   /** Filtro de matrículas/vendas: `{}` para quem tem vendas.viewAll. */
   vendas: Prisma.EnrollmentWhereInput
+  /**
+   * Mesmo recorte, para as vendas de ASSINATURA. Existe como campo próprio
+   * porque `StudentSubscription` é outro model e o `where` de `Enrollment` não
+   * serve nele — e re-derivar o recorte dentro da rota é justamente o padrão
+   * que já produziu vazamento aqui (ver a nota sobre carteira no CLAUDE.md).
+   */
+  assinaturas: Prisma.StudentSubscriptionWhereInput
   /** Filtro de pagamentos (faturamento): `{}` para quem tem vendas.viewAll. */
   pagamentos: Prisma.PaymentWhereInput
   /** Filtro de leads: `{}` para quem tem leads.viewAll. */
@@ -71,6 +78,9 @@ function buildScope(
       ? {}
       : { enrollments: { some: { soldByUserId: userId } } },
     vendas: permissions.has("vendas.viewAll") ? {} : { soldByUserId: userId },
+    assinaturas: permissions.has("vendas.viewAll")
+      ? {}
+      : { soldByUserId: userId },
     // Payment também carrega `soldByUserId` (gravado no fulfill a partir da
     // matrícula), então o faturamento do dashboard segue a mesma fronteira.
     pagamentos: permissions.has("vendas.viewAll") ? {} : { soldByUserId: userId },

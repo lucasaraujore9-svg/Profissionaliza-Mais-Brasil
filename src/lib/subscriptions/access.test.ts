@@ -15,7 +15,12 @@ function days(n: number): Date {
 }
 
 function sub(over: Partial<SubscriptionAccessInput> = {}): SubscriptionAccessInput {
-  return { status: "ACTIVE", currentPeriodEnd: days(10), ...over }
+  return {
+    status: "ACTIVE",
+    currentPeriodEnd: days(10),
+    interval: "MONTHLY",
+    ...over,
+  }
 }
 
 describe("subscriptionGrantsAccess", () => {
@@ -125,5 +130,80 @@ describe("subscriptionShouldCancel", () => {
         NOW,
       ),
     ).toBe(false)
+  })
+})
+
+describe("assinatura VITALICIA", () => {
+  // O vitalicio e uma cobranca UNICA com acesso permanente. Tratado como
+  // recorrencia, ele quebraria em dois lugares ao mesmo tempo: sem
+  // `currentPeriodEnd` nunca liberaria nada, e com uma data qualquer seria
+  // cancelado pela varredura — e cancelar REVOGA o curso na fornecedora legada,
+  // onde desvincular APAGA o progresso do aluno.
+  const vitalicia: SubscriptionAccessInput = {
+    status: "ACTIVE",
+    currentPeriodEnd: null,
+    interval: "LIFETIME",
+  }
+
+  it("libera sem `currentPeriodEnd`", () => {
+    expect(subscriptionGrantsAccess(vitalicia, NOW)).toBe(true)
+  })
+
+  it("continua liberando anos depois", () => {
+    expect(
+      subscriptionGrantsAccess(vitalicia, new Date("2099-01-01T00:00:00Z")),
+    ).toBe(true)
+  })
+
+  it("PENDING nao libera — o pagamento unico ainda nao confirmou", () => {
+    expect(
+      subscriptionGrantsAccess({ ...vitalicia, status: "PENDING" }, NOW),
+    ).toBe(false)
+  })
+
+  it("PAST_DUE nao libera: nao existe atraso num produto sem ciclo", () => {
+    // Aceitar PAST_DUE aqui transformaria qualquer marcacao equivocada de
+    // atraso em acesso concedido.
+    expect(
+      subscriptionGrantsAccess({ ...vitalicia, status: "PAST_DUE" }, NOW),
+    ).toBe(false)
+  })
+
+  it("NUNCA e candidata a cancelamento, nem com prazo vencido gravado", () => {
+    expect(subscriptionShouldCancel(vitalicia, NOW)).toBe(false)
+    expect(
+      subscriptionShouldCancel(
+        { ...vitalicia, currentPeriodEnd: days(-999) },
+        NOW,
+      ),
+    ).toBe(false)
+  })
+
+  it("nem quando o status vem errado do gateway", () => {
+    // O caso que a guarda de `shouldCancel` existe para pegar. Um vitalicio
+    // marcado PAST_DUE (webhook confuso, estorno parcial, correcao manual)
+    // deixa de "liberar" — e, sem a guarda, "nao libera + tem prazo vencido"
+    // vira CANCELAR, que revoga o curso na fornecedora legada e APAGA o
+    // progresso de quem comprou acesso permanente.
+    expect(
+      subscriptionShouldCancel(
+        { ...vitalicia, status: "PAST_DUE", currentPeriodEnd: days(-30) },
+        NOW,
+      ),
+    ).toBe(false)
+  })
+})
+
+describe("periodicidades longas", () => {
+  it("a carencia conta a partir do fim do ciclo, seja ele qual for", () => {
+    // A regra de acesso nao precisa saber o TAMANHO do ciclo — so quando ele
+    // acabou. Uma anual vencida ha 8 dias cai igual a uma mensal vencida ha 8.
+    const anual: SubscriptionAccessInput = {
+      status: "PAST_DUE",
+      currentPeriodEnd: days(-(SUBSCRIPTION_GRACE_DAYS + 1)),
+      interval: "ANNUAL",
+    }
+    expect(subscriptionGrantsAccess(anual, NOW)).toBe(false)
+    expect(subscriptionShouldCancel(anual, NOW)).toBe(true)
   })
 })

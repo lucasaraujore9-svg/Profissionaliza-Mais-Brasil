@@ -3,6 +3,13 @@
 import { useCallback, useEffect, useState } from "react"
 import { Loader2, Eye, EyeOff, Star, StarOff, Plus, Pencil, Trash2 } from "lucide-react"
 import { SUBSCRIPTION_SCOPES, scopeIsComplete } from "@/lib/subscriptions/schema"
+import {
+  SUBSCRIPTION_INTERVALS,
+  INTERVAL_LABEL,
+  INTERVAL_CHARGE_LABEL,
+  INTERVAL_PRICE_SUFFIX,
+  type SubscriptionIntervalValue,
+} from "@/lib/subscriptions/interval"
 
 /**
  * Assinaturas da vitrine da unidade.
@@ -28,6 +35,7 @@ interface PlanRow {
   description: string | null
   suggestedPrice: number
   price: number
+  interval: SubscriptionIntervalValue
   isVisible: boolean
   isFeatured: boolean
   scope: Scope
@@ -66,6 +74,7 @@ interface FormState {
   name: string
   description: string
   price: string
+  interval: SubscriptionIntervalValue
   scope: Scope
   categoryIds: string[]
   packageId: string
@@ -78,6 +87,7 @@ const EMPTY: FormState = {
   name: "",
   description: "",
   price: "",
+  interval: "MONTHLY",
   scope: "ALL",
   categoryIds: [],
   packageId: "",
@@ -172,6 +182,7 @@ export function PainelPlansClient({
         name: form.name,
         description: form.description || null,
         price,
+        interval: form.interval,
         scope: form.scope,
         categoryIds: form.categoryIds,
         packageId: form.packageId || null,
@@ -274,7 +285,11 @@ export function PainelPlansClient({
               />
             </label>
             <label className="text-sm">
-              <span className="font-medium text-gray-700">Mensalidade (R$)</span>
+              <span className="font-medium text-gray-700">
+                {form.interval === "LIFETIME"
+                  ? "Valor único (R$)"
+                  : "Valor por cobrança (R$)"}
+              </span>
               <input
                 value={form.price}
                 onChange={(e) => setForm({ ...form, price: e.target.value })}
@@ -282,8 +297,47 @@ export function PainelPlansClient({
                 placeholder="49,90"
                 className={field}
               />
+              <span className="mt-1 block text-xs text-gray-500">
+                {INTERVAL_CHARGE_LABEL[form.interval]}
+              </span>
             </label>
           </div>
+
+          <label className="mt-4 block text-sm sm:w-1/2 sm:pr-2">
+            <span className="font-medium text-gray-700">Periodicidade</span>
+            <select
+              value={form.interval}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  interval: e.target.value as SubscriptionIntervalValue,
+                })
+              }
+              className={field}
+            >
+              {SUBSCRIPTION_INTERVALS.map((i) => (
+                <option key={i} value={i}>
+                  {INTERVAL_LABEL[i]}
+                </option>
+              ))}
+            </select>
+            {form.interval === "LIFETIME" ? (
+              <span className="mt-1 block text-xs text-gray-500">
+                Cobrança única: o aluno paga uma vez e mantém o acesso ao
+                conteúdo do plano para sempre.
+              </span>
+            ) : (
+              <span className="mt-1 block text-xs text-gray-500">
+                Renova automaticamente até o aluno cancelar.
+              </span>
+            )}
+            {form.id && (
+              <span className="mt-1 block text-xs text-amber-700">
+                Vale só para novas contratações — quem já assina continua no
+                ciclo e no valor que contratou.
+              </span>
+            )}
+          </label>
 
           <label className="mt-4 block text-sm">
             <span className="font-medium text-gray-700">Descrição</span>
@@ -453,9 +507,16 @@ export function PainelPlansClient({
                       <p className="mt-0.5 text-xs text-gray-500">{p.description}</p>
                     )}
                     <p className="mt-1 text-xs text-gray-500">
-                      {SCOPE_LABEL[p.scope]} · <strong>{p.courseCount}</strong>{" "}
+                      {INTERVAL_LABEL[p.interval]} · {SCOPE_LABEL[p.scope]} ·{" "}
+                      <strong>{p.courseCount}</strong>{" "}
                       {p.courseCount === 1 ? "curso" : "cursos"} na sua vitrine
-                      {!own && <> · sugerido {money(p.suggestedPrice)}</>}
+                      {!own && (
+                        <>
+                          {" "}
+                          · sugerido {money(p.suggestedPrice)}
+                          {INTERVAL_PRICE_SUFFIX[p.interval]}
+                        </>
+                      )}
                     </p>
                   </div>
 
@@ -511,6 +572,7 @@ export function PainelPlansClient({
                                 name: p.name,
                                 description: p.description ?? "",
                                 price: String(p.price).replace(".", ","),
+                                interval: p.interval,
                                 scope: p.scope,
                                 categoryIds: p.categoryIds,
                                 packageId: p.packageId ?? "",

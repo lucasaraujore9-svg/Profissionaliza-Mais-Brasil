@@ -8,6 +8,10 @@ import { CheckoutLink } from "@/components/shared/checkout-link"
 import { VerifyPaymentButton } from "@/components/shared/verify-payment-button"
 import { buildEnrollmentCheckoutUrl } from "@/lib/students/checkout-link"
 import { requirePainelPage } from "@/lib/auth/painel-guard"
+import {
+  INTERVAL_LABEL,
+  INTERVAL_PRICE_SUFFIX,
+} from "@/lib/subscriptions/interval"
 
 /** Cobrança em aberto: cabe perguntar ao gateway se já foi paga. */
 const VERIFIABLE = new Set(["PENDING", "SUSPENDED"])
@@ -28,7 +32,7 @@ export default async function PainelVendasPage() {
   // `vendas.view` sem `vendas.create`, e /painel/vendas/nova o redirigiria.
   const canCreateSale = ctx.can("vendas.create")
 
-  const [tenant, enrollments] = await Promise.all([
+  const [tenant, enrollments, subscriptions] = await Promise.all([
     prisma.tenant.findUnique({
       where: { id: ctx.tenantId },
       select: { slug: true, customDomain: true },
@@ -49,7 +53,104 @@ export default async function PainelVendasPage() {
         soldByUser: { select: { name: true } },
       },
     }),
+    // Venda de ASSINATURA não gera matrícula (elas nascem sob demanda, uma por
+    // curso aberto). Sem esta consulta o vendedor emitiria a cobrança e a venda
+    // sumiria justamente da tela que lista as vendas diretas dele. O MESMO
+    // recorte de carteira se aplica — `ctx.scope.assinaturas` é o gêmeo de
+    // `ctx.scope.vendas` para este model.
+    prisma.studentSubscription.findMany({
+      where: {
+        tenantId: ctx.tenantId,
+        soldByUserId: { not: null },
+        ...ctx.scope.assinaturas,
+      },
+      orderBy: { createdAt: "desc" },
+      take: 100,
+      include: {
+        student: { select: { nome: true, email: true } },
+        plan: { select: { name: true } },
+      },
+    }),
   ])
+
+  const sellerIds = [
+    ...new Set(subscriptions.map((s) => s.soldByUserId).filter(Boolean)),
+  ] as string[]
+  const sellers =
+    sellerIds.length > 0
+      ? await prisma.user.findMany({
+          where: { id: { in: sellerIds } },
+          select: { id: true, name: true },
+        })
+      : []
+  const sellerName = new Map(sellers.map((u) => [u.id, u.name]))
+
+  /**
+   * Linha unificada da tabela. Matrícula e assinatura são models diferentes,
+   * mas na tela do vendedor são a MESMA coisa: uma venda que ele fez, com um
+   * link para cobrar. Unificar aqui evita duas tabelas dizendo a mesma coisa
+   * com colunas diferentes.
+   */
+  const rows = [
+    ...enrollments.map((e) => ({
+      key: `enr:${e.id}`,
+      kind: "COURSE" as const,
+      studentId: e.studentId,
+      studentName: e.student.nome,
+      studentEmail: e.student.email,
+      title: e.course.nome,
+      subtitle:
+        e.bundleCourseIds.length > 0
+          ? `+ ${e.bundleCourseIds.length} ${e.bundleCourseIds.length === 1 ? "curso" : "cursos"} na mesma venda`
+          : null,
+      couponCode: e.coupon?.code ?? null,
+      amount: Number(e.finalAmount),
+      amountSuffix: "",
+      originalAmount: Number(e.originalAmount),
+      discountAmount: Number(e.discountAmount),
+      status: e.status as string,
+      link: buildEnrollmentCheckoutUrl({
+        status: e.status,
+        enrollmentId: e.id,
+        gateway: e.gateway,
+        asaasInvoiceUrl: e.asaasInvoiceUrl,
+        tenantSlug: tenant?.slug ?? "",
+        tenantCustomDomain: tenant?.customDomain ?? null,
+      }),
+      enrollmentId: e.id as string | null,
+      soldByName: e.soldByUser?.name ?? null,
+      createdAt: e.createdAt,
+    })),
+    ...subscriptions.map((sub) => ({
+      key: `sub:${sub.id}`,
+      kind: "SUBSCRIPTION" as const,
+      studentId: sub.studentId,
+      studentName: sub.student.nome,
+      studentEmail: sub.student.email,
+      title: sub.plan.name,
+      subtitle: `Assinatura ${INTERVAL_LABEL[sub.interval].toLowerCase()}`,
+      couponCode: null,
+      // `priceAtPurchase` já é o valor congelado, com o desconto do vendedor
+      // dentro — a assinatura não guarda "preço de tabela".
+      amount: Number(sub.priceAtPurchase),
+      amountSuffix: INTERVAL_PRICE_SUFFIX[sub.interval],
+      originalAmount: Number(sub.priceAtPurchase),
+      discountAmount: 0,
+      status: sub.status as string,
+      // Só oferece o link enquanto há o que pagar: uma assinatura ativa não tem
+      // cobrança em aberto, e o link antigo levaria a uma fatura já quitada.
+      link: sub.status === "PENDING" ? sub.checkoutUrl : null,
+      // Assinatura não tem matrícula própria — o botão "Verificar pagamento"
+      // (que consulta o gateway PELA matrícula) não se aplica.
+      enrollmentId: null as string | null,
+      soldByName: sub.soldByUserId
+        ? (sellerName.get(sub.soldByUserId) ?? null)
+        : null,
+      createdAt: sub.createdAt,
+    })),
+  ]
+    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+    .slice(0, 100)
 
   return (
     <div className="space-y-6">
@@ -70,7 +171,7 @@ export default async function PainelVendasPage() {
         }
       />
 
-      {enrollments.length === 0 ? (
+      {rows.length === 0 ? (
         <EmptyState
           icon={ShoppingCart}
           title="Nenhuma venda direta ainda"
@@ -97,7 +198,7 @@ export default async function PainelVendasPage() {
               <thead>
                 <tr className="border-b border-gray-200 bg-gray-50/60 text-left text-[11px] font-bold uppercase tracking-wider text-gray-600">
                   <th className="px-4 py-2.5">Aluno</th>
-                  <th className="px-4 py-2.5">Curso</th>
+                  <th className="px-4 py-2.5">Produto</th>
                   <th className="px-4 py-2.5">Valor</th>
                   <th data-tour="vendas:status" className="px-4 py-2.5">Status</th>
                   <th data-tour="vendas:link" className="px-4 py-2.5">Link de pagamento</th>
@@ -107,65 +208,54 @@ export default async function PainelVendasPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {enrollments.map((e) => (
-                  <tr key={e.id} className="hover:bg-gray-50/50">
+                {rows.map((r) => (
+                  <tr key={r.key} className="hover:bg-gray-50/50">
                     <td className="px-4 py-3">
                       <div className="font-semibold text-[var(--color-pmb-green-900)]">
-                        {e.student.nome}
+                        {r.studentName}
                       </div>
                       <div className="text-[11px] text-gray-500">
-                        {e.student.email ?? "—"}
+                        {r.studentEmail ?? "—"}
                       </div>
                     </td>
                     <td className="px-4 py-3 text-xs">
-                      {e.course.nome}
+                      {r.title}
                       {/* Venda com mais de um curso: o nome acima é o curso
-                          principal (o que carrega a cobrança). */}
-                      {e.bundleCourseIds.length > 0 && (
-                        <div className="text-[10px] text-gray-500">
-                          + {e.bundleCourseIds.length}{" "}
-                          {e.bundleCourseIds.length === 1 ? "curso" : "cursos"} na mesma venda
-                        </div>
+                          principal (o que carrega a cobrança). Na assinatura, a
+                          linha de baixo diz a periodicidade. */}
+                      {r.subtitle && (
+                        <div className="text-[10px] text-gray-500">{r.subtitle}</div>
                       )}
-                      {e.coupon && (
+                      {r.couponCode && (
                         <div className="text-[10px] text-[var(--color-pmb-green-700)]">
-                          cupom {e.coupon.code}
+                          cupom {r.couponCode}
                         </div>
                       )}
                     </td>
                     <td className="px-4 py-3 font-mono text-xs">
-                      {fmtBRL(Number(e.finalAmount))}
-                      {Number(e.discountAmount) > 0 && (
+                      {fmtBRL(r.amount)}
+                      {r.amountSuffix}
+                      {r.discountAmount > 0 && (
                         <div className="text-[10px] text-gray-500 line-through">
-                          {fmtBRL(Number(e.originalAmount))}
+                          {fmtBRL(r.originalAmount)}
                         </div>
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      <SaleStatusBadge status={e.status} />
+                      <SaleStatusBadge status={r.status} />
                     </td>
                     <td className="px-4 py-3">
-                      {(() => {
-                        const link = buildEnrollmentCheckoutUrl({
-                          status: e.status,
-                          enrollmentId: e.id,
-                          gateway: e.gateway,
-                          asaasInvoiceUrl: e.asaasInvoiceUrl,
-                          tenantSlug: tenant?.slug ?? "",
-                          tenantCustomDomain: tenant?.customDomain ?? null,
-                        })
-                        return link ? (
-                          <CheckoutLink url={link} />
-                        ) : (
-                          <span className="text-xs text-gray-400">—</span>
-                        )
-                      })()}
+                      {r.link ? (
+                        <CheckoutLink url={r.link} />
+                      ) : (
+                        <span className="text-xs text-gray-400">—</span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-xs text-gray-600">
-                      {e.soldByUser?.name ?? "—"}
+                      {r.soldByName ?? "—"}
                     </td>
                     <td className="px-4 py-3 text-xs text-gray-500">
-                      {e.createdAt.toLocaleString("pt-BR", {
+                      {r.createdAt.toLocaleString("pt-BR", {
                         day: "2-digit",
                         month: "2-digit",
                         year: "numeric",
@@ -175,9 +265,9 @@ export default async function PainelVendasPage() {
                     </td>
                     {canVerifyPayment && (
                       <td className="px-4 py-3">
-                        {VERIFIABLE.has(e.status) ? (
+                        {r.enrollmentId && VERIFIABLE.has(r.status) ? (
                           <VerifyPaymentButton
-                            url={`/api/painel/alunos/${e.studentId}/enrollments/${e.id}/verificar-pagamento`}
+                            url={`/api/painel/alunos/${r.studentId}/enrollments/${r.enrollmentId}/verificar-pagamento`}
                             label="Verificar"
                           />
                         ) : (

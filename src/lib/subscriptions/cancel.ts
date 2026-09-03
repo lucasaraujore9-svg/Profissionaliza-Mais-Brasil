@@ -41,6 +41,7 @@ interface GatewayRefs {
   mpPreapprovalId: string | null
 }
 
+
 /**
  * Encerra a recorrencia na origem. Idempotente na pratica: cancelar uma
  * assinatura ja cancelada no gateway responde erro conhecido, e o caller so
@@ -51,8 +52,16 @@ async function stopGatewayRecurrence(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
     if (sub.asaasSubscriptionId) {
-      // Vitrine PMB assina pela conta-mãe; unidade, pela conta dela.
-      await cancelAsaasSubscription(sub.asaasSubscriptionId, motherAsaasKey())
+      // A CONTA que criou a assinatura é a única que consegue cancelá-la: com a
+      // chave errada o Asaas responde 404 silencioso e a cobrança do aluno
+      // seguiria viva para sempre (o próprio `cancelSubscription` documenta
+      // isso). `resolveEnrollmentGatewayKeys` já sabe escolher entre a conta-mãe
+      // (vitrine PMB) e a da unidade, e já decifra a chave.
+      const keys = await resolveEnrollmentGatewayKeys({ tenantId: sub.tenantId })
+      await cancelAsaasSubscription(
+        sub.asaasSubscriptionId,
+        keys.asaasApiKey ?? motherAsaasKey(),
+      )
       return { ok: true }
     }
     if (sub.mpPreapprovalId) {
@@ -65,7 +74,9 @@ async function stopGatewayRecurrence(
       await cancelPreapproval(keys.mpAccessToken, sub.mpPreapprovalId)
       return { ok: true }
     }
-    // Assinatura que nunca chegou ao gateway (checkout abortado): nada a parar.
+    // Sem id de recorrência: ou o checkout abortou antes do gateway, ou é uma
+    // assinatura VITALÍCIA — ela nasce de uma cobrança avulsa e não tem
+    // recorrência a interromper. Nos dois casos não há nada a parar.
     return { ok: true }
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) }

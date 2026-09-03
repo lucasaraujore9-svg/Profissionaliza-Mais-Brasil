@@ -2,6 +2,10 @@ import type { Metadata } from "next"
 import { notFound } from "next/navigation"
 import { getCurrentTenant } from "@/lib/tenant/current"
 import { getVitrinePlanBySlug } from "@/lib/subscriptions/plans"
+import {
+  INTERVAL_PRICE_SUFFIX,
+  INTERVAL_CHARGE_LABEL,
+} from "@/lib/subscriptions/interval"
 import { SubscriptionCheckout } from "@/components/loja/subscription-checkout"
 
 interface Props {
@@ -46,11 +50,22 @@ export default async function PlanoPage({ params }: Props) {
               currency: "BRL",
             })}
           </strong>
-          <span className="text-sm text-gray-500"> /mês · {plan.courseCount} cursos</span>
+          <span className="text-sm text-gray-500">
+            {" "}
+            {INTERVAL_PRICE_SUFFIX[plan.interval]} · {plan.courseCount} cursos
+          </span>
+        </p>
+        <p className="mt-1 text-sm text-gray-500">
+          {INTERVAL_CHARGE_LABEL[plan.interval]}
         </p>
       </header>
 
-      <SubscriptionCheckout planId={plan.id} planName={plan.name} price={plan.price} />
+      <SubscriptionCheckout
+        planId={plan.id}
+        planName={plan.name}
+        price={plan.price}
+        interval={plan.interval}
+      />
     </main>
   )
 }

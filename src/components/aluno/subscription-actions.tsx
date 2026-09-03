@@ -59,7 +59,7 @@ export function CancelSubscriptionButton({
         Cancelar sua assinatura?
       </p>
       <p className="mt-1 text-xs text-gray-600">
-        A cobrança mensal para imediatamente.{" "}
+        A cobrança recorrente para imediatamente.{" "}
         {accessUntilLabel
           ? `Você continua com acesso aos cursos até ${accessUntilLabel}.`
           : "Seu acesso segue até o fim do período já pago."}

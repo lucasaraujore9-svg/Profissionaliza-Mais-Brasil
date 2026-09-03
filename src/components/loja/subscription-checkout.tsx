@@ -4,6 +4,13 @@ import { useState } from "react"
 import { Loader2 } from "lucide-react"
 import { PARENTESCOS, PARENTESCO_LABEL } from "@/lib/students/guardian"
 import { getMpInstance } from "@/lib/mercadopago/browser-sdk"
+import {
+  INTERVAL_PRICE_SUFFIX,
+  INTERVAL_CHARGE_LABEL,
+  INTERVAL_PERIOD_LABEL,
+  isRecurringInterval,
+  type SubscriptionIntervalValue,
+} from "@/lib/subscriptions/interval"
 
 /**
  * Contratação de assinatura na vitrine PMB.
@@ -20,6 +27,13 @@ interface Props {
   planId: string
   planName: string
   price: number
+  /**
+   * Periodicidade do plano. Nao e so um rotulo: no VITALICIO o texto muda de
+   * natureza ("pagamento unico", sem "cancele quando quiser") e o MP deixa de
+   * exigir cartao, porque a cobranca vira pagamento avulso em vez de
+   * recorrencia.
+   */
+  interval?: SubscriptionIntervalValue
   /** Rota de contratacao. Muda entre a vitrine PMB e a da unidade. */
   endpoint?: string
   /**
@@ -41,12 +55,19 @@ export function SubscriptionCheckout({
   planId,
   planName,
   price,
+  interval = "MONTHLY",
   endpoint = "/api/checkout/assinatura",
   gateway = "ASAAS",
   mpPublicKey = null,
 }: Props) {
-  const cardOnly = gateway === "MP"
-  const [method, setMethod] = useState<Method>(gateway === "MP" ? "CREDIT_CARD" : "PIX")
+  const recurring = isRecurringInterval(interval)
+  // A restrição a cartão é da RECORRÊNCIA do MP (preapproval exige token). Uma
+  // compra vitalícia no MP é um pagamento comum e aceita PIX e boleto — manter
+  // "só cartão" ali esconderia meios que a loja aceita.
+  const cardOnly = gateway === "MP" && recurring
+  const [method, setMethod] = useState<Method>(
+    gateway === "MP" && isRecurringInterval(interval) ? "CREDIT_CARD" : "PIX",
+  )
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [done, setDone] = useState<{
@@ -301,8 +322,9 @@ export function SubscriptionCheckout({
 
         {method !== "CREDIT_CARD" && (
           <p className="mt-3 rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-600">
-            A cada mês você recebe uma nova fatura para pagar. No cartão, a
-            cobrança é automática.
+            {recurring
+              ? `A cada ${INTERVAL_PERIOD_LABEL[interval]} você recebe uma nova fatura para pagar. No cartão, a cobrança é automática.`
+              : "Você paga uma única vez e o acesso ao plano fica liberado para sempre."}
           </p>
         )}
 
@@ -352,10 +374,14 @@ export function SubscriptionCheckout({
         className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--color-pmb-green)] px-5 py-3.5 text-sm font-semibold text-white disabled:opacity-60"
       >
         {loading && <Loader2 className="h-4 w-4 animate-spin" />}
-        Assinar {planName} · {money(price)}/mês
+        {recurring ? "Assinar" : "Comprar acesso vitalício"} {planName} ·{" "}
+        {money(price)}
+        {INTERVAL_PRICE_SUFFIX[interval]}
       </button>
       <p className="text-center text-xs text-gray-500">
-        Sem fidelidade. Cancele quando quiser.
+        {recurring
+          ? `${INTERVAL_CHARGE_LABEL[interval]}. Sem fidelidade — cancele quando quiser.`
+          : "Pagamento único. O acesso ao conteúdo do plano não expira."}
       </p>
     </form>
   )

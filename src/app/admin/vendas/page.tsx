@@ -6,6 +6,10 @@ import { SyncPaymentButton } from "@/components/admin/sync-payment-button"
 import { CheckoutLink } from "@/components/shared/checkout-link"
 import { buildEnrollmentCheckoutUrl } from "@/lib/students/checkout-link"
 import { PMB_TENANT_SLUG } from "@/lib/pmb-config"
+import {
+  INTERVAL_LABEL,
+  INTERVAL_PRICE_SUFFIX,
+} from "@/lib/subscriptions/interval"
 
 export const dynamic = "force-dynamic"
 
@@ -24,7 +28,15 @@ export default async function VendasDashboardPage() {
   const now = new Date()
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
 
-  const [monthEnrollments, recentEnrollments] = await Promise.all([
+  // Recorte de carteira das assinaturas: o gêmeo de `baseWhere`, para o mesmo
+  // model. `{ not: null }` isola as vendas DIRETAS das contratações que o
+  // próprio aluno fez na vitrine — aquelas não são venda de ninguém.
+  const subsWhere = session.can("vendas.viewAll")
+    ? { tenantId: null as null, soldByUserId: { not: null } }
+    : { tenantId: null as null, soldByUserId: session.userId }
+
+  const [monthEnrollments, recentEnrollments, monthSubs, recentSubs] =
+    await Promise.all([
     prisma.enrollment.findMany({
       where: {
         ...baseWhere,
@@ -46,15 +58,102 @@ export default async function VendasDashboardPage() {
         soldByUser: { select: { name: true } },
       },
     }),
+    // Assinaturas vendidas no mês. Entram nas métricas pelo valor do CICLO
+    // (`priceAtPurchase`) — que é o que efetivamente entrou naquela venda.
+    prisma.studentSubscription.findMany({
+      where: {
+        ...subsWhere,
+        status: { in: ["ACTIVE", "PAST_DUE"] },
+        createdAt: { gte: startOfMonth },
+      },
+      select: { priceAtPurchase: true },
+    }),
+    prisma.studentSubscription.findMany({
+      where: subsWhere,
+      orderBy: { createdAt: "desc" },
+      take: 20,
+      include: {
+        student: { select: { nome: true, email: true } },
+        plan: { select: { name: true } },
+      },
+    }),
   ])
 
-  const monthTotal = monthEnrollments.reduce(
-    (acc, e) => acc + Number(e.finalAmount),
-    0,
-  )
-  const monthCount = monthEnrollments.length
+  const sellerIds = [
+    ...new Set(recentSubs.map((s) => s.soldByUserId).filter(Boolean)),
+  ] as string[]
+  const sellers =
+    sellerIds.length > 0
+      ? await prisma.user.findMany({
+          where: { id: { in: sellerIds } },
+          select: { id: true, name: true },
+        })
+      : []
+  const sellerName = new Map(sellers.map((u) => [u.id, u.name]))
+
+  const monthTotal =
+    monthEnrollments.reduce((acc, e) => acc + Number(e.finalAmount), 0) +
+    monthSubs.reduce((acc, s) => acc + Number(s.priceAtPurchase), 0)
+  const monthCount = monthEnrollments.length + monthSubs.length
   const ticket = monthCount > 0 ? monthTotal / monthCount : 0
+  // Assinatura não aceita cupom (ver lib/subscriptions/direct-sale.ts), então a
+  // contagem segue vindo só das matrículas.
   const couponUsed = monthEnrollments.filter((e) => e.couponId).length
+
+  /**
+   * Linha unificada da tabela. Matrícula e assinatura são models diferentes,
+   * mas na tela do vendedor são a MESMA coisa: uma venda que ele fez.
+   */
+  const rows = [
+    ...recentEnrollments.map((e) => ({
+      key: `enr:${e.id}`,
+      enrollmentId: e.id as string | null,
+      studentName: e.student.nome,
+      studentEmail: e.student.email,
+      title: e.course.nome,
+      subtitle:
+        e.bundleCourseIds.length > 0
+          ? `+ ${e.bundleCourseIds.length} ${e.bundleCourseIds.length === 1 ? "curso" : "cursos"} na mesma venda`
+          : null,
+      amount: Number(e.finalAmount),
+      amountSuffix: "",
+      status: e.status as string,
+      // PMB usa Asaas (gateway ASAAS): o link útil é o asaasInvoiceUrl.
+      // tenantSlug = PMB_TENANT_SLUG desliga o ramo /pagar (só MP de revenda).
+      link: buildEnrollmentCheckoutUrl({
+        status: e.status,
+        enrollmentId: e.id,
+        gateway: e.gateway,
+        asaasInvoiceUrl: e.asaasInvoiceUrl,
+        tenantSlug: PMB_TENANT_SLUG,
+        tenantCustomDomain: null,
+      }),
+      soldByName: e.soldByUser?.name ?? null,
+      createdAt: e.createdAt,
+    })),
+    ...recentSubs.map((sub) => ({
+      key: `sub:${sub.id}`,
+      // Assinatura não tem matrícula própria — o botão de sincronizar pagamento
+      // (que consulta o gateway PELA matrícula) não se aplica.
+      enrollmentId: null as string | null,
+      studentName: sub.student.nome,
+      studentEmail: sub.student.email,
+      title: sub.plan.name,
+      subtitle: `Assinatura ${INTERVAL_LABEL[sub.interval].toLowerCase()}`,
+      amount: Number(sub.priceAtPurchase),
+      amountSuffix: INTERVAL_PRICE_SUFFIX[sub.interval],
+      status: sub.status as string,
+      // Só enquanto há o que pagar: numa assinatura já ativa o link antigo
+      // levaria a uma fatura quitada.
+      link: sub.status === "PENDING" ? sub.checkoutUrl : null,
+      soldByName: sub.soldByUserId
+        ? (sellerName.get(sub.soldByUserId) ?? null)
+        : null,
+      createdAt: sub.createdAt,
+    })),
+  ]
+    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+    .slice(0, 20)
 
   return (
     <div className="space-y-6 p-8">
@@ -107,7 +206,7 @@ export default async function VendasDashboardPage() {
           <thead className="bg-[var(--color-pmb-mist)] text-left">
             <tr>
               <th className="px-4 py-3 font-semibold">Aluno</th>
-              <th className="px-4 py-3 font-semibold">Curso</th>
+              <th className="px-4 py-3 font-semibold">Produto</th>
               <th className="px-4 py-3 font-semibold">Valor</th>
               <th className="px-4 py-3 font-semibold">Status</th>
               <th className="px-4 py-3 font-semibold">Link de pagamento</th>
@@ -118,63 +217,52 @@ export default async function VendasDashboardPage() {
             </tr>
           </thead>
           <tbody>
-            {recentEnrollments.map((e) => (
-              <tr key={e.id} className="border-t">
+            {rows.map((r) => (
+              <tr key={r.key} className="border-t">
                 <td className="px-4 py-3">
-                  <div className="font-medium">{e.student.nome}</div>
+                  <div className="font-medium">{r.studentName}</div>
                   <div className="text-xs text-muted-foreground">
-                    {e.student.email}
+                    {r.studentEmail}
                   </div>
                 </td>
                 <td className="px-4 py-3">
-                  {e.course.nome}
+                  {r.title}
                   {/* Venda com mais de um curso: o nome acima é o curso
-                      principal (o que carrega a cobrança). */}
-                  {e.bundleCourseIds.length > 0 && (
-                    <div className="text-xs text-muted-foreground">
-                      + {e.bundleCourseIds.length}{" "}
-                      {e.bundleCourseIds.length === 1 ? "curso" : "cursos"} na mesma venda
-                    </div>
+                      principal (o que carrega a cobrança). Na assinatura, a
+                      linha de baixo diz a periodicidade. */}
+                  {r.subtitle && (
+                    <div className="text-xs text-muted-foreground">{r.subtitle}</div>
                   )}
                 </td>
-                <td className="px-4 py-3">{formatBRL(Number(e.finalAmount))}</td>
                 <td className="px-4 py-3">
-                  {e.status === "PENDING" ? (
-                    <SyncPaymentButton enrollmentId={e.id} />
+                  {formatBRL(r.amount)}
+                  {r.amountSuffix}
+                </td>
+                <td className="px-4 py-3">
+                  {r.status === "PENDING" && r.enrollmentId ? (
+                    <SyncPaymentButton enrollmentId={r.enrollmentId} />
                   ) : (
-                    <StatusBadge status={e.status} />
+                    <StatusBadge status={r.status} />
                   )}
                 </td>
                 <td className="px-4 py-3">
-                  {(() => {
-                    // PMB usa Asaas (gateway ASAAS): o link util e o asaasInvoiceUrl.
-                    // tenantSlug = PMB_TENANT_SLUG desliga o ramo /pagar (so MP de revenda).
-                    const link = buildEnrollmentCheckoutUrl({
-                      status: e.status,
-                      enrollmentId: e.id,
-                      gateway: e.gateway,
-                      asaasInvoiceUrl: e.asaasInvoiceUrl,
-                      tenantSlug: PMB_TENANT_SLUG,
-                      tenantCustomDomain: null,
-                    })
-                    return link ? (
-                      <CheckoutLink url={link} />
-                    ) : (
-                      <span className="text-xs text-muted-foreground">—</span>
-                    )
-                  })()}
+                  {r.link ? (
+                    <CheckoutLink url={r.link} />
+                  ) : (
+                    <span className="text-xs text-muted-foreground">—</span>
+                  )}
                 </td>
                 {session.can("vendas.viewAll") && (
                   <td className="px-4 py-3 text-muted-foreground">
-                    {e.soldByUser?.name ?? "—"}
+                    {r.soldByName ?? "—"}
                   </td>
                 )}
                 <td className="px-4 py-3 text-muted-foreground">
-                  {e.createdAt.toLocaleDateString("pt-BR")}
+                  {r.createdAt.toLocaleDateString("pt-BR")}
                 </td>
               </tr>
             ))}
-            {recentEnrollments.length === 0 && (
+            {rows.length === 0 && (
               <tr>
                 <td
                   colSpan={session.can("vendas.viewAll") ? 7 : 6}
@@ -198,6 +286,10 @@ const STATUS_LABELS: Record<string, string> = {
   COMPLETED: "Concluído",
   SUSPENDED: "Suspenso",
   CANCELLED: "Cancelado",
+  // Status de ASSINATURA: a tabela lista assinatura ao lado de matrícula, e sem
+  // estas duas linhas o badge imprimiria o valor cru do enum.
+  PAST_DUE: "Em atraso",
+  EXPIRED: "Expirada",
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -206,6 +298,8 @@ const STATUS_COLORS: Record<string, string> = {
   COMPLETED: "bg-blue-50 text-blue-700",
   SUSPENDED: "bg-red-50 text-red-700",
   CANCELLED: "bg-gray-100 text-gray-500",
+  PAST_DUE: "bg-red-50 text-red-700",
+  EXPIRED: "bg-gray-100 text-gray-500",
 }
 
 function StatusBadge({ status }: { status: string }) {

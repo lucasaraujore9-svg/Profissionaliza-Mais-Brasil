@@ -22,6 +22,11 @@ export const SALE_STATUS_META: Record<string, SaleStatusMeta> = {
   COMPLETED: { label: "Concluída", tone: "success" },
   SUSPENDED: { label: "Suspensa", tone: "danger" },
   CANCELLED: { label: "Cancelada", tone: "neutral" },
+  // Status de ASSINATURA. A tabela de vendas diretas passou a listar assinatura
+  // ao lado de matrícula; sem estas duas linhas o badge imprimiria o valor cru
+  // do enum ("PAST_DUE") na tela do vendedor.
+  PAST_DUE: { label: "Em atraso", tone: "danger" },
+  EXPIRED: { label: "Expirada", tone: "neutral" },
 }
 
 const FALLBACK_META: SaleStatusMeta = { label: "", tone: "neutral" }

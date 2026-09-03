@@ -48,6 +48,9 @@ export const GET = withRequestContext(
           description: p.description,
           suggestedPrice: Number(p.price),
           price: o?.price != null ? Number(o.price) : Number(p.price),
+          // A unidade ajusta o PRECO, nunca a periodicidade: a natureza do
+          // produto vale igual em toda a rede.
+          interval: p.interval,
           isVisible: o?.isVisible ?? true,
           isFeatured: o?.isFeatured ?? p.featured,
           scope: p.scope,
@@ -69,6 +72,7 @@ export const GET = withRequestContext(
         description: p.description,
         suggestedPrice: Number(p.price),
         price: Number(p.price),
+        interval: p.interval,
         isVisible: p.enabled,
         isFeatured: p.featured,
         scope: p.scope,
@@ -143,6 +147,7 @@ export const POST = withRequestContext(
         description: d.description ?? null,
         coverImageUrl: d.coverImageUrl ?? null,
         price: d.price,
+        interval: d.interval,
         scope: d.scope,
         categoryIds: d.scope === "CATEGORY" ? d.categoryIds : [],
         packageId: d.scope === "PACKAGE" ? (d.packageId ?? null) : null,

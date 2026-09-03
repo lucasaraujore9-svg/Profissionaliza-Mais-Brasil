@@ -13,7 +13,12 @@ import {
   subscriptionGrantsAccess,
   SUBSCRIPTION_GRACE_DAYS,
 } from "@/lib/subscriptions/access"
-import { AlertTriangle, BookOpen, CheckCircle2, Clock, ExternalLink } from "lucide-react"
+import {
+  INTERVAL_PRICE_SUFFIX,
+  INTERVAL_CHARGE_LABEL,
+  isRecurringInterval,
+} from "@/lib/subscriptions/interval"
+import { AlertTriangle, BookOpen, CheckCircle2, Clock, ExternalLink, Infinity as InfinityIcon } from "lucide-react"
 
 export const dynamic = "force-dynamic"
 
@@ -46,6 +51,7 @@ export default async function AssinaturaPage({
       status: true,
       currentPeriodEnd: true,
       priceAtPurchase: true,
+      interval: true,
       billingType: true,
       plan: { select: { name: true, description: true } },
       // Fatura do ciclo em aberto. É o que o assinante de PIX/boleto precisa
@@ -86,6 +92,7 @@ export default async function AssinaturaPage({
 
   const openCharge = subscription.payments[0] ?? null
   const live = subscriptionGrantsAccess(subscription)
+  const recurring = isRecurringInterval(subscription.interval)
   const search = sp.q?.trim() || undefined
   const catalog = live
     ? await loadSubscriptionCatalog(subscription.id, { page, search })
@@ -100,18 +107,32 @@ export default async function AssinaturaPage({
           {subscription.plan.name}
         </h1>
         <p className="mt-1 text-sm text-gray-600">
-          {formatMoney(Number(subscription.priceAtPurchase))} por mês
-          {subscription.currentPeriodEnd && (
+          {formatMoney(Number(subscription.priceAtPurchase))}
+          {INTERVAL_PRICE_SUFFIX[subscription.interval]} ·{" "}
+          {INTERVAL_CHARGE_LABEL[subscription.interval]}
+          {/* "Válido até" só existe onde há ciclo. No vitalício não há data a
+              mostrar — e uma data ali sugeriria um vencimento que não existe. */}
+          {recurring && subscription.currentPeriodEnd && (
             <> · válido até {formatDate(subscription.currentPeriodEnd)}</>
           )}
         </p>
+        {!recurring && subscription.status === "ACTIVE" && (
+          <p className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-pmb-green)]/10 px-2.5 py-1 text-xs font-medium text-[var(--color-pmb-green-900)]">
+            <InfinityIcon className="h-3.5 w-3.5" />
+            Acesso vitalício — sem renovação e sem novas cobranças
+          </p>
+        )}
       </header>
 
       {subscription.status === "PENDING" && (
         <div className="mb-6 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
           <Clock className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
           <div className="text-sm text-amber-900">
-            <p className="font-semibold">Aguardando o primeiro pagamento</p>
+            <p className="font-semibold">
+              {recurring
+                ? "Aguardando o primeiro pagamento"
+                : "Aguardando o pagamento"}
+            </p>
             <p className="mt-0.5 text-xs">
               Assim que o pagamento for confirmado, seus cursos ficam liberados
               aqui.
@@ -135,7 +156,7 @@ export default async function AssinaturaPage({
         <div className="mb-6 flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-600" />
           <div className="text-sm text-red-900">
-            <p className="font-semibold">Mensalidade em aberto</p>
+            <p className="font-semibold">Cobrança em aberto</p>
             <p className="mt-0.5 text-xs">
               {live
                 ? `Regularize em até ${SUBSCRIPTION_GRACE_DAYS} dias após o vencimento para não perder o acesso aos cursos.`
@@ -164,7 +185,10 @@ export default async function AssinaturaPage({
         </div>
       )}
 
-      {subscription.status !== "PENDING" && (
+      {/* Vitalícia NÃO oferece cancelamento: não há cobrança recorrente a
+          interromper, e cancelar aqui só revogaria o acesso que a pessoa
+          comprou para sempre. */}
+      {subscription.status !== "PENDING" && recurring && (
         <div className="mb-6">
           <CancelSubscriptionButton
             accessUntilLabel={

@@ -42,12 +42,20 @@ async function processSubscriptions() {
 
   // Universo: assinaturas vivas cujo ciclo pago JA venceu. Quem esta em dia nao
   // entra na varredura.
+  //
+  // VITALICIA fica de fora por DUAS travas: o filtro abaixo (`interval` nao e
+  // LIFETIME) e o predicado puro `subscriptionShouldCancel`, que recusa o
+  // vitalicio mesmo que a linha chegue aqui. Duas porque o preco do erro e
+  // altissimo — cancelar revoga o curso na fornecedora legada, e la desvincular
+  // APAGA o progresso do aluno. Uma `currentPeriodEnd` gravada por engano num
+  // acesso permanente nao pode virar corte silencioso.
   const candidates = await prisma.studentSubscription.findMany({
     where: {
       status: { in: ["ACTIVE", "PAST_DUE"] },
+      interval: { not: "LIFETIME" },
       currentPeriodEnd: { not: null, lt: now },
     },
-    select: { id: true, status: true, currentPeriodEnd: true },
+    select: { id: true, status: true, currentPeriodEnd: true, interval: true },
     orderBy: { currentPeriodEnd: "asc" },
     take: 500,
   })

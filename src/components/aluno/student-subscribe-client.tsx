@@ -3,6 +3,13 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { Check, Loader2 } from "lucide-react"
+import {
+  INTERVAL_PRICE_SUFFIX,
+  INTERVAL_CHARGE_LABEL,
+  INTERVAL_PERIOD_LABEL,
+  isRecurringInterval,
+  type SubscriptionIntervalValue,
+} from "@/lib/subscriptions/interval"
 
 /**
  * Contratação para aluno logado.
@@ -18,6 +25,7 @@ interface Plan {
   slug: string
   description: string | null
   price: number
+  interval: SubscriptionIntervalValue
   featured: boolean
   courseCount: number
 }
@@ -32,6 +40,11 @@ export function StudentSubscribeClient({ plans }: { plans: Plan[] }) {
   const router = useRouter()
   const [planId, setPlanId] = useState(plans[0]?.id ?? "")
   const [method, setMethod] = useState<Method>("PIX")
+  // O plano escolhido decide o texto do rodapé: "cobrado todo mês" e "cancele
+  // quando quiser" são falsos num plano vitalício.
+  const selected = plans.find((p) => p.id === planId) ?? plans[0]
+  const selectedInterval = selected?.interval ?? "MONTHLY"
+  const recurring = isRecurringInterval(selectedInterval)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [card, setCard] = useState({
@@ -120,7 +133,13 @@ export function StudentSubscribeClient({ plans }: { plans: Plan[] }) {
               )}
               <span className="mt-3 text-lg font-bold text-[var(--color-pmb-green-900)]">
                 {money(p.price)}
-                <span className="text-sm font-normal text-gray-500"> /mês</span>
+                <span className="text-sm font-normal text-gray-500">
+                  {" "}
+                  {INTERVAL_PRICE_SUFFIX[p.interval]}
+                </span>
+              </span>
+              <span className="mt-0.5 text-xs text-gray-500">
+                {INTERVAL_CHARGE_LABEL[p.interval]}
               </span>
               <span className="mt-2 flex items-center gap-1.5 text-sm text-gray-700">
                 <Check className="h-4 w-4 shrink-0 text-[var(--color-pmb-green)]" />
@@ -151,8 +170,9 @@ export function StudentSubscribeClient({ plans }: { plans: Plan[] }) {
 
         {method !== "CREDIT_CARD" && (
           <p className="mt-3 rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-600">
-            A cada mês você recebe uma nova fatura para pagar. No cartão, a
-            cobrança é automática.
+            {recurring
+              ? `A cada ${INTERVAL_PERIOD_LABEL[selectedInterval]} você recebe uma nova fatura para pagar. No cartão, a cobrança é automática.`
+              : "Você paga uma única vez e o acesso ao plano fica liberado para sempre."}
           </p>
         )}
 
@@ -202,10 +222,12 @@ export function StudentSubscribeClient({ plans }: { plans: Plan[] }) {
         className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--color-pmb-green)] px-5 py-3.5 text-sm font-semibold text-white disabled:opacity-60"
       >
         {loading && <Loader2 className="h-4 w-4 animate-spin" />}
-        Assinar
+        {recurring ? "Assinar" : "Comprar acesso vitalício"}
       </button>
       <p className="text-center text-xs text-gray-500">
-        Sem fidelidade. Cancele quando quiser.
+        {recurring
+          ? `${INTERVAL_CHARGE_LABEL[selectedInterval]}. Sem fidelidade — cancele quando quiser.`
+          : "Pagamento único. O acesso ao conteúdo do plano não expira."}
       </p>
     </form>
   )

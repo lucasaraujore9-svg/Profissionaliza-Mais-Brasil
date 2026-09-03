@@ -3,6 +3,7 @@ import { contextLogger } from "@/lib/logger"
 import { createNotification } from "@/lib/notifications"
 import { swallow } from "@/lib/errors"
 import { cancelSubscriptionAccess } from "./cancel"
+import { addInterval, isRecurringInterval } from "./interval"
 
 /**
  * Renovacao e queda de ciclo de uma assinatura de aluno.
@@ -11,19 +12,6 @@ import { cancelSubscriptionAccess } from "./cancel"
  * `access.ts`), nao o `status` sozinho — status e o ultimo recado do gateway e
  * pode estar atrasado.
  */
-
-/** Um mes a frente, com clamp de fim de mes (31/01 -> 28/02). */
-function addOneMonth(from: Date): Date {
-  const d = new Date(from)
-  const day = d.getUTCDate()
-  d.setUTCDate(1)
-  d.setUTCMonth(d.getUTCMonth() + 1)
-  const lastDay = new Date(
-    Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0),
-  ).getUTCDate()
-  d.setUTCDate(Math.min(day, lastDay))
-  return d
-}
 
 export interface CycleEvent {
   gateway: "MP" | "ASAAS"
@@ -65,6 +53,11 @@ export async function settleSubscriptionCycle(
       currentPeriodEnd: true,
       cancelAtPeriodEnd: true,
       studentId: true,
+      // Congelado na contratacao: e ele que diz quanto o pagamento compra.
+      interval: true,
+      // A VITALICIA nunca tem `currentPeriodEnd`, entao ele nao serve para
+      // saber se ja houve um 1o ciclo — quem responde isso e `startedAt`.
+      startedAt: true,
       plan: { select: { name: true } },
     },
   })
@@ -137,14 +130,22 @@ export async function settleSubscriptionCycle(
     },
   })
 
+  // O ciclo comprado depende da PERIODICIDADE CONGELADA: um pagamento de plano
+  // anual compra 12 meses, nao 1. E na VITALICIA nao ha ciclo a empurrar —
+  // `currentPeriodEnd` fica null para sempre, que e o sinal lido por
+  // `subscriptionGrantsAccess` e o que mantem a linha fora da varredura de
+  // carencia. Gravar uma data distante ali seria uma mentira que a varredura
+  // acabaria cobrando, cancelando quem comprou acesso permanente.
+  const nextPeriodEnd = addInterval(base, sub.interval)
+
   await prisma.studentSubscription.update({
     where: { id: subscriptionId },
     data: {
       // Pagou: sai de PAST_DUE. Um pedido de cancelamento para o fim do ciclo
       // NAO e revogado por um pagamento que ja estava em transito.
       status: "ACTIVE",
-      currentPeriodEnd: addOneMonth(base),
-      startedAt: sub.currentPeriodEnd ? undefined : now,
+      ...(nextPeriodEnd ? { currentPeriodEnd: nextPeriodEnd } : {}),
+      startedAt: sub.startedAt ? undefined : now,
     },
   })
 
@@ -233,9 +234,23 @@ export async function markSubscriptionPastDue(
 ): Promise<void> {
   const sub = await prisma.studentSubscription.findUnique({
     where: { id: subscriptionId },
-    select: { id: true, status: true, studentId: true, tenantId: true, plan: { select: { name: true } } },
+    select: {
+      id: true,
+      status: true,
+      interval: true,
+      studentId: true,
+      tenantId: true,
+      plan: { select: { name: true } },
+    },
   })
   if (!sub || sub.status === "CANCELLED" || sub.status === "EXPIRED") return
+
+  // VITALICIA nao tem mensalidade a atrasar. Um boleto unico que venceu sem
+  // pagamento deixa a assinatura em PENDING (que nao libera nada) — marca-la
+  // PAST_DUE trocaria isso por um status que a area do aluno anuncia como
+  // "regularize para nao perder o acesso" a quem nunca teve acesso, e mandaria
+  // um aviso de cobranca recorrente que nao existe.
+  if (!isRecurringInterval(sub.interval)) return
 
   await prisma.studentSubscription.update({
     where: { id: subscriptionId },

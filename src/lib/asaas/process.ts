@@ -376,6 +376,105 @@ export async function processTenantInstallmentPayment(
   return true
 }
 
+/**
+ * Evento de cobranca de uma ASSINATURA DE ALUNO.
+ *
+ * Existe como funcao porque ha DUAS formas de chegar ate a mesma assinatura, e
+ * elas precisam decidir IGUAL:
+ *
+ *  - pelo `asaasSubscriptionId`, nas assinaturas RECORRENTES (mensal a anual);
+ *  - pelo `externalReference` `pmb_sub_<id>`, nas VITALICIAS — que nascem de uma
+ *    cobranca AVULSA e por isso nao tem assinatura nenhuma no Asaas.
+ *
+ * Enquanto so existia o 1o caminho, a cobranca de um acesso vitalicio caia no
+ * fallback de "mensalidade avulsa da unidade" logo abaixo: o aluno pagava, a
+ * assinatura ficava PENDING para sempre e ele nunca via o catalogo que comprou.
+ *
+ * Devolve `true` quando o evento era de assinatura (tratado ou explicitamente
+ * sem acao) e `false` quando nao ha assinatura correspondente — ai o chamador
+ * segue com as demais resolucoes.
+ */
+async function handleStudentSubscriptionPayment(
+  logId: string,
+  event: string,
+  payment: NonNullable<AsaasWebhookPayload["payment"]>,
+  where: Prisma.StudentSubscriptionWhereInput,
+): Promise<boolean> {
+  const studentSub = await prisma.studentSubscription.findFirst({
+    where,
+    select: { id: true },
+  })
+  if (!studentSub) return false
+
+  if (event === "PAYMENT_RECEIVED" || event === "PAYMENT_CONFIRMED") {
+    const { settled } = await settleSubscriptionCycle(studentSub.id, {
+      gateway: "ASAAS",
+      externalPaymentId: payment.id,
+      amount: payment.value,
+      paidAt: payment.paymentDate ? new Date(payment.paymentDate) : new Date(),
+      dueDate: new Date(payment.dueDate),
+      billingType: payment.billingType,
+      invoiceUrl: payment.invoiceUrl,
+      bankSlipUrl: payment.bankSlipUrl,
+    })
+    await markLog(
+      logId,
+      true,
+      settled
+        ? `assinatura ${studentSub.id}: ciclo liquidado`
+        : `assinatura ${studentSub.id}: ciclo ja registrado`,
+    )
+    return true
+  }
+  if (event === "PAYMENT_OVERDUE") {
+    // Grava a fatura ANTES de marcar o atraso: é este link que a área do
+    // aluno mostra para ele regularizar dentro da carência.
+    await recordOpenSubscriptionCharge(studentSub.id, {
+      gateway: "ASAAS",
+      externalPaymentId: payment.id,
+      amount: payment.value,
+      dueDate: new Date(payment.dueDate),
+      billingType: payment.billingType,
+      invoiceUrl: payment.invoiceUrl,
+      bankSlipUrl: payment.bankSlipUrl,
+      status: "OVERDUE",
+    })
+    // Só MARCA. Quem corta é o cron, depois da carência — revogar aqui
+    // apagaria o progresso na EA de quem se atrasou um dia.
+    await markSubscriptionPastDue(studentSub.id)
+    await markLog(logId, true, `assinatura ${studentSub.id}: em atraso`)
+    return true
+  }
+
+  if (event === "PAYMENT_CREATED" || event === "PAYMENT_UPDATED") {
+    // Ciclo novo emitido pela recorrência: guarda o link de pagamento.
+    await recordOpenSubscriptionCharge(studentSub.id, {
+      gateway: "ASAAS",
+      externalPaymentId: payment.id,
+      amount: payment.value,
+      dueDate: new Date(payment.dueDate),
+      billingType: payment.billingType,
+      invoiceUrl: payment.invoiceUrl,
+      bankSlipUrl: payment.bankSlipUrl,
+      status: "PENDING",
+    })
+    await markLog(logId, true, `assinatura ${studentSub.id}: cobranca em aberto registrada`)
+    return true
+  }
+  if (
+    event === "PAYMENT_REFUNDED" ||
+    event === "PAYMENT_CHARGEBACK_REQUESTED"
+  ) {
+    // Sem carência: ela existe para quem está tentando pagar, não para quem
+    // pediu o dinheiro de volta.
+    await revokeSubscriptionForRefund(studentSub.id)
+    await markLog(logId, true, `assinatura ${studentSub.id}: estornada`)
+    return true
+  }
+  await markLog(logId, true, `assinatura ${studentSub.id}: ${event} — sem acao`)
+  return true
+}
+
 async function processPmbDirectSale(
   logId: string,
   event: string,
@@ -542,6 +641,27 @@ export async function processAsaasWebhook(
     }
 
     const subscriptionId = payment.subscription
+
+    // ASSINATURA DE ALUNO pelo `externalReference`. Roteada ANTES de tudo, e em
+    // especial antes do bloco `!subscriptionId` logo abaixo: a assinatura
+    // VITALICIA nasce de uma cobranca AVULSA, entao ela chega aqui sem
+    // `subscription` e cairia no fallback de "mensalidade avulsa da unidade",
+    // que tenta casar a cobranca com um tenant pelo `customer`. O aluno pagaria
+    // e a assinatura ficaria PENDING para sempre.
+    //
+    // O Asaas propaga o `externalReference` para TODAS as cobrancas de uma
+    // assinatura, entao este caminho tambem cobre as recorrentes — o casamento
+    // por `asaasSubscriptionId` continua abaixo como rede de seguranca.
+    if (payment.externalReference?.startsWith("pmb_sub_")) {
+      const handledSub = await handleStudentSubscriptionPayment(
+        logId,
+        event,
+        payment,
+        { id: payment.externalReference.slice("pmb_sub_".length) },
+      )
+      if (handledSub) return
+    }
+
     // Preenchido quando a cobranca e AVULSA (sem assinatura) e mesmo assim
     // pertence a uma unidade — ver o bloco "MENSALIDADE AVULSA" abaixo.
     let tenantFromCustomer: Prisma.TenantGetPayload<{
@@ -646,77 +766,11 @@ export async function processAsaasWebhook(
     // Guardado por `subscriptionId`: a mensalidade avulsa resolvida acima chega
     // aqui SEM assinatura e nao tem o que casar nestes dois blocos.
     if (subscriptionId) {
-    const studentSub = await prisma.studentSubscription.findFirst({
-      where: { asaasSubscriptionId: subscriptionId },
-      select: { id: true },
-    })
-    if (studentSub) {
-      if (event === "PAYMENT_RECEIVED" || event === "PAYMENT_CONFIRMED") {
-        const { settled } = await settleSubscriptionCycle(studentSub.id, {
-          gateway: "ASAAS",
-          externalPaymentId: payment.id,
-          amount: payment.value,
-          paidAt: payment.paymentDate ? new Date(payment.paymentDate) : new Date(),
-          dueDate: new Date(payment.dueDate),
-          billingType: payment.billingType,
-          invoiceUrl: payment.invoiceUrl,
-          bankSlipUrl: payment.bankSlipUrl,
-        })
-        await markLog(
-          logId,
-          true,
-          settled
-            ? `assinatura ${studentSub.id}: ciclo liquidado`
-            : `assinatura ${studentSub.id}: ciclo ja registrado`,
-        )
-        return
-      }
-      if (event === "PAYMENT_OVERDUE") {
-        // Grava a fatura ANTES de marcar o atraso: é este link que a área do
-        // aluno mostra para ele regularizar dentro da carência.
-        await recordOpenSubscriptionCharge(studentSub.id, {
-          gateway: "ASAAS",
-          externalPaymentId: payment.id,
-          amount: payment.value,
-          dueDate: new Date(payment.dueDate),
-          billingType: payment.billingType,
-          invoiceUrl: payment.invoiceUrl,
-          bankSlipUrl: payment.bankSlipUrl,
-          status: "OVERDUE",
-        })
-        // Só MARCA. Quem corta é o cron, depois da carência — revogar aqui
-        // apagaria o progresso na EA de quem se atrasou um dia.
-        await markSubscriptionPastDue(studentSub.id)
-        await markLog(logId, true, `assinatura ${studentSub.id}: em atraso`)
-        return
-      }
-
-      if (event === "PAYMENT_CREATED" || event === "PAYMENT_UPDATED") {
-        // Ciclo novo emitido pela recorrência: guarda o link de pagamento.
-        await recordOpenSubscriptionCharge(studentSub.id, {
-          gateway: "ASAAS",
-          externalPaymentId: payment.id,
-          amount: payment.value,
-          dueDate: new Date(payment.dueDate),
-          billingType: payment.billingType,
-          invoiceUrl: payment.invoiceUrl,
-          bankSlipUrl: payment.bankSlipUrl,
-          status: "PENDING",
-        })
-        await markLog(logId, true, `assinatura ${studentSub.id}: cobranca em aberto registrada`)
-        return
-      }
-      if (
-        event === "PAYMENT_REFUNDED" ||
-        event === "PAYMENT_CHARGEBACK_REQUESTED"
-      ) {
-        // Sem carência: ela existe para quem está tentando pagar, não para quem
-        // pediu o dinheiro de volta.
-        await revokeSubscriptionForRefund(studentSub.id)
-        await markLog(logId, true, `assinatura ${studentSub.id}: estornada`)
-        return
-      }
-      await markLog(logId, true, `assinatura ${studentSub.id}: ${event} — sem acao`)
+    if (
+      await handleStudentSubscriptionPayment(logId, event, payment, {
+        asaasSubscriptionId: subscriptionId,
+      })
+    ) {
       return
     }
 

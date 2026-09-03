@@ -27,6 +27,13 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { MAX_SALE_COURSES } from "@/lib/enrollment/multi-course"
+import {
+  INTERVAL_LABEL,
+  INTERVAL_PRICE_SUFFIX,
+  INTERVAL_CHARGE_LABEL,
+  isRecurringInterval,
+  type SubscriptionIntervalValue,
+} from "@/lib/subscriptions/interval"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -37,6 +44,14 @@ interface CourseOption {
   paymentType: "ONE_TIME" | "MONTHLY"
 }
 
+interface PlanOption {
+  id: string
+  name: string
+  price: number
+  interval: SubscriptionIntervalValue
+  courseCount: number
+}
+
 interface PackageOption {
   id: string
   name: string
@@ -45,16 +60,19 @@ interface PackageOption {
 }
 
 /**
- * Item unificado do seletor (curso ou pacote). Pacote é sempre pagamento único.
- * O `kind` roteia o corpo da venda: tenantCourseId vs packageId.
+ * Item unificado do seletor (curso, pacote ou plano de assinatura). Pacote e
+ * plano são sempre vendidos SOZINHOS. O `kind` roteia o corpo da venda:
+ * tenantCourseIds vs packageId vs planId.
  */
 type SaleItem = {
-  kind: "course" | "package"
+  kind: "course" | "package" | "plan"
   id: string
   nome: string
   preco: number
   paymentType: "ONE_TIME" | "MONTHLY"
   courseCount?: number
+  /** Só em `kind: "plan"` — decide o rótulo do preço e o texto da cobrança. */
+  interval?: SubscriptionIntervalValue
 }
 
 /** Aluno vindo da busca (alunos da própria unidade). */
@@ -96,7 +114,13 @@ interface InstallmentConfig {
 }
 
 interface CreatedVenda {
-  enrollmentId: string
+  enrollmentId?: string
+  /** Presente quando a venda é de um plano de ASSINATURA. */
+  subscriptionId?: string
+  /** "subscription_plan" nas vendas de assinatura. */
+  mode?: string
+  chargeLabel?: string
+  recurring?: boolean
   /** Link da NOSSA página de pagamento transparente (não é o site do MP). */
   paymentUrl?: string
   basePrice?: number
@@ -159,6 +183,7 @@ export function PainelNovaVendaClient({
   gateway,
   courses,
   packages,
+  plans,
   installmentConfig,
 }: {
   /** Cap de desconto (%) do vendedor logado: dono 100, consultor = maxDiscount. */
@@ -167,6 +192,7 @@ export function PainelNovaVendaClient({
   gateway: "MP" | "ASAAS"
   courses: CourseOption[]
   packages: PackageOption[]
+  plans: PlanOption[]
   installmentConfig: InstallmentConfig | null
 }) {
   // Lista unificada: cursos primeiro, depois pacotes (prefixados "Pacote:").
@@ -185,6 +211,15 @@ export function PainelNovaVendaClient({
       preco: p.price,
       paymentType: "ONE_TIME" as const,
       courseCount: p.courseCount,
+    })),
+    ...plans.map((p) => ({
+      kind: "plan" as const,
+      id: p.id,
+      nome: `Assinatura: ${p.name}`,
+      preco: p.price,
+      paymentType: "ONE_TIME" as const,
+      courseCount: p.courseCount,
+      interval: p.interval,
     })),
   ]
 
@@ -209,6 +244,9 @@ export function PainelNovaVendaClient({
   const [courseSearch, setCourseSearch] = useState("")
   const [selectedItems, setSelectedItems] = useState<SaleItem[]>([])
   const isPkg = selectedItems[0]?.kind === "package"
+  const planItem = selectedItems[0]?.kind === "plan" ? selectedItems[0] : null
+  /** Assinatura não aceita cupom, carnê nem bolsa — ver lib/subscriptions/direct-sale.ts. */
+  const isPlan = !!planItem
   const hasSelection = selectedItems.length > 0
   const isMulti = selectedItems.length > 1
   // Curso mensal é contrato recorrente de UM curso: o servidor recusa somá-lo a
@@ -223,8 +261,11 @@ export function PainelNovaVendaClient({
 
   /** Motivo de o item não poder entrar na seleção atual — null = pode. */
   function blockedReason(item: SaleItem): string | null {
-    if (isSelected(item) || item.kind === "package") return null
-    if (!hasSelection || isPkg) return null
+    if (isSelected(item) || item.kind === "package" || item.kind === "plan")
+      return null
+    // Assinatura é a venda inteira: um curso avulso ao lado dela viraria uma
+    // cobrança única somando recorrência com pagamento à vista.
+    if (!hasSelection || isPkg || isPlan) return null
     if (hasMonthly) return "o curso mensal é vendido sozinho"
     if (item.paymentType === "MONTHLY") return "curso mensal — vendido sozinho"
     if (selectedItems.length >= MAX_SALE_COURSES)
@@ -234,12 +275,13 @@ export function PainelNovaVendaClient({
 
   function toggleItem(item: SaleItem) {
     setSelectedItems((prev) => {
-      // Pacote é a venda inteira: substitui tudo (ou desmarca).
-      if (item.kind === "package") {
-        const same = prev.length === 1 && prev[0].kind === "package" && prev[0].id === item.id
+      // Pacote e assinatura são a venda inteira: substituem tudo (ou desmarcam).
+      if (item.kind === "package" || item.kind === "plan") {
+        const same =
+          prev.length === 1 && prev[0].kind === item.kind && prev[0].id === item.id
         return same ? [] : [item]
       }
-      // Escolher um curso descarta um pacote que estivesse selecionado.
+      // Escolher um curso descarta um pacote/assinatura que estivesse marcado.
       const courses = prev.filter((i) => i.kind === "course")
       if (courses.some((i) => i.id === item.id)) {
         return courses.filter((i) => i.id !== item.id)
@@ -264,7 +306,8 @@ export function PainelNovaVendaClient({
   const [created, setCreated] = useState<CreatedVenda | null>(null)
   const [copied, setCopied] = useState(false)
 
-  const installmentAvailable = !!installmentConfig && !bolsista
+  // Carnê é um parcelamento de valor fechado: não existe "assinatura em 6x".
+  const installmentAvailable = !!installmentConfig && !bolsista && !isPlan
   const isInstallment = installmentAvailable && paymentMode === "installment"
   const needsAddress = isInstallment && installmentConfig?.gateway === "MP"
   const installmentValueNum = Number(inst.value.replace(",", ".")) || 0
@@ -326,6 +369,16 @@ export function PainelNovaVendaClient({
       setPaymentMode("normal")
     }
   }, [bolsista])
+
+  // Escolher uma assinatura desliga a bolsa, o cupom e o carnê. Os controles
+  // somem da tela, mas o ESTADO ficaria — e um `bolsista` verdadeiro invisível
+  // mostraria "Total R$ 0" num resumo de venda que vai cobrar o valor cheio.
+  useEffect(() => {
+    if (!isPlan) return
+    setBolsista(false)
+    setCouponCode("")
+    setPaymentMode("normal")
+  }, [isPlan])
 
   function handleCpfChange(v: string) {
     setNewStudent((s) => ({ ...s, cpf: maskCpf(v) }))
@@ -401,13 +454,17 @@ export function PainelNovaVendaClient({
                 ...guardianCtl.payload(),
               }
             : { studentId: selectedStudent.id }),
-          // Curso individual envia tenantCourseId; pacote envia packageId.
-          ...(isPkg
-            ? { packageId: selectedItems[0].id }
-            : { tenantCourseIds: selectedItems.map((i) => i.id) }),
-          // Cupom não se aplica a bolsa, carnê nem quando há desconto manual.
+          // Curso(s) enviam tenantCourseIds; pacote, packageId; assinatura, planId.
+          ...(isPlan
+            ? { planId: selectedItems[0].id }
+            : isPkg
+              ? { packageId: selectedItems[0].id }
+              : { tenantCourseIds: selectedItems.map((i) => i.id) }),
+          // Cupom não se aplica a bolsa, carnê, assinatura nem quando há
+          // desconto manual. O servidor recusa assinatura+cupom; não mandar
+          // aqui evita um 400 que o vendedor não teria como interpretar.
           couponCode:
-            bolsista || isInstallment || manualValid || !couponCode.trim()
+            isPlan || bolsista || isInstallment || manualValid || !couponCode.trim()
               ? undefined
               : couponCode.trim(),
           // Desconto manual não se aplica a bolsa, carnê nem quando há cupom.
@@ -415,7 +472,7 @@ export function PainelNovaVendaClient({
             bolsista || isInstallment || couponCode.trim() || !manualValid
               ? undefined
               : manualPctNumber,
-          bolsista: bolsista || undefined,
+          bolsista: isPlan ? undefined : bolsista || undefined,
           boletoInstallment: isInstallment
             ? {
                 count: inst.count,
@@ -532,17 +589,45 @@ export function PainelNovaVendaClient({
           </div>
         ) : (
           <div className="rounded-2xl border border-[var(--color-pmb-green)]/20 bg-[var(--color-pmb-green)]/5 p-6 text-[var(--color-pmb-green-900)]">
-            <h2 className="text-base font-bold">Venda criada — link de pagamento gerado</h2>
+            <h2 className="text-base font-bold">
+              {created.mode === "subscription_plan"
+                ? "Assinatura criada — link de pagamento gerado"
+                : "Venda criada — link de pagamento gerado"}
+            </h2>
             <p className="mt-2 text-sm">
-              Envie o link abaixo para o aluno finalizar o pagamento na sua própria
-              loja (cartão, PIX ou boleto — sem sair do site). A matrícula é ativada
-              automaticamente após a confirmação do pagamento.
+              {created.mode === "subscription_plan" ? (
+                <>
+                  {/* O texto NÃO promete a página de pagamento da loja: a
+                      assinatura nasce em aberto no gateway e o aluno escolhe o
+                      meio na fatura dele. Prometer o checkout transparente aqui
+                      seria descrever uma tela que ele não vai ver. */}
+                  Envie o link abaixo para o aluno pagar a primeira cobrança e
+                  ativar a assinatura. O acesso aos cursos do plano é liberado
+                  automaticamente após a confirmação do pagamento.
+                  {created.chargeLabel ? ` ${created.chargeLabel}.` : ""}
+                </>
+              ) : (
+                <>
+                  Envie o link abaixo para o aluno finalizar o pagamento na sua
+                  própria loja (cartão, PIX ou boleto — sem sair do site). A
+                  matrícula é ativada automaticamente após a confirmação do
+                  pagamento.
+                </>
+              )}
             </p>
 
             <div className="mt-4 grid gap-2 sm:grid-cols-3">
               <Mini label="Original" value={fmt(created.basePrice ?? 0)} />
               <Mini label="Desconto" value={fmt(created.discountAmount ?? 0)} />
-              <Mini label="Final" value={fmt(created.finalAmount)} accent />
+              <Mini
+                label={
+                  created.mode === "subscription_plan" && created.recurring
+                    ? "Por cobrança"
+                    : "Final"
+                }
+                value={fmt(created.finalAmount)}
+                accent
+              />
             </div>
 
             <div className="mt-4 flex flex-wrap items-center gap-2">
@@ -592,6 +677,10 @@ export function PainelNovaVendaClient({
       )}
 
       {/* ── Bolsa de estudo ─────────────────────────────────────────────── */}
+      {/* Assinatura não aceita bolsa: sem cobrança não há recorrência a criar no
+          gateway, e o servidor recusa. Esconder é melhor que deixar marcar e
+          devolver um 400 que o vendedor não teria como interpretar. */}
+      {!isPlan && (
       <label
         data-tour="vendas-nova:bolsista"
         className="flex cursor-pointer items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4"
@@ -610,6 +699,7 @@ export function PainelNovaVendaClient({
           </span>
         </span>
       </label>
+      )}
 
       {/* ── 1. Aluno ─────────────────────────────────────────────────────── */}
       <div data-tour="vendas-nova:aluno">
@@ -850,11 +940,11 @@ export function PainelNovaVendaClient({
         </Section>
       </div>
 
-      {/* ── 2. Cursos ou pacote ──────────────────────────────────────────── */}
-      {/* Vários cursos = uma cobrança só, pela soma dos preços. Um pacote é a
-          venda inteira e por isso nunca soma com cursos avulsos. */}
+      {/* ── 2. Cursos, pacote ou assinatura ──────────────────────────────── */}
+      {/* Vários cursos = uma cobrança só, pela soma dos preços. Pacote e
+          assinatura são a venda inteira e nunca somam com cursos avulsos. */}
       <div data-tour="vendas-nova:curso">
-        <Section title="2. Cursos ou pacote" done={hasSelection}>
+        <Section title="2. Cursos, pacote ou assinatura" done={hasSelection}>
           <div className="space-y-3">
             {hasSelection && (
               <ul className="divide-y divide-emerald-100 rounded-xl border border-emerald-200 bg-emerald-50">
@@ -869,7 +959,9 @@ export function PainelNovaVendaClient({
                       </p>
                       <p className="text-xs text-gray-500">
                         {fmt(item.preco)}
-                        {item.kind === "package"
+                        {item.kind === "plan" && item.interval
+                          ? `${INTERVAL_PRICE_SUFFIX[item.interval]} · ${item.courseCount} ${item.courseCount === 1 ? "curso" : "cursos"} · ${INTERVAL_CHARGE_LABEL[item.interval]}`
+                          : item.kind === "package"
                           ? ` · ${item.courseCount} ${item.courseCount === 1 ? "curso" : "cursos"} · pagamento único`
                           : item.paymentType === "MONTHLY"
                             ? " · mensalidade recorrente"
@@ -900,7 +992,7 @@ export function PainelNovaVendaClient({
                 placeholder={
                   hasSelection
                     ? "Adicionar outro curso…"
-                    : "Buscar curso ou pacote da sua vitrine…"
+                    : "Buscar curso, pacote ou assinatura da sua vitrine…"
                 }
                 value={courseSearch}
                 onChange={(e) => setCourseSearch(e.target.value)}
@@ -910,7 +1002,7 @@ export function PainelNovaVendaClient({
             <ul className="max-h-64 divide-y divide-gray-100 overflow-y-auto rounded-xl border border-gray-200 bg-white">
               {filteredItems.length === 0 && (
                 <li className="px-4 py-3 text-sm text-gray-400">
-                  Nenhum curso ou pacote encontrado
+                  Nenhum curso, pacote ou assinatura encontrado
                 </li>
               )}
               {filteredItems.map((c) => {
@@ -942,7 +1034,9 @@ export function PainelNovaVendaClient({
                         <p className="truncate text-sm font-medium text-gray-900">{c.nome}</p>
                         <p className="text-xs text-gray-500">
                           {fmt(c.preco)}
-                          {c.kind === "package"
+                          {c.kind === "plan" && c.interval
+                            ? `${INTERVAL_PRICE_SUFFIX[c.interval]} · ${INTERVAL_LABEL[c.interval]} · ${c.courseCount} ${c.courseCount === 1 ? "curso" : "cursos"}`
+                            : c.kind === "package"
                             ? ` · ${c.courseCount} ${c.courseCount === 1 ? "curso" : "cursos"}`
                             : c.paymentType === "MONTHLY"
                               ? " · mensal"
@@ -957,7 +1051,7 @@ export function PainelNovaVendaClient({
             </ul>
             <p className="text-xs text-gray-400">
               Marque quantos cursos quiser (até {MAX_SALE_COURSES}) — o aluno recebe
-              um único link com a soma. Pacote é vendido sozinho.
+              um único link com a soma. Pacote e assinatura são vendidos sozinhos.
             </p>
           </div>
         </Section>
@@ -1101,6 +1195,11 @@ export function PainelNovaVendaClient({
                 )}
               </div>
 
+              {/* Cupom não vale para assinatura: nenhuma superfície do sistema
+                  aplica cupom a uma recorrência, e acordar isso só aqui criaria
+                  uma semântica ("vale para todos os ciclos?") que ninguém
+                  definiu. O desconto manual acima, esse sim, funciona. */}
+              {!isPlan && (
               <div className="space-y-2 border-t pt-4">
                 <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">
                   Ou cupom
@@ -1120,6 +1219,7 @@ export function PainelNovaVendaClient({
                   O desconto do cupom é validado ao gerar o link de pagamento.
                 </p>
               </div>
+              )}
 
               {!hasSelection && (
                 <p className="text-xs text-gray-400">
@@ -1210,7 +1310,15 @@ export function PainelNovaVendaClient({
               {selectedItems.map((item, i) => (
                 <Row
                   key={`sum:${item.kind}:${item.id}`}
-                  label={isPkg ? "Pacote" : isMulti ? `Curso ${i + 1}` : "Curso"}
+                  label={
+                    isPlan
+                      ? "Assinatura"
+                      : isPkg
+                        ? "Pacote"
+                        : isMulti
+                          ? `Curso ${i + 1}`
+                          : "Curso"
+                  }
                   value={`${item.nome} — ${fmt(item.preco)}`}
                 />
               ))}
@@ -1234,10 +1342,30 @@ export function PainelNovaVendaClient({
                   ) : couponCode.trim() ? (
                     <Row label="Cupom" value="a confirmar" className="text-gray-500" />
                   ) : null}
-                  <Row label="Total" value={couponCode.trim() && !manualValid ? `até ${fmt(finalPrice)}` : fmt(finalPrice)} bold />
+                  <Row
+                    label={
+                      planItem && isRecurringInterval(planItem.interval ?? "MONTHLY")
+                        ? "Valor por cobrança"
+                        : "Total"
+                    }
+                    value={couponCode.trim() && !manualValid ? `até ${fmt(finalPrice)}` : fmt(finalPrice)}
+                    bold
+                  />
                   <Row
                     label={bolsista ? "Cobrança" : "Pagamento"}
-                    value={bolsista ? "Nenhuma (bolsa)" : "Link na sua loja (cartão, PIX ou boleto)"}
+                    value={
+                      bolsista
+                        ? "Nenhuma (bolsa)"
+                        : planItem
+                          ? // Numa recorrência o gateway guarda UM valor: o
+                            // desconto dado agora vale para TODAS as cobranças.
+                            // Sem dizer isso, "10% de desconto" pareceria valer
+                            // só na primeira.
+                            isRecurringInterval(planItem.interval ?? "MONTHLY")
+                            ? `${INTERVAL_CHARGE_LABEL[planItem.interval ?? "MONTHLY"]} — o desconto vale para todas as cobranças`
+                            : INTERVAL_CHARGE_LABEL[planItem.interval ?? "MONTHLY"]
+                          : "Link na sua loja (cartão, PIX ou boleto)"
+                    }
                   />
                 </>
               )}

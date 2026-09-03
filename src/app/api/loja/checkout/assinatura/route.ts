@@ -8,6 +8,7 @@ import { provisionStudentAccess } from "@/lib/students/access"
 import { buildGuardianWrite } from "@/lib/students/guardian"
 import { PAYER_SELECT, resolvePayer } from "@/lib/checkout/payer"
 import { getPlanForCheckout } from "@/lib/subscriptions/plans"
+import { isRecurringInterval } from "@/lib/subscriptions/interval"
 import { createSubscriptionAtGateway } from "@/lib/subscriptions/checkout"
 import { resellerSubscriptionCheckoutSchema } from "@/lib/subscriptions/checkout-schema"
 import { tenantCheckoutMode } from "@/lib/tenant/checkout-mode"
@@ -113,25 +114,34 @@ export const POST = withRequestContext(
     }
     const data = parsed.data
 
-    // MP não faz recorrência com PIX/boleto: a assinatura só existe no cartão.
-    if (gateway === "MP" && data.paymentMethod !== "CREDIT_CARD") {
-      return NextResponse.json(
-        {
-          error: "Esta loja aceita assinatura apenas no cartão de crédito",
-          code: "METHOD_NOT_SUPPORTED",
-        },
-        { status: 400 },
-      )
-    }
     if (data.paymentMethod === "CREDIT_CARD" && (!data.creditCard || !data.creditCardHolder)) {
       return NextResponse.json({ error: "Dados do cartão obrigatórios" }, { status: 400 })
     }
 
-    // Preço e escopo do plano NESTA vitrine (override da unidade aplicado). O
-    // corpo diz qual plano, nunca quanto custa.
+    // Preço, escopo e PERIODICIDADE do plano NESTA vitrine (override da unidade
+    // aplicado). O corpo diz qual plano, nunca quanto custa nem como é cobrado.
     const plan = await getPlanForCheckout(tenant.id, data.planId)
     if (!plan) {
       return NextResponse.json({ error: "Plano indisponível" }, { status: 404 })
+    }
+
+    // MP não faz RECORRÊNCIA com PIX/boleto: o preapproval exige cartão. A
+    // restrição é da recorrência, não da loja — um plano VITALÍCIO no MP é uma
+    // cobrança comum e aceita os três meios. Por isso a checagem roda depois de
+    // carregar o plano: aplicá-la antes recusaria PIX numa compra única que o
+    // gateway aceita sem problema.
+    if (
+      gateway === "MP" &&
+      isRecurringInterval(plan.interval) &&
+      data.paymentMethod !== "CREDIT_CARD"
+    ) {
+      return NextResponse.json(
+        {
+          error: "Esta loja aceita assinatura recorrente apenas no cartão de crédito",
+          code: "METHOD_NOT_SUPPORTED",
+        },
+        { status: 400 },
+      )
     }
 
     if (await cpfHasRegisteredLogin(tenant.id, data.cpf)) {

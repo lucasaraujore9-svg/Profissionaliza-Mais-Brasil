@@ -136,6 +136,9 @@ export const PATCH = withRequestContextParams<{ planId: string }>(
         ...(d.description !== undefined ? { description: d.description } : {}),
         ...(d.coverImageUrl !== undefined ? { coverImageUrl: d.coverImageUrl } : {}),
         ...(d.price !== undefined ? { price: d.price } : {}),
+        // So vale para contratacoes NOVAS — o ciclo de quem ja assina esta
+        // congelado em `StudentSubscription.interval`.
+        ...(d.interval !== undefined ? { interval: d.interval } : {}),
         scope: next.scope,
         // Campos de escopo zerados fora do seu modo: um plano que foi CATEGORY
         // e virou COURSES não pode carregar as categorias antigas — elas

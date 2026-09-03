@@ -72,6 +72,7 @@ export async function releaseSubscriptionCourse(
       tenantId: true,
       status: true,
       currentPeriodEnd: true,
+      interval: true,
       plan: {
         select: {
           scope: true,

@@ -19,6 +19,10 @@ vi.mock("@/lib/prisma", () => ({
     studentLead: { findMany: vi.fn(), findFirst: vi.fn() },
     tenant: { findUnique: vi.fn() },
     enrollment: { findMany: vi.fn() },
+    // A listagem de vendas passou a somar as vendas de ASSINATURA, que vivem
+    // noutro model — e precisam do MESMO recorte de carteira.
+    studentSubscription: { findMany: vi.fn() },
+    user: { findMany: vi.fn() },
   },
 }))
 vi.mock("@/lib/auth/painel-guard", () => ({ requirePainel: vi.fn() }))
@@ -47,6 +51,8 @@ const p = prisma as unknown as {
   studentLead: { findMany: ReturnType<typeof vi.fn>; findFirst: ReturnType<typeof vi.fn> }
   tenant: { findUnique: ReturnType<typeof vi.fn> }
   enrollment: { findMany: ReturnType<typeof vi.fn> }
+  studentSubscription: { findMany: ReturnType<typeof vi.fn> }
+  user: { findMany: ReturnType<typeof vi.fn> }
 }
 const guard = requirePainel as unknown as ReturnType<typeof vi.fn>
 
@@ -61,6 +67,8 @@ beforeEach(() => {
   p.studentLead.findMany.mockResolvedValue([])
   p.tenant.findUnique.mockResolvedValue({ abandonedAfterHours: 24 })
   p.enrollment.findMany.mockResolvedValue([])
+  p.studentSubscription.findMany.mockResolvedValue([])
+  p.user.findMany.mockResolvedValue([])
 })
 
 describe("alunos — escopo por papel", () => {
@@ -141,5 +149,28 @@ describe("vendas — escopo por papel", () => {
     expect(p.enrollment.findMany.mock.calls[0][0].where.soldByUserId).toEqual({
       not: null,
     })
+  })
+
+  it("vendedor: o recorte alcanca tambem as vendas de ASSINATURA", async () => {
+    // A venda de assinatura mora noutro model (`StudentSubscription`), entao o
+    // `ctx.scope.vendas` — tipado para `Enrollment` — nao a alcanca. Sem o
+    // gemeo `ctx.scope.assinaturas`, o vendedor veria as assinaturas vendidas
+    // por TODA a unidade: nome, e-mail e valor de cliente que nao e dele.
+    guard.mockResolvedValue(painelGuardOk({ role: "consultant" }))
+    await listVendas(new Request("http://x/api/painel/vendas"))
+    expect(
+      p.studentSubscription.findMany.mock.calls[0][0].where.soldByUserId,
+    ).toBe("u1")
+  })
+
+  it("financeiro: assinaturas da unidade inteira, mas so as VENDIDAS", async () => {
+    // `{ not: null }` separa a venda direta da contratacao que o proprio aluno
+    // fez na vitrine — aquela nao e venda de ninguem e nao pode aparecer na
+    // tela de vendas diretas.
+    guard.mockResolvedValue(painelGuardOk({ role: "finance" }))
+    await listVendas(new Request("http://x/api/painel/vendas"))
+    expect(
+      p.studentSubscription.findMany.mock.calls[0][0].where.soldByUserId,
+    ).toEqual({ not: null })
   })
 })

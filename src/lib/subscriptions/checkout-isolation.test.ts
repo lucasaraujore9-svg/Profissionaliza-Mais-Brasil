@@ -48,7 +48,14 @@ const findCustomer = findOrCreateAsaasCustomer as unknown as ReturnType<typeof v
 function input(tenantId: string | null) {
   return {
     subscriptionId: "sub_1",
-    plan: { id: "p1", name: "Plano", slug: "plano", price: 49.9, scope: {} as never },
+    plan: {
+      id: "p1",
+      name: "Plano",
+      slug: "plano",
+      price: 49.9,
+      interval: "MONTHLY" as const,
+      scope: {} as never,
+    },
     tenantId,
     billingType: "PIX" as const,
     payer: { nome: "Aluno", cpf: "39053344705", email: "a@x.com", phone: null },

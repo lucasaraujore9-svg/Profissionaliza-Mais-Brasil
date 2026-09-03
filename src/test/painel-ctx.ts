@@ -47,6 +47,9 @@ export function painelCtx({
         ? {}
         : { enrollments: { some: { soldByUserId: userId } } },
       vendas: permissions.has("vendas.viewAll") ? {} : { soldByUserId: userId },
+      assinaturas: permissions.has("vendas.viewAll")
+        ? {}
+        : { soldByUserId: userId },
       pagamentos: permissions.has("vendas.viewAll") ? {} : { soldByUserId: userId },
       leads: permissions.has("leads.viewAll") ? {} : { ownerUserId: userId },
     },

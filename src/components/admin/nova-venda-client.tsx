@@ -10,6 +10,13 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { MAX_SALE_COURSES } from "@/lib/enrollment/multi-course"
+import {
+  INTERVAL_LABEL,
+  INTERVAL_PRICE_SUFFIX,
+  INTERVAL_CHARGE_LABEL,
+  isRecurringInterval,
+  type SubscriptionIntervalValue,
+} from "@/lib/subscriptions/interval"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -28,18 +35,29 @@ interface PackageOption {
   courseCount: number
 }
 
+interface PlanOption {
+  id: string
+  name: string
+  price: number
+  interval: SubscriptionIntervalValue
+  courseCount: number
+}
+
 /**
- * Item unificado do seletor (curso ou pacote). Pacote é sempre pagamento único.
- * O `kind` roteia o corpo da venda: courseId vs packageId.
+ * Item unificado do seletor (curso, pacote ou plano de assinatura). Pacote e
+ * plano são sempre vendidos SOZINHOS. O `kind` roteia o corpo da venda:
+ * courseIds vs packageId vs planId.
  */
 type SaleItem = {
-  kind: "course" | "package"
+  kind: "course" | "package" | "plan"
   id: string
   nome: string
   preco: number
   paymentType: "ONE_TIME" | "MONTHLY"
   monthlyMonths: number | null
   courseCount?: number
+  /** Só em `kind: "plan"` — decide o rótulo do preço e o texto da cobrança. */
+  interval?: SubscriptionIntervalValue
 }
 
 interface StudentResult {
@@ -102,6 +120,7 @@ export function NovaVendaClient({
   gateway,
   courses,
   packages,
+  plans,
 }: {
   // Cap individual (%) resolvido no servidor (User.maxDiscount; padrão 50 para
   // PMB_SALES, 100 para SUPER_ADMIN). Ver src/lib/coupons/sales-cap.ts.
@@ -109,6 +128,7 @@ export function NovaVendaClient({
   gateway: "MP" | "ASAAS"
   courses: CourseOption[]
   packages: PackageOption[]
+  plans: PlanOption[]
 }) {
 
   // Lista unificada: cursos primeiro, depois pacotes (prefixados "Pacote:").
@@ -130,6 +150,16 @@ export function NovaVendaClient({
       monthlyMonths: null,
       courseCount: p.courseCount,
     })),
+    ...plans.map((p) => ({
+      kind: "plan" as const,
+      id: p.id,
+      nome: `Assinatura: ${p.name}`,
+      preco: p.price,
+      paymentType: "ONE_TIME" as const,
+      monthlyMonths: null,
+      courseCount: p.courseCount,
+      interval: p.interval,
+    })),
   ]
 
   // Step 1 — Student
@@ -150,6 +180,9 @@ export function NovaVendaClient({
   const [courseSearch, setCourseSearch] = useState("")
   const [selectedItems, setSelectedItems] = useState<SaleItem[]>([])
   const isPkg = selectedItems[0]?.kind === "package"
+  const planItem = selectedItems[0]?.kind === "plan" ? selectedItems[0] : null
+  /** Cupom e bolsa não valem para assinatura — ver lib/subscriptions/direct-sale.ts. */
+  const isPlan = !!planItem
   const hasSelection = selectedItems.length > 0
   const isMulti = selectedItems.length > 1
   // Curso mensal é contrato recorrente de UM curso: o servidor recusa somá-lo a
@@ -164,7 +197,11 @@ export function NovaVendaClient({
 
   /** Motivo de o item não poder entrar na seleção atual — null = pode. */
   function blockedReason(item: SaleItem): string | null {
-    if (isSelected(item) || item.kind === "package") return null
+    if (isSelected(item) || item.kind === "package" || item.kind === "plan")
+      return null
+    // Assinatura é a venda inteira: um curso avulso ao lado dela viraria uma
+    // cobrança única somando recorrência com pagamento à vista.
+    if (isPlan) return null
     if (!hasSelection) return null
     if (isPkg) return null // clicar num curso troca o pacote pelo curso
     if (hasMonthly) return "o curso mensal é vendido sozinho"
@@ -176,12 +213,13 @@ export function NovaVendaClient({
 
   function toggleItem(item: SaleItem) {
     setSelectedItems((prev) => {
-      // Pacote é a venda inteira: substitui tudo (ou desmarca).
-      if (item.kind === "package") {
-        const same = prev.length === 1 && prev[0].kind === "package" && prev[0].id === item.id
+      // Pacote e assinatura são a venda inteira: substituem tudo (ou desmarcam).
+      if (item.kind === "package" || item.kind === "plan") {
+        const same =
+          prev.length === 1 && prev[0].kind === item.kind && prev[0].id === item.id
         return same ? [] : [item]
       }
-      // Escolher um curso descarta um pacote que estivesse selecionado.
+      // Escolher um curso descarta um pacote/assinatura que estivesse marcado.
       const courses = prev.filter((i) => i.kind === "course")
       if (courses.some((i) => i.id === item.id)) {
         return courses.filter((i) => i.id !== item.id)
@@ -200,6 +238,7 @@ export function NovaVendaClient({
 
   // Bolsa de estudo (sem cobrança)
   const [bolsista, setBolsista] = useState(false)
+
 
   // Step 4 — Link
   const [generatingLink, setGeneratingLink] = useState(false)
@@ -252,6 +291,17 @@ export function NovaVendaClient({
       setManualPct("")
     }
   }, [bolsista])
+
+  // Escolher uma assinatura desliga a bolsa e o cupom. O checkbox e o campo
+  // somem da tela, mas o ESTADO ficaria — e um `bolsista` verdadeiro invisível
+  // mostraria "Total R$ 0" num resumo de venda que vai cobrar o valor cheio.
+  useEffect(() => {
+    if (!isPlan) return
+    setBolsista(false)
+    setCouponResult(null)
+    setCouponCode("")
+    setCouponError(null)
+  }, [isPlan])
 
   function handleCpfChange(v: string) {
     setNewStudent((s) => ({ ...s, cpf: maskCpf(v) }))
@@ -315,7 +365,7 @@ export function NovaVendaClient({
   async function validateCoupon() {
     // Cupom (preview) só para curso(s) — a rota de validação usa courseIds e
     // soma os preços, exatamente como a venda vai cobrar.
-    if (!couponCode.trim() || !hasSelection || isPkg) return
+    if (!couponCode.trim() || !hasSelection || isPkg || isPlan) return
     setValidatingCoupon(true)
     setCouponError(null)
     setCouponResult(null)
@@ -367,14 +417,19 @@ export function NovaVendaClient({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           studentId: selectedStudent.id,
-          // Curso(s) enviam courseIds; pacote envia packageId.
-          ...(isPkg
-            ? { packageId: selectedItems[0].id }
-            : { courseIds: selectedItems.map((i) => i.id) }),
-          couponCode: bolsista || !couponResult ? undefined : couponCode.trim(),
+          // Curso(s) enviam courseIds; pacote, packageId; assinatura, planId.
+          ...(isPlan
+            ? { planId: selectedItems[0].id }
+            : isPkg
+              ? { packageId: selectedItems[0].id }
+              : { courseIds: selectedItems.map((i) => i.id) }),
+          // Assinatura recusa cupom e bolsa no servidor — não mandar aqui evita
+          // um 400 que o vendedor não teria como interpretar.
+          couponCode:
+            isPlan || bolsista || !couponResult ? undefined : couponCode.trim(),
           manualDiscountPercent:
             bolsista || couponResult || !manualValid ? undefined : manualPctNumber,
-          bolsista: bolsista || undefined,
+          bolsista: isPlan ? undefined : bolsista || undefined,
         }),
       })
       const body = await res.json()
@@ -426,6 +481,11 @@ export function NovaVendaClient({
       </div>
 
       {/* ── Bolsa de estudo ─────────────────────────────────────────────── */}
+      {/* Assinatura não aceita bolsa: sem cobrança não há recorrência a criar no
+          gateway, e o servidor recusa. Esconder é melhor que deixar marcar e
+          devolver um 400 que o vendedor não teria como interpretar. Quem quer
+          dar acesso de graça usa a bolsa numa venda de CURSO. */}
+      {!isPlan && (
       <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4">
         <input
           type="checkbox"
@@ -441,6 +501,7 @@ export function NovaVendaClient({
           </span>
         </span>
       </label>
+      )}
 
       {/* ── 1. Aluno ─────────────────────────────────────────────────────── */}
       <Section title="1. Aluno" done={!!selectedStudent}>
@@ -648,7 +709,7 @@ export function NovaVendaClient({
           <div className="relative">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
             <Input
-              placeholder={hasSelection ? "Adicionar outro curso…" : "Buscar curso ou pacote…"}
+              placeholder={hasSelection ? "Adicionar outro curso…" : "Buscar curso, pacote ou assinatura…"}
               value={courseSearch}
               onChange={(e) => setCourseSearch(e.target.value)}
               className="pl-9"
@@ -656,7 +717,7 @@ export function NovaVendaClient({
           </div>
           <ul className="max-h-64 divide-y divide-gray-100 overflow-y-auto rounded-xl border border-gray-200 bg-white">
             {filteredItems.length === 0 && (
-              <li className="px-4 py-3 text-sm text-gray-400">Nenhum curso ou pacote encontrado</li>
+              <li className="px-4 py-3 text-sm text-gray-400">Nenhum curso, pacote ou assinatura encontrado</li>
             )}
             {filteredItems.map((c) => {
               const selected = isSelected(c)
@@ -687,7 +748,9 @@ export function NovaVendaClient({
                       <p className="truncate text-sm font-medium text-gray-900">{c.nome}</p>
                       <p className="text-xs text-gray-500">
                         {fmt(c.preco)}
-                        {c.kind === "package"
+                        {c.kind === "plan" && c.interval
+                          ? `${INTERVAL_PRICE_SUFFIX[c.interval]} · ${INTERVAL_LABEL[c.interval]} · ${c.courseCount} ${c.courseCount === 1 ? "curso" : "cursos"}`
+                          : c.kind === "package"
                           ? ` · ${c.courseCount} ${c.courseCount === 1 ? "curso" : "cursos"}`
                           : c.paymentType === "MONTHLY" && c.monthlyMonths ? ` · ${c.monthlyMonths}x mensais` : " · único"}
                         {blocked ? ` · ${blocked}` : ""}
@@ -700,7 +763,7 @@ export function NovaVendaClient({
           </ul>
           <p className="text-xs text-gray-400">
             Marque quantos cursos quiser (até {MAX_SALE_COURSES}) — o aluno recebe
-            um único link com a soma. Pacote é vendido sozinho.
+            um único link com a soma. Pacote e assinatura são vendidos sozinhos.
           </p>
         </div>
       </Section>
@@ -767,7 +830,7 @@ export function NovaVendaClient({
             {/* Cupom — só curso(s) (a validação usa courseIds). Aplicar cupom é
                 livre (qualquer cupom ativo, mesmo acima do cap — quem criou já
                 foi validado); o cap vale só para o desconto manual acima. */}
-            {!isPkg && (
+            {!isPkg && !isPlan && (
               <div className="space-y-2 border-t pt-4">
                 <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">
                   Ou cupom
@@ -834,11 +897,13 @@ export function NovaVendaClient({
                 <Row
                   key={`sum:${item.kind}:${item.id}`}
                   label={
-                    isPkg
-                      ? "Pacote"
-                      : isMulti
-                        ? `Curso ${i + 1}`
-                        : "Curso"
+                    isPlan
+                      ? "Assinatura"
+                      : isPkg
+                        ? "Pacote"
+                        : isMulti
+                          ? `Curso ${i + 1}`
+                          : "Curso"
                   }
                   value={`${item.nome} — ${fmt(item.preco)}`}
                 />
@@ -851,7 +916,28 @@ export function NovaVendaClient({
               ) : manualValid ? (
                 <Row label={`Desconto (${manualPctNumber}%)`} value={`− ${fmt(manualDiscountAmount)}`} className="text-emerald-600" />
               ) : null}
-              <Row label="Total" value={fmt(finalPrice)} bold />
+              <Row
+                label={
+                  planItem && isRecurringInterval(planItem.interval ?? "MONTHLY")
+                    ? "Valor por cobrança"
+                    : "Total"
+                }
+                value={fmt(finalPrice)}
+                bold
+              />
+              {planItem && (
+                // Numa recorrência o gateway guarda UM valor: o desconto que o
+                // vendedor dá agora vale para TODAS as cobranças. Sem este aviso
+                // um "10% de desconto" pareceria valer só na primeira.
+                <Row
+                  label="Cobrança"
+                  value={
+                    isRecurringInterval(planItem.interval ?? "MONTHLY")
+                      ? `${INTERVAL_CHARGE_LABEL[planItem.interval ?? "MONTHLY"]} — o desconto vale para todas as cobranças`
+                      : INTERVAL_CHARGE_LABEL[planItem.interval ?? "MONTHLY"]
+                  }
+                />
+              )}
               <Row label={bolsista ? "Cobrança" : "Gateway"} value={bolsista ? "Nenhuma (bolsa)" : gateway === "ASAAS" ? "Asaas" : "Mercado Pago"} />
             </div>
 

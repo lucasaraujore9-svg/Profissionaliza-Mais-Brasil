@@ -1,3 +1,4 @@
+import type { SubscriptionInterval } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import type { PlanScopeInput } from "./scope"
 import { planCourseWhere, planIncludesCourseWhere } from "./scope"
@@ -20,6 +21,11 @@ export interface PlanCard {
   coverImageUrl: string | null
   /** Preco efetivo nesta vitrine (override da unidade ou o do plano). */
   price: number
+  /**
+   * Periodicidade da cobranca. Vem do PLANO (a unidade nao a sobrescreve): o
+   * preco e negocio da loja, a natureza do produto e da rede.
+   */
+  interval: SubscriptionInterval
   featured: boolean
   /** Quantos cursos o plano libera nesta vitrine, agora. */
   courseCount: number
@@ -33,6 +39,7 @@ const PLAN_SELECT = {
   description: true,
   coverImageUrl: true,
   price: true,
+  interval: true,
   enabled: true,
   featured: true,
   position: true,
@@ -50,6 +57,7 @@ type PlanRow = {
   description: string | null
   coverImageUrl: string | null
   price: unknown
+  interval: SubscriptionInterval
   enabled: boolean
   featured: boolean
   position: number
@@ -144,6 +152,7 @@ export async function resolveVitrinePlans(
       description: row.description,
       coverImageUrl: override?.customCoverUrl ?? row.coverImageUrl,
       price,
+      interval: row.interval,
       featured: override?.isFeatured ?? row.featured,
       courseCount,
     })
@@ -188,6 +197,12 @@ export interface PlanCheckoutData {
   name: string
   slug: string
   price: number
+  /**
+   * Decide o CAMINHO no gateway (assinatura recorrente x cobranca avulsa) e o
+   * ciclo. Sai daqui e nunca do corpo do POST, pela mesma razao do preco: o
+   * cliente diz QUAL plano, jamais como ele e cobrado.
+   */
+  interval: SubscriptionInterval
   scope: PlanScopeInput
 }
 
@@ -232,7 +247,14 @@ export async function getPlanForCheckout(
   })
   if (count === 0) return null
 
-  return { id: plan.id, name: plan.name, slug: plan.slug, price, scope }
+  return {
+    id: plan.id,
+    name: plan.name,
+    slug: plan.slug,
+    price,
+    interval: plan.interval,
+    scope,
+  }
 }
 
 /**

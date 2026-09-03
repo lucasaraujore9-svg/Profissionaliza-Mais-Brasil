@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { SUBSCRIPTION_INTERVALS } from "./interval"
 
 /**
  * Validacao compartilhada do plano de assinatura. Vive num modulo PURO (sem
@@ -20,6 +21,11 @@ export const planShape = {
   description: z.string().trim().max(2000).nullable().optional(),
   coverImageUrl: z.string().trim().max(1000).nullable().optional(),
   price: z.number().positive("Preço deve ser maior que zero"),
+  /**
+   * Periodicidade da cobranca. `LIFETIME` e o unico valor que NAO gera
+   * recorrencia — vira uma cobranca unica com acesso permanente.
+   */
+  interval: z.enum(SUBSCRIPTION_INTERVALS).default("MONTHLY"),
   scope: z.enum(SUBSCRIPTION_SCOPES),
   categoryIds: z.array(z.string().min(1)).default([]),
   packageId: z.string().min(1).nullable().optional(),
@@ -68,6 +74,12 @@ export const updatePlanSchema = z.object({
   description: planShape.description,
   coverImageUrl: planShape.coverImageUrl,
   price: planShape.price.optional(),
+  /**
+   * Editavel, mas so alcanca contratacoes NOVAS: `StudentSubscription.interval`
+   * e congelado na compra. Trocar a periodicidade do plano nao reescreve o
+   * contrato de quem ja assina.
+   */
+  interval: z.enum(SUBSCRIPTION_INTERVALS).optional(),
   scope: planShape.scope.optional(),
   categoryIds: z.array(z.string().min(1)).optional(),
   packageId: z.string().min(1).nullable().optional(),

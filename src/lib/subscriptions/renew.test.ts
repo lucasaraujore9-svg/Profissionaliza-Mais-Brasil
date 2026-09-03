@@ -45,6 +45,11 @@ function sub(over: Record<string, unknown> = {}) {
     currentPeriodEnd: null,
     cancelAtPeriodEnd: false,
     studentId: "st_1",
+    // Periodicidade CONGELADA na contratacao — e ela que diz quanto o pagamento
+    // compra. Ler do plano faria um assinante mensal virar anual no dia em que
+    // alguem editasse o catalogo.
+    interval: "MONTHLY",
+    startedAt: null,
     plan: { name: "Plano Total" },
     ...over,
   }
@@ -155,5 +160,44 @@ describe("markSubscriptionPastDue", () => {
     findSub.mockResolvedValue(sub({ status: "CANCELLED" }))
     await markSubscriptionPastDue("sub_1")
     expect(updateSub).not.toHaveBeenCalled()
+  })
+})
+
+describe("periodicidade congelada", () => {
+  it("plano anual empurra o ciclo 12 meses, nao 1", async () => {
+    findSub.mockResolvedValue(sub({ interval: "ANNUAL" }))
+    await settleSubscriptionCycle("sub_1", event())
+    expect(
+      updateSub.mock.calls[0][0].data.currentPeriodEnd.toISOString(),
+    ).toBe("2027-08-20T12:00:00.000Z")
+  })
+
+  it("plano trimestral empurra 3 meses", async () => {
+    findSub.mockResolvedValue(sub({ interval: "QUARTERLY" }))
+    await settleSubscriptionCycle("sub_1", event())
+    expect(
+      updateSub.mock.calls[0][0].data.currentPeriodEnd.toISOString(),
+    ).toBe("2026-11-20T12:00:00.000Z")
+  })
+
+  it("VITALICIA nao grava prazo nenhum", async () => {
+    // `currentPeriodEnd` tem que continuar null: e o sinal que mantem a linha
+    // fora da varredura de carencia. Gravar uma data distante seria uma mentira
+    // que a varredura acabaria cobrando, cancelando quem pagou pelo permanente.
+    findSub.mockResolvedValue(sub({ interval: "LIFETIME" }))
+    await settleSubscriptionCycle("sub_1", event())
+    const data = updateSub.mock.calls[0][0].data
+    expect(data.status).toBe("ACTIVE")
+    expect(data.currentPeriodEnd).toBeUndefined()
+    expect(data.startedAt).toEqual(PAID)
+  })
+
+  it("VITALICIA nao vai para PAST_DUE", async () => {
+    // Nao ha mensalidade a atrasar. PAST_DUE anunciaria "regularize para nao
+    // perder o acesso" a quem comprou acesso permanente.
+    findSub.mockResolvedValue(sub({ interval: "LIFETIME" }))
+    await markSubscriptionPastDue("sub_1")
+    expect(updateSub).not.toHaveBeenCalled()
+    expect(notify).not.toHaveBeenCalled()
   })
 })

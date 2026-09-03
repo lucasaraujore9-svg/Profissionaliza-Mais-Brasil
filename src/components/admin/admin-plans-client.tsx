@@ -3,6 +3,13 @@
 import { useCallback, useEffect, useState } from "react"
 import { Loader2, Plus, Trash2, Pencil } from "lucide-react"
 import { SUBSCRIPTION_SCOPES, scopeIsComplete } from "@/lib/subscriptions/schema"
+import {
+  SUBSCRIPTION_INTERVALS,
+  INTERVAL_LABEL,
+  INTERVAL_CHARGE_LABEL,
+  INTERVAL_PRICE_SUFFIX,
+  type SubscriptionIntervalValue,
+} from "@/lib/subscriptions/interval"
 
 /**
  * CRUD dos planos de assinatura da PMB.
@@ -18,6 +25,7 @@ interface Plan {
   slug: string
   description: string | null
   price: number
+  interval: SubscriptionIntervalValue
   scope: (typeof SUBSCRIPTION_SCOPES)[number]
   categoryIds: string[]
   packageId: string | null
@@ -58,6 +66,7 @@ interface FormState {
   name: string
   description: string
   price: string
+  interval: SubscriptionIntervalValue
   scope: (typeof SUBSCRIPTION_SCOPES)[number]
   categoryIds: string[]
   packageId: string
@@ -71,6 +80,7 @@ const EMPTY: FormState = {
   name: "",
   description: "",
   price: "",
+  interval: "MONTHLY",
   scope: "ALL",
   categoryIds: [],
   packageId: "",
@@ -119,6 +129,7 @@ export function AdminPlansClient({
         name: form.name,
         description: form.description || null,
         price,
+        interval: form.interval,
         scope: form.scope,
         categoryIds: form.categoryIds,
         packageId: form.packageId || null,
@@ -205,7 +216,11 @@ export function AdminPlansClient({
               />
             </label>
             <label className="text-sm">
-              <span className="font-medium text-gray-700">Mensalidade (R$)</span>
+              <span className="font-medium text-gray-700">
+                {form.interval === "LIFETIME"
+                  ? "Valor único (R$)"
+                  : "Valor por cobrança (R$)"}
+              </span>
               <input
                 value={form.price}
                 onChange={(e) => setForm({ ...form, price: e.target.value })}
@@ -213,8 +228,54 @@ export function AdminPlansClient({
                 placeholder="49,90"
                 className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
               />
+              {/* O rótulo do campo muda com a periodicidade porque "R$ 490" é
+                  uma coisa por mês e outra por ano — e no vitalício não é
+                  "mensalidade" nenhuma. */}
+              <span className="mt-1 block text-xs text-gray-500">
+                {INTERVAL_CHARGE_LABEL[form.interval]}
+              </span>
             </label>
           </div>
+
+          <label className="mt-4 block text-sm sm:w-1/2 sm:pr-2">
+            <span className="font-medium text-gray-700">Periodicidade</span>
+            <select
+              value={form.interval}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  interval: e.target.value as SubscriptionIntervalValue,
+                })
+              }
+              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+            >
+              {SUBSCRIPTION_INTERVALS.map((i) => (
+                <option key={i} value={i}>
+                  {INTERVAL_LABEL[i]}
+                </option>
+              ))}
+            </select>
+            {form.interval === "LIFETIME" ? (
+              <span className="mt-1 block text-xs text-gray-500">
+                Cobrança única. O aluno paga uma vez e mantém o acesso ao
+                conteúdo do plano para sempre — não há renovação nem
+                cancelamento por falta de pagamento.
+              </span>
+            ) : (
+              <span className="mt-1 block text-xs text-gray-500">
+                Renova automaticamente até o aluno cancelar.
+              </span>
+            )}
+            {form.id && (
+              // Sem este aviso, editar a periodicidade parece alcançar quem já
+              // assina — e não alcança: `StudentSubscription.interval` é
+              // congelado na compra, junto com o preço.
+              <span className="mt-1 block text-xs text-amber-700">
+                Alterar a periodicidade vale só para novas contratações. Quem já
+                assina continua no ciclo e no valor que contratou.
+              </span>
+            )}
+          </label>
 
           <label className="mt-4 block text-sm">
             <span className="font-medium text-gray-700">Descrição</span>
@@ -375,7 +436,9 @@ export function AdminPlansClient({
                   )}
                 </p>
                 <p className="mt-0.5 text-xs text-gray-500">
-                  {money(p.price)}/mês · {SCOPE_LABEL[p.scope]} ·{" "}
+                  {money(p.price)}
+                  {INTERVAL_PRICE_SUFFIX[p.interval]} · {INTERVAL_LABEL[p.interval]} ·{" "}
+                  {SCOPE_LABEL[p.scope]} ·{" "}
                   <strong>{p.courseCount}</strong> cursos hoje
                 </p>
               </div>
@@ -389,6 +452,7 @@ export function AdminPlansClient({
                         name: p.name,
                         description: p.description ?? "",
                         price: String(p.price).replace(".", ","),
+                        interval: p.interval,
                         scope: p.scope,
                         categoryIds: p.categoryIds,
                         packageId: p.packageId ?? "",

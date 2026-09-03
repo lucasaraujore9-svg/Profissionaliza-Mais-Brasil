@@ -50,6 +50,10 @@ import {
 } from "@/lib/installments/schedule"
 import { getPackageForCheckout } from "@/lib/packages/vitrine"
 import { MAX_SALE_COURSES, dedupeIds } from "@/lib/enrollment/multi-course"
+import { getPlanForCheckout } from "@/lib/subscriptions/plans"
+import { createDirectSubscriptionSale } from "@/lib/subscriptions/direct-sale"
+import { decryptTenantAsaasKey } from "@/lib/asaas/client"
+import { decryptTenantMpToken } from "@/lib/mercadopago/client"
 import { rollbackSaleEnrollment } from "@/lib/enrollment/multi-course-server"
 
 const createSchema = withGuardianRule(
@@ -93,6 +97,10 @@ const createSchema = withGuardianRule(
       .max(MAX_SALE_COURSES)
       .optional(),
     packageId: z.string().min(1).optional(),
+    // Alvo ASSINATURA: um plano da vitrine (da PMB ou próprio da unidade). A
+    // venda não gera matrícula — ela cria a assinatura, e as matrículas nascem
+    // sob demanda, uma por curso que o aluno abrir.
+    planId: z.string().min(1).optional(),
     couponCode: z.string().trim().max(64).optional(),
     // Desconto manual (%) dado pelo vendedor na hora, sem cupom. Teto = cap do
     // vendedor (dono 100%, consultor = maxDiscount). Mutuamente exclusivo com
@@ -122,11 +130,30 @@ const createSchema = withGuardianRule(
     })
     .optional(),
 })
-  // XOR: a venda é de curso(s) OU de um pacote, nunca ambos/nenhum.
-  .refine((v) => !!v.tenantCourseIds?.length !== !!v.packageId, {
-    message: "Informe tenantCourseIds ou packageId",
-    path: ["tenantCourseIds"],
-  })
+  // XOR de três: a venda é de curso(s), de um pacote OU de um plano de
+  // assinatura — exatamente um. Somar assinatura a curso numa cobrança só
+  // misturaria uma recorrência com um pagamento único.
+  .refine(
+    (v) =>
+      [!!v.tenantCourseIds?.length, !!v.packageId, !!v.planId].filter(Boolean)
+        .length === 1,
+    {
+      message: "Informe tenantCourseIds, packageId ou planId",
+      path: ["tenantCourseIds"],
+    },
+  )
+  // Assinatura não aceita cupom, carnê nem bolsa: ver os motivos em
+  // `lib/subscriptions/direct-sale.ts`. Recusar no schema é melhor que ignorar
+  // o campo em silêncio — o vendedor marcaria "bolsa" e cobraria assim mesmo.
+  .refine(
+    (v) =>
+      !v.planId || (!v.couponCode && !v.boletoInstallment && !v.bolsista),
+    {
+      message:
+        "Assinatura não aceita cupom, carnê nem bolsa de estudo — use desconto manual.",
+      path: ["planId"],
+    },
+  )
   // Aluno: um aluno existente (studentId) OU os dados completos de um novo
   // aluno, nunca ambos/nenhum.
   .refine((v) => !!v.studentId !== !!(v.nome && v.email && v.cpf && v.fone), {
@@ -162,25 +189,61 @@ export const GET = withRequestContext(
     // Pega vendas diretas (com soldByUserId definido) do tenant. Escopo do
     // papel: sem `vendas.viewAll`, só as vendas que a própria pessoa originou —
     // `ctx.scope.vendas` fixa soldByUserId nela e vence o `{ not: null }`.
-    const enrollments = await prisma.enrollment.findMany({
-      where: {
-        tenantId: ctx.tenantId,
-        soldByUserId: { not: null },
-        ...ctx.scope.vendas,
-      },
-      orderBy: { createdAt: "desc" },
-      take: 50,
-      include: {
-        student: { select: { nome: true, email: true } },
-        course: { select: { nome: true } },
-        coupon: { select: { code: true } },
-        soldByUser: { select: { name: true } },
-      },
-    })
+    // Venda de ASSINATURA não gera matrícula (elas nascem sob demanda, uma por
+    // curso aberto) e por isso não aparece no `findMany` de enrollments. Sem a
+    // segunda consulta o vendedor emitiria a cobrança e a venda sumiria da tela
+    // dele. O MESMO recorte de carteira (`ctx.scope.vendas`, que fixa
+    // `soldByUserId`) se aplica às duas — sem ele um vendedor veria as
+    // assinaturas vendidas por toda a unidade.
+    const [enrollments, subscriptions] = await Promise.all([
+      prisma.enrollment.findMany({
+        where: {
+          tenantId: ctx.tenantId,
+          soldByUserId: { not: null },
+          ...ctx.scope.vendas,
+        },
+        orderBy: { createdAt: "desc" },
+        take: 50,
+        include: {
+          student: { select: { nome: true, email: true } },
+          course: { select: { nome: true } },
+          coupon: { select: { code: true } },
+          soldByUser: { select: { name: true } },
+        },
+      }),
+      prisma.studentSubscription.findMany({
+        where: {
+          tenantId: ctx.tenantId,
+          // `{ not: null }` separa a VENDA de uma contratação que o próprio
+          // aluno fez na vitrine — aquela não é venda de ninguém.
+          soldByUserId: { not: null },
+          ...ctx.scope.assinaturas,
+        },
+        orderBy: { createdAt: "desc" },
+        take: 50,
+        include: {
+          student: { select: { nome: true, email: true } },
+          plan: { select: { name: true } },
+        },
+      }),
+    ])
 
-    return NextResponse.json({
-      data: enrollments.map((e) => ({
+    const sellerIds = [
+      ...new Set(subscriptions.map((s) => s.soldByUserId).filter(Boolean)),
+    ] as string[]
+    const sellers =
+      sellerIds.length > 0
+        ? await prisma.user.findMany({
+            where: { id: { in: sellerIds } },
+            select: { id: true, name: true },
+          })
+        : []
+    const sellerName = new Map(sellers.map((u) => [u.id, u.name]))
+
+    const rows = [
+      ...enrollments.map((e) => ({
         id: e.id,
+        kind: "COURSE" as const,
         studentName: e.student.nome,
         studentEmail: e.student.email,
         courseName: e.course.nome,
@@ -192,10 +255,34 @@ export const GET = withRequestContext(
         discountAmount: Number(e.discountAmount),
         finalAmount: Number(e.finalAmount),
         status: e.status,
+        interval: null as string | null,
         soldByName: e.soldByUser?.name ?? null,
         createdAt: e.createdAt.toISOString(),
       })),
-    })
+      ...subscriptions.map((sub) => ({
+        id: sub.id,
+        kind: "SUBSCRIPTION" as const,
+        studentName: sub.student.nome,
+        studentEmail: sub.student.email,
+        courseName: sub.plan.name,
+        courseCount: 1,
+        couponCode: null,
+        // `priceAtPurchase` já é o valor congelado, com o desconto dentro.
+        originalAmount: Number(sub.priceAtPurchase),
+        discountAmount: 0,
+        finalAmount: Number(sub.priceAtPurchase),
+        status: sub.status,
+        interval: sub.interval as string | null,
+        soldByName: sub.soldByUserId
+          ? (sellerName.get(sub.soldByUserId) ?? null)
+          : null,
+        createdAt: sub.createdAt.toISOString(),
+      })),
+    ]
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, 50)
+
+    return NextResponse.json({ data: rows })
   },
 )
 
@@ -318,7 +405,22 @@ export const POST = withRequestContext(
     // Venda com VÁRIOS cursos: mesma mecânica sem pacote no catálogo — o 1º
     // curso vira a primária (que carrega o valor SOMADO) e os demais vão em
     // `bundleCourseIds`, virando satélites no fulfill.
+    const isSubscription = !!data.planId
     const isPackage = !!data.packageId
+    /**
+     * Plano da venda de ASSINATURA, com o preço EFETIVO desta vitrine
+     * (override da unidade aplicado). Como todo checkout do repo, o corpo diz
+     * QUAL plano — nunca quanto ele custa.
+     */
+    const plan = isSubscription
+      ? await getPlanForCheckout(tenant.id, data.planId!)
+      : null
+    if (isSubscription && !plan) {
+      return NextResponse.json(
+        { error: "Plano de assinatura não disponível na sua vitrine" },
+        { status: 404 },
+      )
+    }
     let basePrice: number
     let enrollmentCourseId: string
     let enrollmentTenantCourseId: string | null
@@ -336,7 +438,18 @@ export const POST = withRequestContext(
      */
     let saleCourses: AuthoredCourseSource[] = []
 
-    if (isPackage) {
+    if (plan) {
+      // Assinatura não tem matrícula própria (elas nascem sob demanda, uma por
+      // curso aberto). Estes campos existem só para o restante do handler
+      // compilar; o ramo de assinatura sai antes de tocar em `Enrollment`.
+      basePrice = plan.price
+      enrollmentCourseId = ""
+      enrollmentTenantCourseId = null
+      enrollmentCoursePackageId = null
+      rawPaymentType = "ONE_TIME"
+      monthlyMonthsMain = null
+      saleCourseIds = []
+    } else if (isPackage) {
       const pkg = await getPackageForCheckout(tenant.id, data.packageId!)
       if (!pkg) {
         return NextResponse.json(
@@ -465,6 +578,10 @@ export const POST = withRequestContext(
     // caso em que o produtor não receberia nada, e é `freeGrant` quem recusa:
     // o resto do gate olha gateway, carteira e preço, e uma concessão sem
     // cobrança passava por todos os três.
+    // `saleCourses` fica vazio na assinatura, então o gate não recusa nada —
+    // mas ele também decide `forcedGateway`, e o ramo de assinatura não passa
+    // por ele. Um plano cujo escopo alcance curso de terceiro fica como limite
+    // conhecido desta versão (ver o comentário do ramo de assinatura).
     const gate = await authoredSaleGate({
       courses: saleCourses,
       sellerTenantId: tenant.id,
@@ -655,6 +772,69 @@ export const POST = withRequestContext(
         },
         { status: 400 },
       )
+    }
+
+    // ── Venda de ASSINATURA ───────────────────────────────────────────────
+    // Sai aqui, antes de tudo que fala em matrícula: a assinatura não cria
+    // nenhuma. As matrículas nascem sob demanda em `releaseSubscriptionCourse`,
+    // uma por curso que o aluno abrir — foi essa decisão que fez SSO, progresso
+    // e certificado funcionarem sem uma linha nova.
+    //
+    // Roda DEPOIS do gate do responsável financeiro e do teto de desconto de
+    // propósito: as duas regras valem igual aqui, e a cobrança recorrente de um
+    // menor precisa sair no CPF do responsável tanto quanto a de um curso.
+    if (plan) {
+      // O guard de gateway acima já devolveu 503 para `NONE` (assinatura nunca
+      // é bolsa, então não pula por ali). A checagem repetida existe para o
+      // compilador estreitar o tipo — e porque um `NONE` que escapasse cobraria
+      // pela conta errada, que é o pior defeito possível nesta rota.
+      if (mode === "NONE") {
+        return NextResponse.json(
+          { error: "Conecte um gateway de pagamento em /painel/configuracoes" },
+          { status: 503 },
+        )
+      }
+      const sale = await createDirectSubscriptionSale({
+        plan,
+        student,
+        tenantId: tenant.id,
+        tenantSlug: tenant.slug,
+        soldByUserId: userId,
+        gateway: mode,
+        // A CONTA da unidade — nunca a conta-mãe. `createSubscriptionAtGateway`
+        // lança se sobrar para a conta-mãe numa venda de revenda.
+        account: {
+          asaasApiKey: tenant.asaasApiKey
+            ? decryptTenantAsaasKey(tenant.asaasApiKey)
+            : undefined,
+          mpAccessToken: tenant.mpAccessToken
+            ? decryptTenantMpToken(tenant.mpAccessToken)
+            : undefined,
+          tenantSlug: tenant.slug,
+        },
+        discountPercent: data.manualDiscountPercent,
+      })
+      if (!sale.ok) {
+        return NextResponse.json(
+          { error: sale.error, ...(sale.code ? { code: sale.code } : {}) },
+          { status: sale.status },
+        )
+      }
+      return NextResponse.json({
+        data: {
+          subscriptionId: sale.subscriptionId,
+          mode: "subscription_plan",
+          planName: plan.name,
+          interval: plan.interval,
+          chargeLabel: sale.chargeLabel,
+          recurring: sale.recurring,
+          paymentUrl: sale.paymentUrl,
+          finalAmount: sale.priceAtPurchase,
+          discountAmount: sale.discountAmount,
+          basePrice: sale.listPrice,
+          studentId: student.id,
+        },
+      })
     }
 
     // Duplicidade: pacote compara pela matrícula primária do pacote; curso(s),

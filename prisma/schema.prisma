@@ -94,6 +94,20 @@ enum SubscriptionScope {
   COURSES // lista fixa de cursos
 }
 
+/// Periodicidade da assinatura.
+///
+/// LIFETIME NAO e uma recorrencia: e uma cobranca UNICA que da acesso
+/// permanente ao escopo do plano. Ver `src/lib/subscriptions/interval.ts` —
+/// tratar o vitalicio como "ciclo muito longo" faria o gateway cobrar de novo
+/// no futuro e a varredura de carencia cancelar quem ja pagou.
+enum SubscriptionInterval {
+  MONTHLY // mensal
+  QUARTERLY // trimestral
+  SEMIANNUAL // semestral
+  ANNUAL // anual
+  LIFETIME // vitalicio — pagamento unico, sem renovacao
+}
+
 enum SubscriptionStatus {
   PENDING // criada, aguardando o 1o pagamento
   ACTIVE // em dia
@@ -1078,8 +1092,15 @@ model SubscriptionPlan {
   slug          String
   description   String? @db.Text
   coverImageUrl String? @map("cover_image_url")
-  /// Mensalidade sugerida (plano PMB) / propria (plano da revenda).
+  /// Valor de CADA ciclo (plano PMB = sugerido; da revenda = o dela). No
+  /// vitalicio e o valor unico cobrado.
   price         Decimal @db.Decimal(10, 2)
+
+  /// De quanto em quanto tempo se cobra. Fica no PLANO e nao no
+  /// `TenantSubscriptionPlan`: a unidade ajusta PRECO e visibilidade, nunca a
+  /// natureza do produto — um plano anual virando mensal numa loja so mudaria o
+  /// que a rede inteira entende por aquele nome.
+  interval      SubscriptionInterval @default(MONTHLY)
 
   /// Como o conjunto de cursos e determinado. Ver SubscriptionScope.
   scope       SubscriptionScope @default(ALL)
@@ -1151,6 +1172,25 @@ model StudentSubscription {
   /// todo mundo.
   priceAtPurchase Decimal @map("price_at_purchase") @db.Decimal(10, 2)
 
+  /// Periodicidade CONGELADA na contratacao, pelo mesmo motivo do preco: e ela
+  /// que a renovacao usa para empurrar `currentPeriodEnd`. Ler do plano faria
+  /// um assinante mensal virar anual (ou perder o vitalicio) no dia em que
+  /// alguem editasse o catalogo.
+  interval        SubscriptionInterval @default(MONTHLY)
+
+  /// Quem VENDEU, quando a assinatura nasceu de uma venda direta (/admin/vendas
+  /// ou /painel/vendas). null = contratacao pelo proprio aluno na vitrine. E o
+  /// campo pelo qual o recorte de carteira (`ctx.scope.vendas`) enxerga a venda
+  /// — sem ele a assinatura vendida sumiria da lista de quem a vendeu.
+  soldByUserId    String?  @map("sold_by_user_id")
+
+  /// Link que o aluno abre para pagar/autorizar a 1a cobranca (fatura do Asaas
+  /// ou `init_point` do MP). Guardado pelo mesmo motivo de
+  /// `Enrollment.asaasInvoiceUrl`: ele so e devolvido UMA vez, na resposta da
+  /// venda direta — sem a coluna, o vendedor que fechasse a aba perdia o link e
+  /// nao tinha como recupera-lo em lugar nenhum.
+  checkoutUrl     String?  @map("checkout_url")
+
   gateway     PaymentGateway @default(MP)
   /// CREDIT_CARD (debito automatico), PIX ou BOLETO (fatura mensal manual).
   billingType String?        @map("billing_type")
@@ -1183,6 +1223,8 @@ model StudentSubscription {
   @@index([tenantId, status])
   // Varredura de renovacao/carencia do cron.
   @@index([status, currentPeriodEnd])
+  // Listagem de vendas diretas, com e sem recorte de carteira.
+  @@index([tenantId, soldByUserId])
   @@map("student_subscriptions")
 }
 

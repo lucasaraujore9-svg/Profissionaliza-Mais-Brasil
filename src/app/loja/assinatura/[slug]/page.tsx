@@ -3,6 +3,10 @@ import { notFound } from "next/navigation"
 import { getCurrentTenant } from "@/lib/tenant/current"
 import { prisma } from "@/lib/prisma"
 import { getVitrinePlanBySlug } from "@/lib/subscriptions/plans"
+import {
+  INTERVAL_PRICE_SUFFIX,
+  INTERVAL_CHARGE_LABEL,
+} from "@/lib/subscriptions/interval"
 import { tenantCheckoutMode } from "@/lib/tenant/checkout-mode"
 import { SubscriptionCheckout } from "@/components/loja/subscription-checkout"
 
@@ -93,8 +97,11 @@ export default async function LojaPlanoPage({ params }: Props) {
           </strong>
           <span className="text-sm text-gray-500">
             {" "}
-            /mês · {plan.courseCount} cursos
+            {INTERVAL_PRICE_SUFFIX[plan.interval]} · {plan.courseCount} cursos
           </span>
+        </p>
+        <p className="mt-1 text-sm text-gray-500">
+          {INTERVAL_CHARGE_LABEL[plan.interval]}
         </p>
       </header>
 
@@ -102,6 +109,7 @@ export default async function LojaPlanoPage({ params }: Props) {
         planId={plan.id}
         planName={plan.name}
         price={plan.price}
+        interval={plan.interval}
         endpoint="/api/loja/checkout/assinatura"
         gateway={gateway}
         mpPublicKey={row?.mpPublicKey ?? null}

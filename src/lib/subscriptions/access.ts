@@ -1,4 +1,5 @@
-import type { SubscriptionStatus } from "@prisma/client"
+import type { SubscriptionInterval, SubscriptionStatus } from "@prisma/client"
+import { isRecurringInterval } from "./interval"
 
 /**
  * Quando uma assinatura da acesso.
@@ -21,8 +22,15 @@ export const SUBSCRIPTION_GRACE_DAYS = 7
 /** O minimo que a decisao precisa saber da assinatura. */
 export interface SubscriptionAccessInput {
   status: SubscriptionStatus
-  /** Fim do ciclo pago. null = nunca houve ciclo pago. */
+  /** Fim do ciclo pago. null = nunca houve ciclo pago (ou e vitalicia). */
   currentPeriodEnd: Date | null
+  /**
+   * Periodicidade CONGELADA na contratacao. Campo obrigatorio de proposito: o
+   * compilador passa a exigi-lo em todo `select` que alimenta esta decisao, e e
+   * isso que impede uma consulta nova de esquecer o vitalicio e cortar o acesso
+   * de quem pagou uma vez por acesso permanente.
+   */
+  interval: SubscriptionInterval
 }
 
 /**
@@ -46,6 +54,13 @@ export function subscriptionGrantsAccess(
   now: Date = new Date(),
 ): boolean {
   if (!LIVE_STATUSES.includes(sub.status)) return false
+
+  // VITALICIA: nao ha prazo a conferir, e ai o status E a verdade — ele so
+  // chega a ACTIVE depois do pagamento unico ser confirmado. Exige ACTIVE
+  // estrito: `PAST_DUE` nao pode aparecer num produto sem ciclo, e aceita-lo
+  // aqui abriria acesso a partir de qualquer marcacao equivocada de atraso.
+  if (!isRecurringInterval(sub.interval)) return sub.status === "ACTIVE"
+
   if (!sub.currentPeriodEnd) return false
 
   const deadline = new Date(sub.currentPeriodEnd)
@@ -66,6 +81,11 @@ export function subscriptionShouldCancel(
   now: Date = new Date(),
 ): boolean {
   if (sub.status === "CANCELLED" || sub.status === "EXPIRED") return false
+  // VITALICIA nunca vence. Sem esta linha bastaria alguem gravar um
+  // `currentPeriodEnd` por engano para a varredura cancelar — e cancelamento de
+  // assinatura REVOGA o curso na fornecedora legada, o que APAGA o progresso do
+  // aluno. Fail-closed no sentido que protege quem pagou.
+  if (!isRecurringInterval(sub.interval)) return false
   if (!sub.currentPeriodEnd) return false
   return !subscriptionGrantsAccess(sub, now)
 }

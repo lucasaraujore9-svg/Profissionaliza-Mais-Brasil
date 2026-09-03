@@ -3,12 +3,16 @@ import { notFound } from "next/navigation"
 import { getCurrentTenant } from "@/lib/tenant/current"
 import Link from "next/link"
 import { resolveVitrinePlans } from "@/lib/subscriptions/plans"
+import {
+  INTERVAL_PRICE_SUFFIX,
+  INTERVAL_CHARGE_LABEL,
+} from "@/lib/subscriptions/interval"
 import { Check, Sparkles } from "lucide-react"
 
 export const metadata: Metadata = {
   title: "Assinaturas — Profissionaliza Mais Brasil",
   description:
-    "Estude quantos cursos quiser pagando uma mensalidade. Escolha o plano ideal para você.",
+    "Estude quantos cursos quiser com um plano mensal, trimestral, semestral, anual ou vitalício. Escolha o ideal para você.",
   alternates: { canonical: "/assinaturas" },
 }
 
@@ -36,8 +40,9 @@ export default async function AssinaturasPage() {
           Estude quantos cursos quiser
         </h1>
         <p className="mx-auto mt-2 max-w-xl text-sm text-gray-600">
-          Uma mensalidade, acesso ao conjunto de cursos do plano. Sem
-          fidelidade — cancele quando quiser.
+          Um pagamento, acesso ao conjunto de cursos do plano. Escolha a
+          periodicidade que preferir — nas recorrentes não há fidelidade,
+          cancele quando quiser.
         </p>
       </header>
 
@@ -71,7 +76,16 @@ export default async function AssinaturasPage() {
                 <span className="text-2xl font-bold text-[var(--color-pmb-green-900)]">
                   {formatMoney(plan.price)}
                 </span>
-                <span className="text-sm text-gray-500"> /mês</span>
+                {/* Sufixo por PERIODICIDADE: "/mês" fixo num plano anual
+                    anunciaria R$ 490 por mês — 12x o preço real. No vitalício
+                    não há sufixo, e a frase abaixo diz que é cobrança única. */}
+                <span className="text-sm text-gray-500">
+                  {" "}
+                  {INTERVAL_PRICE_SUFFIX[plan.interval]}
+                </span>
+              </p>
+              <p className="mt-1 text-xs text-gray-500">
+                {INTERVAL_CHARGE_LABEL[plan.interval]}
               </p>
               <p className="mt-3 flex items-center gap-1.5 text-sm text-gray-700">
                 <Check className="h-4 w-4 shrink-0 text-[var(--color-pmb-green)]" />

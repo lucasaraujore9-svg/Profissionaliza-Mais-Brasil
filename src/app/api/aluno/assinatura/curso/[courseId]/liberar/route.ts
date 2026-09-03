@@ -50,7 +50,9 @@ export const POST = withRequestContextParams<{ courseId: string }>(
         studentId: session.studentId,
         status: { in: ["ACTIVE", "PAST_DUE"] },
       },
-      select: { id: true, status: true, currentPeriodEnd: true },
+      // `interval` nao e decorativo aqui: e ele que faz a assinatura VITALICIA
+      // (sem `currentPeriodEnd`) ser reconhecida como viva.
+      select: { id: true, status: true, currentPeriodEnd: true, interval: true },
       orderBy: { createdAt: "desc" },
     })
     const live = subs.find((s) => subscriptionGrantsAccess(s))

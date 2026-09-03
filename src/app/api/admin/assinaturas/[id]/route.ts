@@ -67,6 +67,9 @@ export const PATCH = withRequestContextParams<{ id: string }>(
         ...(d.description !== undefined ? { description: d.description } : {}),
         ...(d.coverImageUrl !== undefined ? { coverImageUrl: d.coverImageUrl } : {}),
         ...(d.price !== undefined ? { price: d.price } : {}),
+        // Alcanca so contratacoes NOVAS: `StudentSubscription.interval` e
+        // congelado na compra, entao quem ja assina segue no ciclo dele.
+        ...(d.interval !== undefined ? { interval: d.interval } : {}),
         scope: next.scope,
         // Campos de escopo são zerados fora do seu modo: um plano que já foi
         // CATEGORY e virou COURSES não pode carregar as categorias antigas —

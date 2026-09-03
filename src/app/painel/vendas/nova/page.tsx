@@ -7,6 +7,7 @@ import { ensureTenantCourses } from "@/lib/tenant/ensure-courses"
 import { coursePaymentType, monthlyActive } from "@/lib/tenant/monthly-policy"
 import { MAX_BOLETO_INSTALLMENTS } from "@/lib/installments/schedule"
 import { resolveVitrinePackages } from "@/lib/packages/vitrine"
+import { resolveVitrinePlans } from "@/lib/subscriptions/plans"
 import { requirePainelPage } from "@/lib/auth/painel-guard"
 
 export const dynamic = "force-dynamic"
@@ -22,7 +23,8 @@ export default async function PainelNovaVendaPage() {
 
   await ensureTenantCourses(user.tenantId)
 
-  const [tenant, tenantCourses, vitrinePackages, member] = await Promise.all([
+  const [tenant, tenantCourses, vitrinePackages, vitrinePlans, member] =
+    await Promise.all([
     prisma.tenant.findUnique({
       where: { id: user.tenantId },
       select: {
@@ -41,6 +43,10 @@ export default async function PainelNovaVendaPage() {
     }),
     // Pacotes vendáveis nesta vitrine (PMB distribuídos + próprios da unidade).
     resolveVitrinePackages(user.tenantId),
+    // Planos de assinatura vendáveis NESTA vitrine (da PMB, com o preço da
+    // unidade aplicado, + os próprios dela). A MESMA função que a loja usa, para
+    // a venda direta nunca oferecer um plano que a vitrine já não vende.
+    resolveVitrinePlans(user.tenantId),
     // Cap de desconto do vendedor logado: o dono da unidade (sem TenantMember)
     // não tem teto (100%); consultor ativo usa o próprio maxDiscount; consultor
     // inativo fica sem desconto (0). Mesma regra aplicada no POST da rota.
@@ -72,6 +78,14 @@ export default async function PainelNovaVendaPage() {
     courseCount: p.courseCount,
   }))
 
+  const plans = vitrinePlans.map((p) => ({
+    id: p.id,
+    name: p.name,
+    price: p.price,
+    interval: p.interval,
+    courseCount: p.courseCount,
+  }))
+
   // Carnê (parcelado no boleto) usa a MESMA capability de mensalidade: quando o
   // pagamento parcelado está ativo (admin liberou + unidade ativou), o carnê
   // fica disponível na venda direta. Sem campo/toggle próprio.
@@ -91,6 +105,7 @@ export default async function PainelNovaVendaPage() {
         gateway={tenant?.salesGateway ?? "MP"}
         courses={courses}
         packages={packages}
+        plans={plans}
         installmentConfig={installmentConfig}
       />
     </div>

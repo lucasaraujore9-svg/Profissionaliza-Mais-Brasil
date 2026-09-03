@@ -4,6 +4,7 @@ import { getSystemSettings } from "@/lib/system-settings"
 import { NovaVendaClient } from "@/components/admin/nova-venda-client"
 import { coursePaymentType } from "@/lib/tenant/monthly-policy"
 import { resolveVitrinePackages } from "@/lib/packages/vitrine"
+import { resolveVitrinePlans } from "@/lib/subscriptions/plans"
 import { effectiveSalesCap } from "@/lib/coupons/sales-cap"
 
 export const dynamic = "force-dynamic"
@@ -11,7 +12,7 @@ export const dynamic = "force-dynamic"
 export default async function NovaVendaPage() {
   const session = await requireAdminPage("vendas.create")
 
-  const [courses, vitrinePackages, settings, cap] = await Promise.all([
+  const [courses, vitrinePackages, vitrinePlans, settings, cap] = await Promise.all([
     prisma.course.findMany({
       where: { status: "ATIVO" },
       orderBy: { nome: "asc" },
@@ -27,6 +28,10 @@ export default async function NovaVendaPage() {
     }),
     // Pacotes PMB (tenantId=null) vendáveis na venda direta do PMB.
     resolveVitrinePackages(null),
+    // Planos de assinatura da vitrine PMB. A MESMA função que a loja usa, para
+    // a venda direta nunca oferecer um plano que a vitrine já não vende (sem
+    // preço, sem curso no escopo, desativado).
+    resolveVitrinePlans(null),
     getSystemSettings(),
     // Cap individual de desconto do vendedor (User.maxDiscount; padrão 50).
     effectiveSalesCap(session),
@@ -48,6 +53,13 @@ export default async function NovaVendaPage() {
           id: p.id,
           name: p.name,
           price: p.price,
+          courseCount: p.courseCount,
+        }))}
+        plans={vitrinePlans.map((p) => ({
+          id: p.id,
+          name: p.name,
+          price: p.price,
+          interval: p.interval,
           courseCount: p.courseCount,
         }))}
       />

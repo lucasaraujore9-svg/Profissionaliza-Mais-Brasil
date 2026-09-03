@@ -1195,6 +1195,113 @@ conselho que nunca funcionaria, porque repetir nao inventa o id que faltava.
   teste correspondente.
 
 
+### Periodicidade da assinatura + venda direta (2026-09-03)
+
+A assinatura de aluno so existia MENSAL: `SubscriptionPlan.price` era a
+mensalidade, `addOneMonth` era a renovacao inteira, e a unica forma de contratar
+era o aluno chegar sozinho na vitrine. Agora o plano escolhe entre **mensal,
+trimestral, semestral, anual e VITALICIO**, e a assinatura entrou nas duas
+telas de venda direta (/admin/vendas e /painel/vendas).
+
+- **`SubscriptionInterval` e o discriminador**, e o VITALICIO nao e "um ciclo
+  muito longo": e uma cobranca UNICA com acesso permanente. Trata-lo como
+  recorrencia erraria em quatro lugares ao mesmo tempo — criaria assinatura no
+  gateway (cobrando de novo la na frente), deixaria a varredura de carencia
+  cancelar quem pagou, mostraria "proxima cobranca" para quem nao tem nenhuma, e
+  o cancelamento tentaria parar uma recorrencia que nunca existiu.
+- **Fonte unica em `src/lib/subscriptions/interval.ts`** (PURO, sem Prisma —
+  os formularios do /admin e do /painel sao client components). Ali moram meses
+  por ciclo, rotulos, `addInterval` (com clamp de fim de mes) e a traducao para
+  os DOIS gateways. Os nomes do Asaas nao batem com os nossos de proposito
+  (`SEMIANNUAL` la e `SEMIANNUALLY`, `ANNUAL` e `YEARLY`); a traducao num lugar
+  so evita a assinatura recusada por nome invalido. O MP conta em MESES, nunca
+  em dias — 90 dias nao e um trimestre e a data deslizaria a cada ciclo.
+- **A periodicidade e CONGELADA em `StudentSubscription.interval`**, pelo mesmo
+  motivo de `priceAtPurchase`: e ela que a renovacao usa para empurrar
+  `currentPeriodEnd`. Ler do plano faria um assinante mensal virar anual (ou
+  perder o vitalicio) no dia em que alguem editasse o catalogo. As duas telas de
+  plano avisam que editar so alcanca contratacoes NOVAS.
+- **`interval` entrou em `SubscriptionAccessInput` como campo OBRIGATORIO.** E o
+  compilador que passa a exigi-lo em todo `select` que alimenta a decisao de
+  acesso — foi assim que os 5 call sites apareceram sozinhos. Sem isso, uma
+  consulta nova esqueceria o vitalicio e cortaria o acesso de quem pagou.
+- **O vitalicio nunca e cancelado, e a trava e DUPLA**: filtro
+  `interval: { not: "LIFETIME" }` na varredura + o predicado puro
+  `subscriptionShouldCancel`. Duas porque o preco do erro e altissimo — cancelar
+  revoga o curso na fornecedora legada, e la desvincular APAGA o progresso do
+  aluno. A guarda do predicado nao e redundante: ela pega o vitalicio marcado
+  `PAST_DUE` por engano, que "nao libera + tem prazo vencido" transformaria em
+  cancelamento.
+- **`currentPeriodEnd` continua NULL no vitalicio.** Gravar uma data distante
+  seria uma mentira que a varredura acabaria cobrando. Como o campo deixou de
+  servir para saber se ja houve um 1o ciclo, `settleSubscriptionCycle` passou a
+  olhar `startedAt`.
+- **Webhook do Asaas ganhou rota por `externalReference`.** A cobranca vitalicia
+  e AVULSA: chega sem `subscription` e caia no fallback de "mensalidade avulsa da
+  unidade" — o aluno pagava, a assinatura ficava PENDING para sempre e ele nunca
+  via o catalogo. O corpo do tratamento virou
+  `handleStudentSubscriptionPayment`, chamado pelos dois caminhos (`pmb_sub_<id>`
+  e `asaasSubscriptionId`), porque duas resolucoes com codigo duplicado
+  divergiriam em silencio.
+
+**Venda direta de assinatura** (`src/lib/subscriptions/direct-sale.ts`, nucleo
+compartilhado pelas duas rotas — a licao do `GUARDIAN_REQUIRED`, que nasceu numa
+rota so e deixou duas portas cobrando errado por meses):
+
+- **Nao cobra na hora.** O vendedor nao tem o cartao do aluno em maos, entao a
+  cobranca nasce EM ABERTO (`billingType: UNDEFINED` no Asaas, preapproval
+  `status: "pending"` no MP) e o aluno escolhe o meio na fatura/autorizacao do
+  gateway. Mesmo desenho da venda direta de curso mensal que ja existia.
+- **`checkoutUrl` e gravado na linha.** O link so e devolvido UMA vez, na
+  resposta; sem a coluna o vendedor que fechasse a aba perdia a unica copia.
+  Mesmo papel de `Enrollment.asaasInvoiceUrl`. A lista so o oferece enquanto a
+  assinatura esta PENDING — numa ja ativa o link antigo levaria a uma fatura
+  quitada.
+- **`soldByUserId` + `ctx.scope.assinaturas`.** A venda de assinatura NAO gera
+  matricula (elas nascem sob demanda, uma por curso aberto), entao ela sumiria
+  das duas telas de "vendas diretas", que consultam `Enrollment`. As paginas e
+  as APIs passaram a unir os dois models numa linha so. O recorte de carteira
+  precisou de um campo PROPRIO no `PainelScope`: `scope.vendas` e tipado para
+  `Enrollment` e nao compila em `StudentSubscription` — e re-derivar o recorte
+  dentro da rota e exatamente o padrao que ja produziu vazamento aqui.
+- **Sem cupom, sem carne, sem bolsa** (recusado no schema das duas rotas e
+  escondido nas duas telas). Cupom: `StudentSubscription.couponId` existe mas
+  NUNCA foi escrito por nenhum checkout — acorda-lo so aqui criaria o unico
+  lugar do sistema onde um cupom desconta recorrencia, com semantica que ninguem
+  definiu. Carne: nao existe "assinatura em 6x". Bolsa: sem cobranca nao ha
+  recorrencia a criar no gateway. O desconto MANUAL do vendedor passa, respeita
+  o teto dele e **vale para TODAS as cobrancas** (o gateway guarda UM valor por
+  assinatura) — as duas telas dizem isso antes de confirmar.
+- **Escolher assinatura zera bolsa/cupom/carne no estado do formulario.** Os
+  controles somem, mas o estado ficaria: um `bolsista` verdadeiro invisivel
+  mostraria "Total R$ 0" num resumo de venda que vai cobrar o valor cheio.
+
+**Consertos de rota que a feature expos:**
+
+- `cancelSubscriptionAccess` cancelava a assinatura Asaas SEMPRE com
+  `motherAsaasKey()`. Com a chave errada o Asaas responde 404 silencioso e a
+  cobranca do aluno de revenda seguiria viva para sempre. Passou a usar
+  `resolveEnrollmentGatewayKeys`, como o ramo do MP logo abaixo ja fazia.
+- O preapproval do MP nunca mandou `notification_url`: a renovacao de uma
+  assinatura vendida por revenda caia no processador da PMB e o ciclo nunca era
+  reconhecido.
+- O gate "esta loja aceita assinatura apenas no cartao" (MP) rodava ANTES de
+  carregar o plano. A restricao e da RECORRENCIA, nao da loja — uma compra
+  VITALICIA no MP e um pagamento comum e aceita PIX e boleto.
+
+**Deploy:** migration `20260903_subscription_intervals` (aditiva, idempotente,
+sem backfill — `interval` nasce `MONTHLY` nos dois models, que e o unico
+comportamento que existia). Nada a ligar: plano novo nasce mensal e so muda se
+alguem escolher outra periodicidade na tela.
+
+**Limites deliberados:** a venda direta manda o aluno para a fatura do gateway,
+nao para o checkout transparente da loja; e um plano cujo escopo alcance curso de
+autoria de OUTRA unidade nao passa por `authoredSaleGate` (o rateio e da
+cobranca, e uma assinatura cobre um conjunto que muda sozinho) — hoje isso nao
+acontece porque `planCourseWhere` so alcanca o que a vitrine vende, mas e o
+ponto a revisitar se cursos de terceiros entrarem em plano.
+
+
 ### Bugs conhecidos (pendentes)
 
 - **Middleware file convention deprecado** no Next 16 (usar `proxy` em vez de `middleware`).
