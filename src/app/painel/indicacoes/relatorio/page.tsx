@@ -1,14 +1,10 @@
 import Link from "next/link"
-import { ArrowLeft, ExternalLink } from "lucide-react"
-import { notFound, redirect } from "next/navigation"
-import { prisma } from "@/lib/prisma"
-import { adminHome, requireAdminPage } from "@/lib/auth/admin-guard"
-import {
-  referralCommissionStatusLabel,
-  referralPayoutStatusLabel,
-} from "@/lib/labels"
+import { ArrowLeft } from "lucide-react"
+import { notFound } from "next/navigation"
+import { requirePainelPage } from "@/lib/auth/painel-guard"
 import { PageHeader } from "@/components/painel/page-header"
 import { Card } from "@/components/ui/card"
+import { referralCommissionStatusLabel } from "@/lib/labels"
 import {
   loadRelatorioIndicador,
   ultimaCompetencia,
@@ -75,33 +71,30 @@ function Tile({
   )
 }
 
-export default async function RelatorioIndicadorPage({
-  params,
+/**
+ * O MESMO relatorio que o financeiro da PMB usa para conferir a comissao, agora
+ * para o indicador conferir a dele. E o ponto: quando ele contesta um valor, os
+ * dois lados precisam estar olhando exatamente a mesma conta — dai o loader e a
+ * tabela serem compartilhados com /admin/indicacoes/[id], e nao uma segunda
+ * versao "simplificada" que arredonda a verdade.
+ *
+ * O tenant vem SEMPRE da sessao (`ctx.tenantId`), nunca da URL: nao existe
+ * parametro de indicador aqui, entao nao ha o que forjar para ler a carteira de
+ * outra unidade.
+ */
+export default async function PainelRelatorioIndicacoesPage({
   searchParams,
 }: {
-  params: Promise<{ referrerId: string }>
   searchParams: Promise<{ competencia?: string; ordem?: string; dir?: string }>
 }) {
-  const ctx = await requireAdminPage("indicacoes.view")
-  const { referrerId } = await params
+  const ctx = await requirePainelPage("indicacoes.view")
   const { competencia, ordem: ordemRaw, dir: dirRaw } = await searchParams
-
-  // Mesmo recorte de carteira do hub e da lista de pagamentos: o relatório
-  // expõe nome, status e valores das indicadas. `null` = não alcança unidade
-  // nenhuma; e um indicador fora da carteira responde 404, não uma tela vazia.
-  const scope = await ctx.comissoesScope()
-  if (!scope) redirect(adminHome(ctx))
-  const alcanca = await prisma.tenant.findFirst({
-    where: { id: referrerId, ...scope },
-    select: { id: true },
-  })
-  if (!alcanca) notFound()
 
   const period = /^\d{4}-\d{2}$/.test(competencia ?? "")
     ? (competencia as string)
     : ultimaCompetencia()
 
-  const rel = await loadRelatorioIndicador(referrerId, period)
+  const rel = await loadRelatorioIndicador(ctx.tenantId, period)
   if (!rel) notFound()
 
   const { comissao, totais } = rel
@@ -113,7 +106,7 @@ export default async function RelatorioIndicadorPage({
   return (
     <div className="space-y-6">
       <Link
-        href="/admin/indicacoes"
+        href="/painel/indicacoes"
         className="inline-flex items-center gap-2 text-xs font-semibold text-gray-600 hover:text-[var(--color-pmb-green-900)]"
       >
         <ArrowLeft className="h-3.5 w-3.5" />
@@ -121,21 +114,10 @@ export default async function RelatorioIndicadorPage({
       </Link>
 
       <PageHeader
-        title={rel.referrer.name}
-        description="Relatório de indicações: o que a carteira movimentou no mês e como o valor da comissão foi formado."
-        actions={
-          <Link
-            href={`/admin/revendedores/${rel.referrer.id}`}
-            className="inline-flex items-center gap-1.5 text-sm font-medium text-[var(--color-pmb-green-900)] underline-offset-4 hover:underline"
-          >
-            Ver unidade
-            <ExternalLink className="h-3.5 w-3.5" />
-          </Link>
-        }
+        title="Relatório de indicações"
+        description="O que a sua carteira movimentou no mês e como a sua comissão foi formada."
       />
 
-      {/* Seletor de competência: links, não form — a página é server component
-          e o mês vive na URL, então o relatório é compartilhável e recarregável. */}
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">
           Competência
@@ -143,7 +125,7 @@ export default async function RelatorioIndicadorPage({
         {rel.periodosDisponiveis.map((p) => (
           <Link
             key={p}
-            href={`/admin/indicacoes/${rel.referrer.id}?competencia=${p}&ordem=${ordem}&dir=${dir}`}
+            href={`/painel/indicacoes/relatorio?competencia=${p}&ordem=${ordem}&dir=${dir}`}
             className={`rounded-full px-3 py-1 text-xs font-medium ${
               p === rel.period
                 ? "bg-[var(--color-pmb-green-900)] text-white"
@@ -169,15 +151,15 @@ export default async function RelatorioIndicadorPage({
         <Tile
           label="Ativadas no mês"
           value={String(comissao?.bracketCount ?? totais.ativouNoMes)}
-          hint="é o número que define a faixa"
+          hint="é o número que define a sua faixa"
         />
         <Tile
-          label="Recebido das indicadas"
-          value={money(totais.recebidoNoMes)}
-          hint="mensalidades pagas dentro do mês"
+          label="Na conta do mês"
+          value={String(comissao?.unitCount ?? totais.naConta)}
+          hint="unidades que geraram comissão"
         />
         <Tile
-          label="Carteira"
+          label="Sua carteira"
           value={`${totais.ativas} ativas`}
           hint={`${totais.total} no total · ${totais.canceladas} canceladas`}
         />
@@ -186,7 +168,7 @@ export default async function RelatorioIndicadorPage({
       {comissao ? (
         <Card className="p-5">
           <h2 className="text-sm font-semibold text-gray-800">
-            Como este valor foi calculado
+            Como a sua comissão foi calculada
           </h2>
           <ol className="mt-3 space-y-2 text-sm text-gray-700">
             <li>
@@ -194,9 +176,7 @@ export default async function RelatorioIndicadorPage({
               <strong>{comissao.bracketCount}</strong>{" "}
               {BASIS_LABEL[comissao.bracketBasis] ?? comissao.bracketBasis} →{" "}
               <strong>
-                {fixa
-                  ? `${money(comissao.rate)} por unidade`
-                  : `${comissao.rate}%`}
+                {fixa ? `${money(comissao.rate)} por unidade` : `${comissao.rate}%`}
               </strong>
               .
             </li>
@@ -205,9 +185,7 @@ export default async function RelatorioIndicadorPage({
               <strong>{BASE_LABEL[comissao.payoutBase] ?? comissao.payoutBase}</strong>
               : <strong>{comissao.unitCount}</strong>{" "}
               {comissao.unitCount === 1 ? "unidade" : "unidades"}
-              {fixa
-                ? "."
-                : `, somando ${money(comissao.baseSum)} de mensalidade.`}
+              {fixa ? "." : `, somando ${money(comissao.baseSum)} de mensalidade.`}
             </li>
             <li>
               <span className="font-semibold">3.</span>{" "}
@@ -217,43 +195,36 @@ export default async function RelatorioIndicadorPage({
               <strong>{money(comissao.amount)}</strong>.
             </li>
           </ol>
-          {comissao.payout ? (
-            <p className="mt-4 border-t border-gray-100 pt-3 text-xs text-gray-600">
-              Pagamento:{" "}
-              <Link
-                href="/admin/indicacoes/saques"
-                className="font-medium text-[var(--color-pmb-green-900)] underline-offset-4 hover:underline"
-              >
-                {money(comissao.payout.amount)} ·{" "}
-                {referralPayoutStatusLabel(comissao.payout.status)}
-              </Link>
-              {comissao.payout.dueAt
-                ? ` · previsto para ${comissao.payout.dueAt.toLocaleDateString("pt-BR")}`
-                : null}
-            </p>
-          ) : (
-            <p className="mt-4 border-t border-gray-100 pt-3 text-xs text-gray-600">
-              Ainda sem pagamento montado para esta competência.
-            </p>
-          )}
+          <p className="mt-4 border-t border-gray-100 pt-3 text-xs text-gray-600">
+            O pagamento é feito manualmente pela equipe financeira após
+            conferência, e o comprovante fica disponível em{" "}
+            <Link
+              href="/painel/indicacoes"
+              className="font-medium text-[var(--color-pmb-green-900)] underline-offset-4 hover:underline"
+            >
+              Indicações
+            </Link>
+            .
+          </p>
         </Card>
       ) : (
         <Card className="p-5 text-sm text-gray-600">
           Nenhuma comissão apurada em {competenciaLabel(rel.period)}. O
-          fechamento roda no dia 1 do mês seguinte; competência retida pelo
-          mínimo de indicações ativas também não gera linha.
+          fechamento do mês roda no dia 1 do mês seguinte.
         </Card>
       )}
 
       <ReferralCarteiraTable
         linhas={carteira}
         competenciaLabel={competenciaLabel(rel.period)}
-        baseHref={`/admin/indicacoes/${rel.referrer.id}`}
+        baseHref="/painel/indicacoes/relatorio"
         queryExtra={{ competencia: rel.period }}
         ordem={ordem}
         dir={dir}
-        unidadeHrefBase="/admin/revendedores"
-        descricao={`Todas as unidades indicadas por ${rel.referrer.name}. A coluna da direita diz quem entrou na conta de ${competenciaLabel(rel.period)} e, quando não entrou, o motivo.`}
+        // Sem link: o indicador nao administra as unidades que indicou.
+        unidadeHrefBase={null}
+        titulo="Unidades que você indicou"
+        descricao={`A coluna da direita mostra quem entrou na sua comissão de ${competenciaLabel(rel.period)} e, quando não entrou, o motivo.`}
       />
     </div>
   )

@@ -254,12 +254,20 @@ export default async function PainelIndicacoesPage() {
         title="Indicações"
         description="Indique novos revendedores e ganhe comissões recorrentes."
         actions={
-          <Link
-            href="/painel/indicacoes/materiais"
-            className="text-sm font-medium text-[var(--color-pmb-green-900)] underline-offset-4 hover:underline"
-          >
-            Mensagens prontas
-          </Link>
+          <div className="flex items-center gap-4">
+            <Link
+              href="/painel/indicacoes/relatorio"
+              className="text-sm font-medium text-[var(--color-pmb-green-900)] underline-offset-4 hover:underline"
+            >
+              Relatório
+            </Link>
+            <Link
+              href="/painel/indicacoes/materiais"
+              className="text-sm font-medium text-[var(--color-pmb-green-900)] underline-offset-4 hover:underline"
+            >
+              Mensagens prontas
+            </Link>
+          </div>
         }
       />
 
