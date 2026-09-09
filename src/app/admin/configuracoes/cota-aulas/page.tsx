@@ -7,6 +7,7 @@ import { AdminPaceGateSettingsForm } from "@/components/admin/admin-pace-gate-se
 import { WriteGate } from "@/components/shared/permissions/permission-context"
 import {
   PACE_GATED_WHERE,
+  PACE_GATED_CONTENT_WHERE,
   PACE_PRIMARY_SELECT,
   isPaceBlocked,
 } from "@/lib/enrollment/pace-gate"
@@ -32,7 +33,10 @@ export default async function AdminPaceGateSettingsPage() {
       select: { paceGateEnabled: true, paceGateStrict: true },
     }),
     prisma.enrollment.findMany({
-      where: { status: "ACTIVE", ...PACE_GATED_WHERE },
+      // O mesmo recorte da varredura: e-book nao e alcancado pela cota, e
+      // conta-lo aqui prometeria ao dono um impacto que nao vai acontecer
+      // quando ele virar a chave.
+      where: { status: "ACTIVE", ...PACE_GATED_WHERE, ...PACE_GATED_CONTENT_WHERE },
       select: {
         paymentType: true,
         installmentsPaid: true,

@@ -15,6 +15,11 @@ import {
   Smartphone,
 } from "lucide-react"
 import { resolveAprendizado } from "@/lib/courses/aprendizado"
+import {
+  OfferPanel,
+  OfferStickyBar,
+  type OfferData,
+} from "@/components/shared/offer-panel"
 import { RegulamentacaoNote } from "@/components/shared/regulamentacao-note"
 import { AutoriaNote } from "@/components/shared/autoria-note"
 
@@ -109,11 +114,6 @@ const FAQ = [
   },
 ]
 
-function formatBRL(value: number): string {
-  if (value <= 0) return "Consulte"
-  return `R$ ${value.toFixed(2).replace(".", ",")}`
-}
-
 function splitParagraphs(text: string | null): string[] {
   if (!text) return []
   return text
@@ -137,22 +137,17 @@ export function CourseDetailView({
   const cargaHoraria = course.cargaHoraria
     ? `${course.cargaHoraria}h`
     : `${course.qtdAulas} aulas`
-  const isMonthly = course.paymentType === "MONTHLY"
-  const monthlyMonths = isMonthly ? course.monthlyMonths ?? 12 : null
-  // Pagamento único: nº GLOBAL de parcelas sem juros da unidade. Quando ausente
-  // (1 = só à vista), cai para 1 e a linha "ou Nx sem juros" não é exibida.
-  const parcelas = course.parcelas ?? 1
-  const valorParcela = course.price > 0 ? course.price / parcelas : 0
-  const boletoParcelas =
-    !isMonthly && course.boletoParcelas && course.boletoParcelas.n > 1
-      ? course.boletoParcelas
-      : null
-  const desconto =
-    course.originalPrice && course.originalPrice > course.price
-      ? Math.round(
-          ((course.originalPrice - course.price) / course.originalPrice) * 100,
-        )
-      : null
+  // Os numeros da oferta vao inteiros para `offer-panel`, que e quem sabe
+  // formata-los — o "Nx sem juros", o carne e a mensalidade sao a mesma conta na
+  // pagina do curso e na do e-book.
+  const offer: OfferData = {
+    price: course.price,
+    originalPrice: course.originalPrice,
+    parcelas: course.parcelas,
+    paymentType: course.paymentType,
+    monthlyMonths: course.monthlyMonths,
+    boletoParcelas: course.boletoParcelas,
+  }
 
   return (
     <div className="bg-[var(--color-pmb-mist)] pb-24 lg:pb-0">
@@ -451,160 +446,51 @@ export function CourseDetailView({
             <RegulamentacaoNote brandName={brandName} />
           </div>
 
-          {/* SIDEBAR PRICING (sticky) */}
-          <aside className="lg:sticky lg:top-24 lg:self-start">
-            <div className="overflow-hidden rounded-2xl border border-[rgba(2,89,24,0.1)] bg-white shadow-[0_20px_40px_-20px_rgba(2,89,24,0.25)]">
-              {course.imageUrl && (
-                <div className="relative aspect-video w-full overflow-hidden bg-[var(--color-pmb-mist)] lg:hidden">
-                  {/* Spacer em fluxo garante a altura 16:9 em engines antigos
-                      (iOS Safari ≤14) onde aspect-ratio colapsa sem conteudo em
-                      fluxo (o <Image fill> e position:absolute). */}
-                  <div aria-hidden className="pt-[56.25%]" />
-                  <Image
-                    src={course.imageUrl}
-                    alt={course.nome}
-                    fill
-                    sizes="(min-width: 1024px) 360px, 100vw"
-                    className="object-cover"
-                  />
-                </div>
-              )}
-
-              <div className="space-y-5 p-5">
-                <div>
-                  {course.originalPrice && course.originalPrice > course.price && (
-                    <p className="text-[13px] line-through text-[rgba(2,89,24,0.55)]">
-                      De {formatBRL(course.originalPrice)}
-                    </p>
-                  )}
-                  <p className="text-[10.5px] font-bold uppercase tracking-widest text-[var(--color-pmb-gold-600)]">
-                    {desconto
-                      ? `Promoção · ${desconto}% OFF`
-                      : isMonthly
-                        ? "Mensalidade"
-                        : "Investimento"}
-                  </p>
-                  <p className="mt-1 text-[36px] font-black leading-none text-[var(--color-pmb-green)]">
-                    {formatBRL(course.price)}
-                    {isMonthly && (
-                      <span className="ml-1 text-[16px] font-bold text-[rgba(2,89,24,0.6)]">
-                        /mês
-                      </span>
-                    )}
-                  </p>
-                  {isMonthly && monthlyMonths ? (
-                    <p className="mt-1.5 text-[13px] text-[rgba(2,89,24,0.7)]">
-                      {monthlyMonths} mensalidades de {formatBRL(course.price)}
-                    </p>
-                  ) : (
-                    course.price > 0 &&
-                    parcelas > 1 && (
-                      <p className="mt-1.5 text-[13px] text-[rgba(2,89,24,0.7)]">
-                        ou {parcelas}x de {formatBRL(valorParcela)} sem juros
-                      </p>
-                    )
-                  )}
-                  {boletoParcelas && course.price > 0 && (
-                    <p className="mt-0.5 text-[13px] text-[rgba(2,89,24,0.7)]">
-                      ou em até {boletoParcelas.n}x de{" "}
-                      {formatBRL(boletoParcelas.valor)} no boleto
-                    </p>
-                  )}
-                </div>
-
-                <Link
-                  href={ctaHref}
-                  className="block w-full rounded-lg bg-[var(--color-pmb-gold)] px-4 py-3.5 text-center text-[14px] font-black text-[var(--color-pmb-green)] transition-colors hover:bg-[var(--color-pmb-gold-600)]"
-                >
-                  {ctaLabel}
-                </Link>
-                {secondaryCtaHref && secondaryCtaLabel && (
-                  <Link
-                    href={secondaryCtaHref}
-                    className="block w-full rounded-lg border border-[rgba(2,89,24,0.18)] px-4 py-3 text-center text-[13px] font-bold text-[var(--color-pmb-green)] hover:border-[var(--color-pmb-green)]"
-                  >
-                    {secondaryCtaLabel}
-                  </Link>
-                )}
-
-                <ul className="space-y-2.5 border-t border-[rgba(2,89,24,0.08)] pt-4 text-[13px] text-[rgba(2,89,24,0.78)]">
-                  <li className="flex items-center gap-2.5">
-                    <PlayCircle className="h-4 w-4 text-[var(--color-pmb-gold-600)]" aria-hidden />
-                    {course.qtdAulas} aulas em vídeo
-                  </li>
-                  <li className="flex items-center gap-2.5">
-                    <Clock className="h-4 w-4 text-[var(--color-pmb-gold-600)]" aria-hidden />
-                    {cargaHoraria} de conteúdo
-                  </li>
-                  <li className="flex items-center gap-2.5">
-                    <CalendarDays className="h-4 w-4 text-[var(--color-pmb-gold-600)]" aria-hidden />
-                    Acesso por 12 meses
-                  </li>
-                  <li className="flex items-center gap-2.5">
-                    <Smartphone className="h-4 w-4 text-[var(--color-pmb-gold-600)]" aria-hidden />
-                    Estude em qualquer dispositivo
-                  </li>
-                  <li className="flex items-center gap-2.5">
-                    <Award className="h-4 w-4 text-[var(--color-pmb-gold-600)]" aria-hidden />
-                    Certificado reconhecido
-                  </li>
-                  <li className="flex items-center gap-2.5">
-                    <ShieldCheck className="h-4 w-4 text-[var(--color-pmb-gold-600)]" aria-hidden />
-                    Garantia de 7 dias
-                  </li>
-                </ul>
-
-                {inquirySlot}
-              </div>
-            </div>
-          </aside>
+          {/* A OFERTA — preco, CTA e beneficios. O bloco de dinheiro vem de
+              `offer-panel`, compartilhado com a pagina do e-book; a LISTA aqui e
+              a promessa do curso, e e justamente o que muda entre os dois. */}
+          <OfferPanel
+            offer={offer}
+            imageUrl={course.imageUrl}
+            imageAlt={course.nome}
+            ctaHref={ctaHref}
+            ctaLabel={ctaLabel}
+            secondaryCtaHref={secondaryCtaHref}
+            secondaryCtaLabel={secondaryCtaLabel}
+            extraSlot={inquirySlot}
+            features={
+              <>
+                <li className="flex items-center gap-2.5">
+                  <PlayCircle className="h-4 w-4 text-[var(--color-pmb-gold-600)]" aria-hidden />
+                  {course.qtdAulas} aulas em vídeo
+                </li>
+                <li className="flex items-center gap-2.5">
+                  <Clock className="h-4 w-4 text-[var(--color-pmb-gold-600)]" aria-hidden />
+                  {cargaHoraria} de conteúdo
+                </li>
+                <li className="flex items-center gap-2.5">
+                  <CalendarDays className="h-4 w-4 text-[var(--color-pmb-gold-600)]" aria-hidden />
+                  Acesso por 12 meses
+                </li>
+                <li className="flex items-center gap-2.5">
+                  <Smartphone className="h-4 w-4 text-[var(--color-pmb-gold-600)]" aria-hidden />
+                  Estude em qualquer dispositivo
+                </li>
+                <li className="flex items-center gap-2.5">
+                  <Award className="h-4 w-4 text-[var(--color-pmb-gold-600)]" aria-hidden />
+                  Certificado reconhecido
+                </li>
+                <li className="flex items-center gap-2.5">
+                  <ShieldCheck className="h-4 w-4 text-[var(--color-pmb-gold-600)]" aria-hidden />
+                  Garantia de 7 dias
+                </li>
+              </>
+            }
+          />
         </div>
       </section>
 
-      {/* Sticky CTA mobile — leigos não rolam até a sidebar; mostramos preço + CTA fixos no rodapé */}
-      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-[rgba(2,89,24,0.12)] bg-white shadow-[0_-8px_30px_-12px_rgba(2,89,24,0.25)] lg:hidden">
-        <div className="mx-auto flex max-w-[1280px] items-center gap-3 px-4 py-3">
-          <div className="min-w-0 flex-1">
-            {desconto && (
-              <span className="inline-block rounded-full bg-[var(--color-pmb-gold)]/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[var(--color-pmb-gold-600)]">
-                {desconto}% OFF
-              </span>
-            )}
-            <p className="truncate text-[18px] font-black leading-tight text-[var(--color-pmb-green)]">
-              {formatBRL(course.price)}
-              {isMonthly && (
-                <span className="ml-1 text-[12px] font-bold text-[rgba(2,89,24,0.6)]">
-                  /mês
-                </span>
-              )}
-            </p>
-            {isMonthly && monthlyMonths ? (
-              <p className="truncate text-[11px] text-[rgba(2,89,24,0.65)]">
-                {monthlyMonths} mensalidades
-              </p>
-            ) : course.price > 0 && parcelas > 1 ? (
-              <p className="truncate text-[11px] text-[rgba(2,89,24,0.65)]">
-                ou {parcelas}x de {formatBRL(valorParcela)}
-                {boletoParcelas ? ` · ${boletoParcelas.n}x no boleto` : ""}
-              </p>
-            ) : (
-              boletoParcelas &&
-              course.price > 0 && (
-                <p className="truncate text-[11px] text-[rgba(2,89,24,0.65)]">
-                  em até {boletoParcelas.n}x de {formatBRL(boletoParcelas.valor)}{" "}
-                  no boleto
-                </p>
-              )
-            )}
-          </div>
-          <Link
-            href={ctaHref}
-            className="inline-flex shrink-0 items-center justify-center rounded-lg bg-[var(--color-pmb-gold)] px-5 py-3 text-[14px] font-black text-[var(--color-pmb-green)] transition-colors hover:bg-[var(--color-pmb-gold-600)]"
-          >
-            {ctaLabel}
-          </Link>
-        </div>
-      </div>
+      <OfferStickyBar offer={offer} ctaHref={ctaHref} ctaLabel={ctaLabel} />
     </div>
   )
 }

@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import type { Course } from "@/components/main/home/course-card"
 import { COURSE_HAS_PRICE, COURSE_PROVISIONABLE } from "./visibility"
+import { contentCardMeta } from "@/lib/catalog/content-type"
 import { interestFreeLabel } from "@/lib/mercadopago/installments"
 import { getSystemSettings } from "@/lib/system-settings"
 import { coursePaymentType } from "@/lib/tenant/monthly-policy"
@@ -11,6 +12,8 @@ interface RawCourse {
   categoriaLoja: string | null
   qtdAulas: number
   cargaHoraria: string | null
+  contentType: "COURSE" | "EBOOK"
+  ebookPages: number | null
   precoVitrineMain: number | null
   precoPromocional: number | null
   precoOriginal: number | null
@@ -42,14 +45,16 @@ function toCourse(
 ): Course {
   return {
     slug: c.slug,
-    categoria: c.categoriaLoja ?? "Curso profissionalizante",
+    categoria:
+      c.categoriaLoja ?? (c.contentType === "EBOOK" ? "E-book" : "Curso profissionalizante"),
     titulo: c.nome,
-    horas: c.cargaHoraria ? `${c.cargaHoraria}h` : `${c.qtdAulas} aulas`,
+    horas: contentCardMeta(c),
     preco: formatPrice(pickPrice(c)),
     parcelas: interestFreeLabel(interestFree) ?? "",
     selo: selo ?? null,
     accent: idx % 2 === 0 ? "gold" : "green",
     imageUrl: c.capaOverride ?? c.capaImageUrl,
+    contentType: c.contentType,
   }
 }
 
@@ -59,6 +64,8 @@ const SELECT = {
   categoriaLoja: true,
   qtdAulas: true,
   cargaHoraria: true,
+  contentType: true,
+  ebookPages: true,
   precoVitrineMain: true,
   precoPromocional: true,
   precoOriginal: true,
@@ -74,6 +81,8 @@ type DbRow = {
   categoriaLoja: string | null
   qtdAulas: number
   cargaHoraria: string | null
+  contentType: "COURSE" | "EBOOK"
+  ebookPages: number | null
   precoVitrineMain: unknown
   precoPromocional: unknown
   precoOriginal: unknown
@@ -89,6 +98,8 @@ function normalize(c: DbRow): RawCourse {
     nome: c.nome,
     categoriaLoja: c.categoriaLoja,
     qtdAulas: c.qtdAulas,
+    contentType: c.contentType,
+    ebookPages: c.ebookPages,
     cargaHoraria: c.cargaHoraria,
     capaImageUrl: c.capaImageUrl,
     capaOverride: c.capaOverride,

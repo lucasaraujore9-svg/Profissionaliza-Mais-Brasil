@@ -21,7 +21,7 @@ vi.mock("@/lib/logger", () => ({
 
 import { prisma } from "@/lib/prisma"
 import { evaluatePaceGate } from "@/lib/enrollment/pace"
-import { PACE_GATED_WHERE } from "@/lib/enrollment/pace-gate"
+import { PACE_GATED_WHERE, PACE_GATED_CONTENT_WHERE } from "@/lib/enrollment/pace-gate"
 import { runBoletoInstallmentSweep } from "./sweep"
 
 const p = prisma as unknown as {
@@ -63,10 +63,19 @@ describe("runBoletoInstallmentSweep — reconciliação da cota de aulas", () =>
     expect(query.where.AND[0]).toEqual(PACE_GATED_WHERE)
   })
 
+  it("não carrega e-book: a cota conta AULAS, e um arquivo não tem nenhuma", async () => {
+    await runBoletoInstallmentSweep(new Date("2026-08-07T09:00:00.000Z"))
+
+    // `evaluatePaceGate` dispensa o e-book de qualquer forma, então esquecer
+    // este filtro não travaria ninguém por engano — só faria a varredura
+    // carregar todo e-book parcelado da base toda noite para não fazer nada.
+    expect(paceQuery().where.AND[1]).toEqual(PACE_GATED_CONTENT_WHERE)
+  })
+
   it("recolhe as travadas, as que já andaram e as que ainda não têm teto", async () => {
     await runBoletoInstallmentSweep(new Date("2026-08-07T09:00:00.000Z"))
 
-    expect(paceQuery().where.AND[1].OR).toEqual([
+    expect(paceQuery().where.AND[2].OR).toEqual([
       { paceBlockedAt: { not: null } },
       { paceExemptAt: null, progressPercent: { gt: 0 } },
       // Sem esta, a venda parcelada que ainda não andou (e a que teve o envio

@@ -133,6 +133,24 @@ export const PACE_GATED_WHERE = {
 }
 
 /**
+ * "O conteudo desta matricula esta sujeito a cota?" — como `where` do Prisma.
+ *
+ * Fica SEPARADO de `PACE_GATED_WHERE` de proposito: aquele e o gemeo SQL de
+ * `isPaceGatedPlan` e tem um teste de PARIDADE com ele; misturar o tipo de
+ * conteudo ali quebraria a paridade sem que a funcao pura mudasse de contrato
+ * (ela recebe um PLANO, e plano nao sabe o que esta sendo vendido).
+ *
+ * Quem DECIDE e `evaluatePaceGate`, que consulta `isPaceGateApplicable` na linha
+ * carregada — entao uma consulta que esqueca esta clausula produz trabalho
+ * desperdicado, nunca comportamento errado. Aqui ela serve para a varredura nao
+ * carregar e-book toda noite e para os numeros de impacto do /admin nao
+ * prometerem uma trava que nao vai acontecer.
+ */
+export const PACE_GATED_CONTENT_WHERE = {
+  course: { is: { contentType: "COURSE" as const } },
+}
+
+/**
  * Fatia do curso liberada pelas parcelas ja pagas (0-100).
  *
  * `floor` e deliberado: com 3 parcelas a 1a libera 33% (nao 33,33% arredondado

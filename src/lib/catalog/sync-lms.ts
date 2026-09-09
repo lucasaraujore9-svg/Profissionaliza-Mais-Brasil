@@ -278,6 +278,16 @@ async function upsertLmsCourse(
 
   // Campos sincronizaveis. Preco sugerido, categoria e matriz agora vem do LMS;
   // visibilidade (hiddenMain/visibilityMode) segue curadoria do admin.
+  // TIPO DE CONTEUDO. O LMS e o dono: e la que o autor escolhe, na criacao, e o
+  // tipo nao muda depois. Campo ausente (versao antiga do LMS) => COURSE, que e
+  // o que todo o catalogo sempre foi.
+  //
+  // E re-sincronizado como o resto do conteudo, e nao so no create: se o tipo
+  // ficasse congelado na primeira importacao, um e-book que o LMS conhecesse
+  // corretamente continuaria sendo vendido aqui como curso — com pagina de venda
+  // prometendo aulas e certificado.
+  const contentType = curso.contentType === "ebook" ? ("EBOOK" as const) : ("COURSE" as const)
+
   const dataBase = {
     provider: "LMS" as const,
     lmsCourseId: curso.id,
@@ -286,6 +296,15 @@ async function upsertLmsCourse(
     descricao: curso.description || null,
     qtdAulas: curso.lessonCount ?? 0,
     cargaHoraria: curso.workload || null,
+    contentType,
+    // So metadado de vitrine. `ebookPages` 0/ausente vira null: "nao informado"
+    // e diferente de "zero paginas", e a pagina de venda omite a linha em vez de
+    // anunciar um numero que ninguem digitou.
+    ebookPages:
+      contentType === "EBOOK" && curso.ebookPages && curso.ebookPages > 0
+        ? curso.ebookPages
+        : null,
+    ebookDownloadable: curso.ebookDownloadable !== false,
     precoOriginal,
     ...(matrizCurricular !== null ? { matrizCurricular } : {}),
     status: "ATIVO",

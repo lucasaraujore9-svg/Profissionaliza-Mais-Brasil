@@ -60,7 +60,12 @@ export const GET = withRequestContext(
 )
 
 const createSchema = z.object({
-  nome: z.string().trim().min(3, "Informe o nome do curso").max(160),
+  nome: z.string().trim().min(3, "Informe o nome do conteúdo").max(160),
+  // O TIPO é escolhido na criação e NÃO entra no PATCH: trocar o tipo de um
+  // produto já publicado reescreveria o que o comprador viu — e, do lado do LMS,
+  // um curso montado que virasse e-book perderia módulos, aulas e provas de
+  // vista, sem caminho de volta. Ausente = curso, que é o que sempre existiu.
+  contentType: z.enum(["COURSE", "EBOOK"]).optional(),
   descricao: z.string().trim().max(4000).nullable().optional(),
   cargaHoraria: z.string().trim().max(60).nullable().optional(),
   pricingMode: z.enum(["FIXED", "MIN_PRICE", "MIN_PRODUCER_NET"]),
@@ -113,6 +118,8 @@ export const POST = withRequestContext(
       )
     }
 
+    const contentType = data.contentType ?? "COURSE"
+
     // Nome único DENTRO da unidade: duas unidades podem publicar "Excel Básico"
     // (o unique do banco é composto por autor), mas a mesma unidade ter dois
     // cursos homônimos só confunde a vitrine dela.
@@ -122,7 +129,7 @@ export const POST = withRequestContext(
     })
     if (clash) {
       return NextResponse.json(
-        { error: "Você já tem um curso com esse nome.", code: "DUPLICATE_NAME" },
+        { error: "Você já tem um conteúdo com esse nome.", code: "DUPLICATE_NAME" },
         { status: 409 },
       )
     }
@@ -160,6 +167,10 @@ export const POST = withRequestContext(
           title: data.nome,
           description: data.descricao ?? null,
           workload: data.cargaHoraria ?? null,
+          // O tipo tem que descer na CRIAÇÃO: é o LMS que monta a área de edição
+          // (arquivo x módulos/aulas) e que valida a publicação. Uma casca criada
+          // como curso jamais viraria e-book lá — o tipo não muda depois.
+          contentType: contentType === "EBOOK" ? "ebook" : "course",
         })
         lmsCourseId = shell.id
         lmsSlug = shell.slug
@@ -185,6 +196,7 @@ export const POST = withRequestContext(
         nome: data.nome,
         descricao: data.descricao ?? null,
         cargaHoraria: data.cargaHoraria ?? null,
+        contentType,
         qtdAulas: 0,
         slug: await ensureUniqueCourseSlug(slugify(data.nome)),
         lmsCourseId,
@@ -223,6 +235,7 @@ export const POST = withRequestContext(
       tenantId: ctx.tenantId,
       payloadAfter: {
         nome: data.nome,
+        contentType,
         pricingMode: terms.pricingMode,
         authorAmount: terms.authorAmount,
         sellerCommissionPercent: terms.sellerCommissionPercent,

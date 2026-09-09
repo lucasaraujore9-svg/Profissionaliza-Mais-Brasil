@@ -59,6 +59,7 @@ interface AuthoredCourse {
   slug: string
   descricao: string | null
   cargaHoraria: string | null
+  contentType: "COURSE" | "EBOOK"
   qtdAulas: number
   capaImageUrl: string | null
   authoredStatus: AuthoredStatus | null
@@ -131,7 +132,10 @@ export function PainelAuthoredCoursesClient({ canManage }: { canManage: boolean 
   const [courses, setCourses] = useState<AuthoredCourse[] | null>(null)
   const [meta, setMeta] = useState<Meta | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
-  const [editing, setEditing] = useState<AuthoredCourse | "new" | null>(null)
+  // "new" e "new-ebook" são estados de CRIAÇÃO distintos, não um booleano +
+  // parâmetro: o tipo é escolhido no botão e o formulário abre já sabendo o que
+  // está sendo criado.
+  const [editing, setEditing] = useState<AuthoredCourse | "new" | "new-ebook" | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
 
   const load = useCallback(async () => {
@@ -228,19 +232,26 @@ export function PainelAuthoredCoursesClient({ canManage }: { canManage: boolean 
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="max-w-2xl space-y-1">
-          <h2 className="text-lg font-semibold">Cursos que você produz</h2>
+          <h2 className="text-lg font-semibold">Conteúdos que você produz</h2>
           <p className="text-sm text-muted-foreground">
-            Cursos de autoria própria. Você define onde eles são vendidos e quanto
-            paga de comissão a quem vender — o mínimo é{" "}
+            Cursos e e-books de autoria própria. Você define onde eles são
+            vendidos e quanto paga de comissão a quem vender — o mínimo é{" "}
             {meta.minSellerCommissionPercent}%. A Profissionaliza Mais Brasil fica
             com {meta.platformFeePercent}% quando a venda acontece em outra
             vitrine; na sua, o valor é todo seu.
           </p>
         </div>
         {canManage && (
-          <Button onClick={() => setEditing("new")}>
-            <Plus className="size-4" /> Novo curso
-          </Button>
+          /* Dois botões, e não um menu: o tipo é decidido na criação e não muda
+             depois. Escolher antes é o que torna a decisão consciente. */
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={() => setEditing("new")}>
+              <Plus className="size-4" /> Novo curso
+            </Button>
+            <Button variant="outline" onClick={() => setEditing("new-ebook")}>
+              <BookOpen className="size-4" /> Novo e-book
+            </Button>
+          </div>
         )}
       </div>
 
@@ -266,7 +277,7 @@ export function PainelAuthoredCoursesClient({ canManage }: { canManage: boolean 
         <div className="rounded-lg border border-dashed p-8 text-center">
           <BookOpen className="mx-auto size-8 text-muted-foreground" />
           <p className="mt-3 text-sm text-muted-foreground">
-            Você ainda não produziu nenhum curso.
+            Você ainda não produziu nenhum conteúdo.
           </p>
         </div>
       ) : (
@@ -277,6 +288,11 @@ export function PainelAuthoredCoursesClient({ canManage }: { canManage: boolean 
                 <div className="space-y-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-medium">{course.nome}</span>
+                    {course.contentType === "EBOOK" && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs font-medium">
+                        <BookOpen className="size-3" /> E-book
+                      </span>
+                    )}
                     <StatusBadge status={course.authoredStatus} />
                   </div>
                   <p className="text-sm text-muted-foreground">
@@ -288,7 +304,9 @@ export function PainelAuthoredCoursesClient({ canManage }: { canManage: boolean 
                   </p>
                   {!course.hasContent && (
                     <p className="text-sm text-amber-700">
-                      Sem conteúdo cadastrado — o curso não pode ser publicado.
+                      {course.contentType === "EBOOK"
+                        ? "Sem arquivo enviado — o e-book não pode ser publicado."
+                        : "Sem conteúdo cadastrado — o curso não pode ser publicado."}
                     </p>
                   )}
                 </div>
@@ -302,7 +320,10 @@ export function PainelAuthoredCoursesClient({ canManage }: { canManage: boolean 
                         disabled={busyId === course.id}
                         onClick={() => void openContent(course)}
                       >
-                        <ExternalLink className="size-4" /> Conteúdo
+                        {/* No e-book o que se edita lá é o ARQUIVO. "Conteúdo"
+                            faria o autor procurar módulos e aulas que não existem. */}
+                        <ExternalLink className="size-4" />{" "}
+                        {course.contentType === "EBOOK" ? "Arquivo" : "Conteúdo"}
                       </Button>
                     )}
                     <Button
@@ -363,7 +384,8 @@ export function PainelAuthoredCoursesClient({ canManage }: { canManage: boolean 
 
       {editing && (
         <CourseDialog
-          course={editing === "new" ? null : editing}
+          course={editing === "new" || editing === "new-ebook" ? null : editing}
+          contentType={editing === "new-ebook" ? "EBOOK" : editing === "new" ? "COURSE" : editing.contentType}
           meta={meta}
           onClose={() => setEditing(null)}
           onSaved={async () => {
@@ -393,15 +415,19 @@ function StatusBadge({ status }: { status: AuthoredStatus | null }) {
 
 function CourseDialog({
   course,
+  contentType,
   meta,
   onClose,
   onSaved,
 }: {
   course: AuthoredCourse | null
+  /** Tipo do conteúdo sendo criado/editado — vem do botão, não de um seletor. */
+  contentType: "COURSE" | "EBOOK"
   meta: Meta
   onClose: () => void
   onSaved: () => void | Promise<void>
 }) {
+  const ebook = contentType === "EBOOK"
   const [form, setForm] = useState<FormState>(
     course
       ? {
@@ -444,7 +470,9 @@ function CourseDialog({
         pricingMode: form.pricingMode,
         authorAmount: amount,
         sellerCommissionPercent: commission,
-        ...(course ? { distribution } : {}),
+        // Só na CRIAÇÃO: o PATCH não aceita o campo, de propósito — trocar o
+        // tipo de um conteúdo já publicado reescreveria o que o comprador viu.
+        ...(course ? { distribution } : { contentType }),
       }
       const res = await fetch(
         course ? `/api/painel/cursos-autorais/${course.id}` : "/api/painel/cursos-autorais",
@@ -459,7 +487,11 @@ function CourseDialog({
         toast.error(json.error ?? "Não foi possível salvar.")
         return
       }
-      toast.success(course ? "Curso atualizado." : "Curso criado.")
+      toast.success(
+        course
+          ? ebook ? "E-book atualizado." : "Curso atualizado."
+          : ebook ? "E-book criado." : "Curso criado.",
+      )
       await onSaved()
     } finally {
       setSaving(false)
@@ -470,12 +502,16 @@ function CourseDialog({
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{course ? "Editar curso" : "Novo curso próprio"}</DialogTitle>
+          <DialogTitle>
+            {course
+              ? ebook ? "Editar e-book" : "Editar curso"
+              : ebook ? "Novo e-book próprio" : "Novo curso próprio"}
+          </DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4">
           <div className="space-y-1.5">
-            <Label htmlFor="nome">Nome do curso</Label>
+            <Label htmlFor="nome">{ebook ? "Nome do e-book" : "Nome do curso"}</Label>
             <Input
               id="nome"
               value={form.nome}
@@ -494,10 +530,12 @@ function CourseDialog({
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="carga">Carga horária</Label>
+            <Label htmlFor="carga">
+              {ebook ? "Tempo estimado de leitura" : "Carga horária"}
+            </Label>
             <Input
               id="carga"
-              placeholder="ex.: 40 horas"
+              placeholder={ebook ? "ex.: 2 horas" : "ex.: 40 horas"}
               value={form.cargaHoraria}
               onChange={(e) => setForm({ ...form, cargaHoraria: e.target.value })}
             />

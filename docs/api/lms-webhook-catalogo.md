@@ -116,6 +116,9 @@ Catálogo de cursos **publicados e visíveis** — a vitrine consome para montar
       "title": "Eletricista Residencial",
       "description": "…",
       "workload": "12 horas",
+      "contentType": "course",
+      "ebookPages": null,
+      "ebookDownloadable": true,
       "suggestedPriceCents": 19700,
       "categories": [
         { "id": "uuid", "slug": "eletrica", "name": "Elétrica" }
@@ -137,6 +140,14 @@ Catálogo de cursos **publicados e visíveis** — a vitrine consome para montar
 }
 ```
 
+- **`contentType`** — `"course"` (aulas em vídeo) ou `"ebook"` (arquivo para ler).
+  Ausente ⇒ `"course"`, que é o que todo o catálogo sempre foi. O **arquivo do
+  e-book nunca viaja nesta rota**: ele é o produto vendido, e esta rota alimenta
+  a vitrine (pré-venda). O aluno só o alcança depois da matrícula, por URL
+  assinada, dentro do LMS.
+- **`ebookPages` / `ebookDownloadable`** — metadados que a PÁGINA DE VENDA
+  anuncia ("84 páginas", "baixe o PDF e leia sem internet"). `ebookPages` `null`
+  ⇒ a linha some da vitrine, em vez de anunciar "0 páginas".
 - `suggestedPriceCents` — valor sugerido para a vitrine, em **centavos** (`19700` = R$ 197,00).
   **Obrigatório na publicação** → nunca `null` no catálogo.
 - `categories` — taxonomia N–N da vitrine (`{ id, slug, name }`, ordenada por `name`).
@@ -270,7 +281,10 @@ malformado → `400` (não cai silenciosamente em export completo).
 | `slug` | string | Identificador estável para URL. |
 | `title` | string | Nome do curso. |
 | `description` | string | Descrição. |
-| `workload` | string | Carga horária livre (ex.: "12 horas"). |
+| `workload` | string | Carga horária livre (ex.: "12 horas"). No e-book, o **tempo estimado de leitura**. |
+| **`contentType`** | string | **(NOVO)** `course` \| `ebook`. Ausente ⇒ `course`. Definido na criação, imutável. |
+| **`ebookPages`** | int \| null | **(NOVO)** Páginas do e-book. `null` = não informado. |
+| **`ebookDownloadable`** | bool | **(NOVO)** O autor liberou o download do arquivo. |
 | `suggestedPriceCents` | int \| null | Preço sugerido em **centavos**. Obrigatório na publicação. |
 | `categories[]` | obj[] | `{ id, slug, name }`, ordenado por `name`. ≥ 1 obrigatória. |
 | **`curriculum[]`** | obj[] | **(NOVO)** Matriz curricular, ordenada por `order`. Obrigatória → nunca vazia no catálogo. |
@@ -689,6 +703,27 @@ Exemplo de cron do dispatcher:
 | **`totalWorkloadHours`** | (não persistido) | A carga total exibida vem de `workload`; `totalWorkloadHours` é ignorado com segurança. |
 | `status` / `visible` | `status` ATIVO/INATIVO | `published` + `visible` = ATIVO (entra na vitrine). |
 | `title` / `description` / `workload` / `lessonCount` | `nome` / `descrição` / `cargaHoraria` / `qtdAulas` | Re-sincronizados a cada evento. |
+| **`contentType`** | `Course.contentType` (`COURSE`/`EBOOK`) | Re-sincronizado, e não só no create: congelá-lo faria um e-book seguir sendo vendido aqui como curso, com a página prometendo aulas e certificado. |
+| **`ebookPages` / `ebookDownloadable`** | `ebookPages` / `ebookDownloadable` | Só metadado de vitrine. `0`/ausente → `null` ("não informado" ≠ "zero páginas"). |
+
+**O que o tipo muda no PMB** (e o que ele NÃO muda):
+
+- **Muda a página de venda.** `EBOOK` renderiza `EbookDetailView`, não
+  `CourseDetailView`: aquela promete "N aulas em vídeo", "carga horária" e
+  "certificado reconhecido nacionalmente" em oito lugares.
+- **Não emite certificado.** Certificado é documento de curso livre (Lei nº
+  9.394/96), com carga horária e conclusão apurada. Num e-book a conclusão é o
+  leitor dizendo que terminou. `issueCertificateIfEligible` recusa com
+  `NotCertifiableError`, e **`force` não abre exceção**.
+- **Não renderiza a nota de regulamentação** — ela declara curso livre, e um
+  e-book não é. Imprimi-la seria afirmação legal falsa.
+- **Fica fora da cota de aulas** (trava proporcional ao pagamento). A cota
+  compara fração paga com fração de AULAS assistidas; um arquivo não tem aulas.
+  Consequência aceita: e-book vendido em 6x fica inteiro disponível desde a 1ª
+  parcela — quem para de pagar cai na trava de inadimplência, que revoga o acesso.
+- **Não muda nada no dinheiro.** Cobrança, cupom, pacote, split de autoria,
+  assinatura e inadimplência são compartilhados, e o bloco de preço da página é
+  literalmente o mesmo componente (`offer-panel`).
 
 **Regras de negócio:**
 

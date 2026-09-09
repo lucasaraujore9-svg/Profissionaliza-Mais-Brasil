@@ -30,6 +30,18 @@ export interface LmsCourse {
   title: string
   description: string | null
   workload: string | null // ex: "12 horas"
+  /**
+   * TIPO DE CONTEUDO — "course" (aulas em video) | "ebook" (arquivo para ler).
+   *
+   * Opcional para tolerar a versao do LMS que ainda nao devolve o campo: ausente
+   * => curso, que e o que todo o catalogo sempre foi. O ARQUIVO do e-book nunca
+   * vem por aqui — esta rota alimenta a VITRINE, e o arquivo e o produto.
+   */
+  contentType?: "course" | "ebook" | null
+  /** Paginas do e-book. Ausente/0 => a vitrine nao mostra a linha. */
+  ebookPages?: number | null
+  /** O autor liberou o download? A vitrine anuncia o que o aluno vai poder fazer. */
+  ebookDownloadable?: boolean | null
   // Valor sugerido/de referencia em CENTAVOS (ex: 19700 = R$ 197,00). null = sem
   // sugestao. E so referencia — cobranca/comissao/financeiro seguem 100% no PMB.
   suggestedPriceCents: number | null

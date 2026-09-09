@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { Clock, Award } from "lucide-react"
+import { Award, BookOpen, Clock, Zap } from "lucide-react"
 import { CourseThumb } from "./course-thumb"
 
 export interface Course {
@@ -15,6 +15,12 @@ export interface Course {
   selo?: "novo" | "mais-vendido" | "pix-10" | null
   accent: "gold" | "cyan" | "lime" | "green" | "terracotta"
   imageUrl?: string | null
+  /**
+   * COURSE (default) | EBOOK. Numa prateleira mista a pessoa precisa distinguir
+   * os dois ANTES de clicar — e o card do curso promete "Certificado", que num
+   * e-book seria falso.
+   */
+  contentType?: "COURSE" | "EBOOK"
 }
 
 interface CourseCardProps {
@@ -41,8 +47,10 @@ export function CourseCard({ course, hrefBase = "/cursos" }: CourseCardProps) {
     selo,
     accent,
     imageUrl,
+    contentType,
   } = course
   const isMonthly = paymentType === "MONTHLY"
+  const ebook = contentType === "EBOOK"
 
   return (
     <Link
@@ -74,6 +82,14 @@ export function CourseCard({ course, hrefBase = "/cursos" }: CourseCardProps) {
                 : "10% no Pix"}
           </span>
         )}
+        {/* Canto OPOSTO ao selo comercial: os dois convivem ("+ Vendido" e
+            "E-book") e disputar o mesmo canto esconderia um deles. */}
+        {ebook && (
+          <span className="absolute right-2.5 top-2.5 inline-flex items-center gap-1 rounded-full bg-white/95 px-2.5 py-0.5 text-[10.5px] font-black uppercase tracking-wider text-[var(--color-pmb-green)] shadow-sm">
+            <BookOpen className="h-3 w-3" aria-hidden />
+            E-book
+          </span>
+        )}
       </div>
 
       <div className="flex flex-1 flex-col p-3.5">
@@ -86,12 +102,28 @@ export function CourseCard({ course, hrefBase = "/cursos" }: CourseCardProps) {
 
         <ul className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11.5px] text-[rgba(2,89,24,0.65)]">
           <li className="flex items-center gap-1">
-            <Clock className="h-3 w-3" aria-hidden />
+            {ebook ? (
+              <BookOpen className="h-3 w-3" aria-hidden />
+            ) : (
+              <Clock className="h-3 w-3" aria-hidden />
+            )}
             {horas}
           </li>
+          {/* "Certificado" é a promessa do curso. Num e-book ela seria falsa —
+              e é a mentira mais cara possível, porque só aparece depois da
+              compra. Trocada pelo que o e-book de fato entrega. */}
           <li className="flex items-center gap-1">
-            <Award className="h-3 w-3" aria-hidden />
-            Certificado
+            {ebook ? (
+              <>
+                <Zap className="h-3 w-3" aria-hidden />
+                Acesso imediato
+              </>
+            ) : (
+              <>
+                <Award className="h-3 w-3" aria-hidden />
+                Certificado
+              </>
+            )}
           </li>
         </ul>
 

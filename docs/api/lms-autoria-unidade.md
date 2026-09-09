@@ -47,16 +47,27 @@ LMS, o curso chegaria pelo sync e teria que ser adotado por heurística.
   "ownerTenantExternalId": "clx123...",   // Tenant.id do PMB (o mesmo de PUT /tenants/:id)
   "title": "Excel Avançado para Escritório",
   "description": "…",                      // opcional
-  "workload": "40 horas"                   // opcional
+  "workload": "40 horas",                  // opcional
+  "contentType": "course"                  // opcional: "course" (default) | "ebook"
 }
 
 // 201
-{ "data": { "id": "uuid", "slug": "excel-avancado-para-escritorio" } }
+{ "data": { "id": "uuid", "slug": "excel-avancado-para-escritorio", "contentType": "course" } }
 ```
 
 - O curso nasce **rascunho e com dono**. Não aparece em `GET /courses`.
 - `400` se `ownerTenantExternalId` não for uma unidade conhecida do LMS
   (registre-a antes com `PUT /api/v1/tenants/:id`, que o PMB já chama).
+- **`contentType` é definido na CRIAÇÃO e não muda depois.** Não há endpoint para
+  trocá-lo, de propósito: um curso já montado que virasse e-book perderia
+  módulos, aulas e provas de vista, sem caminho de volta — e, do lado do PMB,
+  reescreveria o que o comprador viu na página de venda. Trocar de tipo é criar
+  outro conteúdo.
+- O tipo decide o que o LMS monta: **`course`** abre a aba Conteúdo
+  (módulos → aulas → provas) e exige matriz curricular para publicar;
+  **`ebook`** abre a aba Arquivo (um PDF + materiais extras) e exige o arquivo.
+  As duas checagens vivem na MESMA função (`checkPublishProblems`), então
+  `PATCH … { published: true }` responde `409` com a lista certa para cada tipo.
 
 ### 3.2 `PATCH /api/v1/courses/:id` — publicar / despublicar
 

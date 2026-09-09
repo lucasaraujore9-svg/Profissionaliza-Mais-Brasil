@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button"
 import { SuccessIcon } from "@/components/loja/success-icon"
 import { ConfirmationCard } from "@/components/loja/confirmation-card"
 import { NextSteps } from "@/components/loja/next-steps"
+import { isEbook } from "@/lib/catalog/content-type"
 import { getCurrentTenant } from "@/lib/tenant/current"
 import { prisma } from "@/lib/prisma"
 import { resolveVitrinePixels } from "@/lib/tracking/resolve"
@@ -65,7 +66,7 @@ export default async function ConfirmacaoPage({
     where: { id: enrollment_id, tenantId: tenant.id },
     include: {
       student: { select: { nome: true, email: true } },
-      course: { select: { nome: true } },
+      course: { select: { nome: true, contentType: true } },
     },
   })
 
@@ -88,11 +89,19 @@ export default async function ConfirmacaoPage({
   }
 
   const isApproved = enrollment.status === "ACTIVE"
+  // "Matrícula realizada" descreve a compra de um curso. Quem comprou um e-book
+  // não se matriculou em nada — e a palavra errada na primeira tela depois do
+  // pagamento é o que faz a pessoa achar que comprou outra coisa.
+  const ebook = isEbook(enrollment.course)
   const title = isApproved
-    ? "Matrícula realizada com sucesso!"
+    ? ebook
+      ? "Compra confirmada!"
+      : "Matrícula realizada com sucesso!"
     : "Estamos processando seu pagamento"
   const subtitle = isApproved
-    ? "Obrigado pela confiança. Você já pode começar a estudar agora mesmo."
+    ? ebook
+      ? "Obrigado pela confiança. Seu e-book já está liberado na sua área do aluno."
+      : "Obrigado pela confiança. Você já pode começar a estudar agora mesmo."
     : "Assim que o pagamento for confirmado, liberaremos seu acesso e enviaremos as credenciais por email."
 
   return (
@@ -128,7 +137,7 @@ export default async function ConfirmacaoPage({
             status={enrollment.status}
           />
 
-          <NextSteps autoRedirect={isApproved} />
+          <NextSteps autoRedirect={isApproved} contentType={enrollment.course.contentType} />
 
           <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
             <Link href="/aluno">
@@ -137,7 +146,7 @@ export default async function ConfirmacaoPage({
                 className="w-full bg-[var(--color-pmb-green)] text-white hover:bg-[var(--color-pmb-green-700)] sm:w-auto"
               >
                 <ExternalLink className="mr-2 h-4 w-4" />
-                Ir para área de aulas
+                {ebook ? "Ir para a área do aluno" : "Ir para área de aulas"}
               </Button>
             </Link>
             <Link href="/">

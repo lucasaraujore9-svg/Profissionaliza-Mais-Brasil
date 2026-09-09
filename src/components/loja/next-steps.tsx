@@ -6,29 +6,43 @@ import { Mail, LogIn, BookOpen } from "lucide-react"
 const STUDENT_AREA_URL = "/aluno"
 const REDIRECT_SECONDS = 5
 
-const steps = [
-  {
-    icon: Mail,
-    title: "Verifique seu email",
-    description: "Enviamos suas credenciais de acesso para o email cadastrado.",
-  },
-  {
-    icon: LogIn,
-    title: "Acesse sua área de aulas",
-    description: "Faça login na plataforma com os dados recebidos por email.",
-  },
-  {
-    icon: BookOpen,
-    title: "Comece a estudar",
-    description: "Seu curso já está liberado. Assista quando e onde quiser.",
-  },
-]
+/**
+ * Os três passos falam do que a pessoa ACABOU de comprar.
+ *
+ * "Seu curso já está liberado. Assista quando e onde quiser" num e-book é uma
+ * promessa falsa entregue no pior momento possível: logo depois do pagamento,
+ * quando ela ainda não abriu o produto e a única referência que tem é esta tela.
+ */
+function stepsFor(ebook: boolean) {
+  return [
+    {
+      icon: Mail,
+      title: "Verifique seu email",
+      description: "Enviamos suas credenciais de acesso para o email cadastrado.",
+    },
+    {
+      icon: LogIn,
+      title: ebook ? "Acesse sua área do aluno" : "Acesse sua área de aulas",
+      description: "Faça login na plataforma com os dados recebidos por email.",
+    },
+    {
+      icon: BookOpen,
+      title: ebook ? "Comece a ler" : "Comece a estudar",
+      description: ebook
+        ? "Seu e-book já está liberado. Leia no celular ou no computador, quantas vezes quiser."
+        : "Seu curso já está liberado. Assista quando e onde quiser.",
+    },
+  ]
+}
 
 interface NextStepsProps {
   autoRedirect?: boolean
+  /** O que foi comprado. Ausente = curso, o caso da esmagadora maioria. */
+  contentType?: "COURSE" | "EBOOK"
 }
 
-export function NextSteps({ autoRedirect = false }: NextStepsProps) {
+export function NextSteps({ autoRedirect = false, contentType }: NextStepsProps) {
+  const steps = stepsFor(contentType === "EBOOK")
   const [seconds, setSeconds] = useState(REDIRECT_SECONDS)
 
   useEffect(() => {

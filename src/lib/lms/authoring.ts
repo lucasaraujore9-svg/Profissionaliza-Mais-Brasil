@@ -28,6 +28,11 @@ export interface CreateLmsCourseShellInput {
   title: string
   description?: string | null
   workload?: string | null
+  /**
+   * "course" (aulas em video) | "ebook" (arquivo para ler). Omitir = curso, o
+   * default do LMS — e o que uma versao antiga dele entende.
+   */
+  contentType?: "course" | "ebook"
 }
 
 export interface LmsCourseShell {
@@ -52,6 +57,7 @@ export async function createLmsCourseShell(
       title: input.title,
       description: input.description ?? null,
       workload: input.workload ?? null,
+      contentType: input.contentType ?? "course",
     },
   })
   return res.data

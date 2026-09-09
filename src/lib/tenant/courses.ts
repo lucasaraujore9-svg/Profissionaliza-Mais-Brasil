@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma"
-import type { Prisma } from "@prisma/client"
+import type { ContentType, Prisma } from "@prisma/client"
 import { contextLogger } from "@/lib/logger"
 import { effectivePaymentType, type MonthlyPolicy } from "@/lib/tenant/monthly-policy"
 import { displayInterestFreeInstallments } from "@/lib/mercadopago/installments"
@@ -56,6 +56,10 @@ export interface TenantCourseListItem {
   paymentType: "ONE_TIME" | "MONTHLY"
   /** Quantidade total de mensalidades quando paymentType === "MONTHLY". */
   monthlyMonths: number | null
+  /** COURSE (aulas em video) | EBOOK (arquivo para ler). */
+  contentType: ContentType
+  /** Paginas do e-book. null = nao informado (ou nao e e-book). */
+  ebookPages: number | null
 }
 
 interface ListFilters {
@@ -104,6 +108,11 @@ export function visibilityFilter(tenantId: string): Prisma.CourseWhereInput {
 const CARD_COURSE_SELECT = {
   slug: true,
   nome: true,
+  // O TIPO entra no card: quem vê uma prateleira mista precisa distinguir um
+  // e-book de um curso antes de clicar — e o card do e-book troca "N aulas" por
+  // "N páginas", que "0 aulas" nunca conseguiria dizer.
+  contentType: true,
+  ebookPages: true,
   descricao: true,
   descricaoOverride: true,
   categoriaLoja: true,
@@ -169,6 +178,8 @@ function mapTenantCourseItem(
     isFeatured: tc.isFeatured,
     paymentType,
     monthlyMonths,
+    contentType: tc.course.contentType,
+    ebookPages: tc.course.ebookPages,
   }
 }
 
@@ -332,6 +343,8 @@ export async function listTenantCatalog(args: {
 export interface TenantCourseDetail extends TenantCourseListItem {
   tenantCourseId: string
   qtdAulas: number
+  /** Tempo estimado de leitura do e-book — a mesma coluna que no curso e carga horaria. */
+  ebookDownloadable: boolean
   parcelasSugeridas: number | null
   plataformaCourseId: string | null
   lessons: Array<{ id: string; nome: string; ordem: number }>
@@ -414,6 +427,9 @@ export async function getTenantCourseBySlug(
       paymentType,
       monthlyMonths,
       qtdAulas: tc.course.qtdAulas,
+      contentType: tc.course.contentType,
+      ebookPages: tc.course.ebookPages,
+      ebookDownloadable: tc.course.ebookDownloadable,
       parcelasSugeridas: displayParcelas,
       plataformaCourseId: tc.course.plataformaCourseId,
       lessons: tc.course.courseLessons.map((l) => ({

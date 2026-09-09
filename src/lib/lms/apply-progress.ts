@@ -1,5 +1,9 @@
 import { prisma } from "@/lib/prisma"
-import { issueCertificateIfEligible, PaceGateError } from "@/lib/certificates/issue"
+import {
+  issueCertificateIfEligible,
+  NotCertifiableError,
+  PaceGateError,
+} from "@/lib/certificates/issue"
 import { evaluatePaceGate } from "@/lib/enrollment/pace"
 import { contextLogger } from "@/lib/logger"
 
@@ -67,7 +71,16 @@ export async function applyLmsCourseProgress(
   } catch (err) {
     // Cota de aulas: recusa ESPERADA enquanto faltar parcela — o certificado
     // sai sozinho na quitação. Logar como erro encheria o log de ruído.
-    if (err instanceof PaceGateError) {
+    // E-book concluído (o aluno marcou "li") chega aqui pelo mesmo evento de
+    // conclusão do curso — de propósito: o LMS reporta o FATO, e quem decide o
+    // que não se faz com ele é o PMB, que é quem certifica. A recusa é esperada,
+    // então não é erro.
+    if (err instanceof NotCertifiableError) {
+      contextLogger().info(
+        { event: `${opts.event}.certificate_not_applicable`, enrollmentId },
+        "conclusão registrada — conteúdo não emite certificado",
+      )
+    } else if (err instanceof PaceGateError) {
       contextLogger().info(
         { event: `${opts.event}.certificate_pace_blocked`, enrollmentId },
         "certificado adiado — parcelamento em aberto",

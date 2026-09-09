@@ -3,6 +3,8 @@ export {
   issueCertificateManual,
   revokeCertificate,
   PaceGateError,
+  MissingCpfError,
+  NotCertifiableError,
 } from "./issue"
 export { generateAndUploadPdf, validationUrlFor } from "./generate-pdf"
 export {
