@@ -74,7 +74,11 @@ export const GET = withRequestContextParams<{ id: string }>(
 
   // ---- Stats de indicacao ----
   // defaultPercent vem do SystemSettings; usado quando referralPercent (override) e null.
-  // totalReferrals: tenants indicados por ESTE tenant (qualquer status, exceto CANCELLED).
+  // totalReferrals: tenants indicados por ESTE tenant, QUALQUER status — inclui
+  //   as canceladas (o comentario dizia que as excluia; a query nunca excluiu).
+  //   E o denominador do "ativos / total", no mesmo formato do hub /admin/indicacoes.
+  // activeReferrals: so as ACTIVE. E o numero que decide elegibilidade e o que a
+  //   tela mostra como "Indicados ativos".
   // totalCommissionGenerated: somatorio de comissoes que ESTE tenant gerou para o seu referrer
   //   (status != CANCELLED). Representa quanto o indicador dele ja recebeu/recebera por causa dele.
   // totalCommissionReceived: CAIXA — soma dos ReferralPayout PAID deste tenant como

@@ -497,8 +497,18 @@ export function ResellerReferralConfig({
             <Users className="h-3 w-3" />
             Indicados ativos
           </div>
+          {/* ATIVOS, nao o total: o tile mostrava `totalReferrals` (toda unidade
+              indicada, canceladas inclusive) sob o rotulo "Indicados ativos" e
+              contradizia a linha de elegibilidade logo acima, que sempre usou
+              `activeReferrals`. O total vai ao lado, no formato do hub. */}
           <div className="mt-1 text-lg font-semibold text-[var(--color-pmb-green-900)]">
-            {stats.totalReferrals}
+            {stats.activeReferrals}
+            {stats.totalReferrals > stats.activeReferrals ? (
+              <span className="text-sm font-normal text-gray-400">
+                {" "}
+                / {stats.totalReferrals}
+              </span>
+            ) : null}
           </div>
         </div>
         <div className="rounded-xl border border-gray-200 bg-white p-3">
