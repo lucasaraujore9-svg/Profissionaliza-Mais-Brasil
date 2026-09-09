@@ -1,9 +1,21 @@
 import type { NextConfig } from "next";
+import { trackingOrigins } from "./src/lib/tracking/csp";
 
 // Headers de seguranca aplicados a todas as rotas (HTML, API, assets).
 // Mantemos uma CSP relativamente aberta porque o app embute SDK do
 // Mercado Pago, logos hospedados no Supabase Storage e ainda usa inline
 // styles do Tailwind/shadcn — uma policy mais estrita exigiria nonces.
+
+// Acrescenta a uma diretiva as origens dos pixels de rastreamento (Meta, Google,
+// TikTok, LinkedIn, Pinterest, Bing, Clarity, Hotjar). A lista mora em
+// src/lib/tracking/csp.ts, ao lado dos snippets que carregam esses scripts —
+// pixel bloqueado pela CSP falha em SILENCIO (o painel segue dizendo
+// "instalado" e nenhum evento chega ao gerenciador de anuncios), entao manter a
+// permissao longe do codigo que a exige foi o que deixou a Meta morta nas
+// vitrines das revendas por meses.
+const px = (base: string, directive: "script" | "connect" | "img" | "frame" | "font") =>
+  [base, ...trackingOrigins(directive)].join(" ");
+
 const SECURITY_HEADERS = [
   {
     key: "Strict-Transport-Security",
@@ -28,11 +40,11 @@ const SECURITY_HEADERS = [
       "object-src 'none'",
       // img.youtube.com / i.ytimg.com: thumbnails (capa) dos modulos de
       // Treinamento, que usam o frame do YouTube. Sem isto a CSP bloqueia a capa.
-      "img-src 'self' data: blob: https://*.supabase.co https://playcurso.com https://s3.bmbr.com.br https://img.youtube.com https://i.ytimg.com",
-      "font-src 'self' data:",
+      px("img-src 'self' data: blob: https://*.supabase.co https://playcurso.com https://s3.bmbr.com.br https://img.youtube.com https://i.ytimg.com", "img"),
+      px("font-src 'self' data:", "font"),
       "style-src 'self' 'unsafe-inline'",
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://sdk.mercadopago.com https://www.mercadopago.com https://va.vercel-scripts.com",
-      "connect-src 'self' https://api.mercadopago.com https://*.supabase.co https://*.upstash.io https://api.resend.com https://vitals.vercel-insights.com",
+      px("script-src 'self' 'unsafe-inline' 'unsafe-eval' https://sdk.mercadopago.com https://www.mercadopago.com https://va.vercel-scripts.com", "script"),
+      px("connect-src 'self' https://api.mercadopago.com https://*.supabase.co https://*.upstash.io https://api.resend.com https://vitals.vercel-insights.com", "connect"),
       // 'self' blob: permite o preview do PDF do certificado, embutido via
       // <iframe src="blob:..."> no editor de template (admin/painel). Sem isto
       // o navegador bloqueia o embed ("conteúdo bloqueado"). frame-ancestors
@@ -40,7 +52,7 @@ const SECURITY_HEADERS = [
       // youtube-nocookie.com / youtube.com: player embutido (iframe) dos videos
       // de Treinamento (youtubeEmbedUrl usa youtube-nocookie). Sem isto o video
       // nao carrega ("conteudo bloqueado").
-      "frame-src 'self' blob: https://www.mercadopago.com https://sdk.mercadopago.com https://www.youtube-nocookie.com https://www.youtube.com",
+      px("frame-src 'self' blob: https://www.mercadopago.com https://sdk.mercadopago.com https://www.youtube-nocookie.com https://www.youtube.com", "frame"),
       "form-action 'self' https://www.mercadopago.com",
     ].join("; "),
   },
