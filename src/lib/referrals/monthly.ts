@@ -243,11 +243,17 @@ async function computeForReferrer(
   // excluido de todas as demais contagens, e sem este filtro ele voltaria por
   // aqui — a unidade cancelada que chegou a pagar reentraria no universo e na
   // faixa, contradizendo a exclusao feita nas contagens.
+  //
+  // COMPETENCIA, nao caixa: `competenceAt` = max(vencimento, pagamento do
+  // cliente). A mensalidade pertence ao mes da FATURA; atrasar move, antecipar
+  // nao. Ver src/lib/asaas/competencia.ts — e NAO troque por `paidAt`, que e a
+  // data do CREDITO (D+32 no cartao) e continua sendo a certa para churn,
+  // blacklist e inadimplencia, que sao perguntas de caixa.
   const paidRows = await prisma.tenantPayment.findMany({
     where: {
       tenant: { referrerTenantId, status: { not: "CANCELLED" } },
       status: { in: RECEIVED_STATUSES },
-      paidAt: { gte: range.start, lt: range.end },
+      competenceAt: { gte: range.start, lt: range.end },
     },
     select: { tenantId: true },
   })
@@ -418,22 +424,24 @@ async function computeForReferrer(
       where: {
         tenantId: { in: ids },
         status: { in: RECEIVED_STATUSES },
-        paidAt: { gte: range.start, lt: range.end },
+        competenceAt: { gte: range.start, lt: range.end },
       },
       select: {
         tenantId: true,
         amount: true,
-        paidAt: true,
+        competenceAt: true,
         referralCommission: { select: { status: true } },
       },
-      orderBy: { paidAt: "asc" },
+      orderBy: { competenceAt: "asc" },
     })
     for (const r of rows) {
-      if (!r.paidAt) continue
+      if (!r.competenceAt) continue
       const list = paidInMonth.get(r.tenantId) ?? []
       list.push({
         amount: new Prisma.Decimal(r.amount),
-        paidAt: r.paidAt,
+        // A janela promocional (`promoPaidUntil`) e o relogio por fatura tambem
+        // passam a olhar a data do CLIENTE: sao regras sobre quando ele pagou.
+        paidAt: r.competenceAt,
         elegivel:
           !r.referralCommission || r.referralCommission.status === "CANCELLED",
       })
@@ -452,7 +460,7 @@ async function computeForReferrer(
       where: {
         tenantId: { in: ids },
         status: { in: RECEIVED_STATUSES },
-        paidAt: { lt: range.start },
+        competenceAt: { lt: range.start },
       },
       _count: { _all: true },
     })
@@ -755,9 +763,12 @@ export async function flagMonthlyCommissionForRefund(
 ): Promise<void> {
   const tp = await prisma.tenantPayment.findUnique({
     where: { id: tenantPaymentId },
-    select: { tenantId: true, paidAt: true },
+    // A competencia da comissao foi calculada por `clientPaidAt`; procurar a
+    // linha a estornar por `paidAt` acharia o MES ERRADO sempre que a cobranca
+    // for de cartao (credito em D+32).
+    select: { tenantId: true, competenceAt: true },
   })
-  if (!tp?.paidAt) return
+  if (!tp?.competenceAt) return
 
   const referred = await prisma.tenant.findUnique({
     where: { id: tp.tenantId },
@@ -765,8 +776,8 @@ export async function flagMonthlyCommissionForRefund(
   })
   if (!referred?.referrerTenantId) return
 
-  const period = `${tp.paidAt.getUTCFullYear()}-${String(
-    tp.paidAt.getUTCMonth() + 1,
+  const period = `${tp.competenceAt.getUTCFullYear()}-${String(
+    tp.competenceAt.getUTCMonth() + 1,
   ).padStart(2, "0")}`
 
   const monthly = await prisma.referralMonthlyCommission.findUnique({

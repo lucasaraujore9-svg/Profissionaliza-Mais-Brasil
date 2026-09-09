@@ -156,7 +156,12 @@ export async function loadRelatorioIndicador(
         where: {
           tenant: { referrerTenantId: referrerId },
           status: { in: [...PAID_STATUSES] },
-          paidAt: { gte: range.start, lt: range.end },
+          // MESMA data que o motor usa para a competencia (quando o CLIENTE
+          // pagou). Consultar por `paidAt` aqui faria a tela mostrar "sem
+          // pagamento no mes" para uma unidade que o motor contou — o relatorio
+          // existe justamente para conferir o motor, entao os dois tem de olhar
+          // a mesma coluna.
+          competenceAt: { gte: range.start, lt: range.end },
         },
         _sum: { amount: true },
       }),

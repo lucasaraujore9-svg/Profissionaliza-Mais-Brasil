@@ -194,6 +194,13 @@ interface PaidSpec {
   comissaoCancelada?: boolean
   /** Quando o pagamento foi recebido (default: meio da competencia apurada). */
   paidAt?: Date
+  /**
+   * A que MES a mensalidade pertence — `max(vencimento, pagamento)`, gravado em
+   * `TenantPayment.competenceAt`. Default: o proprio `paidAt`, que e o caso de
+   * quem paga dentro do mes da fatura. Informe explicitamente para exercitar
+   * antecipacao (paga em julho a fatura de agosto) ou atraso.
+   */
+  competenceAt?: Date
 }
 
 /** Meio do mes apurado: por padrao todo pagamento cai dentro da competencia. */
@@ -204,6 +211,7 @@ interface PaymentRow {
   amount: number
   status: string
   paidAt: Date
+  competenceAt: Date
   /** Relacao 1-1 com o ledger legado; null quando o pagamento nunca gerou comissao. */
   referralCommission: { status: string } | null
 }
@@ -224,6 +232,8 @@ function toPaymentRows(paid: Record<string, PaidEntry>): PaymentRow[] {
         amount: spec.amount,
         status: spec.status ?? "RECEIVED",
         paidAt: spec.paidAt ?? PAID_AT_DEFAULT,
+        competenceAt:
+          spec.competenceAt ?? spec.paidAt ?? PAID_AT_DEFAULT,
         referralCommission: temComissaoLegada
           ? { status: spec.comissaoCancelada ? "CANCELLED" : "PENDING" }
           : null,
@@ -243,7 +253,7 @@ interface GroupByWhere {
   tenantId?: { in: string[] }
   status?: { in: string[] }
   // A consulta do mes usa gte+lt; a de "faturas pagas antes" usa so lt.
-  paidAt?: { gte?: Date; lt?: Date }
+  competenceAt?: { gte?: Date; lt?: Date }
   OR?: Array<{ referralCommission?: RelationFilter }>
 }
 
@@ -274,10 +284,10 @@ function matchReferralCommission(
 function matchesWhere(row: PaymentRow, where: GroupByWhere): boolean {
   if (where.tenantId && !where.tenantId.in.includes(row.tenantId)) return false
   if (where.status && !where.status.in.includes(row.status)) return false
-  if (where.paidAt) {
-    const { gte, lt } = where.paidAt
-    if (gte && row.paidAt < gte) return false
-    if (lt && row.paidAt >= lt) return false
+  if (where.competenceAt) {
+    const { gte, lt } = where.competenceAt
+    if (gte && row.competenceAt < gte) return false
+    if (lt && row.competenceAt >= lt) return false
   }
   if (where.OR) {
     const algumaBate = where.OR.some((cond) => {
@@ -380,18 +390,18 @@ function arrange(s: Scenario = {}): void {
         .filter(
           (row) =>
             ["RECEIVED", "CONFIRMED"].includes(row.status) &&
-            row.paidAt >= RANGE_START &&
-            row.paidAt < RANGE_END,
+            row.competenceAt >= RANGE_START &&
+            row.competenceAt < RANGE_END,
         )
         .map((row) => ({ tenantId: row.tenantId }))
     }
     return rows
       .filter((row) => matchesWhere(row, args.where))
-      .sort((a, b) => a.paidAt.getTime() - b.paidAt.getTime())
+      .sort((a, b) => a.competenceAt.getTime() - b.competenceAt.getTime())
       .map((row) => ({
         tenantId: row.tenantId,
         amount: new Prisma.Decimal(row.amount),
-        paidAt: row.paidAt,
+        competenceAt: row.competenceAt,
         // O motor decide a elegibilidade em codigo (nao mais no `where`), entao
         // o mock precisa devolver a relacao como o Prisma devolveria.
         referralCommission: row.referralCommission,
@@ -1893,5 +1903,78 @@ describe("unidade que nunca pagou nao entra em conta nenhuma", () => {
     expect(universo?.tenantPayments).toEqual(
       EVER_PAID_TENANT_WHERE.tenantPayments,
     )
+  })
+})
+
+describe("competencia: a fatura antecipada fica no mes dela", () => {
+  /**
+   * A regra vive em src/lib/asaas/competencia.ts e chega ao motor pela coluna
+   * `TenantPayment.competenceAt` = max(vencimento, pagamento do cliente).
+   *
+   * Estes casos travam a METADE que e do motor: que ele consulta a COMPETENCIA
+   * e nao a data de caixa. Enquanto ele filtrava por `paidAt`, uma unidade que
+   * antecipou a fatura de maio pagando em abril sumia de maio, e uma que pagou
+   * no cartao entrava um mes depois (o Asaas credita em D+32).
+   */
+  function comFatura(paid: Record<string, PaidEntry>) {
+    arrange({
+      referrers: [
+        referrer({
+          commissionBrackets: flatBracket(75),
+          commissionRateType: "FIXED",
+          commissionPayoutBase: "ALL_ACTIVE",
+        }),
+      ],
+      units: [unit("u1")],
+      activeTotal: 1,
+      paid,
+    })
+  }
+
+  it("pagou em ABRIL a fatura de MAIO: entra na competencia de MAIO", async () => {
+    comFatura({
+      u1: {
+        amount: 239,
+        paidAt: new Date(Date.UTC(2026, 3, 28)), // 28/04, antecipado
+        competenceAt: new Date(Date.UTC(2026, 4, 2)), // fatura vence 02/05
+      },
+    })
+
+    await computeMonthlyCommissions(PERIOD) // 2026-05
+
+    const data = created()
+    expect(Number(data.amount)).toBe(75)
+    expect(data.linesSnapshot.map((l) => l.tenantId)).toEqual(["u1"])
+  })
+
+  it("pagou em JUNHO a fatura de MAIO: NAO entra em maio", async () => {
+    comFatura({
+      u1: {
+        amount: 239,
+        paidAt: new Date(Date.UTC(2026, 5, 3)), // 03/06, atrasado
+        competenceAt: new Date(Date.UTC(2026, 5, 3)), // atraso move a competencia
+      },
+    })
+
+    await computeMonthlyCommissions(PERIOD)
+
+    // Sem fatura na competencia, o FIXED proporcional zera e a linha some.
+    expect(db.referralMonthlyCommission.create).not.toHaveBeenCalled()
+  })
+
+  it("cartao creditado no mes seguinte continua na competencia do cliente", async () => {
+    // Cliente pagou 20/05 a fatura de 20/05; o Asaas so creditou em 21/06.
+    // Enquanto o motor lia a data de credito, esta unidade caia em junho.
+    comFatura({
+      u1: {
+        amount: 239,
+        paidAt: new Date(Date.UTC(2026, 5, 21)), // credito D+32
+        competenceAt: new Date(Date.UTC(2026, 4, 20)),
+      },
+    })
+
+    await computeMonthlyCommissions(PERIOD)
+
+    expect(Number(created().amount)).toBe(75)
   })
 })

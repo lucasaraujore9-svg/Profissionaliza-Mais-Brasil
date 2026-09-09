@@ -255,7 +255,10 @@ function arrange(s: Scenario = {}): void {
     Object.entries(paid).map(([tenantId, amount]) => ({
       tenantId,
       amount: new Prisma.Decimal(amount),
-      paidAt: meioDoMes,
+      // `competenceAt` = a que mes a mensalidade pertence. Aqui e o meio da
+      // competencia (pagou dentro do mes da fatura); os casos de antecipacao e
+      // atraso vivem em asaas/competencia.test.ts, que testa a regra em si.
+      competenceAt: meioDoMes,
     })),
   )
   db.tenantPayment.groupBy.mockImplementation(async () => [])

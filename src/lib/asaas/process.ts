@@ -20,6 +20,10 @@ import { flagMonthlyCommissionForRefund } from "@/lib/referrals/monthly"
 import { logAudit } from "@/lib/audit"
 import type { AsaasWebhookPayload } from "./types"
 import { swallow } from "@/lib/errors"
+import {
+  competenciaPagamento,
+  dataPagamentoCliente,
+} from "@/lib/asaas/competencia"
 import { contextLogger } from "@/lib/logger"
 import {
   applySplitEvent,
@@ -812,12 +816,19 @@ export async function processAsaasWebhook(
     }).catch(swallow("asaas.process"))
 
     const paidAt = payment.paymentDate ? new Date(payment.paymentDate) : null
+    // Tres datas, tres perguntas: `paidAt` = quando o dinheiro entrou (caixa),
+    // `clientPaidAt` = quando o cliente pagou (fato), `competenceAt` = a que mes
+    // a mensalidade pertence (regra). Ver ./competencia.ts.
+    const clientPaidAt = dataPagamentoCliente(payment)
+    const competenceAt = competenciaPagamento(payment)
 
     const tenantPaymentRow = await prisma.tenantPayment.upsert({
       where: { asaasPaymentId: payment.id },
       update: {
         status: payment.status,
         paidAt,
+        clientPaidAt,
+        competenceAt,
         ...(payment.invoiceUrl ? { invoiceUrl: payment.invoiceUrl } : {}),
         ...(payment.bankSlipUrl ? { bankSlipUrl: payment.bankSlipUrl } : {}),
       },
@@ -829,6 +840,8 @@ export async function processAsaasWebhook(
         status: payment.status,
         dueDate: new Date(payment.dueDate),
         paidAt,
+        clientPaidAt,
+        competenceAt,
         invoiceUrl: payment.invoiceUrl ?? null,
         bankSlipUrl: payment.bankSlipUrl ?? null,
       },

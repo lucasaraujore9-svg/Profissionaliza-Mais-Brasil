@@ -1,4 +1,8 @@
 import { prisma } from "@/lib/prisma"
+import {
+  competenciaPagamento,
+  dataPagamentoCliente,
+} from "@/lib/asaas/competencia"
 import { listPayments } from "./client"
 
 export interface ReconcileResult {
@@ -60,6 +64,9 @@ export async function reconcileTenantPayments(tenant: {
           billingType: p.billingType,
           dueDate: new Date(p.dueDate),
           paidAt: p.paymentDate ? new Date(p.paymentDate) : null,
+          // Caixa (credito) x fato (cliente) x regra (mes) — ./competencia.ts.
+          clientPaidAt: dataPagamentoCliente(p),
+          competenceAt: competenciaPagamento(p),
           ...(p.invoiceUrl ? { invoiceUrl: p.invoiceUrl } : {}),
           ...(p.bankSlipUrl ? { bankSlipUrl: p.bankSlipUrl } : {}),
         },
@@ -71,6 +78,9 @@ export async function reconcileTenantPayments(tenant: {
           status: p.status,
           dueDate: new Date(p.dueDate),
           paidAt: p.paymentDate ? new Date(p.paymentDate) : null,
+          // Caixa (credito) x fato (cliente) x regra (mes) — ./competencia.ts.
+          clientPaidAt: dataPagamentoCliente(p),
+          competenceAt: competenciaPagamento(p),
           invoiceUrl: p.invoiceUrl ?? null,
           bankSlipUrl: p.bankSlipUrl ?? null,
         },

@@ -1875,6 +1875,14 @@ model TenantPayment {
   status  String // PENDING, CONFIRMED, RECEIVED, OVERDUE, REFUNDED, etc.
   dueDate DateTime  @map("due_date")
   paidAt  DateTime? @map("paid_at")
+  /// FATO: quando o CLIENTE pagou (`clientPaymentDate` do Asaas). No cartao o
+  /// Asaas credita em D+32, entao esta data e diferente de `paidAt`.
+  clientPaidAt DateTime? @map("client_paid_at")
+  /// REGRA: a que MES a mensalidade pertence = max(vencimento, pagamento do
+  /// cliente). Antecipar nao move a fatura de mes; atrasar move. So o motor de
+  /// comissao consome. `paidAt` continua sendo CAIXA (churn, blacklist,
+  /// financeiro, inadimplencia). Ver src/lib/asaas/competencia.ts.
+  competenceAt DateTime? @map("competence_at")
 
   // Indicacao (1-nivel)
   referralCommission ReferralCommission?
@@ -1902,6 +1910,8 @@ model TenantPayment {
   // queries tipo "todos OVERDUE deste tenant em X mês".
   @@index([tenantId, status, dueDate])
   @@index([tenantId, createdAt])
+  // O motor de comissao varre a competencia por (tenant, competence_at).
+  @@index([tenantId, competenceAt])
   // DB-010: índice já existe no banco desde 20260522_financial_manual_management
   // — declarado aqui só para eliminar o drift schema↔banco (sem migration).
   @@index([markedPaidById], map: "tenant_payments_marked_paid_by_idx")
