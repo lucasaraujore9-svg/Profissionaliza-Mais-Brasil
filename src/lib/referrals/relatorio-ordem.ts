@@ -15,6 +15,7 @@ export const ORDENS = [
   "nome",
   "status",
   "entrada",
+  "pagamento",
   "recebido",
   "conta",
 ] as const
@@ -25,6 +26,8 @@ export interface LinhaOrdenavel {
   name: string
   status: string
   entrouEm: Date
+  /** Datas em que o cliente pagou na competencia (pode haver mais de uma). */
+  pagamentosNoMes: Date[]
   recebidoNoMes: number
   naConta: boolean
   valorNaConta: number
@@ -57,6 +60,15 @@ function pesoStatus(status: string): number {
   return PESO_STATUS[status] ?? 9
 }
 
+function ultimoPagamento(linha: LinhaOrdenavel): number | null {
+  let max: number | null = null
+  for (const d of linha.pagamentosNoMes) {
+    const t = d.getTime()
+    if (max === null || t > max) max = t
+  }
+  return max
+}
+
 /**
  * Ordena SEM mutar a lista recebida.
  *
@@ -86,6 +98,19 @@ export function ordenarCarteira<T extends LinhaOrdenavel>(
       sinal * (pesoStatus(b.status) - pesoStatus(a.status)) || porNome(a, b),
     entrada: (a, b) =>
       sinal * (a.entrouEm.getTime() - b.entrouEm.getTime()) || porNome(a, b),
+    // Ordena pelo pagamento MAIS RECENTE da competencia; quem nao pagou vai
+    // sempre para o fim, nas duas direcoes — uma data ausente nao e "muito
+    // antiga", e no topo ela empurraria para baixo justamente as linhas que a
+    // coluna existe para mostrar.
+    pagamento: (a, b) => {
+      const ua = ultimoPagamento(a)
+      const ub = ultimoPagamento(b)
+      if (ua === null || ub === null) {
+        if (ua === ub) return porNome(a, b)
+        return ua === null ? 1 : -1
+      }
+      return sinal * (ua - ub) || porNome(a, b)
+    },
     recebido: (a, b) =>
       sinal * (a.recebidoNoMes - b.recebidoNoMes) || porNome(a, b),
     // "Na conta" ordena por VALOR, nao pelo booleano: quem entrou por R$ 75 e

@@ -37,7 +37,7 @@ import {
   type GlobalCommissionInput,
 } from "@/lib/referrals/effective-rule"
 import { EVER_PAID_TENANT_WHERE } from "@/lib/tenants/lifecycle"
-import { proporcaoPaga, valorBasePlano } from "@/lib/referrals/plano-base"
+import { proporcaoDoMes, valorBasePlano } from "@/lib/referrals/plano-base"
 
 const SETTINGS_ID = "default"
 const DEFAULT_PAYOUT_DAY = 20
@@ -557,7 +557,14 @@ async function computeForReferrer(
       // `elegiveis` e nao `payments`: fatura ja comissionada pelo ledger legado
       // nao pode pagar de novo — mesma trava do ramo PERCENT logo abaixo.
       const recebido = elegiveis.reduce((acc, p) => acc + Number(p.amount), 0)
-      const proporcao = proporcaoPaga(recebido, valorBasePlano(u.automationEnabled))
+      // A proporcao e somada FATURA A FATURA, com teto por fatura. Duas
+      // mensalidades na mesma competencia (a atrasada do mes anterior + a do
+      // mes) valem DUAS faixas: sao duas receitas, e a atrasada ja nao gerou
+      // comissao no mes dela. Um teto sobre a soma a apagaria para sempre.
+      const proporcao = proporcaoDoMes(
+        elegiveis.map((p) => Number(p.amount)),
+        valorBasePlano(u.automationEnabled),
+      )
       // Sem pagamento no mes nao ha comissao E nao ha linha: uma linha de R$ 0
       // no demonstrativo leria como "entrou na conta e nao valeu nada", quando o
       // certo e ela nao ter entrado. O relatorio explica a ausencia.

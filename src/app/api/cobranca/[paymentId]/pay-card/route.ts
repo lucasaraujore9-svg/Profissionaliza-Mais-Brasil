@@ -22,6 +22,7 @@ import { unblockTenantStudents } from "@/lib/auto-block"
 import { isKnownAsaasPayment } from "@/lib/asaas/ownership"
 import { isChargePayable } from "@/lib/asaas/charge-status"
 import { prisma } from "@/lib/prisma"
+import { resolverCompetencia } from "@/lib/asaas/competencia"
 import { invalidateTenant } from "@/lib/redis/tenant-cache"
 import { createCommissionForTenantPayment } from "@/lib/referrals/commission"
 import { createNotification } from "@/lib/notifications"
@@ -303,6 +304,12 @@ export const POST = withRequestContextParams<{ paymentId: string }>(
       update: {
         status: captured ? "CONFIRMED" : "PENDING",
         paidAt: captured ? new Date() : null,
+        // COMPETENCIA junto com o caixa: sem ela a mensalidade paga por aqui
+        // fica invisivel para o motor de comissao, que varre `competenceAt`.
+        clientPaidAt: captured ? new Date() : null,
+        competenceAt: captured
+          ? resolverCompetencia(new Date(payment.dueDate), new Date())
+          : null,
         installmentId: installment.id,
         installmentCount,
         // A 1a parcela e capturada AQUI, de forma sincrona — o webhook dela
@@ -318,6 +325,12 @@ export const POST = withRequestContextParams<{ paymentId: string }>(
         status: captured ? "CONFIRMED" : "PENDING",
         dueDate: new Date(payment.dueDate),
         paidAt: captured ? new Date() : null,
+        // COMPETENCIA junto com o caixa: sem ela a mensalidade paga por aqui
+        // fica invisivel para o motor de comissao, que varre `competenceAt`.
+        clientPaidAt: captured ? new Date() : null,
+        competenceAt: captured
+          ? resolverCompetencia(new Date(payment.dueDate), new Date())
+          : null,
         // Marca a linha como parcelamento: `asaasPaymentId` guarda um `ins_...`,
         // que não resolve em GET /payments/{id}. É por estes campos que a tela
         // de cobranças sabe não oferecer "Pagar agora" e exibir "1 de N".

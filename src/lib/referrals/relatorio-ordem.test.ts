@@ -11,6 +11,7 @@ function linha(over: Partial<LinhaOrdenavel> & { name: string }): LinhaOrdenavel
   return {
     status: "ACTIVE",
     entrouEm: new Date("2026-01-01T00:00:00Z"),
+    pagamentosNoMes: [],
     recebidoNoMes: 0,
     naConta: false,
     valorNaConta: 0,
@@ -117,5 +118,59 @@ describe("proximaDirecao", () => {
   it("clicar de novo na mesma coluna inverte", () => {
     expect(proximaDirecao("recebido", "recebido", "desc")).toBe("asc")
     expect(proximaDirecao("recebido", "recebido", "asc")).toBe("desc")
+  })
+})
+
+describe("ordenar por 'Pago em'", () => {
+  const comData = (name: string, iso: string | null) =>
+    linha({
+      name,
+      pagamentosNoMes: iso ? [new Date(iso)] : [],
+      recebidoNoMes: iso ? 239 : 0,
+    })
+
+  it("ordena pelo pagamento mais recente da competência", () => {
+    const lista = [
+      comData("Cedo", "2026-08-02T00:00:00Z"),
+      comData("Tarde", "2026-08-28T00:00:00Z"),
+      comData("Meio", "2026-08-15T00:00:00Z"),
+    ]
+    expect(ordenarCarteira(lista, "pagamento", "desc").map((l) => l.name)).toEqual(
+      ["Tarde", "Meio", "Cedo"],
+    )
+    expect(ordenarCarteira(lista, "pagamento", "asc").map((l) => l.name)).toEqual(
+      ["Cedo", "Meio", "Tarde"],
+    )
+  })
+
+  it("quem NÃO pagou vai para o fim nas DUAS direções", () => {
+    // Data ausente não é "muito antiga": no topo ela empurraria para baixo
+    // justamente as linhas que a coluna existe para mostrar.
+    const lista = [
+      comData("SemPagamento", null),
+      comData("Pagou", "2026-08-15T00:00:00Z"),
+    ]
+    expect(ordenarCarteira(lista, "pagamento", "desc").map((l) => l.name)).toEqual(
+      ["Pagou", "SemPagamento"],
+    )
+    expect(ordenarCarteira(lista, "pagamento", "asc").map((l) => l.name)).toEqual(
+      ["Pagou", "SemPagamento"],
+    )
+  })
+
+  it("com duas faturas na competência, vale a mais recente", () => {
+    const lista = [
+      linha({
+        name: "Duas",
+        pagamentosNoMes: [
+          new Date("2026-08-05T00:00:00Z"),
+          new Date("2026-08-30T00:00:00Z"),
+        ],
+      }),
+      comData("Uma", "2026-08-20T00:00:00Z"),
+    ]
+    expect(ordenarCarteira(lista, "pagamento", "desc").map((l) => l.name)).toEqual(
+      ["Duas", "Uma"],
+    )
   })
 })

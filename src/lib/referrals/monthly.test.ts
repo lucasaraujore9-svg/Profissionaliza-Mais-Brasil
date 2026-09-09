@@ -998,7 +998,11 @@ describe("computeMonthlyCommissions — FIXED e PROPORCIONAL ao caixa do mes", (
     expect(Number(created().amount)).toBe(50)
   })
 
-  it("duas faturas no mesmo mes nao dobram a comissao", async () => {
+  it("duas mensalidades na mesma competencia valem DUAS faixas", async () => {
+    // A atrasada do mes anterior + a do mes: duas receitas. Este caso ja
+    // afirmou o CONTRARIO ("duas faturas no mesmo mes nao dobram a comissao") —
+    // um teto sobre a soma apagava para sempre a mensalidade que atrasou, que
+    // por ter atrasado tambem nao gerou comissao no mes dela.
     arrange({
       referrers: [
         referrer({
@@ -1008,7 +1012,25 @@ describe("computeMonthlyCommissions — FIXED e PROPORCIONAL ao caixa do mes", (
       ],
       units: [unit("u1")],
       activeTotal: 1,
-      paid: { u1: [{ amount: 239 }, { amount: 239 }] }, // a atrasada e a corrente
+      paid: { u1: [{ amount: 239 }, { amount: 239 }] },
+    })
+
+    await computeMonthlyCommissions(PERIOD)
+
+    expect(Number(created().amount)).toBe(100)
+  })
+
+  it("juros na fatura atrasada nao pagam faixa extra", async () => {
+    arrange({
+      referrers: [
+        referrer({
+          commissionBrackets: flatBracket(50),
+          commissionRateType: "FIXED",
+        }),
+      ],
+      units: [unit("u1")],
+      activeTotal: 1,
+      paid: { u1: { amount: 268 } }, // 239 + multa e juros
     })
 
     await computeMonthlyCommissions(PERIOD)
@@ -1753,14 +1775,21 @@ describe("FIXED + PAID_THIS_MONTH — valor por unidade que pagou", () => {
     })
   }
 
-  it("unidade que pagou DUAS faturas no mes conta UMA vez (valor e por unidade)", async () => {
+  it("unidade que pagou DUAS mensalidades no mes vale DUAS faixas", async () => {
+    // Este caso afirmava o contrario ("conta UMA vez, o valor e por unidade")
+    // ate 09/09/2026. A inversao e deliberada: com a competencia sendo
+    // `max(vencimento, pagamento)`, a mensalidade que atrasou cai no mes
+    // seguinte junto com a corrente — sao duas receitas, e um teto sobre a soma
+    // apagaria a atrasada para sempre.
+    //
+    // `unitCount` continua 1: e a contagem de UNIDADES na base, nao de faixas.
     fixo([unit("u1")], { u1: [{ amount: 239 }, { amount: 239 }] })
 
     await computeMonthlyCommissions(PERIOD)
 
     const data = created()
     expect(data.unitCount).toBe(1)
-    expect(Number(data.amount)).toBe(75) // e nao 150
+    expect(Number(data.amount)).toBe(150)
   })
 
   it("unidade ativa porem inadimplente no mes NAO entra", async () => {

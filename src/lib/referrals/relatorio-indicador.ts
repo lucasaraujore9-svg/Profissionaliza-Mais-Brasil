@@ -36,6 +36,13 @@ export interface LinhaCarteira {
   everPaid: boolean
   /** Mensalidade recebida DENTRO da competencia. */
   recebidoNoMes: number
+  /**
+   * Quando o CLIENTE pagou cada mensalidade da competencia. E o dado que
+   * explica a linha: a fatura antecipada (paga no mes anterior) e a atrasada
+   * (paga no seguinte) so fazem sentido na tela quando a data aparece.
+   * Pode ter MAIS DE UMA — a atrasada e a corrente caem na mesma competencia.
+   */
+  pagamentosNoMes: Date[]
   /** Ativou nesta competencia — e o que define a FAIXA do indicador. */
   ativouNoMes: boolean
   /** Entrou na conta do mes (fonte: linesSnapshot do motor). */
@@ -151,26 +158,47 @@ export async function loadRelatorioIndicador(
         where: { referrerTenantId: referrerId, ...EVER_PAID_TENANT_WHERE },
         select: { id: true },
       }),
-      prisma.tenantPayment.groupBy({
-        by: ["tenantId"],
+      // Linha a linha, e nao `groupBy`: a tela precisa das DATAS de pagamento,
+      // e uma competencia pode ter mais de uma fatura (a atrasada do mes
+      // anterior somada a corrente).
+      prisma.tenantPayment.findMany({
         where: {
           tenant: { referrerTenantId: referrerId },
           status: { in: [...PAID_STATUSES] },
-          // MESMA data que o motor usa para a competencia (quando o CLIENTE
-          // pagou). Consultar por `paidAt` aqui faria a tela mostrar "sem
-          // pagamento no mes" para uma unidade que o motor contou — o relatorio
-          // existe justamente para conferir o motor, entao os dois tem de olhar
-          // a mesma coluna.
+          // MESMA data que o motor usa para a competencia. Consultar por
+          // `paidAt` aqui faria a tela mostrar "sem pagamento no mes" para uma
+          // unidade que o motor contou — o relatorio existe justamente para
+          // conferir o motor, entao os dois tem de olhar a mesma coluna.
           competenceAt: { gte: range.start, lt: range.end },
         },
-        _sum: { amount: true },
+        select: {
+          tenantId: true,
+          amount: true,
+          clientPaidAt: true,
+          competenceAt: true,
+        },
+        orderBy: { competenceAt: "asc" },
       }),
     ])
 
   const everPaidSet = new Set(jaPagaram.map((t) => t.id))
-  const recebidoMap = new Map(
-    recebidos.map((r) => [r.tenantId, Number(r._sum.amount ?? 0)]),
-  )
+  const recebidoMap = new Map<string, number>()
+  const pagamentosMap = new Map<string, Date[]>()
+  for (const r of recebidos) {
+    recebidoMap.set(
+      r.tenantId,
+      (recebidoMap.get(r.tenantId) ?? 0) + Number(r.amount),
+    )
+    // `clientPaidAt` e a data que o cliente pagou; `competenceAt` cobre a linha
+    // antiga que so tem a data de caixa (backfill).
+    const quando = r.clientPaidAt ?? r.competenceAt
+    if (quando) {
+      pagamentosMap.set(r.tenantId, [
+        ...(pagamentosMap.get(r.tenantId) ?? []),
+        quando,
+      ])
+    }
+  }
   // Fonte da verdade de quem entrou e de quanto valeu. Snapshot corrompido cai
   // em lista vazia (o parser descarta linha invalida em vez de coagir para 0) —
   // a tela mostra a conta sem a quebra, nunca uma quebra inventada.
@@ -204,6 +232,7 @@ export async function loadRelatorioIndicador(
       ativacaoRegistrada: u.activatedAt !== null,
       everPaid,
       recebidoNoMes,
+      pagamentosNoMes: pagamentosMap.get(u.id) ?? [],
       ativouNoMes,
       naConta,
       valorNaConta: naContaMap.get(u.id) ?? 0,

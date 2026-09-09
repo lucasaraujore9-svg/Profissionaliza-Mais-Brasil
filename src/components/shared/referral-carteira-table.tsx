@@ -126,6 +126,7 @@ export function ReferralCarteiraTable({
                   ["nome", "Unidade"],
                   ["status", "Status"],
                   ["entrada", "Entrou em"],
+                  ["pagamento", "Pago em"],
                   ["recebido", "Recebido no mês"],
                   ["conta", `Na conta de ${competenciaLabel}`],
                 ] as [OrdemCarteira, string][]
@@ -148,7 +149,7 @@ export function ReferralCarteiraTable({
             {linhas.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={5}
+                  colSpan={6}
                   className="py-8 text-center text-sm text-gray-500"
                 >
                   Nenhuma unidade indicada ainda.
@@ -197,6 +198,19 @@ export function ReferralCarteiraTable({
                         (cadastro)
                       </span>
                     ) : null}
+                  </TableCell>
+                  {/* Quando o cliente pagou. E o que explica a linha: a fatura
+                      antecipada (paga no mes anterior) e a atrasada (paga no
+                      seguinte) so fazem sentido com a data a vista. Mais de uma
+                      data = a atrasada e a corrente na mesma competencia. */}
+                  <TableCell className="text-xs text-gray-600">
+                    {u.pagamentosNoMes.length > 0 ? (
+                      u.pagamentosNoMes
+                        .map((d) => d.toLocaleDateString("pt-BR"))
+                        .join(" · ")
+                    ) : (
+                      <span className="text-gray-400">—</span>
+                    )}
                   </TableCell>
                   <TableCell className="text-right font-mono text-sm">
                     {u.recebidoNoMes > 0 ? (

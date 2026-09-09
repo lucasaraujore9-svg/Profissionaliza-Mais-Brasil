@@ -27,6 +27,8 @@ export interface ResellerPayment {
   status: string
   dueDate: string
   paidAt: string | null
+  /** Quando o CLIENTE pagou; no cartao o credito (`paidAt`) sai ~32 dias depois. */
+  clientPaidAt: string | null
   invoiceUrl: string | null
   bankSlipUrl: string | null
 }
@@ -225,6 +227,7 @@ export function ResellerPaymentHistory({
             <thead>
               <tr className="border-b border-gray-200 bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
                 <th className="px-6 py-3 font-medium">Vencimento</th>
+                <th className="px-6 py-3 font-medium">Pago em</th>
                 <th className="px-6 py-3 font-medium">Valor</th>
                 <th className="px-6 py-3 font-medium">Método</th>
                 <th className="px-6 py-3 font-medium">Status</th>
@@ -262,6 +265,19 @@ export function ResellerPaymentHistory({
                         <span className="font-mono text-xs text-gray-700">
                           {formatDate(p.dueDate)}
                         </span>
+                      )}
+                    </td>
+
+                    {/* Pago em — a data do CLIENTE, nao a do credito. No cartao
+                        o Asaas credita ~32 dias depois, e e a data do cliente
+                        que define a competencia da comissao de indicacao. */}
+                    <td className="px-6 py-3">
+                      {p.clientPaidAt ?? p.paidAt ? (
+                        <span className="font-mono text-xs text-gray-700">
+                          {formatDate((p.clientPaidAt ?? p.paidAt) as string)}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-gray-400">—</span>
                       )}
                     </td>
 

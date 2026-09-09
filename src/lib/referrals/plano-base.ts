@@ -38,12 +38,11 @@ export function valorBasePlano(automationEnabled: boolean): number {
 }
 
 /**
- * Fracao do mes que a unidade pagou, entre 0 e 1.
+ * Fracao que UMA fatura paga da faixa, entre 0 e 1.
  *
- * TETO EM 1, e o teto nao e detalhe: sem ele, a unidade que quita DUAS faturas
- * no mesmo mes (a atrasada e a corrente) pagaria comissao dobrada por um mes so
- * — e a faixa e por unidade/mes, nao por fatura. O mesmo teto cobre a unidade
- * cujo plano de tabela nao bate com a flag de automacao.
+ * TETO EM 1 POR FATURA — e o teto existe para JUROS E MULTA: a fatura em atraso
+ * chega com valor maior que a mensalidade, e o acrescimo e do gateway e da PMB,
+ * nao receita de revenda a ratear.
  *
  * PISO EM 0 porque um valor negativo (estorno lancado como cobranca) nunca pode
  * virar comissao NEGATIVA silenciosa: estorno de comissao ja paga tem caminho
@@ -52,8 +51,38 @@ export function valorBasePlano(automationEnabled: boolean): number {
  * Base <= 0 devolve 0: sem preco de tabela nao ha proporcao a calcular, e
  * dividir por zero pagaria Infinity.
  */
-export function proporcaoPaga(recebidoNoMes: number, base: number): number {
-  if (!Number.isFinite(recebidoNoMes) || !Number.isFinite(base)) return 0
-  if (base <= 0 || recebidoNoMes <= 0) return 0
-  return Math.min(recebidoNoMes / base, 1)
+export function proporcaoPaga(valorDaFatura: number, base: number): number {
+  if (!Number.isFinite(valorDaFatura) || !Number.isFinite(base)) return 0
+  if (base <= 0 || valorDaFatura <= 0) return 0
+  return Math.min(valorDaFatura / base, 1)
+}
+
+/**
+ * Quanto da faixa a unidade vale no mes: a SOMA das fracoes, uma por fatura.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * O TETO E POR FATURA, NUNCA SOBRE A SOMA  ← nao "simplifique" para um min() no
+ * total.
+ *
+ * Duas mensalidades podem cair na MESMA competencia: a de agosto paga com atraso
+ * em 05/09 e a de setembro paga no dia 30/09 sao duas receitas, e a competencia
+ * de ambas e setembro (`max(vencimento, pagamento)`). Um teto sobre a soma
+ * pagaria UMA — e a mensalidade atrasada, que ja nao gerou comissao no mes dela
+ * justamente por ter atrasado, NUNCA geraria comissao nenhuma. O indicador
+ * perderia o repasse porque o cliente dele pagou tarde.
+ *
+ * Foi assim que esta funcao nasceu errada (09/09/2026): o comentario dizia "a
+ * faixa e por unidade/mes, nao por fatura", o que deixou de valer no momento em
+ * que a competencia passou a poder juntar duas faturas no mesmo mes.
+ *
+ * Uma mensalidade quitada em duas partes continua valendo 1 (0,5 + 0,5) — o que
+ * a soma preserva e a RECEITA, nao a contagem de boletos.
+ */
+export function proporcaoDoMes(
+  valoresDasFaturas: readonly number[],
+  base: number,
+): number {
+  let total = 0
+  for (const valor of valoresDasFaturas) total += proporcaoPaga(valor, base)
+  return total
 }

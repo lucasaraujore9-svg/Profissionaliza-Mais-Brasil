@@ -2,6 +2,10 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import {
+  competenciaPagamento,
+  dataPagamentoCliente,
+} from "@/lib/asaas/competencia"
+import {
   describeEffectiveCommission,
   resolveEffectiveCommission,
 } from "@/lib/referrals/effective-rule"
@@ -187,6 +191,8 @@ export const GET = withRequestContextParams<{ id: string }>(
     status: string
     dueDate: string
     paidAt: string | null
+    /** Quando o CLIENTE pagou (no cartao o Asaas credita ~32 dias depois). */
+    clientPaidAt: string | null
     invoiceUrl: string | null
     bankSlipUrl: string | null
   }
@@ -198,6 +204,7 @@ export const GET = withRequestContextParams<{ id: string }>(
     status: p.status,
     dueDate: p.dueDate.toISOString(),
     paidAt: p.paidAt?.toISOString() ?? null,
+    clientPaidAt: p.clientPaidAt?.toISOString() ?? null,
     invoiceUrl: p.invoiceUrl ?? null,
     bankSlipUrl: p.bankSlipUrl ?? null,
   }))
@@ -227,6 +234,7 @@ export const GET = withRequestContextParams<{ id: string }>(
         status: p.status,
         dueDate: new Date(p.dueDate).toISOString(),
         paidAt: p.paymentDate ? new Date(p.paymentDate).toISOString() : null,
+        clientPaidAt: dataPagamentoCliente(p)?.toISOString() ?? null,
         invoiceUrl: p.invoiceUrl ?? null,
         bankSlipUrl: p.bankSlipUrl ?? null,
       }))
@@ -304,6 +312,10 @@ export const GET = withRequestContextParams<{ id: string }>(
             update: {
               status: p.status,
               paidAt: p.paymentDate ? new Date(p.paymentDate) : null,
+              // Sem estas duas a cobranca importada por aqui fica invisivel
+              // para o motor de comissao, que varre por `competenceAt`.
+              clientPaidAt: dataPagamentoCliente(p),
+              competenceAt: competenciaPagamento(p),
               ...(p.invoiceUrl ? { invoiceUrl: p.invoiceUrl } : {}),
               ...(p.bankSlipUrl ? { bankSlipUrl: p.bankSlipUrl } : {}),
             },
@@ -315,6 +327,8 @@ export const GET = withRequestContextParams<{ id: string }>(
               status: p.status,
               dueDate: new Date(p.dueDate),
               paidAt: p.paymentDate ? new Date(p.paymentDate) : null,
+              clientPaidAt: dataPagamentoCliente(p),
+              competenceAt: competenciaPagamento(p),
               invoiceUrl: p.invoiceUrl ?? null,
               bankSlipUrl: p.bankSlipUrl ?? null,
             },

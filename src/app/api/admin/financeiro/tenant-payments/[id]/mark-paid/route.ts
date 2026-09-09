@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
+import { resolverCompetencia } from "@/lib/asaas/competencia"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 import { requireAdmin } from "@/lib/auth/admin-guard"
 import { logAudit } from "@/lib/audit"
@@ -57,6 +58,8 @@ export const POST = withRequestContextParams<{ id: string }>(
       status: true,
       notes: true,
       amount: true,
+      // Vencimento: metade da regra de competencia (`max(vencimento, pagamento)`).
+      dueDate: true,
       tenantId: true,
       tenant: { select: { name: true } },
     },
@@ -101,6 +104,12 @@ export const POST = withRequestContextParams<{ id: string }>(
     data: {
       status: "RECEIVED",
       paidAt,
+      // Baixa manual (PIX por fora) tambem precisa de COMPETENCIA, senao a
+      // mensalidade nunca entra na comissao de indicacao — o motor varre por
+      // `competenceAt`, nao por `paidAt`. Aqui nao ha data de cliente do
+      // gateway: quem pagou informou a data, e ela e a data do pagamento.
+      clientPaidAt: paidAt,
+      competenceAt: resolverCompetencia(payment.dueDate, paidAt),
       markedPaidAt: now,
       markedPaidById: session.userId,
       notes: nextNotes,

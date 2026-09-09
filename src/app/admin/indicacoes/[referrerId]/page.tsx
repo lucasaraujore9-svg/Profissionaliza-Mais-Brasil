@@ -241,10 +241,11 @@ export default async function RelatorioIndicadorPage({
                 // proporcionalmente. Mostrar a multiplicacao aqui seria uma
                 // conta que nao bate com o total logo ao lado.
                 <>
-                  Cada unidade entra proporcionalmente ao que pagou no mês —
-                  quem pagou a mensalidade cheia vale {money(comissao.rate)}.
-                  Somando a coluna da tabela abaixo:{" "}
-                  <strong>{money(comissao.amount)}</strong>.
+                  Cada unidade entra pelo que pagou no mês: a mensalidade
+                  cheia vale {money(comissao.rate)}, uma cortesia vale a fração
+                  correspondente, e quem quitou duas mensalidades no mesmo mês
+                  (a atrasada e a corrente) vale duas vezes. Somando a coluna da
+                  tabela abaixo: <strong>{money(comissao.amount)}</strong>.
                 </>
               ) : (
                 <>
