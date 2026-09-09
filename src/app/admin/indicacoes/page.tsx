@@ -155,9 +155,9 @@ export default async function AdminIndicacoesPage() {
         Pendente, Disponível e Cancelado são valores <strong>apurados</strong> pelo
         motor de comissão. Pago é <strong>caixa</strong>: a soma dos saques
         liquidados — pode divergir da apuração quando o financeiro ajusta o valor
-        no momento do pagamento. Parte do que está em Pendente já tem pagamento
-        montado em <strong>Pagamentos</strong>: o mês é fechado no dia 1 e o valor
-        pode ser pago antes da data de liberação.
+        no momento do pagamento. O mês é fechado no dia 1: a comissão continua em
+        Pendente até a data de liberação, mas o pagamento dela já fica montado em{" "}
+        <strong>Pagamentos</strong> e pode ser quitado antes.
       </p>
 
       <Card className="overflow-hidden">
