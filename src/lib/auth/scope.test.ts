@@ -14,6 +14,8 @@ import {
   leadScopeWhere,
   salesTeamIds,
 } from "./scope"
+import { PMB_TEAM_ROLES } from "./roles"
+import { roleHasTenantCarteira } from "./admin-permissions"
 
 const findMany = prisma.user.findMany as unknown as ReturnType<typeof vi.fn>
 
@@ -50,6 +52,24 @@ describe("tenantScopeWhere (QA-001 / SEG-001)", () => {
   it("papéis sem acesso a unidades → null (rota deve negar/retornar vazio)", async () => {
     for (const role of ["PMB_SALES", "PMB_FINANCEIRO", "RESELLER", "DESCONHECIDO"]) {
       expect(await tenantScopeWhere({ userId: "x", role })).toBeNull()
+    }
+  })
+})
+
+/**
+ * `ROLES_WITH_TENANT_CARTEIRA` vive em `admin-permissions.ts` (módulo PURO,
+ * importável por componente `"use client"`) enquanto o `switch` de verdade está
+ * aqui, num módulo que toca o Prisma. Duas cópias divergem em silêncio: um papel
+ * novo ganharia ramo aqui e a tela de Equipe continuaria avisando que a
+ * permissão não tem efeito — ou, pior, pararia de avisar para um papel que
+ * segue sem carteira. Esta é a trava.
+ */
+describe("paridade com ROLES_WITH_TENANT_CARTEIRA", () => {
+  it("tem ramo estrutural exatamente para os papéis declarados", async () => {
+    findMany.mockResolvedValue([])
+    for (const role of PMB_TEAM_ROLES) {
+      const where = await tenantScopeWhere({ userId: "u1", role })
+      expect(where !== null, role).toBe(roleHasTenantCarteira(role))
     }
   })
 })

@@ -46,15 +46,33 @@ describe("adminCanAccessCertTenant — escopo de certificado (regressao R24/IDOR
 
   /**
    * Regressao da revisao: conceder `certificados.manage` por override a um
-   * papel financeiro nao pode entregar certificado de unidade nenhuma junto.
+   * papel sem alcance de unidade nao pode entregar certificado de unidade
+   * nenhuma junto. O Designer e o assunto limpo — sem `alunos.view` (a porta da
+   * vitrine PMB) e sem ramo em `lib/auth/scope.ts`.
    */
   it("papel sem escopo de unidade e negado mesmo com a permissao concedida", async () => {
     const ctx = adminCtx({
-      role: "PMB_FINANCEIRO",
+      role: "PMB_DESIGNER",
       extra: ["certificados.manage"],
     })
     expect(await adminCanAccessCertTenant(ctx, null)).toBe(false)
     tenantFindUnique.mockResolvedValueOnce({ accountManagerId: "x", salesUserId: null })
     expect(await adminCanAccessCertTenant(ctx, "tenant-x")).toBe(false)
+  })
+
+  /**
+   * Consequencia ASSUMIDA de por `unidades.viewAll` no preset do Financeiro
+   * (2026-09-09): `viewAll` e o bypass do recorte de carteira em TODA parte, e
+   * aqui tambem. O Financeiro nao tem `certificados.*` no preset — mas se
+   * alguem conceder por override, o alcance e a rede inteira, nao uma carteira
+   * (ele nao tem nenhuma). Fica registrado para nao ser descoberto por acidente.
+   */
+  it("financeiro alcanca a rede porque o preset carrega unidades.viewAll", async () => {
+    const ctx = adminCtx({
+      role: "PMB_FINANCEIRO",
+      extra: ["certificados.manage"],
+    })
+    expect(await adminCanAccessCertTenant(ctx, "tenant-x")).toBe(true)
+    expect(tenantFindUnique).not.toHaveBeenCalled()
   })
 })

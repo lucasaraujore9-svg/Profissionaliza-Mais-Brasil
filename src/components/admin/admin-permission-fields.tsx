@@ -19,6 +19,7 @@ import {
   SUPER_EXCLUSIVE,
   adminRoleDescription,
   resolveAdminPermissions,
+  roleHasTenantCarteira,
   type AdminPermission,
 } from "@/lib/auth/admin-permissions"
 
@@ -70,6 +71,12 @@ export function AdminPermissionFields({
   const customCount =
     value.extraPermissions.length + value.revokedPermissions.length
   const isSuper = value.role === "SUPER_ADMIN"
+  // `unidades.view` sozinha não alcança unidade nenhuma num papel sem vínculo
+  // estrutural em `lib/auth/scope.ts`: `unidadesWhere()` devolve `null` e a
+  // lista sai vazia, sem erro. A tela deixava marcar e salvar sem dizer isso —
+  // quem concedia ficava achando que a edição de permissões estava quebrada.
+  const unidadesSemEfeito =
+    !roleHasTenantCarteira(value.role) && !effective.has("unidades.viewAll")
 
   function setRole(role: PmbTeamRole) {
     // Trocar de papel zera os ajustes: os overrides do papel anterior quase
@@ -186,6 +193,14 @@ export function AdminPermissionFields({
                             className="ml-1.5 inline h-3.5 w-3.5 text-amber-500"
                             aria-label="Permissão sensível"
                           />
+                        )}
+                        {perm === "unidades.view" && unidadesSemEfeito && (
+                          <span className="mt-0.5 block text-xs text-amber-700">
+                            Sem efeito neste papel: ele não tem carteira de
+                            unidades, então a lista sai vazia. Enxergar a rede é
+                            decisão de papel — use Diretor de unidades ou
+                            Financeiro.
+                          </span>
                         )}
                       </span>
                     </label>

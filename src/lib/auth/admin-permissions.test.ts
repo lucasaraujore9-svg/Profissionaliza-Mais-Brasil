@@ -242,10 +242,17 @@ describe("resolveAdminPermissions", () => {
     expect(perms.has("financeiro.view")).toBe(false)
   })
 
+  // O papel do assunto tem de ser um cujo PRESET não carregue exclusiva nenhuma,
+  // senão o teste passa a medir o preset em vez do override. O gerente de
+  // unidades é o caso que a regra existe para proteger: ele tem carteira, e
+  // `viewAll` por override o transformaria em super admin de fato.
   it("ignora SUPER_EXCLUSIVE concedida por extra", () => {
-    const perms = resolveAdminPermissions("PMB_FINANCEIRO", [...SUPER_EXCLUSIVE])
     for (const perm of SUPER_EXCLUSIVE) {
-      expect(perms.has(perm)).toBe(false)
+      expect(ADMIN_ROLE_PRESETS.PMB_RESELLER_MGR, perm).not.toContain(perm)
+    }
+    const perms = resolveAdminPermissions("PMB_RESELLER_MGR", [...SUPER_EXCLUSIVE])
+    for (const perm of SUPER_EXCLUSIVE) {
+      expect(perms.has(perm), perm).toBe(false)
     }
   })
 
@@ -264,6 +271,52 @@ describe("resolveAdminPermissions", () => {
     expect(perms.size).toBe(ADMIN_PERMISSIONS.length)
     expect(perms.has("equipe.manage")).toBe(true)
     expect(perms.has("integracoes.manage")).toBe(true)
+  })
+})
+
+/**
+ * Alargamento DELIBERADO de 2026-09-09, fora da tabela de paridade de propósito:
+ * ratificar uma mudança dentro da trava que existe para detectá-la não protege
+ * nada. O Financeiro cobra a mensalidade da rede inteira e não conseguia abrir
+ * a ficha de unidade nenhuma — `unidades.view` marcada à mão em /admin/equipe
+ * não resolvia, porque sem `unidades.viewAll` (SUPER_EXCLUSIVE, só por preset)
+ * o escopo estrutural de `lib/auth/scope.ts` não tem ramo para o papel e
+ * devolve `null`.
+ */
+describe("PMB_FINANCEIRO e a rede de unidades", () => {
+  const perms = resolveAdminPermissions("PMB_FINANCEIRO")
+
+  it("enxerga a rede inteira, não uma carteira", () => {
+    expect(perms.has("unidades.view")).toBe(true)
+    expect(perms.has("unidades.viewAll")).toBe(true)
+  })
+
+  it("administra as cobranças da unidade", () => {
+    expect(perms.has("unidades.billing")).toBe(true)
+  })
+
+  it("não decide sobre a unidade, só sobre o dinheiro dela", () => {
+    for (const perm of [
+      "unidades.manage",
+      "unidades.create",
+      "unidades.governanca",
+      "unidades.credenciais",
+      "unidades.impersonate",
+      "unidades.anonimizar",
+      "unidades.cortesiaExcepcional",
+    ] as const) {
+      expect(perms.has(perm), perm).toBe(false)
+    }
+  })
+
+  it("a exclusiva vem do preset e continua fechada a override", () => {
+    expect(SUPER_EXCLUSIVE_BY_PRESET.PMB_FINANCEIRO).toEqual(["unidades.viewAll"])
+    // Revogar a leitura derruba junto tudo que depende dela (fail-closed de
+    // WRITE_IMPLIES_READ) — inclusive a visão da rede e a cobrança.
+    const semLeitura = resolveAdminPermissions("PMB_FINANCEIRO", [], ["unidades.view"])
+    expect(semLeitura.has("unidades.view")).toBe(false)
+    expect(semLeitura.has("unidades.viewAll")).toBe(false)
+    expect(semLeitura.has("unidades.billing")).toBe(false)
   })
 })
 
@@ -322,7 +375,10 @@ describe("paridade com a matriz de papéis anterior", () => {
     // Administra a carteira, mas não amplia o contrato da unidade.
     ["PMB_RESELLER_MGR", "unidades.governanca", false],
     ["PMB_RESELLER_MGR", "relatorios.export", true],
-    // Financeiro não mexe em catálogo, unidade nem aluno.
+    // Financeiro não mexe em catálogo nem em aluno. (A LEITURA da rede de
+    // unidades e a cobrança delas saíram desta matriz em 2026-09-09 — mudança
+    // deliberada, coberta no describe "PMB_FINANCEIRO e a rede de unidades"
+    // abaixo. As linhas de unidade que sobraram aqui continuam valendo.)
     ["PMB_FINANCEIRO", "financeiro.manage", true],
     // Estorno e % por unidade sim; a regra GLOBAL do motor sempre foi
     // SUPER_ADMIN-only (PUT /api/admin/system-settings/referrals).

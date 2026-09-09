@@ -158,11 +158,29 @@ describe("escopo de dados", () => {
   })
 
   it("unidades.view concedida por override sem recorte no papel não abre a rede", async () => {
-    // PMB_FINANCEIRO não tem recorte em scope.ts: conceder `unidades.view`
-    // sozinho não pode virar "vê tudo" por acidente.
-    signedIn("PMB_FINANCEIRO", { extra: ["unidades.view"] })
+    // PMB_SALES não tem recorte em scope.ts (cai no `default:`): conceder
+    // `unidades.view` sozinho não pode virar "vê tudo" por acidente. `viewAll`
+    // é SUPER_EXCLUSIVE justamente para que abrir a rede seja decisão de
+    // PRESET, revisável, e não um checkbox marcado por engano.
+    signedIn("PMB_SALES", { extra: ["unidades.view"] })
     const ctx = await adminContext()
     expect(await ctx?.unidadesWhere()).toBeNull()
+  })
+
+  /**
+   * O outro lado da mesma regra: quem PRECISA da rede inteira recebe pelo
+   * preset. O Financeiro cobra a mensalidade de todas as unidades e, até
+   * 2026-09-09, abria /admin/revendedores com a lista vazia — marcar
+   * `unidades.view` na ficha dele em /admin/equipe não tinha efeito nenhum,
+   * porque sem `viewAll` o escopo estrutural devolvia `null`.
+   */
+  it("financeiro enxerga a rede inteira pelo preset", async () => {
+    signedIn("PMB_FINANCEIRO")
+    const ctx = await adminContext()
+    expect(await ctx?.unidadesWhere()).toEqual({})
+    expect(await ctx?.canAccessTenant({ accountManagerId: null, salesUserId: null })).toBe(
+      true,
+    )
   })
 
   /**

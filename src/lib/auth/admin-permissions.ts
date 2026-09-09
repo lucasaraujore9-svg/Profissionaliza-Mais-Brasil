@@ -241,6 +241,37 @@ export const SUPER_EXCLUSIVE = [
  * `equipe.manage` não entra para ninguém além do SUPER_ADMIN. É a linha que não
  * se cruza — é a permissão com que alguém ampliaria os próprios poderes.
  */
+/**
+ * Papéis que têm um vínculo ESTRUTURAL com unidades em `lib/auth/scope.ts`
+ * (`accountManagerId`, `salesUserId` ou o time de vendas).
+ *
+ * Só para eles `unidades.view` significa alguma coisa sozinha: sem `viewAll`,
+ * `unidadesWhere()` cai naquele escopo, e um papel que não aparece aqui recebe
+ * `null` — nenhuma unidade. Marcar "Ver as unidades atribuídas" na ficha de um
+ * Financeiro ou de um Vendedor de curso, portanto, não tem efeito NENHUM, e
+ * até 2026-09-09 a tela de Equipe deixava marcar sem dizer isso: o super admin
+ * concedia, salvava, e a pessoa continuava vendo lista vazia.
+ *
+ * Mora aqui, e não em `scope.ts`, porque este módulo é PURO — `scope.ts`
+ * importa o Prisma, e importá-lo de um componente `"use client"` arrastaria o
+ * driver `pg` para o navegador. Há teste de paridade em `scope.test.ts`: papel
+ * novo com ramo lá e ausente daqui (ou o contrário) quebra o build.
+ */
+export const ROLES_WITH_TENANT_CARTEIRA = [
+  "SUPER_ADMIN",
+  "PMB_RESELLER_DIRECTOR",
+  "PMB_RESELLER_MGR",
+  "PMB_REVENDA_SALES",
+  "PMB_SALES_MGR",
+] as const satisfies readonly PmbTeamRole[]
+
+const CARTEIRA_SET = new Set<string>(ROLES_WITH_TENANT_CARTEIRA)
+
+/** `true` se `unidades.view` sozinha alcança alguma unidade neste papel. */
+export function roleHasTenantCarteira(role: PmbTeamRole): boolean {
+  return CARTEIRA_SET.has(role)
+}
+
 export const SUPER_EXCLUSIVE_BY_PRESET: Partial<
   Record<PmbTeamRole, readonly AdminPermission[]>
 > = {
@@ -249,6 +280,11 @@ export const SUPER_EXCLUSIVE_BY_PRESET: Partial<
   // próprio conteúdo do cargo, e `governanca` (atribuir o responsável da conta)
   // não é escalada para quem já alcança todas elas.
   PMB_RESELLER_DIRECTOR: ["unidades.viewAll", "unidades.governanca"],
+  // Financeiro: cobra a mensalidade de TODAS as unidades, então `viewAll` é o
+  // próprio conteúdo do cargo. Não vem acompanhada de `governanca` — ele não
+  // decide de quem é a unidade, nem de `manage`/`credenciais`/`impersonate`:
+  // é leitura da ficha mais a cobrança dela.
+  PMB_FINANCEIRO: ["unidades.viewAll"],
 }
 
 /** Concedíveis por override, mas com aviso destacado na UI de Equipe. */
@@ -524,10 +560,29 @@ export const ADMIN_ROLE_PRESETS: Record<PmbTeamRole, readonly AdminPermission[]>
 
   // Financeiro: dinheiro do ecossistema inteiro — mensalidades a receber,
   // comissões a pagar, regras de comissão e os relatórios correspondentes.
+  //
+  // Enxerga a REDE INTEIRA de unidades, não uma carteira: quem cobra a
+  // mensalidade precisa abrir a ficha de QUALQUER unidade, não só das que
+  // alguém lhe atribuiu. Isso tem de vir do PRESET porque `unidades.viewAll` é
+  // SUPER_EXCLUSIVE — marcá-la pessoa a pessoa em /admin/equipe não tem efeito.
+  // E `unidades.view` sozinha também não resolvia: sem `viewAll`,
+  // `unidadesWhere()` cai no escopo estrutural de `lib/auth/scope.ts`, que não
+  // tem ramo para este papel e devolve `null` (nenhuma unidade). Na prática o
+  // Financeiro abria /admin/revendedores com a lista vazia e os contadores
+  // zerados, sem mensagem de erro nenhuma.
+  //
+  // Fronteira deliberada: LÊ a unidade e administra as COBRANÇAS dela
+  // (reconciliar, cancelar, reemitir no Asaas) — que é o trabalho dele. NÃO
+  // edita dados/status/política (`unidades.manage`), não cria unidade, não
+  // redefine a senha do titular, não entra como, não governa a conta
+  // (`unidades.governanca`) nem anonimiza.
   PMB_FINANCEIRO: [
     "dashboard.view",
     "perfil.edit",
     "treinamentos.view",
+    "unidades.view",
+    "unidades.viewAll",
+    "unidades.billing",
     "financeiro.view",
     "financeiro.viewAll",
     "financeiro.manage",
@@ -560,7 +615,7 @@ const ROLE_DESCRIPTIONS: Record<PmbTeamRole, string> = {
   PMB_RESELLER_MGR:
     "Cuida das unidades sob a sua carteira: dados, status, cobrança, senha do titular e comissões.",
   PMB_FINANCEIRO:
-    "Financeiro do ecossistema: mensalidades a receber, comissões a pagar, regras de comissão e relatórios.",
+    "Financeiro do ecossistema: mensalidades a receber, comissões a pagar, regras de comissão e relatórios. Consulta todas as unidades da rede e administra as cobranças delas, sem editar dados, senha do titular ou governança da conta.",
   PMB_DESIGNER: "Somente o banco de artes de divulgação.",
 }
 
