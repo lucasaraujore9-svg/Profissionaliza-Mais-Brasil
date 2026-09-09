@@ -182,9 +182,13 @@ export default async function AdminIndicacoesPage() {
             ) : (
               items.map((r) => (
                 <TableRow key={r.id}>
+                  {/* Leva ao RELATORIO de indicacoes, nao ao cadastro da
+                      unidade: e por esta lista que o financeiro chega para
+                      conferir de onde saiu o valor antes de pagar. O cadastro
+                      continua a um clique, no topo do relatorio. */}
                   <TableCell className="font-medium">
                     <Link
-                      href={`/admin/revendedores/${r.id}`}
+                      href={`/admin/indicacoes/${r.id}`}
                       className="hover:underline"
                     >
                       {r.name}
