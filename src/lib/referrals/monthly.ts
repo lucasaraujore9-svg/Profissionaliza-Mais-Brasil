@@ -36,6 +36,7 @@ import {
   resolveEffectiveCommissionForEngine,
   type GlobalCommissionInput,
 } from "@/lib/referrals/effective-rule"
+import { EVER_PAID_TENANT_WHERE } from "@/lib/tenants/lifecycle"
 
 const SETTINGS_ID = "default"
 const DEFAULT_PAYOUT_DAY = 20
@@ -251,6 +252,29 @@ async function computeForReferrer(
   })
   const paidTenantIds = [...new Set(paidRows.map((p) => p.tenantId))]
 
+  // UNIDADE QUE NUNCA PAGOU NAO ENTRA EM CONTA NENHUMA (decisao do dono,
+  // 09/09/2026). O caso que expos: `desenvolve tamarana` estava ACTIVE com plano
+  // de R$ 239, `activatedAt` nulo e a unica cobranca DELETED — nunca entrou um
+  // centavo. Ainda assim contava como ativacao do mes (subindo a faixa) e valia
+  // R$ 75 na base. A comissao e sobre receita: sem receita, nao ha o que ratear.
+  //
+  // O predicado e o MESMO do churn/blacklist (`lib/tenants/lifecycle.ts`), de
+  // proposito — ele ja resolveu as armadilhas: `status` de cobranca e MUTAVEL
+  // (estorno reescreve a linha que era RECEIVED), por isso `paidAt`/`markedPaidAt`
+  // entram no OR; e `Tenant.activatedAt` NAO prova pagamento (a migration
+  // 20260620 fez backfill com COALESCE(MIN(paid_at), created_at) e carimbou
+  // unidade que nunca pagou). Reescrever a regra aqui faria as duas divergirem.
+  //
+  // "Nunca pagou" e LIFETIME, nao "nao pagou neste mes": quem ja pagou alguma vez
+  // continua na base mesmo num mes sem fatura — a decisao foi tirar quem nunca
+  // foi cliente, nao punir o indicador por inadimplencia pontual. Para pagar so
+  // sobre quem pagou NO MES existe o payoutBase PAID_THIS_MONTH, que e outra
+  // coisa e e configuravel por fase.
+  //
+  // Vai nas TRES consultas (faixa por ativacao, faixa por ativas e universo).
+  // Aplicar so no universo faria as duas metades da regra discordarem — o mesmo
+  // defeito do `createdAt` x `activatedAt` documentado logo abaixo.
+
   // Contagens no nivel do INDICADOR — usadas para escolher a faixa DENTRO da fase
   // de cada unidade (a faixa por volume continua sendo agregada do indicador,
   // mesmo que cada unidade esteja numa fase diferente do tempo).
@@ -276,6 +300,7 @@ async function computeForReferrer(
         referrerTenantId,
         planValue: { gt: 0 },
         status: { not: "CANCELLED" },
+        ...EVER_PAID_TENANT_WHERE,
         // `activatedAt` sozinho nao serve: so o webhook do Asaas o grava
         // (src/lib/asaas/process.ts). A ativacao por cartao
         // (/api/cobranca/[paymentId]/pay-card) muda o status e deixa o campo
@@ -303,7 +328,12 @@ async function computeForReferrer(
     // `activeTotalCount`, e populacoes com filtros diferentes davam um total que
     // nao correspondia a carteira que de fato recebe.
     prisma.tenant.count({
-      where: { referrerTenantId, status: "ACTIVE", planValue: { gt: 0 } },
+      where: {
+        referrerTenantId,
+        status: "ACTIVE",
+        planValue: { gt: 0 },
+        ...EVER_PAID_TENANT_WHERE,
+      },
     }),
   ])
 
@@ -317,6 +347,7 @@ async function computeForReferrer(
     where: {
       referrerTenantId,
       planValue: { gt: 0 },
+      ...EVER_PAID_TENANT_WHERE,
       OR: [{ status: "ACTIVE" }, { id: { in: paidTenantIds } }],
     },
     select: {

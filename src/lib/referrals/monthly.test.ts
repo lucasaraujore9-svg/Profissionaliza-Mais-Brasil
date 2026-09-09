@@ -37,6 +37,7 @@ vi.mock("@/lib/logger", () => {
 
 import { prisma } from "@/lib/prisma"
 import { computeMonthlyCommissions, recentClosedPeriods } from "./monthly"
+import { EVER_PAID_TENANT_WHERE } from "@/lib/tenants/lifecycle"
 import { FALLBACK_PERCENT } from "./effective-rule"
 
 type AnyMock = ReturnType<typeof vi.fn>
@@ -1693,5 +1694,70 @@ describe("mes da indicacao — ancora unica COALESCE(activatedAt, createdAt)", (
 
     const data = created()
     expect(data.linesSnapshot.map((l) => l.tenantId)).toEqual(["semAncora"])
+  })
+})
+
+describe("unidade que nunca pagou nao entra em conta nenhuma", () => {
+  /**
+   * Decisao do dono (09/09/2026), a partir de um caso real: `desenvolve
+   * tamarana` estava ACTIVE com plano de R$ 239, `activatedAt` nulo e a unica
+   * cobranca DELETED — nunca entrou um centavo. Mesmo assim contava como
+   * ativacao do mes (subindo a faixa) e valia R$ 75 na base do indicador.
+   *
+   * O mock do Prisma devolve linhas prontas e NAO avalia o `where`, entao o que
+   * se testa aqui e a INVARIANTE que de fato protege a regra: o predicado tem
+   * de estar nas TRES consultas de universo/contagem. Aplicar so no universo
+   * (ou so numa contagem) e o defeito classico deste motor — duas metades da
+   * mesma regra discordando sobre quem e uma indicada valida, como ja aconteceu
+   * com `createdAt` x `activatedAt`.
+   */
+  it("o predicado 'ja pagou' vai nas TRES consultas (2 contagens + universo)", async () => {
+    arrange({
+      referrers: [referrer({ commissionBrackets: flatBracket(50) })],
+      units: [unit("u1")],
+      activeTotal: 1,
+      paid: { u1: 239 },
+    })
+
+    await computeMonthlyCommissions(PERIOD)
+
+    // As consultas do motor por indicador sao as que filtram por
+    // `referrerTenantId` — descarta a busca inicial dos indicadores.
+    const wheres = [
+      ...db.tenant.count.mock.calls,
+      ...db.tenant.findMany.mock.calls,
+    ]
+      .map((call) => call[0]?.where as Record<string, unknown> | undefined)
+      .filter((where) => where && "referrerTenantId" in where)
+
+    expect(wheres).toHaveLength(3)
+    for (const where of wheres) {
+      expect(where).toMatchObject({
+        tenantPayments: { some: expect.anything() },
+      })
+    }
+  })
+
+  it("o predicado e o do lifecycle, nao uma copia local", async () => {
+    // Reescrever a regra aqui faria o motor divergir do churn/blacklist. O
+    // `paidAt`/`markedPaidAt` no OR nao e decorativo: status de cobranca e
+    // MUTAVEL (estorno reescreve a linha que era RECEIVED) e sem eles uma
+    // unidade que pagou de verdade voltaria a ler como "nunca pagou".
+    arrange({
+      referrers: [referrer({ commissionBrackets: flatBracket(50) })],
+      units: [unit("u1")],
+      activeTotal: 1,
+      paid: { u1: 239 },
+    })
+
+    await computeMonthlyCommissions(PERIOD)
+
+    const universo = db.tenant.findMany.mock.calls
+      .map((call) => call[0]?.where as Record<string, unknown> | undefined)
+      .find((where) => where && "referrerTenantId" in where)
+
+    expect(universo?.tenantPayments).toEqual(
+      EVER_PAID_TENANT_WHERE.tenantPayments,
+    )
   })
 })
