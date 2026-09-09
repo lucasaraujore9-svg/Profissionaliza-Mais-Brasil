@@ -37,6 +37,7 @@ import {
   type GlobalCommissionInput,
 } from "@/lib/referrals/effective-rule"
 import { EVER_PAID_TENANT_WHERE } from "@/lib/tenants/lifecycle"
+import { proporcaoPaga, valorBasePlano } from "@/lib/referrals/plano-base"
 
 const SETTINGS_ID = "default"
 const DEFAULT_PAYOUT_DAY = 20
@@ -355,6 +356,9 @@ async function computeForReferrer(
       name: true,
       status: true,
       planValue: true,
+      // Discriminador do plano de tabela (PRO R$ 239 x Profissionaliza R$ 209),
+      // que e o DENOMINADOR da comissao proporcional. Ver ./plano-base.ts.
+      automationEnabled: true,
       createdAt: true,
       activatedAt: true,
       commissionPlanStartedAt: true,
@@ -531,15 +535,39 @@ async function computeForReferrer(
     const rate = new Prisma.Decimal(bracket.value)
 
     if (phase.rateType === "FIXED") {
-      // R$ por unidade da base — UMA vez por unidade, mesmo que ela tenha pago
-      // duas faturas no mes. Com payoutBase ALL_ACTIVE independe de pagamento;
-      // com PAID_THIS_MONTH so chega aqui quem pagou (portao acima).
-      amount = amount.add(rate)
+      // R$ por unidade da base, PROPORCIONAL ao que a PMB recebeu dela no mes.
+      //
+      // Antes o valor fixo era pago inteiro por qualquer unidade da base, sem
+      // olhar caixa: unidade com cortesia de 50% pagava metade e o indicador
+      // levava os R$ 75 cheios — a PMB rateava receita que nao entrou. E a
+      // unidade que simplesmente NAO pagou no mes tambem pagava comissao, o que
+      // fazia o programa remunerar inadimplencia.
+      //
+      // O denominador e o preco de TABELA, nunca `planValue` (que e onde a
+      // cortesia esta gravada e faria a razao dar 1 sempre). Ver ./plano-base.ts.
+      //
+      // `elegiveis` e nao `payments`: fatura ja comissionada pelo ledger legado
+      // nao pode pagar de novo — mesma trava do ramo PERCENT logo abaixo.
+      const recebido = elegiveis.reduce((acc, p) => acc + Number(p.amount), 0)
+      const proporcao = proporcaoPaga(recebido, valorBasePlano(u.automationEnabled))
+      // Sem pagamento no mes nao ha comissao E nao ha linha: uma linha de R$ 0
+      // no demonstrativo leria como "entrou na conta e nao valeu nada", quando o
+      // certo e ela nao ter entrado. O relatorio explica a ausencia.
+      if (proporcao <= 0) continue
+      const valor = rate.mul(proporcao)
+      amount = amount.add(valor)
+      // `baseSum` continua sendo SO a base do PERCENT. O recebido que fundamenta
+      // a linha FIXED viaja em `linesSnapshot[].mensalidade`; somar aqui mudaria
+      // o significado de uma coluna que o financeiro e o BI ja leem como
+      // "mensalidades sobre as quais o percentual incidiu".
       lines.push({
         tenantId: u.id,
         name: u.name,
-        mensalidade: Number(u.planValue),
-        amount: bracket.value,
+        // O que a PMB RECEBEU dela no mes — e o numerador da proporcao, entao e
+        // o unico numero que explica a linha. Antes era `planValue`, o preco de
+        // hoje, que nao dizia nada sobre o mes apurado.
+        mensalidade: recebido,
+        amount: Number(valor),
         rateType: "FIXED",
         rate: bracket.value,
         phaseIndex: active.index,

@@ -160,6 +160,8 @@ interface UnitRow {
   name: string
   status: string
   planValue: Prisma.Decimal
+  /** Plano de TABELA: denominador da comissao FIXED proporcional (239 x 209). */
+  automationEnabled: boolean
   createdAt: Date
   activatedAt: Date | null
   commissionPlanStartedAt: Date | null
@@ -177,6 +179,7 @@ function unit(
     // le o status para nao encolher a faixa por suspensao posterior ao mes.
     status: "ACTIVE",
     planValue: new Prisma.Decimal(planValue ?? 239),
+    automationEnabled: true,
     // Ancora bem anterior ao periodo apurado: por padrao a unidade entra e NAO
     // conta como "indicada neste mes".
     createdAt: new Date(Date.UTC(2025, 0, 10)),
@@ -540,8 +543,9 @@ describe("computeMonthlyCommissions — topo com fases MISTAS", () => {
         unit("vet", { activatedAt: ANCHOR.mes12 }), // fase 1, 15% de 239
       ],
       activeTotal: 2,
-      // A novata nao pagou nada no mes: FIXED nao depende de mensalidade.
-      paid: { vet: 239 },
+      // As DUAS pagam: desde 09/09/2026 o FIXED tambem exige caixa no mes, e o
+      // que este caso testa e o MISTO de tipos de fase, nao a proporcao.
+      paid: { nova: 239, vet: 239 },
     })
 
     await computeMonthlyCommissions(PERIOD)
@@ -663,7 +667,9 @@ describe("computeMonthlyCommissions — bracketBasis alimenta resolveBracket", (
       // 5 ativas no total (2 cortesias planValue=0 nao entram na lista de pagas).
       activeTotal: 5,
       newThisMonth: 1,
-      paid: {},
+      // Mensalidade cheia: desde 09/09/2026 o FIXED e proporcional ao caixa, e
+      // estes casos exercitam a FAIXA, nao a proporcao.
+      paid: { u1: 239, u2: 239, u3: 239 },
     })
   }
 
@@ -738,7 +744,7 @@ describe("computeMonthlyCommissions — plano truncado por parsePlan", () => {
         unit("vet", { activatedAt: ANCHOR.mes12 }), // 12 meses => fase 1 (aberta)
       ],
       activeTotal: 3,
-      paid: {},
+      paid: { nova: 239, media: 239, vet: 239 },
     })
 
     await computeMonthlyCommissions(PERIOD)

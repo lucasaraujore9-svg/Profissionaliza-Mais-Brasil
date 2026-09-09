@@ -71,6 +71,19 @@ describe("motivoForaDaConta", () => {
     ).toBe("FORA_DA_BASE")
   })
 
+  it("ATIVA que não pagou no mês: o motivo é o caixa, não o status", () => {
+    // Passou a ser o caso mais comum quando a comissão virou proporcional ao
+    // pagamento do mês. Dizer "fora da base da regra" esconderia do financeiro
+    // a única coisa que ele precisa conferir.
+    expect(
+      motivoForaDaConta(
+        fatos({ status: "ACTIVE", paidInPeriod: false }),
+        AGOSTO,
+        false,
+      ),
+    ).toBe("SEM_PAGAMENTO_NO_MES")
+  })
+
   it("fora do ar e sem pagamento no mês", () => {
     expect(
       motivoForaDaConta(

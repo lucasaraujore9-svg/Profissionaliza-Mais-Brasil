@@ -99,6 +99,13 @@ export default async function PainelRelatorioIndicacoesPage({
 
   const { comissao, totais } = rel
   const fixa = comissao?.rateType === "FIXED"
+  // A faixa cheia vezes o numero de unidades nao fecha com o total quando
+  // alguma pagou parcial (cortesia). Comparar e o que evita imprimir uma
+  // multiplicacao que contradiz o valor exibido ao lado dela.
+  const proporcional =
+    fixa &&
+    !!comissao &&
+    Math.abs(comissao.rate * comissao.unitCount - comissao.amount) > 0.01
   const ordem = parseOrdem(ordemRaw)
   const dir = parseDirecao(dirRaw)
   const carteira = ordenarCarteira(rel.carteira, ordem, dir)
@@ -181,18 +188,46 @@ export default async function PainelRelatorioIndicacoesPage({
               .
             </li>
             <li>
-              <span className="font-semibold">2.</span> A base de pagamento é{" "}
-              <strong>{BASE_LABEL[comissao.payoutBase] ?? comissao.payoutBase}</strong>
-              : <strong>{comissao.unitCount}</strong>{" "}
-              {comissao.unitCount === 1 ? "unidade" : "unidades"}
-              {fixa ? "." : `, somando ${money(comissao.baseSum)} de mensalidade.`}
+              <span className="font-semibold">2.</span>{" "}
+              {fixa ? (
+                <>
+                  Entram as unidades que <strong>pagaram mensalidade no mês</strong>
+                  {" "}(base {BASE_LABEL[comissao.payoutBase] ?? comissao.payoutBase}):{" "}
+                  <strong>{comissao.unitCount}</strong>{" "}
+                  {comissao.unitCount === 1 ? "unidade" : "unidades"}.
+                </>
+              ) : (
+                <>
+                  A base de pagamento é{" "}
+                  <strong>
+                    {BASE_LABEL[comissao.payoutBase] ?? comissao.payoutBase}
+                  </strong>
+                  : <strong>{comissao.unitCount}</strong>{" "}
+                  {comissao.unitCount === 1 ? "unidade" : "unidades"}, somando{" "}
+                  {money(comissao.baseSum)} de mensalidade.
+                </>
+              )}
             </li>
             <li>
               <span className="font-semibold">3.</span>{" "}
-              {fixa
-                ? `${money(comissao.rate)} × ${comissao.unitCount} = `
-                : `${comissao.rate}% de ${money(comissao.baseSum)} = `}
-              <strong>{money(comissao.amount)}</strong>.
+              {!fixa ? (
+                <>
+                  {comissao.rate}% de {money(comissao.baseSum)} ={" "}
+                  <strong>{money(comissao.amount)}</strong>.
+                </>
+              ) : proporcional ? (
+                <>
+                  Cada unidade entra proporcionalmente ao que pagou no mês —
+                  quem pagou a mensalidade cheia vale {money(comissao.rate)}.
+                  Somando a coluna da tabela abaixo:{" "}
+                  <strong>{money(comissao.amount)}</strong>.
+                </>
+              ) : (
+                <>
+                  {money(comissao.rate)} × {comissao.unitCount} ={" "}
+                  <strong>{money(comissao.amount)}</strong>.
+                </>
+              )}
             </li>
           </ol>
           <p className="mt-4 border-t border-gray-100 pt-3 text-xs text-gray-600">

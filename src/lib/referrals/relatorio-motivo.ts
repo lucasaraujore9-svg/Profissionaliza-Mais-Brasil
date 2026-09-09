@@ -32,7 +32,7 @@ export const MOTIVO_LABEL: Record<MotivoForaDaConta, string> = {
   CANCELADA: "Contrato cancelado",
   NUNCA_PAGOU: "Nunca pagou nenhuma mensalidade",
   ENTROU_DEPOIS: "Entrou depois desta competência",
-  SEM_PAGAMENTO_NO_MES: "Fora do ar e sem pagamento no mês",
+  SEM_PAGAMENTO_NO_MES: "Sem pagamento no mês",
   FORA_DA_BASE: "Fora da base de pagamento da regra",
 }
 
@@ -67,9 +67,11 @@ export function motivoForaDaConta(
   if (fatos.status === "CANCELLED") return "CANCELADA"
   if (!fatos.everPaid) return "NUNCA_PAGOU"
   if (fatos.entryMonthIndex > periodMonthIndex) return "ENTROU_DEPOIS"
-  if (fatos.status !== "ACTIVE" && !fatos.paidInPeriod) {
-    return "SEM_PAGAMENTO_NO_MES"
-  }
+  // Desde 09/09/2026 a comissao e proporcional ao caixa DO MES, entao unidade
+  // sem pagamento na competencia nao entra — mesmo ATIVA. Passou a ser o motivo
+  // mais comum, e por isso vem antes do generico: "fora da base da regra" nao
+  // diria ao financeiro a unica coisa que ele precisa saber para conferir.
+  if (!fatos.paidInPeriod) return "SEM_PAGAMENTO_NO_MES"
   return "FORA_DA_BASE"
 }
 

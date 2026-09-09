@@ -1418,6 +1418,78 @@ promete.
   precisa estar na versao que devolve `contentType` em `GET /api/v1/courses` —
   campo ausente resolve para curso, entao a ordem de deploy nao quebra nada.
 
+### Comissao de indicacao virou rateio de RECEITA (2026-09-09)
+
+Duas decisoes do dono, no mesmo dia, que mudam o que o programa remunera:
+
+**1. Unidade que nunca pagou nao entra em conta nenhuma.** O caso que expos:
+`desenvolve tamarana` estava ACTIVE com plano de R$ 239, `activatedAt` nulo e a
+unica cobranca DELETED — nunca entrou um centavo, e mesmo assim ela subia a
+faixa e valia R$ 75. Predicado reusado de `lib/tenants/lifecycle.ts`
+(`EVER_PAID_TENANT_WHERE`), o MESMO do churn: status de cobranca e mutavel
+(estorno reescreve a linha), por isso `paidAt`/`markedPaidAt` entram no OR, e
+`activatedAt` NAO prova pagamento (backfill da migration 20260620). Vai nas TRES
+consultas (faixa por ativacao, faixa por ativas, universo) — aplicar so numa faz
+as metades da regra discordarem sobre quem e uma indicada valida.
+
+**2. O valor FIXO virou PROPORCIONAL ao caixa do mes** (`lib/referrals/plano-base.ts`):
+
+```
+comissao da unidade = rate x (recebido no mes / preco de TABELA do plano)
+```
+
+- **O denominador nunca e `planValue`** — e exatamente onde a cortesia fica
+  gravada (a rota de billing o sobrescreve sem historico). Usa-lo daria
+  `recebido/planValue = 1` para toda unidade com desconto e a regra viraria
+  no-op justo no caso que ela existe para cobrir. Os precos de tabela sao dois:
+  **PRO R$ 239** (com o modulo Automacao) e **Profissionaliza R$ 209**;
+  `Tenant.automationEnabled` e o discriminador.
+- **Proporcao com TETO 1 e PISO 0.** O teto nao e detalhe: sem ele, quitar DUAS
+  faturas no mesmo mes pagaria comissao dobrada (a faixa e por unidade/mes, nao
+  por fatura), e a unidade cuja flag de automacao nao bate com o preco pagaria
+  mais que a faixa cheia. O piso impede que um estorno lancado como cobranca
+  vire comissao negativa calada — reverter comissao paga e clawback, com revisao
+  humana.
+- **Sem pagamento no mes: nem comissao, nem LINHA no snapshot.** Uma linha de
+  R$ 0 leria como "entrou na conta e nao valeu nada"; o certo e nao ter entrado,
+  e o relatorio explica a ausencia ("Sem pagamento no mes").
+- **`baseSum` continua sendo so a base do PERCENT.** O recebido que fundamenta a
+  linha FIXED viaja em `linesSnapshot[].mensalidade` (que passou a ser o
+  RECEBIDO, nao mais o `planValue`); somar no `baseSum` mudaria o significado de
+  uma coluna que o financeiro e o BI ja leem.
+- **Efeito colateral no vocabulario:** para o FIXED, `payoutBase: ALL_ACTIVE`
+  passou a se comportar como PAID_THIS_MONTH. A configuracao continua existindo
+  para o PERCENT e para o recorte REFERRED_THIS_MONTH.
+- **Testes verificados POR MUTACAO:** tirar a proporcao, trocar o denominador
+  por `planValue` ou remover o teto derruba o caso correspondente. Dois testes
+  que AFIRMAVAM o contrario ("paga R$ por unidade ativa, INDEPENDENTE de
+  pagamento no mes" e "o valor NAO depende de quem pagou no mes") foram
+  reescritos com o registro da inversao — nao apagados.
+
+**Impacto medido em producao:** agosto/CDA saiu de 17 unidades (R$ 1.275) para
+16 (R$ 1.200) com a regra 1, e para 12 (R$ 900) com a regra 2. Nenhuma unidade
+da rede teve pagamento PARCIAL em agosto — a proporcionalidade e blindagem para
+frente, nao correcao retroativa.
+
+### Relatorio de indicacoes (2026-09-09)
+
+`/admin/indicacoes/[id]` (financeiro) e `/painel/indicacoes/relatorio`
+(indicador) — MESMO loader e MESMA tabela, de proposito: quando o indicador
+contesta um valor, os dois lados tem de estar olhando a mesma conta.
+
+- **Nada ali recalcula comissao.** Quem entrou e quanto valeu sai do
+  `linesSnapshot` gravado pelo motor; a faixa sai das colunas da comissao.
+  Recalcular para exibir criaria uma segunda fonte da verdade e a tela passaria
+  a conferir a si mesma — bateria sempre, inclusive quando estivesse errada.
+- **`relatorio-motivo.ts` explica so a AUSENCIA**, na ordem de gates do motor, e
+  nao decide nada: `null` ("nao sei dizer") e resposta valida e a tela mostra
+  "—" em vez de chutar. Ha teste travando o caso caro: nunca dizer "nao pagou"
+  de quem pagou no mes.
+- **Ordenacao na URL**, nao em estado de client: relatorio mandado por link
+  reabre na mesma ordem. Status ordena por SITUACAO (ativa primeiro, cancelada
+  por ultimo) e todo criterio desempata por NOME — sem isso a mesma tela abriria
+  em ordens diferentes a cada consulta.
+
 ### Bugs conhecidos (pendentes)
 
 - **Middleware file convention deprecado** no Next 16 (usar `proxy` em vez de `middleware`).

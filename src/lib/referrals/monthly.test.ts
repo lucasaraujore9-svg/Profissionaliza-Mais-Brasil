@@ -125,6 +125,12 @@ interface UnitRow {
   name: string
   status: string
   planValue: Prisma.Decimal
+  /**
+   * Discriminador do plano de TABELA (PRO R$ 239 x Profissionaliza R$ 209), que
+   * e o denominador da comissao FIXED proporcional. Default `true` porque e o
+   * plano de praticamente toda a rede em producao.
+   */
+  automationEnabled: boolean
   createdAt: Date
   activatedAt: Date | null
   commissionPlanStartedAt: Date | null
@@ -155,6 +161,7 @@ function unit(id: string, over: UnitOverrides = {}): UnitRow {
     // le o status para nao encolher a faixa por suspensao posterior ao mes.
     status: "ACTIVE",
     planValue: new Prisma.Decimal(planValue ?? 239),
+    automationEnabled: true,
     // Ancora bem anterior ao periodo apurado: por padrao a unidade entra.
     createdAt: new Date(Date.UTC(2025, 0, 10)),
     activatedAt: null,
@@ -857,8 +864,18 @@ describe("computeMonthlyCommissions — clamp do catch-up", () => {
 // 7. FIXED
 // ---------------------------------------------------------------------------
 
-describe("computeMonthlyCommissions — FIXED", () => {
-  it("paga R$ por unidade ativa, independente de pagamento no mes", async () => {
+describe("computeMonthlyCommissions — FIXED e PROPORCIONAL ao caixa do mes", () => {
+  /**
+   * CONTRATO NOVO (decisao do dono, 09/09/2026). Ate aqui o valor fixo era pago
+   * inteiro por qualquer unidade ATIVA, sem olhar caixa — este bloco chamava-se
+   * "paga R$ por unidade ativa, INDEPENDENTE de pagamento no mes" e afirmava
+   * exatamente o oposto do que se lê agora.
+   *
+   * A troca e deliberada e tem duas razoes: unidade que nao pagou no mes fazia o
+   * programa remunerar inadimplencia, e unidade com cortesia de 50% pagava
+   * metade para a PMB enquanto o indicador levava a faixa cheia.
+   */
+  it("paga a faixa CHEIA para quem pagou a mensalidade cheia", async () => {
     arrange({
       referrers: [
         referrer({
@@ -868,7 +885,7 @@ describe("computeMonthlyCommissions — FIXED", () => {
       ],
       units: [unit("u1"), unit("u2"), unit("u3")],
       activeTotal: 3,
-      paid: {}, // ninguem pagou no mes — FIXED nao depende disso
+      paid: { u1: 239, u2: 239, u3: 239 },
     })
 
     const out = await computeMonthlyCommissions(PERIOD)
@@ -877,15 +894,116 @@ describe("computeMonthlyCommissions — FIXED", () => {
     const data = created()
     expect(Number(data.amount)).toBe(150)
     expect(data.unitCount).toBe(3)
-    expect(Number(data.baseSum)).toBe(0)
     expect(data.rateType).toBe("FIXED")
     expect(Number(data.rate)).toBe(50)
     expect(data.linesSnapshot).toHaveLength(3)
     expect(data.linesSnapshot[0]).toMatchObject({
-      mensalidade: 239, // planValue, ja que nao ha mensalidade recebida
+      // O RECEBIDO no mes, nao o `planValue`: e o numerador da proporcao e o
+      // unico numero que explica a linha.
+      mensalidade: 239,
       amount: 50,
       rateType: "FIXED",
     })
+  })
+
+  it("unidade ATIVA que nao pagou no mes nao gera comissao NEM linha", async () => {
+    arrange({
+      referrers: [
+        referrer({
+          commissionBrackets: flatBracket(50),
+          commissionRateType: "FIXED",
+        }),
+      ],
+      units: [unit("u1"), unit("u2")],
+      activeTotal: 2,
+      paid: { u1: 239 },
+    })
+
+    await computeMonthlyCommissions(PERIOD)
+
+    const data = created()
+    expect(Number(data.amount)).toBe(50)
+    expect(data.unitCount).toBe(1)
+    // Linha de R$ 0 leria como "entrou na conta e nao valeu nada"; o certo e
+    // nao ter entrado, e o relatorio explica a ausencia.
+    expect(data.linesSnapshot.map((l) => l.tenantId)).toEqual(["u1"])
+  })
+
+  it("cortesia de 50% paga METADE da faixa — o caso que motivou a regra", async () => {
+    arrange({
+      referrers: [
+        referrer({
+          commissionBrackets: flatBracket(50),
+          commissionRateType: "FIXED",
+        }),
+      ],
+      units: [unit("u1", { planValue: 119.5 })],
+      activeTotal: 1,
+      paid: { u1: 119.5 },
+    })
+
+    await computeMonthlyCommissions(PERIOD)
+
+    const data = created()
+    expect(Number(data.amount)).toBe(25)
+    expect(data.linesSnapshot[0]).toMatchObject({ mensalidade: 119.5, amount: 25 })
+  })
+
+  it("o denominador e o preco de TABELA, nao o planValue com desconto", async () => {
+    // A trava que impede a regra de virar no-op: `planValue` E onde a cortesia
+    // fica gravada. Se ele fosse o denominador, 119,50/119,50 = 1 e a unidade
+    // com metade do preco pagaria a faixa inteira.
+    arrange({
+      referrers: [
+        referrer({
+          commissionBrackets: flatBracket(50),
+          commissionRateType: "FIXED",
+        }),
+      ],
+      units: [unit("u1", { planValue: 119.5 })],
+      activeTotal: 1,
+      paid: { u1: 119.5 },
+    })
+
+    await computeMonthlyCommissions(PERIOD)
+
+    expect(Number(created().amount)).not.toBe(50)
+  })
+
+  it("unidade sem o modulo Automacao usa a base de R$ 209", async () => {
+    arrange({
+      referrers: [
+        referrer({
+          commissionBrackets: flatBracket(100),
+          commissionRateType: "FIXED",
+        }),
+      ],
+      units: [unit("u1", { automationEnabled: false })],
+      activeTotal: 1,
+      paid: { u1: 104.5 }, // metade de 209
+    })
+
+    await computeMonthlyCommissions(PERIOD)
+
+    expect(Number(created().amount)).toBe(50)
+  })
+
+  it("duas faturas no mesmo mes nao dobram a comissao", async () => {
+    arrange({
+      referrers: [
+        referrer({
+          commissionBrackets: flatBracket(50),
+          commissionRateType: "FIXED",
+        }),
+      ],
+      units: [unit("u1")],
+      activeTotal: 1,
+      paid: { u1: [{ amount: 239 }, { amount: 239 }] }, // a atrasada e a corrente
+    })
+
+    await computeMonthlyCommissions(PERIOD)
+
+    expect(Number(created().amount)).toBe(50)
   })
 })
 
@@ -1095,6 +1213,7 @@ describe("corte do motor unico (commissionUnifiedSince)", () => {
         }),
       ],
       units: [unit("u1")],
+      paid: { u1: 239 }, // FIXED e proporcional ao caixa: sem pagamento, zero
     })
 
     await computeMonthlyCommissions(PERIOD) // 2026-05
@@ -1113,6 +1232,7 @@ describe("corte do motor unico (commissionUnifiedSince)", () => {
         }),
       ],
       units: [unit("u1")],
+      paid: { u1: 239 },
     })
 
     await computeMonthlyCommissions(PERIOD)
@@ -1133,7 +1253,18 @@ describe("contrato CARREIRA DIGITAL — faixa pelas ATIVACOES do mes, R$ sobre a
     { upTo: null, value: 100 },
   ]
 
-  function cda(units: UnitRow[], newThisMonth: number, activeTotal = units.length) {
+  /**
+   * `paid` default = mensalidade CHEIA de todas as unidades. Desde que a
+   * comissao FIXED virou proporcional ao caixa (09/09/2026), unidade sem
+   * pagamento no mes vale zero — e estes casos existem para exercitar a FAIXA,
+   * nao a proporcao. Quem testa a proporcao passa `paid` explicitamente.
+   */
+  function cda(
+    units: UnitRow[],
+    newThisMonth: number,
+    activeTotal = units.length,
+    paid?: Record<string, PaidEntry>,
+  ) {
     arrange({
       referrers: [
         referrer({
@@ -1146,6 +1277,7 @@ describe("contrato CARREIRA DIGITAL — faixa pelas ATIVACOES do mes, R$ sobre a
       units,
       newThisMonth,
       activeTotal,
+      paid: paid ?? Object.fromEntries(units.map((u) => [u.id, 239])),
     })
   }
 
@@ -1176,17 +1308,18 @@ describe("contrato CARREIRA DIGITAL — faixa pelas ATIVACOES do mes, R$ sobre a
     expect(Number(data.amount)).toBe(525)
   })
 
-  it("o valor NAO depende de quem pagou no mes: carteira inteira remunera", async () => {
+  it("o valor DEPENDE de quem pagou no mes: quem nao pagou nao remunera", async () => {
+    // Este caso afirmava o CONTRARIO ate 09/09/2026 ("a carteira inteira
+    // remunera, tenha pago ou nao"). O dono inverteu a clausula: a comissao e
+    // rateio de receita, e sem receita nao ha o que ratear.
     const units = ["u1", "u2", "u3"].map((id) => unit(id))
-    // Ninguem pagou mensalidade na competencia — com ALL_ACTIVE isso e
-    // irrelevante, o que conta e estar ativa.
-    cda(units, 2)
+    cda(units, 2, units.length, { u1: 239, u2: 239 })
 
     await computeMonthlyCommissions(PERIOD)
 
     const data = created()
-    expect(Number(data.amount)).toBe(225) // 3 x R$ 75
-    expect(data.linesSnapshot.map((l) => l.tenantId)).toEqual(["u1", "u2", "u3"])
+    expect(Number(data.amount)).toBe(150) // 2 x R$ 75; u3 nao pagou
+    expect(data.linesSnapshot.map((l) => l.tenantId)).toEqual(["u1", "u2"])
   })
 
   it("11 ativacoes no mes sobem a faixa para R$ 85 em TODA a carteira", async () => {
@@ -1238,7 +1371,7 @@ describe("contrato CARREIRA DIGITAL — faixa pelas ATIVACOES do mes, R$ sobre a
         }),
       ],
       units: [unit("u1", { status: "SUSPENDED" }), unit("u2")],
-      paid: { u1: 239 },
+      paid: { u1: 239, u2: 239 },
       newThisMonth: 1,
       activeTotal: 1, // ativas HOJE: so a u2 sobrou
     })
@@ -1261,6 +1394,7 @@ describe("contrato CARREIRA DIGITAL — faixa pelas ATIVACOES do mes, R$ sobre a
         }),
       ],
       units: [unit("u1", { status: "SUSPENDED" }), unit("u2")],
+      paid: { u2: 239 }, // so a ativa pagou
       newThisMonth: 1,
       activeTotal: 1,
     })
