@@ -50,8 +50,18 @@ select cron.schedule('pmb-sweep-students-overdue', '0 7 * * *',
 select cron.schedule('pmb-reactivate-paid', '15 * * * *',
   $$ select app_internal.run_cron('/api/cron/reactivate-paid') $$);
 
--- Pagamento mensal de comissões de indicação (dia 20, 05:00)
-select cron.schedule('pmb-referral-monthly-payout', '0 5 20 * *',
+-- Comissões de indicação: DIA 1 e DIA 20, 05:00 UTC (02:00 BRT).
+--
+-- Dia 1  — fecha a competência que acabou de terminar e MONTA a lista de
+--          pagamento já com o valor final, para o financeiro poder pagar antes
+--          da data de liberação (ver src/lib/referrals/payout-window.ts).
+-- Dia 20 — libera as comissões para a unidade (PENDING -> AVAILABLE) e recolhe
+--          o que tenha entrado depois. O dia vem de
+--          SystemSettings.referralPayoutDay; mudou lá, mude o cron aqui.
+--
+-- As duas execuções são idempotentes: o fechamento não recalcula competência já
+-- vinculada a um payout e o payout não é recriado enquanto houver um em aberto.
+select cron.schedule('pmb-referral-monthly-payout', '0 5 1,20 * *',
   $$ select app_internal.run_cron('/api/cron/referral-monthly-payout') $$);
 
 -- Limpeza de webhook_logs antigos (mensal, dia 1, 02:00)

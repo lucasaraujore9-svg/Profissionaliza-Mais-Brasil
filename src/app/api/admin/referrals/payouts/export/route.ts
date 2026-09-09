@@ -24,6 +24,8 @@ const ALLOWED_STATUS: ReferralPayoutStatus[] = [
 
 interface PayoutCsvRow extends Record<string, unknown> {
   requested_at: string
+  /** Data prevista de liberacao — no futuro, o pagamento esta sendo antecipado. */
+  due_at: string
   referrer_name: string
   referrer_slug: string
   amount: number
@@ -39,6 +41,7 @@ interface PayoutCsvRow extends Record<string, unknown> {
 
 const HEADERS: CsvHeader<PayoutCsvRow>[] = [
   { key: "requested_at", label: "requested_at" },
+  { key: "due_at", label: "due_at" },
   { key: "referrer_name", label: "referrer_name" },
   { key: "referrer_slug", label: "referrer_slug" },
   { key: "amount", label: "amount" },
@@ -121,6 +124,7 @@ export const GET = withRequestContext(
     where,
     select: {
       requestedAt: true,
+      dueAt: true,
       amount: true,
       method: true,
       status: true,
@@ -138,6 +142,7 @@ export const GET = withRequestContext(
 
   const rows: PayoutCsvRow[] = payouts.map((p) => ({
     requested_at: p.requestedAt.toISOString(),
+    due_at: p.dueAt ? p.dueAt.toISOString() : "",
     referrer_name: p.referrer.name,
     referrer_slug: p.referrer.slug,
     amount: Number(p.amount),

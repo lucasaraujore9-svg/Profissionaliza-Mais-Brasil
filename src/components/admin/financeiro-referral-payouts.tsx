@@ -92,6 +92,8 @@ interface ReferralPayoutRow {
   failureReason: string | null
   notes: string | null
   requestedAt: string
+  /** Data prevista de liberação — no futuro = pagamento antecipado. */
+  dueAt: string | null
   processedAt: string | null
   paidAt: string | null
   proofUrl: string | null
@@ -112,6 +114,17 @@ const PAYOUT_BASE_LABEL: Record<string, string> = {
   REFERRED_THIS_MONTH: "indicadas no mês",
   PAID_THIS_MONTH: "pagantes no mês",
 }
+/**
+ * Pagamento ANTECIPADO: a lista é montada no fechamento do mês, então o valor
+ * existe antes da data de liberação. Só vale enquanto o saque está em aberto —
+ * num já pago a data prevista é história, não um aviso.
+ */
+function isAnticipated(r: Pick<ReferralPayoutRow, "dueAt" | "status">): boolean {
+  if (!r.dueAt) return false
+  if (r.status !== "REQUESTED" && r.status !== "PROCESSING") return false
+  return new Date(r.dueAt).getTime() > Date.now()
+}
+
 function formatPeriod(period: string): string {
   const m = /^(\d{4})-(\d{2})$/.exec(period)
   return m ? `${m[2]}/${m[1]}` : period
@@ -366,7 +379,8 @@ export function FinanceiroReferralPayouts({
                   <th className="px-6 py-3 font-medium">Valor</th>
                   <th className="px-6 py-3 font-medium">Método / PIX</th>
                   <th className="px-6 py-3 font-medium">Status</th>
-                  <th className="px-6 py-3 font-medium">Solicitado</th>
+                  <th className="px-6 py-3 font-medium">Gerado</th>
+                  <th className="px-6 py-3 font-medium">Previsto</th>
                   <th className="px-6 py-3 font-medium">Marcado por</th>
                   <th className="px-6 py-3 font-medium">Última obs.</th>
                   <th className="px-6 py-3 text-right font-medium">Ações</th>
@@ -411,6 +425,23 @@ export function FinanceiroReferralPayouts({
                       </td>
                       <td className="px-6 py-3 font-mono text-xs text-gray-600">
                         {formatDate(r.requestedAt)}
+                      </td>
+                      {/* Previsto = data de LIBERAÇÃO da comissão. No futuro, o
+                          valor já está fechado e pode ser pago antes — é o que
+                          a marca "antecipado" avisa ao financeiro. */}
+                      <td className="px-6 py-3 font-mono text-xs text-gray-600">
+                        {r.dueAt ? (
+                          <>
+                            {formatDate(r.dueAt)}
+                            {isAnticipated(r) ? (
+                              <span className="ml-1 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800">
+                                antecipado
+                              </span>
+                            ) : null}
+                          </>
+                        ) : (
+                          <span className="text-gray-400">—</span>
+                        )}
                       </td>
                       <td className="px-6 py-3 text-xs text-gray-600">
                         {r.markedPaidBy?.name ?? (
@@ -578,10 +609,21 @@ export function FinanceiroReferralPayouts({
                   </div>
                   <div>
                     <div className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">
-                      Solicitado em
+                      Gerado em
                     </div>
                     <div className="mt-0.5">
                       {formatDateTime(detailRow.requestedAt)}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+                      Liberação prevista
+                    </div>
+                    <div className="mt-0.5">
+                      {formatDateTime(detailRow.dueAt)}
+                      {isAnticipated(detailRow)
+                        ? " — pode ser pago antes"
+                        : ""}
                     </div>
                   </div>
                   <div>

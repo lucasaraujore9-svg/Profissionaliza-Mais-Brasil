@@ -319,7 +319,9 @@ export default async function PainelIndicacoesPage() {
             <p className="mt-2 text-xs text-gray-600">
               As comissões ficam disponíveis a partir do dia {payoutDay} do mês
               seguinte ao pagamento do indicado. Próxima liberação:{" "}
-              <strong>{nextPayoutLabel}</strong>
+              <strong>{nextPayoutLabel}</strong>. O valor é apurado logo no
+              fechamento do mês, então o pagamento pode acontecer antes dessa
+              data.
             </p>
           </div>
           {!tenant.pixKey ? (

@@ -4,6 +4,11 @@ import { prisma } from "@/lib/prisma"
 import { createNotification } from "@/lib/notifications"
 import { swallow } from "@/lib/errors"
 import { CLAWBACK_MARKER_PREFIX } from "@/lib/referrals/clawback"
+import {
+  anticipationCutoff,
+  isAnticipatedPayout,
+  latestReleaseDate,
+} from "@/lib/referrals/payout-window"
 
 const SETTINGS_ID = "default"
 
@@ -131,7 +136,7 @@ export async function requestPayout(
         status: "AVAILABLE",
         payoutId: null,
       },
-      select: { id: true, amount: true },
+      select: { id: true, amount: true, availableAt: true },
     }),
     prisma.referralMonthlyCommission.findMany({
       where: {
@@ -139,7 +144,7 @@ export async function requestPayout(
         status: "AVAILABLE",
         payoutId: null,
       },
-      select: { id: true, amount: true },
+      select: { id: true, amount: true, availableAt: true },
     }),
   ])
   if (available.length === 0 && availableMonthly.length === 0) {
@@ -172,6 +177,12 @@ export async function requestPayout(
         pixKeyType:
           input.method === "ASAAS_PIX" ? input.pixKeyType ?? null : null,
         requestedAt: new Date(),
+        // Saque manual so agrupa comissao JA liberada, entao a data prevista
+        // esta no passado. Gravamos assim mesmo para a coluna nao ter dois
+        // significados ("nao previsto" x "sem informacao").
+        dueAt: latestReleaseDate(
+          [...available, ...availableMonthly].map((c) => c.availableAt),
+        ),
       },
     })
     const [linked, linkedMonthly] = await Promise.all([
@@ -398,17 +409,24 @@ export async function failPayout(
 }
 
 /**
- * Executado pelo cron mensal (dia X).
+ * Executado pelo cron mensal — DUAS VEZES por mes (dia 1 e dia X).
  *
  * MONTA a lista de pagamentos (revendedor nao solicita saque), mas NAO paga
  * nada sozinho — o pagamento e MANUAL:
  *   1. Promove ReferralCommission PENDING → AVAILABLE quando availableAt <= now().
- *   2. Para cada referrer com saldo AVAILABLE (mesmo abaixo do minimo), cria um
+ *   2. Para cada referrer com saldo a pagar (mesmo abaixo do minimo), cria um
  *      ReferralPayout em status REQUESTED, vinculando as comissoes — e a lista
  *      de "a pagar" do financeiro. O financeiro paga por fora, marca como PAID e
  *      anexa o comprovante (obrigatorio) via /admin/indicacoes/saques ou
  *      /admin/financeiro. Marcar como pago NUNCA acontece automaticamente.
  *   3. Notifica equipe financeira (precisa pagar) e revendedor (em processamento).
+ *
+ * ANTECIPACAO (ver ./payout-window.ts): o saldo de (2) inclui as comissoes que
+ * ainda estao PENDING mas vencem DENTRO deste mes. E o que permite a lista da
+ * competencia recem-fechada existir no dia 1, com o valor ja fechado, para o
+ * financeiro poder pagar ANTES do dia X. O `status` da comissao NAO e
+ * antecipado — a unidade continua vendo "liberado dia X"; quem antecipa e o
+ * pagamento, nao a promessa.
  *
  * Idempotente: comissoes ja vinculadas a um payout (payoutId != null) sao puladas.
  */
@@ -457,52 +475,86 @@ export async function processMonthlyPayouts(): Promise<{
     })
   }
 
-  // 2. Cria payouts automaticos para todos os referrers com saldo AVAILABLE
+  // 2. Cria payouts automaticos para todos os referrers com saldo a pagar
   // (independente do minimo — pagamento e mensal sem solicitacao).
   // Inclui comissoes que ja estavam AVAILABLE de meses anteriores e ainda nao
   // tinham payout (raro, mas pode ocorrer se houve falha no cron passado).
   // Agrega os DOIS motores (por pagamento + por faixas) no mesmo payout.
+  //
+  // O ramo PENDING e a ANTECIPACAO: depois do passo 1, toda PENDING que sobra
+  // vence no futuro, e `cutoff` (1o dia do mes que vem) deixa passar so o que
+  // vence AINDA NESTE MES — a competencia que acabou de fechar. Sem ele a lista
+  // do dia 1 sairia vazia e o financeiro so descobriria o valor no dia X, sem
+  // janela nenhuma para antecipar o pagamento.
+  const cutoff = anticipationCutoff(now)
+  const payableWhere = {
+    payoutId: null,
+    OR: [
+      { status: "AVAILABLE" as const },
+      { status: "PENDING" as const, availableAt: { lt: cutoff } },
+    ],
+  }
   const [availableUnattached, monthlyUnattached] = await Promise.all([
     prisma.referralCommission.findMany({
-      where: { status: "AVAILABLE", payoutId: null },
-      select: { id: true, referrerTenantId: true, amount: true },
+      where: payableWhere,
+      select: {
+        id: true,
+        referrerTenantId: true,
+        amount: true,
+        availableAt: true,
+      },
     }),
     prisma.referralMonthlyCommission.findMany({
-      where: { status: "AVAILABLE", payoutId: null },
-      select: { id: true, referrerTenantId: true, amount: true },
+      where: payableWhere,
+      select: {
+        id: true,
+        referrerTenantId: true,
+        amount: true,
+        availableAt: true,
+      },
     }),
   ])
 
-  // Agrupa por referrer (ids separados por motor para vincular cada tabela)
+  // Agrupa por referrer (ids separados por motor para vincular cada tabela).
+  // `releases` guarda o availableAt de cada comissao para o payout nascer com a
+  // data prevista de liberacao (a maior delas) — ver latestReleaseDate.
   const byReferrer = new Map<
     string,
-    { total: Prisma.Decimal; ids: string[]; monthlyIds: string[] }
-  >()
-  for (const c of availableUnattached) {
-    const cur = byReferrer.get(c.referrerTenantId) ?? {
-      total: new Prisma.Decimal(0),
-      ids: [],
-      monthlyIds: [],
+    {
+      total: Prisma.Decimal
+      ids: string[]
+      monthlyIds: string[]
+      releases: Date[]
     }
+  >()
+  const emptyBucket = () => ({
+    total: new Prisma.Decimal(0),
+    ids: [] as string[],
+    monthlyIds: [] as string[],
+    releases: [] as Date[],
+  })
+  for (const c of availableUnattached) {
+    const cur = byReferrer.get(c.referrerTenantId) ?? emptyBucket()
     cur.total = cur.total.add(c.amount)
     cur.ids.push(c.id)
+    cur.releases.push(c.availableAt)
     byReferrer.set(c.referrerTenantId, cur)
   }
   for (const c of monthlyUnattached) {
-    const cur = byReferrer.get(c.referrerTenantId) ?? {
-      total: new Prisma.Decimal(0),
-      ids: [],
-      monthlyIds: [],
-    }
+    const cur = byReferrer.get(c.referrerTenantId) ?? emptyBucket()
     cur.total = cur.total.add(c.amount)
     cur.monthlyIds.push(c.id)
+    cur.releases.push(c.availableAt)
     byReferrer.set(c.referrerTenantId, cur)
   }
 
   let payoutsCreated = 0
   let notifiedTenants = 0
 
-  for (const [tenantId, { total, ids, monthlyIds }] of byReferrer.entries()) {
+  for (const [
+    tenantId,
+    { total, ids, monthlyIds, releases },
+  ] of byReferrer.entries()) {
     // BLOQUEIO POR CLAWBACK: se houver alguma comissão marcada como
     // CLAWBACK_PENDING para este referrer, NÃO criamos payout automático
     // até admin resolver. O cancelReason começa com [CLAWBACK_PENDING] —
@@ -541,6 +593,13 @@ export async function processMonthlyPayouts(): Promise<{
       continue
     }
 
+    // Data prevista de liberacao do payout e se ele esta sendo ANTECIPADO —
+    // usados so na copy (notes, notificacoes, rotulo da tela). A mecanica de
+    // pagamento e identica nos dois casos: o financeiro paga quando quiser.
+    const dueAt = latestReleaseDate(releases)
+    const antecipado = isAnticipatedPayout(dueAt, now)
+    const dueLabel = dueAt ? dueAt.toLocaleDateString("pt-BR", { timeZone: "UTC" }) : ""
+
     // Atomicidade: cada referrer é processado dentro de uma transação. A
     // criação do payout + vinculação das comissões usa CAS — o updateMany
     // exige `payoutId: null` na cláusula where, então duas invocações
@@ -572,8 +631,10 @@ export async function processMonthlyPayouts(): Promise<{
           pixKey: tenant?.pixKey ?? null,
           pixKeyType: tenant?.pixKeyType ?? null,
           requestedAt: now,
-          notes:
-            "Lista gerada pelo cron mensal. Pagamento MANUAL: pague, marque como pago e anexe o comprovante.",
+          dueAt,
+          notes: antecipado
+            ? `Lista gerada no fechamento do mes. Liberacao prevista para ${dueLabel} — pode ser pago ANTES. Pagamento MANUAL: pague, marque como pago e anexe o comprovante.`
+            : "Lista gerada pelo cron mensal. Pagamento MANUAL: pague, marque como pago e anexe o comprovante.",
         },
       })
 
@@ -581,13 +642,24 @@ export async function processMonthlyPayouts(): Promise<{
       // pegou as mesmas comissões enquanto montávamos o payout, estes updateMany
       // devolvem count=0 e jogamos fora o payout (throw aborta a transação).
       // Vincula os dois motores (por pagamento + por faixas) ao mesmo payout.
+      // `status: { in: [...] }` e nao `"AVAILABLE"`: a comissao antecipada
+      // entra na lista ainda PENDING. Manter o CAS por status ainda importa —
+      // ele e o que impede vincular uma comissao CANCELADA (clawback) entre a
+      // leitura e o vinculo.
+      const linkableStatus: Prisma.EnumReferralCommissionStatusFilter = {
+        in: ["AVAILABLE", "PENDING"],
+      }
       const [linked, linkedMonthly] = await Promise.all([
         tx.referralCommission.updateMany({
-          where: { id: { in: ids }, payoutId: null, status: "AVAILABLE" },
+          where: { id: { in: ids }, payoutId: null, status: linkableStatus },
           data: { payoutId: payout.id },
         }),
         tx.referralMonthlyCommission.updateMany({
-          where: { id: { in: monthlyIds }, payoutId: null, status: "AVAILABLE" },
+          where: {
+            id: { in: monthlyIds },
+            payoutId: null,
+            status: linkableStatus,
+          },
           data: { payoutId: payout.id },
         }),
       ])
@@ -619,12 +691,20 @@ export async function processMonthlyPayouts(): Promise<{
 
     // Notifica revendedor — pagamento é MANUAL (feito pelo financeiro após
     // conferência). Não prometemos pagamento automático.
+    //
+    // No payout ANTECIPADO a comissao ainda esta PENDING: dizer "liberado" ali
+    // contradiria o painel dela, que mostra a mesma comissao como pendente ate
+    // o dia da liberacao.
     await createNotification({
       audience: "TENANT",
       tenantId,
       level: "INFO",
-      title: "Comissao de indicacao em processamento",
-      body: `R$ ${total.toFixed(2).replace(".", ",")} liberado. O pagamento e feito manualmente pela equipe financeira apos conferencia; o comprovante ficara disponivel aqui.`,
+      title: antecipado
+        ? "Comissao de indicacao apurada"
+        : "Comissao de indicacao em processamento",
+      body: antecipado
+        ? `R$ ${total.toFixed(2).replace(".", ",")} apurado, com liberacao prevista para ${dueLabel}. O pagamento e feito manualmente pela equipe financeira apos conferencia (pode ocorrer antes da data); o comprovante ficara disponivel aqui.`
+        : `R$ ${total.toFixed(2).replace(".", ",")} liberado. O pagamento e feito manualmente pela equipe financeira apos conferencia; o comprovante ficara disponivel aqui.`,
       category: "referral",
       href: "/painel/indicacoes",
     })
@@ -635,7 +715,7 @@ export async function processMonthlyPayouts(): Promise<{
       roleTarget: "PMB_FINANCEIRO",
       level: "WARNING",
       title: `Comissao a pagar: ${tenant?.name ?? tenantId}`,
-      body: `R$ ${total.toFixed(2).replace(".", ",")} ${hasPix ? "via PIX" : "(sem PIX cadastrado, pagar manual)"}. Pague, marque como pago e anexe o comprovante em /admin/indicacoes/saques.`,
+      body: `R$ ${total.toFixed(2).replace(".", ",")} ${hasPix ? "via PIX" : "(sem PIX cadastrado, pagar manual)"}${antecipado ? ` — previsto para ${dueLabel}, pode ser pago antes` : ""}. Pague, marque como pago e anexe o comprovante em /admin/indicacoes/saques.`,
       category: "referral",
       href: "/admin/indicacoes/saques",
     })

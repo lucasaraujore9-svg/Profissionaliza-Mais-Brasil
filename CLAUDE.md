@@ -1302,6 +1302,52 @@ acontece porque `planCourseWhere` so alcanca o que a vitrine vende, mas e o
 ponto a revisitar se cursos de terceiros entrarem em plano.
 
 
+### Comissao de indicacao aparece no dia 1, nao no dia 20 (2026-09-09)
+
+O valor a pagar so existia no dia 20: o cron `pmb-referral-monthly-payout`
+rodava uma vez por mes e, na MESMA execucao, fechava a competencia, liberava a
+comissao e montava a lista de pagamento. Antes disso nao havia numero nenhum em
+lugar nenhum — nao dava para pagar um indicador antes da data porque ninguem
+sabia quanto era.
+
+- **Os dois eventos foram SEPARADOS.** Dia 1: a competencia fecha, a comissao e
+  apurada e o `ReferralPayout` (a lista do financeiro) nasce ja com o valor
+  final. Dia 20 (`SystemSettings.referralPayoutDay`): a comissao e LIBERADA
+  (PENDING -> AVAILABLE), como sempre. O financeiro paga em qualquer ponto entre
+  os dois.
+- **A antecipacao mexe no PAYOUT, nunca no `status` da comissao.** Promover para
+  AVAILABLE no dia 1 mudaria a promessa que a unidade le no painel ("liberado
+  dia 20") e o extrato dela. Por isso `processMonthlyPayouts` passou a recolher
+  tambem as PENDING cujo `availableAt` cai DENTRO deste mes — a regua e
+  `anticipationCutoff` (`lib/referrals/payout-window.ts`, PURO): o 1o instante
+  do mes seguinte, em UTC porque `availableAt` tambem e gravado em UTC.
+  Competencia que so vence no mes que vem fica de fora: seria adiantar mes nao
+  apurado.
+- **O CAS do vinculo passou a aceitar `PENDING`** (`status: { in: [...] }`).
+  Continua sendo um CAS por status de proposito — e ele que impede vincular uma
+  comissao CANCELADA por clawback entre a leitura e a escrita.
+- **`ReferralPayout.dueAt`** guarda a data prevista de liberacao (a MAIOR
+  `availableAt` do payout — a menor prometeria uma data em que parte do valor
+  ainda estaria retida). Sem a coluna, a tela nao distingue "vence dia 20" de
+  "ja venceu": a linha do dia 1 leria como pagamento atrasado. Migration
+  `20260909_referral_payout_due_at` (aditiva, idempotente, sem backfill —
+  payout antigo fica NULL, que e a leitura correta: todos nasceram no dia da
+  liberacao).
+- **O valor CONGELA no dia 1**, porque `computeMonthlyCommissions` pula
+  competencia ja vinculada a payout. Na pratica nao se perde janela de correcao
+  (o fechamento antigo tambem congelava no ato), e fechar logo apos o mes e MAIS
+  correto: `activeNowCount` conta status de HOJE, entao unidade criada no meio do
+  mes corrente contamina menos a faixa da competencia passada.
+- **O gate de clawback no `markPayoutPaid` passa a valer por 19 dias a mais** —
+  e o que impede pagar, no dia 5, uma comissao que foi estornada no dia 10.
+- **Cron:** `'0 5 20 * *'` -> `'0 5 1,20 * *'` em `prisma/sql/pg_cron_jobs.sql`.
+  **Mudanca de agendamento NAO se aplica sozinha**: rodar o `cron.schedule` do
+  arquivo no Supabase apos o deploy e conferir em `cron.job`.
+- Testes verificados POR MUTACAO (`payout-window.test.ts`,
+  `payout-antecipacao.test.ts`): tirar o ramo PENDING da selecao, deslocar o
+  cutoff em um mes ou voltar o CAS para so `AVAILABLE` derruba o caso
+  correspondente.
+
 ### Bugs conhecidos (pendentes)
 
 - **Middleware file convention deprecado** no Next 16 (usar `proxy` em vez de `middleware`).

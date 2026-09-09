@@ -12,6 +12,10 @@ export const maxDuration = 300
 
 // Janela de catch-up: fecha os ultimos N meses (idempotente). Cobre o caso de o
 // cron ter ficado fora do ar por um ou mais meses sem perder competencias.
+//
+// O job roda DUAS vezes por mes (dia 1 e dia da liberacao — ver
+// prisma/sql/pg_cron_jobs.sql). A execucao do dia 1 e a que fecha a competencia
+// recem-terminada; a do dia da liberacao promove PENDING -> AVAILABLE.
 const CATCHUP_MONTHS = 3
 
 export const POST = withRequestContext(
@@ -43,6 +47,10 @@ export const POST = withRequestContext(
       )
 
       // 2) Promove PENDING→AVAILABLE (legado + faixas) e monta a lista de saques.
+      // Rodando no dia 1, a competência recém-fechada ainda não venceu: ela
+      // entra na lista pela janela de antecipação (payout-window.ts), com o
+      // valor já fechado, para o financeiro poder pagar antes do dia da
+      // liberação. Rodando no dia da liberação, é o comportamento de sempre.
       const result = await processMonthlyPayouts()
       log.info({ event: "cron.referral_payout.done", ...result }, "payout mensal concluído")
       return NextResponse.json({ data: { periods, computes, ...result } })

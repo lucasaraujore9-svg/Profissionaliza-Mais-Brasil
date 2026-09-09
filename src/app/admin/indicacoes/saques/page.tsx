@@ -43,6 +43,8 @@ export default async function AdminSaquesPage() {
   // carteira e abria uma aba com 403.
   const podeBaixarComprovante = ctx.can("financeiro.manage")
 
+  const hoje = new Date()
+
   const payouts = await prisma.referralPayout.findMany({
     where: { referrer: scope },
     select: {
@@ -55,6 +57,7 @@ export default async function AdminSaquesPage() {
       asaasTransferId: true,
       failureReason: true,
       requestedAt: true,
+      dueAt: true,
       processedAt: true,
       paidAt: true,
       proofUrl: true,
@@ -76,14 +79,15 @@ export default async function AdminSaquesPage() {
       </Link>
       <PageHeader
         title="Pagamentos de indicação"
-        description="Lista de comissões liberadas para pagamento manual. Pague, marque como pago e anexe o comprovante (obrigatório)."
+        description="Lista de comissões a pagar, montada no fechamento de cada mês. O pagamento é manual e pode ser feito antes da data prevista de liberação: pague, marque como pago e anexe o comprovante (obrigatório)."
       />
 
       <Card className="overflow-hidden">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Solicitado em</TableHead>
+              <TableHead>Gerado em</TableHead>
+              <TableHead>Previsto para</TableHead>
               <TableHead>Indicador</TableHead>
               <TableHead className="text-right">Valor</TableHead>
               <TableHead>Método</TableHead>
@@ -95,8 +99,8 @@ export default async function AdminSaquesPage() {
           <TableBody>
             {payouts.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center text-sm text-gray-500 py-8">
-                  Nenhum saque solicitado.
+                <TableCell colSpan={8} className="text-center text-sm text-gray-500 py-8">
+                  Nenhum pagamento na lista.
                 </TableCell>
               </TableRow>
             ) : (
@@ -104,6 +108,25 @@ export default async function AdminSaquesPage() {
                 <TableRow key={p.id}>
                   <TableCell>
                     {p.requestedAt.toLocaleDateString("pt-BR")}
+                  </TableCell>
+                  {/* Data prevista de LIBERACAO. Quando esta no futuro o valor
+                      ja esta fechado e pode ser pago antes — e o ponto da
+                      antecipacao; sem a marca, o financeiro leria a linha como
+                      um pagamento comum e nao saberia que esta adiantando. */}
+                  <TableCell className="text-xs">
+                    {p.dueAt ? (
+                      <>
+                        {p.dueAt.toLocaleDateString("pt-BR")}
+                        {p.dueAt > hoje &&
+                        (p.status === "REQUESTED" || p.status === "PROCESSING") ? (
+                          <span className="ml-1 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800">
+                            antecipado
+                          </span>
+                        ) : null}
+                      </>
+                    ) : (
+                      <span className="text-gray-400">—</span>
+                    )}
                   </TableCell>
                   <TableCell className="font-medium">
                     <Link

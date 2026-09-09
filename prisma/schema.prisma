@@ -2503,6 +2503,11 @@ model ReferralPayout {
   monthlyCommissions ReferralMonthlyCommission[]
 
   requestedAt DateTime  @default(now()) @map("requested_at")
+  // Data PREVISTA de liberacao (a maior `availableAt` entre as comissoes deste
+  // payout). Desde a antecipacao, a lista de pagamento nasce no dia 1 com
+  // comissoes que so serao liberadas no dia X — sem esta coluna o financeiro
+  // nao teria como distinguir "vence dia 20" de "ja venceu".
+  dueAt       DateTime? @map("due_at")
   processedAt DateTime? @map("processed_at")
   paidAt      DateTime? @map("paid_at")
 
