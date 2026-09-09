@@ -80,7 +80,7 @@ function carne(paid: number, total: number, progress: number, extra = {}) {
     paceAppliedPercent: null,
     paceExemptAt: null,
     lmsEnrollmentId: null,
-    course: { nome: "Eletricista" },
+    course: { nome: "Eletricista", contentType: "COURSE" },
     student: { nome: "Maria", status: "ATIVO" },
     ...extra,
   }
@@ -96,6 +96,58 @@ beforeEach(() => {
   p.enrollment.updateMany.mockResolvedValue({ count: 0 })
   lmsConfiguredMock.mockReturnValue(false)
   lmsLimitMock.mockResolvedValue(undefined)
+})
+
+describe("evaluatePaceGate — e-book fica fora da cota", () => {
+  // A cota compara a fração PAGA com a fração de AULAS assistidas, e desce ao
+  // LMS como teto de aulas liberadas. Um arquivo não tem aulas: o progresso dele
+  // só assume 0 ou 100, então o aluno que marcasse "li" seria travado no ato — e
+  // o teto enviado não teria em que pegar.
+  const ebook = { course: { nome: "Guia do Eletricista", contentType: "EBOOK" } }
+
+  it("não trava, não corta o aluno e não manda teto ao LMS", async () => {
+    lmsConfiguredMock.mockReturnValue(true)
+    // 1 de 2 parcelas com 50% "assistido": num CURSO isto trava.
+    p.enrollment.findUnique.mockResolvedValue(
+      carne(1, 2, 50, { ...ebook, lmsEnrollmentId: "lms_enr_1" }),
+    )
+
+    const out = await evaluatePaceGate("e1")
+
+    expect(out).toBeNull()
+    expect(lmsLimitMock).not.toHaveBeenCalled()
+    expect(setBlockMock).not.toHaveBeenCalled()
+    expect(p.enrollment.update).not.toHaveBeenCalled()
+  })
+
+  it("SOLTA quem já estava travado — a regra não o alcança mais", async () => {
+    // Cobre a matrícula travada antes desta exceção existir (ou reclassificada).
+    // Deixar o flag prenderia o aluno numa trava que ninguém mais reavalia.
+    p.enrollment.findUnique.mockResolvedValue(
+      carne(1, 2, 50, { ...ebook, paceBlockedAt: new Date(), paceAppliedPercent: 50 }),
+    )
+
+    const out = await evaluatePaceGate("e1")
+
+    expect(p.enrollment.updateMany).toHaveBeenCalled()
+    expect(out).toMatchObject({ blocked: false, allowedPercent: 100, changed: true })
+  })
+
+  it("sai ANTES de consultar o interruptor da cota — a regra não é do tenant", async () => {
+    p.enrollment.findUnique.mockResolvedValue(carne(1, 6, 90, ebook))
+
+    await evaluatePaceGate("e1")
+
+    expect(settingsMock).not.toHaveBeenCalled()
+  })
+
+  it("o mesmo cenário num CURSO continua travando (a exceção não vaza)", async () => {
+    p.enrollment.findUnique.mockResolvedValue(carne(1, 2, 50))
+
+    const out = await evaluatePaceGate("e1")
+
+    expect(out).toMatchObject({ blocked: true })
+  })
 })
 
 describe("evaluatePaceGate — teto por matrícula no LMS", () => {

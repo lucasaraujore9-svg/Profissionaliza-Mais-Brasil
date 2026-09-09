@@ -14,6 +14,10 @@ import {
   isConclusionBlockedByPace,
 } from "@/lib/enrollment/pace-gate"
 import { resolvePaceGateSettings } from "@/lib/enrollment/pace-settings"
+import {
+  canIssueCertificate,
+  contentAccessLabel,
+} from "@/lib/catalog/content-type"
 import { contextLogger } from "@/lib/logger"
 import {
   Award,
@@ -117,6 +121,7 @@ export default async function StudentCoursesPage({
           capaOverride: true,
           categoriaLoja: true,
           provider: true,
+          contentType: true,
         },
       },
       certificates: {
@@ -233,8 +238,15 @@ export default async function StudentCoursesPage({
             // parcelamento em aberto o botão NÃO aparece: o backend recusaria.
             const isConcluded =
               e.progressStatus === "CONCLUIDO" || percent >= minPercent
+            // E-book não certifica (ver `canIssueCertificate`): sem este gate a
+            // área do aluno ofereceria "Emitir certificado" num botão que o
+            // backend recusa — e o aluno leria a recusa como defeito nosso.
             const canEmitCertificate =
-              isActive && isConcluded && !certificate && !conclusionBlocked
+              isActive &&
+              isConcluded &&
+              !certificate &&
+              !conclusionBlocked &&
+              canIssueCertificate(e.course)
 
             return (
               <article
@@ -385,7 +397,9 @@ export default async function StudentCoursesPage({
                         rel="noopener noreferrer"
                         className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--color-pmb-green)] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[var(--color-pmb-green-700)]"
                       >
-                        Acessar aulas
+                        {/* "Acessar aulas" num e-book prometeria uma tela que
+                            não existe — o rótulo vem da fonte única do tipo. */}
+                        {contentAccessLabel(e.course.contentType)}
                         <ExternalLink className="h-4 w-4" />
                       </a>
                     ) : isActive && plataformaLoginUrl ? (

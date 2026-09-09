@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { requireStudentSession } from "@/lib/auth/student-session"
 import {
   issueCertificateIfEligible,
+  NotCertifiableError,
   MissingCpfError,
   PaceGateError,
 } from "@/lib/certificates/issue"
@@ -132,6 +133,13 @@ export const POST = withRequestContext(
       // conteúdo mas ainda deve parcelas. Mandar "tente novamente" (o genérico
       // abaixo) seria conselho errado: repetir nunca vai funcionar, quitar sim.
       // Também não é erro de servidor — 400 com a mensagem real.
+      // Conteúdo que não certifica (e-book): recusa DEFINITIVA. O botão nem
+      // deveria ter aparecido — a área do aluno não o mostra para e-book —, mas
+      // a rota é alcançável por POST direto, e "tente novamente" seria a pior
+      // resposta possível para algo que nunca vai mudar.
+      if (err instanceof NotCertifiableError) {
+        return NextResponse.json({ error: err.message }, { status: 400 })
+      }
       if (err instanceof PaceGateError) {
         contextLogger().info(
           {

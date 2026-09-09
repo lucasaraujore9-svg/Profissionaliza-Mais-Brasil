@@ -1,5 +1,6 @@
 import type { Course } from "@/components/main/home/course-card"
 import { interestFreeLabel } from "@/lib/mercadopago/installments"
+import { contentCardMeta } from "@/lib/catalog/content-type"
 
 /**
  * Mappeia rows do Prisma para o shape `Course` consumido pelos cards da home.
@@ -13,6 +14,8 @@ export const courseSelect = {
   categoriaLoja: true,
   qtdAulas: true,
   cargaHoraria: true,
+  contentType: true,
+  ebookPages: true,
   precoVitrineMain: true,
   precoPromocional: true,
   precoOriginal: true,
@@ -29,6 +32,8 @@ interface RawCourse {
   categoriaLoja: string | null
   qtdAulas: number
   cargaHoraria: string | null
+  contentType: "COURSE" | "EBOOK"
+  ebookPages: number | null
   precoVitrineMain: number | null
   precoPromocional: number | null
   precoOriginal: number | null
@@ -45,6 +50,8 @@ type DbRow = {
   categoriaLoja: string | null
   qtdAulas: number
   cargaHoraria: string | null
+  contentType: "COURSE" | "EBOOK"
+  ebookPages: number | null
   precoVitrineMain: unknown
   precoPromocional: unknown
   precoOriginal: unknown
@@ -62,6 +69,8 @@ export function normalizeCourseRow(c: DbRow): RawCourse {
     categoriaLoja: c.categoriaLoja,
     qtdAulas: c.qtdAulas,
     cargaHoraria: c.cargaHoraria,
+    contentType: c.contentType,
+    ebookPages: c.ebookPages,
     capaImageUrl: c.capaImageUrl,
     capaOverride: c.capaOverride,
     parcelasSugeridas: c.parcelasSugeridas,
@@ -96,13 +105,15 @@ export function toCourse(
 ): Course {
   return {
     slug: c.slug,
-    categoria: c.categoriaLoja ?? "Curso profissionalizante",
+    categoria:
+      c.categoriaLoja ?? (c.contentType === "EBOOK" ? "E-book" : "Curso profissionalizante"),
     titulo: c.nome,
-    horas: c.cargaHoraria ? `${c.cargaHoraria}h` : `${c.qtdAulas} aulas`,
+    horas: contentCardMeta(c),
     preco: formatPrice(pickPrice(c)),
     parcelas: interestFreeLabel(interestFree) ?? "",
     selo: selo ?? null,
     accent: idx % 2 === 0 ? "gold" : "green",
     imageUrl: c.capaOverride ?? c.capaImageUrl,
+    contentType: c.contentType,
   }
 }

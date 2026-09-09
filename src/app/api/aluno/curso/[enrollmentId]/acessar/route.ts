@@ -44,7 +44,7 @@ export async function GET(
       lmsPortalUrl: true,
       paceBlockedAt: true,
       student: { select: { id: true } },
-      course: { select: { provider: true } },
+      course: { select: { provider: true, contentType: true, lmsSlug: true } },
     },
   })
 
@@ -75,7 +75,14 @@ export async function GET(
     const { url } = await createLmsSsoToken({
       studentExternalId: enrollment.student.id,
       tenantExternalId: enrollment.tenantId ?? undefined,
-      returnUrl: new URL("/aluno/cursos", request.url).toString(),
+      // O `returnUrl` do SSO é um PATH INTERNO da plataforma de aulas (lá ele
+      // passa por `safeInternalPath`, que descarta URL absoluta). Num e-book
+      // mandamos o aluno direto para o leitor: o botão dele diz "Ler e-book" e
+      // parar numa lista de conteúdos seria pedir mais um clique para chegar
+      // onde o rótulo já prometeu. Sem `lmsSlug` (linha antiga) cai no padrão.
+      ...(enrollment.course.contentType === "EBOOK" && enrollment.course.lmsSlug
+        ? { returnUrl: `/curso/${enrollment.course.lmsSlug}/ler` }
+        : {}),
     })
     return NextResponse.redirect(url)
   } catch (err) {

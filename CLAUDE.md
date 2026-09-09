@@ -1348,6 +1348,76 @@ sabia quanto era.
   cutoff em um mes ou voltar o CAS para so `AVAILABLE` derruba o caso
   correspondente.
 
+### Tipo de conteudo: curso ou e-book (2026-09-09)
+
+O catalogo so tinha uma forma de produto. Agora `Course.contentType`
+(`COURSE`|`EBOOK`) discrimina, e o e-book compartilha TODA a camada comercial —
+matricula, cobranca, cupom, pacote, split de autoria, assinatura, inadimplencia.
+O que muda e o que o aluno RECEBE e, por consequencia, o que a pagina de venda
+promete.
+
+- **So a fornecedora propria (LMS) produz e-book.** A legada (EA) e uma
+  plataforma de aulas em video e nao tem o conceito; o sync dela nunca toca o
+  campo e o default cobre todo o catalogo existente. O tipo e do LMS, que e o
+  dono do conteudo, e desce pelo sync como o resto (`sync-lms.ts`).
+- **O tipo e definido na CRIACAO e nao muda depois** — nem no PMB, nem no LMS,
+  nem pela API. Um curso ja montado que virasse e-book perderia modulos, aulas e
+  provas de vista, sem caminho de volta; e reescreveria o que o comprador viu na
+  pagina de venda. Trocar de tipo e criar outro conteudo. Por isso sao DOIS
+  BOTOES ("Novo curso" / "Novo e-book") e nao um seletor dentro do formulario.
+- **Fonte unica:** `src/lib/catalog/content-type.ts` (PURO — os formularios de
+  venda sao client). Ali moram o vocabulario (`contentLabel`,
+  `contentAccessLabel`, `contentCardMeta`) e as DUAS regras que dependem do tipo:
+  `canIssueCertificate` e `isPaceGateApplicable`. O arquivo e curto de proposito:
+  quanto menos o sistema perguntar "que tipo e isto?", menos lugares divergem.
+- **Pagina de venda SEPARADA, nao um `if`**: `EbookDetailView` x
+  `CourseDetailView`. Aquela promete "N aulas em video", "carga horaria",
+  "certificado reconhecido nacionalmente", "assistir pelo celular" e "conclua
+  todas as aulas" em oito lugares — um discriminador espalhado por ela viraria um
+  componente ilegivel, e a primeira promessa que alguem esquecesse de gatear
+  seria vendida. **O DINHEIRO e compartilhado** (`offer-panel.tsx`, extraido do
+  curso): o "De R$", o "Nx sem juros", o carne no boleto e a mensalidade sao a
+  mesma conta, e duas copias divergiriam na tela em que a pessoa decide pagar.
+- **E-BOOK NAO EMITE CERTIFICADO.** O certificado e documento de CURSO LIVRE
+  (Lei nº 9.394/96 + Decreto nº 5.154/2004): declara carga horaria, conclusao
+  apurada e traz matriz curricular no verso. Num e-book a "conclusao" e o proprio
+  leitor dizendo que terminou, sem apuracao nenhuma. O gate mora no NUCLEO
+  (`issueCertificateIfEligible` -> `NotCertifiableError`) e nao em cada tela,
+  pela licao do `GUARDIAN_REQUIRED` — a emissao tem quatro portas (automatica
+  pelo progresso EA, delta do LMS, manual do /admin e do /painel, botao do
+  aluno). **`force` NAO abre excecao**: o SUPER_ADMIN pode forcar uma emissao
+  travada pela cota, mas ninguem transforma um e-book em curso livre.
+- **A `RegulamentacaoNote` NAO renderiza em e-book** — aquele texto declara que o
+  produto e um curso livre regulamentado. Imprimi-lo ali seria afirmacao legal
+  falsa. A `AutoriaNote` renderiza, com `kind="ebook"`: mesmo texto juridico com
+  o objeto certo (enumerar "aulas, exercicios e avaliacoes" num e-book descreve
+  outro produto, e clausula que descreve outra coisa nao protege ninguem).
+- **E-book fica FORA da cota de aulas.** A cota compara a fracao paga com a
+  fracao de AULAS assistidas e desce ao LMS como teto de aulas liberadas; um
+  arquivo nao tem aulas, e o progresso dele so assume 0 ou 100 — quem marcasse
+  "li" seria travado no ato. `evaluatePaceGate` trata como `paceExemptAt`:
+  **limpa** a marca de quem ja estava travado, senao o flag prenderia o aluno
+  numa trava que ninguem mais reavalia. **Consequencia aceita, e ela e comercial:
+  e-book vendido em 6x fica inteiro disponivel desde a 1a parcela** — quem para
+  de pagar cai na trava de inadimplencia, que revoga o acesso. Fatiar um PDF por
+  parcela exigiria servir intervalos de pagina, o que o leitor nao faz e o
+  download derrubaria de qualquer forma.
+  `PACE_GATED_CONTENT_WHERE` fica SEPARADO de `PACE_GATED_WHERE` (que tem teste
+  de PARIDADE com `isPaceGatedPlan`, e plano nao sabe o que esta sendo vendido);
+  ele so evita trabalho desperdicado na varredura e numeros de impacto mentirosos
+  em /admin/configuracoes/cota-aulas.
+- **Cards, confirmacao e area do aluno tambem mudam.** O card trocava "N aulas"
+  por "0 aulas" e prometia "Certificado" — agora `contentCardMeta` (fonte unica,
+  usada pelos TRES mapeadores de card) diz "84 paginas" e a linha vira "Acesso
+  imediato". A confirmacao dizia "Matricula realizada" e "assista quando quiser".
+  O CTA da area do aluno vira "Ler e-book" e o SSO leva DIRETO ao leitor
+  (`returnUrl: /curso/<slug>/ler`, que e path interno do LMS).
+- **Deploy:** migration `20260909_course_content_type` (aditiva, idempotente, sem
+  backfill — `content_type` nasce `COURSE` em todas as linhas, que e o que elas
+  sao). Nada a ligar: o e-book so aparece quando o LMS mandar um no sync. O LMS
+  precisa estar na versao que devolve `contentType` em `GET /api/v1/courses` —
+  campo ausente resolve para curso, entao a ordem de deploy nao quebra nada.
+
 ### Bugs conhecidos (pendentes)
 
 - **Middleware file convention deprecado** no Next 16 (usar `proxy` em vez de `middleware`).

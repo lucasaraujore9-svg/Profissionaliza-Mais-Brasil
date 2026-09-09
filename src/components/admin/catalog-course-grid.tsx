@@ -13,6 +13,9 @@ export interface CatalogCourse {
   nome: string
   slug: string
   provider?: CourseProvider
+  /** COURSE (default) | EBOOK — o admin precisa distinguir os dois na curadoria. */
+  contentType?: "COURSE" | "EBOOK"
+  ebookPages?: number | null
   qtdAulas: number
   cargaHoraria: string | null
   precoOriginal: number | null
@@ -95,9 +98,17 @@ export function CatalogCourseGrid({ courses, canEdit = false, onEdit, totalCount
                   <h4 className="mt-3 text-sm font-semibold leading-snug text-[var(--color-pmb-green-900)]">
                     {c.nome}
                   </h4>
-                  {c.cargaHoraria && (
+                  {/* No e-book `cargaHoraria` guarda o tempo de leitura; o que
+                      distingue o produto na curadoria é o número de páginas. */}
+                  {c.contentType === "EBOOK" ? (
+                    <p className="mt-1 text-[11px] text-gray-500">
+                      {c.ebookPages
+                        ? `${c.ebookPages} ${c.ebookPages === 1 ? "página" : "páginas"}`
+                        : c.cargaHoraria || "E-book"}
+                    </p>
+                  ) : c.cargaHoraria ? (
                     <p className="mt-1 text-[11px] text-gray-500">{c.cargaHoraria}</p>
-                  )}
+                  ) : null}
                   <div className="mt-3 flex items-center justify-between text-xs text-gray-600">
                     <span className="inline-flex items-center gap-1">
                       <Users className="h-3 w-3" />
@@ -116,6 +127,11 @@ export function CatalogCourseGrid({ courses, canEdit = false, onEdit, totalCount
                     {c.resellers} revendedor{c.resellers === 1 ? "" : "es"} vendendo
                   </p>
                   <div className="mt-3 flex flex-wrap items-center gap-2">
+                    {c.contentType === "EBOOK" ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-semibold text-indigo-700">
+                        <BookOpen className="h-3 w-3" /> E-book
+                      </span>
+                    ) : null}
                     {c.provider ? (
                       <span
                         className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-semibold text-gray-600"

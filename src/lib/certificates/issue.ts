@@ -19,6 +19,7 @@ import {
 } from "@/lib/enrollment/pace-gate"
 import { resolvePaceGateSettings } from "@/lib/enrollment/pace-settings"
 import { contextLogger } from "@/lib/logger"
+import { canIssueCertificate } from "@/lib/catalog/content-type"
 
 const SETTINGS_ID = "default"
 
@@ -47,6 +48,24 @@ export class PaceGateError extends Error {
  * emitir agora, tente novamente" — conselho que nunca vai funcionar, porque
  * repetir nao preenche CPF nenhum.
  */
+/**
+ * Emissao recusada porque o conteudo NAO E UM CURSO.
+ *
+ * Tipo proprio pelo mesmo motivo do `PaceGateError` e do `MissingCpfError`: e
+ * uma recusa DEFINITIVA e explicavel, nao falha de servidor. E ela nao tem
+ * `force`: o SUPER_ADMIN pode forcar uma emissao que a cota travou (o aluno
+ * negociou, pagou por fora), mas ninguem pode transformar um e-book em curso
+ * livre com carga horaria — o documento afirmaria o que nao aconteceu.
+ */
+export class NotCertifiableError extends Error {
+  constructor() {
+    super(
+      "Este conteúdo é um e-book e não emite certificado. Certificado é documento de curso livre, com carga horária e conclusão apurada.",
+    )
+    this.name = "NotCertifiableError"
+  }
+}
+
 export class MissingCpfError extends Error {
   constructor() {
     super(
@@ -96,6 +115,22 @@ export async function issueCertificateIfEligible(
   if (!enrollment) throw new Error(`Enrollment ${enrollmentId} nao encontrado`)
   if (!enrollment.student) throw new Error("Aluno nao encontrado para a matricula")
   if (!enrollment.course) throw new Error("Curso nao encontrado para a matricula")
+
+  // ── E-book não certifica ──────────────────────────────────────────────────
+  // ANTES de qualquer outra checagem, e SEM saída por `force`. Vem primeiro
+  // porque é a recusa mais definitiva das três: cota e CPF descrevem algo que
+  // ainda pode ser resolvido, esta descreve o que o produto É. E o gate mora
+  // aqui, no núcleo, e não em cada tela: a emissão tem quatro portas (automática
+  // pelo progresso, manual do /admin, manual do /painel, botão do aluno) e a
+  // lição do `GUARDIAN_REQUIRED` foi que gate nascido numa rota só deixa as
+  // outras errando por meses.
+  if (!canIssueCertificate(enrollment.course)) {
+    contextLogger().info(
+      { event: "certificates.not_certifiable", enrollmentId, source },
+      "emissão de certificado recusada — conteúdo não é curso",
+    )
+    throw new NotCertifiableError()
+  }
 
   // Bloqueia emissão para matrículas que não pagaram (PENDING) ou foram canceladas/reembolsadas.
   // ACTIVE (cursando), SUSPENDED (inadimplente — pode ter completado antes), COMPLETED são válidas.

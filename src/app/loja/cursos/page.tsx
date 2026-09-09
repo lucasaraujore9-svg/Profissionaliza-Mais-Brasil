@@ -9,6 +9,7 @@ import {
   type TenantCourseListItem,
 } from "@/lib/tenant/courses"
 import { RegulamentacaoNote } from "@/components/shared/regulamentacao-note"
+import { contentCardMeta } from "@/lib/catalog/content-type"
 
 export const dynamic = "force-dynamic"
 
@@ -33,9 +34,17 @@ function toCourse(item: TenantCourseListItem, idx: number): Course {
       : ""
   return {
     slug: item.slug,
-    categoria: item.categoria ?? "Curso profissionalizante",
+    categoria:
+      item.categoria ?? (item.contentType === "EBOOK" ? "E-book" : "Curso profissionalizante"),
     titulo: item.nome,
-    horas: item.horas ? `${item.horas}h` : "Online",
+    // `contentCardMeta` decide o que este slot diz nos dois tipos. Antes era
+    // `${item.horas}h` fixo — no e-book o campo guarda "2 horas" (tempo de
+    // leitura), e a concatenação produzia "2 horash".
+    horas: contentCardMeta({
+      contentType: item.contentType,
+      cargaHoraria: item.horas,
+      ebookPages: item.ebookPages,
+    }) || "Online",
     preco: formatPrice(item.price),
     precoDe:
       item.originalPrice && item.originalPrice > item.price
@@ -46,6 +55,7 @@ function toCourse(item: TenantCourseListItem, idx: number): Course {
     selo: item.isFeatured ? "mais-vendido" : null,
     accent: idx % 2 === 0 ? "gold" : "green",
     imageUrl: item.imageUrl,
+    contentType: item.contentType,
   }
 }
 

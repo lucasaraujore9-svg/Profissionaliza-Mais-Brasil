@@ -1,5 +1,6 @@
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
+import { contentCardMeta } from "@/lib/catalog/content-type"
 import type { Course } from "@/components/main/home/course-card"
 import { COURSE_HAS_PRICE, COURSE_PROVISIONABLE } from "@/lib/catalog/visibility"
 import { interestFreeLabel } from "@/lib/mercadopago/installments"
@@ -746,6 +747,8 @@ async function fetchTenantCoursesByIds(
             categoriaLoja: true,
             qtdAulas: true,
             cargaHoraria: true,
+            contentType: true,
+            ebookPages: true,
             capaImageUrl: true,
             capaOverride: true,
             monthlyMonthsMain: true,
@@ -769,9 +772,10 @@ async function fetchTenantCoursesByIds(
     const monthlyMonths = c.monthlyMonthsMain
     return {
       slug: c.slug,
-      categoria: c.categoriaLoja ?? "Curso profissionalizante",
+      categoria:
+        c.categoriaLoja ?? (c.contentType === "EBOOK" ? "E-book" : "Curso profissionalizante"),
       titulo: c.nome,
-      horas: c.cargaHoraria ? `${c.cargaHoraria}h` : `${c.qtdAulas} aulas`,
+      horas: contentCardMeta(c),
       preco: formatTenantPrice(Number(tc.price)),
       // Pagamento único: "Nx sem juros" vem do nº GLOBAL da unidade.
       parcelas: isMonthly
@@ -783,6 +787,7 @@ async function fetchTenantCoursesByIds(
       selo: null,
       accent: idx % 2 === 0 ? "gold" : "green",
       imageUrl: tc.customCapaUrl ?? c.capaOverride ?? c.capaImageUrl,
+      contentType: c.contentType,
     }
   })
 }

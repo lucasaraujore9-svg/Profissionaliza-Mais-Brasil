@@ -8,6 +8,11 @@ import {
   CourseDetailView,
   type CourseDetailData,
 } from "@/components/shared/course-detail-view"
+import {
+  EbookDetailView,
+  type EbookDetailData,
+} from "@/components/shared/ebook-detail-view"
+import { isEbook } from "@/lib/catalog/content-type"
 import { LeadInquiryCard } from "@/components/loja/lead-inquiry-card"
 import { getRequestOrigin } from "@/lib/seo/host"
 import { JsonLd } from "@/components/seo/json-ld"
@@ -92,6 +97,55 @@ export default async function CoursePage({ params }: CoursePageProps) {
     mpPublicKey: tenantPayment?.mpPublicKey,
   })
 
+  // CTA sempre aponta para o checkout DA VITRINE — a mesma rota para os dois
+  // tipos: o que muda é a promessa da página, não a compra.
+  const ctaHref = `/checkout?course_id=${course.tenantCourseId}`
+
+  const inquirySlot = tenant.automationEnabled ? (
+    <LeadInquiryCard
+      courseSlug={course.slug}
+      courseName={course.nome}
+      escolaName={tenant.name}
+    />
+  ) : null
+
+  // ── E-BOOK ────────────────────────────────────────────────────────────────
+  // Sai antes de montar `CourseDetailData`: aquela forma carrega aulas, carga
+  // horária e matriz, que aqui não existem — e a página que a consome promete
+  // vídeo e certificado em oito lugares.
+  if (isEbook(course)) {
+    const ebook: EbookDetailData = {
+      slug: course.slug,
+      nome: course.nome,
+      categoria: course.categoria ?? "E-book",
+      descricao: course.descricao,
+      imageUrl: course.imageUrl,
+      price: course.price,
+      originalPrice: course.originalPrice,
+      parcelas: displayInterestFreeInstallments(
+        tenantPayment?.interestFreeInstallments ?? 1,
+      ),
+      paginas: course.ebookPages,
+      // `horas` é a mesma coluna que no curso guarda a carga horária; no e-book
+      // a autoria a rotula como tempo estimado de leitura.
+      tempoLeitura: course.horas,
+      baixavel: course.ebookDownloadable,
+      sumario: course.matriz,
+      aprendizado: course.aprendizado,
+      authorName: course.authorTenantName,
+    }
+    return (
+      <EbookDetailView
+        ebook={ebook}
+        ctaHref={ctaHref}
+        ctaLabel={checkoutMode === "NONE" ? "Quero este e-book" : "Comprar agora"}
+        backHref="/"
+        backLabel="Voltar para a loja"
+        inquirySlot={inquirySlot}
+      />
+    )
+  }
+
   const data: CourseDetailData = {
     slug: course.slug,
     nome: course.nome,
@@ -115,19 +169,10 @@ export default async function CoursePage({ params }: CoursePageProps) {
     authorName: course.authorTenantName,
   }
 
-  // CTA sempre aponta para o checkout DA VITRINE. Quando a unidade não tem
-  // gateway próprio (NONE), a página de checkout exibe o formulário de contato
-  // (e-mail p/ a revenda + lead) — nunca o checkout do sistema mãe.
-  const ctaHref = `/checkout?course_id=${course.tenantCourseId}`
+  // Quando a unidade não tem gateway próprio (NONE), a página de checkout exibe
+  // o formulário de contato (e-mail p/ a revenda + lead) — nunca o checkout do
+  // sistema mãe.
   const ctaLabel = checkoutMode === "NONE" ? "Quero me matricular" : "Comprar agora"
-
-  const inquirySlot = tenant.automationEnabled ? (
-    <LeadInquiryCard
-      courseSlug={course.slug}
-      courseName={course.nome}
-      escolaName={tenant.name}
-    />
-  ) : null
 
   const origin = await getRequestOrigin()
   const jsonLd =

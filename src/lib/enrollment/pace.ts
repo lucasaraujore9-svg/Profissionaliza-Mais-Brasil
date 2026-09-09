@@ -24,6 +24,7 @@ import {
   type PaceState,
 } from "./pace-gate"
 import { resolvePaceGateSettings } from "./pace-settings"
+import { isPaceGateApplicable } from "@/lib/catalog/content-type"
 import { setLmsEnrollmentLimit, isLmsConfigured } from "@/lib/lms"
 import { appUrl } from "@/lib/tenant/urls"
 import { createNotification } from "@/lib/notifications"
@@ -92,7 +93,7 @@ export async function evaluatePaceGate(
       where: { id: enrollmentId },
       select: {
         ...PACE_SELECT,
-        course: { select: { nome: true } },
+        course: { select: { nome: true, contentType: true } },
         // `status` do aluno entra para detectar DERIVA: quem mais mexe neste
         // campo (auto-block/unblock do tenant, desbloqueio manual do admin,
         // reativacao ao vincular curso) pode ter devolvido o acesso sem saber
@@ -109,6 +110,31 @@ export async function evaluatePaceGate(
       if (enrollment.paceBlockedAt) {
         await clearPaceFlags([enrollment.id])
         await releaseStudentPaceIfClear(enrollment.studentId)
+      }
+      return null
+    }
+
+    // ── E-BOOK: fora da regra da cota ─────────────────────────────────────
+    // A cota compara a fração PAGA com a fração de AULAS assistidas, e aplica o
+    // resultado como teto de aulas liberadas no LMS. Um arquivo não tem aulas:
+    // o progresso dele só assume 0 ou 100, então o aluno que marcasse "li" seria
+    // travado no ato — e o teto enviado não teria em que pegar.
+    //
+    // Tratado como o `paceExemptAt`: se a matrícula carregava a marca (de antes
+    // desta exceção, ou de uma reclassificação de tipo), ela é LIMPA. Deixar o
+    // flag numa matrícula que a regra não alcança mais prenderia o aluno numa
+    // trava que ninguém mais reavalia. Ver `isPaceGateApplicable`.
+    if (!isPaceGateApplicable(enrollment.course)) {
+      if (enrollment.paceBlockedAt) {
+        await clearPaceFlags([enrollment.id])
+        const released = await releaseStudentPaceIfClear(enrollment.studentId)
+        return {
+          enrollmentId: enrollment.id,
+          allowedPercent: 100,
+          blocked: false,
+          changed: true,
+          platformApplied: released,
+        }
       }
       return null
     }

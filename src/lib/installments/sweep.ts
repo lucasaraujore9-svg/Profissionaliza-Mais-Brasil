@@ -17,7 +17,7 @@ import { createNotification } from "@/lib/notifications"
 import { swallow } from "@/lib/errors"
 import { contextLogger } from "@/lib/logger"
 import { evaluatePaceGate } from "@/lib/enrollment/pace"
-import { PACE_GATED_WHERE } from "@/lib/enrollment/pace-gate"
+import { PACE_GATED_WHERE, PACE_GATED_CONTENT_WHERE } from "@/lib/enrollment/pace-gate"
 import { generateMpBoletoForInstallment } from "./plan"
 import { isOverdue, INSTALLMENT_REVEAL_WINDOW_DAYS } from "./schedule"
 
@@ -132,6 +132,10 @@ async function reconcilePaceGates(): Promise<number> {
         // paridade. Sem o ramo herdado, a satélite de uma compra parcelada
         // (ONE_TIME, sem parcelas) ficava fora da varredura para sempre.
         PACE_GATED_WHERE,
+        // E-book nao entra: `evaluatePaceGate` o dispensa de qualquer forma
+        // (ver `isPaceGateApplicable`), e sem este filtro a varredura carregaria
+        // todo e-book parcelado da base toda noite para nao fazer nada.
+        PACE_GATED_CONTENT_WHERE,
         {
           OR: [
             { paceBlockedAt: { not: null } },

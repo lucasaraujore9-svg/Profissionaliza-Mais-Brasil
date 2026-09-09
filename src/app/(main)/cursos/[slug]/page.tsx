@@ -5,6 +5,11 @@ import {
   CourseDetailView,
   type CourseDetailData,
 } from "@/components/shared/course-detail-view"
+import {
+  EbookDetailView,
+  type EbookDetailData,
+} from "@/components/shared/ebook-detail-view"
+import { isEbook } from "@/lib/catalog/content-type"
 import { LeadInquiryCard } from "@/components/loja/lead-inquiry-card"
 import { JsonLd } from "@/components/seo/json-ld"
 import { courseJsonLd, breadcrumbJsonLd } from "@/lib/seo/jsonld"
@@ -20,6 +25,10 @@ type LoadedCurso = CourseDetailData & {
   id: string
   /** Tem preço configurado na vitrine principal. */
   hasPrice: boolean
+  /** COURSE | EBOOK — decide QUAL página de venda é renderizada. */
+  contentType: "COURSE" | "EBOOK"
+  ebookPages: number | null
+  ebookDownloadable: boolean
 }
 
 async function loadCurso(slug: string): Promise<LoadedCurso | null> {
@@ -67,7 +76,8 @@ async function loadCurso(slug: string): Promise<LoadedCurso | null> {
       id: c.id,
       slug: c.slug,
       nome: c.nome,
-      categoria: c.categoriaLoja ?? "Curso profissionalizante",
+      categoria:
+        c.categoriaLoja ?? (c.contentType === "EBOOK" ? "E-book" : "Curso profissionalizante"),
       // Hierarquia para a vitrine principal: admin > plataforma bruto
       descricao: c.descricaoOverride ?? c.descricao,
       qtdAulas: c.qtdAulas,
@@ -93,9 +103,42 @@ async function loadCurso(slug: string): Promise<LoadedCurso | null> {
       // aqui até mais, porque o comprador está na marca da plataforma.
       authorName: c.authorTenant?.name ?? null,
       hasPrice: price > 0,
+      contentType: c.contentType,
+      ebookPages: c.ebookPages,
+      ebookDownloadable: c.ebookDownloadable,
     }
   } catch {
     return null
+  }
+}
+
+/**
+ * `LoadedCurso` -> a forma que a página do e-book consome.
+ *
+ * A carga vem de UMA consulta só (os dois tipos moram na mesma tabela e a
+ * `loadCurso` já resolve preço, override e autoria); o que muda aqui é o
+ * recorte. `matriz` vira `sumario`: é a mesma lista de tópicos que o LMS
+ * sincroniza — num curso ela é a matriz curricular, num e-book é o índice.
+ */
+function ebookData(c: LoadedCurso): EbookDetailData {
+  return {
+    slug: c.slug,
+    nome: c.nome,
+    categoria: c.categoria,
+    descricao: c.descricao,
+    imageUrl: c.imageUrl,
+    price: c.price,
+    originalPrice: c.originalPrice,
+    parcelas: c.parcelas,
+    boletoParcelas: c.boletoParcelas,
+    paginas: c.ebookPages,
+    // A mesma coluna que num curso é a carga horária; na autoria do e-book ela é
+    // rotulada como tempo estimado de leitura.
+    tempoLeitura: c.cargaHoraria,
+    baixavel: c.ebookDownloadable,
+    sumario: c.matriz,
+    aprendizado: c.aprendizado,
+    authorName: c.authorName,
   }
 }
 
@@ -107,12 +150,17 @@ export async function generateMetadata({
   const { slug } = await params
   const curso = await loadCurso(slug)
   if (!curso) {
-    return { title: "Curso não encontrado" }
+    return { title: "Conteúdo não encontrado" }
   }
   const title = `${curso.nome} — Profissionaliza Mais Brasil`
+  // O fallback de descrição vira a meta description do Google quando o conteúdo
+  // não tem uma. Prometer certificado num e-book seria anunciar o que ele não dá
+  // — e o clique chegaria na página que diz o contrário.
   const description =
     (curso.descricao ?? "").slice(0, 160) ||
-    `Curso ${curso.nome} com certificado válido em todo o Brasil. Matricule-se agora.`
+    (isEbook(curso)
+      ? `E-book ${curso.nome}. Acesso imediato após a compra, para ler no celular ou no computador.`
+      : `Curso ${curso.nome} com certificado válido em todo o Brasil. Matricule-se agora.`)
   const imageUrl = curso.imageUrl ?? null
   return {
     title,
@@ -156,7 +204,11 @@ export default async function CursoDetalhePage({
   const ctaHref = curso.hasPrice
     ? `/checkout?course_id=${curso.id}`
     : `/contato?curso=${encodeURIComponent(curso.slug)}`
-  const ctaLabel = curso.hasPrice ? "Quero me matricular" : "Falar com a equipe"
+  const ctaLabel = curso.hasPrice
+    ? isEbook(curso)
+      ? "Quero este e-book"
+      : "Quero me matricular"
+    : "Falar com a equipe"
 
   const inquirySlot = settings.pmbAutomationEnabled ? (
     <LeadInquiryCard
@@ -191,16 +243,29 @@ export default async function CursoDetalhePage({
           ]),
         ]}
       />
-      <CourseDetailView
-        course={curso}
-        ctaHref={ctaHref}
-        ctaLabel={ctaLabel}
-        backHref="/cursos"
-        backLabel="Voltar para o catálogo"
-        secondaryCtaHref="/ajuda"
-        secondaryCtaLabel="Tirar dúvidas"
-        inquirySlot={inquirySlot}
-      />
+      {isEbook(curso) ? (
+        <EbookDetailView
+          ebook={ebookData(curso)}
+          ctaHref={ctaHref}
+          ctaLabel={ctaLabel}
+          backHref="/cursos"
+          backLabel="Voltar para o catálogo"
+          secondaryCtaHref="/ajuda"
+          secondaryCtaLabel="Tirar dúvidas"
+          inquirySlot={inquirySlot}
+        />
+      ) : (
+        <CourseDetailView
+          course={curso}
+          ctaHref={ctaHref}
+          ctaLabel={ctaLabel}
+          backHref="/cursos"
+          backLabel="Voltar para o catálogo"
+          secondaryCtaHref="/ajuda"
+          secondaryCtaLabel="Tirar dúvidas"
+          inquirySlot={inquirySlot}
+        />
+      )}
     </>
   )
 }

@@ -736,11 +736,42 @@ enum CourseProvider {
   LMS
 }
 
+// TIPO DE CONTEUDO vendido. Discriminador, no molde de `CourseProvider`: toda a
+// camada comercial (matricula, cobranca, cupom, split, pacote, assinatura) e
+// COMPARTILHADA — o que muda e o que o aluno recebe e, por isso, o que a pagina
+// de venda promete.
+//
+//   COURSE — aulas em video na plataforma de aulas. Tudo o que existia ate aqui.
+//   EBOOK  — um arquivo para ler. Sem aula, sem prova, sem carga horaria de
+//            curso livre e SEM CERTIFICADO (ver src/lib/catalog/content-type.ts).
+//
+// So a fornecedora propria (LMS) produz e-book: a legada (EA) e uma plataforma
+// de aulas em video e nao tem o conceito. O sync EA nunca grava este campo, e o
+// default cobre todo o catalogo existente.
+enum ContentType {
+  COURSE
+  EBOOK
+}
+
 model Course {
   id String @id @default(cuid())
 
   // Fornecedora de origem (ver enum CourseProvider)
   provider CourseProvider @default(EA)
+
+  // Tipo de conteudo (ver enum ContentType). Espelha `Course.contentType` do
+  // LMS, que e o dono: o sync o traz junto do resto do catalogo. Nao e editavel
+  // aqui — trocar o tipo de um produto ja vendido reescreveria o que o aluno
+  // comprou.
+  contentType ContentType @default(COURSE) @map("content_type")
+
+  // ── Metadados de e-book (contentType = EBOOK) ──
+  // So o que a PAGINA DE VENDA precisa dizer. O ARQUIVO nunca chega aqui: ele
+  // e o produto, mora no LMS e so e servido a quem tem matricula.
+  ebookPages        Int?    @map("ebook_pages")
+  // O aluno pode baixar o arquivo, ou so le na plataforma? Decisao do autor,
+  // sincronizada do LMS — a vitrine anuncia o que ele vai poder fazer.
+  ebookDownloadable Boolean @default(true) @map("ebook_downloadable")
 
   // Dados da plataforma de aulas
   // ATENCAO: a API cursos/listar NAO retorna ID do curso!
@@ -880,6 +911,7 @@ model Course {
   @@unique([provider, authorTenantId, nome])
   @@index([authorTenantId, authoredStatus])
   @@index([provider])
+  @@index([contentType])
   @@index([status])
   @@index([categoriaLoja])
   @@index([categoryId])
@@ -1100,7 +1132,7 @@ model SubscriptionPlan {
   /// `TenantSubscriptionPlan`: a unidade ajusta PRECO e visibilidade, nunca a
   /// natureza do produto — um plano anual virando mensal numa loja so mudaria o
   /// que a rede inteira entende por aquele nome.
-  interval      SubscriptionInterval @default(MONTHLY)
+  interval SubscriptionInterval @default(MONTHLY)
 
   /// Como o conjunto de cursos e determinado. Ver SubscriptionScope.
   scope       SubscriptionScope @default(ALL)
@@ -1176,20 +1208,20 @@ model StudentSubscription {
   /// que a renovacao usa para empurrar `currentPeriodEnd`. Ler do plano faria
   /// um assinante mensal virar anual (ou perder o vitalicio) no dia em que
   /// alguem editasse o catalogo.
-  interval        SubscriptionInterval @default(MONTHLY)
+  interval SubscriptionInterval @default(MONTHLY)
 
   /// Quem VENDEU, quando a assinatura nasceu de uma venda direta (/admin/vendas
   /// ou /painel/vendas). null = contratacao pelo proprio aluno na vitrine. E o
   /// campo pelo qual o recorte de carteira (`ctx.scope.vendas`) enxerga a venda
   /// — sem ele a assinatura vendida sumiria da lista de quem a vendeu.
-  soldByUserId    String?  @map("sold_by_user_id")
+  soldByUserId String? @map("sold_by_user_id")
 
   /// Link que o aluno abre para pagar/autorizar a 1a cobranca (fatura do Asaas
   /// ou `init_point` do MP). Guardado pelo mesmo motivo de
   /// `Enrollment.asaasInvoiceUrl`: ele so e devolvido UMA vez, na resposta da
   /// venda direta — sem a coluna, o vendedor que fechasse a aba perdia o link e
   /// nao tinha como recupera-lo em lugar nenhum.
-  checkoutUrl     String?  @map("checkout_url")
+  checkoutUrl String? @map("checkout_url")
 
   gateway     PaymentGateway @default(MP)
   /// CREDIT_CARD (debito automatico), PIX ou BOLETO (fatura mensal manual).
