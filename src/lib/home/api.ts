@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import {
   validateSectionPayload,
+  hasKnownKind,
   CATEGORY_SECTION_MIN_COURSES,
   createSectionSchema,
   updateSectionSchema,
@@ -50,7 +51,7 @@ export async function listSections(scope: Scope) {
     orderBy: [{ position: "asc" }, { createdAt: "asc" }],
   })
   return NextResponse.json({
-    data: sections.map((s) => ({
+    data: sections.filter(hasKnownKind).map((s) => ({
       id: s.id,
       tenantId: s.tenantId,
       kind: s.kind,
@@ -76,14 +77,13 @@ export async function createSection(scope: Scope, body: unknown) {
     return NextResponse.json({ error: validation.error }, { status: 400 })
   }
 
-  // Singletons: bestsellers, categories_grid, tecnica, eja e idiomas só podem
-  // existir uma vez por escopo.
+  // Singletons: bestsellers, categories_grid, tecnica e eja só podem existir
+  // uma vez por escopo.
   if (
     validation.kind === "bestsellers" ||
     validation.kind === "categories_grid" ||
     validation.kind === "tecnica" ||
-    validation.kind === "eja" ||
-    validation.kind === "idiomas"
+    validation.kind === "eja"
   ) {
     const exists = await prisma.homeSection.findFirst({
       where: { tenantId: scope.tenantId, kind: validation.kind },
@@ -97,9 +97,7 @@ export async function createSection(scope: Scope, body: unknown) {
             ? "Já existe a seção “Cursos Técnicos” — edite a existente"
             : validation.kind === "eja"
               ? "Já existe a seção “EJA” — edite a existente"
-              : validation.kind === "idiomas"
-                ? "Já existe a seção “Idiomas” — edite a existente"
-                : "Já existe um bloco de categorias — edite o existente"
+              : "Já existe um bloco de categorias — edite o existente"
       return NextResponse.json({ error: message }, { status: 409 })
     }
   }
@@ -195,14 +193,11 @@ export async function updateSection(
     position?: number
   } = {}
 
-  // Conteúdo das seções padronizadas pela PMB (idiomas/tecnica/eja) NÃO é
-  // editável por revendedor: a vitrine herda o conteúdo da PMB no render; a
-  // unidade só altera position/enabled. Ignora qualquer `config` enviado em
-  // escopo de tenant para essas kinds — enforcement server-side do lock que o
-  // painel já mostra (caso contrário um PATCH manual sobrescreveria título/
-  // subtítulo da seção idiomas na vitrine da unidade).
-  const isPmbStandardizedKind =
-    slide.kind === "idiomas" || slide.kind === "tecnica" || slide.kind === "eja"
+  // Conteúdo das seções padronizadas pela PMB (tecnica/eja) NÃO é editável por
+  // revendedor: a vitrine herda o conteúdo da PMB no render; a unidade só altera
+  // position/enabled. Ignora qualquer `config` enviado em escopo de tenant para
+  // essas kinds — enforcement server-side do lock que o painel já mostra.
+  const isPmbStandardizedKind = slide.kind === "tecnica" || slide.kind === "eja"
   const ignoreTenantConfig = scope.tenantId !== null && isPmbStandardizedKind
 
   if (b.config !== undefined && !ignoreTenantConfig) {
@@ -298,12 +293,6 @@ export async function deleteSection(scope: Scope, id: string): Promise<Response>
   if (slide.kind === "eja") {
     return NextResponse.json(
       { error: "A seção “EJA” não pode ser removida — desative-a se não quiser exibi-la" },
-      { status: 400 },
-    )
-  }
-  if (slide.kind === "idiomas") {
-    return NextResponse.json(
-      { error: "A seção “Idiomas” não pode ser removida — desative-a se não quiser exibi-la" },
       { status: 400 },
     )
   }

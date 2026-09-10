@@ -22,7 +22,14 @@ const prisma = new PrismaClient({ adapter })
 async function reorderPmbHomeCanonical() {
   const catRows = await prisma.homeSection.findMany({
     where: {
-      id: { in: ["pmb-cat-informatica", "pmb-cat-administrativo", "pmb-cat-diversas"] },
+      id: {
+        in: [
+          "pmb-cat-informatica",
+          "pmb-cat-administrativo",
+          "pmb-idiomas",
+          "pmb-cat-diversas",
+        ],
+      },
     },
     select: { id: true, config: true },
   })
@@ -32,6 +39,7 @@ async function reorderPmbHomeCanonical() {
   const cats = {
     inf: catId("pmb-cat-informatica"),
     adm: catId("pmb-cat-administrativo"),
+    idi: catId("pmb-idiomas"),
     div: catId("pmb-cat-diversas"),
   }
   const rank = (kind: string, config: unknown): number => {
@@ -48,14 +56,13 @@ async function reorderPmbHomeCanonical() {
       case "category_courses":
         if (cats.inf && cfg.categoryId === cats.inf) return 2
         if (cats.adm && cfg.categoryId === cats.adm) return 4
+        if (cats.idi && cfg.categoryId === cats.idi) return 6
         if (cats.div && cfg.categoryId === cats.div) return 8
         return 1000
       case "categories_grid":
         return 3
       case "eja":
         return 5
-      case "idiomas":
-        return 6
       case "tecnica":
         return 10
       default:
@@ -344,7 +351,7 @@ async function main() {
       precoVitrineMain: 147.0,
       destaqueHome: false,
     },
-    // Idiomas — 4 cursos para a seção fixa "Idiomas" da home.
+    // Idiomas — 4 cursos para a seção "Idiomas" (categoria) da home.
     {
       nome: "Ingles para Iniciantes",
       slug: "ingles-para-iniciantes",
@@ -410,33 +417,44 @@ async function main() {
     }
   }
 
-  // Seção "Idiomas" da home (PMB) — cria/atualiza com os 4 cursos de idiomas.
-  // Em produção a seção é criada pela migration; aqui garantimos o conteúdo para
-  // o ambiente local mesmo que a migration não tenha rodado.
-  const idiomaNomes = [
-    "Ingles para Iniciantes",
-    "Espanhol Completo",
-    "Frances Basico",
-    "Italiano do Zero",
-  ]
-  const idiomaCourses = await prisma.course.findMany({
-    where: { nome: { in: idiomaNomes } },
-    select: { id: true, nome: true },
+  // Seção "Idiomas" da home (PMB) — seção de CATEGORIA como qualquer outra
+  // (migration 20260910_idiomas_section_to_category; antes era a lista fixa
+  // kind="idiomas"). Em prod a categoria e os vínculos vêm do catálogo; aqui
+  // garantimos os dois para o banco local, onde o backfill de categorias rodou
+  // com a tabela de cursos ainda vazia.
+  const idiomasCategory = await prisma.category.upsert({
+    where: { slug: "idiomas" },
+    update: {},
+    create: { name: "Idiomas", slug: "idiomas" },
   })
-  const idiomaCourseIds = idiomaNomes
-    .map((n) => idiomaCourses.find((c) => c.nome === n)?.id)
-    .filter((id): id is string => Boolean(id))
+  const idiomaCourses = await prisma.course.findMany({
+    where: { categoriaLoja: "Idiomas", authorTenantId: null },
+    select: { id: true },
+  })
+  await prisma.courseCategory.createMany({
+    data: idiomaCourses.map((c) => ({
+      courseId: c.id,
+      categoryId: idiomasCategory.id,
+    })),
+    skipDuplicates: true,
+  })
 
   const idiomasConfig = {
-    kind: "idiomas",
+    kind: "category_courses",
     title: "Idiomas",
     subtitle: "Aprenda um novo idioma e abra portas no mercado de trabalho",
-    courseIds: idiomaCourseIds,
+    categoryId: idiomasCategory.id,
+    mode: "random",
+    count: 8,
+    courseIds: [],
+    showSeeMore: true,
   }
 
   const [existingIdiomas, existingEja] = await Promise.all([
+    // `pmb-idiomas` pode ainda ser a linha fixa antiga (a migration só converte
+    // quando a categoria já existia) — o update abaixo a converte.
     prisma.homeSection.findFirst({
-      where: { tenantId: null, kind: "idiomas" },
+      where: { tenantId: null, OR: [{ id: "pmb-idiomas" }, { kind: "idiomas" }] },
       select: { id: true },
     }),
     prisma.homeSection.findFirst({
@@ -445,12 +463,12 @@ async function main() {
     }),
   ])
 
-  // Quando a migration já rodou, só atualiza o conteúdo de Idiomas (a posição
-  // já está correta). EJA fica como está (desativada até a PMB configurar).
+  // Quando a linha já existe, só atualiza o conteúdo de Idiomas (a posição já
+  // está correta). EJA fica como está (desativada até a PMB configurar).
   if (existingIdiomas) {
     await prisma.homeSection.update({
       where: { id: existingIdiomas.id },
-      data: { config: idiomasConfig },
+      data: { kind: "category_courses", config: idiomasConfig },
     })
   }
 
@@ -499,7 +517,7 @@ async function main() {
         data: {
           id: "pmb-idiomas",
           tenantId: null,
-          kind: "idiomas",
+          kind: "category_courses",
           position: pos++,
           enabled: true,
           config: idiomasConfig,

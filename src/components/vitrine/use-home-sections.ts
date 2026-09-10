@@ -15,11 +15,7 @@ export type SectionKind =
   | "institutional"
   | "tecnica"
   | "eja"
-  | "idiomas"
   | "packages"
-
-/** Padrão da seção "Idiomas": exatamente 4 cursos. Espelha IDIOMAS_SECTION_COUNT do servidor. */
-export const IDIOMAS_SECTION_COUNT = 4
 
 export type SectionMode = "manual" | "random"
 export type SectionCount = 4 | 8
@@ -89,13 +85,6 @@ export interface EjaConfig {
   kind: "eja"
 }
 
-export interface IdiomasConfig {
-  kind: "idiomas"
-  title: string
-  subtitle: string
-  courseIds: string[]
-}
-
 /**
  * Seção "Pacotes de cursos". O conteúdo (quais pacotes) é derivado em runtime
  * pela vitrine (PMB + próprios da unidade, menos os ocultos) — a config carrega
@@ -114,7 +103,6 @@ export type AnySectionConfig =
   | InstitutionalConfig
   | TecnicaConfig
   | EjaConfig
-  | IdiomasConfig
   | PackagesConfig
 
 export interface SectionRecord {

@@ -8,7 +8,6 @@ import {
   Hand,
   ImagePlus,
   Info,
-  Languages,
   Loader2,
   Lock,
   Save,
@@ -30,7 +29,6 @@ import {
 } from "@/components/admin/tecnica-courses-editor"
 import { CoursePicker } from "./course-picker"
 import { cn } from "@/lib/utils"
-import { IDIOMAS_SECTION_COUNT } from "./use-home-sections"
 import type {
   AnySectionConfig,
   BestsellersConfig,
@@ -38,7 +36,6 @@ import type {
   CategoryCoursesConfig,
   CategoryOption,
   CourseOption,
-  IdiomasConfig,
   InstitutionalConfig,
   PackagesConfig,
   SectionCount,
@@ -802,74 +799,6 @@ function TecnicaAdminEditor() {
           {saving ? "Salvando..." : "Salvar cursos"}
         </Button>
       </div>
-    </div>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// IdiomasEditor — seção "Idiomas" (4 cursos fixos, padronizada pela PMB)
-//
-// Para o admin (sistema mãe): seletor de exatamente 4 cursos + título/subtítulo,
-// editado pelo fluxo de draft/Salvar genérico (config vive no HomeSection do PMB).
-// Para a unidade: conteúdo bloqueado (lock message renderizado pela section-list).
-// ---------------------------------------------------------------------------
-
-export function IdiomasEditor({
-  section,
-  options,
-  onPatch,
-}: {
-  section: SectionRecord
-  options: { courses: CourseOption[] }
-  onPatch: (patch: Partial<AnySectionConfig>) => void
-}) {
-  const config = section.config as IdiomasConfig
-  return (
-    <div className="space-y-4">
-      <div className="flex items-start gap-2 rounded-md border border-[var(--color-pmb-green)]/15 bg-[var(--color-pmb-green)]/5 px-3 py-2.5 text-sm text-[var(--color-pmb-green-900)]">
-        <Languages className="mt-0.5 h-4 w-4 shrink-0 text-[var(--color-pmb-green)]" aria-hidden />
-        <p>
-          Escolha exatamente <b>{IDIOMAS_SECTION_COUNT} cursos</b> de idiomas.
-          Esta seleção é <b>padronizada para toda a rede</b> — vale para o site
-          PMB e para todas as vitrines de revendedor.
-        </p>
-      </div>
-
-      <CoursePicker
-        selectedIds={config.courseIds}
-        required={IDIOMAS_SECTION_COUNT}
-        courses={options.courses}
-        onChange={(ids) =>
-          onPatch({
-            courseIds: ids.slice(0, IDIOMAS_SECTION_COUNT),
-          } as Partial<AnySectionConfig>)
-        }
-        hint="Mostrando cursos do catálogo completo"
-      />
-
-      <TitleSubtitleEditor
-        title={config.title}
-        subtitle={config.subtitle}
-        onTitleChange={(v) => onPatch({ title: v } as Partial<AnySectionConfig>)}
-        onSubtitleChange={(v) =>
-          onPatch({ subtitle: v } as Partial<AnySectionConfig>)
-        }
-        placeholderTitle="Idiomas"
-      />
-    </div>
-  )
-}
-
-/** Card read-only da seção Idiomas para a unidade (conteúdo padronizado pela PMB). */
-export function IdiomasLockedNotice() {
-  return (
-    <div className="flex items-start gap-2 rounded-md border border-[var(--color-pmb-green)]/15 bg-[var(--color-pmb-green)]/5 px-3 py-2.5 text-sm text-[var(--color-pmb-green-900)]">
-      <Lock className="mt-0.5 h-4 w-4 shrink-0 text-[var(--color-pmb-green)]" aria-hidden />
-      <p>
-        Os cursos da seção <b>Idiomas</b> são padronizados pela administração e
-        iguais em toda a rede. Aqui você só pode <b>posicionar</b> e{" "}
-        <b>ligar/desligar</b> a seção na sua vitrine, pelo cabeçalho acima.
-      </p>
     </div>
   )
 }

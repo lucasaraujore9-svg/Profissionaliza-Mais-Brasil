@@ -132,11 +132,7 @@ async function renderSection(
 ): Promise<React.ReactNode | null> {
   const cfg = section.config
 
-  if (
-    cfg.kind === "bestsellers" ||
-    cfg.kind === "category_courses" ||
-    cfg.kind === "idiomas"
-  ) {
+  if (cfg.kind === "bestsellers" || cfg.kind === "category_courses") {
     const resolved = await resolveSectionCourses(section, ctx.tenantId, {
       bestsellersSnapshot: ctx.bestsellersSnapshot,
       onNewBestsellersSnapshot: ctx.onNewBestsellersSnapshot,

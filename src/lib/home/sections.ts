@@ -129,20 +129,6 @@ export interface EjaSectionConfig {
 }
 
 /**
- * Padrão da seção "Idiomas": exatamente 4 cursos (1 linha). O conteúdo é
- * padronizado pela PMB (igual à Técnica): a config dos `courseIds` vive na seção
- * idiomas do PMB e as unidades só exibem/reordenam — nunca editam a lista.
- */
-export const IDIOMAS_SECTION_COUNT = 4 as const
-
-export interface IdiomasSectionConfig {
-  kind: "idiomas"
-  title: string
-  subtitle: string
-  courseIds: string[]
-}
-
-/**
  * Seção "Pacotes de cursos" — exibe uma linha de cards de pacote. O conteúdo
  * (quais pacotes, preço) é resolvido em runtime pela vitrine: pacotes da PMB
  * (auto-distribuídos) + pacotes próprios da unidade, descontando os que a
@@ -163,7 +149,6 @@ export type AnySectionConfig =
   | InstitutionalConfig
   | TecnicaSectionConfig
   | EjaSectionConfig
-  | IdiomasSectionConfig
   | PackagesSectionConfig
 
 export interface HomeSectionRecord<T extends AnySectionConfig = AnySectionConfig> {
@@ -179,6 +164,8 @@ export interface HomeSectionRecord<T extends AnySectionConfig = AnySectionConfig
 // Validacao
 // ---------------------------------------------------------------------------
 
+// "idiomas" já foi um kind próprio (lista fixa da PMB); virou category_courses da
+// categoria Idiomas na migration 20260910_idiomas_section_to_category.
 export const SECTION_KINDS = [
   "bestsellers",
   "category_courses",
@@ -186,7 +173,6 @@ export const SECTION_KINDS = [
   "institutional",
   "tecnica",
   "eja",
-  "idiomas",
   "packages",
 ] as const
 export type SectionKind = (typeof SECTION_KINDS)[number]
@@ -310,30 +296,6 @@ export function validateSectionPayload(
   // (PMB) e Tenant.eja* (link por unidade).
   if (kind === "eja") {
     return { ok: true, kind, config: { kind: "eja" } }
-  }
-
-  // ---------- idiomas ----------
-  // Seção fixa de até 4 cursos, padronizada pela PMB. title/subtitle opcionais
-  // (default "Idiomas"); courseIds limitado a 4 (UI guia para exatamente 4).
-  if (kind === "idiomas") {
-    const title = strOrEmpty(c.title, 120) || "Idiomas"
-    const subtitle = strOrEmpty(c.subtitle, 200)
-    let courseIds: string[] = []
-    if (Array.isArray(c.courseIds)) {
-      courseIds = c.courseIds.filter((x): x is string => typeof x === "string")
-    }
-    // Dedup preservando ordem + cap em 4.
-    courseIds = Array.from(new Set(courseIds)).slice(0, IDIOMAS_SECTION_COUNT)
-    // Padrão fixo: 0 cursos (seção configurada mas oculta) ou exatamente 4.
-    // Espelha validateTecnicaCoursesInput — a invariante "exatamente N" vive no
-    // servidor, não só na UI.
-    if (courseIds.length !== 0 && courseIds.length !== IDIOMAS_SECTION_COUNT) {
-      return {
-        ok: false,
-        error: `A seção Idiomas exige exatamente ${IDIOMAS_SECTION_COUNT} cursos (ou nenhum). Você enviou ${courseIds.length}.`,
-      }
-    }
-    return { ok: true, kind, config: { kind: "idiomas", title, subtitle, courseIds } }
   }
 
   // ---------- packages ----------
@@ -466,14 +428,25 @@ export async function loadHomeSections(
       orderBy: [{ position: "asc" }, { createdAt: "asc" }],
     })
     if (own.length > 0) {
-      return own.map(parseRow)
+      return own.filter(hasKnownKind).map(parseRow)
     }
   }
   const pmb = await prisma.homeSection.findMany({
     where: { tenantId: null },
     orderBy: [{ position: "asc" }, { createdAt: "asc" }],
   })
-  return pmb.map(parseRow)
+  return pmb.filter(hasKnownKind).map(parseRow)
+}
+
+/**
+ * Descarta linha de um `kind` que o código não conhece mais. O caso real é a
+ * antiga "idiomas": entre a migration que a converte (roda no build) e o deploy
+ * novo entrar no ar, o código velho ainda a recria ao abrir o editor da
+ * vitrine. Sem este filtro essa linha chegaria ao painel e quebraria a tela
+ * inteira (o ícone/rotulo por kind não teria entrada para ela).
+ */
+export function hasKnownKind(r: { kind: string }): boolean {
+  return isSectionKind(r.kind)
 }
 
 function parseRow(r: {
@@ -554,21 +527,6 @@ export async function resolveSectionCourses(
 ): Promise<{ courses: Course[]; meta: { categorySlug?: string } } | null> {
   const cfg = section.config
 
-  // idiomas: lista fixa padronizada pela PMB. Para tenants, lê os courseIds da
-  // seção idiomas do PMB (fonte única, como a Técnica); na PMB usa a própria
-  // config. Os preços/capas saem de TenantCourse quando há tenant (fetchCoursesByIds).
-  if (cfg.kind === "idiomas") {
-    let ids = cfg.courseIds
-    if (tenantId) {
-      ids = await loadPmbIdiomasCourseIds()
-    }
-    ids = ids.slice(0, IDIOMAS_SECTION_COUNT)
-    if (ids.length === 0) return null
-    const courses = await fetchCoursesByIds(ids, tenantId)
-    if (courses.length === 0) return null
-    return { courses, meta: {} }
-  }
-
   if (cfg.kind !== "bestsellers" && cfg.kind !== "category_courses") return null
   // Bestsellers sempre 4, independentemente do que estiver salvo no config.
   const count = cfg.kind === "bestsellers" ? BESTSELLERS_COUNT : cfg.count
@@ -607,24 +565,6 @@ export async function resolveSectionCourses(
     select: { slug: true },
   })
   return { courses, meta: { categorySlug: category?.slug } }
-}
-
-/**
- * Lê os `courseIds` da seção idiomas do PMB (tenantId=null) — fonte única do
- * conteúdo de Idiomas para toda a rede. As vitrines de revendedor herdam estes
- * cursos (com preço/capa próprios via TenantCourse), não a config clonada.
- */
-async function loadPmbIdiomasCourseIds(): Promise<string[]> {
-  const row = await prisma.homeSection.findFirst({
-    where: { tenantId: null, kind: "idiomas" },
-    orderBy: { position: "asc" },
-    select: { config: true },
-  })
-  const cfg = row?.config as { courseIds?: unknown } | null
-  if (cfg && Array.isArray(cfg.courseIds)) {
-    return cfg.courseIds.filter((x): x is string => typeof x === "string")
-  }
-  return []
 }
 
 async function pickRandomCourseIds(args: {
@@ -832,14 +772,15 @@ export async function ensureTenantHomeSections(tenantId: string): Promise<void> 
     // tenants antigos — caso contrário não apareceriam no painel nem na home.
     await ensureTecnicaSection(tenantId)
     await ensureEjaSection(tenantId)
-    await ensureIdiomasSection(tenantId)
     await ensurePackagesSection(tenantId)
     return
   }
-  const pmbSections = await prisma.homeSection.findMany({
-    where: { tenantId: null },
-    orderBy: { position: "asc" },
-  })
+  const pmbSections = (
+    await prisma.homeSection.findMany({
+      where: { tenantId: null },
+      orderBy: { position: "asc" },
+    })
+  ).filter(hasKnownKind)
   if (pmbSections.length === 0) return
   await prisma.homeSection.createMany({
     data: pmbSections.map((s) => ({
@@ -947,9 +888,9 @@ async function createSectionAt(
 
 /**
  * Resolve a posição da âncora canônica "Sua escola no bolso"
- * (institutional/learn_anywhere) de um escopo — EJA e Idiomas nascem
- * imediatamente antes dela (ordem pedida: ... Administrativo → EJA → Idiomas →
- * Sua escola no bolso → ...). Retorna `null` quando a âncora não existe.
+ * (institutional/learn_anywhere) de um escopo — o EJA nasce antes dela quando o
+ * escopo não tem a seção de Idiomas (ordem pedida: ... Administrativo → EJA →
+ * Idiomas → Sua escola no bolso → ...). Retorna `null` quando a âncora não existe.
  */
 async function learnAnywherePosition(
   tenantId: string | null,
@@ -997,16 +938,22 @@ async function testimonialsPosition(
 // Ordem canônica da home (espelha a migration 20260620_eja_idiomas_reposition)
 // ---------------------------------------------------------------------------
 
-/** ids estáveis das 3 seções de categoria que entram na ordem canônica. */
+/**
+ * ids estáveis das seções de categoria da PMB que entram na ordem canônica.
+ * `pmb-idiomas` era a antiga seção fixa de Idiomas, convertida no lugar em
+ * category_courses (migration 20260910) — o id ficou.
+ */
 const CANONICAL_CATEGORY_PMB_IDS = {
   informatica: "pmb-cat-informatica",
   administrativo: "pmb-cat-administrativo",
+  idiomas: "pmb-idiomas",
   diversas: "pmb-cat-diversas",
 } as const
 
 interface CanonicalCategoryIds {
   inf: string | null
   adm: string | null
+  idi: string | null
   div: string | null
 }
 
@@ -1022,6 +969,7 @@ async function canonicalCategoryIds(): Promise<CanonicalCategoryIds> {
   return {
     inf: categoryId(CANONICAL_CATEGORY_PMB_IDS.informatica),
     adm: categoryId(CANONICAL_CATEGORY_PMB_IDS.administrativo),
+    idi: categoryId(CANONICAL_CATEGORY_PMB_IDS.idiomas),
     div: categoryId(CANONICAL_CATEGORY_PMB_IDS.diversas),
   }
 }
@@ -1052,14 +1000,13 @@ function canonicalRank(
     case "category_courses":
       if (cats.inf && cfg.categoryId === cats.inf) return 2
       if (cats.adm && cfg.categoryId === cats.adm) return 4
+      if (cats.idi && cfg.categoryId === cats.idi) return 6
       if (cats.div && cfg.categoryId === cats.div) return 8
       return 1000
     case "categories_grid":
       return 3
     case "eja":
       return 5
-    case "idiomas":
-      return 6
     case "tecnica":
       return 10
     default:
@@ -1104,9 +1051,10 @@ export async function reorderScopeToCanonical(
 
 /**
  * Garante (idempotente) a linha singleton kind="eja" para um escopo. Posiciona
- * no slot canônico: imediatamente ANTES de "Idiomas" (se existir) ou da âncora
- * "Sua escola no bolso"; sem âncora, cai no fim. `enabled` espelha o flag
- * eja_enabled correspondente (SystemSettings para PMB; Tenant para revendedor).
+ * no slot canônico: imediatamente ANTES da seção de Idiomas (a de categoria, se
+ * existir) ou da âncora "Sua escola no bolso"; sem âncora, cai no fim.
+ * `enabled` espelha o flag eja_enabled correspondente (SystemSettings para PMB;
+ * Tenant para revendedor).
  */
 export async function ensureEjaSection(
   tenantId: string | null,
@@ -1134,10 +1082,17 @@ export async function ensureEjaSection(
 
   // EJA fica logo antes de Idiomas (se já existir) — garante EJA→Idiomas
   // independente da ordem de criação. Senão, antes da âncora; senão, no fim.
-  const idiomas = await prisma.homeSection.findFirst({
-    where: { tenantId, kind: "idiomas" },
-    select: { position: true },
-  })
+  const { idi } = await canonicalCategoryIds()
+  const idiomas = idi
+    ? await prisma.homeSection.findFirst({
+        where: {
+          tenantId,
+          kind: "category_courses",
+          config: { path: ["categoryId"], equals: idi },
+        },
+        select: { position: true },
+      })
+    : null
   const position =
     idiomas?.position ??
     (await learnAnywherePosition(tenantId)) ??
@@ -1166,40 +1121,5 @@ export async function setEjaSectionEnabled(
   await prisma.homeSection.updateMany({
     where: { tenantId, kind: "eja" },
     data: { enabled },
-  })
-}
-
-/**
- * Garante (idempotente) a linha singleton kind="idiomas" para um escopo.
- * Posiciona no slot canônico: imediatamente antes da âncora "Sua escola no
- * bolso" (logo após EJA); sem âncora, logo após o EJA se existir; senão, no
- * fim. Nasce ativada. Conteúdo (courseIds) é padronizado pela PMB; a linha do
- * tenant é só posição + enabled e lê os cursos do PMB no render.
- */
-export async function ensureIdiomasSection(
-  tenantId: string | null,
-): Promise<void> {
-  const existing = await prisma.homeSection.findFirst({
-    where: { tenantId, kind: "idiomas" },
-    select: { id: true },
-  })
-  if (existing) return
-
-  const anchor = await learnAnywherePosition(tenantId)
-  let position: number
-  if (anchor != null) {
-    position = anchor
-  } else {
-    const eja = await prisma.homeSection.findFirst({
-      where: { tenantId, kind: "eja" },
-      select: { position: true },
-    })
-    position =
-      eja != null ? eja.position + 1 : (await lastPosition(tenantId)) + 1
-  }
-  await createSectionAt(tenantId, position, {
-    kind: "idiomas",
-    enabled: true,
-    config: { kind: "idiomas", title: "Idiomas", subtitle: "", courseIds: [] },
   })
 }
