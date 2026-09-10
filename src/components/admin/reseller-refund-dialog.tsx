@@ -90,14 +90,18 @@ export function ResellerRefundDialog({
 
   return (
     <>
-      <button
+      {/* Rotulo ESCRITO, nao so o icone — ver o mesmo cuidado no botao de baixa. */}
+      <Button
         type="button"
+        size="xs"
+        variant="ghost"
         onClick={() => setOpen(true)}
-        title="Registrar estorno"
-        className="rounded p-1.5 text-gray-400 hover:bg-amber-50 hover:text-amber-700"
+        title="O dinheiro voltou para a unidade: sai da receita e da comissão"
+        className="text-amber-700 hover:bg-amber-50"
       >
-        <Undo2 className="h-3.5 w-3.5" />
-      </button>
+        <Undo2 className="h-3 w-3" />
+        Estornar
+      </Button>
 
       <AlertDialog open={open} onOpenChange={(o) => (o ? setOpen(true) : fechar())}>
         <AlertDialogContent>

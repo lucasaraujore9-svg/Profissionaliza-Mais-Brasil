@@ -89,14 +89,19 @@ export function ResellerSettleInvoiceDialog({
 
   return (
     <>
-      <button
+      {/* Rotulo ESCRITO, nao so o icone: quem opera o financeiro precisa saber
+          o que o botao faz sem passar o mouse para ler o `title`. */}
+      <Button
         type="button"
+        size="xs"
+        variant="ghost"
         onClick={() => setOpen(true)}
-        title="Dar baixa manual (recebido fora da plataforma)"
-        className="rounded p-1.5 text-gray-400 hover:bg-[var(--color-pmb-lime-50)] hover:text-[var(--color-pmb-green-900)]"
+        title="Recebido fora da plataforma: quita a fatura e cancela a cobrança no Asaas"
+        className="text-[var(--color-pmb-green-900)] hover:bg-[var(--color-pmb-lime-50)]"
       >
-        <BadgeCheck className="h-3.5 w-3.5" />
-      </button>
+        <BadgeCheck className="h-3 w-3" />
+        Baixa manual
+      </Button>
 
       <AlertDialog open={open} onOpenChange={(o) => (o ? setOpen(true) : fechar())}>
         <AlertDialogContent>
