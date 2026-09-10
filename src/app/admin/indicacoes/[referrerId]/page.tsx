@@ -13,6 +13,7 @@ import {
   loadRelatorioIndicador,
   ultimaCompetencia,
 } from "@/lib/referrals/relatorio-indicador"
+import { carteiraResumo } from "@/lib/referrals/relatorio-carteira"
 import {
   ordenarCarteira,
   parseDirecao,
@@ -116,6 +117,7 @@ export default async function RelatorioIndicadorPage({
   const ordem = parseOrdem(ordemRaw)
   const dir = parseDirecao(dirRaw)
   const carteira = ordenarCarteira(rel.carteira, ordem, dir)
+  const resumoCarteira = carteiraResumo(totais)
 
   return (
     <div className="space-y-6">
@@ -185,8 +187,8 @@ export default async function RelatorioIndicadorPage({
         />
         <Tile
           label="Carteira"
-          value={`${totais.ativas} ativas`}
-          hint={`${totais.total} no total · ${totais.canceladas} canceladas`}
+          value={resumoCarteira.valor}
+          hint={resumoCarteira.hint}
         />
       </div>
 

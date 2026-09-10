@@ -13,6 +13,10 @@
  * do mes) e a EXPLICACAO das ausencias — ver ./relatorio-motivo.ts.
  */
 import { prisma } from "@/lib/prisma"
+import {
+  contarCarteira,
+  type ContagemCarteira,
+} from "@/lib/referrals/relatorio-carteira"
 import { EVER_PAID_TENANT_WHERE } from "@/lib/tenants/lifecycle"
 import { PAID_STATUSES } from "@/lib/tenant-billing/types"
 import { parseLinesSnapshot } from "@/lib/referrals/lines-snapshot"
@@ -70,10 +74,11 @@ export interface RelatorioIndicador {
     payout: { id: string; amount: number; status: string; dueAt: Date | null } | null
   } | null
   carteira: LinhaCarteira[]
-  totais: {
-    ativas: number
-    total: number
-    canceladas: number
+  /**
+   * `ContagemCarteira` traz TODOS os status (inclusive suspensas e pendentes) —
+   * o resumo da tela sai dela, entao a soma exibida fecha com o total.
+   */
+  totais: ContagemCarteira & {
     ativouNoMes: number
     recebidoNoMes: number
     naConta: number
@@ -289,9 +294,7 @@ export async function loadRelatorioIndicador(
       : null,
     carteira,
     totais: {
-      ativas: carteira.filter((u) => u.status === "ACTIVE").length,
-      total: carteira.length,
-      canceladas: carteira.filter((u) => u.status === "CANCELLED").length,
+      ...contarCarteira(carteira),
       ativouNoMes: carteira.filter((u) => u.ativouNoMes).length,
       recebidoNoMes: carteira.reduce((acc, u) => acc + u.recebidoNoMes, 0),
       naConta: carteira.filter((u) => u.naConta).length,
