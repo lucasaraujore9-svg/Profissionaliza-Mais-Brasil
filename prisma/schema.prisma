@@ -533,6 +533,13 @@ model Tenant {
   // "Vitrine & extras" — nao se confunde com a permissao `cursosAutorais.*`,
   // que diz QUEM dentro da unidade opera o modulo depois de ligado.
   courseAuthoringEnabled Boolean   @default(false) @map("course_authoring_enabled")
+  // Modulo "Vender assinaturas": a unidade vende planos de assinatura na vitrine
+  // e na venda direta. Habilitacao COMERCIAL, concedida pela equipe do sistema
+  // mae em /admin/revendedores/[id] → "Vitrine & extras" — mesmo molde de
+  // `courseAuthoringEnabled`. Nao se confunde com `assinaturas.*`, que diz QUEM
+  // dentro da unidade mexe nos planos depois de ligado. Desligar fecha a VENDA;
+  // quem ja assina segue com acesso. Ver src/lib/subscriptions/module.ts.
+  subscriptionsEnabled   Boolean   @default(false) @map("subscriptions_enabled")
   // Nome unico da sessao no engine de WhatsApp (gerado como cuid na 1a conexao).
   waSessionName          String?   @unique @map("wa_session_name")
   // Telefone E.164 conectado (snapshot apos QR scan). Unique = um numero

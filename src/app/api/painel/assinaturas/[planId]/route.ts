@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import { requirePainel } from "@/lib/auth/painel-guard"
+import { requireSubscriptionModule } from "@/lib/subscriptions/module-gate"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 import { ensureUniquePlanSlug } from "@/lib/subscriptions/slug"
 import {
@@ -28,7 +28,7 @@ const overrideSchema = z.object({
 export const PATCH = withRequestContextParams<{ planId: string }>(
   { action: "painel.assinaturas.update", route: "/api/painel/assinaturas/[planId]" },
   async (request: Request, { params }) => {
-    const guard = await requirePainel("assinaturas.manage")
+    const guard = await requireSubscriptionModule("assinaturas.manage")
     if (!guard.ok) return guard.response
     const { ctx } = guard
     const { planId } = await params
@@ -160,7 +160,7 @@ export const PATCH = withRequestContextParams<{ planId: string }>(
 export const DELETE = withRequestContextParams<{ planId: string }>(
   { action: "painel.assinaturas.delete", route: "/api/painel/assinaturas/[planId]" },
   async (_request: Request, { params }) => {
-    const guard = await requirePainel("assinaturas.manage")
+    const guard = await requireSubscriptionModule("assinaturas.manage")
     if (!guard.ok) return guard.response
     const { ctx } = guard
     const { planId } = await params

@@ -438,6 +438,8 @@ export const GET = withRequestContextParams<{ id: string }>(
         // Modulo "Revender revendas"
         canSellResellers: tenant.canSellResellers,
         courseAuthoringEnabled: tenant.courseAuthoringEnabled,
+        // Modulo "Vender assinaturas"
+        subscriptionsEnabled: tenant.subscriptionsEnabled,
         waConnectedPhone: tenant.waConnectedPhone,
         waStatus: tenant.waStatus,
         // Pagamento parcelado/mensalidade (habilita tb. o carnê no boleto)

@@ -14,9 +14,12 @@ vi.mock("@/lib/prisma", () => ({
     tenantSubscriptionPlan: { findMany: vi.fn(), findUnique: vi.fn() },
     coursePackageItem: { findMany: vi.fn(async () => []) },
     course: { count: vi.fn(async () => 5) },
+    // Modulo "Vender assinaturas" da unidade. Ligado por padrao aqui: os casos
+    // de escopo abaixo sao sobre QUAL plano, nao sobre SE a loja vende.
+    tenant: { findUnique: vi.fn() },
   },
 }))
-vi.mock("@/lib/catalog/visibility", () => ({ COURSE_HAS_PRICE: {} }))
+vi.mock("@/lib/catalog/visibility", () => ({ COURSE_HAS_PRICE: {}, COURSE_PROVISIONABLE: {} }))
 vi.mock("@/lib/tenant/courses", () => ({ visibilityFilter: () => ({}) }))
 
 import { prisma } from "@/lib/prisma"
@@ -26,6 +29,7 @@ const findPlans = prisma.subscriptionPlan.findMany as unknown as ReturnType<type
 const findOne = prisma.subscriptionPlan.findUnique as unknown as ReturnType<typeof vi.fn>
 const findOverrides = prisma.tenantSubscriptionPlan.findMany as unknown as ReturnType<typeof vi.fn>
 const findOverride = prisma.tenantSubscriptionPlan.findUnique as unknown as ReturnType<typeof vi.fn>
+const findTenant = prisma.tenant.findUnique as unknown as ReturnType<typeof vi.fn>
 
 function plan(over: Record<string, unknown> = {}) {
   return {
@@ -51,6 +55,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   findOverrides.mockResolvedValue([])
   findOverride.mockResolvedValue(null)
+  findTenant.mockResolvedValue({ subscriptionsEnabled: true })
 })
 
 describe("resolveVitrinePlans", () => {
@@ -123,5 +128,47 @@ describe("getPlanForCheckout", () => {
     findOverride.mockResolvedValue({ price: 79.9, isVisible: true })
     const out = await getPlanForCheckout("t1", "p1")
     expect(out?.price).toBe(79.9)
+  })
+})
+
+/**
+ * O modulo "Vender assinaturas" e por UNIDADE e nasce desligado. O gate mora
+ * nestas duas funcoes porque todas as portas passam por elas: a vitrine, o link
+ * da navbar, a pagina do plano, /aluno/assinar e a venda direta do painel (para
+ * listar) e os tres checkouts (para cobrar).
+ */
+describe("modulo da unidade", () => {
+  it("unidade sem o modulo nao lista plano nenhum — nem o dela, nem o da PMB", async () => {
+    findTenant.mockResolvedValue({ subscriptionsEnabled: false })
+    findPlans.mockResolvedValue([
+      plan({ id: "pmb" }),
+      plan({ id: "meu", tenantId: "t1" }),
+    ])
+    expect(await resolveVitrinePlans("t1")).toEqual([])
+    // Sai ANTES de montar a vitrine: nada de contagem de curso por plano numa
+    // loja que nem vende o produto.
+    expect(findPlans).not.toHaveBeenCalled()
+  })
+
+  it("unidade sem o modulo nao cobra, mesmo com um planId valido no corpo", async () => {
+    // A tela aberta antes de o modulo ser desligado, ou um POST direto.
+    findTenant.mockResolvedValue({ subscriptionsEnabled: false })
+    findOne.mockResolvedValue(plan({ id: "meu", tenantId: "t1" }))
+    expect(await getPlanForCheckout("t1", "meu")).toBeNull()
+    expect(findOne).not.toHaveBeenCalled()
+  })
+
+  it("unidade inexistente e fail-closed", async () => {
+    findTenant.mockResolvedValue(null)
+    findPlans.mockResolvedValue([plan()])
+    expect(await resolveVitrinePlans("t1")).toEqual([])
+  })
+
+  it("a vitrine da PMB vende sem depender do modulo", async () => {
+    findPlans.mockResolvedValue([plan()])
+    findOne.mockResolvedValue(plan())
+    expect(await resolveVitrinePlans(null)).toHaveLength(1)
+    expect(await getPlanForCheckout(null, "p1")).not.toBeNull()
+    expect(findTenant).not.toHaveBeenCalled()
   })
 })

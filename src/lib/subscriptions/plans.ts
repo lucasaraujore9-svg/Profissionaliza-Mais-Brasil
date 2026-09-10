@@ -2,6 +2,7 @@ import type { SubscriptionInterval } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import type { PlanScopeInput } from "./scope"
 import { planCourseWhere, planIncludesCourseWhere } from "./scope"
+import { isSubscriptionModuleEnabled } from "./module"
 
 /**
  * Leitura dos planos de assinatura na vitrine.
@@ -11,6 +12,12 @@ import { planCourseWhere, planIncludesCourseWhere } from "./scope"
  * sobrescritiveis pela unidade; plano proprio de OUTRA unidade nunca e vendavel.
  * Divergir daquele arquivo faria pacote e assinatura se comportarem diferente
  * na mesma loja.
+ *
+ * A diferenca para os pacotes e o MODULO: numa unidade sem
+ * `subscriptionsEnabled`, nenhum plano e vendavel — nem o dela, nem o da PMB.
+ * O gate fica nas duas funcoes de entrada (`resolveVitrinePlans` e
+ * `getPlanForCheckout`), por onde passam todas as vitrines, a venda direta e a
+ * area do aluno. Ver `module.ts`.
  */
 
 export interface PlanCard {
@@ -117,6 +124,12 @@ export async function countPlanCourses(
 export async function resolveVitrinePlans(
   tenantId: string | null,
 ): Promise<PlanCard[]> {
+  // Unidade sem o modulo nao vende assinatura nenhuma. Lista vazia e o que
+  // apaga o produto inteiro da loja: o link da navbar (`hasVitrinePlans`), a
+  // pagina de detalhe (`getVitrinePlanBySlug`), a tela /aluno/assinar e o
+  // seletor da venda direta leem daqui.
+  if (!(await isSubscriptionModuleEnabled(tenantId))) return []
+
   const rows = (await prisma.subscriptionPlan.findMany({
     where:
       tenantId === null
@@ -216,6 +229,11 @@ export async function getPlanForCheckout(
   tenantId: string | null,
   planId: string,
 ): Promise<PlanCheckoutData | null> {
+  // O mesmo gate da listagem, na hora de COBRAR. Esconder o plano da tela nao
+  // basta: a pagina aberta antes de o modulo ser desligado, ou um POST direto,
+  // chegariam aqui com um `planId` valido.
+  if (!(await isSubscriptionModuleEnabled(tenantId))) return null
+
   const plan = (await prisma.subscriptionPlan.findUnique({
     where: { id: planId },
     select: PLAN_SELECT,

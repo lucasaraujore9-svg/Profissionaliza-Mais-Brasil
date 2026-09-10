@@ -222,6 +222,11 @@ export function PainelNovaVendaClient({
       interval: p.interval,
     })),
   ]
+  // A lista de planos já chega vazia para unidade sem o módulo "Vender
+  // assinaturas" (o gate mora em `resolveVitrinePlans`). Sem plano a oferecer,
+  // a tela não fala em assinatura — senão prometeria um produto que o seletor
+  // nunca mostra.
+  const sellsPlans = plans.length > 0
 
   // ── Bolsa de estudo (sem cobrança) ──
   const [bolsista, setBolsista] = useState(false)
@@ -944,7 +949,10 @@ export function PainelNovaVendaClient({
       {/* Vários cursos = uma cobrança só, pela soma dos preços. Pacote e
           assinatura são a venda inteira e nunca somam com cursos avulsos. */}
       <div data-tour="vendas-nova:curso">
-        <Section title="2. Cursos, pacote ou assinatura" done={hasSelection}>
+        <Section
+          title={sellsPlans ? "2. Cursos, pacote ou assinatura" : "2. Cursos ou pacote"}
+          done={hasSelection}
+        >
           <div className="space-y-3">
             {hasSelection && (
               <ul className="divide-y divide-emerald-100 rounded-xl border border-emerald-200 bg-emerald-50">
@@ -992,7 +1000,9 @@ export function PainelNovaVendaClient({
                 placeholder={
                   hasSelection
                     ? "Adicionar outro curso…"
-                    : "Buscar curso, pacote ou assinatura da sua vitrine…"
+                    : sellsPlans
+                      ? "Buscar curso, pacote ou assinatura da sua vitrine…"
+                      : "Buscar curso ou pacote da sua vitrine…"
                 }
                 value={courseSearch}
                 onChange={(e) => setCourseSearch(e.target.value)}
@@ -1002,7 +1012,9 @@ export function PainelNovaVendaClient({
             <ul className="max-h-64 divide-y divide-gray-100 overflow-y-auto rounded-xl border border-gray-200 bg-white">
               {filteredItems.length === 0 && (
                 <li className="px-4 py-3 text-sm text-gray-400">
-                  Nenhum curso, pacote ou assinatura encontrado
+                  {sellsPlans
+                    ? "Nenhum curso, pacote ou assinatura encontrado"
+                    : "Nenhum curso ou pacote encontrado"}
                 </li>
               )}
               {filteredItems.map((c) => {
@@ -1051,7 +1063,10 @@ export function PainelNovaVendaClient({
             </ul>
             <p className="text-xs text-gray-400">
               Marque quantos cursos quiser (até {MAX_SALE_COURSES}) — o aluno recebe
-              um único link com a soma. Pacote e assinatura são vendidos sozinhos.
+              um único link com a soma.{" "}
+              {sellsPlans
+                ? "Pacote e assinatura são vendidos sozinhos."
+                : "Pacote é vendido sozinho."}
             </p>
           </div>
         </Section>

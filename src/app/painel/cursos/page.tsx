@@ -3,6 +3,7 @@ import { PainelCatalogTabs } from "@/components/painel/painel-catalog-tabs"
 import { requirePainelPage } from "@/lib/auth/painel-guard"
 import { prisma } from "@/lib/prisma"
 import { isCourseAuthoringEnabled } from "@/lib/course-authoring/module-gate"
+import { isSubscriptionModuleEnabled } from "@/lib/subscriptions/module"
 
 export default async function PainelCursosPage() {
   // `catalogo.view` abre a página; a edição é gated à parte. Sem este segundo
@@ -11,10 +12,15 @@ export default async function PainelCursosPage() {
   const ctx = await requirePainelPage("catalogo.view")
   const canManageCourses = ctx.can("catalogo.manage")
   const canManagePackages = ctx.can("pacotes.manage")
-  // Assinaturas tem familia propria de permissao: quem so cuida do catalogo de
-  // cursos nao precisa mexer no preco da assinatura da loja.
-  const canViewPlans = ctx.can("assinaturas.view")
-  const canManagePlans = ctx.can("assinaturas.manage")
+  // Assinaturas: as mesmas DUAS perguntas do curso de autoria abaixo — a
+  // unidade tem o módulo "Vender assinaturas" (`Tenant.subscriptionsEnabled`)
+  // e esta pessoa mexe nos planos (`assinaturas.*`, família própria: quem só
+  // cuida do catálogo de cursos não precisa mexer no preço da assinatura).
+  // Sem a primeira, a aba aparecia para toda revenda. Ver
+  // `lib/subscriptions/module.ts`.
+  const subscriptionsModuleOn = await isSubscriptionModuleEnabled(ctx.tenantId)
+  const canViewPlans = subscriptionsModuleOn && ctx.can("assinaturas.view")
+  const canManagePlans = subscriptionsModuleOn && ctx.can("assinaturas.manage")
   // Cursos de AUTORIA da unidade. DUAS perguntas, nesta ordem:
   //
   //   1. a unidade tem o modulo habilitado pelo sistema mae?
@@ -50,14 +56,19 @@ export default async function PainelCursosPage() {
       ])
     : [[], []]
 
+  // Não promete "assinaturas" a quem não tem a aba.
+  const catalogItems = canViewPlans
+    ? "cursos, pacotes e assinaturas"
+    : "cursos e pacotes"
+
   return (
     <div className="space-y-6">
       <PageHeader
         title="Catálogo"
         description={
           canManageCourses
-            ? "Gerencie os cursos, pacotes e assinaturas da sua vitrine: preço, visibilidade e destaque."
-            : "Consulte os cursos, pacotes e assinaturas da sua vitrine."
+            ? `Gerencie os ${catalogItems} da sua vitrine: preço, visibilidade e destaque.`
+            : `Consulte os ${catalogItems} da sua vitrine.`
         }
       />
 

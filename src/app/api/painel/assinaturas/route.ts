@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { requirePainel } from "@/lib/auth/painel-guard"
+import { requireSubscriptionModule } from "@/lib/subscriptions/module-gate"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { countPlanCourses } from "@/lib/subscriptions/plans"
 import { ensureUniquePlanSlug } from "@/lib/subscriptions/slug"
@@ -16,11 +16,14 @@ import { createPlanSchema } from "@/lib/subscriptions/schema"
  *    visibilidade e destaque via `TenantSubscriptionPlan`.
  *  - **Proprios** (`tenantId` = a unidade): criados por ela, aparecem SO na
  *    vitrine dela e ela edita tudo.
+ *
+ * Todas as rotas daqui exigem o modulo "Vender assinaturas" ligado na unidade
+ * (`requireSubscriptionModule`) — ha teste de cobertura.
  */
 export const GET = withRequestContext(
   { action: "painel.assinaturas.list", route: "/api/painel/assinaturas" },
   async () => {
-    const guard = await requirePainel("assinaturas.view")
+    const guard = await requireSubscriptionModule("assinaturas.view")
     if (!guard.ok) return guard.response
     const { ctx } = guard
 
@@ -98,7 +101,7 @@ export const GET = withRequestContext(
 export const POST = withRequestContext(
   { action: "painel.assinaturas.create", route: "/api/painel/assinaturas" },
   async (request: Request) => {
-    const guard = await requirePainel("assinaturas.manage")
+    const guard = await requireSubscriptionModule("assinaturas.manage")
     if (!guard.ok) return guard.response
     const { ctx } = guard
 

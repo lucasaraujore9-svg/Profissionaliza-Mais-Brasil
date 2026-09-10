@@ -1490,6 +1490,54 @@ contesta um valor, os dois lados tem de estar olhando a mesma conta.
   por ultimo) e todo criterio desempata por NOME — sem isso a mesma tela abriria
   em ordens diferentes a cada consulta.
 
+### Assinatura virou modulo opcional por unidade (2026-09-10)
+
+A assinatura de aluno nasceu aberta para toda revenda: o preset do dono e
+`owner: ALL`, entao `assinaturas.*` nunca barrou ninguem, e plano da PMB
+(`tenantId` null) aparece sozinho em todas as vitrines. Agora e o modulo
+"Vender assinaturas", no molde de "Produzir cursos".
+
+- **`Tenant.subscriptionsEnabled`**, default FALSE para TODA unidade — decisao
+  do dono, inclusive para quem ja tinha plano montado. Migration
+  `20260910_tenant_subscriptions_module` (aditiva, idempotente, sem backfill).
+  Liga em /admin/revendedores/[id] → "Vitrine & extras"
+  (`PUT /api/admin/tenants/[id]/assinaturas`, `unidades.governanca`, auditado
+  como `tenant.subscriptions_module`, notifica a unidade). Nao se confunde com
+  `assinaturas.*`, que diz QUEM dentro da unidade mexe nos planos.
+- **O gate mora em `resolveVitrinePlans` e `getPlanForCheckout`**
+  (`lib/subscriptions/plans.ts`), por onde ja passam a vitrine, o link da navbar,
+  a pagina do plano, /aluno/assinar, o seletor da venda direta e os tres
+  checkouts. As rotas de gestao `/api/painel/assinaturas/*` usam
+  `requireSubscriptionModule` — `guard-coverage.test.ts` quebra se um handler
+  novo nascer sem ele. A aba Catalogo → Assinaturas some e /loja/assinaturas da
+  404 com o modulo desligado.
+- **Fecha a VENDA, nunca a assinatura viva.** Webhook, renovacao, catalogo do
+  assinante, liberacao de curso e cancelamento seguem funcionando com o modulo
+  desligado: o aluno pagou pelo ciclo. Os planos da unidade ficam guardados e
+  voltam como estavam se o modulo for religado.
+- **A vitrine da PMB (`tenantId` null) nao depende do modulo** — e a dona do
+  produto. `isSubscriptionModuleEnabled(null)` devolve true sem consultar nada.
+- **Impacto medido em prod antes do deploy:** 6 unidades ja tinham plano (5 com
+  plano ativo na vitrine: conectaeducacional, eadcenatep, escala-digital,
+  pvo-educacao, rotadoaprendizado) e so a `eadcenatep` tinha assinatura vendida
+  (1 ACTIVE + 1 PENDING, as duas por venda direta). Todas saem do ar ate alguem
+  ligar o modulo delas; as 2 assinaturas seguem valendo.
+- Testes `module.test.ts`, `module-gate.test.ts`, `plans-scope.test.ts` e o
+  bloco de assinaturas do `guard-coverage.test.ts`, verificados POR MUTACAO:
+  tirar o gate de qualquer das duas funcoes, deixar o guard ignorar o modulo,
+  trocar o guard de uma rota ou tornar fail-open a unidade inexistente derruba o
+  teste correspondente.
+- **Achado lateral, NAO corrigido: /aluno/assinar (aluno ja logado) so
+  funcionaria na vitrine PMB, e nem la funciona.** `POST /api/aluno/assinatura`
+  chama `createSubscriptionAtGateway(..., "ASAAS")` SEM a conta da unidade, entao
+  para aluno de revenda `assertPmbCharge` recusa (fail-closed — nao cobra na
+  conta errada) e ele toma 502 depois de ver os planos listados. Para aluno da
+  vitrine PMB, `session.tenantId` e o placeholder `__pmb__`, tratado como
+  revenda: sem `TenantCourse`, a lista sai vazia. E a porta para onde o checkout
+  anonimo manda quem ja tem senha ("faca login para assinar"), entao toda unidade
+  que tiver o modulo ligado herda o defeito. Conserto pede resolver a conta da
+  unidade na rota e, no MP, tokenizar o cartao no browser como a loja faz.
+
 ### Bugs conhecidos (pendentes)
 
 - **Middleware file convention deprecado** no Next 16 (usar `proxy` em vez de `middleware`).

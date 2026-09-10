@@ -3,6 +3,7 @@ import Link from "next/link"
 import { notFound } from "next/navigation"
 import { getCurrentTenant } from "@/lib/tenant/current"
 import { resolveVitrinePlans } from "@/lib/subscriptions/plans"
+import { isSubscriptionModuleEnabled } from "@/lib/subscriptions/module"
 import {
   INTERVAL_PRICE_SUFFIX,
   INTERVAL_CHARGE_LABEL,
@@ -28,6 +29,10 @@ function money(v: number): string {
 export default async function LojaAssinaturasPage() {
   const tenant = await getCurrentTenant()
   if (!tenant) notFound()
+  // Loja sem o módulo "Vender assinaturas" não tem este produto: 404, e não a
+  // vitrine vazia de "nenhum plano no momento", que prometeria algo que ela
+  // não vende (o link da navbar já some pelo mesmo gate).
+  if (!(await isSubscriptionModuleEnabled(tenant.id))) notFound()
 
   // Planos da PMB com o override DESTA unidade aplicado (preço próprio,
   // ocultos removidos) e a contagem de cursos no escopo dela — o mesmo plano
