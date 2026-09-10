@@ -5,6 +5,7 @@ import {
   competenciaPagamento,
   dataPagamentoCliente,
 } from "@/lib/asaas/competencia"
+import { isManualPayment } from "@/lib/tenant-billing/manual-payment"
 import {
   describeEffectiveCommission,
   resolveEffectiveCommission,
@@ -255,6 +256,9 @@ export const GET = withRequestContextParams<{ id: string }>(
         ? payments.filter(
             (p) =>
               !asaasIds.has(p.asaasPaymentId) &&
+              // Baixa manual nao existe no Asaas por definicao: ausencia na
+              // lista e o esperado, nao prova de cancelamento.
+              !isManualPayment(p.asaasPaymentId) &&
               (p.status === "PENDING" ||
                 p.status === "OVERDUE" ||
                 p.status === "DELETING"),

@@ -15,6 +15,30 @@ export function addMonthsClamped(base: Date, months: number): Date {
   return out
 }
 
+/**
+ * Igual a `addMonthsClamped`, mas em UTC.
+ *
+ * A versao acima usa `getMonth`/`getDate`, que sao do fuso do PROCESSO. Em
+ * producao (Vercel roda em UTC) as duas dao o mesmo resultado; num servidor em
+ * fuso NEGATIVO, uma data gravada como meia-noite UTC — todo `dueDate` que veio
+ * do Asaas e `new Date("YYYY-MM-DD")` — ja e o dia ANTERIOR em horario local, e
+ * o clamp erra: 31/12 + 2 meses devolve 01/03 em vez de 28/02.
+ *
+ * Use esta quando a data de entrada for meia-noite UTC (vencimento, competencia)
+ * e o resultado tiver de ser o mesmo em qualquer maquina.
+ */
+export function addMonthsClampedUtc(base: Date, months: number): Date {
+  const targetDay = base.getUTCDate()
+  const out = new Date(base)
+  out.setUTCDate(1) // evita overflow durante o setUTCMonth
+  out.setUTCMonth(out.getUTCMonth() + months)
+  const lastDay = new Date(
+    Date.UTC(out.getUTCFullYear(), out.getUTCMonth() + 1, 0),
+  ).getUTCDate()
+  out.setUTCDate(Math.min(targetDay, lastDay))
+  return out
+}
+
 export const BR_TIMEZONE = "America/Sao_Paulo"
 
 /**

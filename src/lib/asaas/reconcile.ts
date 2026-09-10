@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma"
+import { MANUAL_PAYMENT_PREFIX } from "@/lib/tenant-billing/manual-payment"
 import {
   competenciaPagamento,
   dataPagamentoCliente,
@@ -104,6 +105,11 @@ export async function reconcileTenantPayments(tenant: {
     where: {
       tenantId: tenant.id,
       status: { in: ["PENDING", "OVERDUE", "DELETING"] },
+      // Baixa manual nao existe no Asaas: "nao apareceu na lista" e o esperado,
+      // nao prova de cancelamento. Hoje ela nasce paga e ja escaparia pelo
+      // filtro de status — a exclusao aqui e para o dia em que alguem
+      // acrescentar um status a lista acima e apagar dado que ninguem esperava.
+      NOT: { asaasPaymentId: { startsWith: MANUAL_PAYMENT_PREFIX } },
     },
     select: { asaasPaymentId: true },
   })

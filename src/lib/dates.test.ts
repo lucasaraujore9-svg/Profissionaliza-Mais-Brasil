@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest"
-import { addMonthsClamped, brDayStartUtc, daysUntilBrDay } from "./dates"
+import {
+  addMonthsClamped,
+  addMonthsClampedUtc,
+  brDayStartUtc,
+  daysUntilBrDay,
+} from "./dates"
 
 // Protege R7: o cálculo de vencimento da inadimplência não pode usar setMonth
 // nativo (overflow), senão o bloqueio atrasa ~1 mês para dias 29-31.
@@ -78,5 +83,31 @@ describe("daysUntilBrDay", () => {
   it("não escorrega de dia às 23h BRT (02:00 UTC do dia seguinte)", () => {
     const lateNight = new Date("2026-08-11T02:00:00.000Z") // 10/08 23:00 BRT
     expect(daysUntilBrDay(new Date("2026-08-10T00:00:00.000Z"), lateNight)).toBe(0)
+  })
+})
+
+describe("addMonthsClampedUtc", () => {
+  it("clampa em UTC, independente do fuso do processo", () => {
+    // `new Date("2026-12-31")` é meia-noite UTC — em fuso negativo já é dia 30
+    // em horário local, e a versão local devolveria 01/03 aqui.
+    const r = addMonthsClampedUtc(new Date("2026-12-31"), 2)
+    expect(r.toISOString().slice(0, 10)).toBe("2027-02-28")
+  })
+
+  it("preserva o dia quando o mês alvo o tem", () => {
+    expect(
+      addMonthsClampedUtc(new Date("2026-08-23"), 2).toISOString().slice(0, 10),
+    ).toBe("2026-10-23")
+  })
+
+  it("ano bissexto: 31/01 + 1 mês = 29/02", () => {
+    expect(
+      addMonthsClampedUtc(new Date("2028-01-31"), 1).toISOString().slice(0, 10),
+    ).toBe("2028-02-29")
+  })
+
+  it("zero meses é identidade", () => {
+    const base = new Date("2026-09-15")
+    expect(addMonthsClampedUtc(base, 0).getTime()).toBe(base.getTime())
   })
 })

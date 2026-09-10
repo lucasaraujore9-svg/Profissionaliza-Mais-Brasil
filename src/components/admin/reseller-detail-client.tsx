@@ -311,6 +311,8 @@ export function ResellerDetailClient({
           />
           <ResellerPaymentHistory
             tenantId={tenantId}
+            tenantName={data.reseller.name}
+            planValue={data.reseller.planValue}
             payments={data.payments}
             onRefresh={load}
           />

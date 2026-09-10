@@ -12,6 +12,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { ResellerCard } from "./reseller-card"
+import { ResellerManualPaymentDialog } from "./reseller-manual-payment-dialog"
 import { ResellerStatusBadge } from "./reseller-status"
 import {
   CortesiaReasonDialog,
@@ -35,6 +36,10 @@ export interface ResellerPayment {
 
 interface ResellerPaymentHistoryProps {
   tenantId: string
+  /** Nome da unidade — aparece no dialogo de baixa manual. */
+  tenantName: string
+  /** Mensalidade atual: preenche o valor sugerido na baixa manual. */
+  planValue: number
   payments: ResellerPayment[]
   onRefresh?: () => void
 }
@@ -73,6 +78,8 @@ interface EditState {
 
 export function ResellerPaymentHistory({
   tenantId,
+  tenantName,
+  planValue,
   payments,
   onRefresh,
 }: ResellerPaymentHistoryProps) {
@@ -210,6 +217,14 @@ export function ResellerPaymentHistory({
       flush
       title="Histórico de pagamentos"
       description="Faturas da assinatura."
+      headerAction={
+        <ResellerManualPaymentDialog
+          tenantId={tenantId}
+          tenantName={tenantName}
+          planValue={planValue}
+          onDone={onRefresh}
+        />
+      }
     >
       {(cancelError || saveError) && (
         <div className="mx-6 mt-4 rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">
