@@ -14,6 +14,7 @@ import {
 import { ResellerCard } from "./reseller-card"
 import { ResellerManualPaymentDialog } from "./reseller-manual-payment-dialog"
 import { ResellerRefundDialog } from "./reseller-refund-dialog"
+import { ResellerSettleInvoiceDialog } from "./reseller-settle-invoice-dialog"
 import { ResellerStatusBadge } from "./reseller-status"
 import {
   CortesiaReasonDialog,
@@ -419,6 +420,20 @@ export function ResellerPaymentHistory({
                               {isCancelling ? "..." : "Cancelar"}
                             </Button>
                           )}
+                          {/* Baixa manual: so em fatura EM ABERTO (a vencer ou
+                              vencida). Ao dar baixa a cobranca e cancelada no
+                              Asaas — mantida viva, seria cobrada de novo. */}
+                          {["PENDING", "OVERDUE"].includes(p.status) &&
+                            !p.paidAt &&
+                            !isEditing && (
+                              <ResellerSettleInvoiceDialog
+                                tenantId={tenantId}
+                                paymentId={p.id}
+                                amount={p.amount}
+                                dueDate={p.dueDate}
+                                onDone={onRefresh}
+                              />
+                            )}
                           {/* Estorno so faz sentido no que foi PAGO. Ja
                               estornado nao repete: a rota tambem recusa, mas
                               esconder evita o clique que so devolve erro. */}

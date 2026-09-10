@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest"
 import {
   buildManualPaymentLines,
   competenceKey,
+  existeNoGateway,
   isManualPayment,
   ManualPaymentError,
   MANUAL_PAYMENT_PREFIX,
@@ -146,5 +147,21 @@ describe("isManualPayment", () => {
     const ids = new Set(Array.from({ length: 50 }, () => newManualPaymentId()))
     expect(ids.size).toBe(50)
     for (const id of ids) expect(id.startsWith(MANUAL_PAYMENT_PREFIX)).toBe(true)
+  })
+})
+
+describe("existeNoGateway", () => {
+  it("cobrança do Asaas pode ser cancelada lá", () => {
+    expect(existeNoGateway("pay_yg730etvfse33ltb")).toBe(true)
+  })
+
+  it("lançamento manual nunca existiu no gateway", () => {
+    expect(existeNoGateway(newManualPaymentId())).toBe(false)
+  })
+
+  it("PARCELAMENTO não é cobrança: `DELETE /payments/{id}` não resolve `ins_`", () => {
+    // Chamar o gateway aqui devolve 404 e faz a baixa parecer que falhou quando
+    // não há nada a cancelar.
+    expect(existeNoGateway("ins_000005638104")).toBe(false)
   })
 })

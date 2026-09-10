@@ -112,7 +112,7 @@ export function ResellerManualPaymentDialog({
   return (
     <>
       <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
-        Baixa manual
+        Lançar meses pagos
       </Button>
 
       <AlertDialog open={open} onOpenChange={(o) => (o ? setOpen(true) : fechar())}>
@@ -124,7 +124,7 @@ export function ResellerManualPaymentDialog({
             <AlertDialogDescription>
               {resultado
                 ? `${tenantName} — o valor já conta para comissão de indicação e para a apuração de inadimplência.`
-                : `Mensalidade de ${tenantName} recebida fora da plataforma (PIX direto, transferência, dinheiro). Use quando a cobrança do Asaas foi cancelada e não há como dar baixa nela.`}
+                : `Mensalidades de ${tenantName} recebidas fora da plataforma cujas faturas AINDA NÃO EXISTEM (meses adiantados, ou cobrança já cancelada). Para quitar uma fatura que está na lista, use o botão de baixa na própria linha — ali a cobrança é cancelada no Asaas.`}
             </AlertDialogDescription>
           </AlertDialogHeader>
 

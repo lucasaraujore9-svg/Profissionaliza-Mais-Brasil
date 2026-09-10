@@ -50,6 +50,20 @@ export function newManualPaymentId(): string {
   return `${MANUAL_PAYMENT_PREFIX}${crypto.randomUUID()}`
 }
 
+/**
+ * A cobranca existe no Asaas e pode ser cancelada la?
+ *
+ * Duas classes de id NAO resolvem em `DELETE /payments/{id}`:
+ *   `manual_...` nasceu aqui e nunca existiu no gateway;
+ *   `ins_...` e um PARCELAMENTO, nao uma cobranca (a coluna guarda os dois).
+ *
+ * Chamar o gateway para esses ids devolve 404 e faz a baixa manual parecer que
+ * falhou quando nao ha nada a cancelar.
+ */
+export function existeNoGateway(asaasPaymentId: string): boolean {
+  return !isManualPayment(asaasPaymentId) && !asaasPaymentId.startsWith("ins_")
+}
+
 export interface ManualPaymentInput {
   /** Valor de UMA mensalidade, nao o total pago. */
   amount: number
