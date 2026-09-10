@@ -194,6 +194,11 @@ export const GET = withRequestContextParams<{ id: string }>(
     paidAt: string | null
     /** Quando o CLIENTE pagou (no cartao o Asaas credita ~32 dias depois). */
     clientPaidAt: string | null
+    /** Estorno registrado: o dinheiro voltou e a mensalidade sai da comissao. */
+    refundedAt: string | null
+    refundReason: string | null
+    /** Ha comprovante anexado? O PATH nunca vai para o client. */
+    hasRefundProof: boolean
     invoiceUrl: string | null
     bankSlipUrl: string | null
   }
@@ -206,6 +211,9 @@ export const GET = withRequestContextParams<{ id: string }>(
     dueDate: p.dueDate.toISOString(),
     paidAt: p.paidAt?.toISOString() ?? null,
     clientPaidAt: p.clientPaidAt?.toISOString() ?? null,
+    refundedAt: p.refundedAt?.toISOString() ?? null,
+    refundReason: p.refundReason ?? null,
+    hasRefundProof: Boolean(p.refundProofUrl),
     invoiceUrl: p.invoiceUrl ?? null,
     bankSlipUrl: p.bankSlipUrl ?? null,
   }))
@@ -236,6 +244,11 @@ export const GET = withRequestContextParams<{ id: string }>(
         dueDate: new Date(p.dueDate).toISOString(),
         paidAt: p.paymentDate ? new Date(p.paymentDate).toISOString() : null,
         clientPaidAt: dataPagamentoCliente(p)?.toISOString() ?? null,
+        // A visao do Asaas nao conhece o estorno REGISTRADO aqui; a linha do
+        // banco (abaixo, em `fromDb`) e que o carrega.
+        refundedAt: null,
+        refundReason: null,
+        hasRefundProof: false,
         invoiceUrl: p.invoiceUrl ?? null,
         bankSlipUrl: p.bankSlipUrl ?? null,
       }))

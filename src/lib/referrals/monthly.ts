@@ -249,9 +249,20 @@ async function computeForReferrer(
   // nao. Ver src/lib/asaas/competencia.ts — e NAO troque por `paidAt`, que e a
   // data do CREDITO (D+32 no cartao) e continua sendo a certa para churn,
   // blacklist e inadimplencia, que sao perguntas de caixa.
+  //
+  // UNIDADE CANCELADA QUE PAGOU NA COMPETENCIA CONTA (decisao do dono,
+  // 09/09/2026). O filtro `status: { not: "CANCELLED" }` que existia aqui a
+  // excluia, e com isso o indicador perdia a comissao de uma mensalidade que a
+  // PMB recebeu e ficou — o cancelamento veio DEPOIS e nao desfaz o dinheiro
+  // que entrou. Mesma logica que ja valia para a suspensa que pagou e caiu no
+  // mes seguinte.
+  //
+  // O que TIRA a mensalidade da conta e o ESTORNO, nao o cancelamento: a linha
+  // estornada sai de `RECEIVED_STATUSES` (vira REFUNDED) e some deste filtro
+  // sozinha. Ver src/lib/tenant-billing/refund.ts.
   const paidRows = await prisma.tenantPayment.findMany({
     where: {
-      tenant: { referrerTenantId, status: { not: "CANCELLED" } },
+      tenant: { referrerTenantId },
       status: { in: RECEIVED_STATUSES },
       competenceAt: { gte: range.start, lt: range.end },
     },
@@ -299,6 +310,13 @@ async function computeForReferrer(
     // CANCELLED, porem, sai: contrato desfeito (fraude, arrependimento,
     // duplicidade) nunca foi venda, e mante-lo inflaria a faixa — que na CDA
     // multiplica o valor por TODA a carteira.
+    //
+    // ISSO NAO CONTRADIZ a base de pagamento, que desde 09/09/2026 INCLUI a
+    // cancelada que pagou na competencia. Sao perguntas diferentes: a FAIXA
+    // mede quantas vendas novas o indicador fez e que ficaram de pe; a BASE
+    // mede de quem entrou dinheiro no mes. Uma venda que virou cancelamento nao
+    // sobe o degrau da carteira inteira, mas a mensalidade que ela pagou antes
+    // de sair continua sendo receita a ratear.
     //
     // `planValue > 0` espelha o universo de unidades abaixo: cortesia nunca
     // gera receita, entao nao pode empurrar a faixa para cima.
@@ -350,6 +368,8 @@ async function computeForReferrer(
   // da FASE ATIVA de cada unidade (avaliado no loop).
   // createdAt/activatedAt/commissionPlanStartedAt definem o relogio PROPRIO de
   // cada unidade.
+  // O ramo `id: { in: paidTenantIds }` e o que traz a unidade CANCELADA que
+  // pagou na competencia: ela nao esta ACTIVE, mas o dinheiro dela entrou.
   const units = await prisma.tenant.findMany({
     where: {
       referrerTenantId,

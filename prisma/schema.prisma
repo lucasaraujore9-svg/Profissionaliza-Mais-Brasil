@@ -221,6 +221,7 @@ model User {
 
   // TenantPayments / ReferralPayouts marcados manualmente como pagos por este admin
   markedTenantPayments   TenantPayment[]  @relation("MarkedTenantPayments")
+  refundedTenantPayments TenantPayment[]  @relation("RefundedTenantPayments")
   markedReferralPayouts  ReferralPayout[] @relation("MarkedReferralPayouts")
   // Saques cujo comprovante de pagamento foi anexado por este usuario (Financeiro)
   uploadedReferralProofs ReferralPayout[] @relation("UploadedReferralProofs")
@@ -1897,6 +1898,18 @@ model TenantPayment {
   // Gestao financeira manual (admin marca pago/anota)
   notes          String?   @map("notes") @db.Text // anotacoes do financeiro
   markedPaidAt   DateTime? @map("marked_paid_at") // quando admin marcou manualmente como pago
+
+  // ── ESTORNO registrado manualmente ──
+  // O dinheiro voltou para a unidade (arrependimento em 7 dias, cobranca
+  // indevida). A mensalidade estornada NAO entra na comissao de indicacao: o
+  // motor filtra por status pago, e o estorno leva a linha para `REFUNDED`.
+  // O comprovante e OBRIGATORIO — e a prova de que o dinheiro saiu.
+  refundedAt     DateTime? @map("refunded_at")
+  refundReason   String?   @map("refund_reason") @db.Text
+  /// PATH no bucket privado (nunca URL publica), como o comprovante de saque.
+  refundProofUrl String?   @map("refund_proof_url") @db.Text
+  refundedById   String?   @map("refunded_by_id")
+  refundedBy     User?     @relation("RefundedTenantPayments", fields: [refundedById], references: [id])
   markedPaidById String?   @map("marked_paid_by_id") // userId do admin que marcou
   markedPaidBy   User?     @relation("MarkedTenantPayments", fields: [markedPaidById], references: [id])
 

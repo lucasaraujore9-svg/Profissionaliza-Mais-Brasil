@@ -384,14 +384,22 @@ function arrange(s: Scenario = {}): void {
   // Mensalidades do mes, fatura a fatura (o motor precisa da data de cada uma).
   db.tenantPayment.findMany.mockImplementation(async (args: GroupByArgs) => {
     const where = args.where as Record<string, unknown>
-    // Descoberta de "quem pagou na competencia": filtra so por status + janela.
+    // Descoberta de "quem pagou na competencia". O mock HONRA tambem o filtro
+    // de TENANT (`where.tenant.status`) — sem isso ele ignorava silenciosamente
+    // a clausula que decide se a unidade CANCELADA entra, e um teste sobre essa
+    // regra passava com o codigo certo E com o errado.
     if (where.tenant) {
+      const tenantWhere = where.tenant as { status?: { not?: string } }
+      const statusProibido = tenantWhere.status?.not
+      const statusPorUnidade = new Map(s.units?.map((u) => [u.id, u.status]) ?? [])
       return rows
         .filter(
           (row) =>
             ["RECEIVED", "CONFIRMED"].includes(row.status) &&
             row.competenceAt >= RANGE_START &&
-            row.competenceAt < RANGE_END,
+            row.competenceAt < RANGE_END &&
+            (!statusProibido ||
+              statusPorUnidade.get(row.tenantId) !== statusProibido),
         )
         .map((row) => ({ tenantId: row.tenantId }))
     }
@@ -2005,5 +2013,75 @@ describe("competencia: a fatura antecipada fica no mes dela", () => {
     await computeMonthlyCommissions(PERIOD)
 
     expect(Number(created().amount)).toBe(75)
+  })
+})
+
+describe("unidade CANCELADA que pagou na competencia conta", () => {
+  /**
+   * Decisao do dono (09/09/2026). O filtro `status: { not: "CANCELLED" }` na
+   * descoberta de "quem pagou no mes" tirava da conta uma mensalidade que a PMB
+   * recebeu E FICOU — o cancelamento veio depois e nao desfaz o dinheiro que
+   * entrou. O que tira a mensalidade da conta e o ESTORNO, que leva a linha
+   * para REFUNDED e a faz sumir do filtro de status pago.
+   */
+  function cenario(units: UnitRow[], paid: Record<string, PaidEntry>) {
+    arrange({
+      referrers: [
+        referrer({
+          commissionBrackets: flatBracket(75),
+          commissionRateType: "FIXED",
+          commissionBracketBasis: "NEW_REFERRALS_MONTH",
+          commissionPayoutBase: "ALL_ACTIVE",
+        }),
+      ],
+      units,
+      activeTotal: units.filter((u) => u.status === "ACTIVE").length,
+      newThisMonth: 0,
+      paid,
+    })
+  }
+
+  it("cancelada HOJE mas que pagou no mes entra na base", async () => {
+    cenario([unit("cancelada", { status: "CANCELLED" }), unit("ativa")], {
+      cancelada: 239,
+      ativa: 239,
+    })
+
+    await computeMonthlyCommissions(PERIOD)
+
+    const data = created()
+    expect(data.linesSnapshot.map((l) => l.tenantId).sort()).toEqual([
+      "ativa",
+      "cancelada",
+    ])
+    expect(Number(data.amount)).toBe(150)
+  })
+
+  it("cancelada que NAO pagou no mes continua fora", async () => {
+    cenario([unit("cancelada", { status: "CANCELLED" }), unit("ativa")], {
+      ativa: 239,
+    })
+
+    await computeMonthlyCommissions(PERIOD)
+
+    const data = created()
+    expect(data.linesSnapshot.map((l) => l.tenantId)).toEqual(["ativa"])
+    expect(Number(data.amount)).toBe(75)
+  })
+
+  it("mensalidade ESTORNADA nao entra: o status deixa de ser pago", async () => {
+    // O estorno leva a linha para REFUNDED; o motor filtra por RECEIVED/
+    // CONFIRMED, entao ela some da base sozinha. E a metade da regra que separa
+    // "cancelou" de "devolveram o dinheiro".
+    cenario([unit("estornada", { status: "CANCELLED" }), unit("ativa")], {
+      estornada: { amount: 239, status: "REFUNDED" },
+      ativa: 239,
+    })
+
+    await computeMonthlyCommissions(PERIOD)
+
+    const data = created()
+    expect(data.linesSnapshot.map((l) => l.tenantId)).toEqual(["ativa"])
+    expect(Number(data.amount)).toBe(75)
   })
 })

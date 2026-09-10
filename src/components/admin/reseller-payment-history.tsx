@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { ResellerCard } from "./reseller-card"
 import { ResellerManualPaymentDialog } from "./reseller-manual-payment-dialog"
+import { ResellerRefundDialog } from "./reseller-refund-dialog"
 import { ResellerStatusBadge } from "./reseller-status"
 import {
   CortesiaReasonDialog,
@@ -30,6 +31,9 @@ export interface ResellerPayment {
   paidAt: string | null
   /** Quando o CLIENTE pagou; no cartao o credito (`paidAt`) sai ~32 dias depois. */
   clientPaidAt: string | null
+  /** Estorno registrado: o dinheiro voltou e a mensalidade sai da comissao. */
+  refundedAt: string | null
+  refundReason: string | null
   invoiceUrl: string | null
   bankSlipUrl: string | null
 }
@@ -328,6 +332,14 @@ export function ResellerPaymentHistory({
                         {isDeleting && (
                           <Loader2 className="h-3 w-3 animate-spin text-amber-500" />
                         )}
+                        {p.refundedAt && (
+                          <span
+                            title={p.refundReason ?? "Estornado"}
+                            className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800"
+                          >
+                            estornado
+                          </span>
+                        )}
                       </span>
                     </td>
 
@@ -407,6 +419,20 @@ export function ResellerPaymentHistory({
                               {isCancelling ? "..." : "Cancelar"}
                             </Button>
                           )}
+                          {/* Estorno so faz sentido no que foi PAGO. Ja
+                              estornado nao repete: a rota tambem recusa, mas
+                              esconder evita o clique que so devolve erro. */}
+                          {!p.refundedAt &&
+                            ["RECEIVED", "CONFIRMED", "RECEIVED_IN_CASH"].includes(
+                              p.status,
+                            ) && (
+                              <ResellerRefundDialog
+                                tenantId={tenantId}
+                                paymentId={p.id}
+                                amount={p.amount}
+                                onDone={onRefresh}
+                              />
+                            )}
                         </div>
                       )}
                     </td>
