@@ -1538,6 +1538,97 @@ A assinatura de aluno nasceu aberta para toda revenda: o preset do dono e
   que tiver o modulo ligado herda o defeito. Conserto pede resolver a conta da
   unidade na rota e, no MP, tokenizar o cartao no browser como a loja faz.
 
+### Vagas da assinatura + um acesso por vez (2026-09-14)
+
+Duas regras novas, decididas pelo dono no mesmo dia, nos dois repos (PMB e LMS),
+mais a correcao do cancelamento pedido pelo aluno (fim desta secao).
+
+**1. A assinatura tem 10 vagas.** O plano pode cobrir o catalogo inteiro, mas o
+aluno estuda no maximo `SUBSCRIPTION_MAX_ACTIVE_COURSES = 10` cursos por vez.
+Com a lista cheia, abrir outro exige TIRAR um — no mesmo pedido (troca) ou por
+"Tirar da lista" em /aluno/assinatura.
+
+- **Fonte unica:** `src/lib/subscriptions/slots.ts` (PURO). Ocupa vaga: matricula
+  da assinatura em ACTIVE/PENDING/SUSPENDED e **nao** concluida. PENDING e
+  SUSPENDED entram porque voltam a ACTIVE sozinhas. "Concluido" e
+  `progressStatus = CONCLUIDO` (o que a plataforma reporta) ou COMPLETED — nunca o
+  percentual minimo do certificado, que e configuracao de emissao. O `where` gemeo
+  precisa do ramo `progressStatus: null` (Prisma `not` exclui NULL).
+- **Tirar da lista NAO e cancelar.** `Enrollment.subscriptionSlotReleasedAt` e o
+  discriminador sobre `status = CANCELLED`: a matricula e revogada no LMS, que
+  GUARDA o progresso por aluno, e "Retomar" reprovisiona de onde parou (chave de
+  idempotencia muda a cada volta).
+- **A assinatura so libera curso da plataforma PROPRIA** (`{ provider: "LMS" }` em
+  `vitrineGateWhere`). Na legada desvincular APAGA o progresso, nao ha pausa por
+  curso e o limite de acesso nao chega la. Cursos legados ja abertos continuam com
+  o assinante, ocupam vaga e nao saem por "tirar da lista". Impacto medido: todo
+  plano ativo segue com 106–119 cursos (sem os ~98 legados).
+- **Lock por ASSINATURA** (`SUBSCRIPTION_RELEASE:<subId>`), nao por curso: dois
+  cliques em cursos diferentes com 9 vagas ocupadas terminariam em 11.
+- **Troca e fail-closed para a regra:** revoga ANTES de abrir o novo; se o novo nao
+  abre, o que saiu e devolvido (`restoreReleased`). Com vaga livre, o
+  `replaceCourseId` e ignorado.
+- Lista cheia: a rota puxa o progresso do LMS antes de responder `SLOTS_FULL` — um
+  curso recem-concluido libera a vaga sem esperar o delta horario.
+- As telas de venda passaram a dizer a regra (`SUBSCRIPTION_SLOTS_RULE_TEXT`):
+  vender "estude quantos cursos quiser" sem o limite prometeria o que a tela do
+  assinante recusa.
+
+**2. Um acesso por vez, para toda modalidade** (avulso, pacote, assinatura — a
+regra e da CONTA). O login num segundo aparelho **derruba o anterior** (decisao do
+dono: derrubar, nao barrar, para ninguem ficar trancado fora).
+
+- **PMB:** `Student.activeSessionId/activeSessionAt` + `sid` no JWT. O callback
+  `jwt` confere a cada leitura de sessao de aluno (PK, sem throttle) e devolve null
+  quando nao bate. Fonte: `src/lib/auth/single-session.ts`. **JWT sem `sid` e
+  recusado** — todo aluno logado entra de novo UMA vez no deploy (sem o aviso de
+  "outro aparelho", que mentiria).
+- **"Entrar como" fica isento:** `impersonatedBy` vai DENTRO do JWT
+  (`buildSessionToken`). Sem isso, atender o aluno o derrubaria.
+- **LMS:** `Student.accountSessionId` + `sid` no cookie; `requireStudent` (paginas)
+  e `requireStudentApi` conferem. Derrubado → `/sessao-encerrada` (apaga o cookie,
+  que Server Component nao consegue) → aviso no login. `SessionGuard` (30s) e o 401
+  do batimento do player tiram o aparelho da tela sem esperar clique.
+- **Os dois lados se enxergam:** login no PMB → `PUT /students/:id/session` (a
+  sessao do LMS cai); SSO leva o `sid` do PMB (mesmo acesso, nao derruba nada); login
+  direto no LMS → webhook `student.session.started` → PMB derruba so a sessao
+  ANTERIOR ao login (o retry com backoff de horas nao pode derrubar login posterior);
+  "entrar como" gera SSO `mode: support` (8h, fora da regra). Contrato em
+  `docs/api/lms-webhook-catalogo.md` §8.5/§8.7/§9.3.
+- O card do painel `/aluno` passou a entrar por SSO nos cursos do LMS (antes mandava
+  para o login de la, e a senha digitada abriria uma sessao NOVA que derrubaria a do
+  proprio aparelho).
+- **Fora do alcance, por limite da API:** a plataforma legada (aluno entra direto
+  com login proprio, sem sessao nem troca de senha). Video ja carregado de URL
+  pre-assinada segue tocando ate o player bater (≤10s) ou o guard conferir.
+
+**Deploy, nesta ordem:** (1) PMB — migration `20260914_subscription_slots_single_session`
+(aditiva, idempotente); (2) LMS — `db push` cria as colunas. Ao contrario, o webhook
+novo chegaria a um PMB que responde 400 e iria para a DLQ com alerta.
+
+**Cancelamento pedido pelo aluno nunca cortava os cursos (corrigido).**
+`DELETE /api/aluno/assinatura` marca CANCELLED com `revokeAccess: false` ("o
+acesso segue ate o fim do ciclo, o cron cuida disso") — e nenhum cron olhava
+assinatura cancelada: a varredura so pega ACTIVE/PAST_DUE. Os cursos abertos
+ficavam para sempre.
+
+- **Fase 3 da `sweep-subscriptions`** (job `pmb-sweep-subscriptions`, ja agendado):
+  encerrada + recorrente + periodo pago vencido + matricula viva ->
+  `revokeEndedSubscriptionAccess`. Regra pura `endedSubscriptionAccessExpired`
+  (`access.ts`): corta NO DIA do fim do periodo, sem a carencia (ela e para quem
+  ainda vai pagar). Vitalicia nunca e cortada por prazo.
+- **Revogacao unica** (`revokeEnrollments` em `cancel.ts`) para o cancelamento e o
+  corte no fim do periodo — so marca CANCELLED o que a fornecedora confirmou. Por
+  isso a fase 3 tambem refaz, todo dia, revogacao que falhou antes.
+- **Voltou a assinar antes do fim do periodo:** o que a assinatura NOVA cobre (plano
+  + vagas) migra para ela (`adoptIntoLiveSubscription`, sob o lock de vagas da nova);
+  so o resto e cortado. Lock ocupado -> nao corta nada na passada (cortar sem olhar a
+  assinatura viva apagaria progresso de quem esta pagando).
+- **Vitalicia nao se cancela pela rota do aluno** (409): a tela escondia o botao,
+  mas o DELETE direto revogava o acesso comprado para sempre.
+- Consequencia aceita pelo dono: curso da plataforma legada de assinatura cancelada
+  e revogado no fim do periodo, e la isso apaga o progresso.
+
 ### Bugs conhecidos (pendentes)
 
 - **Middleware file convention deprecado** no Next 16 (usar `proxy` em vez de `middleware`).

@@ -3,6 +3,7 @@ import {
   SUBSCRIPTION_GRACE_DAYS,
   subscriptionGrantsAccess,
   subscriptionShouldCancel,
+  endedSubscriptionAccessExpired,
   type SubscriptionAccessInput,
 } from "./access"
 
@@ -205,5 +206,38 @@ describe("periodicidades longas", () => {
     }
     expect(subscriptionGrantsAccess(anual, NOW)).toBe(false)
     expect(subscriptionShouldCancel(anual, NOW)).toBe(true)
+  })
+})
+
+describe("endedSubscriptionAccessExpired (cancelada pelo aluno)", () => {
+  it("cancelada com periodo pago ainda correndo: acesso segue", () => {
+    // O aluno cancelou, mas o mes ja foi pago — cortar agora tiraria o que ele pagou.
+    expect(endedSubscriptionAccessExpired(sub({ status: "CANCELLED", currentPeriodEnd: days(5) }), NOW)).toBe(false)
+  })
+
+  it("cancelada com periodo pago vencido: corta", () => {
+    expect(endedSubscriptionAccessExpired(sub({ status: "CANCELLED", currentPeriodEnd: days(-1) }), NOW)).toBe(true)
+  })
+
+  it("corta NO DIA do fim do periodo, sem a carencia de quem paga atrasado", () => {
+    // A carência existe para quem ainda vai pagar; quem cancelou não vai.
+    expect(endedSubscriptionAccessExpired(sub({ status: "CANCELLED", currentPeriodEnd: NOW }), NOW)).toBe(true)
+  })
+
+  it("expirada tambem entra; sem ciclo pago nenhum, nao ha periodo a respeitar", () => {
+    expect(endedSubscriptionAccessExpired(sub({ status: "EXPIRED", currentPeriodEnd: days(-3) }), NOW)).toBe(true)
+    expect(endedSubscriptionAccessExpired(sub({ status: "CANCELLED", currentPeriodEnd: null }), NOW)).toBe(true)
+  })
+
+  it("assinatura viva nunca e cortada por aqui", () => {
+    for (const status of ["ACTIVE", "PAST_DUE", "PENDING"] as const) {
+      expect(endedSubscriptionAccessExpired(sub({ status, currentPeriodEnd: days(-30) }), NOW)).toBe(false)
+    }
+  })
+
+  it("VITALICIA nunca e cortada por prazo", () => {
+    expect(
+      endedSubscriptionAccessExpired(sub({ status: "CANCELLED", interval: "LIFETIME", currentPeriodEnd: null }), NOW),
+    ).toBe(false)
   })
 })

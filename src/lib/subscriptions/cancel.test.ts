@@ -29,6 +29,8 @@ vi.mock("@/lib/enrollment/gateway-credentials", () => ({
   resolveEnrollmentGatewayKeys: vi.fn(async () => ({ mpAccessToken: "mp-token" })),
 }))
 vi.mock("@/lib/errors", () => ({ swallow: () => () => undefined }))
+vi.mock("./live", () => ({ findLiveSubscriptionId: vi.fn(async () => null) }))
+vi.mock("./release", () => ({ adoptIntoLiveSubscription: vi.fn() }))
 vi.mock("@/lib/logger", () => {
   const noop = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() }
   return { contextLogger: () => noop, logger: noop }
@@ -41,7 +43,9 @@ import {
 } from "@/lib/students/plataforma-actions"
 import { cancelSubscription as cancelAsaasSubscription } from "@/lib/asaas/client"
 import { cancelPreapproval } from "@/lib/mercadopago/client"
-import { cancelSubscriptionAccess } from "./cancel"
+import { cancelSubscriptionAccess, revokeEndedSubscriptionAccess } from "./cancel"
+import { findLiveSubscriptionId } from "./live"
+import { adoptIntoLiveSubscription } from "./release"
 
 const findSub = prisma.studentSubscription.findUnique as unknown as ReturnType<typeof vi.fn>
 const findEnr = prisma.enrollment.findMany as unknown as ReturnType<typeof vi.fn>
@@ -170,5 +174,92 @@ describe("cancelSubscriptionAccess", () => {
     const r = await cancelSubscriptionAccess("nope", "REQUESTED")
     expect(r.revoked).toBe(0)
     expect(prisma.studentSubscription.update).not.toHaveBeenCalled()
+  })
+})
+
+describe("revokeEndedSubscriptionAccess (fim do periodo de assinatura cancelada)", () => {
+  const liveId = findLiveSubscriptionId as unknown as ReturnType<typeof vi.fn>
+  const adopt = adoptIntoLiveSubscription as unknown as ReturnType<typeof vi.fn>
+  const past = new Date(Date.now() - 864e5)
+  const future = new Date(Date.now() + 5 * 864e5)
+
+  function cancelled(over: Record<string, unknown> = {}) {
+    return {
+      id: "sub_1",
+      studentId: "st_1",
+      status: "CANCELLED",
+      currentPeriodEnd: past,
+      interval: "MONTHLY",
+      plan: { name: "Plano Total" },
+      ...over,
+    }
+  }
+
+  beforeEach(() => {
+    liveId.mockResolvedValue(null)
+    findEnr.mockResolvedValue([
+      { id: "e1", courseId: "c1", status: "ACTIVE", progressStatus: null },
+      { id: "e2", courseId: "c2", status: "COMPLETED", progressStatus: "CONCLUIDO" },
+    ])
+  })
+
+  it("periodo pago acabou: corta TODOS os cursos que a assinatura abriu", async () => {
+    // O defeito: o cancelamento pedido pelo aluno dizia "o cron cuida disso" e
+    // nenhum cron olhava assinatura cancelada — os cursos ficavam para sempre.
+    findSub.mockResolvedValue(cancelled())
+    const r = await revokeEndedSubscriptionAccess("sub_1")
+    expect(r).toMatchObject({ status: "done", revoked: 2, adopted: 0 })
+    expect(unlink).toHaveBeenCalledTimes(2)
+    expect(updateMany.mock.calls[0][0].where).toEqual({ id: { in: ["e1", "e2"] } })
+  })
+
+  it("periodo pago ainda correndo: nao toca em nada", async () => {
+    findSub.mockResolvedValue(cancelled({ currentPeriodEnd: future }))
+    const r = await revokeEndedSubscriptionAccess("sub_1")
+    expect(r).toEqual({ status: "not_due" })
+    expect(unlink).not.toHaveBeenCalled()
+  })
+
+  it("nao alcanca matricula de compra avulsa (so as desta assinatura)", async () => {
+    findSub.mockResolvedValue(cancelled())
+    await revokeEndedSubscriptionAccess("sub_1")
+    expect(findEnr.mock.calls[0][0].where).toMatchObject({ studentSubscriptionId: "sub_1" })
+  })
+
+  it("voltou a assinar: o que a nova cobre migra, so o resto e cortado", async () => {
+    findSub.mockResolvedValue(cancelled())
+    liveId.mockResolvedValue("sub_2")
+    adopt.mockResolvedValue({ adopted: ["e2"] })
+    const r = await revokeEndedSubscriptionAccess("sub_1")
+    expect(adopt).toHaveBeenCalledWith("sub_2", expect.any(Array))
+    expect(unlink).toHaveBeenCalledTimes(1)
+    expect(unlink).toHaveBeenCalledWith("st_1", "c1")
+    expect(r).toMatchObject({ status: "done", adopted: 1 })
+  })
+
+  it("lock da assinatura nova ocupado: NAO corta nada nesta passada", async () => {
+    // Cortar sem ter olhado a assinatura viva apagaria progresso de quem está pagando.
+    findSub.mockResolvedValue(cancelled())
+    liveId.mockResolvedValue("sub_2")
+    adopt.mockResolvedValue(null)
+    const r = await revokeEndedSubscriptionAccess("sub_1")
+    expect(r).toEqual({ status: "busy" })
+    expect(unlink).not.toHaveBeenCalled()
+  })
+
+  it("so marca cancelada a matricula que a fornecedora confirmou revogar", async () => {
+    findSub.mockResolvedValue(cancelled())
+    unlink.mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error("LMS 503"))
+    const r = await revokeEndedSubscriptionAccess("sub_1")
+    expect(updateMany.mock.calls[0][0].where).toEqual({ id: { in: ["e1"] } })
+    expect(r).toMatchObject({ status: "done" })
+    if (r.status === "done") expect(r.errors).toHaveLength(1)
+  })
+
+  it("VITALICIA nunca e cortada por prazo", async () => {
+    findSub.mockResolvedValue(cancelled({ interval: "LIFETIME", currentPeriodEnd: null }))
+    const r = await revokeEndedSubscriptionAccess("sub_1")
+    expect(r).toEqual({ status: "not_due" })
+    expect(unlink).not.toHaveBeenCalled()
   })
 })

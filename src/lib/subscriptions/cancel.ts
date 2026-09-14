@@ -10,6 +10,12 @@ import { runInChunks } from "@/lib/concurrency"
 import { contextLogger } from "@/lib/logger"
 import { createNotification } from "@/lib/notifications"
 import { swallow } from "@/lib/errors"
+import {
+  LIVE_ENROLLMENT_STATUSES,
+  endedSubscriptionAccessExpired,
+} from "./access"
+import { findLiveSubscriptionId } from "./live"
+import { adoptIntoLiveSubscription } from "./release"
 
 /**
  * Encerra uma assinatura e corta o acesso que ela dava.
@@ -90,9 +96,80 @@ export interface CancelSubscriptionResult {
 }
 
 /**
+ * Revoga na fornecedora e marca como canceladas as matriculas dadas. Um so
+ * caminho para o cancelamento e para o corte no fim do periodo pago — duas
+ * copias divergiriam justamente na regra de "so marca o que a fornecedora
+ * confirmou".
+ */
+async function revokeEnrollments(
+  sub: { id: string; studentId: string; plan: { name: string } },
+  enrollments: Array<{ id: string; courseId: string }>,
+): Promise<CancelSubscriptionResult> {
+  const log = contextLogger()
+  const subscriptionId = sub.id
+  const result: CancelSubscriptionResult = {
+    enrollmentsCancelled: 0,
+    revoked: 0,
+    errors: [],
+  }
+
+  // Serial em lotes pequenos: cada item fala com a fornecedora. `runInChunks` é
+  // o padrão do repo para isso (nunca `$transaction([...])`, que derruba o lote
+  // inteiro sobre o pooler).
+  const settled = await runInChunks(enrollments, 4, async (e) => {
+    await unlinkCourseFromStudent(sub.studentId, e.courseId)
+    return e.id
+  })
+
+  const revokedIds: string[] = []
+  settled.forEach((s, i) => {
+    if (s.status === "fulfilled") {
+      revokedIds.push(enrollments[i].id)
+    } else {
+      const msg = s.reason instanceof Error ? s.reason.message : String(s.reason)
+      result.errors.push(`enrollment ${enrollments[i].id}: ${msg}`)
+    }
+  })
+  result.revoked = revokedIds.length
+
+  // Cancela SÓ as que a fornecedora confirmou revogar. Marcar como cancelada uma
+  // matrícula cujo acesso continua de pé esconderia o vazamento: a tela diria
+  // "sem acesso" e o aluno seguiria assistindo.
+  if (revokedIds.length > 0) {
+    const updated = await prisma.enrollment.updateMany({
+      where: { id: { in: revokedIds } },
+      data: { status: "CANCELLED", cancelledAt: new Date() },
+    })
+    result.enrollmentsCancelled = updated.count
+  }
+
+  if (result.errors.length > 0) {
+    log.error(
+      {
+        event: "subscription.cancel.revoke_errors",
+        subscriptionId,
+        errors: result.errors,
+      },
+      "falha ao revogar cursos de assinatura cancelada",
+    )
+    await createNotification({
+      audience: "ROLE",
+      roleTarget: "SUPER_ADMIN",
+      level: "WARNING",
+      title: "Acesso não revogado ao cancelar assinatura",
+      body: `Assinatura ${subscriptionId} (${sub.plan.name}) cancelada, mas ${result.errors.length} curso(s) não puderam ser revogados na plataforma de aulas. O aluno pode seguir com acesso — verifique.`,
+      href: "/admin/alunos",
+    }).catch(swallow("subscription.cancel"))
+  }
+
+  return result
+}
+
+/**
  * @param reason Aparece na notificacao ao aluno e no log.
  * @param revokeAccess `false` cancela a cobranca mas MANTEM o acesso ate o fim
- *   do ciclo ja pago (pedido de cancelamento com `cancelAtPeriodEnd`).
+ *   do ciclo ja pago (pedido do proprio aluno). O corte no dia certo e feito
+ *   pela varredura diaria, via `revokeEndedSubscriptionAccess`.
  */
 export async function cancelSubscriptionAccess(
   subscriptionId: string,
@@ -154,59 +231,15 @@ export async function cancelSubscriptionAccess(
   const enrollments = await prisma.enrollment.findMany({
     where: {
       studentSubscriptionId: subscriptionId,
-      status: { in: ["ACTIVE", "COMPLETED", "PENDING", "SUSPENDED"] },
+      status: { in: [...LIVE_ENROLLMENT_STATUSES] },
     },
     select: { id: true, courseId: true },
   })
 
-  // Serial em lotes pequenos: cada item fala com a fornecedora. `runInChunks` é
-  // o padrão do repo para isso (nunca `$transaction([...])`, que derruba o lote
-  // inteiro sobre o pooler).
-  const settled = await runInChunks(enrollments, 4, async (e) => {
-    await unlinkCourseFromStudent(sub.studentId, e.courseId)
-    return e.id
-  })
-
-  const revokedIds: string[] = []
-  settled.forEach((s, i) => {
-    if (s.status === "fulfilled") {
-      revokedIds.push(enrollments[i].id)
-    } else {
-      const msg = s.reason instanceof Error ? s.reason.message : String(s.reason)
-      result.errors.push(`enrollment ${enrollments[i].id}: ${msg}`)
-    }
-  })
-  result.revoked = revokedIds.length
-
-  // Cancela SÓ as que a fornecedora confirmou revogar. Marcar como cancelada uma
-  // matrícula cujo acesso continua de pé esconderia o vazamento: a tela diria
-  // "sem acesso" e o aluno seguiria assistindo.
-  if (revokedIds.length > 0) {
-    const updated = await prisma.enrollment.updateMany({
-      where: { id: { in: revokedIds } },
-      data: { status: "CANCELLED", cancelledAt: new Date() },
-    })
-    result.enrollmentsCancelled = updated.count
-  }
-
-  if (result.errors.length > 0) {
-    log.error(
-      {
-        event: "subscription.cancel.revoke_errors",
-        subscriptionId,
-        errors: result.errors,
-      },
-      "falha ao revogar cursos de assinatura cancelada",
-    )
-    await createNotification({
-      audience: "ROLE",
-      roleTarget: "SUPER_ADMIN",
-      level: "WARNING",
-      title: "Acesso não revogado ao cancelar assinatura",
-      body: `Assinatura ${subscriptionId} (${sub.plan.name}) cancelada, mas ${result.errors.length} curso(s) não puderam ser revogados na plataforma de aulas. O aluno pode seguir com acesso — verifique.`,
-      href: "/admin/alunos",
-    }).catch(swallow("subscription.cancel"))
-  }
+  const revoked = await revokeEnrollments(sub, enrollments)
+  result.revoked = revoked.revoked
+  result.enrollmentsCancelled = revoked.enrollmentsCancelled
+  result.errors.push(...revoked.errors)
 
   log.info(
     {
@@ -220,4 +253,78 @@ export async function cancelSubscriptionAccess(
   )
 
   return result
+}
+
+export type EndedAccessResult =
+  | { status: "not_due" }
+  /** O lock de vagas da assinatura viva estava ocupado — nada foi cortado. */
+  | { status: "busy" }
+  | ({ status: "done"; adopted: number } & CancelSubscriptionResult)
+
+/**
+ * Corta os cursos de uma assinatura ENCERRADA cujo periodo pago acabou.
+ *
+ * E a outra metade do cancelamento pedido pelo aluno: la a recorrencia para na
+ * hora e o acesso segue ate o fim do ciclo pago (`revokeAccess: false`); aqui,
+ * chamado pela varredura diaria, o acesso cai. Antes disto ninguem cortava — a
+ * varredura so olhava ACTIVE/PAST_DUE — e os cursos ficavam abertos para sempre.
+ *
+ * Tambem refaz, a cada passada, a revogacao que falhou num cancelamento anterior:
+ * a matricula so e marcada cancelada quando a fornecedora confirma, entao a que
+ * ficou de pe continua aparecendo aqui.
+ *
+ * Se o aluno voltou a assinar, o que a assinatura nova cobre migra para ela
+ * (`adoptIntoLiveSubscription`) e so o resto e cortado.
+ */
+export async function revokeEndedSubscriptionAccess(
+  subscriptionId: string,
+  now: Date = new Date(),
+): Promise<EndedAccessResult> {
+  const sub = await prisma.studentSubscription.findUnique({
+    where: { id: subscriptionId },
+    select: {
+      id: true,
+      studentId: true,
+      status: true,
+      currentPeriodEnd: true,
+      interval: true,
+      plan: { select: { name: true } },
+    },
+  })
+  if (!sub || !endedSubscriptionAccessExpired(sub, now)) return { status: "not_due" }
+
+  const enrollments = await prisma.enrollment.findMany({
+    where: {
+      studentSubscriptionId: sub.id,
+      status: { in: [...LIVE_ENROLLMENT_STATUSES] },
+    },
+    select: { id: true, courseId: true, status: true, progressStatus: true },
+  })
+  if (enrollments.length === 0) {
+    return { status: "done", adopted: 0, enrollmentsCancelled: 0, revoked: 0, errors: [] }
+  }
+
+  let toRevoke = enrollments
+  let adoptedCount = 0
+  const liveId = await findLiveSubscriptionId(sub.studentId)
+  if (liveId && liveId !== sub.id) {
+    const adoption = await adoptIntoLiveSubscription(liveId, enrollments)
+    if (adoption === null) return { status: "busy" }
+    const adopted = new Set(adoption.adopted)
+    adoptedCount = adopted.size
+    toRevoke = enrollments.filter((e) => !adopted.has(e.id))
+  }
+
+  const revoked = await revokeEnrollments(sub, toRevoke)
+  contextLogger().info(
+    {
+      event: "subscription.ended_access_revoked",
+      subscriptionId: sub.id,
+      adopted: adoptedCount,
+      revoked: revoked.revoked,
+      errors: revoked.errors.length,
+    },
+    "fim do periodo pago de assinatura encerrada",
+  )
+  return { status: "done", adopted: adoptedCount, ...revoked }
 }

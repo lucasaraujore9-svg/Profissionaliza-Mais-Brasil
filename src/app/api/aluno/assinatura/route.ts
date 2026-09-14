@@ -8,6 +8,7 @@ import { PAYER_SELECT, resolvePayer } from "@/lib/checkout/payer"
 import { getPlanForCheckout } from "@/lib/subscriptions/plans"
 import { createSubscriptionAtGateway } from "@/lib/subscriptions/checkout"
 import { cancelSubscriptionAccess } from "@/lib/subscriptions/cancel"
+import { isRecurringInterval } from "@/lib/subscriptions/interval"
 import { contextLogger } from "@/lib/logger"
 import { clientIp } from "@/lib/http/client-ip"
 
@@ -225,8 +226,13 @@ export const POST = withRequestContext(
  * quiser" e ate aqui nao havia por onde — so o suporte, na mao, no Asaas.
  *
  * `revokeAccess: false` de proposito: o mes corrente ja foi pago. A recorrencia
- * para agora, o acesso cai quando o ciclo termina (o cron cuida disso). Cortar
- * na hora tiraria o que ele pagou — e, na EA, apagaria o progresso dele.
+ * para agora, o acesso cai quando o ciclo termina — pela fase 3 da varredura
+ * diaria (`revokeEndedSubscriptionAccess`). Cortar na hora tiraria o que ele
+ * pagou — e, na EA, apagaria o progresso dele.
+ *
+ * VITALICIA nao se cancela por aqui: nao ha recorrencia a interromper, e o
+ * cancelamento so revogaria o acesso que a pessoa comprou para sempre. A tela ja
+ * escondia o botao; a trava no servidor e o que impede o pedido direto.
  */
 export const DELETE = withRequestContext(
   { action: "aluno.assinatura.cancelar", route: "/api/aluno/assinatura" },
@@ -241,13 +247,19 @@ export const DELETE = withRequestContext(
         studentId: session.studentId,
         status: { in: ["ACTIVE", "PAST_DUE", "PENDING"] },
       },
-      select: { id: true, currentPeriodEnd: true },
+      select: { id: true, currentPeriodEnd: true, interval: true },
       orderBy: { createdAt: "desc" },
     })
     if (!sub) {
       return NextResponse.json(
         { error: "Você não tem assinatura ativa" },
         { status: 404 },
+      )
+    }
+    if (!isRecurringInterval(sub.interval)) {
+      return NextResponse.json(
+        { error: "Assinatura vitalícia não tem cobrança a cancelar", code: "LIFETIME" },
+        { status: 409 },
       )
     }
 

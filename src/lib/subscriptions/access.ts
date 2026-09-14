@@ -89,3 +89,34 @@ export function subscriptionShouldCancel(
   if (!sub.currentPeriodEnd) return false
   return !subscriptionGrantsAccess(sub, now)
 }
+
+/**
+ * Status das matriculas que ainda dao acesso na fornecedora — as que o corte de
+ * uma assinatura encerrada precisa alcancar. COMPLETED entra: o SSO aceita
+ * matricula concluida, e deixa-la de fora manteria o acesso de quem mais usou.
+ */
+export const LIVE_ENROLLMENT_STATUSES = ["ACTIVE", "COMPLETED", "PENDING", "SUSPENDED"] as const
+
+/**
+ * Assinatura JA ENCERRADA (cancelada pelo aluno, estornada, expirada) cujo
+ * periodo pago acabou — os cursos que ela abriu tem de ser cortados agora.
+ *
+ * Existe porque o cancelamento pedido pelo aluno mantem o acesso ate o fim do
+ * ciclo ja pago (`revokeAccess: false`) e alguem precisa cortar no dia certo. A
+ * varredura de carencia nao serve: ela so olha ACTIVE/PAST_DUE.
+ *
+ * Sem prazo de carencia de proposito: a carencia existe para quem PAGA atrasado,
+ * e quem cancelou nao vai pagar mais nada.
+ */
+export function endedSubscriptionAccessExpired(
+  sub: SubscriptionAccessInput,
+  now: Date = new Date(),
+): boolean {
+  if (sub.status !== "CANCELLED" && sub.status !== "EXPIRED") return false
+  // VITALICIA nunca e cortada por prazo: o encerramento dela (estorno) ja revoga
+  // na hora, e um corte automatico aqui apagaria progresso de quem pagou uma vez.
+  if (!isRecurringInterval(sub.interval)) return false
+  // Sem ciclo pago nenhum: nao ha periodo a respeitar.
+  if (!sub.currentPeriodEnd) return true
+  return now.getTime() >= sub.currentPeriodEnd.getTime()
+}

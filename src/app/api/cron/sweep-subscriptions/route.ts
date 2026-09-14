@@ -8,7 +8,11 @@ import {
   SUBSCRIPTION_GRACE_DAYS,
   subscriptionShouldCancel,
 } from "@/lib/subscriptions/access"
-import { cancelSubscriptionAccess } from "@/lib/subscriptions/cancel"
+import {
+  cancelSubscriptionAccess,
+  revokeEndedSubscriptionAccess,
+} from "@/lib/subscriptions/cancel"
+import { LIVE_ENROLLMENT_STATUSES } from "@/lib/subscriptions/access"
 
 export const maxDuration = 300
 export const dynamic = "force-dynamic"
@@ -28,8 +32,12 @@ export const dynamic = "force-dynamic"
  *      na fornecedora, porque na EA revogar um curso APAGA o progresso do aluno
  *      (desvincular e revincular zera) — quem se atrasou e pagou nao pode perder
  *      o que assistiu.
- *   2. Carencia esgotada -> cancelamento definitivo, com revogacao. E aqui, e so
- *      aqui, que o acesso e cortado.
+ *   2. Carencia esgotada -> cancelamento definitivo, com revogacao.
+ *   3. Assinatura JA ENCERRADA (o aluno cancelou) cujo periodo pago acabou ->
+ *      corta os cursos que ela abriu. Sem esta fase ninguem cortava: o
+ *      cancelamento pedido pelo aluno mantem o acesso ate o fim do ciclo, e as
+ *      fases acima so olham ACTIVE/PAST_DUE — os cursos ficavam abertos para
+ *      sempre. Tambem refaz revogacoes que falharam antes.
  */
 async function processSubscriptions() {
   const now = new Date()
@@ -37,6 +45,8 @@ async function processSubscriptions() {
     inspected: 0,
     markedPastDue: 0,
     cancelled: 0,
+    endedAccessRevoked: 0,
+    endedAccessAdopted: 0,
     errors: [] as string[],
   }
 
@@ -86,6 +96,36 @@ async function processSubscriptions() {
     else {
       const msg = r.reason instanceof Error ? r.reason.message : String(r.reason)
       result.errors.push(`subscription ${toCancel[i].id}: ${msg}`)
+    }
+  })
+
+  // ── Fase 3: encerrada com periodo pago vencido → corta o que sobrou aberto ──
+  // O `where` so pre-seleciona (tem matricula viva e ciclo vencido); a decisao
+  // final e do predicado puro, dentro de `revokeEndedSubscriptionAccess`.
+  const ended = await prisma.studentSubscription.findMany({
+    where: {
+      status: { in: ["CANCELLED", "EXPIRED"] },
+      interval: { not: "LIFETIME" },
+      OR: [{ currentPeriodEnd: null }, { currentPeriodEnd: { lte: now } }],
+      enrollments: { some: { status: { in: [...LIVE_ENROLLMENT_STATUSES] } } },
+    },
+    select: { id: true },
+    orderBy: { cancelledAt: "asc" },
+    take: 200,
+  })
+  const endedSettled = await runInChunks(ended, 3, async (s) =>
+    revokeEndedSubscriptionAccess(s.id, now),
+  )
+  endedSettled.forEach((r, i) => {
+    if (r.status === "fulfilled") {
+      if (r.value.status === "done") {
+        result.endedAccessRevoked += r.value.enrollmentsCancelled
+        result.endedAccessAdopted += r.value.adopted
+        result.errors.push(...r.value.errors.map((e) => `subscription ${ended[i].id}: ${e}`))
+      }
+    } else {
+      const msg = r.reason instanceof Error ? r.reason.message : String(r.reason)
+      result.errors.push(`ended subscription ${ended[i].id}: ${msg}`)
     }
   })
 
