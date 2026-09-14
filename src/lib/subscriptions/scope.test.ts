@@ -125,6 +125,20 @@ describe("vitrineGateWhere", () => {
     })
   })
 
+  it("so libera curso da plataforma de aulas PROPRIA, nas duas vitrines", () => {
+    // A troca de curso da assinatura revoga a matricula. Na plataforma legada
+    // isso APAGA o progresso, e o limite de um acesso por vez nao chega la.
+    expect(vitrineGateWhere(null)).toContainEqual({ provider: "LMS" })
+    expect(vitrineGateWhere("t1")).toContainEqual({ provider: "LMS" })
+  })
+
+  it("plano ALL nao escapa da trava de plataforma", () => {
+    // Mesmo motivo da trava de autoria: `scope: "ALL"` devolve `{}`, entao a
+    // clausula tem de vir do gate de vitrine.
+    const w = planCourseWhere(plan({ scope: "ALL" }), "t1")
+    expect(w.AND as unknown[]).toContainEqual({ provider: "LMS" })
+  })
+
   it("revenda NAO usa o gate de preco da vitrine mae", () => {
     // Na revenda o preco efetivo e o TenantCourse.price; aplicar
     // COURSE_HAS_PRICE ali barraria curso que a unidade precifica sozinha.

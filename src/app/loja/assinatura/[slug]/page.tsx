@@ -9,6 +9,7 @@ import {
 } from "@/lib/subscriptions/interval"
 import { tenantCheckoutMode } from "@/lib/tenant/checkout-mode"
 import { SubscriptionCheckout } from "@/components/loja/subscription-checkout"
+import { SUBSCRIPTION_SLOTS_RULE_TEXT } from "@/lib/subscriptions/slots"
 
 export const dynamic = "force-dynamic"
 
@@ -103,6 +104,7 @@ export default async function LojaPlanoPage({ params }: Props) {
         <p className="mt-1 text-sm text-gray-500">
           {INTERVAL_CHARGE_LABEL[plan.interval]}
         </p>
+        <p className="mt-1 text-sm text-gray-500">{SUBSCRIPTION_SLOTS_RULE_TEXT}</p>
       </header>
 
       <SubscriptionCheckout

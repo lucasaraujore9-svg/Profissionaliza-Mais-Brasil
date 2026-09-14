@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react"
 import { Loader2, Eye, EyeOff, Star, StarOff, Plus, Pencil, Trash2 } from "lucide-react"
 import { SUBSCRIPTION_SCOPES, scopeIsComplete } from "@/lib/subscriptions/schema"
+import { SUBSCRIPTION_MAX_ACTIVE_COURSES } from "@/lib/subscriptions/slots"
 import {
   SUBSCRIPTION_INTERVALS,
   INTERVAL_LABEL,
@@ -353,6 +354,12 @@ export function PainelPlansClient({
             <legend className="text-sm font-medium text-gray-700">
               O que o plano libera
             </legend>
+            <p className="mt-1 text-xs text-gray-500">
+              Entram só os cursos em que o aluno pode trocar de curso sem perder
+              o progresso — a contagem de cursos do plano já considera isso. O
+              assinante estuda até {SUBSCRIPTION_MAX_ACTIVE_COURSES} cursos ao
+              mesmo tempo.
+            </p>
             <div className="mt-2 space-y-2">
               {SUBSCRIPTION_SCOPES.filter((sc) => sc !== "COURSES").map((sc) => (
                 <label key={sc} className="flex items-start gap-2 text-sm">

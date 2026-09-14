@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react"
 import { Loader2, Plus, Trash2, Pencil } from "lucide-react"
 import { SUBSCRIPTION_SCOPES, scopeIsComplete } from "@/lib/subscriptions/schema"
+import { SUBSCRIPTION_MAX_ACTIVE_COURSES } from "@/lib/subscriptions/slots"
 import {
   SUBSCRIPTION_INTERVALS,
   INTERVAL_LABEL,
@@ -291,6 +292,11 @@ export function AdminPlansClient({
             <legend className="text-sm font-medium text-gray-700">
               O que o plano libera
             </legend>
+            <p className="mt-1 text-xs text-gray-500">
+              Entram só cursos da plataforma de aulas própria (LMS): é onde o
+              aluno troca de curso sem perder o progresso. O assinante estuda até{" "}
+              {SUBSCRIPTION_MAX_ACTIVE_COURSES} cursos ao mesmo tempo.
+            </p>
             <div className="mt-2 space-y-2">
               {SUBSCRIPTION_SCOPES.map((sc) => (
                 <label key={sc} className="flex items-start gap-2 text-sm">

@@ -8,6 +8,7 @@ import {
   INTERVAL_CHARGE_LABEL,
 } from "@/lib/subscriptions/interval"
 import { Check, Sparkles } from "lucide-react"
+import { SUBSCRIPTION_SLOTS_RULE_TEXT } from "@/lib/subscriptions/slots"
 
 export const metadata: Metadata = {
   title: "Assinaturas — Profissionaliza Mais Brasil",
@@ -42,7 +43,7 @@ export default async function AssinaturasPage() {
         <p className="mx-auto mt-2 max-w-xl text-sm text-gray-600">
           Um pagamento, acesso ao conjunto de cursos do plano. Escolha a
           periodicidade que preferir — nas recorrentes não há fidelidade,
-          cancele quando quiser.
+          cancele quando quiser. {SUBSCRIPTION_SLOTS_RULE_TEXT}
         </p>
       </header>
 

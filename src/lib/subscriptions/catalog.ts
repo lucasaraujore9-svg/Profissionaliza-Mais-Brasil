@@ -1,6 +1,13 @@
 import { prisma } from "@/lib/prisma"
 import { planCourseWhere } from "./scope"
 import { toScopeInput } from "./plans"
+import {
+  SLOT_OCCUPYING_STATUSES,
+  SUBSCRIPTION_MAX_ACTIVE_COURSES,
+  canReleaseSubscriptionSlot,
+  occupiesSubscriptionSlot,
+  type SubscriptionSlots,
+} from "./slots"
 
 /**
  * Catalogo que a assinatura libera, para a area do aluno.
@@ -16,8 +23,15 @@ export interface SubscriptionCourseCard {
   capaUrl: string | null
   cargaHoraria: string | null
   qtdAulas: number
-  /** Matricula ja existente — quando presente, o aluno "continua" em vez de "comecar". */
-  enrollmentId: string | null
+  /**
+   * - `active`: ja tem matricula valendo (inclusive de compra avulsa) — "Continuar".
+   * - `released`: o aluno tirou este curso da lista; o progresso esta guardado
+   *   — "Retomar".
+   * - `none`: nunca abriu — "Comecar".
+   */
+  state: "active" | "released" | "none"
+  /** Progresso guardado, para o "Retomar" dizer de onde o aluno volta. */
+  progressPercent: number
 }
 
 export interface SubscriptionCatalogPage {
@@ -82,16 +96,22 @@ export async function loadSubscriptionCatalog(
   ])
 
   // Matrículas que o aluno já tem entre os cursos DESTA página — inclui as de
-  // compra avulsa, para não oferecer "Começar" num curso que ele já cursa.
+  // compra avulsa, para não oferecer "Começar" num curso que ele já cursa — e as
+  // que ele tirou da lista, para o card dizer "Retomar" em vez de "Começar".
   const enrollments = await prisma.enrollment.findMany({
     where: {
       studentId: sub.studentId,
       courseId: { in: rows.map((r) => r.id) },
-      status: { in: ["ACTIVE", "COMPLETED"] },
+      OR: [
+        { status: { in: ["ACTIVE", "COMPLETED"] } },
+        { status: "CANCELLED", subscriptionSlotReleasedAt: { not: null } },
+      ],
     },
-    select: { id: true, courseId: true },
+    select: { courseId: true, status: true, progressPercent: true },
+    orderBy: { createdAt: "asc" },
   })
-  const byCourse = new Map(enrollments.map((e) => [e.courseId, e.id]))
+  // A mais recente vence (a lista vem em ordem de criação).
+  const byCourse = new Map(enrollments.map((e) => [e.courseId, e]))
 
   return {
     courses: rows.map((r) => ({
@@ -101,10 +121,62 @@ export async function loadSubscriptionCatalog(
       capaUrl: r.capaOverride ?? r.capaImageUrl,
       cargaHoraria: r.cargaHoraria,
       qtdAulas: r.qtdAulas,
-      enrollmentId: byCourse.get(r.id) ?? null,
+      state: cardState(byCourse.get(r.id)?.status),
+      progressPercent: byCourse.get(r.id)?.progressPercent ?? 0,
     })),
     total,
     page,
     pageSize: CATALOG_PAGE_SIZE,
   }
+}
+
+function cardState(
+  status: string | undefined,
+): SubscriptionCourseCard["state"] {
+  if (status === "ACTIVE" || status === "COMPLETED") return "active"
+  if (status === "CANCELLED") return "released"
+  return "none"
+}
+
+/**
+ * Cursos que ocupam as vagas da assinatura agora, para o painel "X de 10" e
+ * para o seletor de troca.
+ *
+ * Filtra em memória com `occupiesSubscriptionSlot` em cima de um `where` mais
+ * largo: a lista é de no máximo algumas dezenas de linhas, e usar o PREDICADO
+ * (em vez de repetir a regra na query) é o que mantém a tela e o gate de
+ * liberação contando igual.
+ */
+export async function loadSubscriptionSlots(
+  subscriptionId: string,
+): Promise<SubscriptionSlots> {
+  const rows = await prisma.enrollment.findMany({
+    where: {
+      studentSubscriptionId: subscriptionId,
+      status: { in: SLOT_OCCUPYING_STATUSES },
+    },
+    select: {
+      courseId: true,
+      status: true,
+      progressStatus: true,
+      progressPercent: true,
+      course: { select: { nome: true, provider: true } },
+    },
+    orderBy: { startedAt: "asc" },
+  })
+
+  const courses = rows
+    .filter((r) => occupiesSubscriptionSlot(r))
+    .map((r) => ({
+      courseId: r.courseId,
+      nome: r.course.nome,
+      progressPercent: r.progressPercent ?? 0,
+      releasable: canReleaseSubscriptionSlot({
+        status: r.status,
+        progressStatus: r.progressStatus,
+        provider: r.course.provider,
+      }),
+    }))
+
+  return { max: SUBSCRIPTION_MAX_ACTIVE_COURSES, used: courses.length, courses }
 }

@@ -1401,6 +1401,19 @@ model Student {
   resetTokenExpires DateTime? @map("reset_token_expires")
   lastLoginAt       DateTime? @map("last_login_at")
 
+  /// UM acesso por vez: o identificador da ÚNICA sessão que vale agora. Cada
+  /// login grava um novo e o JWT carrega o dele (`sid`); quando os dois não
+  /// batem, a sessão é recusada — é assim que o login num segundo aparelho
+  /// derruba o primeiro. null = nenhuma sessão válida (inclusive quem nunca
+  /// entrou depois da regra: os JWT antigos não têm `sid` e caem de uma vez).
+  /// Ver `src/lib/auth/single-session.ts`.
+  activeSessionId String?   @map("active_session_id")
+  /// Quando essa sessão começou (relógio do PMB). Um login DIRETO na plataforma
+  /// de aulas só derruba a sessão daqui se ela for ANTERIOR — o webhook que
+  /// avisa tem retentativa de horas, e sem a data um evento atrasado derrubaria
+  /// um login feito muito depois.
+  activeSessionAt DateTime? @map("active_session_at")
+
   // Tours guiados (driver.js) da área do aluno já vistos/dispensados. Mesmo
   // mecanismo do User.dismissedTours, mas para a sessão de aluno. Ver src/lib/tours/.
   dismissedTours String[] @default([]) @map("dismissed_tours")
@@ -1544,6 +1557,14 @@ model Enrollment {
   // entao a matricula de assinante nao e cortada por tempo.
   studentSubscriptionId String?              @map("student_subscription_id")
   studentSubscription   StudentSubscription? @relation(fields: [studentSubscriptionId], references: [id], onDelete: SetNull)
+
+  /// Curso de assinatura que o aluno TIROU DA LISTA para liberar uma das vagas
+  /// (`SUBSCRIPTION_MAX_ACTIVE_COURSES`). Anda junto com `status = CANCELLED` e
+  /// e o DISCRIMINADOR entre "tirei da lista" e cancelamento de verdade: a
+  /// matricula foi revogada na plataforma de aulas, que GUARDA o progresso, e
+  /// "Retomar" a religa de onde parou. null = nao foi tirada da lista.
+  /// Ver `src/lib/subscriptions/slots.ts`.
+  subscriptionSlotReleasedAt DateTime? @map("subscription_slot_released_at")
 
   // Cupom
   couponId String? @map("coupon_id")

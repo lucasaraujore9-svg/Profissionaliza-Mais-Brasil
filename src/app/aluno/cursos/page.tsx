@@ -65,6 +65,15 @@ const STATUS_BADGE: Record<string, StatusBadge> = {
   },
 }
 
+// Curso de assinatura que o aluno TIROU DA LISTA para liberar vaga. Tecnicamente
+// a matrícula está CANCELLED, mas "Cancelado" diria que ele perdeu o curso — e o
+// progresso está guardado, esperando o "Retomar".
+const SLOT_RELEASED_BADGE: StatusBadge = {
+  label: "Fora da lista",
+  icon: Clock,
+  className: "bg-gray-100 text-gray-700 ring-1 ring-gray-200",
+}
+
 const PROGRESS_STATUS_LABEL: Record<string, string> = {
   EM_ANDAMENTO: "Em andamento",
   CONCLUIDO: "Concluído",
@@ -216,7 +225,11 @@ export default async function StudentCoursesPage({
             const progressLabel = e.progressStatus
               ? PROGRESS_STATUS_LABEL[e.progressStatus] ?? e.progressStatus
               : null
-            const badge = STATUS_BADGE[e.status] ?? STATUS_BADGE.CANCELLED
+            const slotReleased =
+              e.status === "CANCELLED" && e.subscriptionSlotReleasedAt !== null
+            const badge = slotReleased
+              ? SLOT_RELEASED_BADGE
+              : (STATUS_BADGE[e.status] ?? STATUS_BADGE.CANCELLED)
             const BadgeIcon = badge.icon
             const isActive = e.status === "ACTIVE" || e.status === "COMPLETED"
             const isPending = e.status === "PENDING"
@@ -356,6 +369,19 @@ export default async function StudentCoursesPage({
                       <span>
                         Conteúdo concluído! O certificado é liberado assim que
                         você quitar as {installmentWord(paceWord, true)}.
+                      </span>
+                    </div>
+                  )}
+
+                  {slotReleased && (
+                    <div className="mt-4 flex items-start gap-2 rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs text-gray-700">
+                      <Clock className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                      <span>
+                        Você tirou este curso da lista da assinatura. O progresso
+                        ({percent}%) está salvo.{" "}
+                        <Link href="/aluno/assinatura" className="font-semibold underline">
+                          Retomar pela assinatura
+                        </Link>
                       </span>
                     </div>
                   )}

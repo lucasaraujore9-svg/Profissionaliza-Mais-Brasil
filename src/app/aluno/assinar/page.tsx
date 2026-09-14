@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { requireStudentSession } from "@/lib/auth/student-session"
 import { resolveVitrinePlans } from "@/lib/subscriptions/plans"
 import { StudentSubscribeClient } from "@/components/aluno/student-subscribe-client"
+import { SUBSCRIPTION_SLOTS_RULE_TEXT } from "@/lib/subscriptions/slots"
 
 export const dynamic = "force-dynamic"
 
@@ -36,7 +37,8 @@ export default async function AlunoAssinarPage() {
           Assinar
         </h1>
         <p className="mt-1 text-sm text-gray-600">
-          Estude quantos cursos quiser pagando uma mensalidade. Sem fidelidade.
+          Estude quantos cursos quiser pagando uma mensalidade. Sem fidelidade.{" "}
+          {SUBSCRIPTION_SLOTS_RULE_TEXT}
         </p>
       </header>
 

@@ -4,9 +4,11 @@ import { redirect } from "next/navigation"
 import { prisma } from "@/lib/prisma"
 import { requireStudentSession } from "@/lib/auth/student-session"
 import { StartCourseButton } from "@/components/aluno/start-course-button"
+import { SubscriptionSlotsPanel } from "@/components/aluno/subscription-slots-panel"
 import { CancelSubscriptionButton } from "@/components/aluno/subscription-actions"
 import {
   loadSubscriptionCatalog,
+  loadSubscriptionSlots,
   CATALOG_PAGE_SIZE,
 } from "@/lib/subscriptions/catalog"
 import {
@@ -94,9 +96,12 @@ export default async function AssinaturaPage({
   const live = subscriptionGrantsAccess(subscription)
   const recurring = isRecurringInterval(subscription.interval)
   const search = sp.q?.trim() || undefined
-  const catalog = live
-    ? await loadSubscriptionCatalog(subscription.id, { page, search })
-    : null
+  const [catalog, slots] = live
+    ? await Promise.all([
+        loadSubscriptionCatalog(subscription.id, { page, search }),
+        loadSubscriptionSlots(subscription.id),
+      ])
+    : [null, null]
 
   const totalPages = catalog ? Math.ceil(catalog.total / CATALOG_PAGE_SIZE) : 0
 
@@ -200,6 +205,8 @@ export default async function AssinaturaPage({
         </div>
       )}
 
+      {slots && <SubscriptionSlotsPanel slots={slots} />}
+
       {catalog && (
         <>
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -263,7 +270,7 @@ export default async function AssinaturaPage({
                     {c.cargaHoraria ? ` · ${c.cargaHoraria}` : ""}
                   </p>
                   <div className="mt-auto pt-3">
-                    {c.enrollmentId ? (
+                    {c.state === "active" ? (
                       <Link
                         href="/aluno/cursos"
                         className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-[var(--color-pmb-green)] px-3 py-2 text-xs font-semibold text-[var(--color-pmb-green-900)]"
@@ -272,7 +279,12 @@ export default async function AssinaturaPage({
                         Continuar
                       </Link>
                     ) : (
-                      <StartCourseButton courseId={c.id} />
+                      <StartCourseButton
+                        courseId={c.id}
+                        courseName={c.nome}
+                        resume={c.state === "released"}
+                        progressPercent={c.progressPercent}
+                      />
                     )}
                   </div>
                 </div>

@@ -7,6 +7,7 @@ import {
   INTERVAL_CHARGE_LABEL,
 } from "@/lib/subscriptions/interval"
 import { SubscriptionCheckout } from "@/components/loja/subscription-checkout"
+import { SUBSCRIPTION_SLOTS_RULE_TEXT } from "@/lib/subscriptions/slots"
 
 interface Props {
   params: Promise<{ slug: string }>
@@ -58,6 +59,7 @@ export default async function PlanoPage({ params }: Props) {
         <p className="mt-1 text-sm text-gray-500">
           {INTERVAL_CHARGE_LABEL[plan.interval]}
         </p>
+        <p className="mt-1 text-sm text-gray-500">{SUBSCRIPTION_SLOTS_RULE_TEXT}</p>
       </header>
 
       <SubscriptionCheckout
