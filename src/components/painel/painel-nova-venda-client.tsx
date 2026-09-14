@@ -602,13 +602,13 @@ export function PainelNovaVendaClient({
             <p className="mt-2 text-sm">
               {created.mode === "subscription_plan" ? (
                 <>
-                  {/* O texto NÃO promete a página de pagamento da loja: a
-                      assinatura nasce em aberto no gateway e o aluno escolhe o
-                      meio na fatura dele. Prometer o checkout transparente aqui
-                      seria descrever uma tela que ele não vai ver. */}
-                  Envie o link abaixo para o aluno pagar a primeira cobrança e
-                  ativar a assinatura. O acesso aos cursos do plano é liberado
-                  automaticamente após a confirmação do pagamento.
+                  {/* O link é a página de pagamento da própria loja
+                      (/pagar/assinatura/<id>): a cobrança só nasce no gateway
+                      quando o aluno paga ali. */}
+                  Envie o link abaixo para o aluno pagar a primeira cobrança na
+                  sua própria loja, sem sair do site, e ativar a assinatura. O
+                  acesso aos cursos do plano é liberado automaticamente após a
+                  confirmação do pagamento.
                   {created.chargeLabel ? ` ${created.chargeLabel}.` : ""}
                 </>
               ) : (

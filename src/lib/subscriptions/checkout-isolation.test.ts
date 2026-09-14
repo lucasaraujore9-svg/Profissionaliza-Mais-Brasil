@@ -38,12 +38,14 @@ vi.mock("@/lib/logger", () => {
 import {
   createSubscription as createAsaasSubscription,
   findOrCreateAsaasCustomer,
+  listPayments as listAsaasPayments,
 } from "@/lib/asaas/client"
 import { createSubscriptionAtGateway } from "./checkout"
 import { TenantGatewayIsolationError } from "@/lib/checkout/assert-tenant-gateway"
 
 const createSub = createAsaasSubscription as unknown as ReturnType<typeof vi.fn>
 const findCustomer = findOrCreateAsaasCustomer as unknown as ReturnType<typeof vi.fn>
+const listPays = listAsaasPayments as unknown as ReturnType<typeof vi.fn>
 
 function input(tenantId: string | null) {
   return {
@@ -74,6 +76,17 @@ describe("isolamento de conta na assinatura", () => {
     expect(findCustomer.mock.calls[0][1]).toBe("TENANT_KEY")
     expect(createSub.mock.calls[0][1]).toBe("TENANT_KEY")
     expect(createSub.mock.calls[0][1]).not.toBe("MOTHER_KEY")
+  })
+
+  it("busca a 1a fatura na conta da UNIDADE, nao na conta-mae", async () => {
+    // Listar com a chave da PMB devolvia lista vazia (ela nao conhece a
+    // assinatura da unidade) e o aluno que escolhia PIX ficava sem fatura.
+    const res = await createSubscriptionAtGateway(input("t1"), "ASAAS", {
+      asaasApiKey: "TENANT_KEY",
+      tenantSlug: "revenda1",
+    })
+    expect(listPays.mock.calls[0][1]).toBe("TENANT_KEY")
+    expect(res.invoiceUrl).toBe("https://inv")
   })
 
   it("webhook aponta para a conta da unidade (?tenant=slug)", async () => {

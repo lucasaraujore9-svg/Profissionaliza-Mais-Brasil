@@ -240,13 +240,20 @@ async function createAsaasSubscriptionForPlan(
 
   // O Asaas gera as cobranças de forma assíncrona; buscamos a 1ª fatura em até
   // 3 tentativas (mesmo padrão de issue-pmb-asaas-charge).
+  //
+  // Com a MESMA chave que criou a assinatura. Sem ela a listagem ia para a
+  // conta-mãe, que não conhece a assinatura da unidade: a lista voltava vazia e
+  // o aluno de uma revenda no Asaas que escolhia PIX/boleto ficava sem fatura.
   let invoiceUrl: string | null = null
   for (let i = 0; i < 3; i++) {
-    const list = await listAsaasPayments({
-      subscription: subscription.id,
-      limit: 1,
-      offset: 0,
-    }).catch(() => null)
+    const list = await listAsaasPayments(
+      {
+        subscription: subscription.id,
+        limit: 1,
+        offset: 0,
+      },
+      key,
+    ).catch(() => null)
     const first = list?.data?.[0]
     if (first) {
       invoiceUrl = first.invoiceUrl
@@ -265,10 +272,12 @@ async function createAsaasSubscriptionForPlan(
  *
  *  - **Com `cardToken`** (checkout na vitrine): `status: "authorized"` — fluxo
  *    transparente, sem redirect, o aluno nao sai da loja da unidade.
- *  - **Sem token** (VENDA DIRETA): `status: "pending"` + `init_point`. O
- *    vendedor nao tem o cartao do aluno em maos; exigir o token ali obrigaria a
- *    pedir o numero do cartao por telefone. O aluno autoriza a recorrencia na
- *    pagina do MP e o webhook faz o resto.
+ *  - **Sem token** (VENDA DIRETA do /admin): `status: "pending"` +
+ *    `init_point`. O vendedor nao tem o cartao do aluno em maos; exigir o token
+ *    ali obrigaria a pedir o numero do cartao por telefone. O aluno autoriza a
+ *    recorrencia na pagina do MP e o webhook faz o resto. A venda direta da
+ *    UNIDADE nao passa por aqui sem token: ela manda o aluno para a pagina de
+ *    pagamento da loja, que tokeniza o cartao (`store-payment.ts`).
  *
  * VITALICIA nao usa preapproval: vira uma PREFERENCIA de pagamento unico, onde
  * o aluno escolhe cartao, PIX ou boleto.

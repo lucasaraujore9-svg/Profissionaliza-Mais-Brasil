@@ -21,11 +21,18 @@ import type { PlanCheckoutData } from "./plans"
  *
  * O QUE ESTE FLUXO NAO FAZ, E POR QUE:
  *
- *  - **Nao cobra na hora.** O vendedor nao tem o cartao do aluno em maos. A
- *    cobranca nasce EM ABERTO (`billingType: UNDEFINED` no Asaas,
- *    `status: "pending"` no preapproval do MP) e o aluno escolhe como pagar na
- *    fatura/autorizacao do gateway. E o mesmo desenho da venda direta de curso
- *    mensal que ja existia em /admin/vendas.
+ *  - **Nao cobra na hora.** O vendedor nao tem o cartao do aluno em maos. O
+ *    que muda entre as portas e ONDE o aluno paga (`checkout`):
+ *      - `store` (/painel/vendas): o link e a pagina de pagamento da PROPRIA
+ *        LOJA (`/pagar/assinatura/<id>`), igual ao `/pagar/<id>` da venda de
+ *        curso. Nada nasce no gateway aqui — a cobranca e criada quando o aluno
+ *        paga, em `store-payment.ts`. Mandar o `init_point` do MP era mandar o
+ *        aluno da revenda para fora da loja dela, que e justamente o que o
+ *        checkout transparente existe para evitar.
+ *      - `gateway` (/admin/vendas): a cobranca nasce EM ABERTO
+ *        (`billingType: UNDEFINED` no Asaas, `status: "pending"` no preapproval
+ *        do MP) e o aluno paga na fatura/autorizacao do gateway — o mesmo
+ *        desenho das vendas de curso daquela tela.
  *  - **Nao aceita cupom.** `StudentSubscription.couponId` existe no schema mas
  *    nunca foi escrito por nenhum checkout — nenhuma superficie de assinatura
  *    aplica cupom hoje. Acordar essa coluna so aqui criaria o unico lugar do
@@ -34,6 +41,29 @@ import type { PlanCheckoutData } from "./plans"
  *    vendedor, esse sim, passa — e vale para SEMPRE, porque congela em
  *    `priceAtPurchase`.
  */
+
+export type DirectSubscriptionCheckout =
+  | {
+      kind: "gateway"
+      gateway: "MP" | "ASAAS"
+      account: SubscriptionGatewayAccount
+    }
+  | {
+      kind: "store"
+      /** Gateway ATIVO da unidade na hora da venda (informativo na linha). */
+      gateway: "MP" | "ASAAS"
+      /** Base publica da vitrine (dominio proprio aplicado ou subdominio). */
+      storeUrl: string
+    }
+
+/**
+ * Caminho PUBLICO da pagina de pagamento de uma assinatura vendida pela loja.
+ * Sem `/loja`: o proxy reescreve `/pagar/*` para `/loja/pagar/*` no host da
+ * vitrine, como no `/pagar/<id>` da venda de curso.
+ */
+export function storeSubscriptionPaymentPath(subscriptionId: string): string {
+  return `/pagar/assinatura/${subscriptionId}`
+}
 
 export interface DirectSubscriptionSaleInput {
   /** Plano com o preco EFETIVO daquela vitrine (resolvido pelo servidor). */
@@ -46,8 +76,8 @@ export interface DirectSubscriptionSaleInput {
   tenantSlug: string | null
   /** Quem vendeu — aparece no recorte de carteira da listagem de vendas. */
   soldByUserId: string
-  gateway: "MP" | "ASAAS"
-  account: SubscriptionGatewayAccount
+  /** Onde o aluno paga — ver o cabecalho deste modulo. */
+  checkout: DirectSubscriptionCheckout
   /** Desconto manual (%) JA validado contra o teto do vendedor. */
   discountPercent?: number
 }
@@ -166,13 +196,44 @@ export async function createDirectSubscriptionSale(
       // Congelada: editar o plano depois não pode mudar o que este assinante
       // contratou nem o que a renovação vai empurrar.
       interval: plan.interval,
-      gateway: input.gateway,
-      // A cobrança nasce em aberto — o aluno escolhe o meio na fatura.
+      gateway: input.checkout.gateway,
+      // A cobrança nasce em aberto — o aluno escolhe o meio ao pagar.
       billingType: "UNDEFINED",
       soldByUserId: input.soldByUserId,
     },
     select: { id: true },
   })
+
+  const checkout = input.checkout
+  if (checkout.kind === "store") {
+    const paymentUrl = `${checkout.storeUrl.replace(/\/+$/, "")}${storeSubscriptionPaymentPath(subscription.id)}`
+    // O link da loja é determinístico, mas é gravado pelo mesmo motivo do
+    // caminho do gateway: a lista de vendas diretas oferece "copiar link" a
+    // partir desta coluna.
+    try {
+      await prisma.studentSubscription.update({
+        where: { id: subscription.id },
+        data: { checkoutUrl: paymentUrl },
+      })
+    } catch (err) {
+      // Sem rollback, a linha PENDING sem link travaria toda nova venda para
+      // este aluno com 409 — e o vendedor não teria link nenhum para mandar.
+      await prisma.studentSubscription
+        .delete({ where: { id: subscription.id } })
+        .catch(() => undefined)
+      throw err
+    }
+    return {
+      ok: true,
+      subscriptionId: subscription.id,
+      priceAtPurchase: finalAmount,
+      listPrice,
+      discountAmount,
+      paymentUrl,
+      chargeLabel: INTERVAL_CHARGE_LABEL[plan.interval],
+      recurring: isRecurringInterval(plan.interval),
+    }
+  }
 
   try {
     const result = await createSubscriptionAtGateway(
@@ -189,8 +250,8 @@ export async function createDirectSubscriptionSale(
           phone: payer.fone,
         },
       },
-      input.gateway,
-      input.account,
+      checkout.gateway,
+      checkout.account,
     )
 
     const paymentUrl = result.initPoint ?? result.invoiceUrl

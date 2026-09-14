@@ -84,3 +84,22 @@ export const subscriptionCheckoutSchema = withGuardianRule(
  * e o catalogo do plano, nunca o que se pede ao aluno.
  */
 export const resellerSubscriptionCheckoutSchema = subscriptionCheckoutSchema
+
+/**
+ * Pagamento, na pagina da LOJA, de uma assinatura que ja foi VENDIDA (venda
+ * direta do /painel). So o meio de pagamento: aluno, plano, preco e
+ * periodicidade ja estao congelados na linha — o corpo diz QUAL assinatura,
+ * nunca quanto ela custa nem quem paga.
+ */
+export const storeSubscriptionPaymentSchema = z.object({
+  subscriptionId: z.string().trim().min(1).max(64),
+  paymentMethod: z.enum(["PIX", "BOLETO", "CREDIT_CARD"]),
+  creditCard: subscriptionCardSchema.optional(),
+  creditCardHolder: subscriptionCardHolderSchema.optional(),
+  /** Token do cartao gerado no browser (MP). Mesmo papel do checkout acima. */
+  cardToken: z.string().trim().min(1).max(200).optional(),
+})
+
+export type StoreSubscriptionPaymentInput = z.infer<
+  typeof storeSubscriptionPaymentSchema
+>

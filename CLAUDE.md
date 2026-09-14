@@ -1294,8 +1294,8 @@ sem backfill — `interval` nasce `MONTHLY` nos dois models, que e o unico
 comportamento que existia). Nada a ligar: plano novo nasce mensal e so muda se
 alguem escolher outra periodicidade na tela.
 
-**Limites deliberados:** a venda direta manda o aluno para a fatura do gateway,
-nao para o checkout transparente da loja; e um plano cujo escopo alcance curso de
+**Limites deliberados:** a venda direta do /admin manda o aluno para a fatura do
+gateway (a do /painel deixou de mandar em 2026-09-14, ver abaixo); e um plano cujo escopo alcance curso de
 autoria de OUTRA unidade nao passa por `authoredSaleGate` (o rateio e da
 cobranca, e uma assinatura cobre um conjunto que muda sozinho) — hoje isso nao
 acontece porque `planCourseWhere` so alcanca o que a vitrine vende, mas e o
@@ -1628,6 +1628,35 @@ ficavam para sempre.
   mas o DELETE direto revogava o acesso comprado para sempre.
 - Consequencia aceita pelo dono: curso da plataforma legada de assinatura cancelada
   e revogado no fim do periodo, e la isso apaga o progresso.
+
+### Venda direta de assinatura da unidade paga NA LOJA (2026-09-14)
+
+A Conecta Educacional (MP) vendeu uma assinatura pelo /painel/vendas e o link
+gerado era `mercadopago.com.br/subscriptions/checkout?preapproval_id=...`: a
+venda direta criava o preapproval `pending` na hora e mandava o `init_point`,
+tirando o aluno da loja da revenda — enquanto a venda de CURSO da mesma tela
+manda para o checkout transparente (`/pagar/<id>`).
+
+- **O /painel agora devolve `/pagar/assinatura/<id>`** na loja da unidade
+  (dominio proprio aplicado ou subdominio). `createDirectSubscriptionSale` ganhou
+  `checkout: { kind: "store" | "gateway" }`: `store` so cria a linha PENDING e
+  grava o link em `checkoutUrl`; `gateway` e o comportamento antigo, mantido no
+  /admin, cujas vendas de curso tambem mandam o link do gateway.
+- **A cobranca nasce quando o aluno paga** (`lib/subscriptions/store-payment.ts`
+  via `POST /api/loja/checkout/assinatura/pagar`), na conta DA UNIDADE, com
+  preco e periodicidade CONGELADOS na linha (nunca os de hoje do catalogo) e o
+  pagador resolvido pelo servidor. MP recorrente so no cartao (token no browser,
+  CPF do titular pedido na tela); Asaas aceita PIX/boleto/cartao.
+- **Uma cobranca por assinatura:** linha com `mpPreapprovalId`,
+  `asaasSubscriptionId` ou `externalReference` ja nao e paga de novo, e a
+  checagem e refeita dentro de advisory lock (`SUBSCRIPTION_STORE_PAY:<id>`).
+  Cartao recusado nao grava nada, entao o mesmo link serve para nova tentativa.
+- **Conserto lateral:** a busca da 1a fatura da assinatura Asaas
+  (`listPayments`) ia sem a chave e caia na conta-mae, que nao conhece a
+  assinatura da unidade — o aluno de revenda Asaas que escolhia PIX ficava sem
+  fatura, e a venda direta dessas unidades saia sem link nenhum.
+- **Linhas antigas** (vendidas antes do deploy, com preapproval pendente) nao
+  sao pagaveis pela pagina nova: ela mostra "pagamento em processamento".
 
 ### Bugs conhecidos (pendentes)
 

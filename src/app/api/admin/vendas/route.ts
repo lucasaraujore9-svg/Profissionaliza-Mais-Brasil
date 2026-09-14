@@ -611,11 +611,14 @@ export const POST = withRequestContext(
       tenantId: null,
       tenantSlug: null,
       soldByUserId: guard.ctx.userId,
-      gateway: effectiveGateway,
-      account:
-        effectiveGateway === "MP"
-          ? { mpAccessToken: (await pmbMpAccessToken()) ?? undefined }
-          : {},
+      checkout: {
+        kind: "gateway",
+        gateway: effectiveGateway,
+        account:
+          effectiveGateway === "MP"
+            ? { mpAccessToken: (await pmbMpAccessToken()) ?? undefined }
+            : {},
+      },
       discountPercent: parsed.data.manualDiscountPercent,
     })
     if (!sale.ok) {

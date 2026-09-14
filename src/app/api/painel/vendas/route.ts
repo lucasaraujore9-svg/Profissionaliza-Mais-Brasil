@@ -52,8 +52,6 @@ import { getPackageForCheckout } from "@/lib/packages/vitrine"
 import { MAX_SALE_COURSES, dedupeIds } from "@/lib/enrollment/multi-course"
 import { getPlanForCheckout } from "@/lib/subscriptions/plans"
 import { createDirectSubscriptionSale } from "@/lib/subscriptions/direct-sale"
-import { decryptTenantAsaasKey } from "@/lib/asaas/client"
-import { decryptTenantMpToken } from "@/lib/mercadopago/client"
 import { rollbackSaleEnrollment } from "@/lib/enrollment/multi-course-server"
 
 const createSchema = withGuardianRule(
@@ -286,6 +284,20 @@ export const GET = withRequestContext(
   },
 )
 
+/**
+ * Base pública da loja da unidade para os links de pagamento da venda direta.
+ * Usa o domínio próprio só quando aplicado (DNS apontado + verificado);
+ * enquanto pendente, o link vai pelo subdomínio oficial.
+ */
+function storeBaseUrl(tenant: {
+  slug: string
+  customDomain: string | null
+  domainVerified: boolean
+}): string {
+  const appliedDomain = activeCustomDomain(tenant)
+  return appliedDomain ? `https://${appliedDomain}` : vitrineUrl(tenant.slug)
+}
+
 export const POST = withRequestContext(
   { action: "painel.vendas.create", route: "/api/painel/vendas" },
   async (request: Request) => {
@@ -334,7 +346,6 @@ export const POST = withRequestContext(
         monthlyScope: true,
         salesGateway: true,
         asaasConnected: true,
-        asaasApiKey: true,
         asaasWebhookToken: true,
       },
     })
@@ -800,18 +811,12 @@ export const POST = withRequestContext(
         tenantId: tenant.id,
         tenantSlug: tenant.slug,
         soldByUserId: userId,
-        gateway: mode,
-        // A CONTA da unidade — nunca a conta-mãe. `createSubscriptionAtGateway`
-        // lança se sobrar para a conta-mãe numa venda de revenda.
-        account: {
-          asaasApiKey: tenant.asaasApiKey
-            ? decryptTenantAsaasKey(tenant.asaasApiKey)
-            : undefined,
-          mpAccessToken: tenant.mpAccessToken
-            ? decryptTenantMpToken(tenant.mpAccessToken)
-            : undefined,
-          tenantSlug: tenant.slug,
-        },
+        // O link é a página de pagamento da PRÓPRIA LOJA, igual ao da venda de
+        // curso logo abaixo. Criar a cobrança aqui mandava o aluno para a
+        // página do Mercado Pago (`init_point` do preapproval) em vez do
+        // checkout transparente da unidade. A cobrança nasce quando o aluno
+        // paga, na conta da unidade (`lib/subscriptions/store-payment.ts`).
+        checkout: { kind: "store", gateway: mode, storeUrl: storeBaseUrl(tenant) },
         discountPercent: data.manualDiscountPercent,
       })
       if (!sale.ok) {
@@ -1162,13 +1167,7 @@ export const POST = withRequestContext(
       })
 
       // Path público da vitrine é SEM /loja (o proxy reescreve /pagar → /loja/pagar).
-      // Usa o domínio próprio só quando aplicado (DNS apontado + verificado);
-      // enquanto pendente, o link de pagamento vai pelo subdomínio oficial.
-      const appliedDomain = activeCustomDomain(tenant)
-      const storeBase = appliedDomain
-        ? `https://${appliedDomain}`
-        : vitrineUrl(tenant.slug)
-      const paymentUrl = `${storeBase}/pagar/${enrollment.id}`
+      const paymentUrl = `${storeBaseUrl(tenant)}/pagar/${enrollment.id}`
 
       return NextResponse.json({
         data: {
