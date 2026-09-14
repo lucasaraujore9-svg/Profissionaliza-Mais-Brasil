@@ -41,6 +41,7 @@ export async function startImpersonation(input: StartImpersonationInput): Promis
     studentId: input.target.studentId ?? null,
     email: input.target.email,
     name: input.target.name,
+    impersonatedBy: input.actor.userId,
   })
 
   const cookieStore = await cookies()

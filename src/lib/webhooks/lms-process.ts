@@ -11,6 +11,7 @@ import {
   SUPPORT_STUDENT_SELECT,
 } from "@/lib/support/student-support"
 import { contextLogger } from "@/lib/logger"
+import { lmsLoginEndsPmbSession } from "@/lib/auth/single-session"
 
 /**
  * Processamento dos webhooks de ENTRADA do LMS. Cada handler é IDEMPOTENTE
@@ -29,6 +30,9 @@ export const LMS_WEBHOOK_EVENTS = [
   "course.updated",
   "lesson.completed",
   "student.question.created",
+  // Um acesso por vez: o aluno entrou DIRETO na plataforma de aulas (senha
+  // digitada lá, não SSO daqui). A sessão aberta no PMB antes disso cai.
+  "student.session.started",
 ] as const
 
 export type LmsWebhookEvent = (typeof LMS_WEBHOOK_EVENTS)[number]
@@ -84,6 +88,13 @@ const supportSchema = z.object({
   title: z.string().trim().max(120).optional(),
   body: z.string().trim().min(1).max(4000),
   context: z.string().trim().max(200).optional(),
+})
+
+// student.session.started: só o aluno e QUANDO o login aconteceu. Nenhum id de
+// sessão viaja — a decisão é por tempo (`lmsLoginEndsPmbSession`).
+const sessionStartedSchema = z.object({
+  studentExternalId: z.string().min(1),
+  startedAt: z.string().datetime(),
 })
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -248,6 +259,31 @@ export async function processLmsWebhookEvent(
         "suporte do LMS roteado para a caixa de atendimento",
       )
       return { ok: true, message: `suporte roteado (aluno ${student.id})` }
+    }
+
+    case "student.session.started": {
+      const p = sessionStartedSchema.parse(payload)
+      const startedAt = new Date(p.startedAt)
+      const student = await prisma.student.findUnique({
+        where: { id: p.studentExternalId },
+        select: { activeSessionId: true, activeSessionAt: true },
+      })
+      // Aluno que não existe aqui não tem sessão a derrubar — terminal, sem retry.
+      if (!student) return { ok: true, message: "aluno não encontrado — nada a encerrar" }
+      if (!lmsLoginEndsPmbSession(student, startedAt)) {
+        return { ok: true, message: "sessão do PMB é posterior ao login — mantida" }
+      }
+      // CAS pela sessão lida: se o aluno entrou aqui de novo entre a leitura e a
+      // escrita, a sessão NOVA não pode ser a derrubada.
+      const { count } = await prisma.student.updateMany({
+        where: { id: p.studentExternalId, activeSessionId: student.activeSessionId },
+        data: { activeSessionId: null },
+      })
+      contextLogger().info(
+        { event: "lms.webhook.student_session_ended", studentId: p.studentExternalId, count },
+        "login direto na plataforma de aulas encerrou a sessão do PMB",
+      )
+      return { ok: true, message: `sessão do PMB encerrada (${count})` }
     }
   }
 }

@@ -2,7 +2,12 @@ import type { Metadata, Viewport } from "next"
 import { redirect } from "next/navigation"
 import { headers, cookies } from "next/headers"
 import { prisma } from "@/lib/prisma"
-import { requireStudentSession } from "@/lib/auth/student-session"
+import {
+  requireStudentSession,
+  SESSION_REPLACED_LOGIN_PATH,
+  studentSessionWasReplaced,
+} from "@/lib/auth/student-session"
+import { StudentSessionWatch } from "@/components/aluno/student-session-watch"
 import { StudentShell } from "@/components/aluno/student-shell"
 import { ImpersonationBanner } from "@/components/admin/impersonation-banner"
 import {
@@ -98,7 +103,11 @@ export default async function AlunoLayout({
 }) {
   const session = await requireStudentSession()
   if (!session) {
-    redirect("/login")
+    // Um acesso por vez: a sessão caiu porque a conta entrou em outro aparelho.
+    // O aviso na tela de login é o que impede o aluno de ler isso como defeito.
+    redirect(
+      (await studentSessionWasReplaced()) ? SESSION_REPLACED_LOGIN_PATH : "/login",
+    )
   }
 
   const [studentRow, liveSubscription] = await Promise.all([
@@ -152,8 +161,12 @@ export default async function AlunoLayout({
           targetName={impersonation.targetName}
         />
       )}
+      {/* Sessão derrubada por outro aparelho sai da tela sem esperar um clique. */}
+      <StudentSessionWatch />
       <StudentShell
-        session={session}
+        // Só o que o shell desenha: o objeto inteiro iria para o payload RSC,
+        // e o id da sessão não tem o que fazer no navegador.
+        session={{ studentId: session.studentId, email: session.email, name: session.name }}
         dismissedTours={dismissedTours}
         hasSubscription={liveSubscription !== null}
         {...branding}

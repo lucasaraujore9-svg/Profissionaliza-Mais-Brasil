@@ -112,6 +112,27 @@ describe("getCourseAccessCards", () => {
     )
   })
 
+  it("curso da plataforma propria entra por SSO mesmo com URL de login", async () => {
+    // Um acesso por vez: mandar o aluno digitar a senha la abriria uma sessao
+    // NOVA, que derruba a desta tela no mesmo aparelho.
+    lmsCreds.mockResolvedValue([
+      {
+        enrollmentId: "e7",
+        courseId: "c7",
+        courseNome: "Excel",
+        origin: "own",
+        playback: "local",
+        login: "maria",
+        senha: "abc",
+        portalUrl: "https://aulas.example.com/login",
+      },
+    ])
+
+    const cards = await getCourseAccessCards("st1")
+
+    expect(cards[0].accessUrl).toBe("/api/aluno/curso/e7/acessar")
+  })
+
   it("não deixa passar nenhum campo que identifique a origem do curso", async () => {
     // É ESTE o teste que protege o sigilo. `origin: "escola-avancada"` no
     // payload RSC entrega a fornecedora sem nenhum texto na tela.

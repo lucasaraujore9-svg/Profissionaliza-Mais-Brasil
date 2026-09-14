@@ -72,6 +72,7 @@ valor inválido → `401`.
 | PUSH | PATCH | [`/api/v1/students/:id/access`](#83-patch-apiv1studentsidaccess) | Bloqueia/reativa o aluno |
 | PUSH | PUT | [`/api/v1/tenants/:id`](#84-put-apiv1tenantsid) | Branding da revenda + base do certificado |
 | PUSH | POST | [`/api/v1/sso/token`](#85-post-apiv1ssotoken) | Emite link SSO de uso único |
+| PUSH | PUT | [`/api/v1/students/:id/session`](#87-put-apiv1studentsidsession--um-acesso-por-vez) | Informa a sessão que vale (um acesso por vez) |
 | WEBHOOK | POST | [`…/api/webhooks/lms`](#9-webhooks-lms--pmb) | Eventos LMS→PMB (o PMB recebe) |
 | OPERAÇÃO | POST | [`/api/v1/import/:source/run`](#10-operação-cron) | Importa catálogo de um parceiro |
 | OPERAÇÃO | POST | [`/api/v1/webhooks/dispatch`](#10-operação-cron) | Dispara webhooks pendentes (cron) |
@@ -514,6 +515,14 @@ aluno antes.
 `tenantExternalId` e `returnUrl` são opcionais. **Erros:** `400` (`studentExternalId`
 obrigatório), `404` (aluno não encontrado — matricule antes).
 
+**Um acesso por vez (2026-09-14)** — dois campos opcionais:
+
+- `sessionId` (`pmb_…`): a sessão do PMB que abriu o link. A sessão criada no LMS **herda
+  esse id** e passa a ser a única válida do aluno — é o mesmo acesso continuando, então não
+  derruba a sessão do PMB; derruba a de outro aparelho que estivesse no LMS.
+- `mode: "support"`: "entrar como" do suporte. A sessão no LMS não disputa o lugar do aluno
+  (não grava nada nele), dura 8h e não se renova. `sessionId` é ignorado nesse modo.
+
 ### 8.6. `PATCH /api/v1/enrollments/:id/limit` — cota de aulas ✅ *implementado*
 
 > **Status:** implementado dos DOIS lados (LMS commit `83ec0b1`). O PMB envia o teto por
@@ -557,6 +566,41 @@ o curso e some — e a única defesa do PMB é recusar o certificado.
 
 **Lado do PMB:** `setLmsEnrollmentLimit()` em `src/lib/lms/client.ts`; o cálculo da cota
 vive em `src/lib/enrollment/pace-gate.ts` e o motor em `src/lib/enrollment/pace.ts`.
+
+---
+
+### 8.7. `PUT /api/v1/students/:id/session` — um acesso por vez
+
+A conta do aluno fica aberta em **um aparelho por vez**, no PMB e no LMS juntos. Toda sessão
+de aluno carrega um id (`sid`), e só vale enquanto for igual a `Student.accountSessionId`
+(LMS) / `Student.activeSessionId` (PMB). O último login vence; o aparelho anterior cai na
+próxima requisição.
+
+O PMB chama este endpoint no **login de lá**, para a sessão aberta no LMS em outro aparelho
+cair também. `:id` aceita id interno ou externalId.
+
+```json
+// Request
+{ "sessionId": "pmb_7f1c2e0a-5b7d-4d8e-9a51-1f0c3b2d4e6f" }
+
+// Resposta 200
+{ "data": { "studentId": "cmxyz..." } }
+```
+
+**Erros:** `400` (`sessionId` fora do formato `pmb_…` — o valor vira cookie), `404` (aluno
+nunca teve curso no LMS: nada a derrubar; o PMB ignora).
+
+Quem grava a sessão válida, e o efeito em cada lado:
+
+| Evento | LMS | PMB |
+|---|---|---|
+| Login no PMB | `PUT /students/:id/session` → sessão de outro aparelho cai | sessão nova |
+| SSO do PMB (`sessionId`) | sessão herda o id do PMB | nada muda (é o mesmo acesso) |
+| Login direto no LMS | sessão nova (`lms_…`) | webhook `student.session.started` → sessão **anterior** ao login cai |
+| "Entrar como" (`mode: support`) | sessão curta à parte | isenta (`impersonatedBy` no JWT) |
+
+**Fora do alcance:** cursos da plataforma legada — o aluno entra direto no site dela, com
+login próprio, e a API não tem sessão nem troca de senha.
 
 ---
 
@@ -615,6 +659,7 @@ const esperado = crypto.createHmac("sha256", PMB_WEBHOOK_SECRET)
 | `lesson.completed` | Aluno concluiu uma aula (apenas na 1ª vez). |
 | `course.completed` | Aluno concluiu o curso → PMB emite o certificado do tenant. |
 | `student.question.created` | Aluno abriu uma dúvida no player. |
+| **`student.session.started`** | **(2026-09-14)** Aluno entrou **direto** no LMS (senha digitada lá, não SSO). Corpo `{ "studentExternalId", "startedAt" }` (ISO). O PMB derruba a sessão de lá **só se ela for anterior** a `startedAt` — o retry com backoff não pode derrubar um login feito depois. |
 
 Os três eventos de catálogo (`course.published`/`updated`/`unpublished`) disparam um **sync
 completo** do catálogo no PMB (não um patch de um curso só) — idempotente e barato.

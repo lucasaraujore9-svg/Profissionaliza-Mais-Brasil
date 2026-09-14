@@ -8,13 +8,18 @@ import { PMB_TENANT_SLUG } from "@/lib/pmb-config"
 import { authSecret } from "@/lib/env"
 import { SESSION_COOKIE_NAME } from "@/lib/auth/cookies"
 import { rateLimitByKey, RATE_LIMITS } from "@/lib/ratelimit"
-import { swallow } from "@/lib/errors"
 import { contextLogger } from "@/lib/logger"
 import { isValidCpf, stripCpf } from "@/lib/validation/cpf"
 import {
   normalizeMemberRole,
   type PainelMemberRole,
 } from "@/lib/auth/painel-permissions"
+import { afterResponse } from "@/lib/after-response"
+import {
+  newStudentSessionId,
+  studentSessionIsCurrent,
+} from "@/lib/auth/single-session"
+import { pushStudentSessionToLms } from "@/lib/students/session-sync"
 import "@/types"
 
 // O campo `email` aceita email OU CPF (aluno). A distinção é feita no
@@ -311,12 +316,27 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           return null
         }
 
-        await prisma.student
-          .update({
+        // UM ACESSO POR VEZ: este login passa a ser a única sessão válida da
+        // conta, e a de qualquer outro aparelho cai na próxima requisição (ver
+        // `lib/auth/single-session.ts`). A escrita NÃO é engolida como a do
+        // `lastLoginAt` era: sem ela o JWT sairia com um `sid` que o banco não
+        // conhece e o aluno seria deslogado no primeiro clique.
+        const sessionId = newStudentSessionId()
+        const now = new Date()
+        try {
+          await prisma.student.update({
             where: { id: account.id },
-            data: { lastLoginAt: new Date() },
+            data: { lastLoginAt: now, activeSessionId: sessionId, activeSessionAt: now },
           })
-          .catch(swallow("auth.lastLogin"))
+        } catch (err) {
+          contextLogger().error(
+            { err, event: "auth.student_session.write_failed", studentId: account.id },
+            "não foi possível registrar a sessão do aluno — login recusado",
+          )
+          return null
+        }
+        // A sessão aberta na plataforma de aulas em outro aparelho cai também.
+        afterResponse(() => pushStudentSessionToLms(account.id, sessionId))
 
         return {
           id: account.id,
@@ -326,6 +346,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           tenantId: account.tenantId,
           studentId: account.id,
           mustChangePassword: false,
+          sessionId,
         }
       },
     }),
@@ -341,7 +362,31 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.mustChangePassword = user.mustChangePassword ?? false
         token.tenantStatus = user.tenantStatus ?? null
         token.memberRole = user.memberRole ?? null
+        token.sid = user.sessionId ?? null
         token.refreshedAt = Date.now()
+        return token
+      }
+
+      // ALUNO: um acesso por vez. A cada leitura da sessão confere se este JWT
+      // ainda é o do login mais recente da conta — sem throttle, porque é
+      // exatamente a janela entre o login no outro aparelho e a próxima
+      // conferência que dois acessos convivem. É uma leitura por PK.
+      //
+      // O "entrar como" do suporte (`impersonatedBy`) passa direto: atender o
+      // aluno não pode derrubá-lo.
+      if (token.studentId && !token.impersonatedBy) {
+        try {
+          const row = await prisma.student.findUnique({
+            where: { id: token.studentId },
+            select: { activeSessionId: true },
+          })
+          if (!studentSessionIsCurrent(token, row?.activeSessionId ?? null)) {
+            return null
+          }
+        } catch {
+          // Falha de infraestrutura: mantém a sessão e confere na próxima — não
+          // desloga todo mundo porque o banco piscou. Mesma política do User.
+        }
         return token
       }
 
@@ -387,6 +432,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         session.user.mustChangePassword = token.mustChangePassword ?? false
         session.user.tenantStatus = token.tenantStatus ?? null
         session.user.memberRole = token.memberRole ?? null
+        session.user.sessionId = token.sid ?? null
       }
       return session
     },

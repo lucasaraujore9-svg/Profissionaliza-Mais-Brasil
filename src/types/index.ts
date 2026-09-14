@@ -24,6 +24,8 @@ declare module "next-auth" {
     mustChangePassword?: boolean
     tenantStatus?: string | null
     memberRole?: MemberRole
+    /** Aluno: identificador da sessão deste login (um acesso por vez). */
+    sessionId?: string | null
   }
 
   interface Session {
@@ -38,6 +40,8 @@ declare module "next-auth" {
       mustChangePassword: boolean
       tenantStatus: string | null
       memberRole: MemberRole
+      /** Aluno: sessão deste login. null em impersonação e em outros papéis. */
+      sessionId: string | null
     }
   }
 }
@@ -53,6 +57,13 @@ declare module "next-auth/jwt" {
     // Epoch ms da última re-sincronização do token com o banco (throttle no
     // callback jwt). Ausente em tokens antigos → força refresh no 1º acesso.
     refreshedAt?: number
+    /**
+     * Aluno: sessão deste login. Precisa bater com `Student.activeSessionId` —
+     * é o que faz o login num segundo aparelho derrubar o primeiro.
+     */
+    sid?: string | null
+    /** "Entrar como" do suporte: quem abriu. Não disputa o lugar do aluno. */
+    impersonatedBy?: string | null
   }
 }
 

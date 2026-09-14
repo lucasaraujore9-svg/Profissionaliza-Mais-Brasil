@@ -77,10 +77,15 @@ export async function getCourseAccessCards(
       courseName: credential.courseNome,
       login: credential.login,
       senha: credential.senha,
-      // Quando ha portal proprio do curso, e ele; senao passamos pela nossa
-      // rota, que resolve o acesso do lado do servidor.
+      // Curso de parceiro (redirect) abre no portal dele. O resto passa SEMPRE
+      // pela nossa rota, que entra por SSO — mesmo quando a plataforma devolveu
+      // uma URL de login. Um acesso por vez: o login digitado la e uma sessao
+      // NOVA, que derruba a desta tela no mesmo aparelho; o SSO leva a sessao
+      // daqui junto (`/api/aluno/curso/[id]/acessar`).
       accessUrl:
-        credential.portalUrl ?? `/api/aluno/curso/${credential.enrollmentId}/acessar`,
+        credential.playback === "redirect" && credential.portalUrl
+          ? credential.portalUrl
+          : `/api/aluno/curso/${credential.enrollmentId}/acessar`,
     })
   }
 

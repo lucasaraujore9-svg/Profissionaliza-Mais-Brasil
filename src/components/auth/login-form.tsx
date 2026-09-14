@@ -30,6 +30,9 @@ export function LoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const reset = searchParams.get("reset") === "1"
+  // Um acesso por vez: a sessão deste aparelho caiu porque a conta entrou em
+  // outro. Sem o aviso, o aluno lê o "saí sozinho" como defeito.
+  const sessionReplaced = searchParams.get("motivo") === "outro-acesso"
   const [state, setState] = useState<SubmitState>({ kind: "idle" })
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -131,6 +134,14 @@ export function LoginForm() {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
+      {sessionReplaced && (
+        <div role="status" className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+          Sua sessão foi encerrada porque a conta foi acessada em outro
+          aparelho. A conta fica aberta em um aparelho por vez — entre de novo
+          para continuar aqui.
+        </div>
+      )}
+
       {reset && (
         <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">
           Senha redefinida com sucesso. Faça login com sua nova senha.

@@ -28,6 +28,13 @@ export interface SessionTokenPayload {
   studentId?: string | null
   email?: string | null
   name?: string | null
+  /**
+   * Quem abriu o "entrar como". Vai DENTRO do JWT (cifrado, não forjável) e é o
+   * que isenta a sessão da regra de um acesso por vez: sem isto, atender o aluno
+   * derrubaria a sessão dele — e a do suporte cairia no primeiro clique, porque
+   * o token impersonado não tem o `sid` do login do aluno.
+   */
+  impersonatedBy?: string | null
 }
 
 function getSecret(): string {
@@ -53,7 +60,7 @@ export async function buildSessionToken(
 
 export async function decodeSessionToken(
   raw: string,
-): Promise<SessionTokenPayload | null> {
+): Promise<(SessionTokenPayload & { sid: string | null }) | null> {
   const decoded = await decode({
     token: raw,
     secret: getSecret(),
@@ -68,6 +75,7 @@ export async function decodeSessionToken(
     tenantId: typeof t.tenantId === "string" ? t.tenantId : null,
     email: typeof t.email === "string" ? t.email : null,
     name: typeof t.name === "string" ? t.name : null,
+    sid: typeof t.sid === "string" ? t.sid : null,
   }
 }
 

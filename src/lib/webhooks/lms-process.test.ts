@@ -10,7 +10,7 @@ vi.mock("@/lib/prisma", () => {
   const prisma = {
     enrollment: { findFirst: vi.fn(), update: vi.fn() },
     systemSettings: { findUnique: vi.fn() },
-    student: { findUnique: vi.fn() },
+    student: { findUnique: vi.fn(), updateMany: vi.fn() },
   }
   return { prisma }
 })
@@ -40,7 +40,7 @@ import {
 const p = prisma as unknown as {
   enrollment: { findFirst: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn> }
   systemSettings: { findUnique: ReturnType<typeof vi.fn> }
-  student: { findUnique: ReturnType<typeof vi.fn> }
+  student: { findUnique: ReturnType<typeof vi.fn>; updateMany: ReturnType<typeof vi.fn> }
 }
 const issueMock = issueCertificateIfEligible as unknown as ReturnType<typeof vi.fn>
 const syncMock = syncSingleLmsCourse as unknown as ReturnType<typeof vi.fn>
@@ -197,6 +197,77 @@ describe("payload inválido (QA-010)", () => {
   it("course.completed sem courseId → ZodError (a rota converte para 400)", async () => {
     await expect(
       processLmsWebhookEvent("course.completed", { studentExternalId: "s1" }),
+    ).rejects.toThrow()
+  })
+})
+
+describe("student.session.started (um acesso por vez)", () => {
+  const loginAt = "2026-09-14T12:00:00.000Z"
+
+  it("login direto na plataforma DERRUBA a sessao anterior do PMB", async () => {
+    p.student.findUnique.mockResolvedValue({
+      activeSessionId: "pmb_a",
+      activeSessionAt: new Date("2026-09-14T11:00:00.000Z"),
+    })
+    p.student.updateMany.mockResolvedValue({ count: 1 })
+
+    const res = await processLmsWebhookEvent("student.session.started", {
+      studentExternalId: "st1",
+      startedAt: loginAt,
+    })
+
+    expect(res.ok).toBe(true)
+    // CAS pela sessão lida: um login novo aqui, entre a leitura e a escrita, não
+    // pode ser o derrubado.
+    expect(p.student.updateMany).toHaveBeenCalledWith({
+      where: { id: "st1", activeSessionId: "pmb_a" },
+      data: { activeSessionId: null },
+    })
+  })
+
+  it("evento ATRASADO nao derruba login feito aqui depois", async () => {
+    // O webhook tem retentativa de horas: sem a comparação de tempo, o aluno
+    // sairia sozinho muito depois de ter entrado.
+    p.student.findUnique.mockResolvedValue({
+      activeSessionId: "pmb_b",
+      activeSessionAt: new Date("2026-09-14T15:00:00.000Z"),
+    })
+
+    const res = await processLmsWebhookEvent("student.session.started", {
+      studentExternalId: "st1",
+      startedAt: loginAt,
+    })
+
+    expect(res.ok).toBe(true)
+    expect(p.student.updateMany).not.toHaveBeenCalled()
+  })
+
+  it("aluno sem sessao aqui: nada a fazer, sem retry", async () => {
+    p.student.findUnique.mockResolvedValue({ activeSessionId: null, activeSessionAt: null })
+    const res = await processLmsWebhookEvent("student.session.started", {
+      studentExternalId: "st1",
+      startedAt: loginAt,
+    })
+    expect(res).toMatchObject({ ok: true })
+    expect(p.student.updateMany).not.toHaveBeenCalled()
+  })
+
+  it("aluno inexistente e terminal (ok), nao retryable", async () => {
+    p.student.findUnique.mockResolvedValue(null)
+    const res = await processLmsWebhookEvent("student.session.started", {
+      studentExternalId: "fantasma",
+      startedAt: loginAt,
+    })
+    expect(res.ok).toBe(true)
+    expect(res.retryable).toBeUndefined()
+  })
+
+  it("payload sem data valida e rejeitado", async () => {
+    await expect(
+      processLmsWebhookEvent("student.session.started", {
+        studentExternalId: "st1",
+        startedAt: "ontem",
+      }),
     ).rejects.toThrow()
   })
 })

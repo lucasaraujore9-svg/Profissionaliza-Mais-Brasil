@@ -225,6 +225,22 @@ export async function setLmsStudentAccess(
   )
 }
 
+/**
+ * Um acesso por vez: informa ao LMS qual e a sessao do aluno que vale agora.
+ * Chamado no login do PMB — a sessao aberta la em outro aparelho deixa de valer.
+ * `studentRef` e o externalId (nosso Student.id). Idempotente.
+ */
+export async function setLmsStudentSession(
+  studentRef: string,
+  sessionId: string,
+): Promise<void> {
+  await lmsRequest<{ data: unknown }>(
+    "PUT",
+    `/students/${encodeURIComponent(studentRef)}/session`,
+    { body: { sessionId } },
+  )
+}
+
 export async function getLmsStudent(studentRef: string): Promise<LmsStudentProfile> {
   const res = await lmsRequest<{ data: LmsStudentProfile }>(
     "GET",

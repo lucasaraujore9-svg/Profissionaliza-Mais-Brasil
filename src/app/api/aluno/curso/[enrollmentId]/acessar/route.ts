@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server"
+import { cookies } from "next/headers"
 import { prisma } from "@/lib/prisma"
+import {
+  decodeImpersonationFlag,
+  IMPERSONATION_FLAG_COOKIE,
+} from "@/lib/auth/impersonate"
 import { requireStudentSession } from "@/lib/auth/student-session"
 import { createLmsSsoToken, normalizeLmsPublicUrl } from "@/lib/lms"
 import { resolvePaceGateSettings } from "@/lib/enrollment/pace-settings"
@@ -71,10 +76,28 @@ export async function GET(
     return errorRedirect("sem_acesso")
   }
 
+  // Um acesso por vez: o link leva a sessão DESTE login, e a sessão aberta lá
+  // herda o mesmo id — é o mesmo acesso continuando, não um segundo. No "entrar
+  // como" do suporte vai o modo `support`, que não disputa o lugar do aluno
+  // (atendê-lo não pode derrubá-lo). O flag é assinado (HMAC), não forjável.
+  const impersonation = decodeImpersonationFlag(
+    (await cookies()).get(IMPERSONATION_FLAG_COOKIE)?.value,
+  )
+  const sessionFields = impersonation
+    ? { mode: "support" as const }
+    : session.sessionId
+      ? { sessionId: session.sessionId }
+      : null
+  if (!sessionFields) {
+    // Não acontece: sessão de aluno sem `sid` já é recusada no callback `jwt`.
+    return NextResponse.redirect(new URL("/login", request.url))
+  }
+
   try {
     const { url } = await createLmsSsoToken({
       studentExternalId: enrollment.student.id,
       tenantExternalId: enrollment.tenantId ?? undefined,
+      ...sessionFields,
       // O `returnUrl` do SSO é um PATH INTERNO da plataforma de aulas (lá ele
       // passa por `safeInternalPath`, que descarta URL absoluta). Num e-book
       // mandamos o aluno direto para o leitor: o botão dele diz "Ler e-book" e

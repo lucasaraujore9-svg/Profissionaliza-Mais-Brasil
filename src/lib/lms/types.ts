@@ -178,6 +178,16 @@ export interface LmsSsoTokenRequest {
   studentExternalId: string
   tenantExternalId?: string
   returnUrl?: string
+  /**
+   * Sessao do PMB que abriu o link. A sessao criada no LMS herda o mesmo id: e
+   * o MESMO acesso continuando la, entao nao derruba a sessao daqui.
+   */
+  sessionId?: string
+  /**
+   * `support`: "entrar como" do suporte. A sessao no LMS nao disputa o lugar do
+   * aluno (atender alguem nao pode derruba-lo) e dura poucas horas.
+   */
+  mode?: "support"
 }
 
 export interface LmsSsoTokenResponse {
