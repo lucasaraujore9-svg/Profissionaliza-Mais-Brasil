@@ -127,6 +127,20 @@ export function activeCustomDomain(tenant: {
   return tenant.domainVerified ? domain : null
 }
 
+/**
+ * Base publica da loja da unidade para os links de pagamento enviados ao aluno.
+ * Usa o dominio proprio so quando aplicado (DNS apontado + verificado);
+ * enquanto pendente, o link vai pelo subdominio oficial.
+ */
+export function storeBaseUrl(tenant: {
+  slug: string
+  customDomain?: string | null
+  domainVerified?: boolean | null
+}): string {
+  const appliedDomain = activeCustomDomain(tenant)
+  return appliedDomain ? `https://${appliedDomain}` : vitrineUrl(tenant.slug)
+}
+
 // Base canonica para webhooks de gateways (Mercado Pago).
 //
 // O apex (profissionalizamaisbrasil.com.br) responde 307 -> www e o Mercado

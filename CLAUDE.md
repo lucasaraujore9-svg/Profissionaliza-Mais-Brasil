@@ -1657,6 +1657,13 @@ manda para o checkout transparente (`/pagar/<id>`).
   fatura, e a venda direta dessas unidades saia sem link nenhum.
 - **Linhas antigas** (vendidas antes do deploy, com preapproval pendente) nao
   sao pagaveis pela pagina nova: ela mostra "pagamento em processamento".
+  Remediadas por `/api/cron/fix-subscription-mp-links` (dry-run por padrao,
+  `?apply=true` para executar; `lib/subscriptions/legacy-mp-link.ts`): le o
+  estado VIVO do preapproval, cancela no MP ANTES da linha, e reemite a venda
+  numa linha NOVA com preco/periodicidade/vendedor congelados. **Nao converte a
+  linha antiga:** o preapproval nasceu com `X-Idempotency-Key = pmb_sub_<id>`,
+  e o pagamento na loja reusaria a mesma chave. Quem ja autorizou no MP, ou cujo
+  estado nao pode ser lido, nao e tocado.
 
 ### Bugs conhecidos (pendentes)
 

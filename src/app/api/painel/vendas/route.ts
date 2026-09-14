@@ -41,7 +41,7 @@ import { isValidCpf, stripCpf } from "@/lib/validation/cpf"
 import { isValidPhone, normalizePhone } from "@/lib/validation/phone"
 import { effectivePaymentType, monthlyActive } from "@/lib/tenant/monthly-policy"
 import { tenantCheckoutMode } from "@/lib/tenant/checkout-mode"
-import { activeCustomDomain, vitrineUrl } from "@/lib/tenant/urls"
+import { storeBaseUrl } from "@/lib/tenant/urls"
 import { tenantPolo } from "@/lib/tenant/slug"
 import { createBoletoInstallmentPlan } from "@/lib/installments/plan"
 import {
@@ -283,20 +283,6 @@ export const GET = withRequestContext(
     return NextResponse.json({ data: rows })
   },
 )
-
-/**
- * Base pública da loja da unidade para os links de pagamento da venda direta.
- * Usa o domínio próprio só quando aplicado (DNS apontado + verificado);
- * enquanto pendente, o link vai pelo subdomínio oficial.
- */
-function storeBaseUrl(tenant: {
-  slug: string
-  customDomain: string | null
-  domainVerified: boolean
-}): string {
-  const appliedDomain = activeCustomDomain(tenant)
-  return appliedDomain ? `https://${appliedDomain}` : vitrineUrl(tenant.slug)
-}
 
 export const POST = withRequestContext(
   { action: "painel.vendas.create", route: "/api/painel/vendas" },

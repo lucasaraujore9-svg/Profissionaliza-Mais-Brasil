@@ -254,6 +254,18 @@ export async function searchPayments(
   return request<{ results: MPPayment[] }>("GET", `/v1/payments/search?${qs}`, accessToken)
 }
 
+/**
+ * Estado VIVO de uma assinatura (preapproval): `pending` (aluno ainda nao
+ * autorizou), `authorized`, `paused` ou `cancelled`. Como o cancelamento, so
+ * responde com o token da conta que a criou.
+ */
+export async function getPreapproval(
+  accessToken: string,
+  preapprovalId: string,
+): Promise<MPPreapproval> {
+  return request<MPPreapproval>("GET", `/preapproval/${preapprovalId}`, accessToken)
+}
+
 export async function cancelPreapproval(
   accessToken: string,
   preapprovalId: string,
