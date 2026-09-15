@@ -1558,11 +1558,25 @@ Com a lista cheia, abrir outro exige TIRAR um — no mesmo pedido (troca) ou por
   discriminador sobre `status = CANCELLED`: a matricula e revogada no LMS, que
   GUARDA o progresso por aluno, e "Retomar" reprovisiona de onde parou (chave de
   idempotencia muda a cada volta).
-- **A assinatura so libera curso da plataforma PROPRIA** (`{ provider: "LMS" }` em
-  `vitrineGateWhere`). Na legada desvincular APAGA o progresso, nao ha pausa por
-  curso e o limite de acesso nao chega la. Cursos legados ja abertos continuam com
-  o assinante, ocupam vaga e nao saem por "tirar da lista". Impacto medido: todo
-  plano ativo segue com 106–119 cursos (sem os ~98 legados).
+- **A assinatura libera as DUAS plataformas de aulas** (corrigido em 15/09). De 14 a
+  15/09 havia `{ provider: "LMS" }` em `vitrineGateWhere` e todo plano "catalogo
+  inteiro" perdeu os ~98 cursos da legada (ex.: 119 em vez de 217) sem aviso na tela
+  de quem montou o plano. Ha teste impedindo filtro isolado por fornecedora no gate.
+- **Curso da legada so sai da lista ANTES de o aluno comecar** (decisao do dono,
+  15/09): la desvincular APAGA o progresso. "Nao comecou" = 0% **e** situacao
+  `AGUARDANDO` — a legada arredonda para baixo (havia 105 matriculas `EM_ANDAMENTO`
+  com 0%) e preenche a "data da ultima aula" ate em curso nunca aberto, entao
+  `lastLessonAt` NAO serve de sinal. A tela usa a copia local
+  (`canReleaseSubscriptionSlot`); antes de desvincular, `findReleasable` confere AO
+  VIVO (`checkEaCourseStarted`) e qualquer duvida (plataforma fora, curso nao achado)
+  e recusa. Depois de comecar, a vaga libera ao concluir ("Libera ao concluir" na
+  tela). Com a lista cheia, a rota de liberar puxa o progresso das DUAS plataformas
+  antes de responder `SLOTS_FULL`.
+- **Curso novo da legada entra nas vitrines das unidades no proprio sync**
+  (`ensureCourseForResellers` no CREATE de `upsertEaCourse`, como o LMS ja fazia).
+  Antes so chegava quando o painel da unidade rodasse `ensureTenantCourses` — e ate
+  la ficava fora de toda assinatura "catalogo inteiro" dela, que exige o
+  `TenantCourse`. O escopo `ALL` em si ja era dinamico (resolvido na hora do acesso).
 - **Lock por ASSINATURA** (`SUBSCRIPTION_RELEASE:<subId>`), nao por curso: dois
   cliques em cursos diferentes com 9 vagas ocupadas terminariam em 11.
 - **Troca e fail-closed para a regra:** revoga ANTES de abrir o novo; se o novo nao

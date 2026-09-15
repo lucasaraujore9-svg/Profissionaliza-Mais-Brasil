@@ -4,6 +4,7 @@ import { rateLimitByKey, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 import { releaseSubscriptionSlot } from "@/lib/subscriptions/release"
 import { findLiveSubscriptionId } from "@/lib/subscriptions/live"
+import { SLOT_NOT_RELEASABLE_MESSAGE } from "@/lib/subscriptions/slots"
 
 export const dynamic = "force-dynamic"
 export const maxDuration = 60
@@ -11,8 +12,9 @@ export const maxDuration = 60
 /**
  * "Tirar da lista": libera uma das vagas da assinatura.
  *
- * Não é cancelar o curso — a plataforma de aulas guarda o progresso, e o card
- * do catálogo passa a oferecer "Retomar". Mesmo bucket de rate limit do
+ * Não é cancelar o curso — onde a plataforma de aulas guarda o progresso, o
+ * card do catálogo passa a oferecer "Retomar"; onde não guarda, só sai curso
+ * ainda não começado (`findReleasable`). Mesmo bucket de rate limit do
  * "Começar": as duas ações falam com a fornecedora e juntas formam a troca.
  */
 export const POST = withRequestContextParams<{ courseId: string }>(
@@ -60,7 +62,7 @@ export const POST = withRequestContextParams<{ courseId: string }>(
         )
       }
       return NextResponse.json(
-        { error: "Esse curso não pode sair da sua lista", code: result.reason },
+        { error: SLOT_NOT_RELEASABLE_MESSAGE, code: result.reason },
         { status: 422 },
       )
     }

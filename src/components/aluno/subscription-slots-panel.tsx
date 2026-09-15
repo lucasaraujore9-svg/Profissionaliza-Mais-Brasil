@@ -8,13 +8,17 @@ import type { SubscriptionSlots } from "@/lib/subscriptions/slots"
 /**
  * "X de 10 cursos em andamento", com a saída de cada um.
  *
- * Tirar da lista NÃO é desistir do curso: a plataforma de aulas guarda o
- * progresso, e o card do catálogo passa a oferecer "Retomar". O texto diz isso
- * antes de confirmar, porque "remover" lido sozinho soa como perder o que já
- * foi estudado.
+ * Tirar da lista NÃO é desistir do curso quando ele guarda o progresso: o card
+ * do catálogo passa a oferecer "Retomar". O texto diz isso antes de confirmar,
+ * porque "remover" lido sozinho soa como perder o que já foi estudado. Os
+ * cursos que NÃO guardam progresso fora da lista só saem antes de o aluno
+ * começar — e a tela diz por que o botão sumiu, em vez de só sumir.
+ *
+ * Sem nomear a fornecedora: para o aluno é tudo "a plataforma de aulas".
  */
 export function SubscriptionSlotsPanel({ slots }: { slots: SubscriptionSlots }) {
   const full = slots.used >= slots.max
+  const hasLocked = slots.courses.some((c) => !c.releasable)
 
   return (
     <section className="mb-6 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
@@ -28,8 +32,9 @@ export function SubscriptionSlotsPanel({ slots }: { slots: SubscriptionSlots }) 
       </div>
       <p className="mt-1 text-xs text-gray-600">
         Você estuda até {slots.max} cursos ao mesmo tempo. Cursos concluídos não
-        contam. Para abrir outro com a lista cheia, tire um da lista: o progresso
-        fica salvo.
+        contam. Para abrir outro com a lista cheia, tire um da lista.
+        {hasLocked &&
+          " Alguns cursos só saem da lista antes de você começar: depois disso, a vaga libera quando você concluir."}
       </p>
 
       {slots.courses.length > 0 && (
@@ -60,6 +65,9 @@ function SlotRow({ course }: { course: SubscriptionSlots["courses"][number] }) {
       const body = await res.json().catch(() => ({}))
       if (!res.ok && res.status !== 409) {
         setError(body.error ?? "Não foi possível tirar o curso da lista")
+        // 422: a conferência ao vivo viu que o aluno já começou e gravou o
+        // progresso. Recarregar troca o botão por "Libera ao concluir".
+        if (res.status === 422) router.refresh()
         return
       }
       setConfirming(false)
@@ -89,14 +97,29 @@ function SlotRow({ course }: { course: SubscriptionSlots["courses"][number] }) {
             Tirar da lista
           </button>
         )}
+        {!course.releasable && (
+          <span className="shrink-0 text-[11px] text-gray-400">
+            Libera ao concluir
+          </span>
+        )}
       </div>
 
       {confirming && (
         <div className="mt-2 rounded-lg border border-gray-200 bg-gray-50 p-3">
           <p className="text-xs text-gray-700">
-            Tirar <strong>{course.nome}</strong> da lista? Ele sai dos seus cursos
-            em andamento, mas o progresso fica salvo. Para voltar, é só retomar no
-            catálogo do plano.
+            {course.keepsProgress ? (
+              <>
+                Tirar <strong>{course.nome}</strong> da lista? Ele sai dos seus
+                cursos em andamento, mas o progresso fica salvo. Para voltar, é só
+                retomar no catálogo do plano.
+              </>
+            ) : (
+              <>
+                Tirar <strong>{course.nome}</strong> da lista? Você ainda não
+                começou este curso, então nada se perde. Para abrir de novo, é só
+                procurar no catálogo do plano.
+              </>
+            )}
           </p>
           {error && (
             <p role="alert" className="mt-1.5 text-[11px] text-red-600">
@@ -104,15 +127,17 @@ function SlotRow({ course }: { course: SubscriptionSlots["courses"][number] }) {
             </p>
           )}
           <div className="mt-2 flex gap-2">
-            <button
-              type="button"
-              onClick={remove}
-              disabled={loading}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-gray-800 px-3 py-1.5 text-[11px] font-semibold text-white disabled:opacity-60"
-            >
-              {loading && <Loader2 className="h-3 w-3 animate-spin" />}
-              Tirar da lista
-            </button>
+            {course.releasable && (
+              <button
+                type="button"
+                onClick={remove}
+                disabled={loading}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-gray-800 px-3 py-1.5 text-[11px] font-semibold text-white disabled:opacity-60"
+              >
+                {loading && <Loader2 className="h-3 w-3 animate-spin" />}
+                Tirar da lista
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setConfirming(false)}

@@ -354,3 +354,78 @@ export async function syncStudentProgress(
     certificatesIssued,
   }
 }
+
+/**
+ * Resposta de `checkEaCourseStarted`. `unknown` nao e "nao comecou": e "nao deu
+ * para saber" (plataforma fora, aluno sem id, curso nao achado na lista), e quem
+ * decide algo destrutivo precisa tratar como recusa.
+ */
+export type EaCourseStartedCheck = "started" | "not_started" | "unknown"
+
+/**
+ * O aluno ja comecou este curso da plataforma legada? Pergunta AO VIVO, sem o
+ * cache de 5 min de `syncStudentProgress`.
+ *
+ * Existe para a assinatura: la um curso da legada so pode sair da lista antes de
+ * o aluno comecar, porque desvincular APAGA o progresso. A copia local nao basta
+ * para essa decisao — a legada nao tem webhook, e o aluno pode ter assistido
+ * aulas ontem com o banco ainda dizendo 0%. `syncStudentProgress` tambem nao
+ * serve: ele engole a falha da plataforma e devolve "0 atualizados", que e
+ * indistinguivel de "nada mudou".
+ *
+ * Quando a plataforma diz que comecou, grava o progresso na matricula: sem isso
+ * a tela seguiria oferecendo "Tirar da lista" num curso que acabou de recusar.
+ */
+export async function checkEaCourseStarted(
+  enrollmentId: string,
+): Promise<EaCourseStartedCheck> {
+  const enrollment = await prisma.enrollment.findUnique({
+    where: { id: enrollmentId },
+    select: {
+      id: true,
+      studentId: true,
+      student: { select: { plataformaAlunoId: true } },
+      course: { select: { nome: true } },
+    },
+  })
+  if (!enrollment) return "unknown"
+
+  const idAluno = parseInt(enrollment.student.plataformaAlunoId ?? "", 10)
+  if (Number.isNaN(idAluno)) return "unknown"
+
+  let lista: EACursoVinculado[]
+  try {
+    lista = await cursosVinculados(idAluno)
+  } catch (err) {
+    contextLogger().warn(
+      { err, event: "student-progress.started_check_failed", enrollmentId },
+      "falha ao consultar cursosVinculados para conferir se o aluno comecou o curso",
+    )
+    return "unknown"
+  }
+  if (!Array.isArray(lista)) return "unknown"
+
+  // Mesmo casamento por nome normalizado de `syncStudentProgress` — a lista da
+  // plataforma nao traz o id do curso.
+  const key = norm(enrollment.course.nome)
+  const item = lista.find((i) => norm(i.Curso ?? "") === key)
+  if (!item) return "unknown"
+
+  const percent = parsePercent(item.Porcentagem)
+  const status = mapSituacao(item["Situação"])
+  // Campo ilegivel nao prova nada. So "0%" + AGUARDANDO explicitos contam como
+  // nao comecado: EM ANDAMENTO com 0% e quem abriu a 1a aula e nao terminou.
+  // A "data da ultima aula" nao entra — a legada a preenche ate em AGUARDANDO.
+  if (percent === null || status === null) return "unknown"
+  if (percent === 0 && status === "AGUARDANDO") return "not_started"
+
+  await prisma.enrollment.update({
+    where: { id: enrollment.id },
+    data: {
+      progressPercent: percent,
+      progressStatus: status,
+      progressSyncedAt: new Date(),
+    },
+  })
+  return "started"
+}

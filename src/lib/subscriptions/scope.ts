@@ -93,16 +93,13 @@ export function vitrineGateWhere(tenantId: string | null): Prisma.CourseWhereInp
     // Mora aqui, no gate de vitrine, porque `scope: "ALL"` devolve `{}`: fosse
     // no escopo do plano, um plano ALL alcançaria a rede inteira.
     { OR: [{ authorTenantId: null }, { authorTenantId: tenantId }] },
-    // So a plataforma de aulas PROPRIA (decisao do dono, 2026-09-14). A
-    // assinatura tem vagas (`slots.ts`): o aluno troca de curso tirando outro
-    // da lista, e isso so e seguro onde revogar GUARDA o progresso. Na
-    // plataforma legada desvincular APAGA o progresso e nao ha pausa por curso,
-    // e o limite de um acesso por vez tambem nao chega la — o aluno entra
-    // direto com login e senha proprios, fora do nosso alcance.
-    //
-    // Mora no gate de vitrine, e nao no escopo do plano, pelo mesmo motivo da
-    // trava de autoria acima: `scope: "ALL"` devolve `{}`.
-    { provider: "LMS" },
+    // SEM filtro de fornecedora, de proposito. Entre 14 e 15/09/2026 a
+    // assinatura liberou so a plataforma propria (`provider: "LMS"`), e todo
+    // plano "catalogo inteiro" perdeu os ~98 cursos da legada sem aviso na tela
+    // de quem montou o plano. Decisao do dono (15/09): o plano cobre TODOS os
+    // cursos. O risco que motivou a trava (na legada, tirar da lista APAGA o
+    // progresso) e tratado nas vagas: curso da legada so sai da lista antes de
+    // o aluno comecar (`canReleaseSubscriptionSlot`).
   ]
 
   if (tenantId === null) {

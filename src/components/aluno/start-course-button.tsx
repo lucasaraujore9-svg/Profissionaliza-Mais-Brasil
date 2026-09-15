@@ -22,7 +22,8 @@ import type { SubscriptionSlots } from "@/lib/subscriptions/slots"
  * alteração da lista está em andamento (duplo clique).
  *
  * Com a lista cheia (409 SLOTS_FULL) abre o seletor de troca: o aluno escolhe
- * qual curso sai para este entrar. O progresso do que sai fica guardado.
+ * qual curso sai para este entrar. O seletor só oferece curso que pode sair
+ * sem perder nada — o que guarda progresso, ou o que ele nem começou.
  */
 export function StartCourseButton({
   courseId,
@@ -61,6 +62,15 @@ export function StartCourseButton({
         setReplaceId(null)
         return
       }
+      // O curso escolhido não pôde sair (o aluno já o começou e a conferência ao
+      // vivo pegou o que a lista local ainda não sabia). A resposta traz a lista
+      // atualizada: sem ela o seletor seguiria oferecendo a mesma opção.
+      if (res.status === 422 && body.code === "SLOT_NOT_RELEASABLE" && body.slots) {
+        setSlots(body.slots as SubscriptionSlots)
+        setReplaceId(null)
+        setError(body.error ?? "Esse curso não pode sair da sua lista")
+        return
+      }
       if (res.status === 409) {
         // Já está sendo liberado agora: recarregar mostra o card pronto.
         setSlots(null)
@@ -81,6 +91,7 @@ export function StartCourseButton({
   }
 
   const releasable = slots?.courses.filter((c) => c.releasable) ?? []
+  const lockedCount = (slots?.courses.length ?? 0) - releasable.length
 
   return (
     <div>
@@ -127,7 +138,7 @@ export function StartCourseButton({
             <DialogDescription>
               Você pode ter até {slots?.max} cursos em andamento. Para abrir{" "}
               <strong>{courseName}</strong>, escolha qual curso sai da lista.
-              O progresso dele fica salvo: é só retomar quando quiser.
+              Nada se perde: é só retomar quando quiser.
             </DialogDescription>
           </DialogHeader>
 
@@ -153,10 +164,20 @@ export function StartCourseButton({
                     disabled={loading}
                   />
                   <span className="flex-1 font-medium text-gray-800">{c.nome}</span>
-                  <span className="shrink-0 text-gray-500">{c.progressPercent}%</span>
+                  <span className="shrink-0 text-gray-500">
+                    {c.keepsProgress ? `${c.progressPercent}%` : "não iniciado"}
+                  </span>
                 </label>
               ))}
             </fieldset>
+          )}
+
+          {releasable.length > 0 && lockedCount > 0 && (
+            <p className="text-[11px] text-gray-500">
+              {lockedCount === 1
+                ? "1 curso que você já começou não aparece aqui: ele libera a vaga quando você concluir."
+                : `${lockedCount} cursos que você já começou não aparecem aqui: eles liberam a vaga quando você concluir.`}
+            </p>
           )}
 
           {error && (

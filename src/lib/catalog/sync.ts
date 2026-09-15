@@ -3,6 +3,7 @@ import { listarAulas, listarCursos } from "@/lib/plataforma-cursos/client"
 import type { EAAula, EACurso } from "@/lib/plataforma-cursos/types"
 import { contextLogger } from "@/lib/logger"
 import { parseBRPrice, slugify } from "@/lib/utils"
+import { ensureCourseForResellers } from "@/lib/tenant/ensure-courses"
 import { pushSyncLog, type SyncLogEntry } from "./sync-log"
 import { slugifyCategoria } from "./home"
 
@@ -355,6 +356,22 @@ async function upsertEaCourse(curso: EACurso): Promise<{ created: boolean }> {
   await linkCourseCategory(created.id, effectiveCategoryId)
   if (canSetEaCourseId && courseIdFromCapa && dataBase.status === "ATIVO") {
     await fillEaMatrizIfEmpty(created.id, courseIdFromCapa)
+  }
+
+  // Curso NOVO, ativo e matriculavel: entra nas vitrines das unidades AGORA, como
+  // o sync do LMS ja fazia. Sem isto o curso so aparecia na unidade depois que o
+  // painel dela rodasse `ensureTenantCourses` — e ate la ficava fora da vitrine
+  // E de toda assinatura "catalogo inteiro" dela, que exige o `TenantCourse`.
+  // `ensureCourseForResellers` repete as guardas (preco > 0, id da fornecedora);
+  // o `provisionavel` aqui so evita a consulta quando ja se sabe a resposta.
+  // Best-effort: falha na propagacao nao conta como falha do curso.
+  if (provisionavel && dataBase.status === "ATIVO") {
+    await ensureCourseForResellers(created.id).catch((err) => {
+      contextLogger().warn(
+        { err, event: "catalog.sync_ea.propagate_failed", courseId: created.id },
+        "propagacao do curso novo da fornecedora para as revendas falhou",
+      )
+    })
   }
   return { created: true }
 }

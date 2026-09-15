@@ -125,18 +125,21 @@ describe("vitrineGateWhere", () => {
     })
   })
 
-  it("so libera curso da plataforma de aulas PROPRIA, nas duas vitrines", () => {
-    // A troca de curso da assinatura revoga a matricula. Na plataforma legada
-    // isso APAGA o progresso, e o limite de um acesso por vez nao chega la.
-    expect(vitrineGateWhere(null)).toContainEqual({ provider: "LMS" })
-    expect(vitrineGateWhere("t1")).toContainEqual({ provider: "LMS" })
-  })
-
-  it("plano ALL nao escapa da trava de plataforma", () => {
-    // Mesmo motivo da trava de autoria: `scope: "ALL"` devolve `{}`, entao a
-    // clausula tem de vir do gate de vitrine.
-    const w = planCourseWhere(plan({ scope: "ALL" }), "t1")
-    expect(w.AND as unknown[]).toContainEqual({ provider: "LMS" })
+  it("NAO filtra por fornecedora: plano ALL cobre as duas plataformas de aulas", () => {
+    // Entre 14 e 15/09/2026 havia `{ provider: "LMS" }` aqui, e todo plano
+    // "catalogo inteiro" perdeu ~98 cursos da legada sem aviso. O risco que
+    // motivou a trava (tirar da lista apaga progresso na legada) e tratado nas
+    // vagas (`canReleaseSubscriptionSlot`), nao escondendo o curso do plano.
+    for (const tenantId of [null, "t1"]) {
+      const gates = planCourseWhere(plan({ scope: "ALL" }), tenantId).AND as Array<
+        Record<string, unknown>
+      >
+      // Nenhum gate restringe a fornecedora sozinho. (`COURSE_PROVISIONABLE`
+      // cita as duas dentro de um OR, exigindo o id de cada uma — isso fica.)
+      for (const gate of gates) {
+        expect(gate).not.toHaveProperty("provider")
+      }
+    }
   })
 
   it("revenda NAO usa o gate de preco da vitrine mae", () => {

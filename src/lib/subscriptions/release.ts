@@ -7,6 +7,7 @@ import {
   type TenantContext,
 } from "@/lib/enrollment/fulfill"
 import { unlinkCourseFromStudent } from "@/lib/students/plataforma-actions"
+import { checkEaCourseStarted } from "@/lib/students/progress"
 import { pmbPlataformaPolo, pmbPlataformaVendedorId } from "@/lib/pmb-config"
 import { contextLogger } from "@/lib/logger"
 import { subscriptionGrantsAccess } from "./access"
@@ -16,6 +17,7 @@ import {
   canReleaseSubscriptionSlot,
   occupiesSubscriptionSlot,
   slotOccupyingWhere,
+  slotReleaseKeepsProgress,
 } from "./slots"
 
 /**
@@ -274,11 +276,20 @@ async function releaseSlot(
       courseId: enrollment.courseId,
       enrollmentId: enrollment.id,
     },
-    "curso tirado da lista da assinatura (progresso preservado)",
+    "curso tirado da lista da assinatura",
   )
 }
 
-/** A matricula desta assinatura para o curso, se ela puder sair da lista. */
+/**
+ * A matricula desta assinatura para o curso, se ela puder sair da lista.
+ *
+ * Curso da plataforma LEGADA passa por duas conferencias: a copia local
+ * (`canReleaseSubscriptionSlot`) e, so se ela deixar, o progresso AO VIVO na
+ * plataforma. La desvincular APAGA o progresso e nao ha webhook — o banco pode
+ * dizer 0% de um aluno que assistiu aulas ontem. Qualquer duvida (plataforma
+ * fora, curso nao achado na lista dela) e recusa: o custo de recusar e o aluno
+ * esperar concluir; o de errar e apagar o que ele estudou.
+ */
 async function findReleasable(
   sub: LoadedSub,
   courseId: string,
@@ -290,6 +301,7 @@ async function findReleasable(
       courseId: true,
       status: true,
       progressStatus: true,
+      progressPercent: true,
       course: { select: { provider: true } },
     },
     orderBy: { createdAt: "desc" },
@@ -298,9 +310,28 @@ async function findReleasable(
   const releasable = canReleaseSubscriptionSlot({
     status: enrollment.status,
     progressStatus: enrollment.progressStatus,
+    progressPercent: enrollment.progressPercent,
     provider: enrollment.course.provider,
   })
-  return releasable ? { id: enrollment.id, courseId: enrollment.courseId } : null
+  if (!releasable) return null
+
+  if (!slotReleaseKeepsProgress(enrollment.course.provider)) {
+    const live = await checkEaCourseStarted(enrollment.id)
+    if (live !== "not_started") {
+      contextLogger().info(
+        {
+          event: "subscription.slot_release_refused_started",
+          subscriptionId: sub.id,
+          courseId,
+          live,
+        },
+        "curso da plataforma legada nao saiu da lista: aluno ja comecou ou nao deu para conferir",
+      )
+      return null
+    }
+  }
+
+  return { id: enrollment.id, courseId: enrollment.courseId }
 }
 
 /**
@@ -402,7 +433,9 @@ export async function releaseSubscriptionCourse(
       logProviderFailure(err, "subscription.course_release_failed", sub.id, course.id)
       // A troca tirou um curso e o novo não abriu. Devolve o que saiu: o aluno
       // pediu para TROCAR, não para perder um curso. Se a devolução também
-      // falhar, ele ainda consegue retomar pela lista — o progresso está salvo.
+      // falhar, ele ainda consegue retomar pela lista — nada se perdeu: na
+      // plataforma própria o progresso está salvo, e da legada só sai curso
+      // que ele nem tinha começado.
       if (released) await restoreReleased(sub, released.courseId)
       result = { ok: false, reason: "PROVIDER_FAILED" }
     }
@@ -457,8 +490,9 @@ export type ReleaseSlotResult =
 /**
  * "Tirar da lista": libera a vaga do curso sem abrir outro no lugar.
  *
- * O progresso fica guardado na plataforma de aulas; "Retomar" no catálogo do
- * plano religa a matrícula de onde parou (`releaseSubscriptionCourse`).
+ * Na plataforma própria o progresso fica guardado e "Retomar" no catálogo do
+ * plano religa a matrícula de onde parou (`releaseSubscriptionCourse`). Da
+ * legada só sai curso ainda não começado — ver `findReleasable`.
  */
 export async function releaseSubscriptionSlot(
   subscriptionId: string,

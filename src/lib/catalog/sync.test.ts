@@ -61,6 +61,7 @@ vi.mock("@/lib/logger", () => ({
 import { prisma } from "@/lib/prisma"
 import { listarAulas, listarCursos } from "@/lib/plataforma-cursos/client"
 import { getLmsCourse } from "@/lib/lms"
+import { ensureCourseForResellers } from "@/lib/tenant/ensure-courses"
 import { mapEaAulasToMatriz, syncCatalogFromEA } from "./sync"
 import { syncSingleLmsCourse } from "./sync-lms"
 
@@ -432,6 +433,48 @@ describe("syncCatalogFromEA — renomear na fornecedora não pode duplicar o cur
     // das vitrines de revenda.
     expect(data.plataformaCourseId).toBeUndefined()
     expect(data.hiddenMain).toBe(true)
+  })
+
+  it("curso novo matriculável entra na vitrine das unidades no mesmo sync", async () => {
+    // Sem isto o curso só chegava à unidade quando o painel dela rodasse
+    // `ensureTenantCourses` — e até lá ficava fora de toda assinatura
+    // "catálogo inteiro" dela, que exige o TenantCourse.
+    listarMock.mockResolvedValue([feedCurso("Curso Inédito")])
+    p.category.findFirst.mockResolvedValue({ id: "cat_adm" })
+    p.course.findFirst.mockResolvedValue(null)
+    p.course.findUnique.mockResolvedValue(null)
+
+    await syncCatalogFromEA("cron")
+
+    expect(ensureCourseForResellers).toHaveBeenCalledWith("new1")
+  })
+
+  it("curso novo SEM id da fornecedora não é propagado", async () => {
+    listarMock.mockResolvedValue([feedCurso("Curso Colidente")])
+    p.category.findFirst.mockResolvedValue({ id: "cat_adm" })
+    p.course.findFirst.mockResolvedValue(null)
+    p.course.findUnique.mockImplementation(
+      async ({ where }: { where: { plataformaCourseId?: string } }) =>
+        where.plataformaCourseId ? { id: "outra_linha", nome: "Outro Curso" } : null,
+    )
+
+    await syncCatalogFromEA("cron")
+
+    expect(ensureCourseForResellers).not.toHaveBeenCalled()
+  })
+
+  it("curso EXISTENTE não é repropagado — a curadoria da unidade manda", async () => {
+    // Uma unidade que apagou o curso da vitrine não pode vê-lo voltar a cada sync.
+    listarMock.mockResolvedValue([feedCurso("Preparatório para Corretor de Imóveis")])
+    p.category.findFirst.mockResolvedValue({ id: "cat_adm" })
+    p.course.findFirst.mockImplementation(
+      async ({ where }: { where: { plataformaCourseId?: string } }) =>
+        where.plataformaCourseId === "267" ? LINHA_267 : null,
+    )
+
+    await syncCatalogFromEA("cron")
+
+    expect(ensureCourseForResellers).not.toHaveBeenCalled()
   })
 
   it("capa fora da convenção (sem id extraível) também nasce oculta", async () => {

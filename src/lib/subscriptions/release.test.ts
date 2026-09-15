@@ -45,6 +45,9 @@ vi.mock("@/lib/enrollment/fulfill", () => ({
 vi.mock("@/lib/students/plataforma-actions", () => ({
   unlinkCourseFromStudent: vi.fn(async () => undefined),
 }))
+vi.mock("@/lib/students/progress", () => ({
+  checkEaCourseStarted: vi.fn(async () => "not_started"),
+}))
 vi.mock("@/lib/pmb-config", () => ({
   pmbPlataformaPolo: () => "__pmb__",
   pmbPlataformaVendedorId: () => "1",
@@ -58,6 +61,7 @@ vi.mock("@/lib/logger", () => {
 import { prisma } from "@/lib/prisma"
 import { advisoryLockKeyFrom, provisionCourseForStudent } from "@/lib/enrollment/fulfill"
 import { unlinkCourseFromStudent } from "@/lib/students/plataforma-actions"
+import { checkEaCourseStarted } from "@/lib/students/progress"
 import { planIncludesCourse } from "./plans"
 import {
   adoptIntoLiveSubscription,
@@ -78,6 +82,7 @@ const countEnr = prisma.enrollment.count as unknown as Mock
 const provision = provisionCourseForStudent as unknown as Mock
 const unlink = unlinkCourseFromStudent as unknown as Mock
 const includes = planIncludesCourse as unknown as Mock
+const eaStarted = checkEaCourseStarted as unknown as Mock
 const lockKey = advisoryLockKeyFrom as unknown as Mock
 
 const future = new Date(Date.now() + 30 * 864e5)
@@ -128,6 +133,7 @@ beforeEach(() => {
   createEnr.mockResolvedValue({ id: "e_new" })
   countEnr.mockResolvedValue(0)
   includes.mockResolvedValue(true)
+  eaStarted.mockResolvedValue("not_started")
 })
 
 describe("releaseSubscriptionCourse", () => {
@@ -258,14 +264,15 @@ describe("releaseSubscriptionCourse · vagas", () => {
     expect(unlink).not.toHaveBeenCalled()
   })
 
-  it("curso da plataforma legada nao sai da lista (la revogar apaga o progresso)", async () => {
+  it("curso da plataforma legada JA COMECADO nao sai da lista (la revogar apaga o progresso)", async () => {
     countEnr.mockResolvedValue(FULL)
     enrollmentsByCourse({
       c_ea: {
         id: "e_ea",
         courseId: "c_ea",
         status: "ACTIVE",
-        progressStatus: null,
+        progressStatus: "EM_ANDAMENTO",
+        progressPercent: 20,
         course: { provider: "EA" },
       },
     })
@@ -273,6 +280,83 @@ describe("releaseSubscriptionCourse · vagas", () => {
     expect(r).toEqual({ ok: false, reason: "SLOT_NOT_RELEASABLE" })
     expect(unlink).not.toHaveBeenCalled()
     expect(provision).not.toHaveBeenCalled()
+  })
+
+  it("curso da plataforma legada NAO COMECADO sai na troca, depois de conferir ao vivo", async () => {
+    countEnr.mockResolvedValue(FULL)
+    enrollmentsByCourse({
+      c_ea: {
+        id: "e_ea",
+        courseId: "c_ea",
+        status: "ACTIVE",
+        progressStatus: "AGUARDANDO",
+        progressPercent: 0,
+        course: { provider: "EA" },
+      },
+    })
+    const r = await releaseSubscriptionCourse("sub_1", "c1", { replaceCourseId: "c_ea" })
+    expect(r).toEqual({ ok: true, enrollmentId: "e_new", created: true })
+    expect(eaStarted).toHaveBeenCalledWith("e_ea")
+    expect(unlink).toHaveBeenCalledWith("st_1", "c_ea")
+    // A conferência vem ANTES do desvincular — é ela que protege o progresso.
+    expect(eaStarted.mock.invocationCallOrder[0]).toBeLessThan(
+      unlink.mock.invocationCallOrder[0],
+    )
+  })
+
+  it("curso da plataforma legada: plataforma diz que ja comecou, mesmo com 0% aqui — nao sai", async () => {
+    // A legada nao tem webhook: o banco pode dizer 0% de quem assistiu ontem.
+    countEnr.mockResolvedValue(FULL)
+    enrollmentsByCourse({
+      c_ea: {
+        id: "e_ea",
+        courseId: "c_ea",
+        status: "ACTIVE",
+        progressStatus: "AGUARDANDO",
+        progressPercent: 0,
+        course: { provider: "EA" },
+      },
+    })
+    eaStarted.mockResolvedValue("started")
+    const r = await releaseSubscriptionCourse("sub_1", "c1", { replaceCourseId: "c_ea" })
+    expect(r).toEqual({ ok: false, reason: "SLOT_NOT_RELEASABLE" })
+    expect(unlink).not.toHaveBeenCalled()
+    expect(provision).not.toHaveBeenCalled()
+  })
+
+  it("curso da plataforma legada: sem conseguir conferir, NAO desvincula (fail-closed)", async () => {
+    countEnr.mockResolvedValue(FULL)
+    enrollmentsByCourse({
+      c_ea: {
+        id: "e_ea",
+        courseId: "c_ea",
+        status: "ACTIVE",
+        progressStatus: null,
+        progressPercent: 0,
+        course: { provider: "EA" },
+      },
+    })
+    eaStarted.mockResolvedValue("unknown")
+    const r = await releaseSubscriptionCourse("sub_1", "c1", { replaceCourseId: "c_ea" })
+    expect(r).toEqual({ ok: false, reason: "SLOT_NOT_RELEASABLE" })
+    expect(unlink).not.toHaveBeenCalled()
+  })
+
+  it("curso da plataforma propria nao precisa de conferencia ao vivo", async () => {
+    countEnr.mockResolvedValue(FULL)
+    enrollmentsByCourse({
+      c_old: {
+        id: "e_old",
+        courseId: "c_old",
+        status: "ACTIVE",
+        progressStatus: "EM_ANDAMENTO",
+        progressPercent: 80,
+        course: { provider: "LMS" },
+      },
+    })
+    const r = await releaseSubscriptionCourse("sub_1", "c1", { replaceCourseId: "c_old" })
+    expect(r.ok).toBe(true)
+    expect(eaStarted).not.toHaveBeenCalled()
   })
 
   it("trocar o curso por ele mesmo nao e troca", async () => {

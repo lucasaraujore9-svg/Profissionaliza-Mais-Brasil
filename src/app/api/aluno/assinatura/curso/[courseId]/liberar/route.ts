@@ -5,9 +5,11 @@ import { rateLimitByKey, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 import { contextLogger } from "@/lib/logger"
 import { syncLmsStudentProgress } from "@/lib/lms/student-progress"
+import { syncStudentProgress } from "@/lib/students/progress"
 import { releaseSubscriptionCourse } from "@/lib/subscriptions/release"
 import { loadSubscriptionSlots } from "@/lib/subscriptions/catalog"
 import { findLiveSubscriptionId } from "@/lib/subscriptions/live"
+import { SLOT_NOT_RELEASABLE_MESSAGE } from "@/lib/subscriptions/slots"
 
 export const dynamic = "force-dynamic"
 // Provisiona na fornecedora (EA ou LMS), com timeout próprio. Numa troca são
@@ -81,21 +83,36 @@ export const POST = withRequestContextParams<{ courseId: string }>(
     let result = await releaseSubscriptionCourse(subscriptionId, courseId, opts)
 
     // Lista cheia: antes de mandar o aluno escolher o que tirar, puxa o
-    // progresso da plataforma de aulas. Um curso que ele acabou de concluir
-    // ainda pode estar "em andamento" aqui (o delta roda de hora em hora) — e
-    // concluído não ocupa vaga. Só neste caminho, para o clique comum não pagar
-    // a latência.
+    // progresso das DUAS plataformas de aulas. Um curso que ele acabou de
+    // concluir ainda pode estar "em andamento" aqui (o delta do LMS roda de hora
+    // em hora; a legada, sem webhook, so no cron diario) — e concluido nao ocupa
+    // vaga. So neste caminho, para o clique comum nao pagar a latencia. Cada
+    // fornecedora falha sozinha: a legada fora do ar nao impede o LMS.
     if (!result.ok && result.reason === "SLOTS_FULL") {
-      try {
-        const synced = await syncLmsStudentProgress(session.studentId)
-        if (synced.updated > 0) {
-          result = await releaseSubscriptionCourse(subscriptionId, courseId, opts)
+      let updated = 0
+      const syncs: Array<[string, () => Promise<{ updated: number }>]> = [
+        ["lms", () => syncLmsStudentProgress(session.studentId)],
+        // `force`: o atalho de 5 min e para chamada automatica; aqui o aluno
+        // esta parado na tela esperando saber se ha vaga.
+        ["ea", () => syncStudentProgress(session.studentId, { force: true })],
+      ]
+      for (const [provider, sync] of syncs) {
+        try {
+          updated += (await sync()).updated
+        } catch (err) {
+          contextLogger().warn(
+            {
+              err,
+              event: "aluno.assinatura.slots_sync_failed",
+              provider,
+              studentId: session.studentId,
+            },
+            "sync de progresso antes da troca falhou — segue com a contagem local",
+          )
         }
-      } catch (err) {
-        contextLogger().warn(
-          { err, event: "aluno.assinatura.slots_sync_failed", studentId: session.studentId },
-          "sync de progresso antes da troca falhou — segue com a contagem local",
-        )
+      }
+      if (updated > 0) {
+        result = await releaseSubscriptionCourse(subscriptionId, courseId, opts)
       }
     }
 
@@ -131,8 +148,14 @@ export const POST = withRequestContextParams<{ courseId: string }>(
             { status: 502 },
           )
         case "SLOT_NOT_RELEASABLE":
+          // A lista vai junto: o seletor de troca precisa se atualizar, porque a
+          // recusa costuma vir da conferência ao vivo de um curso já começado.
           return NextResponse.json(
-            { error: "Esse curso não pode sair da sua lista", code: result.reason },
+            {
+              error: SLOT_NOT_RELEASABLE_MESSAGE,
+              code: result.reason,
+              slots: await loadSubscriptionSlots(subscriptionId),
+            },
             { status: 422 },
           )
         default:

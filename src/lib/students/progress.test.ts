@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     student: { findUnique: vi.fn() },
-    enrollment: { findMany: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
+    enrollment: { findMany: vi.fn(), findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
     systemSettings: { upsert: vi.fn() },
     certificate: { findFirst: vi.fn() },
   },
@@ -22,12 +22,13 @@ vi.mock("@/lib/logger", () => ({
 import { prisma } from "@/lib/prisma"
 import { cursosVinculados } from "@/lib/plataforma-cursos/client"
 import { get as cacheGet } from "@/lib/redis/cache"
-import { syncStudentProgress } from "./progress"
+import { checkEaCourseStarted, syncStudentProgress } from "./progress"
 
 const p = prisma as unknown as {
   student: { findUnique: ReturnType<typeof vi.fn> }
   enrollment: {
     findMany: ReturnType<typeof vi.fn>
+    findUnique: ReturnType<typeof vi.fn>
     update: ReturnType<typeof vi.fn>
     updateMany: ReturnType<typeof vi.fn>
   }
@@ -124,5 +125,85 @@ describe("syncStudentProgress — force do botão 'Atualizar progresso'", () => 
     await syncStudentProgress("stu1", { force: true })
 
     expect(listar).toHaveBeenCalledWith(4490)
+  })
+})
+
+/**
+ * Conferência AO VIVO antes de tirar um curso da legada da lista da assinatura.
+ * Lá desvincular APAGA o progresso: só "not_started" pode liberar, e qualquer
+ * dúvida precisa voltar como "unknown" (o chamador trata como recusa).
+ */
+describe("checkEaCourseStarted", () => {
+  function item(over: Record<string, string> = {}) {
+    return {
+      Curso: "NR-33",
+      "Data do cadastro": "15/09/2026",
+      "Situação": "AGUARDANDO",
+      Porcentagem: "0%",
+      // A legada preenche a data até em curso nunca aberto — não pode pesar.
+      "Data da última aula": "2026-09-14",
+      ...over,
+    }
+  }
+
+  beforeEach(() => {
+    p.enrollment.findUnique.mockResolvedValue({
+      id: "e1",
+      studentId: "stu1",
+      student: { plataformaAlunoId: "4490" },
+      course: { nome: "NR-33" },
+    })
+  })
+
+  it("0% + AGUARDANDO = nao comecou, mesmo com data de ultima aula preenchida", async () => {
+    listar.mockResolvedValue([item()])
+    expect(await checkEaCourseStarted("e1")).toBe("not_started")
+    expect(p.enrollment.update).not.toHaveBeenCalled()
+  })
+
+  it("casa o curso pelo nome normalizado (caixa e acento)", async () => {
+    listar.mockResolvedValue([item({ Curso: "nr-33 " })])
+    expect(await checkEaCourseStarted("e1")).toBe("not_started")
+  })
+
+  it("0% + EM ANDAMENTO = ja comecou, e grava o progresso visto", async () => {
+    listar.mockResolvedValue([item({ "Situação": "EM ANDAMENTO" })])
+    expect(await checkEaCourseStarted("e1")).toBe("started")
+    const data = p.enrollment.update.mock.calls[0][0].data
+    expect(data.progressStatus).toBe("EM_ANDAMENTO")
+    expect(data.progressPercent).toBe(0)
+  })
+
+  it("percentual acima de zero = ja comecou", async () => {
+    listar.mockResolvedValue([item({ "Situação": "EM ANDAMENTO", Porcentagem: "12%" })])
+    expect(await checkEaCourseStarted("e1")).toBe("started")
+  })
+
+  it("plataforma fora do ar = unknown, nunca not_started", async () => {
+    listar.mockRejectedValue(new Error("timeout"))
+    expect(await checkEaCourseStarted("e1")).toBe("unknown")
+  })
+
+  it("curso ausente da lista da plataforma = unknown", async () => {
+    listar.mockResolvedValue([item({ Curso: "Outro Curso" })])
+    expect(await checkEaCourseStarted("e1")).toBe("unknown")
+  })
+
+  it("situacao ou porcentagem ilegivel = unknown", async () => {
+    listar.mockResolvedValue([item({ "Situação": "SUSPENSO" })])
+    expect(await checkEaCourseStarted("e1")).toBe("unknown")
+    listar.mockResolvedValue([item({ Porcentagem: "" })])
+    expect(await checkEaCourseStarted("e1")).toBe("unknown")
+  })
+
+  it("aluno sem id na plataforma = unknown, sem consultar", async () => {
+    p.enrollment.findUnique.mockResolvedValue({
+      id: "e1",
+      studentId: "stu1",
+      student: { plataformaAlunoId: null },
+      course: { nome: "NR-33" },
+    })
+    expect(await checkEaCourseStarted("e1")).toBe("unknown")
+    expect(listar).not.toHaveBeenCalled()
   })
 })

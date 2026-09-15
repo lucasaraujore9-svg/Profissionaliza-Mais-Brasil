@@ -6,6 +6,7 @@ import {
   SUBSCRIPTION_MAX_ACTIVE_COURSES,
   canReleaseSubscriptionSlot,
   occupiesSubscriptionSlot,
+  slotReleaseKeepsProgress,
   type SubscriptionSlots,
 } from "./slots"
 
@@ -174,8 +175,10 @@ export async function loadSubscriptionSlots(
       releasable: canReleaseSubscriptionSlot({
         status: r.status,
         progressStatus: r.progressStatus,
+        progressPercent: r.progressPercent,
         provider: r.course.provider,
       }),
+      keepsProgress: slotReleaseKeepsProgress(r.course.provider),
     }))
 
   return { max: SUBSCRIPTION_MAX_ACTIVE_COURSES, used: courses.length, courses }

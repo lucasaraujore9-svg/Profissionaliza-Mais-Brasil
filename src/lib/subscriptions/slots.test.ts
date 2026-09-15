@@ -4,8 +4,10 @@ import {
   SUBSCRIPTION_MAX_ACTIVE_COURSES,
   SLOT_OCCUPYING_STATUSES,
   canReleaseSubscriptionSlot,
+  hasStartedCourse,
   occupiesSubscriptionSlot,
   slotOccupyingWhere,
+  slotReleaseKeepsProgress,
 } from "./slots"
 
 const ALL_STATUSES: EnrollmentStatus[] = [
@@ -78,22 +80,81 @@ describe("slotOccupyingWhere · paridade com o predicado", () => {
   })
 })
 
+describe("hasStartedCourse", () => {
+  it("0% e AGUARDANDO: nunca abriu", () => {
+    expect(hasStartedCourse({ progressPercent: 0, progressStatus: "AGUARDANDO" })).toBe(false)
+  })
+
+  it("0% e EM_ANDAMENTO: abriu a primeira aula e nao terminou — ja comecou", () => {
+    // A legada arredonda para baixo: em producao havia 105 matriculas assim.
+    expect(hasStartedCourse({ progressPercent: 0, progressStatus: "EM_ANDAMENTO" })).toBe(true)
+  })
+
+  it("qualquer percentual acima de zero ja comecou", () => {
+    expect(hasStartedCourse({ progressPercent: 1, progressStatus: "AGUARDANDO" })).toBe(true)
+  })
+
+  it("sem progresso sincronizado nao prova nada — conta como nao comecado", () => {
+    // Quem decide antes de desvincular e a conferencia AO VIVO do release.
+    expect(hasStartedCourse({ progressPercent: null, progressStatus: null })).toBe(false)
+  })
+})
+
+describe("slotReleaseKeepsProgress", () => {
+  it("so a plataforma propria guarda o progresso fora da lista", () => {
+    expect(slotReleaseKeepsProgress("LMS")).toBe(true)
+    expect(slotReleaseKeepsProgress("EA")).toBe(false)
+  })
+})
+
 describe("canReleaseSubscriptionSlot", () => {
+  const base = { status: "ACTIVE" as const, progressStatus: null, progressPercent: null }
+
   it("curso da plataforma propria em andamento pode sair", () => {
     expect(
-      canReleaseSubscriptionSlot({ status: "ACTIVE", progressStatus: null, provider: "LMS" }),
+      canReleaseSubscriptionSlot({
+        ...base,
+        progressStatus: "EM_ANDAMENTO",
+        progressPercent: 60,
+        provider: "LMS",
+      }),
     ).toBe(true)
   })
 
-  it("curso da plataforma legada NUNCA sai: la revogar apaga o progresso", () => {
+  it("curso da plataforma legada NAO COMECADO pode sair (nada a perder)", () => {
     expect(
-      canReleaseSubscriptionSlot({ status: "ACTIVE", progressStatus: null, provider: "EA" }),
+      canReleaseSubscriptionSlot({
+        ...base,
+        progressStatus: "AGUARDANDO",
+        progressPercent: 0,
+        provider: "EA",
+      }),
+    ).toBe(true)
+    expect(canReleaseSubscriptionSlot({ ...base, provider: "EA" })).toBe(true)
+  })
+
+  it("curso da plataforma legada JA COMECADO nao sai: la revogar apaga o progresso", () => {
+    expect(
+      canReleaseSubscriptionSlot({
+        ...base,
+        progressStatus: "EM_ANDAMENTO",
+        progressPercent: 0,
+        provider: "EA",
+      }),
+    ).toBe(false)
+    expect(
+      canReleaseSubscriptionSlot({
+        ...base,
+        progressStatus: "EM_ANDAMENTO",
+        progressPercent: 35,
+        provider: "EA",
+      }),
     ).toBe(false)
   })
 
   it("curso que nao ocupa vaga nao tem o que liberar", () => {
     expect(
-      canReleaseSubscriptionSlot({ status: "ACTIVE", progressStatus: "CONCLUIDO", provider: "LMS" }),
+      canReleaseSubscriptionSlot({ ...base, progressStatus: "CONCLUIDO", provider: "LMS" }),
     ).toBe(false)
   })
 })
