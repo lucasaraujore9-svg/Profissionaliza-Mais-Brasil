@@ -10,6 +10,6 @@ export const GET = withRequestContext(
   async () => {
     const guard = await requirePainel("vitrine.view")
     if (!guard.ok) return guard.response
-        return getHomeSectionsOptions()
+    return getHomeSectionsOptions(guard.ctx.tenantId)
   },
 )

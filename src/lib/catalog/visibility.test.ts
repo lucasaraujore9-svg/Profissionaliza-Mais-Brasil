@@ -1,7 +1,13 @@
 import { describe, it, expect } from "vitest"
 import fs from "node:fs"
 import path from "node:path"
-import { COURSE_HAS_PRICE, COURSE_PROVISIONABLE } from "./visibility"
+import type { Prisma } from "@prisma/client"
+import {
+  COURSE_HAS_PRICE,
+  COURSE_PROVISIONABLE,
+  courseCuratedForTenant,
+  isCourseCuratedForTenant,
+} from "./visibility"
 
 /**
  * "Curso que a plataforma de aulas não consegue matricular não pode ser vendido."
@@ -40,7 +46,7 @@ describe("COURSE_PROVISIONABLE", () => {
 describe("o gate está preso nas consultas que decidem venda", () => {
   it("vitrine de revenda: `visibilityFilter` carrega o gate", () => {
     const src = SRC("lib/tenant/courses.ts")
-    expect(src).toMatch(/AND: \[COURSE_PROVISIONABLE\]/)
+    expect(src).toMatch(/AND: \[COURSE_PROVISIONABLE, courseCuratedForTenant\(tenantId\)\]/)
   })
 
   it("propagação para as revendas: `catalogScopeForTenant` carrega o gate", () => {
@@ -81,5 +87,103 @@ describe("o gate está preso nas consultas que decidem venda", () => {
   it("pacote: um curso não matriculável derruba o pacote inteiro, não some da lista", () => {
     const src = SRC("lib/packages/vitrine.ts")
     expect(src).toMatch(/if \(semFornecedora\) return null/)
+  })
+})
+
+/**
+ * Curadoria da PMB por unidade (`Course.visibilityMode`). A regra existia só nas
+ * listagens da vitrine pública: uma unidade fora de "ocultar para todas EXCETO"
+ * via o curso como visível no painel e conseguia vendê-lo pela venda direta,
+ * pelo checkout por ID e por dentro de pacote.
+ */
+describe("courseCuratedForTenant x isCourseCuratedForTenant", () => {
+  type Curation = Prisma.CourseGetPayload<{
+    select: { visibilityMode: true; allowedTenantIds: true; blockedTenantIds: true }
+  }>
+
+  // Interpretador mínimo do `where` gerado — só os operadores que ele usa. Se o
+  // `where` ganhar um operador novo, o interpretador lança e o teste avisa.
+  function matches(where: Prisma.CourseWhereInput, c: Curation): boolean {
+    return Object.entries(where).every(([key, cond]) => {
+      if (key === "OR") return (cond as Prisma.CourseWhereInput[]).some((w) => matches(w, c))
+      if (key === "NOT") return !matches(cond as Prisma.CourseWhereInput, c)
+      if (key === "visibilityMode") return c.visibilityMode === cond
+      if (key === "allowedTenantIds") return c.allowedTenantIds.includes((cond as { has: string }).has)
+      if (key === "blockedTenantIds") return c.blockedTenantIds.includes((cond as { has: string }).has)
+      throw new Error(`operador não suportado no teste: ${key}`)
+    })
+  }
+
+  const T = "tenant_a"
+  const casos: [string, Curation][] = [
+    ["ALL", { visibilityMode: "ALL", allowedTenantIds: [], blockedTenantIds: [] }],
+    ["ALLOWLIST com a unidade", { visibilityMode: "ALLOWLIST", allowedTenantIds: [T], blockedTenantIds: [] }],
+    ["ALLOWLIST sem a unidade", { visibilityMode: "ALLOWLIST", allowedTenantIds: ["outra"], blockedTenantIds: [] }],
+    ["ALLOWLIST vazia", { visibilityMode: "ALLOWLIST", allowedTenantIds: [], blockedTenantIds: [] }],
+    ["DENYLIST com a unidade", { visibilityMode: "DENYLIST", allowedTenantIds: [], blockedTenantIds: [T] }],
+    ["DENYLIST sem a unidade", { visibilityMode: "DENYLIST", allowedTenantIds: [], blockedTenantIds: ["outra"] }],
+    // A lista do modo que NÃO está ativo não pode decidir nada: o drawer do admin
+    // zera a outra lista, mas o banco não garante isso.
+    ["ALL com lixo nas listas", { visibilityMode: "ALL", allowedTenantIds: ["outra"], blockedTenantIds: [T] }],
+    ["ALLOWLIST com a unidade também bloqueada", { visibilityMode: "ALLOWLIST", allowedTenantIds: [T], blockedTenantIds: [T] }],
+  ]
+
+  it.each(casos)("paridade: %s", (_nome, curso) => {
+    expect(isCourseCuratedForTenant(curso, T)).toBe(matches(courseCuratedForTenant(T), curso))
+  })
+
+  it("resultados esperados (não só paridade — as duas metades podiam errar juntas)", () => {
+    const esperado = casos.map(([nome, c]) => [nome, isCourseCuratedForTenant(c, T)])
+    expect(esperado).toEqual([
+      ["ALL", true],
+      ["ALLOWLIST com a unidade", true],
+      ["ALLOWLIST sem a unidade", false],
+      ["ALLOWLIST vazia", false],
+      ["DENYLIST com a unidade", false],
+      ["DENYLIST sem a unidade", true],
+      ["ALL com lixo nas listas", true],
+      ["ALLOWLIST com a unidade também bloqueada", true],
+    ])
+  })
+
+  it("modo desconhecido é fail-closed", () => {
+    const estranho = { visibilityMode: "OUTRO", allowedTenantIds: [T], blockedTenantIds: [] } as unknown as Curation
+    expect(isCourseCuratedForTenant(estranho, T)).toBe(false)
+  })
+
+  it("usa OR na raiz — por isso só pode ser composto em AND", () => {
+    expect(Object.keys(courseCuratedForTenant(T))).toEqual(["OR"])
+  })
+})
+
+describe("a curadoria está presa em todas as portas da unidade", () => {
+  const portas: [string, RegExp][] = [
+    // Venda: o gate único das portas de venda, via select compartilhado.
+    ["lib/course-authoring/checkout-gate.ts", /COURSE_NOT_AVAILABLE_FOR_TENANT/],
+    ["lib/course-authoring/split-server.ts", /\.\.\.COURSE_CURATION_SELECT/],
+    // Painel: listagem de cursos, venda direta, pacotes e editor da home.
+    ["app/api/painel/cursos/route.ts", /courseCuratedForTenant\(ctx\.tenantId\)/],
+    ["app/painel/vendas/nova/page.tsx", /courseCuratedForTenant\(user\.tenantId\)/],
+    ["app/api/painel/pacotes/route.ts", /COURSE_NOT_AVAILABLE_FOR_TENANT/],
+    ["app/api/painel/pacotes/[id]/route.ts", /COURSE_NOT_AVAILABLE_FOR_TENANT/],
+    ["app/api/painel/pacotes/courses-lookup/route.ts", /courseCuratedForTenant\(/],
+    ["app/api/painel/home-sections/options/route.ts", /getHomeSectionsOptions\(guard\.ctx\.tenantId\)/],
+    // Loja: checkout, API de cursos, sitemap e llms.txt.
+    ["app/loja/checkout/page.tsx", /visibilityFilter\(tenant\.id\)/],
+    ["app/api/loja/courses/route.ts", /visibilityFilter\(tenantId\)/],
+    ["app/sitemap.ts", /visibilityFilter\(tenantId\)/],
+    ["app/llms.txt/route.ts", /visibilityFilter\(tenant\.id\)/],
+    // Pacote: vitrine/checkout E a liberação, que relê os itens no pagamento.
+    ["lib/packages/vitrine.ts", /isCourseCuratedForTenant\(i\.course, tenantId\)/],
+    ["lib/enrollment/fulfill.ts", /isCourseCuratedForTenant\(course, expectedTenantId\)/],
+  ]
+  it.each(portas)("%s", (arquivo, regra) => {
+    expect(SRC(arquivo)).toMatch(regra)
+  })
+
+  it("nenhuma cópia da regra sobrou fora de lib/catalog/visibility.ts", () => {
+    for (const f of ["lib/home/sections.ts", "lib/catalog/home.ts", "lib/tenant/courses.ts"]) {
+      expect(SRC(f), f).not.toMatch(/allowedTenantIds: \{ has:/)
+    }
   })
 })

@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
+import {
+  COURSE_CURATION_SELECT,
+  isCourseCuratedForTenant,
+} from "@/lib/catalog/visibility"
 import { requirePainel } from "@/lib/auth/painel-guard"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 import { ensureUniquePackageSlug } from "@/lib/packages/slug"
@@ -88,7 +92,7 @@ export const PUT = withRequestContextParams<{ id: string }>(
     const courseIds = Array.from(new Set(data.courseIds))
     const courses = await prisma.course.findMany({
       where: { id: { in: courseIds }, status: "ATIVO" },
-      select: { id: true, nome: true, authorTenantId: true },
+      select: { id: true, nome: true, authorTenantId: true, ...COURSE_CURATION_SELECT },
     })
     if (courses.length !== courseIds.length) {
       return NextResponse.json(
@@ -100,6 +104,19 @@ export const PUT = withRequestContextParams<{ id: string }>(
     // Mesma trava da criação: curso de outra unidade não entra em pacote —
     // senão o rateio da cobrança inteira alcançaria cursos que não são do
     // produtor, e o preço do pacote contornaria o piso que ele definiu.
+    // Curso que a PMB restringiu a outras unidades ("ocultar para todas EXCETO")
+    // não entra no pacote desta: seria vendê-lo por dentro do pacote.
+    const naoLiberado = courses.find((c) => !isCourseCuratedForTenant(c, ctx.tenantId))
+    if (naoLiberado) {
+      return NextResponse.json(
+        {
+          error: `O curso "${naoLiberado.nome}" não está liberado para esta unidade.`,
+          code: "COURSE_NOT_AVAILABLE_FOR_TENANT",
+        },
+        { status: 400 },
+      )
+    }
+
     const alheio = courses.find(
       (c) => c.authorTenantId !== null && c.authorTenantId !== ctx.tenantId,
     )

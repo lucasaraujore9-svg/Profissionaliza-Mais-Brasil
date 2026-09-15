@@ -7,6 +7,7 @@ import {
   type AuthoredCourseSource,
 } from "./split-server"
 import { canSellAuthoredCourse } from "./wallet"
+import { isCourseCuratedForTenant } from "@/lib/catalog/visibility"
 
 export { AUTHORED_COURSE_SELECT }
 export type { AuthoredCourseSource }
@@ -95,6 +96,27 @@ export async function authoredSaleGate(
       `O curso "${semFornecedora.nome}" está sem vínculo com a plataforma de aulas e não pode ser matriculado. Avise o suporte da PMB — vender agora cobraria o aluno sem liberar o acesso.`,
       "COURSE_NOT_PROVISIONABLE",
     )
+  }
+
+  // ── Curso que a PMB nao liberou para esta unidade ────────────────────────
+  //
+  // A curadoria de /admin/catalogo ("ocultar para todas EXCETO as
+  // selecionadas") ja tirava o curso das listagens da vitrine, mas nao da
+  // venda: o painel oferecia o curso na venda direta e o checkout por ID o
+  // aceitava. So vale para venda de UNIDADE — na vitrine da PMB quem decide e
+  // `hiddenMain`, que as rotas dela ja checam.
+  if (input.sellerTenantId !== null) {
+    const sellerTenantId = input.sellerTenantId
+    const naoLiberado = input.courses.find(
+      (c) => !isCourseCuratedForTenant(c, sellerTenantId),
+    )
+    if (naoLiberado) {
+      return deny(
+        403,
+        `O curso "${naoLiberado.nome}" não está liberado para esta unidade.`,
+        "COURSE_NOT_AVAILABLE_FOR_TENANT",
+      )
+    }
   }
 
   const needSplit = input.courses.filter((c) =>

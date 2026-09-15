@@ -1718,6 +1718,46 @@ para aluno).
   cancelados no MP por `/api/cron/fix-subscription-mp-links`; a da Conecta foi
   reemitida com o link da loja.
 
+### Curso exclusivo de algumas unidades vale na VENDA, nao so na vitrine (2026-09-15)
+
+O "Barbeiro Profissional" (`ea_250`) estava configurado em /admin/catalogo como
+"Ocultar para todas EXCETO as selecionadas" (`visibilityMode = ALLOWLIST`, so a
+Rota do Aprendizado) e oculto na vitrine da PMB (`hiddenMain`). A vitrine publica
+respeitava: a Rota mostrava o curso, as outras 170 unidades davam "curso nao
+encontrado". Mas a regra so existia nas LISTAGENS da loja.
+
+- **Onde ela nao chegava:** o painel de cursos das outras unidades mostrava o
+  curso como "visivel"; a venda direta o oferecia e o POST o aceitava (a
+  `escala-digital` chegou a liberar uma bolsa); o checkout por ID, a recompra do
+  aluno, a pagina de checkout, o sitemap e o `llms.txt` ignoravam; e tres
+  unidades (`escolaenfermed`, `futurocerto`, `pilarescursos`) tinham o curso
+  dentro de pacote proprio.
+- **Fonte unica:** `courseCuratedForTenant` (where) e `isCourseCuratedForTenant`
+  (em memoria) em `lib/catalog/visibility.ts`, com teste de PARIDADE. As duas
+  copias inline que existiam (`home/sections.ts`, `catalog/home.ts`) foram
+  apagadas. `visibilityFilter` = `COURSE_PROVISIONABLE` AND curadoria.
+- **Venda:** `authoredSaleGate` recusa com **403 `COURSE_NOT_AVAILABLE_FOR_TENANT`**
+  quando a unidade vendedora esta fora da lista. As colunas entraram no
+  `AUTHORED_COURSE_SELECT`, entao as portas que ja o espalham herdaram o gate. So
+  vale para venda de UNIDADE: na vitrine da PMB quem decide e `hiddenMain`.
+  **Fail-closed:** modo ausente/desconhecido nega — fixture de teste sem as tres
+  colunas faz a venda tomar 403 (foi o que quebrou `painel/vendas/route.test.ts`).
+- **Pacote perde o curso, nao sai do ar** (decisao do dono): listagem, pagina e
+  `getPackageForCheckout` descartam o curso nao liberado, e `fulfill.ts` pula a
+  satelite dele — a liberacao rele `course_package_items` no pagamento, entao
+  filtrar so a vitrine entregaria o curso que a pagina nem mostrou. O salvamento
+  do pacote no painel recusa o curso e o seletor nem o lista.
+- **O `TenantCourse` das unidades fora da lista NAO e apagado** — e onde mora o
+  preco/capa delas, e volta a valer se a PMB liberar o curso. So some das telas.
+- **`hiddenMain` e da vitrine da PMB, nunca da unidade.** O seletor de cursos do
+  editor da home do painel filtrava por ele: a unidade liberada nao conseguia
+  escolher o curso exclusivo (oculto na PMB justamente por ser exclusivo).
+- **Venda ja feita nao e tocada:** matricula existente segue com acesso, e o
+  pagamento de venda pendente (`/pagar/<id>` → `checkout/process`) nao passa pelo
+  gate.
+- Testes verificados POR MUTACAO (7 mutacoes, todas mortas): gate, predicado,
+  where, vitrine do pacote, checkout do pacote, fulfill e painel de cursos.
+
 ### Bugs conhecidos (pendentes)
 
 - **Middleware file convention deprecado** no Next 16 (usar `proxy` em vez de `middleware`).

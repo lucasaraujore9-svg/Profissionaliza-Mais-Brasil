@@ -2,29 +2,13 @@ import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { contentCardMeta } from "@/lib/catalog/content-type"
 import type { Course } from "@/components/main/home/course-card"
-import { COURSE_HAS_PRICE, COURSE_PROVISIONABLE } from "@/lib/catalog/visibility"
+import {
+  COURSE_HAS_PRICE,
+  COURSE_PROVISIONABLE,
+  courseCuratedForTenant,
+} from "@/lib/catalog/visibility"
 import { interestFreeLabel } from "@/lib/mercadopago/installments"
 import { coursePaymentType } from "@/lib/tenant/monthly-policy"
-
-/**
- * Filtro de visibilidade granular do catalogo para um tenant (espelha
- * `visibilityFilter` de src/lib/tenant/courses.ts):
- *   - ALL       → todos veem
- *   - ALLOWLIST → so se o tenant estiver em `allowedTenantIds`
- *   - DENYLIST  → todos exceto se estiver em `blockedTenantIds`
- */
-function tenantVisibilityFilter(tenantId: string) {
-  return {
-    OR: [
-      { visibilityMode: "ALL" as const },
-      { visibilityMode: "ALLOWLIST" as const, allowedTenantIds: { has: tenantId } },
-      {
-        visibilityMode: "DENYLIST" as const,
-        NOT: { blockedTenantIds: { has: tenantId } },
-      },
-    ],
-  }
-}
 
 // ---------------------------------------------------------------------------
 // Tipos das configs por kind (gravados em home_sections.config como JSON)
@@ -582,7 +566,7 @@ async function pickRandomCourseIds(args: {
         isVisible: true,
         course: {
           status: "ATIVO",
-          ...tenantVisibilityFilter(args.tenantId),
+          AND: [courseCuratedForTenant(args.tenantId)],
           ...(args.categoryId
             ? { categoryLinks: { some: { categoryId: args.categoryId } } }
             : {}),
@@ -673,7 +657,7 @@ async function fetchTenantCoursesByIds(
         isVisible: true,
         price: { gt: 0 },
         courseId: { in: ids },
-        course: { status: "ATIVO", ...tenantVisibilityFilter(tenantId) },
+        course: { status: "ATIVO", AND: [courseCuratedForTenant(tenantId)] },
       },
       select: {
         courseId: true,

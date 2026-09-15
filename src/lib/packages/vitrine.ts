@@ -1,4 +1,9 @@
 import { prisma } from "@/lib/prisma"
+import type { CourseVisibility } from "@prisma/client"
+import {
+  COURSE_CURATION_SELECT,
+  isCourseCuratedForTenant,
+} from "@/lib/catalog/visibility"
 
 /**
  * Resolução de pacotes de cursos para a vitrine (PMB e revendas) e para o
@@ -11,6 +16,10 @@ import { prisma } from "@/lib/prisma"
  *    próprio CoursePackage.
  *  - O preço efetivo na vitrine da revenda = TenantPackage.price ?? package.price.
  *  - Só pacotes com >=1 curso ATIVO são vendáveis.
+ *  - Na vitrine de revenda, curso que a PMB restringiu a OUTRAS unidades
+ *    (`Course.visibilityMode`) sai do pacote: a página, o checkout e a liberação
+ *    (`fulfill.ts`) enxergam só os cursos liberados para a unidade. Tirar o
+ *    pacote inteiro do ar derrubaria um clube de 180 cursos por causa de um.
  */
 
 export interface VitrinePackageCard {
@@ -60,6 +69,9 @@ type PackageWithItems = {
       capaOverride: string | null
       cargaHoraria: string | null
       qtdAulas: number
+      visibilityMode: CourseVisibility
+      allowedTenantIds: string[]
+      blockedTenantIds: string[]
     }
   }[]
 }
@@ -78,23 +90,30 @@ const packageInclude = {
           capaOverride: true,
           cargaHoraria: true,
           qtdAulas: true,
+          ...COURSE_CURATION_SELECT,
         },
       },
     },
   },
 }
 
-function activeCourses(pkg: PackageWithItems): PackageWithItems["items"][number]["course"][] {
+/** `tenantId` null = vitrine da PMB, onde a curadoria por unidade não se aplica. */
+function activeCourses(
+  pkg: PackageWithItems,
+  tenantId: string | null,
+): PackageWithItems["items"][number]["course"][] {
   return pkg.items
     .filter((i) => i.course.status === "ATIVO")
+    .filter((i) => tenantId === null || isCourseCuratedForTenant(i.course, tenantId))
     .map((i) => i.course)
 }
 
 function toCard(
   pkg: PackageWithItems,
   override: { price: unknown | null; customCoverUrl: string | null; isFeatured: boolean } | null,
+  tenantId: string | null,
 ): VitrinePackageCard | null {
-  const courses = activeCourses(pkg)
+  const courses = activeCourses(pkg, tenantId)
   if (courses.length === 0) return null
   const price = override?.price != null ? Number(override.price) : Number(pkg.price)
   if (!(price > 0)) return null
@@ -125,7 +144,7 @@ export async function resolveVitrinePackages(
       include: packageInclude,
     })) as unknown as PackageWithItems[]
     return pmb
-      .map((p) => toCard(p, null))
+      .map((p) => toCard(p, null, null))
       .filter((c): c is VitrinePackageCard => c !== null)
   }
 
@@ -152,12 +171,13 @@ export async function resolveVitrinePackages(
       return toCard(
         p,
         o ? { price: o.price, customCoverUrl: o.customCoverUrl, isFeatured: o.isFeatured } : null,
+        tenantId,
       )
     })
     .filter((c): c is VitrinePackageCard => c !== null)
 
   const ownCards = own
-    .map((p) => toCard(p, null))
+    .map((p) => toCard(p, null, tenantId))
     .filter((c): c is VitrinePackageCard => c !== null)
 
   return [...ownCards, ...pmbCards].sort((a, b) => {
@@ -169,10 +189,11 @@ export async function resolveVitrinePackages(
 function toDetail(
   pkg: PackageWithItems,
   override: { price: unknown | null; customCoverUrl: string | null; isFeatured: boolean } | null,
+  tenantId: string | null,
 ): VitrinePackageDetail | null {
-  const card = toCard(pkg, override)
+  const card = toCard(pkg, override, tenantId)
   if (!card) return null
-  const courses: VitrinePackageCourse[] = activeCourses(pkg).map((c) => ({
+  const courses: VitrinePackageCourse[] = activeCourses(pkg, tenantId).map((c) => ({
     id: c.id,
     nome: c.nome,
     slug: c.slug,
@@ -196,14 +217,14 @@ export async function getVitrinePackageBySlug(
       where: { tenantId: null, slug, enabled: true },
       include: packageInclude,
     })) as unknown as PackageWithItems | null
-    return pmb ? toDetail(pmb, null) : null
+    return pmb ? toDetail(pmb, null, null) : null
   }
 
   const own = (await prisma.coursePackage.findFirst({
     where: { tenantId, slug, enabled: true },
     include: packageInclude,
   })) as unknown as PackageWithItems | null
-  if (own) return toDetail(own, null)
+  if (own) return toDetail(own, null, tenantId)
 
   const pmb = (await prisma.coursePackage.findFirst({
     where: { tenantId: null, slug, enabled: true },
@@ -220,6 +241,7 @@ export async function getVitrinePackageBySlug(
     override
       ? { price: override.price, customCoverUrl: override.customCoverUrl, isFeatured: override.isFeatured }
       : null,
+    tenantId,
   )
 }
 
@@ -255,6 +277,7 @@ export async function getPackageForCheckout(
               provider: true,
               plataformaCourseId: true,
               lmsCourseId: true,
+              ...COURSE_CURATION_SELECT,
             },
           },
         },
@@ -276,6 +299,9 @@ export async function getPackageForCheckout(
             provider: "EA" | "LMS"
             plataformaCourseId: string | null
             lmsCourseId: string | null
+            visibilityMode: CourseVisibility
+            allowedTenantIds: string[]
+            blockedTenantIds: string[]
           }
         }[]
       }
@@ -299,7 +325,14 @@ export async function getPackageForCheckout(
     return null
   }
 
-  const ativos = pkg.items.filter((i) => i.course.status === "ATIVO")
+  // Mesmo recorte da vitrine (`activeCourses`): o curso não liberado para a
+  // unidade sai do pacote antes da checagem de fornecedora — um curso que ela
+  // nem venderia não pode derrubar o pacote inteiro.
+  const ativos = pkg.items.filter(
+    (i) =>
+      i.course.status === "ATIVO" &&
+      (tenantId === null || isCourseCuratedForTenant(i.course, tenantId)),
+  )
 
   // Curso sem identificador da fornecedora nao e matriculavel (ver
   // COURSE_PROVISIONABLE). Aqui a saida e recusar o PACOTE INTEIRO, nao remover

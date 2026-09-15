@@ -4,6 +4,7 @@ import { CheckoutInquiryForm } from "@/components/loja/checkout-inquiry-form"
 import { getCurrentTenant } from "@/lib/tenant/current"
 import { applyCouponDiscount } from "@/lib/coupons/discount"
 import { prisma } from "@/lib/prisma"
+import { visibilityFilter } from "@/lib/tenant/courses"
 import { effectivePaymentType } from "@/lib/tenant/monthly-policy"
 import { tenantCheckoutMode } from "@/lib/tenant/checkout-mode"
 import { getPackageForCheckout } from "@/lib/packages/vitrine"
@@ -215,7 +216,14 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
 
   const tenantCourse = await prisma.tenantCourse.findFirst({
     // course.status="ATIVO": curso desativado/removido na origem nao renderiza checkout.
-    where: { id: course_id, tenantId: tenant.id, isVisible: true, course: { status: "ATIVO" } },
+    // visibilityFilter: o checkout abre para o mesmo curso que a página do curso
+    // exibe — curso restrito a outras unidades cai no "não encontrado".
+    where: {
+      id: course_id,
+      tenantId: tenant.id,
+      isVisible: true,
+      course: { status: "ATIVO", ...visibilityFilter(tenant.id) },
+    },
     include: {
       course: {
         select: {

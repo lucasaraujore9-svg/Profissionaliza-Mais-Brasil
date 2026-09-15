@@ -2,6 +2,7 @@ import type { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import type { AsaasSplit } from "@/lib/asaas/types"
 import { getPlatformWalletId } from "./wallet"
+import { COURSE_CURATION_SELECT } from "@/lib/catalog/visibility"
 import {
   computeSplit,
   splitLinesForPayment,
@@ -33,6 +34,9 @@ export const AUTHORED_COURSE_SELECT = {
   provider: true,
   plataformaCourseId: true,
   lmsCourseId: true,
+  // Curadoria da PMB ("ocultar para todas EXCETO"): `authoredSaleGate` recusa a
+  // venda por uma unidade fora da lista. Mesmo motivo de morar aqui.
+  ...COURSE_CURATION_SELECT,
   authorTenantId: true,
   authoredStatus: true,
   distribution: true,

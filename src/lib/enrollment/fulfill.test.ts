@@ -129,6 +129,9 @@ const event: PaymentEvent = {
   paymentType: "ONE_TIME",
 }
 
+/** Curadoria da PMB "mostrar para todas as revendas" — o estado da maioria dos cursos. */
+const LIBERADO = { visibilityMode: "ALL", allowedTenantIds: [], blockedTenantIds: [] }
+
 type EnrollmentOverride = Record<string, unknown>
 function enrollment(overrides: EnrollmentOverride = {}) {
   return {
@@ -318,9 +321,9 @@ describe("fulfillEnrollment — dinheiro pós-webhook (QA-013)", () => {
     )
     // Primário (c1/EA) + satélites: c2/EA e c3/LMS.
     p.coursePackageItem.findMany.mockResolvedValue([
-      { course: { id: "c1", nome: "Primário", status: "ATIVO", provider: "EA", lmsCourseId: null } },
-      { course: { id: "c2", nome: "Sat EA", status: "ATIVO", provider: "EA", lmsCourseId: null } },
-      { course: { id: "c3", nome: "Sat LMS", status: "ATIVO", provider: "LMS", lmsCourseId: "lms-c3" } },
+      { course: { id: "c1", nome: "Primário", status: "ATIVO", provider: "EA", lmsCourseId: null, ...LIBERADO } },
+      { course: { id: "c2", nome: "Sat EA", status: "ATIVO", provider: "EA", lmsCourseId: null, ...LIBERADO } },
+      { course: { id: "c3", nome: "Sat LMS", status: "ATIVO", provider: "LMS", lmsCourseId: "lms-c3", ...LIBERADO } },
     ])
     p.enrollment.findFirst.mockResolvedValue(null) // aluno ainda sem acesso aos satélites
     lmsMock.mockResolvedValue({
@@ -351,6 +354,65 @@ describe("fulfillEnrollment — dinheiro pós-webhook (QA-013)", () => {
       expect.objectContaining({ courseId: "lms-c3" }),
       "pkg:e1:c3",
     )
+  })
+
+  // Curso que a PMB restringiu a outras unidades ("ocultar para todas EXCETO")
+  // sai do pacote na página e no checkout (packages/vitrine.ts). A liberação relê
+  // os itens do pacote no pagamento, então precisa aplicar o MESMO recorte —
+  // senão o aluno recebe o curso exclusivo que a página nem mostrou.
+  it("(f2) pacote de unidade: curso restrito a outra unidade não vira satélite", async () => {
+    p.enrollment.findUnique.mockResolvedValue(
+      enrollment({ coursePackageId: "pkg1", coursePackage: { id: "pkg1", name: "Clube" } }),
+    )
+    p.coursePackageItem.findMany.mockResolvedValue([
+      { course: { id: "c1", nome: "Primário", status: "ATIVO", provider: "EA", lmsCourseId: null, ...LIBERADO } },
+      {
+        course: {
+          id: "c2",
+          nome: "Barbeiro Profissional",
+          status: "ATIVO",
+          provider: "EA",
+          lmsCourseId: null,
+          visibilityMode: "ALLOWLIST",
+          allowedTenantIds: ["t_outra"],
+          blockedTenantIds: [],
+        },
+      },
+      { course: { id: "c3", nome: "Liberado", status: "ATIVO", provider: "EA", lmsCourseId: null, ...LIBERADO } },
+    ])
+    p.enrollment.findFirst.mockResolvedValue(null)
+
+    await fulfillEnrollment(eaTenant, "e1", event)
+
+    const satelliteCalls = p.enrollment.create.mock.calls.map((c) => c[0].data)
+    expect(satelliteCalls.map((d) => d.courseId)).toEqual(["c3"])
+  })
+
+  it("(f3) a unidade da lista liberada recebe o curso exclusivo no pacote", async () => {
+    p.enrollment.findUnique.mockResolvedValue(
+      enrollment({ coursePackageId: "pkg1", coursePackage: { id: "pkg1", name: "Clube" } }),
+    )
+    p.coursePackageItem.findMany.mockResolvedValue([
+      { course: { id: "c1", nome: "Primário", status: "ATIVO", provider: "EA", lmsCourseId: null, ...LIBERADO } },
+      {
+        course: {
+          id: "c2",
+          nome: "Barbeiro Profissional",
+          status: "ATIVO",
+          provider: "EA",
+          lmsCourseId: null,
+          visibilityMode: "ALLOWLIST",
+          allowedTenantIds: [eaTenant.id],
+          blockedTenantIds: [],
+        },
+      },
+    ])
+    p.enrollment.findFirst.mockResolvedValue(null)
+
+    await fulfillEnrollment(eaTenant, "e1", event)
+
+    const satelliteCalls = p.enrollment.create.mock.calls.map((c) => c[0].data)
+    expect(satelliteCalls.map((d) => d.courseId)).toEqual(["c2"])
   })
 
   // Venda direta com mais de um curso: mesma mecânica do pacote, mas a lista de

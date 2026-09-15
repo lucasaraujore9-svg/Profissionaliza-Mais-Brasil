@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { courseCuratedForTenant } from "@/lib/catalog/visibility"
 import { PageHeader } from "@/components/painel/page-header"
 import { PainelNovaVendaClient } from "@/components/painel/painel-nova-venda-client"
 import { ensureTenantCourses } from "@/lib/tenant/ensure-courses"
@@ -35,7 +36,12 @@ export default async function PainelNovaVendaPage() {
       },
     }),
     prisma.tenantCourse.findMany({
-      where: { tenantId: user.tenantId, isVisible: true },
+      where: {
+        tenantId: user.tenantId,
+        isVisible: true,
+        // Mesma curadoria que `authoredSaleGate` aplica no POST.
+        course: { AND: [courseCuratedForTenant(user.tenantId)] },
+      },
       orderBy: [{ isFeatured: "desc" }, { customOrder: "asc" }],
       include: {
         course: { select: { nome: true, status: true } },

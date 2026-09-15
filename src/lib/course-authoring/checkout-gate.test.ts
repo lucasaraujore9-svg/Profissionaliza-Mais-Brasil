@@ -26,6 +26,9 @@ function pmbCourse(id = "c_pmb"): Course {
     provider: "EA",
     plataformaCourseId: "267",
     lmsCourseId: null,
+    visibilityMode: "ALL",
+    allowedTenantIds: [],
+    blockedTenantIds: [],
     authorTenantId: null,
     authoredStatus: null,
     distribution: "OWN_ONLY",
@@ -43,6 +46,9 @@ function authoredCourse(over: Partial<Record<string, unknown>> = {}): Course {
     provider: "LMS",
     plataformaCourseId: null,
     lmsCourseId: "lms_c_autoral",
+    visibilityMode: "ALL",
+    allowedTenantIds: [],
+    blockedTenantIds: [],
     authorTenantId: PRODUCER,
     authoredStatus: "PUBLISHED",
     distribution: "NETWORK",
@@ -325,5 +331,94 @@ describe("curso não matriculável na plataforma de aulas", () => {
     if (res.ok) return
     const json = (await res.response.json()) as { code: string }
     expect(json.code).toBe("COURSE_NOT_PROVISIONABLE")
+  })
+})
+
+/**
+ * Curadoria da PMB em /admin/catalogo: "ocultar para todas EXCETO as
+ * selecionadas" (ALLOWLIST) e "mostrar para todas EXCETO" (DENYLIST).
+ *
+ * A regra só existia nas listagens da vitrine pública. O painel oferecia o curso
+ * na venda direta de qualquer unidade e o checkout por ID o aceitava — o caso
+ * real foi o "Barbeiro Profissional", exclusivo da Rota do Aprendizado.
+ */
+describe("curso restrito pela curadoria da PMB", () => {
+  const exclusivo = (over: Partial<Record<string, unknown>> = {}): Course =>
+    ({
+      ...pmbCourse("c_exclusivo"),
+      nome: "Barbeiro Profissional",
+      visibilityMode: "ALLOWLIST",
+      allowedTenantIds: ["tenant_liberado"],
+      ...over,
+    }) as unknown as Course
+
+  it("unidade FORA da lista liberada é recusada com 403, nomeando o curso", async () => {
+    const res = await authoredSaleGate({
+      courses: [exclusivo()],
+      sellerTenantId: SELLER,
+      seller: connectedSeller,
+      listPrice: 897,
+    })
+    expect(res.ok).toBe(false)
+    if (res.ok) return
+    expect(res.response.status).toBe(403)
+    const json = (await res.response.json()) as { code: string; error: string }
+    expect(json.code).toBe("COURSE_NOT_AVAILABLE_FOR_TENANT")
+    expect(json.error).toContain("Barbeiro Profissional")
+  })
+
+  it("a unidade liberada vende normalmente", async () => {
+    const res = await authoredSaleGate({
+      courses: [exclusivo()],
+      sellerTenantId: "tenant_liberado",
+      seller: connectedSeller,
+      listPrice: 397,
+    })
+    expect(res).toEqual({ ok: true, split: null, forcedGateway: null })
+  })
+
+  it("DENYLIST recusa só a unidade bloqueada", async () => {
+    const bloqueado = exclusivo({
+      visibilityMode: "DENYLIST",
+      allowedTenantIds: [],
+      blockedTenantIds: [SELLER],
+    })
+    const recusada = await authoredSaleGate({
+      courses: [bloqueado],
+      sellerTenantId: SELLER,
+      seller: connectedSeller,
+      listPrice: 100,
+    })
+    expect(recusada.ok).toBe(false)
+    const outra = await authoredSaleGate({
+      courses: [bloqueado],
+      sellerTenantId: "tenant_qualquer",
+      seller: connectedSeller,
+      listPrice: 100,
+    })
+    expect(outra.ok).toBe(true)
+  })
+
+  it("vitrine da PMB (sellerTenantId null) não é afetada — lá quem decide é hiddenMain", async () => {
+    const res = await authoredSaleGate({
+      courses: [exclusivo()],
+      sellerTenantId: null,
+      seller: null,
+      listPrice: 897,
+    })
+    expect(res.ok).toBe(true)
+  })
+
+  it("venda MULTI-CURSO é recusada quando o restrito é o 2º curso", async () => {
+    const res = await authoredSaleGate({
+      courses: [pmbCourse("c_ok"), exclusivo()],
+      sellerTenantId: SELLER,
+      seller: connectedSeller,
+      listPrice: 1000,
+    })
+    expect(res.ok).toBe(false)
+    if (res.ok) return
+    const json = (await res.response.json()) as { code: string }
+    expect(json.code).toBe("COURSE_NOT_AVAILABLE_FOR_TENANT")
   })
 })

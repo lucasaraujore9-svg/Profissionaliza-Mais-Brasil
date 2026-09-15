@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { courseCuratedForTenant } from "@/lib/catalog/visibility"
 import { requirePainel } from "@/lib/auth/painel-guard"
 import { ensureTenantCourses } from "@/lib/tenant/ensure-courses"
 import { withRequestContext } from "@/lib/observability/with-request-context"
@@ -25,7 +26,11 @@ export const GET = withRequestContext(
     const interestFree = tenant?.interestFreeInstallments ?? 1
 
     const tenantCourses = await prisma.tenantCourse.findMany({
-      where: { tenantId: ctx.tenantId },
+      // Curso que a PMB restringiu a outras unidades ("ocultar para todas
+      // EXCETO") some do painel desta: aparecia como "visível" e a loja dela
+      // respondia "curso não encontrado". O TenantCourse fica guardado (preço e
+      // capa voltam a valer se a PMB liberar o curso para ela).
+      where: { tenantId: ctx.tenantId, course: { AND: [courseCuratedForTenant(ctx.tenantId)] } },
       orderBy: [{ customOrder: "asc" }, { createdAt: "desc" }],
       include: {
         course: {

@@ -1,5 +1,6 @@
 import type { MetadataRoute } from "next"
 import { prisma } from "@/lib/prisma"
+import { visibilityFilter } from "@/lib/tenant/courses"
 import { classifyRequestHost, getRequestOrigin } from "@/lib/seo/host"
 import { vitrineDomain } from "@/lib/tenant/urls"
 import { COURSE_HAS_PRICE, COURSE_PROVISIONABLE } from "@/lib/catalog/visibility"
@@ -42,7 +43,14 @@ async function vitrineSitemap(
   ]
   try {
     const courses = await prisma.tenantCourse.findMany({
-      where: { tenantId, isVisible: true, price: { gt: 0 }, course: { status: "ATIVO" } },
+      // Mesmo filtro da página do curso: URL que ela responderia com 404 não
+      // entra no sitemap (curso restrito a outras unidades, sem fornecedora).
+      where: {
+        tenantId,
+        isVisible: true,
+        price: { gt: 0 },
+        course: { status: "ATIVO", ...visibilityFilter(tenantId) },
+      },
       select: { updatedAt: true, course: { select: { slug: true } } },
       take: 5000,
     })

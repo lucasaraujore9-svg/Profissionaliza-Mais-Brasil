@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { courseCuratedForTenant } from "@/lib/catalog/visibility"
 import { requirePainel } from "@/lib/auth/painel-guard"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 
@@ -8,8 +9,10 @@ export const GET = withRequestContext(
   async () => {
     const guard = await requirePainel("pacotes.manage")
     if (!guard.ok) return guard.response
-        const courses = await prisma.course.findMany({
-      where: { status: "ATIVO" },
+    const courses = await prisma.course.findMany({
+      // Só o que a PMB liberou para esta unidade — o salvamento do pacote recusa
+      // o resto (COURSE_NOT_AVAILABLE_FOR_TENANT).
+      where: { status: "ATIVO", AND: [courseCuratedForTenant(guard.ctx.tenantId)] },
       orderBy: { nome: "asc" },
       select: { id: true, nome: true },
     })

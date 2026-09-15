@@ -5,6 +5,7 @@
 // Host-aware: no site mãe descreve a PMB; numa vitrine descreve a revenda.
 
 import { prisma } from "@/lib/prisma"
+import { visibilityFilter } from "@/lib/tenant/courses"
 import { classifyRequestHost, getRequestOrigin } from "@/lib/seo/host"
 import { vitrineDomain } from "@/lib/tenant/urls"
 import {
@@ -119,7 +120,7 @@ Livre Cursos é a plataforma white-label da ${SITE_NAME} para criar vitrines de 
             where: {
               tenantId: tenant.id,
               isVisible: true,
-              course: { status: "ATIVO" },
+              course: { status: "ATIVO", ...visibilityFilter(tenant.id) },
             },
             orderBy: [{ isFeatured: "desc" }, { customOrder: "asc" }],
             take: 20,

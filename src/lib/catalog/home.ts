@@ -1,6 +1,10 @@
 import { prisma } from "@/lib/prisma"
 import type { Course } from "@/components/main/home/course-card"
-import { COURSE_HAS_PRICE, COURSE_PROVISIONABLE } from "./visibility"
+import {
+  COURSE_HAS_PRICE,
+  COURSE_PROVISIONABLE,
+  courseCuratedForTenant,
+} from "./visibility"
 import { contentCardMeta } from "@/lib/catalog/content-type"
 import { interestFreeLabel } from "@/lib/mercadopago/installments"
 import { getSystemSettings } from "@/lib/system-settings"
@@ -251,24 +255,6 @@ export async function loadCatalogo({
 }
 
 /**
- * Filtro de visibilidade granular do catalogo de um tenant (espelha
- * `visibilityFilter` de src/lib/tenant/courses.ts). Mantido inline aqui para
- * evitar dependencia cruzada entre os modulos de catalogo.
- */
-function tenantVisibilityFilter(tenantId: string) {
-  return {
-    OR: [
-      { visibilityMode: "ALL" as const },
-      { visibilityMode: "ALLOWLIST" as const, allowedTenantIds: { has: tenantId } },
-      {
-        visibilityMode: "DENYLIST" as const,
-        NOT: { blockedTenantIds: { has: tenantId } },
-      },
-    ],
-  }
-}
-
-/**
  * Showcase do hero.
  *
  * - Sem `tenantId` (site principal PMB): destaques globais do catalogo
@@ -333,14 +319,17 @@ export async function loadShowcase(tenantId?: string): Promise<ShowcaseCard[]> {
 
 async function loadTenantShowcase(tenantId: string): Promise<ShowcaseCard[]> {
   try {
-    const visibility = tenantVisibilityFilter(tenantId)
     const rows = await prisma.tenantCourse.findMany({
       where: {
         tenantId,
         isVisible: true,
         // Regra: curso sem valor nao aparece — na revenda o preco e tc.price.
         price: { gt: 0 },
-        course: { status: "ATIVO", capaImageUrl: { not: null }, ...visibility },
+        course: {
+          status: "ATIVO",
+          capaImageUrl: { not: null },
+          AND: [courseCuratedForTenant(tenantId)],
+        },
       },
       orderBy: [{ isFeatured: "desc" }, { customOrder: "asc" }],
       take: 3,

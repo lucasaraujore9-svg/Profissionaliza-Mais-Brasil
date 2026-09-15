@@ -4,6 +4,10 @@ import {
   writeSplitLines,
 } from "@/lib/course-authoring/split-server"
 import { prisma } from "@/lib/prisma"
+import {
+  COURSE_CURATION_SELECT,
+  isCourseCuratedForTenant,
+} from "@/lib/catalog/visibility"
 import { sendEmail } from "@/lib/email/mailer"
 import { PMB_EMAIL_BRAND, emailFromForBrand } from "@/lib/email/brand"
 import { loadTenantEmailBrand } from "@/lib/email/tenant-brand"
@@ -539,6 +543,7 @@ async function provisionSiblingCourses(
     status: true,
     provider: true,
     lmsCourseId: true,
+    ...COURSE_CURATION_SELECT,
   } as const
 
   // Origem da lista de cursos irmãos.
@@ -572,6 +577,13 @@ async function provisionSiblingCourses(
 
   for (const course of siblings) {
     if (course.id === enrollment.courseId) continue // primário já liberado
+    // Pacote vendido por UNIDADE: curso que a PMB restringiu a outras unidades
+    // não é entregue — é o mesmo recorte que a página e o checkout do pacote
+    // aplicam (`packages/vitrine.ts`), então o aluno recebe o que viu à venda.
+    // Venda multi-curso não chega aqui com ele: `authoredSaleGate` recusa antes.
+    if (isPackage && expectedTenantId && !isCourseCuratedForTenant(course, expectedTenantId)) {
+      continue
+    }
     if (course.status !== "ATIVO") {
       // Pacote: o curso saiu do ar depois da montagem do pacote — segue em
       // silêncio (comportamento histórico). Venda direta: o aluno pagou por

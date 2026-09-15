@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { z, ZodError } from "zod"
 import { prisma } from "@/lib/prisma"
+import { visibilityFilter } from "@/lib/tenant/courses"
 import { contextLogger } from "@/lib/logger"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { resolveTenantFromRequest } from "@/lib/tenant/from-request"
@@ -67,6 +68,7 @@ export const GET = withRequestContext(
         price: { gt: 0 },
         course: {
           status: "ATIVO",
+          ...visibilityFilter(tenantId),
           ...(parsed.category && parsed.category !== "todos"
             ? { categoriaLoja: { equals: parsed.category, mode: "insensitive" } }
             : {}),
@@ -88,6 +90,7 @@ export const GET = withRequestContext(
         price: { gt: 0 },
         course: {
           status: "ATIVO",
+          ...visibilityFilter(tenantId),
           ...(parsed.category && parsed.category !== "todos"
             ? { categoriaLoja: { equals: parsed.category, mode: "insensitive" } }
             : {}),

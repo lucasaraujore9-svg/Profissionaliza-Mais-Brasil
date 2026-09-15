@@ -49,3 +49,61 @@ export const COURSE_PROVISIONABLE: Prisma.CourseWhereInput = {
     { provider: "LMS", lmsCourseId: { not: null } },
   ],
 }
+
+/**
+ * Regra de negocio: "curso que a PMB restringiu a algumas unidades so e exibido
+ * e VENDIDO por elas" — a curadoria `Course.visibilityMode` de /admin/catalogo:
+ *   - ALL       → todas as unidades
+ *   - ALLOWLIST → so as de `allowedTenantIds` ("ocultar para todas EXCETO")
+ *   - DENYLIST  → todas menos as de `blockedTenantIds`
+ *
+ * Por que existe como regra propria: ela so estava nas LISTAGENS da vitrine
+ * publica. O painel de cursos, a venda direta, o checkout por ID, a recompra do
+ * aluno, os pacotes e o sitemap nao a aplicavam — uma unidade fora da lista via
+ * o curso como "visivel" no painel e conseguia vende-lo, enquanto a propria loja
+ * dela respondia "curso nao encontrado".
+ *
+ * `ensureTenantCourses` continua criando o TenantCourse das unidades fora da
+ * lista DE PROPOSITO: e onde mora o preco/capa que a unidade escolheu, e ele
+ * volta a valer se a PMB liberar o curso para ela depois.
+ *
+ * Use sempre via `AND: [courseCuratedForTenant(id)]` — o `OR` na raiz sobrescreve
+ * (ou e sobrescrito por) outro `OR` no mesmo objeto.
+ */
+export function courseCuratedForTenant(tenantId: string): Prisma.CourseWhereInput {
+  return {
+    OR: [
+      { visibilityMode: "ALL" },
+      { visibilityMode: "ALLOWLIST", allowedTenantIds: { has: tenantId } },
+      { visibilityMode: "DENYLIST", NOT: { blockedTenantIds: { has: tenantId } } },
+    ],
+  }
+}
+
+/** Colunas que `isCourseCuratedForTenant` le. */
+export const COURSE_CURATION_SELECT = {
+  visibilityMode: true,
+  allowedTenantIds: true,
+  blockedTenantIds: true,
+} satisfies Prisma.CourseSelect
+
+/**
+ * Gemeo em memoria de `courseCuratedForTenant`, para quando o curso ja veio
+ * carregado (gate de venda, itens de pacote). Os dois tem teste de PARIDADE.
+ */
+export function isCourseCuratedForTenant(
+  course: Prisma.CourseGetPayload<{ select: typeof COURSE_CURATION_SELECT }>,
+  tenantId: string,
+): boolean {
+  switch (course.visibilityMode) {
+    case "ALL":
+      return true
+    case "ALLOWLIST":
+      return course.allowedTenantIds.includes(tenantId)
+    case "DENYLIST":
+      return !course.blockedTenantIds.includes(tenantId)
+    default:
+      // Modo que o `where` gemeo nao casaria (nenhum ramo do OR) — fail-closed.
+      return false
+  }
+}

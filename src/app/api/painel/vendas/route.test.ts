@@ -8,12 +8,17 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
  * Curso do catalogo da PMB tem `authorTenantId: null` — e o que faz o gate de
  * rateio ficar de fora — e carrega o id da fornecedora, sem o qual
  * `authoredSaleGate` recusa a venda com COURSE_NOT_PROVISIONABLE (o curso nao
- * teria como ser matriculado na plataforma de aulas).
+ * teria como ser matriculado na plataforma de aulas). A curadoria "ALL" e o
+ * que deixa a unidade vender: sem ela o gate recusa com
+ * COURSE_NOT_AVAILABLE_FOR_TENANT (fail-closed).
  */
 const SEM_AUTORIA = {
   provider: "EA" as const,
   plataformaCourseId: "267",
   lmsCourseId: null,
+  visibilityMode: "ALL" as const,
+  allowedTenantIds: [] as string[],
+  blockedTenantIds: [] as string[],
   authorTenantId: null,
   authoredStatus: null,
   distribution: "OWN_ONLY" as const,
