@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { Loader2 } from "lucide-react"
 import { PARENTESCOS, PARENTESCO_LABEL } from "@/lib/students/guardian"
-import { getMpInstance } from "@/lib/mercadopago/browser-sdk"
+import { tokenizeMpCard } from "@/lib/mercadopago/browser-sdk"
 import {
   INTERVAL_PRICE_SUFFIX,
   INTERVAL_CHARGE_LABEL,
@@ -11,6 +11,11 @@ import {
   isRecurringInterval,
   type SubscriptionIntervalValue,
 } from "@/lib/subscriptions/interval"
+import { subscriptionMethods } from "@/components/loja/subscription-pay-form"
+import {
+  BoletoInstrumentResult,
+  PixInstrumentResult,
+} from "@/components/loja/payment-instrument-result"
 
 /**
  * Contratação de assinatura na vitrine PMB.
@@ -61,18 +66,17 @@ export function SubscriptionCheckout({
   mpPublicKey = null,
 }: Props) {
   const recurring = isRecurringInterval(interval)
-  // A restrição a cartão é da RECORRÊNCIA do MP (preapproval exige token). Uma
-  // compra vitalícia no MP é um pagamento comum e aceita PIX e boleto — manter
-  // "só cartão" ali esconderia meios que a loja aceita.
-  const cardOnly = gateway === "MP" && recurring
-  const [method, setMethod] = useState<Method>(
-    gateway === "MP" && isRecurringInterval(interval) ? "CREDIT_CARD" : "PIX",
-  )
+  // Os meios que a loja realmente aceita: a recorrência do MP é só cartão; o
+  // pagamento único do MP aceita PIX e cartão; o Asaas, os três.
+  const methods = subscriptionMethods(gateway, recurring)
+  const [method, setMethod] = useState<Method>(methods[0])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [done, setDone] = useState<{
-    invoiceUrl: string | null
+    subscriptionId: string | null
     authorized: boolean
+    pix?: { qrCode: string; qrCodeBase64: string }
+    boleto?: { url: string; digitableLine?: string }
   } | null>(null)
 
   const [f, setF] = useState({
@@ -118,30 +122,30 @@ export function SubscriptionCheckout({
       // Mercado Pago: o cartao e tokenizado NO BROWSER e o PAN nunca passa pelo
       // nosso servidor. No Asaas nao ha tokenizacao no browser, entao o cartao
       // vai no corpo (TLS) — sao caminhos diferentes de propósito.
-      let cardToken: string | undefined
-      if (cardOnly && method === "CREDIT_CARD") {
+      const isMpCard = gateway === "MP" && method === "CREDIT_CARD"
+      let mpCard: Awaited<ReturnType<typeof tokenizeMpCard>> | null = null
+      if (isMpCard) {
         if (!mpPublicKey) {
           setError("Esta loja não está configurada para receber cartão.")
           return
         }
-        const mp = await getMpInstance(mpPublicKey)
-        const token = await mp.createCardToken({
-          cardNumber: f.number.replace(/\D/g, ""),
-          cardholderName: f.holderName,
-          cardExpirationMonth: f.expiryMonth,
-          cardExpirationYear: f.expiryYear,
-          securityCode: f.ccv,
-          identificationType: "CPF",
-          identificationNumber: (isMinor ? f.responsavelCpf : f.cpf).replace(/\D/g, ""),
+        mpCard = await tokenizeMpCard(mpPublicKey, {
+          ...f,
+          holderCpf: isMinor ? f.responsavelCpf : f.cpf,
         })
-        cardToken = token.id
       }
 
       const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ...(cardToken ? { cardToken } : {}),
+          ...(mpCard
+            ? {
+                cardToken: mpCard.cardToken,
+                ...(mpCard.paymentMethodId ? { mpPaymentMethodId: mpCard.paymentMethodId } : {}),
+                ...(mpCard.issuerId ? { mpIssuerId: mpCard.issuerId } : {}),
+              }
+            : {}),
           planId,
           nome: f.nome,
           email: f.email,
@@ -159,7 +163,7 @@ export function SubscriptionCheckout({
                 responsavelParentesco: f.responsavelParentesco,
               }
             : {}),
-          ...(method === "CREDIT_CARD" && !cardOnly
+          ...(method === "CREDIT_CARD" && gateway === "ASAAS"
             ? {
                 creditCard: {
                   holderName: f.holderName,
@@ -182,8 +186,10 @@ export function SubscriptionCheckout({
         return
       }
       setDone({
-        invoiceUrl: body.data?.invoiceUrl ?? null,
+        subscriptionId: body.data?.subscriptionId ?? null,
         authorized: Boolean(body.data?.authorized),
+        pix: body.data?.pix ?? undefined,
+        boleto: body.data?.boleto ?? undefined,
       })
     } catch {
       setError("Erro de conexão. Tente novamente.")
@@ -192,6 +198,24 @@ export function SubscriptionCheckout({
     }
   }
 
+  if (done?.pix) {
+    return (
+      <PixInstrumentResult
+        qrCode={done.pix.qrCode}
+        qrCodeBase64={done.pix.qrCodeBase64}
+        waitingText="Assim que o pagamento for confirmado, seus cursos são liberados na sua área do aluno."
+      />
+    )
+  }
+  if (done?.boleto) {
+    return (
+      <BoletoInstrumentResult
+        url={done.boleto.url}
+        digitableLine={done.boleto.digitableLine}
+        waitingText="A compensação do boleto leva até 3 dias úteis. Seus cursos são liberados assim que ele for confirmado."
+      />
+    )
+  }
   if (done) {
     return (
       <div className="rounded-2xl border border-gray-200 bg-white p-6 text-center">
@@ -201,27 +225,25 @@ export function SubscriptionCheckout({
         <p className="mt-2 text-sm text-gray-600">
           {done.authorized
             ? "O pagamento foi aprovado. Seus cursos já estão liberados."
-            : done.invoiceUrl
-              ? "Conclua o pagamento para liberar seus cursos."
-              : "Pagamento em processamento. Seus cursos são liberados assim que ele for confirmado."}
+            : "Pagamento em processamento. Seus cursos são liberados assim que ele for confirmado."}
         </p>
-        {done.authorized && (
+        {done.authorized ? (
           <a
             href="/aluno/assinatura"
             className="mt-5 inline-flex rounded-xl bg-[var(--color-pmb-green)] px-5 py-3 text-sm font-semibold text-white"
           >
             Ver meus cursos
           </a>
-        )}
-        {done.invoiceUrl && (
-          <a
-            href={done.invoiceUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-5 inline-flex rounded-xl bg-[var(--color-pmb-green)] px-5 py-3 text-sm font-semibold text-white"
-          >
-            Pagar {money(price)}
-          </a>
+        ) : (
+          done.subscriptionId && (
+            // A página de pagamento da plataforma — nunca a fatura do gateway.
+            <a
+              href={`/pagar/assinatura/${done.subscriptionId}`}
+              className="mt-5 inline-flex rounded-xl bg-[var(--color-pmb-green)] px-5 py-3 text-sm font-semibold text-white"
+            >
+              Pagar {money(price)}
+            </a>
+          )
         )}
       </div>
     )
@@ -309,10 +331,7 @@ export function SubscriptionCheckout({
           Pagamento
         </legend>
         <div className="flex flex-wrap gap-3">
-          {(cardOnly
-            ? (["CREDIT_CARD"] as const)
-            : (["PIX", "BOLETO", "CREDIT_CARD"] as const)
-          ).map((m) => (
+          {methods.map((m) => (
             <label key={m} className="flex items-center gap-2 text-sm">
               <input type="radio" name="method" checked={method === m} onChange={() => setMethod(m)} />
               {m === "PIX" ? "PIX" : m === "BOLETO" ? "Boleto" : "Cartão de crédito"}
@@ -323,7 +342,7 @@ export function SubscriptionCheckout({
         {method !== "CREDIT_CARD" && (
           <p className="mt-3 rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-600">
             {recurring
-              ? `A cada ${INTERVAL_PERIOD_LABEL[interval]} você recebe uma nova fatura para pagar. No cartão, a cobrança é automática.`
+              ? `A cada ${INTERVAL_PERIOD_LABEL[interval]} uma nova cobrança fica disponível para pagar na sua área do aluno. No cartão, a cobrança é automática.`
               : "Você paga uma única vez e o acesso ao plano fica liberado para sempre."}
           </p>
         )}
@@ -350,14 +369,20 @@ export function SubscriptionCheckout({
               CVV
               <input required inputMode="numeric" maxLength={4} value={f.ccv} onChange={(e) => set("ccv", e.target.value)} className={field} />
             </label>
-            <label className="text-sm">
-              CEP
-              <input required value={f.postalCode} onChange={(e) => set("postalCode", e.target.value)} className={field} />
-            </label>
-            <label className="text-sm">
-              Número do endereço
-              <input required value={f.addressNumber} onChange={(e) => set("addressNumber", e.target.value)} className={field} />
-            </label>
+            {/* Endereço do titular: exigência do Asaas no cartão. No MP o cartão é
+                tokenizado no browser e o endereço não entra. */}
+            {gateway === "ASAAS" && (
+              <>
+                <label className="text-sm">
+                  CEP
+                  <input required value={f.postalCode} onChange={(e) => set("postalCode", e.target.value)} className={field} />
+                </label>
+                <label className="text-sm">
+                  Número do endereço
+                  <input required value={f.addressNumber} onChange={(e) => set("addressNumber", e.target.value)} className={field} />
+                </label>
+              </>
+            )}
           </div>
         )}
       </fieldset>

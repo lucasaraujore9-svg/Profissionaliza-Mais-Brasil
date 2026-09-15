@@ -90,8 +90,13 @@ export function StudentSubscribeClient({ plans }: { plans: Plan[] }) {
         setError(body.error ?? "Não foi possível assinar")
         return
       }
-      // A área da assinatura mostra a fatura em aberto (PIX/boleto) ou os
-      // cursos já liberados (cartão capturado).
+      // Cartão capturado: cursos liberados. PIX/boleto: a página de pagamento
+      // da plataforma mostra o QR ou o boleto da cobrança em aberto.
+      const subscriptionId: string | undefined = body.data?.subscriptionId
+      if (!body.data?.authorized && subscriptionId) {
+        router.push(`/pagar/assinatura/${subscriptionId}`)
+        return
+      }
       router.push("/aluno/assinatura")
       router.refresh()
     } catch {

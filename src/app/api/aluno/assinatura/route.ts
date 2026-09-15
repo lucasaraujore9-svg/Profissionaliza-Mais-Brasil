@@ -201,8 +201,9 @@ export const POST = withRequestContext(
       return NextResponse.json({
         data: {
           subscriptionId: subscription.id,
-          invoiceUrl: result.invoiceUrl,
           authorized: result.authorized,
+          pix: result.pix,
+          boleto: result.boleto,
         },
       })
     } catch (err) {

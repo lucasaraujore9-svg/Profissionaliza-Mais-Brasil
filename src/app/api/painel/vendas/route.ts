@@ -795,14 +795,13 @@ export const POST = withRequestContext(
         plan,
         student,
         tenantId: tenant.id,
-        tenantSlug: tenant.slug,
         soldByUserId: userId,
         // O link é a página de pagamento da PRÓPRIA LOJA, igual ao da venda de
         // curso logo abaixo. Criar a cobrança aqui mandava o aluno para a
         // página do Mercado Pago (`init_point` do preapproval) em vez do
         // checkout transparente da unidade. A cobrança nasce quando o aluno
         // paga, na conta da unidade (`lib/subscriptions/store-payment.ts`).
-        checkout: { kind: "store", gateway: mode, storeUrl: storeBaseUrl(tenant) },
+        checkout: { gateway: mode, storeUrl: storeBaseUrl(tenant) },
         discountPercent: data.manualDiscountPercent,
       })
       if (!sale.ok) {

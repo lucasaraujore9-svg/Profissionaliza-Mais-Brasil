@@ -40,7 +40,7 @@ import { assertCouponMatchesEnrollment } from "@/lib/checkout/assert-tenant-gate
 import { dueDateInDays } from "@/lib/checkout/due-date"
 import { swallow } from "@/lib/errors"
 import { withRequestContext } from "@/lib/observability/with-request-context"
-import { asaasWebhookUrl, mpWebhookUrl } from "@/lib/tenant/urls"
+import { appUrl as pmbAppUrl, asaasWebhookUrl, mpWebhookUrl } from "@/lib/tenant/urls"
 import { getPackageForCheckout } from "@/lib/packages/vitrine"
 import { requireAdmin } from "@/lib/auth/admin-guard"
 import {
@@ -609,16 +609,11 @@ export const POST = withRequestContext(
       // Vitrine principal PMB. `null` (e não o id do tenant placeholder) é o
       // que `assertPmbCharge` exige para liberar a conta-mãe.
       tenantId: null,
-      tenantSlug: null,
       soldByUserId: guard.ctx.userId,
-      checkout: {
-        kind: "gateway",
-        gateway: effectiveGateway,
-        account:
-          effectiveGateway === "MP"
-            ? { mpAccessToken: (await pmbMpAccessToken()) ?? undefined }
-            : {},
-      },
+      // O aluno paga na página da PMB (`(main)/pagar/assinatura/[id]`), sempre
+      // pelo Asaas da conta-mãe — o mesmo gateway da assinatura contratada na
+      // vitrine PMB (a recorrência do MP não emite PIX/boleto por ciclo).
+      checkout: { gateway: "ASAAS", storeUrl: pmbAppUrl() },
       discountPercent: parsed.data.manualDiscountPercent,
     })
     if (!sale.ok) {
@@ -630,7 +625,7 @@ export const POST = withRequestContext(
     return NextResponse.json({
       data: {
         subscriptionId: sale.subscriptionId,
-        gateway: effectiveGateway,
+        gateway: "ASAAS",
         mode: "subscription_plan",
         planName: plan.name,
         interval: plan.interval,

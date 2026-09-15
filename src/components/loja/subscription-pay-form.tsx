@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { Loader2 } from "lucide-react"
-import { getMpInstance } from "@/lib/mercadopago/browser-sdk"
+import { tokenizeMpCard } from "@/lib/mercadopago/browser-sdk"
 import {
   INTERVAL_PRICE_SUFFIX,
   INTERVAL_CHARGE_LABEL,
@@ -10,12 +10,18 @@ import {
   isRecurringInterval,
   type SubscriptionIntervalValue,
 } from "@/lib/subscriptions/interval"
+import {
+  BoletoInstrumentResult,
+  PixInstrumentResult,
+} from "@/components/loja/payment-instrument-result"
 
 /**
- * Pagamento de uma assinatura JÁ VENDIDA (venda direta do /painel), na loja da
- * unidade. Irmão de `SubscriptionCheckout`, sem o bloco "Seus dados": aluno,
- * preço e periodicidade já estão na venda, então o formulário só manda o id da
- * assinatura e o meio de pagamento.
+ * Pagamento de uma assinatura que JÁ EXISTE (venda direta, 1º ciclo emitido ou
+ * renovação), na página da plataforma. Irmão de `SubscriptionCheckout`, sem o
+ * bloco "Seus dados": aluno, preço e periodicidade já estão na assinatura,
+ * então o formulário só manda o id e o meio de pagamento.
+ *
+ * PIX e boleto aparecem aqui mesmo — nunca um link para a fatura do gateway.
  */
 
 type Method = "PIX" | "BOLETO" | "CREDIT_CARD"
@@ -26,13 +32,34 @@ interface Props {
   price: number
   interval: SubscriptionIntervalValue
   gateway: "MP" | "ASAAS"
-  /** Public key da conta MP da unidade — necessaria para tokenizar. */
+  /** Public key da conta MP da loja — necessaria para tokenizar. */
   mpPublicKey: string | null
+  /** Rota de pagamento: a da loja da unidade ou a da vitrine PMB. */
+  endpoint: string
+  /** Renovação/ciclo em aberto (muda só o texto do botão). */
+  renewal?: boolean
   defaultHolderName?: string
+}
+
+interface Done {
+  authorized: boolean
+  pix?: { qrCode: string; qrCodeBase64: string }
+  boleto?: { url: string; digitableLine?: string }
 }
 
 function money(v: number): string {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
+}
+
+/** Meios que a loja realmente aceita para esta assinatura. */
+export function subscriptionMethods(
+  gateway: "MP" | "ASAAS",
+  recurring: boolean,
+): Method[] {
+  // Recorrência do MP exige cartão tokenizado; o pagamento único do MP aceita
+  // PIX e cartão (boleto no MP exige endereço completo do pagador).
+  if (gateway === "MP") return recurring ? ["CREDIT_CARD"] : ["PIX", "CREDIT_CARD"]
+  return ["PIX", "BOLETO", "CREDIT_CARD"]
 }
 
 export function SubscriptionPayForm({
@@ -42,18 +69,16 @@ export function SubscriptionPayForm({
   interval,
   gateway,
   mpPublicKey,
+  endpoint,
+  renewal = false,
   defaultHolderName = "",
 }: Props) {
   const recurring = isRecurringInterval(interval)
-  // A restrição a cartão é da RECORRÊNCIA do MP (preapproval exige token).
-  const cardOnly = gateway === "MP" && recurring
-  const [method, setMethod] = useState<Method>(cardOnly ? "CREDIT_CARD" : "PIX")
+  const methods = subscriptionMethods(gateway, recurring)
+  const [method, setMethod] = useState<Method>(methods[0])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [done, setDone] = useState<{
-    invoiceUrl: string | null
-    authorized: boolean
-  } | null>(null)
+  const [done, setDone] = useState<Done | null>(null)
 
   const [f, setF] = useState({
     holderName: defaultHolderName,
@@ -80,33 +105,29 @@ export function SubscriptionPayForm({
     try {
       // Mercado Pago: o cartão é tokenizado NO BROWSER e o PAN nunca passa pelo
       // nosso servidor. No Asaas não há tokenização no browser, então o cartão
-      // vai no corpo (TLS) — mesmo desenho de `SubscriptionCheckout`.
-      let cardToken: string | undefined
+      // vai no corpo (TLS).
+      let mpCard: Awaited<ReturnType<typeof tokenizeMpCard>> | null = null
       if (isMpCard) {
         if (!mpPublicKey) {
           setError("Esta loja não está configurada para receber cartão.")
           return
         }
-        const mp = await getMpInstance(mpPublicKey)
-        const token = await mp.createCardToken({
-          cardNumber: f.number.replace(/\D/g, ""),
-          cardholderName: f.holderName,
-          cardExpirationMonth: f.expiryMonth,
-          cardExpirationYear: f.expiryYear,
-          securityCode: f.ccv,
-          identificationType: "CPF",
-          identificationNumber: f.holderCpf.replace(/\D/g, ""),
-        })
-        cardToken = token.id
+        mpCard = await tokenizeMpCard(mpPublicKey, f)
       }
 
-      const res = await fetch("/api/loja/checkout/assinatura/pagar", {
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           subscriptionId,
           paymentMethod: method,
-          ...(cardToken ? { cardToken } : {}),
+          ...(mpCard
+            ? {
+                cardToken: mpCard.cardToken,
+                ...(mpCard.paymentMethodId ? { mpPaymentMethodId: mpCard.paymentMethodId } : {}),
+                ...(mpCard.issuerId ? { mpIssuerId: mpCard.issuerId } : {}),
+              }
+            : {}),
           ...(isAsaasCard
             ? {
                 creditCard: {
@@ -130,8 +151,9 @@ export function SubscriptionPayForm({
         return
       }
       setDone({
-        invoiceUrl: body.data?.invoiceUrl ?? null,
         authorized: Boolean(body.data?.authorized),
+        pix: body.data?.pix ?? undefined,
+        boleto: body.data?.boleto ?? undefined,
       })
     } catch {
       // O `createCardToken` do MP também lança aqui quando o cartão é inválido.
@@ -145,37 +167,43 @@ export function SubscriptionPayForm({
     }
   }
 
+  if (done?.pix) {
+    return (
+      <PixInstrumentResult
+        qrCode={done.pix.qrCode}
+        qrCodeBase64={done.pix.qrCodeBase64}
+        waitingText="Assim que o pagamento for confirmado, seus cursos são liberados na sua área do aluno."
+        onChangeMethod={() => setDone(null)}
+      />
+    )
+  }
+  if (done?.boleto) {
+    return (
+      <BoletoInstrumentResult
+        url={done.boleto.url}
+        digitableLine={done.boleto.digitableLine}
+        waitingText="A compensação do boleto leva até 3 dias úteis. Seus cursos são liberados assim que ele for confirmado."
+        onChangeMethod={() => setDone(null)}
+      />
+    )
+  }
   if (done) {
     return (
       <div className="rounded-2xl border border-gray-200 bg-white p-6 text-center">
         <h2 className="text-lg font-semibold text-[var(--color-pmb-green-900)]">
-          {done.authorized ? "Assinatura confirmada" : "Assinatura criada"}
+          {done.authorized ? "Pagamento confirmado" : "Pagamento em processamento"}
         </h2>
         <p className="mt-2 text-sm text-gray-600">
           {done.authorized
             ? "O pagamento foi aprovado. Seus cursos são liberados em instantes — confira seu e-mail."
-            : done.invoiceUrl
-              ? "Conclua o pagamento para liberar seus cursos."
-              : "Pagamento em processamento. Seus cursos são liberados assim que ele for confirmado."}
+            : "Seus cursos são liberados assim que o pagamento for confirmado."}
         </p>
-        {done.authorized && (
-          <a
-            href="/aluno/assinatura"
-            className="mt-5 inline-flex rounded-xl bg-[var(--color-pmb-green)] px-5 py-3 text-sm font-semibold text-white"
-          >
-            Ver meus cursos
-          </a>
-        )}
-        {done.invoiceUrl && (
-          <a
-            href={done.invoiceUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-5 inline-flex rounded-xl bg-[var(--color-pmb-green)] px-5 py-3 text-sm font-semibold text-white"
-          >
-            Pagar {money(price)}
-          </a>
-        )}
+        <a
+          href="/aluno/assinatura"
+          className="mt-5 inline-flex rounded-xl bg-[var(--color-pmb-green)] px-5 py-3 text-sm font-semibold text-white"
+        >
+          Ver minha assinatura
+        </a>
       </div>
     )
   }
@@ -190,10 +218,7 @@ export function SubscriptionPayForm({
           Pagamento
         </legend>
         <div className="flex flex-wrap gap-3">
-          {(cardOnly
-            ? (["CREDIT_CARD"] as const)
-            : (["PIX", "BOLETO", "CREDIT_CARD"] as const)
-          ).map((m) => (
+          {methods.map((m) => (
             <label key={m} className="flex items-center gap-2 text-sm">
               <input type="radio" name="method" checked={method === m} onChange={() => setMethod(m)} />
               {m === "PIX" ? "PIX" : m === "BOLETO" ? "Boleto" : "Cartão de crédito"}
@@ -204,7 +229,7 @@ export function SubscriptionPayForm({
         {method !== "CREDIT_CARD" && (
           <p className="mt-3 rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-600">
             {recurring
-              ? `A cada ${INTERVAL_PERIOD_LABEL[interval]} você recebe uma nova fatura para pagar. No cartão, a cobrança é automática.`
+              ? `A cada ${INTERVAL_PERIOD_LABEL[interval]} uma nova cobrança fica disponível para pagar na sua área do aluno. No cartão, a cobrança é automática.`
               : "Você paga uma única vez e o acesso ao plano fica liberado para sempre."}
           </p>
         )}
@@ -264,15 +289,17 @@ export function SubscriptionPayForm({
         className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--color-pmb-green)] px-5 py-3.5 text-sm font-semibold text-white disabled:opacity-60"
       >
         {loading && <Loader2 className="h-4 w-4 animate-spin" />}
-        {recurring ? "Assinar" : "Comprar acesso vitalício"} {planName} ·{" "}
+        {renewal ? "Pagar" : recurring ? "Assinar" : "Comprar acesso vitalício"} {planName} ·{" "}
         {money(price)}
-        {INTERVAL_PRICE_SUFFIX[interval]}
+        {renewal ? "" : INTERVAL_PRICE_SUFFIX[interval]}
       </button>
-      <p className="text-center text-xs text-gray-500">
-        {recurring
-          ? `${INTERVAL_CHARGE_LABEL[interval]}. Sem fidelidade — cancele quando quiser.`
-          : "Pagamento único. O acesso ao conteúdo do plano não expira."}
-      </p>
+      {!renewal && (
+        <p className="text-center text-xs text-gray-500">
+          {recurring
+            ? `${INTERVAL_CHARGE_LABEL[interval]}. Sem fidelidade — cancele quando quiser.`
+            : "Pagamento único. O acesso ao conteúdo do plano não expira."}
+        </p>
+      )}
     </form>
   )
 }

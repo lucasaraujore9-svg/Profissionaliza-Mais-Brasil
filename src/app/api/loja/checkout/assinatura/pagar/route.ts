@@ -10,9 +10,9 @@ export const dynamic = "force-dynamic"
 export const maxDuration = 60
 
 /**
- * Pagamento, na loja da unidade, de uma assinatura vendida pela venda direta
- * do /painel (página `/pagar/assinatura/<id>`). A regra mora em
- * `payStoreSubscription`; aqui só entram tenant, corpo e rate limit.
+ * Pagamento, na loja da unidade, de uma assinatura (página
+ * `/pagar/assinatura/<id>`): venda direta, 1º ciclo ou renovação. A regra mora
+ * em `payStoreSubscription`; aqui só entram tenant, corpo e rate limit.
  */
 export const POST = withRequestContext(
   {
@@ -86,7 +86,7 @@ export const POST = withRequestContext(
       )
     }
     return NextResponse.json({
-      data: { invoiceUrl: result.invoiceUrl, authorized: result.authorized },
+      data: { authorized: result.authorized, pix: result.pix, boleto: result.boleto },
     })
   },
 )

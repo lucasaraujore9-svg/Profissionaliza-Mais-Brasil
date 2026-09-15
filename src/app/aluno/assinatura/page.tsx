@@ -56,12 +56,11 @@ export default async function AssinaturaPage({
       interval: true,
       billingType: true,
       plan: { select: { name: true, description: true } },
-      // Fatura do ciclo em aberto. É o que o assinante de PIX/boleto precisa
-      // para regularizar dentro da carência — sem ela, "mensalidade em aberto"
-      // seria um aviso sem saída.
+      // Ciclo em aberto: só o valor. O PAGAMENTO acontece na página da
+      // plataforma (`/pagar/assinatura/<id>`), nunca na fatura do gateway.
       payments: {
         where: { paidAt: null },
-        select: { id: true, invoiceUrl: true, bankSlipUrl: true, dueDate: true, amount: true },
+        select: { id: true, dueDate: true, amount: true },
         orderBy: { dueDate: "desc" },
         take: 1,
       },
@@ -142,17 +141,13 @@ export default async function AssinaturaPage({
               Assim que o pagamento for confirmado, seus cursos ficam liberados
               aqui.
             </p>
-            {openCharge?.invoiceUrl && (
-              <a
-                href={openCharge.invoiceUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-2 text-xs font-semibold text-white"
-              >
-                Pagar {formatMoney(Number(openCharge.amount))}
-                <ExternalLink className="h-3 w-3" />
-              </a>
-            )}
+            <Link
+              href={`/pagar/assinatura/${subscription.id}`}
+              className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-2 text-xs font-semibold text-white"
+            >
+              Pagar{" "}
+              {formatMoney(Number(openCharge?.amount ?? subscription.priceAtPurchase))}
+            </Link>
           </div>
         </div>
       )}
@@ -167,16 +162,13 @@ export default async function AssinaturaPage({
                 ? `Regularize em até ${SUBSCRIPTION_GRACE_DAYS} dias após o vencimento para não perder o acesso aos cursos.`
                 : "O acesso aos cursos da assinatura foi suspenso. Regularize para voltar a estudar."}
             </p>
-            {openCharge?.invoiceUrl ? (
-              <a
-                href={openCharge.invoiceUrl}
-                target="_blank"
-                rel="noopener noreferrer"
+            {openCharge ? (
+              <Link
+                href={`/pagar/assinatura/${subscription.id}`}
                 className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white"
               >
                 Pagar {formatMoney(Number(openCharge.amount))}
-                <ExternalLink className="h-3 w-3" />
-              </a>
+              </Link>
             ) : (
               <Link
                 href="/aluno/pagamentos"

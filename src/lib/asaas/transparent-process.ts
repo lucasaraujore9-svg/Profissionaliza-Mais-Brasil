@@ -7,8 +7,6 @@ import {
   getCustomer as getAsaasCustomer,
   createPayment as createAsaasPayment,
   createSubscription as createAsaasSubscription,
-  getPixQrCode,
-  getBillingInfo,
   getPayment,
   payWithCreditCard,
   listPayments as listAsaasPayments,
@@ -21,6 +19,7 @@ import { isFreeAmount, releaseFreeEnrollment } from "@/lib/checkout/free-enrollm
 import { settleBoletoInstallment } from "@/lib/installments/settle"
 import { asaasSplitsForEnrollment } from "@/lib/course-authoring/split-server"
 import { advisoryLockKeyFrom, withAdvisoryLock } from "@/lib/enrollment/fulfill"
+import { asaasBoletoInstrument, asaasPixInstrument } from "./payment-instrument"
 import type {
   AsaasCreditCard,
   AsaasCreditCardHolderInfo,
@@ -226,8 +225,8 @@ export async function processExistingAsaasInstallmentPayment(
   }
 
   if (formData.method === "PIX") {
-    const qr = await getPixQrCode(paymentId, ctx.apiKey).catch(() => null)
-    if (!qr?.payload) {
+    const pix = await asaasPixInstrument(paymentId, ctx.apiKey)
+    if (!pix) {
       return {
         kind: "error",
         httpStatus: 502,
@@ -235,10 +234,7 @@ export async function processExistingAsaasInstallmentPayment(
         code: "PIX_UNAVAILABLE",
       }
     }
-    return {
-      kind: "pending",
-      pix: { qrCode: qr.payload, qrCodeBase64: qr.encodedImage ?? "" },
-    }
+    return { kind: "pending", pix }
   }
 
   if (formData.method === "BOLETO") {
@@ -567,8 +563,8 @@ async function chargeUnderLock(
   // PIX → QR Code inline. Sem QR, erro: a fatura hospedada do Asaas NUNCA é o
   // caminho de pagamento — nova tentativa reusa esta mesma cobrança.
   if (billingType === "PIX") {
-    const qr = await getPixQrCode(payment.id, apiKey).catch(() => null)
-    if (!qr?.payload) {
+    const pix = await asaasPixInstrument(payment.id, apiKey)
+    if (!pix) {
       return {
         kind: "error",
         httpStatus: 502,
@@ -577,10 +573,7 @@ async function chargeUnderLock(
         code: "PIX_UNAVAILABLE",
       }
     }
-    return {
-      kind: "pending",
-      pix: { qrCode: qr.payload, qrCodeBase64: qr.encodedImage ?? "" },
-    }
+    return { kind: "pending", pix }
   }
 
   // Boleto → linha digitável + PDF do boleto.
@@ -611,9 +604,8 @@ async function boletoResult(
   payment: AsaasPayment,
   apiKey: string,
 ): Promise<TransparentResult> {
-  const billing = await getBillingInfo(payment.id, apiKey).catch(() => null)
-  const url = billing?.bankSlip?.bankSlipUrl ?? payment.bankSlipUrl
-  if (!url) {
+  const boleto = await asaasBoletoInstrument(payment, apiKey)
+  if (!boleto) {
     return {
       kind: "error",
       httpStatus: 502,
@@ -622,10 +614,7 @@ async function boletoResult(
       code: "BOLETO_UNAVAILABLE",
     }
   }
-  return {
-    kind: "pending",
-    boleto: { url, digitableLine: billing?.bankSlip?.identificationField },
-  }
+  return { kind: "pending", boleto }
 }
 
 type PreviousCharge =

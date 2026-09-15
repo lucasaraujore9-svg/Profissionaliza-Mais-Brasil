@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
-    subscriptionPayment: { findFirst: vi.fn(), create: vi.fn() },
+    subscriptionPayment: { findFirst: vi.fn(), create: vi.fn(), updateMany: vi.fn() },
     studentSubscription: { findUnique: vi.fn(), update: vi.fn() },
   },
 }))
@@ -20,6 +20,7 @@ import { settleSubscriptionCycle, markSubscriptionPastDue } from "./renew"
 
 const findPay = prisma.subscriptionPayment.findFirst as unknown as ReturnType<typeof vi.fn>
 const createPay = prisma.subscriptionPayment.create as unknown as ReturnType<typeof vi.fn>
+const updatePays = prisma.subscriptionPayment.updateMany as unknown as ReturnType<typeof vi.fn>
 const findSub = prisma.studentSubscription.findUnique as unknown as ReturnType<typeof vi.fn>
 const updateSub = prisma.studentSubscription.update as unknown as ReturnType<typeof vi.fn>
 const notify = createNotification as unknown as ReturnType<typeof vi.fn>
@@ -73,10 +74,38 @@ describe("settleSubscriptionCycle", () => {
   it("re-entrega do webhook NAO concede mes extra", async () => {
     // Um `currentPeriodEnd += 1 mês` cego daria acesso de graça a cada
     // reentrega do gateway.
-    findPay.mockResolvedValue({ id: "sp_1" })
+    findPay.mockResolvedValue({ id: "sp_1", paidAt: PAID })
     const r = await settleSubscriptionCycle("sub_1", event())
     expect(r.settled).toBe(false)
     expect(createPay).not.toHaveBeenCalled()
+    expect(updatePays).not.toHaveBeenCalled()
+    expect(updateSub).not.toHaveBeenCalled()
+  })
+
+  it("ciclo registrado EM ABERTO (PAYMENT_CREATED) é liquidado quando pago", async () => {
+    // O PIX/boleto chega primeiro como cobrança aberta. Tratar a linha como
+    // "já registrado" deixava o aluno pagante sem acesso até ser cancelado.
+    findPay.mockResolvedValue({ id: "sp_1", paidAt: null })
+    updatePays.mockResolvedValue({ count: 1 })
+
+    const r = await settleSubscriptionCycle("sub_1", event())
+
+    expect(r.settled).toBe(true)
+    expect(updatePays).toHaveBeenCalledWith({
+      where: { id: "sp_1", paidAt: null },
+      data: expect.objectContaining({ status: "CONFIRMED", paidAt: PAID }),
+    })
+    expect(createPay).not.toHaveBeenCalled()
+    expect(updateSub.mock.calls[0][0].data.status).toBe("ACTIVE")
+  })
+
+  it("dois eventos de pagamento simultâneos não empurram o período duas vezes", async () => {
+    findPay.mockResolvedValue({ id: "sp_1", paidAt: null })
+    updatePays.mockResolvedValue({ count: 0 })
+
+    const r = await settleSubscriptionCycle("sub_1", event())
+
+    expect(r.settled).toBe(false)
     expect(updateSub).not.toHaveBeenCalled()
   })
 

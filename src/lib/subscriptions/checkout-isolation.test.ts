@@ -15,7 +15,12 @@ vi.mock("@/lib/prisma", () => ({
 }))
 vi.mock("@/lib/asaas/client", () => ({
   createSubscription: vi.fn(async () => ({ id: "sub_asaas" })),
-  listPayments: vi.fn(async () => ({ data: [{ invoiceUrl: "https://inv" }] })),
+  listPayments: vi.fn(async () => ({
+    data: [{ id: "pay_1", invoiceUrl: "https://asaas.test/i/pay_1", bankSlipUrl: null }],
+  })),
+  getPixQrCode: vi.fn(async () => ({ payload: "pix-copia-e-cola", encodedImage: "b64" })),
+  getBillingInfo: vi.fn(async () => null),
+  createPayment: vi.fn(async () => ({ id: "pay_life", invoiceUrl: "https://asaas.test/i/pay_life", bankSlipUrl: null })),
   findOrCreateAsaasCustomer: vi.fn(async () => ({
     customer: { id: "cus_1" },
     created: true,
@@ -24,8 +29,20 @@ vi.mock("@/lib/asaas/client", () => ({
 }))
 vi.mock("@/lib/mercadopago/client", () => ({
   createPreapproval: vi.fn(async () => ({ id: "pre_1", status: "authorized" })),
+  createPayment: vi.fn(async () => ({
+    id: 77,
+    status: "pending",
+    point_of_interaction: {
+      transaction_data: {
+        qr_code: "mp-pix",
+        qr_code_base64: "mp-b64",
+        ticket_url: "https://www.mercadopago.com.br/payments/77/ticket",
+      },
+    },
+  })),
 }))
 vi.mock("@/lib/tenant/urls", () => ({
+  mpWebhookUrl: (slug?: string | null) => `https://pmb.test/api/webhooks/mercadopago?tenant=${slug}`,
   asaasWebhookUrl: (slug?: string) =>
     slug ? `https://pmb.test/api/webhooks/asaas?tenant=${slug}` : "https://pmb.test/api/webhooks/asaas",
   appUrl: () => "https://pmb.test",
@@ -40,7 +57,11 @@ import {
   findOrCreateAsaasCustomer,
   listPayments as listAsaasPayments,
 } from "@/lib/asaas/client"
-import { createSubscriptionAtGateway } from "./checkout"
+import {
+  createPayment as createMpPayment,
+  createPreapproval,
+} from "@/lib/mercadopago/client"
+import { createSubscriptionAtGateway, SubscriptionCheckoutInputError } from "./checkout"
 import { TenantGatewayIsolationError } from "@/lib/checkout/assert-tenant-gateway"
 
 const createSub = createAsaasSubscription as unknown as ReturnType<typeof vi.fn>
@@ -86,7 +107,9 @@ describe("isolamento de conta na assinatura", () => {
       tenantSlug: "revenda1",
     })
     expect(listPays.mock.calls[0][1]).toBe("TENANT_KEY")
-    expect(res.invoiceUrl).toBe("https://inv")
+    // PIX na tela, nunca a fatura hospedada do Asaas.
+    expect(res.pix).toEqual({ qrCode: "pix-copia-e-cola", qrCodeBase64: "b64" })
+    expect(JSON.stringify(res)).not.toContain("asaas.test/i/")
   })
 
   it("webhook aponta para a conta da unidade (?tenant=slug)", async () => {
@@ -128,5 +151,46 @@ describe("isolamento de conta na assinatura", () => {
         { tenantSlug: "revenda1" },
       ),
     ).rejects.toThrow(/Mercado Pago/)
+  })
+})
+
+describe("o aluno paga na página da plataforma, nunca na do gateway", () => {
+  const lifetime = (tenantId: string | null) => ({
+    ...input(tenantId),
+    plan: { ...input(tenantId).plan, interval: "LIFETIME" as const },
+  })
+
+  it("vitalícia no Asaas devolve o PIX da cobrança, não a fatura", async () => {
+    const res = await createSubscriptionAtGateway(lifetime("t1"), "ASAAS", {
+      asaasApiKey: "TENANT_KEY",
+      tenantSlug: "revenda1",
+    })
+    expect(res.pix?.qrCode).toBe("pix-copia-e-cola")
+    expect(JSON.stringify(res)).not.toContain("asaas.test/i/")
+  })
+
+  it("vitalícia no MP é pagamento transparente, sem preferência hospedada", async () => {
+    const res = await createSubscriptionAtGateway(lifetime("t1"), "MP", {
+      mpAccessToken: "MP_TOKEN",
+      tenantSlug: "revenda1",
+    })
+    const [token, params, key] = vi.mocked(createMpPayment).mock.calls[0]
+    expect(token).toBe("MP_TOKEN")
+    expect(params.payment_method_id).toBe("pix")
+    expect(params.external_reference).toBe("pmb_sub_sub_1")
+    // A mesma assinatura reabre o MESMO PIX, em vez de abrir outro.
+    expect(key).toBe("pmb_sub_sub_1:pix")
+    expect(res.pix).toEqual({ qrCode: "mp-pix", qrCodeBase64: "mp-b64" })
+    expect(JSON.stringify(res)).not.toContain("mercadopago.com")
+  })
+
+  it("recorrência no MP sem token do cartão é recusada (não existe init_point)", async () => {
+    await expect(
+      createSubscriptionAtGateway(input("t1"), "MP", {
+        mpAccessToken: "MP_TOKEN",
+        tenantSlug: "revenda1",
+      }),
+    ).rejects.toBeInstanceOf(SubscriptionCheckoutInputError)
+    expect(vi.mocked(createPreapproval)).not.toHaveBeenCalled()
   })
 })

@@ -40,9 +40,47 @@ export async function settleSubscriptionCycle(
       event.gateway === "MP"
         ? { mpPaymentId: event.externalPaymentId }
         : { asaasPaymentId: event.externalPaymentId },
-    select: { id: true },
+    select: { id: true, paidAt: true },
   })
-  if (existing) return { settled: false }
+  // Já liquidado: re-entrega do webhook. Uma linha SEM `paidAt` não é
+  // re-entrega — é o ciclo que `recordOpenSubscriptionCharge` registrou em
+  // aberto (PAYMENT_CREATED / OVERDUE) e que agora foi pago. Tratá-la como
+  // "já registrado" deixava todo PIX/boleto de assinatura sem liquidar: o aluno
+  // pagava, a assinatura seguia PENDING/PAST_DUE e a varredura a cancelava.
+  if (existing?.paidAt) return { settled: false }
+
+  const paidData = {
+    amount: event.amount,
+    status: "CONFIRMED",
+    billingType: event.billingType ?? null,
+    dueDate: event.dueDate,
+    paidAt: event.paidAt,
+    invoiceUrl: event.invoiceUrl ?? null,
+    bankSlipUrl: event.bankSlipUrl ?? null,
+  }
+  /** Grava o pagamento; `false` quando outro evento já o liquidou. */
+  const recordPaid = async (tenantId: string | null): Promise<boolean> => {
+    if (existing) {
+      // CAS em `paidAt: null`: PAYMENT_CONFIRMED e PAYMENT_RECEIVED chegam
+      // juntos, e duas liquidações empurrariam o período duas vezes.
+      const { count } = await prisma.subscriptionPayment.updateMany({
+        where: { id: existing.id, paidAt: null },
+        data: paidData,
+      })
+      return count === 1
+    }
+    await prisma.subscriptionPayment.create({
+      data: {
+        ...paidData,
+        subscriptionId,
+        tenantId,
+        gateway: event.gateway,
+        mpPaymentId: event.gateway === "MP" ? event.externalPaymentId : null,
+        asaasPaymentId: event.gateway === "ASAAS" ? event.externalPaymentId : null,
+      },
+    })
+    return true
+  }
 
   const sub = await prisma.studentSubscription.findUnique({
     where: { id: subscriptionId },
@@ -70,22 +108,7 @@ export async function settleSubscriptionCycle(
   // na fornecedora. Registramos a cobranca para o dinheiro nao sumir do
   // historico, mas nao devolvemos acesso: reativar exige contratar de novo.
   if (sub.status === "CANCELLED" || sub.status === "EXPIRED") {
-    await prisma.subscriptionPayment.create({
-      data: {
-        subscriptionId,
-        tenantId: sub.tenantId,
-        amount: event.amount,
-        gateway: event.gateway,
-        mpPaymentId: event.gateway === "MP" ? event.externalPaymentId : null,
-        asaasPaymentId: event.gateway === "ASAAS" ? event.externalPaymentId : null,
-        status: "CONFIRMED",
-        billingType: event.billingType ?? null,
-        dueDate: event.dueDate,
-        paidAt: event.paidAt,
-        invoiceUrl: event.invoiceUrl ?? null,
-        bankSlipUrl: event.bankSlipUrl ?? null,
-      },
-    })
+    if (!(await recordPaid(sub.tenantId))) return { settled: false }
     contextLogger().error(
       {
         event: "subscription.payment_on_cancelled",
@@ -113,22 +136,7 @@ export async function settleSubscriptionCycle(
   const base =
     sub.currentPeriodEnd && sub.currentPeriodEnd > now ? sub.currentPeriodEnd : now
 
-  await prisma.subscriptionPayment.create({
-    data: {
-      subscriptionId,
-      tenantId: sub.tenantId,
-      amount: event.amount,
-      gateway: event.gateway,
-      mpPaymentId: event.gateway === "MP" ? event.externalPaymentId : null,
-      asaasPaymentId: event.gateway === "ASAAS" ? event.externalPaymentId : null,
-      status: "CONFIRMED",
-      billingType: event.billingType ?? null,
-      dueDate: event.dueDate,
-      paidAt: event.paidAt,
-      invoiceUrl: event.invoiceUrl ?? null,
-      bankSlipUrl: event.bankSlipUrl ?? null,
-    },
-  })
+  if (!(await recordPaid(sub.tenantId))) return { settled: false }
 
   // O ciclo comprado depende da PERIODICIDADE CONGELADA: um pagamento de plano
   // anual compra 12 meses, nao 1. E na VITALICIA nao ha ciclo a empurrar —

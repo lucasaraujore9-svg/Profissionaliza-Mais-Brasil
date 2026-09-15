@@ -9,7 +9,10 @@ import { buildGuardianWrite } from "@/lib/students/guardian"
 import { PAYER_SELECT, resolvePayer } from "@/lib/checkout/payer"
 import { getPlanForCheckout } from "@/lib/subscriptions/plans"
 import { isRecurringInterval } from "@/lib/subscriptions/interval"
-import { createSubscriptionAtGateway } from "@/lib/subscriptions/checkout"
+import {
+  createSubscriptionAtGateway,
+  SubscriptionCheckoutInputError,
+} from "@/lib/subscriptions/checkout"
 import { resellerSubscriptionCheckoutSchema } from "@/lib/subscriptions/checkout-schema"
 import { tenantCheckoutMode } from "@/lib/tenant/checkout-mode"
 import { tenantPolo } from "@/lib/tenant/slug"
@@ -264,6 +267,8 @@ export const POST = withRequestContext(
             phone: payer.fone,
           },
           cardToken: data.cardToken,
+          mpPaymentMethodId: data.mpPaymentMethodId,
+          mpIssuerId: data.mpIssuerId,
           creditCard: data.creditCard,
           creditCardHolderInfo: data.creditCard
             ? {
@@ -291,17 +296,32 @@ export const POST = withRequestContext(
         },
       )
 
+      if (result.rejectedMessage) {
+        // Recusa não deixa linha: sem isto o gate "já iniciou uma assinatura"
+        // travaria a nova tentativa com outro cartão.
+        await prisma.studentSubscription
+          .delete({ where: { id: subscription.id } })
+          .catch(() => undefined)
+        return NextResponse.json(
+          { error: result.rejectedMessage, code: "PAYMENT_REJECTED" },
+          { status: 400 },
+        )
+      }
       return NextResponse.json({
         data: {
           subscriptionId: subscription.id,
-          invoiceUrl: result.invoiceUrl,
           authorized: result.authorized,
+          pix: result.pix,
+          boleto: result.boleto,
         },
       })
     } catch (err) {
       await prisma.studentSubscription
         .delete({ where: { id: subscription.id } })
         .catch(() => undefined)
+      if (err instanceof SubscriptionCheckoutInputError) {
+        return NextResponse.json({ error: err.message, code: "METHOD_NOT_SUPPORTED" }, { status: 400 })
+      }
       contextLogger().error(
         {
           err,

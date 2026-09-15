@@ -450,6 +450,8 @@ export async function listPayments(
   params?: {
     customer?: string
     subscription?: string
+    /** Cobrança avulsa pela referência que a criou (ex.: `pmb_sub_<id>`). */
+    externalReference?: string
     status?: string
     offset?: number
     limit?: number

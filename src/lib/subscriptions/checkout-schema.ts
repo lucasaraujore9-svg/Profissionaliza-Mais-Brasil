@@ -43,6 +43,16 @@ export const subscriptionCardHolderSchema = z.object({
 })
 
 /**
+ * Bandeira e emissor do cartao, resolvidos pelo SDK do MP no BROWSER a partir do
+ * BIN. So a vitalicia do MP usa (pagamento unico exige `payment_method_id`); a
+ * recorrencia aceita so o token.
+ */
+const mpCardShape = {
+  mpPaymentMethodId: z.string().trim().min(1).max(40).optional(),
+  mpIssuerId: z.string().trim().min(1).max(40).optional(),
+}
+
+/**
  * `nascimento` do ALUNO e obrigatorio: e o unico jeito de saber quem e menor.
  * Quando indicar menor de 18, `withGuardianRule` exige o bloco do RESPONSAVEL
  * FINANCEIRO — a cobranca recorrente sai no CPF dele e o certificado continua
@@ -74,6 +84,7 @@ export const subscriptionCheckoutSchema = withGuardianRule(
      * tokenizacao no browser), entao ali vem `creditCard`.
      */
     cardToken: z.string().trim().min(1).max(200).optional(),
+    ...mpCardShape,
     acceptedTerms: z.literal(true),
   }),
 )
@@ -98,6 +109,7 @@ export const storeSubscriptionPaymentSchema = z.object({
   creditCardHolder: subscriptionCardHolderSchema.optional(),
   /** Token do cartao gerado no browser (MP). Mesmo papel do checkout acima. */
   cardToken: z.string().trim().min(1).max(200).optional(),
+  ...mpCardShape,
 })
 
 export type StoreSubscriptionPaymentInput = z.infer<

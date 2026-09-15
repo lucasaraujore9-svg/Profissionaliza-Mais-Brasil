@@ -6,7 +6,14 @@ import {
   findOrCreateAsaasCustomer,
   motherAsaasKey,
 } from "@/lib/asaas/client"
-import { createPreapproval, createPreference } from "@/lib/mercadopago/client"
+import { createPayment, createPreapproval } from "@/lib/mercadopago/client"
+import {
+  asaasBoletoInstrument,
+  asaasPixInstrument,
+  type BoletoInstrument,
+  type PixInstrument,
+} from "@/lib/asaas/payment-instrument"
+import type { AsaasPayment } from "@/lib/asaas/types"
 import { asaasCycleFor, mpRecurrenceFor } from "./interval"
 import { asaasWebhookUrl, mpWebhookUrl, appUrl } from "@/lib/tenant/urls"
 import { contextLogger } from "@/lib/logger"
@@ -29,8 +36,13 @@ import type { PlanCheckoutData } from "./plans"
  *    (`POST /subscriptions` no Asaas, `preapproval` no MP), com o ciclo
  *    traduzido por `interval.ts`.
  *  - **Vitalicia**: NADA de recorrencia — uma cobranca AVULSA
- *    (`POST /payments` / `preference`). Criar assinatura aqui faria o gateway
- *    cobrar de novo la na frente por um acesso que ja foi vendido para sempre.
+ *    (`POST /payments` nos dois gateways). Criar assinatura aqui faria o
+ *    gateway cobrar de novo la na frente por um acesso que ja foi vendido para
+ *    sempre.
+ *
+ * O aluno paga SEMPRE dentro da nossa pagina: PIX sai como QR, boleto como
+ * linha digitavel + PDF, cartao e capturado na hora. Nenhum caminho devolve a
+ * fatura do Asaas nem uma pagina do Mercado Pago.
  *
  * As duas pontas continuam usando o MESMO `externalReference` `pmb_sub_<id>`:
  * e por ele que o webhook encontra a assinatura no caso vitalicio, onde nao
@@ -54,15 +66,11 @@ export interface SubscriptionGatewayAccount {
 }
 
 /**
- * `UNDEFINED` e o meio da VENDA DIRETA: o vendedor nao tem o cartao do aluno em
- * maos, entao a cobranca nasce em aberto e o proprio aluno escolhe como pagar
- * na fatura. Os outros tres sao o checkout em que o aluno ja esta na tela.
+ * O meio que o aluno escolheu NA TELA. Nao existe mais cobranca "em aberto"
+ * (`UNDEFINED`): a venda direta so cria a linha e manda o aluno para a pagina
+ * de pagamento da plataforma, onde ele escolhe o meio.
  */
-export type SubscriptionBillingType =
-  | "CREDIT_CARD"
-  | "PIX"
-  | "BOLETO"
-  | "UNDEFINED"
+export type SubscriptionBillingType = "CREDIT_CARD" | "PIX" | "BOLETO"
 
 export interface CreateSubscriptionInput {
   subscriptionId: string
@@ -78,6 +86,13 @@ export interface CreateSubscriptionInput {
   }
   /** Token do cartão gerado no browser (MP) — obrigatório no cartão. */
   cardToken?: string
+  /**
+   * Bandeira do cartão (`visa`, `master`...) resolvida pelo SDK do MP a partir
+   * do BIN. O `/v1/payments` do MP exige no cartão — só a vitalícia usa; a
+   * recorrência (preapproval) aceita só o token.
+   */
+  mpPaymentMethodId?: string
+  mpIssuerId?: string
   /** Cartão em claro (Asaas não tokeniza no browser). */
   creditCard?: {
     holderName: string
@@ -99,16 +114,35 @@ export interface CreateSubscriptionInput {
 }
 
 export interface CreateSubscriptionResult {
-  /** Fatura do 1º ciclo (PIX/boleto) para o aluno pagar. */
-  invoiceUrl: string | null
-  /**
-   * Link para o aluno AUTORIZAR/pagar fora da nossa tela. É o que a venda
-   * direta manda para ele: no Asaas é a própria fatura, no MP é o `init_point`
-   * do preapproval (onde ele cadastra o cartão da recorrência).
-   */
-  initPoint: string | null
   /** `true` quando o cartão já foi capturado e a assinatura está valendo. */
   authorized: boolean
+  /** PIX do 1º ciclo, para pagar na própria tela. */
+  pix?: PixInstrument
+  /** Boleto do 1º ciclo (linha digitável + PDF), para pagar na própria tela. */
+  boleto?: BoletoInstrument
+  /** Cartão recusado pelo gateway: mensagem para o aluno. */
+  rejectedMessage?: string
+}
+
+/**
+ * PIX/boleto de uma cobrança do Asaas para a tela. Sem instrumento (Asaas ainda
+ * gerando), devolve só `authorized: false` e a tela manda o aluno para a página
+ * de pagamento da assinatura — nunca para a fatura.
+ */
+export async function asaasInstrumentFor(
+  payment: Pick<AsaasPayment, "id" | "bankSlipUrl">,
+  billingType: SubscriptionBillingType,
+  apiKey: string,
+): Promise<Pick<CreateSubscriptionResult, "pix" | "boleto">> {
+  if (billingType === "PIX") {
+    const pix = await asaasPixInstrument(payment.id, apiKey)
+    return pix ? { pix } : {}
+  }
+  if (billingType === "BOLETO") {
+    const boleto = await asaasBoletoInstrument(payment, apiKey)
+    return boleto ? { boleto } : {}
+  }
+  return {}
 }
 
 /** YYYY-MM-DD daqui a N dias. */
@@ -197,11 +231,10 @@ async function createAsaasSubscriptionForPlan(
       },
     })
 
-    if (isCard) return { invoiceUrl: null, initPoint: null, authorized: true }
+    if (isCard) return { authorized: true }
     return {
-      invoiceUrl: payment.invoiceUrl,
-      initPoint: payment.invoiceUrl,
       authorized: false,
+      ...(await asaasInstrumentFor(payment, input.billingType, key)),
     }
   }
 
@@ -233,10 +266,10 @@ async function createAsaasSubscriptionForPlan(
     },
   })
 
-  // No CARTÃO a 1ª parcela já foi capturada na criação da assinatura: devolver
-  // a `invoiceUrl` faria a tela pedir que o aluno pagasse de novo uma cobrança
-  // que já está no cartão dele. Só PIX e boleto têm fatura a pagar.
-  if (isCard) return { invoiceUrl: null, initPoint: null, authorized: true }
+  // No CARTÃO a 1ª parcela já foi capturada na criação da assinatura: mostrar
+  // PIX/boleto faria a tela pedir que o aluno pagasse de novo uma cobrança que
+  // já está no cartão dele.
+  if (isCard) return { authorized: true }
 
   // O Asaas gera as cobranças de forma assíncrona; buscamos a 1ª fatura em até
   // 3 tentativas (mesmo padrão de issue-pmb-asaas-charge).
@@ -244,7 +277,6 @@ async function createAsaasSubscriptionForPlan(
   // Com a MESMA chave que criou a assinatura. Sem ela a listagem ia para a
   // conta-mãe, que não conhece a assinatura da unidade: a lista voltava vazia e
   // o aluno de uma revenda no Asaas que escolhia PIX/boleto ficava sem fatura.
-  let invoiceUrl: string | null = null
   for (let i = 0; i < 3; i++) {
     const list = await listAsaasPayments(
       {
@@ -256,31 +288,26 @@ async function createAsaasSubscriptionForPlan(
     ).catch(() => null)
     const first = list?.data?.[0]
     if (first) {
-      invoiceUrl = first.invoiceUrl
-      break
+      return {
+        authorized: false,
+        ...(await asaasInstrumentFor(first, input.billingType, key)),
+      }
     }
     await new Promise((r) => setTimeout(r, 500))
   }
 
-  return { invoiceUrl, initPoint: invoiceUrl, authorized: false }
+  return { authorized: false }
 }
 
 /**
  * Assinatura no MERCADO PAGO (conta da unidade).
  *
- * DOIS modos, decididos pela presenca do token do cartao:
- *
- *  - **Com `cardToken`** (checkout na vitrine): `status: "authorized"` — fluxo
- *    transparente, sem redirect, o aluno nao sai da loja da unidade.
- *  - **Sem token** (VENDA DIRETA do /admin): `status: "pending"` +
- *    `init_point`. O vendedor nao tem o cartao do aluno em maos; exigir o token
- *    ali obrigaria a pedir o numero do cartao por telefone. O aluno autoriza a
- *    recorrencia na pagina do MP e o webhook faz o resto. A venda direta da
- *    UNIDADE nao passa por aqui sem token: ela manda o aluno para a pagina de
- *    pagamento da loja, que tokeniza o cartao (`store-payment.ts`).
- *
- * VITALICIA nao usa preapproval: vira uma PREFERENCIA de pagamento unico, onde
- * o aluno escolhe cartao, PIX ou boleto.
+ *  - **Recorrente**: preapproval `authorized` com o `card_token_id` gerado no
+ *    browser. Sem token não há recorrência no MP — e sem página do MP: a venda
+ *    direta manda o aluno para a página de pagamento da loja, que tokeniza.
+ *  - **Vitalícia**: pagamento único transparente (`POST /v1/payments`), com
+ *    PIX (QR na tela) ou cartão tokenizado. Antes era uma `preference` e o
+ *    aluno pagava na página do Mercado Pago.
  */
 async function createMpSubscriptionForPlan(
   input: CreateSubscriptionInput,
@@ -290,32 +317,46 @@ async function createMpSubscriptionForPlan(
   const externalReference = `pmb_sub_${input.subscriptionId}`
   const recurrence = mpRecurrenceFor(input.plan.interval)
 
-  // ── VITALÍCIA: preferência de pagamento único ────────────────────────────
+  // ── VITALÍCIA: pagamento único transparente ──────────────────────────────
   if (recurrence === null) {
-    const preference = await createPreference(
+    const isCard = input.billingType === "CREDIT_CARD"
+    if (input.billingType === "BOLETO") {
+      throw new SubscriptionCheckoutInputError(
+        "Esta loja aceita o acesso vitalício no PIX ou no cartão de crédito.",
+      )
+    }
+    if (isCard && (!input.cardToken || !input.mpPaymentMethodId)) {
+      throw new SubscriptionCheckoutInputError("Dados do cartão obrigatórios")
+    }
+
+    const payment = await createPayment(
       accessToken,
       {
-        items: [
-          {
-            id: input.plan.id,
-            title: `Acesso vitalício — ${input.plan.name}`,
-            quantity: 1,
-            unit_price: input.plan.price,
-            currency_id: "BRL",
-          },
-        ],
-        payer: {
-          name: input.payer.nome,
-          email: input.payer.email,
-          identification: { type: "CPF", number: input.payer.cpf },
-        },
+        transaction_amount: input.plan.price,
+        description: `Acesso vitalício — ${input.plan.name}`,
+        payment_method_id: isCard ? input.mpPaymentMethodId! : "pix",
         external_reference: externalReference,
         // `?tenant=<slug>` roteia o evento para o processador da unidade, que
         // valida com as credenciais DELA. Sem o slug, uma venda de revenda
         // cairia no processador da PMB e o pagamento nunca seria reconhecido.
         notification_url: mpWebhookUrl(tenantSlug),
+        payer: {
+          email: input.payer.email,
+          first_name: input.payer.nome,
+          identification: { type: "CPF", number: input.payer.cpf },
+        },
+        ...(isCard
+          ? {
+              token: input.cardToken,
+              installments: 1,
+              ...(input.mpIssuerId ? { issuer_id: input.mpIssuerId } : {}),
+            }
+          : {}),
       },
-      externalReference,
+      // Cartão: o token é único por envio (permite tentar outro cartão após
+      // recusa). PIX: a mesma assinatura devolve o MESMO pagamento a cada
+      // volta à página, em vez de abrir outro.
+      isCard ? input.cardToken! : `${externalReference}:pix`,
     )
 
     await prisma.studentSubscription.update({
@@ -329,11 +370,32 @@ async function createMpSubscriptionForPlan(
       },
     })
 
-    return {
-      invoiceUrl: preference.init_point ?? null,
-      initPoint: preference.init_point ?? null,
-      authorized: false,
+    if (payment.status === "approved" || payment.status === "authorized") {
+      return { authorized: true }
     }
+    if (payment.status === "rejected") {
+      return {
+        authorized: false,
+        rejectedMessage: "Pagamento recusado. Tente outro cartão ou o PIX.",
+      }
+    }
+    const qr = payment.point_of_interaction?.transaction_data
+    if (qr?.qr_code) {
+      return {
+        authorized: false,
+        pix: { qrCode: qr.qr_code, qrCodeBase64: qr.qr_code_base64 ?? "" },
+      }
+    }
+    // Cartão em análise: sem dado na tela; o webhook conclui.
+    return { authorized: false }
+  }
+
+  if (!input.cardToken) {
+    // A recorrência do MP sem token só existiria como página do Mercado Pago
+    // (`init_point`), e o aluno de uma loja paga sempre na página da loja.
+    throw new SubscriptionCheckoutInputError(
+      "Esta loja aceita assinatura recorrente apenas no cartão de crédito",
+    )
   }
 
   const preapproval = await createPreapproval(
@@ -351,14 +413,14 @@ async function createMpSubscriptionForPlan(
       // tinham (o helper nunca é undefined e usa o host canônico www, evitando
       // o 307 do apex, que o MP não segue).
       notification_url: mpWebhookUrl(tenantSlug),
-      ...(input.cardToken ? { card_token_id: input.cardToken } : {}),
+      card_token_id: input.cardToken,
       auto_recurring: {
         ...recurrence,
         transaction_amount: input.plan.price,
         currency_id: "BRL",
         // SEM end_date: renova até ser cancelada.
       },
-      status: input.cardToken ? "authorized" : "pending",
+      status: "authorized",
     },
     externalReference,
   )
@@ -373,12 +435,14 @@ async function createMpSubscriptionForPlan(
     },
   })
 
-  return {
-    invoiceUrl: null,
-    initPoint: preapproval.init_point ?? null,
-    authorized: preapproval.status === "authorized",
-  }
+  return { authorized: preapproval.status === "authorized" }
 }
+
+/**
+ * Pedido que o gateway nunca aceitaria (meio não oferecido, cartão sem token).
+ * As rotas devolvem 400 com a mensagem — não é falha do gateway.
+ */
+export class SubscriptionCheckoutInputError extends Error {}
 
 export async function createSubscriptionAtGateway(
   input: CreateSubscriptionInput,

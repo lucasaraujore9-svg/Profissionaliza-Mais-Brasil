@@ -113,3 +113,51 @@ export async function getMpInstance(
   instances.set(publicKey, instance)
   return instance
 }
+
+export interface TokenizedMpCard {
+  cardToken: string
+  /** Bandeira (`visa`, `master`...) — o `/v1/payments` exige no cartão. */
+  paymentMethodId?: string
+  issuerId?: string
+}
+
+/**
+ * Tokeniza o cartão no browser e resolve a bandeira pelo BIN. O PAN nunca vai ao
+ * nosso servidor; o token vale para UM envio. A bandeira é best-effort: a
+ * recorrência (preapproval) aceita só o token, e o pagamento único recusa sem
+ * ela com mensagem clara.
+ */
+export async function tokenizeMpCard(
+  publicKey: string,
+  card: {
+    number: string
+    holderName: string
+    expiryMonth: string
+    expiryYear: string
+    ccv: string
+    holderCpf: string
+  },
+): Promise<TokenizedMpCard> {
+  const mp = await getMpInstance(publicKey)
+  const number = card.number.replace(/\D/g, "")
+  const token = await mp.createCardToken({
+    cardNumber: number,
+    cardholderName: card.holderName,
+    cardExpirationMonth: card.expiryMonth,
+    cardExpirationYear: card.expiryYear,
+    securityCode: card.ccv,
+    identificationType: "CPF",
+    identificationNumber: card.holderCpf.replace(/\D/g, ""),
+  })
+  let paymentMethodId: string | undefined
+  let issuerId: string | undefined
+  try {
+    const found = await mp.getPaymentMethods({ bin: number.slice(0, 6) })
+    const first = found.results?.[0]
+    paymentMethodId = first?.id
+    if (first?.issuer?.id !== undefined) issuerId = String(first.issuer.id)
+  } catch {
+    // sem bandeira: o servidor responde com a mensagem de cartão inválido
+  }
+  return { cardToken: token.id, paymentMethodId, issuerId }
+}
