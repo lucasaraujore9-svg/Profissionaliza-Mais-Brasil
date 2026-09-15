@@ -1,13 +1,15 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import {
-  COURSE_CURATION_SELECT,
-  isCourseCuratedForTenant,
-} from "@/lib/catalog/visibility"
 import { requirePainel } from "@/lib/auth/painel-guard"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 import { ensureUniquePackageSlug } from "@/lib/packages/slug"
+import {
+  TENANT_PACKAGE_COURSE_ISSUE_LABEL,
+  TENANT_PACKAGE_COURSE_SELECT,
+  checkTenantPackageCourses,
+  tenantPackageCourseIssue,
+} from "@/lib/packages/tenant-package-courses"
 
 async function ownPackage(tenantId: string, id: string) {
   return prisma.coursePackage.findFirst({
@@ -28,13 +30,23 @@ export const GET = withRequestContextParams<{ id: string }>(
       include: {
         items: {
           orderBy: { order: "asc" },
-          include: { course: { select: { id: true, nome: true } } },
+          include: { course: { select: TENANT_PACKAGE_COURSE_SELECT } },
         },
       },
     })
     if (!pkg) {
       return NextResponse.json({ error: "Pacote não encontrado" }, { status: 404 })
     }
+    // Curso que deixou de poder estar no pacote (desativado, restrito pela PMB
+    // depois da montagem) não aparece na lista de seleção. A tela precisa saber
+    // quais são para mostrá-los — senão eles ficariam selecionados sem
+    // aparecer e o salvamento seria recusado sem saída.
+    const unavailableCourses = pkg.items.flatMap((i) => {
+      const issue = tenantPackageCourseIssue(i.course, ctx.tenantId)
+      return issue
+        ? [{ id: i.course.id, nome: i.course.nome, reason: TENANT_PACKAGE_COURSE_ISSUE_LABEL[issue] }]
+        : []
+    })
     return NextResponse.json({
       data: {
         id: pkg.id,
@@ -47,6 +59,7 @@ export const GET = withRequestContextParams<{ id: string }>(
         featured: pkg.featured,
         courseIds: pkg.items.map((i) => i.course.id),
         courses: pkg.items.map((i) => ({ id: i.course.id, nome: i.course.nome })),
+        unavailableCourses,
       },
     })
   },
@@ -91,43 +104,12 @@ export const PUT = withRequestContextParams<{ id: string }>(
 
     const courseIds = Array.from(new Set(data.courseIds))
     const courses = await prisma.course.findMany({
-      where: { id: { in: courseIds }, status: "ATIVO" },
-      select: { id: true, nome: true, authorTenantId: true, ...COURSE_CURATION_SELECT },
+      where: { id: { in: courseIds } },
+      select: TENANT_PACKAGE_COURSE_SELECT,
     })
-    if (courses.length !== courseIds.length) {
-      return NextResponse.json(
-        { error: "Um ou mais cursos são inválidos ou inativos", code: "INVALID_COURSES" },
-        { status: 400 },
-      )
-    }
-
-    // Mesma trava da criação: curso de outra unidade não entra em pacote —
-    // senão o rateio da cobrança inteira alcançaria cursos que não são do
-    // produtor, e o preço do pacote contornaria o piso que ele definiu.
-    // Curso que a PMB restringiu a outras unidades ("ocultar para todas EXCETO")
-    // não entra no pacote desta: seria vendê-lo por dentro do pacote.
-    const naoLiberado = courses.find((c) => !isCourseCuratedForTenant(c, ctx.tenantId))
-    if (naoLiberado) {
-      return NextResponse.json(
-        {
-          error: `O curso "${naoLiberado.nome}" não está liberado para esta unidade.`,
-          code: "COURSE_NOT_AVAILABLE_FOR_TENANT",
-        },
-        { status: 400 },
-      )
-    }
-
-    const alheio = courses.find(
-      (c) => c.authorTenantId !== null && c.authorTenantId !== ctx.tenantId,
-    )
-    if (alheio) {
-      return NextResponse.json(
-        {
-          error: `O curso "${alheio.nome}" é produzido por outra unidade e não pode entrar em um pacote.`,
-          code: "AUTHORED_COURSE_ALONE",
-        },
-        { status: 400 },
-      )
+    const check = checkTenantPackageCourses(courseIds, courses, ctx.tenantId)
+    if (!check.ok) {
+      return NextResponse.json({ error: check.error, code: check.code }, { status: 400 })
     }
 
     const slug =

@@ -50,6 +50,13 @@ interface LookupCourse {
   nome: string
 }
 
+/** Curso gravado no pacote que não pode mais estar nele (ver GET /api/painel/pacotes/[id]). */
+interface UnavailableCourse {
+  id: string
+  nome: string
+  reason: string
+}
+
 function formatBRL(value: number): string {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
 }
@@ -426,6 +433,7 @@ function OwnPackageDialog({
   const [featured, setFeatured] = useState(pkg?.featured ?? false)
   const [courseIds, setCourseIds] = useState<string[]>([])
   const [courses, setCourses] = useState<LookupCourse[] | null>(null)
+  const [unavailable, setUnavailable] = useState<UnavailableCourse[]>([])
   const [courseSearch, setCourseSearch] = useState("")
   const [saving, setSaving] = useState(false)
 
@@ -443,7 +451,14 @@ function OwnPackageDialog({
           .then((r) => r.json())
           .catch(() => null)
         if (!cancelled && detail?.data?.courseIds) {
-          setCourseIds(detail.data.courseIds as string[])
+          // O curso que deixou de valer não aparece na lista de seleção (ela só
+          // traz o que pode entrar). Mantê-lo marcado deixava o formulário preso:
+          // invisível, impossível de desmarcar, e o salvamento sempre recusado.
+          // Ele sai da seleção e a tela diz qual é, antes de salvar.
+          const gone = (detail.data.unavailableCourses ?? []) as UnavailableCourse[]
+          const goneIds = new Set(gone.map((c) => c.id))
+          setUnavailable(gone)
+          setCourseIds((detail.data.courseIds as string[]).filter((id) => !goneIds.has(id)))
         }
       }
     }
@@ -575,6 +590,22 @@ function OwnPackageDialog({
 
           <div className="space-y-2">
             <Label>Cursos do pacote ({courseIds.length} selecionados)</Label>
+            {unavailable.length > 0 && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                <p className="font-medium">
+                  {unavailable.length === 1
+                    ? "Este curso não está mais disponível e sai do pacote ao salvar:"
+                    : "Estes cursos não estão mais disponíveis e saem do pacote ao salvar:"}
+                </p>
+                <ul className="mt-1 list-disc space-y-0.5 pl-5">
+                  {unavailable.map((c) => (
+                    <li key={c.id}>
+                      {c.nome} <span className="text-amber-700">({c.reason})</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
             <div className="relative">
               <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-gray-400" />
               <Input

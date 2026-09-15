@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import {
-  COURSE_CURATION_SELECT,
-  isCourseCuratedForTenant,
-} from "@/lib/catalog/visibility"
 import { requirePainel } from "@/lib/auth/painel-guard"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { ensureUniquePackageSlug } from "@/lib/packages/slug"
+import {
+  TENANT_PACKAGE_COURSE_SELECT,
+  checkTenantPackageCourses,
+} from "@/lib/packages/tenant-package-courses"
 
 export const GET = withRequestContext(
   { action: "painel.pacotes.list", route: "/api/painel/pacotes" },
@@ -112,45 +112,12 @@ export const POST = withRequestContext(
 
     const courseIds = Array.from(new Set(data.courseIds))
     const courses = await prisma.course.findMany({
-      where: { id: { in: courseIds }, status: "ATIVO" },
-      select: { id: true, nome: true, authorTenantId: true, ...COURSE_CURATION_SELECT },
+      where: { id: { in: courseIds } },
+      select: TENANT_PACKAGE_COURSE_SELECT,
     })
-    if (courses.length !== courseIds.length) {
-      return NextResponse.json(
-        { error: "Um ou mais cursos são inválidos ou inativos", code: "INVALID_COURSES" },
-        { status: 400 },
-      )
-    }
-
-    // Curso produzido por OUTRA unidade não entra em pacote. O rateio é da
-    // cobrança inteira: num pacote, o percentual do produtor incidiria também
-    // sobre os cursos que não são dele — e, pior, um preço de pacote abaixo do
-    // piso dele contornaria em silêncio o valor que ele definiu. Mesma trava do
-    // checkout, onde curso de terceiro vende sozinho.
-    // Curso que a PMB restringiu a outras unidades ("ocultar para todas EXCETO")
-    // não entra no pacote desta: seria vendê-lo por dentro do pacote.
-    const naoLiberado = courses.find((c) => !isCourseCuratedForTenant(c, ctx.tenantId))
-    if (naoLiberado) {
-      return NextResponse.json(
-        {
-          error: `O curso "${naoLiberado.nome}" não está liberado para esta unidade.`,
-          code: "COURSE_NOT_AVAILABLE_FOR_TENANT",
-        },
-        { status: 400 },
-      )
-    }
-
-    const alheio = courses.find(
-      (c) => c.authorTenantId !== null && c.authorTenantId !== ctx.tenantId,
-    )
-    if (alheio) {
-      return NextResponse.json(
-        {
-          error: `O curso "${alheio.nome}" é produzido por outra unidade e não pode entrar em um pacote.`,
-          code: "AUTHORED_COURSE_ALONE",
-        },
-        { status: 400 },
-      )
+    const check = checkTenantPackageCourses(courseIds, courses, ctx.tenantId)
+    if (!check.ok) {
+      return NextResponse.json({ error: check.error, code: check.code }, { status: 400 })
     }
 
     const slug = await ensureUniquePackageSlug(ctx.tenantId, data.name)

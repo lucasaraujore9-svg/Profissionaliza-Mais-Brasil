@@ -164,8 +164,9 @@ describe("a curadoria está presa em todas as portas da unidade", () => {
     // Painel: listagem de cursos, venda direta, pacotes e editor da home.
     ["app/api/painel/cursos/route.ts", /courseCuratedForTenant\(ctx\.tenantId\)/],
     ["app/painel/vendas/nova/page.tsx", /courseCuratedForTenant\(user\.tenantId\)/],
-    ["app/api/painel/pacotes/route.ts", /COURSE_NOT_AVAILABLE_FOR_TENANT/],
-    ["app/api/painel/pacotes/[id]/route.ts", /COURSE_NOT_AVAILABLE_FOR_TENANT/],
+    ["lib/packages/tenant-package-courses.ts", /isCourseCuratedForTenant\(course, tenantId\)/],
+    ["app/api/painel/pacotes/route.ts", /checkTenantPackageCourses\(/],
+    ["app/api/painel/pacotes/[id]/route.ts", /checkTenantPackageCourses\(/],
     ["app/api/painel/pacotes/courses-lookup/route.ts", /courseCuratedForTenant\(/],
     ["app/api/painel/home-sections/options/route.ts", /getHomeSectionsOptions\(guard\.ctx\.tenantId\)/],
     // Loja: checkout, API de cursos, sitemap e llms.txt.
