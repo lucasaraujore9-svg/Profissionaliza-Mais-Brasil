@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma"
-import { listarCursos } from "@/lib/plataforma-cursos/client"
-import type { EACurso } from "@/lib/plataforma-cursos/types"
+import { listarAulas, listarCursos } from "@/lib/plataforma-cursos/client"
+import type { EAAula, EACurso } from "@/lib/plataforma-cursos/types"
 import { contextLogger } from "@/lib/logger"
 import { parseBRPrice, slugify } from "@/lib/utils"
 import { pushSyncLog, type SyncLogEntry } from "./sync-log"
@@ -91,7 +91,68 @@ const EA_MATCH_SELECT = {
   categoryId: true,
   status: true,
   categoriaLoja: true,
+  matrizCurricular: true,
 } as const
+
+/**
+ * Converte as aulas da fornecedora legada (`cursos/aulas`) nos topicos da matriz
+ * curricular. O feed numera o titulo ("01 - Introducao"); a matriz guarda so o
+ * nome, no mesmo formato do backfill de 20260619. So a numeracao SEGUIDA de
+ * separador sai — "5S na empresa" continua inteiro.
+ */
+export function mapEaAulasToMatriz(
+  aulas: EAAula[] | null | undefined,
+): string[] {
+  if (!Array.isArray(aulas)) return []
+  return aulas
+    .map((a) => (a?.aula ?? "").replace(/^\s*\d+\s*[-–—.)]\s*/, "").trim())
+    .filter((s) => s.length > 0)
+}
+
+/**
+ * Preenche a matriz curricular VAZIA a partir das aulas da fornecedora.
+ *
+ * O backfill de 20260619 deixou cursos sem matriz (nao havia documento para
+ * eles) e o sync nunca mais olhou para o campo: "Teologia Historica" ficou com a
+ * pagina e o verso do certificado sem grade. Curso novo da fornecedora nascia no
+ * mesmo estado.
+ *
+ * So escreve em matriz VAZIA, e o `isEmpty` vai no `where` da escrita: a matriz
+ * que ja existe veio de documento curado e nao pode ser trocada pelos titulos
+ * crus das aulas. Best-effort — o curso ja foi sincronizado, e uma falha aqui
+ * nao pode contar como falha dele; a proxima execucao tenta de novo.
+ */
+async function fillEaMatrizIfEmpty(
+  courseId: string,
+  plataformaCourseId: string,
+): Promise<void> {
+  const cursoId = Number.parseInt(plataformaCourseId, 10)
+  if (!Number.isFinite(cursoId)) return
+  try {
+    const matriz = mapEaAulasToMatriz(await listarAulas(cursoId))
+    if (matriz.length === 0) return
+    const { count } = await prisma.course.updateMany({
+      where: { id: courseId, matrizCurricular: { isEmpty: true } },
+      data: { matrizCurricular: matriz },
+    })
+    if (count > 0) {
+      contextLogger().info(
+        {
+          event: "catalog.sync_ea.matriz_filled",
+          courseId,
+          plataformaCourseId,
+          topicos: matriz.length,
+        },
+        "matriz curricular vazia preenchida com as aulas da fornecedora",
+      )
+    }
+  } catch (err) {
+    contextLogger().warn(
+      { err, event: "catalog.sync_ea.matriz_failed", courseId, plataformaCourseId },
+      "nao foi possivel buscar as aulas para a matriz curricular — tenta no proximo sync",
+    )
+  }
+}
 
 /**
  * Upsert de UM curso do feed da fornecedora legada -> `Course`.
@@ -264,6 +325,12 @@ async function upsertEaCourse(curso: EACurso): Promise<{ created: boolean }> {
       },
     })
     await linkCourseCategory(existing.id, effectiveCategoryId)
+    const idNaFornecedora = canSetEaCourseId
+      ? courseIdFromCapa
+      : existing.plataformaCourseId
+    if (idNaFornecedora && (existing.matrizCurricular?.length ?? 0) === 0) {
+      await fillEaMatrizIfEmpty(existing.id, idNaFornecedora)
+    }
     return { created: false }
   }
 
@@ -277,6 +344,9 @@ async function upsertEaCourse(curso: EACurso): Promise<{ created: boolean }> {
     select: { id: true },
   })
   await linkCourseCategory(created.id, effectiveCategoryId)
+  if (canSetEaCourseId && courseIdFromCapa) {
+    await fillEaMatrizIfEmpty(created.id, courseIdFromCapa)
+  }
   return { created: true }
 }
 

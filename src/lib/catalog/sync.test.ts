@@ -25,7 +25,7 @@ vi.mock("@/lib/prisma", () => {
   }
   return { prisma }
 })
-vi.mock("@/lib/plataforma-cursos/client", () => ({ listarCursos: vi.fn() }))
+vi.mock("@/lib/plataforma-cursos/client", () => ({ listarCursos: vi.fn(), listarAulas: vi.fn() }))
 vi.mock("@/lib/lms", () => ({ listLmsCourses: vi.fn(), getLmsCourse: vi.fn() }))
 vi.mock("./sync-log", () => ({ pushSyncLog: vi.fn() }))
 // Cópia FIEL de `slugifyCategoria` (./home importa o prisma e não pode ser
@@ -59,9 +59,9 @@ vi.mock("@/lib/logger", () => ({
 }))
 
 import { prisma } from "@/lib/prisma"
-import { listarCursos } from "@/lib/plataforma-cursos/client"
+import { listarAulas, listarCursos } from "@/lib/plataforma-cursos/client"
 import { getLmsCourse } from "@/lib/lms"
-import { syncCatalogFromEA } from "./sync"
+import { mapEaAulasToMatriz, syncCatalogFromEA } from "./sync"
 import { syncSingleLmsCourse } from "./sync-lms"
 
 const p = prisma as unknown as {
@@ -83,6 +83,7 @@ const p = prisma as unknown as {
   courseLesson: { deleteMany: ReturnType<typeof vi.fn>; createMany: ReturnType<typeof vi.fn> }
 }
 const listarMock = listarCursos as unknown as ReturnType<typeof vi.fn>
+const aulasMock = listarAulas as unknown as ReturnType<typeof vi.fn>
 const getLmsMock = getLmsCourse as unknown as ReturnType<typeof vi.fn>
 
 beforeEach(() => {
@@ -90,6 +91,8 @@ beforeEach(() => {
   p.$transaction.mockImplementation(async (arr: Promise<unknown>[]) => Promise.all(arr))
   p.course.update.mockResolvedValue({})
   p.course.create.mockResolvedValue({ id: "new1" })
+  p.course.updateMany.mockResolvedValue({ count: 1 })
+  aulasMock.mockResolvedValue([])
   p.courseCategory.upsert.mockResolvedValue({})
   // O sync do LMS resolve a categoria por slug (findUnique) e, se não achar, pela
   // chave de unificação do nome (findMany). Sem default, cada teste teria que
@@ -469,5 +472,118 @@ describe("syncCatalogFromEA — renomear na fornecedora não pode duplicar o cur
 
     expect(p.course.update).toHaveBeenCalledTimes(2) // seguiu para o segundo
     expect(res.updated).toBe(1) // só o saudável entrou na conta
+  })
+})
+
+describe("syncCatalogFromEA — matriz curricular vazia vem das aulas da fornecedora", () => {
+  const CAPA_271 = "https://playcurso.com/x/metodo/imagemcursos/271.jpg"
+
+  function feedCurso(nome = "Teologia Histórica", capa: string | null = CAPA_271) {
+    return { nome, aulas: "30", preco: "199,00", status: "ATIVO", categoria_loja: "Diversas", capa_image: capa }
+  }
+
+  const LINHA_271 = {
+    id: "ea_271",
+    nome: "Teologia Histórica",
+    plataformaCourseId: "271",
+    categoryId: "cat_div",
+    status: "ATIVO",
+    categoriaLoja: "DIVERSAS",
+    matrizCurricular: [] as string[],
+  }
+
+  beforeEach(() => {
+    p.category.findFirst.mockResolvedValue({ id: "cat_div" })
+  })
+
+  it("curso sem matriz → busca as aulas pelo id da fornecedora e grava os títulos sem numeração", async () => {
+    listarMock.mockResolvedValue([feedCurso()])
+    p.course.findFirst.mockResolvedValue(LINHA_271)
+    aulasMock.mockResolvedValue([
+      { aula: "01 - Introdução" },
+      { aula: "02 - A Igreja Primitiva" },
+    ])
+
+    await syncCatalogFromEA("cron")
+
+    expect(aulasMock).toHaveBeenCalledWith(271)
+    expect(p.course.updateMany).toHaveBeenCalledTimes(1)
+    const call = p.course.updateMany.mock.calls[0][0]
+    // A guarda de vazio vai NA escrita, não só na leitura: nada sobrescreve uma
+    // matriz que apareceu entre a leitura e o update.
+    expect(call.where).toEqual({ id: "ea_271", matrizCurricular: { isEmpty: true } })
+    expect(call.data.matrizCurricular).toEqual(["Introdução", "A Igreja Primitiva"])
+  })
+
+  it("curso COM matriz → não consulta as aulas nem mexe na matriz curada", async () => {
+    listarMock.mockResolvedValue([feedCurso()])
+    p.course.findFirst.mockResolvedValue({ ...LINHA_271, matrizCurricular: ["Tópico do documento"] })
+
+    await syncCatalogFromEA("cron")
+
+    expect(aulasMock).not.toHaveBeenCalled()
+    expect(p.course.updateMany).not.toHaveBeenCalled()
+    expect(p.course.update.mock.calls[0][0].data).not.toHaveProperty("matrizCurricular")
+  })
+
+  it("curso sem id da fornecedora → não há de onde buscar as aulas", async () => {
+    listarMock.mockResolvedValue([feedCurso("Curso Sem Id", null)])
+    p.course.findFirst.mockResolvedValue({ ...LINHA_271, plataformaCourseId: null })
+
+    await syncCatalogFromEA("cron")
+
+    expect(aulasMock).not.toHaveBeenCalled()
+  })
+
+  it("curso NOVO com id nasce já com a matriz", async () => {
+    listarMock.mockResolvedValue([feedCurso("Curso Inédito")])
+    p.course.findFirst.mockResolvedValue(null)
+    p.course.findUnique.mockResolvedValue(null)
+    aulasMock.mockResolvedValue([{ aula: "01 - Abertura" }])
+
+    await syncCatalogFromEA("cron")
+
+    expect(aulasMock).toHaveBeenCalledWith(271)
+    expect(p.course.updateMany.mock.calls[0][0].data.matrizCurricular).toEqual(["Abertura"])
+  })
+
+  it("falha ao buscar as aulas não conta como falha do curso nem derruba o sync", async () => {
+    listarMock.mockResolvedValue([feedCurso()])
+    p.course.findFirst.mockResolvedValue(LINHA_271)
+    aulasMock.mockRejectedValue(new Error("HTTP 500"))
+
+    const res = await syncCatalogFromEA("cron")
+
+    expect(res.updated).toBe(1)
+    expect(p.course.updateMany).not.toHaveBeenCalled()
+  })
+
+  it("feed sem aulas → matriz continua vazia (não grava lista vazia)", async () => {
+    listarMock.mockResolvedValue([feedCurso()])
+    p.course.findFirst.mockResolvedValue(LINHA_271)
+    aulasMock.mockResolvedValue([{ aula: "  " }])
+
+    await syncCatalogFromEA("cron")
+
+    expect(p.course.updateMany).not.toHaveBeenCalled()
+  })
+})
+
+describe("mapEaAulasToMatriz", () => {
+  it("tira só a numeração seguida de separador", () => {
+    expect(
+      mapEaAulasToMatriz([
+        { aula: "01 - Introdução" },
+        { aula: "2. Patrística" },
+        { aula: "10) Reforma" },
+        { aula: "5S na empresa" },
+        { aula: "Aula sem número" },
+      ]),
+    ).toEqual(["Introdução", "Patrística", "Reforma", "5S na empresa", "Aula sem número"])
+  })
+
+  it("descarta vazios e tolera resposta que não é lista", () => {
+    expect(mapEaAulasToMatriz([{ aula: "" }, { aula: "03 - " }])).toEqual([])
+    expect(mapEaAulasToMatriz(null)).toEqual([])
   })
 })
