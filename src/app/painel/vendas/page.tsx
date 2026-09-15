@@ -35,7 +35,7 @@ export default async function PainelVendasPage() {
   const [tenant, enrollments, subscriptions] = await Promise.all([
     prisma.tenant.findUnique({
       where: { id: ctx.tenantId },
-      select: { slug: true, customDomain: true },
+      select: { slug: true, customDomain: true, domainVerified: true },
     }),
     // Escopo do papel: sem `vendas.viewAll`, só as vendas da própria pessoa.
     prisma.enrollment.findMany({
@@ -113,9 +113,7 @@ export default async function PainelVendasPage() {
         status: e.status,
         enrollmentId: e.id,
         gateway: e.gateway,
-        asaasInvoiceUrl: e.asaasInvoiceUrl,
-        tenantSlug: tenant?.slug ?? "",
-        tenantCustomDomain: tenant?.customDomain ?? null,
+        tenant,
       }),
       enrollmentId: e.id as string | null,
       soldByName: e.soldByUser?.name ?? null,

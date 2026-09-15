@@ -50,7 +50,7 @@ export async function loadStudentDetail(args: {
   const student = await prisma.student.findFirst({
     where,
     include: {
-      tenant: { select: { name: true, slug: true, customDomain: true } },
+      tenant: { select: { name: true, slug: true, customDomain: true, domainVerified: true } },
       enrollments: {
         orderBy: { createdAt: "desc" },
         include: {
@@ -235,16 +235,13 @@ export async function loadStudentDetail(args: {
       // — quem atende não conseguia explicar o limite nem dizer quantas faltam.
       installmentsTotal: effectivePacePlan(e).installmentsTotal,
       installmentsPaid: effectivePacePlan(e).installmentsPaid,
-      asaasInvoiceUrl: e.asaasInvoiceUrl,
       // Link para admin/revenda recuperarem o checkout de uma cobranca pendente
       // (venda direta aguardando pagamento ou carrinho abandonado).
       checkoutUrl: buildEnrollmentCheckoutUrl({
         status: e.status,
         enrollmentId: e.id,
         gateway: e.gateway,
-        asaasInvoiceUrl: e.asaasInvoiceUrl,
-        tenantSlug: student.tenant.slug,
-        tenantCustomDomain: student.tenant.customDomain,
+        tenant: student.tenant,
       }),
       startedAt: e.startedAt?.toISOString() ?? null,
       createdAt: e.createdAt.toISOString(),

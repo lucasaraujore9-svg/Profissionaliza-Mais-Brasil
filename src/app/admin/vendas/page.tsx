@@ -5,7 +5,6 @@ import { Plus, Tag, Users } from "lucide-react"
 import { SyncPaymentButton } from "@/components/admin/sync-payment-button"
 import { CheckoutLink } from "@/components/shared/checkout-link"
 import { buildEnrollmentCheckoutUrl } from "@/lib/students/checkout-link"
-import { PMB_TENANT_SLUG } from "@/lib/pmb-config"
 import {
   INTERVAL_LABEL,
   INTERVAL_PRICE_SUFFIX,
@@ -118,15 +117,12 @@ export default async function VendasDashboardPage() {
       amount: Number(e.finalAmount),
       amountSuffix: "",
       status: e.status as string,
-      // PMB usa Asaas (gateway ASAAS): o link útil é o asaasInvoiceUrl.
-      // tenantSlug = PMB_TENANT_SLUG desliga o ramo /pagar (só MP de revenda).
+      // Vitrine PMB: a página de pagamento da própria plataforma.
       link: buildEnrollmentCheckoutUrl({
         status: e.status,
         enrollmentId: e.id,
         gateway: e.gateway,
-        asaasInvoiceUrl: e.asaasInvoiceUrl,
-        tenantSlug: PMB_TENANT_SLUG,
-        tenantCustomDomain: null,
+        tenant: null,
       }),
       soldByName: e.soldByUser?.name ?? null,
       createdAt: e.createdAt,

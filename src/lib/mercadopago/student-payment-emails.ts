@@ -16,6 +16,7 @@ import {
 import { loadTenantEmailBrand } from "@/lib/email/tenant-brand"
 import { afterResponse } from "@/lib/after-response"
 import { contextLogger } from "@/lib/logger"
+import { buildEnrollmentCheckoutUrl } from "@/lib/students/checkout-link"
 import type { MPPayment } from "./types"
 
 interface TenantLike {
@@ -85,7 +86,11 @@ async function loadContext(enrollmentId: string) {
   const enrollment = await prisma.enrollment.findUnique({
     where: { id: enrollmentId },
     select: {
+      id: true,
+      status: true,
+      gateway: true,
       tenantId: true,
+      tenant: { select: { slug: true, customDomain: true, domainVerified: true } },
       student: { select: { nome: true, email: true } },
       course: { select: { nome: true } },
       coursePackage: { select: { name: true } },
@@ -99,6 +104,14 @@ async function loadContext(enrollmentId: string) {
       ? `pacote ${enrollment.coursePackage.name}`
       : enrollment.course.nome,
     tenantId: enrollment.tenantId,
+    // A página de pagamento da própria loja, que reabre o MESMO PIX/boleto
+    // (idempotência por método) — nunca o `ticket_url` hospedado no MP.
+    paymentUrl: buildEnrollmentCheckoutUrl({
+      status: enrollment.status,
+      enrollmentId: enrollment.id,
+      gateway: enrollment.gateway,
+      tenant: enrollment.tenant,
+    }),
   }
 }
 
@@ -132,10 +145,6 @@ export function notifyStudentPaymentPending(
       if (await alreadySent(ctx.studentEmail, "payment-pending", subject)) return
 
       const brand = await brandFor(tenant, ctx.tenantId)
-      const paymentUrl =
-        payment.point_of_interaction?.transaction_data?.ticket_url ??
-        payment.transaction_details?.external_resource_url ??
-        null
 
       await sendEmail({
         to: ctx.studentEmail,
@@ -150,7 +159,7 @@ export function notifyStudentPaymentPending(
             courseName: ctx.itemName,
             amount: formatBRL(payment.transaction_amount),
             methodLabel: methodLabel(payment),
-            paymentUrl,
+            paymentUrl: ctx.paymentUrl,
             dueDate: formatBrDate(payment.date_of_expiration),
             brand,
           },

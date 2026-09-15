@@ -33,8 +33,20 @@ vi.mock("./client", () => {
     getPayment: vi.fn(),
     payWithCreditCard: vi.fn(),
     listPayments: vi.fn(),
+    deletePayment: vi.fn(),
+    cancelSubscription: vi.fn(),
   }
 })
+
+const lock = vi.hoisted(() => ({ acquired: true }))
+vi.mock("@/lib/enrollment/fulfill", () => ({
+  advisoryLockKeyFrom: () => BigInt(1),
+  withAdvisoryLock: vi.fn(async (_key: bigint, fn: () => Promise<void>) => {
+    if (!lock.acquired) return false
+    await fn()
+    return true
+  }),
+}))
 
 vi.mock("./fulfillment", () => ({
   fulfillFromAsaasPayment: vi.fn(),
@@ -50,12 +62,18 @@ vi.mock("@/lib/installments/settle", () => ({
 }))
 
 import {
+  cancelSubscription,
   createPayment,
+  createSubscription,
+  deletePayment,
   getBillingInfo,
+  getCustomer,
   getPayment,
   getPixQrCode,
+  listPayments,
   payWithCreditCard,
 } from "./client"
+import { fulfillFromAsaasPayment } from "./fulfillment"
 import { settleBoletoInstallment } from "@/lib/installments/settle"
 import { findOrCreateAsaasCustomer } from "./client"
 import { resolvePayer, type PayerSource } from "@/lib/checkout/payer"
@@ -107,6 +125,8 @@ const enrollment: AsaasTransparentEnrollment = {
   payerExternalReference: "student_enr_enr_1",
   payerKind: "STUDENT",
   asaasCustomerId: "cus_1",
+  asaasPaymentId: null,
+  asaasSubscriptionId: null,
 }
 
 const ctx: AsaasTransparentCtx = {
@@ -146,6 +166,7 @@ function payment(status = "PENDING") {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  lock.acquired = true
   getPaymentMock.mockResolvedValue(payment())
 })
 
@@ -311,6 +332,8 @@ function enrollmentDe(payerSource: PayerSource): AsaasTransparentEnrollment {
     payerExternalReference: payer.asaasExternalReference,
     payerKind: payer.kind,
     asaasCustomerId: null,
+    asaasPaymentId: null,
+    asaasSubscriptionId: null,
   }
 }
 
@@ -376,5 +399,220 @@ describe("responsável financeiro (aluno menor)", () => {
     const holder = createPaymentMock.mock.calls[0]![0].creditCardHolderInfo
     expect(holder?.cpfCnpj).toBe(CPF_RESP)
     expect(holder?.phone).toBe("31999998888")
+  })
+})
+
+// ── Retomada: a página de pagamento é o ÚNICO link que o aluno recebe ────────
+// Cada volta a ela não pode deixar outra cobrança viva para a mesma compra.
+
+const PIX_QR = {
+  success: true,
+  payload: "pix-copia-e-cola",
+  encodedImage: "base64",
+  expirationDate: "2026-09-20",
+  description: "Curso",
+}
+
+function avulsa(overrides: Partial<AsaasTransparentEnrollment> = {}): AsaasTransparentEnrollment {
+  return {
+    ...enrollment,
+    id: "enr_av",
+    paymentType: "ONE_TIME",
+    installmentsTotal: null,
+    externalReference: "enr_av",
+    asaasPaymentId: "pay_old",
+    asaasSubscriptionId: null,
+    ...overrides,
+  }
+}
+
+function anterior(billingType: string, status = "PENDING", deleted = false) {
+  return { ...payment(status), id: "pay_old", installment: null, billingType, deleted }
+}
+
+describe("retomada da cobrança avulsa na página de pagamento", () => {
+  beforeEach(() => {
+    vi.mocked(findOrCreateAsaasCustomer).mockResolvedValue({
+      customer: { id: "cus_1" },
+      created: false,
+    } as unknown as Awaited<ReturnType<typeof findOrCreateAsaasCustomer>>)
+    vi.mocked(getCustomer).mockResolvedValue({ id: "cus_1", deleted: false } as never)
+    createPaymentMock.mockResolvedValue({ ...payment(), id: "pay_new", billingType: "BOLETO" } as never)
+  })
+
+  it("mesmo método ainda em aberto: reusa a cobrança, sem criar outra", async () => {
+    getPaymentMock.mockResolvedValue(anterior("PIX") as never)
+    getPixQrCodeMock.mockResolvedValue(PIX_QR)
+
+    const result = await processTransparentAsaasPayment(avulsa(), { method: "PIX" }, ctx)
+
+    expect(result).toMatchObject({ kind: "pending", pix: { qrCode: "pix-copia-e-cola" } })
+    expect(getPixQrCodeMock).toHaveBeenCalledWith("pay_old", "asaas_key")
+    expect(createPaymentMock).not.toHaveBeenCalled()
+    expect(vi.mocked(deletePayment)).not.toHaveBeenCalled()
+  })
+
+  it("troca de método: remove a anterior e só cria a nova depois de o Asaas confirmar", async () => {
+    getPaymentMock
+      .mockResolvedValueOnce(anterior("PIX") as never)
+      .mockResolvedValueOnce(anterior("PIX", "PENDING", true) as never)
+    vi.mocked(deletePayment).mockResolvedValue({ deleted: true, id: "pay_old" })
+    getBillingInfoMock.mockResolvedValue({
+      pix: null,
+      creditCard: null,
+      bankSlip: {
+        identificationField: "00190",
+        nossoNumero: "1",
+        barCode: "0019",
+        bankSlipUrl: "https://asaas.test/boleto/pay_new",
+        daysAfterDueDateToRegistrationCancellation: 30,
+      },
+    })
+
+    const result = await processTransparentAsaasPayment(avulsa(), { method: "BOLETO" }, ctx)
+
+    expect(vi.mocked(deletePayment)).toHaveBeenCalledWith("pay_old", "asaas_key")
+    expect(vi.mocked(deletePayment).mock.invocationCallOrder[0]).toBeLessThan(
+      createPaymentMock.mock.invocationCallOrder[0],
+    )
+    expect(result).toMatchObject({
+      kind: "pending",
+      boleto: { url: "https://asaas.test/boleto/pay_new" },
+    })
+  })
+
+  it("remoção não confirmada (DELETE é soft): não cria segunda cobrança", async () => {
+    getPaymentMock.mockResolvedValue(anterior("PIX") as never)
+    vi.mocked(deletePayment).mockResolvedValue({ deleted: true, id: "pay_old" })
+
+    const result = await processTransparentAsaasPayment(avulsa(), { method: "BOLETO" }, ctx)
+
+    expect(result).toMatchObject({ kind: "error", code: "PREVIOUS_CHARGE_OPEN" })
+    expect(createPaymentMock).not.toHaveBeenCalled()
+  })
+
+  it("anterior já paga (webhook atrasado): efetiva e não cobra de novo", async () => {
+    getPaymentMock.mockResolvedValue(anterior("PIX", "RECEIVED") as never)
+
+    const result = await processTransparentAsaasPayment(avulsa(), { method: "BOLETO" }, ctx)
+
+    expect(result).toEqual({ kind: "approved", status: "RECEIVED" })
+    expect(vi.mocked(fulfillFromAsaasPayment)).toHaveBeenCalled()
+    expect(createPaymentMock).not.toHaveBeenCalled()
+    expect(vi.mocked(deletePayment)).not.toHaveBeenCalled()
+  })
+
+  it("anterior em análise de risco: aguarda, sem cobrar por cima", async () => {
+    getPaymentMock.mockResolvedValue(anterior("CREDIT_CARD", "AWAITING_RISK_ANALYSIS") as never)
+
+    const result = await processTransparentAsaasPayment(avulsa(), { method: "PIX" }, ctx)
+
+    expect(result).toEqual({ kind: "pending" })
+    expect(createPaymentMock).not.toHaveBeenCalled()
+  })
+
+  it("outra requisição já processando esta compra: não cobra", async () => {
+    lock.acquired = false
+
+    const result = await processTransparentAsaasPayment(avulsa(), { method: "PIX" }, ctx)
+
+    expect(result).toMatchObject({ kind: "error", code: "PAYMENT_IN_PROGRESS" })
+    expect(getPaymentMock).not.toHaveBeenCalled()
+    expect(createPaymentMock).not.toHaveBeenCalled()
+  })
+})
+
+describe("nunca devolve a fatura hospedada do Asaas", () => {
+  beforeEach(() => {
+    vi.mocked(findOrCreateAsaasCustomer).mockResolvedValue({
+      customer: { id: "cus_1" },
+      created: false,
+    } as unknown as Awaited<ReturnType<typeof findOrCreateAsaasCustomer>>)
+  })
+
+  it("PIX sem QR vira erro, não o link da fatura", async () => {
+    createPaymentMock.mockResolvedValue({ ...payment(), id: "pay_new", billingType: "PIX" } as never)
+    getPixQrCodeMock.mockResolvedValue(null as never)
+
+    const result = await processTransparentAsaasPayment(
+      avulsa({ asaasPaymentId: null }),
+      { method: "PIX" },
+      ctx,
+    )
+
+    expect(result).toMatchObject({ kind: "error", code: "PIX_UNAVAILABLE" })
+    expect(JSON.stringify(result)).not.toContain("invoice")
+  })
+
+  it("boleto sem PDF vira erro, não o link da fatura", async () => {
+    createPaymentMock.mockResolvedValue({
+      ...payment(),
+      id: "pay_new",
+      bankSlipUrl: null,
+    } as never)
+    getBillingInfoMock.mockResolvedValue(null as never)
+
+    const result = await processTransparentAsaasPayment(
+      avulsa({ asaasPaymentId: null }),
+      { method: "BOLETO" },
+      ctx,
+    )
+
+    expect(result).toMatchObject({ kind: "error", code: "BOLETO_UNAVAILABLE" })
+  })
+})
+
+describe("retomada da mensal no cartão", () => {
+  const card = {
+    method: "CREDIT_CARD" as const,
+    card: {
+      holderName: "ALUNO",
+      number: "4111111111111111",
+      expiryMonth: "12",
+      expiryYear: "28",
+      ccv: "123",
+    },
+    postalCode: "01001000",
+    addressNumber: "1",
+  }
+
+  beforeEach(() => {
+    vi.mocked(findOrCreateAsaasCustomer).mockResolvedValue({
+      customer: { id: "cus_1" },
+      created: false,
+    } as unknown as Awaited<ReturnType<typeof findOrCreateAsaasCustomer>>)
+  })
+
+  it("assinatura anterior não capturada: remove antes de criar outra", async () => {
+    vi.mocked(listPayments)
+      .mockResolvedValueOnce({ data: [anterior("CREDIT_CARD", "PENDING")] } as never)
+      .mockResolvedValue({ data: [] } as never)
+    vi.mocked(cancelSubscription).mockResolvedValue({ deleted: true, id: "sub_old" })
+    vi.mocked(createSubscription).mockResolvedValue({ id: "sub_new" } as never)
+
+    await processTransparentAsaasPayment(
+      avulsa({ paymentType: "MONTHLY", asaasPaymentId: null, asaasSubscriptionId: "sub_old" }),
+      card,
+      ctx,
+    )
+
+    expect(vi.mocked(cancelSubscription)).toHaveBeenCalledWith("sub_old", "asaas_key")
+    expect(vi.mocked(cancelSubscription).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(createSubscription).mock.invocationCallOrder[0],
+    )
+  }, 10_000)
+
+  it("remoção da assinatura anterior falhou: não cria segunda recorrência", async () => {
+    vi.mocked(listPayments).mockResolvedValue({ data: [] } as never)
+    vi.mocked(cancelSubscription).mockRejectedValue(new Error("500"))
+
+    const result = await processTransparentAsaasPayment(
+      avulsa({ paymentType: "MONTHLY", asaasPaymentId: null, asaasSubscriptionId: "sub_old" }),
+      card,
+      ctx,
+    )
+
+    expect(result).toMatchObject({ kind: "error", code: "PREVIOUS_CHARGE_OPEN" })
+    expect(vi.mocked(createSubscription)).not.toHaveBeenCalled()
   })
 })

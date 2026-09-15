@@ -21,9 +21,8 @@ interface PayPendingButtonProps {
 
 /**
  * Botao "Pagar agora" para uma cobranca PENDENTE na area do aluno. Resolve o
- * destino via {@link studentPaymentTarget}: fatura Asaas (nova aba) ou checkout
- * transparente in-app (mesma aba, sessao preservada). Substitui a regra antiga
- * que so mostrava o botao quando havia `asaasInvoiceUrl`.
+ * destino via {@link studentPaymentTarget}: sempre uma pagina de pagamento da
+ * propria plataforma (mesma aba, sessao preservada), nunca a do gateway.
  */
 export function PayPendingButton({
   enrollment,
@@ -40,20 +39,6 @@ export function PayPendingButton({
         Pagar agora
         <ArrowRight className="h-4 w-4" />
       </Link>
-    )
-  }
-
-  if (target.external) {
-    return (
-      <a
-        href={target.href}
-        target="_blank"
-        rel="noopener noreferrer"
-        className={cls}
-      >
-        Pagar agora
-        <ArrowRight className="h-4 w-4" />
-      </a>
     )
   }
 

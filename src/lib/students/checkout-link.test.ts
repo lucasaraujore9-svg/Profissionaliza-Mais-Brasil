@@ -1,17 +1,22 @@
 import { describe, it, expect } from "vitest"
 import { buildEnrollmentCheckoutUrl } from "./checkout-link"
 
-// Invariante coberto: admin (sistema mae) e revenda conseguem recuperar o link
-// de checkout de uma cobranca PENDENTE (venda direta ou carrinho abandonado),
-// com a fonte do link variando por gateway/tenant.
+// Invariante coberto: o link que admin e revenda reenviam ao aluno e SEMPRE a
+// pagina de pagamento da propria plataforma — nunca a pagina do gateway.
+//
+// Inversao registrada (2026-09-14): antes a fatura do Asaas ja emitida tinha
+// prioridade ("evita cobranca duplicada", porque o checkout criava outra
+// cobranca a cada volta). O checkout passou a retomar a cobranca anterior, e a
+// funcao deixou de receber `asaasInvoiceUrl` — nenhum chamador consegue
+// preferi-la.
+
+const loja = { slug: "revenda1", customDomain: null, domainVerified: false }
 
 const base = {
   status: "PENDING",
   enrollmentId: "enr_123",
   gateway: "MP",
-  asaasInvoiceUrl: null as string | null,
-  tenantSlug: "revenda1",
-  tenantCustomDomain: null as string | null,
+  tenant: loja as { slug: string; customDomain: string | null; domainVerified: boolean } | null,
 }
 
 describe("buildEnrollmentCheckoutUrl", () => {
@@ -20,78 +25,49 @@ describe("buildEnrollmentCheckoutUrl", () => {
     expect(buildEnrollmentCheckoutUrl({ ...base, status: "CANCELLED" })).toBeNull()
   })
 
-  it("prioriza a fatura Asaas quando existe", () => {
-    expect(
-      buildEnrollmentCheckoutUrl({
-        ...base,
-        asaasInvoiceUrl: "https://asaas.com/i/abc",
-      }),
-    ).toBe("https://asaas.com/i/abc")
-  })
-
-  it("monta a pagina /pagar da revenda MP no subdominio da vitrine", () => {
+  it("unidade MP: /pagar no subdominio da loja", () => {
     expect(buildEnrollmentCheckoutUrl(base)).toBe(
       "https://revenda1.livrecursos.com.br/pagar/enr_123",
     )
   })
 
-  it("usa o dominio proprio da revenda quando configurado", () => {
-    expect(
-      buildEnrollmentCheckoutUrl({
-        ...base,
-        tenantCustomDomain: "cursosjoao.com.br",
-      }),
-    ).toBe("https://cursosjoao.com.br/pagar/enr_123")
-  })
-
-  it("sistema mae (PMB) Asaas: usa a tela /pagar propria (nao a fatura crua)", () => {
-    // Mesmo com asaasInvoiceUrl ja persistida, preferimos a tela de checkout da
-    // marca PMB (dominio app) que retoma a cobranca — (main)/pagar/[id].
-    const url = buildEnrollmentCheckoutUrl({
-      ...base,
-      tenantSlug: "__pmb__",
-      gateway: "ASAAS",
-      asaasInvoiceUrl: "https://asaas.com/i/pmb",
-    })
-    expect(url).toMatch(/\/pagar\/enr_123$/)
-    expect(url).not.toBe("https://asaas.com/i/pmb")
-  })
-
-  it("retorna null para PMB MP sem init_point (nao usa /pagar de revenda)", () => {
-    // PMB via MP: a /pagar de revenda e MP-tenant-scoped; o init_point do PMB nao
-    // e persistido. Sem asaasInvoiceUrl, fica sem link na lista.
-    expect(
-      buildEnrollmentCheckoutUrl({ ...base, tenantSlug: "__pmb__" }),
-    ).toBeNull()
-  })
-
-  it("revenda Asaas sem fatura ainda emitida: monta a /pagar da vitrine", () => {
-    // Venda direta / carrinho abandonado de unidade Asaas: o asaasInvoiceUrl so
-    // nasce quando o aluno escolhe a forma de pagamento, mas a /pagar ja ramifica
-    // por gateway e renderiza o formulario Asaas. Sem isto, TODA venda direta das
-    // unidades Asaas ficava sem link reenviavel no painel.
+  it("unidade Asaas: /pagar da loja, mesmo com a fatura do Asaas ja emitida", () => {
+    // A entrada nem aceita a fatura — o teste prende o contrato pelo tipo e
+    // pelo valor: nada que nao seja /pagar sai daqui para uma unidade.
     expect(buildEnrollmentCheckoutUrl({ ...base, gateway: "ASAAS" })).toBe(
       "https://revenda1.livrecursos.com.br/pagar/enr_123",
     )
   })
 
-  it("revenda Asaas com dominio proprio: /pagar no dominio da loja", () => {
+  it("dominio proprio so entra quando verificado", () => {
     expect(
       buildEnrollmentCheckoutUrl({
         ...base,
-        gateway: "ASAAS",
-        tenantCustomDomain: "cursosjoao.com.br",
+        tenant: { ...loja, customDomain: "cursosjoao.com.br", domainVerified: true },
       }),
     ).toBe("https://cursosjoao.com.br/pagar/enr_123")
+    expect(
+      buildEnrollmentCheckoutUrl({
+        ...base,
+        tenant: { ...loja, customDomain: "cursosjoao.com.br", domainVerified: false },
+      }),
+    ).toBe("https://revenda1.livrecursos.com.br/pagar/enr_123")
   })
 
-  it("usa a fatura Asaas da revenda quando ja existe", () => {
+  it("vitrine PMB Asaas: /pagar no dominio da PMB", () => {
+    const url = buildEnrollmentCheckoutUrl({ ...base, gateway: "ASAAS", tenant: null })
+    expect(url).toMatch(/^https:\/\/[^/]+\/pagar\/enr_123$/)
+    expect(url).not.toMatch(/livrecursos|asaas/)
     expect(
       buildEnrollmentCheckoutUrl({
         ...base,
         gateway: "ASAAS",
-        asaasInvoiceUrl: "https://asaas.com/i/rev",
+        tenant: { slug: "__pmb__", customDomain: null, domainVerified: false },
       }),
-    ).toBe("https://asaas.com/i/rev")
+    ).toBe(url)
+  })
+
+  it("vitrine PMB MP: sem pagina de retomada, sem link", () => {
+    expect(buildEnrollmentCheckoutUrl({ ...base, tenant: null })).toBeNull()
   })
 })

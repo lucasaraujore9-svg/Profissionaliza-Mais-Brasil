@@ -12,12 +12,15 @@ import {
   getPayment,
   payWithCreditCard,
   listPayments as listAsaasPayments,
+  deletePayment as deleteAsaasPayment,
+  cancelSubscription as cancelAsaasSubscription,
   AsaasApiError,
 } from "./client"
 import { fulfillFromAsaasPayment, type AsaasFulfillTenant } from "./fulfillment"
 import { isFreeAmount, releaseFreeEnrollment } from "@/lib/checkout/free-enrollment"
 import { settleBoletoInstallment } from "@/lib/installments/settle"
 import { asaasSplitsForEnrollment } from "@/lib/course-authoring/split-server"
+import { advisoryLockKeyFrom, withAdvisoryLock } from "@/lib/enrollment/fulfill"
 import type {
   AsaasCreditCard,
   AsaasCreditCardHolderInfo,
@@ -89,6 +92,15 @@ export interface AsaasTransparentEnrollment {
   payerKind: "STUDENT" | "GUARDIAN"
   /** Cobranca por matricula, gravada por uma compra anterior nesta mesma conta. */
   asaasCustomerId: string | null
+  /**
+   * Cobranca avulsa criada por uma tentativa ANTERIOR nesta pagina. Obrigatorio
+   * de proposito: o link de pagamento enviado ao aluno e sempre esta pagina, e
+   * cada volta a ela criaria outra cobranca em aberto se a anterior fosse
+   * ignorada — duas cobrancas vivas para a mesma compra.
+   */
+  asaasPaymentId: string | null
+  /** Assinatura (mensal no cartao) criada por uma tentativa anterior. */
+  asaasSubscriptionId: string | null
 }
 
 export interface AsaasTransparentCtx {
@@ -225,27 +237,12 @@ export async function processExistingAsaasInstallmentPayment(
     }
     return {
       kind: "pending",
-      pix: {
-        qrCode: qr.payload,
-        qrCodeBase64: qr.encodedImage ?? "",
-        ticketUrl: payment.invoiceUrl,
-      },
+      pix: { qrCode: qr.payload, qrCodeBase64: qr.encodedImage ?? "" },
     }
   }
 
   if (formData.method === "BOLETO") {
-    const billing = await getBillingInfo(paymentId, ctx.apiKey).catch(() => null)
-    const url =
-      billing?.bankSlip?.bankSlipUrl ??
-      payment.bankSlipUrl ??
-      payment.invoiceUrl
-    return {
-      kind: "pending",
-      boleto: {
-        url,
-        digitableLine: billing?.bankSlip?.identificationField,
-      },
-    }
+    return boletoResult(payment, ctx.apiKey)
   }
 
   const cardPair = buildCardPair(formData, enrollment)
@@ -401,8 +398,30 @@ export async function processTransparentAsaasPayment(
     }
   }
 
+  // Uma volta a esta pagina por vez: dois cliques (ou duas abas) leriam a mesma
+  // cobranca anterior e criariam duas novas.
+  let result: TransparentResult = {
+    kind: "error",
+    httpStatus: 409,
+    error:
+      "Já existe um pagamento em processamento para esta compra. Aguarde alguns segundos.",
+    code: "PAYMENT_IN_PROGRESS",
+  }
+  await withAdvisoryLock(
+    advisoryLockKeyFrom(`ASAAS_TRANSPARENT:${enrollment.id}`),
+    async () => {
+      result = await chargeUnderLock(enrollment, formData, ctx)
+    },
+  )
+  return result
+}
+
+async function chargeUnderLock(
+  enrollment: AsaasTransparentEnrollment,
+  formData: AsaasTransparentFormData,
+  ctx: AsaasTransparentCtx,
+): Promise<TransparentResult> {
   const apiKey = ctx.apiKey
-  const customerId = await resolveCustomerId(enrollment, apiKey)
   const description = enrollment.courseNome
   const externalReference = enrollment.externalReference
 
@@ -416,6 +435,10 @@ export async function processTransparentAsaasPayment(
         code: "CARD_REQUIRED",
       }
     }
+    const previous = await resolvePreviousSubscription(enrollment, ctx)
+    if (previous) return previous
+
+    const customerId = await resolveCustomerId(enrollment, apiKey)
     const cardPair = buildCardPair(formData, enrollment)
     const months = enrollment.installmentsTotal ?? 12
     try {
@@ -444,7 +467,6 @@ export async function processTransparentAsaasPayment(
       )
 
       // Captura a 1ª cobrança gerada (id/URL/status) para reconciliação/retorno.
-      let firstInvoiceUrl: string | null = null
       let firstPayment: AsaasPayment | null = null
       for (let i = 0; i < 3; i++) {
         const list = await listAsaasPayments(
@@ -453,7 +475,6 @@ export async function processTransparentAsaasPayment(
         ).catch(() => null)
         const first = list?.data?.[0]
         if (first) {
-          firstInvoiceUrl = first.invoiceUrl
           firstPayment = first
           break
         }
@@ -467,7 +488,7 @@ export async function processTransparentAsaasPayment(
           asaasCustomerId: customerId,
           asaasSubscriptionId: subscription.id,
           asaasPaymentId: firstPayment?.id ?? null,
-          asaasInvoiceUrl: firstInvoiceUrl,
+          asaasInvoiceUrl: firstPayment?.invoiceUrl ?? null,
         },
       })
 
@@ -493,42 +514,49 @@ export async function processTransparentAsaasPayment(
         ? "BOLETO"
         : "CREDIT_CARD"
 
-  const cardPair =
-    formData.method === "CREDIT_CARD" ? buildCardPair(formData, enrollment) : null
+  const previous = await resolvePreviousCharge(enrollment, billingType, ctx)
+  if (previous.kind === "result") return previous.result
 
   let payment: AsaasPayment
-  try {
-    payment = await createAsaasPayment(
-      {
-        customer: customerId,
-        billingType,
-        splits: await asaasSplitsForEnrollment(enrollment.id),
-        value: enrollment.finalAmount,
-        // Cartão captura na hora; PIX/boleto vencem em 3 dias.
-        dueDate: dueDateInDays(billingType === "CREDIT_CARD" ? 0 : 3),
-        description: `Curso: ${description}`,
-        externalReference,
-        notificationUrl: ctx.notificationUrl,
-        ...(cardPair ?? {}),
-        // Cartão EXIGE remoteIp no Asaas; PIX/boleto não usam. Fallback 0.0.0.0
-        // quando x-forwarded-for falta (mesmo critério do clientIp() provado).
-        ...(billingType === "CREDIT_CARD" ? { remoteIp: ctx.remoteIp ?? "0.0.0.0" } : {}),
-      },
-      apiKey,
-    )
-  } catch (err) {
-    return asaasErrorToResult(err)
-  }
+  if (previous.kind === "reuse") {
+    payment = previous.payment
+  } else {
+    const customerId = await resolveCustomerId(enrollment, apiKey)
+    const cardPair =
+      formData.method === "CREDIT_CARD" ? buildCardPair(formData, enrollment) : null
+    try {
+      payment = await createAsaasPayment(
+        {
+          customer: customerId,
+          billingType,
+          splits: await asaasSplitsForEnrollment(enrollment.id),
+          value: enrollment.finalAmount,
+          // Cartão captura na hora; PIX/boleto vencem em 3 dias.
+          dueDate: dueDateInDays(billingType === "CREDIT_CARD" ? 0 : 3),
+          description: `Curso: ${description}`,
+          externalReference,
+          notificationUrl: ctx.notificationUrl,
+          ...(cardPair ?? {}),
+          // Cartão EXIGE remoteIp no Asaas; PIX/boleto não usam. Fallback 0.0.0.0
+          // quando x-forwarded-for falta (mesmo critério do clientIp() provado).
+          ...(billingType === "CREDIT_CARD" ? { remoteIp: ctx.remoteIp ?? "0.0.0.0" } : {}),
+        },
+        apiKey,
+      )
+    } catch (err) {
+      return asaasErrorToResult(err)
+    }
 
-  await prisma.enrollment.update({
-    where: { id: enrollment.id },
-    data: {
-      externalReference,
-      asaasCustomerId: customerId,
-      asaasPaymentId: payment.id,
-      asaasInvoiceUrl: payment.invoiceUrl,
-    },
-  })
+    await prisma.enrollment.update({
+      where: { id: enrollment.id },
+      data: {
+        externalReference,
+        asaasCustomerId: customerId,
+        asaasPaymentId: payment.id,
+        asaasInvoiceUrl: payment.invoiceUrl,
+      },
+    })
+  }
 
   // Cartão capturado na hora → efetiva já (webhook é só rede de segurança).
   if (CONFIRMED_STATUSES.has(payment.status)) {
@@ -536,40 +564,28 @@ export async function processTransparentAsaasPayment(
     return { kind: "approved", status: payment.status }
   }
 
-  // PIX → QR Code inline.
+  // PIX → QR Code inline. Sem QR, erro: a fatura hospedada do Asaas NUNCA é o
+  // caminho de pagamento — nova tentativa reusa esta mesma cobrança.
   if (billingType === "PIX") {
     const qr = await getPixQrCode(payment.id, apiKey).catch(() => null)
-    if (qr?.payload) {
+    if (!qr?.payload) {
       return {
-        kind: "pending",
-        pix: {
-          qrCode: qr.payload,
-          qrCodeBase64: qr.encodedImage ?? "",
-          ticketUrl: payment.invoiceUrl,
-        },
+        kind: "error",
+        httpStatus: 502,
+        error:
+          "Não foi possível gerar o QR Code do PIX agora. Tente novamente em instantes ou escolha outro método.",
+        code: "PIX_UNAVAILABLE",
       }
     }
-    // Sem QR (raro) — devolve a fatura hospedada como fallback.
     return {
       kind: "pending",
-      boleto: { url: payment.invoiceUrl },
+      pix: { qrCode: qr.payload, qrCodeBase64: qr.encodedImage ?? "" },
     }
   }
 
-  // Boleto → linha digitável + URL do PDF.
+  // Boleto → linha digitável + PDF do boleto.
   if (billingType === "BOLETO") {
-    let digitableLine: string | undefined
-    const billing = await getBillingInfo(payment.id, apiKey).catch(() => null)
-    if (billing?.bankSlip?.identificationField) {
-      digitableLine = billing.bankSlip.identificationField
-    }
-    return {
-      kind: "pending",
-      boleto: {
-        url: payment.bankSlipUrl ?? payment.invoiceUrl,
-        digitableLine,
-      },
-    }
+    return boletoResult(payment, apiKey)
   }
 
   // Cartão em análise de risco — sem dados inline; aguarda webhook.
@@ -585,6 +601,144 @@ export async function processTransparentAsaasPayment(
     code: "PAYMENT_REJECTED",
     statusDetail: payment.status,
   }
+}
+
+/**
+ * Boleto de uma cobrança: linha digitável + PDF do BOLETO (`bankSlipUrl`). Nunca
+ * a fatura hospedada (`invoiceUrl`), que é uma página de pagamento do Asaas.
+ */
+async function boletoResult(
+  payment: AsaasPayment,
+  apiKey: string,
+): Promise<TransparentResult> {
+  const billing = await getBillingInfo(payment.id, apiKey).catch(() => null)
+  const url = billing?.bankSlip?.bankSlipUrl ?? payment.bankSlipUrl
+  if (!url) {
+    return {
+      kind: "error",
+      httpStatus: 502,
+      error:
+        "Não foi possível gerar o boleto agora. Tente novamente em instantes ou escolha outro método.",
+      code: "BOLETO_UNAVAILABLE",
+    }
+  }
+  return {
+    kind: "pending",
+    boleto: { url, digitableLine: billing?.bankSlip?.identificationField },
+  }
+}
+
+type PreviousCharge =
+  | { kind: "none" }
+  | { kind: "reuse"; payment: AsaasPayment }
+  | { kind: "result"; result: TransparentResult }
+
+const PREVIOUS_CHARGE_STUCK: TransparentResult = {
+  kind: "error",
+  httpStatus: 409,
+  error:
+    "Não foi possível substituir a cobrança anterior desta compra. Tente novamente em instantes.",
+  code: "PREVIOUS_CHARGE_OPEN",
+}
+
+/**
+ * O que fazer com a cobrança avulsa de uma tentativa anterior antes de cobrar.
+ *
+ *  - paga (webhook atrasado) → efetiva a matrícula; não cobra de novo;
+ *  - em análise / reversão → aguarda; outra cobrança por cima cobraria duas vezes;
+ *  - em aberto no MESMO método (PIX ou boleto) → reusa;
+ *  - em aberto noutro método, ou vencida → remove no Asaas e só segue quando o
+ *    Asaas confirma `deleted` (o DELETE é soft: responde 200 e mantém o status).
+ */
+async function resolvePreviousCharge(
+  enrollment: AsaasTransparentEnrollment,
+  billingType: "PIX" | "BOLETO" | "CREDIT_CARD",
+  ctx: AsaasTransparentCtx,
+): Promise<PreviousCharge> {
+  const previousId = enrollment.asaasPaymentId
+  if (!previousId) return { kind: "none" }
+
+  const read = async (): Promise<AsaasPayment | null | "missing"> => {
+    try {
+      return await getPayment(previousId, ctx.apiKey)
+    } catch (err) {
+      if (err instanceof AsaasApiError && err.statusCode === 404) return "missing"
+      return null
+    }
+  }
+
+  const previous = await read()
+  if (previous === "missing") return { kind: "none" }
+  if (previous === null) return { kind: "result", result: PREVIOUS_CHARGE_STUCK }
+  if (previous.deleted) return { kind: "none" }
+
+  if (CONFIRMED_STATUSES.has(previous.status)) {
+    await fulfillFromAsaasPayment(ctx.fulfillTenant, enrollment.id, previous)
+    return { kind: "result", result: { kind: "approved", status: previous.status } }
+  }
+  if (previous.status === "REFUNDED") return { kind: "none" }
+  if (previous.status !== "PENDING" && previous.status !== "OVERDUE") {
+    return PENDING_STATUSES.has(previous.status)
+      ? { kind: "result", result: { kind: "pending" } }
+      : { kind: "result", result: PREVIOUS_CHARGE_STUCK }
+  }
+
+  if (
+    previous.status === "PENDING" &&
+    billingType !== "CREDIT_CARD" &&
+    previous.billingType === billingType
+  ) {
+    return { kind: "reuse", payment: previous }
+  }
+
+  await deleteAsaasPayment(previous.id, ctx.apiKey).catch(() => null)
+  const after = await read()
+  if (after !== null && after !== "missing" && CONFIRMED_STATUSES.has(after.status)) {
+    // Pagou entre a leitura e a remoção: o Asaas não remove cobrança recebida.
+    await fulfillFromAsaasPayment(ctx.fulfillTenant, enrollment.id, after)
+    return { kind: "result", result: { kind: "approved", status: after.status } }
+  }
+  if (after === "missing" || (after !== null && after.deleted)) return { kind: "none" }
+  return { kind: "result", result: PREVIOUS_CHARGE_STUCK }
+}
+
+/**
+ * Mensal no cartão: a assinatura de uma tentativa anterior. Capturada → efetiva;
+ * em análise → aguarda; senão é removida (e confirmada) antes de criar outra —
+ * duas assinaturas vivas cobrariam o aluno todo mês em dobro.
+ */
+async function resolvePreviousSubscription(
+  enrollment: AsaasTransparentEnrollment,
+  ctx: AsaasTransparentCtx,
+): Promise<TransparentResult | null> {
+  const subscriptionId = enrollment.asaasSubscriptionId
+  if (!subscriptionId) return null
+
+  const list = await listAsaasPayments(
+    { subscription: subscriptionId, limit: 1, offset: 0 },
+    ctx.apiKey,
+  ).catch(() => null)
+  const first = list?.data?.[0]
+  if (first && CONFIRMED_STATUSES.has(first.status)) {
+    await fulfillFromAsaasPayment(ctx.fulfillTenant, enrollment.id, first)
+    return { kind: "approved", status: first.status }
+  }
+  if (
+    first &&
+    first.status !== "PENDING" &&
+    first.status !== "OVERDUE" &&
+    PENDING_STATUSES.has(first.status)
+  ) {
+    return { kind: "pending" }
+  }
+
+  const removed = await cancelAsaasSubscription(subscriptionId, ctx.apiKey).catch(
+    (err: unknown) =>
+      err instanceof AsaasApiError && err.statusCode === 404
+        ? { deleted: true, id: subscriptionId }
+        : null,
+  )
+  return removed?.deleted ? null : PREVIOUS_CHARGE_STUCK
 }
 
 /** Converte AsaasApiError (ex.: cartão recusado) num TransparentResult de erro. */

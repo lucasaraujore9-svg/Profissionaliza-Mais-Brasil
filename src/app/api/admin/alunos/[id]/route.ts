@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { buildEnrollmentCheckoutUrl } from "@/lib/students/checkout-link"
 import { getOrCreatePmbTenant } from "@/lib/pmb-tenant"
 import { withRequestContextParams } from "@/lib/observability/with-request-context"
 import { applyStudentEdit, editSchema } from "@/lib/students/management"
@@ -57,7 +58,6 @@ export const GET = withRequestContextParams<{ id: string }>(
           installmentsPaid: true,
           asaasPaymentId: true,
           asaasSubscriptionId: true,
-          asaasInvoiceUrl: true,
           mpPreferenceId: true,
           mpSubscriptionId: true,
           externalReference: true,
@@ -102,7 +102,13 @@ export const GET = withRequestContextParams<{ id: string }>(
         installmentsPaid: e.installmentsPaid,
         asaasPaymentId: e.asaasPaymentId,
         asaasSubscriptionId: e.asaasSubscriptionId,
-        asaasInvoiceUrl: e.asaasInvoiceUrl,
+        // Página de pagamento da plataforma — nunca a fatura do Asaas.
+        checkoutUrl: buildEnrollmentCheckoutUrl({
+          status: e.status,
+          enrollmentId: e.id,
+          gateway: e.gateway,
+          tenant: null,
+        }),
         mpPreferenceId: e.mpPreferenceId,
         mpSubscriptionId: e.mpSubscriptionId,
         externalReference: e.externalReference,

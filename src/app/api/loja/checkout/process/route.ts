@@ -72,6 +72,8 @@ export const POST = withRequestContext(
           installmentsTotal: true,
           externalReference: true,
           asaasCustomerId: true,
+          asaasPaymentId: true,
+          asaasSubscriptionId: true,
           course: { select: { nome: true } },
           // Venda direta com mais de um curso: `course` é só o principal, mas a
           // cobrança é do valor SOMADO. A descrição precisa dos dois.
@@ -250,6 +252,8 @@ export const POST = withRequestContext(
           payerExternalReference: payer.asaasExternalReference,
           payerKind: payer.kind,
           asaasCustomerId: enrollment.asaasCustomerId,
+          asaasPaymentId: enrollment.asaasPaymentId,
+          asaasSubscriptionId: enrollment.asaasSubscriptionId,
         }
         const asaasCtx = {
           apiKey: decryptTenantAsaasKey(tenant.asaasApiKey),

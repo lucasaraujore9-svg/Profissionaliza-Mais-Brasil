@@ -1002,7 +1002,7 @@ export const POST = withRequestContext(
       })
 
       try {
-        const plan = await createBoletoInstallmentPlan({
+        await createBoletoInstallmentPlan({
           enrollmentId: enrollment.id,
           count,
           installmentValue,
@@ -1013,12 +1013,11 @@ export const POST = withRequestContext(
             enrollmentId: enrollment.id,
             studentId: student.id,
             finalAmount: total,
-            installment: {
-              count,
-              installmentValue,
-              total,
-              firstBoletoUrl: plan.firstBoletoUrl,
-            },
+            // A página de pagamento da loja, como em toda venda — nunca o boleto
+            // hospedado no gateway. Ela mostra as parcelas do carnê e, no Asaas,
+            // deixa pagar a parcela aberta por PIX, cartão ou boleto.
+            paymentUrl: `${storeBaseUrl(tenant)}/pagar/${enrollment.id}`,
+            installment: { count, installmentValue, total },
           },
         })
       } catch (err) {

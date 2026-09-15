@@ -322,7 +322,9 @@ async function createAsaasCarne(
           dueDate: new Date(`${p.dueDate}T12:00:00Z`),
           status: "GENERATED",
           gateway: "ASAAS",
-          invoiceUrl: p.bankSlipUrl ?? p.invoiceUrl,
+          // Só o PDF do BOLETO. A fatura hospedada (`invoiceUrl`) é uma página de
+          // pagamento do Asaas; sem PDF, a parcela é paga pela página da loja.
+          invoiceUrl: p.bankSlipUrl ?? null,
           asaasPaymentId: p.id,
           generatedAt: new Date(),
         },

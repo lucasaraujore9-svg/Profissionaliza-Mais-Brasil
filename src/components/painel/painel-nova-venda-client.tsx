@@ -132,7 +132,6 @@ interface CreatedVenda {
     count: number
     installmentValue: number
     total: number
-    firstBoletoUrl: string | null
   }
 }
 
@@ -520,7 +519,7 @@ export function PainelNovaVendaClient({
   }
 
   async function copyLink() {
-    const link = created?.installment?.firstBoletoUrl ?? created?.paymentUrl
+    const link = created?.paymentUrl
     if (!link) return
     await navigator.clipboard.writeText(link)
     setCopied(true)
@@ -570,15 +569,15 @@ export function PainelNovaVendaClient({
               <Mini label="Total" value={fmt(created.installment.total)} accent />
             </div>
 
-            {created.installment.firstBoletoUrl && (
+            {created.paymentUrl && (
               <div className="mt-4 flex flex-wrap items-center gap-2">
                 <a
-                  href={created.installment.firstBoletoUrl}
+                  href={created.paymentUrl}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-pmb-green)] px-4 py-2.5 text-xs font-bold text-white hover:bg-[var(--color-pmb-green-700)]"
                 >
-                  Abrir 1º boleto
+                  Abrir página de pagamento
                   <ExternalLink className="h-3.5 w-3.5" />
                 </a>
                 <button
@@ -587,7 +586,7 @@ export function PainelNovaVendaClient({
                   className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-pmb-green)]/30 bg-white px-4 py-2.5 text-xs font-bold text-[var(--color-pmb-green-700)] hover:bg-[var(--color-pmb-green)]/5"
                 >
                   <Copy className="h-3.5 w-3.5" />
-                  {copied ? "Link copiado" : "Copiar link do boleto"}
+                  {copied ? "Link copiado" : "Copiar link de pagamento"}
                 </button>
               </div>
             )}

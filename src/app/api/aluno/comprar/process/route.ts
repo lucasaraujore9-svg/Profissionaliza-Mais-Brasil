@@ -65,6 +65,8 @@ export const POST = withRequestContext(
           installmentsTotal: true,
           externalReference: true,
           asaasCustomerId: true,
+          asaasPaymentId: true,
+          asaasSubscriptionId: true,
           course: { select: { nome: true } },
           student: { select: PAYER_SELECT },
           tenant: {
@@ -98,6 +100,18 @@ export const POST = withRequestContext(
       if (enrollment.status !== "PENDING") {
         return NextResponse.json(
           { error: "Esta matrícula não pode ser paga", code: "INVALID_STATE" },
+          { status: 409 },
+        )
+      }
+      // Carnê é pago parcela a parcela (boletos já emitidos). Este checkout cobra
+      // o `finalAmount` da compra inteira — um POST direto cobraria o total de
+      // novo. As parcelas ficam em /aluno/pagamentos.
+      if (enrollment.paymentType === "BOLETO_INSTALLMENT") {
+        return NextResponse.json(
+          {
+            error: "Esta compra é paga por parcelas. Acompanhe os boletos em Meus Pagamentos.",
+            code: "INSTALLMENT_PLAN",
+          },
           { status: 409 },
         )
       }
@@ -163,6 +177,8 @@ export const POST = withRequestContext(
             payerExternalReference: payer.asaasExternalReference,
             payerKind: payer.kind,
             asaasCustomerId: enrollment.asaasCustomerId,
+            asaasPaymentId: enrollment.asaasPaymentId,
+            asaasSubscriptionId: enrollment.asaasSubscriptionId,
           },
           asaasParsed.data,
           {

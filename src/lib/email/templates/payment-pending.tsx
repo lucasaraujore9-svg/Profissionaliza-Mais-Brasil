@@ -9,7 +9,10 @@ export interface PaymentPendingTemplateProps {
   amount: string
   /** Rótulo do meio de pagamento aguardando, ex.: "boleto" ou "Pix". */
   methodLabel: string
-  /** Link do boleto/Pix (ticket_url do MP). Quando ausente, esconde o botão. */
+  /**
+   * Página de pagamento da própria loja (nunca a do gateway). Quando ausente,
+   * esconde o botão.
+   */
   paymentUrl?: string | null
   /** Data de vencimento formatada, ex.: "25/06/2026". Opcional. */
   dueDate?: string | null
@@ -91,7 +94,7 @@ PaymentPendingTemplate.PreviewProps = {
   courseName: "Eletricista Predial",
   amount: "R$ 149,90",
   methodLabel: "boleto",
-  paymentUrl: "https://www.mercadopago.com.br/boleto/exemplo",
+  paymentUrl: "https://minhaescola.livrecursos.com.br/pagar/enr_exemplo",
   dueDate: "30/06/2026",
   brand: {
     name: "Cursos Pro João",

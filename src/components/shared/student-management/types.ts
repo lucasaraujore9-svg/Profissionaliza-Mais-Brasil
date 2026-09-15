@@ -29,7 +29,6 @@ export interface StudentEnrollmentItem {
   finalAmount: number
   installmentsTotal: number | null
   installmentsPaid: number
-  asaasInvoiceUrl: string | null
   /**
    * Link de checkout para recuperar uma cobranca PENDENTE (venda direta ou
    * carrinho abandonado). `null` quando a matricula nao esta pendente ou nao

@@ -3,6 +3,7 @@ import Link from "next/link"
 import { ChevronLeft } from "lucide-react"
 import { requireAdminPage } from "@/lib/auth/admin-guard"
 import { prisma } from "@/lib/prisma"
+import { buildEnrollmentCheckoutUrl } from "@/lib/students/checkout-link"
 import { getOrCreatePmbTenant } from "@/lib/pmb-tenant"
 import { studentStatusLabel } from "@/lib/labels"
 import { Badge } from "@/components/ui/badge"
@@ -65,7 +66,6 @@ export default async function StudentDetailPage({ params }: PageProps) {
           installmentsPaid: true,
           asaasPaymentId: true,
           asaasSubscriptionId: true,
-          asaasInvoiceUrl: true,
           mpPreferenceId: true,
           mpSubscriptionId: true,
           externalReference: true,
@@ -106,7 +106,13 @@ export default async function StudentDetailPage({ params }: PageProps) {
       installmentsPaid: e.installmentsPaid,
       asaasPaymentId: e.asaasPaymentId,
       asaasSubscriptionId: e.asaasSubscriptionId,
-      asaasInvoiceUrl: e.asaasInvoiceUrl,
+      // Página de pagamento da plataforma — nunca a fatura do Asaas.
+      checkoutUrl: buildEnrollmentCheckoutUrl({
+        status: e.status,
+        enrollmentId: e.id,
+        gateway: e.gateway,
+        tenant: null,
+      }),
       mpPreferenceId: e.mpPreferenceId,
       mpSubscriptionId: e.mpSubscriptionId,
       externalReference: e.externalReference,
