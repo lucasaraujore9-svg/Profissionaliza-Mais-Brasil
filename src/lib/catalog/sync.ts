@@ -121,6 +121,11 @@ export function mapEaAulasToMatriz(
  * que ja existe veio de documento curado e nao pode ser trocada pelos titulos
  * crus das aulas. Best-effort — o curso ja foi sincronizado, e uma falha aqui
  * nao pode contar como falha dele; a proxima execucao tenta de novo.
+ *
+ * So para curso ATIVO. Na 1a execucao, o descontinuado "Ingles do Zero a
+ * Fluencia" recebeu 297 aulas fora de ordem, com a numeracao grudada no titulo
+ * — lista que ninguem montou para ser exibida. Curso reativado e preenchido no
+ * sync seguinte.
  */
 async function fillEaMatrizIfEmpty(
   courseId: string,
@@ -328,7 +333,11 @@ async function upsertEaCourse(curso: EACurso): Promise<{ created: boolean }> {
     const idNaFornecedora = canSetEaCourseId
       ? courseIdFromCapa
       : existing.plataformaCourseId
-    if (idNaFornecedora && (existing.matrizCurricular?.length ?? 0) === 0) {
+    if (
+      idNaFornecedora &&
+      existing.status === "ATIVO" &&
+      (existing.matrizCurricular?.length ?? 0) === 0
+    ) {
       await fillEaMatrizIfEmpty(existing.id, idNaFornecedora)
     }
     return { created: false }
@@ -344,7 +353,7 @@ async function upsertEaCourse(curso: EACurso): Promise<{ created: boolean }> {
     select: { id: true },
   })
   await linkCourseCategory(created.id, effectiveCategoryId)
-  if (canSetEaCourseId && courseIdFromCapa) {
+  if (canSetEaCourseId && courseIdFromCapa && dataBase.status === "ATIVO") {
     await fillEaMatrizIfEmpty(created.id, courseIdFromCapa)
   }
   return { created: true }

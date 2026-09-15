@@ -526,6 +526,26 @@ describe("syncCatalogFromEA — matriz curricular vazia vem das aulas da fornece
     expect(p.course.update.mock.calls[0][0].data).not.toHaveProperty("matrizCurricular")
   })
 
+  it("curso INATIVO → não recebe matriz (o descontinuado ganhou 297 aulas embaralhadas)", async () => {
+    listarMock.mockResolvedValue([feedCurso()])
+    p.course.findFirst.mockResolvedValue({ ...LINHA_271, status: "INATIVO" })
+
+    await syncCatalogFromEA("cron")
+
+    expect(aulasMock).not.toHaveBeenCalled()
+    expect(p.course.updateMany).not.toHaveBeenCalled()
+  })
+
+  it("curso NOVO que o feed já manda inativo também não recebe matriz", async () => {
+    listarMock.mockResolvedValue([{ ...feedCurso("Curso Inédito"), status: "INATIVO" }])
+    p.course.findFirst.mockResolvedValue(null)
+    p.course.findUnique.mockResolvedValue(null)
+
+    await syncCatalogFromEA("cron")
+
+    expect(aulasMock).not.toHaveBeenCalled()
+  })
+
   it("curso sem id da fornecedora → não há de onde buscar as aulas", async () => {
     listarMock.mockResolvedValue([feedCurso("Curso Sem Id", null)])
     p.course.findFirst.mockResolvedValue({ ...LINHA_271, plataformaCourseId: null })
