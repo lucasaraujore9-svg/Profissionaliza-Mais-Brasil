@@ -1665,6 +1665,45 @@ manda para o checkout transparente (`/pagar/<id>`).
   e o pagamento na loja reusaria a mesma chave. Quem ja autorizou no MP, ou cujo
   estado nao pode ser lido, nao e tocado.
 
+### Link de pagamento de loja e sempre a pagina da plataforma (2026-09-14)
+
+Regra do dono, depois do caso Conecta Educacional (venda direta de assinatura
+mandando o `init_point` do Mercado Pago): em QUALQUER loja — unidade ou vitrine
+PMB — todo link ou redirecionamento de pagamento leva a uma pagina da propria
+plataforma. Dentro dela valem o QR do PIX, a linha digitavel e o PDF do boleto;
+nunca a fatura hospedada do Asaas (`invoiceUrl`), o checkout do MP
+(`init_point`), a pagina do PIX do MP (`ticket_url`) ou a preference do Checkout
+Pro. A cobranca mensal que a PMB faz das UNIDADES fica fora (nao e loja vendendo
+para aluno).
+
+- **Portas:** curso/pacote/carne → `/pagar/<id>` (loja da unidade ou dominio da
+  PMB, que agora renderiza MP e Asaas); assinatura → `/pagar/assinatura/<id>`
+  (loja ou PMB), inclusive 1o ciclo e RENOVACAO. `buildEnrollmentCheckoutUrl` e
+  `studentPaymentTarget` nem recebem a fatura. Venda direta (painel e /admin)
+  nunca fala com o gateway.
+- **O que tornou isso possivel sem cobranca dupla:** o checkout Asaas da unidade
+  criava uma cobranca NOVA a cada volta a pagina (era o motivo de a fatura ter
+  prioridade no "reenviar link"). Agora retoma sob advisory lock: paga → efetiva,
+  em analise → aguarda, mesmo metodo em aberto → reusa, outro metodo → remove e
+  so cria a nova quando o Asaas confirma `deleted` (DELETE e soft). Na assinatura,
+  `/pagar/assinatura` paga a cobranca que JA existe (PIX/boleto na tela, cartao
+  via `payWithCreditCard`), nunca cria outra por cima.
+- **Defeito latente achado no caminho:** `settleSubscriptionCycle` tratava o
+  ciclo que o webhook registrou EM ABERTO (PAYMENT_CREATED/OVERDUE) como
+  re-entrega e nao liquidava — todo PIX/boleto de assinatura no Asaas ficaria sem
+  ativar ate ser cancelado pela varredura. Nunca aconteceu em prod (a unica
+  cobranca de assinatura foi cartao). Liquida com CAS em `paidAt IS NULL`.
+- **Vitalicia no MP** virou pagamento transparente (PIX ou cartao tokenizado com
+  a bandeira resolvida pelo BIN). Boleto do MP ficou de fora nesse caso: exige
+  endereco completo do pagador e nao ha plano vitalicio em prod.
+- **Invariante testada:** `src/lib/checkout/payment-link-coverage.test.ts` — lista
+  FECHADA de arquivos que podem ler `invoiceUrl`/`asaasInvoiceUrl`; `init_point`
+  e `ticket_url` so no tipo; `createPreference` em lugar nenhum; toda preapproval
+  com `card_token_id`. Verificada POR MUTACAO.
+- **Remediacao:** os 2 links do MP ja gerados (Conecta e EAD Cenatep) foram
+  cancelados no MP por `/api/cron/fix-subscription-mp-links`; a da Conecta foi
+  reemitida com o link da loja.
+
 ### Bugs conhecidos (pendentes)
 
 - **Middleware file convention deprecado** no Next 16 (usar `proxy` em vez de `middleware`).

@@ -66,7 +66,11 @@ export interface IssuePmbAsaasChargeInput {
   finalAmount: number
   isMonthly: boolean
   monthlyMonths: number | null
-  billingType: "PIX" | "BOLETO" | "CREDIT_CARD" | "UNDEFINED"
+  /**
+   * O meio escolhido NA TELA. Não existe mais `UNDEFINED` (cobrança em aberto
+   * paga na fatura do Asaas): o aluno paga sempre na página da plataforma.
+   */
+  billingType: "PIX" | "BOLETO" | "CREDIT_CARD"
   /**
    * Nº de parcelas escolhido no checkout (cartão ou boleto). 1/undefined = à
    * vista (fluxo atual). Ignorado quando isMonthly. As regras (boleto: parcela
@@ -114,7 +118,12 @@ export type PmbAsaasChargeResult =
         }>
       }
     }
-  | { mode: "redirect"; initPoint: string | null }
+  /**
+   * Cobrança criada, mas o Asaas ainda não devolveu o PIX/boleto (gera a 1ª
+   * parcela da assinatura de forma assíncrona). A tela segue para a
+   * confirmação, que acompanha o status — nunca para a fatura do Asaas.
+   */
+  | { mode: "processing" }
   /** Cupom/desconto zerou o valor: acesso liberado sem cobrança. */
   | { mode: "free" }
 
@@ -362,8 +371,8 @@ export async function issuePmbAsaasCharge(
       }
     }
 
-    // Fallback: link de checkout Asaas (UNDEFINED ou sem 1ª invoice).
-    return { mode: "redirect", initPoint: firstPayment?.invoiceUrl ?? null }
+    // 1ª parcela ainda não gerada pelo Asaas: acompanha pela confirmação.
+    return { mode: "processing" }
   }
 
   // ──── ONE_TIME parcelado no CARTÃO (POST /installments/) ────
@@ -540,6 +549,5 @@ export async function issuePmbAsaasCharge(
     }
   }
 
-  // billingType === "UNDEFINED" → link checkout Asaas.
-  return { mode: "redirect", initPoint: payment.invoiceUrl }
+  return { mode: "processing" }
 }

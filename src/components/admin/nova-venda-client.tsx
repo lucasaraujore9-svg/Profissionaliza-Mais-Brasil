@@ -243,7 +243,7 @@ export function NovaVendaClient({
   // Step 4 — Link
   const [generatingLink, setGeneratingLink] = useState(false)
   const [linkResult, setLinkResult] = useState<{
-    initPoint?: string
+    paymentUrl?: string
     finalAmount: number
     discountAmount?: number
     gateway?: string
@@ -986,16 +986,16 @@ export function NovaVendaClient({
                 <div className="flex items-center gap-2 font-semibold text-emerald-700">
                   <CheckCircle2 className="h-4 w-4" /> Link gerado com sucesso
                 </div>
-                <p className="break-all text-xs font-mono text-gray-700">{linkResult.initPoint}</p>
+                <p className="break-all text-xs font-mono text-gray-700">{linkResult.paymentUrl}</p>
                 <div className="flex gap-2">
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => { if (linkResult.initPoint) { navigator.clipboard.writeText(linkResult.initPoint); toast.success("Link copiado") } }}
+                    onClick={() => { if (linkResult.paymentUrl) { navigator.clipboard.writeText(linkResult.paymentUrl); toast.success("Link copiado") } }}
                   >
                     <Copy className="h-3.5 w-3.5 mr-1" /> Copiar
                   </Button>
-                  <a href={linkResult.initPoint} target="_blank" rel="noopener noreferrer">
+                  <a href={linkResult.paymentUrl} target="_blank" rel="noopener noreferrer">
                     <Button size="sm" variant="outline">
                       <ExternalLink className="h-3.5 w-3.5 mr-1" /> Abrir
                     </Button>

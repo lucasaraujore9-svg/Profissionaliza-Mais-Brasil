@@ -89,7 +89,7 @@ export type TransparentResult =
   | { kind: "approved"; status: string }
   | {
       kind: "pending"
-      pix?: { qrCode: string; qrCodeBase64: string; ticketUrl?: string }
+      pix?: { qrCode: string; qrCodeBase64: string }
       boleto?: { url: string; digitableLine?: string }
     }
   | { kind: "error"; httpStatus: number; error: string; code: string; statusDetail?: string }
@@ -270,7 +270,6 @@ export async function processTransparentMpPayment(
       pix: {
         qrCode: pix.qr_code,
         qrCodeBase64: pix.qr_code_base64 ?? "",
-        ticketUrl: pix.ticket_url,
       },
     }
   }

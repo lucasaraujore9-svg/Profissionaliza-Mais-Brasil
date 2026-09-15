@@ -672,10 +672,21 @@ export const POST = withRequestContext(
     }
 
     // ── ASAAS (checkout transparente) ─────────────────────────────────────
-    // billingType: o que será enviado ao Asaas. UNDEFINED = link checkout
-    // (compat com clientes antigos que não enviam paymentMethod).
-    const billingType: "PIX" | "BOLETO" | "CREDIT_CARD" | "UNDEFINED" =
-      data.paymentMethod ?? "UNDEFINED"
+    // O meio escolhido na tela é obrigatório no Asaas: sem ele a cobrança
+    // nasceria "em aberto" e o aluno só pagaria na fatura do Asaas.
+    if (!data.paymentMethod) {
+      await prisma.enrollment
+        .delete({ where: { id: enrollment.id } })
+        .catch(swallow("pmb-checkout"))
+      if (consumedCouponId) {
+        await releaseCoupon(consumedCouponId).catch(swallow("pmb-checkout"))
+      }
+      return NextResponse.json(
+        { error: "Escolha a forma de pagamento.", code: "PAYMENT_METHOD_REQUIRED" },
+        { status: 400 },
+      )
+    }
+    const billingType = data.paymentMethod
 
     try {
       // Cobrança Asaas (cliente + payment/subscription + persistência dos

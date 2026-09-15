@@ -418,8 +418,21 @@ export const POST = withRequestContext(
       // Cobrança compartilhada com o checkout de curso (issuePmbAsaasCharge):
       // PIX/boleto/cartão à vista e PARCELADO (cartão via /installments/,
       // boleto via carnê) — pacotes são sempre one-time.
-      const billingType: "PIX" | "BOLETO" | "CREDIT_CARD" | "UNDEFINED" =
-        data.paymentMethod ?? "UNDEFINED"
+      // O meio escolhido na tela é obrigatório no Asaas: sem ele a cobrança
+      // nasceria "em aberto" e o aluno só pagaria na fatura do Asaas.
+      if (!data.paymentMethod) {
+        await prisma.enrollment
+          .delete({ where: { id: enrollment.id } })
+          .catch(swallow("pmb-pkg-checkout"))
+        if (consumedCouponId) {
+          await releaseCoupon(consumedCouponId).catch(swallow("pmb-pkg-checkout"))
+        }
+        return NextResponse.json(
+          { error: "Escolha a forma de pagamento.", code: "PAYMENT_METHOD_REQUIRED" },
+          { status: 400 },
+        )
+      }
+      const billingType = data.paymentMethod
 
       try {
         const result = await issuePmbAsaasCharge({

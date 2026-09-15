@@ -6,7 +6,6 @@ import {
   authoredSaleGate,
 } from "@/lib/course-authoring/checkout-gate"
 import {
-  asaasSplitsForEnrollment,
   resolveSaleSplit,
   saleRequiresSplit,
 } from "@/lib/course-authoring/split-server"
@@ -14,16 +13,6 @@ import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { requireStudentSession } from "@/lib/auth/student-session"
 import { pmbMpAccessToken } from "@/lib/pmb-config"
-import { createPreference, createPreapproval } from "@/lib/mercadopago/client"
-import {
-  findOrCreateAsaasCustomer,
-  getCustomer as getAsaasCustomer,
-  createPayment as createAsaasPayment,
-  createSubscription as createAsaasSubscription,
-  listPayments as listAsaasPayments,
-  motherAsaasKey,
-  AsaasApiError,
-} from "@/lib/asaas/client"
 import {
   assertPmbCharge,
   assertCouponMatchesEnrollment,
@@ -32,8 +21,6 @@ import {
 import { getSystemSettings } from "@/lib/system-settings"
 import { tryConsumeCoupon, releaseCoupon } from "@/lib/coupons/consume"
 import { applyCouponDiscount } from "@/lib/coupons/discount"
-import { dueDateInDays } from "@/lib/checkout/due-date"
-import { mpWebhookUrl, asaasWebhookUrl } from "@/lib/tenant/urls"
 import { swallow } from "@/lib/errors"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { tenantCheckoutMode } from "@/lib/tenant/checkout-mode"
@@ -48,7 +35,7 @@ import {
   resellerTenantContext,
 } from "@/lib/checkout/free-enrollment"
 import { contextLogger } from "@/lib/logger"
-import { asaasCustomerUpdate, PAYER_SELECT, resolvePayer } from "@/lib/checkout/payer"
+import { PAYER_SELECT, resolvePayer } from "@/lib/checkout/payer"
 
 const createSchema = z.object({
   courseId: z.string().min(1),
@@ -640,6 +627,23 @@ export const POST = withRequestContext(
       { status: 503 },
     )
   }
+  if (effectiveGateway === "MP" && !(await pmbMpAccessToken())) {
+    return NextResponse.json({ error: "Mercado Pago não configurado" }, { status: 503 })
+  }
+  // A página de pagamento da PMB cobra no Asaas com o CPF de quem paga e o
+  // cadastro completo do aluno. Recusar aqui, antes de reservar cupom e criar a
+  // matrícula, dá ao aluno o que fazer — em vez de uma página que não cobra.
+  if (effectiveGateway === "ASAAS" && (!payer.cpf || !student.cpf || !student.fone)) {
+    return NextResponse.json(
+      {
+        error:
+          !payer.cpf && payer.kind === "GUARDIAN"
+            ? "Cadastre o CPF do responsável financeiro antes de comprar."
+            : "Cadastre seu CPF e telefone no perfil antes de comprar.",
+      },
+      { status: 400 },
+    )
+  }
 
   let discountAmount = 0
   let couponId: string | null = null
@@ -761,280 +765,23 @@ export const POST = withRequestContext(
     })
   }
 
-  const externalReference = `pmb_enr_${enrollment.id}`
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? ""
+  // ── Pagamento na página da plataforma, nunca na do gateway ──────────────
+  // Nada nasce no gateway aqui: o aluno escolhe o meio em `/pagar/<id>` (Asaas
+  // via /api/checkout/enrollment/[id], Mercado Pago via
+  // /api/checkout/mp/process). Antes esta rota criava a fatura do Asaas ou a
+  // preference/preapproval do MP e redirecionava o aluno para a página deles.
+  await prisma.enrollment.update({
+    where: { id: enrollment.id },
+    data: { externalReference: `pmb_enr_${enrollment.id}` },
+  })
 
-  if (effectiveGateway === "MP") {
-    const mpToken = await pmbMpAccessToken()
-    if (!mpToken) {
-      await prisma.enrollment.delete({ where: { id: enrollment.id } })
-      if (couponId) await releaseCoupon(couponId).catch(swallow("aluno.comprar"))
-      return NextResponse.json(
-        { error: "Mercado Pago não configurado" },
-        { status: 503 },
-      )
-    }
-
-    // Wrapper try/catch obrigatório: se MP retornar 5xx/timeout, precisamos
-    // deletar a enrollment PENDING (evita "duplicate enrollment" em retry) e
-    // liberar o cupom (caso contrário o usedCount fica inflado pra sempre).
-    // Antes este bloco rodava sem proteção e órfãos contaminavam o estoque
-    // de cupons + bloqueavam novas compras.
-    try {
-      if (isMonthly && monthlyMonths) {
-        const startDate = new Date(Date.now() + 60_000).toISOString()
-        const endDate = new Date(
-          Date.now() +
-            monthlyMonths * 31 * 24 * 60 * 60 * 1000 +
-            3 * 24 * 60 * 60 * 1000,
-        ).toISOString()
-
-        const preapproval = await createPreapproval(mpToken, {
-          reason: `Mensalidade — ${course.nome}`,
-          external_reference: externalReference,
-          payer_email: student.email,
-          back_url: `${appUrl || `https://${process.env.NEXT_PUBLIC_APP_DOMAIN ?? "profissionalizamaisbrasil.com.br"}`}/aluno/pagamentos?ok=${enrollment.id}`,
-          // Vitrine PMB (sem slug) — host canônico www, o apex faz 307.
-          notification_url: mpWebhookUrl(),
-          auto_recurring: {
-            frequency: 1,
-            frequency_type: "months",
-            transaction_amount: finalAmount,
-            currency_id: "BRL",
-            start_date: startDate,
-            end_date: endDate,
-          },
-          status: "pending",
-        }, externalReference)
-
-        await prisma.enrollment.update({
-          where: { id: enrollment.id },
-          data: {
-            mpSubscriptionId: preapproval.id,
-            externalReference,
-          },
-        })
-
-        return NextResponse.json({
-          data: {
-            enrollmentId: enrollment.id,
-            gateway: "MP",
-            mode: "subscription",
-            installmentsTotal: monthlyMonths,
-            initPoint: preapproval.init_point,
-            finalAmount,
-          },
-        })
-      }
-
-      const preference = await createPreference(mpToken, {
-        items: [
-          {
-            id: course.id,
-            title: course.nome,
-            quantity: 1,
-            unit_price: finalAmount,
-            currency_id: "BRL",
-          },
-        ],
-        // Quem PAGA — com aluno menor, o responsavel financeiro ja cadastrado.
-        payer: {
-          name: payer.nome,
-          email: payer.email ?? student.email!,
-          identification: payer.cpf
-            ? { type: "CPF", number: payer.cpf }
-            : undefined,
-        },
-        back_urls: appUrl
-          ? {
-              success: `${appUrl}/aluno/pagamentos?ok=${enrollment.id}`,
-              failure: `${appUrl}/aluno/pagamentos?err=${enrollment.id}`,
-              pending: `${appUrl}/aluno/pagamentos?pend=${enrollment.id}`,
-            }
-          : undefined,
-        auto_return: "approved",
-        external_reference: externalReference,
-        // Vitrine PMB (sem slug) — host canônico www, o apex faz 307.
-        notification_url: mpWebhookUrl(),
-      }, externalReference)
-
-      await prisma.enrollment.update({
-        where: { id: enrollment.id },
-        data: {
-          mpPreferenceId: preference.id,
-          externalReference,
-        },
-      })
-
-      return NextResponse.json({
-        data: {
-          enrollmentId: enrollment.id,
-          gateway: "MP",
-          initPoint: preference.init_point,
-          finalAmount,
-        },
-      })
-    } catch (mpError) {
-      await prisma.enrollment.delete({ where: { id: enrollment.id } }).catch(swallow("aluno.comprar.rollback"))
-      if (couponId) await releaseCoupon(couponId).catch(swallow("aluno.comprar.rollback"))
-      throw mpError
-    }
-  }
-
-  // ASAAS
-  if (!process.env.ASAAS_API_URL || !process.env.ASAAS_API_KEY) {
-    await prisma.enrollment.delete({ where: { id: enrollment.id } })
-    if (couponId) await releaseCoupon(couponId).catch(swallow("aluno.comprar"))
-    return NextResponse.json({ error: "Asaas não configurado" }, { status: 503 })
-  }
-  if (!payer.cpf) {
-    await prisma.enrollment.delete({ where: { id: enrollment.id } })
-    if (couponId) await releaseCoupon(couponId).catch(swallow("aluno.comprar"))
-    return NextResponse.json(
-      {
-        error:
-          payer.kind === "GUARDIAN"
-            ? "Cadastre o CPF do responsável financeiro antes de comprar via Asaas"
-            : "Cadastre seu CPF no perfil antes de comprar via Asaas",
-      },
-      { status: 400 },
-    )
-  }
-
-  try {
-    // Reutiliza customer Asaas existente — evita duplicatas em compras múltiplas.
-    // Mas o asaasCustomerId salvo pode pertencer a OUTRA conta Asaas: alunos
-    // criados em homologação (sandbox) guardam um cus_ que não existe na conta
-    // de produção. Nesse caso o Asaas responde 404 ao buscar o customer; antes
-    // esse 404 vazava como AsaasApiError e derrubava o checkout inteiro (a rota
-    // respondia 502 com a mensagem "HTTP 404"). Tratamos o 404 como "id obsoleto":
-    // recriamos o customer na conta atual e regravamos o id no aluno.
-    let customer: Awaited<ReturnType<typeof getAsaasCustomer>> | null = null
-    if (payer.asaasCustomerId) {
-      try {
-        customer = await getAsaasCustomer(payer.asaasCustomerId)
-      } catch (err) {
-        if (err instanceof AsaasApiError && err.statusCode === 404) {
-          customer = null
-        } else {
-          throw err
-        }
-      }
-    }
-
-    if (!customer) {
-      const result = await findOrCreateAsaasCustomer({
-        name: payer.nome,
-        email: payer.email ?? "",
-        cpfCnpj: payer.cpf ?? "",
-        mobilePhone: payer.fone ?? undefined,
-        externalReference: `pmb_${payer.asaasExternalReference}`,
-      })
-      customer = result.customer
-      await prisma.student.update({
-        where: { id: student.id },
-        data: asaasCustomerUpdate(payer, customer.id),
-      })
-    }
-
-    if (isMonthly && monthlyMonths) {
-      const subscription = await createAsaasSubscription({
-        customer: customer.id,
-        billingType: "UNDEFINED",
-        value: finalAmount,
-        nextDueDate: dueDateInDays(3),
-        cycle: "MONTHLY",
-        description: `Mensalidade — ${course.nome}`,
-        externalReference,
-        maxPayments: monthlyMonths,
-        notificationUrl: asaasWebhookUrl(),
-        // Rateio do curso de autoria, lido do snapshot congelado na matrícula.
-        // Sem ele a cobrança nasce sem split e o produtor nunca é pago.
-        splits: await asaasSplitsForEnrollment(enrollment.id),
-      }, motherAsaasKey())
-
-      let firstInvoiceUrl: string | null = null
-      let firstPaymentId: string | null = null
-      for (let i = 0; i < 3; i++) {
-        const list = await listAsaasPayments({
-          subscription: subscription.id,
-          limit: 1,
-          offset: 0,
-        }).catch(() => null)
-        const first = list?.data?.[0]
-        if (first) {
-          firstInvoiceUrl = first.invoiceUrl
-          firstPaymentId = first.id
-          break
-        }
-        await new Promise((r) => setTimeout(r, 500))
-      }
-
-      await prisma.enrollment.update({
-        where: { id: enrollment.id },
-        data: {
-          externalReference,
-          asaasCustomerId: customer.id,
-          asaasSubscriptionId: subscription.id,
-          asaasPaymentId: firstPaymentId,
-          asaasInvoiceUrl: firstInvoiceUrl,
-        },
-      })
-
-      return NextResponse.json({
-        data: {
-          enrollmentId: enrollment.id,
-          gateway: "ASAAS",
-          mode: "subscription",
-          installmentsTotal: monthlyMonths,
-          initPoint: firstInvoiceUrl,
-          finalAmount,
-        },
-      })
-    }
-
-    const payment = await createAsaasPayment({
-      customer: customer.id,
-      billingType: "UNDEFINED",
-      value: finalAmount,
-      dueDate: dueDateInDays(3),
-      description: `Curso: ${course.nome}`,
-      externalReference,
-      notificationUrl: asaasWebhookUrl(),
-      splits: await asaasSplitsForEnrollment(enrollment.id),
-    }, motherAsaasKey())
-
-    await prisma.enrollment.update({
-      where: { id: enrollment.id },
-      data: {
-        externalReference,
-        asaasCustomerId: customer.id,
-        asaasPaymentId: payment.id,
-        asaasInvoiceUrl: payment.invoiceUrl,
-      },
-    })
-
-    return NextResponse.json({
-      data: {
-        enrollmentId: enrollment.id,
-        gateway: "ASAAS",
-        mode: "one_time",
-        initPoint: payment.invoiceUrl,
-        finalAmount,
-      },
-    })
-  } catch (error) {
-    await prisma.enrollment
-      .delete({ where: { id: enrollment.id } })
-      .catch(swallow("aluno.comprar"))
-    if (couponId) {
-      await releaseCoupon(couponId).catch(swallow("aluno.comprar"))
-    }
-    const message =
-      error instanceof AsaasApiError
-        ? error.message
-        : "Falha ao gerar cobrança no Asaas"
-    return NextResponse.json({ error: message }, { status: 502 })
-  }
+  return NextResponse.json({
+    data: {
+      enrollmentId: enrollment.id,
+      gateway: effectiveGateway,
+      payPath: `/pagar/${enrollment.id}`,
+      finalAmount,
+    },
+  })
   },
 )

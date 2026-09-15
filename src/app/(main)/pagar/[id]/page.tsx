@@ -4,6 +4,8 @@ import { prisma } from "@/lib/prisma"
 import { isPmbAppHost } from "@/lib/tenant/urls"
 import { OrderSummary } from "@/components/loja/order-summary"
 import { PmbCheckoutForm } from "@/components/loja/pmb-checkout-form"
+import { MpCheckoutForm } from "@/components/loja/mp-checkout-form"
+import { pmbMpPublicKey } from "@/lib/pmb-config"
 import {
   InstallmentsSection,
   type InstallmentCarne,
@@ -13,7 +15,10 @@ import {
   INSTALLMENT_REVEAL_WINDOW_DAYS,
 } from "@/lib/installments/schedule"
 import { getSystemSettings } from "@/lib/system-settings"
-import { displayInterestFreeInstallments } from "@/lib/mercadopago/installments"
+import {
+  MAX_CARD_INSTALLMENTS,
+  displayInterestFreeInstallments,
+} from "@/lib/mercadopago/installments"
 
 export const dynamic = "force-dynamic"
 
@@ -40,8 +45,10 @@ function Aviso({ titulo, texto }: { titulo: string; texto: string }) {
  * Tela de checkout do SISTEMA-MÃE (PMB) que retoma uma cobrança PENDENTE de uma
  * venda direta (sem criar matrícula nova). Servida no domínio app
  * (profissionalizamaisbrasil.com.br/pagar/[id]) — o proxy não reescreve /pagar
- * no host app (só em subdomínio de vitrine). Cobra na conta Asaas da PMB via
- * POST /api/checkout/enrollment/[id], reusando o PmbCheckoutForm transparente.
+ * no host app (só em subdomínio de vitrine). É o link de pagamento de toda
+ * venda da vitrine PMB, nos DOIS gateways: Asaas via
+ * POST /api/checkout/enrollment/[id] (PmbCheckoutForm) e Mercado Pago via
+ * POST /api/checkout/mp/process (MpCheckoutForm) — nunca a página do gateway.
  */
 export default async function PagarPmbPage({ params }: PagarPmbPageProps) {
   const { id } = await params
@@ -54,10 +61,11 @@ export default async function PagarPmbPage({ params }: PagarPmbPageProps) {
   }
 
   const enrollment = await prisma.enrollment.findFirst({
-    where: { id, tenantId: null, gateway: "ASAAS" },
+    where: { id, tenantId: null },
     select: {
       id: true,
       status: true,
+      gateway: true,
       paymentType: true,
       installmentsTotal: true,
       finalAmount: true,
@@ -211,7 +219,15 @@ export default async function PagarPmbPage({ params }: PagarPmbPageProps) {
   }
 
   const s = enrollment.student
-  if (!s.email || !s.cpf || !s.fone) {
+  const isMonthly = enrollment.paymentType === "MONTHLY"
+  const settings = await getSystemSettings()
+  const mpPublicKey = enrollment.gateway === "MP" ? pmbMpPublicKey() : null
+  if (enrollment.gateway === "MP" && !mpPublicKey) {
+    return <Aviso titulo="Pagamento indisponível" texto="O pagamento desta cobrança não está disponível no momento. Contate o suporte." />
+  }
+  // A retomada no Asaas exige os três (cria o customer na conta-mãe). O
+  // formulário do MP coleta o que falta na própria tela.
+  if (enrollment.gateway === "ASAAS" && (!s.email || !s.cpf || !s.fone)) {
     return (
       <Aviso
         titulo="Cadastro incompleto"
@@ -219,9 +235,6 @@ export default async function PagarPmbPage({ params }: PagarPmbPageProps) {
       />
     )
   }
-
-  const isMonthly = enrollment.paymentType === "MONTHLY"
-  const settings = await getSystemSettings()
 
   return (
     <section className="bg-[#FAFAFA] py-10 md:py-16">
@@ -236,18 +249,35 @@ export default async function PagarPmbPage({ params }: PagarPmbPageProps) {
         </header>
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_380px] lg:gap-8">
-          <PmbCheckoutForm
-            couponCode={null}
-            initPath={`/api/checkout/enrollment/${enrollment.id}`}
-            amount={Number(enrollment.finalAmount)}
-            isMonthly={isMonthly}
-            prefill={{
-              nome: s.nome,
-              email: s.email,
-              cpf: s.cpf,
-              telefone: s.fone,
-            }}
-          />
+          {mpPublicKey ? (
+            <MpCheckoutForm
+              publicKey={mpPublicKey}
+              amount={Number(enrollment.finalAmount)}
+              // Mensal = recorrência (1 cobrança/mês); à vista parcela até 12x.
+              maxInstallments={isMonthly ? 1 : MAX_CARD_INSTALLMENTS}
+              interestFreeInstallments={settings.pmbInterestFreeInstallments}
+              installmentsPath="/api/checkout/installments"
+              enrollmentId={enrollment.id}
+              defaultNome={s.nome ?? undefined}
+              defaultEmail={s.email ?? undefined}
+              processPath="/api/checkout/mp/process"
+              statusPath="/api/checkout/status"
+              confirmacaoPath="/checkout/confirmacao"
+            />
+          ) : (
+            <PmbCheckoutForm
+              couponCode={null}
+              initPath={`/api/checkout/enrollment/${enrollment.id}`}
+              amount={Number(enrollment.finalAmount)}
+              isMonthly={isMonthly}
+              prefill={{
+                nome: s.nome,
+                email: s.email!,
+                cpf: s.cpf!,
+                telefone: s.fone!,
+              }}
+            />
+          )}
 
           <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start">
             <OrderSummary

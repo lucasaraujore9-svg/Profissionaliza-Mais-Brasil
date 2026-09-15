@@ -67,7 +67,9 @@ describe("buildEnrollmentCheckoutUrl", () => {
     ).toBe(url)
   })
 
-  it("vitrine PMB MP: sem pagina de retomada, sem link", () => {
-    expect(buildEnrollmentCheckoutUrl({ ...base, tenant: null })).toBeNull()
+  it("vitrine PMB MP: a mesma pagina da PMB (ela renderiza o checkout do MP)", () => {
+    const url = buildEnrollmentCheckoutUrl({ ...base, tenant: null })
+    expect(url).toMatch(/^https:\/\/[^/]+\/pagar\/enr_123$/)
+    expect(url).not.toMatch(/mercadopago/)
   })
 })

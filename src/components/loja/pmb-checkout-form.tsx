@@ -369,12 +369,11 @@ export function PmbCheckoutForm({
           })
           return
         }
-        case "redirect":
-          if (d.initPoint) {
-            window.location.href = d.initPoint
-            return
-          }
-        // fall through
+        // Cobrança criada, PIX/boleto ainda sendo gerado: a confirmação
+        // acompanha o status. Nunca a fatura do Asaas.
+        case "processing":
+          window.location.href = `/checkout/confirmacao?enrollment_id=${d.enrollmentId}`
+          return
         default:
           setStatus({
             kind: "error",

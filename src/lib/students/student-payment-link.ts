@@ -17,8 +17,7 @@
  *      unidade), so quando a loja PODE receber: `ACTIVE` e, no MP, com
  *      `mpPublicKey`. Senao a pagina cai em "Loja indisponivel" — um botao que
  *      promete e nao cobra e pior que nenhum.
- *   3. Venda direta PMB via Asaas → `/pagar/[id]`, a tela de retomada da marca.
- *   4. Venda direta PMB via MP: sem checkout reabrivel — null.
+ *   3. Vitrine PMB → `/pagar/[id]`, a tela de pagamento da marca (Asaas ou MP).
  */
 export interface PayableEnrollment {
   /** Status da matricula — so PENDING expoe checkout util. */
@@ -60,7 +59,9 @@ export function studentPaymentTarget(
     return { href: `/aluno/comprar/pagar/${e.id}`, external: false }
   }
 
-  if (e.gateway === "ASAAS") return { href: `/pagar/${e.id}`, external: false }
+  if (e.gateway === "ASAAS" || e.gateway === "MP") {
+    return { href: `/pagar/${e.id}`, external: false }
+  }
 
   return null
 }

@@ -32,18 +32,15 @@ export interface CheckoutLinkInput {
  *
  *   - Unidade: `/pagar/<id>` na loja dela (dominio proprio aplicado ou
  *     subdominio). Serve MP e Asaas — a pagina decide pelo `Enrollment.gateway`.
- *   - Vitrine PMB via Asaas: `/pagar/<id>` no dominio da PMB.
- *   - Vitrine PMB via MP: sem pagina de retomada — null.
+ *   - Vitrine PMB: `/pagar/<id>` no dominio da PMB, nos dois gateways.
  */
 export function buildEnrollmentCheckoutUrl(input: CheckoutLinkInput): string | null {
   if (input.status !== "PENDING") return null
 
-  const isPmb = !input.tenant || input.tenant.slug === PMB_TENANT_SLUG
-  if (isPmb) {
-    return input.gateway === "ASAAS" ? `${appUrl()}/pagar/${input.enrollmentId}` : null
-  }
-
   if (input.gateway !== "MP" && input.gateway !== "ASAAS") return null
+
+  const isPmb = !input.tenant || input.tenant.slug === PMB_TENANT_SLUG
+  if (isPmb) return `${appUrl()}/pagar/${input.enrollmentId}`
   if (!input.tenant?.slug) return null
   return `${storeBaseUrl(input.tenant)}/pagar/${input.enrollmentId}`
 }

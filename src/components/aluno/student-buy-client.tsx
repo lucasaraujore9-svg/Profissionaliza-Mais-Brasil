@@ -156,15 +156,14 @@ export function StudentBuyClient() {
         router.push("/aluno/cursos")
         return
       }
-      // PMB (venda direta): a resposta traz initPoint → redirect ao gateway.
-      // Checar PRIMEIRO porque a resposta PMB também inclui enrollmentId.
-      const initPoint = body.data?.initPoint
-      if (initPoint) {
-        window.location.href = initPoint
+      // PMB: a página de pagamento da plataforma no domínio da PMB. Checar
+      // PRIMEIRO porque a resposta PMB também inclui enrollmentId.
+      const payPath = body.data?.payPath
+      if (payPath) {
+        router.push(payPath)
         return
       }
-      // Revenda: matrícula PENDING criada (sem initPoint) → paga no próprio
-      // site via Payment Brick.
+      // Revenda: matrícula PENDING criada → paga no próprio site.
       const enrollmentId = body.data?.enrollmentId
       if (enrollmentId) {
         router.push(`/aluno/comprar/pagar/${enrollmentId}`)

@@ -74,7 +74,10 @@ describe("studentPaymentTarget", () => {
     ).toEqual({ href: "/pagar/enr_123", external: false })
   })
 
-  it("PMB MP: nao ha checkout reabrivel", () => {
-    expect(studentPaymentTarget({ ...base, tenantId: null, tenant: null })).toBeNull()
+  it("PMB MP: a mesma tela da marca, que renderiza o checkout do MP", () => {
+    expect(studentPaymentTarget({ ...base, tenantId: null, tenant: null })).toEqual({
+      href: "/pagar/enr_123",
+      external: false,
+    })
   })
 })
