@@ -43,6 +43,29 @@ export const subscriptionCardHolderSchema = z.object({
 })
 
 /**
+ * Endereco para o BOLETO do Mercado Pago, que recusa o boleto sem o endereco
+ * completo do pagador. So e pedido quando a loja e MP e o meio e boleto — e
+ * gravado no aluno, porque e dele que o cron le para emitir os boletos
+ * seguintes da assinatura.
+ */
+export const boletoAddressSchema = z.object({
+  cep: z
+    .string()
+    .trim()
+    .transform((v) => v.replace(/\D/g, ""))
+    .refine((v) => v.length === 8, "CEP inválido"),
+  rua: z.string().trim().min(2).max(160),
+  numero: z.string().trim().min(1).max(20),
+  bairro: z.string().trim().min(2).max(120),
+  cidade: z.string().trim().min(2).max(120),
+  estado: z
+    .string()
+    .trim()
+    .length(2, "UF inválida")
+    .transform((v) => v.toUpperCase()),
+})
+
+/**
  * Bandeira e emissor do cartao, resolvidos pelo SDK do MP no BROWSER a partir do
  * BIN. So a vitalicia do MP usa (pagamento unico exige `payment_method_id`); a
  * recorrencia aceita so o token.
@@ -85,6 +108,7 @@ export const subscriptionCheckoutSchema = withGuardianRule(
      */
     cardToken: z.string().trim().min(1).max(200).optional(),
     ...mpCardShape,
+    enderecoBoleto: boletoAddressSchema.optional(),
     acceptedTerms: z.literal(true),
   }),
 )
@@ -110,6 +134,8 @@ export const storeSubscriptionPaymentSchema = z.object({
   /** Token do cartao gerado no browser (MP). Mesmo papel do checkout acima. */
   cardToken: z.string().trim().min(1).max(200).optional(),
   ...mpCardShape,
+  /** Boleto no Mercado Pago, quando o aluno ainda nao tem endereco na ficha. */
+  enderecoBoleto: boletoAddressSchema.optional(),
 })
 
 export type StoreSubscriptionPaymentInput = z.infer<

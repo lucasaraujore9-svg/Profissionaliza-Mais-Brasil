@@ -1,4 +1,5 @@
 import Link from "next/link"
+import type { SubscriptionInterval } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { tenantCheckoutMode } from "@/lib/tenant/checkout-mode"
 import {
@@ -7,7 +8,10 @@ import {
 } from "@/lib/subscriptions/interval"
 import { SUBSCRIPTION_SLOTS_RULE_TEXT } from "@/lib/subscriptions/slots"
 import { hasGatewayCharge } from "@/lib/subscriptions/store-payment"
+import { subscriptionCarneView } from "@/lib/subscriptions/carne-view"
+import { hasCompleteBoletoAddress } from "@/lib/installments/mp-boleto"
 import { SubscriptionPayForm } from "@/components/loja/subscription-pay-form"
+import { InstallmentsSection } from "@/components/aluno/installments-section"
 
 /**
  * Página de pagamento de uma ASSINATURA na plataforma — o único lugar onde o
@@ -57,8 +61,19 @@ export async function SubscriptionPaymentPage({
       mpPreapprovalId: true,
       asaasSubscriptionId: true,
       externalReference: true,
+      boletoCarne: true,
       plan: { select: { name: true, description: true } },
-      student: { select: { nome: true } },
+      student: {
+        select: {
+          nome: true,
+          cep: true,
+          rua: true,
+          numero: true,
+          bairro: true,
+          cidade: true,
+          estado: true,
+        },
+      },
       tenant: {
         select: {
           status: true,
@@ -87,6 +102,10 @@ export async function SubscriptionPaymentPage({
   }
   if (sub.status === "CANCELLED" || sub.status === "EXPIRED") {
     return <Aviso titulo="Cobrança indisponível" texto="Esta cobrança não está mais ativa." />
+  }
+
+  if (sub.boletoCarne) {
+    return <CarnePayment subscriptionId={subscriptionId} sub={sub} payEndpoint={payEndpoint} />
   }
 
   const openCycle = sub.payments[0] ?? null
@@ -186,7 +205,138 @@ export async function SubscriptionPaymentPage({
           endpoint={payEndpoint}
           renewal={renewal}
           defaultHolderName={sub.student.nome ?? ""}
+          askBoletoAddress={!hasCompleteBoletoAddress(sub.student)}
         />
+      </div>
+    </section>
+  )
+}
+
+function PlanCard({
+  planName,
+  description,
+  studentName,
+  children,
+}: {
+  planName: string
+  description: string | null
+  studentName: string | null
+  children: React.ReactNode
+}) {
+  return (
+    <div className="mb-6 rounded-2xl border border-gray-200 bg-white p-6">
+      <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+        Assinatura no boleto
+      </p>
+      <h2 className="mt-1 text-lg font-bold text-[var(--color-pmb-green-900)]">{planName}</h2>
+      {description && <p className="mt-2 text-sm text-gray-600">{description}</p>}
+      {children}
+      <p className="mt-1 text-sm text-gray-500">{SUBSCRIPTION_SLOTS_RULE_TEXT}</p>
+      {studentName && (
+        <p className="mt-4 border-t border-gray-100 pt-4 text-sm text-gray-600">
+          Aluno: <strong className="text-gray-800">{studentName}</strong>
+        </p>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Assinatura NO BOLETO: a lista de boletos (a mesma do carnê de curso) e, no
+ * Asaas, o pagamento do boleto em aberto por PIX, cartão ou boleto. No Mercado
+ * Pago o boleto é um pagamento próprio e se paga pelo próprio boleto da lista.
+ */
+async function CarnePayment({
+  subscriptionId,
+  sub,
+  payEndpoint,
+}: {
+  subscriptionId: string
+  sub: {
+    status: string
+    interval: SubscriptionInterval
+    gateway: "MP" | "ASAAS"
+    priceAtPurchase: unknown
+    plan: { name: string; description: string | null }
+    student: { nome: string | null }
+    tenant: { mpPublicKey: string | null } | null
+  }
+  payEndpoint: string
+}) {
+  const rows = await prisma.subscriptionPayment.findMany({
+    where: { subscriptionId, number: { not: null } },
+    orderBy: { number: "asc" },
+    select: {
+      number: true,
+      amount: true,
+      dueDate: true,
+      status: true,
+      paidAt: true,
+      bankSlipUrl: true,
+      digitableLine: true,
+      asaasPaymentId: true,
+    },
+  })
+  const now = new Date()
+  const carne = subscriptionCarneView({ id: subscriptionId, planName: sub.plan.name }, rows, now)
+  // O boleto que se paga agora: o mais antigo em aberto que já foi emitido.
+  const open = rows.find(
+    (r) => !r.paidAt && r.status !== "CANCELLED" && (r.asaasPaymentId || r.bankSlipUrl),
+  )
+  const price = Number(open?.amount ?? sub.priceAtPurchase)
+
+  return (
+    <section className="bg-[#FAFAFA] py-10 md:py-16">
+      <div className="mx-auto max-w-3xl space-y-6 px-4 md:px-6">
+        <header>
+          <h1 className="text-2xl font-bold tracking-tight text-[var(--color-pmb-green-900)] md:text-3xl">
+            {open ? "Pagar boleto da assinatura" : "Assinatura no boleto"}
+          </h1>
+          <p className="mt-1 text-sm text-gray-600">
+            {open
+              ? "Pague o boleto em aberto para manter o acesso aos cursos."
+              : "Nenhum boleto em aberto agora. O próximo fica disponível 7 dias antes do vencimento."}
+          </p>
+        </header>
+
+        <PlanCard
+          planName={sub.plan.name}
+          description={sub.plan.description}
+          studentName={sub.student.nome}
+        >
+          <p className="mt-4">
+            <strong className="text-2xl text-[var(--color-pmb-green-900)]">
+              {money(Number(sub.priceAtPurchase))}
+            </strong>
+            <span className="text-sm text-gray-500"> {INTERVAL_PRICE_SUFFIX[sub.interval]}</span>
+          </p>
+          <p className="mt-1 text-sm text-gray-500">
+            Um boleto por ciclo, renovado automaticamente até o cancelamento.
+          </p>
+        </PlanCard>
+
+        {carne && (
+          <InstallmentsSection
+            carnes={[carne]}
+            title="Boletos da assinatura"
+            description="Cada boleto fica disponível 7 dias antes do vencimento. Pague para manter o acesso aos cursos."
+          />
+        )}
+
+        {open && sub.gateway === "ASAAS" && (
+          <SubscriptionPayForm
+            subscriptionId={subscriptionId}
+            planName={sub.plan.name}
+            price={price}
+            interval={sub.interval}
+            gateway="ASAAS"
+            mpPublicKey={sub.tenant?.mpPublicKey ?? null}
+            endpoint={payEndpoint}
+            renewal
+            carneOpen
+            defaultHolderName={sub.student.nome ?? ""}
+          />
+        )}
       </div>
     </section>
   )

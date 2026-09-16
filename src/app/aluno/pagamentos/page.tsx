@@ -8,6 +8,7 @@ import {
   type InstallmentCarne,
 } from "@/components/aluno/installments-section"
 import { isWithinRevealWindow, INSTALLMENT_REVEAL_WINDOW_DAYS } from "@/lib/installments/schedule"
+import { subscriptionCarneView } from "@/lib/subscriptions/carne-view"
 
 function brl(value: number): string {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
@@ -71,7 +72,7 @@ export default async function StudentPaymentsPage() {
   const session = await requireStudentSession()
   if (!session) return null
 
-  const [enrollments, payments, installmentRows] = await Promise.all([
+  const [enrollments, payments, installmentRows, carneSubscriptions] = await Promise.all([
     prisma.enrollment.findMany({
       where: { studentId: session.studentId },
       include: {
@@ -96,6 +97,32 @@ export default async function StudentPaymentsPage() {
       include: { enrollment: { include: { course: { select: { nome: true } } } } },
       orderBy: [{ enrollmentId: "asc" }, { number: "asc" }],
     }),
+    // Assinatura no boleto: os boletos dela aparecem aqui também, no mesmo
+    // formato do carnê — é onde o aluno procura boleto para pagar.
+    prisma.studentSubscription.findMany({
+      where: {
+        studentId: session.studentId,
+        boletoCarne: true,
+        status: { in: ["PENDING", "ACTIVE", "PAST_DUE"] },
+      },
+      select: {
+        id: true,
+        plan: { select: { name: true } },
+        payments: {
+          where: { number: { not: null } },
+          orderBy: { number: "asc" },
+          select: {
+            number: true,
+            amount: true,
+            dueDate: true,
+            status: true,
+            paidAt: true,
+            bankSlipUrl: true,
+            digitableLine: true,
+          },
+        },
+      },
+    }),
   ])
 
   const totalPaid = payments.reduce((sum, p) => sum + Number(p.amount), 0)
@@ -112,7 +139,7 @@ export default async function StudentPaymentsPage() {
     let carne = carnesMap.get(row.enrollmentId)
     if (!carne) {
       carne = {
-        enrollmentId: row.enrollmentId,
+        id: row.enrollmentId,
         courseName: row.enrollment.course.nome,
         parcelas: [],
       }
@@ -139,6 +166,11 @@ export default async function StudentPaymentsPage() {
     })
   }
   const carnes = [...carnesMap.values()]
+  const subscriptionCarnes = carneSubscriptions
+    .map((sub) =>
+      subscriptionCarneView({ id: sub.id, planName: sub.plan.name }, sub.payments, now),
+    )
+    .filter((c): c is InstallmentCarne => c !== null)
 
   return (
     <div className="space-y-6">
@@ -228,6 +260,13 @@ export default async function StudentPaymentsPage() {
 
       {/* Carnê (venda parcelada no boleto) — boletos por parcela */}
       <InstallmentsSection carnes={carnes} />
+
+      {/* Assinatura no boleto — um boleto por ciclo */}
+      <InstallmentsSection
+        carnes={subscriptionCarnes}
+        title="Boletos da assinatura"
+        description="Cada boleto fica disponível 7 dias antes do vencimento. Pague para manter o acesso aos cursos da assinatura."
+      />
 
       {/* Histórico — tabela em desktop, cards em mobile */}
       <section

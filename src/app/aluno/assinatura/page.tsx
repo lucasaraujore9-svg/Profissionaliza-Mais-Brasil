@@ -6,6 +6,8 @@ import { requireStudentSession } from "@/lib/auth/student-session"
 import { StartCourseButton } from "@/components/aluno/start-course-button"
 import { SubscriptionSlotsPanel } from "@/components/aluno/subscription-slots-panel"
 import { CancelSubscriptionButton } from "@/components/aluno/subscription-actions"
+import { InstallmentsSection } from "@/components/aluno/installments-section"
+import { subscriptionCarneView } from "@/lib/subscriptions/carne-view"
 import {
   loadSubscriptionCatalog,
   loadSubscriptionSlots,
@@ -55,11 +57,12 @@ export default async function AssinaturaPage({
       priceAtPurchase: true,
       interval: true,
       billingType: true,
+      boletoCarne: true,
       plan: { select: { name: true, description: true } },
       // Ciclo em aberto: só o valor. O PAGAMENTO acontece na página da
       // plataforma (`/pagar/assinatura/<id>`), nunca na fatura do gateway.
       payments: {
-        where: { paidAt: null },
+        where: { paidAt: null, status: { not: "CANCELLED" } },
         select: { id: true, dueDate: true, amount: true },
         orderBy: { dueDate: "desc" },
         take: 1,
@@ -93,6 +96,25 @@ export default async function AssinaturaPage({
 
   const openCharge = subscription.payments[0] ?? null
   const live = subscriptionGrantsAccess(subscription)
+  // Assinatura no boleto: a lista de boletos, no mesmo formato do carnê de curso.
+  const carne = subscription.boletoCarne
+    ? subscriptionCarneView(
+        { id: subscription.id, planName: subscription.plan.name },
+        await prisma.subscriptionPayment.findMany({
+          where: { subscriptionId: subscription.id, number: { not: null } },
+          orderBy: { number: "asc" },
+          select: {
+            number: true,
+            amount: true,
+            dueDate: true,
+            status: true,
+            paidAt: true,
+            bankSlipUrl: true,
+            digitableLine: true,
+          },
+        }),
+      )
+    : null
   const recurring = isRecurringInterval(subscription.interval)
   const search = sp.q?.trim() || undefined
   const [catalog, slots] = live
@@ -193,6 +215,16 @@ export default async function AssinaturaPage({
                 ? formatDate(subscription.currentPeriodEnd)
                 : null
             }
+          />
+        </div>
+      )}
+
+      {carne && (
+        <div className="mb-6">
+          <InstallmentsSection
+            carnes={[carne]}
+            title="Boletos da assinatura"
+            description="Cada boleto fica disponível 7 dias antes do vencimento. Pague para manter o acesso aos cursos."
           />
         </div>
       )}

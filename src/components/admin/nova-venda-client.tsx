@@ -9,14 +9,28 @@ import { CheckCircle2, Search, X, UserPlus, Users, RefreshCw, ExternalLink, Copy
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { MAX_SALE_COURSES } from "@/lib/enrollment/multi-course"
 import {
   INTERVAL_LABEL,
+  INTERVAL_PERIOD_LABEL,
   INTERVAL_PRICE_SUFFIX,
   INTERVAL_CHARGE_LABEL,
   isRecurringInterval,
   type SubscriptionIntervalValue,
 } from "@/lib/subscriptions/interval"
+import {
+  SUBSCRIPTION_CARNE_MAX_COUNT,
+  SUBSCRIPTION_CARNE_MAX_FIRST_DUE_DAYS,
+  SUBSCRIPTION_CARNE_MIN_COUNT,
+  defaultCarneCount,
+} from "@/lib/subscriptions/carne-schedule"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -84,6 +98,19 @@ interface CouponResult {
 
 function fmt(n: number) {
   return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
+}
+
+/** Data de hoje + N dias em YYYY-MM-DD (default e limites do input date). */
+function isoDatePlusDays(days: number): string {
+  const d = new Date()
+  d.setDate(d.getDate() + days)
+  return d.toISOString().slice(0, 10)
+}
+
+/** "2026-09-23" → "23/09/2026", sem passar por Date (sem fuso). */
+function fmtYmd(ymd: string): string {
+  const [y, m, d] = ymd.split("-")
+  return `${d}/${m}/${y}`
 }
 
 function maskCpf(v: string) {
@@ -183,6 +210,10 @@ export function NovaVendaClient({
   const planItem = selectedItems[0]?.kind === "plan" ? selectedItems[0] : null
   /** Cupom e bolsa não valem para assinatura — ver lib/subscriptions/direct-sale.ts. */
   const isPlan = !!planItem
+  const planInterval: SubscriptionIntervalValue = planItem?.interval ?? "MONTHLY"
+  // Assinatura no boleto (carnê): um boleto por ciclo, só em plano recorrente —
+  // o vitalício é pago de uma vez, e o aluno escolhe boleto no próprio link.
+  const carneAvailable = isPlan && isRecurringInterval(planInterval)
   const hasSelection = selectedItems.length > 0
   const isMulti = selectedItems.length > 1
   // Curso mensal é contrato recorrente de UM curso: o servidor recusa somá-lo a
@@ -239,6 +270,11 @@ export function NovaVendaClient({
   // Bolsa de estudo (sem cobrança)
   const [bolsista, setBolsista] = useState(false)
 
+  // Assinatura no boleto: quantos boletos gerar agora + 1º vencimento.
+  const [carneMode, setCarneMode] = useState(false)
+  const [carne, setCarne] = useState({ count: 12, firstDueDate: isoDatePlusDays(7) })
+  const isCarne = carneAvailable && carneMode
+
 
   // Step 4 — Link
   const [generatingLink, setGeneratingLink] = useState(false)
@@ -248,6 +284,8 @@ export function NovaVendaClient({
     discountAmount?: number
     gateway?: string
     scholarship?: boolean
+    /** Assinatura no boleto. */
+    carne?: { count: number; amount: number; firstDueDate: string }
   } | null>(null)
 
   // Search students (debounced)
@@ -296,12 +334,16 @@ export function NovaVendaClient({
   // somem da tela, mas o ESTADO ficaria — e um `bolsista` verdadeiro invisível
   // mostraria "Total R$ 0" num resumo de venda que vai cobrar o valor cheio.
   useEffect(() => {
+    // O carnê volta ao modo link a cada troca de plano: a quantidade sugerida
+    // depende da periodicidade.
+    setCarneMode(false)
+    setCarne((prev) => ({ ...prev, count: defaultCarneCount(planInterval) }))
     if (!isPlan) return
     setBolsista(false)
     setCouponResult(null)
     setCouponCode("")
     setCouponError(null)
-  }, [isPlan])
+  }, [isPlan, planInterval])
 
   function handleCpfChange(v: string) {
     setNewStudent((s) => ({ ...s, cpf: maskCpf(v) }))
@@ -430,6 +472,9 @@ export function NovaVendaClient({
           manualDiscountPercent:
             bolsista || couponResult || !manualValid ? undefined : manualPctNumber,
           bolsista: isPlan ? undefined : bolsista || undefined,
+          boletoCarne: isCarne
+            ? { count: carne.count, firstDueDate: carne.firstDueDate }
+            : undefined,
         }),
       })
       const body = await res.json()
@@ -441,7 +486,9 @@ export function NovaVendaClient({
       toast.success(
         body.data?.scholarship
           ? "Bolsa concedida! Aluno matriculado na plataforma de aulas."
-          : "Link de pagamento gerado!",
+          : body.data?.carne
+            ? "Boletos da assinatura gerados!"
+            : "Link de pagamento gerado!",
       )
     } catch {
       toast.error("Erro de rede ao gerar link")
@@ -891,6 +938,84 @@ export function NovaVendaClient({
                 </a>
               </div>
             )}
+            {carneAvailable && !linkResult && (
+              <div className="space-y-3">
+                <div>
+                  <span className="text-xs font-semibold text-gray-600">Forma de pagamento</span>
+                  <div className="mt-1.5 inline-flex rounded-lg border border-gray-200 p-0.5">
+                    <button
+                      type="button"
+                      onClick={() => setCarneMode(false)}
+                      className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${
+                        !carneMode
+                          ? "bg-[var(--color-pmb-green)] text-white"
+                          : "text-gray-600 hover:bg-gray-50"
+                      }`}
+                    >
+                      Link de pagamento
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCarneMode(true)}
+                      className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${
+                        carneMode
+                          ? "bg-[var(--color-pmb-green)] text-white"
+                          : "text-gray-600 hover:bg-gray-50"
+                      }`}
+                    >
+                      Assinatura no boleto (carnê)
+                    </button>
+                  </div>
+                </div>
+                {carneMode && (
+                  <div className="grid gap-3 rounded-xl border border-[var(--color-pmb-green)]/20 bg-[var(--color-pmb-green)]/5 p-4 sm:grid-cols-2">
+                    <div>
+                      <Label htmlFor="a-boletos">Boletos gerados agora</Label>
+                      <Select
+                        value={String(carne.count)}
+                        onValueChange={(v) => setCarne({ ...carne, count: Number(v) || 1 })}
+                      >
+                        <SelectTrigger id="a-boletos" className="mt-1.5 h-10 w-full">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {Array.from(
+                            {
+                              length:
+                                SUBSCRIPTION_CARNE_MAX_COUNT - SUBSCRIPTION_CARNE_MIN_COUNT + 1,
+                            },
+                            (_, i) => i + SUBSCRIPTION_CARNE_MIN_COUNT,
+                          ).map((n) => (
+                            <SelectItem key={n} value={String(n)}>
+                              {n} {n === 1 ? "boleto" : "boletos"}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label htmlFor="a-boleto-venc">1º vencimento</Label>
+                      <Input
+                        id="a-boleto-venc"
+                        type="date"
+                        value={carne.firstDueDate}
+                        min={isoDatePlusDays(0)}
+                        max={isoDatePlusDays(SUBSCRIPTION_CARNE_MAX_FIRST_DUE_DAYS)}
+                        onChange={(e) => setCarne({ ...carne, firstDueDate: e.target.value })}
+                        className="mt-1.5"
+                      />
+                    </div>
+                    <p className="text-xs text-gray-600 sm:col-span-2">
+                      Um boleto por {INTERVAL_PERIOD_LABEL[planInterval]}, no valor da
+                      assinatura ({fmt(finalPrice)}), emitido no Asaas da PMB. Depois
+                      do último, a plataforma emite os próximos sozinha até a
+                      assinatura ser cancelada. O acesso é liberado quando o 1º
+                      boleto for pago.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
             <div className="rounded-xl bg-gray-50 p-4 text-sm space-y-1">
               <Row label="Aluno" value={selectedStudent.nome} />
               {selectedItems.map((item, i) => (
@@ -916,11 +1041,19 @@ export function NovaVendaClient({
               ) : manualValid ? (
                 <Row label={`Desconto (${manualPctNumber}%)`} value={`− ${fmt(manualDiscountAmount)}`} className="text-emerald-600" />
               ) : null}
+              {isCarne && (
+                <Row
+                  label="Boletos agora"
+                  value={`${carne.count} · 1º vence em ${carne.firstDueDate ? fmtYmd(carne.firstDueDate) : "—"}`}
+                />
+              )}
               <Row
                 label={
-                  planItem && isRecurringInterval(planItem.interval ?? "MONTHLY")
-                    ? "Valor por cobrança"
-                    : "Total"
+                  isCarne
+                    ? "Cada boleto"
+                    : planItem && isRecurringInterval(planItem.interval ?? "MONTHLY")
+                      ? "Valor por cobrança"
+                      : "Total"
                 }
                 value={fmt(finalPrice)}
                 bold
@@ -932,9 +1065,11 @@ export function NovaVendaClient({
                 <Row
                   label="Cobrança"
                   value={
-                    isRecurringInterval(planItem.interval ?? "MONTHLY")
-                      ? `${INTERVAL_CHARGE_LABEL[planItem.interval ?? "MONTHLY"]} — o desconto vale para todas as cobranças`
-                      : INTERVAL_CHARGE_LABEL[planItem.interval ?? "MONTHLY"]
+                    isCarne
+                      ? `Boleto, um por ${INTERVAL_PERIOD_LABEL[planInterval]} — renova sozinha; o desconto vale para todos`
+                      : isRecurringInterval(planItem.interval ?? "MONTHLY")
+                        ? `${INTERVAL_CHARGE_LABEL[planItem.interval ?? "MONTHLY"]} — o desconto vale para todas as cobranças`
+                        : INTERVAL_CHARGE_LABEL[planItem.interval ?? "MONTHLY"]
                   }
                 />
               )}
@@ -951,7 +1086,11 @@ export function NovaVendaClient({
               >
                 {generatingLink
                   ? bolsista ? "Concedendo…" : "Gerando…"
-                  : bolsista ? "Conceder bolsa de estudo" : "Gerar link de pagamento"}
+                  : bolsista
+                    ? "Conceder bolsa de estudo"
+                    : isCarne
+                      ? "Gerar boletos da assinatura"
+                      : "Gerar link de pagamento"}
               </Button>
             ) : linkResult.scholarship ? (
               <div className="space-y-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
@@ -984,8 +1123,18 @@ export function NovaVendaClient({
             ) : (
               <div className="space-y-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
                 <div className="flex items-center gap-2 font-semibold text-emerald-700">
-                  <CheckCircle2 className="h-4 w-4" /> Link gerado com sucesso
+                  <CheckCircle2 className="h-4 w-4" />{" "}
+                  {linkResult.carne
+                    ? `Assinatura no boleto criada — ${linkResult.carne.count} ${linkResult.carne.count === 1 ? "boleto" : "boletos"} de ${fmt(linkResult.carne.amount)}`
+                    : "Link gerado com sucesso"}
                 </div>
+                {linkResult.carne && (
+                  <p className="text-sm text-emerald-800">
+                    O 1º boleto vence em {fmtYmd(linkResult.carne.firstDueDate)}. Envie o
+                    link: o aluno vê e paga cada boleto ali e na área dele, 7 dias antes
+                    de cada vencimento.
+                  </p>
+                )}
                 <p className="break-all text-xs font-mono text-gray-700">{linkResult.paymentUrl}</p>
                 <div className="flex gap-2">
                   <Button

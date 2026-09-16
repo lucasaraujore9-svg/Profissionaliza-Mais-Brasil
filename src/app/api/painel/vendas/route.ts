@@ -52,6 +52,7 @@ import { getPackageForCheckout } from "@/lib/packages/vitrine"
 import { MAX_SALE_COURSES, dedupeIds } from "@/lib/enrollment/multi-course"
 import { getPlanForCheckout } from "@/lib/subscriptions/plans"
 import { createDirectSubscriptionSale } from "@/lib/subscriptions/direct-sale"
+import { saveBoletoAddress } from "@/lib/subscriptions/carne"
 import { rollbackSaleEnrollment } from "@/lib/enrollment/multi-course-server"
 
 const createSchema = withGuardianRule(
@@ -108,10 +109,13 @@ const createSchema = withGuardianRule(
     bolsista: z.boolean().optional(),
   // Venda parcelada no boleto (carnê): a revenda define nº de parcelas + valor
   // de cada parcela + 1º vencimento. Só válido quando a unidade tem a capability.
+  // Na ASSINATURA o carnê é "um boleto por ciclo": o vendedor escolhe quantos
+  // boletos gerar agora e o 1º vencimento; o valor é o da assinatura (e por isso
+  // `installmentValue` não vem).
   boletoInstallment: z
     .object({
-      count: z.number().int().min(MIN_BOLETO_INSTALLMENTS).max(MAX_BOLETO_INSTALLMENTS),
-      installmentValue: z.number().positive(),
+      count: z.number().int().min(1).max(MAX_BOLETO_INSTALLMENTS),
+      installmentValue: z.number().positive().optional(),
       firstDueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data inválida"),
     })
     .optional(),
@@ -140,16 +144,26 @@ const createSchema = withGuardianRule(
       path: ["tenantCourseIds"],
     },
   )
-  // Assinatura não aceita cupom, carnê nem bolsa: ver os motivos em
+  // Assinatura não aceita cupom nem bolsa: ver os motivos em
   // `lib/subscriptions/direct-sale.ts`. Recusar no schema é melhor que ignorar
   // o campo em silêncio — o vendedor marcaria "bolsa" e cobraria assim mesmo.
+  // O carnê, sim: é a assinatura no boleto.
+  .refine((v) => !v.planId || (!v.couponCode && !v.bolsista), {
+    message:
+      "Assinatura não aceita cupom nem bolsa de estudo — use desconto manual.",
+    path: ["planId"],
+  })
+  // Carnê de CURSO: o vendedor define o valor de cada parcela, e parcelamento
+  // é de 2 parcelas para cima. (Na assinatura o valor vem do plano.)
   .refine(
     (v) =>
-      !v.planId || (!v.couponCode && !v.boletoInstallment && !v.bolsista),
+      !v.boletoInstallment ||
+      !!v.planId ||
+      (v.boletoInstallment.installmentValue !== undefined &&
+        v.boletoInstallment.count >= MIN_BOLETO_INSTALLMENTS),
     {
-      message:
-        "Assinatura não aceita cupom, carnê nem bolsa de estudo — use desconto manual.",
-      path: ["planId"],
+      message: `Informe o valor de cada parcela (mínimo de ${MIN_BOLETO_INSTALLMENTS} parcelas).`,
+      path: ["boletoInstallment", "installmentValue"],
     },
   )
   // Aluno: um aluno existente (studentId) OU os dados completos de um novo
@@ -359,8 +373,15 @@ export const POST = withRequestContext(
     const mode = tenantCheckoutMode(tenant)
 
     const isInstallment = !isBolsista && !!data.boletoInstallment
-    // Carnê usa a MESMA capability de "Pagamento parcelado (mensalidade)".
-    if (isInstallment && !monthlyActive(tenant)) {
+    // Carnê de CURSO: valor manual por parcela, sem cupom nem desconto. O da
+    // ASSINATURA é outra coisa — cobra o preço do plano, e por isso o desconto
+    // manual (com o teto do vendedor) continua valendo para ele.
+    const isCourseInstallment = isInstallment && !data.planId
+    // Carnê de CURSO usa a MESMA capability de "Pagamento parcelado
+    // (mensalidade)". A assinatura no boleto não passa por ela: ali não há
+    // crédito concedido (cada boleto paga o ciclo dele) e quem libera a venda de
+    // assinatura é o módulo de assinaturas da unidade.
+    if (isCourseInstallment && !monthlyActive(tenant)) {
       return NextResponse.json(
         { error: "Pagamento parcelado não está habilitado para sua unidade." },
         { status: 403 },
@@ -595,7 +616,7 @@ export const POST = withRequestContext(
     let couponId: string | null = null
     let finalAmountFromCoupon: number | null = null
     // Cupom não se aplica a carnê (valor definido manualmente pela revenda).
-    if (!isBolsista && !isInstallment && data.couponCode) {
+    if (!isBolsista && !isCourseInstallment && data.couponCode) {
       const code = data.couponCode.toUpperCase()
       const now = new Date()
       // Cupom só do próprio tenant — cupons PMB (tenantId=null) não vazam
@@ -655,8 +676,10 @@ export const POST = withRequestContext(
     // ── Desconto manual (sem cupom) ───────────────────────────────────────
     // O vendedor digita o percentual na hora; o teto é o cap dele (dono 100%,
     // consultor = maxDiscount, já resolvido em `cap`). Mutuamente exclusivo com
-    // cupom (schema) e não se aplica a bolsa nem a carnê (valor manual).
-    if (!isBolsista && !isInstallment && data.manualDiscountPercent) {
+    // cupom (schema) e não se aplica a bolsa nem a carnê de curso (valor
+    // manual). Na assinatura no boleto ELE VALE — pular o teto aqui deixaria o
+    // desconto passar sem limite para o preço da assinatura.
+    if (!isBolsista && !isCourseInstallment && data.manualDiscountPercent) {
       if (data.manualDiscountPercent > cap + 0.01) {
         return NextResponse.json(
           { error: `Desconto excede seu cap (${cap}%)` },
@@ -791,6 +814,18 @@ export const POST = withRequestContext(
           { status: 503 },
         )
       }
+      // Assinatura no boleto pelo Mercado Pago: o MP exige o endereço do
+      // pagador no boleto. Gravado no aluno — é dele que o cron lê para emitir
+      // os boletos seguintes.
+      if (data.boletoInstallment && mode === "MP") {
+        if (!data.endereco) {
+          return NextResponse.json(
+            { error: "Informe o endereço do aluno para gerar o boleto (Mercado Pago)." },
+            { status: 400 },
+          )
+        }
+        await saveBoletoAddress(student.id, data.endereco)
+      }
       const sale = await createDirectSubscriptionSale({
         plan,
         student,
@@ -803,6 +838,12 @@ export const POST = withRequestContext(
         // paga, na conta da unidade (`lib/subscriptions/store-payment.ts`).
         checkout: { gateway: mode, storeUrl: storeBaseUrl(tenant) },
         discountPercent: data.manualDiscountPercent,
+        carne: data.boletoInstallment
+          ? {
+              count: data.boletoInstallment.count,
+              firstDueDate: data.boletoInstallment.firstDueDate,
+            }
+          : undefined,
       })
       if (!sale.ok) {
         return NextResponse.json(
@@ -823,6 +864,7 @@ export const POST = withRequestContext(
           discountAmount: sale.discountAmount,
           basePrice: sale.listPrice,
           studentId: student.id,
+          ...(sale.carne ? { carne: sale.carne } : {}),
         },
       })
     }
@@ -933,8 +975,15 @@ export const POST = withRequestContext(
     // Cria a matrícula BOLETO_INSTALLMENT (installmentsTotal = nº de parcelas) e
     // dispara a geração do plano: Asaas gera o carnê nativo; MP emite a 1ª parcela
     // agora e o cron emite as demais ~7 dias antes de cada vencimento.
-    if (isInstallment && data.boletoInstallment) {
+    if (isCourseInstallment && data.boletoInstallment) {
       const { count, installmentValue, firstDueDate } = data.boletoInstallment
+      // Garantido pelo schema no carnê de curso; o `if` só estreita o tipo.
+      if (installmentValue === undefined) {
+        return NextResponse.json(
+          { error: "Informe o valor de cada parcela." },
+          { status: 400 },
+        )
+      }
       if (count > MAX_BOLETO_INSTALLMENTS) {
         return NextResponse.json(
           { error: `Máximo de ${MAX_BOLETO_INSTALLMENTS}x.` },

@@ -13,6 +13,11 @@ import { PAYER_SELECT, resolvePayer } from "@/lib/checkout/payer"
 import { getPlanForCheckout } from "@/lib/subscriptions/plans"
 import { subscriptionCheckoutSchema } from "@/lib/subscriptions/checkout-schema"
 import { createSubscriptionAtGateway } from "@/lib/subscriptions/checkout"
+import {
+  CarneInputError,
+  discardSubscriptionCarne,
+  startSelfServiceCarne,
+} from "@/lib/subscriptions/carne"
 import { contextLogger } from "@/lib/logger"
 import { clientIp } from "@/lib/http/client-ip"
 
@@ -190,6 +195,38 @@ export const POST = withRequestContext(
       },
       select: { id: true },
     })
+
+    // Assinatura no BOLETO: um boleto por ciclo, emitido pela plataforma na
+    // conta-mãe (carnê — `lib/subscriptions/carne.ts`), igual à vitrine das
+    // unidades.
+    if (data.paymentMethod === "BOLETO") {
+      try {
+        const carne = await startSelfServiceCarne({
+          subscriptionId: subscription.id,
+          studentId: student.id,
+        })
+        return NextResponse.json({
+          data: {
+            subscriptionId: subscription.id,
+            authorized: false,
+            boleto: carne.firstBoleto ?? undefined,
+          },
+        })
+      } catch (err) {
+        await discardSubscriptionCarne(subscription.id)
+        if (err instanceof CarneInputError) {
+          return NextResponse.json({ error: err.message, code: "CARNE_INVALID" }, { status: 400 })
+        }
+        contextLogger().error(
+          { err, event: "subscription_checkout.carne_failed", planId: plan.id },
+          "falha ao gerar o boleto da assinatura",
+        )
+        return NextResponse.json(
+          { error: "Não foi possível gerar o boleto. Tente novamente." },
+          { status: 502 },
+        )
+      }
+    }
 
     // A vitrine PMB assina SEMPRE pelo Asaas, independente de
     // `pmbDirectSaleGateway`. Não é uma omissão: a recorrência do Mercado Pago

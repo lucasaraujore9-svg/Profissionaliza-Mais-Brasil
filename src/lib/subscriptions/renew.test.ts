@@ -2,7 +2,13 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
-    subscriptionPayment: { findFirst: vi.fn(), create: vi.fn(), updateMany: vi.fn() },
+    subscriptionPayment: {
+      findFirst: vi.fn(),
+      findMany: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+      updateMany: vi.fn(),
+    },
     studentSubscription: { findUnique: vi.fn(), update: vi.fn() },
   },
 }))
@@ -16,11 +22,17 @@ vi.mock("@/lib/logger", () => {
 
 import { prisma } from "@/lib/prisma"
 import { createNotification } from "@/lib/notifications"
-import { settleSubscriptionCycle, markSubscriptionPastDue } from "./renew"
+import {
+  settleSubscriptionCycle,
+  markSubscriptionPastDue,
+  recordOpenSubscriptionCharge,
+} from "./renew"
 
 const findPay = prisma.subscriptionPayment.findFirst as unknown as ReturnType<typeof vi.fn>
 const createPay = prisma.subscriptionPayment.create as unknown as ReturnType<typeof vi.fn>
 const updatePays = prisma.subscriptionPayment.updateMany as unknown as ReturnType<typeof vi.fn>
+const updatePay = prisma.subscriptionPayment.update as unknown as ReturnType<typeof vi.fn>
+const findPays = prisma.subscriptionPayment.findMany as unknown as ReturnType<typeof vi.fn>
 const findSub = prisma.studentSubscription.findUnique as unknown as ReturnType<typeof vi.fn>
 const updateSub = prisma.studentSubscription.update as unknown as ReturnType<typeof vi.fn>
 const notify = createNotification as unknown as ReturnType<typeof vi.fn>
@@ -189,6 +201,129 @@ describe("markSubscriptionPastDue", () => {
     findSub.mockResolvedValue(sub({ status: "CANCELLED" }))
     await markSubscriptionPastDue("sub_1")
     expect(updateSub).not.toHaveBeenCalled()
+  })
+
+  it("assinatura que NUNCA foi paga continua PENDING", async () => {
+    // "Regularize para não perder o acesso" a quem nunca teve acesso — e o
+    // carnê abandonado, que a varredura procura como PENDING, sumiria dela.
+    findSub.mockResolvedValue(sub({ status: "PENDING" }))
+    await markSubscriptionPastDue("sub_1")
+    expect(updateSub).not.toHaveBeenCalled()
+    expect(notify).not.toHaveBeenCalled()
+  })
+})
+
+describe("assinatura no boleto (carnê)", () => {
+  const FIRST_DUE = new Date("2026-08-25T12:00:00Z")
+
+  it("boleto pago marca a LINHA do carnê sem trocar o vencimento da agenda", async () => {
+    findSub.mockResolvedValue(sub({ boletoCarne: true }))
+    findPay.mockResolvedValue({ id: "sp_1", paidAt: null, number: 1 })
+    updatePays.mockResolvedValue({ count: 1 })
+    findPays.mockResolvedValue([{ number: 1, dueDate: FIRST_DUE, paidAt: PAID }])
+
+    await settleSubscriptionCycle("sub_1", event({ dueDate: new Date("2026-08-20T00:00:00Z") }))
+
+    const data = updatePays.mock.calls[0][0].data
+    expect(data).toEqual({ status: "CONFIRMED", paidAt: PAID, amount: 49.9 })
+    expect(data.dueDate).toBeUndefined()
+  })
+
+  it("o período sai da AGENDA: pago adiantado, vale até o vencimento do 2º boleto", async () => {
+    // Somar um mês a partir do pagamento (20/08) encerraria o acesso em 20/09,
+    // cinco dias antes do 2º boleto vencer (25/09).
+    findSub.mockResolvedValue(sub({ boletoCarne: true }))
+    findPay.mockResolvedValue({ id: "sp_1", paidAt: null, number: 1 })
+    updatePays.mockResolvedValue({ count: 1 })
+    findPays.mockResolvedValue([
+      { number: 1, dueDate: FIRST_DUE, paidAt: PAID },
+      { number: 2, dueDate: new Date("2026-09-25T12:00:00Z"), paidAt: null },
+    ])
+
+    await settleSubscriptionCycle("sub_1", event())
+
+    expect(updateSub.mock.calls[0][0].data.currentPeriodEnd.toISOString()).toBe(
+      "2026-09-25T12:00:00.000Z",
+    )
+  })
+
+  it("cada boleto pago soma um ciclo da agenda", async () => {
+    findSub.mockResolvedValue(
+      sub({ boletoCarne: true, currentPeriodEnd: new Date("2026-09-25T12:00:00Z") }),
+    )
+    findPay.mockResolvedValue({ id: "sp_2", paidAt: null, number: 2 })
+    updatePays.mockResolvedValue({ count: 1 })
+    findPays.mockResolvedValue([
+      { number: 1, dueDate: FIRST_DUE, paidAt: new Date("2026-08-20T12:00:00Z") },
+      { number: 2, dueDate: new Date("2026-09-25T12:00:00Z"), paidAt: new Date("2026-09-24T12:00:00Z") },
+    ])
+
+    await settleSubscriptionCycle("sub_1", event({ externalPaymentId: "pay_2" }))
+
+    expect(updateSub.mock.calls[0][0].data.currentPeriodEnd.toISOString()).toBe(
+      "2026-10-25T12:00:00.000Z",
+    )
+  })
+
+  it("o período nunca recua", async () => {
+    const later = new Date("2026-12-25T12:00:00Z")
+    findSub.mockResolvedValue(sub({ boletoCarne: true, currentPeriodEnd: later }))
+    findPay.mockResolvedValue({ id: "sp_1", paidAt: null, number: 1 })
+    updatePays.mockResolvedValue({ count: 1 })
+    findPays.mockResolvedValue([{ number: 1, dueDate: FIRST_DUE, paidAt: PAID }])
+
+    await settleSubscriptionCycle("sub_1", event())
+
+    expect(updateSub.mock.calls[0][0].data.currentPeriodEnd).toEqual(later)
+  })
+
+  it("recorrência do gateway (sem carnê) segue somando um ciclo a partir do pagamento", async () => {
+    await settleSubscriptionCycle("sub_1", event())
+    expect(findPays).not.toHaveBeenCalled()
+  })
+})
+
+describe("recordOpenSubscriptionCharge no carnê", () => {
+  const open = {
+    gateway: "ASAAS" as const,
+    externalPaymentId: "pay_1",
+    amount: 49.9,
+    dueDate: PAID,
+    status: "PENDING",
+  }
+
+  it("NÃO cria linha: quem cria o boleto do carnê é a plataforma", async () => {
+    // O PAYMENT_CREATED chega enquanto o id ainda está sendo gravado; criar aqui
+    // duplicaria o boleto e o id único derrubaria a emissão.
+    findSub.mockResolvedValue({ id: "sub_1", tenantId: null, boletoCarne: true })
+    findPay.mockResolvedValue(null)
+    await recordOpenSubscriptionCharge("sub_1", open)
+    expect(createPay).not.toHaveBeenCalled()
+    expect(updatePay).not.toHaveBeenCalled()
+  })
+
+  it("atraso marca a linha, sem mexer no vencimento nem no boleto", async () => {
+    findSub.mockResolvedValue({ id: "sub_1", tenantId: null, boletoCarne: true })
+    findPay.mockResolvedValue({ id: "sp_1", paidAt: null, number: 3, status: "PENDING" })
+    await recordOpenSubscriptionCharge("sub_1", { ...open, status: "OVERDUE" })
+    expect(updatePay).toHaveBeenCalledWith({
+      where: { id: "sp_1" },
+      data: { status: "OVERDUE" },
+    })
+  })
+
+  it("boleto cancelado não volta a ficar em aberto", async () => {
+    findSub.mockResolvedValue({ id: "sub_1", tenantId: null, boletoCarne: true })
+    findPay.mockResolvedValue({ id: "sp_1", paidAt: null, number: 3, status: "CANCELLED" })
+    await recordOpenSubscriptionCharge("sub_1", { ...open, status: "OVERDUE" })
+    expect(updatePay).not.toHaveBeenCalled()
+  })
+
+  it("fora do carnê continua criando a cobrança em aberto", async () => {
+    findSub.mockResolvedValue({ id: "sub_1", tenantId: null, boletoCarne: false })
+    findPay.mockResolvedValue(null)
+    await recordOpenSubscriptionCharge("sub_1", open)
+    expect(createPay).toHaveBeenCalledTimes(1)
   })
 })
 

@@ -1235,6 +1235,14 @@ model StudentSubscription {
   /// CREDIT_CARD (debito automatico), PIX ou BOLETO (fatura mensal manual).
   billingType String?        @map("billing_type")
 
+  /// Assinatura NO BOLETO (carne): a plataforma emite um boleto por ciclo, na
+  /// conta da loja, nos dois gateways — e nao existe recorrencia no gateway
+  /// (`asaasSubscriptionId`/`mpPreapprovalId` ficam null). Os boletos sao as
+  /// linhas numeradas de `SubscriptionPayment`, e o fim do periodo pago sai
+  /// delas (`carnePeriodEnd`), nao de "pagou, soma um ciclo". Ver
+  /// `src/lib/subscriptions/carne.ts`.
+  boletoCarne Boolean @default(false) @map("boleto_carne")
+
   // Ids da recorrencia no gateway
   mpPreapprovalId     String? @unique @map("mp_preapproval_id") // preapproval_xxxx
   asaasSubscriptionId String? @unique @map("asaas_subscription_id")
@@ -1285,16 +1293,32 @@ model SubscriptionPayment {
   mpPaymentId    String? @unique @map("mp_payment_id")
   asaasPaymentId String? @unique @map("asaas_payment_id")
 
-  status      String // PENDING, CONFIRMED, RECEIVED, OVERDUE, REFUNDED...
+  /// PENDING, CONFIRMED, RECEIVED, OVERDUE, REFUNDED... No carne tambem
+  /// SCHEDULED (linha criada, boleto ainda nao emitido) e CANCELLED.
+  status      String
   billingType String?   @map("billing_type")
+  /// No carne e a data da AGENDA (1o vencimento + n ciclos) e nao muda depois
+  /// de gravada — e dela que sai o periodo pago.
   dueDate     DateTime  @map("due_date")
   paidAt      DateTime? @map("paid_at")
 
   invoiceUrl  String? @map("invoice_url") @db.Text
   bankSlipUrl String? @map("bank_slip_url") @db.Text
 
+  /// Posicao do boleto no CARNE (1, 2, 3...). null = cobranca que o proprio
+  /// gateway emitiu para uma recorrencia (cartao, assinatura antiga).
+  number        Int?
+  /// Linha digitavel do boleto do carne, mostrada dentro da nossa pagina.
+  digitableLine String?   @map("digitable_line")
+  generatedAt   DateTime? @map("generated_at")
+  /// Quantas vezes o boleto desta linha ja foi emitido. Entra na chave de
+  /// idempotencia do MP: o boleto que venceu sem pagamento e reemitido, e com a
+  /// mesma chave o MP devolveria o pagamento ja cancelado.
+  emitAttempts  Int       @default(0) @map("emit_attempts")
+
   createdAt DateTime @default(now()) @map("created_at")
 
+  @@unique([subscriptionId, number])
   @@index([subscriptionId])
   @@index([tenantId, paidAt])
   @@index([status, dueDate])

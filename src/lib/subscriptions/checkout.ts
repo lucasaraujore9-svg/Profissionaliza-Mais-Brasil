@@ -392,9 +392,10 @@ async function createMpSubscriptionForPlan(
 
   if (!input.cardToken) {
     // A recorrência do MP sem token só existiria como página do Mercado Pago
-    // (`init_point`), e o aluno de uma loja paga sempre na página da loja.
+    // (`init_point`), e o aluno de uma loja paga sempre na página da loja. O
+    // boleto nem chega aqui: é a assinatura no boleto (`carne.ts`).
     throw new SubscriptionCheckoutInputError(
-      "Esta loja aceita assinatura recorrente apenas no cartão de crédito",
+      "Esta loja aceita assinatura no cartão de crédito ou no boleto",
     )
   }
 

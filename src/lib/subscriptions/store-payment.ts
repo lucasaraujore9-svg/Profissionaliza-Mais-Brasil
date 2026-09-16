@@ -27,6 +27,12 @@ import { getPlanForCheckout } from "./plans"
 import { isRecurringInterval } from "./interval"
 import { settleSubscriptionCycle } from "./renew"
 import type { StoreSubscriptionPaymentInput } from "./checkout-schema"
+import {
+  CarneInputError,
+  resetSubscriptionCarne,
+  startSelfServiceCarne,
+} from "./carne"
+import { CARNE_OPEN_STATUSES } from "./carne-schedule"
 
 /**
  * PAGAMENTO de uma assinatura na página da PLATAFORMA (`/pagar/assinatura/<id>`)
@@ -34,9 +40,12 @@ import type { StoreSubscriptionPaymentInput } from "./checkout-schema"
  * uma assinatura que já existe: a venda direta, o "Pagar" da área do aluno e a
  * fatura de renovação apontam para cá, nunca para a página do gateway.
  *
- * Três situações, decididas pela linha e pelo gateway:
+ * Situações, decididas pela linha e pelo gateway:
  *  - **sem cobrança ainda** (venda direta): a cobrança nasce aqui, na conta da
- *    loja, com o meio que o aluno escolheu;
+ *    loja, com o meio que o aluno escolheu — e BOLETO vira assinatura no boleto
+ *    (carnê), nos dois gateways;
+ *  - **assinatura no boleto**: paga o boleto em aberto do carnê (no Asaas
+ *    também por PIX ou cartão; no Mercado Pago, só o próprio boleto);
  *  - **fatura aberta no Asaas** (1º ciclo já emitido, renovação, vitalícia):
  *    paga ESSA cobrança — PIX/boleto na tela, cartão via `payWithCreditCard` —
  *    sem criar outra por cima;
@@ -91,6 +100,8 @@ const PAYABLE_SELECT = {
   mpPreapprovalId: true,
   asaasSubscriptionId: true,
   externalReference: true,
+  boletoCarne: true,
+  studentId: true,
   student: { select: PAYER_SELECT },
 } as const
 
@@ -104,6 +115,8 @@ type PayableSubscription = {
   mpPreapprovalId: string | null
   asaasSubscriptionId: string | null
   externalReference: string | null
+  boletoCarne: boolean
+  studentId: string
 }
 
 function fail(status: number, code: string, error: string): StorePaymentResult {
@@ -304,6 +317,9 @@ async function payUnderLock(
   payer: PayerData,
   remoteIp: string | undefined,
 ): Promise<StorePaymentResult> {
+  // ── Assinatura no boleto: paga o boleto em aberto ────────────────────────
+  if (sub.boletoCarne) return payCarneBoleto(sub, data, resolved, payer, remoteIp)
+
   // ── Já existe cobrança no gateway ────────────────────────────────────────
   if (hasGatewayCharge(sub)) {
     if (sub.gateway === "ASAAS" || sub.asaasSubscriptionId) {
@@ -341,12 +357,16 @@ async function payUnderLock(
     )
   }
 
+  // BOLETO, nos dois gateways, é a assinatura no boleto: um boleto por ciclo,
+  // emitido pela plataforma na conta da loja.
+  if (data.paymentMethod === "BOLETO") return startCarne(sub, data, resolved)
+
   const recurring = isRecurringInterval(sub.interval)
   if (resolved.gateway === "MP" && recurring && data.paymentMethod !== "CREDIT_CARD") {
     return fail(
       400,
       "METHOD_NOT_SUPPORTED",
-      "Esta loja aceita assinatura recorrente apenas no cartão de crédito",
+      "Esta loja aceita assinatura no cartão de crédito ou no boleto",
     )
   }
   const cardCheck = checkCard(data, resolved.gateway)
@@ -390,6 +410,90 @@ async function payUnderLock(
     authorized: charged.authorized,
     ...(charged.pix ? { pix: charged.pix } : {}),
     ...(charged.boleto ? { boleto: charged.boleto } : {}),
+  }
+}
+
+/**
+ * O aluno escolheu BOLETO numa assinatura sem cobrança (link da venda direta):
+ * ela vira assinatura no boleto, com o 1º boleto vencendo em 3 dias. Se o
+ * boleto não sai, a assinatura volta a ser o que era — o link continua valendo,
+ * inclusive para outro meio.
+ */
+async function startCarne(
+  sub: PayableSubscription,
+  data: StoreSubscriptionPaymentInput,
+  resolved: ResolvedAccount,
+): Promise<StorePaymentResult> {
+  // O carnê é emitido no gateway ATIVO da loja agora (que pode não ser o da
+  // venda, se a loja trocou de gateway depois de mandar o link).
+  if (sub.gateway !== resolved.gateway) {
+    await prisma.studentSubscription.update({
+      where: { id: sub.id },
+      data: { gateway: resolved.gateway },
+    })
+  }
+  try {
+    const carne = await startSelfServiceCarne({
+      subscriptionId: sub.id,
+      studentId: sub.studentId,
+      address: resolved.gateway === "MP" ? data.enderecoBoleto : undefined,
+    })
+    return {
+      ok: true,
+      authorized: false,
+      ...(carne.firstBoleto ? { boleto: carne.firstBoleto } : {}),
+    }
+  } catch (err) {
+    await resetSubscriptionCarne(sub.id)
+    if (err instanceof CarneInputError) {
+      return fail(400, "CARNE_INVALID", err.message)
+    }
+    throw err
+  }
+}
+
+/**
+ * Boleto em aberto de uma assinatura no boleto. No Asaas a cobrança aceita
+ * PIX, cartão ou o próprio boleto — o mesmo caminho da fatura de renovação. No
+ * Mercado Pago o boleto é um pagamento próprio e não troca de meio (mesma regra
+ * do carnê de curso): a tela mostra o boleto.
+ */
+async function payCarneBoleto(
+  sub: PayableSubscription,
+  data: StoreSubscriptionPaymentInput,
+  resolved: ResolvedAccount,
+  payer: PayerData,
+  remoteIp: string | undefined,
+): Promise<StorePaymentResult> {
+  if (sub.gateway === "ASAAS") {
+    return payOpenAsaasCharge(sub, data, resolved, payer, remoteIp)
+  }
+  const open = await prisma.subscriptionPayment.findFirst({
+    where: {
+      subscriptionId: sub.id,
+      number: { not: null },
+      paidAt: null,
+      status: { in: CARNE_OPEN_STATUSES },
+      mpPaymentId: { not: null },
+      bankSlipUrl: { not: null },
+    },
+    orderBy: { number: "asc" },
+    select: { bankSlipUrl: true, digitableLine: true },
+  })
+  if (!open?.bankSlipUrl) {
+    return fail(
+      409,
+      "NO_OPEN_CHARGE",
+      "Não há boleto em aberto agora. O próximo fica disponível 7 dias antes do vencimento.",
+    )
+  }
+  if (data.paymentMethod !== "BOLETO") {
+    return fail(400, "METHOD_NOT_SUPPORTED", "Esta assinatura é paga por boleto.")
+  }
+  return {
+    ok: true,
+    authorized: false,
+    boleto: { url: open.bankSlipUrl, digitableLine: open.digitableLine ?? undefined },
   }
 }
 

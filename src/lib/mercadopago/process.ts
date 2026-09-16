@@ -12,6 +12,10 @@ import { pmbPlataformaPolo, pmbPlataformaVendedorId, pmbMpAccessToken } from "@/
 import { fulfillFromMpPayment } from "./fulfillment"
 import { fulfillEnrollment } from "@/lib/enrollment/fulfill"
 import { settleBoletoInstallment } from "@/lib/installments/settle"
+import {
+  handleMpCarnePayment,
+  isMpCarneReference,
+} from "@/lib/subscriptions/carne-webhook"
 import { unlinkCourseFromStudent } from "@/lib/students/plataforma-actions"
 import { createNotification } from "@/lib/notifications"
 import {
@@ -441,6 +445,15 @@ export async function processMpWebhook(args: ProcessArgs): Promise<void> {
     // ── Parcela de carnê (parc_<id>): roteia pela linha da parcela ──────────
     if (payment.external_reference?.startsWith("parc_")) {
       await handleInstallmentMpPayment(tenant, payment, logId)
+      return
+    }
+
+    // ── Boleto de assinatura no boleto (subbol_<id>) ───────────────────────
+    // Antes do `pmb_sub_`: lá `cancelled` é estorno e revoga a assinatura, e é
+    // exatamente assim que chega o boleto que venceu sem pagamento.
+    if (isMpCarneReference(payment.external_reference)) {
+      const outcome = await handleMpCarnePayment(tenant, accessToken, payment)
+      await markLog(logId, outcome.ok, outcome.note)
       return
     }
 

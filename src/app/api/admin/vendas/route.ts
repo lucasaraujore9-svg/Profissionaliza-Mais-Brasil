@@ -38,6 +38,7 @@ import { rollbackSaleEnrollment } from "@/lib/enrollment/multi-course-server"
 import { PAYER_SELECT, resolvePayer } from "@/lib/checkout/payer"
 import { getPlanForCheckout } from "@/lib/subscriptions/plans"
 import { createDirectSubscriptionSale } from "@/lib/subscriptions/direct-sale"
+import { MAX_BOLETO_INSTALLMENTS } from "@/lib/installments/schedule"
 
 export const GET = withRequestContext(
   { action: "admin.vendas.list", route: "/api/admin/vendas" },
@@ -170,6 +171,15 @@ const createSchema = z
     manualDiscountPercent: z.number().positive().max(100).optional(),
     // Bolsa de estudo: cria o aluno na plataforma sem gerar cobranca no gateway.
     bolsista: z.boolean().optional(),
+    // Assinatura NO BOLETO (carnê): quantos boletos gerar agora + 1º
+    // vencimento. Cada boleto vale um ciclo, pelo preço da assinatura; os
+    // seguintes a plataforma emite sozinha. Só com `planId`.
+    boletoCarne: z
+      .object({
+        count: z.number().int().min(1).max(MAX_BOLETO_INSTALLMENTS),
+        firstDueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data inválida"),
+      })
+      .optional(),
   })
   // XOR de três: curso(s), pacote OU plano de assinatura — exatamente um.
   .refine(
@@ -188,6 +198,10 @@ const createSchema = z
     message:
       "Assinatura não aceita cupom nem bolsa de estudo — use desconto manual.",
     path: ["planId"],
+  })
+  .refine((v) => !v.boletoCarne || !!v.planId, {
+    message: "Carnê no boleto só vale para assinatura.",
+    path: ["boletoCarne"],
   })
   .refine((v) => !(v.couponCode && v.manualDiscountPercent), {
     message: "Use cupom OU desconto manual, não os dois",
@@ -597,6 +611,7 @@ export const POST = withRequestContext(
       // vitrine PMB (a recorrência do MP não emite PIX/boleto por ciclo).
       checkout: { gateway: "ASAAS", storeUrl: pmbAppUrl() },
       discountPercent: parsed.data.manualDiscountPercent,
+      carne: parsed.data.boletoCarne,
     })
     if (!sale.ok) {
       return NextResponse.json(
@@ -617,6 +632,7 @@ export const POST = withRequestContext(
         finalAmount: sale.priceAtPurchase,
         discountAmount: sale.discountAmount,
         basePrice: sale.listPrice,
+        ...(sale.carne ? { carne: sale.carne } : {}),
       },
     })
   }

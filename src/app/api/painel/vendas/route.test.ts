@@ -45,11 +45,17 @@ vi.mock("@/lib/enrollment/fulfill", () => ({
 // derivado dos presets reais — ver src/test/painel-ctx.ts.
 vi.mock("@/lib/auth/painel-guard", () => ({ requirePainel: vi.fn() }))
 vi.mock("@/lib/auth", () => ({ auth: vi.fn() }))
+vi.mock("@/lib/subscriptions/plans", () => ({ getPlanForCheckout: vi.fn() }))
+vi.mock("@/lib/subscriptions/direct-sale", () => ({ createDirectSubscriptionSale: vi.fn() }))
+vi.mock("@/lib/subscriptions/carne", () => ({ saveBoletoAddress: vi.fn(async () => undefined) }))
 
 import { prisma } from "@/lib/prisma"
 import { requirePainel } from "@/lib/auth/painel-guard"
 import { painelGuardOk } from "@/test/painel-ctx"
 import { auth } from "@/lib/auth"
+import { getPlanForCheckout } from "@/lib/subscriptions/plans"
+import { createDirectSubscriptionSale } from "@/lib/subscriptions/direct-sale"
+import { saveBoletoAddress } from "@/lib/subscriptions/carne"
 import { POST } from "./route"
 
 const p = prisma as unknown as {
@@ -544,5 +550,116 @@ describe("responsável financeiro", () => {
     mockStudent({ nascimento: null })
     const res = await POST(bodyExistingStudent())
     expect(res.status).not.toBe(400)
+  })
+})
+
+// ── Assinatura no boleto (carnê) ────────────────────────────────────────────
+// A estrutura do carnê passou a valer para a assinatura: um boleto por ciclo,
+// pelo preço do plano. Não depende do "parcelado" da unidade (ali não há
+// crédito), mas o teto de desconto do vendedor continua valendo.
+describe("venda de assinatura no boleto", () => {
+  const planLookup = getPlanForCheckout as unknown as ReturnType<typeof vi.fn>
+  const sale = createDirectSubscriptionSale as unknown as ReturnType<typeof vi.fn>
+  const saveAddress = saveBoletoAddress as unknown as ReturnType<typeof vi.fn>
+
+  const carne = { count: 12, firstDueDate: "2026-10-10" }
+  const endereco = {
+    cep: "30110000",
+    rua: "Rua A",
+    numero: "10",
+    bairro: "Centro",
+    cidade: "Belo Horizonte",
+    estado: "MG",
+  }
+
+  beforeEach(() => {
+    planLookup.mockResolvedValue({
+      id: "plan_1",
+      name: "Plano Total",
+      slug: "plano",
+      price: 59.9,
+      interval: "MONTHLY",
+      scope: {},
+    })
+    sale.mockResolvedValue({
+      ok: true,
+      subscriptionId: "sub_1",
+      priceAtPurchase: 59.9,
+      listPrice: 59.9,
+      discountAmount: 0,
+      paymentUrl: "https://unidade.test/pagar/assinatura/sub_1",
+      chargeLabel: "Cobrado todo mês",
+      recurring: true,
+      carne: { count: 12, amount: 59.9, firstDueDate: "2026-10-10", firstBoleto: null },
+    })
+    p.tenantMember.findFirst.mockResolvedValue(null) // dono: teto 100%
+    mockStudent()
+  })
+
+  function planBody(overrides: Record<string, unknown> = {}) {
+    return bodyExistingStudent({
+      tenantCourseIds: undefined,
+      planId: "plan_1",
+      boletoInstallment: carne,
+      endereco,
+      ...overrides,
+    })
+  }
+
+  it("gera os boletos mesmo sem o parcelado liberado para a unidade", async () => {
+    const res = await POST(planBody())
+    expect(res.status).toBe(200)
+    expect(sale.mock.calls[0][0].carne).toEqual(carne)
+    const json = (await res.json()) as { data: { carne: unknown } }
+    expect(json.data.carne).toMatchObject({ count: 12 })
+  })
+
+  it("Mercado Pago: o endereço vai para a ficha do aluno (o cron emite com ele)", async () => {
+    await POST(planBody())
+    expect(saveAddress).toHaveBeenCalledWith("s1", endereco)
+  })
+
+  it("Mercado Pago sem endereço é recusado antes da venda", async () => {
+    const res = await POST(planBody({ endereco: undefined }))
+    expect(res.status).toBe(400)
+    expect(sale).not.toHaveBeenCalled()
+  })
+
+  it("o teto de desconto do vendedor continua valendo no carnê", async () => {
+    // O carnê de CURSO pula o desconto (valor manual). Pular aqui também
+    // deixaria o desconto chegar sem limite ao preço da assinatura.
+    p.tenantMember.findFirst.mockResolvedValue({ maxDiscount: 10, status: "ATIVO" })
+    const res = await POST(planBody({ manualDiscountPercent: 30 }))
+    expect(res.status).toBe(403)
+    expect(sale).not.toHaveBeenCalled()
+  })
+
+  it("desconto dentro do teto chega à venda", async () => {
+    p.tenantMember.findFirst.mockResolvedValue({ maxDiscount: 10, status: "ATIVO" })
+    const res = await POST(planBody({ manualDiscountPercent: 10 }))
+    expect(res.status).toBe(200)
+    expect(sale.mock.calls[0][0].discountPercent).toBe(10)
+  })
+
+  it("carnê de CURSO continua exigindo o valor da parcela e 2+ parcelas", async () => {
+    const semValor = await POST(
+      bodyExistingStudent({ boletoInstallment: { count: 3, firstDueDate: "2026-10-10" } }),
+    )
+    expect(semValor.status).toBe(400)
+    const umaParcela = await POST(
+      bodyExistingStudent({
+        boletoInstallment: { count: 1, installmentValue: 50, firstDueDate: "2026-10-10" },
+      }),
+    )
+    expect(umaParcela.status).toBe(400)
+  })
+
+  it("carnê de CURSO continua preso ao parcelado da unidade", async () => {
+    const res = await POST(
+      bodyExistingStudent({
+        boletoInstallment: { count: 3, installmentValue: 50, firstDueDate: "2026-10-10" },
+      }),
+    )
+    expect(res.status).toBe(403)
   })
 })

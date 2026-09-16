@@ -1,9 +1,11 @@
+import type { SubscriptionInterval } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { contextLogger } from "@/lib/logger"
 import { createNotification } from "@/lib/notifications"
 import { swallow } from "@/lib/errors"
 import { cancelSubscriptionAccess } from "./cancel"
 import { addInterval, isRecurringInterval } from "./interval"
+import { CARNE_STATUS, carnePeriodEnd } from "./carne-schedule"
 
 /**
  * Renovacao e queda de ciclo de uma assinatura de aluno.
@@ -40,7 +42,7 @@ export async function settleSubscriptionCycle(
       event.gateway === "MP"
         ? { mpPaymentId: event.externalPaymentId }
         : { asaasPaymentId: event.externalPaymentId },
-    select: { id: true, paidAt: true },
+    select: { id: true, paidAt: true, number: true },
   })
   // Já liquidado: re-entrega do webhook. Uma linha SEM `paidAt` não é
   // re-entrega — é o ciclo que `recordOpenSubscriptionCharge` registrou em
@@ -58,6 +60,13 @@ export async function settleSubscriptionCycle(
     invoiceUrl: event.invoiceUrl ?? null,
     bankSlipUrl: event.bankSlipUrl ?? null,
   }
+  // Boleto do CARNE: o vencimento e da agenda (e dele que sai o periodo pago) e
+  // o boleto e o que a plataforma emitiu — o pagamento so marca a linha.
+  const carneRowPaidData = {
+    status: "CONFIRMED",
+    paidAt: event.paidAt,
+    amount: event.amount,
+  }
   /** Grava o pagamento; `false` quando outro evento já o liquidou. */
   const recordPaid = async (tenantId: string | null): Promise<boolean> => {
     if (existing) {
@@ -65,7 +74,7 @@ export async function settleSubscriptionCycle(
       // juntos, e duas liquidações empurrariam o período duas vezes.
       const { count } = await prisma.subscriptionPayment.updateMany({
         where: { id: existing.id, paidAt: null },
-        data: paidData,
+        data: existing.number !== null ? carneRowPaidData : paidData,
       })
       return count === 1
     }
@@ -96,6 +105,7 @@ export async function settleSubscriptionCycle(
       // A VITALICIA nunca tem `currentPeriodEnd`, entao ele nao serve para
       // saber se ja houve um 1o ciclo — quem responde isso e `startedAt`.
       startedAt: true,
+      boletoCarne: true,
       plan: { select: { name: true } },
     },
   })
@@ -144,7 +154,12 @@ export async function settleSubscriptionCycle(
   // `subscriptionGrantsAccess` e o que mantem a linha fora da varredura de
   // carencia. Gravar uma data distante ali seria uma mentira que a varredura
   // acabaria cobrando, cancelando quem comprou acesso permanente.
-  const nextPeriodEnd = addInterval(base, sub.interval)
+  //
+  // No CARNE o periodo sai da AGENDA dos boletos, nao de "agora + um ciclo":
+  // ver `carnePeriodEnd`.
+  const nextPeriodEnd = sub.boletoCarne
+    ? await carneRowsPeriodEnd(subscriptionId, sub.interval, sub.currentPeriodEnd)
+    : addInterval(base, sub.interval)
 
   await prisma.studentSubscription.update({
     where: { id: subscriptionId },
@@ -166,6 +181,36 @@ export async function settleSubscriptionCycle(
 }
 
 /**
+ * Fim do periodo de uma assinatura no boleto, recalculado das linhas pagas.
+ * Nunca recua: o maximo entre o que ja estava gravado e o calculado.
+ */
+async function carneRowsPeriodEnd(
+  subscriptionId: string,
+  interval: SubscriptionInterval,
+  current: Date | null,
+): Promise<Date | null> {
+  const rows = await prisma.subscriptionPayment.findMany({
+    where: { subscriptionId },
+    select: { number: true, dueDate: true, paidAt: true },
+  })
+  const first = rows.find((r) => r.number === 1)
+  const paid = rows.filter((r) => r.paidAt !== null)
+  if (!first || paid.length === 0) return current
+  const firstPaidAt = paid.reduce<Date>(
+    (min, r) => (r.paidAt! < min ? r.paidAt! : min),
+    paid[0].paidAt!,
+  )
+  const end = carnePeriodEnd({
+    firstDueDate: first.dueDate,
+    firstPaidAt,
+    paidCount: paid.length,
+    interval,
+  })
+  if (!end) return current
+  return current && current > end ? current : end
+}
+
+/**
  * Registra/atualiza a cobranca de um ciclo AINDA EM ABERTO.
  *
  * Por que existe: com PIX e boleto nao ha debito automatico — o Asaas EMITE a
@@ -183,7 +228,7 @@ export async function recordOpenSubscriptionCharge(
 ): Promise<void> {
   const sub = await prisma.studentSubscription.findUnique({
     where: { id: subscriptionId },
-    select: { id: true, tenantId: true },
+    select: { id: true, tenantId: true, boletoCarne: true },
   })
   if (!sub) return
 
@@ -194,12 +239,30 @@ export async function recordOpenSubscriptionCharge(
 
   const existing = await prisma.subscriptionPayment.findFirst({
     where,
-    select: { id: true, paidAt: true },
+    select: { id: true, paidAt: true, number: true, status: true },
   })
 
   // Nunca rebaixa uma cobranca ja liquidada: o Asaas reenvia PAYMENT_UPDATED
   // depois do pagamento, e sobrescrever devolveria a linha para "em aberto".
   if (existing?.paidAt) return
+
+  // CARNE: quem cria as linhas e a plataforma, na emissao. O PAYMENT_CREATED do
+  // Asaas chega enquanto o id ainda esta sendo gravado — criar uma linha aqui
+  // poria o mesmo boleto duas vezes (e o id unico derrubaria a emissao). Da
+  // linha do carne, o evento so muda o atraso; vencimento e boleto sao da agenda.
+  if (sub.boletoCarne || existing?.number != null) {
+    if (
+      existing &&
+      event.status === CARNE_STATUS.OVERDUE &&
+      existing.status !== CARNE_STATUS.CANCELLED
+    ) {
+      await prisma.subscriptionPayment.update({
+        where: { id: existing.id },
+        data: { status: CARNE_STATUS.OVERDUE },
+      })
+    }
+    return
+  }
 
   if (existing) {
     await prisma.subscriptionPayment.update({
@@ -252,6 +315,10 @@ export async function markSubscriptionPastDue(
     },
   })
   if (!sub || sub.status === "CANCELLED" || sub.status === "EXPIRED") return
+  // Nunca paga: nao ha assinatura a atrasar. Marcar PAST_DUE anunciaria
+  // "regularize para nao perder o acesso" a quem nunca teve acesso — e tiraria a
+  // linha do PENDING que a limpeza de carne abandonado procura.
+  if (sub.status === "PENDING") return
 
   // VITALICIA nao tem mensalidade a atrasar. Um boleto unico que venceu sem
   // pagamento deixa a assinatura em PENDING (que nao libera nada) — marca-la

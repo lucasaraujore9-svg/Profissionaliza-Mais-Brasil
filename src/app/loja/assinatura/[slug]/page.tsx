@@ -40,9 +40,10 @@ export default async function LojaPlanoPage({ params }: Props) {
   if (!plan) notFound()
 
   // Qual gateway a unidade usa decide os MEIOS oferecidos: a recorrência do
-  // Mercado Pago exige cartão tokenizado e não emite fatura de PIX/boleto por
-  // ciclo. Oferecer PIX numa loja de MP levaria a um 400 depois do preenchimento
-  // — o mesmo erro do incidente "revenda sem PIX" já registrado.
+  // Mercado Pago exige cartão tokenizado e não emite PIX por ciclo (o boleto por
+  // ciclo é a assinatura no boleto, emitida pela plataforma). Oferecer PIX numa
+  // loja de MP levaria a um 400 depois do preenchimento — o mesmo erro do
+  // incidente "revenda sem PIX" já registrado.
   const row = await prisma.tenant.findUnique({
     where: { id: tenant.id },
     select: {

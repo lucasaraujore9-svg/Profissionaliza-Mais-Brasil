@@ -173,7 +173,7 @@ export default async function PagarPage({ params }: PagarPageProps) {
     !isTransparentInstallment
   ) {
     const carne: InstallmentCarne = {
-      enrollmentId: enrollment.id,
+      id: enrollment.id,
       courseName: summaryName,
       parcelas: enrollment.boletoInstallments.map((row) => {
         const inWindow = isWithinRevealWindow(

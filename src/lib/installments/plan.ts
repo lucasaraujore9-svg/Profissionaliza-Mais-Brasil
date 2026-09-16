@@ -18,7 +18,6 @@ import { prisma } from "@/lib/prisma"
 import { contextLogger } from "@/lib/logger"
 import { decryptTenantMpToken, createPayment as createMpPayment } from "@/lib/mercadopago/client"
 import { asaasSplitsForEnrollment } from "@/lib/course-authoring/split-server"
-import type { MPCreatePaymentParams } from "@/lib/mercadopago/types"
 import {
   decryptTenantAsaasKey,
   findOrCreateAsaasCustomer,
@@ -36,9 +35,9 @@ import {
 } from "@/lib/checkout/payer"
 import {
   buildInstallmentSchedule,
-  MP_BOLETO_METHOD_ID,
   type ScheduledInstallment,
 } from "./schedule"
+import { hasCompleteBoletoAddress, mpBoletoPaymentParams } from "./mp-boleto"
 
 export interface CreatePlanInput {
   enrollmentId: string
@@ -143,27 +142,6 @@ async function loadContext(enrollmentId: string): Promise<PlanContext> {
 
 function ymd(date: Date): string {
   return date.toISOString().slice(0, 10)
-}
-
-/**
- * date_of_expiration do boleto MP: fim do dia (UTC) do vencimento. Se o
- * vencimento já passou (catch-up do cron após dias pulados), o MP recusa uma
- * expiração no passado — empurramos para daqui a 3 dias para o aluno pagar em
- * atraso (a parcela segue marcada OVERDUE; isto é só a validade do boleto).
- */
-function boletoExpirationIso(dueDate: Date): string {
-  const now = Date.now()
-  const base =
-    dueDate.getTime() < now ? new Date(now + 3 * 24 * 60 * 60 * 1000) : new Date(dueDate)
-  base.setUTCHours(23, 59, 59, 0)
-  return base.toISOString()
-}
-
-function splitName(nome: string): { first: string; last: string } {
-  const parts = nome.trim().split(/\s+/).filter(Boolean)
-  const first = parts[0] ?? "Aluno"
-  const last = parts.slice(1).join(" ") || first
-  return { first, last }
 }
 
 // ── Criação do plano ────────────────────────────────────────────────────────
@@ -402,38 +380,24 @@ async function emitMpBoletoForRow(
   if (!payer.email)
     throw new Error(`aluno ${s.id} sem email — boleto MP exige email`)
   if (!payer.cpf) throw new Error(`aluno ${s.id} sem CPF — boleto MP exige CPF`)
-  if (!s.cep || !s.rua || !s.numero || !s.bairro || !s.cidade || !s.estado) {
+  if (!hasCompleteBoletoAddress(s)) {
     throw new Error(
       `aluno ${s.id} sem endereço completo — boleto MP exige CEP/logradouro/número/bairro/cidade/UF`,
     )
   }
 
   const accessToken = decryptTenantMpToken(ctx.tenant.mpAccessToken!)
-  const { first, last } = splitName(payer.nome)
   const externalReference = `parc_${row.id}`
 
-  const params: MPCreatePaymentParams = {
-    transaction_amount: Number(row.amount),
+  const params = mpBoletoPaymentParams({
+    amount: Number(row.amount),
     description: `${ctx.enrollment.courseNome} — parcela ${row.number}`,
-    payment_method_id: MP_BOLETO_METHOD_ID,
-    external_reference: externalReference,
-    notification_url: mpWebhookUrl(ctx.tenant.slug),
-    date_of_expiration: boletoExpirationIso(row.dueDate),
-    payer: {
-      email: payer.email,
-      first_name: first,
-      last_name: last,
-      identification: { type: "CPF", number: payer.cpf.replace(/\D/g, "") },
-      address: {
-        zip_code: s.cep.replace(/\D/g, ""),
-        street_name: s.rua,
-        street_number: s.numero,
-        neighborhood: s.bairro,
-        city: s.cidade,
-        federal_unit: s.estado,
-      },
-    },
-  }
+    externalReference,
+    notificationUrl: mpWebhookUrl(ctx.tenant.slug),
+    dueDate: row.dueDate,
+    payer: { nome: payer.nome, email: payer.email, cpf: payer.cpf },
+    address: s,
+  })
 
   const payment = await createMpPayment(accessToken, params, externalReference)
 

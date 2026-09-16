@@ -42,6 +42,12 @@ vi.mock("./student-payment-emails", () => ({
   notifyStudentPaymentRejected: vi.fn(),
 }))
 vi.mock("@/lib/webhooks/transient", () => ({ isTransientWebhookError: () => false }))
+vi.mock("@/lib/subscriptions/carne-webhook", async (importOriginal) => ({
+  // O reconhecimento da referência é o real: é ele que decide o roteamento.
+  isMpCarneReference: (await importOriginal<typeof import("@/lib/subscriptions/carne-webhook")>())
+    .isMpCarneReference,
+  handleMpCarnePayment: vi.fn(async () => ({ ok: true, note: "boleto tratado" })),
+}))
 vi.mock("@/lib/logger", () => ({
   contextLogger: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }),
 }))
@@ -56,6 +62,7 @@ import {
 } from "./student-payment-emails"
 import { validateMpWebhookSignature } from "./webhook"
 import { processMpWebhook } from "./process"
+import { handleMpCarnePayment } from "@/lib/subscriptions/carne-webhook"
 
 const p = prisma as unknown as {
   payment: { findUnique: ReturnType<typeof vi.fn> }
@@ -113,6 +120,29 @@ beforeEach(() => {
   p.tenant.findUnique.mockResolvedValue(revendaTenant)
   p.enrollment.findFirst.mockResolvedValue({ id: "e1" })
   notifyMock.mockResolvedValue(undefined)
+})
+
+describe("processMpWebhook — boleto da assinatura no boleto", () => {
+  it("`subbol_` vai para o carnê: o `cancelled` do boleto vencido não vira estorno", async () => {
+    const carneMock = handleMpCarnePayment as unknown as ReturnType<typeof vi.fn>
+    const payment = { ...mpPayment("cancelled"), external_reference: "subbol_row_1" }
+    getPaymentMock.mockResolvedValue(payment)
+
+    await processMpWebhook(args())
+
+    expect(carneMock).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "t1" }),
+      "tok(enc-token)",
+      payment,
+    )
+    expect(fulfillMock).not.toHaveBeenCalled()
+    expect(p.enrollment.findFirst).not.toHaveBeenCalled()
+    expect(p.webhookLog.update).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ processed: true, error: "boleto tratado" }),
+      }),
+    )
+  })
 })
 
 describe("processMpWebhook — roteamento do dinheiro (QA-013)", () => {

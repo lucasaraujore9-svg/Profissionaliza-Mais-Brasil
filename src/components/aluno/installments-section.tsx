@@ -24,9 +24,12 @@ export interface InstallmentView {
 }
 
 export interface InstallmentCarne {
-  enrollmentId: string
+  /** Matrícula (carnê de curso) ou assinatura (assinatura no boleto). */
+  id: string
   courseName: string
   parcelas: InstallmentView[]
+  /** Como cada boleto é chamado na lista. Default "Parcela". */
+  unitLabel?: string
 }
 
 function brl(v: number): string {
@@ -37,7 +40,15 @@ function shortDate(iso: string): string {
   return new Date(iso).toLocaleDateString("pt-BR")
 }
 
-export function InstallmentsSection({ carnes }: { carnes: InstallmentCarne[] }) {
+export function InstallmentsSection({
+  carnes,
+  title = "Boletos do carnê",
+  description = "Cada parcela fica disponível a partir de 7 dias antes do vencimento. Pague o boleto para manter o acesso à sua compra.",
+}: {
+  carnes: InstallmentCarne[]
+  title?: string
+  description?: string
+}) {
   if (carnes.length === 0) return null
 
   return (
@@ -45,23 +56,24 @@ export function InstallmentsSection({ carnes }: { carnes: InstallmentCarne[] }) 
       <div className="flex items-center gap-2">
         <FileText className="h-4 w-4 text-[var(--color-pmb-green)]" />
         <h2 className="text-sm font-semibold text-[var(--color-pmb-green-900)]">
-          Boletos do carnê
+          {title}
         </h2>
       </div>
-      <p className="mt-1 text-xs text-gray-500">
-        Cada parcela fica disponível a partir de 7 dias antes do vencimento. Pague
-        o boleto para manter o acesso à sua compra.
-      </p>
+      <p className="mt-1 text-xs text-gray-500">{description}</p>
 
       <div className="mt-4 space-y-5">
         {carnes.map((carne) => (
-          <div key={carne.enrollmentId}>
+          <div key={carne.id}>
             <h3 className="text-sm font-semibold text-[var(--color-pmb-green-900)]">
               {carne.courseName}
             </h3>
             <ul className="mt-2 space-y-2">
               {carne.parcelas.map((p) => (
-                <ParcelaRow key={p.number} parcela={p} />
+                <ParcelaRow
+                  key={p.number}
+                  parcela={p}
+                  unitLabel={carne.unitLabel ?? "Parcela"}
+                />
               ))}
             </ul>
           </div>
@@ -71,7 +83,13 @@ export function InstallmentsSection({ carnes }: { carnes: InstallmentCarne[] }) 
   )
 }
 
-function ParcelaRow({ parcela }: { parcela: InstallmentView }) {
+function ParcelaRow({
+  parcela,
+  unitLabel,
+}: {
+  parcela: InstallmentView
+  unitLabel: string
+}) {
   const [copied, setCopied] = useState(false)
 
   async function copyLine() {
@@ -88,7 +106,7 @@ function ParcelaRow({ parcela }: { parcela: InstallmentView }) {
     <li className="flex flex-col gap-2 rounded-xl border border-gray-200 p-3 sm:flex-row sm:items-center sm:justify-between">
       <div className="min-w-0">
         <p className="text-sm font-medium text-gray-900">
-          Parcela {parcela.number} · {brl(parcela.amount)}
+          {unitLabel} {parcela.number} · {brl(parcela.amount)}
         </p>
         <p className="text-xs text-gray-500">
           Vencimento {shortDate(parcela.dueDateISO)}

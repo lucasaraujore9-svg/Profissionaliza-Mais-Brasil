@@ -1,8 +1,16 @@
 import { prisma } from "@/lib/prisma"
 import { resolvePayer, type PayerSource } from "@/lib/checkout/payer"
 import { applyCouponDiscount } from "@/lib/coupons/discount"
+import { contextLogger } from "@/lib/logger"
+import type { BoletoInstrument } from "@/lib/asaas/payment-instrument"
 import { INTERVAL_CHARGE_LABEL, isRecurringInterval } from "./interval"
 import type { PlanCheckoutData } from "./plans"
+import { checkCarneRequest } from "./carne-schedule"
+import {
+  CarneInputError,
+  createSubscriptionCarne,
+  discardSubscriptionCarne,
+} from "./carne"
 
 /**
  * VENDA DIRETA de assinatura — o vendedor contrata pelo aluno, no /admin ou no
@@ -16,7 +24,9 @@ import type { PlanCheckoutData } from "./plans"
  *
  * O QUE ESTE FLUXO NAO FAZ, E POR QUE:
  *
- *  - **Nao cobra na hora.** O vendedor nao tem o cartao do aluno em maos. O
+ *  - **Nao cobra na hora** — salvo no CARNE (assinatura no boleto), em que os
+ *    boletos saem na venda, na conta da loja, e o link leva o aluno a eles.
+ *    Fora do carne, o vendedor nao tem o cartao do aluno em maos. O
  *    link e SEMPRE a pagina de pagamento da plataforma
  *    (`/pagar/assinatura/<id>`), na loja da unidade ou no dominio da PMB, igual
  *    ao `/pagar/<id>` da venda de curso. Nada nasce no gateway aqui — a
@@ -64,6 +74,12 @@ export interface DirectSubscriptionSaleInput {
   checkout: DirectSubscriptionCheckout
   /** Desconto manual (%) JA validado contra o teto do vendedor. */
   discountPercent?: number
+  /**
+   * Assinatura NO BOLETO: quantos boletos gerar agora e o 1o vencimento
+   * (YYYY-MM-DD). Cada boleto vale um ciclo, pelo preco da assinatura; depois
+   * do ultimo a plataforma segue emitindo sozinha.
+   */
+  carne?: { count: number; firstDueDate: string }
 }
 
 export type DirectSubscriptionSaleResult =
@@ -79,6 +95,14 @@ export type DirectSubscriptionSaleResult =
       /** Frase pronta para a tela ("Cobrado a cada 3 meses"). */
       chargeLabel: string
       recurring: boolean
+      /** Presente na assinatura no boleto. */
+      carne?: {
+        count: number
+        amount: number
+        firstDueDate: string
+        /** PDF + linha digitável do 1º boleto. */
+        firstBoleto: BoletoInstrument | null
+      }
     }
   | { ok: false; status: number; error: string; code?: string }
 
@@ -170,6 +194,20 @@ export async function createDirectSubscriptionSale(
     }
   }
 
+  // Carnê: o pedido é conferido ANTES de criar qualquer linha — o vendedor
+  // recebe a mensagem pronta em vez de uma venda pela metade.
+  const carneCheck = input.carne
+    ? checkCarneRequest({
+        count: input.carne.count,
+        firstDueDate: input.carne.firstDueDate,
+        interval: plan.interval,
+        amount: finalAmount,
+      })
+    : null
+  if (carneCheck && !carneCheck.ok) {
+    return { ok: false, status: 400, code: "CARNE_INVALID", error: carneCheck.error }
+  }
+
   const subscription = await prisma.studentSubscription.create({
     data: {
       studentId: student.id,
@@ -204,6 +242,41 @@ export async function createDirectSubscriptionSale(
       .catch(() => undefined)
     throw err
   }
+
+  let carne: Extract<DirectSubscriptionSaleResult, { ok: true }>["carne"]
+  if (input.carne && carneCheck?.ok) {
+    try {
+      const created = await createSubscriptionCarne({
+        subscriptionId: subscription.id,
+        count: input.carne.count,
+        firstDueDate: carneCheck.firstDueDate,
+      })
+      carne = {
+        count: created.count,
+        amount: created.amount,
+        firstDueDate: input.carne.firstDueDate,
+        firstBoleto: created.firstBoleto,
+      }
+    } catch (err) {
+      // Sem o 1º boleto não há venda: a assinatura some, e o que tenha sido
+      // emitido é cancelado no gateway.
+      await discardSubscriptionCarne(subscription.id)
+      if (err instanceof CarneInputError) {
+        return { ok: false, status: 400, code: "CARNE_INVALID", error: err.message }
+      }
+      contextLogger().error(
+        { err, event: "subscription.direct_sale.carne_failed", tenantId, studentId: student.id },
+        "falha ao gerar os boletos da assinatura",
+      )
+      return {
+        ok: false,
+        status: 502,
+        code: "CARNE_FAILED",
+        error: "Não foi possível gerar os boletos agora. Tente novamente em instantes.",
+      }
+    }
+  }
+
   return {
     ok: true,
     subscriptionId: subscription.id,
@@ -213,5 +286,6 @@ export async function createDirectSubscriptionSale(
     paymentUrl,
     chargeLabel: INTERVAL_CHARGE_LABEL[plan.interval],
     recurring: isRecurringInterval(plan.interval),
+    ...(carne ? { carne } : {}),
   }
 }

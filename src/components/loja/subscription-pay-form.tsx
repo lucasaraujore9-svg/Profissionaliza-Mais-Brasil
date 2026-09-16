@@ -10,10 +10,15 @@ import {
   isRecurringInterval,
   type SubscriptionIntervalValue,
 } from "@/lib/subscriptions/interval"
+import { carneBoletoNotice } from "@/lib/subscriptions/carne-schedule"
 import {
   BoletoInstrumentResult,
   PixInstrumentResult,
 } from "@/components/loja/payment-instrument-result"
+import {
+  BoletoAddressFields,
+  EMPTY_BOLETO_ADDRESS,
+} from "@/components/loja/boleto-address-fields"
 
 /**
  * Pagamento de uma assinatura que JÁ EXISTE (venda direta, 1º ciclo emitido ou
@@ -39,6 +44,13 @@ interface Props {
   /** Renovação/ciclo em aberto (muda só o texto do botão). */
   renewal?: boolean
   defaultHolderName?: string
+  /**
+   * Boleto do Mercado Pago sem endereço na ficha do aluno: a tela pede, porque
+   * o MP recusa o boleto sem ele.
+   */
+  askBoletoAddress?: boolean
+  /** Boleto em aberto de uma assinatura no boleto (não é a 1ª contratação). */
+  carneOpen?: boolean
 }
 
 interface Done {
@@ -56,9 +68,12 @@ export function subscriptionMethods(
   gateway: "MP" | "ASAAS",
   recurring: boolean,
 ): Method[] {
-  // Recorrência do MP exige cartão tokenizado; o pagamento único do MP aceita
-  // PIX e cartão (boleto no MP exige endereço completo do pagador).
-  if (gateway === "MP") return recurring ? ["CREDIT_CARD"] : ["PIX", "CREDIT_CARD"]
+  // Recorrência do MP: cartão tokenizado, ou a assinatura no BOLETO (a
+  // plataforma emite um boleto por ciclo). PIX recorrente o MP não emite; o
+  // pagamento único aceita os três.
+  if (gateway === "MP") {
+    return recurring ? ["CREDIT_CARD", "BOLETO"] : ["PIX", "BOLETO", "CREDIT_CARD"]
+  }
   return ["PIX", "BOLETO", "CREDIT_CARD"]
 }
 
@@ -72,10 +87,14 @@ export function SubscriptionPayForm({
   endpoint,
   renewal = false,
   defaultHolderName = "",
+  askBoletoAddress = false,
+  carneOpen = false,
 }: Props) {
   const recurring = isRecurringInterval(interval)
   const methods = subscriptionMethods(gateway, recurring)
   const [method, setMethod] = useState<Method>(methods[0])
+  const [address, setAddress] = useState(EMPTY_BOLETO_ADDRESS)
+  const needsAddress = askBoletoAddress && gateway === "MP" && method === "BOLETO"
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [done, setDone] = useState<Done | null>(null)
@@ -128,6 +147,7 @@ export function SubscriptionPayForm({
                 ...(mpCard.issuerId ? { mpIssuerId: mpCard.issuerId } : {}),
               }
             : {}),
+          ...(needsAddress ? { enderecoBoleto: address } : {}),
           ...(isAsaasCard
             ? {
                 creditCard: {
@@ -228,10 +248,18 @@ export function SubscriptionPayForm({
 
         {method !== "CREDIT_CARD" && (
           <p className="mt-3 rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-600">
-            {recurring
-              ? `A cada ${INTERVAL_PERIOD_LABEL[interval]} uma nova cobrança fica disponível para pagar na sua área do aluno. No cartão, a cobrança é automática.`
-              : "Você paga uma única vez e o acesso ao plano fica liberado para sempre."}
+            {carneOpen
+              ? "Este pagamento quita o boleto em aberto da sua assinatura."
+              : method === "BOLETO"
+                ? carneBoletoNotice(interval)
+                : recurring
+                  ? `A cada ${INTERVAL_PERIOD_LABEL[interval]} uma nova cobrança fica disponível para pagar na sua área do aluno. No cartão, a cobrança é automática.`
+                  : "Você paga uma única vez e o acesso ao plano fica liberado para sempre."}
           </p>
+        )}
+
+        {needsAddress && (
+          <BoletoAddressFields value={address} onChange={setAddress} fieldClassName={field} />
         )}
 
         {method === "CREDIT_CARD" && (

@@ -11,8 +11,9 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 const db = vi.hoisted(() => ({
   findFirst: vi.fn(),
   findUnique: vi.fn(),
+  update: vi.fn(),
 }))
-const payments = vi.hoisted(() => ({ findMany: vi.fn() }))
+const payments = vi.hoisted(() => ({ findMany: vi.fn(), findFirst: vi.fn() }))
 const asaas = vi.hoisted(() => ({
   getPayment: vi.fn(),
   listPayments: vi.fn(),
@@ -41,6 +42,18 @@ vi.mock("./checkout", () => ({
   SubscriptionCheckoutInputError: class extends Error {},
 }))
 vi.mock("./renew", () => ({ settleSubscriptionCycle: vi.fn(async () => ({ settled: true })) }))
+vi.mock("./carne", () => {
+  class CarneInputError extends Error {}
+  return {
+    CarneInputError,
+    startSelfServiceCarne: vi.fn(async () => ({
+      count: 1,
+      amount: 90,
+      firstBoleto: { url: "https://mp.test/boleto.pdf", digitableLine: "2379" },
+    })),
+    resetSubscriptionCarne: vi.fn(async () => undefined),
+  }
+})
 vi.mock("./plans", () => ({
   getPlanForCheckout: vi.fn(async () => ({
     id: "plan_1",
@@ -68,11 +81,14 @@ vi.mock("@/lib/logger", () => {
 
 import { createSubscriptionAtGateway } from "./checkout"
 import { settleSubscriptionCycle } from "./renew"
+import { CarneInputError, resetSubscriptionCarne, startSelfServiceCarne } from "./carne"
 import { getPlanForCheckout } from "./plans"
 import { payStoreSubscription } from "./store-payment"
 
 const gatewayCall = createSubscriptionAtGateway as unknown as ReturnType<typeof vi.fn>
 const planLookup = getPlanForCheckout as unknown as ReturnType<typeof vi.fn>
+const startCarne = startSelfServiceCarne as unknown as ReturnType<typeof vi.fn>
+const resetCarne = resetSubscriptionCarne as unknown as ReturnType<typeof vi.fn>
 
 const mpTenant = {
   id: "t1",
@@ -105,6 +121,8 @@ function pendingSub(over: Record<string, unknown> = {}) {
     mpPreapprovalId: null,
     asaasSubscriptionId: null,
     externalReference: null,
+    boletoCarne: false,
+    studentId: "stu_1",
     student: {
       id: "stu_1",
       nome: "Aluno",
@@ -174,7 +192,7 @@ describe("payStoreSubscription", () => {
     })
   })
 
-  it("recorrência no MP só no cartão", async () => {
+  it("recorrência no MP não aceita PIX", async () => {
     const res = await payStoreSubscription(mpTenant, {
       subscriptionId: "sub_1",
       paymentMethod: "PIX",
@@ -367,5 +385,109 @@ describe("payStoreSubscription — vitrine PMB", () => {
     // Sem chave: `createSubscriptionAtGateway` cai na conta-mãe e o assert de
     // isolamento confirma que é mesmo venda da PMB.
     expect(gatewayCall.mock.calls[0][2]).toEqual({})
+  })
+})
+
+describe("payStoreSubscription — assinatura NO BOLETO", () => {
+  const ADDRESS = {
+    cep: "30110000",
+    rua: "Rua A",
+    numero: "10",
+    bairro: "Centro",
+    cidade: "Belo Horizonte",
+    estado: "MG",
+  }
+
+  it("boleto no Mercado Pago vira carnê na conta da loja (antes só existia cartão)", async () => {
+    const res = await payStoreSubscription(mpTenant, {
+      subscriptionId: "sub_1",
+      paymentMethod: "BOLETO",
+      enderecoBoleto: ADDRESS,
+    })
+    expect(res).toEqual({
+      ok: true,
+      authorized: false,
+      boleto: { url: "https://mp.test/boleto.pdf", digitableLine: "2379" },
+    })
+    expect(startCarne).toHaveBeenCalledWith({
+      subscriptionId: "sub_1",
+      studentId: "stu_1",
+      address: ADDRESS,
+    })
+    // Nenhuma recorrência no gateway: quem emite os boletos é a plataforma.
+    expect(gatewayCall).not.toHaveBeenCalled()
+  })
+
+  it("boleto no Asaas também é carnê — as duas pontas seguem o mesmo desenho", async () => {
+    rowIs({ gateway: "ASAAS" })
+    const res = await payStoreSubscription(asaasTenant, {
+      subscriptionId: "sub_1",
+      paymentMethod: "BOLETO",
+      enderecoBoleto: ADDRESS,
+    })
+    expect(res.ok).toBe(true)
+    expect(startCarne).toHaveBeenCalledWith(
+      // O Asaas não pede endereço no boleto: não se grava o que não se usa.
+      expect.objectContaining({ subscriptionId: "sub_1", address: undefined }),
+    )
+    expect(gatewayCall).not.toHaveBeenCalled()
+  })
+
+  it("loja que trocou de gateway emite o carnê no gateway de AGORA", async () => {
+    // Venda feita com a loja no MP; hoje ela recebe pelo Asaas.
+    await payStoreSubscription(asaasTenant, { subscriptionId: "sub_1", paymentMethod: "BOLETO" })
+    expect(db.update).toHaveBeenCalledWith({
+      where: { id: "sub_1" },
+      data: { gateway: "ASAAS" },
+    })
+  })
+
+  it("boleto que não sai devolve a assinatura ao estado de antes — o link continua valendo", async () => {
+    startCarne.mockRejectedValueOnce(new CarneInputError("Informe o endereço completo do aluno"))
+    const res = await payStoreSubscription(mpTenant, { subscriptionId: "sub_1", paymentMethod: "BOLETO" })
+    expect(res).toMatchObject({ ok: false, status: 400, code: "CARNE_INVALID" })
+    expect(resetCarne).toHaveBeenCalledWith("sub_1")
+  })
+
+  it("carnê do MP: a página devolve o boleto em aberto, sem criar cobrança", async () => {
+    rowIs({ boletoCarne: true, status: "ACTIVE", externalReference: "pmb_sub_sub_1" })
+    payments.findFirst.mockResolvedValue({ bankSlipUrl: "https://mp.test/b2.pdf", digitableLine: "999" })
+    const res = await payStoreSubscription(mpTenant, { subscriptionId: "sub_1", paymentMethod: "BOLETO" })
+    expect(res).toEqual({
+      ok: true,
+      authorized: false,
+      boleto: { url: "https://mp.test/b2.pdf", digitableLine: "999" },
+    })
+    expect(startCarne).not.toHaveBeenCalled()
+    expect(gatewayCall).not.toHaveBeenCalled()
+  })
+
+  it("carnê do MP não troca de meio: o boleto é um pagamento próprio", async () => {
+    rowIs({ boletoCarne: true, status: "ACTIVE", externalReference: "pmb_sub_sub_1" })
+    payments.findFirst.mockResolvedValue({ bankSlipUrl: "https://mp.test/b2.pdf", digitableLine: null })
+    const res = await payStoreSubscription(mpTenant, mpCard)
+    expect(res).toMatchObject({ ok: false, code: "METHOD_NOT_SUPPORTED" })
+  })
+
+  it("carnê do MP sem boleto emitido ainda não cobra nada", async () => {
+    rowIs({ boletoCarne: true, status: "ACTIVE", externalReference: "pmb_sub_sub_1" })
+    payments.findFirst.mockResolvedValue(null)
+    const res = await payStoreSubscription(mpTenant, { subscriptionId: "sub_1", paymentMethod: "BOLETO" })
+    expect(res).toMatchObject({ ok: false, code: "NO_OPEN_CHARGE" })
+  })
+
+  it("carnê do Asaas: o boleto em aberto se paga por PIX, sem cobrança nova", async () => {
+    rowIs({
+      boletoCarne: true,
+      gateway: "ASAAS",
+      status: "ACTIVE",
+      externalReference: "pmb_sub_sub_1",
+    })
+    payments.findMany.mockResolvedValue([{ asaasPaymentId: "pay_open" }])
+    asaas.getPayment.mockResolvedValue(openCharge())
+    const res = await payStoreSubscription(asaasTenant, { subscriptionId: "sub_1", paymentMethod: "PIX" })
+    expect(res).toMatchObject({ ok: true, pix: { qrCode: "pix-copia-e-cola" } })
+    expect(startCarne).not.toHaveBeenCalled()
+    expect(gatewayCall).not.toHaveBeenCalled()
   })
 })

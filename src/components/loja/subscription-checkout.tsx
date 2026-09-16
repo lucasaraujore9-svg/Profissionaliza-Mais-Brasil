@@ -12,6 +12,11 @@ import {
   type SubscriptionIntervalValue,
 } from "@/lib/subscriptions/interval"
 import { subscriptionMethods } from "@/components/loja/subscription-pay-form"
+import { carneBoletoNotice } from "@/lib/subscriptions/carne-schedule"
+import {
+  BoletoAddressFields,
+  EMPTY_BOLETO_ADDRESS,
+} from "@/components/loja/boleto-address-fields"
 import {
   BoletoInstrumentResult,
   PixInstrumentResult,
@@ -43,9 +48,10 @@ interface Props {
   endpoint?: string
   /**
    * Gateway da loja. Decide os MEIOS oferecidos: a recorrencia do Mercado Pago
-   * exige cartao tokenizado no browser e nao emite fatura de PIX/boleto por
-   * ciclo. Oferecer PIX numa loja de MP levaria a um 400 depois de a pessoa
-   * preencher tudo — o mesmo erro do incidente "revenda sem PIX".
+   * exige cartao tokenizado no browser e nao emite PIX por ciclo (o boleto por
+   * ciclo e a assinatura no boleto da plataforma). Oferecer PIX numa loja de MP
+   * levaria a um 400 depois de a pessoa preencher tudo — o mesmo erro do
+   * incidente "revenda sem PIX".
    */
   gateway?: "MP" | "ASAAS"
   /** Public key da conta MP da unidade — necessaria para tokenizar. */
@@ -70,6 +76,9 @@ export function SubscriptionCheckout({
   // pagamento único do MP aceita PIX e cartão; o Asaas, os três.
   const methods = subscriptionMethods(gateway, recurring)
   const [method, setMethod] = useState<Method>(methods[0])
+  const [address, setAddress] = useState(EMPTY_BOLETO_ADDRESS)
+  // O boleto do Mercado Pago exige o endereço completo do pagador.
+  const needsAddress = gateway === "MP" && method === "BOLETO"
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [done, setDone] = useState<{
@@ -163,6 +172,7 @@ export function SubscriptionCheckout({
                 responsavelParentesco: f.responsavelParentesco,
               }
             : {}),
+          ...(needsAddress ? { enderecoBoleto: address } : {}),
           ...(method === "CREDIT_CARD" && gateway === "ASAAS"
             ? {
                 creditCard: {
@@ -341,10 +351,16 @@ export function SubscriptionCheckout({
 
         {method !== "CREDIT_CARD" && (
           <p className="mt-3 rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-600">
-            {recurring
-              ? `A cada ${INTERVAL_PERIOD_LABEL[interval]} uma nova cobrança fica disponível para pagar na sua área do aluno. No cartão, a cobrança é automática.`
-              : "Você paga uma única vez e o acesso ao plano fica liberado para sempre."}
+            {method === "BOLETO"
+              ? carneBoletoNotice(interval)
+              : recurring
+                ? `A cada ${INTERVAL_PERIOD_LABEL[interval]} uma nova cobrança fica disponível para pagar na sua área do aluno. No cartão, a cobrança é automática.`
+                : "Você paga uma única vez e o acesso ao plano fica liberado para sempre."}
           </p>
+        )}
+
+        {needsAddress && (
+          <BoletoAddressFields value={address} onChange={setAddress} fieldClassName={field} />
         )}
 
         {method === "CREDIT_CARD" && (

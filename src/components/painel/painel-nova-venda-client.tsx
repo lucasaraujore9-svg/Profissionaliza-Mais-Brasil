@@ -29,11 +29,18 @@ import {
 import { MAX_SALE_COURSES } from "@/lib/enrollment/multi-course"
 import {
   INTERVAL_LABEL,
+  INTERVAL_PERIOD_LABEL,
   INTERVAL_PRICE_SUFFIX,
   INTERVAL_CHARGE_LABEL,
   isRecurringInterval,
   type SubscriptionIntervalValue,
 } from "@/lib/subscriptions/interval"
+import {
+  SUBSCRIPTION_CARNE_MAX_COUNT,
+  SUBSCRIPTION_CARNE_MAX_FIRST_DUE_DAYS,
+  SUBSCRIPTION_CARNE_MIN_COUNT,
+  defaultCarneCount,
+} from "@/lib/subscriptions/carne-schedule"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -133,6 +140,12 @@ interface CreatedVenda {
     installmentValue: number
     total: number
   }
+  /** Presente quando a venda é uma assinatura no boleto. */
+  carne?: {
+    count: number
+    amount: number
+    firstDueDate: string
+  }
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -166,6 +179,12 @@ function validateCpf(cpf: string): boolean {
 
 function validateEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+}
+
+/** "2026-09-23" → "23/09/2026", sem passar por Date (sem fuso). */
+function fmtYmd(ymd: string): string {
+  const [y, m, d] = ymd.split("-")
+  return `${d}/${m}/${y}`
 }
 
 /** Data de hoje + N dias em YYYY-MM-DD (para default e mínimo do input date). */
@@ -249,8 +268,10 @@ export function PainelNovaVendaClient({
   const [selectedItems, setSelectedItems] = useState<SaleItem[]>([])
   const isPkg = selectedItems[0]?.kind === "package"
   const planItem = selectedItems[0]?.kind === "plan" ? selectedItems[0] : null
-  /** Assinatura não aceita cupom, carnê nem bolsa — ver lib/subscriptions/direct-sale.ts. */
+  /** Assinatura não aceita cupom nem bolsa — ver lib/subscriptions/direct-sale.ts. */
   const isPlan = !!planItem
+  const planInterval: SubscriptionIntervalValue = planItem?.interval ?? "MONTHLY"
+  const planRecurring = isPlan && isRecurringInterval(planInterval)
   const hasSelection = selectedItems.length > 0
   const isMulti = selectedItems.length > 1
   // Curso mensal é contrato recorrente de UM curso: o servidor recusa somá-lo a
@@ -310,10 +331,17 @@ export function PainelNovaVendaClient({
   const [created, setCreated] = useState<CreatedVenda | null>(null)
   const [copied, setCopied] = useState(false)
 
-  // Carnê é um parcelamento de valor fechado: não existe "assinatura em 6x".
-  const installmentAvailable = !!installmentConfig && !bolsista && !isPlan
+  // Carnê de CURSO: parcelamento de valor fechado, só com o parcelado liberado
+  // para a unidade. Carnê de ASSINATURA: um boleto por ciclo, pelo preço do
+  // plano — vale para todo plano recorrente (o vitalício é pago de uma vez, e o
+  // aluno escolhe boleto no próprio link).
+  const installmentAvailable =
+    !bolsista && (isPlan ? planRecurring : !!installmentConfig)
   const isInstallment = installmentAvailable && paymentMode === "installment"
-  const needsAddress = isInstallment && installmentConfig?.gateway === "MP"
+  const isPlanCarne = isInstallment && isPlan
+  const isCourseCarne = isInstallment && !isPlan
+  const carneGateway = isPlan ? gateway : installmentConfig?.gateway
+  const needsAddress = isInstallment && carneGateway === "MP"
   const installmentValueNum = Number(inst.value.replace(",", ".")) || 0
   const installmentTotal = Math.round(installmentValueNum * inst.count * 100) / 100
 
@@ -374,15 +402,20 @@ export function PainelNovaVendaClient({
     }
   }, [bolsista])
 
-  // Escolher uma assinatura desliga a bolsa, o cupom e o carnê. Os controles
-  // somem da tela, mas o ESTADO ficaria — e um `bolsista` verdadeiro invisível
-  // mostraria "Total R$ 0" num resumo de venda que vai cobrar o valor cheio.
+  // Escolher uma assinatura desliga a bolsa e o cupom. Os controles somem da
+  // tela, mas o ESTADO ficaria — e um `bolsista` verdadeiro invisível mostraria
+  // "Total R$ 0" num resumo de venda que vai cobrar o valor cheio. O carnê volta
+  // ao modo link: o de curso e o de assinatura contam coisas diferentes.
   useEffect(() => {
+    setPaymentMode("normal")
+    setInst((prev) => ({
+      ...prev,
+      count: isPlan ? defaultCarneCount(planInterval) : 2,
+    }))
     if (!isPlan) return
     setBolsista(false)
     setCouponCode("")
-    setPaymentMode("normal")
-  }, [isPlan])
+  }, [isPlan, planInterval])
 
   function handleCpfChange(v: string) {
     setNewStudent((s) => ({ ...s, cpf: maskCpf(v) }))
@@ -471,19 +504,22 @@ export function PainelNovaVendaClient({
             isPlan || bolsista || isInstallment || manualValid || !couponCode.trim()
               ? undefined
               : couponCode.trim(),
-          // Desconto manual não se aplica a bolsa, carnê nem quando há cupom.
+          // Desconto manual não se aplica a bolsa, carnê de curso (valor
+          // manual) nem quando há cupom. Na assinatura no boleto ele vale.
           manualDiscountPercent:
-            bolsista || isInstallment || couponCode.trim() || !manualValid
+            bolsista || isCourseCarne || couponCode.trim() || !manualValid
               ? undefined
               : manualPctNumber,
           bolsista: isPlan ? undefined : bolsista || undefined,
-          boletoInstallment: isInstallment
+          boletoInstallment: isCourseCarne
             ? {
                 count: inst.count,
                 installmentValue: installmentValueNum,
                 firstDueDate: inst.firstDueDate,
               }
-            : undefined,
+            : isPlanCarne
+              ? { count: inst.count, firstDueDate: inst.firstDueDate }
+              : undefined,
           endereco: needsAddress
             ? {
                 cep: addr.cep.replace(/\D/g, ""),
@@ -567,6 +603,49 @@ export function PainelNovaVendaClient({
               <Mini label="Parcelas" value={`${created.installment.count}x`} />
               <Mini label="Cada parcela" value={fmt(created.installment.installmentValue)} />
               <Mini label="Total" value={fmt(created.installment.total)} accent />
+            </div>
+
+            {created.paymentUrl && (
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                <a
+                  href={created.paymentUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-pmb-green)] px-4 py-2.5 text-xs font-bold text-white hover:bg-[var(--color-pmb-green-700)]"
+                >
+                  Abrir página de pagamento
+                  <ExternalLink className="h-3.5 w-3.5" />
+                </a>
+                <button
+                  type="button"
+                  onClick={copyLink}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-pmb-green)]/30 bg-white px-4 py-2.5 text-xs font-bold text-[var(--color-pmb-green-700)] hover:bg-[var(--color-pmb-green)]/5"
+                >
+                  <Copy className="h-3.5 w-3.5" />
+                  {copied ? "Link copiado" : "Copiar link de pagamento"}
+                </button>
+              </div>
+            )}
+          </div>
+        ) : created.carne ? (
+          <div className="rounded-2xl border border-[var(--color-pmb-green)]/20 bg-[var(--color-pmb-green)]/5 p-6 text-[var(--color-pmb-green-900)]">
+            <h2 className="text-base font-bold">
+              Assinatura no boleto criada — {created.carne.count}{" "}
+              {created.carne.count === 1 ? "boleto" : "boletos"} de{" "}
+              {fmt(created.carne.amount)}
+            </h2>
+            <p className="mt-2 text-sm">
+              O <strong>1º boleto</strong> já está disponível e vence em{" "}
+              {fmtYmd(created.carne.firstDueDate)}. O aluno vê cada boleto na área
+              dele <strong>7 dias antes do vencimento</strong>; depois do último, a
+              plataforma emite os próximos sozinha até a assinatura ser cancelada. O
+              acesso aos cursos é liberado quando o 1º boleto for pago.
+            </p>
+
+            <div className="mt-4 grid gap-2 sm:grid-cols-3">
+              <Mini label="Boletos agora" value={String(created.carne.count)} />
+              <Mini label="Cada boleto" value={fmt(created.carne.amount)} accent />
+              <Mini label="1º vencimento" value={fmtYmd(created.carne.firstDueDate)} />
             </div>
 
             {created.paymentUrl && (
@@ -1075,7 +1154,11 @@ export function PainelNovaVendaClient({
       {!bolsista && (
         <Section
           title="3. Pagamento"
-          done={isInstallment ? installmentValueNum > 0 : !!couponCode.trim() || manualValid}
+          done={
+            isCourseCarne
+              ? installmentValueNum > 0
+              : isPlanCarne || !!couponCode.trim() || manualValid
+          }
         >
           {/* Forma de pagamento (só quando a unidade tem carnê liberado) */}
           {installmentAvailable && (
@@ -1102,13 +1185,13 @@ export function PainelNovaVendaClient({
                       : "text-gray-600 hover:bg-gray-50"
                   }`}
                 >
-                  Parcelado no boleto (carnê)
+                  {isPlan ? "Assinatura no boleto (carnê)" : "Parcelado no boleto (carnê)"}
                 </button>
               </div>
             </div>
           )}
 
-          {isInstallment && installmentConfig ? (
+          {isCourseCarne && installmentConfig ? (
             /* ── Carnê ── */
             <div className="grid gap-3 rounded-xl border border-[var(--color-pmb-green)]/20 bg-[var(--color-pmb-green)]/5 p-4 sm:grid-cols-3">
               <div>
@@ -1173,7 +1256,71 @@ export function PainelNovaVendaClient({
               </p>
             </div>
           ) : (
-            /* ── Desconto (manual OU cupom) ── */
+            <>
+            {isPlanCarne && (
+              /* ── Assinatura no boleto: um boleto por ciclo ── */
+              <div className="mb-4 grid gap-3 rounded-xl border border-[var(--color-pmb-green)]/20 bg-[var(--color-pmb-green)]/5 p-4 sm:grid-cols-3">
+                <div>
+                  <Label htmlFor="v-boletos">Boletos gerados agora</Label>
+                  <Select
+                    value={String(inst.count)}
+                    onValueChange={(v) => setInst({ ...inst, count: Number(v) || 1 })}
+                  >
+                    <SelectTrigger id="v-boletos" className="mt-1.5 h-10 w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Array.from(
+                        {
+                          length:
+                            SUBSCRIPTION_CARNE_MAX_COUNT - SUBSCRIPTION_CARNE_MIN_COUNT + 1,
+                        },
+                        (_, i) => i + SUBSCRIPTION_CARNE_MIN_COUNT,
+                      ).map((n) => (
+                        <SelectItem key={n} value={String(n)}>
+                          {n} {n === 1 ? "boleto" : "boletos"}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {fieldErrors["boletoInstallment.count"] && (
+                    <p className="mt-1 text-xs text-rose-600">{fieldErrors["boletoInstallment.count"]}</p>
+                  )}
+                </div>
+                <div>
+                  <Label>Valor de cada boleto</Label>
+                  {/* O valor é o da assinatura (com o desconto abaixo), nunca
+                      digitado: cada boleto paga um ciclo do plano. */}
+                  <p className="mt-1.5 flex h-10 items-center rounded-lg border border-gray-200 bg-white px-3 font-mono text-sm font-semibold text-[var(--color-pmb-green-900)]">
+                    {fmt(finalPrice)}
+                  </p>
+                </div>
+                <div>
+                  <Label htmlFor="v-boleto-venc">1º vencimento</Label>
+                  <Input
+                    id="v-boleto-venc"
+                    type="date"
+                    value={inst.firstDueDate}
+                    min={isoDatePlusDays(0)}
+                    max={isoDatePlusDays(SUBSCRIPTION_CARNE_MAX_FIRST_DUE_DAYS)}
+                    onChange={(e) => setInst({ ...inst, firstDueDate: e.target.value })}
+                    className="mt-1.5"
+                  />
+                  {fieldErrors["boletoInstallment.firstDueDate"] && (
+                    <p className="mt-1 text-xs text-rose-600">
+                      {fieldErrors["boletoInstallment.firstDueDate"]}
+                    </p>
+                  )}
+                </div>
+                <p className="text-xs text-gray-600 sm:col-span-3">
+                  Um boleto por {INTERVAL_PERIOD_LABEL[planInterval]}, no valor da
+                  assinatura. Depois do último, a plataforma emite os próximos
+                  sozinha até a assinatura ser cancelada. O aluno vê cada boleto 7
+                  dias antes do vencimento, e o acesso é liberado quando o 1º for pago.
+                </p>
+              </div>
+            )}
+            {/* ── Desconto (manual OU cupom) ── */}
             <div data-tour="vendas-nova:cupom" className="space-y-4">
               <div className="space-y-2">
                 <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">
@@ -1241,6 +1388,7 @@ export function PainelNovaVendaClient({
                 </p>
               )}
             </div>
+            </>
           )}
 
           {/* Endereço do aluno — exigido pelo Mercado Pago para emitir o boleto */}
@@ -1336,7 +1484,7 @@ export function PainelNovaVendaClient({
                   value={`${item.nome} — ${fmt(item.preco)}`}
                 />
               ))}
-              {isInstallment ? (
+              {isCourseCarne ? (
                 <>
                   <Row label="Parcelas" value={`${inst.count}x de ${fmt(installmentValueNum)}`} />
                   <Row label="Total do carnê" value={fmt(installmentTotal)} bold />
@@ -1356,11 +1504,19 @@ export function PainelNovaVendaClient({
                   ) : couponCode.trim() ? (
                     <Row label="Cupom" value="a confirmar" className="text-gray-500" />
                   ) : null}
+                  {isPlanCarne && (
+                    <Row
+                      label="Boletos agora"
+                      value={`${inst.count} · 1º vence em ${inst.firstDueDate ? fmtYmd(inst.firstDueDate) : "—"}`}
+                    />
+                  )}
                   <Row
                     label={
-                      planItem && isRecurringInterval(planItem.interval ?? "MONTHLY")
-                        ? "Valor por cobrança"
-                        : "Total"
+                      isPlanCarne
+                        ? "Cada boleto"
+                        : planItem && isRecurringInterval(planItem.interval ?? "MONTHLY")
+                          ? "Valor por cobrança"
+                          : "Total"
                     }
                     value={couponCode.trim() && !manualValid ? `até ${fmt(finalPrice)}` : fmt(finalPrice)}
                     bold
@@ -1370,6 +1526,8 @@ export function PainelNovaVendaClient({
                     value={
                       bolsista
                         ? "Nenhuma (bolsa)"
+                        : isPlanCarne
+                          ? `Boleto (${gateway === "ASAAS" ? "Asaas" : "Mercado Pago"}), um por ${INTERVAL_PERIOD_LABEL[planInterval]} — renova sozinha; o desconto vale para todos`
                         : planItem
                           ? // Numa recorrência o gateway guarda UM valor: o
                             // desconto dado agora vale para TODAS as cobranças.
@@ -1409,10 +1567,18 @@ export function PainelNovaVendaClient({
               {submitting ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  {bolsista ? "Concedendo bolsa…" : isInstallment ? "Gerando carnê…" : "Gerando link…"}
+                  {bolsista
+                    ? "Concedendo bolsa…"
+                    : isPlanCarne
+                      ? "Gerando boletos…"
+                      : isInstallment
+                        ? "Gerando carnê…"
+                        : "Gerando link…"}
                 </>
               ) : bolsista ? (
                 "Conceder bolsa de estudo"
+              ) : isPlanCarne ? (
+                "Gerar boletos da assinatura"
               ) : isInstallment ? (
                 "Gerar carnê no boleto"
               ) : (

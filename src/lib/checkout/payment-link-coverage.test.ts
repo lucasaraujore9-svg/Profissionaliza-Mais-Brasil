@@ -93,11 +93,14 @@ describe("link de pagamento de loja nunca é a página do gateway", () => {
       // ── GRAVAÇÃO do que o Asaas devolve/avisa (histórico, reconciliação) —
       //    nunca devolvida ao aluno como link.
       "lib/asaas/process.ts",
-      "lib/asaas/reseller-process.ts",
       "lib/asaas/transparent-process.ts",
       "lib/asaas/types.ts",
       "lib/checkout/issue-pmb-asaas-charge.ts",
       "lib/subscriptions/renew.ts",
+      // Evento de assinatura dos DOIS webhooks do Asaas (a cópia que morava em
+      // `reseller-process.ts` foi unificada aqui): só repassa o que o evento
+      // traz para `renew.ts` gravar.
+      "lib/subscriptions/asaas-events.ts",
       // ── Coluna `BoletoInstallment.invoiceUrl`: guarda só o PDF do BOLETO da
       //    parcela (lib/installments/plan.ts), mostrado dentro da nossa página.
       "app/(main)/pagar/[id]/page.tsx",
@@ -106,6 +109,9 @@ describe("link de pagamento de loja nunca é a página do gateway", () => {
       "components/aluno/installments-section.tsx",
       "components/loja/pmb-checkout-form.tsx",
       "lib/installments/plan.ts",
+      // ── Mesma view (`InstallmentView.invoiceUrl`) para a assinatura no boleto:
+      //    preenchida com `bankSlipUrl`, o PDF do boleto — nunca a fatura.
+      "lib/subscriptions/carne-view.ts",
     ].sort()
     expect(filesMatching(/\binvoiceUrl\b/)).toEqual(permitidos)
   })

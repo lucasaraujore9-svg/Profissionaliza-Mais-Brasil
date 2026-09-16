@@ -1822,6 +1822,73 @@ em producao (nem da PMB). Antes de anunciar as unidades: compra parcelada de
 verdade (ou sandbox) conferindo liberacao unica, N parcelas no extrato e
 matricula ACTIVE. Testes verificados POR MUTACAO (6 mutacoes, todas mortas).
 
+### Assinatura no boleto (carne) (2026-09-16)
+
+A estrutura do carne (venda parcelada no boleto) passou a valer para a
+assinatura, nos DOIS gateways. Antes, no Mercado Pago a assinatura so aceitava
+cartao — e as 4 unidades com o modulo de assinaturas ligado usam MP.
+
+**Decisoes do dono:** um boleto POR CICLO (mensal em 12 boletos = 12 meses);
+RENOVA SOZINHA depois do ultimo boleto do carne; valor = preco do plano (com o
+desconto manual e o teto do vendedor); disponivel na venda direta do /painel e
+do /admin E na vitrine (o aluno escolhe boleto).
+
+- **Quem emite e a plataforma, nas duas pontas.** O MP nao tem recorrencia no
+  boleto; para as duas se comportarem igual, o Asaas tambem deixou de usar a
+  assinatura nativa no boleto. `StudentSubscription.boletoCarne` e o
+  discriminador; os boletos sao as linhas NUMERADAS de `SubscriptionPayment`
+  (`number`, `digitableLine`, `generatedAt`, `emitAttempts`). Migration
+  `20260916_subscription_boleto_carne` (aditiva, idempotente, sem backfill).
+  **Toda escolha de BOLETO numa assinatura nova vira carne** — checkout da
+  unidade, da PMB, aluno logado e a pagina `/pagar/assinatura/<id>`.
+- **Emissao:** Asaas = todos os boletos do carne na venda (`POST /payments`, um
+  por ciclo, referencia `pmb_sub_<id>`); MP = so o que esta na janela de 7 dias,
+  o resto pelo cron. Nucleo em `lib/subscriptions/carne.ts`, agenda pura em
+  `carne-schedule.ts`. Lock por linha: venda e cron nunca emitem o mesmo boleto.
+  O Asaas nao tem chave de idempotencia — a emissao ADOTA a cobranca de uma
+  tentativa que caiu antes de gravar o id (`findOrphanAsaasCharge`).
+- **O fim do periodo sai da AGENDA, nao de "pagou, soma um ciclo":**
+  `carnePeriodEnd` = inicio + ciclos pagos, com o inicio no 1o vencimento (ou no
+  1o pagamento, se veio depois). Contar de hoje faria o acesso de quem pagou
+  adiantado acabar semanas antes do 2o boleto vencer. Conta todo pagamento,
+  inclusive fora de ordem. O 1o vencimento tem teto de **28 dias** — sem teto,
+  vencimento distante pago hoje daria acesso de graca ate la; e o MP so aceita
+  boleto vencendo em ate 30 dias da emissao.
+- **MP usa referencia POR LINHA (`subbol_<linha>`), nao `pmb_sub_`:** no MP o
+  boleto que vence sem pagamento chega como `cancelled`, e o tratamento de
+  assinatura le `cancelled` como ESTORNO e revoga tudo. `carne-webhook.ts` so
+  libera a linha para o cron reemitir; a chave de idempotencia do MP leva a
+  tentativa, senao o MP devolveria o pagamento ja cancelado.
+- **Atraso nao mexe no status no carne** (nem no Asaas): quem decide e o fim do
+  periodo, pela varredura de assinaturas — igual nas duas pontas, ja que o MP
+  nem avisa atraso. `markSubscriptionPastDue` passou a ignorar PENDING (nunca
+  pago nao esta "em atraso").
+- **Webhook nao cria linha de carne.** O PAYMENT_CREATED do Asaas chega
+  enquanto o id ainda esta sendo gravado; criar ali duplicaria o boleto e o id
+  unico derrubaria a emissao.
+- **Os dois processadores do Asaas decidem igual** (`asaas-events.ts`). A
+  copia da conta da UNIDADE so achava a assinatura pelo `subscription`, entao
+  cobranca avulsa de unidade (boleto do carne, **acesso vitalicio**) caia em
+  "matricula nao encontrada" — defeito latente do vitalicio, corrigido junto.
+- **Cron sem job novo:** a varredura (`carne-sweep.ts`) roda dentro do
+  `sweep-boleto-installments`, ja agendado. Ela encerra carne ABANDONADO (1o
+  boleto vencido ha mais que a carencia, nunca pago), cria o boleto de
+  RENOVACAO quando o ultimo entra na janela, emite/reemite e marca atraso.
+- **Cancelar a assinatura cancela os boletos em aberto** (`cancelOpenCarneRows`
+  dentro de `stopGatewayRecurrence`). DELETE do Asaas e soft: so `deleted:
+  true` prova — sem isso a linha nao e marcada e o admin e alertado.
+- **Carne de CURSO nao mudou:** continua com valor manual, 2+ parcelas e preso
+  ao "parcelado" da unidade. O da assinatura NAO depende dessa capability (nao
+  ha credito concedido) — quem libera e o modulo de assinaturas. O desconto
+  manual vale no carne da assinatura e passa pelo teto do vendedor (a rota do
+  painel pulava o teto para qualquer carne; teria vazado desconto sem limite).
+- Testes: `carne-schedule`, `carne`, `carne-webhook`, `carne-sweep`,
+  `asaas-events` + casos novos em `renew`, `cancel`, `direct-sale`,
+  `store-payment`, rota do painel e webhook MP. 15 mutacoes, todas mortas.
+- **Nao validado contra os gateways reais.** Antes de anunciar: uma venda de
+  assinatura no boleto em cada gateway (sandbox ou real), conferindo o boleto na
+  pagina, a liquidacao pelo webhook e, no MP, a reemissao de um boleto vencido.
+
 ### Bugs conhecidos (pendentes)
 
 - **Middleware file convention deprecado** no Next 16 (usar `proxy` em vez de `middleware`).

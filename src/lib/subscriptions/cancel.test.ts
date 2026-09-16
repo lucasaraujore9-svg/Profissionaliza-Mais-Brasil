@@ -31,6 +31,7 @@ vi.mock("@/lib/enrollment/gateway-credentials", () => ({
 vi.mock("@/lib/errors", () => ({ swallow: () => () => undefined }))
 vi.mock("./live", () => ({ findLiveSubscriptionId: vi.fn(async () => null) }))
 vi.mock("./release", () => ({ adoptIntoLiveSubscription: vi.fn() }))
+vi.mock("./carne", () => ({ cancelOpenCarneRows: vi.fn(async () => ({ ok: true })) }))
 vi.mock("@/lib/logger", () => {
   const noop = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() }
   return { contextLogger: () => noop, logger: noop }
@@ -46,6 +47,8 @@ import { cancelPreapproval } from "@/lib/mercadopago/client"
 import { cancelSubscriptionAccess, revokeEndedSubscriptionAccess } from "./cancel"
 import { findLiveSubscriptionId } from "./live"
 import { adoptIntoLiveSubscription } from "./release"
+import { cancelOpenCarneRows } from "./carne"
+import { createNotification } from "@/lib/notifications"
 
 const findSub = prisma.studentSubscription.findUnique as unknown as ReturnType<typeof vi.fn>
 const findEnr = prisma.enrollment.findMany as unknown as ReturnType<typeof vi.fn>
@@ -129,6 +132,50 @@ describe("cancelSubscriptionAccess", () => {
     const r = await cancelSubscriptionAccess("sub_1", "REQUESTED", false)
     expect(unlink).not.toHaveBeenCalled()
     expect(r.enrollmentsCancelled).toBe(0)
+    expect(prisma.studentSubscription.update).toHaveBeenCalled()
+  })
+
+  it("assinatura NO BOLETO: cancela os boletos em aberto (não há recorrência no gateway)", async () => {
+    // Sem isto o aluno seguiria recebendo — e podendo pagar — boletos de uma
+    // assinatura encerrada.
+    const cancelCarne = cancelOpenCarneRows as unknown as ReturnType<typeof vi.fn>
+    findSub.mockResolvedValueOnce({
+      id: "sub_1",
+      studentId: "st_1",
+      tenantId: "t1",
+      status: "ACTIVE",
+      gateway: "MP",
+      asaasSubscriptionId: null,
+      mpPreapprovalId: null,
+      boletoCarne: true,
+      plan: { name: "Plano Total" },
+    })
+    await cancelSubscriptionAccess("sub_1", "REQUESTED", false)
+    expect(cancelCarne).toHaveBeenCalledWith("sub_1")
+    expect(cancelAsaas).not.toHaveBeenCalled()
+    expect(cancelMp).not.toHaveBeenCalled()
+  })
+
+  it("boleto que não pôde ser cancelado alerta o admin (o aluno ainda pode pagá-lo)", async () => {
+    const cancelCarne = cancelOpenCarneRows as unknown as ReturnType<typeof vi.fn>
+    cancelCarne.mockResolvedValueOnce({ ok: false, error: "MP fora" })
+    findSub.mockResolvedValueOnce({
+      id: "sub_1",
+      studentId: "st_1",
+      tenantId: "t1",
+      status: "ACTIVE",
+      gateway: "MP",
+      asaasSubscriptionId: null,
+      mpPreapprovalId: null,
+      boletoCarne: true,
+      plan: { name: "Plano Total" },
+    })
+    const r = await cancelSubscriptionAccess("sub_1", "REQUESTED", false)
+    expect(r.errors).toEqual(["gateway: MP fora"])
+    expect(createNotification).toHaveBeenCalledWith(
+      expect.objectContaining({ roleTarget: "SUPER_ADMIN" }),
+    )
+    // O encerramento local acontece mesmo assim.
     expect(prisma.studentSubscription.update).toHaveBeenCalled()
   })
 

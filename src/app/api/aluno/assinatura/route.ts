@@ -7,6 +7,11 @@ import { withRequestContext } from "@/lib/observability/with-request-context"
 import { PAYER_SELECT, resolvePayer } from "@/lib/checkout/payer"
 import { getPlanForCheckout } from "@/lib/subscriptions/plans"
 import { createSubscriptionAtGateway } from "@/lib/subscriptions/checkout"
+import {
+  CarneInputError,
+  discardSubscriptionCarne,
+  startSelfServiceCarne,
+} from "@/lib/subscriptions/carne"
 import { cancelSubscriptionAccess } from "@/lib/subscriptions/cancel"
 import { isRecurringInterval } from "@/lib/subscriptions/interval"
 import { contextLogger } from "@/lib/logger"
@@ -167,6 +172,37 @@ export const POST = withRequestContext(
       },
       select: { id: true },
     })
+
+    // Boleto é a assinatura no boleto (carnê), igual às vitrines: um boleto por
+    // ciclo, emitido pela plataforma.
+    if (data.paymentMethod === "BOLETO") {
+      try {
+        const carne = await startSelfServiceCarne({
+          subscriptionId: subscription.id,
+          studentId: student.id,
+        })
+        return NextResponse.json({
+          data: {
+            subscriptionId: subscription.id,
+            authorized: false,
+            boleto: carne.firstBoleto ?? undefined,
+          },
+        })
+      } catch (err) {
+        await discardSubscriptionCarne(subscription.id)
+        if (err instanceof CarneInputError) {
+          return NextResponse.json({ error: err.message, code: "CARNE_INVALID" }, { status: 400 })
+        }
+        contextLogger().error(
+          { err, event: "aluno.assinatura.carne_failed", planId: plan.id },
+          "falha ao gerar o boleto da assinatura do aluno logado",
+        )
+        return NextResponse.json(
+          { error: "Não foi possível gerar o boleto. Tente novamente." },
+          { status: 502 },
+        )
+      }
+    }
 
     try {
       const result = await createSubscriptionAtGateway(

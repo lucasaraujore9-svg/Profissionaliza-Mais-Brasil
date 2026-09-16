@@ -1,10 +1,5 @@
 import { prisma } from "@/lib/prisma"
-import {
-  settleSubscriptionCycle,
-  markSubscriptionPastDue,
-  revokeSubscriptionForRefund,
-  recordOpenSubscriptionCharge,
-} from "@/lib/subscriptions/renew"
+import { applyAsaasSubscriptionEvent } from "@/lib/subscriptions/asaas-events"
 import { getPayment, AsaasApiError } from "./client"
 import { fulfillFromAsaasPayment, type AsaasFulfillTenant } from "./fulfillment"
 import { settleBoletoInstallment } from "@/lib/installments/settle"
@@ -112,71 +107,32 @@ export async function processResellerAsaasWebhook(
     // matrículas nascem sob demanda, uma por curso aberto), então cairia em
     // "matrícula não encontrada" e a renovação nunca aconteceria.
     //
+    // Duas formas de chegar nela: pela referência `pmb_sub_<id>` (cobrança
+    // AVULSA — acesso vitalício e os boletos da assinatura no boleto, que chegam
+    // SEM `subscription`) e pelo `subscription` da recorrência do Asaas.
+    //
     // Escopada ao tenant, como todo o resto deste processador: uma assinatura de
     // OUTRA unidade nunca pode ser liquidada pelo webhook desta conta.
-    if (payment.subscription) {
-      const studentSub = await prisma.studentSubscription.findFirst({
-        where: { asaasSubscriptionId: payment.subscription, tenantId: tenant.id },
-        select: { id: true },
-      })
-      if (studentSub) {
-        if (event === "PAYMENT_RECEIVED" || event === "PAYMENT_CONFIRMED") {
-          const { settled } = await settleSubscriptionCycle(studentSub.id, {
-            gateway: "ASAAS",
-            externalPaymentId: payment.id,
-            amount: payment.value,
-            paidAt: payment.paymentDate ? new Date(payment.paymentDate) : new Date(),
-            dueDate: new Date(payment.dueDate),
-            billingType: payment.billingType,
-            invoiceUrl: payment.invoiceUrl,
-            bankSlipUrl: payment.bankSlipUrl,
+    const subRef = payment.externalReference?.startsWith("pmb_sub_")
+      ? payment.externalReference.slice("pmb_sub_".length)
+      : null
+    const studentSub =
+      (subRef
+        ? await prisma.studentSubscription.findFirst({
+            where: { id: subRef, tenantId: tenant.id },
+            select: { id: true, boletoCarne: true },
           })
-          await markLog(
-            logId,
-            true,
-            settled
-              ? `assinatura ${studentSub.id}: ciclo liquidado`
-              : `assinatura ${studentSub.id}: ciclo ja registrado`,
-          )
-          return
-        }
-        if (event === "PAYMENT_OVERDUE") {
-          await recordOpenSubscriptionCharge(studentSub.id, {
-            gateway: "ASAAS",
-            externalPaymentId: payment.id,
-            amount: payment.value,
-            dueDate: new Date(payment.dueDate),
-            billingType: payment.billingType,
-            invoiceUrl: payment.invoiceUrl,
-            bankSlipUrl: payment.bankSlipUrl,
-            status: "OVERDUE",
+        : null) ??
+      (payment.subscription
+        ? await prisma.studentSubscription.findFirst({
+            where: { asaasSubscriptionId: payment.subscription, tenantId: tenant.id },
+            select: { id: true, boletoCarne: true },
           })
-          await markSubscriptionPastDue(studentSub.id)
-          await markLog(logId, true, `assinatura ${studentSub.id}: em atraso`)
-          return
-        }
-        if (event === "PAYMENT_CREATED" || event === "PAYMENT_UPDATED") {
-          await recordOpenSubscriptionCharge(studentSub.id, {
-            gateway: "ASAAS",
-            externalPaymentId: payment.id,
-            amount: payment.value,
-            dueDate: new Date(payment.dueDate),
-            billingType: payment.billingType,
-            invoiceUrl: payment.invoiceUrl,
-            bankSlipUrl: payment.bankSlipUrl,
-            status: "PENDING",
-          })
-          await markLog(logId, true, `assinatura ${studentSub.id}: cobranca em aberto registrada`)
-          return
-        }
-        if (event === "PAYMENT_REFUNDED" || event === "PAYMENT_CHARGEBACK_REQUESTED") {
-          await revokeSubscriptionForRefund(studentSub.id)
-          await markLog(logId, true, `assinatura ${studentSub.id}: estornada`)
-          return
-        }
-        await markLog(logId, true, `assinatura ${studentSub.id}: ${event} — sem acao`)
-        return
-      }
+        : null)
+    if (studentSub) {
+      const note = await applyAsaasSubscriptionEvent(studentSub, event, payment)
+      await markLog(logId, true, note)
+      return
     }
 
     // Resolve a matrícula SEMPRE escopada ao tenant (anti cross-tenant):

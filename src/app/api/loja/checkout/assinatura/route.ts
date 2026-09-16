@@ -14,6 +14,11 @@ import {
   SubscriptionCheckoutInputError,
 } from "@/lib/subscriptions/checkout"
 import { resellerSubscriptionCheckoutSchema } from "@/lib/subscriptions/checkout-schema"
+import {
+  CarneInputError,
+  discardSubscriptionCarne,
+  startSelfServiceCarne,
+} from "@/lib/subscriptions/carne"
 import { tenantCheckoutMode } from "@/lib/tenant/checkout-mode"
 import { tenantPolo } from "@/lib/tenant/slug"
 import { decryptTenantAsaasKey } from "@/lib/asaas/client"
@@ -35,9 +40,10 @@ const PENDING_CHECKOUT_TTL_MS = 30 * 60 * 1000
  * `createSubscriptionAtGateway`; sem chave da unidade, o assert de isolamento
  * daquele modulo LANCA em vez de cobrar no lugar errado.
  *
- * Limite conhecido do MP: a recorrencia (preapproval) exige cartao tokenizado no
- * browser e nao emite fatura de PIX/boleto por ciclo. Unidade no MP so oferece
- * assinatura no cartao; no Asaas, os tres meios.
+ * Meios: no CARTAO a recorrencia e do gateway (preapproval no MP, assinatura no
+ * Asaas). No BOLETO, nos dois gateways, e a assinatura no boleto (carne): a
+ * plataforma emite um boleto por ciclo (`lib/subscriptions/carne.ts`). PIX
+ * recorrente so existe no Asaas — a recorrencia do MP nao emite PIX por ciclo.
  */
 export const POST = withRequestContext(
   { action: "loja.checkout.assinatura", route: "/api/loja/checkout/assinatura" },
@@ -128,20 +134,32 @@ export const POST = withRequestContext(
       return NextResponse.json({ error: "Plano indisponível" }, { status: 404 })
     }
 
-    // MP não faz RECORRÊNCIA com PIX/boleto: o preapproval exige cartão. A
-    // restrição é da recorrência, não da loja — um plano VITALÍCIO no MP é uma
-    // cobrança comum e aceita os três meios. Por isso a checagem roda depois de
-    // carregar o plano: aplicá-la antes recusaria PIX numa compra única que o
-    // gateway aceita sem problema.
+    // MP não faz RECORRÊNCIA com PIX: o preapproval exige cartão, e o boleto
+    // recorrente é o carnê da plataforma. A restrição é da recorrência, não da
+    // loja — um plano VITALÍCIO no MP é uma cobrança comum e aceita PIX. Por
+    // isso a checagem roda depois de carregar o plano: aplicá-la antes recusaria
+    // PIX numa compra única que o gateway aceita sem problema.
     if (
       gateway === "MP" &&
       isRecurringInterval(plan.interval) &&
-      data.paymentMethod !== "CREDIT_CARD"
+      data.paymentMethod === "PIX"
     ) {
       return NextResponse.json(
         {
-          error: "Esta loja aceita assinatura recorrente apenas no cartão de crédito",
+          error: "Esta loja aceita assinatura no cartão de crédito ou no boleto",
           code: "METHOD_NOT_SUPPORTED",
+        },
+        { status: 400 },
+      )
+    }
+    // Assinatura no boleto: um boleto por ciclo, emitido pela plataforma.
+    const payWithCarne = data.paymentMethod === "BOLETO"
+    // O boleto do MP recusa pagador sem endereço completo.
+    if (payWithCarne && gateway === "MP" && !data.enderecoBoleto) {
+      return NextResponse.json(
+        {
+          error: "Informe o endereço completo para gerar o boleto.",
+          code: "ADDRESS_REQUIRED",
         },
         { status: 400 },
       )
@@ -252,6 +270,38 @@ export const POST = withRequestContext(
       },
       select: { id: true },
     })
+
+    if (payWithCarne) {
+      try {
+        const carne = await startSelfServiceCarne({
+          subscriptionId: subscription.id,
+          studentId: student.id,
+          address: data.enderecoBoleto,
+        })
+        return NextResponse.json({
+          data: {
+            subscriptionId: subscription.id,
+            authorized: false,
+            boleto: carne.firstBoleto ?? undefined,
+          },
+        })
+      } catch (err) {
+        // A assinatura nova some junto — senão o gate "já iniciou uma
+        // assinatura" travaria a nova tentativa.
+        await discardSubscriptionCarne(subscription.id)
+        if (err instanceof CarneInputError) {
+          return NextResponse.json({ error: err.message, code: "CARNE_INVALID" }, { status: 400 })
+        }
+        contextLogger().error(
+          { err, event: "loja.assinatura.carne_failed", tenantId: tenant.id, planId: plan.id },
+          "falha ao gerar o boleto da assinatura",
+        )
+        return NextResponse.json(
+          { error: "Não foi possível gerar o boleto. Tente novamente." },
+          { status: 502 },
+        )
+      }
+    }
 
     try {
       const result = await createSubscriptionAtGateway(

@@ -16,6 +16,7 @@ import {
 } from "./access"
 import { findLiveSubscriptionId } from "./live"
 import { adoptIntoLiveSubscription } from "./release"
+import { cancelOpenCarneRows } from "./carne"
 
 /**
  * Encerra uma assinatura e corta o acesso que ela dava.
@@ -41,10 +42,12 @@ import { adoptIntoLiveSubscription } from "./release"
  */
 
 interface GatewayRefs {
+  id: string
   gateway: string
   tenantId: string | null
   asaasSubscriptionId: string | null
   mpPreapprovalId: string | null
+  boletoCarne: boolean
 }
 
 
@@ -57,6 +60,10 @@ async function stopGatewayRecurrence(
   sub: GatewayRefs,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
+    // Assinatura NO BOLETO: a "recorrência" são os boletos que a plataforma
+    // emitiu. Cancelá-los é o que impede o aluno de receber (e pagar) boleto de
+    // uma assinatura encerrada — o cron para de emitir sozinho, pelo status.
+    if (sub.boletoCarne) return await cancelOpenCarneRows(sub.id)
     if (sub.asaasSubscriptionId) {
       // A CONTA que criou a assinatura é a única que consegue cancelá-la: com a
       // chave errada o Asaas responde 404 silencioso e a cobrança do aluno
@@ -193,6 +200,7 @@ export async function cancelSubscriptionAccess(
       gateway: true,
       asaasSubscriptionId: true,
       mpPreapprovalId: true,
+      boletoCarne: true,
       plan: { select: { name: true } },
     },
   })
