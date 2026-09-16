@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client"
 import { MPApiError } from "@/lib/mercadopago/client"
 import { AsaasApiError } from "@/lib/asaas/client"
 import { EAApiError, EANetworkError } from "@/lib/plataforma-cursos/errors"
+import { CardInstallmentOutOfOrderError } from "@/lib/enrollment/card-installment"
 
 /**
  * Códigos Prisma que indicam falha TRANSITÓRIA de infraestrutura (vale retry):
@@ -26,6 +27,10 @@ const TRANSIENT_PRISMA_CODES = new Set([
  * (markLog(false) + visibilidade no WebhookLog + reconciliação manual).
  */
 export function isTransientWebhookError(error: unknown): boolean {
+  // Parcela do cartão que chegou antes da 1ª: a reentrega é justamente o que a
+  // resolve (na volta a 1ª já liberou o curso). Engolir perderia a parcela do
+  // extrato para sempre.
+  if (error instanceof CardInstallmentOutOfOrderError) return true
   // Gateways: 5xx (instabilidade do provedor) ou statusCode 0 (erro de rede).
   if (error instanceof MPApiError) {
     return error.statusCode >= 500 || error.statusCode === 0

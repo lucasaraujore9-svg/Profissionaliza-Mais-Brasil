@@ -3,7 +3,10 @@ import { notFound } from "next/navigation"
 import { prisma } from "@/lib/prisma"
 import { getCurrentTenant } from "@/lib/tenant/current"
 import { getTenantCourseBySlug } from "@/lib/tenant/courses"
-import { tenantCheckoutMode } from "@/lib/tenant/checkout-mode"
+import {
+  tenantAdvertisedInterestFree,
+  tenantCheckoutMode,
+} from "@/lib/tenant/checkout-mode"
 import {
   CourseDetailView,
   type CourseDetailData,
@@ -17,7 +20,6 @@ import { LeadInquiryCard } from "@/components/loja/lead-inquiry-card"
 import { getRequestOrigin } from "@/lib/seo/host"
 import { JsonLd } from "@/components/seo/json-ld"
 import { courseJsonLd, breadcrumbJsonLd } from "@/lib/seo/jsonld"
-import { displayInterestFreeInstallments } from "@/lib/mercadopago/installments"
 
 interface CoursePageProps {
   params: Promise<{ slug: string }>
@@ -96,6 +98,10 @@ export default async function CoursePage({ params }: CoursePageProps) {
     mpAccessToken: tenantPayment?.mpAccessToken,
     mpPublicKey: tenantPayment?.mpPublicKey,
   })
+  // Parcelas sem juros anunciadas — só quando o checkout da unidade parcela.
+  const advertisedInterestFree = tenantPayment
+    ? tenantAdvertisedInterestFree(tenantPayment)
+    : null
 
   // CTA sempre aponta para o checkout DA VITRINE — a mesma rota para os dois
   // tipos: o que muda é a promessa da página, não a compra.
@@ -122,9 +128,7 @@ export default async function CoursePage({ params }: CoursePageProps) {
       imageUrl: course.imageUrl,
       price: course.price,
       originalPrice: course.originalPrice,
-      parcelas: displayInterestFreeInstallments(
-        tenantPayment?.interestFreeInstallments ?? 1,
-      ),
+      parcelas: advertisedInterestFree,
       paginas: course.ebookPages,
       // `horas` é a mesma coluna que no curso guarda a carga horária; no e-book
       // a autoria a rotula como tempo estimado de leitura.
@@ -156,11 +160,9 @@ export default async function CoursePage({ params }: CoursePageProps) {
     imageUrl: course.imageUrl,
     price: course.price,
     originalPrice: course.originalPrice,
-    // Pagamento único: "Nx sem juros" vem do nº GLOBAL da unidade
+    // Pagamento único: "ou 10x de R$ 10,00 sem juros" pelo nº GLOBAL da unidade
     // (Configurações → Pagamento), não de um valor por curso.
-    parcelas: displayInterestFreeInstallments(
-      tenantPayment?.interestFreeInstallments ?? 1,
-    ),
+    parcelas: advertisedInterestFree,
     paymentType: course.paymentType,
     monthlyMonths: course.monthlyMonths,
     lessons: course.lessons,

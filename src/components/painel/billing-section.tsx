@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import type { ConfigDataWithTenant } from "./config-tabs.types"
 import { AsaasGatewaySection } from "./asaas-gateway-section"
+import { interestFreeInstallmentText } from "@/lib/mercadopago/installments"
 
 /**
  * Painel de desenvolvedores do Mercado Pago ("Suas integrações"). É de lá que
@@ -449,13 +450,24 @@ export function BillingSection({ data, onUpdate }: BillingSectionProps) {
         <h3 className="text-sm font-semibold text-[var(--color-pmb-green-900)]">
           Parcelamento no cartão (sem juros)
         </h3>
-        <p className="mt-1 text-xs text-gray-600">
-          O aluno pode parcelar a compra no cartão em até{" "}
-          <strong className="text-[var(--color-pmb-green-900)]">12x</strong>.
-          Escolha em quantas dessas parcelas você assume o juros (parcelas{" "}
-          <strong>sem juros</strong> para o aluno). Acima disso, o aluno paga o
-          juros do cartão.
-        </p>
+        {/* As regras mudam com o gateway: no Mercado Pago o aluno sempre pode
+            ir a 12x e paga o juros acima do limite; no Asaas não existe juros
+            para o aluno, então o limite é o teto do parcelamento. */}
+        {data.tenant.salesGateway === "ASAAS" ? (
+          <p className="mt-1 text-xs text-gray-600">
+            O aluno pode parcelar a compra no cartão em até o número escolhido,
+            sempre <strong>sem juros</strong> para ele. A taxa do Asaas sobre o
+            parcelamento é descontada do valor que você recebe.
+          </p>
+        ) : (
+          <p className="mt-1 text-xs text-gray-600">
+            O aluno pode parcelar a compra no cartão em até{" "}
+            <strong className="text-[var(--color-pmb-green-900)]">12x</strong>.
+            Escolha em quantas dessas parcelas você assume o juros (parcelas{" "}
+            <strong>sem juros</strong> para o aluno). Acima disso, o aluno paga o
+            juros do cartão.
+          </p>
+        )}
 
         <div className="mt-5 max-w-xs">
           <Label htmlFor="interest-free">Parcelas sem juros</Label>
@@ -473,6 +485,17 @@ export function BillingSection({ data, onUpdate }: BillingSectionProps) {
             ))}
           </select>
         </div>
+
+        {interestFree > 1 && (
+          <p className="mt-3 text-xs text-gray-600">
+            Na vitrine, um curso de R$ 100,00 aparece como{" "}
+            <strong className="text-[var(--color-pmb-green-900)]">
+              {interestFreeInstallmentText(100, interestFree)}
+            </strong>
+            . Cada parcela precisa ter pelo menos R$ 5,00, então cursos baratos
+            parcelam em menos vezes.
+          </p>
+        )}
 
         <div className="mt-3 flex items-center gap-2 text-xs">
           {interestFreeSaving && (
@@ -492,13 +515,15 @@ export function BillingSection({ data, onUpdate }: BillingSectionProps) {
           )}
         </div>
 
-        <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-[11px] text-amber-800">
-          <strong>Importante:</strong> para o sem juros valer de fato, ative o
-          parcelamento sem juros correspondente na sua conta do Mercado Pago. O
-          valor exibido ao aluno no checkout é sempre o confirmado pelo Mercado
-          Pago — se a conta não tiver o sem juros configurado, o aluno verá os
-          juros do cartão mesmo dentro do limite escolhido aqui.
-        </div>
+        {data.tenant.salesGateway !== "ASAAS" && (
+          <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-[11px] text-amber-800">
+            <strong>Importante:</strong> para o sem juros valer de fato, ative o
+            parcelamento sem juros correspondente na sua conta do Mercado Pago. O
+            valor exibido ao aluno no checkout é sempre o confirmado pelo Mercado
+            Pago — se a conta não tiver o sem juros configurado, o aluno verá os
+            juros do cartão mesmo dentro do limite escolhido aqui.
+          </div>
+        )}
       </div>
 
       {/* ── Mercado Pago ──────────────────────────────────────────────────

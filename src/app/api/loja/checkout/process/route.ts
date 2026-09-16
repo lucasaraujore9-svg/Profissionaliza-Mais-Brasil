@@ -94,6 +94,8 @@ export const POST = withRequestContext(
               asaasApiKey: true,
               asaasWebhookToken: true,
               asaasConnected: true,
+              // Teto do parcelamento no cartão Asaas (toda parcela é sem juros).
+              interestFreeInstallments: true,
             },
           },
         },
@@ -265,6 +267,7 @@ export const POST = withRequestContext(
           },
           notificationUrl: asaasWebhookUrl(tenant.slug),
           remoteIp: fwd,
+          interestFreeInstallments: tenant.interestFreeInstallments,
         }
 
         const asaasResult = openInstallment

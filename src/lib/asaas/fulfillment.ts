@@ -46,6 +46,7 @@ export async function fulfillFromAsaasPayment(
       amount: payment.value,
       paidAt: payment.paymentDate ? new Date(payment.paymentDate) : new Date(),
       paymentType,
+      installmentNumber: payment.installmentNumber ?? null,
     },
   )
 

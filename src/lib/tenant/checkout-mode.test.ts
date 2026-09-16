@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest"
-import { tenantCheckoutMode, type CheckoutModeInput } from "./checkout-mode"
+import {
+  tenantAdvertisedInterestFree,
+  tenantCheckoutMode,
+  type CheckoutModeInput,
+} from "./checkout-mode"
 
 // Fonte única do gateway efetivo da unidade. O Asaas deixou de ser capability
 // liberada caso a caso pelo Admin Master (`asaasGatewayEnabled`, migration
@@ -67,5 +71,36 @@ describe("tenantCheckoutMode", () => {
         mpPublicKey: null,
       }),
     ).toBe("NONE")
+  })
+})
+
+describe("tenantAdvertisedInterestFree", () => {
+  // Quantas parcelas a VITRINE da unidade anuncia ("10x de R$ 10,00 sem juros").
+  // Os dois gateways parcelam; sem gateway não há o que anunciar.
+
+  it("MP: anuncia o nº configurado pela unidade", () => {
+    expect(tenantAdvertisedInterestFree({ ...t(), interestFreeInstallments: 10 })).toBe(10)
+  })
+
+  it("MP com só à vista (1) → nada a anunciar", () => {
+    expect(tenantAdvertisedInterestFree({ ...t(), interestFreeInstallments: 1 })).toBeNull()
+  })
+
+  it("Asaas: anuncia o nº configurado — o checkout Asaas parcela até ele", () => {
+    expect(
+      tenantAdvertisedInterestFree({
+        ...t({ salesGateway: "ASAAS", asaasConnected: true, mpAccessToken: null }),
+        interestFreeInstallments: 10,
+      }),
+    ).toBe(10)
+  })
+
+  it("sem gateway (NONE): nunca anuncia", () => {
+    expect(
+      tenantAdvertisedInterestFree({
+        ...t({ mpAccessToken: null }),
+        interestFreeInstallments: 10,
+      }),
+    ).toBeNull()
   })
 })

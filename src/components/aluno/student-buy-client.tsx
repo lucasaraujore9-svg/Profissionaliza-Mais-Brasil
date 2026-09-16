@@ -17,6 +17,7 @@ import {
   type AppliedCoupon,
   type CouponValidateResult,
 } from "@/components/loja/coupon-field"
+import { interestFreeInstallmentsFor } from "@/lib/mercadopago/installments"
 
 interface CatalogCourse {
   id: string
@@ -245,10 +246,13 @@ export function StudentBuyClient() {
           {filtered.map((c) => {
             const owned = c.ownedStatus !== null
             const isMonthly = c.paymentType === "MONTHLY"
-            const installmentValue =
-              !isMonthly && c.installments && c.installments > 1
-                ? c.price / c.installments
-                : null
+            // Mesmo nº que a vitrine anuncia (piso de R$ 5 por parcela).
+            const installmentCount = isMonthly
+              ? null
+              : interestFreeInstallmentsFor(c.price, c.installments)
+            const installmentValue = installmentCount
+              ? c.price / installmentCount
+              : null
             return (
               <article
                 key={c.id}
@@ -300,7 +304,7 @@ export function StudentBuyClient() {
                   ) : null}
                   {installmentValue !== null && (
                     <p className="text-[11px] text-gray-500">
-                      ou {c.installments}x de {brl(installmentValue)}
+                      ou {installmentCount}x de {brl(installmentValue)}
                     </p>
                   )}
 

@@ -1,5 +1,6 @@
 import Image from "next/image"
 import { Tag, GraduationCap } from "lucide-react"
+import { interestFreeInstallmentsFor } from "@/lib/mercadopago/installments"
 
 export interface OrderSummaryProps {
   courseName: string
@@ -54,10 +55,14 @@ export function OrderSummary({
   const isMonthly = paymentType === "MONTHLY"
   const months = isMonthly ? monthlyMonths ?? 12 : null
 
-  const parcelasLabel =
-    !isMonthly && parcelasSugeridas && parcelasSugeridas >= 2
-      ? `${parcelasSugeridas}x de ${formatBRL(finalPrice / parcelasSugeridas)}`
-      : null
+  // Sobre o valor FINAL (com cupom) e limitado à parcela mínima de R$ 5 — o
+  // mesmo teto que o seletor do checkout aplica a este valor.
+  const parcelasN = isMonthly
+    ? null
+    : interestFreeInstallmentsFor(finalPrice, parcelasSugeridas)
+  const parcelasLabel = parcelasN
+    ? `${parcelasN}x de ${formatBRL(finalPrice / parcelasN)}`
+    : null
 
   const totalLabel = isMonthly
     ? "Mensalidade"

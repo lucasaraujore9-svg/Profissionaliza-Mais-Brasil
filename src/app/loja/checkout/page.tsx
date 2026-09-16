@@ -6,12 +6,12 @@ import { applyCouponDiscount } from "@/lib/coupons/discount"
 import { prisma } from "@/lib/prisma"
 import { visibilityFilter } from "@/lib/tenant/courses"
 import { effectivePaymentType } from "@/lib/tenant/monthly-policy"
-import { tenantCheckoutMode } from "@/lib/tenant/checkout-mode"
-import { getPackageForCheckout } from "@/lib/packages/vitrine"
 import {
-  MAX_CARD_INSTALLMENTS,
-  displayInterestFreeInstallments,
-} from "@/lib/mercadopago/installments"
+  tenantAdvertisedInterestFree,
+  tenantCheckoutMode,
+} from "@/lib/tenant/checkout-mode"
+import { getPackageForCheckout } from "@/lib/packages/vitrine"
+import { MAX_CARD_INSTALLMENTS } from "@/lib/mercadopago/installments"
 
 interface CheckoutPageProps {
   searchParams: Promise<{
@@ -137,7 +137,11 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
     // vira matrícula gratuita, liberada na hora como bolsa.
     const pkgPanelForm =
       checkoutMode === "ASAAS"
-        ? ({ kind: "asaas", initPath: "/api/loja/checkout/package" } as const)
+        ? ({
+            kind: "asaas",
+            initPath: "/api/loja/checkout/package",
+            interestFreeInstallments: tenantGateway?.interestFreeInstallments ?? 1,
+          } as const)
         : checkoutMode === "MP" && pkgMpPublicKey
           ? ({
               kind: "mp",
@@ -301,10 +305,11 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
     tenantCourse.customParcelas ??
     tenantCourse.course.parcelasOverride ??
     tenantCourse.course.parcelasSugeridas
-  // Pagamento único: nº GLOBAL de parcelas sem juros da unidade (fonte do resumo).
-  const oneTimeParcelas = displayInterestFreeInstallments(
-    tenantGateway?.interestFreeInstallments ?? 1,
-  )
+  // Pagamento único: nº GLOBAL de parcelas sem juros da unidade (fonte do resumo),
+  // só quando o checkout parcela — no Asaas o cartão da unidade sai à vista.
+  const oneTimeParcelas = tenantGateway
+    ? tenantAdvertisedInterestFree(tenantGateway)
+    : null
   const validatedCoupon = couponParam
     ? await resolveCoupon(tenant.id, couponParam, basePrice)
     : null
@@ -316,7 +321,15 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
   // vira matrícula gratuita, liberada na hora como bolsa.
   const coursePanelForm =
     checkoutMode === "ASAAS"
-      ? ({ kind: "asaas" } as const)
+      ? ({
+          kind: "asaas",
+          // Mensal = recorrência (1 cobrança/mês); à vista parcela até o nº da
+          // unidade — no Asaas toda parcela é sem juros.
+          interestFreeInstallments:
+            effectiveType === "MONTHLY"
+              ? 1
+              : tenantGateway?.interestFreeInstallments ?? 1,
+        } as const)
       : checkoutMode === "MP" && courseMpPublicKey
         ? ({
             kind: "mp",

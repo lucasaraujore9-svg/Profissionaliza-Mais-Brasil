@@ -1,5 +1,5 @@
 import type { Course } from "@/components/main/home/course-card"
-import { interestFreeLabel } from "@/lib/mercadopago/installments"
+import { interestFreeInstallmentText } from "@/lib/mercadopago/installments"
 import { contentCardMeta } from "@/lib/catalog/content-type"
 
 /**
@@ -110,7 +110,7 @@ export function toCourse(
     titulo: c.nome,
     horas: contentCardMeta(c),
     preco: formatPrice(pickPrice(c)),
-    parcelas: interestFreeLabel(interestFree) ?? "",
+    parcelas: interestFreeInstallmentText(pickPrice(c), interestFree) ?? "",
     selo: selo ?? null,
     accent: idx % 2 === 0 ? "gold" : "green",
     imageUrl: c.capaOverride ?? c.capaImageUrl,

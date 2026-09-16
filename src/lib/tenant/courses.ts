@@ -2,40 +2,66 @@ import { prisma } from "@/lib/prisma"
 import type { ContentType, Prisma } from "@prisma/client"
 import { contextLogger } from "@/lib/logger"
 import { effectivePaymentType, type MonthlyPolicy } from "@/lib/tenant/monthly-policy"
-import { displayInterestFreeInstallments } from "@/lib/mercadopago/installments"
+import {
+  ADVERTISED_INSTALLMENTS_SELECT,
+  tenantAdvertisedInterestFree,
+  tenantCheckoutMode,
+  type CheckoutMode,
+} from "@/lib/tenant/checkout-mode"
 import { COURSE_PROVISIONABLE, courseCuratedForTenant } from "@/lib/catalog/visibility"
 
 /**
- * Politica de exibicao da unidade: parcelado/mensalidade + nº GLOBAL de parcelas
- * sem juros (Tenant.interestFreeInstallments) que governa o texto "Nx sem juros"
- * de pagamento unico em toda a vitrine.
+ * Politica de exibicao da unidade: parcelado/mensalidade + quantas parcelas sem
+ * juros a vitrine anuncia no pagamento unico ("10x de R$ 10,00 sem juros").
  */
-type TenantDisplayPolicy = MonthlyPolicy & { interestFreeInstallments: number }
+export type TenantDisplayPolicy = MonthlyPolicy & {
+  /**
+   * Ja resolvido por `tenantAdvertisedInterestFree`: o nº GLOBAL da unidade
+   * (Configuracoes → Pagamento) quando o checkout dela parcela o cartao; null
+   * quando nao ha parcela a anunciar.
+   */
+  advertisedInterestFree: number | null
+  /** Gateway efetivo da vitrine (MP | ASAAS | NONE). */
+  checkoutMode: CheckoutMode
+}
 
 const DISPLAY_POLICY_BLOCKED: TenantDisplayPolicy = {
   monthlyAllowed: false,
   monthlyEnabled: false,
   monthlyScope: "DIRECT_ONLY",
-  interestFreeInstallments: 1,
+  advertisedInterestFree: null,
+  checkoutMode: "NONE",
 }
 
 /**
- * Politica de parcelado/mensalidade da unidade. Na vitrine (compra self-service
- * do lead), o MONTHLY so vale quando a unidade tem o parcelado ativo E o escopo
- * inclui a vitrine. Quando ausente, assume bloqueado. Carrega tambem o nº global
- * de parcelas sem juros da unidade (fonte unica do "Nx sem juros" exibido).
+ * Politica de exibicao da unidade. Na vitrine (compra self-service do lead), o
+ * MONTHLY so vale quando a unidade tem o parcelado ativo E o escopo inclui a
+ * vitrine. Quando ausente, assume bloqueado.
+ *
+ * Exportada para os cards da home e do hero (lib/home/sections.ts,
+ * lib/catalog/home.ts): uma copia local desta leitura foi o que deixou esses
+ * cards mostrando "/mes" em curso que a vitrine cobra a vista.
  */
-async function loadMonthlyPolicy(tenantId: string): Promise<TenantDisplayPolicy> {
+export async function loadTenantDisplayPolicy(
+  tenantId: string,
+): Promise<TenantDisplayPolicy> {
   const t = await prisma.tenant.findUnique({
     where: { id: tenantId },
     select: {
       monthlyAllowed: true,
       monthlyEnabled: true,
       monthlyScope: true,
-      interestFreeInstallments: true,
+      ...ADVERTISED_INSTALLMENTS_SELECT,
     },
   })
-  return t ?? DISPLAY_POLICY_BLOCKED
+  if (!t) return DISPLAY_POLICY_BLOCKED
+  return {
+    monthlyAllowed: t.monthlyAllowed,
+    monthlyEnabled: t.monthlyEnabled,
+    monthlyScope: t.monthlyScope,
+    advertisedInterestFree: tenantAdvertisedInterestFree(t),
+    checkoutMode: tenantCheckoutMode(t),
+  }
 }
 
 export interface TenantCourseListItem {
@@ -156,12 +182,10 @@ function mapTenantCourseItem(
         : null,
     imageUrl:
       tc.customCapaUrl ?? tc.course.capaOverride ?? tc.course.capaImageUrl,
-    // Pagamento único: "Nx sem juros" vem do nº GLOBAL da unidade (não por curso).
-    // Mensalidade: o número exibido é a quantidade de mensalidades.
+    // Pagamento único: parcelas sem juros da unidade (não por curso), só quando
+    // o checkout dela parcela. Mensalidade: a quantidade de mensalidades.
     parcelas:
-      paymentType === "MONTHLY"
-        ? monthlyMonths
-        : displayInterestFreeInstallments(policy.interestFreeInstallments),
+      paymentType === "MONTHLY" ? monthlyMonths : policy.advertisedInterestFree,
     isFeatured: tc.isFeatured,
     paymentType,
     monthlyMonths,
@@ -205,7 +229,7 @@ export async function listTenantCourses(
         skip: filters.offset ?? 0,
       }),
       prisma.tenantCourse.count({ where }),
-      loadMonthlyPolicy(filters.tenantId),
+      loadTenantDisplayPolicy(filters.tenantId),
     ])
 
     return {
@@ -310,7 +334,7 @@ export async function listTenantCatalog(args: {
       }),
       prisma.tenantCourse.count({ where }),
       tenantCatalogCategories(tenantId),
-      loadMonthlyPolicy(tenantId),
+      loadTenantDisplayPolicy(tenantId),
     ])
 
     return {
@@ -375,7 +399,7 @@ export async function getTenantCourseBySlug(
 
     if (!tc) return null
 
-    const monthly = await loadMonthlyPolicy(tenantId)
+    const monthly = await loadTenantDisplayPolicy(tenantId)
 
     // Quantidade de mensalidades (MONTHLY). Em pagamento único o "Nx sem juros"
     // vem do nº global da unidade — ver mapTenantCourseItem.
@@ -386,9 +410,7 @@ export async function getTenantCourseBySlug(
     const paymentType = effectivePaymentType(tc.paymentType, monthly, "vitrine")
     const monthlyMonths = effectiveParcelas ?? tc.course.monthlyMonthsMain
     const displayParcelas =
-      paymentType === "MONTHLY"
-        ? monthlyMonths
-        : displayInterestFreeInstallments(monthly.interestFreeInstallments)
+      paymentType === "MONTHLY" ? monthlyMonths : monthly.advertisedInterestFree
 
     return {
       id: tc.id,

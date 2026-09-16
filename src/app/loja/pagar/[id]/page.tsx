@@ -321,6 +321,12 @@ export default async function PagarPage({ params }: PagarPageProps) {
                 enrollmentId={enrollment.id}
                 boletoInstallmentId={currentInstallment?.id}
                 amount={checkoutAmount}
+                // Parcela de carnê e mensalidade não se parcelam de novo.
+                interestFreeInstallments={
+                  isMonthly || currentInstallment
+                    ? 1
+                    : enrollment.tenant.interestFreeInstallments
+                }
                 submitLabel={
                   currentInstallment
                     ? `Pagar parcela ${currentInstallment.number}`
@@ -355,9 +361,9 @@ export default async function PagarPage({ params }: PagarPageProps) {
               finalPrice={Number(enrollment.finalAmount)}
               couponCode={null}
               parcelasSugeridas={
-                // "Nx sem juros" é do cartão do MP; a cobrança avulsa no Asaas
-                // não parcela, então não anuncia parcelamento que não existe.
-                isMonthly || isAsaas || !!currentInstallment
+                // Os dois gateways parcelam o cartão até o nº da unidade. Carnê
+                // e mensalidade já têm o próprio plano.
+                isMonthly || !!currentInstallment
                   ? null
                   : displayInterestFreeInstallments(
                       enrollment.tenant.interestFreeInstallments,

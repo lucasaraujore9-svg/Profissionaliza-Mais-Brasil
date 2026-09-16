@@ -41,6 +41,11 @@ export const STUDENT_ACCESS_MONTHS = 12
 import type { PaymentGateway, PaymentType, CourseProvider } from "@prisma/client"
 import { swallow } from "@/lib/errors"
 import { contextLogger } from "@/lib/logger"
+import {
+  CardInstallmentOutOfOrderError,
+  closesOnLastInstallment,
+  isFirstCardInstallment,
+} from "@/lib/enrollment/card-installment"
 
 /**
  * Postgres advisory lock por externalPaymentId. Serializa fulfill de dois
@@ -115,6 +120,11 @@ export interface PaymentEvent {
   amount: number
   paidAt: Date
   paymentType?: PaymentType
+  /**
+   * Nº da parcela no gateway (Asaas `installmentNumber`) quando a cobrança é
+   * uma parcela de um parcelamento no cartão. Ver `isFirstCardInstallment`.
+   */
+  installmentNumber?: number | null
   // MP-specific
   mpPaymentType?: string
   mpStatusDetail?: string
@@ -218,6 +228,21 @@ async function fulfillEnrollmentLocked(
   })
   if (alreadyPaid) return
 
+  // Parcelamento no cartão: só a 1ª parcela libera o curso. As demais chegam em
+  // paralelo (webhook não sequencial) e o lock acima é por cobrança — ver
+  // CardInstallmentOutOfOrderError.
+  if (
+    enrollment.paymentType === "CARD_INSTALLMENT" &&
+    enrollment.startedAt === null &&
+    !isFirstCardInstallment({
+      installmentNumber: event.installmentNumber,
+      externalPaymentId: event.externalPaymentId,
+      enrollmentAsaasPaymentId: enrollment.asaasPaymentId,
+    })
+  ) {
+    throw new CardInstallmentOutOfOrderError(enrollmentId, event.externalPaymentId)
+  }
+
   // Termo da cobrança recorrente na copy: carnê/cartão parcelado falam
   // "parcela"; mensal, "mensalidade".
   const isParcelado =
@@ -232,10 +257,11 @@ async function fulfillEnrollmentLocked(
     enrollment.startedAt !== null && enrollment.installmentsTotal !== null
 
   if (isSubsequentInstallment) {
-    const newPaidCount = enrollment.installmentsPaid + 1
-    const reachedTotal =
-      enrollment.installmentsTotal !== null &&
-      newPaidCount >= enrollment.installmentsTotal
+    // Preenchidos dentro da transação, a partir do valor GRAVADO: duas parcelas
+    // confirmadas em paralelo leriam o mesmo `installmentsPaid` e uma
+    // sobrescreveria a outra ("2 de 6" com duas pagas depois da primeira).
+    let newPaidCount = enrollment.installmentsPaid + 1
+    let reachedTotal = false
 
     // Transação para garantir que Payment + Enrollment.update sejam atômicos.
     // Se uma falha, nenhuma é persistida — o webhook é re-entregue e tudo
@@ -263,13 +289,21 @@ async function fulfillEnrollmentLocked(
         },
         select: { id: true },
       })
-      await tx.enrollment.update({
+      const counted = await tx.enrollment.update({
         where: { id: enrollment.id },
-        data: {
-          installmentsPaid: newPaidCount,
-          ...(reachedTotal ? { status: "COMPLETED" } : {}),
-        },
+        data: { installmentsPaid: { increment: 1 } },
+        select: { installmentsPaid: true },
       })
+      newPaidCount = counted?.installmentsPaid ?? newPaidCount
+      reachedTotal =
+        enrollment.installmentsTotal !== null &&
+        newPaidCount >= enrollment.installmentsTotal
+      if (reachedTotal && closesOnLastInstallment(enrollment.paymentType)) {
+        await tx.enrollment.update({
+          where: { id: enrollment.id },
+          data: { status: "COMPLETED" },
+        })
+      }
       // Curso de autoria de outra unidade: cada parcela rateia a MESMA fatia
       // sobre o valor dela — o que o Asaas ja faz com percentual em
       // parcelamento. Quem parou na 3a de 6 rateou so as 3 pagas.
@@ -283,6 +317,12 @@ async function fulfillEnrollmentLocked(
         })
       }
     })
+
+    // Cartão parcelado: as N parcelas confirmam no dia da compra. Avisar
+    // "Parcela 2/6 confirmada" (e ao dono, "Parcela recebida") N-1 vezes no
+    // mesmo minuto seria ruído — a compra foi paga de uma vez, e o aviso de
+    // matrícula da 1ª parcela já disse isso. Aqui a parcela só entra no extrato.
+    if (enrollment.paymentType === "CARD_INSTALLMENT") return
 
     // Notifica o aluno: parcela paga
     await createNotification({
@@ -333,7 +373,8 @@ async function fulfillEnrollmentLocked(
   const firstInstallmentPaid = enrollment.installmentsTotal !== null ? 1 : 0
   const reachedTotalOnFirst =
     enrollment.installmentsTotal !== null &&
-    firstInstallmentPaid >= enrollment.installmentsTotal
+    firstInstallmentPaid >= enrollment.installmentsTotal &&
+    closesOnLastInstallment(enrollment.paymentType)
 
   // Liberação do acesso + prazo de permanência (12 meses) a partir de agora.
   const accessStartedAt = new Date()

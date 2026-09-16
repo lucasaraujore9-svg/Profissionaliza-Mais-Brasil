@@ -7,8 +7,9 @@ import {
   COURSE_PROVISIONABLE,
   courseCuratedForTenant,
 } from "@/lib/catalog/visibility"
-import { interestFreeLabel } from "@/lib/mercadopago/installments"
-import { coursePaymentType } from "@/lib/tenant/monthly-policy"
+import { interestFreeInstallmentText } from "@/lib/mercadopago/installments"
+import { effectivePaymentType } from "@/lib/tenant/monthly-policy"
+import { loadTenantDisplayPolicy } from "@/lib/tenant/courses"
 
 // ---------------------------------------------------------------------------
 // Tipos das configs por kind (gravados em home_sections.config como JSON)
@@ -650,7 +651,7 @@ async function fetchTenantCoursesByIds(
   ids: string[],
   tenantId: string,
 ): Promise<Course[]> {
-  const [rows, tenant] = await Promise.all([
+  const [rows, policy] = await Promise.all([
     prisma.tenantCourse.findMany({
       where: {
         tenantId,
@@ -663,6 +664,7 @@ async function fetchTenantCoursesByIds(
         courseId: true,
         price: true,
         paymentType: true,
+        customParcelas: true,
         customCapaUrl: true,
         course: {
           select: {
@@ -675,25 +677,28 @@ async function fetchTenantCoursesByIds(
             ebookPages: true,
             capaImageUrl: true,
             capaOverride: true,
+            parcelasOverride: true,
+            parcelasSugeridas: true,
             monthlyMonthsMain: true,
           },
         },
       },
     }),
-    prisma.tenant.findUnique({
-      where: { id: tenantId },
-      select: { interestFreeInstallments: true },
-    }),
+    loadTenantDisplayPolicy(tenantId),
   ])
-  const interestFree = tenant?.interestFreeInstallments ?? 1
   const byId = new Map(rows.map((r) => [r.courseId, r]))
   const ordered = ids
     .map((id) => byId.get(id))
     .filter((r): r is NonNullable<typeof r> => r != null)
   return ordered.map((tc, idx) => {
     const c = tc.course
-    const isMonthly = tc.paymentType === "MONTHLY"
-    const monthlyMonths = c.monthlyMonthsMain
+    // Tipo EFETIVO e nº de mensalidades pela mesma hierarquia da pagina do curso
+    // (lib/tenant/courses.ts). O tipo cru mostrava "/mes" na home para curso
+    // que a vitrine cobra a vista, e escondia justamente a parcela sem juros.
+    const paymentType = effectivePaymentType(tc.paymentType, policy, "vitrine")
+    const isMonthly = paymentType === "MONTHLY"
+    const monthlyMonths =
+      tc.customParcelas ?? c.parcelasOverride ?? c.parcelasSugeridas ?? c.monthlyMonthsMain
     return {
       slug: c.slug,
       categoria:
@@ -701,13 +706,13 @@ async function fetchTenantCoursesByIds(
       titulo: c.nome,
       horas: contentCardMeta(c),
       preco: formatTenantPrice(Number(tc.price)),
-      // Pagamento único: "Nx sem juros" vem do nº GLOBAL da unidade.
+      // Pagamento único: valor da parcela sem juros da unidade ("10x de R$ 10,00").
       parcelas: isMonthly
         ? monthlyMonths
           ? `${monthlyMonths} mensalidades`
           : "mensalidade"
-        : interestFreeLabel(interestFree) ?? "",
-      paymentType: coursePaymentType(tc.paymentType),
+        : interestFreeInstallmentText(Number(tc.price), policy.advertisedInterestFree) ?? "",
+      paymentType,
       selo: null,
       accent: idx % 2 === 0 ? "gold" : "green",
       imageUrl: tc.customCapaUrl ?? c.capaOverride ?? c.capaImageUrl,

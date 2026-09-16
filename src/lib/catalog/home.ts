@@ -6,9 +6,10 @@ import {
   courseCuratedForTenant,
 } from "./visibility"
 import { contentCardMeta } from "@/lib/catalog/content-type"
-import { interestFreeLabel } from "@/lib/mercadopago/installments"
+import { interestFreeInstallmentText } from "@/lib/mercadopago/installments"
 import { getSystemSettings } from "@/lib/system-settings"
-import { coursePaymentType } from "@/lib/tenant/monthly-policy"
+import { effectivePaymentType } from "@/lib/tenant/monthly-policy"
+import { loadTenantDisplayPolicy } from "@/lib/tenant/courses"
 
 interface RawCourse {
   slug: string
@@ -54,7 +55,7 @@ function toCourse(
     titulo: c.nome,
     horas: contentCardMeta(c),
     preco: formatPrice(pickPrice(c)),
-    parcelas: interestFreeLabel(interestFree) ?? "",
+    parcelas: interestFreeInstallmentText(pickPrice(c), interestFree) ?? "",
     selo: selo ?? null,
     accent: idx % 2 === 0 ? "gold" : "green",
     imageUrl: c.capaOverride ?? c.capaImageUrl,
@@ -190,8 +191,33 @@ export interface ShowcaseCard {
   accent: "gold" | "cyan" | "lime"
   /** MONTHLY exibe o preco como mensalidade recorrente (sufixo "/mês"). */
   paymentType?: "ONE_TIME" | "MONTHLY"
-  /** Nº global de parcelas sem juros da unidade/PMB — fonte do "Nx sem juros". */
-  interestFree?: number | null
+  /**
+   * Linha sob o preco, ja pronta ("ou 10x de R$ 10,00 sem juros"). Montada no
+   * servidor porque depende do gateway da unidade, que o card nao conhece.
+   * null = sem linha. Ver `showcaseInstallmentNote`.
+   */
+  installmentNote?: string | null
+}
+
+/**
+ * Linha sob o preco do card do hero:
+ *  - mensalidade → "mensalidade recorrente";
+ *  - parcela sem juros anunciavel → "ou 10x de R$ 10,00 sem juros";
+ *  - sem parcela sem juros a anunciar, mas a loja cobra no cartao → "a vista ou
+ *    parcelado no cartao";
+ *  - unidade sem gateway → null. Dizer "parcelado" ali seria prometer o que a
+ *    cobranca nao faz.
+ */
+function showcaseInstallmentNote(args: {
+  price: number
+  monthly: boolean
+  interestFree: number | null
+  cardInstallments: boolean
+}): string | null {
+  if (args.monthly) return "mensalidade recorrente"
+  if (!args.cardInstallments) return null
+  const text = interestFreeInstallmentText(args.price, args.interestFree)
+  return text ? `ou ${text}` : "à vista ou parcelado no cartão"
 }
 
 export async function loadCatalogo({
@@ -309,7 +335,13 @@ export async function loadShowcase(tenantId?: string): Promise<ShowcaseCard[]> {
         imageUrl: n.capaImageUrl,
         selo: selos[idx],
         accent: accents[idx],
-        interestFree: settings.pmbInterestFreeInstallments,
+        // A vitrine da PMB parcela o cartao em ate 12x (pmb-rules.ts).
+        installmentNote: showcaseInstallmentNote({
+          price: pickPrice(n),
+          monthly: false,
+          interestFree: settings.pmbInterestFreeInstallments,
+          cardInstallments: true,
+        }),
       }
     })
   } catch {
@@ -340,26 +372,33 @@ async function loadTenantShowcase(tenantId: string): Promise<ShowcaseCard[]> {
       },
     })
 
-    const tenant = await prisma.tenant.findUnique({
-      where: { id: tenantId },
-      select: { interestFreeInstallments: true },
-    })
-    const interestFree = tenant?.interestFreeInstallments ?? 1
+    const policy = await loadTenantDisplayPolicy(tenantId)
 
     const accents: ShowcaseCard["accent"][] = ["gold", "cyan", "lime"]
     const selos: ShowcaseCard["selo"][] = ["mais-vendido", "mais-vendido", "novo"]
 
-    return rows.map((tc, idx) => ({
-      slug: tc.course.slug,
-      titulo: tc.course.nome,
-      categoria: tc.course.categoriaLoja ?? "Curso profissionalizante",
-      preco: formatPrice(Number(tc.price)),
-      imageUrl: tc.customCapaUrl ?? tc.course.capaOverride ?? tc.course.capaImageUrl,
-      selo: selos[idx] ?? "novo",
-      accent: accents[idx] ?? "gold",
-      paymentType: coursePaymentType(tc.paymentType),
-      interestFree,
-    }))
+    return rows.map((tc, idx) => {
+      // Tipo EFETIVO na vitrine, o mesmo da pagina do curso: mensalidade que a
+      // unidade nao liberou para a vitrine e cobrada a vista. O tipo cru
+      // mostrava "/mes" num curso que o checkout cobra inteiro.
+      const paymentType = effectivePaymentType(tc.paymentType, policy, "vitrine")
+      return {
+        slug: tc.course.slug,
+        titulo: tc.course.nome,
+        categoria: tc.course.categoriaLoja ?? "Curso profissionalizante",
+        preco: formatPrice(Number(tc.price)),
+        imageUrl: tc.customCapaUrl ?? tc.course.capaOverride ?? tc.course.capaImageUrl,
+        selo: selos[idx] ?? "novo",
+        accent: accents[idx] ?? "gold",
+        paymentType,
+        installmentNote: showcaseInstallmentNote({
+          price: Number(tc.price),
+          monthly: paymentType === "MONTHLY",
+          interestFree: policy.advertisedInterestFree,
+          cardInstallments: policy.checkoutMode !== "NONE",
+        }),
+      }
+    })
   } catch {
     return []
   }

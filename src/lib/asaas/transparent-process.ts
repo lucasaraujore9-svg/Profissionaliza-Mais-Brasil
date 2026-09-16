@@ -12,6 +12,9 @@ import {
   listPayments as listAsaasPayments,
   deletePayment as deleteAsaasPayment,
   cancelSubscription as cancelAsaasSubscription,
+  createInstallmentWithCreditCard,
+  getInstallmentPayments,
+  deleteInstallment,
   AsaasApiError,
 } from "./client"
 import { fulfillFromAsaasPayment, type AsaasFulfillTenant } from "./fulfillment"
@@ -20,6 +23,12 @@ import { settleBoletoInstallment } from "@/lib/installments/settle"
 import { asaasSplitsForEnrollment } from "@/lib/course-authoring/split-server"
 import { advisoryLockKeyFrom, withAdvisoryLock } from "@/lib/enrollment/fulfill"
 import { asaasBoletoInstrument, asaasPixInstrument } from "./payment-instrument"
+import {
+  MAX_CARD_INSTALLMENTS,
+  interestFreeInstallmentsFor,
+} from "@/lib/mercadopago/installments"
+import { perInstallment } from "@/lib/installments/pmb-rules"
+import { swallow } from "@/lib/errors"
 import type {
   AsaasCreditCard,
   AsaasCreditCardHolderInfo,
@@ -53,6 +62,10 @@ export const asaasFormDataSchema = z.object({
   postalCode: z.string().optional(),
   addressNumber: z.string().optional(),
   phone: z.string().optional(),
+  // Parcelas no CARTÃO. Ausente/1 = à vista. O teto real é validado no servidor
+  // contra a config da unidade (`AsaasTransparentCtx.interestFreeInstallments`)
+  // — o limite aqui só barra lixo.
+  installments: z.number().int().min(1).max(MAX_CARD_INSTALLMENTS).optional(),
 })
 
 export type AsaasTransparentFormData = z.infer<typeof asaasFormDataSchema>
@@ -110,6 +123,14 @@ export interface AsaasTransparentCtx {
   notificationUrl: string
   /** IP do COMPRADOR (x-forwarded-for) — exigido pelo Asaas no cartão. */
   remoteIp: string | null
+  /**
+   * `Tenant.interestFreeInstallments`: até quantas parcelas a unidade aceita no
+   * cartão. No Asaas toda parcela é sem juros para o aluno (a taxa sai da conta
+   * da unidade), então este número É o teto do parcelamento — o mesmo que a
+   * vitrine anuncia. Obrigatório de propósito: um call site novo não compila
+   * sem decidir o teto, em vez de liberar 12x calado.
+   */
+  interestFreeInstallments: number
 }
 
 // Reaproveita o mesmo contrato do MP para a rota/UI não precisarem ramificar.
@@ -510,14 +531,56 @@ async function chargeUnderLock(
         ? "BOLETO"
         : "CREDIT_CARD"
 
+  // Parcelas no cartão. Validadas ANTES de mexer na cobrança anterior: um pedido
+  // recusado não pode ter removido o PIX em aberto do aluno.
+  const cardInstallments =
+    billingType === "CREDIT_CARD" ? Math.max(1, formData.installments ?? 1) : 1
+  if (cardInstallments > 1) {
+    const cap =
+      interestFreeInstallmentsFor(
+        enrollment.finalAmount,
+        ctx.interestFreeInstallments,
+      ) ?? 1
+    if (cardInstallments > cap) {
+      return {
+        kind: "error",
+        httpStatus: 400,
+        error:
+          cap > 1
+            ? `Esta compra pode ser parcelada em até ${cap}x no cartão.`
+            : "Esta compra não pode ser parcelada no cartão.",
+        code: "INSTALLMENTS_NOT_ALLOWED",
+      }
+    }
+  }
+
   const previous = await resolvePreviousCharge(enrollment, billingType, ctx)
   if (previous.kind === "result") return previous.result
+
+  // Tentativa anterior foi parcelada no cartão e esta não é: a matrícula volta a
+  // ser compra à vista. Depois de `resolvePreviousCharge`, que já removeu (e
+  // confirmou a remoção de) o parcelamento anterior.
+  if (cardInstallments === 1 && enrollment.paymentType === "CARD_INSTALLMENT") {
+    await prisma.enrollment.update({
+      where: { id: enrollment.id },
+      data: { paymentType: "ONE_TIME", installmentsTotal: null },
+    })
+  }
 
   let payment: AsaasPayment
   if (previous.kind === "reuse") {
     payment = previous.payment
   } else {
     const customerId = await resolveCustomerId(enrollment, apiKey)
+    if (cardInstallments > 1) {
+      return chargeCardInstallments(
+        enrollment,
+        formData,
+        ctx,
+        customerId,
+        cardInstallments,
+      )
+    }
     const cardPair =
       formData.method === "CREDIT_CARD" ? buildCardPair(formData, enrollment) : null
     try {
@@ -593,6 +656,126 @@ async function chargeUnderLock(
     error: "Pagamento recusado. Tente outro cartão ou método.",
     code: "PAYMENT_REJECTED",
     statusDetail: payment.status,
+  }
+}
+
+/**
+ * Compra à vista PARCELADA NO CARTÃO (POST /installments/): o Asaas autoriza o
+ * valor cheio e gera N cobranças, uma por parcela, todas com o
+ * `externalReference` da matrícula — é por ele que o webhook da unidade casa
+ * cada uma. A 1ª libera o curso; as demais só entram no extrato
+ * (`fulfillEnrollment`, pelo `installmentsTotal`).
+ *
+ * Mesmo desenho da vitrine PMB (`issuePmbAsaasCharge`), na conta da unidade.
+ */
+async function chargeCardInstallments(
+  enrollment: AsaasTransparentEnrollment,
+  formData: AsaasTransparentFormData,
+  ctx: AsaasTransparentCtx,
+  customerId: string,
+  count: number,
+): Promise<TransparentResult> {
+  const cardPair = buildCardPair(formData, enrollment)
+  if (!cardPair) {
+    return {
+      kind: "error",
+      httpStatus: 400,
+      error: "Dados do cartão ausentes",
+      code: "CARD_REQUIRED",
+    }
+  }
+
+  // As parcelas 2..N não têm outro vínculo com a matrícula: o webhook da unidade
+  // só as encontra por `enr_<id>` (o casamento por `asaasPaymentId` pega apenas
+  // a 1ª). Fixada aqui em vez de confiar no valor da matrícula — o checkout de
+  // pacote, por exemplo, nasce com referência vazia antes de gravá-la.
+  const externalReference = `enr_${enrollment.id}`
+
+  // A intenção vai para a matrícula ANTES da chamada: as parcelas podem chegar
+  // pelo webhook antes de a resposta do Asaas voltar, e sem `installmentsTotal`
+  // cada uma seria tratada como compra nova — curso liberado N vezes.
+  await prisma.enrollment.update({
+    where: { id: enrollment.id },
+    data: {
+      paymentType: "CARD_INSTALLMENT",
+      installmentsTotal: count,
+      externalReference,
+    },
+  })
+
+  let installmentId: string
+  try {
+    const created = await createInstallmentWithCreditCard(
+      {
+        installmentCount: count,
+        customer: customerId,
+        // Rateio aplicado a CADA parcela — percentual, então a soma bate com o
+        // total. Esquecer o split aqui venderia sem pagar o produtor.
+        splits: await asaasSplitsForEnrollment(enrollment.id),
+        value: perInstallment(enrollment.finalAmount, count),
+        // O Asaas ajusta a última parcela a partir do total: sem drift de centavos.
+        totalValue: enrollment.finalAmount,
+        billingType: "CREDIT_CARD",
+        dueDate: dueDateInDays(0),
+        description: `Curso: ${enrollment.courseNome}`,
+        paymentExternalReference: externalReference,
+        ...cardPair,
+        remoteIp: ctx.remoteIp ?? "0.0.0.0",
+      },
+      ctx.apiKey,
+    )
+    installmentId = created.id
+  } catch (err) {
+    // Recusa (4xx): o Asaas NÃO cria o parcelamento, então a matrícula volta a
+    // ser à vista. Em 5xx/timeout NÃO desfaz: o parcelamento pode ter sido criado
+    // e, marcadas como à vista, as N parcelas liberariam o curso N vezes. A
+    // próxima tentativa na página resolve o estado.
+    if (err instanceof AsaasApiError && err.statusCode >= 400 && err.statusCode < 500) {
+      await prisma.enrollment
+        .update({
+          where: { id: enrollment.id },
+          data: { paymentType: "ONE_TIME", installmentsTotal: null },
+        })
+        .catch(swallow("asaas.card_installments.revert"))
+    }
+    return asaasErrorToResult(err)
+  }
+
+  // 200 = parcelamento criado, não necessariamente capturado: a 1ª parcela pode
+  // estar em análise de risco. Falha na consulta → aguarda o webhook.
+  const first = await getInstallmentPayments(installmentId, ctx.apiKey)
+    .then(
+      (list) =>
+        [...list.data].sort((a, b) => a.dueDate.localeCompare(b.dueDate))[0] ??
+        null,
+    )
+    .catch(() => null)
+
+  await prisma.enrollment.update({
+    where: { id: enrollment.id },
+    data: {
+      asaasCustomerId: customerId,
+      asaasInstallmentId: installmentId,
+      // A 1ª parcela: é a que libera o curso (ver isFirstCardInstallment) e a
+      // que a retomada desta página consulta.
+      asaasPaymentId: first?.id ?? null,
+      asaasInvoiceUrl: first?.invoiceUrl ?? null,
+    },
+  })
+
+  if (first && CONFIRMED_STATUSES.has(first.status)) {
+    await fulfillFromAsaasPayment(ctx.fulfillTenant, enrollment.id, first)
+    return { kind: "approved", status: first.status }
+  }
+  if (!first || PENDING_STATUSES.has(first.status)) {
+    return { kind: "pending" }
+  }
+  return {
+    kind: "error",
+    httpStatus: 400,
+    error: "Pagamento recusado. Tente outro cartão ou método.",
+    code: "PAYMENT_REJECTED",
+    statusDetail: first.status,
   }
 }
 
@@ -680,7 +863,13 @@ async function resolvePreviousCharge(
     return { kind: "reuse", payment: previous }
   }
 
-  await deleteAsaasPayment(previous.id, ctx.apiKey).catch(() => null)
+  // Parcela de um parcelamento no cartão: remove o parcelamento INTEIRO. Apagar
+  // só a 1ª cobrança deixaria as outras N-1 vivas no cartão do aluno.
+  if (previous.installment && enrollment.paymentType === "CARD_INSTALLMENT") {
+    await deleteInstallment(previous.installment, ctx.apiKey).catch(() => null)
+  } else {
+    await deleteAsaasPayment(previous.id, ctx.apiKey).catch(() => null)
+  }
   const after = await read()
   if (after !== null && after !== "missing" && CONFIRMED_STATUSES.has(after.status)) {
     // Pagou entre a leitura e a remoção: o Asaas não remove cobrança recebida.

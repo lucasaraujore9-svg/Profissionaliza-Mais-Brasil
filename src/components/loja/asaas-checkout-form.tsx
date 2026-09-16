@@ -26,6 +26,8 @@ import { GuardianFields } from "@/components/shared/guardian/guardian-fields"
 import { useGuardian } from "@/components/shared/guardian/use-guardian"
 import { clientLogger } from "@/lib/logger-client"
 import { storePath } from "@/lib/tenant/vitrine-paths"
+import { interestFreeInstallmentsFor } from "@/lib/mercadopago/installments"
+import { perInstallment } from "@/lib/installments/pmb-rules"
 
 /**
  * Checkout transparente da conta Asaas PRÓPRIA da unidade. Mesmo layout do
@@ -55,6 +57,12 @@ export interface AsaasCheckoutFormProps {
   boletoInstallmentId?: string
   /** Texto do botão principal em payMode (ex.: "Pagar parcela"). */
   submitLabel?: string
+  /**
+   * Até quantas parcelas a unidade aceita no cartão (`Tenant.interestFreeInstallments`).
+   * No Asaas toda parcela é sem juros para o aluno. Ausente/1 = só à vista —
+   * mensalidade e parcela de carnê passam 1. O servidor revalida o teto.
+   */
+  interestFreeInstallments?: number
   defaultNome?: string
   defaultEmail?: string
 }
@@ -119,6 +127,9 @@ function formatExpiry(v: string): string {
   const d = v.replace(/\D/g, "").slice(0, 4)
   return d.length <= 2 ? d : `${d.slice(0, 2)}/${d.slice(2)}`
 }
+function brl(value: number): string {
+  return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
+}
 function formatCep(v: string): string {
   const d = v.replace(/\D/g, "").slice(0, 8)
   return d.length <= 5 ? d : `${d.slice(0, 5)}-${d.slice(5)}`
@@ -142,6 +153,7 @@ export function AsaasCheckoutForm({
   submitLabel,
   defaultNome,
   defaultEmail,
+  interestFreeInstallments = 1,
 }: AsaasCheckoutFormProps) {
   const successUrlFor = useCallback(
     (id: string): string => {
@@ -165,6 +177,14 @@ export function AsaasCheckoutForm({
     blNumero: "",
   })
   const [method, setMethod] = useState<Method>("PIX")
+  // Parcelas no cartão. O teto sai do valor JÁ com cupom: a mesma regra
+  // (`interestFreeInstallmentsFor`) que a vitrine anuncia e o servidor valida.
+  const [cardInstallments, setCardInstallments] = useState(1)
+  const cardCap =
+    typeof amount === "number"
+      ? interestFreeInstallmentsFor(amount, interestFreeInstallments) ?? 1
+      : 1
+  const chosenInstallments = Math.min(cardInstallments, cardCap)
   const [status, setStatus] = useState<Status>({ kind: "idle" })
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
   // Data de nascimento + responsável financeiro. A regra de "quem é menor" vem
@@ -264,6 +284,7 @@ export function AsaasCheckoutForm({
       postalCode: form.blCep.replace(/\D/g, ""),
       addressNumber: form.blNumero,
       phone: form.telefone.replace(/\D/g, ""),
+      ...(chosenInstallments > 1 ? { installments: chosenInstallments } : {}),
     }
   }
 
@@ -494,6 +515,29 @@ export function AsaasCheckoutForm({
             <p className="text-xs text-gray-500">
               O endereço do titular é exigido pela operadora para análise antifraude.
             </p>
+            {cardCap > 1 && typeof amount === "number" && (
+              <div>
+                <Label htmlFor="asaas-cc-parcelas">Parcelamento</Label>
+                <select
+                  id="asaas-cc-parcelas"
+                  value={chosenInstallments}
+                  onChange={(e) => setCardInstallments(Number(e.target.value))}
+                  disabled={submitting}
+                  className="mt-1.5 w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-800 focus:border-[var(--color-pmb-green)] focus:outline-none focus:ring-1 focus:ring-[var(--color-pmb-green)] disabled:opacity-60"
+                >
+                  {Array.from({ length: cardCap }, (_, i) => i + 1).map((n) => (
+                    <option key={n} value={n}>
+                      {n === 1
+                        ? `1x de ${brl(amount)} à vista`
+                        : `${n}x de ${brl(perInstallment(amount, n))} sem juros`}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 text-[11px] text-gray-400">
+                  Em até {cardCap}x sem juros no cartão.
+                </p>
+              </div>
+            )}
           </div>
         )}
 

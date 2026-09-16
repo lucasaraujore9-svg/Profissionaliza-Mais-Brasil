@@ -82,6 +82,7 @@ import { createLmsEnrollment } from "@/lib/lms"
 import { createNotification } from "@/lib/notifications"
 import { evaluatePaceGate } from "@/lib/enrollment/pace"
 import { fulfillEnrollment, type TenantContext, type PaymentEvent } from "./fulfill"
+import { CardInstallmentOutOfOrderError } from "./card-installment"
 
 const p = prisma as unknown as {
   $queryRaw: ReturnType<typeof vi.fn>
@@ -490,5 +491,106 @@ describe("fulfillEnrollment — dinheiro pós-webhook (QA-013)", () => {
 
     expect(p.enrollment.findUnique).not.toHaveBeenCalled()
     expect(p.payment.create).not.toHaveBeenCalled()
+  })
+})
+
+// ── Parcelamento no CARTÃO (Asaas) ────────────────────────────────────────────
+// As N parcelas confirmam juntas e os webhooks das unidades não são sequenciais:
+// elas chegam em paralelo, e o advisory lock do fulfill é por cobrança.
+
+describe("fulfillEnrollment — parcelamento no cartão", () => {
+  const asaasEvent = (id: string, installmentNumber: number | null): PaymentEvent => ({
+    gateway: "ASAAS",
+    externalPaymentId: id,
+    amount: 50,
+    paidAt: new Date("2026-09-15T00:00:00.000Z"),
+    paymentType: "CARD_INSTALLMENT",
+    installmentNumber,
+  })
+  const parcelado = (overrides: EnrollmentOverride = {}) =>
+    enrollment({
+      gateway: "ASAAS",
+      paymentType: "CARD_INSTALLMENT",
+      installmentsTotal: 10,
+      installmentsPaid: 0,
+      asaasPaymentId: "pay_p1",
+      ...overrides,
+    })
+
+  it("parcela 2 chega antes da 1ª liberar o curso: recusa (reentrega) sem liberar nem registrar", async () => {
+    p.enrollment.findUnique.mockResolvedValue(parcelado())
+
+    await expect(
+      fulfillEnrollment(eaTenant, "e1", asaasEvent("pay_p2", 2)),
+    ).rejects.toThrow(CardInstallmentOutOfOrderError)
+    expect(ensureMock).not.toHaveBeenCalled()
+    expect(p.payment.create).not.toHaveBeenCalled()
+  })
+
+  it("a 1ª parcela libera o curso como qualquer compra", async () => {
+    p.enrollment.findUnique.mockResolvedValue(parcelado())
+
+    await fulfillEnrollment(eaTenant, "e1", asaasEvent("pay_p1", 1))
+
+    expect(ensureMock).toHaveBeenCalledWith("s1")
+    expect(p.enrollment.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ status: "ACTIVE", installmentsPaid: 1 }),
+      }),
+    )
+  })
+
+  it("sem installmentNumber, vale a cobrança gravada pelo checkout", async () => {
+    p.enrollment.findUnique.mockResolvedValue(parcelado())
+
+    await fulfillEnrollment(eaTenant, "e1", asaasEvent("pay_p1", null))
+    expect(ensureMock).toHaveBeenCalled()
+
+    vi.clearAllMocks()
+    p.$queryRaw.mockResolvedValue([{ pg_try_advisory_lock: true }])
+    p.payment.findFirst.mockResolvedValue(null)
+    p.enrollment.findUnique.mockResolvedValue(parcelado())
+    await expect(
+      fulfillEnrollment(eaTenant, "e1", asaasEvent("pay_p7", null)),
+    ).rejects.toThrow(CardInstallmentOutOfOrderError)
+  })
+
+  it("parcela seguinte: conta com incremento atômico e NÃO encerra a matrícula ao quitar", async () => {
+    // COMPLETED = curso concluído (a elegibilidade do certificado aceita esse
+    // status sozinho). No cartão todas as parcelas confirmam no dia da compra.
+    p.enrollment.findUnique.mockResolvedValue(
+      parcelado({ startedAt: new Date("2026-09-15T00:00:00.000Z"), installmentsPaid: 9 }),
+    )
+    p.enrollment.update.mockResolvedValue({ installmentsPaid: 10 })
+
+    await fulfillEnrollment(eaTenant, "e1", asaasEvent("pay_p10", 10))
+
+    expect(p.payment.create).toHaveBeenCalledTimes(1)
+    expect(p.enrollment.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { installmentsPaid: { increment: 1 } } }),
+    )
+    expect(p.enrollment.update).not.toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ status: "COMPLETED" }) }),
+    )
+    // A compra foi paga de uma vez: nada de "Parcela 10/10 confirmada".
+    expect(notifyMock).not.toHaveBeenCalled()
+  })
+
+  it("mensalidade segue encerrando ao quitar a última (comportamento mantido)", async () => {
+    p.enrollment.findUnique.mockResolvedValue(
+      enrollment({
+        paymentType: "MONTHLY",
+        startedAt: new Date("2026-01-15T00:00:00.000Z"),
+        installmentsTotal: 3,
+        installmentsPaid: 2,
+      }),
+    )
+    p.enrollment.update.mockResolvedValue({ installmentsPaid: 3 })
+
+    await fulfillEnrollment(eaTenant, "e1", { ...event, externalPaymentId: "pay_m3" })
+
+    expect(p.enrollment.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { status: "COMPLETED" } }),
+    )
   })
 })

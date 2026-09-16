@@ -25,6 +25,7 @@ import { Input } from "@/components/ui/input"
 import { CourseEditDrawer } from "./course-edit-drawer"
 import { CourseBulkEdit } from "./course-bulk-edit"
 import type { CourseListItem } from "./course-types"
+import { interestFreeInstallmentsFor } from "@/lib/mercadopago/installments"
 
 type FilterValue = "Todos" | "Visíveis" | "Ocultos" | "Em destaque"
 type PaymentFilter = "all" | "ONE_TIME" | "MONTHLY"
@@ -431,10 +432,15 @@ export function CourseListWrapper({ canManage }: { canManage: boolean }) {
             <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {filtered.map((c) => {
                 const parcelas = c.parcelas
-                const valorParcela =
-                  parcelas && parcelas > 1 && c.price > 0
-                    ? c.price / parcelas
-                    : null
+                // Pagamento único: o mesmo nº que a vitrine anuncia (com o piso
+                // de R$ 5 por parcela). Mensalidade usa `parcelas` como contagem.
+                const parcelasSemJuros =
+                  c.paymentType === "MONTHLY"
+                    ? null
+                    : interestFreeInstallmentsFor(c.price, parcelas)
+                const valorParcela = parcelasSemJuros
+                  ? c.price / parcelasSemJuros
+                  : null
                 return (
                   <article
                     key={c.id}
@@ -535,7 +541,7 @@ export function CourseListWrapper({ canManage }: { canManage: boolean }) {
                             </p>
                           ) : valorParcela ? (
                             <p className="text-[11px] text-gray-500">
-                              {parcelas}x de {formatBRL(valorParcela)}
+                              {parcelasSemJuros}x de {formatBRL(valorParcela)}
                             </p>
                           ) : null}
                         </div>

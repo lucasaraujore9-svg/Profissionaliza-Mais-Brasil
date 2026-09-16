@@ -529,6 +529,7 @@ async function processPmbDirectSale(
         amount: payment.value,
         paidAt: payment.paymentDate ? new Date(payment.paymentDate) : new Date(),
         paymentType: enrollment.paymentType,
+        installmentNumber: payment.installmentNumber ?? null,
       },
     )
     // Recuperação pós-OVERDUE (mensalidade/cartão parcelado): o branch de

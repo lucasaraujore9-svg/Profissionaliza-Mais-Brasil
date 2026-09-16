@@ -208,6 +208,11 @@ export interface AsaasPayment {
    * caiam no fallback "sem subscription" sem atualizar nada.
    */
   installment: string | null
+  /**
+   * Nº da parcela dentro do parcelamento (1..N). Ausente em cobrança avulsa. E
+   * por ele que o fulfill sabe que so a 1a parcela do cartao libera o curso.
+   */
+  installmentNumber?: number | null
   billingType: string
   value: number
   netValue: number

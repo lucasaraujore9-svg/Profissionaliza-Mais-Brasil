@@ -1,5 +1,6 @@
 import Image from "next/image"
 import Link from "next/link"
+import { interestFreeInstallmentsFor } from "@/lib/mercadopago/installments"
 
 /**
  * A OFERTA — preco, parcelamento e o botao de comprar.
@@ -41,7 +42,9 @@ export function offerDiscount(o: OfferData): number | null {
 
 function offerNumbers(o: OfferData) {
   const isMonthly = o.paymentType === "MONTHLY"
-  const parcelas = o.parcelas ?? 1
+  // Limitado à parcela mínima de R$ 5: é o mesmo nº que o card da vitrine e o
+  // seletor do checkout mostram (`interestFreeInstallmentsFor`).
+  const parcelas = interestFreeInstallmentsFor(o.price, o.parcelas) ?? 1
   return {
     isMonthly,
     monthlyMonths: isMonthly ? o.monthlyMonths ?? 12 : null,

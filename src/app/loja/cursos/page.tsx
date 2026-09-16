@@ -10,6 +10,7 @@ import {
 } from "@/lib/tenant/courses"
 import { RegulamentacaoNote } from "@/components/shared/regulamentacao-note"
 import { contentCardMeta } from "@/lib/catalog/content-type"
+import { interestFreeInstallmentText } from "@/lib/mercadopago/installments"
 
 export const dynamic = "force-dynamic"
 
@@ -29,9 +30,7 @@ function toCourse(item: TenantCourseListItem, idx: number): Course {
     ? item.monthlyMonths
       ? `${item.monthlyMonths} mensalidades`
       : "Mensal"
-    : item.parcelas
-      ? `${item.parcelas}x sem juros`
-      : ""
+    : interestFreeInstallmentText(item.price, item.parcelas) ?? ""
   return {
     slug: item.slug,
     categoria:

@@ -4,7 +4,10 @@ import { courseCuratedForTenant } from "@/lib/catalog/visibility"
 import { requirePainel } from "@/lib/auth/painel-guard"
 import { ensureTenantCourses } from "@/lib/tenant/ensure-courses"
 import { withRequestContext } from "@/lib/observability/with-request-context"
-import { displayInterestFreeInstallments } from "@/lib/mercadopago/installments"
+import {
+  ADVERTISED_INSTALLMENTS_SELECT,
+  tenantAdvertisedInterestFree,
+} from "@/lib/tenant/checkout-mode"
 
 export const GET = withRequestContext(
   { action: "painel.cursos.list", route: "/api/painel/cursos" },
@@ -17,13 +20,14 @@ export const GET = withRequestContext(
     // curso ATIVO do catálogo global (cria apenas o que falta).
     await ensureTenantCourses(ctx.tenantId)
 
-    // Nº global de parcelas sem juros da unidade — fonte do "Nx sem juros" de
-    // pagamento único (espelha a vitrine; ver mapTenantCourseItem).
+    // Parcelas sem juros que a vitrine desta unidade anuncia no pagamento único
+    // (espelha a vitrine; ver mapTenantCourseItem). null quando o checkout dela
+    // não parcela o cartão.
     const tenant = await prisma.tenant.findUnique({
       where: { id: ctx.tenantId },
-      select: { interestFreeInstallments: true },
+      select: ADVERTISED_INSTALLMENTS_SELECT,
     })
-    const interestFree = tenant?.interestFreeInstallments ?? 1
+    const interestFree = tenant ? tenantAdvertisedInterestFree(tenant) : null
 
     const tenantCourses = await prisma.tenantCourse.findMany({
       // Curso que a PMB restringiu a outras unidades ("ocultar para todas
@@ -73,7 +77,7 @@ export const GET = withRequestContext(
             ? tc.customParcelas ??
               tc.course.parcelasOverride ??
               tc.course.parcelasSugeridas
-            : displayInterestFreeInstallments(interestFree),
+            : interestFree,
         paymentType: tc.paymentType,
         isVisible: tc.isVisible,
         isFeatured: tc.isFeatured,

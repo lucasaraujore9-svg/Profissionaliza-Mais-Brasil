@@ -8,6 +8,8 @@
 // (MP ou Asaas). Quando NENHUM está configurado (NONE), a vitrine mostra um
 // formulário de contato em vez de cobrança — nunca o checkout do sistema mãe.
 
+import { displayInterestFreeInstallments } from "@/lib/mercadopago/installments"
+
 export type CheckoutMode = "MP" | "ASAAS" | "NONE"
 
 export interface CheckoutModeInput {
@@ -42,4 +44,50 @@ export function tenantCheckoutMode(t: CheckoutModeInput): CheckoutMode {
   }
   if (t.mpAccessToken && t.mpPublicKey) return "MP"
   return "NONE"
+}
+
+export interface AdvertisedInstallmentsInput extends CheckoutModeInput {
+  // Nº de parcelas sem juros escolhido pela unidade em Configurações → Pagamento.
+  interestFreeInstallments?: number | null
+}
+
+/**
+ * Colunas de `Tenant` que `tenantAdvertisedInterestFree` precisa. Toda consulta
+ * que alimenta o preço exibido na vitrine espalha este select — pegar só
+ * `interestFreeInstallments` voltaria a anunciar parcela em loja que não parcela.
+ */
+export const ADVERTISED_INSTALLMENTS_SELECT = {
+  interestFreeInstallments: true,
+  salesGateway: true,
+  asaasConnected: true,
+  mpAccessToken: true,
+  mpPublicKey: true,
+} as const
+
+/**
+ * Quantas parcelas sem juros a vitrine DA UNIDADE pode anunciar ("10x de R$ 10,00
+ * sem juros"). `null` = nenhuma: a linha some.
+ *
+ * Os dois gateways parcelam o cartão da unidade, com regras diferentes:
+ *  - Mercado Pago: até 12x sempre; até o nº configurado sai sem juros e acima
+ *    dele o aluno paga o juros do emissor.
+ *  - Asaas: não existe juros para o aluno — toda parcela é o total dividido, e a
+ *    taxa do parcelamento sai da conta da unidade. Por isso o checkout Asaas só
+ *    oferece até o nº configurado (`interestFreeInstallmentsFor`).
+ * Nos dois, o nº configurado é exatamente o "até Nx sem juros" que se anuncia.
+ *
+ * Sem gateway (NONE) não há cobrança: anunciar parcelas seria oferta que o
+ * checkout não cumpre — e a oferta anunciada obriga quem vende (CDC, art. 30).
+ *
+ * O limite pela parcela mínima (R$ 5) depende do preço e é aplicado por
+ * `interestFreeInstallmentsFor` em cada card/página.
+ *
+ * Vale só para unidade. A vitrine da PMB cobra pelo Asaas com parcelamento
+ * próprio (lib/installments/pmb-rules.ts) e usa `pmbInterestFreeInstallments`.
+ */
+export function tenantAdvertisedInterestFree(
+  t: AdvertisedInstallmentsInput,
+): number | null {
+  if (tenantCheckoutMode(t) === "NONE") return null
+  return displayInterestFreeInstallments(t.interestFreeInstallments)
 }

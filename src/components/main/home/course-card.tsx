@@ -9,6 +9,12 @@ export interface Course {
   horas: string
   preco: string
   precoDe?: string
+  /**
+   * Linha abaixo do preço. Pagamento único: o valor da parcela sem juros ("10x
+   * de R$ 10,00 sem juros", de `interestFreeInstallmentText`) — o card põe o
+   * "ou" na frente. Mensalidade: a quantidade ("10 mensalidades"). Vazio = sem
+   * linha.
+   */
   parcelas: string
   /** MONTHLY exibe o preco como mensalidade recorrente (sufixo "/mês"). */
   paymentType?: "ONE_TIME" | "MONTHLY"
@@ -133,19 +139,22 @@ export function CourseCard({ course, hrefBase = "/cursos" }: CourseCardProps) {
               De {precoDe}
             </p>
           )}
-          <div className="flex items-baseline gap-2">
-            <span className="text-[20px] font-black text-[var(--color-pmb-green)]">
-              {preco}
-              {isMonthly && (
-                <span className="text-[12px] font-bold text-[rgba(2,89,24,0.6)]">
-                  /mês
-                </span>
-              )}
-            </span>
-            <span className="text-[11px] text-[rgba(2,89,24,0.65)]">
-              {parcelas}
-            </span>
-          </div>
+          <p className="text-[20px] font-black leading-tight text-[var(--color-pmb-green)]">
+            {preco}
+            {isMonthly && (
+              <span className="text-[12px] font-bold text-[rgba(2,89,24,0.6)]">
+                /mês
+              </span>
+            )}
+          </p>
+          {/* Linha própria, não ao lado do preço: "10x de R$ 10,00 sem juros"
+              não cabe na mesma linha do card de duas colunas do celular. O
+              preço à vista continua em destaque — a parcela é a alternativa. */}
+          {parcelas && (
+            <p className="mt-0.5 text-[11.5px] font-semibold leading-snug text-[rgba(2,89,24,0.72)]">
+              {isMonthly ? parcelas : `ou ${parcelas}`}
+            </p>
+          )}
         </div>
       </div>
     </Link>

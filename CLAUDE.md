@@ -1758,6 +1758,70 @@ encontrado". Mas a regra so existia nas LISTAGENS da loja.
 - Testes verificados POR MUTACAO (7 mutacoes, todas mortas): gate, predicado,
   where, vitrine do pacote, checkout do pacote, fulfill e painel de cursos.
 
+### Valor da parcela na vitrine + unidade Asaas vende parcelado (2026-09-15)
+
+A vitrine dizia "10x sem juros" sem dizer de quanto, e a unidade que vende pelo
+Asaas nao parcelava nada: o formulario de cartao dela nao tinha campo de
+parcelas, entao a loja anunciava um parcelamento que a cobranca nao fazia.
+
+- **Fonte unica do numero anunciado:** `interestFreeInstallmentsFor(price, n)` e
+  `interestFreeInstallmentText` (`lib/mercadopago/installments.ts`) — o
+  configurado pela unidade, limitado a 12x e a **R$ 5 por parcela** (piso do
+  Asaas). A MESMA funcao alimenta o card, a pagina do curso, o resumo do pedido,
+  a previa do painel, o catalogo de recompra do aluno E o seletor do checkout:
+  anunciar mais do que o checkout aceita e oferta que obriga quem vende (CDC,
+  art. 30). Anunciar MENOS (caso do MP, que aceita parcela abaixo de R$ 5) e o
+  lado seguro.
+- **`tenantAdvertisedInterestFree`** (`lib/tenant/checkout-mode.ts`) decide se a
+  unidade pode anunciar: os dois gateways parcelam, so `NONE` nao. Quem lê
+  espalha `ADVERTISED_INSTALLMENTS_SELECT` — pegar so `interestFreeInstallments`
+  volta a anunciar parcela em loja sem cobranca.
+- **No Asaas nao existe juros para o aluno:** toda parcela e o total dividido e a
+  taxa sai da conta da unidade. Por isso o nº configurado E o teto do
+  parcelamento (no MP ele so separa o sem juros do com juros, e o teto segue 12x).
+- **Checkout:** `chargeCardInstallments` (`asaas/transparent-process.ts`) usa
+  `POST /installments/` na conta da unidade, no molde da vitrine PMB
+  (`issue-pmb-asaas-charge.ts`). O teto e revalidado no servidor ANTES de mexer
+  na cobranca anterior — pedido recusado nao pode ter removido o PIX em aberto
+  do aluno. Trocar de metodo remove o parcelamento INTEIRO (`deleteInstallment`),
+  nunca so a 1a cobranca. **Recusa 4xx desfaz** a marca de parcelado; **5xx/timeout
+  NAO** — o parcelamento pode ter sido criado, e marcadas como a vista as N
+  parcelas liberariam o curso N vezes.
+- **A referencia e fixada em `enr_<id>` no proprio parcelamento:** e o unico
+  vinculo das parcelas 2..N com a matricula (o casamento por `asaasPaymentId`
+  pega so a 1a), e o checkout de pacote nasce com referencia vazia.
+
+**Tres defeitos do parcelamento no cartao, que existia desde a vitrine PMB e
+NUNCA rodou em producao** (zero vendas CARD_INSTALLMENT). No Asaas cada parcela e
+uma cobranca e todas confirmam no dia da compra; os webhooks das unidades sao
+registrados NAO SEQUENCIAIS, entao chegam em paralelo:
+
+- **Curso liberado duas vezes.** O advisory lock do fulfill e por COBRANCA: a
+  parcela 2 via a matricula sem `startedAt` e seguia pelo ramo da 1a. Agora so a
+  1a libera (`isFirstCardInstallment`, por `installmentNumber` do Asaas com
+  fallback no `asaasPaymentId` gravado); as outras lancam
+  `CardInstallmentOutOfOrderError`, que e TRANSITORIO — o gateway reentrega e na
+  volta entram como parcela seguinte. Engolir perderia a parcela do extrato.
+- **Contagem perdida:** `installmentsPaid` era lido-e-regravado. Virou
+  `{ increment: 1 }` no proprio UPDATE (vale para mensalidade e carne tambem).
+- **`COMPLETED` no dia 1:** quitar a ultima parcela encerrava a matricula — e
+  `COMPLETED` significa curso concluido: `certificates/eligibility.ts` aceita
+  esse status sozinho e o cron de progresso so varre `ACTIVE`.
+  `closesOnLastInstallment` exclui CARD_INSTALLMENT (mensalidade e carne seguem
+  como eram; que eles liberem certificado ao quitar continua em aberto).
+- Cartao parcelado tambem nao dispara os avisos de "Parcela k/N confirmada": as
+  N confirmam no mesmo minuto.
+
+**Fix lateral:** os cards da home liam o `paymentType` CRU, entao mostravam
+"/mes" em curso que a vitrine cobra a vista (ammacursos, qualificamais) — e era
+justamente onde a parcela deveria aparecer. Passaram a usar
+`loadTenantDisplayPolicy` + `effectivePaymentType`, como a pagina do curso.
+
+**Nao validado contra o Asaas real** — nao ha nenhuma venda parcelada no cartao
+em producao (nem da PMB). Antes de anunciar as unidades: compra parcelada de
+verdade (ou sandbox) conferindo liberacao unica, N parcelas no extrato e
+matricula ACTIVE. Testes verificados POR MUTACAO (6 mutacoes, todas mortas).
+
 ### Bugs conhecidos (pendentes)
 
 - **Middleware file convention deprecado** no Next 16 (usar `proxy` em vez de `middleware`).

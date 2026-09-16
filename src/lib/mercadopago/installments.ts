@@ -34,12 +34,56 @@ export function displayInterestFreeInstallments(
   return Math.min(n, MAX_CARD_INSTALLMENTS)
 }
 
-/** Rótulo "Nx sem juros" (ou `null` quando não há parcela sem juros a anunciar). */
-export function interestFreeLabel(
+/**
+ * Valor mínimo de CADA parcela no cartão. É o piso do Asaas; o checkout da
+ * unidade no Asaas não oferece parcela abaixo dele, e a vitrine também não a
+ * anuncia (vale para o Mercado Pago: anunciar menos parcelas do que o checkout
+ * aceita é seguro, anunciar mais é prometer o que ele recusa).
+ */
+export const MIN_CARD_INSTALLMENT_VALUE = 5
+
+/**
+ * Quantas parcelas SEM JUROS cabem num valor: o nº configurado pela unidade (ou
+ * PMB), limitado a 12x e à parcela mínima de R$ 5. R$ 100 com até 10x → 10;
+ * R$ 19,90 com até 10x → 3 (3x de R$ 6,63); R$ 9,00 → null.
+ *
+ * É a fonte única do nº anunciado na vitrine E do teto do seletor do checkout
+ * Asaas da unidade (onde toda parcela é sem juros para o aluno) — os dois têm
+ * de bater, senão a página promete "10x" e o checkout oferece 3.
+ *
+ * `null` quando sobra menos de 2 parcelas: não há parcelamento a oferecer.
+ */
+export function interestFreeInstallmentsFor(
+  price: number,
+  interestFree: number | null | undefined,
+): number | null {
+  const n = displayInterestFreeInstallments(interestFree)
+  if (!n || !Number.isFinite(price) || price <= 0) return null
+  const byMinValue = Math.floor(price / MIN_CARD_INSTALLMENT_VALUE)
+  const capped = Math.min(n, byMinValue)
+  return capped >= 2 ? capped : null
+}
+
+/**
+ * Valor da parcela sem juros como a vitrine o ANUNCIA: "10x de R$ 10,00 sem
+ * juros" para um curso de R$ 100 numa unidade com até 10x sem juros. O nº é o
+ * de `interestFreeInstallmentsFor` — a vitrine nunca promete uma quantidade que
+ * o seletor do checkout não oferece.
+ *
+ * Arredonda a parcela ao centavo (R$ 100 em 3x = R$ 33,33), o mesmo que o
+ * checkout sintetiza antes de o gateway devolver o valor exato.
+ *
+ * `null` quando não há parcela sem juros a anunciar ou o preço não é válido —
+ * quem chama omite a linha, em vez de mostrar "10x de R$ 0,00".
+ */
+export function interestFreeInstallmentText(
+  price: number,
   interestFree: number | null | undefined,
 ): string | null {
-  const n = displayInterestFreeInstallments(interestFree)
-  return n ? `${n}x sem juros` : null
+  const n = interestFreeInstallmentsFor(price, interestFree)
+  if (!n) return null
+  const perInstallment = Math.round((price * 100) / n) / 100
+  return `${n}x de ${formatBRL(perInstallment)} sem juros`
 }
 
 /**

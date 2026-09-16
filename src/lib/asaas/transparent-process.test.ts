@@ -35,6 +35,9 @@ vi.mock("./client", () => {
     listPayments: vi.fn(),
     deletePayment: vi.fn(),
     cancelSubscription: vi.fn(),
+    createInstallmentWithCreditCard: vi.fn(),
+    getInstallmentPayments: vi.fn(),
+    deleteInstallment: vi.fn(),
   }
 })
 
@@ -61,8 +64,12 @@ vi.mock("@/lib/installments/settle", () => ({
   settleBoletoInstallment: vi.fn(),
 }))
 
+import { prisma } from "@/lib/prisma"
 import {
   cancelSubscription,
+  createInstallmentWithCreditCard,
+  deleteInstallment,
+  getInstallmentPayments,
   createPayment,
   createSubscription,
   deletePayment,
@@ -139,6 +146,7 @@ const ctx: AsaasTransparentCtx = {
   },
   notificationUrl: "https://example.com/webhook",
   remoteIp: "203.0.113.10",
+  interestFreeInstallments: 1,
 }
 
 function payment(status = "PENDING") {
@@ -614,5 +622,214 @@ describe("retomada da mensal no cartão", () => {
 
     expect(result).toMatchObject({ kind: "error", code: "PREVIOUS_CHARGE_OPEN" })
     expect(vi.mocked(createSubscription)).not.toHaveBeenCalled()
+  })
+})
+
+// ── Parcelamento no cartão na conta da unidade ────────────────────────────────
+// No Asaas toda parcela é sem juros para o aluno: o teto é o nº que a unidade
+// configurou, o mesmo que a vitrine anuncia.
+
+describe("parcelamento no cartão (Asaas da unidade)", () => {
+  const CARD = {
+    holderName: "ALUNO TESTE",
+    number: "4111111111111111",
+    expiryMonth: "12",
+    expiryYear: "28",
+    ccv: "123",
+  }
+  const createInstallmentMock = vi.mocked(createInstallmentWithCreditCard)
+  const installmentPaymentsMock = vi.mocked(getInstallmentPayments)
+  const updateMock = vi.mocked(prisma.enrollment.update)
+  const ctx10: AsaasTransparentCtx = { ...ctx, interestFreeInstallments: 10 }
+
+  function parcela(n: number, status = "CONFIRMED") {
+    return {
+      ...payment(status),
+      id: `pay_p${n}`,
+      installment: "ins_1",
+      installmentNumber: n,
+      billingType: "CREDIT_CARD",
+      value: 50,
+      dueDate: `2026-${String(9 + n).padStart(2, "0")}-15`,
+    }
+  }
+
+  beforeEach(() => {
+    vi.mocked(findOrCreateAsaasCustomer).mockResolvedValue({
+      customer: { id: "cus_1" },
+      created: false,
+    } as unknown as Awaited<ReturnType<typeof findOrCreateAsaasCustomer>>)
+    vi.mocked(getCustomer).mockResolvedValue({ id: "cus_1", deleted: false } as never)
+    createInstallmentMock.mockResolvedValue({ id: "ins_1" } as never)
+    updateMock.mockResolvedValue({} as never)
+    // Fora de ordem de propósito: a 1ª parcela é a de MENOR vencimento.
+    installmentPaymentsMock.mockResolvedValue({
+      data: [parcela(2), parcela(1)],
+    } as never)
+  })
+
+  it("cria o parcelamento na conta da unidade e libera pela 1ª parcela", async () => {
+    const result = await processTransparentAsaasPayment(
+      avulsa({ asaasPaymentId: null, finalAmount: 500 }),
+      { method: "CREDIT_CARD", card: CARD, postalCode: "01001000", addressNumber: "10", installments: 10 },
+      ctx10,
+    )
+
+    expect(result).toEqual({ kind: "approved", status: "CONFIRMED" })
+    expect(createInstallmentMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        installmentCount: 10,
+        value: 50,
+        totalValue: 500,
+        billingType: "CREDIT_CARD",
+        // É por esta referência que o webhook da unidade casa cada parcela.
+        paymentExternalReference: "enr_enr_av",
+        remoteIp: "203.0.113.10",
+      }),
+      "asaas_key",
+    )
+    expect(createPaymentMock).not.toHaveBeenCalled()
+    expect(vi.mocked(fulfillFromAsaasPayment)).toHaveBeenCalledWith(
+      ctx.fulfillTenant,
+      "enr_av",
+      expect.objectContaining({ id: "pay_p1" }),
+    )
+  })
+
+  it("referência da parcela é sempre enr_<id>, mesmo com a da matrícula vazia", async () => {
+    // O webhook da unidade só encontra as parcelas 2..N por este prefixo.
+    await processTransparentAsaasPayment(
+      avulsa({ asaasPaymentId: null, finalAmount: 500, externalReference: "" }),
+      { method: "CREDIT_CARD", card: CARD, installments: 10 },
+      ctx10,
+    )
+
+    expect(createInstallmentMock).toHaveBeenCalledWith(
+      expect.objectContaining({ paymentExternalReference: "enr_enr_av" }),
+      "asaas_key",
+    )
+  })
+
+  it("marca a matrícula como parcelada ANTES de chamar o Asaas", async () => {
+    // As parcelas podem chegar pelo webhook antes da resposta. Sem
+    // `installmentsTotal` gravado, cada uma liberaria o curso de novo.
+    await processTransparentAsaasPayment(
+      avulsa({ asaasPaymentId: null, finalAmount: 500 }),
+      { method: "CREDIT_CARD", card: CARD, installments: 10 },
+      ctx10,
+    )
+
+    const marca = updateMock.mock.calls.findIndex(
+      ([arg]) => (arg as { data: { paymentType?: string } }).data.paymentType === "CARD_INSTALLMENT",
+    )
+    expect(marca).toBeGreaterThanOrEqual(0)
+    expect(updateMock.mock.calls[marca]![0]).toMatchObject({
+      data: { paymentType: "CARD_INSTALLMENT", installmentsTotal: 10 },
+    })
+    expect(updateMock.mock.invocationCallOrder[marca]).toBeLessThan(
+      createInstallmentMock.mock.invocationCallOrder[0]!,
+    )
+    // E guarda a 1ª parcela (menor vencimento) + o parcelamento.
+    expect(updateMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ asaasInstallmentId: "ins_1", asaasPaymentId: "pay_p1" }),
+      }),
+    )
+  })
+
+  it("acima do nº configurado pela unidade: recusa sem tocar em cobrança nenhuma", async () => {
+    const result = await processTransparentAsaasPayment(
+      avulsa({ finalAmount: 500 }),
+      { method: "CREDIT_CARD", card: CARD, installments: 12 },
+      ctx10,
+    )
+
+    expect(result).toMatchObject({ kind: "error", httpStatus: 400, code: "INSTALLMENTS_NOT_ALLOWED" })
+    expect(createInstallmentMock).not.toHaveBeenCalled()
+    // Validado antes da retomada: o PIX em aberto do aluno não foi removido.
+    expect(getPaymentMock).not.toHaveBeenCalled()
+    expect(vi.mocked(deletePayment)).not.toHaveBeenCalled()
+  })
+
+  it("respeita a parcela mínima de R$ 5 do Asaas", async () => {
+    // R$ 19,90 com até 10x configurado cabe em 3x — 4x daria R$ 4,97.
+    const result = await processTransparentAsaasPayment(
+      avulsa({ asaasPaymentId: null, finalAmount: 19.9 }),
+      { method: "CREDIT_CARD", card: CARD, installments: 4 },
+      ctx10,
+    )
+
+    expect(result).toMatchObject({ kind: "error", code: "INSTALLMENTS_NOT_ALLOWED" })
+    expect(createInstallmentMock).not.toHaveBeenCalled()
+  })
+
+  it("unidade que só vende à vista: parcelas recusadas", async () => {
+    const result = await processTransparentAsaasPayment(
+      avulsa({ asaasPaymentId: null, finalAmount: 500 }),
+      { method: "CREDIT_CARD", card: CARD, installments: 2 },
+      ctx,
+    )
+
+    expect(result).toMatchObject({ kind: "error", code: "INSTALLMENTS_NOT_ALLOWED" })
+  })
+
+  it("cartão recusado (4xx): a matrícula volta a ser à vista", async () => {
+    const { AsaasApiError } = await import("./client")
+    createInstallmentMock.mockRejectedValue(
+      new (AsaasApiError as unknown as new (m: string, c: number) => Error)("recusado", 400),
+    )
+
+    const result = await processTransparentAsaasPayment(
+      avulsa({ asaasPaymentId: null, finalAmount: 500 }),
+      { method: "CREDIT_CARD", card: CARD, installments: 5 },
+      ctx10,
+    )
+
+    expect(result).toMatchObject({ kind: "error", code: "PAYMENT_REJECTED" })
+    expect(updateMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ data: { paymentType: "ONE_TIME", installmentsTotal: null } }),
+    )
+  })
+
+  it("falha do Asaas (5xx): NÃO desfaz — o parcelamento pode ter sido criado", async () => {
+    // Marcadas como à vista, as N parcelas liberariam o curso N vezes.
+    const { AsaasApiError } = await import("./client")
+    createInstallmentMock.mockRejectedValue(
+      new (AsaasApiError as unknown as new (m: string, c: number) => Error)("timeout", 502),
+    )
+
+    await expect(
+      processTransparentAsaasPayment(
+        avulsa({ asaasPaymentId: null, finalAmount: 500 }),
+        { method: "CREDIT_CARD", card: CARD, installments: 5 },
+        ctx10,
+      ),
+    ).rejects.toThrow()
+    expect(updateMock).not.toHaveBeenCalledWith(
+      expect.objectContaining({ data: { paymentType: "ONE_TIME", installmentsTotal: null } }),
+    )
+  })
+
+  it("parcelamento anterior não capturado + nova tentativa no PIX: remove o parcelamento inteiro e volta a ser à vista", async () => {
+    getPaymentMock
+      .mockResolvedValueOnce({ ...parcela(1, "PENDING"), id: "pay_old" } as never)
+      .mockResolvedValueOnce({ ...parcela(1, "PENDING"), id: "pay_old", deleted: true } as never)
+    vi.mocked(deleteInstallment).mockResolvedValue({ deleted: true, id: "ins_1" })
+    createPaymentMock.mockResolvedValue({ ...payment(), id: "pay_pix", billingType: "PIX" } as never)
+    getPixQrCodeMock.mockResolvedValue(PIX_QR)
+
+    await processTransparentAsaasPayment(
+      avulsa({ paymentType: "CARD_INSTALLMENT", installmentsTotal: 5 }),
+      { method: "PIX" },
+      ctx10,
+    )
+
+    // Apagar só a 1ª cobrança deixaria as outras parcelas vivas no cartão.
+    expect(vi.mocked(deleteInstallment)).toHaveBeenCalledWith("ins_1", "asaas_key")
+    expect(vi.mocked(deletePayment)).not.toHaveBeenCalled()
+    expect(updateMock).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { paymentType: "ONE_TIME", installmentsTotal: null } }),
+    )
+    expect(createPaymentMock).toHaveBeenCalled()
   })
 })

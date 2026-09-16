@@ -36,6 +36,11 @@ type FormConfig =
     }
   | {
       kind: "asaas"
+      /**
+       * Até quantas parcelas sem juros no cartão (config da unidade). Omitido/1
+       * = só à vista (mensalidade).
+       */
+      interestFreeInstallments?: number
       initPath?: string
       processPath?: string
       statusPath?: string
@@ -137,6 +142,7 @@ export function CheckoutPanel({
             packageId={packageId}
             couponCode={couponCode}
             amount={finalPrice}
+            interestFreeInstallments={form.interestFreeInstallments}
             initPath={form.initPath}
             processPath={form.processPath}
             statusPath={form.statusPath}
