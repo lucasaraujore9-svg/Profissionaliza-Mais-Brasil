@@ -1,13 +1,11 @@
 import type { Metadata } from "next"
 import { notFound } from "next/navigation"
 import { getCurrentTenant } from "@/lib/tenant/current"
-import { getVitrinePlanBySlug } from "@/lib/subscriptions/plans"
 import {
-  INTERVAL_PRICE_SUFFIX,
-  INTERVAL_CHARGE_LABEL,
-} from "@/lib/subscriptions/interval"
-import { SubscriptionCheckout } from "@/components/loja/subscription-checkout"
-import { SUBSCRIPTION_SLOTS_RULE_TEXT } from "@/lib/subscriptions/slots"
+  getVitrinePlanBySlug,
+  getVitrinePlanDetail,
+} from "@/lib/subscriptions/plans"
+import { PlanDetailView } from "@/components/loja/plan-detail-view"
 
 interface Props {
   params: Promise<{ slug: string }>
@@ -32,42 +30,17 @@ export default async function PlanoPage({ params }: Props) {
   if (await getCurrentTenant()) notFound()
 
   const { slug } = await params
-  const plan = await getVitrinePlanBySlug(null, slug)
+  const plan = await getVitrinePlanDetail(null, slug)
   if (!plan) notFound()
 
   return (
-    <main className="mx-auto max-w-3xl px-4 py-10">
-      <header className="mb-8">
-        <h1 className="text-2xl font-bold text-[var(--color-pmb-green-900)]">
-          {plan.name}
-        </h1>
-        {plan.description && (
-          <p className="mt-2 text-sm text-gray-600">{plan.description}</p>
-        )}
-        <p className="mt-4 text-lg">
-          <strong className="text-2xl text-[var(--color-pmb-green-900)]">
-            {plan.price.toLocaleString("pt-BR", {
-              style: "currency",
-              currency: "BRL",
-            })}
-          </strong>
-          <span className="text-sm text-gray-500">
-            {" "}
-            {INTERVAL_PRICE_SUFFIX[plan.interval]} · {plan.courseCount} cursos
-          </span>
-        </p>
-        <p className="mt-1 text-sm text-gray-500">
-          {INTERVAL_CHARGE_LABEL[plan.interval]}
-        </p>
-        <p className="mt-1 text-sm text-gray-500">{SUBSCRIPTION_SLOTS_RULE_TEXT}</p>
-      </header>
-
-      <SubscriptionCheckout
-        planId={plan.id}
-        planName={plan.name}
-        price={plan.price}
-        interval={plan.interval}
-      />
-    </main>
+    <PlanDetailView
+      plan={plan}
+      ctaHref={`/checkout?plan_id=${plan.id}`}
+      ctaLabel="Assinar agora"
+      backHref="/assinaturas"
+      backLabel="Voltar para os planos"
+      allCoursesHref="/cursos"
+    />
   )
 }

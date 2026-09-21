@@ -11,12 +11,16 @@ import {
   tenantCheckoutMode,
 } from "@/lib/tenant/checkout-mode"
 import { getPackageForCheckout } from "@/lib/packages/vitrine"
+import { resolveVitrinePlans } from "@/lib/subscriptions/plans"
+import { SubscriptionCheckout } from "@/components/loja/subscription-checkout"
+import { SubscriptionOrderSummary } from "@/components/loja/subscription-order-summary"
 import { MAX_CARD_INSTALLMENTS } from "@/lib/mercadopago/installments"
 
 interface CheckoutPageProps {
   searchParams: Promise<{
     course_id?: string
     package_id?: string
+    plan_id?: string
     coupon?: string
     error?: string
   }>
@@ -62,7 +66,13 @@ async function resolveCoupon(
 
 export default async function CheckoutPage({ searchParams }: CheckoutPageProps) {
   const tenant = await getCurrentTenant()
-  const { course_id, package_id, coupon: couponParam, error } = await searchParams
+  const {
+    course_id,
+    package_id,
+    plan_id,
+    coupon: couponParam,
+    error,
+  } = await searchParams
 
   if (!tenant) {
     return (
@@ -91,6 +101,121 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
           Esta loja não está disponível para compras no momento.
         </p>
       </div>
+    )
+  }
+
+  // ── Checkout de ASSINATURA ────────────────────────────────────────────────
+  // Mesma tela dos outros produtos: formulário transparente à esquerda, resumo
+  // do pedido à direita. O plano vem da MESMA função que lista a vitrine
+  // (módulo desligado, override oculto, plano sem curso já caem lá) e o preço
+  // exibido é o dela — o POST reconfere em `getPlanForCheckout`, que é quem
+  // cobra.
+  if (plan_id) {
+    const plans = await resolveVitrinePlans(tenant.id)
+    const plan = plans.find((p) => p.id === plan_id)
+    if (!plan) {
+      return (
+        <div className="mx-auto max-w-3xl px-4 py-24 text-center">
+          <h1 className="text-2xl font-bold text-[var(--color-pmb-green-900)]">
+            Plano indisponível
+          </h1>
+          <p className="mt-3 text-sm text-gray-600">
+            Este plano de assinatura não está mais disponível nesta loja.
+          </p>
+          <Link
+            href="/assinaturas"
+            className="mt-6 inline-block rounded-lg bg-[var(--color-pmb-green)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--color-pmb-green-700)]"
+          >
+            Ver os planos
+          </Link>
+        </div>
+      )
+    }
+
+    const planTenant = await prisma.tenant.findUnique({
+      where: { id: tenant.id },
+      select: {
+        salesGateway: true,
+        asaasApiKey: true,
+        asaasWebhookToken: true,
+        mpAccessToken: true,
+        mpPublicKey: true,
+      },
+    })
+    // Qual gateway a unidade usa decide os MEIOS oferecidos: a recorrência do
+    // Mercado Pago exige cartão tokenizado e não emite PIX por ciclo (o boleto
+    // por ciclo é a assinatura no boleto, emitida pela plataforma). Oferecer PIX
+    // numa loja de MP levaria a um 400 depois do preenchimento — o mesmo erro do
+    // incidente "revenda sem PIX" já registrado.
+    const planGateway = tenantCheckoutMode({
+      salesGateway: planTenant?.salesGateway,
+      asaasConnected: Boolean(
+        planTenant?.asaasApiKey && planTenant?.asaasWebhookToken,
+      ),
+      mpAccessToken: planTenant?.mpAccessToken,
+      mpPublicKey: planTenant?.mpPublicKey,
+    })
+
+    // Sem gateway não há cobrança possível — e assinatura não tem cupom que
+    // pudesse zerar o valor (nenhum checkout escreve `couponId`), então aqui não
+    // existe o caminho de "matrícula gratuita" dos cursos.
+    if (planGateway === "NONE") {
+      return (
+        <div className="mx-auto max-w-3xl px-4 py-24 text-center">
+          <h1 className="text-2xl font-bold text-[var(--color-pmb-green-900)]">
+            {plan.name}
+          </h1>
+          <p className="mt-3 text-sm text-gray-600">
+            Esta loja ainda não está pronta para receber pagamentos online. Entre
+            em contato para assinar.
+          </p>
+          <Link
+            href="/contato"
+            className="mt-6 inline-block rounded-lg bg-[var(--color-pmb-green)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--color-pmb-green-700)]"
+          >
+            Falar com a equipe
+          </Link>
+        </div>
+      )
+    }
+
+    return (
+      <section className="bg-[#FAFAFA] py-10 md:py-16">
+        <div className="mx-auto max-w-6xl px-4 md:px-6">
+          <header className="mb-8">
+            <h1 className="text-2xl font-bold tracking-tight text-[var(--color-pmb-green-900)] md:text-3xl">
+              Finalizar assinatura
+            </h1>
+            <p className="mt-1 text-sm text-gray-600">
+              Preencha seus dados e escolha a forma de pagamento.
+            </p>
+          </header>
+
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_380px] lg:gap-8">
+            <div className="space-y-6">
+              <SubscriptionCheckout
+                planId={plan.id}
+                planName={plan.name}
+                price={plan.price}
+                interval={plan.interval}
+                endpoint="/api/loja/checkout/assinatura"
+                gateway={planGateway}
+                mpPublicKey={planTenant?.mpPublicKey ?? null}
+              />
+            </div>
+
+            <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start">
+              <SubscriptionOrderSummary
+                planName={plan.name}
+                price={plan.price}
+                interval={plan.interval}
+                courseCount={plan.courseCount}
+                coverImageUrl={plan.coverImageUrl}
+              />
+            </aside>
+          </div>
+        </div>
+      </section>
     )
   }
 

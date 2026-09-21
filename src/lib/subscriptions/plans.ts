@@ -292,3 +292,77 @@ export async function planIncludesCourse(
   })
   return found > 0
 }
+
+export interface PlanCourseCard {
+  id: string
+  nome: string
+  slug: string
+  coverImageUrl: string | null
+  cargaHoraria: string | null
+  qtdAulas: number
+}
+
+export interface PlanDetail extends PlanCard {
+  /**
+   * AMOSTRA dos cursos que o plano libera nesta vitrine — nunca a lista
+   * inteira. Um plano `scope=ALL` cobre 200+ cursos: renderizar todos pesaria a
+   * pagina de venda e nao ajudaria ninguem a decidir. `courseCount` (do card)
+   * continua sendo o total, e a tela diz quantos ficaram de fora da amostra.
+   */
+  courses: PlanCourseCard[]
+}
+
+/** Quantos cursos a pagina de detalhe mostra antes do "e mais N cursos". */
+export const PLAN_DETAIL_COURSE_PREVIEW = 12
+
+/**
+ * Plano pela slug com a amostra de cursos, para a pagina publica de detalhe.
+ *
+ * Deriva de `getVitrinePlanBySlug` de proposito: preco efetivo, override
+ * oculto, modulo desligado e plano sem curso ja sao decididos la, e uma segunda
+ * consulta com regras proprias divergiria da listagem que trouxe o aluno ate
+ * aqui. Aqui so se acrescenta a amostra.
+ */
+export async function getVitrinePlanDetail(
+  tenantId: string | null,
+  slug: string,
+): Promise<PlanDetail | null> {
+  const card = await getVitrinePlanBySlug(tenantId, slug)
+  if (!card) return null
+
+  const row = await prisma.subscriptionPlan.findUnique({
+    where: { id: card.id },
+    select: { scope: true, categoryIds: true, courseIds: true, packageId: true },
+  })
+  if (!row) return null
+
+  const scope = await toScopeInput(row)
+  const rows = await prisma.course.findMany({
+    where: planCourseWhere(scope, tenantId),
+    select: {
+      id: true,
+      nome: true,
+      slug: true,
+      capaImageUrl: true,
+      capaOverride: true,
+      cargaHoraria: true,
+      qtdAulas: true,
+    },
+    // Mesma ordem do catalogo do assinante (`catalog.ts`): a amostra da vitrine
+    // mostra os mesmos cursos que ele vai encontrar no topo depois de assinar.
+    orderBy: [{ destaqueHome: "desc" }, { nome: "asc" }],
+    take: PLAN_DETAIL_COURSE_PREVIEW,
+  })
+
+  return {
+    ...card,
+    courses: rows.map((r) => ({
+      id: r.id,
+      nome: r.nome,
+      slug: r.slug,
+      coverImageUrl: r.capaOverride ?? r.capaImageUrl,
+      cargaHoraria: r.cargaHoraria,
+      qtdAulas: r.qtdAulas,
+    })),
+  }
+}

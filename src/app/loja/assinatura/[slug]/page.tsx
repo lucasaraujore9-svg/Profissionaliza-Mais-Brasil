@@ -2,14 +2,12 @@ import type { Metadata } from "next"
 import { notFound } from "next/navigation"
 import { getCurrentTenant } from "@/lib/tenant/current"
 import { prisma } from "@/lib/prisma"
-import { getVitrinePlanBySlug } from "@/lib/subscriptions/plans"
 import {
-  INTERVAL_PRICE_SUFFIX,
-  INTERVAL_CHARGE_LABEL,
-} from "@/lib/subscriptions/interval"
+  getVitrinePlanBySlug,
+  getVitrinePlanDetail,
+} from "@/lib/subscriptions/plans"
 import { tenantCheckoutMode } from "@/lib/tenant/checkout-mode"
-import { SubscriptionCheckout } from "@/components/loja/subscription-checkout"
-import { SUBSCRIPTION_SLOTS_RULE_TEXT } from "@/lib/subscriptions/slots"
+import { PlanDetailView } from "@/components/loja/plan-detail-view"
 
 export const dynamic = "force-dynamic"
 
@@ -28,6 +26,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     description:
       (plan.description ?? "").slice(0, 160) ||
       `Assinatura com acesso a ${plan.courseCount} cursos.`,
+    alternates: { canonical: `/assinatura/${plan.slug}` },
   }
 }
 
@@ -36,14 +35,12 @@ export default async function LojaPlanoPage({ params }: Props) {
   if (!tenant) notFound()
 
   const { slug } = await params
-  const plan = await getVitrinePlanBySlug(tenant.id, slug)
+  const plan = await getVitrinePlanDetail(tenant.id, slug)
   if (!plan) notFound()
 
-  // Qual gateway a unidade usa decide os MEIOS oferecidos: a recorrência do
-  // Mercado Pago exige cartão tokenizado e não emite PIX por ciclo (o boleto por
-  // ciclo é a assinatura no boleto, emitida pela plataforma). Oferecer PIX numa
-  // loja de MP levaria a um 400 depois do preenchimento — o mesmo erro do
-  // incidente "revenda sem PIX" já registrado.
+  // A loja cobra online? Só isso decide o destino do botão: quem paga (e como)
+  // é problema do checkout. Manter a checagem aqui é o que evita a pessoa ler a
+  // página inteira, clicar em "Assinar" e descobrir que a loja não cobra.
   const row = await prisma.tenant.findUnique({
     where: { id: tenant.id },
     select: {
@@ -61,62 +58,21 @@ export default async function LojaPlanoPage({ params }: Props) {
     mpPublicKey: row?.mpPublicKey,
   })
 
-  if (gateway === "NONE") {
-    return (
-      <main className="mx-auto max-w-3xl px-4 py-16 text-center">
-        <h1 className="text-xl font-semibold text-[var(--brand-primary,var(--color-pmb-green-900))]">
-          {plan.name}
-        </h1>
-        <p className="mt-3 text-sm text-gray-600">
-          Esta loja ainda não está pronta para receber pagamentos online. Entre
-          em contato para assinar.
-        </p>
-        <a
-          href="/contato"
-          className="mt-6 inline-flex rounded-xl bg-[var(--brand-primary,var(--color-pmb-green))] px-5 py-3 text-sm font-semibold text-white"
-        >
-          Falar com a equipe
-        </a>
-      </main>
-    )
-  }
+  const semCobranca = gateway === "NONE"
 
   return (
-    <main className="mx-auto max-w-3xl px-4 py-10">
-      <header className="mb-8">
-        <h1 className="text-2xl font-bold text-[var(--brand-primary,var(--color-pmb-green-900))]">
-          {plan.name}
-        </h1>
-        {plan.description && (
-          <p className="mt-2 text-sm text-gray-600">{plan.description}</p>
-        )}
-        <p className="mt-4 text-lg">
-          <strong className="text-2xl text-[var(--brand-primary,var(--color-pmb-green-900))]">
-            {plan.price.toLocaleString("pt-BR", {
-              style: "currency",
-              currency: "BRL",
-            })}
-          </strong>
-          <span className="text-sm text-gray-500">
-            {" "}
-            {INTERVAL_PRICE_SUFFIX[plan.interval]} · {plan.courseCount} cursos
-          </span>
-        </p>
-        <p className="mt-1 text-sm text-gray-500">
-          {INTERVAL_CHARGE_LABEL[plan.interval]}
-        </p>
-        <p className="mt-1 text-sm text-gray-500">{SUBSCRIPTION_SLOTS_RULE_TEXT}</p>
-      </header>
-
-      <SubscriptionCheckout
-        planId={plan.id}
-        planName={plan.name}
-        price={plan.price}
-        interval={plan.interval}
-        endpoint="/api/loja/checkout/assinatura"
-        gateway={gateway}
-        mpPublicKey={row?.mpPublicKey ?? null}
-      />
-    </main>
+    <PlanDetailView
+      plan={plan}
+      ctaHref={semCobranca ? "/contato" : `/checkout?plan_id=${plan.id}`}
+      ctaLabel={semCobranca ? "Falar com a equipe" : "Assinar agora"}
+      ctaNote={
+        semCobranca
+          ? "Esta loja ainda não recebe pagamentos online — a equipe conclui sua assinatura."
+          : undefined
+      }
+      backHref="/assinaturas"
+      backLabel="Voltar para os planos"
+      allCoursesHref="/cursos"
+    />
   )
 }
