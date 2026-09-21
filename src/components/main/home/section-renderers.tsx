@@ -20,9 +20,11 @@ import type {
 } from "@/lib/home/sections"
 import { substituteTrustTokens } from "@/lib/home/trust-tokens"
 
-// Mapa de ícones lucide permitidos. Adicionamos os mais usados nos blocos
-// institucionais. Nome desconhecido => sem ícone.
-const ICON_MAP: Record<string, LucideIcon> = {
+// Mapa de ícones lucide permitidos. Nome desconhecido => sem ícone. As CHAVES
+// daqui são a lista que o editor da vitrine oferece
+// (`INSTITUTIONAL_ICON_NAMES`) — há teste de paridade, senão o dono escolheria
+// um ícone que a home descarta em silêncio.
+export const ICON_MAP: Record<string, LucideIcon> = {
   Award,
   Banknote,
   CalendarDays,
@@ -150,12 +152,40 @@ function TrustBarVariant({
   supportHoursText?: string | null
 }) {
   if (config.items.length === 0) return null
+  // Cabeçalho OPCIONAL acima dos selos. A barra só desenhava os selos, então
+  // título/subtítulo/texto preenchidos no painel não apareciam em lugar nenhum
+  // — três unidades escreveram um anúncio inteiro ali e a home o ignorou.
+  const sub = (t: string) =>
+    substituteTrustTokens(t, { semJurosText, supportHoursText })
+  const heading = sub(config.title)
+  const kicker = sub(config.subtitle)
+  const lead = sub(config.body)
+  const hasHeading = Boolean(heading || kicker || lead)
   return (
     <section
       aria-label={config.title || "Benefícios"}
       className="border-b border-[rgba(2,89,24,0.08)] bg-white"
     >
       <div className="mx-auto max-w-[1280px] px-4 md:px-6">
+        {hasHeading && (
+          <div className="mx-auto max-w-3xl pt-8 text-center md:pt-10">
+            {kicker && (
+              <p className="text-[12px] font-bold uppercase tracking-wide text-[var(--color-pmb-gold,#F2B705)]">
+                {kicker}
+              </p>
+            )}
+            {heading && (
+              <h2 className="mt-1 text-[22px] font-black leading-tight text-[var(--color-pmb-green)] md:text-[26px]">
+                {heading}
+              </h2>
+            )}
+            {lead && (
+              <p className="mt-2 whitespace-pre-line text-[14px] leading-relaxed text-[rgba(2,89,24,0.7)]">
+                {lead}
+              </p>
+            )}
+          </div>
+        )}
         <ul className="grid grid-cols-2 gap-x-4 gap-y-5 py-6 md:grid-cols-3 md:py-7 lg:grid-cols-5 lg:gap-x-6">
           {config.items.map((it, i) => (
             <TrustItem

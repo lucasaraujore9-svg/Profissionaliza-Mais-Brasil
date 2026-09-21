@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react"
 import { Loader2, Eye, EyeOff, Star, StarOff, Plus, Pencil, Trash2 } from "lucide-react"
+import { CoverImageUpload } from "@/components/shared/cover-image-upload"
 import { SUBSCRIPTION_SCOPES, scopeIsComplete } from "@/lib/subscriptions/schema"
 import { SUBSCRIPTION_MAX_ACTIVE_COURSES } from "@/lib/subscriptions/slots"
 import {
@@ -34,6 +35,7 @@ interface PlanRow {
   origin: Origin
   name: string
   description: string | null
+  coverImageUrl: string | null
   suggestedPrice: number
   price: number
   interval: SubscriptionIntervalValue
@@ -74,6 +76,7 @@ interface FormState {
   id: string | null
   name: string
   description: string
+  coverImageUrl: string
   price: string
   interval: SubscriptionIntervalValue
   scope: Scope
@@ -87,6 +90,7 @@ const EMPTY: FormState = {
   id: null,
   name: "",
   description: "",
+  coverImageUrl: "",
   price: "",
   interval: "MONTHLY",
   scope: "ALL",
@@ -182,6 +186,7 @@ export function PainelPlansClient({
       const payload = {
         name: form.name,
         description: form.description || null,
+        coverImageUrl: form.coverImageUrl || null,
         price,
         interval: form.interval,
         scope: form.scope,
@@ -349,6 +354,26 @@ export function PainelPlansClient({
               className={field}
             />
           </label>
+
+          <div className="mt-4 text-sm">
+            <span className="font-medium text-gray-700">Capa</span>
+            <p className="mt-0.5 text-xs text-gray-500">
+              Aparece no card do plano na sua vitrine. Sem capa, o card usa o
+              fundo padrão com ícone.
+            </p>
+            <div className="mt-2">
+              <CoverImageUpload
+                value={form.coverImageUrl || null}
+                onChange={(url) => setForm({ ...form, coverImageUrl: url ?? "" })}
+                endpoint="/api/painel/assinaturas/capa"
+                disabled={saving}
+                aspectRatio={16 / 9}
+                aspectLabel="16:9"
+                minWidth={640}
+                hint="PNG, JPG ou WEBP — proporção 16:9 (ex.: 1280x720px) — até 5MB"
+              />
+            </div>
+          </div>
 
           <fieldset className="mt-5">
             <legend className="text-sm font-medium text-gray-700">
@@ -578,6 +603,7 @@ export function PainelPlansClient({
                                 id: p.id,
                                 name: p.name,
                                 description: p.description ?? "",
+                                coverImageUrl: p.coverImageUrl ?? "",
                                 price: String(p.price).replace(".", ","),
                                 interval: p.interval,
                                 scope: p.scope,

@@ -10,6 +10,7 @@ import {
   Info,
   Loader2,
   Lock,
+  Plus,
   Save,
   Trash2,
 } from "lucide-react"
@@ -28,6 +29,12 @@ import {
   type TecnicaCourseDraft,
 } from "@/components/admin/tecnica-courses-editor"
 import { CoursePicker } from "./course-picker"
+import {
+  INSTITUTIONAL_FIELDS,
+  INSTITUTIONAL_ICON_NAMES,
+  INSTITUTIONAL_ICON_LABEL,
+  INSTITUTIONAL_MAX_ITEMS,
+} from "@/lib/home/institutional-fields"
 import { cn } from "@/lib/utils"
 import type {
   AnySectionConfig,
@@ -37,6 +44,7 @@ import type {
   CategoryOption,
   CourseOption,
   InstitutionalConfig,
+  InstitutionalItem,
   PackagesConfig,
   SubscriptionsConfig,
   SectionCount,
@@ -493,6 +501,10 @@ export function InstitutionalEditor({
   onPatch: (patch: Partial<AnySectionConfig>) => void
 }) {
   const config = section.config as InstitutionalConfig
+  // Só os campos que ESTA variante renderiza. A barra de benefícios não
+  // desenhava título/subtítulo/texto, e a tela os oferecia assim mesmo: três
+  // unidades escreveram um anúncio inteiro que a home nunca mostrou.
+  const fields = INSTITUTIONAL_FIELDS[config.variant] ?? INSTITUTIONAL_FIELDS.custom
 
   return (
     <div className="space-y-4">
@@ -500,72 +512,278 @@ export function InstitutionalEditor({
         <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
         <p>
           Bloco institucional do tipo <b>{labelOfVariant(config.variant)}</b>.
-          Para layouts complexos (depoimentos, lista de itens), use as opções
-          completas no admin avançado.
+          Abaixo aparecem apenas os campos que este bloco exibe na home.
         </p>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div>
-          <Label className="mb-1.5 block text-xs">Título</Label>
-          <Input
-            value={config.title}
-            onChange={(e) =>
-              onPatch({ title: e.target.value } as Partial<AnySectionConfig>)
-            }
-            placeholder="Título grande do bloco"
-          />
+      {(fields.title || fields.subtitle) && (
+        <div className="grid gap-3 sm:grid-cols-2">
+          {fields.title && (
+            <div>
+              <Label className="mb-1.5 block text-xs">Título</Label>
+              <Input
+                value={config.title}
+                onChange={(e) =>
+                  onPatch({ title: e.target.value } as Partial<AnySectionConfig>)
+                }
+                placeholder="Título grande do bloco"
+              />
+            </div>
+          )}
+          {fields.subtitle && (
+            <div>
+              <Label className="mb-1.5 block text-xs">Subtítulo</Label>
+              <Input
+                value={config.subtitle}
+                onChange={(e) =>
+                  onPatch({ subtitle: e.target.value } as Partial<AnySectionConfig>)
+                }
+                placeholder="Linha curta acima do título"
+              />
+            </div>
+          )}
         </div>
-        <div>
-          <Label className="mb-1.5 block text-xs">Subtítulo</Label>
-          <Input
-            value={config.subtitle}
-            onChange={(e) =>
-              onPatch({ subtitle: e.target.value } as Partial<AnySectionConfig>)
-            }
-            placeholder="Linha curta acima ou abaixo do título"
-          />
-        </div>
-      </div>
+      )}
 
-      <div>
-        <Label className="mb-1.5 block text-xs">Texto principal</Label>
-        <Textarea
-          value={config.body}
-          onChange={(e) =>
-            onPatch({ body: e.target.value } as Partial<AnySectionConfig>)
+      {fields.body && (
+        <div>
+          <Label className="mb-1.5 block text-xs">Texto principal</Label>
+          <Textarea
+            value={config.body}
+            onChange={(e) =>
+              onPatch({ body: e.target.value } as Partial<AnySectionConfig>)
+            }
+            placeholder="Mensagem que aparece no bloco"
+            rows={3}
+          />
+        </div>
+      )}
+
+      {fields.button && (
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div>
+            <Label className="mb-1.5 block text-xs">Texto do botão</Label>
+            <Input
+              value={config.buttonText ?? ""}
+              onChange={(e) =>
+                onPatch({
+                  buttonText: e.target.value || null,
+                } as Partial<AnySectionConfig>)
+              }
+              placeholder="Ex.: Conhecer os cursos"
+            />
+          </div>
+          <div>
+            <Label className="mb-1.5 block text-xs">Link do botão</Label>
+            <Input
+              value={config.buttonHref ?? ""}
+              onChange={(e) =>
+                onPatch({
+                  buttonHref: e.target.value || null,
+                } as Partial<AnySectionConfig>)
+              }
+              placeholder="/cursos ou https://..."
+            />
+          </div>
+        </div>
+      )}
+
+      {fields.secondaryButton && (
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div>
+            <Label className="mb-1.5 block text-xs">
+              Texto do botão secundário
+            </Label>
+            <Input
+              value={config.secondaryButtonText ?? ""}
+              onChange={(e) =>
+                onPatch({
+                  secondaryButtonText: e.target.value || null,
+                } as Partial<AnySectionConfig>)
+              }
+              placeholder="Ex.: Falar no WhatsApp"
+            />
+          </div>
+          <div>
+            <Label className="mb-1.5 block text-xs">
+              Link do botão secundário
+            </Label>
+            <Input
+              value={config.secondaryButtonHref ?? ""}
+              onChange={(e) =>
+                onPatch({
+                  secondaryButtonHref: e.target.value || null,
+                } as Partial<AnySectionConfig>)
+              }
+              placeholder="/contato ou https://..."
+            />
+          </div>
+        </div>
+      )}
+
+      {fields.items && (
+        <InstitutionalItemsEditor
+          items={config.items}
+          variant={config.variant}
+          onChange={(items) =>
+            onPatch({ items } as Partial<AnySectionConfig>)
           }
-          placeholder="Mensagem que aparece no bloco"
-          rows={3}
         />
+      )}
+    </div>
+  )
+}
+
+/**
+ * Edição dos ITENS de um bloco institucional (os selos da barra de benefícios,
+ * os cards de "Sua escola no bolso", os depoimentos). Antes só existia no
+ * conteúdo semeado: o painel não tinha nenhum caminho para editá-los, e a
+ * única coisa que a barra de benefícios DESENHA são justamente os itens.
+ */
+function InstitutionalItemsEditor({
+  items,
+  variant,
+  onChange,
+}: {
+  items: InstitutionalItem[]
+  variant: InstitutionalConfig["variant"]
+  onChange: (items: InstitutionalItem[]) => void
+}) {
+  const isTestimonial = variant === "testimonials"
+  const showIcon = !isTestimonial
+
+  function patchItem(index: number, patch: Partial<InstitutionalItem>) {
+    onChange(items.map((it, i) => (i === index ? { ...it, ...patch } : it)))
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <Label className="text-xs">
+          {isTestimonial ? "Depoimentos" : "Itens do bloco"}
+          <span className="ml-1 font-normal text-muted-foreground">
+            ({items.length}/{INSTITUTIONAL_MAX_ITEMS})
+          </span>
+        </Label>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={items.length >= INSTITUTIONAL_MAX_ITEMS}
+          onClick={() =>
+            onChange([
+              ...items,
+              {
+                title: "",
+                body: "",
+                iconName: showIcon ? INSTITUTIONAL_ICON_NAMES[0] : null,
+                imageUrl: null,
+                meta: null,
+              },
+            ])
+          }
+        >
+          <Plus className="h-3.5 w-3.5" aria-hidden />
+          Adicionar
+        </Button>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div>
-          <Label className="mb-1.5 block text-xs">Texto do botão</Label>
-          <Input
-            value={config.buttonText ?? ""}
-            onChange={(e) =>
-              onPatch({
-                buttonText: e.target.value || null,
-              } as Partial<AnySectionConfig>)
-            }
-            placeholder="Ex.: Conhecer os cursos"
-          />
-        </div>
-        <div>
-          <Label className="mb-1.5 block text-xs">Link do botão</Label>
-          <Input
-            value={config.buttonHref ?? ""}
-            onChange={(e) =>
-              onPatch({
-                buttonHref: e.target.value || null,
-              } as Partial<AnySectionConfig>)
-            }
-            placeholder="/cursos ou https://..."
-          />
-        </div>
-      </div>
+      {items.length === 0 ? (
+        <p className="rounded-md border border-dashed border-zinc-200 px-3 py-4 text-center text-xs text-muted-foreground">
+          {isTestimonial
+            ? "Sem depoimentos, este bloco não aparece na home."
+            : "Sem itens, este bloco não aparece na home."}
+        </p>
+      ) : (
+        <ul className="space-y-2">
+          {items.map((it, i) => (
+            <li
+              key={i}
+              className="space-y-2 rounded-lg border border-zinc-200 bg-white p-3"
+            >
+              <div className="grid gap-2 sm:grid-cols-2">
+                <div>
+                  <Label className="mb-1 block text-[11px]">
+                    {isTestimonial ? "Nome de quem fala" : "Título"}
+                  </Label>
+                  <Input
+                    value={it.title}
+                    onChange={(e) => patchItem(i, { title: e.target.value })}
+                    placeholder={
+                      isTestimonial ? "Ex.: Maria S." : "Ex.: Certificado incluso"
+                    }
+                  />
+                </div>
+                {showIcon && (
+                  <div>
+                    <Label className="mb-1 block text-[11px]">Ícone</Label>
+                    <select
+                      value={it.iconName ?? ""}
+                      onChange={(e) =>
+                        patchItem(i, { iconName: e.target.value || null })
+                      }
+                      className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
+                    >
+                      <option value="">Sem ícone</option>
+                      {INSTITUTIONAL_ICON_NAMES.map((name) => (
+                        <option key={name} value={name}>
+                          {INSTITUTIONAL_ICON_LABEL[name] ?? name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+              <div>
+                <Label className="mb-1 block text-[11px]">
+                  {isTestimonial ? "Depoimento" : "Descrição"}
+                </Label>
+                <Textarea
+                  value={it.body}
+                  onChange={(e) => patchItem(i, { body: e.target.value })}
+                  rows={2}
+                  placeholder={
+                    isTestimonial
+                      ? "O que essa pessoa conta sobre o curso"
+                      : "Linha curta abaixo do título"
+                  }
+                />
+              </div>
+              {isTestimonial && (
+                <div>
+                  <Label className="mb-1 block text-[11px]">
+                    Curso / cidade (opcional)
+                  </Label>
+                  <Input
+                    value={it.meta ?? ""}
+                    onChange={(e) =>
+                      patchItem(i, { meta: e.target.value || null })
+                    }
+                    placeholder="Ex.: Auxiliar Administrativo — Belo Horizonte"
+                  />
+                </div>
+              )}
+              <div className="flex justify-end">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => onChange(items.filter((_, j) => j !== i))}
+                  className="text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+                >
+                  <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                  Remover
+                </Button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <p className="text-[11px] text-muted-foreground">
+        Nos textos você pode usar <code>{"{{semJuros}}"}</code> (nº de parcelas
+        sem juros da sua unidade) e <code>{"{{horarioAtendimento}}"}</code>.
+      </p>
     </div>
   )
 }

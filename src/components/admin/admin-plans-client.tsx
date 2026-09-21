@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react"
 import { Loader2, Plus, Trash2, Pencil } from "lucide-react"
+import { CoverImageUpload } from "@/components/shared/cover-image-upload"
 import { SUBSCRIPTION_SCOPES, scopeIsComplete } from "@/lib/subscriptions/schema"
 import { SUBSCRIPTION_MAX_ACTIVE_COURSES } from "@/lib/subscriptions/slots"
 import {
@@ -25,6 +26,7 @@ interface Plan {
   name: string
   slug: string
   description: string | null
+  coverImageUrl: string | null
   price: number
   interval: SubscriptionIntervalValue
   scope: (typeof SUBSCRIPTION_SCOPES)[number]
@@ -66,6 +68,7 @@ interface FormState {
   id: string | null
   name: string
   description: string
+  coverImageUrl: string
   price: string
   interval: SubscriptionIntervalValue
   scope: (typeof SUBSCRIPTION_SCOPES)[number]
@@ -80,6 +83,7 @@ const EMPTY: FormState = {
   id: null,
   name: "",
   description: "",
+  coverImageUrl: "",
   price: "",
   interval: "MONTHLY",
   scope: "ALL",
@@ -129,6 +133,7 @@ export function AdminPlansClient({
       const payload = {
         name: form.name,
         description: form.description || null,
+        coverImageUrl: form.coverImageUrl || null,
         price,
         interval: form.interval,
         scope: form.scope,
@@ -287,6 +292,26 @@ export function AdminPlansClient({
               className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
             />
           </label>
+
+          <div className="mt-4 text-sm">
+            <span className="font-medium text-gray-700">Capa</span>
+            <p className="mt-0.5 text-xs text-gray-500">
+              Aparece no card do plano na vitrine. Sem capa, o card usa o fundo
+              padrão com ícone.
+            </p>
+            <div className="mt-2">
+              <CoverImageUpload
+                value={form.coverImageUrl || null}
+                onChange={(url) => setForm({ ...form, coverImageUrl: url ?? "" })}
+                endpoint="/api/admin/assinaturas/capa"
+                disabled={saving}
+                aspectRatio={16 / 9}
+                aspectLabel="16:9"
+                minWidth={640}
+                hint="PNG, JPG ou WEBP — proporção 16:9 (ex.: 1280x720px) — até 5MB"
+              />
+            </div>
+          </div>
 
           <fieldset className="mt-5">
             <legend className="text-sm font-medium text-gray-700">
@@ -457,6 +482,7 @@ export function AdminPlansClient({
                         id: p.id,
                         name: p.name,
                         description: p.description ?? "",
+                        coverImageUrl: p.coverImageUrl ?? "",
                         price: String(p.price).replace(".", ","),
                         interval: p.interval,
                         scope: p.scope,

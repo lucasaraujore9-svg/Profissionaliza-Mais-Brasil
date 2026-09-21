@@ -49,6 +49,9 @@ export const GET = withRequestContext(
           origin: "PMB" as const,
           name: p.name,
           description: p.description,
+          // Capa EFETIVA nesta vitrine (override da unidade, como o preço) —
+          // é a que o card da home mostra.
+          coverImageUrl: o?.customCoverUrl ?? p.coverImageUrl,
           suggestedPrice: Number(p.price),
           price: o?.price != null ? Number(o.price) : Number(p.price),
           // A unidade ajusta o PRECO, nunca a periodicidade: a natureza do
@@ -73,6 +76,7 @@ export const GET = withRequestContext(
         origin: "OWN" as const,
         name: p.name,
         description: p.description,
+        coverImageUrl: p.coverImageUrl,
         suggestedPrice: Number(p.price),
         price: Number(p.price),
         interval: p.interval,
