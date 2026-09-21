@@ -3,6 +3,7 @@ import {
   createSectionSchema,
   updateSectionSchema,
   reorderSectionsSchema,
+  validateSectionPayload,
 } from "./sections"
 
 // API-003: os envelopes de request de home-sections passaram a ter validação
@@ -102,5 +103,43 @@ describe("reorderSectionsSchema", () => {
 
   it("rejeita body sem order", () => {
     expect(reorderSectionsSchema.safeParse({}).success).toBe(false)
+  })
+})
+
+// Seção "Assinaturas" (kind=subscriptions): marcador com título/subtítulo, no
+// molde de "packages". O conteúdo (planos) é derivado em runtime, então a
+// config nunca guarda ids — se algum dia guardar, este teste cai.
+describe("validateSectionPayload — subscriptions", () => {
+  it("aceita config vazia e aplica o título padrão", () => {
+    const r = validateSectionPayload("subscriptions", {})
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    expect(r.config).toEqual({
+      kind: "subscriptions",
+      title: "Assinaturas",
+      subtitle: "",
+    })
+  })
+
+  it("preserva título/subtítulo e descarta campos estranhos", () => {
+    const r = validateSectionPayload("subscriptions", {
+      title: "Planos",
+      subtitle: "Assine e estude",
+      planIds: ["x"],
+    })
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    expect(r.config).toEqual({
+      kind: "subscriptions",
+      title: "Planos",
+      subtitle: "Assine e estude",
+    })
+  })
+
+  it("aceita subscriptions no envelope de criação", () => {
+    expect(
+      createSectionSchema.safeParse({ kind: "subscriptions", config: {} })
+        .success,
+    ).toBe(true)
   })
 })

@@ -16,6 +16,7 @@ export type SectionKind =
   | "tecnica"
   | "eja"
   | "packages"
+  | "subscriptions"
 
 export type SectionMode = "manual" | "random"
 export type SectionCount = 4 | 8
@@ -96,6 +97,16 @@ export interface PackagesConfig {
   subtitle: string
 }
 
+/**
+ * Seção "Assinaturas". Igual à de pacotes: o conteúdo (quais planos) é
+ * derivado em runtime pela vitrine — a config carrega só título/subtítulo.
+ */
+export interface SubscriptionsConfig {
+  kind: "subscriptions"
+  title: string
+  subtitle: string
+}
+
 export type AnySectionConfig =
   | BestsellersConfig
   | CategoryCoursesConfig
@@ -104,6 +115,7 @@ export type AnySectionConfig =
   | TecnicaConfig
   | EjaConfig
   | PackagesConfig
+  | SubscriptionsConfig
 
 export interface SectionRecord {
   id: string

@@ -1,6 +1,10 @@
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { listSections, createSection } from "@/lib/home/api"
-import { ensureTecnicaSection, ensureEjaSection } from "@/lib/home/sections"
+import {
+  ensureTecnicaSection,
+  ensureEjaSection,
+  ensureSubscriptionsSection,
+} from "@/lib/home/sections"
 import { requireAdmin } from "@/lib/auth/admin-guard"
 
 const SCOPE = { tenantId: null }
@@ -13,6 +17,7 @@ export const GET = withRequestContext(
     // Backfill: garante as seções singleton para ambientes/escopos anteriores a elas.
     await ensureTecnicaSection(null)
     await ensureEjaSection(null)
+    await ensureSubscriptionsSection(null)
     return listSections(SCOPE)
   },
 )

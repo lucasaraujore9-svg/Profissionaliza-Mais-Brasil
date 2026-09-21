@@ -37,6 +37,7 @@ import {
   EjaEditor,
   InstitutionalEditor,
   PackagesEditor,
+  SubscriptionsEditor,
   TecnicaEditor,
 } from "./section-editors"
 import type {
@@ -47,6 +48,7 @@ import type {
   CategoryOption,
   InstitutionalConfig,
   PackagesConfig,
+  SubscriptionsConfig,
   SectionOptions,
   SectionRecord,
 } from "./use-home-sections"
@@ -447,6 +449,11 @@ function SectionIcon({ kind }: { kind: SectionRecord["kind"] }) {
       bg: "bg-emerald-100",
       fg: "text-emerald-600",
     },
+    subscriptions: {
+      icon: Sparkles,
+      bg: "bg-fuchsia-100",
+      fg: "text-fuchsia-600",
+    },
   }
   const { icon: Icon, bg, fg } = map[kind]
   return (
@@ -490,6 +497,8 @@ function titleOfSection(
       return "EJA"
     case "packages":
       return (s.config as PackagesConfig).title || "Pacotes de cursos"
+    case "subscriptions":
+      return (s.config as SubscriptionsConfig).title || "Assinaturas"
   }
 }
 
@@ -522,6 +531,8 @@ function summaryOfSection(s: SectionRecord): string {
       return "Banner com link · imagem padronizada pela administração"
     case "packages":
       return "Pacotes montados automaticamente · rede + próprios da unidade"
+    case "subscriptions":
+      return "Planos montados automaticamente · rede + próprios da unidade"
   }
 }
 
@@ -647,5 +658,7 @@ function EditorForKind({
       return null
     case "packages":
       return <PackagesEditor section={section} onPatch={onPatch} />
+    case "subscriptions":
+      return <SubscriptionsEditor section={section} onPatch={onPatch} />
   }
 }

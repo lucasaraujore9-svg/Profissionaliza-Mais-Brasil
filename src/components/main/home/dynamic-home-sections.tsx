@@ -3,7 +3,9 @@ import { CourseRow } from "./course-row"
 import { TecnicaSection } from "./tecnica-section"
 import { EjaSection } from "./eja-section"
 import { PackagesRow } from "@/components/loja/packages-row"
+import { PlansRow } from "@/components/loja/plans-row"
 import { resolveVitrinePackages } from "@/lib/packages/vitrine"
+import { resolveVitrinePlans } from "@/lib/subscriptions/plans"
 import {
   CategoriesGridSection,
   InstitutionalSection,
@@ -169,6 +171,23 @@ async function renderSection(
         packages={packages}
         // Vitrine de revenda: detalhe em /pacote/:slug; PMB: /pacotes/:slug.
         hrefBase={ctx.tenantId ? "/pacote" : "/pacotes"}
+      />
+    )
+  }
+
+  if (cfg.kind === "subscriptions") {
+    // resolveVitrinePlans já aplica o módulo "Vender assinaturas" da unidade:
+    // sem ele a lista vem vazia e a seção some — mesmo gate da listagem e do
+    // checkout, sem uma segunda checagem aqui que pudesse divergir.
+    const plans = await resolveVitrinePlans(ctx.tenantId)
+    if (plans.length === 0) return null
+    return (
+      <PlansRow
+        titulo={cfg.title}
+        subtitulo={cfg.subtitle || undefined}
+        plans={plans}
+        // Vitrine de revenda: detalhe em /assinatura/:slug; PMB: /assinaturas/:slug.
+        hrefBase={ctx.tenantId ? "/assinatura" : "/assinaturas"}
       />
     )
   }

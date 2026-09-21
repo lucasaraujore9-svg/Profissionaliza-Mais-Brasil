@@ -38,6 +38,7 @@ import type {
   CourseOption,
   InstitutionalConfig,
   PackagesConfig,
+  SubscriptionsConfig,
   SectionCount,
   SectionMode,
   SectionRecord,
@@ -443,6 +444,42 @@ export function PackagesEditor({
           onPatch({ subtitle: v } as Partial<AnySectionConfig>)
         }
         placeholderTitle="Pacotes de cursos"
+      />
+    </div>
+  )
+}
+
+export function SubscriptionsEditor({
+  section,
+  onPatch,
+}: {
+  section: SectionRecord
+  onPatch: (patch: Partial<AnySectionConfig>) => void
+}) {
+  const config = section.config as SubscriptionsConfig
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-start gap-2 rounded-md border border-[var(--color-pmb-green)]/15 bg-[var(--color-pmb-green)]/5 px-3 py-2.5 text-sm text-[var(--color-pmb-green-900)]">
+        <Info className="mt-0.5 h-4 w-4 shrink-0 text-[var(--color-pmb-green)]" aria-hidden />
+        <p>
+          Os planos exibidos aqui são montados automaticamente: os planos da
+          rede mais os planos próprios da sua unidade. A seção só aparece na
+          home quando a venda de assinaturas está habilitada e há plano
+          disponível. Você pode personalizar o título e a descrição abaixo.
+        </p>
+      </div>
+
+      <TitleSubtitleEditor
+        title={config.title}
+        subtitle={config.subtitle}
+        onTitleChange={(v) =>
+          onPatch({ title: v } as Partial<AnySectionConfig>)
+        }
+        onSubtitleChange={(v) =>
+          onPatch({ subtitle: v } as Partial<AnySectionConfig>)
+        }
+        placeholderTitle="Assinaturas"
       />
     </div>
   )

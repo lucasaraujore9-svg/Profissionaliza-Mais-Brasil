@@ -127,6 +127,19 @@ export interface PackagesSectionConfig {
   subtitle: string
 }
 
+/**
+ * Seção "Assinaturas" — linha de cards de plano. Espelha a de pacotes: o
+ * conteúdo (quais planos, preço, nº de cursos) é derivado em runtime por
+ * `resolveVitrinePlans`, que já aplica o override da unidade e o módulo
+ * "Vender assinaturas" — unidade sem o módulo devolve lista vazia e a seção
+ * simplesmente não renderiza. A config carrega só título/subtítulo.
+ */
+export interface SubscriptionsSectionConfig {
+  kind: "subscriptions"
+  title: string
+  subtitle: string
+}
+
 export type AnySectionConfig =
   | BestsellersConfig
   | CategoryCoursesConfig
@@ -135,6 +148,7 @@ export type AnySectionConfig =
   | TecnicaSectionConfig
   | EjaSectionConfig
   | PackagesSectionConfig
+  | SubscriptionsSectionConfig
 
 export interface HomeSectionRecord<T extends AnySectionConfig = AnySectionConfig> {
   id: string
@@ -159,6 +173,7 @@ export const SECTION_KINDS = [
   "tecnica",
   "eja",
   "packages",
+  "subscriptions",
 ] as const
 export type SectionKind = (typeof SECTION_KINDS)[number]
 
@@ -290,6 +305,15 @@ export function validateSectionPayload(
     const title = strOrEmpty(c.title, 120) || "Pacotes de cursos"
     const subtitle = strOrEmpty(c.subtitle, 200)
     return { ok: true, kind, config: { kind: "packages", title, subtitle } }
+  }
+
+  // ---------- subscriptions ----------
+  // Marcador com título/subtítulo editáveis; o conteúdo (planos) é derivado em
+  // runtime (`resolveVitrinePlans`), que já aplica o módulo da unidade.
+  if (kind === "subscriptions") {
+    const title = strOrEmpty(c.title, 120) || "Assinaturas"
+    const subtitle = strOrEmpty(c.subtitle, 200)
+    return { ok: true, kind, config: { kind: "subscriptions", title, subtitle } }
   }
 
   // ---------- categories_grid ----------
@@ -762,6 +786,7 @@ export async function ensureTenantHomeSections(tenantId: string): Promise<void> 
     await ensureTecnicaSection(tenantId)
     await ensureEjaSection(tenantId)
     await ensurePackagesSection(tenantId)
+    await ensureSubscriptionsSection(tenantId)
     return
   }
   const pmbSections = (
@@ -850,6 +875,43 @@ export async function ensurePackagesSection(
     kind: "packages",
     enabled: true,
     config: { kind: "packages", title: "Pacotes de cursos", subtitle: "Leve vários cursos por um valor único" },
+  })
+}
+
+/**
+ * Garante (idempotente) a linha singleton kind="subscriptions" para um escopo.
+ * Posiciona logo após "Pacotes" (ou "Mais vendidos", ou no fim). Habilitada por
+ * padrão — a seção só renderiza quando há plano vendável no escopo, e unidade
+ * sem o módulo "Vender assinaturas" nunca tem nenhum (ver resolveVitrinePlans).
+ */
+export async function ensureSubscriptionsSection(
+  tenantId: string | null,
+): Promise<void> {
+  const existing = await prisma.homeSection.findFirst({
+    where: { tenantId, kind: "subscriptions" },
+    select: { id: true },
+  })
+  if (existing) return
+
+  const anchor =
+    (await prisma.homeSection.findFirst({
+      where: { tenantId, kind: "packages" },
+      select: { position: true },
+    })) ??
+    (await prisma.homeSection.findFirst({
+      where: { tenantId, kind: "bestsellers" },
+      select: { position: true },
+    }))
+  const position =
+    anchor != null ? anchor.position + 1 : (await lastPosition(tenantId)) + 1
+  await createSectionAt(tenantId, position, {
+    kind: "subscriptions",
+    enabled: true,
+    config: {
+      kind: "subscriptions",
+      title: "Assinaturas",
+      subtitle: "Estude vários cursos com um único plano",
+    },
   })
 }
 
@@ -986,6 +1048,8 @@ function canonicalRank(
       return 1
     case "packages":
       return 1.5
+    case "subscriptions":
+      return 1.6
     case "category_courses":
       if (cats.inf && cfg.categoryId === cats.inf) return 2
       if (cats.adm && cfg.categoryId === cats.adm) return 4
