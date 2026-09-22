@@ -103,6 +103,13 @@ select cron.schedule('pmb-sync-day-update-lms', '45 * * * *',
 select cron.schedule('pmb-reconcile-tenant-payments', '0 8 * * *',
   $$ select app_internal.run_cron('/api/cron/reconcile-tenant-payments') $$);
 
+-- Vendas PENDENTES conferidas no Mercado Pago/Asaas: libera o curso de quem ja
+-- pagou mesmo quando o aviso do gateway nao chegou ou falhou. Decisao do dono
+-- (22/09/2026): a cada 3h no horario comercial, a cada 6h fora dele.
+-- UTC 03,09,12,15,18,21 = BRT 00,06,09,12,15,18. Idempotente.
+select cron.schedule('pmb-reconcile-pending-sales', '0 3,9,12,15,18,21 * * *',
+  $$ select app_internal.run_cron('/api/cron/reconcile-pending-sales') $$);
+
 -- Lembretes de vencimento da mensalidade da unidade — 5 dias antes, 2 dias antes
 -- e no dia (diário 11:00 UTC = 08:00 BRT, de manhã e DEPOIS da reconciliação das
 -- 08:00 UTC, para avisar sobre o estado já sincronizado com o Asaas).

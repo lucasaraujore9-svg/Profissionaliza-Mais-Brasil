@@ -193,16 +193,40 @@ describe("processMpWebhook — roteamento do dinheiro (QA-013)", () => {
     expect(fulfillMock).not.toHaveBeenCalled()
   })
 
-  it("HMAC inválido: markLog(false) e não chama fulfill (nem getPayment)", async () => {
+  it("HMAC inválido NÃO descarta: confere no MP, libera o aprovado e avisa a unidade", async () => {
     hmacMock.mockReturnValue(false)
+    getPaymentMock.mockResolvedValue(mpPayment("approved"))
 
     await processMpWebhook(args())
 
-    expect(getPaymentMock).not.toHaveBeenCalled()
-    expect(fulfillMock).not.toHaveBeenCalled()
+    expect(getPaymentMock).toHaveBeenCalledTimes(1)
+    expect(fulfillMock).toHaveBeenCalledTimes(1)
     expect(p.webhookLog.update).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ processed: false, error: "hmac invalid" }) }),
+      expect.objectContaining({
+        data: expect.objectContaining({ processed: true, error: "aprovado via API (hmac invalid)" }),
+      }),
     )
+    expect(notifyMock).toHaveBeenCalledWith(
+      expect.objectContaining({ audience: "TENANT", tenantId: "t1" }),
+    )
+  })
+
+  it("sem secret cadastrada também confere no MP e libera", async () => {
+    p.tenant.findUnique.mockResolvedValue({ ...revendaTenant, mpWebhookSecret: null })
+    getPaymentMock.mockResolvedValue(mpPayment("approved"))
+
+    await processMpWebhook(args())
+
+    expect(fulfillMock).toHaveBeenCalledTimes(1)
+  })
+
+  it("HMAC inválido com pagamento pendente no MP: não libera", async () => {
+    hmacMock.mockReturnValue(false)
+    getPaymentMock.mockResolvedValue(mpPayment("pending"))
+
+    await processMpWebhook(args())
+
+    expect(fulfillMock).not.toHaveBeenCalled()
   })
 
   it("tenant não resolvido: markLog(false) + alerta SUPER_ADMIN, sem fulfill", async () => {

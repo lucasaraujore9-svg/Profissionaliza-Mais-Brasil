@@ -72,6 +72,37 @@ interface TenantContext {
   isPmbVitrine?: boolean
 }
 
+/**
+ * Venda liberada por um aviso SEM assinatura valida: o aluno ja recebeu o
+ * curso, mas a configuracao esta errada e quem pode corrigir precisa saber.
+ */
+async function notifyUnverifiedWebhook(
+  tenant: TenantContext,
+  reason: string,
+): Promise<void> {
+  const body = `Uma venda foi liberada, mas o aviso do Mercado Pago chegou sem assinatura válida (${reason}). Confira a assinatura secreta do webhook para evitar atrasos.`
+  const notification = tenant.isPmbVitrine
+    ? createNotification({
+        audience: "ROLE",
+        roleTarget: "SUPER_ADMIN",
+        level: "WARNING",
+        title: "Webhook do Mercado Pago (PMB) sem assinatura válida",
+        body,
+        category: "webhook",
+        href: "/admin/configuracoes",
+      })
+    : createNotification({
+        audience: "TENANT",
+        tenantId: tenant.id,
+        level: "WARNING",
+        title: "Confira a assinatura secreta do Mercado Pago",
+        body,
+        category: "payment",
+        href: "/painel/configuracoes",
+      })
+  await notification.catch(swallow("mp.process.notify"))
+}
+
 async function buildPmbContext(): Promise<TenantContext | null> {
   const token = await pmbMpAccessToken()
   if (!token) return null
@@ -352,61 +383,28 @@ export async function processMpWebhook(args: ProcessArgs): Promise<void> {
         : decrypt(tenant.mpWebhookSecret)
       : null
 
+    // Decisao do dono (22/09/2026): notificacao do Mercado Pago NUNCA e
+    // descartada. Antes, secret ausente ou HMAC que nao batia encerravam aqui —
+    // a unidade que colou a assinatura secreta errada tinha TODA venda aprovada
+    // presa em PENDING (21 avisos assim entre 25/08 e 22/09). O HMAC so prova
+    // quem mandou o AVISO; quem decide a matricula e o `getPayment` abaixo, com
+    // o token DESTA conta: id forjado ou de outra conta devolve 404, e o status
+    // vem do proprio Mercado Pago — o mesmo caminho do "ja paguei" do aluno.
+    let unverified: string | null = null
     if (!secret) {
-      // Sem secret configurada não há como provar autenticidade. Em dev, a flag
-      // MP_WEBHOOK_DEV_BYPASS=1 (nunca em produção) pula a validação p/ ngrok.
-      const explicitBypass =
-        process.env.MP_WEBHOOK_DEV_BYPASS === "1" &&
-        process.env.NODE_ENV !== "production"
-      if (!explicitBypass) {
-        const reason = tenant.isPmbVitrine
-          ? "MP_WEBHOOK_SECRET (PMB) ausente — request rejeitado"
-          : "tenant sem mpWebhookSecret — configure a assinatura secreta no painel"
-        await markLog(logId, false, reason)
-        contextLogger().error(
-          { event: "mp.process.secret_missing", tenantSlug, paymentId, tenantId: tenant.id },
-          "webhook MP sem secret de validação — fulfillment automático bloqueado",
-        )
-        // Não derruba a venda: o aluno pode reconciliar via "já paguei" e o
-        // admin via sync-payment. Avisa quem pode resolver (a unidade).
-        if (tenant.isPmbVitrine) {
-          await createNotification({
-            audience: "ROLE",
-            roleTarget: "SUPER_ADMIN",
-            level: "ERROR",
-            title: "MP_WEBHOOK_SECRET (PMB) ausente",
-            body: `paymentId=${paymentId} — configure MP_WEBHOOK_SECRET no Vercel. Venda pode ficar sem matrícula automática.`,
-            category: "webhook",
-            href: "/admin/configuracoes",
-          }).catch(swallow("mp.process.notify"))
-        } else {
-          await createNotification({
-            audience: "TENANT",
-            tenantId: tenant.id,
-            level: "ERROR",
-            title: "Assinatura secreta do Mercado Pago ausente",
-            body: "Recebemos um pagamento mas a matrícula automática está bloqueada: cadastre a assinatura secreta do webhook em Configurações → Pagamentos.",
-            category: "payment",
-            href: "/painel/configuracoes",
-          }).catch(swallow("mp.process.notify"))
-        }
-        return
-      }
+      unverified = tenant.isPmbVitrine
+        ? "MP_WEBHOOK_SECRET (PMB) ausente"
+        : "tenant sem mpWebhookSecret"
+    } else if (
+      !validateMpWebhookSignature(xSignature, xRequestId, dataId ?? paymentId, secret)
+    ) {
+      unverified = "hmac invalid"
+    }
+    if (unverified) {
       contextLogger().warn(
-        { event: "mp.webhook.dev_bypass_active" },
-        "MP_WEBHOOK_DEV_BYPASS ativo — validação de HMAC pulada (apenas dev)",
+        { event: "mp.process.unverified", reason: unverified, tenantSlug, paymentId, tenantId: tenant.id },
+        "webhook MP sem assinatura valida — status conferido na API do MP",
       )
-    } else {
-      const valid = validateMpWebhookSignature(
-        xSignature,
-        xRequestId,
-        dataId ?? paymentId,
-        secret,
-      )
-      if (!valid) {
-        await markLog(logId, false, "hmac invalid")
-        return
-      }
     }
 
     // ── Passo 4: associar o log ao tenant ───────────────────────────────────
@@ -530,7 +528,8 @@ export async function processMpWebhook(args: ProcessArgs): Promise<void> {
     // ── Passo 6: rotear conforme status ─────────────────────────────────────
     if (payment.status === "approved") {
       await fulfillFromMp(tenant, enrollmentId, payment)
-      await markLog(logId, true)
+      await markLog(logId, true, unverified ? `aprovado via API (${unverified})` : undefined)
+      if (unverified) await notifyUnverifiedWebhook(tenant, unverified)
       return
     }
 
