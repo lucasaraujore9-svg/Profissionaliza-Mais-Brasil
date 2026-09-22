@@ -11,13 +11,18 @@ import {
 import { VitrinePreview } from "./vitrine-preview"
 import { BlockSkeleton } from "@/components/shared/loading-skeletons"
 import { clientLogger } from "@/lib/logger-client"
+import { composeAppIcon } from "@/lib/pwa/compose-app-icon"
 
 // Campo do config que cada asset alimenta. Sem esse mapa o upload do favicon
 // sobrescreveria a logo no estado local (a API grava na coluna certa, mas a tela
 // mostraria o arquivo errado até o próximo reload).
-const ASSET_FIELD: Record<VitrineAssetKind, "logoUrl" | "faviconUrl"> = {
+const ASSET_FIELD: Record<
+  VitrineAssetKind,
+  "logoUrl" | "faviconUrl" | "appIconUrl"
+> = {
   logo: "logoUrl",
   favicon: "faviconUrl",
+  appicon: "appIconUrl",
 }
 
 const defaultConfig: VitrineConfig = {
@@ -26,6 +31,7 @@ const defaultConfig: VitrineConfig = {
   description: null,
   logoUrl: null,
   faviconUrl: null,
+  appIconUrl: null,
   primaryColor: "#025918", // --color-pmb-green
   secondaryColor: "#014712", // --color-pmb-green-700
   whatsapp: null,
@@ -106,9 +112,15 @@ export function VitrineEditor() {
     async (kind: VitrineAssetKind, file: File) => {
       setUploading(kind)
       try {
+        // O ícone do app sobe JÁ composto: quadrado, com a logo centralizada
+        // sobre fundo claro ou escuro conforme o brilho dela. Mandar a imagem
+        // crua deixaria o Android mascarar um PNG transparente e sumir com a
+        // logo clara dentro do badge branco do atalho.
+        const payload =
+          kind === "appicon" ? (await composeAppIcon(file)).file : file
         const form = new FormData()
         form.set("kind", kind)
-        form.set("file", file)
+        form.set("file", payload)
         const res = await fetch("/api/painel/vitrine/upload", {
           method: "POST",
           body: form,

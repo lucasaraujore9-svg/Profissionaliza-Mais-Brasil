@@ -14,6 +14,7 @@ function tenantWith(
     status: "ACTIVE",
     logoUrl: null,
     faviconUrl: null,
+    appIconUrl: null,
     bannerUrl: null,
     primaryColor: "#025918",
     secondaryColor: "#014712",
@@ -94,6 +95,33 @@ describe("tenantVitrineMetadata — favicon da unidade", () => {
     const metadata = tenantVitrineMetadata(cached as unknown as CurrentTenant, null)
 
     expect(iconUrls(metadata)).toEqual(["https://cdn.test/logo.png"])
+  })
+
+  // O iOS ignora os ícones do manifest: o atalho da tela inicial sai do
+  // apple-touch-icon. Se ele continuasse na favicon, o ícone do app só valeria
+  // no Android e o aluno de iPhone ficaria com a logo crua (ou a da PMB).
+  it("o apple-touch-icon prefere o ícone do app; a aba continua na favicon", () => {
+    const metadata = tenantVitrineMetadata(
+      tenantWith({
+        logoUrl: "https://cdn.test/logo.png",
+        faviconUrl: "https://cdn.test/favicon.png",
+        appIconUrl: "https://cdn.test/app-icon.png",
+      }),
+      null,
+    )
+
+    expect(appleUrls(metadata)).toEqual(["https://cdn.test/app-icon.png"])
+    expect(iconUrls(metadata)).toEqual(["https://cdn.test/favicon.png"])
+  })
+
+  it("só com ícone do app, o apple-touch-icon sai dele e a aba fica vazia", () => {
+    const metadata = tenantVitrineMetadata(
+      tenantWith({ appIconUrl: "https://cdn.test/app-icon.png" }),
+      null,
+    )
+
+    expect(appleUrls(metadata)).toEqual(["https://cdn.test/app-icon.png"])
+    expect(iconUrls(metadata)).toEqual([])
   })
 
   it("não usa a favicon como imagem de preview — og:image segue banner/logo", () => {

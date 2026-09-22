@@ -8,11 +8,19 @@ export async function generateMetadata(): Promise<Metadata> {
   const name = tenant?.name ?? "Profissionaliza Mais Brasil"
   // Favicon dedicada da unidade quando existir; sem ela, cai na logo.
   const iconUrl = tenant?.faviconUrl ?? tenant?.logoUrl ?? null
+  // É desta tela que o aluno costuma instalar o app: no iOS o atalho sai do
+  // apple-touch-icon, então ele prefere o ícone do app quando há um.
+  const appleUrl = tenant?.appIconUrl ?? iconUrl
   return {
     title: `Acessar conta | ${name}`,
     description: "Faça login na sua conta — alunos, revendedores e equipe.",
-    ...(iconUrl
-      ? { icons: { icon: [{ url: iconUrl }], apple: [{ url: iconUrl }] } }
+    ...(iconUrl || appleUrl
+      ? {
+          icons: {
+            ...(iconUrl ? { icon: [{ url: iconUrl }] } : {}),
+            ...(appleUrl ? { apple: [{ url: appleUrl }] } : {}),
+          },
+        }
       : {}),
   }
 }

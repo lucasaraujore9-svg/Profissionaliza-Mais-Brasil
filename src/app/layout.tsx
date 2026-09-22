@@ -47,7 +47,12 @@ export const metadata: Metadata = {
   category: "education",
   // canonical é definido por rota (generateMetadata) para evitar que todas as
   // páginas herdem o canonical da home.
-  manifest: "/manifest.webmanifest",
+  // Manifest dinâmico e ÚNICO: no domínio de uma revenda ele devolve nome, cor
+  // e ícone da unidade; sem tenant, os da PMB. Fica no root (e nenhum segmento o
+  // sobrescreve) porque o aluno instala o app a partir de /login e de /aluno —
+  // quando cada segmento decidia o seu, esses caíam no manifest da PMB e o
+  // atalho nascia com a marca da plataforma. Ver src/app/api/vitrine/manifest.
+  manifest: "/api/vitrine/manifest",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",

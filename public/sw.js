@@ -5,16 +5,18 @@
 //  - APIs e rotas dinâmicas: NUNCA cacheia (sempre online)
 // Versionar via SW_VERSION quando publicar mudança que requer reset de cache.
 
+// v5: o manifest deixou de ser o arquivo estatico /manifest.webmanifest e
+// passou a ser /api/vitrine/manifest (por unidade) — o estatico saiu do
+// precache junto com o arquivo.
 // v4: purga caches de builds antigos — PWAs instalados antes do proxy de
 // imagem (/api/img) seguravam HTML/assets do bundle pre-fix e continuavam
 // exibindo a vitrine com imagens em resolucao cheia (ruido de GPU no Android).
-const SW_VERSION = "v4"
+const SW_VERSION = "v5"
 const STATIC_CACHE = `pmb-static-${SW_VERSION}`
 const PAGES_CACHE = `pmb-pages-${SW_VERSION}`
 
 const PRECACHE_URLS = [
   "/offline",
-  "/manifest.webmanifest",
   "/icons/icon-192.png",
   "/icons/icon-512.png",
   "/icons/apple-touch-icon.png",
@@ -49,7 +51,6 @@ function isStaticAsset(url) {
     url.pathname.startsWith("/_next/static/") ||
     url.pathname.startsWith("/icons/") ||
     url.pathname.startsWith("/images/") ||
-    url.pathname === "/manifest.webmanifest" ||
     url.pathname === "/favicon.ico" ||
     url.pathname.endsWith(".svg") ||
     url.pathname.endsWith(".woff2") ||

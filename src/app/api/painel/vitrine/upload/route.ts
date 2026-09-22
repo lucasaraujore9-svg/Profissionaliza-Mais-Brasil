@@ -22,12 +22,15 @@ const ALLOWED_TYPES = new Set([
   "image/webp",
 ])
 // Cada kind grava numa coluna distinta do tenant. Mapa (e nao ternario) porque
-// sao 3 destinos: um ternario `kind === "logo" ? ... : ...` mandaria o favicon
+// sao 4 destinos: um ternario `kind === "logo" ? ... : ...` mandaria o favicon
 // para a coluna do banner silenciosamente.
 const KIND_FIELD = {
   logo: "logoUrl",
   banner: "bannerUrl",
   favicon: "faviconUrl",
+  // Icone do app instalado. Chega do painel JA composto (quadrado, com fundo
+  // claro ou escuro conforme o brilho da logo) — ver lib/pwa/compose-app-icon.
+  appicon: "appIconUrl",
 } as const
 
 type AssetKind = keyof typeof KIND_FIELD
@@ -72,7 +75,7 @@ export const POST = withRequestContext(
 
     if (!isAssetKind(kind)) {
       return NextResponse.json(
-        { error: "kind deve ser 'logo', 'banner' ou 'favicon'" },
+        { error: "kind deve ser 'logo', 'banner', 'favicon' ou 'appicon'" },
         { status: 400 },
       )
     }
@@ -102,6 +105,7 @@ export const POST = withRequestContext(
         logoUrl: true,
         bannerUrl: true,
         faviconUrl: true,
+        appIconUrl: true,
       },
     })
     if (!tenant) {
@@ -184,7 +188,7 @@ export const DELETE = withRequestContext(
     const kind = (url.searchParams.get("kind") ?? "").trim()
     if (!isAssetKind(kind)) {
       return NextResponse.json(
-        { error: "kind deve ser 'logo', 'banner' ou 'favicon'" },
+        { error: "kind deve ser 'logo', 'banner', 'favicon' ou 'appicon'" },
         { status: 400 },
       )
     }
@@ -199,6 +203,7 @@ export const DELETE = withRequestContext(
         logoUrl: true,
         bannerUrl: true,
         faviconUrl: true,
+        appIconUrl: true,
       },
     })
     if (!tenant) {

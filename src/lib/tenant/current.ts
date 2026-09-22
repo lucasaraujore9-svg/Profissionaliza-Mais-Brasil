@@ -14,6 +14,9 @@ export interface CurrentTenant {
   // (gravada antes do campo existir). Todo consumidor usa `faviconUrl ?? logoUrl`,
   // então o pior caso é a vitrine exibir a logo como ícone até o TTL expirar.
   faviconUrl: string | null
+  // Idem: entrada antiga do cache pode vir sem o campo. Todo consumidor usa
+  // `appIconUrl ?? faviconUrl ?? logoUrl`.
+  appIconUrl: string | null
   bannerUrl: string | null
   primaryColor: string
   secondaryColor: string
@@ -69,6 +72,7 @@ export const getCurrentTenant = cache(
           status: true,
           logoUrl: true,
           faviconUrl: true,
+          appIconUrl: true,
           bannerUrl: true,
           primaryColor: true,
           secondaryColor: true,

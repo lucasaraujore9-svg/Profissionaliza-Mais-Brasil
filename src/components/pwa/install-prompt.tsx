@@ -98,7 +98,7 @@ export function PwaInstallPrompt() {
         </span>
         <div className="flex-1">
           <p className="text-sm font-semibold text-[var(--color-pmb-green-900)]">
-            Instalar Profissionaliza no celular
+            Instalar o app no celular
           </p>
           <p className="mt-0.5 text-xs text-gray-600">
             Acesse offline, receba notificações e tenha o app na tela inicial.

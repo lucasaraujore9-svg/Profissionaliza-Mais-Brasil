@@ -24,6 +24,7 @@ export interface VitrineConfig {
   description: string | null
   logoUrl: string | null
   faviconUrl: string | null
+  appIconUrl: string | null
   primaryColor: string
   secondaryColor: string
   whatsapp: string | null
@@ -38,7 +39,7 @@ export interface VitrineConfig {
   supportHours: string | null
 }
 
-export type VitrineAssetKind = "logo" | "favicon"
+export type VitrineAssetKind = "logo" | "favicon" | "appicon"
 
 interface VitrineConfigFormProps {
   config: VitrineConfig
@@ -60,6 +61,7 @@ export function VitrineConfigForm({
   const [removeKind, setRemoveKind] = useState<VitrineAssetKind | null>(null)
   const logoInputRef = useRef<HTMLInputElement | null>(null)
   const faviconInputRef = useRef<HTMLInputElement | null>(null)
+  const appIconInputRef = useRef<HTMLInputElement | null>(null)
 
   const update = <K extends keyof VitrineConfig>(
     key: K,
@@ -98,7 +100,7 @@ export function VitrineConfigForm({
           Envie os elementos gráficos da sua marca.
         </p>
 
-        <div className="mt-5 grid gap-4 sm:grid-cols-2">
+        <div className="mt-5 grid gap-4 sm:grid-cols-3">
           <AssetUploader
             label="Logo"
             hint="PNG com fundo transparente • horizontal, ideal 480 × 160 px (mín. 200 × 200 px se quadrada) • máx 5MB"
@@ -117,7 +119,26 @@ export function VitrineConfigForm({
             onChoose={(file) => handleFile("favicon", file)}
             onRemove={() => setRemoveKind("favicon")}
           />
+          <AssetUploader
+            label="Ícone do app"
+            hint="PNG ou WEBP quadrado • ideal 512 × 512 px • máx 5MB"
+            accept="image/png,image/webp"
+            previewUrl={config.appIconUrl}
+            uploading={uploading === "appicon"}
+            inputRef={appIconInputRef}
+            onChoose={(file) => handleFile("appicon", file)}
+            onRemove={() => setRemoveKind("appicon")}
+          />
         </div>
+
+        <p className="mt-3 text-[11px] text-gray-500">
+          O <strong className="font-semibold text-[var(--color-pmb-green-900)]">ícone do app</strong>{" "}
+          é o que fica na tela inicial do celular de quem instala a sua loja.
+          Envie o símbolo da sua marca em PNG ou WEBP: o fundo é escolhido
+          sozinho — logo clara ganha fundo escuro, logo escura ganha fundo claro
+          — e a imagem é recortada em 512 × 512 px com margem de segurança.
+          Sem ícone próprio, usamos a favicon e, na falta dela, a logo.
+        </p>
 
         <p className="mt-3 text-[11px] text-gray-500">
           O favicon é o ícone que aparece na aba do navegador e no atalho quando
@@ -364,12 +385,19 @@ export function VitrineConfigForm({
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              Remover {removeKind === "favicon" ? "o favicon" : "o logo"}
+              Remover{" "}
+              {removeKind === "favicon"
+                ? "o favicon"
+                : removeKind === "appicon"
+                  ? "o ícone do app"
+                  : "o logo"}
             </AlertDialogTitle>
             <AlertDialogDescription>
               {removeKind === "favicon"
                 ? "A aba do navegador voltará a usar a sua logo como ícone. Se você também não tiver logo, o navegador exibe o ícone padrão dele."
-                : "A vitrine voltará a exibir o nome da loja sem logo até você enviar uma nova imagem."}
+                : removeKind === "appicon"
+                  ? "Quem instalar a loja no celular a partir de agora verá a sua favicon (ou a logo) como ícone. Quem já instalou continua com o ícone atual até reinstalar."
+                  : "A vitrine voltará a exibir o nome da loja sem logo até você enviar uma nova imagem."}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -392,6 +420,10 @@ export function VitrineConfigForm({
 interface AssetUploaderProps {
   label: string
   hint: string
+  // O ícone do app é recomposto no browser antes de subir (canvas), e o canvas
+  // só devolve PNG: aceitar JPG aqui deixaria o aluno com o fundo branco do JPG
+  // por baixo do fundo escolhido.
+  accept?: string
   previewUrl: string | null
   uploading: boolean
   inputRef: React.RefObject<HTMLInputElement | null>
@@ -402,6 +434,7 @@ interface AssetUploaderProps {
 function AssetUploader({
   label,
   hint,
+  accept = "image/png,image/jpeg,image/webp",
   previewUrl,
   uploading,
   inputRef,
@@ -438,7 +471,7 @@ function AssetUploader({
             ref={inputRef}
             type="file"
             className="hidden"
-            accept="image/png,image/jpeg,image/webp"
+            accept={accept}
             onChange={(e) => {
               const file = e.target.files?.[0] ?? null
               onChoose(file)

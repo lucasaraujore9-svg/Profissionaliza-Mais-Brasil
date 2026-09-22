@@ -30,9 +30,17 @@ export function tenantVitrineMetadata(
   // comportamento histórico). Sem nenhuma das duas, lista vazia para NÃO herdar
   // a favicon da PMB (combinado com a remoção de src/app/favicon.ico).
   const iconUrl = tenant?.faviconUrl ?? tenant?.logoUrl ?? null
+  // O iOS ignora os ícones do manifest e usa o apple-touch-icon para o atalho
+  // da tela inicial — então é aqui que o ícone do app entra do lado de lá.
+  const appleUrl = tenant?.appIconUrl ?? iconUrl
   const icons: Metadata["icons"] = iconUrl
-    ? { icon: [{ url: iconUrl }], apple: [{ url: iconUrl }] }
-    : { icon: [] }
+    ? {
+        icon: [{ url: iconUrl }],
+        ...(appleUrl ? { apple: [{ url: appleUrl }] } : {}),
+      }
+    : appleUrl
+      ? { icon: [], apple: [{ url: appleUrl }] }
+      : { icon: [] }
 
   // Imagem de preview (og/twitter) = banner ou logo da unidade. Sem nenhum,
   // sem imagem — nunca cai no ícone institucional da PMB.
@@ -60,8 +68,6 @@ export function tenantVitrineMetadata(
       statusBarStyle: "default",
       title: name,
     },
-    // Manifest PWA dinâmico: nome, cor e ícone da unidade (não o da PMB).
-    manifest: "/api/vitrine/manifest",
     icons,
     alternates: origin ? { canonical: "/" } : undefined,
     // Sinais geográficos genéricos (Brasil) re-emitidos aqui para não herdar
