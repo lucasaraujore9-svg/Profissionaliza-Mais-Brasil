@@ -230,7 +230,7 @@ export async function resetStudentPassword(
 
   // Envia email com a senha reusando o template student-welcome (mesmo
   // conteudo: identificacao + senha + CTA pra logar).
-  if (!student.email || !isEmailConfigured()) {
+  if (!student.email || !(await isEmailConfigured())) {
     return { tempPassword: plain, emailSent: false, generated }
   }
 

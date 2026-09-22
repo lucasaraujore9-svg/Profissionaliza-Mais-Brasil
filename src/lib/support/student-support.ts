@@ -130,7 +130,7 @@ export async function createStudentSupportTicket(input: {
     ? PMB_SUPPORT_EMAIL
     : student.tenant?.owner?.email ?? null
 
-  if (recipientEmail && isEmailConfigured() && student.email) {
+  if (recipientEmail && (await isEmailConfigured()) && student.email) {
     const brand =
       isPmb || !student.tenant
         ? PMB_EMAIL_BRAND

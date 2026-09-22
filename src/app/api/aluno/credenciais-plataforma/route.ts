@@ -100,7 +100,7 @@ export const POST = withRequestContext(
       )
     }
 
-    if (!isEmailConfigured()) {
+    if (!(await isEmailConfigured())) {
       return NextResponse.json(
         {
           error:

@@ -499,6 +499,6 @@ export async function createReseller(
       firstPaymentId,
       error: asaasError,
     },
-    email: { configured: isEmailConfigured(), sent: emailSent, error: emailError },
+    email: { configured: await isEmailConfigured(), sent: emailSent, error: emailError },
   }
 }

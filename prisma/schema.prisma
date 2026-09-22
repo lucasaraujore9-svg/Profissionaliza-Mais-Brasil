@@ -1931,9 +1931,9 @@ model TenantPayment {
   bankSlipUrl String? @map("bank_slip_url") @db.Text
 
   // Status
-  status  String // PENDING, CONFIRMED, RECEIVED, OVERDUE, REFUNDED, etc.
-  dueDate DateTime  @map("due_date")
-  paidAt  DateTime? @map("paid_at")
+  status       String // PENDING, CONFIRMED, RECEIVED, OVERDUE, REFUNDED, etc.
+  dueDate      DateTime  @map("due_date")
+  paidAt       DateTime? @map("paid_at")
   /// FATO: quando o CLIENTE pagou (`clientPaymentDate` do Asaas). No cartao o
   /// Asaas credita em D+32, entao esta data e diferente de `paidAt`.
   clientPaidAt DateTime? @map("client_paid_at")
@@ -1954,8 +1954,8 @@ model TenantPayment {
   reminders TenantPaymentReminder[]
 
   // Gestao financeira manual (admin marca pago/anota)
-  notes          String?   @map("notes") @db.Text // anotacoes do financeiro
-  markedPaidAt   DateTime? @map("marked_paid_at") // quando admin marcou manualmente como pago
+  notes        String?   @map("notes") @db.Text // anotacoes do financeiro
+  markedPaidAt DateTime? @map("marked_paid_at") // quando admin marcou manualmente como pago
 
   // ── ESTORNO registrado manualmente ──
   // O dinheiro voltou para a unidade (arrependimento em 7 dias, cobranca
@@ -2331,6 +2331,32 @@ model NotificationPreference {
 // envio. `status` = SENT | FAILED; `provider` = smtp | resend; `error` guarda a
 // mensagem quando FAILED. `tenantId` quando o envio nasce no contexto de uma
 // unidade (para diagnóstico por revenda).
+/// Caixa de envio SMTP cadastrada em /admin/configuracoes/email. Os envios sao
+/// DISTRIBUIDOS entre as caixas ativas (a menos usada no dia primeiro) porque
+/// cada caixa da Hostinger aceita ~100 envios/dia e bloqueia acima disso.
+/// Senha criptografada (AES-256-GCM, `lib/crypto`), nunca devolvida pela API.
+model SmtpAccount {
+  id          String    @id @default(cuid())
+  email       String    @unique
+  passwordEnc String    @map("password_enc")
+  host        String    @default("smtp.hostinger.com")
+  port        Int       @default(465)
+  dailyLimit  Int       @default(100) @map("daily_limit")
+  active      Boolean   @default(true)
+  /// Dia civil brasileiro (YYYY-MM-DD) a que `sentCount` se refere. Dia
+  /// diferente de hoje = contador zerado (a virada nao precisa de cron).
+  sentDay     String    @default("") @map("sent_day")
+  sentCount   Int       @default(0) @map("sent_count")
+  /// Dia em que o alerta de 80% ja foi disparado — um alerta por dia.
+  alertedDay  String?   @map("alerted_day")
+  lastError   String?   @map("last_error") @db.Text
+  lastErrorAt DateTime? @map("last_error_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  @@map("smtp_accounts")
+}
+
 model EmailLog {
   id        String   @id @default(cuid())
   to        String   @db.Text

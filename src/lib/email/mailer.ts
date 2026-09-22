@@ -297,15 +297,18 @@ function pickProvider(): "smtp" | "resend" {
 }
 
 /**
- * Retorna `true` se SMTP ou Resend estão configurados. Útil para call sites
+ * Retorna `true` se há caixa cadastrada no /admin, SMTP ou Resend configurados. Útil para call sites
  * que precisam expor "email funciona?" no response sem disparar envio real.
  */
-export function isEmailConfigured(): boolean {
+export async function isEmailConfigured(): Promise<boolean> {
   try {
     pickProvider()
     return true
   } catch {
-    return false
+    // Import dinamico pelo mesmo motivo de `logEmailAttempt`: o pool toca o
+    // banco, e o mailer precisa seguir utilizavel em preview de template.
+    const { hasActiveSmtpAccounts } = await import("./smtp-pool")
+    return hasActiveSmtpAccounts()
   }
 }
 
@@ -325,6 +328,29 @@ export async function sendEmail({
   // gravada em EmailLog, e não só lançada às cegas.
   let provider = "unknown"
   try {
+    // 1) Caixas cadastradas em /admin/configuracoes/email, em rodizio (limite
+    // diario por caixa). `null` = nenhuma com vaga: segue para o SMTP/Resend
+    // das variaveis de ambiente, como sempre foi.
+    provider = "smtp-pool"
+    let pooled: { messageId: string; account: string } | null
+    try {
+      const { sendViaSmtpPool } = await import("./smtp-pool")
+      pooled = await sendViaSmtpPool({ to, subject, html, from, replyTo })
+    } catch (err) {
+      throw new EmailError("Falha ao enviar email via SMTP (caixas cadastradas)", err)
+    }
+    if (pooled) {
+      await logEmailAttempt({
+        status: "SENT",
+        to,
+        subject,
+        template: template.type,
+        provider: `smtp:${pooled.account}`,
+        tenantId,
+      })
+      return { id: pooled.messageId }
+    }
+
     provider = pickProvider()
 
     let id: string

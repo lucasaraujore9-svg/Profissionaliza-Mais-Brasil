@@ -6,6 +6,7 @@ import {
   Zap,
   LineChart,
   GaugeCircle,
+  Mail,
 } from "lucide-react"
 import { PageHeader } from "@/components/painel/page-header"
 import { AdminConfigClient } from "@/components/admin/admin-config-client"
@@ -40,6 +41,13 @@ const SUB_SETTINGS: {
     description: "Trava o aluno na fatia do curso que ele já pagou (carnê/mensalidade)",
     icon: GaugeCircle,
     perm: "configuracoes.view",
+  },
+  {
+    href: "/admin/configuracoes/email",
+    label: "Caixas de e-mail",
+    description: "Contas de envio em rodízio, com o total de e-mails enviados hoje em cada uma",
+    icon: Mail,
+    perm: "integracoes.view",
   },
   {
     href: "/admin/configuracoes/indicacoes",
