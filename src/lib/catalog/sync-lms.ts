@@ -18,7 +18,12 @@ import {
   findSameCategory,
 } from "./category-name"
 import { ensureCourseForResellers } from "@/lib/tenant/ensure-courses"
-import { ensureUniqueCourseSlug, type SyncResult } from "./sync"
+import {
+  ensureUniqueCourseSlug,
+  invalidateCourseCertificatePdfs,
+  type SyncResult,
+} from "./sync"
+import { matrizFromLessonTitles } from "./matriz"
 
 // Cache por UUID da categoria LMS (chave estavel) -> Category.id do PMB.
 // Vale por EXECUCAO: `resetLmsCategoryCache()` o limpa no inicio de cada sync.
@@ -46,6 +51,50 @@ export function mapCurriculumToMatriz(
     .sort((a, b) => a.order - b.order)
     .map((c) => (c.title ?? "").trim())
     .filter((s) => s.length > 0)
+}
+
+/**
+ * Achata `modules[].lessons[]` numa lista unica de TITULOS, modulos por `order`
+ * e depois aulas por `order`. Uma so funcao porque a mesma ordem alimenta as
+ * duas coisas que o detalhe do LMS produz: as aulas (`CourseLesson`) e o
+ * fallback da matriz — duas travessias divergiriam e a grade sairia numa ordem
+ * diferente da lista de aulas do mesmo curso.
+ */
+export function flattenLmsLessonTitles(modules: LmsModule[]): string[] {
+  const titles: string[] = []
+  for (const m of [...modules].sort((a, b) => a.order - b.order)) {
+    for (const l of [...(m.lessons ?? [])].sort((a, b) => a.order - b.order)) {
+      const nome = (l.title ?? "").trim()
+      if (nome) titles.push(nome)
+    }
+  }
+  return titles
+}
+
+/**
+ * Matriz curricular de um curso do LMS: a GRADE quando o autor montou uma, as
+ * AULAS quando nao. Devolve `null` = "nao ha o que gravar, nao mexa na atual".
+ *
+ * Por que a matriz nunca mais e LIMPA pelo sync: 16 dos 123 cursos do LMS
+ * chegavam com `curriculum: []` (o autor nunca preencheu a grade, embora o curso
+ * tenha modulos e aulas). Escrever esse `[]` deixava a pagina do curso sem
+ * conteudo programatico e o VERSO do certificado sem grade. Todo curso tem que
+ * ter matriz, e a fonte menos ruim para quem nao tem grade sao os titulos das
+ * proprias aulas — o mesmo que o sync da fornecedora legada ja fazia.
+ *
+ * `modules === null` (o detalhe falhou) e diferente de `[]` (curso sem aula):
+ * no primeiro caso preservar a matriz atual e obrigatorio, senao uma falha de
+ * rede apagaria a grade de um curso inteiro.
+ */
+export function matrizForLmsCourse(
+  curriculum: LmsCurriculumItem[] | undefined,
+  modules: LmsModule[] | null,
+): string[] | null {
+  const grade = mapCurriculumToMatriz(curriculum)
+  if (grade && grade.length > 0) return grade
+  if (!modules) return null
+  const aulas = matrizFromLessonTitles(flattenLmsLessonTitles(modules))
+  return aulas.length > 0 ? aulas : null
 }
 
 /**
@@ -273,8 +322,9 @@ async function upsertLmsCourse(
 
   // Matriz curricular (grade) vinda do LMS -> topicos do PMB. Curso LMS tem o
   // LMS como dono do conteudo, entao a matriz e re-sincronizada (como descricao/
-  // aulas). `null` = campo ausente na resposta => nao mexe na matriz atual.
-  const matrizCurricular = mapCurriculumToMatriz(curso.curriculum)
+  // aulas). Sem grade no LMS, os titulos das AULAS do detalhe viram a matriz —
+  // nenhum curso pode ficar sem. `null` = nada a gravar, nao mexe na atual.
+  const matrizCurricular = matrizForLmsCourse(curso.curriculum, modules)
 
   // Campos sincronizaveis. Preco sugerido, categoria e matriz agora vem do LMS;
   // visibilidade (hiddenMain/visibilityMode) segue curadoria do admin.
@@ -314,7 +364,15 @@ async function upsertLmsCourse(
 
   const existing = await prisma.course.findUnique({
     where: { lmsCourseId: curso.id },
-    select: { id: true, categoryId: true, status: true, authorTenantId: true },
+    select: {
+      id: true,
+      categoryId: true,
+      status: true,
+      authorTenantId: true,
+      // So para saber se a matriz SAIU de vazia nesta passada — e o gatilho da
+      // regeracao dos certificados ja emitidos (o verso imprime a grade).
+      matrizCurricular: true,
+    },
   })
 
   // Curso com DONO no LMS e curso de autoria de uma unidade. O caminho normal e
@@ -378,6 +436,13 @@ async function upsertLmsCourse(
       data: { ...dataBase, categoryId: effectiveCategoryId, status: existing.status },
     })
     courseId = existing.id
+    if (
+      (existing.matrizCurricular?.length ?? 0) === 0 &&
+      matrizCurricular &&
+      matrizCurricular.length > 0
+    ) {
+      await invalidateCourseCertificatePdfs(courseId)
+    }
   } else {
     const created = await prisma.course.create({
       data: {
@@ -504,15 +569,11 @@ async function syncCourseLessons(
   courseId: string,
   modules: LmsModule[],
 ): Promise<void> {
-  const lessons: { courseId: string; nome: string; ordem: number }[] = []
-  let ordem = 0
-  for (const m of [...modules].sort((a, b) => a.order - b.order)) {
-    for (const l of [...(m.lessons ?? [])].sort((a, b) => a.order - b.order)) {
-      const nome = (l.title ?? "").trim()
-      if (!nome) continue
-      lessons.push({ courseId, nome, ordem: ordem++ })
-    }
-  }
+  const lessons = flattenLmsLessonTitles(modules).map((nome, ordem) => ({
+    courseId,
+    nome,
+    ordem,
+  }))
 
   await prisma.$transaction([
     prisma.courseLesson.deleteMany({ where: { courseId } }),

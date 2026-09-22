@@ -22,6 +22,7 @@ vi.mock("@/lib/prisma", () => {
     category: { findFirst: vi.fn(), findUnique: vi.fn(), findMany: vi.fn(), create: vi.fn() },
     courseCategory: { upsert: vi.fn() },
     courseLesson: { deleteMany: vi.fn(), createMany: vi.fn() },
+    certificate: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
   }
   return { prisma }
 })
@@ -67,6 +68,7 @@ import { syncSingleLmsCourse } from "./sync-lms"
 
 const p = prisma as unknown as {
   $transaction: ReturnType<typeof vi.fn>
+  certificate: { updateMany: ReturnType<typeof vi.fn> }
   course: {
     findFirst: ReturnType<typeof vi.fn>
     findUnique: ReturnType<typeof vi.fn>
@@ -556,6 +558,24 @@ describe("syncCatalogFromEA — matriz curricular vazia vem das aulas da fornece
     // matriz que apareceu entre a leitura e o update.
     expect(call.where).toEqual({ id: "ea_271", matrizCurricular: { isEmpty: true } })
     expect(call.data.matrizCurricular).toEqual(["Introdução", "A Igreja Primitiva"])
+  })
+
+  it("matriz preenchida → certificados já emitidos são marcados para regeneração", async () => {
+    // O verso do certificado imprime a matriz, e `isCertificatePdfStale` não
+    // olha o curso (não pode: `syncedAt` move `updatedAt` todo dia). Sem esta
+    // invalidação, quem já tinha certificado ficaria com o PDF sem grade.
+    listarMock.mockResolvedValue([feedCurso()])
+    p.course.findFirst.mockResolvedValue(LINHA_271)
+    aulasMock.mockResolvedValue([{ aula: "01 - Introdução" }])
+    p.course.updateMany.mockResolvedValue({ count: 1 })
+    p.certificate.updateMany.mockResolvedValue({ count: 2 })
+
+    await syncCatalogFromEA("cron")
+
+    expect(p.certificate.updateMany).toHaveBeenCalledWith({
+      where: { courseId: "ea_271", pdfUrl: { not: null } },
+      data: { pdfUrl: null, pdfGeneratedAt: null },
+    })
   })
 
   it("curso COM matriz → não consulta as aulas nem mexe na matriz curada", async () => {

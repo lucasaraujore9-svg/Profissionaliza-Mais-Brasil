@@ -6,6 +6,7 @@ import { parseBRPrice, slugify } from "@/lib/utils"
 import { ensureCourseForResellers } from "@/lib/tenant/ensure-courses"
 import { pushSyncLog, type SyncLogEntry } from "./sync-log"
 import { slugifyCategoria } from "./home"
+import { matrizFromLessonTitles } from "./matriz"
 
 const TITLECASE_LOWER_WORDS = new Set(["e", "de", "da", "do", "das", "dos", "para", "com", "em"])
 
@@ -98,16 +99,51 @@ const EA_MATCH_SELECT = {
 /**
  * Converte as aulas da fornecedora legada (`cursos/aulas`) nos topicos da matriz
  * curricular. O feed numera o titulo ("01 - Introducao"); a matriz guarda so o
- * nome, no mesmo formato do backfill de 20260619. So a numeracao SEGUIDA de
- * separador sai — "5S na empresa" continua inteiro.
+ * nome, no mesmo formato do backfill de 20260619. A limpeza mora em
+ * `catalog/matriz.ts` e e a MESMA do fallback do LMS — duas copias divergiriam
+ * e o mesmo titulo sairia de um jeito em cada fornecedora.
  */
 export function mapEaAulasToMatriz(
   aulas: EAAula[] | null | undefined,
 ): string[] {
   if (!Array.isArray(aulas)) return []
-  return aulas
-    .map((a) => (a?.aula ?? "").replace(/^\s*\d+\s*[-–—.)]\s*/, "").trim())
-    .filter((s) => s.length > 0)
+  return matrizFromLessonTitles(aulas.map((a) => a?.aula))
+}
+
+/**
+ * Forca a REGERACAO dos PDFs dos certificados ja emitidos deste curso.
+ *
+ * A matriz e impressa no VERSO do certificado, mas `isCertificatePdfStale`
+ * (certificates/freshness.ts) so compara fontes de DESIGN — template, unidade,
+ * SystemSettings e a revisao do codigo de render. O curso nao esta na lista, e
+ * nao pode estar: `syncedAt` move `updatedAt` do curso TODO DIA, e comparar por
+ * ele marcaria a base inteira de certificados como desatualizada a cada sync.
+ *
+ * Nulificar `pdfUrl`/`pdfGeneratedAt` e a forma DOCUMENTADA de forcar a
+ * regeneracao (mesmo caminho da correcao de titularidade). O objeto no Storage
+ * e sobrescrito no mesmo caminho — nao fica binario orfao. Best-effort: um
+ * certificado que nao recebeu a grade nao pode derrubar o sync do catalogo.
+ */
+export async function invalidateCourseCertificatePdfs(
+  courseId: string,
+): Promise<void> {
+  try {
+    const { count } = await prisma.certificate.updateMany({
+      where: { courseId, pdfUrl: { not: null } },
+      data: { pdfUrl: null, pdfGeneratedAt: null },
+    })
+    if (count > 0) {
+      contextLogger().info(
+        { event: "catalog.sync.cert_pdf_invalidated", courseId, certificados: count },
+        "matriz nova: PDFs de certificado marcados para regeneracao",
+      )
+    }
+  } catch (err) {
+    contextLogger().warn(
+      { err, event: "catalog.sync.cert_pdf_invalidate_failed", courseId },
+      "nao foi possivel invalidar os PDFs dos certificados apos preencher a matriz",
+    )
+  }
 }
 
 /**
@@ -151,6 +187,7 @@ async function fillEaMatrizIfEmpty(
         },
         "matriz curricular vazia preenchida com as aulas da fornecedora",
       )
+      await invalidateCourseCertificatePdfs(courseId)
     }
   } catch (err) {
     contextLogger().warn(

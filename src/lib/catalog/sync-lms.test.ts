@@ -1,6 +1,10 @@
 import { describe, it, expect } from "vitest"
-import { mapCurriculumToMatriz } from "./sync-lms"
-import type { LmsCurriculumItem } from "@/lib/lms"
+import {
+  mapCurriculumToMatriz,
+  matrizForLmsCourse,
+  flattenLmsLessonTitles,
+} from "./sync-lms"
+import type { LmsCurriculumItem, LmsModule } from "@/lib/lms"
 
 function item(partial: Partial<LmsCurriculumItem>): LmsCurriculumItem {
   return {
@@ -40,5 +44,52 @@ describe("mapCurriculumToMatriz", () => {
 
   it("campo ausente (undefined) = null → o sync não mexe na matriz atual", () => {
     expect(mapCurriculumToMatriz(undefined)).toBeNull()
+  })
+})
+
+function mod(title: string, order: number, lessons: string[]): LmsModule {
+  return {
+    id: `m${order}`,
+    title,
+    order,
+    lessons: lessons.map((t, i) => ({
+      id: `l${order}-${i}`,
+      title: t,
+      order: i,
+      durationSec: 0,
+      freePreview: false,
+      materialCount: 0,
+    })),
+  }
+}
+
+describe("flattenLmsLessonTitles", () => {
+  it("achata por `order` do módulo e depois da aula", () => {
+    const modules = [mod("M2", 1, ["C", "D"]), mod("M1", 0, ["A", "B"])]
+    expect(flattenLmsLessonTitles(modules)).toEqual(["A", "B", "C", "D"])
+  })
+})
+
+describe("matrizForLmsCourse", () => {
+  const modules = [mod("Módulo 1", 0, ["Aula 1 Boas vindas", "Aula 2 - Dicas"])]
+
+  it("com grade no LMS, a grade vence (títulos preservados, sem limpeza)", () => {
+    const grade = [
+      { id: "c1", title: "Módulo 1 — Fundamentos", workloadHours: 2, ementa: null, order: 0 },
+    ]
+    expect(matrizForLmsCourse(grade, modules)).toEqual(["Módulo 1 — Fundamentos"])
+  })
+
+  it("sem grade (`[]`), a matriz vem das AULAS — nenhum curso fica sem matriz", () => {
+    expect(matrizForLmsCourse([], modules)).toEqual(["Boas vindas", "Dicas"])
+  })
+
+  it("sem grade e sem aula → null: o sync NÃO limpa a matriz atual", () => {
+    expect(matrizForLmsCourse([], [])).toBeNull()
+    expect(matrizForLmsCourse(undefined, [])).toBeNull()
+  })
+
+  it("detalhe do LMS falhou (`modules` null) → null, mesmo sem grade", () => {
+    expect(matrizForLmsCourse([], null)).toBeNull()
   })
 })
