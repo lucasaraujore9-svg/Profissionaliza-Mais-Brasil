@@ -20,6 +20,7 @@ vi.mock("@/lib/logger", () => ({
 }))
 
 import { prisma } from "@/lib/prisma"
+import { issueCertificateIfEligible } from "@/lib/certificates/issue"
 import { cursosVinculados } from "@/lib/plataforma-cursos/client"
 import { get as cacheGet } from "@/lib/redis/cache"
 import { checkEaCourseStarted, syncStudentProgress } from "./progress"
@@ -36,6 +37,7 @@ const p = prisma as unknown as {
   certificate: { findFirst: ReturnType<typeof vi.fn> }
 }
 const listar = cursosVinculados as unknown as ReturnType<typeof vi.fn>
+const emitir = issueCertificateIfEligible as unknown as ReturnType<typeof vi.fn>
 const getCache = cacheGet as unknown as ReturnType<typeof vi.fn>
 
 beforeEach(() => {
@@ -205,5 +207,64 @@ describe("checkEaCourseStarted", () => {
     })
     expect(await checkEaCourseStarted("e1")).toBe("unknown")
     expect(listar).not.toHaveBeenCalled()
+  })
+})
+
+describe("syncStudentProgress — auto-emissão de certificado (EA)", () => {
+  beforeEach(() => {
+    getCache.mockResolvedValue(null)
+    p.systemSettings.upsert.mockResolvedValue({ certificateAutoIssue: true })
+    p.enrollment.findMany.mockResolvedValue(recentEnrollment())
+  })
+
+  it("CONCLUÍDO na plataforma ABAIXO do percentual mínimo ainda emite", async () => {
+    // Regressão: o gate somava `percent >= certificateMinPercent` ao status
+    // CONCLUIDO. A EA marca CONCLUIDO abaixo de 100% (há certificado em
+    // produção com 88%), então o aluno terminava o curso, a emissão automática
+    // recusava calada — e a emissão MANUAL, que só olha o status, aceitava o
+    // mesmo aluno. Quem diz que acabou é a plataforma de aulas.
+    listar.mockResolvedValue([
+      {
+        Curso: "NR-33",
+        "Situação": "CONCLUÍDO",
+        Porcentagem: "88%",
+        "Data da última aula": "2026-08-14",
+      },
+    ])
+
+    const res = await syncStudentProgress("stu1", { force: true })
+
+    expect(emitir).toHaveBeenCalledWith("e1", "AUTO")
+    expect(res.certificatesIssued).toBe(1)
+  })
+
+  it("EM ANDAMENTO não emite, por mais alto que esteja o percentual", async () => {
+    listar.mockResolvedValue([
+      {
+        Curso: "NR-33",
+        "Situação": "EM ANDAMENTO",
+        Porcentagem: "99%",
+      },
+    ])
+
+    await syncStudentProgress("stu1", { force: true })
+
+    expect(emitir).not.toHaveBeenCalled()
+  })
+
+  it("com o interruptor desligado não emite nada", async () => {
+    p.systemSettings.upsert.mockResolvedValue({ certificateAutoIssue: false })
+
+    await syncStudentProgress("stu1", { force: true })
+
+    expect(emitir).not.toHaveBeenCalled()
+  })
+
+  it("certificado não revogado já existente não é reemitido", async () => {
+    p.certificate.findFirst.mockResolvedValue({ id: "cert1" })
+
+    await syncStudentProgress("stu1", { force: true })
+
+    expect(emitir).not.toHaveBeenCalled()
   })
 })

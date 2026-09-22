@@ -233,7 +233,6 @@ export async function syncStudentProgress(
     update: {},
     create: { id: SETTINGS_ID },
     select: {
-      certificateMinPercent: true,
       certificateAutoIssue: true,
     },
   })
@@ -285,13 +284,21 @@ export async function syncStudentProgress(
 
     updates.push({ enrollmentId: e.id, data })
 
-    // Elegibilidade para auto-emissao
-    if (
-      settings.certificateAutoIssue &&
-      status === "CONCLUIDO" &&
-      percent !== null &&
-      percent >= settings.certificateMinPercent
-    ) {
+    // Elegibilidade para auto-emissao.
+    //
+    // Quem diz que o curso acabou e a plataforma de aulas: CONCLUIDO e o FATO
+    // reportado por ela, e o percentual e so o indicador que a acompanha. A EA
+    // marca CONCLUIDO ABAIXO de 100% (ha certificado em producao com 88% e
+    // 97%), entao o `percent >= certificateMinPercent` que existia aqui
+    // recusava calado a conclusao que a propria fornecedora afirmou — enquanto
+    // a emissao MANUAL, que usa `isEnrollmentConcludedForCertificate`, aceitava
+    // o mesmo aluno. As duas camadas discordavam, e o aluno so descobria
+    // abrindo chamado. `certificateMinPercent` segue valendo onde ele faz
+    // sentido: como criterio SUBSTITUTO, para matricula sem status de conclusao
+    // (ver `isEnrollmentConcludedForCertificate`). O ramo LMS
+    // (`applyLmsCourseProgress`) ja decidia assim — agora as duas fornecedoras
+    // concordam.
+    if (settings.certificateAutoIssue && status === "CONCLUIDO") {
       // checa se ja nao ha certificado nao revogado
       const cert = await prisma.certificate.findFirst({
         where: { enrollmentId: e.id, revokedAt: null },

@@ -19,6 +19,7 @@ import {
 } from "@/lib/enrollment/pace-gate"
 import { resolvePaceGateSettings } from "@/lib/enrollment/pace-settings"
 import { contextLogger } from "@/lib/logger"
+import { afterResponse } from "@/lib/after-response"
 import { canIssueCertificate } from "@/lib/catalog/content-type"
 
 const SETTINGS_ID = "default"
@@ -236,13 +237,21 @@ export async function issueCertificateIfEligible(
     })
   }
 
-  // Geracao de PDF assincrona — nao bloqueia o caller
-  void generateAndUploadPdf(created.id).catch((err) => {
-    contextLogger().error(
-      { err, event: "certificates.pdf_gen_failed", certificateId: created.id, code: created.code },
-      "falha ao gerar PDF do certificado",
-    )
-  })
+  // Geracao de PDF assincrona — nao bloqueia o caller.
+  //
+  // `afterResponse` e nao `void`: em serverless a instancia congela assim que a
+  // resposta sai e mata a promise solta (nem o `.catch` roda). O download
+  // regenera sob demanda (`ensureFreshCertificatePdf`), entao perder isto nao
+  // quebrava o certificado — so empurrava a geracao para o primeiro clique,
+  // dentro da requisicao do aluno.
+  afterResponse(() =>
+    generateAndUploadPdf(created.id).catch((err) => {
+      contextLogger().error(
+        { err, event: "certificates.pdf_gen_failed", certificateId: created.id, code: created.code },
+        "falha ao gerar PDF do certificado",
+      )
+    }),
+  )
 
   // Notificacao in-app
   const unidade = enrollment.tenant?.name ?? PMB_TENANT_NAME
