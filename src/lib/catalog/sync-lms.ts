@@ -23,7 +23,7 @@ import {
   invalidateCourseCertificatePdfs,
   type SyncResult,
 } from "./sync"
-import { matrizFromLessonTitles } from "./matriz"
+import { cleanMatrizTopic, matrizFromLessonTitles } from "./matriz"
 
 // Cache por UUID da categoria LMS (chave estavel) -> Category.id do PMB.
 // Vale por EXECUCAO: `resetLmsCategoryCache()` o limpa no inicio de cada sync.
@@ -91,7 +91,11 @@ export function matrizForLmsCourse(
   modules: LmsModule[] | null,
 ): string[] | null {
   const grade = mapCurriculumToMatriz(curriculum)
-  if (grade && grade.length > 0) return grade
+  // Grade feita SO de rotulos ("Modulo 1", "Aula 2") conta como sem grade: e o
+  // placeholder que o LMS cria sozinho, e 53 cursos em producao (22/09/2026)
+  // imprimiam "Modulo 1" como toda a matriz do certificado. Um item com nome
+  // ("Modulo 1 — Fundamentos") ja basta para a grade valer.
+  if (grade && grade.some((t) => cleanMatrizTopic(t).length > 0)) return grade
   if (!modules) return null
   const aulas = matrizFromLessonTitles(flattenLmsLessonTitles(modules))
   return aulas.length > 0 ? aulas : null
@@ -436,10 +440,14 @@ async function upsertLmsCourse(
       data: { ...dataBase, categoryId: effectiveCategoryId, status: existing.status },
     })
     courseId = existing.id
+    // Matriz que MUDOU (inclusive a que saiu do placeholder "Modulo 1") regera
+    // os certificados ja emitidos: o verso imprime a grade. Grade estavel nao
+    // dispara nada, entao o sync diario nao invalida a base inteira.
+    const before = existing.matrizCurricular ?? []
     if (
-      (existing.matrizCurricular?.length ?? 0) === 0 &&
       matrizCurricular &&
-      matrizCurricular.length > 0
+      matrizCurricular.length > 0 &&
+      matrizCurricular.join("\n") !== before.join("\n")
     ) {
       await invalidateCourseCertificatePdfs(courseId)
     }

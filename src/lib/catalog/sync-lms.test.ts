@@ -89,6 +89,20 @@ describe("matrizForLmsCourse", () => {
     expect(matrizForLmsCourse(undefined, [])).toBeNull()
   })
 
+  it("grade só de rótulos (\"Módulo 1\") é placeholder: a matriz vem das AULAS", () => {
+    const placeholder = [
+      { id: "c1", title: "Módulo 1", workloadHours: null, ementa: null, order: 0 },
+    ]
+    expect(matrizForLmsCourse(placeholder, modules)).toEqual(["Boas vindas", "Dicas"])
+  })
+
+  it("grade placeholder com detalhe falho → null (preserva a atual)", () => {
+    const placeholder = [
+      { id: "c1", title: "Módulo 1", workloadHours: null, ementa: null, order: 0 },
+    ]
+    expect(matrizForLmsCourse(placeholder, null)).toBeNull()
+  })
+
   it("detalhe do LMS falhou (`modules` null) → null, mesmo sem grade", () => {
     expect(matrizForLmsCourse([], null)).toBeNull()
   })
