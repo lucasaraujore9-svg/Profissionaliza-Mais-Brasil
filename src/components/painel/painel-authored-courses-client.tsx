@@ -629,6 +629,16 @@ function CourseDialog({
                   Conecte a conta Asaas da unidade para vender fora da sua vitrine.
                 </p>
               )}
+              {/* A regra é do LMS (checkPublishProblems), que recusa ao publicar;
+                  dizer antes evita o produtor descobrir só no erro. E-book não
+                  tem aula, então a regra não se aplica a ele. */}
+              {!ebook && (
+                <p className="text-xs text-muted-foreground">
+                  {distribution === "OWN_ONLY"
+                    ? "Só na sua vitrine, as aulas podem ser só de material (PDF, por exemplo), sem vídeo."
+                    : "Fora da sua vitrine, toda aula precisa ter vídeo."}
+                </p>
+              )}
             </div>
           )}
 

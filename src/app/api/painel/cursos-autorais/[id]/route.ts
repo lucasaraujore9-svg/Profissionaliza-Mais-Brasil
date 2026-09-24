@@ -161,7 +161,10 @@ export const PATCH = withRequestContextParams<{ id: string }>(
     //
     // A checagem acima só sabe que a CASCA existe (`lmsCourseId`), não que há
     // aula, matriz e categoria — quem sabe isso é a plataforma de aulas, e ela
-    // recusa com 409. Espelhar depois, em `afterResponse` best-effort (como o
+    // recusa com 409. O ALCANCE desce junto: fora da própria vitrine toda aula
+    // precisa de vídeo, e é aqui que "levar um curso só de PDF para a rede" é
+    // barrado — inclusive num curso já publicado, que passa por este ramo a
+    // cada edição. Espelhar depois, em `afterResponse` best-effort (como o
     // ramo de despublicar abaixo ainda faz), engolia essa recusa num log: o
     // curso VAZIO ficava à venda na vitrine, e o aluno pagaria por um curso sem
     // conteúdo — exatamente o que este fluxo inteiro existe para evitar.
@@ -171,7 +174,7 @@ export const PATCH = withRequestContextParams<{ id: string }>(
     // aula."). Um "não foi possível publicar" genérico não diz o que fazer.
     if (isPublished && isLmsAuthoringEnabled() && course.lmsCourseId) {
       try {
-        await setLmsCoursePublished(course.lmsCourseId, true)
+        await setLmsCoursePublished(course.lmsCourseId, true, distribution)
       } catch (err) {
         const status = err instanceof LmsApiError ? err.statusCode : undefined
         contextLogger().warn(
@@ -297,7 +300,7 @@ export const PATCH = withRequestContextParams<{ id: string }>(
     // conseguiria tirar do ar o próprio curso porque a outra ponta caiu.
     if (!isPublished && isLmsAuthoringEnabled() && course.lmsCourseId) {
       afterResponse(() =>
-        setLmsCoursePublished(course.lmsCourseId as string, false).catch((err) => {
+        setLmsCoursePublished(course.lmsCourseId as string, false, distribution).catch((err) => {
           contextLogger().warn(
             { event: "course_authoring.lms_unpublish_failed", courseId: course.id, err },
             "não foi possível espelhar a despublicação no LMS",
@@ -385,7 +388,7 @@ export const DELETE = withRequestContextParams<{ id: string }>(
 
     if (isLmsAuthoringEnabled() && course.lmsCourseId) {
       afterResponse(() =>
-        setLmsCoursePublished(course.lmsCourseId as string, false).catch(() => undefined),
+        setLmsCoursePublished(course.lmsCourseId as string, false, course.distribution).catch(() => undefined),
       )
     }
 

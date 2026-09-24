@@ -22,13 +22,13 @@ const SRC = readFileSync(
 
 describe("publicação espelhada na plataforma de aulas", () => {
   it("o publicar AGUARDA o LMS (não é afterResponse)", () => {
-    expect(SRC).toMatch(/await setLmsCoursePublished\(course\.lmsCourseId, true\)/)
+    expect(SRC).toMatch(/await setLmsCoursePublished\(course\.lmsCourseId, true, distribution\)/)
   })
 
   it("o publicar acontece ANTES da escrita na vitrine", () => {
     // Publicar aqui e só depois descobrir que lá recusou deixaria o curso
     // ATIVO na loja com a plataforma de aulas dizendo "não".
-    const chamadaLms = SRC.indexOf("await setLmsCoursePublished(course.lmsCourseId, true)")
+    const chamadaLms = SRC.indexOf("await setLmsCoursePublished(course.lmsCourseId, true, distribution)")
     const escrita = SRC.indexOf("await prisma.course.update(")
     expect(chamadaLms).toBeGreaterThan(-1)
     expect(escrita).toBeGreaterThan(-1)
@@ -50,7 +50,7 @@ describe("publicação espelhada na plataforma de aulas", () => {
     // A assimetria é deliberada: bloquear o despublicar impediria o produtor de
     // tirar do ar o próprio curso porque a outra ponta caiu.
     expect(SRC).toMatch(/if \(!isPublished && isLmsAuthoringEnabled\(\)/)
-    expect(SRC).toMatch(/setLmsCoursePublished\(course\.lmsCourseId as string, false\)/)
+    expect(SRC).toMatch(/setLmsCoursePublished\(course\.lmsCourseId as string, false, distribution\)/)
   })
 
   it("publicar tem UMA chamada e as demais só despublicam", () => {
@@ -63,7 +63,17 @@ describe("publicação espelhada na plataforma de aulas", () => {
     const args = [...SRC.matchAll(/setLmsCoursePublished\(([^)]*)\)/g)].map((m) =>
       m[1].replace(/\s+/g, " ").trim(),
     )
-    expect(args.filter((a) => a.endsWith(", true"))).toEqual(["course.lmsCourseId, true"])
-    expect(args.filter((a) => !a.endsWith(", true") && !a.endsWith(", false"))).toEqual([])
+    // O 2º argumento continua literal; o 3º é o alcance.
+    const segundo = (a: string) => a.split(",")[1]?.trim()
+    expect(args.filter((a) => segundo(a) === "true")).toEqual(["course.lmsCourseId, true, distribution"])
+    expect(args.filter((a) => segundo(a) !== "true" && segundo(a) !== "false")).toEqual([])
+  })
+
+  it("o publicar leva o alcance PEDIDO, não o gravado", () => {
+    // O LMS decide por ele se a aula pode ser só PDF. Mandar `course.distribution`
+    // (o valor ANTES desta edição) deixaria o produtor levar um curso só de PDF
+    // para a rede: o LMS checaria contra "só na minha vitrine" e aprovaria.
+    expect(SRC).toMatch(/const distribution = data\.distribution \?\? course\.distribution/)
+    expect(SRC).not.toMatch(/setLmsCoursePublished\(course\.lmsCourseId, true, course\.distribution\)/)
   })
 })

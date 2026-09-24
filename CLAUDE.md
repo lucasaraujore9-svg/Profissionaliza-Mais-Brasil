@@ -1056,6 +1056,31 @@ passam a dizer de quem e o conteudo — e de quem NAO e:
 uma nota dizendo que a plataforma "nao se responsabiliza" impressa num curso da
 PROPRIA plataforma seria pior que nota nenhuma. Verificado por mutacao nas tres.
 
+### Video obrigatorio so FORA da propria vitrine (2026-09-24)
+
+Curso de autoria vendido **so na vitrine da unidade** (`distribution = OWN_ONLY`)
+pode ter aula sem video — um curso so de PDF. Em `OWN_AND_PMB` e `NETWORK` toda
+aula precisa de video: quem compra na vitrine da PMB ou de outra unidade nao
+escolheu comprar apostila.
+
+- **A regra mora no LMS** (`lessonVideoRequired` em `src/lib/publishCheck.ts`
+  de la), dentro do `checkPublishProblems` que ja decide a publicacao. O PMB
+  so manda o alcance: na criacao da casca (`OWN_ONLY`) e em TODO
+  `setLmsCoursePublished`, que agora recebe `distribution` como 3o argumento.
+- **O alcance que desce e o PEDIDO, nao o gravado** (`data.distribution ??
+  course.distribution`). Mandar `course.distribution` faria o LMS checar contra
+  "so na minha vitrine" e aprovar a ida de um curso so de PDF para a rede.
+  Teste de forma em `publish-gate.test.ts`.
+- **Curso ja publicado tambem e barrado.** Toda edicao de curso publicado passa
+  pelo ramo bloqueante de publicar; o LMS re-checa quando o alcance muda (antes
+  o atalho idempotente dele respondia OK sem olhar nada) e o 409 volta ao
+  produtor com a saida: "Para vender fora da sua loja, toda aula precisa de
+  video. So na sua loja, o video e opcional."
+- **So a publicacao checa.** Tirar o video de uma aula DEPOIS de publicado para
+  a rede nao passa por aqui — mesma lacuna que ja existia para matriz e prova.
+- E-book nao tem aula: a regra nao se aplica, e o aviso do seletor de alcance
+  no painel nao aparece para ele.
+
 ### Regras pedagogicas: a unidade define como as aulas abrem (2026-08-25)
 
 Antes, o aluno navegava livre pelo curso: as unicas travas eram a PROVA (que

@@ -171,6 +171,9 @@ export const POST = withRequestContext(
           // (arquivo x módulos/aulas) e que valida a publicação. Uma casca criada
           // como curso jamais viraria e-book lá — o tipo não muda depois.
           contentType: contentType === "EBOOK" ? "ebook" : "course",
+          // Mesmo valor da linha criada abaixo: o LMS decide por ele se a aula
+          // pode ser so PDF.
+          distribution: "OWN_ONLY",
         })
         lmsCourseId = shell.id
         lmsSlug = shell.slug

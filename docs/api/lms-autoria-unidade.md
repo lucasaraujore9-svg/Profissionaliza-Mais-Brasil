@@ -48,7 +48,8 @@ LMS, o curso chegaria pelo sync e teria que ser adotado por heurística.
   "title": "Excel Avançado para Escritório",
   "description": "…",                      // opcional
   "workload": "40 horas",                  // opcional
-  "contentType": "course"                  // opcional: "course" (default) | "ebook"
+  "contentType": "course",                 // opcional: "course" (default) | "ebook"
+  "distribution": "OWN_ONLY"               // opcional: "OWN_ONLY" | "OWN_AND_PMB" | "NETWORK"
 }
 
 // 201
@@ -72,10 +73,19 @@ LMS, o curso chegaria pelo sync e teria que ser adotado por heurística.
 ### 3.2 `PATCH /api/v1/courses/:id` — publicar / despublicar
 
 ```jsonc
-{ "published": true }
+{ "published": true, "distribution": "OWN_ONLY" }   // distribution opcional
 ```
 
-Espelha o estado do PMB. Curso **com dono** publicado entra em `GET /courses`
+Espelha o estado do PMB.
+
+**Alcance e vídeo.** `distribution` é o `Course.distribution` do PMB, e muda UMA
+regra de publicação: em `OWN_ONLY` a aula pode não ter vídeo (curso só de PDF);
+em `OWN_AND_PMB` e `NETWORK` toda aula precisa de vídeo. Ausente = o LMS usa o
+último valor recebido; nunca recebido = exige vídeo (a regra antiga).
+Em curso **já publicado**, `published: true` com alcance diferente do gravado
+**re-checa** o conteúdo e responde `409` se não servir — sem isso, levar um
+curso só de PDF para a rede passaria pelo atalho idempotente. Na recusa o
+alcance não é gravado. Curso **com dono** publicado entra em `GET /courses`
 apenas com `ownerTenantExternalId` preenchido (ver §3.4) — quem decide onde ele
 é vendido continua sendo o PMB.
 

@@ -1,3 +1,4 @@
+import type { CourseDistribution } from "@prisma/client"
 import { env } from "@/lib/env"
 import { isLmsConfigured } from "./config"
 import { lmsRequest } from "./client"
@@ -33,6 +34,8 @@ export interface CreateLmsCourseShellInput {
    * default do LMS — e o que uma versao antiga dele entende.
    */
   contentType?: "course" | "ebook"
+  /** Alcance de venda. Todo curso nasce `OWN_ONLY` (ver POST /api/painel/cursos-autorais). */
+  distribution?: CourseDistribution
 }
 
 export interface LmsCourseShell {
@@ -58,20 +61,29 @@ export async function createLmsCourseShell(
       description: input.description ?? null,
       workload: input.workload ?? null,
       contentType: input.contentType ?? "course",
+      distribution: input.distribution ?? "OWN_ONLY",
     },
   })
   return res.data
 }
 
-/** Publica ou despublica a casca no LMS, acompanhando o estado no PMB. */
+/**
+ * Publica ou despublica a casca no LMS, acompanhando o estado no PMB.
+ *
+ * `distribution` desce JUNTO porque muda a regra de publicação de lá: so na
+ * propria vitrine (`OWN_ONLY`) a aula pode ser so PDF; fora dela, toda aula
+ * precisa de video. Em curso ja publicado, alcance novo faz o LMS checar de
+ * novo — e recusar (409) quem leva um curso so de PDF para a rede.
+ */
 export async function setLmsCoursePublished(
   lmsCourseId: string,
   published: boolean,
+  distribution: CourseDistribution,
 ): Promise<void> {
   await lmsRequest<{ data: unknown }>(
     "PATCH",
     `/courses/${encodeURIComponent(lmsCourseId)}`,
-    { body: { published } },
+    { body: { published, distribution } },
   )
 }
 
