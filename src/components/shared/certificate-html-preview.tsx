@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo } from "react"
+import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import Image from "next/image"
 
 export type CertificateLayout = "CLASSIC" | "MODERN" | "MINIMAL"
@@ -130,9 +130,60 @@ export function CertificateHtmlPreview({
     groupName,
   }
 
-  if (data.layout === "MODERN") return <ModernPreview {...variantProps} />
-  if (data.layout === "MINIMAL") return <MinimalPreview {...variantProps} />
-  return <ClassicPreview {...variantProps} />
+  return (
+    <ScaledSheet>
+      {data.layout === "MODERN" ? (
+        <ModernPreview {...variantProps} />
+      ) : data.layout === "MINIMAL" ? (
+        <MinimalPreview {...variantProps} />
+      ) : (
+        <ClassicPreview {...variantProps} />
+      )}
+    </ScaledSheet>
+  )
+}
+
+/**
+ * Largura de desenho da folha = A4 paisagem em pt (842), a mesma pagina do
+ * PDF — com 1px ~ 1pt, as fontes da previa ficam na proporcao do documento
+ * real. O certificado e diagramado UMA vez nesse tamanho e reduzido por
+ * `transform: scale` ate a largura do conteiner.
+ * Breakpoints de viewport (sm:/md:) nao servem aqui: a mesma previa aparece
+ * num card estreito e num painel largo NA MESMA TELA, e o card recebia a
+ * fonte do painel e estourava a folha (rodape, QR e assinatura cortados).
+ */
+const SHEET_WIDTH = 842
+const SHEET_RATIO = 842 / 595
+
+function ScaledSheet({ children }: { children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const [scale, setScale] = useState<number | null>(null)
+
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const update = () => setScale(el.clientWidth / SHEET_WIDTH)
+    update()
+    const observer = new ResizeObserver(update)
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
+
+  return (
+    <div ref={ref} className="relative w-full" style={{ aspectRatio: SHEET_RATIO }}>
+      <div
+        className="absolute left-0 top-0 origin-top-left"
+        style={{
+          width: SHEET_WIDTH,
+          height: SHEET_WIDTH / SHEET_RATIO,
+          transform: `scale(${scale ?? 0})`,
+          visibility: scale === null ? "hidden" : undefined,
+        }}
+      >
+        {children}
+      </div>
+    </div>
+  )
 }
 
 interface PreviewVariantProps {
@@ -154,7 +205,7 @@ function GroupBrandStripe({
   return (
     <div className="pointer-events-none absolute inset-x-0 bottom-1 flex flex-col items-center justify-center gap-0.5 text-gray-400">
       {groupLogoUrl ? (
-        <div className="relative h-3 w-12 sm:h-4 sm:w-16">
+        <div className="relative h-4 w-16">
           <Image
             src={groupLogoUrl}
             alt={groupName}
@@ -164,7 +215,7 @@ function GroupBrandStripe({
           />
         </div>
       ) : null}
-      <span className="text-[6px] sm:text-[7px] tracking-wider">
+      <span className="text-[7px] tracking-wider">
         Plataforma do {groupName}
       </span>
     </div>
@@ -184,7 +235,7 @@ function ClassicPreview({
 
   return (
     <div
-      className="relative aspect-[1.41/1] w-full overflow-hidden rounded-xl border-4 shadow-lg"
+      className="relative h-full w-full overflow-hidden rounded-xl border-4 shadow-lg"
       style={{
         borderColor: primary,
         background: data.backgroundUrl ? `url(${data.backgroundUrl})` : "white",
@@ -195,14 +246,14 @@ function ClassicPreview({
       {data.backgroundUrl && <div className="absolute inset-0 bg-white/75" />}
 
       <div
-        className="absolute inset-2 sm:inset-3 rounded-md"
+        className="absolute inset-3 rounded-md"
         style={{ border: `1px solid ${secondary}` }}
       />
 
-      <div className="relative flex h-full flex-col items-center justify-between p-4 sm:p-6 md:p-8 text-center">
+      <div className="relative flex h-full flex-col items-center justify-between p-8 text-center">
         <div className="flex w-full items-start justify-between gap-3">
           {data.logoUrl ? (
-            <div className="relative h-10 w-24 sm:h-12 sm:w-32">
+            <div className="relative h-12 w-32">
               <Image
                 src={data.logoUrl}
                 alt="Logo"
@@ -215,7 +266,7 @@ function ClassicPreview({
             <div className="h-10 w-24" />
           )}
           {data.showSeal && data.sealUrl ? (
-            <div className="relative h-10 w-10 sm:h-14 sm:w-14">
+            <div className="relative h-14 w-14">
               <Image
                 src={data.sealUrl}
                 alt="Selo"
@@ -231,34 +282,34 @@ function ClassicPreview({
 
         <div className="flex flex-col items-center gap-2">
           <h1
-            className="text-base font-bold tracking-wider sm:text-lg md:text-2xl"
+            className="text-2xl font-bold tracking-wider"
             style={{ color: primary }}
           >
             {data.titleText}
           </h1>
           <p
-            className="max-w-prose text-xs leading-relaxed sm:text-sm"
+            className="max-w-prose text-sm leading-relaxed"
             style={{ color: "#1F2937" }}
           >
             {bodyResolved}
           </p>
           <p
-            className="text-lg sm:text-xl md:text-2xl font-bold"
+            className="text-2xl font-bold"
             style={{ color: secondary }}
           >
             {sample.nome}
           </p>
-          <p className="text-[10px] sm:text-xs text-gray-700">CPF: {sample.cpf}</p>
-          <p className="text-[10px] sm:text-xs text-gray-700">
+          <p className="text-xs text-gray-700">CPF: {sample.cpf}</p>
+          <p className="text-xs text-gray-700">
             Curso: {sample.curso} · {sample.carga_horaria} · {sample.data_conclusao}
           </p>
-          <p className="text-[10px] sm:text-xs text-gray-700">
+          <p className="text-xs text-gray-700">
             Aproveitamento: 100%
           </p>
         </div>
 
         <div className="flex w-full items-end justify-between gap-3">
-          <div className="text-left text-[10px] sm:text-xs">
+          <div className="text-left text-xs">
             <div className="text-gray-500">
               Código:{" "}
               <span className="font-mono font-semibold" style={{ color: secondary }}>
@@ -277,9 +328,9 @@ function ClassicPreview({
             )}
           </div>
 
-          <div className="flex flex-col items-center text-[10px] sm:text-xs">
+          <div className="flex flex-col items-center text-xs">
             {data.signatureUrl && (
-              <div className="relative mb-1 h-6 w-24 sm:h-8 sm:w-28">
+              <div className="relative mb-1 h-8 w-28">
                 <Image
                   src={data.signatureUrl}
                   alt="Assinatura"
@@ -302,7 +353,7 @@ function ClassicPreview({
 
           <div className="text-right">
             {data.showQrCode && (
-              <div className="inline-flex h-12 w-12 sm:h-14 sm:w-14 items-center justify-center rounded-md border border-gray-200 bg-white p-1 text-[8px] leading-tight text-gray-500 shadow-sm">
+              <div className="inline-flex h-14 w-14 items-center justify-center rounded-md border border-gray-200 bg-white p-1 text-[8px] leading-tight text-gray-500 shadow-sm">
                 QR
               </div>
             )}
@@ -328,7 +379,7 @@ function ModernPreview({
 
   return (
     <div
-      className="relative aspect-[1.41/1] w-full overflow-hidden rounded-xl border border-gray-200 shadow-lg"
+      className="relative h-full w-full overflow-hidden rounded-xl border border-gray-200 shadow-lg"
       style={{
         background: data.backgroundUrl ? `url(${data.backgroundUrl})` : "white",
         backgroundSize: "cover",
@@ -340,12 +391,12 @@ function ModernPreview({
       <div className="relative flex h-full">
         {/* Sidebar */}
         <div
-          className="flex w-[28%] flex-col items-center justify-between p-3 sm:p-4 md:p-5"
+          className="flex w-[28%] flex-col items-center justify-between p-5"
           style={{ backgroundColor: primary }}
         >
           <div className="flex w-full justify-center">
             {data.logoUrl ? (
-              <div className="relative h-10 w-full sm:h-14">
+              <div className="relative h-14 w-full">
                 <Image
                   src={data.logoUrl}
                   alt="Logo"
@@ -355,7 +406,7 @@ function ModernPreview({
                 />
               </div>
             ) : (
-              <div className="text-center text-[9px] sm:text-[10px] text-white tracking-widest uppercase">
+              <div className="text-center text-[10px] text-white tracking-widest uppercase">
                 {sample.unidade}
               </div>
             )}
@@ -363,7 +414,7 @@ function ModernPreview({
 
           <div className="flex flex-col items-center gap-2">
             {data.showSeal && data.sealUrl && (
-              <div className="relative h-10 w-10 sm:h-14 sm:w-14">
+              <div className="relative h-14 w-14">
                 <Image
                   src={data.sealUrl}
                   alt="Selo"
@@ -373,46 +424,46 @@ function ModernPreview({
                 />
               </div>
             )}
-            <div className="text-center text-[9px] sm:text-[10px] text-white tracking-widest uppercase">
+            <div className="text-center text-[10px] text-white tracking-widest uppercase">
               {sample.unidade}
             </div>
           </div>
         </div>
 
         {/* Content */}
-        <div className="flex flex-1 flex-col justify-between p-3 sm:p-5 md:p-7">
+        <div className="flex flex-1 flex-col justify-between p-7">
           <div>
             <div
-              className="text-[9px] sm:text-[10px] font-bold tracking-[0.4em]"
+              className="text-[10px] font-bold tracking-[0.4em]"
               style={{ color: primary }}
             >
               CERTIFICADO
             </div>
             <h1
-              className="mt-1 text-sm sm:text-lg md:text-2xl font-bold tracking-wider"
+              className="mt-1 text-2xl font-bold tracking-wider"
               style={{ color: secondary }}
             >
               {data.titleText}
             </h1>
-            <p className="mt-2 text-[10px] sm:text-xs text-gray-700 leading-relaxed">
+            <p className="mt-2 text-xs text-gray-700 leading-relaxed">
               {bodyResolved}
             </p>
 
-            <div className="mt-2 text-[8px] sm:text-[9px] tracking-[0.3em] uppercase text-gray-400">
+            <div className="mt-2 text-[9px] tracking-[0.3em] uppercase text-gray-400">
               Aluno(a)
             </div>
             <div
-              className="text-lg sm:text-2xl md:text-3xl font-bold leading-tight"
+              className="text-3xl font-bold leading-tight"
               style={{ color: secondary }}
             >
               {sample.nome}
             </div>
             <div
-              className="mt-1 h-[2px] w-12 sm:w-16"
+              className="mt-1 h-[2px] w-16"
               style={{ backgroundColor: primary }}
             />
 
-            <div className="mt-2 text-[9px] sm:text-[10px] text-gray-700 space-y-0.5">
+            <div className="mt-2 text-[10px] text-gray-700 space-y-0.5">
               <div>
                 <span className="text-gray-500">CPF: </span>
                 {sample.cpf}
@@ -437,9 +488,9 @@ function ModernPreview({
           </div>
 
           <div className="flex items-end justify-between gap-2">
-            <div className="text-[10px] sm:text-xs">
+            <div className="text-xs">
               {data.signatureUrl && (
-                <div className="relative mb-1 h-5 w-20 sm:h-7 sm:w-28">
+                <div className="relative mb-1 h-7 w-28">
                   <Image
                     src={data.signatureUrl}
                     alt="Assinatura"
@@ -456,7 +507,7 @@ function ModernPreview({
                 <div className="font-semibold" style={{ color: "#1F2937" }}>
                   {data.signerName ?? "—"}
                 </div>
-                <div className="text-[8px] sm:text-[9px] text-gray-500">
+                <div className="text-[9px] text-gray-500">
                   {data.signerTitle ?? ""}
                 </div>
               </div>
@@ -464,18 +515,18 @@ function ModernPreview({
 
             <div className="flex flex-col items-end text-right">
               {data.showQrCode && (
-                <div className="h-10 w-10 sm:h-14 sm:w-14 rounded-md border border-gray-200 bg-white p-1 text-[8px] leading-tight text-gray-500 shadow-sm flex items-center justify-center">
+                <div className="h-14 w-14 rounded-md border border-gray-200 bg-white p-1 text-[8px] leading-tight text-gray-500 shadow-sm flex items-center justify-center">
                   QR
                 </div>
               )}
               <div
-                className="mt-1 text-[9px] sm:text-[10px] font-bold font-mono"
+                className="mt-1 text-[10px] font-bold font-mono"
                 style={{ color: primary }}
               >
                 {sample.codigo}
               </div>
               {data.showValidationUrl && (
-                <div className="text-[7px] sm:text-[8px] text-gray-400">
+                <div className="text-[8px] text-gray-400">
                   profissionalizamaisbrasil.com.br/validar
                 </div>
               )}
@@ -483,7 +534,7 @@ function ModernPreview({
           </div>
 
           {footerResolved && (
-            <div className="mt-2 text-[8px] sm:text-[9px] text-gray-500">
+            <div className="mt-2 text-[9px] text-gray-500">
               {footerResolved}
             </div>
           )}
@@ -508,7 +559,7 @@ function MinimalPreview({
 
   return (
     <div
-      className="relative aspect-[1.41/1] w-full overflow-hidden rounded-xl border border-gray-200 shadow-lg bg-white"
+      className="relative h-full w-full overflow-hidden rounded-xl border border-gray-200 shadow-lg bg-white"
       style={{
         background: data.backgroundUrl ? `url(${data.backgroundUrl})` : "white",
         backgroundSize: "cover",
@@ -523,11 +574,11 @@ function MinimalPreview({
         style={{ backgroundColor: primary }}
       />
 
-      <div className="relative flex h-full flex-col p-4 pt-6 sm:p-6 sm:pt-8 md:p-8 md:pt-10">
+      <div className="relative flex h-full flex-col p-8 pt-10">
         {/* Header */}
         <div className="flex items-center justify-between">
           {data.logoUrl ? (
-            <div className="relative h-7 w-20 sm:h-9 sm:w-28">
+            <div className="relative h-9 w-28">
               <Image
                 src={data.logoUrl}
                 alt="Logo"
@@ -537,71 +588,71 @@ function MinimalPreview({
               />
             </div>
           ) : (
-            <div className="text-[8px] sm:text-[9px] tracking-[0.3em] uppercase text-gray-500">
+            <div className="text-[9px] tracking-[0.3em] uppercase text-gray-500">
               {sample.unidade}
             </div>
           )}
-          <div className="text-[8px] sm:text-[9px] tracking-[0.3em] uppercase text-gray-500">
+          <div className="text-[9px] tracking-[0.3em] uppercase text-gray-500">
             {sample.unidade}
           </div>
         </div>
 
         {/* Title */}
-        <div className="mt-4 sm:mt-6">
+        <div className="mt-6">
           <div
-            className="text-xs sm:text-sm md:text-base font-bold tracking-[0.4em]"
+            className="text-base font-bold tracking-[0.4em]"
             style={{ color: primary }}
           >
             {data.titleText}
           </div>
           <div
-            className="mt-1 h-[2px] w-8 sm:w-10"
+            className="mt-1 h-[2px] w-10"
             style={{ backgroundColor: primary }}
           />
         </div>
 
         {/* Name and body */}
-        <div className="mt-3 sm:mt-4">
-          <div className="text-[10px] sm:text-xs text-gray-500">Certificamos que</div>
+        <div className="mt-4">
+          <div className="text-xs text-gray-500">Certificamos que</div>
           <div
-            className="text-xl sm:text-3xl md:text-4xl font-bold leading-tight"
+            className="text-4xl font-bold leading-tight"
             style={{ color: secondary }}
           >
             {sample.nome}
           </div>
-          <p className="mt-2 max-w-[80%] text-[10px] sm:text-xs leading-relaxed text-gray-700">
+          <p className="mt-2 max-w-[80%] text-xs leading-relaxed text-gray-700">
             {bodyResolved}
           </p>
         </div>
 
         {/* Meta */}
-        <div className="mt-3 sm:mt-4 flex flex-wrap gap-x-6 gap-y-2 text-[10px] sm:text-xs">
+        <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-xs">
           <div>
-            <div className="text-[8px] sm:text-[9px] tracking-widest uppercase text-gray-400">
+            <div className="text-[9px] tracking-widest uppercase text-gray-400">
               Curso
             </div>
             <div style={{ color: "#1F2937" }}>{sample.curso}</div>
           </div>
           <div>
-            <div className="text-[8px] sm:text-[9px] tracking-widest uppercase text-gray-400">
+            <div className="text-[9px] tracking-widest uppercase text-gray-400">
               CPF
             </div>
             <div style={{ color: "#1F2937" }}>{sample.cpf}</div>
           </div>
           <div>
-            <div className="text-[8px] sm:text-[9px] tracking-widest uppercase text-gray-400">
+            <div className="text-[9px] tracking-widest uppercase text-gray-400">
               Carga horária
             </div>
             <div style={{ color: "#1F2937" }}>{sample.carga_horaria}</div>
           </div>
           <div>
-            <div className="text-[8px] sm:text-[9px] tracking-widest uppercase text-gray-400">
+            <div className="text-[9px] tracking-widest uppercase text-gray-400">
               Conclusão
             </div>
             <div style={{ color: "#1F2937" }}>{sample.data_conclusao}</div>
           </div>
           <div>
-            <div className="text-[8px] sm:text-[9px] tracking-widest uppercase text-gray-400">
+            <div className="text-[9px] tracking-widest uppercase text-gray-400">
               Aproveitamento
             </div>
             <div style={{ color: "#1F2937" }}>100%</div>
@@ -610,9 +661,9 @@ function MinimalPreview({
 
         {/* Footer */}
         <div className="mt-auto flex items-end justify-between gap-3 pt-3">
-          <div className="text-[10px] sm:text-xs">
+          <div className="text-xs">
             {data.signatureUrl && (
-              <div className="relative mb-1 h-5 w-20 sm:h-7 sm:w-28">
+              <div className="relative mb-1 h-7 w-28">
                 <Image
                   src={data.signatureUrl}
                   alt="Assinatura"
@@ -629,7 +680,7 @@ function MinimalPreview({
               <div className="font-semibold" style={{ color: "#1F2937" }}>
                 {data.signerName ?? "—"}
               </div>
-              <div className="text-[8px] sm:text-[9px] text-gray-500">
+              <div className="text-[9px] text-gray-500">
                 {data.signerTitle ?? ""}
               </div>
             </div>
@@ -637,18 +688,18 @@ function MinimalPreview({
 
           <div className="flex flex-col items-end text-right">
             {data.showQrCode && (
-              <div className="flex h-9 w-9 sm:h-12 sm:w-12 items-center justify-center rounded-md border border-gray-200 bg-white p-1 text-[8px] leading-tight text-gray-500 shadow-sm">
+              <div className="flex h-12 w-12 items-center justify-center rounded-md border border-gray-200 bg-white p-1 text-[8px] leading-tight text-gray-500 shadow-sm">
                 QR
               </div>
             )}
             <div
-              className="mt-1 text-[9px] sm:text-[10px] font-bold font-mono"
+              className="mt-1 text-[10px] font-bold font-mono"
               style={{ color: primary }}
             >
               {sample.codigo}
             </div>
             {data.showValidationUrl && (
-              <div className="text-[7px] sm:text-[8px] text-gray-400">
+              <div className="text-[8px] text-gray-400">
                 profissionalizamaisbrasil.com.br/validar
               </div>
             )}
@@ -656,7 +707,7 @@ function MinimalPreview({
         </div>
 
         {footerResolved && (
-          <div className="mt-1 text-center text-[7px] sm:text-[8px] text-gray-400">
+          <div className="mt-1 text-center text-[8px] text-gray-400">
             {footerResolved}
           </div>
         )}
