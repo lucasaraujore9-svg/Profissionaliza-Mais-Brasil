@@ -58,10 +58,16 @@ export default async function PainelVendasPage() {
     // sumiria justamente da tela que lista as vendas diretas dele. O MESMO
     // recorte de carteira se aplica — `ctx.scope.assinaturas` é o gêmeo de
     // `ctx.scope.vendas` para este model.
+    //
+    // SEM o filtro `soldByUserId: { not: null }`, ao contrário da matrícula: a
+    // venda de curso pela vitrine aparece em Financeiro (vem de `Payment`), mas
+    // a assinatura paga pela vitrine não aparecia em tela NENHUMA — a unidade
+    // via o dinheiro entrar no Asaas e achava que o sistema não tinha dado
+    // baixa. Quem não tem `vendas.viewAll` continua só com as próprias (o
+    // recorte exige `soldByUserId` igual ao dele).
     prisma.studentSubscription.findMany({
       where: {
         tenantId: ctx.tenantId,
-        soldByUserId: { not: null },
         ...ctx.scope.assinaturas,
       },
       orderBy: { createdAt: "desc" },
@@ -143,7 +149,7 @@ export default async function PainelVendasPage() {
       enrollmentId: null as string | null,
       soldByName: sub.soldByUserId
         ? (sellerName.get(sub.soldByUserId) ?? null)
-        : null,
+        : "Vitrine",
       createdAt: sub.createdAt,
     })),
   ]
@@ -154,7 +160,7 @@ export default async function PainelVendasPage() {
     <div className="space-y-6">
       <PageHeader
         title="Vendas diretas"
-        description="Vendas em que você gerou o link de pagamento manualmente. Vendas pela vitrine pública aparecem em Financeiro."
+        description="Vendas em que você gerou o link de pagamento manualmente, e as assinaturas — inclusive as contratadas pela vitrine. Vendas de curso pela vitrine pública aparecem em Financeiro."
         actions={
           canCreateSale ? (
             <Link

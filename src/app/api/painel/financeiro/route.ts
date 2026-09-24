@@ -3,6 +3,10 @@ import { prisma } from "@/lib/prisma"
 import { requirePainel } from "@/lib/auth/painel-guard"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { loadSplitStatement } from "@/lib/course-authoring/statement"
+import {
+  SUBSCRIPTION_REFUNDED_STATUS,
+  SUBSCRIPTION_REVENUE_WHERE,
+} from "@/lib/subscriptions/revenue"
 
 export const GET = withRequestContext(
   { action: "painel.financeiro.get", route: "/api/painel/financeiro" },
@@ -31,6 +35,12 @@ export const GET = withRequestContext(
     // mostraria pendentes, embora o card "Pendente" e o dashboard as contem.
     // Incluimos as pendentes apenas quando o filtro permite (Todos ou Pendente).
     const includePending = !status || status === "PENDING"
+    // Ciclo de assinatura so entra na lista como pago ou estornado — o que esta
+    // em aberto no gateway nao e venda ainda. E toda assinatura e recorrente,
+    // entao o filtro "Mensal" a inclui e o "Avulso" a exclui.
+    const includeSubscriptions =
+      (!status || status === "APPROVED" || status === "REFUNDED") &&
+      (!paymentType || paymentType === "MONTHLY")
 
     const [
       monthApproved,
@@ -40,6 +50,9 @@ export const GET = withRequestContext(
       weeklyRevenueRaw,
       payments,
       pendingEnrollments,
+      subMonthAgg,
+      subAllTimeAgg,
+      subscriptionPayments,
     ] = await Promise.all([
         prisma.payment.aggregate({
           where: {
@@ -66,22 +79,36 @@ export const GET = withRequestContext(
         prisma.$queryRaw<{ day: Date; revenue: number }[]>`
           SELECT date_trunc('day', "paid_at") AS day,
                  COALESCE(SUM(amount)::float, 0) AS revenue
-          FROM "payments"
-          WHERE "tenant_id" = ${ctx.tenantId}
-            AND "mp_status" = 'APPROVED'
-            AND "paid_at" >= ${startOfLastWeek}
-            AND "paid_at" IS NOT NULL
+          FROM (
+            SELECT "paid_at", amount FROM "payments"
+            WHERE "tenant_id" = ${ctx.tenantId}
+              AND "mp_status" = 'APPROVED'
+              AND "paid_at" >= ${startOfLastWeek}
+            UNION ALL
+            SELECT "paid_at", amount FROM "subscription_payments"
+            WHERE "tenant_id" = ${ctx.tenantId}
+              AND "status" <> ${SUBSCRIPTION_REFUNDED_STATUS}
+              AND "paid_at" >= ${startOfLastWeek}
+          ) paid
+          WHERE "paid_at" IS NOT NULL
           GROUP BY day
           ORDER BY day ASC
         `,
         prisma.$queryRaw<{ week: Date; revenue: number }[]>`
           SELECT date_trunc('week', "paid_at") AS week,
                  COALESCE(SUM(amount)::float, 0) AS revenue
-          FROM "payments"
-          WHERE "tenant_id" = ${ctx.tenantId}
-            AND "mp_status" = 'APPROVED'
-            AND "paid_at" >= ${new Date(now.getFullYear(), now.getMonth() - 1, 1)}
-            AND "paid_at" IS NOT NULL
+          FROM (
+            SELECT "paid_at", amount FROM "payments"
+            WHERE "tenant_id" = ${ctx.tenantId}
+              AND "mp_status" = 'APPROVED'
+              AND "paid_at" >= ${new Date(now.getFullYear(), now.getMonth() - 1, 1)}
+            UNION ALL
+            SELECT "paid_at", amount FROM "subscription_payments"
+            WHERE "tenant_id" = ${ctx.tenantId}
+              AND "status" <> ${SUBSCRIPTION_REFUNDED_STATUS}
+              AND "paid_at" >= ${new Date(now.getFullYear(), now.getMonth() - 1, 1)}
+          ) paid
+          WHERE "paid_at" IS NOT NULL
           GROUP BY week
           ORDER BY week ASC
         `,
@@ -146,6 +173,43 @@ export const GET = withRequestContext(
               take: 200,
             })
           : Promise.resolve([]),
+        // Assinatura paga mora em `subscription_payments`, nao em `payments`:
+        // sem estas tres consultas ela nao aparecia no financeiro da unidade.
+        prisma.subscriptionPayment.aggregate({
+          where: {
+            tenantId: ctx.tenantId,
+            ...SUBSCRIPTION_REVENUE_WHERE,
+            paidAt: { gte: startOfMonth },
+          },
+          _sum: { amount: true },
+        }),
+        prisma.subscriptionPayment.aggregate({
+          where: { tenantId: ctx.tenantId, ...SUBSCRIPTION_REVENUE_WHERE },
+          _sum: { amount: true },
+        }),
+        includeSubscriptions
+          ? prisma.subscriptionPayment.findMany({
+              where: {
+                tenantId: ctx.tenantId,
+                paidAt: { gte: dateFrom, lte: dateTo },
+                ...(status === "APPROVED"
+                  ? { status: { not: SUBSCRIPTION_REFUNDED_STATUS } }
+                  : status === "REFUNDED"
+                    ? { status: SUBSCRIPTION_REFUNDED_STATUS }
+                    : {}),
+              },
+              include: {
+                subscription: {
+                  select: {
+                    student: { select: { nome: true } },
+                    plan: { select: { name: true } },
+                  },
+                },
+              },
+              orderBy: { paidAt: "desc" },
+              take: 200,
+            })
+          : Promise.resolve([]),
       ])
 
     // Rateio: `Payment.amount` deixou de ser a receita da loja quando a venda e
@@ -156,8 +220,10 @@ export const GET = withRequestContext(
       lte: dateTo,
     })
 
-    const monthRevenue = Number(monthApproved._sum.amount ?? 0)
-    const received = Number(allTimeAgg._sum.amount ?? 0)
+    const monthRevenue =
+      Number(monthApproved._sum.amount ?? 0) + Number(subMonthAgg._sum.amount ?? 0)
+    const received =
+      Number(allTimeAgg._sum.amount ?? 0) + Number(subAllTimeAgg._sum.amount ?? 0)
     const pending = Number(pendingAgg._sum.finalAmount ?? 0)
     const toReceive = Math.max(monthRevenue * 0.05, 0)
 
@@ -198,7 +264,17 @@ export const GET = withRequestContext(
       type: e.paymentType as string,
     }))
 
-    const allRows = [...paymentRows, ...pendingRows].sort((a, b) =>
+    const subscriptionRows = subscriptionPayments.map((sp) => ({
+      id: `sub-${sp.id}`,
+      // `paidAt` nunca e null aqui: a consulta filtra por ele.
+      date: (sp.paidAt ?? sp.createdAt).toISOString(),
+      description: `${sp.subscription.student.nome} · Assinatura ${sp.subscription.plan.name}`,
+      amount: Number(sp.amount),
+      status: sp.status === SUBSCRIPTION_REFUNDED_STATUS ? "REFUNDED" : "APPROVED",
+      type: "MONTHLY",
+    }))
+
+    const allRows = [...paymentRows, ...pendingRows, ...subscriptionRows].sort((a, b) =>
       a.date < b.date ? 1 : -1,
     )
 

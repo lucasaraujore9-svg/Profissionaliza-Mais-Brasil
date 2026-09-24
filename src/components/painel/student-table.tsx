@@ -16,6 +16,8 @@ export interface StudentListItem {
   email: string
   status: StudentStatus
   coursesCount: number
+  /** Plano da assinatura que dá acesso hoje; null = não assina. */
+  subscriptionPlan?: string | null
   createdAt: string
 }
 
@@ -149,6 +151,14 @@ export function StudentTable({
                   <td className="px-4 py-3 text-sm text-gray-600">{student.email}</td>
                   <td className="px-4 py-3 font-mono text-sm text-gray-700">
                     {student.coursesCount}
+                    {student.subscriptionPlan && (
+                      <div
+                        className="font-sans text-[10px] font-semibold text-[var(--color-pmb-green-700)]"
+                        title={student.subscriptionPlan}
+                      >
+                        Assinante
+                      </div>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-600">
                     {formatDate(student.createdAt)}

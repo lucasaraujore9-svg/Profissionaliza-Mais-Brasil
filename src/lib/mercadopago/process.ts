@@ -496,7 +496,10 @@ export async function processMpWebhook(args: ProcessArgs): Promise<void> {
         payment.status === "charged_back" ||
         payment.status === "cancelled"
       ) {
-        await revokeSubscriptionForRefund(sub.id)
+        await revokeSubscriptionForRefund(sub.id, {
+          gateway: "MP",
+          externalPaymentId: String(payment.id),
+        })
         await markLog(logId, true, `assinatura ${sub.id}: ${payment.status}`)
         return
       }

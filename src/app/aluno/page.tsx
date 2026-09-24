@@ -33,7 +33,7 @@ export default async function StudentDashboardPage() {
   const session = await requireStudentSession()
   if (!session) return null
 
-  const [enrollments, payments, courseAccess] =
+  const [enrollments, payments, courseAccess, liveSubscription] =
     await Promise.all([
       prisma.enrollment.findMany({
         where: { studentId: session.studentId },
@@ -60,6 +60,17 @@ export default async function StudentDashboardPage() {
       // Um cartao de acesso por curso, ja achatado e sem nada que denuncie de
       // onde o curso vem. Filtra por matricula paga la dentro.
       getCourseAccessCards(session.studentId),
+      // Assinatura que da acesso hoje. Na assinatura a matricula so nasce
+      // quando o aluno abre um curso: sem este destaque, quem acabou de pagar
+      // caia numa tela que dizia "escolha um curso" sem apontar para o plano
+      // pago, e lia isso como "o pagamento nao liberou nada".
+      prisma.studentSubscription.findFirst({
+        where: {
+          studentId: session.studentId,
+          status: { in: ["ACTIVE", "PAST_DUE"] },
+        },
+        select: { plan: { select: { name: true } } },
+      }),
     ])
 
   const activeEnrollments = enrollments.filter(
@@ -89,11 +100,43 @@ export default async function StudentDashboardPage() {
           {timeGreeting()}, {firstName}!
         </h1>
         <p className="mt-1 text-sm text-gray-600">
-          {hasNoEnrollments
+          {hasNoEnrollments && liveSubscription
+            ? "Sua assinatura está ativa. Escolha os cursos e comece a estudar hoje mesmo."
+            : hasNoEnrollments
             ? "Vamos começar? Escolha um curso e comece a estudar hoje mesmo."
             : "Acompanhe seus cursos, pagamentos e certificados por aqui — e acesse suas aulas quando quiser."}
         </p>
       </header>
+
+      {liveSubscription && (
+        <Link
+          href="/aluno/assinatura"
+          className="group flex flex-col gap-4 overflow-hidden rounded-2xl border border-[var(--color-pmb-green)]/20 bg-white p-6 shadow-sm transition-all hover:shadow-md sm:flex-row sm:items-center sm:justify-between"
+        >
+          <div className="flex min-w-0 items-center gap-4">
+            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[var(--color-pmb-green)] text-white">
+              <BookOpen className="h-6 w-6" />
+            </span>
+            <div className="min-w-0">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-[var(--color-pmb-green-700)]">
+                Assinatura ativa
+              </p>
+              <p className="mt-0.5 truncate text-lg font-semibold text-[var(--color-pmb-green-900)]">
+                {liveSubscription.plan.name}
+              </p>
+              <p className="mt-0.5 text-xs text-gray-600">
+                {hasNoEnrollments
+                  ? "Seu pagamento foi confirmado. Escolha os cursos do plano para liberar as aulas."
+                  : "Veja os cursos do seu plano e libere outros quando quiser."}
+              </p>
+            </div>
+          </div>
+          <span className="inline-flex items-center gap-2 rounded-lg bg-[var(--color-pmb-green)] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-transform group-hover:translate-x-0.5">
+            {hasNoEnrollments ? "Escolher cursos" : "Ver meus cursos"}
+            <ArrowRight className="h-4 w-4" />
+          </span>
+        </Link>
+      )}
 
       {/* Banner de "Continuar estudando" — primeiro destaque visual quando há curso ativo */}
       {continueEnrollment && continueHref && (
@@ -178,8 +221,10 @@ export default async function StudentDashboardPage() {
         </section>
       )}
 
-      {/* Empty state quando aluno ainda não tem cursos */}
-      {hasNoEnrollments && (
+      {/* Empty state quando aluno ainda não tem cursos. O assinante fica de
+          fora: mandar para o catálogo de COMPRA quem já pagou o plano o faria
+          pagar de novo por um curso que a assinatura cobre. */}
+      {hasNoEnrollments && !liveSubscription && (
         <Link
           href="/aluno/comprar"
           className="group flex flex-col items-center gap-4 overflow-hidden rounded-2xl border-2 border-dashed border-[var(--color-pmb-green)]/30 bg-white p-8 text-center shadow-sm transition-all hover:border-[var(--color-pmb-green)] hover:shadow-md sm:flex-row sm:text-left"

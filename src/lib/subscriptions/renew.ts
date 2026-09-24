@@ -6,6 +6,7 @@ import { swallow } from "@/lib/errors"
 import { cancelSubscriptionAccess } from "./cancel"
 import { addInterval, isRecurringInterval } from "./interval"
 import { CARNE_STATUS, carnePeriodEnd } from "./carne-schedule"
+import { SUBSCRIPTION_REFUNDED_STATUS } from "./revenue"
 
 /**
  * Renovacao e queda de ciclo de uma assinatura de aluno.
@@ -177,7 +178,44 @@ export async function settleSubscriptionCycle(
     "ciclo de assinatura liquidado",
   )
 
+  // 1o pagamento: a assinatura nao cria matricula (ela nasce quando o aluno
+  // escolhe um curso), entao nada mais avisava ninguem. O aluno caia numa area
+  // sem curso nenhum e a unidade nao via venda — os dois liam "nao deu baixa".
+  if (!sub.startedAt) {
+    await notifySubscriptionActivated(sub, event.amount)
+  }
+
   return { settled: true }
+}
+
+async function notifySubscriptionActivated(
+  sub: { id: string; tenantId: string | null; studentId: string; plan: { name: string } },
+  amount: number,
+): Promise<void> {
+  await createNotification({
+    audience: "STUDENT",
+    studentId: sub.studentId,
+    level: "SUCCESS",
+    title: "Assinatura ativa",
+    body: `Pagamento confirmado! Escolha os cursos do plano ${sub.plan.name} para liberar as aulas.`,
+    category: "enrollment",
+    href: "/aluno/assinatura",
+  }).catch(swallow("subscription.activated.student"))
+
+  if (!sub.tenantId) return
+  const student = await prisma.student.findUnique({
+    where: { id: sub.studentId },
+    select: { nome: true },
+  })
+  await createNotification({
+    audience: "TENANT",
+    tenantId: sub.tenantId,
+    level: "SUCCESS",
+    title: `Assinatura paga — ${sub.plan.name}`,
+    body: `${student?.nome ?? "Aluno"} pagou ${amount.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} e já tem acesso aos cursos do plano.`,
+    category: "sale",
+    href: "/painel/vendas",
+  }).catch(swallow("subscription.activated.tenant"))
 }
 
 /**
@@ -351,6 +389,22 @@ export async function markSubscriptionPastDue(
  */
 export async function revokeSubscriptionForRefund(
   subscriptionId: string,
+  refunded?: { gateway: "ASAAS" | "MP"; externalPaymentId: string },
 ): Promise<void> {
+  // Tira o ciclo estornado da receita do painel (`SUBSCRIPTION_REVENUE_WHERE`).
+  // So linha PAGA: "cancelled" do MP tambem passa por aqui e, sem `paidAt`, nao
+  // ha dinheiro a devolver — marcar REFUNDED ali seria mentira no extrato.
+  if (refunded) {
+    await prisma.subscriptionPayment.updateMany({
+      where: {
+        subscriptionId,
+        paidAt: { not: null },
+        ...(refunded.gateway === "MP"
+          ? { mpPaymentId: refunded.externalPaymentId }
+          : { asaasPaymentId: refunded.externalPaymentId }),
+      },
+      data: { status: SUBSCRIPTION_REFUNDED_STATUS },
+    })
+  }
   await cancelSubscriptionAccess(subscriptionId, "REFUNDED", true)
 }

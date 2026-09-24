@@ -10,6 +10,7 @@ vi.mock("@/lib/prisma", () => ({
       updateMany: vi.fn(),
     },
     studentSubscription: { findUnique: vi.fn(), update: vi.fn() },
+    student: { findUnique: vi.fn(async () => ({ nome: "Ana Souza" })) },
   },
 }))
 vi.mock("@/lib/notifications", () => ({ createNotification: vi.fn(async () => null) }))
@@ -22,10 +23,12 @@ vi.mock("@/lib/logger", () => {
 
 import { prisma } from "@/lib/prisma"
 import { createNotification } from "@/lib/notifications"
+import { cancelSubscriptionAccess } from "./cancel"
 import {
   settleSubscriptionCycle,
   markSubscriptionPastDue,
   recordOpenSubscriptionCharge,
+  revokeSubscriptionForRefund,
 } from "./renew"
 
 const findPay = prisma.subscriptionPayment.findFirst as unknown as ReturnType<typeof vi.fn>
@@ -186,6 +189,50 @@ describe("settleSubscriptionCycle", () => {
   it("idempotencia olha o gateway certo", async () => {
     await settleSubscriptionCycle("sub_1", event({ gateway: "MP", externalPaymentId: "mp_9" }))
     expect(findPay.mock.calls[0][0].where).toEqual({ mpPaymentId: "mp_9" })
+  })
+})
+
+describe("1o pagamento avisa aluno e unidade", () => {
+  // A assinatura nao cria matricula no pagamento: sem estes avisos o aluno caia
+  // numa area sem curso e a unidade nao via venda — "o sistema nao deu baixa".
+  it("ativacao notifica o aluno (escolher cursos) e a unidade (venda)", async () => {
+    findSub.mockResolvedValue(sub({ tenantId: "t_1" }))
+    await settleSubscriptionCycle("sub_1", event())
+
+    expect(notify).toHaveBeenCalledWith(
+      expect.objectContaining({ audience: "STUDENT", studentId: "st_1", href: "/aluno/assinatura" }),
+    )
+    expect(notify).toHaveBeenCalledWith(
+      expect.objectContaining({ audience: "TENANT", tenantId: "t_1", href: "/painel/vendas" }),
+    )
+  })
+
+  it("renovacao (ja tinha startedAt) nao repete o aviso", async () => {
+    findSub.mockResolvedValue(sub({ tenantId: "t_1", startedAt: new Date("2026-07-20T12:00:00Z") }))
+    await settleSubscriptionCycle("sub_1", event())
+    expect(notify).not.toHaveBeenCalled()
+  })
+
+  it("re-entrega do 1o pagamento nao avisa de novo", async () => {
+    findPay.mockResolvedValue({ id: "sp_1", paidAt: PAID })
+    await settleSubscriptionCycle("sub_1", event())
+    expect(notify).not.toHaveBeenCalled()
+  })
+})
+
+describe("revokeSubscriptionForRefund", () => {
+  it("marca o ciclo PAGO como REFUNDED antes de revogar — tira da receita", async () => {
+    await revokeSubscriptionForRefund("sub_1", { gateway: "ASAAS", externalPaymentId: "pay_9" })
+    expect(updatePays).toHaveBeenCalledWith({
+      where: { subscriptionId: "sub_1", paidAt: { not: null }, asaasPaymentId: "pay_9" },
+      data: { status: "REFUNDED" },
+    })
+    expect(cancelSubscriptionAccess).toHaveBeenCalledWith("sub_1", "REFUNDED", true)
+  })
+
+  it("no MP casa pelo id do MP", async () => {
+    await revokeSubscriptionForRefund("sub_1", { gateway: "MP", externalPaymentId: "123" })
+    expect(updatePays.mock.calls[0][0].where).toMatchObject({ mpPaymentId: "123" })
   })
 })
 

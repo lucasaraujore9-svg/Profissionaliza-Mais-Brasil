@@ -8,7 +8,8 @@ export interface RecentSale {
   studentName: string
   courseName: string
   amount: number
-  status: "PENDING" | "ACTIVE" | "SUSPENDED" | "CANCELLED" | "COMPLETED"
+  /** Status de matrícula ou de assinatura — `SaleStatusBadge` conhece os dois. */
+  status: string
   createdAt: string
 }
 

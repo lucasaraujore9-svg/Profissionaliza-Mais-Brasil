@@ -1,13 +1,16 @@
 import { guardianRequirement, hasGuardian } from "@/lib/students/guardian"
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import type { Prisma } from "@prisma/client"
+import type { Prisma, SubscriptionStatus } from "@prisma/client"
 import { requirePainel } from "@/lib/auth/painel-guard"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import {
   deriveStudentDisplayStatus,
   countEnrollmentStatuses,
 } from "@/lib/students/display-status"
+
+/** Assinatura que da acesso hoje (inclui a em atraso, ainda na carencia). */
+const LIVE_SUBSCRIPTION_STATUSES: SubscriptionStatus[] = ["ACTIVE", "PAST_DUE"]
 
 export const GET = withRequestContext(
   { action: "painel.alunos.list", route: "/api/painel/alunos" },
@@ -25,16 +28,24 @@ export const GET = withRequestContext(
 
     // Filtro por situacao de matricula/pagamento. "Com curso"/"sem curso"
     // usam matriculas ativas/concluidas (mesma definicao de coursesCount).
+    //
+    // Assinante conta como "com curso": na assinatura a matricula so nasce
+    // quando o aluno abre um curso, e ate la quem pagou sumia do filtro de
+    // quem tem acesso.
     let enrollmentWhere: Prisma.StudentWhereInput = {}
     switch (enrollmentFilter) {
       case "com_curso":
         enrollmentWhere = {
-          enrollments: { some: { status: { in: ["ACTIVE", "COMPLETED"] } } },
+          OR: [
+            { enrollments: { some: { status: { in: ["ACTIVE", "COMPLETED"] } } } },
+            { subscriptions: { some: { status: { in: LIVE_SUBSCRIPTION_STATUSES } } } },
+          ],
         }
         break
       case "sem_curso":
         enrollmentWhere = {
           enrollments: { none: { status: { in: ["ACTIVE", "COMPLETED"] } } },
+          subscriptions: { none: { status: { in: LIVE_SUBSCRIPTION_STATUSES } } },
         }
         break
       case "pagamento_pendente":
@@ -75,6 +86,11 @@ export const GET = withRequestContext(
         include: {
           // Status das matriculas para derivar o status exibido (pago x pendente).
           enrollments: { select: { status: true } },
+          subscriptions: {
+            where: { status: { in: LIVE_SUBSCRIPTION_STATUSES } },
+            select: { plan: { select: { name: true } } },
+            take: 1,
+          },
         },
         orderBy: { createdAt: "desc" },
         take: 200,
@@ -131,6 +147,9 @@ export const GET = withRequestContext(
             status: deriveStudentDisplayStatus(s.status, counts),
             createdAt: s.createdAt.toISOString(),
             coursesCount: counts.paidEnrollments,
+            // Plano da assinatura paga, quando houver — a tela mostra "Assinante"
+            // em vez de "0 cursos" para quem pagou e ainda nao abriu curso.
+            subscriptionPlan: s.subscriptions[0]?.plan.name ?? null,
             plataformaAlunoId: s.plataformaAlunoId,
             nascimento: s.nascimento
               ? s.nascimento.toISOString().slice(0, 10)

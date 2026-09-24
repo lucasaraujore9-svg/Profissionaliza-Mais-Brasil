@@ -92,7 +92,10 @@ export async function applyAsaasSubscriptionEvent(
   if (event === "PAYMENT_REFUNDED" || event === "PAYMENT_CHARGEBACK_REQUESTED") {
     // Sem carência: ela existe para quem está tentando pagar, não para quem
     // pediu o dinheiro de volta.
-    await revokeSubscriptionForRefund(subscriptionId)
+    await revokeSubscriptionForRefund(subscriptionId, {
+      gateway: "ASAAS",
+      externalPaymentId: payment.id,
+    })
     return `assinatura ${subscriptionId}: estornada`
   }
 

@@ -1914,6 +1914,40 @@ do /admin E na vitrine (o aluno escolhe boleto).
   assinatura no boleto em cada gateway (sandbox ou real), conferindo o boleto na
   pagina, a liquidacao pelo webhook e, no MP, a reemissao de um boleto vencido.
 
+### Assinatura paga pela vitrine sumia do painel (2026-09-24)
+
+A Capacita Pro Brasil reclamou que "o sistema nao da baixa" nas assinaturas. O
+webhook estava certo: as 3 assinaturas liquidaram em menos de 1 min. O defeito
+era de VISIBILIDADE — a assinatura paga pela vitrine nao aparecia em tela
+nenhuma, nem para a unidade nem para o aluno.
+
+- **`/painel/vendas` filtrava `soldByUserId: { not: null }`** tambem nas
+  assinaturas: so venda direta. Venda de curso pela vitrine aparece em
+  Financeiro (vem de `Payment`); a assinatura nao aparecia em lugar nenhum.
+  Agora a lista traz todas as assinaturas ("Vendido por: Vitrine"). O recorte
+  de carteira (`ctx.scope.assinaturas`) continua valendo para quem nao tem
+  `vendas.viewAll`.
+- **Financeiro e dashboard so somavam `payments`.** O ciclo de assinatura mora em
+  `subscription_payments`. Predicado unico em `lib/subscriptions/revenue.ts`
+  (`SUBSCRIPTION_REVENUE_WHERE`: `paidAt` preenchido e status != REFUNDED),
+  somado a receita do mes/total, aos graficos (UNION no SQL cru), ao ticket
+  medio, as vendas recentes e a lista de pagamentos.
+- **Estorno nao marcava o ciclo.** `revokeSubscriptionForRefund` revogava o
+  acesso, mas a linha seguia CONFIRMED e contaria como receita. Agora recebe o
+  id do pagamento e grava `REFUNDED` (so em linha paga — o `cancelled` do MP
+  tambem passa por ali). A unica linha afetada em prod foi corrigida na mao.
+- **Ninguem era avisado na ativacao.** A assinatura nao cria matricula (ela
+  nasce quando o aluno escolhe o curso), entao o aluno entrava em `/aluno` e via
+  "Escolha seu primeiro curso" apontando para o catalogo de COMPRA. No 1o
+  pagamento (`startedAt` nulo) `settleSubscriptionCycle` notifica o aluno
+  (`/aluno/assinatura`) e a unidade (`/painel/vendas`). A home do aluno mostra
+  o card "Assinatura ativa -> Escolher cursos" e esconde o convite de compra.
+- `/painel/alunos`: assinante conta como "com curso" e ganha a marca
+  "Assinante" (antes aparecia com 0 cursos).
+- **Nao e defeito:** os ~190 avisos `matricula nao encontrada` da mesma conta
+  Asaas sao PIX direto na chave, faturas do NewGestor e outros produtos da
+  unidade — nenhum tem referencia `pmb_`/`enr_`.
+
 ### Bugs conhecidos (pendentes)
 
 - **Middleware file convention deprecado** no Next 16 (usar `proxy` em vez de `middleware`).

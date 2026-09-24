@@ -2,6 +2,10 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { requirePainel } from "@/lib/auth/painel-guard"
 import { withRequestContext } from "@/lib/observability/with-request-context"
+import {
+  SUBSCRIPTION_REFUNDED_STATUS,
+  SUBSCRIPTION_REVENUE_WHERE,
+} from "@/lib/subscriptions/revenue"
 
 export type DashboardPeriod = "today" | "7d" | "30d" | "90d" | "12m"
 
@@ -104,6 +108,10 @@ export const GET = withRequestContext(
       chartRows,
       recentSales,
       paidPaymentsCount,
+      subRevenueAgg,
+      subRevenuePrevAgg,
+      subPaidCount,
+      recentSubscriptions,
     ] = await Promise.all([
       // Receita: mpStatus="APPROVED" captura pagamentos aprovados de AMBOS os
       // gateways (MP e Asaas) — em fulfillEnrollment os dois gravam
@@ -161,20 +169,33 @@ export const GET = withRequestContext(
       // Mesmo escopo do card de receita — aqui em SQL cru, com o autor como
       // 5o parametro quando o papel nao tem `vendas.viewAll`.
       prisma.$queryRawUnsafe<Array<{ bucket: Date; revenue: number }>>(
+        // Ciclo de assinatura entra na mesma serie: ele mora em
+        // `subscription_payments`, e o autor da venda esta na assinatura.
         `SELECT date_trunc($1, paid_at) AS bucket,
                 COALESCE(SUM(amount)::float, 0) AS revenue
-         FROM payments
-         WHERE tenant_id = $2
-           AND mp_status = 'APPROVED'
-           AND paid_at >= $3
-           AND paid_at <= $4
-           ${scopedAuthor ? "AND sold_by_user_id = $5" : ""}
+         FROM (
+           SELECT paid_at, amount FROM payments
+           WHERE tenant_id = $2
+             AND mp_status = 'APPROVED'
+             AND paid_at >= $3
+             AND paid_at <= $4
+             ${scopedAuthor ? "AND sold_by_user_id = $6" : ""}
+           UNION ALL
+           SELECT sp.paid_at, sp.amount FROM subscription_payments sp
+           JOIN student_subscriptions ss ON ss.id = sp.subscription_id
+           WHERE sp.tenant_id = $2
+             AND sp.status <> $5
+             AND sp.paid_at >= $3
+             AND sp.paid_at <= $4
+             ${scopedAuthor ? "AND ss.sold_by_user_id = $6" : ""}
+         ) paid
          GROUP BY bucket
          ORDER BY bucket ASC`,
         cfg.bucket,
         ctx.tenantId,
         cfg.start,
         cfg.end,
+        SUBSCRIPTION_REFUNDED_STATUS,
         ...(scopedAuthor ? [scopedAuthor] : []),
       ),
       // Vendas recentes: apenas matrículas que viraram venda de fato
@@ -208,10 +229,61 @@ export const GET = withRequestContext(
           paidAt: { gte: cfg.start, lte: cfg.end },
         },
       }),
+      // Assinatura: o pagamento mora em `subscription_payments`. Sem estas
+      // consultas a assinatura paga nao entrava na receita da unidade. O
+      // recorte do papel vem da ASSINATURA (quem vendeu esta nela).
+      prisma.subscriptionPayment.aggregate({
+        _sum: { amount: true },
+        where: {
+          tenantId: ctx.tenantId,
+          subscription: ctx.scope.assinaturas,
+          ...SUBSCRIPTION_REVENUE_WHERE,
+          paidAt: { gte: cfg.start, lte: cfg.end },
+        },
+      }),
+      prisma.subscriptionPayment.aggregate({
+        _sum: { amount: true },
+        where: {
+          tenantId: ctx.tenantId,
+          subscription: ctx.scope.assinaturas,
+          ...SUBSCRIPTION_REVENUE_WHERE,
+          paidAt: { gte: cfg.previousStart, lte: cfg.previousEnd },
+        },
+      }),
+      prisma.subscriptionPayment.count({
+        where: {
+          tenantId: ctx.tenantId,
+          subscription: ctx.scope.assinaturas,
+          ...SUBSCRIPTION_REVENUE_WHERE,
+          paidAt: { gte: cfg.start, lte: cfg.end },
+        },
+      }),
+      // Assinatura contratada no periodo (1o ciclo pago = `startedAt`).
+      prisma.studentSubscription.findMany({
+        where: {
+          tenantId: ctx.tenantId,
+          ...ctx.scope.assinaturas,
+          startedAt: { gte: cfg.start, lte: cfg.end },
+        },
+        orderBy: { startedAt: "desc" },
+        take: 10,
+        select: {
+          id: true,
+          priceAtPurchase: true,
+          status: true,
+          startedAt: true,
+          createdAt: true,
+          student: { select: { nome: true } },
+          plan: { select: { name: true } },
+        },
+      }),
     ])
 
-    const revenue = Number(revenueAgg._sum.amount ?? 0)
-    const revenuePrev = Number(revenuePrevAgg._sum.amount ?? 0)
+    const revenue =
+      Number(revenueAgg._sum.amount ?? 0) + Number(subRevenueAgg._sum.amount ?? 0)
+    const revenuePrev =
+      Number(revenuePrevAgg._sum.amount ?? 0) +
+      Number(subRevenuePrevAgg._sum.amount ?? 0)
     const revenueChange = pctChange(revenue, revenuePrev)
     const studentsChange = pctChange(studentsCount, studentsPrevCount)
 
@@ -219,9 +291,8 @@ export const GET = withRequestContext(
       ? (enrollmentsApproved / enrollmentsTotal) * 100
       : null
 
-    const ticketAverage = paidPaymentsCount > 0
-      ? revenue / paidPaymentsCount
-      : 0
+    const paidCount = paidPaymentsCount + subPaidCount
+    const ticketAverage = paidCount > 0 ? revenue / paidCount : 0
 
     const chart = buildChartSeries(cfg, chartRows)
 
@@ -243,14 +314,26 @@ export const GET = withRequestContext(
           enrollmentsTotal,
         },
         revenueChart: chart,
-        recentSales: recentSales.map((sale) => ({
-          id: sale.id,
-          studentName: sale.student.nome,
-          courseName: sale.course.nome,
-          amount: Number(sale.finalAmount),
-          status: sale.status,
-          createdAt: sale.createdAt.toISOString(),
-        })),
+        recentSales: [
+          ...recentSales.map((sale) => ({
+            id: sale.id,
+            studentName: sale.student.nome,
+            courseName: sale.course.nome,
+            amount: Number(sale.finalAmount),
+            status: sale.status as string,
+            createdAt: sale.createdAt.toISOString(),
+          })),
+          ...recentSubscriptions.map((sub) => ({
+            id: `sub:${sub.id}`,
+            studentName: sub.student.nome,
+            courseName: `Assinatura ${sub.plan.name}`,
+            amount: Number(sub.priceAtPurchase),
+            status: sub.status as string,
+            createdAt: (sub.startedAt ?? sub.createdAt).toISOString(),
+          })),
+        ]
+          .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
+          .slice(0, 10),
       },
     })
   },

@@ -121,7 +121,12 @@ describe("handleMpCarnePayment", () => {
 
   it("estorno de verdade revoga, sem carência", async () => {
     await handleMpCarnePayment(tenant, "tok", payment({ status: "refunded" }))
-    expect(revoke).toHaveBeenCalledWith("sub_1")
+    // O id do pagamento vai junto: é ele que marca o ciclo como REFUNDED e o
+    // tira da receita do painel.
+    expect(revoke).toHaveBeenCalledWith("sub_1", {
+      gateway: "MP",
+      externalPaymentId: "9001",
+    })
   })
 
   it("boleto de outra unidade é recusado", async () => {

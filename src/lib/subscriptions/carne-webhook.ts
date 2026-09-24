@@ -88,7 +88,10 @@ export async function handleMpCarnePayment(
 
   if (payment.status === "refunded" || payment.status === "charged_back") {
     // Estorno de verdade: sem carência, como em qualquer assinatura.
-    await revokeSubscriptionForRefund(row.subscriptionId)
+    await revokeSubscriptionForRefund(row.subscriptionId, {
+      gateway: "MP",
+      externalPaymentId: paymentId,
+    })
     return { ok: true, note: `${label} ${payment.status}` }
   }
 
