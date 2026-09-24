@@ -11,12 +11,19 @@ export interface DnsRecord {
 
 interface DnsInstructionsProps {
   records: DnsRecord[]
+  domainKind?: "apex" | "subdomain" | null
+  customDomain?: string | null
 }
 
-export function DnsInstructions({ records }: DnsInstructionsProps) {
+export function DnsInstructions({
+  records,
+  domainKind,
+  customDomain,
+}: DnsInstructionsProps) {
   const [open, setOpen] = useState(true)
 
   if (records.length === 0) return null
+  const cnameValue = records.find((r) => r.type === "CNAME")?.value
 
   return (
     <div className="overflow-hidden rounded-xl border border-gray-200">
@@ -36,10 +43,19 @@ export function DnsInstructions({ records }: DnsInstructionsProps) {
       </button>
       {open && (
         <div className="px-4 py-4 text-xs text-gray-600">
-          <p>
-            Acesse o painel do seu provedor de DNS (Registro.br, Cloudflare,
-            GoDaddy) e crie os registros abaixo:
-          </p>
+          {domainKind === "subdomain" ? (
+            <p>
+              Acesse o painel de DNS do seu domínio principal (Registro.br,
+              Cloudflare, Hostinger, GoDaddy) e crie o registro abaixo. Não
+              altere os registros <code>@</code> nem <code>www</code> — eles
+              continuam servindo o seu site principal.
+            </p>
+          ) : (
+            <p>
+              Acesse o painel do seu provedor de DNS (Registro.br, Cloudflare,
+              GoDaddy) e crie os registros abaixo:
+            </p>
+          )}
           {/* Desktop: tabela */}
           <div className="mt-3 hidden overflow-x-auto rounded-lg border border-gray-200 sm:block">
             <table className="min-w-full divide-y divide-gray-200 text-xs">
@@ -107,6 +123,20 @@ export function DnsInstructions({ records }: DnsInstructionsProps) {
               </div>
             ))}
           </div>
+          {domainKind === "subdomain" && customDomain ? (
+            <p className="mt-3 text-[11px] text-gray-500">
+              Se o seu provedor pedir o nome completo no campo Nome, use{" "}
+              <code>{customDomain}</code>. Se já existir outro registro (A ou
+              CNAME) com esse mesmo nome, apague-o antes.
+            </p>
+          ) : null}
+          {cnameValue ? (
+            <p className="mt-3 text-[11px] text-gray-500">
+              Se o provedor completar o valor do CNAME com o seu domínio (ex:{" "}
+              <code>{cnameValue}.seudominio.com.br</code>), digite o valor com
+              um ponto no final: <code>{cnameValue}.</code>
+            </p>
+          ) : null}
           <p className="mt-3 text-[11px] text-gray-500">
             A propagação pode levar até 48h. Depois de configurar, clique em
             Verificar.

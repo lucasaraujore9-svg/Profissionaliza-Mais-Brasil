@@ -1,8 +1,8 @@
 // Resolucao do estado "apontado" de um dominio proprio.
 //
 // Um dominio so e considerado APLICAVEL (Tenant.domainVerified = true, badge
-// "Ativo" no painel) quando AS DUAS variantes — apex (registro A) e www
-// (registro CNAME) — estao simultaneamente:
+// "Ativo" no painel) quando TODAS as variantes — dominio raiz: apex (registro A)
+// e www (CNAME); subdominio: so ele (CNAME) — estao simultaneamente:
 //   1. verificadas na Vercel (posse confirmada), E
 //   2. com DNS apontado (config.misconfigured === false).
 //
@@ -15,7 +15,7 @@ import {
   getDomainConfig,
   type VercelDomainStatus,
 } from "./client"
-import { customDomainVariants } from "@/lib/tenant/urls"
+import { customDomainVariants } from "@/lib/tenant/custom-domain"
 
 export type CustomDomainStatus = "PENDING" | "ACTIVE"
 

@@ -8,13 +8,13 @@
 // canonico) isso ainda fazia o site PMB inteiro ser servido sob o dominio da
 // revenda.
 //
-// Este modulo reconcilia: para cada variante (apex + www) do dominio, se nao
+// Este modulo reconcilia: para cada variante do dominio (apex + www, ou so o subdominio), se nao
 // existe cert e o DNS aponta, emite um cert single-CN. Single-CN de proposito:
 // emitir um multi-SAN [apex, www] falharia por inteiro se apenas UMA variante
 // estivesse apontada (http-01 exige cada CN resolvendo).
 
 import { getDomainConfig, issueCert, listCertsForDomain } from "./client"
-import { customDomainVariants } from "@/lib/tenant/urls"
+import { customDomainVariants } from "@/lib/tenant/custom-domain"
 
 export type EnsureCertOutcome =
   // Todas as variantes ja tinham cert — nada a fazer.

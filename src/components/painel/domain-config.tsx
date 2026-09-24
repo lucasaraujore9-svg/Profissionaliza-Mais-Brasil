@@ -5,6 +5,7 @@ import { SubdomainDisplay } from "./subdomain-display"
 import {
   CustomDomainForm,
   type DomainStatus,
+  type DomainKind,
 } from "./custom-domain-form"
 import type { DnsRecord } from "./dns-instructions"
 
@@ -13,6 +14,7 @@ interface DomainInfo {
   vitrineDomain: string
   subdomainFull: string
   customDomain: string | null
+  domainKind: DomainKind | null
   status: DomainStatus
   dnsRecords: DnsRecord[]
   vercelConfigured?: boolean
@@ -108,6 +110,7 @@ export function DomainConfig() {
       ) : null}
       <CustomDomainForm
         customDomain={info.customDomain}
+        domainKind={info.domainKind}
         status={info.status}
         dnsRecords={info.dnsRecords}
         onAdd={handleAdd}

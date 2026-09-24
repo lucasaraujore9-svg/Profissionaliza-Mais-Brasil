@@ -12,13 +12,15 @@ import { resolveCustomDomainStatus } from "@/lib/vercel/domain-status"
 import { invalidateTenant } from "@/lib/redis/tenant-cache"
 import {
   appDomain as resolveAppDomain,
-  cnameTarget as resolveCnameTarget,
-  vercelApexIp as resolveApexIp,
   vitrineDomain as resolveVitrineDomain,
   apexDomain,
   wwwDomain,
-  customDomainVariants,
 } from "@/lib/tenant/urls"
+import {
+  customDomainKind,
+  customDomainVariants,
+  customDomainDnsRecords,
+} from "@/lib/tenant/custom-domain"
 import { swallow } from "@/lib/errors"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 
@@ -86,16 +88,11 @@ async function fetchTenantDomainInfo(tenantId: string) {
     applied,
     status,
     vercelConfigured: isVercelConfigured(),
-    // Dois registros: apex (@) via A e www via CNAME. CNAME no apex e proibido
-    // pela RFC do DNS e o Registro.br nao aceita nome vazio/@ em CNAME — por
-    // isso o apex aponta para o IP da Vercel via registro A. O www segue CNAME
-    // (valido em subdominio).
-    dnsRecords: tenant.customDomain
-      ? [
-          { type: "A", name: "@", value: resolveApexIp() },
-          { type: "CNAME", name: "www", value: resolveCnameTarget() },
-        ]
-      : [],
+    // Dominio raiz: A em "@" (CNAME no apex e proibido pela RFC e o
+    // Registro.br recusa) + CNAME em "www". Subdominio: um CNAME so, no proprio
+    // prefixo — instruir "@" ali mandaria a unidade apontar o dominio PRINCIPAL.
+    domainKind: tenant.customDomain ? customDomainKind(tenant.customDomain) : null,
+    dnsRecords: tenant.customDomain ? customDomainDnsRecords(tenant.customDomain) : [],
     verification,
   }
 }
@@ -153,8 +150,8 @@ export const POST = withRequestContext(
       )
     }
 
-    // Armazenamos sempre a forma apex (sem `www.`); registramos as DUAS
-    // variantes na Vercel para que tanto o apex quanto o www roteiem.
+    // Armazenamos sempre a forma sem `www.`. Dominio raiz registra apex + www
+    // na Vercel; subdominio registra so ele mesmo.
     const apex = apexDomain(parsed.data.domain)
     const [apexHost, wwwHost] = customDomainVariants(parsed.data.domain)
     const appDomain = resolveAppDomain()
@@ -171,7 +168,7 @@ export const POST = withRequestContext(
 
     // Conflito: qualquer variante (apex ou www) ja usada por outro revendedor.
     const existing = await prisma.tenant.findFirst({
-      where: { customDomain: { in: [apexHost, wwwHost] } },
+      where: { customDomain: { in: [apexHost, wwwDomain(apexHost)] } },
       select: { id: true },
     })
     if (existing && existing.id !== ctx.tenantId) {
@@ -204,7 +201,9 @@ export const POST = withRequestContext(
         { status: 502 },
       )
     }
-    await addProjectDomain(wwwHost).catch(swallow("painel.dominio.add.www"))
+    if (wwwHost) {
+      await addProjectDomain(wwwHost).catch(swallow("painel.dominio.add.www"))
+    }
 
     await prisma.tenant.update({
       where: { id: tenant.id },
@@ -243,7 +242,9 @@ export const DELETE = withRequestContext(
       )
     }
 
-    // Remove AS DUAS variantes (apex + www) do projeto na Vercel.
+    // Remove apex + www do projeto na Vercel. O www vai sempre (best-effort):
+    // subdominios cadastrados antes da distincao raiz/subdominio tambem
+    // anexaram um `www.<subdominio>`.
     try {
       await removeProjectDomain(apexDomain(tenant.customDomain))
     } catch (error) {

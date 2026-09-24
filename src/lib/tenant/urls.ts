@@ -100,12 +100,8 @@ export function wwwDomain(domain: string): string {
   return `www.${apexDomain(domain)}`
 }
 
-// As duas variantes [apex, www] que devem ser anexadas na Vercel ao cadastrar
-// um dominio proprio. Ex: cliente.com.br → ["cliente.com.br", "www.cliente.com.br"]
-export function customDomainVariants(domain: string): [string, string] {
-  const apex = apexDomain(domain)
-  return [apex, `www.${apex}`]
-}
+// As variantes a anexar na Vercel (apex + www so quando o dominio e RAIZ; um
+// subdominio e ele mesmo) moram em ./custom-domain (customDomainVariants).
 
 // Dominio proprio "APLICADO" — retorna o customDomain SOMENTE quando ja foi
 // verificado (Tenant.domainVerified === true), isto e, os DOIS registros DNS

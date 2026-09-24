@@ -19,6 +19,7 @@ import {
 import { DnsInstructions, type DnsRecord } from "./dns-instructions"
 
 export type DomainStatus = "NONE" | "PENDING" | "ACTIVE" | "ERROR"
+export type DomainKind = "apex" | "subdomain"
 
 const statusTone: Record<DomainStatus, BadgeTone> = {
   NONE: "neutral",
@@ -36,6 +37,7 @@ const statusLabel: Record<DomainStatus, string> = {
 
 interface CustomDomainFormProps {
   customDomain: string | null
+  domainKind: DomainKind | null
   status: DomainStatus
   dnsRecords: DnsRecord[]
   onAdd: (domain: string) => Promise<void>
@@ -45,6 +47,7 @@ interface CustomDomainFormProps {
 
 export function CustomDomainForm({
   customDomain,
+  domainKind,
   status,
   dnsRecords,
   onAdd,
@@ -107,8 +110,10 @@ export function CustomDomainForm({
         Domínio personalizado
       </h3>
       <p className="mt-1 text-xs text-gray-600">
-        Use o seu próprio endereço (ex: <code>suaempresa.com.br</code>) para
-        fortalecer a marca na vitrine.
+        Use o seu próprio endereço — o domínio principal (ex:{" "}
+        <code>suaempresa.com.br</code>) ou um subdomínio dele (ex:{" "}
+        <code>cursos.suaempresa.com.br</code>) — para fortalecer a marca na
+        vitrine.
       </p>
 
       {!customDomain && (
@@ -117,7 +122,7 @@ export function CustomDomainForm({
           <div className="mt-1.5 flex gap-2">
             <Input
               id="custom-domain"
-              placeholder="meudominio.com.br"
+              placeholder="meudominio.com.br ou cursos.meudominio.com.br"
               className="flex-1"
               value={input}
               onChange={(e) => setInput(e.target.value)}
@@ -156,11 +161,12 @@ export function CustomDomainForm({
               </div>
               {status === "PENDING" && (
                 <p className="mt-2 max-w-md text-xs text-amber-700">
-                  Configure os 2 registros DNS abaixo no seu provedor de domínio.
-                  Enquanto não estiverem apontados, a vitrine continua no
+                  {domainKind === "subdomain"
+                    ? "Crie o registro CNAME abaixo no seu provedor de domínio. Ele aponta só este subdomínio — o site do seu domínio principal continua como está."
+                    : "Configure os 2 registros DNS abaixo no seu provedor de domínio."}{" "}
+                  Enquanto não estiver apontado, a vitrine continua no
                   subdomínio oficial. Depois de configurar, clique em{" "}
-                  <strong>Verificar</strong> — o domínio é aplicado assim que os
-                  dois registros forem confirmados.
+                  <strong>Verificar</strong>.
                 </p>
               )}
               {status === "ACTIVE" && (
@@ -226,7 +232,11 @@ export function CustomDomainForm({
 
       {customDomain && dnsRecords.length > 0 && (
         <div className="mt-6">
-          <DnsInstructions records={dnsRecords} />
+          <DnsInstructions
+            records={dnsRecords}
+            domainKind={domainKind}
+            customDomain={customDomain}
+          />
         </div>
       )}
     </div>

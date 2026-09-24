@@ -4,7 +4,7 @@ import { requirePainel } from "@/lib/auth/painel-guard"
 import { verifyProjectDomain } from "@/lib/vercel/client"
 import { resolveCustomDomainStatus } from "@/lib/vercel/domain-status"
 import { ensureCustomDomainCert } from "@/lib/vercel/ensure-cert"
-import { customDomainVariants } from "@/lib/tenant/urls"
+import { customDomainVariants } from "@/lib/tenant/custom-domain"
 import { invalidateTenant } from "@/lib/redis/tenant-cache"
 import { swallow } from "@/lib/errors"
 import { withRequestContext } from "@/lib/observability/with-request-context"
@@ -27,7 +27,7 @@ export const POST = withRequestContext(
       )
     }
 
-    // Dispara a verificação de posse nas DUAS variantes (apex + www). Best-effort:
+    // Dispara a verificação de posse em cada variante (apex + www, ou só o subdomínio). Best-effort:
     // se a Vercel ainda não conseguir verificar, seguimos para a checagem de
     // estado real abaixo, que é quem decide se o domínio pode ser aplicado.
     const variants = customDomainVariants(tenant.customDomain)
@@ -38,7 +38,7 @@ export const POST = withRequestContext(
     )
 
     try {
-      // Fonte da verdade: os 2 registros precisam estar apontados (DNS) E
+      // Fonte da verdade: os registros precisam estar apontados (DNS) E
       // verificados (posse) para o domínio ser aplicado (domainVerified=true).
       const resolved = await resolveCustomDomainStatus(tenant.customDomain)
 
