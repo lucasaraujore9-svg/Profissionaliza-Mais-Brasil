@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { discardAbandonedCheckouts } from "@/lib/subscriptions/abandoned"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { rateLimit, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
 import { isPmbAppHost } from "@/lib/tenant/urls"
@@ -159,15 +160,9 @@ export const POST = withRequestContext(
     // Limpa as tentativas abandonadas do próprio aluno: sem isto elas se
     // acumulam e a primeira delas continuaria aparecendo no menu como
     // "Minha assinatura" (o layout conta PENDING).
-    await prisma.studentSubscription.deleteMany({
-      where: {
-        studentId: student.id,
-        tenantId: null,
-        status: "PENDING",
-        createdAt: { lt: pendingCutoff },
-        payments: { none: {} },
-      },
-    })
+    // Pendente largada: apaga só o que nunca chegou ao gateway; o resto é
+    // cancelado lá antes (ver `lib/subscriptions/abandoned.ts`).
+    await discardAbandonedCheckouts(student.id, null, pendingCutoff)
 
     // Pagador: o responsável vence quando está na ficha. `resolvePayer` só
     // aceita `PAYER_SELECT`, então um select mais estreito nem compila.

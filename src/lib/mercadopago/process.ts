@@ -463,10 +463,19 @@ export async function processMpWebhook(args: ProcessArgs): Promise<void> {
       const subscriptionId = payment.external_reference.slice("pmb_sub_".length)
       const sub = await prisma.studentSubscription.findUnique({
         where: { id: subscriptionId },
-        select: { id: true },
+        select: { id: true, tenantId: true },
       })
       if (!sub) {
         await markLog(logId, true, `assinatura ${subscriptionId} nao encontrada`)
+        return
+      }
+      // Anti cross-tenant: o `external_reference` e escolhido por quem cria o
+      // pagamento. Sem esta trava, uma unidade criaria na PROPRIA conta MP um
+      // pagamento `pmb_sub_<id de outra loja>`, cancelaria, e revogaria o
+      // assinante alheio. Mesma regra do carne (`handleMpCarnePayment`).
+      const expectedTenantId = tenant.isPmbVitrine ? null : tenant.id
+      if (sub.tenantId !== expectedTenantId) {
+        await markLog(logId, false, `assinatura ${sub.id} de outro tenant`)
         return
       }
 
@@ -489,6 +498,22 @@ export async function processMpWebhook(args: ProcessArgs): Promise<void> {
             : `assinatura ${sub.id}: ciclo ja registrado`,
         )
         return
+      }
+
+      if (payment.status === "cancelled") {
+        // `cancelled` no MP e pagamento que NUNCA foi aprovado (PIX expirado,
+        // cobranca desistida) — estorno de pagamento aprovado chega como
+        // `refunded`. So revoga se ESTE pagamento chegou a liquidar um ciclo:
+        // senao o PIX vencido de quem acabou pagando no cartao cancelava a
+        // assinatura ja paga e apagava o progresso do aluno.
+        const paid = await prisma.subscriptionPayment.findFirst({
+          where: { subscriptionId: sub.id, mpPaymentId: String(payment.id), paidAt: { not: null } },
+          select: { id: true },
+        })
+        if (!paid) {
+          await markLog(logId, true, `assinatura ${sub.id}: pagamento nao pago cancelado`)
+          return
+        }
       }
 
       if (

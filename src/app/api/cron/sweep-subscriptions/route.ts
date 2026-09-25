@@ -13,6 +13,7 @@ import {
   revokeEndedSubscriptionAccess,
 } from "@/lib/subscriptions/cancel"
 import { LIVE_ENROLLMENT_STATUSES } from "@/lib/subscriptions/access"
+import { expireStalePendingSubscriptions } from "@/lib/subscriptions/abandoned"
 
 export const maxDuration = 300
 export const dynamic = "force-dynamic"
@@ -38,6 +39,9 @@ export const dynamic = "force-dynamic"
  *      cancelamento pedido pelo aluno mantem o acesso ate o fim do ciclo, e as
  *      fases acima so olham ACTIVE/PAST_DUE — os cursos ficavam abertos para
  *      sempre. Tambem refaz revogacoes que falharam antes.
+ *   4. PENDENTE sem pagamento ha mais de `STALE_PENDING_DAYS` -> cancela (e
+ *      encerra a cobranca no gateway). Sem isto ela travava para sempre toda
+ *      venda direta nova ao aluno e deixava recorrencia viva no gateway.
  */
 async function processSubscriptions() {
   const now = new Date()
@@ -47,6 +51,7 @@ async function processSubscriptions() {
     cancelled: 0,
     endedAccessRevoked: 0,
     endedAccessAdopted: 0,
+    stalePendingCancelled: 0,
     errors: [] as string[],
   }
 
@@ -128,6 +133,11 @@ async function processSubscriptions() {
       result.errors.push(`ended subscription ${ended[i].id}: ${msg}`)
     }
   })
+
+  // ── Fase 4: pendente que ninguem pagou → cancela ──
+  const stale = await expireStalePendingSubscriptions(now)
+  result.stalePendingCancelled = stale.cancelled
+  result.errors.push(...stale.errors)
 
   contextLogger().info(
     { event: "cron.sweep_subscriptions", ...result, graceDays: SUBSCRIPTION_GRACE_DAYS },

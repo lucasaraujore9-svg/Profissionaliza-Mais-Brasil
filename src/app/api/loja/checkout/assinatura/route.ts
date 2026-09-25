@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { discardAbandonedCheckouts } from "@/lib/subscriptions/abandoned"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { rateLimit, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
 import { upsertStudent, StudentEmailConflictError } from "@/lib/students/upsert"
@@ -123,7 +124,14 @@ export const POST = withRequestContext(
     }
     const data = parsed.data
 
-    if (data.paymentMethod === "CREDIT_CARD" && (!data.creditCard || !data.creditCardHolder)) {
+    // Cartão aberto só existe no Asaas. No MP o browser tokeniza e manda só
+    // `cardToken` — exigir `creditCard` aqui recusava TODA venda no cartão das
+    // lojas MP (quem confere o token é `createSubscriptionAtGateway`).
+    if (
+      gateway === "ASAAS" &&
+      data.paymentMethod === "CREDIT_CARD" &&
+      (!data.creditCard || !data.creditCardHolder)
+    ) {
       return NextResponse.json({ error: "Dados do cartão obrigatórios" }, { status: 400 })
     }
 
@@ -236,15 +244,9 @@ export const POST = withRequestContext(
       )
     }
 
-    await prisma.studentSubscription.deleteMany({
-      where: {
-        studentId: student.id,
-        tenantId: tenant.id,
-        status: "PENDING",
-        createdAt: { lt: pendingCutoff },
-        payments: { none: {} },
-      },
-    })
+    // Pendente largada: apaga só o que nunca chegou ao gateway; o resto é
+    // cancelado lá antes (ver `lib/subscriptions/abandoned.ts`).
+    await discardAbandonedCheckouts(student.id, tenant.id, pendingCutoff)
 
     const payerSource = await prisma.student.findUniqueOrThrow({
       where: { id: student.id },

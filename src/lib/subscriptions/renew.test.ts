@@ -25,6 +25,7 @@ import { prisma } from "@/lib/prisma"
 import { createNotification } from "@/lib/notifications"
 import { cancelSubscriptionAccess } from "./cancel"
 import {
+  cycleBase,
   settleSubscriptionCycle,
   markSubscriptionPastDue,
   recordOpenSubscriptionCharge,
@@ -410,5 +411,35 @@ describe("periodicidade congelada", () => {
     await markSubscriptionPastDue("sub_1")
     expect(updateSub).not.toHaveBeenCalled()
     expect(notify).not.toHaveBeenCalled()
+  })
+})
+
+describe("cycleBase", () => {
+  const d = (iso: string) => new Date(iso)
+
+  it("pagou ANTES do vencimento: o ciclo conta do vencimento (caso real Asaas D+3)", () => {
+    // Pago 23/09, vence 26/09: o proximo boleto vence 26/10 e o periodo nao pode
+    // acabar antes dele.
+    expect(cycleBase(null, { paidAt: d("2026-09-23"), dueDate: d("2026-09-26") })).toEqual(
+      d("2026-09-26"),
+    )
+  })
+
+  it("pagou DEPOIS do vencimento: conta do pagamento (sem credito retroativo)", () => {
+    expect(cycleBase(null, { paidAt: d("2026-09-30"), dueDate: d("2026-09-26") })).toEqual(
+      d("2026-09-30"),
+    )
+  })
+
+  it("renovacao antecipada nao encurta o ciclo ja pago", () => {
+    expect(
+      cycleBase(d("2026-10-26"), { paidAt: d("2026-10-20"), dueDate: d("2026-10-26") }),
+    ).toEqual(d("2026-10-26"))
+  })
+
+  it("vencimento distante nao vira acesso de graca ate la", () => {
+    expect(cycleBase(null, { paidAt: d("2026-09-23"), dueDate: d("2026-12-26") })).toEqual(
+      d("2026-09-23"),
+    )
   })
 })

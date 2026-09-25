@@ -144,8 +144,7 @@ export async function settleSubscriptionCycle(
   // (renovacao antecipada nao encurta o que ja foi pago) e "agora" quando ja
   // passou (nao ha credito retroativo a conceder).
   const now = event.paidAt
-  const base =
-    sub.currentPeriodEnd && sub.currentPeriodEnd > now ? sub.currentPeriodEnd : now
+  const base = cycleBase(sub.currentPeriodEnd, event)
 
   if (!(await recordPaid(sub.tenantId))) return { settled: false }
 
@@ -186,6 +185,35 @@ export async function settleSubscriptionCycle(
   }
 
   return { settled: true }
+}
+
+/** Teto para ancorar o ciclo no vencimento: nada alem de um mes a frente. */
+const MAX_DUE_ANCHOR_MS = 31 * 24 * 60 * 60 * 1000
+
+/**
+ * De onde o ciclo pago comeca a contar.
+ *
+ * O vencimento entra na conta: o Asaas agenda a cobranca seguinte no MESMO dia
+ * do mes do 1o vencimento (PIX/boleto vencem em D+3). Contar so do pagamento
+ * fazia o periodo de quem paga ANTES do vencimento acabar 3 dias antes da
+ * cobranca seguinte existir — a varredura marcava atraso sem boleto vencido e
+ * cancelava (revogando os cursos) no meio da carencia prometida de 7 dias.
+ *
+ * O teto impede que um vencimento distante vire acesso de graca ate la.
+ */
+export function cycleBase(
+  currentPeriodEnd: Date | null,
+  event: Pick<CycleEvent, "paidAt" | "dueDate">,
+): Date {
+  let base = event.paidAt
+  if (
+    event.dueDate > base &&
+    event.dueDate.getTime() - base.getTime() <= MAX_DUE_ANCHOR_MS
+  ) {
+    base = event.dueDate
+  }
+  if (currentPeriodEnd && currentPeriodEnd > base) base = currentPeriodEnd
+  return base
 }
 
 async function notifySubscriptionActivated(

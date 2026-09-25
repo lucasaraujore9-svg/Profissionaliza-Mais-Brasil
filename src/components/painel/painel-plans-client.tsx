@@ -578,7 +578,13 @@ export function PainelPlansClient({
                       </button>
                       <button
                         type="button"
-                        onClick={() => patch(p.id, { isFeatured: !p.isFeatured })}
+                        onClick={() =>
+                          // Plano próprio fala `featured` (o schema de plano
+                          // descartava `isFeatured` calado e respondia 200).
+                          own
+                            ? patch(p.id, { featured: !p.isFeatured })
+                            : patch(p.id, { isFeatured: !p.isFeatured })
+                        }
                         disabled={savingId === p.id}
                         className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-700 disabled:opacity-60"
                       >

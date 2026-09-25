@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
+import { discardAbandonedCheckouts } from "@/lib/subscriptions/abandoned"
 import { requireStudentSession } from "@/lib/auth/student-session"
 import { rateLimitByKey, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
 import { withRequestContext } from "@/lib/observability/with-request-context"
@@ -135,15 +136,9 @@ export const POST = withRequestContext(
       )
     }
 
-    await prisma.studentSubscription.deleteMany({
-      where: {
-        studentId: student.id,
-        tenantId: scopeTenantId,
-        status: "PENDING",
-        createdAt: { lt: pendingCutoff },
-        payments: { none: {} },
-      },
-    })
+    // Pendente largada: apaga só o que nunca chegou ao gateway; o resto é
+    // cancelado lá antes (ver `lib/subscriptions/abandoned.ts`).
+    await discardAbandonedCheckouts(student.id, scopeTenantId, pendingCutoff)
 
     const payerSource = await prisma.student.findUniqueOrThrow({
       where: { id: student.id },

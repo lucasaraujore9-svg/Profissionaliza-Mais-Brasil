@@ -19,6 +19,11 @@ vi.mock("@/lib/subscriptions/cancel", () => ({
   revokeEndedSubscriptionAccess: vi.fn(),
 }))
 
+// Fase 4 (pendente sem pagamento) tem teste próprio em abandoned.test.ts.
+vi.mock("@/lib/subscriptions/abandoned", () => ({
+  expireStalePendingSubscriptions: vi.fn(async () => ({ cancelled: 0, errors: [] })),
+}))
+
 import { prisma } from "@/lib/prisma"
 import { revokeEndedSubscriptionAccess } from "@/lib/subscriptions/cancel"
 import { POST } from "./route"

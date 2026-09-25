@@ -12,6 +12,8 @@ vi.mock("@/lib/prisma", () => {
     enrollment: { findFirst: vi.fn() },
     tenant: { findUnique: vi.fn() },
     webhookLog: { update: vi.fn() },
+    studentSubscription: { findUnique: vi.fn() },
+    subscriptionPayment: { findFirst: vi.fn() },
   }
   return { prisma }
 })
@@ -48,6 +50,11 @@ vi.mock("@/lib/subscriptions/carne-webhook", async (importOriginal) => ({
     .isMpCarneReference,
   handleMpCarnePayment: vi.fn(async () => ({ ok: true, note: "boleto tratado" })),
 }))
+vi.mock("@/lib/subscriptions/renew", () => ({
+  settleSubscriptionCycle: vi.fn(async () => ({ settled: true })),
+  revokeSubscriptionForRefund: vi.fn(async () => undefined),
+  markSubscriptionPastDue: vi.fn(async () => undefined),
+}))
 vi.mock("@/lib/logger", () => ({
   contextLogger: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }),
 }))
@@ -63,12 +70,15 @@ import {
 import { validateMpWebhookSignature } from "./webhook"
 import { processMpWebhook } from "./process"
 import { handleMpCarnePayment } from "@/lib/subscriptions/carne-webhook"
+import { revokeSubscriptionForRefund } from "@/lib/subscriptions/renew"
 
 const p = prisma as unknown as {
   payment: { findUnique: ReturnType<typeof vi.fn> }
   enrollment: { findFirst: ReturnType<typeof vi.fn> }
   tenant: { findUnique: ReturnType<typeof vi.fn> }
   webhookLog: { update: ReturnType<typeof vi.fn> }
+  studentSubscription: { findUnique: ReturnType<typeof vi.fn> }
+  subscriptionPayment: { findFirst: ReturnType<typeof vi.fn> }
 }
 const getPaymentMock = getPayment as unknown as ReturnType<typeof vi.fn>
 const fulfillMock = fulfillFromMpPayment as unknown as ReturnType<typeof vi.fn>
@@ -255,5 +265,38 @@ describe("processMpWebhook — roteamento do dinheiro (QA-013)", () => {
         data: expect.objectContaining({ processed: true, error: expect.stringContaining("enrollment nao encontrado") }),
       }),
     )
+  })
+})
+
+describe("processMpWebhook — assinatura de aluno (pmb_sub_)", () => {
+  const revokeMock = revokeSubscriptionForRefund as unknown as ReturnType<typeof vi.fn>
+  const subPayment = (status: string) => ({ ...mpPayment(status), external_reference: "pmb_sub_s1" })
+
+  it("PIX expirado (`cancelled`, nunca pago) NAO revoga a assinatura ja paga no cartao", async () => {
+    getPaymentMock.mockResolvedValue(subPayment("cancelled"))
+    p.studentSubscription.findUnique.mockResolvedValue({ id: "s1", tenantId: "t1" })
+    p.subscriptionPayment.findFirst.mockResolvedValue(null)
+
+    await processMpWebhook(args())
+
+    expect(revokeMock).not.toHaveBeenCalled()
+  })
+
+  it("estorno (`refunded`) revoga", async () => {
+    getPaymentMock.mockResolvedValue(subPayment("refunded"))
+    p.studentSubscription.findUnique.mockResolvedValue({ id: "s1", tenantId: "t1" })
+
+    await processMpWebhook(args())
+
+    expect(revokeMock).toHaveBeenCalledWith("s1", { gateway: "MP", externalPaymentId: "pay_1" })
+  })
+
+  it("assinatura de OUTRA loja: nao mexe (external_reference e escolhido por quem cria o pagamento)", async () => {
+    getPaymentMock.mockResolvedValue(subPayment("refunded"))
+    p.studentSubscription.findUnique.mockResolvedValue({ id: "s1", tenantId: "outra_loja" })
+
+    await processMpWebhook(args())
+
+    expect(revokeMock).not.toHaveBeenCalled()
   })
 })

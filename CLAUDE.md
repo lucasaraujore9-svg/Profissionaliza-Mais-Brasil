@@ -1948,6 +1948,44 @@ nenhuma, nem para a unidade nem para o aluno.
   Asaas sao PIX direto na chave, faturas do NewGestor e outros produtos da
   unidade — nenhum tem referencia `pmb_`/`enr_`.
 
+### Revisao da estrutura de assinatura (2026-09-25)
+
+Revisao em 3 frentes (pagamento, acesso, painel/admin) sobre o fluxo inteiro.
+Corrigido:
+
+- **Periodo pago acabava ANTES da proxima cobranca.** O Asaas agenda PIX/boleto
+  em D+3 e repete no mesmo dia do mes; o ciclo contava do PAGAMENTO. Quem pagava
+  antes do vencimento ficava com o periodo terminando 3 dias antes do proximo
+  boleto existir: a varredura marcava atraso sem nada vencido e cancelava
+  (revogando os cursos, e na EA apagando progresso) no meio da carencia de 7
+  dias. `cycleBase` (renew.ts) ancora no vencimento quando ele e posterior ao
+  pagamento, com teto de 31 dias. As 3 assinaturas ativas foram estendidas a
+  mao ate o proximo vencimento.
+- **Loja MP nao vendia assinatura no cartao** (400 "Dados do cartão
+  obrigatórios"): a rota exigia o cartao aberto, que so existe no Asaas; no MP
+  o browser manda so `cardToken`.
+- **Webhook MP `pmb_sub_`:** `cancelled` (PIX expirado, nunca pago) revogava a
+  assinatura ja paga no cartao; agora so revoga se aquele pagamento liquidou um
+  ciclo. E passou a conferir a loja dona (mesma trava do carne): o
+  `external_reference` e escolhido por quem cria o pagamento.
+- **Pendente abandonada** (`lib/subscriptions/abandoned.ts`): os checkouts
+  APAGAVAM a pendente anterior sem olhar o gateway — recorrencia viva orfa,
+  venda direta do vendedor sumindo com o link. Agora so se apaga o que nunca
+  chegou ao gateway (`externalReference` nulo) e nunca venda direta; o resto e
+  cancelado pelo nucleo. Fase 4 da `sweep-subscriptions`: pendente sem
+  pagamento ha 7 dias e cancelada (encerra a cobranca no gateway) — era o que
+  travava para sempre toda venda direta nova ao aluno.
+- Relatorio /painel/relatorios (financeiro) passou a somar assinatura, e o
+  "Destacar" de plano proprio da unidade mandava a chave errada (200 sem efeito).
+
+**Pendente, registrado e nao corrigido:** matricula avulsa PENDENTE reaproveitada
+ao abrir o curso pela assinatura (release.ts) fica presa a ela; o player nao
+reconfere a assinatura (ate 24h de acesso apos a carencia, ate a varredura);
+/admin nao lista assinaturas da vitrine PMB nem soma `subscription_payments`;
+slug de plano PMB e de plano da unidade podem colidir na mesma vitrine; trocar a
+periodicidade de plano PMB mantem o preco de override das unidades;
+/aluno/assinatura (aluno logado) segue sem a conta da unidade (502).
+
 ### Bugs conhecidos (pendentes)
 
 - **Middleware file convention deprecado** no Next 16 (usar `proxy` em vez de `middleware`).
