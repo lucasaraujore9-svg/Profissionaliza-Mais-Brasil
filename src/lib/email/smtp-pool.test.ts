@@ -17,6 +17,7 @@ vi.mock("@/lib/prisma", () => ({
 
 import { prisma } from "@/lib/prisma"
 import {
+  SMTP_MAX_WAIT_MS,
   sendViaSmtpPool,
   sentToday,
   shouldAlert,
@@ -122,6 +123,41 @@ describe("disjuntor de caixa suspensa", () => {
     // `NOT (a AND b)` o NULL descartava todas e o pool parou em 28/09.
     expect(sql).toContain("last_error_at IS NULL")
     expect(sql).not.toMatch(/NOT \(last_error_at/)
+  })
+})
+
+describe("distribuição no tempo (intervalo mínimo por caixa)", () => {
+  it("todas no intervalo: espera a próxima vaga e envia, em vez de desistir", async () => {
+    p.$queryRaw
+      .mockResolvedValueOnce([]) // reserva: todas usadas há < 15s
+      .mockResolvedValueOnce([{ wait_ms: 5 }]) // próxima vaga em 5ms
+      .mockResolvedValueOnce([account("a")])
+    sendMail.mockResolvedValueOnce({ messageId: "m1" })
+
+    const result = await sendViaSmtpPool({ to: "x@y.com", subject: "s", html: "h" })
+
+    expect(result).toEqual({ messageId: "m1", account: "a@pmb.com.br" })
+    expect(p.$queryRaw).toHaveBeenCalledTimes(3)
+  })
+
+  it("vaga além do teto de espera: não dorme e cai no fallback", async () => {
+    p.$queryRaw
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ wait_ms: SMTP_MAX_WAIT_MS + 1 }])
+
+    expect(await sendViaSmtpPool({ to: "x@y.com", subject: "s", html: "h" })).toBeNull()
+    expect(sendMail).not.toHaveBeenCalled()
+  })
+
+  it("a reserva exige o intervalo e escolhe a caixa ociosa há mais tempo", async () => {
+    p.$queryRaw.mockResolvedValue([])
+    await sendViaSmtpPool({ to: "x@y.com", subject: "s", html: "h" })
+    const sql = (p.$queryRaw.mock.calls[0][0] as string[]).join("?")
+    // Sem o intervalo, o rodízio despejava a rajada inteira em segundos e a
+    // Hostinger suspendia o domínio (25/09).
+    expect(sql).toContain("last_sent_at <= now() - make_interval")
+    expect(sql).toContain("ORDER BY last_sent_at ASC NULLS FIRST")
+    expect(sql).toContain("last_sent_at = now()")
   })
 })
 

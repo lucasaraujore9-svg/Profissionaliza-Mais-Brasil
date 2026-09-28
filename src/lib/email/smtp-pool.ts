@@ -18,6 +18,22 @@ import { contextLogger } from "@/lib/logger"
  * = contador zerado).
  */
 
+/**
+ * Intervalo minimo entre dois envios da MESMA caixa. A Hostinger suspende a
+ * conta inteira do dominio por RAJADA (25/09: ~12/min do mesmo template), nao
+ * por cota diaria — o contador por dia nao protegia. Com 5 caixas isso da no
+ * maximo 20/min no dominio; o pico real e o cron das 03:01 (~29 no minuto).
+ * ponytail: valor fixo; se a Hostinger voltar a suspender, subir aqui.
+ */
+export const SMTP_MIN_GAP_SECONDS = 15
+
+/**
+ * Quanto um envio espera por uma caixa sair do intervalo antes de desistir do
+ * pool. A espera acontece dentro da requisicao (sem fila): numa rajada, o
+ * cron/checkout fica mais lento em vez de derrubar o dominio.
+ */
+export const SMTP_MAX_WAIT_MS = 60_000
+
 /** Fracao do limite diario que dispara o alerta ao SUPER_ADMIN. */
 export const SMTP_ALERT_RATIO = 0.8
 
@@ -80,6 +96,7 @@ async function reserve(exclude: string[]): Promise<ReservedAccount | null> {
     UPDATE smtp_accounts
        SET sent_count = CASE WHEN sent_day = ${today} THEN sent_count + 1 ELSE 1 END,
            sent_day = ${today},
+           last_sent_at = now(),
            updated_at = now()
      WHERE id = (
        SELECT id FROM smtp_accounts
@@ -98,7 +115,10 @@ async function reserve(exclude: string[]): Promise<ReservedAccount | null> {
           AND (last_error_at IS NULL
                OR last_error_at <= now() - interval '30 minutes'
                OR last_error NOT LIKE '%Outbound sending is disabled%')
-        ORDER BY CASE WHEN sent_day = ${today} THEN sent_count ELSE 0 END, created_at
+          AND (last_sent_at IS NULL
+               OR last_sent_at <= now() - make_interval(secs => ${SMTP_MIN_GAP_SECONDS}))
+        -- A ociosa ha mais tempo primeiro: distribui no TEMPO, nao so no dia.
+        ORDER BY last_sent_at ASC NULLS FIRST, created_at
         LIMIT 1
         FOR UPDATE SKIP LOCKED
      )
@@ -106,6 +126,29 @@ async function reserve(exclude: string[]): Promise<ReservedAccount | null> {
               daily_limit AS "dailyLimit", sent_count AS "sentCount",
               alerted_day AS "alertedDay"`
   return rows[0] ?? null
+}
+
+/**
+ * Milissegundos ate a proxima caixa ELEGIVEL sair do intervalo minimo, ou null
+ * quando nenhuma sairia (todas sem cota, suspensas ou ja tentadas) — esperar
+ * nao adiantaria.
+ */
+async function msUntilNextSlot(exclude: string[]): Promise<number | null> {
+  const today = smtpDayKey()
+  const rows = await prisma.$queryRaw<Array<{ wait_ms: number | null }>>`
+    SELECT CEIL(EXTRACT(EPOCH FROM (
+             MIN(last_sent_at) + make_interval(secs => ${SMTP_MIN_GAP_SECONDS}) - now()
+           )) * 1000)::float8 AS wait_ms
+      FROM smtp_accounts
+     WHERE active
+       AND NOT (id = ANY(${exclude}::text[]))
+       AND (sent_day <> ${today} OR sent_count < daily_limit)
+       AND (last_error_at IS NULL
+            OR last_error_at <= now() - interval '30 minutes'
+            OR last_error NOT LIKE '%Outbound sending is disabled%')
+       AND last_sent_at > now() - make_interval(secs => ${SMTP_MIN_GAP_SECONDS})`
+  const wait = rows[0]?.wait_ms
+  return wait == null ? null : Math.max(wait, 0)
 }
 
 /** Envio falhou: devolve a vaga e registra o erro na caixa (visivel no /admin). */
@@ -214,6 +257,7 @@ export async function sendViaSmtpPool(params: {
 }): Promise<{ messageId: string; account: string } | null> {
   const tried: string[] = []
   let lastError: unknown = null
+  let waitedMs = 0
   for (;;) {
     // Falha do BANCO na reserva (ex.: migration ainda nao aplicada) nao pode
     // virar apagao de e-mail: sem caixa reservada, cai no SMTP das variaveis.
@@ -222,6 +266,15 @@ export async function sendViaSmtpPool(params: {
       return null
     })
     if (!account) {
+      // Todas no intervalo minimo: espera a proxima vaga em vez de disparar.
+      const wait = await msUntilNextSlot(tried).catch(() => null)
+      if (wait !== null && waitedMs + wait <= SMTP_MAX_WAIT_MS) {
+        // Jitter: varias instancias esperando nao acordam juntas na mesma caixa.
+        const sleep = wait + Math.floor(Math.random() * 250)
+        waitedMs += sleep
+        await new Promise((r) => setTimeout(r, sleep))
+        continue
+      }
       if (lastError) throw lastError
       return null
     }

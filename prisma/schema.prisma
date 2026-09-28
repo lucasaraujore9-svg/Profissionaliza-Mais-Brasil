@@ -2347,6 +2347,9 @@ model SmtpAccount {
   /// diferente de hoje = contador zerado (a virada nao precisa de cron).
   sentDay     String    @default("") @map("sent_day")
   sentCount   Int       @default(0) @map("sent_count")
+  /// Ultimo envio reservado nesta caixa: a reserva respeita um intervalo
+  /// minimo entre envios da MESMA caixa (`SMTP_MIN_GAP_SECONDS`).
+  lastSentAt  DateTime? @map("last_sent_at")
   /// Dia em que o alerta de 80% ja foi disparado — um alerta por dia.
   alertedDay  String?   @map("alerted_day")
   lastError   String?   @map("last_error") @db.Text

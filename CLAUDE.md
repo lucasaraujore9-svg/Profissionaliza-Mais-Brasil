@@ -2022,6 +2022,19 @@ configuracao da unidade.
   tentado quando o anterior falha (destinatario recusado nao troca de
   provedor). E o pool ganhou disjuntor: caixa com "Outbound sending is disabled"
   nos ultimos 30 min fica fora da reserva.
+- **Disjuntor foi ao ar QUEBRADO** (hotfix `3f58f152`): `NOT (last_error_at >
+  ... AND ...)` da NULL com `last_error_at` nulo e o WHERE descartava TODA caixa
+  sem erro — o pool parou e tudo caiu no `SMTP_*` com senha velha (535). Em
+  filtro SQL sobre coluna anulavel, escreva o OR positivo (`IS NULL OR ...`) e
+  confira contra o banco real, nao so pelo texto da query no mock.
+- **Distribuicao no tempo** (`last_sent_at`, migration
+  `20260928_smtp_last_sent_at`): cada caixa espera `SMTP_MIN_GAP_SECONDS` (15s)
+  entre envios, sai sempre a ociosa ha mais tempo, e quando todas estao no
+  intervalo o envio ESPERA a proxima vaga (ate `SMTP_MAX_WAIT_MS`, 60s) dentro
+  da propria requisicao — sem fila. Teto: 20/min no dominio. Os picos reais sao
+  o cron das 03:01 UTC (~29 no minuto) e o das 11:00 UTC (~18), que agora levam
+  ~1-2 min em vez de sair numa rajada. Rajada maior que isso por mais de 1 min
+  estoura a espera e cai no `SMTP_*`.
 - **A suspensao e por CONTA/dominio na Hostinger, nao por caixa** — rodiziar
   caixas nao protege. Provedor transacional (Amazon SES sa-east-1, ~US$ 0,16 a
   cada mil) entra pelas `SMTP_*` da Vercel; para ele virar o PRIMARIO, desative
