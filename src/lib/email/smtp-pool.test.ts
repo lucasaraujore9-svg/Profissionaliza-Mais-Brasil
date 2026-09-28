@@ -118,6 +118,10 @@ describe("disjuntor de caixa suspensa", () => {
     // Sem o filtro, cada envio batia nas 5 caixas suspensas antes do fallback.
     expect(sql).toContain("Outbound sending is disabled")
     expect(sql).toContain("interval '30 minutes'")
+    // Caixa SEM erro (last_error_at nulo) tem que continuar elegível: com
+    // `NOT (a AND b)` o NULL descartava todas e o pool parou em 28/09.
+    expect(sql).toContain("last_error_at IS NULL")
+    expect(sql).not.toMatch(/NOT \(last_error_at/)
   })
 })
 

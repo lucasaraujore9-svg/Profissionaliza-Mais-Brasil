@@ -92,8 +92,12 @@ async function reserve(exclude: string[]): Promise<ReservedAccount | null> {
           -- provedor que suspendeu por rajada só prolonga a suspensão.
           -- ponytail: casa pelo texto da Hostinger; outro provedor com outra
           -- mensagem de suspensão precisa entrar aqui.
-          AND NOT (last_error_at > now() - interval '30 minutes'
-                   AND last_error LIKE '%Outbound sending is disabled%')
+          -- Escrito como OR positivo de proposito: NOT (a AND b) com
+          -- last_error_at NULO da NULL e o WHERE descartava TODA caixa sem erro
+          -- (foi ao ar assim em 28/09 e o pool parou de enviar).
+          AND (last_error_at IS NULL
+               OR last_error_at <= now() - interval '30 minutes'
+               OR last_error NOT LIKE '%Outbound sending is disabled%')
         ORDER BY CASE WHEN sent_day = ${today} THEN sent_count ELSE 0 END, created_at
         LIMIT 1
         FOR UPDATE SKIP LOCKED
