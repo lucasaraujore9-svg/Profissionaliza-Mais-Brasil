@@ -1986,6 +1986,47 @@ slug de plano PMB e de plano da unidade podem colidir na mesma vitrine; trocar a
 periodicidade de plano PMB mantem o preco de override das unidades;
 /aluno/assinatura (aluno logado) segue sem a conta da unidade (502).
 
+### Checkout de assinatura travado + apagão de e-mail (2026-09-28)
+
+Video da Capacita Pro Brasil: "nao e possivel efetuar o pagamento" e o e-mail
+com os dados de acesso nao chegava. Tres defeitos nossos, um erro de
+configuracao da unidade.
+
+- **Plano a R$ 1 (config da unidade):** o Asaas recusa assinatura abaixo de
+  R$ 10 e a tela dizia "Tente novamente". Agora `MIN_SUBSCRIPTION_PRICE`
+  (`lib/subscriptions/schema.ts`, puro) barra na ESCRITA do plano, no override
+  da unidade, na venda direta com desconto (`SUBSCRIPTION_BELOW_MINIMUM`) e nos
+  dois formularios. Vale para os dois gateways: a loja pode trocar de MP para
+  Asaas depois do plano existir.
+- **Recusa 4xx do Asaas virou mensagem** (`rejectOnAsaasInputError` em
+  `subscriptions/checkout.ts`), so em volta das chamadas que CRIAM — um 4xx
+  depois (QR do PIX) deixaria a assinatura viva no gateway e a rota apagaria a
+  linha local. `/api/checkout/assinatura` e `/api/aluno/assinatura` ignoravam
+  `rejectedMessage` (cartao MP recusado passava como sucesso sem PIX).
+- **Gate de CPF prendia quem teve a cobranca recusada.** Os checkouts criam a
+  senha ANTES de cobrar (`provisionStudentAccess`), entao a 2a tentativa caia em
+  "faca login" com uma senha que o aluno talvez nem recebeu.
+  `cpfHasRegisteredLogin` agora exige senha E acesso ja liberado (matricula
+  liberada, assinatura iniciada ou certificado). O gate continua existindo
+  porque `upsertStudent` casa por CPF e REGRAVA o e-mail — sem ele, qualquer um
+  tomaria a conta de um cliente.
+- **`/aluno/assinatura` (aluno logado) respondia 502 para aluno de revenda** —
+  cobrava sem a chave da unidade e o assert de isolamento recusava. E o aluno da
+  vitrine PMB (tenant placeholder `__pmb__`) via lista vazia. Fonte unica:
+  `resolveStudentSubscriptionStore` (rota + pagina). No MP o cartao dessa tela
+  e recusado com mensagem (la o cartao e tokenizado so na pagina da loja).
+- **E-mail: o fallback nunca rodava.** O pool de caixas LANCAVA quando todas
+  falhavam, e `SMTP_*`/Resend so entravam quando o pool nao tinha VAGA. Com a
+  Hostinger suspendendo as 5 caixas (554 5.7.1, rajada de 25/09) foram 285
+  falhas e zero envios em 3 dias. Agora: pool -> `SMTP_*` -> Resend, cada um
+  tentado quando o anterior falha (destinatario recusado nao troca de
+  provedor). E o pool ganhou disjuntor: caixa com "Outbound sending is disabled"
+  nos ultimos 30 min fica fora da reserva.
+- **A suspensao e por CONTA/dominio na Hostinger, nao por caixa** — rodiziar
+  caixas nao protege. Provedor transacional (Amazon SES sa-east-1, ~US$ 0,16 a
+  cada mil) entra pelas `SMTP_*` da Vercel; para ele virar o PRIMARIO, desative
+  as caixas em /admin/configuracoes/email.
+
 ### Bugs conhecidos (pendentes)
 
 - **Middleware file convention deprecado** no Next 16 (usar `proxy` em vez de `middleware`).

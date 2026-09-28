@@ -11,6 +11,21 @@ import { SUBSCRIPTION_INTERVALS } from "./interval"
 export const SUBSCRIPTION_SCOPES = ["ALL", "CATEGORY", "PACKAGE", "COURSES"] as const
 
 /**
+ * Menor valor por ciclo que o gateway aceita numa assinatura. O Asaas recusa
+ * abaixo de R$ 10 ("O valor da cobrança ... não pode ser menor que R$ 10,00") —
+ * um plano de R$ 1 salvava normal e quebrava no checkout, com o aluno na tela
+ * (Capacita Pró Brasil, 2026-09-25). Vale para os dois gateways: a loja pode
+ * trocar de MP para Asaas depois de o plano existir.
+ */
+export const MIN_SUBSCRIPTION_PRICE = 10
+
+export const MIN_SUBSCRIPTION_PRICE_MESSAGE = `O valor mínimo da assinatura é R$ ${MIN_SUBSCRIPTION_PRICE},00`
+
+export const subscriptionPriceSchema = z
+  .number()
+  .min(MIN_SUBSCRIPTION_PRICE, MIN_SUBSCRIPTION_PRICE_MESSAGE)
+
+/**
  * O escopo precisa vir COMPLETO: `CATEGORY` sem categoria, `PACKAGE` sem pacote
  * e `COURSES` sem curso produziriam um plano que nao libera nada — o resolvedor
  * e fail-closed, entao o aluno pagaria por um catalogo vazio. Barrar na entrada
@@ -20,7 +35,7 @@ export const planShape = {
   name: z.string().trim().min(3, "Nome muito curto").max(160),
   description: z.string().trim().max(2000).nullable().optional(),
   coverImageUrl: z.string().trim().max(1000).nullable().optional(),
-  price: z.number().positive("Preço deve ser maior que zero"),
+  price: subscriptionPriceSchema,
   /**
    * Periodicidade da cobranca. `LIFETIME` e o unico valor que NAO gera
    * recorrencia — vira uma cobranca unica com acesso permanente.

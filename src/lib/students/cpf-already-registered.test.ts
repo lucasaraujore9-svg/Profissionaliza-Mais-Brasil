@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
-// Gate de CPF do checkout de convidado: só bloqueia quem já tem acesso ao
-// painel /aluno (passwordHash != null) naquele tenant. Aluno sem senha
-// (checkout abandonado antes do pagamento) NÃO conta — senão recompras de quem
-// nunca pagou ficariam presas sem caminho de login.
+// Gate de CPF do checkout de convidado: só bloqueia quem tem login E já
+// recebeu acesso a algo naquele tenant. Senha sozinha NÃO conta — os checkouts
+// criam a senha antes de cobrar, e uma cobrança recusada prendia a nova
+// tentativa em "faça login" (Capacita Pró Brasil, 2026-09-25).
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
@@ -26,17 +26,40 @@ beforeEach(() => {
 })
 
 describe("cpfHasRegisteredLogin", () => {
-  it("retorna true quando existe aluno com passwordHash naquele tenant", async () => {
+  it("retorna true quando existe aluno com senha e acesso já liberado naquele tenant", async () => {
     studentFindFirst.mockResolvedValue(studentRow({ id: "s1" }))
 
     const result = await cpfHasRegisteredLogin("t1", "123.456.789-09")
 
     expect(result).toBe(true)
-    // Consulta escopada por tenant, CPF stripado e exigindo passwordHash != null.
-    expect(studentFindFirst).toHaveBeenCalledWith({
-      where: { tenantId: "t1", cpf: "12345678909", passwordHash: { not: null } },
-      select: { id: true },
+    const where = studentFindFirst.mock.calls[0][0]!.where!
+    expect(where).toMatchObject({
+      tenantId: "t1",
+      cpf: "12345678909",
+      passwordHash: { not: null },
     })
+  })
+
+  it("exige acesso liberado: senha sozinha (cobrança recusada) não trava o CPF", async () => {
+    studentFindFirst.mockResolvedValue(studentRow(null))
+    await cpfHasRegisteredLogin("t1", "12345678909")
+
+    const where = studentFindFirst.mock.calls[0][0]!.where!
+    // Sem o OR de acesso, o aluno cuja 1ª cobrança falhou cairia em "faça login".
+    expect(where.OR).toEqual([
+      {
+        enrollments: {
+          some: {
+            OR: [
+              { startedAt: { not: null } },
+              { status: { in: ["ACTIVE", "SUSPENDED", "COMPLETED"] } },
+            ],
+          },
+        },
+      },
+      { subscriptions: { some: { startedAt: { not: null } } } },
+      { certificates: { some: {} } },
+    ])
   })
 
   it("retorna false quando não há aluno com senha (ex.: checkout abandonado sem pagamento)", async () => {

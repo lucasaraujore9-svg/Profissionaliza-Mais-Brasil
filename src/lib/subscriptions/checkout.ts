@@ -5,6 +5,7 @@ import {
   listPayments as listAsaasPayments,
   findOrCreateAsaasCustomer,
   motherAsaasKey,
+  AsaasApiError,
 } from "@/lib/asaas/client"
 import { createPayment, createPreapproval } from "@/lib/mercadopago/client"
 import {
@@ -158,6 +159,30 @@ function dueDateInDays(days: number): string {
  * Cartão vence hoje (captura na hora); PIX/boleto vencem em 3 dias, como no
  * checkout de curso.
  */
+/**
+ * Recusa do Asaas na CRIAÇÃO (4xx: valor abaixo do mínimo, cartão negado, dado
+ * inválido) vira mensagem para quem está na tela. Repetir não resolve, então o
+ * genérico "tente novamente" era um conselho que nunca funcionaria.
+ *
+ * Só envolve as chamadas que CRIAM: um 4xx depois dela (QR do PIX) deixaria a
+ * assinatura viva no gateway, e a rota apagaria a linha local por cima.
+ */
+async function rejectOnAsaasInputError<T>(
+  create: () => Promise<T>,
+): Promise<T | { rejectedMessage: string }> {
+  try {
+    return await create()
+  } catch (err) {
+    if (err instanceof AsaasApiError && err.statusCode >= 400 && err.statusCode < 500) {
+      return {
+        rejectedMessage:
+          err.errors?.[0]?.description ?? "Pagamento recusado pelo gateway.",
+      }
+    }
+    throw err
+  }
+}
+
 async function createAsaasSubscriptionForPlan(
   input: CreateSubscriptionInput,
   account: SubscriptionGatewayAccount,
@@ -205,19 +230,22 @@ async function createAsaasSubscriptionForPlan(
   // ele já comprou de uma vez — e o cancelamento (que revoga o curso na
   // fornecedora) seria a única forma de parar a cobrança.
   if (cycle === null) {
-    const payment = await createAsaasPayment(
-      {
-        customer: customer.id,
-        billingType: input.billingType,
-        value: input.plan.price,
-        dueDate: dueDateInDays(isCard ? 0 : 3),
-        description: `Acesso vitalício — ${input.plan.name}`,
-        externalReference,
-        notificationUrl,
-        ...(cardPair ?? {}),
-      },
-      key,
+    const payment = await rejectOnAsaasInputError(() =>
+      createAsaasPayment(
+        {
+          customer: customer.id,
+          billingType: input.billingType,
+          value: input.plan.price,
+          dueDate: dueDateInDays(isCard ? 0 : 3),
+          description: `Acesso vitalício — ${input.plan.name}`,
+          externalReference,
+          notificationUrl,
+          ...(cardPair ?? {}),
+        },
+        key,
+      ),
     )
+    if ("rejectedMessage" in payment) return { authorized: false, ...payment }
 
     await prisma.studentSubscription.update({
       where: { id: input.subscriptionId },
@@ -238,22 +266,25 @@ async function createAsaasSubscriptionForPlan(
     }
   }
 
-  const subscription = await createAsaasSubscription(
-    {
-      customer: customer.id,
-      billingType: input.billingType,
-      value: input.plan.price,
-      nextDueDate: dueDateInDays(isCard ? 0 : 3),
-      cycle,
-      description: `Assinatura — ${input.plan.name}`,
-      externalReference,
-      // SEM maxPayments: a assinatura renova até ser cancelada. É a única
-      // diferença estrutural para o curso MONTHLY.
-      notificationUrl,
-      ...(cardPair ?? {}),
-    },
-    key,
+  const subscription = await rejectOnAsaasInputError(() =>
+    createAsaasSubscription(
+      {
+        customer: customer.id,
+        billingType: input.billingType,
+        value: input.plan.price,
+        nextDueDate: dueDateInDays(isCard ? 0 : 3),
+        cycle,
+        description: `Assinatura — ${input.plan.name}`,
+        externalReference,
+        // SEM maxPayments: a assinatura renova até ser cancelada. É a única
+        // diferença estrutural para o curso MONTHLY.
+        notificationUrl,
+        ...(cardPair ?? {}),
+      },
+      key,
+    ),
   )
+  if ("rejectedMessage" in subscription) return { authorized: false, ...subscription }
 
   await prisma.studentSubscription.update({
     where: { id: input.subscriptionId },

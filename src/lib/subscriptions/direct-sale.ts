@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { resolvePayer, type PayerSource } from "@/lib/checkout/payer"
 import { applyCouponDiscount } from "@/lib/coupons/discount"
+import { MIN_SUBSCRIPTION_PRICE, MIN_SUBSCRIPTION_PRICE_MESSAGE } from "./schema"
 import { contextLogger } from "@/lib/logger"
 import type { BoletoInstrument } from "@/lib/asaas/payment-instrument"
 import { INTERVAL_CHARGE_LABEL, isRecurringInterval } from "./interval"
@@ -191,6 +192,17 @@ export async function createDirectSubscriptionSale(
       code: "SUBSCRIPTION_FREE_NOT_SUPPORTED",
       error:
         "Assinatura não pode sair por R$ 0. Reduza o desconto ou use bolsa de estudo em uma venda de curso.",
+    }
+  }
+
+  // O desconto não pode levar o ciclo abaixo do mínimo do gateway: a venda
+  // sairia com link e o aluno bateria na recusa só na hora de pagar.
+  if (finalAmount < MIN_SUBSCRIPTION_PRICE) {
+    return {
+      ok: false,
+      status: 400,
+      code: "SUBSCRIPTION_BELOW_MINIMUM",
+      error: `${MIN_SUBSCRIPTION_PRICE_MESSAGE} por cobrança. Reduza o desconto.`,
     }
   }
 

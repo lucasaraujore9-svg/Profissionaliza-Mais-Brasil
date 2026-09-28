@@ -14,6 +14,15 @@ vi.mock("@/lib/prisma", () => ({
   prisma: { studentSubscription: { update: vi.fn() } },
 }))
 vi.mock("@/lib/asaas/client", () => ({
+  AsaasApiError: class AsaasApiError extends Error {
+    constructor(
+      message: string,
+      public readonly statusCode: number,
+      public readonly errors: Array<{ code: string; description: string }> = [],
+    ) {
+      super(message)
+    }
+  },
   createSubscription: vi.fn(async () => ({ id: "sub_asaas" })),
   listPayments: vi.fn(async () => ({
     data: [{ id: "pay_1", invoiceUrl: "https://asaas.test/i/pay_1", bankSlipUrl: null }],
@@ -53,6 +62,7 @@ vi.mock("@/lib/logger", () => {
 })
 
 import {
+  AsaasApiError,
   createSubscription as createAsaasSubscription,
   findOrCreateAsaasCustomer,
   listPayments as listAsaasPayments,
@@ -62,6 +72,7 @@ import {
   createPreapproval,
 } from "@/lib/mercadopago/client"
 import { createSubscriptionAtGateway, SubscriptionCheckoutInputError } from "./checkout"
+import { prisma } from "@/lib/prisma"
 import { TenantGatewayIsolationError } from "@/lib/checkout/assert-tenant-gateway"
 
 const createSub = createAsaasSubscription as unknown as ReturnType<typeof vi.fn>
@@ -192,5 +203,32 @@ describe("o aluno paga na página da plataforma, nunca na do gateway", () => {
       }),
     ).rejects.toBeInstanceOf(SubscriptionCheckoutInputError)
     expect(vi.mocked(createPreapproval)).not.toHaveBeenCalled()
+  })
+})
+
+describe("recusa do Asaas na criação", () => {
+  const minMsg = "O valor da cobrança (R$ 1,00) menos o valor do desconto (R$ 0,00) não pode ser menor que R$ 10,00."
+
+  it("4xx vira rejectedMessage com o texto do Asaas, sem gravar a linha", async () => {
+    createSub.mockRejectedValueOnce(
+      new AsaasApiError(minMsg, 400, [{ code: "invalid_object", description: minMsg }]),
+    )
+    const res = await createSubscriptionAtGateway(input("t1"), "ASAAS", {
+      asaasApiKey: "TENANT_KEY",
+      tenantSlug: "revenda1",
+    })
+    // Antes: a rota respondia "Tente novamente" — conselho que nunca funcionaria.
+    expect(res).toEqual({ authorized: false, rejectedMessage: minMsg })
+    expect(prisma.studentSubscription.update).not.toHaveBeenCalled()
+  })
+
+  it("5xx do gateway continua sendo falha (a rota responde 502)", async () => {
+    createSub.mockRejectedValueOnce(new AsaasApiError("down", 503))
+    await expect(
+      createSubscriptionAtGateway(input("t1"), "ASAAS", {
+        asaasApiKey: "TENANT_KEY",
+        tenantSlug: "revenda1",
+      }),
+    ).rejects.toThrow("down")
   })
 })

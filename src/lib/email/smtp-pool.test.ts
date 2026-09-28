@@ -108,3 +108,16 @@ describe("sendViaSmtpPool", () => {
     expect(await sendViaSmtpPool({ to: "x@y.com", subject: "s", html: "h" })).toBeNull()
   })
 })
+
+describe("disjuntor de caixa suspensa", () => {
+  it("a reserva pula caixa com suspensão do provedor nos últimos 30 min", async () => {
+    const p = prisma as unknown as { $queryRaw: ReturnType<typeof vi.fn> }
+    p.$queryRaw.mockResolvedValue([])
+    await sendViaSmtpPool({ to: "a@x.com", subject: "s", html: "<p>x</p>" })
+    const sql = (p.$queryRaw.mock.calls[0][0] as string[]).join("?")
+    // Sem o filtro, cada envio batia nas 5 caixas suspensas antes do fallback.
+    expect(sql).toContain("Outbound sending is disabled")
+    expect(sql).toContain("interval '30 minutes'")
+  })
+})
+

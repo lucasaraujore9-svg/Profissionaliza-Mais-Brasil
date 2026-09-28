@@ -1,3 +1,4 @@
+import { resolveStudentSubscriptionStore } from "@/lib/subscriptions/student-store"
 import { redirect } from "next/navigation"
 import { prisma } from "@/lib/prisma"
 import { requireStudentSession } from "@/lib/auth/student-session"
@@ -28,7 +29,9 @@ export default async function AlunoAssinarPage() {
   })
   if (live) redirect("/aluno/assinatura")
 
-  const plans = await resolveVitrinePlans(session.tenantId ?? null)
+  // Mesma vitrine que a rota de cobrança usa (o placeholder da PMB NÃO é revenda).
+  const { scopeTenantId } = await resolveStudentSubscriptionStore(session.tenantId)
+  const plans = await resolveVitrinePlans(scopeTenantId)
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-8">

@@ -60,6 +60,7 @@ import {
   type PlatformAccessTemplateProps,
 } from "./templates/platform-access"
 import { sendSmtp, getDefaultFrom } from "./smtp"
+import { contextLogger } from "@/lib/logger"
 
 export class EmailError extends Error {
   constructor(message: string, public readonly cause?: unknown) {
@@ -275,25 +276,75 @@ export async function renderTemplateHtml(
 }
 
 /**
- * Detecta qual provedor de email está configurado.
+ * Provedores das variáveis de ambiente, na ordem em que são tentados.
  *
- * - SMTP (Hostinger): se SMTP_HOST + SMTP_USER + SMTP_PASSWORD + SMTP_PORT
- *   estiverem todos definidos.
- * - Resend: se RESEND_API_KEY existir. (Mantido como fallback.)
+ * - SMTP: se SMTP_HOST + SMTP_USER + SMTP_PASSWORD + SMTP_PORT estiverem todos
+ *   definidos.
+ * - Resend: se RESEND_API_KEY existir.
  *
- * Em produção exige um dos dois — sem isso, `sendEmail` lança EmailError.
+ * São a REDE DE SEGURANÇA das caixas do /admin: antes, só entravam quando
+ * nenhuma caixa tinha vaga no dia — com as caixas SUSPENSAS pela Hostinger
+ * (554 5.7.1, 2026-09-25) o pool lançava e nenhum outro provedor era tentado.
  */
-function pickProvider(): "smtp" | "resend" {
-  const hasSmtp =
+function configuredProviders(): Array<"smtp" | "resend"> {
+  const providers: Array<"smtp" | "resend"> = []
+  if (
     process.env.SMTP_HOST &&
     process.env.SMTP_USER &&
     process.env.SMTP_PASSWORD &&
     process.env.SMTP_PORT
-  if (hasSmtp) return "smtp"
-  if (process.env.RESEND_API_KEY) return "resend"
+  ) {
+    providers.push("smtp")
+  }
+  if (process.env.RESEND_API_KEY) providers.push("resend")
+  return providers
+}
+
+function pickProvider(): "smtp" | "resend" {
+  const [first] = configuredProviders()
+  if (first) return first
   throw new EmailError(
     "Nenhum provedor de email configurado (defina SMTP_* ou RESEND_API_KEY)",
   )
+}
+
+async function sendViaEnvProvider(
+  provider: "smtp" | "resend",
+  msg: { to: string | string[]; subject: string; html: string; from?: string; replyTo?: string },
+): Promise<string> {
+  if (provider === "smtp") {
+    try {
+      const { messageId } = await sendSmtp({
+        to: msg.to,
+        subject: msg.subject,
+        html: msg.html,
+        from: msg.from ?? getDefaultFrom(),
+        replyTo: msg.replyTo,
+      })
+      return messageId
+    } catch (err) {
+      throw new EmailError("Falha ao enviar email via SMTP", err)
+    }
+  }
+  const { Resend } = await import("resend")
+  const client = new Resend(process.env.RESEND_API_KEY!)
+  const result = await client.emails.send({
+    from:
+      msg.from ??
+      process.env.SMTP_FROM ??
+      "Profissionaliza Mais Brasil <nao-responda@profissionalizamaisbrasil.com.br>",
+    to: msg.to,
+    subject: msg.subject,
+    html: msg.html,
+    replyTo: msg.replyTo,
+  })
+  if (result.error) {
+    throw new EmailError(`Resend error: ${result.error.message}`, result.error)
+  }
+  if (!result.data?.id) {
+    throw new EmailError("Resend did not return an email ID")
+  }
+  return result.data.id
 }
 
 /**
@@ -332,12 +383,17 @@ export async function sendEmail({
     // diario por caixa). `null` = nenhuma com vaga: segue para o SMTP/Resend
     // das variaveis de ambiente, como sempre foi.
     provider = "smtp-pool"
-    let pooled: { messageId: string; account: string } | null
+    let pooled: { messageId: string; account: string } | null = null
+    let poolError: EmailError | null = null
     try {
       const { sendViaSmtpPool } = await import("./smtp-pool")
       pooled = await sendViaSmtpPool({ to, subject, html, from, replyTo })
     } catch (err) {
-      throw new EmailError("Falha ao enviar email via SMTP (caixas cadastradas)", err)
+      // Destinatário recusado: outro provedor receberia a mesma recusa.
+      if ((err as { code?: unknown })?.code === "EENVELOPE") {
+        throw new EmailError("Falha ao enviar email via SMTP (caixas cadastradas)", err)
+      }
+      poolError = new EmailError("Falha ao enviar email via SMTP (caixas cadastradas)", err)
     }
     if (pooled) {
       await logEmailAttempt({
@@ -351,44 +407,31 @@ export async function sendEmail({
       return { id: pooled.messageId }
     }
 
-    provider = pickProvider()
-
-    let id: string
-    if (provider === "smtp") {
-      try {
-        const { messageId } = await sendSmtp({
-          to,
-          subject,
-          html,
-          from: from ?? getDefaultFrom(),
-          replyTo,
-        })
-        id = messageId
-      } catch (err) {
-        throw new EmailError("Falha ao enviar email via SMTP", err)
-      }
-    } else {
-      // Resend (fallback)
-      const { Resend } = await import("resend")
-      const client = new Resend(process.env.RESEND_API_KEY!)
-      const result = await client.emails.send({
-        from:
-          from ??
-          process.env.SMTP_FROM ??
-          "Profissionaliza Mais Brasil <nao-responda@profissionalizamaisbrasil.com.br>",
-        to,
-        subject,
-        html,
-        replyTo,
-      })
-      if (result.error) {
-        throw new EmailError(`Resend error: ${result.error.message}`, result.error)
-      }
-      if (!result.data?.id) {
-        throw new EmailError("Resend did not return an email ID")
-      }
-      id = result.data.id
+    // Pool sem vaga OU com todas as caixas falhando: segue pelos provedores das
+    // variáveis de ambiente, um após o outro.
+    const fallbacks = configuredProviders()
+    if (fallbacks.length === 0) {
+      throw (
+        poolError ??
+        new EmailError("Nenhum provedor de email configurado (defina SMTP_* ou RESEND_API_KEY)")
+      )
     }
+    let id: string | null = null
+    let lastError: unknown = poolError
+    for (const candidate of fallbacks) {
+      provider = candidate
+      try {
+        id = await sendViaEnvProvider(candidate, { to, subject, html, from, replyTo })
+        break
+      } catch (err) {
+        lastError = err
+        contextLogger().warn(
+          { err, event: "email.fallback_failed", provider: candidate },
+          "provedor de e-mail falhou — tentando o proximo",
+        )
+      }
+    }
+    if (id === null) throw lastError
 
     await logEmailAttempt({
       status: "SENT",

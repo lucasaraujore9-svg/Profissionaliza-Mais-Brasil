@@ -261,6 +261,17 @@ export const POST = withRequestContext(
         "ASAAS",
       )
 
+      if (result.rejectedMessage) {
+        // Recusa não deixa linha: sem isto o gate "já iniciou uma assinatura"
+        // travaria a nova tentativa.
+        await prisma.studentSubscription
+          .delete({ where: { id: subscription.id } })
+          .catch(() => undefined)
+        return NextResponse.json(
+          { error: result.rejectedMessage, code: "PAYMENT_REJECTED" },
+          { status: 400 },
+        )
+      }
       return NextResponse.json({
         data: {
           subscriptionId: subscription.id,

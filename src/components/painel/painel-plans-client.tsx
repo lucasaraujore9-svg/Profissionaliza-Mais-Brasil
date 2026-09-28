@@ -3,7 +3,12 @@
 import { useCallback, useEffect, useState } from "react"
 import { Loader2, Eye, EyeOff, Star, StarOff, Plus, Pencil, Trash2 } from "lucide-react"
 import { CoverImageUpload } from "@/components/shared/cover-image-upload"
-import { SUBSCRIPTION_SCOPES, scopeIsComplete } from "@/lib/subscriptions/schema"
+import {
+  MIN_SUBSCRIPTION_PRICE,
+  MIN_SUBSCRIPTION_PRICE_MESSAGE,
+  SUBSCRIPTION_SCOPES,
+  scopeIsComplete,
+} from "@/lib/subscriptions/schema"
 import { SUBSCRIPTION_MAX_ACTIVE_COURSES } from "@/lib/subscriptions/slots"
 import {
   SUBSCRIPTION_INTERVALS,
@@ -169,8 +174,8 @@ export function PainelPlansClient({
   function savePrice(p: PlanRow) {
     const raw = (draftPrice[p.id] ?? "").replace(",", ".")
     const value = Number(raw)
-    if (!Number.isFinite(value) || value <= 0) {
-      setError("Informe um preço maior que zero")
+    if (!Number.isFinite(value) || value < MIN_SUBSCRIPTION_PRICE) {
+      setError(MIN_SUBSCRIPTION_PRICE_MESSAGE)
       return
     }
     if (value === p.price) return
@@ -183,6 +188,10 @@ export function PainelPlansClient({
     setError(null)
     try {
       const price = Number(form.price.replace(",", "."))
+      if (!(price >= MIN_SUBSCRIPTION_PRICE)) {
+        setError(MIN_SUBSCRIPTION_PRICE_MESSAGE)
+        return
+      }
       const payload = {
         name: form.name,
         description: form.description || null,

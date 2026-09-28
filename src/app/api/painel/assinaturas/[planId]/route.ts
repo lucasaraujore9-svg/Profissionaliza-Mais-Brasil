@@ -8,11 +8,12 @@ import {
   updatePlanSchema,
   scopeIsComplete,
   SCOPE_INCOMPLETE_MESSAGE,
+  subscriptionPriceSchema,
 } from "@/lib/subscriptions/schema"
 
 /** Override da unidade sobre um plano da PMB: so o que e negocio DELA. */
 const overrideSchema = z.object({
-  price: z.number().positive("Preço deve ser maior que zero").nullable().optional(),
+  price: subscriptionPriceSchema.nullable().optional(),
   isVisible: z.boolean().optional(),
   isFeatured: z.boolean().optional(),
 })

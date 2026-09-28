@@ -86,6 +86,14 @@ async function reserve(exclude: string[]): Promise<ReservedAccount | null> {
         WHERE active
           AND NOT (id = ANY(${exclude}::text[]))
           AND (sent_day <> ${today} OR sent_count < daily_limit)
+          -- Disjuntor: caixa SUSPENSA pelo provedor (Hostinger, 554 5.7.1) fica
+          -- fora por 30 min. Sem isso, cada e-mail gastava ~6s batendo nas 5
+          -- caixas suspensas antes de chegar ao fallback — e insistir no
+          -- provedor que suspendeu por rajada só prolonga a suspensão.
+          -- ponytail: casa pelo texto da Hostinger; outro provedor com outra
+          -- mensagem de suspensão precisa entrar aqui.
+          AND NOT (last_error_at > now() - interval '30 minutes'
+                   AND last_error LIKE '%Outbound sending is disabled%')
         ORDER BY CASE WHEN sent_day = ${today} THEN sent_count ELSE 0 END, created_at
         LIMIT 1
         FOR UPDATE SKIP LOCKED

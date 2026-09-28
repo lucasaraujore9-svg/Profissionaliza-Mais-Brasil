@@ -7,7 +7,11 @@ import { rateLimitByKey, rateLimitResponse, RATE_LIMITS } from "@/lib/ratelimit"
 import { withRequestContext } from "@/lib/observability/with-request-context"
 import { PAYER_SELECT, resolvePayer } from "@/lib/checkout/payer"
 import { getPlanForCheckout } from "@/lib/subscriptions/plans"
-import { createSubscriptionAtGateway } from "@/lib/subscriptions/checkout"
+import {
+  createSubscriptionAtGateway,
+  SubscriptionCheckoutInputError,
+} from "@/lib/subscriptions/checkout"
+import { resolveStudentSubscriptionStore } from "@/lib/subscriptions/student-store"
 import {
   CarneInputError,
   discardSubscriptionCarne,
@@ -108,13 +112,43 @@ export const POST = withRequestContext(
       return NextResponse.json({ error: "Aluno não encontrado" }, { status: 404 })
     }
 
-    // A vitrine da assinatura é a do aluno. Hoje só a PMB vende, então um aluno
-    // de revenda ainda não tem plano a contratar — melhor dizer isso do que
-    // vender um plano com preço e catálogo de outra loja.
-    const scopeTenantId = session.tenantId ?? null
+    // A vitrine da assinatura é a do aluno, e a cobrança vai para a conta DELA
+    // (unidade) — nunca para a conta-mãe.
+    const store = await resolveStudentSubscriptionStore(session.tenantId)
+    const { scopeTenantId, gateway } = store
+    if (gateway === "NONE") {
+      return NextResponse.json(
+        {
+          error: "Esta loja ainda não está pronta para receber pagamentos",
+          code: "GATEWAY_NOT_READY",
+        },
+        { status: 400 },
+      )
+    }
     const plan = await getPlanForCheckout(scopeTenantId, data.planId)
     if (!plan) {
       return NextResponse.json({ error: "Plano indisponível" }, { status: 404 })
+    }
+    // No MP o cartão é tokenizado no browser pela página da loja; esta tela
+    // manda o cartão aberto, que só o Asaas aceita.
+    if (gateway === "MP" && data.paymentMethod === "CREDIT_CARD") {
+      return NextResponse.json(
+        {
+          error: "Para assinar no cartão, use a página do plano na loja ou escolha o boleto.",
+          code: "METHOD_NOT_SUPPORTED",
+        },
+        { status: 400 },
+      )
+    }
+    // Mesma restrição da loja: a recorrência do MP não emite PIX por ciclo.
+    if (gateway === "MP" && isRecurringInterval(plan.interval) && data.paymentMethod === "PIX") {
+      return NextResponse.json(
+        {
+          error: "Esta loja aceita assinatura no cartão de crédito ou no boleto",
+          code: "METHOD_NOT_SUPPORTED",
+        },
+        { status: 400 },
+      )
     }
 
     const pendingCutoff = new Date(Date.now() - PENDING_CHECKOUT_TTL_MS)
@@ -162,7 +196,7 @@ export const POST = withRequestContext(
         planId: plan.id,
         status: "PENDING",
         priceAtPurchase: plan.price,
-        gateway: "ASAAS",
+        gateway,
         billingType: data.paymentMethod,
       },
       select: { id: true },
@@ -226,9 +260,21 @@ export const POST = withRequestContext(
             : undefined,
           remoteIp: clientIp(request),
         },
-        "ASAAS",
+        gateway,
+        store.account,
       )
 
+      if (result.rejectedMessage) {
+        // Recusa não deixa linha: sem isto o gate "já iniciou uma assinatura"
+        // travaria a nova tentativa.
+        await prisma.studentSubscription
+          .delete({ where: { id: subscription.id } })
+          .catch(() => undefined)
+        return NextResponse.json(
+          { error: result.rejectedMessage, code: "PAYMENT_REJECTED" },
+          { status: 400 },
+        )
+      }
       return NextResponse.json({
         data: {
           subscriptionId: subscription.id,
@@ -241,6 +287,9 @@ export const POST = withRequestContext(
       await prisma.studentSubscription
         .delete({ where: { id: subscription.id } })
         .catch(() => undefined)
+      if (err instanceof SubscriptionCheckoutInputError) {
+        return NextResponse.json({ error: err.message, code: "METHOD_NOT_SUPPORTED" }, { status: 400 })
+      }
       contextLogger().error(
         { err, event: "aluno.assinatura.gateway_failed", planId: plan.id },
         "falha ao criar assinatura do aluno logado",

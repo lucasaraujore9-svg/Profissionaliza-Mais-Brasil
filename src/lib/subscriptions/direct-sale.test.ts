@@ -145,6 +145,16 @@ describe("venda direta pela LOJA (/painel)", () => {
     expect(data.tenantId).toBe("t1")
   })
 
+  it("desconto que leva o ciclo abaixo do mínimo do gateway é recusado antes de criar a linha", async () => {
+    const res = await createDirectSubscriptionSale({
+      ...base(),
+      discountPercent: 95,
+      checkout: { gateway: "ASAAS", storeUrl: "https://loja.test" },
+    })
+    expect(res).toMatchObject({ ok: false, status: 400, code: "SUBSCRIPTION_BELOW_MINIMUM" })
+    expect(db.create).not.toHaveBeenCalled()
+  })
+
   it("se não consegue gravar o link, apaga a linha (senão trava a revenda com 409)", async () => {
     db.update.mockRejectedValueOnce(new Error("db down"))
     await expect(
