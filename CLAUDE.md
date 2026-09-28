@@ -2035,6 +2035,16 @@ configuracao da unidade.
   o cron das 03:01 UTC (~29 no minuto) e o das 11:00 UTC (~18), que agora levam
   ~1-2 min em vez de sair numa rajada. Rajada maior que isso por mais de 1 min
   estoura a espera e cai no `SMTP_*`.
+- **Recuperacao dos e-mails perdidos** (`lib/email/recovery.ts` +
+  `/api/cron/recover-lost-emails`, dry-run por padrao): `email_logs` nao guarda
+  o corpo, entao nada e reenviado — e GERADO de novo. Acesso perdido
+  (welcome/reset) vira link "crie sua senha" de 72h (`sendPasswordLink`, que
+  saiu da rota de forgot-password para `lib/auth/password-link.ts`) e NUNCA troca
+  senha: se o envio falhasse de novo, a pessoa ficaria com outra senha
+  desconhecida. Matricula perdida e refeita da matricula ATIVA com o mesmo
+  assunto (e o que a torna idempotente). `notification`, cobranca de unidade e
+  lead ficam de fora. Lotes de ate 6, 45s entre envios, disparados por um job
+  pg_cron TEMPORARIO (`pmb-recover-lost-emails`) — remover quando zerar.
 - **A suspensao e por CONTA/dominio na Hostinger, nao por caixa** — rodiziar
   caixas nao protege. Provedor transacional (Amazon SES sa-east-1, ~US$ 0,16 a
   cada mil) entra pelas `SMTP_*` da Vercel; para ele virar o PRIMARIO, desative
