@@ -818,7 +818,7 @@ const PREVIOUS_CHARGE_STUCK: TransparentResult = {
  *
  *  - paga (webhook atrasado) → efetiva a matrícula; não cobra de novo;
  *  - em análise / reversão → aguarda; outra cobrança por cima cobraria duas vezes;
- *  - em aberto no MESMO método (PIX ou boleto) → reusa;
+ *  - em aberto no MESMO método (PIX ou boleto) e MESMO valor → reusa;
  *  - em aberto noutro método, ou vencida → remove no Asaas e só segue quando o
  *    Asaas confirma `deleted` (o DELETE é soft: responde 200 e mantém o status).
  */
@@ -855,10 +855,14 @@ async function resolvePreviousCharge(
       : { kind: "result", result: PREVIOUS_CHARGE_STUCK }
   }
 
+  // Reusa só a cobrança do MESMO valor. Cupom aplicado depois de gerado o PIX
+  // (ou o boleto) muda `finalAmount`: reusar mostraria ao aluno a cobrança
+  // antiga, cheia — ele pagaria sem o desconto que a tela prometeu.
   if (
     previous.status === "PENDING" &&
     billingType !== "CREDIT_CARD" &&
-    previous.billingType === billingType
+    previous.billingType === billingType &&
+    Math.abs(previous.value - enrollment.finalAmount) < 0.01
   ) {
     return { kind: "reuse", payment: previous }
   }

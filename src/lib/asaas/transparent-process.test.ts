@@ -434,8 +434,9 @@ function avulsa(overrides: Partial<AsaasTransparentEnrollment> = {}): AsaasTrans
   }
 }
 
-function anterior(billingType: string, status = "PENDING", deleted = false) {
-  return { ...payment(status), id: "pay_old", installment: null, billingType, deleted }
+function anterior(billingType: string, status = "PENDING", deleted = false, value = 300) {
+  // Mesmo valor da matrícula `avulsa()`: só a cobrança do MESMO valor é reusada.
+  return { ...payment(status), id: "pay_old", installment: null, billingType, deleted, value }
 }
 
 describe("retomada da cobrança avulsa na página de pagamento", () => {
@@ -458,6 +459,21 @@ describe("retomada da cobrança avulsa na página de pagamento", () => {
     expect(getPixQrCodeMock).toHaveBeenCalledWith("pay_old", "asaas_key")
     expect(createPaymentMock).not.toHaveBeenCalled()
     expect(vi.mocked(deletePayment)).not.toHaveBeenCalled()
+  })
+
+  it("cupom aplicado depois: PIX antigo de outro valor NÃO é reusado — sai um novo, com desconto", async () => {
+    getPaymentMock
+      .mockResolvedValueOnce(anterior("PIX", "PENDING", false, 500) as never)
+      .mockResolvedValueOnce(anterior("PIX", "PENDING", true, 500) as never)
+    vi.mocked(deletePayment).mockResolvedValue({ deleted: true, id: "pay_old" })
+    createPaymentMock.mockResolvedValue({ ...payment(), id: "pay_new", billingType: "PIX", value: 300 } as never)
+    getPixQrCodeMock.mockResolvedValue(PIX_QR)
+
+    await processTransparentAsaasPayment(avulsa(), { method: "PIX" }, ctx)
+
+    expect(vi.mocked(deletePayment)).toHaveBeenCalledWith("pay_old", "asaas_key")
+    expect(createPaymentMock).toHaveBeenCalledTimes(1)
+    expect(createPaymentMock.mock.calls[0][0]).toMatchObject({ billingType: "PIX", value: 300 })
   })
 
   it("troca de método: remove a anterior e só cria a nova depois de o Asaas confirmar", async () => {

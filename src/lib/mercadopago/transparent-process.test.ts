@@ -134,4 +134,17 @@ describe("processTransparentMpPayment — valor zerado por cupom", () => {
     expect(releaseFreeEnrollment).not.toHaveBeenCalled()
     expect(result).toEqual({ kind: "approved", status: "approved" })
   })
+
+  it("PIX: cupom aplicado depois muda a chave de idempotência — o MP não devolve o pagamento cheio", async () => {
+    vi.mocked(createPayment).mockResolvedValue({ id: 1, status: "pending" } as never)
+
+    await processTransparentMpPayment(enrollment({ finalAmount: 99.9 }), { payment_method_id: "pix" }, CTX)
+    await processTransparentMpPayment(enrollment({ finalAmount: 49.95 }), { payment_method_id: "pix" }, CTX)
+
+    const [cheio, comCupom] = vi.mocked(createPayment).mock.calls.map((c) => c[2])
+    expect(cheio).not.toBe(comCupom)
+    // Mesmo valor: mesma chave — dois cliques não geram dois PIX.
+    await processTransparentMpPayment(enrollment({ finalAmount: 49.95 }), { payment_method_id: "pix" }, CTX)
+    expect(vi.mocked(createPayment).mock.calls[2][2]).toBe(comCupom)
+  })
 })

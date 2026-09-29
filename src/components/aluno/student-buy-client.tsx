@@ -309,13 +309,24 @@ export function StudentBuyClient() {
                   )}
 
                   <div className="mt-auto pt-4">
-                    {owned ? (
+                    {owned && c.ownedStatus !== "PENDING" ? (
                       <span className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">
                         <CheckCircle2 className="h-4 w-4" />
-                        {c.ownedStatus === "PENDING"
-                          ? "Cobrança pendente"
-                          : "Você já tem este curso"}
+                        Você já tem este curso
                       </span>
+                    ) : c.ownedStatus === "PENDING" ? (
+                      // Compra iniciada e não paga: volta ao resumo, onde dá
+                      // para aplicar o cupom esquecido. O servidor reaproveita
+                      // a mesma compra — não cria outra.
+                      <button
+                        type="button"
+                        onClick={() => openBuy(c)}
+                        disabled={submitting && selected?.id === c.id}
+                        className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800 hover:bg-amber-100 disabled:opacity-50"
+                      >
+                        <ShoppingBag className="h-4 w-4" />
+                        Concluir compra
+                      </button>
                     ) : (
                       <button
                         type="button"

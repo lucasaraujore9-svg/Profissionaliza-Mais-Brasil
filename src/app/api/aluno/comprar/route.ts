@@ -569,26 +569,25 @@ export const POST = withRequestContext(
     return NextResponse.json({ error: "Curso indisponível" }, { status: 404 })
   }
 
-  // Bloqueia compra duplicada de curso ainda ativo
+  // Curso já liberado → 409. Compra PENDENTE → reaproveitada mais abaixo (a
+  // mesma regra do ramo da unidade): é assim que o aluno aplica um cupom que
+  // esqueceu, em vez de ficar preso numa cobrança cheia sem saída.
   const existingActive = await prisma.enrollment.findFirst({
     where: {
       studentId: student.id,
       courseId: course.id,
+      tenantId: null,
       status: { in: ["PENDING", "ACTIVE", "COMPLETED"] },
     },
-    select: { id: true, status: true },
+    select: { id: true, status: true, couponId: true, finalAmount: true },
   })
-  if (existingActive) {
+  if (existingActive && existingActive.status !== "PENDING") {
     return NextResponse.json(
-      {
-        error:
-          existingActive.status === "PENDING"
-            ? "Você já tem uma cobrança pendente para este curso"
-            : "Você já tem este curso na sua conta",
-      },
+      { error: "Você já tem este curso na sua conta" },
       { status: 409 },
     )
   }
+  const pending = existingActive
 
   const basePrice = Number(
     course.precoVitrineMain ??
@@ -714,6 +713,52 @@ export const POST = withRequestContext(
       )
     }
     splitSnapshot = recomputed.value
+  }
+
+  if (pending) {
+    let reusedAmount = Number(pending.finalAmount)
+    if (couponId && !pending.couponId) {
+      await prisma.enrollment.update({
+        where: { id: pending.id },
+        data: {
+          originalAmount: basePrice,
+          discountAmount,
+          finalAmount,
+          couponId,
+          authorSplitSnapshot: splitSnapshot
+            ? (splitSnapshot as unknown as Prisma.InputJsonValue)
+            : undefined,
+        },
+      })
+      reusedAmount = finalAmount
+    } else if (couponId) {
+      // A pendente já tem cupom: o novo não se soma — devolve o uso reservado.
+      await releaseCoupon(couponId).catch(swallow("aluno.comprar.pmb_reuse"))
+    }
+    if (isFreeAmount(reusedAmount)) {
+      try {
+        const pmbTenant = await getOrCreatePmbTenant()
+        await releaseFreeEnrollment(pmbTenantContext(pmbTenant), pending.id)
+      } catch (err) {
+        contextLogger().error(
+          { err, event: "aluno.comprar.free_reuse_failed", enrollmentId: pending.id },
+          "liberacao de compra pendente com desconto integral falhou",
+        )
+        return NextResponse.json(
+          { error: "Falha ao liberar o curso. Tente novamente." },
+          { status: 502 },
+        )
+      }
+      return NextResponse.json({ data: { enrollmentId: pending.id, free: true } })
+    }
+    return NextResponse.json({
+      data: {
+        enrollmentId: pending.id,
+        gateway: effectiveGateway,
+        payPath: `/pagar/${pending.id}`,
+        finalAmount: reusedAmount,
+      },
+    })
   }
 
   const enrollment = await prisma.enrollment.create({

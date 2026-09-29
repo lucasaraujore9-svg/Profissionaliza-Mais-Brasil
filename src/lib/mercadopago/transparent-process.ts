@@ -235,10 +235,12 @@ export async function processTransparentMpPayment(
   }
 
   // Idempotência: cartão usa o token (único por submit, permite re-tentar com
-  // outro cartão após recusa); PIX/boleto usam matrícula+método.
+  // outro cartão após recusa); PIX/boleto usam matrícula+método+VALOR. O valor
+  // entra porque um cupom aplicado depois muda `finalAmount`, e com a mesma
+  // chave o MP devolveria o pagamento antigo, pelo preço cheio.
   const idempotencyKey = formData.token
     ? formData.token
-    : `${enrollment.id}:${formData.payment_method_id}`
+    : `${enrollment.id}:${formData.payment_method_id}:${Math.round(Number(enrollment.finalAmount) * 100)}`
 
   const payment = await createPayment(ctx.accessToken, params, idempotencyKey)
 
