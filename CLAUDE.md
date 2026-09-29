@@ -2119,6 +2119,33 @@ cada ciclo na mao e ninguem o avisava de que o PIX do mes tinha saido.
   so regulariza pelo cartao. No MP, uma assinatura no PIX de verdade conferindo
   a liquidacao e a reemissao do PIX expirado.
 
+### Chamado otymus: compra pendente com cupom + diagnostico EA (2026-09-29)
+
+Reuniao de suporte (Gilmar, unidade `otymus`). Tres relatos, um defeito real:
+
+- **Compra pendente sem saida (corrigido).** `/aluno/comprar` mostrava a compra
+  PENDING como selo morto; agora "Concluir compra" reabre o resumo com cupom e o
+  servidor reaproveita a MESMA compra (a vitrine PMB, que respondia 409, passou
+  a reaproveitar como o ramo da unidade). Por baixo havia o defeito caro: com o
+  cupom gravado, a pagina de pagamento reusava o PIX/boleto ja emitido pelo
+  valor CHEIO — `resolvePreviousCharge` (Asaas) nao comparava o valor e a chave
+  de idempotencia do MP (`matricula:metodo`) devolvia o pagamento antigo. Reuso
+  agora exige o mesmo valor e o valor entra na chave do MP. **Regra geral:
+  qualquer reuso de cobranca por idempotencia precisa incluir o VALOR.**
+- **"Curso de PC abre Necropsia" (nao e nosso).** A EA tem vinculado ao login
+  exatamente o que as matriculas dizem (verificado pela rota abaixo). Nosso botao
+  so abre `login.php`, sem curso: quem escolhe o curso aberto e a plataforma —
+  sessao antiga no navegador ou tela da fornecedora.
+- **"Macrame so abre uma aula" (nao e defeito).** Unidade sem regra gravada ja e
+  `FREE` (`DEFAULT_POLICY`); quem trava e a PROVA de cada aula no LMS. O suporte
+  explicou como "regra sequencial gravada na matricula" — isso nao existe.
+- **Rota de diagnostico `GET /api/cron/diagnostico-ea-vinculos?ids=<ea_aluno_id>`**
+  (Bearer CRON_SECRET, SOMENTE LEITURA): compara `usuarios/cursosvinculados` da EA
+  com as nossas matriculas (`soNaEa` / `soAqui`). Segredos da EA sao Sensitive e
+  nao descem para a maquina: dispare por
+  `select app_internal.run_cron('/api/cron/diagnostico-ea-vinculos?ids=...')` e
+  leia `net._http_response`.
+
 ### Bugs conhecidos (pendentes)
 
 - **Middleware file convention deprecado** no Next 16 (usar `proxy` em vez de `middleware`).
